@@ -1,12 +1,10 @@
 ---
 layout: "default"
-title: "8. KASUGAI システム組み込み構成"
-nav_order: "8"
+title: "7. KASUGAI システム組み込み構成"
+nav_order: "7"
 ---
 
-
-
-## 8. KASUGAI システム組み込み構成
+## 7. KASUGAI システム組み込み構成
 
 ### コアエンジン
 
@@ -39,5 +37,3 @@ deck.gl GPU Direct Render
 | 1 | deck.gl + GeoArrow ローダー追加 | 大容量2Dデータの即時表示 |
 | 2 | TerrainExtension & MaskExtension | ドレープ・くり抜き実現 |
 | 3 | 3D Tiles (1.1) + ClipExtension | 点群・広域モデルの断面表示 |
-
----

@@ -1,12 +1,10 @@
 ---
 layout: "default"
-title: "6. Tiles + Buffers を補完するライブラリ"
-nav_order: "6"
+title: "5. Tiles + Buffers を補完するライブラリ"
+nav_order: "5"
 ---
 
-
-
-## 6. Tiles + Buffers を補完するライブラリ
+## 5. Tiles + Buffers を補完するライブラリ
 
 ### 結論：推奨構成
 
@@ -23,5 +21,3 @@ nav_order: "6"
 | **Three.js** | △ (要プラグイン) | ◯ (3d-tiles-renderer) | ◎ (BufferGeometry) | 高度な3Dに強い |
 | **CesiumJS** | ◎ (本家) | ◎ (本家) | △ (Worker変換) | 高精度GISに強い |
 | **MapLibre GL JS** | ◯ (MVT/XYZ) | △ (プラグイン) | △ (deck.gl連携) | 2D MVT が極上 |
-
----
