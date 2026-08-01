@@ -1,0 +1,7 @@
+title: "WebGL / Web-GIS ライブラリ・技術選定"
+description: "ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定"
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
+color_scheme: light
+search_enabled: true
