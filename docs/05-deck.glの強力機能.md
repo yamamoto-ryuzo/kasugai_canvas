@@ -1,10 +1,10 @@
 ---
 layout: "default"
-title: "6. deck.gl の強力機能"
-nav_order: "6"
+title: "5. deck.gl の強力機能"
+nav_order: "5"
 ---
 
-## 6. deck.gl の強力機能
+## 5. deck.gl の強力機能
 
 | 拡張 | 機能 | 用途例 |
 |------|------|--------|

@@ -1,10 +1,10 @@
 ---
 layout: "default"
-title: "5. Tiles + Buffers を補完するライブラリ"
-nav_order: "5"
+title: "4. Tiles + Buffers を補完するライブラリ"
+nav_order: "4"
 ---
 
-## 5. Tiles + Buffers を補完するライブラリ
+## 4. Tiles + Buffers を補完するライブラリ
 
 ### 結論：推奨構成
 

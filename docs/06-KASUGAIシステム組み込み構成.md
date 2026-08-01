@@ -1,10 +1,10 @@
 ---
 layout: "default"
-title: "7. KASUGAI システム組み込み構成"
-nav_order: "7"
+title: "6. KASUGAI システム組み込み構成"
+nav_order: "6"
 ---
 
-## 7. KASUGAI システム組み込み構成
+## 6. KASUGAI システム組み込み構成
 
 ### コアエンジン
 
