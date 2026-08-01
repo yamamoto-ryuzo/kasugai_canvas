@@ -5,7 +5,8 @@ nav_order: "6"
 ---
 
 
-## 8. Tiles + Buffers を補完するライブラリ
+
+## 6. Tiles + Buffers を補完するライブラリ
 
 ### 結論：推奨構成
 

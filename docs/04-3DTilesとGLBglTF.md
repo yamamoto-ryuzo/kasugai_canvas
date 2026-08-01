@@ -5,7 +5,8 @@ nav_order: "4"
 ---
 
 
-## 6. 3D Tiles と GLB/glTF
+
+## 4. 3D Tiles と GLB/glTF
 
 - **GLB/glTF**：3Dモデルの「3D版JPEG/PNG」、単体モデル表示に最適
 - **3D Tiles**：広域データをタイル化・LOD 制御してストリーミングする規格
