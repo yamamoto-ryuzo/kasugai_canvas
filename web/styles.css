@@ -1,0 +1,29 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, "Yu Gothic UI", sans-serif;
+  background: #f6f9fb;
+  color: #1d2b35;
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 80% 0%, #ffffff, #f1f6f8 45%); }
+.topbar { height: 76px; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d9e4e9; }
+.eyebrow { margin: 0 0 3px; color: #74d4bd; font-size: 10px; font-weight: 700; letter-spacing: .16em; }
+h1, h2 { margin: 0; letter-spacing: -.03em; }
+h1 { font-size: 24px; } h2 { font-size: 18px; }
+.status { color: #71818d; font-size: 10px; letter-spacing: .12em; }
+.status i { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #67d7a5; box-shadow: 0 0 10px #67d7a5; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100vh; }
+.panel { overflow: hidden; border: 0; border-radius: 0; background: rgba(255, 255, 255, .92); }
+.panel-heading { height: 72px; padding: 15px 18px; display: flex; align-items: center; justify-content: space-between; }
+.engine { padding: 6px 9px; border: 1px solid #31564f; border-radius: 5px; color: #83dbc7; font-size: 11px; }
+.viewport { position: relative; height: 100vh; min-height: 420px; background: #eef5f7; }
+#deck-container canvas { display: block; }
+.map-attribution { position: absolute; right: 8px; bottom: 6px; z-index: 1; padding: 3px 5px; color: #52636d; background: rgba(255,255,255,.8); font-size: 10px; }
+.legend { display: flex; gap: 18px; padding: 12px 18px; color: #71818d; font-size: 11px; }
+.legend b { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
+.legend-point { background: #ffbd69; border-radius: 50% !important; } .legend-line { background: #72d8c0; } .legend-area { background: #477d9c; }
+.hint, footer { color: #718291; font-size: 11px; }
+footer { padding: 0 28px 22px; }
+@media (max-width: 850px) { .topbar { padding: 14px; } footer { padding: 0 14px 18px; } .viewport { min-height: 360px; } }

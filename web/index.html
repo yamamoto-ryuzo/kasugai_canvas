@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KASUGAI Canvas</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.165.0/build/three.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="workspace">
+      <section class="panel deck-panel">
+        <div id="deck-container" class="viewport">
+          <small class="map-attribution">© OpenStreetMap contributors</small>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
