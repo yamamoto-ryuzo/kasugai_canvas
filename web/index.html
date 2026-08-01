@@ -18,7 +18,48 @@
     <main class="workspace">
       <section class="panel deck-panel">
         <div id="deck-container" class="viewport">
-          <small class="map-attribution">© OpenStreetMap contributors</small>
+          <aside class="control-panel">
+            <div class="panel-title">Layers & Tiles</div>
+            <section>
+              <label class="field-label" for="basemap-select">Basemap</label>
+              <select id="basemap-select"></select>
+            </section>
+            <section>
+              <div class="section-title">Layers</div>
+              <div id="layer-list"></div>
+            </section>
+            <section>
+              <div class="section-title">Add tile layer</div>
+              <form id="add-tile-form">
+                <input id="tile-title" placeholder="Layer name" required />
+                <input id="tile-url" placeholder="https://.../{z}/{x}/{y}.png" required />
+                <button type="submit">Add layer</button>
+              </form>
+            </section>
+            <section>
+              <div class="section-title">Camera presets</div>
+              <div id="camera-presets"></div>
+              <div class="camera-grid">
+                <input id="camera-longitude" type="number" step="any" aria-label="Longitude" />
+                <input id="camera-latitude" type="number" step="any" aria-label="Latitude" />
+                <input id="camera-zoom" type="number" step="any" aria-label="Zoom" />
+                <input id="camera-pitch" type="number" step="any" aria-label="Pitch" />
+                <input id="camera-bearing" type="number" step="any" aria-label="Bearing" />
+              </div>
+              <button id="apply-camera" type="button">Apply camera</button>
+            </section>
+            <section class="terrain-control">
+              <label><input id="terrain-toggle" type="checkbox" checked /> Terrain</label>
+            </section>
+          </aside>
+          <div id="view-status" class="view-status" aria-live="polite"></div>
+          <aside class="navigation-toolbar" aria-label="Navigation toolbar">
+            <button id="compass-button" class="compass-button" type="button" title="Reset north">
+              <span class="compass-needle"></span><strong>N</strong>
+            </button>
+            <button id="top-down-button" type="button">2D</button>
+          </aside>
+          <small id="map-attribution" class="map-attribution">© OpenStreetMap contributors</small>
         </div>
       </section>
     </main>
