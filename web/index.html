@@ -5,7 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KASUGAI Canvas</title>
     <link rel="stylesheet" href="/styles.css" />
-    <script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+    <script src="https://unpkg.com/deck.gl@9.3.7/dist.min.js"></script>
+    <script>window.__deckCore = window.deck;</script>
+    <script src="https://unpkg.com/@deck.gl/geo-layers@9.3.7/dist.min.js"></script>
+    <script>window.__deckGeoLayers = window.deck;</script>
+    <script src="https://unpkg.com/@deck.gl/extensions@9.3.7/dist.min.js"></script>
+    <script>
+      window.deck = Object.assign(
+        {},
+        window.__deckCore || {},
+        window.__deckGeoLayers || {},
+        window.deck || {},
+      );
+    </script>
     <script type="importmap">
       {
         "imports": {
@@ -19,24 +31,22 @@
       <section class="panel deck-panel">
         <div id="deck-container" class="viewport">
           <aside class="control-panel">
-            <div class="panel-title">Layers & Tiles</div>
-            <section>
-              <label class="field-label" for="basemap-select">Basemap</label>
-              <select id="basemap-select"></select>
-            </section>
-            <section>
+            <nav class="panel-tabs" aria-label="Plugin panels">
+              <button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化">−</button>
+              <button class="panel-tab active" type="button" data-panel="layers-panel">Layers</button>
+              <button class="panel-tab" type="button" data-panel="camera-panel">Camera</button>
+              <button class="panel-tab" type="button" data-panel="search-panel">Search</button>
+              <button class="panel-tab" type="button" data-panel="share-panel">Share</button>
+              <button class="panel-tab" type="button" data-panel="info-panel">Info</button>
+              <button class="panel-tab" type="button" data-panel="legend-panel">凡例</button>
+              <button class="panel-tab" type="button" data-panel="attr-panel">Attr</button>
+              <button class="panel-tab" type="button" data-panel="settings-panel">設定</button>
+            </nav>
+            <section id="layers-panel" class="plugin-panel active">
               <div class="section-title">Layers</div>
               <div id="layer-list"></div>
             </section>
-            <section>
-              <div class="section-title">Add tile layer</div>
-              <form id="add-tile-form">
-                <input id="tile-title" placeholder="Layer name" required />
-                <input id="tile-url" placeholder="https://.../{z}/{x}/{y}.png" required />
-                <button type="submit">Add layer</button>
-              </form>
-            </section>
-            <section>
+            <section id="camera-panel" class="plugin-panel">
               <div class="section-title">Camera presets</div>
               <div id="camera-presets"></div>
               <div class="camera-grid">
@@ -48,18 +58,63 @@
               </div>
               <button id="apply-camera" type="button">Apply camera</button>
             </section>
-            <section class="terrain-control">
-              <label><input id="terrain-toggle" type="checkbox" checked /> Terrain</label>
+            <section id="search-panel" class="plugin-panel">
+              <div class="section-title">Search</div>
+              <form id="search-form">
+                <input id="search-query" placeholder="住所・施設名" required />
+                <button type="submit">検索</button>
+              </form>
+              <div id="search-results" class="search-results"></div>
+            </section>
+            <section id="share-panel" class="plugin-panel">
+              <div class="section-title">Share</div>
+              <button id="copy-share-url" type="button">現在位置URLをコピー</button>
+              <input id="share-url" class="share-url" readonly />
+            </section>
+            <section id="settings-panel" class="plugin-panel terrain-control">
+              <div class="terrain-options">
+                <label><input id="terrain-toggle" type="checkbox" /> Terrain</label>
+                <label><input id="shadow-toggle" type="checkbox" /> Shadow</label>
+              </div>
+              <label class="field-label" for="terrain-source">ドレープ対象地形ソース</label>
+              <select id="terrain-source">
+                <option value="dem">国土地理院DEM</option>
+                <option value="3dtiles">表示中の3D Tiles</option>
+                <option value="both">国土地理院DEMと表示中の3D Tiles</option>
+                <option value="none" selected>ドレープしない</option>
+              </select>
+              <span class="field-label">ドレープを適用するレイヤー</span>
+              <label><input id="drape-basemap" type="checkbox" /> Base map</label>
+              <label><input id="drape-xyz" type="checkbox" /> XYZ</label>
+              <label><input id="drape-geojson" type="checkbox" /> GeoJSON</label>
+              <div class="section-title inspector-title">インスペクター</div>
+              <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
+              <button id="apply-inspector" type="button">登録</button>
+              <p id="inspector-status" class="hint" aria-live="polite"></p>
+            </section>
+            <section id="info-panel" class="plugin-panel embedded-content">
+              <iframe src="about:blank" title="Info"></iframe>
+            </section>
+            <section id="legend-panel" class="plugin-panel embedded-content">
+              <img alt="凡例" />
+            </section>
+            <section id="attr-panel" class="plugin-panel">
+              <div class="section-title">Attr</div>
+              <pre id="attr-content" class="attr-content">地物を選択すると属性を表示します。</pre>
             </section>
           </aside>
-          <div id="view-status" class="view-status" aria-live="polite"></div>
+          <div class="basemap-control">
+            <button id="basemap-toggle" class="basemap-toggle" type="button" aria-label="最小化">−</button>
+            <select id="basemap-select"></select>
+          </div>
           <aside class="navigation-toolbar" aria-label="Navigation toolbar">
             <button id="compass-button" class="compass-button" type="button" title="Reset north">
               <span class="compass-needle"></span><strong>N</strong>
             </button>
             <button id="top-down-button" type="button">2D</button>
+            <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化">−</button>
           </aside>
-          <small id="map-attribution" class="map-attribution">© OpenStreetMap contributors</small>
+          <small id="map-attribution" class="map-attribution"></small>
         </div>
       </section>
     </main>
