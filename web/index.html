@@ -93,6 +93,15 @@
                 <div class="terrain-options">
                   <label><input id="shadow-toggle" type="checkbox" /> Shadow</label>
                 </div>
+                <div class="section-title">バージョン・更新</div>
+                <p class="hint">現在のバージョン: <code id="current-version">-</code></p>
+                <p class="hint">最新バージョン: <code id="latest-version">-</code> <span id="update-status"></span></p>
+                <div class="terrain-options">
+                  <label><input id="auto-update" type="checkbox" checked /> 起動時に自動更新</label>
+                </div>
+                <button id="check-update" type="button">更新を確認</button>
+                <button id="install-update" type="button" hidden>最新版をインストール</button>
+                <p id="version-status" class="hint" aria-live="polite"></p>
               </section>
             </section>
             <section id="info-panel" class="plugin-panel embedded-content">

@@ -1,0 +1,10 @@
+{
+  "version": "0.4.0",
+  "notes": "KASUGAI Canvas 0.4.0",
+  "pub_date": "2026-08-02",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest/download/kasugai_canvas.zip"
+    }
+  }
+}

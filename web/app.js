@@ -878,6 +878,97 @@ function setInspectorStatus(message, isError = false) {
   inspectorStatus.style.color = isError ? "#a82020" : "";
 }
 
+function compareVersions(left, right) {
+  const a = left.split(".").map(Number);
+  const b = right.split(".").map(Number);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    const leftPart = Number.isFinite(a[index]) ? a[index] : 0;
+    const rightPart = Number.isFinite(b[index]) ? b[index] : 0;
+    if (leftPart !== rightPart) return leftPart > rightPart ? 1 : -1;
+  }
+  return 0;
+}
+
+async function loadUpdateInfo() {
+  const current = document.querySelector("#current-version");
+  try {
+    const [healthResponse, settingsResponse] = await Promise.all([
+      fetch("/health"),
+      fetch("/api/update/settings"),
+    ]);
+    if (!healthResponse.ok || !settingsResponse.ok) throw new Error("更新情報を取得できませんでした");
+    const health = await healthResponse.json();
+    const settings = await settingsResponse.json();
+    current.textContent = health.version || "-";
+    document.querySelector("#auto-update").checked = settings.autoUpdate !== false;
+    await checkForUpdate(health.version);
+  } catch (error) {
+    current.textContent = "-";
+    document.querySelector("#version-status").textContent = `更新情報を取得できません: ${error.message}`;
+  }
+}
+
+async function checkForUpdate(currentVersion = document.querySelector("#current-version").textContent) {
+  const status = document.querySelector("#version-status");
+  const updateStatus = document.querySelector("#update-status");
+  const installButton = document.querySelector("#install-update");
+  status.textContent = "最新バージョンを確認中...";
+  installButton.hidden = true;
+  try {
+    const response = await fetch("/api/update/latest");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const latestVersion = data.version || "-";
+    document.querySelector("#latest-version").textContent = latestVersion;
+    const comparison = compareVersions(currentVersion, latestVersion);
+    if (comparison < 0) {
+      updateStatus.textContent = "（新しいバージョンがあります）";
+      status.textContent = "更新が利用可能です";
+      installButton.hidden = false;
+      if (document.querySelector("#auto-update").checked) await installUpdate(latestVersion);
+    } else if (comparison === 0) {
+      updateStatus.textContent = "（最新です）";
+      status.textContent = "";
+    } else {
+      updateStatus.textContent = "（現在のバージョンの方が新しいです）";
+      status.textContent = "";
+    }
+  } catch (error) {
+    document.querySelector("#latest-version").textContent = "-";
+    status.textContent = `更新確認エラー: ${error.message}`;
+  }
+}
+
+async function installUpdate(latestVersion = document.querySelector("#latest-version").textContent) {
+  if (!confirm(`新しいバージョン ${latestVersion} が利用可能です。ダウンロードしてインストールしますか？`)) {
+    document.querySelector("#version-status").textContent = "アップデートをキャンセルしました";
+    return;
+  }
+  const button = document.querySelector("#install-update");
+  button.disabled = true;
+  document.querySelector("#version-status").textContent = "最新版をダウンロードして自動インストールを準備中...";
+  try {
+    const response = await fetch("/api/update/install", { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    document.querySelector("#version-status").textContent = data.message || "アップデートを開始しました";
+  } catch (error) {
+    document.querySelector("#version-status").textContent = `自動インストールエラー: ${error.message}`;
+    button.disabled = false;
+  }
+}
+
+async function saveUpdateSettings() {
+  const autoUpdate = document.querySelector("#auto-update").checked;
+  const response = await fetch("/api/update/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ autoUpdate }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  document.querySelector("#version-status").textContent = "自動更新設定を保存しました";
+}
+
 async function loadInspectorConfig() {
   try {
     const response = await fetch("/api/config");
@@ -901,6 +992,17 @@ async function saveInspectorConfig() {
 }
 
 inspectorInput.value = inspectorDefault;
+document.querySelector("#check-update").addEventListener("click", () => {
+  void checkForUpdate();
+});
+document.querySelector("#install-update").addEventListener("click", () => {
+  void installUpdate();
+});
+document.querySelector("#auto-update").addEventListener("change", () => {
+  void saveUpdateSettings().catch(error => {
+    document.querySelector("#version-status").textContent = `自動更新設定の保存エラー: ${error.message}`;
+  });
+});
 document.querySelector("#apply-inspector").addEventListener("click", async () => {
   try {
     setInspectorStatus("設定を保存しています。");
@@ -960,3 +1062,4 @@ renderPresets();
 updateCameraInputs();
 void updateTerrainFollow(viewState);
 void loadInspectorConfig();
+void loadUpdateInfo();

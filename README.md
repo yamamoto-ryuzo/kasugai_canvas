@@ -21,7 +21,17 @@
 5. `python run.py -B` で配布 ZIP を作成し、必要に応じて GitHub のリリースへ添付する
 6. GitHub Pages の公開内容を確認する
 
-バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。
+バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。自動更新用の公開メタデータは `docs/latest.json` で管理し、`server\Cargo.toml` と同じバージョン番号に更新してください。
+
+## 自動更新
+
+アプリ起動時に GitHub Pages の `latest.json` を確認し、新しいバージョンがある場合は更新を提案します。自動更新設定は設定パネルから変更できます。更新を開始する前には必ず確認ダイアログを表示します。
+
+更新処理は GitHub Releases の `kasugai_canvas.zip` をダウンロードし、アプリ終了後に実行ファイルを置き換えて再起動します。したがって、更新を公開する際は GitHub Release に次の名前で ZIP を添付してください。
+
+```text
+kasugai_canvas.zip
+```
 
 ## ベース表示の起動
 
