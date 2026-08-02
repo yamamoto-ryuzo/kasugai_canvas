@@ -1,4 +1,6 @@
-/download/
+/download/*.zip
+/download/*.exe
+/download/*.sig
 /server/target/
 __pycache__/
 /browser-profile*

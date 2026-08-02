@@ -21,7 +21,7 @@
 5. `python run.py -B` で配布 ZIP を作成し、必要に応じて GitHub のリリースへ添付する
 6. GitHub Pages の公開内容を確認する
 
-バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。自動更新用の公開メタデータは `docs/latest.json` で管理し、`server\Cargo.toml` と同じバージョン番号に更新してください。
+バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。自動更新用の公開メタデータは `docs\download\latest.json` で管理し、`server\Cargo.toml` と同じバージョン番号に更新してください。
 
 ## 自動更新
 

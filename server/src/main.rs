@@ -18,8 +18,10 @@ const BOOTSTRAP_JS: &str = include_str!("../../web/bootstrap.js");
 const STYLES_CSS: &str = include_str!("../../web/styles.css");
 const CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
-const LATEST_JSON_URL: &str =
-    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/docs/latest.json";
+const LATEST_JSON_URLS: [&str; 2] = [
+    "https://yamamoto-ryuzo.github.io/kasugai_canvas/download/latest.json",
+    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/docs/download/latest.json",
+];
 const RELEASE_DOWNLOAD_URL: &str =
     "https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest/download/kasugai_canvas.zip";
 
@@ -137,13 +139,23 @@ fn internal_error(error: impl std::fmt::Display) -> (StatusCode, String) {
 }
 
 async fn fetch_latest() -> Result<Value, (StatusCode, String)> {
-    let response = reqwest::get(LATEST_JSON_URL)
-        .await
-        .map_err(internal_error)?
-        .error_for_status()
-        .map_err(internal_error)?;
-    let text = response.text().await.map_err(internal_error)?;
-    serde_json::from_str(&text).map_err(internal_error)
+    let mut last_error = "最新バージョン情報を取得できませんでした".to_string();
+    for url in LATEST_JSON_URLS {
+        match reqwest::get(url).await {
+            Ok(response) => match response.error_for_status() {
+                Ok(response) => match response.text().await {
+                    Ok(text) => match serde_json::from_str(&text) {
+                        Ok(data) => return Ok(data),
+                        Err(error) => last_error = error.to_string(),
+                    },
+                    Err(error) => last_error = error.to_string(),
+                },
+                Err(error) => last_error = error.to_string(),
+            },
+            Err(error) => last_error = error.to_string(),
+        }
+    }
+    Err((StatusCode::BAD_GATEWAY, last_error))
 }
 
 async fn update_latest() -> Result<Json<Value>, (StatusCode, String)> {
