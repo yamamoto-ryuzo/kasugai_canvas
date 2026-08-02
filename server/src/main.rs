@@ -18,7 +18,8 @@ const BOOTSTRAP_JS: &str = include_str!("../../web/bootstrap.js");
 const STYLES_CSS: &str = include_str!("../../web/styles.css");
 const CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
-const LATEST_JSON_URL: &str = "https://yamamoto-ryuzo.github.io/kasugai_canvas/latest.json";
+const LATEST_JSON_URL: &str =
+    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/docs/latest.json";
 const RELEASE_DOWNLOAD_URL: &str =
     "https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest/download/kasugai_canvas.zip";
 
