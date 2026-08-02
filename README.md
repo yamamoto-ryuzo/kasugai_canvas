@@ -18,7 +18,7 @@
 2. `CHANGELOG.md` の `Unreleased` の内容を日付付きのバージョン欄へ移動する
 3. 変更を GitHub の `main` ブランチへ反映する
 4. 同じバージョンの Git タグ（例: `v0.5.0`）を作成して GitHub に公開する
-5. `python run.py -B` で配布 ZIP を作成し、必要に応じて GitHub のリリースへ添付する
+5. `python run.py -B` で配布 ZIP と NSIS インストーラーを作成し、GitHub のリリースへ添付する
 6. GitHub Pages の公開内容を確認する
 
 バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。自動更新用の公開メタデータは `download\latest.json` で管理し、`server\Cargo.toml` と同じバージョン番号に更新してください。
@@ -32,6 +32,22 @@
 ```text
 kasugai_canvas.zip
 ```
+
+## Windows インストーラー
+
+`python run.py -B` は、NSIS の `makensis` が利用可能な場合に次のインストーラーも作成します。
+
+```text
+download\kasugai_canvas_setup.exe
+```
+
+既定のインストール先は次のとおりです。
+
+```text
+C:\kasugai\kasugai_canvas
+```
+
+NSIS が未インストールの場合は ZIP の作成まで実行し、インストーラー作成をスキップします。
 
 ## ベース表示の起動
 

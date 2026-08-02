@@ -14,6 +14,8 @@ SERVER_DIR = ROOT / "server"
 TARGET_EXE = SERVER_DIR / "target" / "release" / "kasugai_canvas.exe"
 DOWNLOAD_DIR = ROOT / "download"
 DOWNLOAD_ZIP = DOWNLOAD_DIR / "kasugai_canvas.zip"
+DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
+INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
 
 
 def run_dev() -> None:
@@ -21,8 +23,35 @@ def run_dev() -> None:
     subprocess.run(["cargo", "run"], cwd=SERVER_DIR, check=True)
 
 
+def build_installer() -> None:
+    """NSIS インストーラーを作成する。"""
+    makensis = shutil.which("makensis") or shutil.which("makensis.exe")
+    if not makensis:
+        for candidate in (
+            Path(r"C:\Program Files\NSIS\makensis.exe"),
+            Path(r"C:\Program Files (x86)\NSIS\makensis.exe"),
+        ):
+            if candidate.exists():
+                makensis = str(candidate)
+                break
+    if not makensis:
+        print("makensis が見つからないため、インストーラー作成をスキップします。")
+        print("NSIS をインストールしてから再実行してください。")
+        return
+    subprocess.run(
+        [
+            makensis,
+            f"/DBUILD_EXE={TARGET_EXE}",
+            str(INSTALLER_SCRIPT),
+        ],
+        cwd=ROOT,
+        check=True,
+    )
+    print(f"インストーラーを作成しました: {DOWNLOAD_INSTALLER}")
+
+
 def build_release() -> None:
-    """リリースビルドと配布用 ZIP 作成を行う。"""
+    """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。"""
     subprocess.run(["cargo", "build", "--release"], cwd=SERVER_DIR, check=True)
     if not TARGET_EXE.exists():
         raise FileNotFoundError(f"ビルド済み実行ファイルが見つかりません: {TARGET_EXE}")
@@ -31,6 +60,7 @@ def build_release() -> None:
     with zipfile.ZipFile(DOWNLOAD_ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(TARGET_EXE, arcname=TARGET_EXE.name)
     print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
+    build_installer()
 
 
 def run_release() -> None:
