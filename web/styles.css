@@ -31,6 +31,11 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .panel-tab.active { background: rgba(49,86,79,.16) !important; color: #31564f !important; font-weight: 700; }
 .plugin-panel { display: none; }
 .plugin-panel.active { display: block; }
+.settings-tabs { display: flex; gap: 3px; margin: 0 0 12px; padding-bottom: 4px; border-bottom: 1px solid rgba(49,86,79,.2); }
+.settings-tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0; background: transparent; color: #52636d; cursor: pointer; font-size: var(--basemap-select-font-size); }
+.settings-tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
+.settings-subpanel { display: none; margin-top: 0 !important; padding-top: 0 !important; border-top: 0 !important; }
+.settings-subpanel.active { display: block; }
 .control-panel.collapsed { width: 40px; height: 40px; padding: 7px; overflow: hidden; }
 .control-panel.collapsed .panel-tabs { height: 26px; margin: 0; padding: 0; overflow: hidden; border-bottom: 0; }
 .control-panel.collapsed .panel-tab,

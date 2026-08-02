@@ -116,6 +116,7 @@ const drapeLayers = {
 };
 let yahooAppId = "";
 let shadowEnabled = false;
+let basemapDrape3DTiles = false;
 let viewState = {
   longitude: numberParam("longitude", origin[0]),
   latitude: numberParam("latitude", origin[1]),
@@ -226,7 +227,17 @@ function createMapLayers() {
   const hasDemSource = usesDem && terrainVisible;
   const has3DTilesSource = uses3DTiles &&
     orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
+  const hasBasemap3DTilesSource = basemapDrape3DTiles &&
+    orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
+  const has3DTilesTerrainSource = (uses3DTiles || basemapDrape3DTiles) &&
+    orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
   const hasDrapeSource = hasDemSource || has3DTilesSource;
+  const basemapUses3DTiles = Boolean(
+    layerState.get("basemap").visible &&
+    selectedBasemap &&
+    hasBasemap3DTilesSource &&
+    TerrainExtension,
+  );
   const isDrapeTarget = layerType =>
     Boolean(drapeLayers[layerType] && hasDrapeSource && TerrainExtension);
   const getDrapeProps = layerType => isDrapeTarget(layerType)
@@ -241,10 +252,10 @@ function createMapLayers() {
     }
     return new Tile3DLayer({
       data: item.url,
-      id: uses3DTiles
+      id: has3DTilesTerrainSource
         ? `${item.id}-terrain-source`
         : item.id,
-      operation: uses3DTiles
+      operation: has3DTilesTerrainSource
         ? "terrain+draw"
         : "draw",
       pickable: "3d",
@@ -262,31 +273,37 @@ function createMapLayers() {
       },
     });
   };
-  if (layerState.get("basemap").visible && selectedBasemap && !terrainVisible) {
-    layers.push(new TileLayer({
-      id: `basemap-${selectedBasemap.id}`,
-      data: selectedBasemap.url,
-      minZoom,
-      maxZoom: getTileMaxZoom(selectedBasemap.url),
-      getTileData: createAdaptiveTileData(selectedBasemap.url),
-      tileSize: 256,
-      refinementStrategy: "best-available",
-      renderSubLayers: props => new BitmapLayer({
-        ...props,
-        id: `${props.id}-bitmap`,
-        data: null,
-        image: props.data,
-        bounds: props.tile.bbox.west
-          ? [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north]
-          : undefined,
-      }),
-    }));
+  const createBasemapLayer = draped => new TileLayer({
+    id: `basemap-${selectedBasemap.id}-${draped ? "drape" : "plain"}`,
+    data: selectedBasemap.url,
+    minZoom,
+    maxZoom: getTileMaxZoom(selectedBasemap.url),
+    getTileData: createAdaptiveTileData(selectedBasemap.url),
+    tileSize: 256,
+    refinementStrategy: "best-available",
+    renderSubLayers: props => new BitmapLayer({
+      ...props,
+      id: `${props.id}-bitmap`,
+      data: null,
+      image: props.data,
+      bounds: props.tile.bbox.west
+        ? [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north]
+        : undefined,
+      ...(draped
+        ? { extensions: [new TerrainExtension()], terrainDrawMode: "drape" }
+        : {}),
+    }),
+  });
+  if (layerState.get("basemap").visible && selectedBasemap && !terrainVisible && !basemapUses3DTiles) {
+    layers.push(createBasemapLayer(false));
   }
   if (terrainVisible) {
     layers.push(new TerrainLayer({
       id: `terrain-${selectedDemSource}-${basemapId}`,
       elevationData: demSource.elevationData,
-      texture: layerState.get("basemap").visible ? selectedBasemap?.url : undefined,
+      texture: layerState.get("basemap").visible
+        ? selectedBasemap?.url
+        : undefined,
       elevationDecoder: demSource.elevationDecoder,
       minZoom,
       maxZoom: terrainMaxZoom,
@@ -304,6 +321,9 @@ function createMapLayers() {
       },
       visible: layerState.get("terrain").visible,
     }));
+  }
+  if (layerState.get("basemap").visible && selectedBasemap && basemapUses3DTiles) {
+    layers.push(createBasemapLayer(true));
   }
   orderedItems.forEach(item => {
     if (item.type === "terrain" || item.type === "basemap" || item.type === "three") return;
@@ -763,6 +783,10 @@ document.querySelector("#shadow-toggle").addEventListener("change", event => {
   shadowEnabled = event.target.checked;
   refreshLayers();
 });
+document.querySelector("#basemap-drape-3dtiles").addEventListener("change", event => {
+  basemapDrape3DTiles = event.target.checked;
+  refreshLayers();
+});
 const inspectorInput = document.querySelector("#inspector-input");
 const inspectorStatus = document.querySelector("#inspector-status");
 
@@ -834,6 +858,14 @@ document.querySelectorAll(".panel-tab").forEach(tab => {
     document.querySelectorAll(".panel-tab").forEach(item => item.classList.toggle("active", item === tab));
     document.querySelectorAll(".plugin-panel").forEach(panel => {
       panel.classList.toggle("active", panel.id === tab.dataset.panel);
+    });
+  });
+  document.querySelectorAll(".settings-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
+      document.querySelectorAll(".settings-subpanel").forEach(panel => {
+        panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel);
+      });
     });
   });
 });
