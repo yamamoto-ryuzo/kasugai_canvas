@@ -47,6 +47,12 @@ download\kasugai_canvas_setup.exe
 C:\kasugai\kasugai_canvas
 ```
 
+インストール完了画面では、次のチェックボックスからデスクトップショートカットの作成を選択できます。スタートメニューのショートカットは常に作成されます。
+
+```text
+Create desktop shortcut
+```
+
 NSIS が未インストールの場合は ZIP の作成まで実行し、インストーラー作成をスキップします。
 
 ## ベース表示の起動
