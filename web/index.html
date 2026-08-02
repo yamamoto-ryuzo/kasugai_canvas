@@ -73,20 +73,21 @@
             </section>
             <section id="settings-panel" class="plugin-panel terrain-control">
               <div class="terrain-options">
-                <label><input id="terrain-toggle" type="checkbox" /> Terrain</label>
+                <label><input id="terrain-toggle" type="checkbox" checked /> Terrain (DEM表示)</label>
                 <label><input id="shadow-toggle" type="checkbox" /> Shadow</label>
               </div>
-              <label class="field-label" for="terrain-source">ドレープ対象地形ソース</label>
-              <select id="terrain-source">
-                <option value="dem">国土地理院DEM</option>
-                <option value="3dtiles">表示中の3D Tiles</option>
-                <option value="both">国土地理院DEMと表示中の3D Tiles</option>
-                <option value="none" selected>ドレープしない</option>
+              <label class="field-label" for="dem-source">DEM</label>
+              <select id="dem-source">
+                <option value="reearth-ellipsoid" selected>Re:Earth Terrain (楕円体高 / WGS84, zoom 19)</option>
+                <option value="reearth">Re:Earth Terrain (標高 / MSL, zoom 19)</option>
+                <option value="terrarium">Terrarium DEM (AWS, zoom 15)</option>
               </select>
+              <span class="field-label">ドレープ対象地形</span>
+              <label><input id="drape-terrain-dem" type="checkbox" checked /> DEM</label>
+              <label><input id="drape-terrain-tiles3d" type="checkbox" checked /> 3D Tiles</label>
               <span class="field-label">ドレープを適用するレイヤー</span>
-              <label><input id="drape-basemap" type="checkbox" /> Base map</label>
-              <label><input id="drape-xyz" type="checkbox" /> XYZ</label>
-              <label><input id="drape-geojson" type="checkbox" /> GeoJSON</label>
+              <label><input id="drape-xyz" type="checkbox" checked /> XYZ</label>
+              <label><input id="drape-geojson" type="checkbox" checked /> GeoJSON</label>
               <div class="section-title inspector-title">インスペクター</div>
               <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
               <button id="apply-inspector" type="button">登録</button>

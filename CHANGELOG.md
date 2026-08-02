@@ -8,8 +8,22 @@
 
 今後の変更をここに記録します。
 
+## [0.4.0] - 2026-08-02
+
 ### Fixed
 
+- 高ズームでカメラが標高0m基準のDEMより下へ入り、地形が見えなくなる問題を修正し、DEM標高への追従を追加
+- Z30付近でTerrainLayerのタイル・メッシュ負荷が過大になりブラウザが停止する問題を修正し、カメラ上限をZ25へ設定
+- 「表示中の3D Tiles」をドレープ対象に選択するとTerrain表示まで解除される問題を修正
+- GeoJSONのドレープを解除してもドレープ表示が残る問題を修正
+- DEM選択と、DEM・3D Tilesを個別に選択するドレープ対象地形を追加
+- DEM選択にRe:Earth Terrainを追加し、表示中にクレジットを表示
+- Re:Earth Terrainの標高版とWGS84楕円体高版をDEM選択で区別
+- Re:Earth配信のPLATEAU 3D Tilesに対応するWGS84楕円体高のTerrainを明記
+- デフォルトDEMをRe:Earth TerrainのWGS84楕円体高版へ変更
+- カメラのズーム範囲を-20〜25へ拡大し、DEMタイル取得は-20〜20に制限
+- DEM・3D Tilesのドレープ対象とXYZ・GeoJSONへのドレープ適用を初期状態でONに変更
+- Base mapをドレープ適用先から除外し、Terrain表示中は常にDEMのテクスチャとして表示するよう変更
 - `@deck.gl/geo-layers`の読み込みでdeck.gl本体のグローバルAPIが上書きされ、`Tile3DLayer`が利用できなくなる問題を修正
 - XYZタイルの`BitmapLayer`で画像が描画データとして解釈される問題を修正
 - パネル上のクリック、ホイール、マウス・タッチ操作、ドラッグ操作が地図へ伝播する問題を修正
@@ -101,7 +115,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/tag/v0.1.0

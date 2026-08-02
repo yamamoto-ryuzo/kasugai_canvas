@@ -6,72 +6,271 @@ const deckContainer = document.querySelector("#deck-container");
 
 const origin = [0, 0];
 const inspectorDefault = "";
+const minZoom = -20;
+const maxZoom = 25;
+const terrainMaxZoom = 20;
+const terrainSampleZoom = 14;
 const urlParams = new URLSearchParams(window.location.search);
 const numberParam = (name, fallback) => {
   const value = Number(urlParams.get(name));
   return Number.isFinite(value) ? value : fallback;
 };
+const clampZoom = zoom => Math.min(maxZoom, Math.max(minZoom, zoom));
 const basemaps = [];
+const tileMaxZooms = new Map();
+let tileZoomRefreshScheduled = false;
+
+function getTileMaxZoom(url) {
+  return tileMaxZooms.get(url) ?? maxZoom;
+}
+
+function lowerTileMaxZoom(url, zoom) {
+  const nextMaxZoom = Math.max(0, zoom - 1);
+  if (nextMaxZoom >= getTileMaxZoom(url)) return;
+  tileMaxZooms.set(url, nextMaxZoom);
+}
+
+function scheduleTileZoomRefresh() {
+  if (tileZoomRefreshScheduled) return;
+  tileZoomRefreshScheduled = true;
+  requestAnimationFrame(() => {
+    tileZoomRefreshScheduled = false;
+    refreshLayers();
+  });
+}
+
+function createAdaptiveTileData(urlTemplate) {
+  return async ({url, signal, index}) => {
+    let fallbackIndex = { ...index };
+    while (fallbackIndex.z >= 0) {
+      const tileUrl = urlTemplate
+        .replaceAll("{z}", String(fallbackIndex.z))
+        .replaceAll("{x}", String(fallbackIndex.x))
+        .replaceAll("{y}", String(fallbackIndex.y));
+      const response = await fetch(
+        fallbackIndex === index ? url : tileUrl,
+        { signal },
+      );
+      if (response.status === 404) {
+        lowerTileMaxZoom(urlTemplate, fallbackIndex.z);
+        fallbackIndex = {
+          x: Math.floor(fallbackIndex.x / 2),
+          y: Math.floor(fallbackIndex.y / 2),
+          z: fallbackIndex.z - 1,
+        };
+        continue;
+      }
+      if (!response.ok) throw new Error(`Tile request failed (${response.status}): ${tileUrl}`);
+      const image = await createImageBitmap(await response.blob());
+      if (fallbackIndex.z !== index.z) scheduleTileZoomRefresh();
+      return image;
+    }
+    throw new Error(`No available parent tile: ${url}`);
+  };
+}
 
 const layerState = new Map([
-  ["terrain", { id: "terrain", title: "Terrain", visible: false, type: "terrain" }],
+  ["terrain", { id: "terrain", title: "Terrain", visible: true, type: "terrain" }],
   ["basemap", { id: "basemap", title: "Basemap", visible: false, type: "basemap" }],
 ]);
 const tileLayers = [];
 let layerOrder = [...layerState.keys()].filter(id => id !== "basemap");
 const cameraPresets = [];
+const demSources = {
+  terrarium: {
+    title: "Terrarium DEM (AWS, zoom 15)",
+    elevationData: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
+    elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
+    tileSize: 256,
+  },
+  reearth: {
+    title: "Re:Earth Terrain (標高 / MSL, zoom 19)",
+    elevationData: "https://terrain.reearth.land/terrarium/elevation/{z}/{x}/{y}.png",
+    elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
+    tileSize: 512,
+    attribution: "Re:Earth Terrain · Mapterhorn (CC BY 4.0)",
+  },
+  "reearth-ellipsoid": {
+    title: "Re:Earth Terrain (楕円体高 / WGS84, zoom 19)",
+    elevationData: "https://terrain.reearth.land/terrarium/ellipsoid/{z}/{x}/{y}.png",
+    elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
+    tileSize: 512,
+    attribution: "Re:Earth Terrain · Mapterhorn (CC BY 4.0)",
+  },
+};
 
 let selectedBasemap;
-let terrainSource = "none";
+let selectedDemSource = "reearth-ellipsoid";
+const terrainFollowState = {
+  requestId: 0,
+  sampleKey: "",
+  tileCache: new Map(),
+};
+const drapeTerrainSources = {
+  dem: true,
+  tiles3d: true,
+};
 const drapeLayers = {
-  xyz: false,
-  basemap: false,
-  geojson: false,
+  xyz: true,
+  geojson: true,
 };
 let yahooAppId = "";
 let shadowEnabled = false;
 let viewState = {
   longitude: numberParam("longitude", origin[0]),
   latitude: numberParam("latitude", origin[1]),
-  zoom: numberParam("zoom", 2),
+  zoom: clampZoom(numberParam("zoom", 2)),
   pitch: numberParam("pitch", 0),
   bearing: numberParam("bearing", 0),
+  minZoom,
+  maxZoom,
 };
 let threeRenderer;
 let threeScene;
 let threeCamera;
 let threeModel;
 
-function getDrapeProps(layerType) {
-  const hasDemSource = layerState.get("terrain").visible &&
-    (terrainSource === "dem" || terrainSource === "both");
-  const has3DTilesSource = (terrainSource === "3dtiles" || terrainSource === "both") &&
-    getOrderedLayerItems().some(item => item.visible && item.type === "3dtiles" && item.url);
-  return drapeLayers[layerType] && TerrainExtension && (hasDemSource || has3DTilesSource)
-    ? { extensions: [new TerrainExtension()], terrainDrawMode: "drape" }
-    : {};
+function formatTileUrl(template, index) {
+  return template
+    .replaceAll("{z}", String(index.z))
+    .replaceAll("{x}", String(index.x))
+    .replaceAll("{y}", String(index.y));
+}
+
+function getTerrainTileIndex(longitude, latitude) {
+  const scale = 2 ** terrainSampleZoom;
+  const x = Math.min(scale - 1, Math.max(0, Math.floor((longitude + 180) / 360 * scale)));
+  const sine = Math.sin(latitude * Math.PI / 180);
+  const y = Math.min(
+    scale - 1,
+    Math.max(0, Math.floor((0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI)) * scale)),
+  );
+  const pixelX = ((longitude + 180) / 360 * scale - x);
+  const pixelY = ((0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI)) * scale - y);
+  return { x, y, z: terrainSampleZoom, pixelX, pixelY };
+}
+
+async function getTerrainTilePixels(source, index) {
+  const url = formatTileUrl(source.elevationData, index);
+  const cached = terrainFollowState.tileCache.get(url);
+  if (cached) return cached;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`DEM tile request failed (${response.status}): ${url}`);
+  const bitmap = await createImageBitmap(await response.blob());
+  const canvas = document.createElement("canvas");
+  canvas.width = source.tileSize;
+  canvas.height = source.tileSize;
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("DEM sample canvas is unavailable");
+  context.drawImage(bitmap, 0, 0, source.tileSize, source.tileSize);
+  bitmap.close();
+  const pixels = context.getImageData(0, 0, source.tileSize, source.tileSize);
+  if (terrainFollowState.tileCache.size >= 32) {
+    terrainFollowState.tileCache.delete(terrainFollowState.tileCache.keys().next().value);
+  }
+  terrainFollowState.tileCache.set(url, pixels);
+  return pixels;
+}
+
+async function updateTerrainFollow(next = viewState) {
+  if (!layerState.get("terrain").visible) return;
+  const source = demSources[selectedDemSource];
+  if (!source) return;
+  const index = getTerrainTileIndex(next.longitude, next.latitude);
+  const sampleX = Math.min(source.tileSize - 1, Math.floor(index.pixelX * source.tileSize));
+  const sampleY = Math.min(source.tileSize - 1, Math.floor(index.pixelY * source.tileSize));
+  const sampleKey = `${selectedDemSource}:${index.x}:${index.y}:${Math.floor(sampleX / 16)}:${Math.floor(sampleY / 16)}`;
+  if (sampleKey === terrainFollowState.sampleKey) return;
+  terrainFollowState.sampleKey = sampleKey;
+  const requestId = ++terrainFollowState.requestId;
+  try {
+    const pixels = await getTerrainTilePixels(source, index);
+    if (requestId !== terrainFollowState.requestId) return;
+    const offset = (sampleY * pixels.width + sampleX) * 4;
+    const elevation = pixels.data[offset] * 256 +
+      pixels.data[offset + 1] +
+      pixels.data[offset + 2] / 256 - 32768;
+    if (!Number.isFinite(elevation)) throw new Error("DEM sample is not a finite elevation");
+    viewState = { ...viewState, position: [0, 0, elevation] };
+    deck.setProps({ viewState });
+  } catch (error) {
+    if (requestId !== terrainFollowState.requestId) return;
+    terrainFollowState.sampleKey = "";
+    console.error("地形追従用DEMの取得に失敗しました。", error);
+  }
+}
+
+function clearTerrainFollow() {
+  terrainFollowState.requestId += 1;
+  terrainFollowState.sampleKey = "";
+  viewState = { ...viewState };
+  delete viewState.position;
+  deck.setProps({ viewState });
+}
+
+function updateMapAttribution() {
+  const credits = [selectedBasemap?.attribution];
+  const demSource = demSources[selectedDemSource];
+  if (layerState.get("terrain").visible && demSource?.attribution) credits.push(demSource.attribution);
+  document.querySelector("#map-attribution").textContent = credits.filter(Boolean).join(" | ");
 }
 
 function createMapLayers() {
   const layers = [];
-  if (TerrainExtension && GeoJsonLayer) {
-    layers.push(new GeoJsonLayer({
-      id: "terrain-effect-bootstrap",
-      data: [],
-      visible: false,
-      extensions: [new TerrainExtension()],
-      terrainDrawMode: "drape",
-    }));
-  }
+  const demSource = demSources[selectedDemSource];
   const basemapId = selectedBasemap?.id || "none";
-  if (layerState.get("basemap").visible && selectedBasemap &&
-    (!layerState.get("terrain").visible || terrainSource === "3dtiles" || terrainSource === "both")) {
+  const terrainVisible = layerState.get("terrain").visible;
+  const orderedItems = getOrderedLayerItems();
+  const usesDem = drapeTerrainSources.dem;
+  const uses3DTiles = drapeTerrainSources.tiles3d;
+  const hasDemSource = usesDem && terrainVisible;
+  const has3DTilesSource = uses3DTiles &&
+    orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
+  const hasDrapeSource = hasDemSource || has3DTilesSource;
+  const isDrapeTarget = layerType =>
+    Boolean(drapeLayers[layerType] && hasDrapeSource && TerrainExtension);
+  const getDrapeProps = layerType => isDrapeTarget(layerType)
+    ? { extensions: [new TerrainExtension()], terrainDrawMode: "drape" }
+    : {};
+  const getDrapeLayerId = (id, layerType) =>
+    `${id}-${isDrapeTarget(layerType) ? "drape" : "plain"}`;
+  const create3DTilesLayer = item => {
+    if (!Tile3DLayer) {
+      item.status = "Tile3DLayer is not available in the deck.gl bundle";
+      return null;
+    }
+    return new Tile3DLayer({
+      data: item.url,
+      id: uses3DTiles
+        ? `${item.id}-terrain-source`
+        : item.id,
+      operation: uses3DTiles
+        ? "terrain+draw"
+        : "draw",
+      pickable: "3d",
+      onClick: info => showAttribute(info.object),
+      onTilesetLoad: tileset => {
+        const layer = layerState.get(item.id);
+        if (layer) layer.status = `loaded (${tileset?.asset?.version || "3D Tiles"})`;
+        renderLayerList();
+      },
+      onTileError: error => {
+        const layer = layerState.get(item.id);
+        if (layer) layer.status = `error: ${error?.message || "tile load failed"}`;
+        renderLayerList();
+        console.error(`3D Tiles load failed: ${item.url}`, error);
+      },
+    });
+  };
+  if (layerState.get("basemap").visible && selectedBasemap && !terrainVisible) {
     layers.push(new TileLayer({
       id: `basemap-${selectedBasemap.id}`,
       data: selectedBasemap.url,
-      minZoom: 0,
-      maxZoom: 19,
+      minZoom,
+      maxZoom: getTileMaxZoom(selectedBasemap.url),
+      getTileData: createAdaptiveTileData(selectedBasemap.url),
       tileSize: 256,
+      refinementStrategy: "best-available",
       renderSubLayers: props => new BitmapLayer({
         ...props,
         id: `${props.id}-bitmap`,
@@ -80,23 +279,22 @@ function createMapLayers() {
         bounds: props.tile.bbox.west
           ? [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north]
           : undefined,
-        ...getDrapeProps("basemap"),
       }),
     }));
   }
-  if (layerState.get("terrain").visible && (terrainSource === "dem" || terrainSource === "both")) {
+  if (terrainVisible) {
     layers.push(new TerrainLayer({
-      id: `terrain-${terrainSource}-${basemapId}`,
-      elevationData: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
-      texture: layerState.get("basemap").visible && terrainSource === "dem"
-        ? selectedBasemap?.url
-        : undefined,
-      elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
-      minZoom: 0,
-      maxZoom: 14,
-      tileSize: 256,
+      id: `terrain-${selectedDemSource}-${basemapId}`,
+      elevationData: demSource.elevationData,
+      texture: layerState.get("basemap").visible ? selectedBasemap?.url : undefined,
+      elevationDecoder: demSource.elevationDecoder,
+      minZoom,
+      maxZoom: terrainMaxZoom,
+      tileSize: demSource.tileSize,
       meshMaxError: 10,
-      operation: "terrain+draw",
+      operation: hasDemSource
+        ? "terrain+draw"
+        : "draw",
       color: [255, 255, 255],
       material: {
         ambient: shadowEnabled ? 0.35 : 1,
@@ -107,35 +305,38 @@ function createMapLayers() {
       visible: layerState.get("terrain").visible,
     }));
   }
-  getOrderedLayerItems().filter(item => item.type === "tile").forEach(item => {
-    if (!item.visible) return;
-    layers.push(new TileLayer({
-      id: item.id,
-      data: item.url,
-      minZoom: 0,
-      maxZoom: 19,
-      tileSize: 256,
-      renderSubLayers: props => new BitmapLayer({
-        ...props,
-        id: `${props.id}-bitmap`,
-        data: null,
-        image: props.data,
-        bounds: [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north],
-        opacity: item.opacity,
-        ...getDrapeProps("xyz"),
-      }),
-    }));
-  });
-  const orderedItems = getOrderedLayerItems().sort((left, right) => {
-    if (terrainSource !== "3dtiles" && terrainSource !== "both") return 0;
-    return Number(right.type === "3dtiles") - Number(left.type === "3dtiles");
-  });
   orderedItems.forEach(item => {
-    if (item.type === "tile" || item.type === "terrain" || item.type === "basemap" || item.type === "three") return;
+    if (item.type === "terrain" || item.type === "basemap" || item.type === "three") return;
     if (!item.visible || !item.url) return;
+    if (item.type === "3dtiles") {
+      const layer = create3DTilesLayer(item);
+      if (layer) layers.push(layer);
+      return;
+    }
+    if (item.type === "tile") {
+      layers.push(new TileLayer({
+        id: getDrapeLayerId(item.id, "xyz"),
+        data: item.url,
+        minZoom,
+        maxZoom: getTileMaxZoom(item.url),
+        getTileData: createAdaptiveTileData(item.url),
+        tileSize: 256,
+        refinementStrategy: "best-available",
+        renderSubLayers: props => new BitmapLayer({
+          ...props,
+          id: `${props.id}-bitmap`,
+          data: null,
+          image: props.data,
+          bounds: [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north],
+          opacity: item.opacity,
+          ...getDrapeProps("xyz"),
+        }),
+      }));
+      return;
+    }
     if (item.type === "geojson") {
       layers.push(new GeoJsonLayer({
-        id: item.id,
+        id: getDrapeLayerId(item.id, "geojson"),
         data: item.url,
         filled: true,
         stroked: true,
@@ -148,34 +349,6 @@ function createMapLayers() {
         onClick: info => showAttribute(info.object),
       }));
     }
-    if (item.type === "3dtiles" && Tile3DLayer) {
-      const isTerrainSource = terrainSource === "3dtiles" || terrainSource === "both";
-      layers.push(new Tile3DLayer({
-        data: item.url,
-        id: isTerrainSource
-          ? `${item.id}-terrain-source`
-          : item.id,
-        operation: isTerrainSource
-          ? "terrain+draw"
-          : "draw",
-        pickable: "3d",
-        onClick: info => showAttribute(info.object),
-        onTilesetLoad: tileset => {
-          const layer = layerState.get(item.id);
-          if (layer) layer.status = `loaded (${tileset?.asset?.version || "3D Tiles"})`;
-          renderLayerList();
-        },
-        onTileError: error => {
-          const layer = layerState.get(item.id);
-          if (layer) layer.status = `error: ${error?.message || "tile load failed"}`;
-          renderLayerList();
-          console.error(`3D Tiles load failed: ${item.url}`, error);
-        },
-      }));
-    } else if (item.type === "3dtiles" && !Tile3DLayer) {
-      item.status = "Tile3DLayer is not available in the deck.gl bundle";
-      renderLayerList();
-    }
   });
   return layers;
 }
@@ -186,9 +359,14 @@ const deck = new Deck({
   initialViewState: viewState,
   controller: { dragRotate: true, touchRotate: true, scrollZoom: true, doubleClickZoom: true, minPitch: 0, maxPitch: 179 },
   onViewStateChange: ({ viewState: next }) => {
-    viewState = { ...viewState, ...next };
+    viewState = {
+      ...viewState,
+      ...next,
+      zoom: clampZoom(next.zoom ?? viewState.zoom),
+    };
     deck.setProps({ viewState });
     updateCameraInputs();
+    void updateTerrainFollow(viewState);
   },
   onWebGLInitialized: gl => {
     threeRenderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl, alpha: true });
@@ -255,11 +433,11 @@ function renderLayerList() {
     <div class="layer-group" data-group="${group}">
       ${group ? `<div class="layer-group-title">${group}</div>` : ""}
       ${layers.map(layer => `
-    <div class="layer-row" draggable="true" data-layer-id="${layer.id}">
+    <label class="layer-row" draggable="true" data-layer-id="${layer.id}">
       <input type="checkbox" data-layer-id="${layer.id}" data-group="${layer.group || ""}" data-exclusive="${layer.exclusiveGroup ? "true" : "false"}" ${layer.visible ? "checked" : ""} ${layer.id === "google-photorealistic" || (layer.type === "3dtiles" && !Tile3DLayer) ? "disabled" : ""}>
       <span>${layer.title}</span>
       <small>${layer.status || (layer.type === "tile" ? "Tile" : layer.type)}</small>
-    </div>
+    </label>
       `).join("")}
     </div>
   `).join("");
@@ -330,9 +508,14 @@ function updateCameraInputs() {
 }
 
 function flyTo(next) {
-  viewState = { ...viewState, ...next };
+  viewState = {
+    ...viewState,
+    ...next,
+    zoom: clampZoom(next.zoom ?? viewState.zoom),
+  };
   deck.setProps({ viewState });
   updateCameraInputs();
+  void updateTerrainFollow(viewState);
 }
 
 function showAttribute(object) {
@@ -411,7 +594,8 @@ function applyInspector(text) {
         if (key === "d" && Number.isFinite(number)) camera.bearing = number;
         if (key === "h" && Number.isFinite(number)) {
           camera.height = number;
-          camera.zoom = Math.max(1, Math.min(20, Math.log2(591657550 / number)));
+          const zoom = Math.log2(591657550 / number);
+          if (Number.isFinite(zoom)) camera.zoom = zoom;
         }
       });
       if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) parsedCameras.push(camera);
@@ -492,7 +676,7 @@ function applyInspector(text) {
   selectedBasemap = basemaps[0];
   layerState.get("basemap").visible = Boolean(selectedBasemap);
   renderBasemapSelector();
-  document.querySelector("#map-attribution").textContent = selectedBasemap?.attribution || "";
+  updateMapAttribution();
   cameraPresets.splice(0, cameraPresets.length, ...parsedCameras);
   renderPresets();
   renderLayerList();
@@ -503,7 +687,7 @@ renderBasemapSelector();
 document.querySelector("#basemap-select").addEventListener("change", event => {
   selectedBasemap = basemaps.find(item => item.id === event.target.value);
   layerState.get("basemap").visible = Boolean(selectedBasemap);
-  document.querySelector("#map-attribution").textContent = selectedBasemap?.attribution || "";
+  updateMapAttribution();
   refreshLayers();
 });
 document.querySelector("#apply-camera").addEventListener("click", () => {
@@ -546,22 +730,28 @@ document.querySelector("#copy-share-url").addEventListener("click", async () => 
   await navigator.clipboard?.writeText(url);
 });
 document.querySelector("#terrain-toggle").addEventListener("change", event => {
-  if (event.target.checked) {
-    if (terrainSource === "none") terrainSource = "dem";
-  } else {
-    terrainSource = "none";
-  }
-  document.querySelector("#terrain-source").value = terrainSource;
-  layerState.get("terrain").visible = terrainSource !== "none";
+  layerState.get("terrain").visible = event.target.checked;
+  if (event.target.checked) void updateTerrainFollow(viewState);
+  else clearTerrainFollow();
+  updateMapAttribution();
   refreshLayers();
   renderLayerList();
 });
-document.querySelector("#terrain-source").addEventListener("change", event => {
-  terrainSource = event.target.value;
-  layerState.get("terrain").visible = terrainSource !== "none";
-  document.querySelector("#terrain-toggle").checked = terrainSource !== "none";
+document.querySelector("#dem-source").addEventListener("change", event => {
+  selectedDemSource = event.target.value;
+  layerState.get("terrain").visible = true;
+  terrainFollowState.sampleKey = "";
+  void updateTerrainFollow(viewState);
+  document.querySelector("#terrain-toggle").checked = true;
+  updateMapAttribution();
   refreshLayers();
   renderLayerList();
+});
+Object.entries(drapeTerrainSources).forEach(([source]) => {
+  document.querySelector(`#drape-terrain-${source}`).addEventListener("change", event => {
+    drapeTerrainSources[source] = event.target.checked;
+    refreshLayers();
+  });
 });
 Object.entries(drapeLayers).forEach(([layerType]) => {
   document.querySelector(`#drape-${layerType}`).addEventListener("change", event => {
@@ -653,4 +843,5 @@ document.querySelector("#top-down-button").addEventListener("click", () => flyTo
 applyInspector(inspectorDefault);
 renderPresets();
 updateCameraInputs();
+void updateTerrainFollow(viewState);
 void loadInspectorConfig();
