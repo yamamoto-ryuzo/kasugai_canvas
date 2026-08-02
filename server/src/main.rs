@@ -167,6 +167,20 @@ async fn update_latest() -> Result<Json<Value>, (StatusCode, String)> {
     Ok(Json(fetch_latest().await?))
 }
 
+fn open_browser(port: u16) {
+    let url = format!("http://127.0.0.1:{port}/");
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", &url])
+            .spawn();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
 async fn install_update(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
@@ -232,7 +246,7 @@ async fn install_update(
 
     let script_path = tmp_dir.join("update.ps1");
     let script = format!(
-        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\nCopy-Item -Path $newExe -Destination $currentExe -Force\nStart-Process -FilePath $currentExe -WindowStyle Hidden\n",
+        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\nCopy-Item -Path $newExe -Destination $currentExe -Force\nStart-Process -FilePath $currentExe -ArgumentList '--open-browser' -WindowStyle Hidden\n",
         new = new_exe.to_string_lossy().replace('\'', "''"),
         current = current_exe.to_string_lossy().replace('\'', "''")
     );
@@ -301,7 +315,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Config: {}",
         executable_directory.join(CONFIG_FILE_NAME).display()
     );
+    let open_browser_requested = std::env::args().any(|argument| argument == "--open-browser");
     let listener = tokio::net::TcpListener::bind(address).await?;
+    if open_browser_requested {
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            open_browser(port);
+        });
+    }
     axum::serve(listener, app)
         .with_graceful_shutdown(async move { shutdown.notified().await })
         .await?;

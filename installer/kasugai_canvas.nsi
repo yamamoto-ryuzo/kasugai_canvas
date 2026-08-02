@@ -27,6 +27,7 @@ VIAddVersionKey "CompanyName" "KASUGAI"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
+!define MUI_FINISHPAGE_RUN_PARAMETERS "--open-browser"
 !define MUI_FINISHPAGE_SHOWREADME
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Create desktop shortcut"
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
@@ -42,7 +43,7 @@ Section "Install"
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   CreateDirectory "$SMPROGRAMS\KASUGAI Canvas"
-  CreateShortcut "$SMPROGRAMS\KASUGAI Canvas\KASUGAI Canvas.lnk" "$INSTDIR\${APP_EXE}"
+  CreateShortcut "$SMPROGRAMS\KASUGAI Canvas\KASUGAI Canvas.lnk" "$INSTDIR\${APP_EXE}" "--open-browser"
 
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "DisplayName" "${APP_NAME}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "UninstallString" "$INSTDIR\uninstall.exe"
@@ -50,7 +51,7 @@ Section "Install"
 SectionEnd
 
 Function CreateDesktopShortcut
-  CreateShortcut "$DESKTOP\KASUGAI Canvas.lnk" "$INSTDIR\${APP_EXE}"
+  CreateShortcut "$DESKTOP\KASUGAI Canvas.lnk" "$INSTDIR\${APP_EXE}" "--open-browser"
 FunctionEnd
 
 Section "Uninstall"
