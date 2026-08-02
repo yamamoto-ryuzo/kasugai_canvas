@@ -2,11 +2,26 @@
 
 ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システム「KASUGAI Canvas」の技術選定ドキュメントです。
 
-## バージョン
+## バージョン管理
 
 現在のバージョンは **0.4.0** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
 
-新しいリリースでは、`server\Cargo.toml`のバージョンを更新し、`CHANGELOG.md`の`Unreleased`の内容を日付付きのバージョン欄へ移動してください。
+公開・リリース管理は次の場所で行います。
+
+- **ソースコード・リリースタグ**: [GitHub リポジトリ](https://github.com/yamamoto-ryuzo/kasugai_canvas)
+- **公開ドキュメント**: [GitHub Pages](https://yamamoto-ryuzo.github.io/kasugai_canvas/)
+- **変更履歴**: [CHANGELOG.md](CHANGELOG.md)
+
+新しいリリースでは、次の順序で更新してください。
+
+1. `server\Cargo.toml` の `package.version` を更新する
+2. `CHANGELOG.md` の `Unreleased` の内容を日付付きのバージョン欄へ移動する
+3. 変更を GitHub の `main` ブランチへ反映する
+4. 同じバージョンの Git タグ（例: `v0.5.0`）を作成して GitHub に公開する
+5. `python run.py -B` で配布 ZIP を作成し、必要に応じて GitHub のリリースへ添付する
+6. GitHub Pages の公開内容を確認する
+
+バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。
 
 ## ベース表示の起動
 
