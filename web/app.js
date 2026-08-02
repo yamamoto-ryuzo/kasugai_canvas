@@ -25,50 +25,22 @@ const numberParam = (name, fallback) => {
 };
 const clampZoom = zoom => Math.min(maxZoom, Math.max(minZoom, zoom));
 const basemaps = [];
-const tileMaxZooms = new Map();
-let tileZoomRefreshScheduled = false;
 
 function getTileMaxZoom(url) {
-  if (tileMaxZooms.has(url)) return tileMaxZooms.get(url);
-  const hostname = new URL(url, window.location.href).hostname;
-  if (hostname === "tile.openstreetmap.org") return 19;
-  if (hostname === "cyberjapandata.gsi.go.jp") return 18;
   return maxZoom;
 }
 
-function lowerTileMaxZoom(url, zoom) {
-  const nextMaxZoom = Math.max(0, zoom - 1);
-  if (nextMaxZoom >= getTileMaxZoom(url)) return;
-  tileMaxZooms.set(url, nextMaxZoom);
-}
-
-function scheduleTileZoomRefresh() {
-  if (tileZoomRefreshScheduled) return;
-  tileZoomRefreshScheduled = true;
-  requestAnimationFrame(() => {
-    tileZoomRefreshScheduled = false;
-    refreshLayers();
-  });
-}
-
-function createAdaptiveTileData(urlTemplate) {
-  return async ({url, signal, index}) => {
-    let response;
+function createAdaptiveTileData() {
+  return async ({url, signal}) => {
     try {
-      response = await fetch(url, { signal });
+      const response = await fetch(url, { signal });
+      if ([400, 404, 416].includes(response.status)) return null;
+      if (!response.ok) throw new Error(`Tile request failed (${response.status}): ${url}`);
+      return createImageBitmap(await response.blob());
     } catch (error) {
       if (signal?.aborted) throw error;
-      lowerTileMaxZoom(urlTemplate, index.z);
-      scheduleTileZoomRefresh();
       return null;
     }
-    if ([400, 404, 416].includes(response.status)) {
-      lowerTileMaxZoom(urlTemplate, index.z);
-      scheduleTileZoomRefresh();
-      return null;
-    }
-    if (!response.ok) throw new Error(`Tile request failed (${response.status}): ${url}`);
-    return createImageBitmap(await response.blob());
   };
 }
 
@@ -282,7 +254,7 @@ function createMapLayers() {
     data: selectedBasemap.url,
     minZoom,
     maxZoom: selectedBasemap.maxZoom ?? getTileMaxZoom(selectedBasemap.url),
-    getTileData: createAdaptiveTileData(selectedBasemap.url),
+    getTileData: createAdaptiveTileData(),
     tileSize: selectedBasemap.tileSize,
     refinementStrategy: "best-available",
     renderSubLayers: props => new BitmapLayer({
@@ -300,7 +272,7 @@ function createMapLayers() {
     data: selectedBasemap.url,
     minZoom,
     maxZoom: selectedBasemap.maxZoom ?? getTileMaxZoom(selectedBasemap.url),
-    getTileData: createAdaptiveTileData(selectedBasemap.url),
+    getTileData: createAdaptiveTileData(),
     tileSize: selectedBasemap.tileSize,
     refinementStrategy: "best-available",
     extensions: [new TerrainExtension()],
@@ -360,7 +332,7 @@ function createMapLayers() {
         data: item.url,
         minZoom,
         maxZoom: getTileMaxZoom(item.url),
-        getTileData: createAdaptiveTileData(item.url),
+        getTileData: createAdaptiveTileData(),
         tileSize: 256,
         refinementStrategy: "best-available",
         renderSubLayers: props => new BitmapLayer({
