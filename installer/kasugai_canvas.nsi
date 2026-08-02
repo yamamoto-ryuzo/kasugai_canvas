@@ -3,9 +3,13 @@
 !ifndef BUILD_EXE
   !define BUILD_EXE "..\server\target\release\kasugai_canvas.exe"
 !endif
+!ifndef SAMPLE_CONFIG
+  !define SAMPLE_CONFIG "kasugai_canvas.config"
+!endif
 
 !define APP_NAME "KASUGAI Canvas"
 !define APP_EXE "kasugai_canvas.exe"
+!define CONFIG_FILE_NAME "kasugai_canvas.config"
 !define INSTALL_DIR "C:\kasugai\kasugai_canvas"
 
 Name "${APP_NAME}"
@@ -18,10 +22,12 @@ InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUG
 RequestExecutionLevel admin
 Unicode True
 
-VIProductVersion "0.4.0.0"
+VIProductVersion "0.4.1.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "CompanyName" "KASUGAI"
+VIAddVersionKey "FileVersion" "0.4.1"
+VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
+VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -37,13 +43,20 @@ VIAddVersionKey "CompanyName" "KASUGAI"
 
 !insertmacro MUI_LANGUAGE "Japanese"
 
+Function .onInit
+  ExecWait '"$SYSDIR\taskkill.exe" /IM "${APP_EXE}" /T /F'
+FunctionEnd
+
 Section "Install"
   SetOutPath "$INSTDIR"
   File "${BUILD_EXE}"
+  IfFileExists "$INSTDIR\${CONFIG_FILE_NAME}" config_exists
+  File "${SAMPLE_CONFIG}"
+config_exists:
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   CreateDirectory "$SMPROGRAMS\KASUGAI Canvas"
-  CreateShortcut "$SMPROGRAMS\KASUGAI Canvas\KASUGAI Canvas.lnk" "$INSTDIR\${APP_EXE}" "--open-browser"
+  CreateShortcut "$SMPROGRAMS\KASUGAI Canvas\kasugai_canvas.lnk" "$INSTDIR\${APP_EXE}" "--open-browser"
 
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "DisplayName" "${APP_NAME}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "UninstallString" "$INSTDIR\uninstall.exe"
@@ -51,12 +64,12 @@ Section "Install"
 SectionEnd
 
 Function CreateDesktopShortcut
-  CreateShortcut "$DESKTOP\KASUGAI Canvas.lnk" "$INSTDIR\${APP_EXE}" "--open-browser"
+  CreateShortcut "$DESKTOP\kasugai_canvas.lnk" "$INSTDIR\${APP_EXE}" "--open-browser"
 FunctionEnd
 
 Section "Uninstall"
-  Delete "$DESKTOP\KASUGAI Canvas.lnk"
-  Delete "$SMPROGRAMS\KASUGAI Canvas\KASUGAI Canvas.lnk"
+  Delete "$DESKTOP\kasugai_canvas.lnk"
+  Delete "$SMPROGRAMS\KASUGAI Canvas\kasugai_canvas.lnk"
   RMDir "$SMPROGRAMS\KASUGAI Canvas"
   Delete "$INSTDIR\${APP_EXE}"
   Delete "$INSTDIR\uninstall.exe"

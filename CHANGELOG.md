@@ -8,14 +8,19 @@
 
 今後の変更をここに記録します。
 
+## [0.4.1] - 2026-08-02
+
 ### Added
 
 - GitHub Pages の最新バージョン情報を使った起動時の自動更新確認・確認付きインストール
 - 設定パネルからの自動更新 ON/OFF と手動更新確認
+- `kasugai_canvas.config` の初期サンプル設定を配布 ZIP と Windows インストーラーへ同梱
 
 ### Changed
 
 - BASEMAPの標準表示をDEMテクスチャーとして維持しつつ、表示中の3D Tilesへドレープする専用設定を追加
+- Axumサーバーが起動済みの状態でショートカットを起動した場合、既存サーバーを再利用してデフォルトブラウザを開くよう変更
+- インストーラー起動時に既存のアプリケーションプロセスを停止し、ショートカット名を `kasugai_canvas` に統一
 
 ## [0.4.0] - 2026-08-02
 
@@ -124,7 +129,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.1.0...v0.2.0

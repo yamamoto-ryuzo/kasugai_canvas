@@ -181,6 +181,17 @@ fn open_browser(port: u16) {
     }
 }
 
+async fn is_running_server(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/health");
+    let Ok(response) = reqwest::get(url).await else {
+        return false;
+    };
+    let Ok(data) = response.json::<Value>().await else {
+        return false;
+    };
+    data.get("name").and_then(Value::as_str) == Some("kasugai_canvas")
+}
+
 async fn install_update(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
@@ -316,7 +327,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         executable_directory.join(CONFIG_FILE_NAME).display()
     );
     let open_browser_requested = std::env::args().any(|argument| argument == "--open-browser");
-    let listener = tokio::net::TcpListener::bind(address).await?;
+    let listener = match tokio::net::TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        Err(_error) if open_browser_requested && is_running_server(port).await => {
+            open_browser(port);
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    };
     if open_browser_requested {
         tokio::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_millis(300)).await;
