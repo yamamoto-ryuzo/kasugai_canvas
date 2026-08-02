@@ -16,8 +16,6 @@ const origin = [0, 0];
 const inspectorDefault = "";
 const minZoom = -20;
 const maxZoom = 25;
-const terrainMaxZoom = 20;
-const terrainSampleZoom = 14;
 const urlParams = new URLSearchParams(window.location.search);
 const numberParam = (name, fallback) => {
   const value = Number(urlParams.get(name));
@@ -57,20 +55,25 @@ const demSources = {
     elevationData: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
     elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
     tileSize: 256,
+    maxZoom: 15,
   },
   reearth: {
     title: "Re:Earth Terrain (標高 / MSL, zoom 19)",
     elevationData: "https://terrain.reearth.land/terrarium/elevation/{z}/{x}/{y}.png",
     elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
     tileSize: 512,
+    maxZoom: 19,
     attribution: "Re:Earth Terrain · Mapterhorn (CC BY 4.0)",
+    attributionUrl: "https://terrain.reearth.land/",
   },
   "reearth-ellipsoid": {
     title: "Re:Earth Terrain (楕円体高 / WGS84, zoom 19)",
     elevationData: "https://terrain.reearth.land/terrarium/ellipsoid/{z}/{x}/{y}.png",
     elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
     tileSize: 512,
+    maxZoom: 19,
     attribution: "Re:Earth Terrain · Mapterhorn (CC BY 4.0)",
+    attributionUrl: "https://terrain.reearth.land/",
   },
 };
 
@@ -114,8 +117,8 @@ function formatTileUrl(template, index) {
     .replaceAll("{y}", String(index.y));
 }
 
-function getTerrainTileIndex(longitude, latitude) {
-  const scale = 2 ** terrainSampleZoom;
+function getTerrainTileIndex(longitude, latitude, zoom) {
+  const scale = 2 ** zoom;
   const x = Math.min(scale - 1, Math.max(0, Math.floor((longitude + 180) / 360 * scale)));
   const sine = Math.sin(latitude * Math.PI / 180);
   const y = Math.min(
@@ -124,7 +127,7 @@ function getTerrainTileIndex(longitude, latitude) {
   );
   const pixelX = ((longitude + 180) / 360 * scale - x);
   const pixelY = ((0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI)) * scale - y);
-  return { x, y, z: terrainSampleZoom, pixelX, pixelY };
+  return { x, y, z: zoom, pixelX, pixelY };
 }
 
 async function getTerrainTilePixels(source, index) {
@@ -139,6 +142,7 @@ async function getTerrainTilePixels(source, index) {
   canvas.height = source.tileSize;
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("DEM sample canvas is unavailable");
+  context.imageSmoothingEnabled = false;
   context.drawImage(bitmap, 0, 0, source.tileSize, source.tileSize);
   bitmap.close();
   const pixels = context.getImageData(0, 0, source.tileSize, source.tileSize);
@@ -153,7 +157,7 @@ async function updateTerrainFollow(next = viewState) {
   if (!layerState.get("terrain").visible) return;
   const source = demSources[selectedDemSource];
   if (!source) return;
-  const index = getTerrainTileIndex(next.longitude, next.latitude);
+  const index = getTerrainTileIndex(next.longitude, next.latitude, source.maxZoom);
   const sampleX = Math.min(source.tileSize - 1, Math.floor(index.pixelX * source.tileSize));
   const sampleY = Math.min(source.tileSize - 1, Math.floor(index.pixelY * source.tileSize));
   const sampleKey = `${selectedDemSource}:${index.x}:${index.y}:${Math.floor(sampleX / 16)}:${Math.floor(sampleY / 16)}`;
@@ -185,11 +189,75 @@ function clearTerrainFollow() {
   deck.setProps({ viewState });
 }
 
+function appendLink(container, text, url) {
+  if (!/^https?:\/\//i.test(url)) {
+    container.append(document.createTextNode(text));
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = text;
+  container.append(link);
+}
+
+function appendAttributionText(container, text) {
+  const urlPattern = /https?:\/\/[^\s<>]+/gi;
+  let lastIndex = 0;
+  for (const match of text.matchAll(urlPattern)) {
+    container.append(document.createTextNode(text.slice(lastIndex, match.index)));
+    appendLink(container, match[0], match[0]);
+    lastIndex = match.index + match[0].length;
+  }
+  container.append(document.createTextNode(text.slice(lastIndex)));
+}
+
+function appendAttributionNode(container, node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    appendAttributionText(container, node.nodeValue || "");
+    return;
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE) return;
+  if (node.tagName.toLowerCase() === "a") {
+    appendLink(container, node.textContent || "", node.getAttribute("href") || "");
+    return;
+  }
+  node.childNodes.forEach(child => appendAttributionNode(container, child));
+}
+
+function appendAttribution(container, credit) {
+  if (!credit) return;
+  const text = typeof credit === "string" ? credit : credit.label;
+  const url = typeof credit === "string" ? undefined : credit.url;
+  if (!text) return;
+  if (/<a\b/i.test(text)) {
+    const documentFragment = new DOMParser().parseFromString(text, "text/html");
+    documentFragment.body.childNodes.forEach(node => appendAttributionNode(container, node));
+    return;
+  }
+  if (url && /^https?:\/\//i.test(url)) {
+    appendLink(container, text, url);
+    return;
+  }
+  appendAttributionText(container, text);
+}
+
 function updateMapAttribution() {
-  const credits = [selectedBasemap?.attribution];
+  const credits = [];
+  if (selectedBasemap?.attribution) {
+    credits.push({ label: selectedBasemap.attribution, url: selectedBasemap.attributionUrl });
+  }
   const demSource = demSources[selectedDemSource];
-  if (layerState.get("terrain").visible && demSource?.attribution) credits.push(demSource.attribution);
-  document.querySelector("#map-attribution").textContent = credits.filter(Boolean).join(" | ");
+  if (layerState.get("terrain").visible && demSource?.attribution) {
+    credits.push({ label: demSource.attribution, url: demSource.attributionUrl });
+  }
+  const attribution = document.querySelector("#map-attribution");
+  attribution.replaceChildren();
+  credits.filter(credit => credit.label).forEach((credit, index) => {
+    if (index > 0) attribution.append(document.createTextNode(" | "));
+    appendAttribution(attribution, credit);
+  });
 }
 
 function createMapLayers() {
@@ -302,7 +370,7 @@ function createMapLayers() {
         : undefined,
       elevationDecoder: demSource.elevationDecoder,
       minZoom,
-      maxZoom: terrainMaxZoom,
+      maxZoom: demSource.maxZoom,
       tileSize: demSource.tileSize,
       meshMaxError: 10,
       operation: hasDemSource
@@ -596,12 +664,16 @@ function applyInspector(text) {
       if (parts[0] && parts[1]) {
         const options = {};
         parts.slice(3).forEach(part => {
-          const [key, raw] = part.split("=", 2);
+          const separator = part.indexOf("=");
+          if (separator < 0) return;
+          const key = part.slice(0, separator).trim();
+          const raw = part.slice(separator + 1).trim();
           const number = Number(raw);
           if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
           if (key === "maxZoom" && Number.isInteger(number) && number >= 0 && number <= maxZoom) {
             options.maxZoom = number;
           }
+          if (key === "attributionUrl" && /^https?:\/\//i.test(raw)) options.attributionUrl = raw;
         });
         parsedBasemaps.push({
           id: `inspector-base-${parsedBasemaps.length}`,
@@ -610,6 +682,7 @@ function applyInspector(text) {
           attribution: parts[2] || "",
           tileSize: options.tileSize || 256,
           ...(options.maxZoom === undefined ? {} : { maxZoom: options.maxZoom }),
+          ...(options.attributionUrl === undefined ? {} : { attributionUrl: options.attributionUrl }),
         });
       }
     }
