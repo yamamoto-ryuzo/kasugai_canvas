@@ -468,16 +468,15 @@ function createMapLayers() {
     orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
   const hasBasemap3DTilesSource = basemapDrape3DTiles &&
     orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
-  const has3DTilesTerrainSource = has3DTilesSource;
+  const has3DTilesTerrainSource = has3DTilesSource || hasBasemap3DTilesSource;
   const hasDrapeSource = hasDemSource || has3DTilesSource;
   const basemapUses3DTiles = Boolean(
     layerState.get("basemap").visible &&
     selectedBasemap &&
     hasBasemap3DTilesSource &&
-    directXYZDrapeSupported,
+    TerrainExtension,
   );
-  if (basemapUses3DTiles) directXYZDrapeAtlas.request(selectedBasemap, viewState);
-  else directXYZDrapeAtlas.disable();
+
   const isDrapeTarget = layerType =>
     Boolean(drapeLayers[layerType] && hasDrapeSource && TerrainExtension);
   const getDrapeProps = layerType => isDrapeTarget(layerType)
@@ -499,7 +498,6 @@ function createMapLayers() {
         ? "terrain+draw"
         : "draw",
       pickable: "3d",
-      ...(basemapUses3DTiles ? { extensions: [new DirectXYZDrapeExtension()] } : {}),
       onClick: info => showAttribute(info.object),
       onTilesetLoad: tileset => {
         const layer = layerState.get(item.id);
@@ -532,8 +530,31 @@ function createMapLayers() {
         : undefined,
     }),
   });
+  const createBasemapDrapeLayer = () => new TileLayer({
+    id: `basemap-${selectedBasemap.id}-drape`,
+    data: selectedBasemap.url,
+    minZoom,
+    maxZoom: selectedBasemap.maxZoom ?? getTileMaxZoom(selectedBasemap.url),
+    getTileData: createAdaptiveTileData(selectedBasemap.url),
+    tileSize: selectedBasemap.tileSize,
+    refinementStrategy: "best-available",
+    extensions: [new TerrainExtension()],
+    terrainDrawMode: "drape",
+    renderSubLayers: props => new BitmapLayer({
+      ...props,
+      id: `${props.id}-bitmap`,
+      data: null,
+      image: props.data,
+      bounds: props.tile.bbox.west
+        ? [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north]
+        : undefined,
+    }),
+  });
   if (layerState.get("basemap").visible && selectedBasemap && !terrainVisible && !basemapUses3DTiles) {
     layers.push(createBasemapLayer());
+  }
+  if (layerState.get("basemap").visible && selectedBasemap && basemapUses3DTiles) {
+    layers.push(createBasemapDrapeLayer());
   }
   if (terrainVisible) {
     layers.push(new TerrainLayer({
@@ -626,7 +647,6 @@ deck = new Deck({
     if (changed) deck.setProps({ viewState: nextViewState });
     updateCameraInputs();
     void updateTerrainFollow(viewState);
-    if (basemapDrape3DTiles) directXYZDrapeAtlas.request(selectedBasemap, viewState);
   },
   onWebGLInitialized: gl => {
     threeRenderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl, alpha: true });
@@ -776,7 +796,6 @@ function flyTo(next) {
   deck.setProps({ viewState });
   updateCameraInputs();
   void updateTerrainFollow(viewState);
-  if (basemapDrape3DTiles) directXYZDrapeAtlas.request(selectedBasemap, viewState);
 }
 
 function showAttribute(object) {
