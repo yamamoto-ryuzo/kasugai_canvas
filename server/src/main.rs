@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 const INDEX_HTML: &str = include_str!("../../web/index.html");
 const APP_JS: &str = include_str!("../../web/app.js");
+const BOOTSTRAP_JS: &str = include_str!("../../web/bootstrap.js");
 const STYLES_CSS: &str = include_str!("../../web/styles.css");
 const CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
 
@@ -25,6 +26,10 @@ async fn index() -> Html<&'static str> {
 
 async fn app_js() -> Response {
     ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], APP_JS).into_response()
+}
+
+async fn bootstrap_js() -> Response {
+    ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], BOOTSTRAP_JS).into_response()
 }
 
 async fn styles_css() -> Response {
@@ -84,6 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
+        .route("/bootstrap.js", get(bootstrap_js))
         .route("/styles.css", get(styles_css))
         .route("/health", get(health))
         .route("/api/config", get(get_config).put(put_config))

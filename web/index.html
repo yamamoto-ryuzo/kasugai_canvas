@@ -5,19 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KASUGAI Canvas</title>
     <link rel="stylesheet" href="/styles.css" />
-    <script src="https://unpkg.com/deck.gl@9.3.7/dist.min.js"></script>
-    <script>window.__deckCore = window.deck;</script>
-    <script src="https://unpkg.com/@deck.gl/geo-layers@9.3.7/dist.min.js"></script>
-    <script>window.__deckGeoLayers = window.deck;</script>
-    <script src="https://unpkg.com/@deck.gl/extensions@9.3.7/dist.min.js"></script>
-    <script>
-      window.deck = Object.assign(
-        {},
-        window.__deckCore || {},
-        window.__deckGeoLayers || {},
-        window.deck || {},
-      );
-    </script>
     <script type="importmap">
       {
         "imports": {
@@ -78,9 +65,10 @@
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel">その他</button>
               </nav>
               <section id="settings-dem-panel" class="settings-subpanel active">
+                <p class="hint terrain-definition"><strong>DEMテクスチャー</strong>：DEMで作った地形メッシュにBase map画像を貼る表示。<strong>ドレープ</strong>：XYZ・GeoJSONなどのレイヤーを地形表面の起伏に沿わせて貼る表示。</p>
                 <div class="terrain-options">
                   <label><input id="terrain-toggle" type="checkbox" checked /> Terrain (DEM表示)</label>
-                  <label><input id="basemap-drape-3dtiles" type="checkbox" /> 3D Tiles (BASEMAPドレープ)</label>
+                  <label><input id="basemap-drape-3dtiles" type="checkbox" /> 3D Tiles (BASEMAP直接GPUドレープ)</label>
                 </div>
                 <label class="field-label" for="dem-source">DEM</label>
                 <select id="dem-source">
@@ -133,6 +121,6 @@
         </div>
       </section>
     </main>
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="/bootstrap.js"></script>
   </body>
 </html>

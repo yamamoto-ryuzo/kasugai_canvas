@@ -1,6 +1,15 @@
 import * as THREE from "three";
 
-const { Deck, MapView, TerrainLayer, TileLayer, BitmapLayer, GeoJsonLayer, Tile3DLayer } = window.deck;
+const {
+  Deck,
+  MapView,
+  TerrainLayer,
+  TileLayer,
+  BitmapLayer,
+  GeoJsonLayer,
+  Tile3DLayer,
+  LayerExtension,
+} = window.deck;
 const TerrainExtension = window.deck.TerrainExtension || window.deck._TerrainExtension;
 const deckContainer = document.querySelector("#deck-container");
 
@@ -21,7 +30,11 @@ const tileMaxZooms = new Map();
 let tileZoomRefreshScheduled = false;
 
 function getTileMaxZoom(url) {
-  return tileMaxZooms.get(url) ?? maxZoom;
+  if (tileMaxZooms.has(url)) return tileMaxZooms.get(url);
+  const hostname = new URL(url, window.location.href).hostname;
+  if (hostname === "tile.openstreetmap.org") return 19;
+  if (hostname === "cyberjapandata.gsi.go.jp") return 18;
+  return maxZoom;
 }
 
 function lowerTileMaxZoom(url, zoom) {
@@ -41,31 +54,22 @@ function scheduleTileZoomRefresh() {
 
 function createAdaptiveTileData(urlTemplate) {
   return async ({url, signal, index}) => {
-    let fallbackIndex = { ...index };
-    while (fallbackIndex.z >= 0) {
-      const tileUrl = urlTemplate
-        .replaceAll("{z}", String(fallbackIndex.z))
-        .replaceAll("{x}", String(fallbackIndex.x))
-        .replaceAll("{y}", String(fallbackIndex.y));
-      const response = await fetch(
-        fallbackIndex === index ? url : tileUrl,
-        { signal },
-      );
-      if (response.status === 404) {
-        lowerTileMaxZoom(urlTemplate, fallbackIndex.z);
-        fallbackIndex = {
-          x: Math.floor(fallbackIndex.x / 2),
-          y: Math.floor(fallbackIndex.y / 2),
-          z: fallbackIndex.z - 1,
-        };
-        continue;
-      }
-      if (!response.ok) throw new Error(`Tile request failed (${response.status}): ${tileUrl}`);
-      const image = await createImageBitmap(await response.blob());
-      if (fallbackIndex.z !== index.z) scheduleTileZoomRefresh();
-      return image;
+    let response;
+    try {
+      response = await fetch(url, { signal });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      lowerTileMaxZoom(urlTemplate, index.z);
+      scheduleTileZoomRefresh();
+      return null;
     }
-    throw new Error(`No available parent tile: ${url}`);
+    if ([400, 404, 416].includes(response.status)) {
+      lowerTileMaxZoom(urlTemplate, index.z);
+      scheduleTileZoomRefresh();
+      return null;
+    }
+    if (!response.ok) throw new Error(`Tile request failed (${response.status}): ${url}`);
+    return createImageBitmap(await response.blob());
   };
 }
 
@@ -117,6 +121,7 @@ const drapeLayers = {
 let yahooAppId = "";
 let shadowEnabled = false;
 let basemapDrape3DTiles = false;
+let deck;
 let viewState = {
   longitude: numberParam("longitude", origin[0]),
   latitude: numberParam("latitude", origin[1]),
@@ -137,6 +142,240 @@ function formatTileUrl(template, index) {
     .replaceAll("{x}", String(index.x))
     .replaceAll("{y}", String(index.y));
 }
+
+const directXYZDrapeModule = {
+  name: "directXYZDrape",
+  vs: `
+layout(std140) uniform directXYZDrapeUniforms {
+  bool enabled;
+  vec2 origin;
+  vec2 grid;
+  float zoom;
+} directXYZDrape;
+out vec2 directXYZDrapeUV;
+out float directXYZDrapeVisible;
+`,
+  fs: `
+precision highp float;
+in vec2 directXYZDrapeUV;
+in float directXYZDrapeVisible;
+uniform sampler2D directXYZDrapeTexture;
+`,
+  uniformTypes: {
+    enabled: "i32",
+    origin: "vec2<f32>",
+    grid: "vec2<f32>",
+    zoom: "f32",
+  },
+  getUniforms: props => props || {},
+  inject: {
+    "vs:#main-end": `
+      vec2 directXYZDrapeWorld = vec2(
+        (geometry.position.x + project.commonOrigin.x) / 512.0,
+        1.0 - (geometry.position.y + project.commonOrigin.y) / 512.0
+      );
+      vec2 directXYZDrapeTile = directXYZDrapeWorld * exp2(directXYZDrape.zoom);
+      vec2 directXYZDrapeAtlasTile = floor(directXYZDrapeTile) - directXYZDrape.origin;
+      directXYZDrapeVisible = float(
+        directXYZDrape.enabled &&
+        all(greaterThanEqual(directXYZDrapeAtlasTile, vec2(0.0))) &&
+        all(lessThan(directXYZDrapeAtlasTile, directXYZDrape.grid))
+      );
+      directXYZDrapeUV = vec2(
+        (directXYZDrapeAtlasTile.x + fract(directXYZDrapeTile.x)) / directXYZDrape.grid.x,
+        1.0 - (directXYZDrapeAtlasTile.y + fract(directXYZDrapeTile.y)) / directXYZDrape.grid.y
+      );
+    `,
+    "fs:DECKGL_FILTER_COLOR": `
+      if (directXYZDrapeVisible > 0.5) {
+        vec4 directXYZDrapeColor = texture(directXYZDrapeTexture, directXYZDrapeUV);
+        color.rgb = mix(color.rgb, directXYZDrapeColor.rgb, directXYZDrapeColor.a);
+      }
+    `,
+  },
+};
+
+class DirectXYZDrapeAtlas {
+  constructor() {
+    this.device = null;
+    this.texture = null;
+    this.enabled = false;
+    this.origin = [0, 0];
+    this.grid = [1, 1];
+    this.zoom = 0;
+    this.source = null;
+    this.viewState = null;
+    this.key = "";
+    this.generation = 0;
+    this.abortController = null;
+  }
+
+  setDevice(device) {
+    if (this.device === device) return;
+    this.texture?.destroy();
+    this.device = device;
+    this.texture = this.createTexture(1, 1, new Uint8Array([0, 0, 0, 0]));
+    this.key = "";
+    this.update();
+  }
+
+  createTexture(width, height, data) {
+    return this.device.createTexture({
+      id: "direct-xyz-drape-atlas",
+      width,
+      height,
+      format: "rgba8unorm",
+      data,
+      sampler: {
+        addressModeU: "clamp-to-edge",
+        addressModeV: "clamp-to-edge",
+        magFilter: "linear",
+        minFilter: "linear",
+        mipmapFilter: "nearest",
+      },
+    });
+  }
+
+  request(source, nextViewState) {
+    this.source = source || null;
+    this.viewState = nextViewState || null;
+    this.update();
+  }
+
+  disable() {
+    if (!this.enabled && !this.abortController) return;
+    this.enabled = false;
+    this.abortController?.abort();
+    this.abortController = null;
+    this.generation += 1;
+    deck?.redraw(true);
+  }
+
+  getShaderProps() {
+    return {
+      enabled: this.enabled ? 1 : 0,
+      origin: this.origin,
+      grid: this.grid,
+      zoom: this.zoom,
+      directXYZDrapeTexture: this.texture,
+    };
+  }
+
+  update() {
+    if (!this.device || !this.source || !this.viewState) return;
+    const sourceMaxZoom = this.source.maxZoom ?? getTileMaxZoom(this.source.url);
+    const zoom = Math.max(0, Math.min(sourceMaxZoom, Math.ceil(this.viewState.zoom)));
+    const scale = 2 ** zoom;
+    const centerX = Math.floor((this.viewState.longitude + 180) / 360 * scale);
+    const latitude = Math.max(-85.05112878, Math.min(85.05112878, this.viewState.latitude));
+    const sine = Math.sin(latitude * Math.PI / 180);
+    const centerY = Math.floor(
+      (0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI)) * scale,
+    );
+    const maxTextureSize = this.device.limits?.maxTextureDimension2D || 4096;
+    const gridSize = Math.max(
+      1,
+      Math.min(6, scale, Math.floor(maxTextureSize / this.source.tileSize)),
+    );
+    const startX = centerX - Math.floor(gridSize / 2);
+    const startY = Math.max(0, Math.min(scale - gridSize, centerY - Math.floor(gridSize / 2)));
+    const key = [
+      this.source.url,
+      this.source.tileSize,
+      zoom,
+      startX,
+      startY,
+      gridSize,
+    ].join(":");
+    if (key === this.key) return;
+    this.key = key;
+    this.enabled = false;
+    this.abortController?.abort();
+    const abortController = new AbortController();
+    this.abortController = abortController;
+    const generation = ++this.generation;
+    void this.build(
+      { source: this.source, zoom, scale, startX, startY, gridSize },
+      abortController.signal,
+      generation,
+    );
+  }
+
+  async build({ source, zoom, scale, startX, startY, gridSize }, signal, generation) {
+    const size = source.tileSize * gridSize;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Direct XYZ drape canvas is unavailable");
+
+    const tiles = [];
+    for (let y = 0; y < gridSize; y += 1) {
+      for (let x = 0; x < gridSize; x += 1) {
+        const tileX = ((startX + x) % scale + scale) % scale;
+        const tileY = startY + y;
+        const url = formatTileUrl(source.url, { x: tileX, y: tileY, z: zoom });
+        tiles.push({ x, y, url });
+      }
+    }
+    const images = await Promise.all(tiles.map(async tile => {
+      try {
+        const response = await fetch(tile.url, { signal });
+        if (!response.ok) return null;
+        return { ...tile, image: await createImageBitmap(await response.blob()) };
+      } catch (error) {
+        if (signal.aborted) return null;
+        console.warn(`BASEMAP direct drape tile failed: ${tile.url}`, error);
+        return null;
+      }
+    }));
+    if (signal.aborted || generation !== this.generation) {
+      images.forEach(tile => tile?.image.close());
+      return;
+    }
+    images.forEach(tile => {
+      if (!tile) return;
+      context.drawImage(
+        tile.image,
+        tile.x * source.tileSize,
+        tile.y * source.tileSize,
+        source.tileSize,
+        source.tileSize,
+      );
+      tile.image.close();
+    });
+    const texture = this.createTexture(size, size, canvas);
+    if (signal.aborted || generation !== this.generation) {
+      texture.destroy();
+      return;
+    }
+    this.texture?.destroy();
+    this.texture = texture;
+    this.origin = [startX, startY];
+    this.grid = [gridSize, gridSize];
+    this.zoom = zoom;
+    this.enabled = true;
+    deck?.redraw(true);
+  }
+}
+
+const directXYZDrapeAtlas = new DirectXYZDrapeAtlas();
+const directXYZDrapeSupported = Boolean(LayerExtension && Tile3DLayer);
+const DirectXYZDrapeExtension = LayerExtension && class extends LayerExtension {
+  static extensionName = "DirectXYZDrapeExtension";
+
+  getShaders() {
+    return { modules: [directXYZDrapeModule] };
+  }
+
+  initializeState(context) {
+    directXYZDrapeAtlas.setDevice(context.device);
+  }
+
+  draw() {
+    this.setShaderModuleProps({ directXYZDrape: directXYZDrapeAtlas.getShaderProps() });
+  }
+};
 
 function getTerrainTileIndex(longitude, latitude) {
   const scale = 2 ** terrainSampleZoom;
@@ -229,15 +468,16 @@ function createMapLayers() {
     orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
   const hasBasemap3DTilesSource = basemapDrape3DTiles &&
     orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
-  const has3DTilesTerrainSource = (uses3DTiles || basemapDrape3DTiles) &&
-    orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
+  const has3DTilesTerrainSource = has3DTilesSource;
   const hasDrapeSource = hasDemSource || has3DTilesSource;
   const basemapUses3DTiles = Boolean(
     layerState.get("basemap").visible &&
     selectedBasemap &&
     hasBasemap3DTilesSource &&
-    TerrainExtension,
+    directXYZDrapeSupported,
   );
+  if (basemapUses3DTiles) directXYZDrapeAtlas.request(selectedBasemap, viewState);
+  else directXYZDrapeAtlas.disable();
   const isDrapeTarget = layerType =>
     Boolean(drapeLayers[layerType] && hasDrapeSource && TerrainExtension);
   const getDrapeProps = layerType => isDrapeTarget(layerType)
@@ -259,6 +499,7 @@ function createMapLayers() {
         ? "terrain+draw"
         : "draw",
       pickable: "3d",
+      ...(basemapUses3DTiles ? { extensions: [new DirectXYZDrapeExtension()] } : {}),
       onClick: info => showAttribute(info.object),
       onTilesetLoad: tileset => {
         const layer = layerState.get(item.id);
@@ -273,13 +514,13 @@ function createMapLayers() {
       },
     });
   };
-  const createBasemapLayer = draped => new TileLayer({
-    id: `basemap-${selectedBasemap.id}-${draped ? "drape" : "plain"}`,
+  const createBasemapLayer = () => new TileLayer({
+    id: `basemap-${selectedBasemap.id}-plain`,
     data: selectedBasemap.url,
     minZoom,
-    maxZoom: getTileMaxZoom(selectedBasemap.url),
+    maxZoom: selectedBasemap.maxZoom ?? getTileMaxZoom(selectedBasemap.url),
     getTileData: createAdaptiveTileData(selectedBasemap.url),
-    tileSize: 256,
+    tileSize: selectedBasemap.tileSize,
     refinementStrategy: "best-available",
     renderSubLayers: props => new BitmapLayer({
       ...props,
@@ -289,13 +530,10 @@ function createMapLayers() {
       bounds: props.tile.bbox.west
         ? [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north]
         : undefined,
-      ...(draped
-        ? { extensions: [new TerrainExtension()], terrainDrawMode: "drape" }
-        : {}),
     }),
   });
   if (layerState.get("basemap").visible && selectedBasemap && !terrainVisible && !basemapUses3DTiles) {
-    layers.push(createBasemapLayer(false));
+    layers.push(createBasemapLayer());
   }
   if (terrainVisible) {
     layers.push(new TerrainLayer({
@@ -321,9 +559,6 @@ function createMapLayers() {
       },
       visible: layerState.get("terrain").visible,
     }));
-  }
-  if (layerState.get("basemap").visible && selectedBasemap && basemapUses3DTiles) {
-    layers.push(createBasemapLayer(true));
   }
   orderedItems.forEach(item => {
     if (item.type === "terrain" || item.type === "basemap" || item.type === "three") return;
@@ -373,20 +608,25 @@ function createMapLayers() {
   return layers;
 }
 
-const deck = new Deck({
+deck = new Deck({
   parent: deckContainer,
   views: new MapView({ repeat: false }),
   initialViewState: viewState,
   controller: { dragRotate: true, touchRotate: true, scrollZoom: true, doubleClickZoom: true, minPitch: 0, maxPitch: 179 },
   onViewStateChange: ({ viewState: next }) => {
-    viewState = {
+    const nextViewState = {
       ...viewState,
       ...next,
       zoom: clampZoom(next.zoom ?? viewState.zoom),
     };
-    deck.setProps({ viewState });
+    const changed = ["longitude", "latitude", "zoom", "pitch", "bearing"].some(
+      key => nextViewState[key] !== viewState[key],
+    );
+    viewState = nextViewState;
+    if (changed) deck.setProps({ viewState: nextViewState });
     updateCameraInputs();
     void updateTerrainFollow(viewState);
+    if (basemapDrape3DTiles) directXYZDrapeAtlas.request(selectedBasemap, viewState);
   },
   onWebGLInitialized: gl => {
     threeRenderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl, alpha: true });
@@ -536,6 +776,7 @@ function flyTo(next) {
   deck.setProps({ viewState });
   updateCameraInputs();
   void updateTerrainFollow(viewState);
+  if (basemapDrape3DTiles) directXYZDrapeAtlas.request(selectedBasemap, viewState);
 }
 
 function showAttribute(object) {
@@ -596,12 +837,25 @@ function applyInspector(text) {
     }
     if (type === "base") {
       const parts = value.split("|").map(part => part.trim());
-      if (parts[0] && parts[1]) parsedBasemaps.push({
-        id: `inspector-base-${parsedBasemaps.length}`,
-        title: parts[0],
-        url: parts[1],
-        attribution: parts[2] || "",
-      });
+      if (parts[0] && parts[1]) {
+        const options = {};
+        parts.slice(3).forEach(part => {
+          const [key, raw] = part.split("=", 2);
+          const number = Number(raw);
+          if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
+          if (key === "maxZoom" && Number.isInteger(number) && number >= 0 && number <= maxZoom) {
+            options.maxZoom = number;
+          }
+        });
+        parsedBasemaps.push({
+          id: `inspector-base-${parsedBasemaps.length}`,
+          title: parts[0],
+          url: parts[1],
+          attribution: parts[2] || "",
+          tileSize: options.tileSize || 256,
+          ...(options.maxZoom === undefined ? {} : { maxZoom: options.maxZoom }),
+        });
+      }
     }
     if (type === "cam") {
       const parts = value.split("|").map(part => part.trim());
