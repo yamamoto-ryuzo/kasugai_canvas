@@ -9,6 +9,9 @@
 !define INSTALL_DIR "C:\kasugai\kasugai_canvas"
 
 Name "${APP_NAME}"
+; icon.ico は 16x16 から 256x256 までのマルチサイズ ICO を含む
+!define MUI_ICON "icon.ico"
+!define MUI_UNICON "icon.ico"
 OutFile "..\download\kasugai_canvas_setup.exe"
 InstallDir "${INSTALL_DIR}"
 InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "InstallLocation"

@@ -16,6 +16,7 @@ const INDEX_HTML: &str = include_str!("../../web/index.html");
 const APP_JS: &str = include_str!("../../web/app.js");
 const BOOTSTRAP_JS: &str = include_str!("../../web/bootstrap.js");
 const STYLES_CSS: &str = include_str!("../../web/styles.css");
+const FAVICON_ICO: &[u8] = include_bytes!("../../web/favicon.ico");
 const CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const LATEST_JSON_URLS: [&str; 2] = [
@@ -75,6 +76,10 @@ async fn styles_css() -> Response {
         STYLES_CSS,
     )
         .into_response()
+}
+
+async fn favicon() -> Response {
+    ([(header::CONTENT_TYPE, "image/x-icon")], FAVICON_ICO).into_response()
 }
 
 async fn health() -> Json<Value> {
@@ -280,6 +285,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/app.js", get(app_js))
         .route("/bootstrap.js", get(bootstrap_js))
         .route("/styles.css", get(styles_css))
+        .route("/favicon.ico", get(favicon))
         .route("/health", get(health))
         .route("/api/config", get(get_config).put(put_config))
         .route(
