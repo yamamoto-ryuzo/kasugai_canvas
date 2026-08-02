@@ -20,7 +20,7 @@ const CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const LATEST_JSON_URLS: [&str; 2] = [
     "https://yamamoto-ryuzo.github.io/kasugai_canvas/download/latest.json",
-    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/docs/download/latest.json",
+    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/latest.json",
 ];
 const RELEASE_DOWNLOAD_URL: &str =
     "https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest/download/kasugai_canvas.zip";
