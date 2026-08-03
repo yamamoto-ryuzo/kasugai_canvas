@@ -8,6 +8,12 @@
 
 今後の変更をここに記録します。
 
+## [0.4.2] - 2026-08-03
+
+### Changed
+
+- 3D TilesのLODとメモリ使用量を制限し、メモリ逼迫時に詳細度を自動調整することで描画負荷を軽減
+
 ## [0.4.1] - 2026-08-02
 
 ### Added
@@ -129,7 +135,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.2.0...v0.3.0

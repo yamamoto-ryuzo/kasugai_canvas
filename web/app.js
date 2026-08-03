@@ -16,6 +16,8 @@ const origin = [0, 0];
 const inspectorDefault = "";
 const minZoom = -20;
 const maxZoom = 25;
+const tile3dMaximumScreenSpaceError = 16;
+const tile3dMaximumMemoryUsage = 512;
 const urlParams = new URLSearchParams(window.location.search);
 const numberParam = (name, fallback) => {
   const value = Number(urlParams.get(name));
@@ -302,6 +304,13 @@ function createMapLayers() {
       operation: has3DTilesTerrainSource
         ? "terrain+draw"
         : "draw",
+      loadOptions: {
+        tileset: {
+          maximumScreenSpaceError: tile3dMaximumScreenSpaceError,
+          maximumMemoryUsage: tile3dMaximumMemoryUsage,
+          memoryAdjustedScreenSpaceError: true,
+        },
+      },
       pickable: "3d",
       onClick: info => showAttribute(info.object),
       onTilesetLoad: tileset => {
