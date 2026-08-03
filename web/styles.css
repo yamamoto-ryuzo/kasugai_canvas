@@ -102,7 +102,12 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .search-results { display: grid; gap: 5px; margin-top: 8px; max-height: 220px; overflow-y: auto; }
 .search-results button { overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .share-url { width: 100%; margin-top: 7px; }
-.attr-content { padding: 8px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.7); font: var(--basemap-select-font-size)/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+.attr-content { padding: 8px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.7); font: var(--basemap-select-font-size)/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.attr-list { display: grid; gap: 6px; margin: 0; }
+.attr-row { display: grid; grid-template-columns: minmax(96px, 34%) minmax(0, 1fr); gap: 8px; padding-bottom: 6px; border-bottom: 1px solid #e4ecef; }
+.attr-row:last-child { padding-bottom: 0; border-bottom: 0; }
+.attr-name { color: #52636d; font-weight: 700; overflow-wrap: anywhere; }
+.attr-value { min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .resource-links { display: flex; gap: 7px; }
 .resource-links a { flex: 1; padding: 6px; border: 1px solid #cbd9de; border-radius: 4px; color: #31564f; font-size: 11px; text-align: center; text-decoration: none; background: rgba(255,255,255,.55); }
 .legend { display: flex; gap: 18px; padding: 12px 18px; color: #71818d; font-size: 11px; }

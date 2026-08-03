@@ -707,9 +707,41 @@ function flyTo(next) {
 }
 
 function showAttribute(object) {
-  document.querySelector("#attr-content").textContent = object
-    ? JSON.stringify(object, null, 2)
-    : "属性情報がありません。";
+  const content = document.querySelector("#attr-content");
+  content.replaceChildren();
+  if (!object) {
+    content.textContent = "属性情報がありません。";
+    return;
+  }
+
+  const attributes = object.properties && typeof object.properties === "object"
+    ? object.properties
+    : object;
+  if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {
+    content.textContent = formatAttributeValue(attributes);
+    return;
+  }
+
+  const list = document.createElement("dl");
+  list.className = "attr-list";
+  Object.entries(attributes).forEach(([name, value]) => {
+    const row = document.createElement("div");
+    row.className = "attr-row";
+    const label = document.createElement("dt");
+    label.className = "attr-name";
+    label.textContent = name;
+    const valueElement = document.createElement("dd");
+    valueElement.className = "attr-value";
+    valueElement.textContent = formatAttributeValue(value);
+    row.append(label, valueElement);
+    list.append(row);
+  });
+  content.append(list);
+}
+
+function formatAttributeValue(value) {
+  if (value !== null && typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value ?? "");
 }
 
 function shareUrl() {
