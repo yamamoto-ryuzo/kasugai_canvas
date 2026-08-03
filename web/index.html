@@ -31,9 +31,6 @@
               <button class="panel-tab" type="button" data-panel="settings-panel">設定</button>
             </nav>
             <section id="layers-panel" class="plugin-panel active">
-              <div class="section-title">Project</div>
-              <select id="project-select" aria-label="Project"></select>
-              <div class="section-title">Layers</div>
               <div id="layer-list"></div>
             </section>
             <section id="camera-panel" class="plugin-panel">
@@ -64,6 +61,7 @@
             <section id="settings-panel" class="plugin-panel terrain-control">
               <nav class="settings-tabs" aria-label="設定カテゴリ">
                 <button class="settings-tab active" type="button" data-settings-panel="settings-dem-panel">DEM</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-project-panel">Project</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-layer-panel">レイヤ</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel">その他</button>
               </nav>
@@ -79,6 +77,10 @@
                   <option value="reearth">Re:Earth Terrain (標高 / MSL, zoom 19)</option>
                   <option value="terrarium">Terrarium DEM (AWS, zoom 15)</option>
                 </select>
+              </section>
+              <section id="settings-project-panel" class="settings-subpanel">
+                <label class="field-label" for="project-select">Project</label>
+                <select id="project-select" aria-label="Project"></select>
               </section>
               <section id="settings-layer-panel" class="settings-subpanel">
                 <span class="field-label">ドレープ対象地形</span>
@@ -113,7 +115,7 @@
               </section>
             </section>
             <section id="info-panel" class="plugin-panel embedded-content">
-              <iframe src="about:blank" title="Info"></iframe>
+              <div id="info-content" class="info-content"></div>
             </section>
             <section id="legend-panel" class="plugin-panel embedded-content">
               <img alt="凡例" />

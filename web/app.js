@@ -747,6 +747,45 @@ function renderBasemapSelector() {
   select.value = selectedBasemap?.id || "";
 }
 
+let infoRequestId = 0;
+
+function setupInfoTabs(content) {
+  const buttons = [...content.querySelectorAll(".tab-button")];
+  const panels = [...content.querySelectorAll(".tab-content")];
+  if (!buttons.length || !panels.length) return;
+  const activate = index => {
+    buttons.forEach((button, buttonIndex) => button.classList.toggle("active", buttonIndex === index));
+    panels.forEach((panel, panelIndex) => panel.classList.toggle("active", panelIndex === index));
+  };
+  buttons.forEach((button, index) => button.addEventListener("click", () => activate(index)));
+  activate(Math.max(0, buttons.findIndex(button => button.classList.contains("active"))));
+}
+
+async function loadInfoContent(url) {
+  const content = document.querySelector("#info-content");
+  if (!content) return;
+  const requestId = ++infoRequestId;
+  content.replaceChildren();
+  if (!url) return;
+  try {
+    const response = await fetch(`/api/info?url=${encodeURIComponent(url)}`);
+    if (!response.ok) throw new Error(await response.text());
+    const html = await response.text();
+    if (requestId !== infoRequestId) return;
+    const documentFragment = new DOMParser().parseFromString(html, "text/html");
+    documentFragment.querySelectorAll("script, iframe, object, embed, form, link, style").forEach(node => node.remove());
+    documentFragment.querySelectorAll("*").forEach(node => {
+      [...node.attributes].forEach(attribute => {
+        if (/^on/i.test(attribute.name) || /javascript:/i.test(attribute.value)) node.removeAttribute(attribute.name);
+      });
+    });
+    content.replaceChildren(...[...documentFragment.body.childNodes].map(node => document.importNode(node, true)));
+    setupInfoTabs(content);
+  } catch (error) {
+    if (requestId === infoRequestId) content.textContent = `INFOを読み込めません: ${error instanceof Error ? error.message : error}`;
+  }
+}
+
 function applyInspector(text) {
   const nextLines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const parsedCameras = [];
@@ -761,7 +800,8 @@ function applyInspector(text) {
   tileLayers.splice(0, tileLayers.length);
   yahooAppId = "";
   document.body.style.background = "";
-  document.querySelector("#info-panel iframe").src = "about:blank";
+  document.querySelector("#info-content").replaceChildren();
+  ++infoRequestId;
   document.querySelector("#legend-panel img").removeAttribute("src");
   nextLines.forEach(line => {
     const separator = line.indexOf(":");
@@ -770,7 +810,7 @@ function applyInspector(text) {
     const value = line.slice(separator + 1).trim();
     if (type === "background") document.body.style.background = value;
     if (type === "yahooappid") yahooAppId = value;
-    if (type === "info") document.querySelector("#info-panel iframe").src = value;
+    if (type === "info") void loadInfoContent(value);
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());
       document.querySelector("#legend-panel img").src = parts[parts.length - 1];

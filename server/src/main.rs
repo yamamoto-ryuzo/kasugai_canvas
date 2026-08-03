@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
@@ -38,6 +38,11 @@ struct AppState {
     update_config_path: Arc<PathBuf>,
     shutdown: Arc<Notify>,
     port: u16,
+}
+
+#[derive(Deserialize)]
+struct InfoQuery {
+    url: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -99,6 +104,25 @@ async fn styles_css() -> Response {
 
 async fn favicon() -> Response {
     ([(header::CONTENT_TYPE, "image/x-icon")], FAVICON_ICO).into_response()
+}
+
+async fn proxy_info(Query(query): Query<InfoQuery>) -> Result<Html<String>, (StatusCode, String)> {
+    let url = reqwest::Url::parse(&query.url).map_err(|_| {
+        (StatusCode::BAD_REQUEST, "INFO URLが不正です".to_string())
+    })?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "INFO URLはhttpまたはhttpsで指定してください".to_string(),
+        ));
+    }
+    let response = reqwest::get(url)
+        .await
+        .map_err(internal_error)?
+        .error_for_status()
+        .map_err(internal_error)?;
+    let content = response.text().await.map_err(internal_error)?;
+    Ok(Html(content))
 }
 
 async fn health(State(state): State<AppState>) -> Json<Value> {
@@ -462,6 +486,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/styles.css", get(styles_css))
         .route("/favicon.ico", get(favicon))
         .route("/health", get(health))
+        .route("/api/info", get(proxy_info))
         .route("/api/projects", get(list_projects))
         .route(
             "/api/projects/{project_id}/config",
