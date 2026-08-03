@@ -557,6 +557,16 @@ function parseLayerTitle(title) {
   };
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>'"]/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "'": "&#39;",
+    '"': "&quot;",
+  })[character]);
+}
+
 function getOrderedLayerItems() {
   const items = [...layerState.values(), ...tileLayers].filter(layer => layer.id !== "basemap");
   const byId = new Map(items.map(layer => [layer.id, layer]));
@@ -569,33 +579,61 @@ function renderLayerList() {
   const groupedLayers = new Map();
   getOrderedLayerItems().filter(layer => layer.id !== "terrain").forEach(layer => {
     const group = layer.group || "";
-    if (!groupedLayers.has(group)) groupedLayers.set(group, []);
-    groupedLayers.get(group).push(layer);
+    const key = `${group}|${layer.exclusiveGroup ? "exclusive" : "regular"}`;
+    if (!groupedLayers.has(key)) groupedLayers.set(key, { group, exclusive: layer.exclusiveGroup, layers: [] });
+    groupedLayers.get(key).layers.push(layer);
   });
-  list.innerHTML = [...groupedLayers].map(([group, layers]) => `
-    <div class="layer-group" data-group="${group}">
-      ${group ? `<div class="layer-group-title">${group}</div>` : ""}
-      ${layers.map(layer => `
-    <label class="layer-row" draggable="true" data-layer-id="${layer.id}">
-      <input type="checkbox" data-layer-id="${layer.id}" data-group="${layer.group || ""}" data-exclusive="${layer.exclusiveGroup ? "true" : "false"}" ${layer.visible ? "checked" : ""} ${layer.id === "google-photorealistic" || (layer.type === "3dtiles" && !Tile3DLayer) ? "disabled" : ""}>
-      <span>${layer.title}</span>
-      <small>${layer.status || (layer.type === "tile" ? "Tile" : layer.type)}</small>
-    </label>
-      `).join("")}
-    </div>
-  `).join("");
-  list.querySelectorAll("input").forEach(input => {
+  list.innerHTML = [...groupedLayers.values()].map(({ group, exclusive, layers }) => {
+    const groupKey = `${group}|${exclusive ? "exclusive" : "regular"}`;
+    const groupId = `layer-group-${[...groupKey].map(character => character.charCodeAt(0).toString(16)).join("")}`;
+    const groupChecked = layers.some(layer => layer.visible);
+    return `
+    <section class="layer-group${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
+      ${group ? `<div class="layer-group-title"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="true">▾</button><input class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><span>${escapeHtml(group)}</span>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
+      <div class="layer-group-children" id="${groupId}">
+        ${layers.map(layer => `
+        <label class="layer-row" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
+          <input type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""} ${layer.id === "google-photorealistic" || (layer.type === "3dtiles" && !Tile3DLayer) ? "disabled" : ""}>
+          <span>${escapeHtml(layer.title)}</span>
+          <small>${escapeHtml(layer.status || (layer.type === "tile" ? "Tile" : layer.type))}</small>
+        </label>`).join("")}
+      </div>
+    </section>`;
+  }).join("");
+
+  list.querySelectorAll(".layer-group-checkbox").forEach(input => {
+    input.addEventListener("change", () => {
+      const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
+      if (!group) return;
+      if (group.exclusive) {
+        group.layers.forEach(layer => { layer.visible = false; });
+        if (input.checked) (group.layers.find(layer => layer.visible) || group.layers[0]).visible = true;
+      } else group.layers.forEach(layer => { layer.visible = input.checked; });
+      renderLayerList();
+      refreshLayers();
+    });
+  });
+  list.querySelectorAll(".layer-row input").forEach(input => {
     input.addEventListener("change", () => {
       const layer = layerState.get(input.dataset.layerId) || tileLayers.find(item => item.id === input.dataset.layerId);
       if (!layer) return;
       layer.visible = input.checked;
-      if (input.checked && input.dataset.exclusive === "true" && input.dataset.group) {
+      if (input.checked && input.dataset.exclusive === "true") {
         [...layerState.values(), ...tileLayers].forEach(other => {
-          if (other !== layer && other.group === input.dataset.group) other.visible = false;
+          if (other !== layer && other.group === layer.group && other.exclusiveGroup) other.visible = false;
         });
-        renderLayerList();
       }
+      renderLayerList();
       refreshLayers();
+    });
+  });
+  list.querySelectorAll(".layer-group-toggle").forEach(toggle => {
+    toggle.addEventListener("click", () => {
+      const children = toggle.closest(".layer-group").querySelector(".layer-group-children");
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      toggle.textContent = expanded ? "▸" : "▾";
+      children.hidden = expanded;
     });
   });
   let draggedId;
@@ -606,14 +644,8 @@ function renderLayerList() {
       event.dataTransfer.setData("text/plain", draggedId);
       row.classList.add("dragging");
     });
-    row.addEventListener("dragend", () => {
-      draggedId = undefined;
-      row.classList.remove("dragging");
-    });
-    row.addEventListener("dragover", event => {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "move";
-    });
+    row.addEventListener("dragend", () => { draggedId = undefined; row.classList.remove("dragging"); });
+    row.addEventListener("dragover", event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; });
     row.addEventListener("drop", event => {
       event.preventDefault();
       const sourceId = draggedId || event.dataTransfer.getData("text/plain");
@@ -622,7 +654,7 @@ function renderLayerList() {
       const orderedLayers = getOrderedLayerItems();
       const sourceLayer = orderedLayers.find(item => item.id === sourceId);
       const targetLayer = orderedLayers.find(item => item.id === targetId);
-      if (!sourceLayer || !targetLayer || sourceLayer.group !== targetLayer.group) return;
+      if (!sourceLayer || !targetLayer || sourceLayer.group !== targetLayer.group || sourceLayer.exclusiveGroup !== targetLayer.exclusiveGroup) return;
       const nextOrder = orderedLayers.map(item => item.id);
       const sourceIndex = nextOrder.indexOf(sourceId);
       const targetIndex = nextOrder.indexOf(targetId);
@@ -633,6 +665,10 @@ function renderLayerList() {
       renderLayerList();
       refreshLayers();
     });
+  });
+  list.querySelectorAll(".layer-group-checkbox").forEach(input => {
+    const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
+    if (group && !group.exclusive) input.indeterminate = group.layers.some(layer => layer.visible) && group.layers.some(layer => !layer.visible);
   });
 }
 
@@ -781,7 +817,7 @@ function applyInspector(text) {
       if (!title || !url) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const existing = tileLayers.find(item =>
-        item.sourceTitle === title || item.title === title || item.url === url);
+        item.sourceTitle === title || (!item.sourceTitle && (item.title === title || item.url === url)));
       if (existing) {
         existing.visible = !off;
         existing.title = displayTitle;
@@ -816,7 +852,7 @@ function applyInspector(text) {
       const id = `inspector-${type}-${title}-${url || "none"}`.replace(/[^a-zA-Z0-9_-]/g, "-");
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const existing = [...layerState.values()].find(item =>
-        item.sourceTitle === title || item.title === title || (item.type === type && url && item.url === url));
+        item.sourceTitle === title || (!item.sourceTitle && (item.title === title || (item.type === type && url && item.url === url))));
       if (existing) {
         existing.visible = !off;
         existing.url = url || existing.url;
