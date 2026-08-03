@@ -796,6 +796,7 @@ function applyInspector(text) {
 }
 
 renderBasemapSelector();
+document.querySelector("#current-port").value = window.location.port || (window.location.protocol === "https:" ? "443" : "8510");
 document.querySelector("#basemap-select").addEventListener("change", event => {
   selectedBasemap = basemaps.find(item => item.id === event.target.value);
   layerState.get("basemap").visible = Boolean(selectedBasemap);
@@ -909,6 +910,7 @@ async function loadUpdateInfo() {
     const health = await healthResponse.json();
     const settings = await settingsResponse.json();
     current.textContent = health.version || "-";
+    if (Number.isInteger(health.port)) document.querySelector("#current-port").value = health.port;
     document.querySelector("#auto-update").checked = settings.autoUpdate !== false;
     await checkForUpdate(health.version);
   } catch (error) {
@@ -1012,6 +1014,21 @@ document.querySelector("#check-update").addEventListener("click", () => {
 });
 document.querySelector("#install-update").addEventListener("click", () => {
   void installUpdate();
+});
+document.querySelector("#shutdown-app").addEventListener("click", async event => {
+  if (!confirm("KASUGAI Canvasを停止しますか？")) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = "停止中...";
+  try {
+    const response = await fetch("/api/shutdown", { method: "POST" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    button.textContent = "停止しました";
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "停止";
+    document.querySelector("#version-status").textContent = `停止に失敗しました: ${error.message}`;
+  }
 });
 document.querySelector("#auto-update").addEventListener("change", () => {
   void saveUpdateSettings().catch(error => {

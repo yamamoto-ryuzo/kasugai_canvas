@@ -33,6 +33,7 @@ struct AppState {
     config_path: Arc<PathBuf>,
     update_config_path: Arc<PathBuf>,
     shutdown: Arc<Notify>,
+    port: u16,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -84,11 +85,12 @@ async fn favicon() -> Response {
     ([(header::CONTENT_TYPE, "image/x-icon")], FAVICON_ICO).into_response()
 }
 
-async fn health() -> Json<Value> {
+async fn health(State(state): State<AppState>) -> Json<Value> {
     Json(json!({
         "status": "ok",
         "name": "kasugai_canvas",
-        "version": env!("CARGO_PKG_VERSION")
+        "version": env!("CARGO_PKG_VERSION"),
+        "port": state.port,
     }))
 }
 
@@ -167,6 +169,14 @@ async fn fetch_latest() -> Result<Value, (StatusCode, String)> {
 
 async fn update_latest() -> Result<Json<Value>, (StatusCode, String)> {
     Ok(Json(fetch_latest().await?))
+}
+
+async fn request_shutdown(State(state): State<AppState>) -> StatusCode {
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        state.shutdown.notify_one();
+    });
+    StatusCode::NO_CONTENT
 }
 
 fn open_browser(port: u16) {
@@ -320,6 +330,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config_path: Arc::new(executable_directory.join(CONFIG_FILE_NAME)),
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
         shutdown: Arc::new(Notify::new()),
+        port,
     };
     let shutdown = state.shutdown.clone();
     let app = Router::new()
@@ -329,6 +340,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/styles.css", get(styles_css))
         .route("/favicon.ico", get(favicon))
         .route("/health", get(health))
+        .route("/api/shutdown", post(request_shutdown))
         .route("/api/config", get(get_config).put(put_config))
         .route(
             "/api/update/settings",

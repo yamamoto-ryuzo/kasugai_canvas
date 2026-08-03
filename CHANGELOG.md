@@ -8,6 +8,17 @@
 
 今後の変更をここに記録します。
 
+## [0.4.3] - 2026-08-03
+
+### Added
+
+- 設定パネルからアプリを停止するボタンを追加
+- 設定パネルに現在の接続ポート番号を表示
+
+### Fixed
+
+- ポート番号の表示欄がチェックボックスと同じサイズになる問題を修正
+
 ## [0.4.2] - 2026-08-03
 
 ### Changed
@@ -135,7 +146,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.3.0...v0.4.0

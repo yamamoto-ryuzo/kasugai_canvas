@@ -94,6 +94,10 @@
                 <div class="terrain-options">
                   <label><input id="shadow-toggle" type="checkbox" /> Shadow</label>
                 </div>
+                <div class="section-title">ポート番号</div>
+                <label class="field-label" for="current-port">現在の接続ポート</label>
+                <input id="current-port" type="number" min="1" max="65535" readonly />
+                <p class="hint">ポート番号の変更は、アプリ起動時の設定で行います。</p>
                 <div class="section-title">バージョン・更新</div>
                 <p class="hint">現在のバージョン: <code id="current-version">-</code></p>
                 <p class="hint">最新バージョン: <code id="latest-version">-</code> <span id="update-status"></span></p>
@@ -102,6 +106,7 @@
                 </div>
                 <button id="check-update" type="button">更新を確認</button>
                 <button id="install-update" type="button" hidden>最新版をインストール</button>
+                <button id="shutdown-app" type="button" class="danger-button">停止</button>
                 <p id="version-status" class="hint" aria-live="polite"></p>
               </section>
             </section>
