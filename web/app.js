@@ -791,6 +791,11 @@ async function loadInfoContent(url) {
   }
 }
 
+function updateSearchProviderLabel() {
+  const useYahooSearch = yahooAppId && !yahooAppId.includes("あなたのYahoo");
+  document.querySelector("#search-title").textContent = `Search（${useYahooSearch ? "Yahoo Local Search" : "国土地理院住所検索API"}）`;
+}
+
 function applyInspector(text) {
   const nextLines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const parsedCameras = [];
@@ -804,6 +809,7 @@ function applyInspector(text) {
   layerOrder = layerOrder.filter(id => layerState.has(id));
   tileLayers.splice(0, tileLayers.length);
   yahooAppId = "";
+  updateSearchProviderLabel();
   document.body.style.background = "";
   document.querySelector("#info-content").replaceChildren();
   ++infoRequestId;
@@ -909,6 +915,7 @@ function applyInspector(text) {
       inspectorLayerIds.add(id);
     }
   });
+  updateSearchProviderLabel();
   [...layerState.keys()].forEach(id => {
     if (id !== "terrain" && id !== "basemap" && !inspectorLayerIds.has(id)) layerState.delete(id);
   });
@@ -970,11 +977,15 @@ document.querySelector("#search-form").addEventListener("submit", async event =>
       title: item.Name,
       latitude: Number(item.Geometry?.Coordinates?.split(",")[1]),
       longitude: Number(item.Geometry?.Coordinates?.split(",")[0]),
-    })) : data.map(item => ({ title: item.display_name, latitude: Number(item.lat), longitude: Number(item.lon) }));
+    })) : data.map(item => ({
+      title: item.properties?.title,
+      latitude: Number(item.geometry?.coordinates?.[1]),
+      longitude: Number(item.geometry?.coordinates?.[0]),
+    }));
     results.innerHTML = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
       .map((item, index) => `<button type="button" data-search-index="${index}">${item.title}</button>`).join("");
     results.querySelectorAll("[data-search-index]").forEach(button => {
-      button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, zoom: 15 }));
+      button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, zoom: 19 }));
     });
   } catch (error) {
     results.textContent = error instanceof Error ? error.message : "検索に失敗しました。";

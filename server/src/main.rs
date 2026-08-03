@@ -157,12 +157,9 @@ async fn proxy_search(
             .append_pair("output", "json");
         (url, true)
     } else {
-        let mut url = reqwest::Url::parse("https://nominatim.openstreetmap.org/search")
+        let mut url = reqwest::Url::parse("https://msearch.gsi.go.jp/address-search/AddressSearch")
             .map_err(internal_error)?;
-        url.query_pairs_mut()
-            .append_pair("format", "jsonv2")
-            .append_pair("limit", "5")
-            .append_pair("q", query.query.trim());
+        url.query_pairs_mut().append_pair("q", query.query.trim());
         (url, false)
     };
     let client = reqwest::Client::builder()
