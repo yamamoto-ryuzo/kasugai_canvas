@@ -25,6 +25,8 @@ const LATEST_JSON_URLS: [&str; 2] = [
 ];
 const RELEASE_DOWNLOAD_URL: &str =
     "https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest/download/kasugai_canvas.zip";
+const REPOSITORY_DOWNLOAD_URL: &str =
+    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip";
 
 #[derive(Clone)]
 struct AppState {
@@ -199,7 +201,7 @@ async fn install_update(
     let url = latest["platforms"]["windows-x86_64"]["url"]
         .as_str()
         .unwrap_or(RELEASE_DOWNLOAD_URL);
-    if url != RELEASE_DOWNLOAD_URL {
+    if url != RELEASE_DOWNLOAD_URL && url != REPOSITORY_DOWNLOAD_URL {
         return Err((
             StatusCode::BAD_REQUEST,
             "許可されていない更新ファイルURLです".to_string(),
@@ -215,14 +217,29 @@ async fn install_update(
         .await
         .map_err(internal_error)?;
 
-    let bytes = reqwest::get(url)
-        .await
-        .map_err(internal_error)?
-        .error_for_status()
-        .map_err(internal_error)?
-        .bytes()
-        .await
-        .map_err(internal_error)?;
+    let bytes = match reqwest::get(url).await {
+        Ok(response) => match response.error_for_status() {
+            Ok(response) => response.bytes().await.map_err(internal_error)?,
+            Err(_error) if url == RELEASE_DOWNLOAD_URL => reqwest::get(REPOSITORY_DOWNLOAD_URL)
+                .await
+                .map_err(internal_error)?
+                .error_for_status()
+                .map_err(internal_error)?
+                .bytes()
+                .await
+                .map_err(internal_error)?,
+            Err(error) => return Err(internal_error(error)),
+        },
+        Err(_error) if url == RELEASE_DOWNLOAD_URL => reqwest::get(REPOSITORY_DOWNLOAD_URL)
+            .await
+            .map_err(internal_error)?
+            .error_for_status()
+            .map_err(internal_error)?
+            .bytes()
+            .await
+            .map_err(internal_error)?,
+        Err(error) => return Err(internal_error(error)),
+    };
     tokio::fs::write(&zip_path, bytes)
         .await
         .map_err(internal_error)?;

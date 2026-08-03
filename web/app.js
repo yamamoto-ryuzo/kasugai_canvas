@@ -949,8 +949,14 @@ async function installUpdate(latestVersion = document.querySelector("#latest-ver
   document.querySelector("#version-status").textContent = "最新版をダウンロードして自動インストールを準備中...";
   try {
     const response = await fetch("/api/update/install", { method: "POST" });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    const body = await response.text();
+    let data;
+    try {
+      data = body ? JSON.parse(body) : {};
+    } catch {
+      data = {};
+    }
+    if (!response.ok) throw new Error(data.error || body || `HTTP ${response.status}`);
     document.querySelector("#version-status").textContent = data.message || "アップデートを開始しました";
   } catch (error) {
     document.querySelector("#version-status").textContent = `自動インストールエラー: ${error.message}`;
