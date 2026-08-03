@@ -8,6 +8,13 @@
 
 今後の変更をここに記録します。
 
+## [0.4.4] - 2026-08-03
+
+### Fixed
+
+- XYZタイルの提供最大ズームを超えてリクエストし続け、BASEMAPの3D Tilesドレープが停止する問題を修正
+- 一部のXYZサービスで404となるズーム上限を自動判定し、存在するタイルを継続表示するよう変更
+
 ## [0.4.3] - 2026-08-03
 
 ### Added
@@ -146,7 +153,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.0...v0.4.1

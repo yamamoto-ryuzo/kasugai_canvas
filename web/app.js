@@ -25,16 +25,63 @@ const numberParam = (name, fallback) => {
 };
 const clampZoom = zoom => Math.min(maxZoom, Math.max(minZoom, zoom));
 const basemaps = [];
+const adaptiveTileFailureThreshold = 4;
+const adaptiveTileSources = new Map();
+let adaptiveTileRefreshTimer;
 
-function getTileMaxZoom(url) {
-  return maxZoom;
+function getAdaptiveTileSource(template, requestedMaxZoom = maxZoom) {
+  let source = adaptiveTileSources.get(template);
+  if (!source) {
+    source = { maxZoom: requestedMaxZoom, failures: new Map() };
+    adaptiveTileSources.set(template, source);
+  } else {
+    source.maxZoom = Math.min(source.maxZoom, requestedMaxZoom);
+  }
+  return source;
 }
 
-function createAdaptiveTileData() {
+function getTileMaxZoom(url, requestedMaxZoom = maxZoom) {
+  return getAdaptiveTileSource(url, requestedMaxZoom).maxZoom;
+}
+
+function getTileZoom(template, url) {
+  if (!template.includes("{z}")) return null;
+  const escapedTemplate = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = escapedTemplate
+    .replace("\\{z\\}", "(\\d+)")
+    .replace(/\\\{[xy]\\\}/g, "\\d+");
+  const match = url.match(new RegExp(`^${pattern}$`));
+  return match ? Number(match[1]) : null;
+}
+
+function scheduleAdaptiveTileRefresh() {
+  if (adaptiveTileRefreshTimer !== undefined) return;
+  adaptiveTileRefreshTimer = window.setTimeout(() => {
+    adaptiveTileRefreshTimer = undefined;
+    if (deck) refreshLayers();
+  }, 0);
+}
+
+function recordAdaptiveTileFailure(template, url) {
+  const zoom = getTileZoom(template, url);
+  if (zoom === null) return;
+  const source = getAdaptiveTileSource(template);
+  const failures = (source.failures.get(zoom) || 0) + 1;
+  source.failures.set(zoom, failures);
+  if (failures >= adaptiveTileFailureThreshold && source.maxZoom >= zoom) {
+    source.maxZoom = zoom - 1;
+    scheduleAdaptiveTileRefresh();
+  }
+}
+
+function createAdaptiveTileData(template) {
   return async ({url, signal}) => {
     try {
       const response = await fetch(url, { signal });
-      if ([400, 404, 416].includes(response.status)) return null;
+      if ([400, 404, 416].includes(response.status)) {
+        recordAdaptiveTileFailure(template, url);
+        return null;
+      }
       if (!response.ok) throw new Error(`Tile request failed (${response.status}): ${url}`);
       return createImageBitmap(await response.blob());
     } catch (error) {
@@ -330,8 +377,8 @@ function createMapLayers() {
     id: `basemap-${selectedBasemap.id}-plain`,
     data: selectedBasemap.url,
     minZoom,
-    maxZoom: selectedBasemap.maxZoom ?? getTileMaxZoom(selectedBasemap.url),
-    getTileData: createAdaptiveTileData(),
+    maxZoom: getTileMaxZoom(selectedBasemap.url, selectedBasemap.maxZoom ?? maxZoom),
+    getTileData: createAdaptiveTileData(selectedBasemap.url),
     tileSize: selectedBasemap.tileSize,
     refinementStrategy: "best-available",
     renderSubLayers: props => new BitmapLayer({
@@ -348,8 +395,8 @@ function createMapLayers() {
     id: `basemap-${selectedBasemap.id}-drape`,
     data: selectedBasemap.url,
     minZoom,
-    maxZoom: selectedBasemap.maxZoom ?? getTileMaxZoom(selectedBasemap.url),
-    getTileData: createAdaptiveTileData(),
+    maxZoom: getTileMaxZoom(selectedBasemap.url, selectedBasemap.maxZoom ?? maxZoom),
+    getTileData: createAdaptiveTileData(selectedBasemap.url),
     tileSize: selectedBasemap.tileSize,
     refinementStrategy: "best-available",
     extensions: [new TerrainExtension()],
@@ -409,7 +456,7 @@ function createMapLayers() {
         data: item.url,
         minZoom,
         maxZoom: getTileMaxZoom(item.url),
-        getTileData: createAdaptiveTileData(),
+        getTileData: createAdaptiveTileData(item.url),
         tileSize: 256,
         refinementStrategy: "best-available",
         renderSubLayers: props => new BitmapLayer({
