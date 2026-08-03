@@ -586,17 +586,21 @@ function renderLayerList() {
   list.innerHTML = [...groupedLayers.values()].map(({ group, exclusive, layers }) => {
     const groupKey = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const groupId = `layer-group-${[...groupKey].map(character => character.charCodeAt(0).toString(16)).join("")}`;
+    const groupInputId = `${groupId}-checkbox`;
     const groupChecked = layers.some(layer => layer.visible);
     return `
     <section class="layer-group${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
-      ${group ? `<div class="layer-group-title"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="true">▾</button><input class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><span>${escapeHtml(group)}</span>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
-      <div class="layer-group-children" id="${groupId}">
-        ${layers.map(layer => `
-        <label class="layer-row" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
-          <input type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""} ${layer.id === "google-photorealistic" || (layer.type === "3dtiles" && !Tile3DLayer) ? "disabled" : ""}>
+      ${group ? `<div class="layer-group-title"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="false">▸</button><input id="${groupInputId}" class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
+      <div class="layer-group-children" id="${groupId}"${group ? " hidden" : ""}>
+        ${layers.map((layer, index) => {
+          const inputId = `${groupId}-layer-${index}`;
+          return `
+        <label class="layer-row" for="${inputId}" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
+          <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""} ${layer.id === "google-photorealistic" || (layer.type === "3dtiles" && !Tile3DLayer) ? "disabled" : ""}>
           <span>${escapeHtml(layer.title)}</span>
           <small>${escapeHtml(layer.status || (layer.type === "tile" ? "Tile" : layer.type))}</small>
-        </label>`).join("")}
+        </label>`;
+        }).join("")}
       </div>
     </section>`;
   }).join("");
@@ -749,6 +753,12 @@ function applyInspector(text) {
   const parsedBasemaps = [];
   const inspectorLayerIds = new Set();
   const inspectorTileIds = new Set();
+  let inspectorLayerIndex = 0;
+  [...layerState.keys()].forEach(id => {
+    if (id !== "terrain" && id !== "basemap") layerState.delete(id);
+  });
+  layerOrder = layerOrder.filter(id => layerState.has(id));
+  tileLayers.splice(0, tileLayers.length);
   yahooAppId = "";
   document.body.style.background = "";
   document.querySelector("#info-panel iframe").src = "about:blank";
@@ -816,31 +826,20 @@ function applyInspector(text) {
       const off = parts.some(part => /^(off|false)$/i.test(part));
       if (!title || !url) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
-      const existing = tileLayers.find(item =>
-        item.sourceTitle === title || (!item.sourceTitle && (item.title === title || item.url === url)));
-      if (existing) {
-        existing.visible = !off;
-        existing.title = displayTitle;
-        existing.sourceTitle = title;
-        existing.group = group;
-        existing.exclusiveGroup = exclusiveGroup;
-        inspectorTileIds.add(existing.id);
-      } else {
-        const id = `inspector-xyz-${title}-${url}`.replace(/[^a-zA-Z0-9_-]/g, "-");
-        tileLayers.push({
-          id,
-          title: displayTitle,
-          sourceTitle: title,
-          url,
-          visible: !off,
-          type: "tile",
-          opacity: 0.8,
-          group,
-          exclusiveGroup,
-        });
-        layerOrder.push(id);
-        inspectorTileIds.add(id);
-      }
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      tileLayers.push({
+        id,
+        title: displayTitle,
+        sourceTitle: title,
+        url,
+        visible: !off,
+        type: "tile",
+        opacity: 0.8,
+        group,
+        exclusiveGroup,
+      });
+      layerOrder.push(id);
+      inspectorTileIds.add(id);
       return;
     }
     if (type === "3dtiles" || type === "geojson" || type === "layer") {
@@ -849,32 +848,20 @@ function applyInspector(text) {
       const url = parts[1];
       const off = parts.some(part => /^(off|false)$/i.test(part));
       if (!title) return;
-      const id = `inspector-${type}-${title}-${url || "none"}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
-      const existing = [...layerState.values()].find(item =>
-        item.sourceTitle === title || (!item.sourceTitle && (item.title === title || (item.type === type && url && item.url === url))));
-      if (existing) {
-        existing.visible = !off;
-        existing.url = url || existing.url;
-        existing.group = group;
-        existing.title = displayTitle;
-        existing.sourceTitle = title;
-        existing.exclusiveGroup = exclusiveGroup;
-        inspectorLayerIds.add(existing.id);
-      } else {
-        layerState.set(id, {
-          id,
-          title: displayTitle,
-          sourceTitle: title,
-          visible: !off,
-          type,
-          url,
-          group,
-          exclusiveGroup,
-        });
-        layerOrder.push(id);
-        inspectorLayerIds.add(id);
-      }
+      layerState.set(id, {
+        id,
+        title: displayTitle,
+        sourceTitle: title,
+        visible: !off,
+        type,
+        url,
+        group,
+        exclusiveGroup,
+      });
+      layerOrder.push(id);
+      inspectorLayerIds.add(id);
     }
   });
   [...layerState.keys()].forEach(id => {
