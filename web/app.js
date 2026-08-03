@@ -98,6 +98,7 @@ const layerState = new Map([
   ["basemap", { id: "basemap", title: "Basemap", visible: false, type: "basemap" }],
 ]);
 const tileLayers = [];
+const expandedLayerGroups = new Set();
 let layerOrder = [...layerState.keys()].filter(id => id !== "basemap");
 const cameraPresets = [];
 const demSources = {
@@ -589,9 +590,9 @@ function renderLayerList() {
     const groupInputId = `${groupId}-checkbox`;
     const groupChecked = layers.some(layer => layer.visible);
     return `
-    <section class="layer-group${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
-      ${group ? `<div class="layer-group-title"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="false">▸</button><input id="${groupInputId}" class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
-      <div class="layer-group-children" id="${groupId}"${group ? " hidden" : ""}>
+    <section class="layer-group${group ? " grouped" : ""}${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
+      ${group ? `<div class="layer-group-title"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
+      <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
           return `
@@ -633,11 +634,15 @@ function renderLayerList() {
   });
   list.querySelectorAll(".layer-group-toggle").forEach(toggle => {
     toggle.addEventListener("click", () => {
-      const children = toggle.closest(".layer-group").querySelector(".layer-group-children");
+      const group = toggle.closest(".layer-group");
+      const children = group.querySelector(".layer-group-children");
+      const groupKey = group.dataset.groupKey;
       const expanded = toggle.getAttribute("aria-expanded") === "true";
       toggle.setAttribute("aria-expanded", String(!expanded));
       toggle.textContent = expanded ? "▸" : "▾";
       children.hidden = expanded;
+      if (expanded) expandedLayerGroups.delete(groupKey);
+      else expandedLayerGroups.add(groupKey);
     });
   });
   let draggedId;
