@@ -45,6 +45,12 @@ struct InfoQuery {
     url: String,
 }
 
+#[derive(Deserialize)]
+struct SearchQuery {
+    query: String,
+    appid: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ProjectSummary {
@@ -107,9 +113,8 @@ async fn favicon() -> Response {
 }
 
 async fn proxy_info(Query(query): Query<InfoQuery>) -> Result<Html<String>, (StatusCode, String)> {
-    let url = reqwest::Url::parse(&query.url).map_err(|_| {
-        (StatusCode::BAD_REQUEST, "INFO URLが不正です".to_string())
-    })?;
+    let url = reqwest::Url::parse(&query.url)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "INFO URLが不正です".to_string()))?;
     if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -132,6 +137,56 @@ async fn health(State(state): State<AppState>) -> Json<Value> {
         "version": env!("CARGO_PKG_VERSION"),
         "port": state.port,
     }))
+}
+
+async fn proxy_search(
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if query.query.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "検索語が空です".to_string()));
+    }
+    let (url, yahoo) = if let Some(appid) = query
+        .appid
+        .filter(|value| !value.trim().is_empty() && !value.contains("あなたのYahoo"))
+    {
+        let mut url = reqwest::Url::parse("https://map.yahooapis.jp/search/V1/LocalSearch")
+            .map_err(internal_error)?;
+        url.query_pairs_mut()
+            .append_pair("appid", &appid)
+            .append_pair("query", query.query.trim())
+            .append_pair("output", "json");
+        (url, true)
+    } else {
+        let mut url = reqwest::Url::parse("https://nominatim.openstreetmap.org/search")
+            .map_err(internal_error)?;
+        url.query_pairs_mut()
+            .append_pair("format", "jsonv2")
+            .append_pair("limit", "5")
+            .append_pair("q", query.query.trim());
+        (url, false)
+    };
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("kasugai_canvas/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(internal_error)?;
+    let data = client
+        .get(url)
+        .header(header::ACCEPT, "application/json")
+        .send()
+        .await
+        .map_err(internal_error)?
+        .error_for_status()
+        .map_err(internal_error)?
+        .json::<Value>()
+        .await
+        .map_err(internal_error)?;
+    if yahoo && !data.is_object() {
+        return Err((
+            StatusCode::BAD_GATEWAY,
+            "Yahoo検索の応答が不正です".to_string(),
+        ));
+    }
+    Ok(Json(data))
 }
 
 async fn get_config(State(state): State<AppState>) -> Result<Response, (StatusCode, String)> {
@@ -487,6 +542,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/favicon.ico", get(favicon))
         .route("/health", get(health))
         .route("/api/info", get(proxy_info))
+        .route("/api/search", get(proxy_search))
         .route("/api/projects", get(list_projects))
         .route(
             "/api/projects/{project_id}/config",

@@ -960,13 +960,13 @@ document.querySelector("#search-form").addEventListener("submit", async event =>
   const results = document.querySelector("#search-results");
   results.textContent = "検索中...";
   try {
-    const endpoint = yahooAppId
-      ? `https://map.yahooapis.jp/search/V1/LocalSearch?appid=${encodeURIComponent(yahooAppId)}&query=${encodeURIComponent(query)}&output=json`
-      : `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(query)}`;
-    const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error(`検索に失敗しました (${response.status})`);
+    const useYahooSearch = yahooAppId && !yahooAppId.includes("あなたのYahoo");
+    const params = new URLSearchParams({ query });
+    if (useYahooSearch) params.set("appid", yahooAppId);
+    const response = await fetch(`/api/search?${params}`);
+    if (!response.ok) throw new Error(await response.text() || `検索に失敗しました (${response.status})`);
     const data = await response.json();
-    const items = yahooAppId ? (data.Feature || []).map(item => ({
+    const items = useYahooSearch ? (data.Feature || []).map(item => ({
       title: item.Name,
       latitude: Number(item.Geometry?.Coordinates?.split(",")[1]),
       longitude: Number(item.Geometry?.Coordinates?.split(",")[0]),
