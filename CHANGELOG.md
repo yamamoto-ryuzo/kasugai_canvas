@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-08-03
+
+### Added
+
+- 属性タブ内のURLをハイパーリンクとして表示
+
+### Changed
+
+- 属性JSONを見やすい形式で表示
+- 属性タブのスクロール方式を統一
+
 ## [0.4.8] - 2026-08-03
 
 ### Added
@@ -193,7 +204,11 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.9...HEAD
+[0.4.9]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.8...v0.4.9
+[0.4.8]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.7...v0.4.8
+[0.4.7]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.6...v0.4.7
+[0.4.6]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.2...v0.4.3
