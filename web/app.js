@@ -732,11 +732,31 @@ function showAttribute(object) {
     label.textContent = name;
     const valueElement = document.createElement("dd");
     valueElement.className = "attr-value";
-    valueElement.textContent = formatAttributeValue(value);
+    valueElement.append(createAttributeValue(value));
     row.append(label, valueElement);
     list.append(row);
   });
   content.append(list);
+}
+
+function createAttributeValue(value) {
+  const text = formatAttributeValue(value);
+  if (typeof value !== "string" || !isHttpUrl(value)) return document.createTextNode(text);
+  const link = document.createElement("a");
+  link.href = value;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = value;
+  return link;
+}
+
+function isHttpUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function formatAttributeValue(value) {

@@ -108,6 +108,7 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .attr-row:last-child { padding-bottom: 0; border-bottom: 0; }
 .attr-name { color: #52636d; font-weight: 700; overflow-wrap: anywhere; }
 .attr-value { min-width: 0; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.attr-value a { color: #31564f; text-decoration: underline; overflow-wrap: anywhere; }
 .resource-links { display: flex; gap: 7px; }
 .resource-links a { flex: 1; padding: 6px; border: 1px solid #cbd9de; border-radius: 4px; color: #31564f; font-size: 11px; text-align: center; text-decoration: none; background: rgba(255,255,255,.55); }
 .legend { display: flex; gap: 18px; padding: 12px 18px; color: #71818d; font-size: 11px; }
