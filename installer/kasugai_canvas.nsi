@@ -6,6 +6,9 @@
 !ifndef SAMPLE_CONFIG
   !define SAMPLE_CONFIG "kasugai_canvas.config"
 !endif
+!ifndef SAMPLE_PROJECTS
+  !define SAMPLE_PROJECTS "..\installer\projects"
+!endif
 
 !define APP_NAME "KASUGAI Canvas"
 !define APP_EXE "kasugai_canvas.exe"
@@ -22,10 +25,10 @@ InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUG
 RequestExecutionLevel admin
 Unicode True
 
-VIProductVersion "0.4.3.0"
+VIProductVersion "0.4.5.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "0.4.3"
+VIAddVersionKey "FileVersion" "0.4.5"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -53,6 +56,8 @@ Section "Install"
   IfFileExists "$INSTDIR\${CONFIG_FILE_NAME}" config_exists
   File "${SAMPLE_CONFIG}"
 config_exists:
+  SetOutPath "$INSTDIR\projects"
+  File /r "${SAMPLE_PROJECTS}\*"
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   CreateDirectory "$SMPROGRAMS\KASUGAI Canvas"

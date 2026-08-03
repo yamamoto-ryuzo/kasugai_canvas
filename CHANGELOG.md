@@ -8,6 +8,19 @@
 
 今後の変更をここに記録します。
 
+## [0.4.5] - 2026-08-03
+
+### Added
+
+- インストール版とポータブル版で共通利用できるプロジェクトフォルダ構成を追加
+- Layersパネルから複数プロジェクトを切り替える機能を追加
+- 配布ZIPとインストーラーへ`projects/default`のサンプルプロジェクトを同梱
+
+### Changed
+
+- プロジェクトごとの設定を`projects/<project>/kasugai_canvas.config`へ保存するよう変更
+- 既存のルート設定ファイルを初回起動時に`projects/default`へ移行するよう変更
+
 ## [0.4.4] - 2026-08-03
 
 ### Fixed
@@ -153,7 +166,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.4...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.1...v0.4.2

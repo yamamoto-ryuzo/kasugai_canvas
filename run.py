@@ -16,6 +16,7 @@ DOWNLOAD_DIR = ROOT / "download"
 DOWNLOAD_ZIP = DOWNLOAD_DIR / "kasugai_canvas.zip"
 DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
 SAMPLE_CONFIG = ROOT / "installer" / "kasugai_canvas.config"
+SAMPLE_PROJECTS = ROOT / "installer" / "projects"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
 
 
@@ -44,6 +45,7 @@ def build_installer() -> None:
             makensis,
             f"/DBUILD_EXE={TARGET_EXE}",
             f"/DSAMPLE_CONFIG={SAMPLE_CONFIG}",
+            f"/DSAMPLE_PROJECTS={SAMPLE_PROJECTS}",
             str(INSTALLER_SCRIPT),
         ],
         cwd=ROOT,
@@ -60,11 +62,16 @@ def build_release() -> None:
 
     if not SAMPLE_CONFIG.exists():
         raise FileNotFoundError(f"初期サンプル設定が見つかりません: {SAMPLE_CONFIG}")
+    if not SAMPLE_PROJECTS.exists():
+        raise FileNotFoundError(f"初期サンプルプロジェクトが見つかりません: {SAMPLE_PROJECTS}")
 
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(DOWNLOAD_ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(TARGET_EXE, arcname=TARGET_EXE.name)
         archive.write(SAMPLE_CONFIG, arcname=SAMPLE_CONFIG.name)
+        for project_file in SAMPLE_PROJECTS.rglob("*"):
+            if project_file.is_file():
+                archive.write(project_file, arcname=(Path("projects") / project_file.relative_to(SAMPLE_PROJECTS)).as_posix())
     print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
     build_installer()
 

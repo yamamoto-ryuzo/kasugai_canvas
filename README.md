@@ -4,7 +4,7 @@
 
 ## バージョン管理
 
-現在のバージョンは **0.4.4** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
+現在のバージョンは **0.4.5** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -75,7 +75,23 @@ python run.py -B          # リリースビルド + download\kasugai_canvas.zip
 python run.py --release   # リリース版を起動
 ```
 
-インスペクターで「登録」した設定は、実行ファイルと同じフォルダの`kasugai_canvas.config`へ保存され、次回起動時に自動で復元されます。
+インスペクターで「登録」した設定は、選択中のプロジェクトの`projects\\<project>\\kasugai_canvas.config`へ保存され、次回起動時に自動で復元されます。既存のルート設定ファイルしかない環境では、初回起動時に`projects\\default`へ移行されます。
+
+インストール版とポータブル版は同じフォルダ構成で、実行ファイルと同じ場所の`projects`を使用します。
+
+```text
+kasugai_canvas/
+├─ kasugai_canvas.exe
+└─ projects/
+   ├─ default/
+   │  ├─ project.json
+   │  └─ kasugai_canvas.config
+   └─ <project>/
+      ├─ project.json
+      └─ kasugai_canvas.config
+```
+
+プロジェクトは起動後のLayersパネルから切り替えられます。配布ZIPにも`projects/default`のサンプルプロジェクトを同梱します。
 
 ## ドキュメント
 

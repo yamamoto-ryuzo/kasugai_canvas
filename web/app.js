@@ -25,6 +25,8 @@ const numberParam = (name, fallback) => {
 };
 const clampZoom = zoom => Math.min(maxZoom, Math.max(minZoom, zoom));
 const basemaps = [];
+const projects = [];
+let currentProjectId = urlParams.get("project") || "";
 const adaptiveTileFailureThreshold = 4;
 const adaptiveTileSources = new Map();
 let adaptiveTileRefreshTimer;
@@ -684,6 +686,18 @@ function renderPresets() {
   });
 }
 
+function renderProjectSelector() {
+  const select = document.querySelector("#project-select");
+  if (!select) return;
+  select.replaceChildren(...projects.map(project => {
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = project.title;
+    return option;
+  }));
+  select.value = currentProjectId;
+}
+
 function renderBasemapSelector() {
   const select = document.querySelector("#basemap-select");
   select.innerHTML = [
@@ -842,7 +856,21 @@ function applyInspector(text) {
   refreshLayers();
 }
 
+renderProjectSelector();
 renderBasemapSelector();
+document.querySelector("#project-select")?.addEventListener("change", async event => {
+  currentProjectId = event.target.value;
+  const params = new URLSearchParams(window.location.search);
+  if (currentProjectId) params.set("project", currentProjectId);
+  else params.delete("project");
+  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+  try {
+    setInspectorStatus("プロジェクトを読み込んでいます。");
+    await loadInspectorConfig();
+  } catch (error) {
+    setInspectorStatus(`プロジェクトを読み込めません: ${error instanceof Error ? error.message : error}`, true);
+  }
+});
 document.querySelector("#current-port").value = window.location.port || (window.location.protocol === "https:" ? "443" : "8510");
 document.querySelector("#basemap-select").addEventListener("change", event => {
   selectedBasemap = basemaps.find(item => item.id === event.target.value);
@@ -1033,9 +1061,26 @@ async function saveUpdateSettings() {
   document.querySelector("#version-status").textContent = "自動更新設定を保存しました";
 }
 
+function getProjectConfigUrl() {
+  return currentProjectId
+    ? `/api/projects/${encodeURIComponent(currentProjectId)}/config`
+    : "/api/config";
+}
+
+async function loadProjects() {
+  const response = await fetch("/api/projects");
+  if (!response.ok) throw new Error(await response.text());
+  const definitions = await response.json();
+  projects.splice(0, projects.length, ...definitions);
+  if (!projects.some(project => project.id === currentProjectId)) {
+    currentProjectId = projects[0]?.id || "";
+  }
+  renderProjectSelector();
+}
+
 async function loadInspectorConfig() {
   try {
-    const response = await fetch("/api/config");
+    const response = await fetch(getProjectConfigUrl());
     if (!response.ok) throw new Error(await response.text());
     inspectorInput.value = await response.text();
     applyInspector(inspectorInput.value);
@@ -1047,7 +1092,7 @@ async function loadInspectorConfig() {
 }
 
 async function saveInspectorConfig() {
-  const response = await fetch("/api/config", {
+  const response = await fetch(getProjectConfigUrl(), {
     method: "PUT",
     headers: { "Content-Type": "text/plain; charset=utf-8" },
     body: inspectorInput.value,
@@ -1140,5 +1185,12 @@ applyInspector(inspectorDefault);
 renderPresets();
 updateCameraInputs();
 void updateTerrainFollow(viewState);
-void loadInspectorConfig();
+void (async () => {
+  try {
+    await loadProjects();
+  } catch (error) {
+    console.error("プロジェクト一覧の読み込みに失敗しました。", error);
+  }
+  await loadInspectorConfig();
+})();
 void loadUpdateInfo();

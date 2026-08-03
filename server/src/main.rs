@@ -1,6 +1,6 @@
 #![windows_subsystem = "windows"]
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
@@ -18,6 +18,9 @@ const BOOTSTRAP_JS: &str = include_str!("../../web/bootstrap.js");
 const STYLES_CSS: &str = include_str!("../../web/styles.css");
 const FAVICON_ICO: &[u8] = include_bytes!("../../web/favicon.ico");
 const CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
+const PROJECTS_DIRECTORY_NAME: &str = "projects";
+const PROJECT_CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
+const PROJECT_MANIFEST_FILE_NAME: &str = "project.json";
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const LATEST_JSON_URLS: [&str; 2] = [
     "https://yamamoto-ryuzo.github.io/kasugai_canvas/download/latest.json",
@@ -31,9 +34,22 @@ const REPOSITORY_DOWNLOAD_URL: &str =
 #[derive(Clone)]
 struct AppState {
     config_path: Arc<PathBuf>,
+    projects_path: Arc<PathBuf>,
     update_config_path: Arc<PathBuf>,
     shutdown: Arc<Notify>,
     port: u16,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectSummary {
+    id: String,
+    title: String,
+}
+
+#[derive(Deserialize)]
+struct ProjectManifest {
+    title: Option<String>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -123,6 +139,95 @@ async fn put_config(
             format!("設定ファイルを保存できません: {error}"),
         )
     })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn valid_project_id(project_id: &str) -> bool {
+    !project_id.is_empty()
+        && project_id != "."
+        && project_id != ".."
+        && project_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+}
+
+fn project_config_path(
+    state: &AppState,
+    project_id: &str,
+) -> Result<PathBuf, (StatusCode, String)> {
+    if !valid_project_id(project_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "不正なプロジェクトIDです".to_string(),
+        ));
+    }
+    Ok(state
+        .projects_path
+        .join(project_id)
+        .join(PROJECT_CONFIG_FILE_NAME))
+}
+
+async fn list_projects(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ProjectSummary>>, (StatusCode, String)> {
+    let mut projects = Vec::new();
+    let entries = match std::fs::read_dir(state.projects_path.as_ref()) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Json(projects)),
+        Err(error) => return Err(internal_error(error)),
+    };
+    for entry in entries {
+        let entry = entry.map_err(internal_error)?;
+        if !entry.file_type().map_err(internal_error)?.is_dir() {
+            continue;
+        }
+        let id = entry.file_name().to_string_lossy().into_owned();
+        if !valid_project_id(&id) {
+            continue;
+        }
+        let manifest_path = entry.path().join(PROJECT_MANIFEST_FILE_NAME);
+        let title = std::fs::read_to_string(manifest_path)
+            .ok()
+            .and_then(|content| serde_json::from_str::<ProjectManifest>(&content).ok())
+            .and_then(|manifest| manifest.title)
+            .filter(|title| !title.trim().is_empty())
+            .unwrap_or_else(|| id.clone());
+        projects.push(ProjectSummary { id, title });
+    }
+    projects.sort_by(|left, right| left.title.cmp(&right.title));
+    Ok(Json(projects))
+}
+
+async fn get_project_config(
+    State(state): State<AppState>,
+    Path(project_id): Path<String>,
+) -> Result<Response, (StatusCode, String)> {
+    let path = project_config_path(&state, &project_id)?;
+    match std::fs::read_to_string(path) {
+        Ok(config) => Ok((
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            config,
+        )
+            .into_response()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok((
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            String::new(),
+        )
+            .into_response()),
+        Err(error) => Err(internal_error(error)),
+    }
+}
+
+async fn put_project_config(
+    State(state): State<AppState>,
+    Path(project_id): Path<String>,
+    config: String,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let path = project_config_path(&state, &project_id)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(internal_error)?;
+    }
+    std::fs::write(path, config).map_err(internal_error)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -326,8 +431,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parent()
         .ok_or_else(|| std::io::Error::other("実行ファイルのフォルダを取得できません"))?
         .to_path_buf();
+    let projects_path = executable_directory.join(PROJECTS_DIRECTORY_NAME);
+    std::fs::create_dir_all(&projects_path)?;
+    let default_project_path = projects_path.join("default");
+    let default_project_config = default_project_path.join(PROJECT_CONFIG_FILE_NAME);
+    let legacy_config_path = executable_directory.join(CONFIG_FILE_NAME);
+    if !default_project_config.exists() && legacy_config_path.exists() {
+        std::fs::create_dir_all(&default_project_path)?;
+        std::fs::copy(&legacy_config_path, &default_project_config)?;
+        std::fs::write(
+            default_project_path.join(PROJECT_MANIFEST_FILE_NAME),
+            r#"{
+  "title": "デフォルトプロジェクト"
+}
+"#,
+        )?;
+    }
     let state = AppState {
         config_path: Arc::new(executable_directory.join(CONFIG_FILE_NAME)),
+        projects_path: Arc::new(projects_path),
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
         shutdown: Arc::new(Notify::new()),
         port,
@@ -340,6 +462,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/styles.css", get(styles_css))
         .route("/favicon.ico", get(favicon))
         .route("/health", get(health))
+        .route("/api/projects", get(list_projects))
+        .route(
+            "/api/projects/{project_id}/config",
+            get(get_project_config).put(put_project_config),
+        )
         .route("/api/shutdown", post(request_shutdown))
         .route("/api/config", get(get_config).put(put_config))
         .route(
