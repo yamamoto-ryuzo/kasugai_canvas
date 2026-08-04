@@ -1230,6 +1230,7 @@ document.querySelector("#current-port").value = window.location.port || (window.
 setupEvents();
 setupThreeJs();
 applyInspector(defaultConfig);
+const defaultCamera = cameraPresets[0];
 const urlCamera = {
   latitude: numberParam("latitude"),
   longitude: numberParam("longitude"),
@@ -1237,14 +1238,34 @@ const urlCamera = {
   pitch: numberParam("pitch", 0),
   bearing: numberParam("bearing", 0),
 };
-if (Number.isFinite(urlCamera.latitude) && Number.isFinite(urlCamera.longitude)) {
-  flyTo(urlCamera);
-} else if (cameraPresets.length) {
-  flyTo(cameraPresets[0]);
+
+async function resolveInitialCamera() {
+  if (Number.isFinite(urlCamera.latitude) && Number.isFinite(urlCamera.longitude)) {
+    return urlCamera;
+  }
+  if (cameraPresets.length) {
+    return cameraPresets[0];
+  }
+  try {
+    const response = await fetch("https://ipapi.co/json/");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const latitude = Number(data.latitude);
+    const longitude = Number(data.longitude);
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      return { latitude, longitude, zoom: 10, pitch: -30, bearing: 0 };
+    }
+  } catch (error) {
+    console.warn("IP geolocation failed", error);
+  }
+  return defaultCamera;
 }
-renderPresets();
+
 (async () => {
   try { await loadProjects(); } catch (e) { console.error(e); }
   try { await loadInspectorConfig(); } catch (e) { console.error(e); }
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }
+  const initialCamera = await resolveInitialCamera();
+  if (initialCamera) flyTo(initialCamera);
+  renderPresets();
 })();
