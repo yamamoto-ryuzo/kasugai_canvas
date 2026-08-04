@@ -6,6 +6,15 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-04
+
+### Fixed
+
+- コンパス針の回転をボタン全体に連携し、北方位を正しく表示
+- 2D ボタンを真上俯瞰（pitch 90）に修正
+- URL パラメータ（longitude / latitude / zoom / pitch / bearing / project）の読み込みと共有 URL への連携
+- パネル最小化、GeoJSON アウトライン警告、Three.js オーバーレイ描画の不具合を修正
+
 ## [0.5.0] - 2026-08-04
 
 ### Added
@@ -218,7 +227,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.7...v0.4.8
