@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-08-05
+
+### Changed
+
+- バージョンを 0.5.3 に更新
+
 ## [0.5.2] - 2026-08-05
 
 ### Added
@@ -234,7 +240,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.9...v0.5.0
