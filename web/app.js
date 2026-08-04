@@ -180,7 +180,7 @@ function updateCameraInputs() {
   document.querySelector("#camera-pitch").value = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
   document.querySelector("#camera-bearing").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const needle = document.querySelector(".compass-needle");
-  if (needle) needle.style.transform = `translate(-50%, -92%) rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg)`;
+  if (needle) needle.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg) translate(-50%, -100%)`;
 }
 
 function renderBasemapSelector() {
