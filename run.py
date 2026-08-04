@@ -2,6 +2,7 @@
 """KASUGAI Canvas の開発起動・ビルドラッパー。"""
 
 import argparse
+import re
 import shutil
 import subprocess
 import sys
@@ -18,6 +19,53 @@ DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
 SAMPLE_CONFIG = ROOT / "installer" / "kasugai_canvas.config"
 SAMPLE_PROJECTS = ROOT / "installer" / "projects"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
+
+
+def check_versions() -> None:
+    """各設定ファイルのバージョンが server/Cargo.toml と一致するか確認する。"""
+    cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
+    cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
+    if not cargo_match:
+        raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
+    cargo_version = cargo_match.group(1)
+
+    nsi = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+    product_match = re.search(r'VIProductVersion "([^"]+)"', nsi)
+    file_match = re.search(r'VIAddVersionKey "FileVersion" "([^"]+)"', nsi)
+    nsi_product = product_match.group(1).rsplit(".", 1)[0] if product_match else None
+    nsi_file = file_match.group(1) if file_match else None
+
+    latest = (DOWNLOAD_DIR / "latest.json").read_text(encoding="utf-8")
+    latest_match = re.search(r'"version"\s*:\s*"([^"]+)"', latest)
+    latest_version = latest_match.group(1) if latest_match else None
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_match = re.search(r"現在のバージョンは \*\*([^*]+)\*\* です。", readme)
+    readme_version = readme_match.group(1) if readme_match else None
+
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    changelog_match = re.search(r"^## \[(\d+\.\d+\.\d+)\] -", changelog, re.M)
+    changelog_version = changelog_match.group(1) if changelog_match else None
+
+    mismatches = []
+    files = {
+        "installer/kasugai_canvas.nsi (VIProductVersion)": nsi_product,
+        "installer/kasugai_canvas.nsi (FileVersion)": nsi_file,
+        "download/latest.json": latest_version,
+        "README.md": readme_version,
+        "CHANGELOG.md": changelog_version,
+    }
+    for name, version in files.items():
+        if version != cargo_version:
+            mismatches.append(f"  {name}: {version} (server/Cargo.toml: {cargo_version})")
+
+    if mismatches:
+        print("エラー: 以下のファイルのバージョンが server/Cargo.toml と一致していません。", file=sys.stderr, flush=True)
+        for line in mismatches:
+            print(line, file=sys.stderr, flush=True)
+        raise SystemExit(1)
+
+    print(f"バージョン整合性チェック完了: {cargo_version}", file=sys.stderr, flush=True)
 
 
 def run_dev() -> None:
@@ -56,6 +104,7 @@ def build_installer() -> None:
 
 def build_release() -> None:
     """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。"""
+    check_versions()
     subprocess.run(["cargo", "build", "--release"], cwd=SERVER_DIR, check=True)
     if not TARGET_EXE.exists():
         raise FileNotFoundError(f"ビルド済み実行ファイルが見つかりません: {TARGET_EXE}")
