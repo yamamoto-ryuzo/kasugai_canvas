@@ -185,8 +185,8 @@ function updateCameraInputs() {
   document.querySelector("#camera-zoom").value = Number(cartographic.height).toFixed(1);
   document.querySelector("#camera-pitch").value = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
   document.querySelector("#camera-bearing").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-  const needle = document.querySelector(".compass-needle");
-  if (needle) needle.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg) translate(-7px, -27px)`;
+  const compass = document.querySelector("#compass-button");
+  if (compass) compass.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg)`;
 }
 
 function renderBasemapSelector() {
