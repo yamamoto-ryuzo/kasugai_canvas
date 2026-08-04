@@ -1,553 +1,73 @@
 import * as THREE from "three";
 
-const {
-  Deck,
-  MapView,
-  TerrainLayer,
-  TileLayer,
-  BitmapLayer,
-  GeoJsonLayer,
-  Tile3DLayer,
-} = window.deck;
-const TerrainExtension = window.deck.TerrainExtension || window.deck._TerrainExtension;
-const deckContainer = document.querySelector("#deck-container");
+const Cesium = window.Cesium;
 
-const origin = [0, 0];
-const inspectorDefault = "";
-const minZoom = -20;
-const maxZoom = 25;
-const tile3dMaximumScreenSpaceError = 16;
-const tile3dMaximumMemoryUsage = 512;
-const urlParams = new URLSearchParams(window.location.search);
-const numberParam = (name, fallback) => {
-  const value = Number(urlParams.get(name));
-  return Number.isFinite(value) ? value : fallback;
-};
-const clampZoom = zoom => Math.min(maxZoom, Math.max(minZoom, zoom));
+const viewer = new Cesium.Viewer("deck-container", {
+  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+  baseLayerPicker: false,
+  geocoder: false,
+  homeButton: false,
+  sceneModePicker: false,
+  navigationHelpButton: false,
+  animation: false,
+  timeline: false,
+  fullscreenButton: false,
+  vrButton: false,
+  infoBox: false,
+  selectionIndicator: false,
+});
+
+viewer.scene.globe.depthTestAgainstTerrain = true;
+viewer.scene.globe.enableLighting = false;
+viewer.imageryLayers.removeAll();
+viewer.camera.percentageChanged = 0.3;
+
 const basemaps = [];
-const projects = [];
-let currentProjectId = urlParams.get("project") || "";
-const adaptiveTileFailureThreshold = 4;
-const adaptiveTileSources = new Map();
-let adaptiveTileRefreshTimer;
-
-function getAdaptiveTileSource(template, requestedMaxZoom = maxZoom) {
-  let source = adaptiveTileSources.get(template);
-  if (!source) {
-    source = { maxZoom: requestedMaxZoom, failures: new Map() };
-    adaptiveTileSources.set(template, source);
-  } else {
-    source.maxZoom = Math.min(source.maxZoom, requestedMaxZoom);
-  }
-  return source;
-}
-
-function getTileMaxZoom(url, requestedMaxZoom = maxZoom) {
-  return getAdaptiveTileSource(url, requestedMaxZoom).maxZoom;
-}
-
-function getTileZoom(template, url) {
-  if (!template.includes("{z}")) return null;
-  const escapedTemplate = template.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const pattern = escapedTemplate
-    .replace("\\{z\\}", "(\\d+)")
-    .replace(/\\\{[xy]\\\}/g, "\\d+");
-  const match = url.match(new RegExp(`^${pattern}$`));
-  return match ? Number(match[1]) : null;
-}
-
-function scheduleAdaptiveTileRefresh() {
-  if (adaptiveTileRefreshTimer !== undefined) return;
-  adaptiveTileRefreshTimer = window.setTimeout(() => {
-    adaptiveTileRefreshTimer = undefined;
-    if (deck) refreshLayers();
-  }, 0);
-}
-
-function recordAdaptiveTileFailure(template, url) {
-  const zoom = getTileZoom(template, url);
-  if (zoom === null) return;
-  const source = getAdaptiveTileSource(template);
-  const failures = (source.failures.get(zoom) || 0) + 1;
-  source.failures.set(zoom, failures);
-  if (failures >= adaptiveTileFailureThreshold && source.maxZoom >= zoom) {
-    source.maxZoom = zoom - 1;
-    scheduleAdaptiveTileRefresh();
-  }
-}
-
-function createAdaptiveTileData(template) {
-  return async ({url, signal}) => {
-    try {
-      const response = await fetch(url, { signal });
-      if ([400, 404, 416].includes(response.status)) {
-        recordAdaptiveTileFailure(template, url);
-        return null;
-      }
-      if (!response.ok) throw new Error(`Tile request failed (${response.status}): ${url}`);
-      return createImageBitmap(await response.blob());
-    } catch (error) {
-      if (signal?.aborted) throw error;
-      return null;
-    }
-  };
-}
-
-const layerState = new Map([
-  ["terrain", { id: "terrain", title: "Terrain", visible: true, type: "terrain" }],
-  ["basemap", { id: "basemap", title: "Basemap", visible: false, type: "basemap" }],
-]);
-const tileLayers = [];
-const expandedLayerGroups = new Set();
-let layerOrder = [...layerState.keys()].filter(id => id !== "basemap");
+let selectedBasemap = null;
 const cameraPresets = [];
+const layers = [];
+const tileLayers = [];
+const layerState = new Map();
+let layerOrder = [];
+const expandedLayerGroups = new Set();
+let currentProjectId = "";
+let yahooAppId = "";
+let terrainEnabled = true;
+let shadowEnabled = false;
+let undergroundViewEnabled = false;
+let basemapDrape3DTiles = false;
+let infoRequestId = 0;
+const activeClippingPlanes = { planes: [] };
+const activeDataSources = [];
+const activePrimitives = [];
+const drapeTerrainSources = { dem: true, tiles3d: true };
+const drapeLayers = { xyz: true, geojson: true };
 const demSources = {
+  reearth: {
+    title: "Re:Earth Terrain (標高 / MSL, zoom 19)",
+    url: "https://terrain.reearth.land/cesium-mesh/msl",
+  },
+  "reearth-ellipsoid": {
+    title: "Re:Earth Terrain (楕円体高 / WGS84, zoom 19)",
+    url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
+  },
   terrarium: {
     title: "Terrarium DEM (AWS, zoom 15)",
     elevationData: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
     elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
     tileSize: 256,
     maxZoom: 15,
-  },
-  reearth: {
-    title: "Re:Earth Terrain (標高 / MSL, zoom 19)",
-    elevationData: "https://terrain.reearth.land/terrarium/elevation/{z}/{x}/{y}.png",
-    elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
-    tileSize: 512,
-    maxZoom: 19,
-    attribution: "Re:Earth Terrain · Mapterhorn (CC BY 4.0)",
-    attributionUrl: "https://terrain.reearth.land/",
-  },
-  "reearth-ellipsoid": {
-    title: "Re:Earth Terrain (楕円体高 / WGS84, zoom 19)",
-    elevationData: "https://terrain.reearth.land/terrarium/ellipsoid/{z}/{x}/{y}.png",
-    elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
-    tileSize: 512,
-    maxZoom: 19,
-    attribution: "Re:Earth Terrain · Mapterhorn (CC BY 4.0)",
-    attributionUrl: "https://terrain.reearth.land/",
+    attribution: "Mapzen Terrarium · AWS",
+    attributionUrl: "https://registry.opendata.aws/terrain-tiles/",
   },
 };
-
-let selectedBasemap;
 let selectedDemSource = "reearth-ellipsoid";
-const terrainFollowState = {
-  requestId: 0,
-  sampleKey: "",
-  tileCache: new Map(),
-};
-const drapeTerrainSources = {
-  dem: true,
-  tiles3d: true,
-};
-const drapeLayers = {
-  xyz: true,
-  geojson: true,
-};
-let yahooAppId = "";
-let shadowEnabled = false;
-let basemapDrape3DTiles = false;
-let deck;
-let viewState = {
-  longitude: numberParam("longitude", origin[0]),
-  latitude: numberParam("latitude", origin[1]),
-  zoom: clampZoom(numberParam("zoom", 2)),
-  pitch: numberParam("pitch", 0),
-  bearing: numberParam("bearing", 0),
-  minZoom,
-  maxZoom,
-};
+const maxZoom = 25;
+
 let threeRenderer;
 let threeScene;
 let threeCamera;
 let threeModel;
-
-function formatTileUrl(template, index) {
-  return template
-    .replaceAll("{z}", String(index.z))
-    .replaceAll("{x}", String(index.x))
-    .replaceAll("{y}", String(index.y));
-}
-
-function getTerrainTileIndex(longitude, latitude, zoom) {
-  const scale = 2 ** zoom;
-  const x = Math.min(scale - 1, Math.max(0, Math.floor((longitude + 180) / 360 * scale)));
-  const sine = Math.sin(latitude * Math.PI / 180);
-  const y = Math.min(
-    scale - 1,
-    Math.max(0, Math.floor((0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI)) * scale)),
-  );
-  const pixelX = ((longitude + 180) / 360 * scale - x);
-  const pixelY = ((0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI)) * scale - y);
-  return { x, y, z: zoom, pixelX, pixelY };
-}
-
-async function getTerrainTilePixels(source, index) {
-  const url = formatTileUrl(source.elevationData, index);
-  const cached = terrainFollowState.tileCache.get(url);
-  if (cached) return cached;
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`DEM tile request failed (${response.status}): ${url}`);
-  const bitmap = await createImageBitmap(await response.blob());
-  const canvas = document.createElement("canvas");
-  canvas.width = source.tileSize;
-  canvas.height = source.tileSize;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) throw new Error("DEM sample canvas is unavailable");
-  context.imageSmoothingEnabled = false;
-  context.drawImage(bitmap, 0, 0, source.tileSize, source.tileSize);
-  bitmap.close();
-  const pixels = context.getImageData(0, 0, source.tileSize, source.tileSize);
-  if (terrainFollowState.tileCache.size >= 32) {
-    terrainFollowState.tileCache.delete(terrainFollowState.tileCache.keys().next().value);
-  }
-  terrainFollowState.tileCache.set(url, pixels);
-  return pixels;
-}
-
-async function updateTerrainFollow(next = viewState) {
-  if (!layerState.get("terrain").visible) return;
-  const source = demSources[selectedDemSource];
-  if (!source) return;
-  const index = getTerrainTileIndex(next.longitude, next.latitude, source.maxZoom);
-  const sampleX = Math.min(source.tileSize - 1, Math.floor(index.pixelX * source.tileSize));
-  const sampleY = Math.min(source.tileSize - 1, Math.floor(index.pixelY * source.tileSize));
-  const sampleKey = `${selectedDemSource}:${index.x}:${index.y}:${Math.floor(sampleX / 16)}:${Math.floor(sampleY / 16)}`;
-  if (sampleKey === terrainFollowState.sampleKey) return;
-  terrainFollowState.sampleKey = sampleKey;
-  const requestId = ++terrainFollowState.requestId;
-  try {
-    const pixels = await getTerrainTilePixels(source, index);
-    if (requestId !== terrainFollowState.requestId) return;
-    const offset = (sampleY * pixels.width + sampleX) * 4;
-    const elevation = pixels.data[offset] * 256 +
-      pixels.data[offset + 1] +
-      pixels.data[offset + 2] / 256 - 32768;
-    if (!Number.isFinite(elevation)) throw new Error("DEM sample is not a finite elevation");
-    viewState = { ...viewState, position: [0, 0, elevation] };
-    deck.setProps({ viewState });
-  } catch (error) {
-    if (requestId !== terrainFollowState.requestId) return;
-    terrainFollowState.sampleKey = "";
-    console.error("地形追従用DEMの取得に失敗しました。", error);
-  }
-}
-
-function clearTerrainFollow() {
-  terrainFollowState.requestId += 1;
-  terrainFollowState.sampleKey = "";
-  viewState = { ...viewState };
-  delete viewState.position;
-  deck.setProps({ viewState });
-}
-
-function appendLink(container, text, url) {
-  if (!/^https?:\/\//i.test(url)) {
-    container.append(document.createTextNode(text));
-    return;
-  }
-  const link = document.createElement("a");
-  link.href = url;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
-  link.textContent = text;
-  container.append(link);
-}
-
-function appendAttributionText(container, text) {
-  const urlPattern = /https?:\/\/[^\s<>]+/gi;
-  let lastIndex = 0;
-  for (const match of text.matchAll(urlPattern)) {
-    container.append(document.createTextNode(text.slice(lastIndex, match.index)));
-    appendLink(container, match[0], match[0]);
-    lastIndex = match.index + match[0].length;
-  }
-  container.append(document.createTextNode(text.slice(lastIndex)));
-}
-
-function appendAttributionNode(container, node) {
-  if (node.nodeType === Node.TEXT_NODE) {
-    appendAttributionText(container, node.nodeValue || "");
-    return;
-  }
-  if (node.nodeType !== Node.ELEMENT_NODE) return;
-  if (node.tagName.toLowerCase() === "a") {
-    appendLink(container, node.textContent || "", node.getAttribute("href") || "");
-    return;
-  }
-  node.childNodes.forEach(child => appendAttributionNode(container, child));
-}
-
-function appendAttribution(container, credit) {
-  if (!credit) return;
-  const text = typeof credit === "string" ? credit : credit.label;
-  const url = typeof credit === "string" ? undefined : credit.url;
-  if (!text) return;
-  if (/<a\b/i.test(text)) {
-    const documentFragment = new DOMParser().parseFromString(text, "text/html");
-    documentFragment.body.childNodes.forEach(node => appendAttributionNode(container, node));
-    return;
-  }
-  if (url && /^https?:\/\//i.test(url)) {
-    appendLink(container, text, url);
-    return;
-  }
-  appendAttributionText(container, text);
-}
-
-function updateMapAttribution() {
-  const credits = [];
-  if (selectedBasemap?.attribution) {
-    credits.push({ label: selectedBasemap.attribution, url: selectedBasemap.attributionUrl });
-  }
-  const demSource = demSources[selectedDemSource];
-  if (layerState.get("terrain").visible && demSource?.attribution) {
-    credits.push({ label: demSource.attribution, url: demSource.attributionUrl });
-  }
-  const attribution = document.querySelector("#map-attribution");
-  attribution.replaceChildren();
-  credits.filter(credit => credit.label).forEach((credit, index) => {
-    if (index > 0) attribution.append(document.createTextNode(" | "));
-    appendAttribution(attribution, credit);
-  });
-}
-
-function createMapLayers() {
-  const layers = [];
-  const demSource = demSources[selectedDemSource];
-  const basemapId = selectedBasemap?.id || "none";
-  const terrainVisible = layerState.get("terrain").visible;
-  const orderedItems = getOrderedLayerItems();
-  const usesDem = drapeTerrainSources.dem;
-  const uses3DTiles = drapeTerrainSources.tiles3d;
-  const hasDemSource = usesDem && terrainVisible;
-  const has3DTilesSource = uses3DTiles &&
-    orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
-  const hasBasemap3DTilesSource = basemapDrape3DTiles &&
-    orderedItems.some(item => item.visible && item.type === "3dtiles" && item.url);
-  const has3DTilesTerrainSource = has3DTilesSource || hasBasemap3DTilesSource;
-  const hasDrapeSource = hasDemSource || has3DTilesSource;
-  const basemapUses3DTiles = Boolean(
-    layerState.get("basemap").visible &&
-    selectedBasemap &&
-    hasBasemap3DTilesSource &&
-    TerrainExtension,
-  );
-
-  const isDrapeTarget = layerType =>
-    Boolean(drapeLayers[layerType] && hasDrapeSource && TerrainExtension);
-  const getDrapeProps = layerType => isDrapeTarget(layerType)
-    ? { extensions: [new TerrainExtension()], terrainDrawMode: "drape" }
-    : {};
-  const getDrapeLayerId = (id, layerType) =>
-    `${id}-${isDrapeTarget(layerType) ? "drape" : "plain"}`;
-  const create3DTilesLayer = item => {
-    if (!Tile3DLayer) {
-      item.status = "Tile3DLayer is not available in the deck.gl bundle";
-      return null;
-    }
-    return new Tile3DLayer({
-      data: item.url,
-      id: has3DTilesTerrainSource
-        ? `${item.id}-terrain-source`
-        : item.id,
-      operation: has3DTilesTerrainSource
-        ? "terrain+draw"
-        : "draw",
-      loadOptions: {
-        tileset: {
-          maximumScreenSpaceError: tile3dMaximumScreenSpaceError,
-          maximumMemoryUsage: tile3dMaximumMemoryUsage,
-          memoryAdjustedScreenSpaceError: true,
-        },
-      },
-      pickable: "3d",
-      onClick: info => showAttribute(info.object),
-      onTilesetLoad: tileset => {
-        const layer = layerState.get(item.id);
-        if (layer) layer.status = `loaded (${tileset?.asset?.version || "3D Tiles"})`;
-        renderLayerList();
-      },
-      onTileError: error => {
-        const layer = layerState.get(item.id);
-        if (layer) layer.status = `error: ${error?.message || "tile load failed"}`;
-        renderLayerList();
-        console.error(`3D Tiles load failed: ${item.url}`, error);
-      },
-    });
-  };
-  const createBasemapLayer = () => new TileLayer({
-    id: `basemap-${selectedBasemap.id}-plain`,
-    data: selectedBasemap.url,
-    minZoom,
-    maxZoom: getTileMaxZoom(selectedBasemap.url, selectedBasemap.maxZoom ?? maxZoom),
-    getTileData: createAdaptiveTileData(selectedBasemap.url),
-    tileSize: selectedBasemap.tileSize,
-    refinementStrategy: "best-available",
-    renderSubLayers: props => new BitmapLayer({
-      ...props,
-      id: `${props.id}-bitmap`,
-      data: null,
-      image: props.data,
-      bounds: props.tile.bbox.west
-        ? [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north]
-        : undefined,
-    }),
-  });
-  const createBasemapDrapeLayer = () => new TileLayer({
-    id: `basemap-${selectedBasemap.id}-drape`,
-    data: selectedBasemap.url,
-    minZoom,
-    maxZoom: getTileMaxZoom(selectedBasemap.url, selectedBasemap.maxZoom ?? maxZoom),
-    getTileData: createAdaptiveTileData(selectedBasemap.url),
-    tileSize: selectedBasemap.tileSize,
-    refinementStrategy: "best-available",
-    extensions: [new TerrainExtension()],
-    terrainDrawMode: "drape",
-    renderSubLayers: props => new BitmapLayer({
-      ...props,
-      id: `${props.id}-bitmap`,
-      data: null,
-      image: props.data,
-      bounds: props.tile.bbox.west
-        ? [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north]
-        : undefined,
-    }),
-  });
-  if (layerState.get("basemap").visible && selectedBasemap && !terrainVisible && !basemapUses3DTiles) {
-    layers.push(createBasemapLayer());
-  }
-  if (layerState.get("basemap").visible && selectedBasemap && basemapUses3DTiles) {
-    layers.push(createBasemapDrapeLayer());
-  }
-  if (terrainVisible) {
-    layers.push(new TerrainLayer({
-      id: `terrain-${selectedDemSource}-${basemapId}`,
-      elevationData: demSource.elevationData,
-      texture: layerState.get("basemap").visible
-        ? selectedBasemap?.url
-        : undefined,
-      elevationDecoder: demSource.elevationDecoder,
-      minZoom,
-      maxZoom: demSource.maxZoom,
-      tileSize: demSource.tileSize,
-      meshMaxError: 10,
-      operation: hasDemSource
-        ? "terrain+draw"
-        : "draw",
-      color: [255, 255, 255],
-      material: {
-        ambient: shadowEnabled ? 0.35 : 1,
-        diffuse: shadowEnabled ? 0.65 : 0,
-        shininess: shadowEnabled ? 8 : 0,
-        specularColor: [0, 0, 0],
-      },
-      visible: layerState.get("terrain").visible,
-    }));
-  }
-  orderedItems.forEach(item => {
-    if (item.type === "terrain" || item.type === "basemap" || item.type === "three") return;
-    if (!item.visible || !item.url) return;
-    if (item.type === "3dtiles") {
-      const layer = create3DTilesLayer(item);
-      if (layer) layers.push(layer);
-      return;
-    }
-    if (item.type === "tile") {
-      layers.push(new TileLayer({
-        id: getDrapeLayerId(item.id, "xyz"),
-        data: item.url,
-        minZoom,
-        maxZoom: getTileMaxZoom(item.url),
-        getTileData: createAdaptiveTileData(item.url),
-        tileSize: 256,
-        refinementStrategy: "best-available",
-        renderSubLayers: props => new BitmapLayer({
-          ...props,
-          id: `${props.id}-bitmap`,
-          data: null,
-          image: props.data,
-          bounds: [props.tile.bbox.west, props.tile.bbox.south, props.tile.bbox.east, props.tile.bbox.north],
-          opacity: item.opacity,
-          ...getDrapeProps("xyz"),
-        }),
-      }));
-      return;
-    }
-    if (item.type === "geojson") {
-      layers.push(new GeoJsonLayer({
-        id: getDrapeLayerId(item.id, "geojson"),
-        data: item.url,
-        filled: true,
-        stroked: true,
-        getFillColor: [70, 125, 156, 35],
-        getLineColor: [45, 90, 110, 210],
-        getLineWidth: 2,
-        lineWidthMinPixels: 1,
-        ...getDrapeProps("geojson"),
-        pickable: true,
-        onClick: info => showAttribute(info.object),
-      }));
-    }
-  });
-  return layers;
-}
-
-deck = new Deck({
-  parent: deckContainer,
-  views: new MapView({ repeat: false }),
-  initialViewState: viewState,
-  controller: { dragRotate: true, touchRotate: true, scrollZoom: true, doubleClickZoom: true, minPitch: 0, maxPitch: 179 },
-  onViewStateChange: ({ viewState: next }) => {
-    const nextViewState = {
-      ...viewState,
-      ...next,
-      zoom: clampZoom(next.zoom ?? viewState.zoom),
-    };
-    const changed = ["longitude", "latitude", "zoom", "pitch", "bearing"].some(
-      key => nextViewState[key] !== viewState[key],
-    );
-    viewState = nextViewState;
-    if (changed) deck.setProps({ viewState: nextViewState });
-    updateCameraInputs();
-    void updateTerrainFollow(viewState);
-  },
-  onWebGLInitialized: gl => {
-    threeRenderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl, alpha: true });
-    threeRenderer.autoClear = false;
-    threeRenderer.setPixelRatio(1);
-    threeScene = new THREE.Scene();
-    threeScene.add(new THREE.HemisphereLight(0xffffff, 0x668080, 2.2));
-    threeModel = new THREE.Mesh(
-      new THREE.BoxGeometry(1, 1, 1),
-      new THREE.MeshStandardMaterial({ color: 0x168f84, roughness: 0.6, metalness: 0.1 }),
-    );
-    threeScene.add(threeModel);
-    threeCamera = new THREE.Camera();
-    threeCamera.matrixAutoUpdate = false;
-  },
-  onAfterRender: () => {
-    if (!threeRenderer || !threeScene || !threeCamera || !threeModel) return;
-    const viewport = deck.getViewports()[0];
-    if (!viewport) return;
-    threeRenderer.setViewport(0, 0, viewport.width, viewport.height);
-    threeRenderer.resetState();
-    threeCamera.matrixWorldInverse.fromArray(viewport.viewMatrix);
-    threeCamera.matrixWorld.copy(threeCamera.matrixWorldInverse).invert();
-    threeCamera.projectionMatrix.fromArray(viewport.projectionMatrix);
-    threeCamera.projectionMatrixInverse.copy(threeCamera.projectionMatrix).invert();
-    threeModel.visible = Boolean(layerState.get("three-model")?.visible);
-    threeModel.position.fromArray(viewport.projectPosition([origin[0], origin[1], 18]));
-    threeModel.scale.setScalar(0.00035);
-    threeModel.rotation.y = 0.6;
-    threeRenderer.render(threeScene, threeCamera);
-  },
-  layers: createMapLayers(),
-});
-
-function refreshLayers() {
-  deck.setProps({ layers: createMapLayers() });
-}
 
 function parseLayerTitle(title) {
   const parts = title.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
@@ -559,29 +79,148 @@ function parseLayerTitle(title) {
 }
 
 function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "'": "&#39;",
-    '"': "&quot;",
-  })[character]);
+  return String(value).replace(/[&<>'"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
+}
+
+function appendAttributionText(container, text) {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  if (trimmed.startsWith("<")) {
+    const wrapper = document.createElement("span");
+    wrapper.innerHTML = trimmed;
+    container.append(wrapper);
+  } else {
+    const span = document.createElement("span");
+    span.textContent = ` ${trimmed}`;
+    container.append(span);
+  }
+}
+
+function updateMapAttribution() {
+  const attribution = document.querySelector("#map-attribution");
+  attribution.replaceChildren();
+  if (selectedBasemap?.attribution) appendAttributionText(attribution, selectedBasemap.attribution);
+  [...tileLayers, ...layers].forEach(item => {
+    if (item.visible && item.attribution) appendAttributionText(attribution, item.attribution);
+  });
+}
+
+function getProjectConfigUrl() {
+  return currentProjectId ? `/api/projects/${encodeURIComponent(currentProjectId)}/config` : "/api/config";
+}
+
+async function loadProjects() {
+  const response = await fetch("/api/projects");
+  if (!response.ok) throw new Error(await response.text());
+  const definitions = await response.json();
+  const select = document.querySelector("#project-select");
+  select.replaceChildren();
+  definitions.forEach(project => {
+    const option = document.createElement("option");
+    option.value = project.id;
+    option.textContent = project.title || project.id;
+    if (project.id === currentProjectId) option.selected = true;
+    select.append(option);
+  });
+}
+
+async function loadInspectorConfig() {
+  try {
+    const response = await fetch(getProjectConfigUrl());
+    if (!response.ok) throw new Error(await response.text());
+    const text = await response.text();
+    document.querySelector("#inspector-input").value = text;
+    applyInspector(text);
+    setInspectorStatus("設定を読み込みました。");
+  } catch (error) {
+    console.error("設定の読み込みに失敗しました。", error);
+    setInspectorStatus(`設定を読み込めません: ${error instanceof Error ? error.message : error}`, true);
+  }
+}
+
+async function saveInspectorConfig() {
+  const response = await fetch(getProjectConfigUrl(), {
+    method: "PUT",
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+    body: document.querySelector("#inspector-input").value,
+  });
+  if (!response.ok) throw new Error(await response.text());
+}
+
+function setInspectorStatus(message, isError = false) {
+  const status = document.querySelector("#inspector-status");
+  status.textContent = message;
+  status.style.color = isError ? "#a82020" : "";
+}
+
+function flyTo(options = {}) {
+  const latitude = Number(options.latitude);
+  const longitude = Number(options.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  const latRad = latitude * Math.PI / 180;
+  let height = Number(options.height);
+  if (!Number.isFinite(height)) {
+    const zoom = Number(options.zoom);
+    height = Number.isFinite(zoom) ? Math.max(10, 156543.03392 * 256 * Math.max(0.2, Math.cos(latRad)) / (2 ** zoom)) : 1000;
+  }
+  const pitch = -Math.max(-90, Math.min(90, Number(options.pitch) || 0)) * Math.PI / 180;
+  const heading = (Number(options.bearing) || 0) * Math.PI / 180;
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, Math.max(1, height)),
+    orientation: { heading, pitch, roll: 0 },
+    duration: 1.5,
+  });
+}
+
+function updateCameraInputs() {
+  const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  document.querySelector("#camera-latitude").value = Number(cartographic.latitude * 180 / Math.PI).toFixed(6);
+  document.querySelector("#camera-longitude").value = Number(cartographic.longitude * 180 / Math.PI).toFixed(6);
+  document.querySelector("#camera-zoom").value = Number(cartographic.height).toFixed(1);
+  document.querySelector("#camera-pitch").value = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
+  document.querySelector("#camera-bearing").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
+}
+
+function renderBasemapSelector() {
+  const select = document.querySelector("#basemap-select");
+  select.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "ベースマップなし";
+  select.append(none);
+  basemaps.forEach(basemap => {
+    const option = document.createElement("option");
+    option.value = basemap.id;
+    option.textContent = basemap.title;
+    if (basemap.id === selectedBasemap?.id) option.selected = true;
+    select.append(option);
+  });
+}
+
+function renderPresets() {
+  const container = document.querySelector("#camera-presets");
+  container.replaceChildren();
+  cameraPresets.forEach((preset, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = preset.title;
+    button.dataset.preset = String(index);
+    button.addEventListener("click", () => flyTo(preset));
+    container.append(button);
+  });
 }
 
 function getOrderedLayerItems() {
-  const items = [...layerState.values(), ...tileLayers].filter(layer => layer.id !== "basemap");
-  const byId = new Map(items.map(layer => [layer.id, layer]));
-  layerOrder = [...layerOrder.filter(id => byId.has(id)), ...items.map(item => item.id).filter(id => !layerOrder.includes(id))];
-  return layerOrder.map(id => byId.get(id)).filter(Boolean);
+  return layerOrder.map(id => layerState.get(id)).filter(Boolean);
 }
 
 function renderLayerList() {
   const list = document.querySelector("#layer-list");
   const groupedLayers = new Map();
-  getOrderedLayerItems().filter(layer => layer.id !== "terrain").forEach(layer => {
+  getOrderedLayerItems().forEach(layer => {
     const group = layer.group || "";
     const key = `${group}|${layer.exclusiveGroup ? "exclusive" : "regular"}`;
-    if (!groupedLayers.has(key)) groupedLayers.set(key, { group, exclusive: layer.exclusiveGroup, layers: [] });
+    if (!groupedLayers.has(key)) groupedLayers.set(key, { group, exclusive: !!layer.exclusiveGroup, layers: [] });
     groupedLayers.get(key).layers.push(layer);
   });
   list.innerHTML = [...groupedLayers.values()].map(({ group, exclusive, layers }) => {
@@ -597,7 +236,7 @@ function renderLayerList() {
           const inputId = `${groupId}-layer-${index}`;
           return `
         <label class="layer-row" for="${inputId}" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
-          <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""} ${layer.id === "google-photorealistic" || (layer.type === "3dtiles" && !Tile3DLayer) ? "disabled" : ""}>
+          <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""}>
           <span>${escapeHtml(layer.title)}</span>
           <small>${escapeHtml(layer.status || (layer.type === "tile" ? "Tile" : layer.type))}</small>
         </label>`;
@@ -606,32 +245,6 @@ function renderLayerList() {
     </section>`;
   }).join("");
 
-  list.querySelectorAll(".layer-group-checkbox").forEach(input => {
-    input.addEventListener("change", () => {
-      const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
-      if (!group) return;
-      if (group.exclusive) {
-        group.layers.forEach(layer => { layer.visible = false; });
-        if (input.checked) (group.layers.find(layer => layer.visible) || group.layers[0]).visible = true;
-      } else group.layers.forEach(layer => { layer.visible = input.checked; });
-      renderLayerList();
-      refreshLayers();
-    });
-  });
-  list.querySelectorAll(".layer-row input").forEach(input => {
-    input.addEventListener("change", () => {
-      const layer = layerState.get(input.dataset.layerId) || tileLayers.find(item => item.id === input.dataset.layerId);
-      if (!layer) return;
-      layer.visible = input.checked;
-      if (input.checked && input.dataset.exclusive === "true") {
-        [...layerState.values(), ...tileLayers].forEach(other => {
-          if (other !== layer && other.group === layer.group && other.exclusiveGroup) other.visible = false;
-        });
-      }
-      renderLayerList();
-      refreshLayers();
-    });
-  });
   list.querySelectorAll(".layer-group-toggle").forEach(toggle => {
     toggle.addEventListener("click", () => {
       const group = toggle.closest(".layer-group");
@@ -645,6 +258,37 @@ function renderLayerList() {
       else expandedLayerGroups.add(groupKey);
     });
   });
+
+  list.querySelectorAll(".layer-group-checkbox").forEach(input => {
+    input.addEventListener("change", () => {
+      const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
+      if (!group) return;
+      if (group.exclusive) {
+        group.layers.forEach(layer => { layer.visible = false; });
+        if (input.checked) (group.layers.find(layer => layer.visible) || group.layers[0]).visible = true;
+      } else {
+        group.layers.forEach(layer => { layer.visible = input.checked; });
+      }
+      renderLayerList();
+      refreshLayers();
+    });
+  });
+
+  list.querySelectorAll(".layer-row input").forEach(input => {
+    input.addEventListener("change", () => {
+      const layer = layerState.get(input.dataset.layerId);
+      if (!layer) return;
+      layer.visible = input.checked;
+      if (input.checked && input.dataset.exclusive === "true") {
+        getOrderedLayerItems().forEach(other => {
+          if (other !== layer && other.group === layer.group && other.exclusiveGroup) other.visible = false;
+        });
+      }
+      renderLayerList();
+      refreshLayers();
+    });
+  });
+
   let draggedId;
   list.querySelectorAll(".layer-row").forEach(row => {
     row.addEventListener("dragstart", event => {
@@ -663,7 +307,7 @@ function renderLayerList() {
       const orderedLayers = getOrderedLayerItems();
       const sourceLayer = orderedLayers.find(item => item.id === sourceId);
       const targetLayer = orderedLayers.find(item => item.id === targetId);
-      if (!sourceLayer || !targetLayer || sourceLayer.group !== targetLayer.group || sourceLayer.exclusiveGroup !== targetLayer.exclusiveGroup) return;
+      if (!sourceLayer || !targetLayer || sourceLayer.group !== targetLayer.group || (sourceLayer.exclusiveGroup ? "exclusive" : "regular") !== (targetLayer.exclusiveGroup ? "exclusive" : "regular")) return;
       const nextOrder = orderedLayers.map(item => item.id);
       const sourceIndex = nextOrder.indexOf(sourceId);
       const targetIndex = nextOrder.indexOf(targetId);
@@ -675,144 +319,286 @@ function renderLayerList() {
       refreshLayers();
     });
   });
+
   list.querySelectorAll(".layer-group-checkbox").forEach(input => {
     const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
     if (group && !group.exclusive) input.indeterminate = group.layers.some(layer => layer.visible) && group.layers.some(layer => !layer.visible);
   });
 }
 
-function updateCameraInputs() {
-  ["longitude", "latitude", "zoom", "pitch", "bearing"].forEach(key => {
-    const input = document.querySelector(`#camera-${key}`);
-    if (input && document.activeElement !== input) input.value = Number(viewState[key]).toFixed(4);
-  });
-  const params = new URLSearchParams();
-  ["longitude", "latitude", "zoom", "pitch", "bearing"].forEach(key => {
-    params.set(key, Number(viewState[key]).toFixed(6));
-  });
-  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
-  const compass = document.querySelector("#compass-button");
-  if (compass) compass.style.transform = `rotate(${-viewState.bearing}deg)`;
+function formatTileUrl(template, index) {
+  return template
+    .replaceAll("{z}", String(index.z))
+    .replaceAll("{x}", String(index.x))
+    .replaceAll("{y}", String(index.y));
 }
 
-function flyTo(next) {
-  viewState = {
-    ...viewState,
-    ...next,
-    zoom: clampZoom(next.zoom ?? viewState.zoom),
-  };
-  deck.setProps({ viewState });
-  updateCameraInputs();
-  void updateTerrainFollow(viewState);
-}
-
-function showAttribute(object) {
-  const content = document.querySelector("#attr-content");
-  content.replaceChildren();
-  if (!object) {
-    content.textContent = "属性情報がありません。";
-    return;
+class TerrariumTerrainProvider {
+  constructor(options) {
+    this.tilingScheme = new Cesium.GeographicTilingScheme();
+    this.heightmapWidth = options.tileSize || 256;
+    this.heightmapHeight = options.tileSize || 256;
+    this.hasVertexNormals = false;
+    this.hasWaterMask = false;
+    this.elevationData = options.elevationData;
+    this.elevationDecoder = options.elevationDecoder;
+    this.maxZoom = options.maxZoom || 15;
+    this.availability = {
+      isTileAvailable: (level, x, y) => level <= this.maxZoom && x >= 0 && y >= 0,
+    };
   }
 
-  const attributes = object.properties && typeof object.properties === "object"
-    ? object.properties
-    : object;
-  if (!attributes || typeof attributes !== "object" || Array.isArray(attributes)) {
-    content.textContent = formatAttributeValue(attributes);
-    return;
+  getLevelMaximumGeometricError(level) {
+    return 156543.03392 / (1 << level);
   }
 
-  const list = document.createElement("dl");
-  list.className = "attr-list";
-  Object.entries(attributes).forEach(([name, value]) => {
-    const row = document.createElement("div");
-    row.className = "attr-row";
-    const label = document.createElement("dt");
-    label.className = "attr-name";
-    label.textContent = name;
-    const valueElement = document.createElement("dd");
-    valueElement.className = "attr-value";
-    valueElement.append(createAttributeValue(value));
-    row.append(label, valueElement);
-    list.append(row);
+  requestTileGeometry(x, y, level, request) {
+    if (level > this.maxZoom) return Promise.reject(new Error("Tile out of range"));
+    const url = formatTileUrl(this.elevationData, { x, y, z: level });
+    return fetch(url, { mode: "cors" })
+      .then(async response => {
+        if (!response.ok) throw new Error(`Terrain tile request failed (${response.status}): ${url}`);
+        return createImageBitmap(await response.blob());
+      })
+      .then(bitmap => {
+        const canvas = document.createElement("canvas");
+        canvas.width = this.heightmapWidth;
+        canvas.height = this.heightmapHeight;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) throw new Error("Terrain sample canvas is unavailable");
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(bitmap, 0, 0, this.heightmapWidth, this.heightmapHeight);
+        bitmap.close();
+        const image = ctx.getImageData(0, 0, this.heightmapWidth, this.heightmapHeight);
+        const { rScaler, gScaler, bScaler, offset } = this.elevationDecoder;
+        const count = this.heightmapWidth * this.heightmapHeight;
+        const heights = new Float32Array(count);
+        for (let i = 0; i < count; i += 1) {
+          const offsetPixels = i * 4;
+          const r = image.data[offsetPixels];
+          const g = image.data[offsetPixels + 1];
+          const b = image.data[offsetPixels + 2];
+          heights[i] = r * rScaler + g * gScaler + b * bScaler + offset;
+        }
+        return new Cesium.HeightmapTerrainData({
+          buffer: heights,
+          width: this.heightmapWidth,
+          height: this.heightmapHeight,
+          childTileMask: level === this.maxZoom ? 0 : 15,
+          structure: {
+            heightScale: 1.0,
+            heightOffset: 0.0,
+            elementsPerHeight: 1,
+            stride: 1,
+            elementMultiplier: 1.0,
+            isBigEndian: false,
+          },
+        });
+      });
+  }
+}
+
+function createUrlTemplateProvider(options) {
+  return new Cesium.UrlTemplateImageryProvider({
+    url: options.url,
+    credit: new Cesium.Credit(options.attribution || ""),
+    maximumLevel: options.maxZoom || maxZoom,
+    tileWidth: options.tileSize || 256,
+    tileHeight: options.tileSize || 256,
   });
-  content.append(list);
 }
 
-function createAttributeValue(value) {
-  const text = formatAttributeValue(value);
-  if (typeof value !== "string" || !isHttpUrl(value)) return document.createTextNode(text);
-  const link = document.createElement("a");
-  link.href = value;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
-  link.textContent = value;
-  return link;
+function createClippingPlaneFromEnu(normalEnu) {
+  const center = viewer.camera.position.clone();
+  const transform = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+  const normalEcef = Cesium.Matrix4.multiplyByPointAsVector(transform, normalEnu, new Cesium.Cartesian3());
+  Cesium.Cartesian3.normalize(normalEcef, normalEcef);
+  const distance = -Cesium.Cartesian3.dot(normalEcef, center);
+  return new Cesium.ClippingPlane(normalEcef, distance);
 }
 
-function isHttpUrl(value) {
+function applyClippingPlanes(target) {
   try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
+    if (!activeClippingPlanes.planes.length) {
+      target.clippingPlanes = undefined;
+      return;
+    }
+    target.clippingPlanes = new Cesium.ClippingPlaneCollection({
+      planes: activeClippingPlanes.planes.map(p => new Cesium.ClippingPlane(p.normal, p.distance)),
+      edgeWidth: 2,
+      edgeColor: Cesium.Color.RED,
+      enabled: true,
+    });
+  } catch (error) {
+    console.warn("クリッピング平面の適用に失敗しました:", error);
   }
 }
 
-function formatAttributeValue(value) {
-  if (value !== null && typeof value === "object") return JSON.stringify(value, null, 2);
-  return String(value ?? "");
+function updateUndergroundView() {
+  const hasTerrain = !(viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider);
+  viewer.scene.globe.depthTestAgainstTerrain = hasTerrain && !undergroundViewEnabled;
+  viewer.scene.globe.translucency.enabled = undergroundViewEnabled;
+  if (undergroundViewEnabled) {
+    viewer.scene.globe.translucency.frontFaceAlpha = 0.5;
+    viewer.scene.globe.translucency.backFaceAlpha = 0.5;
+    viewer.scene.globe.undergroundColor = Cesium.Color.BLACK;
+    viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = -1000;
+  } else {
+    viewer.scene.globe.undergroundColor = Cesium.Color.BLACK;
+    viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1;
+  }
 }
 
-function shareUrl() {
-  return `${window.location.origin}${window.location.pathname}?${new URLSearchParams({
-    longitude: viewState.longitude.toFixed(6),
-    latitude: viewState.latitude.toFixed(6),
-    zoom: viewState.zoom.toFixed(6),
-    pitch: viewState.pitch.toFixed(6),
-    bearing: viewState.bearing.toFixed(6),
-  })}`;
-}
+async function refreshLayers() {
+  viewer.imageryLayers.removeAll(false);
+  activeDataSources.forEach(ds => { try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
+  activeDataSources.length = 0;
+  activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
+  activePrimitives.length = 0;
 
-function renderPresets() {
-  document.querySelector("#camera-presets").innerHTML = cameraPresets.map((preset, index) =>
-    `<button class="preset-button" data-preset="${index}">${preset.title}</button>`,
-  ).join("");
-  document.querySelectorAll("[data-preset]").forEach(button => {
-    button.addEventListener("click", () => flyTo(cameraPresets[Number(button.dataset.preset)]));
-  });
-}
+  const demSource = terrainEnabled ? demSources[selectedDemSource] : null;
+  if (demSource?.url) {
+    try {
+      const terrainProvider = Cesium.CesiumTerrainProvider.fromUrl
+        ? await Cesium.CesiumTerrainProvider.fromUrl(demSource.url)
+        : await new Promise((resolve, reject) => {
+            const provider = new Cesium.CesiumTerrainProvider({ url: demSource.url });
+            if (!provider.readyPromise) {
+              reject(new Error("CesiumTerrainProvider.readyPromise is unavailable"));
+            } else {
+              provider.readyPromise.then(() => resolve(provider)).catch(reject);
+            }
+          });
+      viewer.terrainProvider = terrainProvider;
+    } catch (error) {
+      console.warn("DEM の読み込みに失敗しました:", error);
+      viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    }
+  } else if (demSource?.elevationData) {
+    try {
+      viewer.terrainProvider = new TerrariumTerrainProvider(demSource);
+    } catch (error) {
+      console.warn("Terrarium DEM の初期化に失敗しました:", error);
+      viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    }
+  } else {
+    viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+  }
 
-function renderProjectSelector() {
-  const select = document.querySelector("#project-select");
-  if (!select) return;
-  select.replaceChildren(...projects.map(project => {
-    const option = document.createElement("option");
-    option.value = project.id;
-    option.textContent = project.title;
-    return option;
-  }));
-  select.value = currentProjectId;
-}
+  viewer.scene.globe.enableLighting = shadowEnabled;
+  viewer.scene.shadows = shadowEnabled;
 
-function renderBasemapSelector() {
-  const select = document.querySelector("#basemap-select");
-  select.innerHTML = [
-    '<option value="">ベースマップなし</option>',
-    ...basemaps.map(item => `<option value="${item.id}">${item.title}</option>`),
-  ].join("");
-  select.value = selectedBasemap?.id || "";
-}
+  const visible3DTiles = layers.some(l => l.visible && l.type === "3dtiles");
+  const drape3DTiles = drapeTerrainSources.tiles3d && visible3DTiles;
 
-let infoRequestId = 0;
+  // 3D Tiles ドレープ用プロバイダー定義
+  const drapeProviders = [];
+  if (drape3DTiles) {
+    if (basemapDrape3DTiles && selectedBasemap?.url) {
+      drapeProviders.push({
+        url: selectedBasemap.url,
+        attribution: selectedBasemap.attribution,
+        maxZoom: selectedBasemap.maxZoom || maxZoom,
+        tileSize: selectedBasemap.tileSize || 256,
+        opacity: selectedBasemap.opacity ?? 1.0,
+      });
+    }
+    if (drapeLayers.xyz) {
+      tileLayers.filter(t => t.visible).forEach(item => {
+        drapeProviders.push({
+          url: item.url,
+          attribution: item.attribution,
+          maxZoom: item.maxZoom || maxZoom,
+          tileSize: item.tileSize || 256,
+          opacity: item.opacity ?? 0.8,
+        });
+      });
+    }
+  }
+
+  // Globe 表面のベースマップ
+  if (selectedBasemap?.url) {
+    try {
+      const provider = createUrlTemplateProvider({
+        url: selectedBasemap.url,
+        attribution: selectedBasemap.attribution,
+        maxZoom: selectedBasemap.maxZoom || maxZoom,
+        tileSize: selectedBasemap.tileSize || 256,
+      });
+      viewer.imageryLayers.add(new Cesium.ImageryLayer(provider, { alpha: selectedBasemap.opacity ?? 1.0 }));
+    } catch (error) {
+      console.warn("ベースマップの作成に失敗しました:", error);
+    }
+  }
+
+  // Globe 表面の XYZ
+  for (const item of tileLayers) {
+    if (!item.visible) continue;
+    if (drape3DTiles && drapeLayers.xyz) continue;
+    try {
+      const provider = createUrlTemplateProvider({
+        url: item.url,
+        attribution: item.attribution,
+        maxZoom: item.maxZoom || maxZoom,
+        tileSize: item.tileSize || 256,
+      });
+      viewer.imageryLayers.add(new Cesium.ImageryLayer(provider, { alpha: item.opacity ?? 0.8 }));
+    } catch (error) {
+      console.warn("XYZ タイルの作成に失敗しました:", item.url, error);
+    }
+  }
+
+  // 3D Tiles / GeoJSON
+  for (const item of layers) {
+    if (!item.visible) continue;
+    if (item.type === "3dtiles") {
+      try {
+        const tileset = await Cesium.Cesium3DTileset.fromUrl(item.url);
+        if (drape3DTiles && Array.isArray(drapeProviders) && drapeProviders.length > 0) {
+          drapeProviders.forEach(options => {
+            try {
+              const provider = createUrlTemplateProvider(options);
+              const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: options.opacity ?? 0.8 });
+              tileset.imageryLayers.add(imageryLayer);
+            } catch (drapeError) {
+              console.warn("3D Tiles ドレープレイヤー追加失敗:", options.url, drapeError);
+            }
+          });
+        }
+        applyClippingPlanes(tileset);
+        viewer.scene.primitives.add(tileset);
+        activePrimitives.push(tileset);
+      } catch (error) {
+        console.warn("3D Tiles の読み込みに失敗しました:", item.url, error);
+      }
+    } else if (item.type === "geojson" || item.type === "layer") {
+      try {
+        const ds = await Cesium.GeoJsonDataSource.load(item.url, { clampToGround: true });
+        await viewer.dataSources.add(ds);
+        activeDataSources.push(ds);
+      } catch (error) {
+        console.warn("GeoJSON の読み込みに失敗しました:", item.url, error);
+      }
+    }
+  }
+
+  applyClippingPlanes(viewer.scene.globe);
+  updateUndergroundView();
+  updateMapAttribution();
+}
 
 function setupInfoTabs(content) {
   const buttons = [...content.querySelectorAll(".tab-button")];
   const panels = [...content.querySelectorAll(".tab-content")];
   if (!buttons.length || !panels.length) return;
   const activate = index => {
-    buttons.forEach((button, buttonIndex) => button.classList.toggle("active", buttonIndex === index));
-    panels.forEach((panel, panelIndex) => panel.classList.toggle("active", panelIndex === index));
+    buttons.forEach((button, i) => button.classList.toggle("active", i === index));
+    panels.forEach((panel, i) => {
+      panel.classList.toggle("active", i === index);
+      panel.hidden = i !== index;
+    });
   };
   buttons.forEach((button, index) => button.addEventListener("click", () => activate(index)));
   activate(Math.max(0, buttons.findIndex(button => button.classList.contains("active"))));
@@ -843,56 +629,51 @@ async function loadInfoContent(url) {
   }
 }
 
-function updateSearchProviderLabel() {
-  const useYahooSearch = yahooAppId && !yahooAppId.includes("あなたのYahoo");
-  document.querySelector("#search-title").textContent = `Search（${useYahooSearch ? "Yahoo Local Search" : "国土地理院住所検索API"}）`;
-}
-
 function applyInspector(text) {
   const nextLines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const parsedCameras = [];
   const parsedBasemaps = [];
-  const inspectorLayerIds = new Set();
-  const inspectorTileIds = new Set();
-  let inspectorLayerIndex = 0;
-  [...layerState.keys()].forEach(id => {
-    if (id !== "terrain" && id !== "basemap") layerState.delete(id);
-  });
-  layerOrder = layerOrder.filter(id => layerState.has(id));
+  layerState.clear();
   tileLayers.splice(0, tileLayers.length);
-  yahooAppId = "";
-  updateSearchProviderLabel();
+  layers.splice(0, layers.length);
+  basemaps.splice(0, basemaps.length);
+  layerOrder = [];
+
   document.body.style.background = "";
-  document.querySelector("#info-content").replaceChildren();
   ++infoRequestId;
+  document.querySelector("#info-content").replaceChildren();
   document.querySelector("#legend-panel img").removeAttribute("src");
+
+  let inspectorLayerIndex = 0;
   nextLines.forEach(line => {
     const separator = line.indexOf(":");
     if (separator < 0) return;
     const type = line.slice(0, separator).toLowerCase();
     const value = line.slice(separator + 1).trim();
+
     if (type === "background") document.body.style.background = value;
     if (type === "yahooappid") yahooAppId = value;
-    if (type === "info") void loadInfoContent(value);
+    if (type === "info") {
+      void loadInfoContent(value);
+    }
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());
       document.querySelector("#legend-panel img").src = parts[parts.length - 1];
     }
+
     if (type === "base") {
       const parts = value.split("|").map(part => part.trim());
       if (parts[0] && parts[1]) {
         const options = {};
         parts.slice(3).forEach(part => {
-          const separator = part.indexOf("=");
-          if (separator < 0) return;
-          const key = part.slice(0, separator).trim();
-          const raw = part.slice(separator + 1).trim();
+          const eq = part.indexOf("=");
+          if (eq < 0) return;
+          const key = part.slice(0, eq).trim();
+          const raw = part.slice(eq + 1).trim();
           const number = Number(raw);
           if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
-          if (key === "maxZoom" && Number.isInteger(number) && number >= 0 && number <= maxZoom) {
-            options.maxZoom = number;
-          }
-          if (key === "attributionUrl" && /^https?:\/\//i.test(raw)) options.attributionUrl = raw;
+          if (key === "maxZoom" && Number.isInteger(number) && number >= 0) options.maxZoom = number;
+          if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
         });
         parsedBasemaps.push({
           id: `inspector-base-${parsedBasemaps.length}`,
@@ -900,28 +681,26 @@ function applyInspector(text) {
           url: parts[1],
           attribution: parts[2] || "",
           tileSize: options.tileSize || 256,
+          opacity: options.opacity ?? 1.0,
           ...(options.maxZoom === undefined ? {} : { maxZoom: options.maxZoom }),
-          ...(options.attributionUrl === undefined ? {} : { attributionUrl: options.attributionUrl }),
         });
       }
     }
+
     if (type === "cam") {
       const parts = value.split("|").map(part => part.trim());
       if (parts.length < 3) return;
-      const camera = { title: parts[0], latitude: Number(parts[1]), longitude: Number(parts[2]), zoom: 12, pitch: 30, bearing: 0 };
+      const camera = { title: parts[0], latitude: Number(parts[1]), longitude: Number(parts[2]), pitch: 30, bearing: 0 };
       parts.slice(3).forEach(part => {
         const [key, raw] = part.split("=");
         const number = Number(raw);
         if (key === "p" && Number.isFinite(number)) camera.pitch = Math.abs(number);
         if (key === "d" && Number.isFinite(number)) camera.bearing = number;
-        if (key === "h" && Number.isFinite(number)) {
-          camera.height = number;
-          const zoom = Math.log2(591657550 / number);
-          if (Number.isFinite(zoom)) camera.zoom = zoom;
-        }
+        if (key === "h" && Number.isFinite(number)) camera.height = number;
       });
       if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) parsedCameras.push(camera);
     }
+
     if (type === "xyz") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
@@ -929,169 +708,379 @@ function applyInspector(text) {
       const off = parts.some(part => /^(off|false)$/i.test(part));
       if (!title || !url) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
-      const id = `inspector-layer-${inspectorLayerIndex++}`;
-      tileLayers.push({
-        id,
-        title: displayTitle,
-        sourceTitle: title,
-        url,
-        visible: !off,
-        type: "tile",
-        opacity: 0.8,
-        group,
-        exclusiveGroup,
+      const options = {};
+      parts.slice(3).forEach(part => {
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        const key = part.slice(0, eq).trim();
+        const raw = part.slice(eq + 1).trim();
+        const number = Number(raw);
+        if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
+        if (key === "maxZoom" && Number.isInteger(number) && number >= 0) options.maxZoom = number;
+        if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
       });
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      const item = { id, title: displayTitle, sourceTitle: title, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] || "", group, exclusiveGroup };
+      if (options.maxZoom !== undefined) item.maxZoom = options.maxZoom;
+      if (options.tileSize !== undefined) item.tileSize = options.tileSize;
+      tileLayers.push(item);
+      layerState.set(id, item);
       layerOrder.push(id);
-      inspectorTileIds.add(id);
-      return;
     }
+
     if (type === "3dtiles" || type === "geojson" || type === "layer") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
       const url = parts[1];
       const off = parts.some(part => /^(off|false)$/i.test(part));
       if (!title) return;
-      const id = `inspector-layer-${inspectorLayerIndex++}`;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
-      layerState.set(id, {
-        id,
-        title: displayTitle,
-        sourceTitle: title,
-        visible: !off,
-        type,
-        url,
-        group,
-        exclusiveGroup,
-      });
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      const item = { id, title: displayTitle, sourceTitle: title, type, url, visible: !off, attribution: parts[2] || "", group, exclusiveGroup };
+      layers.push(item);
+      layerState.set(id, item);
       layerOrder.push(id);
-      inspectorLayerIds.add(id);
     }
   });
-  updateSearchProviderLabel();
-  [...layerState.keys()].forEach(id => {
-    if (id !== "terrain" && id !== "basemap" && !inspectorLayerIds.has(id)) layerState.delete(id);
-  });
-  tileLayers.splice(0, tileLayers.length, ...tileLayers.filter(item => inspectorTileIds.has(item.id)));
+
   basemaps.splice(0, basemaps.length, ...parsedBasemaps);
-  selectedBasemap = basemaps[0];
-  layerState.get("basemap").visible = Boolean(selectedBasemap);
-  renderBasemapSelector();
-  updateMapAttribution();
+  selectedBasemap = basemaps[0] || null;
   cameraPresets.splice(0, cameraPresets.length, ...parsedCameras);
+  renderBasemapSelector();
   renderPresets();
   renderLayerList();
   refreshLayers();
 }
 
-renderProjectSelector();
-renderBasemapSelector();
-document.querySelector("#project-select")?.addEventListener("change", async event => {
-  currentProjectId = event.target.value;
-  const params = new URLSearchParams(window.location.search);
-  if (currentProjectId) params.set("project", currentProjectId);
-  else params.delete("project");
-  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
-  try {
-    setInspectorStatus("プロジェクトを読み込んでいます。");
-    await loadInspectorConfig();
-  } catch (error) {
-    setInspectorStatus(`プロジェクトを読み込めません: ${error instanceof Error ? error.message : error}`, true);
-  }
-});
-document.querySelector("#current-port").value = window.location.port || (window.location.protocol === "https:" ? "443" : "8510");
-document.querySelector("#basemap-select").addEventListener("change", event => {
-  selectedBasemap = basemaps.find(item => item.id === event.target.value);
-  layerState.get("basemap").visible = Boolean(selectedBasemap);
-  updateMapAttribution();
-  refreshLayers();
-});
-document.querySelector("#apply-camera").addEventListener("click", () => {
-  const next = {};
-  ["longitude", "latitude", "zoom", "pitch", "bearing"].forEach(key => {
-    const value = Number(document.querySelector(`#camera-${key}`).value);
-    if (Number.isFinite(value)) next[key] = value;
-  });
-  flyTo(next);
-});
-document.querySelector("#search-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  const query = document.querySelector("#search-query").value.trim();
-  const results = document.querySelector("#search-results");
-  results.textContent = "検索中...";
-  try {
-    const useYahooSearch = yahooAppId && !yahooAppId.includes("あなたのYahoo");
-    const params = new URLSearchParams({ query });
-    if (useYahooSearch) params.set("appid", yahooAppId);
-    const response = await fetch(`/api/search?${params}`);
-    if (!response.ok) throw new Error(await response.text() || `検索に失敗しました (${response.status})`);
-    const data = await response.json();
-    const items = useYahooSearch ? (data.Feature || []).map(item => ({
-      title: item.Name,
-      latitude: Number(item.Geometry?.Coordinates?.split(",")[1]),
-      longitude: Number(item.Geometry?.Coordinates?.split(",")[0]),
-    })) : data.map(item => ({
-      title: item.properties?.title,
-      latitude: Number(item.geometry?.coordinates?.[1]),
-      longitude: Number(item.geometry?.coordinates?.[0]),
-    }));
-    results.innerHTML = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
-      .map((item, index) => `<button type="button" data-search-index="${index}">${item.title}</button>`).join("");
-    results.querySelectorAll("[data-search-index]").forEach(button => {
-      button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, zoom: 19 }));
-    });
-  } catch (error) {
-    results.textContent = error instanceof Error ? error.message : "検索に失敗しました。";
-  }
-});
-document.querySelector("#copy-share-url").addEventListener("click", async () => {
-  const url = shareUrl();
-  document.querySelector("#share-url").value = url;
-  await navigator.clipboard?.writeText(url);
-});
-document.querySelector("#terrain-toggle").addEventListener("change", event => {
-  layerState.get("terrain").visible = event.target.checked;
-  if (event.target.checked) void updateTerrainFollow(viewState);
-  else clearTerrainFollow();
-  updateMapAttribution();
-  refreshLayers();
-  renderLayerList();
-});
-document.querySelector("#dem-source").addEventListener("change", event => {
-  selectedDemSource = event.target.value;
-  layerState.get("terrain").visible = true;
-  terrainFollowState.sampleKey = "";
-  void updateTerrainFollow(viewState);
-  document.querySelector("#terrain-toggle").checked = true;
-  updateMapAttribution();
-  refreshLayers();
-  renderLayerList();
-});
-Object.entries(drapeTerrainSources).forEach(([source]) => {
-  document.querySelector(`#drape-terrain-${source}`).addEventListener("change", event => {
-    drapeTerrainSources[source] = event.target.checked;
-    refreshLayers();
-  });
-});
-Object.entries(drapeLayers).forEach(([layerType]) => {
-  document.querySelector(`#drape-${layerType}`).addEventListener("change", event => {
-    drapeLayers[layerType] = event.target.checked;
-    refreshLayers();
-  });
-});
-document.querySelector("#shadow-toggle").addEventListener("change", event => {
-  shadowEnabled = event.target.checked;
-  refreshLayers();
-});
-document.querySelector("#basemap-drape-3dtiles").addEventListener("change", event => {
-  basemapDrape3DTiles = event.target.checked;
-  refreshLayers();
-});
-const inspectorInput = document.querySelector("#inspector-input");
-const inspectorStatus = document.querySelector("#inspector-status");
+function setupThreeJs() {
+  const container = document.querySelector("#deck-container");
+  const canvas = document.createElement("canvas");
+  canvas.id = "three-canvas";
+  canvas.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;";
+  container.append(canvas);
 
-function setInspectorStatus(message, isError = false) {
-  inspectorStatus.textContent = message;
-  inspectorStatus.style.color = isError ? "#a82020" : "";
+  threeRenderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  threeRenderer.autoClear = false;
+  threeRenderer.setPixelRatio(window.devicePixelRatio);
+  const resize = () => {
+    if (!viewer?.canvas) return;
+    threeRenderer.setSize(viewer.canvas.clientWidth, viewer.canvas.clientHeight, false);
+  };
+  resize();
+  window.addEventListener("resize", resize);
+
+  threeScene = new THREE.Scene();
+  threeScene.add(new THREE.HemisphereLight(0xffffff, 0x668080, 2.2));
+  threeModel = new THREE.Mesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x168f84, roughness: 0.6, metalness: 0.1 }),
+  );
+  const modelPosition = Cesium.Cartesian3.fromDegrees(0, 0, 18);
+  threeModel.position.set(modelPosition.x, modelPosition.y, modelPosition.z);
+  threeModel.scale.setScalar(10000);
+  threeModel.rotation.y = 0.6;
+  threeScene.add(threeModel);
+
+  threeCamera = new THREE.Camera();
+  threeCamera.matrixAutoUpdate = false;
+
+  viewer.scene.postRender.addEventListener(() => {
+    if (!threeRenderer || !threeCamera) return;
+    threeRenderer.state.reset();
+    threeCamera.matrixWorldInverse.fromArray(viewer.camera.viewMatrix);
+    threeCamera.matrixWorld.copy(threeCamera.matrixWorldInverse).invert();
+    threeCamera.projectionMatrix.fromArray(viewer.camera.frustum.projectionMatrix);
+    threeCamera.projectionMatrixInverse.copy(threeCamera.projectionMatrix).invert();
+    threeRenderer.render(threeScene, threeCamera);
+  });
+}
+
+function setupEvents() {
+  document.querySelector("#basemap-select").addEventListener("change", event => {
+    selectedBasemap = basemaps.find(b => b.id === event.target.value) || null;
+    updateMapAttribution();
+    refreshLayers();
+  });
+
+  document.querySelector("#apply-camera").addEventListener("click", () => {
+    const next = {};
+    ["longitude", "latitude", "zoom", "pitch", "bearing"].forEach(key => {
+      const value = Number(document.querySelector(`#camera-${key}`).value);
+      if (Number.isFinite(value)) next[key] = value;
+    });
+    flyTo(next);
+  });
+
+  document.querySelector("#search-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const query = document.querySelector("#search-query").value.trim();
+    const results = document.querySelector("#search-results");
+    results.textContent = "検索中...";
+    try {
+      const useYahoo = yahooAppId && !yahooAppId.includes("あなたのYahoo");
+      const params = new URLSearchParams({ query });
+      if (useYahoo) params.set("appid", yahooAppId);
+      const response = await fetch(`/api/search?${params}`);
+      if (!response.ok) throw new Error(await response.text() || `検索に失敗しました (${response.status})`);
+      const data = await response.json();
+      const items = useYahoo ? (data.Feature || []).map(item => ({
+        title: item.Name,
+        latitude: Number(item.Geometry?.Coordinates?.split(",")[1]),
+        longitude: Number(item.Geometry?.Coordinates?.split(",")[0]),
+      })) : data.map(item => ({
+        title: item.properties?.title,
+        latitude: Number(item.geometry?.coordinates?.[1]),
+        longitude: Number(item.geometry?.coordinates?.[0]),
+      }));
+      results.innerHTML = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
+        .map((item, index) => `<button type="button" data-search-index="${index}">${escapeHtml(item.title)}</button>`).join("");
+      results.querySelectorAll("[data-search-index]").forEach(button => {
+        button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, zoom: 19, pitch: 30 }));
+      });
+    } catch (error) {
+      results.textContent = error instanceof Error ? error.message : "検索に失敗しました。";
+    }
+  });
+
+  document.querySelector("#terrain-toggle").addEventListener("change", event => {
+    terrainEnabled = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#dem-source").addEventListener("change", event => {
+    selectedDemSource = event.target.value;
+    terrainEnabled = true;
+    document.querySelector("#terrain-toggle").checked = true;
+    refreshLayers();
+  });
+
+  document.querySelector("#basemap-drape-3dtiles").addEventListener("change", event => {
+    basemapDrape3DTiles = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#drape-terrain-dem").addEventListener("change", event => {
+    drapeTerrainSources.dem = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#drape-terrain-tiles3d").addEventListener("change", event => {
+    drapeTerrainSources.tiles3d = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#drape-xyz").addEventListener("change", event => {
+    drapeLayers.xyz = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#drape-geojson").addEventListener("change", event => {
+    drapeLayers.geojson = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#shadow-toggle").addEventListener("change", event => {
+    shadowEnabled = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#underground-toggle").addEventListener("change", event => {
+    undergroundViewEnabled = event.target.checked;
+    updateUndergroundView();
+  });
+
+  function setClipStatus(message, isError = false) {
+    const status = document.querySelector("#clip-status");
+    status.textContent = message;
+    status.style.color = isError ? "#a82020" : "";
+  }
+
+  function applyClip(type) {
+    const normals = {
+      ns: new Cesium.Cartesian3(1, 0, 0),
+      ew: new Cesium.Cartesian3(0, 1, 0),
+      h: new Cesium.Cartesian3(0, 0, 1),
+    };
+    const normal = normals[type];
+    if (!normal) {
+      activeClippingPlanes.planes = [];
+      refreshLayers();
+      setClipStatus("クリッピングを解除しました。");
+      return;
+    }
+    try {
+      activeClippingPlanes.planes = [createClippingPlaneFromEnu(normal)];
+      refreshLayers();
+      setClipStatus(`${type.toUpperCase()} 断面を適用しました。`);
+    } catch (error) {
+      setClipStatus(`断面作成エラー: ${error.message}`, true);
+    }
+  }
+
+  document.querySelector("#clip-ns").addEventListener("click", () => applyClip("ns"));
+  document.querySelector("#clip-ew").addEventListener("click", () => applyClip("ew"));
+  document.querySelector("#clip-h").addEventListener("click", () => applyClip("h"));
+  document.querySelector("#clip-clear").addEventListener("click", () => applyClip("clear"));
+
+  document.querySelector("#compass-button").addEventListener("click", () => {
+    const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    flyTo({
+      latitude: c.latitude * 180 / Math.PI,
+      longitude: c.longitude * 180 / Math.PI,
+      height: c.height,
+      pitch: -viewer.camera.pitch * 180 / Math.PI,
+      bearing: 0,
+    });
+  });
+
+  document.querySelector("#top-down-button").addEventListener("click", () => {
+    const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    flyTo({
+      latitude: c.latitude * 180 / Math.PI,
+      longitude: c.longitude * 180 / Math.PI,
+      height: c.height,
+      pitch: 0,
+      bearing: viewer.camera.heading * 180 / Math.PI,
+    });
+  });
+
+  document.querySelector("#apply-inspector").addEventListener("click", async () => {
+    try {
+      setInspectorStatus("設定を保存しています。");
+      await saveInspectorConfig();
+      applyInspector(document.querySelector("#inspector-input").value);
+      setInspectorStatus("設定を保存しました。");
+    } catch (error) {
+      setInspectorStatus(`設定を保存できません: ${error instanceof Error ? error.message : error}`, true);
+    }
+  });
+
+  document.querySelector("#project-select")?.addEventListener("change", async event => {
+    currentProjectId = event.target.value;
+    const params = new URLSearchParams(window.location.search);
+    if (currentProjectId) params.set("project", currentProjectId);
+    else params.delete("project");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+    try {
+      setInspectorStatus("プロジェクトを読み込んでいます。");
+      await loadInspectorConfig();
+    } catch (error) {
+      setInspectorStatus(`プロジェクトを読み込めません: ${error instanceof Error ? error.message : error}`, true);
+    }
+  });
+
+  document.querySelector("#copy-share-url").addEventListener("click", async () => {
+    const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
+    const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
+    const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
+    const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
+    const height = Number(c.height).toFixed(1);
+    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&pitch=${pitch}&bearing=${bearing}&height=${height}&project=${encodeURIComponent(currentProjectId)}`;
+    document.querySelector("#share-url").value = url;
+    await navigator.clipboard?.writeText(url);
+  });
+
+  document.querySelector("#shutdown-app").addEventListener("click", async () => {
+    if (!confirm("KASUGAI Canvasを停止しますか？")) return;
+    await fetch("/api/shutdown", { method: "POST" });
+  });
+
+  document.querySelector("#check-update").addEventListener("click", () => {
+    void checkForUpdate();
+  });
+
+  document.querySelector("#install-update").addEventListener("click", () => {
+    void installUpdate();
+  });
+
+  document.querySelector("#auto-update").addEventListener("change", () => {
+    void saveUpdateSettings().catch(error => {
+      document.querySelector("#version-status").textContent = `自動更新設定の保存エラー: ${error.message}`;
+    });
+  });
+
+  document.querySelectorAll(".panel-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".panel-tab").forEach(item => item.classList.toggle("active", item === tab));
+      document.querySelectorAll(".plugin-panel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.panel));
+    });
+  });
+
+  document.querySelectorAll(".settings-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
+      document.querySelectorAll(".settings-subpanel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel));
+    });
+  });
+
+  viewer.camera.changed.addEventListener(() => updateCameraInputs());
+
+  const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
+  clickHandler.setInputAction(movement => {
+    const picked = viewer.scene.pick(movement.position);
+    const attr = document.querySelector("#attr-content");
+    attr.replaceChildren();
+    document.querySelectorAll(".panel-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.panel === "attr-panel"));
+    document.querySelectorAll(".plugin-panel").forEach(panel => panel.classList.toggle("active", panel.id === "attr-panel"));
+
+    if (!picked) {
+      attr.textContent = "地物を選択すると属性を表示します。";
+      return;
+    }
+
+    if (picked instanceof Cesium.Cesium3DTileFeature) {
+      const table = document.createElement("table");
+      table.style.width = "100%";
+      table.style.borderCollapse = "collapse";
+      table.style.fontSize = "12px";
+      const names = picked.getPropertyNames ? picked.getPropertyNames() : [];
+      names.forEach(name => {
+        const tr = document.createElement("tr");
+        const th = document.createElement("th");
+        th.textContent = name;
+        th.style.textAlign = "left";
+        th.style.padding = "3px 6px";
+        th.style.borderBottom = "1px solid #cbd9de";
+        const td = document.createElement("td");
+        const value = picked.getProperty(name);
+        td.textContent = value === undefined ? "" : String(value);
+        td.style.padding = "3px 6px";
+        td.style.borderBottom = "1px solid #cbd9de";
+        tr.append(th, td);
+        table.append(tr);
+      });
+      attr.append(table);
+      return;
+    }
+
+    const entity = picked.id;
+    if (entity?.properties) {
+      const table = document.createElement("table");
+      table.style.width = "100%";
+      table.style.borderCollapse = "collapse";
+      table.style.fontSize = "12px";
+      const values = entity.properties.getValue(Cesium.JulianDate.now()) || {};
+      Object.entries(values).forEach(([key, value]) => {
+        const tr = document.createElement("tr");
+        const th = document.createElement("th");
+        th.textContent = key;
+        th.style.textAlign = "left";
+        th.style.padding = "3px 6px";
+        th.style.borderBottom = "1px solid #cbd9de";
+        const td = document.createElement("td");
+        td.textContent = value === undefined ? "" : String(value);
+        td.style.padding = "3px 6px";
+        td.style.borderBottom = "1px solid #cbd9de";
+        tr.append(th, td);
+        table.append(tr);
+      });
+      attr.append(table);
+      return;
+    }
+
+    attr.textContent = "選択した地物に属性情報がありません。";
+  }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 }
 
 function compareVersions(left, right) {
@@ -1192,136 +1181,18 @@ async function saveUpdateSettings() {
   document.querySelector("#version-status").textContent = "自動更新設定を保存しました";
 }
 
-function getProjectConfigUrl() {
-  return currentProjectId
-    ? `/api/projects/${encodeURIComponent(currentProjectId)}/config`
-    : "/api/config";
-}
+const defaultConfig = `base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院
+3dtiles: 東京都/千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json
+cam:東京駅|35.653108|139.761449|h=2200.6|p=-30|d=348.5`;
 
-async function loadProjects() {
-  const response = await fetch("/api/projects");
-  if (!response.ok) throw new Error(await response.text());
-  const definitions = await response.json();
-  projects.splice(0, projects.length, ...definitions);
-  if (!projects.some(project => project.id === currentProjectId)) {
-    currentProjectId = projects[0]?.id || "";
-  }
-  renderProjectSelector();
-}
-
-async function loadInspectorConfig() {
-  try {
-    const response = await fetch(getProjectConfigUrl());
-    if (!response.ok) throw new Error(await response.text());
-    inspectorInput.value = await response.text();
-    applyInspector(inspectorInput.value);
-    setInspectorStatus("設定を読み込みました。");
-  } catch (error) {
-    console.error("インスペクター設定の読み込みに失敗しました。", error);
-    setInspectorStatus(`設定を読み込めません: ${error instanceof Error ? error.message : error}`, true);
-  }
-}
-
-async function saveInspectorConfig() {
-  const response = await fetch(getProjectConfigUrl(), {
-    method: "PUT",
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-    body: inspectorInput.value,
-  });
-  if (!response.ok) throw new Error(await response.text());
-}
-
-inspectorInput.value = inspectorDefault;
-document.querySelector("#check-update").addEventListener("click", () => {
-  void checkForUpdate();
-});
-document.querySelector("#install-update").addEventListener("click", () => {
-  void installUpdate();
-});
-document.querySelector("#shutdown-app").addEventListener("click", async event => {
-  if (!confirm("KASUGAI Canvasを停止しますか？")) return;
-  const button = event.currentTarget;
-  button.disabled = true;
-  button.textContent = "停止中...";
-  try {
-    const response = await fetch("/api/shutdown", { method: "POST" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    button.textContent = "停止しました";
-  } catch (error) {
-    button.disabled = false;
-    button.textContent = "停止";
-    document.querySelector("#version-status").textContent = `停止に失敗しました: ${error.message}`;
-  }
-});
-document.querySelector("#auto-update").addEventListener("change", () => {
-  void saveUpdateSettings().catch(error => {
-    document.querySelector("#version-status").textContent = `自動更新設定の保存エラー: ${error.message}`;
-  });
-});
-document.querySelector("#apply-inspector").addEventListener("click", async () => {
-  try {
-    setInspectorStatus("設定を保存しています。");
-    await saveInspectorConfig();
-    applyInspector(inspectorInput.value);
-    setInspectorStatus("設定を保存しました。");
-  } catch (error) {
-    console.error("インスペクター設定の保存に失敗しました。", error);
-    setInspectorStatus(`設定を保存できません: ${error instanceof Error ? error.message : error}`, true);
-  }
-});
-document.querySelector("#layer-panel-toggle").addEventListener("click", event => {
-  const panel = document.querySelector(".control-panel");
-  const collapsed = panel.classList.toggle("collapsed");
-  event.currentTarget.textContent = collapsed ? "+" : "−";
-  event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
-});
-document.querySelector("#basemap-toggle").addEventListener("click", event => {
-  const control = document.querySelector(".basemap-control");
-  const collapsed = control.classList.toggle("collapsed");
-  event.currentTarget.textContent = collapsed ? "+" : "−";
-  event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
-});
-document.querySelector("#navigation-toggle").addEventListener("click", event => {
-  const toolbar = document.querySelector(".navigation-toolbar");
-  const collapsed = toolbar.classList.toggle("collapsed");
-  event.currentTarget.textContent = collapsed ? "+" : "−";
-  event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
-});
-[".control-panel", ".basemap-control", ".navigation-toolbar"].forEach(selector => {
-  const panel = document.querySelector(selector);
-  ["click", "dblclick", "pointerdown", "pointermove", "pointerup", "pointercancel", "touchstart", "touchmove", "touchend", "wheel", "dragstart", "contextmenu"].forEach(type => {
-    panel.addEventListener(type, event => event.stopPropagation());
-  });
-});
-document.querySelectorAll(".panel-tab").forEach(tab => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".panel-tab").forEach(item => item.classList.toggle("active", item === tab));
-    document.querySelectorAll(".plugin-panel").forEach(panel => {
-      panel.classList.toggle("active", panel.id === tab.dataset.panel);
-    });
-  });
-  document.querySelectorAll(".settings-tab").forEach(tab => {
-    tab.addEventListener("click", () => {
-      document.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
-      document.querySelectorAll(".settings-subpanel").forEach(panel => {
-        panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel);
-      });
-    });
-  });
-});
-document.querySelector("#compass-button").addEventListener("click", () => flyTo({ bearing: 0 }));
-document.querySelector("#top-down-button").addEventListener("click", () => flyTo({ pitch: 0 }));
-
-applyInspector(inspectorDefault);
+document.querySelector("#current-port").value = window.location.port || (window.location.protocol === "https:" ? "443" : "8510");
+setupEvents();
+setupThreeJs();
+applyInspector(defaultConfig);
+if (cameraPresets.length) flyTo(cameraPresets[0]);
 renderPresets();
-updateCameraInputs();
-void updateTerrainFollow(viewState);
-void (async () => {
-  try {
-    await loadProjects();
-  } catch (error) {
-    console.error("プロジェクト一覧の読み込みに失敗しました。", error);
-  }
-  await loadInspectorConfig();
+(async () => {
+  try { await loadProjects(); } catch (e) { console.error(e); }
+  try { await loadInspectorConfig(); } catch (e) { console.error(e); }
+  try { await loadUpdateInfo(); } catch (e) { console.error(e); }
 })();
-void loadUpdateInfo();

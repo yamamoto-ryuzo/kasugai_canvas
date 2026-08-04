@@ -4,7 +4,7 @@
 
 ## バージョン管理
 
-現在のバージョンは **0.4.9** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
+現在のバージョンは **0.5.0** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -59,7 +59,7 @@ NSIS が未インストールの場合は ZIP の作成まで実行し、イン�
 
 ## ベース表示の起動
 
-Rust/Axum サーバーが deck.gl の2D表示と Three.js の3Dプレビューを配信します。
+Rust/Axum サーバーが CesiumJS の 3D 表示と Three.js の補助 3D プレビューを配信します。
 
 ```powershell
 cargo run --manifest-path server\Cargo.toml
@@ -91,7 +91,7 @@ kasugai_canvas/
       └─ kasugai_canvas.config
 ```
 
-プロジェクトは起動後のLayersパネルから切り替えられます。配布ZIPにも`projects/default`のサンプルプロジェクトを同梱します。
+プロジェクトは起動後の Layers パネルから切り替えられます。配布 ZIP にも `projects/default` のサンプルプロジェクトを同梱します。
 
 ## ドキュメント
 

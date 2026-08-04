@@ -6,6 +6,8 @@
     <title>KASUGAI Canvas</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/cesium@1.143.0/Build/Cesium/Widgets/widgets.css" crossorigin="" />
+    <script src="https://unpkg.com/cesium@1.143.0/Build/Cesium/Cesium.js" crossorigin=""></script>
     <script type="importmap">
       {
         "imports": {
@@ -97,6 +99,7 @@
               <section id="settings-other-panel" class="settings-subpanel">
                 <div class="terrain-options">
                   <label><input id="shadow-toggle" type="checkbox" /> Shadow</label>
+                  <label><input id="underground-toggle" type="checkbox" /> 地下表示</label>
                 </div>
                 <div class="section-title">ポート番号</div>
                 <label class="field-label" for="current-port">現在の接続ポート</label>
@@ -112,6 +115,15 @@
                 <button id="install-update" type="button" hidden>最新版をインストール</button>
                 <button id="shutdown-app" type="button" class="danger-button">停止</button>
                 <p id="version-status" class="hint" aria-live="polite"></p>
+                <div class="section-title">断面クリップ</div>
+                <p class="hint">カメラ中心に断面を作成します。カメラ位置を移動してから実行してください。</p>
+                <div class="terrain-options" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
+                  <button id="clip-ns" type="button">NS 断面</button>
+                  <button id="clip-ew" type="button">EW 断面</button>
+                  <button id="clip-h" type="button">水平断面</button>
+                  <button id="clip-clear" type="button" class="danger-button">クリア</button>
+                </div>
+                <p id="clip-status" class="hint" aria-live="polite"></p>
               </section>
             </section>
             <section id="info-panel" class="plugin-panel embedded-content">
@@ -140,6 +152,6 @@
         </div>
       </section>
     </main>
-    <script type="module" src="/bootstrap.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

@@ -6,6 +6,20 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-04
+
+### Added
+
+- Terrarium DEM ソースの CesiumJS 移植
+- XYZ / ベースマップの不透明度（opacity）設定
+- Three.js オーバーレイ描画統合
+- 地下表示切り替え機能
+
+### Changed
+
+- 描画エンジンを deck.gl から CesiumJS へ移行。3D Tiles・DEM 上への XYZ 重ね合わせの描画性能を向上
+- 技術選定ドキュメント（docs/）を CesiumJS 中心の記述へ更新
+
 ## [0.4.9] - 2026-08-03
 
 ### Added
@@ -204,7 +218,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.9...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.9...v0.5.0
 [0.4.9]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.8...v0.4.9
 [0.4.8]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.7...v0.4.8
 [0.4.7]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.4.6...v0.4.7
