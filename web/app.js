@@ -2,6 +2,12 @@ import * as THREE from "three";
 
 const Cesium = window.Cesium;
 
+const urlParams = new URLSearchParams(window.location.search);
+const numberParam = (name, fallback) => {
+  const value = Number(urlParams.get(name));
+  return Number.isFinite(value) ? value : fallback;
+};
+
 const viewer = new Cesium.Viewer("deck-container", {
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   baseLayerPicker: false,
@@ -30,7 +36,7 @@ const tileLayers = [];
 const layerState = new Map();
 let layerOrder = [];
 const expandedLayerGroups = new Set();
-let currentProjectId = "";
+let currentProjectId = urlParams.get("project") || "";
 let yahooAppId = "";
 let terrainEnabled = true;
 let shadowEnabled = false;
@@ -180,7 +186,7 @@ function updateCameraInputs() {
   document.querySelector("#camera-pitch").value = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
   document.querySelector("#camera-bearing").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const needle = document.querySelector(".compass-needle");
-  if (needle) needle.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg) translate(-50%, -100%)`;
+  if (needle) needle.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg) translate(-7px, -27px)`;
 }
 
 function renderBasemapSelector() {
@@ -945,7 +951,7 @@ function setupEvents() {
       latitude: c.latitude * 180 / Math.PI,
       longitude: c.longitude * 180 / Math.PI,
       height: c.height,
-      pitch: 0,
+      pitch: -90,
       bearing: viewer.camera.heading * 180 / Math.PI,
     });
   });
@@ -1010,8 +1016,8 @@ function setupEvents() {
     const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
     const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
     const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-    const height = Number(c.height).toFixed(1);
-    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&pitch=${pitch}&bearing=${bearing}&height=${height}&project=${encodeURIComponent(currentProjectId)}`;
+    const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, c.height))).toFixed(6);
+    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&zoom=${zoom}&pitch=${pitch}&bearing=${bearing}&project=${encodeURIComponent(currentProjectId)}`;
     document.querySelector("#share-url").value = url;
     await navigator.clipboard?.writeText(url);
   });
@@ -1224,7 +1230,18 @@ document.querySelector("#current-port").value = window.location.port || (window.
 setupEvents();
 setupThreeJs();
 applyInspector(defaultConfig);
-if (cameraPresets.length) flyTo(cameraPresets[0]);
+const urlCamera = {
+  latitude: numberParam("latitude"),
+  longitude: numberParam("longitude"),
+  zoom: numberParam("zoom"),
+  pitch: numberParam("pitch", 0),
+  bearing: numberParam("bearing", 0),
+};
+if (Number.isFinite(urlCamera.latitude) && Number.isFinite(urlCamera.longitude)) {
+  flyTo(urlCamera);
+} else if (cameraPresets.length) {
+  flyTo(cameraPresets[0]);
+}
 renderPresets();
 (async () => {
   try { await loadProjects(); } catch (e) { console.error(e); }

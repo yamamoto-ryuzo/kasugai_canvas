@@ -88,8 +88,8 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .navigation-toolbar.collapsed .navigation-toggle { width: 26px; min-width: 26px; min-height: 26px; padding: 1px 4px; }
 .compass-button { position: relative; width: 64px; height: 64px; min-width: 64px !important; min-height: 64px !important; border-radius: 50% !important; transition: transform 180ms ease; }
 .compass-button strong { position: absolute; left: 50%; top: 15px; transform: translateX(-50%); color: #222; font-size: 19px; }
-.compass-needle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 27px solid #e33d3d; transform: translate(-50%, -100%); transform-origin: 50% 100%; }
-.compass-needle::after { content: ""; position: absolute; left: -7px; top: 27px; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 27px solid #a82020; }
+.compass-needle { position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-bottom: 27px solid #e33d3d; transform: translate(-7px, -27px); transform-origin: 7px 27px; }
+.compass-needle::after { content: ""; position: absolute; left: 0; top: 27px; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 27px solid #a82020; }
 .preset-button { margin: 0 5px 5px 0; background: #eef5f7 !important; border-color: #cbd9de !important; color: #31564f !important; }
 .camera-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
 .camera-grid input:nth-child(3) { grid-column: 1 / -1; }
