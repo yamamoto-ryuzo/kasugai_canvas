@@ -576,6 +576,10 @@ async function refreshLayers() {
     } else if (item.type === "geojson" || item.type === "layer") {
       try {
         const ds = await Cesium.GeoJsonDataSource.load(item.url, { clampToGround: true });
+        for (const entity of ds.entities.values) {
+          if (entity.polygon) entity.polygon.outline = new Cesium.ConstantProperty(false);
+          if (entity.polyline) entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
+        }
         await viewer.dataSources.add(ds);
         activeDataSources.push(ds);
       } catch (error) {
@@ -941,6 +945,35 @@ function setupEvents() {
       height: c.height,
       pitch: 0,
       bearing: viewer.camera.heading * 180 / Math.PI,
+    });
+  });
+
+  document.querySelector("#layer-panel-toggle").addEventListener("click", event => {
+    const panel = document.querySelector(".control-panel");
+    const collapsed = panel.classList.toggle("collapsed");
+    event.currentTarget.textContent = collapsed ? "+" : "−";
+    event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+  });
+
+  document.querySelector("#basemap-toggle").addEventListener("click", event => {
+    const control = document.querySelector(".basemap-control");
+    const collapsed = control.classList.toggle("collapsed");
+    event.currentTarget.textContent = collapsed ? "+" : "−";
+    event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+  });
+
+  document.querySelector("#navigation-toggle").addEventListener("click", event => {
+    const toolbar = document.querySelector(".navigation-toolbar");
+    const collapsed = toolbar.classList.toggle("collapsed");
+    event.currentTarget.textContent = collapsed ? "+" : "−";
+    event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+  });
+
+  [".control-panel", ".basemap-control", ".navigation-toolbar"].forEach(selector => {
+    const panel = document.querySelector(selector);
+    if (!panel) return;
+    ["click", "mousedown", "dblclick", "touchstart", "touchmove", "wheel"].forEach(type => {
+      panel.addEventListener(type, event => event.stopPropagation());
     });
   });
 
