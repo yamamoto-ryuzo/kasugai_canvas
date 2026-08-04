@@ -951,7 +951,7 @@ function setupEvents() {
       latitude: c.latitude * 180 / Math.PI,
       longitude: c.longitude * 180 / Math.PI,
       height: c.height,
-      pitch: -90,
+      pitch: 90,
       bearing: viewer.camera.heading * 180 / Math.PI,
     });
   });
