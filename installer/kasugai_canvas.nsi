@@ -13,6 +13,7 @@
 !define APP_NAME "KASUGAI Canvas"
 !define APP_EXE "kasugai_canvas.exe"
 !define CONFIG_FILE_NAME "kasugai_canvas.config"
+!define PROJECT_MANIFEST_FILE_NAME "project.json"
 !define INSTALL_DIR "C:\kasugai\kasugai_canvas"
 
 Name "${APP_NAME}"
@@ -25,10 +26,10 @@ InstallDirRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUG
 RequestExecutionLevel admin
 Unicode True
 
-VIProductVersion "0.5.4.0"
+VIProductVersion "0.5.5.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "0.5.4"
+VIAddVersionKey "FileVersion" "0.5.5"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -57,7 +58,17 @@ Section "Install"
   File "${SAMPLE_CONFIG}"
 config_exists:
   SetOutPath "$INSTDIR\projects"
-  File /r "${SAMPLE_PROJECTS}\*"
+  File /nonfatal /r /x "default" "${SAMPLE_PROJECTS}\*"
+
+  CreateDirectory "$INSTDIR\projects\default"
+  SetOutPath "$INSTDIR\projects\default"
+  IfFileExists "$INSTDIR\projects\default\${CONFIG_FILE_NAME}" default_config_exists
+  File "${SAMPLE_PROJECTS}\default\${CONFIG_FILE_NAME}"
+default_config_exists:
+  IfFileExists "$INSTDIR\projects\default\${PROJECT_MANIFEST_FILE_NAME}" default_manifest_exists
+  File "${SAMPLE_PROJECTS}\default\${PROJECT_MANIFEST_FILE_NAME}"
+default_manifest_exists:
+
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
   CreateDirectory "$SMPROGRAMS\KASUGAI Canvas"

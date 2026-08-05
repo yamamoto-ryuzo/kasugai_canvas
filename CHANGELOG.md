@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-08-05
+
+### Changed
+
+- インストール時に `projects/default/kasugai_canvas.config` と `project.json` の既存ファイルを上書きしないよう変更
+- バージョンを 0.5.5 に更新
+
 ## [0.5.4] - 2026-08-05
 
 ### Changed
