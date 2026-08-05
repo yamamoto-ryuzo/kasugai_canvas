@@ -41,6 +41,8 @@ kasugai_canvas.zip
 download\kasugai_canvas_setup.exe
 ```
 
+EXE ファイルが直接ダウンロードできない環境では、同じく `download\` に作成される ZIP 版のインストーラー `kasugai_canvas_setup.zip` を利用してください。展開後に中の `kasugai_canvas_setup.exe` を実行すると通常のセットアップと同様にインストールできます。
+
 既定のインストール先は次のとおりです。
 
 ```text

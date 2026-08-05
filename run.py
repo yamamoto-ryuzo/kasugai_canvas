@@ -16,6 +16,7 @@ TARGET_EXE = SERVER_DIR / "target" / "release" / "kasugai_canvas.exe"
 DOWNLOAD_DIR = ROOT / "download"
 DOWNLOAD_ZIP = DOWNLOAD_DIR / "kasugai_canvas.zip"
 DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
+DOWNLOAD_INSTALLER_ZIP = DOWNLOAD_DIR / "kasugai_canvas_setup.zip"
 SAMPLE_CONFIG = ROOT / "installer" / "kasugai_canvas.config"
 SAMPLE_PROJECTS = ROOT / "installer" / "projects"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
@@ -100,6 +101,10 @@ def build_installer() -> None:
         check=True,
     )
     print(f"インストーラーを作成しました: {DOWNLOAD_INSTALLER}")
+
+    with zipfile.ZipFile(DOWNLOAD_INSTALLER_ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(DOWNLOAD_INSTALLER, arcname=DOWNLOAD_INSTALLER.name)
+    print(f"インストーラーZIPを作成しました: {DOWNLOAD_INSTALLER_ZIP}")
 
 
 def build_release() -> None:
