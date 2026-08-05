@@ -47,7 +47,7 @@ const activeClippingPlanes = { planes: [] };
 const activeDataSources = [];
 const activePrimitives = [];
 const drapeTerrainSources = { dem: true, tiles3d: true };
-const drapeLayers = { xyz: true, geojson: true };
+const drapeLayers = { xyz: false, geojson: true };
 const demSources = {
   reearth: {
     title: "Re:Earth Terrain (標高 / MSL, zoom 19)",
@@ -348,7 +348,7 @@ class TerrariumTerrainProvider {
     this.heightmapHeight = options.tileSize || 256;
     this.hasVertexNormals = false;
     this.hasWaterMask = false;
-    this.elevationData = options.elevationData;
+    this.elevationData = proxyTemplateUrl(options.elevationData);
     this.elevationDecoder = options.elevationDecoder;
     this.maxZoom = options.maxZoom || 15;
     this.availability = {
@@ -406,9 +406,41 @@ class TerrariumTerrainProvider {
   }
 }
 
+function toHex(str) {
+  return Array.from(new TextEncoder().encode(str), b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function proxyTileUrl(url) {
+  if (typeof url !== "string" || !url.startsWith("http")) return url;
+  const origin = window.location.origin;
+  if (url.startsWith(origin + "/api/tile/")) return url;
+  let dir = url;
+  let file = "";
+  if (!dir.endsWith("/")) {
+    const lastSlash = dir.lastIndexOf("/");
+    const candidate = dir.slice(lastSlash + 1);
+    if (candidate.includes(".")) {
+      file = candidate;
+      dir = dir.slice(0, lastSlash + 1);
+    } else {
+      dir += "/";
+    }
+  }
+  const hex = toHex(dir);
+  if (file) return `${origin}/api/tile/${hex}/${file}`;
+  return `${origin}/api/tile/${hex}/`;
+}
+
+function proxyTemplateUrl(url) {
+  if (typeof url !== "string" || !url.startsWith("http")) return url;
+  if (url.startsWith(window.location.origin)) return url;
+  const encoded = encodeURIComponent(url).replace(/%7B/g, "{").replace(/%7D/g, "}");
+  return `${window.location.origin}/api/tile?url=${encoded}`;
+}
+
 function createUrlTemplateProvider(options) {
   return new Cesium.UrlTemplateImageryProvider({
-    url: options.url,
+    url: proxyTemplateUrl(options.url),
     credit: new Cesium.Credit(options.attribution || ""),
     maximumLevel: options.maxZoom || maxZoom,
     tileWidth: options.tileSize || 256,
@@ -459,6 +491,21 @@ function updateUndergroundView() {
   }
 }
 
+function getCesiumTilesetOptions() {
+  const sseInput = document.querySelector("#cesium-sse");
+  const memoryInput = document.querySelector("#cesium-max-memory");
+  const sse = sseInput ? Number(sseInput.value) : 16;
+  const maximumMemoryUsage = memoryInput ? Number(memoryInput.value) : 512;
+  return {
+    maximumScreenSpaceError: Number.isFinite(sse) && sse >= 0 ? sse : 16,
+    maximumMemoryUsage: Number.isFinite(maximumMemoryUsage) && maximumMemoryUsage >= 0 ? maximumMemoryUsage : 512,
+    dynamicScreenSpaceError: document.querySelector("#cesium-dynamic-sse")?.checked ?? false,
+    cullWithChildrenBounds: document.querySelector("#cesium-cull-children")?.checked ?? true,
+    preferLeaves: document.querySelector("#cesium-prefer-leaves")?.checked ?? false,
+    skipLevelOfDetail: document.querySelector("#cesium-skip-lod")?.checked ?? false,
+  };
+}
+
 async function refreshLayers() {
   viewer.imageryLayers.removeAll(false);
   activeDataSources.forEach(ds => { try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
@@ -468,11 +515,12 @@ async function refreshLayers() {
 
   const demSource = terrainEnabled ? demSources[selectedDemSource] : null;
   if (demSource?.url) {
+    const terrainUrl = proxyTileUrl(demSource.url);
     try {
       const terrainProvider = Cesium.CesiumTerrainProvider.fromUrl
-        ? await Cesium.CesiumTerrainProvider.fromUrl(demSource.url)
+        ? await Cesium.CesiumTerrainProvider.fromUrl(terrainUrl)
         : await new Promise((resolve, reject) => {
-            const provider = new Cesium.CesiumTerrainProvider({ url: demSource.url });
+            const provider = new Cesium.CesiumTerrainProvider({ url: terrainUrl });
             if (!provider.readyPromise) {
               reject(new Error("CesiumTerrainProvider.readyPromise is unavailable"));
             } else {
@@ -563,7 +611,7 @@ async function refreshLayers() {
     if (!item.visible) continue;
     if (item.type === "3dtiles") {
       try {
-        const tileset = await Cesium.Cesium3DTileset.fromUrl(item.url);
+        const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(item.url), getCesiumTilesetOptions());
         if (drape3DTiles && Array.isArray(drapeProviders) && drapeProviders.length > 0) {
           drapeProviders.forEach(options => {
             try {
@@ -905,6 +953,14 @@ function setupEvents() {
   document.querySelector("#underground-toggle").addEventListener("change", event => {
     undergroundViewEnabled = event.target.checked;
     updateUndergroundView();
+  });
+
+  ["#cesium-sse", "#cesium-max-memory"].forEach(selector => {
+    document.querySelector(selector).addEventListener("change", () => refreshLayers());
+  });
+
+  ["#cesium-dynamic-sse", "#cesium-cull-children", "#cesium-prefer-leaves", "#cesium-skip-lod"].forEach(selector => {
+    document.querySelector(selector).addEventListener("change", () => refreshLayers());
   });
 
   function setClipStatus(message, isError = false) {

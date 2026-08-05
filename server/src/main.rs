@@ -7,6 +7,8 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,6 +40,8 @@ struct AppState {
     update_config_path: Arc<PathBuf>,
     shutdown: Arc<Notify>,
     port: u16,
+    cache_path: Arc<PathBuf>,
+    client: reqwest::Client,
 }
 
 #[derive(Deserialize)]
@@ -49,6 +53,18 @@ struct InfoQuery {
 struct SearchQuery {
     query: String,
     appid: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TileQuery {
+    url: String,
+    ttl: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct FileQuery {
+    path: String,
+    project: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -324,6 +340,235 @@ async fn put_update_settings(
     Ok(Json(settings))
 }
 
+fn content_type_from_path(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        Some("json") => "application/json",
+        Some("geojson") => "application/geo+json",
+        Some("kml") => "application/vnd.google-earth.kml+xml",
+        Some("kmz") => "application/vnd.google-earth.kmz",
+        Some("gltf") => "model/gltf+json",
+        Some("glb") => "model/gltf-binary",
+        Some("b3dm") => "application/octet-stream",
+        Some("i3dm") => "application/octet-stream",
+        Some("pnts") => "application/octet-stream",
+        Some("cmpt") => "application/octet-stream",
+        Some("terrain") => "application/octet-stream",
+        _ => "application/octet-stream",
+    }
+}
+
+fn content_type_from_url(url: &reqwest::Url) -> &'static str {
+    if let Some(last) = url.path_segments().and_then(|mut s| s.next_back()) {
+        let lower = last.to_lowercase();
+        let pseudo = std::path::Path::new(&lower);
+        return content_type_from_path(pseudo);
+    }
+    "application/octet-stream"
+}
+
+fn tile_cache_key(url: &reqwest::Url) -> String {
+    let mut hasher = DefaultHasher::new();
+    url.as_str().hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+async fn proxy_tile(
+    Query(query): Query<TileQuery>,
+    State(state): State<AppState>,
+) -> Result<Response, (StatusCode, String)> {
+    let url = reqwest::Url::parse(&query.url)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "タイルURLが不正です".to_string()))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "タイルURLはhttpまたはhttpsを指定してください".to_string(),
+        ));
+    }
+    let ttl = query.ttl.unwrap_or(86400);
+    let cache_key = tile_cache_key(&url);
+    let cache_file = state.cache_path.join(format!("{cache_key}.bin"));
+    if cache_file.exists() {
+        if let Ok(metadata) = std::fs::metadata(&cache_file) {
+            if let Ok(modified) = metadata.modified() {
+                let elapsed = std::time::SystemTime::now()
+                    .duration_since(modified)
+                    .unwrap_or_default();
+                if elapsed.as_secs() < ttl {
+                    if let Ok(body) = tokio::fs::read(&cache_file).await {
+                        let content_type = content_type_from_url(&url);
+                        return Ok((
+                            [
+                                (header::CONTENT_TYPE, content_type),
+                                (header::CACHE_CONTROL, "public, max-age=86400"),
+                            ],
+                            body,
+                        )
+                            .into_response());
+                    }
+                }
+            }
+        }
+    }
+    let response = state.client.get(url.as_str()).send().await.map_err(internal_error)?;
+    let response = response.error_for_status().map_err(internal_error)?;
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(String::from)
+        .unwrap_or_else(|| content_type_from_url(&url).to_string());
+    let bytes = response.bytes().await.map_err(internal_error)?;
+    if let Some(parent) = cache_file.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(&cache_file, &bytes).await;
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type.as_str()),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+fn hex_decode(input: &str) -> Result<Vec<u8>, (StatusCode, String)> {
+    if input.len() % 2 != 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "タイルディレクトリが不正です".to_string(),
+        ));
+    }
+    let mut result = Vec::with_capacity(input.len() / 2);
+    for chunk in input.as_bytes().chunks(2) {
+        let s = std::str::from_utf8(chunk).map_err(|_| {
+            (StatusCode::BAD_REQUEST, "タイルディレクトリのデコードに失敗しました".to_string())
+        })?;
+        let b = u8::from_str_radix(s, 16).map_err(|_| {
+            (StatusCode::BAD_REQUEST, "タイルディレクトリのデコードに失敗しました".to_string())
+        })?;
+        result.push(b);
+    }
+    Ok(result)
+}
+
+async fn proxy_tile_path(
+    Path(target): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Response, (StatusCode, String)> {
+    let (hex, rest) = target.split_once('/').unwrap_or((&target, ""));
+    if hex.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "タイルディレクトリが指定されていません".to_string(),
+        ));
+    }
+    let dir_bytes = hex_decode(hex)?;
+    let mut dir = String::from_utf8(dir_bytes)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "タイルディレクトリが不正です".to_string()))?;
+    if !dir.ends_with('/') {
+        dir.push('/');
+    }
+    let full = format!("{}{}", dir, rest);
+    let url = reqwest::Url::parse(&full)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "タイルURLが不正です".to_string()))?;
+    if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "タイルURLはhttpまたはhttpsを指定してください".to_string(),
+        ));
+    }
+    let ttl = 86400;
+    let cache_key = tile_cache_key(&url);
+    let cache_file = state.cache_path.join(format!("{cache_key}.bin"));
+    if cache_file.exists() {
+        if let Ok(metadata) = std::fs::metadata(&cache_file) {
+            if let Ok(modified) = metadata.modified() {
+                let elapsed = std::time::SystemTime::now()
+                    .duration_since(modified)
+                    .unwrap_or_default();
+                if elapsed.as_secs() < ttl {
+                    if let Ok(body) = tokio::fs::read(&cache_file).await {
+                        let content_type = content_type_from_url(&url);
+                        return Ok((
+                            [
+                                (header::CONTENT_TYPE, content_type),
+                                (header::CACHE_CONTROL, "public, max-age=86400"),
+                            ],
+                            body,
+                        )
+                            .into_response());
+                    }
+                }
+            }
+        }
+    }
+    let response = state.client.get(url.as_str()).send().await.map_err(internal_error)?;
+    let response = response.error_for_status().map_err(internal_error)?;
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(String::from)
+        .unwrap_or_else(|| content_type_from_url(&url).to_string());
+    let bytes = response.bytes().await.map_err(internal_error)?;
+    if let Some(parent) = cache_file.parent() {
+        let _ = tokio::fs::create_dir_all(parent).await;
+    }
+    let _ = tokio::fs::write(&cache_file, &bytes).await;
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type.as_str()),
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
+async fn serve_local_file(
+    Query(query): Query<FileQuery>,
+    State(state): State<AppState>,
+) -> Result<Response, (StatusCode, String)> {
+    let base = if let Some(project) = query.project.as_deref().filter(|v| valid_project_id(v)) {
+        state.projects_path.join(project)
+    } else {
+        state.projects_path.as_ref().clone()
+    };
+    let requested = base.join(&query.path);
+    let canonical = requested.canonicalize().map_err(|error| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("ファイルが見つかりません: {error}"),
+        )
+    })?;
+    let base_canonical = base.canonicalize().map_err(|error| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("ベースフォルダが見つかりません: {error}"),
+        )
+    })?;
+    if !canonical.starts_with(&base_canonical) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "指定されたファイルへのアクセスは許可されていません".to_string(),
+        ));
+    }
+    let bytes = tokio::fs::read(&canonical).await.map_err(internal_error)?;
+    let content_type = content_type_from_path(&canonical);
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CACHE_CONTROL, "public, max-age=3600"),
+        ],
+        bytes,
+    )
+        .into_response())
+}
+
 fn internal_error(error: impl std::fmt::Display) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
 }
@@ -523,12 +768,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 "#,
         )?;
     }
+    let cache_path = executable_directory.join("cache");
+    tokio::fs::create_dir_all(&cache_path).await?;
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("kasugai_canvas/", env!("CARGO_PKG_VERSION")))
+        .build()?;
     let state = AppState {
         config_path: Arc::new(executable_directory.join(CONFIG_FILE_NAME)),
         projects_path: Arc::new(projects_path),
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
         shutdown: Arc::new(Notify::new()),
         port,
+        cache_path: Arc::new(cache_path),
+        client,
     };
     let shutdown = state.shutdown.clone();
     let app = Router::new()
@@ -540,6 +792,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(health))
         .route("/api/info", get(proxy_info))
         .route("/api/search", get(proxy_search))
+        .route("/api/tile", get(proxy_tile))
+        .route("/api/tile/{*target}", get(proxy_tile_path))
+        .route("/api/file", get(serve_local_file))
         .route("/api/projects", get(list_projects))
         .route(
             "/api/projects/{project_id}/config",

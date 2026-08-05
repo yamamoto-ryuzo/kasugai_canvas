@@ -118,3 +118,5 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .control-panel .hint { font-size: var(--basemap-select-font-size); }
 footer { padding: 0 28px 22px; }
 @media (max-width: 850px) { .topbar { padding: 14px; } footer { padding: 0 14px 18px; } .viewport { min-height: 360px; } }
+#cesium-sse,
+#cesium-max-memory { width: 100%; min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; }

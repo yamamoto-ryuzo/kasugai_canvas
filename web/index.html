@@ -65,6 +65,7 @@
                 <button class="settings-tab active" type="button" data-settings-panel="settings-dem-panel">DEM</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-project-panel">Project</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-layer-panel">レイヤ</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-cesium-panel">Cesium</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel">その他</button>
               </nav>
               <section id="settings-dem-panel" class="settings-subpanel active">
@@ -89,7 +90,7 @@
                 <label><input id="drape-terrain-dem" type="checkbox" checked /> DEM</label>
                 <label><input id="drape-terrain-tiles3d" type="checkbox" checked /> 3D Tiles</label>
                 <span class="field-label">ドレープを適用するレイヤー</span>
-                <label><input id="drape-xyz" type="checkbox" checked /> XYZ</label>
+                <label><input id="drape-xyz" type="checkbox" /> XYZ</label>
                 <label><input id="drape-geojson" type="checkbox" checked /> GeoJSON</label>
                 <div class="section-title inspector-title">インスペクター</div>
                 <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
@@ -124,6 +125,30 @@
                   <button id="clip-clear" type="button" class="danger-button">クリア</button>
                 </div>
                 <p id="clip-status" class="hint" aria-live="polite"></p>
+              </section>
+              <section id="settings-cesium-panel" class="settings-subpanel">
+                <p class="hint">CesiumJS 3D Tiles 描画パラメータを調整します。値を変えると 3D レイヤーが再読み込みされます。</p>
+                <div class="terrain-options">
+                  <label class="field-label" for="cesium-sse">Maximum Screen Space Error</label>
+                  <input id="cesium-sse" type="number" min="0" step="1" value="16" />
+                  <p class="hint">値を大きくすると読み込むタイル数が減り、描画が軽快になります。小さいほど詳細です。</p>
+
+                  <label class="field-label" for="cesium-max-memory">Maximum Memory Usage (MB)</label>
+                  <input id="cesium-max-memory" type="number" min="0" step="64" value="512" />
+                  <p class="hint">3D Tiles のキャッシュメモリ上限です。小さいとタイルの再読み込みが増えます。</p>
+
+                  <label><input id="cesium-dynamic-sse" type="checkbox" checked /> Dynamic Screen Space Error</label>
+                  <p class="hint">ON にすると遠景タイルを自動で粗くし、カメラ高度が高い場面で軽快になります。</p>
+
+                  <label><input id="cesium-cull-children" type="checkbox" checked /> Cull With Children Bounds</label>
+                  <p class="hint">ON にすると子タイルの範囲から不要な親タイルを除外し、描画負荷を下げます。</p>
+
+                  <label><input id="cesium-prefer-leaves" type="checkbox" /> Prefer Leaves</label>
+                  <p class="hint">ON にすると最も詳細なリーフタイルを優先的に読み込みます。重くなりやすいです。</p>
+
+                  <label><input id="cesium-skip-lod" type="checkbox" /> Skip Level Of Detail</label>
+                  <p class="hint">ON にすると中間 LOD を読み飛ばし、素早く目的の解像度のタイルへ到達します。</p>
+                </div>
               </section>
             </section>
             <section id="info-panel" class="plugin-panel embedded-content">
