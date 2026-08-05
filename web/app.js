@@ -663,7 +663,13 @@ function applyInspector(text) {
     const type = line.slice(0, separator).toLowerCase();
     const value = line.slice(separator + 1).trim();
 
-    if (type === "background") document.body.style.background = value;
+    if (type === "background") {
+      document.body.style.background = value;
+      const baseColor = Cesium.Color.fromCssColorString(value);
+      if (baseColor) {
+        viewer.scene.globe.baseColor = baseColor;
+      }
+    }
     if (type === "yahooappid") yahooAppId = value;
     if (type === "info") {
       void loadInfoContent(value);

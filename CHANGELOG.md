@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-08-05
+
+### Fixed
+
+- CONFIG の `background` 指定が Cesium 地形の背景色に反映されない問題を修正
+
 ## [0.5.5] - 2026-08-05
 
 ### Changed
