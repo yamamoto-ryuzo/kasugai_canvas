@@ -6,10 +6,25 @@
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-06
+
 ### Added
 
 - 設定パネルの「その他」に「地下移動」切り替えを追加
 - 地下表示と地下移動を独立した設定に分離
+- 設定パネルの「その他」に「地表透過」スライダーを追加
+- CONFIG の `background` 色を地球中心部（underground color）にも反映
+
+### Changed
+
+- 地下表示の ON/OFF スイッチを削除し、透過率スライダーに統合
+- 地下表示中の星空（SkyBox）を非表示にし、背景色を統一
+- 地表透過スライダーの値を不透明度から透過率に変更
+
+### Fixed
+
+- 地下表示時に地球中心部が CONFIG の背景色にならない問題を修正
+- 地球中心部の色が距離によってブレンドされていた問題を修正
 
 ## [0.6.1] - 2026-08-06
 
@@ -285,7 +300,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.7...v0.6.0
 [0.5.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.2...v0.5.3

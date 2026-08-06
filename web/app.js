@@ -40,8 +40,9 @@ let currentProjectId = urlParams.get("project") || "";
 let yahooAppId = "";
 let terrainEnabled = true;
 let shadowEnabled = false;
-let undergroundViewEnabled = false;
+let undergroundTransparency = 0;
 let undergroundDiveEnabled = false;
+let undergroundBackgroundColor = Cesium.Color.BLACK;
 let basemapDrape3DTiles = false;
 let infoRequestId = 0;
 const activeClippingPlanes = { planes: [] };
@@ -495,13 +496,17 @@ function applyClippingPlanes(target) {
 
 function updateUndergroundView() {
   const hasTerrain = !(viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider);
-  viewer.scene.globe.depthTestAgainstTerrain = hasTerrain && !undergroundViewEnabled;
-  viewer.scene.globe.translucency.enabled = undergroundViewEnabled;
-  if (undergroundViewEnabled) {
-    viewer.scene.globe.translucency.frontFaceAlpha = 0.5;
-    viewer.scene.globe.translucency.backFaceAlpha = 0.5;
+  const alpha = 1 - undergroundTransparency;
+  viewer.scene.globe.depthTestAgainstTerrain = hasTerrain && undergroundTransparency === 0;
+  viewer.scene.globe.translucency.enabled = undergroundTransparency > 0;
+  viewer.scene.globe.translucency.frontFaceAlpha = alpha;
+  viewer.scene.globe.translucency.backFaceAlpha = alpha;
+  viewer.scene.globe.undergroundColor = undergroundBackgroundColor;
+  viewer.scene.globe.undergroundColorAlphaByDistance = undefined;
+  viewer.scene.backgroundColor = undergroundBackgroundColor;
+  if (viewer.scene.skyBox) {
+    viewer.scene.skyBox.show = undergroundTransparency === 0 && !undergroundDiveEnabled;
   }
-  viewer.scene.globe.undergroundColor = Cesium.Color.BLACK;
   if (undergroundDiveEnabled) {
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = -1000;
@@ -720,6 +725,7 @@ function applyInspector(text) {
   layerOrder = [];
 
   document.body.style.background = "";
+  undergroundBackgroundColor = Cesium.Color.BLACK;
   ++infoRequestId;
   document.querySelector("#info-content").replaceChildren();
   document.querySelector("#legend-panel img").removeAttribute("src");
@@ -736,6 +742,7 @@ function applyInspector(text) {
       const baseColor = Cesium.Color.fromCssColorString(value);
       if (baseColor) {
         viewer.scene.globe.baseColor = baseColor;
+        undergroundBackgroundColor = baseColor;
       }
     }
     if (type === "yahooappid") yahooAppId = value;
@@ -970,8 +977,11 @@ function setupEvents() {
     refreshLayers();
   });
 
-  document.querySelector("#underground-toggle").addEventListener("change", event => {
-    undergroundViewEnabled = event.target.checked;
+  const transparencyInput = document.querySelector("#underground-transparency");
+  const transparencyValue = document.querySelector("#underground-transparency-value");
+  transparencyInput.addEventListener("input", event => {
+    undergroundTransparency = Number(event.target.value);
+    if (transparencyValue) transparencyValue.textContent = `${Math.round(undergroundTransparency * 100)}%`;
     updateUndergroundView();
   });
 
