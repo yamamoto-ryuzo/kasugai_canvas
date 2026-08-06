@@ -41,6 +41,7 @@ let yahooAppId = "";
 let terrainEnabled = true;
 let shadowEnabled = false;
 let undergroundViewEnabled = false;
+let undergroundDiveEnabled = false;
 let basemapDrape3DTiles = false;
 let infoRequestId = 0;
 const activeClippingPlanes = { planes: [] };
@@ -499,11 +500,12 @@ function updateUndergroundView() {
   if (undergroundViewEnabled) {
     viewer.scene.globe.translucency.frontFaceAlpha = 0.5;
     viewer.scene.globe.translucency.backFaceAlpha = 0.5;
-    viewer.scene.globe.undergroundColor = Cesium.Color.BLACK;
+  }
+  viewer.scene.globe.undergroundColor = Cesium.Color.BLACK;
+  if (undergroundDiveEnabled) {
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = -1000;
   } else {
-    viewer.scene.globe.undergroundColor = Cesium.Color.BLACK;
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1;
   }
@@ -970,6 +972,11 @@ function setupEvents() {
 
   document.querySelector("#underground-toggle").addEventListener("change", event => {
     undergroundViewEnabled = event.target.checked;
+    updateUndergroundView();
+  });
+
+  document.querySelector("#underground-dive-toggle").addEventListener("change", event => {
+    undergroundDiveEnabled = event.target.checked;
     updateUndergroundView();
   });
 
