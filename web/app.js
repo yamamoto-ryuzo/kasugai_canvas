@@ -40,7 +40,7 @@ let currentProjectId = urlParams.get("project") || "";
 let yahooAppId = "";
 let terrainEnabled = true;
 let undergroundTransparency = 0;
-let undergroundDiveEnabled = false;
+let undergroundDiveEnabled = true;
 let undergroundBackgroundColor = Cesium.Color.BLACK;
 let basemapDrape3DTiles = false;
 let infoRequestId = 0;
@@ -1004,7 +1004,9 @@ function setupEvents() {
     updateEffectSettings();
   });
 
-  document.querySelector("#underground-dive-toggle").addEventListener("change", event => {
+  const undergroundDiveToggle = document.querySelector("#underground-dive-toggle");
+  undergroundDiveToggle.checked = undergroundDiveEnabled;
+  undergroundDiveToggle.addEventListener("change", event => {
     undergroundDiveEnabled = event.target.checked;
     updateUndergroundView();
   });
