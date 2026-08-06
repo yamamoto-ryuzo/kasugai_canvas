@@ -44,6 +44,7 @@ let undergroundDiveEnabled = true;
 let undergroundBackgroundColor = Cesium.Color.BLACK;
 let basemapDrape3DTiles = false;
 let infoRequestId = 0;
+let walkModeActive = false;
 const activeClippingPlanes = { planes: [] };
 const activeDataSources = [];
 const activePrimitives = [];
@@ -1072,6 +1073,83 @@ function setupEvents() {
       pitch: 90,
       bearing: viewer.camera.heading * 180 / Math.PI,
     });
+  });
+
+  const modeSelect = document.querySelector("#mode-select");
+  const walkKeys = new Set();
+  let walkLastTime = performance.now();
+  let walkRafId = null;
+  const walkLoop = (timestamp) => {
+    walkRafId = null;
+    const delta = Math.min((timestamp - walkLastTime) / 1000, 0.1);
+    walkLastTime = timestamp;
+    if (walkModeActive) {
+      const camera = viewer.camera;
+      let heading = camera.heading;
+      let pitch = camera.pitch;
+
+      const turnDelta = 1.5 * delta;
+      if (walkKeys.has("KeyA") || walkKeys.has("ArrowLeft")) heading -= turnDelta;
+      if (walkKeys.has("KeyD") || walkKeys.has("ArrowRight")) heading += turnDelta;
+
+      const pitchDelta = 0.8 * delta;
+      if (walkKeys.has("ArrowUp")) pitch += pitchDelta;
+      if (walkKeys.has("ArrowDown")) pitch -= pitchDelta;
+      pitch = Math.max(-85 * Math.PI / 180, Math.min(-5 * Math.PI / 180, pitch));
+
+      const move = (walkKeys.has("KeyW") ? 1 : 0) - (walkKeys.has("KeyS") ? 1 : 0);
+      const moveSpeed = 30 * delta;
+      if (move !== 0) {
+        camera.moveForward(move * moveSpeed);
+      }
+
+      const carto = Cesium.Cartographic.fromCartesian(camera.position);
+      if (carto) {
+        const terrainHeight = viewer.scene.globe.getHeight(carto) ?? 0;
+        const minHeight = terrainHeight + 10;
+        const maxHeight = terrainHeight + 30;
+        carto.height = Math.max(minHeight, Math.min(maxHeight, carto.height));
+        camera.setView({
+          destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, carto.height),
+          orientation: { heading, pitch, roll: 0 },
+        });
+      }
+      walkRafId = requestAnimationFrame(walkLoop);
+    }
+  };
+  const walkHelp = document.querySelector("#walk-help");
+  const setMode = (next) => {
+    const isWalk = next === "walk";
+    modeSelect.value = next;
+    modeSelect.textContent = isWalk ? "Walk" : "3D";
+    modeSelect.setAttribute("aria-label", isWalk ? "Walk mode" : "3D view");
+    walkModeActive = isWalk;
+    walkHelp?.classList.toggle("visible", isWalk);
+    viewer.scene.mode = Cesium.SceneMode.SCENE3D;
+    if (isWalk && !walkRafId) {
+      walkLastTime = performance.now();
+      walkRafId = requestAnimationFrame(walkLoop);
+    }
+  };
+  modeSelect.addEventListener("click", () => {
+    setMode(modeSelect.value === "3d" ? "walk" : "3d");
+  });
+  window.addEventListener("keydown", event => {
+    if (!walkModeActive) return;
+    if (["INPUT", "SELECT", "TEXTAREA"].includes(event.target?.tagName)) return;
+    const code = event.code;
+    if (["KeyW", "KeyS", "KeyA", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(code)) {
+      event.preventDefault();
+      if (code === "Escape") {
+        setMode("3d");
+      } else {
+        walkKeys.add(code);
+      }
+    }
+  });
+
+  window.addEventListener("keyup", event => {
+    walkKeys.delete(event.code);
   });
 
   document.querySelector("#layer-panel-toggle").addEventListener("click", event => {

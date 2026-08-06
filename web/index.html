@@ -179,10 +179,18 @@
             <select id="basemap-select"></select>
           </div>
           <aside class="navigation-toolbar" aria-label="Navigation toolbar">
+            <div id="walk-help" class="walk-help">
+              <div><kbd>W</kbd> 前進</div>
+              <div><kbd>S</kbd> 後退</div>
+              <div><kbd>A / D</kbd> 旋回</div>
+              <div><kbd>↑ / ↓</kbd> 上下</div>
+              <div><kbd>Esc</kbd> 3D</div>
+            </div>
             <button id="compass-button" class="compass-button" type="button" title="Reset north">
               <span class="compass-needle"></span><strong>N</strong>
             </button>
-            <button id="top-down-button" type="button">2D</button>
+            <button id="top-down-button" type="button" title="Top-down view">2D</button>
+            <button id="mode-select" class="mode-select" type="button" value="3d" aria-label="View mode">3D</button>
             <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化">−</button>
           </aside>
           <small id="map-attribution" class="map-attribution"></small>

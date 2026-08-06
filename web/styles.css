@@ -83,7 +83,13 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .navigation-toolbar button { min-width: 42px; min-height: 29px; padding: 5px 7px; border: 1px solid rgba(0,0,0,.08); border-radius: 7px; background: linear-gradient(#fff, #f1f4f8); color: #263643; cursor: pointer; font-size: var(--basemap-select-font-size); }
 .navigation-toolbar button:hover { background: #e7f3f0; }
 .navigation-toolbar.collapsed .compass-button,
-.navigation-toolbar.collapsed #top-down-button { display: none; }
+.navigation-toolbar.collapsed #top-down-button,
+.navigation-toolbar.collapsed .mode-select { display: none; }
+.navigation-toolbar .mode-select { min-width: 60px; min-height: 29px; padding: 5px 7px; border: 1px solid rgba(0,0,0,.08); border-radius: 7px; background: linear-gradient(#fff, #f1f4f8); color: #263643; cursor: pointer; font-size: var(--basemap-select-font-size); }
+.walk-help { display: none; position: absolute; right: 100%; top: 0; margin-right: 6px; padding: 7px 10px; border: 1px solid rgba(14,32,64,.12); border-radius: 10px; background: rgba(255,255,255,.6); box-shadow: 0 8px 18px rgba(10,20,40,.16); color: #263643; font-size: var(--basemap-select-font-size); white-space: nowrap; }
+.walk-help.visible { display: block; }
+.walk-help div { margin: 2px 0; }
+.walk-help kbd { display: inline-block; min-width: 18px; padding: 1px 4px; border: 1px solid rgba(0,0,0,.12); border-radius: 4px; background: #fff; text-align: center; }
 .navigation-toggle { font-size: 17px !important; line-height: 1; }
 .navigation-toolbar.collapsed { width: 40px; height: 40px; padding: 7px; box-sizing: border-box; gap: 0; }
 .navigation-toolbar.collapsed .navigation-toggle { width: 26px; min-width: 26px; min-height: 26px; padding: 1px 4px; }
