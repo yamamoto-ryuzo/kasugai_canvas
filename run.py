@@ -69,6 +69,31 @@ def check_versions() -> None:
     print(f"バージョン整合性チェック完了: {cargo_version}", file=sys.stderr, flush=True)
 
 
+def sync_versions() -> None:
+    """server/Cargo.toml のバージョンを他の公開ファイルへ同期する。"""
+    cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
+    cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
+    if not cargo_match:
+        raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
+    cargo_version = cargo_match.group(1)
+
+    latest = (DOWNLOAD_DIR / "latest.json").read_text(encoding="utf-8")
+    latest = re.sub(r'("version"\s*:\s*)"[^"]*"', lambda m: f'{m.group(1)}"{cargo_version}"', latest)
+    latest = re.sub(r'"notes"\s*:\s*"[^"]*"', lambda m: f'"notes": "KASUGAI Canvas {cargo_version}"', latest)
+    (DOWNLOAD_DIR / "latest.json").write_text(latest, encoding="utf-8")
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = re.sub(r"(現在のバージョンは \*\*)[^*]+(\*\* です。)", lambda m: f"{m.group(1)}{cargo_version}{m.group(2)}", readme)
+    (ROOT / "README.md").write_text(readme, encoding="utf-8")
+
+    nsi = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+    nsi = re.sub(r'VIProductVersion "[^"]+"', lambda m: f'VIProductVersion "{cargo_version}.0"', nsi)
+    nsi = re.sub(r'VIAddVersionKey "FileVersion" "[^"]+"', lambda m: f'VIAddVersionKey "FileVersion" "{cargo_version}"', nsi)
+    INSTALLER_SCRIPT.write_text(nsi, encoding="utf-8")
+
+    print(f"バージョンを {cargo_version} へ同期しました。", file=sys.stderr, flush=True)
+
+
 def run_dev() -> None:
     """開発モードで起動する。"""
     subprocess.run(["cargo", "run"], cwd=SERVER_DIR, check=True)
@@ -109,6 +134,7 @@ def build_installer() -> None:
 
 def build_release() -> None:
     """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。"""
+    sync_versions()
     check_versions()
     subprocess.run(["cargo", "build", "--release"], cwd=SERVER_DIR, check=True)
     if not TARGET_EXE.exists():
@@ -157,6 +183,11 @@ def main() -> None:
         help="リリースビルド済みの実行ファイルを起動",
     )
     parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="server/Cargo.toml のバージョンを他の公開ファイルへ同期",
+    )
+    parser.add_argument(
         "build_short",
         nargs="?",
         choices=["b", "B"],
@@ -170,7 +201,9 @@ def main() -> None:
             parser.error("b/B と --release は同時に指定できません")
         args.build = True
 
-    if args.build:
+    if args.sync:
+        sync_versions()
+    elif args.build:
         build_release()
     elif args.release:
         run_release()
