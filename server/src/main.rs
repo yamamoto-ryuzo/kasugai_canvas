@@ -7,12 +7,13 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::hash_map::DefaultHasher;
+use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Notify;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::{broadcast, Mutex as TokioMutex, Notify};
 
 const INDEX_HTML: &str = include_str!("../../web/index.html");
 const APP_JS: &str = include_str!("../../web/app.js");
@@ -34,6 +35,21 @@ const REPOSITORY_DOWNLOAD_URL: &str =
     "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip";
 
 #[derive(Clone)]
+struct TileFetch {
+    body: Vec<u8>,
+    status: u16,
+    content_type: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, Default)]
+struct TileMeta {
+    etag: Option<String>,
+    last_modified: Option<String>,
+}
+
+type TileResult = Result<TileFetch, (StatusCode, String)>;
+
+#[derive(Clone)]
 struct AppState {
     config_path: Arc<PathBuf>,
     projects_path: Arc<PathBuf>,
@@ -42,6 +58,7 @@ struct AppState {
     port: u16,
     cache_path: Arc<PathBuf>,
     client: reqwest::Client,
+    in_flight: Arc<TokioMutex<HashMap<String, broadcast::Sender<TileResult>>>>,
 }
 
 #[derive(Deserialize)]
@@ -375,6 +392,159 @@ fn tile_cache_key(url: &reqwest::Url) -> String {
     format!("{:016x}", hasher.finish())
 }
 
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+enum CacheState {
+    None,
+    Fresh(Vec<u8>),
+    Stale(Vec<u8>),
+}
+
+async fn read_cached(cache_path: &std::path::Path, key: &str, ttl: u64) -> CacheState {
+    let ttl_file = cache_path.join(format!("{key}.ttl"));
+    let cache_file = cache_path.join(format!("{key}.bin"));
+    let now = now_secs();
+    let expires = tokio::fs::read_to_string(&ttl_file)
+        .await
+        .ok()
+        .and_then(|text| text.parse::<u64>().ok());
+    if let Some(expires) = expires {
+        if now < expires {
+            if let Ok(body) = tokio::fs::read(&cache_file).await {
+                let _ = tokio::fs::write(&ttl_file, (now + ttl).to_string()).await;
+                return CacheState::Fresh(body);
+            }
+        } else if now < expires + ttl {
+            if let Ok(body) = tokio::fs::read(&cache_file).await {
+                return CacheState::Stale(body);
+            }
+        }
+    } else if let Ok(body) = tokio::fs::read(&cache_file).await {
+        let _ = tokio::fs::write(&ttl_file, (now + ttl).to_string()).await;
+        return CacheState::Fresh(body);
+    }
+    CacheState::None
+}
+
+async fn do_fetch_and_save(
+    client: &reqwest::Client,
+    cache_path: &std::path::Path,
+    url: &reqwest::Url,
+    key: &str,
+    ttl: u64,
+) -> Result<TileFetch, (StatusCode, String)> {
+    let meta_file = cache_path.join(format!("{key}.meta"));
+    let ttl_file = cache_path.join(format!("{key}.ttl"));
+    let cache_file = cache_path.join(format!("{key}.bin"));
+    let meta = tokio::fs::read_to_string(&meta_file)
+        .await
+        .ok()
+        .and_then(|text| serde_json::from_str::<TileMeta>(&text).ok())
+        .unwrap_or_default();
+    let mut request = client.get(url.as_str());
+    if let Some(etag) = &meta.etag {
+        request = request.header(header::IF_NONE_MATCH, etag);
+    }
+    if let Some(last_modified) = &meta.last_modified {
+        request = request.header(header::IF_MODIFIED_SINCE, last_modified);
+    }
+    let response = request.send().await.map_err(internal_error)?;
+    let status = response.status().as_u16();
+    let response_etag = response
+        .headers()
+        .get(header::ETAG)
+        .and_then(|value| value.to_str().ok())
+        .map(String::from);
+    let response_last_modified = response
+        .headers()
+        .get(header::LAST_MODIFIED)
+        .and_then(|value| value.to_str().ok())
+        .map(String::from);
+    let content_type = response
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(String::from)
+        .unwrap_or_else(|| content_type_from_url(url).to_string());
+    if status == 304 {
+        let body = tokio::fs::read(&cache_file).await.map_err(internal_error)?;
+        let _ = tokio::fs::write(&ttl_file, (now_secs() + ttl).to_string()).await;
+        return Ok(TileFetch {
+            body,
+            status: 200,
+            content_type,
+        });
+    }
+    let bytes = response.bytes().await.map_err(internal_error)?;
+    let body = bytes.to_vec();
+    if (200..=299).contains(&status) {
+        if let Some(parent) = cache_file.parent() {
+            let _ = tokio::fs::create_dir_all(parent).await;
+        }
+        let _ = tokio::fs::write(&cache_file, &body).await;
+        let _ = tokio::fs::write(&ttl_file, (now_secs() + ttl).to_string()).await;
+        let new_meta = TileMeta {
+            etag: response_etag.clone(),
+            last_modified: response_last_modified.clone(),
+        };
+        let _ = tokio::fs::write(
+            &meta_file,
+            serde_json::to_string(&new_meta).unwrap_or_default(),
+        )
+        .await;
+    }
+    Ok(TileFetch {
+        body,
+        status,
+        content_type,
+    })
+}
+
+async fn fetch_unique_tile(
+    state: &AppState,
+    url: &reqwest::Url,
+    key: &str,
+    ttl: u64,
+) -> Result<TileFetch, (StatusCode, String)> {
+    match read_cached(&state.cache_path, key, ttl).await {
+        CacheState::Fresh(body) => {
+            return Ok(TileFetch {
+                body,
+                status: 200,
+                content_type: content_type_from_url(url).to_string(),
+            });
+        }
+        _ => {}
+    }
+
+    let tx = {
+        let mut guard = state.in_flight.lock().await;
+        if let Some(tx) = guard.get(key) {
+            let mut rx = tx.subscribe();
+            drop(guard);
+            let result = rx.recv().await.map_err(|_| {
+                (StatusCode::INTERNAL_SERVER_ERROR, "in-flight channel closed".to_string())
+            })?;
+            return result;
+        }
+        let (tx, _rx) = broadcast::channel::<TileResult>(1);
+        guard.insert(key.to_string(), tx.clone());
+        tx
+    };
+
+    let result = do_fetch_and_save(&state.client, &state.cache_path, url, key, ttl).await;
+    let _ = tx.send(result.clone());
+    let mut guard = state.in_flight.lock().await;
+    guard.remove(key);
+    drop(guard);
+    result
+}
+
 async fn proxy_tile(
     Query(query): Query<TileQuery>,
     State(state): State<AppState>,
@@ -389,48 +559,51 @@ async fn proxy_tile(
     }
     let ttl = query.ttl.unwrap_or(86400);
     let cache_key = tile_cache_key(&url);
-    let cache_file = state.cache_path.join(format!("{cache_key}.bin"));
-    if cache_file.exists() {
-        if let Ok(metadata) = std::fs::metadata(&cache_file) {
-            if let Ok(modified) = metadata.modified() {
-                let elapsed = std::time::SystemTime::now()
-                    .duration_since(modified)
-                    .unwrap_or_default();
-                if elapsed.as_secs() < ttl {
-                    if let Ok(body) = tokio::fs::read(&cache_file).await {
-                        let content_type = content_type_from_url(&url);
-                        return Ok((
-                            [
-                                (header::CONTENT_TYPE, content_type),
-                                (header::CACHE_CONTROL, "public, max-age=86400"),
-                            ],
-                            body,
-                        )
-                            .into_response());
-                    }
-                }
-            }
+    let state_for_spawn = state.clone();
+    let spawn_url = url.clone();
+    let spawn_key = cache_key.clone();
+    match read_cached(&state.cache_path, &cache_key, ttl).await {
+        CacheState::Fresh(body) => {
+            let content_type = content_type_from_url(&url);
+            return Ok((
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (header::CACHE_CONTROL, "public, max-age=86400"),
+                ],
+                body,
+            )
+                .into_response());
         }
+        CacheState::Stale(body) => {
+            tokio::spawn(async move {
+                let _ = fetch_unique_tile(&state_for_spawn, &spawn_url, &spawn_key, ttl).await;
+            });
+            let content_type = content_type_from_url(&url);
+            return Ok((
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (header::CACHE_CONTROL, "public, max-age=0, stale-while-revalidate=86400"),
+                ],
+                body,
+            )
+                .into_response());
+        }
+        CacheState::None => {}
     }
-    let response = state.client.get(url.as_str()).send().await.map_err(internal_error)?;
-    let response = response.error_for_status().map_err(internal_error)?;
-    let content_type = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .map(String::from)
-        .unwrap_or_else(|| content_type_from_url(&url).to_string());
-    let bytes = response.bytes().await.map_err(internal_error)?;
-    if let Some(parent) = cache_file.parent() {
-        let _ = tokio::fs::create_dir_all(parent).await;
-    }
-    let _ = tokio::fs::write(&cache_file, &bytes).await;
+    let tile = fetch_unique_tile(&state, &url, &cache_key, ttl).await?;
+    let status = StatusCode::from_u16(tile.status).unwrap_or(StatusCode::BAD_GATEWAY);
+    let cache = if status.is_success() {
+        "public, max-age=86400"
+    } else {
+        "public, max-age=0"
+    };
     Ok((
+        status,
         [
-            (header::CONTENT_TYPE, content_type.as_str()),
-            (header::CACHE_CONTROL, "public, max-age=86400"),
+            (header::CONTENT_TYPE, tile.content_type.as_str()),
+            (header::CACHE_CONTROL, cache),
         ],
-        bytes,
+        tile.body,
     )
         .into_response())
 }
@@ -483,48 +656,51 @@ async fn proxy_tile_path(
     }
     let ttl = 86400;
     let cache_key = tile_cache_key(&url);
-    let cache_file = state.cache_path.join(format!("{cache_key}.bin"));
-    if cache_file.exists() {
-        if let Ok(metadata) = std::fs::metadata(&cache_file) {
-            if let Ok(modified) = metadata.modified() {
-                let elapsed = std::time::SystemTime::now()
-                    .duration_since(modified)
-                    .unwrap_or_default();
-                if elapsed.as_secs() < ttl {
-                    if let Ok(body) = tokio::fs::read(&cache_file).await {
-                        let content_type = content_type_from_url(&url);
-                        return Ok((
-                            [
-                                (header::CONTENT_TYPE, content_type),
-                                (header::CACHE_CONTROL, "public, max-age=86400"),
-                            ],
-                            body,
-                        )
-                            .into_response());
-                    }
-                }
-            }
+    let state_for_spawn = state.clone();
+    let spawn_url = url.clone();
+    let spawn_key = cache_key.clone();
+    match read_cached(&state.cache_path, &cache_key, ttl).await {
+        CacheState::Fresh(body) => {
+            let content_type = content_type_from_url(&url);
+            return Ok((
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (header::CACHE_CONTROL, "public, max-age=86400"),
+                ],
+                body,
+            )
+                .into_response());
         }
+        CacheState::Stale(body) => {
+            tokio::spawn(async move {
+                let _ = fetch_unique_tile(&state_for_spawn, &spawn_url, &spawn_key, ttl).await;
+            });
+            let content_type = content_type_from_url(&url);
+            return Ok((
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (header::CACHE_CONTROL, "public, max-age=0, stale-while-revalidate=86400"),
+                ],
+                body,
+            )
+                .into_response());
+        }
+        CacheState::None => {}
     }
-    let response = state.client.get(url.as_str()).send().await.map_err(internal_error)?;
-    let response = response.error_for_status().map_err(internal_error)?;
-    let content_type = response
-        .headers()
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .map(String::from)
-        .unwrap_or_else(|| content_type_from_url(&url).to_string());
-    let bytes = response.bytes().await.map_err(internal_error)?;
-    if let Some(parent) = cache_file.parent() {
-        let _ = tokio::fs::create_dir_all(parent).await;
-    }
-    let _ = tokio::fs::write(&cache_file, &bytes).await;
+    let tile = fetch_unique_tile(&state, &url, &cache_key, ttl).await?;
+    let status = StatusCode::from_u16(tile.status).unwrap_or(StatusCode::BAD_GATEWAY);
+    let cache = if status.is_success() {
+        "public, max-age=86400"
+    } else {
+        "public, max-age=0"
+    };
     Ok((
+        status,
         [
-            (header::CONTENT_TYPE, content_type.as_str()),
-            (header::CACHE_CONTROL, "public, max-age=86400"),
+            (header::CONTENT_TYPE, tile.content_type.as_str()),
+            (header::CACHE_CONTROL, cache),
         ],
-        bytes,
+        tile.body,
     )
         .into_response())
 }
@@ -781,6 +957,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         port,
         cache_path: Arc::new(cache_path),
         client,
+        in_flight: Arc::new(TokioMutex::new(HashMap::new())),
     };
     let shutdown = state.shutdown.clone();
     let app = Router::new()

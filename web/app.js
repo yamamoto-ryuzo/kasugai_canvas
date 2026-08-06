@@ -429,8 +429,9 @@ function toHex(str) {
   return Array.from(new TextEncoder().encode(str), b => b.toString(16).padStart(2, "0")).join("");
 }
 
-function proxyTileUrl(url) {
+function proxyTileUrl(url, useProxy = true) {
   if (typeof url !== "string" || !url.startsWith("http")) return url;
+  if (useProxy === false) return url;
   const origin = window.location.origin;
   if (url.startsWith(origin + "/api/tile/")) return url;
   let dir = url;
@@ -450,8 +451,9 @@ function proxyTileUrl(url) {
   return `${origin}/api/tile/${hex}/`;
 }
 
-function proxyTemplateUrl(url) {
+function proxyTemplateUrl(url, useProxy = true) {
   if (typeof url !== "string" || !url.startsWith("http")) return url;
+  if (useProxy === false) return url;
   if (url.startsWith(window.location.origin)) return url;
   const encoded = encodeURIComponent(url).replace(/%7B/g, "{").replace(/%7D/g, "}");
   return `${window.location.origin}/api/tile?url=${encoded}`;
@@ -459,7 +461,7 @@ function proxyTemplateUrl(url) {
 
 function createUrlTemplateProvider(options) {
   return new Cesium.UrlTemplateImageryProvider({
-    url: proxyTemplateUrl(options.url),
+    url: proxyTemplateUrl(options.url, options.proxy !== false),
     credit: new Cesium.Credit(options.attribution || ""),
     maximumLevel: options.maxZoom || maxZoom,
     tileWidth: options.tileSize || 256,
@@ -594,6 +596,7 @@ async function refreshLayers() {
         maxZoom: selectedBasemap.maxZoom || maxZoom,
         tileSize: selectedBasemap.tileSize || 256,
         opacity: selectedBasemap.opacity ?? 1.0,
+        proxy: selectedBasemap.proxy,
       });
     }
     if (drapeLayers.xyz) {
@@ -604,6 +607,7 @@ async function refreshLayers() {
           maxZoom: item.maxZoom || maxZoom,
           tileSize: item.tileSize || 256,
           opacity: item.opacity ?? 0.8,
+          proxy: item.proxy,
         });
       });
     }
@@ -646,7 +650,7 @@ async function refreshLayers() {
     if (!item.visible) continue;
     if (item.type === "3dtiles") {
       try {
-        const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(item.url), getCesiumTilesetOptions());
+        const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(item.url, item.proxy), getCesiumTilesetOptions());
         if (drape3DTiles && Array.isArray(drapeProviders) && drapeProviders.length > 0) {
           drapeProviders.forEach(options => {
             try {
@@ -778,6 +782,7 @@ function applyInspector(text) {
           if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
           if (key === "maxZoom" && Number.isInteger(number) && number >= 0) options.maxZoom = number;
           if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
+          if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
         });
         parsedBasemaps.push({
           id: `inspector-base-${parsedBasemaps.length}`,
@@ -786,6 +791,7 @@ function applyInspector(text) {
           attribution: parts[2] || "",
           tileSize: options.tileSize || 256,
           opacity: options.opacity ?? 1.0,
+          proxy: options.proxy !== false,
           ...(options.maxZoom === undefined ? {} : { maxZoom: options.maxZoom }),
         });
       }
@@ -822,9 +828,10 @@ function applyInspector(text) {
         if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
         if (key === "maxZoom" && Number.isInteger(number) && number >= 0) options.maxZoom = number;
         if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
+        if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
       });
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] || "", group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] || "", proxy: options.proxy !== false, group, exclusiveGroup };
       if (options.maxZoom !== undefined) item.maxZoom = options.maxZoom;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
       tileLayers.push(item);
@@ -837,10 +844,11 @@ function applyInspector(text) {
       const title = parts[0];
       const url = parts[1];
       const off = parts.some(part => /^(off|false)$/i.test(part));
+      const proxy = !parts.some(part => /^proxy\s*=\s*(off|false|direct)$/i.test(part));
       if (!title) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, type, url, visible: !off, attribution: parts[2] || "", group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, type, url, visible: !off, attribution: parts[2] || "", proxy, group, exclusiveGroup };
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);

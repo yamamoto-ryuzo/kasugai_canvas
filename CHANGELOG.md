@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-08-06
+
+### プロキシー
+
+- 同一タイル重複取得防止（in-flight 共有）を実装
+- 304 条件付きリクエスト（ETag / Last-Modified）に対応
+- stale-while-revalidate キャッシュ戦略を導入
+
 ## [0.6.3] - 2026-08-06
 
 ### Changed
@@ -46,7 +54,7 @@
 
 ## [0.6.0] - 2026-08-06
 
-### Added
+### プロキシー
 
 - Rust/Axum サーバーにタイル/データのプロキシ＆キャッシュ機能を追加
 - 外部 XYZ・標高タイル・3D Tiles をローカル `cache/` フォルダにキャッシュ
@@ -311,7 +319,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.0...v0.6.1
