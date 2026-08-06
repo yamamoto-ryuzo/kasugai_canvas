@@ -136,7 +136,7 @@
                   <p class="hint">値を大きくすると読み込むタイル数が減り、描画が軽快になります。小さいほど詳細です。</p>
 
                   <label class="field-label" for="cesium-max-memory">Maximum Memory Usage (MB)</label>
-                  <input id="cesium-max-memory" type="number" min="0" step="64" value="512" />
+                  <input id="cesium-max-memory" type="number" min="0" step="64" value="2048" />
                   <p class="hint">3D Tiles のキャッシュメモリ上限です。小さいとタイルの再読み込みが増えます。</p>
 
                   <label><input id="cesium-dynamic-sse" type="checkbox" checked /> Dynamic Screen Space Error</label>
@@ -148,7 +148,7 @@
                   <label><input id="cesium-prefer-leaves" type="checkbox" /> Prefer Leaves</label>
                   <p class="hint">ON にすると最も詳細なリーフタイルを優先的に読み込みます。重くなりやすいです。</p>
 
-                  <label><input id="cesium-skip-lod" type="checkbox" /> Skip Level Of Detail</label>
+                  <label><input id="cesium-skip-lod" type="checkbox" checked /> Skip Level Of Detail</label>
                   <p class="hint">ON にすると中間 LOD を読み飛ばし、素早く目的の解像度のタイルへ到達します。</p>
                 </div>
               </section>

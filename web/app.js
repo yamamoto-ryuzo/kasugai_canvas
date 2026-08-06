@@ -520,14 +520,14 @@ function getCesiumTilesetOptions() {
   const sseInput = document.querySelector("#cesium-sse");
   const memoryInput = document.querySelector("#cesium-max-memory");
   const sse = sseInput ? Number(sseInput.value) : 16;
-  const maximumMemoryUsage = memoryInput ? Number(memoryInput.value) : 512;
+  const maximumMemoryUsage = memoryInput ? Number(memoryInput.value) : 2048;
   return {
     maximumScreenSpaceError: Number.isFinite(sse) && sse >= 0 ? sse : 16,
-    maximumMemoryUsage: Number.isFinite(maximumMemoryUsage) && maximumMemoryUsage >= 0 ? maximumMemoryUsage : 512,
+    maximumMemoryUsage: Number.isFinite(maximumMemoryUsage) && maximumMemoryUsage >= 0 ? maximumMemoryUsage : 2048,
     dynamicScreenSpaceError: document.querySelector("#cesium-dynamic-sse")?.checked ?? false,
     cullWithChildrenBounds: document.querySelector("#cesium-cull-children")?.checked ?? true,
     preferLeaves: document.querySelector("#cesium-prefer-leaves")?.checked ?? false,
-    skipLevelOfDetail: document.querySelector("#cesium-skip-lod")?.checked ?? false,
+    skipLevelOfDetail: document.querySelector("#cesium-skip-lod")?.checked ?? true,
   };
 }
 
