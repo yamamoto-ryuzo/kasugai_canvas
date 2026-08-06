@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-08-06
+
+### Changed
+
+- 地下移動を標準で ON に設定
+
 ## [0.6.4] - 2026-08-06
 
 ### プロキシー
@@ -319,7 +325,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.1...v0.6.2
