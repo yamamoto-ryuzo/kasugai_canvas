@@ -39,7 +39,6 @@ const expandedLayerGroups = new Set();
 let currentProjectId = urlParams.get("project") || "";
 let yahooAppId = "";
 let terrainEnabled = true;
-let shadowEnabled = false;
 let undergroundTransparency = 0;
 let undergroundDiveEnabled = false;
 let undergroundBackgroundColor = Cesium.Color.BLACK;
@@ -495,10 +494,7 @@ function applyClippingPlanes(target) {
 }
 
 function updateUndergroundView() {
-  const hasTerrain = !(viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider);
   const alpha = 1 - undergroundTransparency;
-  viewer.scene.globe.depthTestAgainstTerrain = hasTerrain && undergroundTransparency === 0;
-  viewer.scene.globe.translucency.enabled = undergroundTransparency > 0;
   viewer.scene.globe.translucency.frontFaceAlpha = alpha;
   viewer.scene.globe.translucency.backFaceAlpha = alpha;
   viewer.scene.globe.undergroundColor = undergroundBackgroundColor;
@@ -514,6 +510,23 @@ function updateUndergroundView() {
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1;
   }
+}
+
+function updateEffectSettings() {
+  const hasTerrain = !(viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider);
+  const terrainLightingInput = document.querySelector("#effect-terrain-lighting");
+  const translucencyInput = document.querySelector("#effect-translucency");
+  const fogInput = document.querySelector("#effect-fog");
+  const skyAtmosphereInput = document.querySelector("#effect-sky-atmosphere");
+  const shadowsInput = document.querySelector("#effect-shadows");
+  const depthTestInput = document.querySelector("#effect-depth-test");
+
+  viewer.scene.globe.enableLighting = terrainLightingInput?.checked ?? false;
+  viewer.scene.shadows = shadowsInput?.checked ?? false;
+  viewer.scene.globe.depthTestAgainstTerrain = (depthTestInput?.checked ?? true) && hasTerrain && undergroundTransparency === 0;
+  viewer.scene.globe.translucency.enabled = translucencyInput?.checked ?? false;
+  if (viewer.scene.fog) viewer.scene.fog.enabled = fogInput?.checked ?? true;
+  if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = skyAtmosphereInput?.checked ?? true;
 }
 
 function getCesiumTilesetOptions() {
@@ -567,9 +580,6 @@ async function refreshLayers() {
   } else {
     viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
   }
-
-  viewer.scene.globe.enableLighting = shadowEnabled;
-  viewer.scene.shadows = shadowEnabled;
 
   const visible3DTiles = layers.some(l => l.visible && l.type === "3dtiles");
   const drape3DTiles = drapeTerrainSources.tiles3d && visible3DTiles;
@@ -671,6 +681,7 @@ async function refreshLayers() {
 
   applyClippingPlanes(viewer.scene.globe);
   updateUndergroundView();
+  updateEffectSettings();
   updateMapAttribution();
 }
 
@@ -972,9 +983,8 @@ function setupEvents() {
     refreshLayers();
   });
 
-  document.querySelector("#shadow-toggle").addEventListener("change", event => {
-    shadowEnabled = event.target.checked;
-    refreshLayers();
+  ["#effect-terrain-lighting", "#effect-translucency", "#effect-fog", "#effect-sky-atmosphere", "#effect-shadows", "#effect-depth-test"].forEach(selector => {
+    document.querySelector(selector)?.addEventListener("change", () => updateEffectSettings());
   });
 
   const transparencyInput = document.querySelector("#underground-transparency");
@@ -983,6 +993,7 @@ function setupEvents() {
     undergroundTransparency = Number(event.target.value);
     if (transparencyValue) transparencyValue.textContent = `${Math.round(undergroundTransparency * 100)}%`;
     updateUndergroundView();
+    updateEffectSettings();
   });
 
   document.querySelector("#underground-dive-toggle").addEventListener("change", event => {
@@ -1327,6 +1338,7 @@ document.querySelector("#current-port").value = window.location.port || (window.
 setupEvents();
 setupThreeJs();
 applyInspector(defaultConfig);
+updateEffectSettings();
 const defaultCamera = cameraPresets[0];
 const urlCamera = {
   latitude: numberParam("latitude"),

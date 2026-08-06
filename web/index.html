@@ -66,6 +66,7 @@
                 <button class="settings-tab" type="button" data-settings-panel="settings-project-panel">Project</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-layer-panel">レイヤ</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-cesium-panel">Cesium</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-effects-panel">効果</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel">その他</button>
               </nav>
               <section id="settings-dem-panel" class="settings-subpanel active">
@@ -98,12 +99,7 @@
                 <p id="inspector-status" class="hint" aria-live="polite"></p>
               </section>
               <section id="settings-other-panel" class="settings-subpanel">
-                <div class="terrain-options">
-                  <label><input id="shadow-toggle" type="checkbox" /> Shadow</label>
-                  <label><input id="underground-dive-toggle" type="checkbox" /> 地下移動</label>
-                </div>
-                <label class="field-label" for="underground-transparency">地表透過 <span id="underground-transparency-value">0%</span></label>
-                <input id="underground-transparency" type="range" min="0" max="1" step="0.05" value="0" style="width: 100%;" />
+
                 <div class="section-title">ポート番号</div>
                 <label class="field-label" for="current-port">現在の接続ポート</label>
                 <input id="current-port" type="number" min="1" max="65535" readonly />
@@ -151,6 +147,20 @@
                   <label><input id="cesium-skip-lod" type="checkbox" checked /> Skip Level Of Detail</label>
                   <p class="hint">ON にすると中間 LOD を読み飛ばし、素早く目的の解像度のタイルへ到達します。</p>
                 </div>
+              </section>
+              <section id="settings-effects-panel" class="settings-subpanel">
+                <p class="hint">CesiumJS の表示効果を調整します。</p>
+                <div class="terrain-options">
+                  <label><input id="effect-terrain-lighting" type="checkbox" /> 地形照明</label>
+                  <label><input id="effect-translucency" type="checkbox" /> 地下透過</label>
+                  <label><input id="effect-fog" type="checkbox" checked /> 霧</label>
+                  <label><input id="effect-sky-atmosphere" type="checkbox" checked /> 大気</label>
+                  <label><input id="effect-shadows" type="checkbox" /> 影</label>
+                  <label><input id="effect-depth-test" type="checkbox" checked /> 地形深度テスト</label>
+                  <label><input id="underground-dive-toggle" type="checkbox" /> 地下移動</label>
+                </div>
+                <label class="field-label" for="underground-transparency">地表透過 <span id="underground-transparency-value">0%</span></label>
+                <input id="underground-transparency" type="range" min="0" max="1" step="0.05" value="0" style="width: 100%;" />
               </section>
             </section>
             <section id="info-panel" class="plugin-panel embedded-content">
