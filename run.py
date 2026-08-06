@@ -85,7 +85,7 @@ def sync_versions() -> None:
         "pub_date": datetime.date.today().isoformat(),
         "platforms": {
             "windows-x86_64": {
-                "url": f"https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/download/v{cargo_version}/kasugai_canvas.zip"
+                "url": "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip"
             }
         }
     }

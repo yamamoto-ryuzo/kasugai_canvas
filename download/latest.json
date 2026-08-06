@@ -4,7 +4,7 @@
   "pub_date": "2026-08-06",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/download/v0.6.5/kasugai_canvas.zip"
+      "url": "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip"
     }
   }
 }
