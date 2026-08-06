@@ -6,6 +6,17 @@
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-08-06
+
+### Changed
+
+- 標準の 3D Tiles 描画設定を改善
+- Cesium の効果設定を専用タブに分離
+
+### Fixed
+
+- クリアボタンの縦ずれを修正
+
 ## [0.6.2] - 2026-08-06
 
 ### Added
@@ -300,7 +311,8 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.7...v0.6.0
