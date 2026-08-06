@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-06
+
+### Changed
+
+- カメラ移動に合わせてURLのクエリパラメーター（latitude / longitude / zoom / pitch / bearing / project）を自動更新し、パーマリンクとして利用可能に
+- カメラ変更検出閾値を 0.3 から 0.05 に調整し、URL反映をスムーズに
+
 ## [0.6.0] - 2026-08-06
 
 ### Added
@@ -273,7 +280,9 @@
 - 明るい配色のUIを採用
 - 地形タイルの読み込み負荷を軽減
 
-[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.7...v0.6.0
 [0.5.3]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/yamamoto-ryuzo/kasugai_canvas/compare/v0.5.0...v0.5.1

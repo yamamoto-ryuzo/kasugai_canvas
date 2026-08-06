@@ -26,7 +26,7 @@ const viewer = new Cesium.Viewer("deck-container", {
 viewer.scene.globe.depthTestAgainstTerrain = true;
 viewer.scene.globe.enableLighting = false;
 viewer.imageryLayers.removeAll();
-viewer.camera.percentageChanged = 0.3;
+viewer.camera.percentageChanged = 0.05;
 
 const basemaps = [];
 let selectedBasemap = null;
@@ -178,6 +178,23 @@ function flyTo(options = {}) {
   });
 }
 
+function updateUrlFromCamera() {
+  const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
+  const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
+  const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
+  const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
+  const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, c.height))).toFixed(6);
+  const params = new URLSearchParams(window.location.search);
+  params.set("latitude", lat);
+  params.set("longitude", lon);
+  params.set("zoom", zoom);
+  params.set("pitch", pitch);
+  params.set("bearing", bearing);
+  if (currentProjectId) params.set("project", currentProjectId);
+  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+}
+
 function updateCameraInputs() {
   const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.position);
   document.querySelector("#camera-latitude").value = Number(cartographic.latitude * 180 / Math.PI).toFixed(6);
@@ -187,6 +204,7 @@ function updateCameraInputs() {
   document.querySelector("#camera-bearing").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const compass = document.querySelector("#compass-button");
   if (compass) compass.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg)`;
+  updateUrlFromCamera();
 }
 
 function renderBasemapSelector() {
