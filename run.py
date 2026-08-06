@@ -2,6 +2,8 @@
 """KASUGAI Canvas の開発起動・ビルドラッパー。"""
 
 import argparse
+import datetime
+import json
 import re
 import shutil
 import subprocess
@@ -77,10 +79,17 @@ def sync_versions() -> None:
         raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
     cargo_version = cargo_match.group(1)
 
-    latest = (DOWNLOAD_DIR / "latest.json").read_text(encoding="utf-8")
-    latest = re.sub(r'("version"\s*:\s*)"[^"]*"', lambda m: f'{m.group(1)}"{cargo_version}"', latest)
-    latest = re.sub(r'"notes"\s*:\s*"[^"]*"', lambda m: f'"notes": "KASUGAI Canvas {cargo_version}"', latest)
-    (DOWNLOAD_DIR / "latest.json").write_text(latest, encoding="utf-8")
+    latest_json = {
+        "version": cargo_version,
+        "notes": f"KASUGAI Canvas {cargo_version}",
+        "pub_date": datetime.date.today().isoformat(),
+        "platforms": {
+            "windows-x86_64": {
+                "url": f"https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/download/v{cargo_version}/kasugai_canvas.zip"
+            }
+        }
+    }
+    (DOWNLOAD_DIR / "latest.json").write_text(json.dumps(latest_json, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme = re.sub(r"(現在のバージョンは \*\*)[^*]+(\*\* です。)", lambda m: f"{m.group(1)}{cargo_version}{m.group(2)}", readme)

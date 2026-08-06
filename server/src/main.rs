@@ -813,7 +813,8 @@ async fn install_update(
     let url = latest["platforms"]["windows-x86_64"]["url"]
         .as_str()
         .unwrap_or(RELEASE_DOWNLOAD_URL);
-    if url != RELEASE_DOWNLOAD_URL && url != REPOSITORY_DOWNLOAD_URL {
+    let is_release_url = url.starts_with("https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/download/");
+    if !is_release_url && url != REPOSITORY_DOWNLOAD_URL {
         return Err((
             StatusCode::BAD_REQUEST,
             "許可されていない更新ファイルURLです".to_string(),
