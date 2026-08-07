@@ -176,6 +176,23 @@ def run_release() -> None:
     subprocess.run([str(TARGET_EXE)], cwd=ROOT, check=True)
 
 
+def publish_release() -> None:
+    """リリースビルド、コミット、タグ付け、プッシュまで行う。"""
+    build_release()
+    cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
+    cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
+    if not cargo_match:
+        raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
+    version = cargo_match.group(1)
+    tag = f"v{version}"
+    subprocess.run(["git", "add", "-A"], cwd=ROOT, check=True)
+    subprocess.run(["git", "commit", "-m", f"{version} リリース"], cwd=ROOT, check=True)
+    subprocess.run(["git", "tag", "-a", tag, "-m", f"{version} リリース"], cwd=ROOT, check=True)
+    subprocess.run(["git", "push"], cwd=ROOT, check=True)
+    subprocess.run(["git", "push", "origin", tag], cwd=ROOT, check=True)
+    print(f"バージョン {version} を {tag} タグ付きでリモートへプッシュしました。")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="KASUGAI Canvas ランチャー")
     group = parser.add_mutually_exclusive_group()
@@ -190,6 +207,11 @@ def main() -> None:
         "--release",
         action="store_true",
         help="リリースビルド済みの実行ファイルを起動",
+    )
+    group.add_argument(
+        "--publish",
+        action="store_true",
+        help="リリースビルド、コミット、タグ付け、リモートプッシュまで一括実行",
     )
     parser.add_argument(
         "--sync",
@@ -216,6 +238,8 @@ def main() -> None:
         build_release()
     elif args.release:
         run_release()
+    elif args.publish:
+        publish_release()
     else:
         run_dev()
 
