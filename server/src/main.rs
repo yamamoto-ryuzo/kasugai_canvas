@@ -402,7 +402,6 @@ fn now_secs() -> u64 {
 enum CacheState {
     None,
     Fresh(Vec<u8>),
-    Stale(Vec<u8>),
 }
 
 async fn read_cached(cache_path: &std::path::Path, key: &str, ttl: u64) -> CacheState {
@@ -416,12 +415,15 @@ async fn read_cached(cache_path: &std::path::Path, key: &str, ttl: u64) -> Cache
     if let Some(expires) = expires {
         if now < expires {
             if let Ok(body) = tokio::fs::read(&cache_file).await {
-                let _ = tokio::fs::write(&ttl_file, (now + ttl).to_string()).await;
+                if expires - now < 7 * 24 * 60 * 60 {
+                    let _ = tokio::fs::write(&ttl_file, (now + ttl).to_string()).await;
+                }
                 return CacheState::Fresh(body);
             }
         } else if now < expires + ttl {
             if let Ok(body) = tokio::fs::read(&cache_file).await {
-                return CacheState::Stale(body);
+                let _ = tokio::fs::write(&ttl_file, (now + ttl).to_string()).await;
+                return CacheState::Fresh(body);
             }
         }
     } else if let Ok(body) = tokio::fs::read(&cache_file).await {
@@ -557,43 +559,23 @@ async fn proxy_tile(
             "タイルURLはhttpまたはhttpsを指定してください".to_string(),
         ));
     }
-    let ttl = query.ttl.unwrap_or(86400);
+    let ttl = query.ttl.unwrap_or(2592000);
     let cache_key = tile_cache_key(&url);
-    let state_for_spawn = state.clone();
-    let spawn_url = url.clone();
-    let spawn_key = cache_key.clone();
-    match read_cached(&state.cache_path, &cache_key, ttl).await {
-        CacheState::Fresh(body) => {
-            let content_type = content_type_from_url(&url);
-            return Ok((
-                [
-                    (header::CONTENT_TYPE, content_type),
-                    (header::CACHE_CONTROL, "public, max-age=86400"),
-                ],
-                body,
-            )
-                .into_response());
-        }
-        CacheState::Stale(body) => {
-            tokio::spawn(async move {
-                let _ = fetch_unique_tile(&state_for_spawn, &spawn_url, &spawn_key, ttl).await;
-            });
-            let content_type = content_type_from_url(&url);
-            return Ok((
-                [
-                    (header::CONTENT_TYPE, content_type),
-                    (header::CACHE_CONTROL, "public, max-age=0, stale-while-revalidate=86400"),
-                ],
-                body,
-            )
-                .into_response());
-        }
-        CacheState::None => {}
+    if let CacheState::Fresh(body) = read_cached(&state.cache_path, &cache_key, ttl).await {
+        let content_type = content_type_from_url(&url);
+        return Ok((
+            [
+                (header::CONTENT_TYPE, content_type),
+                (header::CACHE_CONTROL, "public, max-age=2592000"),
+            ],
+            body,
+        )
+            .into_response());
     }
     let tile = fetch_unique_tile(&state, &url, &cache_key, ttl).await?;
     let status = StatusCode::from_u16(tile.status).unwrap_or(StatusCode::BAD_GATEWAY);
     let cache = if status.is_success() {
-        "public, max-age=86400"
+        "public, max-age=2592000"
     } else {
         "public, max-age=0"
     };
@@ -654,43 +636,23 @@ async fn proxy_tile_path(
             "タイルURLはhttpまたはhttpsを指定してください".to_string(),
         ));
     }
-    let ttl = 86400;
+    let ttl = 2592000;
     let cache_key = tile_cache_key(&url);
-    let state_for_spawn = state.clone();
-    let spawn_url = url.clone();
-    let spawn_key = cache_key.clone();
-    match read_cached(&state.cache_path, &cache_key, ttl).await {
-        CacheState::Fresh(body) => {
-            let content_type = content_type_from_url(&url);
-            return Ok((
-                [
-                    (header::CONTENT_TYPE, content_type),
-                    (header::CACHE_CONTROL, "public, max-age=86400"),
-                ],
-                body,
-            )
-                .into_response());
-        }
-        CacheState::Stale(body) => {
-            tokio::spawn(async move {
-                let _ = fetch_unique_tile(&state_for_spawn, &spawn_url, &spawn_key, ttl).await;
-            });
-            let content_type = content_type_from_url(&url);
-            return Ok((
-                [
-                    (header::CONTENT_TYPE, content_type),
-                    (header::CACHE_CONTROL, "public, max-age=0, stale-while-revalidate=86400"),
-                ],
-                body,
-            )
-                .into_response());
-        }
-        CacheState::None => {}
+    if let CacheState::Fresh(body) = read_cached(&state.cache_path, &cache_key, ttl).await {
+        let content_type = content_type_from_url(&url);
+        return Ok((
+            [
+                (header::CONTENT_TYPE, content_type),
+                (header::CACHE_CONTROL, "public, max-age=2592000"),
+            ],
+            body,
+        )
+            .into_response());
     }
     let tile = fetch_unique_tile(&state, &url, &cache_key, ttl).await?;
     let status = StatusCode::from_u16(tile.status).unwrap_or(StatusCode::BAD_GATEWAY);
     let cache = if status.is_success() {
-        "public, max-age=86400"
+        "public, max-age=2592000"
     } else {
         "public, max-age=0"
     };
