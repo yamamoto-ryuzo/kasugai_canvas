@@ -180,13 +180,32 @@
           </div>
           <aside class="navigation-toolbar" aria-label="Navigation toolbar">
             <div id="walk-help" class="walk-help">
-              <div><kbd>W</kbd> 前進</div>
-              <div><kbd>S</kbd> 後退</div>
-              <div><kbd>A / D</kbd> 旋回</div>
-              <div><kbd>↑ / ↓</kbd> 上下</div>
-              <div><kbd>Q / E</kbd> 高さ調整</div>
-              <div><kbd>+ / -</kbd> 速度調整</div>
-              <div><kbd>Esc</kbd> 3D</div>
+              <div class="walk-help-header">
+                <strong>Fly</strong>
+                <button id="walk-help-toggle" class="walk-help-toggle" type="button" aria-label="最小化">−</button>
+              </div>
+              <div class="walk-help-tabs">
+                <button class="walk-help-tab active" data-tab="mouse" type="button">マウス</button>
+                <button class="walk-help-tab" data-tab="keyboard" type="button">キー</button>
+              </div>
+              <div class="walk-help-contents">
+                <div class="walk-help-content active" data-tab="mouse">
+                  <div><kbd>左ダブルクリック</kbd> 自動前進 ON/OFF</div>
+                  <div><kbd>右ダブルクリック</kbd> 自動後退 ON/OFF</div>
+                  <div><kbd>左ドラッグ</kbd> 視点回転</div>
+                  <div><kbd>右ドラッグ</kbd> 視点移動</div>
+                  <div><kbd>マウスホイール</kbd> 速度調整</div>
+                </div>
+                <div class="walk-help-content" data-tab="keyboard">
+                  <div><kbd>W</kbd> 前進</div>
+                  <div><kbd>S</kbd> 後退</div>
+                  <div><kbd>A / D</kbd> 旋回</div>
+                  <div><kbd>↑ / ↓</kbd> 上下</div>
+                  <div><kbd>Q / E</kbd> 高さ調整</div>
+                  <div><kbd>+ / -</kbd> 速度調整</div>
+                  <div><kbd>Esc</kbd> 3D モードへ</div>
+                </div>
+              </div>
               <div class="walk-height">高さ: <strong id="walk-offset">20.0</strong>m / 地形高: <strong id="walk-terrain">0.0</strong>m</div>
               <div class="walk-height">速度: <strong id="walk-speed">108.0</strong>km/h</div>
             </div>

@@ -176,7 +176,7 @@ function flyTo(options = {}) {
   const pitch = -Math.max(-90, Math.min(90, Number(options.pitch) || 0)) * Math.PI / 180;
   const heading = (Number(options.bearing) || 0) * Math.PI / 180;
   viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, Math.max(1, height)),
+    destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, height),
     orientation: { heading, pitch, roll: 0 },
     duration: 1.5,
   });
@@ -188,7 +188,7 @@ function updateUrlFromCamera() {
   const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
   const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
   const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-  const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, c.height))).toFixed(6);
+  const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, Math.abs(c.height)))).toFixed(6);
   const params = new URLSearchParams(window.location.search);
   params.set("latitude", lat);
   params.set("longitude", lon);
@@ -510,7 +510,6 @@ function updateUndergroundView() {
   }
   if (undergroundDiveEnabled) {
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
-    viewer.scene.screenSpaceCameraController.minimumZoomDistance = -1000;
   } else {
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = true;
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = 1;
@@ -1083,6 +1082,7 @@ function setupEvents() {
   const walkSpeedEl = document.querySelector("#walk-speed");
   const walkKeys = new Set();
   let walkLastTime = performance.now();
+  let autoMove = 0;
   let walkRafId = null;
   const walkLoop = (timestamp) => {
     walkRafId = null;
@@ -1102,7 +1102,8 @@ function setupEvents() {
       if (walkKeys.has("ArrowDown")) pitch -= pitchDelta;
       pitch = Math.max(-85 * Math.PI / 180, Math.min(-5 * Math.PI / 180, pitch));
 
-      const move = (walkKeys.has("KeyW") ? 1 : 0) - (walkKeys.has("KeyS") ? 1 : 0);
+      const manualMove = (walkKeys.has("KeyW") ? 1 : 0) - (walkKeys.has("KeyS") ? 1 : 0);
+      const move = (manualMove !== 0) ? manualMove : autoMove;
       const speedChange = (walkKeys.has("Equal") || walkKeys.has("NumpadAdd") ? 1 : 0) -
         (walkKeys.has("Minus") || walkKeys.has("NumpadSubtract") ? 1 : 0);
       walkMoveSpeed = Math.max(1, Math.min(1000 / 3.6, walkMoveSpeed * (1 + 0.8 * speedChange * delta)));
@@ -1123,7 +1124,7 @@ function setupEvents() {
       if (carto) {
         const terrainHeight = viewer.scene.globe.getHeight(carto) ?? 0;
         const heightChange = (walkKeys.has("KeyQ") ? 1 : 0) - (walkKeys.has("KeyE") ? 1 : 0);
-        walkTerrainOffset = Math.max(1, Math.min(500, walkTerrainOffset + 10 * heightChange * delta));
+        walkTerrainOffset += 10 * heightChange * delta;
         carto.height = terrainHeight + walkTerrainOffset;
         camera.setView({
           destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, carto.height),
@@ -1137,13 +1138,18 @@ function setupEvents() {
     }
   };
   const walkHelp = document.querySelector("#walk-help");
+  const ssec = viewer.scene.screenSpaceCameraController;
+  const defaultLookEventTypes = ssec.lookEventTypes;
   const setMode = (next) => {
     const isWalk = next === "walk";
     modeSelect.value = next;
-    modeSelect.textContent = isWalk ? "Walk" : "3D";
-    modeSelect.setAttribute("aria-label", isWalk ? "Walk mode" : "3D view");
+    modeSelect.textContent = isWalk ? "Fly" : "3D";
+    modeSelect.setAttribute("aria-label", isWalk ? "Fly mode" : "3D view");
     walkModeActive = isWalk;
+    autoMove = 0;
     walkHelp?.classList.toggle("visible", isWalk);
+    ssec.enableZoom = !isWalk;
+    ssec.lookEventTypes = isWalk && Cesium.CameraEventType ? [Cesium.CameraEventType.RIGHT_DRAG] : defaultLookEventTypes;
     viewer.scene.mode = Cesium.SceneMode.SCENE3D;
     if (isWalk && !walkRafId) {
       walkLastTime = performance.now();
@@ -1153,6 +1159,7 @@ function setupEvents() {
   modeSelect.addEventListener("click", () => {
     setMode(modeSelect.value === "3d" ? "walk" : "3d");
   });
+  const lastKeyTap = { KeyW: 0, KeyS: 0 };
   window.addEventListener("keydown", event => {
     if (!walkModeActive) return;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(event.target?.tagName)) return;
@@ -1162,6 +1169,14 @@ function setupEvents() {
       if (code === "Escape") {
         setMode("3d");
       } else {
+        if (code === "KeyW" || code === "KeyS") {
+          const now = performance.now();
+          const direction = code === "KeyW" ? 1 : -1;
+          if (!event.repeat && now - lastKeyTap[code] < 300) {
+            autoMove = autoMove === direction ? 0 : direction;
+          }
+          if (!event.repeat) lastKeyTap[code] = now;
+        }
         walkKeys.add(code);
       }
     }
@@ -1231,7 +1246,7 @@ function setupEvents() {
     const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
     const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
     const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-    const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, c.height))).toFixed(6);
+    const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, Math.abs(c.height)))).toFixed(6);
     const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&zoom=${zoom}&pitch=${pitch}&bearing=${bearing}&project=${encodeURIComponent(currentProjectId)}`;
     document.querySelector("#share-url").value = url;
     await navigator.clipboard?.writeText(url);
@@ -1274,6 +1289,7 @@ function setupEvents() {
 
   const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
   clickHandler.setInputAction(movement => {
+    if (walkModeActive) return;
     const picked = viewer.scene.pick(movement.position);
     const attr = document.querySelector("#attr-content");
     attr.replaceChildren();
@@ -1337,6 +1353,51 @@ function setupEvents() {
 
     attr.textContent = "選択した地物に属性情報がありません。";
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  viewer.canvas.addEventListener("contextmenu", event => {
+    event.preventDefault();
+  });
+
+  viewer.canvas.addEventListener("mousedown", event => {
+    if (!walkModeActive) return;
+    if (event.detail === 2) {
+      if (event.button === 0) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        autoMove = autoMove === 1 ? 0 : 1;
+      } else if (event.button === 2) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        autoMove = autoMove === -1 ? 0 : -1;
+      }
+    }
+  }, { capture: true });
+
+  viewer.canvas.addEventListener("wheel", event => {
+    if (!walkModeActive) return;
+    event.preventDefault();
+    const direction = -Math.sign(event.deltaY);
+    if (direction === 0) return;
+    walkMoveSpeed = Math.max(1, Math.min(1000 / 3.6, walkMoveSpeed * (1 + 0.2 * direction)));
+  }, { passive: false });
+
+  const walkHelpToggle = document.querySelector("#walk-help-toggle");
+  if (walkHelpToggle) {
+    walkHelpToggle.addEventListener("click", () => {
+      const minimized = walkHelp.classList.toggle("minimized");
+      walkHelpToggle.textContent = minimized ? "+" : "−";
+      walkHelpToggle.setAttribute("aria-label", minimized ? "展開" : "最小化");
+    });
+  }
+
+  document.querySelectorAll(".walk-help-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".walk-help-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".walk-help-content").forEach(c => c.classList.remove("active"));
+      tab.classList.add("active");
+      document.querySelector(`.walk-help-content[data-tab="${tab.dataset.tab}"]`)?.classList.add("active");
+    });
+  });
 }
 
 function compareVersions(left, right) {

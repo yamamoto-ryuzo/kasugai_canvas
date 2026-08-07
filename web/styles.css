@@ -90,6 +90,17 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .walk-help.visible { display: block; }
 .walk-help div { margin: 2px 0; }
 .walk-help kbd { display: inline-block; min-width: 18px; padding: 1px 4px; border: 1px solid rgba(0,0,0,.12); border-radius: 4px; background: #fff; text-align: center; }
+.walk-help-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.walk-help-header strong { font-size: 14px; }
+.walk-help-toggle { min-width: 24px; min-height: 22px; padding: 1px 4px; border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f; cursor: pointer; font-size: 15px; line-height: 1; }
+.walk-help-tabs { display: flex; gap: 3px; margin: 4px 0; }
+.walk-help-tab { min-height: 22px; padding: 2px 7px; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 13px; }
+.walk-help-tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
+.walk-help-content { display: none; }
+.walk-help-content.active { display: block; }
+.walk-help.minimized .walk-help-tabs,
+.walk-help.minimized .walk-help-contents,
+.walk-help.minimized .walk-height { display: none; }
 .navigation-toggle { font-size: 17px !important; line-height: 1; }
 .navigation-toolbar.collapsed { width: 40px; height: 40px; padding: 7px; box-sizing: border-box; gap: 0; }
 .navigation-toolbar.collapsed .navigation-toggle { width: 26px; min-width: 26px; min-height: 26px; padding: 1px 4px; }
