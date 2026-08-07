@@ -1106,7 +1106,7 @@ function setupEvents() {
       const move = (manualMove !== 0) ? manualMove : autoMove;
       const speedChange = (walkKeys.has("Equal") || walkKeys.has("NumpadAdd") ? 1 : 0) -
         (walkKeys.has("Minus") || walkKeys.has("NumpadSubtract") ? 1 : 0);
-      walkMoveSpeed = Math.max(1, Math.min(1000 / 3.6, walkMoveSpeed * (1 + 0.8 * speedChange * delta)));
+      walkMoveSpeed += 100 * speedChange * delta;
       const moveDistance = walkMoveSpeed * delta;
       if (move !== 0) {
         const normal = viewer.scene.globe.ellipsoid.geodeticSurfaceNormal(camera.position, new Cesium.Cartesian3());
@@ -1140,6 +1140,8 @@ function setupEvents() {
   const walkHelp = document.querySelector("#walk-help");
   const ssec = viewer.scene.screenSpaceCameraController;
   const defaultLookEventTypes = ssec.lookEventTypes;
+  const defaultZoomEventTypes = ssec.zoomEventTypes ? [...ssec.zoomEventTypes] : [];
+  const wheelEventType = Cesium.CameraEventType?.WHEEL;
   const setMode = (next) => {
     const isWalk = next === "walk";
     modeSelect.value = next;
@@ -1148,8 +1150,18 @@ function setupEvents() {
     walkModeActive = isWalk;
     autoMove = 0;
     walkHelp?.classList.toggle("visible", isWalk);
-    ssec.enableZoom = !isWalk;
-    ssec.lookEventTypes = isWalk && Cesium.CameraEventType ? [Cesium.CameraEventType.RIGHT_DRAG] : defaultLookEventTypes;
+    if (isWalk) {
+      const carto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+      if (carto) {
+        const terrainHeight = viewer.scene.globe.getHeight(carto) ?? 0;
+        walkTerrainOffset = carto.height - terrainHeight;
+      }
+    }
+    ssec.enableZoom = true;
+    ssec.lookEventTypes = defaultLookEventTypes;
+    ssec.zoomEventTypes = isWalk && wheelEventType
+      ? defaultZoomEventTypes.filter(t => t !== wheelEventType)
+      : defaultZoomEventTypes;
     viewer.scene.mode = Cesium.SceneMode.SCENE3D;
     if (isWalk && !walkRafId) {
       walkLastTime = performance.now();
@@ -1354,31 +1366,30 @@ function setupEvents() {
     attr.textContent = "選択した地物に属性情報がありません。";
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+  let lastRightClick = 0;
   viewer.canvas.addEventListener("contextmenu", event => {
     event.preventDefault();
+    if (!walkModeActive) return;
+    const now = performance.now();
+    if (now - lastRightClick < 400) {
+      autoMove = autoMove === -1 ? 0 : -1;
+    }
+    lastRightClick = now;
   });
 
-  viewer.canvas.addEventListener("mousedown", event => {
+  viewer.canvas.addEventListener("dblclick", event => {
     if (!walkModeActive) return;
-    if (event.detail === 2) {
-      if (event.button === 0) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        autoMove = autoMove === 1 ? 0 : 1;
-      } else if (event.button === 2) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        autoMove = autoMove === -1 ? 0 : -1;
-      }
+    if (event.button === 0) {
+      autoMove = autoMove === 1 ? 0 : 1;
     }
-  }, { capture: true });
+  });
 
   viewer.canvas.addEventListener("wheel", event => {
     if (!walkModeActive) return;
     event.preventDefault();
     const direction = -Math.sign(event.deltaY);
     if (direction === 0) return;
-    walkMoveSpeed = Math.max(1, Math.min(1000 / 3.6, walkMoveSpeed * (1 + 0.2 * direction)));
+    walkMoveSpeed += 20 * direction;
   }, { passive: false });
 
   const walkHelpToggle = document.querySelector("#walk-help-toggle");
