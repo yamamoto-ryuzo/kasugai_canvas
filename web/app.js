@@ -45,6 +45,8 @@ let undergroundBackgroundColor = Cesium.Color.BLACK;
 let basemapDrape3DTiles = false;
 let infoRequestId = 0;
 let walkModeActive = false;
+let walkTerrainOffset = 20;
+let walkMoveSpeed = 30;
 const activeClippingPlanes = { planes: [] };
 const activeDataSources = [];
 const activePrimitives = [];
@@ -1076,6 +1078,9 @@ function setupEvents() {
   });
 
   const modeSelect = document.querySelector("#mode-select");
+  const walkOffsetEl = document.querySelector("#walk-offset");
+  const walkTerrainEl = document.querySelector("#walk-terrain");
+  const walkSpeedEl = document.querySelector("#walk-speed");
   const walkKeys = new Set();
   let walkLastTime = performance.now();
   let walkRafId = null;
@@ -1098,21 +1103,35 @@ function setupEvents() {
       pitch = Math.max(-85 * Math.PI / 180, Math.min(-5 * Math.PI / 180, pitch));
 
       const move = (walkKeys.has("KeyW") ? 1 : 0) - (walkKeys.has("KeyS") ? 1 : 0);
-      const moveSpeed = 30 * delta;
+      const speedChange = (walkKeys.has("Equal") || walkKeys.has("NumpadAdd") ? 1 : 0) -
+        (walkKeys.has("Minus") || walkKeys.has("NumpadSubtract") ? 1 : 0);
+      walkMoveSpeed = Math.max(1, Math.min(1000 / 3.6, walkMoveSpeed * (1 + 0.8 * speedChange * delta)));
+      const moveDistance = walkMoveSpeed * delta;
       if (move !== 0) {
-        camera.moveForward(move * moveSpeed);
+        const normal = viewer.scene.globe.ellipsoid.geodeticSurfaceNormal(camera.position, new Cesium.Cartesian3());
+        const dot = Cesium.Cartesian3.dot(camera.direction, normal);
+        const horizontal = Cesium.Cartesian3.add(
+          camera.direction,
+          Cesium.Cartesian3.multiplyByScalar(normal, -dot, new Cesium.Cartesian3()),
+          new Cesium.Cartesian3()
+        );
+        Cesium.Cartesian3.normalize(horizontal, horizontal);
+        camera.move(horizontal, move * moveDistance);
       }
 
       const carto = Cesium.Cartographic.fromCartesian(camera.position);
       if (carto) {
         const terrainHeight = viewer.scene.globe.getHeight(carto) ?? 0;
-        const minHeight = terrainHeight + 10;
-        const maxHeight = terrainHeight + 30;
-        carto.height = Math.max(minHeight, Math.min(maxHeight, carto.height));
+        const heightChange = (walkKeys.has("KeyQ") ? 1 : 0) - (walkKeys.has("KeyE") ? 1 : 0);
+        walkTerrainOffset = Math.max(1, Math.min(500, walkTerrainOffset + 10 * heightChange * delta));
+        carto.height = terrainHeight + walkTerrainOffset;
         camera.setView({
           destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, carto.height),
           orientation: { heading, pitch, roll: 0 },
         });
+        if (walkOffsetEl) walkOffsetEl.textContent = walkTerrainOffset.toFixed(1);
+        if (walkTerrainEl) walkTerrainEl.textContent = terrainHeight.toFixed(1);
+        if (walkSpeedEl) walkSpeedEl.textContent = (walkMoveSpeed * 3.6).toFixed(1);
       }
       walkRafId = requestAnimationFrame(walkLoop);
     }
@@ -1138,7 +1157,7 @@ function setupEvents() {
     if (!walkModeActive) return;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(event.target?.tagName)) return;
     const code = event.code;
-    if (["KeyW", "KeyS", "KeyA", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(code)) {
+    if (["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE", "Equal", "Minus", "NumpadAdd", "NumpadSubtract", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(code)) {
       event.preventDefault();
       if (code === "Escape") {
         setMode("3d");
