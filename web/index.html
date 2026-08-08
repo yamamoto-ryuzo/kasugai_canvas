@@ -89,9 +89,9 @@
               <section id="settings-layer-panel" class="settings-subpanel">
                 <span class="field-label">ドレープ対象地形</span>
                 <label><input id="drape-terrain-dem" type="checkbox" checked /> DEM</label>
-                <label><input id="drape-terrain-tiles3d" type="checkbox" checked /> 3D Tiles</label>
+                <label><input id="drape-terrain-tiles3d" type="checkbox" /> 3D Tiles</label>
                 <span class="field-label">ドレープを適用するレイヤー</span>
-                <label><input id="drape-xyz" type="checkbox" /> XYZ</label>
+                <label><input id="drape-xyz" type="checkbox" checked /> XYZ</label>
                 <label><input id="drape-geojson" type="checkbox" checked /> GeoJSON</label>
                 <div class="section-title inspector-title">インスペクター</div>
                 <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
@@ -211,7 +211,7 @@
             <button id="compass-button" class="compass-button" type="button" title="Reset north">
               <span class="compass-needle"></span><strong>N</strong>
             </button>
-            <button id="top-down-button" type="button" title="Top-down view">2D</button>
+            <button id="top-down-button" type="button" title="真上からの視点">真上</button>
             <button id="mode-select" class="mode-select" type="button" value="3d" aria-label="View mode">3D</button>
             <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化">−</button>
           </aside>

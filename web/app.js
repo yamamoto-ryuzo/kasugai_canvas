@@ -52,8 +52,8 @@ let walkMoveSpeed = 30;
 const activeClippingPlanes = { planes: [] };
 const activeDataSources = [];
 const activePrimitives = [];
-const drapeTerrainSources = { dem: true, tiles3d: true };
-const drapeLayers = { xyz: false, geojson: true };
+const drapeTerrainSources = { dem: true, tiles3d: false };
+const drapeLayers = { xyz: true, geojson: true };
 const demSources = {
   reearth: {
     title: "Re:Earth Terrain (標高 / MSL, zoom 19)",
@@ -635,7 +635,7 @@ async function refreshLayers() {
   // Globe 表面の XYZ
   for (const item of tileLayers) {
     if (!item.visible) continue;
-    if (drape3DTiles && drapeLayers.xyz) continue;
+    if ((drapeTerrainSources.dem || drape3DTiles) && (!drapeLayers.xyz || !drapeTerrainSources.dem)) continue;
     try {
       const provider = createUrlTemplateProvider({
         url: item.url,
@@ -674,10 +674,26 @@ async function refreshLayers() {
       }
     } else if (item.type === "geojson" || item.type === "layer") {
       try {
-        const ds = await Cesium.GeoJsonDataSource.load(item.url, { clampToGround: true });
+        const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
+        if (!clamp) continue;
+        let classification;
+        if (clamp) {
+          if (drapeTerrainSources.dem && drape3DTiles) classification = Cesium.ClassificationType.BOTH;
+          else if (drape3DTiles) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
+          else if (drapeTerrainSources.dem) classification = Cesium.ClassificationType.TERRAIN;
+        }
+        const ds = await Cesium.GeoJsonDataSource.load(item.url, { clampToGround: clamp });
         for (const entity of ds.entities.values) {
-          if (entity.polygon) entity.polygon.outline = new Cesium.ConstantProperty(false);
-          if (entity.polyline) entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
+          if (entity.polygon) {
+            entity.polygon.outline = new Cesium.ConstantProperty(false);
+            if (clamp) entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
+          }
+          if (entity.polyline) {
+            if (clamp) {
+              entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
+              entity.polyline.classificationType = new Cesium.ConstantProperty(classification);
+            }
+          }
         }
         await viewer.dataSources.add(ds);
         activeDataSources.push(ds);
