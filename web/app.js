@@ -159,6 +159,28 @@ async function saveInspectorConfig() {
   if (!response.ok) throw new Error(await response.text());
 }
 
+function updateInspectorFromLayerOrder() {
+  const input = document.querySelector("#inspector-input");
+  if (!input) return;
+  const lines = input.value.split(/\r?\n/);
+  const layerLineIndices = [];
+  lines.forEach((line, index) => {
+    const separator = line.indexOf(":");
+    if (separator < 0) return;
+    const layerType = line.slice(0, separator).toLowerCase().trim();
+    if (["xyz", "3dtiles", "geojson", "layer"].includes(layerType)) layerLineIndices.push(index);
+  });
+  const orderedSourceLines = layerOrder.map(id => layerState.get(id)?.sourceLine).filter(Boolean);
+  if (layerLineIndices.length !== orderedSourceLines.length) return;
+  layerLineIndices.forEach((index, i) => { lines[index] = orderedSourceLines[i]; });
+  input.value = lines.join("\n");
+}
+
+async function persistLayerOrder() {
+  updateInspectorFromLayerOrder();
+  await saveInspectorConfig();
+}
+
 function setInspectorStatus(message, isError = false) {
   const status = document.querySelector("#inspector-status");
   status.textContent = message;
@@ -359,6 +381,7 @@ function renderLayerList() {
       draggedGroupKey = undefined;
       renderLayerList();
       refreshLayers();
+      void persistLayerOrder().catch(error => { console.warn("レイヤー順の保存エラー:", error); });
     });
   });
 
@@ -410,6 +433,7 @@ function renderLayerList() {
       layerOrder = nextOrder;
       renderLayerList();
       refreshLayers();
+      void persistLayerOrder().catch(error => { console.warn("レイヤー順の保存エラー:", error); });
     });
   });
 
@@ -651,8 +675,8 @@ async function refreshLayers() {
   const visible3DTiles = layers.some(l => l.visible && l.type === "3dtiles");
   const drape3DTiles = drapeTerrainSources.tiles3d && visible3DTiles;
   const orderedItems = getOrderedLayerItems();
-  const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile");
-  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer");
+  const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
+  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer").slice().reverse();
 
   // 3D Tiles ドレープ用プロバイダー定義
   const drapeProviders = [];
@@ -915,7 +939,7 @@ function applyInspector(text) {
         if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
       });
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] || "", proxy: options.proxy !== false, group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] || "", proxy: options.proxy !== false, group, exclusiveGroup };
       if (options.maxZoom !== undefined) item.maxZoom = options.maxZoom;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
       tileLayers.push(item);
@@ -932,7 +956,7 @@ function applyInspector(text) {
       if (!title) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, type, url, visible: !off, attribution: parts[2] || "", proxy, group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parts[2] || "", proxy, group, exclusiveGroup };
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
