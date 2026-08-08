@@ -896,7 +896,7 @@ function applyInspector(text) {
           id: `inspector-base-${parsedBasemaps.length}`,
           title: parts[0],
           url: parts[1],
-          attribution: parts[2] || "",
+          attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "",
           tileSize: options.tileSize || 256,
           opacity: options.opacity ?? 1.0,
           proxy: options.proxy !== false,
@@ -939,7 +939,7 @@ function applyInspector(text) {
         if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
       });
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] || "", proxy: options.proxy !== false, group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", proxy: options.proxy !== false, group, exclusiveGroup };
       if (options.maxZoom !== undefined) item.maxZoom = options.maxZoom;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
       tileLayers.push(item);
@@ -956,7 +956,7 @@ function applyInspector(text) {
       if (!title) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parts[2] || "", proxy, group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", proxy, group, exclusiveGroup };
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
