@@ -246,6 +246,13 @@ function getOrderedLayerItems() {
   return layerOrder.map(id => layerState.get(id)).filter(Boolean);
 }
 
+function getGroupLayerIds(groupKey) {
+  const [groupName, exclusive] = groupKey.split("|");
+  return getOrderedLayerItems()
+    .filter(layer => (layer.group || "") === groupName && (layer.exclusiveGroup ? "exclusive" : "regular") === exclusive)
+    .map(layer => layer.id);
+}
+
 function renderLayerList() {
   const list = document.querySelector("#layer-list");
   const groupedLayers = new Map();
@@ -262,7 +269,7 @@ function renderLayerList() {
     const groupChecked = layers.some(layer => layer.visible);
     return `
     <section class="layer-group${group ? " grouped" : ""}${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
-      ${group ? `<div class="layer-group-title"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
+      ${group ? `<div class="layer-group-title" draggable="true"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
       <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
@@ -322,6 +329,55 @@ function renderLayerList() {
   });
 
   let draggedId;
+  let draggedGroupKey;
+
+  list.querySelectorAll(".layer-group").forEach(groupSection => {
+    groupSection.addEventListener("dragover", event => {
+      if (!draggedGroupKey || draggedGroupKey === groupSection.dataset.groupKey) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    });
+    groupSection.addEventListener("drop", event => {
+      if (!draggedGroupKey) return;
+      event.preventDefault();
+      const sourceKey = draggedGroupKey;
+      const targetKey = groupSection.dataset.groupKey;
+      if (sourceKey === targetKey) return;
+      const sourceIds = getGroupLayerIds(sourceKey);
+      const targetIds = getGroupLayerIds(targetKey);
+      const sourceFirstIndex = layerOrder.indexOf(sourceIds[0]);
+      const targetFirstIndex = layerOrder.indexOf(targetIds[0]);
+      const nextOrder = layerOrder.filter(id => !sourceIds.includes(id));
+      let insertIndex;
+      if (sourceFirstIndex < targetFirstIndex) {
+        insertIndex = nextOrder.indexOf(targetIds[targetIds.length - 1]) + 1;
+      } else {
+        insertIndex = nextOrder.indexOf(targetIds[0]);
+      }
+      nextOrder.splice(insertIndex, 0, ...sourceIds);
+      layerOrder = nextOrder;
+      draggedGroupKey = undefined;
+      renderLayerList();
+      refreshLayers();
+    });
+  });
+
+  list.querySelectorAll(".layer-group-title").forEach(title => {
+    title.addEventListener("dragstart", event => {
+      const groupSection = title.closest(".layer-group");
+      if (!groupSection) return;
+      draggedGroupKey = groupSection.dataset.groupKey;
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", draggedGroupKey);
+      groupSection.classList.add("dragging");
+    });
+    title.addEventListener("dragend", () => {
+      const groupSection = title.closest(".layer-group");
+      if (groupSection) groupSection.classList.remove("dragging");
+      draggedGroupKey = undefined;
+    });
+  });
+
   list.querySelectorAll(".layer-row").forEach(row => {
     row.addEventListener("dragstart", event => {
       draggedId = row.dataset.layerId;
@@ -330,8 +386,13 @@ function renderLayerList() {
       row.classList.add("dragging");
     });
     row.addEventListener("dragend", () => { draggedId = undefined; row.classList.remove("dragging"); });
-    row.addEventListener("dragover", event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; });
+    row.addEventListener("dragover", event => {
+      if (!draggedId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+    });
     row.addEventListener("drop", event => {
+      if (!draggedId) return;
       event.preventDefault();
       const sourceId = draggedId || event.dataTransfer.getData("text/plain");
       const targetId = row.dataset.layerId;
@@ -589,6 +650,9 @@ async function refreshLayers() {
 
   const visible3DTiles = layers.some(l => l.visible && l.type === "3dtiles");
   const drape3DTiles = drapeTerrainSources.tiles3d && visible3DTiles;
+  const orderedItems = getOrderedLayerItems();
+  const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile");
+  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer");
 
   // 3D Tiles ドレープ用プロバイダー定義
   const drapeProviders = [];
@@ -604,7 +668,7 @@ async function refreshLayers() {
       });
     }
     if (drapeLayers.xyz) {
-      tileLayers.filter(t => t.visible).forEach(item => {
+      orderedTileLayers.filter(t => t.visible).forEach(item => {
         drapeProviders.push({
           url: item.url,
           attribution: item.attribution,
@@ -633,7 +697,7 @@ async function refreshLayers() {
   }
 
   // Globe 表面の XYZ
-  for (const item of tileLayers) {
+  for (const item of orderedTileLayers) {
     if (!item.visible) continue;
     if ((drapeTerrainSources.dem || drape3DTiles) && (!drapeLayers.xyz || !drapeTerrainSources.dem)) continue;
     try {
@@ -650,7 +714,7 @@ async function refreshLayers() {
   }
 
   // 3D Tiles / GeoJSON
-  for (const item of layers) {
+  for (const item of orderedOtherLayers) {
     if (!item.visible) continue;
     if (item.type === "3dtiles") {
       try {
