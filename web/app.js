@@ -1520,7 +1520,7 @@ setupEvents();
 setupThreeJs();
 applyInspector(defaultConfig);
 updateEffectSettings();
-const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, zoom: 15, pitch: 30, bearing: 0 };
+const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, zoom: 14, pitch: 30, bearing: 0 };
 const urlCamera = {
   latitude: numberParam("latitude"),
   longitude: numberParam("longitude"),
