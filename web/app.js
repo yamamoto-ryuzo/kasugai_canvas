@@ -4,7 +4,9 @@ const Cesium = window.Cesium;
 
 const urlParams = new URLSearchParams(window.location.search);
 const numberParam = (name, fallback) => {
-  const value = Number(urlParams.get(name));
+  const raw = urlParams.get(name);
+  if (raw === null || raw === "") return fallback;
+  const value = Number(raw);
   return Number.isFinite(value) ? value : fallback;
 };
 
@@ -1518,13 +1520,13 @@ setupEvents();
 setupThreeJs();
 applyInspector(defaultConfig);
 updateEffectSettings();
-const defaultCamera = cameraPresets[0];
+const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, zoom: 15, pitch: 30, bearing: 0 };
 const urlCamera = {
   latitude: numberParam("latitude"),
   longitude: numberParam("longitude"),
-  zoom: numberParam("zoom"),
-  pitch: numberParam("pitch", 0),
-  bearing: numberParam("bearing", 0),
+  zoom: numberParam("zoom", DEFAULT_VIEW.zoom),
+  pitch: numberParam("pitch", DEFAULT_VIEW.pitch),
+  bearing: numberParam("bearing", DEFAULT_VIEW.bearing),
 };
 
 async function resolveInitialCamera() {
@@ -1541,12 +1543,12 @@ async function resolveInitialCamera() {
     const latitude = Number(data.latitude);
     const longitude = Number(data.longitude);
     if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-      return { latitude, longitude, zoom: 10, pitch: -30, bearing: 0 };
+      return { latitude, longitude, zoom: 10, pitch: DEFAULT_VIEW.pitch, bearing: 0 };
     }
   } catch (error) {
     console.warn("IP geolocation failed", error);
   }
-  return defaultCamera;
+  return DEFAULT_VIEW;
 }
 
 (async () => {
