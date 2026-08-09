@@ -1251,8 +1251,8 @@ function setupEvents() {
   const setMode = (next) => {
     const isWalk = next === "walk";
     modeSelect.value = next;
-    modeSelect.textContent = isWalk ? "Fly" : "3D";
-    modeSelect.setAttribute("aria-label", isWalk ? "Fly mode" : "3D view");
+    modeSelect.textContent = isWalk ? "Fly" : "Orbit";
+    modeSelect.setAttribute("aria-label", isWalk ? "Fly mode" : "Orbit view");
     walkModeActive = isWalk;
     autoMove = 0;
     walkHelp?.classList.toggle("visible", isWalk);
@@ -1275,7 +1275,7 @@ function setupEvents() {
     }
   };
   modeSelect.addEventListener("click", () => {
-    setMode(modeSelect.value === "3d" ? "walk" : "3d");
+    setMode(modeSelect.value === "orbit" ? "walk" : "orbit");
   });
   const lastKeyTap = { KeyW: 0, KeyS: 0 };
   window.addEventListener("keydown", event => {
@@ -1285,7 +1285,7 @@ function setupEvents() {
     if (["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE", "Equal", "Minus", "NumpadAdd", "NumpadSubtract", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(code)) {
       event.preventDefault();
       if (code === "Escape") {
-        setMode("3d");
+        setMode("orbit");
       } else {
         if (code === "KeyW" || code === "KeyS") {
           const now = performance.now();
