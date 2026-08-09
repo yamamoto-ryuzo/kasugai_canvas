@@ -1179,19 +1179,41 @@ function setupEvents() {
     });
   });
 
-  let last3DPitch = 30;
+  let last3DView = null;
   document.querySelector("#top-down-button").addEventListener("click", () => {
-    const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
     const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
-    const latitude = c.latitude * 180 / Math.PI;
-    const longitude = c.longitude * 180 / Math.PI;
-    const height = c.height;
-    const bearing = viewer.camera.heading * 180 / Math.PI;
     if (pitchDeg >= 85) {
-      flyTo({ latitude, longitude, height, pitch: last3DPitch, bearing });
+      if (last3DView) {
+        flyTo(last3DView);
+      } else {
+        const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+        flyTo({
+          latitude: c.latitude * 180 / Math.PI,
+          longitude: c.longitude * 180 / Math.PI,
+          height: c.height,
+          pitch: 30,
+          bearing: viewer.camera.heading * 180 / Math.PI,
+        });
+      }
     } else {
-      last3DPitch = pitchDeg;
-      flyTo({ latitude, longitude, height, pitch: 90, bearing });
+      const cameraCarto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+      const ray = new Cesium.Ray(viewer.camera.position, viewer.camera.direction);
+      const target = viewer.scene.globe.pick(ray, viewer.scene) || viewer.camera.position;
+      const targetCarto = Cesium.Cartographic.fromCartesian(target);
+      last3DView = {
+        latitude: cameraCarto.latitude * 180 / Math.PI,
+        longitude: cameraCarto.longitude * 180 / Math.PI,
+        height: cameraCarto.height,
+        pitch: pitchDeg,
+        bearing: viewer.camera.heading * 180 / Math.PI,
+      };
+      flyTo({
+        latitude: targetCarto.latitude * 180 / Math.PI,
+        longitude: targetCarto.longitude * 180 / Math.PI,
+        height: cameraCarto.height,
+        pitch: 90,
+        bearing: viewer.camera.heading * 180 / Math.PI,
+      });
     }
   });
 
