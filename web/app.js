@@ -1183,6 +1183,7 @@ function setupEvents() {
   document.querySelector("#top-down-button").addEventListener("click", () => {
     const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
     if (pitchDeg >= 85) {
+      viewer.scene.screenSpaceCameraController.enableTilt = true;
       if (last3DView) {
         flyTo(last3DView);
       } else {
@@ -1196,6 +1197,7 @@ function setupEvents() {
         });
       }
     } else {
+      viewer.scene.screenSpaceCameraController.enableTilt = false;
       const cameraCarto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
       const ray = new Cesium.Ray(viewer.camera.position, viewer.camera.direction);
       const target = viewer.scene.globe.pick(ray, viewer.scene) || viewer.camera.position;
@@ -1532,6 +1534,44 @@ function setupEvents() {
     if (direction === 0) return;
     walkMoveSpeed += 20 * direction;
   }, { passive: false });
+
+  let middlePointerId = null;
+  let lastMiddleRotateX = 0;
+  const middleRotateSpeed = 0.005;
+  viewer.canvas.addEventListener("pointerdown", event => {
+    if (event.button !== 1 || walkModeActive) return;
+    const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
+    if (pitchDeg < 85) return;
+    middlePointerId = event.pointerId;
+    lastMiddleRotateX = event.clientX;
+    viewer.canvas.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+  }, { passive: false, capture: true });
+  viewer.canvas.addEventListener("pointermove", event => {
+    if (middlePointerId === null || event.pointerId !== middlePointerId) return;
+    if ((event.buttons & 4) === 0) { middlePointerId = null; return; }
+    const deltaX = event.clientX - lastMiddleRotateX;
+    if (deltaX === 0) return;
+    lastMiddleRotateX = event.clientX;
+    const newHeading = viewer.camera.heading + deltaX * middleRotateSpeed;
+    viewer.camera.setView({
+      destination: viewer.camera.position,
+      orientation: { heading: newHeading, pitch: -Math.PI / 2, roll: 0 },
+    });
+    event.preventDefault();
+    event.stopPropagation();
+  }, { passive: false, capture: true });
+  viewer.canvas.addEventListener("pointerup", event => {
+    if (middlePointerId === null || event.pointerId !== middlePointerId) return;
+    middlePointerId = null;
+    event.preventDefault();
+    event.stopPropagation();
+  }, { passive: false, capture: true });
+  viewer.canvas.addEventListener("pointercancel", event => {
+    if (middlePointerId === null || event.pointerId !== middlePointerId) return;
+    middlePointerId = null;
+  }, { passive: false, capture: true });
 
   const walkHelpToggle = document.querySelector("#walk-help-toggle");
   if (walkHelpToggle) {
