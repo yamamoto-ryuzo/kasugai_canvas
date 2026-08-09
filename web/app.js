@@ -232,6 +232,14 @@ function updateCameraInputs() {
   document.querySelector("#camera-bearing").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const compass = document.querySelector("#compass-button");
   if (compass) compass.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg)`;
+  const topDownButton = document.querySelector("#top-down-button");
+  if (topDownButton) {
+    const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
+    const isTopDown = pitchDeg >= 85;
+    topDownButton.textContent = isTopDown ? "2D" : "3D";
+    topDownButton.setAttribute("aria-label", isTopDown ? "2D top-down view" : "3D perspective view");
+    topDownButton.setAttribute("title", isTopDown ? "2D top-down view" : "3D perspective view");
+  }
   updateUrlFromCamera();
 }
 
@@ -1171,15 +1179,20 @@ function setupEvents() {
     });
   });
 
+  let last3DPitch = 30;
   document.querySelector("#top-down-button").addEventListener("click", () => {
     const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
-    flyTo({
-      latitude: c.latitude * 180 / Math.PI,
-      longitude: c.longitude * 180 / Math.PI,
-      height: c.height,
-      pitch: 90,
-      bearing: viewer.camera.heading * 180 / Math.PI,
-    });
+    const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
+    const latitude = c.latitude * 180 / Math.PI;
+    const longitude = c.longitude * 180 / Math.PI;
+    const height = c.height;
+    const bearing = viewer.camera.heading * 180 / Math.PI;
+    if (pitchDeg >= 85) {
+      flyTo({ latitude, longitude, height, pitch: last3DPitch, bearing });
+    } else {
+      last3DPitch = pitchDeg;
+      flyTo({ latitude, longitude, height, pitch: 90, bearing });
+    }
   });
 
   const modeSelect = document.querySelector("#mode-select");
