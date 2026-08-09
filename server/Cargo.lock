@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "kasugai_canvas"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "axum",
  "reqwest",

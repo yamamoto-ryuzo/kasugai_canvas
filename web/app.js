@@ -1179,36 +1179,53 @@ function setupEvents() {
     });
   });
 
-  let last3DView = null;
+  let last3DPitch = null;
   document.querySelector("#top-down-button").addEventListener("click", () => {
     const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
     if (pitchDeg >= 85) {
       viewer.scene.screenSpaceCameraController.enableTilt = true;
-      if (last3DView) {
-        flyTo(last3DView);
-      } else {
-        const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+      const cameraCarto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+      const ray = new Cesium.Ray(viewer.camera.position, viewer.camera.direction);
+      const target = viewer.scene.globe.pick(ray, viewer.scene) || viewer.camera.position;
+      if (target === viewer.camera.position) {
         flyTo({
-          latitude: c.latitude * 180 / Math.PI,
-          longitude: c.longitude * 180 / Math.PI,
-          height: c.height,
-          pitch: 30,
+          latitude: cameraCarto.latitude * 180 / Math.PI,
+          longitude: cameraCarto.longitude * 180 / Math.PI,
+          height: cameraCarto.height,
+          pitch: last3DPitch ?? 30,
           bearing: viewer.camera.heading * 180 / Math.PI,
         });
+        return;
       }
+      const targetCarto = Cesium.Cartographic.fromCartesian(target);
+      const heightAboveTarget = Math.max(0, cameraCarto.height - targetCarto.height);
+      const tiltDeg = Math.max(1, last3DPitch ?? 30);
+      const tiltRad = tiltDeg * Math.PI / 180;
+      const heading = viewer.camera.heading;
+      const horizontalDistance = heightAboveTarget / Math.tan(tiltRad);
+      const east = -horizontalDistance * Math.sin(heading);
+      const north = -horizontalDistance * Math.cos(heading);
+      const up = heightAboveTarget;
+      const targetCartesian = Cesium.Cartesian3.fromRadians(targetCarto.longitude, targetCarto.latitude, targetCarto.height);
+      const enuToEcef = Cesium.Transforms.eastNorthUpToFixedFrame(targetCartesian, Cesium.Ellipsoid.WGS84, new Cesium.Matrix4());
+      const offset = new Cesium.Cartesian3(east, north, up);
+      const rotatedOffset = Cesium.Matrix4.multiplyByPointAsVector(enuToEcef, offset, new Cesium.Cartesian3());
+      const cameraPosition = Cesium.Cartesian3.add(targetCartesian, rotatedOffset, new Cesium.Cartesian3());
+      const newCarto = Cesium.Cartographic.fromCartesian(cameraPosition);
+      flyTo({
+        latitude: newCarto.latitude * 180 / Math.PI,
+        longitude: newCarto.longitude * 180 / Math.PI,
+        height: newCarto.height,
+        pitch: tiltDeg,
+        bearing: viewer.camera.heading * 180 / Math.PI,
+      });
     } else {
       viewer.scene.screenSpaceCameraController.enableTilt = false;
       const cameraCarto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
       const ray = new Cesium.Ray(viewer.camera.position, viewer.camera.direction);
       const target = viewer.scene.globe.pick(ray, viewer.scene) || viewer.camera.position;
       const targetCarto = Cesium.Cartographic.fromCartesian(target);
-      last3DView = {
-        latitude: cameraCarto.latitude * 180 / Math.PI,
-        longitude: cameraCarto.longitude * 180 / Math.PI,
-        height: cameraCarto.height,
-        pitch: pitchDeg,
-        bearing: viewer.camera.heading * 180 / Math.PI,
-      };
+      last3DPitch = pitchDeg;
       flyTo({
         latitude: targetCarto.latitude * 180 / Math.PI,
         longitude: targetCarto.longitude * 180 / Math.PI,
