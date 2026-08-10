@@ -25,12 +25,9 @@ const PROJECTS_DIRECTORY_NAME: &str = "projects";
 const PROJECT_CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
 const PROJECT_MANIFEST_FILE_NAME: &str = "project.json";
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
-const LATEST_JSON_URLS: [&str; 2] = [
-    "https://yamamoto-ryuzo.github.io/kasugai_canvas/download/latest.json",
+const LATEST_JSON_URLS: [&str; 1] = [
     "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/latest.json",
 ];
-const RELEASE_DOWNLOAD_URL: &str =
-    "https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest/download/kasugai_canvas.zip";
 const REPOSITORY_DOWNLOAD_URL: &str =
     "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip";
 
@@ -774,8 +771,8 @@ async fn install_update(
     let latest = fetch_latest().await?;
     let url = latest["platforms"]["windows-x86_64"]["url"]
         .as_str()
-        .unwrap_or(RELEASE_DOWNLOAD_URL);
-    if url != RELEASE_DOWNLOAD_URL && url != REPOSITORY_DOWNLOAD_URL {
+        .unwrap_or(REPOSITORY_DOWNLOAD_URL);
+    if url != REPOSITORY_DOWNLOAD_URL {
         return Err((
             StatusCode::BAD_REQUEST,
             "許可されていない更新ファイルURLです".to_string(),
@@ -791,29 +788,14 @@ async fn install_update(
         .await
         .map_err(internal_error)?;
 
-    let bytes = match reqwest::get(url).await {
-        Ok(response) => match response.error_for_status() {
-            Ok(response) => response.bytes().await.map_err(internal_error)?,
-            Err(_error) if url == RELEASE_DOWNLOAD_URL => reqwest::get(REPOSITORY_DOWNLOAD_URL)
-                .await
-                .map_err(internal_error)?
-                .error_for_status()
-                .map_err(internal_error)?
-                .bytes()
-                .await
-                .map_err(internal_error)?,
-            Err(error) => return Err(internal_error(error)),
-        },
-        Err(_error) if url == RELEASE_DOWNLOAD_URL => reqwest::get(REPOSITORY_DOWNLOAD_URL)
-            .await
-            .map_err(internal_error)?
-            .error_for_status()
-            .map_err(internal_error)?
-            .bytes()
-            .await
-            .map_err(internal_error)?,
-        Err(error) => return Err(internal_error(error)),
-    };
+    let bytes = reqwest::get(url)
+        .await
+        .map_err(internal_error)?
+        .error_for_status()
+        .map_err(internal_error)?
+        .bytes()
+        .await
+        .map_err(internal_error)?;
     tokio::fs::write(&zip_path, bytes)
         .await
         .map_err(internal_error)?;
@@ -848,7 +830,7 @@ async fn install_update(
 
     let script_path = tmp_dir.join("update.ps1");
     let script = format!(
-        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\nCopy-Item -Path $newExe -Destination $currentExe -Force\nStart-Process -FilePath $currentExe -ArgumentList '--open-browser' -WindowStyle Hidden\n",
+        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\nCopy-Item -Path $newExe -Destination $currentExe -Force\nStart-Process -FilePath $currentExe -WindowStyle Hidden\n",
         new = new_exe.to_string_lossy().replace('\'', "''"),
         current = current_exe.to_string_lossy().replace('\'', "''")
     );

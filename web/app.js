@@ -1717,10 +1717,36 @@ async function installUpdate(latestVersion = document.querySelector("#latest-ver
     }
     if (!response.ok) throw new Error(data.error || body || `HTTP ${response.status}`);
     document.querySelector("#version-status").textContent = data.message || "アップデートを開始しました";
+    void reloadAfterRestart();
   } catch (error) {
     document.querySelector("#version-status").textContent = `自動インストールエラー: ${error.message}`;
     button.disabled = false;
   }
+}
+
+async function reloadAfterRestart() {
+  const status = document.querySelector("#version-status");
+  const ping = async () => {
+    try {
+      const response = await fetch("/health", { cache: "no-store" });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  };
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  status.textContent = "更新中... サーバーの再起動を待っています";
+  // 旧サーバーの停止を待つ（早すぎるリロードを防ぐ）
+  for (let i = 0; i < 60 && await ping(); i++) await sleep(1000);
+  // 新サーバーの起動を待ってリロード（カメラ位置はURLハッシュから復元される）
+  for (let i = 0; i < 120; i++) {
+    await sleep(1000);
+    if (await ping()) {
+      window.location.reload();
+      return;
+    }
+  }
+  status.textContent = "再起動を確認できませんでした。手動でページを再読み込みしてください。";
 }
 
 async function saveUpdateSettings() {

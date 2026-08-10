@@ -178,20 +178,21 @@ def run_release() -> None:
 
 
 def publish_release() -> None:
-    """リリースビルド、コミット、タグ付け、プッシュまで行う。"""
+    """リリースビルド、コミット、プッシュまで行う。
+
+    自動更新は main ブランチの latest.json / kasugai_canvas.zip のみを参照するため、
+    タグは作成しない。
+    """
     build_release()
     cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
     cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
     if not cargo_match:
         raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
     version = cargo_match.group(1)
-    tag = f"v{version}"
     subprocess.run(["git", "add", "-A"], cwd=ROOT, check=True)
     subprocess.run(["git", "commit", "-m", f"{version} リリース"], cwd=ROOT, check=True)
-    subprocess.run(["git", "tag", "-a", tag, "-m", f"{version} リリース"], cwd=ROOT, check=True)
     subprocess.run(["git", "push"], cwd=ROOT, check=True)
-    subprocess.run(["git", "push", "origin", tag], cwd=ROOT, check=True)
-    print(f"バージョン {version} を {tag} タグ付きでリモートへプッシュしました。")
+    print(f"バージョン {version} をリモートへプッシュしました。")
 
 
 def main() -> None:
@@ -212,7 +213,7 @@ def main() -> None:
     group.add_argument(
         "--publish",
         action="store_true",
-        help="リリースビルド、コミット、タグ付け、リモートプッシュまで一括実行",
+        help="リリースビルド、コミット、リモートプッシュまで一括実行",
     )
     parser.add_argument(
         "--sync",
