@@ -3,12 +3,10 @@ import * as THREE from "three";
 const Cesium = window.Cesium;
 
 const urlParams = new URLSearchParams(window.location.search);
-const numberParam = (name, fallback) => {
-  const raw = urlParams.get(name);
-  if (raw === null || raw === "") return fallback;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : fallback;
-};
+// カメラ情報はハッシュ(#latitude=...)に置く。ハッシュはアドレスバーで書き換えても
+// ページが再読み込みされないため、前のビューからそのままFLYTOできる(Google Earth と同じ挙動)
+const initialCameraSource = window.location.search + window.location.hash;
+const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, zoom: 14, pitch: 30, bearing: 0 };
 
 const viewer = new Cesium.Viewer("deck-container", {
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
@@ -29,6 +27,17 @@ viewer.scene.globe.depthTestAgainstTerrain = true;
 viewer.scene.globe.enableLighting = false;
 viewer.imageryLayers.removeAll();
 viewer.camera.percentageChanged = 0.05;
+
+// リロード直後にデフォルトの地球全体ビューが見えるのを防ぐため、
+// 前回のカメラ位置（なければURLの座標）へ描画開始前に同期的に即セットする
+let lastCameraSearch = null;
+try { lastCameraSearch = sessionStorage.getItem("lastCameraSearch"); } catch (e) {}
+const lastCamera = lastCameraSearch ? parseUrlCamera(lastCameraSearch) : null;
+const hasLastCamera = !!(lastCamera && Number.isFinite(lastCamera.latitude) && Number.isFinite(lastCamera.longitude));
+{
+  const startupCamera = hasLastCamera ? lastCamera : parseUrlCamera(initialCameraSource);
+  if (Number.isFinite(startupCamera.latitude) && Number.isFinite(startupCamera.longitude)) flyTo(startupCamera, 0);
+}
 
 const basemaps = [];
 let selectedBasemap = null;
@@ -187,7 +196,7 @@ function setInspectorStatus(message, isError = false) {
   status.style.color = isError ? "#a82020" : "";
 }
 
-function flyTo(options = {}, duration = 1.5) {
+function flyTo(options = {}, duration = null) {
   const latitude = Number(options.latitude);
   const longitude = Number(options.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
@@ -203,9 +212,22 @@ function flyTo(options = {}, duration = 1.5) {
   const orientation = { heading, pitch, roll: 0 };
   if (duration === 0) {
     viewer.camera.setView({ destination, orientation });
-  } else {
-    viewer.camera.flyTo({ destination, orientation, duration });
+    return;
   }
+  const flight = { destination, orientation };
+  if (Number.isFinite(duration)) {
+    flight.duration = duration;
+  } else {
+    // Google Earth 風: 距離に応じて時間を伸ばし、一度ズームアウトしてから降下する弧を描く
+    const distance = Cesium.Cartesian3.distance(viewer.camera.position, destination);
+    flight.duration = Math.min(7, 1.0 + Math.log2(1 + distance / 1000) * 0.35);
+    if (distance > 20000) {
+      const currentHeight = Cesium.Cartographic.fromCartesian(viewer.camera.position).height;
+      const peak = Math.min(distance * 0.6, 4000000);
+      if (peak > Math.max(currentHeight, height)) flight.maximumHeight = peak;
+    }
+  }
+  viewer.camera.flyTo(flight);
 }
 
 function updateUrlFromCamera() {
@@ -216,13 +238,16 @@ function updateUrlFromCamera() {
   const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, Math.abs(c.height)))).toFixed(6);
   const params = new URLSearchParams(window.location.search);
-  params.set("latitude", lat);
-  params.set("longitude", lon);
-  params.set("zoom", zoom);
-  params.set("pitch", pitch);
-  params.set("bearing", bearing);
+  ["latitude", "longitude", "zoom", "pitch", "bearing"].forEach(key => params.delete(key));
   if (currentProjectId) params.set("project", currentProjectId);
-  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+  const hashParams = new URLSearchParams();
+  hashParams.set("latitude", lat);
+  hashParams.set("longitude", lon);
+  hashParams.set("zoom", zoom);
+  hashParams.set("pitch", pitch);
+  hashParams.set("bearing", bearing);
+  const search = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}#${hashParams.toString()}`);
 }
 
 function updateCameraInputs() {
@@ -1718,19 +1743,16 @@ setupEvents();
 setupThreeJs();
 applyInspector(defaultConfig);
 updateEffectSettings();
-const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, zoom: 14, pitch: 30, bearing: 0 };
-const urlCamera = {
-  latitude: numberParam("latitude"),
-  longitude: numberParam("longitude"),
-  zoom: numberParam("zoom", DEFAULT_VIEW.zoom),
-  pitch: numberParam("pitch", DEFAULT_VIEW.pitch),
-  bearing: numberParam("bearing", DEFAULT_VIEW.bearing),
-};
+const urlCamera = parseUrlCamera(initialCameraSource);
 
-function parseUrlCamera(search = window.location.search) {
-  const params = new URLSearchParams(search);
+function parseUrlCamera(source = window.location.search + window.location.hash) {
+  const hashIndex = source.indexOf("#");
+  const searchPart = hashIndex >= 0 ? source.slice(0, hashIndex) : source;
+  const hashPart = hashIndex >= 0 ? source.slice(hashIndex + 1) : "";
+  const searchParams = new URLSearchParams(searchPart.startsWith("?") ? searchPart.slice(1) : searchPart);
+  const hashParams = new URLSearchParams(hashPart);
   const getNumber = (name, fallback) => {
-    const raw = params.get(name);
+    const raw = hashParams.get(name) ?? searchParams.get(name);
     if (raw === null || raw === "") return fallback;
     const value = Number(raw);
     return Number.isFinite(value) ? value : fallback;
@@ -1778,7 +1800,7 @@ window.addEventListener("hashchange", applyUrlCamera);
 
 window.addEventListener("pagehide", () => {
   try {
-    sessionStorage.setItem("lastCameraSearch", window.location.search);
+    sessionStorage.setItem("lastCameraSearch", window.location.search + window.location.hash);
   } catch (e) {}
 });
 
@@ -1787,12 +1809,9 @@ window.addEventListener("pagehide", () => {
   try { await loadInspectorConfig(); } catch (e) { console.error(e); }
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }
   const initialCamera = await resolveInitialCamera();
-  const lastSearch = sessionStorage.getItem("lastCameraSearch");
-  const lastCamera = lastSearch ? parseUrlCamera(lastSearch) : null;
-  const hasLast = lastCamera && Number.isFinite(lastCamera.latitude) && Number.isFinite(lastCamera.longitude);
-  if (hasLast && lastSearch !== window.location.search) {
-    flyTo(lastCamera, 0);                         // 前のURLの位置に即セット
-    if (initialCamera) flyTo(initialCamera, 1.5);  // 新しいURLへFLYTO
+  // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
+  if (hasLastCamera && lastCameraSearch !== initialCameraSource) {
+    if (initialCamera) flyTo(initialCamera);      // 前回の位置から新しいURLへGoogle Earth風にFLYTO
   } else {
     if (initialCamera) flyTo(initialCamera, 0);   // 履歴がない or 同じURL
   }

@@ -4,7 +4,7 @@
 
 ## バージョン管理
 
-現在のバージョンは **1.0.6** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
+現在のバージョンは **1.0.7** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
 
 公開・リリース管理は次の場所で行います。
 
