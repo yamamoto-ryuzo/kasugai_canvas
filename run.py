@@ -38,10 +38,6 @@ def check_versions() -> None:
     nsi_product = product_match.group(1).rsplit(".", 1)[0] if product_match else None
     nsi_file = file_match.group(1) if file_match else None
 
-    latest = (DOWNLOAD_DIR / "latest.json").read_text(encoding="utf-8")
-    latest_match = re.search(r'"version"\s*:\s*"([^"]+)"', latest)
-    latest_version = latest_match.group(1) if latest_match else None
-
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_match = re.search(r"現在のバージョンは \*\*([^*]+)\*\* です。", readme)
     readme_version = readme_match.group(1) if readme_match else None
@@ -54,7 +50,6 @@ def check_versions() -> None:
     files = {
         "installer/kasugai_canvas.nsi (VIProductVersion)": nsi_product,
         "installer/kasugai_canvas.nsi (FileVersion)": nsi_file,
-        "download/latest.json": latest_version,
         "README.md": readme_version,
         "CHANGELOG.md": changelog_version,
     }
@@ -71,25 +66,30 @@ def check_versions() -> None:
     print(f"バージョン整合性チェック完了: {cargo_version}", file=sys.stderr, flush=True)
 
 
-def sync_versions() -> None:
-    """server/Cargo.toml のバージョンを他の公開ファイルへ同期する。"""
+def sync_versions(write_latest: bool = True) -> None:
+    """server/Cargo.toml のバージョンを他の公開ファイルへ同期する。
+
+    write_latest=False の場合、latest.json には書き込まず、README と NSIS メタデータのみ同期する。
+    リリースビルドの途中で latest.json を更新しないようにするためのオプション。
+    """
     cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
     cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
     if not cargo_match:
         raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
     cargo_version = cargo_match.group(1)
 
-    latest_json = {
-        "version": cargo_version,
-        "notes": f"KASUGAI Canvas {cargo_version}",
-        "pub_date": datetime.date.today().isoformat(),
-        "platforms": {
-            "windows-x86_64": {
-                "url": "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip"
+    if write_latest:
+        latest_json = {
+            "version": cargo_version,
+            "notes": f"KASUGAI Canvas {cargo_version}",
+            "pub_date": datetime.date.today().isoformat(),
+            "platforms": {
+                "windows-x86_64": {
+                    "url": "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip"
+                }
             }
         }
-    }
-    (DOWNLOAD_DIR / "latest.json").write_text(json.dumps(latest_json, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (DOWNLOAD_DIR / "latest.json").write_text(json.dumps(latest_json, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme = re.sub(r"(現在のバージョンは \*\*)[^*]+(\*\* です。)", lambda m: f"{m.group(1)}{cargo_version}{m.group(2)}", readme)
@@ -143,16 +143,16 @@ def build_installer() -> None:
 
 def build_release() -> None:
     """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。"""
-    sync_versions()
+    sync_versions(write_latest=False)
     check_versions()
     subprocess.run(["cargo", "build", "--release"], cwd=SERVER_DIR, check=True)
     if not TARGET_EXE.exists():
-        raise FileNotFoundError(f"ビルド済み実行ファイルが見つかりません: {TARGET_EXE}")
+        raise FileNotFoundError(f"ビルド済み実行ファイルがみつかりません: {TARGET_EXE}")
 
     if not SAMPLE_CONFIG.exists():
-        raise FileNotFoundError(f"初期サンプル設定が見つかりません: {SAMPLE_CONFIG}")
+        raise FileNotFoundError(f"初期サンプル設定がみつかりません: {SAMPLE_CONFIG}")
     if not SAMPLE_PROJECTS.exists():
-        raise FileNotFoundError(f"初期サンプルプロジェクトが見つかりません: {SAMPLE_PROJECTS}")
+        raise FileNotFoundError(f"初期サンプルプロジェクトがみつかりません: {SAMPLE_PROJECTS}")
 
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(DOWNLOAD_ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
@@ -163,6 +163,7 @@ def build_release() -> None:
                 archive.write(project_file, arcname=(Path("projects") / project_file.relative_to(SAMPLE_PROJECTS)).as_posix())
     print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
     build_installer()
+    sync_versions(write_latest=True)
 
 
 def run_release() -> None:
