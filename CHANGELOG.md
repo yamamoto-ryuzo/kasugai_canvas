@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-08-10
+
+### Added
+
+- URL パラメータ変更時（popstate/hashchange）にページ再読み込みなしでカメラを FLYTO する機能
+- pagehide イベントで前回 URL のカメラ情報を sessionStorage に保存し、再読み込み時に前の位置から新しい URL へ FLYTO する機能
+- `flyTo` 関数に duration パラメータを追加（0 の場合は setView）
+
+### Changed
+
+- 初期表示時に地球儀を表示してから FLYTO することを避けるため、初期カメラを setView で即座に配置するように変更
+- `parseUrlCamera` を任意の query string を受け取れるように変更
+
 ## [1.0.5] - 2026-08-09
 
 ### Changed

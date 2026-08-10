@@ -187,7 +187,7 @@ function setInspectorStatus(message, isError = false) {
   status.style.color = isError ? "#a82020" : "";
 }
 
-function flyTo(options = {}) {
+function flyTo(options = {}, duration = 1.5) {
   const latitude = Number(options.latitude);
   const longitude = Number(options.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
@@ -199,11 +199,13 @@ function flyTo(options = {}) {
   }
   const pitch = -Math.max(-90, Math.min(90, Number(options.pitch) || 0)) * Math.PI / 180;
   const heading = (Number(options.bearing) || 0) * Math.PI / 180;
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, height),
-    orientation: { heading, pitch, roll: 0 },
-    duration: 1.5,
-  });
+  const destination = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
+  const orientation = { heading, pitch, roll: 0 };
+  if (duration === 0) {
+    viewer.camera.setView({ destination, orientation });
+  } else {
+    viewer.camera.flyTo({ destination, orientation, duration });
+  }
 }
 
 function updateUrlFromCamera() {
@@ -1725,6 +1727,23 @@ const urlCamera = {
   bearing: numberParam("bearing", DEFAULT_VIEW.bearing),
 };
 
+function parseUrlCamera(search = window.location.search) {
+  const params = new URLSearchParams(search);
+  const getNumber = (name, fallback) => {
+    const raw = params.get(name);
+    if (raw === null || raw === "") return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : fallback;
+  };
+  return {
+    latitude: getNumber("latitude"),
+    longitude: getNumber("longitude"),
+    zoom: getNumber("zoom", DEFAULT_VIEW.zoom),
+    pitch: getNumber("pitch", DEFAULT_VIEW.pitch),
+    bearing: getNumber("bearing", DEFAULT_VIEW.bearing),
+  };
+}
+
 async function resolveInitialCamera() {
   if (Number.isFinite(urlCamera.latitude) && Number.isFinite(urlCamera.longitude)) {
     return urlCamera;
@@ -1747,11 +1766,35 @@ async function resolveInitialCamera() {
   return DEFAULT_VIEW;
 }
 
+function applyUrlCamera() {
+  const camera = parseUrlCamera();
+  if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) {
+    flyTo(camera);
+  }
+}
+
+window.addEventListener("popstate", applyUrlCamera);
+window.addEventListener("hashchange", applyUrlCamera);
+
+window.addEventListener("pagehide", () => {
+  try {
+    sessionStorage.setItem("lastCameraSearch", window.location.search);
+  } catch (e) {}
+});
+
 (async () => {
   try { await loadProjects(); } catch (e) { console.error(e); }
   try { await loadInspectorConfig(); } catch (e) { console.error(e); }
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }
   const initialCamera = await resolveInitialCamera();
-  if (initialCamera) flyTo(initialCamera);
+  const lastSearch = sessionStorage.getItem("lastCameraSearch");
+  const lastCamera = lastSearch ? parseUrlCamera(lastSearch) : null;
+  const hasLast = lastCamera && Number.isFinite(lastCamera.latitude) && Number.isFinite(lastCamera.longitude);
+  if (hasLast && lastSearch !== window.location.search) {
+    flyTo(lastCamera, 0);                         // 前のURLの位置に即セット
+    if (initialCamera) flyTo(initialCamera, 1.5);  // 新しいURLへFLYTO
+  } else {
+    if (initialCamera) flyTo(initialCamera, 0);   // 履歴がない or 同じURL
+  }
   renderPresets();
 })();
