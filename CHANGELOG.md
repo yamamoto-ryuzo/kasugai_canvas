@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+## [1.0.9] - 2026-08-11
+
+### Changed
+
+- URL カメラ管理を Cesium ネイティブな `height` / `heading` / `pitch`（度数法）に変更
+  - `zoom` パラメータを廃止し、楕円体高メートル `height` で管理
+  - `bearing` を Cesium 用語の `heading` に変更
+  - 古い deck.gl 実装 `web/app.deck.legacy.js` を削除
+- タイルソースの最大詳細度表記を `maxZoom` から Cesium 用語の `maximumLevel` に統一
+  - 設定中の `maxZoom` は互換 alias として引き続き読み込み可能
+- カメラプリセット `cam:` 行で `height=` / `heading=` / `pitch=` のフルネームを使用可能に変更
+  - 従来の `h=` / `d=` / `p=` も引き続き利用可能
+
 ## [1.0.8] - 2026-08-10
 
 ### Changed

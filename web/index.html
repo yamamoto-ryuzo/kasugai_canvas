@@ -41,9 +41,9 @@
               <div class="camera-grid">
                 <input id="camera-longitude" type="number" step="any" aria-label="Longitude" />
                 <input id="camera-latitude" type="number" step="any" aria-label="Latitude" />
-                <input id="camera-zoom" type="number" step="any" aria-label="Zoom" />
+                <input id="camera-height" type="number" step="any" aria-label="Height" />
                 <input id="camera-pitch" type="number" step="any" aria-label="Pitch" />
-                <input id="camera-bearing" type="number" step="any" aria-label="Bearing" />
+                <input id="camera-heading" type="number" step="any" aria-label="Heading" />
               </div>
               <button id="apply-camera" type="button">Apply camera</button>
             </section>
@@ -77,9 +77,9 @@
                 </div>
                 <label class="field-label" for="dem-source">DEM</label>
                 <select id="dem-source">
-                  <option value="reearth-ellipsoid" selected>Re:Earth Terrain (楕円体高 / WGS84, zoom 19)</option>
-                  <option value="reearth">Re:Earth Terrain (標高 / MSL, zoom 19)</option>
-                  <option value="terrarium">Terrarium DEM (AWS, zoom 15)</option>
+                  <option value="reearth-ellipsoid" selected>Re:Earth Terrain (楕円体高 / WGS84, level 19)</option>
+                  <option value="reearth">Re:Earth Terrain (標高 / MSL, level 19)</option>
+                  <option value="terrarium">Terrarium DEM (AWS, level 15)</option>
                 </select>
               </section>
               <section id="settings-project-panel" class="settings-subpanel">

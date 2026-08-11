@@ -6,7 +6,7 @@ const urlParams = new URLSearchParams(window.location.search);
 // カメラ情報はハッシュ(#latitude=...)に置く。ハッシュはアドレスバーで書き換えても
 // ページが再読み込みされないため、前のビューからそのままFLYTOできる(Google Earth と同じ挙動)
 const initialCameraSource = window.location.search + window.location.hash;
-const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, zoom: 14, pitch: 30, bearing: 0 };
+const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, height: 2000, pitch: 30, heading: 0 };
 
 const viewer = new Cesium.Viewer("deck-container", {
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
@@ -65,25 +65,25 @@ const drapeTerrainSources = { dem: true, tiles3d: false };
 const drapeLayers = { xyz: true, geojson: true };
 const demSources = {
   reearth: {
-    title: "Re:Earth Terrain (標高 / MSL, zoom 19)",
+    title: "Re:Earth Terrain (標高 / MSL, level 19)",
     url: "https://terrain.reearth.land/cesium-mesh/msl",
   },
   "reearth-ellipsoid": {
-    title: "Re:Earth Terrain (楕円体高 / WGS84, zoom 19)",
+    title: "Re:Earth Terrain (楕円体高 / WGS84, level 19)",
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
   terrarium: {
-    title: "Terrarium DEM (AWS, zoom 15)",
+    title: "Terrarium DEM (AWS, level 15)",
     elevationData: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
     elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
     tileSize: 256,
-    maxZoom: 15,
+    maximumLevel: 15,
     attribution: "Mapzen Terrarium · AWS",
     attributionUrl: "https://registry.opendata.aws/terrain-tiles/",
   },
 };
 let selectedDemSource = "reearth-ellipsoid";
-const maxZoom = 25;
+const DEFAULT_MAXIMUM_LEVEL = 25;
 
 let threeRenderer;
 let threeScene;
@@ -200,14 +200,10 @@ function flyTo(options = {}, duration = null) {
   const latitude = Number(options.latitude);
   const longitude = Number(options.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-  const latRad = latitude * Math.PI / 180;
   let height = Number(options.height);
-  if (!Number.isFinite(height)) {
-    const zoom = Number(options.zoom);
-    height = Number.isFinite(zoom) ? Math.max(10, 156543.03392 * 256 * Math.max(0.2, Math.cos(latRad)) / (2 ** zoom)) : 1000;
-  }
+  if (!Number.isFinite(height)) height = DEFAULT_VIEW.height;
   const pitch = -Math.max(-90, Math.min(90, Number(options.pitch) || 0)) * Math.PI / 180;
-  const heading = (Number(options.bearing) || 0) * Math.PI / 180;
+  const heading = (Number(options.heading) || 0) * Math.PI / 180;
   const destination = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
   const orientation = { heading, pitch, roll: 0 };
   if (duration === 0) {
@@ -235,17 +231,17 @@ function updateUrlFromCamera() {
   const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
   const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
   const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
-  const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-  const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, Math.abs(c.height)))).toFixed(6);
+  const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
+  const height = Number(c.height).toFixed(1);
   const params = new URLSearchParams(window.location.search);
-  ["latitude", "longitude", "zoom", "pitch", "bearing"].forEach(key => params.delete(key));
+  ["latitude", "longitude", "height", "pitch", "heading"].forEach(key => params.delete(key));
   if (currentProjectId) params.set("project", currentProjectId);
   const hashParams = new URLSearchParams();
   hashParams.set("latitude", lat);
   hashParams.set("longitude", lon);
-  hashParams.set("zoom", zoom);
+  hashParams.set("height", height);
   hashParams.set("pitch", pitch);
-  hashParams.set("bearing", bearing);
+  hashParams.set("heading", heading);
   const search = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}#${hashParams.toString()}`);
 }
@@ -254,9 +250,9 @@ function updateCameraInputs() {
   const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.position);
   document.querySelector("#camera-latitude").value = Number(cartographic.latitude * 180 / Math.PI).toFixed(6);
   document.querySelector("#camera-longitude").value = Number(cartographic.longitude * 180 / Math.PI).toFixed(6);
-  document.querySelector("#camera-zoom").value = Number(cartographic.height).toFixed(1);
+  document.querySelector("#camera-height").value = Number(cartographic.height).toFixed(1);
   document.querySelector("#camera-pitch").value = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
-  document.querySelector("#camera-bearing").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
+  document.querySelector("#camera-heading").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const compass = document.querySelector("#compass-button");
   if (compass) compass.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg)`;
   const topDownButton = document.querySelector("#top-down-button");
@@ -494,9 +490,9 @@ class TerrariumTerrainProvider {
     this.hasWaterMask = false;
     this.elevationData = proxyTemplateUrl(options.elevationData);
     this.elevationDecoder = options.elevationDecoder;
-    this.maxZoom = options.maxZoom || 15;
+    this.maximumLevel = options.maximumLevel || 15;
     this.availability = {
-      isTileAvailable: (level, x, y) => level <= this.maxZoom && x >= 0 && y >= 0,
+      isTileAvailable: (level, x, y) => level <= this.maximumLevel && x >= 0 && y >= 0,
     };
   }
 
@@ -505,7 +501,7 @@ class TerrariumTerrainProvider {
   }
 
   requestTileGeometry(x, y, level, request) {
-    if (level > this.maxZoom) return Promise.reject(new Error("Tile out of range"));
+    if (level > this.maximumLevel) return Promise.reject(new Error("Tile out of range"));
     const url = formatTileUrl(this.elevationData, { x, y, z: level });
     return fetch(url, { mode: "cors" })
       .then(async response => {
@@ -536,7 +532,7 @@ class TerrariumTerrainProvider {
           buffer: heights,
           width: this.heightmapWidth,
           height: this.heightmapHeight,
-          childTileMask: level === this.maxZoom ? 0 : 15,
+          childTileMask: level === this.maximumLevel ? 0 : 15,
           structure: {
             heightScale: 1.0,
             heightOffset: 0.0,
@@ -588,7 +584,7 @@ function createUrlTemplateProvider(options) {
   return new Cesium.UrlTemplateImageryProvider({
     url: proxyTemplateUrl(options.url, options.proxy !== false),
     credit: new Cesium.Credit(options.attribution || ""),
-    maximumLevel: options.maxZoom || maxZoom,
+    maximumLevel: options.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
     tileWidth: options.tileSize || 256,
     tileHeight: options.tileSize || 256,
   });
@@ -720,7 +716,7 @@ async function refreshLayers() {
       drapeProviders.push({
         url: selectedBasemap.url,
         attribution: selectedBasemap.attribution,
-        maxZoom: selectedBasemap.maxZoom || maxZoom,
+        maximumLevel: selectedBasemap.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
         tileSize: selectedBasemap.tileSize || 256,
         opacity: selectedBasemap.opacity ?? 1.0,
         proxy: selectedBasemap.proxy,
@@ -731,7 +727,7 @@ async function refreshLayers() {
         drapeProviders.push({
           url: item.url,
           attribution: item.attribution,
-          maxZoom: item.maxZoom || maxZoom,
+          maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
           tileSize: item.tileSize || 256,
           opacity: item.opacity ?? 0.8,
           proxy: item.proxy,
@@ -746,7 +742,7 @@ async function refreshLayers() {
       const provider = createUrlTemplateProvider({
         url: selectedBasemap.url,
         attribution: selectedBasemap.attribution,
-        maxZoom: selectedBasemap.maxZoom || maxZoom,
+        maximumLevel: selectedBasemap.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
         tileSize: selectedBasemap.tileSize || 256,
       });
       viewer.imageryLayers.add(new Cesium.ImageryLayer(provider, { alpha: selectedBasemap.opacity ?? 1.0 }));
@@ -763,7 +759,7 @@ async function refreshLayers() {
       const provider = createUrlTemplateProvider({
         url: item.url,
         attribution: item.attribution,
-        maxZoom: item.maxZoom || maxZoom,
+        maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
         tileSize: item.tileSize || 256,
       });
       viewer.imageryLayers.add(new Cesium.ImageryLayer(provider, { alpha: item.opacity ?? 0.8 }));
@@ -923,7 +919,7 @@ function applyInspector(text) {
           const raw = part.slice(eq + 1).trim();
           const number = Number(raw);
           if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
-          if (key === "maxZoom" && Number.isInteger(number) && number >= 0) options.maxZoom = number;
+          if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
           if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
           if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
         });
@@ -935,7 +931,7 @@ function applyInspector(text) {
           tileSize: options.tileSize || 256,
           opacity: options.opacity ?? 1.0,
           proxy: options.proxy !== false,
-          ...(options.maxZoom === undefined ? {} : { maxZoom: options.maxZoom }),
+          ...(options.maximumLevel === undefined ? {} : { maximumLevel: options.maximumLevel }),
         });
       }
     }
@@ -943,13 +939,13 @@ function applyInspector(text) {
     if (type === "cam") {
       const parts = value.split("|").map(part => part.trim());
       if (parts.length < 3) return;
-      const camera = { title: parts[0], latitude: Number(parts[1]), longitude: Number(parts[2]), pitch: 30, bearing: 0 };
+      const camera = { title: parts[0], latitude: Number(parts[1]), longitude: Number(parts[2]), pitch: 30, heading: 0 };
       parts.slice(3).forEach(part => {
         const [key, raw] = part.split("=");
         const number = Number(raw);
-        if (key === "p" && Number.isFinite(number)) camera.pitch = Math.abs(number);
-        if (key === "d" && Number.isFinite(number)) camera.bearing = number;
-        if (key === "h" && Number.isFinite(number)) camera.height = number;
+        if ((key === "p" || key === "pitch") && Number.isFinite(number)) camera.pitch = Math.abs(number);
+        if ((key === "d" || key === "heading") && Number.isFinite(number)) camera.heading = number;
+        if ((key === "h" || key === "height") && Number.isFinite(number)) camera.height = number;
       });
       if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) parsedCameras.push(camera);
     }
@@ -969,13 +965,13 @@ function applyInspector(text) {
         const raw = part.slice(eq + 1).trim();
         const number = Number(raw);
         if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
-        if (key === "maxZoom" && Number.isInteger(number) && number >= 0) options.maxZoom = number;
+        if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
         if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
         if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
       });
       const id = `inspector-layer-${inspectorLayerIndex++}`;
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", proxy: options.proxy !== false, group, exclusiveGroup };
-      if (options.maxZoom !== undefined) item.maxZoom = options.maxZoom;
+      if (options.maximumLevel !== undefined) item.maximumLevel = options.maximumLevel;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
       tileLayers.push(item);
       layerState.set(id, item);
@@ -1059,7 +1055,7 @@ function setupEvents() {
 
   document.querySelector("#apply-camera").addEventListener("click", () => {
     const next = {};
-    ["longitude", "latitude", "zoom", "pitch", "bearing"].forEach(key => {
+    ["longitude", "latitude", "height", "pitch", "heading"].forEach(key => {
       const value = Number(document.querySelector(`#camera-${key}`).value);
       if (Number.isFinite(value)) next[key] = value;
     });
@@ -1090,7 +1086,7 @@ function setupEvents() {
       results.innerHTML = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
         .map((item, index) => `<button type="button" data-search-index="${index}">${escapeHtml(item.title)}</button>`).join("");
       results.querySelectorAll("[data-search-index]").forEach(button => {
-        button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, zoom: 19, pitch: 30 }));
+        button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, height: 300, pitch: 30 }));
       });
     } catch (error) {
       results.textContent = error instanceof Error ? error.message : "検索に失敗しました。";
@@ -1202,7 +1198,7 @@ function setupEvents() {
       longitude: c.longitude * 180 / Math.PI,
       height: c.height,
       pitch: -viewer.camera.pitch * 180 / Math.PI,
-      bearing: 0,
+      heading: 0,
     });
   });
 
@@ -1220,7 +1216,7 @@ function setupEvents() {
           longitude: cameraCarto.longitude * 180 / Math.PI,
           height: cameraCarto.height,
           pitch: last3DPitch ?? 30,
-          bearing: viewer.camera.heading * 180 / Math.PI,
+          heading: viewer.camera.heading * 180 / Math.PI,
         });
         return;
       }
@@ -1244,7 +1240,7 @@ function setupEvents() {
         longitude: newCarto.longitude * 180 / Math.PI,
         height: newCarto.height,
         pitch: tiltDeg,
-        bearing: viewer.camera.heading * 180 / Math.PI,
+        heading: viewer.camera.heading * 180 / Math.PI,
       });
     } else {
       viewer.scene.screenSpaceCameraController.enableTilt = false;
@@ -1258,7 +1254,7 @@ function setupEvents() {
         longitude: targetCarto.longitude * 180 / Math.PI,
         height: cameraCarto.height,
         pitch: 90,
-        bearing: viewer.camera.heading * 180 / Math.PI,
+        heading: viewer.camera.heading * 180 / Math.PI,
       });
     }
   });
@@ -1444,9 +1440,9 @@ function setupEvents() {
     const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
     const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
     const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
-    const bearing = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-    const zoom = Number(Math.log2(156543.03392 * 256 * Math.max(0.2, Math.cos(c.latitude)) / Math.max(1, Math.abs(c.height)))).toFixed(6);
-    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&zoom=${zoom}&pitch=${pitch}&bearing=${bearing}&project=${encodeURIComponent(currentProjectId)}`;
+    const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
+    const height = Number(c.height).toFixed(1);
+    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
     document.querySelector("#share-url").value = url;
     await navigator.clipboard?.writeText(url);
   });
@@ -1762,7 +1758,7 @@ async function saveUpdateSettings() {
 
 const defaultConfig = `base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院
 3dtiles: 東京都/千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json
-cam:東京駅|35.653108|139.761449|h=2200.6|p=-30|d=348.5`;
+cam:東京駅|35.653108|139.761449|height=2200.6|pitch=-30|heading=348.5`;
 
 document.querySelector("#current-port").value = window.location.port || (window.location.protocol === "https:" ? "443" : "8510");
 setupEvents();
@@ -1786,9 +1782,9 @@ function parseUrlCamera(source = window.location.search + window.location.hash) 
   return {
     latitude: getNumber("latitude"),
     longitude: getNumber("longitude"),
-    zoom: getNumber("zoom", DEFAULT_VIEW.zoom),
+    height: getNumber("height", DEFAULT_VIEW.height),
     pitch: getNumber("pitch", DEFAULT_VIEW.pitch),
-    bearing: getNumber("bearing", DEFAULT_VIEW.bearing),
+    heading: getNumber("heading", DEFAULT_VIEW.heading),
   };
 }
 
@@ -1806,7 +1802,7 @@ async function resolveInitialCamera() {
     const latitude = Number(data.latitude);
     const longitude = Number(data.longitude);
     if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-      return { latitude, longitude, zoom: 10, pitch: DEFAULT_VIEW.pitch, bearing: 0 };
+      return { latitude, longitude, height: 10000, pitch: DEFAULT_VIEW.pitch, heading: 0 };
     }
   } catch (error) {
     console.warn("IP geolocation failed", error);
