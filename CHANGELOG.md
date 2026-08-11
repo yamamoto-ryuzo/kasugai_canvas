@@ -11,6 +11,12 @@
 - カメラ `pitch` の符号を Cesium ネイティブ (`camera.pitch`) に統一
   - 水平を `0°`、上向きを `+`、真下を `−90°` とする
 
+### Fixed
+
+- 2D/3D 切り替えボタンの判定を `pitch` 値から `screenSpaceCameraController.enableTilt` に変更
+  - 自動同期で `pitch=-90` が渡された場合も、傾斜操作が有効な限り「3D」表示のまま維持
+  - 真上からの 3D 視点と 2D トップダウンモードを明確に区別
+
 ## [1.0.9] - 2026-08-11
 
 ### Changed
