@@ -259,6 +259,8 @@ KASUGAI cameraState
 QGIS処理層へ中心座標・範囲を通知
 ```
 
+`pitch` は Cesium の `camera.pitch` と同じ符号（水平 0°、真上 +90°、真下 −90°）を採用します。
+
 QGISプロジェクトのCRSからKASUGAIの表示用座標系へ変換する。通常のWeb表示ではWGS84経度緯度を基本とし、編集・解析時は元レイヤーのCRSを維持する。
 
 ## 5.9 現行実装と構想の境界

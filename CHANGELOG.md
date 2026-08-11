@@ -4,7 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
-## [Unreleased]
+## [1.0.10] - 2026-08-11
+
+### Changed
+
+- カメラ `pitch` の符号を Cesium ネイティブ (`camera.pitch`) に統一
+  - 水平を `0°`、上向きを `+`、真下を `−90°` とする
 
 ## [1.0.9] - 2026-08-11
 

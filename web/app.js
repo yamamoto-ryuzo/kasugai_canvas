@@ -6,7 +6,7 @@ const urlParams = new URLSearchParams(window.location.search);
 // カメラ情報はハッシュ(#latitude=...)に置く。ハッシュはアドレスバーで書き換えても
 // ページが再読み込みされないため、前のビューからそのままFLYTOできる(Google Earth と同じ挙動)
 const initialCameraSource = window.location.search + window.location.hash;
-const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, height: 2000, pitch: 30, heading: 0 };
+const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, height: 2000, pitch: -30, heading: 0 };
 
 const viewer = new Cesium.Viewer("deck-container", {
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
@@ -202,7 +202,7 @@ function flyTo(options = {}, duration = null) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   let height = Number(options.height);
   if (!Number.isFinite(height)) height = DEFAULT_VIEW.height;
-  const pitch = -Math.max(-90, Math.min(90, Number(options.pitch) || 0)) * Math.PI / 180;
+  const pitch = Math.max(-90, Math.min(90, Number(options.pitch) || 0)) * Math.PI / 180;
   const heading = (Number(options.heading) || 0) * Math.PI / 180;
   const destination = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
   const orientation = { heading, pitch, roll: 0 };
@@ -230,7 +230,7 @@ function updateUrlFromCamera() {
   const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
   const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
   const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
-  const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
+  const pitch = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
   const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const height = Number(c.height).toFixed(1);
   const params = new URLSearchParams(window.location.search);
@@ -251,14 +251,14 @@ function updateCameraInputs() {
   document.querySelector("#camera-latitude").value = Number(cartographic.latitude * 180 / Math.PI).toFixed(6);
   document.querySelector("#camera-longitude").value = Number(cartographic.longitude * 180 / Math.PI).toFixed(6);
   document.querySelector("#camera-height").value = Number(cartographic.height).toFixed(1);
-  document.querySelector("#camera-pitch").value = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
+  document.querySelector("#camera-pitch").value = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
   document.querySelector("#camera-heading").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const compass = document.querySelector("#compass-button");
   if (compass) compass.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg)`;
   const topDownButton = document.querySelector("#top-down-button");
   if (topDownButton) {
-    const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
-    const isTopDown = pitchDeg >= 85;
+    const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
+    const isTopDown = pitchDeg <= -85;
     topDownButton.textContent = isTopDown ? "2D" : "3D";
     topDownButton.setAttribute("aria-label", isTopDown ? "2D top-down view" : "3D perspective view");
     topDownButton.setAttribute("title", isTopDown ? "2D top-down view" : "3D perspective view");
@@ -939,11 +939,11 @@ function applyInspector(text) {
     if (type === "cam") {
       const parts = value.split("|").map(part => part.trim());
       if (parts.length < 3) return;
-      const camera = { title: parts[0], latitude: Number(parts[1]), longitude: Number(parts[2]), pitch: 30, heading: 0 };
+      const camera = { title: parts[0], latitude: Number(parts[1]), longitude: Number(parts[2]), pitch: -30, heading: 0 };
       parts.slice(3).forEach(part => {
         const [key, raw] = part.split("=");
         const number = Number(raw);
-        if ((key === "p" || key === "pitch") && Number.isFinite(number)) camera.pitch = Math.abs(number);
+        if ((key === "p" || key === "pitch") && Number.isFinite(number)) camera.pitch = number;
         if ((key === "d" || key === "heading") && Number.isFinite(number)) camera.heading = number;
         if ((key === "h" || key === "height") && Number.isFinite(number)) camera.height = number;
       });
@@ -1086,7 +1086,7 @@ function setupEvents() {
       results.innerHTML = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
         .map((item, index) => `<button type="button" data-search-index="${index}">${escapeHtml(item.title)}</button>`).join("");
       results.querySelectorAll("[data-search-index]").forEach(button => {
-        button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, height: 300, pitch: 30 }));
+        button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, height: 300, pitch: -30 }));
       });
     } catch (error) {
       results.textContent = error instanceof Error ? error.message : "検索に失敗しました。";
@@ -1197,15 +1197,15 @@ function setupEvents() {
       latitude: c.latitude * 180 / Math.PI,
       longitude: c.longitude * 180 / Math.PI,
       height: c.height,
-      pitch: -viewer.camera.pitch * 180 / Math.PI,
+      pitch: viewer.camera.pitch * 180 / Math.PI,
       heading: 0,
     });
   });
 
   let last3DPitch = null;
   document.querySelector("#top-down-button").addEventListener("click", () => {
-    const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
-    if (pitchDeg >= 85) {
+    const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
+    if (pitchDeg <= -85) {
       viewer.scene.screenSpaceCameraController.enableTilt = true;
       const cameraCarto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
       const ray = new Cesium.Ray(viewer.camera.position, viewer.camera.direction);
@@ -1215,14 +1215,14 @@ function setupEvents() {
           latitude: cameraCarto.latitude * 180 / Math.PI,
           longitude: cameraCarto.longitude * 180 / Math.PI,
           height: cameraCarto.height,
-          pitch: last3DPitch ?? 30,
+          pitch: last3DPitch ?? -30,
           heading: viewer.camera.heading * 180 / Math.PI,
         });
         return;
       }
       const targetCarto = Cesium.Cartographic.fromCartesian(target);
       const heightAboveTarget = Math.max(0, cameraCarto.height - targetCarto.height);
-      const tiltDeg = Math.max(1, last3DPitch ?? 30);
+      const tiltDeg = Math.max(1, -(last3DPitch ?? -30));
       const tiltRad = tiltDeg * Math.PI / 180;
       const heading = viewer.camera.heading;
       const horizontalDistance = heightAboveTarget / Math.tan(tiltRad);
@@ -1239,7 +1239,7 @@ function setupEvents() {
         latitude: newCarto.latitude * 180 / Math.PI,
         longitude: newCarto.longitude * 180 / Math.PI,
         height: newCarto.height,
-        pitch: tiltDeg,
+        pitch: -tiltDeg,
         heading: viewer.camera.heading * 180 / Math.PI,
       });
     } else {
@@ -1253,7 +1253,7 @@ function setupEvents() {
         latitude: targetCarto.latitude * 180 / Math.PI,
         longitude: targetCarto.longitude * 180 / Math.PI,
         height: cameraCarto.height,
-        pitch: 90,
+        pitch: -90,
         heading: viewer.camera.heading * 180 / Math.PI,
       });
     }
@@ -1439,7 +1439,7 @@ function setupEvents() {
     const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
     const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
     const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
-    const pitch = Number(-viewer.camera.pitch * 180 / Math.PI).toFixed(2);
+    const pitch = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
     const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
     const height = Number(c.height).toFixed(1);
     const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
@@ -1580,8 +1580,8 @@ function setupEvents() {
   const middleRotateSpeed = 0.005;
   viewer.canvas.addEventListener("pointerdown", event => {
     if (event.button !== 1 || walkModeActive) return;
-    const pitchDeg = -viewer.camera.pitch * 180 / Math.PI;
-    if (pitchDeg < 85) return;
+    const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
+    if (pitchDeg > -85) return;
     middlePointerId = event.pointerId;
     lastMiddleRotateX = event.clientX;
     viewer.canvas.setPointerCapture(event.pointerId);
