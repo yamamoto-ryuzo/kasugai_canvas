@@ -1261,7 +1261,7 @@ function setupEvents() {
   });
 
   document.querySelector("#top-down-button").addEventListener("click", () => {
-    setTopDown(!viewer.scene.screenSpaceCameraController.enableTilt);
+    setTopDown(viewer.scene.screenSpaceCameraController.enableTilt);
   });
 
   const modeSelect = document.querySelector("#mode-select");
