@@ -1050,11 +1050,12 @@ function setTopDown(is2D) {
   const ssec = viewer.scene.screenSpaceCameraController;
   ssec.enableTilt = !is2D;
   const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
   flyTo({
     latitude: c.latitude * 180 / Math.PI,
     longitude: c.longitude * 180 / Math.PI,
     height: c.height,
-    pitch: viewer.camera.pitch * 180 / Math.PI,
+    pitch: is2D ? pitchDeg : Math.max(pitchDeg, -89.9999999),
     heading: viewer.camera.heading * 180 / Math.PI,
   });
   updateTopDownButton(is2D);
