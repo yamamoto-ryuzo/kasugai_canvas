@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.19] - 2026-08-14
+
+### Changed
+
+- 3D モードで `pitch < -85°` の場合、`-85°` にクランプ
+  - オイラー角のジンバルロックを明示的に回避
+  - 画面最下部に「ジンバルロック」メッセージを表示
+
 ## [1.0.18] - 2026-08-13
 
 ### Changed
