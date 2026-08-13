@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.21] - 2026-08-14
+
+### Changed
+
+- ジンバルロックメッセージを削除
+  - `-84.99°` へのピッチクランプは維持
+
 ## [1.0.20] - 2026-08-14
 
 ### Changed
