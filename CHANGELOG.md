@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.18] - 2026-08-13
+
+### Changed
+
+- 3D モード時に `camera.constrainedAxis` を `undefined` に設定
+  - Cesium の真上付近での回転制限を解除し、チルトを可能に
+  - 2D モード時は `Cartesian3.UNIT_Z` を維持
+
 ## [1.0.17] - 2026-08-13
 
 ### Changed
