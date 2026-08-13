@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.12] - 2026-08-13
+
+### Changed
+
+- 2D/3D トップダウン制御を `setTopDown()` / `updateTopDownButton()` 関数に集約
+  - `enableTilt` 切り替えとボタンラベル更新を一箇所で管理
+  - 3D 表示時は傾斜操作有効、2D 表示時は真上固定
+
 ## [1.0.11] - 2026-08-13
 
 ## [1.0.10] - 2026-08-11
