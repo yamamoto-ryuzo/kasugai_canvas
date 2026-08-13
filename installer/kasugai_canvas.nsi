@@ -27,10 +27,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "1.0.10.0"
+VIProductVersion "1.0.11.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "1.0.10"
+VIAddVersionKey "FileVersion" "1.0.11"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
