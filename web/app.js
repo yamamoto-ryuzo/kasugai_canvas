@@ -1055,7 +1055,7 @@ function setTopDown(is2D) {
     latitude: c.latitude * 180 / Math.PI,
     longitude: c.longitude * 180 / Math.PI,
     height: c.height,
-    pitch: is2D ? pitchDeg : Math.max(pitchDeg, -89.9999999),
+    pitch: is2D ? pitchDeg : Math.max(pitchDeg, -89.99999999999999),
     heading: viewer.camera.heading * 180 / Math.PI,
   });
   updateTopDownButton(is2D);
