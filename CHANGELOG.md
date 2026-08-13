@@ -4,6 +4,15 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.20] - 2026-08-14
+
+### Changed
+
+- 3D モードで `pitch < -85°` の場合、`-84.99°` に強制変更
+  - `flyTo()` 内でクランプ
+  - マウス操作後も `camera.moveEnd` で検知・矯正
+  - `constrainedAxis = undefined` と併用してジンバルロックを回避
+
 ## [1.0.19] - 2026-08-14
 
 ### Changed
