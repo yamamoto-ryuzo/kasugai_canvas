@@ -202,7 +202,12 @@ function flyTo(options = {}, duration = null) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   let height = Number(options.height);
   if (!Number.isFinite(height)) height = DEFAULT_VIEW.height;
-  const pitch = (viewer.scene.screenSpaceCameraController.enableTilt ? Math.max(-90, Math.min(90, Number(options.pitch) || 0)) : -90) * Math.PI / 180;
+  const ssec = viewer.scene.screenSpaceCameraController;
+  const pitchInput = Number(options.pitch) || 0;
+  if (ssec.enableTilt && pitchInput < -85) {
+    console.warn("ジンバルロック");
+  }
+  const pitch = (ssec.enableTilt ? Math.max(-85, Math.min(90, pitchInput)) : -90) * Math.PI / 180;
   const heading = (Number(options.heading) || 0) * Math.PI / 180;
   const destination = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
   const orientation = { heading, pitch, roll: 0 };
@@ -1056,7 +1061,7 @@ function setTopDown(is2D) {
     latitude: c.latitude * 180 / Math.PI,
     longitude: c.longitude * 180 / Math.PI,
     height: c.height,
-    pitch: is2D ? pitchDeg : Math.max(pitchDeg, -89.9),
+    pitch: pitchDeg,
     heading: viewer.camera.heading * 180 / Math.PI,
   });
   updateTopDownButton(is2D);
