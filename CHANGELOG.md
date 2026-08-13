@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.14] - 2026-08-13
+
+### Changed
+
+- 2D/3D トップダウンボタンの動作を `enableTilt` フラグとボタン表示の同期のみに簡素化
+  - `flyTo` 制御、自動 2D 切り替え、`last3DPitch` 保存機能を削除
+
 ## [1.0.13] - 2026-08-13
 
 ### Fixed
