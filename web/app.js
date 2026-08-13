@@ -1047,7 +1047,16 @@ function updateTopDownButton(is2D) {
 }
 
 function setTopDown(is2D) {
-  viewer.scene.screenSpaceCameraController.enableTilt = !is2D;
+  const ssec = viewer.scene.screenSpaceCameraController;
+  ssec.enableTilt = !is2D;
+  const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  flyTo({
+    latitude: c.latitude * 180 / Math.PI,
+    longitude: c.longitude * 180 / Math.PI,
+    height: c.height,
+    pitch: is2D ? -90 : DEFAULT_VIEW.pitch,
+    heading: viewer.camera.heading * 180 / Math.PI,
+  });
   updateTopDownButton(is2D);
 }
 
