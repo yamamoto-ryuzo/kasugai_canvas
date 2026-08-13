@@ -36,10 +36,7 @@ const lastCamera = lastCameraSearch ? parseUrlCamera(lastCameraSearch) : null;
 const hasLastCamera = !!(lastCamera && Number.isFinite(lastCamera.latitude) && Number.isFinite(lastCamera.longitude));
 {
   const startupCamera = hasLastCamera ? lastCamera : parseUrlCamera(initialCameraSource);
-  if (Number.isFinite(startupCamera.latitude) && Number.isFinite(startupCamera.longitude)) {
-    setTopDown(startupCamera.pitch <= -85);
-    flyTo(startupCamera, 0);
-  }
+  if (Number.isFinite(startupCamera.latitude) && Number.isFinite(startupCamera.longitude)) flyTo(startupCamera, 0);
 }
 
 const basemaps = [];
@@ -205,7 +202,7 @@ function flyTo(options = {}, duration = null) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   let height = Number(options.height);
   if (!Number.isFinite(height)) height = DEFAULT_VIEW.height;
-  const pitch = Math.max(-90, Math.min(90, Number(options.pitch) || 0)) * Math.PI / 180;
+  const pitch = (viewer.scene.screenSpaceCameraController.enableTilt ? Math.max(-90, Math.min(90, Number(options.pitch) || 0)) : -90) * Math.PI / 180;
   const heading = (Number(options.heading) || 0) * Math.PI / 180;
   const destination = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
   const orientation = { heading, pitch, roll: 0 };
@@ -1769,7 +1766,6 @@ async function resolveInitialCamera() {
 function applyUrlCamera() {
   const camera = parseUrlCamera();
   if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) {
-    setTopDown(camera.pitch <= -85);
     flyTo(camera);
   }
 }
@@ -1789,7 +1785,6 @@ window.addEventListener("pagehide", () => {
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }
   const initialCamera = await resolveInitialCamera();
   // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
-  if (initialCamera) setTopDown(initialCamera.pitch <= -85);
   if (hasLastCamera && lastCameraSearch !== initialCameraSource) {
     if (initialCamera) flyTo(initialCamera);      // 前回の位置から新しいURLへGoogle Earth風にFLYTO
   } else {
