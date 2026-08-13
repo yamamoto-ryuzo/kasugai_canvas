@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.17] - 2026-08-13
+
+### Changed
+
+- 3D ボタン時の `setTopDown()` が `-90°` 付近のピッチを `-89.99999999999999°` にクランプ
+  - ガンバルロックを回避しつつ、ほぼ真上を維持
+
 ## [1.0.16] - 2026-08-13
 
 ### Changed
