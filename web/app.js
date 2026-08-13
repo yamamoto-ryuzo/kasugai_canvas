@@ -205,11 +205,18 @@ function flyTo(options = {}, duration = null) {
   const ssec = viewer.scene.screenSpaceCameraController;
   const pitchInput = Number(options.pitch) || 0;
   const gimbalStatus = document.querySelector("#gimbal-status");
-  if (gimbalStatus) {
-    gimbalStatus.textContent = ssec.enableTilt && pitchInput < -85 ? "ジンバルロック" : "";
-    gimbalStatus.hidden = !(ssec.enableTilt && pitchInput < -85);
+  let pitchDeg = ssec.enableTilt ? Math.min(90, pitchInput) : -90;
+  if (ssec.enableTilt && pitchDeg < -85) {
+    pitchDeg = -84.99;
+    if (gimbalStatus) {
+      gimbalStatus.textContent = "ジンバルロック";
+      gimbalStatus.hidden = false;
+    }
+  } else if (gimbalStatus) {
+    gimbalStatus.textContent = "";
+    gimbalStatus.hidden = true;
   }
-  const pitch = (ssec.enableTilt ? Math.max(-85, Math.min(90, pitchInput)) : -90) * Math.PI / 180;
+  const pitch = pitchDeg * Math.PI / 180;
   const heading = (Number(options.heading) || 0) * Math.PI / 180;
   const destination = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
   const orientation = { heading, pitch, roll: 0 };
@@ -1733,6 +1740,27 @@ cam:東京駅|35.653108|139.761449|height=2200.6|pitch=-30|heading=348.5`;
 
 document.querySelector("#current-port").value = window.location.port || (window.location.protocol === "https:" ? "443" : "8510");
 setupEvents();
+
+viewer.camera.moveEnd.addEventListener(() => {
+  const ssec = viewer.scene.screenSpaceCameraController;
+  if (!ssec.enableTilt) return;
+  const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
+  const gimbalStatus = document.querySelector("#gimbal-status");
+  if (pitchDeg < -85) {
+    if (gimbalStatus) {
+      gimbalStatus.textContent = "ジンバルロック";
+      gimbalStatus.hidden = false;
+    }
+    viewer.camera.setView({
+      destination: viewer.camera.position,
+      orientation: { heading: viewer.camera.heading, pitch: -84.99 * Math.PI / 180, roll: 0 }
+    });
+  } else if (gimbalStatus) {
+    gimbalStatus.textContent = "";
+    gimbalStatus.hidden = true;
+  }
+});
+
 setupThreeJs();
 applyInspector(defaultConfig);
 updateEffectSettings();
