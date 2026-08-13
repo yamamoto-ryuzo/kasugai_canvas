@@ -36,7 +36,10 @@ const lastCamera = lastCameraSearch ? parseUrlCamera(lastCameraSearch) : null;
 const hasLastCamera = !!(lastCamera && Number.isFinite(lastCamera.latitude) && Number.isFinite(lastCamera.longitude));
 {
   const startupCamera = hasLastCamera ? lastCamera : parseUrlCamera(initialCameraSource);
-  if (Number.isFinite(startupCamera.latitude) && Number.isFinite(startupCamera.longitude)) flyTo(startupCamera, 0);
+  if (Number.isFinite(startupCamera.latitude) && Number.isFinite(startupCamera.longitude)) {
+    setTopDown(startupCamera.pitch <= -85);
+    flyTo(startupCamera, 0);
+  }
 }
 
 const basemaps = [];
@@ -255,7 +258,6 @@ function updateCameraInputs() {
   document.querySelector("#camera-heading").value = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
   const compass = document.querySelector("#compass-button");
   if (compass) compass.style.transform = `rotateZ(${-viewer.camera.heading * 180 / Math.PI}deg)`;
-  updateTopDownButton(!viewer.scene.screenSpaceCameraController.enableTilt);
   updateUrlFromCamera();
 }
 
@@ -1767,6 +1769,7 @@ async function resolveInitialCamera() {
 function applyUrlCamera() {
   const camera = parseUrlCamera();
   if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) {
+    setTopDown(camera.pitch <= -85);
     flyTo(camera);
   }
 }
@@ -1786,6 +1789,7 @@ window.addEventListener("pagehide", () => {
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }
   const initialCamera = await resolveInitialCamera();
   // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
+  if (initialCamera) setTopDown(initialCamera.pitch <= -85);
   if (hasLastCamera && lastCameraSearch !== initialCameraSource) {
     if (initialCamera) flyTo(initialCamera);      // 前回の位置から新しいURLへGoogle Earth風にFLYTO
   } else {
