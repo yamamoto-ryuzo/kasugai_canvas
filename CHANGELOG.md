@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.16] - 2026-08-13
+
+### Changed
+
+- 2D/3D 切り替えボタンで `flyTo` を実行
+  - 切り替え時にカメラを現在位置へ `flyTo` させ、ピッチは現在値を維持
+  - 2D モードでは `flyTo` 内部で `-90°`、3D モードでは現在ピッチを使用
+
 ## [1.0.15] - 2026-08-13
 
 ### Changed
