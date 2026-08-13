@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.13] - 2026-08-13
+
+### Fixed
+
+- 2D/3D トップダウンボタンのトグル動作を修正
+  - クリック時に正しく 2D↔3D を切り替えるように修正
+
 ## [1.0.12] - 2026-08-13
 
 ### Changed
