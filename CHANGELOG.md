@@ -4,6 +4,15 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.15] - 2026-08-13
+
+### Changed
+
+- 2D/3D 切り替えを最も単純な構成に整理
+  - `setTopDown()` は 2D/3D ボタンクリックのみで呼ぶ
+  - `flyTo()` は 2D モード時に pitch を -90° 固定、3D モード時は指定 pitch を使用
+  - URL/起動時の位置同期は `flyTo()` のみで行い、モード自動切り替えを削除
+
 ## [1.0.14] - 2026-08-13
 
 ### Changed
