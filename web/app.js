@@ -202,7 +202,9 @@ function flyTo(options = {}, duration = null) {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
   let height = Number(options.height);
   if (!Number.isFinite(height)) height = DEFAULT_VIEW.height;
-  const pitch = (viewer.scene.screenSpaceCameraController.enableTilt ? Math.max(-90, Math.min(90, Number(options.pitch) || 0)) : -90) * Math.PI / 180;
+  const pitch = (viewer.scene.screenSpaceCameraController.enableTilt
+    ? (Number(options.pitch) <= -85 ? DEFAULT_VIEW.pitch : Math.max(-90, Math.min(90, Number(options.pitch) || 0)))
+    : -90) * Math.PI / 180;
   const heading = (Number(options.heading) || 0) * Math.PI / 180;
   const destination = Cesium.Cartesian3.fromDegrees(longitude, latitude, height);
   const orientation = { heading, pitch, roll: 0 };
