@@ -1487,6 +1487,14 @@ function setupEvents() {
 
   viewer.camera.changed.addEventListener(() => updateCameraInputs());
 
+  viewer.camera.moveEnd.addEventListener(() => {
+    const ssec = viewer.scene.screenSpaceCameraController;
+    const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
+    if (pitchDeg <= -85 && ssec.enableTilt) {
+      setTopDown(true);
+    }
+  });
+
   const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
   clickHandler.setInputAction(movement => {
     if (walkModeActive) return;
