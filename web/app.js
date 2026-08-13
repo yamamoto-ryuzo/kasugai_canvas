@@ -204,8 +204,10 @@ function flyTo(options = {}, duration = null) {
   if (!Number.isFinite(height)) height = DEFAULT_VIEW.height;
   const ssec = viewer.scene.screenSpaceCameraController;
   const pitchInput = Number(options.pitch) || 0;
-  if (ssec.enableTilt && pitchInput < -85) {
-    console.warn("ジンバルロック");
+  const gimbalStatus = document.querySelector("#gimbal-status");
+  if (gimbalStatus) {
+    gimbalStatus.textContent = ssec.enableTilt && pitchInput < -85 ? "ジンバルロック" : "";
+    gimbalStatus.hidden = !(ssec.enableTilt && pitchInput < -85);
   }
   const pitch = (ssec.enableTilt ? Math.max(-85, Math.min(90, pitchInput)) : -90) * Math.PI / 180;
   const heading = (Number(options.heading) || 0) * Math.PI / 180;
