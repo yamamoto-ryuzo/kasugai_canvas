@@ -60,6 +60,8 @@ let walkTerrainOffset = 20;
 let walkMoveSpeed = 30;
 const activeClippingPlanes = { planes: [] };
 const activeDataSources = [];
+const vectorDataSources = [];
+let vectorSearchData = null;
 const activePrimitives = [];
 const drapeTerrainSources = { dem: true, tiles3d: false };
 const drapeLayers = { xyz: true, geojson: true };
@@ -664,10 +666,145 @@ function getCesiumTilesetOptions() {
   };
 }
 
+function cartesianToDegrees(cartesian) {
+  try {
+    const c = Cesium.Cartographic.fromCartesian(cartesian);
+    return { lat: c.latitude * 180 / Math.PI, lng: c.longitude * 180 / Math.PI };
+  } catch (e) { return null; }
+}
+
+function getEntityPosition(entity) {
+  try {
+    const time = viewer.clock && viewer.clock.currentTime;
+    if (entity.position) {
+      const pos = entity.position.getValue(time);
+      if (pos) return pos;
+    }
+    if (entity.polygon) {
+      const hierarchy = entity.polygon.hierarchy.getValue(time);
+      const positions = hierarchy && hierarchy.positions;
+      if (positions && positions.length) {
+        let sum = new Cesium.Cartesian3(0, 0, 0);
+        for (const p of positions) sum = Cesium.Cartesian3.add(sum, p, sum);
+        return Cesium.Cartesian3.divideByScalar(sum, positions.length, new Cesium.Cartesian3());
+      }
+    }
+    if (entity.polyline) {
+      const positions = entity.polyline.positions.getValue(time);
+      if (positions && positions.length) {
+        let sum = new Cesium.Cartesian3(0, 0, 0);
+        for (const p of positions) sum = Cesium.Cartesian3.add(sum, p, sum);
+        return Cesium.Cartesian3.divideByScalar(sum, positions.length, new Cesium.Cartesian3());
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+function buildVectorSearchIndex() {
+  vectorSearchData = { all: { attributes: [], valuesByAttr: {}, featureByAttr: {} }, layers: {}, layerOptions: [] };
+  const time = viewer.clock && viewer.clock.currentTime;
+  const allAttrSet = new Set();
+  const allValuesMap = {};
+  const allFeatureMap = {};
+  for (const { ds, id, title } of vectorDataSources) {
+    const layerInfo = { title, attributes: [], valuesByAttr: {}, featureByAttr: {} };
+    const attrSet = new Set();
+    const valuesMap = {};
+    const featureMap = {};
+    try {
+      for (const entity of ds.entities.values) {
+        const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
+        if (!props) continue;
+        for (const key of Object.keys(props)) {
+          const raw = props[key];
+          if (raw == null || raw === "") continue;
+          const val = (typeof raw === "object") ? JSON.stringify(raw) : String(raw);
+          attrSet.add(key);
+          if (!valuesMap[key]) valuesMap[key] = new Set();
+          if (!valuesMap[key].has(val)) {
+            valuesMap[key].add(val);
+            if (!featureMap[key]) featureMap[key] = {};
+            if (!featureMap[key][val]) {
+              const cartesian = getEntityPosition(entity);
+              const deg = cartesian ? cartesianToDegrees(cartesian) : null;
+              if (deg && Number.isFinite(deg.lat) && Number.isFinite(deg.lng)) {
+                featureMap[key][val] = deg;
+                if (!allFeatureMap[key]) allFeatureMap[key] = {};
+                if (!allFeatureMap[key][val]) allFeatureMap[key][val] = deg;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {}
+    layerInfo.attributes = [...attrSet].sort((a, b) => a.localeCompare(b));
+    for (const attr of layerInfo.attributes) {
+      layerInfo.valuesByAttr[attr] = [...valuesMap[attr]].sort((a, b) => a.localeCompare(b));
+      layerInfo.featureByAttr[attr] = featureMap[attr] || {};
+    }
+    vectorSearchData.layers[id] = layerInfo;
+    if (layerInfo.attributes.length) {
+      vectorSearchData.layerOptions.push({ id, title });
+    }
+    for (const attr of layerInfo.attributes) {
+      allAttrSet.add(attr);
+      if (!allValuesMap[attr]) allValuesMap[attr] = new Set();
+      for (const val of layerInfo.valuesByAttr[attr]) allValuesMap[attr].add(val);
+    }
+  }
+  vectorSearchData.all.attributes = [...allAttrSet].sort((a, b) => a.localeCompare(b));
+  for (const attr of vectorSearchData.all.attributes) {
+    vectorSearchData.all.valuesByAttr[attr] = [...allValuesMap[attr]].sort((a, b) => a.localeCompare(b));
+    vectorSearchData.all.featureByAttr[attr] = allFeatureMap[attr] || {};
+  }
+}
+
+function getCurrentVectorSource() {
+  try {
+    if (!vectorSearchData) return null;
+    const layerSelect = document.querySelector("#vector-layer");
+    const layerId = layerSelect ? layerSelect.value : "__all__";
+    if (layerId === "__all__") return vectorSearchData.all || null;
+    return (vectorSearchData.layers && vectorSearchData.layers[layerId]) || null;
+  } catch (e) { return null; }
+}
+
+function updateVectorSearchUI() {
+  const layerSelect = document.querySelector("#vector-layer");
+  const attrSelect = document.querySelector("#vector-attr");
+  const valueSelect = document.querySelector("#vector-value");
+  const flyBtn = document.querySelector("#vector-fly-btn");
+  const status = document.querySelector("#vector-search-status");
+  const data = vectorSearchData;
+  if (!layerSelect) return;
+  const opts = (data && data.layerOptions) || [];
+  let html = '<option value="__all__">全選択</option>';
+  for (const o of opts) {
+    html += '<option value="' + escapeHtml(String(o.id)) + '">' + escapeHtml(o.title || o.id) + '</option>';
+  }
+  layerSelect.innerHTML = html;
+  layerSelect.disabled = (opts.length === 0);
+  if (attrSelect) {
+    attrSelect.innerHTML = '<option value="__all__">全選択</option>';
+    attrSelect.disabled = true;
+  }
+  if (valueSelect) {
+    valueSelect.innerHTML = '<option value="">値を選択</option>';
+    valueSelect.disabled = true;
+  }
+  if (flyBtn) flyBtn.disabled = true;
+  if (status) status.textContent = (data && data.all && data.all.attributes.length) ? (data.all.attributes.length + " 属性を読み込みました") : "属性付きベクトルがありません";
+  if (layerSelect && !layerSelect.disabled) {
+    try { layerSelect.dispatchEvent(new Event("change")); } catch (e) {}
+  }
+}
+
 async function refreshLayers() {
   viewer.imageryLayers.removeAll(false);
   activeDataSources.forEach(ds => { try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
   activeDataSources.length = 0;
+  vectorDataSources.length = 0;
   activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
   activePrimitives.length = 0;
 
@@ -814,6 +951,7 @@ async function refreshLayers() {
         }
         await viewer.dataSources.add(ds);
         activeDataSources.push(ds);
+        vectorDataSources.push({ ds, id: item.id, title: item.title });
       } catch (error) {
         console.warn("GeoJSON の読み込みに失敗しました:", item.url, error);
       }
@@ -823,6 +961,8 @@ async function refreshLayers() {
   applyClippingPlanes(viewer.scene.globe);
   updateUndergroundView();
   updateEffectSettings();
+  buildVectorSearchIndex();
+  updateVectorSearchUI();
   updateMapAttribution();
 }
 
@@ -1647,6 +1787,151 @@ function setupEvents() {
       document.querySelector(`.walk-help-content[data-tab="${tab.dataset.tab}"]`)?.classList.add("active");
     });
   });
+  setupVectorSearch();
+}
+
+function setupVectorSearch() {
+  const vectorLayer = document.querySelector("#vector-layer");
+  const vectorAttr = document.querySelector("#vector-attr");
+  const vectorValue = document.querySelector("#vector-value");
+  const vectorFlyBtn = document.querySelector("#vector-fly-btn");
+  const vectorRefreshBtn = document.querySelector("#vector-refresh-btn");
+  const vectorSearchText = document.querySelector("#vector-search-text");
+  const vectorTextSearchBtn = document.querySelector("#vector-text-search-btn");
+  const vectorSearchResults = document.querySelector("#vector-search-results");
+
+  function performVectorTextSearch() {
+    try {
+      if (!vectorSearchResults || !vectorSearchData) return;
+      const q = vectorSearchText ? String(vectorSearchText.value).trim() : "";
+      if (!q) { vectorSearchResults.innerHTML = ""; return; }
+      const query = q.toLowerCase();
+      const targetLayerId = (vectorLayer && vectorLayer.value) ? vectorLayer.value : "__all__";
+      const targetAttr = (vectorAttr && vectorAttr.value) ? vectorAttr.value : "__all__";
+      const data = vectorSearchData;
+      const res = [];
+      const layerIds = (targetLayerId === "__all__") ? ["__all__"] : [targetLayerId];
+      for (const layerId of layerIds) {
+        try {
+          const source = (layerId === "__all__") ? data.all : (data.layers && data.layers[layerId]);
+          if (!source) continue;
+          const attrList = (targetAttr === "__all__") ? (source.attributes || []) : [targetAttr];
+          for (const attr of attrList) {
+            if (!attr || attr === "__all__") continue;
+            const values = (source.valuesByAttr && Array.isArray(source.valuesByAttr[attr])) ? source.valuesByAttr[attr] : [];
+            for (const val of values) {
+              const haystack = (String(val) + " " + String(attr)).toLowerCase();
+              if (haystack.includes(query)) {
+                const layerTitle = (layerId === "__all__") ? "全選択" : ((data.layers && data.layers[layerId] && data.layers[layerId].title) || layerId);
+                const pos = (source.featureByAttr && source.featureByAttr[attr] && source.featureByAttr[attr][val]) || null;
+                res.push({ layerId: (layerId === "__all__") ? "__all__" : layerId, layerTitle, attr, value: val, lat: pos ? pos.lat : null, lng: pos ? pos.lng : null });
+              }
+            }
+          }
+        } catch (e) {}
+      }
+      if (!res.length) {
+        vectorSearchResults.innerHTML = '<li style="padding:4px;color:#71818d;">該当なし</li>';
+        return;
+      }
+      vectorSearchResults.innerHTML = res.slice(0, 50).map((r, i) =>
+        '<li class="vector-search-result" data-idx="' + i + '" style="padding:4px;border-bottom:1px solid #e4ecef;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+        escapeHtml(r.layerTitle) + ' / ' + escapeHtml(r.attr) + ' / ' + escapeHtml(r.value) +
+        '</li>'
+      ).join("");
+      vectorSearchResults._resultData = res;
+    } catch (e) { console.error("vector text search error", e); }
+  }
+
+  if (vectorSearchResults) {
+    vectorSearchResults.addEventListener("click", (ev) => {
+      try {
+        const li = ev.target.closest && ev.target.closest("li[data-idx]");
+        if (!li || !vectorSearchResults._resultData) return;
+        const r = vectorSearchResults._resultData[Number(li.getAttribute("data-idx"))];
+        if (!r) return;
+        if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) {
+          flyTo({ latitude: r.lat, longitude: r.lng, height: 300, pitch: -30 });
+        }
+      } catch (e) { console.error("vector result click error", e); }
+    });
+  }
+
+  if (vectorTextSearchBtn) vectorTextSearchBtn.addEventListener("click", performVectorTextSearch);
+  if (vectorSearchText) vectorSearchText.addEventListener("keydown", (ev) => { if (ev.key === "Enter") performVectorTextSearch(); });
+
+  if (vectorLayer) {
+    vectorLayer.addEventListener("change", () => {
+      try {
+        const source = getCurrentVectorSource();
+        if (vectorAttr) {
+          if (source && source.attributes && source.attributes.length) {
+            vectorAttr.innerHTML = '<option value="__all__">全選択</option>' + source.attributes.map(a => '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>').join("");
+            vectorAttr.disabled = false;
+          } else {
+            vectorAttr.innerHTML = '<option value="__all__">全選択</option>';
+            vectorAttr.disabled = true;
+          }
+          vectorAttr.value = "__all__";
+        }
+        if (vectorValue) {
+          vectorValue.innerHTML = '<option value="">値を選択</option>';
+          vectorValue.disabled = true;
+        }
+        if (vectorFlyBtn) vectorFlyBtn.disabled = true;
+      } catch (e) { console.error("vector layer change error", e); }
+    });
+  }
+
+  if (vectorAttr) {
+    vectorAttr.addEventListener("change", () => {
+      try {
+        const source = getCurrentVectorSource();
+        const attr = vectorAttr.value;
+        if (vectorValue) {
+          if (source && source.valuesByAttr && attr && attr !== "__all__" && Array.isArray(source.valuesByAttr[attr])) {
+            vectorValue.innerHTML = '<option value="">値を選択</option>' + source.valuesByAttr[attr].map(v => '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>').join("");
+            vectorValue.disabled = false;
+          } else {
+            vectorValue.innerHTML = '<option value="">値を選択</option>';
+            vectorValue.disabled = true;
+          }
+          vectorValue.value = "";
+          if (vectorFlyBtn) vectorFlyBtn.disabled = true;
+        }
+      } catch (e) { console.error("vector attr change error", e); }
+    });
+  }
+
+  if (vectorValue) {
+    vectorValue.addEventListener("change", () => {
+      if (vectorFlyBtn) vectorFlyBtn.disabled = !vectorValue.value;
+    });
+  }
+
+  if (vectorFlyBtn) {
+    vectorFlyBtn.addEventListener("click", () => {
+      try {
+        if (!vectorLayer || !vectorAttr || !vectorValue || !vectorAttr.value || !vectorValue.value) return;
+        const source = getCurrentVectorSource();
+        const pos = (source && source.featureByAttr && source.featureByAttr[vectorAttr.value] && source.featureByAttr[vectorAttr.value][vectorValue.value]) || null;
+        if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lng)) {
+          flyTo({ latitude: pos.lat, longitude: pos.lng, height: 300, pitch: -30 });
+        }
+      } catch (e) { console.error("vector fly error", e); }
+    });
+  }
+
+  if (vectorRefreshBtn) {
+    vectorRefreshBtn.addEventListener("click", () => {
+      try {
+        const status = document.querySelector("#vector-search-status");
+        if (status) status.textContent = "読み込み中...";
+        buildVectorSearchIndex();
+        updateVectorSearchUI();
+      } catch (e) { console.error("vector refresh error", e); }
+    });
+  }
 }
 
 function compareVersions(left, right) {
