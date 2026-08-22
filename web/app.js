@@ -802,9 +802,9 @@ function updateVectorSearchUI() {
 
 async function refreshLayers() {
   viewer.imageryLayers.removeAll(false);
-  activeDataSources.forEach(ds => { try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
-  activeDataSources.length = 0;
+  vectorDataSources.forEach(({ ds }) => { try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
   vectorDataSources.length = 0;
+  activeDataSources.length = 0;
   activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
   activePrimitives.length = 0;
 
@@ -905,7 +905,7 @@ async function refreshLayers() {
 
   // 3D Tiles / GeoJSON
   for (const item of orderedOtherLayers) {
-    if (!item.visible) continue;
+    if (!item.visible && item.type === "3dtiles") continue;
     if (item.type === "3dtiles") {
       try {
         const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(item.url, item.proxy), getCesiumTilesetOptions());
@@ -929,7 +929,7 @@ async function refreshLayers() {
     } else if (item.type === "geojson" || item.type === "layer") {
       try {
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
-        if (!clamp) continue;
+        if (!clamp && !item.visible) continue;
         let classification;
         if (clamp) {
           if (drapeTerrainSources.dem && drape3DTiles) classification = Cesium.ClassificationType.BOTH;
@@ -949,8 +949,8 @@ async function refreshLayers() {
             }
           }
         }
+        try { ds.show = item.visible; } catch (e) {}
         await viewer.dataSources.add(ds);
-        activeDataSources.push(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
       } catch (error) {
         console.warn("GeoJSON の読み込みに失敗しました:", item.url, error);
