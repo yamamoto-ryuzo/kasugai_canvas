@@ -866,6 +866,17 @@ async function loadInfoContent(url) {
   }
 }
 
+function updateSearchProvider() {
+  const searchProvider = document.querySelector("#search-provider");
+  const searchYahooWarning = document.querySelector("#search-yahoo-warning");
+  if (!searchProvider) return;
+  const yahooOpt = searchProvider.querySelector('option[value="yahoo"]');
+  const hasYahoo = yahooAppId && !yahooAppId.includes("あなたのYahoo");
+  if (yahooOpt) yahooOpt.disabled = !hasYahoo;
+  if (!hasYahoo && searchProvider.value === "yahoo") searchProvider.value = "gsi";
+  if (searchYahooWarning) searchYahooWarning.style.display = (searchProvider.value === "yahoo") ? "" : "none";
+}
+
 function applyInspector(text) {
   const nextLines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const parsedCameras = [];
@@ -897,7 +908,10 @@ function applyInspector(text) {
         undergroundBackgroundColor = baseColor;
       }
     }
-    if (type === "yahooappid") yahooAppId = value;
+    if (type === "yahooappid") {
+      yahooAppId = value;
+      updateSearchProvider();
+    }
     if (type === "info") {
       void loadInfoContent(value);
     }
@@ -999,6 +1013,7 @@ function applyInspector(text) {
   renderPresets();
   renderLayerList();
   refreshLayers();
+  updateSearchProvider();
 }
 
 function setupThreeJs() {
@@ -1084,34 +1099,66 @@ function setupEvents() {
     flyTo(next);
   });
 
+  const searchProvider = document.querySelector("#search-provider");
+  if (searchProvider) {
+    searchProvider.addEventListener("change", () => {
+      const searchYahooWarning = document.querySelector("#search-yahoo-warning");
+      if (searchYahooWarning) searchYahooWarning.style.display = (searchProvider.value === "yahoo") ? "" : "none";
+    });
+  }
+  updateSearchProvider();
+
   document.querySelector("#search-form").addEventListener("submit", async event => {
     event.preventDefault();
     const query = document.querySelector("#search-query").value.trim();
     const results = document.querySelector("#search-results");
-    results.textContent = "検索中...";
+    if (!query) {
+      results.innerHTML = '<li style="padding:8px;color:#71818d;">検索語を入力してください。</li>';
+      return;
+    }
+    results.innerHTML = '<li style="padding:8px;color:#71818d;">検索中...</li>';
     try {
-      const useYahoo = yahooAppId && !yahooAppId.includes("あなたのYahoo");
+      const provider = searchProvider ? searchProvider.value : "gsi";
+      const useYahoo = provider === "yahoo" && yahooAppId && !yahooAppId.includes("あなたのYahoo");
       const params = new URLSearchParams({ query });
       if (useYahoo) params.set("appid", yahooAppId);
       const response = await fetch(`/api/search?${params}`);
       if (!response.ok) throw new Error(await response.text() || `検索に失敗しました (${response.status})`);
       const data = await response.json();
-      const items = useYahoo ? (data.Feature || []).map(item => ({
-        title: item.Name,
-        latitude: Number(item.Geometry?.Coordinates?.split(",")[1]),
-        longitude: Number(item.Geometry?.Coordinates?.split(",")[0]),
-      })) : data.map(item => ({
-        title: item.properties?.title,
-        latitude: Number(item.geometry?.coordinates?.[1]),
-        longitude: Number(item.geometry?.coordinates?.[0]),
-      }));
-      results.innerHTML = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude))
-        .map((item, index) => `<button type="button" data-search-index="${index}">${escapeHtml(item.title)}</button>`).join("");
+      const items = useYahoo
+        ? (data.Feature || []).map(item => ({
+            title: item.Name || item.name || "",
+            address: item.Property?.Address || item.Property?.address || "",
+            latitude: Number(item.Geometry?.Coordinates?.split(",")[1]),
+            longitude: Number(item.Geometry?.Coordinates?.split(",")[0]),
+          }))
+        : data.map(item => ({
+            title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
+            address: item.properties?.address || item.properties?.Address || item.properties?.title || "",
+            latitude: Number(item.geometry?.coordinates?.[1]),
+            longitude: Number(item.geometry?.coordinates?.[0]),
+          }));
+      const validItems = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+      if (!validItems.length) {
+        results.innerHTML = '<li style="padding:8px;color:#71818d;">該当する結果がありません。</li>';
+        return;
+      }
+      results.innerHTML = validItems.map((item, index) => `
+        <li style="padding:0;border-bottom:1px solid #e4ecef;">
+          <button type="button" data-search-index="${index}" style="width:100%;padding:6px 8px;border:0;background:transparent;cursor:pointer;text-align:left;">
+            <span style="display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.title)}</span>
+            <span style="display:block;font-size:0.85em;color:#52636d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.address)}</span>
+          </button>
+        </li>
+      `).join("");
       results.querySelectorAll("[data-search-index]").forEach(button => {
-        button.addEventListener("click", () => flyTo({ latitude: items[Number(button.dataset.searchIndex)].latitude, longitude: items[Number(button.dataset.searchIndex)].longitude, height: 300, pitch: -30 }));
+        button.addEventListener("click", () => {
+          const item = validItems[Number(button.dataset.searchIndex)];
+          flyTo({ latitude: item.latitude, longitude: item.longitude, height: 300, pitch: -30 });
+        });
       });
     } catch (error) {
-      results.textContent = error instanceof Error ? error.message : "検索に失敗しました。";
+      results.innerHTML = `<li style="padding:8px;color:#a82020;">${escapeHtml(error instanceof Error ? error.message : "検索に失敗しました。")}</li>`;
     }
   });
 

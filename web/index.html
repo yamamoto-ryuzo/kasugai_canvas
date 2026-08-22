@@ -48,12 +48,19 @@
               <button id="apply-camera" type="button">Apply camera</button>
             </section>
             <section id="search-panel" class="plugin-panel">
-              <div id="search-title" class="section-title">Search（国土地理院住所検索API）</div>
+              <div id="search-title" class="section-title">住所検索</div>
+              <div style="display:flex;justify-content:flex-start;gap:8px;align-items:center;margin-bottom:8px;">
+                <select id="search-provider" style="flex:0 0 auto;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;background:#fff;color:#1d2b35;">
+                  <option value="gsi" selected>地理院</option>
+                  <option value="yahoo">Yahoo</option>
+                </select>
+                <span id="search-yahoo-warning" style="display:none;font-size:0.85em;color:#a82020;">注意: yahooAppIdは漏洩する可能性があります。公開サイトでは使用しないでください。</span>
+              </div>
               <form id="search-form">
                 <input id="search-query" placeholder="住所・施設名" required />
                 <button type="submit">検索</button>
               </form>
-              <div id="search-results" class="search-results"></div>
+              <ul id="search-results" class="search-results" style="list-style:none;padding:0;margin:8px 0 0;"></ul>
             </section>
             <section id="share-panel" class="plugin-panel">
               <div class="section-title">Share</div>
