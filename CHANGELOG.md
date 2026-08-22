@@ -4,6 +4,15 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.0.23] - 2026-08-22
+
+### Added
+
+- Search タブに Re:Earth GeoSuite 由来の検索概念を移植
+  - 住所検索: 地理院 / Yahoo プロバイダー選択、警告表示、タイトル + 住所の結果リスト
+  - ベクトル検索: レイヤー・属性・値の三段階選択、テキスト検索、FlyTo
+  - 非表示のベクトルレイヤーも読み込んで検索対象にする
+
 ## [1.0.21] - 2026-08-14
 
 ### Changed
