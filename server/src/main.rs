@@ -15,6 +15,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, Mutex as TokioMutex, Notify};
 
+const _WEB_ASSET_HASH: &str = env!("WEB_ASSET_HASH");
 const INDEX_HTML: &str = include_str!("../../web/index.html");
 const APP_JS: &str = include_str!("../../web/app.js");
 const STYLES_CSS: &str = include_str!("../../web/styles.css");

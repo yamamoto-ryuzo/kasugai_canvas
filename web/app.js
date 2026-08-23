@@ -375,7 +375,7 @@ function renderLayerList() {
     const groupChecked = layers.some(layer => layer.visible);
     return `
     <section class="layer-group${group ? " grouped" : ""}${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
-      ${group ? `<div class="layer-group-title" draggable="true"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="checkbox" data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
+      ${group ? `<div class="layer-group-title" draggable="true"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupInputId)}"` : ""} data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
       <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
@@ -416,6 +416,16 @@ function renderLayerList() {
       }
       renderLayerList();
       refreshLayers();
+    });
+  });
+
+  list.querySelectorAll(".layer-group-checkbox").forEach(input => {
+    input.addEventListener("click", event => {
+      if (input.type === "radio" && input.checked) {
+        event.preventDefault();
+        input.checked = false;
+        input.dispatchEvent(new Event("change"));
+      }
     });
   });
 
