@@ -235,10 +235,15 @@ function flyTo(options = {}, duration = null) {
 }
 
 // 目的の地物が画面中央に来るように、ピッチと高さからカメラ位置を後退補正して flyTo する
+// height / pitch / heading を省略した場合は現在のカメラの値を使う
 function flyToFeature(lat, lng, options = {}) {
-  const height = Number.isFinite(options.height) ? options.height : 300;
-  const pitchDeg = Number.isFinite(options.pitch) ? options.pitch : -30;
-  const headingDeg = Number.isFinite(options.heading) ? options.heading : 0;
+  const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  const currentHeight = cartographic ? cartographic.height : DEFAULT_VIEW.height;
+  const currentPitchDeg = viewer.camera.pitch * 180 / Math.PI;
+  const currentHeadingDeg = viewer.camera.heading * 180 / Math.PI;
+  const height = Number.isFinite(options.height) ? options.height : currentHeight;
+  const pitchDeg = Number.isFinite(options.pitch) ? options.pitch : currentPitchDeg;
+  const headingDeg = Number.isFinite(options.heading) ? options.heading : currentHeadingDeg;
   const pitchRad = Math.abs(pitchDeg) * Math.PI / 180;
   // 真下(-90°)に近い場合は補正不要
   let cameraLat = lat;
@@ -1314,7 +1319,7 @@ function setupEvents() {
       results.querySelectorAll("[data-search-index]").forEach(button => {
         button.addEventListener("click", () => {
           const item = validItems[Number(button.dataset.searchIndex)];
-          flyToFeature(item.latitude, item.longitude, { height: 300, pitch: -30 });
+          flyToFeature(item.latitude, item.longitude);
         });
       });
     } catch (error) {
@@ -1880,7 +1885,7 @@ function setupVectorSearch() {
         const r = vectorSearchResults._resultData[Number(li.getAttribute("data-idx"))];
         if (!r) return;
         if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) {
-          flyToFeature(r.lat, r.lng, { height: 300, pitch: -30 });
+          flyToFeature(r.lat, r.lng);
         }
       } catch (e) { console.error("vector result click error", e); }
     });
@@ -1949,7 +1954,7 @@ function setupVectorSearch() {
         const source = getCurrentVectorSource();
         const pos = (source && source.featureByAttr && source.featureByAttr[vectorAttr.value] && source.featureByAttr[vectorAttr.value][vectorValue.value]) || null;
         if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lng)) {
-          flyToFeature(pos.lat, pos.lng, { height: 300, pitch: -30 });
+          flyToFeature(pos.lat, pos.lng);
         }
       } catch (e) { console.error("vector fly error", e); }
     });
@@ -2126,7 +2131,7 @@ function setupVectorSearch() {
         const lat = Number(tr.getAttribute("data-lat"));
         const lng = Number(tr.getAttribute("data-lng"));
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          flyToFeature(lat, lng, { height: 300, pitch: -30 });
+          flyToFeature(lat, lng);
         }
       } catch (e) { console.error("vector attr row click error", e); }
     });
