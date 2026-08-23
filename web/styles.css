@@ -152,8 +152,9 @@ footer { padding: 0 28px 22px; }
 .vector-attr-widget-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid #e4ecef; background: #f6f9fb; }
 .vector-attr-widget-title { font-weight: 700; font-size: 15px; }
 .vector-attr-widget-close { min-width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 20px; line-height: 1; }
-.vector-attr-widget-filter { padding: 12px 14px; border-bottom: 1px solid #e4ecef; }
-#vector-attr-widget-search { width: 100%; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; }
+.vector-attr-widget-filter { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e4ecef; }
+#vector-attr-widget-layer { flex: 0 0 160px; min-width: 120px; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; background: #fff; }
+#vector-attr-widget-search { flex: 1; min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; }
 .vector-attr-widget-table-wrap { flex: 1; overflow: auto; }
 .vector-attr-widget-table { width: auto; min-width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; white-space: nowrap; }
 .vector-attr-widget-thead th { position: sticky; top: 0; padding: 8px 14px; text-align: left; border-bottom: 1px solid #e4ecef; background: #f6f9fb; color: #52636d; font-weight: 700; font-size: 12px; cursor: pointer; user-select: none; white-space: nowrap; }

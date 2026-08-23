@@ -1951,6 +1951,7 @@ function setupVectorSearch() {
   const vectorAttrWidgetClose = document.querySelector(".vector-attr-widget-close");
   const vectorAttrWidgetResizer = document.querySelector(".vector-attr-widget-resizer");
   const vectorAttrWidgetSearch = document.querySelector("#vector-attr-widget-search");
+  const vectorAttrWidgetLayerSelect = document.querySelector("#vector-attr-widget-layer");
   const vectorAttrWidgetHead = document.querySelector("#vector-attr-widget-head");
   const vectorAttrWidgetList = document.querySelector("#vector-attr-widget-list");
   const vectorAttrWidgetCount = document.querySelector("#vector-attr-widget-count");
@@ -2044,12 +2045,28 @@ function setupVectorSearch() {
     } catch (e) { console.error("vector attr widget render error", e); }
   }
 
+  function updateVectorAttrWidgetLayerOptions(layerId) {
+    if (!vectorAttrWidgetLayerSelect) return;
+    const opts = (vectorSearchData && vectorSearchData.layerOptions) || [];
+    let html = '<option value="">レイヤを選択</option>';
+    for (const o of opts) {
+      html += '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.title || o.id) + '</option>';
+    }
+    vectorAttrWidgetLayerSelect.innerHTML = html;
+    const hasLayer = layerId && layerId !== "__all__" && opts.some(o => o.id === layerId);
+    vectorAttrWidgetLayerSelect.value = hasLayer ? layerId : "";
+  }
+
   function openVectorAttrWidget(layerId = null) {
     if (!vectorAttrWidget) return;
-    if (vectorLayer && layerId && layerId !== "__all__") {
-      const hasOption = [...vectorLayer.options].some(option => option.value === layerId);
-      if (hasOption) vectorLayer.value = layerId;
+    if (vectorLayer) {
+      if (layerId && layerId !== "__all__" && [...vectorLayer.options].some(option => option.value === layerId)) {
+        vectorLayer.value = layerId;
+      } else if (!layerId || layerId === "__all__") {
+        vectorLayer.value = "__all__";
+      }
     }
+    updateVectorAttrWidgetLayerOptions(layerId || (vectorLayer ? vectorLayer.value : null));
     buildVectorAttrWidgetRows();
     renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
     vectorAttrWidget.classList.add("visible");
@@ -2073,6 +2090,12 @@ function setupVectorSearch() {
   if (vectorAttrWidgetSearch) {
     vectorAttrWidgetSearch.addEventListener("input", () => renderVectorAttrWidget(vectorAttrWidgetSearch.value));
     vectorAttrWidgetSearch.addEventListener("keydown", (ev) => { if (ev.key === "Enter") renderVectorAttrWidget(vectorAttrWidgetSearch.value); });
+  }
+
+  if (vectorAttrWidgetLayerSelect) {
+    vectorAttrWidgetLayerSelect.addEventListener("change", () => {
+      try { openVectorAttrWidget(vectorAttrWidgetLayerSelect.value); } catch (e) { console.error("vector attr layer change error", e); }
+    });
   }
 
   if (vectorAttrWidgetList) {
