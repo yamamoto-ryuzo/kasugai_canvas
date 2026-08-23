@@ -1680,6 +1680,15 @@ function setupEvents() {
 
     const entity = picked.id;
     if (entity?.properties) {
+      const ds = entity.entityCollection && entity.entityCollection.owner;
+      const match = ds ? vectorDataSources.find(item => item.ds === ds) : null;
+      if (match) {
+        attr.dataset.layerId = match.id;
+        attr.dataset.layerTitle = match.title || match.id;
+      } else {
+        delete attr.dataset.layerId;
+        delete attr.dataset.layerTitle;
+      }
       const table = document.createElement("table");
       table.style.width = "100%";
       table.style.borderCollapse = "collapse";
@@ -2035,8 +2044,12 @@ function setupVectorSearch() {
     } catch (e) { console.error("vector attr widget render error", e); }
   }
 
-  function openVectorAttrWidget() {
+  function openVectorAttrWidget(layerId = null) {
     if (!vectorAttrWidget) return;
+    if (vectorLayer && layerId && layerId !== "__all__") {
+      const hasOption = [...vectorLayer.options].some(option => option.value === layerId);
+      if (hasOption) vectorLayer.value = layerId;
+    }
     buildVectorAttrWidgetRows();
     renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
     vectorAttrWidget.classList.add("visible");
@@ -2047,9 +2060,15 @@ function setupVectorSearch() {
     if (vectorAttrWidget) vectorAttrWidget.classList.remove("visible");
   }
 
-  if (vectorAttrListBtn) vectorAttrListBtn.addEventListener("click", openVectorAttrWidget);
+  if (vectorAttrListBtn) vectorAttrListBtn.addEventListener("click", () => openVectorAttrWidget(vectorLayer ? vectorLayer.value : null));
   const attrVectorAttrListBtn = document.querySelector("#attr-vector-attr-list-btn");
-  if (attrVectorAttrListBtn) attrVectorAttrListBtn.addEventListener("click", openVectorAttrWidget);
+  const attrContent = document.querySelector("#attr-content");
+  if (attrVectorAttrListBtn) {
+    attrVectorAttrListBtn.addEventListener("click", () => {
+      const layerId = (attrContent && attrContent.dataset.layerId) ? attrContent.dataset.layerId : (vectorLayer ? vectorLayer.value : null);
+      openVectorAttrWidget(layerId);
+    });
+  }
   if (vectorAttrWidgetClose) vectorAttrWidgetClose.addEventListener("click", closeVectorAttrWidget);
   if (vectorAttrWidgetSearch) {
     vectorAttrWidgetSearch.addEventListener("input", () => renderVectorAttrWidget(vectorAttrWidgetSearch.value));
