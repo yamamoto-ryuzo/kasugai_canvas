@@ -1314,7 +1314,7 @@ function setupEvents() {
       results.querySelectorAll("[data-search-index]").forEach(button => {
         button.addEventListener("click", () => {
           const item = validItems[Number(button.dataset.searchIndex)];
-          flyTo({ latitude: item.latitude, longitude: item.longitude, height: 300, pitch: -30 });
+          flyToFeature(item.latitude, item.longitude, { height: 300, pitch: -30 });
         });
       });
     } catch (error) {
