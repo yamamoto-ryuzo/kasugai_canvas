@@ -103,8 +103,22 @@ def sync_versions(write_latest: bool = True) -> None:
     print(f"バージョンを {cargo_version} へ同期しました。", file=sys.stderr, flush=True)
 
 
+def _kill_existing_kasugai() -> None:
+    """既存の kasugai_canvas.exe を停止する。"""
+    try:
+        subprocess.run(
+            ["taskkill", "/F", "/IM", "kasugai_canvas.exe"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        pass
+
+
 def run_dev() -> None:
     """開発モードで起動する。"""
+    _kill_existing_kasugai()
     subprocess.run(["cargo", "run"], cwd=SERVER_DIR, check=True)
 
 
@@ -174,6 +188,7 @@ def run_release() -> None:
             file=sys.stderr,
         )
         raise SystemExit(1)
+    _kill_existing_kasugai()
     subprocess.run([str(TARGET_EXE)], cwd=ROOT, check=True)
 
 
