@@ -8,7 +8,7 @@ const urlParams = new URLSearchParams(window.location.search);
 const initialCameraSource = window.location.search + window.location.hash;
 const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, height: 2000, pitch: -30, heading: 0 };
 
-const viewer = new Cesium.Viewer("deck-container", {
+const viewer = new Cesium.Viewer("cesium-container", {
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   baseLayerPicker: false,
   geocoder: false,
@@ -1210,7 +1210,7 @@ function applyInspector(text) {
 }
 
 function setupThreeJs() {
-  const container = document.querySelector("#deck-container");
+  const container = document.querySelector("#cesium-container");
   const canvas = document.createElement("canvas");
   canvas.id = "three-canvas";
   canvas.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;";

@@ -21,7 +21,7 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .panel-heading { height: 72px; padding: 15px 18px; display: flex; align-items: center; justify-content: space-between; }
 .engine { padding: 6px 9px; border: 1px solid #31564f; border-radius: 5px; color: #83dbc7; font-size: 11px; }
 .viewport { position: relative; height: 100vh; min-height: 420px; background: #eef5f7; }
-#deck-container canvas { display: block; }
+#cesium-container canvas { display: block; }
 .map-attribution { position: absolute; right: 8px; bottom: 6px; z-index: 1; padding: 3px 5px; color: #52636d; background: rgba(255,255,255,.8); font-size: 10px; }
 .control-panel { position: absolute; z-index: 2; top: 14px; left: 14px; width: 336px; max-height: calc(100% - var(--control-panel-bottom-clearance)); overflow-y: auto; padding: 14px; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.6); box-shadow: 0 8px 24px rgba(29,43,53,.14); pointer-events: auto; touch-action: auto; user-select: text; }
 .panel-title { margin-bottom: 14px; font-size: 16px; font-weight: 700; }
