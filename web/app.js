@@ -234,10 +234,28 @@ function flyTo(options = {}, duration = null) {
   viewer.camera.flyTo(flight);
 }
 
+// 検索座標の地形標高を事前に読み込んで返す（未読み込みタイルもダウンロードする）
+async function sampleGroundHeight(lat, lng) {
+  const carto = Cesium.Cartographic.fromDegrees(lng, lat);
+  // 1. sampleTerrainMostDetailed で対象タイルを事前ダウンロードして正確な標高を得る
+  try {
+    if (viewer.terrainProvider && !(viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider)) {
+      const [result] = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [carto]);
+      if (result && Number.isFinite(result.height)) return result.height;
+    }
+  } catch (e) { /* 取得失敗時は読み込み済みタイルにフォールバック */ }
+  // 2. フォールバック: 読み込み済みタイルから取得
+  try {
+    const sampled = viewer.scene.globe.getHeight(carto);
+    if (Number.isFinite(sampled)) return sampled;
+  } catch (e) { /* ignore */ }
+  return 0;
+}
+
 // 目的の座標（ピッチ-90で真下に見える地点）が画面中央に来るように、
 // ピッチ・高さ・方位からカメラ位置を後退補正して flyTo する。
 // height / pitch / heading を省略した場合は現在のカメラの値を使う
-function flyToFeature(lat, lng, options = {}) {
+async function flyToFeature(lat, lng, options = {}) {
   const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.position);
   const currentHeight = cartographic ? cartographic.height : DEFAULT_VIEW.height;
   const currentPitchDeg = viewer.camera.pitch * 180 / Math.PI;
@@ -256,12 +274,8 @@ function flyToFeature(lat, lng, options = {}) {
   const pitchRad = Math.abs(pitchDeg) * Math.PI / 180;
   // 真下(-90°)に近い場合は補正不要
   if (Math.abs(pitchDeg) < 89 && pitchRad > 0.01) {
-    // 目標点の地形標高を差し引いた「地面からの相対高さ」で後退距離を計算する
-    let groundHeight = 0;
-    try {
-      const sampled = viewer.scene.globe.getHeight(Cesium.Cartographic.fromDegrees(lng, lat));
-      if (Number.isFinite(sampled)) groundHeight = sampled;
-    } catch (e) { /* 地形未読み込み時は 0 とみなす */ }
+    // 検索座標の地形標高を事前読み込みし、地面からの相対高さで後退距離を計算する
+    const groundHeight = await sampleGroundHeight(lat, lng);
     const relativeHeight = Math.max(0, height - groundHeight);
     const distance = relativeHeight / Math.tan(pitchRad);
     const headingRad = headingDeg * Math.PI / 180;
