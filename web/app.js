@@ -1948,6 +1948,7 @@ function setupVectorSearch() {
   const vectorAttrWidgetTitle = document.querySelector(".vector-attr-widget-title");
   let vectorAttrWidgetRows = [];
   let vectorAttrWidgetAttributes = [];
+  let vectorAttrWidgetSort = { column: -1, order: 1 };
 
   function getVectorDataSourceById(layerId) {
     if (layerId === "__all__") return null;
@@ -1957,6 +1958,7 @@ function setupVectorSearch() {
   function buildVectorAttrWidgetRows() {
     vectorAttrWidgetRows = [];
     vectorAttrWidgetAttributes = [];
+    vectorAttrWidgetSort = { column: -1, order: 1 };
     const layerId = (vectorLayer && vectorLayer.value) ? vectorLayer.value : "__all__";
     const dsItem = getVectorDataSourceById(layerId);
     const source = getCurrentVectorSource();
@@ -1988,7 +1990,17 @@ function setupVectorSearch() {
     try {
       if (!vectorAttrWidgetList || !vectorAttrWidgetCount || !vectorAttrWidgetTitle) return;
       const query = String(filter).toLowerCase().trim();
-      const matched = query ? vectorAttrWidgetRows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : vectorAttrWidgetRows;
+      let matched = query ? vectorAttrWidgetRows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : [...vectorAttrWidgetRows];
+      if (vectorAttrWidgetSort.column >= 0 && vectorAttrWidgetSort.column < vectorAttrWidgetAttributes.length) {
+        const col = vectorAttrWidgetSort.column;
+        const order = vectorAttrWidgetSort.order;
+        matched.sort((a, b) => {
+          const left = a.values[col] || "";
+          const right = b.values[col] || "";
+          const cmp = String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+          return cmp * order;
+        });
+      }
       const displayRows = matched.slice(0, 1000);
       const layerTitle = (vectorLayer && vectorLayer.value !== "__all__" && vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[vectorLayer.value] && vectorSearchData.layers[vectorLayer.value].title) ? vectorSearchData.layers[vectorLayer.value].title : "全選択";
       vectorAttrWidgetTitle.textContent = "属性・値一覧" + (layerTitle ? " — " + layerTitle : "");
@@ -1999,9 +2011,11 @@ function setupVectorSearch() {
         return;
       }
       if (vectorAttrWidgetHead) {
-        vectorAttrWidgetHead.innerHTML = '<tr>' + vectorAttrWidgetAttributes.map(attr =>
-          '<th>' + escapeHtml(attr) + '</th>'
-        ).join("") + '</tr>';
+        vectorAttrWidgetHead.innerHTML = '<tr>' + vectorAttrWidgetAttributes.map((attr, idx) => {
+          const active = vectorAttrWidgetSort.column === idx;
+          const marker = active ? (vectorAttrWidgetSort.order > 0 ? ' ▲' : ' ▼') : '';
+          return '<th data-idx="' + idx + '" title="クリックで並び替え"' + (active ? ' class="sorted"' : '') + '>' + escapeHtml(attr) + '<span class="sort-marker">' + marker + '</span></th>';
+        }).join("") + '</tr>';
       }
       if (!displayRows.length) {
         vectorAttrWidgetList.innerHTML = '<tr><td colspan="' + vectorAttrWidgetAttributes.length + '" style="padding:12px 14px;color:#71818d;">該当する地物がありません</td></tr>';
@@ -2051,6 +2065,22 @@ function setupVectorSearch() {
           flyTo({ latitude: lat, longitude: lng, height: 300, pitch: -30 });
         }
       } catch (e) { console.error("vector attr row click error", e); }
+    });
+  }
+
+  if (vectorAttrWidgetHead) {
+    vectorAttrWidgetHead.addEventListener("click", (ev) => {
+      try {
+        const th = ev.target.closest("th");
+        if (!th || !th.hasAttribute("data-idx")) return;
+        const idx = Number(th.getAttribute("data-idx"));
+        if (vectorAttrWidgetSort.column === idx) {
+          vectorAttrWidgetSort.order *= -1;
+        } else {
+          vectorAttrWidgetSort = { column: idx, order: 1 };
+        }
+        renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+      } catch (e) { console.error("vector attr head click error", e); }
     });
   }
 
