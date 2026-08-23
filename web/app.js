@@ -2048,6 +2048,8 @@ function setupVectorSearch() {
   }
 
   if (vectorAttrListBtn) vectorAttrListBtn.addEventListener("click", openVectorAttrWidget);
+  const attrVectorAttrListBtn = document.querySelector("#attr-vector-attr-list-btn");
+  if (attrVectorAttrListBtn) attrVectorAttrListBtn.addEventListener("click", openVectorAttrWidget);
   if (vectorAttrWidgetClose) vectorAttrWidgetClose.addEventListener("click", closeVectorAttrWidget);
   if (vectorAttrWidgetSearch) {
     vectorAttrWidgetSearch.addEventListener("input", () => renderVectorAttrWidget(vectorAttrWidgetSearch.value));
@@ -2117,6 +2119,8 @@ function setupVectorSearch() {
       window.addEventListener("mouseup", onMouseUp);
     });
   }
+
+  window.vectorAttrWidget = { open: openVectorAttrWidget, close: closeVectorAttrWidget };
 }
 
 function compareVersions(left, right) {
