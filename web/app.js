@@ -234,7 +234,8 @@ function flyTo(options = {}, duration = null) {
   viewer.camera.flyTo(flight);
 }
 
-// 目的の地物が画面中央に来るように、ピッチと高さからカメラ位置を後退補正して flyTo する
+// 目的の座標（ピッチ-90で真下に見える地点）が画面中央に来るように、
+// ピッチ・高さ・方位からカメラ位置を後退補正して flyTo する。
 // height / pitch / heading を省略した場合は現在のカメラの値を使う
 function flyToFeature(lat, lng, options = {}) {
   const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.position);
@@ -242,14 +243,27 @@ function flyToFeature(lat, lng, options = {}) {
   const currentPitchDeg = viewer.camera.pitch * 180 / Math.PI;
   const currentHeadingDeg = viewer.camera.heading * 180 / Math.PI;
   const height = Number.isFinite(options.height) ? options.height : currentHeight;
-  const pitchDeg = Number.isFinite(options.pitch) ? options.pitch : currentPitchDeg;
+  let pitchDeg = Number.isFinite(options.pitch) ? options.pitch : currentPitchDeg;
   const headingDeg = Number.isFinite(options.heading) ? options.heading : currentHeadingDeg;
-  const pitchRad = Math.abs(pitchDeg) * Math.PI / 180;
-  // 真下(-90°)に近い場合は補正不要
+
+  // flyTo 側のピッチ補正と同じ値を先に適用して距離計算のズレを防ぐ
+  const ssec = viewer.scene.screenSpaceCameraController;
+  if (!ssec.enableTilt) pitchDeg = -90;
+  else if (pitchDeg < -85) pitchDeg = -84.99;
+
   let cameraLat = lat;
   let cameraLng = lng;
+  const pitchRad = Math.abs(pitchDeg) * Math.PI / 180;
+  // 真下(-90°)に近い場合は補正不要
   if (Math.abs(pitchDeg) < 89 && pitchRad > 0.01) {
-    const distance = height / Math.tan(pitchRad);
+    // 目標点の地形標高を差し引いた「地面からの相対高さ」で後退距離を計算する
+    let groundHeight = 0;
+    try {
+      const sampled = viewer.scene.globe.getHeight(Cesium.Cartographic.fromDegrees(lng, lat));
+      if (Number.isFinite(sampled)) groundHeight = sampled;
+    } catch (e) { /* 地形未読み込み時は 0 とみなす */ }
+    const relativeHeight = Math.max(0, height - groundHeight);
+    const distance = relativeHeight / Math.tan(pitchRad);
     const headingRad = headingDeg * Math.PI / 180;
     const metersPerDegLat = 111320;
     const metersPerDegLng = 111320 * Math.cos(lat * Math.PI / 180);
