@@ -72,6 +72,7 @@
                 </div>
                 <ul id="vector-search-results" style="list-style:none;padding:0;margin:0;max-height:160px;overflow:auto;font-size:0.85em;"></ul>
                 <button id="vector-refresh-btn" type="button" style="width:100%;font-size:0.9em;margin-top:6px;">ベクトルデータを更新</button>
+                <button id="vector-attr-list-btn" type="button" style="width:100%;font-size:0.9em;margin-top:6px;">選択中のレイヤ属性一覧</button>
                 <div id="vector-search-status" style="font-size:0.85em;color:#666;margin-top:4px;"></div>
               </div>
               <div id="search-title" class="section-title">住所検索</div>
@@ -252,6 +253,27 @@
         </div>
       </section>
     </main>
+    <div id="vector-attr-widget" class="vector-attr-widget">
+      <div class="vector-attr-widget-inner">
+        <div class="vector-attr-widget-resizer" title="上下にドラッグして高さを変更"></div>
+        <div class="vector-attr-widget-header">
+          <span class="vector-attr-widget-title">属性・値一覧</span>
+          <button class="vector-attr-widget-close" type="button" aria-label="閉じる">×</button>
+        </div>
+        <div class="vector-attr-widget-filter">
+          <input id="vector-attr-widget-search" type="text" placeholder="属性または値で検索" />
+        </div>
+        <div class="vector-attr-widget-table-wrap">
+          <table class="vector-attr-widget-table">
+            <thead id="vector-attr-widget-head" class="vector-attr-widget-thead"></thead>
+            <tbody id="vector-attr-widget-list"></tbody>
+          </table>
+        </div>
+        <div class="vector-attr-widget-footer">
+          <span id="vector-attr-widget-count"></span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

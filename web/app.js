@@ -1879,6 +1879,10 @@ function setupVectorSearch() {
           vectorValue.disabled = true;
         }
         if (vectorFlyBtn) vectorFlyBtn.disabled = true;
+        if (vectorAttrWidget && vectorAttrWidget.classList.contains("visible")) {
+          buildVectorAttrWidgetRows();
+          renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+        }
       } catch (e) { console.error("vector layer change error", e); }
     });
   }
@@ -1930,6 +1934,157 @@ function setupVectorSearch() {
         buildVectorSearchIndex();
         updateVectorSearchUI();
       } catch (e) { console.error("vector refresh error", e); }
+    });
+  }
+
+  const vectorAttrListBtn = document.querySelector("#vector-attr-list-btn");
+  const vectorAttrWidget = document.querySelector("#vector-attr-widget");
+  const vectorAttrWidgetClose = document.querySelector(".vector-attr-widget-close");
+  const vectorAttrWidgetResizer = document.querySelector(".vector-attr-widget-resizer");
+  const vectorAttrWidgetSearch = document.querySelector("#vector-attr-widget-search");
+  const vectorAttrWidgetHead = document.querySelector("#vector-attr-widget-head");
+  const vectorAttrWidgetList = document.querySelector("#vector-attr-widget-list");
+  const vectorAttrWidgetCount = document.querySelector("#vector-attr-widget-count");
+  const vectorAttrWidgetTitle = document.querySelector(".vector-attr-widget-title");
+  let vectorAttrWidgetRows = [];
+  let vectorAttrWidgetAttributes = [];
+
+  function getVectorDataSourceById(layerId) {
+    if (layerId === "__all__") return null;
+    return vectorDataSources.find(item => item.id === layerId) || null;
+  }
+
+  function buildVectorAttrWidgetRows() {
+    vectorAttrWidgetRows = [];
+    vectorAttrWidgetAttributes = [];
+    const layerId = (vectorLayer && vectorLayer.value) ? vectorLayer.value : "__all__";
+    const dsItem = getVectorDataSourceById(layerId);
+    const source = getCurrentVectorSource();
+    if (!dsItem || !source || !source.attributes || !source.attributes.length) return;
+    const time = viewer.clock && viewer.clock.currentTime;
+    vectorAttrWidgetAttributes = source.attributes.slice();
+    const maxRows = 1000;
+    let count = 0;
+    for (const entity of dsItem.ds.entities.values) {
+      if (count++ >= maxRows) break;
+      const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
+      const row = [];
+      for (const attr of vectorAttrWidgetAttributes) {
+        const raw = props ? props[attr] : undefined;
+        const val = (raw == null) ? "" : (typeof raw === "object" ? JSON.stringify(raw) : String(raw));
+        row.push(val);
+      }
+      const cartesian = getEntityPosition(entity);
+      const deg = cartesian ? cartesianToDegrees(cartesian) : null;
+      vectorAttrWidgetRows.push({
+        values: row,
+        lat: deg && Number.isFinite(deg.lat) ? deg.lat : null,
+        lng: deg && Number.isFinite(deg.lng) ? deg.lng : null,
+      });
+    }
+  }
+
+  function renderVectorAttrWidget(filter = "") {
+    try {
+      if (!vectorAttrWidgetList || !vectorAttrWidgetCount || !vectorAttrWidgetTitle) return;
+      const query = String(filter).toLowerCase().trim();
+      const matched = query ? vectorAttrWidgetRows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : vectorAttrWidgetRows;
+      const displayRows = matched.slice(0, 1000);
+      const layerTitle = (vectorLayer && vectorLayer.value !== "__all__" && vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[vectorLayer.value] && vectorSearchData.layers[vectorLayer.value].title) ? vectorSearchData.layers[vectorLayer.value].title : "全選択";
+      vectorAttrWidgetTitle.textContent = "属性・値一覧" + (layerTitle ? " — " + layerTitle : "");
+      if (!vectorAttrWidgetAttributes.length) {
+        if (vectorAttrWidgetHead) vectorAttrWidgetHead.innerHTML = "";
+        vectorAttrWidgetList.innerHTML = '<tr><td style="padding:12px 14px;color:#71818d;">レイヤを選択してください</td></tr>';
+        vectorAttrWidgetCount.textContent = "0 件 / 0 属性";
+        return;
+      }
+      if (vectorAttrWidgetHead) {
+        vectorAttrWidgetHead.innerHTML = '<tr>' + vectorAttrWidgetAttributes.map(attr =>
+          '<th>' + escapeHtml(attr) + '</th>'
+        ).join("") + '</tr>';
+      }
+      if (!displayRows.length) {
+        vectorAttrWidgetList.innerHTML = '<tr><td colspan="' + vectorAttrWidgetAttributes.length + '" style="padding:12px 14px;color:#71818d;">該当する地物がありません</td></tr>';
+        vectorAttrWidgetCount.textContent = (query ? "0" : String(vectorAttrWidgetRows.length)) + " 件 / " + vectorAttrWidgetAttributes.length + " 属性";
+        return;
+      }
+      vectorAttrWidgetList.innerHTML = displayRows.map(row => {
+        const flyable = Number.isFinite(row.lat) && Number.isFinite(row.lng);
+        const dataAttrs = flyable ? 'data-lat="' + row.lat + '" data-lng="' + row.lng + '"' : '';
+        const style = flyable ? 'style="cursor:pointer;"' : '';
+        return '<tr class="vector-attr-widget-row" ' + dataAttrs + ' ' + style + ' title="' + (flyable ? 'クリックで移動' : '') + '">' +
+          row.values.map(val => '<td class="vector-attr-widget-cell" title="' + escapeHtml(val) + '">' + escapeHtml(val) + '</td>').join("") +
+          '</tr>';
+      }).join("");
+      const suffix = (matched.length > displayRows.length) ? " （表示上限 " + displayRows.length + " 件）" : "";
+      vectorAttrWidgetCount.textContent = String(matched.length) + " 件 / " + vectorAttrWidgetAttributes.length + " 属性" + suffix;
+    } catch (e) { console.error("vector attr widget render error", e); }
+  }
+
+  function openVectorAttrWidget() {
+    if (!vectorAttrWidget) return;
+    buildVectorAttrWidgetRows();
+    renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+    vectorAttrWidget.classList.add("visible");
+    if (vectorAttrWidgetSearch) vectorAttrWidgetSearch.focus();
+  }
+
+  function closeVectorAttrWidget() {
+    if (vectorAttrWidget) vectorAttrWidget.classList.remove("visible");
+  }
+
+  if (vectorAttrListBtn) vectorAttrListBtn.addEventListener("click", openVectorAttrWidget);
+  if (vectorAttrWidgetClose) vectorAttrWidgetClose.addEventListener("click", closeVectorAttrWidget);
+  if (vectorAttrWidgetSearch) {
+    vectorAttrWidgetSearch.addEventListener("input", () => renderVectorAttrWidget(vectorAttrWidgetSearch.value));
+    vectorAttrWidgetSearch.addEventListener("keydown", (ev) => { if (ev.key === "Enter") renderVectorAttrWidget(vectorAttrWidgetSearch.value); });
+  }
+
+  if (vectorAttrWidgetList) {
+    vectorAttrWidgetList.addEventListener("click", (ev) => {
+      try {
+        const tr = ev.target.closest("tr");
+        if (!tr) return;
+        const lat = Number(tr.getAttribute("data-lat"));
+        const lng = Number(tr.getAttribute("data-lng"));
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          flyTo({ latitude: lat, longitude: lng, height: 300, pitch: -30 });
+        }
+      } catch (e) { console.error("vector attr row click error", e); }
+    });
+  }
+
+  if (vectorAttrWidgetResizer && vectorAttrWidget) {
+    let startY = 0;
+    let startHeight = 0;
+    let isResizing = false;
+
+    function onMouseMove(ev) {
+      if (!isResizing) return;
+      ev.preventDefault();
+      const delta = startY - ev.clientY;
+      const nextHeight = startHeight + delta;
+      const maxHeight = Math.min(window.innerHeight * 0.9, 1200);
+      const clamped = Math.max(120, Math.min(maxHeight, nextHeight));
+      vectorAttrWidget.style.height = clamped + "px";
+    }
+
+    function onMouseUp() {
+      isResizing = false;
+      document.body.style.cursor = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      if (window.getSelection) window.getSelection().removeAllRanges();
+    }
+
+    vectorAttrWidgetResizer.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      isResizing = true;
+      startY = ev.clientY;
+      startHeight = vectorAttrWidget.offsetHeight;
+      document.body.style.cursor = "ns-resize";
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
     });
   }
 }
