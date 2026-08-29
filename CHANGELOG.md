@@ -4,6 +4,29 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.1.0] - 2026-08-24
+
+### Added
+
+- Fly モードの経路追従機能
+  - `fly_geojson:` インスペクター構文で GeoJSON ルートを定義
+  - 手動 / 自動経路の選択ドロップダウン
+  - ルートに沿った自動飛行、速度・高さのリアルタイム調整
+- 描画ルート機能
+  - 右クリックで点を追加、右ダブルクリックで終了
+  - 描画したルートをプロジェクト内に GeoJSON としてキャッシュ
+  - 保存したルートを `fly_geojson:` として即座に FLY 可能
+- 速度・高さの一元制御
+  - 手動・自動を問わず `flySpeed`（km/h）/ `flyHeight`（m）を共有
+  - マウスホイールで ±1 km/h 速度調整
+  - walk-help パネルで速度・高さを直接入力
+- ローカルファイルの PUT 保存 API (`PUT /api/file`)
+
+### Changed
+
+- Fly モードの UI 操作を Orbit との干渉を避けて整理
+- 速度値は負数も許容し、前進 / 停止 / 後進を同じ概念で操作
+
 ## [1.0.25] - 2026-08-23
 
 ### Added

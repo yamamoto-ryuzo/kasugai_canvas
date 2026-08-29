@@ -219,6 +219,11 @@
                 <strong>Fly</strong>
                 <button id="walk-help-toggle" class="walk-help-toggle" type="button" aria-label="最小化">−</button>
               </div>
+              <div class="walk-path-select" style="margin-bottom:8px;">
+                <select id="fly-path-select" style="width:100%;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;">
+                  <option value="__manual__">手動</option>
+                </select>
+              </div>
               <div class="walk-help-tabs">
                 <button class="walk-help-tab active" data-tab="mouse" type="button">マウス</button>
                 <button class="walk-help-tab" data-tab="keyboard" type="button">キー</button>
@@ -240,13 +245,14 @@
                   <div><kbd>Esc</kbd> 3D モードへ</div>
                 </div>
               </div>
-              <div class="walk-height">高さ: <strong id="walk-offset">20.0</strong>m / 地形高: <strong id="walk-terrain">0.0</strong>m</div>
-              <div class="walk-height">速度: <strong id="walk-speed">108.0</strong>km/h</div>
+              <div class="walk-height">高さ: <input id="walk-offset" type="number" value="20.0" step="0.1" style="width:60px;">m / 地形高: <strong id="walk-terrain">0.0</strong>m</div>
+              <div class="walk-height">速度: <input id="walk-speed" type="number" value="30" step="1" style="width:60px;">km/h</div>
             </div>
             <button id="compass-button" class="compass-button" type="button" title="Reset north">
               <span class="compass-needle"></span><strong>N</strong>
             </button>
             <button id="top-down-button" type="button" aria-label="3D perspective view" title="3D perspective view">3D</button>
+            <button id="draw-mode-toggle" type="button" aria-label="Draw glow line" title="Draw glow line">Draw</button>
             <button id="mode-select" class="mode-select" type="button" value="orbit" aria-label="Orbit view">Orbit</button>
             <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化">−</button>
           </aside>

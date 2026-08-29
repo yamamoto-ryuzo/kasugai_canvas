@@ -56,8 +56,23 @@ let undergroundBackgroundColor = Cesium.Color.BLACK;
 let basemapDrape3DTiles = false;
 let infoRequestId = 0;
 let walkModeActive = false;
-let walkTerrainOffset = 20;
-let walkMoveSpeed = 30;
+let flyHeight = 20;
+let flySpeed = 30;
+const flyPaths = [];
+let flyPath = null;
+let flyPathCoords = null;
+let flyPathLinePositions = [];
+let flyPathEntity = null;
+let flyPathRafId = null;
+let flyPathActive = false;
+let flyPathProgress = 0;
+let flyRafId = null;
+let flyLastTime = performance.now();
+let drawModeActive = false;
+let drawnPoints = [];
+let drawLineEntity = null;
+let isDrawing = false;
+let lastRightDownTime = 0;
 const activeClippingPlanes = { planes: [] };
 const activeDataSources = [];
 const vectorDataSources = [];
@@ -285,6 +300,89 @@ async function flyToFeature(lat, lng, options = {}) {
     cameraLng = lng - (distance * Math.sin(headingRad)) / (metersPerDegLng || 1);
   }
   flyTo({ latitude: cameraLat, longitude: cameraLng, height, pitch: pitchDeg, heading: headingDeg });
+}
+
+function extractLineStringCoordinates(geojson) {
+  if (!geojson || typeof geojson !== "object") return [];
+  const coords = [];
+  const collect = (obj) => {
+    if (!obj || typeof obj !== "object") return;
+    if (obj.type === "LineString") {
+      if (Array.isArray(obj.coordinates)) coords.push(...obj.coordinates);
+    } else if (obj.type === "MultiLineString") {
+      (obj.coordinates || []).forEach(line => { if (Array.isArray(line)) coords.push(...line); });
+    } else if (obj.type === "Feature") {
+      collect(obj.geometry);
+    } else if (obj.type === "FeatureCollection" || Array.isArray(obj.features)) {
+      (obj.features || []).forEach(collect);
+    } else if (obj.type === "GeometryCollection" || Array.isArray(obj.geometries)) {
+      (obj.geometries || []).forEach(collect);
+    }
+  };
+  collect(geojson);
+  return coords.filter(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]));
+}
+
+function buildFlyPath(rawCoords, stepMeters = 100) {
+  if (!rawCoords.length) return [];
+  const path = [];
+  for (let i = 0; i < rawCoords.length - 1; i++) {
+    const [lng1, lat1, alt1 = 0] = rawCoords[i];
+    const [lng2, lat2, alt2 = 0] = rawCoords[i + 1];
+    const dx = (lng2 - lng1) * 111320 * Math.cos((lat1 + lat2) * Math.PI / 360);
+    const dy = (lat2 - lat1) * 111320;
+    const dz = (alt2 - alt1);
+    const segLen = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    const steps = Math.max(1, Math.ceil(segLen / stepMeters));
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      path.push({
+        longitude: lng1 + (lng2 - lng1) * t,
+        latitude: lat1 + (lat2 - lat1) * t,
+        altitude: alt1 + (alt2 - alt1) * t,
+      });
+    }
+  }
+  path.push({
+    longitude: rawCoords[rawCoords.length - 1][0],
+    latitude: rawCoords[rawCoords.length - 1][1],
+    altitude: rawCoords[rawCoords.length - 1][2] || 0,
+  });
+  return path;
+}
+
+async function loadFlyGeoJson(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  const geojson = await response.json();
+  const rawCoords = extractLineStringCoordinates(geojson);
+  if (!rawCoords.length) throw new Error("LineString または MultiLineString が見つかりません");
+  return buildFlyPath(rawCoords, flyPath?.step ?? 100);
+}
+
+function buildFlyPathLinePositions(coords) {
+  return coords.map(c => {
+    const carto = Cesium.Cartographic.fromDegrees(c.longitude, c.latitude);
+    const terrainHeight = carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0;
+    return Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, terrainHeight + c.altitude + flyHeight);
+  });
+}
+
+function getFlyPathLinePositions() {
+  if (!flyPathLinePositions.length) return [];
+  const idx = Math.floor(flyPathProgress);
+  if (idx < 0 || idx >= flyPathLinePositions.length) return flyPathLinePositions;
+  const nextIdx = Math.min(idx + 1, flyPathLinePositions.length - 1);
+  const t = flyPathProgress - idx;
+  const a = flyPathLinePositions[idx];
+  const b = flyPathLinePositions[nextIdx];
+  if (t === 0 || !b) return flyPathLinePositions.slice(0, idx + 1);
+  const current = new Cesium.Cartesian3(
+    a.x + (b.x - a.x) * t,
+    a.y + (b.y - a.y) * t,
+    a.z + (b.z - a.z) * t
+  );
+  return [...flyPathLinePositions.slice(0, idx + 1), current];
 }
 
 function updateUrlFromCamera() {
@@ -535,6 +633,16 @@ function renderLayerList() {
     const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
     if (group && !group.exclusive) input.indeterminate = group.layers.some(layer => layer.visible) && group.layers.some(layer => !layer.visible);
   });
+}
+
+function renderFlyPathSelect() {
+  const select = document.querySelector("#fly-path-select");
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '<option value="__manual__">手動</option>' +
+    flyPaths.map((path, index) => `<option value="${index}">${escapeHtml(path.title)}</option>`).join("");
+  const exists = [...select.options].some(option => option.value === current);
+  select.value = exists ? current : "__manual__";
 }
 
 function formatTileUrl(template, index) {
@@ -1089,6 +1197,13 @@ function applyInspector(text) {
   layers.splice(0, layers.length);
   basemaps.splice(0, basemaps.length);
   layerOrder = [];
+  flyPaths.splice(0, flyPaths.length);
+  flyPath = null;
+  flyPathCoords = null;
+  flyPathLinePositions = [];
+  if (flyPathEntity) { viewer.entities.remove(flyPathEntity); flyPathEntity = null; }
+  flyPathActive = false;
+  flyPathProgress = 0;
 
   document.body.style.background = "";
   undergroundBackgroundColor = Cesium.Color.BLACK;
@@ -1165,6 +1280,28 @@ function applyInspector(text) {
       if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) parsedCameras.push(camera);
     }
 
+    if (type === "fly_geojson") {
+      const parts = value.split("|").map(part => part.trim());
+      const title = parts[0];
+      const url = parts[1];
+      if (!url) return;
+      const config = { title: title || url, url, speed: 30, height: 20, pitch: -10, loop: false, step: 100 };
+      const off = parts.some(part => /^(off|false)$/i.test(part));
+      parts.slice(2).forEach(part => {
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        const key = part.slice(0, eq).trim().toLowerCase();
+        const raw = part.slice(eq + 1).trim();
+        const number = Number(raw);
+        if ((key === "speed" || key === "s") && Number.isFinite(number) && number > 0) config.speed = number;
+        if ((key === "height" || key === "h") && Number.isFinite(number)) config.height = number;
+        if ((key === "pitch" || key === "p") && Number.isFinite(number)) config.pitch = number;
+        if ((key === "step") && Number.isFinite(number) && number > 0) config.step = number;
+        if (key === "loop" || key === "l") config.loop = /^(true|1|on|yes)$/i.test(raw);
+      });
+      if (!off) flyPaths.push(config);
+    }
+
     if (type === "xyz") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
@@ -1215,6 +1352,7 @@ function applyInspector(text) {
   renderBasemapSelector();
   renderPresets();
   renderLayerList();
+  renderFlyPathSelect();
   refreshLayers();
   updateSearchProvider();
 }
@@ -1478,11 +1616,143 @@ function setupEvents() {
     setTopDown(viewer.scene.screenSpaceCameraController.enableTilt);
   });
 
+  function getBearing(a, b) {
+    const lat1 = a.latitude * Math.PI / 180;
+    const lat2 = b.latitude * Math.PI / 180;
+    const dLng = (b.longitude - a.longitude) * Math.PI / 180;
+    const x = Math.sin(dLng) * Math.cos(lat2);
+    const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return Math.atan2(x, y);
+  }
+
+  function stopFlyPath() {
+    flyPathActive = false;
+    if (flyPathRafId !== null) {
+      cancelAnimationFrame(flyPathRafId);
+      flyPathRafId = null;
+    }
+    if (flyPathEntity) {
+      viewer.entities.remove(flyPathEntity);
+      flyPathEntity = null;
+    }
+  }
+
+  async function startFlyPath(index) {
+    if (!Number.isFinite(index) || index < 0 || index >= flyPaths.length) return;
+    flyPath = flyPaths[index];
+    flySpeed = Number(flyPath.speed) || 30;
+    flyHeight = Number(flyPath.height) || 20;
+    if (walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+    if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
+    try {
+      flyPathCoords = await loadFlyGeoJson(flyPath.url);
+    } catch (error) {
+      console.error("Fly GeoJSON の読み込みに失敗しました:", error);
+      flyPathCoords = null;
+      return;
+    }
+    if (!flyPathCoords || !flyPathCoords.length) return;
+    flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+    if (flyPathEntity) viewer.entities.remove(flyPathEntity);
+    flyPathEntity = viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(() => getFlyPathLinePositions(), false),
+        width: 4,
+        material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.15 }),
+      },
+    });
+    flyPathProgress = 0;
+    flyPathActive = true;
+    flyPathLastTime = performance.now();
+    if (flyPathRafId === null) flyPathRafId = requestAnimationFrame(flyPathLoop);
+  }
+
+  let flyPathLastTime = performance.now();
+  const flyPathLoop = (timestamp) => {
+    flyPathRafId = null;
+    if (!flyPathActive || !flyPathCoords || !flyPathCoords.length) return;
+    const delta = Math.min((timestamp - flyPathLastTime) / 1000, 0.1);
+    flyPathLastTime = timestamp;
+
+    const path = flyPathCoords;
+    const stepMeters = (flySpeed / 3.6) * delta;
+    flyPathProgress += stepMeters / flyPath.step;
+
+    if (flyPathProgress >= path.length - 1) {
+      if (flyPath.loop) {
+        flyPathProgress = 0;
+      } else {
+        flyPathProgress = path.length - 1;
+        stopFlyPath();
+        return;
+      }
+    }
+    if (flyPathProgress <= 0) {
+      if (flyPath.loop) {
+        flyPathProgress = path.length - 1;
+      } else {
+        flyPathProgress = 0;
+      }
+    }
+
+    const idx = Math.floor(flyPathProgress);
+    const nextIdx = Math.min(idx + 1, path.length - 1);
+    const t = flyPathProgress - idx;
+    const a = path[idx];
+    const b = path[nextIdx];
+    const lat = a.latitude + (b.latitude - a.latitude) * t;
+    const lng = a.longitude + (b.longitude - a.longitude) * t;
+    const alt = a.altitude + (b.altitude - a.altitude) * t;
+    const carto = Cesium.Cartographic.fromDegrees(lng, lat);
+    const terrainHeight = carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0;
+    const height = terrainHeight + flyHeight + alt;
+    const heading = getBearing(a, b);
+    const pitch = Math.max(-85, Math.min(0, flyPath.pitch)) * Math.PI / 180;
+
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(lng, lat, height),
+      orientation: { heading, pitch, roll: 0 },
+    });
+
+    if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
+    if (walkTerrainEl) walkTerrainEl.textContent = terrainHeight.toFixed(1);
+    if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+
+    flyPathRafId = requestAnimationFrame(flyPathLoop);
+  };
+
   const modeSelect = document.querySelector("#mode-select");
   const walkOffsetEl = document.querySelector("#walk-offset");
   const walkTerrainEl = document.querySelector("#walk-terrain");
   const walkSpeedEl = document.querySelector("#walk-speed");
   const walkKeys = new Set();
+  if (walkOffsetEl) {
+    walkOffsetEl.addEventListener("input", () => {
+      const value = Number(walkOffsetEl.value);
+      if (!Number.isFinite(value)) {
+        walkOffsetEl.value = flyHeight.toFixed(1);
+        return;
+      }
+      flyHeight = value;
+      if (flyPathActive && flyPath) flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+    });
+  }
+  if (walkSpeedEl) {
+    walkSpeedEl.addEventListener("input", () => {
+      const value = Number(walkSpeedEl.value);
+      if (!Number.isFinite(value)) {
+        walkSpeedEl.value = flySpeed.toFixed(1);
+        return;
+      }
+      flySpeed = value;
+    });
+  }
+  viewer.canvas.addEventListener("wheel", event => {
+    if (!walkModeActive) return;
+    event.preventDefault();
+    flySpeed = flySpeed + Math.sign(event.deltaY) * 1;
+    if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+  }, { passive: false });
   let walkLastTime = performance.now();
   let autoMove = 0;
   let walkRafId = null;
@@ -1508,8 +1778,8 @@ function setupEvents() {
       const move = (manualMove !== 0) ? manualMove : autoMove;
       const speedChange = (walkKeys.has("Equal") || walkKeys.has("NumpadAdd") ? 1 : 0) -
         (walkKeys.has("Minus") || walkKeys.has("NumpadSubtract") ? 1 : 0);
-      walkMoveSpeed += 100 * speedChange * delta;
-      const moveDistance = walkMoveSpeed * delta;
+      flySpeed += 100 * speedChange * delta;
+      const moveDistance = (flySpeed / 3.6) * delta;
       if (move !== 0) {
         const normal = viewer.scene.globe.ellipsoid.geodeticSurfaceNormal(camera.position, new Cesium.Cartesian3());
         const dot = Cesium.Cartesian3.dot(camera.direction, normal);
@@ -1526,15 +1796,15 @@ function setupEvents() {
       if (carto) {
         const terrainHeight = viewer.scene.globe.getHeight(carto) ?? 0;
         const heightChange = (walkKeys.has("KeyQ") ? 1 : 0) - (walkKeys.has("KeyE") ? 1 : 0);
-        walkTerrainOffset += 10 * heightChange * delta;
-        carto.height = terrainHeight + walkTerrainOffset;
+        flyHeight += 10 * heightChange * delta;
+        carto.height = terrainHeight + flyHeight;
         camera.setView({
           destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, carto.height),
           orientation: { heading, pitch, roll: 0 },
         });
-        if (walkOffsetEl) walkOffsetEl.textContent = walkTerrainOffset.toFixed(1);
+        if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
         if (walkTerrainEl) walkTerrainEl.textContent = terrainHeight.toFixed(1);
-        if (walkSpeedEl) walkSpeedEl.textContent = (walkMoveSpeed * 3.6).toFixed(1);
+        if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
       }
       walkRafId = requestAnimationFrame(walkLoop);
     }
@@ -1546,6 +1816,7 @@ function setupEvents() {
   const wheelEventType = Cesium.CameraEventType?.WHEEL;
   const setMode = (next) => {
     const isWalk = next === "walk";
+    const wasWalk = walkModeActive;
     modeSelect.value = next;
     modeSelect.textContent = isWalk ? "Fly" : "Orbit";
     modeSelect.setAttribute("aria-label", isWalk ? "Fly mode" : "Orbit view");
@@ -1556,7 +1827,7 @@ function setupEvents() {
       const carto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
       if (carto) {
         const terrainHeight = viewer.scene.globe.getHeight(carto) ?? 0;
-        walkTerrainOffset = carto.height - terrainHeight;
+        flyHeight = carto.height - terrainHeight;
       }
     }
     ssec.enableZoom = true;
@@ -1565,19 +1836,200 @@ function setupEvents() {
       ? defaultZoomEventTypes.filter(t => t !== wheelEventType)
       : defaultZoomEventTypes;
     viewer.scene.mode = Cesium.SceneMode.SCENE3D;
-    if (isWalk && !walkRafId) {
-      walkLastTime = performance.now();
-      walkRafId = requestAnimationFrame(walkLoop);
+    if (isWalk && !wasWalk) {
+      const select = document.querySelector("#fly-path-select");
+      const pathValue = select?.value || "__manual__";
+      if (pathValue !== "__manual__" && !flyPathActive) {
+        const index = Number(pathValue);
+        if (Number.isFinite(index) && index >= 0 && index < flyPaths.length) void startFlyPath(index);
+      } else if (pathValue === "__manual__" && !walkRafId) {
+        walkLastTime = performance.now();
+        walkRafId = requestAnimationFrame(walkLoop);
+      }
+    }
+    if (!isWalk) {
+      stopFlyPath();
+      if (walkRafId) {
+        cancelAnimationFrame(walkRafId);
+        walkRafId = null;
+      }
     }
   };
   modeSelect.addEventListener("click", () => {
     setMode(modeSelect.value === "orbit" ? "walk" : "orbit");
   });
+  document.querySelector("#fly-path-select")?.addEventListener("change", () => {
+    if (!walkModeActive) return;
+    stopFlyPath();
+    if (walkRafId) {
+      cancelAnimationFrame(walkRafId);
+      walkRafId = null;
+    }
+    const select = document.querySelector("#fly-path-select");
+    const pathValue = select?.value || "__manual__";
+    if (pathValue !== "__manual__") {
+      const index = Number(pathValue);
+      if (Number.isFinite(index) && index >= 0 && index < flyPaths.length) void startFlyPath(index);
+    } else {
+      walkLastTime = performance.now();
+      walkRafId = requestAnimationFrame(walkLoop);
+    }
+  });
+
+  const drawModeToggle = document.querySelector("#draw-mode-toggle");
+  function updateDrawModeButton() { if (drawModeToggle) drawModeToggle.classList.toggle("active", drawModeActive); }
+  function addDrawPoint(screenPosition) {
+    if (!drawModeActive) return;
+    const ray = viewer.camera.getPickRay(screenPosition);
+    if (!ray) return;
+    const cartesian = viewer.scene.globe.pick(ray, viewer.scene);
+    if (!cartesian) return;
+    const carto = Cesium.Cartographic.fromCartesian(cartesian);
+    const point = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, carto.height + 20);
+    if (drawnPoints.length > 0) {
+      const last = drawnPoints[drawnPoints.length - 1];
+      const dx = point.x - last.x;
+      const dy = point.y - last.y;
+      const dz = point.z - last.z;
+      if (dx * dx + dy * dy + dz * dz < 25) return;
+    }
+    drawnPoints.push(point);
+    if (!drawLineEntity) {
+      drawLineEntity = viewer.entities.add({
+        polyline: {
+          positions: new Cesium.CallbackProperty(() => drawnPoints, false),
+          width: 4,
+          material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.CYAN, glowPower: 0.15 }),
+        },
+      });
+    }
+  }
+  function stopDrawMode() {
+    drawModeActive = false;
+    isDrawing = false;
+    lastRightDownTime = 0;
+    updateDrawModeButton();
+    if (viewer.scene.screenSpaceCameraController) {
+      viewer.scene.screenSpaceCameraController.zoomEventTypes = defaultZoomEventTypes;
+    }
+  }
+  function clearDrawnLine() {
+    if (drawLineEntity) {
+      viewer.entities.remove(drawLineEntity);
+      drawLineEntity = null;
+    }
+    drawnPoints = [];
+  }
+  function buildDrawnGeoJson(absolute = true) {
+    if (drawnPoints.length < 2) return null;
+    const coordinates = drawnPoints.map(p => {
+      const c = Cesium.Cartographic.fromCartesian(p);
+      const lng = Number((c.longitude * 180 / Math.PI).toFixed(6));
+      const lat = Number((c.latitude * 180 / Math.PI).toFixed(6));
+      return absolute ? [lng, lat, Number(c.height.toFixed(2))] : [lng, lat];
+    });
+    return {
+      type: "Feature",
+      properties: { heightOffset: 20 },
+      geometry: { type: "LineString", coordinates },
+    };
+  }
+  function saveDrawnLine() {
+    const geojson = buildDrawnGeoJson(true);
+    if (!geojson) return;
+    const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "drawn_route.geojson";
+    document.body.append(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+  async function cacheDrawnLine() {
+    const geojson = buildDrawnGeoJson(false);
+    if (!geojson) return;
+    const project = currentProjectId || "";
+    const path = "drawn_route.geojson";
+    const fileUrl = `/api/file?path=${encodeURIComponent(path)}&project=${encodeURIComponent(project)}`;
+    try {
+      const response = await fetch(fileUrl, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geojson) });
+      if (!response.ok) throw new Error(await response.text());
+      flyPaths.push({ title: "描画ルート", url: fileUrl, speed: 30, height: 20, pitch: -10, loop: false, step: 100 });
+      renderFlyPathSelect();
+      const select = document.querySelector("#fly-path-select");
+      if (select) select.value = String(flyPaths.length - 1);
+      const inspectorInput = document.querySelector("#inspector-input");
+      if (inspectorInput) {
+        const line = `fly_geojson: 描画ルート | ${fileUrl}`;
+        const text = inspectorInput.value;
+        inspectorInput.value = text ? (text.trim().endsWith("\n") ? text + line + "\n" : text + "\n" + line + "\n") : line + "\n";
+        void saveInspectorConfig().catch(error => console.warn("設定の保存に失敗しました:", error));
+      }
+    } catch (error) {
+      console.error("ルートのキャッシュに失敗しました:", error);
+    }
+  }
+
+  function getCanvasPosition(event) {
+    const rect = viewer.canvas.getBoundingClientRect();
+    return new Cesium.Cartesian2(event.clientX - rect.left, event.clientY - rect.top);
+  }
+  const RIGHT_DOUBLE_MS = 400;
+  let suppressContextMenu = false;
+  function onDrawPointerDown(event) {
+    if (!drawModeActive || event.button !== 2) return;
+    event.preventDefault();
+    const now = performance.now();
+    const isDouble = now - lastRightDownTime < RIGHT_DOUBLE_MS;
+    if (isDouble) {
+      lastRightDownTime = 0;
+      suppressContextMenu = true;
+      if (drawnPoints.length >= 2) {
+        saveDrawnLine();
+        void cacheDrawnLine();
+        stopDrawMode();
+      }
+      return;
+    }
+    lastRightDownTime = now;
+    addDrawPoint(getCanvasPosition(event));
+  }
+  function onDrawContextMenu(event) {
+    if (!drawModeActive && !suppressContextMenu) return;
+    event.preventDefault();
+    suppressContextMenu = false;
+  }
+
+  viewer.canvas.addEventListener("pointerdown", onDrawPointerDown, { passive: false });
+  viewer.canvas.addEventListener("contextmenu", onDrawContextMenu, { passive: false });
+
+  if (drawModeToggle) {
+    drawModeToggle.addEventListener("click", () => {
+      if (drawModeActive) {
+        stopDrawMode();
+      } else {
+        if (walkModeActive || flyPathActive) setMode("orbit");
+        clearDrawnLine();
+        drawModeActive = true;
+        updateDrawModeButton();
+        if (viewer.scene.screenSpaceCameraController) {
+          const ssec = viewer.scene.screenSpaceCameraController;
+          ssec.enableZoom = true;
+          const rightDrag = Cesium.CameraEventType.RIGHT_DRAG;
+          ssec.zoomEventTypes = defaultZoomEventTypes.filter(t => t !== rightDrag && t?.eventType !== rightDrag);
+        }
+      }
+    });
+  }
+
   const lastKeyTap = { KeyW: 0, KeyS: 0 };
   window.addEventListener("keydown", event => {
     if (!walkModeActive) return;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(event.target?.tagName)) return;
     const code = event.code;
+    if (flyPathActive && code !== "Escape") return;
     if (["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE", "Equal", "Minus", "NumpadAdd", "NumpadSubtract", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(code)) {
       event.preventDefault();
       if (code === "Escape") {
@@ -1795,14 +2247,6 @@ function setupEvents() {
       autoMove = autoMove === 1 ? 0 : 1;
     }
   });
-
-  viewer.canvas.addEventListener("wheel", event => {
-    if (!walkModeActive) return;
-    event.preventDefault();
-    const direction = -Math.sign(event.deltaY);
-    if (direction === 0) return;
-    walkMoveSpeed += 20 * direction;
-  }, { passive: false });
 
   let middlePointerId = null;
   let lastMiddleRotateX = 0;

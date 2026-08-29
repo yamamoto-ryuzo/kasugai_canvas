@@ -700,6 +700,47 @@ fn internal_error(error: impl std::fmt::Display) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
 }
 
+async fn put_local_file(
+    Query(query): Query<FileQuery>,
+    State(state): State<AppState>,
+    body: axum::body::Bytes,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let base = if let Some(project) = query.project.as_deref().filter(|v| valid_project_id(v)) {
+        state.projects_path.join(project)
+    } else {
+        state.projects_path.as_ref().clone()
+    };
+    tokio::fs::create_dir_all(&base).await.map_err(internal_error)?;
+    let base_canonical = base.canonicalize().map_err(|error| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("ベースフォルダが見つかりません: {error}"),
+        )
+    })?;
+    let requested = base.join(&query.path);
+    let parent = requested.parent().unwrap_or(&base).to_path_buf();
+    tokio::fs::create_dir_all(&parent).await.map_err(internal_error)?;
+    let parent_canonical = parent.canonicalize().map_err(|error| {
+        (
+            StatusCode::FORBIDDEN,
+            format!("指定されたフォルダにアクセスできません: {error}"),
+        )
+    })?;
+    if !parent_canonical.starts_with(&base_canonical) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "指定されたファイルへのアクセスは許可されていません".to_string(),
+        ));
+    }
+    let file_name = requested.file_name().and_then(|n| n.to_str()).ok_or((
+        StatusCode::BAD_REQUEST,
+        "不正なファイル名です".to_string(),
+    ))?;
+    let file_path = parent_canonical.join(file_name);
+    tokio::fs::write(&file_path, body).await.map_err(internal_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn fetch_latest() -> Result<Value, (StatusCode, String)> {
     let mut last_error = "最新バージョン情報を取得できませんでした".to_string();
     for url in LATEST_JSON_URLS {
@@ -906,7 +947,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/search", get(proxy_search))
         .route("/api/tile", get(proxy_tile))
         .route("/api/tile/{*target}", get(proxy_tile_path))
-        .route("/api/file", get(serve_local_file))
+        .route("/api/file", get(serve_local_file).put(put_local_file))
         .route("/api/projects", get(list_projects))
         .route(
             "/api/projects/{project_id}/config",
