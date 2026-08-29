@@ -1698,19 +1698,37 @@ function setupEvents() {
     if (walkTerrainEl) walkTerrainEl.textContent = terrain.toFixed(1);
     if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
   }
+  function ensureFlyPathEntity() {
+    if (flyPathEntity) return;
+    if (!flyPathCoords) return;
+    if (!flyPathLinePositions) flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+    flyPathEntity = viewer.entities.add({
+      polyline: {
+        positions: new Cesium.CallbackProperty(() => getFlyPathLinePositions(), false),
+        width: 4,
+        material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.15 }),
+      },
+    });
+  }
   function pauseFlyPath() {
     flyPathActive = false;
     if (flyPathRafId !== null) {
       cancelAnimationFrame(flyPathRafId);
       flyPathRafId = null;
     }
-  }
-  function stopFlyPath() {
-    pauseFlyPath();
     if (flyPathEntity) {
       viewer.entities.remove(flyPathEntity);
       flyPathEntity = null;
     }
+  }
+  function stopFlyPath() {
+    pauseFlyPath();
+    flyPath = null;
+    flyPathCoords = null;
+    flyPathCumulativeDistances = [];
+    flyPathLinePositions = [];
+    flyPathDistance = 0;
+    flyPathDirection = 1;
   }
   function toggleFlyPathMove(direction) {
     if (!flyPathCoords || flyPathCoords.length < 2) return;
@@ -1723,6 +1741,7 @@ function setupEvents() {
       }
       flyPathDirection = direction;
       flyPathActive = true;
+      ensureFlyPathEntity();
       if (flyPathRafId === null) {
         flyPathLastTime = performance.now();
         flyPathRafId = requestAnimationFrame(flyPathLoop);
@@ -1758,14 +1777,7 @@ function setupEvents() {
       point.terrain = carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0;
     }
     flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
-    if (flyPathEntity) viewer.entities.remove(flyPathEntity);
-    flyPathEntity = viewer.entities.add({
-      polyline: {
-        positions: new Cesium.CallbackProperty(() => getFlyPathLinePositions(), false),
-        width: 4,
-        material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.15 }),
-      },
-    });
+    ensureFlyPathEntity();
     flyPathProgress = 0;
     flyPathDistance = 0;
     flyPathDirection = 1;
