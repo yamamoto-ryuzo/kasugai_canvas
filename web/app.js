@@ -61,6 +61,8 @@ let flySpeed = 30;
 const flyPaths = [];
 let flyPath = null;
 let flyPathCoords = null;
+let flyPathCumulativeDistances = [];
+let flyPathDistance = 0;
 let flyPathLinePositions = [];
 let flyPathEntity = null;
 let flyPathRafId = null;
@@ -323,32 +325,20 @@ function extractLineStringCoordinates(geojson) {
   return coords.filter(c => Array.isArray(c) && c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]));
 }
 
-function buildFlyPath(rawCoords, stepMeters = 100) {
-  if (!rawCoords.length) return [];
-  const path = [];
-  for (let i = 0; i < rawCoords.length - 1; i++) {
-    const [lng1, lat1, alt1 = 0] = rawCoords[i];
-    const [lng2, lat2, alt2 = 0] = rawCoords[i + 1];
-    const dx = (lng2 - lng1) * 111320 * Math.cos((lat1 + lat2) * Math.PI / 360);
-    const dy = (lat2 - lat1) * 111320;
-    const dz = (alt2 - alt1);
-    const segLen = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-    const steps = Math.max(1, Math.ceil(segLen / stepMeters));
-    for (let s = 0; s < steps; s++) {
-      const t = s / steps;
-      path.push({
-        longitude: lng1 + (lng2 - lng1) * t,
-        latitude: lat1 + (lat2 - lat1) * t,
-        altitude: alt1 + (alt2 - alt1) * t,
-      });
-    }
+function buildFlyPath(rawCoords) {
+  if (!rawCoords.length) return { points: [], distances: [] };
+  const points = rawCoords.map(([lng, lat, alt = 0]) => ({ longitude: lng, latitude: lat, altitude: alt, terrain: 0 }));
+  const distances = [0];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const dx = (b.longitude - a.longitude) * 111320 * Math.cos((a.latitude + b.latitude) * Math.PI / 360);
+    const dy = (b.latitude - a.latitude) * 111320;
+    const dz = (b.altitude - a.altitude);
+    const segLen = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0;
+    distances.push(distances[distances.length - 1] + segLen);
   }
-  path.push({
-    longitude: rawCoords[rawCoords.length - 1][0],
-    latitude: rawCoords[rawCoords.length - 1][1],
-    altitude: rawCoords[rawCoords.length - 1][2] || 0,
-  });
-  return path;
+  return { points, distances };
 }
 
 async function loadFlyGeoJson(url) {
@@ -357,15 +347,11 @@ async function loadFlyGeoJson(url) {
   const geojson = await response.json();
   const rawCoords = extractLineStringCoordinates(geojson);
   if (!rawCoords.length) throw new Error("LineString または MultiLineString が見つかりません");
-  return buildFlyPath(rawCoords, flyPath?.step ?? 100);
+  return buildFlyPath(rawCoords);
 }
 
 function buildFlyPathLinePositions(coords) {
-  return coords.map(c => {
-    const carto = Cesium.Cartographic.fromDegrees(c.longitude, c.latitude);
-    const terrainHeight = carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0;
-    return Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, terrainHeight + c.altitude + flyHeight);
-  });
+  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0) + flyHeight));
 }
 
 function getFlyPathLinePositions() {
@@ -643,6 +629,40 @@ function renderFlyPathSelect() {
     flyPaths.map((path, index) => `<option value="${index}">${escapeHtml(path.title)}</option>`).join("");
   const exists = [...select.options].some(option => option.value === current);
   select.value = exists ? current : "__manual__";
+}
+
+async function ensureDrawnRouteFlyPath() {
+  const project = currentProjectId || "";
+  const listUrl = `/api/files?project=${encodeURIComponent(project)}`;
+  try {
+    const listResponse = await fetch(listUrl);
+    if (!listResponse.ok) return;
+    const files = await listResponse.json();
+    const routeFiles = files.filter(name => /^drawn_route(_\d+)?\.geojson$/.test(name)).sort();
+    const fileUrls = new Set(flyPaths.map(path => path.url));
+    let changed = false;
+    for (const file of routeFiles) {
+      const fileUrl = `/api/file?path=${encodeURIComponent(file)}&project=${encodeURIComponent(project)}`;
+      if (fileUrls.has(fileUrl)) continue;
+      const match = file.match(/^drawn_route_(\d+)\.geojson$/);
+      const title = match ? `描画ルート${match[1]}` : "描画ルート";
+      flyPaths.push({ title, url: fileUrl, speed: 30, height: 20, pitch: -10, loop: false, step: 100 });
+      changed = true;
+    }
+    for (let i = flyPaths.length - 1; i >= 0; i--) {
+      const p = flyPaths[i];
+      const match = p.url.match(/[?&]path=([^&]+)/);
+      if (!match) continue;
+      const file = decodeURIComponent(match[1]);
+      if (p.title.startsWith("描画ルート") && !routeFiles.includes(file)) {
+        flyPaths.splice(i, 1);
+        changed = true;
+      }
+    }
+    if (changed) renderFlyPathSelect();
+  } catch (error) {
+    // ファイルの存在確認に失敗しても無視
+  }
 }
 
 function formatTileUrl(template, index) {
@@ -1349,10 +1369,13 @@ function applyInspector(text) {
   basemaps.splice(0, basemaps.length, ...parsedBasemaps);
   selectedBasemap = basemaps[0] || null;
   cameraPresets.splice(0, cameraPresets.length, ...parsedCameras);
+  const uniqueFlyPaths = [...new Map(flyPaths.map(path => [path.url, path])).values()];
+  flyPaths.splice(0, flyPaths.length, ...uniqueFlyPaths);
   renderBasemapSelector();
   renderPresets();
   renderLayerList();
   renderFlyPathSelect();
+  void ensureDrawnRouteFlyPath();
   refreshLayers();
   updateSearchProvider();
 }
@@ -1624,6 +1647,12 @@ function setupEvents() {
     const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
     return Math.atan2(x, y);
   }
+  function lerpBearing(a, b, t) {
+    let diff = b - a;
+    while (diff <= -Math.PI) diff += 2 * Math.PI;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    return a + diff * t;
+  }
 
   function stopFlyPath() {
     flyPathActive = false;
@@ -1639,19 +1668,31 @@ function setupEvents() {
 
   async function startFlyPath(index) {
     if (!Number.isFinite(index) || index < 0 || index >= flyPaths.length) return;
+    if (flyPathRafId !== null) {
+      cancelAnimationFrame(flyPathRafId);
+      flyPathRafId = null;
+    }
     flyPath = flyPaths[index];
     flySpeed = Number(flyPath.speed) || 30;
     flyHeight = Number(flyPath.height) || 20;
     if (walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
     if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
     try {
-      flyPathCoords = await loadFlyGeoJson(flyPath.url);
+      const pathData = await loadFlyGeoJson(flyPath.url);
+      flyPathCoords = pathData.points;
+      flyPathCumulativeDistances = pathData.distances;
     } catch (error) {
       console.error("Fly GeoJSON の読み込みに失敗しました:", error);
       flyPathCoords = null;
+      flyPathCumulativeDistances = [];
+      flyPathActive = false;
       return;
     }
     if (!flyPathCoords || !flyPathCoords.length) return;
+    for (const point of flyPathCoords) {
+      const carto = Cesium.Cartographic.fromDegrees(point.longitude, point.latitude);
+      point.terrain = carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0;
+    }
     flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
     if (flyPathEntity) viewer.entities.remove(flyPathEntity);
     flyPathEntity = viewer.entities.add({
@@ -1662,63 +1703,85 @@ function setupEvents() {
       },
     });
     flyPathProgress = 0;
+    flyPathDistance = 0;
     flyPathActive = true;
     flyPathLastTime = performance.now();
-    if (flyPathRafId === null) flyPathRafId = requestAnimationFrame(flyPathLoop);
+    flyPathRafId = requestAnimationFrame(flyPathLoop);
   }
 
   let flyPathLastTime = performance.now();
   const flyPathLoop = (timestamp) => {
     flyPathRafId = null;
     if (!flyPathActive || !flyPathCoords || !flyPathCoords.length) return;
+    try {
     const delta = Math.min((timestamp - flyPathLastTime) / 1000, 0.1);
     flyPathLastTime = timestamp;
 
     const path = flyPathCoords;
     const stepMeters = (flySpeed / 3.6) * delta;
-    flyPathProgress += stepMeters / flyPath.step;
-
-    if (flyPathProgress >= path.length - 1) {
+    const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+    flyPathDistance += stepMeters;
+    if (flyPathDistance > total) {
       if (flyPath.loop) {
-        flyPathProgress = 0;
+        flyPathDistance = total > 0 ? flyPathDistance % total : 0;
       } else {
-        flyPathProgress = path.length - 1;
+        flyPathDistance = total;
         stopFlyPath();
         return;
       }
     }
-    if (flyPathProgress <= 0) {
-      if (flyPath.loop) {
-        flyPathProgress = path.length - 1;
+    if (flyPathDistance < 0) {
+      if (flyPath.loop && total > 0) {
+        flyPathDistance = (total + (flyPathDistance % total)) % total;
       } else {
-        flyPathProgress = 0;
+        flyPathDistance = 0;
+        stopFlyPath();
+        return;
       }
     }
 
-    const idx = Math.floor(flyPathProgress);
+    let idx = 0;
+    while (idx + 1 < flyPathCumulativeDistances.length && flyPathDistance >= flyPathCumulativeDistances[idx + 1]) idx++;
     const nextIdx = Math.min(idx + 1, path.length - 1);
-    const t = flyPathProgress - idx;
+    const segDist = (flyPathCumulativeDistances[nextIdx] - flyPathCumulativeDistances[idx]) || 1;
+    const t = (flyPathDistance - flyPathCumulativeDistances[idx]) / segDist;
     const a = path[idx];
     const b = path[nextIdx];
+    flyPathProgress = idx + t;
     const lat = a.latitude + (b.latitude - a.latitude) * t;
     const lng = a.longitude + (b.longitude - a.longitude) * t;
     const alt = a.altitude + (b.altitude - a.altitude) * t;
-    const carto = Cesium.Cartographic.fromDegrees(lng, lat);
-    const terrainHeight = carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0;
-    const height = terrainHeight + flyHeight + alt;
-    const heading = getBearing(a, b);
+    const terrain = (a.terrain || 0) + ((b.terrain || 0) - (a.terrain || 0)) * t;
+    const height = alt + terrain + flyHeight;
+    let heading = getBearing(a, b);
+    if (nextIdx + 1 < path.length) {
+      const nextBearing = getBearing(path[nextIdx], path[nextIdx + 1]);
+      const remaining = (1 - t) * segDist;
+      const blendStart = Math.min(segDist, 100);
+      const blend = remaining < blendStart ? 1 - (remaining / blendStart) : 0;
+      heading = lerpBearing(heading, nextBearing, blend);
+    }
     const pitch = Math.max(-85, Math.min(0, flyPath.pitch)) * Math.PI / 180;
 
-    viewer.camera.setView({
-      destination: Cesium.Cartesian3.fromDegrees(lng, lat, height),
-      orientation: { heading, pitch, roll: 0 },
-    });
+    try {
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(lng, lat, height),
+        orientation: { heading, pitch, roll: 0 },
+      });
+      viewer.scene.requestRender();
+    } catch (error) {
+      console.error("flyPathLoop setView error:", error);
+    }
 
     if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
-    if (walkTerrainEl) walkTerrainEl.textContent = terrainHeight.toFixed(1);
+    if (walkTerrainEl) walkTerrainEl.textContent = terrain.toFixed(1);
     if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
 
     flyPathRafId = requestAnimationFrame(flyPathLoop);
+    } catch (error) {
+      console.error("flyPathLoop error:", error);
+      stopFlyPath();
+    }
   };
 
   const modeSelect = document.querySelector("#mode-select");
@@ -1951,21 +2014,32 @@ function setupEvents() {
     const geojson = buildDrawnGeoJson(false);
     if (!geojson) return;
     const project = currentProjectId || "";
-    const path = "drawn_route.geojson";
-    const fileUrl = `/api/file?path=${encodeURIComponent(path)}&project=${encodeURIComponent(project)}`;
+    const listUrl = `/api/files?project=${encodeURIComponent(project)}`;
     try {
-      const response = await fetch(fileUrl, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geojson) });
-      if (!response.ok) throw new Error(await response.text());
-      flyPaths.push({ title: "描画ルート", url: fileUrl, speed: 30, height: 20, pitch: -10, loop: false, step: 100 });
+      const listResponse = await fetch(listUrl);
+      const files = listResponse.ok ? await listResponse.json() : [];
+      const numbers = files
+        .filter(name => /^drawn_route_(\d+)\.geojson$/.test(name))
+        .map(name => Number(name.match(/^drawn_route_(\d+)\.geojson$/)[1]));
+      const next = (numbers.length ? Math.max(...numbers) : 0) + 1;
+      const path = `drawn_route_${next}.geojson`;
+      const title = `描画ルート${next}`;
+      const fileUrl = `/api/file?path=${encodeURIComponent(path)}&project=${encodeURIComponent(project)}`;
+      const putResponse = await fetch(fileUrl, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geojson) });
+      if (!putResponse.ok) throw new Error(await putResponse.text());
+      flyPaths.push({ title, url: fileUrl, speed: 30, height: 20, pitch: -10, loop: false, step: 100 });
       renderFlyPathSelect();
       const select = document.querySelector("#fly-path-select");
-      if (select) select.value = String(flyPaths.length - 1);
+      const flyIndex = flyPaths.findIndex(p => p.url === fileUrl);
+      if (select) select.value = String(flyIndex);
       const inspectorInput = document.querySelector("#inspector-input");
       if (inspectorInput) {
-        const line = `fly_geojson: 描画ルート | ${fileUrl}`;
-        const text = inspectorInput.value;
-        inspectorInput.value = text ? (text.trim().endsWith("\n") ? text + line + "\n" : text + "\n" + line + "\n") : line + "\n";
-        void saveInspectorConfig().catch(error => console.warn("設定の保存に失敗しました:", error));
+        const line = `fly_geojson: ${title} | ${fileUrl}`;
+        if (!inspectorInput.value.includes(line)) {
+          const text = inspectorInput.value;
+          inspectorInput.value = text ? (text.trim().endsWith("\n") ? text + line + "\n" : text + "\n" + line + "\n") : line + "\n";
+          void saveInspectorConfig().catch(error => console.warn("設定の保存に失敗しました:", error));
+        }
       }
     } catch (error) {
       console.error("ルートのキャッシュに失敗しました:", error);
@@ -2021,6 +2095,14 @@ function setupEvents() {
           ssec.zoomEventTypes = defaultZoomEventTypes.filter(t => t !== rightDrag && t?.eventType !== rightDrag);
         }
       }
+    });
+  }
+  const openDrawnRoute = document.querySelector("#open-drawn-route");
+  if (openDrawnRoute) {
+    openDrawnRoute.addEventListener("click", () => {
+      const project = currentProjectId || "";
+      const openUrl = `/api/open?path=drawn_route.geojson&project=${encodeURIComponent(project)}`;
+      void fetch(openUrl, { method: "POST" }).catch(error => console.error("フォルダを開けませんでした:", error));
     });
   }
 

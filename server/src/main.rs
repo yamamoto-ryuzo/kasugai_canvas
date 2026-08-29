@@ -110,13 +110,20 @@ fn default_true() -> bool {
     true
 }
 
-async fn index() -> Html<&'static str> {
-    Html(INDEX_HTML)
+async fn index() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8"), (header::CACHE_CONTROL, "no-store")],
+        INDEX_HTML,
+    )
+        .into_response()
 }
 
 async fn app_js() -> Response {
     (
-        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        [
+            (header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
         APP_JS,
     )
         .into_response()
@@ -124,7 +131,10 @@ async fn app_js() -> Response {
 
 async fn styles_css() -> Response {
     (
-        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        [
+            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (header::CACHE_CONTROL, "no-store"),
+        ],
         STYLES_CSS,
     )
         .into_response()
@@ -741,6 +751,70 @@ async fn put_local_file(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn list_files(
+    Query(query): Query<FileQuery>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
+    let base = if let Some(project) = query.project.as_deref().filter(|v| valid_project_id(v)) {
+        state.projects_path.join(project)
+    } else {
+        state.projects_path.as_ref().clone()
+    };
+    tokio::fs::create_dir_all(&base).await.map_err(internal_error)?;
+    let mut files = Vec::new();
+    let mut entries = tokio::fs::read_dir(&base).await.map_err(internal_error)?;
+    while let Some(entry) = entries.next_entry().await.map_err(internal_error)? {
+        if entry.file_type().await.map_err(internal_error)?.is_file() {
+            files.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    Ok(Json(files))
+}
+
+async fn open_local_file(
+    Query(query): Query<FileQuery>,
+    State(state): State<AppState>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let base = if let Some(project) = query.project.as_deref().filter(|v| valid_project_id(v)) {
+        state.projects_path.join(project)
+    } else {
+        state.projects_path.as_ref().clone()
+    };
+    tokio::fs::create_dir_all(&base).await.map_err(internal_error)?;
+    let base_canonical = base.canonicalize().map_err(|error| {
+        (
+            StatusCode::NOT_FOUND,
+            format!("ベースフォルダが見つかりません: {error}"),
+        )
+    })?;
+    let requested = base.join(&query.path);
+    let parent = requested.parent().unwrap_or(&base).to_path_buf();
+    if !parent.exists() {
+        let _ = tokio::fs::create_dir_all(&parent).await;
+    }
+    let parent_canonical = parent.canonicalize().unwrap_or(base_canonical.clone());
+    if !parent_canonical.starts_with(&base_canonical) {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "指定されたフォルダへのアクセスは許可されていません".to_string(),
+        ));
+    }
+    if !parent_canonical.exists() {
+        return Err((StatusCode::NOT_FOUND, "フォルダが見つかりません".to_string()));
+    }
+    let open_path = parent_canonical.to_string_lossy().into_owned();
+    let open_path = open_path.strip_prefix(r"\\?\").unwrap_or(&open_path).to_string();
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("explorer").arg(open_path).spawn();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(open_path).spawn();
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn fetch_latest() -> Result<Value, (StatusCode, String)> {
     let mut last_error = "最新バージョン情報を取得できませんでした".to_string();
     for url in LATEST_JSON_URLS {
@@ -948,6 +1022,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/tile", get(proxy_tile))
         .route("/api/tile/{*target}", get(proxy_tile_path))
         .route("/api/file", get(serve_local_file).put(put_local_file))
+        .route("/api/files", get(list_files))
+        .route("/api/open", post(open_local_file))
         .route("/api/projects", get(list_projects))
         .route(
             "/api/projects/{project_id}/config",

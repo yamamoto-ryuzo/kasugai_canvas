@@ -4,6 +4,29 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [Unreleased]
+
+### Added
+
+- 描画ルートの番号付き保存
+  - `drawn_route_1.geojson`、`drawn_route_2.geojson` ... として自動連番でキャッシュ
+  - 既存ファイルは上書きせず、新規ファイルとして追加
+  - プロジェクト内の描画ルート一覧を取得する `GET /api/files`
+- ルート飛行時の旋回補正
+  - 折れ点手前で次の線分方向へ滑らかに方位を補間
+  - 最後の 100m（または線分の 30% 以内）で旋回を開始
+
+### Changed
+
+- `fly_geojson:` ルートは折れ点どおりのオリジナル頂点を使用
+  - 各頂点で `z + 地形高 + flyHeight` を事前計算し、セグメント内で線形補間
+- 手動 / 自動ルートで速度・高さを `flySpeed`（km/h）/ `flyHeight`（m）で共有
+
+### Fixed
+
+- ルートを選択し直しても最初から再開できない不具合
+- `py run.py` 重複起動時のポート衝突を起動前に解決
+
 ## [1.1.0] - 2026-08-24
 
 ### Added
