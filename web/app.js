@@ -1750,6 +1750,12 @@ function setupEvents() {
       viewer.entities.remove(flyPathEntity);
       flyPathEntity = null;
     }
+    flyPath = null;
+    flyPathCoords = null;
+    flyPathCumulativeDistances = [];
+    flyPathDistance = 0;
+    flyPathProgress = 0;
+    flyPathLinePositions = [];
   }
 
   async function startFlyPath(index) {
@@ -2008,6 +2014,7 @@ function setupEvents() {
         const index = Number(pathValue);
         if (Number.isFinite(index) && index >= 0 && index < flyPaths.length) void startFlyPath(index);
       } else if (pathValue === "__manual__" && !walkRafId) {
+        stopFlyPath();
         walkLastTime = performance.now();
         walkRafId = requestAnimationFrame(walkLoop);
       }
