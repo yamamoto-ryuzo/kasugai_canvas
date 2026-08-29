@@ -1697,6 +1697,29 @@ function setupEvents() {
     if (walkTerrainEl) walkTerrainEl.textContent = terrain.toFixed(1);
     if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
   }
+  function stepFlyPath(direction) {
+    if (!flyPathCoords || flyPathCoords.length < 2 || !flyPathCumulativeDistances.length) return;
+    const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+    let idx = 0;
+    while (idx + 1 < flyPathCumulativeDistances.length && flyPathDistance >= flyPathCumulativeDistances[idx + 1]) idx++;
+    const nextIdx = Math.min(idx + 1, flyPathCoords.length - 1);
+    if (direction > 0) {
+      if (flyPathDistance >= total - 0.001) {
+        if (flyPath && flyPath.loop) flyPathDistance = 0;
+        else flyPathDistance = total;
+      } else {
+        flyPathDistance = flyPathCumulativeDistances[nextIdx];
+      }
+    } else {
+      if (flyPathDistance <= 0.001) {
+        if (flyPath && flyPath.loop) flyPathDistance = total;
+        else flyPathDistance = 0;
+      } else {
+        flyPathDistance = flyPathCumulativeDistances[idx];
+      }
+    }
+    updateFlyPathCamera(flyPathDistance);
+  }
 
   function stopFlyPath() {
     flyPathActive = false;
@@ -2330,7 +2353,8 @@ function setupEvents() {
     if (!walkModeActive) return;
     const now = performance.now();
     if (now - lastRightClick < 400) {
-      autoMove = autoMove === -1 ? 0 : -1;
+      if (flyPath && flyPathCoords && !flyPathActive) stepFlyPath(-1);
+      else autoMove = autoMove === -1 ? 0 : -1;
     }
     lastRightClick = now;
   });
@@ -2338,7 +2362,8 @@ function setupEvents() {
   viewer.canvas.addEventListener("dblclick", event => {
     if (!walkModeActive) return;
     if (event.button === 0) {
-      autoMove = autoMove === 1 ? 0 : 1;
+      if (flyPath && flyPathCoords && !flyPathActive) stepFlyPath(1);
+      else autoMove = autoMove === 1 ? 0 : 1;
     }
   });
 
