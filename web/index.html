@@ -246,8 +246,13 @@
                   <div><kbd>Esc</kbd> 3D モードへ</div>
                 </div>
               </div>
-              <div class="walk-height">高さ: <input id="walk-offset" type="number" value="20.0" step="0.1" style="width:60px;">m / 地形高: <strong id="walk-terrain">0.0</strong>m</div>
+              <div class="walk-height">補正: <input id="walk-offset" type="number" value="0.0" step="0.1" style="width:60px;">m / 地形高: <strong id="walk-terrain">0.0</strong>m</div>
               <div class="walk-height">速度: <input id="walk-speed" type="number" value="30" step="1" style="width:60px;">km/h</div>
+              <div id="fly-point-editor" class="walk-height" style="margin-top:8px;display:none;">
+                点: <select id="fly-point-index" style="width:60px;"></select>
+                点高: <input id="fly-point-offset" type="number" step="0.1" style="width:60px;">m
+                <button id="fly-point-save" type="button" style="font-size:0.9em;">保存</button>
+              </div>
             </div>
             <button id="compass-button" class="compass-button" type="button" title="Reset north">
               <span class="compass-needle"></span><strong>N</strong>
