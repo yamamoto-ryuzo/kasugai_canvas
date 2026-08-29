@@ -1653,6 +1653,50 @@ function setupEvents() {
     while (diff > Math.PI) diff -= 2 * Math.PI;
     return a + diff * t;
   }
+  function updateFlyPathCamera(distance) {
+    const path = flyPathCoords;
+    const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+    let flyDistance = distance;
+    if (flyDistance > total) flyDistance = total;
+    if (flyDistance < 0) flyDistance = 0;
+
+    let idx = 0;
+    while (idx + 1 < flyPathCumulativeDistances.length && flyDistance >= flyPathCumulativeDistances[idx + 1]) idx++;
+    const nextIdx = Math.min(idx + 1, path.length - 1);
+    const segDist = (flyPathCumulativeDistances[nextIdx] - flyPathCumulativeDistances[idx]) || 1;
+    const t = (flyDistance - flyPathCumulativeDistances[idx]) / segDist;
+    const a = path[idx];
+    const b = path[nextIdx];
+    flyPathProgress = idx + t;
+    const lat = a.latitude + (b.latitude - a.latitude) * t;
+    const lng = a.longitude + (b.longitude - a.longitude) * t;
+    const alt = a.altitude + (b.altitude - a.altitude) * t;
+    const terrain = (a.terrain || 0) + ((b.terrain || 0) - (a.terrain || 0)) * t;
+    const height = alt + terrain + flyHeight;
+    let heading = getBearing(a, b);
+    if (nextIdx + 1 < path.length) {
+      const nextBearing = getBearing(path[nextIdx], path[nextIdx + 1]);
+      const remaining = (1 - t) * segDist;
+      const blendStart = Math.min(segDist, 100);
+      const blend = remaining < blendStart ? 1 - (remaining / blendStart) : 0;
+      heading = lerpBearing(heading, nextBearing, blend);
+    }
+    const pitch = Math.max(-85, Math.min(0, flyPath.pitch)) * Math.PI / 180;
+
+    try {
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(lng, lat, height),
+        orientation: { heading, pitch, roll: 0 },
+      });
+      viewer.scene.requestRender();
+    } catch (error) {
+      console.error("flyPathLoop setView error:", error);
+    }
+
+    if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
+    if (walkTerrainEl) walkTerrainEl.textContent = terrain.toFixed(1);
+    if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+  }
 
   function stopFlyPath() {
     flyPathActive = false;
@@ -1704,9 +1748,12 @@ function setupEvents() {
     });
     flyPathProgress = 0;
     flyPathDistance = 0;
-    flyPathActive = true;
-    flyPathLastTime = performance.now();
-    flyPathRafId = requestAnimationFrame(flyPathLoop);
+    flyPathActive = false;
+    if (flyPathRafId !== null) {
+      cancelAnimationFrame(flyPathRafId);
+      flyPathRafId = null;
+    }
+    updateFlyPathCamera(0);
   }
 
   let flyPathLastTime = performance.now();
@@ -1714,70 +1761,35 @@ function setupEvents() {
     flyPathRafId = null;
     if (!flyPathActive || !flyPathCoords || !flyPathCoords.length) return;
     try {
-    const delta = Math.min((timestamp - flyPathLastTime) / 1000, 0.1);
-    flyPathLastTime = timestamp;
+      const delta = Math.min((timestamp - flyPathLastTime) / 1000, 0.1);
+      flyPathLastTime = timestamp;
 
-    const path = flyPathCoords;
-    const stepMeters = (flySpeed / 3.6) * delta;
-    const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
-    flyPathDistance += stepMeters;
-    if (flyPathDistance > total) {
-      if (flyPath.loop) {
-        flyPathDistance = total > 0 ? flyPathDistance % total : 0;
-      } else {
-        flyPathDistance = total;
-        stopFlyPath();
-        return;
+      const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+      const stepMeters = (flySpeed / 3.6) * delta;
+      flyPathDistance += stepMeters;
+      if (flyPathDistance > total) {
+        if (flyPath.loop) {
+          flyPathDistance = total > 0 ? flyPathDistance % total : 0;
+        } else {
+          flyPathDistance = total;
+          updateFlyPathCamera(flyPathDistance);
+          stopFlyPath();
+          return;
+        }
       }
-    }
-    if (flyPathDistance < 0) {
-      if (flyPath.loop && total > 0) {
-        flyPathDistance = (total + (flyPathDistance % total)) % total;
-      } else {
-        flyPathDistance = 0;
-        stopFlyPath();
-        return;
+      if (flyPathDistance < 0) {
+        if (flyPath.loop && total > 0) {
+          flyPathDistance = (total + (flyPathDistance % total)) % total;
+        } else {
+          flyPathDistance = 0;
+          updateFlyPathCamera(flyPathDistance);
+          stopFlyPath();
+          return;
+        }
       }
-    }
 
-    let idx = 0;
-    while (idx + 1 < flyPathCumulativeDistances.length && flyPathDistance >= flyPathCumulativeDistances[idx + 1]) idx++;
-    const nextIdx = Math.min(idx + 1, path.length - 1);
-    const segDist = (flyPathCumulativeDistances[nextIdx] - flyPathCumulativeDistances[idx]) || 1;
-    const t = (flyPathDistance - flyPathCumulativeDistances[idx]) / segDist;
-    const a = path[idx];
-    const b = path[nextIdx];
-    flyPathProgress = idx + t;
-    const lat = a.latitude + (b.latitude - a.latitude) * t;
-    const lng = a.longitude + (b.longitude - a.longitude) * t;
-    const alt = a.altitude + (b.altitude - a.altitude) * t;
-    const terrain = (a.terrain || 0) + ((b.terrain || 0) - (a.terrain || 0)) * t;
-    const height = alt + terrain + flyHeight;
-    let heading = getBearing(a, b);
-    if (nextIdx + 1 < path.length) {
-      const nextBearing = getBearing(path[nextIdx], path[nextIdx + 1]);
-      const remaining = (1 - t) * segDist;
-      const blendStart = Math.min(segDist, 100);
-      const blend = remaining < blendStart ? 1 - (remaining / blendStart) : 0;
-      heading = lerpBearing(heading, nextBearing, blend);
-    }
-    const pitch = Math.max(-85, Math.min(0, flyPath.pitch)) * Math.PI / 180;
-
-    try {
-      viewer.camera.setView({
-        destination: Cesium.Cartesian3.fromDegrees(lng, lat, height),
-        orientation: { heading, pitch, roll: 0 },
-      });
-      viewer.scene.requestRender();
-    } catch (error) {
-      console.error("flyPathLoop setView error:", error);
-    }
-
-    if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
-    if (walkTerrainEl) walkTerrainEl.textContent = terrain.toFixed(1);
-    if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
-
-    flyPathRafId = requestAnimationFrame(flyPathLoop);
+      updateFlyPathCamera(flyPathDistance);
+      flyPathRafId = requestAnimationFrame(flyPathLoop);
     } catch (error) {
       console.error("flyPathLoop error:", error);
       stopFlyPath();
