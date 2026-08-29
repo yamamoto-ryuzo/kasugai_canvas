@@ -1701,23 +1701,12 @@ function setupEvents() {
   function getTargetVertexDistance(direction) {
     if (!flyPathCoords || flyPathCoords.length < 2 || !flyPathCumulativeDistances.length) return null;
     const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
-    let idx = 0;
-    while (idx + 1 < flyPathCumulativeDistances.length && flyPathDistance >= flyPathCumulativeDistances[idx + 1]) idx++;
     if (direction > 0) {
-      if (flyPathDistance >= total - 0.001) {
-        if (flyPath && flyPath.loop) return 0;
-        return total;
-      }
-      return flyPathCumulativeDistances[idx + 1];
+      if (flyPathDistance >= total - 0.001) return null;
+      return total;
     }
-    if (flyPathDistance <= 0.001) {
-      if (flyPath && flyPath.loop) return total;
-      return 0;
-    }
-    if (flyPathDistance <= flyPathCumulativeDistances[idx] + 0.001 && idx > 0) {
-      return flyPathCumulativeDistances[idx - 1];
-    }
-    return flyPathCumulativeDistances[idx];
+    if (flyPathDistance <= 0.001) return null;
+    return 0;
   }
   function moveFlyPathToVertex(direction) {
     const target = getTargetVertexDistance(direction);
