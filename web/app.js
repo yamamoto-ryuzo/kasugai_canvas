@@ -1806,6 +1806,7 @@ function setupEvents() {
     try {
       const delta = Math.min((timestamp - flyPathLastTime) / 1000, 0.1);
       flyPathLastTime = timestamp;
+      applyWalkKeys(delta);
 
       const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
       if (flyPathTargetDistance !== null) {
@@ -1860,6 +1861,36 @@ function setupEvents() {
   const walkTerrainEl = document.querySelector("#walk-terrain");
   const walkSpeedEl = document.querySelector("#walk-speed");
   const walkKeys = new Set();
+  function applyWalkKeys(delta) {
+    if (!flyPathCoords || flyPathCoords.length < 2) return;
+    const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+
+    const heightChange = (walkKeys.has("KeyQ") ? 1 : 0) - (walkKeys.has("KeyE") ? 1 : 0);
+    if (heightChange !== 0) {
+      flyHeight += 10 * heightChange * delta;
+      if (flyPathCoords) flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+    }
+
+    const speedChange = (walkKeys.has("Equal") || walkKeys.has("NumpadAdd") ? 1 : 0) -
+      (walkKeys.has("Minus") || walkKeys.has("NumpadSubtract") ? 1 : 0);
+    if (speedChange !== 0) {
+      flySpeed += 20 * speedChange * delta;
+      if (flySpeed < 0) flySpeed = 0;
+    }
+
+    const pitchChange = (walkKeys.has("ArrowUp") ? 1 : 0) - (walkKeys.has("ArrowDown") ? 1 : 0);
+    if (pitchChange !== 0 && flyPath) {
+      flyPath.pitch += 20 * pitchChange * delta;
+      flyPath.pitch = Math.max(-85, Math.min(0, flyPath.pitch));
+    }
+
+    const manualDirection = (walkKeys.has("KeyW") ? 1 : 0) - (walkKeys.has("KeyS") ? 1 : 0);
+    if (manualDirection > 0) {
+      flyPathTargetDistance = total;
+    } else if (manualDirection < 0) {
+      flyPathTargetDistance = 0;
+    }
+  }
   if (walkOffsetEl) {
     walkOffsetEl.addEventListener("input", () => {
       const value = Number(walkOffsetEl.value);
@@ -2178,17 +2209,31 @@ function setupEvents() {
   }
 
   const lastKeyTap = { KeyW: 0, KeyS: 0 };
+  function startFlyPathLoopIfNeeded() {
+    if (flyPathRafId === null && flyPathCoords && flyPathCoords.length) {
+      flyPathActive = true;
+      flyPathLastTime = performance.now();
+      flyPathRafId = requestAnimationFrame(flyPathLoop);
+    }
+  }
+
   window.addEventListener("keydown", event => {
     if (!walkModeActive) return;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(event.target?.tagName)) return;
     const code = event.code;
-    if (flyPathActive && code !== "Escape") return;
     if (["KeyW", "KeyS", "KeyA", "KeyD", "KeyQ", "KeyE", "Equal", "Minus", "NumpadAdd", "NumpadSubtract", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(code)) {
       event.preventDefault();
       if (code === "Escape") {
         setMode("orbit");
-      } else {
-        if (code === "KeyW" || code === "KeyS") {
+        return;
+      }
+      if (code === "KeyW" || code === "KeyS") {
+        if (flyPath && flyPathCoords) {
+          const direction = code === "KeyW" ? 1 : -1;
+          const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+          flyPathTargetDistance = direction > 0 ? total : 0;
+          startFlyPathLoopIfNeeded();
+        } else if (!flyPathActive) {
           const now = performance.now();
           const direction = code === "KeyW" ? 1 : -1;
           if (!event.repeat && now - lastKeyTap[code] < 300) {
@@ -2196,7 +2241,11 @@ function setupEvents() {
           }
           if (!event.repeat) lastKeyTap[code] = now;
         }
-        walkKeys.add(code);
+      }
+      walkKeys.add(code);
+      if (!flyPathActive && flyPath && flyPathCoords && ["KeyQ", "KeyE", "Equal", "Minus", "NumpadAdd", "NumpadSubtract", "ArrowUp", "ArrowDown"].includes(code)) {
+        applyWalkKeys(0.05);
+        updateFlyPathCamera(flyPathDistance);
       }
     }
   });
