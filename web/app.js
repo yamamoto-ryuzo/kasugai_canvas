@@ -63,6 +63,7 @@ let flyPath = null;
 let flyPathCoords = null;
 let flyPathCumulativeDistances = [];
 let flyPathDistance = 0;
+let flyPathTargetDistance = null;
 let flyPathLinePositions = [];
 let flyPathEntity = null;
 let flyPathRafId = null;
@@ -1697,32 +1698,45 @@ function setupEvents() {
     if (walkTerrainEl) walkTerrainEl.textContent = terrain.toFixed(1);
     if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
   }
-  function stepFlyPath(direction) {
-    if (!flyPathCoords || flyPathCoords.length < 2 || !flyPathCumulativeDistances.length) return;
+  function getTargetVertexDistance(direction) {
+    if (!flyPathCoords || flyPathCoords.length < 2 || !flyPathCumulativeDistances.length) return null;
     const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
     let idx = 0;
     while (idx + 1 < flyPathCumulativeDistances.length && flyPathDistance >= flyPathCumulativeDistances[idx + 1]) idx++;
-    const nextIdx = Math.min(idx + 1, flyPathCoords.length - 1);
     if (direction > 0) {
       if (flyPathDistance >= total - 0.001) {
-        if (flyPath && flyPath.loop) flyPathDistance = 0;
-        else flyPathDistance = total;
-      } else {
-        flyPathDistance = flyPathCumulativeDistances[nextIdx];
+        if (flyPath && flyPath.loop) return 0;
+        return total;
       }
-    } else {
-      if (flyPathDistance <= 0.001) {
-        if (flyPath && flyPath.loop) flyPathDistance = total;
-        else flyPathDistance = 0;
-      } else {
-        flyPathDistance = flyPathCumulativeDistances[idx];
-      }
+      return flyPathCumulativeDistances[idx + 1];
     }
-    updateFlyPathCamera(flyPathDistance);
+    if (flyPathDistance <= 0.001) {
+      if (flyPath && flyPath.loop) return total;
+      return 0;
+    }
+    if (flyPathDistance <= flyPathCumulativeDistances[idx] + 0.001 && idx > 0) {
+      return flyPathCumulativeDistances[idx - 1];
+    }
+    return flyPathCumulativeDistances[idx];
+  }
+  function moveFlyPathToVertex(direction) {
+    const target = getTargetVertexDistance(direction);
+    if (target === null) return;
+    flyPathTargetDistance = target;
+    if (walkRafId !== null) {
+      cancelAnimationFrame(walkRafId);
+      walkRafId = null;
+    }
+    if (flyPathRafId === null) {
+      flyPathActive = true;
+      flyPathLastTime = performance.now();
+      flyPathRafId = requestAnimationFrame(flyPathLoop);
+    }
   }
 
   function stopFlyPath() {
     flyPathActive = false;
+    flyPathTargetDistance = null;
     if (flyPathRafId !== null) {
       cancelAnimationFrame(flyPathRafId);
       flyPathRafId = null;
@@ -1771,6 +1785,7 @@ function setupEvents() {
     });
     flyPathProgress = 0;
     flyPathDistance = 0;
+    flyPathTargetDistance = null;
     flyPathActive = false;
     if (flyPathRafId !== null) {
       cancelAnimationFrame(flyPathRafId);
@@ -1788,31 +1803,47 @@ function setupEvents() {
       flyPathLastTime = timestamp;
 
       const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
-      const stepMeters = (flySpeed / 3.6) * delta;
-      flyPathDistance += stepMeters;
-      if (flyPathDistance > total) {
-        if (flyPath.loop) {
-          flyPathDistance = total > 0 ? flyPathDistance % total : 0;
+      if (flyPathTargetDistance !== null) {
+        const stepMeters = Math.abs(flySpeed / 3.6) * delta;
+        const diff = flyPathTargetDistance - flyPathDistance;
+        if (Math.abs(diff) <= stepMeters) {
+          flyPathDistance = flyPathTargetDistance;
+          flyPathTargetDistance = null;
+          flyPathActive = false;
         } else {
-          flyPathDistance = total;
-          updateFlyPathCamera(flyPathDistance);
-          stopFlyPath();
-          return;
+          flyPathDistance += Math.sign(diff) * stepMeters;
+          if (flyPathDistance > total) flyPathDistance = total;
+          if (flyPathDistance < 0) flyPathDistance = 0;
         }
-      }
-      if (flyPathDistance < 0) {
-        if (flyPath.loop && total > 0) {
-          flyPathDistance = (total + (flyPathDistance % total)) % total;
-        } else {
-          flyPathDistance = 0;
-          updateFlyPathCamera(flyPathDistance);
-          stopFlyPath();
-          return;
+        updateFlyPathCamera(flyPathDistance);
+      } else {
+        const stepMeters = (flySpeed / 3.6) * delta;
+        flyPathDistance += stepMeters;
+        if (flyPathDistance > total) {
+          if (flyPath.loop) {
+            flyPathDistance = total > 0 ? flyPathDistance % total : 0;
+          } else {
+            flyPathDistance = total;
+            updateFlyPathCamera(flyPathDistance);
+            stopFlyPath();
+            return;
+          }
         }
+        if (flyPathDistance < 0) {
+          if (flyPath.loop && total > 0) {
+            flyPathDistance = (total + (flyPathDistance % total)) % total;
+          } else {
+            flyPathDistance = 0;
+            updateFlyPathCamera(flyPathDistance);
+            stopFlyPath();
+            return;
+          }
+        }
+
+        updateFlyPathCamera(flyPathDistance);
       }
 
-      updateFlyPathCamera(flyPathDistance);
-      flyPathRafId = requestAnimationFrame(flyPathLoop);
+      if (flyPathActive) flyPathRafId = requestAnimationFrame(flyPathLoop);
     } catch (error) {
       console.error("flyPathLoop error:", error);
       stopFlyPath();
@@ -2353,7 +2384,7 @@ function setupEvents() {
     if (!walkModeActive) return;
     const now = performance.now();
     if (now - lastRightClick < 400) {
-      if (flyPath && flyPathCoords && !flyPathActive) stepFlyPath(-1);
+      if (flyPath && flyPathCoords) moveFlyPathToVertex(-1);
       else autoMove = autoMove === -1 ? 0 : -1;
     }
     lastRightClick = now;
@@ -2362,7 +2393,7 @@ function setupEvents() {
   viewer.canvas.addEventListener("dblclick", event => {
     if (!walkModeActive) return;
     if (event.button === 0) {
-      if (flyPath && flyPathCoords && !flyPathActive) stepFlyPath(1);
+      if (flyPath && flyPathCoords) moveFlyPathToVertex(1);
       else autoMove = autoMove === 1 ? 0 : 1;
     }
   });
