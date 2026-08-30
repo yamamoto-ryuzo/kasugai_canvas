@@ -4,7 +4,7 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
-## [Unreleased]
+## [1.2.1] - 2026-08-30
 
 ### Changed
 
@@ -13,6 +13,9 @@
   - Fly パネルに「マウス / キー / Draw」の 3 タブを配置
   - Draw タブ選択時に Orbit モードに切り替わるように変更
   - 描画中は Orbit モードのまま描画、描画終了後も Orbit モードを維持
+- Fly パネルの高さ表示を整理
+  - 手動時は `地形高`（地表標高）と `補正`（カメラ地上高）を別行で表示
+  - ルート追従時は `地上高（AGL）`（`z + flyHeight`）と `補正`（`flyHeight`）を別行で表示
 
 ### Fixed
 

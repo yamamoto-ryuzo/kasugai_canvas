@@ -223,7 +223,7 @@
                 <select id="fly-path-select" style="flex:1;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;">
                   <option value="__manual__">手動</option>
                 </select>
-                <button id="open-drawn-route" type="button" aria-label="Open drawn route folder" title="Open drawn route folder" style="white-space:nowrap;padding:5px 8px;font-size:0.9em;border:1px solid #cbd9de;border-radius:4px;background:#fff;cursor:pointer;">Open</button>
+
               </div>
               <div class="walk-help-tabs">
                 <button class="walk-help-tab active" data-tab="mouse" type="button">マウス</button>
@@ -247,8 +247,9 @@
                   <div><kbd>Esc</kbd> 3D モードへ</div>
                 </div>
                 <div class="walk-help-content" data-tab="draw">
-                  <div>
+                  <div style="display:flex;gap:4px;align-items:center;">
                     <button id="draw-mode-toggle" class="draw-mode-toggle" type="button" aria-label="Draw glow line" title="Draw glow line">Draw</button>
+                    <button id="open-drawn-route" type="button" aria-label="Open drawn route folder" title="Open drawn route folder" style="white-space:nowrap;padding:5px 8px;font-size:0.9em;border:1px solid #cbd9de;border-radius:4px;background:#fff;cursor:pointer;">Open</button>
                   </div>
                   <div style="margin-top:8px;font-size:0.9em;">
                     <div><kbd>右クリック</kbd> 点追加</div>
@@ -256,7 +257,8 @@
                   </div>
                 </div>
               </div>
-              <div class="walk-height">補正: <input id="walk-offset" type="number" value="0.0" step="0.1" style="width:60px;">m / 地形高: <strong id="walk-terrain">0.0</strong>m</div>
+              <div class="walk-height"><span id="walk-terrain-label">地形高</span>: <strong id="walk-terrain">0.0</strong>m</div>
+              <div class="walk-height">補正: <input id="walk-offset" type="number" value="0.0" step="0.1" style="width:60px;">m</div>
               <div class="walk-height">速度: <input id="walk-speed" type="number" value="30" step="1" style="width:60px;">km/h</div>
               <div id="fly-point-editor" class="walk-height" style="margin-top:8px;display:none;">
                 点: <select id="fly-point-index" style="width:60px;"></select>

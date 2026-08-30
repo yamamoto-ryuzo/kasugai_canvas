@@ -1696,7 +1696,8 @@ function setupEvents() {
     }
 
     if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
-    if (walkTerrainEl) walkTerrainEl.textContent = terrain.toFixed(1);
+    if (walkTerrainEl) walkTerrainEl.textContent = (alt + flyHeight).toFixed(1);
+    if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = "地上高（AGL）";
     if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
   }
   function getTargetVertexDistance(direction) {
@@ -1872,6 +1873,7 @@ function setupEvents() {
   const modeSelect = document.querySelector("#mode-select");
   const walkOffsetEl = document.querySelector("#walk-offset");
   const walkTerrainEl = document.querySelector("#walk-terrain");
+  const walkTerrainLabelEl = document.querySelector("#walk-terrain-label");
   const walkSpeedEl = document.querySelector("#walk-speed");
   const flyPointEditor = document.querySelector("#fly-point-editor");
   const flyPointIndexEl = document.querySelector("#fly-point-index");
@@ -2045,6 +2047,7 @@ function setupEvents() {
         });
         if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
         if (walkTerrainEl) walkTerrainEl.textContent = terrainHeight.toFixed(1);
+        if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = "地形高";
         if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
       }
       walkRafId = requestAnimationFrame(walkLoop);
