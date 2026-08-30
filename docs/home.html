@@ -16,7 +16,7 @@
       <section>
         <h2>📋 概要</h2>
         <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。2D 図面、3D モデル、点群、3DGS、地形タイル、XYZ タイルを同一の 3D 地球空間に重ねて描画できます。</p>
-        <p>本サイトでは、KASUGAI Canvas の技術選定に関する文書を公開しています。各章は左の目次から、または下のカードから開けます。</p>
+        <p>機能整備は <strong>V1.0.0</strong> で GIS 基本機能を完成させ、<strong>V2.0.0</strong> から FLY を含むプレゼンテーション機能を本格的に展開していく予定です。</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 20px 0;">
           <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" class="demo-link" target="_blank">🚀 ソースコードを見る</a>
           <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest" class="demo-link" target="_blank">🌐 最新リリースを見る</a>
@@ -24,55 +24,106 @@
       </section>
 
       <section>
-        <h2>✨ 主な機能</h2>
-        <p>現行の KASUGAI Canvas で利用できる機能一覧です。詳細は各章で確認できます。</p>
+        <h2>🗺️ V1.0.0 GIS 基本機能</h2>
+        <p>デジタルツインとして 2D / 3D 地理空間データを探索・可視化するための基本機能です。</p>
         <div class="features">
           <div class="feature-card">
-            <h3>🗂️ レイヤー管理</h3>
-            <p>XYZ / 3D Tiles / GeoJSON の表示切替、グループ化、ドラッグ＆ドロップ並び替え、設定永続化</p>
+            <h3>📝 インスペクター一括設定</h3>
+            <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
           </div>
           <div class="feature-card">
             <h3>🗺️ ベースマップ</h3>
-            <p><code>base:</code> 一行設定で選択・表示切替可能なベースマップ切替</p>
+            <p><code>base:</code> または <code>xyz:</code> 行で指定。Basemap セレクタから 1 つだけアクティブ化</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔧 システムレイヤ制御</h3>
+            <p><code>layer:</code> 行で既存レイヤー名を指定し、表示 / 非表示を初期制御</p>
+          </div>
+          <div class="feature-card">
+            <h3>➕ レイヤー追加・管理</h3>
+            <p>XYZ タイル、3D Tiles、GeoJSON を URL 指定で追加。Layers パネルで表示切替</p>
+          </div>
+          <div class="feature-card">
+            <h3>📑 レイヤー一覧UI</h3>
+            <p>読み込んだレイヤーの表示切替、並び順変更、設定の永続化を視覚的に操作</p>
+          </div>
+          <div class="feature-card">
+            <h3>📂 レイヤグループ化</h3>
+            <p><code>/</code> 通常グループ、<code>//</code> 排他グループ。ラジオボタンのような排他制御</p>
+          </div>
+          <div class="feature-card">
+            <h3>🖼️ 凡例表示</h3>
+            <p><code>legend:</code> 行で画像 URL を指定。Legend タブに凡例画像を一覧表示</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔎 住所検索</h3>
+            <p>国土地理院 / Yahoo ジオコーダ API を使い、住所・施設名で検索＋ FlyTo</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧬 ベクトル検索</h3>
+            <p>GeoJSON / CSV レイヤーの属性値をレイヤー・属性・文字列で絞り込み FlyTo</p>
+          </div>
+          <div class="feature-card">
+            <h3>📊 属性・値一覧</h3>
+            <p>表示中のベクトルレイヤー属性を一覧。文字列検索・列ソート・行クリック FlyTo</p>
           </div>
           <div class="feature-card">
             <h3>🎥 カメラプリセット</h3>
-            <p><code>cam:</code> 一行設定で緯度・経度・高さ・ピッチ・ヘディングを登録</p>
+            <p><code>cam:</code> 行で登録した位置へワンクリック FlyTo。緯度・経度・高さ・ピッチ・方位を設定</p>
           </div>
           <div class="feature-card">
-            <h3>🔎 住所・ベクトル検索</h3>
-            <p>国土地理院 / Yahoo 住所検索、レイヤー属性の三段階ベクトル検索、FlyTo</p>
+            <h3>ℹ️ Info 表示</h3>
+            <p><code>info:</code> 行で外部 HTML を Info タブに表示。プロジェクト説明やドキュメントを埋め込み</p>
           </div>
           <div class="feature-card">
-            <h3>🔗 共有 URL</h3>
-            <p>URL パーマリンクの自動更新、同じ視点をコピーして共有</p>
+            <h3>🗺️ GeoJSON 3D ドレープ制御</h3>
+            <p>地面 / Terrain / 3D Tiles のどれに張り付くかをインスペクター行または設定で切替</p>
           </div>
           <div class="feature-card">
-            <h3>ℹ️ Info・凡例・属性</h3>
-            <p>HTML 情報表示、凡例画像、選択地物の属性表示</p>
+            <h3>⛰️ Terrain / Shadow</h3>
+            <p>地形表示と影表示の ON/OFF をワンクリックで切り替え</p>
           </div>
           <div class="feature-card">
-            <h3>⛰️ DEM / ドレープ / 設定</h3>
-            <p>地形表示、レイヤードレープ対象、プロジェクト切替、自動更新、断面クリップ</p>
-          </div>
-          <div class="feature-card">
-            <h3>�️ Fly モード</h3>
-            <p>GeoJSON ルート自動追従・手動操縦、速度・高さ・ピッチ調整、ルート描画</p>
+            <h3>🧭 ナビゲーション</h3>
+            <p>方位コンパス、2D / 3D 切替、Orbit / Fly モード切替、北リセット</p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2>🔮 構想・未対応</h2>
-        <p>現時点では未対応、または将来の構想として位置づけられている機能です。</p>
+        <h2>🎬 V2.0.0 プレゼンテーション機能（FLY）</h2>
+        <p>視点を動かしたり、周囲に共有したりする、より体験的な機能です。V2.0.0 から本格的な整備を開始します。</p>
         <div class="features">
           <div class="feature-card">
-            <h3>� Three.js 点群・3DGS・GLB</h3>
-            <p>Three.js の枠組みは組み込まれているが、点群 / 3D Gaussian Splatting / GLB 表示は未対応</p>
+            <h3>🛩️ Fly モード</h3>
+            <p>GeoJSON ルート自動追従・手動操縦、速度・高さ・ピッチ調整、ルート描画</p>
           </div>
           <div class="feature-card">
-            <h3>🌐 Google Earth / Yahoo 連携</h3>
-            <p>位置情報の外部サービス連携は構想段階</p>
+            <h3>🔗 URL 共有</h3>
+            <p>カメラ位置を URL ハッシュに保存し、同じ視点を URL コピーで共有</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌐 Google Earth 連携</h3>
+            <p>現在視点を Google Earth 形式で新規ウィンドウに渡す外部連携（V2.0.0 構想）</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌐 Yahoo! Map 等との連携</h3>
+            <p>他の地図サービスへの位置情報連携（V2.0.0 構想）</p>
+          </div>
+          <div class="feature-card">
+            <h3>📍 現在位置 FlyTo</h3>
+            <p>端末の現在位置を取得して FlyTo する機能（V2.0.0 構想）</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>🔮 今後の構想</h2>
+        <p>V2.0.0 以降に検討している機能です。</p>
+        <div class="features">
+          <div class="feature-card">
+            <h3>🎨 Three.js 点群・3DGS・GLB</h3>
+            <p>Three.js の枠組みは組み込まれているが、点群 / 3DGS / GLB 表示は未対応</p>
           </div>
           <div class="feature-card">
             <h3>🔗 QGIS・GDAL 配信</h3>
