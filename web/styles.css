@@ -170,3 +170,18 @@ footer { padding: 0 28px 22px; }
 #vector-attr-widget-list td { padding: 7px 14px; vertical-align: top; }
 .vector-attr-widget-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .vector-attr-widget-footer { padding: 8px 14px; border-top: 1px solid #e4ecef; color: #71818d; font-size: 12px; text-align: right; }
+
+.help-link {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 5px 8px;
+  border: 1px solid #31564f;
+  border-radius: 4px;
+  background: #31564f;
+  color: #fff;
+  text-decoration: none;
+  font-size: var(--basemap-select-font-size);
+}
+.help-link:hover {
+  background: #26453e;
+}

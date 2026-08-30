@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [2.0.3] - 2026-08-30
+
+### Added
+
+- レイヤーパネル設定タブの「レイヤ」と「その他」に HELP リンクを追加
+
 ## [2.0.2] - 2026-08-30
 
 ### Fixed
