@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Draw UI を Fly パネル内のタブへ移動
+  - ナビゲーションツールバーから独立した Draw ボタンを廃止
+  - Fly パネルに「マウス / キー / Draw」の 3 タブを配置
+  - Draw タブ選択時に Orbit モードに切り替わるように変更
+  - 描画中は Orbit モードのまま描画、描画終了後も Orbit モードを維持
+
+### Fixed
+
+- `cargo clean` 後に `python run.py` 実行時にサンプル設定・プロジェクトが失われる問題を修正
+  - `run_dev()` で `installer/kasugai_canvas.config` と `installer/projects` を `server/target/debug` へ自動コピー
+
 ## [1.2.0] - 2026-08-29
 
 ### Added

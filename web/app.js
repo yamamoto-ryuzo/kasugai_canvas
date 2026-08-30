@@ -640,14 +640,14 @@ async function ensureDrawnRouteFlyPath() {
     const listResponse = await fetch(listUrl);
     if (!listResponse.ok) return;
     const files = await listResponse.json();
-    const routeFiles = files.filter(name => /^drawn_route(_\d+)?\.geojson$/.test(name)).sort();
+    const routeFiles = files.filter(name => /^drawn_route_\d+\.geojson$/.test(name)).sort();
     const fileUrls = new Set(flyPaths.map(path => path.url));
     let changed = false;
     for (const file of routeFiles) {
       const fileUrl = `/api/file?path=${encodeURIComponent(file)}&project=${encodeURIComponent(project)}`;
       if (fileUrls.has(fileUrl)) continue;
       const match = file.match(/^drawn_route_(\d+)\.geojson$/);
-      const title = match ? `描画ルート${match[1]}` : "描画ルート";
+      const title = `描画ルート${match[1]}`;
       flyPaths.push({ title, url: fileUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
       changed = true;
     }
@@ -2055,6 +2055,10 @@ function setupEvents() {
   const defaultLookEventTypes = ssec.lookEventTypes;
   const defaultZoomEventTypes = ssec.zoomEventTypes ? [...ssec.zoomEventTypes] : [];
   const wheelEventType = Cesium.CameraEventType?.WHEEL;
+  let drawTabActive = false;
+  const walkZoomWithoutWheel = wheelEventType
+    ? defaultZoomEventTypes.filter(t => t !== wheelEventType)
+    : defaultZoomEventTypes;
   const setMode = (next) => {
     const isWalk = next === "walk";
     const wasWalk = walkModeActive;
@@ -2063,7 +2067,7 @@ function setupEvents() {
     modeSelect.setAttribute("aria-label", isWalk ? "Fly mode" : "Orbit view");
     walkModeActive = isWalk;
     autoMove = 0;
-    walkHelp?.classList.toggle("visible", isWalk);
+    walkHelp?.classList.toggle("visible", isWalk || drawTabActive);
     if (isWalk) {
       const carto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
       if (carto) {
@@ -2073,8 +2077,8 @@ function setupEvents() {
     }
     ssec.enableZoom = true;
     ssec.lookEventTypes = defaultLookEventTypes;
-    ssec.zoomEventTypes = isWalk && wheelEventType
-      ? defaultZoomEventTypes.filter(t => t !== wheelEventType)
+    ssec.zoomEventTypes = isWalk && !drawTabActive
+      ? walkZoomWithoutWheel
       : defaultZoomEventTypes;
     viewer.scene.mode = Cesium.SceneMode.SCENE3D;
     if (isWalk && !wasWalk) {
@@ -2152,7 +2156,9 @@ function setupEvents() {
     lastRightDownTime = 0;
     updateDrawModeButton();
     if (viewer.scene.screenSpaceCameraController) {
-      viewer.scene.screenSpaceCameraController.zoomEventTypes = defaultZoomEventTypes;
+      ssec.zoomEventTypes = !walkModeActive || drawTabActive
+        ? defaultZoomEventTypes
+        : walkZoomWithoutWheel;
     }
   }
   function clearDrawnLine() {
@@ -2569,6 +2575,10 @@ function setupEvents() {
       document.querySelectorAll(".walk-help-content").forEach(c => c.classList.remove("active"));
       tab.classList.add("active");
       document.querySelector(`.walk-help-content[data-tab="${tab.dataset.tab}"]`)?.classList.add("active");
+      const nextDrawTab = tab.dataset.tab === "draw";
+      if (drawModeActive && !nextDrawTab) stopDrawMode();
+      drawTabActive = nextDrawTab;
+      setMode(drawTabActive ? "orbit" : "walk");
     });
   });
   setupVectorSearch();

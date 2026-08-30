@@ -105,6 +105,9 @@ h1 { font-size: 24px; } h2 { font-size: 18px; }
 .walk-help-tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
 .walk-help-content { display: none; }
 .walk-help-content.active { display: block; }
+.draw-mode-toggle { min-height: 30px; padding: 5px 12px; border: 1px solid rgba(0,0,0,.08); border-radius: 7px; background: linear-gradient(#fff, #f1f4f8); color: #263643; cursor: pointer; font-size: var(--basemap-select-font-size); }
+.draw-mode-toggle:hover { background: #e7f3f0; }
+.draw-mode-toggle.active { border-color: #31564f; background: #31564f; color: #fff; }
 .walk-help.minimized .walk-help-tabs,
 .walk-help.minimized .walk-help-contents,
 .walk-help.minimized .walk-height { display: none; }

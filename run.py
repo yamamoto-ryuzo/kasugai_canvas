@@ -4,6 +4,7 @@
 import argparse
 import datetime
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -103,6 +104,22 @@ def sync_versions(write_latest: bool = True) -> None:
     print(f"バージョンを {cargo_version} へ同期しました。", file=sys.stderr, flush=True)
 
 
+def _get_port() -> int:
+    """使用するポート番号を取得する。"""
+    port_env = os.environ.get("KASUGAI_CANVAS_PORT")
+    if port_env:
+        try:
+            return int(port_env)
+        except ValueError:
+            pass
+    return 8510
+
+
+def _print_access_url() -> None:
+    """アクセス先URLをターミナルに表示する。"""
+    print(f"ブラウザで以下のURLにアクセスしてください: http://127.0.0.1:{_get_port()}/", flush=True)
+
+
 def _kill_existing_kasugai() -> None:
     """既存の kasugai_canvas.exe を停止する。"""
     try:
@@ -119,6 +136,18 @@ def _kill_existing_kasugai() -> None:
 def run_dev() -> None:
     """開発モードで起動する。"""
     _kill_existing_kasugai()
+    _print_access_url()
+    debug_dir = SERVER_DIR / "target" / "debug"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    dev_config = debug_dir / "kasugai_canvas.config"
+    if not dev_config.exists() and SAMPLE_CONFIG.exists():
+        shutil.copy(SAMPLE_CONFIG, dev_config)
+    if SAMPLE_PROJECTS.exists():
+        dev_projects = debug_dir / "projects"
+        dev_projects.mkdir(parents=True, exist_ok=True)
+        for project in SAMPLE_PROJECTS.iterdir():
+            if project.is_dir() and not (dev_projects / project.name).exists():
+                shutil.copytree(project, dev_projects / project.name)
     subprocess.run(["cargo", "run"], cwd=SERVER_DIR, check=True)
 
 
@@ -189,6 +218,7 @@ def run_release() -> None:
         )
         raise SystemExit(1)
     _kill_existing_kasugai()
+    _print_access_url()
     subprocess.run([str(TARGET_EXE)], cwd=ROOT, check=True)
 
 
