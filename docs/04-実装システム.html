@@ -7,18 +7,19 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="wrap">
+  <div class="container">
     <header>
-      <h1 class="title">4. 実装システム</h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v2.0.0</span></h1>
+      <p>4. 実装システム — 現行実装の機能と制限</p>
     </header>
-        <main>
+    <main>
       <h2 id="実装システム">4. 実装システム</h2>
       <p>KASUGAI Canvas の現行実装は、ローカルPC 上で Rust/Axum
       サーバーを起動し、ブラウザ上の CesiumJS で 2D/3D
       地理空間データを描画する構成です。Three.js は Cesium
       のビュー行列を共有する簡易な 3D
       描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は
-      V1.1.0 では未対応です。</p>
+      V2.0.0 では未対応です。</p>
       <p>開発起動時は
       <code>projects/default/kasugai_canvas.config</code>
       を初期サンプルとして読み込みます。配布 ZIP と Windows
@@ -74,7 +75,7 @@
       <code>Entity</code> / <code>Primitive</code>
       として地形へドレープする</li>
       <li>Three.js は補助 3D
-      描画の枠組みとして組み込まれている。点群・3DGS・GLB 表示は V1.0.24
+      描画の枠組みとして組み込まれている。点群・3DGS・GLB 表示は V2.0.0
       では未対応</li>
       </ol>
       <h2 id="ui-パネルと主な機能">UI パネルと主な機能</h2>
@@ -732,7 +733,7 @@ fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height
       <code>TerrainProvider</code> を実装して <code>demSources</code>
       へ登録する必要があります。</li>
       </ul>
-      <h3 id="v1.0.24-で未対応の機能">V1.0.24 で未対応の機能</h3>
+      <h3 id="v2.0.0-で未対応の機能">V2.0.0 で未対応の機能</h3>
       <p>現状の実装では未対応の機能は以下の通りです。</p>
       <ul>
       <li>Three.js 点群 / 3DGS / GLB 表示</li>
@@ -746,6 +747,22 @@ fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height
       <li>開発起動時は Rust/Axum
       サーバーを使用してください。静的ファイルのみの表示では設定・レイヤー・プロジェクトの読み込みは行えません。</li>
       </ul>
+      <section class="card">
+        <h2>📚 関連リンク</h2>
+        <ul>
+          <li><a href="home.html">🏠 KASUGAI Canvas 技術選定 ホーム</a></li>
+          <li><a href="01-データ.html">1. データ</a></li>
+          <li><a href="02-ライブラリ.html">2. ライブラリ</a></li>
+          <li><a href="03-システム構成.html">3. システム構成</a></li>
+          <li><strong>4. 実装システム（現在のページ）</strong></li>
+          <li><a href="05-QGIS連携.html">5. QGIS・GDAL連携（構想）</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">GitHub リポジトリ</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/releases" target="_blank">GitHub Releases</a></li>
+          <li><a href="https://re-earth-geo-suite.vercel.app/" target="_blank">Re:Earth GeoSuite</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/blob/main/CHANGELOG.md" target="_blank">CHANGELOG</a></li>
+        </ul>
+      </section>
+
     </main>
   </div>
 </body>

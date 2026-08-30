@@ -7,11 +7,12 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="wrap">
+  <div class="container">
     <header>
-      <h1 class="title">5. QGIS・GDAL連携（構想）</h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v2.0.0</span></h1>
+      <p>5. QGIS・GDAL連携（構想） — QGIS・GDALを活用した連携構想</p>
     </header>
-        <main>
+    <main>
       <h2 id="qgisgdal連携構想">5. QGIS・GDAL連携（構想）</h2>
       <p>本章では、KASUGAI
       Canvasをメイン画面・最終2D/3D表示エンジンとし、QGIS・GDALを多様なGISデータを扱うための変換・編集・解析基盤として連携する構想をまとめる。</p>
@@ -364,6 +365,22 @@ QGIS / GDAL
       </blockquote>
       <p>QGISの画面をKASUGAIへそのまま埋め込むのではなく、正データを維持したまま、用途に応じてGeoJSON、MVT、GeoArrow、XYZ、WMTS、3D
       Tiles等へ変換する。小規模データはGeoJSON、大規模ベクターはMVT、ローカル大容量データはGeoArrowまたはArrowを基本とし、KASUGAIのdeck.glとThree.jsで最終描画する。</p>
+      <section class="card">
+        <h2>📚 関連リンク</h2>
+        <ul>
+          <li><a href="home.html">🏠 KASUGAI Canvas 技術選定 ホーム</a></li>
+          <li><a href="01-データ.html">1. データ</a></li>
+          <li><a href="02-ライブラリ.html">2. ライブラリ</a></li>
+          <li><a href="03-システム構成.html">3. システム構成</a></li>
+          <li><a href="04-実装システム.html">4. 実装システム</a></li>
+          <li><strong>5. QGIS・GDAL連携（構想）（現在のページ）</strong></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">GitHub リポジトリ</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/releases" target="_blank">GitHub Releases</a></li>
+          <li><a href="https://re-earth-geo-suite.vercel.app/" target="_blank">Re:Earth GeoSuite</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/blob/main/CHANGELOG.md" target="_blank">CHANGELOG</a></li>
+        </ul>
+      </section>
+
     </main>
   </div>
 </body>
