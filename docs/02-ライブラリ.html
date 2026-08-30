@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2. ライブラリ — KASUGAI Canvas 技術選定</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      color: #2c3e50;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px; }
+    nav { margin-bottom: 20px; }
+    nav a {
+      display: inline-block;
+      color: #fff;
+      background: linear-gradient(90deg, #00c6ff, #0072ff);
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    header {
+      background: linear-gradient(90deg, #ff6a00, #ee0979);
+      color: #fff;
+      padding: 52px 32px;
+      border-radius: 24px;
+      text-align: center;
+      margin-bottom: 32px;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.2);
+    }
+    header h1 { margin: 0; font-size: 2.4rem; letter-spacing: -1px; }
+    main {
+      background: #fff;
+      border-radius: 24px;
+      padding: 44px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      border-left: 10px solid #ff6a00;
+      padding-left: 16px;
+      margin-top: 48px;
+      font-size: 1.7rem;
+    }
+    h3 {
+      color: #34495e;
+      border-left: 8px solid #2ecc71;
+      padding-left: 14px;
+      margin-top: 34px;
+      font-size: 1.4rem;
+    }
+    h4 { color: #555; margin-top: 26px; font-size: 1.15rem; }
+    p { margin: 1em 0; }
+    a { color: #d63031; font-weight: 700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul, ol { padding-left: 1.6em; margin: 1em 0; }
+    li { margin: 0.6em 0; }
+    li > ul, li > ol { margin: 0.4em 0; }
+    code {
+      background: #f1f2f6;
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: #0984e3;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      background: #2d3436;
+      color: #dfe6e9;
+      padding: 18px;
+      border-radius: 14px;
+      overflow-x: auto;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.88em;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.2em 0;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    th, td { padding: 14px 16px; text-align: left; }
+    th { background: linear-gradient(90deg, #6c5ce7, #00b894); color: #fff; font-weight: 700; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    tr:hover { background: #fff3e0; transition: background 0.2s; }
+    img { max-width: 100%; height: auto; border-radius: 14px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+    blockquote { margin: 1.2em 0; padding: 16px 22px; border-left: 8px solid #ff6a00; background: #fff8f0; border-radius: 0 16px 16px 0; }
+    strong { color: #e84393; }
+    @media (max-width: 720px) {
+      .wrap { padding: 16px; }
+      main { padding: 26px; }
+      header { padding: 36px 20px; }
+      header h1 { font-size: 1.8rem; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav><a href="index.html">← 目次へ戻る</a></nav>
+        <header>
+      <h1 class="title">2. ライブラリ</h1>
+    </header>
+        <main>
+      <h2 id="ライブラリ">2. ライブラリ</h2>
+      <p>KASUGAI Canvas
+      を構成する主要ライブラリについてまとめる章。基本は
+      <strong>CesiumJS + Three.js</strong>。3D Tiles・DEM 上への XYZ
+      重ね合わせなど、地球規模の 3D 表示が必要な箇所は CesiumJS
+      を主軸とする。</p>
+      <h2 id="推奨構成kasugai-canvas">推奨構成：KASUGAI Canvas</h2>
+      <table>
+      <colgroup>
+      <col style="width: 26%" />
+      <col style="width: 47%" />
+      <col style="width: 26%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>役割</th>
+      <th>ライブラリ</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>3D 地球・3D Tiles・DEM ドレープ・XYZ 重ね合わせ</td>
+      <td><strong>CesiumJS</strong></td>
+      <td>KASUGAI Canvas の 3D 描画の核。地球規模
+      LOD・地形・イメージリレイヤー・3D Tiles をネイティブに扱う</td>
+      </tr>
+      <tr>
+      <td>点群・3DGS・高度な 3D 表現</td>
+      <td><strong>Three.js</strong></td>
+      <td>GLB / 点群 / 3DGS エコシステム。Cesium 内のエンティティ /
+      プリミティブと連携</td>
+      </tr>
+      <tr>
+      <td>大容量 2D ベクトル / タイル</td>
+      <td><strong>deck.gl</strong></td>
+      <td>オプション。2D 分析・FlatBuffers / GeoArrow / MVT
+      表示で活用可能</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li><strong>KASUGAI Canvas = CesiumJS +
+      Three.js</strong>。地理院標高 PNG / PLATEAU 3D Tiles
+      等をそのまま読み込む。</li>
+      <li><strong>正式な描画方式：CesiumJS の Viewer / Scene
+      内でレイヤー・深度・カメラを一括管理する</strong>。3D
+      Tiles・DEM・XYZ・GeoJSON は CesiumJS のレイヤー /
+      プリミティブとして配置する。</li>
+      </ul>
+      <h2 id="kasugai-canvas-で可能な表示モード">KASUGAI Canvas
+      で可能な表示モード</h2>
+      <table>
+      <colgroup>
+      <col style="width: 47%" />
+      <col style="width: 26%" />
+      <col style="width: 26%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>表示モード</th>
+      <th>可否</th>
+      <th>説明</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>平面（2D 地図・図面）</strong></td>
+      <td>◎</td>
+      <td>CesiumJS <code>SceneMode.SCENE2D</code> または deck.gl /
+      MapLibre オプション</td>
+      </tr>
+      <tr>
+      <td><strong>3D パース（3D モデル・点群・3DGS）</strong></td>
+      <td>◎</td>
+      <td>Cesium <code>Cesium3DTileset</code> / <code>Model</code> +
+      Three.js 点群・3DGS レンダラー</td>
+      </tr>
+      <tr>
+      <td><strong>地形（DEM ドレープ）</strong></td>
+      <td>◎</td>
+      <td>Cesium <code>TerrainProvider</code> /
+      <code>CesiumWorldTerrain</code> + <code>ImageryLayer</code></td>
+      </tr>
+      <tr>
+      <td><strong>グローブ（球形地球儀）</strong></td>
+      <td>◎</td>
+      <td>CesiumJS はデフォルトで地球儀表示を扱う。グローブ / ローカル
+      3D 空間の切り替えが可能</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li>KASUGAI Canvas は <strong>グローブ（球形地球）</strong> も
+      <strong>ローカル 3D 空間</strong> も扱える。</li>
+      <li><strong>WGS84 / 平面直角座標等の座標系</strong>
+      を使い、CesiumJS の座標変換（<code>Cartographic</code>,
+      <code>Cartesian3</code>,
+      <code>Transforms</code>）で統一して描画する。</li>
+      </ul>
+      <h2
+      id="データ種別別のライブラリ選択">データ種別別のライブラリ選択</h2>
+      <table>
+      <colgroup>
+      <col style="width: 18%" />
+      <col style="width: 23%" />
+      <col style="width: 23%" />
+      <col style="width: 20%" />
+      <col style="width: 13%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>データ</th>
+      <th>CesiumJS</th>
+      <th>Three.js</th>
+      <th>deck.gl</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>3D Tiles / GLB</td>
+      <td>◎</td>
+      <td>◯</td>
+      <td>◯</td>
+      <td>Cesium <code>Cesium3DTileset</code> / <code>Model</code>
+      でネイティブ表示。PLATEAU も直接読み込み</td>
+      </tr>
+      <tr>
+      <td>DEM / 標高PNG</td>
+      <td>◎</td>
+      <td>△</td>
+      <td>◯</td>
+      <td>Cesium <code>TerrainProvider</code> /
+      <code>CesiumWorldTerrain</code> で高精細地形。XYZ を ImageryLayer
+      としてドレープ</td>
+      </tr>
+      <tr>
+      <td>XYZ / TMS / WMS</td>
+      <td>◎</td>
+      <td>△</td>
+      <td>◎</td>
+      <td>Cesium <code>ImageryLayer</code> /
+      <code>UrlTemplateImageryProvider</code>
+      で曲面・地形にドレープ</td>
+      </tr>
+      <tr>
+      <td>GeoJSON</td>
+      <td>◎</td>
+      <td>△</td>
+      <td>◎</td>
+      <td>Cesium <code>GeoJsonDataSource</code> / <code>Entity</code> /
+      <code>Cesium3DTileset</code>（ベクタータイル）</td>
+      </tr>
+      <tr>
+      <td>2D Buffers (GeoArrow/FlatBuffers)</td>
+      <td>△</td>
+      <td>△</td>
+      <td>◎</td>
+      <td>deck.gl <code>GeoJsonLayer（binary）</code> が最適。2D
+      分析用</td>
+      </tr>
+      <tr>
+      <td>2D タイル (MVT/XYZ)</td>
+      <td>◯</td>
+      <td>△</td>
+      <td>◎</td>
+      <td>2D 表示用途なら deck.gl <code>MVTLayer</code> /
+      <code>TileLayer</code></td>
+      </tr>
+      <tr>
+      <td>点群 (PLY/LAS/EPT)</td>
+      <td>◯</td>
+      <td>◯</td>
+      <td>◯</td>
+      <td>Cesium <code>Cesium3DTileset</code>（pnts / 3DTiles_next）or
+      Three.js <code>Points</code> / Potree</td>
+      </tr>
+      <tr>
+      <td>3DGS (PLY/SPZ/Splat)</td>
+      <td>△</td>
+      <td>◎</td>
+      <td>△</td>
+      <td>Three.js 系専用レンダラー</td>
+      </tr>
+      </tbody>
+      </table>
+      <h2 id="cesiumjs-の強力機能">CesiumJS の強力機能</h2>
+      <table>
+      <colgroup>
+      <col style="width: 42%" />
+      <col style="width: 57%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>機能</th>
+      <th>用途例</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>ImageryLayer / ImageryProvider</strong></td>
+      <td>XYZ / TMS / WMS を地球/地形へ重ね合わせ。前後関係は
+      <code>ImageryLayerCollection</code> で管理</td>
+      </tr>
+      <tr>
+      <td><strong>TerrainProvider</strong></td>
+      <td>DEM / 標高PNG・CesiumWorldTerrain 等で 3D 地形を構築</td>
+      </tr>
+      <tr>
+      <td><strong>Cesium3DTileset</strong></td>
+      <td>PLATEAU 等の大規模 3D Tiles をネイティブ
+      LOD・カリングで描画</td>
+      </tr>
+      <tr>
+      <td><strong>ClippingPlaneCollection / ClippingPlane</strong></td>
+      <td>3D Tiles・点群の断面カット</td>
+      </tr>
+      <tr>
+      <td><strong>ClassificationPrimitive /
+      Vector3DTilePrimitive</strong></td>
+      <td>3D 地形・建物へのドレープ・クラシフィケーション</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li>CesiumJS は 3D Tiles、DEM、XYZ いずれも <strong>同じグローブ /
+      深度バッファ</strong>
+      内で描画するため、重ね合わせの前後関係が自然に扱える。</li>
+      </ul>
+      <h2 id="点群3dgs-用ライブラリ">点群・3DGS 用ライブラリ</h2>
+      <table>
+      <colgroup>
+      <col style="width: 18%" />
+      <col style="width: 34%" />
+      <col style="width: 36%" />
+      <col style="width: 10%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>ライブラリ</th>
+      <th>点群 (LAS/PLY/EPT)</th>
+      <th>3DGS (PLY/SPZ/Splat)</th>
+      <th>特徴</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>CesiumJS</strong></td>
+      <td>◯ (3D Tiles pnts / 3DTiles_next)</td>
+      <td>△ (要カスタムレンダラー)</td>
+      <td>大規模点群を地球規模で描画。3DGS は現状最適化されていない</td>
+      </tr>
+      <tr>
+      <td><strong>Three.js</strong></td>
+      <td>◯ (<code>BufferGeometry</code>)</td>
+      <td>◎ (<code>gaussian-splats-3d</code> / Splat Viewer)</td>
+      <td>3DGS エコシステムが最も充実</td>
+      </tr>
+      <tr>
+      <td><strong>Potree</strong></td>
+      <td>◎ (専用点群レンダラー)</td>
+      <td>❌</td>
+      <td>大規模点群 Web 可視化特化</td>
+      </tr>
+      <tr>
+      <td><strong>PlayCanvas SuperSplat</strong></td>
+      <td>❌</td>
+      <td>◎</td>
+      <td>3DGS 専用ビューアー。変換・最適化にも強い</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li><strong>点群</strong>：大量 PLY / LAS は <strong>Potree 形式 /
+      EPT / 3D Tiles（pnts）</strong> へ変換して KASUGAI
+      Canvas（CesiumJS / Three.js）で描画</li>
+      <li><strong>3DGS</strong>：そのまま描画には <strong>Three.js
+      系の専用レンダラー</strong> が現状最適。配信には
+      <strong>SPZ</strong> 等の圧縮を検討</li>
+      </ul>
+      <h2 id="cesiumjs-three.js-の連携パターン">CesiumJS + Three.js
+      の連携パターン</h2>
+      <h3
+      id="正式仕様cesiumjs-内のエンティティ-プリミティブ-three.js-補完">正式仕様：CesiumJS
+      内のエンティティ / プリミティブ + Three.js 補完</h3>
+      <ul>
+      <li>CesiumJS の <code>Scene</code> 内に
+      <code>Cesium3DTileset</code>、<code>ImageryLayer</code>、<code>Entity</code>、<code>Primitive</code>
+      を配置</li>
+      <li>Three.js は Cesium の <code>Scene</code>
+      内に連携させるか、<code>Cesium.CallbackProperty</code> /
+      <code>Cesium.Entity</code> 経由で位置同期</li>
+      <li>深度バッファ・カメラ行列・ビューポートは CesiumJS
+      が管理。Three.js は点群・3DGS・特殊メッシュ用に補完</li>
+      <li>フレームループは CesiumJS の <code>clock.onTick</code> または
+      <code>scene.postRender</code> で制御</li>
+      </ul>
+      <h3 id="参考方式オーバーレイ">参考方式：オーバーレイ</h3>
+      <ul>
+      <li>Three.js 用の <code>&lt;canvas&gt;</code> を下層、CesiumJS
+      用の <code>&lt;canvas&gt;</code> を上層に重ねる</li>
+      <li>両方を同じサイズ・カメラに揃え、CSS
+      <code>pointer-events</code> を調整</li>
+      <li>実装が容易で、各エンジンの描画サイクルを独立に保てる</li>
+      <li>プロトタイプや障害切り分けには使用できるが、深度・レイヤー順・ピッキングを統合できないため本番仕様にはしない</li>
+      </ul>
+      <h2 id="補完ライブラリ">補完ライブラリ</h2>
+      <table>
+      <colgroup>
+      <col style="width: 26%" />
+      <col style="width: 47%" />
+      <col style="width: 26%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>用途</th>
+      <th>ライブラリ</th>
+      <th>説明</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>座標変換</td>
+      <td><strong>proj4.js / coordsys</strong></td>
+      <td>平面直角座標 ↔︎ WGS84 等の変換</td>
+      </tr>
+      <tr>
+      <td>GPKG 変換</td>
+      <td><strong>sql.js + WKB パーサー</strong></td>
+      <td>ブラウザ内で SQLite（GPKG） → Arrow/GeoJSON 変換</td>
+      </tr>
+      <tr>
+      <td>FGDB 変換</td>
+      <td><strong>ogr2ogr（サーバー or 事前変換）</strong></td>
+      <td>プロプライエタリ形式をブラウザ内では読みにくいため、サーバー
+      or 事前変換で対応</td>
+      </tr>
+      <tr>
+      <td>点群変換</td>
+      <td><strong>Potree Converter / entwine</strong></td>
+      <td>PLY/LAS → EPT / 3D Tiles</td>
+      </tr>
+      </tbody>
+      </table>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1. データ — KASUGAI Canvas 技術選定</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      color: #2c3e50;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px; }
+    nav { margin-bottom: 20px; }
+    nav a {
+      display: inline-block;
+      color: #fff;
+      background: linear-gradient(90deg, #00c6ff, #0072ff);
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    header {
+      background: linear-gradient(90deg, #ff6a00, #ee0979);
+      color: #fff;
+      padding: 52px 32px;
+      border-radius: 24px;
+      text-align: center;
+      margin-bottom: 32px;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.2);
+    }
+    header h1 { margin: 0; font-size: 2.4rem; letter-spacing: -1px; }
+    main {
+      background: #fff;
+      border-radius: 24px;
+      padding: 44px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      border-left: 10px solid #ff6a00;
+      padding-left: 16px;
+      margin-top: 48px;
+      font-size: 1.7rem;
+    }
+    h3 {
+      color: #34495e;
+      border-left: 8px solid #2ecc71;
+      padding-left: 14px;
+      margin-top: 34px;
+      font-size: 1.4rem;
+    }
+    h4 { color: #555; margin-top: 26px; font-size: 1.15rem; }
+    p { margin: 1em 0; }
+    a { color: #d63031; font-weight: 700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul, ol { padding-left: 1.6em; margin: 1em 0; }
+    li { margin: 0.6em 0; }
+    li > ul, li > ol { margin: 0.4em 0; }
+    code {
+      background: #f1f2f6;
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: #0984e3;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      background: #2d3436;
+      color: #dfe6e9;
+      padding: 18px;
+      border-radius: 14px;
+      overflow-x: auto;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.88em;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.2em 0;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    th, td { padding: 14px 16px; text-align: left; }
+    th { background: linear-gradient(90deg, #6c5ce7, #00b894); color: #fff; font-weight: 700; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    tr:hover { background: #fff3e0; transition: background 0.2s; }
+    img { max-width: 100%; height: auto; border-radius: 14px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+    blockquote { margin: 1.2em 0; padding: 16px 22px; border-left: 8px solid #ff6a00; background: #fff8f0; border-radius: 0 16px 16px 0; }
+    strong { color: #e84393; }
+    @media (max-width: 720px) {
+      .wrap { padding: 16px; }
+      main { padding: 26px; }
+      header { padding: 36px 20px; }
+      header h1 { font-size: 1.8rem; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav><a href="index.html">← 目次へ戻る</a></nav>
+        <header>
+      <h1 class="title">1. データ</h1>
+    </header>
+        <main>
+      <h2 id="データ">1. データ</h2>
+      <p>KASUGAI Canvas（<strong>deck.gl + Three.js</strong>）で取り扱う
+      2D / 3D
+      データの最適フォーマット、配信・管理についてまとめる章。</p>
+      <h2 id="kasugai-canvas-で扱えるデータ形式一覧">KASUGAI Canvas
+      で扱えるデータ形式一覧</h2>
+      <h3 id="直接描画可能なデータ形式">直接描画可能なデータ形式</h3>
+      <table>
+      <colgroup>
+      <col style="width: 21%" />
+      <col style="width: 21%" />
+      <col style="width: 35%" />
+      <col style="width: 21%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>分類</th>
+      <th>形式</th>
+      <th>描画方法</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>2D ベクトル</td>
+      <td>GeoArrow / FlatBuffers</td>
+      <td><code>deck.gl GeoJsonLayer（binary）</code></td>
+      <td>最も推奨。GeoArrow/FlatBuffers から deck.gl 独自 binary
+      へ変換して GPU バッファへゼロコピー</td>
+      </tr>
+      <tr>
+      <td>2D ベクトル</td>
+      <td>GeoJSON（小〜中規模）</td>
+      <td><code>deck.gl GeoJsonLayer</code></td>
+      <td>大容量時は GeoArrow/FlatBuffers への変換を推奨</td>
+      </tr>
+      <tr>
+      <td>2D タイル</td>
+      <td>MVT / XYZ / WMTS</td>
+      <td><code>deck.gl TileLayer</code> / <code>MVTLayer</code></td>
+      <td>広域地図・航空写真（WMTS は TileMatrixSet 変換が必要）</td>
+      </tr>
+      <tr>
+      <td>3D モデル</td>
+      <td>GLB / glTF 2.0</td>
+      <td><code>deck.gl ScenegraphLayer</code> / Three.js
+      <code>GLTFLoader</code></td>
+      <td>建機・構造物</td>
+      </tr>
+      <tr>
+      <td>3D タイル</td>
+      <td>3D Tiles 1.1 (GLB 内包)</td>
+      <td><code>deck.gl Tile3DLayer</code> / Three.js
+      <code>3DTilesRenderer</code></td>
+      <td>PLATEAU 等。LOD・ストリーミング対応</td>
+      </tr>
+      <tr>
+      <td>点群</td>
+      <td>EPT / Potree 形式</td>
+      <td><code>deck.gl PointCloudLayer</code> / Three.js
+      <code>Points</code></td>
+      <td>大規模点群向け</td>
+      </tr>
+      <tr>
+      <td>3DGS</td>
+      <td>PLY / SPZ / .splat / .ksplat / .sog</td>
+      <td>Three.js 系専用レンダラー</td>
+      <td><code>gaussian-splats-3d</code> 等。deck.gl はカメラ同期</td>
+      </tr>
+      <tr>
+      <td>DEM / 地形</td>
+      <td>標高PNG (XYZ / WMTS)</td>
+      <td><code>deck.gl TerrainLayer</code></td>
+      <td>GPU リアルタイムメッシュ化</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3
+      id="パイプライン変換が必要なデータ形式">パイプライン（変換）が必要なデータ形式</h3>
+      <table>
+      <colgroup>
+      <col style="width: 23%" />
+      <col style="width: 23%" />
+      <col style="width: 30%" />
+      <col style="width: 23%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>分類</th>
+      <th>形式</th>
+      <th>変換先</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>2D ベクトル</td>
+      <td>GPKG (GeoPackage)</td>
+      <td>GeoArrow / FlatBuffers / MVT</td>
+      <td>SQLite + WKB。Web Worker 等で変換</td>
+      </tr>
+      <tr>
+      <td>2D ベクトル</td>
+      <td>FGDB (File Geodatabase)</td>
+      <td>GeoArrow / FlatBuffers / MVT</td>
+      <td>プロプライエタリ。ogr2ogr 等で変換</td>
+      </tr>
+      <tr>
+      <td>2D ベクトル</td>
+      <td>GeoJSON（大規模）</td>
+      <td>GeoArrow / FlatBuffers</td>
+      <td>ゼロコピー描画のため変換</td>
+      </tr>
+      <tr>
+      <td>点群</td>
+      <td>PLY / LAS / LAZ</td>
+      <td>EPT / 3D Tiles / PointCloud バッファ</td>
+      <td>ブラウザ内 or 事前変換</td>
+      </tr>
+      <tr>
+      <td>DEM / 地形</td>
+      <td>GeoTIFF / CSV 等</td>
+      <td>標高PNG / GLB / 3D Tiles</td>
+      <td>Web Worker またはサーバー側で変換</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li><strong>直接描画可能</strong>：deck.gl / Three.js
+      のローダーまたはレイヤーでそのまま描画可能</li>
+      <li><strong>要専用レンダラー</strong>：Three.js
+      系の専用ライブラリが必要。deck.gl はカメラ同期のみ</li>
+      <li><strong>パイプライン（変換）が必要</strong>：ブラウザ内 Web
+      Worker または事前変換が必要。GPKG/FGDB は Single Source of Truth
+      として管理・変換元に使用</li>
+      </ul>
+      <h2 id="deck.gl-と-three.js-の担当分け">deck.gl と Three.js
+      の担当分け</h2>
+      <table>
+      <colgroup>
+      <col style="width: 19%" />
+      <col style="width: 35%" />
+      <col style="width: 30%" />
+      <col style="width: 14%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>データ</th>
+      <th>主担当エンジン</th>
+      <th>補完エンジン</th>
+      <th>用途</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>2D ベクトル (GeoArrow / FlatBuffers)</td>
+      <td><strong>deck.gl</strong>
+      (<code>GeoJsonLayer（binary）</code>)</td>
+      <td>–</td>
+      <td>図面・境界・大容量 2D</td>
+      </tr>
+      <tr>
+      <td>2D タイル (MVT / XYZ / WMTS)</td>
+      <td><strong>deck.gl</strong> (<code>TileLayer</code>)</td>
+      <td>–</td>
+      <td>広域地図・航空写真</td>
+      </tr>
+      <tr>
+      <td>GLB / 3D Tiles</td>
+      <td><strong>deck.gl</strong> (<code>ScenegraphLayer</code> /
+      <code>Tile3DLayer</code>)</td>
+      <td><strong>Three.js</strong> (<code>GLTFLoader</code>)</td>
+      <td>建機・構造物・都市モデル</td>
+      </tr>
+      <tr>
+      <td>点群 (PLY / LAS / EPT)</td>
+      <td><strong>deck.gl</strong> (<code>PointCloudLayer</code>)</td>
+      <td><strong>Three.js</strong> (<code>Points</code> / Potree)</td>
+      <td>測量・LiDAR 点群</td>
+      </tr>
+      <tr>
+      <td>3DGS (PLY / SPZ / Splat)</td>
+      <td><strong>Three.js</strong> 専用レンダラー</td>
+      <td><strong>deck.gl</strong> (カメラ同期)</td>
+      <td>写真測量・ニューラル表現</td>
+      </tr>
+      <tr>
+      <td>管理データ (GPKG / FGDB)</td>
+      <td>Web Worker → 変換</td>
+      <td>–</td>
+      <td>正データ保持・変換元</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li><strong>deck.gl</strong>：2D/3D Tiles/Buffers を同一 GPU
+      コンテキストでゼロコピー描画</li>
+      <li><strong>Three.js</strong>：点群・3DGS・高度な GLB
+      表現を補完。deck.gl とカメラを同期させて重ねる</li>
+      </ul>
+      <h2 id="d-データ">2D データ</h2>
+      <h3 id="d-データ整理">2D データ整理</h3>
+      <table style="width:100%;">
+      <colgroup>
+      <col style="width: 28%" />
+      <col style="width: 28%" />
+      <col style="width: 10%" />
+      <col style="width: 10%" />
+      <col style="width: 21%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>用途・データ領域</th>
+      <th>最適フォーマット</th>
+      <th>評価</th>
+      <th>強み</th>
+      <th>弱み・注意点</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>数千〜数万件の 2D図面・境界</td>
+      <td><strong>FlatBuffers / GeoArrow</strong></td>
+      <td>🏆 最推奨</td>
+      <td>ゼロコピーで GPU
+      バッファへ直結。数十万〜数百万のベクター可視化</td>
+      <td>–</td>
+      </tr>
+      <tr>
+      <td>広域・大量の全国地図・航空写真</td>
+      <td><strong>MVT / XYZ / WMTS</strong></td>
+      <td>🥈</td>
+      <td>GIS/Web 標準。圧縮・サイズ削減に強い</td>
+      <td>デコードに CPU を使う</td>
+      </tr>
+      <tr>
+      <td>管理・連携用の正データ</td>
+      <td><strong>GPKG (GeoPackage)</strong></td>
+      <td>✅ 管理用</td>
+      <td>Single Source of Truth。属性・トポロジ保持に優秀</td>
+      <td>ブラウザ直接描画は向かない（SQLite + WKB パース）</td>
+      </tr>
+      <tr>
+      <td>Esri 資産の管理・連携</td>
+      <td><strong>FGDB (File Geodatabase)</strong></td>
+      <td>✅ 管理用</td>
+      <td>Esri ツールとの互換。フィーチャクラス・ドメイン・関係対応</td>
+      <td>プロプライエタリ。ブラウザ直接描画不可。変換が必要</td>
+      </tr>
+      <tr>
+      <td>2D 図面への GLB 使用</td>
+      <td>—</td>
+      <td>❌</td>
+      <td>3D メッシュ向け</td>
+      <td>属性・トポロジが弱く、2D 図面には向かない</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li>KASUGAI Canvas 描画層：<strong>GPKG は Web Worker で、FGDB は
+      ogr2ogr 等のサーバー or 事前変換で FlatBuffers / MVT
+      に変換</strong>し、<code>deck.gl</code> の
+      <code>GeoJsonLayer（binary）</code> / <code>TileLayer</code>
+      へゼロコピーで渡す</li>
+      </ul>
+      <h2 id="d-データ-1">3D データ</h2>
+      <h3 id="d-データ整理-1">3D データ整理</h3>
+      <table>
+      <colgroup>
+      <col style="width: 30%" />
+      <col style="width: 30%" />
+      <col style="width: 11%" />
+      <col style="width: 11%" />
+      <col style="width: 15%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>用途・データ領域</th>
+      <th>最適フォーマット</th>
+      <th>評価</th>
+      <th>強み</th>
+      <th>注意点</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>単体オブジェクト（建機・構造物）</td>
+      <td><strong>GLB (glTF 2.0)</strong></td>
+      <td>🏆 最推奨</td>
+      <td>3D モデルの「3D 版 JPEG/PNG」。1 ファイルで完結</td>
+      <td>–</td>
+      </tr>
+      <tr>
+      <td>広域・大容量（都市モデル）</td>
+      <td><strong>3D Tiles 1.1（GLB 内包）</strong></td>
+      <td>🏆 最推奨</td>
+      <td>タイル化・LOD 制御でストリーミング</td>
+      <td>1.1 から glTF 2.0 / GLB ペイロードを直接利用可能</td>
+      </tr>
+      <tr>
+      <td>点群（測量・LiDAR 生データ）</td>
+      <td><strong>LAS/LAZ / PLY / EPT</strong></td>
+      <td>🥈</td>
+      <td>測量標準。EPT は大規模点群を階層タイル化</td>
+      <td>そのままの描画には変換・ローダーが必要</td>
+      </tr>
+      <tr>
+      <td>画像からのニューラル表現</td>
+      <td><strong>3DGS (PLY / SPZ / Splat)</strong></td>
+      <td>🥈</td>
+      <td>写真起点の高品質ビジュアル。SPZ は PLY 比 10x 圧縮</td>
+      <td>PLY は未圧縮で大容量。描画には専用レンダラーが必要</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="kasugai-canvas-への読み込み方">KASUGAI Canvas
+      への読み込み方</h3>
+      <table>
+      <colgroup>
+      <col style="width: 25%" />
+      <col style="width: 40%" />
+      <col style="width: 34%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>データ</th>
+      <th>描画エンジン</th>
+      <th>ロード方法</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>GLB / 3D Tiles</strong></td>
+      <td><code>deck.gl</code> (<code>ScenegraphLayer</code> /
+      <code>Tile3DLayer</code>) または <code>Three.js</code>
+      (<code>GLTFLoader</code> / <code>3DTilesRenderer</code>)</td>
+      <td>loaders.gl 経由でゼロコピー</td>
+      </tr>
+      <tr>
+      <td><strong>点群 (PLY / LAS)</strong></td>
+      <td><code>deck.gl</code> (<code>PointCloudLayer</code>) または
+      <code>Three.js</code> (<code>Points</code> / Potree)</td>
+      <td>PLY/LAZ → 変換 → バッファ渡し</td>
+      </tr>
+      <tr>
+      <td><strong>3DGS (PLY / SPZ)</strong></td>
+      <td><strong>Three.js</strong> 専用レンダラー</td>
+      <td><code>gaussian-splats-3d</code> / SuperSplat 等で読み込み</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="点群の扱い">点群の扱い</h3>
+      <ul>
+      <li><strong>LAS/LAZ</strong>：測量・LiDAR での標準。LAZ
+      は圧縮形式</li>
+      <li><strong>PLY</strong>：簡易入出力用。点位置 + RGB
+      のみの軽量点群も可能</li>
+      <li><strong>EPT (Entwine Point Tile)</strong> / <strong>Potree
+      形式</strong>：ブラウザ向け大規模点群配信。八分木階層で LOD
+      制御</li>
+      <li>大量点群は <strong>EPT</strong> や <strong>3D Tiles 点群（pnts
+      / 1.1 glTF）</strong> に変換して <code>deck.gl</code> /
+      <code>Three.js</code> で描画すると安定</li>
+      </ul>
+      <h3 id="d-gaussian-splatting3dgs">3D Gaussian
+      Splatting（3DGS）</h3>
+      <ul>
+      <li>3D
+      空間上の多数のガウス分布でシーンを表現するニューラル描画手法</li>
+      <li>主要フォーマット
+      <ul>
+      <li><strong>PLY</strong>：学習済みモデルのデファクト標準。各ガウスに位置・スケール・回転・不透明度・球面調和係数を保持</li>
+      <li><strong>SPZ</strong>：Niantic 公開の圧縮形式。PLY と比べて約
+      10 倍小さく、Web 配信に適している</li>
+      <li><strong>.splat / .ksplat /
+      .sog</strong>：各ビューアー向けの圧縮・最適化形式</li>
+      </ul></li>
+      <li>KASUGAI Canvas では <strong>Three.js</strong>
+      側で専用レンダラーを使い、<code>deck.gl</code>
+      レイヤーとカメラ同期を行う</li>
+      </ul>
+      <h2 id="地形demの扱い">地形（DEM）の扱い</h2>
+      <ul>
+      <li><strong>deck.gl <code>TerrainLayer</code></strong>：標高PNG
+      (XYZ / WMTS) を読み込み、GPU
+      でリアルタイムにメッシュ化。国土地理院標高タイルを使う場合は RGB →
+      標高値（x = 2^16R + 2^8G + B、u は標高分解能
+      0.01m）に変換する必要がある。ただし GSI 標高タイルは
+      <code>x &lt; 2^23</code> のとき
+      <code>h = xu</code>、<code>x = 2^23</code> のとき
+      NA、<code>x &gt; 2^23</code> のとき <code>h = (x - 2^24)u</code>
+      という符号付き・条件分岐形式のため、deck.gl の
+      <code>elevationDecoder</code> だけでは扱えず、事前変換または GSI
+      専用レイヤーが必要</li>
+      <li><strong>Three.js</strong>：DEM 画像から
+      <code>PlaneGeometry</code> + displacement map / 頂点シェーダーで
+      terrain メッシュを生成</li>
+      <li><strong>PLATEAU 3D Tiles</strong>：3D
+      都市モデル（建物・地形等）を LOD 付きで配信しているので
+      <code>Tile3DLayer</code> / Three.js <code>3DTilesRenderer</code>
+      でそのまま表示</li>
+      <li>生の DEM（GeoTIFF / CSV 等）は、Web Worker またはサーバー側で
+      <strong>標高PNG / GLB / 3D Tiles</strong> に変換してから描画</li>
+      </ul>
+      <h2 id="データパイプライン">データパイプライン</h2>
+      <p>KASUGAI Canvas
+      へのデータは、以下のパイプラインを経て描画層に届く。</p>
+      <pre class="text"><code>現場データ（GPKG / FGDB / GeoJSON / GLB / LAS / PLY / SPZ）
+    ↓
+① 変換
+    ブラウザ内（Web Worker / WASM）: sql.js / Arrow-JS / geopackage-js
+    サーバー or 事前変換: ogr2ogr / Potree Converter / entwine
+    ↓
+② 描画用フォーマット
+    GeoArrow / FlatBuffers / MVT / 3D Tiles / EPT / GLB
+    ↓
+③ 配信・キャッシュ
+    OPFS / IndexedDB / S3 / MinIO / CDN
+    ↓
+④ 描画
+    deck.gl / Three.js（VRAM ゼロコピー）</code></pre>
+      <table>
+      <colgroup>
+      <col style="width: 21%" />
+      <col style="width: 21%" />
+      <col style="width: 57%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>段階</th>
+      <th>役割</th>
+      <th>対象データ・技術</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>入力</td>
+      <td>正データ・管理データの保持</td>
+      <td>GPKG、FGDB、Re:Earth（属性・プロジェクト管理）</td>
+      </tr>
+      <tr>
+      <td>変換</td>
+      <td>ブラウザ内 or 事前変換</td>
+      <td>2D 図面 → GeoArrow/FlatBuffers、点群 → EPT/3D Tiles、3DGS →
+      SPZ</td>
+      </tr>
+      <tr>
+      <td>配信</td>
+      <td>タイル・バイナリの配信</td>
+      <td>S3/MinIO、CDN、Martin、Tegola</td>
+      </tr>
+      <tr>
+      <td>描画</td>
+      <td>GPU 直接描画</td>
+      <td>deck.gl <code>GeoJsonLayer（binary）</code> /
+      <code>TileLayer</code> / <code>Tile3DLayer</code>、Three.js</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li>点群・3DGS・生 DEM は
+      <strong>ブラウザ内で変換するのではなく、事前に 3D Tiles / EPT /
+      SPZ へ変換</strong> しておくのが現実的</li>
+      <li><strong>GPKG</strong> は <strong>Web Worker / sql.js + WKB
+      パーサー 経由で FlatBuffers / MVT</strong>
+      に、<strong>FGDB</strong> は <strong>ogr2ogr 等のサーバー or
+      事前変換で GeoJSON/CSV 経由 FlatBuffers / MVT</strong>
+      に変換し、<code>deck.gl</code> へゼロコピーで渡す</li>
+      <li>変換済みデータは <strong>OPFS や IndexedDB</strong>
+      にキャッシュし、次回起動時の読み込みを短縮する</li>
+      </ul>
+      <h2 id="配信サービス">配信サービス</h2>
+      <h3 id="reearth-の位置づけ">Re:Earth の位置づけ</h3>
+      <ul>
+      <li><strong>メイン</strong>：属性・プロジェクト管理・検索API</li>
+      <li><strong>オープンソース・セルフホスト</strong>可能（ローカル/オンプレ対応）</li>
+      <li>PLATEAU / GIS データの管理・メタデータ付与に強い</li>
+      </ul>
+      <h3 id="データ種別ごとの配信構成">データ種別ごとの配信構成</h3>
+      <table>
+      <colgroup>
+      <col style="width: 25%" />
+      <col style="width: 29%" />
+      <col style="width: 45%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>データ種別</th>
+      <th>配信サービス</th>
+      <th>Re:Earth の役割</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>属性・プロジェクト管理</td>
+      <td><strong>Re:Earth</strong></td>
+      <td>メインデータ管理</td>
+      </tr>
+      <tr>
+      <td>2D Buffers (GeoArrow/FlatBuffers)</td>
+      <td>Re:Earth or S3互換</td>
+      <td>アセット保存</td>
+      </tr>
+      <tr>
+      <td>広域 3D Tiles / 点群 / 3DGS</td>
+      <td><strong>S3/MinIO + CDN</strong></td>
+      <td>URL参照</td>
+      </tr>
+      <tr>
+      <td>2D MVT / 地理院タイル</td>
+      <td><strong>Martin / Tegola</strong></td>
+      <td>外部API連携</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="ハイブリッド配信フロー">ハイブリッド配信フロー</h3>
+      <pre class="text"><code>データ入力/管理
+├── 現場メタデータ ──&gt; Re:Earth
+├── 2D図面(.arrow) ──&gt; Re:Earth / S3
+├── 3D Tiles/点群 ───&gt; S3/MinIO
+└── 3DGS (.ply/.spz) ──&gt; S3/MinIO
+         ↓ (URL/API)
+KASUGAI Canvas (deck.gl + Three.js)
+    ↓
+ゼロコピーで VRAM 転送・爆速描画</code></pre>
+    </main>
+  </div>
+</body>
+</html>

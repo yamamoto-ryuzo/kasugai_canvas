@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>5. QGIS・GDAL連携（構想） — KASUGAI Canvas 技術選定</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      color: #2c3e50;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px; }
+    nav { margin-bottom: 20px; }
+    nav a {
+      display: inline-block;
+      color: #fff;
+      background: linear-gradient(90deg, #00c6ff, #0072ff);
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    header {
+      background: linear-gradient(90deg, #ff6a00, #ee0979);
+      color: #fff;
+      padding: 52px 32px;
+      border-radius: 24px;
+      text-align: center;
+      margin-bottom: 32px;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.2);
+    }
+    header h1 { margin: 0; font-size: 2.4rem; letter-spacing: -1px; }
+    main {
+      background: #fff;
+      border-radius: 24px;
+      padding: 44px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      border-left: 10px solid #ff6a00;
+      padding-left: 16px;
+      margin-top: 48px;
+      font-size: 1.7rem;
+    }
+    h3 {
+      color: #34495e;
+      border-left: 8px solid #2ecc71;
+      padding-left: 14px;
+      margin-top: 34px;
+      font-size: 1.4rem;
+    }
+    h4 { color: #555; margin-top: 26px; font-size: 1.15rem; }
+    p { margin: 1em 0; }
+    a { color: #d63031; font-weight: 700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul, ol { padding-left: 1.6em; margin: 1em 0; }
+    li { margin: 0.6em 0; }
+    li > ul, li > ol { margin: 0.4em 0; }
+    code {
+      background: #f1f2f6;
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: #0984e3;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      background: #2d3436;
+      color: #dfe6e9;
+      padding: 18px;
+      border-radius: 14px;
+      overflow-x: auto;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.88em;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.2em 0;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    th, td { padding: 14px 16px; text-align: left; }
+    th { background: linear-gradient(90deg, #6c5ce7, #00b894); color: #fff; font-weight: 700; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    tr:hover { background: #fff3e0; transition: background 0.2s; }
+    img { max-width: 100%; height: auto; border-radius: 14px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+    blockquote { margin: 1.2em 0; padding: 16px 22px; border-left: 8px solid #ff6a00; background: #fff8f0; border-radius: 0 16px 16px 0; }
+    strong { color: #e84393; }
+    @media (max-width: 720px) {
+      .wrap { padding: 16px; }
+      main { padding: 26px; }
+      header { padding: 36px 20px; }
+      header h1 { font-size: 1.8rem; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav><a href="index.html">← 目次へ戻る</a></nav>
+        <header>
+      <h1 class="title">5. QGIS・GDAL連携（構想）</h1>
+    </header>
+        <main>
+      <h2 id="qgisgdal連携構想">5. QGIS・GDAL連携（構想）</h2>
+      <p>本章では、KASUGAI
+      Canvasをメイン画面・最終2D/3D表示エンジンとし、QGIS・GDALを多様なGISデータを扱うための変換・編集・解析基盤として連携する構想をまとめる。</p>
+      <p>これは現行実装の説明ではなく、現在のGeoJSON・XYZ・DEM・3D
+      Tiles対応を出発点として、QGIS・GDAL対応を段階的に追加するための設計方針である。</p>
+      <figure>
+      <img src="./images/canvas_QGIS.png" alt="QGIS連携構想" />
+      <figcaption aria-hidden="true">QGIS連携構想</figcaption>
+      </figure>
+      <h2 id="基本方針">5.1 基本方針</h2>
+      <p>QGISの画面や<code>QgsMapCanvas</code>をKASUGAIへそのまま埋め込むのではない。QGIS・GDALが扱える多様な入力形式を、deck.glが効率よく描画できる形式へ変換・配信する。</p>
+      <pre class="text"><code>各種GISデータ
+├─ GeoPackage / Shapefile / FileGDB
+├─ PostGIS
+├─ GeoTIFF / COG
+├─ LAS / LAZ
+└─ 3D都市モデル
+        ↓
+QGIS Processing / PyQGIS / GDAL・OGR
+        ↓
+KASUGAI向け変換・配信層
+        ↓
+GeoJSON / MVT / GeoArrow / XYZ / WMTS / 3D Tiles
+        ↓
+deck.gl + Three.js
+        ↓
+KASUGAI Canvasで最終表示</code></pre>
+      <h3 id="役割分担">役割分担</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>役割</th>
+      <th>担当</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>メインUI、レイヤー管理、カメラ、最終表示</td>
+      <td>KASUGAI Canvas</td>
+      </tr>
+      <tr>
+      <td>ベクター、タイル、Terrain、3D TilesのGPU描画</td>
+      <td>deck.gl</td>
+      </tr>
+      <tr>
+      <td>GLB、点群、3DGS等の補助3D描画</td>
+      <td>Three.js</td>
+      </tr>
+      <tr>
+      <td>多様な形式の読み込み・変換</td>
+      <td>GDAL・OGR / QGIS</td>
+      </tr>
+      <tr>
+      <td>編集・属性・高度な空間解析</td>
+      <td>PyQGIS / QGIS Processing</td>
+      </tr>
+      <tr>
+      <td>正データの保存</td>
+      <td>GeoPackage / PostGIS / FileGDB等</td>
+      </tr>
+      </tbody>
+      </table>
+      <h2 id="データの3層構造">5.2 データの3層構造</h2>
+      <p>編集用データと描画用データを同じ形式に統一しない。正データ、配信用データ、描画データを分離する。</p>
+      <pre class="text"><code>正データ
+GeoPackage / PostGIS / FileGDB / GeoTIFF
+        ↓ 変換・抽出・タイル化
+配信用データ
+GeoJSON / MVT / GeoArrow / XYZ / WMTS / 3D Tiles
+        ↓ 読み込み・デコード
+描画データ
+TypedArray / binary attributes / deck.gl layer</code></pre>
+      <table>
+      <colgroup>
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>層</th>
+      <th>目的</th>
+      <th>主な形式</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>正データ</td>
+      <td>編集、属性、解析、保存</td>
+      <td>GeoPackage、PostGIS、FileGDB、GeoTIFF</td>
+      </tr>
+      <tr>
+      <td>配信用データ</td>
+      <td>範囲・ズーム単位の取得</td>
+      <td>GeoJSON、MVT、GeoArrow、XYZ、WMTS、3D Tiles</td>
+      </tr>
+      <tr>
+      <td>描画データ</td>
+      <td>GPUへ効率よく渡す</td>
+      <td>TypedArray、binary attributes、deck.gl layer</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>この分離により、編集に適した形式を維持しながら、表示には高速な別形式を利用できる。</p>
+      <h2 id="ベクター連携qgisgdalからdeck.glへ">5.3
+      ベクター連携：QGIS・GDALからdeck.glへ</h2>
+      <p>ベクターは、QGIS・GDALを正データへのアクセスと変換の窓口にする。</p>
+      <pre class="text"><code>GeoPackage / FileGDB / PostGIS
+        ↓
+QGIS Processing / GDAL・OGR
+        ↓
+┌────────────────────────────────────┐
+│ 小規模・編集結果       → GeoJSON    │
+│ 大規模・範囲配信       → MVT        │
+│ ローカル大容量・高速   → GeoArrow   │
+│ 動的検索・属性取得     → JSON API   │
+└────────────────────────────────────┘
+        ↓
+deck.gl</code></pre>
+      <h3 id="geojson最初の連携形式">GeoJSON：最初の連携形式</h3>
+      <p>小〜中規模データ、編集直後の確認、属性連携に使用する。現在のKASUGAI
+      Canvasは<code>GeoJsonLayer</code>を中心に実装されているため、最初のQGIS連携形式に適している。</p>
+      <pre class="text"><code>QGIS / GDAL
+    ↓ GeoJSON
+KASUGAI `GeoJsonLayer`</code></pre>
+      <h3
+      id="mvt大規模ベクターの基本形式">MVT：大規模ベクターの基本形式</h3>
+      <p>広域・大容量データでは、全件をGeoJSONで取得せず、表示範囲とズームに応じてMVTを取得する。</p>
+      <pre class="text"><code>KASUGAIの表示範囲・ズーム
+        ↓
+MVTタイル取得
+        ↓
+KASUGAI `MVTLayer`
+        ↓
+必要に応じてTerrainExtensionでドレープ</code></pre>
+      <p>MVTの生成・配信には、QGIS
+      Server、GDAL・OGR、データベース側のタイル生成、専用のタイル生成処理を利用する。MVTと<code>MVTLayer</code>は将来追加する機能として扱う。</p>
+      <h3
+      id="geoarrowarrowtypedarray大容量ローカルデータ">GeoArrow・Arrow・TypedArray：大容量ローカルデータ</h3>
+      <p>ローカルPC上で大容量ベクターを高速に扱う場合は、Arrow系のバイナリ形式へ変換し、Web
+      Workerでデコードしてdeck.glのbinary attributesへ渡す。</p>
+      <pre class="text"><code>QGIS / GDAL
+    ↓ Arrow変換
+GeoArrow / Arrow
+    ↓ Web Worker
+TypedArray / binary attributes
+    ↓
+deck.gl</code></pre>
+      <p>GeoArrowはすべてのデータの標準形式にするのではなく、GeoJSONで十分な小規模データや、MVTが適する範囲配信データとは使い分ける。</p>
+      <h2 id="ラスタ連携公開サービスとqgis管理データ">5.4
+      ラスタ連携：公開サービスとQGIS管理データ</h2>
+      <h3 id="公開xyzwmts">公開XYZ・WMTS</h3>
+      <p>公開されているXYZやWMTSは、QGISとKASUGAIが同じ配信元をそれぞれ直接利用する。</p>
+      <pre class="text"><code>公開XYZ / WMTS
+    ├─ QGISで読み込む
+    └─ KASUGAIで直接読み込む</code></pre>
+      <p>この場合、QGISがKASUGAIへ再配信する必要はない。</p>
+      <h3 id="qgis管理ラスタ">QGIS管理ラスタ</h3>
+      <p>QGIS
+      Desktopは既存のXYZを読み込めるが、QGISプロジェクト内のGeoTIFF等を自動的にXYZとして配信するわけではない。QGIS管理ラスタをKASUGAIへ渡す場合は、次のいずれかを選択する。</p>
+      <pre class="text"><code>QGIS管理ラスタ
+    ├─ QGIS Server → WMS / WMTS
+    ├─ 事前タイル化 → XYZ
+    ├─ COG / 独自タイル配信
+    └─ ローカルファイルをKASUGAIが直接取得</code></pre>
+      <p>WMTSをKASUGAIの<code>TileLayer</code>で利用する場合は、TileMatrixSet、座標系、原点、ズーム番号、Y軸方向がXYZ形式と一致するか確認する。一致しない場合は、Rust/Axum等のタイルアダプターでXYZリクエストをWMTSへ変換する。</p>
+      <h2 id="dem3dデータkasugaiで直接描画">5.5
+      DEM・3Dデータ：KASUGAIで直接描画</h2>
+      <p>DEMと3D都市モデルは、可能な限りQGISを経由せず、KASUGAIが直接ストリーミングする。</p>
+      <pre class="text"><code>DEM標高タイル
+    ↓
+KASUGAI `TerrainLayer`
+
+3D Tiles
+    ↓
+KASUGAI `Tile3DLayer`
+
+QGISベクター
+    ↓ GeoJSON / MVT / GeoArrow
+KASUGAI `GeoJsonLayer` / `MVTLayer`
+    ↓
+TerrainExtension
+    ↓
+DEMまたは3D Tilesの表面へドレープ</code></pre>
+      <p>QGISとKASUGAIが同じ3Dデータソースを参照できればよく、同じ描画処理を共有する必要はない。</p>
+      <ul>
+      <li>QGIS：参照、属性、管理、解析</li>
+      <li>KASUGAI：Terrain、3D Tiles、点群、3DGSの最終描画</li>
+      </ul>
+      <p>高さ基準はデータごとに管理する。標高とWGS84楕円体高が異なるデータを重ねる場合は、QGIS処理層またはKASUGAI側で補正する。</p>
+      <h2 id="qgisgdal機能層">5.6 QGIS・GDAL機能層</h2>
+      <p>KASUGAIから呼び出す処理は、GDAL・OGRとQGIS
+      Processingを使い分ける。</p>
+      <pre class="text"><code>KASUGAI Canvas
+    ↓ HTTP / IPC
+Rust/Axum連携API
+    ├─ GDAL・OGR：入出力、形式変換、CRS、タイル化
+    └─ PyQGIS / QGIS Processing：編集、属性、高度な空間解析</code></pre>
+      <table>
+      <thead>
+      <tr>
+      <th>処理</th>
+      <th>推奨実装</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>GeoPackage・GeoTIFFの読み書き</td>
+      <td>GDAL・OGR</td>
+      </tr>
+      <tr>
+      <td>Shapefile・FileGDBの変換</td>
+      <td>GDAL・OGR / PyQGIS</td>
+      </tr>
+      <tr>
+      <td>CRS変換</td>
+      <td>GDAL・OGR / QGIS</td>
+      </tr>
+      <tr>
+      <td>GeoJSON・MVTの生成</td>
+      <td>GDAL・OGR / QGIS Server / 専用タイル処理</td>
+      </tr>
+      <tr>
+      <td>バッファ・交差・クリップ</td>
+      <td>QGIS Processing</td>
+      </tr>
+      <tr>
+      <td>属性検索・編集</td>
+      <td>PyQGIS / GDAL・OGR / データベースAPI</td>
+      </tr>
+      <tr>
+      <td>3D Tiles・点群生成</td>
+      <td>専用変換処理、必要に応じてQGISと連携</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>想定するAPIは次のとおりである。</p>
+      <pre class="text"><code>POST /api/qgis/layers
+POST /api/qgis/features/query
+POST /api/qgis/features/edit
+POST /api/qgis/processes/run
+GET  /api/qgis/processes/{id}
+GET  /api/qgis/state</code></pre>
+      <h2 id="選択編集再描画">5.7 選択・編集・再描画</h2>
+      <h3 id="選択">選択</h3>
+      <pre class="text"><code>KASUGAI picking
+    ↓ layerId / featureId
+QGIS・GDAL連携API
+    ↓ 属性・ジオメトリ取得
+KASUGAI属性パネル</code></pre>
+      <h3 id="編集">編集</h3>
+      <pre class="text"><code>KASUGAI編集UI
+    ↓ GeoJSON / JSON Patch
+PyQGIS / GDAL・OGR / データベース
+    ↓
+GeoPackage / PostGIS / FileGDB</code></pre>
+      <p>編集後は、変更されたフィーチャーまたはタイルだけを再取得してKASUGAI側で再描画する。正データを直接deck.gl用形式に置き換えるのではなく、編集結果から配信用データを更新する。</p>
+      <h2 id="カメラcrs連携状態">5.8 カメラ・CRS・連携状態</h2>
+      <p>カメラの正本はKASUGAI
+      Canvasとする。KASUGAIの表示範囲や選択位置を、必要に応じてQGIS処理層へ通知する。</p>
+      <pre class="text"><code>KASUGAI cameraState
+├─ longitude
+├─ latitude
+├─ zoom
+├─ bearing
+└─ pitch
+        ↓ 必要に応じて
+QGIS処理層へ中心座標・範囲を通知</code></pre>
+      <p><code>pitch</code> は Cesium の <code>camera.pitch</code>
+      と同じ符号（水平 0°、真上 +90°、真下 −90°）を採用します。</p>
+      <p>QGISプロジェクトのCRSからKASUGAIの表示用座標系へ変換する。通常のWeb表示ではWGS84経度緯度を基本とし、編集・解析時は元レイヤーのCRSを維持する。</p>
+      <h2 id="現行実装と構想の境界">5.9 現行実装と構想の境界</h2>
+      <p>現行のKASUGAI
+      Canvasで利用できる主な形式と、今後の構想を分けて管理する。</p>
+      <pre class="text"><code>現行
+QGIS相当のデータ → GeoJSON → GeoJsonLayer
+DEM               → TerrainLayer
+3D Tiles          → Tile3DLayer
+XYZ               → TileLayer
+
+構想
+QGIS / GDAL
+    ├─ 小規模・編集 → GeoJSON → GeoJsonLayer
+    ├─ 大規模配信   → MVT → MVTLayer
+    └─ 大容量高速   → GeoArrow / Arrow → binary deck.gl</code></pre>
+      <p>MVT、GeoArrow、QGIS
+      Processing、PyQGIS、GDAL連携APIは、現行実装に追加する拡張機能である。</p>
+      <h2 id="実装ロードマップ">5.10 実装ロードマップ</h2>
+      <table>
+      <colgroup>
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>Phase</th>
+      <th>内容</th>
+      <th>成果</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>1</td>
+      <td>GeoJSON連携と属性・選択APIを整理</td>
+      <td>QGISデータをKASUGAIで表示・検索</td>
+      </tr>
+      <tr>
+      <td>2</td>
+      <td>GDAL・OGRでGeoPackage、FileGDB、GeoTIFFを読み書き</td>
+      <td>多様なデータ形式の入出力</td>
+      </tr>
+      <tr>
+      <td>3</td>
+      <td>KASUGAI向け変換APIを追加</td>
+      <td>変換処理を画面から実行</td>
+      </tr>
+      <tr>
+      <td>4</td>
+      <td>MVT生成と<code>MVTLayer</code>を追加</td>
+      <td>大規模ベクターのタイル配信</td>
+      </tr>
+      <tr>
+      <td>5</td>
+      <td>QGIS Processing / PyQGISを追加</td>
+      <td>バッファ、交差、クリップ等の解析</td>
+      </tr>
+      <tr>
+      <td>6</td>
+      <td>GeoArrow / ArrowとWeb Workerを追加</td>
+      <td>大容量ベクターの高速処理</td>
+      </tr>
+      <tr>
+      <td>7</td>
+      <td>QGIS管理ラスタのWMTS・事前XYZ・COG配信</td>
+      <td>QGISラスタの効率的な共有</td>
+      </tr>
+      <tr>
+      <td>8</td>
+      <td>Terrain・3D Tiles・点群とのドレープ連携</td>
+      <td>3D現場確認の統合</td>
+      </tr>
+      </tbody>
+      </table>
+      <h2 id="設計上の結論">設計上の結論</h2>
+      <p>本構想の基本方針は、次のとおりである。</p>
+      <blockquote>
+      <p><strong>KASUGAI
+      Canvasをメイン画面および最終2D/3D表示エンジンとし、QGIS・GDALを多様なGISデータをdeck.gl向け形式へ変換・配信する基盤として利用する。</strong></p>
+      </blockquote>
+      <p>QGISの画面をKASUGAIへそのまま埋め込むのではなく、正データを維持したまま、用途に応じてGeoJSON、MVT、GeoArrow、XYZ、WMTS、3D
+      Tiles等へ変換する。小規模データはGeoJSON、大規模ベクターはMVT、ローカル大容量データはGeoArrowまたはArrowを基本とし、KASUGAIのdeck.glとThree.jsで最終描画する。</p>
+    </main>
+  </div>
+</body>
+</html>

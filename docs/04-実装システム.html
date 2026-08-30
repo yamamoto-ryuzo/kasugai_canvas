@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4. 実装システム — KASUGAI Canvas 技術選定</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      color: #2c3e50;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px; }
+    nav { margin-bottom: 20px; }
+    nav a {
+      display: inline-block;
+      color: #fff;
+      background: linear-gradient(90deg, #00c6ff, #0072ff);
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    header {
+      background: linear-gradient(90deg, #ff6a00, #ee0979);
+      color: #fff;
+      padding: 52px 32px;
+      border-radius: 24px;
+      text-align: center;
+      margin-bottom: 32px;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.2);
+    }
+    header h1 { margin: 0; font-size: 2.4rem; letter-spacing: -1px; }
+    main {
+      background: #fff;
+      border-radius: 24px;
+      padding: 44px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      border-left: 10px solid #ff6a00;
+      padding-left: 16px;
+      margin-top: 48px;
+      font-size: 1.7rem;
+    }
+    h3 {
+      color: #34495e;
+      border-left: 8px solid #2ecc71;
+      padding-left: 14px;
+      margin-top: 34px;
+      font-size: 1.4rem;
+    }
+    h4 { color: #555; margin-top: 26px; font-size: 1.15rem; }
+    p { margin: 1em 0; }
+    a { color: #d63031; font-weight: 700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul, ol { padding-left: 1.6em; margin: 1em 0; }
+    li { margin: 0.6em 0; }
+    li > ul, li > ol { margin: 0.4em 0; }
+    code {
+      background: #f1f2f6;
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: #0984e3;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      background: #2d3436;
+      color: #dfe6e9;
+      padding: 18px;
+      border-radius: 14px;
+      overflow-x: auto;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.88em;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.2em 0;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    th, td { padding: 14px 16px; text-align: left; }
+    th { background: linear-gradient(90deg, #6c5ce7, #00b894); color: #fff; font-weight: 700; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    tr:hover { background: #fff3e0; transition: background 0.2s; }
+    img { max-width: 100%; height: auto; border-radius: 14px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+    blockquote { margin: 1.2em 0; padding: 16px 22px; border-left: 8px solid #ff6a00; background: #fff8f0; border-radius: 0 16px 16px 0; }
+    strong { color: #e84393; }
+    @media (max-width: 720px) {
+      .wrap { padding: 16px; }
+      main { padding: 26px; }
+      header { padding: 36px 20px; }
+      header h1 { font-size: 1.8rem; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav><a href="index.html">← 目次へ戻る</a></nav>
+        <header>
+      <h1 class="title">4. 実装システム</h1>
+    </header>
+        <main>
+      <h2 id="実装システム">4. 実装システム</h2>
+      <p>KASUGAI Canvas の現行実装は、ローカルPC 上で Rust/Axum
+      サーバーを起動し、ブラウザ上の CesiumJS で 2D/3D
+      地理空間データを描画する構成です。Three.js は Cesium
+      のビュー行列を共有する簡易な 3D
+      描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は
+      V1.1.0 では未対応です。</p>
+      <p>開発起動時は
+      <code>projects/default/kasugai_canvas.config</code>
+      を初期サンプルとして読み込みます。配布 ZIP と Windows
+      インストーラーには東京都の表示例を含む
+      <code>kasugai_canvas.config</code> が同梱されます。</p>
+      <ul>
+      <li><a
+      href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip">Windows
+      インストーラー ZIP —
+      <code>kasugai_canvas_setup.zip</code></a></li>
+      </ul>
+      <figure>
+      <img src="./images/実装システム概要.png" alt="概要" />
+      <figcaption aria-hidden="true">概要</figcaption>
+      </figure>
+      <h2 id="システム構成">システム構成</h2>
+      <pre class="text"><code>┌──────────────────────────────────────────────┐
+│ ブラウザ                                      │
+│                                              │
+│  KASUGAI パネル                              │
+│  ├─ Layers / Camera / Search / Share         │
+│  ├─ Info / 凡例 / Attr / 設定                │
+│  └─ インスペクター設定登録                   │
+│                                              │
+│  KASUGAI Basemap Selector                    │
+│  └─ base: で定義した XYZ / TMS               │
+│                                              │
+│  KASUGAI Navigation Toolbar                  │
+│  ├─ Orbit / Fly モード切替                   │
+│  ├─ 2D / 3D 切替                             │
+│  └─ 方位コンパス                             │
+│                                              │
+│  CesiumJS + Three.js                         │
+│  - Viewer / Scene / Globe                    │
+│  - ImageryLayerCollection                    │
+│  - Cesium3DTileset                           │
+│  - TerrainProvider                           │
+└──────────────────────────────────────────────┘
+                    ▲ HTTP
+┌──────────────────────────────────────────────┐
+│ Rust / Axum                                  │
+│  127.0.0.1:8510                              │
+│  静的アセット / タイルプロキシ / 設定 API    │
+└──────────────────────────────────────────────┘</code></pre>
+      <h2 id="処理の流れ">処理の流れ</h2>
+      <ol type="1">
+      <li>Rust/Axum が <code>web</code> 配下の画面と設定 API
+      を配信する</li>
+      <li>インスペクター設定からレイヤー、ベースマップ、カメラプリセットを生成する</li>
+      <li>CesiumJS が Terrain、XYZ、GeoJSON、3D Tiles を同一の 3D
+      地球ビューへ配置する</li>
+      <li>XYZ・GeoJSON を <code>ImageryLayer</code> /
+      <code>Entity</code> / <code>Primitive</code>
+      として地形へドレープする</li>
+      <li>Three.js は補助 3D
+      描画の枠組みとして組み込まれている。点群・3DGS・GLB 表示は V1.0.24
+      では未対応</li>
+      </ol>
+      <h2 id="ui-パネルと主な機能">UI パネルと主な機能</h2>
+      <table>
+      <colgroup>
+      <col style="width: 50%" />
+      <col style="width: 50%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>パネル / コントロール</th>
+      <th>主な機能</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>Layers</strong></td>
+      <td>XYZ / 3D Tiles / GeoJSON
+      レイヤーの表示切替、グループ（排他グループは ○
+      のラジオボタン）、ドラッグ＆ドロップ並び替え、設定への永続化</td>
+      </tr>
+      <tr>
+      <td><strong>Basemap セレクタ</strong></td>
+      <td><code>base:</code> で定義したベースマップの選択・表示切替</td>
+      </tr>
+      <tr>
+      <td><strong>Camera</strong></td>
+      <td><code>cam:</code>
+      で定義したカメラプリセット、緯度・経度・高さ・ピッチ・ヘディングの手動入力</td>
+      </tr>
+      <tr>
+      <td><strong>Search</strong></td>
+      <td>住所検索（地理院 / Yahoo
+      選択可）、ベクトル検索（レイヤー・属性・値の三段階選択、テキスト検索、FlyTo）</td>
+      </tr>
+      <tr>
+      <td><strong>Share</strong></td>
+      <td>共有 URL コピー</td>
+      </tr>
+      <tr>
+      <td><strong>Info / 凡例 / Attr</strong></td>
+      <td>HTML 情報表示、凡例画像、選択地物の属性表示</td>
+      </tr>
+      <tr>
+      <td><strong>設定</strong></td>
+      <td>DEM / ドレープ、レイヤードレープ対象、Cesium 3D Tiles
+      パラメータ、表示効果、プロジェクト切替、自動更新、断面クリップ</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>また、ナビゲーション ツールバーには Orbit/Fly
+      モード切替、<code>fly_geojson:</code>
+      で定義した経路の選択ドロップダウン、2D/3D
+      切替、方位コンパスが配置されています。描画（Draw）は <strong>Fly
+      パネル内の Draw タブ</strong> から行います。</p>
+      <p>その他、URL パーマリンクの自動更新、共有 URL
+      コピー、プロジェクト切替（<code>projects/&lt;project&gt;</code>
+      単位）、自動更新（<code>latest.json</code>
+      確認）も実装しています。</p>
+      <h3 id="fly-モード">Fly モード</h3>
+      <p>Fly モードでは手動操縦か、<code>fly_geojson:</code>
+      で定義した経路の自動追従を選択できます。インスペクターに
+      <code>fly_geojson: ルート名 | URL | speed=... | height=...</code>
+      と記述すると、Fly
+      パネルのドロップダウンにルートが追加されます。ルートを選択し直すと、読み込みとルート状態をリセットして最初から再開します。</p>
+      <table>
+      <colgroup>
+      <col style="width: 50%" />
+      <col style="width: 50%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>操作</th>
+      <th>動作</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>マウスホイール</td>
+      <td>速度を ±1 km/h で調整（手前：加速、奥：減速）</td>
+      </tr>
+      <tr>
+      <td>walk-help 速度入力</td>
+      <td><code>flySpeed</code>（km/h）を直接上書き</td>
+      </tr>
+      <tr>
+      <td>walk-help 補正入力</td>
+      <td><code>flyHeight</code>（m）を直接上書き（点の高さに対する操作中の補正）</td>
+      </tr>
+      <tr>
+      <td>点選択 + 点高入力</td>
+      <td>各点の <code>z</code>（AGL）を編集</td>
+      </tr>
+      <tr>
+      <td>保存ボタン</td>
+      <td>編集した点の高さを GeoJSON へ保存</td>
+      </tr>
+      <tr>
+      <td>キー +/-</td>
+      <td>速度を増減</td>
+      </tr>
+      <tr>
+      <td>キー Q / E</td>
+      <td>高さ補正を増減</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>Fly パネルの高さ表示は、手動時に
+      <code>地形高</code>（地表標高）と
+      <code>補正</code>（カメラ地上高）、ルート追従時に
+      <code>地上高（AGL）</code>（<code>z + flyHeight</code>）と
+      <code>補正</code>（<code>flyHeight</code>）をそれぞれ別行で表示します。</p>
+      <p>速度は正でも負でも可です。0
+      で停止、負でバック（手動はカメラを逆方向へ、自動はルートを逆方向へ）します。手動・自動で
+      <code>flySpeed</code>（km/h）と
+      <code>flyHeight</code>（m）を共有するため、モード切替時も値が継続します。</p>
+      <h3 id="ルート描画">ルート描画</h3>
+      <p>Fly パネルの <strong>Draw</strong> タブを選択すると
+      <strong>Orbit モード</strong>
+      に切り替わり、描画準備が整います。タブ内の <strong>Draw</strong>
+      ボタンを押すと描画を開始し、右クリックで点を追加、右ダブルクリックで描画を終了できます。描画したルートは：</p>
+      <ol type="1">
+      <li>プロジェクトフォルダ内に
+      <code>drawn_route_1.geojson</code>、<code>drawn_route_2.geojson</code>
+      … のように自動連番でキャッシュ（<code>PUT /api/file</code>）
+      <ul>
+      <li>同じファイル名があっても上書きせず、新しい番号のファイルとして保存</li>
+      <li>プロジェクト内のファイル一覧は
+      <code>GET /api/files?project=...</code> で取得</li>
+      </ul></li>
+      <li>自動的に <code>fly_geojson:</code>
+      行をインスペクターに追加し、Fly モードで選択可能</li>
+      </ol>
+      <p>描画ルートの GeoJSON には各点の高さ <code>z</code> を
+      <code>heightReference: "Terrain"</code>
+      として保存します。<code>z</code>
+      はその点の<strong>地形からの高さ（AGL）</strong>を表します。飛行時の実際のカメラ高さは
+      <code>z + 地形高 + flyHeight</code>
+      で計算します。<code>flyHeight</code>
+      は操作中の補正値であり、GeoJSON
+      には含まれません。セグメント内では始点・終点の 3D
+      位置と地形高を距離に応じて補間し、滑らかな高度変化にします。カメラは折れ点に到達する前から次の線分方向へ滑らかに旋回します（最後の
+      100m、または線分長の 30% 以内で旋回開始）。</p>
+      <h3 id="url-パーマリンク">URL パーマリンク</h3>
+      <p>カメラ情報（latitude / longitude / height / heading / pitch）は
+      URL
+      の<strong>ハッシュ</strong>（<code>#latitude=...&amp;longitude=...</code>）に保持します。ハッシュはアドレスバーで書き換えてもページが再読み込みされないため、座標を変更すると現在のビューからそのまま
+      Google Earth
+      風（距離に応じた飛行時間＋一度ズームアウトして降下する弧）に FLYTO
+      します。<code>project</code>
+      などカメラ以外のパラメータはクエリ（<code>?project=...</code>）に保持します。</p>
+      <h3 id="カメラ-pitch-の扱い">カメラ pitch の扱い</h3>
+      <p>URL パラメータ・カメラ入力・カメラプリセットの
+      <code>pitch</code> は Cesium の
+      <code>camera.pitch</code>（度数法）と同じ符号体系で扱います。水平を
+      <code>0°</code>、上向きを <code>+</code>、真下を <code>−90°</code>
+      とします。</p>
+      <table style="width:100%;">
+      <colgroup>
+      <col style="width: 16%" />
+      <col style="width: 16%" />
+      <col style="width: 16%" />
+      <col style="width: 16%" />
+      <col style="width: 16%" />
+      <col style="width: 16%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>方式</th>
+      <th>通常範囲</th>
+      <th>真下</th>
+      <th>水平</th>
+      <th>真上</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>Google Earth t</td>
+      <td>0° 〜 90°（実用）</td>
+      <td>0°</td>
+      <td>90°</td>
+      <td>180°以上も可</td>
+      <td>上限なし</td>
+      </tr>
+      <tr>
+      <td>Cesium <code>camera.pitch</code></td>
+      <td>−90° 〜 0°（実用）</td>
+      <td>−90°</td>
+      <td>0°</td>
+      <td>+90°</td>
+      <td>3D モードではジンバルロック回避のため −84.99° にクランプ。2D
+      モードでは −90° 固定</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>最終決定として、本システムでは <strong>Cesium
+      <code>camera.pitch</code> と同じ向きを採用</strong> します。</p>
+      <p>旧形式（<code>?latitude=...</code> クエリ形式）の URL
+      も引き続き解釈されますが、クエリの変更はブラウザ仕様によりページ再読み込みが発生します。その場合も前回のカメラ位置を
+      sessionStorage から復元して即表示し、そこから新しい座標へ FLYTO
+      します。開いた後は自動的に新形式（ハッシュ）へ移行されます。</p>
+      <h3 id="検索">検索</h3>
+      <p><strong>住所検索</strong>は国土地理院住所検索 API
+      をデフォルトとし、Yahoo Local Search API を
+      <code>yahooAppId</code>
+      設定で追加できます。検索結果は住所・施設名を一覧表示し、クリックでその位置へ
+      FlyTo します。</p>
+      <p><strong>ベクトル検索</strong>は読み込んだ GeoJSON /
+      <code>layer:</code>
+      データを対象に、レイヤー・属性・値の三段階で絞り込みます。テキスト検索と
+      FlyTo に対応し、非表示のベクトルレイヤーも検索対象に含めます。</p>
+      <h3 id="属性凡例info">属性・凡例・Info</h3>
+      <p><strong>属性</strong>は地物をクリックすると Attr
+      パネルにテーブル表示されます。レイヤー属性一覧ボタンでは選択中または全レイヤーの属性・値を表形式で絞り込み表示できます。</p>
+      <p><strong>凡例</strong>は <code>legend:</code>
+      で指定した画像を表示します。<strong>Info</strong> は
+      <code>info:</code> で指定した URL の HTML
+      をサニタイズして表示します。</p>
+      <h2 id="レイヤーと描画順">レイヤーと描画順</h2>
+      <table>
+      <colgroup>
+      <col style="width: 27%" />
+      <col style="width: 27%" />
+      <col style="width: 45%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>種類</th>
+      <th>実装</th>
+      <th>表示方法</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>Terrain</td>
+      <td>Cesium <code>TerrainProvider</code></td>
+      <td>選択した DEM を <code>Globe</code> 地形として表示</td>
+      </tr>
+      <tr>
+      <td>Base map</td>
+      <td>Cesium <code>ImageryLayer</code></td>
+      <td><code>Globe</code> 表面へ XYZ / TMS を貼り付け</td>
+      </tr>
+      <tr>
+      <td>XYZ</td>
+      <td>Cesium <code>ImageryLayer</code></td>
+      <td><code>ImageryLayerCollection</code> に追加。Terrain
+      上へ自動ドレープ</td>
+      </tr>
+      <tr>
+      <td>GeoJSON</td>
+      <td>Cesium <code>GeoJsonDataSource</code> /
+      <code>Entity</code></td>
+      <td>設定により追加。DEM / 3D Tiles 表面へ
+      <code>ClassificationType</code> で追従</td>
+      </tr>
+      <tr>
+      <td>3D Tiles</td>
+      <td>Cesium <code>Cesium3DTileset</code></td>
+      <td>設定により追加。Globe 上へ配置</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>レイヤーパネルの各行はドラッグ＆ドロップで並べ替えられます。並べ替えた順序は
+      <code>ImageryLayerCollection</code> の <code>lower()</code> /
+      <code>raise()</code> や <code>DataSource</code> の
+      <code>index</code>
+      へ反映されます。表示・非表示の切替や排他グループの動作は並べ替え後も維持されます。</p>
+      <h2 id="地形ドレープ高さ基準">地形、ドレープ、高さ基準</h2>
+      <p><strong>DEM テクスチャー</strong>は DEM
+      から作った地形メッシュに Base map
+      画像を貼る表示です。<strong>ドレープ</strong>は XYZ・GeoJSON
+      などのレイヤーを DEM または 3D Tiles
+      の地形表面の起伏に沿わせて貼る表示です。前者は地形の下地画像、後者は既存レイヤーの地形追従であり、別の処理です。</p>
+      <p>CesiumJS では <code>ImageryLayer</code> は <code>Globe</code>
+      表面へ自動的に地形に沿って描画されるため、XYZ タイルは特別な
+      <code>TerrainExtension</code>
+      不要でドレープされます。<code>GeoJsonDataSource</code> /
+      <code>Entity</code> については
+      <code>heightReference: Cesium.HeightReference.CLAMP_TO_GROUND</code>
+      または <code>clampToGround: true</code>
+      を指定して地形に吸着させます。</p>
+      <h3 id="ドレープの設定フロー">ドレープの設定フロー</h3>
+      <ol type="1">
+      <li><code>DEM</code> で Terrain 表示に使う DEM / TerrainProvider
+      を選ぶ</li>
+      <li><code>ドレープ対象地形</code> の DEM／3D Tiles
+      から、表示中で利用可能な地形を選ぶ</li>
+      <li><code>ドレープを適用するレイヤー</code> で ON の XYZ・GeoJSON
+      だけへ、選択した地形を適用する</li>
+      <li>Base map は標準では <code>ImageryLayer</code> として Globe
+      表面へ表示する</li>
+      </ol>
+      <table>
+      <colgroup>
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>設定UI</th>
+      <th>役割</th>
+      <th>他の設定への影響</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><code>DEM</code></td>
+      <td>Terrain 表示に使う DEM を選ぶ</td>
+      <td>デフォルトは
+      <code>Re:Earth Terrain (楕円体高 / WGS84)</code>。内包ソースは
+      Re:Earth Terrain（標高 / MSL、楕円体高 / WGS84）および Terrarium
+      DEM（AWS）です。新しい DEM を追加する場合は <code>app.js</code> の
+      <code>demSources</code> へ TerrainProvider 定義を登録する</td>
+      </tr>
+      <tr>
+      <td><code>Terrain (DEM表示)</code></td>
+      <td>選択した DEM を有効にする</td>
+      <td>DEM をドレープ対象として使うには ON が必要。3D Tiles
+      の表示・選択は変更しない</td>
+      </tr>
+      <tr>
+      <td><code>3D Tiles (BASEMAPドレープ)</code></td>
+      <td>Base map 専用の 3D Tiles ドレープを有効にする</td>
+      <td>表示中の 3D Tiles がある場合、Base map の代わりに 3D Tiles
+      表面へテクスチャを重ねる。XYZ・GeoJSON の設定には影響しない</td>
+      </tr>
+      <tr>
+      <td><code>ドレープ対象地形</code></td>
+      <td>DEM と 3D Tiles を個別にドレープ面へ登録する</td>
+      <td>DEM は初期状態で ON、3D Tiles は OFF。両方を ON
+      にすると、利用可能な両方をドレープ面にする</td>
+      </tr>
+      <tr>
+      <td><code>ドレープを適用するレイヤー</code></td>
+      <td>XYZ、GeoJSON の各レイヤーへ地形追従を付与する</td>
+      <td>XYZ・GeoJSON は初期状態で ON。ON
+      のレイヤーだけをドレープする。地形ソース自体の表示は変更しない</td>
+      </tr>
+      </tbody>
+      </table>
+      <table>
+      <colgroup>
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>ドレープ対象地形</th>
+      <th>有効になる条件</th>
+      <th>ドレープ面</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>DEM</td>
+      <td><code>Terrain (DEM表示)</code> が ON</td>
+      <td>表示中の DEM</td>
+      </tr>
+      <tr>
+      <td>3D Tiles</td>
+      <td>URL を持つ 3D Tiles レイヤーが 1 つ以上表示中</td>
+      <td>表示中の 3D Tiles 表面</td>
+      </tr>
+      <tr>
+      <td>DEM と 3D Tiles</td>
+      <td>両方を ON にし、それぞれの有効条件を満たす</td>
+      <td>条件を満たす DEM と 3D Tiles の両方</td>
+      </tr>
+      <tr>
+      <td>どちらも OFF</td>
+      <td>なし</td>
+      <td>適用レイヤーは通常表示</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>Terrain を ON にした場合、Base map は <code>ImageryLayer</code>
+      として Globe
+      表面へ描画されます。<code>3D Tiles (BASEMAPドレープ)</code> を ON
+      にすると、3D Tiles 表面へ別の <code>ImageryLayer</code>
+      相当のテクスチャを重ねます。Terrain を OFF にした場合も、表示中の
+      3D Tiles があれば Base map を 3D Tiles
+      表面へドレープし、それ以外は通常の <code>ImageryLayer</code>
+      を表示します。</p>
+      <p>XYZ タイルは設定の <code>maximumLevel</code>（または互換 alias
+      <code>maxZoom</code>）で個別に最大ズームを指定できます。未指定時はデフォルトで
+      25 まで取得します。CesiumJS の
+      <code>UrlTemplateImageryProvider</code> を使って表示します。</p>
+      <h3 id="高さ基準">高さ基準</h3>
+      <p>Terrain と 3D Tiles は、高さ基準を揃えなければ数十 m
+      の上下ずれが生じます。データセットごとに高さ基準を確認して DEM /
+      TerrainProvider を選択します。</p>
+      <table>
+      <colgroup>
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>データ</th>
+      <th>高さ基準</th>
+      <th>選択する DEM</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>元の PLATEAU CityGML</td>
+      <td>東京湾平均海面基準の標高（JGD2011 / EPSG:6697）</td>
+      <td>標高基準の DEM / TerrainProvider を使用</td>
+      </tr>
+      <tr>
+      <td>Re:Earth 配信の PLATEAU 3D Tiles</td>
+      <td>WGS84 楕円体からの高さ</td>
+      <td><code>Re:Earth Terrain (楕円体高 / WGS84)</code> 対応
+      TerrainProvider</td>
+      </tr>
+      <tr>
+      <td>WGS84 楕円体高で作成されたその他の 3D Tiles・Cesium 地形</td>
+      <td>WGS84 楕円体からの高さ</td>
+      <td><code>Re:Earth Terrain (楕円体高 / WGS84)</code> 対応
+      TerrainProvider</td>
+      </tr>
+      <tr>
+      <td>高さ基準が不明な 3D Tiles</td>
+      <td>データ仕様または tileset のメタデータを確認する</td>
+      <td>確認後に上記いずれかを選ぶ</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>Re:Earth Terrain は Cesium quantized-mesh
+      形式で配信され、<code>Cesium.CesiumTerrainProvider</code>
+      として読み込みます。<code>elevation</code>
+      は平均海面基準の標高（MSL）、<code>ellipsoid</code> は EGM2008
+      ジオイド高を加えた WGS84 楕円体高です。Terrarium DEM（Mapzen /
+      AWS）は <code>height = R × 256 + G + B / 256 - 32768</code>
+      でメートル単位の高さを復元し、カスタム
+      <code>TerrariumTerrainProvider</code> 経由で利用します。</p>
+      <h2 id="インスペクター設定">インスペクター設定</h2>
+      <p>ユーザーがテキストエリアに入力したレイヤー・ベースマップ・カメラプリセットを読み込み、CesiumJS
+      Viewer へ反映します。設定の読み込みはブラウザ内で完結し、HTTP
+      通信は行いません。</p>
+      <pre class="text"><code>kasugai_canvas.config（テキスト形式。1行に `種類: 値` を記述）
+  base:    ベースマップタイトル | URL | アトリビューション | option=...
+  xyz:     レイヤータイトル | URL | アトリビューション | option=...
+  3dtiles: レイヤータイトル | URL | option=...
+  geojson: レイヤータイトル | URL | option=...
+  layer:   レイヤータイトル | URL | option=...
+  fly_geojson: タイトル | URL | speed=... | height=... | pitch=... | loop=... | step=...
+  cam:     タイトル | 緯度 | 経度 | h=高さ | p=ピッチ | d=ヘディング
+  info:    URL
+  legend:  URL または タイトル | URL
+  background: #rrggbb
+  yahooAppId: Yahoo Local Search API AppID</code></pre>
+      <ul>
+      <li><code>option</code> には
+      <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換
+      alias
+      <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code>
+      などが使えます。</li>
+      <li><code>on</code> / <code>off</code>
+      フラグでレイヤーの初期表示を切り替えられます。</li>
+      <li>プロジェクトは <code>projects/&lt;project&gt;</code>
+      単位で切り替えます。設定ファイル内に <code>project</code>
+      項目はありません。</li>
+      </ul>
+      <h3 id="fly-モードの経路設定">Fly モードの経路設定</h3>
+      <p><code>fly_geojson:</code> では、GeoJSON の
+      <code>LineString</code> / <code>MultiLineString</code>
+      を読み込み、Fly
+      モードで自動飛行する経路として使えます。複数定義すれば Fly
+      パネルのドロップダウンから選択でき、<code>手動</code>
+      を選ぶと従来の WASD / マウス操作に戻ります。</p>
+      <pre class="text"><code>fly_geojson: ルートA | https://example.com/route.geojson | speed=60 | height=100 | pitch=-15 | loop=true
+fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height=50</code></pre>
+      <table>
+      <colgroup>
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>オプション</th>
+      <th>意味</th>
+      <th>デフォルト</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><code>speed</code>（<code>s</code>）</td>
+      <td>地上速度（km/h）</td>
+      <td>30</td>
+      </tr>
+      <tr>
+      <td><code>height</code>（<code>h</code>）</td>
+      <td>操作中の高さ補正（m）</td>
+      <td>0</td>
+      </tr>
+      <tr>
+      <td><code>pitch</code>（<code>p</code>）</td>
+      <td>カメラピッチ（度）</td>
+      <td>-10</td>
+      </tr>
+      <tr>
+      <td><code>step</code></td>
+      <td>互換性のため受け付けるが、現在は頂点間を直接移行するため無視</td>
+      <td>（不使用）</td>
+      </tr>
+      <tr>
+      <td><code>loop</code>（<code>l</code>）</td>
+      <td>終点で最初に戻してループ</td>
+      <td>false</td>
+      </tr>
+      <tr>
+      <td><code>off</code></td>
+      <td>選択肢に表示しない</td>
+      <td>-</td>
+      </tr>
+      </tbody>
+      </table>
+      <p><code>fly_geojson:</code> の GeoJSON ルートは
+      <code>LineString</code> / <code>MultiLineString</code>
+      のオリジナル頂点をそのまま使用します。各頂点の <code>z</code>
+      はその点の <strong>AGL（地形からの高さ）</strong>
+      として解釈します。飛行時の実際の高さは
+      <code>GeoJSON z + 地形高 + flyHeight</code>
+      として計算します。<code>flyHeight</code>
+      は操作中の補正値であり、GeoJSON
+      には含まれません。セグメント内では始点・終点の 3D
+      位置と地形高を距離に応じて補間します。</p>
+      <h3 id="fly-パネルの-ui">Fly パネルの UI</h3>
+      <p>Fly パネルでは以下の操作ができます。</p>
+      <ul>
+      <li><strong>経路選択</strong> — <code>fly_geojson:</code>
+      で定義した経路か <code>手動</code> を選びます。</li>
+      <li><strong>プリセット</strong> —
+      よく使う速度・高さ・ピッチをまとめて適用できます。</li>
+      </ul>
+      <table>
+      <thead>
+      <tr>
+      <th>プリセット</th>
+      <th>高さ（m）</th>
+      <th>速度（km/h）</th>
+      <th>ピッチ（°）</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>徒歩</td>
+      <td>2</td>
+      <td>5</td>
+      <td>-5</td>
+      </tr>
+      <tr>
+      <td>車載</td>
+      <td>2</td>
+      <td>60</td>
+      <td>-10</td>
+      </tr>
+      <tr>
+      <td>ドローン</td>
+      <td>200</td>
+      <td>60</td>
+      <td>-30</td>
+      </tr>
+      <tr>
+      <td>広域</td>
+      <td>1000</td>
+      <td>300</td>
+      <td>-45</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li><strong>補正 / 速度 / ピッチ</strong> —
+      それぞれ数値を直接入力して変更できます。経路飛行中は
+      <code>flyPath.pitch</code>
+      を、手動時はカメラのチルトを操作します。</li>
+      <li><strong>起終点逆転</strong> — Fly
+      パネルヘッダーのボタンです。経路選択中は頂点配列を反転し、手動時はカメラ方位を
+      180° 回転させます。</li>
+      </ul>
+      <h2 id="制限注意事項">制限・注意事項</h2>
+      <h3 id="d-tiles-への-xyz-ドレープ">3D Tiles への XYZ ドレープ</h3>
+      <p>CesiumJS 1.130 以降で
+      <code>Cesium3DTileset.imageryLayers</code> が追加され、3D Tiles
+      表面に <code>ImageryLayer</code>
+      をドレープできるようになりました。KASUGAI Canvas では 1.144.0
+      を使用しています。</p>
+      <table>
+      <colgroup>
+      <col style="width: 50%" />
+      <col style="width: 50%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>設定</th>
+      <th>効果</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><code>ドレープ対象地形</code> → <code>3D Tiles</code> ON</td>
+      <td>表示中の 3D Tiles をドレープ対象として有効化</td>
+      </tr>
+      <tr>
+      <td><code>ドレープを適用するレイヤー</code> → <code>XYZ</code>
+      ON</td>
+      <td>各 XYZ タイルを 3D Tiles 表面へドレープ</td>
+      </tr>
+      <tr>
+      <td><code>3D Tiles (BASEMAPドレープ)</code> ON</td>
+      <td>ベースマップを 3D Tiles 表面へドレープ</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>ドレープ対象になった XYZ / ベースマップは、Globe
+      表面には重ねず、3D Tiles 表面のみに表示されます。</p>
+      <h3 id="既知の制限">既知の制限</h3>
+      <ul>
+      <li><strong>アップサンプリング未対応</strong>
+      <ul>
+      <li>3D Tiles のジオメトリが粗い場合、高精細な XYZ
+      画像をそのままドレープしても、ジオメトリの解像度に制限されます。</li>
+      </ul></li>
+      <li><strong>テクスチャユニット制限</strong>
+      <ul>
+      <li>同時に使用できるテクスチャ数は GPU によりますが、おおよそ 16
+      枚程度です。複数の高解像度 XYZ を 1 つの 3D Tiles
+      に重ねると、一部のテクスチャが省略されることがあります。</li>
+      </ul></li>
+      <li><strong><code>CESIUM_primitive_outline</code> 非対応</strong>
+      <ul>
+      <li>この拡張を使用した 3D Tiles
+      ではドレープが正しく描画されない場合があります。</li>
+      </ul></li>
+      </ul>
+      <h3 id="dem-地形">DEM / 地形</h3>
+      <ul>
+      <li>初期表示は <code>EllipsoidTerrainProvider</code>
+      ですが、<code>Terrain (DEM表示)</code> が ON の場合は
+      <code>Re:Earth Terrain (楕円体高 / WGS84)</code>
+      がデフォルトで読み込まれます。</li>
+      <li><code>CesiumWorldTerrain</code>
+      は同梱されていません。利用するには Cesium Ion
+      へのアクセスが必要です。</li>
+      <li>Re:Earth Terrain は quantized-mesh 形式で標準
+      <code>CesiumTerrainProvider</code> で利用できます。国土地理院標高
+      PNG 等の独自 Terrarium 形式 DEM を追加する場合は、Cesium 用の
+      <code>TerrainProvider</code> を実装して <code>demSources</code>
+      へ登録する必要があります。</li>
+      </ul>
+      <h3 id="v1.0.24-で未対応の機能">V1.0.24 で未対応の機能</h3>
+      <p>現状の実装では未対応の機能は以下の通りです。</p>
+      <ul>
+      <li>Three.js 点群 / 3DGS / GLB 表示</li>
+      </ul>
+      <h3 id="ローカル開発時の注意">ローカル開発時の注意</h3>
+      <ul>
+      <li>Python 等の簡易 HTTP サーバーでは <code>/api/projects</code>
+      や
+      <code>/api/config</code>、<code>/api/tile</code>、<code>/api/search</code>
+      等のエンドポイントが存在しません。</li>
+      <li>開発起動時は Rust/Axum
+      サーバーを使用してください。静的ファイルのみの表示では設定・レイヤー・プロジェクトの読み込みは行えません。</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

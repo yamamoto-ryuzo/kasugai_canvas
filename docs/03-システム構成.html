@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3. システム構成 — KASUGAI Canvas 技術選定</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+      color: #2c3e50;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px; }
+    nav { margin-bottom: 20px; }
+    nav a {
+      display: inline-block;
+      color: #fff;
+      background: linear-gradient(90deg, #00c6ff, #0072ff);
+      padding: 10px 20px;
+      border-radius: 30px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    header {
+      background: linear-gradient(90deg, #ff6a00, #ee0979);
+      color: #fff;
+      padding: 52px 32px;
+      border-radius: 24px;
+      text-align: center;
+      margin-bottom: 32px;
+      box-shadow: 0 14px 36px rgba(0,0,0,0.2);
+    }
+    header h1 { margin: 0; font-size: 2.4rem; letter-spacing: -1px; }
+    main {
+      background: #fff;
+      border-radius: 24px;
+      padding: 44px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    h2 {
+      color: #2c3e50;
+      border-left: 10px solid #ff6a00;
+      padding-left: 16px;
+      margin-top: 48px;
+      font-size: 1.7rem;
+    }
+    h3 {
+      color: #34495e;
+      border-left: 8px solid #2ecc71;
+      padding-left: 14px;
+      margin-top: 34px;
+      font-size: 1.4rem;
+    }
+    h4 { color: #555; margin-top: 26px; font-size: 1.15rem; }
+    p { margin: 1em 0; }
+    a { color: #d63031; font-weight: 700; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    ul, ol { padding-left: 1.6em; margin: 1em 0; }
+    li { margin: 0.6em 0; }
+    li > ul, li > ol { margin: 0.4em 0; }
+    code {
+      background: #f1f2f6;
+      padding: 2px 8px;
+      border-radius: 6px;
+      color: #0984e3;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      background: #2d3436;
+      color: #dfe6e9;
+      padding: 18px;
+      border-radius: 14px;
+      overflow-x: auto;
+      font-family: "Fira Code", Consolas, monospace;
+      font-size: 0.88em;
+      line-height: 1.55;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.2em 0;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    th, td { padding: 14px 16px; text-align: left; }
+    th { background: linear-gradient(90deg, #6c5ce7, #00b894); color: #fff; font-weight: 700; }
+    tr:nth-child(even) { background: #f8f9fa; }
+    tr:hover { background: #fff3e0; transition: background 0.2s; }
+    img { max-width: 100%; height: auto; border-radius: 14px; box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+    blockquote { margin: 1.2em 0; padding: 16px 22px; border-left: 8px solid #ff6a00; background: #fff8f0; border-radius: 0 16px 16px 0; }
+    strong { color: #e84393; }
+    @media (max-width: 720px) {
+      .wrap { padding: 16px; }
+      main { padding: 26px; }
+      header { padding: 36px 20px; }
+      header h1 { font-size: 1.8rem; }
+      table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav><a href="index.html">← 目次へ戻る</a></nav>
+        <header>
+      <h1 class="title">3. システム構成</h1>
+    </header>
+        <main>
+      <h2 id="システム構成">3. システム構成</h2>
+      <p>KASUGAI Canvas（<strong>CesiumJS +
+      Three.js</strong>）をローカルPC・サーバーレス・国内対応・組み込みで動かすための構成についてまとめる章。</p>
+      <h2 id="全体の判断基準">全体の判断基準</h2>
+      <ul>
+      <li><strong>描画基盤：CesiumJS + Three.js</strong></li>
+      <li><strong>描画方式：CesiumJS の <code>Viewer</code> /
+      <code>Scene</code> 内でレイヤー・深度・カメラを一括管理。Three.js
+      は点群・3DGS・特殊メッシュ用に補完</strong></li>
+      <li><strong>2D / 3D
+      混在</strong>、<strong>点群</strong>、<strong>3DGS</strong>、<strong>Tiles/Buffers</strong>
+      を同一 GPU 空間で扱う</li>
+      <li><strong>ドレープ（2D を 3D
+      地形に貼り付け）</strong>、<strong>クリッピング</strong>、<strong>断面表示</strong>などの現場機能</li>
+      <li>日本国内の <strong>PLATEAU / 地理院タイル</strong>
+      との親和性</li>
+      <li>ローカルPC完結・サーバーレスで動作</li>
+      </ul>
+      <h2 id="kasugai-canvas-基本構成">KASUGAI Canvas 基本構成</h2>
+      <pre class="text"><code>┌────────────────────────────────────────────────────────────┐
+│                     KASUGAI Canvas                         │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  3D 地球描画層  CesiumJS                             │  │
+│   - Viewer / Scene / Globe / ImageryLayerCollection     │  │
+│   - ImageryLayer (XYZ / TMS / WMS)                      │  │
+│   - Cesium3DTileset (PLATEAU / 3D Tiles)                │  │
+│   - TerrainProvider (DEM / CesiumWorldTerrain)          │  │
+│   - Entity / DataSource / Primitive (GeoJSON / 図面)    │  │
+│   - ClippingPlaneCollection (断面カット)               │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  補完 3D 描画層  Three.js                            │  │
+│   - GLB / 点群 / 3DGS レンダラー                        │  │
+│   - Cesium の Scene 内 or オーバーレイで連携           │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  ロード・変換層  loaders.gl + Web Worker             │  │
+│  │   - GPKG (sql.js + WKB パーサー) / GeoJSON → Arrow/FlatBuffers（FGDBはサーバー or 事前変換）            │  │
+│  │   - PLY/LAS → EPT / 3D Tiles / PointCloud            │  │
+│  │   - GLB / 3D Tiles → VRAM                            │  │
+│  └──────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  接続層  KASUGAI Connect                             │  │
+│  │   - ローカル File / D&amp;D / Box API / Re:Earth     │  │
+│  └──────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘</code></pre>
+      <h2
+      id="ローカルpcで爆速操作する構成">ローカルPCで爆速操作する構成</h2>
+      <h3
+      id="メインレンダラーcesiumjs-three.js">メインレンダラー：CesiumJS
+      + Three.js</h3>
+      <ul>
+      <li><strong>CesiumJS</strong>
+      <ul>
+      <li>3D 地球・3D Tiles・DEM ドレープ・XYZ 重ね合わせを同一
+      <code>Scene</code> で一括描画</li>
+      <li><code>ImageryLayerCollection</code> で XYZ / TMS / WMS
+      の重ね順を管理</li>
+      <li><code>Cesium3DTileset</code> で PLATEAU 等の大規模 3D Tiles を
+      LOD・カリング</li>
+      <li><code>TerrainProvider</code> で DEM / 標高PNG /
+      CesiumWorldTerrain を 3D 地形化</li>
+      <li><code>ClippingPlaneCollection</code> で 3D
+      Tiles・点群の断面カット</li>
+      </ul></li>
+      <li><strong>Three.js</strong>
+      <ul>
+      <li>GLB / 点群 / 3DGS 等、Cesium 単体では扱いにくい高度な 3D
+      表現を補完</li>
+      <li>Cesium の <code>Scene</code> 内で連携（正式仕様）</li>
+      <li>オーバーレイ canvas はプロトタイプ・障害切り分け用に限定</li>
+      </ul></li>
+      <li><strong>loaders.gl</strong>
+      <ul>
+      <li><code>@loaders.gl/arrow</code>,
+      <code>@loaders.gl/3d-tiles</code>, <code>@loaders.gl/gltf</code>
+      などでバイナリを GPU へ</li>
+      </ul></li>
+      </ul>
+      <h3 id="データパイプライン">データパイプライン</h3>
+      <table>
+      <colgroup>
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      <col style="width: 33%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>段階</th>
+      <th>技術</th>
+      <th>効果</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>読み込み</td>
+      <td>File / Blob / Box API</td>
+      <td>サーバー不要、ローカル完結。GPKG/FGDB/GLB/LAS/PLY/SPZ
+      等をそのまま読み込み</td>
+      </tr>
+      <tr>
+      <td>変換</td>
+      <td>Web Worker + Arrow-JS / sql.js + WKB パーサー、FGDB は ogr2ogr
+      サーバー/事前変換</td>
+      <td>UI ブロックなしで GPKG/GeoJSON → Arrow、FGDB →
+      事前変換、PLY/LAS → EPT/3D Tiles</td>
+      </tr>
+      <tr>
+      <td>永続化</td>
+      <td>OPFS / IndexedDB</td>
+      <td>次回起動を即座に行える</td>
+      </tr>
+      <tr>
+      <td>描画</td>
+      <td>CesiumJS + Three.js</td>
+      <td>同一 <code>Scene</code> / 同一 GPU 空間で 3D 地球・地形・3D
+      Tiles・XYZ・点群を重ね描画</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="必須テクニック">必須テクニック</h3>
+      <ol type="1">
+      <li><strong>GeoArrow / FlatBuffers</strong>
+      <ul>
+      <li>数十万〜数百万点の 2D ベクトルを CPU パースなしで GPU へ</li>
+      </ul></li>
+      <li><strong>Web Worker + loaders.gl</strong>
+      <ul>
+      <li>GPKG/GeoJSON → Arrow、FGDB → サーバー or 事前変換、PLY/LAS →
+      EPT/3D Tiles をバックグラウンド化</li>
+      </ul></li>
+      <li><strong>OPFS / IndexedDB</strong>
+      <ul>
+      <li>巨大バイナリをブラウザ内にキャッシュ</li>
+      </ul></li>
+      <li><strong>CesiumJS + Three.js 連携</strong>
+      <ul>
+      <li><strong>CesiumJS の <code>Scene</code>
+      内でカメラ・深度・レイヤー順を共有（正式仕様）</strong></li>
+      <li>重ねた canvas は正式な混在レイヤー管理には使用しない</li>
+      </ul></li>
+      </ol>
+      <h2 id="kasugai-システム組み込み構成">KASUGAI
+      システム組み込み構成</h2>
+      <h3 id="コアエンジン">コアエンジン</h3>
+      <ul>
+      <li><strong>CesiumJS + Three.js + loaders.gl</strong>
+      <ul>
+      <li><code>cesium</code> (npm) または <code>Cesium.js</code>
+      ビルド</li>
+      <li><code>three</code> + 必要に応じて
+      <code>gaussian-splats-3d</code></li>
+      <li><code>@loaders.gl/3d-tiles</code>,
+      <code>@loaders.gl/gltf</code>, <code>@loaders.gl/arrow</code></li>
+      </ul></li>
+      </ul>
+      <h3 id="組み込むべき-cesiumjs-機能">組み込むべき CesiumJS
+      機能</h3>
+      <ol type="1">
+      <li><strong>ImageryLayer /
+      UrlTemplateImageryProvider</strong>：XYZ / TMS / WMS を 3D 地球 /
+      地形へドレープ</li>
+      <li><strong>TerrainProvider / CesiumWorldTerrain</strong>：3D
+      地形を構築</li>
+      <li><strong>Cesium3DTileset</strong>：PLATEAU 等の 3D Tiles を LOD
+      描画</li>
+      <li><strong>ClippingPlaneCollection</strong>：3D
+      Tiles・点群の断面カット</li>
+      <li><strong>GeoJsonDataSource / Entity</strong>：2D 図面・境界の
+      3D 表示</li>
+      </ol>
+      <h3 id="データパイプライン-1">データパイプライン</h3>
+      <pre class="text"><code>ローカルファイル (GPKG / GeoJSON / GLB / LAS / PLY / SPZ) + FGDB（事前変換）
+    ↓
+Web Worker or サーバー変換（ブラウザ: sql.js + WKB パーサー / Arrow-JS、サーバー or 事前: ogr2ogr / Potree Converter / entwine）
+    ↓
+FlatBuffers / GeoArrow / TypedArray / 3D Tiles / EPT (VRAM)
+    ↓
+CesiumJS + Three.js GPU Render</code></pre>
+      <h3 id="ロードマップ案">ロードマップ案</h3>
+      <table style="width:100%;">
+      <colgroup>
+      <col style="width: 36%" />
+      <col style="width: 31%" />
+      <col style="width: 31%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>Phase</th>
+      <th>内容</th>
+      <th>効果</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>1</td>
+      <td>CesiumJS ベース構築 + ImageryLayer / TerrainProvider</td>
+      <td>XYZ / DEM / 地形表示を高速化</td>
+      </tr>
+      <tr>
+      <td>2</td>
+      <td>Cesium3DTileset 統合 + ClippingPlaneCollection</td>
+      <td>PLATEAU 等の大規模 3D Tiles・断面表示</td>
+      </tr>
+      <tr>
+      <td>3</td>
+      <td>Three.js 統合 + 点群 + 3DGS</td>
+      <td>点群・3DGS 可視化を補完</td>
+      </tr>
+      </tbody>
+      </table>
+      <h2 id="日本国内向け構成">日本国内向け構成</h2>
+      <h3 id="推奨構成">推奨構成</h3>
+      <ul>
+      <li><strong>描画基盤：CesiumJS + Three.js + loaders.gl</strong>
+      <ul>
+      <li>国土地理院タイル（XYZ / 標高PNG）を <code>ImageryLayer</code>
+      / <code>TerrainProvider</code> で合成</li>
+      <li>国交省 <strong>PLATEAU</strong>（3D Tiles 1.1 / GLB）を
+      <code>Cesium3DTileset</code> / <code>Model</code>
+      で直接ロード</li>
+      <li>点群・3DGS は Three.js 側で補完</li>
+      </ul></li>
+      <li><strong>参考・相互連携：Re:Earth (OSS)</strong>
+      <ul>
+      <li>PLATEAU 等のデジタルツイン可視化で参考になる OSS
+      ツール（PLATEAU 公式基盤ではない点に注意）</li>
+      <li>データエクスポート/API 連携を担保</li>
+      </ul></li>
+      </ul>
+      <h3 id="日本現場機能セット">日本現場機能セット</h3>
+      <table>
+      <colgroup>
+      <col style="width: 32%" />
+      <col style="width: 38%" />
+      <col style="width: 29%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>国内データ</th>
+      <th>組み込む技術</th>
+      <th>現場効果</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>地理院 DEM + 2D図面</td>
+      <td>Cesium <code>TerrainProvider</code> +
+      <code>ImageryLayer</code></td>
+      <td>平面図を標高にぴったりドレープ</td>
+      </tr>
+      <tr>
+      <td>PLATEAU + 現場BIM/CIM</td>
+      <td>Cesium <code>Cesium3DTileset</code> +
+      <code>ClippingPlaneCollection</code></td>
+      <td>建物・敷地の断面・クリッピング</td>
+      </tr>
+      <tr>
+      <td>i-Construction 点群</td>
+      <td>Cesium <code>Cesium3DTileset</code>（pnts）+ Three.js
+      <code>Points</code> / Potree</td>
+      <td>点群を高さスライスで施工管理</td>
+      </tr>
+      <tr>
+      <td>写真測量 3DGS</td>
+      <td>Three.js 専用レンダラー</td>
+      <td>現場状況をニューラル表現で可視化</td>
+      </tr>
+      </tbody>
+      </table>
+      <h2 id="サーバーレスローカル起動">サーバーレス・ローカル起動</h2>
+      <p>HTTP サーバーが使えなくても KASUGAI Canvas
+      はクライアント完結で動作可能。</p>
+      <h3 id="データ読み込み手法">データ読み込み手法</h3>
+      <table>
+      <colgroup>
+      <col style="width: 50%" />
+      <col style="width: 50%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>方法</th>
+      <th>概要</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>File / Blob / ArrayBuffer 直読</strong></td>
+      <td>ドラッグ&amp;ドロップ or ファイル選択。HTTP（fetch）不要、CORS
+      なし</td>
+      </tr>
+      <tr>
+      <td><strong>OPFS / IndexedDB</strong></td>
+      <td>ブラウザ内にバイナリをキャッシュ。オフラインでも爆速起動</td>
+      </tr>
+      <tr>
+      <td><strong>PWA (Service Worker)</strong></td>
+      <td>内部で HTTP リクエストを横取りし、ローカル/Zip から返す</td>
+      </tr>
+      <tr>
+      <td><strong>Tauri / Electron</strong></td>
+      <td>デスクトップ化し、Tauri は <code>tauri://</code>、Electron は
+      <code>file://</code> またはカスタムプロトコルで安全に読み込み</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="kasugai-box-構成">KASUGAI × Box 構成</h3>
+      <ul>
+      <li><strong>Box を CDE（保存領域）</strong>、<strong>KASUGAI
+      Canvas を可視化エンジン</strong></li>
+      <li>Box API / Direct Download /
+      ローカルファイルからデータを読み込み</li>
+      <li>可視化結果は KASUGAI Canvas 内で表示・スクリーンショット・URL
+      共有</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>
