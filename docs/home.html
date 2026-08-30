@@ -26,26 +26,38 @@
       <section>
         <h2>✨ 主な機能</h2>
         <div class="features">
-          <a href="01-データ.html" class="feature-card">
-            <h3>⚙️ データ</h3>
-            <p>2D/3D/点群/3DGS/FGDB など、KASUGAI Canvas で扱う最適フォーマットと配信構成</p>
-          </a>
-          <a href="02-ライブラリ.html" class="feature-card">
-            <h3>🗺️ ライブラリ</h3>
-            <p>CesiumJS、Three.js、deck.gl などの選定と役割分担</p>
-          </a>
-          <a href="03-システム構成.html" class="feature-card">
-            <h3>🔧 システム構成</h3>
-            <p>ローカルPC、サーバーレス、KASUGAI 組み込み構成の設計</p>
-          </a>
-          <a href="04-実装システム.html" class="feature-card">
-            <h3>🗺️ 実装システム</h3>
-            <p>現行の Rust/Axum + CesiumJS 実装、UI、インスペクター設定</p>
-          </a>
-          <a href="05-QGIS連携.html" class="feature-card">
-            <h3>🔗 QGIS・GDAL連携</h3>
-            <p>QGIS・GDALをデータ変換・配信基盤とする構想</p>
-          </a>
+          <div class="feature-card">
+            <h3>🌍 3D 地球表示</h3>
+            <p>CesiumJS による地球儀・DEM・3D Tiles の表示、XYZ / TMS / WMS の重ね合わせ</p>
+          </div>
+          <div class="feature-card">
+            <h3>🗺️ 2D/3D レイヤー統合</h3>
+            <p>GeoJSON、XYZ、3D Tiles、ベースマップを同一空間で統合的に管理・可視化</p>
+          </div>
+          <div class="feature-card">
+            <h3>⛰️ 地形ドレープ</h3>
+            <p>DEM や 3D Tiles 表面へ XYZ・GeoJSON を地形に沿ってドレープ</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧭 ナビゲーション</h3>
+            <p>国土地理院 / Yahoo 住所検索、ベクトル検索、FlyTo、カメラプリセット</p>
+          </div>
+          <div class="feature-card">
+            <h3>🎥 Fly モード</h3>
+            <p>GeoJSON ルートの自動追従と手動操縦、速度・高さ・ピッチの調整</p>
+          </div>
+          <div class="feature-card">
+            <h3>🛠️ インスペクター設定</h3>
+            <p>1 行テキストでレイヤー・カメラ・ベースマップ・凡例を一括管理</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌐 位置情報共有</h3>
+            <p>カメラ位置を URL ハッシュに保存し、Google Earth 形式で外部連携</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔗 QGIS・GDAL 連携</h3>
+            <p>QGIS・GDAL をデータ変換・配信基盤とした GIS データ連携（構想）</p>
+          </div>
         </div>
       </section>
 
@@ -76,15 +88,43 @@
         </div>
       </section>
 
-      <section class="card">
-        <h2>🛠️ 開発について</h2>
-        <ul>
-          <li><strong>バージョン：</strong>v1.3.0（正本は <code>server\Cargo.toml</code>）</li>
-          <li><strong>バックエンド：</strong>Rust / Axum（<code>127.0.0.1:8510</code>）</li>
-          <li><strong>フロントエンド：</strong>CesiumJS + Three.js + deck.gl</li>
-          <li><strong>データパイプライン：</strong>loaders.gl + Web Worker / sql.js + ogr2ogr</li>
-          <li><strong>対応形式：</strong>GeoJSON、XYZ、3D Tiles、GLB、PLY/LAS、EPT、GPKG、FGDB など</li>
-        </ul>
+      <section>
+        <h2>🛠️ 実装システム</h2>
+        <p>KASUGAI Canvas は Rust/Axum バックエンドと CesiumJS + Three.js フロントエンドで構成されています。バージョン v1.3.0（正本は <code>server\Cargo.toml</code>）。以下は主要な実装コンポーネントです。</p>
+        <div class="features">
+          <div class="feature-card">
+            <h3>⚙️ Rust / Axum</h3>
+            <p>ローカルPC上で <code>127.0.0.1:8510</code> で動作。静的アセット、タイルプロキシ、設定 API を提供</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌍 CesiumJS + Three.js</h3>
+            <p>地球・3D Tiles・DEM ドレープを CesiumJS で、点群・3DGS・GLB 等を Three.js で補完</p>
+          </div>
+          <div class="feature-card">
+            <h3>📊 UI パネル</h3>
+            <p>Layers、Basemap、Camera、Search、Share、Info、Attr、設定 パネルで直感的に操作</p>
+          </div>
+          <div class="feature-card">
+            <h3>🎥 Fly モード</h3>
+            <p>GeoJSON ルートの自動追従と手動操縦。徒歩・車載・ドローン・広域のプリセットを内包</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔗 URL パーマリンク</h3>
+            <p>カメラ情報を URL ハッシュ、プロジェクトなどをクエリに保存。共有 URL コピー対応</p>
+          </div>
+          <div class="feature-card">
+            <h3>📝 インスペクター設定</h3>
+            <p>1 行 <code>種類: 値</code> 形式の <code>kasugai_canvas.config</code> でレイヤー・カメラを一括指定</p>
+          </div>
+          <div class="feature-card">
+            <h3>⛰️ ドレープ・地形</h3>
+            <p>DEM、3D Tiles 表面への XYZ・GeoJSON ドレープ。高さ基準に応じた TerrainProvider 選択</p>
+          </div>
+          <div class="feature-card">
+            <h3>⚠️ 制限・未対応</h3>
+            <p>Three.js 点群 / 3DGS / GLB 表示は現在未対応。将来的な補完対象</p>
+          </div>
+        </div>
       </section>
 
       <section class="card">
