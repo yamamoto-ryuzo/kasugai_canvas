@@ -1,0 +1,252 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+  line-height: 1.7;
+  color: #333;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.container, .wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+nav {
+  padding: 20px 30px 0;
+}
+
+nav a {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 10px 20px;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: 700;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+nav a:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 50px 30px;
+  text-align: center;
+}
+
+header h1 {
+  font-size: 2.4em;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+header p {
+  font-size: 1.2em;
+  opacity: 0.95;
+}
+
+main, .content {
+  padding: 40px 30px;
+}
+
+section {
+  margin-bottom: 40px;
+}
+
+h2 {
+  color: #667eea;
+  font-size: 1.7em;
+  margin: 40px 0 15px;
+  padding-bottom: 10px;
+  border-bottom: 3px solid #667eea;
+}
+
+h3 {
+  color: #667eea;
+  font-size: 1.3em;
+  margin: 30px 0 12px;
+}
+
+h4 {
+  color: #555;
+  font-size: 1.1em;
+  margin: 24px 0 10px;
+}
+
+p {
+  margin: 1em 0;
+}
+
+a {
+  color: #667eea;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+ul, ol {
+  padding-left: 1.6em;
+  margin: 1em 0;
+}
+
+li {
+  margin: 0.6em 0;
+}
+
+li > ul, li > ol {
+  margin: 0.4em 0;
+}
+
+code {
+  background: #f8f9fa;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'Fira Code', Consolas, 'Lucida Console', monospace;
+  font-size: 0.9em;
+  color: #333;
+  border: 1px solid #e0e0e0;
+}
+
+pre {
+  background: #f8f9fa;
+  color: #333;
+  padding: 18px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: 'Fira Code', Consolas, 'Lucida Console', monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
+  border: 1px solid #e0e0e0;
+  margin: 1em 0;
+}
+
+pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+th, td {
+  padding: 14px 16px;
+  text-align: left;
+}
+
+th {
+  background: #667eea;
+  color: #fff;
+  font-weight: 700;
+}
+
+tr:nth-child(even) {
+  background: #f8f9fa;
+}
+
+tr:hover {
+  background: #f0f4ff;
+  transition: background 0.2s;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin: 15px 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+blockquote {
+  margin: 1.2em 0;
+  padding: 16px 22px;
+  border-left: 4px solid #667eea;
+  background: #f8f9fa;
+  border-radius: 0 8px 8px 0;
+}
+
+strong {
+  color: #764ba2;
+  font-weight: 700;
+}
+
+.card {
+  background: #f8f9fa;
+  padding: 24px;
+  border-radius: 8px;
+  border-left: 4px solid #667eea;
+  margin: 24px 0;
+}
+
+.badge {
+  display: inline-block;
+  background: #28a745;
+  color: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+footer, .footer {
+  background: #f8f9fa;
+  padding: 20px 30px;
+  text-align: center;
+  color: #666;
+  border-top: 1px solid #e0e0e0;
+}
+
+@media (max-width: 720px) {
+  body {
+    padding: 12px;
+  }
+
+  .container, .wrap {
+    border-radius: 8px;
+  }
+
+  main, .content {
+    padding: 24px 18px;
+  }
+
+  header {
+    padding: 32px 20px;
+  }
+
+  header h1 {
+    font-size: 1.8rem;
+  }
+
+  nav {
+    padding: 16px 18px 0;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+  }
+}
