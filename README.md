@@ -2,6 +2,13 @@
 
 ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システム「KASUGAI Canvas」の技術選定ドキュメントです。Re:Earth GeoSuite との互換性を意識した GIS 基本機能に加え、KASUGAI 独自の FLY 機能を追加しています。
 
+## ドキュメント
+
+詳細は GitHub Pages をご覧ください。
+
+- [KASUGAI Canvas 技術選定](https://yamamoto-ryuzo.github.io/kasugai_canvas/)
+- [変更履歴](CHANGELOG.md)
+
 ## 主な機能
 
 ### GIS 基本機能（Re:Earth GeoSuite コンパチブル）
@@ -110,9 +117,4 @@ kasugai_canvas/
 
 プロジェクトは起動後の Layers パネルから切り替えられます。配布 ZIP にも `projects/default` のサンプルプロジェクトを同梱します。
 
-## ドキュメント
 
-詳細は GitHub Pages をご覧ください。
-
-- [KASUGAI Canvas 技術選定](https://yamamoto-ryuzo.github.io/kasugai_canvas/)
-- [変更履歴](CHANGELOG.md)
