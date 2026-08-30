@@ -1,6 +1,21 @@
 # KASUGAI Canvas
 
-ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システム「KASUGAI Canvas」の技術選定ドキュメントです。
+ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システム「KASUGAI Canvas」の技術選定ドキュメントです。Re:Earth GeoSuite との互換性を意識した GIS 基本機能に加え、KASUGAI 独自の FLY 機能を追加しています。
+
+## 主な機能
+
+### GIS 基本機能（Re:Earth GeoSuite コンパチブル）
+
+- インスペクター一括設定（`xyz:`, `3dtiles:`, `geojson:`, `base:`, `info:`, `cam:`, `legend:`）
+- ベースマップ、システムレイヤー制御、レイヤー追加・管理、レイヤー一覧 UI
+- レイヤーグループ化（`/` 通常、`//` 排他）
+- 凡例表示、住所・ベクトル検索、属性・値一覧、カメラプリセット
+- Info 表示、Share（URL 共有）、GeoJSON 3D ドレープ制御、Terrain/Shadow、ナビゲーション
+
+### プレゼンテーション機能（追加機能）
+
+- Fly モード（ルート自動追従・手動操縦）
+- ルート描画、Google Earth 風アニメーション FlyTo
 
 ## バージョン管理
 
