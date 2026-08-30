@@ -24,57 +24,65 @@
       </section>
 
       <section>
-        <h2>🗺️ GIS 基本機能</h2>
-        <p>デジタルツインとして、2D / 3D 地理空間データを統合的に可視化するための基本機能です。</p>
+        <h2>✨ 主な機能</h2>
+        <p>現行の KASUGAI Canvas で利用できる機能一覧です。詳細は各章で確認できます。</p>
         <div class="features">
           <div class="feature-card">
-            <h3>🌍 3D 地球表示</h3>
-            <p>CesiumJS による地球儀、DEM、3D Tiles、XYZ / TMS / WMS の重ね合わせ</p>
+            <h3>🗂️ レイヤー管理</h3>
+            <p>XYZ / 3D Tiles / GeoJSON の表示切替、グループ化、ドラッグ＆ドロップ並び替え、設定永続化</p>
           </div>
           <div class="feature-card">
-            <h3>🗺️ 2D/3D レイヤー統合</h3>
-            <p>GeoJSON、XYZ、3D Tiles、ベースマップを同一空間で管理・可視化</p>
+            <h3>🗺️ ベースマップ</h3>
+            <p><code>base:</code> 一行設定で選択・表示切替可能なベースマップ切替</p>
           </div>
           <div class="feature-card">
-            <h3>⛰️ 地形ドレープ</h3>
-            <p>DEM や 3D Tiles 表面へ XYZ・GeoJSON を地形に沿ってドレープ</p>
+            <h3>🎥 カメラプリセット</h3>
+            <p><code>cam:</code> 一行設定で緯度・経度・高さ・ピッチ・ヘディングを登録</p>
           </div>
           <div class="feature-card">
-            <h3>🛠️ インスペクター設定</h3>
-            <p>1 行テキストでレイヤー、カメラ、ベースマップ、凡例を一括管理</p>
+            <h3>🔎 住所・ベクトル検索</h3>
+            <p>国土地理院 / Yahoo 住所検索、レイヤー属性の三段階ベクトル検索、FlyTo</p>
           </div>
           <div class="feature-card">
-            <h3>🔗 QGIS・GDAL 連携</h3>
-            <p>QGIS・GDAL をデータ変換・配信基盤とした GIS データ連携（構想）</p>
+            <h3>🔗 共有 URL</h3>
+            <p>URL パーマリンクの自動更新、同じ視点をコピーして共有</p>
+          </div>
+          <div class="feature-card">
+            <h3>ℹ️ Info・凡例・属性</h3>
+            <p>HTML 情報表示、凡例画像、選択地物の属性表示</p>
+          </div>
+          <div class="feature-card">
+            <h3>⛰️ DEM / ドレープ / 設定</h3>
+            <p>地形表示、レイヤードレープ対象、プロジェクト切替、自動更新、断面クリップ</p>
+          </div>
+          <div class="feature-card">
+            <h3>�️ Fly モード</h3>
+            <p>GeoJSON ルート自動追従・手動操縦、速度・高さ・ピッチ調整、ルート描画</p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2>� プレゼンテーション機能</h2>
-        <p>データを探索したり、視点を動かして周囲に共有したりする、より体験的な機能です。</p>
+        <h2>🔮 構想・未対応</h2>
+        <p>現時点では未対応、または将来の構想として位置づけられている機能です。</p>
         <div class="features">
           <div class="feature-card">
-            <h3>🧭 検索・視点移動</h3>
-            <p>住所 / ベクトル検索、FlyTo、カメラプリセットで素早く目的の場所へ</p>
+            <h3>� Three.js 点群・3DGS・GLB</h3>
+            <p>Three.js の枠組みは組み込まれているが、点群 / 3D Gaussian Splatting / GLB 表示は未対応</p>
           </div>
           <div class="feature-card">
-            <h3>🎥 Fly モード</h3>
-            <p>GeoJSON ルートの自動追従と手動操縦。徒歩・車載・ドローンのプリセット付き</p>
+            <h3>🌐 Google Earth / Yahoo 連携</h3>
+            <p>位置情報の外部サービス連携は構想段階</p>
           </div>
           <div class="feature-card">
-            <h3>🔗 URL 共有</h3>
-            <p>カメラ位置を URL ハッシュに保存し、同じ視点を URL コピーで共有</p>
-          </div>
-          <div class="feature-card">
-            <h3>🌐 外部連携</h3>
-            <p>Google Earth 形式への視点変換、Yahoo! Map 等との位置情報連携</p>
+            <h3>🔗 QGIS・GDAL 配信</h3>
+            <p>QGIS・GDAL を CesiumJS 向け変換・配信基盤とする構想</p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2>� インストール</h2>
+        <h2>🔗 インストール</h2>
         <div class="install-steps">
           <h3>配布 ZIP / インストーラー</h3>
           <ol>
@@ -118,7 +126,7 @@
           </div>
           <div class="feature-card">
             <h3>🎥 Fly モード</h3>
-            <p>GeoJSON ルートの自動追従と手動操縦。徒歩・車載・ドローン・広域のプリセットを内包</p>
+            <p>GeoJSON ルートの自動追従と手動操縦、速度・高さ・ピッチ調整</p>
           </div>
           <div class="feature-card">
             <h3>🔗 URL パーマリンク</h3>
