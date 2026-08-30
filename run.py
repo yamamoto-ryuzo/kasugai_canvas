@@ -7,8 +7,13 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
 import zipfile
 from pathlib import Path
 
@@ -25,13 +30,18 @@ SAMPLE_PROJECTS = ROOT / "installer" / "projects"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
 
 
-def check_versions() -> None:
-    """各設定ファイルのバージョンが server/Cargo.toml と一致するか確認する。"""
+def _get_cargo_version() -> str:
+    """server/Cargo.toml からバージョンを取得する。"""
     cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
     cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
     if not cargo_match:
         raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
-    cargo_version = cargo_match.group(1)
+    return cargo_match.group(1)
+
+
+def check_versions(check_latest: bool = True) -> None:
+    """各設定ファイルのバージョンが server/Cargo.toml と一致するか確認する。"""
+    cargo_version = _get_cargo_version()
 
     nsi = INSTALLER_SCRIPT.read_text(encoding="utf-8")
     product_match = re.search(r'VIProductVersion "([^"]+)"', nsi)
@@ -47,13 +57,23 @@ def check_versions() -> None:
     changelog_match = re.search(r"^## \[(\d+\.\d+\.\d+)\] -", changelog, re.M)
     changelog_version = changelog_match.group(1) if changelog_match else None
 
-    mismatches = []
     files = {
         "installer/kasugai_canvas.nsi (VIProductVersion)": nsi_product,
         "installer/kasugai_canvas.nsi (FileVersion)": nsi_file,
         "README.md": readme_version,
         "CHANGELOG.md": changelog_version,
     }
+
+    if check_latest:
+        latest_json_path = DOWNLOAD_DIR / "latest.json"
+        if latest_json_path.exists():
+            latest_content = latest_json_path.read_text(encoding="utf-8")
+            latest_match = re.search(r'"version"\s*:\s*"([^"]+)"', latest_content)
+            files["download/latest.json"] = latest_match.group(1) if latest_match else None
+        else:
+            files["download/latest.json"] = None
+
+    mismatches = []
     for name, version in files.items():
         if version != cargo_version:
             mismatches.append(f"  {name}: {version} (server/Cargo.toml: {cargo_version})")
@@ -73,11 +93,7 @@ def sync_versions(write_latest: bool = True) -> None:
     write_latest=False の場合、latest.json には書き込まず、README と NSIS メタデータのみ同期する。
     リリースビルドの途中で latest.json を更新しないようにするためのオプション。
     """
-    cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
-    cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
-    if not cargo_match:
-        raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
-    cargo_version = cargo_match.group(1)
+    cargo_version = _get_cargo_version()
 
     if write_latest:
         latest_json = {
@@ -133,6 +149,74 @@ def _kill_existing_kasugai() -> None:
         pass
 
 
+def _find_free_port() -> int:
+    """空いている TCP ポートを 1 つ見つける。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
+
+def _kill_process(process: subprocess.Popen) -> None:
+    """起動したサブプロセスを終了する。"""
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(process.pid)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            pass
+        process.wait()
+
+
+def _wait_for_health(port: int, expected_version: str, timeout: float = 30.0) -> None:
+    """指定ポートでサーバーの /health が返却する version を確認する。"""
+    url = f"http://127.0.0.1:{port}/health"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            actual = data.get("version")
+            if actual != expected_version:
+                raise SystemExit(
+                    f"EXE バージョンが一致しません: 期待 {expected_version}, 実際 {actual}"
+                )
+            return
+        except (urllib.error.URLError, json.JSONDecodeError, ConnectionRefusedError):
+            time.sleep(0.5)
+    raise SystemExit(f"起動確認が {timeout} 秒以内に完了しませんでした: {url}")
+
+
+def _start_exe_and_verify(exe_path: Path, expected_version: str) -> None:
+    """EXE を一時ポートで起動し、/health の version を検証する。"""
+    port = _find_free_port()
+    env = {**os.environ, "KASUGAI_CANVAS_PORT": str(port)}
+    process = subprocess.Popen([str(exe_path)], env=env)
+    try:
+        _wait_for_health(port, expected_version)
+    finally:
+        _kill_process(process)
+
+
+def _verify_zip_version(zip_path: Path, expected_version: str) -> None:
+    """ZIP を一時展開し、同梱 EXE の /health version を検証する。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        extract_dir = Path(tmp) / "extracted"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(zip_path, "r") as archive:
+            archive.extractall(extract_dir)
+        exe = extract_dir / TARGET_EXE.name
+        if not exe.exists():
+            raise FileNotFoundError(f"ZIP内に実行ファイルが見つかりません: {zip_path}")
+        _start_exe_and_verify(exe, expected_version)
+
+
 def run_dev() -> None:
     """開発モードで起動する。"""
     _kill_existing_kasugai()
@@ -186,11 +270,15 @@ def build_installer() -> None:
 
 def build_release() -> None:
     """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。"""
+    cargo_version = _get_cargo_version()
     sync_versions(write_latest=False)
-    check_versions()
+    check_versions(check_latest=False)
     subprocess.run(["cargo", "build", "--release"], cwd=SERVER_DIR, check=True)
     if not TARGET_EXE.exists():
         raise FileNotFoundError(f"ビルド済み実行ファイルがみつかりません: {TARGET_EXE}")
+
+    print("ビルド済み EXE のバージョンを確認します...")
+    _start_exe_and_verify(TARGET_EXE, cargo_version)
 
     if not SAMPLE_CONFIG.exists():
         raise FileNotFoundError(f"初期サンプル設定がみつかりません: {SAMPLE_CONFIG}")
@@ -205,8 +293,13 @@ def build_release() -> None:
             if project_file.is_file():
                 archive.write(project_file, arcname=(Path("projects") / project_file.relative_to(SAMPLE_PROJECTS)).as_posix())
     print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
+
+    print("ZIP 内 EXE のバージョンを確認します...")
+    _verify_zip_version(DOWNLOAD_ZIP, cargo_version)
+
     build_installer()
     sync_versions(write_latest=True)
+    check_versions(check_latest=True)
 
 
 def run_release() -> None:
@@ -229,15 +322,11 @@ def publish_release() -> None:
     タグは作成しない。
     """
     build_release()
-    cargo_toml = (SERVER_DIR / "Cargo.toml").read_text(encoding="utf-8")
-    cargo_match = re.search(r'^\s*version\s*=\s*"([^"]+)"', cargo_toml, re.M)
-    if not cargo_match:
-        raise SystemExit("server/Cargo.toml からバージョンを取得できません。")
-    version = cargo_match.group(1)
+    cargo_version = _get_cargo_version()
     subprocess.run(["git", "add", "-A"], cwd=ROOT, check=True)
-    subprocess.run(["git", "commit", "-m", f"{version} リリース"], cwd=ROOT, check=True)
+    subprocess.run(["git", "commit", "-m", f"{cargo_version} リリース"], cwd=ROOT, check=True)
     subprocess.run(["git", "push"], cwd=ROOT, check=True)
-    print(f"バージョン {version} をリモートへプッシュしました。")
+    print(f"バージョン {cargo_version} をリモートへプッシュしました。")
 
 
 def main() -> None:
@@ -296,4 +385,3 @@ if __name__ == "__main__":
         main()
     except subprocess.CalledProcessError as error:
         raise SystemExit(error.returncode) from error
-
