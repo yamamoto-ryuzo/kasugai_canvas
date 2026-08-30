@@ -1699,6 +1699,7 @@ function setupEvents() {
     if (walkTerrainEl) walkTerrainEl.textContent = (alt + flyHeight).toFixed(1);
     if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = "地上高（AGL）";
     if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+    if (walkPitchEl && document.activeElement !== walkPitchEl) walkPitchEl.value = (pitch * 180 / Math.PI).toFixed(1);
   }
   function getTargetVertexDistance(direction) {
     if (!flyPathCoords || flyPathCoords.length < 2 || !flyPathCumulativeDistances.length) return null;
@@ -1875,10 +1876,13 @@ function setupEvents() {
   const walkTerrainEl = document.querySelector("#walk-terrain");
   const walkTerrainLabelEl = document.querySelector("#walk-terrain-label");
   const walkSpeedEl = document.querySelector("#walk-speed");
+  const walkPitchEl = document.querySelector("#walk-pitch");
+  const flyPresetSelect = document.querySelector("#fly-preset-select");
   const flyPointEditor = document.querySelector("#fly-point-editor");
   const flyPointIndexEl = document.querySelector("#fly-point-index");
   const flyPointOffsetEl = document.querySelector("#fly-point-offset");
   const flyPointSaveEl = document.querySelector("#fly-point-save");
+  const flyReverseBtn = document.querySelector("#fly-reverse-btn");
   const walkKeys = new Set();
   function updateFlyPointEditor() {
     if (!flyPointEditor || !flyPointIndexEl || !flyPointOffsetEl) return;
@@ -1959,6 +1963,7 @@ function setupEvents() {
       }
       flyHeight = value;
       if (flyPathActive && flyPath) flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+      if (flyPresetSelect) flyPresetSelect.value = "custom";
     });
   }
   if (walkSpeedEl) {
@@ -1969,6 +1974,61 @@ function setupEvents() {
         return;
       }
       flySpeed = value;
+      if (flyPresetSelect) flyPresetSelect.value = "custom";
+    });
+  }
+  if (walkPitchEl) {
+    walkPitchEl.addEventListener("input", () => {
+      const value = Number(walkPitchEl.value);
+      if (!Number.isFinite(value)) {
+        const currentDeg = (flyPath && Number.isFinite(flyPath.pitch)) ? flyPath.pitch : viewer.camera.pitch * 180 / Math.PI;
+        walkPitchEl.value = Number.isFinite(currentDeg) ? currentDeg.toFixed(1) : "-10.0";
+        return;
+      }
+      if (flyPath) {
+        flyPath.pitch = Math.max(-85, Math.min(0, value));
+        if (flyPathCoords) {
+          flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+          updateFlyPathCamera(flyPathDistance);
+        }
+      } else if (walkModeActive) {
+        const pitchRad = Math.max(-85 * Math.PI / 180, Math.min(-5 * Math.PI / 180, value * Math.PI / 180));
+        viewer.camera.setView({
+          destination: viewer.camera.position,
+          orientation: { heading: viewer.camera.heading, pitch: pitchRad, roll: 0 }
+        });
+      }
+      if (flyPresetSelect) flyPresetSelect.value = "custom";
+    });
+  }
+  if (flyPresetSelect) {
+    flyPresetSelect.addEventListener("change", () => {
+      const presets = {
+        walk: { height: 2, speed: 5, pitch: -5 },
+        drive: { height: 2, speed: 60, pitch: -10 },
+        drone: { height: 200, speed: 60, pitch: -30 },
+        overview: { height: 1000, speed: 300, pitch: -45 }
+      };
+      const preset = presets[flyPresetSelect.value];
+      if (!preset) return;
+      flyHeight = preset.height;
+      flySpeed = preset.speed;
+      if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
+      if (walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+      if (walkPitchEl) walkPitchEl.value = Number.isFinite(preset.pitch) ? preset.pitch.toFixed(1) : "-10.0";
+      if (flyPath && Number.isFinite(preset.pitch)) {
+        flyPath.pitch = Math.max(-85, Math.min(0, preset.pitch));
+      }
+      if (flyPathCoords && flyPath) {
+        flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+        updateFlyPathCamera(flyPathDistance);
+      } else if (walkModeActive) {
+        const pitchRad = Math.max(-85 * Math.PI / 180, Math.min(-5 * Math.PI / 180, preset.pitch * Math.PI / 180));
+        viewer.camera.setView({
+          destination: viewer.camera.position,
+          orientation: { heading: viewer.camera.heading, pitch: pitchRad, roll: 0 }
+        });
+      }
     });
   }
   if (flyPointIndexEl) {
@@ -1989,6 +2049,27 @@ function setupEvents() {
   }
   if (flyPointSaveEl) {
     flyPointSaveEl.addEventListener("click", saveFlyPointOffsets);
+  }
+  if (flyReverseBtn) {
+    flyReverseBtn.addEventListener("click", () => {
+      pauseFlyPath();
+      if (flyPathCoords && flyPathCoords.length >= 2) {
+        flyPathCoords.reverse();
+        const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+        flyPathCumulativeDistances = flyPathCumulativeDistances.map((_, i, arr) => total - arr[arr.length - 1 - i]);
+        flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
+        flyPathDistance = 0;
+        updateFlyPathCamera(0);
+        updateFlyPointEditor();
+      } else if (walkModeActive) {
+        const camera = viewer.camera;
+        const heading = Cesium.Math.zeroToTwoPi(camera.heading + Math.PI);
+        camera.setView({
+          destination: camera.position,
+          orientation: { heading, pitch: camera.pitch, roll: 0 }
+        });
+      }
+    });
   }
   viewer.canvas.addEventListener("wheel", event => {
     if (!walkModeActive) return;
@@ -2049,6 +2130,7 @@ function setupEvents() {
         if (walkTerrainEl) walkTerrainEl.textContent = terrainHeight.toFixed(1);
         if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = "地形高";
         if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+        if (walkPitchEl && document.activeElement !== walkPitchEl) walkPitchEl.value = (pitch * 180 / Math.PI).toFixed(1);
       }
       walkRafId = requestAnimationFrame(walkLoop);
     }
@@ -2071,6 +2153,7 @@ function setupEvents() {
     walkModeActive = isWalk;
     autoMove = 0;
     walkHelp?.classList.toggle("visible", isWalk || drawTabActive);
+    if (flyReverseBtn) flyReverseBtn.disabled = !isWalk;
     if (isWalk) {
       const carto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
       if (carto) {
