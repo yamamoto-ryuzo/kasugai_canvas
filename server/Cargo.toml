@@ -1,6 +1,6 @@
 [package]
 name = "kasugai_canvas"
-version = "1.2.1"
+version = "1.3.0"
 edition = "2021"
 description = "KASUGAI Canvas CesiumJS and Three.js viewer"
 

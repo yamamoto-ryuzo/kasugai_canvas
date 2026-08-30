@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [1.3.0] - 2026-08-30
+
+### Added
+
+- Fly パネルにプリセット選択、ピッチ入力、起終点逆転ボタンを追加
+- Fly パネルのヘルプテキストをコンパクト化
+
+### Changed
+
+- 実装システムのドキュメントを更新
+
 ## [1.2.1] - 2026-08-30
 
 ### Changed
