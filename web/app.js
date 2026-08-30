@@ -3084,7 +3084,7 @@ async function checkForUpdate(currentVersion = document.querySelector("#current-
       updateStatus.textContent = "（新しいバージョンがあります）";
       status.textContent = "更新が利用可能です";
       installButton.hidden = false;
-      if (document.querySelector("#auto-update").checked) await installUpdate(latestVersion);
+      if (document.querySelector("#auto-update").checked) await installUpdate(latestVersion, true);
     } else if (comparison === 0) {
       updateStatus.textContent = "（最新です）";
       status.textContent = "";
@@ -3098,8 +3098,8 @@ async function checkForUpdate(currentVersion = document.querySelector("#current-
   }
 }
 
-async function installUpdate(latestVersion = document.querySelector("#latest-version").textContent) {
-  if (!confirm(`新しいバージョン ${latestVersion} が利用可能です。ダウンロードしてインストールしますか？`)) {
+async function installUpdate(latestVersion = document.querySelector("#latest-version").textContent, silent = false) {
+  if (!silent && !confirm(`新しいバージョン ${latestVersion} が利用可能です。ダウンロードしてインストールしますか？`)) {
     document.querySelector("#version-status").textContent = "アップデートをキャンセルしました";
     return;
   }

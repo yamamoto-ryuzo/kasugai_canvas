@@ -1045,13 +1045,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         executable_directory.join(CONFIG_FILE_NAME).display()
     );
     let open_browser_requested = std::env::args().any(|argument| argument == "--open-browser");
-    let listener = match tokio::net::TcpListener::bind(address).await {
-        Ok(listener) => listener,
-        Err(_error) if open_browser_requested && is_running_server(port).await => {
-            open_browser(port);
-            return Ok(());
+    let listener = if open_browser_requested {
+        let mut listener = None;
+        for attempt in 0..60 {
+            match tokio::net::TcpListener::bind(address).await {
+                Ok(l) => {
+                    listener = Some(l);
+                    break;
+                }
+                Err(_) if is_running_server(port).await => {
+                    if attempt == 0 {
+                        println!("KASUGAI Canvas は既にポート {port} で起動しています。古いインスタンスを停止します。");
+                    }
+                    let stop_url = format!("http://127.0.0.1:{port}/api/shutdown");
+                    let _ = reqwest::Client::new().post(&stop_url).send().await;
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+                Err(error) => return Err(error.into()),
+            }
         }
-        Err(error) => return Err(error.into()),
+        if let Some(listener) = listener {
+            listener
+        } else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("KASUGAI Canvas: ポート {port} の解放を待ちましたが、起動できません"),
+            )
+            .into());
+        }
+    } else {
+        tokio::net::TcpListener::bind(address).await?
     };
     if open_browser_requested {
         tokio::spawn(async move {

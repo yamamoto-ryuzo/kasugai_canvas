@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [2.0.1] - 2026-08-30
+
+### Fixed
+
+- 自動更新時に `autoUpdate` 有効でも確認ダイアログが表示されていた問題を修正
+- 多重起動時に既存インスタンスを停止してポートを確保する処理を実装
+- `run.py` のリリースビルドで EXE / ZIP のバージョンを検証するよう強化
+
 ## [2.0.0] - 2026-08-30
 
 ### Changed
