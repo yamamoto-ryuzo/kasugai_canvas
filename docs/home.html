@@ -15,8 +15,7 @@
     <main>
       <section>
         <h2>📋 概要</h2>
-        <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。2D 図面、3D モデル、点群、3DGS、地形タイル、XYZ タイルを同一の 3D 地球空間に重ねて描画できます。</p>
-        <p>機能整備は <strong>V1.0.0</strong> で GIS 基本機能を完成させ、<strong>V2.0.0</strong> から FLY を含むプレゼンテーション機能を本格的に展開していく予定です。</p>
+        <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。Re:Earth GeoSuite との互換性を意識した GIS 基本機能に加え、KASUGAI 独自の FLY 機能を追加しています。</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 20px 0;">
           <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" class="demo-link" target="_blank">🚀 ソースコードを見る</a>
           <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest" class="demo-link" target="_blank">🌐 最新リリースを見る</a>
@@ -24,8 +23,8 @@
       </section>
 
       <section>
-        <h2>🗺️ V1.0.0 GIS 基本機能</h2>
-        <p>デジタルツインとして 2D / 3D 地理空間データを探索・可視化するための基本機能です。</p>
+        <h2>🗺️ GIS 基本機能（Re:Earth GeoSuite コンパチブル）</h2>
+        <p>Re:Earth GeoSuite と同様の GIS・デジタルツイン機能を実装しています。</p>
         <div class="features">
           <div class="feature-card">
             <h3>📝 インスペクター一括設定</h3>
@@ -76,7 +75,11 @@
             <p><code>info:</code> 行で外部 HTML を Info タブに表示。プロジェクト説明やドキュメントを埋め込み</p>
           </div>
           <div class="feature-card">
-            <h3>🗺️ GeoJSON 3D ドレープ制御</h3>
+            <h3>� Share（位置情報共有）</h3>
+            <p>カメラ位置を URL ハッシュに保存。共有 URL コピーで同じ視点を共有</p>
+          </div>
+          <div class="feature-card">
+            <h3>�🗺️ GeoJSON 3D ドレープ制御</h3>
             <p>地面 / Terrain / 3D Tiles のどれに張り付くかをインスペクター行または設定で切替</p>
           </div>
           <div class="feature-card">
@@ -87,40 +90,48 @@
             <h3>🧭 ナビゲーション</h3>
             <p>方位コンパス、2D / 3D 切替、Orbit / Fly モード切替、北リセット</p>
           </div>
+          <div class="feature-card">
+            <h3>📊 属性（Attr）表示</h3>
+            <p>Re:Earth上の地物を選択した際に、属性情報を一覧表示</p>
+          </div>
         </div>
       </section>
 
       <section>
-        <h2>🎬 V2.0.0 プレゼンテーション機能（FLY）</h2>
-        <p>視点を動かしたり、周囲に共有したりする、より体験的な機能です。V2.0.0 から本格的な整備を開始します。</p>
+        <h2>🎬 プレゼンテーション機能（追加機能）</h2>
+        <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。</p>
         <div class="features">
           <div class="feature-card">
             <h3>🛩️ Fly モード</h3>
             <p>GeoJSON ルート自動追従・手動操縦、速度・高さ・ピッチ調整、ルート描画</p>
           </div>
           <div class="feature-card">
-            <h3>🔗 URL 共有</h3>
-            <p>カメラ位置を URL ハッシュに保存し、同じ視点を URL コピーで共有</p>
+            <h3>✏️ ルート描画</h3>
+            <p>Orbit モードで右クリックによるルート作成。高さ編集・保存・Fly 実行まで一連</p>
           </div>
           <div class="feature-card">
-            <h3>🌐 Google Earth 連携</h3>
-            <p>現在視点を Google Earth 形式で新規ウィンドウに渡す外部連携（V2.0.0 構想）</p>
-          </div>
-          <div class="feature-card">
-            <h3>🌐 Yahoo! Map 等との連携</h3>
-            <p>他の地図サービスへの位置情報連携（V2.0.0 構想）</p>
-          </div>
-          <div class="feature-card">
-            <h3>📍 現在位置 FlyTo</h3>
-            <p>端末の現在位置を取得して FlyTo する機能（V2.0.0 構想）</p>
+            <h3>🎬 Google Earth 風 FlyTo</h3>
+            <p>距離に応じた飛行時間＋ズームアウトから降下する弧を描いて移動</p>
           </div>
         </div>
       </section>
 
       <section>
-        <h2>🔮 今後の構想</h2>
-        <p>V2.0.0 以降に検討している機能です。</p>
+        <h2>🔮 構想・未対応</h2>
+        <p>現時点では未対応、または将来の構想として位置づけられている機能です。</p>
         <div class="features">
+          <div class="feature-card">
+            <h3>🌐 Google Earth 連携</h3>
+            <p>現在視点を Google Earth 形式で新規ウィンドウに渡す外部連携</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌐 Yahoo! Map 等との連携</h3>
+            <p>他の地図サービスへの位置情報連携</p>
+          </div>
+          <div class="feature-card">
+            <h3>📍 現在位置 FlyTo</h3>
+            <p>端末の現在位置を取得して FlyTo する機能</p>
+          </div>
           <div class="feature-card">
             <h3>🎨 Three.js 点群・3DGS・GLB</h3>
             <p>Three.js の枠組みは組み込まれているが、点群 / 3DGS / GLB 表示は未対応</p>
