@@ -4,6 +4,15 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [2.0.2] - 2026-08-30
+
+### Fixed
+
+- 更新用 PowerShell スクリプトで EXE 差し替え失敗時に無限ループしないように `try/catch` を追加
+- 更新 ZIP のダウンロード URL にバージョンクエリを付与し、GitHub raw コンテンツのキャッシュによる不整合を回避
+- `latest.json` 取得時にタイムスタンプクエリを付与
+- 更新 ZIP URL のホワイトリストをホスト・パスで判定し、クエリパラメータを許可
+
 ## [2.0.1] - 2026-08-30
 
 ### Fixed

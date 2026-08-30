@@ -816,9 +816,14 @@ async fn open_local_file(
 }
 
 async fn fetch_latest() -> Result<Value, (StatusCode, String)> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
     let mut last_error = "最新バージョン情報を取得できませんでした".to_string();
     for url in LATEST_JSON_URLS {
-        match reqwest::get(url).await {
+        let busted = format!("{url}?t={now}");
+        match reqwest::get(busted.as_str()).await {
             Ok(response) => match response.error_for_status() {
                 Ok(response) => match response.text().await {
                     Ok(text) => match serde_json::from_str(&text) {
@@ -879,7 +884,14 @@ async fn install_update(
     let url = latest["platforms"]["windows-x86_64"]["url"]
         .as_str()
         .unwrap_or(REPOSITORY_DOWNLOAD_URL);
-    if url != REPOSITORY_DOWNLOAD_URL {
+    let allowed = reqwest::Url::parse(REPOSITORY_DOWNLOAD_URL).map_err(internal_error)?;
+    let actual = reqwest::Url::parse(url).map_err(|_| {
+        (
+            StatusCode::BAD_REQUEST,
+            "更新ファイルURLが不正です".to_string(),
+        )
+    })?;
+    if actual.host() != allowed.host() || actual.path() != allowed.path() {
         return Err((
             StatusCode::BAD_REQUEST,
             "許可されていない更新ファイルURLです".to_string(),
@@ -937,7 +949,7 @@ async fn install_update(
 
     let script_path = tmp_dir.join("update.ps1");
     let script = format!(
-        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\nCopy-Item -Path $newExe -Destination $currentExe -Force\nStart-Process -FilePath $currentExe -WindowStyle Hidden\n",
+        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\n$ErrorActionPreference = 'Stop'\ntry {{\n    Copy-Item -Path $newExe -Destination $currentExe -Force\n    Start-Process -FilePath $currentExe -WindowStyle Hidden\n}} catch {{\n    Write-Error \"EXEの差し替えに失敗しました: $_\"\n    exit 1\n}}\n",
         new = new_exe.to_string_lossy().replace('\'', "''"),
         current = current_exe.to_string_lossy().replace('\'', "''")
     );
