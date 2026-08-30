@@ -158,44 +158,6 @@
         </div>
       </section>
 
-      <section>
-        <h2>🛠️ 実装システム</h2>
-        <p>KASUGAI Canvas は Rust/Axum バックエンドと CesiumJS + Three.js フロントエンドで構成されています。バージョン v1.3.0（正本は <code>server\Cargo.toml</code>）。以下は主要な実装コンポーネントです。</p>
-        <div class="features">
-          <div class="feature-card">
-            <h3>⚙️ Rust / Axum</h3>
-            <p>ローカルPC上で <code>127.0.0.1:8510</code> で動作。静的アセット、タイルプロキシ、設定 API を提供</p>
-          </div>
-          <div class="feature-card">
-            <h3>🌍 CesiumJS + Three.js</h3>
-            <p>地球・3D Tiles・DEM ドレープを CesiumJS で、点群・3DGS・GLB 等を Three.js で補完</p>
-          </div>
-          <div class="feature-card">
-            <h3>📊 UI パネル</h3>
-            <p>Layers、Basemap、Camera、Search、Share、Info、Attr、設定 パネルで直感的に操作</p>
-          </div>
-          <div class="feature-card">
-            <h3>🎥 Fly モード</h3>
-            <p>GeoJSON ルートの自動追従と手動操縦、速度・高さ・ピッチ調整</p>
-          </div>
-          <div class="feature-card">
-            <h3>🔗 URL パーマリンク</h3>
-            <p>カメラ情報を URL ハッシュ、プロジェクトなどをクエリに保存。共有 URL コピー対応</p>
-          </div>
-          <div class="feature-card">
-            <h3>📝 インスペクター設定</h3>
-            <p>1 行 <code>種類: 値</code> 形式の <code>kasugai_canvas.config</code> でレイヤー・カメラを一括指定</p>
-          </div>
-          <div class="feature-card">
-            <h3>⛰️ ドレープ・地形</h3>
-            <p>DEM、3D Tiles 表面への XYZ・GeoJSON ドレープ。高さ基準に応じた TerrainProvider 選択</p>
-          </div>
-          <div class="feature-card">
-            <h3>⚠️ 制限・未対応</h3>
-            <p>Three.js 点群 / 3DGS / GLB 表示は現在未対応。将来的な補完対象</p>
-          </div>
-        </div>
-      </section>
 
       <section class="card">
         <h2>📚 関連リンク</h2>
