@@ -241,6 +241,72 @@ strong {
   margin: 0;
 }
 
+.version-badge {
+  display: inline-block;
+  background: #28a745;
+  color: white;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.4em;
+  vertical-align: middle;
+  margin-left: 10px;
+  font-weight: 600;
+}
+
+.demo-link {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 15px 30px;
+  text-decoration: none;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 1.05em;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.demo-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+  text-decoration: none;
+}
+
+.url-box {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #28a745;
+  margin: 15px 0;
+}
+
+.url-box h3 {
+  color: #28a745;
+  font-size: 1.2em;
+  margin: 0 0 10px;
+}
+
+.install-steps {
+  background: #fff8e1;
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #ffc107;
+  margin: 15px 0;
+}
+
+.install-steps h3 {
+  color: #b8860b;
+  font-size: 1.2em;
+  margin: 0 0 10px;
+}
+
+.install-steps ol {
+  margin-left: 20px;
+}
+
+.install-steps li {
+  margin: 10px 0;
+}
+
 @media (max-width: 720px) {
   body {
     padding: 12px;

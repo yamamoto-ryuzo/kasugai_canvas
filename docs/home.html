@@ -9,53 +9,92 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas 技術選定</h1>
-      <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定ドキュメント</p>
+      <h1>KASUGAI Canvas <span class="version-badge">v1.3.0</span></h1>
+      <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
-      <section class="card">
-        <h2>概要</h2>
-        <p>KASUGAI Canvas（<strong>CesiumJS + Three.js</strong>）は、ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムです。同じ 3D 地球空間で 2D 図面、3D モデル、点群、3DGS、地形タイル、XYZ タイルを重ねて描画します。</p>
-      </section>
-
-      <section class="card">
-        <h2>KASUGAI Canvas の核</h2>
-        <ul>
-          <li><strong>描画エンジン：</strong>CesiumJS + Three.js
-            <ul>
-              <li><strong>CesiumJS</strong>：3D 地球・3D Tiles・DEM ドレープ・XYZ 重ね合わせを同一 <code>Scene</code> で一括描画</li>
-              <li><strong>Three.js</strong>：点群、3DGS、GLB 等の高度な 3D 表現を補完</li>
-            </ul>
-          </li>
-          <li><strong>ロード・変換：</strong>loaders.gl + Web Worker</li>
-          <li><strong>目的：</strong>同じ 3D 地球空間で 2D 図面、3D モデル、点群、3DGS、地形タイル、XYZ タイルを重ねて描画</li>
-        </ul>
+      <section>
+        <h2>📋 概要</h2>
+        <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。2D 図面、3D モデル、点群、3DGS、地形タイル、XYZ タイルを同一の 3D 地球空間に重ねて描画できます。</p>
+        <p>本サイトでは、KASUGAI Canvas の技術選定に関する文書を公開しています。各章は左の目次から、または下のカードから開けます。</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 20px 0;">
+          <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" class="demo-link" target="_blank">🚀 ソースコードを見る</a>
+          <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/releases/latest" class="demo-link" target="_blank">🌐 最新リリースを見る</a>
+        </div>
       </section>
 
       <section>
-        <h2>主な章</h2>
+        <h2>✨ 主な機能</h2>
         <div class="features">
           <a href="01-データ.html" class="feature-card">
-            <h3>1. データ</h3>
-            <p>KASUGAI Canvas 向け 2D/3D/点群/3DGS/FGDB の最適フォーマット</p>
+            <h3>⚙️ データ</h3>
+            <p>2D/3D/点群/3DGS/FGDB など、KASUGAI Canvas で扱う最適フォーマットと配信構成</p>
           </a>
           <a href="02-ライブラリ.html" class="feature-card">
-            <h3>2. ライブラリ</h3>
-            <p>CesiumJS + Three.js + 補完ライブラリの選定と役割</p>
+            <h3>🗺️ ライブラリ</h3>
+            <p>CesiumJS、Three.js、deck.gl などの選定と役割分担</p>
           </a>
           <a href="03-システム構成.html" class="feature-card">
-            <h3>3. システム構成</h3>
-            <p>ローカルPC、サーバーレス、KASUGAI 組み込み構成</p>
+            <h3>🔧 システム構成</h3>
+            <p>ローカルPC、サーバーレス、KASUGAI 組み込み構成の設計</p>
           </a>
           <a href="04-実装システム.html" class="feature-card">
-            <h3>4. 実装システム</h3>
-            <p>現行実装、3 つのプラグイン、インスペクター設定</p>
+            <h3>🗺️ 実装システム</h3>
+            <p>現行の Rust/Axum + CesiumJS 実装、UI、インスペクター設定</p>
           </a>
           <a href="05-QGIS連携.html" class="feature-card">
-            <h3>5. QGIS・GDAL連携（構想）</h3>
-            <p>QGIS・GDALを CesiumJS 向けデータ変換・配信基盤として利用</p>
+            <h3>🔗 QGIS・GDAL連携</h3>
+            <p>QGIS・GDALをデータ変換・配信基盤とする構想</p>
           </a>
         </div>
+      </section>
+
+      <section>
+        <h2>� インストール</h2>
+        <div class="install-steps">
+          <h3>配布 ZIP / インストーラー</h3>
+          <ol>
+            <li>GitHub Releases から <strong>kasugai_canvas.zip</strong> または <strong>kasugai_canvas_setup.zip</strong> をダウンロード</li>
+            <li>ZIP は任意のフォルダに展開、インストーラーはウィザードに従って <code>C:\kasugai\kasugai_canvas</code> へインストール</li>
+            <li>同梱の <code>kasugai_canvas.exe</code> を実行するか、ショートカットから起動</li>
+            <li>既定でブラウザが開き、KASUGAI Canvas が起動します</li>
+          </ol>
+        </div>
+      </section>
+
+      <section>
+        <h2>📖 使い方</h2>
+        <div class="url-box">
+          <h3>開発起動</h3>
+          <pre><code>cargo run --manifest-path server\Cargo.toml</code></pre>
+          <p>ブラウザで <code>http://127.0.0.1:8510</code> を開いてください。インスペクター設定は <code>projects/&lt;project&gt;/kasugai_canvas.config</code> に保存されます。</p>
+        </div>
+        <div class="url-box">
+          <h3>リリースビルド</h3>
+          <pre><code>python run.py -B</code></pre>
+          <p>配布用 ZIP と、NSIS が利用可能な場合はインストーラーを <code>download\</code> に作成します。</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>🛠️ 開発について</h2>
+        <ul>
+          <li><strong>バージョン：</strong>v1.3.0（正本は <code>server\Cargo.toml</code>）</li>
+          <li><strong>バックエンド：</strong>Rust / Axum（<code>127.0.0.1:8510</code>）</li>
+          <li><strong>フロントエンド：</strong>CesiumJS + Three.js + deck.gl</li>
+          <li><strong>データパイプライン：</strong>loaders.gl + Web Worker / sql.js + ogr2ogr</li>
+          <li><strong>対応形式：</strong>GeoJSON、XYZ、3D Tiles、GLB、PLY/LAS、EPT、GPKG、FGDB など</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>📚 関連リンク</h2>
+        <ul>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">GitHub リポジトリ</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/releases" target="_blank">GitHub Releases</a></li>
+          <li><a href="https://re-earth-geo-suite.vercel.app/" target="_blank">Re:Earth GeoSuite</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/blob/main/CHANGELOG.md" target="_blank">CHANGELOG</a></li>
+        </ul>
       </section>
     </main>
   </div>
