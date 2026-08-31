@@ -25,7 +25,7 @@ DOWNLOAD_DIR = ROOT / "download"
 DOWNLOAD_ZIP = DOWNLOAD_DIR / "kasugai_canvas.zip"
 DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
 DOWNLOAD_INSTALLER_ZIP = DOWNLOAD_DIR / "kasugai_canvas_setup.zip"
-SAMPLE_CONFIG = ROOT / "installer" / "kasugai_canvas.config"
+SAMPLE_CONFIG = ROOT / "installer" / "kasugai_canvas.kasc"
 SAMPLE_PROJECTS = ROOT / "installer" / "projects"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
 
@@ -223,7 +223,7 @@ def run_dev() -> None:
     _print_access_url()
     debug_dir = SERVER_DIR / "target" / "debug"
     debug_dir.mkdir(parents=True, exist_ok=True)
-    dev_config = debug_dir / "kasugai_canvas.config"
+    dev_config = debug_dir / "kasugai_canvas.kasc"
     if not dev_config.exists() and SAMPLE_CONFIG.exists():
         shutil.copy(SAMPLE_CONFIG, dev_config)
     if SAMPLE_PROJECTS.exists():

@@ -26,7 +26,7 @@
 
 ## バージョン管理
 
-現在のバージョンは **2.0.3** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
+現在のバージョンは **2.0.4** です。バージョン番号の正本は`server\Cargo.toml`の`package.version`とし、変更履歴は[CHANGELOG.md](CHANGELOG.md)で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -73,7 +73,7 @@ C:\kasugai\kasugai_canvas
 
 インストール完了画面では、次のチェックボックスからデスクトップショートカットの作成を選択できます。スタートメニューのショートカットは常に作成されます。各ショートカットおよびインストール完了時の起動では、ブラウザで KASUGAI Canvas を開きます。
 
-配布 ZIP とインストーラーには `installer\kasugai_canvas.config` を初期サンプル設定として含めます。インストーラーはインストール先へ配置し、既存の `kasugai_canvas.config` は上書きしません。ショートカット起動時に Axum サーバーがすでに起動している場合は、既存サーバーを再利用してデフォルトブラウザを開きます。
+配布 ZIP とインストーラーには `installer\kasugai_canvas.kasc` を初期サンプル設定として含めます。インストーラーはインストール先へ配置し、既存の `kasugai_canvas.kasc` は上書きしません。ショートカット起動時に Axum サーバーがすでに起動している場合は、既存サーバーを再利用してデフォルトブラウザを開きます。
 
 ```text
 Create desktop shortcut
@@ -99,7 +99,7 @@ python run.py -B          # リリースビルド + download\kasugai_canvas.zip
 python run.py --release   # リリース版を起動
 ```
 
-インスペクターで「登録」した設定は、選択中のプロジェクトの`projects\\<project>\\kasugai_canvas.config`へ保存され、次回起動時に自動で復元されます。既存のルート設定ファイルしかない環境では、初回起動時に`projects\\default`へ移行されます。
+インスペクターで「登録」した設定は、選択中のプロジェクトの`projects\\<project>\\kasugai_canvas.kasc`へ保存され、次回起動時に自動で復元されます。既存のルート設定ファイルしかない環境では、初回起動時に`projects\\default`へ移行されます。
 
 インストール版とポータブル版は同じフォルダ構成で、実行ファイルと同じ場所の`projects`を使用します。
 
@@ -109,10 +109,10 @@ kasugai_canvas/
 └─ projects/
    ├─ default/
    │  ├─ project.json
-   │  └─ kasugai_canvas.config
+   │  └─ kasugai_canvas.kasc
    └─ <project>/
       ├─ project.json
-      └─ kasugai_canvas.config
+      └─ kasugai_canvas.kasc
 ```
 
 プロジェクトは起動後の Layers パネルから切り替えられます。配布 ZIP にも `projects/default` のサンプルプロジェクトを同梱します。

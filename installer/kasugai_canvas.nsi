@@ -4,7 +4,7 @@
   !define BUILD_EXE "..\server\target\release\kasugai_canvas.exe"
 !endif
 !ifndef SAMPLE_CONFIG
-  !define SAMPLE_CONFIG "kasugai_canvas.config"
+  !define SAMPLE_CONFIG "kasugai_canvas.kasc"
 !endif
 !ifndef SAMPLE_PROJECTS
   !define SAMPLE_PROJECTS "..\installer\projects"
@@ -12,7 +12,7 @@
 
 !define APP_NAME "KASUGAI Canvas"
 !define APP_EXE "kasugai_canvas.exe"
-!define CONFIG_FILE_NAME "kasugai_canvas.config"
+!define CONFIG_FILE_NAME "kasugai_canvas.kasc"
 !define PROJECT_MANIFEST_FILE_NAME "project.json"
 !define INSTALL_DIR "C:\kasugai\kasugai_canvas"
 
@@ -27,10 +27,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "2.0.3.0"
+VIProductVersion "2.0.4.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "2.0.3"
+VIAddVersionKey "FileVersion" "2.0.4"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -78,6 +78,13 @@ default_manifest_exists:
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "DisplayName" "${APP_NAME}"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "UninstallString" "$INSTDIR\uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "InstallLocation" "$INSTDIR"
+
+  WriteRegStr HKCU "Software\Classes\.kasc" "" "KASUGAI.Canvas"
+  WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas" "" "KASUGAI Canvas Inspector"
+  WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas\DefaultIcon" "" "$INSTDIR\${APP_EXE},0"
+  WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas\shell\open\command" "" '"$INSTDIR\${APP_EXE}" "--open-browser" "%1"'
+  ; Windows 8+ ファイルの関連付け反映
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)r'
 SectionEnd
 
 Function CreateDesktopShortcut
@@ -92,4 +99,6 @@ Section "Uninstall"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas"
+  DeleteRegKey HKCU "Software\Classes\KASUGAI.Canvas"
+  DeleteRegKey HKCU "Software\Classes\.kasc"
 SectionEnd

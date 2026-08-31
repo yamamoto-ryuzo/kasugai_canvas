@@ -21,10 +21,10 @@
       描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は
       V2.0.0 では未対応です。</p>
       <p>開発起動時は
-      <code>projects/default/kasugai_canvas.config</code>
+      <code>projects/default/kasugai_canvas.kasc</code>
       を初期サンプルとして読み込みます。配布 ZIP と Windows
       インストーラーには東京都の表示例を含む
-      <code>kasugai_canvas.config</code> が同梱されます。</p>
+      <code>kasugai_canvas.kasc</code> が同梱されます。</p>
       <ul>
       <li><a
       href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip">Windows
@@ -521,7 +521,7 @@
       <p>ユーザーがテキストエリアに入力したレイヤー・ベースマップ・カメラプリセットを読み込み、CesiumJS
       Viewer へ反映します。設定の読み込みはブラウザ内で完結し、HTTP
       通信は行いません。</p>
-      <pre class="text"><code>kasugai_canvas.config（テキスト形式。1行に `種類: 値` を記述）
+      <pre class="text"><code>kasugai_canvas.kasc（テキスト形式。1行に `種類: 値` を記述）
   base:    ベースマップタイトル | URL | アトリビューション | option=...
   xyz:     レイヤータイトル | URL | アトリビューション | option=...
   3dtiles: レイヤータイトル | URL | option=...

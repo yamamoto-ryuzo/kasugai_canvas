@@ -2450,6 +2450,20 @@ function setupEvents() {
     }
   });
 
+  document.querySelector("#export-inspector")?.addEventListener("click", () => {
+    const text = document.querySelector("#inspector-input").value;
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentProjectId || "kasugai_canvas"}.kasc`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setInspectorStatus(".kasc ファイルをエクスポートしました。");
+  });
+
   document.querySelector("#project-select")?.addEventListener("change", async event => {
     currentProjectId = event.target.value;
     const params = new URLSearchParams(window.location.search);

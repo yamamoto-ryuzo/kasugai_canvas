@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [2.0.4] - 2026-08-31
+
+### Added
+
+- インスペクター設定を `.kasc` ファイルとしてエクスポート
+- `.kasc` ファイルを Windows の関連ファイルとして開けるようレジストリ登録
+
+### Changed
+
+- プロジェクト・ルート設定ファイルを `kasugai_canvas.config` から `kasugai_canvas.kasc` に統一
+- 古い `.config` ファイルは `.kasc` 優先で読み込むようフォールバック対応
+
 ## [2.0.3] - 2026-08-30
 
 ### Added

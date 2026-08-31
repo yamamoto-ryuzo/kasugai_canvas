@@ -20,9 +20,9 @@ const INDEX_HTML: &str = include_str!("../../web/index.html");
 const APP_JS: &str = include_str!("../../web/app.js");
 const STYLES_CSS: &str = include_str!("../../web/styles.css");
 const FAVICON_ICO: &[u8] = include_bytes!("../../web/favicon.ico");
-const CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
+const CONFIG_FILE_NAME: &str = "kasugai_canvas.kasc";
 const PROJECTS_DIRECTORY_NAME: &str = "projects";
-const PROJECT_CONFIG_FILE_NAME: &str = "kasugai_canvas.config";
+const PROJECT_CONFIG_FILE_NAME: &str = "kasugai_canvas.kasc";
 const PROJECT_MANIFEST_FILE_NAME: &str = "project.json";
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const LATEST_JSON_URLS: [&str; 1] = [
@@ -311,17 +311,28 @@ async fn get_project_config(
     Path(project_id): Path<String>,
 ) -> Result<Response, (StatusCode, String)> {
     let path = project_config_path(&state, &project_id)?;
-    match std::fs::read_to_string(path) {
+    match std::fs::read_to_string(&path) {
         Ok(config) => Ok((
             [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
             config,
         )
             .into_response()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok((
-            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
-            String::new(),
-        )
-            .into_response()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(legacy) = path.extension().map(|_| path.with_extension("config")) {
+                if let Ok(config) = std::fs::read_to_string(&legacy) {
+                    return Ok((
+                        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                        config,
+                    )
+                        .into_response());
+                }
+            }
+            Ok((
+                [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                String::new(),
+            )
+                .into_response())
+        }
         Err(error) => Err(internal_error(error)),
     }
 }
@@ -1012,8 +1023,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::builder()
         .user_agent(concat!("kasugai_canvas/", env!("CARGO_PKG_VERSION")))
         .build()?;
+    let mut open_browser_requested = false;
+    let mut kasc_path: Option<PathBuf> = None;
+    for arg in std::env::args().skip(1) {
+        if arg == "--open-browser" {
+            open_browser_requested = true;
+        } else if !arg.starts_with('-') {
+            let path = PathBuf::from(&arg);
+            if path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map_or(false, |ext| ext.eq_ignore_ascii_case("kasc"))
+            {
+                kasc_path = Some(if path.is_absolute() {
+                    path
+                } else {
+                    std::env::current_dir()?.join(path)
+                });
+            }
+        }
+    }
+
+    let is_kasc_arg = kasc_path.is_some();
+    let config_path = kasc_path.unwrap_or_else(|| executable_directory.join(CONFIG_FILE_NAME));
+    if !is_kasc_arg {
+        let old_config_path = executable_directory.join("kasugai_canvas.config");
+        if !config_path.exists() && old_config_path.exists() {
+            let _ = std::fs::copy(&old_config_path, &config_path);
+        }
+    }
     let state = AppState {
-        config_path: Arc::new(executable_directory.join(CONFIG_FILE_NAME)),
+        config_path: Arc::new(config_path.clone()),
         projects_path: Arc::new(projects_path),
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
         shutdown: Arc::new(Notify::new()),
@@ -1054,9 +1094,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("KASUGAI Canvas: http://{address}");
     println!(
         "Config: {}",
-        executable_directory.join(CONFIG_FILE_NAME).display()
+        config_path.display()
     );
-    let open_browser_requested = std::env::args().any(|argument| argument == "--open-browser");
+    // open_browser_requested は上で解析済み
     let listener = if open_browser_requested {
         let mut listener = None;
         for attempt in 0..60 {
