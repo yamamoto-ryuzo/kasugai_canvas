@@ -84,6 +84,7 @@ let vectorSearchData = null;
 const activePrimitives = [];
 const drapeTerrainSources = { dem: true, tiles3d: false };
 const drapeLayers = { xyz: true, geojson: true };
+let geojsonPrimitiveDrape = false;
 const demSources = {
   reearth: {
     title: "Re:Earth Terrain (標高 / MSL, level 19)",
@@ -1123,6 +1124,17 @@ async function refreshLayers() {
       try {
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
         if (!clamp && !item.visible) continue;
+        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive) {
+          let heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+          if (drapeTerrainSources.dem && drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+          else if (drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_3D_TILE;
+          else if (drapeTerrainSources.dem) heightReference = Cesium.HeightReference.CLAMP_TO_TERRAIN;
+          const primitive = await Cesium.GeoJsonPrimitive.fromUrl(item.url, { heightReference, scene: viewer.scene });
+          primitive.show = item.visible;
+          viewer.scene.primitives.add(primitive);
+          activePrimitives.push(primitive);
+          continue;
+        }
         let classification;
         if (clamp) {
           if (drapeTerrainSources.dem && drape3DTiles) classification = Cesium.ClassificationType.BOTH;
@@ -1562,6 +1574,11 @@ function setupEvents() {
 
   document.querySelector("#drape-geojson").addEventListener("change", event => {
     drapeLayers.geojson = event.target.checked;
+    refreshLayers();
+  });
+
+  document.querySelector("#drape-geojson-primitive")?.addEventListener("change", event => {
+    geojsonPrimitiveDrape = event.target.checked;
     refreshLayers();
   });
 
@@ -2555,6 +2572,31 @@ function setupEvents() {
         th.style.borderBottom = "1px solid #cbd9de";
         const td = document.createElement("td");
         const value = picked.getProperty(name);
+        td.textContent = value === undefined ? "" : String(value);
+        td.style.padding = "3px 6px";
+        td.style.borderBottom = "1px solid #cbd9de";
+        tr.append(th, td);
+        table.append(tr);
+      });
+      attr.append(table);
+      return;
+    }
+
+    if (Cesium.GeoJsonPrimitive && picked.parentPrimitive instanceof Cesium.GeoJsonPrimitive && picked.properties) {
+      delete attr.dataset.layerId;
+      delete attr.dataset.layerTitle;
+      const table = document.createElement("table");
+      table.style.width = "100%";
+      table.style.borderCollapse = "collapse";
+      table.style.fontSize = "12px";
+      Object.entries(picked.properties).forEach(([key, value]) => {
+        const tr = document.createElement("tr");
+        const th = document.createElement("th");
+        th.textContent = key;
+        th.style.textAlign = "left";
+        th.style.padding = "3px 6px";
+        th.style.borderBottom = "1px solid #cbd9de";
+        const td = document.createElement("td");
         td.textContent = value === undefined ? "" : String(value);
         td.style.padding = "3px 6px";
         td.style.borderBottom = "1px solid #cbd9de";

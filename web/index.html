@@ -6,8 +6,8 @@
     <title>KASUGAI Canvas</title>
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="stylesheet" href="/styles.css" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.144.0/Build/Cesium/Widgets/widgets.css" crossorigin="anonymous" />
-    <script src="https://cdn.jsdelivr.net/npm/cesium@1.144.0/Build/Cesium/Cesium.js" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" crossorigin="anonymous" />
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js" crossorigin="anonymous"></script>
     <script type="importmap">
       {
         "imports": {
@@ -128,6 +128,8 @@
                 <span class="field-label">ドレープを適用するレイヤー</span>
                 <label><input id="drape-xyz" type="checkbox" checked /> XYZ</label>
                 <label><input id="drape-geojson" type="checkbox" checked /> GeoJSON</label>
+                <label><input id="drape-geojson-primitive" type="checkbox" /> GeoJSON 高速ドレープ (実験的)</label>
+                <p class="hint">CesiumJS 1.145 の GeoJsonPrimitive を使い、GeoJSON を高品質・高速に地形や 3D Tiles にドレープします。有効時はベクター検索の対象外になります。</p>
                 <div class="section-title inspector-title">インスペクター</div>
                 <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
                 <button id="apply-inspector" type="button">登録</button>
