@@ -782,6 +782,7 @@ class GsiDemTerrainProvider {
     this.availability = {
       isTileAvailable: (level, x, y) => level <= this.maximumLevel && x >= 0 && y >= 0,
     };
+    this._tileCache = new Map();
     this.errorEvent = new Cesium.Event();
     this.credit = new Cesium.Credit("出典：国土地理院(標高タイル)");
     this.ready = true;
@@ -805,10 +806,16 @@ class GsiDemTerrainProvider {
       const tx = x >> shift;
       const ty = y >> shift;
       for (const layer of gsiLayerOrder(zz)) {
+        const key = `${layer.id}/${zz}/${tx}/${ty}`;
+        if (this._tileCache.has(key)) {
+          const cached = this._tileCache.get(key);
+          if (cached) return { pixels: cached, z: zz, x: tx, y: ty };
+          continue;
+        }
         const url = `https://cyberjapandata.gsi.go.jp/xyz/${layer.id}/${zz}/${tx}/${ty}.png`;
         try {
           const response = await fetch(url, { mode: "cors" });
-          if (!response.ok) continue;
+          if (!response.ok) { this._tileCache.set(key, null); continue; }
           const bitmap = await createImageBitmap(await response.blob());
           const canvas = document.createElement("canvas");
           canvas.width = 256;
@@ -817,7 +824,9 @@ class GsiDemTerrainProvider {
           if (!ctx) { bitmap.close(); return null; }
           ctx.drawImage(bitmap, 0, 0);
           bitmap.close();
-          return { pixels: ctx.getImageData(0, 0, 256, 256).data, z: zz, x: tx, y: ty };
+          const pixels = ctx.getImageData(0, 0, 256, 256).data;
+          this._tileCache.set(key, pixels);
+          return { pixels, z: zz, x: tx, y: ty };
         } catch (error) {
           // ネットワーク断などは次のレイヤーへ
         }
@@ -850,9 +859,9 @@ class GsiDemTerrainProvider {
     let z = Math.min(level + 1, this.maxMercatorZ);
     let xMin, xMax, yMin, yMax;
     for (; z >= 0; z -= 1) {
-      xMin = Math.floor(gsiMercatorX(west, z) / 256);
+      xMin = Math.max(0, Math.floor(gsiMercatorX(west, z) / 256));
       xMax = Math.min((1 << z) - 1, Math.floor(gsiMercatorX(east - 1e-9, z) / 256));
-      yMin = Math.floor(gsiMercatorY(north, z) / 256);
+      yMin = Math.max(0, Math.floor(gsiMercatorY(north, z) / 256));
       yMax = Math.min((1 << z) - 1, Math.floor(gsiMercatorY(south, z) / 256));
       if ((xMax - xMin + 1) * (yMax - yMin + 1) <= 9) break;
     }
