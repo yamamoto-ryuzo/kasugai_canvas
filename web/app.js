@@ -94,13 +94,13 @@ const demSources = {
     title: "Re:Earth Terrain (楕円体高 / WGS84, level 14)",
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
-  gsi: {
-    title: "地理院 標高タイル (日本域 / 標高MSL基準, DEM1A〜10B)",
-    gsiDem: true,
+  gsi5m: {
+    title: "地理院 5mメッシュ (DEM5系 / 標高MSL基準)",
+    gsiLayers: ["dem5a_png", "dem5b_png", "dem5c_png"],
   },
-  "japan-auto": {
-    title: "自動 (日本域は地理院高精度 / 標高MSL基準)",
-    gsiDem: true,
+  gsi1m: {
+    title: "地理院 1mメッシュ (DEM1A / 航空レーザー / 標高MSL基準)",
+    gsiLayers: ["dem1a_png"],
   },
 };
 let selectedDemSource = "reearth-ellipsoid";
@@ -739,16 +739,7 @@ const GSI_DEM_LAYERS = [
   { id: "dem_png", maxZ: 14 },
   { id: "demgm_png", maxZ: 8 },
 ];
-// ズームレベルに応じた試行順(そのズームで必要な解像度に近いレイヤーから試す)
-function gsiLayerOrder(z) {
-  const byId = Object.fromEntries(GSI_DEM_LAYERS.map(layer => [layer.id, layer]));
-  const order =
-    z >= 16 ? ["dem1a_png", "dem5a_png", "dem5b_png", "dem5c_png", "dem_png", "demgm_png"] :
-    z === 15 ? ["dem5a_png", "dem5b_png", "dem5c_png", "dem1a_png", "dem_png", "demgm_png"] :
-    z >= 9 ? ["dem_png", "dem5a_png", "dem5b_png", "dem5c_png", "dem1a_png", "demgm_png"] :
-             ["dem_png", "demgm_png", "dem5a_png", "dem5b_png", "dem5c_png", "dem1a_png"];
-  return order.map(id => byId[id]).filter(layer => layer && layer.maxZ >= z);
-}
+const GSI_LAYER_BY_ID = Object.fromEntries(GSI_DEM_LAYERS.map(layer => [layer.id, layer]));
 
 const GSI_MERCATOR_MAX_LAT = 85.05112878;
 const GSI_INVALID_PIXEL = 8388608; // 2^23: (R,G,B) = (128,0,0)
@@ -773,6 +764,7 @@ class GsiDemTerrainProvider {
   constructor(options = {}) {
     this.tilingScheme = new Cesium.GeographicTilingScheme();
     this.outputSize = options.outputSize || 128;
+    this.layers = (options.layers || ["dem5a_png"]).map(id => GSI_LAYER_BY_ID[id]).filter(Boolean);
     this.hasVertexNormals = false;
     this.hasWaterMask = false;
     this.maximumLevel = 16;
@@ -831,8 +823,8 @@ class GsiDemTerrainProvider {
       const shift = z - zz;
       const tx = x >> shift;
       const ty = y >> shift;
-      // 同一ズームのレイヤーは並列で取得し、優先順位の高い成功分を採用
-      const layers = gsiLayerOrder(zz);
+      // 選択レイヤーを並列で取得し、優先順位の高い成功分を採用
+      const layers = this.layers.filter(layer => layer.maxZ >= zz);
       const results = await Promise.all(layers.map(layer => this._fetchSourceTile(layer.id, zz, tx, ty)));
       for (const pixels of results) {
         if (pixels) return { pixels, z: zz, x: tx, y: ty };
@@ -1188,9 +1180,9 @@ async function refreshLayers() {
       console.warn("DEM の読み込みに失敗しました:", error);
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
     }
-  } else if (demSource?.gsiDem) {
+  } else if (demSource?.gsiLayers) {
     try {
-      viewer.terrainProvider = new GsiDemTerrainProvider();
+      viewer.terrainProvider = new GsiDemTerrainProvider({ layers: demSource.gsiLayers });
     } catch (error) {
       console.warn("地理院 DEM の初期化に失敗しました:", error);
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
