@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.0.0] - 2026-09-06
+
+### Added
+
+- ヘルプサイトにデモサイト（`/web/`）へのリンクを追加
+
+### Changed
+
+- Rust サーバーを静的ファイル配信のみの最小構成に再構築し、これまでのファイル保存 API 等を廃止
+- ヘルプドキュメントを `docs/` からリポジトリルートへ移動し、GitHub Pages 用 `.nojekyll` を追加
+- README・インストーラー・サンプルプロジェクトを新しい静的構成に合わせて更新
+
 ## [2.0.5] - 2026-09-03
 
 ### Added

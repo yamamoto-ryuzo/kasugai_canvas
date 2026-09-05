@@ -143,7 +143,7 @@ NSIS が未インストールの場合は ZIP の作成まで実行し、イン�
 
 ## バージョン管理
 
-現在のバージョンは **2.0.5** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **3.0.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
