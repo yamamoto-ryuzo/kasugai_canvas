@@ -95,8 +95,13 @@ const demSources = {
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
   gsi: {
-    title: "地理院 標高タイル (日本域, DEM1A〜10B)",
+    title: "地理院 標高タイル (日本域 / 標高MSL基準, DEM1A〜10B)",
     gsiDem: true,
+  },
+  "japan-auto": {
+    title: "自動 (日本域は地理院高精度 / 標高MSL基準)",
+    hybrid: true,
+    url: "https://terrain.reearth.land/cesium-mesh/elevation",
   },
 };
 let selectedDemSource = "reearth-ellipsoid";
@@ -735,6 +740,17 @@ const GSI_DEM_LAYERS = [
   { id: "dem_png", maxZ: 14 },
   { id: "demgm_png", maxZ: 8 },
 ];
+// ズームレベルに応じた試行順(そのズームで必要な解像度に近いレイヤーから試す)
+function gsiLayerOrder(z) {
+  const byId = Object.fromEntries(GSI_DEM_LAYERS.map(layer => [layer.id, layer]));
+  const order =
+    z >= 16 ? ["dem1a_png", "dem5a_png", "dem5b_png", "dem5c_png", "dem_png", "demgm_png"] :
+    z === 15 ? ["dem5a_png", "dem5b_png", "dem5c_png", "dem1a_png", "dem_png", "demgm_png"] :
+    z >= 9 ? ["dem_png", "dem5a_png", "dem5b_png", "dem5c_png", "dem1a_png", "demgm_png"] :
+             ["dem_png", "demgm_png", "dem5a_png", "dem5b_png", "dem5c_png", "dem1a_png"];
+  return order.map(id => byId[id]).filter(layer => layer && layer.maxZ >= z);
+}
+
 const GSI_MERCATOR_MAX_LAT = 85.05112878;
 const GSI_INVALID_PIXEL = 8388608; // 2^23: (R,G,B) = (128,0,0)
 
@@ -788,8 +804,7 @@ class GsiDemTerrainProvider {
       const shift = z - zz;
       const tx = x >> shift;
       const ty = y >> shift;
-      for (const layer of GSI_DEM_LAYERS) {
-        if (layer.maxZ < zz) continue;
+      for (const layer of gsiLayerOrder(zz)) {
         const url = `https://cyberjapandata.gsi.go.jp/xyz/${layer.id}/${zz}/${tx}/${ty}.png`;
         try {
           const response = await fetch(url, { mode: "cors" });
@@ -872,6 +887,54 @@ class GsiDemTerrainProvider {
         isBigEndian: false,
       },
     });
+  }
+}
+
+const JAPAN_BBOX = { west: 122, south: 20, east: 155, north: 47 };
+
+class JapanHybridTerrainProvider {
+  constructor(globalProvider, gsiProvider) {
+    this._global = globalProvider;
+    this._gsi = gsiProvider;
+    this.tilingScheme = globalProvider.tilingScheme;
+    this.errorEvent = globalProvider.errorEvent || new Cesium.Event();
+    this.credit = globalProvider.credit;
+    this.hasVertexNormals = false;
+    this.hasWaterMask = globalProvider.hasWaterMask || false;
+    this.availability = globalProvider.availability;
+    this.ready = true;
+  }
+
+  _useGsi(x, y, level) {
+    const rect = this.tilingScheme.tileXYToRectangle(x, y, level);
+    const west = Cesium.Math.toDegrees(rect.west);
+    const east = Cesium.Math.toDegrees(rect.east);
+    const south = Cesium.Math.toDegrees(rect.south);
+    const north = Cesium.Math.toDegrees(rect.north);
+    return east >= JAPAN_BBOX.west && west <= JAPAN_BBOX.east
+      && north >= JAPAN_BBOX.south && south <= JAPAN_BBOX.north;
+  }
+
+  _pick(x, y, level) {
+    return this._useGsi(x, y, level) ? this._gsi : this._global;
+  }
+
+  getLevelMaximumGeometricError(level) {
+    return this._global.getLevelMaximumGeometricError(level);
+  }
+
+  getTileDataAvailable(x, y, level) {
+    const provider = this._pick(x, y, level);
+    return provider.getTileDataAvailable ? provider.getTileDataAvailable(x, y, level) : undefined;
+  }
+
+  loadTileDataAvailability(x, y, level) {
+    const provider = this._pick(x, y, level);
+    return provider.loadTileDataAvailability ? provider.loadTileDataAvailability(x, y, level) : undefined;
+  }
+
+  requestTileGeometry(x, y, level, request) {
+    return this._pick(x, y, level).requestTileGeometry(x, y, level, request);
   }
 }
 
@@ -1153,7 +1216,9 @@ async function refreshLayers() {
               provider.readyPromise.then(() => resolve(provider)).catch(reject);
             }
           });
-      viewer.terrainProvider = terrainProvider;
+      viewer.terrainProvider = demSource.hybrid
+        ? new JapanHybridTerrainProvider(terrainProvider, new GsiDemTerrainProvider())
+        : terrainProvider;
     } catch (error) {
       console.warn("DEM の読み込みに失敗しました:", error);
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
