@@ -4,6 +4,26 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.1.0] - 2026-09-06
+
+### Added
+
+- 地形(DEM)ソース選択を追加: Re:Earth Terrain(楕円体高 / 標高)と国土地理院 DEM(5m+10m メッシュ、1m メッシュ)を選択可能に
+- 地理院 5m+10m メッシュ: ズームレベルに応じて z14 以下は DEM10B(10m)、z15 以上は DEM5系(5m)を自動選択
+
+### Changed
+
+- 地理院標高タイル用の独自 TerrainProvider を実装(Geographic タイルをメルカトル XYZ 標高 PNG から生成)
+- 高さ基準の表記を「TP基準(東京湾平均海面)」に変更し、WGS84 楕円体高との差(約30〜40m)をヘルプに明記
+- GSI ベースマップ・空中写真に `maxZoom` を設定し、未提供ズームへの不要なリクエストを抑制
+
+### Fixed
+
+- Re:Earth terrain の `msl` エンドポイント 404 を `elevation` へ修正
+- カスタム TerrainProvider の `getTileDataAvailable` 未実装による Cesium クラッシュを修正
+- GSI DEM の負のタイル番号(y=-1)リクエストを修正
+- GSI DEM の多段フォールバックを廃止し、要求ズームのみの並列取得+キャッシュで大幅に高速化
+
 ## [3.0.0] - 2026-09-06
 
 ### Added
