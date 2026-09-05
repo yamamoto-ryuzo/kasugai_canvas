@@ -94,15 +94,6 @@ const demSources = {
     title: "Re:Earth Terrain (楕円体高 / WGS84, level 14)",
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
-  terrarium: {
-    title: "Terrarium DEM (AWS, level 15)",
-    elevationData: "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png",
-    elevationDecoder: { rScaler: 256, gScaler: 1, bScaler: 1 / 256, offset: -32768 },
-    tileSize: 256,
-    maximumLevel: 15,
-    attribution: "Mapzen Terrarium · AWS",
-    attributionUrl: "https://registry.opendata.aws/terrain-tiles/",
-  },
 };
 let selectedDemSource = "reearth-ellipsoid";
 const DEFAULT_MAXIMUM_LEVEL = 25;
@@ -732,89 +723,6 @@ async function ensureDrawnRouteFlyPath() {
   }
 }
 
-function formatTileUrl(template, index) {
-  return template
-    .replaceAll("{z}", String(index.z))
-    .replaceAll("{x}", String(index.x))
-    .replaceAll("{y}", String(index.y));
-}
-
-class TerrariumTerrainProvider {
-  constructor(options) {
-    this.tilingScheme = new Cesium.GeographicTilingScheme();
-    this.heightmapWidth = options.tileSize || 256;
-    this.heightmapHeight = options.tileSize || 256;
-    this.hasVertexNormals = false;
-    this.hasWaterMask = false;
-    this.elevationData = proxyTemplateUrl(options.elevationData);
-    this.elevationDecoder = options.elevationDecoder;
-    this.maximumLevel = options.maximumLevel || 15;
-    this.availability = {
-      isTileAvailable: (level, x, y) => level <= this.maximumLevel && x >= 0 && y >= 0,
-    };
-    this.errorEvent = new Cesium.Event();
-    this.credit = new Cesium.Credit(options.attribution || "");
-    this.ready = true;
-  }
-
-  getLevelMaximumGeometricError(level) {
-    return 156543.03392 / (1 << level);
-  }
-
-  getTileDataAvailable(x, y, level) {
-    return this.availability.isTileAvailable(level, x, y);
-  }
-
-  loadTileDataAvailability() {
-    return undefined;
-  }
-
-  requestTileGeometry(x, y, level, request) {
-    if (level > this.maximumLevel) return Promise.reject(new Error("Tile out of range"));
-    const url = formatTileUrl(this.elevationData, { x, y, z: level });
-    return fetch(url, { mode: "cors" })
-      .then(async response => {
-        if (!response.ok) throw new Error(`Terrain tile request failed (${response.status}): ${url}`);
-        return createImageBitmap(await response.blob());
-      })
-      .then(bitmap => {
-        const canvas = document.createElement("canvas");
-        canvas.width = this.heightmapWidth;
-        canvas.height = this.heightmapHeight;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        if (!ctx) throw new Error("Terrain sample canvas is unavailable");
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(bitmap, 0, 0, this.heightmapWidth, this.heightmapHeight);
-        bitmap.close();
-        const image = ctx.getImageData(0, 0, this.heightmapWidth, this.heightmapHeight);
-        const { rScaler, gScaler, bScaler, offset } = this.elevationDecoder;
-        const count = this.heightmapWidth * this.heightmapHeight;
-        const heights = new Float32Array(count);
-        for (let i = 0; i < count; i += 1) {
-          const offsetPixels = i * 4;
-          const r = image.data[offsetPixels];
-          const g = image.data[offsetPixels + 1];
-          const b = image.data[offsetPixels + 2];
-          heights[i] = r * rScaler + g * gScaler + b * bScaler + offset;
-        }
-        return new Cesium.HeightmapTerrainData({
-          buffer: heights,
-          width: this.heightmapWidth,
-          height: this.heightmapHeight,
-          childTileMask: level === this.maximumLevel ? 0 : 15,
-          structure: {
-            heightScale: 1.0,
-            heightOffset: 0.0,
-            elementsPerHeight: 1,
-            stride: 1,
-            elementMultiplier: 1.0,
-            isBigEndian: false,
-          },
-        });
-      });
-  }
-}
-
 function toHex(str) {
   return Array.from(new TextEncoder().encode(str), b => b.toString(16).padStart(2, "0")).join("");
 }
@@ -1096,13 +1004,6 @@ async function refreshLayers() {
       viewer.terrainProvider = terrainProvider;
     } catch (error) {
       console.warn("DEM の読み込みに失敗しました:", error);
-      viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
-    }
-  } else if (demSource?.elevationData) {
-    try {
-      viewer.terrainProvider = new TerrariumTerrainProvider(demSource);
-    } catch (error) {
-      console.warn("Terrarium DEM の初期化に失敗しました:", error);
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
     }
   } else {
