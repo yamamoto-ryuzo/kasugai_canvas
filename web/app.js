@@ -752,10 +752,21 @@ class TerrariumTerrainProvider {
     this.availability = {
       isTileAvailable: (level, x, y) => level <= this.maximumLevel && x >= 0 && y >= 0,
     };
+    this.errorEvent = new Cesium.Event();
+    this.credit = new Cesium.Credit(options.attribution || "");
+    this.ready = true;
   }
 
   getLevelMaximumGeometricError(level) {
     return 156543.03392 / (1 << level);
+  }
+
+  getTileDataAvailable(x, y, level) {
+    return this.availability.isTileAvailable(level, x, y);
+  }
+
+  loadTileDataAvailability() {
+    return undefined;
   }
 
   requestTileGeometry(x, y, level, request) {
