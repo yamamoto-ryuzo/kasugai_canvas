@@ -95,8 +95,8 @@ const demSources = {
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
   gsi5m: {
-    title: "地理院 5mメッシュ (DEM5系 / 標高TP基準)",
-    gsiLayers: ["dem5a_png", "dem5b_png", "dem5c_png"],
+    title: "地理院 5m+10mメッシュ (DEM5系+10B / 標高TP基準)",
+    gsiLayers: ["dem5a_png", "dem5b_png", "dem5c_png", "dem_png"],
   },
   gsi1m: {
     title: "地理院 1mメッシュ (DEM1A / 航空レーザー / 標高TP基準)",
@@ -732,10 +732,10 @@ async function ensureDrawnRouteFlyPath() {
 }
 
 const GSI_DEM_LAYERS = [
-  { id: "dem1a_png", maxZ: 17 },
-  { id: "dem5a_png", maxZ: 15 },
-  { id: "dem5b_png", maxZ: 15 },
-  { id: "dem5c_png", maxZ: 15 },
+  { id: "dem1a_png", maxZ: 17, clampZoom: true },
+  { id: "dem5a_png", maxZ: 15, minZ: 15, clampZoom: true },
+  { id: "dem5b_png", maxZ: 15, minZ: 15, clampZoom: true },
+  { id: "dem5c_png", maxZ: 15, minZ: 15, clampZoom: true },
   { id: "dem_png", maxZ: 14 },
   { id: "demgm_png", maxZ: 8 },
 ];
@@ -819,7 +819,8 @@ class GsiDemTerrainProvider {
 
   async _loadMercatorTile(x, y, z) {
     // フォールバックなし: 各レイヤーは自身の最大ズームにクランプして並列取得
-    const results = await Promise.all(this.layers.map(async layer => {
+    const layers = this.layers.filter(layer => z >= (layer.minZ || 0) && (layer.clampZoom || z <= layer.maxZ));
+    const results = await Promise.all(layers.map(async layer => {
       const zz = Math.min(z, layer.maxZ);
       const shift = z - zz;
       const tx = x >> shift;
