@@ -95,11 +95,11 @@ const demSources = {
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
   gsi5m: {
-    title: "地理院 5mメッシュ (DEM5系 / 標高MSL基準)",
+    title: "地理院 5mメッシュ (DEM5系 / 標高TP基準)",
     gsiLayers: ["dem5a_png", "dem5b_png", "dem5c_png"],
   },
   gsi1m: {
-    title: "地理院 1mメッシュ (DEM1A / 航空レーザー / 標高MSL基準)",
+    title: "地理院 1mメッシュ (DEM1A / 航空レーザー / 標高TP基準)",
     gsiLayers: ["dem1a_png"],
   },
 };
