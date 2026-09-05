@@ -799,36 +799,43 @@ class GsiDemTerrainProvider {
     return undefined;
   }
 
+  _fetchSourceTile(layerId, zz, tx, ty) {
+    const key = `${layerId}/${zz}/${tx}/${ty}`;
+    let promise = this._tileCache.get(key);
+    if (promise) return promise;
+    promise = (async () => {
+      try {
+        const url = `https://cyberjapandata.gsi.go.jp/xyz/${layerId}/${zz}/${tx}/${ty}.png`;
+        const response = await fetch(url, { mode: "cors" });
+        if (!response.ok) return null;
+        const bitmap = await createImageBitmap(await response.blob());
+        const canvas = document.createElement("canvas");
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (!ctx) { bitmap.close(); return null; }
+        ctx.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        return ctx.getImageData(0, 0, 256, 256).data;
+      } catch (error) {
+        return null;
+      }
+    })();
+    if (this._tileCache.size > 2000) this._tileCache.clear();
+    this._tileCache.set(key, promise);
+    return promise;
+  }
+
   async _loadMercatorTile(x, y, z) {
     for (let zz = z; zz >= Math.max(0, z - this.maxFetchZoomDrop); zz -= 1) {
       const shift = z - zz;
       const tx = x >> shift;
       const ty = y >> shift;
-      for (const layer of gsiLayerOrder(zz)) {
-        const key = `${layer.id}/${zz}/${tx}/${ty}`;
-        if (this._tileCache.has(key)) {
-          const cached = this._tileCache.get(key);
-          if (cached) return { pixels: cached, z: zz, x: tx, y: ty };
-          continue;
-        }
-        const url = `https://cyberjapandata.gsi.go.jp/xyz/${layer.id}/${zz}/${tx}/${ty}.png`;
-        try {
-          const response = await fetch(url, { mode: "cors" });
-          if (!response.ok) { this._tileCache.set(key, null); continue; }
-          const bitmap = await createImageBitmap(await response.blob());
-          const canvas = document.createElement("canvas");
-          canvas.width = 256;
-          canvas.height = 256;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          if (!ctx) { bitmap.close(); return null; }
-          ctx.drawImage(bitmap, 0, 0);
-          bitmap.close();
-          const pixels = ctx.getImageData(0, 0, 256, 256).data;
-          this._tileCache.set(key, pixels);
-          return { pixels, z: zz, x: tx, y: ty };
-        } catch (error) {
-          // ネットワーク断などは次のレイヤーへ
-        }
+      // 同一ズームのレイヤーは並列で取得し、優先順位の高い成功分を採用
+      const layers = gsiLayerOrder(zz);
+      const results = await Promise.all(layers.map(layer => this._fetchSourceTile(layer.id, zz, tx, ty)));
+      for (const pixels of results) {
+        if (pixels) return { pixels, z: zz, x: tx, y: ty };
       }
     }
     return null;
