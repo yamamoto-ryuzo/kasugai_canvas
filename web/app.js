@@ -769,7 +769,6 @@ class GsiDemTerrainProvider {
     this.hasWaterMask = false;
     this.maximumLevel = 16;
     this.maxMercatorZ = 17;
-    this.maxFetchZoomDrop = 6;
     this.availability = {
       isTileAvailable: (level, x, y) => level <= this.maximumLevel && x >= 0 && y >= 0,
     };
@@ -819,16 +818,17 @@ class GsiDemTerrainProvider {
   }
 
   async _loadMercatorTile(x, y, z) {
-    for (let zz = z; zz >= Math.max(0, z - this.maxFetchZoomDrop); zz -= 1) {
+    // フォールバックなし: 各レイヤーは自身の最大ズームにクランプして並列取得
+    const results = await Promise.all(this.layers.map(async layer => {
+      const zz = Math.min(z, layer.maxZ);
       const shift = z - zz;
       const tx = x >> shift;
       const ty = y >> shift;
-      // 選択レイヤーを並列で取得し、優先順位の高い成功分を採用
-      const layers = this.layers.filter(layer => layer.maxZ >= zz);
-      const results = await Promise.all(layers.map(layer => this._fetchSourceTile(layer.id, zz, tx, ty)));
-      for (const pixels of results) {
-        if (pixels) return { pixels, z: zz, x: tx, y: ty };
-      }
+      const pixels = await this._fetchSourceTile(layer.id, zz, tx, ty);
+      return pixels ? { pixels, z: zz, x: tx, y: ty } : null;
+    }));
+    for (const tile of results) {
+      if (tile) return tile;
     }
     return null;
   }
