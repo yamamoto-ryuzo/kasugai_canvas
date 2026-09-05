@@ -94,6 +94,10 @@ const demSources = {
     title: "Re:Earth Terrain (楕円体高 / WGS84, level 14)",
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
+  gsi: {
+    title: "地理院 標高タイル (日本域, DEM1A〜10B)",
+    gsiDem: true,
+  },
 };
 let selectedDemSource = "reearth-ellipsoid";
 const DEFAULT_MAXIMUM_LEVEL = 25;
@@ -723,6 +727,154 @@ async function ensureDrawnRouteFlyPath() {
   }
 }
 
+const GSI_DEM_LAYERS = [
+  { id: "dem1a_png", maxZ: 17 },
+  { id: "dem5a_png", maxZ: 15 },
+  { id: "dem5b_png", maxZ: 15 },
+  { id: "dem5c_png", maxZ: 15 },
+  { id: "dem_png", maxZ: 14 },
+  { id: "demgm_png", maxZ: 8 },
+];
+const GSI_MERCATOR_MAX_LAT = 85.05112878;
+const GSI_INVALID_PIXEL = 8388608; // 2^23: (R,G,B) = (128,0,0)
+
+function gsiMercatorX(lonDeg, z) {
+  return ((lonDeg + 180) / 360) * 256 * (1 << z);
+}
+
+function gsiMercatorY(latDeg, z) {
+  const clamped = Math.min(Math.max(latDeg, -GSI_MERCATOR_MAX_LAT), GSI_MERCATOR_MAX_LAT);
+  const rad = (clamped * Math.PI) / 180;
+  return ((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2) * 256 * (1 << z);
+}
+
+function gsiDecodeHeight(data, offset) {
+  const value = data[offset] * 65536 + data[offset + 1] * 256 + data[offset + 2];
+  if (value === GSI_INVALID_PIXEL) return 0;
+  return (value > GSI_INVALID_PIXEL ? value - 16777216 : value) * 0.01;
+}
+
+class GsiDemTerrainProvider {
+  constructor(options = {}) {
+    this.tilingScheme = new Cesium.GeographicTilingScheme();
+    this.outputSize = options.outputSize || 128;
+    this.hasVertexNormals = false;
+    this.hasWaterMask = false;
+    this.maximumLevel = 16;
+    this.maxMercatorZ = 17;
+    this.maxFetchZoomDrop = 6;
+    this.availability = {
+      isTileAvailable: (level, x, y) => level <= this.maximumLevel && x >= 0 && y >= 0,
+    };
+    this.errorEvent = new Cesium.Event();
+    this.credit = new Cesium.Credit("出典：国土地理院(標高タイル)");
+    this.ready = true;
+  }
+
+  getLevelMaximumGeometricError(level) {
+    return 156543.03392 / (1 << level);
+  }
+
+  getTileDataAvailable(x, y, level) {
+    return this.availability.isTileAvailable(level, x, y);
+  }
+
+  loadTileDataAvailability() {
+    return undefined;
+  }
+
+  async _loadMercatorTile(x, y, z) {
+    for (let zz = z; zz >= Math.max(0, z - this.maxFetchZoomDrop); zz -= 1) {
+      const shift = z - zz;
+      const tx = x >> shift;
+      const ty = y >> shift;
+      for (const layer of GSI_DEM_LAYERS) {
+        if (layer.maxZ < zz) continue;
+        const url = `https://cyberjapandata.gsi.go.jp/xyz/${layer.id}/${zz}/${tx}/${ty}.png`;
+        try {
+          const response = await fetch(url, { mode: "cors" });
+          if (!response.ok) continue;
+          const bitmap = await createImageBitmap(await response.blob());
+          const canvas = document.createElement("canvas");
+          canvas.width = 256;
+          canvas.height = 256;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) { bitmap.close(); return null; }
+          ctx.drawImage(bitmap, 0, 0);
+          bitmap.close();
+          return { pixels: ctx.getImageData(0, 0, 256, 256).data, z: zz, x: tx, y: ty };
+        } catch (error) {
+          // ネットワーク断などは次のレイヤーへ
+        }
+      }
+    }
+    return null;
+  }
+
+  _sampleHeight(tiles, lonDeg, latDeg) {
+    for (const tile of tiles) {
+      const gx = gsiMercatorX(lonDeg, tile.z) - tile.x * 256;
+      const gy = gsiMercatorY(latDeg, tile.z) - tile.y * 256;
+      if (gx < 0 || gy < 0 || gx >= 256 || gy >= 256) continue;
+      const px = Math.min(255, Math.floor(gx));
+      const py = Math.min(255, Math.floor(gy));
+      return gsiDecodeHeight(tile.pixels, (py * 256 + px) * 4);
+    }
+    return 0;
+  }
+
+  async requestTileGeometry(x, y, level) {
+    const size = this.outputSize;
+    const rect = this.tilingScheme.tileXYToRectangle(x, y, level);
+    const west = Cesium.Math.toDegrees(rect.west);
+    const east = Cesium.Math.toDegrees(rect.east);
+    const south = Cesium.Math.toDegrees(rect.south);
+    const north = Cesium.Math.toDegrees(rect.north);
+
+    // 地理院タイル(WebメルカトルXYZ)の該当ズームを決定し、範囲内のタイルを列挙
+    let z = Math.min(level + 1, this.maxMercatorZ);
+    let xMin, xMax, yMin, yMax;
+    for (; z >= 0; z -= 1) {
+      xMin = Math.floor(gsiMercatorX(west, z) / 256);
+      xMax = Math.min((1 << z) - 1, Math.floor(gsiMercatorX(east - 1e-9, z) / 256));
+      yMin = Math.floor(gsiMercatorY(north, z) / 256);
+      yMax = Math.min((1 << z) - 1, Math.floor(gsiMercatorY(south, z) / 256));
+      if ((xMax - xMin + 1) * (yMax - yMin + 1) <= 9) break;
+    }
+
+    const fetched = await Promise.all(
+      Array.from({ length: yMax - yMin + 1 }, (_, iy) => iy + yMin).flatMap(ty =>
+        Array.from({ length: xMax - xMin + 1 }, (_, ix) => ix + xMin).map(tx => this._loadMercatorTile(tx, ty, z))
+      )
+    );
+    const tiles = fetched.filter(Boolean);
+
+    const heights = new Float32Array(size * size);
+    for (let j = 0; j < size; j += 1) {
+      const lat = north - ((j + 0.5) / size) * (north - south);
+      for (let i = 0; i < size; i += 1) {
+        const lon = west + ((i + 0.5) / size) * (east - west);
+        heights[j * size + i] = this._sampleHeight(tiles, lon, lat);
+      }
+    }
+
+    return new Cesium.HeightmapTerrainData({
+      buffer: heights,
+      width: size,
+      height: size,
+      childTileMask: level >= this.maximumLevel ? 0 : 15,
+      structure: {
+        heightScale: 1.0,
+        heightOffset: 0.0,
+        elementsPerHeight: 1,
+        stride: 1,
+        elementMultiplier: 1.0,
+        isBigEndian: false,
+      },
+    });
+  }
+}
+
 function toHex(str) {
   return Array.from(new TextEncoder().encode(str), b => b.toString(16).padStart(2, "0")).join("");
 }
@@ -1004,6 +1156,13 @@ async function refreshLayers() {
       viewer.terrainProvider = terrainProvider;
     } catch (error) {
       console.warn("DEM の読み込みに失敗しました:", error);
+      viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
+    }
+  } else if (demSource?.gsiDem) {
+    try {
+      viewer.terrainProvider = new GsiDemTerrainProvider();
+    } catch (error) {
+      console.warn("地理院 DEM の初期化に失敗しました:", error);
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
     }
   } else {
