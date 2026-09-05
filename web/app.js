@@ -100,8 +100,7 @@ const demSources = {
   },
   "japan-auto": {
     title: "自動 (日本域は地理院高精度 / 標高MSL基準)",
-    hybrid: true,
-    url: "https://terrain.reearth.land/cesium-mesh/elevation",
+    gsiDem: true,
   },
 };
 let selectedDemSource = "reearth-ellipsoid";
@@ -899,54 +898,6 @@ class GsiDemTerrainProvider {
   }
 }
 
-const JAPAN_BBOX = { west: 122, south: 20, east: 155, north: 47 };
-
-class JapanHybridTerrainProvider {
-  constructor(globalProvider, gsiProvider) {
-    this._global = globalProvider;
-    this._gsi = gsiProvider;
-    this.tilingScheme = globalProvider.tilingScheme;
-    this.errorEvent = globalProvider.errorEvent || new Cesium.Event();
-    this.credit = globalProvider.credit;
-    this.hasVertexNormals = false;
-    this.hasWaterMask = globalProvider.hasWaterMask || false;
-    this.availability = globalProvider.availability;
-    this.ready = true;
-  }
-
-  _useGsi(x, y, level) {
-    const rect = this.tilingScheme.tileXYToRectangle(x, y, level);
-    const west = Cesium.Math.toDegrees(rect.west);
-    const east = Cesium.Math.toDegrees(rect.east);
-    const south = Cesium.Math.toDegrees(rect.south);
-    const north = Cesium.Math.toDegrees(rect.north);
-    return east >= JAPAN_BBOX.west && west <= JAPAN_BBOX.east
-      && north >= JAPAN_BBOX.south && south <= JAPAN_BBOX.north;
-  }
-
-  _pick(x, y, level) {
-    return this._useGsi(x, y, level) ? this._gsi : this._global;
-  }
-
-  getLevelMaximumGeometricError(level) {
-    return this._global.getLevelMaximumGeometricError(level);
-  }
-
-  getTileDataAvailable(x, y, level) {
-    const provider = this._pick(x, y, level);
-    return provider.getTileDataAvailable ? provider.getTileDataAvailable(x, y, level) : undefined;
-  }
-
-  loadTileDataAvailability(x, y, level) {
-    const provider = this._pick(x, y, level);
-    return provider.loadTileDataAvailability ? provider.loadTileDataAvailability(x, y, level) : undefined;
-  }
-
-  requestTileGeometry(x, y, level, request) {
-    return this._pick(x, y, level).requestTileGeometry(x, y, level, request);
-  }
-}
-
 function toHex(str) {
   return Array.from(new TextEncoder().encode(str), b => b.toString(16).padStart(2, "0")).join("");
 }
@@ -1225,9 +1176,7 @@ async function refreshLayers() {
               provider.readyPromise.then(() => resolve(provider)).catch(reject);
             }
           });
-      viewer.terrainProvider = demSource.hybrid
-        ? new JapanHybridTerrainProvider(terrainProvider, new GsiDemTerrainProvider())
-        : terrainProvider;
+      viewer.terrainProvider = terrainProvider;
     } catch (error) {
       console.warn("DEM の読み込みに失敗しました:", error);
       viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
