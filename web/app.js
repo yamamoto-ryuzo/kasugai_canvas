@@ -87,11 +87,11 @@ const drapeLayers = { xyz: true, geojson: true };
 let geojsonPrimitiveDrape = false;
 const demSources = {
   reearth: {
-    title: "Re:Earth Terrain (標高 / MSL, level 19)",
-    url: "https://terrain.reearth.land/cesium-mesh/msl",
+    title: "Re:Earth Terrain (標高 / elevation, level 14)",
+    url: "https://terrain.reearth.land/cesium-mesh/elevation",
   },
   "reearth-ellipsoid": {
-    title: "Re:Earth Terrain (楕円体高 / WGS84, level 19)",
+    title: "Re:Earth Terrain (楕円体高 / WGS84, level 14)",
     url: "https://terrain.reearth.land/cesium-mesh/ellipsoid",
   },
   terrarium: {
@@ -1070,6 +1070,8 @@ async function refreshLayers() {
   if (demSource?.url) {
     const terrainUrl = proxyTileUrl(demSource.url);
     try {
+      const metadataResponse = await fetch(terrainUrl.replace(/\/$/, "") + "/layer.json", { cache: "no-store" });
+      if (!metadataResponse.ok) throw new Error(`layer.json の取得に失敗しました (HTTP ${metadataResponse.status})`);
       const terrainProvider = Cesium.CesiumTerrainProvider.fromUrl
         ? await Cesium.CesiumTerrainProvider.fromUrl(terrainUrl)
         : await new Promise((resolve, reject) => {
