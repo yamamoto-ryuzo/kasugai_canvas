@@ -114,9 +114,10 @@
                 <label class="field-label" for="dem-source">DEM</label>
                 <select id="dem-source">
                   <option value="reearth-ellipsoid" selected>Re:Earth Terrain (楕円体高 / WGS84, level 14)</option>
-                  <option value="reearth">Re:Earth Terrain (標高 / elevation, level 14)</option>
-                  <option value="gsi">地理院 標高タイル (日本域, DEM1A〜10B)</option>
+                  <option value="reearth">Re:Earth Terrain (標高 / MSL基準, level 14)</option>
+                  <option value="gsi">地理院 標高タイル (日本域 / 標高MSL基準, DEM1A〜10B)</option>
                 </select>
+                <p class="hint"><strong>高さ基準</strong>：「楕円体高 / WGS84」は3D地球・PLATEAU等の3D Tilesと整合します。「標高 / MSL基準」「地理院」は平均海面基準のため、日本では楕円体高より約30〜40m低く表示されます(3D Tilesが地面に埋もれて見える場合があります)。「地理院」は日本域のみ有効です。</p>
               </section>
               <section id="settings-project-panel" class="settings-subpanel">
                 <label class="field-label" for="project-select">Project</label>
