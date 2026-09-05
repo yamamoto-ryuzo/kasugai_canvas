@@ -9,22 +9,13 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v2.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v2.0.5</span></h1>
       <p>4. 実装システム — 現行実装の機能と制限</p>
     </header>
     <main>
       <h2 id="実装システム">4. 実装システム</h2>
-      <p>KASUGAI Canvas の現行実装は、ローカルPC 上で Rust/Axum
-      サーバーを起動し、ブラウザ上の CesiumJS で 2D/3D
-      地理空間データを描画する構成です。Three.js は Cesium
-      のビュー行列を共有する簡易な 3D
-      描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は
-      V2.0.0 では未対応です。</p>
-      <p>開発起動時は
-      <code>projects/default/kasugai_canvas.kasc</code>
-      を初期サンプルとして読み込みます。配布 ZIP と Windows
-      インストーラーには東京都の表示例を含む
-      <code>kasugai_canvas.kasc</code> が同梱されます。</p>
+      <p>KASUGAI Canvas の現行実装（v2.0.5）は、<strong>純粋な CesiumJS フロントエンド</strong>を <code>web/</code> ディレクトリに配置し、通常の HTTP サーバーから配信する構成です。オプションとして、Rust/Axum で最小限の静的ファイルサーバー（<code>kasugai_canvas.exe</code>）を同梱しています。Three.js は Cesium のビュー行列を共有する簡易な 3D 描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は未対応です。</p>
+      <p>設定は <code>projects/&lt;project_id&gt;/kasugai_canvas.kasc</code> から読み込みます。デフォルトは <code>projects/default/kasugai_canvas.kasc</code> です。ルート階層の <code>kasugai_canvas.kasc</code> は廃止しました。配布 ZIP と Windows インストーラーには <code>web/</code>・<code>projects/</code> ディレクトリが同梱されます。</p>
       <ul>
       <li><a
       href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip">Windows
@@ -36,47 +27,50 @@
       <figcaption aria-hidden="true">概要</figcaption>
       </figure>
       <h2 id="システム構成">システム構成</h2>
-      <pre class="text"><code>┌──────────────────────────────────────────────┐
-│ ブラウザ                                      │
-│                                              │
-│  KASUGAI パネル                              │
-│  ├─ Layers / Camera / Search / Share         │
-│  ├─ Info / 凡例 / Attr / 設定                │
-│  └─ インスペクター設定登録                   │
-│                                              │
-│  KASUGAI Basemap Selector                    │
-│  └─ base: で定義した XYZ / TMS               │
-│                                              │
-│  KASUGAI Navigation Toolbar                  │
-│  ├─ Orbit / Fly モード切替                   │
-│  ├─ 2D / 3D 切替                             │
-│  └─ 方位コンパス                             │
-│                                              │
-│  CesiumJS + Three.js                         │
-│  - Viewer / Scene / Globe                    │
-│  - ImageryLayerCollection                    │
-│  - Cesium3DTileset                           │
-│  - TerrainProvider                           │
-└──────────────────────────────────────────────┘
-                    ▲ HTTP
-┌──────────────────────────────────────────────┐
-│ Rust / Axum                                  │
-│  127.0.0.1:8510                              │
-│  静的アセット / タイルプロキシ / 設定 API    │
-└──────────────────────────────────────────────┘</code></pre>
+      <pre class="text"><code>┌──────────────────────────────────────────────────────────────┐
+│ ブラウザ                                                      │
+│                                                              │
+│  KASUGAI パネル                                              │
+│  ├─ Layers / Camera / Search / Share                       │
+│  ├─ Info / 凡例 / Attr / 設定                                │
+│  └─ インスペクター設定表示（エクスポートで保存）            │
+│                                                              │
+│  KASUGAI Basemap Selector                                    │
+│  └─ base: で定義した XYZ / TMS                               │
+│                                                              │
+│  KASUGAI Navigation Toolbar                                  │
+│  ├─ Orbit / Fly モード切替                                   │
+│  ├─ 2D / 3D 切替                                             │
+│  └─ 方位コンパス                                             │
+│                                                              │
+│  CesiumJS + Three.js                                         │
+│  - Viewer / Scene / Globe                                    │
+│  - ImageryLayerCollection                                    │
+│  - Cesium3DTileset                                           │
+│  - TerrainProvider                                           │
+└──────────────────────────────────────────────────────────────┘
+                    ▲ HTTP (任意)
+┌──────────────────────────────────────────────────────────────┐
+│ 通常の HTTP サーバー または Rust / Axum                      │
+│                                                              │
+│  静的配信:                                                   │
+│  - web/ (index.html, app.js, styles.css...)                  │
+│  - projects/<project_id>/kasugai_canvas.kasc               │
+│  - projects/<project_id>/DATA/                               │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘</code></pre>
       <h2 id="処理の流れ">処理の流れ</h2>
       <ol type="1">
-      <li>Rust/Axum が <code>web</code> 配下の画面と設定 API
-      を配信する</li>
+      <li>HTTP サーバー（任意で Rust/Axum）が <code>web/</code> と <code>projects/</code> を静的配信する</li>
+      <li>ブラウザは <code>projects/projects.json</code> と <code>projects/&lt;project_id&gt;/kasugai_canvas.kasc</code> を読み込む</li>
       <li>インスペクター設定からレイヤー、ベースマップ、カメラプリセットを生成する</li>
+      <li><code>.kasc</code> 内の相対パスは <code>projects/&lt;project_id&gt;/</code> 配下に解決される（例: <code>DATA/sample.geojson</code>）</li>
       <li>CesiumJS が Terrain、XYZ、GeoJSON、3D Tiles を同一の 3D
       地球ビューへ配置する</li>
       <li>XYZ・GeoJSON を <code>ImageryLayer</code> /
       <code>Entity</code> / <code>Primitive</code>
       として地形へドレープする</li>
-      <li>Three.js は補助 3D
-      描画の枠組みとして組み込まれている。点群・3DGS・GLB 表示は V2.0.0
-      では未対応</li>
+      <li>Three.js は補助 3D 描画の枠組みとして組み込まれている。点群・3DGS・GLB 表示は未対応</li>
       </ol>
       <h2 id="ui-パネルと主な機能">UI パネルと主な機能</h2>
       <table>
@@ -122,7 +116,7 @@
       <tr>
       <td><strong>設定</strong></td>
       <td>DEM / ドレープ、レイヤードレープ対象、Cesium 3D Tiles
-      パラメータ、表示効果、プロジェクト切替、自動更新、断面クリップ</td>
+      パラメータ、表示効果、プロジェクト切替、Inspector、Help、断面クリップ（自動更新は静的配信では無効）</td>
       </tr>
       </tbody>
       </table>
@@ -131,10 +125,7 @@
       で定義した経路の選択ドロップダウン、2D/3D
       切替、方位コンパスが配置されています。描画（Draw）は <strong>Fly
       パネル内の Draw タブ</strong> から行います。</p>
-      <p>その他、URL パーマリンクの自動更新、共有 URL
-      コピー、プロジェクト切替（<code>projects/&lt;project&gt;</code>
-      単位）、自動更新（<code>latest.json</code>
-      確認）も実装しています。</p>
+      <p>URL パーマリンクの自動更新、共有 URL コピー、プロジェクト切替（<code>?project=&lt;project_id&gt;</code>）を実装しています。自動更新・ルート保存・タイルプロキシ等、サーバー API に依存する機能は静的配信では無効です。</p>
       <h3 id="fly-モード">Fly モード</h3>
       <p>Fly モードでは手動操縦か、<code>fly_geojson:</code>
       で定義した経路の自動追従を選択できます。インスペクターに
@@ -198,7 +189,7 @@
       に切り替わり、描画準備が整います。タブ内の <strong>Draw</strong>
       ボタンを押すと描画を開始し、右クリックで点を追加、右ダブルクリックで描画を終了できます。描画したルートは：</p>
       <ol type="1">
-      <li>プロジェクトフォルダ内に
+      <li>ローカルで Rust/Axum サーバーを起動している場合、プロジェクトフォルダ内に
       <code>drawn_route_1.geojson</code>、<code>drawn_route_2.geojson</code>
       … のように自動連番でキャッシュ（<code>PUT /api/file</code>）
       <ul>
@@ -206,6 +197,8 @@
       <li>プロジェクト内のファイル一覧は
       <code>GET /api/files?project=...</code> で取得</li>
       </ul></li>
+      <li>静的 WEB 公開時は描画ルートの保存は行えません。<code>fly_geojson:</code>
+      をあらかじめ <code>.kasc</code> ファイルに記述するか、ローカル版で作成してください。</li>
       <li>自動的に <code>fly_geojson:</code>
       行をインスペクターに追加し、Fly モードで選択可能</li>
       </ol>
@@ -733,19 +726,21 @@ fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height
       <code>TerrainProvider</code> を実装して <code>demSources</code>
       へ登録する必要があります。</li>
       </ul>
-      <h3 id="v2.0.0-で未対応の機能">V2.0.0 で未対応の機能</h3>
+      <h3 id="v2.0.5-で未対応の機能">v2.0.5 で未対応の機能</h3>
       <p>現状の実装では未対応の機能は以下の通りです。</p>
       <ul>
       <li>Three.js 点群 / 3DGS / GLB 表示</li>
       </ul>
-      <h3 id="ローカル開発時の注意">ローカル開発時の注意</h3>
+      <h3 id="静的ホスティングの注意">静的ホスティングの注意</h3>
       <ul>
-      <li>Python 等の簡易 HTTP サーバーでは <code>/api/projects</code>
-      や
-      <code>/api/config</code>、<code>/api/tile</code>、<code>/api/search</code>
-      等のエンドポイントが存在しません。</li>
-      <li>開発起動時は Rust/Axum
-      サーバーを使用してください。静的ファイルのみの表示では設定・レイヤー・プロジェクトの読み込みは行えません。</li>
+      <li><code>web/</code> ディレクトリを nginx / Apache / IIS / Python <code>http.server</code> 等に置くだけで、<code>projects/&lt;project_id&gt;/kasugai_canvas.kasc</code>、<code>projects/projects.json</code>、<code>projects/&lt;project_id&gt;/DATA/</code> を読み込めます。</li>
+      <li>外部 3D Tiles や GeoJSON を読み込む場合、配信元が CORS を許可している必要があります。</li>
+      <li>Yahoo AppID 等の認証情報を <code>.kasc</code> に記述すると、静的サイト上で誰でも参照できるため注意してください。</li>
+      </ul>
+      <h3 id="サーバー依存機能の制限">サーバー依存機能の制限</h3>
+      <ul>
+      <li>静的ファイル配信のみの状態では、ルート描画の保存、自動更新、タイルプロキシ、ローカルファイル API 等は利用できません。</li>
+      <li>これらが必要な場合は Rust/Axum 版（<code>kasugai_canvas.exe</code>）をローカルで起動するか、同等のサーバー機能を別途実装してください。</li>
       </ul>
 
     </main>

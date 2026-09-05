@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v2.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v2.0.5</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -94,7 +94,30 @@
       </section>
 
       <section>
-        <h2>🎬 プレゼンテーション機能（追加機能）</h2>
+        <h2>� ハイブリッド配布・公開構成</h2>
+        <p>KASUGAI Canvas は、ブラウザ完結の CesiumJS フロントエンドに整理されています。Rust/Axum サーバーはあくまで <strong>最小限の静的ファイル配信</strong>で、<code>web/</code> ディレクトリそのものを nginx / Apache / IIS / GitHub Pages などに置くだけで一般公開もできます。</p>
+        <div class="features">
+          <div class="feature-card">
+            <h3>📦 ローカル・納品</h3>
+            <p><code>kasugai_canvas.zip</code> または NSIS インストーラーで配布。<code>kasugai_canvas.exe</code> と同じ場所に <code>web/</code>・<code>projects/</code> を配置します。</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌐 WEB 公開</h3>
+            <p><code>web/</code> を静的サーバーにアップロード。同一オリジン内の <code>projects/&lt;id&gt;/DATA/</code> を相対パスで参照できます。</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔒 読み取り専用</h3>
+            <p>プロジェクトファイルは Web サーバー側の権限で書き込み禁止にできます。変更は「エクスポート(.kasc)」でローカルに落として差し替えます。</p>
+          </div>
+          <div class="feature-card">
+            <h3>⚠️ 公開時の注意</h3>
+            <p>外部 3D Tiles / GeoJSON は CORS が必要。Yahoo AppID 等の認証情報を <code>.kasc</code> に書くと公開サイトで漏洩します。</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>�🎬 プレゼンテーション機能（追加機能）</h2>
         <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。</p>
         <div class="features">
           <div class="feature-card">
