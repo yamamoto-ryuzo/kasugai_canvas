@@ -4,8 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KASUGAI Canvas</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" crossorigin="anonymous" />
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js" crossorigin="anonymous"></script>
     <script type="importmap">
@@ -99,8 +99,10 @@
                 <button class="settings-tab active" type="button" data-settings-panel="settings-dem-panel">DEM</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-project-panel">Project</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-layer-panel">レイヤ</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-inspector-panel">Inspector</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-cesium-panel">Cesium</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-effects-panel">効果</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-help-panel">Help</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel">その他</button>
               </nav>
               <section id="settings-dem-panel" class="settings-subpanel active">
@@ -121,7 +123,6 @@
                 <select id="project-select" aria-label="Project"></select>
               </section>
               <section id="settings-layer-panel" class="settings-subpanel">
-                <a class="help-link" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer">HELP</a>
                 <span class="field-label">ドレープ対象地形</span>
                 <label><input id="drape-terrain-dem" type="checkbox" checked /> DEM</label>
                 <label><input id="drape-terrain-tiles3d" type="checkbox" /> 3D Tiles</label>
@@ -130,14 +131,19 @@
                 <label><input id="drape-geojson" type="checkbox" checked /> GeoJSON</label>
                 <label><input id="drape-geojson-primitive" type="checkbox" /> GeoJSON 高速ドレープ (実験的)</label>
                 <p class="hint">CesiumJS 1.145 の GeoJsonPrimitive を使い、GeoJSON を高品質・高速に地形や 3D Tiles にドレープします。有効時はベクター検索の対象外になります。</p>
+              </section>
+              <section id="settings-inspector-panel" class="settings-subpanel">
                 <div class="section-title inspector-title">インスペクター</div>
                 <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
                 <button id="apply-inspector" type="button">登録</button>
                 <button id="export-inspector" type="button">エクスポート(.kasc)</button>
                 <p id="inspector-status" class="hint" aria-live="polite"></p>
               </section>
+              <section id="settings-help-panel" class="settings-subpanel">
+                <div class="section-title">HELP</div>
+                <a class="help-link" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer">オンラインヘルプを開く</a>
+              </section>
               <section id="settings-other-panel" class="settings-subpanel">
-                <a class="help-link" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer">HELP</a>
 
                 <div class="section-title">ポート番号</div>
                 <label class="field-label" for="current-port">現在の接続ポート</label>
@@ -315,6 +321,6 @@
         </div>
       </div>
     </div>
-    <script type="module" src="/app.js"></script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>

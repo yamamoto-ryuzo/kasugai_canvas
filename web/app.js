@@ -47,7 +47,7 @@ const tileLayers = [];
 const layerState = new Map();
 let layerOrder = [];
 const expandedLayerGroups = new Set();
-let currentProjectId = urlParams.get("project") || "";
+let currentProjectId = urlParams.get("project") || "default";
 let yahooAppId = "";
 let terrainEnabled = true;
 let undergroundTransparency = 0;
@@ -111,6 +111,7 @@ let threeRenderer;
 let threeScene;
 let threeCamera;
 let threeModel;
+let backendEnabled = false;
 
 function parseLayerTitle(title) {
   const parts = title.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
@@ -148,14 +149,65 @@ function updateMapAttribution() {
   });
 }
 
+async function detectBackend() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1000);
+    const response = await fetch("./health", { signal: controller.signal, cache: "no-store" });
+    clearTimeout(timeout);
+    if (response.ok) {
+      const data = await response.json().catch(() => ({}));
+      backendEnabled = data?.name === "kasugai_canvas";
+    }
+  } catch {
+    backendEnabled = false;
+  }
+}
+
 function getProjectConfigUrl() {
-  return currentProjectId ? `/api/projects/${encodeURIComponent(currentProjectId)}/config` : "/api/config";
+  if (backendEnabled) {
+    return `/api/projects/${encodeURIComponent(currentProjectId)}/config`;
+  }
+  return `./projects/${encodeURIComponent(currentProjectId)}/kasugai_canvas.kasc`;
+}
+
+function getProjectBaseUrl() {
+  return `projects/${encodeURIComponent(currentProjectId || "default")}/`;
+}
+
+function resolveProjectUrl(url) {
+  if (typeof url !== "string") return url;
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+  let path = trimmed;
+  if (path.startsWith("./")) path = path.slice(2);
+  const segments = path.split("/").filter(Boolean);
+  const safeSegments = [];
+  for (const segment of segments) {
+    if (segment === "..") {
+      if (safeSegments.length > 0) safeSegments.pop();
+    } else if (segment !== ".") {
+      safeSegments.push(segment);
+    }
+  }
+  return getProjectBaseUrl() + safeSegments.join("/");
 }
 
 async function loadProjects() {
-  const response = await fetch("/api/projects");
-  if (!response.ok) throw new Error(await response.text());
-  const definitions = await response.json();
+  let definitions = [];
+  if (backendEnabled) {
+    const response = await fetch("/api/projects");
+    if (!response.ok) throw new Error(await response.text());
+    definitions = await response.json();
+  } else {
+    try {
+      const response = await fetch("./projects/projects.json", { cache: "no-store" });
+      if (response.ok) definitions = await response.json();
+    } catch {}
+  }
+  if (!definitions.length) definitions = [{ id: "default", title: "デフォルトプロジェクト" }];
   const select = document.querySelector("#project-select");
   select.replaceChildren();
   definitions.forEach(project => {
@@ -169,9 +221,19 @@ async function loadProjects() {
 
 async function loadInspectorConfig() {
   try {
-    const response = await fetch(getProjectConfigUrl());
-    if (!response.ok) throw new Error(await response.text());
-    const text = await response.text();
+    const projectId = currentProjectId || "default";
+    const staticUrl = `./projects/${encodeURIComponent(projectId)}/kasugai_canvas.kasc`;
+    let text = "";
+    try {
+      const response = await fetch(staticUrl, { cache: "no-store" });
+      if (response.ok) text = await response.text();
+    } catch {}
+    if (!text && backendEnabled) {
+      const response = await fetch(getProjectConfigUrl());
+      if (!response.ok) throw new Error(await response.text());
+      text = await response.text();
+    }
+    if (!text) text = defaultConfig;
     document.querySelector("#inspector-input").value = text;
     applyInspector(text);
     setInspectorStatus("設定を読み込みました。");
@@ -182,6 +244,7 @@ async function loadInspectorConfig() {
 }
 
 async function saveInspectorConfig() {
+  if (!backendEnabled) return;
   const response = await fetch(getProjectConfigUrl(), {
     method: "PUT",
     headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -635,6 +698,7 @@ function renderFlyPathSelect() {
 }
 
 async function ensureDrawnRouteFlyPath() {
+  if (!backendEnabled) return;
   const project = currentProjectId || "";
   const listUrl = `/api/files?project=${encodeURIComponent(project)}`;
   try {
@@ -746,7 +810,7 @@ function toHex(str) {
 
 function proxyTileUrl(url, useProxy = true) {
   if (typeof url !== "string" || !url.startsWith("http")) return url;
-  if (useProxy === false) return url;
+  if (!backendEnabled || useProxy === false) return url;
   const origin = window.location.origin;
   if (url.startsWith(origin + "/api/tile/")) return url;
   let dir = url;
@@ -768,7 +832,7 @@ function proxyTileUrl(url, useProxy = true) {
 
 function proxyTemplateUrl(url, useProxy = true) {
   if (typeof url !== "string" || !url.startsWith("http")) return url;
-  if (useProxy === false) return url;
+  if (!backendEnabled || useProxy === false) return url;
   if (url.startsWith(window.location.origin)) return url;
   const encoded = encodeURIComponent(url).replace(/%7B/g, "{").replace(/%7D/g, "}");
   return `${window.location.origin}/api/tile?url=${encoded}`;
@@ -1193,7 +1257,8 @@ async function loadInfoContent(url) {
   content.replaceChildren();
   if (!url) return;
   try {
-    const response = await fetch(`/api/info?url=${encodeURIComponent(url)}`);
+    const infoUrl = backendEnabled ? `/api/info?url=${encodeURIComponent(url)}` : url;
+    const response = await fetch(infoUrl, { mode: "cors" });
     if (!response.ok) throw new Error(await response.text());
     const html = await response.text();
     if (requestId !== infoRequestId) return;
@@ -1265,11 +1330,11 @@ function applyInspector(text) {
       updateSearchProvider();
     }
     if (type === "info") {
-      void loadInfoContent(value);
+      void loadInfoContent(resolveProjectUrl(value));
     }
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());
-      document.querySelector("#legend-panel img").src = parts[parts.length - 1];
+      document.querySelector("#legend-panel img").src = resolveProjectUrl(parts[parts.length - 1]);
     }
 
     if (type === "base") {
@@ -1290,7 +1355,7 @@ function applyInspector(text) {
         parsedBasemaps.push({
           id: `inspector-base-${parsedBasemaps.length}`,
           title: parts[0],
-          url: parts[1],
+          url: resolveProjectUrl(parts[1]),
           attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "",
           tileSize: options.tileSize || 256,
           opacity: options.opacity ?? 1.0,
@@ -1317,7 +1382,7 @@ function applyInspector(text) {
     if (type === "fly_geojson") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
-      const url = parts[1];
+      const url = resolveProjectUrl(parts[1]);
       if (!url) return;
       const config = { title: title || url, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100 };
       const off = parts.some(part => /^(off|false)$/i.test(part));
@@ -1339,7 +1404,7 @@ function applyInspector(text) {
     if (type === "xyz") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
-      const url = parts[1];
+      const url = resolveProjectUrl(parts[1]);
       const off = parts.some(part => /^(off|false)$/i.test(part));
       if (!title || !url) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
@@ -1367,7 +1432,7 @@ function applyInspector(text) {
     if (type === "3dtiles" || type === "geojson" || type === "layer") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
-      const url = parts[1];
+      const url = resolveProjectUrl(parts[1]);
       const off = parts.some(part => /^(off|false)$/i.test(part));
       const proxy = !parts.some(part => /^proxy\s*=\s*(off|false|direct)$/i.test(part));
       if (!title) return;
@@ -1497,10 +1562,16 @@ function setupEvents() {
     results.innerHTML = '<li style="padding:8px;color:#71818d;">検索中...</li>';
     try {
       const provider = searchProvider ? searchProvider.value : "gsi";
-      const useYahoo = provider === "yahoo" && yahooAppId && !yahooAppId.includes("あなたのYahoo");
-      const params = new URLSearchParams({ query });
-      if (useYahoo) params.set("appid", yahooAppId);
-      const response = await fetch(`/api/search?${params}`);
+      let useYahoo = provider === "yahoo" && yahooAppId && !yahooAppId.includes("あなたのYahoo");
+      if (!backendEnabled) useYahoo = false;
+      let response;
+      if (backendEnabled) {
+        const params = new URLSearchParams({ query });
+        if (useYahoo) params.set("appid", yahooAppId);
+        response = await fetch(`/api/search?${params}`);
+      } else {
+        response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
+      }
       if (!response.ok) throw new Error(await response.text() || `検索に失敗しました (${response.status})`);
       const data = await response.json();
       const items = useYahoo
@@ -2287,6 +2358,7 @@ function setupEvents() {
     };
   }
   async function cacheDrawnLine() {
+    if (!backendEnabled) return;
     const geojson = buildDrawnGeoJson();
     if (!geojson) return;
     const project = currentProjectId || "";
@@ -2375,6 +2447,7 @@ function setupEvents() {
   const openDrawnRoute = document.querySelector("#open-drawn-route");
   if (openDrawnRoute) {
     openDrawnRoute.addEventListener("click", () => {
+      if (!backendEnabled) return;
       const project = currentProjectId || "";
       const openUrl = `/api/open?path=drawn_route.geojson&project=${encodeURIComponent(project)}`;
       void fetch(openUrl, { method: "POST" }).catch(error => console.error("フォルダを開けませんでした:", error));
@@ -2508,6 +2581,7 @@ function setupEvents() {
   });
 
   document.querySelector("#shutdown-app").addEventListener("click", async () => {
+    if (!backendEnabled) return;
     if (!confirm("KASUGAI Canvasを停止しますか？")) return;
     await fetch("/api/shutdown", { method: "POST" });
   });
@@ -3030,8 +3104,11 @@ function setupVectorSearch() {
       try {
         const tr = ev.target.closest("tr");
         if (!tr) return;
-        const lat = Number(tr.getAttribute("data-lat"));
-        const lng = Number(tr.getAttribute("data-lng"));
+        const latAttr = tr.getAttribute("data-lat");
+        const lngAttr = tr.getAttribute("data-lng");
+        if (latAttr == null || lngAttr == null) return;
+        const lat = Number(latAttr);
+        const lng = Number(lngAttr);
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
           flyToFeature(lat, lng);
         }
@@ -3105,6 +3182,10 @@ function compareVersions(left, right) {
 
 async function loadUpdateInfo() {
   const current = document.querySelector("#current-version");
+  if (!backendEnabled) {
+    if (current) current.textContent = "-";
+    return;
+  }
   try {
     const [healthResponse, settingsResponse] = await Promise.all([
       fetch("/health"),
@@ -3206,6 +3287,7 @@ async function reloadAfterRestart() {
 }
 
 async function saveUpdateSettings() {
+  if (!backendEnabled) return;
   const autoUpdate = document.querySelector("#auto-update").checked;
   const response = await fetch("/api/update/settings", {
     method: "PUT",
@@ -3300,6 +3382,7 @@ window.addEventListener("pagehide", () => {
 });
 
 (async () => {
+  await detectBackend();
   try { await loadProjects(); } catch (e) { console.error(e); }
   try { await loadInspectorConfig(); } catch (e) { console.error(e); }
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }

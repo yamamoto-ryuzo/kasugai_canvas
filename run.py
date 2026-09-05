@@ -25,8 +25,8 @@ DOWNLOAD_DIR = ROOT / "download"
 DOWNLOAD_ZIP = DOWNLOAD_DIR / "kasugai_canvas.zip"
 DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
 DOWNLOAD_INSTALLER_ZIP = DOWNLOAD_DIR / "kasugai_canvas_setup.zip"
-SAMPLE_CONFIG = ROOT / "installer" / "kasugai_canvas.kasc"
 SAMPLE_PROJECTS = ROOT / "installer" / "projects"
+WEB_DIR = ROOT / "web"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
 
 
@@ -223,9 +223,6 @@ def run_dev() -> None:
     _print_access_url()
     debug_dir = SERVER_DIR / "target" / "debug"
     debug_dir.mkdir(parents=True, exist_ok=True)
-    dev_config = debug_dir / "kasugai_canvas.kasc"
-    if not dev_config.exists() and SAMPLE_CONFIG.exists():
-        shutil.copy(SAMPLE_CONFIG, dev_config)
     if SAMPLE_PROJECTS.exists():
         dev_projects = debug_dir / "projects"
         dev_projects.mkdir(parents=True, exist_ok=True)
@@ -254,8 +251,8 @@ def build_installer() -> None:
         [
             makensis,
             f"/DBUILD_EXE={TARGET_EXE}",
-            f"/DSAMPLE_CONFIG={SAMPLE_CONFIG}",
             f"/DSAMPLE_PROJECTS={SAMPLE_PROJECTS}",
+            f"/DWEB_DIR={WEB_DIR}",
             str(INSTALLER_SCRIPT),
         ],
         cwd=ROOT,
@@ -280,18 +277,20 @@ def build_release() -> None:
     print("ビルド済み EXE のバージョンを確認します...")
     _start_exe_and_verify(TARGET_EXE, cargo_version)
 
-    if not SAMPLE_CONFIG.exists():
-        raise FileNotFoundError(f"初期サンプル設定がみつかりません: {SAMPLE_CONFIG}")
     if not SAMPLE_PROJECTS.exists():
         raise FileNotFoundError(f"初期サンプルプロジェクトがみつかりません: {SAMPLE_PROJECTS}")
 
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    web_dir = ROOT / "web"
     with zipfile.ZipFile(DOWNLOAD_ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(TARGET_EXE, arcname=TARGET_EXE.name)
-        archive.write(SAMPLE_CONFIG, arcname=SAMPLE_CONFIG.name)
         for project_file in SAMPLE_PROJECTS.rglob("*"):
             if project_file.is_file():
                 archive.write(project_file, arcname=(Path("projects") / project_file.relative_to(SAMPLE_PROJECTS)).as_posix())
+        if web_dir.exists():
+            for web_file in web_dir.rglob("*"):
+                if web_file.is_file():
+                    archive.write(web_file, arcname=(Path("web") / web_file.relative_to(web_dir)).as_posix())
     print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
 
     print("ZIP 内 EXE のバージョンを確認します...")

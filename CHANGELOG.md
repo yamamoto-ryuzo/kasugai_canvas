@@ -14,6 +14,17 @@
 ### Changed
 
 - CesiumJS を 1.144 から 1.145 に更新(dompurify 脆弱性 CVE-2026-49458 の修正を含む)
+- フロントエンドを純粋な CesiumJS 化し、`web/` を任意の HTTP サーバーに置くだけで動作するよう変更
+- 設定をプロジェクト単位 (`projects/<project_id>/kasugai_canvas.kasc`) に移行し、ルートの `kasugai_canvas.kasc` を廃止
+- Rust サーバーを `web/` および `projects/` を配信する最小静的サーバーに変更
+- 設定ファイル内の相対パスを `projects/<project_id>/` から解決するよう変更
+- インスペクターを Layer タブから独立した Inspector タブに移動
+- Help リンクを設定パネル内の Help タブに集約
+- OpenStreetMap の `tileSize=512` を削除
+
+### Fixed
+
+- 属性一覧で座標を持たない行をクリックした際に緯度経度 (0, 0) へ飛んでしまう不具合を修正
 
 ## [2.0.4] - 2026-08-31
 

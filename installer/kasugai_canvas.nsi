@@ -3,11 +3,11 @@
 !ifndef BUILD_EXE
   !define BUILD_EXE "..\server\target\release\kasugai_canvas.exe"
 !endif
-!ifndef SAMPLE_CONFIG
-  !define SAMPLE_CONFIG "kasugai_canvas.kasc"
-!endif
 !ifndef SAMPLE_PROJECTS
   !define SAMPLE_PROJECTS "..\installer\projects"
+!endif
+!ifndef WEB_DIR
+  !define WEB_DIR "..\web"
 !endif
 
 !define APP_NAME "KASUGAI Canvas"
@@ -55,9 +55,10 @@ FunctionEnd
 Section "Install"
   SetOutPath "$INSTDIR"
   File "${BUILD_EXE}"
-  IfFileExists "$INSTDIR\${CONFIG_FILE_NAME}" config_exists
-  File "${SAMPLE_CONFIG}"
-config_exists:
+
+  SetOutPath "$INSTDIR\web"
+  File /r "${WEB_DIR}\*"
+
   SetOutPath "$INSTDIR\projects"
   File /nonfatal /r /x "default" "${SAMPLE_PROJECTS}\*"
 
@@ -95,6 +96,8 @@ Section "Uninstall"
   Delete "$DESKTOP\kasugai_canvas.lnk"
   Delete "$SMPROGRAMS\KASUGAI Canvas\kasugai_canvas.lnk"
   RMDir "$SMPROGRAMS\KASUGAI Canvas"
+  RMDir /r "$INSTDIR\web"
+  RMDir /r "$INSTDIR\projects"
   Delete "$INSTDIR\${APP_EXE}"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
