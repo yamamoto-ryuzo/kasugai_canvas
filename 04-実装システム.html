@@ -9,12 +9,12 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v2.0.5</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v3.0.0</span></h1>
       <p>4. 実装システム — 現行実装の機能と制限</p>
     </header>
     <main>
       <h2 id="実装システム">4. 実装システム</h2>
-      <p>KASUGAI Canvas の現行実装（v2.0.5）は、<strong>純粋な CesiumJS フロントエンド</strong>を <code>web/</code> ディレクトリに配置し、通常の HTTP サーバーから配信する構成です。オプションとして、Rust/Axum で最小限の静的ファイルサーバー（<code>kasugai_canvas.exe</code>）を同梱しています。Three.js は Cesium のビュー行列を共有する簡易な 3D 描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は未対応です。</p>
+      <p>KASUGAI Canvas の現行実装（v3.0.0）は、<strong>純粋な CesiumJS フロントエンド</strong>を <code>web/</code> ディレクトリに配置し、通常の HTTP サーバーから配信する構成です。オプションとして、Rust/Axum で最小限の静的ファイルサーバー（<code>kasugai_canvas.exe</code>）を同梱しています。Three.js は Cesium のビュー行列を共有する簡易な 3D 描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は未対応です。</p>
       <p>設定は <code>projects/&lt;project_id&gt;/kasugai_canvas.kasc</code> から読み込みます。デフォルトは <code>projects/default/kasugai_canvas.kasc</code> です。ルート階層の <code>kasugai_canvas.kasc</code> は廃止しました。配布 ZIP と Windows インストーラーには <code>web/</code>・<code>projects/</code> ディレクトリが同梱されます。</p>
       <ul>
       <li><a
@@ -726,7 +726,7 @@ fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height
       <code>TerrainProvider</code> を実装して <code>demSources</code>
       へ登録する必要があります。</li>
       </ul>
-      <h3 id="v2.0.5-で未対応の機能">v2.0.5 で未対応の機能</h3>
+      <h3 id="v3.0.0-で未対応の機能">v3.0.0 で未対応の機能</h3>
       <p>現状の実装では未対応の機能は以下の通りです。</p>
       <ul>
       <li>Three.js 点群 / 3DGS / GLB 表示</li>
