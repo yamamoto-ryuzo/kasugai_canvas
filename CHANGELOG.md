@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.1] - 2026-09-06
+
+### Fixed
+
+- CesiumJS タイル/3D Tiles/情報パネルが `/api/tile` や `/api/info` 等の存在しない API 経由で取得されて地図が表示されない問題を修正
+- プロジェクト一覧も静的 `projects/projects.json` から直接読み込むように変更
+
 ## [3.4.0] - 2026-09-06
 
 ### Added

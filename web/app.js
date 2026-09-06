@@ -197,16 +197,10 @@ function resolveProjectUrl(url) {
 
 async function loadProjects() {
   let definitions = [];
-  if (backendEnabled) {
-    const response = await fetch("/api/projects");
-    if (!response.ok) throw new Error(await response.text());
-    definitions = await response.json();
-  } else {
-    try {
-      const response = await fetch("./projects/projects.json", { cache: "no-store" });
-      if (response.ok) definitions = await response.json();
-    } catch {}
-  }
+  try {
+    const response = await fetch("./projects/projects.json", { cache: "no-store" });
+    if (response.ok) definitions = await response.json();
+  } catch {}
   if (!definitions.length) definitions = [{ id: "default", title: "デフォルトプロジェクト" }];
   const select = document.querySelector("#project-select");
   select.replaceChildren();
@@ -904,33 +898,11 @@ function toHex(str) {
 }
 
 function proxyTileUrl(url, useProxy = true) {
-  if (typeof url !== "string" || !url.startsWith("http")) return url;
-  if (!backendEnabled || useProxy === false) return url;
-  const origin = window.location.origin;
-  if (url.startsWith(origin + "/api/tile/")) return url;
-  let dir = url;
-  let file = "";
-  if (!dir.endsWith("/")) {
-    const lastSlash = dir.lastIndexOf("/");
-    const candidate = dir.slice(lastSlash + 1);
-    if (candidate.includes(".")) {
-      file = candidate;
-      dir = dir.slice(0, lastSlash + 1);
-    } else {
-      dir += "/";
-    }
-  }
-  const hex = toHex(dir);
-  if (file) return `${origin}/api/tile/${hex}/${file}`;
-  return `${origin}/api/tile/${hex}/`;
+  return url;
 }
 
 function proxyTemplateUrl(url, useProxy = true) {
-  if (typeof url !== "string" || !url.startsWith("http")) return url;
-  if (!backendEnabled || useProxy === false) return url;
-  if (url.startsWith(window.location.origin)) return url;
-  const encoded = encodeURIComponent(url).replace(/%7B/g, "{").replace(/%7D/g, "}");
-  return `${window.location.origin}/api/tile?url=${encoded}`;
+  return url;
 }
 
 function createUrlTemplateProvider(options) {
@@ -1354,7 +1326,7 @@ async function loadInfoContent(url) {
   content.replaceChildren();
   if (!url) return;
   try {
-    const infoUrl = backendEnabled ? `/api/info?url=${encodeURIComponent(url)}` : url;
+    const infoUrl = url;
     const response = await fetch(infoUrl, { mode: "cors" });
     if (!response.ok) throw new Error(await response.text());
     const html = await response.text();
@@ -3054,6 +3026,16 @@ function setupEvents() {
   setupGoogleSettings();
 }
 
+// Google APIキー未設定時はチャットパネルを表示しない。設定保存時に再評価する
+// 注意: setupChatPanel は window.kasugaiApi 定義前に呼ばれるため localStorage を直接参照する
+function updateChatPanelVisibility() {
+  const panel = document.querySelector("#chat-panel");
+  if (!panel) return;
+  let hasKey = false;
+  try { hasKey = !!localStorage.getItem("googleApiKey"); } catch (e) {}
+  panel.style.display = hasKey ? "" : "none";
+}
+
 function setupGoogleSettings() {
   const keyInput = document.querySelector("#google-api-key");
   const modelSelect = document.querySelector("#google-gemini-model");
@@ -3069,6 +3051,7 @@ function setupGoogleSettings() {
     try {
       localStorage.setItem("googleApiKey", keyInput.value.trim());
       if (modelSelect) localStorage.setItem("googleGeminiModel", modelSelect.value);
+      updateChatPanelVisibility();
       if (status) status.textContent = "保存しました。";
     } catch (e) {
       if (status) status.textContent = `保存エラー: ${e.message}`;
@@ -4404,6 +4387,7 @@ async function callGemini(history) {
 function setupChatPanel() {
   const panel = document.querySelector("#chat-panel");
   if (!panel) return;
+  updateChatPanelVisibility();
   const messages = document.querySelector("#chat-messages");
   const form = document.querySelector("#chat-form");
   const input = document.querySelector("#chat-input");
