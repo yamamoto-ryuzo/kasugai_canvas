@@ -394,7 +394,7 @@ async function loadFlyGeoJson(url) {
 }
 
 function buildFlyPathLinePositions(coords) {
-  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0) + flyHeight));
+  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0)));
 }
 
 function getFlyPathLinePositions() {
