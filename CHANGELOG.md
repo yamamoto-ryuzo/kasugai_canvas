@@ -4,6 +4,20 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.2.0] - 2026-09-06
+
+### Added
+
+- AIチャットパネルを右下に新設。Gemini API（function calling）で地図操作が可能（flyTo・レイヤ/ベースマップ切替・検索・プリセット・地形/効果・地下・断面・Flyパス・プロジェクト切替等）
+- AI操作API `window.kasugaiApi` を公開。地図移動はドローン視点（対象地上+200m・-30°）を既定適用
+- ブラウザ内コード実行サンドボックス（`runCode` ツール、opaque origin iframe + postMessage ブリッジ）
+- 設定タブに「Google」を追加（Gemini APIキー・モデル選択、localStorage保存）
+- チャット履歴をプロジェクト単位で localStorage に永続化（クリアボタン付き）
+- APIキー未設定時のローカルコマンド（/fly /layers /layer /basemaps /basemap /search /camera）
+- Inspector にローカルファイル追加機能（File System Access API で DATA/ へ直接保存→設定追記→登録、保存先フォルダ選択可）
+- `addGeoJsonLayer` によるAIからのレイヤ追加
+- ドキュメントを home.html に集約（インスペクター完全仕様・AI/セキュリティ・使い方）、README は最小化
+
 ## [3.1.0] - 2026-09-06
 
 ### Added

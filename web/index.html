@@ -103,6 +103,7 @@
                 <button class="settings-tab" type="button" data-settings-panel="settings-cesium-panel">Cesium</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-effects-panel">効果</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-help-panel">Help</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-google-panel">Google</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel">その他</button>
               </nav>
               <section id="settings-dem-panel" class="settings-subpanel active">
@@ -140,6 +141,19 @@
                 <button id="apply-inspector" type="button">登録</button>
                 <button id="export-inspector" type="button">エクスポート(.kasc)</button>
                 <p id="inspector-status" class="hint" aria-live="polite"></p>
+                <div class="section-title" style="margin-top:14px;">ローカルファイルを追加</div>
+                <label class="field-label" for="inspector-data-dir">保存先フォルダ (DATA/ を選択)</label>
+                <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                  <button id="inspector-data-dir" type="button" style="flex:0 0 auto;">フォルダを選択</button>
+                  <span id="inspector-data-dir-name" style="font-size:0.85em;color:#71818d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">未選択</span>
+                </div>
+                <input id="inspector-file-input" type="file" accept=".geojson,.json" style="width:100%;font-size:0.85em;" />
+                <div class="terrain-options" style="margin-top:6px;">
+                  <button id="inspector-save-data" type="button" disabled>DATA/ に保存して追加</button>
+                  <button id="inspector-add-file" type="button" disabled>設定行のみ追加</button>
+                  <button id="inspector-preview-file" type="button" disabled>今すぐプレビュー</button>
+                </div>
+                <p class="hint">「DATA/ に保存して追加」は File System Access API で <code>projects/&lt;project&gt;/DATA/</code> を選ばせ、ファイル書き込み→設定行追加→登録まで行います(Chromium系のみ)。<br />「設定行のみ追加」は <code>geojson:タイトル|DATA/ファイル名</code> を追記するだけです(ファイルは手動でDATA/へ)。<br />「今すぐプレビュー」は保存せず選択ファイルを一時表示します。</p>
               </section>
               <section id="settings-help-panel" class="settings-subpanel">
                 <div class="section-title">HELP</div>
@@ -148,6 +162,28 @@
                   <li>ローカルデータは <code>projects/&lt;project&gt;/DATA/</code> 以下に置き、設定から相対パスで参照できます。</li>
                   <li>「エクスポート(.kasc)」ボタンで変更をダウンロードし、設定ファイルと差し替えて保存してください。</li>
                   <li><code>web/</code> ディレクトリは通常の HTTP サーバーにそのまま配置できます。</li>
+                </ul>
+                <div class="section-title">インスペクター設定（書式）</div>
+                <ul style="margin:0 0 12px 1.4em;padding:0;font-size:0.9em;line-height:1.7;">
+                  <li>書式: <code>種類:タイトル|URL|出典|オプション</code></li>
+                  <li><code>base:</code> ベースマップ（先頭が既定）。オプション: <code>maxZoom=</code> <code>tileSize=256|512</code> <code>opacity=</code> <code>proxy=off</code></li>
+                  <li><code>xyz:</code> タイルレイヤ（同上＋末尾 <code>off</code> で非表示登録）</li>
+                  <li><code>3dtiles:</code> / <code>geojson:</code>(<code>layer:</code>) レイヤ。末尾 <code>off</code>、<code>proxy=off</code></li>
+                  <li><code>cam:</code> カメラプリセット <code>cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位</code></li>
+                  <li><code>fly_geojson:</code> Flyパス <code>…|s=速度|h=高さ|p=ピッチ|loop=true</code></li>
+                  <li><code>info:</code> InfoパネルHTMLのURL / <code>legend:</code> 凡例画像 / <code>background:</code> 背景色 / <code>yahooAppId:</code> Yahoo検索ID</li>
+                  <li>タイトルの <code>/</code>・<code>\</code> でグループ化、<code>//</code>・<code>\\</code> で排他グループ（同時1つ表示）。全グループ初期は折りたたみ</li>
+                  <li>任意位置に <code>on</code>/<code>off</code>（<code>false</code>可・大小文字不問）で初期表示を指定</li>
+                  <li>「登録」で即時適用、「エクスポート(.kasc)」で保存</li>
+                  <li>未対応: <code>layer:</code>制御、<code>max=</code>/<code>zoom=</code>（<code>maxZoom=</code>使用）、行単位ドレープ、<code>attrUrlOpen:</code></li>
+                </ul>
+                <div class="section-title">ローカルファイルの追加（デモ用データ）</div>
+                <ul style="margin:0 0 12px 1.4em;padding:0;font-size:0.9em;line-height:1.7;">
+                  <li>Inspectorタブ「保存先フォルダ」で DATA/ を選択（Chromium系のみ・以降は権限確認のみ・いつでも変更可）</li>
+                  <li>「DATA/ に保存して追加」: ファイル書き込み→<code>geojson:…|DATA/…</code>追記→登録まで一括</li>
+                  <li>「設定行のみ追加」: 追記のみ（ファイルは手動でDATA/へ。非対応ブラウザ向け）</li>
+                  <li>「今すぐプレビュー」: 保存せず一時表示（リロードで消える）</li>
+                  <li>保存したDATA/ファイルは .kasc と共に配布すればデモサイト化できます</li>
                 </ul>
                 <a class="help-link" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer">オンラインヘルプを開く</a>
               </section>
@@ -176,6 +212,24 @@
                   <button id="clip-clear" type="button" class="danger-button">クリア</button>
                 </div>
                 <p id="clip-status" class="hint" aria-live="polite"></p>
+              </section>
+              <section id="settings-google-panel" class="settings-subpanel">
+                <p class="hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
+                <p class="hint"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。ただし API 呼び出し時にキーがリクエストURLに含まれるため、このPCを操作する人・ブラウザ拡張機能・ページ上のスクリプトからは参照可能です。ローカル・個人利用を前提とし、公開サーバーへの設置や第三者との共有は避けてください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
+                <p class="hint"><strong>エージェント連携について</strong>：このアプリは ADK 等のエージェントフレームワークを内蔵しません。外部で構築されたエージェント（Antigravity等）をAPIで呼び出し、ツール実行（地図操作）はブラウザ側の <code>kasugaiApi</code> が担当する構成です。</p>
+                <label class="field-label" for="google-api-key">Gemini API キー</label>
+                <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" autocomplete="off" />
+                <label class="field-label" for="google-gemini-model" style="margin-top:10px;">Gemini モデル</label>
+                <select id="google-gemini-model">
+                  <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (標準・低コスト)</option>
+                  <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                  <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                  <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                </select>
+                <div class="terrain-options" style="margin-top:10px;">
+                  <button id="google-settings-save" type="button">保存</button>
+                </div>
+                <p id="google-settings-status" class="hint" aria-live="polite"></p>
               </section>
               <section id="settings-cesium-panel" class="settings-subpanel">
                 <p class="hint">CesiumJS 3D Tiles 描画パラメータを調整します。値を変えると 3D レイヤーが再読み込みされます。</p>
@@ -302,6 +356,20 @@
             <button id="top-down-button" type="button" aria-label="3D perspective view" title="3D perspective view">3D</button>
             <button id="mode-select" class="mode-select" type="button" value="orbit" aria-label="Orbit view">Orbit</button>
             <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化">−</button>
+          </aside>
+          <aside class="chat-panel" id="chat-panel" aria-label="AIチャット">
+            <div class="chat-header">
+              <strong>Chat</strong>
+              <span style="margin-left:auto;display:flex;gap:4px;">
+                <button id="chat-clear" class="chat-toggle" type="button" aria-label="履歴をクリア" title="履歴をクリア">🗑</button>
+                <button id="chat-panel-toggle" class="chat-toggle" type="button" aria-label="最小化">−</button>
+              </span>
+            </div>
+            <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+            <form id="chat-form" class="chat-form">
+              <input id="chat-input" type="text" placeholder="メッセージを入力 (/ でコマンド)" autocomplete="off" />
+              <button type="submit">送信</button>
+            </form>
           </aside>
           <small id="map-attribution" class="map-attribution"></small>
         </div>

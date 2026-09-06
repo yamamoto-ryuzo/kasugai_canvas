@@ -78,6 +78,7 @@ let drawLineEntity = null;
 let isDrawing = false;
 let lastRightDownTime = 0;
 const activeClippingPlanes = { planes: [] };
+const uiHooks = {};
 const activeDataSources = [];
 const vectorDataSources = [];
 let vectorSearchData = null;
@@ -1805,6 +1806,8 @@ function setupEvents() {
     }
   }
 
+  uiHooks.applyClip = applyClip;
+
   document.querySelector("#clip-ns").addEventListener("click", () => applyClip("ns"));
   document.querySelector("#clip-ew").addEventListener("click", () => applyClip("ew"));
   document.querySelector("#clip-h").addEventListener("click", () => applyClip("h"));
@@ -2371,6 +2374,10 @@ function setupEvents() {
       }
     }
   };
+  uiHooks.setMode = setMode;
+  uiHooks.startFlyPath = startFlyPath;
+  uiHooks.stopFlyPath = stopFlyPath;
+
   modeSelect.addEventListener("click", () => {
     setMode(modeSelect.value === "orbit" ? "walk" : "orbit");
   });
@@ -2617,7 +2624,7 @@ function setupEvents() {
     event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
   });
 
-  [".control-panel", ".basemap-control", ".navigation-toolbar"].forEach(selector => {
+  [".control-panel", ".basemap-control", ".navigation-toolbar", ".chat-panel"].forEach(selector => {
     const panel = document.querySelector(selector);
     if (!panel) return;
     ["click", "mousedown", "dblclick", "touchstart", "touchmove", "wheel"].forEach(type => {
@@ -2648,6 +2655,155 @@ function setupEvents() {
     a.remove();
     URL.revokeObjectURL(url);
     setInspectorStatus(".kasc ファイルをエクスポートしました。");
+  });
+
+  // ローカルファイル → インスペクター設定行 / 一時プレビュー
+  let inspectorPickedFile = null;
+  const inspectorFileInput = document.querySelector("#inspector-file-input");
+  const inspectorAddFile = document.querySelector("#inspector-add-file");
+  const inspectorPreviewFile = document.querySelector("#inspector-preview-file");
+  inspectorFileInput?.addEventListener("change", () => {
+    inspectorPickedFile = inspectorFileInput.files?.[0] || null;
+    if (inspectorAddFile) inspectorAddFile.disabled = !inspectorPickedFile;
+    if (inspectorPreviewFile) inspectorPreviewFile.disabled = !inspectorPickedFile;
+  });
+  // File System Access API: DATAフォルダへの直接保存(Chromium系のみ)。
+  // フォルダハンドルは IndexedDB に保持し、次回以降は権限確認のみで再利用する
+  const dataDirStore = {
+    open() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open("kasugai-canvas", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("handles");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    },
+    async get(key) {
+      try {
+        const db = await this.open();
+        return await new Promise(resolve => {
+          const query = db.transaction("handles", "readonly").objectStore("handles").get(key);
+          query.onsuccess = () => resolve(query.result || null);
+          query.onerror = () => resolve(null);
+        });
+      } catch (e) { return null; }
+    },
+    async set(key, value) {
+      try {
+        const db = await this.open();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("handles", "readwrite");
+          tx.objectStore("handles").put(value, key);
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (e) {}
+    },
+  };
+
+  let dataDirHandle = null;
+  const dataDirKey = () => `dataDir_${currentProjectId || "default"}`;
+  const dataDirName = document.querySelector("#inspector-data-dir-name");
+
+  async function updateDataDirLabel() {
+    if (!dataDirName) return;
+    if (!window.showDirectoryPicker) {
+      dataDirName.textContent = "このブラウザは未対応";
+      return;
+    }
+    if (dataDirHandle) { dataDirName.textContent = dataDirHandle.name; return; }
+    const saved = await dataDirStore.get(dataDirKey());
+    dataDirName.textContent = saved ? `${saved.name} (要権限確認)` : "未選択";
+  }
+
+  async function pickDataDir() {
+    const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+    dataDirHandle = handle;
+    await dataDirStore.set(dataDirKey(), handle);
+    await updateDataDirLabel();
+    return handle;
+  }
+
+  async function getDataDirHandle() {
+    if (!window.showDirectoryPicker) return null;
+    if (dataDirHandle) {
+      if (await dataDirHandle.queryPermission({ mode: "readwrite" }) === "granted") return dataDirHandle;
+      if (await dataDirHandle.requestPermission({ mode: "readwrite" }) === "granted") return dataDirHandle;
+    }
+    const saved = await dataDirStore.get(dataDirKey());
+    if (saved) {
+      if (await saved.queryPermission({ mode: "readwrite" }) === "granted") { dataDirHandle = saved; return saved; }
+      if (await saved.requestPermission({ mode: "readwrite" }) === "granted") { dataDirHandle = saved; return saved; }
+    }
+    return pickDataDir();
+  }
+
+  document.querySelector("#inspector-data-dir")?.addEventListener("click", async () => {
+    if (!window.showDirectoryPicker) {
+      setInspectorStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開いてください。", true);
+      return;
+    }
+    try {
+      await pickDataDir();
+      setInspectorStatus("保存先フォルダを設定しました。");
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+      setInspectorStatus(`フォルダ選択に失敗しました: ${error instanceof Error ? error.message : error}`, true);
+    }
+  });
+  void updateDataDirLabel();
+
+  const inspectorSaveData = document.querySelector("#inspector-save-data");
+  inspectorFileInput?.addEventListener("change", () => {
+    if (inspectorSaveData) inspectorSaveData.disabled = !inspectorPickedFile;
+  });
+  inspectorSaveData?.addEventListener("click", async () => {
+    if (!inspectorPickedFile) return;
+    if (!window.showDirectoryPicker) {
+      setInspectorStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開くか、手動で DATA/ にコピーしてください。", true);
+      return;
+    }
+    try {
+      const dir = await getDataDirHandle();
+      if (!dir) return;
+      const fileHandle = await dir.getFileHandle(inspectorPickedFile.name, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(inspectorPickedFile);
+      await writable.close();
+      const title = inspectorPickedFile.name.replace(/\.[^.]+$/, "");
+      const line = `geojson:${title}|DATA/${inspectorPickedFile.name}`;
+      const input = document.querySelector("#inspector-input");
+      if (input && !input.value.includes(`DATA/${inspectorPickedFile.name}`)) {
+        input.value = input.value.replace(/\s*$/, "") + `\n${line}\n`;
+      }
+      document.querySelector("#apply-inspector")?.click();
+      setInspectorStatus(`DATA/ に保存し、設定に追加・登録しました: ${line}`);
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+      setInspectorStatus(`保存に失敗しました: ${error instanceof Error ? error.message : error}`, true);
+    }
+  });
+
+  inspectorAddFile?.addEventListener("click", () => {
+    if (!inspectorPickedFile) return;
+    const title = inspectorPickedFile.name.replace(/\.[^.]+$/, "");
+    const line = `geojson:${title}|DATA/${inspectorPickedFile.name}`;
+    const input = document.querySelector("#inspector-input");
+    if (input) input.value = input.value.replace(/\s*$/, "") + `\n${line}\n`;
+    setInspectorStatus(`設定行を追加しました: ${line}\nファイルを projects/${currentProjectId || "default"}/DATA/ にコピーして「登録」してください。`);
+  });
+  inspectorPreviewFile?.addEventListener("click", async () => {
+    if (!inspectorPickedFile) return;
+    try {
+      const blobUrl = URL.createObjectURL(inspectorPickedFile);
+      const ds = await Cesium.GeoJsonDataSource.load(blobUrl);
+      ds.name = inspectorPickedFile.name;
+      await viewer.dataSources.add(ds);
+      viewer.flyTo(ds);
+      setInspectorStatus(`「${inspectorPickedFile.name}」を一時表示しました(未保存。再読み込みで消えます)。`);
+    } catch (error) {
+      setInspectorStatus(`プレビューに失敗しました: ${error instanceof Error ? error.message : error}`, true);
+    }
   });
 
   document.querySelector("#project-select")?.addEventListener("change", async event => {
@@ -2894,6 +3050,30 @@ function setupEvents() {
     });
   });
   setupVectorSearch();
+  setupChatPanel();
+  setupGoogleSettings();
+}
+
+function setupGoogleSettings() {
+  const keyInput = document.querySelector("#google-api-key");
+  const modelSelect = document.querySelector("#google-gemini-model");
+  const saveButton = document.querySelector("#google-settings-save");
+  const status = document.querySelector("#google-settings-status");
+  if (!keyInput || !saveButton) return;
+  try {
+    keyInput.value = localStorage.getItem("googleApiKey") || "";
+    const savedModel = localStorage.getItem("googleGeminiModel");
+    if (savedModel && modelSelect) modelSelect.value = savedModel;
+  } catch (e) {}
+  saveButton.addEventListener("click", () => {
+    try {
+      localStorage.setItem("googleApiKey", keyInput.value.trim());
+      if (modelSelect) localStorage.setItem("googleGeminiModel", modelSelect.value);
+      if (status) status.textContent = "保存しました。";
+    } catch (e) {
+      if (status) status.textContent = `保存エラー: ${e.message}`;
+    }
+  });
 }
 
 function setupVectorSearch() {
@@ -3465,6 +3645,867 @@ function applyUrlCamera() {
   const camera = parseUrlCamera();
   if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) {
     flyTo(camera);
+  }
+}
+
+// AI・外部連携用の操作API。チャットパネルや将来的なエージェント連携から地図を操作する入口
+window.kasugaiApi = {
+  flyTo,
+  getCamera() {
+    const carto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    if (!carto) return null;
+    return {
+      latitude: Cesium.Math.toDegrees(carto.latitude),
+      longitude: Cesium.Math.toDegrees(carto.longitude),
+      height: carto.height,
+      heading: Cesium.Math.toDegrees(viewer.camera.heading),
+      pitch: Cesium.Math.toDegrees(viewer.camera.pitch),
+    };
+  },
+  listLayers() {
+    return getOrderedLayerItems().map(layer => ({ id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type }));
+  },
+  setLayerVisible(idOrTitle, visible) {
+    const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
+    if (!layer) return false;
+    layer.visible = !!visible;
+    if (layer.visible && layer.exclusiveGroup) {
+      getOrderedLayerItems().forEach(other => {
+        if (other !== layer && other.group === layer.group && other.exclusiveGroup) other.visible = false;
+      });
+    }
+    renderLayerList();
+    refreshLayers();
+    return true;
+  },
+  listBasemaps() {
+    return basemaps.map(basemap => ({ id: basemap.id, title: basemap.title, selected: basemap === selectedBasemap }));
+  },
+  setBasemap(idOrTitle) {
+    const basemap = basemaps.find(item => item.id === idOrTitle || item.title === idOrTitle);
+    if (!basemap) return false;
+    selectedBasemap = basemap;
+    const select = document.querySelector("#basemap-select");
+    if (select) select.value = basemap.id;
+    updateMapAttribution();
+    refreshLayers();
+    return true;
+  },
+  async searchLocation(query) {
+    const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
+    if (!response.ok) throw new Error(`検索に失敗しました (${response.status})`);
+    const data = await response.json();
+    return data.slice(0, 5).map(item => ({
+      title: item.properties?.title || "",
+      address: item.properties?.address || "",
+      latitude: Number(item.geometry?.coordinates?.[1]),
+      longitude: Number(item.geometry?.coordinates?.[0]),
+    })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+  },
+  flyToFeature,
+  listCameraPresets() {
+    return cameraPresets.map(preset => preset.title);
+  },
+  flyToPreset(name) {
+    const preset = cameraPresets.find(item => item.title === name) || cameraPresets.find(item => item.title.includes(name));
+    if (!preset) return false;
+    flyTo(preset);
+    return true;
+  },
+  setTerrain(enabled) {
+    terrainEnabled = !!enabled;
+    const toggle = document.querySelector("#terrain-toggle");
+    if (toggle) toggle.checked = terrainEnabled;
+    refreshLayers();
+    return true;
+  },
+  setEffect(name, enabled) {
+    const selectors = {
+      lighting: "#effect-terrain-lighting",
+      translucency: "#effect-translucency",
+      fog: "#effect-fog",
+      atmosphere: "#effect-sky-atmosphere",
+      shadows: "#effect-shadows",
+      depthTest: "#effect-depth-test",
+    };
+    const input = document.querySelector(selectors[name]);
+    if (!input) return false;
+    input.checked = !!enabled;
+    updateEffectSettings();
+    return true;
+  },
+  setUnderground({ transparency, dive } = {}) {
+    if (Number.isFinite(transparency)) {
+      undergroundTransparency = Math.max(0, Math.min(1, transparency));
+      const slider = document.querySelector("#underground-transparency");
+      if (slider) slider.value = String(undergroundTransparency);
+      const label = document.querySelector("#underground-transparency-value");
+      if (label) label.textContent = `${Math.round(undergroundTransparency * 100)}%`;
+    }
+    if (typeof dive === "boolean") {
+      undergroundDiveEnabled = dive;
+      const toggle = document.querySelector("#underground-dive-toggle");
+      if (toggle) toggle.checked = dive;
+    }
+    updateUndergroundView();
+    updateEffectSettings();
+    return true;
+  },
+  setClip(type) {
+    if (!uiHooks.applyClip) return false;
+    uiHooks.applyClip(type);
+    return true;
+  },
+  listFlyPaths() {
+    return flyPaths.map((path, index) => ({ index, title: path.title }));
+  },
+  playFlyPath(nameOrIndex) {
+    const index = Number.isInteger(nameOrIndex) ? nameOrIndex : flyPaths.findIndex(path => path.title === nameOrIndex || path.title.includes(nameOrIndex));
+    if (index < 0 || index >= flyPaths.length) return false;
+    const select = document.querySelector("#fly-path-select");
+    if (select) select.value = String(index);
+    if (walkModeActive && uiHooks.startFlyPath) {
+      uiHooks.stopFlyPath?.();
+      void uiHooks.startFlyPath(index);
+    } else if (uiHooks.setMode) {
+      uiHooks.setMode("walk");
+    }
+    return true;
+  },
+  stopFly() {
+    if (uiHooks.setMode) uiHooks.setMode("orbit");
+    return true;
+  },
+  listProjects() {
+    const select = document.querySelector("#project-select");
+    if (!select) return [];
+    return [...select.options].map(option => ({ id: option.value, title: option.textContent, selected: option.value === currentProjectId }));
+  },
+  switchProject(projectId) {
+    const select = document.querySelector("#project-select");
+    if (!select) return false;
+    const exists = [...select.options].some(option => option.value === projectId);
+    if (!exists) return false;
+    select.value = projectId;
+    select.dispatchEvent(new Event("change"));
+    return true;
+  },
+  applyInspector(text) {
+    const input = document.querySelector("#inspector-input");
+    if (!input || typeof text !== "string") return false;
+    input.value = text;
+    document.querySelector("#apply-inspector")?.click();
+    return true;
+  },
+  exportInspector() {
+    const button = document.querySelector("#export-inspector");
+    if (!button) return false;
+    button.click();
+    return true;
+  },
+  checkUpdate() {
+    document.querySelector("#check-update")?.click();
+    return true;
+  },
+  installUpdate() {
+    const button = document.querySelector("#install-update");
+    if (!button || button.hidden) return false;
+    button.click();
+    return true;
+  },
+  shutdownApp() {
+    const button = document.querySelector("#shutdown-app");
+    if (!button) return false;
+    button.click();
+    return true;
+  },
+  toggleDrawMode() {
+    const button = document.querySelector("#draw-mode-toggle");
+    if (!button) return { ok: false };
+    button.click();
+    return { ok: true, drawModeActive };
+  },
+  vectorSearch(query) {
+    if (!vectorSearchData || !query) return [];
+    const q = String(query).toLowerCase();
+    const results = [];
+    const source = vectorSearchData.all;
+    if (!source) return results;
+    for (const attr of source.attributes || []) {
+      for (const val of source.valuesByAttr[attr] || []) {
+        if (!(String(val) + " " + String(attr)).toLowerCase().includes(q)) continue;
+        const pos = source.featureByAttr?.[attr]?.[val] || null;
+        results.push({ attr, value: val, latitude: pos?.lat ?? null, longitude: pos?.lng ?? null });
+        if (results.length >= 20) return results;
+      }
+    }
+    return results;
+  },
+  getShareUrl() {
+    const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    if (!c) return null;
+    const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
+    const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
+    const pitch = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
+    const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
+    const height = Number(c.height).toFixed(1);
+    return `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
+  },
+  addGeoJsonLayer(title, url) {
+    if (!title || !url) return false;
+    const input = document.querySelector("#inspector-input");
+    if (!input) return false;
+    input.value = input.value.replace(/\s*$/, "") + `\ngeojson:${title}|${url}\n`;
+    document.querySelector("#apply-inspector")?.click();
+    return true;
+  },
+  getGoogleApiKey() {
+    try { return localStorage.getItem("googleApiKey") || ""; } catch (e) { return ""; }
+  },
+  getGeminiModel() {
+    try { return localStorage.getItem("googleGeminiModel") || "gemini-3.1-flash-lite"; } catch (e) { return "gemini-3.1-flash-lite"; }
+  },
+};
+
+// ローカルコマンド: AI接続前でも操作APIの動作確認ができる
+async function handleLocalChatCommand(text) {
+  const [command, ...args] = text.trim().split(/\s+/);
+  if (command === "/fly") {
+    const [lat, lng, height] = args.map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "使い方: /fly 緯度 経度 [高さm]";
+    flyTo({ latitude: lat, longitude: lng, height: Number.isFinite(height) ? height : undefined });
+    return `(${lat}, ${lng}) へ移動します。`;
+  }
+  if (command === "/layers") {
+    const items = window.kasugaiApi.listLayers();
+    if (!items.length) return "レイヤがありません。";
+    return items.map(layer => `${layer.visible ? "●" : "○"} ${layer.title}`).join("\n");
+  }
+  if (command === "/layer") {
+    const onoff = args[0];
+    const name = args.slice(1).join(" ");
+    if (!/^(on|off)$/i.test(onoff) || !name) return "使い方: /layer on|off レイヤ名";
+    const on = /^on$/i.test(onoff);
+    const ok = window.kasugaiApi.setLayerVisible(name, on);
+    return ok ? `「${name}」を${on ? "表示" : "非表示"}にしました。` : `「${name}」というレイヤが見つかりません。`;
+  }
+  if (command === "/basemaps") {
+    const items = window.kasugaiApi.listBasemaps();
+    if (!items.length) return "ベースマップがありません。";
+    return items.map(basemap => `${basemap.selected ? "●" : "○"} ${basemap.title}`).join("\n");
+  }
+  if (command === "/basemap") {
+    const name = args.join(" ");
+    if (!name) return "使い方: /basemap ベースマップ名";
+    const ok = window.kasugaiApi.setBasemap(name);
+    return ok ? `ベースマップを「${name}」に切り替えました。` : `「${name}」というベースマップが見つかりません。`;
+  }
+  if (command === "/search") {
+    const query = args.join(" ");
+    if (!query) return "使い方: /search 住所・施設名";
+    const results = await window.kasugaiApi.searchLocation(query);
+    if (!results.length) return "該当する結果がありません。";
+    const first = results[0];
+    flyToFeature(first.latitude, first.longitude);
+    return `候補:\n${results.map(item => `- ${item.title} (${item.address})`).join("\n")}\n先頭の候補へ移動しました。`;
+  }
+  if (command === "/camera") {
+    const camera = window.kasugaiApi.getCamera();
+    if (!camera) return "カメラ位置を取得できません。";
+    return `緯度 ${camera.latitude.toFixed(5)} / 経度 ${camera.longitude.toFixed(5)} / 高さ ${camera.height.toFixed(0)}m\nheading ${camera.heading.toFixed(1)}° / pitch ${camera.pitch.toFixed(1)}°`;
+  }
+  return null;
+}
+
+// Gemini へ公開するツール定義。実行は window.kasugaiApi に委譲する
+const CHAT_TOOLS = [{
+  functionDeclarations: [
+    {
+      name: "flyTo",
+      description: "地図カメラを指定座標へ移動する。height/pitch省略時はドローン視点(対象地上+200m・ピッチ-30°)になる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          latitude: { type: "NUMBER", description: "緯度(度)" },
+          longitude: { type: "NUMBER", description: "経度(度)" },
+          height: { type: "NUMBER", description: "カメラ高さ(m)。省略時は対象地上+200m" },
+          pitch: { type: "NUMBER", description: "ピッチ(度)。省略時は-30(ドローン視点)。-90で真上から俯瞰" },
+          heading: { type: "NUMBER", description: "方位(度)" },
+        },
+        required: ["latitude", "longitude"],
+      },
+    },
+    {
+      name: "setLayerVisible",
+      description: "レイヤ名を指定して表示/非表示を切り替える",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名(listLayersで確認)" },
+          visible: { type: "BOOLEAN", description: "trueで表示、falseで非表示" },
+        },
+        required: ["name", "visible"],
+      },
+    },
+    {
+      name: "listLayers",
+      description: "登録されているレイヤ一覧(名前・表示状態)を取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "getCamera",
+      description: "現在のカメラ位置(緯度・経度・高さ・方位・ピッチ)を取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "listBasemaps",
+      description: "選択可能なベースマップ(背景地図)の一覧と現在の選択を取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "setBasemap",
+      description: "ベースマップ(背景地図)を名前またはIDで切り替える",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "ベースマップ名またはID(listBasemapsで確認)" },
+        },
+        required: ["name"],
+      },
+    },
+    {
+      name: "searchLocation",
+      description: "住所・地名・施設名を検索し、候補(名称・住所・緯度経度)を返す。検索後はflyToまたはflyToFeatureで移動できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          query: { type: "STRING", description: "検索語(例: 春日井市役所)" },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "flyToFeature",
+      description: "指定座標が画面中央に来るようにカメラを後退補正して移動する。地点・地物を見せたい場合はこちら。height/pitch省略時はドローン視点(対象地上+200m・ピッチ-30°)になる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          latitude: { type: "NUMBER", description: "緯度(度)" },
+          longitude: { type: "NUMBER", description: "経度(度)" },
+          height: { type: "NUMBER", description: "カメラ高さ(m)。省略時は対象地上+200m" },
+          pitch: { type: "NUMBER", description: "ピッチ(度)。省略時は-30(ドローン視点)" },
+          heading: { type: "NUMBER", description: "方位(度)" },
+        },
+        required: ["latitude", "longitude"],
+      },
+    },
+    {
+      name: "flyToPreset",
+      description: "登録済みのカメラプリセット名を指定して移動する。listCameraPresetsで一覧を確認できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "プリセット名" },
+        },
+        required: ["name"],
+      },
+    },
+    {
+      name: "listCameraPresets",
+      description: "登録済みカメラプリセット名の一覧を取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "setTerrain",
+      description: "地形(DEM)表示のON/OFF",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          enabled: { type: "BOOLEAN" },
+        },
+        required: ["enabled"],
+      },
+    },
+    {
+      name: "setEffect",
+      description: "表示効果のON/OFF。nameは lighting(地形照明) translucency(地下透過) fog(霧) atmosphere(大気) shadows(影) depthTest(地形深度テスト) のいずれか",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          enabled: { type: "BOOLEAN" },
+        },
+        required: ["name", "enabled"],
+      },
+    },
+    {
+      name: "setUnderground",
+      description: "地下表示の設定。transparencyは地表の透過率0〜1、diveは地下への移動許可",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          transparency: { type: "NUMBER", description: "0〜1" },
+          dive: { type: "BOOLEAN" },
+        },
+      },
+    },
+    {
+      name: "setClip",
+      description: "カメラ中心に断面クリップを作成・解除する。typeは ns ew h clear のいずれか",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          type: { type: "STRING", description: "ns / ew / h / clear" },
+        },
+        required: ["type"],
+      },
+    },
+    {
+      name: "listFlyPaths",
+      description: "登録済みフライパス(巡視ルート)の一覧を取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "playFlyPath",
+      description: "フライパス(巡視ルート)を名前または番号で再生し、Flyモードで自動走行する",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "フライパス名(listFlyPathsで確認)" },
+        },
+        required: ["name"],
+      },
+    },
+    {
+      name: "stopFly",
+      description: "Flyモード・フライパス再生を停止してOrbit(3D)モードに戻る",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "vectorSearch",
+      description: "読み込み済みベクトルデータ(GeoJSON等)の属性を検索し、該当する属性名・値・位置を返す。結果の緯度経度へはflyToFeatureで移動できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          query: { type: "STRING", description: "検索語(属性名や値の一部)" },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "getShareUrl",
+      description: "現在のカメラ位置・プロジェクトを含む共有URLを取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "listProjects",
+      description: "切替可能なプロジェクト一覧を取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "switchProject",
+      description: "プロジェクトを切り替える。レイヤ・カメラプリセット等の設定全体が入れ替わるので、ユーザーが明示した場合のみ使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          projectId: { type: "STRING", description: "プロジェクトID(listProjectsで確認)" },
+        },
+        required: ["projectId"],
+      },
+    },
+    {
+      name: "toggleDrawMode",
+      description: "Drawモード(地図上へのルート描画)をON/OFFする",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "applyInspector",
+      description: "インスペクターの設定テキスト(.kasc形式)を登録・適用する。設定全体が上書きされるので、ユーザーが明示した場合のみ使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          text: { type: "STRING", description: ".kasc形式の設定テキスト" },
+        },
+        required: ["text"],
+      },
+    },
+    {
+      name: "exportInspector",
+      description: "現在の設定を.kascファイルとしてエクスポート(ダウンロード)する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "checkUpdate",
+      description: "アプリの最新バージョンを確認する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "installUpdate",
+      description: "最新版をインストールする(更新がある場合のみ有効)",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "runCode",
+      description: "ブラウザ内サンドボックスでJavaScriptを実行し、戻り値とconsole出力を返す。データ加工・集計・座標計算などに使う。api.flyTo(...)等の地図操作APIが非同期で呼べる(api.<関数名>はkasugaiApiと同じ)。例: const layers = await api.listLayers(); return layers.length; ※DOM・localStorage・外部fetchは不可",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          code: { type: "STRING", description: "実行するJavaScript。returnで値を返す。await使用可" },
+        },
+        required: ["code"],
+      },
+    },
+    {
+      name: "addGeoJsonLayer",
+      description: "GeoJSONレイヤをURL指定で追加して即座に適用する。urlはDATA/相対パスまたは外部URL。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING", description: "レイヤ名" },
+          url: { type: "STRING", description: "GeoJSONのURLまたは DATA/ファイル名" },
+        },
+        required: ["title", "url"],
+      },
+    },
+    {
+      name: "shutdownApp",
+      description: "アプリを停止する。確認ダイアログが出るのでユーザーが最終判断する。破壊的操作のためユーザーが明示した場合のみ使う",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+  ],
+}];
+
+const CHAT_SYSTEM_INSTRUCTION = "あなたは3D地図アプリ「KASUGAI Canvas」の操作アシスタントです。ユーザーの指示に応じてツールで地図を操作してください。レイヤ名が曖昧な場合はlistLayers、ベースマップ名が曖昧な場合はlistBasemapsで確認し、最も近いものを使ってください。switchProject・applyInspector・shutdownApp・installUpdate・exportInspectorは影響が大きい操作なので、ユーザーが明示的に指示した場合のみ実行し、実行前に一言確認してください。回答は日本語で簡潔に。";
+
+// ブラウザ内コード実行サンドボックス。
+// sandbox属性(allow-scriptsのみ・opaque origin)のiframe内で実行するため、
+// localStorage・DOM・APIキーにはアクセスできない。地図操作は postMessage 経由の api ブリッジのみ。
+let chatSandboxFrame = null;
+let chatSandboxReady = null;
+const chatSandboxPending = new Map();
+
+function getChatSandbox() {
+  if (chatSandboxFrame) return chatSandboxReady;
+  const srcdoc = `<!doctype html><script>
+    const logs = [];
+    ["log", "warn", "error"].forEach(kind => {
+      console[kind] = (...items) => {
+        logs.push(items.map(item => { try { return typeof item === "object" ? JSON.stringify(item) : String(item); } catch (e) { return String(item); } }).join(" "));
+      };
+    });
+    window.api = new Proxy({}, {
+      get: (target, name) => (...args) => new Promise((resolve, reject) => {
+        const id = Math.random().toString(36).slice(2) + Date.now();
+        const onMessage = event => {
+          if (!event.data || event.data.id !== id) return;
+          removeEventListener("message", onMessage);
+          if (event.data.error) reject(new Error(event.data.error));
+          else resolve(event.data.result);
+        };
+        addEventListener("message", onMessage);
+        parent.postMessage({ id, call: name, args }, "*");
+      }),
+    });
+    addEventListener("message", async event => {
+      const data = event.data || {};
+      if (!data.id || typeof data.code !== "string") return;
+      logs.length = 0;
+      try {
+        const fn = new Function("api", "return (async () => { " + data.code + " })()");
+        const result = await fn(window.api);
+        parent.postMessage({ id: data.id, result: result === undefined ? null : result, logs: logs.slice(0, 50) }, "*");
+      } catch (error) {
+        parent.postMessage({ id: data.id, error: String(error && error.message || error), logs: logs.slice(0, 50) }, "*");
+      }
+    });
+    parent.postMessage({ ready: true }, "*");
+  <\/script>`;
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-scripts");
+  frame.srcdoc = srcdoc;
+  frame.style.display = "none";
+  chatSandboxFrame = frame;
+  chatSandboxReady = new Promise(resolve => {
+    const onMessage = event => {
+      if (event.source === frame.contentWindow && event.data?.ready) {
+        removeEventListener("message", onMessage);
+        resolve();
+      }
+    };
+    addEventListener("message", onMessage);
+  });
+  document.body.append(frame);
+  return chatSandboxReady;
+}
+
+// サンドボックスへ公開しないAPI（キー等の機密を外部送信されるのを防ぐ）
+const CHAT_SANDBOX_BLOCKED_API = new Set(["getGoogleApiKey", "getGeminiModel", "applyInspector", "shutdownApp", "installUpdate"]);
+
+// サンドボックスからの api.XXX 呼び出しを kasugaiApi に橋渡しする
+window.addEventListener("message", async event => {
+  if (!chatSandboxFrame || event.source !== chatSandboxFrame.contentWindow) return;
+  const { id, call, args } = event.data || {};
+  if (!id || typeof call !== "string") return;
+  const fn = window.kasugaiApi?.[call];
+  let out;
+  try {
+    if (CHAT_SANDBOX_BLOCKED_API.has(call)) throw new Error(`api.${call} はサンドボックスから呼べません`);
+    if (typeof fn !== "function") throw new Error(`api.${call} は存在しません`);
+    out = { result: await fn(...(Array.isArray(args) ? args : [])) };
+  } catch (error) {
+    out = { error: String(error && error.message || error) };
+  }
+  event.source.postMessage({ id, ...out }, "*");
+});
+
+// サンドボックス内でJSコードを実行し、戻り値とconsole出力を返す
+async function runSandboxedCode(code, timeoutMs = 15000) {
+  await getChatSandbox();
+  const id = Math.random().toString(36).slice(2) + Date.now();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      chatSandboxPending.delete(id);
+      reject(new Error("実行がタイムアウトしました"));
+    }, timeoutMs);
+    chatSandboxPending.set(id, { resolve, timer });
+    const onMessage = event => {
+      if (event.source !== chatSandboxFrame.contentWindow || event.data?.id !== id) return;
+      removeEventListener("message", onMessage);
+      chatSandboxPending.delete(id);
+      clearTimeout(timer);
+      const { result, error, logs } = event.data;
+      if (error) reject(new Error(error));
+      else resolve({ result, logs: logs || [] });
+    };
+    addEventListener("message", onMessage);
+    chatSandboxFrame.contentWindow.postMessage({ id, code }, "*");
+  });
+}
+
+// AIによる地図移動の既定視点: ドローン(対象地上+200m・ピッチ-30°)
+async function applyDroneViewDefaults(args) {
+  const merged = { ...args };
+  if (!Number.isFinite(Number(merged.pitch))) merged.pitch = -30;
+  if (!Number.isFinite(Number(merged.height))) {
+    const lat = Number(merged.latitude);
+    const lng = Number(merged.longitude);
+    merged.height = (await sampleGroundHeight(lat, lng)) + 200;
+  }
+  return merged;
+}
+
+async function executeChatTool(name, args = {}) {
+  if (name === "flyTo") {
+    flyTo(await applyDroneViewDefaults(args));
+    return { ok: true };
+  }
+  if (name === "flyToFeature") {
+    const merged = await applyDroneViewDefaults(args);
+    await flyToFeature(Number(merged.latitude), Number(merged.longitude), merged);
+    return { ok: true };
+  }
+  if (name === "setLayerVisible") {
+    const ok = window.kasugaiApi.setLayerVisible(args.name, args.visible);
+    return { ok, message: ok ? undefined : `「${args.name}」というレイヤが見つかりません` };
+  }
+  if (name === "listLayers") return { layers: window.kasugaiApi.listLayers() };
+  if (name === "getCamera") return { camera: window.kasugaiApi.getCamera() };
+  if (name === "listBasemaps") return { basemaps: window.kasugaiApi.listBasemaps() };
+  if (name === "setBasemap") {
+    const ok = window.kasugaiApi.setBasemap(args.name);
+    return { ok, message: ok ? undefined : `「${args.name}」というベースマップが見つかりません` };
+  }
+  if (name === "searchLocation") {
+    const results = await window.kasugaiApi.searchLocation(args.query);
+    return { results };
+  }
+  if (name === "listCameraPresets") return { presets: window.kasugaiApi.listCameraPresets() };
+  if (name === "flyToPreset") {
+    const ok = window.kasugaiApi.flyToPreset(args.name);
+    return { ok, message: ok ? undefined : `「${args.name}」というプリセットが見つかりません` };
+  }
+  if (name === "setTerrain") return { ok: window.kasugaiApi.setTerrain(args.enabled) };
+  if (name === "setEffect") {
+    const ok = window.kasugaiApi.setEffect(args.name, args.enabled);
+    return { ok, message: ok ? undefined : `未知の効果名: ${args.name}` };
+  }
+  if (name === "setUnderground") return { ok: window.kasugaiApi.setUnderground(args) };
+  if (name === "setClip") return { ok: window.kasugaiApi.setClip(args.type) };
+  if (name === "listFlyPaths") return { flyPaths: window.kasugaiApi.listFlyPaths() };
+  if (name === "playFlyPath") {
+    const ok = window.kasugaiApi.playFlyPath(args.name);
+    return { ok, message: ok ? undefined : `「${args.name}」というフライパスが見つかりません` };
+  }
+  if (name === "stopFly") return { ok: window.kasugaiApi.stopFly() };
+  if (name === "vectorSearch") return { results: window.kasugaiApi.vectorSearch(args.query) };
+  if (name === "getShareUrl") return { url: window.kasugaiApi.getShareUrl() };
+  if (name === "listProjects") return { projects: window.kasugaiApi.listProjects() };
+  if (name === "switchProject") {
+    const ok = window.kasugaiApi.switchProject(args.projectId);
+    return { ok, message: ok ? undefined : `「${args.projectId}」というプロジェクトが見つかりません` };
+  }
+  if (name === "toggleDrawMode") return window.kasugaiApi.toggleDrawMode();
+  if (name === "applyInspector") return { ok: window.kasugaiApi.applyInspector(args.text) };
+  if (name === "exportInspector") return { ok: window.kasugaiApi.exportInspector() };
+  if (name === "checkUpdate") return { ok: window.kasugaiApi.checkUpdate() };
+  if (name === "installUpdate") {
+    const ok = window.kasugaiApi.installUpdate();
+    return { ok, message: ok ? undefined : "現在インストール可能な更新はありません" };
+  }
+  if (name === "runCode") {
+    try {
+      const { result, logs } = await runSandboxedCode(String(args.code || ""));
+      return { result, logs };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message || error) };
+    }
+  }
+  if (name === "addGeoJsonLayer") return { ok: window.kasugaiApi.addGeoJsonLayer(args.title, args.url) };
+  if (name === "shutdownApp") return { ok: window.kasugaiApi.shutdownApp() };
+  return { ok: false, message: `未知のツール: ${name}` };
+}
+
+// Gemini generateContent を呼び、function calling の往復を処理する
+async function callGemini(history) {
+  const apiKey = window.kasugaiApi.getGoogleApiKey();
+  const model = window.kasugaiApi.getGeminiModel();
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const executed = [];
+  for (let step = 0; step < 5; step++) {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: CHAT_SYSTEM_INSTRUCTION }] },
+        contents: history,
+        tools: CHAT_TOOLS,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    history.push({ role: "model", parts });
+    const calls = parts.filter(part => part.functionCall);
+    if (!calls.length) {
+      const text = parts.map(part => part.text || "").join("").trim();
+      return { text: text || "(応答なし)", executed };
+    }
+    const responseParts = [];
+    for (const part of calls) {
+      const result = await executeChatTool(part.functionCall.name, part.functionCall.args || {});
+      executed.push(`${part.functionCall.name}(${JSON.stringify(part.functionCall.args || {})})`);
+      responseParts.push({ functionResponse: { name: part.functionCall.name, response: { result } } });
+    }
+    history.push({ role: "user", parts: responseParts });
+  }
+  return { text: "ツール実行が上限回数に達しました。", executed };
+}
+
+function setupChatPanel() {
+  const panel = document.querySelector("#chat-panel");
+  if (!panel) return;
+  const messages = document.querySelector("#chat-messages");
+  const form = document.querySelector("#chat-form");
+  const input = document.querySelector("#chat-input");
+  const history = [];
+
+  // チャット履歴はプロジェクト単位で localStorage に保存する
+  const historyKey = `kasugaiChatHistory_${currentProjectId || "default"}`;
+  const loadChatLog = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(historyKey) || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch (e) { return []; }
+  };
+  const saveChatLog = (role, text) => {
+    try {
+      const log = loadChatLog();
+      log.push({ role, text });
+      localStorage.setItem(historyKey, JSON.stringify(log.slice(-200)));
+    } catch (e) {}
+  };
+
+  const addMessage = (role, text, { persist = true } = {}) => {
+    const div = document.createElement("div");
+    div.className = `chat-message ${role}`;
+    div.textContent = text;
+    messages.append(div);
+    messages.scrollTop = messages.scrollHeight;
+    if (persist) saveChatLog(role, text);
+  };
+
+  // 保存済み履歴を復元し、Gemini の会話コンテキストも user/model ペアで再構成する
+  const savedLog = loadChatLog();
+  savedLog.forEach(entry => {
+    if (!entry || typeof entry.text !== "string") return;
+    addMessage(entry.role, entry.text, { persist: false });
+    if (entry.role === "user") history.push({ role: "user", parts: [{ text: entry.text }] });
+    else if (entry.role === "assistant") history.push({ role: "model", parts: [{ text: entry.text }] });
+  });
+
+  const toggle = document.querySelector("#chat-panel-toggle");
+  toggle?.addEventListener("click", () => {
+    const collapsed = panel.classList.toggle("collapsed");
+    toggle.textContent = collapsed ? "+" : "−";
+    toggle.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+  });
+
+  const clearButton = document.querySelector("#chat-clear");
+  clearButton?.addEventListener("click", () => {
+    try { localStorage.removeItem(historyKey); } catch (e) {}
+    history.length = 0;
+    messages.replaceChildren();
+    addMessage("system", "履歴をクリアしました。", { persist: false });
+  });
+
+  form?.addEventListener("submit", event => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    addMessage("user", text);
+    void respondToChat(text);
+  });
+
+  // Google APIキーが設定されていれば Gemini (function calling)、未設定ならローカルコマンドのみ。
+  // "kasugai:chat" カスタムイベントを購読し detail.reply をセットすれば外部エージェントへ橋渡しできる
+  async function respondToChat(text) {
+    const detail = { text, reply: null };
+    window.dispatchEvent(new CustomEvent("kasugai:chat", { detail }));
+    if (typeof detail.reply === "string" && detail.reply) {
+      addMessage("assistant", detail.reply);
+      return;
+    }
+    if (text.startsWith("/")) {
+      const local = await handleLocalChatCommand(text);
+      addMessage("assistant", local || `不明なコマンド: ${text}`);
+      return;
+    }
+    if (!window.kasugaiApi.getGoogleApiKey()) {
+      const local = await handleLocalChatCommand(text);
+      addMessage("assistant", local || "AI接続は未設定です。設定タブの「Google」でGemini APIキーを保存してください。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
+      return;
+    }
+    const thinking = document.createElement("div");
+    thinking.className = "chat-message assistant";
+    thinking.textContent = "…";
+    messages.append(thinking);
+    messages.scrollTop = messages.scrollHeight;
+    try {
+      history.push({ role: "user", parts: [{ text }] });
+      const { text: reply, executed } = await callGemini(history);
+      thinking.remove();
+      executed.forEach(call => addMessage("system", `実行: ${call}`));
+      addMessage("assistant", reply);
+    } catch (error) {
+      thinking.remove();
+      history.pop();
+      addMessage("system", `エラー: ${error.message}`);
+    }
+  }
+
+  if (!savedLog.length) {
+    addMessage("system", "AIチャット。設定タブ「Google」でGemini APIキーを保存すると会話できます。「/」始まりはローカルコマンドです。", { persist: false });
   }
 }
 

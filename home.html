@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v3.1.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v3.2.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -140,6 +140,86 @@
       </section>
 
       <section>
+        <h2>🤖 AIチャット（Gemini連携）</h2>
+        <p>右下の Chat パネルから Gemini API（function calling）で地図を操作できます。設定 → Google タブで Gemini API キー・モデルを設定します。</p>
+        <div class="features">
+          <div class="feature-card">
+            <h3>💬 地図操作チャット</h3>
+            <p>「◯◯へ飛んで」「レイヤを消して」等をAIが実行。flyTo・レイヤ切替・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替まで網羅。AI移動はドローン視点（対象地上+200m・-30°）が既定</p>
+          </div>
+          <div class="feature-card">
+            <h3>⚙️ ローカルコマンド</h3>
+            <p>APIキー未設定でも <code>/fly</code> <code>/layers</code> <code>/layer</code> <code>/basemaps</code> <code>/search</code> <code>/camera</code> で地図操作を試せます</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧪 コード実行サンドボックス</h3>
+            <p><code>runCode</code> ツールでAI生成JSを sandbox iframe（opaque origin）内で実行。集計・加工・座標計算が無料・高速。地図操作は <code>api</code> ブリッジ経由のみ</p>
+          </div>
+          <div class="feature-card">
+            <h3>📜 履歴・透明性</h3>
+            <p>履歴はプロジェクト単位で localStorage に永続化（最大200件・ヘッダーの🗑でクリア）。AIのツール実行は「実行: ...」とログ表示</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔐 セキュリティ</h3>
+            <p>APIキーは localStorage のみ・送信先は Google のAPI（HTTPS）のみ。Google Cloud 側でAPI制限推奨。<code>window.kasugaiApi</code> は開いたブラウザ内からのみ実行可能で外部経路なし。影響の大きい操作（プロジェクト切替・設定適用・停止等）はユーザー明示時のみ</p>
+          </div>
+          <div class="feature-card">
+            <h3>🤝 エージェント連携方針</h3>
+            <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>📝 インスペクター設定（完全版）</h2>
+        <p>設定 → Inspector タブで <code>.kasc</code> 形式を編集・適用します。このページが設定仕様の正本です。</p>
+        <div class="url-box">
+          <h3>Step 2: 設定方法</h3>
+          <p>設定 → Inspector（歯車タブ）のテキスト欄に、以下の形式で行ごとに入力し「登録」を押してください。設定行は順不同です。</p>
+          <pre><code>xyz: OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png
+base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18
+base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
+3dtiles: 東京都/千代田区（建築物LOD1） | https://example.com/tileset.json | off
+geojson: 東京都/行政区域 | https://example.com/行政区域.geojson | on
+background: #ffffff
+info: https://example.com/project-info.html
+cam: 東京駅|35.653108|139.761449|h=2200.6|p=-30
+legend: 凡例|https://example.com/legend.png</code></pre>
+        </div>
+        <div class="url-box">
+          <h3>基本書式</h3>
+          <pre><code>種類:タイトル|URL|出典|オプション名=値|on/off</code></pre>
+          <p>URLが <code>DATA/...</code> 等の相対パスなら <code>projects/&lt;project&gt;/DATA/</code> 配下に解決。任意位置の <code>on</code>/<code>off</code>（<code>false</code> 可・大文字小文字不問）で初期表示を指定。</p>
+        </div>
+        <div class="url-box">
+          <h3>設定種類</h3>
+          <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
+xyz: タイルレイヤ | 同上+off
+3dtiles: / geojson:(layer:) レイヤ | off / proxy=off
+cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
+fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true
+info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID</code></pre>
+        </div>
+        <div class="url-box">
+          <h3>グループ化ルール</h3>
+          <p><code>/</code>・<code>\</code>＝通常グループ（一括ON/OFF）、<code>//</code>・<code>\\</code>＝排他グループ（同時に1つだけ表示・ラジオ動作）。<strong>全グループの初期表示は折りたたみ</strong>です。</p>
+        </div>
+        <div class="url-box">
+          <h3>未対応の記法（注意）</h3>
+          <p>Re:Earth GeoSuite 由来の以下の記法は本アプリでは未実装です：<code>layer:</code> によるシステムレイヤ制御、<code>max=</code>/<code>zoom=</code>（<code>maxZoom=</code> を使用）、行単位ドレープ（<code>| terrain</code> 等→設定タブのグローバル設定を使用）、<code>attrUrlOpen:</code>、<code>\</code> による初期展開。</p>
+        </div>
+        <div class="url-box">
+          <h3>ローカルファイルの追加（デモ用データ・Chromium系）</h3>
+          <ol>
+            <li>Inspectorタブ「フォルダを選択」で <code>DATA/</code> を指定（File System Access API・変更可・IndexedDB保持）</li>
+            <li>ファイル選択 → <strong>「DATA/ に保存して追加」</strong> で書き込み＋設定追記＋登録まで一括</li>
+            <li>「設定行のみ追加」は追記のみ（手動コピー用）、「今すぐプレビュー」は一時表示</li>
+            <li>保存したDATA/ファイルは .kasc と共に配布すればデモサイト化できます</li>
+          </ol>
+        </div>
+      </section>
+
+      <section>
         <h2>🔮 構想・未対応</h2>
         <p>現時点では未対応、または将来の構想として位置づけられている機能です。</p>
         <div class="features">
@@ -176,14 +256,43 @@
       <section>
         <h2>📖 使い方</h2>
         <div class="url-box">
-          <h3>開発起動</h3>
-          <pre><code>cargo run --manifest-path server\Cargo.toml</code></pre>
-          <p>ブラウザで <code>http://127.0.0.1:8510</code> を開いてください。インスペクター設定は <code>projects/&lt;project&gt;/kasugai_canvas.kasc</code> に保存されます。</p>
+          <h3>起動方法（通常のHTTPサーバー）</h3>
+          <pre><code>cd web
+python -m http.server 8520</code></pre>
+          <p><code>web/</code> をドキュメントルートに置くだけです。ブラウザで <code>http://127.0.0.1:8520/</code> を開いてください。</p>
+        </div>
+        <div class="url-box">
+          <h3>起動方法（Rustサーバー / 開発）</h3>
+          <pre><code>cargo run --manifest-path server\Cargo.toml
+# または
+python run.py            # 開発起動
+python run.py --release  # リリース版を起動</code></pre>
+          <p>ブラウザで <code>http://127.0.0.1:8510/</code> を開いてください。ポートは <code>KASUGAI_CANVAS_PORT</code> 環境変数で変更できます。インスペクター設定は <code>projects/&lt;project&gt;/kasugai_canvas.kasc</code> に保存されます。</p>
+        </div>
+        <div class="url-box">
+          <h3>プロジェクト構成</h3>
+          <pre><code>web/                    # フロントエンド資産(静的配信のみで動作)
+├─ index.html / app.js / styles.css
+└─ projects/
+   ├─ projects.json      # プロジェクト一覧 [{"id":"...","title":"..."}]
+   └─ &lt;project_id&gt;/
+      ├─ project.json     # 表示名等
+      ├─ kasugai_canvas.kasc  # インスペクター設定
+      └─ DATA/            # ローカルGeoJSON・3D Tiles・画像等</code></pre>
+          <p>設定内の相対パス（例: <code>DATA/sample.geojson</code>）は <code>projects/&lt;project_id&gt;/DATA/</code> に解決されます。Rustサーバー使用時は同構成の <code>projects/</code> をサーバーと同階層に配置します。</p>
+        </div>
+        <div class="url-box">
+          <h3>設定の保存</h3>
+          <p>静的サーバーでは設定をサーバーに保存しません。インスペクターの<strong>「エクスポート(.kasc)」</strong>でダウンロードし、対象プロジェクトの <code>kasugai_canvas.kasc</code> と差し替えてください。</p>
         </div>
         <div class="url-box">
           <h3>リリースビルド</h3>
           <pre><code>python run.py -B</code></pre>
-          <p>配布用 ZIP と、NSIS が利用可能な場合はインストーラーを <code>download\</code> に作成します。</p>
+          <p>配布用 ZIP（<code>kasugai_canvas.exe</code> + <code>web/</code> + <code>projects/</code>）と、NSIS が利用可能な場合はインストーラーを <code>download\</code> に作成します。既定のインストール先は <code>C:\kasugai\kasugai_canvas</code> です。</p>
+        </div>
+        <div class="url-box">
+          <h3>自動更新</h3>
+          <p>現在のバージョンでは静的サーバー構成のため自動更新は無効です。新しいリリースは手動で ZIP を差し替えてください。</p>
         </div>
         <div class="url-box">
           <h3>インスペクター設定</h3>
@@ -191,7 +300,7 @@
 base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | max=18
 cam: 東京駅 | 35.653108 | 139.761449 | h=2200.6 | p=-30
 info: https://example.com/project-info.html</code></pre>
-          <p>1 行 <code>種類: 値</code> 形式でレイヤー、ベースマップ、カメラ、Info、凡例等を記述します。詳細な書式・設定例は <a href="https://re-earth-geo-suite.vercel.app/" target="_blank">Re:Earth GeoSuite 使い方</a> を参照してください。</p>
+          <p>1 行 <code>種類: 値</code> 形式でレイヤー、ベースマップ、カメラ、Info、凡例等を記述します。完全な書式・オプション・ローカルファイル追加手順は本ページ上部の「インスペクター設定（完全版）」を参照してください。</p>
         </div>
         <div class="install-steps">
           <h3>FLY 機能（KASUGAI 独自追加機能）</h3>

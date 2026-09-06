@@ -88,6 +88,12 @@ h4 {
   margin: 20px 0 8px;
 }
 
+h5 {
+  color: #666;
+  font-size: 0.98em;
+  margin: 16px 0 6px;
+}
+
 p {
   margin: 1em 0;
 }
