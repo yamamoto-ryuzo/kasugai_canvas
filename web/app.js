@@ -1880,7 +1880,7 @@ function setupEvents() {
       show: true,
       polyline: {
         positions: new Cesium.CallbackProperty(() => getFlyPathLinePositions(), false),
-        width: 8,
+        width: new Cesium.CallbackProperty(() => Math.max(6, Math.min(24, flyHeight / 5 + 6)), false),
         material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.25 }),
       },
     });
