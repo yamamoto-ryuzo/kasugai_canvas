@@ -74,6 +74,7 @@ let flyRafId = null;
 let flyLastTime = performance.now();
 let drawModeActive = false;
 let drawnPoints = [];
+let drawnPointHeights = [];
 let drawLineEntity = null;
 let isDrawing = false;
 let lastRightDownTime = 0;
@@ -1994,7 +1995,7 @@ function setupEvents() {
       return;
     }
     const coordinates = flyPathCoords.map(p => [p.longitude, p.latitude, Number.isFinite(p.altitude) ? p.altitude : 0]);
-    const properties = Object.keys(flyPathProperties || {}).length ? flyPathProperties : { heightReference: "Terrain", heightOffset: 20 };
+    const properties = Object.keys(flyPathProperties || {}).length ? flyPathProperties : { heightReference: "Terrain", heightOffset: 0 };
     const geojson = {
       type: "Feature",
       properties,
@@ -2320,6 +2321,11 @@ function setupEvents() {
 
   const drawModeToggle = document.querySelector("#draw-mode-toggle");
   function updateDrawModeButton() { if (drawModeToggle) drawModeToggle.classList.toggle("active", drawModeActive); }
+  function getDrawAgl() {
+    const el = document.querySelector("#draw-agl");
+    const value = el ? Number(el.value) : NaN;
+    return Number.isFinite(value) ? value : 0;
+  }
   function addDrawPoint(screenPosition) {
     if (!drawModeActive) return;
     const ray = viewer.camera.getPickRay(screenPosition);
@@ -2327,7 +2333,8 @@ function setupEvents() {
     const cartesian = viewer.scene.globe.pick(ray, viewer.scene);
     if (!cartesian) return;
     const carto = Cesium.Cartographic.fromCartesian(cartesian);
-    const point = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, carto.height + 20);
+    const drawAgl = getDrawAgl();
+    const point = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, carto.height + drawAgl);
     if (drawnPoints.length > 0) {
       const last = drawnPoints[drawnPoints.length - 1];
       const dx = point.x - last.x;
@@ -2336,6 +2343,7 @@ function setupEvents() {
       if (dx * dx + dy * dy + dz * dz < 25) return;
     }
     drawnPoints.push(point);
+    drawnPointHeights.push(drawAgl);
     flashDrawPoint(point);
     if (!drawLineEntity) {
       drawLineEntity = viewer.entities.add({
@@ -2361,6 +2369,7 @@ function setupEvents() {
     drawModeActive = false;
     isDrawing = false;
     lastRightDownTime = 0;
+    clearDrawnLine();
     updateDrawModeButton();
     updateDrawCursor();
     if (viewer.scene.screenSpaceCameraController) {
@@ -2375,16 +2384,18 @@ function setupEvents() {
       drawLineEntity = null;
     }
     drawnPoints = [];
+    drawnPointHeights = [];
   }
   function buildDrawnGeoJson() {
     if (drawnPoints.length < 2) return null;
-    const baseHeight = 20;
-    const coordinates = drawnPoints.map(p => {
+    const coordinates = drawnPoints.map((p, i) => {
       const c = Cesium.Cartographic.fromCartesian(p);
       const lng = Number((c.longitude * 180 / Math.PI).toFixed(6));
       const lat = Number((c.latitude * 180 / Math.PI).toFixed(6));
-      return [lng, lat, baseHeight];
+      const agl = Number.isFinite(drawnPointHeights[i]) ? drawnPointHeights[i] : getDrawAgl();
+      return [lng, lat, agl];
     });
+    const baseHeight = Number.isFinite(drawnPointHeights[0]) ? drawnPointHeights[0] : getDrawAgl();
     return {
       type: "Feature",
       properties: { heightReference: "Terrain", heightOffset: baseHeight },
