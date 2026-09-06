@@ -399,6 +399,7 @@ function buildFlyPathLinePositions(coords) {
 
 function getFlyPathLinePositions() {
   if (!flyPathLinePositions.length) return [];
+  if (!flyPathActive) return flyPathLinePositions;
   const idx = Math.floor(flyPathProgress);
   if (idx < 0 || idx >= flyPathLinePositions.length) return flyPathLinePositions;
   const nextIdx = Math.min(idx + 1, flyPathLinePositions.length - 1);
