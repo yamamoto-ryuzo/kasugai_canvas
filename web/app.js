@@ -1854,6 +1854,7 @@ function setupEvents() {
     flyPathProgress = 0;
     flyPathLinePositions = [];
     updateFlyPointEditor();
+    updateFlyPathVisibilityButton();
   }
 
   async function startFlyPath(index) {
@@ -1905,6 +1906,7 @@ function setupEvents() {
     }
     updateFlyPathCamera(0);
     updateFlyPointEditor();
+    updateFlyPathVisibilityButton();
   }
 
   let flyPathLastTime = performance.now();
@@ -2289,6 +2291,25 @@ function setupEvents() {
     stopDrawMode();
     setMode(modeSelect.value === "orbit" ? "walk" : "orbit");
   });
+  const flyPathVisibilityBtn = document.querySelector("#fly-path-visibility");
+  function updateFlyPathVisibilityButton() {
+    if (!flyPathVisibilityBtn) return;
+    const select = document.querySelector("#fly-path-select");
+    if (!select || select.value === "__manual__" || !flyPathEntity) {
+      flyPathVisibilityBtn.disabled = true;
+      flyPathVisibilityBtn.textContent = "非表示";
+      return;
+    }
+    flyPathVisibilityBtn.disabled = false;
+    flyPathVisibilityBtn.textContent = flyPathEntity.show ? "非表示" : "表示";
+  }
+  flyPathVisibilityBtn?.addEventListener("click", () => {
+    if (flyPathEntity) {
+      flyPathEntity.show = !flyPathEntity.show;
+      updateFlyPathVisibilityButton();
+    }
+  });
+
   document.querySelector("#fly-path-select")?.addEventListener("change", () => {
     if (!walkModeActive) return;
     stopFlyPath();
@@ -2305,6 +2326,7 @@ function setupEvents() {
       walkLastTime = performance.now();
       walkRafId = requestAnimationFrame(walkLoop);
     }
+    updateFlyPathVisibilityButton();
   });
 
   const drawModeToggle = document.querySelector("#draw-mode-toggle");
