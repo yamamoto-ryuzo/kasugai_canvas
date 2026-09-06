@@ -691,7 +691,7 @@ async function ensureDrawnRouteFlyPath() {
       flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
     }
     renderFlyPathSelect();
-  } catch {}
+  } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
 }
 
 const GSI_DEM_LAYERS = [
