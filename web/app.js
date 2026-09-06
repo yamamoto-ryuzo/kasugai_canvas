@@ -2289,7 +2289,7 @@ function setupEvents() {
       return;
     }
     flyPathVisibilityBtn.disabled = false;
-    flyPathVisibilityBtn.textContent = flyPathEntity.show ? "非表示" : "表示";
+    flyPathVisibilityBtn.textContent = flyPathEntity.show ? "表示" : "非表示";
   }
   flyPathVisibilityBtn?.addEventListener("click", () => {
     if (flyPathEntity) {
