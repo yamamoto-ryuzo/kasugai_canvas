@@ -1890,6 +1890,7 @@ function setupEvents() {
     flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
     if (flyPathEntity) viewer.entities.remove(flyPathEntity);
     flyPathEntity = viewer.entities.add({
+      show: true,
       polyline: {
         positions: new Cesium.CallbackProperty(() => getFlyPathLinePositions(), false),
         width: 4,
