@@ -394,7 +394,7 @@ async function loadFlyGeoJson(url) {
 }
 
 function buildFlyPathLinePositions(coords) {
-  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0)));
+  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0) + flyHeight));
 }
 
 function getFlyPathLinePositions() {
@@ -1880,8 +1880,8 @@ function setupEvents() {
       show: true,
       polyline: {
         positions: new Cesium.CallbackProperty(() => getFlyPathLinePositions(), false),
-        width: 4,
-        material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.15 }),
+        width: 8,
+        material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.25 }),
       },
     });
     flyPathProgress = 0;
