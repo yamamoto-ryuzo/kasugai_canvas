@@ -216,16 +216,7 @@ fn internal_error(error: impl std::fmt::Display) -> (StatusCode, String) {
 
 fn open_browser(port: u16) {
     let url = format!("http://127.0.0.1:{port}/");
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("cmd")
-            .args(["/C", "start", "", &url])
-            .spawn();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
-    }
+    let _ = opener::open(&url);
 }
 
 fn resolve_dir(exe_dir: &Option<PathBuf>, name: &str, fallback: impl FnOnce() -> PathBuf) -> PathBuf {
