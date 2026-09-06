@@ -398,21 +398,7 @@ function buildFlyPathLinePositions(coords) {
 }
 
 function getFlyPathLinePositions() {
-  if (!flyPathLinePositions.length) return [];
-  if (!flyPathActive) return flyPathLinePositions;
-  const idx = Math.floor(flyPathProgress);
-  if (idx < 0 || idx >= flyPathLinePositions.length) return flyPathLinePositions;
-  const nextIdx = Math.min(idx + 1, flyPathLinePositions.length - 1);
-  const t = flyPathProgress - idx;
-  const a = flyPathLinePositions[idx];
-  const b = flyPathLinePositions[nextIdx];
-  if (t === 0 || !b) return flyPathLinePositions.slice(0, idx + 1);
-  const current = new Cesium.Cartesian3(
-    a.x + (b.x - a.x) * t,
-    a.y + (b.y - a.y) * t,
-    a.z + (b.z - a.z) * t
-  );
-  return [...flyPathLinePositions.slice(0, idx + 1), current];
+  return flyPathLinePositions;
 }
 
 function updateUrlFromCamera() {
