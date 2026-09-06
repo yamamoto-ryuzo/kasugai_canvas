@@ -4483,7 +4483,7 @@ function setupChatPanel() {
     }
     if (!window.kasugaiApi.getGoogleApiKey()) {
       const local = await handleLocalChatCommand(text);
-      addMessage("assistant", local || "APIキー未設定。使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
+      addMessage("assistant", local || "APIキー未設定です。設定 → Google タブで Gemini API キーを保存すると会話できます。キーは https://aistudio.google.com/apikey から取得できます。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
       return;
     }
     const thinking = document.createElement("div");
