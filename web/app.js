@@ -676,10 +676,9 @@ function renderFlyPathSelect() {
 
 async function ensureDrawnRouteFlyPath() {
   if (!window.showDirectoryPicker) return;
-  const dir = dataDirHandle || await dataDirStore.get(dataDirKey());
-  if (!dir) return;
-  if (await dir.queryPermission({ mode: "readwrite" }) !== "granted") return;
   try {
+    const dir = await getDataDirHandle();
+    if (!dir) return;
     const existing = new Set(flyPaths.map(p => p.title));
     for await (const entry of dir.values()) {
       if (entry.kind !== "file" || !entry.name.endsWith(".geojson")) continue;
