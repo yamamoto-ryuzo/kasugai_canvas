@@ -2405,7 +2405,31 @@ function setupEvents() {
       const fileName = drawnRouteFileName();
       const text = JSON.stringify(geojson, null, 2);
       await saveDrawnLineToFolder(fileName, text);
+      void listDrawnRoutes();
     } catch {}
+  }
+
+  async function listDrawnRoutes() {
+    const listEl = document.querySelector("#drawn-route-list");
+    if (!listEl) return;
+    if (!window.showDirectoryPicker) { listEl.style.display = "none"; return; }
+    const dir = dataDirHandle || await dataDirStore.get(dataDirKey());
+    if (!dir) { listEl.style.display = "none"; return; }
+    if (await dir.queryPermission({ mode: "readwrite" }) !== "granted") { listEl.style.display = "none"; return; }
+    try {
+      const files = [];
+      for await (const entry of dir.values()) {
+        if (entry.kind === "file" && entry.name.endsWith(".geojson")) files.push(entry.name);
+      }
+      files.sort();
+      if (files.length) {
+        listEl.innerHTML = `<div style="color:#71818d;margin-bottom:4px;">drawn route (${files.length}件):</div>` +
+          files.map(name => `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(name)}">${escapeHtml(name)}</div>`).join("");
+        listEl.style.display = "block";
+      } else {
+        listEl.style.display = "none";
+      }
+    } catch { listEl.style.display = "none"; }
   }
 
   function getCanvasPosition(event) {
@@ -2891,6 +2915,7 @@ function setupEvents() {
       if (drawModeActive && !nextDrawTab) stopDrawMode();
       drawTabActive = nextDrawTab;
       setMode(drawTabActive ? "orbit" : "walk");
+      if (nextDrawTab) void listDrawnRoutes();
     });
   });
   setupVectorSearch();
