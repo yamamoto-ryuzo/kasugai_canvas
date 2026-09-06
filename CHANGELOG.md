@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.0] - 2026-09-06
+
+### Added
+
+- Rust サーバーに自動更新機能を復元
+  - `GET /api/update/settings` / `PUT /api/update/settings` による自動更新設定
+  - `GET /api/update/latest` による最新版情報取得
+  - `POST /api/update/install` による ZIP ダウンロード・EXE 差し替え・自動再起動
+  - `POST /api/shutdown` によるサーバー停止
+- `GET /health` に `name`・`port` を含め、フロントエンドの `backendEnabled` 判定に対応
+
 ## [3.3.0] - 2026-09-06
 
 ### Fixed
