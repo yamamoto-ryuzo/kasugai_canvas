@@ -675,23 +675,9 @@ function renderFlyPathSelect() {
 }
 
 async function ensureDrawnRouteFlyPath() {
-  if (!window.showDirectoryPicker) return;
-  try {
-    const dir = await getDataDirHandle();
-    if (!dir) return;
-    const existing = new Set(flyPaths.map(p => p.title));
-    for await (const entry of dir.values()) {
-      if (entry.kind !== "file" || !entry.name.endsWith(".geojson")) continue;
-      const title = entry.name.replace(/\.geojson$/, "");
-      if (existing.has(title)) continue;
-      const fileHandle = await dir.getFileHandle(entry.name);
-      const file = await fileHandle.getFile();
-      const text = await file.text();
-      const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
-      flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
-    }
-    renderFlyPathSelect();
-  } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
+  if (window.kasugaiApi?.ensureDrawnRouteFlyPath) {
+    return await window.kasugaiApi.ensureDrawnRouteFlyPath();
+  }
 }
 
 const GSI_DEM_LAYERS = [
@@ -2647,6 +2633,26 @@ function setupEvents() {
     return pickDataDir();
   }
 
+  async function _ensureDrawnRouteFlyPath() {
+    if (!window.showDirectoryPicker) return;
+    const dir = await getDataDirHandle();
+    if (!dir) return;
+    try {
+      const existing = new Set(flyPaths.map(p => p.title));
+      for await (const entry of dir.values()) {
+        if (entry.kind !== "file" || !entry.name.endsWith(".geojson")) continue;
+        const title = entry.name.replace(/\.geojson$/, "");
+        if (existing.has(title)) continue;
+        const fileHandle = await dir.getFileHandle(entry.name);
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+        const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+        flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
+      }
+      renderFlyPathSelect();
+    } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
+  }
+
   document.querySelector("#inspector-data-dir")?.addEventListener("click", async () => {
     if (!window.showDirectoryPicker) {
       setInspectorStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開いてください。", true);
@@ -3736,6 +3742,7 @@ window.kasugaiApi = {
   getGeminiModel() {
     try { return localStorage.getItem("googleGeminiModel") || "gemini-3.1-flash-lite"; } catch (e) { return "gemini-3.1-flash-lite"; }
   },
+  ensureDrawnRouteFlyPath: _ensureDrawnRouteFlyPath,
 };
 
 // ローカルコマンド: AI接続前でも操作APIの動作確認ができる
