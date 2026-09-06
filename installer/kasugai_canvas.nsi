@@ -27,10 +27,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "3.4.7.0"
+VIProductVersion "3.4.8.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "3.4.7"
+VIAddVersionKey "FileVersion" "3.4.8"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -63,6 +63,7 @@ Section "Install"
   File /nonfatal /r /x "default" "${SAMPLE_PROJECTS}\*"
 
   CreateDirectory "$INSTDIR\projects\default"
+  CreateDirectory "$INSTDIR\data"
   SetOutPath "$INSTDIR\projects\default"
   IfFileExists "$INSTDIR\projects\default\${CONFIG_FILE_NAME}" default_config_exists
   File "${SAMPLE_PROJECTS}\default\${CONFIG_FILE_NAME}"

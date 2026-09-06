@@ -258,6 +258,27 @@ function setInspectorStatus(message, isError = false) {
   status.style.color = isError ? "#a82020" : "";
 }
 
+let toastTimer = null;
+function showToast(message, isError = false) {
+  let toast = document.querySelector("#app-toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "app-toast";
+    toast.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:9999;max-width:360px;padding:8px 12px;border-radius:6px;background:rgba(30,41,51,0.92);color:#fff;font-size:0.85em;box-shadow:0 2px 8px rgba(0,0,0,0.3);white-space:pre-wrap;";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.style.background = isError ? "rgba(168,32,32,0.95)" : "rgba(30,41,51,0.92)";
+  toast.style.display = "block";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.style.display = "none"; }, 6000);
+}
+
+function notifyStatus(message, isError = false) {
+  setInspectorStatus(message, isError);
+  showToast(message, isError);
+}
+
 function flyTo(options = {}, duration = null) {
   const latitude = Number(options.latitude);
   const longitude = Number(options.longitude);
@@ -2366,8 +2387,47 @@ function setupEvents() {
       geometry: { type: "LineString", coordinates },
     };
   }
+  function drawnRouteFileName() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `drawn_route_${timestamp}.geojson`;
+  }
+
+  async function saveDrawnLineToFolder(fileName, text) {
+    if (!window.showDirectoryPicker) {
+      notifyStatus("このブラウザは File System Access API に未対応のため、描画ルートを保存できません。Chrome/Edge で開いてください。", true);
+      return;
+    }
+    const dir = await getDataDirHandle();
+    if (!dir) {
+      notifyStatus("保存先フォルダが未選択のため、描画ルートは保存されませんでした。インスペクターの「保存先フォルダ」で設定してください。", true);
+      return;
+    }
+    const file = await dir.getFileHandle(fileName, { create: true });
+    const writable = await file.createWritable();
+    await writable.write(text);
+    await writable.close();
+    const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+    flyPaths.push({ title: fileName.replace(/\.geojson$/, ""), url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
+    renderFlyPathSelect();
+    notifyStatus(`描画ルートを ${dir.name}/${fileName} に保存し、FLYパス一覧に登録しました。fly_geojson: タイトル | DATA/${fileName} で永続化できます。`);
+  }
+
   async function cacheDrawnLine() {
-    // 静的サイト構成のため描画ルートのバックエンド保存は行わない
+    const geojson = buildDrawnGeoJson();
+    if (!geojson) return;
+    try {
+      const fileName = drawnRouteFileName();
+      const text = JSON.stringify(geojson, null, 2);
+      await saveDrawnLineToFolder(fileName, text);
+    } catch (error) {
+      if (error && error.name === "AbortError") {
+        notifyStatus("フォルダ選択がキャンセルされたため、描画ルートは保存されませんでした。");
+        return;
+      }
+      notifyStatus(`描画ルートの保存に失敗しました: ${error instanceof Error ? error.message : error}`, true);
+    }
   }
 
   function getCanvasPosition(event) {
@@ -2422,8 +2482,22 @@ function setupEvents() {
   }
   const openDrawnRoute = document.querySelector("#open-drawn-route");
   if (openDrawnRoute) {
-    openDrawnRoute.addEventListener("click", () => {
-      // 静的サイト構成のためファイルオープン API は使用しない
+    openDrawnRoute.addEventListener("click", async () => {
+      try {
+        if (!window.showDirectoryPicker) {
+          notifyStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開いてください。", true);
+          return;
+        }
+        const dir = await getDataDirHandle();
+        if (!dir) return;
+        await window.showOpenFilePicker({
+          startIn: dir,
+          types: [{ description: "GeoJSON", accept: { "application/geo+json": [".geojson", ".json"] } }],
+        });
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+        notifyStatus(`保存先フォルダを開けませんでした: ${error instanceof Error ? error.message : error}`, true);
+      }
     });
   }
 
@@ -2527,16 +2601,8 @@ function setupEvents() {
     setInspectorStatus(".kasc ファイルをエクスポートしました。");
   });
 
-  // ローカルファイル → インスペクター設定行 / 一時プレビュー
-  let inspectorPickedFile = null;
-  const inspectorFileInput = document.querySelector("#inspector-file-input");
-  const inspectorAddFile = document.querySelector("#inspector-add-file");
-  const inspectorPreviewFile = document.querySelector("#inspector-preview-file");
-  inspectorFileInput?.addEventListener("change", () => {
-    inspectorPickedFile = inspectorFileInput.files?.[0] || null;
-    if (inspectorAddFile) inspectorAddFile.disabled = !inspectorPickedFile;
-    if (inspectorPreviewFile) inspectorPreviewFile.disabled = !inspectorPickedFile;
-  });
+  // File System Access API: DATAフォルダへの直接保存(Chromium系のみ)。
+  // フォルダハンドルは IndexedDB に保持し、次回以降は権限確認のみで再利用する
   // File System Access API: DATAフォルダへの直接保存(Chromium系のみ)。
   // フォルダハンドルは IndexedDB に保持し、次回以降は権限確認のみで再利用する
   const dataDirStore = {
@@ -2583,7 +2649,7 @@ function setupEvents() {
     }
     if (dataDirHandle) { dataDirName.textContent = dataDirHandle.name; return; }
     const saved = await dataDirStore.get(dataDirKey());
-    dataDirName.textContent = saved ? `${saved.name} (要権限確認)` : "未選択";
+    dataDirName.textContent = saved ? `${saved.name} (要権限確認)` : "未設定";
   }
 
   async function pickDataDir() {
@@ -2623,58 +2689,7 @@ function setupEvents() {
   });
   void updateDataDirLabel();
 
-  const inspectorSaveData = document.querySelector("#inspector-save-data");
-  inspectorFileInput?.addEventListener("change", () => {
-    if (inspectorSaveData) inspectorSaveData.disabled = !inspectorPickedFile;
-  });
-  inspectorSaveData?.addEventListener("click", async () => {
-    if (!inspectorPickedFile) return;
-    if (!window.showDirectoryPicker) {
-      setInspectorStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開くか、手動で DATA/ にコピーしてください。", true);
-      return;
-    }
-    try {
-      const dir = await getDataDirHandle();
-      if (!dir) return;
-      const fileHandle = await dir.getFileHandle(inspectorPickedFile.name, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(inspectorPickedFile);
-      await writable.close();
-      const title = inspectorPickedFile.name.replace(/\.[^.]+$/, "");
-      const line = `geojson:${title}|DATA/${inspectorPickedFile.name}`;
-      const input = document.querySelector("#inspector-input");
-      if (input && !input.value.includes(`DATA/${inspectorPickedFile.name}`)) {
-        input.value = input.value.replace(/\s*$/, "") + `\n${line}\n`;
-      }
-      document.querySelector("#apply-inspector")?.click();
-      setInspectorStatus(`DATA/ に保存し、設定に追加・登録しました: ${line}`);
-    } catch (error) {
-      if (error && error.name === "AbortError") return;
-      setInspectorStatus(`保存に失敗しました: ${error instanceof Error ? error.message : error}`, true);
-    }
-  });
 
-  inspectorAddFile?.addEventListener("click", () => {
-    if (!inspectorPickedFile) return;
-    const title = inspectorPickedFile.name.replace(/\.[^.]+$/, "");
-    const line = `geojson:${title}|DATA/${inspectorPickedFile.name}`;
-    const input = document.querySelector("#inspector-input");
-    if (input) input.value = input.value.replace(/\s*$/, "") + `\n${line}\n`;
-    setInspectorStatus(`設定行を追加しました: ${line}\nファイルを projects/${currentProjectId || "default"}/DATA/ にコピーして「登録」してください。`);
-  });
-  inspectorPreviewFile?.addEventListener("click", async () => {
-    if (!inspectorPickedFile) return;
-    try {
-      const blobUrl = URL.createObjectURL(inspectorPickedFile);
-      const ds = await Cesium.GeoJsonDataSource.load(blobUrl);
-      ds.name = inspectorPickedFile.name;
-      await viewer.dataSources.add(ds);
-      viewer.flyTo(ds);
-      setInspectorStatus(`「${inspectorPickedFile.name}」を一時表示しました(未保存。再読み込みで消えます)。`);
-    } catch (error) {
-      setInspectorStatus(`プレビューに失敗しました: ${error instanceof Error ? error.message : error}`, true);
-    }
-  });
 
   document.querySelector("#project-select")?.addEventListener("change", async event => {
     currentProjectId = event.target.value;

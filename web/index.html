@@ -141,19 +141,13 @@
                 <button id="apply-inspector" type="button">登録</button>
                 <button id="export-inspector" type="button">エクスポート(.kasc)</button>
                 <p id="inspector-status" class="hint" aria-live="polite"></p>
-                <div class="section-title" style="margin-top:14px;">ローカルファイルを追加</div>
+                <div class="section-title" style="margin-top:14px;">ファイル保存先</div>
                 <label class="field-label" for="inspector-data-dir">保存先フォルダ (DATA/ を選択)</label>
                 <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
                   <button id="inspector-data-dir" type="button" style="flex:0 0 auto;">フォルダを選択</button>
                   <span id="inspector-data-dir-name" style="font-size:0.85em;color:#71818d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">未選択</span>
                 </div>
-                <input id="inspector-file-input" type="file" accept=".geojson,.json" style="width:100%;font-size:0.85em;" />
-                <div class="terrain-options" style="margin-top:6px;">
-                  <button id="inspector-save-data" type="button" disabled>DATA/ に保存して追加</button>
-                  <button id="inspector-add-file" type="button" disabled>設定行のみ追加</button>
-                  <button id="inspector-preview-file" type="button" disabled>今すぐプレビュー</button>
-                </div>
-                <p class="hint">「DATA/ に保存して追加」は File System Access API で <code>projects/&lt;project&gt;/DATA/</code> を選ばせ、ファイル書き込み→設定行追加→登録まで行います(Chromium系のみ)。<br />「設定行のみ追加」は <code>geojson:タイトル|DATA/ファイル名</code> を追記するだけです(ファイルは手動でDATA/へ)。<br />「今すぐプレビュー」は保存せず選択ファイルを一時表示します。</p>
+
               </section>
               <section id="settings-help-panel" class="settings-subpanel">
                 <div class="section-title">HELP</div>
@@ -284,7 +278,7 @@
               <div class="walk-help-tabs">
                 <button class="walk-help-tab active" data-tab="mouse" type="button">マウス</button>
                 <button class="walk-help-tab" data-tab="keyboard" type="button">キー</button>
-                <button class="walk-help-tab" data-tab="draw" type="button">Draw</button>
+                <button class="walk-help-tab" data-tab="draw" type="button">Edit</button>
               </div>
               <div class="walk-help-contents">
                 <div class="walk-help-content active" data-tab="mouse">

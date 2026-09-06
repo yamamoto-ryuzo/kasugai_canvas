@@ -4,6 +4,20 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.8] - 2026-09-06
+
+### Added
+
+- FLYパネルの Draw で作図したルートを、インスペクターの「保存先フォルダ」へ `drawn_route_YYYYMMDD_HHMMSS.geojson` として保存（File System Access API、Chromium系のみ）
+- 保存したルートをFLYパス一覧へ自動登録し、その場で再生可能に
+- 編集タブの「Open」ボタンで保存先フォルダを開いたファイルダイアログを表示
+- 保存結果・エラーを画面右下のトースト通知で表示（インスペクターを閉じていても確認可能）
+
+### Changed
+
+- Flyパネルの Draw タブ名を「Edit」に変更（ボタン名との重複を解消）
+- 保存先フォルダ未設定時はダミーパス表示をやめ「未設定」と表示
+
 ## [3.4.7] - 2026-09-06
 
 ### Fixed
