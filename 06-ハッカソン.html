@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6. ハッカソン — KASUGAI Canvas 技術選定</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v3.1.0</span></h1>
+      <p>6. ハッカソン — 第5回 Agentic AI Hackathon with Google Cloud 出展まとめ</p>
+    </header>
+    <main>
+      <nav>
+        <a href="home.html">← はじめに</a>
+      </nav>
+
+      <h2 id="概要">6. ハッカソン概要</h2>
+      <p><a href="https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5" target="_blank">第5回 Agentic AI Hackathon with Google Cloud</a> は、Zenn（クラスメソッド）主催、Google Cloud 協賛のハッカソンです。テーマは <strong>「作れる」から「使える」。エージェントの、新しいステージへ。</strong> 単なる自動化ではなく、可観測性・セキュリティ・ガバナンスを意識した「使えるエージェント」を募集します。</p>
+
+      <div class="card">
+        <h3>基本情報</h3>
+        <ul>
+          <li><strong>期間：</strong>2026/08/20 〜 2026/10/15</li>
+          <li><strong>賞金総額：</strong>175 万円</li>
+          <li><strong>主催：</strong>Zenn（クラスメソッド株式会社）</li>
+          <li><strong>協賛：</strong>グーグル・クラウド・ジャパン合同会社</li>
+          <li><strong>エントリー数：</strong>302</li>
+          <li><strong>Google Cloud クーポン：</strong>エントリー者に 300 ドル分</li>
+        </ul>
+      </div>
+
+      <h2 id="スケジュール">スケジュール</h2>
+      <table>
+        <thead>
+          <tr><th>日程</th><th>内容</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>2026/08/20（木）</td><td>エントリー受付開始</td></tr>
+          <tr><td>2026/09/03（木）</td><td>Build with Gemini Tokyo Day 1: Gen AI Intensive Vibe Coding Workshop</td></tr>
+          <tr><td>2026/09/04（金）</td><td>Build with Gemini Tokyo Day 2: Build with Gemini Special Tracks</td></tr>
+          <tr><td>2026/09/05（土）</td><td>ミニハッカソン 渋谷（渋谷ストリーム）</td></tr>
+          <tr><td>2026/09/11（金）〜 12（土）</td><td>ミニハッカソン 福岡（クラスメソッド福岡オフィス）</td></tr>
+          <tr><td>2026/09/18（金）〜 19（土）</td><td>ミニハッカソン 大阪（クラスメソッド大阪オフィス）</td></tr>
+          <tr><td>2026/09/29（火）</td><td>オフィスアワー</td></tr>
+          <tr><td>2026/10/15（木）</td><td>参加登録・プロジェクト提出締切</td></tr>
+          <tr><td>2026/10/28（水）</td><td>ファイナリスト発表</td></tr>
+          <tr><td>2026/12/01（火）</td><td>最終ピッチコンテスト・表彰式（渋谷ストリーム予定）</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="gis-あるべき論">GIS とはどうあるべきか</h2>
+      <p>渋谷ミニハッカソンで痛感したのは、多くの現場で GIS が「地図を描くツール」にとどまり、「場と情報を一体化させて理解を支援する基盤」として使われていない点です。KASUGAI Canvas は、本来あるべき GIS の姿を実現することを目指します。</p>
+
+      <h3>一番大事なこと：GIS で「何ができて、何が解決できるか」を先に体験する</h3>
+      <p>結局、最も重要なのは、<strong>「GIS を使うことで何ができて、どんな課題が解決できるか」を本番導入前に体験できるか</strong>ということです。GIS 導入が進まない、あるいは導入されても活用されない現場の多くは、GIS 自体の理解が不足していることが原因です。</p>
+      <p>そのためのエージェントこそが、KASUGAI Canvas の ANTIGRAVITY 情報レイヤーです。</p>
+      <ul>
+        <li><strong>体験を先に：</strong>本番データを必要とせず、サンプル・資料・GIS が連動した状態で「GIS ならではの理解」を体験</li>
+        <li><strong>理解を深める：</strong>地図と情報の一体化、レイヤーの切り替え、FlyTo・属性表示など、GIS の利点を実感</li>
+        <li><strong>正しい導入判断へ：</strong>体験を通じて「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らす</li>
+      </ul>
+
+      <h3>ANTIGRAVITY エージェント：目標と 3 つの機能</h3>
+      <p>ANTIGRAVITY エージェントの<strong>目標</strong>は、利用者を<strong>正しい GIS 導入判断と課題解決へ導く</strong>ことです。そのために、以下 3 つの機能が必要です。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>自然言語からレイヤーと属性を自動構成</h3>
+          <p>「○○の資料を作って」と話すだけで、必要な地図レイヤー・属性・凡例・カメラ位置を自動で選定・構成する。</p>
+        </div>
+        <div class="feature-card">
+          <h3>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</h3>
+          <p>本番データがなくても、エリア・業種・目的に応じた架空サンプルを生成。地図と情報の一体化、レイヤー切り替え、FlyTo、属性表示など、GIS ならではの理解を実感してもらう。</p>
+        </div>
+        <div class="feature-card">
+          <h3>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</h3>
+          <p>レイヤー・属性から課題を抽出し、その平面（地図上の状況）・内容・解決案をまとめた資料のベースを自動生成。資料には GIS へのパーマリンクを付与する。</p>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px;">
+        <h3>目標：正しい GIS 導入判断と課題解決へ導く</h3>
+        <p>上記 3 つの機能を通じて、利用者は本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験します。その結果、「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らし、課題解決につながります。</p>
+      </div>
+
+      <h3>ANTIGRAVITY エージェントの本質：資料を作る・見せる・説明する</h3>
+      <p>ANTIGRAVITY エージェントは、資料の基本である <strong>作る → 見せる → 説明する</strong> を自動化するエージェントです。</p>
+      <table>
+        <thead>
+          <tr><th>資料の基本</th><th>ANTIGRAVITY の機能</th><th>具体的な動作</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>作る</td><td>自然言語からレイヤーと属性を自動構成</td><td>「○○の資料を作って」と話すだけで、必要なレイヤー・属性・サンプルデータを自動生成する</td></tr>
+          <tr><td>見せる</td><td>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</td><td>地図上にサンプルを表示し、レイヤー切り替え・FlyTo・属性表示で GIS 体験を提供する</td></tr>
+          <tr><td>説明する</td><td>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</td><td>属性から課題を読み取り、平面・内容・解決案をまとめた資料を作成する</td></tr>
+        </tbody>
+      </table>
+      <p>この 3 ステップを通じて、資料は「PDF への地図貼り付け」ではなく、<strong>GIS と連動した生きた理解資料</strong>となります。そして、その体験が正しい GIS 導入判断と課題解決へ繋がります。</p>
+
+      <h3>資料のベース作成と GIS パーマリンク連携</h3>
+      <p>最も重要なのは、<strong>資料は資料として必要なものである</strong>という点です。資料は会議の進行、結論の提示、合意形成のための要約として不可欠です。ANTIGRAVITY エージェントは、GIS 上のレイヤー・属性から課題を読み取り、<strong>平面（地図上の状況）・内容・解決案</strong>をまとめた資料のベースを自動作成します。</p>
+      <p>資料に載せきれない背景・範囲・詳細は GIS 側に置き、<strong>資料にパーマリンク（QR や短縮 URL）を載せる</strong>ことで、資料と GIS を双方向に連動させます。</p>
+
+      <h4>なぜパーマリンクなのか</h4>
+      <ul>
+        <li><strong>資料の要約性を維持：</strong>資料は簡潔なままで、詳細は GIS へ誘導</li>
+        <li><strong>深い理解へ誘導：</strong>「なぜこの範囲か」「背景データは何か」「周辺の状況は」などを地図上で探索可能に</li>
+        <li><strong>会議の一体感：</strong>参加者全員が同じ URL から GIS を開き、同一視点・レイヤーで議論できる</li>
+        <li><strong>判断の加速：</strong>空中戦を減らし、必要な情報に即座にアクセスすることで、より速い課題解決・意思決定を実現</li>
+      </ul>
+
+      <h4>想定される使い方</h4>
+      <ol>
+        <li>資料の該当部分に <code>https://kasugai-canvas.example/#cam=...&amp;layers=...</code> 形式のパーマリンクを配置</li>
+        <li>会議参加者がリンクを開くと、KASUGAI Canvas が即座にその場所・レイヤー・属性を表示</li>
+        <li>必要に応じてレイヤーを追加・非表示・属性をクリックし、深掘りを行う</li>
+        <li>新たな視点が見つかったら、新しいパーマリンクを生成し資料にフィードバック</li>
+      </ol>
+
+      <h4>ANTIGRAVITY との関係</h4>
+      <p>資料作成時に、ANTIGRAVITY エージェントが「資料に載せるべき GIS 視点」を自動提案し、パーマリンク付きで資料と GIS を同時生成します。資料と GIS がお互いを補完し合うことで、会議の一体感と意思決定のスピードが向上します。</p>
+
+      <h3>ANTIGRAVITY エージェントのワークフロー</h3>
+      <pre class="text"><code>自然言語での指示（「○○の資料を作って」）
+    ↓
+必要なレイヤー・属性・サンプルデータの自動構成
+    ↓
+属性から課題を抽出し、平面・内容・解決案を提示した資料を作成
+    ↓
+資料用パーマリンクと GIS 表示の生成
+    ↓
+利用者が GIS で「何ができて、何が解決できるか」を体験
+    ↓
+GIS 理解の深化と正しい導入判断・課題解決</code></pre>
+
+      <h3>現在の GIS 活用とのギャップ</h3>
+      <table>
+        <thead>
+          <tr><th>目標・機能</th><th>現状の課題</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>自然言語からレイヤーと属性を自動構成</td><td>レイヤー追加・属性設定が手間で、GIS 専門家にしかできない</td></tr>
+          <tr><td>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</td><td>本番データがないと GIS 体験が作れず、会議参加者が GIS の可能性を理解できない</td></tr>
+          <tr><td>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</td><td>PDF やスライドに地図が貼られるだけで、課題と解決案が地図と結びついていない</td></tr>
+          <tr><td>目標：正しい GIS 導入判断と課題解決へ導く</td><td>GIS への理解が不足しており、導入前に「何ができるか」を体験できる環境がない</td></tr>
+        </tbody>
+      </table>
+
+      <h3>ANTIGRAVITY の狙い</h3>
+      <p>ANTIGRAVITY 情報レイヤーは、上記 3 つの機能を自然言語で実現し、「正しい GIS 導入判断と課題解決へ導く」ことを目指すエージェントです。「○○の資料を作って」と話すだけで、<strong>作る → 見せる → 説明する</strong> という資料作成の基本が自動化され、場と情報が一体化した GIS 体験が構築されます。</p>
+      <p>ANTIGRAVITY の最終目的は、<strong>利用者が本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験し、GIS への理解を深めること</strong>にあります。サンプルデータや資料×GIS 連携を通じて、正しい GIS 導入判断と課題解決を後押しします。</p>
+
+      <h2 id="渋谷成果">ミニハッカソン 渋谷 参加成果（2026/09/05）</h2>
+      <p>渋谷ストリームで開催されたミニハッカソンに参加し、KASUGAI Canvas と GIS データを扱う現場の課題を掘り起こしました。</p>
+
+      <h3>課題発掘</h3>
+      <div class="features">
+        <div class="feature-card">
+          <h3>地図情報の伝わりにくさ</h3>
+          <p>「地図情報がどのようなものか、何ができるか」が相手に正しく伝わりにくい。PDF 等の資料では実際の内容が正確に伝わらない。</p>
+        </div>
+        <div class="feature-card">
+          <h3>地図と情報の分断</h3>
+          <p>地図と情報が分断されやすく、地図が資料から孤立した「作り物」として残ってしまう。本来の価値が伝わらない。</p>
+        </div>
+        <div class="feature-card">
+          <h3>空中戦・取り残され</h3>
+          <p>会議等で位置や場所に詳しくない人が取り残され、理解が深まらないまま会議が進む「空中戦」が起きる。</p>
+        </div>
+      </div>
+
+      <h3>現在の対応とつらい点</h3>
+      <table>
+        <thead>
+          <tr><th>段階</th><th>内容</th><th>課題</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>事前の行動</td><td>説明できる事例をあらかじめ集める</td><td>GIS 自体の理解が浅く、何を示せばよいか分からない。実例も手間で作れない</td></tr>
+          <tr><td>資料化</td><td>PDF 等にまとめる</td><td>実際の地図・空間情報の操作性や詳細が正確に伝わりにくい</td></tr>
+          <tr><td>完成時</td><td>喜ばれる</td><td>ただし、作るまでに情報の伝達・分断・空中戦が発生しやすい</td></tr>
+        </tbody>
+      </table>
+
+      <h3>渋谷ミニハッカソンからの学びと ANTIGRAVITY への反映</h3>
+      <p>上記の課題は、GIS 導入前に「何ができて、どんな課題が解決できるか」を体験できる環境がないことに起因しています。これを解決するために、ANTIGRAVITY エージェントで <strong>作る → 見せる → 説明する</strong> を自動化し、GIS と連動した資料を生み出す方向性が固まりました。</p>
+      <p>また、渋谷ミニハッカソンでは以下のような応用アイデアも出ました。これらは ANTIGRAVITY の 3 つの機能を拡張するものです。</p>
+      <ul>
+        <li><strong>交通連携：</strong>駅すぱあと API MCP サーバーで到達圏・ルートをレイヤー化し、資料の説得力を補強</li>
+        <li><strong>画像解析：</strong>GMI Cloud / Earth Engine / Vision AI で衛星写真から建物・道路・植生を自動検出</li>
+        <li><strong>会議支援：</strong>自然言語で FlyTo やレイヤー切り替えを自動制御し、全員が同じ視点で議論できる状態を作る</li>
+      </ul>
+
+      <h2 id="賞品">賞品</h2>
+      <table>
+        <thead>
+          <tr><th>賞</th><th>副賞</th><th>数</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>最優秀賞</td><td>50 万円</td><td>1 プロジェクト</td></tr>
+          <tr><td>優秀賞</td><td>25 万円</td><td>3 プロジェクト</td></tr>
+          <tr><td>特別賞</td><td>5 万円</td><td>6 プロジェクト</td></tr>
+          <tr><td>奨励賞</td><td>4 万円相当のギフトカード</td><td>5 プロジェクト</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="審査基準">審査基準</h2>
+      <div class="features">
+        <div class="feature-card">
+          <h3>課題の新規性と解決策の有効性</h3>
+          <p>未解決の課題を発見し、核心に効果的に対処する価値あるソリューション。</p>
+        </div>
+        <div class="feature-card">
+          <h3>自律性・エージェントらしさ</h3>
+          <p>状況を判断し自律的に行動しつつ、可観測性・セキュリティを備えた信頼できる動作。</p>
+        </div>
+        <div class="feature-card">
+          <h3>実装品質と拡張性</h3>
+          <p>高い品質で実現され、運用性・費用対効果を考慮した実用的なソリューション。</p>
+        </div>
+      </div>
+
+      <h2 id="参加条件">参加条件・提出物</h2>
+      <h3>必須：Google Cloud アプリケーション実行プロダクト</h3>
+      <ul>
+        <li>App Engine / Compute Engine / GKE / Cloud Run / Cloud Run functions / Cloud TPU / GPU のいずれかを使用</li>
+      </ul>
+      <h3>必須：Google Cloud AI 技術</h3>
+      <ul>
+        <li>Gemini Enterprise Agent Platform / Gemini API / Gemma / Nano Banana / ADK / Speech-to-Text / Vision AI / Natural Language AI / Translation AI のいずれかを使用</li>
+      </ul>
+      <h3>提出物</h3>
+      <ol>
+        <li>GitHub リポジトリの連携（公開・非公開どちらでも可）</li>
+        <li>デプロイした URL（審査員が動作確認できる状態を維持）</li>
+        <li>プロジェクト説明、システムアーキテクチャ図、3分程度のデモ動画（YouTube 公開）</li>
+      </ol>
+
+      <h2 id="kasugai-concept">KASUGAI Canvas 出展構想</h2>
+      <p>KASUGAI Canvas を <strong>Agentic AI による空間情報レイヤー自動構築・自動更新プラットフォーム</strong> へ進化させ、本ハッカソンに出展することを目指します。特に、GIS 本番導入前の「フロントローディング」として、利用者が GIS の利活用を体験し、正しい導入判断と課題解決につなげることを重視します。</p>
+
+      <h3>課題設定</h3>
+      <p>多くの現場で GIS が導入に至らない、あるいは導入後も活用されない状況があります。本ハッカソン出展テーマとしては、<strong>「GIS に何ができて、どう課題解決に繋げられるか」を本番導入前に体験できる ANTIGRAVITY エージェントを作る</strong>ことに位置づけます。</p>
+
+      <h3>解決策：ANTIGRAVITY 情報レイヤー（GIS 利活用の体験・理解を促進するエージェント）</h3>
+      <p>本番導入前に、自然言語や文脈から「今必要な情報レイヤー」を自律的に選定・追加・更新するエージェント機能を提供します。重力に逆らって情報が自動的に「浮かび上がる」ように、必要なレイヤーが勝手に追加される体験を目指します。</p>
+      <p>ANTIGRAVITY の本質は、<strong>「GIS で何ができて、どんな課題が解決できるか」を本番前に体験してもらうためのエージェント</strong>にあります。サンプルデータ・資料・GIS を連動させることで、利用者の GIS 理解を先に深め、正しい導入判断と課題解決への期待値を形成します。</p>
+      <ul>
+        <li><strong>文脈理解：</strong>ユーザーの質問・目的・現在の視点を Gemini などの LLM で解析</li>
+        <li><strong>レイヤー推論：</strong>必要な GeoJSON、XYZ、3D Tiles、DEM、画像、属性情報を推定</li>
+        <li><strong>自動取得・変換：</strong>外部 API や Google Cloud 上のデータから自動取得し、表示可能なレイヤーへ変換</li>
+        <li><strong>ガバナンス：</strong>取得元・更新時刻・ライセンスを可視化し、不要なレイヤーは自動で非表示</li>
+      </ul>
+
+      <h3 id="協賛api-gis">協賛企業 API・サービスの GIS 活用法</h3>
+      <p>本ハッカソンの Support スポンサーおよび Google Cloud が提供する API・サービスを、KASUGAI Canvas の空間情報レイヤーとしてどう活かせるか整理しました。</p>
+
+      <h4>駅すぱあと API MCP サーバー（株式会社ヴァル研究所）</h4>
+      <p>電車・バス・飛行機・船などの経路探索を、LLM/エージェントから自然言語で直接呼び出せる MCP サーバーです。</p>
+      <ul>
+        <li><strong>GIS への活用法：</strong>
+          <ul>
+            <li>出発地→目的地の経路を GeoJSON 化し、KASUGAI Canvas の <code>geojson:</code> レイヤーとして追加</li>
+            <li>駅・バス停をポイントレイヤーで表示し、 FlyTo や属性表示と連動</li>
+            <li>所要時間や運賃を属性として持たせ、ルート比較レイヤーを重ねる</li>
+            <li>「渋谷から新宿まで30分以内で行ける場所」など、到達圏（アイソクローン）を生成</li>
+          </ul>
+        </li>
+        <li><strong>エージェント連携例：</strong>「渋谷駅から横浜駅までの電車ルートを地図に表示して」→ Gemini が Ekispert MCP を呼び出し → 取得した経路を GeoJSON に変換 → KASUGAI Canvas へ自動追加</li>
+      </ul>
+
+      <h4>YouCam API（パーフェクト株式会社）</h4>
+      <p>AI 肌解析、バーチャル試着、画像・動画生成など 50 種類以上の AI 機能を提供する API です。GIS とは分野が異なりますが、以下の活用が考えられます。</p>
+      <ul>
+        <li><strong>GIS への活用法：</strong>
+          <ul>
+            <li>建物・構造物の外観を AI 生成し、3D モデル/テクスチャとして KASUGAI Canvas に重ねる</li>
+            <li>都市景観シミュレーション：開発予定地の外観を生成し、周辺地形にドレープ</li>
+            <li>観光・小売向け：店舗や商品の AR 試着映像を地図上の POI と連携</li>
+            <li>画像解析系 API を利用し、ストリートビュー風画像から看板・建物を抽出して POI 化</li>
+          </ul>
+        </li>
+        <li><strong>エージェント連携例：</strong>「この地点に新しい商業ビルを建てたら景観はどう変わる？」→ 周辺カメラ視点を生成 → YouCam 画像生成 → 結果を Info パネルまたは 3D プレーンで表示</li>
+      </ul>
+
+      <h4>GMI Cloud</h4>
+      <p>200 以上の AI モデルを推論できる AI ネイティブクラウドです。TrendAI™ Vision One を使ったセキュリティ機能も備えています。</p>
+      <ul>
+        <li><strong>GIS への活用法：</strong>
+          <ul>
+            <li>衛星画像・航空写真を対象に、物体検出・変化検知・セグメンテーションモデルを実行</li>
+            <li>検出結果（建物、道路、植生、駐車場など）を自動で GeoJSON レイヤー化</li>
+            <li>LiDAR/点群の分類モデル推論で、建物・樹木・地面を自動分類</li>
+            <li>推論環境のセキュリティ監視：ANTIGRAVITY エージェントが外部データを取得する際の脅威分析・対処自動化</li>
+          </ul>
+        </li>
+        <li><strong>エージェント連携例：</strong>「このエリアの建物を AI で自動検出してレイヤー追加して」→ GMI Cloud 上の Vision モデルに航空写真タイルを投入 → 検出結果を GeoJSON 化 → KASUGAI Canvas へ追加</li>
+      </ul>
+
+      <h4>Google Cloud（協賛）</h4>
+      <p>ハッカソンの必須技術となる Google Cloud プロダクトを、GIS 用途に絞って整理します。</p>
+      <ul>
+        <li><strong>Gemini Enterprise Agent Platform / Gemini API / ADK：</strong>自然言語からレイヤー追加意図を理解し、実行計画を立てる AI エージェントの中核</li>
+        <li><strong>Cloud Run / Cloud Run functions：</strong>ANTIGRAVITY エージェント API、外部 API 連携、GeoJSON 変換処理をホスティング</li>
+        <li><strong>Earth Engine：</strong>衛星画像・DEM・土地利用データの大規模分析。分析結果を KASUGAI Canvas 用 XYZ/GeoJSON タイルへエクスポート</li>
+        <li><strong>BigQuery GIS：</strong>大規模空間データの集計・検索。例：「半径 1km 以内の全ての公園」などを SQL で抽出しレイヤー化</li>
+        <li><strong>Cloud Storage / Firestore：</strong>生成したレイヤーファイル、メタデータ、キャッシュの保存</li>
+        <li><strong>Vision AI / Natural Language AI / Translation AI：</strong>画像・テキスト・多言語の前処理。地名・住所の正規化、多言語属性表示など</li>
+      </ul>
+
+      <h3>技術スタック案</h3>
+      <table>
+        <thead>
+          <tr><th>層</th><th>技術</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>フロントエンド</td><td>KASUGAI Canvas（CesiumJS）</td><td>3D 地球・レイヤー表示・FlyTo・Info 表示</td></tr>
+          <tr><td>ホスティング</td><td>Cloud Run / Cloud Run functions</td><td>ANTIGRAVITY エージェント API・レイヤー変換</td></tr>
+          <tr><td>AI エージェント</td><td>Gemini API / ADK</td><td>意図理解・レイヤー選定・MCP/ツール実行計画</td></tr>
+          <tr><td>交通データ</td><td>駅すぱあと API MCP サーバー</td><td>経路探索・到達圏レイヤー生成</td></tr>
+          <tr><td>画像生成・解析</td><td>YouCam API / GMI Cloud / Vision AI</td><td>外観生成・航空写真解析・POI 抽出</td></tr>
+          <tr><td>地理空間解析</td><td>Earth Engine / BigQuery GIS</td><td>衛星データ分析・大規模空間クエリ</td></tr>
+          <tr><td>データ保存</td><td>Firestore / Cloud Storage</td><td>レイヤー設定・生成済みデータのキャッシュ</td></tr>
+          <tr><td>セキュリティ</td><td>GMI Cloud TrendAI™ / Cloud IAM</td><td>エージェントの脅威分析・最小権限アクセス</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="todo">次のステップ</h2>
+      <ol>
+        <li>エントリー済みか確認し、ダッシュボードへプロジェクトを作成</li>
+        <li>アーキテクチャ図・デモ動画の制作</li>
+        <li>Google Cloud へのデプロイ（Cloud Run 等）</li>
+        <li>ANTIGRAVITY レイヤー自動追加の最小プロトタイプ実装</li>
+        <li>GitHub リポジトリ連携とプロジェクト提出</li>
+      </ol>
+
+      <section class="card">
+        <h3>参考リンク</h3>
+        <ul>
+          <li><a href="https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5" target="_blank">第5回 Agentic AI Hackathon with Google Cloud</a></li>
+          <li><a href="https://github.com/zenn-dev/hackathon-agent-skills" target="_blank">coding agent 向けスキル（zenn-dev/hackathon-agent-skills）</a></li>
+          <li><a href="https://discord.gg/cvA2Z3yny4" target="_blank">Discord サーバー</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
