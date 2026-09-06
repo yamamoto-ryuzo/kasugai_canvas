@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.6] - 2026-09-06
+
+### Fixed
+
+- WebView2 環境で Gemini API キー入力欄が最小幅に縮まる問題を修正
+
 ## [3.4.5] - 2026-09-06
 
 ### Fixed
