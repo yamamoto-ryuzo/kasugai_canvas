@@ -267,6 +267,7 @@ def build_installer() -> None:
 
 def build_release() -> None:
     """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。"""
+    _kill_existing_kasugai()
     cargo_version = _get_cargo_version()
     sync_versions(write_latest=False)
     check_versions(check_latest=False)
