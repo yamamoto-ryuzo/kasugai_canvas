@@ -2283,6 +2283,8 @@ function setupEvents() {
   uiHooks.stopFlyPath = stopFlyPath;
 
   modeSelect.addEventListener("click", () => {
+    drawTabActive = false;
+    stopDrawMode();
     setMode(modeSelect.value === "orbit" ? "walk" : "orbit");
   });
   document.querySelector("#fly-path-select")?.addEventListener("change", () => {
