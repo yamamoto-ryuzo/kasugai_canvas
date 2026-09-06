@@ -4417,6 +4417,7 @@ window.addEventListener("pagehide", () => {
   await detectBackend();
   try { await loadProjects(); } catch (e) { console.error(e); }
   try { await loadInspectorConfig(); } catch (e) { console.error(e); }
+  try { await ensureDrawnRouteFlyPath(); } catch (e) { console.error(e); }
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }
   const initialCamera = await resolveInitialCamera();
   // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
