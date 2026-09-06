@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.10] - 2026-09-06
+
+### Changed
+
+- 配布物を再ビルドし、最新の `web/` フロントエンド（表示/非表示ボタン・DATAフォルダ読み込み等）が含まれることを確認
+
 ## [3.4.9] - 2026-09-06
 
 ### Added
