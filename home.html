@@ -257,6 +257,15 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
       <section>
         <h2>📖 使い方</h2>
         <div class="url-box">
+          <h3>基本の流れ</h3>
+          <ul>
+            <li>設定は <code>projects/&lt;project&gt;/kasugai_canvas.kasc</code> に記述します。</li>
+            <li>ローカルデータは <code>projects/&lt;project&gt;/DATA/</code> 以下に置き、設定から相対パスで参照できます。</li>
+            <li>「エクスポート(.kasc)」ボタンで変更をダウンロードし、設定ファイルと差し替えて保存してください。</li>
+            <li><code>web/</code> ディレクトリは通常の HTTP サーバーにそのまま配置できます。</li>
+          </ul>
+        </div>
+        <div class="url-box">
           <h3>起動方法（通常のHTTPサーバー）</h3>
           <pre><code>cd web
 python -m http.server 8520</code></pre>

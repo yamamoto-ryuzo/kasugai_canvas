@@ -157,34 +157,7 @@
               </section>
               <section id="settings-help-panel" class="settings-subpanel">
                 <div class="section-title">HELP</div>
-                <ul style="margin:0 0 12px 1.4em;padding:0;font-size:0.9em;line-height:1.7;">
-                  <li>設定は <code>projects/&lt;project&gt;/kasugai_canvas.kasc</code> に記述します。</li>
-                  <li>ローカルデータは <code>projects/&lt;project&gt;/DATA/</code> 以下に置き、設定から相対パスで参照できます。</li>
-                  <li>「エクスポート(.kasc)」ボタンで変更をダウンロードし、設定ファイルと差し替えて保存してください。</li>
-                  <li><code>web/</code> ディレクトリは通常の HTTP サーバーにそのまま配置できます。</li>
-                </ul>
-                <div class="section-title">インスペクター設定（書式）</div>
-                <ul style="margin:0 0 12px 1.4em;padding:0;font-size:0.9em;line-height:1.7;">
-                  <li>書式: <code>種類:タイトル|URL|出典|オプション</code></li>
-                  <li><code>base:</code> ベースマップ（先頭が既定）。オプション: <code>maxZoom=</code> <code>tileSize=256|512</code> <code>opacity=</code> <code>proxy=off</code></li>
-                  <li><code>xyz:</code> タイルレイヤ（同上＋末尾 <code>off</code> で非表示登録）</li>
-                  <li><code>3dtiles:</code> / <code>geojson:</code>(<code>layer:</code>) レイヤ。末尾 <code>off</code>、<code>proxy=off</code></li>
-                  <li><code>cam:</code> カメラプリセット <code>cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位</code></li>
-                  <li><code>fly_geojson:</code> Flyパス <code>…|s=速度|h=高さ|p=ピッチ|loop=true</code></li>
-                  <li><code>info:</code> InfoパネルHTMLのURL / <code>legend:</code> 凡例画像 / <code>background:</code> 背景色 / <code>yahooAppId:</code> Yahoo検索ID</li>
-                  <li>タイトルの <code>/</code>・<code>\</code> でグループ化、<code>//</code>・<code>\\</code> で排他グループ（同時1つ表示）。全グループ初期は折りたたみ</li>
-                  <li>任意位置に <code>on</code>/<code>off</code>（<code>false</code>可・大小文字不問）で初期表示を指定</li>
-                  <li>「登録」で即時適用、「エクスポート(.kasc)」で保存</li>
-                  <li>未対応: <code>layer:</code>制御、<code>max=</code>/<code>zoom=</code>（<code>maxZoom=</code>使用）、行単位ドレープ、<code>attrUrlOpen:</code></li>
-                </ul>
-                <div class="section-title">ローカルファイルの追加（デモ用データ）</div>
-                <ul style="margin:0 0 12px 1.4em;padding:0;font-size:0.9em;line-height:1.7;">
-                  <li>Inspectorタブ「保存先フォルダ」で DATA/ を選択（Chromium系のみ・以降は権限確認のみ・いつでも変更可）</li>
-                  <li>「DATA/ に保存して追加」: ファイル書き込み→<code>geojson:…|DATA/…</code>追記→登録まで一括</li>
-                  <li>「設定行のみ追加」: 追記のみ（ファイルは手動でDATA/へ。非対応ブラウザ向け）</li>
-                  <li>「今すぐプレビュー」: 保存せず一時表示（リロードで消える）</li>
-                  <li>保存したDATA/ファイルは .kasc と共に配布すればデモサイト化できます</li>
-                </ul>
+                <p class="hint">使い方・設定仕様・ローカルファイル追加の詳細は、オンラインヘルプ（home.html）を参照してください。</p>
                 <a class="help-link" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer">オンラインヘルプを開く</a>
               </section>
               <section id="settings-other-panel" class="settings-subpanel">
