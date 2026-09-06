@@ -4483,7 +4483,7 @@ function setupChatPanel() {
     }
     if (!window.kasugaiApi.getGoogleApiKey()) {
       const local = await handleLocalChatCommand(text);
-      addMessage("assistant", local || "AI接続は未設定です。設定タブの「Google」でGemini APIキーを保存してください。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
+      addMessage("assistant", local || "APIキー未設定。使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
       return;
     }
     const thinking = document.createElement("div");
@@ -4504,9 +4504,7 @@ function setupChatPanel() {
     }
   }
 
-  if (!savedLog.length) {
-    addMessage("system", "AIチャット。設定タブ「Google」でGemini APIキーを保存すると会話できます。「/」始まりはローカルコマンドです。", { persist: false });
-  }
+  // 初回案内は表示しない（API未設定時のチュートリアル表示を省略）
 }
 
 window.addEventListener("popstate", applyUrlCamera);
