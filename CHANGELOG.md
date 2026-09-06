@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.3] - 2026-09-06
+
+### Docs
+
+- `home.html` に API 構成の簡潔な説明を追加
+
 ## [3.4.2] - 2026-09-06
 
 ### Removed
