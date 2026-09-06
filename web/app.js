@@ -2906,6 +2906,7 @@ function setupEvents() {
       if (drawModeActive && !nextDrawTab) stopDrawMode();
       drawTabActive = nextDrawTab;
       setMode(drawTabActive ? "orbit" : "walk");
+      if (nextDrawTab) void ensureDrawnRouteFlyPath();
     });
   });
   setupVectorSearch();
