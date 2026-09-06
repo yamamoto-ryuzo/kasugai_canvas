@@ -4,6 +4,15 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.2] - 2026-09-06
+
+### Removed
+
+- バージョン管理 API (`/api/update/*`、`/api/shutdown`、`/health`) 以外の Rust サーバー API 呼び出しを `web/app.js` から削除
+  - `/api/projects` 系、 `/api/tile` 系、 `/api/info` 系
+  - `/api/search` 代替として地理院住所検索をブラウザから直接呼び出し
+  - 描画ルートの `/api/files`・`/api/file` 系取得・保存
+
 ## [3.4.1] - 2026-09-06
 
 ### Fixed

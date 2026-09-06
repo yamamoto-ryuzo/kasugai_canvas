@@ -164,12 +164,6 @@ async function detectBackend() {
   }
 }
 
-function getProjectConfigUrl() {
-  if (backendEnabled) {
-    return `/api/projects/${encodeURIComponent(currentProjectId)}/config`;
-  }
-  return `./projects/${encodeURIComponent(currentProjectId)}/kasugai_canvas.kasc`;
-}
 
 function getProjectBaseUrl() {
   return `projects/${encodeURIComponent(currentProjectId || "default")}/`;
@@ -222,11 +216,6 @@ async function loadInspectorConfig() {
       const response = await fetch(staticUrl, { cache: "no-store" });
       if (response.ok) text = await response.text();
     } catch {}
-    if (!text && backendEnabled) {
-      const response = await fetch(getProjectConfigUrl());
-      if (!response.ok) throw new Error(await response.text());
-      text = await response.text();
-    }
     if (!text) text = defaultConfig;
     document.querySelector("#inspector-input").value = text;
     applyInspector(text);
@@ -238,13 +227,7 @@ async function loadInspectorConfig() {
 }
 
 async function saveInspectorConfig() {
-  if (!backendEnabled) return;
-  const response = await fetch(getProjectConfigUrl(), {
-    method: "PUT",
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-    body: document.querySelector("#inspector-input").value,
-  });
-  if (!response.ok) throw new Error(await response.text());
+  // 静的サイト構成のためサーバーへの保存は行わない
 }
 
 function updateInspectorFromLayerOrder() {
@@ -692,38 +675,7 @@ function renderFlyPathSelect() {
 }
 
 async function ensureDrawnRouteFlyPath() {
-  if (!backendEnabled) return;
-  const project = currentProjectId || "";
-  const listUrl = `/api/files?project=${encodeURIComponent(project)}`;
-  try {
-    const listResponse = await fetch(listUrl);
-    if (!listResponse.ok) return;
-    const files = await listResponse.json();
-    const routeFiles = files.filter(name => /^drawn_route_\d+\.geojson$/.test(name)).sort();
-    const fileUrls = new Set(flyPaths.map(path => path.url));
-    let changed = false;
-    for (const file of routeFiles) {
-      const fileUrl = `/api/file?path=${encodeURIComponent(file)}&project=${encodeURIComponent(project)}`;
-      if (fileUrls.has(fileUrl)) continue;
-      const match = file.match(/^drawn_route_(\d+)\.geojson$/);
-      const title = `描画ルート${match[1]}`;
-      flyPaths.push({ title, url: fileUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
-      changed = true;
-    }
-    for (let i = flyPaths.length - 1; i >= 0; i--) {
-      const p = flyPaths[i];
-      const match = p.url.match(/[?&]path=([^&]+)/);
-      if (!match) continue;
-      const file = decodeURIComponent(match[1]);
-      if (p.title.startsWith("描画ルート") && !routeFiles.includes(file)) {
-        flyPaths.splice(i, 1);
-        changed = true;
-      }
-    }
-    if (changed) renderFlyPathSelect();
-  } catch (error) {
-    // ファイルの存在確認に失敗しても無視
-  }
+  // 静的サイト構成のため描画ルートのバックエンド取得は行わない
 }
 
 const GSI_DEM_LAYERS = [
@@ -893,9 +845,6 @@ class GsiDemTerrainProvider {
   }
 }
 
-function toHex(str) {
-  return Array.from(new TextEncoder().encode(str), b => b.toString(16).padStart(2, "0")).join("");
-}
 
 function proxyTileUrl(url, useProxy = true) {
   return url;
@@ -1630,32 +1579,15 @@ function setupEvents() {
     }
     results.innerHTML = '<li style="padding:8px;color:#71818d;">検索中...</li>';
     try {
-      const provider = searchProvider ? searchProvider.value : "gsi";
-      let useYahoo = provider === "yahoo" && yahooAppId && !yahooAppId.includes("あなたのYahoo");
-      if (!backendEnabled) useYahoo = false;
-      let response;
-      if (backendEnabled) {
-        const params = new URLSearchParams({ query });
-        if (useYahoo) params.set("appid", yahooAppId);
-        response = await fetch(`/api/search?${params}`);
-      } else {
-        response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
-      }
+      const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
       if (!response.ok) throw new Error(await response.text() || `検索に失敗しました (${response.status})`);
       const data = await response.json();
-      const items = useYahoo
-        ? (data.Feature || []).map(item => ({
-            title: item.Name || item.name || "",
-            address: item.Property?.Address || item.Property?.address || "",
-            latitude: Number(item.Geometry?.Coordinates?.split(",")[1]),
-            longitude: Number(item.Geometry?.Coordinates?.split(",")[0]),
-          }))
-        : data.map(item => ({
-            title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
-            address: item.properties?.address || item.properties?.Address || item.properties?.title || "",
-            latitude: Number(item.geometry?.coordinates?.[1]),
-            longitude: Number(item.geometry?.coordinates?.[0]),
-          }));
+      const items = data.map(item => ({
+        title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
+        address: item.properties?.address || item.properties?.Address || item.properties?.title || "",
+        latitude: Number(item.geometry?.coordinates?.[1]),
+        longitude: Number(item.geometry?.coordinates?.[0]),
+      }));
       const validItems = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
       if (!validItems.length) {
         results.innerHTML = '<li style="padding:8px;color:#71818d;">該当する結果がありません。</li>';
@@ -2433,40 +2365,7 @@ function setupEvents() {
     };
   }
   async function cacheDrawnLine() {
-    if (!backendEnabled) return;
-    const geojson = buildDrawnGeoJson();
-    if (!geojson) return;
-    const project = currentProjectId || "";
-    const listUrl = `/api/files?project=${encodeURIComponent(project)}`;
-    try {
-      const listResponse = await fetch(listUrl);
-      const files = listResponse.ok ? await listResponse.json() : [];
-      const numbers = files
-        .filter(name => /^drawn_route_(\d+)\.geojson$/.test(name))
-        .map(name => Number(name.match(/^drawn_route_(\d+)\.geojson$/)[1]));
-      const next = (numbers.length ? Math.max(...numbers) : 0) + 1;
-      const path = `drawn_route_${next}.geojson`;
-      const title = `描画ルート${next}`;
-      const fileUrl = `/api/file?path=${encodeURIComponent(path)}&project=${encodeURIComponent(project)}`;
-      const putResponse = await fetch(fileUrl, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geojson) });
-      if (!putResponse.ok) throw new Error(await putResponse.text());
-      flyPaths.push({ title, url: fileUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
-      renderFlyPathSelect();
-      const select = document.querySelector("#fly-path-select");
-      const flyIndex = flyPaths.findIndex(p => p.url === fileUrl);
-      if (select) select.value = String(flyIndex);
-      const inspectorInput = document.querySelector("#inspector-input");
-      if (inspectorInput) {
-        const line = `fly_geojson: ${title} | ${fileUrl} | height=0`;
-        if (!inspectorInput.value.includes(line)) {
-          const text = inspectorInput.value;
-          inspectorInput.value = text ? (text.trim().endsWith("\n") ? text + line + "\n" : text + "\n" + line + "\n") : line + "\n";
-          void saveInspectorConfig().catch(error => console.warn("設定の保存に失敗しました:", error));
-        }
-      }
-    } catch (error) {
-      console.error("ルートのキャッシュに失敗しました:", error);
-    }
+    // 静的サイト構成のため描画ルートのバックエンド保存は行わない
   }
 
   function getCanvasPosition(event) {
@@ -2522,10 +2421,7 @@ function setupEvents() {
   const openDrawnRoute = document.querySelector("#open-drawn-route");
   if (openDrawnRoute) {
     openDrawnRoute.addEventListener("click", () => {
-      if (!backendEnabled) return;
-      const project = currentProjectId || "";
-      const openUrl = `/api/open?path=drawn_route.geojson&project=${encodeURIComponent(project)}`;
-      void fetch(openUrl, { method: "POST" }).catch(error => console.error("フォルダを開けませんでした:", error));
+      // 静的サイト構成のためファイルオープン API は使用しない
     });
   }
 
