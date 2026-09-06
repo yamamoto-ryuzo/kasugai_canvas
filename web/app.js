@@ -2386,15 +2386,9 @@ function setupEvents() {
   }
 
   async function saveDrawnLineToFolder(fileName, text) {
-    if (!window.showDirectoryPicker) {
-      setInspectorStatus("このブラウザは File System Access API に未対応のため、描画ルートを保存できません。Chrome/Edge で開いてください。", true);
-      return;
-    }
+    if (!window.showDirectoryPicker) return;
     const dir = await getDataDirHandle();
-    if (!dir) {
-      setInspectorStatus("保存先フォルダが未選択のため、描画ルートは保存されませんでした。インスペクターの「保存先フォルダ」で設定してください。", true);
-      return;
-    }
+    if (!dir) return;
     const file = await dir.getFileHandle(fileName, { create: true });
     const writable = await file.createWritable();
     await writable.write(text);
@@ -2402,7 +2396,6 @@ function setupEvents() {
     const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
     flyPaths.push({ title: fileName.replace(/\.geojson$/, ""), url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
     renderFlyPathSelect();
-    setInspectorStatus(`描画ルートを ${dir.name}/${fileName} に保存し、FLYパス一覧に登録しました。fly_geojson: タイトル | DATA/${fileName} で永続化できます。`);
   }
 
   async function cacheDrawnLine() {
@@ -2412,13 +2405,7 @@ function setupEvents() {
       const fileName = drawnRouteFileName();
       const text = JSON.stringify(geojson, null, 2);
       await saveDrawnLineToFolder(fileName, text);
-    } catch (error) {
-      if (error && error.name === "AbortError") {
-        setInspectorStatus("フォルダ選択がキャンセルされたため、描画ルートは保存されませんでした。");
-        return;
-      }
-      setInspectorStatus(`描画ルートの保存に失敗しました: ${error instanceof Error ? error.message : error}`, true);
-    }
+    } catch {}
   }
 
   function getCanvasPosition(event) {
@@ -2469,38 +2456,6 @@ function setupEvents() {
           const rightDrag = Cesium.CameraEventType.RIGHT_DRAG;
           ssec.zoomEventTypes = defaultZoomEventTypes.filter(t => t !== rightDrag && t?.eventType !== rightDrag);
         }
-      }
-    });
-  }
-  const openDrawnRoute = document.querySelector("#open-drawn-route");
-  if (openDrawnRoute) {
-    openDrawnRoute.addEventListener("click", async () => {
-      try {
-        if (!window.showDirectoryPicker) {
-          setInspectorStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開いてください。", true);
-          return;
-        }
-        const dir = await getDataDirHandle();
-        if (!dir) return;
-        const listEl = document.querySelector("#drawn-route-list");
-        const files = [];
-        for await (const entry of dir.values()) {
-          if (entry.kind === "file") files.push(entry.name);
-        }
-        files.sort();
-        if (listEl) {
-          if (!files.length) {
-            listEl.innerHTML = `<div style="color:#71818d;">${escapeHtml(dir.name)} にファイルがありません</div>`;
-          } else {
-            listEl.innerHTML = `<div style="color:#71818d;margin-bottom:4px;">${escapeHtml(dir.name)} の中身 (${files.length}件):</div>` +
-              files.map(name => `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(name)}">${escapeHtml(name)}</div>`).join("");
-          }
-          listEl.style.display = "block";
-        }
-        setInspectorStatus(`保存先フォルダ ${dir.name} の中身を表示しました。(${files.length}件)`);
-      } catch (error) {
-        if (error && error.name === "AbortError") return;
-        setInspectorStatus(`保存先フォルダを開けませんでした: ${error instanceof Error ? error.message : error}`, true);
       }
     });
   }
