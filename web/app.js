@@ -394,8 +394,8 @@ async function loadFlyGeoJson(url) {
 }
 
 function buildFlyPathLinePositions(coords) {
-  // ルートラインは FLY 高さに追随させず、地表付近に描画する（高高度でも視認できるように）
-  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0) + 2));
+  // ルートラインは GeoJSON 本来の高さ（標高 + ルート高度）で描画する
+  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0)));
 }
 
 function getFlyPathLinePositions() {
