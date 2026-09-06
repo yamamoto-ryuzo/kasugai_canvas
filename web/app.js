@@ -258,27 +258,6 @@ function setInspectorStatus(message, isError = false) {
   status.style.color = isError ? "#a82020" : "";
 }
 
-let toastTimer = null;
-function showToast(message, isError = false) {
-  let toast = document.querySelector("#app-toast");
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "app-toast";
-    toast.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:9999;max-width:360px;padding:8px 12px;border-radius:6px;background:rgba(30,41,51,0.92);color:#fff;font-size:0.85em;box-shadow:0 2px 8px rgba(0,0,0,0.3);white-space:pre-wrap;";
-    document.body.appendChild(toast);
-  }
-  toast.textContent = message;
-  toast.style.background = isError ? "rgba(168,32,32,0.95)" : "rgba(30,41,51,0.92)";
-  toast.style.display = "block";
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.style.display = "none"; }, 6000);
-}
-
-function notifyStatus(message, isError = false) {
-  setInspectorStatus(message, isError);
-  showToast(message, isError);
-}
-
 function flyTo(options = {}, duration = null) {
   const latitude = Number(options.latitude);
   const longitude = Number(options.longitude);
@@ -2344,6 +2323,7 @@ function setupEvents() {
       if (dx * dx + dy * dy + dz * dz < 25) return;
     }
     drawnPoints.push(point);
+    flashDrawPoint(point);
     if (!drawLineEntity) {
       drawLineEntity = viewer.entities.add({
         polyline: {
@@ -2354,11 +2334,22 @@ function setupEvents() {
       });
     }
   }
+  function flashDrawPoint(position) {
+    const marker = viewer.entities.add({
+      position,
+      point: { pixelSize: 14, color: Cesium.Color.CYAN.withAlpha(0.9), outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
+    });
+    setTimeout(() => viewer.entities.remove(marker), 400);
+  }
+  function updateDrawCursor() {
+    viewer.canvas.style.cursor = drawModeActive ? "crosshair" : "";
+  }
   function stopDrawMode() {
     drawModeActive = false;
     isDrawing = false;
     lastRightDownTime = 0;
     updateDrawModeButton();
+    updateDrawCursor();
     if (viewer.scene.screenSpaceCameraController) {
       ssec.zoomEventTypes = !walkModeActive || drawTabActive
         ? defaultZoomEventTypes
@@ -2396,12 +2387,12 @@ function setupEvents() {
 
   async function saveDrawnLineToFolder(fileName, text) {
     if (!window.showDirectoryPicker) {
-      notifyStatus("このブラウザは File System Access API に未対応のため、描画ルートを保存できません。Chrome/Edge で開いてください。", true);
+      setInspectorStatus("このブラウザは File System Access API に未対応のため、描画ルートを保存できません。Chrome/Edge で開いてください。", true);
       return;
     }
     const dir = await getDataDirHandle();
     if (!dir) {
-      notifyStatus("保存先フォルダが未選択のため、描画ルートは保存されませんでした。インスペクターの「保存先フォルダ」で設定してください。", true);
+      setInspectorStatus("保存先フォルダが未選択のため、描画ルートは保存されませんでした。インスペクターの「保存先フォルダ」で設定してください。", true);
       return;
     }
     const file = await dir.getFileHandle(fileName, { create: true });
@@ -2411,7 +2402,7 @@ function setupEvents() {
     const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
     flyPaths.push({ title: fileName.replace(/\.geojson$/, ""), url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
     renderFlyPathSelect();
-    notifyStatus(`描画ルートを ${dir.name}/${fileName} に保存し、FLYパス一覧に登録しました。fly_geojson: タイトル | DATA/${fileName} で永続化できます。`);
+    setInspectorStatus(`描画ルートを ${dir.name}/${fileName} に保存し、FLYパス一覧に登録しました。fly_geojson: タイトル | DATA/${fileName} で永続化できます。`);
   }
 
   async function cacheDrawnLine() {
@@ -2423,10 +2414,10 @@ function setupEvents() {
       await saveDrawnLineToFolder(fileName, text);
     } catch (error) {
       if (error && error.name === "AbortError") {
-        notifyStatus("フォルダ選択がキャンセルされたため、描画ルートは保存されませんでした。");
+        setInspectorStatus("フォルダ選択がキャンセルされたため、描画ルートは保存されませんでした。");
         return;
       }
-      notifyStatus(`描画ルートの保存に失敗しました: ${error instanceof Error ? error.message : error}`, true);
+      setInspectorStatus(`描画ルートの保存に失敗しました: ${error instanceof Error ? error.message : error}`, true);
     }
   }
 
@@ -2471,6 +2462,7 @@ function setupEvents() {
         clearDrawnLine();
         drawModeActive = true;
         updateDrawModeButton();
+        updateDrawCursor();
         if (viewer.scene.screenSpaceCameraController) {
           const ssec = viewer.scene.screenSpaceCameraController;
           ssec.enableZoom = true;
@@ -2485,18 +2477,30 @@ function setupEvents() {
     openDrawnRoute.addEventListener("click", async () => {
       try {
         if (!window.showDirectoryPicker) {
-          notifyStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開いてください。", true);
+          setInspectorStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開いてください。", true);
           return;
         }
         const dir = await getDataDirHandle();
         if (!dir) return;
-        await window.showOpenFilePicker({
-          startIn: dir,
-          types: [{ description: "GeoJSON", accept: { "application/geo+json": [".geojson", ".json"] } }],
-        });
+        const listEl = document.querySelector("#drawn-route-list");
+        const files = [];
+        for await (const entry of dir.values()) {
+          if (entry.kind === "file") files.push(entry.name);
+        }
+        files.sort();
+        if (listEl) {
+          if (!files.length) {
+            listEl.innerHTML = `<div style="color:#71818d;">${escapeHtml(dir.name)} にファイルがありません</div>`;
+          } else {
+            listEl.innerHTML = `<div style="color:#71818d;margin-bottom:4px;">${escapeHtml(dir.name)} の中身 (${files.length}件):</div>` +
+              files.map(name => `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(name)}">${escapeHtml(name)}</div>`).join("");
+          }
+          listEl.style.display = "block";
+        }
+        setInspectorStatus(`保存先フォルダ ${dir.name} の中身を表示しました。(${files.length}件)`);
       } catch (error) {
         if (error && error.name === "AbortError") return;
-        notifyStatus(`保存先フォルダを開けませんでした: ${error instanceof Error ? error.message : error}`, true);
+        setInspectorStatus(`保存先フォルダを開けませんでした: ${error instanceof Error ? error.message : error}`, true);
       }
     });
   }
