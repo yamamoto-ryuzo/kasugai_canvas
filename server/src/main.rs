@@ -177,11 +177,23 @@ async fn install_update(
         ));
     }
 
+    let install_dir = current_exe
+        .parent()
+        .map(PathBuf::from)
+        .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "インストール先ディレクトリを取得できません".to_string(),
+        ))?;
+    let new_web_dir = extract_dir.join("web");
+    let current_web_dir = install_dir.join("web");
+
     let script_path = tmp_dir.join("update.ps1");
     let script = format!(
-        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\n$ErrorActionPreference = 'Stop'\ntry {{\n    Copy-Item -Path $newExe -Destination $currentExe -Force\n    Start-Process -FilePath $currentExe -WindowStyle Hidden\n}} catch {{\n    Write-Error \"EXEの差し替えに失敗しました: $_\"\n    exit 1\n}}\n",
+        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\n$newWeb = '{new_web}'\n$currentWeb = '{current_web}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\n$ErrorActionPreference = 'Stop'\ntry {{\n    Copy-Item -Path $newExe -Destination $currentExe -Force\n    if (Test-Path $newWeb) {{\n        if (Test-Path $currentWeb) {{ Remove-Item -Path $currentWeb -Recurse -Force }}\n        Copy-Item -Path $newWeb -Destination $currentWeb -Recurse -Force\n    }}\n    Start-Process -FilePath $currentExe -WindowStyle Hidden\n}} catch {{\n    Write-Error \"更新ファイルの差し替えに失敗しました: $_\"\n    exit 1\n}}\n",
         new = new_exe.to_string_lossy().replace('\'', "''"),
-        current = current_exe.to_string_lossy().replace('\'', "''")
+        current = current_exe.to_string_lossy().replace('\'', "''"),
+        new_web = new_web_dir.to_string_lossy().replace('\'', "''"),
+        current_web = current_web_dir.to_string_lossy().replace('\'', "''")
     );
     tokio::fs::write(&script_path, script)
         .await
