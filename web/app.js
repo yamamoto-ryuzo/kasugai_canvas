@@ -394,7 +394,8 @@ async function loadFlyGeoJson(url) {
 }
 
 function buildFlyPathLinePositions(coords) {
-  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0) + flyHeight));
+  // ルートラインは FLY 高さに追随させず、地表付近に描画する（高高度でも視認できるように）
+  return coords.map(c => Cesium.Cartesian3.fromDegrees(c.longitude, c.latitude, c.altitude + (c.terrain || 0) + 2));
 }
 
 function getFlyPathLinePositions() {
@@ -1880,7 +1881,7 @@ function setupEvents() {
       show: true,
       polyline: {
         positions: new Cesium.CallbackProperty(() => getFlyPathLinePositions(), false),
-        width: new Cesium.CallbackProperty(() => Math.max(6, Math.min(24, flyHeight / 5 + 6)), false),
+        width: 8,
         material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.25 }),
       },
     });
