@@ -675,8 +675,8 @@ function renderFlyPathSelect() {
 }
 
 async function ensureDrawnRouteFlyPath() {
-  if (window.kasugaiApi?.ensureDrawnRouteFlyPath) {
-    return await window.kasugaiApi.ensureDrawnRouteFlyPath();
+  if (window._ensureDrawnRouteFlyPath) {
+    return await window._ensureDrawnRouteFlyPath();
   }
 }
 
@@ -2652,6 +2652,7 @@ function setupEvents() {
       renderFlyPathSelect();
     } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
   }
+  window._ensureDrawnRouteFlyPath = _ensureDrawnRouteFlyPath;
 
   document.querySelector("#inspector-data-dir")?.addEventListener("click", async () => {
     if (!window.showDirectoryPicker) {
@@ -3742,7 +3743,6 @@ window.kasugaiApi = {
   getGeminiModel() {
     try { return localStorage.getItem("googleGeminiModel") || "gemini-3.1-flash-lite"; } catch (e) { return "gemini-3.1-flash-lite"; }
   },
-  ensureDrawnRouteFlyPath: _ensureDrawnRouteFlyPath,
 };
 
 // ローカルコマンド: AI接続前でも操作APIの動作確認ができる
