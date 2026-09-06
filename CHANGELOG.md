@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.3.0] - 2026-09-06
+
+### Fixed
+
+- APIキー未設定時のチャット応答に、設定手順・取得URL・使えるコマンドを含めるよう改善
+- チャットパネルの初回チュートリアルメッセージを省略（API未設定時の不要な表示を減らす）
+
 ## [3.2.0] - 2026-09-06
 
 ### Added
