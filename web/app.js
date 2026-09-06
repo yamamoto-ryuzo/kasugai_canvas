@@ -675,7 +675,24 @@ function renderFlyPathSelect() {
 }
 
 async function ensureDrawnRouteFlyPath() {
-  // 静的サイト構成のため描画ルートのバックエンド取得は行わない
+  if (!window.showDirectoryPicker) return;
+  const dir = dataDirHandle || await dataDirStore.get(dataDirKey());
+  if (!dir) return;
+  if (await dir.queryPermission({ mode: "readwrite" }) !== "granted") return;
+  try {
+    const existing = new Set(flyPaths.map(p => p.title));
+    for await (const entry of dir.values()) {
+      if (entry.kind !== "file" || !entry.name.endsWith(".geojson")) continue;
+      const title = entry.name.replace(/\.geojson$/, "");
+      if (existing.has(title)) continue;
+      const fileHandle = await dir.getFileHandle(entry.name);
+      const file = await fileHandle.getFile();
+      const text = await file.text();
+      const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+      flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
+    }
+    renderFlyPathSelect();
+  } catch {}
 }
 
 const GSI_DEM_LAYERS = [
@@ -2393,9 +2410,6 @@ function setupEvents() {
     const writable = await file.createWritable();
     await writable.write(text);
     await writable.close();
-    const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
-    flyPaths.push({ title: fileName.replace(/\.geojson$/, ""), url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
-    renderFlyPathSelect();
   }
 
   async function cacheDrawnLine() {
@@ -2405,6 +2419,7 @@ function setupEvents() {
       const fileName = drawnRouteFileName();
       const text = JSON.stringify(geojson, null, 2);
       await saveDrawnLineToFolder(fileName, text);
+      await ensureDrawnRouteFlyPath();
       void listDrawnRoutes();
     } catch {}
   }
@@ -2664,6 +2679,7 @@ function setupEvents() {
     }
     try {
       await pickDataDir();
+      await ensureDrawnRouteFlyPath();
       setInspectorStatus("保存先フォルダを設定しました。");
     } catch (error) {
       if (error && error.name === "AbortError") return;
