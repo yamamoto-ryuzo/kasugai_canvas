@@ -191,7 +191,7 @@
                 <p class="hint"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。ただし API 呼び出し時にキーがリクエストURLに含まれるため、このPCを操作する人・ブラウザ拡張機能・ページ上のスクリプトからは参照可能です。ローカル・個人利用を前提とし、公開サーバーへの設置や第三者との共有は避けてください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
                 <p class="hint"><strong>エージェント連携について</strong>：このアプリは ADK 等のエージェントフレームワークを内蔵しません。外部で構築されたエージェント（Antigravity等）をAPIで呼び出し、ツール実行（地図操作）はブラウザ側の <code>kasugaiApi</code> が担当する構成です。</p>
                 <label class="field-label" for="google-api-key">Gemini API キー</label>
-                <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" autocomplete="off" />
+                <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" autocomplete="off" size="28" />
                 <label class="field-label" for="google-gemini-model" style="margin-top:10px;">Gemini モデル</label>
                 <select id="google-gemini-model">
                   <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (標準・低コスト)</option>
