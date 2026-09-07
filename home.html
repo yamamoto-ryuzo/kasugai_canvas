@@ -141,17 +141,20 @@
       </section>
 
       <section>
-        <h2>🌍 Google Maps Platform 連携</h2>
-        <p>トップレベルの「Google」タブ → Map で Google Maps Platform の API キー（<a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行）を設定できます。「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。キーは localStorage にのみ保存され、.kasc エクスポートには含まれません。Map Tiles API は従量課金です。</p>
-      </section>
-
-      <section>
-        <h2>🤖 AIチャット（Gemini連携）</h2>
-        <p>右下の Chat パネルから Gemini API（function calling）で地図を操作できます。Google → Gemini タブで Gemini API キー・モデルを設定します。</p>
+        <h2>� Google 連携（v4.0 へ向けた主要機能）</h2>
+        <p>トップレベルの「Google」タブ（設定の右）に Google 関連機能を集約しています。Gemini による AI チャットと Google Maps Platform の地図機能を、このタブのサブタブ（Gemini / Map）から設定します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v4.0 をリリースする予定です。</strong></p>
         <div class="features">
           <div class="feature-card">
-            <h3>💬 地図操作チャット</h3>
-            <p>「◯◯へ飛んで」「レイヤを消して」等をAIが実行。flyTo・レイヤ切替・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替まで網羅。AI移動はドローン視点（対象地上+200m・-30°）が既定</p>
+            <h3>🤖 AIチャット（Gemini）</h3>
+            <p>右下の Chat パネルから Gemini API（function calling）で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。flyTo・レイヤ切替・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替まで網羅。AI移動はドローン視点（対象地上+200m・-30°）が既定。Google → Gemini タブで API キー・モデルを設定</p>
+          </div>
+          <div class="feature-card">
+            <h3>🗺️ Photorealistic 3D Tiles</h3>
+            <p>Google → Map タブで Maps Platform API キーを設定し、「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。Map Tiles API は従量課金です</p>
+          </div>
+          <div class="feature-card">
+            <h3>� API キー管理</h3>
+            <p>Gemini キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>、Maps キーは <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行。キーは localStorage にのみ保存され、.kasc エクスポートには含まれません</p>
           </div>
           <div class="feature-card">
             <h3>⚙️ ローカルコマンド</h3>
