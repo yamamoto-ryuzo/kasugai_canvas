@@ -10,6 +10,10 @@ const DEFAULT_VIEW = { latitude: 35.6852, longitude: 139.7528, height: 2000, pit
 
 const viewer = new Cesium.Viewer("cesium-container", {
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+  contextOptions: { webgl: { alpha: true } },
+  // 「ベースマップ透明」(地表透明+XYZドレープのみ表示)は globe.translucency で
+  // baseColor のアルファを効かせる必要があり、その手法は OIT 無効時のみ動作する
+  orderIndependentTranslucency: false,
   baseLayerPicker: false,
   geocoder: false,
   homeButton: false,
@@ -41,8 +45,10 @@ const hasLastCamera = !!(lastCamera && Number.isFinite(lastCamera.latitude) && N
 
 const basemaps = [];
 let selectedBasemap = null;
-// ベースマップ選択「テレイン非表示」用: true なら地表(globe)を描画しない。地形プロバイダ(高さ)は維持される
+// ベースマップ選択「ベースマップ透明」用: true なら地表色と背景を透明にし、XYZタイルのドレープだけを残す。地形プロバイダ(高さ)は維持される
 let globeHidden = false;
+// テレイン非表示から復帰した時に元へ戻すため、通常時の地表ベース色を保持する
+let globeBaseColor = viewer.scene.globe.baseColor.clone();
 const cameraPresets = [];
 const layers = [];
 const tileLayers = [];
@@ -447,7 +453,7 @@ function renderBasemapSelector() {
   select.append(none);
   const hideGlobe = document.createElement("option");
   hideGlobe.value = "__hide_globe__";
-  hideGlobe.textContent = "テレイン非表示";
+  hideGlobe.textContent = "ベースマップ透明";
   hideGlobe.selected = globeHidden;
   select.append(hideGlobe);
   basemaps.forEach(basemap => {
@@ -889,15 +895,53 @@ function applyClippingPlanes(target) {
   }
 }
 
+// ベースマップ透明に入る前の HDR / 大気ハロー設定を保持する
+let savedHdrForGlobeHidden = null;
+let savedGroundAtmosphereForGlobeHidden = null;
+
+function applyGlobeVisibility() {
+  const scene = viewer.scene;
+  // 「ベースマップ透明」でも globe 自体は描画する。地表色と背景を透明にし、
+  // XYZ タイルの ImageryLayer だけが地形起伏の上に残るようにする。
+  // 背景を透明にするには HDR を無効化する必要がある(Cesium公式: HDR有効時は
+  // フレームバッファのアルファが合成されず不透明になる)
+  scene.globe.show = true;
+  scene.globe.baseColor = globeHidden ? Cesium.Color.TRANSPARENT : globeBaseColor;
+  if (globeHidden) {
+    if (savedHdrForGlobeHidden === null) savedHdrForGlobeHidden = scene.highDynamicRange;
+    if (savedGroundAtmosphereForGlobeHidden === null) savedGroundAtmosphereForGlobeHidden = scene.globe.showGroundAtmosphere;
+    scene.highDynamicRange = false;
+    scene.globe.showGroundAtmosphere = false;
+    scene.backgroundColor = Cesium.Color.TRANSPARENT;
+    // 地表のアルファを baseColor(透明) + imagery(XYZ) のブレンド結果にする。
+    // translucency 無効だと globe は不透明パスで描画され baseColor のアルファが無視される
+    scene.globe.translucency.enabled = true;
+    scene.globe.translucency.frontFaceAlpha = 1;
+    scene.globe.translucency.backFaceAlpha = 1;
+    if (scene.skyBox) scene.skyBox.show = false;
+    if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
+    if (scene.sun) scene.sun.show = false;
+    if (scene.moon) scene.moon.show = false;
+  } else {
+    if (savedHdrForGlobeHidden !== null) { scene.highDynamicRange = savedHdrForGlobeHidden; savedHdrForGlobeHidden = null; }
+    if (savedGroundAtmosphereForGlobeHidden !== null) { scene.globe.showGroundAtmosphere = savedGroundAtmosphereForGlobeHidden; savedGroundAtmosphereForGlobeHidden = null; }
+    if (scene.sun) scene.sun.show = true;
+    if (scene.moon) scene.moon.show = true;
+  }
+  document.body.classList.toggle("globe-hidden", globeHidden);
+}
+
 function updateUndergroundView() {
-  const alpha = 1 - undergroundTransparency;
+  // ベースマップ透明中は地表アルファを baseColor+imagery のブレンド結果に委ねるため、
+  // frontFaceAlpha/backFaceAlpha は 1 固定(applyGlobeVisibility 側で管理)
+  const alpha = globeHidden ? 1 : 1 - undergroundTransparency;
   viewer.scene.globe.translucency.frontFaceAlpha = alpha;
   viewer.scene.globe.translucency.backFaceAlpha = alpha;
   viewer.scene.globe.undergroundColor = undergroundBackgroundColor;
   viewer.scene.globe.undergroundColorAlphaByDistance = undefined;
-  viewer.scene.backgroundColor = undergroundBackgroundColor;
+  viewer.scene.backgroundColor = globeHidden ? Cesium.Color.TRANSPARENT : undergroundBackgroundColor;
   if (viewer.scene.skyBox) {
-    viewer.scene.skyBox.show = undergroundTransparency === 0 && !undergroundDiveEnabled;
+    viewer.scene.skyBox.show = !globeHidden && undergroundTransparency === 0 && !undergroundDiveEnabled;
   }
   if (undergroundDiveEnabled) {
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
@@ -919,9 +963,9 @@ function updateEffectSettings() {
   viewer.scene.globe.enableLighting = terrainLightingInput?.checked ?? false;
   viewer.scene.shadows = shadowsInput?.checked ?? false;
   viewer.scene.globe.depthTestAgainstTerrain = (depthTestInput?.checked ?? true) && hasTerrain && undergroundTransparency === 0;
-  viewer.scene.globe.translucency.enabled = translucencyInput?.checked ?? false;
+  viewer.scene.globe.translucency.enabled = (translucencyInput?.checked ?? false) || globeHidden;
   if (viewer.scene.fog) viewer.scene.fog.enabled = fogInput?.checked ?? true;
-  if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = skyAtmosphereInput?.checked ?? true;
+  if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = (skyAtmosphereInput?.checked ?? true) && !globeHidden;
 }
 
 function getCesiumTilesetOptions() {
@@ -1147,7 +1191,7 @@ async function refreshLayers() {
   }
 
   // Globe 表面のベースマップ
-  if (selectedBasemap?.url) {
+  if (!globeHidden && selectedBasemap?.url) {
     try {
       const provider = createUrlTemplateProvider({
         url: selectedBasemap.url,
@@ -1250,7 +1294,7 @@ async function refreshLayers() {
   buildVectorSearchIndex();
   updateVectorSearchUI();
   updateMapAttribution();
-  viewer.scene.globe.show = !globeHidden;
+  applyGlobeVisibility();
 }
 
 function setupInfoTabs(content) {
@@ -1339,7 +1383,8 @@ function applyInspector(text) {
       document.body.style.background = value;
       const baseColor = Cesium.Color.fromCssColorString(value);
       if (baseColor) {
-        viewer.scene.globe.baseColor = baseColor;
+        globeBaseColor = baseColor;
+        viewer.scene.globe.baseColor = globeHidden ? Cesium.Color.TRANSPARENT : baseColor;
         undergroundBackgroundColor = baseColor;
       }
     }
@@ -1578,7 +1623,7 @@ function setupEvents() {
   document.querySelector("#basemap-select").addEventListener("change", event => {
     globeHidden = event.target.value === "__hide_globe__";
     if (!globeHidden) selectedBasemap = basemaps.find(b => b.id === event.target.value) || null;
-    viewer.scene.globe.show = !globeHidden;
+    applyGlobeVisibility();
     updateMapAttribution();
     refreshLayers();
   });
@@ -3682,6 +3727,7 @@ window.kasugaiApi = {
     const basemap = basemaps.find(item => item.id === idOrTitle || item.title === idOrTitle);
     if (!basemap) return false;
     selectedBasemap = basemap;
+    globeHidden = false;
     const select = document.querySelector("#basemap-select");
     if (select) select.value = basemap.id;
     updateMapAttribution();

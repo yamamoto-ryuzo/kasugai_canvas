@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.14] - 2026-09-07
+
+### Changed
+
+- 「テレイン非表示」を「ベースマップ透明」に刷新。globe の描画を消す代わりに、地表色と背景を透明にして XYZ タイルのドレープだけを地形起伏の上に残す。`contextOptions.webgl.alpha`、HDR 無効化、大気ハロー非表示、`orderIndependentTranslucency` 無効化を伴う
+
 ## [3.4.13] - 2026-09-07
 
 ### Added
