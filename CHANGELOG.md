@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.15] - 2026-09-08
+
+### Added
+
+- BASEMAP パネルの 🌐 アイコンをクリックすると、現在の視点（位置・高度・方位・傾き）を Google Earth 形式に変換して `https://earth.google.com/web/` を新しいウィンドウで開く機能を追加
+
 ## [3.4.14] - 2026-09-07
 
 ### Changed

@@ -443,6 +443,39 @@ function updateCameraInputs() {
   updateUrlFromCamera();
 }
 
+function openGoogleEarth() {
+  try {
+    const cartographic = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    if (!cartographic || !Number.isFinite(cartographic.latitude) || !Number.isFinite(cartographic.longitude)) return;
+    const cameraLat = cartographic.latitude * 180 / Math.PI;
+    const cameraLng = cartographic.longitude * 180 / Math.PI;
+    const height = Math.max(0, Number(cartographic.height) || 0);
+    const headingRad = viewer.camera.heading;
+    const pitchRad = viewer.camera.pitch;
+
+    const tiltRad = Math.max(0, Math.min(Math.PI / 2, pitchRad + Math.PI / 2));
+    const tiltDeg = tiltRad * 180 / Math.PI;
+    const headingDeg = ((headingRad * 180 / Math.PI) % 360 + 360) % 360;
+
+    const metersPerDegLat = 111320;
+    const metersPerDegLng = 111320 * Math.cos(cameraLat * Math.PI / 180);
+    let targetLat = cameraLat;
+    let targetLng = cameraLng;
+    let distance = height;
+    if (tiltRad > 0.01) {
+      const horizontalDistance = height * Math.tan(tiltRad);
+      targetLat = cameraLat + (horizontalDistance * Math.cos(headingRad)) / metersPerDegLat;
+      targetLng = cameraLng + (horizontalDistance * Math.sin(headingRad)) / (metersPerDegLng || 1);
+      distance = height / Math.cos(tiltRad);
+    }
+
+    const url = `https://earth.google.com/web/@${targetLat.toFixed(6)},${targetLng.toFixed(6)},0a,${distance.toFixed(2)}d,35y,${headingDeg.toFixed(1)}h,${tiltDeg.toFixed(1)}t,0r`;
+    window.open(url, "_blank");
+  } catch (error) {
+    console.error("Google Earth 連携エラー:", error);
+  }
+}
+
 function renderBasemapSelector() {
   const select = document.querySelector("#basemap-select");
   select.replaceChildren();
@@ -1627,6 +1660,8 @@ function setupEvents() {
     updateMapAttribution();
     refreshLayers();
   });
+
+  document.querySelector("#basemap-globe").addEventListener("click", openGoogleEarth);
 
   document.querySelector("#apply-camera").addEventListener("click", () => {
     const next = {};
