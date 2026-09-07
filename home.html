@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v3.4.12</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v3.4.13</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -33,7 +33,7 @@
           </div>
           <div class="feature-card">
             <h3>🗺️ ベースマップ</h3>
-            <p><code>base:</code> または <code>xyz:</code> 行で指定。Basemap セレクタから 1 つだけアクティブ化</p>
+            <p><code>base:</code> または <code>xyz:</code> 行で指定。Basemap セレクタから 1 つだけアクティブ化。「ベースマップなし」「テレイン非表示（高さは維持）」も選択可能</p>
           </div>
           <div class="feature-card">
             <h3>🔧 システムレイヤ制御</h3>
@@ -141,8 +141,13 @@
       </section>
 
       <section>
+        <h2>🌍 Google Maps Platform 連携</h2>
+        <p>トップレベルの「Google」タブ → Map で Google Maps Platform の API キー（<a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行）を設定できます。「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。キーは localStorage にのみ保存され、.kasc エクスポートには含まれません。Map Tiles API は従量課金です。</p>
+      </section>
+
+      <section>
         <h2>🤖 AIチャット（Gemini連携）</h2>
-        <p>右下の Chat パネルから Gemini API（function calling）で地図を操作できます。設定 → Google タブで Gemini API キー・モデルを設定します。</p>
+        <p>右下の Chat パネルから Gemini API（function calling）で地図を操作できます。Google → Gemini タブで Gemini API キー・モデルを設定します。</p>
         <div class="features">
           <div class="feature-card">
             <h3>💬 地図操作チャット</h3>

@@ -4,6 +4,21 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [3.4.13] - 2026-09-07
+
+### Added
+
+- トップレベルに「Google」タブを追加（設定タブの右）。サブタブ構成: Gemini / Map
+- Google → Map タブに Google Maps Platform の API キー入力欄を追加（localStorage 保存、`window.kasugaiApi.getGoogleMapsApiKey()` で参照可能）
+- Photorealistic 3D Tiles 表示トグルを追加。ON で Google のフォトリアル3Dタイルをレイヤ一覧へ自動追加（inspector テキストには書き込まないため .kasc エクスポートに API キーは含まれない）
+- BASEMAP セレクタに「テレイン非表示」を追加。地表（globe）の描画を消しつつ地形プロバイダ（高さ）は維持
+
+### Changed
+
+- Gemini 設定を 設定 → Google から Google → Gemini タブへ移動
+- 設定内サブタブの切替をパネル単位にスコープ化し、設定・Google で独立して動作するように修正
+- Photorealistic 3D Tiles トグル ON 時に未保存の入力キーを自動保存するように変更
+
 ## [3.4.12] - 2026-09-07
 
 ### Added

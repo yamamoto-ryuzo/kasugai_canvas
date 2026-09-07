@@ -41,6 +41,8 @@ const hasLastCamera = !!(lastCamera && Number.isFinite(lastCamera.latitude) && N
 
 const basemaps = [];
 let selectedBasemap = null;
+// ベースマップ選択「テレイン非表示」用: true なら地表(globe)を描画しない。地形プロバイダ(高さ)は維持される
+let globeHidden = false;
 const cameraPresets = [];
 const layers = [];
 const tileLayers = [];
@@ -441,7 +443,13 @@ function renderBasemapSelector() {
   const none = document.createElement("option");
   none.value = "";
   none.textContent = "ベースマップなし";
+  none.selected = !globeHidden && !selectedBasemap;
   select.append(none);
+  const hideGlobe = document.createElement("option");
+  hideGlobe.value = "__hide_globe__";
+  hideGlobe.textContent = "テレイン非表示";
+  hideGlobe.selected = globeHidden;
+  select.append(hideGlobe);
   basemaps.forEach(basemap => {
     const option = document.createElement("option");
     option.value = basemap.id;
@@ -1242,6 +1250,7 @@ async function refreshLayers() {
   buildVectorSearchIndex();
   updateVectorSearchUI();
   updateMapAttribution();
+  viewer.scene.globe.show = !globeHidden;
 }
 
 function setupInfoTabs(content) {
@@ -1454,6 +1463,7 @@ function applyInspector(text) {
     }
   });
 
+  syncGoogle3dTilesLayer();
   basemaps.splice(0, basemaps.length, ...parsedBasemaps);
   selectedBasemap = basemaps[0] || null;
   cameraPresets.splice(0, cameraPresets.length, ...parsedCameras);
@@ -1466,6 +1476,35 @@ function applyInspector(text) {
   void ensureDrawnRouteFlyPath();
   refreshLayers();
   updateSearchProvider();
+}
+
+// Google Photorealistic 3D Tiles: MapタブのトグルON時にレイヤ一覧へ自動追加する。
+// inspectorテキストには書き込まないため .kasc エクスポートにAPIキーは含まれない。
+const GOOGLE_3DTILES_LAYER_ID = "google-photorealistic-3dtiles";
+function syncGoogle3dTilesLayer() {
+  let enabled = false;
+  let key = "";
+  try {
+    enabled = localStorage.getItem("googleMaps3dTiles") === "1";
+    key = localStorage.getItem("googleMapsApiKey") || "";
+  } catch (e) {}
+  const index = layers.findIndex(item => item.id === GOOGLE_3DTILES_LAYER_ID);
+  if (enabled && key) {
+    const url = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(key)}`;
+    if (index === -1) {
+      const item = { id: GOOGLE_3DTILES_LAYER_ID, title: "Google Photorealistic 3D Tiles", sourceTitle: "Google Photorealistic 3D Tiles", type: "3dtiles", url, visible: true, attribution: "Google", proxy: false };
+      layers.push(item);
+      layerState.set(item.id, item);
+      layerOrder.push(item.id);
+    } else {
+      layers[index].url = url;
+    }
+  } else if (index !== -1) {
+    layers.splice(index, 1);
+    layerState.delete(GOOGLE_3DTILES_LAYER_ID);
+    const orderIndex = layerOrder.indexOf(GOOGLE_3DTILES_LAYER_ID);
+    if (orderIndex !== -1) layerOrder.splice(orderIndex, 1);
+  }
 }
 
 function setupThreeJs() {
@@ -1537,7 +1576,9 @@ function setTopDown(is2D) {
 
 function setupEvents() {
   document.querySelector("#basemap-select").addEventListener("change", event => {
-    selectedBasemap = basemaps.find(b => b.id === event.target.value) || null;
+    globeHidden = event.target.value === "__hide_globe__";
+    if (!globeHidden) selectedBasemap = basemaps.find(b => b.id === event.target.value) || null;
+    viewer.scene.globe.show = !globeHidden;
     updateMapAttribution();
     refreshLayers();
   });
@@ -2749,8 +2790,9 @@ function setupEvents() {
 
   document.querySelectorAll(".settings-tab").forEach(tab => {
     tab.addEventListener("click", () => {
-      document.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
-      document.querySelectorAll(".settings-subpanel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel));
+      const scope = tab.closest(".plugin-panel") || document;
+      scope.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
+      scope.querySelectorAll(".settings-subpanel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel));
     });
   });
 
@@ -2972,6 +3014,61 @@ function setupGoogleSettings() {
       if (status) status.textContent = "保存しました。";
     } catch (e) {
       if (status) status.textContent = `保存エラー: ${e.message}`;
+    }
+  });
+
+  const mapsKeyInput = document.querySelector("#google-maps-api-key");
+  const mapsSaveButton = document.querySelector("#google-maps-settings-save");
+  const mapsStatus = document.querySelector("#google-maps-settings-status");
+  const tiles3dToggle = document.querySelector("#google-3dtiles-toggle");
+  if (!mapsKeyInput || !mapsSaveButton) return;
+  try {
+    mapsKeyInput.value = localStorage.getItem("googleMapsApiKey") || "";
+    if (tiles3dToggle) tiles3dToggle.checked = localStorage.getItem("googleMaps3dTiles") === "1";
+  } catch (e) {}
+  mapsSaveButton.addEventListener("click", () => {
+    try {
+      localStorage.setItem("googleMapsApiKey", mapsKeyInput.value.trim());
+      if (mapsStatus) mapsStatus.textContent = "保存しました。";
+      if (layerState.has(GOOGLE_3DTILES_LAYER_ID)) {
+        syncGoogle3dTilesLayer();
+        renderLayerList();
+        refreshLayers();
+      }
+    } catch (e) {
+      if (mapsStatus) mapsStatus.textContent = `保存エラー: ${e.message}`;
+    }
+  });
+  tiles3dToggle?.addEventListener("change", () => {
+    console.log("[Google3dTiles] toggle changed:", tiles3dToggle.checked);
+    try {
+      // 入力欄に未保存のキーがあれば保存してから有効化する
+      if (tiles3dToggle.checked) {
+        const pending = mapsKeyInput.value.trim();
+        if (pending && pending !== (localStorage.getItem("googleMapsApiKey") || "")) {
+          localStorage.setItem("googleMapsApiKey", pending);
+          console.log("[Google3dTiles] 入力欄のキーを自動保存しました");
+        }
+      }
+      const key = localStorage.getItem("googleMapsApiKey") || "";
+      if (tiles3dToggle.checked && !key) {
+        tiles3dToggle.checked = false;
+        if (mapsStatus) mapsStatus.textContent = "先に Maps API キーを保存してください。";
+        console.warn("[Google3dTiles] Maps API キーが未保存のため無効化しました");
+        return;
+      }
+      localStorage.setItem("googleMaps3dTiles", tiles3dToggle.checked ? "1" : "0");
+      syncGoogle3dTilesLayer();
+      renderLayerList();
+      refreshLayers();
+      const added = layerState.has(GOOGLE_3DTILES_LAYER_ID);
+      console.log(`[Google3dTiles] レイヤ一覧に存在: ${added}`);
+      if (mapsStatus) mapsStatus.textContent = added
+        ? "レイヤに追加しました。Layers タブで表示を確認できます。"
+        : "レイヤから削除しました。";
+    } catch (error) {
+      console.error("[Google3dTiles] トグル処理でエラー:", error);
+      if (mapsStatus) mapsStatus.textContent = `エラー: ${error instanceof Error ? error.message : error}`;
     }
   });
 }
@@ -3762,6 +3859,9 @@ window.kasugaiApi = {
   getGoogleApiKey() {
     try { return localStorage.getItem("googleApiKey") || ""; } catch (e) { return ""; }
   },
+  getGoogleMapsApiKey() {
+    try { return localStorage.getItem("googleMapsApiKey") || ""; } catch (e) { return ""; }
+  },
   getGeminiModel() {
     try { return localStorage.getItem("googleGeminiModel") || "gemini-3.1-flash-lite"; } catch (e) { return "gemini-3.1-flash-lite"; }
   },
@@ -4384,7 +4484,7 @@ function setupChatPanel() {
     }
     if (!window.kasugaiApi.getGoogleApiKey()) {
       const local = await handleLocalChatCommand(text);
-      addMessage("assistant", local || "APIキー未設定です。設定 → Google タブで Gemini API キーを保存すると会話できます。キーは https://aistudio.google.com/apikey から取得できます。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
+      addMessage("assistant", local || "APIキー未設定です。Google → Gemini タブで Gemini API キーを保存すると会話できます。キーは https://aistudio.google.com/apikey から取得できます。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
       return;
     }
     const thinking = document.createElement("div");

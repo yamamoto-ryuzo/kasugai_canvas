@@ -31,6 +31,7 @@
               <button class="panel-tab" type="button" data-panel="legend-panel">凡例</button>
               <button class="panel-tab" type="button" data-panel="attr-panel">Attr</button>
               <button class="panel-tab" type="button" data-panel="settings-panel">設定</button>
+              <button class="panel-tab" type="button" data-panel="google-panel">Google</button>
             </nav>
             <section id="layers-panel" class="plugin-panel active">
               <div id="layer-list"></div>
@@ -103,7 +104,6 @@
                 <button class="settings-tab" type="button" data-settings-panel="settings-cesium-panel">Cesium</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-effects-panel">効果</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-help-panel">Help</button>
-                <button class="settings-tab" type="button" data-settings-panel="settings-google-panel">Google</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel">その他</button>
               </nav>
               <section id="settings-dem-panel" class="settings-subpanel active">
@@ -180,24 +180,6 @@
                 </div>
                 <p id="clip-status" class="hint" aria-live="polite"></p>
               </section>
-              <section id="settings-google-panel" class="settings-subpanel">
-                <p class="hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
-                <p class="hint"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。ただし API 呼び出し時にキーがリクエストURLに含まれるため、このPCを操作する人・ブラウザ拡張機能・ページ上のスクリプトからは参照可能です。ローカル・個人利用を前提とし、公開サーバーへの設置や第三者との共有は避けてください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
-                <p class="hint"><strong>エージェント連携について</strong>：このアプリは ADK 等のエージェントフレームワークを内蔵しません。外部で構築されたエージェント（Antigravity等）をAPIで呼び出し、ツール実行（地図操作）はブラウザ側の <code>kasugaiApi</code> が担当する構成です。</p>
-                <label class="field-label" for="google-api-key">Gemini API キー</label>
-                <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" autocomplete="off" size="28" />
-                <label class="field-label" for="google-gemini-model" style="margin-top:10px;">Gemini モデル</label>
-                <select id="google-gemini-model">
-                  <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (標準・低コスト)</option>
-                  <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-                  <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-                  <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                </select>
-                <div class="terrain-options" style="margin-top:10px;">
-                  <button id="google-settings-save" type="button">保存</button>
-                </div>
-                <p id="google-settings-status" class="hint" aria-live="polite"></p>
-              </section>
               <section id="settings-cesium-panel" class="settings-subpanel">
                 <p class="hint">CesiumJS 3D Tiles 描画パラメータを調整します。値を変えると 3D レイヤーが再読み込みされます。</p>
                 <div class="terrain-options">
@@ -235,6 +217,42 @@
                 </div>
                 <label class="field-label" for="underground-transparency">地表透過 <span id="underground-transparency-value">0%</span></label>
                 <input id="underground-transparency" type="range" min="0" max="1" step="0.05" value="0" style="width: 100%;" />
+              </section>
+            </section>
+            <section id="google-panel" class="plugin-panel">
+              <nav class="settings-tabs" aria-label="Google設定カテゴリ">
+                <button class="settings-tab active" type="button" data-settings-panel="gemini-panel">Gemini</button>
+                <button class="settings-tab" type="button" data-settings-panel="google-map-panel">Map</button>
+              </nav>
+              <section id="gemini-panel" class="settings-subpanel active">
+              <p class="hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
+              <p class="hint"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。ただし API 呼び出し時にキーがリクエストURLに含まれるため、このPCを操作する人・ブラウザ拡張機能・ページ上のスクリプトからは参照可能です。ローカル・個人利用を前提とし、公開サーバーへの設置や第三者との共有は避けてください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
+              <label class="field-label" for="google-api-key">Gemini API キー</label>
+              <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" autocomplete="off" size="28" />
+              <label class="field-label" for="google-gemini-model" style="margin-top:10px;">Gemini モデル</label>
+              <select id="google-gemini-model">
+                <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (標準・低コスト)</option>
+                <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+              </select>
+              <div class="terrain-options" style="margin-top:10px;">
+                <button id="google-settings-save" type="button">保存</button>
+              </div>
+              <p id="google-settings-status" class="hint" aria-live="polite"></p>
+              </section>
+              <section id="google-map-panel" class="settings-subpanel">
+              <p class="hint">Google Maps Platform の API キーです。<a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行したキーを入力してください。ジオコーディング・Places・Photorealistic 3D Tiles 等の地図機能で使用します。</p>
+              <p class="hint"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存されます。Gemini キーとは別キーを推奨します。Google Cloud 側で「Map Tiles API のみ」等のAPI制限と、可能であればHTTPリファラー制限をかけてください。従量課金のため、予算アラートの設定を推奨します。</p>
+              <label class="field-label" for="google-maps-api-key">Maps API キー</label>
+              <input id="google-maps-api-key" type="password" placeholder="Maps APIキーを入力" autocomplete="off" size="28" />
+              <div class="terrain-options" style="margin-top:10px;">
+                <button id="google-maps-settings-save" type="button">保存</button>
+              </div>
+              <p id="google-maps-settings-status" class="hint" aria-live="polite"></p>
+              <div class="section-title" style="margin-top:14px;">表示</div>
+              <label><input id="google-3dtiles-toggle" type="checkbox" /> Photorealistic 3D Tiles</label>
+              <p class="hint">ONにすると保存済みの Maps API キーで Google のフォトリアル3Dタイルをレイヤ一覧へ自動追加します。Map Tiles API の従量課金が発生します。</p>
               </section>
             </section>
             <section id="info-panel" class="plugin-panel embedded-content">
