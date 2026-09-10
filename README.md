@@ -33,7 +33,7 @@ python run.py -B
 
 ## バージョン管理
 
-現在のバージョンは **3.4.15** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **4.0.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -51,3 +51,33 @@ python run.py -B
 6. GitHub Pages の公開内容を確認する
 
 バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。自動更新用の公開メタデータは `download\latest.json` で管理し、`server\Cargo.toml` と同じバージョン番号に更新してください。
+
+## 拡張機能（Plugin）と認証
+
+### 起動前認証プラグイン
+`web/auth-selector.js` が最初に読み込まれ、`web/auth-methods.json` に基づいて認証プラグインを選択・実行します。認証成功後に `app.js` と `plugin-loader.js` が動的に読み込まれます。
+
+- `none`：認証なし（デフォルト）
+- `local`：`web/PLUGIN/auth-local/auth.js` を使用
+
+認証情報は `window.kasugaiAuth` に保存され、`kasugaiApi.getAuth()` から取得できます。
+
+### 起動後通常プラグイン
+`web/plugin-loader.js` が `web/plugins.json` を読み込み、各プラグインを `import()` します。
+
+```json
+{
+  "plugins": [
+    { "id": "sample-hello", "url": "./PLUGIN/sample-hello/plugin.js" }
+  ]
+}
+```
+
+```js
+// PLUGIN/my-plugin/plugin.js
+export async function init(api, manifest) {
+  const viewer = api.getViewer();
+  const Cesium = api.getCesium();
+  // Cesium への機能追加
+}
+```

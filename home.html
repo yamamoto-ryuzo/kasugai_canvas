@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v3.4.15</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -141,8 +141,29 @@
       </section>
 
       <section>
-        <h2>� Google 連携（v4.0 へ向けた主要機能）</h2>
-        <p>トップレベルの「Google」タブ（設定の右）に Google 関連機能を集約しています。Gemini による AI チャットと Google Maps Platform の地図機能を、このタブのサブタブ（Gemini / Map）から設定します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v4.0 をリリースする予定です。</strong></p>
+        <h2>拡張機能（Plugin）と認証</h2>
+        <div class="url-box">
+          <h3>起動前認証プラグイン</h3>
+          <p>認証方式は <code>web/auth-methods.json</code> で定義します。デフォルトは認証なしで起動します。</p>
+          <ul>
+            <li>通常起動: <code>http://127.0.0.1:8520/</code></li>
+            <li>ローカル認証: <code>http://127.0.0.1:8520/?auth=local</code></li>
+            <li>前回の方式を localStorage に記憶させる場合: <code>localStorage.setItem('kasugaiAuthMethod', 'local')</code></li>
+          </ul>
+          <p>認証後、<code>window.kasugaiAuth</code> に認証情報がセットされ、その後 <code>app.js</code> と通常プラグインが起動します。</p>
+        </div>
+        <div class="url-box">
+          <h3>起動後通常プラグイン</h3>
+          <p>機能拡張プラグインは <code>web/PLUGIN/&lt;plugin-id&gt;/plugin.js</code> に配置し、<code>web/plugins.json</code> に登録します。</p>
+          <pre><code>web/PLUGIN/sample-hello/plugin.js
+web/PLUGIN/auth-local/auth.js</code></pre>
+          <p>通常プラグインは <code>window.kasugaiApi</code> 経由で Cesium viewer やカメラ、レイヤー情報にアクセスできます。詳細は README.md を参照してください。</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>� Google 連携（v5.0 へ向けた主要機能）</h2>
+        <p>トップレベルの「Google」タブ（設定の右）に Google 関連機能を集約しています。Gemini による AI チャットと Google Maps Platform の地図機能を、このタブのサブタブ（Gemini / Map）から設定します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v5.0 をリリースする予定です。</strong></p>
         <div class="features">
           <div class="feature-card">
             <h3>🤖 AIチャット（Gemini）</h3>
@@ -330,7 +351,6 @@ info: https://example.com/project-info.html</code></pre>
           </ol>
         </div>
       </section>
-
 
       <section class="card">
         <h2>📚 関連リンク</h2>

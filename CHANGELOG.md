@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.0.0] - 2026-09-11
+
+### Added
+
+- 基本システムを拡張可能な Plugin 機構を追加
+- 起動前認証プラグイン（auth-selector）と起動後通常プラグイン（plugin-loader）を分離
+- `window.kasugaiApi` に viewer / Cesium / イベント / プラグイン登録 API を追加
+- 認証なし（none）とローカル認証（local）を同梱
+- サンプル拡張機能（sample-hello）と認証プラグイン（auth-local）を追加
+- 予定していた v4.0 到達条件を v5.0 に変更
+
 ## [3.4.15] - 2026-09-08
 
 ### Added

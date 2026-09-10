@@ -1,0 +1,6 @@
+{
+  "id": "sample-hello",
+  "name": "Hello Plugin",
+  "version": "1.0.0",
+  "description": "Cesium ビューアーに "Hello" マーカーを追加するサンプル拡張機能"
+}

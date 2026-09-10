@@ -1,0 +1,7 @@
+{
+  "default": "none",
+  "methods": {
+    "none": null,
+    "local": "./PLUGIN/auth-local/auth.js"
+  }
+}

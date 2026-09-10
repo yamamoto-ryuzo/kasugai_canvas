@@ -2876,7 +2876,10 @@ function setupEvents() {
     });
   });
 
-  viewer.camera.changed.addEventListener(() => updateCameraInputs());
+  viewer.camera.changed.addEventListener(() => {
+    updateCameraInputs();
+    window.kasugaiApi?.emit("camera-changed", window.kasugaiApi.getCamera());
+  });
 
 
   const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
@@ -3946,6 +3949,31 @@ window.kasugaiApi = {
   getGeminiModel() {
     try { return localStorage.getItem("googleGeminiModel") || "gemini-3.1-flash-lite"; } catch (e) { return "gemini-3.1-flash-lite"; }
   },
+  getViewer() { return viewer; },
+  getCesium() { return Cesium; },
+  _plugins: [],
+  _events: {},
+  isReady: false,
+  on(event, handler) {
+    if (!this._events[event]) this._events[event] = [];
+    this._events[event].push(handler);
+    if (event === "ready" && this.isReady) { try { handler(this); } catch (e) { console.error(e); } }
+  },
+  off(event, handler) {
+    if (!this._events[event]) return;
+    const idx = this._events[event].indexOf(handler);
+    if (idx >= 0) this._events[event].splice(idx, 1);
+  },
+  emit(event, payload) {
+    (this._events[event] || []).slice().forEach(h => { try { h(payload); } catch (e) { console.error(e); } });
+  },
+  registerPlugin(meta) {
+    this._plugins.push(meta);
+    this.emit("plugin-registered", meta);
+    console.log("[kasugaiApi] プラグイン登録:", meta.id || meta.name);
+  },
+  getPlugins() { return this._plugins; },
+  getAuth() { return window.kasugaiAuth || null; },
 };
 
 // ローカルコマンド: AI接続前でも操作APIの動作確認ができる
@@ -4612,4 +4640,6 @@ window.addEventListener("pagehide", () => {
     if (initialCamera) flyTo(initialCamera, 0);   // 履歴がない or 同じURL
   }
   renderPresets();
+  window.kasugaiApi.isReady = true;
+  window.kasugaiApi.emit("ready");
 })();
