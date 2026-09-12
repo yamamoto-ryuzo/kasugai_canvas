@@ -1,7 +1,14 @@
+function stripComments(text) {
+  return text.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
 async function loadAuthConfig() {
   try {
     const response = await fetch("./auth-methods.json", { cache: "no-store" });
-    if (response.ok) return await response.json();
+    if (response.ok) {
+      const text = await response.text();
+      return JSON.parse(stripComments(text));
+    }
   } catch (error) {
     console.log("[auth-selector] auth-methods.json が見つかりません。内蔵デフォルトを使います。");
   }
@@ -9,17 +16,33 @@ async function loadAuthConfig() {
 }
 
 async function runAuth() {
-  const config = await loadAuthConfig();
+  let config = await loadAuthConfig();
+  if (typeof config.control === "number") {
+    const controlMap = {
+      0: { default: "none", methods: { none: null } },
+      1: { default: "local", methods: { none: null, local: "./PLUGIN/auth-local/auth.js" } },
+      2: { default: "cloudflare", methods: { cloudflare: "./PLUGIN/auth-cloudflare/auth.js" } },
+      3: { default: "password", methods: { password: "./PLUGIN/auth-password/auth.js" } }
+    };
+    config = controlMap[config.control] || controlMap[0];
+  }
+  const available = new Set(Object.keys(config.methods || {}));
 
   let storedMethod = null;
   try { storedMethod = localStorage.getItem("kasugaiAuthMethod"); } catch (e) {}
   const param = new URLSearchParams(window.location.search).get("auth");
-  const method = param || storedMethod || config.default || "none";
+  const requested = param || storedMethod;
+  const fallback = config.default || "none";
 
-  const loader = config.methods?.[method];
+  const method = requested && available.has(requested) ? requested : (available.has(fallback) ? fallback : "none");
+  if (requested && requested !== method) {
+    console.warn(`[auth-selector] 未設定の認証方式: ${requested}、${method} にフォールバック`);
+  }
+
+  const loader = (config.methods || {})[method];
 
   if (method === "none" || loader == null) {
-    if (method !== "none" && !config.methods?.[method]) {
+    if (method !== "none") {
       console.warn(`[auth-selector] 未知の認証方式: ${method}`);
     }
     window.kasugaiAuth = null;

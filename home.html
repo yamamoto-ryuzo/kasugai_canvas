@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.1</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -141,16 +141,29 @@
       </section>
 
       <section>
-        <h2>🔍 V4. 拡張機能（Plugin）と認証</h2>
+        <h2 id="v4-auth">🔍 V4. 拡張機能（Plugin）と認証</h2>
+        <p>認証方式は <code>web/auth-methods.json</code> の <code>control</code> で 0〜3 の番号で指定します。デフォルトは 0（認証なし）で起動します。認証後、<code>window.kasugaiAuth</code> に認証情報がセットされ、その後 <code>app.js</code> と通常プラグインが起動します。</p>
         <div class="url-box">
-          <h3>起動前認証プラグイン</h3>
-          <p>認証方式は <code>web/auth-methods.json</code> で定義します。デフォルトは認証なしで起動します。</p>
-          <ul>
-            <li>通常起動: <code>http://127.0.0.1:8520/</code></li>
-            <li>ローカル認証: <code>http://127.0.0.1:8520/?auth=local</code></li>
-            <li>前回の方式を localStorage に記憶させる場合: <code>localStorage.setItem('kasugaiAuthMethod', 'local')</code></li>
-          </ul>
-          <p>認証後、<code>window.kasugaiAuth</code> に認証情報がセットされ、その後 <code>app.js</code> と通常プラグインが起動します。</p>
+          <h3>⚠️ セキュリティ上の注意</h3>
+          <p>Cloudflare Pages 認証は<strong>最低限の起動制御 + .kasc 設定情報の保護</strong>です。アプリの起動を制御し、<code>.kasc</code> ファイルは ID/PASS 認証後に取得した復号鍵でブラウザ内で復号されます。ただし、HTML/JS/CSS などの静的ファイル自体は公開されており、<code>DATA/</code> 内の画像・GeoJSON 等は保護対象外です。<code>auth-selector.js</code> は <code>auth-methods.json</code> で選択された方式のみを読み込みます。完全なファイルアクセス制御が必要な場合は、Cloudflare Functions や R2 等でファイル配信を制御してください。</p>
+        </div>
+        <div class="features">
+          <a class="feature-card" href="04-auth-0-none.html">
+            <h3>0. 認証なし（none）</h3>
+            <p>ID/PASS 不要。誰でも起動可能。ローカル開発や非公開の信頼環境向け。</p>
+          </a>
+          <a class="feature-card" href="04-auth-1-local.html">
+            <h3>1. ローカル認証（local）</h3>
+            <p>最小限のローカル向け認証。localStorage のユーザー名を利用するテスト・実験用。</p>
+          </a>
+          <a class="feature-card" href="04-auth-2-password.html">
+            <h3>2. 簡易パスワード認証（password）</h3>
+            <p>クラウド不要の JS 内ハッシュ比較。閉じた環境・テスト用途向け。</p>
+          </a>
+          <a class="feature-card" href="04-auth-3-cloudflare.html">
+            <h3>3. Cloudflare Pages 認証（cloudflare）</h3>
+            <p>サーバーレス ID/PASS 認証＋.kasc.enc 復号。安全な本番運用に推奨。</p>
+          </a>
         </div>
         <div class="url-box">
           <h3>起動後通常プラグイン</h3>

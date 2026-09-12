@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.0.1] - 2026-09-12
+
+### Added
+
+- home.html V4 セクションに認証方式 0〜3 のカードと、各方式の詳細ページを追加
+- 認証方式の詳細ページを HTML 形式で作成（`04-auth-0-none.html` 〜 `04-auth-3-cloudflare.html`）
+
+### Changed
+
+- README.md の「拡張機能（Plugin）と認証」セクションを home.html へ集約し、概要とリンクに簡素化
+- `web/auth-methods.json` のデフォルト `control` を `2` から `0` に変更
+
 ## [4.0.0] - 2026-09-11
 
 ### Added

@@ -33,7 +33,7 @@ python run.py -B
 
 ## バージョン管理
 
-現在のバージョンは **4.0.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **4.0.1** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -54,13 +54,7 @@ python run.py -B
 
 ## 拡張機能（Plugin）と認証
 
-### 起動前認証プラグイン
-`web/auth-selector.js` が最初に読み込まれ、`web/auth-methods.json` に基づいて認証プラグインを選択・実行します。認証成功後に `app.js` と `plugin-loader.js` が動的に読み込まれます。
-
-- `none`：認証なし（デフォルト）
-- `local`：`web/PLUGIN/auth-local/auth.js` を使用
-
-認証情報は `window.kasugaiAuth` に保存され、`kasugaiApi.getAuth()` から取得できます。
+認証方式は `web/auth-methods.json` の `control` で 0〜3 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [home.html の V4 セクション](home.html#v4-auth) を参照してください。
 
 ### 起動後通常プラグイン
 `web/plugin-loader.js` が `web/plugins.json` を読み込み、各プラグインを `import()` します。

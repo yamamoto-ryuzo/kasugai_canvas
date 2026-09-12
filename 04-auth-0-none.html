@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0. 認証なし — KASUGAI Canvas 技術選定</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.0</span></h1>
+      <p>0. 認証なし（none）</p>
+    </header>
+    <main>
+      <p><a href="home.html#v4-auth">← V4. 拡張機能（Plugin）と認証へ戻る</a></p>
+      <h2>0. 認証なし（none）</h2>
+      <div class="url-box">
+        <h3>概要</h3>
+        <p>ID/PASS の設定は不要です。誰でもアプリを起動できます。アクセス制御が不要な一般公開や非公開の信頼環境に使用します。アクセスを制限したい場合は <a href="04-auth-3-cloudflare.html">3. Cloudflare Pages 認証（cloudflare）</a> を使用してください。</p>
+        <ul>
+          <li>アクセス制御が不要な一般公開</li>
+          <li>ローカル開発</li>
+          <li>非公開の信頼できる環境</li>
+          <li>認証機能の動作確認を気にしないケース</li>
+        </ul>
+      </div>
+      <div class="url-box">
+        <h3>起動と設定</h3>
+        <p><code>web/auth-methods.json</code> の <code>control</code> を <code>0</code> に設定すると、この認証方式が選択されます。</p>
+        <pre><code>{
+  "control": 0
+}</code></pre>
+        <p>ブラウザで <code>http://127.0.0.1:8520/</code> を開くだけで起動します。</p>
+      </div>
+      <div class="url-box">
+        <h3>セキュリティ上の注意</h3>
+        <ul>
+          <li>保護できるもの：なし（全公開）</li>
+          <li>保護できないもの：アプリ、静的ファイル、<code>DATA/</code> 内のデータ全般</li>
+          <li>利用場面：アクセス制御が不要な一般公開、ローカル開発、非公開の信頼環境</li>
+          <li>注意：一般公開する場合は、<code>DATA/</code> 内のすべてのデータが誰でも閲覧可能であることを確認してください</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1. ローカル認証 — KASUGAI Canvas 技術選定</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.0</span></h1>
+      <p>1. ローカル認証（local）</p>
+    </header>
+    <main>
+      <p><a href="home.html#v4-auth">← V4. 拡張機能（Plugin）と認証へ戻る</a></p>
+      <h2>1. ローカル認証（local）</h2>
+      <div class="url-box">
+        <h3>概要</h3>
+        <p>最小限のローカル向け認証（テスト・実験用）です。実際の ID/PASS 判定は行わず、localStorage に保存されたユーザー名を利用します。</p>
+      </div>
+      <div class="url-box">
+        <h3>起動と設定</h3>
+        <p><code>web/auth-methods.json</code> の <code>control</code> を <code>1</code> に設定すると、この認証方式が選択されます。</p>
+        <pre><code>{
+  "control": 1
+}</code></pre>
+        <p>ブラウザで <code>http://127.0.0.1:8520/</code> を開くだけで起動します。</p>
+      </div>
+      <div class="url-box">
+        <h3>カスタマイズ</h3>
+        <p>ユーザー名の既定値は <code>web/PLUGIN/auth-local/auth.js</code> 内の <code>name</code> で変更できます。localStorage に <code>kasugaiLocalUser</code> が保存されている場合はそちらを優先します。</p>
+      </div>
+      <div class="url-box">
+        <h3>セキュリティ上の注意</h3>
+        <ul>
+          <li>保護できるもの：なし（利用者名の表示のみ）</li>
+          <li>保護できないもの：アプリの起動、<code>DATA/</code> へのアクセス</li>
+          <li>利用場面：動作確認・実験用</li>
+          <li>注意：本番や公開環境には不向きです</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

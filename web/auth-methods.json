@@ -1,7 +1,60 @@
+/*
+  KASUGAI Canvas 起動制御設定
+
+  本ファイルはブラウザが最初に読み込む認証方式を選択するための設定です。
+  各方式の違いを理解したうえで番号を選んでください。
+
+  control: 起動制御方式を番号で指定
+
+    0 = none（認証なし）
+        ID/PASS の設定は不要です。
+        誰でもアプリを起動できます。ローカル開発や非公開の信頼環境向け。
+
+    1 = local（ローカル認証）
+        最小限のローカル向け認証（テスト・実験用）。
+        設定先：./PLUGIN/auth-local/auth.js
+          ファイル内の ID/PASS 定数を直接編集してください。
+
+    2 = password（簡易パスワード認証）
+        クラウド・サーバー・環境変数が不要な「なんちゃって起動制御」です。
+        ブラウザ内で判定するため、社内 GLWAN 等の閉じた環境やテスト用途に限定してください。
+
+        ID/PASS の設定先：./PLUGIN/auth-password/auth.js
+          EXPECTED_USER = ユーザーID
+          EXPECTED_SALT = ハッシュ生成時の salt（base64）
+          EXPECTED_HASH = "ユーザーID:パスワード" の PBKDF2 ハッシュ（base64）
+
+        初期値：
+          ユーザーID = admin
+          パスワード = admin
+
+        ハッシュ生成コマンド：
+          python -c "import base64,secrets,hashlib; s=secrets.token_bytes(16); h=hashlib.pbkdf2_hmac('sha256',b'USER:PASS',s,100000,32); print('SALT:',base64.b64encode(s).decode()); print('HASH:',base64.b64encode(h).decode())"
+
+        この方式では HTML/JS/DATA/ 等のファイルを保護できません。
+
+    3 = cloudflare（Cloudflare Pages 認証）
+        Cloudflare Pages Functions を使ったサーバーレス ID/PASS 認証。
+        認証後に暗号化された .kasc.enc を自動復号してアプリを起動します。
+
+        ID/PASS の設定先：
+          本番：Cloudflare Pages ダッシュボード → 「環境変数」
+          ローカルテスト：リポジトリルートの .dev.vars
+        変数名：
+          KASUGAI_AUTH_USER  = ユーザーID
+          KASUGAI_AUTH_PASS  = パスワード
+          KASUGAI_DATA_KEY   = .kasc 復号用の AES 鍵（base64）
+
+        .kasc 暗号化手順：
+          python tools/encrypt_kasc.py "<KASUGAI_DATA_KEY>" "web/projects/<project>/kasugai_canvas.kasc"
+        生成された .kasc.enc をデプロイに含め、元の .kasc は削除してください。
+
+        これは「起動制御 + .kasc 設定情報の保護」であり、
+        HTML/JS/CSS/DATA/ 等の静的ファイルまでは保護しません。
+
+  安全な本番運用を行う場合は 0,1,2 ではなく 3（cloudflare）を選択してください。
+*/
+
 {
-  "default": "none",
-  "methods": {
-    "none": null,
-    "local": "./PLUGIN/auth-local/auth.js"
-  }
+  "control":0
 }

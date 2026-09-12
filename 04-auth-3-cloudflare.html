@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3. Cloudflare Pages 認証 — KASUGAI Canvas 技術選定</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.0</span></h1>
+      <p>3. Cloudflare Pages 認証（cloudflare）</p>
+    </header>
+    <main>
+      <p><a href="home.html#v4-auth">← V4. 拡張機能（Plugin）と認証へ戻る</a></p>
+      <h2>3. Cloudflare Pages 認証（cloudflare）</h2>
+      <div class="url-box">
+        <h3>概要</h3>
+        <p>Cloudflare Pages Functions を使ったサーバーレス ID/PASS 認証です。認証後に暗号化された <code>.kasc.enc</code> を自動復号してアプリを起動します。安全な本番運用に推奨します。</p>
+      </div>
+      <div class="url-box">
+        <h3>起動と設定</h3>
+        <p><code>web/auth-methods.json</code> の <code>control</code> を <code>3</code> に設定すると、この認証方式が選択されます。</p>
+        <pre><code>{
+  "control": 3
+}</code></pre>
+        <p>ブラウザで <code>https://&lt;your-site&gt;/</code> を開くだけで起動します。</p>
+      </div>
+      <div class="url-box">
+        <h3>環境変数</h3>
+        <p>Cloudflare Pages ダッシュボードまたは <code>.dev.vars</code> に以下を設定します。</p>
+        <pre><code>KASUGAI_AUTH_USER  = ユーザーID
+KASUGAI_AUTH_PASS  = パスワード
+KASUGAI_DATA_KEY   = .kasc 復号用 AES 鍵（base64）</code></pre>
+      </div>
+      <div class="url-box">
+        <h3>.kasc 暗号化手順</h3>
+        <ol>
+          <li><code>KASUGAI_DATA_KEY</code> を準備します。</li>
+          <li>以下のコマンドで <code>.kasc</code> を暗号化します。</li>
+        </ol>
+        <pre><code>python tools/encrypt_kasc.py "&lt;KASUGAI_DATA_KEY&gt;" "web/projects/&lt;project&gt;/kasugai_canvas.kasc"</code></pre>
+        <p>生成された <code>.kasc.enc</code> をデプロイに含め、元の <code>.kasc</code> は削除してください。</p>
+      </div>
+      <div class="url-box">
+        <h3>セキュリティ上の注意</h3>
+        <ul>
+          <li>保護できるもの：アプリ起動制御、<code>.kasc</code> 設定情報（ID/PASS 認証後の復号鍵でブラウザ内復号）</li>
+          <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、<code>DATA/</code> 内の画像・GeoJSON 等</li>
+          <li>利用場面：安全な本番運用</li>
+          <li>注意：完全なファイルアクセス制御が必要な場合は、Cloudflare Functions や R2 等でファイル配信を制御してください</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
