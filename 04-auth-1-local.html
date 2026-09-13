@@ -20,6 +20,13 @@
         <p>最小限のローカル向け認証（テスト・実験用）です。<code>web/PLUGIN/auth-local/auth.js</code> 内の定数と同じ ID/PASS を入力すると起動します。</p>
       </div>
       <div class="url-box">
+        <h3>利用シーン</h3>
+        <ul>
+          <li>ローカルでの動作確認</li>
+          <li>認証機能の実験・テスト</li>
+        </ul>
+      </div>
+      <div class="url-box">
         <h3>起動と設定</h3>
         <p><code>web/auth-methods.json</code> の <code>control</code> を <code>1</code> に設定すると、この認証方式が選択されます。</p>
         <pre><code>{
@@ -37,10 +44,10 @@ const EXPECTED_PASS = "admin";</code></pre>
       <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
-          <li>保護できるもの：簡易な起動制御（ID/PASS の平文照合）</li>
-          <li>保護できないもの：HTML/JS/CSS や <code>DATA/</code> 内のファイル、定数の読み取り</li>
+          <li>保護できるもの：アプリ起動制御（ID/PASS 入力なしでは起動できない）</li>
+          <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、<code>DATA/</code> 内の画像・GeoJSON 等、認証情報（<code>auth-local.js</code> 内の ID/PASS 定数は平文のため容易に読み取られる）</li>
           <li>利用場面：動作確認・実験用</li>
-          <li>注意：平文で管理されるため、本番や公開環境には不向きです</li>
+          <li>注意：ID/PASS は <code>auth-local.js</code> 内に平文で保存されるため、簡単に漏洩します。本番や公開環境には絶対に使用しないでください</li>
         </ul>
       </div>
     </main>
