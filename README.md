@@ -33,7 +33,7 @@ python run.py -B
 
 ## バージョン管理
 
-現在のバージョンは **4.0.1** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **4.0.2** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -73,5 +73,33 @@ export async function init(api, manifest) {
   const viewer = api.getViewer();
   const Cesium = api.getCesium();
   // Cesium への機能追加
+}
+```
+
+### 認証用ログインUIの共通化
+
+ID/パスワードを入力する認証プラグインでは、`web/auth-login-form.js` の `showLoginForm` を使って UI を共通化します。各プラグインは独自の認証処理だけを `onSubmit` コールバックに記述します。
+
+```js
+// web/PLUGIN/auth-example/auth.js
+import { showLoginForm } from "../../auth-login-form.js";
+
+export async function authenticate() {
+  return showLoginForm({
+    onSubmit: async ({ user, pass }) => {
+      // ここに独自の認証処理を実装する
+      // 成功時は認証結果オブジェクトを返す
+      // 失敗時は Error を throw すると UI 側にエラー表示される
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user, pass })
+      });
+      if (!res.ok) {
+        throw new Error("認証に失敗しました");
+      }
+      return { token: "example", user: { name: user, role: "example" } };
+    }
+  });
 }
 ```

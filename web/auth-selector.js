@@ -21,8 +21,8 @@ async function runAuth() {
     const controlMap = {
       0: { default: "none", methods: { none: null } },
       1: { default: "local", methods: { none: null, local: "./PLUGIN/auth-local/auth.js" } },
-      2: { default: "cloudflare", methods: { cloudflare: "./PLUGIN/auth-cloudflare/auth.js" } },
-      3: { default: "password", methods: { password: "./PLUGIN/auth-password/auth.js" } }
+      2: { default: "password", methods: { password: "./PLUGIN/auth-password/auth.js" } },
+      3: { default: "cloudflare", methods: { cloudflare: "./PLUGIN/auth-cloudflare/auth.js" } }
     };
     config = controlMap[config.control] || controlMap[0];
   }

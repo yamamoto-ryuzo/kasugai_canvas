@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.0.2] - 2026-09-13
+
+### Fixed
+
+- `web/PLUGIN/auth-local/auth.js` が ID/PASS 認証を行わずに通過していた不具合を修正
+- `web/auth-selector.js` の `control` 2/3 のマッピングを `auth-methods.json` の説明と一致させ修正
+
+### Changed
+
+- `web/PLUGIN/auth-local/auth.js` を `auth-login-form.js` を使った ID/PASS 平文照合に変更
+- ローカル認証（local）のドキュメントを修正（`home.html`、`04-auth-1-local.html`）
+
 ## [4.0.1] - 2026-09-12
 
 ### Added

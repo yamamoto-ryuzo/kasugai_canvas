@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.0.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.2</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -154,7 +154,7 @@
           </a>
           <a class="feature-card" href="04-auth-1-local.html">
             <h3>1. ローカル認証（local）</h3>
-            <p>最小限のローカル向け認証。localStorage のユーザー名を利用するテスト・実験用。</p>
+            <p>最小限のローカル向け認証。ID/PASS を平文で照合するテスト・実験用。</p>
           </a>
           <a class="feature-card" href="04-auth-2-password.html">
             <h3>2. 簡易パスワード認証（password）</h3>
@@ -164,6 +164,11 @@
             <h3>3. Cloudflare Pages 認証（cloudflare）</h3>
             <p>サーバーレス ID/PASS 認証＋.kasc.enc 復号。安全な本番運用に推奨。</p>
           </a>
+        </div>
+        <div class="url-box">
+          <h3>認証用ログインUI</h3>
+          <p>ローカル認証（1）、パスワード認証（2）、Cloudflare 認証（3）は、同じログインUIコンポーネント <code>web/auth-login-form.js</code> を使用します。画面の見た目・入力チェック・ローディング表示・エラー表示を共通化し、認証方式ごとの判定処理だけを <code>web/PLUGIN/auth-*/auth.js</code> に閉じ込めています。</p>
+          <p>新しい認証方式を追加する場合は、<code>web/PLUGIN/&lt;id&gt;/auth.js</code> から <code>showLoginForm({ onSubmit })</code> を呼び出し、<code>onSubmit</code> コールバック内で独自の認証処理を記述してください。詳細は README.md を参照してください。</p>
         </div>
         <div class="url-box">
           <h3>起動後通常プラグイン</h3>

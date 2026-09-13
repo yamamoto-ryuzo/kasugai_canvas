@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.2</span></h1>
       <p>1. ローカル認証（local）</p>
     </header>
     <main>
@@ -17,7 +17,7 @@
       <h2>1. ローカル認証（local）</h2>
       <div class="url-box">
         <h3>概要</h3>
-        <p>最小限のローカル向け認証（テスト・実験用）です。実際の ID/PASS 判定は行わず、localStorage に保存されたユーザー名を利用します。</p>
+        <p>最小限のローカル向け認証（テスト・実験用）です。<code>web/PLUGIN/auth-local/auth.js</code> 内の定数と同じ ID/PASS を入力すると起動します。</p>
       </div>
       <div class="url-box">
         <h3>起動と設定</h3>
@@ -25,19 +25,22 @@
         <pre><code>{
   "control": 1
 }</code></pre>
-        <p>ブラウザで <code>http://127.0.0.1:8520/</code> を開くだけで起動します。</p>
+        <p>ブラウザで <code>http://127.0.0.1:8510/</code> を開くと、ログイン画面が表示されます。</p>
       </div>
       <div class="url-box">
-        <h3>カスタマイズ</h3>
-        <p>ユーザー名の既定値は <code>web/PLUGIN/auth-local/auth.js</code> 内の <code>name</code> で変更できます。localStorage に <code>kasugaiLocalUser</code> が保存されている場合はそちらを優先します。</p>
+        <h3>ID/PASS の設定</h3>
+        <p><code>web/PLUGIN/auth-local/auth.js</code> の以下の定数を編集してください。</p>
+        <pre><code>const EXPECTED_USER = "admin";
+const EXPECTED_PASS = "admin";</code></pre>
+        <p>初期値: ユーザーID <code>admin</code>、パスワード <code>admin</code></p>
       </div>
       <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
-          <li>保護できるもの：なし（利用者名の表示のみ）</li>
-          <li>保護できないもの：アプリの起動、<code>DATA/</code> へのアクセス</li>
+          <li>保護できるもの：簡易な起動制御（ID/PASS の平文照合）</li>
+          <li>保護できないもの：HTML/JS/CSS や <code>DATA/</code> 内のファイル、定数の読み取り</li>
           <li>利用場面：動作確認・実験用</li>
-          <li>注意：本番や公開環境には不向きです</li>
+          <li>注意：平文で管理されるため、本番や公開環境には不向きです</li>
         </ul>
       </div>
     </main>
