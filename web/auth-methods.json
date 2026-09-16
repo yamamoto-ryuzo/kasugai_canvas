@@ -38,8 +38,10 @@
 
         この方式では HTML/JS/DATA/ 等のファイルを保護できません。
 
-    3 = cloudflare（Cloudflare Pages 認証）
-        Cloudflare Pages Functions を使ったサーバーレス ID/PASS 認証。
+    3 = cloudflare（Cloudflare 認証：Pages 実装）
+        Cloudflare Pages + Pages Functions を使ったサーバーレス ID/PASS 認証。
+        ※ Workers 実装等の別バリアント追加を見据え、ドキュメントは
+          04-auth-3-cloudflare-pages.html に分離しています。
         認証後に .kasc の内容を Cloudflare KV から取得してアプリを起動します。
 
         ID/PASS の設定先（環境変数）：

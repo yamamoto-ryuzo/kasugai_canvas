@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3. Cloudflare Pages 認証 — KASUGAI Canvas 技術選定</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.2</span></h1>
+      <p>3. Cloudflare 認証 — Pages 実装（cloudflare）</p>
+    </header>
+    <main>
+      <p><a href="home.html#v4-auth">← V4. 拡張機能（Plugin）と認証へ戻る</a></p>
+      <h2>3. Cloudflare 認証（cloudflare）：Pages 実装</h2>
+      <div class="url-box">
+        <h3>概要</h3>
+        <p>Cloudflare Pages + Pages Functions を使ったサーバーレス ID/PASS 認証です。ID/PASS は環境変数、<code>.kasc</code> の内容は Cloudflare KV に登録しておき、認証成功後にその内容を取得してアプリを起動します。安全な本番運用に推奨します。</p>
+        <p><strong>この方式のみ <code>.kasc</code> の読み書きが可能です。</strong>他の方式（0〜2）では <code>.kasc</code> は静的ファイルからの読み取り専用で、「適用」はブラウザ内への反映のみです。この方式では「適用」が KV への保存も行います。</p>
+        <p>Cloudflare 認証は将来 Workers 実装など別バリアントを追加できるよう、本実装を「Pages 実装」として位置付けています（<code>control: 3</code> の選択子は共通です）。</p>
+      </div>
+      <div class="url-box">
+        <h3>推奨デプロイ構成</h3>
+        <p>データ種別ごとに配置先を分け、無料枠内で秘匿性と速度を両立させる構成です。</p>
+        <pre><code>静的配信（リクエスト無制限無料・2万ファイル/25MiB 上限）
+  └─ HTML/JS/CSS
+
+外部タイルサービス or R2 公開バケット（認証なし）
+  └─ タイル（PMTiles または地理院タイル等の外部サービス）
+     ※ R2 公開バケットの読み出しは無料枠 1,000万回/月（Class B）まで
+
+Functions 認証ゲート（無料枠 10万リクエスト/日）
+  ├─ /api/auth, /api/kasc
+  └─ 秘匿 GeoJSON 等（R2 バインド経由で配信）※今後の拡張予定
+
+Cloudflare KV
+  └─ .kasc（kasc:&lt;プロジェクトID&gt;）</code></pre>
+        <p>静的配信はファイル数・サイズの上限があるため、タイルのような大量ファイルは置けません。公開データは R2 公開バケットか外部タイルサービスを使います。R2 は1ファイル最大5TiB・転送料（egress）無料で、読み出しは無料枠 <strong>1,000万回/月</strong>（Class B オペレーション）までです。カスタムドメイン経由にして CDN キャッシュを効かせると実際の R2 アクセス数をさらに減らせます。</p>
+      </div>
+      <div class="url-box">
+        <h3>利用シーン</h3>
+        <ul>
+          <li>インターネットや不特定多数からアクセスされる本番運用</li>
+          <li>ID/PASS と .kasc 設定情報をサーバー側で管理したい場合</li>
+          <li>静的アセットのみの Workers プロジェクトでは環境変数・バインディングを設定できないため、<strong>Pages プロジェクトとしてデプロイしてください</strong></li>
+        </ul>
+      </div>
+      <div class="url-box">
+        <h3>起動と設定</h3>
+        <p><code>web/auth-methods.json</code> の <code>control</code> を <code>3</code> に設定すると、この認証方式が選択されます。</p>
+        <pre><code>{
+  "control": 3
+}</code></pre>
+        <p>ブラウザで <code>https://&lt;your-site&gt;/</code> を開くだけで起動します。</p>
+      </div>
+      <div class="url-box">
+        <h3>デプロイ手順（Pages プロジェクト）</h3>
+        <ol>
+          <li>ダッシュボード → Workers &amp; Pages → <strong>Pages</strong> でプロジェクトを作成します（Workers ではありません）。</li>
+          <li>Git 連携の場合は出力ディレクトリを <code>web</code> に設定するか、リポジトリルートで直接アップロードします。</li>
+        </ol>
+        <pre><code>npx wrangler pages deploy web</code></pre>
+        <p>リポジトリルートの <code>functions/</code> が自動検出され、<code>/api/*</code> エンドポイントとして動作します。</p>
+      </div>
+      <div class="url-box">
+        <h3>環境変数</h3>
+        <p>Pages プロジェクト → Settings → <strong>Environment variables（環境変数）</strong>に設定してください。</p>
+        <p><code>.dev.vars</code> などのローカルファイルは git 管理外とし、本番環境では必ずダッシュボード経由で管理してください。</p>
+        <pre><code>KASUGAI_AUTH_USER      = ユーザーID
+KASUGAI_AUTH_PASS      = パスワード
+KASUGAI_TOKEN_SECRET   = 署名鍵（任意・未設定時は KASUGAI_AUTH_PASS）</code></pre>
+      </div>
+      <div class="url-box">
+        <h3>.kasc 登録手順（Cloudflare KV）</h3>
+        <p><code>.kasc</code> の内容は Cloudflare KV に登録します。ID/PASS 認証後にのみ取得できます。</p>
+        <ol>
+          <li>ダッシュボード → Workers &amp; Pages → KV でネームスペースを作成します。</li>
+          <li>Pages プロジェクト → Settings → Bindings → Functions で、ネームスペースを <code>KASUGAI_KV</code> という変数名でバインドします。</li>
+          <li>キー <code>kasc:&lt;プロジェクトID&gt;</code> に .kasc の内容を登録します（例：<code>kasc:default</code>）。</li>
+          <li>デプロイから元の <code>.kasc</code> は削除してください（KV に無いプロジェクトは静的ファイルが読まれるため、残すと公開されます）。</li>
+        </ol>
+        <pre><code>wrangler kv namespace create KASUGAI_KV
+wrangler kv key put --binding KASUGAI_KV "kasc:default" --path web/projects/default/kasugai_canvas.kasc</code></pre>
+        <p>KV の書き込みが全エッジへ反映されるまで最大60秒程度かかります。</p>
+      </div>
+      <div class="url-box">
+        <h3>.kasc の保存</h3>
+        <p>この認証方式でログイン中は、インスペクターの「適用」ボタンが <code>POST /api/kasc</code> 経由で KV に保存します（静的ホスティング時は従来どおりエクスポート運用）。</p>
+        <p>保存にはログイン時に発行される署名トークン（有効期間12時間）を使います。署名鍵は環境変数 <code>KASUGAI_TOKEN_SECRET</code>（未設定時は <code>KASUGAI_AUTH_PASS</code>）です。</p>
+      </div>
+      <div class="url-box">
+        <h3>セキュリティ上の注意</h3>
+        <ul>
+          <li>保護できるもの：アプリ起動制御（サーバーレス ID/PASS 認証）、<code>.kasc</code> 設定情報の内容（ID/PASS 認証後に Cloudflare KV から取得）</li>
+          <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、静的配信に置いた <code>DATA/</code> 内の画像・GeoJSON 等、R2 公開バケットの内容</li>
+          <li>秘匿データ（GeoJSON 等）を保護したい場合は R2 に配置し、Functions バインド経由で認証付き配信とする方針です（配信エンドポイントは今後の拡張予定）。なお Functions 経由の配信は1ファイルごとにリクエスト枠（10万/日）を消費します</li>
+          <li>静的ファイル自体を含めて完全に保護したい場合は、Cloudflare Access（Zero Trust）を使うか、Worker スクリプトで全リクエストをゲートする Workers 実装が必要です</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>
