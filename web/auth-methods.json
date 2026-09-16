@@ -7,7 +7,7 @@
   control: 起動制御方式を番号で指定
 
   ※ .kasc は全方式で「読み取り」できますが、
-     サーバーへの「書き込み」ができるのは 3（cloudflare）のみです。
+     サーバーへの「書き込み」ができるのは 3・4（cloudflare 系）のみです。
      0〜2 ではインスペクターの「適用」はブラウザ内への反映のみで、
      保存は「エクスポート(.kasc)」→ ファイル差し替えの運用になります。
 
@@ -62,11 +62,36 @@
         保存にはログイン時に発行される署名トークン（有効12時間）を使用します。
         署名鍵は KASUGAI_TOKEN_SECRET（未設定時は KASUGAI_AUTH_PASS）。
 
+        秘匿データ配信（任意・R2 バインド時のみ有効）：
+          R2 バケットを KASUGAI_DATA としてバインドすると、.kasc で
+          r2://<キー> と記述したレイヤが /api/data/* 認証ゲート経由で配信されます。
+          r2:// を付けないデータは従来どおり静的配信です（部分秘匿）。
+            wrangler r2 bucket create kasugai-data
+            Pages → Settings → Bindings → Functions → R2 で KASUGAI_DATA をバインド
+            wrangler r2 object put kasugai-data/secret/area.geojson --path DATA/area.geojson
+
         KV に無いプロジェクトの .kasc は静的ファイルから読み込まれます。
         これは「起動制御 + .kasc 設定情報の保護」であり、
         HTML/JS/CSS/DATA/ 等の静的ファイルまでは保護しません。
 
-  安全な本番運用を行う場合は 0,1,2 ではなく 3（cloudflare）を選択してください。
+        詳細は 04-auth-3-cloudflare-pages.html を参照。
+
+    4 = cloudflare-workers（cloudflare：Workers 実装・全ファイルゲート）
+        3 の機能に加えて、静的ファイル自体も含めて全リクエストを
+        Worker が認証ゲートします（run_worker_first）。
+        未認証では app.js や DATA/ も取得できません。
+
+        デプロイは Pages ではなく Workers（workers/ ディレクトリ）：
+          cd workers
+          wrangler secret put KASUGAI_AUTH_PASS
+          wrangler deploy
+        KV/R2 のバインドは workers/wrangler.toml に設定します。
+        セッションは HttpOnly Cookie（kasugai_session・12時間）で管理されます。
+
+        詳細は 04-auth-4-cloudflare-workers.html を参照。
+
+  安全な本番運用を行う場合は 0,1,2 ではなく 3・4（cloudflare 系）を選択してください。
+  静的ファイル自体も保護したい場合は 4（cloudflare-workers）を選択してください。
 */
 
 {

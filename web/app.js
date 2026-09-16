@@ -241,7 +241,8 @@ async function saveInspectorConfig() {
   const auth = window.kasugaiAuth;
   if (!auth || auth.method !== "cloudflare" || !auth.token) return;
   const projectId = currentProjectId || "default";
-  const text = document.querySelector("#inspector-input").value;
+  const rawText = document.querySelector("#inspector-input").value;
+  const text = auth.restoreKasc ? auth.restoreKasc(rawText) : rawText;
   const res = await fetch("/api/kasc", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

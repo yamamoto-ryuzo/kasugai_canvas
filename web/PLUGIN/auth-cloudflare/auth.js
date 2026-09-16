@@ -9,7 +9,24 @@ function extractProjectId(url) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-function patchFetch(kascMap) {
+// .kasc 内の r2://<キー> を /api/data/<キー>?token=... に変換する
+// KV には r2:// 形式のまま保存し、配信時にだけ書き換える
+function rewriteKascText(text, token) {
+  return text.replace(/r2:\/\/([^|\s]+)/g, (_, key) => {
+    const path = key.split("/").map(encodeURIComponent).join("/");
+    return `/api/data/${path}?token=${encodeURIComponent(token)}`;
+  });
+}
+
+// 保存前の正規化: 書き換え後の URL を r2:// 形式に戻す
+function restoreKascText(text) {
+  return text.replace(/\/api\/data\/([^?\s|]+)\?token=[^|\s]*/g, (_, path) => {
+    const key = path.split("/").map(decodeURIComponent).join("/");
+    return `r2://${key}`;
+  });
+}
+
+function patchFetch(kascMap, token) {
   const originalFetch = window.fetch;
   window.fetch = async (input, init) => {
     let url = input;
@@ -21,7 +38,8 @@ function patchFetch(kascMap) {
     const projectId = typeof url === "string" ? extractProjectId(url) : null;
     const key = projectId ? normalizeProjectId(projectId) : null;
     if (key && Object.prototype.hasOwnProperty.call(kascMap, key)) {
-      return new Response(kascMap[key], { status: 200, headers: { "Content-Type": "text/plain" } });
+      const text = token ? rewriteKascText(kascMap[key], token) : kascMap[key];
+      return new Response(text, { status: 200, headers: { "Content-Type": "text/plain" } });
     }
     return originalFetch(input, init);
   };
@@ -40,14 +58,15 @@ export async function authenticate() {
         throw new Error(data.error || "認証に失敗しました");
       }
       if (data.kasc && typeof data.kasc === "object") {
-        patchFetch(data.kasc);
+        patchFetch(data.kasc, data.token);
       }
       return {
         token: data.token || "cloudflare",
         user: { name: user, role: "cloudflare" },
         updateKasc: (projectId, text) => {
           if (data.kasc) data.kasc[normalizeProjectId(projectId)] = text;
-        }
+        },
+        restoreKasc: restoreKascText
       };
     }
   });

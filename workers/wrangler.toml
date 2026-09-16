@@ -1,0 +1,25 @@
+name = "kasugai-canvas"
+main = "worker.js"
+compatibility_date = "2025-09-15"
+
+[assets]
+directory = "../web"
+binding = "ASSETS"
+# 全リクエストを Worker 経由にし、静的ファイルも認証ゲートする
+run_worker_first = true
+
+# 非秘密の値。パスワード系はここに書かず wrangler secret put で登録する:
+#   wrangler secret put KASUGAI_AUTH_PASS
+#   wrangler secret put KASUGAI_TOKEN_SECRET   (任意・未設定時は AUTH_PASS)
+[vars]
+KASUGAI_AUTH_USER = "admin"
+
+# wrangler kv namespace create KASUGAI_KV で発行されたIDを設定
+# [[kv_namespaces]]
+# binding = "KASUGAI_KV"
+# id = "<namespace-id>"
+
+# wrangler r2 bucket create kasugai-data で作成したバケット名を設定
+# [[r2_buckets]]
+# binding = "KASUGAI_DATA"
+# bucket_name = "kasugai-data"

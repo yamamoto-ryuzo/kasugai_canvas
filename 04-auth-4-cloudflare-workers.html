@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4. Cloudflare Workers 認証 — KASUGAI Canvas 技術選定</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.0.2</span></h1>
+      <p>4. Cloudflare 認証 — Workers 実装（cloudflare-workers）</p>
+    </header>
+    <main>
+      <p><a href="home.html#v4-auth">← V4. 拡張機能（Plugin）と認証へ戻る</a></p>
+      <h2>4. Cloudflare 認証（cloudflare）：Workers 実装</h2>
+      <div class="url-box">
+        <h3>概要</h3>
+        <p><a href="04-auth-3-cloudflare-pages.html">3. Cloudflare 認証 — Pages 実装</a>の機能（KV の .kasc・R2 秘匿データ配信）に加えて、<strong>静的ファイル自体も含めて全リクエストを認証ゲート</strong>する方式です。Worker スクリプトが全リクエストを処理し（<code>run_worker_first</code>）、ログイン時に発行される署名トークンの Cookie（HttpOnly・12時間有効）を持たないアクセスには静的ファイルも返しません。</p>
+        <p>秘匿データがすべて Functions/Worker 経由になる設計では Pages の「静的ファイル無料無制限」の利点が薄いため、静的ファイルまで保護できる本方式が適しています。</p>
+        <p><code>control</code> を <code>4</code> に設定するとこの方式が選択されます（クライアント実装は cloudflare と共通で、<code>r2://</code> 書き換えも有効）。</p>
+      </div>
+      <div class="url-box">
+        <h3>構成</h3>
+        <pre><code>workers/
+  wrangler.toml  … assets=../web、KV/R2バインド、run_worker_first=true
+  worker.js      … /api/* ルーティング＋静的ファイル認証ゲート</code></pre>
+        <p><code>worker.js</code> は <code>functions/api/*</code>・<code>functions/_lib/token.js</code> のハンドラをそのまま再利用します。二重実装ではありません。</p>
+        <p>認証前に公開されるのはログイン画面に必要な最小限のみです（<code>index.html</code>・<code>styles.css</code>・<code>favicon.ico</code>・<code>auth-*.js</code>・<code>auth-methods.json</code>・<code>PLUGIN/auth-*/</code>）。それ以外のファイル（<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等）はすべて未認証では 401 になります。</p>
+      </div>
+      <div class="url-box">
+        <h3>デプロイ手順</h3>
+        <ol>
+          <li><code>workers/wrangler.toml</code> の KV/R2 バインドを設定します。</li>
+          <li>パスワード系は secret として登録します（wrangler.toml には書きません）。</li>
+          <li><code>workers/</code> ディレクトリでデプロイします。</li>
+        </ol>
+        <pre><code>cd workers
+wrangler kv namespace create KASUGAI_KV   # → 発行された id を wrangler.toml に
+wrangler r2 bucket create kasugai-data
+wrangler secret put KASUGAI_AUTH_PASS
+wrangler deploy</code></pre>
+        <p><code>.kasc</code> の登録・R2 データ・<code>r2://</code> 記法は <a href="04-auth-3-cloudflare-pages.html">3 のページ</a>と同じです。</p>
+      </div>
+      <div class="url-box">
+        <h3>ローカル開発</h3>
+        <pre><code>cd workers
+wrangler dev</code></pre>
+        <p>ローカル用の変数は <code>workers/.dev.vars</code>（git 管理外）に置きます。</p>
+      </div>
+      <div class="url-box">
+        <h3>無料枠の消費</h3>
+        <ul>
+          <li><strong>全リクエスト</strong>が Worker 呼び出しとして無料枠（10万回/日）を消費します — 静的ファイル・ログイン画面も含む</li>
+          <li>起動時に数十ファイルを読む構成のため、少人数利用なら十分ですが不特定多数への公開には向きません</li>
+          <li>KV/R2 のオペレーション枠は別途あり（R2 読み出し 1,000万回/月 等）</li>
+        </ul>
+      </div>
+      <div class="url-box">
+        <h3>セキュリティ上の注意</h3>
+        <ul>
+          <li>保護できるもの：<strong>静的ファイルすべて</strong>（HTML/JS/CSS/DATA/ 等）、<code>.kasc</code>、R2 内の秘匿データ</li>
+          <li>保護できないもの：公開許可リストのファイル（ログイン画面系）、<code>PLUGIN/auth-*/</code> の内容（ID/PASS を直書きするプラグインの中身は見えます — 本番では cloudflare 系のみ使用してください）</li>
+          <li>セッションは HttpOnly Cookie（<code>kasugai_session</code>・SameSite=Strict・12時間）で管理され、JS から読み取れません</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

@@ -19,7 +19,7 @@
         <h3>概要</h3>
         <p>Cloudflare Pages + Pages Functions を使ったサーバーレス ID/PASS 認証です。ID/PASS は環境変数、<code>.kasc</code> の内容は Cloudflare KV に登録しておき、認証成功後にその内容を取得してアプリを起動します。安全な本番運用に推奨します。</p>
         <p><strong>この方式のみ <code>.kasc</code> の読み書きが可能です。</strong>他の方式（0〜2）では <code>.kasc</code> は静的ファイルからの読み取り専用で、「適用」はブラウザ内への反映のみです。この方式では「適用」が KV への保存も行います。</p>
-        <p>Cloudflare 認証は将来 Workers 実装など別バリアントを追加できるよう、本実装を「Pages 実装」として位置付けています（<code>control: 3</code> の選択子は共通です）。</p>
+        <p>静的ファイル自体も含めて全リクエストを保護したい場合は、<a href="04-auth-4-cloudflare-workers.html">4. Cloudflare 認証 — Workers 実装</a>（<code>control: 4</code>）を使ってください。</p>
       </div>
       <div class="url-box">
         <h3>推奨デプロイ構成</h3>
@@ -33,7 +33,7 @@
 
 Functions 認証ゲート（無料枠 10万リクエスト/日）
   ├─ /api/auth, /api/kasc
-  └─ 秘匿 GeoJSON 等（R2 バインド経由で配信）※今後の拡張予定
+  └─ /api/data/* … 秘匿 GeoJSON 等（R2 バインド経由・r2:// 指定時のみ）
 
 Cloudflare KV
   └─ .kasc（kasc:&lt;プロジェクトID&gt;）</code></pre>
@@ -91,12 +91,28 @@ wrangler kv key put --binding KASUGAI_KV "kasc:default" --path web/projects/defa
         <p>保存にはログイン時に発行される署名トークン（有効期間12時間）を使います。署名鍵は環境変数 <code>KASUGAI_TOKEN_SECRET</code>（未設定時は <code>KASUGAI_AUTH_PASS</code>）です。</p>
       </div>
       <div class="url-box">
+        <h3>秘匿データ配信（Cloudflare R2・任意）</h3>
+        <p>GeoJSON 等の秘匿データを R2 に置き、<code>/api/data/*</code> の認証ゲート経由でのみ配信できます。<strong>一部のデータだけを選択的に秘匿化</strong>する方式です。</p>
+        <ol>
+          <li>ダッシュボード → R2 でバケットを作成します（例：<code>kasugai-data</code>）。公開設定は不要です。</li>
+          <li>Pages プロジェクト → Settings → Bindings → Functions → R2 bucket で、バケットを <code>KASUGAI_DATA</code> という変数名でバインドします。</li>
+          <li>秘匿したいファイルをオブジェクトとして登録します（キー名は英数字・<code>_-./</code> のみ）。</li>
+        </ol>
+        <pre><code>wrangler r2 bucket create kasugai-data
+wrangler r2 object put kasugai-data/secret/area.geojson --path DATA/area.geojson</code></pre>
+        <p><code>.kasc</code> では URL に <code>r2://&lt;キー&gt;</code> スキームを使います。認証後は自動的に <code>/api/data/&lt;キー&gt;?token=…</code> へ書き換えられて読み込まれます（<code>r2://</code> を付けないデータは従来どおり静的配信のままです）。</p>
+        <pre><code>geojson: 秘匿レイヤ | r2://secret/area.geojson | on
+fly_geojson: 秘匿ルート | r2://secret/route.geojson</code></pre>
+        <p>「適用」で保存する際は <code>r2://</code> 形式に自動で戻されるため、KV にはトークンを含まない可搬な形式で保持されます。<code>fly_geojson</code> の高さ書き戻し（PUT）にも対応しています。</p>
+        <p><strong>無料枠の消費</strong>：<code>/api/data/*</code> は1ファイルごとに Functions リクエスト（10万回/日）＋ R2 Class B（1,000万回/月）を消費します。レイヤ単位の少数ファイルなら実質無料枠内ですが、タイル級の大量リクエストには向きません。</p>
+      </div>
+      <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
-          <li>保護できるもの：アプリ起動制御（サーバーレス ID/PASS 認証）、<code>.kasc</code> 設定情報の内容（ID/PASS 認証後に Cloudflare KV から取得）</li>
+          <li>保護できるもの：アプリ起動制御（サーバーレス ID/PASS 認証）、<code>.kasc</code> 設定情報の内容（ID/PASS 認証後に Cloudflare KV から取得）、<code>KASUGAI_DATA</code> バケット内のデータ（署名トークン必須）</li>
           <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、静的配信に置いた <code>DATA/</code> 内の画像・GeoJSON 等、R2 公開バケットの内容</li>
-          <li>秘匿データ（GeoJSON 等）を保護したい場合は R2 に配置し、Functions バインド経由で認証付き配信とする方針です（配信エンドポイントは今後の拡張予定）。なお Functions 経由の配信は1ファイルごとにリクエスト枠（10万/日）を消費します</li>
-          <li>静的ファイル自体を含めて完全に保護したい場合は、Cloudflare Access（Zero Trust）を使うか、Worker スクリプトで全リクエストをゲートする Workers 実装が必要です</li>
+          <li>注意：<code>/api/data/*</code> のトークンは URL に埋め込まれるためブラウザ履歴・プロキシログに残り得ます。レスポンスは <code>Cache-Control: private, no-store</code> で返すため CDN キャッシュ経由の漏洩は防がれます</li>
+          <li>静的ファイル自体を含めて完全に保護したい場合は、<a href="04-auth-4-cloudflare-workers.html">4. Cloudflare 認証 — Workers 実装</a>（全リクエスト認証ゲート）または Cloudflare Access（Zero Trust）を使ってください</li>
         </ul>
       </div>
     </main>
