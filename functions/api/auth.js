@@ -1,3 +1,22 @@
+import { createToken } from "../_lib/token.js";
+
+const KV_KEY_PREFIX = "kasc:";
+
+function normalizeProjectId(id) {
+  return String(id).toUpperCase().replace(/[^A-Z0-9]/g, "_");
+}
+
+async function collectKasc(env) {
+  const kasc = {};
+  if (!env.KASUGAI_KV) return kasc;
+  const list = await env.KASUGAI_KV.list({ prefix: KV_KEY_PREFIX });
+  for (const { name } of list.keys) {
+    const text = await env.KASUGAI_KV.get(name, "text");
+    if (text != null) kasc[normalizeProjectId(name.slice(KV_KEY_PREFIX.length))] = text;
+  }
+  return kasc;
+}
+
 export async function onRequestPost(context) {
   let body;
   try {
@@ -27,9 +46,11 @@ export async function onRequestPost(context) {
     });
   }
 
-  const dataKey = context.env.KASUGAI_DATA_KEY || null;
-  return new Response(JSON.stringify({ ok: true, token: "cloudflare", dataKey }), {
+  const kasc = await collectKasc(context.env);
+  const secret = context.env.KASUGAI_TOKEN_SECRET || context.env.KASUGAI_AUTH_PASS;
+  const token = await createToken(secret);
+  return new Response(JSON.stringify({ ok: true, token, kasc }), {
     status: 200,
-    headers: { "Content-Type": "application/json" }
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
   });
 }

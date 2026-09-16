@@ -1,23 +1,15 @@
 import { showLoginForm } from "../../auth-login-form.js";
 
-function base64ToBuffer(base64) {
-  return Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+function normalizeProjectId(id) {
+  return String(id).toUpperCase().replace(/[^A-Z0-9]/g, "_");
 }
 
-async function importDataKey(dataKey) {
-  const raw = base64ToBuffer(dataKey);
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+function extractProjectId(url) {
+  const m = /\/projects\/([^/]+)\/[^/?#]*\.kasc(?:[?#].*)?$/.exec(url);
+  return m ? decodeURIComponent(m[1]) : null;
 }
 
-async function decryptKasc(buffer, key) {
-  const data = new Uint8Array(buffer);
-  const iv = data.slice(0, 12);
-  const cipher = data.slice(12);
-  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
-  return new TextDecoder().decode(plain);
-}
-
-function patchFetch(key) {
+function patchFetch(kascMap) {
   const originalFetch = window.fetch;
   window.fetch = async (input, init) => {
     let url = input;
@@ -26,14 +18,10 @@ function patchFetch(key) {
       else if (input && typeof input.href === "string") url = input.href;
       else url = String(input);
     }
-    if (typeof url === "string" && url.endsWith(".kasc")) {
-      const res = await originalFetch(url + ".enc", init);
-      if (!res.ok) {
-        throw new Error("暗号化プロジェクトの取得に失敗しました");
-      }
-      const buf = await res.arrayBuffer();
-      const text = await decryptKasc(buf, key);
-      return new Response(text, { status: 200, headers: { "Content-Type": "text/plain" } });
+    const projectId = typeof url === "string" ? extractProjectId(url) : null;
+    const key = projectId ? normalizeProjectId(projectId) : null;
+    if (key && Object.prototype.hasOwnProperty.call(kascMap, key)) {
+      return new Response(kascMap[key], { status: 200, headers: { "Content-Type": "text/plain" } });
     }
     return originalFetch(input, init);
   };
@@ -51,11 +39,16 @@ export async function authenticate() {
       if (!res.ok || !data.ok) {
         throw new Error(data.error || "認証に失敗しました");
       }
-      if (data.dataKey) {
-        const key = await importDataKey(data.dataKey);
-        patchFetch(key);
+      if (data.kasc && typeof data.kasc === "object") {
+        patchFetch(data.kasc);
       }
-      return { token: data.token || "cloudflare", user: { name: user, role: "cloudflare" } };
+      return {
+        token: data.token || "cloudflare",
+        user: { name: user, role: "cloudflare" },
+        updateKasc: (projectId, text) => {
+          if (data.kasc) data.kasc[normalizeProjectId(projectId)] = text;
+        }
+      };
     }
   });
 }

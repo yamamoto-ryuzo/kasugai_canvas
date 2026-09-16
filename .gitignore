@@ -3,3 +3,4 @@ __pycache__/
 /browser-profile*
 *.log
 .wrangler/
+.dev.vars

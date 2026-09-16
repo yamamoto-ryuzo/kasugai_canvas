@@ -142,10 +142,10 @@
 
       <section>
         <h2 id="v4-auth">🔍 V4. 拡張機能（Plugin）と認証</h2>
-        <p>認証方式は <code>web/auth-methods.json</code> の <code>control</code> で 0〜3 の番号で指定します。デフォルトは 0（認証なし）で起動します。認証後、<code>window.kasugaiAuth</code> に認証情報がセットされ、その後 <code>app.js</code> と通常プラグインが起動します。</p>
+        <p>認証方式は <code>web/auth-methods.json</code> の <code>control</code> で 0〜3 の番号で指定します。デフォルトは 0（認証なし）で起動します。認証後、<code>window.kasugaiAuth</code> に認証情報がセットされ、その後 <code>app.js</code> と通常プラグインが起動します。<code>.kasc</code> は全方式で読み取り可能ですが、<strong>サーバーへの書き込み（KV への保存）ができるのは 3（cloudflare）のみ</strong>です。0〜2 では「適用」はブラウザ内への反映のみで、「エクスポート(.kasc)」でのファイル運用になります。</p>
         <div class="url-box">
           <h3>⚠️ セキュリティ上の注意</h3>
-          <p>Cloudflare Pages 認証は<strong>最低限の起動制御 + .kasc 設定情報の保護</strong>です。アプリの起動を制御し、<code>.kasc</code> ファイルは ID/PASS 認証後に取得した復号鍵でブラウザ内で復号されます。ただし、HTML/JS/CSS などの静的ファイル自体は公開されており、<code>DATA/</code> 内の画像・GeoJSON 等は保護対象外です。<code>auth-selector.js</code> は <code>auth-methods.json</code> で選択された方式のみを読み込みます。完全なファイルアクセス制御が必要な場合は、Cloudflare Functions や R2 等でファイル配信を制御してください。</p>
+          <p>Cloudflare Pages 認証は<strong>最低限の起動制御 + .kasc 設定情報の保護</strong>です。アプリの起動を制御し、<code>.kasc</code> の内容は ID/PASS 認証後に Cloudflare KV から取得されます。ただし、HTML/JS/CSS などの静的ファイル自体は公開されており、<code>DATA/</code> 内の画像・GeoJSON 等は保護対象外です。<code>auth-selector.js</code> は <code>auth-methods.json</code> で選択された方式のみを読み込みます。完全なファイルアクセス制御が必要な場合は、Cloudflare Access（Zero Trust）や R2 等でファイル配信を制御してください。</p>
         </div>
         <div class="features">
           <a class="feature-card" href="04-auth-0-none.html">
@@ -162,7 +162,7 @@
           </a>
           <a class="feature-card" href="04-auth-3-cloudflare.html">
             <h3>3. Cloudflare Pages 認証（cloudflare）</h3>
-            <p>サーバーレス ID/PASS 認証＋.kasc.enc 復号。安全な本番運用に推奨。</p>
+            <p>サーバーレス ID/PASS 認証。.kasc は Cloudflare KV から取得。安全な本番運用に推奨。</p>
           </a>
         </div>
         <div class="url-box">

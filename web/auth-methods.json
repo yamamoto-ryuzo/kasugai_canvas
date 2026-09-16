@@ -6,6 +6,11 @@
 
   control: 起動制御方式を番号で指定
 
+  ※ .kasc は全方式で「読み取り」できますが、
+     サーバーへの「書き込み」ができるのは 3（cloudflare）のみです。
+     0〜2 ではインスペクターの「適用」はブラウザ内への反映のみで、
+     保存は「エクスポート(.kasc)」→ ファイル差し替えの運用になります。
+
     0 = none（認証なし）
         ID/PASS の設定は不要です。
         誰でもアプリを起動できます。ローカル開発や非公開の信頼環境向け。
@@ -35,20 +40,27 @@
 
     3 = cloudflare（Cloudflare Pages 認証）
         Cloudflare Pages Functions を使ったサーバーレス ID/PASS 認証。
-        認証後に暗号化された .kasc.enc を自動復号してアプリを起動します。
+        認証後に .kasc の内容を Cloudflare KV から取得してアプリを起動します。
 
-        ID/PASS の設定先：
+        ID/PASS の設定先（環境変数）：
           本番：Cloudflare Pages ダッシュボード → 「環境変数」
-          ローカルテスト：リポジトリルートの .dev.vars
+          ローカルテスト：リポジトリルートの .dev.vars（git 管理外）
         変数名：
-          KASUGAI_AUTH_USER  = ユーザーID
-          KASUGAI_AUTH_PASS  = パスワード
-          KASUGAI_DATA_KEY   = .kasc 復号用の AES 鍵（base64）
+          KASUGAI_AUTH_USER    = ユーザーID
+          KASUGAI_AUTH_PASS    = パスワード
 
-        .kasc 暗号化手順：
-          python tools/encrypt_kasc.py "<KASUGAI_DATA_KEY>" "web/projects/<project>/kasugai_canvas.kasc"
-        生成された .kasc.enc をデプロイに含め、元の .kasc は削除してください。
+        .kasc の設定先（Cloudflare KV）：
+          1. KV ネームスペースを作成し、Pages プロジェクトに
+             「KASUGAI_KV」という名前でバインド
+          2. キー kasc:<プロジェクトID> に .kasc 内容を登録
+             （例: kasc:default）
+             wrangler kv key put --binding KASUGAI_KV "kasc:default" --path web/projects/default/kasugai_canvas.kasc
 
+        インスペクターの「適用」で KV へ保存も行います（POST /api/kasc）。
+        保存にはログイン時に発行される署名トークン（有効12時間）を使用します。
+        署名鍵は KASUGAI_TOKEN_SECRET（未設定時は KASUGAI_AUTH_PASS）。
+
+        KV に無いプロジェクトの .kasc は静的ファイルから読み込まれます。
         これは「起動制御 + .kasc 設定情報の保護」であり、
         HTML/JS/CSS/DATA/ 等の静的ファイルまでは保護しません。
 

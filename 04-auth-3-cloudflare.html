@@ -17,13 +17,14 @@
       <h2>3. Cloudflare Pages 認証（cloudflare）</h2>
       <div class="url-box">
         <h3>概要</h3>
-        <p>Cloudflare Pages Functions を使ったサーバーレス ID/PASS 認証です。認証後に暗号化された <code>.kasc.enc</code> を自動復号してアプリを起動します。<code>.kasc.enc</code> 等のソースURLやファイルパス自体は保護されませんが、内容は復号鍵で暗号化されているため漏洩しても読み取られにくく、安全な本番運用に推奨します。</p>
+        <p>Cloudflare Pages Functions を使ったサーバーレス ID/PASS 認証です。ID/PASS は環境変数、<code>.kasc</code> の内容は Cloudflare KV に登録しておき、認証成功後にその内容を取得してアプリを起動します。安全な本番運用に推奨します。</p>
+        <p><strong>この方式のみ <code>.kasc</code> の読み書きが可能です。</strong>他の方式（0〜2）では <code>.kasc</code> は静的ファイルからの読み取り専用で、「適用」はブラウザ内への反映のみです。この方式では「適用」が KV への保存も行います。</p>
       </div>
       <div class="url-box">
         <h3>利用シーン</h3>
         <ul>
           <li>インターネットや不特定多数からアクセスされる本番運用</li>
-          <li>ID/PASS と復号鍵をサーバー側で管理したい場合</li>
+          <li>ID/PASS と .kasc 設定情報をサーバー側で管理したい場合</li>
         </ul>
       </div>
       <div class="url-box">
@@ -37,27 +38,35 @@
       <div class="url-box">
         <h3>環境変数</h3>
         <p>以下の環境変数は <a href="https://dash.cloudflare.com/">Cloudflare Pages ダッシュボード</a>の「環境変数」に設定してください。</p>
-        <p><code>.dev.vars</code> などのローカルファイルに機密情報を置くと漏洩リスクがあります。本番環境では必ずダッシュボード経由で管理してください。</p>
-        <pre><code>KASUGAI_AUTH_USER  = ユーザーID
-KASUGAI_AUTH_PASS  = パスワード
-KASUGAI_DATA_KEY   = .kasc 復号用 AES 鍵（base64）</code></pre>
+        <p><code>.dev.vars</code> などのローカルファイルは git 管理外とし、本番環境では必ずダッシュボード経由で管理してください。</p>
+        <pre><code>KASUGAI_AUTH_USER    = ユーザーID
+KASUGAI_AUTH_PASS    = パスワード</code></pre>
       </div>
       <div class="url-box">
-        <h3>.kasc 暗号化手順</h3>
+        <h3>.kasc 登録手順（Cloudflare KV）</h3>
+        <p><code>.kasc</code> の内容は Cloudflare KV に登録します。ID/PASS 認証後にのみ取得できます。</p>
         <ol>
-          <li><code>KASUGAI_DATA_KEY</code> を準備します。</li>
-          <li>以下のコマンドで <code>.kasc</code> を暗号化します。</li>
+          <li>ダッシュボード → Workers &amp; Pages → KV でネームスペースを作成します。</li>
+          <li>Pages プロジェクト → Settings → Bindings で、ネームスペースを <code>KASUGAI_KV</code> という変数名でバインドします。</li>
+          <li>キー <code>kasc:&lt;プロジェクトID&gt;</code> に .kasc の内容を登録します（例：<code>kasc:default</code>）。</li>
+          <li>デプロイから元の <code>.kasc</code> は削除してください（KV に無いプロジェクトは静的ファイルが読まれるため、残すと公開されます）。</li>
         </ol>
-        <pre><code>python tools/encrypt_kasc.py "&lt;KASUGAI_DATA_KEY&gt;" "web/projects/&lt;project&gt;/kasugai_canvas.kasc"</code></pre>
-        <p>生成された <code>.kasc.enc</code> をデプロイに含め、元の <code>.kasc</code> は削除してください。</p>
+        <pre><code>wrangler kv namespace create KASUGAI_KV
+wrangler kv key put --binding KASUGAI_KV "kasc:default" --path web/projects/default/kasugai_canvas.kasc</code></pre>
+        <p>KV の書き込みが全エッジへ反映されるまで最大60秒程度かかります。</p>
+      </div>
+      <div class="url-box">
+        <h3>.kasc の保存</h3>
+        <p>この認証方式でログイン中は、インスペクターの「適用」ボタンが <code>POST /api/kasc</code> 経由で KV に保存します（静的ホスティング時は従来どおりエクスポート運用）。</p>
+        <p>保存にはログイン時に発行される署名トークン（有効期間12時間）を使います。署名鍵は環境変数 <code>KASUGAI_TOKEN_SECRET</code>（未設定時は <code>KASUGAI_AUTH_PASS</code>）です。</p>
       </div>
       <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
-          <li>保護できるもの：アプリ起動制御（サーバーレス ID/PASS 認証）、<code>.kasc</code> 設定情報の内容（ID/PASS 認証後に Cloudflare Functions から取得した復号鍵でブラウザ内復号）</li>
-          <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、<code>.kasc.enc</code> 等のソースURL・ファイルパス、<code>DATA/</code> 内の画像・GeoJSON 等</li>
+          <li>保護できるもの：アプリ起動制御（サーバーレス ID/PASS 認証）、<code>.kasc</code> 設定情報の内容（ID/PASS 認証後に Cloudflare KV から取得）</li>
+          <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、<code>DATA/</code> 内の画像・GeoJSON 等</li>
           <li>利用場面：安全な本番運用</li>
-          <li>注意：ソースURL（<code>.kasc.enc</code> 等のファイルパス）自体は保護されていません。これは <code>.kasc.enc</code> の内容が復号鍵で保護されていることとは別の注意点です。完全なファイルアクセス制御が必要な場合は Cloudflare Functions や R2 等でファイル配信を制御してください</li>
+          <li>注意：完全なファイルアクセス制御が必要な場合は Cloudflare Access（Zero Trust）や R2 等でファイル配信を制御してください</li>
         </ul>
       </div>
     </main>

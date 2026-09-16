@@ -237,6 +237,21 @@ async function loadInspectorConfig() {
 
 async function saveInspectorConfig() {
   // 静的サイト構成のためサーバーへの保存は行わない
+  // Cloudflare Pages 認証時のみ KV へ保存する
+  const auth = window.kasugaiAuth;
+  if (!auth || auth.method !== "cloudflare" || !auth.token) return;
+  const projectId = currentProjectId || "default";
+  const text = document.querySelector("#inspector-input").value;
+  const res = await fetch("/api/kasc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: auth.token, project: projectId, text })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || `保存に失敗しました (${res.status})`);
+  }
+  auth.updateKasc?.(projectId, text);
 }
 
 function updateInspectorFromLayerOrder() {
