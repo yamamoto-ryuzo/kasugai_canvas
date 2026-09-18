@@ -59,14 +59,22 @@ Cloudflare KV
         <h3>デプロイ手順（Pages プロジェクト）</h3>
         <ol>
           <li>ダッシュボード → Workers &amp; Pages → <strong>Pages</strong> でプロジェクトを作成します（Workers ではありません）。</li>
-          <li>Git 連携の場合は出力ディレクトリを <code>web</code> に設定するか、リポジトリルートで直接アップロードします。</li>
+          <li>Git 連携の場合は出力ディレクトリを <code>web</code> に設定します。</li>
+          <li>直接アップロードの場合は、<strong>リポジトリルート</strong>で以下を実行します。<code>--project-name</code> にダッシュボードで作ったプロジェクト名を指定してください。</li>
         </ol>
-        <pre><code>npx wrangler pages deploy web</code></pre>
-        <p>リポジトリルートの <code>functions/</code> が自動検出され、<code>/api/*</code> エンドポイントとして動作します。</p>
+        <pre><code>npx wrangler pages deploy web --project-name &lt;プロジェクト名&gt;</code></pre>
+        <p>この1コマンドで <code>web/</code>（静的アセット）と <code>functions/</code>（Pages Functions）の<strong>両方がまとめてデプロイ</strong>されます。<code>functions/</code> はカレントディレクトリから自動検出されるため、必ず<strong>リポジトリルートで実行</strong>してください（<code>web/</code> 内で実行すると検出されません）。検出された <code>functions/</code> は <code>/api/*</code> エンドポイントとして動作します。<code>web/functions/</code> に入れても Function にはならず、ソースコードが静的ファイルとして公開されてしまうため、<code>functions/</code> は必ずルートに置きます。</p>
+        <p><strong>注意</strong>：ダッシュボードの「直接アップロード」で <code>web/</code> フォルダだけをドラッグ&amp;ドロップした場合、<code>functions/</code> は含まれず <code>/api/*</code> が 404 になります（ログイン時に「認証に失敗しました」と表示されます）。必ず wrangler か Git 連携でデプロイしてください。</p>
+        <p><strong>再デプロイの目安</strong>：</p>
+        <ul>
+          <li><code>web/</code>・<code>functions/</code> 内のファイルを変更した → 上記コマンドを再実行</li>
+          <li>環境変数・KV/R2 バインドを変更した → Deployments → 最新デプロイの「Retry deployment」で再適用（ファイル再アップロード不要）</li>
+          <li>KV の中身（<code>.kasc</code>）を更新した → デプロイ不要（インスペクターの「適用」や <code>wrangler kv key put</code> で即反映・伝播は最大60秒）</li>
+        </ul>
       </div>
       <div class="url-box">
         <h3>環境変数</h3>
-        <p>Pages プロジェクト → Settings → <strong>Environment variables（環境変数）</strong>に設定してください。</p>
+        <p>Pages プロジェクト → Settings → <strong>Environment variables（環境変数）</strong>に設定してください。環境変数は <strong>Production / Preview ごと</strong>に分かれているため、アクセスする URL（本番ドメインか <code>*.pages.dev</code> のプレビューか）に合わせて設定してください。設定後は「Retry deployment」で反映されます。</p>
         <p><code>.dev.vars</code> などのローカルファイルは git 管理外とし、本番環境では必ずダッシュボード経由で管理してください。</p>
         <pre><code>KASUGAI_AUTH_USER      = ユーザーID
 KASUGAI_AUTH_PASS      = パスワード
@@ -76,10 +84,10 @@ KASUGAI_TOKEN_SECRET   = 署名鍵（任意・未設定時は KASUGAI_AUTH_PASS�
         <h3>.kasc 登録手順（Cloudflare KV）</h3>
         <p><code>.kasc</code> の内容は Cloudflare KV に登録します。ID/PASS 認証後にのみ取得できます。</p>
         <ol>
-          <li>ダッシュボード → Workers &amp; Pages → KV でネームスペースを作成します。</li>
-          <li>Pages プロジェクト → Settings → Bindings → Functions で、ネームスペースを <code>KASUGAI_KV</code> という変数名でバインドします。</li>
-          <li>キー <code>kasc:&lt;プロジェクトID&gt;</code> に .kasc の内容を登録します（例：<code>kasc:default</code>）。</li>
-          <li>デプロイから元の <code>.kasc</code> は削除してください（KV に無いプロジェクトは静的ファイルが読まれるため、残すと公開されます）。</li>
+          <li>ダッシュボード → ストレージとデータベース → KV でネームスペースを作成します（例：<code>KASUGAI_KV</code>）。</li>
+          <li>Pages プロジェクト → Settings → Bindings → Functions → KV 名前空間 で、<strong>変数名 <code>KASUGAI_KV</code>・KV 名前空間 <code>KASUGAI_KV</code></strong>（ドロップダウンから選択）でバインドします。保存後は「Retry deployment」で有効化してください。<br>※ この画面には <code>kasc:default</code> や .kasc の中身は<strong>入力しません</strong>。バインドは「ネームスペースを <code>env.KASUGAI_KV</code> という名前で Function から見えるようにする」設定だけです。</li>
+          <li>ネームスペースの中にキー <code>kasc:&lt;プロジェクトID&gt;</code> を作成し、値に .kasc の内容を登録します（例：キー <code>kasc:default</code>）。ダッシュボードの KV 画面（ストレージとデータベース → KV → ネームスペースを開く → キーと値のペアを追加）または下記の wrangler コマンドで登録します。</li>
+          <li>デプロイから元の <code>.kasc</code> は削除してください。モード3のアプリは <code>.kasc</code> を KV からのみ読み込み、KV に無いプロジェクトは静的ファイルも内蔵デフォルトも使わず空で起動します。ただし静的ファイル自体は公開のため、残すと直接 URL で第三者に取得されます。</li>
         </ol>
         <pre><code>wrangler kv namespace create KASUGAI_KV
 wrangler kv key put --binding KASUGAI_KV "kasc:default" --path web/projects/default/kasugai_canvas.kasc</code></pre>
@@ -94,7 +102,7 @@ wrangler kv key put --binding KASUGAI_KV "kasc:default" --path web/projects/defa
         <h3>秘匿データ配信（Cloudflare R2・任意）</h3>
         <p>GeoJSON 等の秘匿データを R2 に置き、<code>/api/data/*</code> の認証ゲート経由でのみ配信できます。<strong>一部のデータだけを選択的に秘匿化</strong>する方式です。</p>
         <ol>
-          <li>ダッシュボード → R2 でバケットを作成します（例：<code>kasugai-data</code>）。公開設定は不要です。</li>
+          <li>ダッシュボード → ストレージとデータベース → R2 でバケットを作成します（例：<code>kasugai-data</code>）。公開設定は不要です。</li>
           <li>Pages プロジェクト → Settings → Bindings → Functions → R2 bucket で、バケットを <code>KASUGAI_DATA</code> という変数名でバインドします。</li>
           <li>秘匿したいファイルをオブジェクトとして登録します（キー名は英数字・<code>_-./</code> のみ）。</li>
         </ol>

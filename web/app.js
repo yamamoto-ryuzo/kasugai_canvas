@@ -225,7 +225,16 @@ async function loadInspectorConfig() {
       const response = await fetch(staticUrl, { cache: "no-store" });
       if (response.ok) text = await response.text();
     } catch {}
-    if (!text) text = defaultConfig;
+    if (!text) {
+      if (window.kasugaiAuth?.method === "cloudflare") {
+        // KV に無いプロジェクトは静的 .kasc も内蔵デフォルトも使わず空で起動する
+        document.querySelector("#inspector-input").value = "";
+        applyInspector("");
+        setInspectorStatus("KV に .kasc が登録されていません。", true);
+        return;
+      }
+      text = defaultConfig;
+    }
     document.querySelector("#inspector-input").value = text;
     applyInspector(text);
     setInspectorStatus("設定を読み込みました。");
@@ -3690,7 +3699,8 @@ viewer.camera.moveEnd.addEventListener(() => {
 });
 
 setupThreeJs();
-applyInspector(defaultConfig);
+// cloudflare 認証時は KV の .kasc のみ使い、内蔵デフォルトは適用しない
+applyInspector(window.kasugaiAuth?.method === "cloudflare" ? "" : defaultConfig);
 updateEffectSettings();
 const urlCamera = parseUrlCamera(initialCameraSource);
 

@@ -36,8 +36,11 @@ function patchFetch(kascMap, token) {
       else url = String(input);
     }
     const projectId = typeof url === "string" ? extractProjectId(url) : null;
-    const key = projectId ? normalizeProjectId(projectId) : null;
-    if (key && Object.prototype.hasOwnProperty.call(kascMap, key)) {
+    if (projectId) {
+      const key = normalizeProjectId(projectId);
+      if (!Object.prototype.hasOwnProperty.call(kascMap, key)) {
+        return new Response("", { status: 404, statusText: "Not in KV" });
+      }
       const text = token ? rewriteKascText(kascMap[key], token) : kascMap[key];
       return new Response(text, { status: 200, headers: { "Content-Type": "text/plain" } });
     }

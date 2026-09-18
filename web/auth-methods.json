@@ -70,7 +70,10 @@
             Pages → Settings → Bindings → Functions → R2 で KASUGAI_DATA をバインド
             wrangler r2 object put kasugai-data/secret/area.geojson --path DATA/area.geojson
 
-        KV に無いプロジェクトの .kasc は静的ファイルから読み込まれます。
+        .kasc は KV からのみ読み込みます。KV に無いプロジェクトは
+        静的ファイルも内蔵デフォルトも使わず空で起動します。
+        静的配信の .kasc は直接URLで取得可能なため、
+        KV に登録した .kasc はデプロイから削除してください。
         これは「起動制御 + .kasc 設定情報の保護」であり、
         HTML/JS/CSS/DATA/ 等の静的ファイルまでは保護しません。
 
