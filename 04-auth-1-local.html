@@ -42,6 +42,22 @@ const EXPECTED_PASS = "admin";</code></pre>
         <p>初期値: ユーザーID <code>admin</code>、パスワード <code>admin</code></p>
       </div>
       <div class="url-box">
+        <h3>資産ごとの秘匿状況</h3>
+        <table>
+          <thead>
+            <tr><th>資産</th><th>未ログインの第三者</th><th>備考</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ID/PASS</td><td>❌ 平文で露出</td><td><code>auth.js</code> 内の <code>EXPECTED_USER</code> / <code>EXPECTED_PASS</code> を読めばそのまま分かります。ログインするまでもなく漏洩します</td></tr>
+            <tr><td>.kasc 設定</td><td>❌ 全公開</td><td>静的ファイルとして誰でも取得可能</td></tr>
+            <tr><td>HTML/JS/CSS（アプリ本体）</td><td>❌ 全公開</td><td>ログイン画面は見た目のゲートのみ。ファイルは全て取得可能</td></tr>
+            <tr><td>データ（web/）<br><small>URL が公開情報から分かる</small></td><td>❌ 列挙容易</td><td><code>.kasc</code> や <code>projects.json</code> に記載のパス、<code>DATA/</code> の固定パスは一覧・推測で容易に取得可能</td></tr>
+            <tr><td>データ（web/）<br><small>URL が非公開・推測困難</small></td><td>△ obscurity</td><td>どこにもパスが書かれていないファイルは URL を知らなければ到達困難。ただし認証はないため URL が漏れれば即座に取得可能</td></tr>
+          </tbody>
+        </table>
+        <p><small>サーバー側で守られる資産は<strong>一切ありません</strong>。ログイン画面はあくまで表示上の制御です。</small></p>
+      </div>
+      <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
           <li>保護できるもの：アプリ起動制御（ID/PASS 入力なしでは起動できない）</li>

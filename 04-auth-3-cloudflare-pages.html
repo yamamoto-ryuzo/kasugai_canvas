@@ -10,16 +10,16 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v4.0.2</span></h1>
-      <p>3. Cloudflare 認証 — Pages 実装（cloudflare）</p>
+      <p>3. Cloudflare 認証 — Pages（cloudflare）</p>
     </header>
     <main>
       <p><a href="home.html#v4-auth">← V4. 拡張機能（Plugin）と認証へ戻る</a></p>
-      <h2>3. Cloudflare 認証（cloudflare）：Pages 実装</h2>
+      <h2>3. Cloudflare 認証（cloudflare）：Pages</h2>
       <div class="url-box">
         <h3>概要</h3>
         <p>Cloudflare Pages + Pages Functions を使ったサーバーレス ID/PASS 認証です。ID/PASS は環境変数、<code>.kasc</code> の内容は Cloudflare KV に登録しておき、認証成功後にその内容を取得してアプリを起動します。安全な本番運用に推奨します。</p>
         <p><strong>この方式のみ <code>.kasc</code> の読み書きが可能です。</strong>他の方式（0〜2）では <code>.kasc</code> は静的ファイルからの読み取り専用で、「適用」はブラウザ内への反映のみです。この方式では「適用」が KV への保存も行います。</p>
-        <p>静的ファイル自体も含めて全リクエストを保護したい場合は、<a href="04-auth-4-cloudflare-workers.html">4. Cloudflare 認証 — Workers 実装</a>（<code>control: 4</code>）を使ってください。</p>
+        <p>静的ファイル自体も含めて全リクエストを保護したい場合は、<a href="04-auth-4-cloudflare-workers.html">4. Cloudflare 認証 — Workers</a>（<code>control: 4</code>）を使ってください。</p>
       </div>
       <div class="url-box">
         <h3>推奨デプロイ構成</h3>
@@ -115,12 +115,71 @@ fly_geojson: 秘匿ルート | r2://secret/route.geojson</code></pre>
         <p><strong>無料枠の消費</strong>：<code>/api/data/*</code> は1ファイルごとに Functions リクエスト（10万回/日）＋ R2 Class B（1,000万回/月）を消費します。レイヤ単位の少数ファイルなら実質無料枠内ですが、タイル級の大量リクエストには向きません。</p>
       </div>
       <div class="url-box">
+        <h3>資産ごとの秘匿状況</h3>
+        <table>
+          <thead>
+            <tr><th>資産</th><th>未ログインの第三者</th><th>ログイン済みユーザー</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ID/PASS</td>
+              <td>✅ 秘匿</td>
+              <td>✅ 秘匿</td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>環境変数（<code>KASUGAI_AUTH_USER</code> / <code>KASUGAI_AUTH_PASS</code>）にのみ存在し、照合は Pages Function 内で実施。ブラウザには合否とトークンしか返らないため、誰からも読み取れません。ただし推測可能な値（<code>demo</code> 等）は総当たり・推測でログインされ得ます。</small></td>
+            </tr>
+            <tr>
+              <td>.kasc 設定（KV）</td>
+              <td>✅ 秘匿<br><small><code>/api/kasc</code> の認証ゲート内</small></td>
+              <td>❌ 全量が見える<br><small>ログイン時に全プロジェクト分を一括取得</small></td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>中に書かれたデータ URL も同じ扱いです。<code>r2://</code> キー名が見えても実 URL ではないため単体では無害ですが、外部 URL・API キー入り URL はログイン者にそのまま見えます。</small></td>
+            </tr>
+            <tr>
+              <td>HTML/JS/CSS（アプリ本体）</td>
+              <td>❌ 全公開</td>
+              <td>❌ 見える</td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>静的配信は認証なし。<code>index.html</code>・<code>app.js</code>・<code>PLUGIN/</code> 等は直接 URL で誰でも取得可能です。ログイン画面は見た目のゲートであり、静的ファイルの保護にはなりません。</small></td>
+            </tr>
+            <tr>
+              <td>データ（web/）<br><small>URL が公開情報から分かる</small></td>
+              <td>◐ 対象は限定的<br><small>該当するなら ❌ 列挙容易</small></td>
+              <td>❌ 見える</td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>方式0〜2 と違い、<strong>.kasc は KV 内で非公開のため URL の出どころになりません</strong>。残る公開情報の出どころは <code>projects.json</code>・HTML/JS・誤って残置した <code>.kasc</code> のみで、ここにパスが書かれたデータは一覧・推測で容易に取得されます。<code>DATA/</code> や <code>projects/</code> に残した <code>.kasc</code>・GeoJSON・画像も直接 URL で取得されます。KV 登録済みの <code>.kasc</code> はデプロイから削除してください。</small></td>
+            </tr>
+            <tr>
+              <td>データ（web/）<br><small>URL が非公開・推測困難</small></td>
+              <td>△ obscurity</td>
+              <td>❌ 見える</td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>KV 内の <code>.kasc</code> にだけ書かれたデータ URL は、未ログインの第三者には発見できません — URL そのものが秘匿情報として機能します。ただし認証チェックはないため、URL が一度漏れれば防御はゼロです（obscurity による弱い隠蔽）。本当に秘匿したいデータは R2（<code>r2://</code>）に置いてください。</small></td>
+            </tr>
+            <tr>
+              <td>データ（R2・r2:// 経由）</td>
+              <td>✅ 秘匿<br><small>署名トークン必須</small></td>
+              <td>◐ 取得可<br><small>トークン付き <code>/api/data/*</code> 経由</small></td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>実 URL は存在せず <code>/api/data/...?token=…</code> に書き換えられます。トークンは URL に現れるため、ログイン済みブラウザのデベロッパーツール・履歴・プロキシログから読み取り得ます。トークンがあれば有効期間（12時間）中はアクセス可能です。</small></td>
+            </tr>
+          </tbody>
+        </table>
+        <p><small>✅ 秘匿　◐ 条件付き　❌ 公開</small></p>
+      </div>
+      <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
           <li>保護できるもの：アプリ起動制御（サーバーレス ID/PASS 認証）、<code>.kasc</code> 設定情報の内容（ID/PASS 認証後に Cloudflare KV から取得）、<code>KASUGAI_DATA</code> バケット内のデータ（署名トークン必須）</li>
           <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、静的配信に置いた <code>DATA/</code> 内の画像・GeoJSON 等、R2 公開バケットの内容</li>
           <li>注意：<code>/api/data/*</code> のトークンは URL に埋め込まれるためブラウザ履歴・プロキシログに残り得ます。レスポンスは <code>Cache-Control: private, no-store</code> で返すため CDN キャッシュ経由の漏洩は防がれます</li>
-          <li>静的ファイル自体を含めて完全に保護したい場合は、<a href="04-auth-4-cloudflare-workers.html">4. Cloudflare 認証 — Workers 実装</a>（全リクエスト認証ゲート）または Cloudflare Access（Zero Trust）を使ってください</li>
+          <li>静的ファイル自体を含めて完全に保護したい場合は、<a href="04-auth-4-cloudflare-workers.html">4. Cloudflare 認証 — Workers</a>（全リクエスト認証ゲート）または Cloudflare Access（Zero Trust）を使ってください</li>
         </ul>
       </div>
     </main>

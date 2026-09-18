@@ -126,7 +126,7 @@
       </section>
 
       <section>
-        <h2>🎬 V3. プレゼンテーション機能（追加機能）</h2>
+        <h2>🎬 V3. プレゼンテーション機能</h2>
         <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。</p>
         <div class="features">
           <div class="feature-card">
@@ -165,13 +165,82 @@
             <p>クラウド不要の JS 内ハッシュ比較。閉じた環境・テスト用途向け。</p>
           </a>
           <a class="feature-card" href="04-auth-3-cloudflare-pages.html">
-            <h3>3. Cloudflare 認証（cloudflare）— Pages 実装</h3>
+            <h3>3. Cloudflare 認証（cloudflare）— Pages</h3>
             <p>サーバーレス ID/PASS 認証。.kasc は Cloudflare KV、秘匿データは r2:// で R2 認証ゲート経由。安全な本番運用に推奨。</p>
           </a>
           <a class="feature-card" href="04-auth-4-cloudflare-workers.html">
-            <h3>4. Cloudflare 認証（cloudflare）— Workers 実装</h3>
+            <h3>4. Cloudflare 認証（cloudflare）— Workers</h3>
             <p>3 の機能に加え、静的ファイル自体も含めて全リクエストを認証ゲート。最も強い保護。</p>
           </a>
+        </div>
+        <div class="url-box">
+          <h3>資産ごとの秘匿状況（認証方式別）</h3>
+          <p>「ID/PASS」「設定ファイル（.kasc）」「実ファイル（アプリ本体・GISデータ）」が、方式ごとにどこまで秘匿されるかの一覧です。</p>
+          <table>
+            <thead>
+              <tr>
+                <th>資産</th>
+                <th>0 none</th>
+                <th>1 local</th>
+                <th>2 password</th>
+                <th>3 Pages</th>
+                <th>4 Workers</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ID/PASS</td>
+                <td>−（認証なし）</td>
+                <td>❌ JS内に平文</td>
+                <td>△ JS内ハッシュ<br><small>弱いPASSは解析可</small></td>
+                <td>✅ 環境変数のみ<br><small>ブラウザへ送信されない</small></td>
+                <td>✅ 同左</td>
+              </tr>
+              <tr>
+                <td>.kasc 設定</td>
+                <td>❌ 全公開</td>
+                <td>❌ 全公開</td>
+                <td>❌ 全公開</td>
+                <td>◐ KV 内で秘匿<br><small>ログイン後は全量がブラウザへ配信</small></td>
+                <td>◐ 同左</td>
+              </tr>
+              <tr>
+                <td>HTML/JS/CSS<br><small>（アプリ本体）</small></td>
+                <td>❌ 全公開</td>
+                <td>❌ 全公開</td>
+                <td>❌ 全公開</td>
+                <td>❌ 全公開</td>
+                <td>✅ 未ログインは 401<br><small>ログイン画面系のみ公開</small></td>
+              </tr>
+              <tr>
+                <td>データ（web/）<br><small>URL が公開情報から分かる</small></td>
+                <td>❌ 列挙容易</td>
+                <td>❌ 列挙容易</td>
+                <td>❌ 列挙容易</td>
+                <td>◐ 対象は限定的<br><small>.kasc は KV で非公開のため、projects.json・HTML/JS・残置 .kasc 由来のみ</small></td>
+                <td>✅ 未ログインは 401</td>
+              </tr>
+              <tr>
+                <td>データ（web/）<br><small>URL が非公開・推測困難</small></td>
+                <td>△ obscurity</td>
+                <td>△ obscurity</td>
+                <td>△ obscurity</td>
+                <td>△ obscurity</td>
+                <td>✅ 未ログインは 401</td>
+              </tr>
+              <tr>
+                <td>データ<br><small>（R2・r2:// 経由）</small></td>
+                <td>−</td>
+                <td>−</td>
+                <td>−</td>
+                <td>✅ トークン必須<br><small>未ログインは取得不可</small></td>
+                <td>✅ 同左</td>
+              </tr>
+            </tbody>
+          </table>
+          <p><small>✅ 秘匿される　◐ 条件付きで秘匿　△ 弱い保護　❌ 公開　− 該当なし</small></p>
+          <p><small><strong>「web/ 静的配信」の2区分について</strong>：静的ファイルに認証チェックはなく、URL が分かれば誰でも取得できる点は同じです。違いは <strong>URL の発見可能性</strong>だけです。「URL が公開情報から分かる」とは、公開の <code>.kasc</code>・<code>projects.json</code>・HTML/JS 内にパスが書かれている、または <code>projects/default/DATA/...</code> のような推測しやすい固定パスのケース — 実質的に一覧・総当たりで列挙可能です。「URL が非公開・推測困難」はどこにもパスが書かれていないケースで、URL そのものが秘匿情報として機能します（ obscurity による弱い隠蔽で、URL が一度漏れれば防御はゼロです）。方式3 で <code>.kasc</code> を KV に移せば、そこに書かれたデータ URL は未ログイン者には発見できなくなります。</small></p>
+          <p><small><strong>共通の前提</strong>：「ログインした人」からは .kasc・データは見えます（ブラウザへ配信されるため）。秘匿が効くのは「未ログインの第三者」に対してです。方式3/4 の署名トークンは <code>/api/data/...?token=…</code> の URL に現れるため、ログイン済みブラウザから読み取れば有効期間中（12時間）は KV/R2 にアクセス可能です。各方式の詳細はそれぞれのページを参照してください。</small></p>
         </div>
         <div class="url-box">
           <h3>認証用ログインUI</h3>

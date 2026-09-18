@@ -10,14 +10,14 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v4.0.2</span></h1>
-      <p>4. Cloudflare 認証 — Workers 実装（cloudflare-workers）</p>
+      <p>4. Cloudflare 認証 — Workers（cloudflare-workers）</p>
     </header>
     <main>
       <p><a href="home.html#v4-auth">← V4. 拡張機能（Plugin）と認証へ戻る</a></p>
-      <h2>4. Cloudflare 認証（cloudflare）：Workers 実装</h2>
+      <h2>4. Cloudflare 認証（cloudflare）：Workers</h2>
       <div class="url-box">
         <h3>概要</h3>
-        <p><a href="04-auth-3-cloudflare-pages.html">3. Cloudflare 認証 — Pages 実装</a>の機能（KV の .kasc・R2 秘匿データ配信）に加えて、<strong>静的ファイル自体も含めて全リクエストを認証ゲート</strong>する方式です。Worker スクリプトが全リクエストを処理し（<code>run_worker_first</code>）、ログイン時に発行される署名トークンの Cookie（HttpOnly・12時間有効）を持たないアクセスには静的ファイルも返しません。</p>
+        <p><a href="04-auth-3-cloudflare-pages.html">3. Cloudflare 認証 — Pages</a>の機能（KV の .kasc・R2 秘匿データ配信）に加えて、<strong>静的ファイル自体も含めて全リクエストを認証ゲート</strong>する方式です。Worker スクリプトが全リクエストを処理し（<code>run_worker_first</code>）、ログイン時に発行される署名トークンの Cookie（HttpOnly・12時間有効）を持たないアクセスには静的ファイルも返しません。</p>
         <p>秘匿データがすべて Functions/Worker 経由になる設計では Pages の「静的ファイル無料無制限」の利点が薄いため、静的ファイルまで保護できる本方式が適しています。</p>
         <p><code>control</code> を <code>4</code> に設定するとこの方式が選択されます（クライアント実装は cloudflare と共通で、<code>r2://</code> 書き換えも有効）。</p>
       </div>
@@ -56,6 +56,59 @@ wrangler dev</code></pre>
           <li>起動時に数十ファイルを読む構成のため、少人数利用なら十分ですが不特定多数への公開には向きません</li>
           <li>KV/R2 のオペレーション枠は別途あり（R2 読み出し 1,000万回/月 等）</li>
         </ul>
+      </div>
+      <div class="url-box">
+        <h3>資産ごとの秘匿状況</h3>
+        <table>
+          <thead>
+            <tr><th>資産</th><th>未ログインの第三者</th><th>ログイン済みユーザー</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ID/PASS</td>
+              <td>✅ 秘匿</td>
+              <td>✅ 秘匿</td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>環境変数（secret）にのみ存在し、照合は Worker 内で実施。ブラウザには合否とトークンしか返りません。ただし推測可能な値は総当たり・推測でログインされ得ます。</small></td>
+            </tr>
+            <tr>
+              <td>.kasc 設定（KV）</td>
+              <td>✅ 秘匿<br><small><code>/api/kasc</code> の認証ゲート内</small></td>
+              <td>❌ 全量が見える<br><small>ログイン時に全プロジェクト分を一括取得</small></td>
+            </tr>
+            <tr>
+              <td>HTML/JS/CSS（アプリ本体）</td>
+              <td>✅ 秘匿<br><small>未ログインは 401</small></td>
+              <td>❌ 見える</td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>未ログインで公開されるのはログイン画面に必要な最小限のみ（<code>index.html</code>・<code>styles.css</code>・<code>auth-*.js</code>・<code>PLUGIN/auth-*/</code>）。<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等はすべて 401 です。</small></td>
+            </tr>
+            <tr>
+              <td>データ（web/）<br><small>URL が公開情報から分かる</small></td>
+              <td>✅ 秘匿<br><small>未ログインは 401</small></td>
+              <td>❌ 見える</td>
+            </tr>
+            <tr>
+              <td>データ（web/）<br><small>URL が非公開・推測困難</small></td>
+              <td>✅ 秘匿<br><small>未ログインは 401</small></td>
+              <td>❌ 見える</td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>方式3 との違いはここです。Worker が全リクエストを検査するため、URL が公開・推測可能かどうかに関係なく、未ログインでは静的ファイルは一切取得できません（obscurity に依存しない実際の認証ゲート）。</small></td>
+            </tr>
+            <tr>
+              <td>データ（R2・r2:// 経由）</td>
+              <td>✅ 秘匿<br><small>署名トークン必須</small></td>
+              <td>◐ 取得可<br><small>セッション Cookie / トークン付き <code>/api/data/*</code> 経由</small></td>
+            </tr>
+            <tr>
+              <td colspan="3"><small>セッションは HttpOnly Cookie（<code>kasugai_session</code>・SameSite=Strict・12時間）で管理され JS からは読み取れません。ただし <code>r2://</code> の書き換えにより <code>/api/data/...?token=…</code> の URL にトークンが現れるため、ログイン済みブラウザのデベロッパーツールからは読み取り得ます。</small></td>
+            </tr>
+          </tbody>
+        </table>
+        <p><small>✅ 秘匿　◐ 条件付き　❌ 公開　——「ログインした人」からは .kasc・データ・アプリ本体はすべて見えます。秘匿が効くのは未ログインの第三者に対してです。</small></p>
       </div>
       <div class="url-box">
         <h3>セキュリティ上の注意</h3>

@@ -37,6 +37,21 @@
         <p>ブラウザで <code>http://127.0.0.1:8510/</code> を開くだけで起動します。</p>
       </div>
       <div class="url-box">
+        <h3>資産ごとの秘匿状況</h3>
+        <table>
+          <thead>
+            <tr><th>資産</th><th>未ログインの第三者</th><th>備考</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>ID/PASS</td><td>−</td><td>認証自体が存在しません</td></tr>
+            <tr><td>.kasc 設定</td><td>❌ 全公開</td><td>静的ファイルとして誰でも取得可能</td></tr>
+            <tr><td>HTML/JS/CSS（アプリ本体）</td><td>❌ 全公開</td><td></td></tr>
+            <tr><td>データ（web/）<br><small>URL が公開情報から分かる</small></td><td>❌ 列挙容易</td><td><code>.kasc</code> や <code>projects.json</code> に記載のパス、<code>DATA/</code> の固定パスは一覧・推測で容易に取得可能</td></tr>
+            <tr><td>データ（web/）<br><small>URL が非公開・推測困難</small></td><td>△ obscurity</td><td>どこにもパスが書かれていないファイルは URL を知らなければ到達困難。ただし認証はないため URL が漏れれば即座に取得可能</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
           <li>保護できるもの：アプリ起動制御（なし。全公開です）</li>
