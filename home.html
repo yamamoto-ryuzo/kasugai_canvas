@@ -369,7 +369,8 @@ info: https://example.com/project-info.html</code></pre>
             <li><code>kasugai_canvas.kasc</code> に <code>fly_geojson: ルート名 | URL | speed=10 | height=100 | pitch=-30</code> を追加</li>
             <li>ナビゲーションツールバーから <strong>Fly</strong> モードに切り替え、ドロップダウンでルートを選択</li>
             <li>マウスホイール / キー <code>+</code> / <code>-</code> で速度、キー <code>Q</code> / <code>E</code> で高さ補正を調整</li>
-            <li>Orbit モードで <strong>Draw</strong> タブから右クリックで点を追加、右ダブルクリックでルート描画終了</li>
+            <li>Orbit モードで <strong>Draw</strong> タブから右クリックで点を追加、右ダブルクリックでルート描画終了→ブラウザ IndexedDB に自動保存されドロップダウンに追加</li>
+            <li>描画ルートを選択中は「削除」「取込」（フォルダ由来→IndexedDB へ移行）ボタンが表示。インスペクタで <code>route:&lt;ルート名&gt;</code> を参照することも可（例：<code>fly_geojson: 名 | route:drawn_route_...</code>）</li>
           </ol>
         </div>
       </section>

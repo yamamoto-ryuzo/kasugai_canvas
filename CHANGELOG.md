@@ -4,6 +4,22 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [Unreleased]
+
+### Added
+
+- 認証方式 4（cloudflare-workers）：静的ファイル含む全リクエストを Worker で認証ゲート（`workers/`・`run_worker_first`・HttpOnly Cookie セッション）
+- R2 秘匿データ配信：`.kasc` で `r2://<キー>` と記述したデータを `/api/data/*` 認証ゲート経由で配信（`KASUGAI_DATA` バケットバインド）
+- 描画ルートの削除・取込ボタンを FLY パネルのルート選択横に追加（描画ルート選択時のみ表示）
+- `fly_geojson:` の URL に `route:<ルート名>` スキームを追加し、IndexedDB の描画ルートをインスペクタから参照可能に
+
+### Changed
+
+- モード3・4（cloudflare 系）で `.kasc` は KV からのみ読み込み。KV に無いプロジェクトは静的ファイルも内蔵デフォルトも使わず空で起動
+- 描画ルートの保存先を保存先フォルダ（File System Access API）から IndexedDB に変更。保存時のフォルダ選択ダイアログは不要になり、静的ホスティングでも保存可能。保存先フォルダ内の `.geojson` は読み取り専用で引き続き読み込み
+- `ensureDrawnRouteFlyPath` は許可済みフォルダのみ静かに読み込み、未設定時にピッカーを出さないよう変更
+- Pages デプロイ・KV バインド手順ドキュメントを実際のダッシュボード導線に修正（`04-auth-3-cloudflare-pages.html`）
+
 ## [4.0.2] - 2026-09-13
 
 ### Fixed

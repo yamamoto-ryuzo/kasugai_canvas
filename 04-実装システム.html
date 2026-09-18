@@ -189,18 +189,11 @@
       に切り替わり、描画準備が整います。タブ内の <strong>Draw</strong>
       ボタンを押すと描画を開始し、右クリックで点を追加、右ダブルクリックで描画を終了できます。描画したルートは：</p>
       <ol type="1">
-      <li>ローカルで Rust/Axum サーバーを起動している場合、プロジェクトフォルダ内に
-      <code>drawn_route_1.geojson</code>、<code>drawn_route_2.geojson</code>
-      … のように自動連番でキャッシュ（<code>PUT /api/file</code>）
-      <ul>
-      <li>同じファイル名があっても上書きせず、新しい番号のファイルとして保存</li>
-      <li>プロジェクト内のファイル一覧は
-      <code>GET /api/files?project=...</code> で取得</li>
-      </ul></li>
-      <li>静的 WEB 公開時は描画ルートの保存は行えません。<code>fly_geojson:</code>
-      をあらかじめ <code>.kasc</code> ファイルに記述するか、ローカル版で作成してください。</li>
-      <li>自動的に <code>fly_geojson:</code>
-      行をインスペクターに追加し、Fly モードで選択可能</li>
+      <li>ブラウザの IndexedDB に <code>drawn_route_YYYYMMDD_HHMMSS</code>
+      という名前で GeoJSON テキストとして保存（プロジェクト単位）。静的 WEB 公開でも保存でき、フォルダ選択や権限確認は不要です</li>
+      <li>インスペクターの「保存先フォルダ」を設定している場合は、フォルダ内の
+      <code>.geojson</code> も Fly パス一覧へ読み込みます（File System Access API、Chromium系のみ・読み取り専用）</li>
+      <li>保存・読み込んだルートは FLY パネルのルート選択に追加されます。描画ルートを選択している時は「削除」ボタンが表示され、IndexedDB／フォルダから削除できます</li>
       </ol>
       <p>描画ルートの GeoJSON には各点の高さ <code>z</code> を
       <code>heightReference: "Terrain"</code>
@@ -547,6 +540,10 @@
       を選ぶと従来の WASD / マウス操作に戻ります。</p>
       <pre class="text"><code>fly_geojson: ルートA | https://example.com/route.geojson | speed=60 | height=100 | pitch=-15 | loop=true
 fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height=50</code></pre>
+      <p>URL には外部 URL・プロジェクト相対パスのほか、<code>route:&lt;ルート名&gt;</code>
+      でブラウザ IndexedDB に保存した描画ルートも指定できます（例：
+      <code>fly_geojson: 描いたルート | route:drawn_route_20260918_153000</code>）。
+      IndexedDB はブラウザごとの領域のため、他環境と共有したい場合は GeoJSON を実ファイル化して URL で参照してください。</p>
       <table>
       <colgroup>
       <col style="width: 33%" />

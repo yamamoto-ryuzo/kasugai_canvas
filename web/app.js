@@ -419,9 +419,18 @@ function buildFlyPath(rawCoords) {
 }
 
 async function loadFlyGeoJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  const geojson = await response.json();
+  let text;
+  if (typeof url === "string" && url.startsWith("route:")) {
+    // IndexedDB の描画ルートを参照（fly_geojson: 名 | route:ルート名）
+    const name = decodeURIComponent(url.slice(6));
+    text = window._routeStoreGet ? await window._routeStoreGet(currentProjectId || "default", name) : null;
+    if (text == null) throw new Error(`描画ルートが見つかりません: ${name}`);
+  } else {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    text = await response.text();
+  }
+  const geojson = JSON.parse(text);
   const rawCoords = extractLineStringCoordinates(geojson);
   if (!rawCoords.length) throw new Error("LineString または MultiLineString が見つかりません");
   return { ...buildFlyPath(rawCoords), properties: geojson.properties || {} };
@@ -733,6 +742,18 @@ function renderFlyPathSelect() {
     flyPaths.map((path, index) => `<option value="${index}">${escapeHtml(path.title)}</option>`).join("");
   const exists = [...select.options].some(option => option.value === current);
   select.value = exists ? current : "__manual__";
+  updateFlyPathDeleteButton();
+}
+
+// 描画ルート（IndexedDB/フォルダ由来）を選択している時だけ削除・取込ボタンを表示
+function updateFlyPathDeleteButton() {
+  const delBtn = document.querySelector("#fly-path-delete");
+  const importBtn = document.querySelector("#fly-path-import");
+  const select = document.querySelector("#fly-path-select");
+  const index = Number(select?.value);
+  const path = Number.isInteger(index) && index >= 0 && index < flyPaths.length ? flyPaths[index] : null;
+  if (delBtn) delBtn.style.display = path?.drawn ? "" : "none";
+  if (importBtn) importBtn.style.display = path?.drawn?.kind === "file" ? "" : "none";
 }
 
 async function ensureDrawnRouteFlyPath() {
@@ -2447,6 +2468,7 @@ function setupEvents() {
   });
 
   document.querySelector("#fly-path-select")?.addEventListener("change", () => {
+    updateFlyPathDeleteButton();
     if (!walkModeActive) return;
     stopFlyPath();
     if (walkRafId) {
@@ -2463,6 +2485,36 @@ function setupEvents() {
       walkRafId = requestAnimationFrame(walkLoop);
     }
     updateFlyPathVisibilityButton();
+  });
+
+  document.querySelector("#fly-path-delete")?.addEventListener("click", async () => {
+    const select = document.querySelector("#fly-path-select");
+    const index = Number(select?.value);
+    const path = Number.isInteger(index) && index >= 0 && index < flyPaths.length ? flyPaths[index] : null;
+    if (!path?.drawn) return;
+    if (!window.confirm(`描画ルート「${path.title}」を削除しますか？`)) return;
+    if (flyPath === path) stopFlyPath();
+    if (path.drawn.kind === "idb") {
+      await routeStore.remove(currentProjectId || "default", path.drawn.name);
+    } else if (path.drawn.kind === "file") {
+      const dir = await getDataDirHandle();
+      if (!dir) return;
+      await dir.removeEntry(path.drawn.name);
+    }
+    flyPaths.splice(index, 1);
+    renderFlyPathSelect();
+  });
+
+  // フォルダ由来のルートを IndexedDB へ取り込む（元ファイルは残す）
+  document.querySelector("#fly-path-import")?.addEventListener("click", async () => {
+    const select = document.querySelector("#fly-path-select");
+    const index = Number(select?.value);
+    const path = Number.isInteger(index) && index >= 0 && index < flyPaths.length ? flyPaths[index] : null;
+    if (path?.drawn?.kind !== "file") return;
+    const text = await (await fetch(path.url)).text();
+    await routeStore.set(currentProjectId || "default", path.title, text);
+    path.drawn = { kind: "idb", name: path.title };
+    updateFlyPathDeleteButton();
   });
 
   const drawModeToggle = document.querySelector("#draw-mode-toggle");
@@ -2555,23 +2607,17 @@ function setupEvents() {
     return `drawn_route_${timestamp}.geojson`;
   }
 
-  async function saveDrawnLineToFolder(fileName, text) {
-    if (!window.showDirectoryPicker) return;
-    const dir = await getDataDirHandle();
-    if (!dir) return;
-    const file = await dir.getFileHandle(fileName, { create: true });
-    const writable = await file.createWritable();
-    await writable.write(text);
-    await writable.close();
+  async function saveDrawnRoute(name, text) {
+    await routeStore.set(currentProjectId || "default", name, text);
   }
 
   async function cacheDrawnLine() {
     const geojson = buildDrawnGeoJson();
     if (!geojson) return;
     try {
-      const fileName = drawnRouteFileName();
+      const name = drawnRouteFileName().replace(/\.geojson$/, "");
       const text = JSON.stringify(geojson, null, 2);
-      await saveDrawnLineToFolder(fileName, text);
+      await saveDrawnRoute(name, text);
       await ensureDrawnRouteFlyPath();
     } catch {}
   }
@@ -2735,8 +2781,12 @@ function setupEvents() {
   const dataDirStore = {
     open() {
       return new Promise((resolve, reject) => {
-        const request = indexedDB.open("kasugai-canvas", 1);
-        request.onupgradeneeded = () => request.result.createObjectStore("handles");
+        const request = indexedDB.open("kasugai-canvas", 2);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles");
+          if (!db.objectStoreNames.contains("routes")) db.createObjectStore("routes");
+        };
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
@@ -2757,6 +2807,55 @@ function setupEvents() {
         await new Promise((resolve, reject) => {
           const tx = db.transaction("handles", "readwrite");
           tx.objectStore("handles").put(value, key);
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (e) {}
+    },
+  };
+
+  // 描画ルート（GeoJSONテキスト）を IndexedDB に保存。キーは "<projectId>/<name>"
+  const routeStore = {
+    async names(projectId) {
+      try {
+        const db = await dataDirStore.open();
+        return await new Promise(resolve => {
+          const query = db.transaction("routes", "readonly").objectStore("routes").getAllKeys();
+          query.onsuccess = () => {
+            const prefix = `${projectId}/`;
+            resolve((query.result || []).map(String).filter(k => k.startsWith(prefix)).map(k => k.slice(prefix.length)));
+          };
+          query.onerror = () => resolve([]);
+        });
+      } catch (e) { return []; }
+    },
+    async get(projectId, name) {
+      try {
+        const db = await dataDirStore.open();
+        return await new Promise(resolve => {
+          const query = db.transaction("routes", "readonly").objectStore("routes").get(`${projectId}/${name}`);
+          query.onsuccess = () => resolve(query.result ?? null);
+          query.onerror = () => resolve(null);
+        });
+      } catch (e) { return null; }
+    },
+    async set(projectId, name, text) {
+      try {
+        const db = await dataDirStore.open();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("routes", "readwrite");
+          tx.objectStore("routes").put(text, `${projectId}/${name}`);
+          tx.oncomplete = resolve;
+          tx.onerror = () => reject(tx.error);
+        });
+      } catch (e) {}
+    },
+    async remove(projectId, name) {
+      try {
+        const db = await dataDirStore.open();
+        await new Promise((resolve, reject) => {
+          const tx = db.transaction("routes", "readwrite");
+          tx.objectStore("routes").delete(`${projectId}/${name}`);
           tx.oncomplete = resolve;
           tx.onerror = () => reject(tx.error);
         });
@@ -2801,26 +2900,50 @@ function setupEvents() {
     return pickDataDir();
   }
 
+  // 権限確認・ピッカーを出さず、許可済みのフォルダがある時だけ返す
+  async function getGrantedDataDirHandle() {
+    if (!window.showDirectoryPicker) return null;
+    const handle = dataDirHandle || await dataDirStore.get(dataDirKey());
+    if (handle && await handle.queryPermission({ mode: "readwrite" }) === "granted") {
+      dataDirHandle = handle;
+      return handle;
+    }
+    return null;
+  }
+
   async function _ensureDrawnRouteFlyPath() {
-    if (!window.showDirectoryPicker) return;
-    const dir = await getDataDirHandle();
-    if (!dir) return;
-    try {
-      const existing = new Set(flyPaths.map(p => p.title));
-      for await (const entry of dir.values()) {
-        if (entry.kind !== "file" || !entry.name.endsWith(".geojson")) continue;
-        const title = entry.name.replace(/\.geojson$/, "");
-        if (existing.has(title)) continue;
-        const fileHandle = await dir.getFileHandle(entry.name);
-        const file = await fileHandle.getFile();
-        const text = await file.text();
-        const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
-        flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100 });
-      }
-      renderFlyPathSelect();
-    } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
+    const projectId = currentProjectId || "default";
+    const existing = new Set(flyPaths.map(p => p.title));
+    // IndexedDB の描画ルート（ピッカー・権限不要）
+    for (const name of await routeStore.names(projectId)) {
+      if (existing.has(name)) continue;
+      const text = await routeStore.get(projectId, name);
+      if (text == null) continue;
+      const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+      flyPaths.push({ title: name, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, drawn: { kind: "idb", name } });
+      existing.add(name);
+    }
+    // 保存先フォルダ内の .geojson（許可済みの場合のみ・読み取り専用）
+    const dir = await getGrantedDataDirHandle();
+    if (dir) {
+      try {
+        for await (const entry of dir.values()) {
+          if (entry.kind !== "file" || !entry.name.endsWith(".geojson")) continue;
+          const title = entry.name.replace(/\.geojson$/, "");
+          if (existing.has(title)) continue;
+          const fileHandle = await dir.getFileHandle(entry.name);
+          const file = await fileHandle.getFile();
+          const text = await file.text();
+          const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+          flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, drawn: { kind: "file", name: entry.name } });
+          existing.add(title);
+        }
+      } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
+    }
+    renderFlyPathSelect();
   }
   window._ensureDrawnRouteFlyPath = _ensureDrawnRouteFlyPath;
+  window._routeStoreGet = (projectId, name) => routeStore.get(projectId, name);
 
   document.querySelector("#inspector-data-dir")?.addEventListener("click", async () => {
     if (!window.showDirectoryPicker) {
