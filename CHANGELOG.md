@@ -10,8 +10,12 @@
 
 - 認証方式 4（cloudflare-workers）：静的ファイル含む全リクエストを Worker で認証ゲート（`workers/`・`run_worker_first`・HttpOnly Cookie セッション）
 - R2 秘匿データ配信：`.kasc` で `r2://<キー>` と記述したデータを `/api/data/*` 認証ゲート経由で配信（`KASUGAI_DATA` バケットバインド）
-- 描画ルートの削除・取込ボタンを FLY パネルのルート選択横に追加（描画ルート選択時のみ表示）
+- FLY パネルのルート選択横に「取込」（.geojson をファイル選択で IndexedDB へインポート・常時表示）と「出力」「削除」（描画ルート選択時のみ表示）ボタンを追加
 - `fly_geojson:` の URL に `route:<ルート名>` スキームを追加し、IndexedDB の描画ルートをインスペクタから参照可能に
+
+### Fixed
+
+- FLY パネルの「保存」（点高書き戻し）が旧 `/api/file` 専用で動作していなかった問題を修正。保存先を IndexedDB・保存先フォルダ・`/api/data/*`（R2）に対応させた
 
 ### Changed
 

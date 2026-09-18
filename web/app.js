@@ -745,15 +745,15 @@ function renderFlyPathSelect() {
   updateFlyPathDeleteButton();
 }
 
-// 描画ルート（IndexedDB/フォルダ由来）を選択している時だけ削除・取込ボタンを表示
+// 描画ルート（IndexedDB/フォルダ由来）を選択している時だけ削除・出力ボタンを表示
 function updateFlyPathDeleteButton() {
   const delBtn = document.querySelector("#fly-path-delete");
-  const importBtn = document.querySelector("#fly-path-import");
+  const downloadBtn = document.querySelector("#fly-path-download");
   const select = document.querySelector("#fly-path-select");
   const index = Number(select?.value);
   const path = Number.isInteger(index) && index >= 0 && index < flyPaths.length ? flyPaths[index] : null;
   if (delBtn) delBtn.style.display = path?.drawn ? "" : "none";
-  if (importBtn) importBtn.style.display = path?.drawn?.kind === "file" ? "" : "none";
+  if (downloadBtn) downloadBtn.style.display = path?.drawn ? "" : "none";
 }
 
 async function ensureDrawnRouteFlyPath() {
@@ -2157,10 +2157,6 @@ function setupEvents() {
   }
   async function saveFlyPointOffsets() {
     if (!flyPathCoords || !flyPath || !flyPath.url) return;
-    if (!flyPath.url.startsWith("/api/file")) {
-      console.warn("ローカルファイル以外のルートは保存できません");
-      return;
-    }
     const coordinates = flyPathCoords.map(p => [p.longitude, p.latitude, Number.isFinite(p.altitude) ? p.altitude : 0]);
     const properties = Object.keys(flyPathProperties || {}).length ? flyPathProperties : { heightReference: "Terrain", heightOffset: 0 };
     const geojson = {
@@ -2168,9 +2164,29 @@ function setupEvents() {
       properties,
       geometry: { type: "LineString", coordinates }
     };
+    const text = JSON.stringify(geojson);
     try {
-      const response = await fetch(flyPath.url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geojson) });
-      if (!response.ok) throw new Error(await response.text());
+      if (flyPath.drawn?.kind === "idb") {
+        await routeStore.set(currentProjectId || "default", flyPath.drawn.name, text);
+      } else if (flyPath.drawn?.kind === "file") {
+        const dir = await getDataDirHandle();
+        if (!dir) return;
+        const file = await dir.getFileHandle(flyPath.drawn.name, { create: true });
+        const writable = await file.createWritable();
+        await writable.write(text);
+        await writable.close();
+      } else if (flyPath.url.startsWith("/api/data/")) {
+        const response = await fetch(flyPath.url, { method: "PUT", headers: { "Content-Type": "application/json" }, body: text });
+        if (!response.ok) throw new Error(await response.text());
+      } else {
+        console.warn("このルートは保存できません（静的・外部URLのため）");
+        return;
+      }
+      // 保存内容を反映した新しい blob URL に差し替える
+      if (flyPath.url.startsWith("blob:")) {
+        URL.revokeObjectURL(flyPath.url);
+        flyPath.url = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+      }
       console.log("点の高さを保存しました");
     } catch (error) {
       console.error("点の高さの保存に失敗しました:", error);
@@ -2505,16 +2521,45 @@ function setupEvents() {
     renderFlyPathSelect();
   });
 
-  // フォルダ由来のルートを IndexedDB へ取り込む（元ファイルは残す）
-  document.querySelector("#fly-path-import")?.addEventListener("click", async () => {
+  // .geojson ファイルを直接選んで IndexedDB へ取り込む
+  const importFileInput = document.querySelector("#fly-path-import-file");
+  document.querySelector("#fly-path-import")?.addEventListener("click", () => {
+    importFileInput?.click();
+  });
+  importFileInput?.addEventListener("change", async () => {
+    const files = [...(importFileInput.files || [])];
+    if (!files.length) return;
+    const projectId = currentProjectId || "default";
+    const existingNames = new Set(await routeStore.names(projectId));
+    let lastName = null;
+    for (const file of files) {
+      const name = file.name.replace(/\.geojson$/i, "");
+      if (existingNames.has(name) && !window.confirm(`ルート「${name}」は既に存在します。上書きしますか？`)) continue;
+      await routeStore.set(projectId, name, await file.text());
+      existingNames.add(name);
+      lastName = name;
+    }
+    importFileInput.value = "";
+    await ensureDrawnRouteFlyPath();
+    if (lastName) {
+      const select = document.querySelector("#fly-path-select");
+      const idx = flyPaths.findIndex(p => p.title === lastName);
+      if (select && idx >= 0) { select.value = String(idx); select.dispatchEvent(new Event("change")); }
+    }
+  });
+
+  // 選択中の描画ルートを .geojson ファイルとしてダウンロード
+  document.querySelector("#fly-path-download")?.addEventListener("click", async () => {
     const select = document.querySelector("#fly-path-select");
     const index = Number(select?.value);
     const path = Number.isInteger(index) && index >= 0 && index < flyPaths.length ? flyPaths[index] : null;
-    if (path?.drawn?.kind !== "file") return;
+    if (!path?.drawn) return;
     const text = await (await fetch(path.url)).text();
-    await routeStore.set(currentProjectId || "default", path.title, text);
-    path.drawn = { kind: "idb", name: path.title };
-    updateFlyPathDeleteButton();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+    a.download = `${path.title}.geojson`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   });
 
   const drawModeToggle = document.querySelector("#draw-mode-toggle");

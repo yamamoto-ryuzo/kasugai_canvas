@@ -193,7 +193,7 @@
       という名前で GeoJSON テキストとして保存（プロジェクト単位）。静的 WEB 公開でも保存でき、フォルダ選択や権限確認は不要です</li>
       <li>インスペクターの「保存先フォルダ」を設定している場合は、フォルダ内の
       <code>.geojson</code> も Fly パス一覧へ読み込みます（File System Access API、Chromium系のみ・読み取り専用）</li>
-      <li>保存・読み込んだルートは FLY パネルのルート選択に追加されます。描画ルートを選択している時は「削除」ボタンが表示され、IndexedDB／フォルダから削除できます</li>
+      <li>保存・読み込んだルートは FLY パネルのルート選択に追加されます。「取込」ボタンで任意の <code>.geojson</code> ファイルを IndexedDB へインポートでき、描画ルートを選択している時は「出力」（.geojson ダウンロード）「削除」ボタンが表示されます</li>
       </ol>
       <p>描画ルートの GeoJSON には各点の高さ <code>z</code> を
       <code>heightReference: "Terrain"</code>
