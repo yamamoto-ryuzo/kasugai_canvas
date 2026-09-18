@@ -2199,6 +2199,7 @@ function setupEvents() {
     const heightChange = (walkKeys.has("KeyQ") ? 1 : 0) - (walkKeys.has("KeyE") ? 1 : 0);
     if (heightChange !== 0) {
       flyHeight += 10 * heightChange * delta;
+      if (flyPath) flyPath.height = flyHeight;
       if (flyPathCoords) flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
     }
 
@@ -2207,6 +2208,7 @@ function setupEvents() {
     if (speedChange !== 0) {
       flySpeed += 20 * speedChange * delta;
       if (flySpeed < 0) flySpeed = 0;
+      if (flyPath) flyPath.speed = flySpeed;
     }
 
     const pitchChange = (walkKeys.has("ArrowUp") ? 1 : 0) - (walkKeys.has("ArrowDown") ? 1 : 0);
@@ -2230,6 +2232,7 @@ function setupEvents() {
         return;
       }
       flyHeight = value;
+      if (flyPath) flyPath.height = value;
       if (flyPathActive && flyPath) flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
       if (flyPresetSelect) flyPresetSelect.value = "custom";
     });
@@ -2242,6 +2245,7 @@ function setupEvents() {
         return;
       }
       flySpeed = value;
+      if (flyPath) flyPath.speed = value;
       if (flyPresetSelect) flyPresetSelect.value = "custom";
     });
   }
@@ -2284,8 +2288,11 @@ function setupEvents() {
       if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
       if (walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
       if (walkPitchEl) walkPitchEl.value = Number.isFinite(preset.pitch) ? preset.pitch.toFixed(1) : "-10.0";
-      if (flyPath && Number.isFinite(preset.pitch)) {
-        flyPath.pitch = Math.max(-85, Math.min(0, preset.pitch));
+      if (flyPath) {
+        // 高さ・速度もルート設定へ反映（ピッチと同様に再スタート時も維持するため）
+        flyPath.height = preset.height;
+        flyPath.speed = preset.speed;
+        if (Number.isFinite(preset.pitch)) flyPath.pitch = Math.max(-85, Math.min(0, preset.pitch));
       }
       if (flyPathCoords && flyPath) {
         flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
