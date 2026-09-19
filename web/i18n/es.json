@@ -283,5 +283,6 @@
   "nav.fly": "Volar",
   "nav.flyMode": "Modo de vuelo",
   "nav.orbitMode": "Órbita",
-  "layer.exclusive": "Exclusivo"
+  "layer.exclusive": "Exclusivo",
+  "layer.focus": "Acercar a la capa"
 }

@@ -283,5 +283,6 @@
   "nav.fly": "飞行",
   "nav.flyMode": "飞行模式",
   "nav.orbitMode": "轨道",
-  "layer.exclusive": "排他"
+  "layer.exclusive": "排他",
+  "layer.focus": "缩放至图层"
 }

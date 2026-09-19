@@ -283,5 +283,6 @@
   "nav.fly": "비행",
   "nav.flyMode": "비행 모드",
   "nav.orbitMode": "궤도",
-  "layer.exclusive": "배타적"
+  "layer.exclusive": "배타적",
+  "layer.focus": "레이어로 확대"
 }

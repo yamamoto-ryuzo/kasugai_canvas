@@ -283,5 +283,6 @@
   "nav.fly": "フライ",
   "nav.flyMode": "フライモード",
   "nav.orbitMode": "オービット",
-  "layer.exclusive": "排他"
+  "layer.exclusive": "排他",
+  "layer.focus": "レイヤーにズーム"
 }

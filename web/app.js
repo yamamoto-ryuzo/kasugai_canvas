@@ -94,6 +94,9 @@ const activeClippingPlanes = { planes: [] };
 const uiHooks = {};
 const activeDataSources = [];
 const vectorDataSources = [];
+// レイヤー行の📍フォーカス用: レイヤーID→実行時オブジェクト(ImageryLayer/Tileset/DataSource/Primitive)。
+// refreshLayers() のたびに再登録される
+const layerRuntimeTargets = new Map();
 // プラグイン宣言レイヤー(plugins.json の layer 設定由来)。applyInspector で
 // layers/layerState/layerOrder がクリアされても再登録されるよう別リストで保持する
 const pluginLayers = [];
@@ -564,6 +567,39 @@ function getGroupLayerIds(groupKey) {
     .map(layer => layer.id);
 }
 
+// レイヤー一覧の📍ボタン/エージェント用: レイヤー全体が画面に収まるようカメラを移動する。
+// 非表示レイヤーは未ロードの場合があるため、表示してからフォーカスする。
+// 実行時オブジェクトは refreshLayers() で layerRuntimeTargets に登録される
+async function focusLayer(layer) {
+  if (!layer) return false;
+  if (!layerRuntimeTargets.has(layer.id) && !layer.dataSource && !layer.visible) {
+    layer.visible = true;
+    if (layer.exclusiveGroup) {
+      getOrderedLayerItems().forEach(other => {
+        if (other !== layer && other.group === layer.group && other.exclusiveGroup) other.visible = false;
+      });
+    }
+    renderLayerList();
+    await refreshLayers();
+  }
+  let target = layerRuntimeTargets.get(layer.id) || layer.dataSource || null;
+  // XYZタイルは範囲情報を持たないため、ImageryLayer未生成時は全世界表示にフォールバックする
+  if (!target && layer.type === "tile") target = Cesium.Rectangle.clone(Cesium.Rectangle.MAX_VALUE);
+  if (!target) return false;
+  try {
+    return await viewer.flyTo(target, { duration: 2 });
+  } catch (error) {
+    if (target.boundingSphere) {
+      try {
+        viewer.camera.flyToBoundingSphere(target.boundingSphere, { duration: 2 });
+        return true;
+      } catch (e) { /* ignore */ }
+    }
+    console.warn("レイヤーへのフォーカスに失敗しました:", layer.title, error);
+    return false;
+  }
+}
+
 function renderLayerList() {
   const list = document.querySelector("#layer-list");
   const groupedLayers = new Map();
@@ -588,7 +624,7 @@ function renderLayerList() {
         <label class="layer-row" for="${inputId}" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
           <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""}>
           <span>${escapeHtml(layer.title)}</span>
-          <small>${escapeHtml(layer.status || (layer.type === "tile" ? "Tile" : layer.type))}</small>
+          <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>`;
         }).join("")}
       </div>
@@ -646,6 +682,14 @@ function renderLayerList() {
       }
       renderLayerList();
       refreshLayers();
+    });
+  });
+
+  list.querySelectorAll(".layer-focus").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      void focusLayer(layerState.get(button.dataset.layerId));
     });
   });
 
@@ -1211,6 +1255,7 @@ async function refreshLayers() {
   activeDataSources.length = 0;
   activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
   activePrimitives.length = 0;
+  layerRuntimeTargets.clear();
 
   const demSource = terrainEnabled ? demSources[selectedDemSource] : null;
   if (demSource?.url) {
@@ -1303,7 +1348,9 @@ async function refreshLayers() {
         maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
         tileSize: item.tileSize || 256,
       });
-      viewer.imageryLayers.add(new Cesium.ImageryLayer(provider, { alpha: item.opacity ?? 0.8 }));
+      const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: item.opacity ?? 0.8 });
+      viewer.imageryLayers.add(imageryLayer);
+      layerRuntimeTargets.set(item.id, imageryLayer);
     } catch (error) {
       console.warn("XYZ タイルの作成に失敗しました:", item.url, error);
     }
@@ -1329,6 +1376,7 @@ async function refreshLayers() {
         applyClippingPlanes(tileset);
         viewer.scene.primitives.add(tileset);
         activePrimitives.push(tileset);
+        layerRuntimeTargets.set(item.id, tileset);
       } catch (error) {
         console.warn("3D Tiles の読み込みに失敗しました:", item.url, error);
       }
@@ -1338,6 +1386,7 @@ async function refreshLayers() {
       if (!item.dataSource) continue;
       try { item.dataSource.show = item.visible; } catch (e) {}
       vectorDataSources.push({ ds: item.dataSource, id: item.id, title: item.title, plugin: true });
+      layerRuntimeTargets.set(item.id, item.dataSource);
     } else if (item.type === "geojson" || item.type === "layer") {
       try {
         if (!item.url && !item.data) continue;
@@ -1352,6 +1401,7 @@ async function refreshLayers() {
           primitive.show = item.visible;
           viewer.scene.primitives.add(primitive);
           activePrimitives.push(primitive);
+          layerRuntimeTargets.set(item.id, primitive);
           continue;
         }
         let classification;
@@ -1376,6 +1426,7 @@ async function refreshLayers() {
         try { ds.show = item.visible; } catch (e) {}
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
+        layerRuntimeTargets.set(item.id, ds);
       } catch (error) {
         console.warn("GeoJSON の読み込みに失敗しました:", item.url, error);
       }
@@ -4067,6 +4118,11 @@ window.kasugaiApi = {
     refreshLayers();
     return true;
   },
+  async focusLayer(idOrTitle) {
+    const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
+    if (!layer) return false;
+    return focusLayer(layer);
+  },
   listBasemaps() {
     return basemaps.map(basemap => ({ id: basemap.id, title: basemap.title, selected: basemap === selectedBasemap }));
   },
@@ -4394,6 +4450,17 @@ const CHAT_TOOLS = [{
       name: "listLayers",
       description: "登録されているレイヤ一覧(名前・表示状態)を取得する",
       parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "focusLayer",
+      description: "レイヤ名またはIDを指定し、レイヤ全体が画面に収まるようカメラを移動する。非表示レイヤーは自動で表示してから移動する",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名またはID(listLayersで確認)" },
+        },
+        required: ["name"],
+      },
     },
     {
       name: "getCamera",
@@ -4752,6 +4819,10 @@ async function executeChatTool(name, args = {}) {
     return { ok, message: ok ? undefined : t("tool.layerNotFound", { name: args.name }) };
   }
   if (name === "listLayers") return { layers: window.kasugaiApi.listLayers() };
+  if (name === "focusLayer") {
+    const ok = await window.kasugaiApi.focusLayer(args.name);
+    return { ok, message: ok ? undefined : t("tool.layerNotFound", { name: args.name }) };
+  }
   if (name === "getCamera") return { camera: window.kasugaiApi.getCamera() };
   if (name === "listBasemaps") return { basemaps: window.kasugaiApi.listBasemaps() };
   if (name === "setBasemap") {

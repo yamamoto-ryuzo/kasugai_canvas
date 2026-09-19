@@ -283,5 +283,6 @@
   "nav.fly": "Flug",
   "nav.flyMode": "Flugmodus",
   "nav.orbitMode": "Orbit",
-  "layer.exclusive": "Exklusiv"
+  "layer.exclusive": "Exklusiv",
+  "layer.focus": "Auf Ebene zoomen"
 }

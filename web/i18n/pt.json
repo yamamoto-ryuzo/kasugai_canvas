@@ -283,5 +283,6 @@
   "nav.fly": "Voo",
   "nav.flyMode": "Modo de voo",
   "nav.orbitMode": "Órbita",
-  "layer.exclusive": "Exclusivo"
+  "layer.exclusive": "Exclusivo",
+  "layer.focus": "Ampliar para a camada"
 }

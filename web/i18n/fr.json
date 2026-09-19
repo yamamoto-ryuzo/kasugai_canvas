@@ -283,5 +283,6 @@
   "nav.fly": "Vol",
   "nav.flyMode": "Mode vol",
   "nav.orbitMode": "Orbite",
-  "layer.exclusive": "Exclusif"
+  "layer.exclusive": "Exclusif",
+  "layer.focus": "Zoomer sur la couche"
 }
