@@ -279,5 +279,9 @@
   "auth.required": "Digite um ID de usuário e uma senha",
   "auth.authenticating": "Autenticando...",
   "auth.noAuthenticate": "O plugin de autenticação não define authenticate: {method}",
-  "auth.loadFailed": "Falha ao carregar: {url}"
+  "auth.loadFailed": "Falha ao carregar: {url}",
+  "nav.fly": "Voo",
+  "nav.flyMode": "Modo de voo",
+  "nav.orbitMode": "Órbita",
+  "layer.exclusive": "Exclusivo"
 }

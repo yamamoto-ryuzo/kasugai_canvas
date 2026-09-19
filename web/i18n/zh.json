@@ -279,5 +279,9 @@
   "auth.required": "请输入用户 ID 和密码",
   "auth.authenticating": "认证中...",
   "auth.noAuthenticate": "认证插件未定义 authenticate：{method}",
-  "auth.loadFailed": "加载失败：{url}"
+  "auth.loadFailed": "加载失败：{url}",
+  "nav.fly": "飞行",
+  "nav.flyMode": "飞行模式",
+  "nav.orbitMode": "轨道",
+  "layer.exclusive": "排他"
 }

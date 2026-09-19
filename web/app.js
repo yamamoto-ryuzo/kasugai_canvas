@@ -576,7 +576,7 @@ function renderLayerList() {
     const groupChecked = layers.some(layer => layer.visible);
     return `
     <section class="layer-group${group ? " grouped" : ""}${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
-      ${group ? `<div class="layer-group-title" draggable="true"><button class="layer-group-toggle" type="button" aria-label="${t("layer.groupToggle")}" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupInputId)}"` : ""} data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
+      ${group ? `<div class="layer-group-title" draggable="true"><button class="layer-group-toggle" type="button" aria-label="${t("layer.groupToggle")}" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupInputId)}"` : ""} data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? `<small class="exclusive-badge">${t("layer.exclusive")}</small>` : ""}</div>` : ""}
       <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
@@ -2427,8 +2427,8 @@ function setupEvents() {
     const isWalk = next === "walk";
     const wasWalk = walkModeActive;
     modeSelect.value = next;
-    modeSelect.textContent = isWalk ? "Fly" : "Orbit";
-    modeSelect.setAttribute("aria-label", isWalk ? "Fly mode" : "Orbit view");
+    modeSelect.textContent = isWalk ? t("nav.fly") : t("nav.orbitMode");
+    modeSelect.setAttribute("aria-label", isWalk ? t("nav.flyMode") : t("nav.orbit"));
     walkModeActive = isWalk;
     autoMove = 0;
     walkHelp?.classList.toggle("visible", isWalk || drawTabActive);
@@ -3084,6 +3084,12 @@ function setupEvents() {
     void loadProjects();
     updateFlyPathVisibilityButton();
     void updateDataDirLabel();
+    const modeSelect = document.querySelector("#mode-select");
+    if (modeSelect) {
+      const isWalk = modeSelect.value === "walk";
+      modeSelect.textContent = isWalk ? t("nav.fly") : t("nav.orbitMode");
+      modeSelect.setAttribute("aria-label", isWalk ? t("nav.flyMode") : t("nav.orbit"));
+    }
   });
 
   document.querySelectorAll(".panel-tab").forEach(tab => {

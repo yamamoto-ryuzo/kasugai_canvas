@@ -279,5 +279,9 @@
   "auth.required": "Benutzer-ID und Passwort eingeben",
   "auth.authenticating": "Authentifiziere...",
   "auth.noAuthenticate": "Auth-Plugin definiert authenticate nicht: {method}",
-  "auth.loadFailed": "Laden fehlgeschlagen: {url}"
+  "auth.loadFailed": "Laden fehlgeschlagen: {url}",
+  "nav.fly": "Flug",
+  "nav.flyMode": "Flugmodus",
+  "nav.orbitMode": "Orbit",
+  "layer.exclusive": "Exklusiv"
 }

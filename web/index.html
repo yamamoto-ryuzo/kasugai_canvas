@@ -23,13 +23,13 @@
           <aside class="control-panel">
             <nav class="panel-tabs" aria-label="Plugin panels">
               <button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
-              <button class="panel-tab active" type="button" data-panel="layers-panel" data-i18n="tab.layers">Layers</button>
-              <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">Camera</button>
-              <button class="panel-tab" type="button" data-panel="search-panel" data-i18n="tab.search">Search</button>
-              <button class="panel-tab" type="button" data-panel="share-panel" data-i18n="tab.share">Share</button>
-              <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">Info</button>
+              <button class="panel-tab active" type="button" data-panel="layers-panel" data-i18n="tab.layers">レイヤ</button>
+              <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">カメラ</button>
+              <button class="panel-tab" type="button" data-panel="search-panel" data-i18n="tab.search">検索</button>
+              <button class="panel-tab" type="button" data-panel="share-panel" data-i18n="tab.share">共有</button>
+              <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
               <button class="panel-tab" type="button" data-panel="legend-panel" data-i18n="tab.legend">凡例</button>
-              <button class="panel-tab" type="button" data-panel="attr-panel" data-i18n="tab.attr">Attr</button>
+              <button class="panel-tab" type="button" data-panel="attr-panel" data-i18n="tab.attr">属性</button>
               <button class="panel-tab" type="button" data-panel="settings-panel" data-i18n="tab.settings">設定</button>
               <button class="panel-tab" type="button" data-panel="google-panel" data-i18n="tab.google">Google</button>
             </nav>
@@ -37,16 +37,16 @@
               <div id="layer-list"></div>
             </section>
             <section id="camera-panel" class="plugin-panel">
-              <div class="section-title" data-i18n="camera.presets">Camera presets</div>
+              <div class="section-title" data-i18n="camera.presets">カメラプリセット</div>
               <div id="camera-presets"></div>
               <div class="camera-grid">
-                <input id="camera-longitude" type="number" step="any" aria-label="Longitude" data-i18n-attr="aria-label:camera.longitude" />
-                <input id="camera-latitude" type="number" step="any" aria-label="Latitude" data-i18n-attr="aria-label:camera.latitude" />
-                <input id="camera-height" type="number" step="any" aria-label="Height" data-i18n-attr="aria-label:camera.height" />
-                <input id="camera-pitch" type="number" step="any" aria-label="Pitch" data-i18n-attr="aria-label:camera.pitch" />
-                <input id="camera-heading" type="number" step="any" aria-label="Heading" data-i18n-attr="aria-label:camera.heading" />
+                <input id="camera-longitude" type="number" step="any" aria-label="経度" data-i18n-attr="aria-label:camera.longitude" />
+                <input id="camera-latitude" type="number" step="any" aria-label="緯度" data-i18n-attr="aria-label:camera.latitude" />
+                <input id="camera-height" type="number" step="any" aria-label="高さ" data-i18n-attr="aria-label:camera.height" />
+                <input id="camera-pitch" type="number" step="any" aria-label="ピッチ" data-i18n-attr="aria-label:camera.pitch" />
+                <input id="camera-heading" type="number" step="any" aria-label="方位" data-i18n-attr="aria-label:camera.heading" />
               </div>
-              <button id="apply-camera" type="button" data-i18n="camera.apply">Apply camera</button>
+              <button id="apply-camera" type="button" data-i18n="camera.apply">カメラ適用</button>
             </section>
             <section id="search-panel" class="plugin-panel">
               <div id="vector-search" style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #e4ecef;">
@@ -91,19 +91,19 @@
               <ul id="search-results" class="search-results" style="list-style:none;padding:0;margin:8px 0 0;"></ul>
             </section>
             <section id="share-panel" class="plugin-panel">
-              <div class="section-title" data-i18n="share.title">Share</div>
+              <div class="section-title" data-i18n="share.title">共有</div>
               <button id="copy-share-url" type="button" data-i18n="share.copy">現在位置URLをコピー</button>
               <input id="share-url" class="share-url" readonly />
             </section>
             <section id="settings-panel" class="plugin-panel terrain-control">
               <nav class="settings-tabs" aria-label="設定カテゴリ" data-i18n-attr="aria-label:settings.ariaLabel">
                 <button class="settings-tab active" type="button" data-settings-panel="settings-dem-panel">DEM</button>
-                <button class="settings-tab" type="button" data-settings-panel="settings-project-panel" data-i18n="settings.tab.project">Project</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-project-panel" data-i18n="settings.tab.project">プロジェクト</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-layer-panel" data-i18n="settings.tab.layer">レイヤ</button>
-                <button class="settings-tab" type="button" data-settings-panel="settings-inspector-panel" data-i18n="settings.tab.inspector">Inspector</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-inspector-panel" data-i18n="settings.tab.inspector">インスペクター</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-cesium-panel">Cesium</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-effects-panel" data-i18n="settings.tab.effects">効果</button>
-                <button class="settings-tab" type="button" data-settings-panel="settings-help-panel" data-i18n="settings.tab.help">Help</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-help-panel" data-i18n="settings.tab.help">ヘルプ</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel" data-i18n="settings.tab.other">その他</button>
               </nav>
               <section id="settings-dem-panel" class="settings-subpanel active">
@@ -122,8 +122,8 @@
                 <p class="hint" data-i18n-html="settings.dem.heightHint"><strong>高さ基準</strong>：「楕円体高 / WGS84」は3D地球・PLATEAU等の3D Tilesと整合します。「標高 / 平均海面基準」「地理院(TP基準=東京湾平均海面)」は楕円体高より約30〜40m低く表示されます(3D Tilesが地面に埋もれて見える場合があります)。「地理院」は日本域のみ有効です。</p>
               </section>
               <section id="settings-project-panel" class="settings-subpanel">
-                <label class="field-label" for="project-select" data-i18n="settings.project.label">Project</label>
-                <select id="project-select" aria-label="Project" data-i18n-attr="aria-label:settings.project.label"></select>
+                <label class="field-label" for="project-select" data-i18n="settings.project.label">プロジェクト</label>
+                <select id="project-select" aria-label="プロジェクト" data-i18n-attr="aria-label:settings.project.label"></select>
               </section>
               <section id="settings-layer-panel" class="settings-subpanel">
                 <span class="field-label" data-i18n="settings.layer.drapeTarget">ドレープ対象地形</span>
@@ -227,7 +227,7 @@
             <section id="google-panel" class="plugin-panel">
               <nav class="settings-tabs" aria-label="Google設定カテゴリ" data-i18n-attr="aria-label:google.ariaLabel">
                 <button class="settings-tab active" type="button" data-settings-panel="gemini-panel">Gemini</button>
-                <button class="settings-tab" type="button" data-settings-panel="google-map-panel" data-i18n="google.tab.map">Map</button>
+                <button class="settings-tab" type="button" data-settings-panel="google-map-panel" data-i18n="google.tab.map">マップ</button>
               </nav>
               <section id="gemini-panel" class="settings-subpanel active">
               <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
@@ -267,7 +267,7 @@
               <img alt="凡例" data-i18n-attr="alt:tab.legend" />
             </section>
             <section id="attr-panel" class="plugin-panel">
-              <div class="section-title" data-i18n="attr.title">Attr</div>
+              <div class="section-title" data-i18n="attr.title">属性</div>
               <button id="attr-vector-attr-list-btn" type="button" style="width:100%;font-size:0.9em;margin-bottom:8px;" data-i18n="vector.attrList">選択中のレイヤ属性一覧</button>
               <div id="attr-content" class="attr-content" data-i18n="attr.empty">地物を選択すると属性を表示します。</div>
             </section>
@@ -308,7 +308,7 @@
               <div class="walk-help-tabs">
                 <button class="walk-help-tab active" data-tab="mouse" type="button" data-i18n="fly.tab.mouse">マウス</button>
                 <button class="walk-help-tab" data-tab="keyboard" type="button" data-i18n="fly.tab.keyboard">キー</button>
-                <button class="walk-help-tab" data-tab="draw" type="button" data-i18n="fly.tab.draw">Edit</button>
+                <button class="walk-help-tab" data-tab="draw" type="button" data-i18n="fly.tab.draw">編集</button>
               </div>
               <div class="walk-help-contents">
                 <div class="walk-help-content active" data-tab="mouse">
@@ -351,11 +351,11 @@
                 <button id="fly-point-save" type="button" style="font-size:0.9em;" data-i18n="common.save">保存</button>
               </div>
             </div>
-            <button id="compass-button" class="compass-button" type="button" title="Reset north" data-i18n-attr="title:nav.compass">
+            <button id="compass-button" class="compass-button" type="button" title="北をリセット" data-i18n-attr="title:nav.compass">
               <span class="compass-needle"></span><strong>N</strong>
             </button>
-            <button id="top-down-button" type="button" aria-label="3D perspective view" title="3D perspective view" data-i18n-attr="aria-label:nav.topDown;title:nav.topDown">3D</button>
-            <button id="mode-select" class="mode-select" type="button" value="orbit" aria-label="Orbit view" data-i18n-attr="aria-label:nav.orbit">Orbit</button>
+            <button id="top-down-button" type="button" aria-label="3D表示" title="3D表示" data-i18n-attr="aria-label:nav.topDown;title:nav.topDown">3D</button>
+            <button id="mode-select" class="mode-select" type="button" value="orbit" aria-label="オービット表示" data-i18n="nav.orbitMode" data-i18n-attr="aria-label:nav.orbit">オービット</button>
             <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
           </aside>
           <aside class="chat-panel" id="chat-panel" aria-label="AIチャット" data-i18n-attr="aria-label:chat.ariaLabel">

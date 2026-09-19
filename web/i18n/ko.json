@@ -279,5 +279,9 @@
   "auth.required": "사용자 ID와 비밀번호를 입력하세요",
   "auth.authenticating": "인증 중...",
   "auth.noAuthenticate": "인증 플러그인에 authenticate가 정의되어 있지 않습니다: {method}",
-  "auth.loadFailed": "로드 실패: {url}"
+  "auth.loadFailed": "로드 실패: {url}",
+  "nav.fly": "비행",
+  "nav.flyMode": "비행 모드",
+  "nav.orbitMode": "궤도",
+  "layer.exclusive": "배타적"
 }

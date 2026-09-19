@@ -279,5 +279,9 @@
   "auth.required": "Enter a user ID and password",
   "auth.authenticating": "Authenticating...",
   "auth.noAuthenticate": "Auth plugin does not define authenticate: {method}",
-  "auth.loadFailed": "Failed to load: {url}"
+  "auth.loadFailed": "Failed to load: {url}",
+  "nav.fly": "Fly",
+  "nav.flyMode": "Fly mode",
+  "nav.orbitMode": "Orbit",
+  "layer.exclusive": "Exclusive"
 }

@@ -279,5 +279,9 @@
   "auth.required": "ユーザーIDとパスワードを入力してください",
   "auth.authenticating": "認証中...",
   "auth.noAuthenticate": "認証プラグインに authenticate が定義されていません: {method}",
-  "auth.loadFailed": "読み込み失敗: {url}"
+  "auth.loadFailed": "読み込み失敗: {url}",
+  "nav.fly": "フライ",
+  "nav.flyMode": "フライモード",
+  "nav.orbitMode": "オービット",
+  "layer.exclusive": "排他"
 }
