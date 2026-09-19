@@ -48,7 +48,7 @@ python run-workers.py    # Workers（control: 4・全ファイル認証ゲート
 
 ## バージョン管理
 
-現在のバージョンは **4.4.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **4.5.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 

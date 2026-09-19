@@ -1757,18 +1757,35 @@ function updateTopDownButton(is2D) {
   topDownButton.setAttribute("title", is2D ? "2D top-down view" : "3D perspective view");
 }
 
+// 画面中央に映っている地表地点を返す。地形を優先し、拾えなければ楕円体で補完する
+function pickGlobeScreenCenter() {
+  const canvas = viewer.scene.canvas;
+  const center = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2);
+  const ray = viewer.camera.getPickRay(center);
+  if (!ray) return null;
+  let cartesian = null;
+  try {
+    cartesian = viewer.scene.globe.pick(ray, viewer.scene) || null;
+  } catch (e) { /* 初期化直後などpickできない場合は楕円体にフォールバック */ }
+  return cartesian
+    || viewer.camera.pickEllipsoid(center, viewer.scene.globe.ellipsoid)
+    || null;
+}
+
 function setTopDown(is2D) {
   const ssec = viewer.scene.screenSpaceCameraController;
   ssec.enableTilt = !is2D;
   viewer.camera.constrainedAxis = is2D ? Cesium.Cartesian3.UNIT_Z : undefined;
-  const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
-  const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
-  flyTo({
-    latitude: c.latitude * 180 / Math.PI,
-    longitude: c.longitude * 180 / Math.PI,
-    height: c.height,
-    pitch: pitchDeg,
-    heading: viewer.camera.heading * 180 / Math.PI,
+  // 画面中央の地点を基点に、レイヤパネル側と同じ flyToFeature をそのまま使ってflyする。
+  // heightにはカメラからその地点までの距離を渡し、切替前後で見え方のスケールを保つ。
+  // pitch/headingはflyToFeatureが現在値を引き継ぐので省略（2D時は内部で-90°に固定される）。
+  // 中央が地球を捉えない場合はカメラ真下の地点を基点にする
+  const center = pickGlobeScreenCenter();
+  const carto = center
+    ? Cesium.Cartographic.fromCartesian(center)
+    : Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  void flyToFeature(carto.latitude * 180 / Math.PI, carto.longitude * 180 / Math.PI, {
+    height: center ? Cesium.Cartesian3.distance(viewer.camera.position, center) : carto.height,
   });
   updateTopDownButton(is2D);
 }
