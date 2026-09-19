@@ -4,7 +4,22 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
-## [Unreleased]
+## [4.6.0] - 2026-09-20
+
+### Added
+
+- AIプラグイン生成（自己拡張）：チャットからの指示で Gemini がプラグインコード（ESモジュール）を生成し、IndexedDB のストレージプラグインとして保存・即時有効化する `savePlugin` ツールを追加。適用前にコード全文を表示する確認ダイアログを挟み、読み込みエラーは `lastError` として保存・AIへ返却するため getPluginCode→修正→再保存の自律ループが可能
+- ストレージプラグイン管理：Google → エージェント タブに管理画面を追加（一覧・有効/無効・コード確認・`.kasp` 出力/取込・削除）。`.kasp` は manifest+code を1ファイルにまとめたJSON形式で、公開せず特定ユーザーへの配布にも使える
+- プラグインライフサイクル：plugin-loader.js が起動時に有効なストレージプラグインを Blob URL 経由で読み込み、更新・無効化時はプラグイン宣言レイヤーを除去して再 init する再読み込みを実装
+- データ取得・加工・表示ツール：`fetchData`（外部URL取得・CORS前提・約400KB打切り）、`getLayerGeoJson`（読込済みレイヤーの entity→GeoJSON 逆変換）、`addDataLayer`/`removeDataLayer`（インラインGeoJSONの一時レイヤー。simplestyle 属性で色分け・ポップアップ制御可。.kasc エクスポート対象外で applyInspector 後も存続）
+- `listPlugins` / `getPluginCode` / `removePlugin` / `setPluginEnabled` ツールを追加し、チャットの systemInstruction に自己拡張とデータ加工の手順を追記（全8言語）
+- IndexedDB "kasugai-canvas" を v3 にバージョンアップし `plugins` ストアを追加
+- セキュリティ：サンドボックス（runCode）からのプラグイン書き込み系 API をブロック対象に追加
+- 能力ティア構造：AI機能を static（静的配信のみ）/ workers（Cloudflare公開）/ local（ローカルRust）の3ティアに分け、影響範囲がセッション内に閉じる機能のみ公開環境に提供する方針を `AGENTS.md` に明文化。フロントは `GET /api/capabilities` でバックエンド能力を検出しツール・UI を出し分ける
+- ローカルサーバー API：`/api/capabilities`（tier/features 通知）、`/api/fetch`（CORS回避のGETプロキシ・30秒タイムアウト・20MB上限）、`POST /api/plugins`・`DELETE /api/plugins/{id}`（PLUGIN/ 書込み・plugins.json 更新。ID検証でパストラバーサル防止）
+- `publishPlugin` ツールとエージェントパネルの「公開」ボタン：IndexedDB のストレージプラグインを配布用 `PLUGIN/` へ昇格（ローカル版のみ表示・確認ダイアログ必須）
+- `fetchData` はローカル版で `/api/fetch` プロキシを優先利用し CORS 制約を回避
+- Rust サーバー：環境変数 `PORT` 指定時は `0.0.0.0` にバインド（Cloud Run 等のコンテナ環境対応）、未設定時は従来通り `127.0.0.1`+`KASUGAI_CANVAS_PORT`（既定8510）
 
 ## [4.5.0] - 2026-09-20
 

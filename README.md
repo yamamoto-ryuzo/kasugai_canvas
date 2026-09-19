@@ -46,9 +46,25 @@ python run-workers.py    # Workers（control: 4・全ファイル認証ゲート
 
 設定手順の詳細は [home.html の V4 セクション](home.html#v4-auth) を参照してください。
 
+## ローカルサーバー API（オプション）
+
+Rust サーバーは静的配信に加えて、ローカル開発向けの高権限 API を提供します（公開環境の Pages/Workers では提供しません）。フロントエンドは `/api/capabilities` で能力を検出し、ツール・UI を出し分けます。
+
+| エンドポイント | 内容 |
+|---|---|
+| `GET /health` | 起動確認 |
+| `GET /api/capabilities` | ティア（`local`）と利用可能機能（features）を返す |
+| `GET /api/fetch?url=` | CORS 回避の GET プロキシ（http/https のみ・30秒・20MB 上限） |
+| `POST /api/plugins` | ストレージプラグインを `PLUGIN/<id>/` + `plugins.json` に書き込み公開 |
+| `DELETE /api/plugins/{id}` | 公開プラグインを削除 |
+| `GET/PUT /api/update/settings`・`GET /api/update/latest`・`POST /api/update/install` | 自動更新 |
+| `POST /api/shutdown` | アプリ終了 |
+
+ポートは環境変数 `KASUGAI_CANVAS_PORT`（既定 `8510`）で変更可能。`PORT` が設定されたコンテナ環境では `0.0.0.0` にバインドします。
+
 ## バージョン管理
 
-現在のバージョンは **4.5.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **4.6.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 

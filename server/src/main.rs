@@ -14,9 +14,8 @@ use tokio::sync::Notify;
 use tower_http::services::ServeDir;
 
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
-const LATEST_JSON_URLS: [&str; 1] = [
-    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/latest.json",
-];
+const LATEST_JSON_URLS: [&str; 1] =
+    ["https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/latest.json"];
 const REPOSITORY_DOWNLOAD_URL: &str =
     "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip";
 
@@ -42,6 +41,19 @@ struct AppState {
     update_config_path: Arc<PathBuf>,
     shutdown: Arc<Notify>,
     port: u16,
+    web_dir: Arc<PathBuf>,
+}
+
+// /api/fetch の上限とタイムアウト
+const FETCH_MAX_BYTES: usize = 20 * 1024 * 1024;
+const FETCH_TIMEOUT_SECS: u64 = 30;
+// プラグインIDはファイル名・plugins.json の双方に使うため厳密に制限する
+fn is_valid_plugin_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 async fn health(State(state): State<AppState>) -> Json<Value> {
@@ -97,6 +109,164 @@ async fn fetch_latest() -> Result<Value, (StatusCode, String)> {
 
 async fn update_latest() -> Result<Json<Value>, (StatusCode, String)> {
     Ok(Json(fetch_latest().await?))
+}
+
+// バックエンドの能力を返す。フロントはこれで tier(local/workers/static)と
+// 利用可能機能を判別し、ツール定義・UI を出し分ける
+async fn capabilities() -> Json<Value> {
+    Json(json!({
+        "tier": "local",
+        "name": "kasugai_canvas",
+        "version": env!("CARGO_PKG_VERSION"),
+        "features": ["fetchProxy", "pluginWrite", "update", "shutdown"]
+    }))
+}
+
+#[derive(Deserialize)]
+struct FetchQuery {
+    url: String,
+}
+
+// CORS 非対応の外部データを取り込むための GET プロキシ。
+// ローカルサーバー(127.0.0.1バインド)前提の機能で、呼び出し元はこのPCのブラウザのみ
+async fn fetch_proxy(
+    axum::extract::Query(query): axum::extract::Query<FetchQuery>,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let url = reqwest::Url::parse(&query.url)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "URLが不正です".to_string()))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "http/https のみ取得できます".to_string(),
+        ));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
+        .build()
+        .map_err(internal_error)?;
+    let response = client.get(url).send().await.map_err(internal_error)?;
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream")
+        .to_string();
+    let bytes = response.bytes().await.map_err(internal_error)?;
+    if bytes.len() > FETCH_MAX_BYTES {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "取得データが上限を超えています".to_string(),
+        ));
+    }
+    Ok(axum::response::Response::builder()
+        .status(status)
+        .header(axum::http::header::CONTENT_TYPE, content_type)
+        .body(axum::body::Body::from(bytes))
+        .map_err(internal_error)?)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginSaveRequest {
+    id: String,
+    name: Option<String>,
+    version: Option<String>,
+    description: Option<String>,
+    layer: Option<Value>,
+    code: String,
+}
+
+// plugins.json の plugins 配列を更新する（同 id は置き換え、remove=true で削除）
+fn update_plugins_json(
+    web_dir: &PathBuf,
+    id: &str,
+    entry: Option<Value>,
+) -> Result<(), (StatusCode, String)> {
+    let path = web_dir.join("plugins.json");
+    let mut doc: Value = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_else(|| json!({ "version": "1.0.0", "plugins": [] }));
+    let plugins = doc
+        .pointer_mut("/plugins")
+        .and_then(Value::as_array_mut)
+        .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "plugins.json の形式が不正です".to_string(),
+        ))?;
+    plugins.retain(|p| p.get("id").and_then(Value::as_str) != Some(id));
+    if let Some(entry) = entry {
+        plugins.push(entry);
+    }
+    let text = serde_json::to_string_pretty(&doc).map_err(internal_error)?;
+    std::fs::write(&path, text).map_err(internal_error)
+}
+
+// AI生成・ユーザー取込みのストレージプラグインを配布用 PLUGIN/ へ昇格させる。
+// 実ファイルを書き換える破壊的操作のため、フロント側では確認ダイアログ必須とする
+async fn save_plugin(
+    State(state): State<AppState>,
+    Json(request): Json<PluginSaveRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if !is_valid_plugin_id(&request.id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "プラグインIDは半角英数・-・_ のみ使用できます".to_string(),
+        ));
+    }
+    if request.code.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "code が空です".to_string()));
+    }
+    let plugin_dir = state.web_dir.join("PLUGIN").join(&request.id);
+    tokio::fs::create_dir_all(&plugin_dir)
+        .await
+        .map_err(internal_error)?;
+    tokio::fs::write(plugin_dir.join("plugin.js"), &request.code)
+        .await
+        .map_err(internal_error)?;
+    let manifest = json!({
+        "id": request.id,
+        "name": request.name.clone().unwrap_or_else(|| request.id.clone()),
+        "version": request.version.clone().unwrap_or_else(|| "0.1.0".to_string()),
+        "description": request.description.clone().unwrap_or_default(),
+    });
+    let manifest_text = serde_json::to_string_pretty(&manifest).map_err(internal_error)?;
+    tokio::fs::write(plugin_dir.join("manifest.json"), manifest_text)
+        .await
+        .map_err(internal_error)?;
+
+    let mut entry = json!({
+        "id": request.id,
+        "name": request.name.unwrap_or_else(|| request.id.clone()),
+        "version": request.version.unwrap_or_else(|| "0.1.0".to_string()),
+        "url": format!("./PLUGIN/{}/plugin.js", request.id),
+    });
+    if let Some(layer) = request.layer {
+        entry["layer"] = layer;
+    }
+    update_plugins_json(&state.web_dir, &request.id, Some(entry))?;
+    Ok(Json(json!({ "ok": true, "id": request.id })))
+}
+
+async fn delete_plugin(
+    State(state): State<AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if !is_valid_plugin_id(&id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "プラグインIDが不正です".to_string(),
+        ));
+    }
+    let plugin_dir = state.web_dir.join("PLUGIN").join(&id);
+    if plugin_dir.exists() {
+        tokio::fs::remove_dir_all(&plugin_dir)
+            .await
+            .map_err(internal_error)?;
+    }
+    update_plugins_json(&state.web_dir, &id, None)?;
+    Ok(Json(json!({ "ok": true, "id": id })))
 }
 
 async fn request_shutdown(State(state): State<AppState>) -> StatusCode {
@@ -177,13 +347,10 @@ async fn install_update(
         ));
     }
 
-    let install_dir = current_exe
-        .parent()
-        .map(PathBuf::from)
-        .ok_or((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "インストール先ディレクトリを取得できません".to_string(),
-        ))?;
+    let install_dir = current_exe.parent().map(PathBuf::from).ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "インストール先ディレクトリを取得できません".to_string(),
+    ))?;
     let new_web_dir = extract_dir.join("web");
     let current_web_dir = install_dir.join("web");
 
@@ -231,7 +398,11 @@ fn open_browser(port: u16) {
     let _ = opener::open(&url);
 }
 
-fn resolve_dir(exe_dir: &Option<PathBuf>, name: &str, fallback: impl FnOnce() -> PathBuf) -> PathBuf {
+fn resolve_dir(
+    exe_dir: &Option<PathBuf>,
+    name: &str,
+    fallback: impl FnOnce() -> PathBuf,
+) -> PathBuf {
     if let Some(dir) = exe_dir {
         let candidate = dir.join(name);
         if candidate.exists() {
@@ -243,11 +414,24 @@ fn resolve_dir(exe_dir: &Option<PathBuf>, name: &str, fallback: impl FnOnce() ->
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let port = std::env::var("KASUGAI_CANVAS_PORT")
+    // Cloud Run 等のコンテナ環境は PORT が設定される。その場合は 0.0.0.0 で待ち受け、
+    // 未設定のローカル実行は従来通り localhost のみにバインドする
+    let cloud_port = std::env::var("PORT")
         .ok()
-        .and_then(|value| value.parse().ok())
+        .and_then(|value| value.parse().ok());
+    let port = cloud_port
+        .or_else(|| {
+            std::env::var("KASUGAI_CANVAS_PORT")
+                .ok()
+                .and_then(|value| value.parse().ok())
+        })
         .unwrap_or(8510);
-    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let host: [u8; 4] = if cloud_port.is_some() {
+        [0, 0, 0, 0]
+    } else {
+        [127, 0, 0, 1]
+    };
+    let address = SocketAddr::from((host, port));
 
     let open_browser_requested = std::env::args().any(|arg| arg == "--open-browser");
 
@@ -259,7 +443,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parent()
         .ok_or("Cargo manifest has no parent directory")?;
 
-    let executable_directory = exe_dir.as_ref().cloned().unwrap_or_else(|| repo_dir.to_path_buf());
+    let executable_directory = exe_dir
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| repo_dir.to_path_buf());
     let web_dir = resolve_dir(&exe_dir, "web", || repo_dir.join("web"));
     let projects_dir = resolve_dir(&exe_dir, "projects", || repo_dir.join("installer/projects"));
 
@@ -267,10 +454,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
         shutdown: Arc::new(Notify::new()),
         port,
+        web_dir: Arc::new(web_dir.clone()),
     };
 
     let app = Router::new()
         .route("/health", get(health))
+        .route("/api/capabilities", get(capabilities))
+        .route("/api/fetch", get(fetch_proxy))
+        .route("/api/plugins", post(save_plugin))
+        .route("/api/plugins/{id}", axum::routing::delete(delete_plugin))
         .route(
             "/api/update/settings",
             get(get_update_settings).put(put_update_settings),

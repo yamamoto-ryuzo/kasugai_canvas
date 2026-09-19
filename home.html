@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.5.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.6.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -267,7 +267,7 @@ web/PLUGIN/auth-local/auth.js</code></pre>
 
       <section>
         <h2>� V5.【開発中:ﾊｯｶｿﾝ】Google 連携（v5.0 へ向けた主要機能）</h2>
-        <p>トップレベルの「Google」タブ（設定の右）に Google 関連機能を集約しています。Gemini による AI チャットと Google Maps Platform の地図機能を、このタブのサブタブ（Gemini / Map）から設定します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v5.0 をリリースする予定です。</strong></p>
+        <p>トップレベルの「Google」タブ（設定の右）に Google 関連機能を集約しています。Gemini による AI チャットと Google Maps Platform の地図機能を、このタブのサブタブ（Gemini / Map / エージェント）から設定・管理します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v5.0 をリリースする予定です。</strong></p>
         <div class="features">
           <div class="feature-card">
             <h3>🤖 AIチャット（Gemini）</h3>
@@ -301,6 +301,37 @@ web/PLUGIN/auth-local/auth.js</code></pre>
             <h3>🤝 エージェント連携方針</h3>
             <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します</p>
           </div>
+          <div class="feature-card">
+            <h3>🧩 AIプラグイン生成（自己拡張）</h3>
+            <p>チャットに「〜するプラグインを作って」と頼むと、AIがコードを生成してブラウザ内 IndexedDB に保存・即時有効化。適用前にコード全文の確認ダイアログが出ます。読み込みエラーはAIへ返るため、修正→再保存の自律ループが回ります。Google → エージェント タブで一覧・有効化・コード確認・<code>.kasp</code> 出力/取込・削除が可能。ストレージ保存のため配布物とは分離され、気に入ったものだけ <code>PLUGIN/</code> に登録して公開できます</p>
+          </div>
+          <div class="feature-card">
+            <h3>📊 データ取得・加工・表示パイプライン</h3>
+            <p><code>fetchData</code>（外部URL取得・CORS前提）と <code>getLayerGeoJson</code>（読込済みレイヤーのGeoJSON取り出し）でデータを取得し、<code>runCode</code> で任意の加工・集計・変換を行い、<code>addDataLayer</code> で GeoJSON を直接レイヤー表示。feature の properties に simplestyle 属性（marker-color/fill/stroke/description 等）を書けば色分け・ポップアップも制御できます。一時レイヤーは .kasc には含まれません</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌐 実行環境ティア（公開/ローカルの使い分け）</h3>
+            <p>AI機能は操作の影響範囲で3ティアに分かれます。<strong>static</strong>（静的配信のみ）と <strong>workers</strong>（Cloudflare Pages/Workers 公開環境）では、セッション内に閉じる安全な機能（地図操作・runCode・データ加工・IndexedDBプラグイン生成）を誰でも利用可能。<strong>local</strong>（ローカルサーバー版）では永続化・共有・システムに触れる高権限機能（<code>/api/fetch</code> によるCORS回避の取得プロキシ、<code>/api/plugins</code> による PLUGIN/ へのプラグイン公開、ファイル保存）が使えます。フロントは <code>/api/capabilities</code> で能力を検出してツール・UIを出し分け、バックエンド無しでも安全機能のみで動作します。昇格ルートは「IndexedDB草稿 → .kasp出力 → ローカル版で公開ボタン → PLUGIN/」です</p>
+          </div>
+        </div>
+        <div class="url-box">
+          <h3>ローカルサーバー版の独自API（公開環境では無効）</h3>
+          <pre><code>GET  /api/capabilities   → {"tier":"local","features":["fetchProxy","pluginWrite",...]}
+GET  /api/fetch?url=...  → CORS回避のGETプロキシ（http/httpsのみ・30秒・20MB上限）
+POST /api/plugins        → {"id","name","version","description","layer","code"}
+                           PLUGIN/&lt;id&gt;/plugin.js・manifest.json を作成し plugins.json に登録
+DELETE /api/plugins/{id} → プラグインの公開取り消し（PLUGIN/&lt;id&gt;/ と plugins.json 登録を削除）</code></pre>
+          <p>プラグインIDは半角英数・<code>-</code>・<code>_</code> のみ（64文字まで）。公開・削除は実ファイルを書き換えるため、フロント側では必ず確認ダイアログが出ます。公開環境（Pages/Workers）に同等の無認証書き込みAPIを置かないでください。</p>
+        </div>
+        <div class="url-box">
+          <h3>未実装・今後の検討項目</h3>
+          <ul>
+            <li><strong>Workers 側の AI/fetch プロキシ</strong>：Gemini キーを Workers のシークレットに置き、キー未設定の訪問者でもAIを試せる公開プロキシ（レート制限付き）は未実装。現在はどの環境でも Gemini キーのBYOが必要です</li>
+            <li><strong>Workers の共有書き込み</strong>：共有 .kasc カタログ・共有プラグインカタログへの書き込みは認証・承認フローが前提で未実装</li>
+            <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止）</li>
+            <li><strong>ローカルファイル連携</strong>：DATA/ フォルダ書き込み・File System Access 連携・QGIS/GDAL 呼び出しは未実装</li>
+            <li><strong>Cloud Run 対応</strong>：<code>PORT</code> 環境変数での <code>0.0.0.0</code> バインドのみ対応済み。Dockerfile・コンテナビルド手順は未整備（永続化には別途ストレージ設計が必要）</li>
+          </ul>
         </div>
       </section>
 

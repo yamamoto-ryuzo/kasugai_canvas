@@ -97,10 +97,78 @@ const vectorDataSources = [];
 // レイヤー行の📍フォーカス用: レイヤーID→実行時オブジェクト(ImageryLayer/Tileset/DataSource/Primitive)。
 // refreshLayers() のたびに再登録される
 const layerRuntimeTargets = new Map();
+// IndexedDB "kasugai-canvas": handles(保存先フォルダ) / routes(描画ルート) / plugins(AI生成プラグイン)
+function openAppDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("kasugai-canvas", 3);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      for (const name of ["handles", "routes", "plugins"]) {
+        if (!db.objectStoreNames.contains(name)) db.createObjectStore(name);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+// AI/ユーザー生成プラグインの保存先。配布物(PLUGIN/・plugins.json)とは分離された
+// ブラウザローカルの開発領域。レコードは {id,name,version,description,layer,code,enabled,updatedAt,lastError}
+const pluginStore = {
+  async list() {
+    try {
+      const db = await openAppDb();
+      return await new Promise(resolve => {
+        const query = db.transaction("plugins", "readonly").objectStore("plugins").getAll();
+        query.onsuccess = () => resolve(query.result || []);
+        query.onerror = () => resolve([]);
+      });
+    } catch (e) { return []; }
+  },
+  async get(id) {
+    try {
+      const db = await openAppDb();
+      return await new Promise(resolve => {
+        const query = db.transaction("plugins", "readonly").objectStore("plugins").get(id);
+        query.onsuccess = () => resolve(query.result ?? null);
+        query.onerror = () => resolve(null);
+      });
+    } catch (e) { return null; }
+  },
+  async put(record) {
+    const db = await openAppDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("plugins", "readwrite");
+      tx.objectStore("plugins").put(record, record.id);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async remove(id) {
+    const db = await openAppDb();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction("plugins", "readwrite");
+      tx.objectStore("plugins").delete(id);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  },
+  async setError(id, message) {
+    const record = await this.get(id);
+    if (!record) return;
+    record.lastError = message || "";
+    try { await this.put(record); } catch (e) {}
+  },
+};
+
 // プラグイン宣言レイヤー(plugins.json の layer 設定由来)。applyInspector で
 // layers/layerState/layerOrder がクリアされても再登録されるよう別リストで保持する
 const pluginLayers = [];
 let pluginLayerSeq = 0;
+// AI等が生成したインラインデータの一時レイヤー。inspectorテキストには書き込まず
+// (.kascエクスポートに含まれない)、applyInspector 後に末尾へ再登録する
+const dataLayers = [];
+let dataLayerSeq = 0;
 let vectorSearchData = null;
 const activePrimitives = [];
 const drapeTerrainSources = { dem: true, tiles3d: false };
@@ -132,6 +200,11 @@ let threeScene;
 let threeCamera;
 let threeModel;
 let backendEnabled = false;
+// バックエンドの能力。{tier:"local"|..., features:[...]}。static環境では null のまま
+let backendCapabilities = null;
+function hasBackendFeature(name) {
+  return !!backendCapabilities?.features?.includes(name);
+}
 
 function parseLayerTitle(title) {
   const parts = title.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
@@ -178,6 +251,13 @@ async function detectBackend() {
     if (response.ok) {
       const data = await response.json().catch(() => ({}));
       backendEnabled = data?.name === "kasugai_canvas";
+      if (backendEnabled) {
+        // 利用可能な機能（fetchプロキシ・プラグイン書込み等）を取得する
+        const caps = await fetch("./api/capabilities", { cache: "no-store" })
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null);
+        backendCapabilities = caps && caps.tier ? caps : null;
+      }
     }
   } catch {
     backendEnabled = false;
@@ -1661,6 +1741,12 @@ function applyInspector(text) {
     layerState.set(item.id, item);
     layerOrder.push(item.id);
   }
+  // インラインデータの一時レイヤーも同様に再登録する
+  for (const item of dataLayers) {
+    layers.push(item);
+    layerState.set(item.id, item);
+    layerOrder.push(item.id);
+  }
 
   syncGoogle3dTilesLayer();
   basemaps.splice(0, basemaps.length, ...parsedBasemaps);
@@ -2942,16 +3028,7 @@ function setupEvents() {
   // フォルダハンドルは IndexedDB に保持し、次回以降は権限確認のみで再利用する
   const dataDirStore = {
     open() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open("kasugai-canvas", 2);
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles");
-          if (!db.objectStoreNames.contains("routes")) db.createObjectStore("routes");
-        };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
+      return openAppDb();
     },
     async get(key) {
       try {
@@ -3405,6 +3482,172 @@ function setupEvents() {
   setupVectorSearch();
   setupChatPanel();
   setupGoogleSettings();
+  setupAgentPanel();
+}
+
+// Google → エージェントタブ: IndexedDB に保存した AI生成/取込プラグインの管理画面。
+// 同梱 PLUGIN/ とは分離されたブラウザローカルの開発領域を一覧・有効化・削除・入出力する
+function setupAgentPanel() {
+  const list = document.querySelector("#agent-plugin-list");
+  if (!list) return;
+  const status = document.querySelector("#agent-status");
+  const fileInput = document.querySelector("#agent-import-file");
+  const setStatus = message => { if (status) status.textContent = message || ""; };
+
+  function downloadPlugin(record) {
+    const pkg = {
+      format: "kasugai-plugin/1",
+      id: record.id,
+      name: record.name,
+      version: record.version,
+      description: record.description,
+      layer: record.layer,
+      code: record.code,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(pkg, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${record.id}.kasp`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function render() {
+    if (!window.kasugaiApi?.listStoragePlugins) return;
+    const records = await window.kasugaiApi.listStoragePlugins();
+    list.replaceChildren();
+    if (!records.length) {
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = t("agent.empty");
+      list.append(empty);
+      return;
+    }
+    for (const record of records) {
+      const card = document.createElement("div");
+      card.style.cssText = "border:1px solid #dbe4e8;border-radius:6px;padding:8px;margin-bottom:8px;font-size:0.9em;";
+
+      const head = document.createElement("div");
+      head.style.cssText = "display:flex;align-items:center;gap:6px;";
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.checked = !!record.enabled;
+      toggle.title = t("agent.enabledTitle");
+      const title = document.createElement("strong");
+      title.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
+      title.textContent = `${record.name || record.id} (${record.id})`;
+      const exportBtn = document.createElement("button");
+      exportBtn.type = "button";
+      exportBtn.textContent = t("fly.export");
+      exportBtn.title = t("agent.exportTitle");
+      // PLUGIN/ への公開はローカルサーバー版のみ（静的/Workers環境では非表示）
+      const publishBtn = hasBackendFeature("pluginWrite") ? document.createElement("button") : null;
+      if (publishBtn) {
+        publishBtn.type = "button";
+        publishBtn.textContent = t("agent.publish");
+        publishBtn.title = t("agent.publishTitle");
+      }
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.textContent = t("fly.delete");
+      deleteBtn.title = t("agent.deleteTitle");
+      head.append(toggle, title, exportBtn);
+      if (publishBtn) head.append(publishBtn);
+      head.append(deleteBtn);
+      card.append(head);
+
+      const meta = document.createElement("div");
+      meta.style.cssText = "font-size:0.8em;color:#71818d;margin-top:2px;";
+      meta.textContent = t("agent.updated", { time: record.updatedAt ? new Date(record.updatedAt).toLocaleString() : "-" });
+      card.append(meta);
+
+      if (record.lastError) {
+        const error = document.createElement("div");
+        error.style.cssText = "font-size:0.8em;color:#a82020;margin-top:2px;white-space:pre-wrap;word-break:break-all;";
+        error.textContent = t("agent.lastError", { error: record.lastError });
+        card.append(error);
+      }
+
+      const details = document.createElement("details");
+      details.style.marginTop = "4px";
+      const summary = document.createElement("summary");
+      summary.style.cssText = "cursor:pointer;font-size:0.85em;";
+      summary.textContent = t("agent.code");
+      const pre = document.createElement("pre");
+      pre.style.cssText = "max-height:200px;overflow:auto;background:#f4f7f8;border:1px solid #dbe4e8;border-radius:4px;padding:6px;font-size:0.75em;white-space:pre-wrap;word-break:break-all;";
+      details.append(summary, pre);
+      card.append(details);
+
+      toggle.addEventListener("change", async () => {
+        await window.kasugaiApi.setStoragePluginEnabled(record.id, toggle.checked);
+        await render();
+      });
+      exportBtn.addEventListener("click", async () => {
+        const full = await window.kasugaiApi.getStoragePlugin(record.id);
+        if (full) downloadPlugin(full);
+      });
+      publishBtn?.addEventListener("click", async () => {
+        if (!window.confirm(t("agent.confirmPublish", { name: record.name || record.id }))) return;
+        const result = await window.kasugaiApi.publishStoragePlugin(record.id);
+        setStatus(result?.error
+          ? t("agent.publishFailed", { error: result.error })
+          : t("agent.published", { name: record.name || record.id }));
+      });
+      deleteBtn.addEventListener("click", async () => {
+        if (!window.confirm(t("agent.confirmDelete", { name: record.name || record.id }))) return;
+        await window.kasugaiApi.removeStoragePlugin(record.id);
+        setStatus(t("agent.deleted", { name: record.name || record.id }));
+      });
+      // コードは一覧に含めないため、開いた時点で取得する
+      details.addEventListener("toggle", async () => {
+        if (details.open && !pre.textContent) {
+          const full = await window.kasugaiApi.getStoragePlugin(record.id);
+          pre.textContent = full?.code || "";
+        }
+      });
+
+      list.append(card);
+    }
+  }
+
+  document.querySelector("#agent-refresh")?.addEventListener("click", () => void render());
+  document.querySelector("#agent-import")?.addEventListener("click", () => fileInput?.click());
+  fileInput?.addEventListener("change", async () => {
+    const files = [...(fileInput.files || [])];
+    fileInput.value = "";
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        let record;
+        if (/\.js$/i.test(file.name)) {
+          const id = file.name.replace(/\.js$/i, "");
+          record = { id, name: id, code: text, enabled: true };
+        } else {
+          const pkg = JSON.parse(text);
+          record = { id: pkg.id, name: pkg.name, version: pkg.version, description: pkg.description, layer: pkg.layer, code: pkg.code, enabled: true };
+        }
+        if (!record.id || typeof record.code !== "string" || !record.code) throw new Error(t("agent.invalidFile"));
+        // 取込コードも適用前に全文確認する
+        if (!(await confirmPluginApply(record))) continue;
+        const result = await window.kasugaiApi.saveStoragePlugin(record);
+        setStatus(result?.loadError ? t("agent.savedWithError", { error: result.loadError }) : t("agent.imported", { name: record.name || record.id }));
+      } catch (error) {
+        setStatus(t("agent.importFailed", { error: error instanceof Error ? error.message : error }));
+      }
+    }
+  });
+
+  // kasugaiApi はこのモジュール評価中に定義されるため、購読登録は次のタスクへ遅延する
+  setTimeout(() => {
+    const start = () => {
+      window.kasugaiApi.on("storage-plugins-changed", () => void render());
+      void render();
+    };
+    if (window.kasugaiApi?.isReady) start();
+    else window.kasugaiApi?.on("ready", start);
+  });
 }
 
 // Google APIキー未設定時はチャットパネルを表示しない。設定保存時に再評価する
@@ -4125,6 +4368,97 @@ function findPluginLayer(idOrPluginId) {
   return pluginLayers.find(item => item.id === idOrPluginId || item.pluginId === idOrPluginId) || null;
 }
 
+// インラインGeoJSONの一時レイヤー(AIのデータ加工結果の表示用)。
+// inspectorテキストには含まれないため .kasc エクスポート対象外で、
+// applyInspector 後に dataLayers から再登録されて存続する
+async function registerDataLayer(title, geojson) {
+  const item = {
+    id: `data-${++dataLayerSeq}`,
+    title: title || `Data ${dataLayerSeq}`,
+    type: "geojson",
+    visible: true,
+    group: "",
+    data: geojson,
+    ephemeral: true,
+  };
+  dataLayers.push(item);
+  layers.push(item);
+  layerState.set(item.id, item);
+  layerOrder.push(item.id);
+  renderLayerList();
+  await refreshLayers();
+  return item;
+}
+
+async function unregisterDataLayer(idOrTitle) {
+  const item = dataLayers.find(entry => entry.id === idOrTitle || entry.title === idOrTitle);
+  if (!item) return false;
+  dataLayers.splice(dataLayers.indexOf(item), 1);
+  const orderIndex = layerOrder.indexOf(item.id);
+  if (orderIndex >= 0) layerOrder.splice(orderIndex, 1);
+  layerState.delete(item.id);
+  const layerIndex = layers.indexOf(item);
+  if (layerIndex >= 0) layers.splice(layerIndex, 1);
+  renderLayerList();
+  await refreshLayers();
+  return true;
+}
+
+// DataSource の entity を GeoJSON FeatureCollection に戻す。
+// AI が読み込み済みレイヤーのデータを取得・加工するための出口
+function entitiesToGeoJson(ds) {
+  const time = viewer.clock && viewer.clock.currentTime;
+  const toLngLat = position => {
+    const c = Cesium.Cartographic.fromCartesian(position);
+    const h = Math.round(c.height * 100) / 100;
+    return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude), h];
+  };
+  const features = [];
+  for (const entity of ds.entities.values) {
+    let geometry = null;
+    try {
+      if (entity.polygon?.hierarchy) {
+        const hierarchy = entity.polygon.hierarchy.getValue(time);
+        const positions = Array.isArray(hierarchy) ? hierarchy : (hierarchy?.positions || []);
+        if (positions.length >= 3) {
+          const ring = positions.map(toLngLat);
+          ring.push([...ring[0]]);
+          geometry = { type: "Polygon", coordinates: [ring] };
+        }
+      }
+      if (!geometry && entity.polyline?.positions) {
+        const positions = entity.polyline.positions.getValue(time) || [];
+        if (positions.length >= 2) geometry = { type: "LineString", coordinates: positions.map(toLngLat) };
+      }
+      if (!geometry && entity.position) {
+        const position = entity.position.getValue(time);
+        if (position) geometry = { type: "Point", coordinates: toLngLat(position) };
+      }
+    } catch (e) { /* ignore */ }
+    if (!geometry) continue;
+    let properties = {};
+    try {
+      const bag = entity.properties?.getValue ? entity.properties.getValue(time) : entity.properties;
+      if (bag && typeof bag === "object") properties = { ...bag };
+    } catch (e) { /* ignore */ }
+    if (entity.name && properties.name == null) properties.name = entity.name;
+    features.push({ type: "Feature", geometry, properties });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+// レイヤ名/IDから GeoJSON を取り出す。インラインデータはそのまま返し、
+// URL由来のレイヤーはロード済み DataSource を entity→GeoJSON 変換して返す
+function getLayerGeoJson(idOrTitle) {
+  const item = getOrderedLayerItems().find(layer => layer.id === idOrTitle || layer.title === idOrTitle);
+  if (!item) return null;
+  if (item.data && typeof item.data === "object") return item.data;
+  const entry = vectorDataSources.find(source => source.id === item.id);
+  const ds = entry?.ds || item.dataSource || null;
+  if (!ds) return null;
+  return entitiesToGeoJson(ds);
+}
+
 window.kasugaiApi = {
   flyTo,
   getCamera() {
@@ -4396,6 +4730,125 @@ window.kasugaiApi = {
     await refreshLayers();
     return true;
   },
+  // 外部URLからテキスト/JSON/CSV等を取得する。
+  // ローカルサーバー版では /api/fetch プロキシ経由（CORS不要）・それ以外は直接fetch（CORS前提）
+  async fetchData(url, { maxChars = 400000 } = {}) {
+    const target = String(url || "");
+    if (!/^https?:\/\//i.test(target)) throw new Error(t("error.invalidUrl"));
+    const fetchUrl = hasBackendFeature("fetchProxy")
+      ? `/api/fetch?url=${encodeURIComponent(target)}`
+      : target;
+    const response = await fetch(fetchUrl, hasBackendFeature("fetchProxy") ? {} : { mode: "cors" });
+    const contentType = response.headers.get("content-type") || "";
+    const text = await response.text();
+    return { status: response.status, contentType, truncated: text.length > maxChars, text: text.slice(0, maxChars) };
+  },
+  // 読み込み済みレイヤーの地物を GeoJSON で返す（データ加工の入力用）
+  getLayerGeoJson(idOrTitle) {
+    return getLayerGeoJson(idOrTitle);
+  },
+  // GeoJSONオブジェクトを一時レイヤーとして直接表示する
+  async addDataLayer(title, geojson) {
+    if (!geojson || typeof geojson !== "object") return null;
+    const item = await registerDataLayer(title, geojson);
+    return { id: item.id, title: item.title };
+  },
+  async removeDataLayer(idOrTitle) {
+    return await unregisterDataLayer(idOrTitle);
+  },
+  // ---- ストレージプラグイン（IndexedDB・ブラウザローカル）----
+  async listStoragePlugins() {
+    return (await pluginStore.list()).map(({ code, ...meta }) => meta);
+  },
+  async getStoragePlugin(id) {
+    return await pluginStore.get(id);
+  },
+  async saveStoragePlugin(record) {
+    if (!record || typeof record.id !== "string" || !record.id.trim()) return { ok: false, error: "id is required" };
+    if (typeof record.code !== "string" || !record.code.trim()) return { ok: false, error: "code is required" };
+    const id = record.id.trim();
+    const prev = await pluginStore.get(id);
+    const next = {
+      id,
+      name: String(record.name || prev?.name || id),
+      version: String(record.version || prev?.version || "0.1.0"),
+      description: String(record.description ?? prev?.description ?? ""),
+      layer: record.layer !== undefined ? record.layer : (prev?.layer ?? null),
+      code: record.code,
+      enabled: record.enabled !== undefined ? !!record.enabled : (prev?.enabled ?? true),
+      updatedAt: Date.now(),
+      lastError: "",
+    };
+    try {
+      await pluginStore.put(next);
+    } catch (error) {
+      return { ok: false, error: String(error && error.message || error) };
+    }
+    // 有効なら即時（再）読み込み。失敗理由は lastError に保存され呼び出し側にも返る
+    let loadResult = { ok: true, skipped: true };
+    if (next.enabled && window.kasugaiPluginLoader?.load) {
+      loadResult = await window.kasugaiPluginLoader.load(id);
+    }
+    this.emit("storage-plugins-changed", {});
+    return { ok: true, id, loaded: !!loadResult.ok && !loadResult.skipped, loadError: loadResult.error || null };
+  },
+  async removeStoragePlugin(id) {
+    const record = await pluginStore.get(id);
+    if (!record) return false;
+    try { await window.kasugaiPluginLoader?.unload(id); } catch (e) { /* ignore */ }
+    await pluginStore.remove(id);
+    this.emit("storage-plugins-changed", {});
+    return true;
+  },
+  async setStoragePluginEnabled(id, enabled) {
+    const record = await pluginStore.get(id);
+    if (!record) return false;
+    record.enabled = !!enabled;
+    record.updatedAt = Date.now();
+    await pluginStore.put(record);
+    if (enabled) {
+      await window.kasugaiPluginLoader?.load(id);
+    } else {
+      await window.kasugaiPluginLoader?.unload(id);
+    }
+    this.emit("storage-plugins-changed", {});
+    return true;
+  },
+  async setStoragePluginError(id, message) {
+    await pluginStore.setError(id, message);
+    this.emit("storage-plugins-changed", {});
+  },
+  getCapabilities() {
+    // バックエンドの能力情報。静的配信のみの環境では null
+    return backendCapabilities ? { ...backendCapabilities } : null;
+  },
+  // IndexedDBのストレージプラグインを配布用 PLUGIN/ へ昇格させる（ローカルサーバー版のみ）
+  async publishStoragePlugin(id) {
+    if (!hasBackendFeature("pluginWrite")) {
+      return { error: "pluginWrite はローカルサーバー版のみで利用できます" };
+    }
+    const record = await pluginStore.get(id);
+    if (!record) return { error: `plugin '${id}' not found` };
+    try {
+      const response = await fetch("/api/plugins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: record.id,
+          name: record.name,
+          version: record.version,
+          description: record.description,
+          layer: record.layer,
+          code: record.code,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) return { error: data.error || `publish failed (${response.status})` };
+      return { ok: true };
+    } catch (error) {
+      return { error: String(error && error.message || error) };
+    }
+  },
   getAuth() { return window.kasugaiAuth || null; },
 };
 
@@ -4450,6 +4903,42 @@ async function handleLocalChatCommand(text) {
     });
   }
   return null;
+}
+
+// AIが書き込むコードの適用前確認。コード全文を表示し、ユーザーが明示承認した場合のみ true。
+// ストレージプラグインは読み込まれると kasugaiApi へフルアクセスできるため必須のガード
+function confirmPluginApply({ id, name, code }) {
+  return new Promise(resolve => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;";
+    const panel = document.createElement("div");
+    panel.style.cssText = "background:#fff;color:#1d2b35;max-width:720px;width:90%;max-height:80vh;display:flex;flex-direction:column;border-radius:8px;padding:16px;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,0.3);";
+    const title = document.createElement("strong");
+    title.textContent = t("agent.approveTitle", { name: name || id });
+    const note = document.createElement("p");
+    note.style.cssText = "margin:0;font-size:0.85em;color:#52636d;";
+    note.textContent = t("agent.approveNote");
+    const pre = document.createElement("pre");
+    pre.style.cssText = "flex:1;overflow:auto;background:#f4f7f8;border:1px solid #dbe4e8;border-radius:4px;padding:8px;font-size:0.78em;margin:0;white-space:pre-wrap;word-break:break-all;";
+    pre.textContent = code;
+    const buttons = document.createElement("div");
+    buttons.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = t("agent.cancel");
+    const apply = document.createElement("button");
+    apply.type = "button";
+    apply.textContent = t("agent.apply");
+    apply.style.cssText = "background:#2f7d8c;color:#fff;border:0;border-radius:4px;padding:6px 14px;";
+    const done = ok => { overlay.remove(); resolve(ok); };
+    cancel.addEventListener("click", () => done(false));
+    apply.addEventListener("click", () => done(true));
+    overlay.addEventListener("click", event => { if (event.target === overlay) done(false); });
+    buttons.append(cancel, apply);
+    panel.append(title, note, pre, buttons);
+    overlay.append(panel);
+    document.body.append(overlay);
+  });
 }
 
 // Gemini へ公開するツール定義。実行は window.kasugaiApi に委譲する
@@ -4718,10 +5207,127 @@ const CHAT_TOOLS = [{
       description: "アプリを停止する。確認ダイアログが出るのでユーザーが最終判断する。破壊的操作のためユーザーが明示した場合のみ使う",
       parameters: { type: "OBJECT", properties: {} },
     },
+    {
+      name: "savePlugin",
+      description: "KASUGAI Canvas の拡張機能(プラグイン)をブラウザ内ストレージに保存・有効化する自己拡張ツール。code は export async function init(api, manifest){} 形式のESモジュール。api は kasugaiApi で getCesium/getViewer/registerPluginLayer/getPluginDataSource/setPluginLayerData/addDataLayer/listLayers/flyTo/on(イベント) 等が使える。保存前にユーザーへコード確認ダイアログが出る。既存idは上書き更新になり再読み込みされる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "プラグインID(半角英数・ハイフン・アンダースコア)" },
+          name: { type: "STRING", description: "表示名" },
+          code: { type: "STRING", description: "プラグインのESモジュールコード全文" },
+          layer: { type: "OBJECT", description: "省略可。{title,group,format:\"entities\"|\"geojson\",visible,scope:\"app\"|\"project\"}。指定するとプラグイン専用レイヤーが自動登録され setPluginLayerData/getPluginDataSource で使える" },
+          enable: { type: "BOOLEAN", description: "省略時true。falseで保存のみ(読み込まない)" },
+        },
+        required: ["id", "code"],
+      },
+    },
+    {
+      name: "listPlugins",
+      description: "同梱プラグインと保存済みプラグインの一覧(id/name/source/enabled/lastError)を取得する",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "getPluginCode",
+      description: "保存済みプラグインのコードと設定を取得する。修正して savePlugin で再保存する修正ループに使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "プラグインID(listPluginsで確認)" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "removePlugin",
+      description: "保存済みプラグインを削除する。確認ダイアログが出るのでユーザーが最終判断する",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "プラグインID(listPluginsで確認)" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "setPluginEnabled",
+      description: "保存済みプラグインの有効/無効を切り替える",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "プラグインID(listPluginsで確認)" },
+          enabled: { type: "BOOLEAN" },
+        },
+        required: ["id", "enabled"],
+      },
+    },
+    {
+      name: "publishPlugin",
+      description: "保存済みプラグインを配布用 PLUGIN/ に書き込み全利用者に公開する(ローカルサーバー版のみ・取り消しは開発者作業)。確認ダイアログが出るのでユーザーが最終判断する",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "プラグインID(listPluginsで確認)" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "fetchData",
+      description: "外部URLからテキスト/JSON/CSV等のデータを取得する(CORS許可サイトのみ・約400KBで打切り)。取得データは runCode で加工し addDataLayer で表示できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          url: { type: "STRING", description: "取得するURL(http/https)" },
+        },
+        required: ["url"],
+      },
+    },
+    {
+      name: "getLayerGeoJson",
+      description: "読み込み済みレイヤーの地物をGeoJSONで取得する。属性検索より前にデータ全体が必要な時・変換加工の入力に使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名またはID(listLayersで確認)" },
+        },
+        required: ["name"],
+      },
+    },
+    {
+      name: "addDataLayer",
+      description: "GeoJSONオブジェクトを新規レイヤーとして直接表示する(URL不要の一時レイヤー・.kascには含まれない)。featureのpropertiesに simplestyle 属性(marker-color/marker-size/stroke/fill/fill-opacity/description等)を入れると色分け・ポップアップを制御できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING", description: "レイヤ名" },
+          geojson: { type: "OBJECT", description: "GeoJSON FeatureCollection オブジェクト" },
+        },
+        required: ["title", "geojson"],
+      },
+    },
+    {
+      name: "removeDataLayer",
+      description: "addDataLayerで追加した一時レイヤーを削除する",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名またはID" },
+        },
+        required: ["name"],
+      },
+    },
   ],
 }];
 
 const chatSystemInstruction = () => t("chat.systemInstruction");
+
+// バックエンドの能力に応じて公開するツールを絞る（公開環境に高権限ツールを見せない）
+function activeChatTools() {
+  const declarations = CHAT_TOOLS[0].functionDeclarations
+    .filter(d => d.name !== "publishPlugin" || hasBackendFeature("pluginWrite"));
+  return [{ functionDeclarations: declarations }];
+}
 
 // ブラウザ内コード実行サンドボックス。
 // sandbox属性(allow-scriptsのみ・opaque origin)のiframe内で実行するため、
@@ -4784,8 +5390,9 @@ function getChatSandbox() {
   return chatSandboxReady;
 }
 
-// サンドボックスへ公開しないAPI（キー等の機密を外部送信されるのを防ぐ）
-const CHAT_SANDBOX_BLOCKED_API = new Set(["getGoogleApiKey", "getGeminiModel", "applyInspector", "shutdownApp", "installUpdate"]);
+// サンドボックスへ公開しないAPI（キー等の機密を外部送信されるのを防ぐ。
+// プラグイン書き込み系は確認ダイアログを迂回できるためブロックする）
+const CHAT_SANDBOX_BLOCKED_API = new Set(["getGoogleApiKey", "getGeminiModel", "applyInspector", "shutdownApp", "installUpdate", "saveStoragePlugin", "removeStoragePlugin", "setStoragePluginEnabled", "setStoragePluginError", "publishStoragePlugin"]);
 
 // サンドボックスからの api.XXX 呼び出しを kasugaiApi に橋渡しする
 window.addEventListener("message", async event => {
@@ -4912,6 +5519,67 @@ async function executeChatTool(name, args = {}) {
   }
   if (name === "addGeoJsonLayer") return { ok: window.kasugaiApi.addGeoJsonLayer(args.title, args.url) };
   if (name === "shutdownApp") return { ok: window.kasugaiApi.shutdownApp() };
+  if (name === "savePlugin") {
+    // 生成コードの適用前にユーザーへ全文確認を取る（プラグインはフル権限で動くため）
+    const approved = await confirmPluginApply({ id: args.id, name: args.name, code: String(args.code || "") });
+    if (!approved) return { ok: false, message: t("agent.cancelled") };
+    return await window.kasugaiApi.saveStoragePlugin(args);
+  }
+  if (name === "listPlugins") {
+    const bundled = window.kasugaiApi.getPlugins().map(plugin => ({ id: plugin.id, name: plugin.name, source: "bundled" }));
+    const stored = await window.kasugaiApi.listStoragePlugins();
+    return { plugins: [...bundled, ...stored.map(plugin => ({ ...plugin, source: "storage" }))] };
+  }
+  if (name === "getPluginCode") {
+    const record = await window.kasugaiApi.getStoragePlugin(args.id);
+    if (!record) return { ok: false, message: t("tool.pluginNotFound", { name: args.id }) };
+    return { id: record.id, name: record.name, version: record.version, layer: record.layer, enabled: record.enabled, lastError: record.lastError || null, code: record.code };
+  }
+  if (name === "removePlugin") {
+    const record = await window.kasugaiApi.getStoragePlugin(args.id);
+    if (!record) return { ok: false, message: t("tool.pluginNotFound", { name: args.id }) };
+    if (!window.confirm(t("agent.confirmDelete", { name: record.name || record.id }))) return { ok: false, message: t("agent.cancelled") };
+    return { ok: await window.kasugaiApi.removeStoragePlugin(record.id) };
+  }
+  if (name === "setPluginEnabled") {
+    const ok = await window.kasugaiApi.setStoragePluginEnabled(args.id, args.enabled);
+    return { ok, message: ok ? undefined : t("tool.pluginNotFound", { name: args.id }) };
+  }
+  if (name === "publishPlugin") {
+    // PLUGIN/ への書き込みは全利用者への配布になるため必ず確認を取る
+    const record = await window.kasugaiApi.getStoragePlugin(args.id);
+    if (!record) return { ok: false, message: t("tool.pluginNotFound", { name: args.id }) };
+    if (!window.confirm(t("agent.confirmPublish", { name: record.name || record.id }))) {
+      return { ok: false, message: t("agent.cancelled") };
+    }
+    const result = await window.kasugaiApi.publishStoragePlugin(record.id);
+    if (result?.error) return { ok: false, message: result.error };
+    return { ok: true, message: t("agent.published", { name: record.name || record.id }) };
+  }
+  if (name === "fetchData") {
+    try {
+      return await window.kasugaiApi.fetchData(args.url);
+    } catch (error) {
+      return { ok: false, message: String(error && error.message || error) };
+    }
+  }
+  if (name === "getLayerGeoJson") {
+    const geojson = window.kasugaiApi.getLayerGeoJson(args.name);
+    if (!geojson) return { ok: false, message: t("tool.layerDataNotFound", { name: args.name }) };
+    const size = JSON.stringify(geojson).length;
+    if (size > 400000) {
+      return { ok: false, message: t("tool.dataTooLarge", { size, count: geojson.features?.length ?? 0 }) };
+    }
+    return { geojson };
+  }
+  if (name === "addDataLayer") {
+    const item = await window.kasugaiApi.addDataLayer(args.title, args.geojson);
+    return item ? { ok: true, id: item.id } : { ok: false, message: t("tool.invalidGeoJson") };
+  }
+  if (name === "removeDataLayer") {
+    const ok = await window.kasugaiApi.removeDataLayer(args.name);
+    return { ok, message: ok ? undefined : t("tool.layerNotFound", { name: args.name }) };
+  }
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 
@@ -4928,7 +5596,7 @@ async function callGemini(history) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: chatSystemInstruction() }] },
         contents: history,
-        tools: CHAT_TOOLS,
+        tools: activeChatTools(),
       }),
     });
     const data = await response.json();
