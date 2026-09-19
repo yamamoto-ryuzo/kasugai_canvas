@@ -46,7 +46,6 @@
 
         ID/PASS の設定先（環境変数）：
           本番：Cloudflare Pages ダッシュボード → 「環境変数」
-          ローカルテスト：リポジトリルートの .dev.vars（git 管理外）
         変数名：
           KASUGAI_AUTH_USER    = ユーザーID
           KASUGAI_AUTH_PASS    = パスワード
