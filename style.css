@@ -277,6 +277,14 @@ strong {
   text-decoration: none;
 }
 
+.demo-link.cloudflare {
+  background: linear-gradient(135deg, #f6821f 0%, #e06c00 100%);
+}
+
+.demo-link.cloudflare:hover {
+  box-shadow: 0 8px 20px rgba(246, 130, 31, 0.4);
+}
+
 .url-box {
   background: #f8f9fa;
   padding: 20px;
