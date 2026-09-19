@@ -1,4 +1,5 @@
 import { showLoginForm } from "../../auth-login-form.js";
+import { t } from "../../i18n.js";
 
 const EXPECTED_USER = "admin";
 const EXPECTED_SALT = "2tr4Cnrn5LXfo6fpf7ozNg==";
@@ -30,13 +31,13 @@ export async function authenticate() {
   return showLoginForm({
     onSubmit: async ({ user, pass }) => {
       if (user !== EXPECTED_USER) {
-        throw new Error("認証に失敗しました");
+        throw new Error(t("auth.failed"));
       }
       const salt = base64ToBuffer(EXPECTED_SALT);
       const hash = await deriveHash(user, pass, salt);
       const expected = base64ToBuffer(EXPECTED_HASH);
       if (hash.length !== expected.length || !hash.every((v, i) => v === expected[i])) {
-        throw new Error("認証に失敗しました");
+        throw new Error(t("auth.failed"));
       }
       return { token: "password", user: { name: user, role: "password" } };
     }

@@ -1,4 +1,5 @@
 import { showLoginForm } from "../../auth-login-form.js";
+import { t } from "../../i18n.js";
 
 function normalizeProjectId(id) {
   return String(id).toUpperCase().replace(/[^A-Z0-9]/g, "_");
@@ -58,7 +59,7 @@ export async function authenticate() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
-        throw new Error(data.error || "認証に失敗しました");
+        throw new Error(data.error || t("auth.failed"));
       }
       if (data.kasc && typeof data.kasc === "object") {
         patchFetch(data.kasc, data.token);

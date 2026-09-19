@@ -1,4 +1,8 @@
 import * as THREE from "three";
+import { initI18n, t, applyI18n, setLanguage, getLanguage, SUPPORTED_LANGUAGES, LANGUAGE_NAMES } from "./i18n.js";
+
+await initI18n();
+applyI18n();
 
 const Cesium = window.Cesium;
 
@@ -204,7 +208,7 @@ async function loadProjects() {
     const response = await fetch("./projects/projects.json", { cache: "no-store" });
     if (response.ok) definitions = await response.json();
   } catch {}
-  if (!definitions.length) definitions = [{ id: "default", title: "デフォルトプロジェクト" }];
+  if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
   const select = document.querySelector("#project-select");
   select.replaceChildren();
   definitions.forEach(project => {
@@ -230,17 +234,17 @@ async function loadInspectorConfig() {
         // KV に無いプロジェクトは静的 .kasc も内蔵デフォルトも使わず空で起動する
         document.querySelector("#inspector-input").value = "";
         applyInspector("");
-        setInspectorStatus("KV に .kasc が登録されていません。", true);
+        setInspectorStatus(t("inspector.status.noKasc"), true);
         return;
       }
       text = defaultConfig;
     }
     document.querySelector("#inspector-input").value = text;
     applyInspector(text);
-    setInspectorStatus("設定を読み込みました。");
+    setInspectorStatus(t("inspector.status.loaded"));
   } catch (error) {
     console.error("設定の読み込みに失敗しました。", error);
-    setInspectorStatus(`設定を読み込めません: ${error instanceof Error ? error.message : error}`, true);
+    setInspectorStatus(t("inspector.status.loadFailed", { error: error instanceof Error ? error.message : error }), true);
   }
 }
 
@@ -259,7 +263,7 @@ async function saveInspectorConfig() {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.ok) {
-    throw new Error(data.error || `保存に失敗しました (${res.status})`);
+    throw new Error(data.error || t("error.saveFailed", { status: res.status }));
   }
   auth.updateKasc?.(projectId, text);
 }
@@ -424,7 +428,7 @@ async function loadFlyGeoJson(url) {
     // IndexedDB の描画ルートを参照（fly_geojson: 名 | route:ルート名）
     const name = decodeURIComponent(url.slice(6));
     text = window._routeStoreGet ? await window._routeStoreGet(currentProjectId || "default", name) : null;
-    if (text == null) throw new Error(`描画ルートが見つかりません: ${name}`);
+    if (text == null) throw new Error(t("error.routeNotFound", { name }));
   } else {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -432,7 +436,7 @@ async function loadFlyGeoJson(url) {
   }
   const geojson = JSON.parse(text);
   const rawCoords = extractLineStringCoordinates(geojson);
-  if (!rawCoords.length) throw new Error("LineString または MultiLineString が見つかりません");
+  if (!rawCoords.length) throw new Error(t("error.noLineString"));
   return { ...buildFlyPath(rawCoords), properties: geojson.properties || {} };
 }
 
@@ -515,12 +519,12 @@ function renderBasemapSelector() {
   select.replaceChildren();
   const none = document.createElement("option");
   none.value = "";
-  none.textContent = "ベースマップなし";
+  none.textContent = t("basemap.none");
   none.selected = !globeHidden && !selectedBasemap;
   select.append(none);
   const hideGlobe = document.createElement("option");
   hideGlobe.value = "__hide_globe__";
-  hideGlobe.textContent = "ベースマップ透明";
+  hideGlobe.textContent = t("basemap.transparent");
   hideGlobe.selected = globeHidden;
   select.append(hideGlobe);
   basemaps.forEach(basemap => {
@@ -572,7 +576,7 @@ function renderLayerList() {
     const groupChecked = layers.some(layer => layer.visible);
     return `
     <section class="layer-group${group ? " grouped" : ""}${exclusive ? " exclusive" : ""}" data-group-key="${escapeHtml(groupKey)}">
-      ${group ? `<div class="layer-group-title" draggable="true"><button class="layer-group-toggle" type="button" aria-label="グループを展開・折りたたみ" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupInputId)}"` : ""} data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
+      ${group ? `<div class="layer-group-title" draggable="true"><button class="layer-group-toggle" type="button" aria-label="${t("layer.groupToggle")}" aria-expanded="${expandedLayerGroups.has(groupKey)}">${expandedLayerGroups.has(groupKey) ? "▾" : "▸"}</button><input id="${groupInputId}" class="layer-group-checkbox" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupInputId)}"` : ""} data-group-key="${escapeHtml(groupKey)}" ${groupChecked ? "checked" : ""}><label class="layer-group-label" for="${groupInputId}">${escapeHtml(group)}</label>${exclusive ? '<small class="exclusive-badge">Exclusive</small>' : ""}</div>` : ""}
       <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
@@ -738,7 +742,7 @@ function renderFlyPathSelect() {
   const select = document.querySelector("#fly-path-select");
   if (!select) return;
   const current = select.value;
-  select.innerHTML = '<option value="__manual__">手動</option>' +
+  select.innerHTML = '<option value="__manual__">' + escapeHtml(t("fly.manual")) + '</option>' +
     flyPaths.map((path, index) => `<option value="${index}">${escapeHtml(path.title)}</option>`).join("");
   const exists = [...select.options].some(option => option.value === current);
   select.value = exists ? current : "__manual__";
@@ -805,7 +809,7 @@ class GsiDemTerrainProvider {
     };
     this._tileCache = new Map();
     this.errorEvent = new Cesium.Event();
-    this.credit = new Cesium.Credit("出典：国土地理院(標高タイル)");
+    this.credit = new Cesium.Credit(t("credit.gsi"));
     this.ready = true;
   }
 
@@ -1175,22 +1179,22 @@ function updateVectorSearchUI() {
   const data = vectorSearchData;
   if (!layerSelect) return;
   const opts = (data && data.layerOptions) || [];
-  let html = '<option value="__all__">全選択</option>';
+  let html = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>';
   for (const o of opts) {
     html += '<option value="' + escapeHtml(String(o.id)) + '">' + escapeHtml(o.title || o.id) + '</option>';
   }
   layerSelect.innerHTML = html;
   layerSelect.disabled = (opts.length === 0);
   if (attrSelect) {
-    attrSelect.innerHTML = '<option value="__all__">全選択</option>';
+    attrSelect.innerHTML = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>';
     attrSelect.disabled = true;
   }
   if (valueSelect) {
-    valueSelect.innerHTML = '<option value="">値を選択</option>';
+    valueSelect.innerHTML = '<option value="">' + escapeHtml(t("vector.valuePlaceholder")) + '</option>';
     valueSelect.disabled = true;
   }
   if (flyBtn) flyBtn.disabled = true;
-  if (status) status.textContent = (data && data.all && data.all.attributes.length) ? (data.all.attributes.length + " 属性を読み込みました") : "属性付きベクトルがありません";
+  if (status) status.textContent = (data && data.all && data.all.attributes.length) ? t("vector.status.loaded", { count: data.all.attributes.length }) : t("vector.status.none");
   if (layerSelect && !layerSelect.disabled) {
     try { layerSelect.dispatchEvent(new Event("change")); } catch (e) {}
   }
@@ -1413,7 +1417,7 @@ async function loadInfoContent(url) {
     content.replaceChildren(...[...documentFragment.body.childNodes].map(node => document.importNode(node, true)));
     setupInfoTabs(content);
   } catch (error) {
-    if (requestId === infoRequestId) content.textContent = `INFOを読み込めません: ${error instanceof Error ? error.message : error}`;
+    if (requestId === infoRequestId) content.textContent = t("info.loadFailed", { error: error instanceof Error ? error.message : error });
   }
 }
 
@@ -1732,13 +1736,13 @@ function setupEvents() {
     const query = document.querySelector("#search-query").value.trim();
     const results = document.querySelector("#search-results");
     if (!query) {
-      results.innerHTML = '<li style="padding:8px;color:#71818d;">検索語を入力してください。</li>';
+      results.innerHTML = '<li style="padding:8px;color:#71818d;">' + escapeHtml(t("search.enterQuery")) + '</li>';
       return;
     }
-    results.innerHTML = '<li style="padding:8px;color:#71818d;">検索中...</li>';
+    results.innerHTML = '<li style="padding:8px;color:#71818d;">' + escapeHtml(t("search.searching")) + '</li>';
     try {
       const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
-      if (!response.ok) throw new Error(await response.text() || `検索に失敗しました (${response.status})`);
+      if (!response.ok) throw new Error(await response.text() || t("search.failedStatus", { status: response.status }));
       const data = await response.json();
       const items = data.map(item => ({
         title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
@@ -1748,7 +1752,7 @@ function setupEvents() {
       }));
       const validItems = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
       if (!validItems.length) {
-        results.innerHTML = '<li style="padding:8px;color:#71818d;">該当する結果がありません。</li>';
+        results.innerHTML = '<li style="padding:8px;color:#71818d;">' + escapeHtml(t("search.noResults")) + '</li>';
         return;
       }
       results.innerHTML = validItems.map((item, index) => `
@@ -1766,7 +1770,7 @@ function setupEvents() {
         });
       });
     } catch (error) {
-      results.innerHTML = `<li style="padding:8px;color:#a82020;">${escapeHtml(error instanceof Error ? error.message : "検索に失敗しました。")}</li>`;
+      results.innerHTML = `<li style="padding:8px;color:#a82020;">${escapeHtml(error instanceof Error ? error.message : t("search.failed"))}</li>`;
     }
   });
 
@@ -1856,15 +1860,15 @@ function setupEvents() {
     if (!normal) {
       activeClippingPlanes.planes = [];
       refreshLayers();
-      setClipStatus("クリッピングを解除しました。");
+      setClipStatus(t("clip.cleared"));
       return;
     }
     try {
       activeClippingPlanes.planes = [createClippingPlaneFromEnu(normal)];
       refreshLayers();
-      setClipStatus(`${type.toUpperCase()} 断面を適用しました。`);
+      setClipStatus(t("clip.applied", { type: type.toUpperCase() }));
     } catch (error) {
-      setClipStatus(`断面作成エラー: ${error.message}`, true);
+      setClipStatus(t("clip.error", { error: error.message }), true);
     }
   }
 
@@ -1915,19 +1919,19 @@ function setupEvents() {
     while (idx + 1 < flyPathCumulativeDistances.length && flyDistance >= flyPathCumulativeDistances[idx + 1]) idx++;
     const nextIdx = Math.min(idx + 1, path.length - 1);
     const segDist = (flyPathCumulativeDistances[nextIdx] - flyPathCumulativeDistances[idx]) || 1;
-    const t = (flyDistance - flyPathCumulativeDistances[idx]) / segDist;
+    const segT = (flyDistance - flyPathCumulativeDistances[idx]) / segDist;
     const a = path[idx];
     const b = path[nextIdx];
-    flyPathProgress = idx + t;
-    const lat = a.latitude + (b.latitude - a.latitude) * t;
-    const lng = a.longitude + (b.longitude - a.longitude) * t;
-    const alt = a.altitude + (b.altitude - a.altitude) * t;
-    const terrain = (a.terrain || 0) + ((b.terrain || 0) - (a.terrain || 0)) * t;
+    flyPathProgress = idx + segT;
+    const lat = a.latitude + (b.latitude - a.latitude) * segT;
+    const lng = a.longitude + (b.longitude - a.longitude) * segT;
+    const alt = a.altitude + (b.altitude - a.altitude) * segT;
+    const terrain = (a.terrain || 0) + ((b.terrain || 0) - (a.terrain || 0)) * segT;
     const height = alt + terrain + flyHeight;
     let heading = getBearing(a, b);
     if (nextIdx + 1 < path.length) {
       const nextBearing = getBearing(path[nextIdx], path[nextIdx + 1]);
-      const remaining = (1 - t) * segDist;
+      const remaining = (1 - segT) * segDist;
       const blendStart = Math.min(segDist, 100);
       const blend = remaining < blendStart ? 1 - (remaining / blendStart) : 0;
       heading = lerpBearing(heading, nextBearing, blend);
@@ -1946,7 +1950,7 @@ function setupEvents() {
 
     if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
     if (walkTerrainEl) walkTerrainEl.textContent = (alt + flyHeight).toFixed(1);
-    if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = "地上高（AGL）";
+    if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = t("walk.agl");
     if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
     if (walkPitchEl && document.activeElement !== walkPitchEl) walkPitchEl.value = (pitch * 180 / Math.PI).toFixed(1);
   }
@@ -2403,7 +2407,7 @@ function setupEvents() {
         });
         if (walkOffsetEl && document.activeElement !== walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
         if (walkTerrainEl) walkTerrainEl.textContent = terrainHeight.toFixed(1);
-        if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = "地形高";
+        if (walkTerrainLabelEl) walkTerrainLabelEl.textContent = t("walk.terrain");
         if (walkSpeedEl && document.activeElement !== walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
         if (walkPitchEl && document.activeElement !== walkPitchEl) walkPitchEl.value = (pitch * 180 / Math.PI).toFixed(1);
       }
@@ -2477,11 +2481,11 @@ function setupEvents() {
     const select = document.querySelector("#fly-path-select");
     if (!select || select.value === "__manual__" || !flyPathEntity) {
       flyPathVisibilityBtn.disabled = true;
-      flyPathVisibilityBtn.textContent = "非表示";
+      flyPathVisibilityBtn.textContent = t("fly.hide");
       return;
     }
     flyPathVisibilityBtn.disabled = false;
-    flyPathVisibilityBtn.textContent = flyPathEntity.show ? "表示" : "非表示";
+    flyPathVisibilityBtn.textContent = flyPathEntity.show ? t("fly.show") : t("fly.hide");
   }
   flyPathVisibilityBtn?.addEventListener("click", () => {
     if (flyPathEntity) {
@@ -2515,7 +2519,7 @@ function setupEvents() {
     const index = Number(select?.value);
     const path = Number.isInteger(index) && index >= 0 && index < flyPaths.length ? flyPaths[index] : null;
     if (!path?.drawn) return;
-    if (!window.confirm(`描画ルート「${path.title}」を削除しますか？`)) return;
+    if (!window.confirm(t("fly.confirmDelete", { name: path.title }))) return;
     if (flyPath === path) stopFlyPath();
     if (path.drawn.kind === "idb") {
       await routeStore.remove(currentProjectId || "default", path.drawn.name);
@@ -2541,7 +2545,7 @@ function setupEvents() {
     let lastName = null;
     for (const file of files) {
       const name = file.name.replace(/\.geojson$/i, "");
-      if (existingNames.has(name) && !window.confirm(`ルート「${name}」は既に存在します。上書きしますか？`)) continue;
+      if (existingNames.has(name) && !window.confirm(t("fly.confirmOverwrite", { name }))) continue;
       await routeStore.set(projectId, name, await file.text());
       existingNames.add(name);
       lastName = name;
@@ -2776,21 +2780,21 @@ function setupEvents() {
     const panel = document.querySelector(".control-panel");
     const collapsed = panel.classList.toggle("collapsed");
     event.currentTarget.textContent = collapsed ? "+" : "−";
-    event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    event.currentTarget.setAttribute("aria-label", collapsed ? t("common.expand") : t("common.minimize"));
   });
 
   document.querySelector("#basemap-toggle").addEventListener("click", event => {
     const control = document.querySelector(".basemap-control");
     const collapsed = control.classList.toggle("collapsed");
     event.currentTarget.textContent = collapsed ? "+" : "−";
-    event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    event.currentTarget.setAttribute("aria-label", collapsed ? t("common.expand") : t("common.minimize"));
   });
 
   document.querySelector("#navigation-toggle").addEventListener("click", event => {
     const toolbar = document.querySelector(".navigation-toolbar");
     const collapsed = toolbar.classList.toggle("collapsed");
     event.currentTarget.textContent = collapsed ? "+" : "−";
-    event.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    event.currentTarget.setAttribute("aria-label", collapsed ? t("common.expand") : t("common.minimize"));
   });
 
   [".control-panel", ".basemap-control", ".navigation-toolbar", ".chat-panel"].forEach(selector => {
@@ -2803,12 +2807,12 @@ function setupEvents() {
 
   document.querySelector("#apply-inspector").addEventListener("click", async () => {
     try {
-      setInspectorStatus("設定を保存しています。");
+      setInspectorStatus(t("inspector.status.saving"));
       await saveInspectorConfig();
       applyInspector(document.querySelector("#inspector-input").value);
-      setInspectorStatus("設定を保存しました。");
+      setInspectorStatus(t("inspector.status.saved"));
     } catch (error) {
-      setInspectorStatus(`設定を保存できません: ${error instanceof Error ? error.message : error}`, true);
+      setInspectorStatus(t("inspector.status.saveFailed", { error: error instanceof Error ? error.message : error }), true);
     }
   });
 
@@ -2823,7 +2827,7 @@ function setupEvents() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    setInspectorStatus(".kasc ファイルをエクスポートしました。");
+    setInspectorStatus(t("inspector.status.exported"));
   });
 
   // File System Access API: DATAフォルダへの直接保存(Chromium系のみ)。
@@ -2922,12 +2926,12 @@ function setupEvents() {
   async function updateDataDirLabel() {
     if (!dataDirName) return;
     if (!window.showDirectoryPicker) {
-      dataDirName.textContent = "このブラウザは未対応";
+      dataDirName.textContent = t("inspector.dataDir.unsupported");
       return;
     }
     if (dataDirHandle) { dataDirName.textContent = dataDirHandle.name; return; }
     const saved = await dataDirStore.get(dataDirKey());
-    dataDirName.textContent = saved ? `${saved.name} (要権限確認)` : "未設定";
+    dataDirName.textContent = saved ? t("inspector.dataDir.needsPermission", { name: saved.name }) : t("inspector.dataDir.unset");
   }
 
   async function pickDataDir() {
@@ -2999,16 +3003,16 @@ function setupEvents() {
 
   document.querySelector("#inspector-data-dir")?.addEventListener("click", async () => {
     if (!window.showDirectoryPicker) {
-      setInspectorStatus("このブラウザは File System Access API に未対応です。Chrome/Edge で開いてください。", true);
+      setInspectorStatus(t("inspector.status.fsUnsupported"), true);
       return;
     }
     try {
       await pickDataDir();
       await ensureDrawnRouteFlyPath();
-      setInspectorStatus("保存先フォルダを設定しました。");
+      setInspectorStatus(t("inspector.status.dirSet"));
     } catch (error) {
       if (error && error.name === "AbortError") return;
-      setInspectorStatus(`フォルダ選択に失敗しました: ${error instanceof Error ? error.message : error}`, true);
+      setInspectorStatus(t("inspector.status.dirFailed", { error: error instanceof Error ? error.message : error }), true);
     }
   });
   void updateDataDirLabel();
@@ -3022,10 +3026,10 @@ function setupEvents() {
     else params.delete("project");
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
     try {
-      setInspectorStatus("プロジェクトを読み込んでいます。");
+      setInspectorStatus(t("inspector.status.loadingProject"));
       await loadInspectorConfig();
     } catch (error) {
-      setInspectorStatus(`プロジェクトを読み込めません: ${error instanceof Error ? error.message : error}`, true);
+      setInspectorStatus(t("inspector.status.loadProjectFailed", { error: error instanceof Error ? error.message : error }), true);
     }
   });
 
@@ -3043,7 +3047,7 @@ function setupEvents() {
 
   document.querySelector("#shutdown-app").addEventListener("click", async () => {
     if (!backendEnabled) return;
-    if (!confirm("KASUGAI Canvasを停止しますか？")) return;
+    if (!confirm(t("app.confirmShutdown"))) return;
     await fetch("/api/shutdown", { method: "POST" });
   });
 
@@ -3057,8 +3061,29 @@ function setupEvents() {
 
   document.querySelector("#auto-update").addEventListener("change", () => {
     void saveUpdateSettings().catch(error => {
-      document.querySelector("#version-status").textContent = `自動更新設定の保存エラー: ${error.message}`;
+      document.querySelector("#version-status").textContent = t("update.autoSaveError", { error: error.message });
     });
+  });
+
+  const languageSelect = document.querySelector("#language-select");
+  if (languageSelect) {
+    languageSelect.replaceChildren(...SUPPORTED_LANGUAGES.map(code => {
+      const option = document.createElement("option");
+      option.value = code;
+      option.textContent = LANGUAGE_NAMES[code] || code;
+      return option;
+    }));
+    languageSelect.value = getLanguage();
+    languageSelect.addEventListener("change", () => { void setLanguage(languageSelect.value); });
+  }
+  window.addEventListener("kasugai:language-changed", () => {
+    renderBasemapSelector();
+    renderLayerList();
+    renderFlyPathSelect();
+    updateVectorSearchUI();
+    void loadProjects();
+    updateFlyPathVisibilityButton();
+    void updateDataDirLabel();
   });
 
   document.querySelectorAll(".panel-tab").forEach(tab => {
@@ -3092,7 +3117,7 @@ function setupEvents() {
     document.querySelectorAll(".plugin-panel").forEach(panel => panel.classList.toggle("active", panel.id === "attr-panel"));
 
     if (!picked) {
-      attr.textContent = "地物を選択すると属性を表示します。";
+      attr.textContent = t("attr.empty");
       return;
     }
 
@@ -3180,7 +3205,7 @@ function setupEvents() {
       return;
     }
 
-    attr.textContent = "選択した地物に属性情報がありません。";
+    attr.textContent = t("attr.noAttrs");
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
   let lastRightClick = 0;
@@ -3246,7 +3271,7 @@ function setupEvents() {
     walkHelpToggle.addEventListener("click", () => {
       const minimized = walkHelp.classList.toggle("minimized");
       walkHelpToggle.textContent = minimized ? "+" : "−";
-      walkHelpToggle.setAttribute("aria-label", minimized ? "展開" : "最小化");
+      walkHelpToggle.setAttribute("aria-label", minimized ? t("common.expand") : t("common.minimize"));
     });
   }
 
@@ -3294,9 +3319,9 @@ function setupGoogleSettings() {
       localStorage.setItem("googleApiKey", keyInput.value.trim());
       if (modelSelect) localStorage.setItem("googleGeminiModel", modelSelect.value);
       updateChatPanelVisibility();
-      if (status) status.textContent = "保存しました。";
+      if (status) status.textContent = t("common.saved");
     } catch (e) {
-      if (status) status.textContent = `保存エラー: ${e.message}`;
+      if (status) status.textContent = t("common.saveError", { error: e.message });
     }
   });
 
@@ -3312,14 +3337,14 @@ function setupGoogleSettings() {
   mapsSaveButton.addEventListener("click", () => {
     try {
       localStorage.setItem("googleMapsApiKey", mapsKeyInput.value.trim());
-      if (mapsStatus) mapsStatus.textContent = "保存しました。";
+      if (mapsStatus) mapsStatus.textContent = t("common.saved");
       if (layerState.has(GOOGLE_3DTILES_LAYER_ID)) {
         syncGoogle3dTilesLayer();
         renderLayerList();
         refreshLayers();
       }
     } catch (e) {
-      if (mapsStatus) mapsStatus.textContent = `保存エラー: ${e.message}`;
+      if (mapsStatus) mapsStatus.textContent = t("common.saveError", { error: e.message });
     }
   });
   tiles3dToggle?.addEventListener("change", () => {
@@ -3336,7 +3361,7 @@ function setupGoogleSettings() {
       const key = localStorage.getItem("googleMapsApiKey") || "";
       if (tiles3dToggle.checked && !key) {
         tiles3dToggle.checked = false;
-        if (mapsStatus) mapsStatus.textContent = "先に Maps API キーを保存してください。";
+        if (mapsStatus) mapsStatus.textContent = t("google.needKey");
         console.warn("[Google3dTiles] Maps API キーが未保存のため無効化しました");
         return;
       }
@@ -3347,11 +3372,11 @@ function setupGoogleSettings() {
       const added = layerState.has(GOOGLE_3DTILES_LAYER_ID);
       console.log(`[Google3dTiles] レイヤ一覧に存在: ${added}`);
       if (mapsStatus) mapsStatus.textContent = added
-        ? "レイヤに追加しました。Layers タブで表示を確認できます。"
-        : "レイヤから削除しました。";
+        ? t("google.tilesAdded")
+        : t("google.tilesRemoved");
     } catch (error) {
       console.error("[Google3dTiles] トグル処理でエラー:", error);
-      if (mapsStatus) mapsStatus.textContent = `エラー: ${error instanceof Error ? error.message : error}`;
+      if (mapsStatus) mapsStatus.textContent = t("common.error", { error: error instanceof Error ? error.message : error });
     }
   });
 }
@@ -3388,7 +3413,7 @@ function setupVectorSearch() {
             for (const val of values) {
               const haystack = (String(val) + " " + String(attr)).toLowerCase();
               if (haystack.includes(query)) {
-                const layerTitle = (layerId === "__all__") ? "全選択" : ((data.layers && data.layers[layerId] && data.layers[layerId].title) || layerId);
+                const layerTitle = (layerId === "__all__") ? t("common.all") : ((data.layers && data.layers[layerId] && data.layers[layerId].title) || layerId);
                 const pos = (source.featureByAttr && source.featureByAttr[attr] && source.featureByAttr[attr][val]) || null;
                 res.push({ layerId: (layerId === "__all__") ? "__all__" : layerId, layerTitle, attr, value: val, lat: pos ? pos.lat : null, lng: pos ? pos.lng : null });
               }
@@ -3397,7 +3422,7 @@ function setupVectorSearch() {
         } catch (e) {}
       }
       if (!res.length) {
-        vectorSearchResults.innerHTML = '<li style="padding:4px;color:#71818d;">該当なし</li>';
+        vectorSearchResults.innerHTML = '<li style="padding:4px;color:#71818d;">' + escapeHtml(t("vector.noMatch")) + '</li>';
         return;
       }
       vectorSearchResults.innerHTML = res.slice(0, 50).map((r, i) =>
@@ -3432,16 +3457,16 @@ function setupVectorSearch() {
         const source = getCurrentVectorSource();
         if (vectorAttr) {
           if (source && source.attributes && source.attributes.length) {
-            vectorAttr.innerHTML = '<option value="__all__">全選択</option>' + source.attributes.map(a => '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>').join("");
+            vectorAttr.innerHTML = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>' + source.attributes.map(a => '<option value="' + escapeHtml(a) + '">' + escapeHtml(a) + '</option>').join("");
             vectorAttr.disabled = false;
           } else {
-            vectorAttr.innerHTML = '<option value="__all__">全選択</option>';
+            vectorAttr.innerHTML = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>';
             vectorAttr.disabled = true;
           }
           vectorAttr.value = "__all__";
         }
         if (vectorValue) {
-          vectorValue.innerHTML = '<option value="">値を選択</option>';
+          vectorValue.innerHTML = '<option value="">' + escapeHtml(t("vector.valuePlaceholder")) + '</option>';
           vectorValue.disabled = true;
         }
         if (vectorFlyBtn) vectorFlyBtn.disabled = true;
@@ -3460,10 +3485,10 @@ function setupVectorSearch() {
         const attr = vectorAttr.value;
         if (vectorValue) {
           if (source && source.valuesByAttr && attr && attr !== "__all__" && Array.isArray(source.valuesByAttr[attr])) {
-            vectorValue.innerHTML = '<option value="">値を選択</option>' + source.valuesByAttr[attr].map(v => '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>').join("");
+            vectorValue.innerHTML = '<option value="">' + escapeHtml(t("vector.valuePlaceholder")) + '</option>' + source.valuesByAttr[attr].map(v => '<option value="' + escapeHtml(v) + '">' + escapeHtml(v) + '</option>').join("");
             vectorValue.disabled = false;
           } else {
-            vectorValue.innerHTML = '<option value="">値を選択</option>';
+            vectorValue.innerHTML = '<option value="">' + escapeHtml(t("vector.valuePlaceholder")) + '</option>';
             vectorValue.disabled = true;
           }
           vectorValue.value = "";
@@ -3496,7 +3521,7 @@ function setupVectorSearch() {
     vectorRefreshBtn.addEventListener("click", () => {
       try {
         const status = document.querySelector("#vector-search-status");
-        if (status) status.textContent = "読み込み中...";
+        if (status) status.textContent = t("common.loading");
         buildVectorSearchIndex();
         updateVectorSearchUI();
       } catch (e) { console.error("vector refresh error", e); }
@@ -3569,43 +3594,43 @@ function setupVectorSearch() {
         });
       }
       const displayRows = matched.slice(0, 1000);
-      const layerTitle = (vectorLayer && vectorLayer.value !== "__all__" && vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[vectorLayer.value] && vectorSearchData.layers[vectorLayer.value].title) ? vectorSearchData.layers[vectorLayer.value].title : "全選択";
-      vectorAttrWidgetTitle.textContent = "属性・値一覧" + (layerTitle ? " — " + layerTitle : "");
+      const layerTitle = (vectorLayer && vectorLayer.value !== "__all__" && vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[vectorLayer.value] && vectorSearchData.layers[vectorLayer.value].title) ? vectorSearchData.layers[vectorLayer.value].title : t("common.all");
+      vectorAttrWidgetTitle.textContent = t("vattr.title") + (layerTitle ? " — " + layerTitle : "");
       if (!vectorAttrWidgetAttributes.length) {
         if (vectorAttrWidgetHead) vectorAttrWidgetHead.innerHTML = "";
-        vectorAttrWidgetList.innerHTML = '<tr><td style="padding:12px 14px;color:#71818d;">レイヤを選択してください</td></tr>';
-        vectorAttrWidgetCount.textContent = "0 件 / 0 属性";
+        vectorAttrWidgetList.innerHTML = '<tr><td style="padding:12px 14px;color:#71818d;">' + escapeHtml(t("vattr.selectLayer")) + '</td></tr>';
+        vectorAttrWidgetCount.textContent = t("vattr.count", { matched: 0, attrs: 0 });
         return;
       }
       if (vectorAttrWidgetHead) {
         vectorAttrWidgetHead.innerHTML = '<tr>' + vectorAttrWidgetAttributes.map((attr, idx) => {
           const active = vectorAttrWidgetSort.column === idx;
           const marker = active ? (vectorAttrWidgetSort.order > 0 ? ' ▲' : ' ▼') : '';
-          return '<th data-idx="' + idx + '" title="クリックで並び替え"' + (active ? ' class="sorted"' : '') + '>' + escapeHtml(attr) + '<span class="sort-marker">' + marker + '</span></th>';
+          return '<th data-idx="' + idx + '" title="' + escapeHtml(t("vattr.sort")) + '"' + (active ? ' class="sorted"' : '') + '>' + escapeHtml(attr) + '<span class="sort-marker">' + marker + '</span></th>';
         }).join("") + '</tr>';
       }
       if (!displayRows.length) {
-        vectorAttrWidgetList.innerHTML = '<tr><td colspan="' + vectorAttrWidgetAttributes.length + '" style="padding:12px 14px;color:#71818d;">該当する地物がありません</td></tr>';
-        vectorAttrWidgetCount.textContent = (query ? "0" : String(vectorAttrWidgetRows.length)) + " 件 / " + vectorAttrWidgetAttributes.length + " 属性";
+        vectorAttrWidgetList.innerHTML = '<tr><td colspan="' + vectorAttrWidgetAttributes.length + '" style="padding:12px 14px;color:#71818d;">' + escapeHtml(t("vattr.noFeatures")) + '</td></tr>';
+        vectorAttrWidgetCount.textContent = t("vattr.count", { matched: query ? 0 : vectorAttrWidgetRows.length, attrs: vectorAttrWidgetAttributes.length });
         return;
       }
       vectorAttrWidgetList.innerHTML = displayRows.map(row => {
         const flyable = Number.isFinite(row.lat) && Number.isFinite(row.lng);
         const dataAttrs = flyable ? 'data-lat="' + row.lat + '" data-lng="' + row.lng + '"' : '';
         const style = flyable ? 'style="cursor:pointer;"' : '';
-        return '<tr class="vector-attr-widget-row" ' + dataAttrs + ' ' + style + ' title="' + (flyable ? 'クリックで移動' : '') + '">' +
+        return '<tr class="vector-attr-widget-row" ' + dataAttrs + ' ' + style + ' title="' + (flyable ? escapeHtml(t("vattr.clickToMove")) : '') + '">' +
           row.values.map(val => '<td class="vector-attr-widget-cell" title="' + escapeHtml(val) + '">' + escapeHtml(val) + '</td>').join("") +
           '</tr>';
       }).join("");
-      const suffix = (matched.length > displayRows.length) ? " （表示上限 " + displayRows.length + " 件）" : "";
-      vectorAttrWidgetCount.textContent = String(matched.length) + " 件 / " + vectorAttrWidgetAttributes.length + " 属性" + suffix;
+      const suffix = (matched.length > displayRows.length) ? t("vattr.limitSuffix", { count: displayRows.length }) : "";
+      vectorAttrWidgetCount.textContent = t("vattr.count", { matched: matched.length, attrs: vectorAttrWidgetAttributes.length }) + suffix;
     } catch (e) { console.error("vector attr widget render error", e); }
   }
 
   function updateVectorAttrWidgetLayerOptions(layerId) {
     if (!vectorAttrWidgetLayerSelect) return;
     const opts = (vectorSearchData && vectorSearchData.layerOptions) || [];
-    let html = '<option value="">レイヤを選択</option>';
+    let html = '<option value="">' + escapeHtml(t("vattr.layerTitle")) + '</option>';
     for (const o of opts) {
       html += '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.title || o.id) + '</option>';
     }
@@ -3644,6 +3669,13 @@ function setupVectorSearch() {
     });
   }
   if (vectorAttrWidgetClose) vectorAttrWidgetClose.addEventListener("click", closeVectorAttrWidget);
+  window.addEventListener("kasugai:language-changed", () => {
+    updateVectorAttrWidgetLayerOptions(vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : null);
+    if (vectorAttrWidget && vectorAttrWidget.classList.contains("visible")) {
+      buildVectorAttrWidgetRows();
+      renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+    }
+  });
   if (vectorAttrWidgetSearch) {
     vectorAttrWidgetSearch.addEventListener("input", () => renderVectorAttrWidget(vectorAttrWidgetSearch.value));
     vectorAttrWidgetSearch.addEventListener("keydown", (ev) => { if (ev.key === "Enter") renderVectorAttrWidget(vectorAttrWidgetSearch.value); });
@@ -3747,7 +3779,7 @@ async function loadUpdateInfo() {
       fetch("/health"),
       fetch("/api/update/settings"),
     ]);
-    if (!healthResponse.ok || !settingsResponse.ok) throw new Error("更新情報を取得できませんでした");
+    if (!healthResponse.ok || !settingsResponse.ok) throw new Error(t("update.fetchFailed"));
     const health = await healthResponse.json();
     const settings = await settingsResponse.json();
     current.textContent = health.version || "-";
@@ -3756,7 +3788,7 @@ async function loadUpdateInfo() {
     await checkForUpdate(health.version);
   } catch (error) {
     current.textContent = "-";
-    document.querySelector("#version-status").textContent = `更新情報を取得できません: ${error.message}`;
+    document.querySelector("#version-status").textContent = t("update.fetchFailedError", { error: error.message });
   }
 }
 
@@ -3764,7 +3796,7 @@ async function checkForUpdate(currentVersion = document.querySelector("#current-
   const status = document.querySelector("#version-status");
   const updateStatus = document.querySelector("#update-status");
   const installButton = document.querySelector("#install-update");
-  status.textContent = "最新バージョンを確認中...";
+  status.textContent = t("update.checking");
   installButton.hidden = true;
   try {
     const response = await fetch("/api/update/latest");
@@ -3774,31 +3806,31 @@ async function checkForUpdate(currentVersion = document.querySelector("#current-
     document.querySelector("#latest-version").textContent = latestVersion;
     const comparison = compareVersions(currentVersion, latestVersion);
     if (comparison < 0) {
-      updateStatus.textContent = "（新しいバージョンがあります）";
-      status.textContent = "更新が利用可能です";
+      updateStatus.textContent = t("update.availableMark");
+      status.textContent = t("update.available");
       installButton.hidden = false;
       if (document.querySelector("#auto-update").checked) await installUpdate(latestVersion, true);
     } else if (comparison === 0) {
-      updateStatus.textContent = "（最新です）";
+      updateStatus.textContent = t("update.latestMark");
       status.textContent = "";
     } else {
-      updateStatus.textContent = "（現在のバージョンの方が新しいです）";
+      updateStatus.textContent = t("update.newerMark");
       status.textContent = "";
     }
   } catch (error) {
     document.querySelector("#latest-version").textContent = "-";
-    status.textContent = `更新確認エラー: ${error.message}`;
+    status.textContent = t("update.checkError", { error: error.message });
   }
 }
 
 async function installUpdate(latestVersion = document.querySelector("#latest-version").textContent, silent = false) {
-  if (!silent && !confirm(`新しいバージョン ${latestVersion} が利用可能です。ダウンロードしてインストールしますか？`)) {
-    document.querySelector("#version-status").textContent = "アップデートをキャンセルしました";
+  if (!silent && !confirm(t("update.confirm", { version: latestVersion }))) {
+    document.querySelector("#version-status").textContent = t("update.cancelled");
     return;
   }
   const button = document.querySelector("#install-update");
   button.disabled = true;
-  document.querySelector("#version-status").textContent = "最新版をダウンロードして自動インストールを準備中...";
+  document.querySelector("#version-status").textContent = t("update.preparing");
   try {
     const response = await fetch("/api/update/install", { method: "POST" });
     const body = await response.text();
@@ -3809,10 +3841,10 @@ async function installUpdate(latestVersion = document.querySelector("#latest-ver
       data = {};
     }
     if (!response.ok) throw new Error(data.error || body || `HTTP ${response.status}`);
-    document.querySelector("#version-status").textContent = data.message || "アップデートを開始しました";
+    document.querySelector("#version-status").textContent = data.message || t("update.started");
     void reloadAfterRestart();
   } catch (error) {
-    document.querySelector("#version-status").textContent = `自動インストールエラー: ${error.message}`;
+    document.querySelector("#version-status").textContent = t("update.installError", { error: error.message });
     button.disabled = false;
   }
 }
@@ -3828,7 +3860,7 @@ async function reloadAfterRestart() {
     }
   };
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-  status.textContent = "更新中... サーバーの再起動を待っています";
+  status.textContent = t("update.waiting");
   // 旧サーバーの停止を待つ（早すぎるリロードを防ぐ）
   for (let i = 0; i < 60 && await ping(); i++) await sleep(1000);
   // 新サーバーの起動を待ってリロード（カメラ位置はURLハッシュから復元される）
@@ -3839,7 +3871,7 @@ async function reloadAfterRestart() {
       return;
     }
   }
-  status.textContent = "再起動を確認できませんでした。手動でページを再読み込みしてください。";
+  status.textContent = t("update.restartFailed");
 }
 
 async function saveUpdateSettings() {
@@ -3851,7 +3883,7 @@ async function saveUpdateSettings() {
     body: JSON.stringify({ autoUpdate }),
   });
   if (!response.ok) throw new Error(await response.text());
-  document.querySelector("#version-status").textContent = "自動更新設定を保存しました";
+  document.querySelector("#version-status").textContent = t("update.settingsSaved");
 }
 
 const defaultConfig = `base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院
@@ -3975,7 +4007,7 @@ window.kasugaiApi = {
   },
   async searchLocation(query) {
     const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
-    if (!response.ok) throw new Error(`検索に失敗しました (${response.status})`);
+    if (!response.ok) throw new Error(t("search.failedStatus", { status: response.status }));
     const data = await response.json();
     return data.slice(0, 5).map(item => ({
       title: item.properties?.title || "",
@@ -4182,47 +4214,50 @@ async function handleLocalChatCommand(text) {
   const [command, ...args] = text.trim().split(/\s+/);
   if (command === "/fly") {
     const [lat, lng, height] = args.map(Number);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return "使い方: /fly 緯度 経度 [高さm]";
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return t("command.flyUsage");
     flyTo({ latitude: lat, longitude: lng, height: Number.isFinite(height) ? height : undefined });
-    return `(${lat}, ${lng}) へ移動します。`;
+    return t("command.flyMoved", { lat, lng });
   }
   if (command === "/layers") {
     const items = window.kasugaiApi.listLayers();
-    if (!items.length) return "レイヤがありません。";
+    if (!items.length) return t("command.noLayers");
     return items.map(layer => `${layer.visible ? "●" : "○"} ${layer.title}`).join("\n");
   }
   if (command === "/layer") {
     const onoff = args[0];
     const name = args.slice(1).join(" ");
-    if (!/^(on|off)$/i.test(onoff) || !name) return "使い方: /layer on|off レイヤ名";
+    if (!/^(on|off)$/i.test(onoff) || !name) return t("command.layerUsage");
     const on = /^on$/i.test(onoff);
     const ok = window.kasugaiApi.setLayerVisible(name, on);
-    return ok ? `「${name}」を${on ? "表示" : "非表示"}にしました。` : `「${name}」というレイヤが見つかりません。`;
+    return ok ? t(on ? "command.layerShown" : "command.layerHidden", { name }) : t("command.layerNotFound", { name });
   }
   if (command === "/basemaps") {
     const items = window.kasugaiApi.listBasemaps();
-    if (!items.length) return "ベースマップがありません。";
+    if (!items.length) return t("command.noBasemaps");
     return items.map(basemap => `${basemap.selected ? "●" : "○"} ${basemap.title}`).join("\n");
   }
   if (command === "/basemap") {
     const name = args.join(" ");
-    if (!name) return "使い方: /basemap ベースマップ名";
+    if (!name) return t("command.basemapUsage");
     const ok = window.kasugaiApi.setBasemap(name);
-    return ok ? `ベースマップを「${name}」に切り替えました。` : `「${name}」というベースマップが見つかりません。`;
+    return ok ? t("command.basemapSet", { name }) : t("command.basemapNotFound", { name });
   }
   if (command === "/search") {
     const query = args.join(" ");
-    if (!query) return "使い方: /search 住所・施設名";
+    if (!query) return t("command.searchUsage");
     const results = await window.kasugaiApi.searchLocation(query);
-    if (!results.length) return "該当する結果がありません。";
+    if (!results.length) return t("search.noResults");
     const first = results[0];
     flyToFeature(first.latitude, first.longitude);
-    return `候補:\n${results.map(item => `- ${item.title} (${item.address})`).join("\n")}\n先頭の候補へ移動しました。`;
+    return t("command.searchResults", { list: results.map(item => `- ${item.title} (${item.address})`).join("\n") });
   }
   if (command === "/camera") {
     const camera = window.kasugaiApi.getCamera();
-    if (!camera) return "カメラ位置を取得できません。";
-    return `緯度 ${camera.latitude.toFixed(5)} / 経度 ${camera.longitude.toFixed(5)} / 高さ ${camera.height.toFixed(0)}m\nheading ${camera.heading.toFixed(1)}° / pitch ${camera.pitch.toFixed(1)}°`;
+    if (!camera) return t("command.cameraFailed");
+    return t("command.camera", {
+      lat: camera.latitude.toFixed(5), lng: camera.longitude.toFixed(5), height: camera.height.toFixed(0),
+      heading: camera.heading.toFixed(1), pitch: camera.pitch.toFixed(1)
+    });
   }
   return null;
 }
@@ -4485,7 +4520,7 @@ const CHAT_TOOLS = [{
   ],
 }];
 
-const CHAT_SYSTEM_INSTRUCTION = "あなたは3D地図アプリ「KASUGAI Canvas」の操作アシスタントです。ユーザーの指示に応じてツールで地図を操作してください。レイヤ名が曖昧な場合はlistLayers、ベースマップ名が曖昧な場合はlistBasemapsで確認し、最も近いものを使ってください。switchProject・applyInspector・shutdownApp・installUpdate・exportInspectorは影響が大きい操作なので、ユーザーが明示的に指示した場合のみ実行し、実行前に一言確認してください。回答は日本語で簡潔に。";
+const chatSystemInstruction = () => t("chat.systemInstruction");
 
 // ブラウザ内コード実行サンドボックス。
 // sandbox属性(allow-scriptsのみ・opaque origin)のiframe内で実行するため、
@@ -4559,8 +4594,8 @@ window.addEventListener("message", async event => {
   const fn = window.kasugaiApi?.[call];
   let out;
   try {
-    if (CHAT_SANDBOX_BLOCKED_API.has(call)) throw new Error(`api.${call} はサンドボックスから呼べません`);
-    if (typeof fn !== "function") throw new Error(`api.${call} は存在しません`);
+    if (CHAT_SANDBOX_BLOCKED_API.has(call)) throw new Error(t("error.sandboxBlocked", { call }));
+    if (typeof fn !== "function") throw new Error(t("error.apiMissing", { call }));
     out = { result: await fn(...(Array.isArray(args) ? args : [])) };
   } catch (error) {
     out = { error: String(error && error.message || error) };
@@ -4575,7 +4610,7 @@ async function runSandboxedCode(code, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       chatSandboxPending.delete(id);
-      reject(new Error("実行がタイムアウトしました"));
+      reject(new Error(t("error.timeout")));
     }, timeoutMs);
     chatSandboxPending.set(id, { resolve, timer });
     const onMessage = event => {
@@ -4616,14 +4651,14 @@ async function executeChatTool(name, args = {}) {
   }
   if (name === "setLayerVisible") {
     const ok = window.kasugaiApi.setLayerVisible(args.name, args.visible);
-    return { ok, message: ok ? undefined : `「${args.name}」というレイヤが見つかりません` };
+    return { ok, message: ok ? undefined : t("tool.layerNotFound", { name: args.name }) };
   }
   if (name === "listLayers") return { layers: window.kasugaiApi.listLayers() };
   if (name === "getCamera") return { camera: window.kasugaiApi.getCamera() };
   if (name === "listBasemaps") return { basemaps: window.kasugaiApi.listBasemaps() };
   if (name === "setBasemap") {
     const ok = window.kasugaiApi.setBasemap(args.name);
-    return { ok, message: ok ? undefined : `「${args.name}」というベースマップが見つかりません` };
+    return { ok, message: ok ? undefined : t("tool.basemapNotFound", { name: args.name }) };
   }
   if (name === "searchLocation") {
     const results = await window.kasugaiApi.searchLocation(args.query);
@@ -4632,19 +4667,19 @@ async function executeChatTool(name, args = {}) {
   if (name === "listCameraPresets") return { presets: window.kasugaiApi.listCameraPresets() };
   if (name === "flyToPreset") {
     const ok = window.kasugaiApi.flyToPreset(args.name);
-    return { ok, message: ok ? undefined : `「${args.name}」というプリセットが見つかりません` };
+    return { ok, message: ok ? undefined : t("tool.presetNotFound", { name: args.name }) };
   }
   if (name === "setTerrain") return { ok: window.kasugaiApi.setTerrain(args.enabled) };
   if (name === "setEffect") {
     const ok = window.kasugaiApi.setEffect(args.name, args.enabled);
-    return { ok, message: ok ? undefined : `未知の効果名: ${args.name}` };
+    return { ok, message: ok ? undefined : t("tool.unknownEffect", { name: args.name }) };
   }
   if (name === "setUnderground") return { ok: window.kasugaiApi.setUnderground(args) };
   if (name === "setClip") return { ok: window.kasugaiApi.setClip(args.type) };
   if (name === "listFlyPaths") return { flyPaths: window.kasugaiApi.listFlyPaths() };
   if (name === "playFlyPath") {
     const ok = window.kasugaiApi.playFlyPath(args.name);
-    return { ok, message: ok ? undefined : `「${args.name}」というフライパスが見つかりません` };
+    return { ok, message: ok ? undefined : t("tool.flyPathNotFound", { name: args.name }) };
   }
   if (name === "stopFly") return { ok: window.kasugaiApi.stopFly() };
   if (name === "vectorSearch") return { results: window.kasugaiApi.vectorSearch(args.query) };
@@ -4652,7 +4687,7 @@ async function executeChatTool(name, args = {}) {
   if (name === "listProjects") return { projects: window.kasugaiApi.listProjects() };
   if (name === "switchProject") {
     const ok = window.kasugaiApi.switchProject(args.projectId);
-    return { ok, message: ok ? undefined : `「${args.projectId}」というプロジェクトが見つかりません` };
+    return { ok, message: ok ? undefined : t("tool.projectNotFound", { name: args.projectId }) };
   }
   if (name === "toggleDrawMode") return window.kasugaiApi.toggleDrawMode();
   if (name === "applyInspector") return { ok: window.kasugaiApi.applyInspector(args.text) };
@@ -4660,7 +4695,7 @@ async function executeChatTool(name, args = {}) {
   if (name === "checkUpdate") return { ok: window.kasugaiApi.checkUpdate() };
   if (name === "installUpdate") {
     const ok = window.kasugaiApi.installUpdate();
-    return { ok, message: ok ? undefined : "現在インストール可能な更新はありません" };
+    return { ok, message: ok ? undefined : t("tool.noUpdate") };
   }
   if (name === "runCode") {
     try {
@@ -4672,7 +4707,7 @@ async function executeChatTool(name, args = {}) {
   }
   if (name === "addGeoJsonLayer") return { ok: window.kasugaiApi.addGeoJsonLayer(args.title, args.url) };
   if (name === "shutdownApp") return { ok: window.kasugaiApi.shutdownApp() };
-  return { ok: false, message: `未知のツール: ${name}` };
+  return { ok: false, message: t("tool.unknown", { name }) };
 }
 
 // Gemini generateContent を呼び、function calling の往復を処理する
@@ -4686,7 +4721,7 @@ async function callGemini(history) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        systemInstruction: { parts: [{ text: CHAT_SYSTEM_INSTRUCTION }] },
+        systemInstruction: { parts: [{ text: chatSystemInstruction() }] },
         contents: history,
         tools: CHAT_TOOLS,
       }),
@@ -4698,7 +4733,7 @@ async function callGemini(history) {
     const calls = parts.filter(part => part.functionCall);
     if (!calls.length) {
       const text = parts.map(part => part.text || "").join("").trim();
-      return { text: text || "(応答なし)", executed };
+      return { text: text || t("chat.noResponse"), executed };
     }
     const responseParts = [];
     for (const part of calls) {
@@ -4708,7 +4743,7 @@ async function callGemini(history) {
     }
     history.push({ role: "user", parts: responseParts });
   }
-  return { text: "ツール実行が上限回数に達しました。", executed };
+  return { text: t("chat.toolLimit"), executed };
 }
 
 function setupChatPanel() {
@@ -4758,7 +4793,7 @@ function setupChatPanel() {
   toggle?.addEventListener("click", () => {
     const collapsed = panel.classList.toggle("collapsed");
     toggle.textContent = collapsed ? "+" : "−";
-    toggle.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    toggle.setAttribute("aria-label", collapsed ? t("common.expand") : t("common.minimize"));
   });
 
   const clearButton = document.querySelector("#chat-clear");
@@ -4766,7 +4801,7 @@ function setupChatPanel() {
     try { localStorage.removeItem(historyKey); } catch (e) {}
     history.length = 0;
     messages.replaceChildren();
-    addMessage("system", "履歴をクリアしました。", { persist: false });
+    addMessage("system", t("chat.cleared"), { persist: false });
   });
 
   form?.addEventListener("submit", event => {
@@ -4789,12 +4824,12 @@ function setupChatPanel() {
     }
     if (text.startsWith("/")) {
       const local = await handleLocalChatCommand(text);
-      addMessage("assistant", local || `不明なコマンド: ${text}`);
+      addMessage("assistant", local || t("chat.unknownCommand", { command: text }));
       return;
     }
     if (!window.kasugaiApi.getGoogleApiKey()) {
       const local = await handleLocalChatCommand(text);
-      addMessage("assistant", local || "APIキー未設定です。Google → Gemini タブで Gemini API キーを保存すると会話できます。キーは https://aistudio.google.com/apikey から取得できます。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera");
+      addMessage("assistant", local || t("chat.noApiKey"));
       return;
     }
     const thinking = document.createElement("div");
@@ -4806,12 +4841,12 @@ function setupChatPanel() {
       history.push({ role: "user", parts: [{ text }] });
       const { text: reply, executed } = await callGemini(history);
       thinking.remove();
-      executed.forEach(call => addMessage("system", `実行: ${call}`));
+      executed.forEach(call => addMessage("system", t("chat.executed", { call })));
       addMessage("assistant", reply);
     } catch (error) {
       thinking.remove();
       history.pop();
-      addMessage("system", `エラー: ${error.message}`);
+      addMessage("system", t("common.error", { error: error.message }));
     }
   }
 

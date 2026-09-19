@@ -1,3 +1,5 @@
+import { initI18n, t } from "./i18n.js";
+
 function stripComments(text) {
   return text.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
 }
@@ -54,7 +56,7 @@ async function runAuth() {
   try {
     const mod = await import(loader);
     if (typeof mod.authenticate !== "function") {
-      throw new Error(`認証プラグインに authenticate が定義されていません: ${method}`);
+      throw new Error(t("auth.noAuthenticate", { method }));
     }
     const auth = await mod.authenticate();
     window.kasugaiAuth = { method, ...auth };
@@ -71,13 +73,14 @@ async function injectModule(url) {
     script.type = "module";
     script.src = url;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`読み込み失敗: ${url}`));
+    script.onerror = () => reject(new Error(t("auth.loadFailed", { url })));
     document.head.appendChild(script);
   });
 }
 
 (async () => {
   try {
+    await initI18n();
     await runAuth();
     await injectModule("./app.js");
     await injectModule("./plugin-loader.js");
@@ -85,7 +88,7 @@ async function injectModule(url) {
     const container = document.body;
     const notice = document.createElement("div");
     notice.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:#fff;color:#a82020;display:flex;align-items:center;justify-content:center;padding:20px;font-family:sans-serif;";
-    notice.textContent = `起動できません: ${error instanceof Error ? error.message : error}`;
+    notice.textContent = t("auth.startupFailed", { error: error instanceof Error ? error.message : error });
     container.append(notice);
   }
 })();
