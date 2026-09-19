@@ -4,7 +4,7 @@
 実行内容:
   1. wrangler のログイン確認
   2. Pages プロジェクトの解決（--project-name 指定 > 既存プロジェクト > 新規作成）
-  3. web/auth-methods.json の control を 3 に設定
+  3. web/auth-methods.json の control を 3 に設定してデプロイ（終了後は 0 に戻す）
   4. wrangler pages deploy（web/ + functions/ をまとめてデプロイ）
   5. 簡易動作確認（トップページ 200 / 静的ファイル公開 / 認証 API）
 
@@ -96,12 +96,11 @@ def resolve_project(requested: str | None) -> str:
     return DEFAULT_PROJECT
 
 
-def set_control() -> None:
+def set_control(value: int) -> None:
     text = AUTH_METHODS.read_text(encoding="utf-8")
-    new = re.sub(r'("control"\s*:\s*)\d+', r"\g<1>3", text, count=1)
+    new = re.sub(r'("control"\s*:\s*)\d+', rf"\g<1>{value}", text, count=1)
     if new != text:
         AUTH_METHODS.write_text(new, encoding="utf-8")
-    print("[3/5] web/auth-methods.json の control = 3", flush=True)
 
 
 def deploy(project: str) -> str:
@@ -170,9 +169,15 @@ def main() -> None:
 
     check_login()
     project = resolve_project(args.project_name)
-    set_control()
-    base = deploy(project)
-    verify(base)
+    print("[3/5] web/auth-methods.json の control = 3", flush=True)
+    set_control(3)
+    try:
+        base = deploy(project)
+        verify(base)
+    finally:
+        # デプロイ対象の web/ には 3 が残るが、リポジトリのファイルは認証なしに戻す
+        set_control(0)
+        print("web/auth-methods.json の control を 0 に戻しました", flush=True)
     print("完了しました。", flush=True)
 
 

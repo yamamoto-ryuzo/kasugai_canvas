@@ -31,7 +31,7 @@
       </div>
       <div class="url-box">
         <h3>デプロイ手順</h3>
-        <p>以下の手順はリポジトリルートで <code>python run-workers.py</code> を実行すると自動化できます（ログイン確認・KV/R2 バインド記入・secret 確認・control=4 設定・deploy・簡易検証まで。未ログイン時の <code>wrangler login</code> とパスワード入力のみ手動です）。</p>
+        <p>以下の手順はリポジトリルートで <code>python run-workers.py</code> を実行すると自動化できます（ログイン確認・KV/R2 バインド記入・secret 確認・control=4 設定・deploy・簡易検証まで。control はデプロイ後に 0 に戻します。未ログイン時の <code>wrangler login</code> とパスワード入力のみ手動です）。</p>
         <p>前提：wrangler（Cloudflare の CLI）が使えること。初回のみ <code>wrangler login</code> でブラウザ認証しておきます。</p>
         <ol>
           <li>

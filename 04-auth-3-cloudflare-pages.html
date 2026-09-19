@@ -63,7 +63,7 @@ Cloudflare KV
           <li>直接アップロードの場合は、<strong>リポジトリルート</strong>で以下を実行します。<code>--project-name</code> にダッシュボードで作ったプロジェクト名を指定してください。</li>
         </ol>
         <pre><code>npx wrangler pages deploy web --project-name &lt;プロジェクト名&gt;</code></pre>
-        <p>または、リポジトリルートで <code>python run-pages.py</code> を実行するとプロジェクト解決・<code>control=3</code> 設定・デプロイ・動作確認まで自動化できます（<code>--project-name</code> でデプロイ先の指定も可）。</p>
+        <p>または、リポジトリルートで <code>python run-pages.py</code> を実行するとプロジェクト解決・<code>control=3</code> 設定・デプロイ・動作確認まで自動化できます（control はデプロイ後に 0 に戻します）（<code>--project-name</code> でデプロイ先の指定も可）。</p>
         <p>この1コマンドで <code>web/</code>（静的アセット）と <code>functions/</code>（Pages Functions）の<strong>両方がまとめてデプロイ</strong>されます。<code>functions/</code> はカレントディレクトリから自動検出されるため、必ず<strong>リポジトリルートで実行</strong>してください（<code>web/</code> 内で実行すると検出されません）。検出された <code>functions/</code> は <code>/api/*</code> エンドポイントとして動作します。<code>web/functions/</code> に入れても Function にはならず、ソースコードが静的ファイルとして公開されてしまうため、<code>functions/</code> は必ずルートに置きます。</p>
         <p><strong>注意</strong>：ダッシュボードの「直接アップロード」で <code>web/</code> フォルダだけをドラッグ&amp;ドロップした場合、<code>functions/</code> は含まれず <code>/api/*</code> が 404 になります（ログイン時に「認証に失敗しました」と表示されます）。必ず wrangler か Git 連携でデプロイしてください。</p>
         <p><strong>再デプロイの目安</strong>：</p>

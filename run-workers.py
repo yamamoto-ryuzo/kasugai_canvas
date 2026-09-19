@@ -6,7 +6,7 @@
   2. KV 名前空間 (KASUGAI_KV) の確認・作成と wrangler.toml へのバインド記入
   3. R2 バケット (kasugai-data) の確認・作成とバインド記入（R2 未有効化時はスキップ）
   4. KASUGAI_AUTH_PASS シークレットの確認（未登録なら対話プロンプトで登録）
-  5. web/auth-methods.json の control を 4 に設定
+  5. web/auth-methods.json の control を 4 に設定してデプロイ（終了後は 0 に戻す）
   6. wrangler deploy と簡易動作確認（認証ゲート 401 / トップページ 200）
 
 使い方:
@@ -172,12 +172,11 @@ def ensure_secret() -> None:
         raise SystemExit("シークレットの登録に失敗しました。")
 
 
-def set_control() -> None:
+def set_control(value: int) -> None:
     text = AUTH_METHODS.read_text(encoding="utf-8")
-    new = re.sub(r'("control"\s*:\s*)\d+', r"\g<1>4", text, count=1)
+    new = re.sub(r'("control"\s*:\s*)\d+', rf"\g<1>{value}", text, count=1)
     if new != text:
         AUTH_METHODS.write_text(new, encoding="utf-8")
-    print("[5/6] web/auth-methods.json の control = 4", flush=True)
 
 
 def deploy_and_verify() -> None:
@@ -242,8 +241,14 @@ def main() -> None:
     ensure_kv_binding()
     ensure_r2_binding()
     ensure_secret()
-    set_control()
-    deploy_and_verify()
+    print("[5/6] web/auth-methods.json の control = 4", flush=True)
+    set_control(4)
+    try:
+        deploy_and_verify()
+    finally:
+        # デプロイ対象の web/ には 4 が残るが、リポジトリのファイルは認証なしに戻す
+        set_control(0)
+        print("web/auth-methods.json の control を 0 に戻しました", flush=True)
     print("完了しました。", flush=True)
 
 
