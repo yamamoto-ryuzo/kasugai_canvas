@@ -14,9 +14,10 @@ const PUBLIC_PATHS = new Set([
   "/favicon.ico",
   "/auth-selector.js",
   "/auth-login-form.js",
-  "/auth-methods.json"
+  "/auth-methods.json",
+  "/i18n.js"
 ]);
-const PUBLIC_PREFIXES = ["/PLUGIN/auth-"];
+const PUBLIC_PREFIXES = ["/PLUGIN/auth-", "/i18n/"];
 
 function isPublic(path) {
   return PUBLIC_PATHS.has(path) || PUBLIC_PREFIXES.some(p => path.startsWith(p));

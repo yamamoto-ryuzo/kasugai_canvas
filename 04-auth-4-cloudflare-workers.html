@@ -27,21 +27,127 @@
   wrangler.toml  … assets=../web、KV/R2バインド、run_worker_first=true
   worker.js      … /api/* ルーティング＋静的ファイル認証ゲート</code></pre>
         <p><code>worker.js</code> は <code>functions/api/*</code>・<code>functions/_lib/token.js</code> のハンドラをそのまま再利用します。二重実装ではありません。</p>
-        <p>認証前に公開されるのはログイン画面に必要な最小限のみです（<code>index.html</code>・<code>styles.css</code>・<code>favicon.ico</code>・<code>auth-*.js</code>・<code>auth-methods.json</code>・<code>PLUGIN/auth-*/</code>）。それ以外のファイル（<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等）はすべて未認証では 401 になります。</p>
+        <p>認証前に公開されるのはログイン画面に必要な最小限のみです（<code>index.html</code>・<code>styles.css</code>・<code>favicon.ico</code>・<code>auth-*.js</code>・<code>auth-methods.json</code>・<code>i18n.js</code>・<code>i18n/</code>・<code>PLUGIN/auth-*/</code>）。それ以外のファイル（<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等）はすべて未認証では 401 になります。</p>
       </div>
       <div class="url-box">
         <h3>デプロイ手順</h3>
+        <p>以下の手順はリポジトリルートで <code>python run-workers.py</code> を実行すると自動化できます（ログイン確認・KV/R2 バインド記入・secret 確認・control=4 設定・deploy・簡易検証まで。未ログイン時の <code>wrangler login</code> とパスワード入力のみ手動です）。</p>
+        <p>前提：wrangler（Cloudflare の CLI）が使えること。初回のみ <code>wrangler login</code> でブラウザ認証しておきます。</p>
         <ol>
-          <li><code>workers/wrangler.toml</code> の KV/R2 バインドを設定します。</li>
-          <li>パスワード系は secret として登録します（wrangler.toml には書きません）。</li>
-          <li><code>workers/</code> ディレクトリでデプロイします。</li>
+          <li>
+            <strong>KV / R2 を用意します</strong>（Pages ですでに作成済みならこの手順はスキップ。同じものをバインドし直すだけでデータ移行は不要です）。
+            <pre><code>cd workers
+wrangler kv namespace create KASUGAI_KV    # → 発行された id を控える
+wrangler r2 bucket create kasugai-data     # → バケット名を控える</code></pre>
+            作成済みなら <code>wrangler kv namespace list</code> / <code>wrangler r2 bucket list</code> で id・バケット名を確認できます。
+          </li>
+          <li>
+            <strong><code>workers/wrangler.toml</code> にバインドを書きます</strong>。<code>[[kv_namespaces]]</code> / <code>[[r2_buckets]]</code> のコメントを外して、手順1の id・バケット名を記入します。ユーザーIDを <code>admin</code> から変える場合は <code>[vars]</code> の <code>KASUGAI_AUTH_USER</code> もここで編集します。
+          </li>
+          <li>
+            <strong>パスワードをシークレット登録します</strong>（<code>wrangler.toml</code> には書きません）。
+            <pre><code>wrangler secret put KASUGAI_AUTH_PASS</code></pre>
+            値は引数には書かず、<strong>コマンド実行後の対話プロンプトで入力</strong>します。
+            <pre><code>Enter a secret value:          ← ここでパスワードを打ち込んで Enter
+✨ Success! Uploaded secret KASUGAI_AUTH_PASS</code></pre>
+            <ul>
+              <li>入力中は画面に何も表示されません（パスワード入力と同じ）。貼り付けも可</li>
+              <li>対話式なのは、端末の履歴にもファイルにも値を残さないためです</li>
+              <li>登録済みかは <code>wrangler secret list</code> で確認できます（名前だけ出て値は読み出せません）。間違えたら同じコマンドで上書きします</li>
+              <li>ダッシュボードからも設定できます：Worker → Settings → Variables and Secrets → Add（Type: Secret）</li>
+            </ul>
+          </li>
+          <li>
+            <strong><code>web/auth-methods.json</code> の <code>control</code> を <code>4</code> にします</strong>（このファイルは静的アセットとして一緒にデプロイされます）。
+          </li>
+          <li>
+            <strong>デプロイします</strong>。
+            <pre><code>wrangler deploy</code></pre>
+            Pages の <code>--project-name</code> や配信ディレクトリのような引数は不要です。<code>wrangler.toml</code> が宣言的な設定ファイルになっており、以下がそこに書かれています。
+            <table>
+              <thead>
+                <tr><th>Pages のコマンド引数</th><th>Workers での相当設定</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>--project-name &lt;プロジェクト名&gt;</code></td><td><code>wrangler.toml</code> の <code>name = "kasugai-canvas"</code></td></tr>
+                <tr><td><code>web</code>（配信ディレクトリ）</td><td><code>[assets]</code> の <code>directory = "../web"</code></td></tr>
+                <tr><td><code>functions/</code>（自動検出）</td><td><code>main = "worker.js"</code></td></tr>
+              </tbody>
+            </table>
+            初回 deploy で <code>name</code> の Worker が自動作成され、以降は同名 Worker の更新になります。
+          </li>
+          <li>
+            <strong>動作確認します</strong>。<code>https://kasugai-canvas.&lt;アカウント&gt;.workers.dev</code> を開き、ログイン画面 → ID/PASS でログインできることを確認します。未ログインで <code>app.js</code> 等に直接アクセスして 401 になることも確認すると確実です。
+          </li>
+        </ol>
+        <p><strong>再デプロイの目安</strong>：</p>
+        <ul>
+          <li><code>web/</code>・<code>workers/</code>・<code>functions/</code> のファイルを変更した → <code>wrangler deploy</code> を再実行</li>
+          <li>secret（パスワード）を変えた → <code>wrangler secret put</code> のみ（再デプロイ不要・即反映）</li>
+          <li>KV の中身（<code>.kasc</code>）を更新した → デプロイ不要（インスペクターの「適用」や <code>wrangler kv key put</code> で即反映・伝播は最大60秒）</li>
+        </ul>
+        <p><code>.kasc</code> の登録・R2 データ・<code>r2://</code> 記法は <a href="04-auth-3-cloudflare-pages.html">3 のページ</a>と同じです。</p>
+      </div>
+      <div class="url-box">
+        <h3>Pages（方式3）との設定の違い</h3>
+        <p>クライアント側（<code>web/</code>・認証プラグイン・API 呼び出し）は方式3と完全に共通で、違いはサーバー側のデプロイ・設定方法だけです。<code>functions/api/*</code> のハンドラも worker.js が import して再利用するため、API 実装の二重管理はありません。</p>
+        <table>
+          <thead>
+            <tr><th>項目</th><th>Pages（方式3）</th><th>Workers（方式4）</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>デプロイ先</td>
+              <td>Pages プロジェクト<br><small><code>wrangler pages deploy web</code>（ルートで実行・<code>functions/</code> を自動検出）</small></td>
+              <td>Workers プロジェクト<br><small><code>cd workers && wrangler deploy</code></small></td>
+            </tr>
+            <tr>
+              <td>KV/R2 バインド</td>
+              <td>Pages → Settings → Bindings → Functions で GUI 設定</td>
+              <td><code>workers/wrangler.toml</code> の <code>[[kv_namespaces]]</code> / <code>[[r2_buckets]]</code></td>
+            </tr>
+            <tr>
+              <td>環境変数・シークレット</td>
+              <td>Pages → Settings → Environment variables（Production/Preview 別）</td>
+              <td>非秘密は <code>wrangler.toml</code> の <code>[vars]</code>、パスワード系は <code>wrangler secret put</code></td>
+            </tr>
+            <tr>
+              <td>静的ファイル</td>
+              <td>認証なしで公開（無料・無制限）</td>
+              <td><code>run_worker_first = true</code> で全リクエスト認証ゲート（Worker のリクエスト枠を消費）</td>
+            </tr>
+            <tr>
+              <td>セッション</td>
+              <td>署名トークンのみ（<code>?token=</code> / Bearer）</td>
+              <td>HttpOnly Cookie（<code>kasugai_session</code>）＋署名トークン</td>
+            </tr>
+            <tr>
+              <td>デフォルトドメイン</td>
+              <td><code>*.pages.dev</code></td>
+              <td><code>*.workers.dev</code></td>
+            </tr>
+            <tr>
+              <td>control 値</td>
+              <td><code>3</code></td>
+              <td><code>4</code>（同じ auth-cloudflare プラグインを使用）</td>
+            </tr>
+          </tbody>
+        </table>
+        <h3>Pages からの移行手順</h3>
+        <p>KV 名前空間・R2 バケットはアカウント配下のリソースなので、データ移行は不要です。同じものを Worker にバインドし直すだけです。</p>
+        <ol>
+          <li>Pages プロジェクトの Settings → Bindings で KV 名前空間 ID・R2 バケット名を確認し、<code>workers/wrangler.toml</code> の <code>[[kv_namespaces]]</code> / <code>[[r2_buckets]]</code> に転記します（<code>wrangler kv namespace list</code> / <code>wrangler r2 bucket list</code> でも確認可）。</li>
+          <li>シークレットを再登録します。値は Pages から読み出せないため再入力です（忘れた場合は新しいパスワードを登録すればよく、既存トークンが無効化されるだけです）。</li>
         </ol>
         <pre><code>cd workers
-wrangler kv namespace create KASUGAI_KV   # → 発行された id を wrangler.toml に
-wrangler r2 bucket create kasugai-data
 wrangler secret put KASUGAI_AUTH_PASS
+wrangler secret put KASUGAI_TOKEN_SECRET   # Pages で設定していた場合のみ
 wrangler deploy</code></pre>
-        <p><code>.kasc</code> の登録・R2 データ・<code>r2://</code> 記法は <a href="04-auth-3-cloudflare-pages.html">3 のページ</a>と同じです。</p>
+        <ol start="3">
+          <li><code>https://kasugai-canvas.&lt;アカウント&gt;.workers.dev</code> でログイン・<code>/api/data/*</code> の動作を確認します。</li>
+          <li><code>web/auth-methods.json</code> の <code>control</code> を <code>4</code> にして再デプロイします。</li>
+          <li>カスタムドメインを Pages に付けている場合は Worker の Settings → Domains &amp; Routes で付け替えます（同時に1箇所にしか向けられません）。動作確認が済むまで Pages プロジェクトは残しておけば切り戻し可能です。</li>
+        </ol>
       </div>
       <div class="url-box">
         <h3>ローカル開発</h3>
@@ -83,7 +189,7 @@ wrangler dev</code></pre>
               <td>❌ 見える</td>
             </tr>
             <tr>
-              <td colspan="3"><small>未ログインで公開されるのはログイン画面に必要な最小限のみ（<code>index.html</code>・<code>styles.css</code>・<code>auth-*.js</code>・<code>PLUGIN/auth-*/</code>）。<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等はすべて 401 です。</small></td>
+              <td colspan="3"><small>未ログインで公開されるのはログイン画面に必要な最小限のみ（<code>index.html</code>・<code>styles.css</code>・<code>auth-*.js</code>・<code>i18n.js</code>・<code>i18n/</code>・<code>PLUGIN/auth-*/</code>）。<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等はすべて 401 です。</small></td>
             </tr>
             <tr>
               <td>データ（web/）<br><small>URL が公開情報から分かる</small></td>

@@ -6,10 +6,23 @@
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-09-19
+
 ### Added
 
+- `run-workers.py`：Cloudflare Workers（方式4・全ファイル認証ゲート）へのデプロイ自動化スクリプト。wrangler ログイン確認・KV/R2 バインドの wrangler.toml 自動記入・シークレット登録確認・`control=4` 設定・デプロイ・認証ゲートの簡易検証まで一括実行
+- `run-pages.py`：Cloudflare Pages（方式3）へのデプロイ自動化スクリプト。プロジェクト解決（`--project-name` 指定／既存プロジェクト検出／新規作成）・`control=3` 設定・`wrangler pages deploy`・動作確認を一括実行
 - Fly パネルに「ルート座標の基準」セレクトを追加。「カメラ位置」（従来どおりカメラがルート上を飛行）と「画面中心」（ルート点が画面中心に来るよう進行方向の後方・上空から追従）を切替可能。画面中心時の後方距離は `height / tan(|pitch|)` で自動計算（pitch は -85〜-1° にクランプ）
 - `fly_geojson:` に `view=`（エイリアス `v=`）オプションを追加。`camera`（既定）/`center` でルートごとの基準を指定可能（`center` `chase` `follow` `3rd` `third` も `center` 扱い）
+
+### Changed
+
+- `workers/wrangler.toml` に KV 名前空間のバインドを実設定（`KASUGAI_KV`）
+- `04-auth-4-cloudflare-workers.html` を大幅拡充：Pages との設定の違いの対照表・Pages からの移行手順・`wrangler secret put` の対話入力の説明・`wrangler deploy` に引数が不要な理由（wrangler.toml 宣言式設定）・段階的なデプロイ手順と再デプロイの目安を追加
+
+### Fixed
+
+- Workers 認証ゲートの公開許可リストに `i18n.js`・`i18n/` を追加。未ログイン時に i18n リソースが 401 となりログイン画面自体が描画されない問題を修正
 
 ## [4.3.0] - 2026-09-19
 

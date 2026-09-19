@@ -18,9 +18,13 @@ kasugai_canvas/
 ├─ server/               # Rust(Axum) 静的配信サーバー（オプション）
 ├─ web/                  # フロントエンド資産（index.html / app.js / styles.css）
 │  └─ projects/          # プロジェクト（projects.json / <id>/kasugai_canvas.kasc / DATA/）
+├─ functions/            # Cloudflare Pages Functions（認証 API / KV・R2 ゲート）
+├─ workers/              # Cloudflare Workers 版デプロイ設定（worker.js / wrangler.toml）
 ├─ installer/            # NSIS インストーラー定義
 ├─ download/             # 配布 ZIP・インストーラー・latest.json
-└─ run.py                # 起動・ビルドスクリプト
+├─ run.py                # 起動・ビルドスクリプト
+├─ run-pages.py          # Cloudflare Pages へのデプロイ自動化
+└─ run-workers.py        # Cloudflare Workers へのデプロイ自動化
 ```
 
 ## リリースビルド
@@ -31,9 +35,20 @@ python run.py -B
 
 `download/` に `kasugai_canvas.zip` と（NSIS があれば）`kasugai_canvas_setup.exe` を作成します。
 
+## Cloudflare へのデプロイ
+
+Cloudflare Pages / Workers へのデプロイは以下のスクリプトで自動化できます（要 `npx wrangler login`）。
+
+```powershell
+python run-pages.py      # Pages（control: 3）へデプロイ
+python run-workers.py    # Workers（control: 4・全ファイル認証ゲート）へデプロイ
+```
+
+設定手順の詳細は [home.html の V4 セクション](home.html#v4-auth) を参照してください。
+
 ## バージョン管理
 
-現在のバージョンは **4.3.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **4.4.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -54,7 +69,7 @@ python run.py -B
 
 ## 拡張機能（Plugin）と認証
 
-認証方式は `web/auth-methods.json` の `control` で 0〜3 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [home.html の V4 セクション](home.html#v4-auth) を参照してください。
+認証方式は `web/auth-methods.json` の `control` で 0〜4 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [home.html の V4 セクション](home.html#v4-auth) を参照してください。
 
 ### 起動後通常プラグイン
 `web/plugin-loader.js` が `web/plugins.json` を読み込み、各プラグインを `import()` します。

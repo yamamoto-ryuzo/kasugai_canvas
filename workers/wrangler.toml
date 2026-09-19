@@ -15,10 +15,11 @@ run_worker_first = true
 KASUGAI_AUTH_USER = "admin"
 
 # wrangler kv namespace create KASUGAI_KV で発行されたIDを設定
-# [[kv_namespaces]]
-# binding = "KASUGAI_KV"
-# id = "<namespace-id>"
+[[kv_namespaces]]
+binding = "KASUGAI_KV"
+id = "d43d76ff42884645865b2713852fe7f3"
 
+# R2 を使う場合はダッシュボードで R2 を有効化し
 # wrangler r2 bucket create kasugai-data で作成したバケット名を設定
 # [[r2_buckets]]
 # binding = "KASUGAI_DATA"
