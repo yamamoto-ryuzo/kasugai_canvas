@@ -513,7 +513,7 @@
   3dtiles: レイヤータイトル | URL | option=...
   geojson: レイヤータイトル | URL | option=...
   layer:   レイヤータイトル | URL | option=...
-  fly_geojson: タイトル | URL | speed=... | height=... | pitch=... | loop=... | step=...
+  fly_geojson: タイトル | URL | speed=... | height=... | pitch=... | loop=... | step=... | view=...
   cam:     タイトル | 緯度 | 経度 | h=高さ | p=ピッチ | d=ヘディング
   info:    URL
   legend:  URL または タイトル | URL
@@ -584,6 +584,11 @@ fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height
       <td>false</td>
       </tr>
       <tr>
+      <td><code>view</code>（<code>v</code>）</td>
+      <td>ルート座標の基準。<code>camera</code>=カメラ位置（カメラがルート上を飛行）、<code>center</code>=画面中心（ルート点が画面中心に来るよう後方・上空から追従）</td>
+      <td>camera</td>
+      </tr>
+      <tr>
       <td><code>off</code></td>
       <td>選択肢に表示しない</td>
       <td>-</td>
@@ -607,6 +612,10 @@ fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height
       で定義した経路か <code>手動</code> を選びます。</li>
       <li><strong>プリセット</strong> —
       よく使う速度・高さ・ピッチをまとめて適用できます。</li>
+      <li><strong>ルート座標の基準</strong> —
+      「カメラ位置」（カメラがルート上を飛行）か「画面中心」（ルート点を画面中心に追従）を選びます。画面中心では
+      <code>pitch</code> の絶対値と <code>height</code>
+      から後方距離を自動計算します。</li>
       </ul>
       <table>
       <thead>

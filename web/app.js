@@ -1592,7 +1592,7 @@ function applyInspector(text) {
       const title = parts[0];
       const url = resolveProjectUrl(parts[1]);
       if (!url) return;
-      const config = { title: title || url, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100 };
+      const config = { title: title || url, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera" };
       const off = parts.some(part => /^(off|false)$/i.test(part));
       parts.slice(2).forEach(part => {
         const eq = part.indexOf("=");
@@ -1605,6 +1605,7 @@ function applyInspector(text) {
         if ((key === "pitch" || key === "p") && Number.isFinite(number)) config.pitch = number;
         if ((key === "step") && Number.isFinite(number) && number > 0) config.step = number;
         if (key === "loop" || key === "l") config.loop = /^(true|1|on|yes)$/i.test(raw);
+        if (key === "view" || key === "v") config.view = /^(center|chase|follow|3rd|third)$/i.test(raw) ? "center" : "camera";
       });
       if (!off) flyPaths.push(config);
     }
@@ -2006,11 +2007,20 @@ function setupEvents() {
       const blend = remaining < blendStart ? 1 - (remaining / blendStart) : 0;
       heading = lerpBearing(heading, nextBearing, blend);
     }
-    const pitch = Math.max(-85, Math.min(0, flyPath.pitch)) * Math.PI / 180;
+    const pitchDeg = Math.max(-85, Math.min(flyPath.view === "center" ? -1 : 0, flyPath.pitch));
+    const pitch = pitchDeg * Math.PI / 180;
+    let camLat = lat;
+    let camLng = lng;
+    if (flyPath.view === "center") {
+      // 画面中心: ルート点が画面中心に来るよう、進行方向の後方・上空にカメラを置く
+      const backDistance = flyHeight > 0 ? flyHeight / Math.tan(-pitch) : 0;
+      camLat -= (Math.cos(heading) * backDistance) / 111320;
+      camLng -= (Math.sin(heading) * backDistance) / (111320 * Math.cos(lat * Math.PI / 180));
+    }
 
     try {
       viewer.camera.setView({
-        destination: Cesium.Cartesian3.fromDegrees(lng, lat, height),
+        destination: Cesium.Cartesian3.fromDegrees(camLng, camLat, height),
         orientation: { heading, pitch, roll: 0 },
       });
       viewer.scene.requestRender();
@@ -2112,6 +2122,7 @@ function setupEvents() {
     flyHeight = Number.isFinite(flyPath.height) ? Number(flyPath.height) : 0;
     if (walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
     if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
+    if (flyViewSelect) flyViewSelect.value = flyPath.view === "center" ? "center" : "camera";
     if (!flyPathCoords || !flyPathCoords.length) return;
     for (const point of flyPathCoords) {
       const carto = Cesium.Cartographic.fromDegrees(point.longitude, point.latitude);
@@ -2204,6 +2215,7 @@ function setupEvents() {
   const walkSpeedEl = document.querySelector("#walk-speed");
   const walkPitchEl = document.querySelector("#walk-pitch");
   const flyPresetSelect = document.querySelector("#fly-preset-select");
+  const flyViewSelect = document.querySelector("#fly-view-select");
   const flyPointEditor = document.querySelector("#fly-point-editor");
   const flyPointIndexEl = document.querySelector("#fly-point-index");
   const flyPointOffsetEl = document.querySelector("#fly-point-offset");
@@ -2378,6 +2390,13 @@ function setupEvents() {
           orientation: { heading: viewer.camera.heading, pitch: pitchRad, roll: 0 }
         });
       }
+    });
+  }
+  if (flyViewSelect) {
+    flyViewSelect.addEventListener("change", () => {
+      if (!flyPath) return;
+      flyPath.view = flyViewSelect.value === "center" ? "center" : "camera";
+      if (flyPathCoords) updateFlyPathCamera(flyPathDistance);
     });
   }
   if (flyPointIndexEl) {
@@ -3046,7 +3065,7 @@ function setupEvents() {
       const text = await routeStore.get(projectId, name);
       if (text == null) continue;
       const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
-      flyPaths.push({ title: name, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, drawn: { kind: "idb", name } });
+      flyPaths.push({ title: name, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "idb", name } });
       existing.add(name);
     }
     // 保存先フォルダ内の .geojson（許可済みの場合のみ・読み取り専用）
@@ -3061,7 +3080,7 @@ function setupEvents() {
           const file = await fileHandle.getFile();
           const text = await file.text();
           const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
-          flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, drawn: { kind: "file", name: entry.name } });
+          flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "file", name: entry.name } });
           existing.add(title);
         }
       } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
