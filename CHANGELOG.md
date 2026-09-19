@@ -6,6 +6,18 @@
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-09-19
+
+### Added
+
+- プラグイン宣言レイヤー：`plugins.json` の `layer` 設定を宣言すると、本体がプラグイン専用レイヤーを自動登録し、レイヤ一覧・表示切替・属性検索（ベクター検索）・属性パネルの対象になる
+  - `format: "entities"`：本体生成の `Cesium.CustomDataSource` を `api.getPluginDataSource(manifest.id)` で取得し `ds.entities.add(...)` で動的 entity を管理対象化
+  - `format: "geojson"`：`api.setPluginLayerData(manifest.id, geojson)` で GeoJSON オブジェクトを `geojson:` レイヤーと同じ描画経路（クランプ・ドレープ含む）で表示・更新
+  - `scope`：`"app"`（既定・プロジェクト切替をまたいで存続）/ `"project"`（切替時に削除）
+  - `api.registerPluginLayer(config, pluginId)` / `api.removePluginLayer(idOrPluginId)` で任意のタイミングでの追加・削除も可能
+  - `plugin-layer-registered` / `plugin-layer-removed` イベントを追加
+- `sample-hello` プラグインを宣言レイヤー方式の実装例として更新
+
 ## [4.1.0] - 2026-09-19
 
 ### Added

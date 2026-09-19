@@ -1,12 +1,14 @@
 export async function init(api, manifest) {
   const Cesium = api.getCesium();
-  const viewer = api.getViewer();
-  if (!Cesium || !viewer) {
-    console.warn("[sample-hello] Cesium または viewer が見つかりません");
+  // plugins.json の layer 宣言(format:"entities")で本体が生成した DataSource を取得する。
+  // この DataSource に追加した entity はレイヤ一覧・表示切替・属性検索の対象になる
+  const ds = api.getPluginDataSource(manifest.id);
+  if (!Cesium || !ds) {
+    console.warn("[sample-hello] Cesium またはプラグイン用 DataSource が見つかりません");
     return;
   }
 
-  const marker = viewer.entities.add({
+  const marker = ds.entities.add({
     name: manifest.name,
     position: Cesium.Cartesian3.fromDegrees(139.7528, 35.6852, 1000),
     point: { pixelSize: 20, color: Cesium.Color.fromCssColorString("#ff6b6b") },
@@ -19,6 +21,7 @@ export async function init(api, manifest) {
       verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
       pixelOffset: new Cesium.Cartesian2(0, -12),
     },
+    properties: { source: "sample-hello", description: "プラグインが追加したサンプルマーカー" },
   });
 
   api.registerPlugin({
@@ -27,6 +30,4 @@ export async function init(api, manifest) {
     version: manifest.version,
     marker,
   });
-
-  console.log(`[sample-hello] 読み込み完了: ${manifest.name}`);
 }

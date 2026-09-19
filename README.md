@@ -33,7 +33,7 @@ python run.py -B
 
 ## バージョン管理
 
-現在のバージョンは **4.1.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **4.2.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -75,6 +75,31 @@ export async function init(api, manifest) {
   // Cesium への機能追加
 }
 ```
+
+#### プラグイン宣言レイヤー（manifest.layer）
+
+`plugins.json` に `layer` を宣言すると、本体がプラグイン専用レイヤーを自動登録します。レイヤ一覧・表示切替・属性検索（ベクター検索）・属性パネルの対象になり、内蔵レイヤーと同じ扱いになります。
+
+```json
+{
+  "id": "my-plugin",
+  "url": "./PLUGIN/my-plugin/plugin.js",
+  "layer": {
+    "title": "マイプラグイン",
+    "group": "プラグイン",
+    "format": "entities",
+    "visible": true,
+    "scope": "app"
+  }
+}
+```
+
+- `format: "entities"`：本体が `Cesium.CustomDataSource` を生成して貸し出します。`api.getPluginDataSource(manifest.id)` で取得し `ds.entities.add(...)` するだけで、動的な entity が管理対象になります
+- `format: "geojson"`：`api.setPluginLayerData(manifest.id, geojson)` で GeoJSON オブジェクトを渡すと、`geojson:` レイヤーと同じ描画経路（クランプ・ドレープ設定を含む）で表示されます。更新は再度呼び出すだけです
+- `scope`：`"app"`（既定）はプロジェクト切替をまたいで存続、`"project"` はプロジェクト切替時にレイヤーごと削除されます
+- `manifest.layer` を省略した場合は従来通りで、`viewer.entities.add` 等による直接描画も可能です（非管理・揮発データ）
+
+プラグインから任意のタイミングで追加する場合は `api.registerPluginLayer(config, pluginId)`、削除は `api.removePluginLayer(idOrPluginId)` も使えます。
 
 ### 認証用ログインUIの共通化
 

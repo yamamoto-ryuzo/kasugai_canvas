@@ -5,7 +5,14 @@
       "id": "sample-hello",
       "name": "Hello Plugin",
       "version": "1.0.0",
-      "url": "./PLUGIN/sample-hello/plugin.js"
+      "url": "./PLUGIN/sample-hello/plugin.js",
+      "layer": {
+        "title": "サンプルプラグイン",
+        "group": "プラグイン",
+        "format": "entities",
+        "visible": true,
+        "scope": "app"
+      }
     }
   ]
 }

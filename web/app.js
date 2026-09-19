@@ -94,6 +94,10 @@ const activeClippingPlanes = { planes: [] };
 const uiHooks = {};
 const activeDataSources = [];
 const vectorDataSources = [];
+// プラグイン宣言レイヤー(plugins.json の layer 設定由来)。applyInspector で
+// layers/layerState/layerOrder がクリアされても再登録されるよう別リストで保持する
+const pluginLayers = [];
+let pluginLayerSeq = 0;
 let vectorSearchData = null;
 const activePrimitives = [];
 const drapeTerrainSources = { dem: true, tiles3d: false };
@@ -1202,7 +1206,7 @@ function updateVectorSearchUI() {
 
 async function refreshLayers() {
   viewer.imageryLayers.removeAll(false);
-  vectorDataSources.forEach(({ ds }) => { try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
+  vectorDataSources.forEach(({ ds, plugin }) => { if (!plugin) try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
   vectorDataSources.length = 0;
   activeDataSources.length = 0;
   activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
@@ -1244,7 +1248,7 @@ async function refreshLayers() {
   const drape3DTiles = drapeTerrainSources.tiles3d && visible3DTiles;
   const orderedItems = getOrderedLayerItems();
   const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
-  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer").slice().reverse();
+  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities").slice().reverse();
 
   // 3D Tiles ドレープ用プロバイダー定義
   const drapeProviders = [];
@@ -1328,11 +1332,18 @@ async function refreshLayers() {
       } catch (error) {
         console.warn("3D Tiles の読み込みに失敗しました:", item.url, error);
       }
+    } else if (item.type === "entities") {
+      // プラグイン宣言レイヤー: DataSource は本体で所有・refresh をまたいで存続し、
+      // ここでは表示状態の反映と属性検索インデックスへの登録だけを行う
+      if (!item.dataSource) continue;
+      try { item.dataSource.show = item.visible; } catch (e) {}
+      vectorDataSources.push({ ds: item.dataSource, id: item.id, title: item.title, plugin: true });
     } else if (item.type === "geojson" || item.type === "layer") {
       try {
+        if (!item.url && !item.data) continue;
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
         if (!clamp && !item.visible) continue;
-        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive) {
+        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url) {
           let heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           if (drapeTerrainSources.dem && drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           else if (drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_3D_TILE;
@@ -1349,7 +1360,7 @@ async function refreshLayers() {
           else if (drape3DTiles) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
           else if (drapeTerrainSources.dem) classification = Cesium.ClassificationType.TERRAIN;
         }
-        const ds = await Cesium.GeoJsonDataSource.load(item.url, { clampToGround: clamp });
+        const ds = await Cesium.GeoJsonDataSource.load(item.data || item.url, { clampToGround: clamp });
         for (const entity of ds.entities.values) {
           if (entity.polygon) {
             entity.polygon.outline = new Cesium.ConstantProperty(false);
@@ -1590,6 +1601,14 @@ function applyInspector(text) {
       layerOrder.push(id);
     }
   });
+
+  // プラグイン宣言レイヤーは inspector テキスト由来ではないため、
+  // パース後に末尾へ再登録する
+  for (const item of pluginLayers) {
+    layers.push(item);
+    layerState.set(item.id, item);
+    layerOrder.push(item.id);
+  }
 
   syncGoogle3dTilesLayer();
   basemaps.splice(0, basemaps.length, ...parsedBasemaps);
@@ -3025,6 +3044,8 @@ function setupEvents() {
     if (currentProjectId) params.set("project", currentProjectId);
     else params.delete("project");
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+    // scope:"project" のプラグインレイヤーはプロジェクト単位のデータとして切り離す
+    pluginLayers.filter(item => item.scope === "project").forEach(removePluginLayer);
     try {
       setInspectorStatus(t("inspector.status.loadingProject"));
       await loadInspectorConfig();
@@ -3968,6 +3989,55 @@ function applyUrlCamera() {
 }
 
 // AI・外部連携用の操作API。チャットパネルや将来的なエージェント連携から地図を操作する入口
+// プラグイン宣言レイヤー: plugins.json の layer 設定またはプラグインからの
+// 明示呼び出しで生成し、レイヤ一覧・表示切替・属性検索を本体レイヤーと同じ経路で扱う。
+// format:"entities" は CustomDataSource を貸し出し、format:"geojson" は
+// setPluginLayerData で渡した GeoJSON を内蔵 geojson レイヤーと同じ描画経路に載せる
+async function registerPluginLayer(config = {}, pluginId = "") {
+  const format = config.format === "geojson" ? "geojson" : "entities";
+  const item = {
+    id: `plugin-${pluginId || "anon"}-${pluginLayerSeq++}`,
+    title: config.title || pluginId || "Plugin",
+    type: format,
+    visible: config.visible !== false,
+    group: config.group || "",
+    scope: config.scope === "project" ? "project" : "app",
+    plugin: true,
+    pluginId,
+    data: config.data || null,
+    dataSource: null,
+  };
+  if (format === "entities") {
+    const ds = new Cesium.CustomDataSource(item.title);
+    await viewer.dataSources.add(ds);
+    item.dataSource = ds;
+  }
+  pluginLayers.push(item);
+  layers.push(item);
+  layerState.set(item.id, item);
+  layerOrder.push(item.id);
+  renderLayerList();
+  await refreshLayers();
+  window.kasugaiApi?.emit("plugin-layer-registered", { id: item.id, pluginId, type: item.type });
+  return item;
+}
+
+function removePluginLayer(item) {
+  if (item.dataSource) { try { viewer.dataSources.remove(item.dataSource, true); } catch (e) {} }
+  const pluginIndex = pluginLayers.indexOf(item);
+  if (pluginIndex >= 0) pluginLayers.splice(pluginIndex, 1);
+  layerState.delete(item.id);
+  const orderIndex = layerOrder.indexOf(item.id);
+  if (orderIndex >= 0) layerOrder.splice(orderIndex, 1);
+  const layerIndex = layers.indexOf(item);
+  if (layerIndex >= 0) layers.splice(layerIndex, 1);
+  window.kasugaiApi?.emit("plugin-layer-removed", { id: item.id, pluginId: item.pluginId });
+}
+
+function findPluginLayer(idOrPluginId) {
+  return pluginLayers.find(item => item.id === idOrPluginId || item.pluginId === idOrPluginId) || null;
+}
+
 window.kasugaiApi = {
   flyTo,
   getCamera() {
@@ -4212,6 +4282,28 @@ window.kasugaiApi = {
     console.log("[kasugaiApi] プラグイン登録:", meta.id || meta.name);
   },
   getPlugins() { return this._plugins; },
+  async registerPluginLayer(config, pluginId) {
+    return await registerPluginLayer(config, pluginId);
+  },
+  getPluginDataSource(idOrPluginId) {
+    const item = findPluginLayer(idOrPluginId);
+    return item ? item.dataSource : null;
+  },
+  async setPluginLayerData(idOrPluginId, geojson) {
+    const item = findPluginLayer(idOrPluginId);
+    if (!item || item.type !== "geojson" || !geojson) return false;
+    item.data = geojson;
+    await refreshLayers();
+    return true;
+  },
+  async removePluginLayer(idOrPluginId) {
+    const item = findPluginLayer(idOrPluginId);
+    if (!item) return false;
+    removePluginLayer(item);
+    renderLayerList();
+    await refreshLayers();
+    return true;
+  },
   getAuth() { return window.kasugaiAuth || null; },
 };
 

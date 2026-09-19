@@ -1,6 +1,15 @@
 async function loadPlugin(manifest) {
   try {
     const url = manifest.url || `./PLUGIN/${manifest.id}/plugin.js`;
+    // layer 宣言があるプラグインは本体側でレイヤーを先に登録し、
+    // レイヤ一覧・属性検索・表示切替の対象にする
+    if (manifest.layer && window.kasugaiApi?.registerPluginLayer) {
+      try {
+        await window.kasugaiApi.registerPluginLayer(manifest.layer, manifest.id || "");
+      } catch (error) {
+        console.warn(`[plugin-loader] レイヤー登録失敗: ${manifest.id}`, error);
+      }
+    }
     const module = await import(url);
     if (typeof module.init === "function") {
       await module.init(window.kasugaiApi, manifest);

@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.1.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.2.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -257,6 +257,7 @@
           <pre><code>web/PLUGIN/sample-hello/plugin.js
 web/PLUGIN/auth-local/auth.js</code></pre>
           <p>通常プラグインは <code>window.kasugaiApi</code> 経由で Cesium viewer やカメラ、レイヤー情報にアクセスできます。詳細は README.md を参照してください。</p>
+          <p><code>plugins.json</code> に <code>layer</code> を宣言すると、本体がプラグイン専用レイヤーを自動登録し、レイヤ一覧・表示切替・属性検索・属性パネルの対象になります。<code>format: "entities"</code> は本体生成の DataSource に動的 entity を追加する方式、<code>format: "geojson"</code> は <code>api.setPluginLayerData()</code> で GeoJSON を渡して内蔵レイヤーと同じ描画経路で表示する方式です。<code>scope: "project"</code> でプロジェクト切替時に自動削除もできます。</p>
         </div>
       </section>
 
