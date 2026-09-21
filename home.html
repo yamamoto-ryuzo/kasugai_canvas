@@ -408,8 +408,8 @@ legend: 凡例|https://example.com/legend.png</code></pre>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
 xyz: タイルレイヤ | 同上+off
 3dtiles: / geojson:(layer:) / geoparquet: レイヤ | off / proxy=off
-duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / bbox=auto / render=primitive
-sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・:bbox で表示範囲連動)
+duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / bbox=auto / render=primitive|entity(既定primitive)
+sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・:bbox で表示範囲連動)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID</code></pre>
@@ -420,7 +420,9 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
           <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・GeoPackage 等）を使います。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
           <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> に <code>bbox=auto</code> を付けると、カメラ停止ごとに表示範囲を <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> として再クエリします。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用に使えます。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
           <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
-          <p><strong>高速描画モード</strong>：<code>render=primitive</code> を付けると entity を作らず CesiumJS の <code>GeoJsonPrimitive</code>（バッファプリミティブのバッチ描画）で表示し、大量地物で軽くなります。このモードでは絞り込み・検索は SQL フィルター（⏷・<code>bbox=auto</code>）に委ねるためベクター検索パネルの対象外ですが、クリックした地物の属性は従来通り属性パネルに表示されます。</p>
+          <p><strong>描画方式（既定はバッファ描画）</strong>：<code>duckdb:</code>/<code>sql:</code> は既定で entity を作らず CesiumJS の <code>GeoJsonPrimitive</code>（バッファプリミティブのバッチ描画）で表示し、大量地物でも軽く動作します。<code>render=entity</code>（<code>sql:</code> は末尾 <code>| render=entity</code>）で従来の entity 描画に戻せます。クリックした地物の属性はいずれの方式でも属性パネルに表示されます。なおバッファ描画は地形ドレープ（クランプ）非対応のため、起伏のある地形ではジオメトリが地表に埋まる場合があります。ドレープが必要な場合は <code>render=entity</code> を指定してください。</p>
+          <p><strong>検索は常に全件対象</strong>：<code>duckdb:</code>/<code>sql:</code> の検索・絞り込みは ⏷ の SQL フィルターに一本化しており、常にファイル全件を対象に評価します（読み込み済みの一部だけを対象にするベクター検索パネルには登録されません）。<code>bbox=auto</code> と <code>where=</code> を併用した場合、表示は「検索条件 ∩ 表示範囲」になりますが、検索自体は全件に対して行われ、コンソールに「検索ヒット全 N 件 / 表示範囲内 M 件」と併記されます。</p>
+          <p><strong>属性値一覧</strong>：属性値一覧ウィジェットのレイヤー選択に <code>duckdb:</code>/<code>sql:</code> レイヤーも表示されます。一覧は読み込み済み地物ではなく DuckDB へ直接クエリして作られ、<code>where=</code> は適用する一方 <code>bbox</code>/<code>limit=</code> は適用せず LIMIT 無しの全件を取得します。ウィジェット内の検索文字は全属性列への <code>ILIKE</code> 述語として SQL に変換されるため、常にファイル全件が検索対象です（表への描画は先頭1000行まで）。</p>
           <p><strong>Parquet 最適化</strong>：クエリ結果のジオメトリは WKB バイナリで受け取ります（テキスト変換を省き転送量・パース時間・ピークメモリを削減）。<code>columns=列名,列名</code> で読み込む属性列を絞る列プルーニングが可能です。<code>bbox=auto</code> 時は GeoParquet 1.1 の <code>covering</code> bbox 列（または慣用名の xmin/xmax/ymin/ymax 列、<code>covering=</code> で明示指定も可）への範囲述語を優先的に使うため、Parquet の row group 統計スキップが効き、表示範囲外のデータは読み込み自体を省略できます。</p>
         </div>
         <div class="url-box">

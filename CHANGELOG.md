@@ -10,10 +10,11 @@
 
 - DuckDB-WASM レイヤー：インスペクターの `.kasc` 設定で `duckdb: タイトル | URL | on/off | where= | limit= | geom= | lon=・lat= | format=` および `sql: タイトル | SELECT文` 行を新規追加。CDN 配信の DuckDB-WASM（遅延ロード・Worker 実行）で Parquet/CSV/JSON 等を SQL で絞り込んでから GeoJSON へ正規化し、既存のベクター描画経路に流す。ジオメトリ列は GEOMETRY 型→慣用名→BLOB 列の順に自動検出（`geom=` で明示可）、WKB/WKT/GeoJSON テキストを受理し、緯度経度列のみのデータは `lon=`/`lat=` でポイント化。spatial 拡張ロード時は空間述語・`ST_Read`（`format=read` で Shapefile/GeoPackage 等）も利用可能で、拡張ロード失敗時も WKB/GeoJSON テキストのパススルーで縮退動作する
 - 対話的フィルター・表示範囲連動：レイヤー一覧の ⏷ ボタンで `duckdb:` は WHERE 条件式、`sql:` はクエリ全文を変更して即時再クエリ（変更は inspector の `.kasc` 行にも反映）。`duckdb:` の `bbox=auto`・`sql:` の `:bbox` プレースホルダ指定時はカメラ停止ごとに表示範囲を `ST_MakeEnvelope`/`ST_Intersects` で絞り込み再クエリし、巨大データを「見ている範囲だけ読む」運用が可能（spatial 拡張が必要）
-- 高速描画モード：`duckdb:` の `render=primitive` で entity を介さず `GeoJsonPrimitive`（バッファプリミティブ）でバッチ描画。大量地物で軽量になり、検索は SQL フィルターに委ねる設計（ベクター検索パネル対象外・クリック属性表示は従来通り利用可能）
+- バッファ描画を既定化：`duckdb:`/`sql:` は既定で entity を介さず `GeoJsonPrimitive`（バッファプリミティブ）でバッチ描画し、大量地物で軽量に動作。`render=entity`（`sql:` は末尾 `| render=entity`）で従来の entity 描画に戻せる。クリック属性表示は両方式で利用可能
+- 「検索は常に全件検索」方針の徹底：`duckdb:`/`sql:` は読み込み済み行のみを対象とするベクター検索パネルに登録せず、検索・絞り込みはファイル全件を対象に評価する SQL フィルター（⏷）に一本化。`bbox=auto`+`where=` 併用時は表示が「検索 ∩ 表示範囲」になる一方、`where=` のみの `COUNT(*)` を併走して「検索ヒット全 N 件 / 表示範囲内 M 件」をコンソールに出力。クリック属性は `scene.pick` の `picked.properties` から表示（バッファ描画は地形ドレープ非対応のため、ドレープが必要な場合は `render=entity` を指定）。属性値一覧ウィジェットのレイヤー選択にも `duckdb:`/`sql:` を追加し、一覧は DuckDB に直接クエリして LIMIT 無しの全件対象（bbox・`limit=` 非適用・位置は `ST_Centroid` または lon/lat 列）で取得。ウィジェット内の検索文字は全属性列への `ILIKE` 述語として SQL に変換され、常にファイル全件が検索対象になる（表への描画は先頭1000行まで）
 - Parquet 最適化：クエリ結果のジオメトリを WKB バイナリで受け取りテキスト変換・`JSON.parse` を削減（転送量・ロード時間・ピークメモリを改善）。`columns=` で読み込む属性列を絞る列プルーニングに対応。`bbox=auto` 時は GeoParquet 1.1 `covering` bbox 列（慣用名 xmin/xmax/ymin/ymax または `covering=` 指定）への範囲述語を優先し、row group 統計スキップで表示範囲外を読み込まない
 - ベクターデコーダーのレジストリ化：`vectorDecoders` Map（type→`{load, query}`）に集約し、`refreshLayers` ディスパッチ・`orderedOtherLayers` フィルタ・`updateInspectorFromLayerOrder` の種類一覧をレジストリ参照に統一。今後の形式追加は「パース + デコーダー1本 + Map 登録」で完結する
-- サンプル：`web/projects/default` と `installer/projects/default` の `kasugai_canvas.kasc` に `duckdb:` サンプル（NaturalEarth・`bbox=auto` 表示範囲連動・`render=primitive` 高速描画・`off` で任意ロード）を追加
+- サンプル：`web/projects/default` と `installer/projects/default` の `kasugai_canvas.kasc` に `duckdb:` サンプル（NaturalEarth・`bbox=auto` 表示範囲連動・`render=entity` 描画・`off` で任意ロード）を追加
 - ドキュメント：home.html の対応形式一覧に DuckDB SQL カードを追加し、CSV/TSV・Shapefile/GeoPackage を `duckdb:`/`sql:` 経路の対応済みに更新。インスペクター設定仕様に `duckdb:`/`sql:` の書式・注意事項を追記
 
 ## [4.7.0] - 2026-09-21
