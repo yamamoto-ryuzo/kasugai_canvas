@@ -32,7 +32,7 @@
       </section>
 
       <section>
-        <h2>�️ 対応データ形式</h2>
+        <h2>🗂️ 対応データ形式</h2>
         <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
         <div class="features">
           <div class="feature-card">
@@ -52,11 +52,11 @@
             <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。Range Request による部分読み・属性検索に対応</p>
           </div>
           <div class="feature-card">
-            <h3>� DuckDB SQL <span class="badge">対応</span> <span class="badge" style="background:#17a2b8;">NEW v4.8.0</span></h3>
+            <h3>🦆 DuckDB SQL <span class="badge">対応</span> <span class="badge" style="background:#17a2b8;">NEW v4.8.0</span></h3>
             <p><code>duckdb:</code> / <code>sql:</code> で指定。DuckDB-WASM（CDN から遅延ロード）で Parquet・CSV・JSON 等を SQL で絞り込んでから GeoJSON へ正規化して描画。spatial 拡張により空間述語・WKT・<code>ST_Read</code>(Shapefile/GeoPackage 等) も利用可能</p>
           </div>
           <div class="feature-card">
-            <h3>�🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
+            <h3>🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
             <p>空間インデックス内蔵のバイナリ形式。範囲ストリーミングに強く、GeoJSON 正規化経路での対応候補</p>
           </div>
           <div class="feature-card">
@@ -76,7 +76,7 @@
       </section>
 
       <section>
-        <h2>�🗺️ V1.GIS 基本機能（Re:Earth GeoSuite コンパチブル）</h2>
+        <h2>🗺️ V1.GIS 基本機能（Re:Earth GeoSuite コンパチブル）</h2>
         <p>Re:Earth GeoSuite と同様の GIS・デジタルツイン機能を実装しています。</p>
         <div class="features">
           <div class="feature-card">
@@ -310,7 +310,7 @@ web/PLUGIN/auth-local/auth.js</code></pre>
       </section>
 
       <section>
-        <h2>� V5.【開発中:ﾊｯｶｿﾝ】Google 連携（v5.0 へ向けた主要機能）</h2>
+        <h2>🔗 V5.【開発中:ハッカソン】Google 連携（v5.0 へ向けた主要機能）</h2>
         <p>トップレベルの「Google」タブ（設定の右）に Google 関連機能を集約しています。Gemini による AI チャットと Google Maps Platform の地図機能を、このタブのサブタブ（Gemini / Map / エージェント）から設定・管理します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v5.0 をリリースする予定です。</strong></p>
         <div class="features">
           <div class="feature-card">
@@ -322,7 +322,7 @@ web/PLUGIN/auth-local/auth.js</code></pre>
             <p>Google → Map タブで Maps Platform API キーを設定し、「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。Map Tiles API は従量課金です</p>
           </div>
           <div class="feature-card">
-            <h3>� API キー管理</h3>
+            <h3>🔑 API キー管理</h3>
             <p>Gemini キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>、Maps キーは <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行。キーは localStorage にのみ保存され、.kasc エクスポートには含まれません</p>
           </div>
           <div class="feature-card">

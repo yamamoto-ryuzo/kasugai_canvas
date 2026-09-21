@@ -11,7 +11,7 @@
 - DuckDB-WASM レイヤー：インスペクターの `.kasc` 設定で `duckdb: タイトル | URL | on/off | where= | limit= | geom= | lon=・lat= | format=` および `sql: タイトル | SELECT文` 行を新規追加。CDN 配信の DuckDB-WASM（遅延ロード・Worker 実行）で Parquet/CSV/JSON 等を SQL で絞り込んでから GeoJSON へ正規化し、既存のベクター描画経路に流す。ジオメトリ列は GEOMETRY 型→慣用名→BLOB 列の順に自動検出（`geom=` で明示可）、WKB/WKT/GeoJSON テキストを受理し、緯度経度列のみのデータは `lon=`/`lat=` でポイント化。spatial 拡張ロード時は空間述語・`ST_Read`（`format=read` で Shapefile/GeoPackage 等）も利用可能で、拡張ロード失敗時も WKB/GeoJSON テキストのパススルーで縮退動作する
 - 対話的フィルター・表示範囲連動：レイヤー一覧の ⏷ ボタンで `duckdb:` は WHERE 条件式、`sql:` はクエリ全文を変更して即時再クエリ（変更は inspector の `.kasc` 行にも反映）。`duckdb:` の `bbox=auto`・`sql:` の `:bbox` プレースホルダ指定時はカメラ停止ごとに表示範囲を `ST_MakeEnvelope`/`ST_Intersects` で絞り込み再クエリし、巨大データを「見ている範囲だけ読む」運用が可能（spatial 拡張が必要）
 - ベクターデコーダーのレジストリ化：`vectorDecoders` Map（type→`{load, query}`）に集約し、`refreshLayers` ディスパッチ・`orderedOtherLayers` フィルタ・`updateInspectorFromLayerOrder` の種類一覧をレジストリ参照に統一。今後の形式追加は「パース + デコーダー1本 + Map 登録」で完結する
-- サンプル：`web/projects/default` と `installer/projects/default` の `kasugai_canvas.kasc` に `duckdb:` サンプル（NaturalEarth・`limit=10`・`off` で任意ロード）を追加
+- サンプル：`web/projects/default` と `installer/projects/default` の `kasugai_canvas.kasc` に `duckdb:` サンプル（NaturalEarth・`bbox=auto` 表示範囲連動・`off` で任意ロード）を追加
 - ドキュメント：home.html の対応形式一覧に DuckDB SQL カードを追加し、CSV/TSV・Shapefile/GeoPackage を `duckdb:`/`sql:` 経路の対応済みに更新。インスペクター設定仕様に `duckdb:`/`sql:` の書式・注意事項を追記
 
 ## [4.7.0] - 2026-09-21
