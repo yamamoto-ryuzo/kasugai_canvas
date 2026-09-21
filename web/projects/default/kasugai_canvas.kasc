@@ -1,7 +1,7 @@
 3dtiles: 東京都/千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json|on
 geojson: ローカルサンプル | DATA/sample.geojson | on
 geoparquet: サンプル/NaturalEarth国ポリゴン | https://raw.githubusercontent.com/opengeospatial/geoparquet/refs/heads/main/examples/example.parquet | on
-duckdb: サンプル/NaturalEarth(SQL・表示範囲連動) | https://raw.githubusercontent.com/opengeospatial/geoparquet/refs/heads/main/examples/example.parquet | off | bbox=auto
+duckdb: サンプル/NaturalEarth(SQL・表示範囲連動) | https://raw.githubusercontent.com/opengeospatial/geoparquet/refs/heads/main/examples/example.parquet | off | bbox=auto | render=primitive
 geojson: 東京都/行政区域 | https://assets.cms.reearth.io/assets/ef/b1d062-e44b-4a19-8ebe-5fafeeba05f2/%E8%A1%8C%E6%94%BF%E5%8C%BA%E5%9F%9F.geojson|off
 3dtiles: 東京都//千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json|off
 geojson: 東京都//行政区域 | https://assets.cms.reearth.io/assets/ef/b1d062-e44b-4a19-8ebe-5fafeeba05f2/%E8%A1%8C%E6%94%BF%E5%8C%BA%E5%9F%9F.geojson|off

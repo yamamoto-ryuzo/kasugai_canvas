@@ -666,6 +666,11 @@ async function focusLayer(layer) {
   // XYZタイルは範囲情報を持たないため、ImageryLayer未生成時は全世界表示にフォールバックする
   if (!target && layer.type === "tile") target = Cesium.Rectangle.clone(Cesium.Rectangle.MAX_VALUE);
   if (!target) return false;
+  // GeoJsonPrimitive は flyTo の対象外なので内部の Buffer コレクションへフォーカスする
+  if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
+    const inner = target.polygons || target.polylines || target.points;
+    if (inner) target = inner;
+  }
   try {
     return await viewer.flyTo(target, { duration: 2 });
   } catch (error) {
@@ -1544,11 +1549,12 @@ function duckDbGeometryCastExpr(col) {
   return `COALESCE(TRY(ST_GeomFromText(${name})), TRY(ST_GeomFromGeoJSON(${name})))`;
 }
 
-// ジオメトリ列を取り出す SELECT 式を組み立てる。spatial 拡張があれば GeoJSON テキスト化し、
-// 無ければ生値を返して JS 側の WKB/GeoJSON テキストパースに委ねる
+// ジオメトリ列を取り出す SELECT 式を組み立てる。spatial 拡張があれば WKB バイナリ化して返し
+// (テキストシリアライズと JSON.parse の往復を避ける)、無ければ生値を返して JS 側の
+// WKB/GeoJSON テキストパースに委ねる
 function duckDbGeometryExpr(col, spatial) {
   if (!spatial) return quoteSqlIdent(col.name);
-  return `ST_AsGeoJSON(${duckDbGeometryCastExpr(col)})`;
+  return `ST_AsWKB(${duckDbGeometryCastExpr(col)})`;
 }
 
 // 表示範囲連動フィルター(bbox=auto / :bbox プレースホルダ)が有効なレイヤーか
@@ -1559,8 +1565,9 @@ function isViewportQueryLayer(item) {
 const DUCKDB_WORLD_ENVELOPE = "ST_MakeEnvelope(-180, -90, 180, 90)";
 let duckDbBBoxWarned = false;
 
-// 現在の表示範囲を ST_MakeEnvelope の SQL 式として返す。日付変更線またぎは2分割の UNION にする
-function getViewEnvelopeSql() {
+// 現在の表示範囲を経度範囲配列として返す(日付変更線またぎは2区間)。
+// covering bbox 列への範囲述語(row group 統計スキップ)に使う
+function getViewRanges() {
   const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
   if (!rect) return null;
   const normLon = deg => {
@@ -1572,9 +1579,70 @@ function getViewEnvelopeSql() {
   const south = Math.max(-89.9, Math.min(89.9, Cesium.Math.toDegrees(rect.south)));
   const north = Math.max(-89.9, Math.min(89.9, Cesium.Math.toDegrees(rect.north)));
   // west === east は ±180 が両端に丸まる全球表示の退化ケース(幅ゼロになるのを防ぐ)
-  if (west === east) return `ST_MakeEnvelope(-180, ${south}, 180, ${north})`;
-  if (west < east) return `ST_MakeEnvelope(${west}, ${south}, ${east}, ${north})`;
-  return `ST_Union(ST_MakeEnvelope(${west}, ${south}, 180, ${north}), ST_MakeEnvelope(-180, ${south}, ${east}, ${north}))`;
+  const ranges = west === east ? [{ west: -180, east: 180 }]
+    : west < east ? [{ west, east }]
+    : [{ west, east: 180 }, { west: -180, east }];
+  return { ranges, south, north };
+}
+
+// 現在の表示範囲を ST_MakeEnvelope の SQL 式として返す。日付変更線またぎは2分割の UNION にする
+function getViewEnvelopeSql() {
+  const bounds = getViewRanges();
+  if (!bounds) return null;
+  const env = r => `ST_MakeEnvelope(${r.west}, ${bounds.south}, ${r.east}, ${bounds.north})`;
+  return bounds.ranges.length === 1 ? env(bounds.ranges[0]) : `ST_Union(${env(bounds.ranges[0])}, ${env(bounds.ranges[1])})`;
+}
+
+// 表示範囲連動レイヤーのフィルター状態を現在のカメラ範囲で更新する
+function updateViewportFilter(item) {
+  item.bboxFilter = getViewEnvelopeSql() || DUCKDB_WORLD_ENVELOPE;
+  item.bboxBounds = getViewRanges();
+}
+
+// covering bbox 列への範囲述語を組み立てる(row group の min/max 統計による読み飛ばしが効く)
+function duckDbCoveringPredicate(refs, bounds) {
+  if (!bounds) return null;
+  const lon = bounds.ranges.map(r => `(${refs.xmax} >= ${r.west} AND ${refs.xmin} <= ${r.east})`).join(" OR ");
+  return `((${lon}) AND ${refs.ymax} >= ${bounds.south} AND ${refs.ymin} <= ${bounds.north})`;
+}
+
+// GeoParquet 1.1 covering.bbox 列を parquet_kv_metadata の geo メタデータから検出する
+async function detectDuckDbCoveringFromMetadata(conn, url) {
+  try {
+    const table = await conn.query(`SELECT key, value FROM parquet_kv_metadata(${quoteSqlLiteral(url)}) WHERE key = 'geo'`);
+    const row = table.toArray()[0];
+    if (!row) return null;
+    const raw = row.value;
+    const text = typeof raw === "string" ? raw : new TextDecoder().decode(raw instanceof Uint8Array ? raw : new Uint8Array(raw));
+    const geo = JSON.parse(text);
+    const covering = geo?.columns?.[geo.primary_column]?.covering?.bbox;
+    if (!covering) return null;
+    const ref = path => Array.isArray(path) && path.length ? path.map(quoteSqlIdent).join(".") : null;
+    const refs = { xmin: ref(covering.xmin), xmax: ref(covering.xmax), ymin: ref(covering.ymin), ymax: ref(covering.ymax) };
+    if (!refs.xmin || !refs.xmax || !refs.ymin || !refs.ymax) return null;
+    // covering のルート列は表示用属性ではないため出力から除く
+    const exclude = new Set([covering.xmin, covering.xmax, covering.ymin, covering.ymax].map(p => Array.isArray(p) ? p[0] : null).filter(Boolean));
+    return { refs, exclude };
+  } catch { return null; }
+}
+
+// covering bbox 列を解決する。優先順: covering= 明示指定 > geo メタデータ > 慣用名 xmin/xmax/ymin/ymax
+async function resolveDuckDbCoveringColumns(conn, item, columns) {
+  if (Array.isArray(item.covering) && item.covering.length === 4) {
+    const [xmin, xmax, ymin, ymax] = item.covering;
+    return { refs: { xmin: quoteSqlIdent(xmin), xmax: quoteSqlIdent(xmax), ymin: quoteSqlIdent(ymin), ymax: quoteSqlIdent(ymax) }, exclude: new Set(item.covering) };
+  }
+  const format = String(item.format || "").toLowerCase();
+  const isParquet = format === "parquet" || (!format && /\.parquet([?#]|$)/i.test(item.url || ""));
+  if (isParquet) {
+    const detected = await detectDuckDbCoveringFromMetadata(conn, item.url);
+    if (detected) return detected;
+  }
+  const find = name => columns.find(c => c.name.toLowerCase() === name)?.name;
+  if (["xmin", "xmax", "ymin", "ymax"].every(n => find(n))) {
+    return { refs: { xmin: quoteSqlIdent(find("xmin")), xmax: quoteSqlIdent(find("xmax")), ymin: quoteSqlIdent(find("ymin")), ymax: quoteSqlIdent(find("ymax")) }, exclude: new Set() };
+  }
+  return null;
 }
 
 // DuckDB の行値から GeoJSON ジオメトリを取り出す
@@ -1633,21 +1701,34 @@ async function loadDuckDbLayerAsGeoJson(item) {
   const geomCol = resolveDuckDbGeometryColumn(columns, item.geom);
   const lonlat = geomCol ? null : resolveDuckDbLonLat(columns, item.lon, item.lat);
   if (!geomCol && !lonlat) throw new Error("ジオメトリ列が見つかりません(geom= または lon=/lat= で指定できます)");
+  // covering bbox 列(GeoParquet 1.1)があれば xmin/xmax/ymin/ymax の範囲述語で
+  // row group 統計スキップが効く。表示範囲フィルター指定時のみ解決する
+  const covering = item.bboxFilter ? await resolveDuckDbCoveringColumns(conn, item, columns) : null;
+  if (item.columns?.length) {
+    const missing = item.columns.filter(name => !columns.some(c => c.name === name));
+    if (missing.length) throw new Error(`columns= の列が見つかりません: ${missing.join(", ")}`);
+  }
   const geomExpr = geomCol ? `${duckDbGeometryExpr(geomCol, spatial)} AS "__geom__"` : null;
+  const excludeCols = geomCol ? [geomCol.name, ...(covering ? [...covering.exclude] : [])] : [];
   const select = geomCol
-    ? `SELECT * EXCLUDE (${quoteSqlIdent(geomCol.name)}), ${geomExpr}`
+    ? (item.columns?.length
+        ? `SELECT ${item.columns.map(quoteSqlIdent).join(", ")}, ${geomExpr}`
+        : `SELECT * EXCLUDE (${excludeCols.map(quoteSqlIdent).join(", ")}), ${geomExpr}`)
     : "SELECT *";
   const predicates = [];
   if (item.where) predicates.push(`(${item.where})`);
-  // 表示範囲連動フィルター(bbox=auto): カメラの表示範囲を ST_Intersects の述語にする
+  // 表示範囲連動フィルター(bbox=auto): covering 列があれば統計スキップ可能な範囲述語で先に絞り、
+  // spatial があれば ST_Intersects で精密判定する。covering のみでも近似フィルターとして機能する
   if (item.bboxFilter) {
+    const coveringPred = covering ? duckDbCoveringPredicate(covering.refs, item.bboxBounds) : null;
+    if (coveringPred) predicates.push(coveringPred);
     const operand = geomCol
       ? (spatial ? duckDbGeometryCastExpr(geomCol) : null)
       : (spatial ? `ST_Point(${quoteSqlIdent(lonlat.lon)}, ${quoteSqlIdent(lonlat.lat)})` : null);
     if (operand) predicates.push(`ST_Intersects(${operand}, ${item.bboxFilter})`);
-    else if (!duckDbBBoxWarned) {
+    else if (!coveringPred && !duckDbBBoxWarned) {
       duckDbBBoxWarned = true;
-      console.warn("bbox フィルターには spatial 拡張が必要です。全件読み込みで動作します");
+      console.warn("bbox フィルターには spatial 拡張または covering bbox 列が必要です。全件読み込みで動作します");
     }
   }
   const clauses = [];
@@ -1842,8 +1923,14 @@ async function refreshLayers() {
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
         if (!clamp && !item.visible) continue;
         // 表示範囲連動レイヤーは現在の表示範囲を絞り込み条件としてセットしてからクエリする
-        if (decoder && isViewportQueryLayer(item)) item.bboxFilter = getViewEnvelopeSql() || DUCKDB_WORLD_ENVELOPE;
+        if (decoder && isViewportQueryLayer(item)) updateViewportFilter(item);
         const source = decoder ? await decoder.load(item) : (item.data || item.url);
+        // render=primitive: entity を作らず GeoJsonPrimitive でバッチ描画する高速パス。
+        // 検索は SQL フィルター(⏷)に委ねるためベクター検索パネルの対象外
+        if (decoder && item.renderPrimitive && Cesium.GeoJsonPrimitive) {
+          await addGeoJsonPrimitiveLayer(item, source, clamp);
+          continue;
+        }
         if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url && !decoder) {
           let heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           if (drapeTerrainSources.dem && drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
@@ -1876,6 +1963,29 @@ async function refreshLayers() {
   applyGlobeVisibility();
 }
 
+// GeoJsonPrimitive 用の高さ基準を返す(render=primitive の高速描画パスで使用)
+function geoJsonPrimitiveHeightReference(clamp) {
+  if (!clamp) return Cesium.HeightReference.NONE;
+  const drape3DTiles = isDrape3DTilesActive();
+  if (drapeTerrainSources.dem && drape3DTiles) return Cesium.HeightReference.CLAMP_TO_GROUND;
+  if (drape3DTiles) return Cesium.HeightReference.CLAMP_TO_3D_TILE;
+  return Cesium.HeightReference.CLAMP_TO_TERRAIN;
+}
+
+// GeoJSON を GeoJsonPrimitive(entity を介さないバッチ描画)として scene に追加する。
+// 属性は entity に展開されないが、ピック時に picked.properties から参照できる
+async function addGeoJsonPrimitiveLayer(item, geojson, clamp) {
+  const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(geojson, {
+    heightReference: geoJsonPrimitiveHeightReference(clamp),
+    scene: viewer.scene,
+    allowPicking: true,
+  });
+  primitive.show = item.visible;
+  viewer.scene.primitives.add(primitive);
+  activePrimitives.push(primitive);
+  layerRuntimeTargets.set(item.id, primitive);
+}
+
 // GeoJSON をスタイル適用済みの GeoJsonDataSource に変換する(初回ロードと再クエリで共用)
 function isDrape3DTilesActive() {
   return drapeTerrainSources.tiles3d && layers.some(l => l.visible && l.type === "3dtiles");
@@ -1903,14 +2013,27 @@ async function buildStyledGeoJsonDataSource(source, clamp) {
   return ds;
 }
 
-// クエリ系レイヤー(duckdb:/sql:)の DataSource を条件変更後に差し替えて再読み込みする
+// クエリ系レイヤー(duckdb:/sql:)の描画物を条件変更後に差し替えて再読み込みする
+// render=primitive のレイヤーは vectorDataSources に載らないため scene.primitives 側を差し替える
 async function reloadVectorLayer(item) {
   const decoder = vectorDecoders.get(item.type);
+  if (!decoder) return;
   const entry = vectorDataSources.find(e => e.id === item.id);
-  if (!decoder || !entry) return;
-  if (isViewportQueryLayer(item)) item.bboxFilter = getViewEnvelopeSql() || DUCKDB_WORLD_ENVELOPE;
+  const oldTarget = layerRuntimeTargets.get(item.id);
+  const oldPrimitive = Cesium.GeoJsonPrimitive && oldTarget instanceof Cesium.GeoJsonPrimitive ? oldTarget : null;
+  if (!entry && !oldPrimitive) return;
+  if (isViewportQueryLayer(item)) updateViewportFilter(item);
   const geojson = await decoder.load(item);
   const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || isDrape3DTilesActive());
+  if (item.renderPrimitive && Cesium.GeoJsonPrimitive) {
+    if (oldPrimitive) {
+      viewer.scene.primitives.remove(oldPrimitive);
+      const index = activePrimitives.indexOf(oldPrimitive);
+      if (index >= 0) activePrimitives.splice(index, 1);
+    }
+    await addGeoJsonPrimitiveLayer(item, geojson, clamp);
+    return;
+  }
   const ds = await buildStyledGeoJsonDataSource(geojson, clamp);
   try { ds.show = item.visible; } catch (e) {}
   viewer.dataSources.remove(entry.ds, false);
@@ -1927,9 +2050,8 @@ async function refreshViewportLayers() {
   if (!targets.length) return;
   viewportQueryRefreshRunning = true;
   try {
-    const envelope = getViewEnvelopeSql() || DUCKDB_WORLD_ENVELOPE;
     for (const item of targets) {
-      item.bboxFilter = envelope;
+      updateViewportFilter(item);
       try {
         await reloadVectorLayer(item);
       } catch (error) {
@@ -1980,7 +2102,10 @@ function syncLayerSourceLine(item) {
     if (item.lon) parts.push(`lon=${item.lon}`);
     if (item.lat) parts.push(`lat=${item.lat}`);
     if (item.format) parts.push(`format=${item.format}`);
+    if (item.columns?.length) parts.push(`columns=${item.columns.join(",")}`);
+    if (item.covering?.length) parts.push(`covering=${item.covering.join(",")}`);
     if (item.bboxAuto) parts.push("bbox=auto");
+    if (item.renderPrimitive) parts.push("render=primitive");
     line = `duckdb: ${parts.join(" | ")}`;
   } else if (item.type === "sql") {
     line = `sql: ${item.sourceTitle} | ${item.query}${item.sourceVisible === false ? " | off" : ""}`;
@@ -2204,8 +2329,10 @@ function applyInspector(text) {
       layerOrder.push(id);
     }
 
-    // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=  | on/off
+    // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto/render=primitive | on/off
     // 単一ファイルを DuckDB-WASM で読み、SQL の絞り込みを適用してから描画する
+    // columns= は読む属性列の絞り込み(列プルーニング)、covering= は xmin,xmax,ymin,ymax の列名指定
+    // render=primitive は entity を作らず GeoJsonPrimitive でバッチ描画する高速モード
     if (type === "duckdb") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
@@ -2226,6 +2353,9 @@ function applyInspector(text) {
         else if ((key === "lon" || key === "lng") && raw) item.lon = raw;
         else if (key === "lat" && raw) item.lat = raw;
         else if (key === "format" && raw) item.format = raw;
+        else if ((key === "columns" || key === "cols") && raw) item.columns = raw.split(",").map(s => s.trim()).filter(Boolean);
+        else if (key === "covering" && raw) item.covering = raw.split(",").map(s => s.trim()).filter(Boolean);
+        else if (key === "render" && /^(primitive|fast|batch)$/i.test(raw)) item.renderPrimitive = true;
         else if (key === "bbox" && /^(auto|on|true|view|viewport)$/i.test(raw)) item.bboxAuto = true;
         else if (key === "limit" && Number.isInteger(number) && number > 0) item.limit = number;
       });
