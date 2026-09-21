@@ -33,7 +33,9 @@
 
       <section>
         <h2>🗂️ 対応データ形式</h2>
-        <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
+        <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。ベクター系は <strong>全件読み込み系</strong>（全件 entity 化・ベクター検索対象）と <strong>クエリ系</strong>（SQL 絞り込み・表示範囲のみ描画・検索は常に全件）の2系統に分かれます。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
+
+        <h3 style="margin:14px 0 8px;">ネイティブ・タイル系</h3>
         <div class="features">
           <div class="feature-card">
             <h3>🗺️ XYZ タイル <span class="badge">対応</span></h3>
@@ -44,32 +46,45 @@
             <p><code>3dtiles:</code> で tileset.json を指定。PLATEAU 建築物・点群など大規模3Dデータをストリーミング表示</p>
           </div>
           <div class="feature-card">
+            <h3>🧩 MVT / PMTiles <span class="badge" style="background:#6c757d;">検討中</span></h3>
+            <p>ベクタータイル。数十万地物級の全件表示・LOD が必要な大規模データ向けの別経路として検討</p>
+          </div>
+        </div>
+
+        <h3 style="margin:14px 0 8px;">ベクター：全件読み込み系</h3>
+        <div class="features">
+          <div class="feature-card">
             <h3>📍 GeoJSON <span class="badge">対応</span></h3>
-            <p><code>geojson:</code> / <code>layer:</code> で指定。ベクトル検索・属性一覧・ドレープに対応したベクターデータの基本形式</p>
+            <p><code>geojson:</code> / <code>layer:</code> で指定。ベクトル検索・属性一覧・ドレープに対応したベクターデータの基本形式。小〜中規模・全件表示はこれが最速</p>
           </div>
           <div class="feature-card">
-            <h3>📦 GeoParquet <span class="badge">対応</span> <span class="badge" style="background:#17a2b8;">NEW v4.7.0</span></h3>
-            <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。Range Request による部分読み・属性検索に対応</p>
+            <h3>📦 GeoParquet <span class="badge">対応</span></h3>
+            <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。常に全件読み込みのため中規模まで。「Parquet をそのまま置くだけで表示」の利便性重視の経路</p>
           </div>
+        </div>
+
+        <h3 style="margin:14px 0 8px;">ベクター：クエリ系（DuckDB SQL）</h3>
+        <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路です。DuckDB-WASM（CDN から遅延ロード）が SQL で絞り込んでから GeoJSON へ正規化して描画します。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です。対応するファイル形式は以下のとおりです。</p>
+        <div class="features">
           <div class="feature-card">
-            <h3>🦆 DuckDB SQL <span class="badge">対応</span> <span class="badge" style="background:#17a2b8;">NEW v4.8.0</span></h3>
-            <p><code>duckdb:</code> / <code>sql:</code> で指定。DuckDB-WASM（CDN から遅延ロード）で Parquet・CSV・JSON 等を SQL で絞り込んでから GeoJSON へ正規化して描画。spatial 拡張により空間述語・WKT・<code>ST_Read</code>(Shapefile/GeoPackage 等) も利用可能</p>
-          </div>
-          <div class="feature-card">
-            <h3>🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
-            <p>空間インデックス内蔵のバイナリ形式。範囲ストリーミングに強く、GeoJSON 正規化経路での対応候補</p>
+            <h3>📦 Parquet / GeoParquet <span class="badge">対応</span></h3>
+            <p><code>duckdb:</code> で指定（<code>format=parquet</code>・既定）。<code>where=</code>/<code>bbox=auto</code>/<code>columns=</code> の絞り込みで述語プッシュダウン・row group スキップ・列プルーニングが効くクエリ系の本来の対象。大規模・広範囲データ向け</p>
           </div>
           <div class="feature-card">
             <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
             <p><code>duckdb:</code> の <code>lon=</code>/<code>lat=</code> 指定で緯度・経度列を持つ表データをポイントとして表示（lon/lat/lng/longitude/latitude 列は自動検出）</p>
           </div>
           <div class="feature-card">
+            <h3>📋 JSON / GeoJSON <span class="badge">対応</span></h3>
+            <p><code>duckdb:</code> の <code>format=json</code>（<code>read_json_auto</code>）でテーブルとしてクエリ可能。FeatureCollection の構造は <code>format=read</code>（<code>ST_Read</code>）推奨</p>
+          </div>
+          <div class="feature-card">
             <h3>🗂️ Shapefile / GeoPackage <span class="badge">対応</span></h3>
             <p><code>duckdb:</code> の <code>format=read</code>（spatial 拡張の <code>ST_Read</code>）で読み込み可能。QGIS での編集成果物をそのまま扱える</p>
           </div>
           <div class="feature-card">
-            <h3>🧩 MVT / PMTiles <span class="badge" style="background:#6c757d;">検討中</span></h3>
-            <p>ベクタータイル。数十万地物級の全件表示・LOD が必要な大規模データ向けの別経路として検討</p>
+            <h3>🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
+            <p>空間インデックス内蔵のバイナリ形式。範囲ストリーミングに強く、クエリ系経路での対応候補</p>
           </div>
         </div>
         <p><small>方針の詳細（経路分類・新形式の追加手順）はリポジトリの <code>AGENTS.md</code>「データ形式方針」を参照してください。</small></p>
@@ -415,8 +430,28 @@ fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID</code></pre>
         </div>
         <div class="url-box">
+          <h3>ベクターデータ形式の使い分け</h3>
+          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>）はファイル全件を entity 化し、ベクター検索パネルで属性検索できます。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。</p>
+          <pre><code>【全件読み込み系】全件 entity 化・ベクター検索パネル対象
+  小〜中規模・全件表示        → geojson:（事前変換が最速・最単純）
+  中規模・Parquet をそのまま  → geoparquet:（利便性重視・変換不要で置くだけ）
+
+【クエリ系】SQL 絞り込み・表示範囲のみ描画・検索は常に全件
+  大規模・広範囲・絞り込み    → duckdb:/sql:（Parquet の利点が発揮される）
+
+超大規模・全件表示            → タイル化（MVT/PMTiles 等・別経路）</code></pre>
+          <p>Parquet の利点（圧縮・述語プッシュダウン・row group スキップ・列プルーニング・Range Request）は「読まない部分を作れる」ときにだけ効きます。全件を読んで表示するだけなら、変換済み GeoJSON の方が速くて単純です。<code>geoparquet:</code> は絞り込みを持たず常に全件読み込みなので、広範囲データや条件絞り込みが必要な場合は <code>duckdb:</code>/<code>sql:</code> を使ってください。</p>
+        </div>
+        <div class="url-box">
           <h3>duckdb: / sql:（SQL絞り込みレイヤ）</h3>
-          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（数十MB・Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。ファイル形式は拡張子から自動判別します（parquet/csv/json）。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。クエリ内の URL は絶対指定が必要です。</p>
+          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（数十MB・Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。クエリ内の URL は絶対指定が必要です。</p>
+          <p><strong>対応ファイル形式</strong>（<code>format=</code> 指定または拡張子から自動判別）：</p>
+          <pre><code>format=省略        → 拡張子自動判別（.parquet / .csv / .tsv / .json 等）
+format=parquet     → Parquet / GeoParquet（read_parquet）
+format=csv | tsv   → CSV / TSV（read_csv_auto。lon=/lat= 列でポイント化、WKT/WKB 列も可）
+format=json|geojson→ JSON / GeoJSON テキスト（read_json_auto。FeatureCollection は format=read 推奨）
+format=read        → Shapefile / GeoPackage 等（ST_Read。spatial 拡張必須）</code></pre>
+          <p>Parquet では述語プッシュダウン・row group スキップ・列プルーニングが効くため本機能の本来の対象です。それ以外の形式は全件読み込みになりますが、「絞り込んだ分だけ描画オブジェクトを作る」「事前変換不要」「SQL で加工できる」利点は共通です。</p>
           <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・GeoPackage 等）を使います。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
           <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> に <code>bbox=auto</code> を付けると、カメラ停止ごとに表示範囲を <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> として再クエリします。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用に使えます。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
           <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>

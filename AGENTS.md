@@ -67,11 +67,11 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
 
 - **ネイティブ経路**: `3dtiles:` / `geojson:` / `xyz:` など CesiumJS が直接読める形式
 - **GeoJSON 正規化経路**: 非対応形式をデコーダーで GeoJSON 化して同じ DataSource 経路に乗せる。デコーダーは `web/app.js` の **`vectorDecoders` レジストリ**（type→`async (item) => GeoJSON` の Map）に登録する
-  - 実装済み: `geoparquet:`（`loadGeoParquetAsGeoJson()`。hyparquet を CDN から遅延ロード、WKB/ネイティブ GEOMETRY 型の両方を GeoJSON ジオメトリに変換）
+  - 実装済み: `geoparquet:`（`loadGeoParquetAsGeoJson()`。hyparquet を CDN から遅延ロード、WKB/ネイティブ GEOMETRY 型の両方を GeoJSON ジオメトリに変換。**常に全件読み込み**で絞り込みは持たない。「Parquet をそのまま置くだけで表示」の利便性重視の経路で、中規模までが目安）
   - 実装済み: `duckdb:` / `sql:`（`loadDuckDbLayerAsGeoJson()` / `loadDuckDbQueryAsGeoJson()`。DuckDB-WASM を CDN から遅延ロードし、SQL で絞り込んでから GeoJSON 化。`duckdb:` はファイル+`where=`/`limit=`/`geom=`/`lon=`・`lat=`/`format=`/`columns=`（属性列プルーニング）/`covering=`（xmin,xmax,ymin,ymax 列名）/`bbox=auto`/`render=` の宣言的指定。ジオメトリは WKB バイナリで受領し、`bbox=auto` 時は GeoParquet 1.1 `covering` bbox 列への範囲述語を優先して row group 統計スキップを効かせる。`sql:` は任意の SELECT 文（`:bbox` プレースホルダで表示範囲連動・末尾 `| off` / `| render=entity` をオプションとして解釈）。spatial 拡張があれば WKT・ST_Read・空間述語も利用可、無くても WKB/GeoJSON テキストと lon/lat ポイント化は動作する）
     - **設計方針: 「検索は常に全件検索・表示はバッファの表示範囲のみ」**。クエリ系レイヤーはベクター検索パネル（読み込み済み entity の索引）の対象外で、検索はファイル全件を対象とする SQL フィルター(⏷)に一本化する。属性値一覧ウィジェットには `query` フラグ付きで選択肢に載り、一覧内容は `queryDuckDbAttributeRows()` が DuckDB に直接クエリして全件対象（bbox 非適用・`where=` 適用・位置は `ST_Centroid` または lon/lat 列）で取得する。`bbox=auto`+`where=` 併用時は `where=` のみの `COUNT(*)` を併走し「検索ヒット全 N 件 / 表示範囲内 M 件」をコンソールに出す。描画は既定で `GeoJsonPrimitive` バッチ（entity 非経由）で、`render=entity` で entity 描画に opt-out 可能。**注意**: `GeoJsonPrimitive` は `CLAMP_TO_*` 時に `scene.vectorProvider`（地形タイル焼き込み）へ回され `scene.pick` で拾えなくなるため、primitive 描画は常に `HeightReference.NONE`（ドレープ非対応。地形ありで埋まる場合は `render=entity` を使う）
   - クエリ系形式（`query:true` フラグ）は再クエリ対応: レイヤー一覧の ⏷ ボタンで WHERE 式/クエリを対話的に変更（`editLayerQueryFilter` → `reloadVectorLayer` で DataSource 差替え・`.kasc` 行にも反映）、`bbox=auto`/`:bbox` は `camera.moveEnd` デバウンスで表示範囲 `ST_MakeEnvelope` を再クエリする（`refreshViewportLayers`）
-  - `duckdb:`/`sql:` 経路で既に扱えるもの: CSV/TSV（lon/lat ポイント化）・Shapefile/GeoPackage 等（`format=read` の `ST_Read`）
+  - `duckdb:`/`sql:` 経路で既に扱えるもの: Parquet/GeoParquet（`format=parquet`・本来の対象）・CSV/TSV（`format=csv`・lon/lat ポイント化）・JSON/GeoJSON テキスト（`format=json`）・Shapefile/GeoPackage 等（`format=read` の `ST_Read`）。`format=` 省略時は拡張子から自動判別。非 parquet 形式は全件読み込みだが「絞り込み分だけ描画オブジェクト生成」「SQL 加工」「変換不要」の利点は共通
   - 将来候補: FlatGeobuf・KML 等
 - **タイル/大規模経路**: MVT・PMTiles・ラスタタイル等。全件描画や LOD が必要な大規模データ向けで、GeoJSON 正規化とは別経路を検討する
 
@@ -81,6 +81,22 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
 2. デコーダー関数を1本に閉じ込める（`loadXxxAsGeoJson(item)` の形。返り値は GeoJSON FeatureCollection）
 3. `vectorDecoders` Map に `{ load: item => loadXxxAsGeoJson(item) }` を登録する（`refreshLayers` の geojson 分岐・`orderedOtherLayers` フィルタ・`updateInspectorFromLayerOrder` の種類一覧はレジストリ参照のため変更不要。条件変更・再クエリに対応する形式は `query: true` を付けるとフィルター UI の対象になる）
 4. `home.html` のインスペクター設定仕様に書式を追記する
+
+### 形式の使い分け
+
+ベクター系の行タイプは大きく2系統に分かれる（コード上は `vectorDecoders` の `query` フラグがこの区別）:
+
+- **全件読み込み系**（`geojson:`・`geoparquet:`）: ファイル全件を entity 化。ベクター検索パネルの対象（読み込み済み entity の索引）。見えない範囲も entity を作る
+- **クエリ系**（`duckdb:`・`sql:`）: SQL で絞り込み、表示は見えている範囲のみ・検索は常にファイル全件対象。ベクター検索パネル対象外で、検索は SQL フィルター・属性値一覧の全件クエリに一本化
+
+Parquet の利点（圧縮・述語プッシュダウン・row group スキップ・列プルーニング・Range Request）は「読まない部分を作れる」ときにだけ効く。全件読み込みでは Parquet は「もう1ステップある GeoJSON」に過ぎないため、条件・規模に応じて経路を選ぶ:
+
+| 条件・規模 | 推奨経路 | 理由 |
+|---|---|---|
+| 小〜中規模・全件表示 | `geojson:`（事前変換） | 最速・最単純。ブラウザは `JSON.parse`+entity 化のみ |
+| 中規模・Parquet をそのまま | `geoparquet:` | 変換不要で置くだけの利便性重視 |
+| 大規模・広範囲・絞り込み | `duckdb:`/`sql:` | Parquet の利点が発揮される（`bbox=auto`・`where=`・`columns=`） |
+| 超大規模・全件表示 | タイル化（MVT/PMTiles 等） | GeoJSON 正規化とは別経路 |
 
 ### 方針上の注意
 
