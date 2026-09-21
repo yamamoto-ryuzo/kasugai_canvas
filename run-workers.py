@@ -8,6 +8,8 @@
   4. KASUGAI_AUTH_PASS シークレットの確認（未登録なら対話プロンプトで登録）
   5. web/auth-methods.json の control を 4 に設定してデプロイ（終了後は 0 に戻す）
   6. wrangler deploy と簡易動作確認（認証ゲート 401 / トップページ 200）
+  7. web/projects/<id>/*.kasc を KV の kasc:<id> にシード
+     （Cloudflare 認証時は静的ファイルではなく KV の .kasc が使われるため）
 
 使い方:
   python run-workers.py
@@ -66,7 +68,7 @@ def check_login() -> None:
             "wrangler にログインしていません。先に以下を実行してください:\n"
             "  cd workers && npx wrangler login"
         )
-    print("[1/6] wrangler ログイン確認 OK", flush=True)
+    print("[1/7] wrangler ログイン確認 OK", flush=True)
 
 
 def _kv_namespace_id() -> str | None:
@@ -85,10 +87,10 @@ def _kv_bound() -> bool:
     return re.search(pattern, text, re.M) is not None
 
 
-def ensure_kv_binding() -> None:
+def ensure_kv_binding() -> str | None:
     if _kv_bound():
-        print(f"[2/6] KV バインド済み: {KV_NAMESPACE}", flush=True)
-        return
+        print(f"[2/7] KV バインド済み: {KV_NAMESPACE}", flush=True)
+        return _kv_namespace_id()
 
     ns_id = _kv_namespace_id()
     if not ns_id:
@@ -110,7 +112,8 @@ def ensure_kv_binding() -> None:
     else:
         text = text.rstrip() + "\n\n" + block + "\n"
     WRANGLER_TOML.write_text(text, encoding="utf-8")
-    print(f"[2/6] KV バインドを wrangler.toml に記入: {KV_NAMESPACE} (id: {ns_id})", flush=True)
+    print(f"[2/7] KV バインドを wrangler.toml に記入: {KV_NAMESPACE} (id: {ns_id})", flush=True)
+    return ns_id
 
 
 def _r2_bound() -> bool:
@@ -121,14 +124,14 @@ def _r2_bound() -> bool:
 
 def ensure_r2_binding() -> None:
     if _r2_bound():
-        print(f"[3/6] R2 バインド済み: {R2_BINDING}", flush=True)
+        print(f"[3/7] R2 バインド済み: {R2_BINDING}", flush=True)
         return
 
     r = _wrangler("r2", "bucket", "list")
     if r.returncode != 0:
         if "enable R2" in (r.stdout + r.stderr):
             print(
-                f"[3/6] R2 がアカウントで有効化されていません。r2:// を使う場合は"
+                f"[3/7] R2 がアカウントで有効化されていません。r2:// を使う場合は"
                 "ダッシュボードで有効化してから再実行してください。スキップします。",
                 flush=True,
             )
@@ -139,7 +142,7 @@ def ensure_r2_binding() -> None:
         print(f"R2 バケット {R2_BUCKET} を作成します...", flush=True)
         r = _wrangler("r2", "bucket", "create", R2_BUCKET)
         if r.returncode != 0:
-            print(f"[3/6] R2 バケット作成に失敗しました。スキップします:\n{r.stderr or r.stdout}", flush=True)
+            print(f"[3/7] R2 バケット作成に失敗しました。スキップします:\n{r.stderr or r.stdout}", flush=True)
             return
 
     text = WRANGLER_TOML.read_text(encoding="utf-8")
@@ -152,7 +155,7 @@ def ensure_r2_binding() -> None:
     else:
         text = text.rstrip() + "\n\n" + block + "\n"
     WRANGLER_TOML.write_text(text, encoding="utf-8")
-    print(f"[3/6] R2 バインドを wrangler.toml に記入: {R2_BINDING} ({R2_BUCKET})", flush=True)
+    print(f"[3/7] R2 バインドを wrangler.toml に記入: {R2_BINDING} ({R2_BUCKET})", flush=True)
 
 
 def ensure_secret() -> None:
@@ -161,10 +164,10 @@ def ensure_secret() -> None:
         raise SystemExit(f"シークレット一覧の取得に失敗しました:\n{r.stderr or r.stdout}")
     names = {entry.get("name") for entry in json.loads(r.stdout)}
     if SECRET_PASS in names:
-        print(f"[4/6] シークレット登録済み: {SECRET_PASS}", flush=True)
+        print(f"[4/7] シークレット登録済み: {SECRET_PASS}", flush=True)
         return
     print(
-        f"[4/6] {SECRET_PASS} が未登録です。対話プロンプトが出るのでパスワードを入力してください。",
+        f"[4/7] {SECRET_PASS} が未登録です。対話プロンプトが出るのでパスワードを入力してください。",
         flush=True,
     )
     r = _wrangler_live("secret", "put", SECRET_PASS)
@@ -180,7 +183,7 @@ def set_control(value: int) -> None:
 
 
 def deploy_and_verify() -> None:
-    print("[6/6] wrangler deploy を実行します...", flush=True)
+    print("[6/7] wrangler deploy を実行します...", flush=True)
     r = _wrangler("deploy")
     sys.stdout.write(r.stdout or "")
     sys.stderr.write(r.stderr or "")
@@ -234,17 +237,48 @@ def deploy_and_verify() -> None:
         print(f"警告: /api/auth にアクセスできません: {e}", flush=True)
 
 
+def seed_kasc(ns_id: str | None) -> None:
+    """web/projects/<id>/*.kasc を KV の kasc:<id> に同期する。
+
+    Cloudflare 認証時は静的ファイルではなく KV の .kasc が使われるため、
+    デプロイのたびにリポジトリの内容で上書きする。
+    （認証サイト上で保存した .kasc はデプロイで上書きされる点に注意）
+    """
+    kasc_files = sorted((ROOT / "web" / "projects").glob("*/*.kasc"))
+    if not kasc_files:
+        return
+    if not ns_id:
+        print(
+            f"[7/7] 警告: KV 名前空間 {KV_NAMESPACE} が解決できないため"
+            ".kasc のシードをスキップします。認証サイトは空の設定で起動します。",
+            flush=True,
+        )
+        return
+    print("[7/7] KV へ .kasc をシードします（サイト上の編集は上書きされます）", flush=True)
+    for path in kasc_files:
+        key = f"kasc:{path.parent.name}"
+        r = _wrangler(
+            "kv", "key", "put", "--remote",
+            "--namespace-id", ns_id, key, "--path", str(path),
+        )
+        if r.returncode != 0:
+            print(f"警告: {key} の KV 書き込みに失敗しました:\n{r.stderr or r.stdout}", flush=True)
+        else:
+            print(f"  {key} を登録: {path}", flush=True)
+
+
 def main() -> None:
     if not WRANGLER_TOML.exists():
         raise SystemExit(f"{WRANGLER_TOML} が見つかりません。")
     check_login()
-    ensure_kv_binding()
+    ns_id = ensure_kv_binding()
     ensure_r2_binding()
     ensure_secret()
-    print("[5/6] web/auth-methods.json の control = 4", flush=True)
+    print("[5/7] web/auth-methods.json の control = 4", flush=True)
     set_control(4)
     try:
         deploy_and_verify()
+        seed_kasc(ns_id)
     finally:
         # デプロイ対象の web/ には 4 が残るが、リポジトリのファイルは認証なしに戻す
         set_control(0)

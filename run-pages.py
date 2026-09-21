@@ -6,7 +6,9 @@
   2. Pages プロジェクトの解決（--project-name 指定 > 既存プロジェクト > 新規作成）
   3. web/auth-methods.json の control を 3 に設定してデプロイ（終了後は 0 に戻す）
   4. wrangler pages deploy（web/ + functions/ をまとめてデプロイ）
-  5. 簡易動作確認（トップページ 200 / 静的ファイル公開 / 認証 API）
+  5. web/projects/<id>/*.kasc を KV 名前空間 KASUGAI_KV の kasc:<id> にシード
+     （Cloudflare 認証時は静的ファイルではなく KV の .kasc が使われるため）
+  6. 簡易動作確認（トップページ 200 / 静的ファイル公開 / 認証 API）
 
 注意: Pages の環境変数・KV/R2 バインドはプロジェクトの設定として
 ダッシュボードで管理され、デプロイをまたいで引き継がれます。
@@ -38,6 +40,7 @@ ROOT = Path(__file__).resolve().parent
 AUTH_METHODS = ROOT / "web" / "auth-methods.json"
 
 DEFAULT_PROJECT = "kasugai-canvas"
+KV_NAMESPACE = "KASUGAI_KV"
 SECRET_PASS = "KASUGAI_AUTH_PASS"
 
 
@@ -60,7 +63,7 @@ def check_login() -> None:
             "wrangler にログインしていません。先に以下を実行してください:\n"
             "  npx wrangler login"
         )
-    print("[1/5] wrangler ログイン確認 OK", flush=True)
+    print("[1/6] wrangler ログイン確認 OK", flush=True)
 
 
 def _list_projects() -> list[str]:
@@ -78,18 +81,18 @@ def _list_projects() -> list[str]:
 
 def resolve_project(requested: str | None) -> str:
     if requested:
-        print(f"[2/5] プロジェクト: {requested}（--project-name 指定）", flush=True)
+        print(f"[2/6] プロジェクト: {requested}（--project-name 指定）", flush=True)
         return requested
     existing = _list_projects()
     if len(existing) == 1:
-        print(f"[2/5] 既存プロジェクトを使用: {existing[0]}", flush=True)
+        print(f"[2/6] 既存プロジェクトを使用: {existing[0]}", flush=True)
         return existing[0]
     if len(existing) > 1:
         raise SystemExit(
             "複数の Pages プロジェクトがあります。--project-name で指定してください:\n  "
             + ", ".join(existing)
         )
-    print(f"[2/5] プロジェクト {DEFAULT_PROJECT} を作成します...", flush=True)
+    print(f"[2/6] プロジェクト {DEFAULT_PROJECT} を作成します...", flush=True)
     r = _wrangler("pages", "project", "create", DEFAULT_PROJECT, "--production-branch", "main")
     if r.returncode != 0:
         raise SystemExit(f"プロジェクトの作成に失敗しました:\n{r.stderr or r.stdout}")
@@ -104,7 +107,7 @@ def set_control(value: int) -> None:
 
 
 def deploy(project: str) -> str:
-    print(f"[4/5] wrangler pages deploy を実行します（project: {project}）...", flush=True)
+    print(f"[4/6] wrangler pages deploy を実行します（project: {project}）...", flush=True)
     r = _wrangler("pages", "deploy", "web", "--project-name", project)
     sys.stdout.write(r.stdout or "")
     sys.stderr.write(r.stderr or "")
@@ -114,11 +117,57 @@ def deploy(project: str) -> str:
     return m.group(0) if m else ""
 
 
+def _kv_namespace_id() -> str | None:
+    r = _wrangler("kv", "namespace", "list")
+    if r.returncode != 0:
+        return None
+    try:
+        namespaces = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return None
+    for ns in namespaces:
+        if ns.get("title") == KV_NAMESPACE:
+            return ns.get("id")
+    return None
+
+
+def seed_kasc() -> None:
+    """web/projects/<id>/*.kasc を KV 名前空間 KASUGAI_KV の kasc:<id> に同期する。
+
+    Cloudflare 認証時は静的ファイルではなく KV の .kasc が使われるため、
+    デプロイのたびにリポジトリの内容で上書きする。
+    （認証サイト上で保存した .kasc はデプロイで上書きされる点に注意）
+    """
+    kasc_files = sorted((ROOT / "web" / "projects").glob("*/*.kasc"))
+    if not kasc_files:
+        return
+    ns_id = _kv_namespace_id()
+    if not ns_id:
+        print(
+            f"[5/6] 警告: KV 名前空間 {KV_NAMESPACE} が見つかりません。"
+            "Pages の Functions バインド先に .kasc を登録するまで、"
+            "認証サイトは空の設定で起動します。",
+            flush=True,
+        )
+        return
+    print("[5/6] KV へ .kasc をシードします（サイト上の編集は上書きされます）", flush=True)
+    for path in kasc_files:
+        key = f"kasc:{path.parent.name}"
+        r = _wrangler(
+            "kv", "key", "put", "--remote",
+            "--namespace-id", ns_id, key, "--path", str(path),
+        )
+        if r.returncode != 0:
+            print(f"警告: {key} の KV 書き込みに失敗しました:\n{r.stderr or r.stdout}", flush=True)
+        else:
+            print(f"  {key} を登録: {path}", flush=True)
+
+
 def verify(base: str) -> None:
     if not base:
-        print("[5/5] デプロイは完了しましたが URL を取得できませんでした。", flush=True)
+        print("[6/6] デプロイは完了しましたが URL を取得できませんでした。", flush=True)
         return
-    print(f"[5/5] 動作確認: {base}", flush=True)
+    print(f"[6/6] 動作確認: {base}", flush=True)
 
     # workers.dev と同じく pages.dev も簡易ボット判定があるためブラウザ UA を付ける
     ua = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) KASUGAI-Canvas-deploy-check"}
@@ -169,10 +218,11 @@ def main() -> None:
 
     check_login()
     project = resolve_project(args.project_name)
-    print("[3/5] web/auth-methods.json の control = 3", flush=True)
+    print("[3/6] web/auth-methods.json の control = 3", flush=True)
     set_control(3)
     try:
         base = deploy(project)
+        seed_kasc()
         verify(base)
     finally:
         # デプロイ対象の web/ には 3 が残るが、リポジトリのファイルは認証なしに戻す
