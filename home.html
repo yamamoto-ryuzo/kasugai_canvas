@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.6.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.7.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -37,7 +37,7 @@
         <div class="features">
           <div class="feature-card">
             <h3>📝 インスペクター一括設定</h3>
-            <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
+            <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
           </div>
           <div class="feature-card">
             <h3>🗺️ ベースマップ</h3>
@@ -346,6 +346,7 @@ base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/x
 base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
 3dtiles: 東京都/千代田区（建築物LOD1） | https://example.com/tileset.json | off
 geojson: 東京都/行政区域 | https://example.com/行政区域.geojson | on
+geoparquet: 全国/施設ポイント | https://example.com/facilities.parquet | on
 background: #ffffff
 info: https://example.com/project-info.html
 cam: 東京駅|35.653108|139.761449|h=2200.6|p=-30
@@ -360,7 +361,7 @@ legend: 凡例|https://example.com/legend.png</code></pre>
           <h3>設定種類</h3>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
 xyz: タイルレイヤ | 同上+off
-3dtiles: / geojson:(layer:) レイヤ | off / proxy=off
+3dtiles: / geojson:(layer:) / geoparquet: レイヤ | off / proxy=off
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID</code></pre>

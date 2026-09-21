@@ -364,7 +364,7 @@ function updateInspectorFromLayerOrder() {
     const separator = line.indexOf(":");
     if (separator < 0) return;
     const layerType = line.slice(0, separator).toLowerCase().trim();
-    if (["xyz", "3dtiles", "geojson", "layer"].includes(layerType)) layerLineIndices.push(index);
+    if (["xyz", "3dtiles", "geojson", "geoparquet", "layer"].includes(layerType)) layerLineIndices.push(index);
   });
   const orderedSourceLines = layerOrder.map(id => layerState.get(id)?.sourceLine).filter(Boolean);
   if (layerLineIndices.length !== orderedSourceLines.length) return;
@@ -1328,6 +1328,124 @@ function updateVectorSearchUI() {
   }
 }
 
+// GeoParquet を CDN から読み込む軽量リーダー(hyparquet)でデコードし、
+// WKB ジオメトリを GeoJSON に変換して既存のベクター描画経路に流す。
+// DuckDB-WASM ほど重くないので「全件を読んで Entity 化する」用途に向く。
+let hyparquetLoaderPromise = null;
+function loadHyparquet() {
+  if (!hyparquetLoaderPromise) {
+    hyparquetLoaderPromise = Promise.all([
+      import("https://cdn.jsdelivr.net/npm/hyparquet@1.30.1/+esm"),
+      import("https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm"),
+    ]).then(([hp, hc]) => ({
+      parquetReadObjects: hp.parquetReadObjects,
+      parquetMetadata: hp.parquetMetadataAsync || hp.parquetMetadata,
+      asyncBufferFromUrl: hp.asyncBufferFromUrl,
+      compressors: hc.compressors,
+    }));
+  }
+  return hyparquetLoaderPromise;
+}
+
+// WKB(ISO/EWKB)を GeoJSON ジオメトリに変換する
+function wkbToGeoJsonGeometry(bytes) {
+  if (!bytes || !bytes.byteLength) return null;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let pos = 0;
+  const readGeometry = () => {
+    const littleEndian = view.getUint8(pos) === 1; pos += 1;
+    const raw = view.getUint32(pos, littleEndian); pos += 4;
+    let base = raw & 0xffff;
+    let hasZ = (raw & 0x80000000) !== 0;
+    let hasM = (raw & 0x40000000) !== 0;
+    const hasSrid = (raw & 0x20000000) !== 0;
+    if (!hasZ && !hasM && raw >= 1000) {
+      const variant = Math.floor(raw / 1000);
+      hasZ = variant === 1 || variant === 3;
+      hasM = variant === 2 || variant === 3;
+      base = raw % 1000;
+    }
+    if (hasSrid) pos += 4;
+    const count = () => { const n = view.getUint32(pos, littleEndian); pos += 4; return n; };
+    const point = () => {
+      const c = [view.getFloat64(pos, littleEndian), view.getFloat64(pos + 8, littleEndian)];
+      pos += 16;
+      if (hasZ) { c.push(view.getFloat64(pos, littleEndian)); pos += 8; }
+      if (hasM) pos += 8; // M 値は描画しない
+      return c;
+    };
+    const points = () => { const a = new Array(count()); for (let i = 0; i < a.length; i++) a[i] = point(); return a; };
+    const rings = () => { const a = new Array(count()); for (let i = 0; i < a.length; i++) a[i] = points(); return a; };
+    const children = () => { const a = new Array(count()); for (let i = 0; i < a.length; i++) a[i] = readGeometry(); return a; };
+    switch (base) {
+      case 1: return { type: "Point", coordinates: point() };
+      case 2: return { type: "LineString", coordinates: points() };
+      case 3: return { type: "Polygon", coordinates: rings() };
+      case 4: return { type: "MultiPoint", coordinates: children().map(g => g && g.coordinates) };
+      case 5: return { type: "MultiLineString", coordinates: children().map(g => g && g.coordinates) };
+      case 6: return { type: "MultiPolygon", coordinates: children().map(g => g && g.coordinates) };
+      case 7: return { type: "GeometryCollection", geometries: children().filter(Boolean) };
+      default: return null;
+    }
+  };
+  try { return readGeometry(); } catch { return null; }
+}
+
+async function loadGeoParquetAsGeoJson(url) {
+  const { parquetReadObjects, parquetMetadata, asyncBufferFromUrl, compressors } = await loadHyparquet();
+  // Range Request 対応の非同期バッファを優先し、取れない環境では全件取得にフォールバック
+  let file;
+  try {
+    file = await asyncBufferFromUrl({ url });
+  } catch {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    file = await response.arrayBuffer();
+  }
+  const rows = await parquetReadObjects({ file, compressors });
+  if (!rows.length) return { type: "FeatureCollection", features: [] };
+  // geo メタデータの primary_column を優先し、無ければ geometry 列/バイナリ列を探す
+  let geomColumn = null;
+  try {
+    const meta = await parquetMetadata(file);
+    const kv = meta && (meta.key_value_metadata || meta.metadata || []);
+    const entry = Array.isArray(kv)
+      ? kv.find(item => item.key === "geo")
+      : (kv instanceof Map ? { value: kv.get("geo") } : null);
+    const rawGeo = entry && entry.value;
+    const geoText = rawGeo instanceof Uint8Array ? new TextDecoder().decode(rawGeo) : rawGeo;
+    const geo = geoText ? JSON.parse(geoText) : null;
+    if (geo && geo.primary_column) geomColumn = geo.primary_column;
+  } catch {}
+  const isGeometryValue = value =>
+    value instanceof Uint8Array || (value && typeof value === "object" && typeof value.type === "string" && ("coordinates" in value || "geometries" in value));
+  const firstRow = rows[0];
+  if (!geomColumn || !(geomColumn in firstRow)) {
+    geomColumn = "geometry" in firstRow ? "geometry"
+      : Object.keys(firstRow).find(key => isGeometryValue(firstRow[key]));
+  }
+  if (!geomColumn) throw new Error("ジオメトリ列が見つかりません");
+  const features = [];
+  for (const row of rows) {
+    const value = row[geomColumn];
+    // Parquet ネイティブ GEOMETRY 型は hyparquet が GeoJSON 化済み、WKB 列は自前でデコード
+    const geometry = value instanceof Uint8Array
+      ? wkbToGeoJsonGeometry(value)
+      : (isGeometryValue(value) ? value : null);
+    if (!geometry) continue;
+    const properties = {};
+    for (const key of Object.keys(row)) {
+      if (key === geomColumn) continue;
+      const value = row[key];
+      properties[key] = typeof value === "bigint"
+        ? (Number.isSafeInteger(Number(value)) ? Number(value) : value.toString())
+        : value;
+    }
+    features.push({ type: "Feature", geometry, properties });
+  }
+  return { type: "FeatureCollection", features };
+}
+
 async function refreshLayers() {
   viewer.imageryLayers.removeAll(false);
   vectorDataSources.forEach(({ ds, plugin }) => { if (!plugin) try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
@@ -1373,7 +1491,7 @@ async function refreshLayers() {
   const drape3DTiles = drapeTerrainSources.tiles3d && visible3DTiles;
   const orderedItems = getOrderedLayerItems();
   const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
-  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities").slice().reverse();
+  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "geoparquet" || layer.type === "layer" || layer.type === "entities").slice().reverse();
 
   // 3D Tiles ドレープ用プロバイダー定義
   const drapeProviders = [];
@@ -1467,12 +1585,14 @@ async function refreshLayers() {
       try { item.dataSource.show = item.visible; } catch (e) {}
       vectorDataSources.push({ ds: item.dataSource, id: item.id, title: item.title, plugin: true });
       layerRuntimeTargets.set(item.id, item.dataSource);
-    } else if (item.type === "geojson" || item.type === "layer") {
+    } else if (item.type === "geojson" || item.type === "layer" || item.type === "geoparquet") {
       try {
         if (!item.url && !item.data) continue;
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
         if (!clamp && !item.visible) continue;
-        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url) {
+        // GeoParquet は hyparquet で読み込み GeoJSON に変換してから同じ経路に流す
+        const source = item.type === "geoparquet" ? await loadGeoParquetAsGeoJson(item.url) : (item.data || item.url);
+        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url && item.type !== "geoparquet") {
           let heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           if (drapeTerrainSources.dem && drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           else if (drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_3D_TILE;
@@ -1490,7 +1610,7 @@ async function refreshLayers() {
           else if (drape3DTiles) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
           else if (drapeTerrainSources.dem) classification = Cesium.ClassificationType.TERRAIN;
         }
-        const ds = await Cesium.GeoJsonDataSource.load(item.data || item.url, { clampToGround: clamp });
+        const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp });
         for (const entity of ds.entities.values) {
           if (entity.polygon) {
             entity.polygon.outline = new Cesium.ConstantProperty(false);
@@ -1508,7 +1628,7 @@ async function refreshLayers() {
         vectorDataSources.push({ ds, id: item.id, title: item.title });
         layerRuntimeTargets.set(item.id, ds);
       } catch (error) {
-        console.warn("GeoJSON の読み込みに失敗しました:", item.url, error);
+        console.warn(`${item.type === "geoparquet" ? "GeoParquet" : "GeoJSON"} の読み込みに失敗しました:`, item.url, error);
       }
     }
   }
@@ -1718,7 +1838,7 @@ function applyInspector(text) {
       layerOrder.push(id);
     }
 
-    if (type === "3dtiles" || type === "geojson" || type === "layer") {
+    if (type === "3dtiles" || type === "geojson" || type === "geoparquet" || type === "layer") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
       const url = resolveProjectUrl(parts[1]);

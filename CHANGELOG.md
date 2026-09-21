@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.7.0] - 2026-09-21
+
+### Added
+
+- GeoParquetレイヤー：インスペクターの `.kasc` 設定で `geoparquet: タイトル | URL | on/off` 行を新規追加。CDN配信の hyparquet（遅延ロード）で Parquet をデコードし、WKB（ISO/EWKB・Z/M対応）および Parquet ネイティブ `GEOMETRY` 論理型のジオメトリを GeoJSON へ変換して既存のベクター描画経路に流す。レイヤ一覧・表示切替・フォーカス・ベクトル検索・属性パネルがそのまま利用可能。Range Request 対応の `asyncBufferFromUrl` を優先し、非対応環境は全件取得へフォールバック
+- サンプル：`web/projects/default` と `installer/projects/default` の `kasugai_canvas.kasc` に GeoParquet 公式サンプル（NaturalEarth国ポリゴン）を `on` で追加
+- ドキュメント：home.html のインスペクター設定仕様に `geoparquet:` を追記
+
 ## [4.6.0] - 2026-09-20
 
 ### Added
