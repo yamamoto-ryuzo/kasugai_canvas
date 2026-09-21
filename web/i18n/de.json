@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "Ebene „{name}“ hat keine lesbaren Vektordaten",
   "tool.dataTooLarge": "Ebenendaten zu groß ({size} Bytes, {count} Features). Mit vectorSearch eingrenzen oder in einem Plugin verarbeiten.",
   "tool.invalidGeoJson": "Ungültiges GeoJSON-Objekt",
-  "error.invalidUrl": "Nur http(s)-URLs können abgerufen werden"
+  "error.invalidUrl": "Nur http(s)-URLs können abgerufen werden",
+  "layer.filter": "Filter (SQL)",
+  "layer.filter.promptWhere": "WHERE-Ausdruck eingeben (SQL). Leer zum Entfernen.",
+  "layer.filter.promptSql": "SQL-Abfrage bearbeiten"
 }

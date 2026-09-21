@@ -364,7 +364,7 @@ function updateInspectorFromLayerOrder() {
     const separator = line.indexOf(":");
     if (separator < 0) return;
     const layerType = line.slice(0, separator).toLowerCase().trim();
-    if (["xyz", "3dtiles", "geojson", "geoparquet", "layer"].includes(layerType)) layerLineIndices.push(index);
+    if (["xyz", "3dtiles", "geojson", "layer"].includes(layerType) || vectorDecoders.has(layerType)) layerLineIndices.push(index);
   });
   const orderedSourceLines = layerOrder.map(id => layerState.get(id)?.sourceLine).filter(Boolean);
   if (layerLineIndices.length !== orderedSourceLines.length) return;
@@ -700,10 +700,14 @@ function renderLayerList() {
       <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
+          const filterButton = vectorDecoders.get(layer.type)?.query
+            ? `<button class="layer-filter" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.filter"))}" aria-label="${escapeHtml(t("layer.filter"))}">⏷</button>`
+            : "";
           return `
         <label class="layer-row" for="${inputId}" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
           <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""}>
           <span>${escapeHtml(layer.title)}</span>
+          ${filterButton}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>`;
         }).join("")}
@@ -770,6 +774,14 @@ function renderLayerList() {
       event.preventDefault();
       event.stopPropagation();
       void focusLayer(layerState.get(button.dataset.layerId));
+    });
+  });
+
+  list.querySelectorAll(".layer-filter").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      void editLayerQueryFilter(layerState.get(button.dataset.layerId));
     });
   });
 
@@ -1391,6 +1403,13 @@ function wkbToGeoJsonGeometry(bytes) {
   try { return readGeometry(); } catch { return null; }
 }
 
+// ベクター属性値を GeoJSON properties に載せられる形へ正規化する
+function sanitizeVectorPropertyValue(value) {
+  return typeof value === "bigint"
+    ? (Number.isSafeInteger(Number(value)) ? Number(value) : value.toString())
+    : value;
+}
+
 async function loadGeoParquetAsGeoJson(url) {
   const { parquetReadObjects, parquetMetadata, asyncBufferFromUrl, compressors } = await loadHyparquet();
   // Range Request 対応の非同期バッファを優先し、取れない環境では全件取得にフォールバック
@@ -1436,15 +1455,246 @@ async function loadGeoParquetAsGeoJson(url) {
     const properties = {};
     for (const key of Object.keys(row)) {
       if (key === geomColumn) continue;
-      const value = row[key];
-      properties[key] = typeof value === "bigint"
-        ? (Number.isSafeInteger(Number(value)) ? Number(value) : value.toString())
-        : value;
+      properties[key] = sanitizeVectorPropertyValue(row[key]);
     }
     features.push({ type: "Feature", geometry, properties });
   }
   return { type: "FeatureCollection", features };
 }
+
+// DuckDB-WASM を CDN から遅延ロードし、SQL で絞り込んでから GeoJSON 化する重い経路。
+// hyparquet より重い代わりに WHERE/LIMIT/列選択・空間述語・CSV/JSON 等の
+// 複数フォーマットを1エンジンで扱える。Worker は jsdelivr を直指定すると
+// cross-origin で起動できないため blob + importScripts で包む。
+let duckDbLoaderPromise = null;
+function loadDuckDb() {
+  if (!duckDbLoaderPromise) {
+    duckDbLoaderPromise = (async () => {
+      const duckdb = await import("https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/+esm");
+      const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
+      const workerUrl = URL.createObjectURL(new Blob([`importScripts(${JSON.stringify(bundle.mainWorker)});`], { type: "text/javascript" }));
+      const worker = new Worker(workerUrl);
+      const logger = duckdb.VoidLogger ? new duckdb.VoidLogger() : new duckdb.ConsoleLogger();
+      const db = new duckdb.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      URL.revokeObjectURL(workerUrl);
+      const conn = await db.connect();
+      // 拡張ロードはネットワーク取得を伴うため失敗を許容し、可能な範囲で動作する
+      try { await conn.query("INSTALL httpfs; LOAD httpfs;"); } catch (error) { console.warn("DuckDB httpfs 拡張の読み込みに失敗:", error); }
+      let spatial = false;
+      try {
+        await conn.query("INSTALL spatial; LOAD spatial;");
+        spatial = true;
+      } catch (error) {
+        console.warn("DuckDB spatial 拡張の読み込みに失敗。WKB/GeoJSONテキストのパススルーのみで動作します:", error);
+      }
+      console.info(`[duckdb] 初期化完了 (spatial: ${spatial})`);
+      return { conn, spatial };
+    })();
+  }
+  return duckDbLoaderPromise;
+}
+
+const quoteSqlIdent = name => `"${String(name).replace(/"/g, '""')}"`;
+const quoteSqlLiteral = value => `'${String(value).replace(/'/g, "''")}'`;
+
+// DESCRIBE で列名と型(大文字)の一覧を取得する
+async function describeDuckDbColumns(conn, selectSql) {
+  const table = await conn.query(`DESCRIBE ${selectSql}`);
+  return table.toArray().map(row => {
+    const plain = typeof row.toJSON === "function" ? row.toJSON() : { ...row };
+    return { name: String(plain.column_name), type: String(plain.column_type || "").toUpperCase() };
+  });
+}
+
+// 結果列からジオメトリ列を推定する。優先順: geom= 指定 > GEOMETRY型 > 慣用名 > BLOB列
+function resolveDuckDbGeometryColumn(columns, geomName) {
+  if (geomName) {
+    const col = columns.find(c => c.name === geomName);
+    if (!col) throw new Error(`geom= で指定した列が見つかりません: ${geomName}`);
+    return col;
+  }
+  return columns.find(c => c.type.includes("GEOMETRY") || c.type.includes("WKB"))
+    || columns.find(c => /^(geometry|geom|wkb|the_geom)$/i.test(c.name))
+    || columns.find(c => c.type === "BLOB")
+    || null;
+}
+
+// 経度・緯度列を解決する(lon=/lat= 指定または慣用名の自動検出)
+function resolveDuckDbLonLat(columns, lonName, latName) {
+  const find = (explicit, re) => {
+    if (explicit) {
+      if (!columns.some(c => c.name === explicit)) throw new Error(`指定した列が見つかりません: ${explicit}`);
+      return explicit;
+    }
+    return columns.find(c => re.test(c.name))?.name || null;
+  };
+  const lon = find(lonName, /^(lon|lng|longitude)$/i);
+  const lat = find(latName, /^(lat|latitude)$/i);
+  if ((lon || lat) && !(lon && lat)) throw new Error("経度・緯度の列を両方特定できません(lon=/lat= で指定してください)");
+  return lon && lat ? { lon, lat } : null;
+}
+
+// ジオメトリ列を GEOMETRY 型として取り出す式(spatial 拡張が必要)。WHERE 句の述語にも使う
+function duckDbGeometryCastExpr(col) {
+  const name = quoteSqlIdent(col.name);
+  if (col.type.includes("GEOMETRY")) return name;
+  // WKB は環境により BLOB / WKB_BLOB 型で返るため両方を対象にする
+  if (col.type === "BLOB" || col.type.includes("WKB")) return `TRY(ST_GeomFromWKB(${name}))`;
+  return `COALESCE(TRY(ST_GeomFromText(${name})), TRY(ST_GeomFromGeoJSON(${name})))`;
+}
+
+// ジオメトリ列を取り出す SELECT 式を組み立てる。spatial 拡張があれば GeoJSON テキスト化し、
+// 無ければ生値を返して JS 側の WKB/GeoJSON テキストパースに委ねる
+function duckDbGeometryExpr(col, spatial) {
+  if (!spatial) return quoteSqlIdent(col.name);
+  return `ST_AsGeoJSON(${duckDbGeometryCastExpr(col)})`;
+}
+
+// 表示範囲連動フィルター(bbox=auto / :bbox プレースホルダ)が有効なレイヤーか
+function isViewportQueryLayer(item) {
+  return !!item && ((item.type === "duckdb" && item.bboxAuto) || (item.type === "sql" && /:bbox\b/i.test(item.query || "")));
+}
+
+const DUCKDB_WORLD_ENVELOPE = "ST_MakeEnvelope(-180, -90, 180, 90)";
+let duckDbBBoxWarned = false;
+
+// 現在の表示範囲を ST_MakeEnvelope の SQL 式として返す。日付変更線またぎは2分割の UNION にする
+function getViewEnvelopeSql() {
+  const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
+  if (!rect) return null;
+  const normLon = deg => {
+    const lon = ((deg + 180) % 360 + 360) % 360 - 180;
+    return lon === -180 ? 180 : lon;
+  };
+  const west = normLon(Cesium.Math.toDegrees(rect.west));
+  const east = normLon(Cesium.Math.toDegrees(rect.east));
+  const south = Math.max(-89.9, Math.min(89.9, Cesium.Math.toDegrees(rect.south)));
+  const north = Math.max(-89.9, Math.min(89.9, Cesium.Math.toDegrees(rect.north)));
+  // west === east は ±180 が両端に丸まる全球表示の退化ケース(幅ゼロになるのを防ぐ)
+  if (west === east) return `ST_MakeEnvelope(-180, ${south}, 180, ${north})`;
+  if (west < east) return `ST_MakeEnvelope(${west}, ${south}, ${east}, ${north})`;
+  return `ST_Union(ST_MakeEnvelope(${west}, ${south}, 180, ${north}), ST_MakeEnvelope(-180, ${south}, ${east}, ${north}))`;
+}
+
+// DuckDB の行値から GeoJSON ジオメトリを取り出す
+// (WKBバイナリ / 既にオブジェクト化済みのジオメトリ / GeoJSONテキスト を受理)
+function duckDbValueToGeometry(value) {
+  if (value instanceof Uint8Array) return wkbToGeoJsonGeometry(value);
+  if (value && typeof value === "object" && typeof value.type === "string" && ("coordinates" in value || "geometries" in value)) return value;
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (text.startsWith("{")) {
+      try {
+        const geom = JSON.parse(text);
+        return geom && typeof geom.type === "string" ? geom : null;
+      } catch { return null; }
+    }
+  }
+  return null;
+}
+
+// Arrow Table の行を GeoJSON FeatureCollection に変換する。
+// __geom__ 列をジオメトリとして使い、lonlat 指定時は JS 側で Point を生成する
+function duckDbTableToGeoJson(table, lonlat) {
+  const fields = table.schema.fields.map(field => field.name);
+  const geomKey = fields.includes("__geom__") ? "__geom__" : null;
+  const features = [];
+  for (const row of table.toArray()) {
+    let geometry = geomKey ? duckDbValueToGeometry(row[geomKey]) : null;
+    if (!geometry && lonlat) {
+      const x = Number(row[lonlat.lon]);
+      const y = Number(row[lonlat.lat]);
+      if (Number.isFinite(x) && Number.isFinite(y)) geometry = { type: "Point", coordinates: [x, y] };
+    }
+    if (!geometry) continue;
+    const properties = {};
+    for (const name of fields) {
+      if (name === geomKey) continue;
+      properties[name] = sanitizeVectorPropertyValue(row[name]);
+    }
+    features.push({ type: "Feature", geometry, properties });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+// duckdb: レイヤー。単一ファイルを読み、where=/limit= で絞り込んでから描画する
+async function loadDuckDbLayerAsGeoJson(item) {
+  const { conn, spatial } = await loadDuckDb();
+  const literal = quoteSqlLiteral(item.url);
+  const format = String(item.format || "").toLowerCase();
+  const source =
+    format === "parquet" ? `read_parquet(${literal})` :
+    format === "csv" || format === "tsv" ? `read_csv_auto(${literal})` :
+    format === "json" || format === "geojson" ? `read_json_auto(${literal})` :
+    format === "read" ? `ST_Read(${literal})` :
+    literal; // 省略時は拡張子から自動判別(置換スキャン)
+  const columns = await describeDuckDbColumns(conn, `SELECT * FROM ${source}`);
+  const geomCol = resolveDuckDbGeometryColumn(columns, item.geom);
+  const lonlat = geomCol ? null : resolveDuckDbLonLat(columns, item.lon, item.lat);
+  if (!geomCol && !lonlat) throw new Error("ジオメトリ列が見つかりません(geom= または lon=/lat= で指定できます)");
+  const geomExpr = geomCol ? `${duckDbGeometryExpr(geomCol, spatial)} AS "__geom__"` : null;
+  const select = geomCol
+    ? `SELECT * EXCLUDE (${quoteSqlIdent(geomCol.name)}), ${geomExpr}`
+    : "SELECT *";
+  const predicates = [];
+  if (item.where) predicates.push(`(${item.where})`);
+  // 表示範囲連動フィルター(bbox=auto): カメラの表示範囲を ST_Intersects の述語にする
+  if (item.bboxFilter) {
+    const operand = geomCol
+      ? (spatial ? duckDbGeometryCastExpr(geomCol) : null)
+      : (spatial ? `ST_Point(${quoteSqlIdent(lonlat.lon)}, ${quoteSqlIdent(lonlat.lat)})` : null);
+    if (operand) predicates.push(`ST_Intersects(${operand}, ${item.bboxFilter})`);
+    else if (!duckDbBBoxWarned) {
+      duckDbBBoxWarned = true;
+      console.warn("bbox フィルターには spatial 拡張が必要です。全件読み込みで動作します");
+    }
+  }
+  const clauses = [];
+  if (predicates.length) clauses.push(`WHERE ${predicates.join(" AND ")}`);
+  if (item.limit) clauses.push(`LIMIT ${Math.floor(item.limit)}`);
+  const sql = `${select} FROM ${source} ${clauses.join(" ")}`;
+  console.info(`[duckdb] ${item.title}: ${sql}`);
+  const table = await conn.query(sql);
+  const geojson = duckDbTableToGeoJson(table, lonlat);
+  console.info(`[duckdb] ${item.title}: ${geojson.features.length} 件`);
+  return geojson;
+}
+
+// sql: レイヤー。任意の SELECT 文を実行し、結果のジオメトリ列を GeoJSON 化して描画する
+async function loadDuckDbQueryAsGeoJson(item) {
+  const { conn, spatial } = await loadDuckDb();
+  // サブクエリとして包むため末尾のセミコロンは除去する
+  const query = String(item.query || "").replace(/;+\s*$/, "");
+  // :bbox プレースホルダは表示範囲の envelope に置換される(含まれていれば範囲連動レイヤーになる)
+  let effectiveQuery = query;
+  if (/:bbox\b/i.test(query)) {
+    if (!spatial) throw new Error("sql: の :bbox プレースホルダには spatial 拡張が必要です");
+    effectiveQuery = query.replace(/:bbox\b/gi, item.bboxFilter || DUCKDB_WORLD_ENVELOPE);
+  }
+  const columns = await describeDuckDbColumns(conn, `SELECT * FROM (${effectiveQuery})`);
+  const geomCol = resolveDuckDbGeometryColumn(columns, null);
+  const lonlat = geomCol ? null : resolveDuckDbLonLat(columns, null, null);
+  if (!geomCol && !lonlat) throw new Error("クエリ結果にジオメトリ列がありません(ジオメトリ列、または lon/lat 列が必要です)");
+  const geomExpr = geomCol ? `${duckDbGeometryExpr(geomCol, spatial)} AS "__geom__"` : null;
+  const sql = geomCol
+    ? `SELECT * EXCLUDE (${quoteSqlIdent(geomCol.name)}), ${geomExpr} FROM (${effectiveQuery})`
+    : `SELECT * FROM (${effectiveQuery})`;
+  console.info(`[duckdb] ${item.title}: ${sql}`);
+  const table = await conn.query(sql);
+  const geojson = duckDbTableToGeoJson(table, lonlat);
+  console.info(`[duckdb] ${item.title}: ${geojson.features.length} 件`);
+  return geojson;
+}
+
+// GeoJSON 正規化経路のデコーダー一覧。新しい形式はここに type→loader を登録し、
+// applyInspector の行パースを追加すれば既存のベクター描画経路に乗る。
+// query:true は条件変更・再クエリ(フィルターUI/表示範囲連動)に対応した形式
+const vectorDecoders = new Map([
+  ["geoparquet", { load: item => loadGeoParquetAsGeoJson(item.url) }],
+  ["duckdb", { load: item => loadDuckDbLayerAsGeoJson(item), query: true }],
+  ["sql", { load: item => loadDuckDbQueryAsGeoJson(item), query: true }],
+]);
 
 async function refreshLayers() {
   viewer.imageryLayers.removeAll(false);
@@ -1487,11 +1737,10 @@ async function refreshLayers() {
     viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
   }
 
-  const visible3DTiles = layers.some(l => l.visible && l.type === "3dtiles");
-  const drape3DTiles = drapeTerrainSources.tiles3d && visible3DTiles;
+  const drape3DTiles = isDrape3DTilesActive();
   const orderedItems = getOrderedLayerItems();
   const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
-  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "geoparquet" || layer.type === "layer" || layer.type === "entities").slice().reverse();
+  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities" || vectorDecoders.has(layer.type)).slice().reverse();
 
   // 3D Tiles ドレープ用プロバイダー定義
   const drapeProviders = [];
@@ -1585,14 +1834,17 @@ async function refreshLayers() {
       try { item.dataSource.show = item.visible; } catch (e) {}
       vectorDataSources.push({ ds: item.dataSource, id: item.id, title: item.title, plugin: true });
       layerRuntimeTargets.set(item.id, item.dataSource);
-    } else if (item.type === "geojson" || item.type === "layer" || item.type === "geoparquet") {
+    } else if (item.type === "geojson" || item.type === "layer" || vectorDecoders.has(item.type)) {
+      // 登録済みデコーダー(GeoParquet/DuckDB等)は GeoJSON に変換してから同じ経路に流す
+      const decoder = vectorDecoders.get(item.type);
       try {
-        if (!item.url && !item.data) continue;
+        if (!item.url && !item.data && !item.query) continue;
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
         if (!clamp && !item.visible) continue;
-        // GeoParquet は hyparquet で読み込み GeoJSON に変換してから同じ経路に流す
-        const source = item.type === "geoparquet" ? await loadGeoParquetAsGeoJson(item.url) : (item.data || item.url);
-        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url && item.type !== "geoparquet") {
+        // 表示範囲連動レイヤーは現在の表示範囲を絞り込み条件としてセットしてからクエリする
+        if (decoder && isViewportQueryLayer(item)) item.bboxFilter = getViewEnvelopeSql() || DUCKDB_WORLD_ENVELOPE;
+        const source = decoder ? await decoder.load(item) : (item.data || item.url);
+        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url && !decoder) {
           let heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           if (drapeTerrainSources.dem && drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           else if (drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_3D_TILE;
@@ -1604,31 +1856,13 @@ async function refreshLayers() {
           layerRuntimeTargets.set(item.id, primitive);
           continue;
         }
-        let classification;
-        if (clamp) {
-          if (drapeTerrainSources.dem && drape3DTiles) classification = Cesium.ClassificationType.BOTH;
-          else if (drape3DTiles) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
-          else if (drapeTerrainSources.dem) classification = Cesium.ClassificationType.TERRAIN;
-        }
-        const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp });
-        for (const entity of ds.entities.values) {
-          if (entity.polygon) {
-            entity.polygon.outline = new Cesium.ConstantProperty(false);
-            if (clamp) entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
-          }
-          if (entity.polyline) {
-            if (clamp) {
-              entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
-              entity.polyline.classificationType = new Cesium.ConstantProperty(classification);
-            }
-          }
-        }
+        const ds = await buildStyledGeoJsonDataSource(source, clamp);
         try { ds.show = item.visible; } catch (e) {}
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
         layerRuntimeTargets.set(item.id, ds);
       } catch (error) {
-        console.warn(`${item.type === "geoparquet" ? "GeoParquet" : "GeoJSON"} の読み込みに失敗しました:`, item.url, error);
+        console.warn(`${decoder ? item.type.toUpperCase() : "GeoJSON"} の読み込みに失敗しました:`, item.url || item.query || "", error);
       }
     }
   }
@@ -1640,6 +1874,123 @@ async function refreshLayers() {
   updateVectorSearchUI();
   updateMapAttribution();
   applyGlobeVisibility();
+}
+
+// GeoJSON をスタイル適用済みの GeoJsonDataSource に変換する(初回ロードと再クエリで共用)
+function isDrape3DTilesActive() {
+  return drapeTerrainSources.tiles3d && layers.some(l => l.visible && l.type === "3dtiles");
+}
+
+async function buildStyledGeoJsonDataSource(source, clamp) {
+  let classification;
+  if (clamp) {
+    const drape3DTiles = isDrape3DTilesActive();
+    if (drapeTerrainSources.dem && drape3DTiles) classification = Cesium.ClassificationType.BOTH;
+    else if (drape3DTiles) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
+    else if (drapeTerrainSources.dem) classification = Cesium.ClassificationType.TERRAIN;
+  }
+  const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp });
+  for (const entity of ds.entities.values) {
+    if (entity.polygon) {
+      entity.polygon.outline = new Cesium.ConstantProperty(false);
+      if (clamp) entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
+    }
+    if (entity.polyline && clamp) {
+      entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
+      entity.polyline.classificationType = new Cesium.ConstantProperty(classification);
+    }
+  }
+  return ds;
+}
+
+// クエリ系レイヤー(duckdb:/sql:)の DataSource を条件変更後に差し替えて再読み込みする
+async function reloadVectorLayer(item) {
+  const decoder = vectorDecoders.get(item.type);
+  const entry = vectorDataSources.find(e => e.id === item.id);
+  if (!decoder || !entry) return;
+  if (isViewportQueryLayer(item)) item.bboxFilter = getViewEnvelopeSql() || DUCKDB_WORLD_ENVELOPE;
+  const geojson = await decoder.load(item);
+  const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || isDrape3DTilesActive());
+  const ds = await buildStyledGeoJsonDataSource(geojson, clamp);
+  try { ds.show = item.visible; } catch (e) {}
+  viewer.dataSources.remove(entry.ds, false);
+  await viewer.dataSources.add(ds);
+  entry.ds = ds;
+  layerRuntimeTargets.set(item.id, ds);
+}
+
+// カメラ停止後に表示範囲連動レイヤーを再クエリする(camera.moveEnd からデバウンスして呼ばれる)
+let viewportQueryRefreshRunning = false;
+async function refreshViewportLayers() {
+  if (viewportQueryRefreshRunning) return;
+  const targets = layers.filter(item => item.visible && isViewportQueryLayer(item));
+  if (!targets.length) return;
+  viewportQueryRefreshRunning = true;
+  try {
+    const envelope = getViewEnvelopeSql() || DUCKDB_WORLD_ENVELOPE;
+    for (const item of targets) {
+      item.bboxFilter = envelope;
+      try {
+        await reloadVectorLayer(item);
+      } catch (error) {
+        console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+      }
+    }
+    buildVectorSearchIndex();
+    updateVectorSearchUI();
+  } finally {
+    viewportQueryRefreshRunning = false;
+  }
+}
+
+// クエリ系レイヤーの条件を対話的に変更する。duckdb: は WHERE 式、sql: はクエリ全文を編集し、
+// 変更は .kasc 行(sourceLine)にも反映して inspector テキストとの整合を保つ
+async function editLayerQueryFilter(item) {
+  if (!item) return;
+  const isSql = item.type === "sql";
+  const current = isSql ? (item.query || "") : (item.where || "");
+  const input = window.prompt(t(isSql ? "layer.filter.promptSql" : "layer.filter.promptWhere"), current);
+  if (input === null) return;
+  const value = input.trim();
+  if (isSql) {
+    if (!value) return;
+    item.query = value;
+  } else {
+    item.where = value || undefined;
+  }
+  syncLayerSourceLine(item);
+  try {
+    await reloadVectorLayer(item);
+    buildVectorSearchIndex();
+    updateVectorSearchUI();
+  } catch (error) {
+    console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+  }
+}
+
+// フィルター変更を .kasc 行へ反映する。sourceTitle/元の on-off 指定(sourceVisible)を維持する
+function syncLayerSourceLine(item) {
+  let line = null;
+  if (item.type === "duckdb") {
+    const parts = [item.sourceTitle, item.url || "", item.attribution || ""];
+    if (item.sourceVisible === false) parts.push("off");
+    if (item.where) parts.push(`where=${item.where}`);
+    if (item.limit) parts.push(`limit=${item.limit}`);
+    if (item.geom) parts.push(`geom=${item.geom}`);
+    if (item.lon) parts.push(`lon=${item.lon}`);
+    if (item.lat) parts.push(`lat=${item.lat}`);
+    if (item.format) parts.push(`format=${item.format}`);
+    if (item.bboxAuto) parts.push("bbox=auto");
+    line = `duckdb: ${parts.join(" | ")}`;
+  } else if (item.type === "sql") {
+    line = `sql: ${item.sourceTitle} | ${item.query}${item.sourceVisible === false ? " | off" : ""}`;
+  }
+  if (!line || line === item.sourceLine) return;
+  const input = document.querySelector("#inspector-input");
+  if (input && item.sourceLine) {
+    input.value = input.value.split(/\r?\n/).map(l => (l === item.sourceLine ? line : l)).join("\n");
+  }
+  item.sourceLine = line;
 }
 
 function setupInfoTabs(content) {
@@ -1848,6 +2199,57 @@ function applyInspector(text) {
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", proxy, group, exclusiveGroup };
+      layers.push(item);
+      layerState.set(id, item);
+      layerOrder.push(id);
+    }
+
+    // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=  | on/off
+    // 単一ファイルを DuckDB-WASM で読み、SQL の絞り込みを適用してから描画する
+    if (type === "duckdb") {
+      const parts = value.split("|").map(part => part.trim());
+      const title = parts[0];
+      const url = resolveProjectUrl(parts[1]);
+      const off = parts.some(part => /^(off|false)$/i.test(part));
+      if (!title || !url) return;
+      const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, sourceVisible: !off, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", group, exclusiveGroup };
+      parts.slice(3).forEach(part => {
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        const key = part.slice(0, eq).trim().toLowerCase();
+        const raw = part.slice(eq + 1).trim();
+        const number = Number(raw);
+        if (key === "where" && raw) item.where = raw;
+        else if ((key === "geom" || key === "geometry") && raw) item.geom = raw;
+        else if ((key === "lon" || key === "lng") && raw) item.lon = raw;
+        else if (key === "lat" && raw) item.lat = raw;
+        else if (key === "format" && raw) item.format = raw;
+        else if (key === "bbox" && /^(auto|on|true|view|viewport)$/i.test(raw)) item.bboxAuto = true;
+        else if (key === "limit" && Number.isInteger(number) && number > 0) item.limit = number;
+      });
+      layers.push(item);
+      layerState.set(id, item);
+      layerOrder.push(id);
+    }
+
+    // sql: タイトル | SELECT文(先頭の | 以降はすべてクエリ文字列として扱い | も使用可)。
+    // 末尾が "| off" の場合のみ非表示指定として解釈する
+    if (type === "sql") {
+      const firstSep = value.indexOf("|");
+      const title = firstSep < 0 ? "" : value.slice(0, firstSep).trim();
+      let query = firstSep < 0 ? "" : value.slice(firstSep + 1).trim();
+      let visible = true;
+      const tail = /\|\s*(off|false)\s*$/i.exec(query);
+      if (tail) {
+        visible = false;
+        query = query.slice(0, tail.index).trim();
+      }
+      if (!title || !query) return;
+      const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, query, visible, sourceVisible: visible, attribution: "", group, exclusiveGroup };
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -4380,6 +4782,14 @@ viewer.camera.moveEnd.addEventListener(() => {
       orientation: { heading: viewer.camera.heading, pitch: -84.99 * Math.PI / 180, roll: 0 }
     });
   }
+});
+
+// 表示範囲連動レイヤー(bbox=auto / :bbox)はカメラ停止ごとに範囲絞り込みで再クエリする
+let viewportQueryTimer = null;
+viewer.camera.moveEnd.addEventListener(() => {
+  if (!layers.some(isViewportQueryLayer)) return;
+  clearTimeout(viewportQueryTimer);
+  viewportQueryTimer = setTimeout(() => { void refreshViewportLayers(); }, 400);
 });
 
 setupThreeJs();

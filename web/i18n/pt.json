@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "A camada \"{name}\" não tem dados vetoriais legíveis",
   "tool.dataTooLarge": "Os dados da camada são grandes demais para retornar ({size} bytes, {count} feições). Refine com vectorSearch ou processe em um plugin.",
   "tool.invalidGeoJson": "Objeto GeoJSON inválido",
-  "error.invalidUrl": "Apenas URLs http(s) podem ser obtidas"
+  "error.invalidUrl": "Apenas URLs http(s) podem ser obtidas",
+  "layer.filter": "Filtro (SQL)",
+  "layer.filter.promptWhere": "Digite uma expressão WHERE (SQL). Vazio para limpar.",
+  "layer.filter.promptSql": "Editar a consulta SQL"
 }

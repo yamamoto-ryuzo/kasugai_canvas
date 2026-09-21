@@ -85,8 +85,9 @@ body.globe-hidden .viewport { background: transparent; }
 .layer-row:active { cursor: grabbing; }
 .layer-row input { width: 15px; min-height: 15px; }
 .layer-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.layer-focus { flex: 0 0 auto; width: 24px; min-width: 24px !important; min-height: 24px !important; padding: 0 !important; border: 0 !important; background: transparent !important; font-size: 15px !important; line-height: 1; opacity: .7; }
-.layer-focus:hover { opacity: 1; }
+.layer-focus, .layer-filter { flex: 0 0 auto; width: 24px; min-width: 24px !important; min-height: 24px !important; padding: 0 !important; border: 0 !important; background: transparent !important; font-size: 15px !important; line-height: 1; opacity: .7; }
+.layer-focus:hover, .layer-filter:hover { opacity: 1; }
+.layer-filter { font-size: 12px !important; }
 #add-tile-form { display: grid; gap: 6px; }
 .control-panel button { min-height: 30px; padding: 5px 8px; border: 1px solid #31564f; border-radius: 4px; background: #31564f; color: #fff; cursor: pointer; font-size: var(--basemap-select-font-size); }
 .control-panel .danger-button { margin-top: 8px; border-color: #a82020; background: #a82020; }

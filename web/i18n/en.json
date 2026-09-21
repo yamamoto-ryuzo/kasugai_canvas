@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "Layer \"{name}\" has no readable vector data",
   "tool.dataTooLarge": "Layer data is too large to return ({size} bytes, {count} features). Narrow it down with vectorSearch or process it in a plugin.",
   "tool.invalidGeoJson": "Invalid GeoJSON object",
-  "error.invalidUrl": "Only http(s) URLs can be fetched"
+  "error.invalidUrl": "Only http(s) URLs can be fetched",
+  "layer.filter": "Filter (SQL)",
+  "layer.filter.promptWhere": "Enter a WHERE expression (SQL). Leave empty to clear.",
+  "layer.filter.promptSql": "Edit the SQL query."
 }

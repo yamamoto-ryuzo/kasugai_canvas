@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "La couche « {name} » n'a pas de données vectorielles lisibles",
   "tool.dataTooLarge": "Les données de la couche sont trop volumineuses ({size} octets, {count} entités). Affinez avec vectorSearch ou traitez-les dans un plugin.",
   "tool.invalidGeoJson": "Objet GeoJSON invalide",
-  "error.invalidUrl": "Seules les URL http(s) peuvent être récupérées"
+  "error.invalidUrl": "Seules les URL http(s) peuvent être récupérées",
+  "layer.filter": "Filtre (SQL)",
+  "layer.filter.promptWhere": "Saisir une expression WHERE (SQL). Vide pour effacer.",
+  "layer.filter.promptSql": "Modifier la requête SQL"
 }

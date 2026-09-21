@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "La capa \"{name}\" no tiene datos vectoriales legibles",
   "tool.dataTooLarge": "Los datos de la capa son demasiado grandes para devolverlos ({size} bytes, {count} elementos). Acote con vectorSearch o procéselos en un plugin.",
   "tool.invalidGeoJson": "Objeto GeoJSON no válido",
-  "error.invalidUrl": "Solo se pueden obtener URL http(s)"
+  "error.invalidUrl": "Solo se pueden obtener URL http(s)",
+  "layer.filter": "Filtro (SQL)",
+  "layer.filter.promptWhere": "Introduce una expresión WHERE (SQL). Vacío para quitar.",
+  "layer.filter.promptSql": "Edita la consulta SQL"
 }

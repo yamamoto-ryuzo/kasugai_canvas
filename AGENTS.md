@@ -66,21 +66,23 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
 ### 経路の分類
 
 - **ネイティブ経路**: `3dtiles:` / `geojson:` / `xyz:` など CesiumJS が直接読める形式
-- **GeoJSON 正規化経路**: 非対応形式をデコーダーで GeoJSON 化して同じ DataSource 経路に乗せる
+- **GeoJSON 正規化経路**: 非対応形式をデコーダーで GeoJSON 化して同じ DataSource 経路に乗せる。デコーダーは `web/app.js` の **`vectorDecoders` レジストリ**（type→`async (item) => GeoJSON` の Map）に登録する
   - 実装済み: `geoparquet:`（`loadGeoParquetAsGeoJson()`。hyparquet を CDN から遅延ロード、WKB/ネイティブ GEOMETRY 型の両方を GeoJSON ジオメトリに変換）
-  - 将来候補: FlatGeobuf・CSV/TSV(緯度経度列)・Shapefile(zip)・GeoPackage・KML 等
+  - 実装済み: `duckdb:` / `sql:`（`loadDuckDbLayerAsGeoJson()` / `loadDuckDbQueryAsGeoJson()`。DuckDB-WASM を CDN から遅延ロードし、SQL で絞り込んでから GeoJSON 化。`duckdb:` はファイル+`where=`/`limit=`/`geom=`/`lon=`・`lat=`/`format=`/`bbox=auto` の宣言的指定、`sql:` は任意の SELECT 文（`:bbox` プレースホルダで表示範囲連動）。spatial 拡張があれば WKT・ST_Read・空間述語も利用可、無くても WKB/GeoJSON テキストと lon/lat ポイント化は動作する）
+  - クエリ系形式（`query:true` フラグ）は再クエリ対応: レイヤー一覧の ⏷ ボタンで WHERE 式/クエリを対話的に変更（`editLayerQueryFilter` → `reloadVectorLayer` で DataSource 差替え・`.kasc` 行にも反映）、`bbox=auto`/`:bbox` は `camera.moveEnd` デバウンスで表示範囲 `ST_MakeEnvelope` を再クエリする（`refreshViewportLayers`）
+  - `duckdb:`/`sql:` 経路で既に扱えるもの: CSV/TSV（lon/lat ポイント化）・Shapefile/GeoPackage 等（`format=read` の `ST_Read`）
+  - 将来候補: FlatGeobuf・KML 等
 - **タイル/大規模経路**: MVT・PMTiles・ラスタタイル等。全件描画や LOD が必要な大規模データ向けで、GeoJSON 正規化とは別経路を検討する
 
 ### 新形式を追加する手順
 
-1. `applyInspector` のパースに行タイプを追加（`type === "xxx"` を layer 分岐に含める）
-2. デコーダー関数を1本に閉じ込める（`loadXxxAsGeoJson(url)` の形。返り値は GeoJSON FeatureCollection）
-3. `refreshLayers` の geojson 分岐に `item.type === "xxx"` を追加し、`source` の分岐だけ差し替える
-4. `orderedOtherLayers` のフィルタと `updateInspectorFromLayerOrder` の種類一覧にも同じタイプ名を登録する
-5. `home.html` のインスペクター設定仕様に書式を追記する
+1. `applyInspector` のパースに行タイプを追加する
+2. デコーダー関数を1本に閉じ込める（`loadXxxAsGeoJson(item)` の形。返り値は GeoJSON FeatureCollection）
+3. `vectorDecoders` Map に `{ load: item => loadXxxAsGeoJson(item) }` を登録する（`refreshLayers` の geojson 分岐・`orderedOtherLayers` フィルタ・`updateInspectorFromLayerOrder` の種類一覧はレジストリ参照のため変更不要。条件変更・再クエリに対応する形式は `query: true` を付けるとフィルター UI の対象になる）
+4. `home.html` のインスペクター設定仕様に書式を追記する
 
 ### 方針上の注意
 
-- **デコーダーは軽量ライブラリ優先**（CDN の ESM を動的 import）。DuckDB-WASM のような重いエンジンは「SQL で絞ってから描く」要件が出た時点で検討し、それまでは全件読み込みでよい
-- **全件読み込みが前提**のため、デコードは数万〜10万地物規模を目安とする。それを超える大規模データはタイル経路（別形式への事前変換）で扱う
-- **プロパティの型変換**はデコーダー側で行う（BigInt→Number/String 等）。GeoJSON 側に渡す properties は検索・一覧がそのまま動く形に整形する
+- **デコーダーは軽量ライブラリ優先**（CDN の ESM を動的 import）。DuckDB-WASM のような重いエンジンは本体に置くが**遅延ロード必須**とし、使用時までコストを発生させない。プラグインではなく本体に置く理由: `.kasc` の行タイプはプロジェクトファイルの可搬性のため本体実装が必須であり、現プラグイン機構は `applyInspector` の行タイプを拡張できないため。プラグインからの decoder 登録（manifest での形式宣言＋遅延リフレッシュ）は将来の拡張ポイントとする
+- **全件読み込みが前提**のため、デコードは数万〜10万地物規模を目安とする。それを超える大規模データはタイル経路（別形式への事前変換）か、`duckdb:`/`sql:` で事前に絞り込んで扱う
+- **プロパティの型変換**はデコーダー側で行う（BigInt→Number/String 等。共通ヘルパー `sanitizeVectorPropertyValue` を使う）。GeoJSON 側に渡す properties は検索・一覧がそのまま動く形に整形する

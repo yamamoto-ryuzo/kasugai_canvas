@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "图层“{name}”没有可读取的矢量数据",
   "tool.dataTooLarge": "图层数据过大无法返回（{size} 字节，{count} 个要素）。请用 vectorSearch 缩小范围或在插件中处理。",
   "tool.invalidGeoJson": "GeoJSON 对象无效",
-  "error.invalidUrl": "只能获取 http(s) URL"
+  "error.invalidUrl": "只能获取 http(s) URL",
+  "layer.filter": "筛选 (SQL)",
+  "layer.filter.promptWhere": "输入 WHERE 表达式(SQL),留空则清除",
+  "layer.filter.promptSql": "编辑 SQL 查询"
 }

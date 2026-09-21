@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.7.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.8.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -52,16 +52,20 @@
             <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。Range Request による部分読み・属性検索に対応</p>
           </div>
           <div class="feature-card">
-            <h3>🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
+            <h3>� DuckDB SQL <span class="badge">対応</span> <span class="badge" style="background:#17a2b8;">NEW v4.8.0</span></h3>
+            <p><code>duckdb:</code> / <code>sql:</code> で指定。DuckDB-WASM（CDN から遅延ロード）で Parquet・CSV・JSON 等を SQL で絞り込んでから GeoJSON へ正規化して描画。spatial 拡張により空間述語・WKT・<code>ST_Read</code>(Shapefile/GeoPackage 等) も利用可能</p>
+          </div>
+          <div class="feature-card">
+            <h3>�🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
             <p>空間インデックス内蔵のバイナリ形式。範囲ストリーミングに強く、GeoJSON 正規化経路での対応候補</p>
           </div>
           <div class="feature-card">
-            <h3>📄 CSV / TSV <span class="badge" style="background:#6c757d;">予定</span></h3>
-            <p>緯度・経度列を持つ表データをポイントとして表示。ダッシュボード連携の入口となる軽量形式</p>
+            <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
+            <p><code>duckdb:</code> の <code>lon=</code>/<code>lat=</code> 指定で緯度・経度列を持つ表データをポイントとして表示（lon/lat/lng/longitude/latitude 列は自動検出）</p>
           </div>
           <div class="feature-card">
-            <h3>🗂️ Shapefile / GeoPackage <span class="badge" style="background:#6c757d;">予定</span></h3>
-            <p>デスクトップ GIS の代表形式。QGIS での編集成果物をそのまま読み込む経路として検討中</p>
+            <h3>🗂️ Shapefile / GeoPackage <span class="badge">対応</span></h3>
+            <p><code>duckdb:</code> の <code>format=read</code>（spatial 拡張の <code>ST_Read</code>）で読み込み可能。QGIS での編集成果物をそのまま扱える</p>
           </div>
           <div class="feature-card">
             <h3>🧩 MVT / PMTiles <span class="badge" style="background:#6c757d;">検討中</span></h3>
@@ -77,7 +81,7 @@
         <div class="features">
           <div class="feature-card">
             <h3>📝 インスペクター一括設定</h3>
-            <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
+            <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
           </div>
           <div class="feature-card">
             <h3>🗺️ ベースマップ</h3>
@@ -387,6 +391,8 @@ base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std
 3dtiles: 東京都/千代田区（建築物LOD1） | https://example.com/tileset.json | off
 geojson: 東京都/行政区域 | https://example.com/行政区域.geojson | on
 geoparquet: 全国/施設ポイント | https://example.com/facilities.parquet | on
+duckdb: 全国/河川(上位100件) | https://example.com/rivers.parquet | on | limit=100
+sql: 圏内の施設 | SELECT * FROM 'https://example.com/facilities.parquet' WHERE ST_Intersects(geometry, ST_MakeEnvelope(139.7, 35.6, 139.9, 35.8))
 background: #ffffff
 info: https://example.com/project-info.html
 cam: 東京駅|35.653108|139.761449|h=2200.6|p=-30
@@ -402,9 +408,18 @@ legend: 凡例|https://example.com/legend.png</code></pre>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
 xyz: タイルレイヤ | 同上+off
 3dtiles: / geojson:(layer:) / geoparquet: レイヤ | off / proxy=off
+duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / bbox=auto
+sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・:bbox で表示範囲連動)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID</code></pre>
+        </div>
+        <div class="url-box">
+          <h3>duckdb: / sql:（SQL絞り込みレイヤ）</h3>
+          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（数十MB・Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。ファイル形式は拡張子から自動判別します（parquet/csv/json）。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。クエリ内の URL は絶対指定が必要です。</p>
+          <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・GeoPackage 等）を使います。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
+          <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> に <code>bbox=auto</code> を付けると、カメラ停止ごとに表示範囲を <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> として再クエリします。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用に使えます。いずれも spatial 拡張が必要です。</p>
+          <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
         </div>
         <div class="url-box">
           <h3>グループ化ルール</h3>

@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "レイヤー \"{name}\" に読み取り可能なベクトルデータがありません",
   "tool.dataTooLarge": "レイヤーデータが大きすぎて返せません（{size}バイト・{count}地物）。vectorSearchで絞るかプラグイン側で処理してください",
   "tool.invalidGeoJson": "GeoJSONオブジェクトが不正です",
-  "error.invalidUrl": "http/https のURLのみ取得できます"
+  "error.invalidUrl": "http/https のURLのみ取得できます",
+  "layer.filter": "フィルター(SQL)",
+  "layer.filter.promptWhere": "WHERE 条件式を入力してください(SQL・空欄で解除)",
+  "layer.filter.promptSql": "SQL クエリを編集してください"
 }

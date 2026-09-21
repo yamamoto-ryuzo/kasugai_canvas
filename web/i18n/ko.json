@@ -319,5 +319,8 @@
   "tool.layerDataNotFound": "레이어 \"{name}\"에 읽을 수 있는 벡터 데이터가 없습니다",
   "tool.dataTooLarge": "레이어 데이터가 너무 커서 반환할 수 없습니다({size}바이트, {count}개 피처). vectorSearch로 범위를 좁히거나 플러그인에서 처리하세요.",
   "tool.invalidGeoJson": "GeoJSON 객체가 올바르지 않습니다",
-  "error.invalidUrl": "http(s) URL만 가져올 수 있습니다"
+  "error.invalidUrl": "http(s) URL만 가져올 수 있습니다",
+  "layer.filter": "필터 (SQL)",
+  "layer.filter.promptWhere": "WHERE 조건식을 입력하세요(SQL・비우면 해제)",
+  "layer.filter.promptSql": "SQL 쿼리를 편집하세요"
 }
