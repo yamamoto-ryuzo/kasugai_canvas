@@ -32,7 +32,47 @@
       </section>
 
       <section>
-        <h2>🗺️ V1.GIS 基本機能（Re:Earth GeoSuite コンパチブル）</h2>
+        <h2>�️ 対応データ形式</h2>
+        <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
+        <div class="features">
+          <div class="feature-card">
+            <h3>🗺️ XYZ タイル <span class="badge">対応</span></h3>
+            <p><code>xyz:</code> / <code>base:</code> で指定するラスタタイル。<code>{z}/{x}/{y}</code> 形式のタイル画像を重ね合わせ・ドレープ表示</p>
+          </div>
+          <div class="feature-card">
+            <h3>🏙️ 3D Tiles <span class="badge">対応</span></h3>
+            <p><code>3dtiles:</code> で tileset.json を指定。PLATEAU 建築物・点群など大規模3Dデータをストリーミング表示</p>
+          </div>
+          <div class="feature-card">
+            <h3>📍 GeoJSON <span class="badge">対応</span></h3>
+            <p><code>geojson:</code> / <code>layer:</code> で指定。ベクトル検索・属性一覧・ドレープに対応したベクターデータの基本形式</p>
+          </div>
+          <div class="feature-card">
+            <h3>📦 GeoParquet <span class="badge">対応</span> <span class="badge" style="background:#17a2b8;">NEW v4.7.0</span></h3>
+            <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。Range Request による部分読み・属性検索に対応</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
+            <p>空間インデックス内蔵のバイナリ形式。範囲ストリーミングに強く、GeoJSON 正規化経路での対応候補</p>
+          </div>
+          <div class="feature-card">
+            <h3>📄 CSV / TSV <span class="badge" style="background:#6c757d;">予定</span></h3>
+            <p>緯度・経度列を持つ表データをポイントとして表示。ダッシュボード連携の入口となる軽量形式</p>
+          </div>
+          <div class="feature-card">
+            <h3>🗂️ Shapefile / GeoPackage <span class="badge" style="background:#6c757d;">予定</span></h3>
+            <p>デスクトップ GIS の代表形式。QGIS での編集成果物をそのまま読み込む経路として検討中</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧩 MVT / PMTiles <span class="badge" style="background:#6c757d;">検討中</span></h3>
+            <p>ベクタータイル。数十万地物級の全件表示・LOD が必要な大規模データ向けの別経路として検討</p>
+          </div>
+        </div>
+        <p><small>方針の詳細（経路分類・新形式の追加手順）はリポジトリの <code>AGENTS.md</code>「データ形式方針」を参照してください。</small></p>
+      </section>
+
+      <section>
+        <h2>�🗺️ V1.GIS 基本機能（Re:Earth GeoSuite コンパチブル）</h2>
         <p>Re:Earth GeoSuite と同様の GIS・デジタルツイン機能を実装しています。</p>
         <div class="features">
           <div class="feature-card">
