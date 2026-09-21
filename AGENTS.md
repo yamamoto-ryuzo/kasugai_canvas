@@ -58,3 +58,29 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
   - バージョンアップ関連の API (`/api/update/*`)、アプリ終了用の `/api/shutdown`、起動確認用の `/health`
   - **ローカル開発向けの高権限 API**: `/api/capabilities`（能力通知）、`/api/fetch`（CORSプロキシ）、`/api/plugins`（PLUGIN/ へのプラグイン書き込み・削除）。これらはローカルサーバー（127.0.0.1）前提の機能であり、公開環境（Pages/Workers）では無制限の書き込み・fetchを無認証で提供してはならない
 - 地図タイル・検索等の外部 API へのアクセスは、ブラウザから直接呼ぶか、CORS 対応を前提とする
+
+## データ形式方針
+
+CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコード → GeoJSON へ正規化 → 既存のベクター描画経路（`GeoJsonDataSource`）に流す」**を基本ルールとする。これによりレイヤ一覧・表示切替・フォーカス・ベクトル検索・属性パネルが新形式でも自動的に機能する。
+
+### 経路の分類
+
+- **ネイティブ経路**: `3dtiles:` / `geojson:` / `xyz:` など CesiumJS が直接読める形式
+- **GeoJSON 正規化経路**: 非対応形式をデコーダーで GeoJSON 化して同じ DataSource 経路に乗せる
+  - 実装済み: `geoparquet:`（`loadGeoParquetAsGeoJson()`。hyparquet を CDN から遅延ロード、WKB/ネイティブ GEOMETRY 型の両方を GeoJSON ジオメトリに変換）
+  - 将来候補: FlatGeobuf・CSV/TSV(緯度経度列)・Shapefile(zip)・GeoPackage・KML 等
+- **タイル/大規模経路**: MVT・PMTiles・ラスタタイル等。全件描画や LOD が必要な大規模データ向けで、GeoJSON 正規化とは別経路を検討する
+
+### 新形式を追加する手順
+
+1. `applyInspector` のパースに行タイプを追加（`type === "xxx"` を layer 分岐に含める）
+2. デコーダー関数を1本に閉じ込める（`loadXxxAsGeoJson(url)` の形。返り値は GeoJSON FeatureCollection）
+3. `refreshLayers` の geojson 分岐に `item.type === "xxx"` を追加し、`source` の分岐だけ差し替える
+4. `orderedOtherLayers` のフィルタと `updateInspectorFromLayerOrder` の種類一覧にも同じタイプ名を登録する
+5. `home.html` のインスペクター設定仕様に書式を追記する
+
+### 方針上の注意
+
+- **デコーダーは軽量ライブラリ優先**（CDN の ESM を動的 import）。DuckDB-WASM のような重いエンジンは「SQL で絞ってから描く」要件が出た時点で検討し、それまでは全件読み込みでよい
+- **全件読み込みが前提**のため、デコードは数万〜10万地物規模を目安とする。それを超える大規模データはタイル経路（別形式への事前変換）で扱う
+- **プロパティの型変換**はデコーダー側で行う（BigInt→Number/String 等）。GeoJSON 側に渡す properties は検索・一覧がそのまま動く形に整形する
