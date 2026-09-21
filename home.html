@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.8.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.9.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -71,15 +71,15 @@
             <p><code>duckdb:</code> で指定（<code>format=parquet</code>・既定）。<code>where=</code>/<code>bbox=auto</code>/<code>columns=</code> の絞り込みで述語プッシュダウン・row group スキップ・列プルーニングが効くクエリ系の本来の対象。大規模・広範囲データ向け</p>
           </div>
           <div class="feature-card">
-            <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
+            <h3>📄 CSV / TSV <span class="badge" style="background:#fd7e14;">対応中</span></h3>
             <p><code>duckdb:</code> の <code>lon=</code>/<code>lat=</code> 指定で緯度・経度列を持つ表データをポイントとして表示（lon/lat/lng/longitude/latitude 列は自動検出）</p>
           </div>
           <div class="feature-card">
-            <h3>📋 JSON / GeoJSON <span class="badge">対応</span></h3>
+            <h3>📋 JSON / GeoJSON <span class="badge" style="background:#fd7e14;">対応中</span></h3>
             <p><code>duckdb:</code> の <code>format=json</code>（<code>read_json_auto</code>）でテーブルとしてクエリ可能。FeatureCollection の構造は <code>format=read</code>（<code>ST_Read</code>）推奨</p>
           </div>
           <div class="feature-card">
-            <h3>🗂️ Shapefile / GeoPackage <span class="badge">対応</span></h3>
+            <h3>🗂️ Shapefile / GeoPackage <span class="badge" style="background:#fd7e14;">対応中</span></h3>
             <p><code>duckdb:</code> の <code>format=read</code>（spatial 拡張の <code>ST_Read</code>）で読み込み可能。QGIS での編集成果物をそのまま扱える</p>
           </div>
           <div class="feature-card">

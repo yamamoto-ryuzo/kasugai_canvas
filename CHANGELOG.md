@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.9.0] - 2026-09-22
+
+### Changed
+
+- 属性値一覧の entity 経路は `GeoJsonDataSource` が MultiPolygon をパート毎に分割するため、同一 properties の entity を1行にまとめて地物単位で表示（例: 5行の国データが45行に見えていた問題を解消）
+- ドキュメント：home.html の対応データ形式を「ネイティブ・タイル系」「ベクター:全件読み込み系」「ベクター:クエリ系(DuckDB SQL)」の3グループに再編。`duckdb:`/`sql:` の `format=` 対応形式一覧（parquet/csv・tsv/json・geojson/read）と「全件読み込み系 / クエリ系」の使い分け表を追加。AGENTS.md にも同分類を明記
+
 ## [4.8.0] - 2026-09-21
 
 ### Added
