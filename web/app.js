@@ -2143,7 +2143,8 @@ async function refreshLayersImpl() {
           continue;
         }
         const source = await loadVectorSourceCached(item, decoder);
-        // クエリ系レイヤー(duckdb:/sql:)は既定で GeoJsonPrimitive バッチ描画(render=entity で戻せる)。
+        // クエリ系レイヤー(duckdb:/sql:)は render=primitive で GeoJsonPrimitive バッチ描画に切替可
+        // (既定は entity 描画=地形ドレープ可)。
         // 検索は常に全件対象の SQL フィルター(⏷)に一本化するためベクター検索パネルには登録しない
         if (decoder && item.renderPrimitive && Cesium.GeoJsonPrimitive) {
           await addGeoJsonPrimitiveLayer(item, source);
@@ -2543,7 +2544,8 @@ function applyInspector(text) {
     // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto/render= | on/off
     // 単一ファイルを DuckDB-WASM で読み、SQL の絞り込みを適用してから描画する
     // columns= は読む属性列の絞り込み(列プルーニング)、covering= は xmin,xmax,ymin,ymax の列名指定
-    // 描画は既定で GeoJsonPrimitive バッチ(entity 非経由)。render=entity で entity 描画に戻せる
+    // 描画は既定で entity(GeoJsonDataSource・地形ドレープ可)。render=primitive で
+    // GeoJsonPrimitive バッチ(entity 非経由・ドレープ不可だが大量地物向け)に切替可
     if (type === "duckdb") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
@@ -2552,7 +2554,7 @@ function applyInspector(text) {
       if (!title || !url) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, sourceVisible: !off, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", group, exclusiveGroup, renderPrimitive: true };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, sourceVisible: !off, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", group, exclusiveGroup, renderPrimitive: false };
       parts.slice(3).forEach(part => {
         const eq = part.indexOf("=");
         if (eq < 0) return;
@@ -2580,13 +2582,13 @@ function applyInspector(text) {
 
     // sql: タイトル | SELECT文(先頭の | 以降はすべてクエリ文字列として扱い | も使用可)。
     // 末尾の "| off" は非表示指定、"| render=entity" / "| render=primitive" は描画方式として解釈する。
-    // 描画は既定で GeoJsonPrimitive バッチ(entity 非経由)
+    // 描画は既定で entity(地形ドレープ可)
     if (type === "sql") {
       const firstSep = value.indexOf("|");
       const title = firstSep < 0 ? "" : value.slice(0, firstSep).trim();
       let query = firstSep < 0 ? "" : value.slice(firstSep + 1).trim();
       let visible = true;
-      let renderPrimitive = true;
+      let renderPrimitive = false;
       let renderSpecified = false;
       const tailRe = /\|\s*(off|false|render\s*=\s*[a-z]+)\s*$/i;
       let tail;

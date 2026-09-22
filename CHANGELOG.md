@@ -4,6 +4,16 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.13.0] - 2026-09-22
+
+### Changed
+
+- `duckdb:`/`sql:` レイヤーの既定描画を GeoJsonPrimitive バッチから entity（`GeoJsonDataSource`）に変更。既定で地形・3D Tiles へのドレープ（クランプ）が効くようになり、起伏のある地形でジオメトリが地表に埋まる問題を解消。大量地物向けの軽量バッチ描画は `render=primitive`（`sql:` は末尾 `| render=primitive`）で opt-in 可能
+
+### Added
+
+- ドキュメント：`duckdb:`/`sql:` で FlatGeobuf（`.fgb`）が読めることを明記（spatial 拡張の `ST_Read`/`format=read`、拡張子からの自動判別も可）。home.html のクエリ系カードに FlatGeobuf を追加し、entity/primitive 描画方式の違いを一覧化
+
 ## [4.12.0] - 2026-09-22
 
 ### Added
