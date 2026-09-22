@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.10.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.12.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -52,6 +52,7 @@
         </div>
 
         <h3 style="margin:14px 0 8px;">ベクター：全件読み込み系</h3>
+        <p>ファイル全件を entity 化する経路です。読み込みは必要となった初回（表示ON、または属性・値一覧での選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。</p>
         <div class="features">
           <div class="feature-card">
             <h3>📍 GeoJSON <span class="badge">対応</span></h3>
@@ -60,6 +61,10 @@
           <div class="feature-card">
             <h3>📦 GeoParquet <span class="badge">対応</span></h3>
             <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。常に全件読み込みのため中規模まで。「Parquet をそのまま置くだけで表示」の利便性重視の経路</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧭 FlatGeobuf <span class="badge">対応</span></h3>
+            <p><code>flatgeobuf:</code> で指定。空間インデックス内蔵のバイナリ形式を公式 JS リーダー（CDN・遅延ロード）でストリームデコードし GeoJSON へ正規化。全件読み込み系の経路だが、全件バッファリングせず逐次変換する</p>
           </div>
         </div>
 
@@ -82,10 +87,6 @@
             <h3>🗂️ Shapefile / GeoPackage <span class="badge" style="background:#fd7e14;">対応中</span></h3>
             <p><code>duckdb:</code> の <code>format=read</code>（spatial 拡張の <code>ST_Read</code>）で読み込み可能。QGIS での編集成果物をそのまま扱える</p>
           </div>
-          <div class="feature-card">
-            <h3>🧭 FlatGeobuf <span class="badge" style="background:#6c757d;">予定</span></h3>
-            <p>空間インデックス内蔵のバイナリ形式。範囲ストリーミングに強く、クエリ系経路での対応候補</p>
-          </div>
         </div>
         <p><small>方針の詳細（経路分類・新形式の追加手順）はリポジトリの <code>AGENTS.md</code>「データ形式方針」を参照してください。</small></p>
       </section>
@@ -96,7 +97,7 @@
         <div class="features">
           <div class="feature-card">
             <h3>📝 インスペクター一括設定</h3>
-            <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
+            <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>flatgeobuf:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
           </div>
           <div class="feature-card">
             <h3>🗺️ ベースマップ</h3>
@@ -406,6 +407,7 @@ base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std
 3dtiles: 東京都/千代田区（建築物LOD1） | https://example.com/tileset.json | off
 geojson: 東京都/行政区域 | https://example.com/行政区域.geojson | on
 geoparquet: 全国/施設ポイント | https://example.com/facilities.parquet | on
+flatgeobuf: 全国/国ポリゴン | https://example.com/countries.fgb | on
 duckdb: 全国/河川(上位100件) | https://example.com/rivers.parquet | on | limit=100
 sql: 圏内の施設 | SELECT * FROM 'https://example.com/facilities.parquet' WHERE ST_Intersects(geometry, ST_MakeEnvelope(139.7, 35.6, 139.9, 35.8))
 background: #ffffff
@@ -422,7 +424,7 @@ legend: 凡例|https://example.com/legend.png</code></pre>
           <h3>設定種類</h3>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
 xyz: タイルレイヤ | 同上+off
-3dtiles: / geojson:(layer:) / geoparquet: レイヤ | off / proxy=off
+3dtiles: / geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off
 duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / bbox=auto / render=primitive|entity(既定primitive)
 sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・:bbox で表示範囲連動)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
@@ -431,16 +433,18 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
         </div>
         <div class="url-box">
           <h3>ベクターデータ形式の使い分け</h3>
-          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>）はファイル全件を entity 化し、ベクター検索パネルで属性検索できます。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。</p>
+          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>）はファイル全件を entity 化し、ベクター検索パネルで属性検索できます。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。</p>
           <pre><code>【全件読み込み系】全件 entity 化・ベクター検索パネル対象
   小〜中規模・全件表示        → geojson:（事前変換が最速・最単純）
   中規模・Parquet をそのまま  → geoparquet:（利便性重視・変換不要で置くだけ）
+  中規模・FlatGeobuf をそのまま → flatgeobuf:（変換不要・ストリームで逐次デコード）
 
 【クエリ系】SQL 絞り込み・表示範囲のみ描画・検索は常に全件
   大規模・広範囲・絞り込み    → duckdb:/sql:（Parquet の利点が発揮される）
 
 超大規模・全件表示            → タイル化（MVT/PMTiles 等・別経路）</code></pre>
           <p>Parquet の利点（圧縮・述語プッシュダウン・row group スキップ・列プルーニング・Range Request）は「読まない部分を作れる」ときにだけ効きます。全件を読んで表示するだけなら、変換済み GeoJSON の方が速くて単純です。<code>geoparquet:</code> は絞り込みを持たず常に全件読み込みなので、広範囲データや条件絞り込みが必要な場合は <code>duckdb:</code>/<code>sql:</code> を使ってください。</p>
+          <p><strong>読み込みタイミング</strong>：全件読み込み系レイヤーは、必要となった初回（表示ON、または属性・値一覧でレイヤーを選択した時点）にダウンロード＋デコードします。<code>off</code> のレイヤーは起動時に読み込まれません。取得結果はメモリに保持されるため、2回目以降の表示切替・ドレープ変更・属性一覧では再取得せず即座に反映されます（キャッシュはインスペクター/プロジェクト変更で破棄）。クエリ系は条件ごとに結果が変わるため毎回クエリします。</p>
         </div>
         <div class="url-box">
           <h3>duckdb: / sql:（SQL絞り込みレイヤ）</h3>

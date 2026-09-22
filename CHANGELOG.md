@@ -4,6 +4,22 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.12.0] - 2026-09-22
+
+### Added
+
+- FlatGeobuf レイヤー：インスペクターの `.kasc` 設定で `flatgeobuf: タイトル | URL | on/off` 行を新規追加。CDN 配信の flatgeobuf 公式 JS リーダー（`geojson` サブモジュールのみ遅延ロード）でデコードし、レスポンスボディを ReadableStream のまま逐次 GeoJSON Feature 化して既存のベクター描画経路に流す。レイヤ一覧・表示切替・フォーカス・ベクトル検索・属性パネルがそのまま利用可能。空間インデックスによる範囲読みは持たない全件読み込み系だが、全件バッファリングせずストリームデコードする
+- サンプル：`web/projects/default` と `installer/projects/default` の `kasugai_canvas.kasc` に FlatGeobuf 公式テストデータ（countries.fgb・国ポリゴン）を `off` で追加（geoparquet サンプルと同じ国データのため初期は非表示）
+- ドキュメント：home.html のインスペクター設定仕様・対応形式一覧に `flatgeobuf:` を追記し、AGENTS.md のデータ形式方針を実装済みに更新
+
+### Changed
+
+- 全件読み込み系ベクターレイヤー（`geojson:`/`geoparquet:`/`flatgeobuf:`）を「必要となった初回に読み込み・2回目以降はメモリ再利用」に変更。非表示レイヤーは起動時・レイヤー更新時にロードせず（従来はドレープ有効時、`off` のレイヤーもファイル全件をダウンロード＋デコードしていた）、表示ONまたは属性値一覧での選択の時点で初めてダウンロード＋デコードする。結果は `vectorSourceCache`（id|url キー）に保持し、以降の表示切替・ドレープ変更等の `refreshLayers` や属性値一覧では再取得しない（表示経路と属性一覧経路でキャッシュ共有）。キャッシュはインスペクター/プロジェクト変更（`applyInspector`）で破棄。クエリ系（`duckdb:`/`sql:`）は条件ごとに結果が変わるため従来どおり毎回クエリ
+
+### Fixed
+
+- GeoParquet/FlatGeobuf の国ポリゴンなど広域ポリゴンで Cesium のレンダリングが `RangeError: Too many properties to enumerate`（`computeRhumbLineSubdivision`）で停止し、レイヤーが一切描画されなくなる問題を修正。CesiumJS の `GeoJsonDataSource` が polygon/polyline に既定で設定する `arcType=RHUMB` は、極域（南極）・日付変更線跨ぎ・重複点を含むジオメトリで rhumb 細分化が暴走する既知バグ（Cesium #7550/#7864/#8599）があるため、`buildStyledGeoJsonDataSource` で entity の `arcType` を `GEODESIC` に戻すよう変更
+
 ## [4.10.0] - 2026-09-22
 
 ### Added

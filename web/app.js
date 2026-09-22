@@ -97,6 +97,28 @@ const vectorDataSources = [];
 // 属性値一覧が未ロードレイヤーを選択された際のオンデマンド読み込み結果。
 // 使わないデータを起動時に読まないためのキャッシュで、refreshLayers() で破棄する
 const vectorAttrLoadCache = new Map();
+// 全件読み込み系ベクターレイヤー(geojson:/geoparquet:/flatgeobuf:)のダウンロード＋
+// デコード結果キャッシュ。初回に必要となった時点で読み込み、2回目以降の
+// refreshLayers(表示切替等)・属性値一覧はメモリの GeoJSON を再利用する。
+// クエリ系(duckdb:/sql:)は条件ごとに結果が変わるため対象外。
+// キーは id|url で、applyInspector(プロジェクト/インスペクター変更)時に破棄する
+const vectorSourceCache = new Map();
+function loadVectorSourceCached(item, decoder) {
+  if (decoder?.query) return decoder.load(item);
+  if (item.data) return Promise.resolve(item.data);
+  const key = `${item.id}|${item.url || ""}`;
+  let promise = vectorSourceCache.get(key);
+  if (!promise) {
+    promise = decoder ? decoder.load(item) : (async () => {
+      const response = await fetch(item.url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    })();
+    promise.catch(() => { if (vectorSourceCache.get(key) === promise) vectorSourceCache.delete(key); });
+    vectorSourceCache.set(key, promise);
+  }
+  return promise;
+}
 // レイヤー行の📍フォーカス用: レイヤーID→実行時オブジェクト(ImageryLayer/Tileset/DataSource/Primitive)。
 // refreshLayers() のたびに再登録される
 const layerRuntimeTargets = new Map();
@@ -1482,6 +1504,39 @@ async function loadGeoParquetAsGeoJson(url) {
   return { type: "FeatureCollection", features };
 }
 
+// FlatGeobuf を公式 JS リーダー(CDN から遅延ロード)でデコードし、
+// GeoJSON に変換して既存のベクター描画経路に流す。
+// 空間インデックス内蔵で Range Request による範囲読みも可能だが、
+// ここでは geoparquet: と同じく全件読み込みの経路に乗せる。
+// レスポンスボディを ReadableStream のまま逐次デコードするため全件をバッファリングしない。
+// geojson サブモジュールのみを読み込む(パッケージのエントリは optional な ol にも依存するため)
+let flatgeobufLoaderPromise = null;
+function loadFlatGeobuf() {
+  if (!flatgeobufLoaderPromise) {
+    flatgeobufLoaderPromise = import("https://cdn.jsdelivr.net/npm/flatgeobuf@4.4.0/lib/mjs/geojson.js/+esm");
+  }
+  return flatgeobufLoaderPromise;
+}
+
+async function loadFlatGeobufAsGeoJson(url) {
+  const { deserialize } = await loadFlatGeobuf();
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.body) throw new Error("レスポンスボディを取得できません");
+  const features = [];
+  for await (const feature of deserialize(response.body)) {
+    if (!feature || !feature.geometry) continue;
+    const properties = feature.properties;
+    if (properties) {
+      for (const key of Object.keys(properties)) {
+        properties[key] = sanitizeVectorPropertyValue(properties[key]);
+      }
+    }
+    features.push(feature);
+  }
+  return { type: "FeatureCollection", features };
+}
+
 // DuckDB-WASM を CDN から遅延ロードし、SQL で絞り込んでから GeoJSON 化する重い経路。
 // hyparquet より重い代わりに WHERE/LIMIT/列選択・空間述語・CSV/JSON 等の
 // 複数フォーマットを1エンジンで扱える。Worker は jsdelivr を直指定すると
@@ -1887,6 +1942,7 @@ async function queryDuckDbAttributeRows(item, searchText) {
 // query:true は条件変更・再クエリ(フィルターUI/表示範囲連動)に対応した形式
 const vectorDecoders = new Map([
   ["geoparquet", { load: item => loadGeoParquetAsGeoJson(item.url) }],
+  ["flatgeobuf", { load: item => loadFlatGeobufAsGeoJson(item.url) }],
   ["duckdb", { load: item => loadDuckDbLayerAsGeoJson(item), query: true }],
   ["sql", { load: item => loadDuckDbQueryAsGeoJson(item), query: true }],
 ]);
@@ -2067,19 +2123,13 @@ async function refreshLayersImpl() {
       try {
         if (!item.url && !item.data && !item.query) continue;
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
-        if (!clamp && !item.visible) continue;
-        // クエリ系レイヤーは非表示でも drape 前提でロードされるが、WASM 初期化・
-        // ファイル取得・SQL 実行は重いため表示されるまで遅延する
-        if (decoder && decoder.query && !item.visible) continue;
+        // 非表示レイヤーはロードしない(ダウンロード・デコードとも表示ONの
+        // refreshLayers まで遅延する)。表示切替は refreshLayers の全再構築で反映
+        // されるため、非表示分を先読みしてもトグルは速くならない
+        if (!item.visible) continue;
         // 表示範囲連動レイヤーは現在の表示範囲を絞り込み条件としてセットしてからクエリする
         if (decoder && isViewportQueryLayer(item)) updateViewportFilter(item);
-        const source = decoder ? await decoder.load(item) : (item.data || item.url);
-        // クエリ系レイヤー(duckdb:/sql:)は既定で GeoJsonPrimitive バッチ描画(render=entity で戻せる)。
-        // 検索は常に全件対象の SQL フィルター(⏷)に一本化するためベクター検索パネルには登録しない
-        if (decoder && item.renderPrimitive && Cesium.GeoJsonPrimitive) {
-          await addGeoJsonPrimitiveLayer(item, source);
-          continue;
-        }
+        // GeoJsonPrimitive ドレープ経路は URL 直読みのため先に分岐する(キャッシュ経由の二重取得を避ける)
         if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url && !decoder) {
           let heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
           if (drapeTerrainSources.dem && drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
@@ -2090,6 +2140,13 @@ async function refreshLayersImpl() {
           viewer.scene.primitives.add(primitive);
           activePrimitives.push(primitive);
           layerRuntimeTargets.set(item.id, primitive);
+          continue;
+        }
+        const source = await loadVectorSourceCached(item, decoder);
+        // クエリ系レイヤー(duckdb:/sql:)は既定で GeoJsonPrimitive バッチ描画(render=entity で戻せる)。
+        // 検索は常に全件対象の SQL フィルター(⏷)に一本化するためベクター検索パネルには登録しない
+        if (decoder && item.renderPrimitive && Cesium.GeoJsonPrimitive) {
+          await addGeoJsonPrimitiveLayer(item, source);
           continue;
         }
         const ds = await buildStyledGeoJsonDataSource(source, clamp);
@@ -2142,14 +2199,23 @@ async function buildStyledGeoJsonDataSource(source, clamp) {
     else if (drapeTerrainSources.dem) classification = Cesium.ClassificationType.TERRAIN;
   }
   const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp });
+  // GeoJsonDataSource は polygon/polyline に arcType=RHUMB を設定するが、
+  // 極域(南極)・日付変更線跨ぎ・重複点を含むデータで rhumb 細分化が暴走し
+  // レンダリング全体が停止する既知バグがある(Cesium #7550/#7864/#8599)。
+  // GEODESIC に戻して回避する
+  const geodesic = new Cesium.ConstantProperty(Cesium.ArcType.GEODESIC);
   for (const entity of ds.entities.values) {
     if (entity.polygon) {
       entity.polygon.outline = new Cesium.ConstantProperty(false);
+      entity.polygon.arcType = geodesic;
       if (clamp) entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
     }
-    if (entity.polyline && clamp) {
-      entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
-      entity.polyline.classificationType = new Cesium.ConstantProperty(classification);
+    if (entity.polyline) {
+      entity.polyline.arcType = geodesic;
+      if (clamp) {
+        entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
+        entity.polyline.classificationType = new Cesium.ConstantProperty(classification);
+      }
     }
   }
   return ds;
@@ -2319,6 +2385,7 @@ function applyInspector(text) {
   const parsedCameras = [];
   const parsedBasemaps = [];
   layerState.clear();
+  vectorSourceCache.clear();
   tileLayers.splice(0, tileLayers.length);
   layers.splice(0, layers.length);
   basemaps.splice(0, basemaps.length);
@@ -2458,7 +2525,7 @@ function applyInspector(text) {
       layerOrder.push(id);
     }
 
-    if (type === "3dtiles" || type === "geojson" || type === "geoparquet" || type === "layer") {
+    if (type === "3dtiles" || type === "geojson" || type === "geoparquet" || type === "flatgeobuf" || type === "layer") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
       const url = resolveProjectUrl(parts[1]);
@@ -4721,7 +4788,7 @@ function setupVectorSearch() {
     let promise = vectorAttrLoadCache.get(layerItem.id);
     if (!promise) {
       promise = (async () => {
-        const src = layerDecoder ? await layerDecoder.load(layerItem) : (layerItem.data || layerItem.url);
+        const src = await loadVectorSourceCached(layerItem, layerDecoder);
         return src ? Cesium.GeoJsonDataSource.load(src) : null;
       })();
       promise.catch(() => { if (vectorAttrLoadCache.get(layerItem.id) === promise) vectorAttrLoadCache.delete(layerItem.id); });
