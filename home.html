@@ -64,7 +64,7 @@
           </div>
           <div class="feature-card">
             <h3>🧭 FlatGeobuf <span class="badge">対応</span></h3>
-            <p><code>flatgeobuf:</code> で指定。空間インデックス内蔵のバイナリ形式を公式 JS リーダー（CDN・遅延ロード）でストリームデコードし GeoJSON へ正規化。全件読み込み系の経路だが、全件バッファリングせず逐次変換する</p>
+            <p><code>flatgeobuf:</code> で指定。空間インデックス内蔵のバイナリ形式を公式 JS リーダー（CDN・遅延ロード）でストリームデコードし GeoJSON へ正規化。全件読み込み系の経路だが、全件バッファリングせず逐次変換する（SQL 絞り込み経路は下のクエリ系カードを参照）</p>
           </div>
         </div>
 
@@ -74,6 +74,10 @@
           <div class="feature-card">
             <h3>📦 Parquet / GeoParquet <span class="badge">対応</span></h3>
             <p><code>duckdb:</code> で指定（<code>format=parquet</code>・既定）。<code>where=</code>/<code>bbox=auto</code>/<code>columns=</code> の絞り込みで述語プッシュダウン・row group スキップ・列プルーニングが効くクエリ系の本来の対象。大規模・広範囲データ向け</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧭 FlatGeobuf <span class="badge" style="background:#fd7e14;">対応中</span></h3>
+            <p><code>duckdb:</code>/<code>sql:</code> の <code>ST_Read</code>（<code>format=read</code>）で読み込み可能。<code>.fgb</code> は拡張子からも自動判別されるため <code>format=</code> 省略可。<code>where=</code>/<code>bbox=auto</code> 等の SQL 絞り込みが効くクエリ経路として使える（全件読み込みの <code>flatgeobuf:</code> 経路もある）</p>
           </div>
           <div class="feature-card">
             <h3>📄 CSV / TSV <span class="badge" style="background:#fd7e14;">対応中</span></h3>
@@ -451,11 +455,11 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
           <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。クエリ内の URL は絶対指定が必要です。なおクエリ系レイヤーが非表示の場合は、表示ONまたは属性・値一覧で選択されるまで WASM 自体をロードしません。</p>
           <p><strong>ランタイムの永続キャッシュ</strong>：DuckDB-WASM のランタイム資産（WASM 本体約33MB・Worker スクリプト・spatial 拡張約22MB・parquet/httpfs 拡張、計約60MB）は <code>cdn.jsdelivr.net</code> と <code>extensions.duckdb.org</code> から取得しますが、Service Worker（<code>sw-duckdb.js</code>）がこれらの取得を横取りしてブラウザの <strong>CacheStorage</strong> に永続保存します。そのため<strong>実際のダウンロードはバージョンごとに最初の1回だけ</strong>で、2回目以降の起動・再読み込み・ブラウザ再起動後もキャッシュから即座に読み込まれます（通常のHTTPキャッシュと違い、ブラウザ任せの失効がありません）。キャッシュキーは URL そのまま（<code>@duckdb/duckdb-wasm@1.32.0</code>・拡張 <code>v1.4.3</code> のようにバージョン入り）のため、DuckDB のバージョンが上がると新しい資産が自動的にダウンロードされ、起動時に旧バージョンのエントリだけが削除されます。Worker 内部のフェッチ（Worker スクリプトの読み込み・拡張 INSTALL の内部取得）も対象で、DuckDB 以外の通信には一切介入しません。Service Worker は HTTPS または localhost でのみ有効で、静的ホスティングでも動作します。ブラウザのサイトデータ削除でキャッシュも消えるため、その場合は次回利用時に再ダウンロードが発生します。</p>
           <p><strong>対応ファイル形式</strong>（<code>format=</code> 指定または拡張子から自動判別）：</p>
-          <pre><code>format=省略        → 拡張子自動判別（.parquet / .csv / .tsv / .json 等）
+          <pre><code>format=省略        → 拡張子自動判別（.parquet / .csv / .tsv / .json / .fgb 等）
 format=parquet     → Parquet / GeoParquet（read_parquet）
 format=csv | tsv   → CSV / TSV（read_csv_auto。lon=/lat= 列でポイント化、WKT/WKB 列も可）
 format=json|geojson→ JSON / GeoJSON テキスト（read_json_auto。FeatureCollection は format=read 推奨）
-format=read        → Shapefile / GeoPackage 等（ST_Read。spatial 拡張必須）</code></pre>
+format=read        → Shapefile / GeoPackage / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡張必須。*.fgb は拡張子からも自動判別されるため format= 省略で読めます）</code></pre>
           <p>Parquet では述語プッシュダウン・row group スキップ・列プルーニングが効くため本機能の本来の対象です。それ以外の形式は全件読み込みになりますが、「絞り込んだ分だけ描画オブジェクトを作る」「事前変換不要」「SQL で加工できる」利点は共通です。</p>
           <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・GeoPackage 等）を使います。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
           <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> に <code>bbox=auto</code> を付けると、カメラ停止ごとに表示範囲を <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> として再クエリします。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用に使えます。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
