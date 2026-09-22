@@ -237,6 +237,7 @@
   "vattr.count": "{matched} éléments / {attrs} attributs",
   "vattr.sort": "Cliquer pour trier",
   "vattr.noFeatures": "Aucun objet correspondant",
+  "vattr.loadFailed": "Échec du chargement de la couche",
   "vattr.clickToMove": "Cliquer pour y voler",
   "vattr.limitSuffix": " (affichage des {count} premiers)",
   "layer.groupToggle": "Développer / réduire le groupe",

@@ -8,6 +8,13 @@
     <link rel="stylesheet" href="./styles.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" crossorigin="anonymous" />
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js" crossorigin="anonymous"></script>
+    <script>
+      // DuckDB-WASM の CDN 資産(~60MB)を Service Worker + CacheStorage に永続キャッシュする。
+      // モジュールのキャッシュ鮮度に左右されないようインラインで最優先登録する。
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw-duckdb.js").catch(() => {});
+      }
+    </script>
     <script type="importmap">
       {
         "imports": {

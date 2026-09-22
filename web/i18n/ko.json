@@ -237,6 +237,7 @@
   "vattr.count": "{matched}개 항목 / {attrs}개 속성",
   "vattr.sort": "클릭하여 정렬",
   "vattr.noFeatures": "일치하는 지물 없음",
+  "vattr.loadFailed": "레이어를 불러오지 못했습니다",
   "vattr.clickToMove": "클릭하여 이동",
   "vattr.limitSuffix": " (처음 {count}개 표시)",
   "layer.groupToggle": "그룹 펼치기 / 접기",

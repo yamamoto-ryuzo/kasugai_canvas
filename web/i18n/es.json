@@ -237,6 +237,7 @@
   "vattr.count": "{matched} elementos / {attrs} atributos",
   "vattr.sort": "Clic para ordenar",
   "vattr.noFeatures": "No hay elementos coincidentes",
+  "vattr.loadFailed": "No se pudo cargar la capa",
   "vattr.clickToMove": "Clic para volar allí",
   "vattr.limitSuffix": " (mostrando los primeros {count})",
   "layer.groupToggle": "Expandir / contraer grupo",

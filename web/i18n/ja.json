@@ -237,6 +237,7 @@
   "vattr.count": "{matched} 件 / {attrs} 属性",
   "vattr.sort": "クリックで並び替え",
   "vattr.noFeatures": "該当する地物がありません",
+  "vattr.loadFailed": "レイヤの読み込みに失敗しました",
   "vattr.clickToMove": "クリックで移動",
   "vattr.limitSuffix": " （表示上限 {count} 件）",
   "layer.groupToggle": "グループを展開・折りたたみ",

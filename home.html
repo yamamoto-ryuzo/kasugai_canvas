@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.9.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.10.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -64,7 +64,7 @@
         </div>
 
         <h3 style="margin:14px 0 8px;">ベクター：クエリ系（DuckDB SQL）</h3>
-        <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路です。DuckDB-WASM（CDN から遅延ロード）が SQL で絞り込んでから GeoJSON へ正規化して描画します。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です。対応するファイル形式は以下のとおりです。</p>
+        <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路です。DuckDB-WASM（CDN から遅延ロード）が SQL で絞り込んでから GeoJSON へ正規化して描画します。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です。ランタイム資産（約60MB）は Service Worker がブラウザ内に永続キャッシュするため、重いダウンロードはバージョンごとの初回のみで、以後はキャッシュから読み込まれます（詳細は後述の「ランタイムの永続キャッシュ」）。対応するファイル形式は以下のとおりです。</p>
         <div class="features">
           <div class="feature-card">
             <h3>📦 Parquet / GeoParquet <span class="badge">対応</span></h3>
@@ -132,7 +132,7 @@
           </div>
           <div class="feature-card">
             <h3>📊 属性・値一覧</h3>
-            <p>表示中のベクトルレイヤー属性を一覧。文字列検索・列ソート・行クリック FlyTo</p>
+            <p>全ベクターレイヤー（非表示・クエリ系含む）の属性を一覧。文字列検索・列ソート・行クリック FlyTo</p>
           </div>
           <div class="feature-card">
             <h3>🎥 カメラプリセット</h3>
@@ -444,7 +444,8 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
         </div>
         <div class="url-box">
           <h3>duckdb: / sql:（SQL絞り込みレイヤ）</h3>
-          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（数十MB・Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。クエリ内の URL は絶対指定が必要です。</p>
+          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。クエリ内の URL は絶対指定が必要です。なおクエリ系レイヤーが非表示の場合は、表示ONまたは属性・値一覧で選択されるまで WASM 自体をロードしません。</p>
+          <p><strong>ランタイムの永続キャッシュ</strong>：DuckDB-WASM のランタイム資産（WASM 本体約33MB・Worker スクリプト・spatial 拡張約22MB・parquet/httpfs 拡張、計約60MB）は <code>cdn.jsdelivr.net</code> と <code>extensions.duckdb.org</code> から取得しますが、Service Worker（<code>sw-duckdb.js</code>）がこれらの取得を横取りしてブラウザの <strong>CacheStorage</strong> に永続保存します。そのため<strong>実際のダウンロードはバージョンごとに最初の1回だけ</strong>で、2回目以降の起動・再読み込み・ブラウザ再起動後もキャッシュから即座に読み込まれます（通常のHTTPキャッシュと違い、ブラウザ任せの失効がありません）。キャッシュキーは URL そのまま（<code>@duckdb/duckdb-wasm@1.32.0</code>・拡張 <code>v1.4.3</code> のようにバージョン入り）のため、DuckDB のバージョンが上がると新しい資産が自動的にダウンロードされ、起動時に旧バージョンのエントリだけが削除されます。Worker 内部のフェッチ（Worker スクリプトの読み込み・拡張 INSTALL の内部取得）も対象で、DuckDB 以外の通信には一切介入しません。Service Worker は HTTPS または localhost でのみ有効で、静的ホスティングでも動作します。ブラウザのサイトデータ削除でキャッシュも消えるため、その場合は次回利用時に再ダウンロードが発生します。</p>
           <p><strong>対応ファイル形式</strong>（<code>format=</code> 指定または拡張子から自動判別）：</p>
           <pre><code>format=省略        → 拡張子自動判別（.parquet / .csv / .tsv / .json 等）
 format=parquet     → Parquet / GeoParquet（read_parquet）
@@ -457,7 +458,7 @@ format=read        → Shapefile / GeoPackage 等（ST_Read。spatial 拡張必�
           <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
           <p><strong>描画方式（既定はバッファ描画）</strong>：<code>duckdb:</code>/<code>sql:</code> は既定で entity を作らず CesiumJS の <code>GeoJsonPrimitive</code>（バッファプリミティブのバッチ描画）で表示し、大量地物でも軽く動作します。<code>render=entity</code>（<code>sql:</code> は末尾 <code>| render=entity</code>）で従来の entity 描画に戻せます。クリックした地物の属性はいずれの方式でも属性パネルに表示されます。なおバッファ描画は地形ドレープ（クランプ）非対応のため、起伏のある地形ではジオメトリが地表に埋まる場合があります。ドレープが必要な場合は <code>render=entity</code> を指定してください。</p>
           <p><strong>検索は常に全件対象</strong>：<code>duckdb:</code>/<code>sql:</code> の検索・絞り込みは ⏷ の SQL フィルターに一本化しており、常にファイル全件を対象に評価します（読み込み済みの一部だけを対象にするベクター検索パネルには登録されません）。<code>bbox=auto</code> と <code>where=</code> を併用した場合、表示は「検索条件 ∩ 表示範囲」になりますが、検索自体は全件に対して行われ、コンソールに「検索ヒット全 N 件 / 表示範囲内 M 件」と併記されます。</p>
-          <p><strong>属性値一覧</strong>：属性値一覧ウィジェットのレイヤー選択に <code>duckdb:</code>/<code>sql:</code> レイヤーも表示されます。一覧は読み込み済み地物ではなく DuckDB へ直接クエリして作られ、<code>where=</code> は適用する一方 <code>bbox</code>/<code>limit=</code> は適用せず LIMIT 無しの全件を取得します。ウィジェット内の検索文字は全属性列への <code>ILIKE</code> 述語として SQL に変換されるため、常にファイル全件が検索対象です（表への描画は先頭1000行まで）。</p>
+          <p><strong>属性値一覧</strong>：属性値一覧ウィジェットのレイヤー選択には <code>duckdb:</code>/<code>sql:</code> を含む全ベクターレイヤーが表示されます。選択肢はレイヤー定義から即座に作られるため、データの読み込み完了を待たず起動直後から選択可能です。一覧は読み込み済み地物ではなく DuckDB へ直接クエリして作られ、<code>where=</code> は適用する一方 <code>bbox</code>/<code>limit=</code> は適用せず LIMIT 無しの全件を取得します。ウィジェット内の検索文字は全属性列への <code>ILIKE</code> 述語として SQL に変換されるため、常にファイル全件が検索対象です（表への描画は先頭1000行まで）。</p>
           <p><strong>Parquet 最適化</strong>：クエリ結果のジオメトリは WKB バイナリで受け取ります（テキスト変換を省き転送量・パース時間・ピークメモリを削減）。<code>columns=列名,列名</code> で読み込む属性列を絞る列プルーニングが可能です。<code>bbox=auto</code> 時は GeoParquet 1.1 の <code>covering</code> bbox 列（または慣用名の xmin/xmax/ymin/ymax 列、<code>covering=</code> で明示指定も可）への範囲述語を優先的に使うため、Parquet の row group 統計スキップが効き、表示範囲外のデータは読み込み自体を省略できます。</p>
         </div>
         <div class="url-box">

@@ -94,6 +94,9 @@ const activeClippingPlanes = { planes: [] };
 const uiHooks = {};
 const activeDataSources = [];
 const vectorDataSources = [];
+// 属性値一覧が未ロードレイヤーを選択された際のオンデマンド読み込み結果。
+// 使わないデータを起動時に読まないためのキャッシュで、refreshLayers() で破棄する
+const vectorAttrLoadCache = new Map();
 // レイヤー行の📍フォーカス用: レイヤーID→実行時オブジェクト(ImageryLayer/Tileset/DataSource/Primitive)。
 // refreshLayers() のたびに再登録される
 const layerRuntimeTargets = new Map();
@@ -1308,12 +1311,9 @@ function buildVectorSearchIndex() {
     vectorSearchData.all.valuesByAttr[attr] = [...allValuesMap[attr]].sort((a, b) => a.localeCompare(b));
     vectorSearchData.all.featureByAttr[attr] = allFeatureMap[attr] || {};
   }
-  // クエリ系レイヤー(duckdb:/sql:)は検索索引には載せないが、属性値一覧の
-  // レイヤー選択には出す(一覧内容は DuckDB に直接クエリして全件対象で取得する)
-  for (const item of layers) {
-    const dec = vectorDecoders.get(item.type);
-    if (dec && dec.query) vectorSearchData.layerOptions.push({ id: item.id, title: item.title, query: true });
-  }
+  // クエリ系レイヤー(duckdb:/sql:)は検索索引には載せない(検索は全件対象の SQL
+  // フィルターに一本化)。属性値一覧の選択肢は索引ではなくレイヤー一覧から
+  // 直接構築されるため、ここでは登録しない
 }
 
 function getCurrentVectorSource() {
@@ -1335,8 +1335,8 @@ function updateVectorSearchUI() {
   const data = vectorSearchData;
   if (!layerSelect) return;
   // クエリ系レイヤー(duckdb:/sql:)は読み込み済み行の索引が作れないため検索パネルには出さない
-  // (検索は全件対象の SQL フィルターに一本化)。属性値一覧には query フラグ付きで載せる
-  const opts = ((data && data.layerOptions) || []).filter(o => !o.query);
+  // (検索は全件対象の SQL フィルターに一本化。索引には非クエリ系しか登録されない)
+  const opts = (data && data.layerOptions) || [];
   let html = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>';
   for (const o of opts) {
     html += '<option value="' + escapeHtml(String(o.id)) + '">' + escapeHtml(o.title || o.id) + '</option>';
@@ -1356,6 +1356,8 @@ function updateVectorSearchUI() {
   if (layerSelect && !layerSelect.disabled) {
     try { layerSelect.dispatchEvent(new Event("change")); } catch (e) {}
   }
+  // 属性値一覧ウィジェットのレイヤー選択肢も索引に追従させる
+  uiHooks.refreshVectorAttrWidget?.();
 }
 
 // GeoParquet を CDN から読み込む軽量リーダー(hyparquet)でデコードし、
@@ -1484,11 +1486,24 @@ async function loadGeoParquetAsGeoJson(url) {
 // hyparquet より重い代わりに WHERE/LIMIT/列選択・空間述語・CSV/JSON 等の
 // 複数フォーマットを1エンジンで扱える。Worker は jsdelivr を直指定すると
 // cross-origin で起動できないため blob + importScripts で包む。
+// CDN 資産(~60MB: 本体wasm+拡張)は sw-duckdb.js(Service Worker)が
+// CacheStorage に永続キャッシュするため、実際のダウンロードはバージョンごとに初回のみ
+const DUCKDB_WASM_VERSION = "1.32.0";
+// Service Worker(sw-duckdb.js)の CacheStorage に本体 wasm が既にあれば
+// 初期化のダウンロードは実質無料(ディスク読み込み)とみなせる
+async function duckDbAssetsCached() {
+  try {
+    if (!("caches" in window)) return false;
+    const keys = await caches.open("kasugai-duckdb-wasm").then(c => c.keys());
+    return keys.some(request => /duckdb-(eh|mvp|coi)\.wasm/.test(request.url));
+  } catch (e) { return false; }
+}
+
 let duckDbLoaderPromise = null;
 function loadDuckDb() {
   if (!duckDbLoaderPromise) {
-    duckDbLoaderPromise = (async () => {
-      const duckdb = await import("https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.32.0/+esm");
+    const loading = (async () => {
+      const duckdb = await import(`https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@${DUCKDB_WASM_VERSION}/+esm`);
       const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
       const workerUrl = URL.createObjectURL(new Blob([`importScripts(${JSON.stringify(bundle.mainWorker)});`], { type: "text/javascript" }));
       const worker = new Worker(workerUrl);
@@ -1506,9 +1521,14 @@ function loadDuckDb() {
       } catch (error) {
         console.warn("DuckDB spatial 拡張の読み込みに失敗。WKB/GeoJSONテキストのパススルーのみで動作します:", error);
       }
+      // parquet はほぼ必須のため先に入れておく(autoload による途中停止を避ける)
+      try { await conn.query("INSTALL parquet; LOAD parquet;"); } catch (error) { /* autoload に任せる */ }
       console.info(`[duckdb] 初期化完了 (spatial: ${spatial})`);
       return { conn, spatial };
     })();
+    // 初期化に失敗した Promise は保持せず、次回呼び出しでリトライできるようにする
+    loading.catch(() => { if (duckDbLoaderPromise === loading) duckDbLoaderPromise = null; });
+    duckDbLoaderPromise = loading;
   }
   return duckDbLoaderPromise;
 }
@@ -1892,6 +1912,7 @@ async function refreshLayersImpl() {
   viewer.imageryLayers.removeAll(false);
   vectorDataSources.forEach(({ ds, plugin }) => { if (!plugin) try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
   vectorDataSources.length = 0;
+  vectorAttrLoadCache.clear();
   activeDataSources.length = 0;
   activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
   activePrimitives.length = 0;
@@ -1933,6 +1954,17 @@ async function refreshLayersImpl() {
   const orderedItems = getOrderedLayerItems();
   const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
   const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities" || vectorDecoders.has(layer.type)).slice().reverse();
+
+  // クエリ系レイヤー(duckdb:/sql:)があれば DuckDB-WASM の初期化を先行して開始する。
+  // CDN 資産は sw-duckdb.js が永続キャッシュするため、キャッシュ済みなら
+  // 非表示レイヤーのぶんまで温めても実質無料(選択をほぼ即応答にできる)。
+  // 未キャッシュ(=実質初回)は ~60MB の実コストがかかるため、表示対象の
+  // クエリ系があるときだけ先行する(非表示は選択・表示ONの時点で初期化される)
+  const queryLayers = orderedOtherLayers.filter(item => vectorDecoders.get(item.type)?.query);
+  if (queryLayers.length) {
+    const warmAll = queryLayers.some(item => item.visible) || await duckDbAssetsCached();
+    if (warmAll) void loadDuckDb().catch(() => {});
+  }
 
   // 3D Tiles ドレープ用プロバイダー定義
   const drapeProviders = [];
@@ -2026,6 +2058,9 @@ async function refreshLayersImpl() {
       try { item.dataSource.show = item.visible; } catch (e) {}
       vectorDataSources.push({ ds: item.dataSource, id: item.id, title: item.title, plugin: true });
       layerRuntimeTargets.set(item.id, item.dataSource);
+      // ロード済みレイヤーから順に検索索引・選択肢を更新する
+      buildVectorSearchIndex();
+      updateVectorSearchUI();
     } else if (item.type === "geojson" || item.type === "layer" || vectorDecoders.has(item.type)) {
       // 登録済みデコーダー(GeoParquet/DuckDB等)は GeoJSON に変換してから同じ経路に流す
       const decoder = vectorDecoders.get(item.type);
@@ -2033,6 +2068,9 @@ async function refreshLayersImpl() {
         if (!item.url && !item.data && !item.query) continue;
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
         if (!clamp && !item.visible) continue;
+        // クエリ系レイヤーは非表示でも drape 前提でロードされるが、WASM 初期化・
+        // ファイル取得・SQL 実行は重いため表示されるまで遅延する
+        if (decoder && decoder.query && !item.visible) continue;
         // 表示範囲連動レイヤーは現在の表示範囲を絞り込み条件としてセットしてからクエリする
         if (decoder && isViewportQueryLayer(item)) updateViewportFilter(item);
         const source = decoder ? await decoder.load(item) : (item.data || item.url);
@@ -2059,6 +2097,10 @@ async function refreshLayersImpl() {
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
         layerRuntimeTargets.set(item.id, ds);
+        // ロード済みのレイヤーから順に検索索引・選択肢を更新する。
+        // 重いデコーダーの待機中でも先行レイヤーが検索・属性一覧に出るようにする
+        buildVectorSearchIndex();
+        updateVectorSearchUI();
       } catch (error) {
         console.warn(`${decoder ? item.type.toUpperCase() : "GeoJSON"} の読み込みに失敗しました:`, item.url || item.query || "", error);
       }
@@ -2185,6 +2227,8 @@ async function editLayerQueryFilter(item) {
     await reloadVectorLayer(item);
     buildVectorSearchIndex();
     updateVectorSearchUI();
+    // 条件変更で一覧内容が変わるため、クエリ系も含めて属性一覧の行を再取得する
+    uiHooks.refreshVectorAttrWidget?.(true);
   } catch (error) {
     console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
   }
@@ -4591,8 +4635,7 @@ function setupVectorSearch() {
         }
         if (vectorFlyBtn) vectorFlyBtn.disabled = true;
         if (vectorAttrWidget && vectorAttrWidget.classList.contains("visible")) {
-          buildVectorAttrWidgetRows();
-          renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+          refreshVectorAttrWidgetRows();
         }
       } catch (e) { console.error("vector layer change error", e); }
     });
@@ -4661,39 +4704,105 @@ function setupVectorSearch() {
   let vectorAttrWidgetRows = [];
   let vectorAttrWidgetAttributes = [];
   let vectorAttrWidgetSort = { column: -1, order: 1 };
+  let vectorAttrWidgetLoading = false;
+  let vectorAttrWidgetLoadError = false;
+  // 非同期の行構築(クエリ/オンデマンド読み込み)が遅れて解決したときに
+  // 新しい選択の結果を上書きしないための世代番号
+  let vectorAttrWidgetRequestSeq = 0;
 
   function getVectorDataSourceById(layerId) {
     if (layerId === "__all__") return null;
     return vectorDataSources.find(item => item.id === layerId) || null;
   }
 
+  // 未ロードレイヤーの DataSource をオンデマンドで読み込む。
+  // 同一レイヤーの重複読み込みをキャッシュで抑止し、失敗時は破棄してリトライ可能にする
+  function loadAttrWidgetDataSource(layerItem, layerDecoder) {
+    let promise = vectorAttrLoadCache.get(layerItem.id);
+    if (!promise) {
+      promise = (async () => {
+        const src = layerDecoder ? await layerDecoder.load(layerItem) : (layerItem.data || layerItem.url);
+        return src ? Cesium.GeoJsonDataSource.load(src) : null;
+      })();
+      promise.catch(() => { if (vectorAttrLoadCache.get(layerItem.id) === promise) vectorAttrLoadCache.delete(layerItem.id); });
+      vectorAttrLoadCache.set(layerItem.id, promise);
+    }
+    return promise;
+  }
+
   async function buildVectorAttrWidgetRows() {
+    const requestSeq = ++vectorAttrWidgetRequestSeq;
+    const isCurrent = () => requestSeq === vectorAttrWidgetRequestSeq;
     vectorAttrWidgetRows = [];
     vectorAttrWidgetAttributes = [];
     vectorAttrWidgetSort = { column: -1, order: 1 };
+    vectorAttrWidgetLoading = false;
+    vectorAttrWidgetLoadError = false;
     // ウィジェット側の選択を優先(クエリ系レイヤーは検索パネルの #vector-layer に存在しないため)
     const layerId = (vectorAttrWidgetLayerSelect && vectorAttrWidgetLayerSelect.value) || (vectorLayer && vectorLayer.value) || "__all__";
     // クエリ系レイヤー(duckdb:/sql:)は読み込み済み entity ではなく DuckDB に直接クエリして全件対象で一覧を作る
     const layerItem = layerState.get(layerId);
     const layerDecoder = layerItem && vectorDecoders.get(layerItem.type);
     if (layerDecoder && layerDecoder.query) {
+      // DuckDB-WASM 初回初期化は数十秒かかることがあるため読み込み中表示にする
+      vectorAttrWidgetLoading = true;
+      renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
       try {
         const searchText = vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "";
         const result = await queryDuckDbAttributeRows(layerItem, searchText);
+        if (!isCurrent()) return;
         vectorAttrWidgetAttributes = result.attributes;
         vectorAttrWidgetRows = result.rows;
-      } catch (e) { console.warn(`${layerItem.type.toUpperCase()} 属性一覧の取得に失敗しました:`, e); }
+      } catch (e) {
+        if (!isCurrent()) return;
+        vectorAttrWidgetLoadError = true;
+        console.warn(`${layerItem.type.toUpperCase()} 属性一覧の取得に失敗しました:`, e);
+      } finally {
+        if (isCurrent()) vectorAttrWidgetLoading = false;
+      }
       return;
     }
-    const dsItem = getVectorDataSourceById(layerId);
-    const source = getCurrentVectorSource();
-    if (!dsItem || !source || !source.attributes || !source.attributes.length) return;
+    let ds = (getVectorDataSourceById(layerId) || {}).ds || (layerItem && layerItem.dataSource) || null;
+    // 未ロードのレイヤー(非表示・ロード待ち)は、選択された時点で実データから直接行を構築する。
+    // 使わないデータを起動時に完全読み込みする必要はない
+    if (!ds && layerItem && (layerItem.type === "geojson" || layerItem.type === "layer" || layerDecoder)) {
+      vectorAttrWidgetLoading = true;
+      renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+      try {
+        ds = await loadAttrWidgetDataSource(layerItem, layerDecoder);
+      } catch (e) {
+        if (isCurrent()) {
+          vectorAttrWidgetLoadError = true;
+          console.warn("属性一覧の読み込みに失敗しました:", layerItem.url || "", e);
+        }
+      } finally {
+        if (isCurrent()) vectorAttrWidgetLoading = false;
+      }
+    }
+    if (!isCurrent() || !ds) return;
     const time = viewer.clock && viewer.clock.currentTime;
-    vectorAttrWidgetAttributes = source.attributes.slice();
+    // 属性列は検索索引があればそこから、未索引(オンデマンド読み込み)は entity から収集する
+    const source = (vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[layerId]) || null;
+    if (source && source.attributes && source.attributes.length) {
+      vectorAttrWidgetAttributes = source.attributes.slice();
+    } else {
+      const attrSet = new Set();
+      for (const entity of ds.entities.values) {
+        const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
+        if (!props) continue;
+        for (const key of Object.keys(props)) {
+          const raw = props[key];
+          if (raw == null || raw === "") continue;
+          attrSet.add(key);
+        }
+      }
+      vectorAttrWidgetAttributes = [...attrSet].sort((a, b) => a.localeCompare(b));
+    }
+    if (!vectorAttrWidgetAttributes.length) return;
     // GeoJsonDataSource は MultiPolygon 等をパート毎の別 entity に分割する。
     // 同一フィーチャ由来の entity は properties が一致するので、地物単位で1行にまとめる
     const seenRows = new Set();
-    for (const entity of dsItem.ds.entities.values) {
+    for (const entity of ds.entities.values) {
       const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
       const row = [];
       for (const attr of vectorAttrWidgetAttributes) {
@@ -4735,7 +4844,8 @@ function setupVectorSearch() {
       vectorAttrWidgetTitle.textContent = t("vattr.title") + (layerTitle ? " — " + layerTitle : "");
       if (!vectorAttrWidgetAttributes.length) {
         if (vectorAttrWidgetHead) vectorAttrWidgetHead.innerHTML = "";
-        vectorAttrWidgetList.innerHTML = '<tr><td style="padding:12px 14px;color:#71818d;">' + escapeHtml(t("vattr.selectLayer")) + '</td></tr>';
+        const msgKey = vectorAttrWidgetLoading ? "common.loading" : vectorAttrWidgetLoadError ? "vattr.loadFailed" : "vattr.selectLayer";
+        vectorAttrWidgetList.innerHTML = '<tr><td style="padding:12px 14px;color:#71818d;">' + escapeHtml(t(msgKey)) + '</td></tr>';
         vectorAttrWidgetCount.textContent = t("vattr.count", { matched: 0, attrs: 0 });
         return;
       }
@@ -4766,7 +4876,11 @@ function setupVectorSearch() {
 
   function updateVectorAttrWidgetLayerOptions(layerId) {
     if (!vectorAttrWidgetLayerSelect) return;
-    const opts = (vectorSearchData && vectorSearchData.layerOptions) || [];
+    // 選択肢は検索索引ではなくレイヤー一覧から即時構築する。
+    // 未ロードのレイヤーも選択肢に出し、行はロード完了後(クエリ系は選択時の
+    // DuckDB 直接クエリ)に利用可能になる
+    const opts = getOrderedLayerItems()
+      .filter(item => item.type === "geojson" || item.type === "layer" || item.type === "entities" || vectorDecoders.has(item.type));
     let html = '<option value="">' + escapeHtml(t("vattr.layerTitle")) + '</option>';
     for (const o of opts) {
       html += '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.title || o.id) + '</option>';
@@ -4775,6 +4889,25 @@ function setupVectorSearch() {
     const hasLayer = layerId && layerId !== "__all__" && opts.some(o => o.id === layerId);
     vectorAttrWidgetLayerSelect.value = hasLayer ? layerId : "";
   }
+
+  // 開いているウィジェットの行を再構築する。クエリ系レイヤーは再クエリが重いため
+  // withQueryRows 指定時(フィルター変更等)だけ再取得し、それ以外は既取得行を保持する
+  function refreshVectorAttrWidgetRows(withQueryRows = false) {
+    if (!vectorAttrWidget || !vectorAttrWidget.classList.contains("visible")) return;
+    const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
+    const item = layerState.get(layerId);
+    const dec = item && vectorDecoders.get(item.type);
+    if (dec && dec.query && !withQueryRows) return;
+    void buildVectorAttrWidgetRows().then(() => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : ""));
+  }
+
+  // 検索索引の更新(updateVectorSearchUI)やレイヤー一覧の変更に合わせて、開いて
+  // いるウィジェットの選択肢・行を追従させる。選択肢自体はレイヤー一覧由来で
+  // ロード非依存だが、行は索引・オンデマンド読み込みの完了に合わせて再構築する
+  uiHooks.refreshVectorAttrWidget = (withQueryRows = false) => {
+    updateVectorAttrWidgetLayerOptions(vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : null);
+    refreshVectorAttrWidgetRows(withQueryRows);
+  };
 
   async function openVectorAttrWidget(layerId = null) {
     if (!vectorAttrWidget) return;

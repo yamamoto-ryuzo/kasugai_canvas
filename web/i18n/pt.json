@@ -237,6 +237,7 @@
   "vattr.count": "{matched} itens / {attrs} atributos",
   "vattr.sort": "Clique para ordenar",
   "vattr.noFeatures": "Nenhum elemento correspondente",
+  "vattr.loadFailed": "Falha ao carregar a camada",
   "vattr.clickToMove": "Clique para voar até lá",
   "vattr.limitSuffix": " (mostrando os primeiros {count})",
   "layer.groupToggle": "Expandir / recolher grupo",

@@ -237,6 +237,7 @@
   "vattr.count": "{matched} items / {attrs} attributes",
   "vattr.sort": "Click to sort",
   "vattr.noFeatures": "No matching features",
+  "vattr.loadFailed": "Failed to load the layer",
   "vattr.clickToMove": "Click to fly there",
   "vattr.limitSuffix": " (showing first {count})",
   "layer.groupToggle": "Expand / collapse group",

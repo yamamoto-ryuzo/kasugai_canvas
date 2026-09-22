@@ -237,6 +237,7 @@
   "vattr.count": "{matched} Elemente / {attrs} Attribute",
   "vattr.sort": "Klicken zum Sortieren",
   "vattr.noFeatures": "Keine passenden Features",
+  "vattr.loadFailed": "Ebene konnte nicht geladen werden",
   "vattr.clickToMove": "Klicken, um dorthin zu fliegen",
   "vattr.limitSuffix": " (erste {count} werden angezeigt)",
   "layer.groupToggle": "Gruppe ein-/ausklappen",
