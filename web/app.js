@@ -4174,6 +4174,33 @@ function setupEvents() {
   });
 
 
+  // 実行時オブジェクト(Tileset/DataSource/Primitive)から対応するレイヤー定義を引く。
+  // 属性パネルで「どのグループのどのレイヤーの地物か」を明示するために使う
+  const findAttrLayerItem = target => {
+    if (!target) return null;
+    for (const [id, obj] of layerRuntimeTargets) {
+      if (obj === target) return layerState.get(id) || null;
+    }
+    return null;
+  };
+
+  // 属性表示の先頭に「グループ / レイヤー名」を出し、
+  // 「選択中のレイヤ属性一覧」ボタン用にレイヤーIDを dataset に保持する
+  const setAttrLayerContext = (attr, item) => {
+    if (item) {
+      attr.dataset.layerId = item.id;
+      attr.dataset.layerTitle = item.title || item.id;
+    } else {
+      delete attr.dataset.layerId;
+      delete attr.dataset.layerTitle;
+    }
+    if (!item || !item.title) return;
+    const header = document.createElement("div");
+    header.className = "attr-layer-path";
+    header.textContent = item.group ? `${item.group} / ${item.title}` : item.title;
+    attr.append(header);
+  };
+
   const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
   clickHandler.setInputAction(movement => {
     if (walkModeActive) return;
@@ -4184,11 +4211,13 @@ function setupEvents() {
     document.querySelectorAll(".plugin-panel").forEach(panel => panel.classList.toggle("active", panel.id === "attr-panel"));
 
     if (!picked) {
+      setAttrLayerContext(attr, null);
       attr.textContent = t("attr.empty");
       return;
     }
 
     if (picked instanceof Cesium.Cesium3DTileFeature) {
+      setAttrLayerContext(attr, findAttrLayerItem(picked.tileset || picked.primitive));
       const table = document.createElement("table");
       table.style.width = "100%";
       table.style.borderCollapse = "collapse";
@@ -4214,8 +4243,7 @@ function setupEvents() {
     }
 
     if (Cesium.GeoJsonPrimitive && picked.parentPrimitive instanceof Cesium.GeoJsonPrimitive && picked.properties) {
-      delete attr.dataset.layerId;
-      delete attr.dataset.layerTitle;
+      setAttrLayerContext(attr, findAttrLayerItem(picked.parentPrimitive));
       const table = document.createElement("table");
       table.style.width = "100%";
       table.style.borderCollapse = "collapse";
@@ -4242,13 +4270,7 @@ function setupEvents() {
     if (entity?.properties) {
       const ds = entity.entityCollection && entity.entityCollection.owner;
       const match = ds ? vectorDataSources.find(item => item.ds === ds) : null;
-      if (match) {
-        attr.dataset.layerId = match.id;
-        attr.dataset.layerTitle = match.title || match.id;
-      } else {
-        delete attr.dataset.layerId;
-        delete attr.dataset.layerTitle;
-      }
+      setAttrLayerContext(attr, (match && layerState.get(match.id)) || findAttrLayerItem(ds));
       const table = document.createElement("table");
       table.style.width = "100%";
       table.style.borderCollapse = "collapse";
@@ -4272,6 +4294,7 @@ function setupEvents() {
       return;
     }
 
+    setAttrLayerContext(attr, null);
     attr.textContent = t("attr.noAttrs");
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 

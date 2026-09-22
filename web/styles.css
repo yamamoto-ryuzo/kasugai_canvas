@@ -140,6 +140,7 @@ body.globe-hidden .viewport { background: transparent; }
 .search-results button { overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .share-url { width: 100%; margin-top: 7px; }
 .attr-content { padding: 8px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.7); font: var(--basemap-select-font-size)/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.attr-layer-path { margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid #cbd9de; color: #52636d; font-weight: 700; overflow-wrap: anywhere; }
 .attr-list { display: grid; gap: 6px; margin: 0; }
 .attr-row { display: grid; grid-template-columns: minmax(96px, 34%) minmax(0, 1fr); gap: 8px; padding-bottom: 6px; border-bottom: 1px solid #e4ecef; }
 .attr-row:last-child { padding-bottom: 0; border-bottom: 0; }
