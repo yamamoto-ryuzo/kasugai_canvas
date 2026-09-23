@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.16.0] - 2026-09-24
+
+### Changed
+
+- 静止時の再描画を抑制する `scene.requestRenderMode` を有効化。`clock.shouldAnimate=false` でシミュレーション時計も停止（時計が動いたままだと時刻変化で毎フレーム描画され効果が出ないため）。入力イベント捕捉による `requestRender` 要求と、`refreshLayers`/`reloadVectorLayer` 等の非同期ロード完了時の明示的な描画要求を追加。タイルロード完了後の静止時はほぼ描画が止まり（実測 5 秒で 1 フレーム）、カメラ操作・LOD 精緻化・flyTo 中は従来通り描画される
+- 技術ドキュメント（01-データ/02-ライブラリ/05-QGIS連携）の deck.gl 前提の記述を現行の CesiumJS + Three.js 構成に更新し、全ドキュメントのバージョンバッジを統一
+
+### Removed
+
+- 未使用の `web/bootstrap.js`（deck.gl ローダー。描画エンジンの CesiumJS 移行後に残っていたデッドコード）を削除
+
 ## [4.15.0] - 2026-09-24
 
 ### Added
