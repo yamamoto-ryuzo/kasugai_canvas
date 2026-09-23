@@ -36,6 +36,20 @@ viewer.scene.globe.enableLighting = false;
 viewer.imageryLayers.removeAll();
 viewer.camera.percentageChanged = 0.05;
 
+// 静止時の無駄な再描画をやめる。時刻依存の表示は使っていないため時計も止める
+// (shouldAnimate が true のままだとシミュレーション時刻の変化で毎フレーム描画される)
+viewer.scene.requestRenderMode = true;
+viewer.clock.shouldAnimate = false;
+const requestRender = () => viewer.scene.requestRender();
+// 入力操作起因の変更(CallbackProperty・.show・設定変更等)は自動では描画要求されないため、
+// 入力イベントを捕捉して次フレームの描画を要求する。
+// requestRender はフラグを立てるだけなので、同じタスク内で行われた変更も描画に間に合う
+for (const type of ["click", "dblclick", "contextmenu", "wheel", "keydown", "keyup", "input", "change", "drop", "pointerdown", "pointerup", "pointercancel"]) {
+  window.addEventListener(type, requestRender, { capture: true, passive: true });
+}
+// ルート描画プレビュー等のカーソル追従表示用。pointermove は頻度が高いためキャンバスに限定する
+viewer.canvas.addEventListener("pointermove", requestRender, { passive: true });
+
 // リロード直後にデフォルトの地球全体ビューが見えるのを防ぐため、
 // 前回のカメラ位置（なければURLの座標）へ描画開始前に同期的に即セットする
 let lastCameraSearch = null;
@@ -2111,6 +2125,7 @@ async function refreshLayers() {
       refreshLayersQueued = false;
       await refreshLayersImpl();
     } while (refreshLayersQueued);
+    requestRender();
   } finally {
     refreshLayersRunning = false;
   }
@@ -2411,6 +2426,7 @@ async function reloadVectorLayer(item) {
       if (index >= 0) activePrimitives.splice(index, 1);
     }
     await addGeoJsonPrimitiveLayer(item, geojson);
+    requestRender();
     return;
   }
   const ds = await buildStyledGeoJsonDataSource(geojson, clamp);
@@ -2421,6 +2437,7 @@ async function reloadVectorLayer(item) {
   layerRuntimeTargets.set(item.id, ds);
   // entity 描画へ戻った場合は primitive 用の保持ソースを破棄する
   item.geojsonSource = null;
+  requestRender();
 }
 
 // カメラ停止後に表示範囲連動レイヤーを再クエリする(camera.moveEnd からデバウンスして呼ばれる)
@@ -3317,6 +3334,7 @@ function setupEvents() {
         material: new Cesium.PolylineGlowMaterialProperty({ color: Cesium.Color.YELLOW, glowPower: 0.25 }),
       },
     });
+    requestRender();
     flyPathProgress = 0;
     flyPathDistance = 0;
     flyPathTargetDistance = null;
@@ -3882,7 +3900,7 @@ function setupEvents() {
       position,
       point: { pixelSize: 14, color: Cesium.Color.CYAN.withAlpha(0.9), outlineColor: Cesium.Color.WHITE, outlineWidth: 2 },
     });
-    setTimeout(() => viewer.entities.remove(marker), 400);
+    setTimeout(() => { viewer.entities.remove(marker); requestRender(); }, 400);
   }
   function updateDrawCursor() {
     viewer.canvas.style.cursor = drawModeActive ? "crosshair" : "";

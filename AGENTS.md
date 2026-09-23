@@ -12,7 +12,7 @@
 - `CHANGELOG.md` に日付付きセクションを追加（Keep a Changelog 形式）
 - 配布物は `python run.py -B` で `download/` に作成し、コミットしてプッシュ
 
-## 動作確認（必須）
+## 動作確認（Playwrigh：必須）
 
 - **コードを修正したら必ず動作確認を行う**。構文チェック（`node --check web/app.js`・`cargo check`）だけで完了とみなさない
 - フロントエンドの挙動変更はブラウザで実際に検証する（Playwright + インストール済みブラウザによる自動化を推奨。`applyInspector`・`kasugaiApi`・`vectorAttrWidget.open()` 等を `page.evaluate` で直接叩けば UI 操作なしで検証できる）
