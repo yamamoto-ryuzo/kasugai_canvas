@@ -138,9 +138,9 @@
                 <label><input id="drape-terrain-tiles3d" type="checkbox" /> 3D Tiles</label>
                 <span class="field-label" data-i18n="settings.layer.drapeApply">ドレープを適用するレイヤー</span>
                 <label><input id="drape-xyz" type="checkbox" checked /> XYZ</label>
-                <label><input id="drape-geojson" type="checkbox" checked /> GeoJSON</label>
-                <label><input id="drape-geojson-primitive" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> GeoJSON 高速ドレープ (実験的)</span></label>
-                <p class="hint" data-i18n="settings.layer.primitiveHint">CesiumJS 1.145 の GeoJsonPrimitive を使い、GeoJSON を高品質・高速に地形や 3D Tiles にドレープします。有効時はベクター検索の対象外になります。</p>
+                <label><input id="drape-geojson" type="checkbox" checked /> ベクター</label>
+                <label><input id="drape-geojson-primitive" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> ベクター高速ドレープ (実験的)</span></label>
+                <p class="hint" data-i18n="settings.layer.primitiveHint">CesiumJS 1.145 の GeoJsonPrimitive を使い、ベクターレイヤー(GeoJSON/GeoParquet/FlatGeobuf)を高品質・高速に地形や 3D Tiles にドレープします。有効時はベクター検索・属性クリックの対象外になります。</p>
               </section>
               <section id="settings-inspector-panel" class="settings-subpanel">
                 <div class="section-title inspector-title" data-i18n="inspector.title">インスペクター</div>

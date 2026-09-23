@@ -1,6 +1,7 @@
 /server/target/
 __pycache__/
 /browser-profile*
+/.testtmp/
 *.log
 .wrangler/
 .dev.vars

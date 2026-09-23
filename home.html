@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.13.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.14.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -133,7 +133,7 @@
           </div>
           <div class="feature-card">
             <h3>🧬 ベクトル検索</h3>
-            <p>GeoJSON / CSV レイヤーの属性値をレイヤー・属性・文字列で絞り込み FlyTo</p>
+            <p>全件読み込み系ベクター（GeoJSON/GeoParquet/FlatGeobuf）の属性値をレイヤー・属性・文字列で絞り込み FlyTo。未読み込みレイヤーも選択肢に出し、選択時に読み込み</p>
           </div>
           <div class="feature-card">
             <h3>📊 属性・値一覧</h3>
@@ -371,7 +371,7 @@ web/PLUGIN/auth-local/auth.js</code></pre>
           </div>
           <div class="feature-card">
             <h3>📊 データ取得・加工・表示パイプライン</h3>
-            <p><code>fetchData</code>（外部URL取得・CORS前提）と <code>getLayerGeoJson</code>（読込済みレイヤーのGeoJSON取り出し）でデータを取得し、<code>runCode</code> で任意の加工・集計・変換を行い、<code>addDataLayer</code> で GeoJSON を直接レイヤー表示。feature の properties に simplestyle 属性（marker-color/fill/stroke/description 等）を書けば色分け・ポップアップも制御できます。一時レイヤーは .kasc には含まれません</p>
+            <p><code>fetchData</code>（外部URL取得・CORS前提）と <code>getLayerGeoJson</code>（読込済みレイヤーのGeoJSON取り出し）でデータを取得し、<code>runCode</code> で任意の加工・集計・変換を行い、<code>addDataLayer</code> で GeoJSON を直接レイヤー表示。feature の properties に simplestyle 属性（marker-color/fill/stroke/description 等）を書けば色分け・ポップアップも制御できます。一時レイヤーは .kasc には含まれません。URL・ファイル指定のレイヤーを .kasc に永続追加する場合は <code>addLayer</code>（geojson/layer/geoparquet/flatgeobuf/duckdb/sql の各行タイプに対応、duckdb は where=/limit=/bbox=auto 等のオプション指定可）を使います</p>
           </div>
           <div class="feature-card">
             <h3>🌐 実行環境ティア（公開/ローカルの使い分け）</h3>
@@ -428,9 +428,10 @@ legend: 凡例|https://example.com/legend.png</code></pre>
           <h3>設定種類</h3>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
 xyz: タイルレイヤ | 同上+off
-3dtiles: / geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off
-duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / bbox=auto / render=primitive|entity(既定primitive)
-sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・:bbox で表示範囲連動)
+3dtiles: レイヤ | off / proxy=off
+geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / render=primitive|entity / attr=出典(3番目のフィールドに出典を直接書くことも可)
+duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / bbox=auto / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / attr=出典
+sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・:bbox で表示範囲連動)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID</code></pre>
@@ -448,11 +449,11 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
 
 超大規模・全件表示            → タイル化（MVT/PMTiles 等・別経路）</code></pre>
           <p>Parquet の利点（圧縮・述語プッシュダウン・row group スキップ・列プルーニング・Range Request）は「読まない部分を作れる」ときにだけ効きます。全件を読んで表示するだけなら、変換済み GeoJSON の方が速くて単純です。<code>geoparquet:</code> は絞り込みを持たず常に全件読み込みなので、広範囲データや条件絞り込みが必要な場合は <code>duckdb:</code>/<code>sql:</code> を使ってください。</p>
-          <p><strong>読み込みタイミング</strong>：全件読み込み系レイヤーは、必要となった初回（表示ON、または属性・値一覧でレイヤーを選択した時点）にダウンロード＋デコードします。<code>off</code> のレイヤーは起動時に読み込まれません。取得結果はメモリに保持されるため、2回目以降の表示切替・ドレープ変更・属性一覧では再取得せず即座に反映されます（キャッシュはインスペクター/プロジェクト変更で破棄）。クエリ系は条件ごとに結果が変わるため毎回クエリします。</p>
+          <p><strong>読み込みタイミング</strong>：全件読み込み系レイヤーは、必要となった初回（表示ON、属性・値一覧やベクター検索パネルでレイヤーを選択した時点）にダウンロード＋デコードします。ベクター検索パネルのレイヤー選択肢には未読み込みのレイヤーも「(未読込)」付きで表示され、選択すると読み込み後に索引されて検索できるようになります（「全選択」では読み込み済みレイヤーのみが対象です）。<code>off</code> のレイヤーは起動時に読み込まれません。取得結果はメモリに保持されるため、2回目以降の表示切替・ドレープ変更・属性一覧では再取得せず即座に反映されます（キャッシュはインスペクター/プロジェクト変更で破棄）。クエリ系は条件ごとに結果が変わるため毎回クエリします。</p>
         </div>
         <div class="url-box">
           <h3>duckdb: / sql:（SQL絞り込みレイヤ）</h3>
-          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。クエリ内の URL は絶対指定が必要です。なおクエリ系レイヤーが非表示の場合は、表示ONまたは属性・値一覧で選択されるまで WASM 自体をロードしません。</p>
+          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。末尾オプションとして <code>| off</code>（非表示）・<code>| render=entity|primitive</code>（描画方式）・<code>| attr=出典</code>（右下の出典表示。値に <code>|</code> は含められません）を付けられます。クエリ内の URL は絶対指定が必要です。なおクエリ系レイヤーが非表示の場合は、表示ONまたは属性・値一覧で選択されるまで WASM 自体をロードしません。</p>
           <p><strong>ランタイムの永続キャッシュ</strong>：DuckDB-WASM のランタイム資産（WASM 本体約33MB・Worker スクリプト・spatial 拡張約22MB・parquet/httpfs 拡張、計約60MB）は <code>cdn.jsdelivr.net</code> と <code>extensions.duckdb.org</code> から取得しますが、Service Worker（<code>sw-duckdb.js</code>）がこれらの取得を横取りしてブラウザの <strong>CacheStorage</strong> に永続保存します。そのため<strong>実際のダウンロードはバージョンごとに最初の1回だけ</strong>で、2回目以降の起動・再読み込み・ブラウザ再起動後もキャッシュから即座に読み込まれます（通常のHTTPキャッシュと違い、ブラウザ任せの失効がありません）。キャッシュキーは URL そのまま（<code>@duckdb/duckdb-wasm@1.32.0</code>・拡張 <code>v1.4.3</code> のようにバージョン入り）のため、DuckDB のバージョンが上がると新しい資産が自動的にダウンロードされ、起動時に旧バージョンのエントリだけが削除されます。Worker 内部のフェッチ（Worker スクリプトの読み込み・拡張 INSTALL の内部取得）も対象で、DuckDB 以外の通信には一切介入しません。Service Worker は HTTPS または localhost でのみ有効で、静的ホスティングでも動作します。ブラウザのサイトデータ削除でキャッシュも消えるため、その場合は次回利用時に再ダウンロードが発生します。</p>
           <p><strong>対応ファイル形式</strong>（<code>format=</code> 指定または拡張子から自動判別）：</p>
           <pre><code>format=省略        → 拡張子自動判別（.parquet / .csv / .tsv / .json / .fgb 等）
@@ -462,9 +463,10 @@ format=json|geojson→ JSON / GeoJSON テキスト（read_json_auto。FeatureCol
 format=read        → Shapefile / GeoPackage / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡張必須。*.fgb は拡張子からも自動判別されるため format= 省略で読めます）</code></pre>
           <p>Parquet では述語プッシュダウン・row group スキップ・列プルーニングが効くため本機能の本来の対象です。それ以外の形式は全件読み込みになりますが、「絞り込んだ分だけ描画オブジェクトを作る」「事前変換不要」「SQL で加工できる」利点は共通です。</p>
           <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・GeoPackage 等）を使います。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
+          <p><strong>取得プロキシ（<code>proxy=on</code>・ローカルサーバー版のみ）</strong>：<code>duckdb:</code> に <code>proxy=on</code> を付けると、ファイルの取得をローカルサーバーの <code>/api/fetch</code> 経由に切り替えます。CORS 非対応の外部サーバーにあるデータを読めます。<code>/api/fetch</code> は Range/HEAD リクエストを転送するため、Parquet の部分読み（メタデータ・row group スキップ）はプロキシ経由でも有効です。既定は直接接続で、静的配信環境やバックエンド非対応時は指定しても直接接続になります。<code>sql:</code> のクエリ内 URL には適用されません。Range 非対応のサーバーへ全件 GET が必要な形式（CSV/JSON 等）では 20MB 上限があります。</p>
           <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> に <code>bbox=auto</code> を付けると、カメラ停止ごとに表示範囲を <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> として再クエリします。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用に使えます。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
           <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
-          <p><strong>描画方式（既定は entity 描画）</strong>：<code>duckdb:</code>/<code>sql:</code> は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。末尾に <code>render=primitive</code>（<code>duckdb:</code> はオプション欄、<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。違いは以下のとおりです。</p>
+          <p><strong>描画方式（既定は entity 描画）</strong>：ベクター系レイヤー（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>duckdb:</code>/<code>sql:</code>）は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。<code>render=primitive</code>（<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>、その他はオプション欄）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。レイヤー行の <code>render=</code> 指定は設定タブの「ベクター高速ドレープ」より優先され、<code>render=entity</code> を書くと高速ドレープが有効でもそのレイヤーだけ entity 描画に戻せます。違いは以下のとおりです。</p>
           <pre><code>【entity(既定)】1地物ごとに Cesium Entity を生成
   ・地形/3D Tiles にドレープ可能(clampToGround)
   ・フォーカス・属性パネル等の entity 機能がすべて使える
@@ -473,7 +475,7 @@ format=read        → Shapefile / GeoPackage / FlatGeobuf(.fgb) 等（ST_Read�
 【primitive(render=primitive)】GeoJsonPrimitive バッチ描画
   ・entity を作らずジオメトリだけをまとめて描画するため大量地物でも軽い
   ・地形ドレープ非対応(高さ0の楕円体面に描画。起伏のある地形では地表に埋まる)
-  ・属性はクリック時に picked.properties から表示(ベクター検索の索引対象外)</code></pre>
+  ・属性はクリック時に picked.properties から表示。ベクター検索の索引対象(描画に使った GeoJSON から索引を構築)</code></pre>
           <p><strong>検索は常に全件対象</strong>：<code>duckdb:</code>/<code>sql:</code> の検索・絞り込みは ⏷ の SQL フィルターに一本化しており、常にファイル全件を対象に評価します（読み込み済みの一部だけを対象にするベクター検索パネルには登録されません）。<code>bbox=auto</code> と <code>where=</code> を併用した場合、表示は「検索条件 ∩ 表示範囲」になりますが、検索自体は全件に対して行われ、コンソールに「検索ヒット全 N 件 / 表示範囲内 M 件」と併記されます。</p>
           <p><strong>属性値一覧</strong>：属性値一覧ウィジェットのレイヤー選択には <code>duckdb:</code>/<code>sql:</code> を含む全ベクターレイヤーが表示されます。選択肢はレイヤー定義から即座に作られるため、データの読み込み完了を待たず起動直後から選択可能です。一覧は読み込み済み地物ではなく DuckDB へ直接クエリして作られ、<code>where=</code> は適用する一方 <code>bbox</code>/<code>limit=</code> は適用せず LIMIT 無しの全件を取得します。ウィジェット内の検索文字は全属性列への <code>ILIKE</code> 述語として SQL に変換されるため、常にファイル全件が検索対象です（表への描画は先頭1000行まで）。</p>
           <p><strong>Parquet 最適化</strong>：クエリ結果のジオメトリは WKB バイナリで受け取ります（テキスト変換を省き転送量・パース時間・ピークメモリを削減）。<code>columns=列名,列名</code> で読み込む属性列を絞る列プルーニングが可能です。<code>bbox=auto</code> 時は GeoParquet 1.1 の <code>covering</code> bbox 列（または慣用名の xmin/xmax/ymin/ymax 列、<code>covering=</code> で明示指定も可）への範囲述語を優先的に使うため、Parquet の row group 統計スキップが効き、表示範囲外のデータは読み込み自体を省略できます。</p>

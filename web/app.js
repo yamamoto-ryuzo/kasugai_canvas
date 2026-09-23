@@ -103,6 +103,11 @@ const vectorAttrLoadCache = new Map();
 // クエリ系(duckdb:/sql:)は条件ごとに結果が変わるため対象外。
 // キーは id|url で、applyInspector(プロジェクト/インスペクター変更)時に破棄する
 const vectorSourceCache = new Map();
+// ベクター検索で未ロードレイヤーが選択された際のオンデマンド読み込み結果。
+// vectorSourceCache と同じく applyInspector(プロジェクト/インスペクター変更)で破棄する
+const vectorSearchLoadedSources = new Map();
+// 検索用オンデマンド読み込みに失敗したレイヤー。選択肢変更のたびに再試行しない
+const vectorSearchLoadFailed = new Set();
 function loadVectorSourceCached(item, decoder) {
   if (decoder?.query) return decoder.load(item);
   if (item.data) return Promise.resolve(item.data);
@@ -229,6 +234,15 @@ let backendEnabled = false;
 let backendCapabilities = null;
 function hasBackendFeature(name) {
   return !!backendCapabilities?.features?.includes(name);
+}
+
+// レイヤー行の出典フィールドを解釈する。on/off 等の表示指定や key=value 形式の
+// オプション記述(render= / proxy= / attr= 等)が来た場合はオプションとみなし出典にしない
+function parseAttributionField(field) {
+  const value = String(field || "").trim();
+  if (!value || /^(on|off|true|false)$/i.test(value)) return "";
+  if (/^[a-z][a-z0-9_]*\s*=/i.test(value)) return "";
+  return value;
 }
 
 function parseLayerTitle(title) {
@@ -1108,6 +1122,15 @@ function proxyTileUrl(url, useProxy = true) {
   return url;
 }
 
+// リモート URL をローカルサーバーの /api/fetch 経由に書き換える。
+// fetchRange 能力(Range/HEAD 転送)があるバックエンドでのみ有効。
+// duckdb: の proxy=on で使用。バックエンド無し・相対パスでは元の URL を返す
+function proxyFetchUrl(url, useProxy = false) {
+  if (!useProxy || !/^https?:\/\//i.test(String(url || ""))) return url;
+  if (!hasBackendFeature("fetchRange")) return url;
+  return `${location.origin}/api/fetch?url=${encodeURIComponent(url)}`;
+}
+
 function proxyTemplateUrl(url, useProxy = true) {
   return url;
 }
@@ -1271,19 +1294,70 @@ function getEntityPosition(entity) {
   return null;
 }
 
+// 1地物分の properties を検索索引へ登録する。getDeg は新規値のときだけ呼ぶ遅延評価
+function indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap) {
+  for (const key of Object.keys(props)) {
+    const raw = props[key];
+    if (raw == null || raw === "") continue;
+    const val = (typeof raw === "object") ? JSON.stringify(raw) : String(raw);
+    attrSet.add(key);
+    if (!valuesMap[key]) valuesMap[key] = new Set();
+    if (!valuesMap[key].has(val)) {
+      valuesMap[key].add(val);
+      if (!featureMap[key]) featureMap[key] = {};
+      if (!featureMap[key][val]) {
+        const deg = getDeg();
+        if (deg && Number.isFinite(deg.lat) && Number.isFinite(deg.lng)) {
+          featureMap[key][val] = deg;
+          if (!allFeatureMap[key]) allFeatureMap[key] = {};
+          if (!allFeatureMap[key][val]) allFeatureMap[key][val] = deg;
+        }
+      }
+    }
+  }
+}
+
+// GeoJSON Feature から代表点(頂点座標の平均)を取り出す。primitive 描画レイヤーの索引用
+function geoJsonFeatureDegrees(feature) {
+  const geom = feature?.geometry;
+  if (!geom) return null;
+  let count = 0, lng = 0, lat = 0;
+  const walk = coords => {
+    if (!Array.isArray(coords)) return;
+    if (typeof coords[0] === "number") { lng += coords[0]; lat += coords[1] || 0; count++; return; }
+    coords.forEach(walk);
+  };
+  if (geom.type === "GeometryCollection") (geom.geometries || []).forEach(g => walk(g?.coordinates));
+  else walk(geom.coordinates);
+  return count ? { lat: lat / count, lng: lng / count } : null;
+}
+
 function buildVectorSearchIndex() {
   vectorSearchData = { all: { attributes: [], valuesByAttr: {}, featureByAttr: {} }, layers: {}, layerOptions: [] };
   const time = viewer.clock && viewer.clock.currentTime;
   const allAttrSet = new Set();
   const allValuesMap = {};
   const allFeatureMap = {};
+  const commitLayerIndex = (id, title, attrSet, valuesMap, featureMap) => {
+    const layerInfo = { title, attributes: [...attrSet].sort((a, b) => a.localeCompare(b)), valuesByAttr: {}, featureByAttr: {} };
+    for (const attr of layerInfo.attributes) {
+      layerInfo.valuesByAttr[attr] = [...valuesMap[attr]].sort((a, b) => a.localeCompare(b));
+      layerInfo.featureByAttr[attr] = featureMap[attr] || {};
+    }
+    vectorSearchData.layers[id] = layerInfo;
+    if (layerInfo.attributes.length) vectorSearchData.layerOptions.push({ id, title });
+    for (const attr of layerInfo.attributes) {
+      allAttrSet.add(attr);
+      if (!allValuesMap[attr]) allValuesMap[attr] = new Set();
+      for (const val of layerInfo.valuesByAttr[attr]) allValuesMap[attr].add(val);
+    }
+  };
   for (const { ds, id, title } of vectorDataSources) {
     // クエリ系レイヤー(duckdb:/sql:)は読み込み済み行だけの索引になるため対象外とし、
     // 検索は常にファイル全件を対象とする SQL フィルター(⏷)に一本化する
     const layerItem = layerState.get(id);
     const layerDecoder = layerItem && vectorDecoders.get(layerItem.type);
     if (layerDecoder && layerDecoder.query) continue;
-    const layerInfo = { title, attributes: [], valuesByAttr: {}, featureByAttr: {} };
     const attrSet = new Set();
     const valuesMap = {};
     const featureMap = {};
@@ -1291,42 +1365,40 @@ function buildVectorSearchIndex() {
       for (const entity of ds.entities.values) {
         const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
         if (!props) continue;
-        for (const key of Object.keys(props)) {
-          const raw = props[key];
-          if (raw == null || raw === "") continue;
-          const val = (typeof raw === "object") ? JSON.stringify(raw) : String(raw);
-          attrSet.add(key);
-          if (!valuesMap[key]) valuesMap[key] = new Set();
-          if (!valuesMap[key].has(val)) {
-            valuesMap[key].add(val);
-            if (!featureMap[key]) featureMap[key] = {};
-            if (!featureMap[key][val]) {
-              const cartesian = getEntityPosition(entity);
-              const deg = cartesian ? cartesianToDegrees(cartesian) : null;
-              if (deg && Number.isFinite(deg.lat) && Number.isFinite(deg.lng)) {
-                featureMap[key][val] = deg;
-                if (!allFeatureMap[key]) allFeatureMap[key] = {};
-                if (!allFeatureMap[key][val]) allFeatureMap[key][val] = deg;
-              }
-            }
-          }
-        }
+        let cachedDeg;
+        const getDeg = () => cachedDeg === undefined
+          ? (cachedDeg = (() => { const c = getEntityPosition(entity); return c ? cartesianToDegrees(c) : null; })())
+          : cachedDeg;
+        indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
       }
     } catch (e) {}
-    layerInfo.attributes = [...attrSet].sort((a, b) => a.localeCompare(b));
-    for (const attr of layerInfo.attributes) {
-      layerInfo.valuesByAttr[attr] = [...valuesMap[attr]].sort((a, b) => a.localeCompare(b));
-      layerInfo.featureByAttr[attr] = featureMap[attr] || {};
-    }
-    vectorSearchData.layers[id] = layerInfo;
-    if (layerInfo.attributes.length) {
-      vectorSearchData.layerOptions.push({ id, title });
-    }
-    for (const attr of layerInfo.attributes) {
-      allAttrSet.add(attr);
-      if (!allValuesMap[attr]) allValuesMap[attr] = new Set();
-      for (const val of layerInfo.valuesByAttr[attr]) allValuesMap[attr].add(val);
-    }
+    commitLayerIndex(id, title, attrSet, valuesMap, featureMap);
+  }
+  // primitive 描画(GeoJsonPrimitive)レイヤーは entity 非経由のため vectorDataSources に
+  // 載らないが、描画時に保持した GeoJSON(item.geojsonSource)から索引する。
+  // 検索パネルで選択されてオンデマンド読み込みされた未ロードレイヤー
+  // (vectorSearchLoadedSources)も同じ経路で索引する。
+  // クエリ系(duckdb:/sql:)は設計上対象外(検索は全件対象の SQL フィルターに一本化)
+  const indexedIds = new Set(vectorDataSources.map(v => v.id));
+  for (const id of layerOrder) {
+    const item = layerState.get(id);
+    const source = item && (item.geojsonSource || vectorSearchLoadedSources.get(id));
+    if (!item || indexedIds.has(id) || !source?.features?.length) continue;
+    const layerDecoder = vectorDecoders.get(item.type);
+    if (layerDecoder?.query) continue;
+    const attrSet = new Set();
+    const valuesMap = {};
+    const featureMap = {};
+    try {
+      for (const feature of source.features) {
+        const props = feature?.properties;
+        if (!props) continue;
+        let cachedDeg;
+        const getDeg = () => cachedDeg === undefined ? (cachedDeg = geoJsonFeatureDegrees(feature)) : cachedDeg;
+        indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
+      }
+    } catch (e) {}
+    commitLayerIndex(id, item.title || item.sourceTitle || id, attrSet, valuesMap, featureMap);
   }
   vectorSearchData.all.attributes = [...allAttrSet].sort((a, b) => a.localeCompare(b));
   for (const attr of vectorSearchData.all.attributes) {
@@ -1348,6 +1420,19 @@ function getCurrentVectorSource() {
   } catch (e) { return null; }
 }
 
+// 検索パネルのレイヤー選択肢に出す未ロード(未索引)レイヤー。
+// 索引には載らないが選択肢には出し、実際に選択されたら読み込んで索引する
+// (属性値一覧ウィジェットと同じオンデマンド方式)
+function getVectorSearchPendingLayers() {
+  const indexedIds = new Set(Object.keys((vectorSearchData && vectorSearchData.layers) || {}));
+  return getOrderedLayerItems().filter(item => {
+    if (indexedIds.has(item.id)) return false;
+    const dec = vectorDecoders.get(item.type);
+    if (dec && dec.query) return false;
+    return item.type === "geojson" || item.type === "layer" || item.type === "entities" || !!dec;
+  });
+}
+
 function updateVectorSearchUI() {
   const layerSelect = document.querySelector("#vector-layer");
   const attrSelect = document.querySelector("#vector-attr");
@@ -1359,12 +1444,19 @@ function updateVectorSearchUI() {
   // クエリ系レイヤー(duckdb:/sql:)は読み込み済み行の索引が作れないため検索パネルには出さない
   // (検索は全件対象の SQL フィルターに一本化。索引には非クエリ系しか登録されない)
   const opts = (data && data.layerOptions) || [];
+  const pending = getVectorSearchPendingLayers();
+  const prevValue = layerSelect.value;
+  const unloadedSuffix = t("vector.unloadedSuffix");
   let html = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>';
   for (const o of opts) {
     html += '<option value="' + escapeHtml(String(o.id)) + '">' + escapeHtml(o.title || o.id) + '</option>';
   }
+  for (const o of pending) {
+    html += '<option value="' + escapeHtml(String(o.id)) + '">' + escapeHtml((o.title || o.id) + unloadedSuffix) + '</option>';
+  }
   layerSelect.innerHTML = html;
-  layerSelect.disabled = (opts.length === 0);
+  if (prevValue && [...layerSelect.options].some(o => o.value === prevValue)) layerSelect.value = prevValue;
+  layerSelect.disabled = (opts.length === 0 && pending.length === 0);
   if (attrSelect) {
     attrSelect.innerHTML = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>';
     attrSelect.disabled = true;
@@ -1775,8 +1867,9 @@ function duckDbTableToGeoJson(table, lonlat) {
 }
 
 // duckdb: のソース SQL 式(format= または拡張子から自動判別)
+// proxy=on 時はローカルサーバーの /api/fetch 経由に書き換える(Range 転送対応)
 function duckDbSourceSql(item) {
-  const literal = quoteSqlLiteral(item.url);
+  const literal = quoteSqlLiteral(proxyFetchUrl(item.url, item.proxy));
   const format = String(item.format || "").toLowerCase();
   return format === "parquet" ? `read_parquet(${literal})` :
     format === "csv" || format === "tsv" ? `read_csv_auto(${literal})` :
@@ -2123,31 +2216,32 @@ async function refreshLayersImpl() {
       try {
         if (!item.url && !item.data && !item.query) continue;
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
+        // 再描画のたびに描画ソース保持をリセットする(primitive 経路で再セット。
+        // 非表示・entity 描画へ戻った場合に古い GeoJSON が残らないようにする)
+        item.geojsonSource = null;
         // 非表示レイヤーはロードしない(ダウンロード・デコードとも表示ONの
         // refreshLayers まで遅延する)。表示切替は refreshLayers の全再構築で反映
         // されるため、非表示分を先読みしてもトグルは速くならない
         if (!item.visible) continue;
         // 表示範囲連動レイヤーは現在の表示範囲を絞り込み条件としてセットしてからクエリする
         if (decoder && isViewportQueryLayer(item)) updateViewportFilter(item);
-        // GeoJsonPrimitive ドレープ経路は URL 直読みのため先に分岐する(キャッシュ経由の二重取得を避ける)
-        if (clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && item.url && !decoder) {
-          let heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
-          if (drapeTerrainSources.dem && drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
-          else if (drape3DTiles) heightReference = Cesium.HeightReference.CLAMP_TO_3D_TILE;
-          else if (drapeTerrainSources.dem) heightReference = Cesium.HeightReference.CLAMP_TO_TERRAIN;
-          const primitive = await Cesium.GeoJsonPrimitive.fromUrl(item.url, { heightReference, scene: viewer.scene });
-          primitive.show = item.visible;
-          viewer.scene.primitives.add(primitive);
-          activePrimitives.push(primitive);
-          layerRuntimeTargets.set(item.id, primitive);
+        // レイヤー行の render=primitive はグローバル設定より優先する明示指定で、
+        // HeightReference.NONE のバッチ描画にする(CLAMP系は scene.pick で拾えなくなるため)。
+        // クエリ系レイヤーはベクター検索パネルに登録しない(検索は全件対象の SQL フィルターに一本化)
+        if (item.renderPrimitive && Cesium.GeoJsonPrimitive) {
+          const source = await loadVectorSourceCached(item, decoder);
+          await addGeoJsonPrimitiveLayer(item, source);
           continue;
         }
+        // GeoJsonPrimitive ドレープ(実験的グローバル設定): 全件読み込み系ベクターが対象。
+        // render= 明示指定のレイヤーとクエリ系(render= で個別指定する形式)は除外する
+        const primitiveDrape = clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && !decoder?.query && !item.renderSpecified;
         const source = await loadVectorSourceCached(item, decoder);
-        // クエリ系レイヤー(duckdb:/sql:)は render=primitive で GeoJsonPrimitive バッチ描画に切替可
-        // (既定は entity 描画=地形ドレープ可)。
-        // 検索は常に全件対象の SQL フィルター(⏷)に一本化するためベクター検索パネルには登録しない
-        if (decoder && item.renderPrimitive && Cesium.GeoJsonPrimitive) {
-          await addGeoJsonPrimitiveLayer(item, source);
+        // fromGeoJson 経路に統一する: ソースは vectorSourceCache の共有取得で二重
+        // ダウンロードにならず、保持した GeoJSON が getLayerGeoJson・検索索引に使える
+        if (primitiveDrape) {
+          const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: primitiveDrapeHeightReference(drape3DTiles), scene: viewer.scene });
+          registerPrimitiveLayer(item, primitive, source);
           continue;
         }
         const ds = await buildStyledGeoJsonDataSource(source, clamp);
@@ -2174,16 +2268,33 @@ async function refreshLayersImpl() {
   applyGlobeVisibility();
 }
 
+// 描画した primitive を scene/管理リストへ登録する。
+// geojson は primitive 描画レイヤーが vectorDataSources に載らないため、
+// getLayerGeoJson 用に描画に使った GeoJSON を item に保持する
+// (参照を1本増やすだけで追加のデコード・ダウンロードは発生しない)
+function registerPrimitiveLayer(item, primitive, geojson = null) {
+  primitive.show = item.visible;
+  viewer.scene.primitives.add(primitive);
+  activePrimitives.push(primitive);
+  layerRuntimeTargets.set(item.id, primitive);
+  item.geojsonSource = geojson;
+}
+
+// ドレープ先(地形/3D Tiles)に応じた GeoJsonPrimitive 用の HeightReference を返す
+function primitiveDrapeHeightReference(drape3DTiles) {
+  if (drapeTerrainSources.dem && drape3DTiles) return Cesium.HeightReference.CLAMP_TO_GROUND;
+  if (drape3DTiles) return Cesium.HeightReference.CLAMP_TO_3D_TILE;
+  if (drapeTerrainSources.dem) return Cesium.HeightReference.CLAMP_TO_TERRAIN;
+  return Cesium.HeightReference.CLAMP_TO_GROUND;
+}
+
 // GeoJSON を GeoJsonPrimitive(entity を介さないバッチ描画)として scene に追加する。
 // heightReference は常に NONE: CLAMP 系は内部で scene.vectorProvider(地形タイル焼き込み)
 // に回され scene.pick で拾えなくなるため、ピックできる単純な描画を優先する。
 // 属性はピック時に picked.properties から参照できる
 async function addGeoJsonPrimitiveLayer(item, geojson) {
   const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(geojson, { allowPicking: true });
-  primitive.show = item.visible;
-  viewer.scene.primitives.add(primitive);
-  activePrimitives.push(primitive);
-  layerRuntimeTargets.set(item.id, primitive);
+  registerPrimitiveLayer(item, primitive, geojson);
 }
 
 // GeoJSON をスタイル適用済みの GeoJsonDataSource に変換する(初回ロードと再クエリで共用)
@@ -2249,6 +2360,8 @@ async function reloadVectorLayer(item) {
   await viewer.dataSources.add(ds);
   entry.ds = ds;
   layerRuntimeTargets.set(item.id, ds);
+  // entity 描画へ戻った場合は primitive 用の保持ソースを破棄する
+  item.geojsonSource = null;
 }
 
 // カメラ停止後に表示範囲連動レイヤーを再クエリする(camera.moveEnd からデバウンスして呼ばれる)
@@ -2317,9 +2430,10 @@ function syncLayerSourceLine(item) {
     if (item.covering?.length) parts.push(`covering=${item.covering.join(",")}`);
     if (item.bboxAuto) parts.push("bbox=auto");
     if (item.renderSpecified) parts.push(item.renderPrimitive ? "render=primitive" : "render=entity");
+    if (item.proxy) parts.push("proxy=on");
     line = `duckdb: ${parts.join(" | ")}`;
   } else if (item.type === "sql") {
-    line = `sql: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}`;
+    line = `sql: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}${item.attribution ? ` | attr=${item.attribution}` : ""}`;
   }
   if (!line || line === item.sourceLine) return;
   const input = document.querySelector("#inspector-input");
@@ -2387,6 +2501,8 @@ function applyInspector(text) {
   const parsedBasemaps = [];
   layerState.clear();
   vectorSourceCache.clear();
+  vectorSearchLoadedSources.clear();
+  vectorSearchLoadFailed.clear();
   tileLayers.splice(0, tileLayers.length);
   layers.splice(0, layers.length);
   basemaps.splice(0, basemaps.length);
@@ -2518,7 +2634,7 @@ function applyInspector(text) {
         if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
       });
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", proxy: options.proxy !== false, group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parseAttributionField(parts[2]), proxy: options.proxy !== false, group, exclusiveGroup };
       if (options.maximumLevel !== undefined) item.maximumLevel = options.maximumLevel;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
       tileLayers.push(item);
@@ -2535,13 +2651,26 @@ function applyInspector(text) {
       if (!title) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", proxy, group, exclusiveGroup };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parseAttributionField(parts[2]), proxy, group, exclusiveGroup };
+      // render=primitive|entity: ベクター系の描画方式指定(duckdb:/sql: と同じ意味。
+      // primitive は GeoJsonPrimitive バッチ描画、entity は GeoJsonDataSource 描画)
+      if (type !== "3dtiles") {
+        const render = parts.find(part => /^render\s*=\s*(primitive|fast|batch|entity|datasource)$/i.test(part));
+        if (render) {
+          item.renderPrimitive = !/=\s*(entity|datasource)$/i.test(render);
+          item.renderSpecified = true;
+        }
+        // attr=出典: 出典スロット(3番目のフィールド)以外でもオプション形式で指定可能にする
+        const attr = parts.find(part => /^attr(?:ibution)?\s*=\s*\S/i.test(part));
+        if (attr) item.attribution = attr.slice(attr.indexOf("=") + 1).trim();
+      }
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
     }
 
-    // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto/render= | on/off
+    // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto/render=/proxy=on | on/off
+    // proxy=on: ローカルサーバーの /api/fetch 経由で取得(CORS回避。Range 転送で Parquet の部分読みも可)
     // 単一ファイルを DuckDB-WASM で読み、SQL の絞り込みを適用してから描画する
     // columns= は読む属性列の絞り込み(列プルーニング)、covering= は xmin,xmax,ymin,ymax の列名指定
     // 描画は既定で entity(GeoJsonDataSource・地形ドレープ可)。render=primitive で
@@ -2554,8 +2683,11 @@ function applyInspector(text) {
       if (!title || !url) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, sourceVisible: !off, attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "", group, exclusiveGroup, renderPrimitive: false };
-      parts.slice(3).forEach(part => {
+      // parts[2] は出典スロット。ただし key=value 形式(オプション)なら出典ではなく
+      // オプションとして解釈するため、その場合は options 走査を parts[2] から始める
+      const attribution = parseAttributionField(parts[2]);
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, sourceVisible: !off, attribution, group, exclusiveGroup, renderPrimitive: false, proxy: false };
+      parts.slice(attribution ? 3 : 2).forEach(part => {
         const eq = part.indexOf("=");
         if (eq < 0) return;
         const key = part.slice(0, eq).trim().toLowerCase();
@@ -2574,6 +2706,8 @@ function applyInspector(text) {
         }
         else if (key === "bbox" && /^(auto|on|true|view|viewport)$/i.test(raw)) item.bboxAuto = true;
         else if (key === "limit" && Number.isInteger(number) && number > 0) item.limit = number;
+        else if (key === "proxy") item.proxy = /^(on|true|auto)$/i.test(raw);
+        else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
       });
       layers.push(item);
       layerState.set(id, item);
@@ -2581,7 +2715,8 @@ function applyInspector(text) {
     }
 
     // sql: タイトル | SELECT文(先頭の | 以降はすべてクエリ文字列として扱い | も使用可)。
-    // 末尾の "| off" は非表示指定、"| render=entity" / "| render=primitive" は描画方式として解釈する。
+    // 末尾の "| off" は非表示指定、"| render=entity" / "| render=primitive" は描画方式、
+    // "| attr=出典" は出典表示(値に | は含められない)として末尾から順に解釈する。
     // 描画は既定で entity(地形ドレープ可)
     if (type === "sql") {
       const firstSep = value.indexOf("|");
@@ -2590,20 +2725,26 @@ function applyInspector(text) {
       let visible = true;
       let renderPrimitive = false;
       let renderSpecified = false;
-      const tailRe = /\|\s*(off|false|render\s*=\s*[a-z]+)\s*$/i;
+      let attribution = "";
+      const tailRe = /\|\s*(off|false|render\s*=\s*[a-z]+|attr(?:ibution)?\s*=[^|]*)\s*$/i;
       let tail;
       while ((tail = tailRe.exec(query))) {
-        const opt = tail[1].replace(/\s+/g, "").toLowerCase();
-        if (opt === "off" || opt === "false") visible = false;
-        else if (/^render=(entity|datasource)$/.test(opt)) { renderPrimitive = false; renderSpecified = true; }
-        else if (/^render=(primitive|fast|batch)$/.test(opt)) { renderPrimitive = true; renderSpecified = true; }
-        else break;
+        const seg = tail[1].trim();
+        const attrMatch = /^attr(?:ibution)?\s*=\s*(.*)$/i.exec(seg);
+        if (attrMatch) attribution = attrMatch[1].trim();
+        else {
+          const opt = seg.replace(/\s+/g, "").toLowerCase();
+          if (opt === "off" || opt === "false") visible = false;
+          else if (/^render=(entity|datasource)$/.test(opt)) { renderPrimitive = false; renderSpecified = true; }
+          else if (/^render=(primitive|fast|batch)$/.test(opt)) { renderPrimitive = true; renderSpecified = true; }
+          else break;
+        }
         query = query.slice(0, tail.index).trim();
       }
       if (!title || !query) return;
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
-      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, query, visible, sourceVisible: visible, attribution: "", group, exclusiveGroup, renderPrimitive, renderSpecified };
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, query, visible, sourceVisible: visible, attribution, group, exclusiveGroup, renderPrimitive, renderSpecified };
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -4726,6 +4867,30 @@ function setupVectorSearch() {
           vectorValue.disabled = true;
         }
         if (vectorFlyBtn) vectorFlyBtn.disabled = true;
+        // 未ロードレイヤーが選択されたらオンデマンドで読み込み、索引して検索可能にする。
+        // 属性値一覧ウィジェットと同じく「候補には出すが選択されるまで読まない」方式
+        const selId = vectorLayer.value;
+        const selItem = (selId && selId !== "__all__") ? layerState.get(selId) : null;
+        const alreadyIndexed = !!(vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[selId]);
+        if (selItem && !alreadyIndexed && !vectorSearchLoadFailed.has(selId)) {
+          const dec = vectorDecoders.get(selItem.type);
+          const searchable = selItem.type === "geojson" || selItem.type === "layer" || selItem.type === "entities" || !!dec;
+          if (searchable && !(dec && dec.query)) {
+            const statusEl = document.querySelector("#vector-search-status");
+            if (statusEl) statusEl.textContent = t("common.loading");
+            loadVectorSourceCached(selItem, dec).then(src => {
+              if (src && Array.isArray(src.features)) vectorSearchLoadedSources.set(selId, src);
+              buildVectorSearchIndex();
+              updateVectorSearchUI();
+              // テキスト検索欄に入力済みなら索引更新後に再検索する
+              performVectorTextSearch();
+            }).catch(e => {
+              vectorSearchLoadFailed.add(selId);
+              console.warn("[vector-search] layer load failed:", selId, e);
+              if (statusEl) statusEl.textContent = t("vector.status.none");
+            });
+          }
+        }
         if (vectorAttrWidget && vectorAttrWidget.classList.contains("visible")) {
           refreshVectorAttrWidgetRows();
         }
@@ -5477,11 +5642,13 @@ function entitiesToGeoJson(ds) {
 }
 
 // レイヤ名/IDから GeoJSON を取り出す。インラインデータはそのまま返し、
-// URL由来のレイヤーはロード済み DataSource を entity→GeoJSON 変換して返す
+// primitive 描画レイヤーは描画時に保持したソースを、
+// それ以外のURL由来レイヤーはロード済み DataSource を entity→GeoJSON 変換して返す
 function getLayerGeoJson(idOrTitle) {
   const item = getOrderedLayerItems().find(layer => layer.id === idOrTitle || layer.title === idOrTitle);
   if (!item) return null;
   if (item.data && typeof item.data === "object") return item.data;
+  if (item.geojsonSource) return item.geojsonSource;
   const entry = vectorDataSources.find(source => source.id === item.id);
   const ds = entry?.ds || item.dataSource || null;
   if (!ds) return null;
@@ -5696,13 +5863,25 @@ window.kasugaiApi = {
     const height = Number(c.height).toFixed(1);
     return `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
   },
-  addGeoJsonLayer(title, url) {
-    if (!title || !url) return false;
+  // ベクター系レイヤーを .kasc 行として末尾へ追記し即時適用する。
+  // type: geojson/layer/geoparquet/flatgeobuf/duckdb(target は URL) / sql(target は SELECT 文)
+  addLayer(title, target, { type = "geojson", options = "" } = {}) {
     const input = document.querySelector("#inspector-input");
-    if (!input) return false;
-    input.value = input.value.replace(/\s*$/, "") + `\ngeojson:${title}|${url}\n`;
+    const urlTypes = new Set(["geojson", "layer", "geoparquet", "flatgeobuf", "duckdb"]);
+    const clean = value => String(value || "").replace(/[\r\n]+/g, " ").trim();
+    title = clean(title); target = clean(target); options = clean(options);
+    if (!title || !target || !input) return false;
+    if (!urlTypes.has(type) && type !== "sql") return false;
+    // URL系は「タイトル|URL|出典|オプション」の形式のため、options 指定時は
+    // 出典スロットを空で埋める(出典は options 側の attr= で指定できる)
+    const line = `${type}:${title}|${target}${urlTypes.has(type) && options ? "|" : ""}${options ? `|${options}` : ""}`;
+    input.value = input.value.replace(/\s*$/, "") + `\n${line}\n`;
     document.querySelector("#apply-inspector")?.click();
     return true;
+  },
+  addGeoJsonLayer(title, url) {
+    // サンドボックスブリッジはメソッドを detach して呼ぶため this は使わない
+    return window.kasugaiApi.addLayer(title, url);
   },
   getGoogleApiKey() {
     try { return localStorage.getItem("googleApiKey") || ""; } catch (e) { return ""; }
@@ -6220,8 +6399,22 @@ const CHAT_TOOLS = [{
       },
     },
     {
+      name: "addLayer",
+      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/duckdb/sql。target は duckdb 以外はURLまたは DATA/相対パス、sql は SELECT 文。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING", description: "レイヤ名" },
+          target: { type: "STRING", description: "データのURLまたは DATA/ファイル名(sql: の場合は SELECT 文)" },
+          type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/duckdb/sql (省略時 geojson)" },
+          options: { type: "STRING", description: "省略可。duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、attr=出典 等(|区切り)" },
+        },
+        required: ["title", "target"],
+      },
+    },
+    {
       name: "addGeoJsonLayer",
-      description: "GeoJSONレイヤをURL指定で追加して即座に適用する。urlはDATA/相対パスまたは外部URL。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "GeoJSONレイヤをURL指定で追加して即座に適用する(urlはDATA/相対パスまたは外部URL)。他形式は addLayer を使う。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -6238,7 +6431,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "savePlugin",
-      description: "KASUGAI Canvas の拡張機能(プラグイン)をブラウザ内ストレージに保存・有効化する自己拡張ツール。code は export async function init(api, manifest){} 形式のESモジュール。api は kasugaiApi で getCesium/getViewer/registerPluginLayer/getPluginDataSource/setPluginLayerData/addDataLayer/listLayers/flyTo/on(イベント) 等が使える。保存前にユーザーへコード確認ダイアログが出る。既存idは上書き更新になり再読み込みされる",
+      description: "KASUGAI Canvas の拡張機能(プラグイン)をブラウザ内ストレージに保存・有効化する自己拡張ツール。code は export async function init(api, manifest){} 形式のESモジュール。api は kasugaiApi で getCesium/getViewer/registerPluginLayer/getPluginDataSource/setPluginLayerData/addDataLayer/addLayer/listLayers/flyTo/on(イベント) 等が使える。保存前にユーザーへコード確認ダイアログが出る。既存idは上書き更新になり再読み込みされる",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -6546,6 +6739,7 @@ async function executeChatTool(name, args = {}) {
       return { ok: false, message: String(error && error.message || error) };
     }
   }
+  if (name === "addLayer") return { ok: window.kasugaiApi.addLayer(args.title, args.target, { type: args.type, options: args.options }) };
   if (name === "addGeoJsonLayer") return { ok: window.kasugaiApi.addGeoJsonLayer(args.title, args.url) };
   if (name === "shutdownApp") return { ok: window.kasugaiApi.shutdownApp() };
   if (name === "savePlugin") {

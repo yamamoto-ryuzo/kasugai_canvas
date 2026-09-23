@@ -4,6 +4,25 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.14.0] - 2026-09-24
+
+### Added
+
+- 描画方式 `render=primitive|entity` を全ベクター系行タイプ（`geojson:`/`layer:`/`geoparquet:`/`flatgeobuf:`/`duckdb:`/`sql:`）で共通化。レイヤー行の明示指定は設定タブの「ベクター高速ドレープ」グローバル設定より優先され、`render=entity` で個別に entity 描画へ戻せる。高速ドレープの対象も GeoJSON 限定から全件読み込み系ベクター全形式（GeoParquet/FlatGeobuf/インラインデータ含む）に拡張し、設定ラベル・ヒント（8言語）を「ベクター高速ドレープ」に改称
+- `render=primitive`（および高速ドレープ）で描画したレイヤーでも `getLayerGeoJson()` が GeoJSON を返すように、描画に使ったソースを `item.geojsonSource` に保持（参照のみ・追加取得なし）
+- primitive 描画・高速ドレープのレイヤーをベクター検索の索引対象に追加（保持した GeoJSON から索引を構築。位置はジオメトリ頂点の平均）。高速ドレープの `fromUrl` 経路は廃止し、`loadVectorSourceCached` + `fromGeoJson` に統一（キャッシュ共有のため二重取得なし）
+- ベクター検索パネルのレイヤー選択肢に未読み込みレイヤーを「(未読込)」付きで表示し、選択された時点でオンデマンド読み込み→索引→検索可能に（属性・値一覧と同じ「候補には出すが選択されるまで読まない」方式。読み込んでも表示状態は変えない。「全選択」は読み込み済みレイヤーのみ対象。翻訳キー `vector.unloadedSuffix` を8言語に追加）
+- AI ツール：全ベクター形式対応の `addLayer(title, target, {type, options})` を新設（`geojson`/`layer`/`geoparquet`/`flatgeobuf`/`duckdb`/`sql`）。`addGeoJsonLayer` は互換エイリアスとして維持。8言語のシステムプロンプトに行タイプ一覧を追記
+- `sql:` 行に出典指定 `| attr=出典`（`attribution=` 別名可）を追加。⏷フィルター編集での行書き戻しでも保持
+- `duckdb:` に `proxy=on` を追加（opt-in）。ローカルサーバーの `/api/fetch` 経由で取得し、CORS 非対応の外部データを読める。`/api/fetch` は Range/HEAD リクエストを上流へ転送するようになり（`Content-Range` 等の応答ヘッダー伝播・capabilities に `fetchRange` 追加）、Parquet の部分読み（メタデータ・row group スキップ）がプロキシ経由でも有効
+- URL 系ベクター行（`geojson:`/`geoparquet:`/`flatgeobuf:`/`duckdb:` 等）のオプション欄でも `attr=出典` を指定可能に
+- AGENTS.md に「動作確認（必須）」節を追加（修正後は構文チェックだけでなくブラウザ実機・実リクエストでの検証を必須化）
+
+### Fixed
+
+- `geojson:`/`xyz:`/`duckdb:` の出典スロット（3番目の `|` フィールド）に `render=primitive` 等の `key=value` オプションを書くと出典として誤採用される問題を修正（`parseAttributionField` で除外）。`duckdb:` は出典スロット位置に書かれたオプションも解釈するよう緩和
+- AI ツール `addLayer` が生成する行で、オプション指定時に出典スロットを空埋めせず `where=` 等が出典に誤配置される問題を修正
+
 ## [4.13.0] - 2026-09-22
 
 ### Changed

@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, Method, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
@@ -118,7 +118,7 @@ async fn capabilities() -> Json<Value> {
         "tier": "local",
         "name": "kasugai_canvas",
         "version": env!("CARGO_PKG_VERSION"),
-        "features": ["fetchProxy", "pluginWrite", "update", "shutdown"]
+        "features": ["fetchProxy", "fetchRange", "pluginWrite", "update", "shutdown"]
     }))
 }
 
@@ -127,9 +127,14 @@ struct FetchQuery {
     url: String,
 }
 
-// CORS 非対応の外部データを取り込むための GET プロキシ。
-// ローカルサーバー(127.0.0.1バインド)前提の機能で、呼び出し元はこのPCのブラウザのみ
+// CORS 非対応の外部データを取り込むための GET/HEAD プロキシ。
+// ローカルサーバー(127.0.0.1バインド)前提の機能で、呼び出し元はこのPCのブラウザのみ。
+// GET の Range ヘッダーを転送し 206 をそのまま返すため、DuckDB-WASM の httpfs による
+// Parquet の範囲読み(metadata・row group スキップ)がこの経路でも機能する。
+// 応答はいったんバッファするため、Range 無しの全件 GET は FETCH_MAX_BYTES 上限のまま
 async fn fetch_proxy(
+    method: Method,
+    headers: HeaderMap,
     axum::extract::Query(query): axum::extract::Query<FetchQuery>,
 ) -> Result<axum::response::Response, (StatusCode, String)> {
     let url = reqwest::Url::parse(&query.url)
@@ -144,14 +149,41 @@ async fn fetch_proxy(
         .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
         .build()
         .map_err(internal_error)?;
-    let response = client.get(url).send().await.map_err(internal_error)?;
+    let is_head = method == Method::HEAD;
+    let upstream_method = if is_head {
+        reqwest::Method::HEAD
+    } else {
+        reqwest::Method::GET
+    };
+    let mut request = client.request(upstream_method, url);
+    if !is_head {
+        if let Some(range) = headers
+            .get(axum::http::header::RANGE)
+            .and_then(|v| v.to_str().ok())
+        {
+            request = request.header(reqwest::header::RANGE, range);
+        }
+    }
+    let response = request.send().await.map_err(internal_error)?;
     let status = response.status();
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/octet-stream")
-        .to_string();
+    let mut builder = axum::response::Response::builder().status(status);
+    for key in [
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::CONTENT_LENGTH,
+        axum::http::header::CONTENT_RANGE,
+        axum::http::header::ACCEPT_RANGES,
+        axum::http::header::ETAG,
+        axum::http::header::LAST_MODIFIED,
+    ] {
+        if let Some(value) = response.headers().get(&key) {
+            builder = builder.header(key, value.clone());
+        }
+    }
+    if is_head {
+        return builder
+            .body(axum::body::Body::empty())
+            .map_err(internal_error);
+    }
     let bytes = response.bytes().await.map_err(internal_error)?;
     if bytes.len() > FETCH_MAX_BYTES {
         return Err((
@@ -159,11 +191,9 @@ async fn fetch_proxy(
             "取得データが上限を超えています".to_string(),
         ));
     }
-    Ok(axum::response::Response::builder()
-        .status(status)
-        .header(axum::http::header::CONTENT_TYPE, content_type)
+    builder
         .body(axum::body::Body::from(bytes))
-        .map_err(internal_error)?)
+        .map_err(internal_error)
 }
 
 #[derive(Deserialize)]
@@ -460,7 +490,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/api/capabilities", get(capabilities))
-        .route("/api/fetch", get(fetch_proxy))
+        .route("/api/fetch", get(fetch_proxy).head(fetch_proxy))
         .route("/api/plugins", post(save_plugin))
         .route("/api/plugins/{id}", axum::routing::delete(delete_plugin))
         .route(
