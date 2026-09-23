@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v3.1.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.15.0</span></h1>
       <p>2. ライブラリ — 主要ライブラリと描画基盤</p>
     </header>
     <main>
@@ -47,10 +47,11 @@
       プリミティブと連携</td>
       </tr>
       <tr>
-      <td>大容量 2D ベクトル / タイル</td>
-      <td><strong>deck.gl</strong></td>
-      <td>オプション。2D 分析・FlatBuffers / GeoArrow / MVT
-      表示で活用可能</td>
+      <td>ベクターデコード / SQL 絞り込み</td>
+      <td><strong>hyparquet / flatgeobuf / DuckDB-WASM</strong></td>
+      <td>GeoParquet・FlatGeobuf・Parquet/CSV/GPKG 等をブラウザ内で
+      デコードし GeoJSON へ正規化（<code>vectorDecoders</code>
+      レジストリ経由）</td>
       </tr>
       </tbody>
       </table>
@@ -82,8 +83,8 @@
       <tr>
       <td><strong>平面（2D 地図・図面）</strong></td>
       <td>◎</td>
-      <td>CesiumJS <code>SceneMode.SCENE2D</code> または deck.gl /
-      MapLibre オプション</td>
+      <td>CesiumJS <code>SceneMode.SCENE2D</code>（真上視点の 2D
+      地図表示）</td>
       </tr>
       <tr>
       <td><strong>3D パース（3D モデル・点群・3DGS）</strong></td>
@@ -117,18 +118,16 @@
       id="データ種別別のライブラリ選択">データ種別別のライブラリ選択</h2>
       <table>
       <colgroup>
-      <col style="width: 18%" />
-      <col style="width: 23%" />
-      <col style="width: 23%" />
-      <col style="width: 20%" />
-      <col style="width: 13%" />
+      <col style="width: 26%" />
+      <col style="width: 14%" />
+      <col style="width: 14%" />
+      <col style="width: 44%" />
       </colgroup>
       <thead>
       <tr>
       <th>データ</th>
       <th>CesiumJS</th>
       <th>Three.js</th>
-      <th>deck.gl</th>
       <th>備考</th>
       </tr>
       </thead>
@@ -137,7 +136,6 @@
       <td>3D Tiles / GLB</td>
       <td>◎</td>
       <td>◯</td>
-      <td>◯</td>
       <td>Cesium <code>Cesium3DTileset</code> / <code>Model</code>
       でネイティブ表示。PLATEAU も直接読み込み</td>
       </tr>
@@ -145,16 +143,14 @@
       <td>DEM / 標高PNG</td>
       <td>◎</td>
       <td>△</td>
-      <td>◯</td>
-      <td>Cesium <code>TerrainProvider</code> /
-      <code>CesiumWorldTerrain</code> で高精細地形。XYZ を ImageryLayer
-      としてドレープ</td>
+      <td>Cesium <code>TerrainProvider</code> で高精細地形。
+      地理院標高PNG は <code>GsiDemTerrainProvider</code>
+      でデコード済み。XYZ を ImageryLayer としてドレープ</td>
       </tr>
       <tr>
       <td>XYZ / TMS / WMS</td>
       <td>◎</td>
       <td>△</td>
-      <td>◎</td>
       <td>Cesium <code>ImageryLayer</code> /
       <code>UrlTemplateImageryProvider</code>
       で曲面・地形にドレープ</td>
@@ -163,29 +159,27 @@
       <td>GeoJSON</td>
       <td>◎</td>
       <td>△</td>
-      <td>◎</td>
-      <td>Cesium <code>GeoJsonDataSource</code> / <code>Entity</code> /
-      <code>Cesium3DTileset</code>（ベクタータイル）</td>
+      <td>Cesium <code>GeoJsonDataSource</code>（entity 描画）/
+      <code>GeoJsonPrimitive</code>（バッチ描画・
+      <code>render=primitive</code>）</td>
       </tr>
       <tr>
-      <td>2D Buffers (GeoArrow/FlatBuffers)</td>
-      <td>△</td>
-      <td>△</td>
+      <td>バイナリベクター (GeoParquet / FlatGeobuf)</td>
       <td>◎</td>
-      <td>deck.gl <code>GeoJsonLayer（binary）</code> が最適。2D
-      分析用</td>
+      <td>△</td>
+      <td><code>geoparquet:</code> / <code>flatgeobuf:</code> /
+      <code>duckdb:</code> / <code>sql:</code>
+      でブラウザ内デコード → GeoJSON 正規化経路へ</td>
       </tr>
       <tr>
-      <td>2D タイル (MVT/XYZ)</td>
-      <td>◯</td>
+      <td>2D タイル (MVT)</td>
       <td>△</td>
-      <td>◎</td>
-      <td>2D 表示用途なら deck.gl <code>MVTLayer</code> /
-      <code>TileLayer</code></td>
+      <td>△</td>
+      <td>現行未実装。XYZ ラスタタイルは
+      <code>ImageryLayer</code> で対応。MVT はタイル/大規模経路として将来候補</td>
       </tr>
       <tr>
       <td>点群 (PLY/LAS/EPT)</td>
-      <td>◯</td>
       <td>◯</td>
       <td>◯</td>
       <td>Cesium <code>Cesium3DTileset</code>（pnts / 3DTiles_next）or
@@ -195,7 +189,6 @@
       <td>3DGS (PLY/SPZ/Splat)</td>
       <td>△</td>
       <td>◎</td>
-      <td>△</td>
       <td>Three.js 系専用レンダラー</td>
       </tr>
       </tbody>
@@ -235,6 +228,11 @@
       <td><strong>ClassificationPrimitive /
       Vector3DTilePrimitive</strong></td>
       <td>3D 地形・建物へのドレープ・クラシフィケーション</td>
+      </tr>
+      <tr>
+      <td><strong>GeoJsonPrimitive / GroundPrimitive</strong></td>
+      <td>ベクターの地形・3D Tiles への高速ドレープ（ベクター高速ドレープ /
+      <code>render=primitive</code>）</td>
       </tr>
       </tbody>
       </table>
@@ -296,29 +294,30 @@
       </ul>
       <h2 id="cesiumjs-three.js-の連携パターン">CesiumJS + Three.js
       の連携パターン</h2>
-      <h3
-      id="正式仕様cesiumjs-内のエンティティ-プリミティブ-three.js-補完">正式仕様：CesiumJS
-      内のエンティティ / プリミティブ + Three.js 補完</h3>
+      <h3 id="現行実装オーバーレイ">現行実装：オーバーレイ canvas +
+      カメラ同期</h3>
       <ul>
-      <li>CesiumJS の <code>Scene</code> 内に
-      <code>Cesium3DTileset</code>、<code>ImageryLayer</code>、<code>Entity</code>、<code>Primitive</code>
-      を配置</li>
-      <li>Three.js は Cesium の <code>Scene</code>
-      内に連携させるか、<code>Cesium.CallbackProperty</code> /
-      <code>Cesium.Entity</code> 経由で位置同期</li>
-      <li>深度バッファ・カメラ行列・ビューポートは CesiumJS
-      が管理。Three.js は点群・3DGS・特殊メッシュ用に補完</li>
-      <li>フレームループは CesiumJS の <code>clock.onTick</code> または
-      <code>scene.postRender</code> で制御</li>
-      </ul>
-      <h3 id="参考方式オーバーレイ">参考方式：オーバーレイ</h3>
-      <ul>
-      <li>Three.js 用の <code>&lt;canvas&gt;</code> を下層、CesiumJS
-      用の <code>&lt;canvas&gt;</code> を上層に重ねる</li>
-      <li>両方を同じサイズ・カメラに揃え、CSS
-      <code>pointer-events</code> を調整</li>
+      <li><code>#cesium-container</code> 内に Three.js 用の
+      <code>&lt;canvas&gt;</code>（<code>three-canvas</code>、<code>pointer-events:none</code>）を重ねる</li>
+      <li><code>scene.postRender</code> で
+      <code>viewer.camera.viewMatrix</code> /
+      <code>frustum.projectionMatrix</code> を Three.js
+      カメラへコピーして同期。ECEF（<code>Cartesian3</code>）座標を
+      Three.js のワールド座標としてそのまま共有できる</li>
       <li>実装が容易で、各エンジンの描画サイクルを独立に保てる</li>
-      <li>プロトタイプや障害切り分けには使用できるが、深度・レイヤー順・ピッキングを統合できないため本番仕様にはしない</li>
+      <li>深度バッファを共有しないため、地球・3D Tiles
+      との遮蔽関係やピッキングの統合はできない（Three.js
+      側は常に全面に描画される）</li>
+      </ul>
+      <h3 id="将来候補同一コンテキスト">将来候補：同一 WebGL
+      コンテキストでの統合</h3>
+      <ul>
+      <li>CesiumJS の GL コンテキスト上で Three.js
+      を描画し、深度バッファを共有する方式（遮蔽関係を正しく合成可能）</li>
+      <li>CesiumJS の内部 GL 状態管理に依存しバージョンアップで壊れやすいため、現行はオーバーレイ方式を採用している</li>
+      <li>単独オブジェクトなら Three.js を介さず CesiumJS の
+      <code>Model</code> / <code>Primitive</code> +
+      <code>CustomShader</code> で済ませる方が安定</li>
       </ul>
       <h2 id="補完ライブラリ">補完ライブラリ</h2>
       <table>
@@ -341,9 +340,20 @@
       <td>平面直角座標 ↔︎ WGS84 等の変換</td>
       </tr>
       <tr>
-      <td>GPKG 変換</td>
-      <td><strong>sql.js + WKB パーサー</strong></td>
-      <td>ブラウザ内で SQLite（GPKG） → Arrow/GeoJSON 変換</td>
+      <td>GPKG / Shapefile 読込</td>
+      <td><strong>DuckDB-WASM（spatial 拡張 <code>ST_Read</code>）</strong></td>
+      <td>ブラウザ内で GeoPackage 等 → GeoJSON 正規化（<code>duckdb:</code>
+      の <code>format=read</code>）</td>
+      </tr>
+      <tr>
+      <td>GeoParquet デコード</td>
+      <td><strong>hyparquet</strong></td>
+      <td>CDN から遅延ロード。WKB / ネイティブ GEOMETRY → GeoJSON</td>
+      </tr>
+      <tr>
+      <td>FlatGeobuf デコード</td>
+      <td><strong>flatgeobuf 公式 JS リーダー</strong></td>
+      <td>CDN から遅延ロード。ストリームで逐次 GeoJSON Feature 化</td>
       </tr>
       <tr>
       <td>FGDB 変換</td>

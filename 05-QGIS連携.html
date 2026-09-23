@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v3.1.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.15.0</span></h1>
       <p>5. QGIS・GDAL連携（構想） — QGIS・GDALを活用した連携構想</p>
     </header>
     <main>
@@ -23,7 +23,7 @@
       <figcaption aria-hidden="true">QGIS連携構想</figcaption>
       </figure>
       <h2 id="基本方針">5.1 基本方針</h2>
-      <p>QGISの画面や<code>QgsMapCanvas</code>をKASUGAIへそのまま埋め込むのではない。QGIS・GDALが扱える多様な入力形式を、deck.glが効率よく描画できる形式へ変換・配信する。</p>
+      <p>QGISの画面や<code>QgsMapCanvas</code>をKASUGAIへそのまま埋め込むのではない。QGIS・GDALが扱える多様な入力形式を、KASUGAI Canvas（CesiumJS）が描画できる形式へ変換・配信する。</p>
       <pre class="text"><code>各種GISデータ
 ├─ GeoPackage / Shapefile / FileGDB
 ├─ PostGIS
@@ -35,9 +35,9 @@ QGIS Processing / PyQGIS / GDAL・OGR
         ↓
 KASUGAI向け変換・配信層
         ↓
-GeoJSON / MVT / GeoArrow / XYZ / WMTS / 3D Tiles
+GeoJSON / GeoParquet / FlatGeobuf / XYZ / WMTS / 3D Tiles
         ↓
-deck.gl + Three.js
+CesiumJS + Three.js
         ↓
 KASUGAI Canvasで最終表示</code></pre>
       <h3 id="役割分担">役割分担</h3>
@@ -54,8 +54,9 @@ KASUGAI Canvasで最終表示</code></pre>
       <td>KASUGAI Canvas</td>
       </tr>
       <tr>
-      <td>ベクター、タイル、Terrain、3D TilesのGPU描画</td>
-      <td>deck.gl</td>
+      <td>ベクター、タイル、Terrain、3D Tilesの描画</td>
+      <td>CesiumJS（GeoJsonDataSource / GeoJsonPrimitive /
+      ImageryLayer / TerrainProvider / Cesium3DTileset）</td>
       </tr>
       <tr>
       <td>GLB、点群、3DGS等の補助3D描画</td>
@@ -81,10 +82,10 @@ KASUGAI Canvasで最終表示</code></pre>
 GeoPackage / PostGIS / FileGDB / GeoTIFF
         ↓ 変換・抽出・タイル化
 配信用データ
-GeoJSON / MVT / GeoArrow / XYZ / WMTS / 3D Tiles
-        ↓ 読み込み・デコード
+GeoJSON / GeoParquet / FlatGeobuf / XYZ / WMTS / 3D Tiles
+        ↓ 読み込み・ブラウザ内デコード
 描画データ
-TypedArray / binary attributes / deck.gl layer</code></pre>
+GeoJSON → GeoJsonDataSource（entity）/ GeoJsonPrimitive</code></pre>
       <table>
       <colgroup>
       <col style="width: 33%" />
@@ -107,18 +108,20 @@ TypedArray / binary attributes / deck.gl layer</code></pre>
       <tr>
       <td>配信用データ</td>
       <td>範囲・ズーム単位の取得</td>
-      <td>GeoJSON、MVT、GeoArrow、XYZ、WMTS、3D Tiles</td>
+      <td>GeoJSON、GeoParquet、FlatGeobuf、XYZ、WMTS、3D
+      Tiles（MVT は将来候補）</td>
       </tr>
       <tr>
       <td>描画データ</td>
       <td>GPUへ効率よく渡す</td>
-      <td>TypedArray、binary attributes、deck.gl layer</td>
+      <td>GeoJSON → GeoJsonDataSource（entity）/
+      GeoJsonPrimitive（バッチ描画）</td>
       </tr>
       </tbody>
       </table>
       <p>この分離により、編集に適した形式を維持しながら、表示には高速な別形式を利用できる。</p>
-      <h2 id="ベクター連携qgisgdalからdeck.glへ">5.3
-      ベクター連携：QGIS・GDALからdeck.glへ</h2>
+      <h2 id="ベクター連携qgisgdalからkasugai-canvasへ">5.3
+      ベクター連携：QGIS・GDALからKASUGAI Canvasへ</h2>
       <p>ベクターは、QGIS・GDALを正データへのアクセスと変換の窓口にする。</p>
       <pre class="text"><code>GeoPackage / FileGDB / PostGIS
         ↓
@@ -126,42 +129,46 @@ QGIS Processing / GDAL・OGR
         ↓
 ┌────────────────────────────────────┐
 │ 小規模・編集結果       → GeoJSON    │
-│ 大規模・範囲配信       → MVT        │
-│ ローカル大容量・高速   → GeoArrow   │
-│ 動的検索・属性取得     → JSON API   │
+│ 中規模・置くだけ       → GeoParquet │
+│                        / FlatGeobuf│
+│ 大規模・絞り込み       → duckdb:/sql:│
+│ 広域・範囲配信         → MVT(将来)  │
 └────────────────────────────────────┘
         ↓
-deck.gl</code></pre>
+GeoJSON 正規化 → GeoJsonDataSource / GeoJsonPrimitive</code></pre>
       <h3 id="geojson最初の連携形式">GeoJSON：最初の連携形式</h3>
       <p>小〜中規模データ、編集直後の確認、属性連携に使用する。現在のKASUGAI
-      Canvasは<code>GeoJsonLayer</code>を中心に実装されているため、最初のQGIS連携形式に適している。</p>
+      Canvasは<code>geojson:</code> 行タイプを
+      <code>GeoJsonDataSource</code> で描画するため、最初のQGIS連携形式に適している。</p>
       <pre class="text"><code>QGIS / GDAL
     ↓ GeoJSON
-KASUGAI `GeoJsonLayer`</code></pre>
+KASUGAI `geojson:` → `GeoJsonDataSource`</code></pre>
       <h3
-      id="mvt大規模ベクターの基本形式">MVT：大規模ベクターの基本形式</h3>
+      id="mvt大規模ベクターの将来形式">MVT：大規模ベクターの将来形式</h3>
       <p>広域・大容量データでは、全件をGeoJSONで取得せず、表示範囲とズームに応じてMVTを取得する。</p>
       <pre class="text"><code>KASUGAIの表示範囲・ズーム
         ↓
 MVTタイル取得
         ↓
-KASUGAI `MVTLayer`
+MVTデコード → GeoJSON 正規化 or 専用タイル描画（将来検討）
         ↓
-必要に応じてTerrainExtensionでドレープ</code></pre>
+必要に応じて地形・3D Tilesへドレープ</code></pre>
       <p>MVTの生成・配信には、QGIS
-      Server、GDAL・OGR、データベース側のタイル生成、専用のタイル生成処理を利用する。MVTと<code>MVTLayer</code>は将来追加する機能として扱う。</p>
+      Server、GDAL・OGR、データベース側のタイル生成、専用のタイル生成処理を利用する。現行のCesiumJSベース実装にMVT経路は無く、タイル/大規模経路として将来追加する機能として扱う。なお現行でも
+      <code>duckdb:</code> の <code>bbox=auto</code>
+      により「表示範囲だけ読む」運用はParquet系で実現できる。</p>
       <h3
-      id="geoarrowarrowtypedarray大容量ローカルデータ">GeoArrow・Arrow・TypedArray：大容量ローカルデータ</h3>
-      <p>ローカルPC上で大容量ベクターを高速に扱う場合は、Arrow系のバイナリ形式へ変換し、Web
-      Workerでデコードしてdeck.glのbinary attributesへ渡す。</p>
+      id="geoparquetflatgeobuf大容量ローカルデータ">GeoParquet・FlatGeobuf：大容量ローカルデータ</h3>
+      <p>ローカルPC上で大容量ベクターを高速に扱う場合は、列指向・空間インデックス付きのバイナリ形式で出力し、ブラウザ内デコードしてGeoJSON正規化経路へ渡す。いずれも実装済み。</p>
       <pre class="text"><code>QGIS / GDAL
-    ↓ Arrow変換
-GeoArrow / Arrow
-    ↓ Web Worker
-TypedArray / binary attributes
+    ↓ GeoParquet / FlatGeobuf 出力
+geoparquet: / flatgeobuf:（全件読み込み）
+    または duckdb: / sql:（SQL絞り込み・bbox=auto）
+    ↓ ブラウザ内デコード（hyparquet / flatgeobuf / DuckDB-WASM）
+GeoJSON
     ↓
-deck.gl</code></pre>
-      <p>GeoArrowはすべてのデータの標準形式にするのではなく、GeoJSONで十分な小規模データや、MVTが適する範囲配信データとは使い分ける。</p>
+GeoJsonDataSource / GeoJsonPrimitive</code></pre>
+      <p>これらのバイナリ形式はすべてのデータの標準形式にするのではなく、GeoJSONで十分な小規模データや、SQL絞り込みが適する大規模データとは使い分ける。</p>
       <h2 id="ラスタ連携公開サービスとqgis管理データ">5.4
       ラスタ連携：公開サービスとQGIS管理データ</h2>
       <h3 id="公開xyzwmts">公開XYZ・WMTS</h3>
@@ -178,23 +185,24 @@ deck.gl</code></pre>
     ├─ 事前タイル化 → XYZ
     ├─ COG / 独自タイル配信
     └─ ローカルファイルをKASUGAIが直接取得</code></pre>
-      <p>WMTSをKASUGAIの<code>TileLayer</code>で利用する場合は、TileMatrixSet、座標系、原点、ズーム番号、Y軸方向がXYZ形式と一致するか確認する。一致しない場合は、Rust/Axum等のタイルアダプターでXYZリクエストをWMTSへ変換する。</p>
+      <p>WMTSをKASUGAIで利用する場合は、CesiumJS の
+      <code>WebMapTileServiceImageryProvider</code> で読み込めるが、TileMatrixSet、座標系、原点、ズーム番号、Y軸方向がXYZ形式と一致するか確認する。一致しない場合は、Rust/Axum等のタイルアダプターでXYZリクエストをWMTSへ変換する。</p>
       <h2 id="dem3dデータkasugaiで直接描画">5.5
       DEM・3Dデータ：KASUGAIで直接描画</h2>
       <p>DEMと3D都市モデルは、可能な限りQGISを経由せず、KASUGAIが直接ストリーミングする。</p>
       <pre class="text"><code>DEM標高タイル
     ↓
-KASUGAI `TerrainLayer`
+KASUGAI `TerrainProvider`（地理院標高PNGデコード実装済み）
 
 3D Tiles
     ↓
-KASUGAI `Tile3DLayer`
+KASUGAI `3dtiles:` → `Cesium3DTileset`
 
 QGISベクター
-    ↓ GeoJSON / MVT / GeoArrow
-KASUGAI `GeoJsonLayer` / `MVTLayer`
+    ↓ GeoJSON / GeoParquet / FlatGeobuf / duckdb:/sql:
+GeoJSON 正規化 → `GeoJsonDataSource` / `GeoJsonPrimitive`
     ↓
-TerrainExtension
+CLAMP_TO_GROUND / ドレープ設定
     ↓
 DEMまたは3D Tilesの表面へドレープ</code></pre>
       <p>QGISとKASUGAIが同じ3Dデータソースを参照できればよく、同じ描画処理を共有する必要はない。</p>
@@ -269,7 +277,7 @@ KASUGAI属性パネル</code></pre>
 PyQGIS / GDAL・OGR / データベース
     ↓
 GeoPackage / PostGIS / FileGDB</code></pre>
-      <p>編集後は、変更されたフィーチャーまたはタイルだけを再取得してKASUGAI側で再描画する。正データを直接deck.gl用形式に置き換えるのではなく、編集結果から配信用データを更新する。</p>
+      <p>編集後は、変更されたフィーチャーまたはタイルだけを再取得してKASUGAI側で再描画する。正データを直接描画用形式に置き換えるのではなく、編集結果から配信用データを更新する。</p>
       <h2 id="カメラcrs連携状態">5.8 カメラ・CRS・連携状態</h2>
       <p>カメラの正本はKASUGAI
       Canvasとする。KASUGAIの表示範囲や選択位置を、必要に応じてQGIS処理層へ通知する。</p>
@@ -288,17 +296,19 @@ QGIS処理層へ中心座標・範囲を通知</code></pre>
       <p>現行のKASUGAI
       Canvasで利用できる主な形式と、今後の構想を分けて管理する。</p>
       <pre class="text"><code>現行
-QGIS相当のデータ → GeoJSON → GeoJsonLayer
-DEM               → TerrainLayer
-3D Tiles          → Tile3DLayer
-XYZ               → TileLayer
+QGIS相当のデータ → GeoJSON → geojson: → GeoJsonDataSource
+                → GeoParquet → geoparquet: / duckdb:
+                → FlatGeobuf → flatgeobuf: / duckdb:(ST_Read)
+                → GPKG等    → duckdb: format=read (ST_Read)
+DEM               → TerrainProvider（地理院標高PNG対応）
+3D Tiles          → 3dtiles: → Cesium3DTileset
+XYZ               → xyz: → ImageryLayer
 
 構想
 QGIS / GDAL
-    ├─ 小規模・編集 → GeoJSON → GeoJsonLayer
-    ├─ 大規模配信   → MVT → MVTLayer
-    └─ 大容量高速   → GeoArrow / Arrow → binary deck.gl</code></pre>
-      <p>MVT、GeoArrow、QGIS
+    ├─ 広域・範囲配信 → MVT → MVT経路（将来）
+    └─ 編集・解析     → PyQGIS / GDAL連携API</code></pre>
+      <p>MVT経路、QGIS
       Processing、PyQGIS、GDAL連携APIは、現行実装に追加する拡張機能である。</p>
       <h2 id="実装ロードマップ">5.10 実装ロードマップ</h2>
       <table>
@@ -332,7 +342,7 @@ QGIS / GDAL
       </tr>
       <tr>
       <td>4</td>
-      <td>MVT生成と<code>MVTLayer</code>を追加</td>
+      <td>MVT生成とベクタータイル経路を追加</td>
       <td>大規模ベクターのタイル配信</td>
       </tr>
       <tr>
@@ -342,8 +352,9 @@ QGIS / GDAL
       </tr>
       <tr>
       <td>6</td>
-      <td>GeoArrow / ArrowとWeb Workerを追加</td>
-      <td>大容量ベクターの高速処理</td>
+      <td>GeoArrow / Arrowの直接読み込みを追加</td>
+      <td>大容量ベクターの高速処理（GeoParquet/FlatGeobuf
+      は実装済み）</td>
       </tr>
       <tr>
       <td>7</td>
@@ -361,10 +372,10 @@ QGIS / GDAL
       <p>本構想の基本方針は、次のとおりである。</p>
       <blockquote>
       <p><strong>KASUGAI
-      Canvasをメイン画面および最終2D/3D表示エンジンとし、QGIS・GDALを多様なGISデータをdeck.gl向け形式へ変換・配信する基盤として利用する。</strong></p>
+      Canvasをメイン画面および最終2D/3D表示エンジンとし、QGIS・GDALを多様なGISデータをCesiumJSが描画できる形式へ変換・配信する基盤として利用する。</strong></p>
       </blockquote>
-      <p>QGISの画面をKASUGAIへそのまま埋め込むのではなく、正データを維持したまま、用途に応じてGeoJSON、MVT、GeoArrow、XYZ、WMTS、3D
-      Tiles等へ変換する。小規模データはGeoJSON、大規模ベクターはMVT、ローカル大容量データはGeoArrowまたはArrowを基本とし、KASUGAIのdeck.glとThree.jsで最終描画する。</p>
+      <p>QGISの画面をKASUGAIへそのまま埋め込むのではなく、正データを維持したまま、用途に応じてGeoJSON、GeoParquet、FlatGeobuf、XYZ、WMTS、3D
+      Tiles等へ変換する。小規模データはGeoJSON、中規模はGeoParquet/FlatGeobuf、大規模・絞り込みはduckdb:/sql:、広域タイル配信はMVT（将来候補）を基本とし、KASUGAIのCesiumJSとThree.jsで最終描画する。</p>
 
     </main>
   </div>

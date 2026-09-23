@@ -9,12 +9,12 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v3.1.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.15.0</span></h1>
       <p>1. データ — 2D/3D データの最適フォーマット、配信・管理</p>
     </header>
     <main>
       <h2 id="データ">1. データ</h2>
-      <p>KASUGAI Canvas（<strong>deck.gl + Three.js</strong>）で取り扱う
+      <p>KASUGAI Canvas（<strong>CesiumJS + Three.js</strong>）で取り扱う
       2D / 3D
       データの最適フォーマット、配信・管理についてまとめる章。</p>
       <h2 id="kasugai-canvas-で扱えるデータ形式一覧">KASUGAI Canvas
@@ -38,55 +38,62 @@
       <tbody>
       <tr>
       <td>2D ベクトル</td>
-      <td>GeoArrow / FlatBuffers</td>
-      <td><code>deck.gl GeoJsonLayer（binary）</code></td>
-      <td>最も推奨。GeoArrow/FlatBuffers から deck.gl 独自 binary
-      へ変換して GPU バッファへゼロコピー</td>
+      <td>GeoParquet / FlatGeobuf</td>
+      <td><code>geoparquet:</code> / <code>flatgeobuf:</code> →
+      GeoJSON 正規化 → <code>GeoJsonDataSource</code></td>
+      <td>ブラウザ内デコード（hyparquet / flatgeobuf
+      公式リーダー）で変換不要。<code>duckdb:</code>/<code>sql:</code>
+      なら SQL 絞り込みも可</td>
       </tr>
       <tr>
       <td>2D ベクトル</td>
       <td>GeoJSON（小〜中規模）</td>
-      <td><code>deck.gl GeoJsonLayer</code></td>
-      <td>大容量時は GeoArrow/FlatBuffers への変換を推奨</td>
+      <td><code>geojson:</code> → <code>CesiumJS
+      GeoJsonDataSource</code></td>
+      <td>大容量時は GeoParquet/FlatGeobuf または
+      <code>duckdb:</code>/<code>sql:</code> クエリ経路を推奨</td>
       </tr>
       <tr>
       <td>2D タイル</td>
-      <td>MVT / XYZ / WMTS</td>
-      <td><code>deck.gl TileLayer</code> / <code>MVTLayer</code></td>
-      <td>広域地図・航空写真（WMTS は TileMatrixSet 変換が必要）</td>
+      <td>XYZ / WMTS / TMS</td>
+      <td><code>CesiumJS ImageryLayer</code>（地形・3D Tiles
+      にドレープ）</td>
+      <td>広域地図・航空写真。MVT は現行未実装（将来候補）</td>
       </tr>
       <tr>
       <td>3D モデル</td>
       <td>GLB / glTF 2.0</td>
-      <td><code>deck.gl ScenegraphLayer</code> / Three.js
+      <td><code>CesiumJS Model</code> / Three.js
       <code>GLTFLoader</code></td>
       <td>建機・構造物</td>
       </tr>
       <tr>
       <td>3D タイル</td>
       <td>3D Tiles 1.1 (GLB 内包)</td>
-      <td><code>deck.gl Tile3DLayer</code> / Three.js
-      <code>3DTilesRenderer</code></td>
-      <td>PLATEAU 等。LOD・ストリーミング対応</td>
+      <td><code>3dtiles:</code> → <code>CesiumJS
+      Cesium3DTileset</code></td>
+      <td>PLATEAU・Google Photorealistic 等。LOD・ストリーミング対応</td>
       </tr>
       <tr>
       <td>点群</td>
-      <td>EPT / Potree 形式</td>
-      <td><code>deck.gl PointCloudLayer</code> / Three.js
+      <td>3D Tiles 点群 (pnts / 1.1 glTF)</td>
+      <td><code>Cesium3DTileset</code> / Three.js
       <code>Points</code></td>
-      <td>大規模点群向け</td>
+      <td>大規模点群向け。LAS/LAZ・EPT は変換が必要</td>
       </tr>
       <tr>
       <td>3DGS</td>
       <td>PLY / SPZ / .splat / .ksplat / .sog</td>
       <td>Three.js 系専用レンダラー</td>
-      <td><code>gaussian-splats-3d</code> 等。deck.gl はカメラ同期</td>
+      <td><code>gaussian-splats-3d</code> 等。CesiumJS
+      とカメラ同期（オーバーレイ canvas）</td>
       </tr>
       <tr>
       <td>DEM / 地形</td>
-      <td>標高PNG (XYZ / WMTS)</td>
-      <td><code>deck.gl TerrainLayer</code></td>
-      <td>GPU リアルタイムメッシュ化</td>
+      <td>標高PNG (XYZ) / Cesium Terrain</td>
+      <td><code>CesiumJS TerrainProvider</code></td>
+      <td>地理院標高PNG は独自デコーダー
+      （<code>GsiDemTerrainProvider</code>）実装済み</td>
       </tr>
       </tbody>
       </table>
@@ -111,20 +118,21 @@
       <tr>
       <td>2D ベクトル</td>
       <td>GPKG (GeoPackage)</td>
-      <td>GeoArrow / FlatBuffers / MVT</td>
-      <td>SQLite + WKB。Web Worker 等で変換</td>
+      <td><code>duckdb:</code> の <code>ST_Read</code> で直接読込 /
+      GeoParquet・FlatGeobuf</td>
+      <td>SQLite + WKB。DuckDB-WASM spatial 拡張でブラウザ内読込可</td>
       </tr>
       <tr>
       <td>2D ベクトル</td>
       <td>FGDB (File Geodatabase)</td>
-      <td>GeoArrow / FlatBuffers / MVT</td>
+      <td>GeoParquet / FlatGeobuf / GeoJSON</td>
       <td>プロプライエタリ。ogr2ogr 等で変換</td>
       </tr>
       <tr>
       <td>2D ベクトル</td>
       <td>GeoJSON（大規模）</td>
-      <td>GeoArrow / FlatBuffers</td>
-      <td>ゼロコピー描画のため変換</td>
+      <td>GeoParquet / FlatGeobuf</td>
+      <td>列指向・空間インデックスで読み込み効率化</td>
       </tr>
       <tr>
       <td>点群</td>
@@ -141,15 +149,18 @@
       </tbody>
       </table>
       <ul>
-      <li><strong>直接描画可能</strong>：deck.gl / Three.js
-      のローダーまたはレイヤーでそのまま描画可能</li>
+      <li><strong>直接描画可能</strong>：CesiumJS
+      ネイティブ形式、または <code>vectorDecoders</code>
+      レジストリのデコーダーで GeoJSON へ正規化して既存のベクター描画経路（<code>GeoJsonDataSource</code>
+      / <code>GeoJsonPrimitive</code>）に流す</li>
       <li><strong>要専用レンダラー</strong>：Three.js
-      系の専用ライブラリが必要。deck.gl はカメラ同期のみ</li>
+      系の専用ライブラリが必要。CesiumJS とはカメラ同期（オーバーレイ
+      canvas + <code>postRender</code>）のみ</li>
       <li><strong>パイプライン（変換）が必要</strong>：ブラウザ内 Web
       Worker または事前変換が必要。GPKG/FGDB は Single Source of Truth
       として管理・変換元に使用</li>
       </ul>
-      <h2 id="deck.gl-と-three.js-の担当分け">deck.gl と Three.js
+      <h2 id="cesiumjs-と-three.js-の担当分け">CesiumJS と Three.js
       の担当分け</h2>
       <table>
       <colgroup>
@@ -168,50 +179,54 @@
       </thead>
       <tbody>
       <tr>
-      <td>2D ベクトル (GeoArrow / FlatBuffers)</td>
-      <td><strong>deck.gl</strong>
-      (<code>GeoJsonLayer（binary）</code>)</td>
-      <td>–</td>
+      <td>2D ベクトル (GeoJSON / GeoParquet / FlatGeobuf)</td>
+      <td><strong>CesiumJS</strong>
+      (<code>GeoJsonDataSource</code> /
+      <code>GeoJsonPrimitive</code>)</td>
+      <td><code>duckdb:</code> / <code>sql:</code>（SQL 絞り込み）</td>
       <td>図面・境界・大容量 2D</td>
       </tr>
       <tr>
-      <td>2D タイル (MVT / XYZ / WMTS)</td>
-      <td><strong>deck.gl</strong> (<code>TileLayer</code>)</td>
+      <td>2D タイル (XYZ / WMTS)</td>
+      <td><strong>CesiumJS</strong> (<code>ImageryLayer</code>)</td>
       <td>–</td>
-      <td>広域地図・航空写真</td>
+      <td>広域地図・航空写真（地形ドレープ可）</td>
       </tr>
       <tr>
       <td>GLB / 3D Tiles</td>
-      <td><strong>deck.gl</strong> (<code>ScenegraphLayer</code> /
-      <code>Tile3DLayer</code>)</td>
+      <td><strong>CesiumJS</strong> (<code>Model</code> /
+      <code>Cesium3DTileset</code>)</td>
       <td><strong>Three.js</strong> (<code>GLTFLoader</code>)</td>
       <td>建機・構造物・都市モデル</td>
       </tr>
       <tr>
       <td>点群 (PLY / LAS / EPT)</td>
-      <td><strong>deck.gl</strong> (<code>PointCloudLayer</code>)</td>
+      <td><strong>CesiumJS</strong> (<code>Cesium3DTileset</code>
+      pnts)</td>
       <td><strong>Three.js</strong> (<code>Points</code> / Potree)</td>
       <td>測量・LiDAR 点群</td>
       </tr>
       <tr>
       <td>3DGS (PLY / SPZ / Splat)</td>
       <td><strong>Three.js</strong> 専用レンダラー</td>
-      <td><strong>deck.gl</strong> (カメラ同期)</td>
+      <td><strong>CesiumJS</strong> (カメラ同期)</td>
       <td>写真測量・ニューラル表現</td>
       </tr>
       <tr>
       <td>管理データ (GPKG / FGDB)</td>
-      <td>Web Worker → 変換</td>
+      <td><code>duckdb:</code>（<code>ST_Read</code>）または Web
+      Worker → 変換</td>
       <td>–</td>
       <td>正データ保持・変換元</td>
       </tr>
       </tbody>
       </table>
       <ul>
-      <li><strong>deck.gl</strong>：2D/3D Tiles/Buffers を同一 GPU
-      コンテキストでゼロコピー描画</li>
+      <li><strong>CesiumJS</strong>：グローブ・地形・3D
+      Tiles・ベクター・イメージリを同一 Scene / 深度バッファで描画</li>
       <li><strong>Three.js</strong>：点群・3DGS・高度な GLB
-      表現を補完。deck.gl とカメラを同期させて重ねる</li>
+      表現を補完。別 canvas を重ね、<code>postRender</code> で
+      CesiumJS のカメラ行列を同期させる</li>
       </ul>
       <h2 id="d-データ">2D データ</h2>
       <h3 id="d-データ整理">2D データ整理</h3>
@@ -235,25 +250,36 @@
       <tbody>
       <tr>
       <td>数千〜数万件の 2D図面・境界</td>
-      <td><strong>FlatBuffers / GeoArrow</strong></td>
+      <td><strong>GeoParquet / FlatGeobuf</strong></td>
       <td>🏆 最推奨</td>
-      <td>ゼロコピーで GPU
-      バッファへ直結。数十万〜数百万のベクター可視化</td>
-      <td>–</td>
+      <td>列指向バイナリ・空間インデックス。<code>geoparquet:</code>
+      / <code>flatgeobuf:</code> でブラウザ内デコードし GeoJSON
+      正規化。変換不要で置くだけ</td>
+      <td>全件読み込みのため超大規模は向かない</td>
+      </tr>
+      <tr>
+      <td>大規模・条件絞り込み・表示範囲連動</td>
+      <td><strong>GeoParquet + <code>duckdb:</code> /
+      <code>sql:</code></strong></td>
+      <td>🏆 大規模向け</td>
+      <td>述語プッシュダウン・row group スキップ・列プルーニング・<code>bbox=auto</code>
+      で「見ている範囲だけ読む」。検索は常に全件</td>
+      <td>DuckDB-WASM の初期ロードが重い（SW キャッシュで緩和）</td>
       </tr>
       <tr>
       <td>広域・大量の全国地図・航空写真</td>
-      <td><strong>MVT / XYZ / WMTS</strong></td>
+      <td><strong>XYZ / WMTS</strong>（MVT は将来候補）</td>
       <td>🥈</td>
-      <td>GIS/Web 標準。圧縮・サイズ削減に強い</td>
-      <td>デコードに CPU を使う</td>
+      <td>GIS/Web 標準。<code>ImageryLayer</code> で地形ドレープ可</td>
+      <td>MVT ベクタータイルは現行未実装</td>
       </tr>
       <tr>
       <td>管理・連携用の正データ</td>
       <td><strong>GPKG (GeoPackage)</strong></td>
       <td>✅ 管理用</td>
-      <td>Single Source of Truth。属性・トポロジ保持に優秀</td>
-      <td>ブラウザ直接描画は向かない（SQLite + WKB パース）</td>
+      <td>Single Source of Truth。属性・トポロジ保持に優秀。<code>duckdb:</code>
+      の <code>ST_Read</code> で直接読込も可</td>
+      <td>大規模データは描画用形式への変換を推奨</td>
       </tr>
       <tr>
       <td>Esri 資産の管理・連携</td>
@@ -272,11 +298,12 @@
       </tbody>
       </table>
       <ul>
-      <li>KASUGAI Canvas 描画層：<strong>GPKG は Web Worker で、FGDB は
-      ogr2ogr 等のサーバー or 事前変換で FlatBuffers / MVT
-      に変換</strong>し、<code>deck.gl</code> の
-      <code>GeoJsonLayer（binary）</code> / <code>TileLayer</code>
-      へゼロコピーで渡す</li>
+      <li>KASUGAI Canvas 描画層：<strong>GPKG は <code>duckdb:</code>
+      の <code>ST_Read</code> で直接読み込むか GeoParquet/FlatGeobuf
+      へ変換、FGDB は ogr2ogr 等のサーバー or 事前変換で GeoParquet /
+      FlatGeobuf / GeoJSON に変換</strong>し、GeoJSON
+      正規化経路（<code>GeoJsonDataSource</code> /
+      <code>GeoJsonPrimitive</code>）へ流す</li>
       </ul>
       <h2 id="d-データ-1">3D データ</h2>
       <h3 id="d-データ整理-1">3D データ整理</h3>
@@ -346,16 +373,18 @@
       <tbody>
       <tr>
       <td><strong>GLB / 3D Tiles</strong></td>
-      <td><code>deck.gl</code> (<code>ScenegraphLayer</code> /
-      <code>Tile3DLayer</code>) または <code>Three.js</code>
+      <td><code>CesiumJS</code> (<code>Model</code> /
+      <code>Cesium3DTileset</code>) または <code>Three.js</code>
       (<code>GLTFLoader</code> / <code>3DTilesRenderer</code>)</td>
-      <td>loaders.gl 経由でゼロコピー</td>
+      <td><code>3dtiles:</code> 行で URL 指定。LOD・ストリーミングは
+      CesiumJS が管理</td>
       </tr>
       <tr>
       <td><strong>点群 (PLY / LAS)</strong></td>
-      <td><code>deck.gl</code> (<code>PointCloudLayer</code>) または
+      <td><code>CesiumJS</code> (<code>Cesium3DTileset</code>
+      pnts) または
       <code>Three.js</code> (<code>Points</code> / Potree)</td>
-      <td>PLY/LAZ → 変換 → バッファ渡し</td>
+      <td>PLY/LAZ → 3D Tiles 変換 → <code>3dtiles:</code> で読み込み</td>
       </tr>
       <tr>
       <td><strong>3DGS (PLY / SPZ)</strong></td>
@@ -374,7 +403,7 @@
       形式</strong>：ブラウザ向け大規模点群配信。八分木階層で LOD
       制御</li>
       <li>大量点群は <strong>EPT</strong> や <strong>3D Tiles 点群（pnts
-      / 1.1 glTF）</strong> に変換して <code>deck.gl</code> /
+      / 1.1 glTF）</strong> に変換して <code>Cesium3DTileset</code> /
       <code>Three.js</code> で描画すると安定</li>
       </ul>
       <h3 id="d-gaussian-splatting3dgs">3D Gaussian
@@ -391,28 +420,29 @@
       .sog</strong>：各ビューアー向けの圧縮・最適化形式</li>
       </ul></li>
       <li>KASUGAI Canvas では <strong>Three.js</strong>
-      側で専用レンダラーを使い、<code>deck.gl</code>
-      レイヤーとカメラ同期を行う</li>
+      側で専用レンダラーを使い、オーバーレイ canvas +
+      <code>postRender</code> で CesiumJS とカメラ同期を行う</li>
       </ul>
       <h2 id="地形demの扱い">地形（DEM）の扱い</h2>
       <ul>
-      <li><strong>deck.gl <code>TerrainLayer</code></strong>：標高PNG
-      (XYZ / WMTS) を読み込み、GPU
-      でリアルタイムにメッシュ化。国土地理院標高タイルを使う場合は RGB →
+      <li><strong>CesiumJS <code>TerrainProvider</code></strong>：KASUGAI
+      Canvas は独自実装の
+      <code>GsiDemTerrainProvider</code>（<code>HeightmapTerrainData</code>
+      を返す）で地理院標高PNG (XYZ)
+      を直接地形化する。国土地理院標高タイルは RGB →
       標高値（x = 2^16R + 2^8G + B、u は標高分解能
-      0.01m）に変換する必要がある。ただし GSI 標高タイルは
-      <code>x &lt; 2^23</code> のとき
-      <code>h = xu</code>、<code>x = 2^23</code> のとき
-      NA、<code>x &gt; 2^23</code> のとき <code>h = (x - 2^24)u</code>
-      という符号付き・条件分岐形式のため、deck.gl の
-      <code>elevationDecoder</code> だけでは扱えず、事前変換または GSI
-      専用レイヤーが必要</li>
+      0.01m）かつ符号付き・条件分岐形式（<code>x &lt; 2^23</code>
+      のとき <code>h = xu</code>、<code>x = 2^23</code> のとき
+      NA、<code>x &gt; 2^23</code> のとき <code>h = (x - 2^24)u</code>）だが、この変換は
+      <code>gsiDecodeHeight</code> として実装済み。設定タブで
+      Re:Earth Terrain（楕円体高 / 標高）・地理院 5m+10m・地理院 1m
+      を切替可能</li>
       <li><strong>Three.js</strong>：DEM 画像から
       <code>PlaneGeometry</code> + displacement map / 頂点シェーダーで
-      terrain メッシュを生成</li>
+      terrain メッシュを生成する代替経路（オーバーレイ canvas 上）</li>
       <li><strong>PLATEAU 3D Tiles</strong>：3D
       都市モデル（建物・地形等）を LOD 付きで配信しているので
-      <code>Tile3DLayer</code> / Three.js <code>3DTilesRenderer</code>
+      <code>3dtiles:</code> 行 → <code>Cesium3DTileset</code>
       でそのまま表示</li>
       <li>生の DEM（GeoTIFF / CSV 等）は、Web Worker またはサーバー側で
       <strong>標高PNG / GLB / 3D Tiles</strong> に変換してから描画</li>
@@ -423,17 +453,18 @@
       <pre class="text"><code>現場データ（GPKG / FGDB / GeoJSON / GLB / LAS / PLY / SPZ）
     ↓
 ① 変換
-    ブラウザ内（Web Worker / WASM）: sql.js / Arrow-JS / geopackage-js
+    ブラウザ内（Web Worker / WASM）: DuckDB-WASM / hyparquet / flatgeobuf
     サーバー or 事前変換: ogr2ogr / Potree Converter / entwine
     ↓
 ② 描画用フォーマット
-    GeoArrow / FlatBuffers / MVT / 3D Tiles / EPT / GLB
+    GeoJSON / GeoParquet / FlatGeobuf / XYZ / 3D Tiles / GLB
     ↓
 ③ 配信・キャッシュ
     OPFS / IndexedDB / S3 / MinIO / CDN
     ↓
 ④ 描画
-    deck.gl / Three.js（VRAM ゼロコピー）</code></pre>
+    CesiumJS（GeoJsonDataSource / GeoJsonPrimitive / ImageryLayer /
+    Cesium3DTileset / TerrainProvider）+ Three.js（オーバーレイ）</code></pre>
       <table>
       <colgroup>
       <col style="width: 21%" />
@@ -456,7 +487,7 @@
       <tr>
       <td>変換</td>
       <td>ブラウザ内 or 事前変換</td>
-      <td>2D 図面 → GeoArrow/FlatBuffers、点群 → EPT/3D Tiles、3DGS →
+      <td>2D 図面 → GeoParquet/FlatGeobuf、点群 → EPT/3D Tiles、3DGS →
       SPZ</td>
       </tr>
       <tr>
@@ -466,9 +497,10 @@
       </tr>
       <tr>
       <td>描画</td>
-      <td>GPU 直接描画</td>
-      <td>deck.gl <code>GeoJsonLayer（binary）</code> /
-      <code>TileLayer</code> / <code>Tile3DLayer</code>、Three.js</td>
+      <td>GPU 描画</td>
+      <td>CesiumJS <code>GeoJsonDataSource</code> /
+      <code>GeoJsonPrimitive</code> / <code>ImageryLayer</code> /
+      <code>Cesium3DTileset</code>、Three.js</td>
       </tr>
       </tbody>
       </table>
@@ -476,11 +508,11 @@
       <li>点群・3DGS・生 DEM は
       <strong>ブラウザ内で変換するのではなく、事前に 3D Tiles / EPT /
       SPZ へ変換</strong> しておくのが現実的</li>
-      <li><strong>GPKG</strong> は <strong>Web Worker / sql.js + WKB
-      パーサー 経由で FlatBuffers / MVT</strong>
-      に、<strong>FGDB</strong> は <strong>ogr2ogr 等のサーバー or
-      事前変換で GeoJSON/CSV 経由 FlatBuffers / MVT</strong>
-      に変換し、<code>deck.gl</code> へゼロコピーで渡す</li>
+      <li><strong>GPKG</strong> は <strong><code>duckdb:</code> の
+      <code>ST_Read</code>（DuckDB-WASM spatial 拡張）で直接読み込む</strong>
+      か事前変換、<strong>FGDB</strong> は <strong>ogr2ogr 等のサーバー or
+      事前変換で GeoParquet / FlatGeobuf / GeoJSON</strong>
+      に変換し、GeoJSON 正規化経路へ流す</li>
       <li>変換済みデータは <strong>OPFS や IndexedDB</strong>
       にキャッシュし、次回起動時の読み込みを短縮する</li>
       </ul>
@@ -512,7 +544,7 @@
       <td>メインデータ管理</td>
       </tr>
       <tr>
-      <td>2D Buffers (GeoArrow/FlatBuffers)</td>
+      <td>2D ベクター (GeoParquet / FlatGeobuf / GeoJSON)</td>
       <td>Re:Earth or S3互換</td>
       <td>アセット保存</td>
       </tr>
@@ -531,13 +563,13 @@
       <h3 id="ハイブリッド配信フロー">ハイブリッド配信フロー</h3>
       <pre class="text"><code>データ入力/管理
 ├── 現場メタデータ ──&gt; Re:Earth
-├── 2D図面(.arrow) ──&gt; Re:Earth / S3
+├── 2D図面(.parquet/.fgb) ──&gt; Re:Earth / S3
 ├── 3D Tiles/点群 ───&gt; S3/MinIO
 └── 3DGS (.ply/.spz) ──&gt; S3/MinIO
          ↓ (URL/API)
-KASUGAI Canvas (deck.gl + Three.js)
+KASUGAI Canvas (CesiumJS + Three.js)
     ↓
-ゼロコピーで VRAM 転送・爆速描画</code></pre>
+ブラウザ内デコード → GeoJSON 正規化 → GPU 描画</code></pre>
     </main>
   </div>
 </body>
