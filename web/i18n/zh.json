@@ -33,6 +33,7 @@
   "vector.status.loaded": "已加载 {count} 个属性",
   "vector.status.none": "无带属性的矢量",
   "vector.unloadedSuffix": " (未加载)",
+  "vector.visibleLayers": "可见图层",
   "vector.noMatch": "无匹配项",
   "search.title": "地址搜索",
   "search.provider.gsi": "国土地理院",

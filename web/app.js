@@ -1410,14 +1410,72 @@ function buildVectorSearchIndex() {
   // 直接構築されるため、ここでは登録しない
 }
 
+// 表示中(visible)の索引済みレイヤーIDを返す。「表示レイヤ」検索の対象
+// (表示中レイヤーは描画のために必ずロード済みなので索引にも載っている)
+function getVisibleIndexedLayerIds() {
+  return Object.keys((vectorSearchData && vectorSearchData.layers) || {}).filter(id => {
+    const item = layerState.get(id);
+    return item && item.visible;
+  });
+}
+
+// 複数レイヤーの索引を1つのソース(attributes/valuesByAttr/featureByAttr)に集約する
+function aggregateVectorSources(layerIds) {
+  const attrSet = new Set();
+  const valuesMap = {};
+  const featureMap = {};
+  for (const id of layerIds) {
+    const src = vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[id];
+    if (!src) continue;
+    for (const attr of src.attributes || []) {
+      attrSet.add(attr);
+      if (!valuesMap[attr]) valuesMap[attr] = new Set();
+      if (!featureMap[attr]) featureMap[attr] = {};
+      for (const val of src.valuesByAttr[attr] || []) {
+        valuesMap[attr].add(val);
+        const pos = src.featureByAttr && src.featureByAttr[attr] && src.featureByAttr[attr][val];
+        if (pos && !featureMap[attr][val]) featureMap[attr][val] = pos;
+      }
+    }
+  }
+  const attributes = [...attrSet].sort((a, b) => a.localeCompare(b));
+  const valuesByAttr = {};
+  for (const attr of attributes) valuesByAttr[attr] = [...valuesMap[attr]].sort((a, b) => a.localeCompare(b));
+  return { attributes, valuesByAttr, featureByAttr: featureMap };
+}
+
 function getCurrentVectorSource() {
   try {
     if (!vectorSearchData) return null;
     const layerSelect = document.querySelector("#vector-layer");
     const layerId = layerSelect ? layerSelect.value : "__all__";
     if (layerId === "__all__") return vectorSearchData.all || null;
+    if (layerId === "__visible__") return aggregateVectorSources(getVisibleIndexedLayerIds());
     return (vectorSearchData.layers && vectorSearchData.layers[layerId]) || null;
   } catch (e) { return null; }
+}
+
+// 「全選択」検索の実行前に、未ロードの非クエリ系ベクターレイヤーをすべて読み込んで
+// 索引する。読み込みは検索の実行時のみ(選択しただけでは読まない)。失敗レイヤーは
+// vectorSearchLoadFailed で再試行を抑止する。読み込みが発生した場合 true を返す
+async function ensureAllVectorSourcesIndexed() {
+  const pending = getVectorSearchPendingLayers().filter(item => !vectorSearchLoadFailed.has(item.id));
+  if (!pending.length) return false;
+  const statusEl = document.querySelector("#vector-search-status");
+  if (statusEl) statusEl.textContent = t("common.loading");
+  await Promise.all(pending.map(async item => {
+    try {
+      const dec = vectorDecoders.get(item.type);
+      const src = await loadVectorSourceCached(item, dec);
+      if (src && Array.isArray(src.features)) vectorSearchLoadedSources.set(item.id, src);
+    } catch (e) {
+      vectorSearchLoadFailed.add(item.id);
+      console.warn("[vector-search] layer load failed:", item.id, e);
+    }
+  }));
+  buildVectorSearchIndex();
+  updateVectorSearchUI();
+  return true;
 }
 
 // 検索パネルのレイヤー選択肢に出す未ロード(未索引)レイヤー。
@@ -1448,6 +1506,7 @@ function updateVectorSearchUI() {
   const prevValue = layerSelect.value;
   const unloadedSuffix = t("vector.unloadedSuffix");
   let html = '<option value="__all__">' + escapeHtml(t("common.all")) + '</option>';
+  html += '<option value="__visible__">' + escapeHtml(t("vector.visibleLayers")) + '</option>';
   for (const o of opts) {
     html += '<option value="' + escapeHtml(String(o.id)) + '">' + escapeHtml(o.title || o.id) + '</option>';
   }
@@ -4788,7 +4847,7 @@ function setupVectorSearch() {
   const vectorTextSearchBtn = document.querySelector("#vector-text-search-btn");
   const vectorSearchResults = document.querySelector("#vector-search-results");
 
-  function performVectorTextSearch() {
+  async function performVectorTextSearch() {
     try {
       if (!vectorSearchResults || !vectorSearchData) return;
       const q = vectorSearchText ? String(vectorSearchText.value).trim() : "";
@@ -4796,9 +4855,16 @@ function setupVectorSearch() {
       const query = q.toLowerCase();
       const targetLayerId = (vectorLayer && vectorLayer.value) ? vectorLayer.value : "__all__";
       const targetAttr = (vectorAttr && vectorAttr.value) ? vectorAttr.value : "__all__";
+      // 「全選択」は非表示・未ロードのレイヤーも含めた全レイヤーが対象。
+      // 検索の実行時に未ロード分をまとめて読み込んでから索引・検索する
+      if (targetLayerId === "__all__") await ensureAllVectorSourcesIndexed();
       const data = vectorSearchData;
       const res = [];
-      const layerIds = (targetLayerId === "__all__") ? ["__all__"] : [targetLayerId];
+      // 「表示レイヤ」は表示中レイヤーだけを対象にレイヤー単位で検索する
+      // (結果行にレイヤー名が出る)
+      const layerIds = (targetLayerId === "__all__") ? ["__all__"]
+        : (targetLayerId === "__visible__") ? getVisibleIndexedLayerIds()
+        : [targetLayerId];
       for (const layerId of layerIds) {
         try {
           const source = (layerId === "__all__") ? data.all : (data.layers && data.layers[layerId]);

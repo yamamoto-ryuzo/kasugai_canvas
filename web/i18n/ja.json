@@ -33,6 +33,7 @@
   "vector.status.loaded": "{count} 属性を読み込みました",
   "vector.status.none": "属性付きベクトルがありません",
   "vector.unloadedSuffix": " (未読込)",
+  "vector.visibleLayers": "表示レイヤ",
   "vector.noMatch": "該当なし",
   "search.title": "住所検索",
   "search.provider.gsi": "地理院",

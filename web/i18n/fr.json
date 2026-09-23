@@ -33,6 +33,7 @@
   "vector.status.loaded": "{count} attributs chargés",
   "vector.status.none": "Aucun vecteur avec attributs",
   "vector.unloadedSuffix": " (non chargé)",
+  "vector.visibleLayers": "Couches visibles",
   "vector.noMatch": "Aucune correspondance",
   "search.title": "Recherche d'adresse",
   "search.provider.gsi": "GSI",

@@ -33,6 +33,7 @@
   "vector.status.loaded": "속성 {count}개를 로드했습니다",
   "vector.status.none": "속성이 있는 벡터가 없습니다",
   "vector.unloadedSuffix": " (미로드)",
+  "vector.visibleLayers": "표시 레이어",
   "vector.noMatch": "일치하는 항목 없음",
   "search.title": "주소 검색",
   "search.provider.gsi": "국토지리원",
