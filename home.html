@@ -33,7 +33,7 @@
 
       <section>
         <h2>🗂️ 対応データ形式</h2>
-        <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。ベクター系は <strong>全件読み込み系</strong>（全件 entity 化・ベクター検索対象）と <strong>クエリ系</strong>（SQL 絞り込み・表示範囲のみ描画・検索は常に全件）の2系統に分かれます。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
+        <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。ベクター系は <strong>全件読み込み系</strong>（全件読み込み・ベクター検索対象）と <strong>クエリ系</strong>（SQL 絞り込み・表示範囲のみ描画・検索は常に全件）の2系統に分かれます。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
 
         <h3 style="margin:14px 0 8px;">ネイティブ・タイル系</h3>
         <div class="features">
@@ -52,7 +52,7 @@
         </div>
 
         <h3 style="margin:14px 0 8px;">ベクター：全件読み込み系</h3>
-        <p>ファイル全件を entity 化する経路です。読み込みは必要となった初回（表示ON、または属性・値一覧での選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。</p>
+        <p>ファイル全件を読み込んで描画する経路です（既定は entity 化・<code>render=primitive</code> でバッチ描画も可）。読み込みは必要となった初回（表示ON、属性・値一覧やベクター検索パネルでの選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧・検索では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。</p>
         <div class="features">
           <div class="feature-card">
             <h3>📍 GeoJSON <span class="badge">対応</span></h3>
@@ -438,8 +438,8 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
         </div>
         <div class="url-box">
           <h3>ベクターデータ形式の使い分け</h3>
-          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>）はファイル全件を entity 化し、ベクター検索パネルで属性検索できます。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。</p>
-          <pre><code>【全件読み込み系】全件 entity 化・ベクター検索パネル対象
+          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>）はファイル全件を読み込んで描画し、ベクター検索パネルで属性検索できます。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。</p>
+          <pre><code>【全件読み込み系】全件読み込み・ベクター検索パネル対象
   小〜中規模・全件表示        → geojson:（事前変換が最速・最単純）
   中規模・Parquet をそのまま  → geoparquet:（利便性重視・変換不要で置くだけ）
   中規模・FlatGeobuf をそのまま → flatgeobuf:（変換不要・ストリームで逐次デコード）
@@ -476,7 +476,7 @@ format=read        → Shapefile / GeoPackage / FlatGeobuf(.fgb) 等（ST_Read�
   ・entity を作らずジオメトリだけをまとめて描画するため大量地物でも軽い
   ・地形ドレープ非対応(高さ0の楕円体面に描画。起伏のある地形では地表に埋まる)
   ・属性はクリック時に picked.properties から表示。ベクター検索の索引対象(描画に使った GeoJSON から索引を構築)</code></pre>
-          <p><strong>検索は常に全件対象</strong>：<code>duckdb:</code>/<code>sql:</code> の検索・絞り込みは ⏷ の SQL フィルターに一本化しており、常にファイル全件を対象に評価します（読み込み済みの一部だけを対象にするベクター検索パネルには登録されません）。<code>bbox=auto</code> と <code>where=</code> を併用した場合、表示は「検索条件 ∩ 表示範囲」になりますが、検索自体は全件に対して行われ、コンソールに「検索ヒット全 N 件 / 表示範囲内 M 件」と併記されます。</p>
+          <p><strong>検索は常に全件対象</strong>：<code>duckdb:</code>/<code>sql:</code> の検索・絞り込みは ⏷ の SQL フィルターに一本化しており、常にファイル全件を対象に評価します（読み込み済み地物を対象にするベクター検索パネルには登録されません）。<code>bbox=auto</code> と <code>where=</code> を併用した場合、表示は「検索条件 ∩ 表示範囲」になりますが、検索自体は全件に対して行われ、コンソールに「検索ヒット全 N 件 / 表示範囲内 M 件」と併記されます。</p>
           <p><strong>属性値一覧</strong>：属性値一覧ウィジェットのレイヤー選択には <code>duckdb:</code>/<code>sql:</code> を含む全ベクターレイヤーが表示されます。選択肢はレイヤー定義から即座に作られるため、データの読み込み完了を待たず起動直後から選択可能です。一覧は読み込み済み地物ではなく DuckDB へ直接クエリして作られ、<code>where=</code> は適用する一方 <code>bbox</code>/<code>limit=</code> は適用せず LIMIT 無しの全件を取得します。ウィジェット内の検索文字は全属性列への <code>ILIKE</code> 述語として SQL に変換されるため、常にファイル全件が検索対象です（表への描画は先頭1000行まで）。</p>
           <p><strong>Parquet 最適化</strong>：クエリ結果のジオメトリは WKB バイナリで受け取ります（テキスト変換を省き転送量・パース時間・ピークメモリを削減）。<code>columns=列名,列名</code> で読み込む属性列を絞る列プルーニングが可能です。<code>bbox=auto</code> 時は GeoParquet 1.1 の <code>covering</code> bbox 列（または慣用名の xmin/xmax/ymin/ymax 列、<code>covering=</code> で明示指定も可）への範囲述語を優先的に使うため、Parquet の row group 統計スキップが効き、表示範囲外のデータは読み込み自体を省略できます。</p>
         </div>
