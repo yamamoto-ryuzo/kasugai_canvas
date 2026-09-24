@@ -359,11 +359,20 @@ function getProjectBaseUrl() {
   return `projects/${encodeURIComponent(currentProjectId || "default")}/`;
 }
 
+// github.com の /raw/・/blob/ URL は raw.githubusercontent.com へのリダイレクト時に
+// Access-Control-Allow-Origin が付かずブラウザの CORS fetch が失敗するため、
+// 配信ドメイン直指定に正規化する(レイヤー・スタイル・凡例画像等すべてに効く)
+function normalizeRemoteUrl(url) {
+  const m = /^https?:\/\/github\.com\/([^/]+)\/([^/?#]+)\/(?:raw|blob)\/(.+)$/i.exec(url);
+  if (m) return `https://raw.githubusercontent.com/${m[1]}/${m[2]}/${m[3]}`;
+  return url;
+}
+
 function resolveProjectUrl(url) {
   if (typeof url !== "string") return url;
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return trimmed;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return normalizeRemoteUrl(trimmed);
   if (trimmed.startsWith("/")) return trimmed;
   let path = trimmed;
   if (path.startsWith("./")) path = path.slice(2);
