@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [Unreleased]
+
+### Added
+
+- QGIS レイヤースタイル（.qml・QGIS 4 以降対象）を全ベクター系行タイプで適用できる `style=QMLファイルURL` オプションを追加（`web/qml-style.js` 新設）。singleSymbol / categorizedSymbol / graduatedSymbol / RuleBased の各レンダラ、SimpleMarker（canvas 生成・SVG/フォントマーカー近似）・SimpleLine（破線対応）・SimpleFill（単色・ハッチ/ドット/画像パターン）、`<labeling>` のラベル（フォント・ハロー）、データ定義プロパティ・縮尺依存ルールをカバー。entity（GeoJsonDataSource）と primitive（GeoJsonPrimitive・BufferMaterial を featureId 単位で適用）の両描画経路に対応。未対応要素はフォールバックしコンソールに警告。取得は直接 fetch（CORS 前提）で、失敗時はローカルサーバーの `/api/fetch` へフォールバック。`.kasc` プロジェクトからの相対パスも解決
+- `gpkg:` / `geopackage:` 行タイプを追加。GeoPackage を sql.js（SQLite WASM・CDN 遅延ロード）で直接開き、地物テーブルを全件 GeoJSON 化して描画。`table=地物テーブル名` で複数テーブルから選択可。QGIS が「データベースに保存」する `layer_styles` テーブルの QML を `useAsDefault` 優先で読み取り自動適用（`style=` 明示指定が優先）。`duckdb:` で `.gpkg` 拡張子・`format=gpkg` を指定した場合も同経路へ振り分け（DuckDB spatial の `ST_Read` は非 COI 環境でスレッド生成に失敗するため不使用）
+- AI ツール `addLayer` の `type` に `gpkg`/`geopackage` を追加
+
+### Changed
+
+- 既定プロジェクト（`web/projects/default/kasugai_canvas.kasc`）に GeoPackage サンプル3件（`DATA/行政区域.gpkg`・Ian 洪水 GPKG の2テーブル）を `| off` で追加
+
 ## [4.16.0] - 2026-09-24
 
 ### Changed
