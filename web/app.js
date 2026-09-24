@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { initI18n, t, applyI18n, setLanguage, getLanguage, SUPPORTED_LANGUAGES, LANGUAGE_NAMES } from "./i18n.js";
 import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-style.js";
+import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
 
 await initI18n();
 applyI18n();
@@ -126,8 +127,15 @@ const qmlStyleCache = new Map();
 const vectorSearchLoadedSources = new Map();
 // 検索用オンデマンド読み込みに失敗したレイヤー。選択肢変更のたびに再試行しない
 const vectorSearchLoadFailed = new Set();
+// デコーダーの query 指定でクエリ系レイヤーかを判定する。query は真値
+// (常にクエリ系: duckdb:/sql:)または item を受け取る判定関数
+// (gpkg:/geopackage: は where=/limit=/columns=/bbox=auto の指定時のみクエリ系)
+function isQueryDecoder(decoder, item) {
+  if (!decoder || !decoder.query) return false;
+  return typeof decoder.query === "function" ? !!decoder.query(item) : true;
+}
 function loadVectorSourceCached(item, decoder) {
-  if (decoder?.query) return decoder.load(item);
+  if (isQueryDecoder(decoder, item)) return decoder.load(item);
   if (item.data) return Promise.resolve(item.data);
   const key = `${item.id}|${item.url || ""}`;
   let promise = vectorSourceCache.get(key);
@@ -804,7 +812,7 @@ function renderLayerList() {
       <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
-          const filterButton = vectorDecoders.get(layer.type)?.query
+          const filterButton = isQueryDecoder(vectorDecoders.get(layer.type), layer)
             ? `<button class="layer-filter" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.filter"))}" aria-label="${escapeHtml(t("layer.filter"))}">⏷</button>`
             : "";
           return `
@@ -1417,7 +1425,7 @@ function buildVectorSearchIndex() {
     // 検索は常にファイル全件を対象とする SQL フィルター(⏷)に一本化する
     const layerItem = layerState.get(id);
     const layerDecoder = layerItem && vectorDecoders.get(layerItem.type);
-    if (layerDecoder && layerDecoder.query) continue;
+    if (isQueryDecoder(layerDecoder, layerItem)) continue;
     const attrSet = new Set();
     const valuesMap = {};
     const featureMap = {};
@@ -1445,7 +1453,7 @@ function buildVectorSearchIndex() {
     const source = item && (item.geojsonSource || vectorSearchLoadedSources.get(id));
     if (!item || indexedIds.has(id) || !source?.features?.length) continue;
     const layerDecoder = vectorDecoders.get(item.type);
-    if (layerDecoder?.query) continue;
+    if (isQueryDecoder(layerDecoder, item)) continue;
     const attrSet = new Set();
     const valuesMap = {};
     const featureMap = {};
@@ -1546,7 +1554,7 @@ function getVectorSearchPendingLayers() {
   return getOrderedLayerItems().filter(item => {
     if (indexedIds.has(item.id)) return false;
     const dec = vectorDecoders.get(item.type);
-    if (dec && dec.query) return false;
+    if (isQueryDecoder(dec, item)) return false;
     return item.type === "geojson" || item.type === "layer" || item.type === "entities" || !!dec;
   });
 }
@@ -1612,56 +1620,8 @@ function loadHyparquet() {
   return hyparquetLoaderPromise;
 }
 
-// WKB(ISO/EWKB)を GeoJSON ジオメトリに変換する
-function wkbToGeoJsonGeometry(bytes) {
-  if (!bytes || !bytes.byteLength) return null;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let pos = 0;
-  const readGeometry = () => {
-    const littleEndian = view.getUint8(pos) === 1; pos += 1;
-    const raw = view.getUint32(pos, littleEndian); pos += 4;
-    let base = raw & 0xffff;
-    let hasZ = (raw & 0x80000000) !== 0;
-    let hasM = (raw & 0x40000000) !== 0;
-    const hasSrid = (raw & 0x20000000) !== 0;
-    if (!hasZ && !hasM && raw >= 1000) {
-      const variant = Math.floor(raw / 1000);
-      hasZ = variant === 1 || variant === 3;
-      hasM = variant === 2 || variant === 3;
-      base = raw % 1000;
-    }
-    if (hasSrid) pos += 4;
-    const count = () => { const n = view.getUint32(pos, littleEndian); pos += 4; return n; };
-    const point = () => {
-      const c = [view.getFloat64(pos, littleEndian), view.getFloat64(pos + 8, littleEndian)];
-      pos += 16;
-      if (hasZ) { c.push(view.getFloat64(pos, littleEndian)); pos += 8; }
-      if (hasM) pos += 8; // M 値は描画しない
-      return c;
-    };
-    const points = () => { const a = new Array(count()); for (let i = 0; i < a.length; i++) a[i] = point(); return a; };
-    const rings = () => { const a = new Array(count()); for (let i = 0; i < a.length; i++) a[i] = points(); return a; };
-    const children = () => { const a = new Array(count()); for (let i = 0; i < a.length; i++) a[i] = readGeometry(); return a; };
-    switch (base) {
-      case 1: return { type: "Point", coordinates: point() };
-      case 2: return { type: "LineString", coordinates: points() };
-      case 3: return { type: "Polygon", coordinates: rings() };
-      case 4: return { type: "MultiPoint", coordinates: children().map(g => g && g.coordinates) };
-      case 5: return { type: "MultiLineString", coordinates: children().map(g => g && g.coordinates) };
-      case 6: return { type: "MultiPolygon", coordinates: children().map(g => g && g.coordinates) };
-      case 7: return { type: "GeometryCollection", geometries: children().filter(Boolean) };
-      default: return null;
-    }
-  };
-  try { return readGeometry(); } catch { return null; }
-}
-
-// ベクター属性値を GeoJSON properties に載せられる形へ正規化する
-function sanitizeVectorPropertyValue(value) {
-  return typeof value === "bigint"
-    ? (Number.isSafeInteger(Number(value)) ? Number(value) : value.toString())
-    : value;
-}
+// WKB→GeoJSON・属性値の正規化・SQL クォートは vector-decode.js に集約し、
+// gpkg-worker.js(Web Worker)からも import する
 
 async function loadGeoParquetAsGeoJson(url) {
   const { parquetReadObjects, parquetMetadata, asyncBufferFromUrl, compressors } = await loadHyparquet();
@@ -1748,83 +1708,97 @@ async function loadFlatGeobufAsGeoJson(url) {
   return { type: "FeatureCollection", features };
 }
 
-// sql.js(SQLite WASM)の遅延ロード。GeoPackage の地物テーブルと
-// layer_styles(QGIS のファイル埋め込みスタイル)を読むために使う。
-// DuckDB spatial の ST_Read は非COI環境でスレッド生成に失敗するため
-// GPKG には使わず、SQLite として直接開く
-let sqlJsPromise = null;
-function loadSqlJs() {
-  if (!sqlJsPromise) {
-    sqlJsPromise = (async () => {
-      const mod = await import("https://cdn.jsdelivr.net/npm/sql.js@1.13.0/+esm");
-      const initSqlJs = mod.default || mod.initSqlJs || mod;
-      return initSqlJs({ locateFile: file => `https://cdn.jsdelivr.net/npm/sql.js@1.13.0/dist/${file}` });
-    })();
-    sqlJsPromise.catch(() => { sqlJsPromise = null; });
+// GeoPackage の読み込みは gpkg-worker.js(module Worker)に委譲する。
+// sql.js(SQLite WASM)の初期化・ファイル全体の fetch・WKB→GeoJSON デコードが
+// すべて別スレッドで走るため、大量地物でも地図操作をブロックしない。
+// Worker は開いた DB を url キーで保持するので、bbox=auto の表示範囲
+// 再クエリや属性一覧のクエリは再ダウンロード無しで実行できる
+let gpkgWorker = null;
+let gpkgWorkerReqId = 0;
+const gpkgWorkerPending = new Map();
+function loadGpkgWorker() {
+  if (!gpkgWorker) {
+    gpkgWorker = new Worker(new URL("./gpkg-worker.js", import.meta.url), { type: "module" });
+    gpkgWorker.onmessage = event => {
+      const data = event.data || {};
+      const pending = gpkgWorkerPending.get(data.reqId);
+      if (!pending) return;
+      gpkgWorkerPending.delete(data.reqId);
+      if (data.error) pending.reject(new Error(data.error));
+      else pending.resolve(data);
+    };
+    gpkgWorker.onerror = event => {
+      const error = new Error(event.message || "gpkg-worker の実行に失敗しました");
+      for (const pending of gpkgWorkerPending.values()) pending.reject(error);
+      gpkgWorkerPending.clear();
+    };
   }
-  return sqlJsPromise;
+  return gpkgWorker;
+}
+function gpkgWorkerCall(cmd, params = {}) {
+  return new Promise((resolve, reject) => {
+    const reqId = ++gpkgWorkerReqId;
+    gpkgWorkerPending.set(reqId, { resolve, reject });
+    loadGpkgWorker().postMessage({ cmd, reqId, ...params });
+  });
+}
+// インスペクター/プロジェクト変更時に Worker が保持する DB を破棄する
+function resetGpkgWorkerDbs() {
+  if (gpkgWorker) gpkgWorker.postMessage({ cmd: "reset", reqId: 0 });
 }
 
-// GeoPackage バイナリ(GPkgBinary)から WKB 部分を切り出す。
-// ヘッダ: 'GP'(2B) + version(1B) + flags(1B) + srs_id(4B) + エンベロープ(0/32/48/64B)。
-// flags bit1-3 がエンベロープ種別(0=無し,1=XY,2=XYZ,3=XYM,4=XYZM)
-function gpkgGeometryToWkb(value) {
-  if (!(value instanceof Uint8Array) || value.length < 8 || value[0] !== 0x47 || value[1] !== 0x50) return null;
-  const envelopeBytes = [0, 32, 48, 48, 64][(value[3] >> 1) & 0x07] ?? 0;
-  const wkb = value.subarray(8 + envelopeBytes);
-  return wkb.length ? wkb : null;
+// gpkg:/geopackage: 行、または duckdb: で .gpkg/format=gpkg を指すレイヤーは
+// DuckDB ではなく sql.js(Worker)経路で読まれる
+function isGpkgBackedItem(item) {
+  if (!item) return false;
+  if (item.type === "gpkg" || item.type === "geopackage") return true;
+  if (item.type === "duckdb") {
+    const format = String(item.format || "").toLowerCase();
+    return format === "gpkg" || /\.gpkg([?#]|$)/i.test(item.url || "");
+  }
+  return false;
 }
 
-// GeoPackage(.gpkg)を sql.js で読み GeoJSON 化する。
+// GeoPackage(.gpkg)を Worker 内の sql.js で読み GeoJSON 化する。
 // table= で地物テーブルを指定、省略時は gpkg_geometry_columns の先頭テーブル。
+// where=/limit=/columns= は SQL の絞り込み、bbox=auto は GPkgBinary
+// エンベロープによる表示範囲フィルター(item.bboxBounds に現在の表示範囲)。
 // QGIS が「データベースに保存」したスタイル(layer_styles テーブルの QML)があれば
 // useAsDefault を優先してコンパイルし item.qmlStyle に保持する
 // (style= 明示指定があるときはそちらを優先し埋め込みは使わない)
 async function loadGeoPackageAsGeoJson(item) {
-  const SQL = await loadSqlJs();
-  const response = await fetch(proxyFetchUrl(item.url, item.proxy));
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const db = new SQL.Database(new Uint8Array(await response.arrayBuffer()));
-  try {
-    let tableName = item.gpkgTable || null;
-    if (!tableName) {
-      const res = db.exec("SELECT table_name FROM gpkg_geometry_columns ORDER BY rowid LIMIT 1");
-      tableName = res[0]?.values?.[0]?.[0] || null;
-    }
-    if (!tableName) throw new Error("地物テーブルが見つかりません");
-    const gres = db.exec(`SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ${quoteSqlLiteral(tableName)} LIMIT 1`);
-    const geomCol = gres[0]?.values?.[0]?.[0] || "geom";
-    const stmt = db.prepare(`SELECT * FROM ${quoteSqlIdent(tableName)}`);
-    const features = [];
-    const cols = stmt.getColumnNames();
-    while (stmt.step()) {
-      const row = stmt.get();
-      const rec = {};
-      cols.forEach((c, i) => { rec[c] = row[i]; });
-      const wkb = gpkgGeometryToWkb(rec[geomCol]);
-      const geometry = wkb ? wkbToGeoJsonGeometry(wkb) : null;
-      if (!geometry) continue;
-      const properties = {};
-      for (const c of cols) if (c !== geomCol) properties[c] = sanitizeVectorPropertyValue(rec[c]);
-      features.push({ type: "Feature", geometry, properties });
-    }
-    stmt.free();
-    // QGIS 埋め込みスタイル: このテーブルの useAsDefault=1 を優先、無ければ先頭行
-    if (!item.styleUrl && !item.qmlStyle) {
-      try {
-        const sres = db.exec(`SELECT styleQML FROM layer_styles WHERE f_table_name = ${quoteSqlLiteral(tableName)} ORDER BY useAsDefault DESC`);
-        const qml = sres[0]?.values?.[0]?.[0];
-        if (typeof qml === "string" && qml.trim()) {
-          const style = compileQmlStyle(qml, item.url);
-          item.qmlStyle = style;
-          if (style?.warnings?.length) console.warn(`GPKG 埋め込みスタイル (${item.url}):`, style.warnings.join(" / "));
-        }
-      } catch (e) { /* layer_styles の無い GPKG はスタイル無しで描画 */ }
-    }
-    return { type: "FeatureCollection", features };
-  } finally {
-    db.close();
+  const res = await gpkgWorkerCall("load", {
+    url: proxyFetchUrl(item.url, item.proxy),
+    table: item.gpkgTable || null,
+    where: item.where || null,
+    limit: item.limit || null,
+    columns: item.columns || null,
+    bbox: item.bboxAuto ? item.bboxBounds : null,
+    wantStyle: !item.styleUrl && !item.qmlStyle,
+  });
+  if (res.total != null) {
+    console.info(`[gpkg] ${item.title}: 検索ヒット全 ${res.total} 件 / 表示範囲内 ${res.count} 件`);
   }
+  if (res.qml) {
+    const style = compileQmlStyle(res.qml, item.url);
+    item.qmlStyle = style;
+    if (style?.warnings?.length) console.warn(`GPKG 埋め込みスタイル (${item.url}):`, style.warnings.join(" / "));
+  }
+  return res.geojson;
+}
+
+// 属性値一覧ウィジェット用: クエリ系扱いの GPKG レイヤーの属性行を Worker 内の
+// DB に直接クエリして取得する。表示用の絞り込み(bbox/limit)は適用せず、
+// where= の全件を対象にする(検索は常に全件検索の方針)
+async function queryGpkgAttributeRows(item, searchText) {
+  const res = await gpkgWorkerCall("attrs", {
+    url: proxyFetchUrl(item.url, item.proxy),
+    table: item.gpkgTable || null,
+    where: item.where || null,
+    columns: item.columns || null,
+    searchText: searchText || "",
+  });
+  return { attributes: res.attributes, rows: res.rows };
 }
 
 // DuckDB-WASM を CDN から遅延ロードし、SQL で絞り込んでから GeoJSON 化する重い経路。
@@ -1878,8 +1852,7 @@ function loadDuckDb() {
   return duckDbLoaderPromise;
 }
 
-const quoteSqlIdent = name => `"${String(name).replace(/"/g, '""')}"`;
-const quoteSqlLiteral = value => `'${String(value).replace(/'/g, "''")}'`;
+// quoteSqlIdent/quoteSqlLiteral は vector-decode.js から import(Worker と共有)
 
 // DESCRIBE で列名と型(大文字)の一覧を取得する
 async function describeDuckDbColumns(conn, selectSql) {
@@ -1937,7 +1910,7 @@ function duckDbGeometryExpr(col, spatial) {
 
 // 表示範囲連動フィルター(bbox=auto / :bbox プレースホルダ)が有効なレイヤーか
 function isViewportQueryLayer(item) {
-  return !!item && ((item.type === "duckdb" && item.bboxAuto) || (item.type === "sql" && /:bbox\b/i.test(item.query || "")));
+  return !!item && (((item.type === "duckdb" || isGpkgBackedItem(item)) && item.bboxAuto) || (item.type === "sql" && /:bbox\b/i.test(item.query || "")));
 }
 
 const DUCKDB_WORLD_ENVELOPE = "ST_MakeEnvelope(-180, -90, 180, 90)";
@@ -2240,8 +2213,10 @@ async function queryDuckDbAttributeRows(item, searchText) {
 const vectorDecoders = new Map([
   ["geoparquet", { load: item => loadGeoParquetAsGeoJson(item.url) }],
   ["flatgeobuf", { load: item => loadFlatGeobufAsGeoJson(item.url) }],
-  ["gpkg", { load: item => loadGeoPackageAsGeoJson(item) }],
-  ["geopackage", { load: item => loadGeoPackageAsGeoJson(item) }],
+  // gpkg: は where=/limit=/columns=/bbox=auto の指定時のみクエリ系になる。
+  // フィルター無しの GPKG は全件読み込み系としてキャッシュ・検索索引の対象のまま
+  ["gpkg", { load: item => loadGeoPackageAsGeoJson(item), query: item => !!(item.where || item.limit || item.columns?.length || item.bboxAuto) }],
+  ["geopackage", { load: item => loadGeoPackageAsGeoJson(item), query: item => !!(item.where || item.limit || item.columns?.length || item.bboxAuto) }],
   ["duckdb", { load: item => loadDuckDbLayerAsGeoJson(item), query: true }],
   ["sql", { load: item => loadDuckDbQueryAsGeoJson(item), query: true }],
 ]);
@@ -2316,10 +2291,16 @@ async function refreshLayersImpl() {
   // 非表示レイヤーのぶんまで温めても実質無料(選択をほぼ即応答にできる)。
   // 未キャッシュ(=実質初回)は ~60MB の実コストがかかるため、表示対象の
   // クエリ系があるときだけ先行する(非表示は選択・表示ONの時点で初期化される)
-  const queryLayers = orderedOtherLayers.filter(item => vectorDecoders.get(item.type)?.query);
-  if (queryLayers.length) {
-    const warmAll = queryLayers.some(item => item.visible) || await duckDbAssetsCached();
+  const queryLayers = orderedOtherLayers.filter(item => isQueryDecoder(vectorDecoders.get(item.type), item));
+  const duckQueryLayers = queryLayers.filter(item => !isGpkgBackedItem(item));
+  if (duckQueryLayers.length) {
+    const warmAll = duckQueryLayers.some(item => item.visible) || await duckDbAssetsCached();
     if (warmAll) void loadDuckDb().catch(() => {});
+  }
+  // GPKG レイヤー(表示中のみ)があれば sql.js Worker を先行初期化する。
+  // wasm は ~1MB と軽いため、表示ONの GPKG がある時だけ温める
+  if (orderedOtherLayers.some(item => item.visible && isGpkgBackedItem(item))) {
+    void gpkgWorkerCall("warm").catch(() => {});
   }
 
   // 3D Tiles ドレープ用プロバイダー定義
@@ -2444,7 +2425,7 @@ async function refreshLayersImpl() {
         }
         // GeoJsonPrimitive ドレープ(実験的グローバル設定): 全件読み込み系ベクターが対象。
         // render= 明示指定のレイヤーとクエリ系(render= で個別指定する形式)は除外する
-        const primitiveDrape = clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && !decoder?.query && !item.renderSpecified;
+        const primitiveDrape = clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && !isQueryDecoder(decoder, item) && !item.renderSpecified;
         const source = await loadVectorSourceCached(item, decoder);
         // fromGeoJson 経路に統一する: ソースは vectorSourceCache の共有取得で二重
         // ダウンロードにならず、保持した GeoJSON が getLayerGeoJson・検索索引に使える
@@ -2653,6 +2634,18 @@ function syncLayerSourceLine(item) {
     if (item.proxy) parts.push("proxy=on");
     if (item.styleUrl) parts.push(`style=${item.styleUrl}`);
     line = `duckdb: ${parts.join(" | ")}`;
+  } else if (item.type === "gpkg" || item.type === "geopackage") {
+    const parts = [item.sourceTitle, item.url || "", item.attribution || ""];
+    if (item.sourceVisible === false) parts.push("off");
+    if (item.where) parts.push(`where=${item.where}`);
+    if (item.limit) parts.push(`limit=${item.limit}`);
+    if (item.columns?.length) parts.push(`columns=${item.columns.join(",")}`);
+    if (item.gpkgTable) parts.push(`table=${item.gpkgTable}`);
+    if (item.bboxAuto) parts.push("bbox=auto");
+    if (item.renderSpecified) parts.push(item.renderPrimitive ? "render=primitive" : "render=entity");
+    if (item.proxy === false) parts.push("proxy=off");
+    if (item.styleUrl) parts.push(`style=${item.styleUrl}`);
+    line = `${item.type}: ${parts.join(" | ")}`;
   } else if (item.type === "sql") {
     line = `sql: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}${item.attribution ? ` | attr=${item.attribution}` : ""}${item.styleUrl ? ` | style=${item.styleUrl}` : ""}`;
   }
@@ -2722,6 +2715,8 @@ function applyInspector(text) {
   const parsedBasemaps = [];
   layerState.clear();
   vectorSourceCache.clear();
+  // gpkg Worker が url キーで開いたままの DB も破棄する(メモリ解放・再取得)
+  resetGpkgWorkerDbs();
   qmlStyleCache.clear();
   vectorSearchLoadedSources.clear();
   vectorSearchLoadFailed.clear();
@@ -2891,6 +2886,22 @@ function applyInspector(text) {
         // table=地物テーブル名: 複数レイヤーを持つ GPKG の読み取り対象を指定
         const tableOpt = parts.find(part => /^table\s*=\s*\S/i.test(part));
         if (tableOpt) item.gpkgTable = tableOpt.slice(tableOpt.indexOf("=") + 1).trim();
+        // GPKG の絞り込みオプション(sql.js に渡す SQLite 式)。
+        // where= の値に | は含められない(行の区切り文字)。
+        // bbox=auto を指定した場合だけクエリ系(表示範囲連動)になる
+        if (type === "gpkg" || type === "geopackage") {
+          const whereOpt = parts.find(part => /^where\s*=\s*\S/i.test(part));
+          if (whereOpt) item.where = whereOpt.slice(whereOpt.indexOf("=") + 1).trim();
+          const limitOpt = parts.find(part => /^limit\s*=\s*\d+/i.test(part));
+          if (limitOpt) {
+            const n = Number(limitOpt.slice(limitOpt.indexOf("=") + 1).trim());
+            if (Number.isInteger(n) && n > 0) item.limit = n;
+          }
+          const colsOpt = parts.find(part => /^(?:columns|cols)\s*=\s*\S/i.test(part));
+          if (colsOpt) item.columns = colsOpt.slice(colsOpt.indexOf("=") + 1).split(",").map(s => s.trim()).filter(Boolean);
+          if (parts.some(part => /^bbox\s*=\s*(auto|on|true|view|viewport)$/i.test(part))) item.bboxAuto = true;
+          item.sourceVisible = !off;
+        }
       }
       layers.push(item);
       layerState.set(id, item);
@@ -5118,7 +5129,7 @@ function setupVectorSearch() {
         if (selItem && !alreadyIndexed && !vectorSearchLoadFailed.has(selId)) {
           const dec = vectorDecoders.get(selItem.type);
           const searchable = selItem.type === "geojson" || selItem.type === "layer" || selItem.type === "entities" || !!dec;
-          if (searchable && !(dec && dec.query)) {
+          if (searchable && !isQueryDecoder(dec, selItem)) {
             const statusEl = document.querySelector("#vector-search-status");
             if (statusEl) statusEl.textContent = t("common.loading");
             loadVectorSourceCached(selItem, dec).then(src => {
@@ -5243,13 +5254,17 @@ function setupVectorSearch() {
     // クエリ系レイヤー(duckdb:/sql:)は読み込み済み entity ではなく DuckDB に直接クエリして全件対象で一覧を作る
     const layerItem = layerState.get(layerId);
     const layerDecoder = layerItem && vectorDecoders.get(layerItem.type);
-    if (layerDecoder && layerDecoder.query) {
-      // DuckDB-WASM 初回初期化は数十秒かかることがあるため読み込み中表示にする
+    if (isQueryDecoder(layerDecoder, layerItem)) {
+      // クエリ系レイヤーはエンジンへの直接クエリで全件対象の一覧を作る。
+      // GPKG は sql.js(Worker)、それ以外は DuckDB-WASM。DuckDB-WASM の
+      // 初回初期化は数十秒かかることがあるため読み込み中表示にする
       vectorAttrWidgetLoading = true;
       renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
       try {
         const searchText = vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "";
-        const result = await queryDuckDbAttributeRows(layerItem, searchText);
+        const result = isGpkgBackedItem(layerItem)
+          ? await queryGpkgAttributeRows(layerItem, searchText)
+          : await queryDuckDbAttributeRows(layerItem, searchText);
         if (!isCurrent()) return;
         vectorAttrWidgetAttributes = result.attributes;
         vectorAttrWidgetRows = result.rows;
@@ -5397,7 +5412,7 @@ function setupVectorSearch() {
     const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
     const item = layerState.get(layerId);
     const dec = item && vectorDecoders.get(item.type);
-    if (dec && dec.query && !withQueryRows) return;
+    if (isQueryDecoder(dec, item) && !withQueryRows) return;
     void buildVectorAttrWidgetRows().then(() => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : ""));
   }
 
@@ -5453,7 +5468,7 @@ function setupVectorSearch() {
       const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
       const li = layerState.get(layerId);
       const dec = li && vectorDecoders.get(li.type);
-      if (dec && dec.query) {
+      if (isQueryDecoder(dec, li)) {
         clearTimeout(attrSearchTimer);
         attrSearchTimer = setTimeout(async () => {
           await buildVectorAttrWidgetRows();

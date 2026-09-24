@@ -9,7 +9,7 @@
 ### Added
 
 - QGIS レイヤースタイル（.qml・QGIS 4 以降対象）を全ベクター系行タイプで適用できる `style=QMLファイルURL` オプションを追加（`web/qml-style.js` 新設）。singleSymbol / categorizedSymbol / graduatedSymbol / RuleBased の各レンダラ、SimpleMarker（canvas 生成・SVG/フォントマーカー近似）・SimpleLine（破線対応）・SimpleFill（単色・ハッチ/ドット/画像パターン）、`<labeling>` のラベル（フォント・ハロー）、データ定義プロパティ・縮尺依存ルールをカバー。entity（GeoJsonDataSource）と primitive（GeoJsonPrimitive・BufferMaterial を featureId 単位で適用）の両描画経路に対応。未対応要素はフォールバックしコンソールに警告。取得は直接 fetch（CORS 前提）で、失敗時はローカルサーバーの `/api/fetch` へフォールバック。`.kasc` プロジェクトからの相対パスも解決
-- `gpkg:` / `geopackage:` 行タイプを追加。GeoPackage を sql.js（SQLite WASM・CDN 遅延ロード）で直接開き、地物テーブルを全件 GeoJSON 化して描画。`table=地物テーブル名` で複数テーブルから選択可。QGIS が「データベースに保存」する `layer_styles` テーブルの QML を `useAsDefault` 優先で読み取り自動適用（`style=` 明示指定が優先）。`duckdb:` で `.gpkg` 拡張子・`format=gpkg` を指定した場合も同経路へ振り分け（DuckDB spatial の `ST_Read` は非 COI 環境でスレッド生成に失敗するため不使用）
+- `gpkg:` / `geopackage:` 行タイプを追加。GeoPackage を sql.js（SQLite WASM・CDN 遅延ロード）で直接開き、地物テーブルを GeoJSON 化して描画。読み込みは `web/gpkg-worker.js`（module Worker）内で実行するため、ダウンロード・SQLite 展開・WKB デコード中も地図操作をブロックしない。開いた DB は Worker が URL キーで保持し、再クエリは再ダウンロード不要。`table=地物テーブル名` で複数テーブルから選択可。絞り込みオプション `where=`（SQLite 式）/`limit=`/`columns=`（属性列プルーニング）/`bbox=auto`（各行の GPkgBinary エンベロープで表示範囲判定し範囲外の WKB デコードをスキップ。カメラ停止で再クエリ）を追加し、指定時はクエリ系レイヤーとして動作（⏷フィルター編集・属性一覧の全件クエリ・ベクター検索索引の対象外）。QGIS が「データベースに保存」する `layer_styles` テーブルの QML を `useAsDefault` 優先で読み取り自動適用（`style=` 明示指定が優先）。`duckdb:` で `.gpkg` 拡張子・`format=gpkg` を指定した場合も同経路へ振り分け（DuckDB spatial の `ST_Read` は非 COI 環境でスレッド生成に失敗するため不使用）
 - AI ツール `addLayer` の `type` に `gpkg`/`geopackage` を追加
 
 ### Changed
