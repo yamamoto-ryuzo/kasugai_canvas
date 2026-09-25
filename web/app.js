@@ -129,7 +129,7 @@ const vectorSearchLoadedSources = new Map();
 const vectorSearchLoadFailed = new Set();
 // デコーダーの query 指定でクエリ系レイヤーかを判定する。query は真値
 // (常にクエリ系: duckdb:/sql:)または item を受け取る判定関数
-// (gpkg:/geopackage: は where=/limit=/columns=/bbox=auto の指定時のみクエリ系)
+// (gpkg:/geopackage: は bbox=auto が既定 ON のため通常はクエリ系。bbox=off 明示時のみ全件読み込み系)
 function isQueryDecoder(decoder, item) {
   if (!decoder || !decoder.query) return false;
   return typeof decoder.query === "function" ? !!decoder.query(item) : true;
@@ -150,6 +150,85 @@ function loadVectorSourceCached(item, decoder) {
   }
   return promise;
 }
+// ベクター entity 描画の合計件数上限(フリーズ防止)。
+// 設定 #vector-entity-limit。0・未入力・不正値は無制限
+function getVectorEntityLimit() {
+  const input = document.querySelector("#vector-entity-limit");
+  const value = input ? Number(input.value) : NaN;
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : Infinity;
+}
+
+// entity 描画前に GeoJSON を残りバジェットの件数まで切り詰める。
+// vectorSourceCache の共有オブジェクトを破壊しないよう浅いコピーで返す
+function limitGeoJsonFeatures(source, remaining, item) {
+  const total = source?.features?.length ?? 0;
+  item.entityLimited = null;
+  if (!total || total <= remaining) return { source, used: total };
+  const shown = Math.max(remaining, 0);
+  item.entityLimited = { shown, total };
+  console.warn(`${item.title}: ベクター描画件数上限により ${total} 件中 ${shown} 件のみ描画します`);
+  return { source: { ...source, features: source.features.slice(0, shown) }, used: shown };
+}
+
+// 地物の外接矩形 [west, south, east, north] を返す。null ジオメトリは null。
+// 日付変更線またぎは単純な min/max(全域に広がる過大判定=安全側)
+function geoJsonFeatureEnvelope(feature) {
+  const geom = feature?.geometry;
+  if (!geom) return null;
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+  const walk = coords => {
+    if (!Array.isArray(coords)) return;
+    if (typeof coords[0] === "number") {
+      const lon = coords[0], lat = coords[1] || 0;
+      if (lon < west) west = lon;
+      if (lon > east) east = lon;
+      if (lat < south) south = lat;
+      if (lat > north) north = lat;
+      return;
+    }
+    coords.forEach(walk);
+  };
+  if (geom.type === "GeometryCollection") (geom.geometries || []).forEach(g => walk(g?.coordinates));
+  else walk(geom.coordinates);
+  return Number.isFinite(west) ? [west, south, east, north] : null;
+}
+
+// 地物エンベロープ(envs は Float64Array のフラット配列 [w,s,e,n]×N、NaN=ジオメトリ無し)
+// と表示範囲(view.ranges は日付変更線で2分割済み)の交差判定
+function envelopeInView(envs, i, view) {
+  const s = envs[i * 4 + 1], n = envs[i * 4 + 3];
+  if (Number.isNaN(s) || n < view.south || s > view.north) return false;
+  const w = envs[i * 4], e = envs[i * 4 + 2];
+  return view.ranges.some(r => e >= r.west && w <= r.east);
+}
+
+// 地物ごとの外接矩形を item 単位でキャッシュする(ソースが同じなら再計算しない)。
+// moveEnd ごとの再スライス判定を O(件数) の矩形比較で済ませるため
+function featureEnvelopes(item, source) {
+  const cache = item._envCache;
+  if (cache && cache.source === source) return cache.envs;
+  const envs = new Float64Array(source.features.length * 4).fill(NaN);
+  for (let i = 0; i < source.features.length; i++) {
+    const e = geoJsonFeatureEnvelope(source.features[i]);
+    if (e) envs.set(e, i * 4);
+  }
+  item._envCache = { source, envs };
+  return envs;
+}
+
+// 非クエリ系の切り捨て対象レイヤーを「表示範囲内の地物」に絞り込む。
+// 全件が範囲内なら元ソースをそのまま返す(コピーを作らない)
+function sliceSourceToView(item, source) {
+  const view = getViewRanges();
+  if (!view || !source?.features?.length) return source;
+  const envs = featureEnvelopes(item, source);
+  const features = [];
+  for (let i = 0; i < source.features.length; i++) {
+    if (envelopeInView(envs, i, view)) features.push(source.features[i]);
+  }
+  return features.length === source.features.length ? source : { ...source, features };
+}
+
 // style= の QML 取得に使う fetcher。直接 fetch(CORS 前提)を試し、失敗したら
 // ローカルサーバーの /api/fetch 経由にフォールバックする
 async function fetchStyleText(url) {
@@ -263,6 +342,8 @@ const activePrimitives = [];
 const drapeTerrainSources = { dem: true, tiles3d: false };
 const drapeLayers = { xyz: true, geojson: true };
 let geojsonPrimitiveDrape = false;
+// レイヤー一覧に件数上限バッジが出ているか(解除時の再描画判定用)
+let entityLimitBadgeVisible = false;
 const demSources = {
   reearth: {
     title: "Re:Earth Terrain (標高 / elevation, level 14)",
@@ -815,11 +896,15 @@ function renderLayerList() {
           const filterButton = isQueryDecoder(vectorDecoders.get(layer.type), layer)
             ? `<button class="layer-filter" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.filter"))}" aria-label="${escapeHtml(t("layer.filter"))}">⏷</button>`
             : "";
+          const limitBadge = layer.entityLimited
+            ? `<small class="entity-limit-badge" title="${escapeHtml(t("layer.entityLimited", { shown: layer.entityLimited.shown, total: layer.entityLimited.total }))}">${layer.entityLimited.shown}/${layer.entityLimited.total}</small>`
+            : "";
           return `
         <label class="layer-row" for="${inputId}" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
           <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""}>
           <span>${escapeHtml(layer.title)}</span>
           ${filterButton}
+          ${limitBadge}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>`;
         }).join("")}
@@ -1430,14 +1515,27 @@ function buildVectorSearchIndex() {
     const valuesMap = {};
     const featureMap = {};
     try {
-      for (const entity of ds.entities.values) {
-        const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
-        if (!props) continue;
-        let cachedDeg;
-        const getDeg = () => cachedDeg === undefined
-          ? (cachedDeg = (() => { const c = getEntityPosition(entity); return c ? cartesianToDegrees(c) : null; })())
-          : cachedDeg;
-        indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
+      // 件数上限で描画が切り捨てられたレイヤーも全件を検索対象にするため、
+      // フルソース(item.geojsonSource)があれば描画済み entity ではなくそちらを索引する
+      const fullSource = layerItem.geojsonSource;
+      if (fullSource?.features?.length) {
+        for (const feature of fullSource.features) {
+          const props = feature?.properties;
+          if (!props) continue;
+          let cachedDeg;
+          const getDeg = () => cachedDeg === undefined ? (cachedDeg = geoJsonFeatureDegrees(feature)) : cachedDeg;
+          indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
+        }
+      } else {
+        for (const entity of ds.entities.values) {
+          const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
+          if (!props) continue;
+          let cachedDeg;
+          const getDeg = () => cachedDeg === undefined
+            ? (cachedDeg = (() => { const c = getEntityPosition(entity); return c ? cartesianToDegrees(c) : null; })())
+            : cachedDeg;
+          indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
+        }
       }
     } catch (e) {}
     commitLayerIndex(id, title, attrSet, valuesMap, featureMap);
@@ -2213,8 +2311,8 @@ async function queryDuckDbAttributeRows(item, searchText) {
 const vectorDecoders = new Map([
   ["geoparquet", { load: item => loadGeoParquetAsGeoJson(item.url) }],
   ["flatgeobuf", { load: item => loadFlatGeobufAsGeoJson(item.url) }],
-  // gpkg: は where=/limit=/columns=/bbox=auto の指定時のみクエリ系になる。
-  // フィルター無しの GPKG は全件読み込み系としてキャッシュ・検索索引の対象のまま
+  // gpkg: は bbox=auto が既定 ON のため通常はクエリ系(表示範囲連動)になる。
+  // bbox=off を明示した場合だけ全件読み込み系としてキャッシュ・検索索引の対象になる
   ["gpkg", { load: item => loadGeoPackageAsGeoJson(item), query: item => !!(item.where || item.limit || item.columns?.length || item.bboxAuto) }],
   ["geopackage", { load: item => loadGeoPackageAsGeoJson(item), query: item => !!(item.where || item.limit || item.columns?.length || item.bboxAuto) }],
   ["duckdb", { load: item => loadDuckDbLayerAsGeoJson(item), query: true }],
@@ -2365,6 +2463,8 @@ async function refreshLayersImpl() {
   }
 
   // 3D Tiles / GeoJSON
+  // entity 描画するベクター地物の合計上限(フリーズ防止)。primitive 経路は消費しない
+  let vectorEntityBudget = getVectorEntityLimit();
   for (const item of orderedOtherLayers) {
     if (!item.visible && item.type === "3dtiles") continue;
     if (item.type === "3dtiles") {
@@ -2404,9 +2504,12 @@ async function refreshLayersImpl() {
       try {
         if (!item.url && !item.data && !item.query) continue;
         const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
-        // 再描画のたびに描画ソース保持をリセットする(primitive 経路で再セット。
-        // 非表示・entity 描画へ戻った場合に古い GeoJSON が残らないようにする)
+        // 再描画のたびに描画ソース保持をリセットする(primitive/entity 経路で再セット。
+        // 非表示レイヤーに古い GeoJSON が残らないようにする)
         item.geojsonSource = null;
+        // entity 描画上限の超過表示もリセット(上限適用は entity 経路のみ)
+        item.entityLimited = null;
+        item.viewportSliced = false;
         // 非表示レイヤーはロードしない(ダウンロード・デコードとも表示ONの
         // refreshLayers まで遅延する)。表示切替は refreshLayers の全再構築で反映
         // されるため、非表示分を先読みしてもトグルは速くならない
@@ -2435,7 +2538,30 @@ async function refreshLayersImpl() {
           registerPrimitiveLayer(item, primitive, source);
           continue;
         }
-        const ds = await buildStyledGeoJsonDataSource(source, clamp, item);
+        // entity 経路でもフルソースを保持する。件数上限で描画を切り捨てても
+        // 検索索引・getLayerGeoJson・属性一覧が全件を対象にできるようにする
+        item.geojsonSource = source;
+        // 非クエリ系でバジェットを超えるレイヤーは表示範囲内の地物を優先して描画する。
+        // moveEnd ごとの再スライスで見えている範囲に追従する(クライアント側 bbox=auto 相当)。
+        // バジェット内に収まるレイヤーは従来どおり全件描画のまま
+        let drawSource = source;
+        if (!isQueryDecoder(decoder, item) && Number.isFinite(vectorEntityBudget) && source.features.length > vectorEntityBudget) {
+          drawSource = sliceSourceToView(item, source);
+          item.viewportSliced = true;
+        }
+        const limited = limitGeoJsonFeatures(drawSource, vectorEntityBudget, item);
+        vectorEntityBudget -= limited.used;
+        // 再スライスの同一判定用に今回描画した地物集合を記録する。
+        // スライス中のバッジは「描画数/フルソース全件数」で出す(範囲外で0件でも
+        // レイヤーにデータが残っていることが分かるようにする)
+        if (item.viewportSliced) {
+          item.entityLimited = limited.used < source.features.length
+            ? { shown: limited.used, total: source.features.length }
+            : null;
+          item._slicedFeatures = limited.source.features;
+          item._slicedUsed = limited.used;
+        }
+        const ds = await buildStyledGeoJsonDataSource(limited.source, clamp, item);
         try { ds.show = item.visible; } catch (e) {}
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
@@ -2457,6 +2583,11 @@ async function refreshLayersImpl() {
   updateVectorSearchUI();
   updateMapAttribution();
   applyGlobeVisibility();
+  // 件数上限で切り詰めたレイヤーがあれば一覧にバッジを出す。
+  // 上限未適用へ戻ったときも stale バッジを消すため再描画する
+  const limitedNow = layers.some(item => item.entityLimited);
+  if (limitedNow || entityLimitBadgeVisible) renderLayerList();
+  entityLimitBadgeVisible = limitedNow;
 }
 
 // 描画した primitive を scene/管理リストへ登録する。
@@ -2543,48 +2674,118 @@ async function reloadVectorLayer(item) {
   if (item.styleUrl) await ensureQmlStyle(item);
   const geojson = await decoder.load(item);
   const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || isDrape3DTilesActive());
+  const hadLimited = !!item.entityLimited;
   if (item.renderPrimitive && Cesium.GeoJsonPrimitive) {
     if (oldPrimitive) {
       viewer.scene.primitives.remove(oldPrimitive);
       const index = activePrimitives.indexOf(oldPrimitive);
       if (index >= 0) activePrimitives.splice(index, 1);
     }
+    // primitive 経路は件数上限の対象外。entity 経路から戻った場合のバッジを消す
+    item.entityLimited = null;
+    if (hadLimited) renderLayerList();
     await addGeoJsonPrimitiveLayer(item, geojson);
     requestRender();
     return;
   }
-  const ds = await buildStyledGeoJsonDataSource(geojson, clamp, item);
+  const limited = limitGeoJsonFeatures(geojson, getVectorEntityLimit(), item);
+  const ds = await buildStyledGeoJsonDataSource(limited.source, clamp, item);
   try { ds.show = item.visible; } catch (e) {}
+  if (hadLimited || item.entityLimited) renderLayerList();
   viewer.dataSources.remove(entry.ds, false);
   await viewer.dataSources.add(ds);
   entry.ds = ds;
   layerRuntimeTargets.set(item.id, ds);
-  // entity 描画へ戻った場合は primitive 用の保持ソースを破棄する
-  item.geojsonSource = null;
+  // entity 描画でもフルソースを保持する(件数上限の切り捨て分も検索・属性の対象にするため)
+  item.geojsonSource = geojson;
   requestRender();
 }
 
-// カメラ停止後に表示範囲連動レイヤーを再クエリする(camera.moveEnd からデバウンスして呼ばれる)
+// カメラ停止後に表示範囲連動レイヤーを再クエリする(camera.moveEnd / camera.changed から
+// デバウンスして呼ばれる)。非クエリ系で件数上限を超えたレイヤー(viewportSliced)は
+// メモリ上のフルソースから表示範囲内の地物を選び直して再描画する(再ダウンロード・再デコードは無し)
 let viewportQueryRefreshRunning = false;
+let viewportQueryRefreshQueued = false;
 async function refreshViewportLayers() {
-  if (viewportQueryRefreshRunning) return;
-  const targets = layers.filter(item => item.visible && isViewportQueryLayer(item));
-  if (!targets.length) return;
+  // 実行中に届いたカメラ停止イベントを失わせないよう、最新の表示範囲でもう一度だけ処理する
+  if (viewportQueryRefreshRunning) { viewportQueryRefreshQueued = true; return; }
   viewportQueryRefreshRunning = true;
   try {
-    for (const item of targets) {
-      updateViewportFilter(item);
-      try {
-        await reloadVectorLayer(item);
-      } catch (error) {
-        console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+    do {
+      viewportQueryRefreshQueued = false;
+      const targets = layers.filter(item => item.visible && isViewportQueryLayer(item));
+      const sliced = layers.filter(item => item.visible && item.viewportSliced && item.geojsonSource && vectorDataSources.some(e => e.id === item.id));
+      for (const item of targets) {
+        updateViewportFilter(item);
+        try {
+          await reloadVectorLayer(item);
+        } catch (error) {
+          console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+        }
       }
-    }
-    buildVectorSearchIndex();
-    updateVectorSearchUI();
+      if (targets.length) {
+        buildVectorSearchIndex();
+        updateVectorSearchUI();
+      }
+      if (sliced.length) {
+        // 再スライス対象以外の entity 描画分を差し引いた残りを、描画順に配分する。
+        // プラグインの entities レイヤーは refreshLayersImpl と同じくバジェット対象外
+        let remaining = getVectorEntityLimit();
+        const slicedIds = new Set(sliced.map(i => i.id));
+        if (Number.isFinite(remaining)) {
+          for (const entry of vectorDataSources) {
+            if (!slicedIds.has(entry.id) && !entry.plugin) remaining -= entry.ds.entities.values.length;
+          }
+          remaining = Math.max(remaining, 0);
+        }
+        for (const item of sliced) {
+          try {
+            remaining -= await resliceViewportLayer(item, remaining);
+          } catch (error) {
+            console.warn(`${item.type.toUpperCase()} レイヤーの再スライスに失敗しました:`, item.url || item.query || "", error);
+          }
+        }
+        // バッジは「表示範囲内の件数/描画件数」で出す(範囲内が収まれば消える)
+        const limitedNow = layers.some(i => i.entityLimited);
+        if (limitedNow || entityLimitBadgeVisible) renderLayerList();
+        entityLimitBadgeVisible = limitedNow;
+      }
+    } while (viewportQueryRefreshQueued);
   } finally {
     viewportQueryRefreshRunning = false;
   }
+}
+
+// 非クエリ系の切り捨てレイヤーを現在の表示範囲で再スライスして差し替える。
+// 新しい DataSource を先に追加してから旧 DataSource を除去し、空白を最小化する
+async function resliceViewportLayer(item, remaining) {
+  const entry = vectorDataSources.find(e => e.id === item.id);
+  if (!entry || !item.geojsonSource) return 0;
+  const viewSource = sliceSourceToView(item, item.geojsonSource);
+  // 描画対象(件数・中身)が前回と同一なら再構築しない。
+  // moveEnd→ピッチ矯正 setView による追発火・moveEnd/changed の二重起動・微小な移動で
+  // ビュー矩形が僅かに変わっても選ばれる地物が同じなら entity 再構築は無駄になるため
+  const shown = Math.max(0, Math.min(viewSource.features.length, remaining));
+  const prev = item._slicedFeatures;
+  if (prev && prev.length === shown && viewSource.features.slice(0, shown).every((f, i) => f === prev[i])) {
+    return prev.length;
+  }
+  const limited = limitGeoJsonFeatures(viewSource, remaining, item);
+  const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || isDrape3DTilesActive());
+  const ds = await buildStyledGeoJsonDataSource(limited.source, clamp, item);
+  try { ds.show = item.visible; } catch (e) {}
+  await viewer.dataSources.add(ds);
+  viewer.dataSources.remove(entry.ds, false);
+  entry.ds = ds;
+  layerRuntimeTargets.set(item.id, ds);
+  // バッジはフルソース基準(範囲外で0件でも「0/N」でデータ残存を示す)
+  item.entityLimited = limited.used < item.geojsonSource.features.length
+    ? { shown: limited.used, total: item.geojsonSource.features.length }
+    : null;
+  item._slicedFeatures = limited.source.features;
+  item._slicedUsed = limited.used;
+  requestRender();
+  return limited.used;
 }
 
 // クエリ系レイヤーの条件を対話的に変更する。duckdb: は WHERE 式、sql: はクエリ全文を編集し、
@@ -2630,6 +2831,7 @@ function syncLayerSourceLine(item) {
     if (item.covering?.length) parts.push(`covering=${item.covering.join(",")}`);
     if (item.gpkgTable) parts.push(`table=${item.gpkgTable}`);
     if (item.bboxAuto) parts.push("bbox=auto");
+    else if (item.bboxAuto === false) parts.push("bbox=off");
     if (item.renderSpecified) parts.push(item.renderPrimitive ? "render=primitive" : "render=entity");
     if (item.proxy) parts.push("proxy=on");
     if (item.styleUrl) parts.push(`style=${item.styleUrl}`);
@@ -2642,6 +2844,7 @@ function syncLayerSourceLine(item) {
     if (item.columns?.length) parts.push(`columns=${item.columns.join(",")}`);
     if (item.gpkgTable) parts.push(`table=${item.gpkgTable}`);
     if (item.bboxAuto) parts.push("bbox=auto");
+    else if (item.bboxAuto === false) parts.push("bbox=off");
     if (item.renderSpecified) parts.push(item.renderPrimitive ? "render=primitive" : "render=entity");
     if (item.proxy === false) parts.push("proxy=off");
     if (item.styleUrl) parts.push(`style=${item.styleUrl}`);
@@ -2888,7 +3091,7 @@ function applyInspector(text) {
         if (tableOpt) item.gpkgTable = tableOpt.slice(tableOpt.indexOf("=") + 1).trim();
         // GPKG の絞り込みオプション(sql.js に渡す SQLite 式)。
         // where= の値に | は含められない(行の区切り文字)。
-        // bbox=auto を指定した場合だけクエリ系(表示範囲連動)になる
+        // bbox=auto は既定 ON(表示範囲連動のクエリ系)。常時全件描画にしたい場合は bbox=off で明示解除する
         if (type === "gpkg" || type === "geopackage") {
           const whereOpt = parts.find(part => /^where\s*=\s*\S/i.test(part));
           if (whereOpt) item.where = whereOpt.slice(whereOpt.indexOf("=") + 1).trim();
@@ -2899,7 +3102,13 @@ function applyInspector(text) {
           }
           const colsOpt = parts.find(part => /^(?:columns|cols)\s*=\s*\S/i.test(part));
           if (colsOpt) item.columns = colsOpt.slice(colsOpt.indexOf("=") + 1).split(",").map(s => s.trim()).filter(Boolean);
-          if (parts.some(part => /^bbox\s*=\s*(auto|on|true|view|viewport)$/i.test(part))) item.bboxAuto = true;
+          const bboxOpt = parts.find(part => /^bbox\s*=\s*\S+/i.test(part));
+          if (bboxOpt) {
+            const v = bboxOpt.slice(bboxOpt.indexOf("=") + 1).trim();
+            if (/^(auto|on|true|view|viewport)$/i.test(v)) item.bboxAuto = true;
+            else if (/^(off|none|false|static|manual)$/i.test(v)) item.bboxAuto = false;
+          }
+          if (item.bboxAuto === undefined) item.bboxAuto = true;
           item.sourceVisible = !off;
         }
       }
@@ -2908,7 +3117,8 @@ function applyInspector(text) {
       layerOrder.push(id);
     }
 
-    // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto/render=/proxy=on | on/off
+    // duckdb: タイトル | URL | 出典 | where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto|off/render=/proxy=on | on/off
+    // bbox=auto は既定 ON(表示範囲連動)。常時全件描画にしたい場合は bbox=off で明示解除する
     // proxy=on: ローカルサーバーの /api/fetch 経由で取得(CORS回避。Range 転送で Parquet の部分読みも可)
     // 単一ファイルを DuckDB-WASM で読み、SQL の絞り込みを適用してから描画する
     // columns= は読む属性列の絞り込み(列プルーニング)、covering= は xmin,xmax,ymin,ymax の列名指定
@@ -2943,7 +3153,10 @@ function applyInspector(text) {
           item.renderPrimitive = !/^(entity|datasource)$/i.test(raw);
           item.renderSpecified = true;
         }
-        else if (key === "bbox" && /^(auto|on|true|view|viewport)$/i.test(raw)) item.bboxAuto = true;
+        else if (key === "bbox") {
+          if (/^(auto|on|true|view|viewport)$/i.test(raw)) item.bboxAuto = true;
+          else if (/^(off|none|false|static|manual)$/i.test(raw)) item.bboxAuto = false;
+        }
         else if (key === "limit" && Number.isInteger(number) && number > 0) item.limit = number;
         else if (key === "proxy") item.proxy = /^(on|true|auto)$/i.test(raw);
         else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
@@ -2951,6 +3164,8 @@ function applyInspector(text) {
         // style=QML URL: QGIS レイヤースタイル(.qml)を取得して描画に適用する
         else if ((key === "style" || key === "qml") && raw) item.styleUrl = resolveProjectUrl(raw);
       });
+      // 表示範囲連動を既定にする(常時全件描画にしたい場合は bbox=off で明示解除)
+      if (item.bboxAuto === undefined) item.bboxAuto = true;
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -3252,6 +3467,9 @@ function setupEvents() {
     geojsonPrimitiveDrape = event.target.checked;
     refreshLayers();
   });
+
+  // ベクター描画件数の上限(フリーズ防止)。変更時は全レイヤーを再描画して反映
+  document.querySelector("#vector-entity-limit")?.addEventListener("change", () => refreshLayers());
 
   ["#effect-terrain-lighting", "#effect-translucency", "#effect-fog", "#effect-sky-atmosphere", "#effect-shadows", "#effect-depth-test"].forEach(selector => {
     document.querySelector(selector)?.addEventListener("change", () => updateEffectSettings());
@@ -5706,13 +5924,18 @@ viewer.camera.moveEnd.addEventListener(() => {
   }
 });
 
-// 表示範囲連動レイヤー(bbox=auto / :bbox)はカメラ停止ごとに範囲絞り込みで再クエリする
+// 表示範囲連動レイヤー(bbox=auto / :bbox / 件数超過レイヤーの再スライス)は
+// カメラ停止ごとに範囲絞り込みで再クエリ・再構築する
 let viewportQueryTimer = null;
-viewer.camera.moveEnd.addEventListener(() => {
-  if (!layers.some(isViewportQueryLayer)) return;
+const scheduleViewportRefresh = () => {
+  if (!layers.some(item => isViewportQueryLayer(item) || item.viewportSliced)) return;
   clearTimeout(viewportQueryTimer);
   viewportQueryTimer = setTimeout(() => { void refreshViewportLayers(); }, 400);
-});
+};
+viewer.camera.moveEnd.addEventListener(scheduleViewportRefresh);
+// setView 等の即時ジャンプは moveEnd が発火しないことがあるため changed も併用する
+// (移動中は連続発火するが、タイマー再セットで実質停止時の1回にデバウンスされる)
+viewer.camera.changed.addEventListener(scheduleViewportRefresh);
 
 setupThreeJs();
 // cloudflare 認証時は KV の .kasc のみ使い、内蔵デフォルトは適用しない
@@ -5900,8 +6123,8 @@ function entitiesToGeoJson(ds) {
 }
 
 // レイヤ名/IDから GeoJSON を取り出す。インラインデータはそのまま返し、
-// primitive 描画レイヤーは描画時に保持したソースを、
-// それ以外のURL由来レイヤーはロード済み DataSource を entity→GeoJSON 変換して返す
+// 描画時に保持したソース(primitive/entity とも件数上限の切り捨て前フルデータ)を優先し、
+// それが無いレイヤーはロード済み DataSource を entity→GeoJSON 変換して返す
 function getLayerGeoJson(idOrTitle) {
   const item = getOrderedLayerItems().find(layer => layer.id === idOrTitle || layer.title === idOrTitle);
   if (!item) return null;
@@ -5927,7 +6150,7 @@ window.kasugaiApi = {
     };
   },
   listLayers() {
-    return getOrderedLayerItems().map(layer => ({ id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type }));
+    return getOrderedLayerItems().map(layer => ({ id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type, bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced }));
   },
   setLayerVisible(idOrTitle, visible) {
     const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);

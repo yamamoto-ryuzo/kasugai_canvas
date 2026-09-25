@@ -141,6 +141,9 @@
                 <label><input id="drape-geojson" type="checkbox" checked /> ベクター</label>
                 <label><input id="drape-geojson-primitive" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> ベクター高速ドレープ (実験的)</span></label>
                 <p class="hint" data-i18n="settings.layer.primitiveHint">CesiumJS 1.145 の GeoJsonPrimitive を使い、ベクターレイヤー(GeoJSON/GeoParquet/FlatGeobuf)を高品質・高速に地形や 3D Tiles にドレープします。有効時はベクター検索・属性クリックの対象外になります。</p>
+                <label class="field-label" for="vector-entity-limit" data-i18n="settings.layer.vectorLimit">ベクター描画件数の上限</label>
+                <input id="vector-entity-limit" type="number" min="0" step="1000" value="20000" />
+                <p class="hint" data-i18n="settings.layer.vectorLimitHint">1回の描画で entity 化するベクター地物数の合計上限(全レイヤー合算)。超過分は描画を省略してフリーズを防ぎます。0 で無制限。</p>
               </section>
               <section id="settings-inspector-panel" class="settings-subpanel">
                 <div class="section-title inspector-title" data-i18n="inspector.title">インスペクター</div>

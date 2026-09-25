@@ -66,6 +66,8 @@
   "settings.layer.drapeApply": "드레이프할 레이어",
   "settings.layer.geojsonPrimitive": "벡터 고속 드레이프 (실험적)",
   "settings.layer.primitiveHint": "CesiumJS 1.145의 GeoJsonPrimitive를 사용하여 벡터 레이어(GeoJSON/GeoParquet/FlatGeobuf)를 지형 및 3D Tiles에 고품질·고속으로 드레이프합니다. 활성화된 동안에는 속성 클릭 대상에서 제외됩니다(벡터 검색은 사용 가능).",
+  "settings.layer.vectorLimit": "벡터 entity 렌더링 수 상한",
+  "settings.layer.vectorLimitHint": "한 번의 렌더링에서 entity로 그리는 벡터 피처 수의 총 상한(전체 레이어 합산). 초과분은 생략하여 멈춤을 방지합니다. 0이면 무제한입니다.",
   "inspector.title": "인스펙터",
   "inspector.apply": "적용",
   "inspector.export": "내보내기 (.kasc)",
@@ -325,5 +327,6 @@
   "error.invalidUrl": "http(s) URL만 가져올 수 있습니다",
   "layer.filter": "필터 (SQL)",
   "layer.filter.promptWhere": "WHERE 조건식을 입력하세요(SQL・비우면 해제)",
-  "layer.filter.promptSql": "SQL 쿼리를 편집하세요"
+  "layer.filter.promptSql": "SQL 쿼리를 편집하세요",
+  "layer.entityLimited": "{total}개 중 {shown}개만 표시(상한 적용)"
 }

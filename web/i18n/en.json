@@ -66,6 +66,8 @@
   "settings.layer.drapeApply": "Layers to drape",
   "settings.layer.geojsonPrimitive": "Fast vector drape (experimental)",
   "settings.layer.primitiveHint": "Uses CesiumJS 1.145 GeoJsonPrimitive to drape vector layers (GeoJSON/GeoParquet/FlatGeobuf) onto terrain and 3D Tiles with high quality and speed. Attribute picking is unavailable while enabled; vector search remains available.",
+  "settings.layer.vectorLimit": "Vector entity draw limit",
+  "settings.layer.vectorLimitHint": "Maximum total number of vector features rendered as entities per refresh (across all layers). Excess features are skipped to prevent freezes. Set 0 for no limit.",
   "inspector.title": "Inspector",
   "inspector.apply": "Apply",
   "inspector.export": "Export (.kasc)",
@@ -325,5 +327,6 @@
   "error.invalidUrl": "Only http(s) URLs can be fetched",
   "layer.filter": "Filter (SQL)",
   "layer.filter.promptWhere": "Enter a WHERE expression (SQL). Leave empty to clear.",
-  "layer.filter.promptSql": "Edit the SQL query."
+  "layer.filter.promptSql": "Edit the SQL query.",
+  "layer.entityLimited": "Showing {shown} of {total} features (draw limit)"
 }

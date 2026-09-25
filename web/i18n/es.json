@@ -66,6 +66,8 @@
   "settings.layer.drapeApply": "Capas a drapear",
   "settings.layer.geojsonPrimitive": "Drapeado rápido de vectores (experimental)",
   "settings.layer.primitiveHint": "Utiliza GeoJsonPrimitive de CesiumJS 1.145 para drapear capas vectoriales (GeoJSON/GeoParquet/FlatGeobuf) sobre el terreno y los 3D Tiles con alta calidad y velocidad. Excluidas de la consulta de atributos al hacer clic mientras esté activado; la búsqueda vectorial sigue disponible.",
+  "settings.layer.vectorLimit": "Límite de entidades vectoriales dibujadas",
+  "settings.layer.vectorLimitHint": "Número máximo total de elementos vectoriales renderizados como entidades por actualización (todas las capas). El exceso se omite para evitar bloqueos. 0 significa sin límite.",
   "inspector.title": "Inspector",
   "inspector.apply": "Aplicar",
   "inspector.export": "Exportar (.kasc)",
@@ -325,5 +327,6 @@
   "error.invalidUrl": "Solo se pueden obtener URL http(s)",
   "layer.filter": "Filtro (SQL)",
   "layer.filter.promptWhere": "Introduce una expresión WHERE (SQL). Vacío para quitar.",
-  "layer.filter.promptSql": "Edita la consulta SQL"
+  "layer.filter.promptSql": "Edita la consulta SQL",
+  "layer.entityLimited": "Mostrando {shown} de {total} elementos (límite aplicado)"
 }

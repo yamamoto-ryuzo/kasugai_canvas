@@ -66,6 +66,8 @@
   "settings.layer.drapeApply": "要贴地的图层",
   "settings.layer.geojsonPrimitive": "矢量高速贴地（实验性）",
   "settings.layer.primitiveHint": "使用 CesiumJS 1.145 的 GeoJsonPrimitive 将矢量图层（GeoJSON/GeoParquet/FlatGeobuf）高质量、快速地贴附到地形和 3D Tiles 上。启用期间无法点击拾取属性，但矢量搜索仍可用。",
+  "settings.layer.vectorLimit": "矢量实体绘制数量上限",
+  "settings.layer.vectorLimitHint": "每次刷新时以实体（entity）形式绘制的矢量要素总数上限（所有图层合计）。超出部分将被省略以防止卡死。设为 0 表示无限制。",
   "inspector.title": "检查器",
   "inspector.apply": "应用",
   "inspector.export": "导出 (.kasc)",
@@ -325,5 +327,6 @@
   "error.invalidUrl": "只能获取 http(s) URL",
   "layer.filter": "筛选 (SQL)",
   "layer.filter.promptWhere": "输入 WHERE 表达式(SQL),留空则清除",
-  "layer.filter.promptSql": "编辑 SQL 查询"
+  "layer.filter.promptSql": "编辑 SQL 查询",
+  "layer.entityLimited": "仅显示 {total} 个要素中的 {shown} 个（已达上限）"
 }
