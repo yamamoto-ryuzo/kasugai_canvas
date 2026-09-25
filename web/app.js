@@ -1447,8 +1447,9 @@ function getEntityPosition(entity) {
   return null;
 }
 
-// 1地物分の properties を検索索引へ登録する。getDeg は新規値のときだけ呼ぶ遅延評価
-function indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap) {
+// 1地物分の properties を検索索引へ登録する。getDeg は新規値のときだけ呼ぶ遅延評価。
+// 位置情報には layerId を持たせ、「全選択」検索の結果から所属レイヤーを特定できるようにする
+function indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap, layerId) {
   for (const key of Object.keys(props)) {
     const raw = props[key];
     if (raw == null || raw === "") continue;
@@ -1461,9 +1462,10 @@ function indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, 
       if (!featureMap[key][val]) {
         const deg = getDeg();
         if (deg && Number.isFinite(deg.lat) && Number.isFinite(deg.lng)) {
-          featureMap[key][val] = deg;
+          const pos = { lat: deg.lat, lng: deg.lng, layerId };
+          featureMap[key][val] = pos;
           if (!allFeatureMap[key]) allFeatureMap[key] = {};
-          if (!allFeatureMap[key][val]) allFeatureMap[key][val] = deg;
+          if (!allFeatureMap[key][val]) allFeatureMap[key][val] = pos;
         }
       }
     }
@@ -1524,7 +1526,7 @@ function buildVectorSearchIndex() {
           if (!props) continue;
           let cachedDeg;
           const getDeg = () => cachedDeg === undefined ? (cachedDeg = geoJsonFeatureDegrees(feature)) : cachedDeg;
-          indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
+          indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap, id);
         }
       } else {
         for (const entity of ds.entities.values) {
@@ -1534,7 +1536,7 @@ function buildVectorSearchIndex() {
           const getDeg = () => cachedDeg === undefined
             ? (cachedDeg = (() => { const c = getEntityPosition(entity); return c ? cartesianToDegrees(c) : null; })())
             : cachedDeg;
-          indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
+          indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap, id);
         }
       }
     } catch (e) {}
@@ -1561,7 +1563,7 @@ function buildVectorSearchIndex() {
         if (!props) continue;
         let cachedDeg;
         const getDeg = () => cachedDeg === undefined ? (cachedDeg = geoJsonFeatureDegrees(feature)) : cachedDeg;
-        indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap);
+        indexVectorFeatureProps(props, getDeg, attrSet, valuesMap, featureMap, allFeatureMap, id);
       }
     } catch (e) {}
     commitLayerIndex(id, item.title || item.sourceTitle || id, attrSet, valuesMap, featureMap);
@@ -5253,6 +5255,21 @@ function setupVectorSearch() {
   const vectorTextSearchBtn = document.querySelector("#vector-text-search-btn");
   const vectorSearchResults = document.querySelector("#vector-search-results");
 
+  // 検索結果へのFLY時に、対象地物が属するレイヤーが非表示なら表示してから飛ぶ
+  // (レイヤー一覧の📍フォーカスと同じ扱い。「全選択」検索は非表示レイヤーも対象のため必要)
+  function showVectorFlyLayer(layerId) {
+    const item = (layerId && layerId !== "__all__" && layerId !== "__visible__") ? layerState.get(layerId) : null;
+    if (!item || item.visible) return;
+    item.visible = true;
+    if (item.exclusiveGroup) {
+      getOrderedLayerItems().forEach(other => {
+        if (other !== item && other.group === item.group && other.exclusiveGroup) other.visible = false;
+      });
+    }
+    renderLayerList();
+    void refreshLayers();
+  }
+
   async function performVectorTextSearch() {
     try {
       if (!vectorSearchResults || !vectorSearchData) return;
@@ -5282,9 +5299,15 @@ function setupVectorSearch() {
             for (const val of values) {
               const haystack = (String(val) + " " + String(attr)).toLowerCase();
               if (haystack.includes(query)) {
-                const layerTitle = (layerId === "__all__") ? t("common.all") : ((data.layers && data.layers[layerId] && data.layers[layerId].title) || layerId);
                 const pos = (source.featureByAttr && source.featureByAttr[attr] && source.featureByAttr[attr][val]) || null;
-                res.push({ layerId: (layerId === "__all__") ? "__all__" : layerId, layerTitle, attr, value: val, lat: pos ? pos.lat : null, lng: pos ? pos.lng : null });
+                // 「全選択」では索引の layerId から所属レイヤーを復元する(FLY時の表示切替・結果表示用)
+                const resultLayerId = (layerId === "__all__") ? ((pos && pos.layerId) || "__all__") : layerId;
+                const layerTitle = (layerId === "__all__")
+                  ? ((data.layers && data.layers[resultLayerId] && data.layers[resultLayerId].title)
+                    || (layerState.get(resultLayerId) && layerState.get(resultLayerId).title)
+                    || t("common.all"))
+                  : ((data.layers && data.layers[layerId] && data.layers[layerId].title) || layerId);
+                res.push({ layerId: resultLayerId, layerTitle, attr, value: val, lat: pos ? pos.lat : null, lng: pos ? pos.lng : null });
               }
             }
           }
@@ -5311,6 +5334,7 @@ function setupVectorSearch() {
         const r = vectorSearchResults._resultData[Number(li.getAttribute("data-idx"))];
         if (!r) return;
         if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) {
+          showVectorFlyLayer(r.layerId);
           flyToFeature(r.lat, r.lng);
         }
       } catch (e) { console.error("vector result click error", e); }
@@ -5403,6 +5427,8 @@ function setupVectorSearch() {
         const source = getCurrentVectorSource();
         const pos = (source && source.featureByAttr && source.featureByAttr[vectorAttr.value] && source.featureByAttr[vectorAttr.value][vectorValue.value]) || null;
         if (pos && Number.isFinite(pos.lat) && Number.isFinite(pos.lng)) {
+          const flyLayerId = pos.layerId || ((vectorLayer.value !== "__all__" && vectorLayer.value !== "__visible__") ? vectorLayer.value : null);
+          showVectorFlyLayer(flyLayerId);
           flyToFeature(pos.lat, pos.lng);
         }
       } catch (e) { console.error("vector fly error", e); }
@@ -5717,6 +5743,7 @@ function setupVectorSearch() {
         const lat = Number(latAttr);
         const lng = Number(lngAttr);
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          showVectorFlyLayer(vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : null);
           flyToFeature(lat, lng);
         }
       } catch (e) { console.error("vector attr row click error", e); }
@@ -6328,7 +6355,7 @@ window.kasugaiApi = {
       for (const val of source.valuesByAttr[attr] || []) {
         if (!(String(val) + " " + String(attr)).toLowerCase().includes(q)) continue;
         const pos = source.featureByAttr?.[attr]?.[val] || null;
-        results.push({ attr, value: val, latitude: pos?.lat ?? null, longitude: pos?.lng ?? null });
+        results.push({ attr, value: val, latitude: pos?.lat ?? null, longitude: pos?.lng ?? null, layerId: pos?.layerId ?? null });
         if (results.length >= 20) return results;
       }
     }
