@@ -142,6 +142,11 @@ body.globe-hidden .viewport { background: transparent; }
 .share-url { width: 100%; margin-top: 7px; }
 .attr-content { padding: 8px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.7); font: var(--basemap-select-font-size)/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .attr-layer-path { margin-bottom: 6px; padding-bottom: 5px; border-bottom: 1px solid #cbd9de; color: #52636d; font-weight: 700; overflow-wrap: anywhere; }
+.attr-picked-count { margin-bottom: 8px; color: #71818d; font-size: 11px; }
+.attr-feature + .attr-feature { margin-top: 12px; padding-top: 10px; border-top: 2px solid #cbd9de; }
+.attr-content .attr-feature-toggle { display: block; width: 100%; min-height: 0; padding: 0 0 5px; margin: 0 0 6px; background: none; border: 0; border-bottom: 1px solid #cbd9de; border-radius: 0; color: #52636d; font: inherit; font-weight: 700; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.attr-feature-marker { display: inline-block; min-width: 1.1em; color: #71818d; }
+.attr-content .attr-feature-toggle:hover .attr-feature-marker { color: #31564f; }
 .attr-list { display: grid; gap: 6px; margin: 0; }
 .attr-row { display: grid; grid-template-columns: minmax(96px, 34%) minmax(0, 1fr); gap: 8px; padding-bottom: 6px; border-bottom: 1px solid #e4ecef; }
 .attr-row:last-child { padding-bottom: 0; border-bottom: 0; }

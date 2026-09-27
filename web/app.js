@@ -4792,7 +4792,6 @@ function setupEvents() {
     return null;
   };
 
-  // 属性表示の先頭に「グループ / レイヤー名」を出し、
   // 「選択中のレイヤ属性一覧」ボタン用にレイヤーIDを dataset に保持する
   const setAttrLayerContext = (attr, item) => {
     if (item) {
@@ -4802,108 +4801,162 @@ function setupEvents() {
       delete attr.dataset.layerId;
       delete attr.dataset.layerTitle;
     }
-    if (!item || !item.title) return;
-    const header = document.createElement("div");
-    header.className = "attr-layer-path";
-    header.textContent = item.group ? `${item.group} / ${item.title}` : item.title;
-    attr.append(header);
   };
+
+  // 属性表示の先頭に出す「グループ / レイヤー名」のラベル
+  const attrLayerPathText = item => (item?.title ? (item.group ? `${item.group} / ${item.title}` : item.title) : null);
+
+  // 1件分のピック結果を {item,label,entries} に正規化する。
+  // 属性を持たない描画物(地形・モデル等)は null を返す
+  const describePicked = (picked, time) => {
+    if (picked instanceof Cesium.Cesium3DTileFeature) {
+      // Cesium 1.9x以降の構造化メタデータは getPropertyIds() で列挙する
+      // (getPropertyNames は存在しない場合があり空テーブルになる)
+      const names = picked.getPropertyIds ? picked.getPropertyIds()
+        : picked.getPropertyNames ? picked.getPropertyNames() : [];
+      return {
+        item: findAttrLayerItem(picked.tileset || picked.primitive),
+        entries: names.map(name => [name, picked.getProperty(name)]),
+      };
+    }
+    if (Cesium.GeoJsonPrimitive && picked.parentPrimitive instanceof Cesium.GeoJsonPrimitive && picked.properties) {
+      return {
+        item: findAttrLayerItem(picked.parentPrimitive),
+        entries: Object.entries(picked.properties),
+      };
+    }
+    const entity = picked.id;
+    if (entity?.properties) {
+      const ds = entity.entityCollection && entity.entityCollection.owner;
+      const match = ds ? vectorDataSources.find(item => item.ds === ds) : null;
+      return {
+        item: (match && layerState.get(match.id)) || findAttrLayerItem(ds),
+        label: typeof entity.name === "string" && entity.name ? entity.name : null,
+        entries: Object.entries(entity.properties.getValue(time) || {}),
+      };
+    }
+    return null;
+  };
+
+  // 同一地物の重複ピック除外用キー。entity は billboard+label 等の
+  // 複数描画で重複ヒットしうるため entity で判定する。GeoJsonPrimitive は
+  // Multi系ジオメトリのパーツが同一 properties 参照を共有するためそれで判定する。
+  // 3D Tiles feature は drillPick の各パスで別インスタンスになりうるため
+  // content+featureId の複合キーで判定する
+  const tileContentSeq = new WeakMap();
+  let tileContentSeqNext = 0;
+  const pickedDedupKey = picked => {
+    if (picked instanceof Cesium.Cesium3DTileFeature) {
+      if (picked.featureId === undefined) return picked;
+      const owner = picked.content || picked.tileset || picked.primitive || picked;
+      let seq = tileContentSeq.get(owner);
+      if (seq === undefined) { seq = tileContentSeqNext++; tileContentSeq.set(owner, seq); }
+      return `tile:${seq}:${picked.featureId}`;
+    }
+    if (Cesium.GeoJsonPrimitive && picked?.parentPrimitive instanceof Cesium.GeoJsonPrimitive) return picked.properties || picked;
+    return picked?.id || picked;
+  };
+
+  const buildAttrTable = entries => {
+    const table = document.createElement("table");
+    table.style.width = "100%";
+    table.style.borderCollapse = "collapse";
+    table.style.fontSize = "12px";
+    entries.forEach(([key, value]) => {
+      const tr = document.createElement("tr");
+      const th = document.createElement("th");
+      th.textContent = key;
+      th.style.textAlign = "left";
+      th.style.padding = "3px 6px";
+      th.style.borderBottom = "1px solid #cbd9de";
+      const td = document.createElement("td");
+      td.textContent = value === undefined ? "" : String(value);
+      td.style.padding = "3px 6px";
+      td.style.borderBottom = "1px solid #cbd9de";
+      tr.append(th, td);
+      table.append(tr);
+    });
+    return table;
+  };
+
+  // drillPick の深度探索上限。重なりは通常数件だが、無制限だと
+  // ピック毎に描画パスが増えるため上限を設ける
+  const DRILL_PICK_LIMIT = 16;
 
   const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
   clickHandler.setInputAction(movement => {
     if (walkModeActive) return;
-    const picked = viewer.scene.pick(movement.position);
+    // 重なった地物も拾えるよう drillPick で手前から順に全件取得する
+    const pickedList = viewer.scene.drillPick(movement.position, DRILL_PICK_LIMIT) || [];
     const attr = document.querySelector("#attr-content");
     attr.replaceChildren();
     document.querySelectorAll(".panel-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.panel === "attr-panel"));
     document.querySelectorAll(".plugin-panel").forEach(panel => panel.classList.toggle("active", panel.id === "attr-panel"));
 
-    if (!picked) {
+    if (!pickedList.length) {
       setAttrLayerContext(attr, null);
       attr.textContent = t("attr.empty");
       return;
     }
 
-    if (picked instanceof Cesium.Cesium3DTileFeature) {
-      setAttrLayerContext(attr, findAttrLayerItem(picked.tileset || picked.primitive));
-      const table = document.createElement("table");
-      table.style.width = "100%";
-      table.style.borderCollapse = "collapse";
-      table.style.fontSize = "12px";
-      const names = picked.getPropertyNames ? picked.getPropertyNames() : [];
-      names.forEach(name => {
-        const tr = document.createElement("tr");
-        const th = document.createElement("th");
-        th.textContent = name;
-        th.style.textAlign = "left";
-        th.style.padding = "3px 6px";
-        th.style.borderBottom = "1px solid #cbd9de";
-        const td = document.createElement("td");
-        const value = picked.getProperty(name);
-        td.textContent = value === undefined ? "" : String(value);
-        td.style.padding = "3px 6px";
-        td.style.borderBottom = "1px solid #cbd9de";
-        tr.append(th, td);
-        table.append(tr);
-      });
-      attr.append(table);
+    const time = Cesium.JulianDate.now();
+    const seen = new Set();
+    const records = [];
+    for (const picked of pickedList) {
+      const key = pickedDedupKey(picked);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const record = describePicked(picked, time);
+      if (record) records.push(record);
+    }
+
+    if (!records.length) {
+      setAttrLayerContext(attr, null);
+      attr.textContent = t("attr.noAttrs");
       return;
     }
 
-    if (Cesium.GeoJsonPrimitive && picked.parentPrimitive instanceof Cesium.GeoJsonPrimitive && picked.properties) {
-      setAttrLayerContext(attr, findAttrLayerItem(picked.parentPrimitive));
-      const table = document.createElement("table");
-      table.style.width = "100%";
-      table.style.borderCollapse = "collapse";
-      table.style.fontSize = "12px";
-      Object.entries(picked.properties).forEach(([key, value]) => {
-        const tr = document.createElement("tr");
-        const th = document.createElement("th");
-        th.textContent = key;
-        th.style.textAlign = "left";
-        th.style.padding = "3px 6px";
-        th.style.borderBottom = "1px solid #cbd9de";
-        const td = document.createElement("td");
-        td.textContent = value === undefined ? "" : String(value);
-        td.style.padding = "3px 6px";
-        td.style.borderBottom = "1px solid #cbd9de";
-        tr.append(th, td);
-        table.append(tr);
-      });
-      attr.append(table);
-      return;
-    }
+    // 「選択中のレイヤ属性一覧」は最前面の地物が属するレイヤーに紐付ける
+    setAttrLayerContext(attr, records.map(record => record.item).find(Boolean) || null);
 
-    const entity = picked.id;
-    if (entity?.properties) {
-      const ds = entity.entityCollection && entity.entityCollection.owner;
-      const match = ds ? vectorDataSources.find(item => item.ds === ds) : null;
-      setAttrLayerContext(attr, (match && layerState.get(match.id)) || findAttrLayerItem(ds));
-      const table = document.createElement("table");
-      table.style.width = "100%";
-      table.style.borderCollapse = "collapse";
-      table.style.fontSize = "12px";
-      const values = entity.properties.getValue(Cesium.JulianDate.now()) || {};
-      Object.entries(values).forEach(([key, value]) => {
-        const tr = document.createElement("tr");
-        const th = document.createElement("th");
-        th.textContent = key;
-        th.style.textAlign = "left";
-        th.style.padding = "3px 6px";
-        th.style.borderBottom = "1px solid #cbd9de";
-        const td = document.createElement("td");
-        td.textContent = value === undefined ? "" : String(value);
-        td.style.padding = "3px 6px";
-        td.style.borderBottom = "1px solid #cbd9de";
-        tr.append(th, td);
-        table.append(tr);
-      });
-      attr.append(table);
-      return;
+    const multiple = records.length > 1;
+    if (multiple) {
+      const count = document.createElement("div");
+      count.className = "attr-picked-count";
+      count.textContent = t("attr.pickedCount", { count: records.length });
+      attr.append(count);
     }
-
-    setAttrLayerContext(attr, null);
-    attr.textContent = t("attr.noAttrs");
+    // 複数件時はヘッダーのみ表示し、行クリックで属性を開閉する。
+    // 1件のみなら属性を最初から展開する
+    records.forEach((record, index) => {
+      const block = document.createElement("div");
+      block.className = "attr-feature";
+      let label = attrLayerPathText(record.item) || record.label || t("attr.otherFeature");
+      if (multiple) label = `${index + 1}. ${label}`;
+      const header = document.createElement("button");
+      header.type = "button";
+      header.className = "attr-layer-path attr-feature-toggle";
+      const marker = document.createElement("span");
+      marker.className = "attr-feature-marker";
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      header.append(marker, labelEl);
+      const table = buildAttrTable(record.entries);
+      const setOpen = open => {
+        table.hidden = !open;
+        marker.textContent = open ? "▾" : "▸";
+        header.setAttribute("aria-expanded", String(open));
+      };
+      header.addEventListener("click", () => {
+        // 展開した地物のレイヤーを属性一覧ボタンの対象にする
+        const open = table.hidden;
+        setOpen(open);
+        if (open) setAttrLayerContext(attr, record.item);
+      });
+      setOpen(!multiple);
+      block.append(header, table);
+      attr.append(block);
+    });
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
   let lastRightClick = 0;

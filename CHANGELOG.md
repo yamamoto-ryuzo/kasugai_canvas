@@ -4,6 +4,16 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.18.0] - 2026-09-27
+
+### Fixed
+
+- 3D Tiles 地物をクリックしても属性が空（レイヤー名ヘッダのみ）だった問題を修正。構造化メタデータ（EXT_structural_metadata）系の `Cesium3DTileFeature` には `getPropertyNames()` が存在しないため、`getPropertyIds()` を優先してプロパティを列挙するようにした
+
+### Changed
+
+- 地物クリック時の属性表示を `scene.pick` から `scene.drillPick`（上限16件）による複数件対応に変更。重なった地物（ポリゴン等）は先頭に件数を表示し、「番号. グループ / レイヤー名」のヘッダ一覧を手前から順に出す。ヘッダー行をクリックするとその地物の属性テーブルが開閉し（複数件時は既定で全件折りたたみ、1件のみなら展開表示）、展開した地物のレイヤーが「選択中のレイヤ属性一覧」の対象になる。同一地物の重複ピック（entity の複数描画・GeoJsonPrimitive のマルチジオメトリ分割・3D Tiles feature の別インスタンス化）は除外
+
 ## [4.17.0] - 2026-09-25
 
 ### Added

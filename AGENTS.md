@@ -91,6 +91,13 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
   - 将来候補: KML 等（FlatGeobuf は `flatgeobuf:` として実装済み。Range Request 範囲読みの活用は将来の拡張ポイント）
 - **タイル/大規模経路**: MVT・PMTiles・ラスタタイル等。全件描画や LOD が必要な大規模データ向けで、GeoJSON 正規化とは別経路を検討する
 
+### 属性パネル（地物クリック）
+
+- 左クリックは `scene.drillPick`（上限16件・手前から順）で重なった地物を全件拾い、`describePicked()` が3経路（`Cesium3DTileFeature` / `GeoJsonPrimitive` の pick オブジェクト / entity）を `{item,entries}` に正規化する
+- 複数件時はヘッダー一覧（`番号. グループ / レイヤー名`）のみ表示し、行クリックで属性テーブルを開閉するアコーディオン。展開した地物のレイヤーが `#attr-content` の `dataset.layerId`（「選択中のレイヤ属性一覧」対象）になる。1件のみなら最初から展開
+- 同一地物の重複ヒットは `pickedDedupKey()` で除外（entity は id、GeoJsonPrimitive は共有 properties 参照、3D Tiles feature は content+featureId）
+- **注意**: `Cesium3DTileFeature` のプロパティ列挙は `getPropertyIds()`（構造化メタデータ系には `getPropertyNames()` が無い）
+
 ### 新形式を追加する手順
 
 1. `applyInspector` のパースに行タイプを追加する

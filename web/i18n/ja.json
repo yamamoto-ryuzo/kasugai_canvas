@@ -169,6 +169,8 @@
   "attr.title": "属性",
   "attr.empty": "地物を選択すると属性を表示します。",
   "attr.noAttrs": "選択した地物に属性情報がありません。",
+  "attr.pickedCount": "重なった地物 {count} 件",
+  "attr.otherFeature": "その他の地物",
   "basemap.none": "ベースマップなし",
   "basemap.transparent": "ベースマップ透明",
   "basemap.googleEarth": "Google Earth で現在の表示を開く",

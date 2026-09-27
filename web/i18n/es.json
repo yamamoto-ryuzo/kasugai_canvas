@@ -169,6 +169,8 @@
   "attr.title": "Atributos",
   "attr.empty": "Seleccione un elemento para ver sus atributos.",
   "attr.noAttrs": "El elemento seleccionado no tiene información de atributos.",
+  "attr.pickedCount": "{count} elementos superpuestos",
+  "attr.otherFeature": "Otro elemento",
   "basemap.none": "Sin mapa base",
   "basemap.transparent": "Mapa base transparente",
   "basemap.googleEarth": "Abrir la vista actual en Google Earth",

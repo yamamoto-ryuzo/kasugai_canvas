@@ -169,6 +169,8 @@
   "attr.title": "Attribute",
   "attr.empty": "Wählen Sie ein Feature aus, um Attribute anzuzeigen.",
   "attr.noAttrs": "Das ausgewählte Feature hat keine Attributinformationen.",
+  "attr.pickedCount": "{count} überlappende Features",
+  "attr.otherFeature": "Anderes Feature",
   "basemap.none": "Keine Basiskarte",
   "basemap.transparent": "Transparente Basiskarte",
   "basemap.googleEarth": "Aktuelle Ansicht in Google Earth öffnen",

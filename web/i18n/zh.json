@@ -169,6 +169,8 @@
   "attr.title": "属性",
   "attr.empty": "选择要素以查看属性。",
   "attr.noAttrs": "所选要素没有属性信息。",
+  "attr.pickedCount": "{count} 个重叠要素",
+  "attr.otherFeature": "其他要素",
   "basemap.none": "无底图",
   "basemap.transparent": "透明底图",
   "basemap.googleEarth": "在 Google Earth 中打开当前视图",

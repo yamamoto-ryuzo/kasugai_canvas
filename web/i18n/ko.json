@@ -169,6 +169,8 @@
   "attr.title": "속성",
   "attr.empty": "지물을 선택하면 속성이 표시됩니다.",
   "attr.noAttrs": "선택한 지물에 속성 정보가 없습니다.",
+  "attr.pickedCount": "겹친 지물 {count}개",
+  "attr.otherFeature": "기타 지물",
   "basemap.none": "베이스맵 없음",
   "basemap.transparent": "투명 베이스맵",
   "basemap.googleEarth": "Google Earth에서 현재 보기 열기",
