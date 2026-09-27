@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.19.0] - 2026-09-27
+
+### Fixed
+
+- GPKG レイヤーの属性値一覧で行をクリックしても地物へ Fly しない問題を修正。GPkgBinary ヘッダにエンベロープを持たない地物（作成ツールによって省略される）は行位置が `null` になりクリック不可になっていたため、エンベロープが無い行は WKB をデコードして座標範囲の中心を位置とするフォールバックを追加（`geoJsonGeometryEnvelope()`）
+- GPKG Worker のコマンド処理を直列化。`reset`（プロジェクト/インスペクター変更）が `openDb` ペンディング中の DB を close し、同じ Promise を待つ `load`/`attrs` が `Database closed` で失敗し得る競合を解消
+
 ## [4.18.0] - 2026-09-27
 
 ### Fixed

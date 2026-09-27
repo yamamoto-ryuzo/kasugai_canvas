@@ -76,5 +76,39 @@ export function gpkgGeometryEnvelope(value) {
   } catch { return null; }
 }
 
+// GeoJSON ジオメトリの座標を走査して {west,south,east,north} を返す。
+// GPkgBinary ヘッダにエンベロープが無い地物の中心点計算用
+export function geoJsonGeometryEnvelope(geom) {
+  let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+  const visit = (coords) => {
+    if (!Array.isArray(coords)) return;
+    if (typeof coords[0] === "number" && coords.length >= 2) {
+      const x = coords[0], y = coords[1];
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        if (x < west) west = x;
+        if (x > east) east = x;
+        if (y < south) south = y;
+        if (y > north) north = y;
+      }
+      return;
+    }
+    for (const c of coords) visit(c);
+  };
+  if (geom && geom.type === "GeometryCollection") {
+    for (const g of geom.geometries || []) {
+      const env = geoJsonGeometryEnvelope(g);
+      if (env) {
+        if (env.west < west) west = env.west;
+        if (env.east > east) east = env.east;
+        if (env.south < south) south = env.south;
+        if (env.north > north) north = env.north;
+      }
+    }
+  } else if (geom && geom.coordinates) {
+    visit(geom.coordinates);
+  }
+  return west <= east && south <= north ? { west, south, east, north } : null;
+}
+
 export const quoteSqlIdent = name => `"${String(name).replace(/"/g, '""')}"`;
 export const quoteSqlLiteral = value => `'${String(value).replace(/'/g, "''")}'`;

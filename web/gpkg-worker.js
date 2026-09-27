@@ -4,7 +4,7 @@
 // ⏷フィルター変更・属性一覧クエリは2回目以降ダウンロード無しで実行できる。
 // DuckDB spatial の ST_Read は非COI環境でスレッド生成に失敗するため
 // GPKG には使わず、SQLite として直接開く
-import { wkbToGeoJsonGeometry, gpkgGeometryToWkb, gpkgGeometryEnvelope, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
+import { wkbToGeoJsonGeometry, gpkgGeometryToWkb, gpkgGeometryEnvelope, geoJsonGeometryEnvelope, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
 
 const SQL_JS_VERSION = "1.13.0";
 let sqlJsPromise = null;
@@ -156,7 +156,15 @@ async function cmdAttrs(msg) {
       const s = sanitizeVectorPropertyValue(v);
       return s == null ? "" : String(s);
     });
-    const env = gpkgGeometryEnvelope(row[attrCols.length]);
+    const geomValue = row[attrCols.length];
+    let env = gpkgGeometryEnvelope(geomValue);
+    if (!env) {
+      // エンベロープを持たない GPkgBinary(作成ツールによって省略される)は
+      // WKB をデコードして座標の範囲から中心を求める
+      const wkb = gpkgGeometryToWkb(geomValue);
+      const geometry = wkb ? wkbToGeoJsonGeometry(wkb) : null;
+      env = geometry ? geoJsonGeometryEnvelope(geometry) : null;
+    }
     const center = env ? { lat: (env.south + env.north) / 2, lng: (env.west + env.east) / 2 } : null;
     rows.push({ values, lat: center ? center.lat : null, lng: center ? center.lng : null });
   }
@@ -164,30 +172,34 @@ async function cmdAttrs(msg) {
   return { attributes: attrCols, rows };
 }
 
-self.onmessage = async event => {
-  const msg = event.data || {};
-  const { cmd, reqId } = msg;
-  try {
-    let result;
-    if (cmd === "warm") {
-      await loadSqlJs();
-      result = {};
-    } else if (cmd === "load") {
-      result = await cmdLoad(msg);
-    } else if (cmd === "attrs") {
-      result = await cmdAttrs(msg);
-    } else if (cmd === "reset") {
-      // プロジェクト/インスペクター変更時に開いた DB をすべて破棄する
-      for (const promise of dbs.values()) {
-        try { (await promise).close(); } catch (e) { /* ignore */ }
-      }
-      dbs.clear();
-      result = {};
-    } else {
-      throw new Error(`不明なコマンド: ${cmd}`);
-    }
-    self.postMessage({ reqId, ...result });
-  } catch (error) {
-    self.postMessage({ reqId, error: error instanceof Error ? error.message : String(error) });
+async function handleMessage(msg) {
+  const { cmd } = msg;
+  if (cmd === "warm") {
+    await loadSqlJs();
+    return {};
   }
+  if (cmd === "load") return cmdLoad(msg);
+  if (cmd === "attrs") return cmdAttrs(msg);
+  if (cmd === "reset") {
+    // プロジェクト/インスペクター変更時に開いた DB をすべて破棄する
+    for (const promise of dbs.values()) {
+      try { (await promise).close(); } catch (e) { /* ignore */ }
+    }
+    dbs.clear();
+    return {};
+  }
+  throw new Error(`不明なコマンド: ${cmd}`);
+}
+
+// コマンドは直列に処理する。await 中に後続コマンドが割り込むと、
+// reset が openDb ペンディング中の DB を close して他のコマンドが
+// 閉じた DB を受け取る競合("Database closed")が起きるため
+let commandQueue = Promise.resolve();
+self.onmessage = event => {
+  const msg = event.data || {};
+  const { reqId } = msg;
+  commandQueue = commandQueue.then(() => handleMessage(msg)).then(
+    result => self.postMessage({ reqId, ...result }),
+    error => self.postMessage({ reqId, error: error instanceof Error ? error.message : String(error) }),
+  );
 };
