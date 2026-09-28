@@ -4,6 +4,24 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.20.0] - 2026-09-28
+
+### Added
+
+- **外部エージェント呼び出し**: Google → エージェント タブにエンドポイントURL・Bearerトークン（任意）・有効化トグルを追加。有効時はチャット入力を Gemini より優先してエンドポイントへ POST（`{message, project, camera, layers, history}`）。応答JSONの `actions:[{name,args}]` はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行。外部で構築したエージェント（Antigravity等）を静的配信のまま接続できる。Gemini キー未設定でもエージェント設定のみでチャットパネルが有効化
+- **ローカルファイル保存 API `/api/files`**（ローカルサーバー版のみ・`fileWrite` 能力）: `GET /api/files?project=` で `projects/<id>/DATA/` 内の再帰一覧、`PUT /api/files/{project}/{*path}` で書き込み（サブフォルダ可・64MB上限）、`DELETE` で削除。パスは `..`・`\`・`:` を拒否して DATA/ 内に限定
+- インスペクタータブに「DATA/ に保存して追加」ボタンを追加。選択ファイルを DATA/ へ保存（ローカルサーバー版は `/api/files`、それ以外は File System Access の選択フォルダ）し、`.geojson`/`.json`/`.gpkg`/`.fgb`/`.parquet` は対応する `.kasc` 行を自動追記して即時適用
+- 描画ルートの読み込み・保存でローカルサーバー版は DATA/ を `/api/files` 経由で列挙・保存（File System Access 不要・ブラウザ非依存）
+- AI ツール `listDataFiles` / `saveDataFile` / `deleteDataFile` を追加（`fileWrite` 能力時のみ公開・上書き/削除は確認ダイアログ）
+- **Google Maps Platform 拡充**: 検索タブのプロバイダに「Google」（Geocoding API）・「Google Places」（Places API (New) テキスト検索）を追加（Maps API キー保存時のみ有効）。AI ツールに `searchPlaces`（Places テキスト検索）・`openStreetView`（Street View メタデータ確認後に別タブでパノラマを開く）を追加（Maps API キー設定時のみ公開）。`searchLocation` ツール/API に `provider` 引数を追加し、検索タブの選択プロバイダを既定にした
+- **Street View の UI 導線**: 検索結果各行に「SV」ボタンを追加（その地点の Street View を別タブで開く）。検索タブに「地図をクリック → Street View」ボタンを追加し、ワンショットの地点拾いモードでクリック位置の Street View を開ける
+- **Maps Web サービス用キー（任意）**: Google → Map パネルに第2のキー入力欄を追加（`googleMapsWsApiKey`）。Geocoding/Places/Street View は Web サービス API で HTTP リファラー制限付きキーを拒否するため、リファラー制限付きのメインキー（Map Tiles/3D Tiles 用）とは別キーを設定できる。未設定時はメインキーにフォールバック。キー関連の案内文言を「リファラー制限推奨」から「API 制限＋Web サービス用別キー」方針に修正
+- Yahoo 検索プロバイダの実処理を追加（`yahooappid:` が設定された `.kasc` で有効化。従来は選択肢のみで実際の呼び出しは未接続だった）
+
+### Changed
+
+- 検索タブのプロバイダ選択を実際の検索呼び出しに反映（従来は常に地理院検索だった）
+
 ## [4.19.0] - 2026-09-27
 
 ### Fixed

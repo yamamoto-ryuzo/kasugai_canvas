@@ -9,7 +9,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.19.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.20.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムの技術選定</p>
     </header>
     <main>
@@ -346,7 +346,11 @@ web/PLUGIN/auth-local/auth.js</code></pre>
             <p>Google → Map タブで Maps Platform API キーを設定し、「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。Map Tiles API は従量課金です</p>
           </div>
           <div class="feature-card">
-            <h3>🔑 API キー管理</h3>
+            <h3>� Maps Platform の検索・ Places ・ Street View</h3>
+            <p>Maps API キーを保存すると、住所検索タブのプロバイダに「Google」（Geocoding API）が追加されます。AIチャットには <code>searchPlaces</code>（Places テキスト検索）・<code>openStreetView</code>（ストリートビューを別タブで開く）ツールが有効時のみ公開され、「近くのカフェを探して」「この地点のストリートビューを見せて」といった指示に対応します</p>
+          </div>
+          <div class="feature-card">
+            <h3>�🔑 API キー管理</h3>
             <p>Gemini キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>、Maps キーは <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行。キーは localStorage にのみ保存され、.kasc エクスポートには含まれません</p>
           </div>
           <div class="feature-card">
@@ -366,8 +370,8 @@ web/PLUGIN/auth-local/auth.js</code></pre>
             <p>APIキーは localStorage のみ・送信先は Google のAPI（HTTPS）のみ。Google Cloud 側でAPI制限推奨。<code>window.kasugaiApi</code> は開いたブラウザ内からのみ実行可能で外部経路なし。影響の大きい操作（プロジェクト切替・設定適用・停止等）はユーザー明示時のみ</p>
           </div>
           <div class="feature-card">
-            <h3>🤝 エージェント連携方針</h3>
-            <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します</p>
+            <h3>🤝 エージェント連携</h3>
+            <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します。Google → エージェント タブでエンドポイントURL・Bearerトークン（任意）を設定し「チャットを外部エージェントへ送信」をONにすると、チャット入力が Gemini より優先してそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history}</code>、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
           </div>
           <div class="feature-card">
             <h3>🧩 AIプラグイン生成（自己拡張）</h3>
@@ -384,11 +388,14 @@ web/PLUGIN/auth-local/auth.js</code></pre>
         </div>
         <div class="url-box">
           <h3>ローカルサーバー版の独自API（公開環境では無効）</h3>
-          <pre><code>GET  /api/capabilities   → {"tier":"local","features":["fetchProxy","pluginWrite",...]}
+          <pre><code>GET  /api/capabilities   → {"tier":"local","features":["fetchProxy","pluginWrite","fileWrite",...]}
 GET  /api/fetch?url=...  → CORS回避のGETプロキシ（http/httpsのみ・30秒・20MB上限）
 POST /api/plugins        → {"id","name","version","description","layer","code"}
                            PLUGIN/&lt;id&gt;/plugin.js・manifest.json を作成し plugins.json に登録
-DELETE /api/plugins/{id} → プラグインの公開取り消し（PLUGIN/&lt;id&gt;/ と plugins.json 登録を削除）</code></pre>
+DELETE /api/plugins/{id} → プラグインの公開取り消し（PLUGIN/&lt;id&gt;/ と plugins.json 登録を削除）
+GET  /api/files?project= → projects/&lt;project&gt;/DATA/ 内のファイル一覧（{name,size,modified}[]）
+PUT  /api/files/{project}/{path} → DATA/ へボディを書き込み（サブフォルダ可・64MB上限）
+DELETE /api/files/{project}/{path} → DATA/ 内のファイルを削除</code></pre>
           <p>プラグインIDは半角英数・<code>-</code>・<code>_</code> のみ（64文字まで）。公開・削除は実ファイルを書き換えるため、フロント側では必ず確認ダイアログが出ます。公開環境（Pages/Workers）に同等の無認証書き込みAPIを置かないでください。</p>
         </div>
         <div class="url-box">
@@ -396,8 +403,8 @@ DELETE /api/plugins/{id} → プラグインの公開取り消し（PLUGIN/&lt;i
           <ul>
             <li><strong>Workers 側の AI/fetch プロキシ</strong>：Gemini キーを Workers のシークレットに置き、キー未設定の訪問者でもAIを試せる公開プロキシ（レート制限付き）は未実装。現在はどの環境でも Gemini キーのBYOが必要です</li>
             <li><strong>Workers の共有書き込み</strong>：共有 .kasc カタログ・共有プラグインカタログへの書き込みは認証・承認フローが前提で未実装</li>
-            <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止）</li>
-            <li><strong>ローカルファイル連携</strong>：DATA/ フォルダ書き込み・File System Access 連携・QGIS/GDAL 呼び出しは未実装</li>
+            <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送はエージェントタブで設定可能）</li>
+            <li><strong>ローカルファイル連携</strong>：DATA/ 書き込みは File System Access API（Chromium系）とローカルサーバー版の <code>/api/files</code> で実装済み。QGIS/GDAL 呼び出しは未実装</li>
             <li><strong>Cloud Run 対応</strong>：<code>PORT</code> 環境変数での <code>0.0.0.0</code> バインドのみ対応済み。Dockerfile・コンテナビルド手順は未整備（永続化には別途ストレージ設計が必要）</li>
           </ul>
         </div>

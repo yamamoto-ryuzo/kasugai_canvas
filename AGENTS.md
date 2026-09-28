@@ -55,7 +55,7 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
 
 フロントエンドは `GET /api/capabilities`（応答例: `{tier:"local", features:[...]}`）でバックエンドの能力を取得し、ツール定義・UI を出し分ける。バックエンドが無い環境では静的安全機能のみで動作すること。
 
-実装状況: 現在 `local` ティアの `/api/capabilities`・`/api/fetch`・`/api/plugins` のみ実装済み。`workers` ティアのプロキシ・共有書き込み、サーバーサイドエージェント、ローカルファイル連携（DATA/・QGIS等）は設計方針のみで未実装。
+実装状況: 現在 `local` ティアの `/api/capabilities`・`/api/fetch`・`/api/plugins`・`/api/files`（`projects/<id>/DATA/` への書き込み・一覧・削除）を実装済み。ブラウザ側は File System Access API による DATA/ 保存も併存（Chromium系のみ・選択フォルダへ直接書込み）。`workers` ティアのプロキシ・共有書き込み、サーバーサイドエージェント（長時間ループ・SSE等）、QGIS/GDAL 連携は設計方針のみで未実装。外部エージェント呼び出し（エージェントタブでエンドポイントURLを設定し、チャット入力を POST `{message,project,camera,layers,history}` → 応答 `{reply,actions:[{name,args}]}` の actions をチャットツールとして実行）はブラウザ側で実装済み。
 
 プラグインの昇格ルート: AI生成プラグインはまず IndexedDB（ブラウザローカル草稿）に保存 → `.kasp` でエクスポート可 → レビュー後にローカル版で `PLUGIN/` へ公開。これにより開発と公開、公開と非公開を分離する。
 
@@ -65,7 +65,7 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
 - Rust サーバーは原則として静的ファイル配信のみとし、独自 API は追加しない
 - ただし以下はこの制限から除く:
   - バージョンアップ関連の API (`/api/update/*`)、アプリ終了用の `/api/shutdown`、起動確認用の `/health`
-  - **ローカル開発向けの高権限 API**: `/api/capabilities`（能力通知）、`/api/fetch`（CORSプロキシ）、`/api/plugins`（PLUGIN/ へのプラグイン書き込み・削除）。これらはローカルサーバー（127.0.0.1）前提の機能であり、公開環境（Pages/Workers）では無制限の書き込み・fetchを無認証で提供してはならない
+  - **ローカル開発向けの高権限 API**: `/api/capabilities`（能力通知）、`/api/fetch`（CORSプロキシ）、`/api/plugins`（PLUGIN/ へのプラグイン書き込み・削除）、`/api/files`（`projects/<id>/DATA/` へのファイル書き込み・一覧・削除）。これらはローカルサーバー（127.0.0.1）前提の機能であり、公開環境（Pages/Workers）では無制限の書き込み・fetchを無認証で提供してはならない
 - 地図タイル・検索等の外部 API へのアクセスは、ブラウザから直接呼ぶか、CORS 対応を前提とする
 
 ## データ形式方針

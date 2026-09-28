@@ -84,6 +84,7 @@ let undergroundBackgroundColor = Cesium.Color.BLACK;
 let basemapDrape3DTiles = false;
 let infoRequestId = 0;
 let walkModeActive = false;
+let streetViewPickMode = false;
 let flyHeight = 20;
 let flySpeed = 30;
 const flyPaths = [];
@@ -2903,6 +2904,65 @@ async function loadInfoContent(url) {
   }
 }
 
+// Geocoding/Places/Street View などの Web サービス API 用キー。
+// googleMapsWsApiKey（別キー）があればそちらを優先し、無ければ Maps API キーにフォールバックする
+// （Web サービス API は HTTP リファラー制限付きキーを拒否するため分離できるようにした）
+function getMapsWsKey() {
+  try {
+    return localStorage.getItem("googleMapsWsApiKey") || localStorage.getItem("googleMapsApiKey") || "";
+  } catch (e) { return ""; }
+}
+
+// 検索プロバイダ。いずれも {title,address,latitude,longitude}[] を返す。
+// google は Maps API キー(localStorage)、yahoo は .kasc の yahooappid: を使う
+const searchProviders = {
+  async gsi(query) {
+    const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
+    if (!response.ok) throw new Error(await response.text() || t("search.failedStatus", { status: response.status }));
+    const data = await response.json();
+    return data.map(item => ({
+      title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
+      address: item.properties?.address || item.properties?.Address || item.properties?.title || "",
+      latitude: Number(item.geometry?.coordinates?.[1]),
+      longitude: Number(item.geometry?.coordinates?.[0]),
+    }));
+  },
+  async google(query) {
+    const key = getMapsWsKey();
+    if (!key) throw new Error(t("google.needKey"));
+    const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${encodeURIComponent(key)}&language=${encodeURIComponent(getLanguage())}`, { mode: "cors" });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error_message || t("search.failedStatus", { status: response.status }));
+    if (data?.status !== "OK" && data?.status !== "ZERO_RESULTS") {
+      throw new Error(data?.error_message || data?.status || t("search.failed"));
+    }
+    return (data?.results || []).map(item => ({
+      title: item.formatted_address || "",
+      address: item.formatted_address || "",
+      latitude: Number(item.geometry?.location?.lat),
+      longitude: Number(item.geometry?.location?.lng),
+    }));
+  },
+  // Google Places API (New) テキスト検索（施設名・キーワード向け）。kasugaiApi.searchPlaces と同処理
+  async places(query) {
+    return window.kasugaiApi.searchPlaces(query);
+  },
+  async yahoo(query) {
+    const response = await fetch(`https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${encodeURIComponent(yahooAppId)}&query=${encodeURIComponent(query)}&output=json`, { mode: "cors" });
+    if (!response.ok) throw new Error(await response.text() || t("search.failedStatus", { status: response.status }));
+    const data = await response.json();
+    return (data?.Feature || []).map(feature => {
+      const [lng, lat] = String(feature?.Geometry?.Coordinates || "").split(",");
+      return {
+        title: feature?.Name || feature?.Property?.Address || "",
+        address: feature?.Property?.Address || feature?.Name || "",
+        latitude: Number(lat),
+        longitude: Number(lng),
+      };
+    });
+  },
+};
+
 function updateSearchProvider() {
   const searchProvider = document.querySelector("#search-provider");
   const searchYahooWarning = document.querySelector("#search-yahoo-warning");
@@ -2910,8 +2970,41 @@ function updateSearchProvider() {
   const yahooOpt = searchProvider.querySelector('option[value="yahoo"]');
   const hasYahoo = yahooAppId && !yahooAppId.includes("あなたのYahoo");
   if (yahooOpt) yahooOpt.disabled = !hasYahoo;
+  const googleOpt = searchProvider.querySelector('option[value="google"]');
+  const placesOpt = searchProvider.querySelector('option[value="places"]');
+  const hasGoogle = !!getMapsWsKey();
+  if (googleOpt) googleOpt.disabled = !hasGoogle;
+  if (placesOpt) placesOpt.disabled = !hasGoogle;
   if (!hasYahoo && searchProvider.value === "yahoo") searchProvider.value = "gsi";
+  if (!hasGoogle && (searchProvider.value === "google" || searchProvider.value === "places")) searchProvider.value = "gsi";
   if (searchYahooWarning) searchYahooWarning.style.display = (searchProvider.value === "yahoo") ? "" : "none";
+  const svRow = document.querySelector("#streetview-row");
+  if (svRow) svRow.style.display = hasGoogle ? "" : "none";
+  if (!hasGoogle && streetViewPickMode) {
+    streetViewPickMode = false;
+    updateStreetViewPickButton();
+  }
+}
+
+// Street View を別タブで開き、結果を検索パネルのステータスに表示する
+async function openStreetViewAt(latitude, longitude) {
+  const statusEl = document.querySelector("#search-status");
+  try {
+    const result = await window.kasugaiApi.openStreetView(latitude, longitude);
+    if (statusEl) statusEl.textContent = result?.ok ? t("search.streetviewOpened") : t("search.streetviewNone");
+  } catch (e) {
+    if (statusEl) statusEl.textContent = e instanceof Error ? e.message : String(e);
+  }
+}
+
+// Street View 地点拾いモードのボタン表示を更新
+function updateStreetViewPickButton() {
+  const btn = document.querySelector("#streetview-pick");
+  if (!btn) return;
+  btn.style.background = streetViewPickMode ? "#ffd88a" : "";
+  btn.textContent = t(streetViewPickMode ? "search.streetviewPicking" : "search.streetviewPick");
+  const statusEl = document.querySelector("#search-status");
+  if (statusEl) statusEl.textContent = streetViewPickMode ? t("search.streetviewHint") : "";
 }
 
 function applyInspector(text) {
@@ -3395,26 +3488,21 @@ function setupEvents() {
     }
     results.innerHTML = '<li style="padding:8px;color:#71818d;">' + escapeHtml(t("search.searching")) + '</li>';
     try {
-      const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
-      if (!response.ok) throw new Error(await response.text() || t("search.failedStatus", { status: response.status }));
-      const data = await response.json();
-      const items = data.map(item => ({
-        title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
-        address: item.properties?.address || item.properties?.Address || item.properties?.title || "",
-        latitude: Number(item.geometry?.coordinates?.[1]),
-        longitude: Number(item.geometry?.coordinates?.[0]),
-      }));
+      const provider = searchProviders[searchProvider?.value] || searchProviders.gsi;
+      const items = await provider(query);
       const validItems = items.filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
       if (!validItems.length) {
         results.innerHTML = '<li style="padding:8px;color:#71818d;">' + escapeHtml(t("search.noResults")) + '</li>';
         return;
       }
+      const hasSvKey = !!getMapsWsKey();
       results.innerHTML = validItems.map((item, index) => `
-        <li style="padding:0;border-bottom:1px solid #e4ecef;">
-          <button type="button" data-search-index="${index}" style="width:100%;padding:6px 8px;border:0;background:transparent;cursor:pointer;text-align:left;">
+        <li style="padding:0;border-bottom:1px solid #e4ecef;display:flex;align-items:stretch;">
+          <button type="button" data-search-index="${index}" style="flex:1;min-width:0;padding:6px 8px;border:0;background:transparent;cursor:pointer;text-align:left;">
             <span style="display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.title)}</span>
             <span style="display:block;font-size:0.85em;color:#52636d;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(item.address)}</span>
           </button>
+          ${hasSvKey ? `<button type="button" data-sv-index="${index}" title="Street View" style="flex:0 0 auto;border:0;border-left:1px solid #e4ecef;background:transparent;cursor:pointer;padding:0 8px;font-size:0.85em;">SV</button>` : ""}
         </li>
       `).join("");
       results.querySelectorAll("[data-search-index]").forEach(button => {
@@ -3423,10 +3511,24 @@ function setupEvents() {
           flyToFeature(item.latitude, item.longitude);
         });
       });
+      results.querySelectorAll("[data-sv-index]").forEach(button => {
+        button.addEventListener("click", () => {
+          const item = validItems[Number(button.dataset.svIndex)];
+          void openStreetViewAt(item.latitude, item.longitude);
+        });
+      });
     } catch (error) {
       results.innerHTML = `<li style="padding:8px;color:#a82020;">${escapeHtml(error instanceof Error ? error.message : t("search.failed"))}</li>`;
     }
   });
+
+  const streetviewPickBtn = document.querySelector("#streetview-pick");
+  if (streetviewPickBtn) {
+    streetviewPickBtn.addEventListener("click", () => {
+      streetViewPickMode = !streetViewPickMode;
+      updateStreetViewPickButton();
+    });
+  }
 
   document.querySelector("#terrain-toggle").addEventListener("change", event => {
     terrainEnabled = event.target.checked;
@@ -3841,6 +3943,9 @@ function setupEvents() {
     try {
       if (flyPath.drawn?.kind === "idb") {
         await routeStore.set(currentProjectId || "default", flyPath.drawn.name, text);
+      } else if (flyPath.drawn?.kind === "server") {
+        const result = await window.kasugaiApi.saveDataFile(flyPath.drawn.name, text);
+        if (!result?.ok) throw new Error(result?.error || "saveDataFile failed");
       } else if (flyPath.drawn?.kind === "file") {
         const dir = await getDataDirHandle();
         if (!dir) return;
@@ -4634,6 +4739,26 @@ function setupEvents() {
     return null;
   }
 
+  // DATA/ への保存: ローカルサーバー版は /api/files（ブラウザ非依存）、
+  // それ以外は「フォルダを選択」で選んだ FSA フォルダへ書き込む
+  async function saveToDataDir(name, content) {
+    if (hasBackendFeature("fileWrite")) {
+      const project = currentProjectId || "default";
+      const rel = String(name).split("/").filter(Boolean).map(encodeURIComponent).join("/");
+      const response = await fetch(`./api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
+      if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+      return "server";
+    }
+    const dir = await getDataDirHandle();
+    if (!dir) throw new Error(t("inspector.addFileNoDir"));
+    const fileName = String(name).split("/").filter(Boolean).pop();
+    const fileHandle = await dir.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+    return "fsa";
+  }
+
   async function _ensureDrawnRouteFlyPath() {
     const projectId = currentProjectId || "default";
     const existing = new Set(flyPaths.map(p => p.title));
@@ -4663,6 +4788,20 @@ function setupEvents() {
         }
       } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
     }
+    // ローカルサーバー版: projects/<id>/DATA/ を /api/files で列挙して .geojson をルート化
+    if (hasBackendFeature("fileWrite")) {
+      try {
+        const entries = await window.kasugaiApi.listDataFiles();
+        for (const entry of entries) {
+          if (!entry.name?.endsWith(".geojson")) continue;
+          const title = entry.name.replace(/\.geojson$/, "");
+          if (existing.has(title)) continue;
+          const url = `projects/${encodeURIComponent(projectId)}/DATA/${entry.name.split("/").map(encodeURIComponent).join("/")}`;
+          flyPaths.push({ title, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "server", name: entry.name } });
+          existing.add(title);
+        }
+      } catch (e) { console.error("listDataFiles failed:", e); }
+    }
     renderFlyPathSelect();
   }
   window._ensureDrawnRouteFlyPath = _ensureDrawnRouteFlyPath;
@@ -4683,6 +4822,32 @@ function setupEvents() {
     }
   });
   void updateDataDirLabel();
+
+  // ファイルを DATA/ へ保存し、拡張子に応じた .kasc 行を設定へ追記して即時適用する
+  const addFileInput = document.querySelector("#inspector-add-file");
+  document.querySelector("#inspector-add-file-button")?.addEventListener("click", () => addFileInput?.click());
+  addFileInput?.addEventListener("change", async () => {
+    const files = [...(addFileInput.files || [])];
+    addFileInput.value = "";
+    for (const file of files) {
+      try {
+        await saveToDataDir(file.name, file);
+        const ext = file.name.toLowerCase().split(".").pop() || "";
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet" }[ext];
+        if (type) {
+          const title = file.name.replace(/\.[^.]+$/, "");
+          window.kasugaiApi.addLayer(title, `DATA/${file.name}`, { type });
+          setInspectorStatus(t("inspector.addFileSaved", { name: file.name }));
+        } else {
+          setInspectorStatus(t("inspector.addFileSavedOnly", { name: file.name }));
+        }
+        void ensureDrawnRouteFlyPath();
+      } catch (error) {
+        if (error && error.name === "AbortError") continue;
+        setInspectorStatus(t("inspector.addFileFailed", { error: error instanceof Error ? error.message : error }), true);
+      }
+    }
+  });
 
 
 
@@ -4885,6 +5050,21 @@ function setupEvents() {
 
   const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
   clickHandler.setInputAction(movement => {
+    // Street View 地点拾いモード: クリック位置の地表座標で Street View を開く
+    if (streetViewPickMode) {
+      streetViewPickMode = false;
+      updateStreetViewPickButton();
+      const ray = viewer.camera.getPickRay(movement.position);
+      const cartesian = ray
+        ? ((() => { try { return viewer.scene.globe.pick(ray, viewer.scene); } catch (e) { return null; } })()
+          || viewer.camera.pickEllipsoid(movement.position, viewer.scene.globe.ellipsoid))
+        : null;
+      if (cartesian) {
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        void openStreetViewAt(carto.latitude * 180 / Math.PI, carto.longitude * 180 / Math.PI);
+      }
+      return;
+    }
     if (walkModeActive) return;
     // 重なった地物も拾えるよう drillPick で手前から順に全件取得する
     const pickedList = viewer.scene.drillPick(movement.position, DRILL_PICK_LIMIT) || [];
@@ -5172,6 +5352,32 @@ function setupAgentPanel() {
     }
   }
 
+  // 外部エージェント設定（チャット入力をHTTPエンドポイントへ転送する。Geminiより優先）
+  const endpointInput = document.querySelector("#agent-endpoint");
+  const tokenInput = document.querySelector("#agent-token");
+  const enabledInput = document.querySelector("#agent-enabled");
+  const settingsSave = document.querySelector("#agent-settings-save");
+  const settingsStatus = document.querySelector("#agent-settings-status");
+  if (endpointInput && settingsSave) {
+    try {
+      const config = getAgentConfig();
+      endpointInput.value = config.endpoint;
+      if (tokenInput) tokenInput.value = config.token;
+      if (enabledInput) enabledInput.checked = config.enabled;
+    } catch (e) {}
+    settingsSave.addEventListener("click", () => {
+      try {
+        localStorage.setItem("agentEndpoint", endpointInput.value.trim());
+        localStorage.setItem("agentToken", tokenInput ? tokenInput.value : "");
+        localStorage.setItem("agentEnabled", enabledInput?.checked ? "1" : "0");
+        updateChatPanelVisibility();
+        if (settingsStatus) settingsStatus.textContent = t("common.saved");
+      } catch (error) {
+        if (settingsStatus) settingsStatus.textContent = t("common.saveError", { error: error.message });
+      }
+    });
+  }
+
   document.querySelector("#agent-refresh")?.addEventListener("click", () => void render());
   document.querySelector("#agent-import")?.addEventListener("click", () => fileInput?.click());
   fileInput?.addEventListener("change", async () => {
@@ -5212,12 +5418,29 @@ function setupAgentPanel() {
 
 // Google APIキー未設定時はチャットパネルを表示しない。設定保存時に再評価する
 // 注意: setupChatPanel は window.kasugaiApi 定義前に呼ばれるため localStorage を直接参照する
+// 外部エージェント連携の設定値。Geminiキー未設定でもチャットが使えるよう別経路として扱う
+function getAgentConfig() {
+  try {
+    return {
+      endpoint: (localStorage.getItem("agentEndpoint") || "").trim(),
+      token: localStorage.getItem("agentToken") || "",
+      enabled: localStorage.getItem("agentEnabled") === "1",
+    };
+  } catch (e) {
+    return { endpoint: "", token: "", enabled: false };
+  }
+}
+function isAgentEnabled() {
+  const config = getAgentConfig();
+  return config.enabled && !!config.endpoint;
+}
+
 function updateChatPanelVisibility() {
   const panel = document.querySelector("#chat-panel");
   if (!panel) return;
   let hasKey = false;
   try { hasKey = !!localStorage.getItem("googleApiKey"); } catch (e) {}
-  panel.style.display = hasKey ? "" : "none";
+  panel.style.display = (hasKey || isAgentEnabled()) ? "" : "none";
 }
 
 function setupGoogleSettings() {
@@ -5243,17 +5466,21 @@ function setupGoogleSettings() {
   });
 
   const mapsKeyInput = document.querySelector("#google-maps-api-key");
+  const mapsWsKeyInput = document.querySelector("#google-maps-ws-api-key");
   const mapsSaveButton = document.querySelector("#google-maps-settings-save");
   const mapsStatus = document.querySelector("#google-maps-settings-status");
   const tiles3dToggle = document.querySelector("#google-3dtiles-toggle");
   if (!mapsKeyInput || !mapsSaveButton) return;
   try {
     mapsKeyInput.value = localStorage.getItem("googleMapsApiKey") || "";
+    if (mapsWsKeyInput) mapsWsKeyInput.value = localStorage.getItem("googleMapsWsApiKey") || "";
     if (tiles3dToggle) tiles3dToggle.checked = localStorage.getItem("googleMaps3dTiles") === "1";
   } catch (e) {}
   mapsSaveButton.addEventListener("click", () => {
     try {
       localStorage.setItem("googleMapsApiKey", mapsKeyInput.value.trim());
+      if (mapsWsKeyInput) localStorage.setItem("googleMapsWsApiKey", mapsWsKeyInput.value.trim());
+      updateSearchProvider();
       if (mapsStatus) mapsStatus.textContent = t("common.saved");
       if (layerState.has(GOOGLE_3DTILES_LAYER_ID)) {
         syncGoogle3dTilesLayer();
@@ -6264,16 +6491,47 @@ window.kasugaiApi = {
     refreshLayers();
     return true;
   },
-  async searchLocation(query) {
-    const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors" });
-    if (!response.ok) throw new Error(t("search.failedStatus", { status: response.status }));
-    const data = await response.json();
-    return data.slice(0, 5).map(item => ({
-      title: item.properties?.title || "",
-      address: item.properties?.address || "",
-      latitude: Number(item.geometry?.coordinates?.[1]),
-      longitude: Number(item.geometry?.coordinates?.[0]),
+  async searchLocation(query, provider) {
+    const fn = searchProviders[provider || document.querySelector("#search-provider")?.value] || searchProviders.gsi;
+    const items = await fn(String(query || ""));
+    return items.slice(0, 5);
+  },
+  // Google Places API (New) のテキスト検索。Maps API キーが必要
+  async searchPlaces(query) {
+    const key = getMapsWsKey();
+    if (!key) throw new Error(t("google.needKey"));
+    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
+      },
+      body: JSON.stringify({ textQuery: String(query || ""), languageCode: getLanguage(), pageSize: 10 }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error?.message || t("search.failedStatus", { status: response.status }));
+    return (data?.places || []).map(place => ({
+      title: place.displayName?.text || "",
+      address: place.formattedAddress || "",
+      latitude: Number(place.location?.latitude),
+      longitude: Number(place.location?.longitude),
     })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+  },
+  // Google ストリートビューを別タブで開く。存在確認は Street View Static の metadata(無料)で行う
+  async openStreetView(latitude, longitude) {
+    const key = getMapsWsKey();
+    if (!key) throw new Error(t("google.needKey"));
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error(t("error.invalidUrl"));
+    const response = await fetch(`https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${encodeURIComponent(key)}`, { mode: "cors" });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error_message || t("search.failedStatus", { status: response.status }));
+    if (data?.status !== "OK") return { ok: false, status: data?.status || "UNKNOWN" };
+    const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+    window.open(url, "_blank", "noopener");
+    return { ok: true, url };
   },
   flyToFeature,
   listCameraPresets() {
@@ -6450,6 +6708,10 @@ window.kasugaiApi = {
   getGoogleMapsApiKey() {
     try { return localStorage.getItem("googleMapsApiKey") || ""; } catch (e) { return ""; }
   },
+  // Web サービス API 用キー（googleMapsWsApiKey 優先・無ければ Maps キー）
+  getGoogleMapsWsApiKey() {
+    return getMapsWsKey();
+  },
   getGeminiModel() {
     try { return localStorage.getItem("googleGeminiModel") || "gemini-3.1-flash-lite"; } catch (e) { return "gemini-3.1-flash-lite"; }
   },
@@ -6524,6 +6786,35 @@ window.kasugaiApi = {
   },
   async removeDataLayer(idOrTitle) {
     return await unregisterDataLayer(idOrTitle);
+  },
+  // ---- DATA/ ファイル（ローカルサーバー版のみ・fileWrite 能力）----
+  // DATA/ 内のファイル一覧を {name,size,modified}[] で返す
+  async listDataFiles() {
+    if (!hasBackendFeature("fileWrite")) return [];
+    const project = currentProjectId || "default";
+    const response = await fetch(`./api/files?project=${encodeURIComponent(project)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
+    const data = await response.json().catch(() => ({}));
+    return Array.isArray(data?.files) ? data.files : [];
+  },
+  // content: string / Blob / ArrayBuffer を DATA/<name> へ書き込む（サブフォルダ可）
+  async saveDataFile(name, content) {
+    if (!hasBackendFeature("fileWrite")) return { ok: false, error: "fileWrite はローカルサーバー版のみで利用できます" };
+    const project = currentProjectId || "default";
+    const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+    if (!rel) return { ok: false, error: "name is required" };
+    const response = await fetch(`./api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
+    if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
+    return { ok: true, name };
+  },
+  async deleteDataFile(name) {
+    if (!hasBackendFeature("fileWrite")) return { ok: false, error: "fileWrite はローカルサーバー版のみで利用できます" };
+    const project = currentProjectId || "default";
+    const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+    if (!rel) return { ok: false, error: "name is required" };
+    const response = await fetch(`./api/files/${encodeURIComponent(project)}/${rel}`, { method: "DELETE" });
+    if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
+    return { ok: true, name };
   },
   // ---- ストレージプラグイン（IndexedDB・ブラウザローカル）----
   async listStoragePlugins() {
@@ -6784,6 +7075,7 @@ const CHAT_TOOLS = [{
         type: "OBJECT",
         properties: {
           query: { type: "STRING", description: "検索語(例: 春日井市役所)" },
+          provider: { type: "STRING", description: "検索プロバイダ(省略時は検索タブの選択): gsi/google/yahoo" },
         },
         required: ["query"],
       },
@@ -7100,15 +7392,70 @@ const CHAT_TOOLS = [{
         required: ["name"],
       },
     },
+    {
+      name: "searchPlaces",
+      description: "Google Places API(テキスト検索)で施設・店舗・観光地等を検索する。Maps APIキー設定時のみ利用可。検索後はflyToまたはflyToFeatureで移動できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          query: { type: "STRING", description: "検索語(例: 春日井市 カフェ)" },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "openStreetView",
+      description: "指定座標の Google ストリートビューを別タブで開く。Maps APIキー設定時のみ利用可",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          latitude: { type: "NUMBER", description: "緯度(度)" },
+          longitude: { type: "NUMBER", description: "経度(度)" },
+        },
+        required: ["latitude", "longitude"],
+      },
+    },
+    {
+      name: "listDataFiles",
+      description: "プロジェクトの DATA/ フォルダ内ファイル一覧(名前・サイズ・更新時刻)を取得する。ローカルサーバー版のみ利用可",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "saveDataFile",
+      description: "テキスト内容をプロジェクトの DATA/ フォルダへ保存する(.geojson等・サブフォルダ可)。既存ファイルの上書き時はユーザー確認が出る。ローカルサーバー版のみ利用可",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "DATA/ 以下のファイル名(例: route.geojson, sub/out.txt)" },
+          content: { type: "STRING", description: "保存するテキスト内容" },
+        },
+        required: ["name", "content"],
+      },
+    },
+    {
+      name: "deleteDataFile",
+      description: "DATA/ フォルダ内のファイルを削除する。実行前にユーザー確認が出る。ローカルサーバー版のみ利用可",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "DATA/ 以下のファイル名" },
+        },
+        required: ["name"],
+      },
+    },
   ],
 }];
 
 const chatSystemInstruction = () => t("chat.systemInstruction");
 
 // バックエンドの能力に応じて公開するツールを絞る（公開環境に高権限ツールを見せない）
+// Mapsキー必須のツール・ローカルサーバー版のファイル書込みツールも同様に条件付き
 function activeChatTools() {
+  const hasMapsKey = !!getMapsWsKey();
   const declarations = CHAT_TOOLS[0].functionDeclarations
-    .filter(d => d.name !== "publishPlugin" || hasBackendFeature("pluginWrite"));
+    .filter(d => d.name !== "publishPlugin" || hasBackendFeature("pluginWrite"))
+    .filter(d => !["searchPlaces", "openStreetView"].includes(d.name) || hasMapsKey)
+    .filter(d => !["listDataFiles", "saveDataFile", "deleteDataFile"].includes(d.name) || hasBackendFeature("fileWrite"));
   return [{ functionDeclarations: declarations }];
 }
 
@@ -7175,7 +7522,7 @@ function getChatSandbox() {
 
 // サンドボックスへ公開しないAPI（キー等の機密を外部送信されるのを防ぐ。
 // プラグイン書き込み系は確認ダイアログを迂回できるためブロックする）
-const CHAT_SANDBOX_BLOCKED_API = new Set(["getGoogleApiKey", "getGeminiModel", "applyInspector", "shutdownApp", "installUpdate", "saveStoragePlugin", "removeStoragePlugin", "setStoragePluginEnabled", "setStoragePluginError", "publishStoragePlugin"]);
+const CHAT_SANDBOX_BLOCKED_API = new Set(["getGoogleApiKey", "getGoogleMapsApiKey", "getGoogleMapsWsApiKey", "getGeminiModel", "applyInspector", "shutdownApp", "installUpdate", "saveStoragePlugin", "removeStoragePlugin", "setStoragePluginEnabled", "setStoragePluginError", "publishStoragePlugin", "saveDataFile", "deleteDataFile"]);
 
 // サンドボックスからの api.XXX 呼び出しを kasugaiApi に橋渡しする
 window.addEventListener("message", async event => {
@@ -7256,8 +7603,36 @@ async function executeChatTool(name, args = {}) {
     return { ok, message: ok ? undefined : t("tool.basemapNotFound", { name: args.name }) };
   }
   if (name === "searchLocation") {
-    const results = await window.kasugaiApi.searchLocation(args.query);
+    const results = await window.kasugaiApi.searchLocation(args.query, args.provider);
     return { results };
+  }
+  if (name === "searchPlaces") {
+    try {
+      return { results: await window.kasugaiApi.searchPlaces(args.query) };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message || error) };
+    }
+  }
+  if (name === "openStreetView") {
+    try {
+      return await window.kasugaiApi.openStreetView(args.latitude, args.longitude);
+    } catch (error) {
+      return { ok: false, message: String(error && error.message || error) };
+    }
+  }
+  if (name === "listDataFiles") return { files: await window.kasugaiApi.listDataFiles() };
+  if (name === "saveDataFile") {
+    const fileName = String(args.name || "").trim();
+    const existing = await window.kasugaiApi.listDataFiles();
+    if (existing.some(f => f.name === fileName) && !window.confirm(t("datafile.confirmOverwrite", { name: fileName }))) {
+      return { ok: false, message: t("agent.cancelled") };
+    }
+    return await window.kasugaiApi.saveDataFile(fileName, String(args.content ?? ""));
+  }
+  if (name === "deleteDataFile") {
+    const fileName = String(args.name || "").trim();
+    if (!window.confirm(t("datafile.confirmDelete", { name: fileName }))) return { ok: false, message: t("agent.cancelled") };
+    return await window.kasugaiApi.deleteDataFile(fileName);
   }
   if (name === "listCameraPresets") return { presets: window.kasugaiApi.listCameraPresets() };
   if (name === "flyToPreset") {
@@ -7470,6 +7845,42 @@ function setupChatPanel() {
     void respondToChat(text);
   });
 
+  // 外部エージェントへメッセージを送る。
+  // 応答は {reply: "...", actions: [{name, args}]} で、actions はチャットツールと同名で順次実行される
+  async function callExternalAgent(text) {
+    const config = getAgentConfig();
+    const headers = { "Content-Type": "application/json" };
+    if (config.token) headers["Authorization"] = `Bearer ${config.token}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    let response;
+    try {
+      response = await fetch(config.endpoint, {
+        method: "POST",
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({
+          message: text,
+          project: currentProjectId || "default",
+          camera: window.kasugaiApi.getCamera(),
+          layers: window.kasugaiApi.listLayers(),
+          history: loadChatLog().slice(-20),
+        }),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+    const executed = [];
+    for (const action of Array.isArray(data?.actions) ? data.actions : []) {
+      if (!action || typeof action.name !== "string") continue;
+      await executeChatTool(action.name, action.args || {});
+      executed.push(`${action.name}(${JSON.stringify(action.args || {})})`);
+    }
+    return { text: typeof data?.reply === "string" && data.reply ? data.reply : t("chat.noResponse"), executed };
+  }
+
   // Google APIキーが設定されていれば Gemini (function calling)、未設定ならローカルコマンドのみ。
   // "kasugai:chat" カスタムイベントを購読し detail.reply をセットすれば外部エージェントへ橋渡しできる
   async function respondToChat(text) {
@@ -7482,6 +7893,24 @@ function setupChatPanel() {
     if (text.startsWith("/")) {
       const local = await handleLocalChatCommand(text);
       addMessage("assistant", local || t("chat.unknownCommand", { command: text }));
+      return;
+    }
+    // 外部エージェントが有効なら Gemini より優先してエンドポイントへ送信する
+    if (isAgentEnabled()) {
+      const thinking = document.createElement("div");
+      thinking.className = "chat-message assistant";
+      thinking.textContent = "…";
+      messages.append(thinking);
+      messages.scrollTop = messages.scrollHeight;
+      try {
+        const { text: reply, executed } = await callExternalAgent(text);
+        thinking.remove();
+        executed.forEach(call => addMessage("system", t("chat.executed", { call })));
+        addMessage("assistant", reply);
+      } catch (error) {
+        thinking.remove();
+        addMessage("system", t("common.error", { error: error.message }));
+      }
       return;
     }
     if (!window.kasugaiApi.getGoogleApiKey()) {

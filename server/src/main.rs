@@ -1,13 +1,13 @@
 #![windows_subsystem = "windows"]
 
-use axum::extract::State;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{HeaderMap, Method, StatusCode};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
@@ -42,6 +42,7 @@ struct AppState {
     shutdown: Arc<Notify>,
     port: u16,
     web_dir: Arc<PathBuf>,
+    projects_dir: Arc<PathBuf>,
 }
 
 // /api/fetch の上限とタイムアウト
@@ -118,7 +119,7 @@ async fn capabilities() -> Json<Value> {
         "tier": "local",
         "name": "kasugai_canvas",
         "version": env!("CARGO_PKG_VERSION"),
-        "features": ["fetchProxy", "fetchRange", "pluginWrite", "update", "shutdown"]
+        "features": ["fetchProxy", "fetchRange", "pluginWrite", "fileWrite", "update", "shutdown"]
     }))
 }
 
@@ -297,6 +298,133 @@ async fn delete_plugin(
     }
     update_plugins_json(&state.web_dir, &id, None)?;
     Ok(Json(json!({ "ok": true, "id": id })))
+}
+
+// /api/files のアップロード上限
+const FILE_WRITE_MAX_BYTES: usize = 64 * 1024 * 1024;
+
+// プロジェクトIDはフォルダ名に使うため plugins.json の id 規則に準拠（"."も許可するが先頭は不可）
+fn is_valid_project_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && !id.starts_with('.')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+}
+
+// projects/<project>/DATA/ 以下の相対パスを検証して絶対パスへ解決する。
+// ".." やドライブ指定・バックスラッシュを拒否し、書き込みを DATA/ 内に限定する
+fn resolve_data_path(
+    projects_dir: &Path,
+    project: &str,
+    rel: &str,
+) -> Result<PathBuf, (StatusCode, String)> {
+    if !is_valid_project_id(project) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "プロジェクトIDが不正です".to_string(),
+        ));
+    }
+    let mut path = projects_dir.join(project).join("DATA");
+    if rel.is_empty() {
+        return Ok(path);
+    }
+    if rel.len() > 512 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "パスが長すぎます".to_string(),
+        ));
+    }
+    for segment in rel.split('/') {
+        if segment.is_empty()
+            || segment == "."
+            || segment == ".."
+            || segment
+                .chars()
+                .any(|c| c.is_control() || c == '\\' || c == ':')
+        {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "ファイル名が不正です".to_string(),
+            ));
+        }
+        path.push(segment);
+    }
+    Ok(path)
+}
+
+#[derive(Deserialize)]
+struct FileListQuery {
+    project: String,
+}
+
+// GET /api/files?project=<id> → DATA/ 内のファイル一覧（再帰・相対パス）
+async fn list_data_files(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<FileListQuery>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let dir = resolve_data_path(&state.projects_dir, &query.project, "")?;
+    let mut files = Vec::new();
+    let mut stack = vec![dir.clone()];
+    while let Some(current) = stack.pop() {
+        let entries = match std::fs::read_dir(&current) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if let Ok(rel) = path.strip_prefix(&dir) {
+                let meta = entry.metadata().ok();
+                files.push(json!({
+                    "name": rel.to_string_lossy().replace('\\', "/"),
+                    "size": meta.as_ref().map(|m| m.len()).unwrap_or(0),
+                    "modified": meta
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as u64),
+                }));
+            }
+        }
+    }
+    files.sort_by_key(|f| f["name"].as_str().unwrap_or("").to_string());
+    Ok(Json(json!({ "files": files })))
+}
+
+// PUT /api/files/{project}/{*path} → DATA/ へボディをそのまま書き込む。
+// ローカルサーバー(127.0.0.1)前提の高権限API。フロント側では上書き時に確認ダイアログを挟む
+async fn write_data_file(
+    State(state): State<AppState>,
+    axum::extract::Path((project, rel)): axum::extract::Path<(String, String)>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let path = resolve_data_path(&state.projects_dir, &project, &rel)?;
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(internal_error)?;
+    }
+    tokio::fs::write(&path, &body).await.map_err(internal_error)?;
+    Ok(Json(json!({ "ok": true, "name": rel })))
+}
+
+async fn delete_data_file(
+    State(state): State<AppState>,
+    axum::extract::Path((project, rel)): axum::extract::Path<(String, String)>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let path = resolve_data_path(&state.projects_dir, &project, &rel)?;
+    if path.is_dir() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "フォルダは削除できません".to_string(),
+        ));
+    }
+    if path.exists() {
+        tokio::fs::remove_file(&path).await.map_err(internal_error)?;
+    }
+    Ok(Json(json!({ "ok": true, "name": rel })))
 }
 
 async fn request_shutdown(State(state): State<AppState>) -> StatusCode {
@@ -485,6 +613,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         shutdown: Arc::new(Notify::new()),
         port,
         web_dir: Arc::new(web_dir.clone()),
+        projects_dir: Arc::new(projects_dir.clone()),
     };
 
     let app = Router::new()
@@ -492,7 +621,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/capabilities", get(capabilities))
         .route("/api/fetch", get(fetch_proxy).head(fetch_proxy))
         .route("/api/plugins", post(save_plugin))
-        .route("/api/plugins/{id}", axum::routing::delete(delete_plugin))
+        .route("/api/plugins/{id}", delete(delete_plugin))
+        .route("/api/files", get(list_data_files))
+        .route(
+            "/api/files/{project}/{*path}",
+            put(write_data_file)
+                .delete(delete_data_file)
+                .layer(DefaultBodyLimit::max(FILE_WRITE_MAX_BYTES)),
+        )
         .route(
             "/api/update/settings",
             get(get_update_settings).put(put_update_settings),
