@@ -2,10 +2,114 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>KASUGAI Canvas 技術選定</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KASUGAI Canvas — ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
 </head>
-<frameset cols="240,*" frameborder="0" border="0">
-  <frame src="menu.html" name="menu" scrolling="auto" noresize="noresize">
-  <frame src="home.html" name="main" scrolling="auto">
-</frameset>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.20.0</span></h1>
+      <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムのドキュメント</p>
+    </header>
+    <main>
+      <section>
+        <h2>📋 概要</h2>
+        <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。Re:Earth GeoSuite との互換性を意識した GIS 基本機能に加え、KASUGAI 独自の FLY 機能・AIチャット（Gemini 連携）を備えています。</p>
+        <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得は CesiumJS が直接行い、Rust サーバーはバージョン管理・シャットダウン・ヘルスチェック API のみ提供します。</small></p>
+        <div style="margin: 15px 0;">
+          <a href="web/" class="demo-link" target="_blank">▶ デモサイトを開く（インストール不要・ブラウザで即起動）</a>
+        </div>
+        <p><small>デモは GitHub Pages 上の静的配信版です。設定の保存・サーバー経由の一部機能は無効ですが、地図閲覧・Fly など主要機能はそのまま試せます。</small></p>
+        <div style="margin: 15px 0;">
+          <a href="https://cesium-5ie.pages.dev/" class="demo-link cloudflare" target="_blank" rel="noopener noreferrer">▶ デモサイトを開く（Cloudflare Pages・認証方式3）</a>
+        </div>
+        <p><small>Cloudflare Pages 上のデモです。認証方式 3（Pages Functions + KV）で動作しており、ログイン ID／パスワードはいずれも <code>demo</code> です。</small></p>
+        <div style="margin: 15px 0;">
+          <a href="https://kasugai-canvas.ryu-3cb.workers.dev/" class="demo-link cloudflare" target="_blank" rel="noopener noreferrer">▶ デモサイトを開く（Cloudflare Workers・認証方式4）</a>
+        </div>
+        <p><small>Cloudflare Workers 上のデモです。認証方式 4（Worker + KV・全ファイル認証ゲート）で動作しており、未ログインでは静的ファイルも取得できません。ログイン ID は <code>admin</code>、パスワードは <code>admin123</code> です。</small></p>
+      </section>
+
+      <section>
+        <h2>📚 ドキュメント</h2>
+        <div class="features">
+          <a class="feature-card" href="guide.html">
+            <h3>📖 使い方・インストール</h3>
+            <p>起動方法・プロジェクト構成・設定の保存・FLY 機能の操作・配布と公開の形態</p>
+          </a>
+          <a class="feature-card" href="features.html">
+            <h3>🗺️ 機能と実装</h3>
+            <p>GIS 基本機能・Fly プレゼン機能の一覧と、現行実装の仕組み・ドレープ・制限事項</p>
+          </a>
+          <a class="feature-card" href="inspector.html">
+            <h3>📝 .kasc 設定仕様</h3>
+            <p>インスペクター設定ファイルの完全な書式。行タイプ・オプション・グループ化ルール</p>
+          </a>
+        </div>
+        <h3>技術選定</h3>
+        <div class="features">
+          <a class="feature-card" href="data.html">
+            <h3>🗂️ データ形式</h3>
+            <p>対応データ形式と 2D/3D データの最適フォーマット、配信・管理の考え方</p>
+          </a>
+          <a class="feature-card" href="library.html">
+            <h3>🧰 ライブラリ</h3>
+            <p>CesiumJS・Three.js を中心とした描画基盤と補完ライブラリの選定</p>
+          </a>
+          <a class="feature-card" href="architecture.html">
+            <h3>🏗️ システム構成</h3>
+            <p>ローカルPC・サーバーレス・国内対応・組み込みの構成方針</p>
+          </a>
+        </div>
+        <h3>拡張・連携</h3>
+        <div class="features">
+          <a class="feature-card" href="auth/">
+            <h3>🔐 認証とプラグイン</h3>
+            <p>認証方式 0〜4 の比較と設定手順、プラグインによる機能拡張</p>
+          </a>
+          <a class="feature-card" href="google.html">
+            <h3>🤖 Google 連携・AI</h3>
+            <p>Gemini AI チャット・Maps Platform・外部エージェント連携・AIプラグイン生成</p>
+          </a>
+          <a class="feature-card" href="qgis.html">
+            <h3>🔗 QGIS・GDAL 連携（構想）</h3>
+            <p>QGIS・GDAL を変換・配信基盤とする連携構想と実装ロードマップ</p>
+          </a>
+        </div>
+        <h3>記録</h3>
+        <div class="features">
+          <a class="feature-card" href="hackathon.html">
+            <h3>🏆 ハッカソン</h3>
+            <p>第5回 Agentic AI Hackathon with Google Cloud 出展まとめ</p>
+          </a>
+        </div>
+      </section>
+
+      <section>
+        <h2>🔗 インストール</h2>
+        <div class="install-steps">
+          <h3>配布 ZIP / インストーラー</h3>
+          <p>最新のビルドは <code>download/</code> フォルダから直接ダウンロードできます。</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 15px 0;">
+            <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas.zip" class="demo-link" target="_blank">DOWNLOAD: ポータブル ZIP</a>
+            <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip" class="demo-link" target="_blank">DOWNLOAD: インストーラー ZIP</a>
+          </div>
+          <p>詳しい手順は <a href="guide.html">使い方・インストール</a> を参照してください。</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>📚 関連リンク</h2>
+        <ul>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">GitHub リポジトリ</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/releases" target="_blank">GitHub Releases</a></li>
+          <li><a href="https://re-earth-geo-suite.vercel.app/" target="_blank">Re:Earth GeoSuite</a></li>
+          <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/blob/main/CHANGELOG.md" target="_blank">CHANGELOG</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
 </html>

@@ -91,7 +91,7 @@
   "inspector.dataDir.needsPermission": "{name}（需要确认权限）",
   "inspector.dataDir.unset": "未设置",
   "help.title": "帮助",
-  "help.hint": "使用方法、设置说明及如何添加本地文件，请参阅在线帮助（home.html）。",
+  "help.hint": "使用方法、设置说明及如何添加本地文件，请参阅在线帮助。",
   "help.link": "打开在线帮助",
   "settings.port.title": "端口",
   "settings.port.label": "当前连接端口",

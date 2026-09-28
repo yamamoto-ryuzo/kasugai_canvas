@@ -3,30 +3,82 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>1. データ — KASUGAI Canvas 技術選定</title>
+  <title>データ形式 — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v4.16.0</span></h1>
-      <p>1. データ — 2D/3D データの最適フォーマット、配信・管理</p>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.20.0</span></h1>
+      <p>データ形式 — 2D/3D データの最適フォーマット、配信・管理</p>
     </header>
     <main>
-      <h2 id="データ">1. データ</h2>
-      <p>KASUGAI Canvas（<strong>CesiumJS + Three.js</strong>）で取り扱う
-      2D / 3D
-      データの最適フォーマット、配信・管理についてまとめる章。</p>
-      <h2 id="kasugai-canvas-で扱えるデータ形式一覧">KASUGAI Canvas
-      で扱えるデータ形式一覧</h2>
-      <h3 id="直接描画可能なデータ形式">直接描画可能なデータ形式</h3>
+      <h2>対応データ形式</h2>
+      <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。ベクター系は <strong>全件読み込み系</strong>（全件読み込み・ベクター検索対象）と <strong>クエリ系</strong>（SQL 絞り込み・表示範囲のみ描画・検索は常に全件）の2系統に分かれます。共通の設計方針は「<strong>描画は表示範囲・属性は全件</strong>」で、描画件数の上限（フリーズ防止の安全弁）による切り捨ても描画のみに適用され、検索・属性一覧・API は常に全件を対象にします。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
+
+      <h3>ネイティブ・タイル系</h3>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🗺️ XYZ タイル <span class="badge">対応</span></h3>
+          <p><code>xyz:</code> / <code>base:</code> で指定するラスタタイル。<code>{z}/{x}/{y}</code> 形式のタイル画像を重ね合わせ・ドレープ表示</p>
+        </div>
+        <div class="feature-card">
+          <h3>🏙️ 3D Tiles <span class="badge">対応</span></h3>
+          <p><code>3dtiles:</code> で tileset.json を指定。PLATEAU 建築物・点群など大規模3Dデータをストリーミング表示</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧩 MVT / PMTiles <span class="badge" style="background:#6c757d;">検討中</span></h3>
+          <p>ベクタータイル。数十万地物級の全件表示・LOD が必要な大規模データ向けの別経路として検討</p>
+        </div>
+      </div>
+
+      <h3>ベクター：全件読み込み系</h3>
+      <p>ファイル全件を読み込んで描画する経路です（既定は entity 化・<code>render=primitive</code> でバッチ描画も可）。読み込みは必要となった初回（表示ON、属性・値一覧やベクター検索パネルでの選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧・検索では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。描画件数の上限（設定タブ・既定 20000）を超えるレイヤーは<strong>表示範囲内の地物のみ</strong>を描画し、カメラ移動で範囲内の地物に追随します（切り捨ては描画のみで、検索・属性一覧は常に全件対象）。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>📍 GeoJSON <span class="badge">対応</span></h3>
+          <p><code>geojson:</code> / <code>layer:</code> で指定。ベクトル検索・属性一覧・ドレープに対応したベクターデータの基本形式。小〜中規模・全件表示はこれが最速</p>
+        </div>
+        <div class="feature-card">
+          <h3>📦 GeoParquet <span class="badge">対応</span></h3>
+          <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。常に全件読み込みのため中規模まで。「Parquet をそのまま置くだけで表示」の利便性重視の経路</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧭 FlatGeobuf <span class="badge">対応</span></h3>
+          <p><code>flatgeobuf:</code> で指定。空間インデックス内蔵のバイナリ形式を公式 JS リーダー（CDN・遅延ロード）でストリームデコードし GeoJSON へ正規化。全件読み込み系の経路だが、全件バッファリングせず逐次変換する（SQL 絞り込み経路は下のクエリ系カードを参照）</p>
+        </div>
+      </div>
+
+      <h3>ベクター：クエリ系（DuckDB SQL）</h3>
+      <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路です。DuckDB-WASM（CDN から遅延ロード）が SQL で絞り込んでから GeoJSON へ正規化して描画します。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です。ランタイム資産（約60MB）は Service Worker がブラウザ内に永続キャッシュするため、重いダウンロードはバージョンごとの初回のみで、以後はキャッシュから読み込まれます（詳細は <a href="inspector.html">.kasc 設定仕様</a> の「ランタイムの永続キャッシュ」）。対応するファイル形式は以下のとおりです。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>📦 Parquet / GeoParquet <span class="badge">対応</span></h3>
+          <p><code>duckdb:</code> で指定（<code>format=parquet</code>・既定）。<code>where=</code>/<code>bbox=auto</code>/<code>columns=</code> の絞り込みで述語プッシュダウン・row group スキップ・列プルーニングが効くクエリ系の本来の対象。大規模・広範囲データ向け</p>
+        </div>
+        <div class="feature-card">
+          <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
+          <p><code>duckdb:</code> の <code>lon=</code>/<code>lat=</code> 指定で緯度・経度列を持つ表データをポイントとして表示（lon/lat/lng/longitude/latitude 列は自動検出）</p>
+        </div>
+        <div class="feature-card">
+          <h3>📋 JSON / GeoJSON <span class="badge">対応</span></h3>
+          <p><code>duckdb:</code> の <code>format=json</code>（<code>read_json_auto</code>）でテーブルとしてクエリ可能。FeatureCollection の構造は <code>format=read</code>（<code>ST_Read</code>・spatial 拡張必須）向け</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗂️ GeoPackage <span class="badge">対応</span></h3>
+          <p><code>gpkg:</code>（または <code>duckdb:</code> の拡張子判別・<code>format=gpkg</code>）で読み込み。sql.js（SQLite WASM）を Web Worker で実行するためデコード中も地図操作をブロックしません。<code>table=</code> で複数地物テーブルを選択可。<code>where=</code>/<code>limit=</code>/<code>columns=</code>/<code>bbox=auto</code>（表示範囲連動・既定 ON）の絞り込みにも対応。QGIS が埋め込む <code>layer_styles</code> のスタイル（QML）も自動適用</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧭 FlatGeobuf / 📐 Shapefile <span class="badge" style="background:#fd7e14;">対応中</span></h3>
+          <p><code>duckdb:</code>/<code>sql:</code> の <code>ST_Read</code>（<code>format=read</code>・spatial 拡張必須）で読み込み可能。<code>.fgb</code> は拡張子からも自動判別されます。ただし ST_Read は非 COI 環境（通常の静的ホスティング・ローカルサーバー）でスレッド生成に失敗しリモート URL も読めないため、現状の実行環境では実質利用できません。FlatGeobuf は全件読み込みの <code>flatgeobuf:</code> 経路（実装済み）を推奨</p>
+        </div>
+      </div>
+      <p><small>方針の詳細（経路分類・新形式の追加手順）はリポジトリの <code>AGENTS.md</code>「データ形式方針」を参照してください。</small></p>
+
+      <h2>KASUGAI Canvas で扱えるデータ形式一覧</h2>
+      <h3>直接描画可能なデータ形式</h3>
       <table>
-      <colgroup>
-      <col style="width: 21%" />
-      <col style="width: 21%" />
-      <col style="width: 35%" />
-      <col style="width: 21%" />
-      </colgroup>
       <thead>
       <tr>
       <th>分類</th>
@@ -97,15 +149,8 @@
       </tr>
       </tbody>
       </table>
-      <h3
-      id="パイプライン変換が必要なデータ形式">パイプライン（変換）が必要なデータ形式</h3>
+      <h3>パイプライン（変換）が必要なデータ形式</h3>
       <table>
-      <colgroup>
-      <col style="width: 23%" />
-      <col style="width: 23%" />
-      <col style="width: 30%" />
-      <col style="width: 23%" />
-      </colgroup>
       <thead>
       <tr>
       <th>分類</th>
@@ -160,15 +205,8 @@
       Worker または事前変換が必要。GPKG/FGDB は Single Source of Truth
       として管理・変換元に使用</li>
       </ul>
-      <h2 id="cesiumjs-と-three.js-の担当分け">CesiumJS と Three.js
-      の担当分け</h2>
+      <h2>CesiumJS と Three.js の担当分け</h2>
       <table>
-      <colgroup>
-      <col style="width: 19%" />
-      <col style="width: 35%" />
-      <col style="width: 30%" />
-      <col style="width: 14%" />
-      </colgroup>
       <thead>
       <tr>
       <th>データ</th>
@@ -228,16 +266,9 @@
       表現を補完。別 canvas を重ね、<code>postRender</code> で
       CesiumJS のカメラ行列を同期させる</li>
       </ul>
-      <h2 id="d-データ">2D データ</h2>
-      <h3 id="d-データ整理">2D データ整理</h3>
-      <table style="width:100%;">
-      <colgroup>
-      <col style="width: 28%" />
-      <col style="width: 28%" />
-      <col style="width: 10%" />
-      <col style="width: 10%" />
-      <col style="width: 21%" />
-      </colgroup>
+      <h2>2D データ</h2>
+      <h3>2D データ整理</h3>
+      <table>
       <thead>
       <tr>
       <th>用途・データ領域</th>
@@ -305,16 +336,9 @@
       正規化経路（<code>GeoJsonDataSource</code> /
       <code>GeoJsonPrimitive</code>）へ流す</li>
       </ul>
-      <h2 id="d-データ-1">3D データ</h2>
-      <h3 id="d-データ整理-1">3D データ整理</h3>
+      <h2>3D データ</h2>
+      <h3>3D データ整理</h3>
       <table>
-      <colgroup>
-      <col style="width: 30%" />
-      <col style="width: 30%" />
-      <col style="width: 11%" />
-      <col style="width: 11%" />
-      <col style="width: 15%" />
-      </colgroup>
       <thead>
       <tr>
       <th>用途・データ領域</th>
@@ -355,14 +379,8 @@
       </tr>
       </tbody>
       </table>
-      <h3 id="kasugai-canvas-への読み込み方">KASUGAI Canvas
-      への読み込み方</h3>
+      <h3>KASUGAI Canvas への読み込み方</h3>
       <table>
-      <colgroup>
-      <col style="width: 25%" />
-      <col style="width: 40%" />
-      <col style="width: 34%" />
-      </colgroup>
       <thead>
       <tr>
       <th>データ</th>
@@ -393,7 +411,7 @@
       </tr>
       </tbody>
       </table>
-      <h3 id="点群の扱い">点群の扱い</h3>
+      <h3>点群の扱い</h3>
       <ul>
       <li><strong>LAS/LAZ</strong>：測量・LiDAR での標準。LAZ
       は圧縮形式</li>
@@ -406,8 +424,7 @@
       / 1.1 glTF）</strong> に変換して <code>Cesium3DTileset</code> /
       <code>Three.js</code> で描画すると安定</li>
       </ul>
-      <h3 id="d-gaussian-splatting3dgs">3D Gaussian
-      Splatting（3DGS）</h3>
+      <h3>3D Gaussian Splatting（3DGS）</h3>
       <ul>
       <li>3D
       空間上の多数のガウス分布でシーンを表現するニューラル描画手法</li>
@@ -423,7 +440,7 @@
       側で専用レンダラーを使い、オーバーレイ canvas +
       <code>postRender</code> で CesiumJS とカメラ同期を行う</li>
       </ul>
-      <h2 id="地形demの扱い">地形（DEM）の扱い</h2>
+      <h2>地形（DEM）の扱い</h2>
       <ul>
       <li><strong>CesiumJS <code>TerrainProvider</code></strong>：KASUGAI
       Canvas は独自実装の
@@ -447,7 +464,7 @@
       <li>生の DEM（GeoTIFF / CSV 等）は、Web Worker またはサーバー側で
       <strong>標高PNG / GLB / 3D Tiles</strong> に変換してから描画</li>
       </ul>
-      <h2 id="データパイプライン">データパイプライン</h2>
+      <h2>データパイプライン</h2>
       <p>KASUGAI Canvas
       へのデータは、以下のパイプラインを経て描画層に届く。</p>
       <pre class="text"><code>現場データ（GPKG / FGDB / GeoJSON / GLB / LAS / PLY / SPZ）
@@ -466,11 +483,6 @@
     CesiumJS（GeoJsonDataSource / GeoJsonPrimitive / ImageryLayer /
     Cesium3DTileset / TerrainProvider）+ Three.js（オーバーレイ）</code></pre>
       <table>
-      <colgroup>
-      <col style="width: 21%" />
-      <col style="width: 21%" />
-      <col style="width: 57%" />
-      </colgroup>
       <thead>
       <tr>
       <th>段階</th>
@@ -516,20 +528,15 @@
       <li>変換済みデータは <strong>OPFS や IndexedDB</strong>
       にキャッシュし、次回起動時の読み込みを短縮する</li>
       </ul>
-      <h2 id="配信サービス">配信サービス</h2>
-      <h3 id="reearth-の位置づけ">Re:Earth の位置づけ</h3>
+      <h2>配信サービス</h2>
+      <h3>Re:Earth の位置づけ</h3>
       <ul>
       <li><strong>メイン</strong>：属性・プロジェクト管理・検索API</li>
       <li><strong>オープンソース・セルフホスト</strong>可能（ローカル/オンプレ対応）</li>
       <li>PLATEAU / GIS データの管理・メタデータ付与に強い</li>
       </ul>
-      <h3 id="データ種別ごとの配信構成">データ種別ごとの配信構成</h3>
+      <h3>データ種別ごとの配信構成</h3>
       <table>
-      <colgroup>
-      <col style="width: 25%" />
-      <col style="width: 29%" />
-      <col style="width: 45%" />
-      </colgroup>
       <thead>
       <tr>
       <th>データ種別</th>
@@ -560,7 +567,7 @@
       </tr>
       </tbody>
       </table>
-      <h3 id="ハイブリッド配信フロー">ハイブリッド配信フロー</h3>
+      <h3>ハイブリッド配信フロー</h3>
       <pre class="text"><code>データ入力/管理
 ├── 現場メタデータ ──&gt; Re:Earth
 ├── 2D図面(.parquet/.fgb) ──&gt; Re:Earth / S3

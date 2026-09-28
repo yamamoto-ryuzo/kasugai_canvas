@@ -8,7 +8,7 @@
 ## バージョン管理手順
 
 - バージョン番号の正本: `server\Cargo.toml` の `package.version`
-- リリース時は以下を同じ番号に更新: `download/latest.json`、`home.html` のバージョンバッジ、`README.md` のバージョン表記、`installer/kasugai_canvas.nsi`（`python run.py -B` が自動更新する場合あり）
+- リリース時は以下を同じ番号に更新: `download/latest.json`、ドキュメント各ページ（`index.html` 等）のバージョンバッジ、`README.md` のバージョン表記、`installer/kasugai_canvas.nsi`（`python run.py -B` が自動更新する場合あり）
 - `CHANGELOG.md` に日付付きセクションを追加（Keep a Changelog 形式）
 - 配布物は `python run.py -B` で `download/` に作成し、コミットしてプッシュ
 
@@ -23,7 +23,7 @@
 
 ## ドキュメント方針
 
-- 使い方・設定仕様・AI/セキュリティ等のドキュメントは `home.html`（GitHub Pages）に集約する
+- 使い方・設定仕様・AI/セキュリティ等のドキュメントはドキュメントサイト（`index.html` 以下の各ページ・GitHub Pages）に集約する
 - `README.md` は概要＋開発者向け情報のみ。ユーザー向け情報を二重管理しない
 
 ## 言語方針
@@ -103,7 +103,7 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
 1. `applyInspector` のパースに行タイプを追加する
 2. デコーダー関数を1本に閉じ込める（`loadXxxAsGeoJson(item)` の形。返り値は GeoJSON FeatureCollection）
 3. `vectorDecoders` Map に `{ load: item => loadXxxAsGeoJson(item) }` を登録する（`refreshLayers` の geojson 分岐・`orderedOtherLayers` フィルタ・`updateInspectorFromLayerOrder` の種類一覧はレジストリ参照のため変更不要。条件変更・再クエリに対応する形式は `query: true`（常時）または `query: item => 条件`（条件付き）を付けるとフィルター UI の対象になる）
-4. `home.html` のインスペクター設定仕様に書式を追記する
+4. `inspector.html` のインスペクター設定仕様に書式を追記する
 
 ### 形式の使い分け
 

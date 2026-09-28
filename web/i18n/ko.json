@@ -91,7 +91,7 @@
   "inspector.dataDir.needsPermission": "{name} (권한 확인 필요)",
   "inspector.dataDir.unset": "미설정",
   "help.title": "도움말",
-  "help.hint": "사용법·설정 사양·로컬 파일 추가 방법은 온라인 도움말(home.html)을 참조하세요.",
+  "help.hint": "사용법·설정 사양·로컬 파일 추가 방법은 온라인 도움말을 참조하세요.",
   "help.link": "온라인 도움말 열기",
   "settings.port.title": "포트",
   "settings.port.label": "현재 연결 포트",

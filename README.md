@@ -44,7 +44,7 @@ python run-pages.py      # Pages（control: 3）へデプロイ
 python run-workers.py    # Workers（control: 4・全ファイル認証ゲート）へデプロイ
 ```
 
-設定手順の詳細は [home.html の V4 セクション](home.html#v4-auth) を参照してください。
+設定手順の詳細は [認証とプラグイン](auth/index.html) を参照してください。
 
 ## ローカルサーバー API（オプション）
 
@@ -85,7 +85,7 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 
 ## 拡張機能（Plugin）と認証
 
-認証方式は `web/auth-methods.json` の `control` で 0〜4 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [home.html の V4 セクション](home.html#v4-auth) を参照してください。
+認証方式は `web/auth-methods.json` の `control` で 0〜4 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](auth/index.html) を参照してください。
 
 ### 起動後通常プラグイン
 `web/plugin-loader.js` が `web/plugins.json` を読み込み、各プラグインを `import()` します。

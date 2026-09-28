@@ -91,7 +91,7 @@
   "inspector.dataDir.needsPermission": "{name} (requiere comprobación de permisos)",
   "inspector.dataDir.unset": "Sin establecer",
   "help.title": "AYUDA",
-  "help.hint": "Consulte la ayuda en línea (home.html) para el uso, la configuración y cómo añadir archivos locales.",
+  "help.hint": "Consulte la ayuda en línea para el uso, la configuración y cómo añadir archivos locales.",
   "help.link": "Abrir ayuda en línea",
   "settings.port.title": "Puerto",
   "settings.port.label": "Puerto de conexión actual",

@@ -91,7 +91,7 @@
   "inspector.dataDir.needsPermission": "{name} (Berechtigungsprüfung erforderlich)",
   "inspector.dataDir.unset": "Nicht festgelegt",
   "help.title": "HILFE",
-  "help.hint": "Informationen zur Verwendung, zu den Einstellungen und zum Hinzufügen lokaler Dateien finden Sie in der Online-Hilfe (home.html).",
+  "help.hint": "Informationen zur Verwendung, zu den Einstellungen und zum Hinzufügen lokaler Dateien finden Sie in der Online-Hilfe.",
   "help.link": "Online-Hilfe öffnen",
   "settings.port.title": "Port",
   "settings.port.label": "Aktueller Verbindungsport",

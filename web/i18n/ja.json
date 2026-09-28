@@ -91,7 +91,7 @@
   "inspector.dataDir.needsPermission": "{name} (要権限確認)",
   "inspector.dataDir.unset": "未設定",
   "help.title": "HELP",
-  "help.hint": "使い方・設定仕様・ローカルファイル追加の詳細は、オンラインヘルプ（home.html）を参照してください。",
+  "help.hint": "使い方・設定仕様・ローカルファイル追加の詳細は、オンラインヘルプを参照してください。",
   "help.link": "オンラインヘルプを開く",
   "settings.port.title": "ポート番号",
   "settings.port.label": "現在の接続ポート",

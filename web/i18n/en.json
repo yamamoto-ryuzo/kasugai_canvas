@@ -91,7 +91,7 @@
   "inspector.dataDir.needsPermission": "{name} (permission check needed)",
   "inspector.dataDir.unset": "Not set",
   "help.title": "HELP",
-  "help.hint": "See the online help (home.html) for usage, settings, and how to add local files.",
+  "help.hint": "See the online help for usage, settings, and how to add local files.",
   "help.link": "Open online help",
   "settings.port.title": "Port",
   "settings.port.label": "Current connection port",
