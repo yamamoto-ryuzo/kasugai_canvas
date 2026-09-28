@@ -350,10 +350,11 @@
   "google.maps.wsKeyLabel": "Web サービス用キー（任意）",
   "google.maps.wsKeyPlaceholder": "Webサービス用 Maps APIキー（省略可）",
   "google.maps.wsKeyHint": "Geocoding・Places・Street View で使用します。未設定時は上のキーを使用。これらの API は HTTP リファラー制限付きキーを拒否するため、上のキーにリファラー制限をかけている場合はこちらに別キーを設定してください。",
-  "search.provider.places": "Google Places",
   "search.streetviewPick": "地図をクリック → Street View",
   "search.streetviewPicking": "地点をクリック…",
   "search.streetviewHint": "地図上の地点をクリックするとStreet Viewを開きます",
   "search.streetviewOpened": "Street Viewを開きました",
-  "search.streetviewNone": "この場所にはStreet Viewがありません"
+  "search.streetviewNone": "この場所にはStreet Viewがありません",
+  "search.streetviewCoverage": "Street View の候補ラインを表示",
+  "search.streetviewCoverageHint": "青いライン=Street View撮影済みの道路（Google内部のカバレッジデータを使用。将来変更の可能性あり）"
 }

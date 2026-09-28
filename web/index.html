@@ -88,7 +88,6 @@
                 <select id="search-provider" style="flex:0 0 auto;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;background:#fff;color:#1d2b35;">
                   <option value="gsi" selected data-i18n="search.provider.gsi">地理院</option>
                   <option value="google" data-i18n="search.provider.google">Google</option>
-                  <option value="places" data-i18n="search.provider.places">Google Places</option>
                   <option value="yahoo">Yahoo</option>
                 </select>
                 <span id="search-yahoo-warning" style="display:none;font-size:0.85em;color:#a82020;" data-i18n="search.yahooWarning">注意: yahooAppIdは漏洩する可能性があります。公開サイトでは使用しないでください。</span>
@@ -100,6 +99,10 @@
               <ul id="search-results" class="search-results" style="list-style:none;padding:0;margin:8px 0 0;"></ul>
               <div id="streetview-row" style="margin-top:8px;display:none;">
                 <button id="streetview-pick" type="button" data-i18n="search.streetviewPick">地図をクリック → Street View</button>
+                <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:0.9em;" data-i18n-attr="title:search.streetviewCoverageHint">
+                  <input id="streetview-coverage" type="checkbox" />
+                  <span data-i18n="search.streetviewCoverage">Street View の候補ラインを表示</span>
+                </label>
               </div>
               <div id="search-status" style="font-size:0.85em;color:#666;margin-top:4px;"></div>
             </section>

@@ -347,11 +347,19 @@ web/PLUGIN/auth-local/auth.js</code></pre>
           </div>
           <div class="feature-card">
             <h3>� Maps Platform の検索・ Places ・ Street View</h3>
-            <p>Maps API キーを保存すると、住所検索タブのプロバイダに「Google」（Geocoding API）が追加されます。AIチャットには <code>searchPlaces</code>（Places テキスト検索）・<code>openStreetView</code>（ストリートビューを別タブで開く）ツールが有効時のみ公開され、「近くのカフェを探して」「この地点のストリートビューを見せて」といった指示に対応します</p>
+            <p>Maps API キーを保存すると、住所検索タブのプロバイダに「Google」が追加されます。Geocoding API と Places テキスト検索を並列で呼ぶハイブリッド検索で、住所・施設名・キーワードのいずれにも対応します。検索結果の「SV」ボタンや「地図をクリック → Street View」でストリートビューを別タブで開き、「候補ラインを表示」で撮影済み道路の青いラインを地図上に重ねられます。AIチャットには <code>searchPlaces</code>（Places テキスト検索）・<code>openStreetView</code>（ストリートビューを別タブで開く）ツールが有効時のみ公開され、「近くのカフェを探して」「この地点のストリートビューを見せて」といった指示に対応します</p>
           </div>
           <div class="feature-card">
             <h3>�🔑 API キー管理</h3>
             <p>Gemini キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>、Maps キーは <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行。キーは localStorage にのみ保存され、.kasc エクスポートには含まれません</p>
+            <p><strong>Google Cloud で有効化・キー制限への追加が必要な API:</strong></p>
+            <ul>
+              <li><strong>Map Tiles API</strong> — Photorealistic 3D Tiles</li>
+              <li><strong>Geocoding API</strong> — 検索プロバイダ「Google」（ハイブリッド検索の住所側）</li>
+              <li><strong>Places API (New)</strong> — ハイブリッド検索の施設・キーワード側 / AIツール <code>searchPlaces</code></li>
+              <li><strong>Street View Static API</strong> — Street View のメタデータ確認（「SV」ボタン・地図クリック・AIツール <code>openStreetView</code>。パノラマ自体は Google マップを別タブで開くだけなので API 不要）</li>
+            </ul>
+            <p>Geocoding / Places / Street View の Web サービス API は HTTP リファラー制限付きキーを拒否します。リファラー制限をかけたい場合は「Web サービス用キー」欄に制限なしの別キーを設定してください（Map Tiles API のみリファラー制限が有効なので、上の「Maps API キー」に制限付きキーを入れる運用が可能です）。Street View 候補ラインは Google マップ内部のカバレッジデータ（キー不要・非公式）を使用します</p>
           </div>
           <div class="feature-card">
             <h3>⚙️ ローカルコマンド</h3>

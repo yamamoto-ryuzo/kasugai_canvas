@@ -85,6 +85,13 @@ let basemapDrape3DTiles = false;
 let infoRequestId = 0;
 let walkModeActive = false;
 let streetViewPickMode = false;
+// Street View カバレッジ表示の状態
+let svCoverageDataSource = null;
+const svCoverageTiles = new Map(); // "x/y" -> Cesium.Entity[]
+let svCoverageRefreshToken = 0;
+let svCoverageTimer = null;
+let svCoverageListener = null;
+let svCoverageAutoOn = false; // 地点拾いモードで自動ONにした場合のみ true（手動ONは維持）
 let flyHeight = 20;
 let flySpeed = 30;
 const flyPaths = [];
@@ -1290,13 +1297,16 @@ function proxyTemplateUrl(url, useProxy = true) {
 }
 
 function createUrlTemplateProvider(options) {
-  return new Cesium.UrlTemplateImageryProvider({
+  const providerOptions = {
     url: proxyTemplateUrl(options.url, options.proxy !== false),
     credit: new Cesium.Credit(options.attribution || ""),
     maximumLevel: options.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
     tileWidth: options.tileSize || 256,
     tileHeight: options.tileSize || 256,
-  });
+  };
+  // URL の {s} プレースホルダ用サブドメイン（"0123" 等の文字列で指定）
+  if (options.subdomains) providerOptions.subdomains = options.subdomains;
+  return new Cesium.UrlTemplateImageryProvider(providerOptions);
 }
 
 function createClippingPlaneFromEnu(normalEnu) {
@@ -2913,6 +2923,44 @@ function getMapsWsKey() {
   } catch (e) { return ""; }
 }
 
+// Google Geocoding API。{title,address,latitude,longitude}[] を返す
+async function googleGeocodeSearch(query, key) {
+  const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${encodeURIComponent(key)}&language=${encodeURIComponent(getLanguage())}`, { mode: "cors" });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error_message || t("search.failedStatus", { status: response.status }));
+  if (data?.status !== "OK" && data?.status !== "ZERO_RESULTS") {
+    throw new Error(data?.error_message || data?.status || t("search.failed"));
+  }
+  return (data?.results || []).map(item => ({
+    title: item.formatted_address || "",
+    address: item.formatted_address || "",
+    latitude: Number(item.geometry?.location?.lat),
+    longitude: Number(item.geometry?.location?.lng),
+  }));
+}
+
+// Google Places API (New) テキスト検索。{title,address,latitude,longitude}[] を返す
+async function googlePlacesSearch(query, key) {
+  if (!key) throw new Error(t("google.needKey"));
+  const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": key,
+      "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
+    },
+    body: JSON.stringify({ textQuery: String(query || ""), languageCode: getLanguage(), pageSize: 10 }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error?.message || t("search.failedStatus", { status: response.status }));
+  return (data?.places || []).map(place => ({
+    title: place.displayName?.text || "",
+    address: place.formattedAddress || "",
+    latitude: Number(place.location?.latitude),
+    longitude: Number(place.location?.longitude),
+  }));
+}
+
 // 検索プロバイダ。いずれも {title,address,latitude,longitude}[] を返す。
 // google は Maps API キー(localStorage)、yahoo は .kasc の yahooappid: を使う
 const searchProviders = {
@@ -2927,25 +2975,35 @@ const searchProviders = {
       longitude: Number(item.geometry?.coordinates?.[0]),
     }));
   },
+  // ハイブリッド検索: Geocoding（住所向け）と Places テキスト検索（施設・キーワード向け）を
+  // 並列で呼んでマージする。片方が失敗しても他方の結果は返す（両方失敗時のみエラー）
   async google(query) {
     const key = getMapsWsKey();
     if (!key) throw new Error(t("google.needKey"));
-    const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${encodeURIComponent(key)}&language=${encodeURIComponent(getLanguage())}`, { mode: "cors" });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error_message || t("search.failedStatus", { status: response.status }));
-    if (data?.status !== "OK" && data?.status !== "ZERO_RESULTS") {
-      throw new Error(data?.error_message || data?.status || t("search.failed"));
+    const [geocode, places] = await Promise.allSettled([
+      googleGeocodeSearch(query, key),
+      googlePlacesSearch(query, key),
+    ]);
+    const items = [];
+    if (geocode.status === "fulfilled") items.push(...geocode.value);
+    if (places.status === "fulfilled") items.push(...places.value);
+    if (!items.length) {
+      if (geocode.status === "rejected") throw geocode.reason;
+      if (places.status === "rejected") throw places.reason;
     }
-    return (data?.results || []).map(item => ({
-      title: item.formatted_address || "",
-      address: item.formatted_address || "",
-      latitude: Number(item.geometry?.location?.lat),
-      longitude: Number(item.geometry?.location?.lng),
-    }));
+    // 同一地点の重複を除外（座標を ~11m 単位に丸めて比較。Geocoding側を優先して残す）
+    const seen = new Set();
+    return items.filter(item => {
+      if (!Number.isFinite(item.latitude) || !Number.isFinite(item.longitude)) return false;
+      const k = `${Math.round(item.latitude * 1e4)},${Math.round(item.longitude * 1e4)}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
   },
-  // Google Places API (New) テキスト検索（施設名・キーワード向け）。kasugaiApi.searchPlaces と同処理
+  // Places テキスト検索のみ（AIツールや provider="places" 指定用）
   async places(query) {
-    return window.kasugaiApi.searchPlaces(query);
+    return googlePlacesSearch(query, getMapsWsKey());
   },
   async yahoo(query) {
     const response = await fetch(`https://map.yahooapis.jp/geocode/V1/geoCoder?appid=${encodeURIComponent(yahooAppId)}&query=${encodeURIComponent(query)}&output=json`, { mode: "cors" });
@@ -2971,18 +3029,20 @@ function updateSearchProvider() {
   const hasYahoo = yahooAppId && !yahooAppId.includes("あなたのYahoo");
   if (yahooOpt) yahooOpt.disabled = !hasYahoo;
   const googleOpt = searchProvider.querySelector('option[value="google"]');
-  const placesOpt = searchProvider.querySelector('option[value="places"]');
   const hasGoogle = !!getMapsWsKey();
   if (googleOpt) googleOpt.disabled = !hasGoogle;
-  if (placesOpt) placesOpt.disabled = !hasGoogle;
   if (!hasYahoo && searchProvider.value === "yahoo") searchProvider.value = "gsi";
-  if (!hasGoogle && (searchProvider.value === "google" || searchProvider.value === "places")) searchProvider.value = "gsi";
+  if (!hasGoogle && searchProvider.value === "google") searchProvider.value = "gsi";
   if (searchYahooWarning) searchYahooWarning.style.display = (searchProvider.value === "yahoo") ? "" : "none";
   const svRow = document.querySelector("#streetview-row");
   if (svRow) svRow.style.display = hasGoogle ? "" : "none";
-  if (!hasGoogle && streetViewPickMode) {
-    streetViewPickMode = false;
-    updateStreetViewPickButton();
+  if (!hasGoogle) {
+    if (streetViewPickMode) {
+      streetViewPickMode = false;
+      updateStreetViewPickButton();
+    }
+    svCoverageAutoOn = false;
+    setStreetViewCoverage(false);
   }
 }
 
@@ -2997,6 +3057,160 @@ async function openStreetViewAt(latitude, longitude) {
   }
 }
 
+// Street View カバレッジ(青い候補ライン)。Google マップが内部で使う photometa/ac/v1
+// (z17タイル単位のパノラマ位置+リンク)を fetch し、リンクを青いラインとして自前描画する。
+// 旧来の lyrs=svv ラスタータイルは空タイルを返すようになったため使えない。
+// 非公式エンドポイントのため将来変更・停止される可能性あり
+const SV_COVERAGE_ZOOM = 17;
+const SV_COVERAGE_MAX_TILES = 40;
+const SV_COVERAGE_COLOR = Cesium.Color.fromCssColorString("#2e7cf6").withAlpha(0.9);
+const SV_COVERAGE_CELL_COLOR = Cesium.Color.fromCssColorString("#2e7cf6").withAlpha(0.12);
+
+function lonLatToSvTile(lon, lat) {
+  const n = 2 ** SV_COVERAGE_ZOOM;
+  const latRad = Math.min(85.05, Math.max(-85.05, lat)) * Math.PI / 180;
+  return {
+    x: Math.max(0, Math.min(n - 1, Math.floor((lon + 180) / 360 * n))),
+    y: Math.max(0, Math.min(n - 1, Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n))),
+  };
+}
+
+// photometa/ac/v1 のタイルJSONを Entity 配列に変換する
+// tile[1][1] = パノラマ一覧([[type,panoid],_,[[_,_,lat,lng],...]],[リンク先index]) + tile[2] = カバレッジセル(粗い矩形)
+function parseSvCoverageTile(tile) {
+  const entities = [];
+  const panos = [];
+  const panoList = Array.isArray(tile?.[1]?.[1]) ? tile[1][1] : null;
+  if (panoList) {
+    for (const raw of panoList) {
+      const head = raw?.[0];
+      if (!Array.isArray(head) || head[0]?.[0] === 1) continue;
+      const lat = head?.[2]?.[0]?.[2];
+      const lng = head?.[2]?.[0]?.[3];
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      panos.push({ lat, lng, links: Array.isArray(raw?.[1]) ? raw[1] : [] });
+    }
+  }
+  if (panos.length) {
+    for (let i = 0; i < panos.length; i++) {
+      let linked = false;
+      for (const j of panos[i].links) {
+        if (!Number.isInteger(j) || j <= i || !panos[j]) continue;
+        linked = true;
+        entities.push(new Cesium.Entity({
+          polyline: {
+            positions: [
+              Cesium.Cartesian3.fromDegrees(panos[i].lng, panos[i].lat),
+              Cesium.Cartesian3.fromDegrees(panos[j].lng, panos[j].lat),
+            ],
+            width: 3,
+            material: SV_COVERAGE_COLOR,
+            clampToGround: true,
+            classificationType: Cesium.ClassificationType.BOTH,
+          },
+        }));
+      }
+      if (!linked && !panos[i].links.length) {
+        // 孤立パノラマは小さな点で残す
+        entities.push(new Cesium.Entity({
+          position: Cesium.Cartesian3.fromDegrees(panos[i].lng, panos[i].lat),
+          point: { pixelSize: 5, color: SV_COVERAGE_COLOR, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND },
+        }));
+      }
+    }
+    return entities;
+  }
+  // per-pano データが無いタイルはカバレッジセルを薄く塗る
+  const cells = Array.isArray(tile?.[2]) ? tile[2] : null;
+  if (cells) {
+    for (const cell of cells) {
+      const a = cell?.[1]?.[0];
+      const b = cell?.[1]?.[1];
+      const lat1 = a?.[2], lng1 = a?.[3], lat2 = b?.[2], lng2 = b?.[3];
+      if (![lat1, lng1, lat2, lng2].every(Number.isFinite)) continue;
+      entities.push(new Cesium.Entity({
+        rectangle: {
+          coordinates: Cesium.Rectangle.fromDegrees(Math.min(lng1, lng2), Math.min(lat1, lat2), Math.max(lng1, lng2), Math.max(lat1, lat2)),
+          material: SV_COVERAGE_CELL_COLOR,
+        },
+      }));
+    }
+  }
+  return entities;
+}
+
+// 表示範囲の z17 タイルを取得してカバレッジを描画する（ビュー外タイルは撤去）
+async function refreshSvCoverage() {
+  const token = ++svCoverageRefreshToken;
+  const ds = svCoverageDataSource;
+  if (!ds) return;
+  const view = getViewRanges();
+  if (!view?.ranges?.length) return;
+  const wanted = new Map();
+  for (const r of view.ranges) {
+    const nw = lonLatToSvTile(r.west, view.north);
+    const se = lonLatToSvTile(r.east, view.south);
+    const cx = (Math.min(nw.x, se.x) + Math.max(nw.x, se.x)) / 2;
+    const cy = (Math.min(nw.y, se.y) + Math.max(nw.y, se.y)) / 2;
+    const all = [];
+    for (let x = Math.min(nw.x, se.x); x <= Math.max(nw.x, se.x); x++) {
+      for (let y = Math.min(nw.y, se.y); y <= Math.max(nw.y, se.y); y++) {
+        all.push({ x, y, d: (x - cx) ** 2 + (y - cy) ** 2 });
+      }
+    }
+    all.sort((a, b) => a.d - b.d);
+    for (const t2 of all.slice(0, SV_COVERAGE_MAX_TILES)) wanted.set(`${t2.x}/${t2.y}`, t2);
+  }
+  for (const [key, entities] of svCoverageTiles) {
+    if (!wanted.has(key)) {
+      entities.forEach(e => ds.entities.remove(e));
+      svCoverageTiles.delete(key);
+    }
+  }
+  const missing = [...wanted.keys()].filter(k => !svCoverageTiles.has(k));
+  await Promise.all(missing.map(async key => {
+    const { x, y } = wanted.get(key);
+    try {
+      const res = await fetch(`https://www.google.com/maps/photometa/ac/v1?pb=!1m1!1smaps_sv.tactile!6m3!1i${x}!2i${y}!3i17!8b1`);
+      const text = await res.text();
+      if (!res.ok) return;
+      const start = text.indexOf("[");
+      const entities = start >= 0 ? parseSvCoverageTile(JSON.parse(text.slice(start))) : [];
+      if (token !== svCoverageRefreshToken || svCoverageDataSource !== ds) return;
+      entities.forEach(e => ds.entities.add(e));
+      svCoverageTiles.set(key, entities);
+    } catch (e) { /* タイル取得失敗は無視 */ }
+  }));
+}
+
+function scheduleSvCoverageRefresh() {
+  clearTimeout(svCoverageTimer);
+  svCoverageTimer = setTimeout(() => { void refreshSvCoverage(); }, 500);
+}
+
+async function setStreetViewCoverage(enabled) {
+  if (enabled) {
+    if (!svCoverageDataSource) {
+      svCoverageDataSource = new Cesium.CustomDataSource("sv-coverage");
+      await viewer.dataSources.add(svCoverageDataSource);
+      svCoverageListener = scheduleSvCoverageRefresh;
+      viewer.camera.moveEnd.addEventListener(svCoverageListener);
+      void refreshSvCoverage();
+    }
+  } else if (svCoverageDataSource) {
+    if (svCoverageListener) {
+      viewer.camera.moveEnd.removeEventListener(svCoverageListener);
+      svCoverageListener = null;
+    }
+    svCoverageRefreshToken++; // 進行中の fetch 結果を破棄
+    svCoverageTiles.clear();
+    viewer.dataSources.remove(svCoverageDataSource, true);
+    svCoverageDataSource = null;
+  }
+  const checkbox = document.querySelector("#streetview-coverage");
+  if (checkbox) checkbox.checked = !!svCoverageDataSource;
+}
+
 // Street View 地点拾いモードのボタン表示を更新
 function updateStreetViewPickButton() {
   const btn = document.querySelector("#streetview-pick");
@@ -3005,6 +3219,18 @@ function updateStreetViewPickButton() {
   btn.textContent = t(streetViewPickMode ? "search.streetviewPicking" : "search.streetviewPick");
   const statusEl = document.querySelector("#search-status");
   if (statusEl) statusEl.textContent = streetViewPickMode ? t("search.streetviewHint") : "";
+}
+
+// 地点拾いモード中は候補ラインを自動表示し、解除したら自動表示分だけ消す。
+// ユーザーが手動でONにしている場合は解除してもそのままにする
+async function updateStreetViewPickCoverage() {
+  if (streetViewPickMode && !svCoverageDataSource) {
+    svCoverageAutoOn = true;
+    await setStreetViewCoverage(true);
+  } else if (!streetViewPickMode && svCoverageAutoOn) {
+    svCoverageAutoOn = false;
+    await setStreetViewCoverage(false);
+  }
 }
 
 function applyInspector(text) {
@@ -3527,6 +3753,14 @@ function setupEvents() {
     streetviewPickBtn.addEventListener("click", () => {
       streetViewPickMode = !streetViewPickMode;
       updateStreetViewPickButton();
+      void updateStreetViewPickCoverage();
+    });
+  }
+  const streetviewCoverage = document.querySelector("#streetview-coverage");
+  if (streetviewCoverage) {
+    streetviewCoverage.addEventListener("change", event => {
+      svCoverageAutoOn = false; // 手動操作は自動制御を解除
+      setStreetViewCoverage(event.target.checked);
     });
   }
 
@@ -5054,6 +5288,7 @@ function setupEvents() {
     if (streetViewPickMode) {
       streetViewPickMode = false;
       updateStreetViewPickButton();
+      void updateStreetViewPickCoverage();
       const ray = viewer.camera.getPickRay(movement.position);
       const cartesian = ray
         ? ((() => { try { return viewer.scene.globe.pick(ray, viewer.scene); } catch (e) { return null; } })()
@@ -6498,38 +6733,30 @@ window.kasugaiApi = {
   },
   // Google Places API (New) のテキスト検索。Maps API キーが必要
   async searchPlaces(query) {
-    const key = getMapsWsKey();
-    if (!key) throw new Error(t("google.needKey"));
-    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": key,
-        "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location",
-      },
-      body: JSON.stringify({ textQuery: String(query || ""), languageCode: getLanguage(), pageSize: 10 }),
-    });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error?.message || t("search.failedStatus", { status: response.status }));
-    return (data?.places || []).map(place => ({
-      title: place.displayName?.text || "",
-      address: place.formattedAddress || "",
-      latitude: Number(place.location?.latitude),
-      longitude: Number(place.location?.longitude),
-    })).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+    return googlePlacesSearch(query, getMapsWsKey());
   },
-  // Google ストリートビューを別タブで開く。存在確認は Street View Static の metadata(無料)で行う
+  // Google ストリートビューを別タブで開く。存在確認は Street View Static の metadata(無料)で行う。
+  // source=outdoor(公式屋外パノラマ)を優先し、無ければ全パノラマにフォールバック。
+  // 確認した pano_id を URL に含めて、クリック位置の最寄りパノラマ(屋内・撮影不良等で真っ暗になり得る)への誤着地を防ぐ
   async openStreetView(latitude, longitude) {
     const key = getMapsWsKey();
     if (!key) throw new Error(t("google.needKey"));
     const lat = Number(latitude);
     const lng = Number(longitude);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error(t("error.invalidUrl"));
-    const response = await fetch(`https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${encodeURIComponent(key)}`, { mode: "cors" });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error_message || t("search.failedStatus", { status: response.status }));
+    const fetchMeta = async source => {
+      const response = await fetch(`https://maps.googleapis.com/maps/api/streetview/metadata?location=${lat},${lng}&key=${encodeURIComponent(key)}${source ? `&source=${source}` : ""}`, { mode: "cors" });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.error_message || t("search.failedStatus", { status: response.status }));
+      return data;
+    };
+    let data = await fetchMeta("outdoor");
+    if (data?.status !== "OK") data = await fetchMeta("");
     if (data?.status !== "OK") return { ok: false, status: data?.status || "UNKNOWN" };
-    const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`;
+    const panoLat = Number(data.location?.lat);
+    const panoLng = Number(data.location?.lng);
+    const viewpoint = `${Number.isFinite(panoLat) ? panoLat : lat},${Number.isFinite(panoLng) ? panoLng : lng}`;
+    const url = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${viewpoint}${data.pano_id ? `&panoid=${encodeURIComponent(data.pano_id)}` : ""}`;
     window.open(url, "_blank", "noopener");
     return { ok: true, url };
   },
@@ -7075,7 +7302,7 @@ const CHAT_TOOLS = [{
         type: "OBJECT",
         properties: {
           query: { type: "STRING", description: "検索語(例: 春日井市役所)" },
-          provider: { type: "STRING", description: "検索プロバイダ(省略時は検索タブの選択): gsi/google/yahoo" },
+          provider: { type: "STRING", description: "検索プロバイダ(省略時は検索タブの選択): gsi/google/places/yahoo (google=Geocoding+Placesハイブリッド、places=Placesのみ)" },
         },
         required: ["query"],
       },

@@ -350,10 +350,11 @@
   "google.maps.wsKeyLabel": "Web service key (optional)",
   "google.maps.wsKeyPlaceholder": "Maps API key for web services (optional)",
   "google.maps.wsKeyHint": "Used for Geocoding, Places, and Street View. Falls back to the key above when empty. These APIs reject keys with HTTP referrer restrictions — if the key above has referrer restrictions, set a separate key here.",
-  "search.provider.places": "Google Places",
   "search.streetviewPick": "Click map → Street View",
   "search.streetviewPicking": "Click a point on the map…",
   "search.streetviewHint": "Click a location on the map to open Street View",
   "search.streetviewOpened": "Street View opened",
-  "search.streetviewNone": "No Street View at this location"
+  "search.streetviewNone": "No Street View at this location",
+  "search.streetviewCoverage": "Show Street View coverage lines",
+  "search.streetviewCoverageHint": "Blue lines = streets with Street View imagery (uses Google internal coverage data; may change without notice)"
 }

@@ -350,10 +350,11 @@
   "google.maps.wsKeyLabel": "Web 服务密钥（可选）",
   "google.maps.wsKeyPlaceholder": "Web 服务用 Maps API 密钥（可省略）",
   "google.maps.wsKeyHint": "用于 Geocoding、Places、Street View。未设置时使用上面的密钥。这些 API 会拒绝带 HTTP 引荐来源限制的密钥——若上面的密钥设置了引荐来源限制，请在此设置另一把密钥。",
-  "search.provider.places": "Google Places",
   "search.streetviewPick": "点击地图 → Street View",
   "search.streetviewPicking": "请点击地图上的地点…",
   "search.streetviewHint": "点击地图上的位置即可打开街景",
   "search.streetviewOpened": "已打开街景",
-  "search.streetviewNone": "该位置没有街景"
+  "search.streetviewNone": "该位置没有街景",
+  "search.streetviewCoverage": "显示街景覆盖线",
+  "search.streetviewCoverageHint": "蓝线=已拍摄街景的道路（使用Google内部覆盖数据，未来可能变更）"
 }

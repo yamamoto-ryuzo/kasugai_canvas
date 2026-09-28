@@ -350,10 +350,11 @@
   "google.maps.wsKeyLabel": "웹 서비스용 키(선택)",
   "google.maps.wsKeyPlaceholder": "웹 서비스용 Maps API 키(생략 가능)",
   "google.maps.wsKeyHint": "Geocoding·Places·Street View에서 사용합니다. 미설정 시 위의 키를 사용. 이 API들은 HTTP 리퍼러 제한이 있는 키를 거부하므로, 위 키에 리퍼러 제한이 있다면 여기에 별도 키를 설정하세요.",
-  "search.provider.places": "Google Places",
   "search.streetviewPick": "지도 클릭 → Street View",
   "search.streetviewPicking": "지도에서 지점을 클릭…",
   "search.streetviewHint": "지도의 위치를 클릭하면 Street View가 열립니다",
   "search.streetviewOpened": "Street View를 열었습니다",
-  "search.streetviewNone": "이 위치에는 Street View가 없습니다"
+  "search.streetviewNone": "이 위치에는 Street View가 없습니다",
+  "search.streetviewCoverage": "Street View 후보 라인 표시",
+  "search.streetviewCoverageHint": "파란 선=Street View 촬영된 도로(Google 내부 커버리지 데이터 사용, 향후 변경 가능)"
 }
