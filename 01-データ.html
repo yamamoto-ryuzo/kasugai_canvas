@@ -118,9 +118,9 @@
       <tr>
       <td>2D ベクトル</td>
       <td>GPKG (GeoPackage)</td>
-      <td><code>duckdb:</code> の <code>ST_Read</code> で直接読込 /
+      <td><code>gpkg:</code> / <code>duckdb:</code>（.gpkg）で直接読込 /
       GeoParquet・FlatGeobuf</td>
-      <td>SQLite + WKB。DuckDB-WASM spatial 拡張でブラウザ内読込可</td>
+      <td>SQLite + WKB。sql.js（Web Worker）経路でブラウザ内読込実装済み。大規模は変換推奨</td>
       </tr>
       <tr>
       <td>2D ベクトル</td>
@@ -214,8 +214,8 @@
       </tr>
       <tr>
       <td>管理データ (GPKG / FGDB)</td>
-      <td><code>duckdb:</code>（<code>ST_Read</code>）または Web
-      Worker → 変換</td>
+      <td>GPKG は <code>gpkg:</code>（sql.js Web Worker）で直接読込、
+      FGDB は変換</td>
       <td>–</td>
       <td>正データ保持・変換元</td>
       </tr>
@@ -277,8 +277,8 @@
       <td>管理・連携用の正データ</td>
       <td><strong>GPKG (GeoPackage)</strong></td>
       <td>✅ 管理用</td>
-      <td>Single Source of Truth。属性・トポロジ保持に優秀。<code>duckdb:</code>
-      の <code>ST_Read</code> で直接読込も可</td>
+      <td>Single Source of Truth。属性・トポロジ保持に優秀。<code>gpkg:</code>
+      / <code>duckdb:</code>（sql.js Worker 経路）で直接読込も可</td>
       <td>大規模データは描画用形式への変換を推奨</td>
       </tr>
       <tr>
@@ -298,8 +298,8 @@
       </tbody>
       </table>
       <ul>
-      <li>KASUGAI Canvas 描画層：<strong>GPKG は <code>duckdb:</code>
-      の <code>ST_Read</code> で直接読み込むか GeoParquet/FlatGeobuf
+      <li>KASUGAI Canvas 描画層：<strong>GPKG は <code>gpkg:</code>
+      （sql.js Web Worker）で直接読み込むか GeoParquet/FlatGeobuf
       へ変換、FGDB は ogr2ogr 等のサーバー or 事前変換で GeoParquet /
       FlatGeobuf / GeoJSON に変換</strong>し、GeoJSON
       正規化経路（<code>GeoJsonDataSource</code> /
@@ -508,8 +508,8 @@
       <li>点群・3DGS・生 DEM は
       <strong>ブラウザ内で変換するのではなく、事前に 3D Tiles / EPT /
       SPZ へ変換</strong> しておくのが現実的</li>
-      <li><strong>GPKG</strong> は <strong><code>duckdb:</code> の
-      <code>ST_Read</code>（DuckDB-WASM spatial 拡張）で直接読み込む</strong>
+      <li><strong>GPKG</strong> は <strong><code>gpkg:</code> /
+      <code>duckdb:</code>（.gpkg）で sql.js Web Worker 経由の直接読み込み</strong>
       か事前変換、<strong>FGDB</strong> は <strong>ogr2ogr 等のサーバー or
       事前変換で GeoParquet / FlatGeobuf / GeoJSON</strong>
       に変換し、GeoJSON 正規化経路へ流す</li>

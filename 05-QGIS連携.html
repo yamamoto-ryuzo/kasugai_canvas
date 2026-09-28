@@ -298,8 +298,9 @@ QGIS処理層へ中心座標・範囲を通知</code></pre>
       <pre class="text"><code>現行
 QGIS相当のデータ → GeoJSON → geojson: → GeoJsonDataSource
                 → GeoParquet → geoparquet: / duckdb:
-                → FlatGeobuf → flatgeobuf: / duckdb:(ST_Read)
-                → GPKG等    → duckdb: format=read (ST_Read)
+                → FlatGeobuf → flatgeobuf: / duckdb:(format=read・要 spatial)
+                → GPKG      → gpkg:（sql.js Worker・実装済み）/ duckdb: format=gpkg
+                → Shapefile等 → duckdb: format=read（ST_Read・非 COI 環境では不可）
 DEM               → TerrainProvider（地理院標高PNG対応）
 3D Tiles          → 3dtiles: → Cesium3DTileset
 XYZ               → xyz: → ImageryLayer

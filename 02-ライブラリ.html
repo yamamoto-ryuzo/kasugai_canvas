@@ -340,10 +340,16 @@
       <td>平面直角座標 ↔︎ WGS84 等の変換</td>
       </tr>
       <tr>
-      <td>GPKG / Shapefile 読込</td>
+      <td>GPKG 読込</td>
+      <td><strong>sql.js（SQLite WASM・Web Worker）</strong></td>
+      <td><code>gpkg:</code> / <code>duckdb:</code>（.gpkg）でブラウザ内読込
+      → GeoJSON 正規化（実装済み）</td>
+      </tr>
+      <tr>
+      <td>Shapefile 読込</td>
       <td><strong>DuckDB-WASM（spatial 拡張 <code>ST_Read</code>）</strong></td>
-      <td>ブラウザ内で GeoPackage 等 → GeoJSON 正規化（<code>duckdb:</code>
-      の <code>format=read</code>）</td>
+      <td><code>duckdb:</code> の <code>format=read</code>。非 COI
+      環境・リモート URL では動作しないため実質未対応</td>
       </tr>
       <tr>
       <td>GeoParquet デコード</td>

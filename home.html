@@ -76,20 +76,20 @@
             <p><code>duckdb:</code> で指定（<code>format=parquet</code>・既定）。<code>where=</code>/<code>bbox=auto</code>/<code>columns=</code> の絞り込みで述語プッシュダウン・row group スキップ・列プルーニングが効くクエリ系の本来の対象。大規模・広範囲データ向け</p>
           </div>
           <div class="feature-card">
-            <h3>🧭 FlatGeobuf <span class="badge" style="background:#fd7e14;">対応中</span></h3>
-            <p><code>duckdb:</code>/<code>sql:</code> の <code>ST_Read</code>（<code>format=read</code>）で読み込み可能。<code>.fgb</code> は拡張子からも自動判別されるため <code>format=</code> 省略可。<code>where=</code>/<code>bbox=auto</code> 等の SQL 絞り込みが効くクエリ経路として使える（全件読み込みの <code>flatgeobuf:</code> 経路もある）</p>
-          </div>
-          <div class="feature-card">
-            <h3>📄 CSV / TSV <span class="badge" style="background:#fd7e14;">対応中</span></h3>
+            <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
             <p><code>duckdb:</code> の <code>lon=</code>/<code>lat=</code> 指定で緯度・経度列を持つ表データをポイントとして表示（lon/lat/lng/longitude/latitude 列は自動検出）</p>
           </div>
           <div class="feature-card">
-            <h3>📋 JSON / GeoJSON <span class="badge" style="background:#fd7e14;">対応中</span></h3>
-            <p><code>duckdb:</code> の <code>format=json</code>（<code>read_json_auto</code>）でテーブルとしてクエリ可能。FeatureCollection の構造は <code>format=read</code>（<code>ST_Read</code>）推奨</p>
+            <h3>📋 JSON / GeoJSON <span class="badge">対応</span></h3>
+            <p><code>duckdb:</code> の <code>format=json</code>（<code>read_json_auto</code>）でテーブルとしてクエリ可能。FeatureCollection の構造は <code>format=read</code>（<code>ST_Read</code>・spatial 拡張必須）向け</p>
           </div>
           <div class="feature-card">
-            <h3>🗂️ GeoPackage / Shapefile <span class="badge" style="background:#fd7e14;">対応中</span></h3>
-            <p>GeoPackage（.gpkg）は <code>gpkg:</code>（または <code>duckdb:</code> の拡張子判別・<code>format=gpkg</code>）で読み込み。sql.js（SQLite WASM）を Web Worker で実行するためデコード中も地図操作をブロックしません。<code>table=</code> で複数地物テーブルを選択可。<code>where=</code>/<code>limit=</code>/<code>columns=</code>/<code>bbox=auto</code>（表示範囲連動）の絞り込みにも対応。QGIS が埋め込む <code>layer_styles</code> のスタイル（QML）も自動適用。Shapefile は <code>duckdb:</code> の <code>format=read</code>（spatial 拡張の <code>ST_Read</code>）で読み込み可能</p>
+            <h3>🗂️ GeoPackage <span class="badge">対応</span></h3>
+            <p><code>gpkg:</code>（または <code>duckdb:</code> の拡張子判別・<code>format=gpkg</code>）で読み込み。sql.js（SQLite WASM）を Web Worker で実行するためデコード中も地図操作をブロックしません。<code>table=</code> で複数地物テーブルを選択可。<code>where=</code>/<code>limit=</code>/<code>columns=</code>/<code>bbox=auto</code>（表示範囲連動・既定 ON）の絞り込みにも対応。QGIS が埋め込む <code>layer_styles</code> のスタイル（QML）も自動適用</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧭 FlatGeobuf / 📐 Shapefile <span class="badge" style="background:#fd7e14;">対応中</span></h3>
+            <p><code>duckdb:</code>/<code>sql:</code> の <code>ST_Read</code>（<code>format=read</code>・spatial 拡張必須）で読み込み可能。<code>.fgb</code> は拡張子からも自動判別されます。ただし ST_Read は非 COI 環境（通常の静的ホスティング・ローカルサーバー）でスレッド生成に失敗しリモート URL も読めないため、現状の実行環境では実質利用できません。FlatGeobuf は全件読み込みの <code>flatgeobuf:</code> 経路（実装済み）を推奨</p>
           </div>
         </div>
         <p><small>方針の詳細（経路分類・新形式の追加手順）はリポジトリの <code>AGENTS.md</code>「データ形式方針」を参照してください。</small></p>
@@ -484,11 +484,11 @@ info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAp
 format=parquet     → Parquet / GeoParquet（read_parquet）
 format=csv | tsv   → CSV / TSV（read_csv_auto。lon=/lat= 列でポイント化、WKT/WKB 列も可）
 format=json|geojson→ JSON / GeoJSON テキスト（read_json_auto。FeatureCollection は format=read 推奨）
-format=read        → Shapefile / GeoPackage / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡張必須。*.fgb は拡張子からも自動判別されるため format= 省略で読めます）</code></pre>
+format=read        → Shapefile / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡張必須・非 COI 環境・リモート URL では動作しません。*.fgb は拡張子からも自動判別されます。GeoPackage は gpkg:/sql.js 経路へ自動振り分け）</code></pre>
           <p>Parquet では述語プッシュダウン・row group スキップ・列プルーニングが効くため本機能の本来の対象です。それ以外の形式は全件読み込みになりますが、「絞り込んだ分だけ描画オブジェクトを作る」「事前変換不要」「SQL で加工できる」利点は共通です。</p>
-          <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・GeoPackage 等）を使います。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
+          <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・FlatGeobuf 等）を使いますが、非 COI 環境ではスレッド生成に失敗しリモート URL も読めないため、通常の配信環境では利用できません。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
           <p><strong>取得プロキシ（<code>proxy=on</code>・ローカルサーバー版のみ）</strong>：<code>duckdb:</code> に <code>proxy=on</code> を付けると、ファイルの取得をローカルサーバーの <code>/api/fetch</code> 経由に切り替えます。CORS 非対応の外部サーバーにあるデータを読めます。<code>/api/fetch</code> は Range/HEAD リクエストを転送するため、Parquet の部分読み（メタデータ・row group スキップ）はプロキシ経由でも有効です。既定は直接接続で、静的配信環境やバックエンド非対応時は指定しても直接接続になります。<code>sql:</code> のクエリ内 URL には適用されません。Range 非対応のサーバーへ全件 GET が必要な形式（CSV/JSON 等）では 20MB 上限があります。</p>
-          <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> と <code>gpkg:</code> は既定で <code>bbox=auto</code> が有効で、カメラ停止ごとに表示範囲を <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> として再クエリします。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用が標準動作です。常時全件描画にしたいレイヤーは <code>bbox=off</code> を付けます（範囲外に出ても地物が消えません）。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
+          <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> と <code>gpkg:</code> は既定で <code>bbox=auto</code> が有効で、カメラ停止ごとに表示範囲で再クエリします（<code>duckdb:</code> は <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> または covering bbox 列への範囲述語、<code>gpkg:</code> は各行の GPkgBinary エンベロープで判定）。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用が標準動作です。常時全件描画にしたいレイヤーは <code>bbox=off</code> を付けます（範囲外に出ても地物が消えません）。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
           <p><strong>ベクター描画件数の上限（描画は表示範囲・属性は全件）</strong>：設定タブの「ベクター描画件数の上限」（既定 20000、0・空欄=無制限）で、entity 描画するベクターレイヤーの<strong>合計</strong>描画件数を制限します。大量の entity 生成によるブラウザのフリーズを防ぐ安全弁で、上限を超えたレイヤーはレイヤー一覧に <code>描画数/全件数</code> のバッジが付きます。上限を超えた全件読み込み系レイヤーは「ファイル先頭から」ではなく<strong>表示範囲内の地物を優先</strong>して描画し、カメラを動かすたびにメモリ上の全件データから範囲内の地物を選び直します（再ダウンロード無し）。検索結果や属性一覧から未描画の地物へ飛んでも、その場所で描画が復活します。表示範囲外にデータがある間は <code>0/全件数</code> のバッジでデータが残っていることが分かります。切り捨ては描画だけの制限で、ベクター検索・属性一覧・プラグイン API の <code>getLayerGeoJson</code> は常にファイル全件を対象にします。<code>render=primitive</code> のバッチ描画は entity コストを支払わないため上限の対象外です。</p>
           <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
           <p><strong>描画方式（既定は entity 描画）</strong>：ベクター系レイヤー（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>）は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。<code>render=primitive</code>（<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>、その他はオプション欄）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。レイヤー行の <code>render=</code> 指定は設定タブの「ベクター高速ドレープ」より優先され、<code>render=entity</code> を書くと高速ドレープが有効でもそのレイヤーだけ entity 描画に戻せます。違いは以下のとおりです。</p>
