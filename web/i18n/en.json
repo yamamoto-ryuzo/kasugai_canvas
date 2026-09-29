@@ -356,5 +356,8 @@
   "search.streetviewOpened": "Street View opened",
   "search.streetviewNone": "No Street View at this location",
   "search.streetviewCoverage": "Show Street View coverage lines",
-  "search.streetviewCoverageHint": "Blue lines = streets with Street View imagery (uses Google internal coverage data; may change without notice)"
+  "search.streetviewCoverageHint": "Blue lines = streets with Street View imagery (uses Google internal coverage data; may change without notice)",
+  "report.title": "Report",
+  "report.download": "Download",
+  "report.close": "Close"
 }

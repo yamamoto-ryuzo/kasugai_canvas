@@ -356,5 +356,8 @@
   "search.streetviewOpened": "Street View를 열었습니다",
   "search.streetviewNone": "이 위치에는 Street View가 없습니다",
   "search.streetviewCoverage": "Street View 후보 라인 표시",
-  "search.streetviewCoverageHint": "파란 선=Street View 촬영된 도로(Google 내부 커버리지 데이터 사용, 향후 변경 가능)"
+  "search.streetviewCoverageHint": "파란 선=Street View 촬영된 도로(Google 내부 커버리지 데이터 사용, 향후 변경 가능)",
+  "report.title": "보고서",
+  "report.download": "다운로드",
+  "report.close": "닫기"
 }

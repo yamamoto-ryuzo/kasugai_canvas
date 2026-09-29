@@ -3,7 +3,10 @@
 ## バージョン採番方針
 
 - **v5.0 は全機能が完成した後に採番する**。それまでのリリースは 4.x 系（4.0.0, 4.1.0, ...）で進める
-- v5.0 への到達条件: AIチャット・エージェント連携・Google Maps Platform 連携・ローカルファイル保存など、計画中の機能がすべて完成した時点
+- v5.0 への到達条件: 当初の計画機能（AIチャット・外部エージェント連携・Google Maps Platform 連携・ローカルファイル保存）は v4.20.0 で実装済み。v5.0 は「**ANTIGRAVITY エージェント完成＝ハッカソン提出可能状態**」と定義する（詳細は `hackathon.html` の「今回追加する機能（実装計画）」節）:
+  - Cloud Run 上のエージェントサービス（FastAPI + Gemini API/ADK）が外部エージェントプロトコル（`POST /agent/chat` → `{reply, actions, report}`）で稼働している
+  - サンプルデータ自動生成・資料生成＋パーマリンク（`showReport`/`buildShareUrl`）が動作する
+  - 審査用公開URLが維持され、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く
 
 ## バージョン管理手順
 
@@ -55,7 +58,7 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
 
 フロントエンドは `GET /api/capabilities`（応答例: `{tier:"local", features:[...]}`）でバックエンドの能力を取得し、ツール定義・UI を出し分ける。バックエンドが無い環境では静的安全機能のみで動作すること。
 
-実装状況: 現在 `local` ティアの `/api/capabilities`・`/api/fetch`・`/api/plugins`・`/api/files`（`projects/<id>/DATA/` への書き込み・一覧・削除）を実装済み。ブラウザ側は File System Access API による DATA/ 保存も併存（Chromium系のみ・選択フォルダへ直接書込み）。`workers` ティアのプロキシ・共有書き込み、サーバーサイドエージェント（長時間ループ・SSE等）、QGIS/GDAL 連携は設計方針のみで未実装。外部エージェント呼び出し（エージェントタブでエンドポイントURLを設定し、チャット入力を POST `{message,project,camera,layers,history}` → 応答 `{reply,actions:[{name,args}]}` の actions をチャットツールとして実行）はブラウザ側で実装済み。
+実装状況: 現在 `local` ティアの `/api/capabilities`・`/api/fetch`・`/api/plugins`・`/api/files`（`projects/<id>/DATA/` への書き込み・一覧・削除）を実装済み。ブラウザ側は File System Access API による DATA/ 保存も併存（Chromium系のみ・選択フォルダへ直接書込み）。`workers` ティアのプロキシ・共有書き込み、QGIS/GDAL 連携は設計方針のみで未実装。サーバーサイドエージェントは `agent/` に FastAPI + Gemini API（google-genai）で新設済み（`POST /agent/chat`＋`web/` 静的配信の同一オリジン構成。`GET /api/capabilities` は `{tier:"cloudrun", features:["agent"]}` を返す。サーバーツールは `fetch_url`（SSRF対策あり）と `generate_sample_geojson`（架空サンプルGeoJSON生成・properties に出典/生成時刻/AI生成明記を付与）。応答 actions は高権限・破壊的操作を除くホワイトリストでサニタイズ。Cloud Run デプロイは `agent/Dockerfile`・コンテキストはリポジトリ直下・手順は `agent/README.md`。長時間ループ・SSE は未実装）。外部エージェント呼び出し（エージェントタブでエンドポイントURLを設定し、チャット入力を POST `{message,project,camera,layers,history}` → 応答 `{reply,actions:[{name,args}]}` の actions をチャットツールとして実行）はブラウザ側で実装済み。**このプロトコルが ANTIGRAVITY エージェント API（Cloud Run・FastAPI + Gemini API/ADK）の契約であり、ハッカソン計画の必須エンドポイントは `POST /agent/chat` 1本に集約する**（レイヤー構成・サンプルデータは actions で表現、資料は `report` フィールド/`showReport` アクションで返す）。公開環境のエージェントが返す actions も同じ実行経路のため、破壊的ツール（`savePlugin`/`publishPlugin`/`deleteDataFile` 等）はフロント側の既存確認ダイアログで保護される。
 
 プラグインの昇格ルート: AI生成プラグインはまず IndexedDB（ブラウザローカル草稿）に保存 → `.kasp` でエクスポート可 → レビュー後にローカル版で `PLUGIN/` へ公開。これにより開発と公開、公開と非公開を分離する。
 

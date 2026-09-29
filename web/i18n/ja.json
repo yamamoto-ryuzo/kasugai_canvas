@@ -356,5 +356,8 @@
   "search.streetviewOpened": "Street Viewを開きました",
   "search.streetviewNone": "この場所にはStreet Viewがありません",
   "search.streetviewCoverage": "Street View の候補ラインを表示",
-  "search.streetviewCoverageHint": "青いライン=Street View撮影済みの道路（Google内部のカバレッジデータを使用。将来変更の可能性あり）"
+  "search.streetviewCoverageHint": "青いライン=Street View撮影済みの道路（Google内部のカバレッジデータを使用。将来変更の可能性あり）",
+  "report.title": "資料",
+  "report.download": "ダウンロード",
+  "report.close": "閉じる"
 }

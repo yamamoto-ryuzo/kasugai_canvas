@@ -356,5 +356,8 @@
   "search.streetviewOpened": "Street View aberto",
   "search.streetviewNone": "Sem Street View neste local",
   "search.streetviewCoverage": "Mostrar linhas de cobertura do Street View",
-  "search.streetviewCoverageHint": "Linhas azuis = ruas com Street View (usa dados internos de cobertura do Google; pode mudar)"
+  "search.streetviewCoverageHint": "Linhas azuis = ruas com Street View (usa dados internos de cobertura do Google; pode mudar)",
+  "report.title": "Relatório",
+  "report.download": "Baixar",
+  "report.close": "Fechar"
 }

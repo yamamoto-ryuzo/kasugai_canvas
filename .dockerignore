@@ -1,0 +1,16 @@
+# Cloud Run ビルドコンテキストの軽量化（agent/Dockerfile はリポジトリ直下をコンテキストにする）
+.git
+server
+installer
+download
+docs
+articles
+sample_data
+functions
+workers
+auth
+.testtmp
+__pycache__
+*.log
+build.log
+installer

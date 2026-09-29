@@ -356,5 +356,8 @@
   "search.streetviewOpened": "Street View geöffnet",
   "search.streetviewNone": "Kein Street View an diesem Ort",
   "search.streetviewCoverage": "Street-View-Abdeckungslinien anzeigen",
-  "search.streetviewCoverageHint": "Blaue Linien = Straßen mit Street-View-Bildern (interne Google-Abdeckungsdaten; kann sich ändern)"
+  "search.streetviewCoverageHint": "Blaue Linien = Straßen mit Street-View-Bildern (interne Google-Abdeckungsdaten; kann sich ändern)",
+  "report.title": "Bericht",
+  "report.download": "Herunterladen",
+  "report.close": "Schließen"
 }

@@ -438,8 +438,10 @@ async function detectBackend() {
     if (response.ok) {
       const data = await response.json().catch(() => ({}));
       backendEnabled = data?.name === "kasugai_canvas";
-      if (backendEnabled) {
-        // 利用可能な機能（fetchプロキシ・プラグイン書込み等）を取得する
+      // ローカルRustサーバー以外（Cloud Run版エージェント等）でも /health が
+      // {ok:true} を返せば capabilities を取得する（静的配信のみの環境は404で到達しない）
+      if (backendEnabled || data?.ok === true) {
+        // 利用可能な機能（fetchプロキシ・プラグイン書込み・エージェント等）を取得する
         const caps = await fetch("./api/capabilities", { cache: "no-store" })
           .then(r => (r.ok ? r.json() : null))
           .catch(() => null);
@@ -5596,7 +5598,8 @@ function setupAgentPanel() {
   if (endpointInput && settingsSave) {
     try {
       const config = getAgentConfig();
-      endpointInput.value = config.endpoint;
+      // 入力欄には保存値のみ表示（バックエンド通知の既定値はプレースホルダで示す）
+      endpointInput.value = localStorage.getItem("agentEndpoint") || "";
       if (tokenInput) tokenInput.value = config.token;
       if (enabledInput) enabledInput.checked = config.enabled;
     } catch (e) {}
@@ -5654,12 +5657,29 @@ function setupAgentPanel() {
 // Google APIキー未設定時はチャットパネルを表示しない。設定保存時に再評価する
 // 注意: setupChatPanel は window.kasugaiApi 定義前に呼ばれるため localStorage を直接参照する
 // 外部エージェント連携の設定値。Geminiキー未設定でもチャットが使えるよう別経路として扱う
+// バックエンドが agent 機能を通知していれば既定エンドポイントとして使う
+// （Cloud Run 版など公開デプロイを審査員が無設定で使えるようにするため）
+function defaultAgentEndpoint() {
+  const endpoint = backendCapabilities?.agent?.endpoint;
+  if (!endpoint || !hasBackendFeature("agent")) return "";
+  try {
+    return new URL(endpoint, window.location.href).href;
+  } catch (e) {
+    return "";
+  }
+}
+
 function getAgentConfig() {
   try {
+    const savedEndpoint = (localStorage.getItem("agentEndpoint") || "").trim();
+    const savedEnabled = localStorage.getItem("agentEnabled");
     return {
-      endpoint: (localStorage.getItem("agentEndpoint") || "").trim(),
+      // 手動設定が無ければバックエンド通知の既定エンドポイントを使う
+      endpoint: savedEndpoint || defaultAgentEndpoint(),
       token: localStorage.getItem("agentToken") || "",
-      enabled: localStorage.getItem("agentEnabled") === "1",
+      // 「有効」の明示保存、または未保存＋既定エンドポイント存在で有効化。
+      // "0" の明示保存（ユーザーが無効化して保存）は尊重する
+      enabled: savedEnabled === "1" || (savedEnabled === null && !savedEndpoint && !!defaultAgentEndpoint()),
     };
   } catch (e) {
     return { endpoint: "", token: "", enabled: false };
@@ -5672,10 +5692,17 @@ function isAgentEnabled() {
 
 function updateChatPanelVisibility() {
   const panel = document.querySelector("#chat-panel");
-  if (!panel) return;
-  let hasKey = false;
-  try { hasKey = !!localStorage.getItem("googleApiKey"); } catch (e) {}
-  panel.style.display = (hasKey || isAgentEnabled()) ? "" : "none";
+  if (panel) {
+    let hasKey = false;
+    try { hasKey = !!localStorage.getItem("googleApiKey"); } catch (e) {}
+    panel.style.display = (hasKey || isAgentEnabled()) ? "" : "none";
+  }
+  // 既定エンドポイント（バックエンド通知）を設定欄のプレースホルダに表示する
+  const endpointInput = document.querySelector("#agent-endpoint");
+  if (endpointInput && !endpointInput.value) {
+    const fallback = defaultAgentEndpoint();
+    if (fallback) endpointInput.placeholder = fallback;
+  }
 }
 
 function setupGoogleSettings() {
@@ -6909,6 +6936,38 @@ window.kasugaiApi = {
     const height = Number(c.height).toFixed(1);
     return `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
   },
+  // 任意の座標・視点の共有URLを組み立てる。省略した引数は現在視点を使う。
+  // 資料の各節に視点別パーマリンクを埋め込む用途向け
+  buildShareUrl({ latitude, longitude, height, pitch, heading, project } = {}) {
+    const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    const current = c ? {
+      longitude: c.longitude * 180 / Math.PI,
+      latitude: c.latitude * 180 / Math.PI,
+      height: c.height,
+      pitch: viewer.camera.pitch * 180 / Math.PI,
+      heading: viewer.camera.heading * 180 / Math.PI,
+    } : {};
+    const pick = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+    const lon = pick(longitude, current.longitude);
+    const lat = pick(latitude, current.latitude);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+    const params = new URLSearchParams();
+    params.set("longitude", lon.toFixed(6));
+    params.set("latitude", lat.toFixed(6));
+    const h = pick(height, current.height);
+    const p = pick(pitch, current.pitch);
+    const hd = pick(heading, current.heading);
+    if (Number.isFinite(h)) params.set("height", h.toFixed(1));
+    if (Number.isFinite(p)) params.set("pitch", p.toFixed(2));
+    if (Number.isFinite(hd)) params.set("heading", hd.toFixed(2));
+    params.set("project", typeof project === "string" && project ? project : currentProjectId);
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+  },
+  // エージェント生成の資料（Markdown/HTML）をモーダル表示する
+  showReport(args = {}) {
+    showReportModal(args);
+    return { ok: true };
+  },
   // ベクター系レイヤーを .kasc 行として末尾へ追記し即時適用する。
   // type: geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb(target は URL) / sql(target は SELECT 文)
   addLayer(title, target, { type = "geojson", options = "" } = {}) {
@@ -7228,6 +7287,83 @@ function confirmPluginApply({ id, name, code }) {
   });
 }
 
+// Markdown の最小レンダラ。XSS 防止のため先にHTMLエスケープしてから
+// 見出し・箇条書き・太字・インラインコード・リンクのみ装飾する
+function renderMarkdownLite(markdown) {
+  const inline = text => String(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out = [];
+  let inList = false;
+  for (const raw of escapeHtml(String(markdown ?? "")).split(/\r?\n/)) {
+    const heading = /^(#{1,4})\s+(.*)$/.exec(raw);
+    if (heading) {
+      if (inList) { out.push("</ul>"); inList = false; }
+      const level = Math.min(heading[1].length + 2, 6);
+      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      continue;
+    }
+    const bullet = /^[-*]\s+(.*)$/.exec(raw);
+    if (bullet) {
+      if (!inList) { out.push("<ul>"); inList = true; }
+      out.push(`<li>${inline(bullet[1])}</li>`);
+      continue;
+    }
+    if (inList) { out.push("</ul>"); inList = false; }
+    if (raw.trim()) out.push(`<p>${inline(raw)}</p>`);
+  }
+  if (inList) out.push("</ul>");
+  return out.join("");
+}
+
+// 資料モーダル（confirmPluginApply と同じオーバーレイ方式）。
+// format=html は sandbox 属性のみの iframe で隔離して描画する
+function showReportModal({ title, format, content } = {}) {
+  const isHtml = String(format || "").toLowerCase() === "html";
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;";
+  const panel = document.createElement("div");
+  panel.style.cssText = "background:#fff;color:#1d2b35;max-width:820px;width:92%;max-height:84vh;display:flex;flex-direction:column;border-radius:8px;padding:16px;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,0.3);";
+  const titleEl = document.createElement("strong");
+  titleEl.textContent = title || t("report.title");
+  const body = document.createElement("div");
+  body.style.cssText = "flex:1;overflow:auto;border:1px solid #dbe4e8;border-radius:4px;padding:12px;font-size:0.9em;line-height:1.6;background:#fbfcfd;";
+  if (isHtml) {
+    const frame = document.createElement("iframe");
+    frame.setAttribute("sandbox", "");
+    frame.style.cssText = "width:100%;height:100%;min-height:50vh;border:0;background:#fff;";
+    frame.srcdoc = String(content ?? "");
+    body.append(frame);
+  } else {
+    body.innerHTML = renderMarkdownLite(content);
+  }
+  const buttons = document.createElement("div");
+  buttons.style.cssText = "display:flex;gap:8px;justify-content:flex-end;";
+  const download = document.createElement("button");
+  download.type = "button";
+  download.textContent = t("report.download");
+  download.style.cssText = "background:#2f7d8c;color:#fff;border:0;border-radius:4px;padding:6px 14px;";
+  const close = document.createElement("button");
+  close.type = "button";
+  close.textContent = t("report.close");
+  const done = () => overlay.remove();
+  close.addEventListener("click", done);
+  overlay.addEventListener("click", event => { if (event.target === overlay) done(); });
+  download.addEventListener("click", () => {
+    const blob = new Blob([String(content ?? "")], { type: isHtml ? "text/html" : "text/markdown" });
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = `${String(title || "report").replace(/[\\/:*?"<>|]/g, "_")}.${isHtml ? "html" : "md"}`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(anchor.href), 10000);
+  });
+  buttons.append(download, close);
+  panel.append(titleEl, body, buttons);
+  overlay.append(panel);
+  document.body.append(overlay);
+}
+
 // Gemini へ公開するツール定義。実行は window.kasugaiApi に委譲する
 const CHAT_TOOLS = [{
   functionDeclarations: [
@@ -7419,6 +7555,35 @@ const CHAT_TOOLS = [{
       name: "getShareUrl",
       description: "現在のカメラ位置・プロジェクトを含む共有URLを取得する",
       parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "buildShareUrl",
+      description: "指定した座標・視点の共有URLを組み立てる。省略した引数は現在視点を使う。資料の各節に視点別パーマリンクを埋め込むときに使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          latitude: { type: "NUMBER", description: "緯度(度)" },
+          longitude: { type: "NUMBER", description: "経度(度)" },
+          height: { type: "NUMBER", description: "カメラ高さ(m)" },
+          pitch: { type: "NUMBER", description: "ピッチ(度)" },
+          heading: { type: "NUMBER", description: "方位(度)" },
+          project: { type: "STRING", description: "プロジェクトID(省略時は現在のプロジェクト)" },
+        },
+        required: ["latitude", "longitude"],
+      },
+    },
+    {
+      name: "showReport",
+      description: "生成した資料(Markdown/HTML)をモーダル表示しダウンロード可能にする。「資料を作って」等の指示に対し、平面・内容・解決案の構成で content に本文を入れる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING", description: "資料タイトル" },
+          format: { type: "STRING", description: "markdown または html(省略時markdown)" },
+          content: { type: "STRING", description: "資料本文。各節に視点パーマリンクを含める" },
+        },
+        required: ["title", "content"],
+      },
     },
     {
       name: "listProjects",
@@ -7881,6 +8046,8 @@ async function executeChatTool(name, args = {}) {
   if (name === "stopFly") return { ok: window.kasugaiApi.stopFly() };
   if (name === "vectorSearch") return { results: window.kasugaiApi.vectorSearch(args.query) };
   if (name === "getShareUrl") return { url: window.kasugaiApi.getShareUrl() };
+  if (name === "buildShareUrl") return { url: window.kasugaiApi.buildShareUrl(args) };
+  if (name === "showReport") return window.kasugaiApi.showReport(args);
   if (name === "listProjects") return { projects: window.kasugaiApi.listProjects() };
   if (name === "switchProject") {
     const ok = window.kasugaiApi.switchProject(args.projectId);
@@ -8105,6 +8272,13 @@ function setupChatPanel() {
       await executeChatTool(action.name, action.args || {});
       executed.push(`${action.name}(${JSON.stringify(action.args || {})})`);
     }
+    // 資料フィールドが返された場合は showReport と同等に扱ってモーダル表示する
+    if (data?.report && typeof data.report === "object") {
+      try {
+        await executeChatTool("showReport", { title: data.report.title, format: data.report.format, content: data.report.content });
+        executed.push(`showReport(${JSON.stringify({ title: data.report.title || "" })})`);
+      } catch (e) {}
+    }
     return { text: typeof data?.reply === "string" && data.reply ? data.reply : t("chat.noResponse"), executed };
   }
 
@@ -8177,6 +8351,8 @@ window.addEventListener("pagehide", () => {
 
 (async () => {
   await detectBackend();
+  // capabilities 取得後に既定エージェントエンドポイントを反映するため再評価する
+  updateChatPanelVisibility();
   try { await loadProjects(); } catch (e) { console.error(e); }
   try { await loadInspectorConfig(); } catch (e) { console.error(e); }
   try { await ensureDrawnRouteFlyPath(); } catch (e) { console.error(e); }

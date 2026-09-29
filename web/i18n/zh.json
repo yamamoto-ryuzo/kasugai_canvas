@@ -356,5 +356,8 @@
   "search.streetviewOpened": "已打开街景",
   "search.streetviewNone": "该位置没有街景",
   "search.streetviewCoverage": "显示街景覆盖线",
-  "search.streetviewCoverageHint": "蓝线=已拍摄街景的道路（使用Google内部覆盖数据，未来可能变更）"
+  "search.streetviewCoverageHint": "蓝线=已拍摄街景的道路（使用Google内部覆盖数据，未来可能变更）",
+  "report.title": "报告",
+  "report.download": "下载",
+  "report.close": "关闭"
 }
