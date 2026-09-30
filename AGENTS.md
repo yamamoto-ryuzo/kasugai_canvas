@@ -14,7 +14,7 @@
 - リリース時は以下を同じ番号に更新: `download/latest.json`、ドキュメント各ページ（`index.html` 等）のバージョンバッジ、`README.md` のバージョン表記、`installer/kasugai_canvas.nsi`（`python run.py -B` が自動更新する場合あり）
 - `CHANGELOG.md` に日付付きセクションを追加（Keep a Changelog 形式）
 - 配布物は `python run.py -B` で `download/` に作成し、コミットしてプッシュ
-- **重要（無限ループ事故の再発防止）**: `download/latest.json` のバージョン更新と `download/kasugai_canvas.zip` の再ビルドは**必ず同じコミットで行う**。`latest.json` だけを先に上げると、全ユーザーの自動更新が「適用 → 再起動 → 依然古い → 再適用」の**無限ループ**に陥る（4.20.0 リリースで実際に発生し 4.20.1 で修正）。`latest.json` を手編集でだけ更新するリリースは禁止。必ず `python run.py -B`（または `--publish`）を通し、スクリプトによる ZIP 内 exe の `/health` バージョン検証を通過させること。フロント側にも試行済みバージョンの記録によるループガードはあるが、配布物の整合はリリース手順で担保する
+- **重要（無限ループ事故の再発防止）**: `download/latest.json` のバージョン更新と `download/kasugai_canvas.zip` の再ビルドは**必ず同じコミットで行う**。`latest.json` だけを先に上げると、全ユーザーの自動更新が「適用 → 再起動 → 依然古い → 再適用」の**無限ループ**に陥る（4.20.0 リリースで実際に発生し 4.20.1 で修正）。`latest.json` を手編集でだけ更新するリリースは禁止。必ず `python run.py -B`（または `--publish`）を通し、スクリプトによる ZIP 内 exe の `/health` バージョン検証を通過させること（`--sync` 実行時も同検証を行い、ズレた ZIP はブロックされる）。フロント側にも試行済みバージョンの記録によるループガードはあるが、配布物の整合はリリース手順で担保する
 
 ## 動作確認（Playwrigh：必須）
 

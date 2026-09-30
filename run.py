@@ -370,6 +370,18 @@ def main() -> None:
 
     if args.sync:
         sync_versions()
+        # latest.json だけを新バージョンへ更新して配布 ZIP が古いままだと、
+        # 公開時に全ユーザーの自動更新が無限ループする（4.20.0 で発生）。
+        # --sync でも ZIP 内 exe の /health バージョンを検証してズレを止める
+        if DOWNLOAD_ZIP.exists():
+            print("ZIP 内 EXE のバージョンを確認します...", file=sys.stderr, flush=True)
+            _verify_zip_version(DOWNLOAD_ZIP, _get_cargo_version())
+        else:
+            print(
+                "警告: download/kasugai_canvas.zip がありません。公開前に 'python run.py -B' で作成してください。",
+                file=sys.stderr,
+                flush=True,
+            )
     elif args.build:
         build_release()
     elif args.release:
