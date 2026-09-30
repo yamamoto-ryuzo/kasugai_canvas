@@ -120,6 +120,7 @@
   "update.restartFailed": "再起動を確認できませんでした。手動でページを再読み込みしてください。",
   "update.settingsSaved": "自動更新設定を保存しました",
   "update.autoSaveError": "自動更新設定の保存エラー: {error}",
+  "update.retrySkipped": "更新を適用しましたがバージョンが変わりませんでした。このセッションでは自動更新を停止します。",
   "clip.title": "断面クリップ",
   "clip.hint": "カメラ中心に断面を作成します。カメラ位置を移動してから実行してください。",
   "clip.ns": "NS 断面",

@@ -120,6 +120,7 @@
   "update.restartFailed": "재시작을 확인할 수 없습니다. 페이지를 수동으로 새로 고침하세요.",
   "update.settingsSaved": "자동 업데이트 설정을 저장했습니다",
   "update.autoSaveError": "자동 업데이트 설정 저장 오류: {error}",
+  "update.retrySkipped": "업데이트를 적용했지만 버전이 변경되지 않았습니다. 이 세션에서는 자동 업데이트를 일시 중지합니다.",
   "clip.title": "단면 클립",
   "clip.hint": "카메라 중심에 단면을 만듭니다. 카메라를 먼저 이동한 후 실행하세요.",
   "clip.ns": "NS 단면",

@@ -120,6 +120,7 @@
   "update.restartFailed": "Neustart konnte nicht bestätigt werden. Bitte laden Sie die Seite manuell neu.",
   "update.settingsSaved": "Einstellungen für automatische Updates gespeichert",
   "update.autoSaveError": "Fehler beim Speichern der Einstellungen für automatische Updates: {error}",
+  "update.retrySkipped": "Das Update wurde angewendet, aber die Version hat sich nicht geändert. Automatische Updates sind für diese Sitzung pausiert.",
   "clip.title": "Schnittabschnitt",
   "clip.hint": "Erstellt einen Schnitt in der Kameramitte. Verschieben Sie zuerst die Kamera und führen Sie dann aus.",
   "clip.ns": "NS-Schnitt",

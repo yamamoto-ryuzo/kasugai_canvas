@@ -120,6 +120,7 @@
   "update.restartFailed": "Could not confirm restart. Please reload the page manually.",
   "update.settingsSaved": "Auto-update settings saved",
   "update.autoSaveError": "Auto-update settings save error: {error}",
+  "update.retrySkipped": "Update was applied but the version did not change. Auto-update is paused for this session.",
   "clip.title": "Section clip",
   "clip.hint": "Creates a section at the camera center. Move the camera first, then run.",
   "clip.ns": "NS section",

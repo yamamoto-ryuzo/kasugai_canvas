@@ -120,6 +120,7 @@
   "update.restartFailed": "Impossible de confirmer le redémarrage. Rechargez la page manuellement.",
   "update.settingsSaved": "Réglages de mise à jour automatique enregistrés",
   "update.autoSaveError": "Erreur d'enregistrement des réglages de mise à jour automatique : {error}",
+  "update.retrySkipped": "La mise à jour a été appliquée mais la version n'a pas changé. La mise à jour automatique est suspendue pour cette session.",
   "clip.title": "Coupe en section",
   "clip.hint": "Crée une section au centre de la caméra. Déplacez d'abord la caméra, puis exécutez.",
   "clip.ns": "Section NS",

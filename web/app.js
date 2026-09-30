@@ -6345,6 +6345,10 @@ function setupVectorSearch() {
   window.vectorAttrWidget = { open: openVectorAttrWidget, close: closeVectorAttrWidget };
 }
 
+// 自動更新の無限ループ防止用。更新適用→再起動→リロード後もバージョンが変わらない
+// （配布ZIPの中身が古い等）場合に、同一タブ内での再試行を止めるため試行済みバージョンを記録する
+const UPDATE_ATTEMPT_KEY = "kasugaiUpdateAttempt";
+
 function compareVersions(left, right) {
   const a = left.split(".").map(Number);
   const b = right.split(".").map(Number);
@@ -6397,7 +6401,15 @@ async function checkForUpdate(currentVersion = document.querySelector("#current-
       updateStatus.textContent = t("update.availableMark");
       status.textContent = t("update.available");
       installButton.hidden = false;
-      if (document.querySelector("#auto-update").checked) await installUpdate(latestVersion, true);
+      if (document.querySelector("#auto-update").checked) {
+        let attempted = null;
+        try { attempted = sessionStorage.getItem(UPDATE_ATTEMPT_KEY); } catch (e) {}
+        if (attempted === latestVersion) {
+          status.textContent = t("update.retrySkipped");
+        } else {
+          await installUpdate(latestVersion, true);
+        }
+      }
     } else if (comparison === 0) {
       updateStatus.textContent = t("update.latestMark");
       status.textContent = "";
@@ -6429,6 +6441,7 @@ async function installUpdate(latestVersion = document.querySelector("#latest-ver
       data = {};
     }
     if (!response.ok) throw new Error(data.error || body || `HTTP ${response.status}`);
+    try { sessionStorage.setItem(UPDATE_ATTEMPT_KEY, latestVersion); } catch (e) {}
     document.querySelector("#version-status").textContent = data.message || t("update.started");
     void reloadAfterRestart();
   } catch (error) {

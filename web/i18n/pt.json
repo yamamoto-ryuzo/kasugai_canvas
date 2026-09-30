@@ -120,6 +120,7 @@
   "update.restartFailed": "Não foi possível confirmar a reinicialização. Recarregue a página manualmente.",
   "update.settingsSaved": "Configurações de atualização automática salvas",
   "update.autoSaveError": "Erro ao salvar configurações de atualização automática: {error}",
+  "update.retrySkipped": "A atualização foi aplicada, mas a versão não mudou. A atualização automática está pausada nesta sessão.",
   "clip.title": "Corte de seção",
   "clip.hint": "Cria uma seção no centro da câmera. Mova a câmera primeiro e depois execute.",
   "clip.ns": "Seção NS",

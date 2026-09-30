@@ -120,6 +120,7 @@
   "update.restartFailed": "无法确认重启。请手动刷新页面。",
   "update.settingsSaved": "自动更新设置已保存",
   "update.autoSaveError": "自动更新设置保存错误：{error}",
+  "update.retrySkipped": "已应用更新但版本未变化。本会话将暂停自动更新。",
   "clip.title": "剖面裁剪",
   "clip.hint": "在相机中心创建剖面。请先移动相机再执行。",
   "clip.ns": "NS 剖面",

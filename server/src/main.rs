@@ -435,10 +435,28 @@ async fn request_shutdown(State(state): State<AppState>) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
+// "4.20.0" 形式のバージョンを比較する（欠けた要素は 0 扱い）
+fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
+    let pa: Vec<u64> = a.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect();
+    let pb: Vec<u64> = b.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect();
+    for i in 0..pa.len().max(pb.len()) {
+        match pa.get(i).copied().unwrap_or(0).cmp(&pb.get(i).copied().unwrap_or(0)) {
+            std::cmp::Ordering::Equal => continue,
+            ord => return ord,
+        }
+    }
+    std::cmp::Ordering::Equal
+}
+
 async fn install_update(
     State(state): State<AppState>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     let latest = fetch_latest().await?;
+    // latest.json が現行以下を指す場合は差し替えない（古い配布物へのダウングレード防止）
+    let latest_version = latest["version"].as_str().unwrap_or_default();
+    if compare_versions(latest_version, env!("CARGO_PKG_VERSION")) != std::cmp::Ordering::Greater {
+        return Err((StatusCode::CONFLICT, "既に最新バージョンです".to_string()));
+    }
     let url = latest["platforms"]["windows-x86_64"]["url"]
         .as_str()
         .unwrap_or(REPOSITORY_DOWNLOAD_URL);
