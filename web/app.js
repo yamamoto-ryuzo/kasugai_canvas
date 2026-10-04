@@ -515,8 +515,8 @@ async function loadInspectorConfig() {
       if (response.ok) text = await response.text();
     } catch {}
     if (!text) {
-      if (window.kasugaiAuth?.method === "cloudflare") {
-        // KV に無いプロジェクトは静的 .kasc も内蔵デフォルトも使わず空で起動する
+      if (window.kasugaiAuth?.serverKasc) {
+        // サーバーの .kasc に無いプロジェクトは静的 .kasc も内蔵デフォルトも使わず空で起動する
         document.querySelector("#inspector-input").value = "";
         applyInspector("");
         setInspectorStatus(t("inspector.status.noKasc"), true);
@@ -535,9 +535,9 @@ async function loadInspectorConfig() {
 
 async function saveInspectorConfig() {
   // 静的サイト構成のためサーバーへの保存は行わない
-  // Cloudflare Pages 認証時のみ KV へ保存する
+  // サーバー .kasc 対応の認証方式（cloudflare/cloudrun 系）時のみ保存する
   const auth = window.kasugaiAuth;
-  if (!auth || auth.method !== "cloudflare" || !auth.token) return;
+  if (!auth || !auth.serverKasc || !auth.token) return;
   const projectId = currentProjectId || "default";
   const rawText = document.querySelector("#inspector-input").value;
   const text = auth.restoreKasc ? auth.restoreKasc(rawText) : rawText;
@@ -6520,8 +6520,8 @@ viewer.camera.moveEnd.addEventListener(scheduleViewportRefresh);
 viewer.camera.changed.addEventListener(scheduleViewportRefresh);
 
 setupThreeJs();
-// cloudflare 認証時は KV の .kasc のみ使い、内蔵デフォルトは適用しない
-applyInspector(window.kasugaiAuth?.method === "cloudflare" ? "" : defaultConfig);
+// サーバー .kasc 対応の認証時はサーバー側の .kasc のみ使い、内蔵デフォルトは適用しない
+applyInspector(window.kasugaiAuth?.serverKasc ? "" : defaultConfig);
 updateEffectSettings();
 const urlCamera = parseUrlCamera(initialCameraSource);
 

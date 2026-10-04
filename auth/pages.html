@@ -182,6 +182,7 @@ fly_geojson: 秘匿ルート | r2://secret/route.geojson</code></pre>
           <li>保護できないもの：HTML/JS/CSS 等の静的ファイル、静的配信に置いた <code>DATA/</code> 内の画像・GeoJSON 等、R2 公開バケットの内容</li>
           <li>注意：<code>/api/data/*</code> のトークンは URL に埋め込まれるためブラウザ履歴・プロキシログに残り得ます。レスポンスは <code>Cache-Control: private, no-store</code> で返すため CDN キャッシュ経由の漏洩は防がれます</li>
           <li>静的ファイル自体を含めて完全に保護したい場合は、<a href="workers.html">4. Cloudflare 認証 — Workers</a>（全リクエスト認証ゲート）または Cloudflare Access（Zero Trust）を使ってください</li>
+          <li>Cloud Run 上で同様の「認証のみ・静的公開」モデルを使う場合は <a href="cloudrun.html">5. Cloud Run 認証</a>（<code>control: 5</code>。KV→GCS・<code>r2://</code>→<code>gs://</code> に相当）を参照してください</li>
         </ul>
       </div>
     </main>

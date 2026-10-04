@@ -7,7 +7,8 @@
   control: 起動制御方式を番号で指定
 
   ※ .kasc は全方式で「読み取り」できますが、
-     サーバーへの「書き込み」ができるのは 3・4（cloudflare 系）のみです。
+     サーバーへの「書き込み」ができるのは 3・4（cloudflare 系）と
+     5・6・7（cloudrun 系・GCS 設定時）のみです。
      0〜2 ではインスペクターの「適用」はブラウザ内への反映のみで、
      保存は「エクスポート(.kasc)」→ ファイル差し替えの運用になります。
 
@@ -92,8 +93,29 @@
 
         詳細は auth/workers.html を参照。
 
-  安全な本番運用を行う場合は 0,1,2 ではなく 3・4（cloudflare 系）を選択してください。
-  静的ファイル自体も保護したい場合は 4（cloudflare-workers）を選択してください。
+    5 = cloudrun（Cloud Run：認証のみ）
+        Cloud Run 版エージェント（agent/）上での ID/PASS 認証。
+        静的ファイルは公開のまま、.kasc（GCS の kasc/<ID>）と
+        gs:// 秘匿データのみ保護します（3 に相当）。
+        設定は環境変数: KASUGAI_AUTH_USER / KASUGAI_AUTH_PASS /
+        KASUGAI_TOKEN_SECRET / KASUGAI_GCS_BUCKET。
+        Cloud Run では KASUGAI_AUTH_MODE=5 でこの control 値が
+        /auth-methods.json として動的に返されます。
+
+    6 = cloudrun-gate（Cloud Run：全ファイルゲート）
+        5 に加え、静的ファイルを含む全リクエストを
+        kasugai_session Cookie でゲートします（4 に相当）。
+        KASUGAI_AUTH_MODE=6 で有効化。
+
+    7 = cloudrun-iap（Cloud Run：IAP 委譲）
+        Cloud IAP（gcloud run deploy --iap）に認証を委譲する方式。
+        Google アカウントでログインし、全ファイルが IAP 内側で保護されます。
+        アプリ側ログイン画面は出ません。KASUGAI_AUTH_MODE=7 で有効化。
+
+        詳細・デプロイ手順は agent/AUTH_MODES.md と agent/README.md を参照。
+
+  安全な本番運用を行う場合は 0,1,2 ではなく 3〜7（cloudflare/cloudrun 系）を選択してください。
+  静的ファイル自体も保護したい場合は 4・6・7 を選択してください。
 */
 
 {

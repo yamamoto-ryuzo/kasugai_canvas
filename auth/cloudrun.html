@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Run 認証 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v4.20.1</span></h1>
+      <p>Cloud Run 認証（cloudrun / cloudrun-gate / cloudrun-iap）</p>
+    </header>
+    <main>
+      <p><a href="index.html">← 認証とプラグインへ戻る</a></p>
+      <h2 id="overview">5〜7. Cloud Run 認証（cloudrun）</h2>
+      <div class="url-box">
+        <h3>概要</h3>
+        <p>Cloud Run 上のエージェントサービス（<code>agent/</code>・FastAPI）に実装された認証方式です。<code>web/</code> の静的配信と API が同一オリジンで同居し、認証モードは環境変数 <code>KASUGAI_AUTH_MODE</code> で切り替えます（<code>/auth-methods.json</code> が動的に返されるため、モード変更にイメージ再ビルドは不要です）。</p>
+        <table>
+          <thead>
+            <tr><th>control</th><th>モード</th><th>保護範囲</th><th>用途</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>5</td>
+              <td>cloudrun（認証のみ）</td>
+              <td><code>/api/*</code> とデータのみ（静的は公開）</td>
+              <td>公開アプリ＋秘匿データ・設定。<strong>実装が最も軽い</strong></td>
+            </tr>
+            <tr>
+              <td>6</td>
+              <td>cloudrun-gate（全ゲート）</td>
+              <td>全リクエスト（Cookie ゲート）</td>
+              <td>デプロイ自体を到達不可にしたい場合</td>
+            </tr>
+            <tr>
+              <td>7</td>
+              <td>cloudrun-iap</td>
+              <td>全リクエスト（Cloud IAP）</td>
+              <td>Google アカウント運用できる組織内限定公開</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Cloudflare の 3（Pages）→ 5、4（Workers）→ 6 がほぼ対応し、7 は Cloud Run 独自の追加方式です。「認証のみ・静的公開」は Cloudflare 側の制約（Pages が静的をゲートできない）の産物ではありますが、このプロジェクトでは <code>web/</code> 自体が公開コードのため、静的秘匿の付加価値が小さく、<strong>まずは 5 の運用が現実的</strong>です。</p>
+      </div>
+      <div class="url-box">
+        <h3>構成</h3>
+        <pre><code>Cloud Run（agent/ FastAPI コンテナ）
+  ├─ /                    … web/ 静的配信
+  ├─ POST /agent/chat     … ANTIGRAVITY エージェント（認証モード時は認可必須）
+  ├─ POST /api/auth       … ID/PASS → {ok, token, kasc}（6 では Cookie も発行）
+  ├─ POST /api/kasc       … トークン必須 → GCS kasc/&lt;projectId&gt; へ書き込み
+  ├─ GET|PUT /api/data/*  … トークン必須 → GCS data/&lt;key&gt;（GET は署名付き URL へ 302）
+  └─ GET /api/capabilities … {tier:"cloudrun", features, auth:{mode}}
+
+Cloud Storage（KASUGAI_GCS_BUCKET）
+  ├─ kasc/&lt;プロジェクトID&gt;  … .kasc 本文（Cloudflare の kasc:&lt;id&gt; 相当）
+  └─ data/&lt;キー&gt;          … gs:// で参照される秘匿データ</code></pre>
+        <p><code>.kasc</code> 内で <code>gs://&lt;キー&gt;</code> と書いたレイヤーは <code>/api/data/&lt;キー&gt;?token=…</code> に書き換えられて配信されます（Cloudflare の <code>r2://</code> に相当。<code>r2://</code> も移行用に読み替えられ、保存時は <code>gs://</code> に正規化されます）。GET は既定で GCS V4 署名付き URL へ 302 リダイレクトするため、大きなデータもコンテナを通りません（<code>KASUGAI_DATA_REDIRECT=0</code> でプロキシ配信に切替可・Range 対応）。</p>
+        <p>起動時に <code>web/projects/*/*.kasc</code> がストレージへ冪等シードされます（<code>KASUGAI_SEED_KASC=0</code> で無効化）。<strong>秘匿したい .kasc は静的配信から削除してください</strong> — モード5 では <code>web/projects/*</code> は公開のままです。</p>
+      </div>
+      <div class="url-box">
+        <h3>利用シーン</h3>
+        <ul>
+          <li><strong>モード5</strong>：審査用デモ・一般公開しつつ設定とデータだけ保護したい。最も負荷が軽い推奨構成</li>
+          <li><strong>モード6</strong>：改造版 <code>web/</code> を秘匿したい、デプロイ自体の存在を限定したい場合</li>
+          <li><strong>モード7</strong>：Google アカウントでアクセス管理できる社内・組織内向け。認証コードはほぼ不要</li>
+        </ul>
+      </div>
+      <div class="url-box">
+        <h3>デプロイ手順</h3>
+        <p>コンテナのビルド・デプロイは <code>agent/README.md</code> の手順どおりです（コンテキストはリポジトリ直下）。</p>
+        <ol>
+          <li>
+            <strong>GCS バケットを用意します</strong>（モード5/6 で .kasc・データを使う場合）。
+            <pre><code>gcloud storage buckets create gs://kasugai-data --location=asia-northeast1</code></pre>
+          </li>
+          <li>
+            <strong>実行サービスアカウントに権限を付与します</strong>（署名付き URL を使う場合）。
+            <pre><code># signBlob 用（自身への Token Creator）＋ バケットのオブジェクト管理
+gcloud iam service-accounts add-iam-policy-binding SA_EMAIL \
+  --role=roles/iam.serviceAccountTokenCreator --member=serviceAccount:SA_EMAIL
+gcloud storage buckets add-iam-policy-binding gs://kasugai-data \
+  --role=roles/storage.objectAdmin --member=serviceAccount:SA_EMAIL
+gcloud services enable iamcredentials.googleapis.com</code></pre>
+          </li>
+          <li>
+            <strong>署名 URL 方式を使う場合はバケットに CORS を設定します</strong>（302 後はクロスオリジンになるため必須）。
+            <pre><code>gcloud storage buckets update gs://kasugai-data --cors-file=cors.json
+# cors.json:
+# [{"origin":["https://&lt;app&gt;.a.run.app"], "method":["GET","PUT"],
+#   "responseHeader":["Content-Type","Content-Range","ETag"], "maxAgeSeconds":3600}]</code></pre>
+            未設定でも動きますが <code>KASUGAI_DATA_REDIRECT=0</code>（プロキシ配信）で運用してください。
+          </li>
+          <li>
+            <strong>ID/PASS を Secret Manager に登録します</strong>（モード5/6）。
+            <pre><code>gcloud secrets create kasugai-auth-user --data-file=- &lt;&lt;&lt; admin
+gcloud secrets create kasugai-auth-pass --data-file=- &lt;&lt;&lt; '********'</code></pre>
+          </li>
+          <li>
+            <strong>デプロイします</strong>。
+            <pre><code># モード5（認証のみ）
+gcloud run deploy kasugai-canvas \
+  --image asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas \
+  --region asia-northeast1 --allow-unauthenticated --min-instances 1 \
+  --set-env-vars KASUGAI_AUTH_MODE=5,KASUGAI_GCS_BUCKET=kasugai-data \
+  --set-secrets KASUGAI_AUTH_USER=kasugai-auth-user:latest,KASUGAI_AUTH_PASS=kasugai-auth-pass:latest
+
+# モード7（IAP。認証はインフラ側）
+gcloud run deploy kasugai-canvas --image ... --iap</code></pre>
+            <code>--min-instances 1</code> はフロントの <code>/health</code> 検出（1秒タイムアウト）がコールドスタートを逃さないための推奨設定です。
+          </li>
+          <li>
+            <strong>動作確認します</strong>。トップページでログイン画面（5/6）または Google ログイン（7）が出ること、誤パスワードで 401、ログイン後にレイヤーが表示されることを確認します。
+          </li>
+        </ol>
+      </div>
+      <div class="url-box">
+        <h3>環境変数</h3>
+        <table>
+          <thead><tr><th>変数</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>KASUGAI_AUTH_MODE</code></td><td><code>5</code>/<code>6</code>/<code>7</code> で起動制御を有効化（未設定は認証なし）</td></tr>
+            <tr><td><code>KASUGAI_AUTH_USER</code>/<code>KASUGAI_AUTH_PASS</code></td><td>モード5/6 の ID/PASS（Secret Manager 推奨）</td></tr>
+            <tr><td><code>KASUGAI_TOKEN_SECRET</code></td><td>トークン署名鍵（未設定時は <code>KASUGAI_AUTH_PASS</code>）</td></tr>
+            <tr><td><code>KASUGAI_GCS_BUCKET</code></td><td>.kasc・秘匿データの格納バケット（未設定時はローカル <code>.datastore/</code>・開発用）</td></tr>
+            <tr><td><code>KASUGAI_DATA_REDIRECT</code></td><td><code>0</code> で GET /api/data をプロキシ配信（既定 1=署名 URL へ 302）</td></tr>
+            <tr><td><code>KASUGAI_SIGNED_URL_TTL</code></td><td>署名 URL 有効期限秒（既定 900）</td></tr>
+            <tr><td><code>KASUGAI_IAP_AUDIENCE</code></td><td>モード7 の IAP JWT audience（設定時は署名検証）</td></tr>
+            <tr><td><code>KASUGAI_SEED_KASC</code></td><td><code>0</code> で起動時の .kasc シードを無効化</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="url-box">
+        <h3>資産ごとの秘匿状況</h3>
+        <table>
+          <thead>
+            <tr><th>資産</th><th>5 cloudrun</th><th>6 cloudrun-gate</th><th>7 cloudrun-iap</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ID/PASS</td>
+              <td>✅ 環境変数のみ<br><small>Secret Manager 推奨</small></td>
+              <td>✅ 同左</td>
+              <td>✅ Google アカウント<br><small>アプリは資格情報を持たない</small></td>
+            </tr>
+            <tr>
+              <td>.kasc 設定</td>
+              <td>◐ GCS 内で秘匿<br><small>ログイン後は全量がブラウザへ配信</small></td>
+              <td>◐ 同左</td>
+              <td>◐ IAP 内側<br><small>静的ファイルでよい場合は GCS 不要</small></td>
+            </tr>
+            <tr>
+              <td>HTML/JS/CSS<br><small>（アプリ本体）</small></td>
+              <td>❌ 全公開</td>
+              <td>✅ 未ログインは 401<br><small>ログイン画面系のみ公開</small></td>
+              <td>✅ IAP がリダイレクト</td>
+            </tr>
+            <tr>
+              <td>データ（web/）</td>
+              <td>❌ 列挙容易 / △ obscurity</td>
+              <td>✅ 未ログインは 401</td>
+              <td>✅ IAP 内側</td>
+            </tr>
+            <tr>
+              <td>データ（gs:// 経由）</td>
+              <td>✅ トークン必須<br><small>署名 URL は期限付きベアラ</small></td>
+              <td>✅ 同左（Cookie でも可）</td>
+              <td>✅ IAP JWT or トークン</td>
+            </tr>
+            <tr>
+              <td>/agent/chat</td>
+              <td>✅ kasugai トークン or Bearer</td>
+              <td>✅ Cookie セッション</td>
+              <td>✅ IAP JWT</td>
+            </tr>
+          </tbody>
+        </table>
+        <p><small>✅ 秘匿　◐ 条件付き　❌ 公開　——「ログインした人」からは .kasc・データは見えます。秘匿が効くのは未ログインの第三者に対してです。署名付き URL は発行時点で認証済みの期限付きベアラ URL なので、有効期間内は誰でも使えます（<code>r2://</code> の <code>?token=</code> と同等のリスク）。</small></p>
+      </div>
+      <div class="url-box">
+        <h3>セキュリティ上の注意</h3>
+        <ul>
+          <li>トークン形式は Cloudflare 版と同じ <code>expiry.HMAC-SHA256</code>。秘密鍵は <code>KASUGAI_TOKEN_SECRET</code>（未設定時 <code>KASUGAI_AUTH_PASS</code>）</li>
+          <li>プロセス内レート制限はマルチインスタンス環境ではベストエフォートです。本格運用では外部 HTTPS LB + Cloud Armor を前段に置いてください（run.app 直の構成では Cloud Armor は使えません）</li>
+          <li>モード6 の Cookie は HttpOnly・Secure・SameSite=Strict・12時間。モード7 は署名検証用の <code>KASUGAI_IAP_AUDIENCE</code> 設定を推奨（未設定でも IAP 直下では到達自体が認証済みですが、防御の深さとして）</li>
+          <li>Cloud Run のリクエスト上限は 32MiB です。それを超えるデータアップロードは署名付き URL 直 PUT が必要です（現状の PUT はプロキシ経由）</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

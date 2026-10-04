@@ -1,4 +1,6 @@
-import { showLoginForm } from "../../auth-login-form.js";
+// Cloud IAP 版認証プラグイン（control=7）。
+// IAP 配下では認証はインフラ側で完了しているためログイン画面は出さず、
+// GET /api/auth でセッショントークンと .kasc を受け取る。
 import { t } from "../../i18n.js";
 
 function normalizeProjectId(id) {
@@ -10,20 +12,19 @@ function extractProjectId(url) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-// .kasc 内の r2://<キー> を /api/data/<キー>?token=... に変換する
-// KV には r2:// 形式のまま保存し、配信時にだけ書き換える
+// .kasc 内の gs://<キー> / r2://<キー> を /api/data/<キー>?token=... に変換する
 function rewriteKascText(text, token) {
-  return text.replace(/r2:\/\/([^|\s]+)/g, (_, key) => {
+  return text.replace(/(?:gs|r2):\/\/([^|\s]+)/g, (_, key) => {
     const path = key.split("/").map(encodeURIComponent).join("/");
     return `/api/data/${path}?token=${encodeURIComponent(token)}`;
   });
 }
 
-// 保存前の正規化: 書き換え後の URL を r2:// 形式に戻す
+// 保存前の正規化: 書き換え後の URL を gs:// 形式に戻す
 function restoreKascText(text) {
   return text.replace(/\/api\/data\/([^?\s|]+)\?token=[^|\s]*/g, (_, path) => {
     const key = path.split("/").map(decodeURIComponent).join("/");
-    return `r2://${key}`;
+    return `gs://${key}`;
   });
 }
 
@@ -40,7 +41,7 @@ function patchFetch(kascMap, token) {
     if (projectId) {
       const key = normalizeProjectId(projectId);
       if (!Object.prototype.hasOwnProperty.call(kascMap, key)) {
-        return new Response("", { status: 404, statusText: "Not in KV" });
+        return new Response("", { status: 404, statusText: "Not in store" });
       }
       const text = token ? rewriteKascText(kascMap[key], token) : kascMap[key];
       return new Response(text, { status: 200, headers: { "Content-Type": "text/plain" } });
@@ -50,29 +51,23 @@ function patchFetch(kascMap, token) {
 }
 
 export async function authenticate() {
-  return showLoginForm({
-    onSubmit: async ({ user, pass }) => {
-      const res = await fetch("/api/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user, pass })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) {
-        throw new Error(data.error || t("auth.failed"));
-      }
-      if (data.kasc && typeof data.kasc === "object") {
-        patchFetch(data.kasc, data.token);
-      }
-      return {
-        token: data.token || "cloudflare",
-        serverKasc: true,
-        user: { name: user, role: "cloudflare" },
-        updateKasc: (projectId, text) => {
-          if (data.kasc) data.kasc[normalizeProjectId(projectId)] = text;
-        },
-        restoreKasc: restoreKascText
-      };
-    }
-  });
+  // IAP 配下では /api/auth が IAP JWT を検証して kasugai トークンを発行する。
+  // GCS バックエンドが無い場合は kasc が空で返り、静的 .kasc で起動する
+  const res = await fetch("/api/auth", { cache: "no-store" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    throw new Error(data.error || t("auth.failed"));
+  }
+  const kasc = data.kasc && typeof data.kasc === "object" ? data.kasc : null;
+  const hasStore = !!(kasc && data.token);
+  if (hasStore) patchFetch(kasc, data.token);
+  return {
+    token: data.token || "",
+    serverKasc: hasStore,
+    user: { name: "iap", role: "cloudrun" },
+    updateKasc: (projectId, text) => {
+      if (kasc) kasc[normalizeProjectId(projectId)] = text;
+    },
+    restoreKasc: restoreKascText
+  };
 }

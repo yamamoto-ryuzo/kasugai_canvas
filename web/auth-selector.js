@@ -25,7 +25,10 @@ async function runAuth() {
       1: { default: "local", methods: { none: null, local: "./PLUGIN/auth-local/auth.js" } },
       2: { default: "password", methods: { password: "./PLUGIN/auth-password/auth.js" } },
       3: { default: "cloudflare", methods: { cloudflare: "./PLUGIN/auth-cloudflare/auth.js" } },
-      4: { default: "cloudflare", methods: { cloudflare: "./PLUGIN/auth-cloudflare/auth.js" } }
+      4: { default: "cloudflare", methods: { cloudflare: "./PLUGIN/auth-cloudflare/auth.js" } },
+      5: { default: "cloudrun", methods: { cloudrun: "./PLUGIN/auth-cloudrun/auth.js" } },
+      6: { default: "cloudrun", methods: { cloudrun: "./PLUGIN/auth-cloudrun/auth.js" } },
+      7: { default: "iap", methods: { iap: "./PLUGIN/auth-iap/auth.js" } }
     };
     config = controlMap[config.control] || controlMap[0];
   }

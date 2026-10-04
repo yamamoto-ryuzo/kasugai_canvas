@@ -60,7 +60,7 @@
   "settings.dem.reearth": "Re:Earth Terrain (Höhe / mittlerer Meeresspiegel, Level 14)",
   "settings.dem.gsi5m": "GSI 5m+10m-Mesh (DEM5-Serie +10B / Höhe TP-Datum)",
   "settings.dem.gsi1m": "GSI 1m-Mesh (DEM1A / Luftbild-LiDAR / Höhe TP-Datum)",
-  "settings.dem.heightHint": "<strong>Höhenbezug</strong>: „Ellipsoidische Höhe / WGS84“ stimmt mit dem 3D-Globus und 3D Tiles wie PLATEAU überein. „Höhe / mittlerer Meeresspiegel“ und „GSI (TP-Datum = mittlerer Meeresspiegel der Bucht von Tokio)“ erscheinen etwa 30–40 m unter der ellipsoidischen Höhe (3D Tiles können vergraben wirken). „GSI“-Quellen decken nur Japan ab.",
+  "settings.dem.heightHint": "<strong>Höhenbezug</strong>: „Ellipsoidische Höhe / WGS84“ stimmt mit dem 3D-Globus und 3D Tiles wie PLATEAU überein. „Höhe / mittlerer Meeresspiegel“ und „GSI (TP-Datum = mittlerer Tidepegel der Bucht von Tokio)“ sind geoidbezogen und erscheinen daher um die japanische Geoidhöhe (etwa 30–40 m) unter der ellipsoidischen Höhe (3D Tiles können vergraben wirken). „GSI“-Quellen decken nur Japan ab.",
   "settings.project.label": "Projekt",
   "settings.layer.drapeTarget": "Gelände zum Drapieren",
   "settings.layer.drapeApply": "Zu drapierende Ebenen",

@@ -135,7 +135,7 @@
                   <option value="gsi5m" data-i18n="settings.dem.gsi5m">地理院 5m+10mメッシュ (DEM5系+10B / 標高TP基準)</option>
                   <option value="gsi1m" data-i18n="settings.dem.gsi1m">地理院 1mメッシュ (DEM1A / 航空レーザー / 標高TP基準)</option>
                 </select>
-                <p class="hint" data-i18n-html="settings.dem.heightHint"><strong>高さ基準</strong>：「楕円体高 / WGS84」は3D地球・PLATEAU等の3D Tilesと整合します。「標高 / 平均海面基準」「地理院(TP基準=東京湾平均海面)」は楕円体高より約30〜40m低く表示されます(3D Tilesが地面に埋もれて見える場合があります)。「地理院」は日本域のみ有効です。</p>
+                <p class="hint" data-i18n-html="settings.dem.heightHint"><strong>高さ基準</strong>：「楕円体高 / WGS84」は3D地球・PLATEAU等の3D Tilesと整合します。「標高 / 平均海面基準」「地理院(TP基準=東京湾平均潮位面)」はジオイド基準のため、ジオイド高（日本域で約30〜40m）の分だけ楕円体高より低く描画されます(3D Tilesが地面に埋もれて見える場合があります)。「地理院」は日本域のみ有効です。</p>
               </section>
               <section id="settings-project-panel" class="settings-subpanel">
                 <label class="field-label" for="project-select" data-i18n="settings.project.label">プロジェクト</label>

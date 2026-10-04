@@ -60,7 +60,7 @@
   "settings.dem.reearth": "Re:Earth Terrain (elevation / mean sea level, level 14)",
   "settings.dem.gsi5m": "GSI 5m+10m mesh (DEM5 series +10B / elevation TP datum)",
   "settings.dem.gsi1m": "GSI 1m mesh (DEM1A / aerial LiDAR / elevation TP datum)",
-  "settings.dem.heightHint": "<strong>Height datum</strong>: \"Ellipsoid height / WGS84\" aligns with the 3D globe and 3D Tiles such as PLATEAU. \"Elevation / mean sea level\" and \"GSI (TP datum = Tokyo Bay mean sea level)\" appear about 30–40 m lower than ellipsoid height (3D Tiles may look buried). \"GSI\" sources cover Japan only.",
+  "settings.dem.heightHint": "<strong>Height datum</strong>: \"Ellipsoid height / WGS84\" aligns with the 3D globe and 3D Tiles such as PLATEAU. \"Elevation / mean sea level\" and \"GSI (TP datum = Tokyo Bay mean tidal level)\" are geoid-referenced, so they render about 30–40 m lower than ellipsoid height by the geoid height in Japan (3D Tiles may look buried). \"GSI\" sources cover Japan only.",
   "settings.project.label": "Project",
   "settings.layer.drapeTarget": "Terrain to drape onto",
   "settings.layer.drapeApply": "Layers to drape",

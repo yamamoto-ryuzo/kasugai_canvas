@@ -16,10 +16,10 @@
     <main>
       <section>
         <h2 id="v4-auth">🔍 拡張機能（Plugin）と認証</h2>
-        <p>認証方式は <code>web/auth-methods.json</code> の <code>control</code> で 0〜4 の番号で指定します。デフォルトは 0（認証なし）で起動します。認証後、<code>window.kasugaiAuth</code> に認証情報がセットされ、その後 <code>app.js</code> と通常プラグインが起動します。<code>.kasc</code> は全方式で読み取り可能ですが、<strong>サーバーへの書き込み（KV への保存）ができるのは 3・4（cloudflare 系）のみ</strong>です。0〜2 では「適用」はブラウザ内への反映のみで、「エクスポート(.kasc)」でのファイル運用になります。</p>
+        <p>認証方式は <code>web/auth-methods.json</code> の <code>control</code> で 0〜7 の番号で指定します。デフォルトは 0（認証なし）で起動します。認証後、<code>window.kasugaiAuth</code> に認証情報がセットされ、その後 <code>app.js</code> と通常プラグインが起動します。<code>.kasc</code> は全方式で読み取り可能ですが、<strong>サーバーへの書き込み（KV/GCS への保存）ができるのは 3・4（cloudflare 系）と 5・6・7（cloudrun 系）のみ</strong>です。0〜2 では「適用」はブラウザ内への反映のみで、「エクスポート(.kasc)」でのファイル運用になります。</p>
         <div class="url-box">
           <h3>⚠️ セキュリティ上の注意</h3>
-          <p>Cloudflare Pages 認証は<strong>最低限の起動制御 + .kasc 設定情報の保護</strong>です。アプリの起動を制御し、<code>.kasc</code> の内容は ID/PASS 認証後に Cloudflare KV から取得されます。ただし、HTML/JS/CSS などの静的ファイル自体は公開されており、<code>DATA/</code> 内の画像・GeoJSON 等は保護対象外です。<code>auth-selector.js</code> は <code>auth-methods.json</code> で選択された方式のみを読み込みます。完全なファイルアクセス制御が必要な場合は、Cloudflare Access（Zero Trust）や R2 等でファイル配信を制御してください。</p>
+          <p>「認証のみ」系の方式（3 Pages・5 cloudrun）は<strong>最低限の起動制御 + .kasc 設定情報の保護</strong>です。アプリの起動を制御し、<code>.kasc</code> の内容は ID/PASS 認証後に KV（Cloudflare）または GCS（Cloud Run）から取得されます。ただし、HTML/JS/CSS などの静的ファイル自体は公開されており、<code>DATA/</code> 内の画像・GeoJSON 等は保護対象外です。<code>auth-selector.js</code> は <code>auth-methods.json</code> で選択された方式のみを読み込みます。完全なファイルアクセス制御が必要な場合は、4 Workers・6 cloudrun-gate・7 cloudrun-iap、または Cloudflare Access（Zero Trust）等でファイル配信を制御してください。</p>
         </div>
         <div class="features">
           <a class="feature-card" href="none.html">
@@ -42,6 +42,18 @@
             <h3>4. Cloudflare 認証（cloudflare）— Workers</h3>
             <p>3 の機能に加え、静的ファイル自体も含めて全リクエストを認証ゲート。最も強い保護。</p>
           </a>
+          <a class="feature-card" href="cloudrun.html">
+            <h3>5. Cloud Run 認証（cloudrun）— 認証のみ</h3>
+            <p>Cloud Run 版の ID/PASS 認証。.kasc は GCS、秘匿データは gs:// で署名付き URL 経由。静的は公開のまま。</p>
+          </a>
+          <a class="feature-card" href="cloudrun.html">
+            <h3>6. Cloud Run 認証（cloudrun-gate）— 全ゲート</h3>
+            <p>5 に加え、静的ファイルを含む全リクエストを kasugai_session Cookie でゲート。</p>
+          </a>
+          <a class="feature-card" href="cloudrun.html">
+            <h3>7. Cloud Run 認証（cloudrun-iap）— IAP 委譲</h3>
+            <p>Cloud IAP に認証を完全委譲。Google アカウントで全ファイルを保護。アプリ側コードほぼゼロ。</p>
+          </a>
         </div>
         <div class="url-box">
           <h3>資産ごとの秘匿状況（認証方式別）</h3>
@@ -55,6 +67,9 @@
                 <th>2 password</th>
                 <th>3 Pages</th>
                 <th>4 Workers</th>
+                <th>5 cloudrun</th>
+                <th>6 gate</th>
+                <th>7 iap</th>
               </tr>
             </thead>
             <tbody>
@@ -65,6 +80,9 @@
                 <td>△ JS内ハッシュ<br><small>弱いPASSは解析可</small></td>
                 <td>✅ 環境変数のみ<br><small>ブラウザへ送信されない</small></td>
                 <td>✅ 同左</td>
+                <td>✅ Secret Manager<br><small>ブラウザへ送信されない</small></td>
+                <td>✅ 同左</td>
+                <td>✅ Google アカウント<br><small>アプリは資格情報を持たない</small></td>
               </tr>
               <tr>
                 <td>.kasc 設定</td>
@@ -73,6 +91,9 @@
                 <td>❌ 全公開</td>
                 <td>◐ KV 内で秘匿<br><small>ログイン後は全量がブラウザへ配信</small></td>
                 <td>◐ 同左</td>
+                <td>◐ GCS 内で秘匿<br><small>ログイン後は全量がブラウザへ配信</small></td>
+                <td>◐ 同左</td>
+                <td>◐ IAP 内側<br><small>GCS 利用時は同左</small></td>
               </tr>
               <tr>
                 <td>HTML/JS/CSS<br><small>（アプリ本体）</small></td>
@@ -81,6 +102,9 @@
                 <td>❌ 全公開</td>
                 <td>❌ 全公開</td>
                 <td>✅ 未ログインは 401<br><small>ログイン画面系のみ公開</small></td>
+                <td>❌ 全公開</td>
+                <td>✅ 未ログインは 401<br><small>ログイン画面系のみ公開</small></td>
+                <td>✅ IAP がリダイレクト</td>
               </tr>
               <tr>
                 <td>データ（web/）<br><small>URL が公開情報から分かる</small></td>
@@ -89,6 +113,9 @@
                 <td>❌ 列挙容易</td>
                 <td>◐ 対象は限定的<br><small>.kasc は KV で非公開のため、projects.json・HTML/JS・残置 .kasc 由来のみ</small></td>
                 <td>✅ 未ログインは 401</td>
+                <td>◐ 対象は限定的<br><small>.kasc は GCS で非公開のため、projects.json・HTML/JS・残置 .kasc 由来のみ</small></td>
+                <td>✅ 未ログインは 401</td>
+                <td>✅ IAP 内側</td>
               </tr>
               <tr>
                 <td>データ（web/）<br><small>URL が非公開・推測困難</small></td>
@@ -97,24 +124,30 @@
                 <td>△ obscurity</td>
                 <td>△ obscurity</td>
                 <td>✅ 未ログインは 401</td>
+                <td>△ obscurity</td>
+                <td>✅ 未ログインは 401</td>
+                <td>✅ IAP 内側</td>
               </tr>
               <tr>
-                <td>データ<br><small>（R2・r2:// 経由）</small></td>
+                <td>データ<br><small>（R2・r2:// / GCS・gs:// 経由）</small></td>
                 <td>−</td>
                 <td>−</td>
                 <td>−</td>
                 <td>✅ トークン必須<br><small>未ログインは取得不可</small></td>
                 <td>✅ 同左</td>
+                <td>✅ トークン必須<br><small>署名 URL は期限付きベアラ</small></td>
+                <td>✅ 同左<br><small>Cookie でも可</small></td>
+                <td>✅ IAP JWT / 署名 URL</td>
               </tr>
             </tbody>
           </table>
           <p><small>✅ 秘匿される　◐ 条件付きで秘匿　△ 弱い保護　❌ 公開　− 該当なし</small></p>
           <p><small><strong>「web/ 静的配信」の2区分について</strong>：静的ファイルに認証チェックはなく、URL が分かれば誰でも取得できる点は同じです。違いは <strong>URL の発見可能性</strong>だけです。「URL が公開情報から分かる」とは、公開の <code>.kasc</code>・<code>projects.json</code>・HTML/JS 内にパスが書かれている、または <code>projects/default/DATA/...</code> のような推測しやすい固定パスのケース — 実質的に一覧・総当たりで列挙可能です。「URL が非公開・推測困難」はどこにもパスが書かれていないケースで、URL そのものが秘匿情報として機能します（ obscurity による弱い隠蔽で、URL が一度漏れれば防御はゼロです）。方式3 で <code>.kasc</code> を KV に移せば、そこに書かれたデータ URL は未ログイン者には発見できなくなります。</small></p>
-          <p><small><strong>共通の前提</strong>：「ログインした人」からは .kasc・データは見えます（ブラウザへ配信されるため）。秘匿が効くのは「未ログインの第三者」に対してです。方式3/4 の署名トークンは <code>/api/data/...?token=…</code> の URL に現れるため、ログイン済みブラウザから読み取れば有効期間中（12時間）は KV/R2 にアクセス可能です。各方式の詳細はそれぞれのページを参照してください。</small></p>
+          <p><small><strong>共通の前提</strong>：「ログインした人」からは .kasc・データは見えます（ブラウザへ配信されるため）。秘匿が効くのは「未ログインの第三者」に対してです。方式3〜6 の署名トークンは <code>/api/data/...?token=…</code> の URL に現れるため、ログイン済みブラウザから読み取れば有効期間中（12時間）は KV/GCS にアクセス可能です。方式5/6 の署名付き URL も同様に期限付き（既定15分）のベアラ URL です。各方式の詳細はそれぞれのページを参照してください。</small></p>
         </div>
         <div class="url-box">
           <h3>認証用ログインUI</h3>
-          <p>ローカル認証（1）、パスワード認証（2）、Cloudflare 認証（3）は、同じログインUIコンポーネント <code>web/auth-login-form.js</code> を使用します。画面の見た目・入力チェック・ローディング表示・エラー表示を共通化し、認証方式ごとの判定処理だけを <code>web/PLUGIN/auth-*/auth.js</code> に閉じ込めています。</p>
+          <p>ローカル認証（1）、パスワード認証（2）、Cloudflare 認証（3・4）、Cloud Run 認証（5・6）は、同じログインUIコンポーネント <code>web/auth-login-form.js</code> を使用します。画面の見た目・入力チェック・ローディング表示・エラー表示を共通化し、認証方式ごとの判定処理だけを <code>web/PLUGIN/auth-*/auth.js</code> に閉じ込めています。</p>
           <p>新しい認証方式を追加する場合は、<code>web/PLUGIN/&lt;id&gt;/auth.js</code> から <code>showLoginForm({ onSubmit })</code> を呼び出し、<code>onSubmit</code> コールバック内で独自の認証処理を記述してください。詳細は README.md を参照してください。</p>
         </div>
         <div class="url-box">

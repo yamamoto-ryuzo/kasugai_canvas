@@ -35,7 +35,8 @@
             { href: 'auth/local.html', text: '1. ローカル認証' },
             { href: 'auth/password.html', text: '2. 簡易パスワード' },
             { href: 'auth/pages.html', text: '3. Cloudflare Pages' },
-            { href: 'auth/workers.html', text: '4. Cloudflare Workers' }
+            { href: 'auth/workers.html', text: '4. Cloudflare Workers' },
+            { href: 'auth/cloudrun.html', text: '5-7. Cloud Run' }
           ]
         },
         { href: 'google.html', text: 'Google 連携・AI' },

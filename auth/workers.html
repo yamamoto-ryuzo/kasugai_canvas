@@ -217,6 +217,7 @@ wrangler deploy</code></pre>
           <li>保護できるもの：<strong>静的ファイルすべて</strong>（HTML/JS/CSS/DATA/ 等）、<code>.kasc</code>、R2 内の秘匿データ</li>
           <li>保護できないもの：公開許可リストのファイル（ログイン画面系）、<code>PLUGIN/auth-*/</code> の内容（ID/PASS を直書きするプラグインの中身は見えます — 本番では cloudflare 系のみ使用してください）</li>
           <li>セッションは HttpOnly Cookie（<code>kasugai_session</code>・SameSite=Strict・12時間）で管理され、JS から読み取れません</li>
+          <li>Cloud Run で同様の全ゲート構成を取る場合は <a href="cloudrun.html">6. Cloud Run 認証 — cloudrun-gate</a>（<code>control: 6</code>）、組織アカウント運用ができる場合は <code>control: 7</code>（Cloud IAP）があります</li>
         </ul>
       </div>
     </main>

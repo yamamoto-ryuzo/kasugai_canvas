@@ -20,6 +20,7 @@ kasugai_canvas/
 │  └─ projects/          # プロジェクト（projects.json / <id>/kasugai_canvas.kasc / DATA/）
 ├─ functions/            # Cloudflare Pages Functions（認証 API / KV・R2 ゲート）
 ├─ workers/              # Cloudflare Workers 版デプロイ設定（worker.js / wrangler.toml）
+├─ agent/                # Cloud Run エージェントサービス（FastAPI・認証 5/6/7・GCS ストレージ）
 ├─ installer/            # NSIS インストーラー定義
 ├─ download/             # 配布 ZIP・インストーラー・latest.json
 ├─ run.py                # 起動・ビルドスクリプト
@@ -43,6 +44,8 @@ Cloudflare Pages / Workers へのデプロイは以下のスクリプトで自�
 python run-pages.py      # Pages（control: 3）へデプロイ
 python run-workers.py    # Workers（control: 4・全ファイル認証ゲート）へデプロイ
 ```
+
+Cloud Run へのデプロイ（control: 5/6/7）は `agent/Dockerfile` と `agent/README.md` を参照してください。
 
 設定手順の詳細は [認証とプラグイン](auth/index.html) を参照してください。
 
@@ -85,7 +88,7 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 
 ## 拡張機能（Plugin）と認証
 
-認証方式は `web/auth-methods.json` の `control` で 0〜4 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](auth/index.html) を参照してください。
+認証方式は `web/auth-methods.json` の `control` で 0〜7 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](auth/index.html) を参照してください。
 
 ### 起動後通常プラグイン
 `web/plugin-loader.js` が `web/plugins.json` を読み込み、各プラグインを `import()` します。

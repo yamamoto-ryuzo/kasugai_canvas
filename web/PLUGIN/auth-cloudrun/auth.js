@@ -1,3 +1,6 @@
+// Cloud Run 版認証プラグイン（control=5/6）。
+// API 契約は auth-cloudflare と同じ {user,pass} → {ok,token,kasc}。
+// 秘匿データ記法は gs://<キー>（r2:// も移行用に読み替える）。
 import { showLoginForm } from "../../auth-login-form.js";
 import { t } from "../../i18n.js";
 
@@ -10,20 +13,20 @@ function extractProjectId(url) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-// .kasc 内の r2://<キー> を /api/data/<キー>?token=... に変換する
-// KV には r2:// 形式のまま保存し、配信時にだけ書き換える
+// .kasc 内の gs://<キー> / r2://<キー> を /api/data/<キー>?token=... に変換する
+// GCS には gs:// 形式のまま保存し、配信時にだけ書き換える
 function rewriteKascText(text, token) {
-  return text.replace(/r2:\/\/([^|\s]+)/g, (_, key) => {
+  return text.replace(/(?:gs|r2):\/\/([^|\s]+)/g, (_, key) => {
     const path = key.split("/").map(encodeURIComponent).join("/");
     return `/api/data/${path}?token=${encodeURIComponent(token)}`;
   });
 }
 
-// 保存前の正規化: 書き換え後の URL を r2:// 形式に戻す
+// 保存前の正規化: 書き換え後の URL を gs:// 形式に戻す
 function restoreKascText(text) {
   return text.replace(/\/api\/data\/([^?\s|]+)\?token=[^|\s]*/g, (_, path) => {
     const key = path.split("/").map(decodeURIComponent).join("/");
-    return `r2://${key}`;
+    return `gs://${key}`;
   });
 }
 
@@ -40,7 +43,7 @@ function patchFetch(kascMap, token) {
     if (projectId) {
       const key = normalizeProjectId(projectId);
       if (!Object.prototype.hasOwnProperty.call(kascMap, key)) {
-        return new Response("", { status: 404, statusText: "Not in KV" });
+        return new Response("", { status: 404, statusText: "Not in store" });
       }
       const text = token ? rewriteKascText(kascMap[key], token) : kascMap[key];
       return new Response(text, { status: 200, headers: { "Content-Type": "text/plain" } });
@@ -65,9 +68,9 @@ export async function authenticate() {
         patchFetch(data.kasc, data.token);
       }
       return {
-        token: data.token || "cloudflare",
+        token: data.token || "",
         serverKasc: true,
-        user: { name: user, role: "cloudflare" },
+        user: { name: user, role: "cloudrun" },
         updateKasc: (projectId, text) => {
           if (data.kasc) data.kasc[normalizeProjectId(projectId)] = text;
         },
