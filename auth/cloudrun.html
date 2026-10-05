@@ -71,6 +71,23 @@ Cloud Storage（KASUGAI_GCS_BUCKET）
         </ul>
       </div>
       <div class="url-box">
+        <h3>モード別の設定（Canvas 側 ⇄ Cloud Run 側）</h3>
+        <p><strong>Canvas（web/）側</strong>：Cloud Run が <code>web/</code> を同一オリジン配信する構成では、<code>KASUGAI_AUTH_MODE</code> から <code>/auth-methods.json</code> が動的に返るため <strong>web/ 側の設定変更は不要</strong>です（モード変更も再ビルド不要）。<code>web/</code> を別途静的配信する場合だけ <code>auth-methods.json</code> の <code>control</code> を手動で 5/6/7 に設定してください。</p>
+        <table>
+          <thead>
+            <tr><th>設定項目</th><th>5 cloudrun</th><th>6 gate</th><th>7 iap</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>KASUGAI_AUTH_MODE</code></td><td><code>5</code></td><td><code>6</code></td><td><code>7</code></td></tr>
+            <tr><td><code>KASUGAI_AUTH_USER/PASS</code></td><td>必須（Secret Manager）</td><td>必須（同左）</td><td>不要</td></tr>
+            <tr><td><code>KASUGAI_GCS_BUCKET</code></td><td>.kasc・データ利用時</td><td>同左</td><td>.kasc 編集保存する場合のみ</td></tr>
+            <tr><td><code>KASUGAI_IAP_AUDIENCE</code></td><td>−</td><td>−</td><td>署名検証する場合</td></tr>
+            <tr><td>デプロイフラグ</td><td colspan="2"><code>--allow-unauthenticated</code></td><td><code>--iap</code></td></tr>
+            <tr><td>インフラ前提</td><td colspan="2">バケット＋SA 権限（GCS 利用時）</td><td>OAuth 同意画面＋<code>iap.httpsResourceAccessor</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="url-box">
         <h3>デプロイ手順</h3>
         <p>コンテナのビルド・デプロイは <code>agent/README.md</code> の手順どおりです（コンテキストはリポジトリ直下）。</p>
         <ol>

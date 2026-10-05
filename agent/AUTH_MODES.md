@@ -26,6 +26,50 @@ Cloud Run の作法を優先しつつ、実装・運用負荷の軽い順にモ�
 | 7 | `cloudrun-iap` | 全リクエスト（IAP） | 認証コードほぼゼロ | Google アカウント運用できる組織内 |
 | 0（既存） | none | なし（公開＋rate limit） | — | 審査用公開デモ・現行構成 |
 
+## モード別設定一覧（Canvas 側 ⇄ Cloud Run 側）
+
+### Canvas（web/）側の設定
+
+認証方式は `web/auth-methods.json` の `control` 値で決まるが、設定方法は
+配信形態で2通りある:
+
+- **Cloud Run 同一オリジン運用（推奨・既定）**: `KASUGAI_AUTH_MODE` を
+  設定すると `/auth-methods.json` が環境変数から動的に返るため、
+  **`web/` 側のファイル変更は一切不要**（モード変更も再ビルド不要）
+- **`web/` を別途静的配信する場合**: `web/auth-methods.json` の
+  `control` を手動で `5`/`6`/`7` に書き換える（auth API は同一オリジンを
+  期待するため、Cloud Run 側でも `web/` を配信する構成が前提）
+
+### Cloud Run 側の設定（モード別）
+
+| 設定項目 | 5 cloudrun | 6 cloudrun-gate | 7 cloudrun-iap |
+| --- | --- | --- | --- |
+| `KASUGAI_AUTH_MODE` | `5` | `6` | `7` |
+| `KASUGAI_AUTH_USER`/`PASS` | **必須**（Secret Manager） | **必須**（同左） | 不要 |
+| `KASUGAI_GCS_BUCKET` | .kasc・データ利用時（省略で `.datastore/`） | 同左 | .kasc 編集保存する場合のみ |
+| `KASUGAI_TOKEN_SECRET` | 省略可（=AUTH_PASS） | 省略可 | 省略可 |
+| `KASUGAI_DATA_REDIRECT` | `0`=プロキシ（既定1=署名URL） | 同左 | 同左 |
+| `KASUGAI_IAP_AUDIENCE` | — | — | 署名検証する場合に設定 |
+| `KASUGAI_SEED_KASC` | `0` でシード無効化 | 同左 | 同左 |
+| デプロイフラグ | `--allow-unauthenticated` | `--allow-unauthenticated` | `--iap`（unauthenticated も併記） |
+| インフラ前提 | バケット＋SA権限（GCS利用時） | 同左 | OAuth 同意画面＋`iap.httpsResourceAccessor` |
+
+```powershell
+# モード5/6（ID/PASS 認証。6 は AUTH_MODE=6 に変えるだけ）
+gcloud run deploy kasugai-canvas --image <IMAGE> --region asia-northeast1 `
+  --allow-unauthenticated --min-instances 1 `
+  --set-env-vars "KASUGAI_AUTH_MODE=5,KASUGAI_GCS_BUCKET=kasugai-data" `
+  --set-secrets "KASUGAI_AUTH_USER=kasugai-auth-user:latest,KASUGAI_AUTH_PASS=kasugai-auth-pass:latest"
+
+# モード7（IAP。ID/PASS 不要・認証は Google ログイン）
+gcloud run deploy kasugai-canvas --image <IMAGE> --region asia-northeast1 `
+  --iap --set-env-vars "KASUGAI_AUTH_MODE=7,KASUGAI_IAP_AUDIENCE=<AUDIENCE>"
+
+# IAP のアクセス許可（対象 Google アカウントごと）
+gcloud run services add-iam-policy-binding kasugai-canvas --region asia-northeast1 `
+  --member="user:you@example.com" --role="roles/iap.httpsResourceAccessor"
+```
+
 ### 認証のみ（5）を残す理由
 
 「静的をゲートできない Cloudflare の制約の産物」と一度は廃番にしたが、
