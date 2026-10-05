@@ -532,7 +532,7 @@ async fn install_update(
 
     let script_path = tmp_dir.join("update.ps1");
     let script = format!(
-        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\n$newWeb = '{new_web}'\n$currentWeb = '{current_web}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\n$ErrorActionPreference = 'Stop'\ntry {{\n    Copy-Item -Path $newExe -Destination $currentExe -Force\n    if (Test-Path $newWeb) {{\n        if (Test-Path $currentWeb) {{ Remove-Item -Path $currentWeb -Recurse -Force }}\n        Copy-Item -Path $newWeb -Destination $currentWeb -Recurse -Force\n    }}\n    Start-Process -FilePath $currentExe -WindowStyle Hidden\n}} catch {{\n    Write-Error \"更新ファイルの差し替えに失敗しました: $_\"\n    exit 1\n}}\n",
+        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\n$newWeb = '{new_web}'\n$currentWeb = '{current_web}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\n$ErrorActionPreference = 'Stop'\ntry {{\n    Copy-Item -Path $newExe -Destination $currentExe -Force\n    if (Test-Path $newWeb) {{\n        if (Test-Path $currentWeb) {{ Remove-Item -Path $currentWeb -Recurse -Force }}\n        Copy-Item -Path $newWeb -Destination $currentWeb -Recurse -Force\n    }}\n    Start-Process -FilePath $currentExe -ArgumentList '--no-browser' -WindowStyle Hidden\n}} catch {{\n    Write-Error \"更新ファイルの差し替えに失敗しました: $_\"\n    exit 1\n}}\n",
         new = new_exe.to_string_lossy().replace('\'', "''"),
         current = current_exe.to_string_lossy().replace('\'', "''"),
         new_web = new_web_dir.to_string_lossy().replace('\'', "''"),
@@ -628,7 +628,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let address = SocketAddr::from((host, port));
 
-    let open_browser_requested = std::env::args().any(|arg| arg == "--open-browser");
+    // ウィンドウレス実行のため、引数なし起動(手動作成ショートカット・exe ダブルクリック)でも
+    // 何も見えない事故を防ぐべく、ブラウザを開くのを既定とする。サイレント起動は --no-browser
+    // (自動更新の再起動・run.py が使用)。--open-browser は後方互換のため受理する(既定と同じ挙動)。
+    // コンテナ実行(PORT 設定時)はブラウザを開かない
+    let open_browser_requested =
+        cloud_port.is_none() && !std::env::args().any(|arg| arg == "--no-browser");
 
     let exe_dir = std::env::current_exe()
         .ok()

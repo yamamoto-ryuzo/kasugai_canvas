@@ -197,7 +197,7 @@ def _start_exe_and_verify(exe_path: Path, expected_version: str) -> None:
     """EXE を一時ポートで起動し、/health の version を検証する。"""
     port = _find_free_port()
     env = {**os.environ, "KASUGAI_CANVAS_PORT": str(port)}
-    process = subprocess.Popen([str(exe_path)], env=env)
+    process = subprocess.Popen([str(exe_path), "--no-browser"], env=env)
     try:
         _wait_for_health(port, expected_version)
     finally:
@@ -229,7 +229,7 @@ def run_dev() -> None:
         for project in SAMPLE_PROJECTS.iterdir():
             if project.is_dir() and not (dev_projects / project.name).exists():
                 shutil.copytree(project, dev_projects / project.name)
-    subprocess.run(["cargo", "run"], cwd=SERVER_DIR, check=True)
+    subprocess.run(["cargo", "run", "--", "--no-browser"], cwd=SERVER_DIR, check=True)
 
 
 def build_installer() -> None:
@@ -312,7 +312,7 @@ def run_release() -> None:
         raise SystemExit(1)
     _kill_existing_kasugai()
     _print_access_url()
-    subprocess.run([str(TARGET_EXE)], cwd=ROOT, check=True)
+    subprocess.run([str(TARGET_EXE), "--no-browser"], cwd=ROOT, check=True)
 
 
 def publish_release() -> None:
