@@ -574,6 +574,25 @@ fn open_browser(port: u16) {
     let _ = opener::open(&url);
 }
 
+/// ポートを占有しているのが起動済みの KASUGAI Canvas かどうかを /health で確認する
+async fn is_existing_instance(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/health");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return false,
+    };
+    match client.get(&url).send().await {
+        Ok(response) => match response.json::<Value>().await {
+            Ok(body) => body.get("name").and_then(Value::as_str) == Some("kasugai_canvas"),
+            Err(_) => false,
+        },
+        Err(_) => false,
+    }
+}
+
 fn resolve_dir(
     exe_dir: &Option<PathBuf>,
     name: &str,
@@ -658,7 +677,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .fallback_service(ServeDir::new(web_dir).append_index_html_on_directories(true))
         .with_state(state.clone());
 
-    let listener = TcpListener::bind(address).await?;
+    // ウィンドウレス実行(windows_subsystem="windows")のためバインド失敗は利用者に見えない。
+    // 既に起動済みのインスタンスがポートを占有している場合は、無言終了ではなく
+    // 既存インスタンスのブラウザを開いて正常終了する(ショートカット再クリック対策)
+    let listener = match TcpListener::bind(address).await {
+        Ok(listener) => listener,
+        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+            if is_existing_instance(port).await {
+                println!("KASUGAI Canvas は既に起動しています: http://{address}");
+                if open_browser_requested {
+                    open_browser(port);
+                }
+                return Ok(());
+            }
+            return Err(err.into());
+        }
+        Err(err) => return Err(err.into()),
+    };
     println!("KASUGAI Canvas: http://{address}");
 
     if open_browser_requested {

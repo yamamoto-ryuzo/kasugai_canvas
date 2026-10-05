@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.20.2] - 2026-10-05
+
+### Fixed
+
+- **ショートカットから起動しない問題を修正**: KASUGAI Canvas が既に起動済みでポートを占有している場合、ショートカットから起動した新プロセスがバインド失敗（AddrInUse）で無言終了し「起動しない」ように見えていた。ポート占有時は `/health` で占有者が KASUGAI Canvas 本体か確認し、本体であれば既存インスタンスのブラウザを開いて正常終了するようにした（別アプリが占有している場合は従来どおりエラー終了）
+
 ## [4.20.1] - 2026-10-01
 
 ### Fixed
