@@ -25,7 +25,8 @@
       <tr><td><a href="#presentation">V2</a></td><td>プレゼンテーション機能</td></tr>
       <tr><td><a href="#ai">V3</a></td><td>AI 連携</td></tr>
       <tr><td><a href="#plugins">V4</a></td><td>プラグイン（認証機構）・外部連携</td></tr>
-      <tr><td><a href="#agent">V5（予約）</a></td><td>ANTIGRAVITY エージェント完成</td></tr>
+      <tr><td><a href="#app">V5</a></td><td>アプリ化（ローカル連携）</td></tr>
+      <tr><td><a href="#agent">V6（予約）</a></td><td>ANTIGRAVITY エージェント完成</td></tr>
       </tbody>
       </table>
 
@@ -156,16 +157,25 @@
           <p>Geocoding / Places のハイブリッド検索、Street View リンク・候補ラインオーバーレイ。外部エージェント呼出し（エージェントタブにエンドポイントを設定し <code>POST {message, project, camera, layers, history}</code> → <code>actions</code> を実行）で Antigravity 等の外部構築エージェントと接続可能</p>
         </div>
         <div class="feature-card">
+          <h3>🌐 多言語対応（8言語）</h3>
+          <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の 8 言語に対応。設定 → その他の言語セレクタで即時切替。初回はブラウザ言語から自動判定（未対応時は英語）、選択は localStorage に保存。AIチャットの回答言語も UI 言語に追随</p>
+        </div>
+      </div>
+
+      <h2 id="app">V5: アプリ化（ローカル連携）</h2>
+      <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。ブラウザの外（OS・ファイルシステム・ネイティブバイナリ）に踏み込むため、静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。ブラウザ GIS との差別化要因となる流れで、今後もこのテーマで拡張していきます。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>☁️ クラウドストレージ連携（rclone）</h3>
+          <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）で仮想ドライブ化するほか、アプリ内 <code>cloud:</code> スキームでレイヤーURLから直接参照可能。読み取り専用 / 読み書きの権限選択、フォルダURLによるルート固定、.kasc のクラウド保存に対応（ローカルサーバーのみ）</p>
+        </div>
+        <div class="feature-card">
           <h3>💾 ローカルファイル保存</h3>
           <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能。描画ルート保存・インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet の自動行追記）にも利用</p>
         </div>
         <div class="feature-card">
-          <h3>🌐 多言語対応（8言語）</h3>
-          <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の 8 言語に対応。設定 → その他の言語セレクタで即時切替。初回はブラウザ言語から自動判定（未対応時は英語）、選択は localStorage に保存。AIチャットの回答言語も UI 言語に追随</p>
-        </div>
-        <div class="feature-card">
-          <h3>☁️ クラウドストレージ連携（rclone）</h3>
-          <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）で仮想ドライブ化するほか、アプリ内 <code>cloud:</code> スキームでレイヤーURLから直接参照可能。読み取り専用 / 読み書きの権限選択、フォルダURLによるルート固定、.kasc のクラウド保存に対応（ローカルサーバーのみ）</p>
+          <h3>📦 納品用ローカル化</h3>
+          <p>接続中のクラウドルートを <code>projects/&lt;id&gt;/DATA/</code> へ丸ごとコピーし、<code>.kasc</code> の <code>cloud:</code> 参照を <code>DATA/</code> に書き換えます。納品先は rclone・OAuth 設定不要でファイル一式だけで動くローカル完結パッケージになります</p>
         </div>
       </div>
       <div class="url-box">
@@ -202,7 +212,8 @@ POST /api/cloud/serve     … WebDAV 起動（remote / root|フォルダURL / re
 POST /api/cloud/stop      … 停止（ドライブ割当も解除）
 POST /api/cloud/drive     … ドライブ割当・解除（Windows）
 GET  /api/cloud/list      … フォルダ一覧（rclone lsjson）
-GET/PUT/DELETE /api/cloud/file … ファイルの読み書き・削除（Range 転送対応）</code></pre>
+GET/PUT/DELETE /api/cloud/file … ファイルの読み書き・削除（Range 転送対応）
+POST /api/cloud/localize  … 接続ルートを DATA/ へコピーし .kasc の cloud: を書換え（納品用）</code></pre>
         <h3>制約・注意点</h3>
         <ul>
           <li>ドライブ経由の読み書きは Windows WebClient の既定上限（約 50MB）を受けます。<code>cloud:</code> スキーム（アプリ内プロキシ）はこの制限を受けません</li>
@@ -211,8 +222,8 @@ GET/PUT/DELETE /api/cloud/file … ファイルの読み書き・削除（Range 
         </ul>
       </div>
 
-      <h2 id="agent">V5（予約）: ANTIGRAVITY エージェント完成</h2>
-      <p>Cloud Run 上のエージェントサービス（FastAPI + Gemini API/ADK）が外部エージェントプロトコル（<code>POST /agent/chat</code> → <code>{reply, actions, report}</code>）で稼働し、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く状態を V5 の完成条件としています。実装計画は <a href="hackathon.html">ハッカソン</a> を参照してください。</p>
+      <h2 id="agent">V6（予約）: ANTIGRAVITY エージェント完成</h2>
+      <p>Cloud Run 上のエージェントサービス（FastAPI + Gemini API/ADK）が外部エージェントプロトコル（<code>POST /agent/chat</code> → <code>{reply, actions, report}</code>）で稼働し、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く状態を V6 の完成条件としています。実装計画は <a href="hackathon.html">ハッカソン</a> を参照してください。</p>
 
       <h2 id="implementation">現行実装の構成</h2>
       <p>KASUGAI Canvas の現行実装は、<strong>純粋な CesiumJS フロントエンド</strong>を <code>web/</code> ディレクトリに配置し、通常の HTTP サーバーから配信する構成です。オプションとして、Rust/Axum で最小限の静的ファイルサーバー（<code>kasugai_canvas.exe</code>）を同梱しています。Three.js は Cesium のビュー行列を共有する簡易な 3D 描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は未対応です。</p>
