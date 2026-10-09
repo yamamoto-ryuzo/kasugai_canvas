@@ -1,6 +1,6 @@
 # KASUGAI Canvas
 
-ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システム「KASUGAI Canvas」です。Re:Earth GeoSuite との互換性を意識した GIS 基本機能に加え、KASUGAI 独自の FLY 機能・AIチャット（Gemini連携）を備えています。
+ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システム「KASUGAI Canvas」です。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能・AIチャット（Gemini連携）を備えています。
 
 フロントエンドは **純粋な CesiumJS** に整理されており、`web/` ディレクトリを任意の HTTP サーバーに置くだけで動作します。最小限の Rust（Axum）サーバーは `web/` および `projects/` を静的に配信するためのオプションです。
 

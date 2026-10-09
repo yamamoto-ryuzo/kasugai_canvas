@@ -14,8 +14,8 @@
       <p>機能と実装 — 機能一覧と現行実装の仕組み・制限</p>
     </header>
     <main>
-      <h2>GIS 基本機能（Re:Earth GeoSuite コンパチブル）</h2>
-      <p>Re:Earth GeoSuite と同様の GIS・デジタルツイン機能を実装しています。</p>
+      <h2 id="gis">GIS 基本機能（Re:Earth GeoSuite 上位互換）</h2>
+      <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。</p>
       <div class="features">
         <div class="feature-card">
           <h3>📝 インスペクター一括設定</h3>
@@ -99,7 +99,7 @@
         </div>
       </div>
 
-      <h2>プレゼンテーション機能</h2>
+      <h2 id="presentation">プレゼンテーション機能</h2>
       <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。</p>
       <div class="features">
         <div class="feature-card">
@@ -116,7 +116,7 @@
         </div>
       </div>
 
-      <h2>現行実装の構成</h2>
+      <h2 id="implementation">現行実装の構成</h2>
       <p>KASUGAI Canvas の現行実装は、<strong>純粋な CesiumJS フロントエンド</strong>を <code>web/</code> ディレクトリに配置し、通常の HTTP サーバーから配信する構成です。オプションとして、Rust/Axum で最小限の静的ファイルサーバー（<code>kasugai_canvas.exe</code>）を同梱しています。Three.js は Cesium のビュー行列を共有する簡易な 3D 描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は未対応です。</p>
       <p>設定は <code>projects/&lt;project_id&gt;/kasugai_canvas.kasc</code> から読み込みます。デフォルトは <code>projects/default/kasugai_canvas.kasc</code> です。ルート階層の <code>kasugai_canvas.kasc</code> は廃止しました。配布 ZIP と Windows インストーラーには <code>web/</code>・<code>projects/</code> ディレクトリが同梱されます。</p>
       <figure>
@@ -169,7 +169,7 @@
       として地形へドレープする</li>
       <li>Three.js は補助 3D 描画の枠組みとして組み込まれている。点群・3DGS・GLB 表示は未対応</li>
       </ol>
-      <h2>UI パネルと主な機能</h2>
+      <h2 id="ui">UI パネルと主な機能</h2>
       <table>
       <thead>
       <tr>
@@ -362,7 +362,7 @@
       で指定した画像を表示します。<strong>Info</strong> は
       <code>info:</code> で指定した URL の HTML
       をサニタイズして表示します。</p>
-      <h2>レイヤーと描画順</h2>
+      <h2 id="draw-order">レイヤーと描画順</h2>
       <table>
       <thead>
       <tr>
@@ -407,7 +407,7 @@
       <code>raise()</code> や <code>DataSource</code> の
       <code>index</code>
       へ反映されます。表示・非表示の切替や排他グループの動作は並べ替え後も維持されます。</p>
-      <h2>地形、ドレープ、高さ基準</h2>
+      <h2 id="terrain">地形、ドレープ、高さ基準</h2>
       <p><strong>DEM テクスチャー</strong>は DEM
       から作った地形メッシュに Base map
       画像を貼る表示です。<strong>ドレープ</strong>は XYZ・GeoJSON
@@ -564,7 +564,7 @@
       AWS）は <code>height = R × 256 + G + B / 256 - 32768</code>
       でメートル単位の高さを復元し、カスタム
       <code>TerrariumTerrainProvider</code> 経由で利用します。</p>
-      <h2>制限・注意事項</h2>
+      <h2 id="limits">制限・注意事項</h2>
       <h3>3D Tiles への XYZ ドレープ</h3>
       <p>CesiumJS 1.130 以降で
       <code>Cesium3DTileset.imageryLayers</code> が追加され、3D Tiles
@@ -642,7 +642,7 @@
       <li>これらが必要な場合は Rust/Axum 版（<code>kasugai_canvas.exe</code>）をローカルで起動するか、同等のサーバー機能を別途実装してください。</li>
       </ul>
 
-      <h2>構想・未対応</h2>
+      <h2 id="roadmap">構想・未対応</h2>
       <p>現時点では未対応、または将来の構想として位置づけられている機能です。</p>
       <div class="features">
         <div class="feature-card">

@@ -5,7 +5,7 @@
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v4.20.0';
+  const VERSION = 'v4.21.0';
 
   const GROUPS = [
     {
@@ -13,7 +13,19 @@
       items: [
         { href: 'index.html', text: 'トップ・概要' },
         { href: 'guide.html', text: '使い方・インストール' },
-        { href: 'features.html', text: '機能と実装' },
+        {
+          href: 'features.html', text: '機能と実装',
+          children: [
+            { href: 'features.html#gis', text: 'GIS 基本機能' },
+            { href: 'features.html#presentation', text: 'プレゼンテーション機能' },
+            { href: 'features.html#implementation', text: '現行実装の構成' },
+            { href: 'features.html#ui', text: 'UI パネルと主な機能' },
+            { href: 'features.html#draw-order', text: 'レイヤーと描画順' },
+            { href: 'features.html#terrain', text: '地形・ドレープ・高さ基準' },
+            { href: 'features.html#limits', text: '制限・注意事項' },
+            { href: 'features.html#roadmap', text: '構想・未対応' }
+          ]
+        },
         { href: 'inspector.html', text: '.kasc 設定仕様' }
       ]
     },
