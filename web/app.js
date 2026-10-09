@@ -5208,6 +5208,7 @@ function setupEvents() {
     mount: document.querySelector("#cloud-mount"),
     unmount: document.querySelector("#cloud-unmount"),
     saveKasc: document.querySelector("#cloud-save-kasc"),
+    localize: document.querySelector("#cloud-localize"),
     status: document.querySelector("#cloud-status"),
   };
   const cloudStorage = {
@@ -5395,6 +5396,18 @@ function setupEvents() {
             if (!response.ok) throw new Error(await response.text() || response.statusText);
           });
           setCloudStatus(t("cloud.status.kascSaved", { name: fileName }));
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+
+      cloudEls.localize.addEventListener("click", async () => {
+        if (!window.confirm(t("cloud.localizeConfirm"))) return;
+        try {
+          setCloudStatus(t("cloud.status.localizing"));
+          const result = await cloudPost("localize", { project: currentProjectId || "default" });
+          setCloudStatus(t("cloud.status.localized"));
+          if (result.kascRewritten) location.reload();
         } catch (error) {
           setCloudStatus(error.message, true);
         }

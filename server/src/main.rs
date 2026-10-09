@@ -1269,6 +1269,96 @@ async fn cloud_drive(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CloudLocalizeRequest {
+    project: String,
+}
+
+// .kasc 各行の | 区切りフィールドで "cloud:xxx" を "DATA/xxx" に置き換える
+fn rewrite_cloud_refs(text: &str) -> String {
+    text.split('\n')
+        .map(|line| {
+            line.split('|')
+                .map(|part| {
+                    let trimmed = part.trim_start();
+                    match trimmed.strip_prefix("cloud:") {
+                        // ../ 等を含む参照は DATA/ に置き換えると
+                        // プロジェクト外に出るため書き換えない
+                        Some(rest) if is_valid_cloud_path(rest) => {
+                            let indent = &part[..part.len() - trimmed.len()];
+                            format!("{indent}DATA/{rest}")
+                        }
+                        _ => part.to_string(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("|")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+// 接続中のクラウドルートを projects/<project>/DATA/ へ丸ごとコピーし、
+// .kasc 内の cloud: 参照を DATA/ 相対に書き換える(納品用ローカル化)。
+// 納品先は rclone 設定・OAuth 不要でファイル一式だけで動く構成になる
+async fn cloud_localize(
+    State(state): State<AppState>,
+    Json(request): Json<CloudLocalizeRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if !is_valid_project_id(&request.project) {
+        return Err((StatusCode::BAD_REQUEST, "プロジェクトIDが不正です".to_string()));
+    }
+    let (exe, source) = {
+        let cloud = state.cloud.lock().await;
+        let serve = cloud.serve.as_ref().ok_or((
+            StatusCode::CONFLICT,
+            "クラウドに接続していません".to_string(),
+        ))?;
+        let exe = rclone_exe(&state).await.ok_or((
+            StatusCode::BAD_REQUEST,
+            "rclone が見つかりません".to_string(),
+        ))?;
+        (exe, serve_target(serve, ""))
+    };
+    let project_dir = state.projects_dir.join(&request.project);
+    if !project_dir.is_dir() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "プロジェクトが見つかりません".to_string(),
+        ));
+    }
+    let data_dir = resolve_data_path(&state.projects_dir, &request.project, "")?;
+    tokio::fs::create_dir_all(&data_dir)
+        .await
+        .map_err(internal_error)?;
+    let output = new_rclone_command(&exe)
+        .args(["copy", &source])
+        .arg(&data_dir)
+        .output()
+        .await
+        .map_err(internal_error)?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err((
+            StatusCode::BAD_GATEWAY,
+            format!("rclone copy が失敗しました: {}", stderr.trim()),
+        ));
+    }
+    let kasc_path = project_dir.join("kasugai_canvas.kasc");
+    let mut kasc_rewritten = false;
+    if let Ok(text) = tokio::fs::read_to_string(&kasc_path).await {
+        let rewritten = rewrite_cloud_refs(&text);
+        if rewritten != text {
+            tokio::fs::write(&kasc_path, &rewritten)
+                .await
+                .map_err(internal_error)?;
+            kasc_rewritten = true;
+        }
+    }
+    Ok(Json(json!({ "ok": true, "kascRewritten": kasc_rewritten })))
+}
+
+#[derive(Deserialize)]
 struct CloudPathQuery {
     path: String,
 }
@@ -1704,6 +1794,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .route("/api/cloud/stop", post(cloud_stop))
             .route("/api/cloud/drive", post(cloud_drive))
             .route("/api/cloud/list", get(cloud_list))
+            .route("/api/cloud/localize", post(cloud_localize))
             .route(
                 "/api/cloud/file",
                 get(cloud_get_file)

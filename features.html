@@ -171,6 +171,7 @@
       <div class="url-box">
         <h3>クラウドストレージ連携（rclone）の詳細</h3>
         <p>Box Drive 等のクライアントがインストールできない環境でも、単体バイナリで動く <strong>rclone</strong> を介してクラウドストレージを利用する機能です。ローカルサーバー（local ティア）のみで有効で、<code>/api/capabilities</code> の <code>cloudRclone</code> で提供可否を判定します。コンテナ実行時は <code>/api/cloud/*</code> を公開しません。</p>
+        <p><strong>この連携の意義</strong>: 静的 HTTP サーバーにデータを置くのではなく、認証・ACL・監査・バージョン履歴を備えたクラウドストレージをデータ基盤にできます。各ユーザーは自分の OAuth アカウントで接続するためプロバイダ側で権限が強制され、<code>.kasc</code> には <code>cloud:</code> パスのみが書かれ認証情報は共有されません。同じフォルダを K: ドライブ経由で Office・QGIS・エクスプローラーからも使えるため、資料や GIS データを一元管理するシステムを組みやすい構成です。また「DATA/へ同期（納品用）」でクラウドの内容を <code>projects/&lt;id&gt;/DATA/</code> に丸ごとコピーし <code>cloud:</code> 参照を書き換えれば、rclone 不要のローカル完結パッケージとして納品できます。</p>
         <h3>2つの利用形態</h3>
         <ul>
           <li><strong>Windows ドライブ割当</strong>: <code>rclone serve webdav</code> を localhost で起動し <code>net use</code> でドライブ化（既定 K:、E〜Z から選択可）。エクスプローラーや他のアプリから通常のドライブとして使えます</li>
