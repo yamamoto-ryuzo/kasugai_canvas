@@ -42,6 +42,13 @@ body.globe-hidden .viewport { background: transparent; }
 .settings-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: -2px -4px 0; padding-bottom: 4px; overflow: visible; }
 .settings-subpanel { display: none; margin-top: 0 !important; padding-top: 0 !important; border-top: 0 !important; }
 .settings-subpanel.active { display: block; }
+/* クラウドタブ: 336px 固定幅パネル内で横スクロールを出さない。
+   行内の要素が収まらない場合は折り返し、パス等の長い文字列は任意位置で改行する */
+#settings-cloud-panel [style*="display:flex"] { flex-wrap: wrap; }
+#settings-cloud-panel code { overflow-wrap: anywhere; word-break: break-all; }
+/* .terrain-control input{width:15px} がチェックボックス以外にも効くため、
+   このパネル内のテキスト入力は明示的に全幅に戻す */
+#settings-cloud-panel input[type="text"] { width: 100%; }
 .control-panel.collapsed { width: 40px; height: 40px; padding: 7px; overflow: hidden; }
 .control-panel.collapsed .panel-tabs { height: 26px; margin: 0; padding: 0; overflow: hidden; border-bottom: 0; }
 .control-panel.collapsed .panel-tab,

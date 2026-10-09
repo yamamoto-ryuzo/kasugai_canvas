@@ -4,6 +4,25 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [4.21.0] - 2026-10-10
+
+### Added
+
+- **クラウドストレージ連携（rclone）**: レイヤーパネルの設定タブに「クラウド」パネルを追加し、Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 を rclone 経由で接続できるようにした
+  - rclone の自動検出（設定パス → PATH → `C:\kasugai\rclone`）と、未導入時に公式配布物を指定フォルダへダウンロード配置する機能
+  - リモート一覧・追加（種別を選ぶとその名前で `rclone config create` を起動し、ブラウザで OAuth 認証）
+  - 読み取り専用 / 読み書きの権限選択と接続開始・停止
+  - Windows ドライブ割当（既定 K:）。`rclone serve webdav` + `net use` により、クラウドをエクスプローラーから操作できる仮想ドライブとして利用可能
+  - アプリ内プロキシによる `cloud:` スキームで、レイヤーURLからクラウド上のファイルを直接参照。HTTP Range 転送に対応し DuckDB-WASM 等の範囲読み経路でも利用可。読み取り専用接続での書き込みは 403 で拒否
+  - ルートフォルダはパスに加えてフォルダURLを受け付け、`root_folder_id` 起点で接続（Box の `/folder/<id>`・共有リンク `/s/`、Drive の `/folders/<id>`、OneDrive・pCloud の `?id=`）。権限や共有経路でリモート内の見える位置が異なっても、全員が同じフォルダをルートとして参照できる
+  - 接続中のストレージへ `.kasc` プロジェクト設定を保存可能
+  - ローカルサーバー（`local` ティア）のみ有効。`/api/capabilities` に `cloudRclone` を追加し、コンテナ実行時は `/api/cloud/*` を公開しない
+
+### Changed
+
+- `auth-selector.js`・`styles.css` をクエリ付き動的読み込みに変更し、ブラウザキャッシュによる旧フロントエンド資産の残留を防止
+- `GET /api/cloud/status` などクラウド系API応答を `no-store` で取得するように変更
+
 ## [4.20.3] - 2026-10-05
 
 ### Changed

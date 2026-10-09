@@ -5,7 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KASUGAI Canvas</title>
     <link rel="icon" type="image/x-icon" href="./favicon.ico" />
-    <link rel="stylesheet" href="./styles.css" />
+    <script>
+      // 静的配信は no-cache を付けないためキャッシュバスター付きで読み込む
+      document.head.appendChild(Object.assign(document.createElement("link"), {
+        rel: "stylesheet", href: `./styles.css?t=${Date.now()}`
+      }));
+    </script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Widgets/widgets.css" crossorigin="anonymous" />
     <script src="https://cdn.jsdelivr.net/npm/cesium@1.145.0/Build/Cesium/Cesium.js" crossorigin="anonymous"></script>
     <script>
@@ -119,6 +124,7 @@
                 <button class="settings-tab" type="button" data-settings-panel="settings-inspector-panel" data-i18n="settings.tab.inspector">インスペクター</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-cesium-panel">Cesium</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-effects-panel" data-i18n="settings.tab.effects">効果</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-cloud-panel" data-i18n="settings.tab.cloud">クラウド</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-help-panel" data-i18n="settings.tab.help">ヘルプ</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-other-panel" data-i18n="settings.tab.other">その他</button>
               </nav>
@@ -172,6 +178,66 @@
                 </div>
                 <p class="hint" data-i18n="inspector.addFileHint">選択したファイルを DATA/ へ保存し（ローカルサーバー版はサーバー側、それ以外は上で選択したフォルダ）、対応形式なら設定行を追記して即時反映します。対応: .geojson .json .gpkg .fgb .parquet</p>
 
+              </section>
+              <section id="settings-cloud-panel" class="settings-subpanel">
+                <p class="hint" data-i18n-html="cloud.hint">クラウドストレージ(Box・Google Drive・OneDrive等)を rclone 経由で接続します。接続するとレイヤーURLに <code>cloud:フォルダ/ファイル名</code> と書けます。</p>
+                <p id="cloud-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                <div id="cloud-controls">
+                  <div class="section-title" data-i18n="cloud.rclone.title">rclone</div>
+                  <p class="hint"><span data-i18n="cloud.rclone.status">状態: </span><code id="cloud-rclone-status">-</code></p>
+                  <label class="field-label" for="cloud-install-dir" data-i18n="cloud.installDir">インストール先フォルダ</label>
+                  <input id="cloud-install-dir" type="text" placeholder="C:\kasugai\rclone" />
+                  <div style="display:flex;gap:6px;margin-top:6px;">
+                    <button id="cloud-rclone-recheck" type="button" data-i18n="cloud.rclone.recheck">再検出</button>
+                    <button id="cloud-rclone-install" type="button" data-i18n="cloud.rclone.install">ダウンロードして配置</button>
+                  </div>
+
+                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.remote.title">ストレージ</div>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <select id="cloud-remote" style="flex:1;min-width:0;" data-i18n-attr="aria-label:cloud.remote.title"></select>
+                    <button id="cloud-remote-refresh" type="button" style="flex:0 0 auto;" data-i18n="cloud.remote.refresh">更新</button>
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+                    <select id="cloud-remote-type" style="flex:1;min-width:0;width:auto;">
+                      <option value="box">Box</option>
+                      <option value="drive">GoogleDrive</option>
+                      <option value="onedrive">OneDrive</option>
+                      <option value="dropbox">Dropbox</option>
+                      <option value="pcloud">pCloud</option>
+                      <option value="mega">MEGA</option>
+                      <option value="webdav">WebDAV</option>
+                      <option value="s3">S3</option>
+                    </select>
+                    <button id="cloud-remote-add" type="button" style="flex:0 0 auto;" data-i18n="cloud.remote.add">追加</button>
+                  </div>
+                  <p class="hint" data-i18n="cloud.remote.addHint">「追加」でブラウザの認証画面が開きます。許可後に「更新」を押してください。</p>
+                  <label class="field-label" for="cloud-root" data-i18n="cloud.root.label">ルートフォルダ (パスまたはフォルダURL・省略可)</label>
+                  <input id="cloud-root" type="text" placeholder="KASUGAI/ または https://app.box.com/folder/…" />
+
+                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.perm.title">権限</div>
+                  <div class="terrain-options" style="display:flex;flex-direction:row;gap:16px;">
+                    <label><input id="cloud-perm-read" name="cloud-perm" type="radio" checked /><span data-i18n="cloud.perm.read"> 読み取り専用</span></label>
+                    <label><input id="cloud-perm-write" name="cloud-perm" type="radio" /><span data-i18n="cloud.perm.write"> 読み書き</span></label>
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:6px;">
+                    <button id="cloud-connect" type="button" data-i18n="cloud.connect">接続開始</button>
+                    <button id="cloud-stop" type="button" class="danger-button" data-i18n="cloud.stop">停止</button>
+                  </div>
+                  <p class="hint"><span data-i18n="cloud.serveStatus">接続状態: </span><code id="cloud-serve-status">-</code></p>
+
+                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.drive.title">ドライブ割当 (Windows)</div>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <select id="cloud-drive" style="flex:0 0 auto;width:auto;">
+                      <option value="">-</option>
+                    </select>
+                    <button id="cloud-mount" type="button" data-i18n="cloud.drive.mount">割り当て</button>
+                    <button id="cloud-unmount" type="button" data-i18n="cloud.drive.unmount">解除</button>
+                  </div>
+
+                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.project.title">プロジェクト保存</div>
+                  <button id="cloud-save-kasc" type="button" data-i18n="cloud.saveKasc">現在の設定(.kasc)をクラウドへ保存</button>
+                  <p id="cloud-status" class="hint" aria-live="polite"></p>
+                </div>
               </section>
               <section id="settings-help-panel" class="settings-subpanel">
                 <div class="section-title" data-i18n="help.title">HELP</div>
@@ -451,6 +517,8 @@
         </div>
       </div>
     </div>
-    <script type="module" src="./auth-selector.js"></script>
+    <!-- 静的配信は no-cache を付けないため、 auth-selector.js → app.js の
+         連鎖がブラウザキャッシュで古いままになる事故を防ぐ(更新不整合対策) -->
+    <script type="module">import(`./auth-selector.js?t=${Date.now()}`);</script>
   </body>
 </html>

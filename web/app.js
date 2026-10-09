@@ -468,9 +468,16 @@ function normalizeRemoteUrl(url) {
 }
 
 function resolveProjectUrl(url) {
-  if (typeof url !== "string") return url;
+  if (typeof url !== "string" || !url) return url;
   const trimmed = url.trim();
   if (!trimmed) return trimmed;
+  // cloud:パス はローカルサーバーの rclone 連携(/api/cloud/file)へ解決する。
+  // レイヤーURLに「cloud:フォルダ/ファイル.geojson」と書くだけで接続中の
+  // クラウドストレージから読める
+  if (/^cloud:/i.test(trimmed)) {
+    const path = trimmed.slice(6).replace(/^\/+/, "");
+    return `./api/cloud/file?path=${encodeURIComponent(path)}`;
+  }
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return normalizeRemoteUrl(trimmed);
   if (trimmed.startsWith("/")) return trimmed;
   let path = trimmed;
@@ -5174,8 +5181,226 @@ function setupEvents() {
       const scope = tab.closest(".plugin-panel") || document;
       scope.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
       scope.querySelectorAll(".settings-subpanel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel));
+      if (tab.dataset.settingsPanel === "settings-cloud-panel") void refreshCloudStatus();
     });
   });
+
+  // ---- クラウドストレージ設定タブ (rclone 連携) ----
+  const cloudEls = {
+    panel: document.querySelector("#settings-cloud-panel"),
+    unavailable: document.querySelector("#cloud-unavailable"),
+    controls: document.querySelector("#cloud-controls"),
+    rcloneStatus: document.querySelector("#cloud-rclone-status"),
+    installDir: document.querySelector("#cloud-install-dir"),
+    recheck: document.querySelector("#cloud-rclone-recheck"),
+    install: document.querySelector("#cloud-rclone-install"),
+    remote: document.querySelector("#cloud-remote"),
+    remoteRefresh: document.querySelector("#cloud-remote-refresh"),
+    remoteType: document.querySelector("#cloud-remote-type"),
+    remoteAdd: document.querySelector("#cloud-remote-add"),
+    root: document.querySelector("#cloud-root"),
+    permRead: document.querySelector("#cloud-perm-read"),
+    permWrite: document.querySelector("#cloud-perm-write"),
+    connect: document.querySelector("#cloud-connect"),
+    stop: document.querySelector("#cloud-stop"),
+    serveStatus: document.querySelector("#cloud-serve-status"),
+    drive: document.querySelector("#cloud-drive"),
+    mount: document.querySelector("#cloud-mount"),
+    unmount: document.querySelector("#cloud-unmount"),
+    saveKasc: document.querySelector("#cloud-save-kasc"),
+    status: document.querySelector("#cloud-status"),
+  };
+  const cloudStorage = {
+    get: key => localStorage.getItem(`kasugai.cloud.${key}`) || "",
+    set: (key, value) => localStorage.setItem(`kasugai.cloud.${key}`, value || ""),
+  };
+
+  const setCloudStatus = (text, isError = false) => {
+    if (!cloudEls.status) return;
+    cloudEls.status.textContent = text;
+    cloudEls.status.style.color = isError ? "#c0392b" : "";
+  };
+
+  const cloudApi = async (path, options = {}) => {
+    const response = await fetch(`./api/cloud/${path}`, { cache: "no-store", ...options });
+    const text = await response.text();
+    if (!response.ok) throw new Error(text || response.statusText);
+    try { return JSON.parse(text); } catch { return text; }
+  };
+  const cloudPost = (path, body) =>
+    cloudApi(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+
+  // クラウド連携の可否は capabilities 取得後( detectBackend 完了後 )にしか
+  // 判定できないため、タブを開いたタイミングで都度評価する
+  async function refreshCloudStatus() {
+    if (!cloudEls.panel) return null;
+    const supported = hasBackendFeature("cloudRclone");
+    cloudEls.unavailable.hidden = supported;
+    cloudEls.controls.style.display = supported ? "" : "none";
+    if (!supported) return null;
+    try {
+      const status = await cloudApi("status");
+      cloudEls.rcloneStatus.textContent = status.installed
+        ? [status.version, status.path].filter(Boolean).join(" — ")
+        : t("cloud.rclone.notInstalled");
+      const previous = cloudEls.remote.value || cloudStorage.get("remote");
+      cloudEls.remote.replaceChildren();
+      (status.remotes || []).forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        cloudEls.remote.append(option);
+      });
+      if (previous) cloudEls.remote.value = previous;
+      const serving = status.serving;
+      cloudEls.serveStatus.textContent = serving
+        ? `${serving.remote}:${serving.root || (serving.folderId ? `#${serving.folderId}` : "")} (port ${serving.port}, ${serving.readOnly ? "RO" : "RW"}${serving.drive ? `, ${serving.drive}:` : ""})`
+        : t("cloud.serve.none");
+      if (serving?.drive) cloudEls.drive.value = serving.drive;
+      return status;
+    } catch (error) {
+      cloudEls.rcloneStatus.textContent = error instanceof Error ? error.message : String(error);
+      return null;
+    }
+  }
+
+  if (cloudEls.panel && cloudEls.controls) {
+    {
+      for (let code = "E".charCodeAt(0); code <= "Z".charCodeAt(0); code++) {
+        const letter = String.fromCharCode(code);
+        const option = document.createElement("option");
+        option.value = letter;
+        option.textContent = `${letter}:`;
+        cloudEls.drive.append(option);
+      }
+      cloudEls.root.value = cloudStorage.get("root");
+      cloudEls.installDir.value = cloudStorage.get("installDir");
+      if (cloudStorage.get("perm") === "write") cloudEls.permWrite.checked = true;
+      cloudEls.drive.value = cloudStorage.get("drive") || "K";
+
+      cloudEls.recheck.addEventListener("click", () => void refreshCloudStatus());
+      cloudEls.remoteRefresh.addEventListener("click", () => void refreshCloudStatus());
+
+      cloudEls.install.addEventListener("click", async () => {
+        try {
+          setCloudStatus(t("cloud.status.installing"));
+          const dir = cloudEls.installDir.value.trim();
+          cloudStorage.set("installDir", dir);
+          const result = await cloudPost("install", { dir: dir || undefined });
+          setCloudStatus(t("cloud.status.installed", { path: result.path }));
+          await refreshCloudStatus();
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+
+      cloudEls.remoteAdd.addEventListener("click", async () => {
+        // リモート名は種別名をそのまま使う(同名リモートは既存設定を選ぶだけにする)
+        const name = cloudEls.remoteType.value;
+        if ([...cloudEls.remote.options].some(option => option.value === name)) {
+          cloudEls.remote.value = name;
+          setCloudStatus(t("cloud.status.remoteExists", { name }));
+          return;
+        }
+        try {
+          await cloudPost("config", { name, type: name });
+          setCloudStatus(t("cloud.status.authorizing"));
+          // OAuth 認可の完了を remotes の増加で検出する(最大2分)
+          for (let i = 0; i < 40; i++) {
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            const status = await refreshCloudStatus();
+            if (status?.remotes?.includes(name)) {
+              setCloudStatus(t("cloud.status.remoteAdded", { name }));
+              return;
+            }
+          }
+          setCloudStatus(t("cloud.status.authTimeout"), true);
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+
+      cloudEls.connect.addEventListener("click", async () => {
+        const remote = cloudEls.remote.value;
+        if (!remote) {
+          setCloudStatus(t("cloud.status.noRemote"), true);
+          return;
+        }
+        const readOnly = cloudEls.permRead.checked;
+        const root = cloudEls.root.value.trim();
+        const drive = cloudEls.drive.value;
+        cloudStorage.set("remote", remote);
+        cloudStorage.set("root", root);
+        cloudStorage.set("perm", readOnly ? "read" : "write");
+        cloudStorage.set("drive", drive);
+        try {
+          setCloudStatus(t("cloud.status.connecting"));
+          await cloudPost("serve", { remote, root, readOnly, drive: drive || undefined });
+          setCloudStatus(t("cloud.status.connected"));
+          await refreshCloudStatus();
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+
+      cloudEls.stop.addEventListener("click", async () => {
+        try {
+          await cloudPost("stop");
+          setCloudStatus(t("cloud.status.stopped"));
+          await refreshCloudStatus();
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+
+      cloudEls.mount.addEventListener("click", async () => {
+        const drive = cloudEls.drive.value;
+        if (!drive) return;
+        try {
+          await cloudPost("drive", { action: "mount", drive });
+          cloudStorage.set("drive", drive);
+          setCloudStatus(t("cloud.status.mounted", { drive }));
+          await refreshCloudStatus();
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+
+      cloudEls.unmount.addEventListener("click", async () => {
+        const drive = cloudEls.drive.value;
+        if (!drive) return;
+        try {
+          await cloudPost("drive", { action: "unmount", drive });
+          setCloudStatus(t("cloud.status.unmounted", { drive }));
+          await refreshCloudStatus();
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+
+      cloudEls.saveKasc.addEventListener("click", async () => {
+        const text = document.querySelector("#inspector-input")?.value || "";
+        const fileName = `${currentProjectId || "kasugai_canvas"}.kasc`;
+        if (!window.confirm(t("cloud.saveKascConfirm", { name: fileName }))) return;
+        try {
+          await fetch(`./api/cloud/file?path=${encodeURIComponent(fileName)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: text,
+          }).then(async response => {
+            if (!response.ok) throw new Error(await response.text() || response.statusText);
+          });
+          setCloudStatus(t("cloud.status.kascSaved", { name: fileName }));
+        } catch (error) {
+          setCloudStatus(error.message, true);
+        }
+      });
+    }
+  }
 
   viewer.camera.changed.addEventListener(() => {
     updateCameraInputs();

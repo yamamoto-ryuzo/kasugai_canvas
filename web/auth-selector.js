@@ -74,7 +74,9 @@ async function injectModule(url) {
   return new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.type = "module";
-    script.src = url;
+    // 静的配信サーバーは no-cache 指定を出さないため、更新後もブラウザが
+    // 旧モジュールを使い続けて機能が動かない事故を防ぐ(ローカル配信は転送が速く影響小)
+    script.src = `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
     script.onload = () => resolve();
     script.onerror = () => reject(new Error(t("auth.loadFailed", { url })));
     document.head.appendChild(script);
