@@ -16,8 +16,11 @@
         {
           href: 'features.html', text: '機能と実装',
           children: [
-            { href: 'features.html#gis', text: 'GIS 基本機能' },
-            { href: 'features.html#presentation', text: 'プレゼンテーション機能' },
+            { href: 'features.html#gis', text: 'V1: GIS 基本機能' },
+            { href: 'features.html#presentation', text: 'V2: プレゼンテーション' },
+            { href: 'features.html#ai', text: 'V3: AI 連携' },
+            { href: 'features.html#plugins', text: 'V4: プラグイン・外部連携' },
+            { href: 'features.html#agent', text: 'V5: ANTIGRAVITY（構想）' },
             { href: 'features.html#implementation', text: '現行実装の構成' },
             { href: 'features.html#ui', text: 'UI パネルと主な機能' },
             { href: 'features.html#draw-order', text: 'レイヤーと描画順' },

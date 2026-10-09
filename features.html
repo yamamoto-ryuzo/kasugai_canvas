@@ -14,7 +14,22 @@
       <p>機能と実装 — 機能一覧と現行実装の仕組み・制限</p>
     </header>
     <main>
-      <h2 id="gis">GIS 基本機能（Re:Earth GeoSuite 上位互換）</h2>
+      <h2 id="themes">機能テーマとバージョン</h2>
+      <p>メジャーバージョンごとの機能テーマは次のとおりです。以下、機能はこの流れに沿って説明し、後半に現行実装の詳細をまとめています。</p>
+      <table>
+      <thead>
+      <tr><th>バージョン</th><th>機能テーマ</th></tr>
+      </thead>
+      <tbody>
+      <tr><td><a href="#gis">V1</a></td><td>GIS 基本機能</td></tr>
+      <tr><td><a href="#presentation">V2</a></td><td>プレゼンテーション機能</td></tr>
+      <tr><td><a href="#ai">V3</a></td><td>AI 連携</td></tr>
+      <tr><td><a href="#plugins">V4</a></td><td>プラグイン（認証機構）・外部連携</td></tr>
+      <tr><td><a href="#agent">V5（予約）</a></td><td>ANTIGRAVITY エージェント完成</td></tr>
+      </tbody>
+      </table>
+
+      <h2 id="gis">V1: GIS 基本機能（Re:Earth GeoSuite 上位互換）</h2>
       <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。</p>
       <div class="features">
         <div class="feature-card">
@@ -89,17 +104,9 @@
           <h3>📊 属性（Attr）表示</h3>
           <p>地物をクリックすると属性を一覧表示。重なった地物（ポリゴン等）は件数付きのヘッダー一覧（手前から順）になり、行をクリックで個別に属性を展開。3D Tiles（構造化メタデータ）・ベクター（entity/primitive）の各描画経路に対応</p>
         </div>
-        <div class="feature-card">
-          <h3>🌐 多言語対応（8言語）</h3>
-          <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の 8 言語に対応。設定 → その他の言語セレクタで即時切替。初回はブラウザ言語から自動判定（未対応時は英語）、選択は localStorage に保存。AIチャットの回答言語も UI 言語に追随</p>
-        </div>
-        <div class="feature-card">
-          <h3>☁️ クラウドストレージ連携（rclone）</h3>
-          <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）で仮想ドライブ化するほか、アプリ内 <code>cloud:</code> スキームでレイヤーURLから直接参照可能。読み取り専用 / 読み書きの権限選択、フォルダURLによるルート固定、.kasc のクラウド保存に対応（ローカルサーバーのみ）</p>
-        </div>
       </div>
 
-      <h2 id="presentation">プレゼンテーション機能</h2>
+      <h2 id="presentation">V2: プレゼンテーション機能</h2>
       <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。</p>
       <div class="features">
         <div class="feature-card">
@@ -115,6 +122,55 @@
           <p>距離に応じた飛行時間＋ズームアウトから降下する弧を描いて移動</p>
         </div>
       </div>
+
+      <h2 id="ai">V3: AI 連携</h2>
+      <p>Gemini API を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="google.html">Google 連携・AI</a> を参照してください。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🗨️ AI チャット（Gemini 連携）</h3>
+          <p>設定 → Google で API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセット・地形/効果・Fly パス・プロジェクト切替などを実行。履歴はプロジェクト単位で保存。APIキー未設定時はローカルコマンド（<code>/fly</code> 等）が使える</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧪 runCode サンドボックス</h3>
+          <p>AI が生成した JavaScript を opaque origin iframe + postMessage ブリッジで安全に実行し、地図を操作するブラウザ内コード実行基盤</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔌 kasugaiApi</h3>
+          <p><code>window.kasugaiApi</code> で viewer・カメラ・レイヤー・イベントに外部からアクセスする操作 API。プラグイン・外部エージェントの土台</p>
+        </div>
+      </div>
+
+      <h2 id="plugins">V4: プラグイン（認証機構）・外部連携</h2>
+      <p>拡張可能なプラグイン機構と認証方式の導入に加え、データ形式・外部サービス連携を大きく拡充しました。</p>
+      <div class="features">
+        <a class="feature-card" href="auth/">
+          <h3>🧩 プラグイン機構・認証方式</h3>
+          <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構。認証方式は 0〜7（認証なし / ローカル / 簡易パスワード / Cloudflare Pages / Workers / Cloud Run / IAP）から選択</p>
+        </a>
+        <div class="feature-card">
+          <h3>🗃️ クエリ系・大規模ベクター</h3>
+          <p><code>duckdb:</code> / <code>sql:</code> / <code>gpkg:</code> 行タイプで DuckDB-WASM・SQLite WASM による SQL 絞り込みレイヤー。GeoParquet・FlatGeobuf・GeoPackage を直接読み込み、bbox 連動・where 絞り込み・属性列プルーニングに対応。ベクター描画件数の上限・primitive バッチ描画で大規模データにも対応</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ Google Maps Platform 連携</h3>
+          <p>Geocoding / Places のハイブリッド検索、Street View リンク・候補ラインオーバーレイ。外部エージェント呼出し（エージェントタブにエンドポイントを設定し <code>POST {message, project, camera, layers, history}</code> → <code>actions</code> を実行）で Antigravity 等の外部構築エージェントと接続可能</p>
+        </div>
+        <div class="feature-card">
+          <h3>💾 ローカルファイル保存</h3>
+          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能。描画ルート保存・インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet の自動行追記）にも利用</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌐 多言語対応（8言語）</h3>
+          <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の 8 言語に対応。設定 → その他の言語セレクタで即時切替。初回はブラウザ言語から自動判定（未対応時は英語）、選択は localStorage に保存。AIチャットの回答言語も UI 言語に追随</p>
+        </div>
+        <div class="feature-card">
+          <h3>☁️ クラウドストレージ連携（rclone）</h3>
+          <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）で仮想ドライブ化するほか、アプリ内 <code>cloud:</code> スキームでレイヤーURLから直接参照可能。読み取り専用 / 読み書きの権限選択、フォルダURLによるルート固定、.kasc のクラウド保存に対応（ローカルサーバーのみ）</p>
+        </div>
+      </div>
+
+      <h2 id="agent">V5（予約）: ANTIGRAVITY エージェント完成</h2>
+      <p>Cloud Run 上のエージェントサービス（FastAPI + Gemini API/ADK）が外部エージェントプロトコル（<code>POST /agent/chat</code> → <code>{reply, actions, report}</code>）で稼働し、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く状態を V5 の完成条件としています。実装計画は <a href="hackathon.html">ハッカソン</a> を参照してください。</p>
 
       <h2 id="implementation">現行実装の構成</h2>
       <p>KASUGAI Canvas の現行実装は、<strong>純粋な CesiumJS フロントエンド</strong>を <code>web/</code> ディレクトリに配置し、通常の HTTP サーバーから配信する構成です。オプションとして、Rust/Axum で最小限の静的ファイルサーバー（<code>kasugai_canvas.exe</code>）を同梱しています。Three.js は Cesium のビュー行列を共有する簡易な 3D 描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は未対応です。</p>
