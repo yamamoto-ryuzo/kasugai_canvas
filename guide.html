@@ -105,6 +105,18 @@ info: https://example.com/project-info.html</code></pre>
             <li>「取込」で .geojson ファイルを IndexedDB へインポート、描画ルートを選択中は「出力」（.geojson ダウンロード）「削除」ボタンが表示。インスペクタで <code>route:&lt;ルート名&gt;</code> を参照することも可（例：<code>fly_geojson: 名 | route:drawn_route_...</code>）</li>
           </ol>
         </div>
+        <div class="install-steps">
+          <h3>クラウドストレージ連携（rclone・ローカルサーバーのみ）</h3>
+          <ol>
+            <li>設定 → <strong>クラウド</strong> タブを開き、rclone の検出状態を確認。未導入なら「インストール先フォルダ」（既定 <code>C:\kasugai\rclone</code>）を指定して「ダウンロードして配置」</li>
+            <li>「ストレージ」で種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選んで「追加」。ブラウザで OAuth 認証画面が開くので、許可後に「更新」を押すとリモート一覧に反映されます</li>
+            <li>「ルートフォルダ」に接続の起点を指定します（省略可）。フォルダパスのほか、Box の <code>https://app.box.com/folder/…</code>・共有リンク <code>…/s/…</code>、Google Drive の <code>…/folders/…</code>、OneDrive の <code>?id=…</code> といったフォルダURLも指定できます。URL指定はフォルダID起点で接続されるため、権限や共有経路によってリモート内の見える位置が異なる環境間でも、全員が同じフォルダをルートとして参照できます</li>
+            <li>「読み取り専用 / 読み書き」を選んで「接続開始」。「ドライブ割当」（既定 K:）を指定するとエクスプローラーからも使える仮想ドライブになります（Windows のみ）</li>
+            <li>レイヤーURLには <code>cloud:</code> スキームが使えます。<code>geojson: 名 | cloud:フォルダ/file.geojson</code> のように接続中ストレージのファイルを直接参照でき、HTTP Range にも対応しています</li>
+            <li>読み書きで接続中は「.kascをクラウドへ保存」で現在の設定をクラウド上に保存できます</li>
+          </ol>
+          <p>ドライブ経由の読み書きは Windows WebClient の制約で約 50MB 超のファイルを扱えません（<code>cloud:</code> スキーム経由はこの制限を受けません）。この機能はローカルサーバー（local ティア）のみで有効です。</p>
+        </div>
       </section>
 
       <section>
