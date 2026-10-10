@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.6.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.7.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -20,7 +20,7 @@
       <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。ブラウザの外（OS・ファイルシステム・ネイティブバイナリ）に踏み込むため、静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。ブラウザ GIS との差別化要因となる流れで、今後もこのテーマで拡張していきます。</p>
 
       <h3>☁️ クラウドストレージ連携（rclone）</h3>
-      <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続します。2つの利用形態があります：</p>
+      <p>アプリ → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続します。ローカルサーバー版のみの機能（クラウド・保存）はトップパネルの「アプリ」タブに集約されており、静的配信・コンテナ実行ではタブ自体が非表示になります。2つの利用形態があります：</p>
       <ul>
         <li><strong>Windows ドライブ割当</strong> — <code>rclone serve webdav</code> を localhost で起動し <code>net use</code> でドライブ化（既定 K:）。エクスプローラーや Office・QGIS など他のアプリから通常のドライブとして使えます</li>
         <li><strong>アプリ内 <code>cloud:</code> スキーム</strong> — レイヤーURLに <code>cloud:フォルダ/file.geojson</code> と書くと <code>/api/cloud/file</code> プロキシ経由で接続中ストレージのファイルを読み込みます。HTTP Range を転送するため DuckDB-WASM 等の範囲読み経路でも利用でき、ドライブ割当なしで動作します</li>
@@ -51,13 +51,13 @@
         <ul>
           <li>インスペクタに設定行 <code>cloud: リモート名 | ルートフォルダ | perm=write | drive=K</code> を書くと、<code>.kasc</code> の読み込み（起動時・プロジェクト切替・登録ボタン）のたびに <code>/api/cloud/serve</code> が自動実行されます。<code>.kasc</code> に保存しておけば起動時に接続済みの状態で始まり、レイヤーURLの <code>cloud:パス</code> もそのまま使えます</li>
           <li>ルートフォルダはパスでもフォルダURLでも指定でき、省略時はリモート直下です。<code>perm=write</code> で読み書き（省略時は読み取り専用）、<code>drive=K</code> で Windows ドライブ割当まで自動化します。rclone が未導入なら接続前に自動インストールします（既定 <code>C:\kasugai\rclone</code>。<code>install=off</code> で無効化）</li>
-          <li><code>cloud: stop</code>（または <code>disconnect</code>）は接続停止を意味します。行末の <code>| off</code> は「設定は残すが接続しない」です。クラウドタブの「現在の設定をインスペクタに追記して接続」ボタンで、入力中の設定からこの行を生成できます</li>
+          <li><code>cloud: stop</code>（または <code>disconnect</code>）は接続停止を意味します。行末の <code>| off</code> は「設定は残すが接続しない」です。アプリ → クラウド タブの「現在の設定をインスペクタに追記して接続」ボタンで、入力中の設定からこの行を生成できます</li>
           <li>ローカルサーバー版でのみ動作します（静的配信・Cloud Run では <code>/api/cloud/*</code> が存在しないため自動的に何もしません）。既に同じ内容で接続済みなら再起動せず、指定が変わったときだけ再接続します</li>
         </ul>
         <h3>WEB版での挙動（<code>cloud:</code> 行は無視される）</h3>
         <ul>
           <li>静的配信（<code>web/</code> のみの環境）では <code>GET /api/cloud/status</code> のプローブが1回だけ飛んで 404 → 早期リターンします。<code>install</code>・<code>serve</code>・<code>stop</code>・<code>drive</code> など副作用のある API は一切呼ばれません（実機検証済み）</li>
-          <li>エラー表示・例外も発生せず、クラウドタブは従来通り「ローカルサーバー版でのみ利用できます」の表示に落ちます。レイヤー行など他の設定行の処理は通常通り動作します</li>
+          <li>エラー表示・例外も発生せず、アプリタブ自体が非表示になります。レイヤー行など他の設定行の処理は通常通り動作します</li>
         </ul>
         <h4>なぜアプリ版専用が妥当か</h4>
         <ul>
@@ -92,7 +92,7 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
       <p>利用例: 描画ルートの保存、インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet を選ぶと対応する行タイプのレイヤー行を自動追記）、ダウンロードしたデータのプロジェクト内配置など。静的配信では利用できません（サーバー API 依存機能）。</p>
 
       <h3>📦 納品用ローカル化（_local ワークスペース）</h3>
-      <p>クラウドパネルで<strong>「共有（既定）」または「専用」</strong>を選び、「納品パッケージを生成（_local/）」を実行します。<strong>元のプロジェクトは変更せず</strong>、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>
+      <p>アプリ → 保存 タブで<strong>「共有（既定）」または「専用」</strong>を選び、「納品パッケージを生成（_local/）」を実行します。<strong>元のプロジェクトは変更せず</strong>、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>
       <pre><code>ProjectA_local/           … 納品ワークスペース。このフォルダを ZIP にして渡す
 ├─ projects.json          … 群マニフェスト（複製内 .kasc を開くだけで登録される）
 ├─ DATA/                  … 共有スコープ

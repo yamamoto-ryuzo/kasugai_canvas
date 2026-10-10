@@ -453,6 +453,13 @@ async function detectBackend() {
   }
 }
 
+// アプリタブ(クラウド・保存 = ローカルサーバー版のみの機能群)は
+// capabilities 判定後にのみ表示する。静的環境では hidden のまま
+function updateAppPanelVisibility() {
+  const tab = document.querySelector('.panel-tab[data-panel="app-panel"]');
+  if (tab) tab.hidden = !hasBackendFeature("cloudRclone");
+}
+
 
 function getProjectBaseUrl() {
   return `projects/${encodeURIComponent(currentProjectId || "default")}/`;
@@ -5399,6 +5406,7 @@ function setupEvents() {
       scope.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
       scope.querySelectorAll(".settings-subpanel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel));
       if (tab.dataset.settingsPanel === "settings-cloud-panel") void refreshCloudStatus();
+      if (tab.dataset.settingsPanel === "settings-save-panel") void refreshSaveStatus();
     });
   });
 
@@ -5440,6 +5448,24 @@ function setupEvents() {
     cloudEls.status.textContent = text;
     cloudEls.status.style.color = isError ? "#c0392b" : "";
   };
+
+  // ---- 保存タブ (ローカルサーバー版のみ: クラウド保存・納品パッケージ) ----
+  const saveEls = {
+    unavailable: document.querySelector("#save-unavailable"),
+    controls: document.querySelector("#save-controls"),
+    status: document.querySelector("#save-status"),
+  };
+  const setSaveStatus = (text, isError = false) => {
+    if (!saveEls.status) return;
+    saveEls.status.textContent = text;
+    saveEls.status.style.color = isError ? "#c0392b" : "";
+  };
+  function refreshSaveStatus() {
+    if (!saveEls.controls) return;
+    const supported = hasBackendFeature("cloudRclone");
+    if (saveEls.unavailable) saveEls.unavailable.hidden = supported;
+    saveEls.controls.style.display = supported ? "" : "none";
+  }
 
   const cloudApi = async (path, options = {}) => {
     const response = await fetch(`./api/cloud/${path}`, { cache: "no-store", ...options });
@@ -5640,9 +5666,9 @@ function setupEvents() {
           }).then(async response => {
             if (!response.ok) throw new Error(await response.text() || response.statusText);
           });
-          setCloudStatus(t("cloud.status.kascSaved", { name: fileName }));
+          setSaveStatus(t("cloud.status.kascSaved", { name: fileName }));
         } catch (error) {
-          setCloudStatus(error.message, true);
+          setSaveStatus(error.message, true);
         }
       });
 
@@ -5652,7 +5678,7 @@ function setupEvents() {
         if (!window.confirm(t("cloud.localizeConfirm", { path }))) return;
         cloudEls.localize.disabled = true;
         try {
-          setCloudStatus(t("cloud.status.localizing"));
+          setSaveStatus(t("cloud.status.localizing"));
           const result = await cloudPost("localize", { project: currentProjectId || "default", scope });
           const parts = [
             result.cloudSynced ? t("cloud.status.localizedCloud") : t("cloud.status.localizedNoCloud"),
@@ -5671,9 +5697,9 @@ function setupEvents() {
           if (result.failed?.length) parts.push(t("cloud.status.localizedFailed", { count: result.failed.length }));
           if (result.cloudRefsRemaining) parts.push(t("cloud.status.localizedCloudLeft", { count: result.cloudRefsRemaining }));
           if (result.outputPath) parts.push(t("cloud.status.localizedOut", { path: result.outputPath }));
-          setCloudStatus(parts.join(" / "), !!result.failed?.length);
+          setSaveStatus(parts.join(" / "), !!result.failed?.length);
         } catch (error) {
-          setCloudStatus(error.message, true);
+          setSaveStatus(error.message, true);
         } finally {
           cloudEls.localize.disabled = false;
         }
@@ -8868,6 +8894,7 @@ window.addEventListener("pagehide", () => {
 
 (async () => {
   await detectBackend();
+  updateAppPanelVisibility();
   // capabilities 取得後に既定エージェントエンドポイントを反映するため再評価する
   updateChatPanelVisibility();
   try { await loadProjects(); } catch (e) { console.error(e); }
