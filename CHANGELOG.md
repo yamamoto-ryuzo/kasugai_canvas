@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.3.1] - 2026-10-10
+
+### Changed
+
+- インストーラー同梱のサンプルプロジェクト（default）をローカル化: 外部 HTTP(S) 参照（GeoParquet・FlatGeobuf・GeoJSON・info/legend）を共有 `DATA/http/` にダウンロードして `../DATA/http/` 相対参照へ書き換え、出典一覧を `DATA/http/_sources.json` に記録。オフライン環境でもサンプルがそのまま動作し、5.3.0 の共有データ参照（`../` スコープ）の実例にもなっている
+
 ## [5.3.0] - 2026-10-10
 
 ### Changed
