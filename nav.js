@@ -16,18 +16,13 @@
         {
           href: 'features.html', text: '機能と実装',
           children: [
-            { href: 'features.html#gis', text: 'V1: GIS 基本機能' },
-            { href: 'features.html#presentation', text: 'V2: プレゼンテーション' },
-            { href: 'features.html#ai', text: 'V3: AI 連携' },
-            { href: 'features.html#plugins', text: 'V4: プラグイン・外部連携' },
-            { href: 'features.html#app', text: 'V5: アプリ化（ローカル連携）' },
-            { href: 'features.html#agent', text: 'V6: ANTIGRAVITY（構想）' },
-            { href: 'features.html#implementation', text: '現行実装の構成' },
-            { href: 'features.html#ui', text: 'UI パネルと主な機能' },
-            { href: 'features.html#draw-order', text: 'レイヤーと描画順' },
-            { href: 'features.html#terrain', text: '地形・ドレープ・高さ基準' },
-            { href: 'features.html#limits', text: '制限・注意事項' },
-            { href: 'features.html#roadmap', text: '構想・未対応' }
+            { href: 'features/v0.html', text: 'V0: システム基本構成' },
+            { href: 'features/v1.html', text: 'V1: GIS 基本機能' },
+            { href: 'features/v2.html', text: 'V2: プレゼンテーション' },
+            { href: 'features/v3.html', text: 'V3: AI 連携' },
+            { href: 'features/v4.html', text: 'V4: プラグイン・外部連携' },
+            { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' },
+            { href: 'features/v6.html', text: 'V6: ANTIGRAVITY（構想）' }
           ]
         },
         { href: 'inspector.html', text: '.kasc 設定仕様' }

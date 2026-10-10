@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V3: AI 連携 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
+      <p>V3: AI 連携 — Gemini チャット・runCode・kasugaiApi</p>
+    </header>
+    <main>
+      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+
+      <h2 id="ai">V3: AI 連携</h2>
+      <p>Gemini API を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="../google.html">Google 連携・AI</a> を参照してください。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🗨️ AI チャット（Gemini 連携）</h3>
+          <p>設定 → Google で API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセット・地形/効果・Fly パス・プロジェクト切替などを実行。履歴はプロジェクト単位で保存。APIキー未設定時はローカルコマンド（<code>/fly</code> 等）が使える</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧪 runCode サンドボックス</h3>
+          <p>AI が生成した JavaScript を opaque origin iframe + postMessage ブリッジで安全に実行し、地図を操作するブラウザ内コード実行基盤</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔌 kasugaiApi</h3>
+          <p><code>window.kasugaiApi</code> で viewer・カメラ・レイヤー・イベントに外部からアクセスする操作 API。プラグイン・外部エージェントの土台</p>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</body>
+</html>

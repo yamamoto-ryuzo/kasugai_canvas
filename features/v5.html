@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V5: アプリ化（ローカル連携） — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
+      <p>V5: アプリ化（ローカル連携） — ローカルサーバーと一体の「アプリ」だから実現できる機能群</p>
+    </header>
+    <main>
+      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+
+      <h2 id="app">V5: アプリ化（ローカル連携）</h2>
+      <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。ブラウザの外（OS・ファイルシステム・ネイティブバイナリ）に踏み込むため、静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。ブラウザ GIS との差別化要因となる流れで、今後もこのテーマで拡張していきます。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>☁️ クラウドストレージ連携（rclone）</h3>
+          <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）で仮想ドライブ化するほか、アプリ内 <code>cloud:</code> スキームでレイヤーURLから直接参照可能。読み取り専用 / 読み書きの権限選択、フォルダURLによるルート固定、.kasc のクラウド保存に対応（ローカルサーバーのみ）</p>
+        </div>
+        <div class="feature-card">
+          <h3>💾 ローカルファイル保存</h3>
+          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能。描画ルート保存・インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet の自動行追記）にも利用</p>
+        </div>
+        <div class="feature-card">
+          <h3>📦 納品用ローカル化</h3>
+          <p>接続中のクラウドルートを <code>projects/&lt;id&gt;/DATA/</code> へ丸ごとコピーし、<code>.kasc</code> の <code>cloud:</code> 参照を <code>DATA/</code> に書き換えます。納品先は rclone・OAuth 設定不要でファイル一式だけで動くローカル完結パッケージになります</p>
+        </div>
+      </div>
+      <div class="url-box">
+        <h3>クラウドストレージ連携（rclone）の詳細</h3>
+        <p>Box Drive 等のクライアントがインストールできない環境でも、単体バイナリで動く <strong>rclone</strong> を介してクラウドストレージを利用する機能です。ローカルサーバー（local ティア）のみで有効で、<code>/api/capabilities</code> の <code>cloudRclone</code> で提供可否を判定します。コンテナ実行時は <code>/api/cloud/*</code> を公開しません。</p>
+        <p><strong>この連携の意義</strong>: 静的 HTTP サーバーにデータを置くのではなく、認証・ACL・監査・バージョン履歴を備えたクラウドストレージをデータ基盤にできます。各ユーザーは自分の OAuth アカウントで接続するためプロバイダ側で権限が強制され、<code>.kasc</code> には <code>cloud:</code> パスのみが書かれ認証情報は共有されません。同じフォルダを K: ドライブ経由で Office・QGIS・エクスプローラーからも使えるため、資料や GIS データを一元管理するシステムを組みやすい構成です。また「DATA/へ同期（納品用）」でクラウドの内容を <code>projects/&lt;id&gt;/DATA/</code> に丸ごとコピーし <code>cloud:</code> 参照を書き換えれば、rclone 不要のローカル完結パッケージとして納品できます。</p>
+        <p><strong>なぜ静的配信（HTTP サーバーのみ）では実現できないか</strong>: rclone の実行・ドライブ割当（<code>net use</code>）・<code>cloud:</code> の解決プロキシはすべてブラウザ外の処理であり、Box 等の OAuth 認可コードフローに必要な client_secret も静的 web には埋め込めません。そのため本機能はアプリ（ローカルサーバー）専用です。</p>
+        <h3>2つの利用形態</h3>
+        <ul>
+          <li><strong>Windows ドライブ割当</strong>: <code>rclone serve webdav</code> を localhost で起動し <code>net use</code> でドライブ化（既定 K:、E〜Z から選択可）。エクスプローラーや他のアプリから通常のドライブとして使えます</li>
+          <li><strong>アプリ内 <code>cloud:</code> スキーム</strong>: レイヤーURLに <code>cloud:フォルダ/file.geojson</code> と書くと、ローカルサーバーの <code>/api/cloud/file</code> プロキシ経由で接続中ストレージのファイルを直接読み込みます。HTTP Range を転送するため DuckDB-WASM 等の範囲読み経路でも利用でき、ドライブ割当なしで動作します</li>
+        </ul>
+        <h3>rclone の導入</h3>
+        <ul>
+          <li>自動検出の順序: 設定ファイル（<code>kasugai_canvas.cloud.json</code> の <code>rclonePath</code>）→ PATH → <code>C:\kasugai\rclone\rclone.exe</code></li>
+          <li>未導入時は「インストール先フォルダ」を指定して「ダウンロードして配置」で公式配布物を取得（インストーラー不要の単体バイナリ）</li>
+          <li>リモート追加は種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選ぶだけで、その種別名をリモート名として <code>rclone config create</code> を起動し、ブラウザで OAuth 認証します</li>
+        </ul>
+        <h3>ルートフォルダとフォルダURL</h3>
+        <ul>
+          <li>「ルートフォルダ」に指定したフォルダが接続の起点になります（空欄はリモート全体）</li>
+          <li>フォルダURLを指定すると<strong>フォルダID起点</strong>（rclone の <code>root_folder_id</code>）で接続します。権限や共有経路によってリモート内の見える位置が異なる環境間でも、全員が同じフォルダをルートとして参照でき、.kasc の <code>cloud:</code> パス指定を環境間で統一できます</li>
+          <li>対応URL形式: Box の <code>…/folder/&lt;ID&gt;</code> と共有リンク <code>…/s/&lt;slug&gt;</code>（Box API の shared_items でフォルダIDに解決）、Google Drive の <code>…/folders/&lt;ID&gt;</code>、OneDrive / pCloud の <code>?id=</code> パラメータ。その他の種別はフォルダパスで指定します</li>
+        </ul>
+        <h3>権限とプロジェクト保存</h3>
+        <ul>
+          <li><strong>読み取り専用</strong>: <code>rclone serve webdav --read-only</code> で起動し、プロキシ書き込みは 403 で拒否。意図しない書き込みを防げます</li>
+          <li><strong>読み書き</strong>: <code>--vfs-cache-mode full</code> で起動。ファイルのアップロード・削除・<code>.kasc</code> のクラウド保存が可能</li>
+        </ul>
+        <h3>主な API</h3>
+        <pre><code>GET  /api/cloud/status    … 検出状態・バージョン・リモート一覧・接続状態
+POST /api/cloud/install   … 指定フォルダへ rclone をダウンロード配置
+POST /api/cloud/config    … リモート追加（config create → OAuth）
+POST /api/cloud/serve     … WebDAV 起動（remote / root|フォルダURL / readOnly / drive）
+POST /api/cloud/stop      … 停止（ドライブ割当も解除）
+POST /api/cloud/drive     … ドライブ割当・解除（Windows）
+GET  /api/cloud/list      … フォルダ一覧（rclone lsjson）
+GET/PUT/DELETE /api/cloud/file … ファイルの読み書き・削除（Range 転送対応）
+POST /api/cloud/localize  … 接続ルートを DATA/ へコピーし .kasc の cloud: を書換え（納品用）</code></pre>
+        <h3>制約・注意点</h3>
+        <ul>
+          <li>ドライブ経由の読み書きは Windows WebClient の既定上限（約 50MB）を受けます。<code>cloud:</code> スキーム（アプリ内プロキシ）はこの制限を受けません</li>
+          <li>ドライブ割当は Windows のみ。オフラインキャッシュはなく、WebDAV のロックは限定的なため同時編集は避けてください（Box 等のバージョン履歴で過去版には戻せます）</li>
+          <li>rclone の OAuth トークンは rclone 側の設定ファイル（<code>%APPDATA%\rclone\rclone.conf</code>）で管理されます</li>
+        </ul>
+      </div>
+
+    </main>
+  </div>
+</body>
+</html>

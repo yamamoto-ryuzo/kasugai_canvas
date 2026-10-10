@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V4: プラグイン・外部連携 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
+      <p>V4: プラグイン（認証機構）・外部連携</p>
+    </header>
+    <main>
+      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+
+      <h2 id="plugins">V4: プラグイン（認証機構）・外部連携</h2>
+      <p>拡張可能なプラグイン機構と認証方式の導入に加え、データ形式・外部サービス連携を大きく拡充しました。</p>
+      <div class="features">
+        <a class="feature-card" href="../auth/">
+          <h3>🧩 プラグイン機構・認証方式</h3>
+          <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構。認証方式は 0〜7（認証なし / ローカル / 簡易パスワード / Cloudflare Pages / Workers / Cloud Run / IAP）から選択</p>
+        </a>
+        <div class="feature-card">
+          <h3>🗃️ クエリ系・大規模ベクター</h3>
+          <p><code>duckdb:</code> / <code>sql:</code> / <code>gpkg:</code> 行タイプで DuckDB-WASM・SQLite WASM による SQL 絞り込みレイヤー。GeoParquet・FlatGeobuf・GeoPackage を直接読み込み、bbox 連動・where 絞り込み・属性列プルーニングに対応。ベクター描画件数の上限・primitive バッチ描画で大規模データにも対応</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ Google Maps Platform 連携</h3>
+          <p>Geocoding / Places のハイブリッド検索、Street View リンク・候補ラインオーバーレイ。外部エージェント呼出し（エージェントタブにエンドポイントを設定し <code>POST {message, project, camera, layers, history}</code> → <code>actions</code> を実行）で Antigravity 等の外部構築エージェントと接続可能</p>
+        </div>
+      </div>
+      <p>認証方式の詳細は <a href="../auth/">認証とプラグイン</a>、データ形式の経路分類は <a href="../data.html">データ形式</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>
