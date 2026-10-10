@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.2.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.3.0</span></h1>
       <p>.kasc 設定仕様 — インスペクター設定の完全な書式</p>
     </header>
     <main>
@@ -37,10 +37,12 @@ legend: 凡例|https://example.com/legend.png</code></pre>
         <div class="url-box">
           <h3>基本書式</h3>
           <pre><code>種類:タイトル|URL|出典|オプション名=値|on/off</code></pre>
-          <p>URLが <code>DATA/...</code> 等の相対パスなら <code>projects/&lt;project&gt;/DATA/</code> 配下に解決。ローカルサーバーでクラウド接続中は <code>cloud:&lt;パス&gt;</code> で接続中ストレージ（ルートフォルダ基準）のファイルを参照できます（Range 対応）。任意位置の <code>on</code>/<code>off</code>（<code>false</code> 可・大文字小文字不問）で初期表示を指定。</p>
+          <p>URLが <code>DATA/...</code> 等の相対パスなら <code>projects/&lt;project&gt;/</code> 直下（DATA/ は慣例のサブフォルダ）に解決。ローカルサーバーでクラウド接続中は <code>cloud:&lt;パス&gt;</code> で接続中ストレージ（ルートフォルダ基準）のファイルを参照できます（Range 対応）。任意位置の <code>on</code>/<code>off</code>（<code>false</code> 可・大文字小文字不問）で初期表示を指定。</p>
+          <p><code>..</code> はプロジェクトフォルダの1つ上への参照です。例: <code>../DATA/x.geojson</code> は、通常プロジェクトでは全プロジェクト共有の <code>projects/DATA/</code>、外部プロジェクト（.kasc をダブルクリック登録したもの）では .kasc のあるフォルダと並列の <code>DATA/</code> に解決されます。プロジェクト群フォルダに <code>projects.json</code>（群マニフェスト）を置くとその上もスコープになり、<code>../../DATA/x</code> でワークスペースルート（複数のプロジェクト群が共有する DATA/）まで参照できます（マニフェストが無い構造では1階層上まで・それより上は拒否）。</p>
         </div>
         <div class="url-box">
           <h3>設定種類</h3>
+          <p>納品用ローカル化は共有保存が既定です。HTTP(S) データの出力先は <code>../DATA/http/</code>（専用選択時は <code>DATA/http/</code>）で、<code>sql: 例 | SELECT * FROM read_csv_auto('../DATA/http/x.csv')</code> のように SQL のファイル参照も相対パスで保存できます。<code>FROM</code>/<code>JOIN</code> 直後や対応する <code>read_csv</code>/<code>read_parquet</code>/<code>read_json</code>/<code>ST_Read</code> 系の第1引数にある DATA/ 相対参照を、描画・属性検索時に現在のプロジェクトから解決します。通常の文字列値は変更しません。</p>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
 xyz: タイルレイヤ | 同上+off
 3dtiles: レイヤ | off / proxy=off

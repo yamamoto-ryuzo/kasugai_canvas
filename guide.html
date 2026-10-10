@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.2.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.3.0</span></h1>
       <p>使い方・インストール — 起動・プロジェクト構成・配布と公開</p>
     </header>
     <main>
@@ -61,6 +61,18 @@ python run.py --release  # リリース版を起動</code></pre>
         <div class="url-box">
           <h3>起動方法（.kasc ファイルから起動・インストーラー版）</h3>
           <p>インストーラー版は <code>.kasc</code> 拡張子を関連付けます。任意のフォルダにある <code>.kasc</code> をダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録して開きます。<code>.kasc</code> のあるフォルダがそのままプロジェクトルートになり、<code>DATA/</code> などの相対参照はそのフォルダ基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> をまとめたフォルダを渡すだけで納品できます。登録はプロジェクト一覧に残り、システムとは別の場所に複数プロジェクトを管理できます（ファイル名は <code>kasugai_canvas.kasc</code> 以外でも可）。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
+          <h4>納品パッケージの推奨構造（プロジェクト群＋共有 DATA/）</h4>
+          <pre><code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡す
+├─ DATA/                  … 全プロジェクト群で共有（../../DATA/x で参照）
+├─ ProjectsA/
+│  ├─ projects.json       … 群マニフェスト [{"dir":"ProjectA","kasc":"xxx.kasc","title":"計画A"}, ...]
+│  ├─ DATA/               … （任意）群内共有（../DATA/x で参照）
+│  ├─ ProjectA/{xxx.kasc, project.json, DATA/}
+│  └─ ProjectB/{yyy.kasc}
+└─ ProjectsB/
+   ├─ projects.json
+   └─ ProjectC/{zzz.kasc}   … ProjectsA と同じ ../../DATA/ を共有</code></pre>
+          <p>相対参照の規則: <code>DATA/x</code> は .kasc のあるフォルダ内、<code>../x</code> は1つ上（群フォルダ＝群内共有）、<code>../../x</code> は2つ上（ワークスペースルート＝全群共有）を指します。<code>projects.json</code> を持たないフラット構造（<code>{P1, DATA}</code>）は従来通り <code>../</code> が1つ上を指します。この構造を ZIP にすれば受け取り側は群内の .kasc を1つダブルクリックするだけで、マニフェストの一覧に従って群の全プロジェクトが登録され、全参照が解決します。</p>
         </div>
       </section>
 
@@ -85,7 +97,12 @@ python run.py --release  # リリース版を起動</code></pre>
       ├─ project.json     # 表示名等
       ├─ kasugai_canvas.kasc  # インスペクター設定
       └─ DATA/            # ローカルGeoJSON・3D Tiles・画像等</code></pre>
-          <p>設定内の相対パス（例: <code>DATA/sample.geojson</code>）は <code>projects/&lt;project_id&gt;/DATA/</code> に解決されます。Rustサーバー使用時は同構成の <code>projects/</code> をサーバーと同階層に配置します。</p>
+          <p>設定内の相対パス（例: <code>DATA/sample.geojson</code>）は <code>projects/&lt;project_id&gt;/</code> 直下に解決されます。<code>../DATA/x</code> のように <code>..</code> で1階層上を指すと、プロジェクト群と並列の共有 DATA/（通常プロジェクトは <code>projects/DATA/</code>）を参照でき、複数プロジェクトで同じデータを使い回せます。Rustサーバー使用時は同構成の <code>projects/</code> をサーバーと同階層に配置します。</p>
+        </div>
+        <div class="url-box">
+          <h3>納品用ローカル化の保存先</h3>
+          <p>クラウドパネルで「共有（既定）」または「専用」を選んで同期します。共有はプロジェクトフォルダの1つ上の <code>DATA/</code>、専用はプロジェクト内の <code>DATA/</code> に出力します。HTTP・HTTPS データは <code>http/</code>、クラウドは <code>cloud/取得元ハッシュ/</code> に保存します。通常の構成では <code>projects/DATA/{http,cloud}/</code> と <code>projects/ProjectA/</code>・<code>projects/ProjectB/</code> が並びます。</p>
+          <p>共有時は SQL 内も含めて <code>../DATA/http/x.csv</code> のような相対参照に書き換えます。登録IDが変わっても参照は維持されます。納品時は共有 DATA/ ごと ZIP に含めてください。HTTP(S)の保存先は <code>http/</code> に統一しています。保存先の切り替えは新たに取得するデータに適用されます。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
         </div>
         <div class="url-box">
           <h3>設定の保存</h3>

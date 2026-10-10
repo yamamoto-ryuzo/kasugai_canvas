@@ -82,6 +82,17 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
   - **ローカル開発向けの高権限 API**: `/api/capabilities`（能力通知）、`/api/fetch`（CORSプロキシ）、`/api/plugins`（PLUGIN/ へのプラグイン書き込み・削除）、`/api/files`（`projects/<id>/DATA/` へのファイル書き込み・一覧・削除）。これらはローカルサーバー（127.0.0.1）前提の機能であり、公開環境（Pages/Workers）では無制限の書き込み・fetchを無認証で提供してはならない
 - 地図タイル・検索等の外部 API へのアクセスは、ブラウザから直接呼ぶか、CORS 対応を前提とする
 
+## プロジェクト構造（標準・外部・共有データ）
+
+- **システム本体**は `kasugai_canvas.exe` + `web/` の2つ。プロジェクトは `projects/<id>/`（`kasugai_canvas.kasc` + `project.json` + `DATA/`）で複数管理。プロジェクト一覧は `projects/projects.json`、フロントは `./projects/<id>/kasugai_canvas.kasc` を読む
+- **外部プロジェクト**（ローカルサーバー版のみ）: `.kasc` ファイルの関連付け起動・`POST /api/projects/register` で、インストール外の任意フォルダをプロジェクト化する。登録は exe 隣の `kasugai_canvas.projects.json` に永続化され、`GET /projects/projects.json` で静的定義にマージ（`external:true` 付き）して返す。`GET /projects/<id>/*` は登録フォルダから配信し、`kasugai_canvas.kasc` 要求は登録した実ファイル名にマップ（ファイル名は自由）。納品フォルダ（`.kasc` + `DATA/`）をそのまま開ける設計。`DELETE /api/projects/{id}` で登録解除
+- **共有データ（`..` 参照・階層スコープ）**: 相対URLの `..` はプロジェクトフォルダの1階層上を指し、祖先に `projects.json`（プロジェクト群マニフェスト）を持つフォルダが連続する限り追加で1階層ずつ上に出られる（群 → ワークスペースルート）。通常プロジェクトは `../DATA/x` がブラウザのURL正規化で `projects/DATA/`（全プロジェクト共有）に解決される。外部プロジェクトは `..` をマーカー `@parent` に置き換えて送信し、サーバーが登録フォルダの祖先基準で解決する（WHATWG のURL正規化は `%2E%2E` も畳むため、`..` をそのまま送る方法は存在しない点に注意）。マニフェストが無い構造では1階層上まで。納品推奨構造: `納品/{DATA, ProjectsA/{projects.json, P1,P2}, ProjectsB/{projects.json, P3}}`（`DATA/`=プロジェクト専用、`../`=群内共有、`../../`=全群共有）。通常プロジェクトへの `..` 到達・`/api/files` の DATA/ 書き込みでの `..` は従来通り拒否
+- **群マニフェストによる一括登録**: `.kasc` 登録時に親フォルダの `projects.json` を検出した場合、マニフェストのエントリ `{id,title,dir?,kasc?}`（dir 省略=id 名のサブフォルダ、kasc 省略=フォルダ内の最初の .kasc）に従い群内の全プロジェクトをまとめて登録する。`/api/projects/register` の応答 `registered` に全 id が返る。冪等（同じ dir+kasc は既存ID再利用）。群メンバー側からの再帰的な群展開はしない（ネストした群はその .kasc を直接開いた時のみ展開）
+- `/api/files`・`/api/cloud/localize` 等のプロジェクト系 API は `resolve_project_dir` で標準・外部を透過的に解決する
+- **納品用ローカル化の保存先**: `POST /api/cloud/localize {project,scope}` の `scope` は `shared`（既定、プロジェクトの1つ上の `DATA/`）または `project`（専用 `DATA/`）。HTTP(S)の保存先は `http/` に統一し、旧保存先との互換維持は行わない。クラウドは `cloud/<取得元ハッシュ>/`。保存先選択は新規取得に適用し、ローカル化済みファイルの移動は行わない。出典一覧・既存ファイルを照合して同名衝突を回避し、処理を直列化する。通常の `/api/files` 保存は従来通り専用DATA内のみ。
+- **納品データと内部IDの分離**: SQLを含むローカル化参照は `../DATA/http/...` または `DATA/http/...` の相対パスで保存。SQLのファイル参照は描画・属性検索時に `resolveProjectSql` で解決する。画面・API用内部IDは維持するが納品ファイルへ埋め込まない。群マニフェストは `dir` 指定時に `id` 省略可能。群を先に登録して起動対象にもマニフェストの表示名を適用する。
+- ローカル化の回帰テストは `cargo test --bin kasugai_canvas localize_tests`。保存先・再実行時衝突・SQL相対出力・群登録を含む。
+
 ## データ形式方針
 
 CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコード → GeoJSON へ正規化 → 既存のベクター描画経路（`GeoJsonDataSource`）に流す」**を基本ルールとする。これによりレイヤ一覧・表示切替・フォーカス・ベクトル検索・属性パネルが新形式でも自動的に機能する。

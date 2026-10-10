@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.2.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.3.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -78,7 +78,7 @@ POST /api/cloud/stop      … 停止（ドライブ割当も解除）
 POST /api/cloud/drive     … ドライブ割当・解除（Windows）
 GET  /api/cloud/list      … フォルダ一覧（rclone lsjson）
 GET/PUT/DELETE /api/cloud/file … ファイルの読み書き・削除（Range 転送対応）
-POST /api/cloud/localize  … 接続ルートを DATA/cloud/ へコピー + .kasc 内の http(s) 参照を DATA/net/ へダウンロードし参照書換え（納品用）</code></pre>
+POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既定。選択先DATA/の cloud/・http/ へ取り込み、相対参照に書換え（納品用）</code></pre>
         <h3>制約・注意点</h3>
         <ul>
           <li>ドライブ経由の読み書きは Windows WebClient の既定上限（約 50MB）を受けます。<code>cloud:</code> スキーム（アプリ内プロキシ）はこの制限を受けません</li>
@@ -92,14 +92,23 @@ POST /api/cloud/localize  … 接続ルートを DATA/cloud/ へコピー + .kas
       <p>利用例: 描画ルートの保存、インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet を選ぶと対応する行タイプのレイヤー行を自動追記）、ダウンロードしたデータのプロジェクト内配置など。静的配信では利用できません（サーバー API 依存機能）。</p>
 
       <h3>📦 納品用ローカル化</h3>
-      <p>クラウドパネルの「リモートデータをDATA/へ同期（納品用）」ボタン（または <code>POST /api/cloud/localize</code>）で、<code>.kasc</code> が参照するリモートデータを <code>projects/&lt;id&gt;/DATA/</code> へ取り込み、参照をローカル相対に書き換えます。保存先は出所で分かれます。</p>
+      <p>クラウドパネルで<strong>「共有（既定）」または「専用」</strong>を選び、「リモートデータをDATA/へ同期（納品用）」を実行します。共有は .kasc のあるプロジェクトフォルダの<strong>1つ上の DATA/</strong>（<code>../DATA/</code>）、専用はプロジェクト内の <code>DATA/</code> に保存します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>
+      <pre><code>projects/
+├─ projects.json
+├─ DATA/                  … 共有のローカル化先（既定）
+│  ├─ cloud/              … 取得元別サブフォルダ
+│  └─ http/               … HTTP・HTTPS データと _sources.json
+├─ ProjectA/a.kasc        … ../DATA/http/x.csv などの相対参照
+└─ ProjectB/b.kasc        … 同じ共有 DATA/ を利用</code></pre>
+      <p>群が <code>ProjectsA/ProjectA/</code> のように入れ子の場合、共有出力先は <code>ProjectsA/DATA/</code> です。さらに上の全群共有 <code>../../DATA/</code> を読み取る機能とは別で、今回の保存先選択は専用／1つ上の共有の2種類です。ZIP 納品には参照先の DATA/ を含む親フォルダをまとめてください。単独でも projects.json は不要です。</p>
       <ul>
-        <li><code>DATA/cloud/</code>: 接続中のクラウドルートを <code>rclone copy</code> で丸ごとコピーし、<code>cloud:パス</code> 参照を <code>DATA/cloud/パス</code> に書き換えます（未接続時はスキップ）</li>
-        <li><code>DATA/net/</code>: <code>.kasc</code> 内の http(s) URL をサーバーがダウンロードして保存し、参照を書き換えます。対象はベクター系レイヤー行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>fly_geojson:</code>）の URL フィールド、<code>style=</code>/<code>qml=</code> オプション、<code>info:</code>/<code>legend:</code>、および <code>sql:</code> クエリ内の URL リテラル（同じ URL が他の行で取得済みなら同一ファイルを指します）。タイル系（<code>xyz:</code>/<code>base:</code>/<code>3dtiles:</code>）は巨大なため対象外です</li>
+        <li><code>DATA/cloud/&lt;取得元ハッシュ&gt;/</code>: 接続中のクラウドルートを <code>rclone copy</code> でコピーします。別の接続先・ルートの同名ファイルが混ざらないよう取得元ごとに分け、共有時は <code>../DATA/cloud/&lt;取得元ハッシュ&gt;/パス</code> に書き換えます（未接続時はスキップ）。取得元の対応は <code>cloud/_sources.json</code> に保存します</li>
+        <li><code>DATA/http/</code>（共有時は <code>../DATA/http/</code>）: <code>.kasc</code> 内の http(s) URL をサーバーがダウンロードして保存し、参照を書き換えます。対象はベクター系レイヤー行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>fly_geojson:</code>）の URL フィールド、<code>style=</code>/<code>qml=</code> オプション、<code>info:</code>/<code>legend:</code>、および <code>sql:</code> クエリ内の URL リテラル（同じ URL が他の行で取得済みなら同一ファイルを指します）。タイル系（<code>xyz:</code>/<code>base:</code>/<code>3dtiles:</code>）は巨大なため対象外です</li>
       </ul>
-      <p>同一 URL の重複参照は1ファイルにまとめ、別 URL の同名衝突はハッシュ接尾辞で回避します。<code>DATA/net/_sources.json</code> に「保存ファイル名 → 取得元 URL」の一覧を残すため、後から出所を遡れます。ダウンロードに失敗した参照は URL のまま残り、応答の <code>failed</code> に一覧が返ります。</p>
-      <p>これにより「クラウド・Web 上のデータを正とした構築 → 納品時にローカル完結パッケージ化」という流れができます。納品先は rclone の設定も元のクラウドの OAuth 認証情報もネット接続も不要で、ファイル一式だけで動作します（クラウドの <code>cloud:</code> 接続行は自動接続を防ぐためコメント化されます）。</p>
-      <p>安全対策として、<code>..</code>・バックスラッシュ・制御文字を含む <code>cloud:</code> 参照はプロジェクト外に出るため書き換え対象外です（クラウド参照のまま残ります）。大容量フォルダではダウンロードに時間がかかる点と、同期後はクラウド側・元URL側の更新が自動反映されない点に注意してください（再実行すれば最新に再取得されます）。</p>
+      <p>同一 URL の重複参照は1ファイルにまとめます。<code>http/_sources.json</code> の出典一覧と既存ファイルを確認し、別 URL の同名衝突（大文字小文字違いを含む）はハッシュ接尾辞で回避します。同一取得元のファイルは再取得時に更新される場合があります。ダウンロード失敗時は元の URL を残し、応答の <code>failed</code> に記録します。<code>dataPath</code> は実際の保存先、<code>dataReference</code> は .kasc 基準の相対パスを返します。</p>
+      <p><code>sql:</code> のファイル参照も <code>read_csv_auto('../DATA/http/x.csv')</code> のように相対パスで保存し、描画・属性検索時に現在のプロジェクトから解決します。納品先の登録IDに依存しません。HTTP(S)の保存先は <code>http/</code> に統一し、旧保存先との互換維持は行いません。保存先を選び直しても、ローカル化済みファイルを自動移動する操作ではありません。</p>
+      <p>これにより「クラウド・Web 上のデータを正とした構築 → 納品時にローカル完結パッケージ化」という流れができます。取得済みデータの参照には元のクラウドの認証情報は不要です。ただし対象外のタイル、取得失敗した参照、CDN依存資産などは別途必要であり、完全オフライン動作を保証するものではありません（クラウドの <code>cloud:</code> 接続行は自動接続を防ぐためコメント化されます）。</p>
+      <p>安全対策として、<code>..</code>・バックスラッシュ・制御文字を含む <code>cloud:</code> 参照はプロジェクト外に出るため書き換え対象外です（クラウド参照のまま残ります）。大容量フォルダではダウンロードに時間がかかる点と、同期後はクラウド側・元URL側の更新が自動反映されない点に注意してください（HTTPデータは .kasc にリモートURLが残っているものだけを取得します。ローカル化済み参照の自動再取得は行いません）。</p>
 
       <h3>📂 .kasc ファイル関連付け（外部プロジェクト）</h3>
       <p>インストーラー版は <code>.kasc</code> 拡張子をアプリに関連付けます。<code>.kasc</code> ファイルをダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録し、そのプロジェクトを開いた状態でブラウザが起動します（起動済みなら実行中のインスタンスに <code>/api/projects/register</code> で登録を引き継ぎます）。</p>
@@ -107,11 +116,37 @@ POST /api/cloud/localize  … 接続ルートを DATA/cloud/ へコピー + .kas
         <li><strong>その場所がプロジェクトルート</strong>: <code>.kasc</code> のあるフォルダがそのまま <code>/projects/&lt;id&gt;/</code> の配信元になり、<code>DATA/</code> 等の相対参照はすべてそのフォルダ基準で解決されます。<code>.kasc</code> + <code>DATA/</code> をまとめたフォルダを納品すれば、受け取った側はダブルクリックだけで開けます（納品用ローカル化の出力とも整合）</li>
         <li><strong>ファイル名は自由</strong>: <code>kasugai_canvas.kasc</code> 以外の名前でも開けます。同じフォルダに複数の .kasc を置けば、それぞれ別プロジェクトとして登録されます</li>
         <li><strong>システムとプロジェクトの分離管理</strong>: 登録情報は exe 隣の <code>kasugai_canvas.projects.json</code> に永続化され、設定パネルのプロジェクト一覧に残ります（<code>external</code> フラグ付き）。プロジェクトをインストール先の <code>projects/</code> に置く必要はなく、任意のフォルダ・ドライブに配置できます</li>
-        <li><strong>表示名</strong>: フォルダ内に <code>project.json</code>（<code>{"title": "..."}</code>）があればその title、なければフォルダ名を表示名にします</li>
+        <li><strong>表示名</strong>: フォルダ内に <code>project.json</code>（<code>{"title": "..."}</code>）があればその title、なければ群マニフェストの title、さらに無ければフォルダ名を表示名にします（起動対象も群メンバーも同じ規則）</li>
+        <li><strong>共有データ（<code>../</code> 参照・階層スコープ）</strong>: 相対URLの <code>..</code> は .kasc のあるフォルダの1つ上を指します。プロジェクト群フォルダに <code>projects.json</code>（複数プロジェクト一覧のマニフェスト）を置くと「この上はワークスペース」の宣言になり、連続するマニフェストの数だけ上に出られます。<code>ProjectsA/ProjectA/</code> のような群構成なら <code>../</code> が群内共有、<code>../../DATA/</code> がワークスペースルートの全群共有 DATA になり、<code>ProjectsA/</code>・<code>ProjectsB/</code> のような複数のプロジェクト群で同じ DATA/ を共有できます。マニフェストが無いフラット構造は従来通り1階層上まで。通常プロジェクトも同じ意味で、<code>../</code> は <code>projects/</code> 直下（<code>../DATA/</code> = 全プロジェクト共有の <code>projects/DATA/</code>）を指します</li>
+        <li><strong>プロジェクト群の一括登録</strong>: 群の中の .kasc を1つダブルクリック（または登録）すると、親フォルダの <code>projects.json</code> が読まれ、マニフェストに列挙された<strong>全プロジェクトがまとめて登録</strong>されます。エントリは例として <code>{"dir":"ProjectA","title":"計画A","kasc":"a.kasc"}</code> と記述できます。登録IDは指定不要です。従来の <code>id</code> も受理し、<code>dir</code> 省略時は id と同名のサブフォルダを使います。<code>kasc</code> 省略時はフォルダ直下の .kasc を辞書順で選ぶため、複数ファイルがある場合は明記してください。無効なフォルダ・明示されたファイルはスキップします。応答の <code>registered</code> に登録された全 id が返ります</li>
         <li><strong>登録解除</strong>: <code>DELETE /api/projects/&lt;id&gt;</code> で一覧から外せます（ファイルは削除しません）</li>
-        <li><code>/api/files</code>・<code>/api/cloud/localize</code> 等のプロジェクト系 API も外部プロジェクトに対応します。DATA/ への書き込みやローカル化は登録フォルダ内に反映されます</li>
+        <li><code>/api/files</code>・<code>/api/cloud/localize</code> 等のプロジェクト系 API も外部プロジェクトに対応します。通常のファイル保存は登録フォルダ内、納品用ローカル化は選択した専用／共有の保存先に反映されます</li>
         <li>ローカルサーバー（local ティア）のみの機能です。静的配信・コンテナ実行では関連付け自体が存在しません</li>
       </ul>
+      <h4>推奨納品パッケージ構造（プロジェクト群＋共有DATA）</h4>
+      <pre><code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡せる
+├─ DATA/                  … 全プロジェクト群で共有（../../DATA/… で参照）
+├─ ProjectsA/
+│  ├─ projects.json       … 群マニフェスト [{"dir":"ProjectA","title":"計画A","kasc":"xxx.kasc"}, ...]
+│  │                        （群のプロジェクト一括登録＋共有スコープ宣言の役割）
+│  ├─ DATA/               … （任意）群内だけの共有（../DATA/… で参照）
+│  ├─ ProjectA/
+│  │  ├─ xxx.kasc         … geojson: 名 | ../../DATA/共有.geojson で全群共有を参照
+│  │  ├─ DATA/            … （任意）プロジェクト専用（DATA/… で参照）
+│  │  └─ project.json     … （任意）表示名 {"title": "..."}
+│  └─ ProjectB/
+│     └─ yyy.kasc
+└─ ProjectsB/
+   ├─ projects.json
+   └─ ProjectC/
+      └─ zzz.kasc          … ProjectsA と同じ ../../DATA/ を共有できる</code></pre>
+      <ul>
+        <li><code>DATA/x</code> → プロジェクトフォルダ内の DATA/（プロジェクト専用）</li>
+        <li><code>../DATA/x</code> → 群フォルダ内の DATA/（群内のプロジェクトで共有）</li>
+        <li><code>../../DATA/x</code> → ワークスペースルートの DATA/（全プロジェクト群で共有）</li>
+        <li><code>projects.json</code> を持たないフラット構造（<code>{P1, DATA}</code>）は従来通り <code>../</code> が1つ上を指し、<code>../../</code> は拒否されます</li>
+      </ul>
+      <p>受け取り側は ZIP を展開して群内の <code>.kasc</code> をどれか1つダブルクリックするだけで、マニフェストに従って<strong>群の全プロジェクトが登録</strong>され、相対参照・共有データのすべてが解決します。</p>
 
     </main>
   </div>

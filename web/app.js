@@ -467,6 +467,11 @@ function normalizeRemoteUrl(url) {
   return url;
 }
 
+// projects.json の external:true が付くプロジェクトID。
+// .kasc 直接登録(外部プロジェクト)で、参照解決の基点が projects/ ではなく
+// 登録フォルダになるもの。loadProjects で構築する
+const externalProjectIds = new Set();
+
 function resolveProjectUrl(url) {
   if (typeof url !== "string" || !url) return url;
   const trimmed = url.trim();
@@ -483,15 +488,25 @@ function resolveProjectUrl(url) {
   let path = trimmed;
   if (path.startsWith("./")) path = path.slice(2);
   const segments = path.split("/").filter(Boolean);
+  // ".." はプロジェクトフォルダの1つ上(ワークスペース)への参照。
+  // 例: ../DATA/x → プロジェクト群と並列の共有 DATA/。通常プロジェクトは
+  // ブラウザのURL正規化で projects/<id>/../DATA/x → projects/DATA/x に解決。
+  // 外部プロジェクトは .. を正規化されないマーカー @parent に置き換えて送り、
+  // サーバー側で登録フォルダの親を基点に解決する
+  const external = externalProjectIds.has(currentProjectId || "default");
   const safeSegments = [];
   for (const segment of segments) {
     if (segment === "..") {
-      if (safeSegments.length > 0) safeSegments.pop();
+      if (safeSegments.length && safeSegments[safeSegments.length - 1] !== "..") safeSegments.pop();
+      else safeSegments.push("..");
     } else if (segment !== ".") {
       safeSegments.push(segment);
     }
   }
-  return getProjectBaseUrl() + safeSegments.join("/");
+  const resolved = safeSegments
+    .map(segment => (segment === ".." && external ? "@parent" : segment))
+    .join("/");
+  return getProjectBaseUrl() + resolved;
 }
 
 async function loadProjects() {
@@ -501,9 +516,11 @@ async function loadProjects() {
     if (response.ok) definitions = await response.json();
   } catch {}
   if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
+  externalProjectIds.clear();
   const select = document.querySelector("#project-select");
   select.replaceChildren();
   definitions.forEach(project => {
+    if (project.external) externalProjectIds.add(project.id);
     const option = document.createElement("option");
     option.value = project.id;
     option.textContent = project.title || project.id;
@@ -2234,10 +2251,38 @@ async function loadDuckDbLayerAsGeoJson(item) {
 }
 
 // sql: レイヤー。任意の SELECT 文を実行し、結果のジオメトリ列を GeoJSON 化して描画する
+function resolveProjectSql(query) {
+  const tokens = [...query.matchAll(/--[^\n]*|\/\*[\s\S]*?\*\/|\$\$[\s\S]*?\$\$|'(?:''|[^'])*'|"(?:""|[^"])*"|[a-zA-Z_][a-zA-Z0-9_]*|[^\s]/g)];
+  const readers = /^(?:read_(?:csv(?:_auto)?|json(?:_auto|_objects|_objects_auto)?|ndjson(?:_auto|_objects)?|parquet)|parquet_scan|st_read|st_readosm)$/i;
+  const stack = [];
+  let previous = "", offset = 0, out = "";
+  for (const token of tokens) {
+    const value = token[0];
+    if (value.startsWith("--") || value.startsWith("/*")) continue;
+    const top = stack[stack.length - 1];
+    if (value === "(" || value === "[") {
+      stack.push({ close: value === "(" ? ")" : "]", files: value === "(" ? readers.test(previous) : !!top?.files });
+    } else if (value === ")" || value === "]") {
+      stack.pop();
+    } else if (value === "," && top?.close === ")") {
+      top.files = false;
+    } else if ((value.startsWith("'") || value.startsWith('"')) && (top?.files || /^(from|join)$/i.test(previous))) {
+      const quote = value[0];
+      const path = value.slice(1, -1).replaceAll(quote + quote, quote);
+      if (/^(?:\.\/)?(?:\.\.\/)*DATA\//i.test(path)) {
+        out += query.slice(offset, token.index) + quoteSqlLiteral(new URL(resolveProjectUrl(path), window.location.href).href);
+        offset = token.index + value.length;
+      }
+    }
+    previous = value;
+  }
+  return out + query.slice(offset);
+}
+
 async function loadDuckDbQueryAsGeoJson(item) {
   const { conn, spatial } = await loadDuckDb();
   // サブクエリとして包むため末尾のセミコロンは除去する
-  const query = String(item.query || "").replace(/;+\s*$/, "");
+  const query = resolveProjectSql(String(item.query || "").replace(/;+\s*$/, ""));
   // :bbox プレースホルダは表示範囲の envelope に置換される(含まれていれば範囲連動レイヤーになる)
   let effectiveQuery = query;
   if (/:bbox\b/i.test(query)) {
@@ -2268,7 +2313,7 @@ async function queryDuckDbAttributeRows(item, searchText) {
   const { conn, spatial } = await loadDuckDb();
   let inner, columns, geomCol, lonlat;
   if (item.type === "sql") {
-    inner = `(${String(item.query || "").replace(/;+\s*$/, "").replace(/:bbox\b/gi, DUCKDB_WORLD_ENVELOPE)})`;
+    inner = `(${resolveProjectSql(String(item.query || "").replace(/;+\s*$/, "")).replace(/:bbox\b/gi, DUCKDB_WORLD_ENVELOPE)})`;
     columns = await describeDuckDbColumns(conn, `SELECT * FROM ${inner}`);
     geomCol = resolveDuckDbGeometryColumn(columns, null);
     lonlat = geomCol ? null : resolveDuckDbLonLat(columns, null, null);
@@ -5346,6 +5391,7 @@ function setupEvents() {
     inspectorLine: document.querySelector("#cloud-inspector-line"),
     saveKasc: document.querySelector("#cloud-save-kasc"),
     localize: document.querySelector("#cloud-localize"),
+    localizeScope: document.querySelector("#cloud-localize-scope"),
     status: document.querySelector("#cloud-status"),
   };
   const cloudStorage = {
@@ -5565,13 +5611,16 @@ function setupEvents() {
       });
 
       cloudEls.localize.addEventListener("click", async () => {
-        if (!window.confirm(t("cloud.localizeConfirm"))) return;
+        const scope = cloudEls.localizeScope.value;
+        const path = scope === "project" ? "DATA/" : "../DATA/";
+        if (!window.confirm(t("cloud.localizeConfirm", { path }))) return;
+        cloudEls.localize.disabled = true;
         try {
           setCloudStatus(t("cloud.status.localizing"));
-          const result = await cloudPost("localize", { project: currentProjectId || "default" });
+          const result = await cloudPost("localize", { project: currentProjectId || "default", scope });
           const parts = [
             result.cloudSynced ? t("cloud.status.localizedCloud") : t("cloud.status.localizedNoCloud"),
-            t("cloud.status.localizedNet", { count: result.downloaded ?? 0 }),
+            t("cloud.status.localizedHttp", { count: result.downloaded ?? 0, path: result.dataReference || path.replace(/\/$/, "") }),
           ];
           if (result.failed?.length) parts.push(t("cloud.status.localizedFailed", { count: result.failed.length }));
           if (result.cloudRefsRemaining) parts.push(t("cloud.status.localizedCloudLeft", { count: result.cloudRefsRemaining }));
@@ -5579,6 +5628,8 @@ function setupEvents() {
           if (result.kascRewritten) location.reload();
         } catch (error) {
           setCloudStatus(error.message, true);
+        } finally {
+          cloudEls.localize.disabled = false;
         }
       });
     }

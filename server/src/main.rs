@@ -22,6 +22,7 @@ const CLOUD_CONFIG_FILE_NAME: &str = "kasugai_canvas.cloud.json";
 // フォルダにあるプロジェクト)の永続化レジストリ
 const EXTERNAL_PROJECTS_FILE_NAME: &str = "kasugai_canvas.projects.json";
 const KASC_FILE_NAME: &str = "kasugai_canvas.kasc";
+const GROUP_MANIFEST_FILE_NAME: &str = "projects.json";
 const LATEST_JSON_URLS: [&str; 1] =
     ["https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/latest.json"];
 const REPOSITORY_DOWNLOAD_URL: &str =
@@ -381,10 +382,7 @@ fn resolve_data_path(project_dir: &Path, rel: &str) -> Result<PathBuf, (StatusCo
         return Ok(path);
     }
     if rel.len() > 512 {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "パスが長すぎます".to_string(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "パスが長すぎます".to_string()));
     }
     for segment in rel.split('/') {
         if segment.is_empty()
@@ -394,10 +392,7 @@ fn resolve_data_path(project_dir: &Path, rel: &str) -> Result<PathBuf, (StatusCo
                 .chars()
                 .any(|c| c.is_control() || c == '\\' || c == ':')
         {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                "ファイル名が不正です".to_string(),
-            ));
+            return Err((StatusCode::BAD_REQUEST, "ファイル名が不正です".to_string()));
         }
         path.push(segment);
     }
@@ -456,7 +451,9 @@ async fn write_data_file(
             .await
             .map_err(internal_error)?;
     }
-    tokio::fs::write(&path, &body).await.map_err(internal_error)?;
+    tokio::fs::write(&path, &body)
+        .await
+        .map_err(internal_error)?;
     Ok(Json(json!({ "ok": true, "name": rel })))
 }
 
@@ -472,7 +469,9 @@ async fn delete_data_file(
         ));
     }
     if path.exists() {
-        tokio::fs::remove_file(&path).await.map_err(internal_error)?;
+        tokio::fs::remove_file(&path)
+            .await
+            .map_err(internal_error)?;
     }
     Ok(Json(json!({ "ok": true, "name": rel })))
 }
@@ -657,7 +656,10 @@ async fn resolve_cloud_root(
     }
     let remote_type = rclone_remote_type(exe, remote).await?;
     let url = reqwest::Url::parse(input).map_err(|_| {
-        (StatusCode::BAD_REQUEST, "ルートフォルダのURLが不正です".to_string())
+        (
+            StatusCode::BAD_REQUEST,
+            "ルートフォルダのURLが不正です".to_string(),
+        )
     })?;
     let segments: Vec<String> = url
         .path_segments()
@@ -830,11 +832,7 @@ async fn cloud_status(State(state): State<AppState>) -> Json<Value> {
     let mut version = Value::Null;
     let mut remotes: Vec<String> = Vec::new();
     if let Some(exe) = &exe {
-        if let Ok(output) = new_rclone_command(exe)
-            .arg("version")
-            .output()
-            .await
-        {
+        if let Ok(output) = new_rclone_command(exe).arg("version").output().await {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Some(line) = stdout.lines().next() {
                 // "rclone v1.75.2" → "v1.75.2" に整形
@@ -842,11 +840,7 @@ async fn cloud_status(State(state): State<AppState>) -> Json<Value> {
                 version = json!(line.strip_prefix("rclone ").unwrap_or(line));
             }
         }
-        if let Ok(output) = new_rclone_command(exe)
-            .arg("listremotes")
-            .output()
-            .await
-        {
+        if let Ok(output) = new_rclone_command(exe).arg("listremotes").output().await {
             if output.status.success() {
                 remotes = String::from_utf8_lossy(&output.stdout)
                     .lines()
@@ -960,7 +954,10 @@ async fn cloud_install(
             .await
             .map_err(internal_error)?;
         if !status.success() {
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, "ZIP展開に失敗しました".to_string()));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ZIP展開に失敗しました".to_string(),
+            ));
         }
     }
     #[cfg(not(windows))]
@@ -974,11 +971,18 @@ async fn cloud_install(
             .await
             .map_err(internal_error)?;
         if !status.success() {
-            return Err((StatusCode::INTERNAL_SERVER_ERROR, "ZIP展開に失敗しました".to_string()));
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ZIP展開に失敗しました".to_string(),
+            ));
         }
     }
     // rclone-vX.Y.Z-<os>-<arch>/rclone[.exe] を探して exe 隣の rclone/ へ移す
-    let exe_name = if cfg!(windows) { "rclone.exe" } else { "rclone" };
+    let exe_name = if cfg!(windows) {
+        "rclone.exe"
+    } else {
+        "rclone"
+    };
     let mut found = None;
     if let Ok(entries) = std::fs::read_dir(&extract_dir) {
         for entry in entries.flatten() {
@@ -993,10 +997,18 @@ async fn cloud_install(
         StatusCode::INTERNAL_SERVER_ERROR,
         "展開後に rclone が見つかりません".to_string(),
     ))?;
-    let dest = match request.dir.as_deref().map(str::trim).filter(|dir| !dir.is_empty()) {
+    let dest = match request
+        .dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|dir| !dir.is_empty())
+    {
         Some(dir) => {
             if dir.len() > 260 || dir.chars().any(|c| c.is_control()) {
-                return Err((StatusCode::BAD_REQUEST, "インストール先が不正です".to_string()));
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "インストール先が不正です".to_string(),
+                ));
             }
             PathBuf::from(dir).join(exe_name)
         }
@@ -1007,11 +1019,15 @@ async fn cloud_install(
             .await
             .map_err(internal_error)?;
     }
-    tokio::fs::copy(&found, &dest).await.map_err(internal_error)?;
+    tokio::fs::copy(&found, &dest)
+        .await
+        .map_err(internal_error)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let mut perms = std::fs::metadata(&dest).map_err(internal_error)?.permissions();
+        let mut perms = std::fs::metadata(&dest)
+            .map_err(internal_error)?
+            .permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(&dest, perms).map_err(internal_error)?;
     }
@@ -1043,7 +1059,9 @@ async fn cloud_config(
     let remote_type = request.remote_type.trim();
     if remote_type.is_empty()
         || remote_type.len() > 32
-        || !remote_type.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+        || !remote_type
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
     {
         return Err((StatusCode::BAD_REQUEST, "種別が不正です".to_string()));
     }
@@ -1072,10 +1090,7 @@ struct CloudServeRequest {
 // 占有していない localhost ポートを拾う
 fn pick_free_port() -> Result<u16, (StatusCode, String)> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").map_err(internal_error)?;
-    let port = listener
-        .local_addr()
-        .map_err(internal_error)?
-        .port();
+    let port = listener.local_addr().map_err(internal_error)?.port();
     drop(listener);
     Ok(port)
 }
@@ -1099,7 +1114,11 @@ async fn mount_drive(drive: &str, port: u16) -> Result<(), (StatusCode, String)>
         let stdout = String::from_utf8_lossy(&output.stdout);
         return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("ドライブ割り当てに失敗しました: {}{}", stdout.trim(), stderr.trim()),
+            format!(
+                "ドライブ割り当てに失敗しました: {}{}",
+                stdout.trim(),
+                stderr.trim()
+            ),
         ));
     }
     Ok(())
@@ -1132,10 +1151,8 @@ async fn cloud_serve(
     State(state): State<AppState>,
     Json(request): Json<CloudServeRequest>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let remote = normalize_remote_name(&request.remote).ok_or((
-        StatusCode::BAD_REQUEST,
-        "リモート名が不正です".to_string(),
-    ))?;
+    let remote = normalize_remote_name(&request.remote)
+        .ok_or((StatusCode::BAD_REQUEST, "リモート名が不正です".to_string()))?;
     let drive = match request.drive.as_deref() {
         Some(drive) if !drive.trim().is_empty() => Some(normalize_drive(drive)?),
         _ => None,
@@ -1152,14 +1169,15 @@ async fn cloud_serve(
         "rclone が見つかりません。パスを指定するかダウンロードしてください".to_string(),
     ))?;
     // ルート指定: フォルダパスか、フォルダURL(→フォルダID起点)
-    let (root, remote_spec, folder_id) = match resolve_cloud_root(&exe, &remote, &request.root).await? {
-        CloudRoot::Path(path) => (path, remote.clone(), None),
-        CloudRoot::FolderId(id) => (
-            String::new(),
-            format!("{remote},root_folder_id={id}"),
-            Some(id),
-        ),
-    };
+    let (root, remote_spec, folder_id) =
+        match resolve_cloud_root(&exe, &remote, &request.root).await? {
+            CloudRoot::Path(path) => (path, remote.clone(), None),
+            CloudRoot::FolderId(id) => (
+                String::new(),
+                format!("{remote},root_folder_id={id}"),
+                Some(id),
+            ),
+        };
 
     // 既存 serve の停止(ドライブ割当も解除)
     {
@@ -1305,11 +1323,60 @@ async fn cloud_drive(
 #[serde(rename_all = "camelCase")]
 struct CloudLocalizeRequest {
     project: String,
+    #[serde(default)]
+    scope: LocalizeScope,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+enum LocalizeScope {
+    Project,
+    #[default]
+    Shared,
+}
+
+static LOCALIZE_LOCK: Mutex<()> = Mutex::const_new(());
+
+fn localize_destination(
+    project_dir: &Path,
+    scope: LocalizeScope,
+) -> Result<(PathBuf, &'static str), (StatusCode, String)> {
+    match scope {
+        LocalizeScope::Project => Ok((project_dir.to_path_buf(), "DATA")),
+        LocalizeScope::Shared => project_dir
+            .parent()
+            .map(|dir| (dir.to_path_buf(), "../DATA"))
+            .ok_or((
+                StatusCode::BAD_REQUEST,
+                "共有フォルダを特定できません".to_string(),
+            )),
+    }
+}
+
+fn localize_output_path(root: &Path, rel: &str) -> Result<PathBuf, (StatusCode, String)> {
+    let path = resolve_data_path(root, rel)?;
+    let mut current = root.to_path_buf();
+    for component in path
+        .strip_prefix(root)
+        .map_err(internal_error)?
+        .components()
+    {
+        current.push(component);
+        if let Ok(meta) = std::fs::symlink_metadata(&current) {
+            if meta.file_type().is_symlink() || !normalize_fs_path(&current).starts_with(root) {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    "保存先のリンクは使用できません".to_string(),
+                ));
+            }
+        }
+    }
+    Ok(path)
 }
 
 // ---- 納品用ローカル化(.kasc 内のリモート参照の DATA/ 化) ----
 // 参照の置き換え先は出所で分ける: クラウド由来は DATA/cloud/、
-// 一般の http(s) URL は DATA/net/(ファイル名→取得元URLは DATA/net/_sources.json)
+// 一般の http(s) URL は DATA/http/(ファイル名→取得元URLは DATA/http/_sources.json)
 
 // 1ファイルのダウンロード上限(タイル系は対象外のためこの程度で十分)
 const LOCALIZE_FILE_MAX_BYTES: usize = 256 * 1024 * 1024;
@@ -1399,6 +1466,14 @@ fn sanitize_file_name(name: &str) -> String {
     } else {
         trimmed.to_string()
     };
+    let device = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+    if matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (device.len() == 4
+            && (device.starts_with("COM") || device.starts_with("LPT"))
+            && matches!(device.as_bytes()[3], b'1'..=b'9'))
+    {
+        name.insert(0, '_');
+    }
     if name.chars().count() > 120 {
         let (stem, ext) = split_file_ext(&name);
         let keep = 120usize.saturating_sub(ext.chars().count()).max(8);
@@ -1426,33 +1501,76 @@ fn localize_file_name(url: &str) -> String {
     sanitize_file_name(&percent_decode(&base))
 }
 
-// 正規化済み URL 一覧に DATA/net/ 内の保存先を割り当てる。
+// 正規化済み URL 一覧に DATA/http/ 内の保存先を割り当てる。
 // 同一 URL は常に同名(重複アドレスは1ファイルに簡素化)で、
 // 別 URL の同名衝突だけ hash 接尾辞を付ける
-fn assign_localize_names(urls: &[String]) -> HashMap<String, String> {
+fn read_localize_sources(
+    path: &Path,
+) -> Result<serde_json::Map<String, Value>, (StatusCode, String)> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).map_err(|_| {
+            (
+                StatusCode::CONFLICT,
+                "出典一覧が壊れています。保存先を確認してください".to_string(),
+            )
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::Map::new()),
+        Err(error) => Err(internal_error(error)),
+    }
+}
+
+fn assign_localize_names(
+    urls: &[String],
+    sources: &serde_json::Map<String, Value>,
+    occupied: &HashSet<String>,
+) -> HashMap<String, String> {
     let mut by_url = HashMap::new();
-    let mut used: HashMap<String, String> = HashMap::new();
+    let mut used: HashMap<String, String> = occupied
+        .iter()
+        .map(|name| (name.to_lowercase(), String::new()))
+        .collect();
+    used.insert("_sources.json".to_string(), String::new());
+    for (rel, source) in sources {
+        if let (Some(name), Some(url)) = (rel.strip_prefix("http/"), source.as_str()) {
+            if !name.eq_ignore_ascii_case("_sources.json")
+                && !name.contains('/')
+                && sanitize_file_name(name) == name
+            {
+                used.insert(name.to_lowercase(), url.to_string());
+                by_url.entry(url.to_string()).or_insert_with(|| rel.clone());
+            }
+        }
+    }
     for url in urls {
+        if by_url.contains_key(url) {
+            continue;
+        }
         let mut name = localize_file_name(url);
-        if used.get(&name).is_some_and(|used_url| used_url != url) {
+        if used
+            .get(&name.to_lowercase())
+            .is_some_and(|used_url| used_url != url)
+        {
             let (stem, ext) = split_file_ext(&name);
-            let mut candidate = format!("{stem}--{:08x}{ext}", fnv1a64(url) as u32);
+            let mut candidate = format!("{stem}--{:016x}{ext}", fnv1a64(url));
             let mut n = 2u32;
-            while used.get(&candidate).is_some_and(|used_url| used_url != url) {
-                candidate = format!("{stem}--{:08x}-{n}{ext}", fnv1a64(url) as u32);
+            while used
+                .get(&candidate.to_lowercase())
+                .is_some_and(|used_url| used_url != url)
+            {
+                candidate = format!("{stem}--{:016x}-{n}{ext}", fnv1a64(url));
                 n += 1;
             }
             name = candidate;
         }
-        used.insert(name.clone(), url.clone());
-        by_url.insert(url.clone(), format!("net/{name}"));
+        used.insert(name.to_lowercase(), url.clone());
+        by_url.insert(url.clone(), format!("http/{name}"));
     }
     by_url
 }
 
 // リモート参照の出現位置。置換文字列の形が位置によって異なる
-// Field: DATA/net/x(resolveProjectUrl 経由でプロジェクト相対に解決される)
-// Sql:   /projects/<id>/DATA/net/x(クエリ内リテラルは絶対パス指定が必要なため)
+// Field: DATA/http/x または ../DATA/http/x(resolveProjectUrl で解決する)
+// Sql:   同じ相対パスを保存し、実行時に resolveProjectSql で解決する
 #[derive(Clone, Copy)]
 enum RefPos {
     Field,
@@ -1472,20 +1590,20 @@ fn kasc_url_field_index(line_type: &str, field_count: usize) -> Option<usize> {
 }
 
 // | 区切りフィールド1つの書き換え。
-// cloud: → DATA/cloud/(include_cloud 時のみ)、URLフィールド・style=/qml= 値 → lookup の結果
+// cloud: → cloud_prefix(指定時のみ)、URLフィールド・style=/qml= 値 → lookup の結果
 fn rewrite_kasc_field(
     part: &str,
     is_url_field: bool,
-    include_cloud: bool,
+    cloud_prefix: Option<&str>,
     lookup: &mut impl FnMut(&str, RefPos) -> Option<String>,
 ) -> String {
     let trimmed = part.trim_start();
     let indent = &part[..part.len() - trimmed.len()];
-    if include_cloud {
+    if let Some(prefix) = cloud_prefix {
         if let Some(rest) = strip_prefix_ci(trimmed, "cloud:") {
             // ../ 等を含む参照は DATA/ に置き換えるとプロジェクト外に出るため書き換えない
             if is_valid_cloud_path(rest) {
-                return format!("{indent}DATA/cloud/{rest}");
+                return format!("{indent}{prefix}/{rest}");
             }
             return part.to_string();
         }
@@ -1623,7 +1741,7 @@ fn rewrite_sql_remote_urls(
 
 fn rewrite_kasc_line(
     line: &str,
-    include_cloud: bool,
+    cloud_prefix: Option<&str>,
     lookup: &mut impl FnMut(&str, RefPos) -> Option<String>,
 ) -> String {
     let (body, cr) = match line.strip_suffix('\r') {
@@ -1638,7 +1756,7 @@ fn rewrite_kasc_line(
     // 走らないようコメント化する。クラウド未接続で同期できなかった場合は
     // 参照・行ともそのまま残す
     if line_type == "cloud" {
-        if include_cloud {
+        if cloud_prefix.is_some() {
             let indent = &body[..body.len() - body.trim_start().len()];
             return format!("{indent}# {}{cr}", body.trim_start());
         }
@@ -1656,7 +1774,7 @@ fn rewrite_kasc_line(
         .split('|')
         .enumerate()
         .map(|(index, part)| {
-            rewrite_kasc_field(part, Some(index) == url_index, include_cloud, lookup)
+            rewrite_kasc_field(part, Some(index) == url_index, cloud_prefix, lookup)
         })
         .collect();
     format!("{prefix}{}{cr}", parts.join("|"))
@@ -1664,14 +1782,14 @@ fn rewrite_kasc_line(
 
 // .kasc 全文のリモート参照を書き換える。lookup は URL(原文)を受け取り、
 // Some(置換文字列) を返せば差し替え、None なら参照をそのまま残す。
-// include_cloud=false のとき cloud: 参照・接続行は一切触らない
+// cloud_prefix=None のとき cloud: 参照・接続行は一切触らない
 fn rewrite_kasc_remote_refs(
     text: &str,
-    include_cloud: bool,
+    cloud_prefix: Option<&str>,
     lookup: &mut impl FnMut(&str, RefPos) -> Option<String>,
 ) -> String {
     text.split('\n')
-        .map(|line| rewrite_kasc_line(line, include_cloud, lookup))
+        .map(|line| rewrite_kasc_line(line, cloud_prefix, lookup))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -1685,9 +1803,9 @@ fn count_cloud_refs(text: &str) -> usize {
 }
 
 // リモート参照のローカル化(納品用)。接続中ならクラウドルートを
-// projects/<project>/DATA/cloud/ へ rclone copy し、.kasc 内の cloud: 参照を
-// DATA/cloud/ 相対に書き換える。さらに .kasc 内の http(s) 参照(レイヤーURL・
-// style=・info:/legend:・sql: クエリ内リテラル)を DATA/net/ へダウンロードして
+// 選択先の DATA/cloud/<取得元ハッシュ>/ へ rclone copy し、cloud: 参照を
+// .kasc 基準の相対パスに書き換える。さらに http(s) 参照(レイヤーURL・
+// style=・info:/legend:・sql: クエリ内リテラル)を DATA/http/ へダウンロードして
 // 参照を書き換える。重複する URL は1ファイルにまとめ、sql: 文中の URL も
 // 同一ファイルを指す。納品先は rclone 設定・OAuth・ネット接続不要で
 // ファイル一式だけで動く構成になる
@@ -1695,20 +1813,27 @@ async fn cloud_localize(
     State(state): State<AppState>,
     Json(request): Json<CloudLocalizeRequest>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let project_dir = resolve_project_dir(&state, &request.project)?;
+    let _guard = LOCALIZE_LOCK.lock().await;
+    let project_dir = normalize_fs_path(&resolve_project_dir(&state, &request.project)?);
     if !project_dir.is_dir() {
         return Err((
             StatusCode::BAD_REQUEST,
             "プロジェクトが見つかりません".to_string(),
         ));
     }
-    let data_dir = resolve_data_path(&project_dir, "")?;
+    let kasc_path = project_dir.join(project_kasc_name(&state, &request.project));
+    let text = tokio::fs::read_to_string(&kasc_path)
+        .await
+        .map_err(internal_error)?;
+    let (output_root, data_prefix) = localize_destination(&project_dir, request.scope)?;
+    let data_dir = localize_output_path(&output_root, "")?;
     tokio::fs::create_dir_all(&data_dir)
         .await
         .map_err(internal_error)?;
 
     // クラウド側のコピーは接続中のみ。未接続でも Web 参照だけの同期は可能とする
     let mut cloud_synced = false;
+    let mut cloud_prefix = None;
     let source = {
         let cloud = state.cloud.lock().await;
         cloud.serve.as_ref().map(|serve| serve_target(serve, ""))
@@ -1718,10 +1843,28 @@ async fn cloud_localize(
             StatusCode::BAD_REQUEST,
             "rclone が見つかりません".to_string(),
         ))?;
-        let cloud_dir = resolve_data_path(&project_dir, "cloud")?;
+        let cloud_rel = format!("cloud/{:016x}", fnv1a64(&source));
+        let cloud_dir = localize_output_path(&output_root, &cloud_rel)?;
+        let sources_path = localize_output_path(&output_root, "cloud/_sources.json")?;
+        let mut sources = read_localize_sources(&sources_path)?;
+        if (cloud_dir.exists() || sources.contains_key(&cloud_rel))
+            && sources.get(&cloud_rel).and_then(Value::as_str) != Some(&source)
+        {
+            return Err((
+                StatusCode::CONFLICT,
+                "クラウド保存先が別のデータと衝突しています".to_string(),
+            ));
+        }
         tokio::fs::create_dir_all(&cloud_dir)
             .await
             .map_err(internal_error)?;
+        sources.insert(cloud_rel.clone(), json!(source));
+        tokio::fs::write(
+            &sources_path,
+            serde_json::to_vec_pretty(&sources).map_err(internal_error)?,
+        )
+        .await
+        .map_err(internal_error)?;
         let output = new_rclone_command(&exe)
             .args(["copy", &source])
             .arg(&cloud_dir)
@@ -1736,16 +1879,13 @@ async fn cloud_localize(
             ));
         }
         cloud_synced = true;
+        cloud_prefix = Some(format!("{data_prefix}/{cloud_rel}"));
     }
 
     // .kasc からリモート URL を収集(正規化して重複除去)
-    let kasc_path = project_dir.join(project_kasc_name(&state, &request.project));
-    let text = tokio::fs::read_to_string(&kasc_path)
-        .await
-        .unwrap_or_default();
     let mut urls: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
-    rewrite_kasc_remote_refs(&text, cloud_synced, &mut |url, _pos| {
+    rewrite_kasc_remote_refs(&text, cloud_prefix.as_deref(), &mut |url, _pos| {
         let normalized = normalize_remote_url(url);
         if seen.insert(normalized.clone()) {
             urls.push(normalized);
@@ -1753,38 +1893,46 @@ async fn cloud_localize(
         None
     });
 
-    // DATA/net/<name> に割り当てて順次ダウンロード。失敗した参照は URL のまま残す
-    let names = assign_localize_names(&urls);
+    // DATA/http/<name> に割り当てて順次ダウンロード。失敗した参照は URL のまま残す
+    let http_dir = localize_output_path(&output_root, "http")?;
+    let manifest_path = localize_output_path(&output_root, "http/_sources.json")?;
+    let mut sources = read_localize_sources(&manifest_path)?;
+    let occupied = if http_dir.exists() {
+        std::fs::read_dir(&http_dir)
+            .map_err(internal_error)?
+            .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().to_string()))
+            .collect::<Result<HashSet<_>, _>>()
+            .map_err(internal_error)?
+    } else {
+        HashSet::new()
+    };
+    let names = assign_localize_names(&urls, &sources, &occupied);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(CLOUD_FETCH_TIMEOUT_SECS))
         .build()
         .map_err(internal_error)?;
     let mut downloaded: HashSet<String> = HashSet::new();
     let mut failed: Vec<Value> = Vec::new();
-    let net_dir = resolve_data_path(&project_dir, "net")?;
-    let manifest_path = net_dir.join("_sources.json");
-    let mut sources = std::fs::read_to_string(&manifest_path)
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .and_then(|value| value.as_object().cloned())
-        .unwrap_or_default();
     for url in &urls {
         let rel = &names[url];
         let result = async {
-            let response = client.get(url).send().await.map_err(|e| e.to_string())?;
+            let mut response = client.get(url).send().await.map_err(|e| e.to_string())?;
             if !response.status().is_success() {
                 return Err(format!("HTTP {}", response.status()));
             }
-            let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-            if bytes.len() > LOCALIZE_FILE_MAX_BYTES {
-                return Err("サイズ上限(256MB)を超えています".to_string());
+            let mut bytes = Vec::new();
+            while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+                if bytes.len() + chunk.len() > LOCALIZE_FILE_MAX_BYTES {
+                    return Err("サイズ上限(256MB)を超えています".to_string());
+                }
+                bytes.extend_from_slice(&chunk);
             }
             Ok(bytes)
         }
         .await;
         match result {
             Ok(bytes) => {
-                let path = resolve_data_path(&project_dir, rel)?;
+                let path = localize_output_path(&output_root, rel)?;
                 if let Some(parent) = path.parent() {
                     tokio::fs::create_dir_all(parent)
                         .await
@@ -1807,8 +1955,8 @@ async fn cloud_localize(
     }
     // どこからダウンロードしたかの一覧(整理用)。既存マニフェストにマージする
     if !downloaded.is_empty() {
-        let manifest = serde_json::to_string_pretty(&Value::Object(sources))
-            .map_err(internal_error)?;
+        let manifest =
+            serde_json::to_string_pretty(&Value::Object(sources)).map_err(internal_error)?;
         tokio::fs::write(&manifest_path, manifest)
             .await
             .map_err(internal_error)?;
@@ -1816,16 +1964,13 @@ async fn cloud_localize(
 
     // 参照の書き換え。ダウンロード済みの URL のみ置き換える
     let mut kasc_rewritten = false;
-    let new_text = rewrite_kasc_remote_refs(&text, cloud_synced, &mut |url, pos| {
+    let new_text = rewrite_kasc_remote_refs(&text, cloud_prefix.as_deref(), &mut |url, _pos| {
         let normalized = normalize_remote_url(url);
         let rel = names.get(&normalized)?;
         if !downloaded.contains(&normalized) {
             return None;
         }
-        Some(match pos {
-            RefPos::Field => format!("DATA/{rel}"),
-            RefPos::Sql => format!("/projects/{}/DATA/{rel}", request.project),
-        })
+        Some(format!("{data_prefix}/{}", encode_uri_path(rel)))
     });
     if new_text != text {
         tokio::fs::write(&kasc_path, &new_text)
@@ -1840,6 +1985,8 @@ async fn cloud_localize(
         "failed": failed,
         "cloudRefsRemaining": count_cloud_refs(&new_text),
         "kascRewritten": kasc_rewritten,
+        "dataPath": data_dir.to_string_lossy(),
+        "dataReference": data_prefix,
     })))
 }
 
@@ -1850,7 +1997,7 @@ mod localize_tests {
     fn collect_urls(text: &str) -> Vec<String> {
         let mut urls = Vec::new();
         let mut seen = HashSet::new();
-        rewrite_kasc_remote_refs(text, false, &mut |url, _pos| {
+        rewrite_kasc_remote_refs(text, None, &mut |url, _pos| {
             let normalized = normalize_remote_url(url);
             if seen.insert(normalized.clone()) {
                 urls.push(normalized);
@@ -1862,15 +2009,21 @@ mod localize_tests {
 
     fn rewrite(text: &str, include_cloud: bool, urls: &[&str]) -> String {
         let names = assign_localize_names(
-            &urls.iter().map(|u| normalize_remote_url(u)).collect::<Vec<_>>(),
+            &urls
+                .iter()
+                .map(|u| normalize_remote_url(u))
+                .collect::<Vec<_>>(),
+            &serde_json::Map::new(),
+            &HashSet::new(),
         );
-        rewrite_kasc_remote_refs(text, include_cloud, &mut |url, pos| {
-            let rel = names.get(&normalize_remote_url(url))?;
-            Some(match pos {
-                RefPos::Field => format!("DATA/{rel}"),
-                RefPos::Sql => format!("/projects/p/DATA/{rel}"),
-            })
-        })
+        rewrite_kasc_remote_refs(
+            text,
+            include_cloud.then_some("DATA/cloud"),
+            &mut |url, _pos| {
+                let rel = names.get(&normalize_remote_url(url))?;
+                Some(format!("DATA/{rel}"))
+            },
+        )
     }
 
     #[test]
@@ -1905,21 +2058,25 @@ mod localize_tests {
                     duckdb: b | https://x/d.csv\n\
                     sql: q | SELECT * FROM 'https://x/d.csv' | style=https://x/d.csv";
         let out = rewrite(text, false, &["https://x/d.csv"]);
-        assert!(out.contains("geojson: a | DATA/net/d.csv "));
-        assert!(out.contains("duckdb: b | DATA/net/d.csv"));
-        assert!(out.contains("'/projects/p/DATA/net/d.csv'"));
-        assert!(out.contains("style=DATA/net/d.csv"));
+        assert!(out.contains("geojson: a | DATA/http/d.csv "));
+        assert!(out.contains("duckdb: b | DATA/http/d.csv"));
+        assert!(out.contains("'DATA/http/d.csv'"));
+        assert!(out.contains("style=DATA/http/d.csv"));
         assert!(!out.contains("--"));
     }
 
     #[test]
     fn name_collision_gets_hash_suffix() {
-        let names = assign_localize_names(&[
-            "https://a.com/dir/data.csv".to_string(),
-            "https://b.com/other/data.csv".to_string(),
-        ]);
-        assert_eq!(names["https://a.com/dir/data.csv"], "net/data.csv");
-        assert_ne!(names["https://b.com/other/data.csv"], "net/data.csv");
+        let names = assign_localize_names(
+            &[
+                "https://a.com/dir/data.csv".to_string(),
+                "https://b.com/other/data.csv".to_string(),
+            ],
+            &serde_json::Map::new(),
+            &HashSet::new(),
+        );
+        assert_eq!(names["https://a.com/dir/data.csv"], "http/data.csv");
+        assert_ne!(names["https://b.com/other/data.csv"], "http/data.csv");
         assert!(names["https://b.com/other/data.csv"].ends_with(".csv"));
     }
 
@@ -1945,6 +2102,229 @@ mod localize_tests {
         // urls に無い(=ダウンロード失敗)参照は URL のまま残る
         let text = "geojson: a | https://x/miss.geojson";
         assert_eq!(rewrite(text, false, &[]), text);
+    }
+
+    struct TestWorkspace {
+        root: PathBuf,
+        state: AppState,
+    }
+
+    impl TestWorkspace {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "kasugai-localize-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            std::fs::create_dir_all(root.join("projects")).unwrap();
+            let root = normalize_fs_path(&root);
+            let state = AppState {
+                update_config_path: Arc::new(root.join("update.json")),
+                cloud_config_path: Arc::new(root.join("cloud.json")),
+                external_projects_path: Arc::new(root.join("registry.json")),
+                external_projects: Arc::new(StdMutex::new(Vec::new())),
+                cloud: Arc::new(Mutex::new(CloudState::default())),
+                shutdown: Arc::new(Notify::new()),
+                port: 0,
+                web_dir: Arc::new(root.clone()),
+                projects_dir: Arc::new(root.join("projects")),
+                is_local: true,
+            };
+            Self { root, state }
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    #[test]
+    fn group_registration_uses_manifest_for_primary_without_requiring_ids() {
+        let env = TestWorkspace::new();
+        let group = env.root.join("delivery");
+        for name in ["A", "B"] {
+            std::fs::create_dir_all(group.join(name)).unwrap();
+            std::fs::write(group.join(name).join("view.kasc"), "title: test").unwrap();
+        }
+        std::fs::write(group.join("B/notes.txt"), "not a project").unwrap();
+        std::fs::write(
+            group.join("projects.json"),
+            r#"[
+            {"dir":"A","title":"Manifest A","kasc":"view.kasc"},
+            {"id":"custom-b","dir":"B","title":"Manifest B","kasc":"view.kasc"},
+            {"id":"invalid","dir":"B","kasc":"notes.txt"}
+        ]"#,
+        )
+        .unwrap();
+        let (primary, members) =
+            register_external_project(&env.state, &group.join("A/view.kasc")).unwrap();
+        assert_eq!(primary.title, "Manifest A");
+        assert_eq!(members.len(), 2);
+        assert_eq!(members[1].id, "custom-b");
+        let (other, repeated) =
+            register_external_project(&env.state, &group.join("B/view.kasc")).unwrap();
+        assert_eq!(other.id, "custom-b");
+        assert_eq!(other.title, "Manifest B");
+        assert_eq!(repeated.len(), 2);
+        assert_eq!(env.state.external_projects.lock().unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn localize_shared_private_and_repeated_downloads() {
+        let env = TestWorkspace::new();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            axum::serve(
+                listener,
+                Router::new()
+                    .route("/a/data.csv", get(|| async { "lon,lat\n139,35\n" }))
+                    .route("/b/data.csv", get(|| async { "lon,lat\n140,36\n" })),
+            )
+            .await
+            .unwrap();
+        });
+        let shared = env.state.projects_dir.join("DATA/http");
+        for (id, source) in [("A", "a"), ("B", "b"), ("C", "a")] {
+            let dir = env.state.projects_dir.join(id);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join(KASC_FILE_NAME), format!("duckdb: data | {base}/{source}/data.csv\nsql: sql | SELECT * FROM read_csv('{base}/{source}/data.csv')")).unwrap();
+            let result = cloud_localize(
+                State(env.state.clone()),
+                Json(CloudLocalizeRequest {
+                    project: id.to_string(),
+                    scope: LocalizeScope::Shared,
+                }),
+            )
+            .await
+            .unwrap()
+            .0;
+            assert_eq!(result["downloaded"], 1);
+            assert_eq!(result["dataReference"], "../DATA");
+            assert!(!dir.join("DATA/http").exists());
+            let text = std::fs::read_to_string(dir.join(KASC_FILE_NAME)).unwrap();
+            assert!(text.contains("../DATA/http/"));
+            assert!(!text.contains("/projects/"));
+            assert!(!text.contains(&base));
+        }
+        assert_eq!(
+            std::fs::read_to_string(shared.join("data.csv")).unwrap(),
+            "lon,lat\n139,35\n"
+        );
+        let sources = read_localize_sources(&shared.join("_sources.json")).unwrap();
+        assert_eq!(sources.len(), 2);
+        let a = env.state.projects_dir.join("A");
+        let old = std::fs::read_to_string(a.join(KASC_FILE_NAME)).unwrap();
+        std::fs::write(
+            a.join(KASC_FILE_NAME),
+            format!("{old}\nduckdb: extra | {base}/b/data.csv"),
+        )
+        .unwrap();
+        let _ = cloud_localize(
+            State(env.state.clone()),
+            Json(CloudLocalizeRequest {
+                project: "A".to_string(),
+                scope: LocalizeScope::Shared,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(shared.join("data.csv")).unwrap(),
+            "lon,lat\n139,35\n"
+        );
+        std::fs::write(
+            a.join(KASC_FILE_NAME),
+            format!("duckdb: private | {base}/a/data.csv"),
+        )
+        .unwrap();
+        let private = cloud_localize(
+            State(env.state.clone()),
+            Json(CloudLocalizeRequest {
+                project: "A".to_string(),
+                scope: LocalizeScope::Project,
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(private["dataReference"], "DATA");
+        assert!(a.join("DATA/http/data.csv").is_file());
+        assert_eq!(
+            std::fs::read_to_string(a.join(KASC_FILE_NAME)).unwrap(),
+            "duckdb: private | DATA/http/data.csv"
+        );
+        std::fs::write(a.join("DATA/http/_sources.json"), "broken").unwrap();
+        let error = cloud_localize(
+            State(env.state.clone()),
+            Json(CloudLocalizeRequest {
+                project: "A".to_string(),
+                scope: LocalizeScope::Project,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.0, StatusCode::CONFLICT);
+        task.abort();
+    }
+
+    #[test]
+    fn shared_is_default_and_private_is_explicit() {
+        let request: CloudLocalizeRequest = serde_json::from_value(json!({"project":"p"})).unwrap();
+        assert_eq!(request.scope, LocalizeScope::Shared);
+        let dir = Path::new("workspace/group/p");
+        assert_eq!(
+            localize_destination(dir, request.scope).unwrap(),
+            (PathBuf::from("workspace/group"), "../DATA")
+        );
+        assert_eq!(
+            localize_destination(dir, LocalizeScope::Project).unwrap(),
+            (dir.to_path_buf(), "DATA")
+        );
+        assert!(serde_json::from_value::<CloudLocalizeRequest>(
+            json!({"project":"p","scope":"../../"})
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn persistent_names_protect_existing_and_reserved_files() {
+        let sources =
+            serde_json::from_value(json!({"http/data.csv":"https://a/data.csv"})).unwrap();
+        let occupied = ["data.csv", "User.csv"]
+            .map(str::to_string)
+            .into_iter()
+            .collect();
+        let urls = [
+            "https://a/data.csv",
+            "https://b/DATA.csv",
+            "https://b/user.csv",
+            "https://b/_sources.json",
+        ]
+        .map(str::to_string);
+        let names = assign_localize_names(&urls, &sources, &occupied);
+        assert_eq!(names[&urls[0]], "http/data.csv");
+        assert_ne!(names[&urls[1]].to_lowercase(), "http/data.csv");
+        assert_ne!(names[&urls[2]].to_lowercase(), "http/user.csv");
+        assert_ne!(names[&urls[3]], "http/_sources.json");
+        assert_eq!(sanitize_file_name("CON.csv"), "_CON.csv");
+    }
+
+    #[test]
+    fn shared_references_do_not_embed_registration_id() {
+        let text = "geojson: a | https://a/data.csv\nsql: b | SELECT * FROM read_csv('https://a/data.csv')\ngeojson: c | cloud:folder/c.geojson";
+        let out = rewrite_kasc_remote_refs(text, Some("../DATA/cloud/source"), &mut |_, _| {
+            Some("../DATA/http/data.csv".to_string())
+        });
+        assert!(out.contains("read_csv('../DATA/http/data.csv')"));
+        assert!(out.contains("geojson: a | ../DATA/http/data.csv"));
+        assert!(out.contains("../DATA/cloud/source/folder/c.geojson"));
+        assert!(!out.contains("/projects/"));
     }
 
     #[test]
@@ -2141,10 +2521,21 @@ async fn request_shutdown(State(state): State<AppState>) -> StatusCode {
 
 // "4.20.0" 形式のバージョンを比較する（欠けた要素は 0 扱い）
 fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
-    let pa: Vec<u64> = a.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect();
-    let pb: Vec<u64> = b.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect();
+    let pa: Vec<u64> = a
+        .split('.')
+        .map(|p| p.trim().parse().unwrap_or(0))
+        .collect();
+    let pb: Vec<u64> = b
+        .split('.')
+        .map(|p| p.trim().parse().unwrap_or(0))
+        .collect();
     for i in 0..pa.len().max(pb.len()) {
-        match pa.get(i).copied().unwrap_or(0).cmp(&pb.get(i).copied().unwrap_or(0)) {
+        match pa
+            .get(i)
+            .copied()
+            .unwrap_or(0)
+            .cmp(&pb.get(i).copied().unwrap_or(0))
+        {
             std::cmp::Ordering::Equal => continue,
             ord => return ord,
         }
@@ -2335,16 +2726,7 @@ fn sanitize_project_id(name: &str) -> String {
 
 // フォルダ名から一意なプロジェクトIDを作る。既存 projects/・登録済み外部IDと
 // 衝突する場合は -2, -3, ... を付ける
-fn unique_external_id(
-    registry: &[ExternalProject],
-    projects_dir: &Path,
-    dir: &Path,
-) -> String {
-    let base = sanitize_project_id(
-        dir.file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("external"),
-    );
+fn unique_external_id(registry: &[ExternalProject], projects_dir: &Path, base: String) -> String {
     let mut id = base.clone();
     let mut seq = 2u32;
     while registry.iter().any(|e| e.id == id) || projects_dir.join(&id).exists() {
@@ -2354,12 +2736,161 @@ fn unique_external_id(
     id
 }
 
+// プロジェクトフォルダ内の project.json の title を読む
+fn read_project_title(dir: &Path) -> Option<String> {
+    std::fs::read_to_string(dir.join("project.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|value| {
+            value
+                .get("title")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .filter(|title| !title.is_empty())
+}
+
+// フォルダ直下の最初の .kasc ファイル名を返す(辞書順)
+fn first_kasc_name(dir: &Path) -> Option<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| {
+            let p = entry.path();
+            p.is_file()
+                && p.extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|ext| ext.eq_ignore_ascii_case("kasc"))
+                    .unwrap_or(false)
+        })
+        .map(|entry| entry.file_name().to_string_lossy().to_string())
+        .collect();
+    names.sort();
+    names.into_iter().next()
+}
+
+// dir+kasc の組を外部プロジェクトとして登録する(同一組の再登録は冪等)。
+// preferred_id/title はプロジェクト群マニフェスト由来の優先値
+fn upsert_external_project(
+    state: &AppState,
+    dir: &Path,
+    kasc_name: &str,
+    preferred_id: Option<&str>,
+    preferred_title: Option<&str>,
+) -> Result<ExternalProject, (StatusCode, String)> {
+    let dir_key = dir.to_string_lossy().to_string();
+    // タイトルは project.json > マニフェスト > フォルダ名 > ファイル名 の順
+    let title = read_project_title(dir)
+        .or_else(|| preferred_title.map(str::to_string))
+        .or_else(|| {
+            dir.file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            Path::new(kasc_name)
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "external".to_string());
+    let base = preferred_id
+        .filter(|id| is_valid_project_id(id))
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            sanitize_project_id(
+                dir.file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("external"),
+            )
+        });
+    let mut list = state
+        .external_projects
+        .lock()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "内部エラー".to_string()))?;
+    if let Some(existing) = list
+        .iter_mut()
+        .find(|e| e.dir.eq_ignore_ascii_case(&dir_key) && e.kasc.eq_ignore_ascii_case(kasc_name))
+    {
+        existing.title = title;
+        let project = existing.clone();
+        save_external_projects(&state.external_projects_path, &list);
+        return Ok(project);
+    }
+    let project = ExternalProject {
+        id: unique_external_id(&list, &state.projects_dir, base),
+        title,
+        dir: dir_key,
+        kasc: kasc_name.to_string(),
+    };
+    list.push(project.clone());
+    save_external_projects(&state.external_projects_path, &list);
+    Ok(project)
+}
+
+// プロジェクト群マニフェスト(group_dir/projects.json)に列挙された
+// プロジェクトをまとめて登録する。エントリは {id,title,dir?,kasc?}。
+// dir 省略時は id と同名のサブフォルダ、kasc 省略時はフォルダ内の
+// 最初の .kasc を使う
+fn register_group_members(state: &AppState, group_dir: &Path) -> Vec<ExternalProject> {
+    let Ok(text) = std::fs::read_to_string(group_dir.join(GROUP_MANIFEST_FILE_NAME)) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&text) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for entry in value.as_array().into_iter().flatten() {
+        let Some(dir_name) = entry
+            .get("dir")
+            .or_else(|| entry.get("id"))
+            .and_then(Value::as_str)
+        else {
+            continue;
+        };
+        if dir_name.starts_with('.') || sanitize_file_name(dir_name) != dir_name {
+            continue;
+        }
+        let dir = normalize_fs_path(&group_dir.join(dir_name));
+        if !dir.is_dir() || dir.parent() != Some(group_dir) {
+            continue;
+        }
+        let kasc_name = match entry.get("kasc") {
+            Some(value) => value.as_str().map(str::to_string),
+            None => first_kasc_name(&dir),
+        };
+        let Some(kasc_name) = kasc_name.filter(|name| {
+            sanitize_file_name(name) == *name
+                && Path::new(name)
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("kasc"))
+                && dir.join(name).is_file()
+                && normalize_fs_path(&dir.join(name)).parent() == Some(dir.as_path())
+        }) else {
+            continue;
+        };
+        if let Ok(project) = upsert_external_project(
+            state,
+            &dir,
+            &kasc_name,
+            entry.get("id").and_then(Value::as_str),
+            entry.get("title").and_then(Value::as_str),
+        ) {
+            out.push(project);
+        }
+    }
+    out
+}
+
 // .kasc ファイルを外部プロジェクトとして登録する。
-// 同じファイルの再登録は既存IDを再利用し、レジストリを永続化する
+// 親フォルダに projects.json(プロジェクト群マニフェスト)があれば
+// 群に属する他プロジェクトもまとめて登録する。
+// 戻り値は (起動対象の主プロジェクト, 登録された全プロジェクト)
 fn register_external_project(
     state: &AppState,
     kasc_path: &Path,
-) -> Result<ExternalProject, (StatusCode, String)> {
+) -> Result<(ExternalProject, Vec<ExternalProject>), (StatusCode, String)> {
     let path = normalize_fs_path(kasc_path);
     if !path.is_file() {
         return Err((
@@ -2389,56 +2920,23 @@ fn register_external_project(
         .and_then(|name| name.to_str())
         .map(str::to_string)
     else {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            "ファイル名が不正です".to_string(),
-        ));
+        return Err((StatusCode::BAD_REQUEST, "ファイル名が不正です".to_string()));
     };
-    let dir_key = dir.to_string_lossy().to_string();
-
-    // タイトルは project.json > フォルダ名 > ファイル名 の順で決める
-    let title = std::fs::read_to_string(dir.join("project.json"))
-        .ok()
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .and_then(|value| {
-            value
-                .get("title")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .filter(|title| !title.is_empty())
-        .or_else(|| {
-            dir.file_name()
-                .and_then(|name| name.to_str())
-                .map(str::to_string)
-        })
-        .or_else(|| {
-            path.file_stem()
-                .and_then(|name| name.to_str())
-                .map(str::to_string)
-        })
-        .unwrap_or_else(|| "external".to_string());
-
-    let mut list = state.external_projects.lock().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "内部エラー".to_string(),
-        )
-    })?;
-    if let Some(existing) = list.iter().find(|e| {
-        e.dir.eq_ignore_ascii_case(&dir_key) && e.kasc.eq_ignore_ascii_case(&kasc_name)
+    let mut members = dir
+        .parent()
+        .map(|group_dir| register_group_members(state, group_dir))
+        .unwrap_or_default();
+    let primary = match members.iter().find(|member| {
+        member.dir.eq_ignore_ascii_case(&dir.to_string_lossy())
+            && member.kasc.eq_ignore_ascii_case(&kasc_name)
     }) {
-        return Ok(existing.clone());
-    }
-    let project = ExternalProject {
-        id: unique_external_id(&list, &state.projects_dir, &dir),
-        title,
-        dir: dir_key,
-        kasc: kasc_name,
+        Some(member) => member.clone(),
+        None => upsert_external_project(state, &dir, &kasc_name, None, None)?,
     };
-    list.push(project.clone());
-    save_external_projects(&state.external_projects_path, &list);
-    Ok(project)
+    members.retain(|m| m.id != primary.id);
+    let mut all = vec![primary.clone()];
+    all.extend(members);
+    Ok((primary, all))
 }
 
 // プロジェクトの実 .kasc ファイル名(外部プロジェクトは登録名、それ以外は既定名)
@@ -2447,11 +2945,7 @@ fn project_kasc_name(state: &AppState, id: &str) -> String {
         .external_projects
         .lock()
         .ok()
-        .and_then(|list| {
-            list.iter()
-                .find(|e| e.id == id)
-                .map(|e| e.kasc.clone())
-        })
+        .and_then(|list| list.iter().find(|e| e.id == id).map(|e| e.kasc.clone()))
         .unwrap_or_else(|| KASC_FILE_NAME.to_string())
 }
 
@@ -2461,16 +2955,20 @@ struct RegisterProjectRequest {
 }
 
 // POST /api/projects/register { path } → .kasc を外部プロジェクトとして登録。
+// 親にプロジェクト群マニフェスト(projects.json)があれば群の他プロジェクトも
+// まとめて登録し registered に全 id を返す。
 // ファイル関連付けで起動済みインスタンスに登録を依頼する用途
 async fn register_project(
     State(state): State<AppState>,
     Json(request): Json<RegisterProjectRequest>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let project = register_external_project(&state, Path::new(&request.path))?;
+    let (primary, members) = register_external_project(&state, Path::new(&request.path))?;
+    let registered: Vec<&str> = members.iter().map(|m| m.id.as_str()).collect();
     Ok(Json(json!({
         "ok": true,
-        "id": project.id,
-        "title": project.title,
+        "id": primary.id,
+        "title": primary.title,
+        "registered": registered,
     })))
 }
 
@@ -2480,12 +2978,10 @@ async fn unregister_project(
     State(state): State<AppState>,
     axum::extract::Path(id): axum::extract::Path<String>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let mut list = state.external_projects.lock().map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "内部エラー".to_string(),
-        )
-    })?;
+    let mut list = state
+        .external_projects
+        .lock()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "内部エラー".to_string()))?;
     let Some(index) = list.iter().position(|e| e.id == id) else {
         return Err((
             StatusCode::NOT_FOUND,
@@ -2556,16 +3052,29 @@ async fn serve_project_files(
     if rel.is_empty() || !is_valid_project_id(id) {
         return Err(not_found());
     }
-    // URI の二重エンコードやルート脱出を防ぐため、危険なセグメントはここで拒否
-    let invalid = rel.split('/').any(|segment| {
-        segment.is_empty()
-            || segment == "."
-            || segment == ".."
-            || segment
-                .chars()
-                .any(|c| c.is_control() || c == '\\' || c == ':')
-    });
-    if invalid {
+    // セグメントを字句解決する。プロジェクトルートを上に出る ".." の数を
+    // depth として数え、危険文字を含むセグメントは拒否する。
+    // ".." はブラウザのURL正規化で畳まれるため、外部プロジェクトのフロントは
+    // マーカー "@parent" で送ってくる。ここでは ".." と同じ親参照として扱う
+    let mut depth = 0u32;
+    let mut out: Vec<&str> = Vec::new();
+    let mut bad = false;
+    for segment in rel.split('/') {
+        match segment {
+            "" | "." => {}
+            ".." | "@parent" => {
+                if out.pop().is_none() {
+                    depth += 1;
+                }
+            }
+            s if s.chars().any(|c| c.is_control() || c == '\\' || c == ':') => {
+                bad = true;
+                break;
+            }
+            s => out.push(s),
+        }
+    }
+    if bad {
         return Err((StatusCode::BAD_REQUEST, "パスが不正です".to_string()));
     }
     let external = state
@@ -2573,16 +3082,51 @@ async fn serve_project_files(
         .lock()
         .ok()
         .and_then(|list| list.iter().find(|e| e.id == id).cloned());
+    // ".." の許可範囲はプロジェクトフォルダの1階層上(ワークスペース)まで。
+    // ただし祖先に projects.json(プロジェクト群マニフェスト)を持つフォルダが
+    // 連続する場合、その数だけ追加で上に出られる(群→ワークスペースルート)。
+    // 通常プロジェクトはブラウザ側で projects/<id>/.. が正規化されここには
+    // 届かないため depth>0 は拒否でよい
     let (root, target) = match &external {
-        Some(ext) => (
-            PathBuf::from(&ext.dir),
-            if rel == KASC_FILE_NAME {
-                ext.kasc.clone()
-            } else {
-                rel.to_string()
-            },
-        ),
-        None => (state.projects_dir.join(id), rel.to_string()),
+        Some(ext) => {
+            let dir = PathBuf::from(&ext.dir);
+            let allowed_up = {
+                let mut n = 1u32;
+                let mut anc = dir.parent();
+                while let Some(p) = anc {
+                    if p.join(GROUP_MANIFEST_FILE_NAME).is_file() {
+                        n += 1;
+                        anc = p.parent();
+                    } else {
+                        break;
+                    }
+                }
+                n
+            };
+            if depth > allowed_up {
+                return Err(not_found());
+            }
+            let base = dir
+                .ancestors()
+                .nth(depth as usize)
+                .map(Path::to_path_buf)
+                .ok_or_else(not_found)?;
+            let target = out.join("/");
+            (
+                base,
+                if depth == 0 && target == KASC_FILE_NAME {
+                    ext.kasc.clone()
+                } else {
+                    target
+                },
+            )
+        }
+        None => {
+            if depth > 0 {
+                return Err(not_found());
+            }
+            (state.projects_dir.join(id), out.join("/"))
+        }
     };
     // ServeDir に処理を委譲するため URI をプロジェクトルート相対に書き換える。
     // メソッド・ヘッダ(Range 等)は元リクエストを引き継ぐ
@@ -2733,7 +3277,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut startup_query = String::new();
     if let Some(path) = &kasc_arg {
         match register_external_project(&state, path) {
-            Ok(project) => startup_query = format!("?project={}", project.id),
+            Ok((primary, members)) => {
+                if members.len() > 1 {
+                    eprintln!(
+                        "プロジェクト群を登録しました: {}",
+                        members
+                            .iter()
+                            .map(|m| m.id.as_str())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                startup_query = format!("?project={}", primary.id);
+            }
             Err((_, error)) => eprintln!(".kasc の登録に失敗しました: {error}"),
         }
     }
