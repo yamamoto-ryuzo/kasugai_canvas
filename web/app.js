@@ -471,6 +471,18 @@ function normalizeRemoteUrl(url) {
 // .kasc 直接登録(外部プロジェクト)で、参照解決の基点が projects/ ではなく
 // 登録フォルダになるもの。loadProjects で構築する
 const externalProjectIds = new Set();
+// loadProjects で取得した projects.json のエントリ(id → 定義)。
+// ローカルサーバー時は dir(プロジェクトルートの実パス)・kasc(実ファイル名)を含む
+const projectDefinitions = new Map();
+
+function updateProjectRootPath() {
+  const el = document.querySelector("#project-root-path");
+  if (!el) return;
+  const id = currentProjectId || "default";
+  const def = projectDefinitions.get(id);
+  el.value = def?.dir || `projects/${id}/`;
+  el.title = el.value;
+}
 
 function resolveProjectUrl(url) {
   if (typeof url !== "string" || !url) return url;
@@ -517,16 +529,19 @@ async function loadProjects() {
   } catch {}
   if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
   externalProjectIds.clear();
+  projectDefinitions.clear();
   const select = document.querySelector("#project-select");
   select.replaceChildren();
   definitions.forEach(project => {
     if (project.external) externalProjectIds.add(project.id);
+    projectDefinitions.set(project.id, project);
     const option = document.createElement("option");
     option.value = project.id;
     option.textContent = project.title || project.id;
     if (project.id === currentProjectId) option.selected = true;
     select.append(option);
   });
+  updateProjectRootPath();
 }
 
 async function loadInspectorConfig() {
@@ -5281,6 +5296,7 @@ function setupEvents() {
     if (currentProjectId) params.set("project", currentProjectId);
     else params.delete("project");
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+    updateProjectRootPath();
     // scope:"project" のプラグインレイヤーはプロジェクト単位のデータとして切り離す
     pluginLayers.filter(item => item.scope === "project").forEach(removePluginLayer);
     try {

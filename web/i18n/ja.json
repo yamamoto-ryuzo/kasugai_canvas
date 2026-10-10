@@ -120,6 +120,8 @@
   "settings.dem.gsi1m": "地理院 1mメッシュ (DEM1A / 航空レーザー / 標高TP基準)",
   "settings.dem.heightHint": "<strong>高さ基準</strong>：「楕円体高 / WGS84」は3D地球・PLATEAU等の3D Tilesと整合します。「標高 / 平均海面基準」「地理院(TP基準=東京湾平均潮位面)」はジオイド基準のため、ジオイド高（日本域で約30〜40m）の分だけ楕円体高より低く描画されます(3D Tilesが地面に埋もれて見える場合があります)。「地理院」は日本域のみ有効です。",
   "settings.project.label": "プロジェクト",
+  "settings.project.root": "プロジェクトルート",
+  "settings.project.rootHint": "プロジェクト内の相対パス(DATA/ 等)はこのフォルダを基準に解決されます。",
   "settings.layer.drapeTarget": "ドレープ対象地形",
   "settings.layer.drapeApply": "ドレープを適用するレイヤー",
   "settings.layer.geojsonPrimitive": "ベクター高速ドレープ (実験的)",

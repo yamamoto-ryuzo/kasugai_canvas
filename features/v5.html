@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.4.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.5.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -118,6 +118,7 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
       <p>インストーラー版は <code>.kasc</code> 拡張子をアプリに関連付けます。<code>.kasc</code> ファイルをダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録し、そのプロジェクトを開いた状態でブラウザが起動します（起動済みなら実行中のインスタンスに <code>/api/projects/register</code> で登録を引き継ぎます）。</p>
       <ul>
         <li><strong>その場所がプロジェクトルート</strong>: <code>.kasc</code> のあるフォルダがそのまま <code>/projects/&lt;id&gt;/</code> の配信元になり、<code>DATA/</code> 等の相対参照はすべてそのフォルダ基準で解決されます。<code>.kasc</code> + <code>DATA/</code> をまとめたフォルダを納品すれば、受け取った側はダブルクリックだけで開けます（納品用ローカル化の出力とも整合）</li>
+        <li><strong>ルートの確認</strong>: 設定 &gt; プロジェクトタブの「プロジェクトルート」に現在のプロジェクトの実フォルダが表示されます。外部プロジェクトは登録フォルダ、通常プロジェクトは <code>projects/&lt;id&gt;/</code> の実パスで、相対参照がどこに解決されるかをその場で確認できます</li>
         <li><strong>ファイル名は自由</strong>: <code>kasugai_canvas.kasc</code> 以外の名前でも開けます。同じフォルダに複数の .kasc を置けば、それぞれ別プロジェクトとして登録されます</li>
         <li><strong>システムとプロジェクトの分離管理</strong>: 登録情報は exe 隣の <code>kasugai_canvas.projects.json</code> に永続化され、設定パネルのプロジェクト一覧に残ります（<code>external</code> フラグ付き）。プロジェクトをインストール先の <code>projects/</code> に置く必要はなく、任意のフォルダ・ドライブに配置できます</li>
         <li><strong>表示名</strong>: フォルダ内に <code>project.json</code>（<code>{"title": "..."}</code>）があればその title、なければ群マニフェストの title、さらに無ければフォルダ名を表示名にします（起動対象も群メンバーも同じ規則）</li>

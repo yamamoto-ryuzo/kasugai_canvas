@@ -120,6 +120,8 @@
   "settings.dem.gsi1m": "국토지리원 1m 메시 (DEM1A / 항공 라이다 / 표고 TP 기준)",
   "settings.dem.heightHint": "<strong>높이 기준</strong>: 「타원체고 / WGS84」는 3D 지구 및 PLATEAU 등의 3D Tiles와 일치합니다. 「표고 / 평균 해수면」과 「국토지리원 (TP 기준 = 도쿄만 평균 조위면)」은 지오이드 기준이므로 일본 지역의 지오이드고(약 30~40m)만큼 타원체고보다 낮게 표시됩니다 (3D Tiles가 지면에 묻혀 보일 수 있습니다). 「국토지리원」은 일본 지역만 유효합니다.",
   "settings.project.label": "프로젝트",
+  "settings.project.root": "프로젝트 루트",
+  "settings.project.rootHint": "프로젝트 내 상대 경로(DATA/ 등)는 이 폴더를 기준으로 해석됩니다.",
   "settings.layer.drapeTarget": "드레이프 대상 지형",
   "settings.layer.drapeApply": "드레이프할 레이어",
   "settings.layer.geojsonPrimitive": "벡터 고속 드레이프 (실험적)",

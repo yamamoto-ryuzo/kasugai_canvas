@@ -3256,14 +3256,28 @@ fn merged_projects_manifest(state: &AppState) -> Value {
         .iter()
         .filter_map(|def| def.get("id").and_then(Value::as_str).map(str::to_string))
         .collect();
+    // プロジェクトルートの実パスはローカル実行時のみ通知する
+    // (コンテナ公開環境でサーバー内パスを見せないため)
+    if state.is_local {
+        for def in definitions.iter_mut() {
+            if let Some(id) = def.get("id").and_then(Value::as_str) {
+                def["dir"] = json!(state.projects_dir.join(id).to_string_lossy());
+            }
+        }
+    }
     if let Ok(list) = state.external_projects.lock() {
         for ext in list.iter() {
             if !known.contains(&ext.id) {
-                definitions.push(json!({
+                let mut entry = json!({
                     "id": ext.id,
                     "title": ext.title,
                     "external": true,
-                }));
+                });
+                if state.is_local {
+                    entry["dir"] = json!(ext.dir);
+                    entry["kasc"] = json!(ext.kasc);
+                }
+                definitions.push(entry);
             }
         }
     }

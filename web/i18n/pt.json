@@ -120,6 +120,8 @@
   "settings.dem.gsi1m": "Malha GSI 1m (DEM1A / LiDAR aéreo / elevação datum TP)",
   "settings.dem.heightHint": "<strong>Datum de altura</strong>: «Altura elipsoidal / WGS84» alinha-se com o globo 3D e 3D Tiles como PLATEAU. «Elevação / nível médio do mar» e «GSI (datum TP = nível médio de maré da baía de Tóquio)» são referenciadas ao geoide, portanto aparecem cerca de 30–40 m abaixo da altura elipsoidal conforme a ondulação do geoide no Japão (3D Tiles podem parecer enterrados). As fontes «GSI» cobrem apenas o Japão.",
   "settings.project.label": "Projeto",
+  "settings.project.root": "Raiz do projeto",
+  "settings.project.rootHint": "Os caminhos relativos do projeto (DATA/ etc.) são resolvidos a partir desta pasta.",
   "settings.layer.drapeTarget": "Terreno sobre o qual drapear",
   "settings.layer.drapeApply": "Camadas a drapear",
   "settings.layer.geojsonPrimitive": "Drapeamento rápido de vetores (experimental)",

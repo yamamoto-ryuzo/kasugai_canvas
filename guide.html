@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.4.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.5.0</span></h1>
       <p>使い方・インストール — 起動・プロジェクト構成・配布と公開</p>
     </header>
     <main>
@@ -60,7 +60,7 @@ python run.py --release  # リリース版を起動</code></pre>
         </div>
         <div class="url-box">
           <h3>起動方法（.kasc ファイルから起動・インストーラー版）</h3>
-          <p>インストーラー版は <code>.kasc</code> 拡張子を関連付けます。任意のフォルダにある <code>.kasc</code> をダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録して開きます。<code>.kasc</code> のあるフォルダがそのままプロジェクトルートになり、<code>DATA/</code> などの相対参照はそのフォルダ基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> をまとめたフォルダを渡すだけで納品できます。登録はプロジェクト一覧に残り、システムとは別の場所に複数プロジェクトを管理できます（ファイル名は <code>kasugai_canvas.kasc</code> 以外でも可）。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
+          <p>インストーラー版は <code>.kasc</code> 拡張子を関連付けます。任意のフォルダにある <code>.kasc</code> をダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録して開きます。<code>.kasc</code> のあるフォルダがそのままプロジェクトルートになり、<code>DATA/</code> などの相対参照はそのフォルダ基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> をまとめたフォルダを渡すだけで納品できます。登録はプロジェクト一覧に残り、システムとは別の場所に複数プロジェクトを管理できます（ファイル名は <code>kasugai_canvas.kasc</code> 以外でも可）。設定 &gt; プロジェクトタブの「プロジェクトルート」で、現在のプロジェクトが実際にどのフォルダを基準にしているか確認できます。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
           <h4>納品パッケージの推奨構造（プロジェクト群＋共有 DATA/）</h4>
           <pre><code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡す
 ├─ DATA/                  … 全プロジェクト群で共有（../../DATA/x で参照）

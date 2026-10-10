@@ -120,6 +120,8 @@
   "settings.dem.gsi1m": "国土地理院 1m 网格（DEM1A / 航空激光雷达 / 海拔 TP 基准）",
   "settings.dem.heightHint": "<strong>高程基准</strong>：“椭球高 / WGS84”与 3D 地球及 PLATEAU 等 3D Tiles 对齐。“海拔 / 平均海平面”和“国土地理院（TP 基准 = 东京湾平均潮位面）”以大地水准面为基准，因此在日本地区比椭球高低约 30–40 米（3D Tiles 可能看起来被埋入地下）。“国土地理院”数据源仅覆盖日本。",
   "settings.project.label": "项目",
+  "settings.project.root": "项目根目录",
+  "settings.project.rootHint": "项目中的相对路径（DATA/ 等）以此文件夹为基准解析。",
   "settings.layer.drapeTarget": "贴地目标地形",
   "settings.layer.drapeApply": "要贴地的图层",
   "settings.layer.geojsonPrimitive": "矢量高速贴地（实验性）",
