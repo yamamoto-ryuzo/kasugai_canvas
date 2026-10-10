@@ -11,27 +11,24 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
-      <p>V3: AI 連携 — Gemini チャット・runCode・kasugaiApi</p>
+      <p>V3: AI 連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="ai">V3: AI 連携</h2>
       <p>Gemini API を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="../google.html">Google 連携・AI</a> を参照してください。</p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>🗨️ AI チャット（Gemini 連携）</h3>
-          <p>設定 → Google で API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセット・地形/効果・Fly パス・プロジェクト切替などを実行。履歴はプロジェクト単位で保存。APIキー未設定時はローカルコマンド（<code>/fly</code> 等）が使える</p>
-        </div>
-        <div class="feature-card">
-          <h3>🧪 runCode サンドボックス</h3>
-          <p>AI が生成した JavaScript を opaque origin iframe + postMessage ブリッジで安全に実行し、地図を操作するブラウザ内コード実行基盤</p>
-        </div>
-        <div class="feature-card">
-          <h3>🔌 kasugaiApi</h3>
-          <p><code>window.kasugaiApi</code> で viewer・カメラ・レイヤー・イベントに外部からアクセスする操作 API。プラグイン・外部エージェントの土台</p>
-        </div>
-      </div>
+
+      <h3>🗨️ AI チャット（Gemini 連携）</h3>
+      <p>設定 → Google タブで Gemini API キーを登録すると、右下のチャットパネルから自然言語で地図を操作できます。ブラウザから Gemini API を直接呼び出す構成（BYO キー方式）で、静的配信のまま利用可能です。function calling により flyTo・レイヤー/ベースマップ切替・検索・カメラプリセット・地形/表示効果・Fly パス選択・プロジェクト切替などを実行します。</p>
+      <p>チャット履歴はプロジェクト単位で永続化されます。AI の回答言語は UI 言語に追随します。API キー未設定時はローカルコマンド（<code>/fly</code> 等）が使えます。</p>
+      <p>実行されるツール群は <code>/api/capabilities</code> で取得したバックエンド能力に応じて出し分けられます（ティア分け。公開環境ではセッション内に閉じる安全な機能のみ）。</p>
+
+      <h3>🧪 runCode サンドボックス</h3>
+      <p>AI が生成した JavaScript を opaque origin の iframe + postMessage ブリッジで実行するブラウザ内コード実行基盤です。メイン画面とは DOM・ストレージが分離された状態で <code>kasugaiApi</code> 経由のみ地図を操作できるため、生成コードが誤動作しても本体状態や他ユーザーの共有資源を汚染しません。ブラウザローカルの IndexedDB プラグイン生成もこの基盤の上にあります。</p>
+
+      <h3>🔌 kasugaiApi</h3>
+      <p><code>window.kasugaiApi</code> は viewer・カメラ・レイヤー・イベントへ外部からアクセスする操作 API です。AI チャットの function calling、runCode サンドボックス内コード、プラグイン、外部エージェントの actions 実行がすべてこの API を通る共通経路になっています。イベント購読（<code>camera-changed</code> 等）もここから行えます。</p>
 
     </main>
   </div>

@@ -11,28 +11,31 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
-      <p>V4: プラグイン（認証機構）・外部連携</p>
+      <p>V4: プラグイン（認証機構）・外部連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="plugins">V4: プラグイン（認証機構）・外部連携</h2>
       <p>拡張可能なプラグイン機構と認証方式の導入に加え、データ形式・外部サービス連携を大きく拡充しました。</p>
-      <div class="features">
-        <a class="feature-card" href="../auth/">
-          <h3>🧩 プラグイン機構・認証方式</h3>
-          <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構。認証方式は 0〜7（認証なし / ローカル / 簡易パスワード / Cloudflare Pages / Workers / Cloud Run / IAP）から選択</p>
-        </a>
-        <div class="feature-card">
-          <h3>🗃️ クエリ系・大規模ベクター</h3>
-          <p><code>duckdb:</code> / <code>sql:</code> / <code>gpkg:</code> 行タイプで DuckDB-WASM・SQLite WASM による SQL 絞り込みレイヤー。GeoParquet・FlatGeobuf・GeoPackage を直接読み込み、bbox 連動・where 絞り込み・属性列プルーニングに対応。ベクター描画件数の上限・primitive バッチ描画で大規模データにも対応</p>
-        </div>
-        <div class="feature-card">
-          <h3>🗺️ Google Maps Platform 連携</h3>
-          <p>Geocoding / Places のハイブリッド検索、Street View リンク・候補ラインオーバーレイ。外部エージェント呼出し（エージェントタブにエンドポイントを設定し <code>POST {message, project, camera, layers, history}</code> → <code>actions</code> を実行）で Antigravity 等の外部構築エージェントと接続可能</p>
-        </div>
-      </div>
-      <p>認証方式の詳細は <a href="../auth/">認証とプラグイン</a>、データ形式の経路分類は <a href="../data.html">データ形式</a> を参照してください。</p>
+
+      <h3>🧩 プラグイン機構・認証方式</h3>
+      <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構です。認証方式は 0〜7（認証なし / ローカル / 簡易パスワード / Cloudflare Pages / Cloudflare Workers / Cloud Run / Cloud Run IAP）から選択でき、公開環境でも ID プロバイダの認証・承認の内側に置けます。</p>
+      <p>プラグインは <code>window.kasugaiApi</code> を通じて地図を操作します。AI が生成したプラグインはまず IndexedDB（ブラウザローカル草稿）に保存され、<code>.kasp</code> でエクスポート可 → レビュー後にローカル版で <code>PLUGIN/</code> へ公開、という「開発→草稿→公開」の昇格ルートを持ちます。高権限操作（プラグイン公開等）はフロント側で必ず確認ダイアログを挟みます。詳細は <a href="../auth/">認証とプラグイン</a> を参照してください。</p>
+
+      <h3>🗃️ クエリ系・大規模ベクター</h3>
+      <p>CesiumJS ネイティブ非対応の形式は「ブラウザ側でデコード → GeoJSON へ正規化 → 既存のベクター描画経路に流す」が基本ルールです。これによりレイヤー一覧・表示切替・フォーカス・ベクトル検索・属性パネルが新形式でも自動的に機能します。</p>
+      <ul>
+      <li><code>geoparquet:</code> — hyparquet（CDN 遅延ロード）で WKB/ネイティブ GEOMETRY を GeoJSON 化。常に全件読み込み</li>
+      <li><code>flatgeobuf:</code> — 公式 JS リーダーでレスポンスを ReadableStream のまま逐次デコード。全件読み込みだが全件バッファリングはしない</li>
+      <li><code>gpkg:</code> — sql.js(SQLite WASM) を module Worker で動かし GPKG を SQLite として直接開く。<code>where=</code>/<code>limit=</code>/<code>columns=</code>/<code>bbox=auto</code>（既定 ON。GPkgBinary エンベロープで JS 範囲判定）対応。QGIS の layer_styles(QML) を読んで既定スタイルに適用</li>
+      <li><code>duckdb:</code> / <code>sql:</code> — DuckDB-WASM で SQL 絞り込みしてから GeoJSON 化。<code>:bbox</code> プレースホルダで表示範囲連動、<code>proxy=on</code> でローカルサーバーの /api/fetch 経由取得（Range/HEAD 転送対応）</li>
+      </ul>
+      <p>クエリ系レイヤーは「検索は常に全件検索・表示はバッファの表示範囲のみ」の設計で、⏷フィルター編集による対話的な条件変更にも対応します。ベクター描画件数の上限・primitive バッチ描画（<code>render=primitive</code>）で大規模データにも対応します。形式の使い分けは <a href="../data.html">データ形式</a> を参照してください。</p>
+
+      <h3>🗺️ Google Maps Platform 連携</h3>
+      <p>設定 → Google タブで API キーを登録すると、Geocoding / Places を使ったハイブリッド検索と、Street View リンク・候補ラインオーバーレイが利用できます。検索は国土地理院/Yahoo/Google を切り替えて使えます。</p>
+      <p>外部エージェント呼出し（エージェントタブにエンドポイント URL を設定し、チャット入力を <code>POST {message, project, camera, layers, history}</code> → 応答 <code>{reply, actions}</code> の actions をチャットツールとして実行）で Antigravity 等の外部構築エージェントと接続できます。このプロトコルが V6 の ANTIGRAVITY エージェント API の契約です。詳細は <a href="../google.html">Google 連携・AI</a> を参照してください。</p>
 
     </main>
   </div>

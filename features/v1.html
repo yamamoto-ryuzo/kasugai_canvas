@@ -11,92 +11,70 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
-      <p>V1: GIS 基本機能 — Re:Earth GeoSuite 上位互換の GIS・デジタルツイン実装</p>
+      <p>V1: GIS 基本機能 — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="gis">V1: GIS 基本機能（Re:Earth GeoSuite 上位互換）</h2>
-      <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。</p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>📝 インスペクター一括設定</h3>
-          <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>flatgeobuf:</code> / <code>gpkg:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
-        </div>
-        <div class="feature-card">
-          <h3>🗺️ ベースマップ</h3>
-          <p><code>base:</code> または <code>xyz:</code> 行で指定。Basemap セレクタから 1 つだけアクティブ化。「ベースマップなし」「ベースマップ透明（地表色と背景を透過し、XYZ ドレープと地形の高さは維持）」も選択可能。セレクタ横の 🌐 アイコンで、現在の視点（位置・高度・方位・傾き）を Google Earth 形式に変換して新しいウィンドウで開く</p>
-        </div>
-        <div class="feature-card">
-          <h3>🔧 システムレイヤ制御</h3>
-          <p><code>layer:</code> 行で既存レイヤー名を指定し、表示 / 非表示を初期制御</p>
-        </div>
-        <div class="feature-card">
-          <h3>➕ レイヤー追加・管理</h3>
-          <p>XYZ タイル、3D Tiles、GeoJSON を URL 指定で追加。Layers パネルで表示切替</p>
-        </div>
-        <div class="feature-card">
-          <h3>📑 レイヤー一覧UI</h3>
-          <p>読み込んだレイヤーの表示切替、並び順変更、設定の永続化を視覚的に操作。各行の📍ボタンでレイヤー全体にフォーカス</p>
-        </div>
-        <div class="feature-card">
-          <h3>📂 レイヤグループ化</h3>
-          <p><code>/</code> 通常グループ、<code>//</code> 排他グループ。ラジオボタンのような排他制御</p>
-        </div>
-        <div class="feature-card">
-          <h3>🖼️ 凡例表示</h3>
-          <p><code>legend:</code> 行で画像 URL を指定。Legend タブに凡例画像を一覧表示</p>
-        </div>
-        <div class="feature-card">
-          <h3>🔎 住所検索</h3>
-          <p>国土地理院 / Yahoo ジオコーダ API を使い、住所・施設名で検索＋ FlyTo</p>
-        </div>
-        <div class="feature-card">
-          <h3>🧬 ベクトル検索</h3>
-          <p>全件読み込み系ベクター（GeoJSON/GeoParquet/FlatGeobuf）の属性値をレイヤー・属性・文字列で絞り込み FlyTo。対象は「全選択（非表示・未読込レイヤーも検索時に読み込んで対象化）」「表示レイヤ（表示中のみ）」「個別レイヤー（未読込は選択時に読み込み）」から選択</p>
-        </div>
-        <div class="feature-card">
-          <h3>📊 属性・値一覧</h3>
-          <p>全ベクターレイヤー（非表示・クエリ系含む）の属性を一覧。文字列検索・列ソート・行クリック FlyTo</p>
-        </div>
-        <div class="feature-card">
-          <h3>🎥 カメラプリセット</h3>
-          <p><code>cam:</code> 行で登録した位置へワンクリック FlyTo。緯度・経度・高さ・ピッチ・方位を設定</p>
-        </div>
-        <div class="feature-card">
-          <h3>ℹ️ Info 表示</h3>
-          <p><code>info:</code> 行で外部 HTML を Info タブに表示。プロジェクト説明やドキュメントを埋め込み</p>
-        </div>
-        <div class="feature-card">
-          <h3>📤 Share（位置情報共有）</h3>
-          <p>カメラ位置を URL ハッシュに保存。共有 URL コピーで同じ視点を共有</p>
-        </div>
-        <div class="feature-card">
-          <h3>🗺️ GeoJSON 3D ドレープ制御</h3>
-          <p>地面 / Terrain / 3D Tiles のどれに張り付くかをインスペクター行または設定で切替</p>
-        </div>
-        <div class="feature-card">
-          <h3>🛡️ ベクター描画件数の上限</h3>
-          <p>設定タブで entity 描画の合計件数を制限（既定 20000・0=無制限）。超過レイヤーは表示範囲内の地物のみ描画しカメラ移動で追随。検索・属性は常に全件対象</p>
-        </div>
-        <div class="feature-card">
-          <h3>⛰️ Terrain / Shadow</h3>
-          <p>地形表示と影表示の ON/OFF をワンクリックで切り替え。地形ソースは Re:Earth(楕円体高 / 標高)と国土地理院 DEM(5m+10m / 1m、TP基準)から選択可能</p>
-        </div>
-        <div class="feature-card">
-          <h3>🧭 ナビゲーション</h3>
-          <p>方位コンパス、2D / 3D 切替、Orbit / Fly モード切替、北リセット</p>
-        </div>
-        <div class="feature-card">
-          <h3>📊 属性（Attr）表示</h3>
-          <p>地物をクリックすると属性を一覧表示。重なった地物（ポリゴン等）は件数付きのヘッダー一覧（手前から順）になり、行をクリックで個別に属性を展開。3D Tiles（構造化メタデータ）・ベクター（entity/primitive）の各描画経路に対応</p>
-        </div>
-        <div class="feature-card">
-          <h3>🌐 多言語対応（8言語）</h3>
-          <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の 8 言語に対応。設定 → その他の言語セレクタで即時切替。初回はブラウザ言語から自動判定（未対応時は英語）、選択は localStorage に保存。AIチャットの回答言語も UI 言語に追随</p>
-        </div>
-      </div>
-      <p>設定書式の詳細は <a href="../inspector.html">.kasc 設定仕様</a>、バージョン横断の実装詳細（描画順・ドレープ・高さ基準・制限）は <a href="v0.html">V0: システム基本構成</a> を参照してください。</p>
+      <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。各機能の設定書式は <a href="../inspector.html">.kasc 設定仕様</a>、バージョン横断の実装詳細（描画順・ドレープ・高さ基準・制限）は <a href="v0.html">V0: システム基本構成</a> を参照してください。</p>
+
+      <h3>📝 インスペクター一括設定</h3>
+      <p>プロジェクトの設定は <code>projects/&lt;id&gt;/kasugai_canvas.kasc</code> に行単位のテキストとして記述します。レイヤーパネルの「Inspector」タブでテキスト全体を確認・編集でき、「適用」で即時反映されます。レイヤー行は <code>種類: 名前 | URL | オプション</code> の形式で、<code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>flatgeobuf:</code> / <code>gpkg:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>cloud:</code> 参照 / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> / <code>fly_geojson:</code> 等を扱えます。テキストベースなので .kasc ファイルをそのまま共有・版管理できます。</p>
+
+      <h3>🗺️ ベースマップ</h3>
+      <p><code>base:</code> または <code>xyz:</code> 行で定義した XYZ/TMS タイルをベースマップとして扱い、ツールバーの Basemap セレクタで1つだけアクティブにします。「ベースマップなし」は背景を透過し、「ベースマップ透明」は地表色と背景を透過しつつ XYZ ドレープと地形の高さを維持します。セレクタ横の 🌐 アイコンは、現在の視点（位置・高度・方位・傾き）を Google Earth 形式に変換して新しいウィンドウで開きます。</p>
+
+      <h3>🔧 システムレイヤ制御</h3>
+      <p><code>layer:</code> 行で既存レイヤー名を指定し、表示/非表示を初期状態として制御します。プロジェクトを開いた時点で特定レイヤーだけを見せたい場合に使います。非表示にされたベクターレイヤーはロード自体もスキップされ、表示ON・検索・フィルター変更のタイミングで初めて取得されます。</p>
+
+      <h3>➕ レイヤー追加・管理</h3>
+      <p>XYZ タイル・3D Tiles・GeoJSON などを URL 指定で追加できます。ローカルサーバー版では <code>DATA/</code> 内ファイルや <code>cloud:</code> スキームのクラウド上ファイルもレイヤーとして読み込めます。追加したレイヤーは Layers パネルで表示切替・並べ替えでき、設定（.kasc）に永続化されます。</p>
+
+      <h3>📑 レイヤー一覧UI</h3>
+      <p>読み込んだレイヤーを一覧し、チェックで表示切替、ドラッグ＆ドロップで並び替えができます。各行の 📍 ボタンでレイヤー全体の範囲へフォーカス（FlyTo）します。並べ替えた順序は <code>ImageryLayerCollection</code> の lower/raise や DataSource の index に反映され、表示切替や排他グループ動作は並べ替え後も維持されます。</p>
+
+      <h3>📂 レイヤーグループ化</h3>
+      <p>レイヤー名に <code>/</code> を含めるとフォルダのようなグループに、<code>//</code> を含めると排他グループ（同時に1つだけ表示・ラジオボタン的動作）になります。地物カテゴリの切替や対比表示に使えます。</p>
+
+      <h3>🖼️ 凡例表示</h3>
+      <p><code>legend:</code> 行で凡例画像の URL を指定すると Legend タブに一覧表示します。複数行で複数の凡例を登録できます。凡例画像は静的ファイル・外部 URL・ローカル <code>DATA/</code> 内ファイルのいずれも使えます。</p>
+
+      <h3>🔎 住所検索</h3>
+      <p>国土地理院の住所検索 API（既定）と Yahoo Local Search API（<code>yahooAppId</code> 設定で有効化）を使い、住所・施設名で検索してクリックで FlyTo します。Google Maps Platform の Geocoding / Places を使うハイブリッド検索は V4 の Google 連携側の機能です。</p>
+
+      <h3>🧬 ベクトル検索</h3>
+      <p>読み込み済みベクター（GeoJSON/GeoParquet/FlatGeobuf 等の全件読み込み系）の属性値を「レイヤー → 属性 → 値」の三段階またはテキスト検索で絞り込み、行クリックで FlyTo します。対象範囲は「全選択（非表示・未読込レイヤーも検索時に読み込んで対象化）」「表示レイヤ」「個別レイヤー」から選べます。クエリ系レイヤー（duckdb:/sql:/gpkg:）は索引ではなく SQL フィルター側で検索する設計のため対象外です。</p>
+
+      <h3>📊 属性・値一覧</h3>
+      <p>選択中または全ベクターレイヤーの属性・値を表形式で一覧し、文字列検索・列ソート・行クリック FlyTo に対応します。クエリ系レイヤーも選択肢に出し、内容は DB に対して直接クエリして取得します（検索索引ではなく全件対象）。</p>
+
+      <h3>🎥 カメラプリセット</h3>
+      <p><code>cam: 名前 | 緯度 | 経度 | 高さ | pitch | heading</code> 形式で登録した位置へ、Camera パネルのボタンでワンクリック FlyTo します。プレゼンの導線（Chapter 的な視点遷移）として使えます。</p>
+
+      <h3>ℹ️ Info 表示</h3>
+      <p><code>info:</code> 行で指定した外部 HTML を Info タブに表示します。スクリプト等はサニタイズされ、プロジェクト説明・参考資料・凡例ドキュメントの埋め込みに使えます。</p>
+
+      <h3>📤 Share（位置情報共有）</h3>
+      <p>カメラ位置（緯度・経度・高さ・heading・pitch）を URL ハッシュに保持し、「共有 URL コピー」で同じ視点を再現するリンクを発行します。ハッシュ形式のためカメラ移動で URL が自動更新され、開いた側はアニメーション付きでその視点へ FlyTo します。プロジェクト指定はクエリ（<code>?project=</code>）に保持されます。</p>
+
+      <h3>🗺️ GeoJSON 3D ドレープ制御</h3>
+      <p>ベクターレイヤーが「地面 / Terrain（DEM）/ 3D Tiles」のどの面に追従するかを、インスペクター行のオプションまたは設定パネルで切り替えます。地形ありの現地調査資料では張り付き先の選択が見え方を左右します。詳細な仕組みは <a href="v0.html#terrain">V0 の地形・ドレープ節</a> を参照してください。</p>
+
+      <h3>🛡️ ベクター描画件数の上限</h3>
+      <p>設定タブで entity 描画ベクターの合計件数バジェットを制限します（既定 20000・0/空欄=無制限）。上限超過時は「ファイル先頭 N 件」ではなく<strong>表示範囲内の地物を優先</strong>して描画し、カメラ移動で追従します。切り捨ては描画のみで、検索索引・属性一覧は常に全件対象です。一覧には <code>shown/total</code> バッジが出ます。</p>
+
+      <h3>⛰️ Terrain / Shadow</h3>
+      <p>地形表示と影表示をワンクリックで ON/OFF します。地形ソースは Re:Earth Terrain（楕円体高 / 標高）と国土地理院 DEM（5m+10m / 1m、TP基準）から選択可能で、CesiumWorldTerrain は Ion アクセスが必要なため同梱していません。高さ基準の違い（楕円体高 / 標高）は数十 m のずれになるため、3D Tiles の高さ基準に合わせた選択が必要です（<a href="v0.html#terrain">詳細</a>）。</p>
+
+      <h3>🧭 ナビゲーション</h3>
+      <p>ナビゲーションツールバーに方位コンパス・2D/3D 切替・Orbit/Fly モード切替・北リセットを配置しています。Orbit は通常の地球閲覧、Fly はプレゼン用の飛行モード（V2）です。</p>
+
+      <h3>📊 属性（Attr）表示</h3>
+      <p>地物をクリックすると属性を Attr パネルに一覧表示します。重なった地物（ポリゴン等の面重なり）は <code>scene.drillPick</code> で最大16件を手前から順に拾い、件数付きヘッダー一覧として表示し、行クリックで個別属性を展開します。3D Tiles（構造化メタデータ <code>Cesium3DTileFeature</code>）・ベクター（entity/primitive）の各描画経路を同じ形式に正規化して扱います。</p>
+
+      <h3>🌐 多言語対応（8言語）</h3>
+      <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の8言語に対応しています。設定 → その他の言語セレクタで即時切替でき、初回はブラウザ言語から自動判定します（未対応言語は英語）。選択は localStorage に保存され、AIチャットの回答言語も UI 言語に追随します。翻訳の基準言語は英語（<code>en.json</code> がフォールバック辞書）です。</p>
 
     </main>
   </div>

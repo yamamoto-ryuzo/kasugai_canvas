@@ -15,52 +15,173 @@
     </header>
     <main>
       <h2 id="themes">機能テーマとバージョン</h2>
-      <p>メジャーバージョンごとの機能テーマは次のとおりです。V0 はバージョン横断のシステム基本構成です。各バージョンの詳細はリンク先の個別ページを参照してください。</p>
+      <p>メジャーバージョンごとの機能テーマは次のとおりです。以下、機能をこの流れに沿ってカード形式で簡単に説明します。各カードの詳細・バージョン横断の実装詳細（<a href="features/v0.html">V0: システム基本構成</a>）はリンク先の個別ページを参照してください。</p>
       <table>
       <thead>
       <tr><th>バージョン</th><th>機能テーマ</th></tr>
       </thead>
       <tbody>
       <tr><td><a href="features/v0.html">V0</a></td><td>システム基本構成（横断的な実装詳細）</td></tr>
-      <tr><td><a href="features/v1.html">V1</a></td><td>GIS 基本機能</td></tr>
-      <tr><td><a href="features/v2.html">V2</a></td><td>プレゼンテーション機能</td></tr>
-      <tr><td><a href="features/v3.html">V3</a></td><td>AI 連携</td></tr>
-      <tr><td><a href="features/v4.html">V4</a></td><td>プラグイン（認証機構）・外部連携</td></tr>
-      <tr><td><a href="features/v5.html">V5</a></td><td>アプリ化（ローカル連携）</td></tr>
+      <tr><td><a href="#gis">V1</a></td><td>GIS 基本機能</td></tr>
+      <tr><td><a href="#presentation">V2</a></td><td>プレゼンテーション機能</td></tr>
+      <tr><td><a href="#ai">V3</a></td><td>AI 連携</td></tr>
+      <tr><td><a href="#plugins">V4</a></td><td>プラグイン（認証機構）・外部連携</td></tr>
+      <tr><td><a href="#app">V5</a></td><td>アプリ化（ローカル連携）</td></tr>
       <tr><td><a href="features/v6.html">V6（予約）</a></td><td>ANTIGRAVITY エージェント完成</td></tr>
       </tbody>
       </table>
 
+      <h2 id="gis">V1: GIS 基本機能（Re:Earth GeoSuite 上位互換）</h2>
+      <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。<a href="features/v1.html">詳細 →</a></p>
       <div class="features">
-        <a class="feature-card" href="features/v0.html">
-          <h3>🏗️ V0: システム基本構成</h3>
-          <p>現行実装の構成・UI パネル・レイヤーと描画順・地形/ドレープ/高さ基準・制限・構想など、バージョン横断の実装詳細</p>
-        </a>
-        <a class="feature-card" href="features/v1.html">
-          <h3>🗺️ V1: GIS 基本機能</h3>
-          <p>Re:Earth GeoSuite 上位互換の GIS・デジタルツイン実装。レイヤー管理・検索・属性・カメラプリセット・多言語対応など</p>
-        </a>
-        <a class="feature-card" href="features/v2.html">
-          <h3>🎬 V2: プレゼンテーション機能</h3>
-          <p>Fly モード・ルート描画・Google Earth 風 FlyTo。視点を動かして周囲に共有するプレゼンテーション機能</p>
-        </a>
-        <a class="feature-card" href="features/v3.html">
-          <h3>🗨️ V3: AI 連携</h3>
-          <p>Gemini AI チャットによる地図操作、runCode サンドボックス、kasugaiApi。ブラウザ内 AI 基盤</p>
-        </a>
-        <a class="feature-card" href="features/v4.html">
-          <h3>🧩 V4: プラグイン（認証機構）・外部連携</h3>
-          <p>プラグイン機構と認証方式 0〜7、クエリ系・大規模ベクター、Google Maps Platform・外部エージェント連携</p>
-        </a>
-        <a class="feature-card" href="features/v5.html">
-          <h3>🖥️ V5: アプリ化（ローカル連携）</h3>
-          <p>ローカル Rust サーバーと一体のアプリだから実現できる機能群。クラウドストレージ連携（rclone）・ドライブ割当・ローカルファイル保存・納品用ローカル化</p>
-        </a>
-        <a class="feature-card" href="features/v6.html">
-          <h3>🤖 V6（予約）: ANTIGRAVITY エージェント完成</h3>
-          <p>Cloud Run 上のエージェントサービスによる資料生成・レイヤー自動構成のデモ完走を完成条件とする構想</p>
-        </a>
+        <div class="feature-card">
+          <h3>📝 インスペクター一括設定</h3>
+          <p><code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>flatgeobuf:</code> / <code>gpkg:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> 等を行単位で一括設定</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ ベースマップ</h3>
+          <p><code>base:</code> または <code>xyz:</code> 行で指定。Basemap セレクタから 1 つだけアクティブ化。「ベースマップなし」「ベースマップ透明」も選択可能</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔧 システムレイヤ制御</h3>
+          <p><code>layer:</code> 行で既存レイヤー名を指定し、表示 / 非表示を初期制御</p>
+        </div>
+        <div class="feature-card">
+          <h3>➕ レイヤー追加・管理</h3>
+          <p>XYZ タイル、3D Tiles、GeoJSON を URL 指定で追加。Layers パネルで表示切替</p>
+        </div>
+        <div class="feature-card">
+          <h3>📑 レイヤー一覧UI</h3>
+          <p>読み込んだレイヤーの表示切替、並び順変更、設定の永続化を視覚的に操作。各行の📍ボタンでレイヤー全体にフォーカス</p>
+        </div>
+        <div class="feature-card">
+          <h3>📂 レイヤグループ化</h3>
+          <p><code>/</code> 通常グループ、<code>//</code> 排他グループ。ラジオボタンのような排他制御</p>
+        </div>
+        <div class="feature-card">
+          <h3>🖼️ 凡例表示</h3>
+          <p><code>legend:</code> 行で画像 URL を指定。Legend タブに凡例画像を一覧表示</p>
+        </div>
+        <div class="feature-card">
+          <h3>� 住所検索</h3>
+          <p>国土地理院 / Yahoo ジオコーダ API を使い、住所・施設名で検索＋ FlyTo</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧬 ベクトル検索</h3>
+          <p>全件読み込み系ベクター（GeoJSON/GeoParquet/FlatGeobuf）の属性値をレイヤー・属性・文字列で絞り込み FlyTo</p>
+        </div>
+        <div class="feature-card">
+          <h3>📊 属性・値一覧</h3>
+          <p>全ベクターレイヤー（非表示・クエリ系含む）の属性を一覧。文字列検索・列ソート・行クリック FlyTo</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎥 カメラプリセット</h3>
+          <p><code>cam:</code> 行で登録した位置へワンクリック FlyTo。緯度・経度・高さ・ピッチ・方位を設定</p>
+        </div>
+        <div class="feature-card">
+          <h3>ℹ️ Info 表示</h3>
+          <p><code>info:</code> 行で外部 HTML を Info タブに表示。プロジェクト説明やドキュメントを埋め込み</p>
+        </div>
+        <div class="feature-card">
+          <h3>📤 Share（位置情報共有）</h3>
+          <p>カメラ位置を URL ハッシュに保存。共有 URL コピーで同じ視点を共有</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ GeoJSON 3D ドレープ制御</h3>
+          <p>地面 / Terrain / 3D Tiles のどれに張り付くかをインスペクター行または設定で切替</p>
+        </div>
+        <div class="feature-card">
+          <h3>🛡️ ベクター描画件数の上限</h3>
+          <p>設定タブで entity 描画の合計件数を制限（既定 20000・0=無制限）。超過レイヤーは表示範囲内の地物のみ描画しカメラ移動で追随</p>
+        </div>
+        <div class="feature-card">
+          <h3>⛰️ Terrain / Shadow</h3>
+          <p>地形表示と影表示の ON/OFF をワンクリックで切り替え。地形ソースは Re:Earth(楕円体高 / 標高)と国土地理院 DEM(5m+10m / 1m、TP基準)から選択可能</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧭 ナビゲーション</h3>
+          <p>方位コンパス、2D / 3D 切替、Orbit / Fly モード切替、北リセット</p>
+        </div>
+        <div class="feature-card">
+          <h3>📊 属性（Attr）表示</h3>
+          <p>地物をクリックすると属性を一覧表示。重なった地物は件数付きのヘッダー一覧になり、行をクリックで個別に属性を展開</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌐 多言語対応（8言語）</h3>
+          <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の 8 言語に対応</p>
+        </div>
       </div>
+
+      <h2 id="presentation">V2: プレゼンテーション機能</h2>
+      <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。<a href="features/v2.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🛩️ Fly モード</h3>
+          <p>GeoJSON ルート自動追従・手動操縦、速度・高さ・ピッチ調整、ルート座標の基準切替（カメラ位置／画面中心）、ルート描画</p>
+        </div>
+        <div class="feature-card">
+          <h3>✏️ ルート描画</h3>
+          <p>Orbit モードで右クリックによるルート作成。高さ編集・保存・Fly 実行まで一連</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎬 Google Earth 風 FlyTo</h3>
+          <p>距離に応じた飛行時間＋ズームアウトから降下する弧を描いて移動</p>
+        </div>
+      </div>
+
+      <h2 id="ai">V3: AI 連携</h2>
+      <p>Gemini API を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。<a href="features/v3.html">詳細 →</a>（設定手順は <a href="google.html">Google 連携・AI</a>）</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🗨️ AI チャット（Gemini 連携）</h3>
+          <p>設定 → Google で API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセットなどを実行</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧪 runCode サンドボックス</h3>
+          <p>AI が生成した JavaScript を opaque origin iframe + postMessage ブリッジで安全に実行し、地図を操作するブラウザ内コード実行基盤</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔌 kasugaiApi</h3>
+          <p><code>window.kasugaiApi</code> で viewer・カメラ・レイヤー・イベントに外部からアクセスする操作 API。プラグイン・外部エージェントの土台</p>
+        </div>
+      </div>
+
+      <h2 id="plugins">V4: プラグイン（認証機構）・外部連携</h2>
+      <p>拡張可能なプラグイン機構と認証方式の導入に加え、データ形式・外部サービス連携を大きく拡充しました。<a href="features/v4.html">詳細 →</a></p>
+      <div class="features">
+        <a class="feature-card" href="auth/">
+          <h3>🧩 プラグイン機構・認証方式</h3>
+          <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構。認証方式は 0〜7 から選択</p>
+        </a>
+        <div class="feature-card">
+          <h3>🗃️ クエリ系・大規模ベクター</h3>
+          <p><code>duckdb:</code> / <code>sql:</code> / <code>gpkg:</code> 行タイプで DuckDB-WASM・SQLite WASM による SQL 絞り込みレイヤー。GeoParquet・FlatGeobuf・GeoPackage を直接読み込み</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ Google Maps Platform 連携</h3>
+          <p>Geocoding / Places のハイブリッド検索、Street View リンク・候補ラインオーバーレイ。外部エージェント呼出しにも対応</p>
+        </div>
+      </div>
+
+      <h2 id="app">V5: アプリ化（ローカル連携）</h2>
+      <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。<a href="features/v5.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>☁️ クラウドストレージ連携（rclone）</h3>
+          <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）と <code>cloud:</code> スキームの2形態</p>
+        </div>
+        <div class="feature-card">
+          <h3>💾 ローカルファイル保存</h3>
+          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能</p>
+        </div>
+        <div class="feature-card">
+          <h3>📦 納品用ローカル化</h3>
+          <p>接続中のクラウドルートを <code>DATA/</code> へ丸ごとコピーし、<code>.kasc</code> の <code>cloud:</code> 参照を書き換え。rclone 不要のローカル完結パッケージとして納品可能</p>
+        </div>
+      </div>
+
+      <h2 id="agent">V6（予約）: ANTIGRAVITY エージェント完成</h2>
+      <p>Cloud Run 上のエージェントサービス（FastAPI + Gemini API/ADK）が外部エージェントプロトコル（<code>POST /agent/chat</code> → <code>{reply, actions, report}</code>）で稼働し、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く状態を V6 の完成条件としています。<a href="features/v6.html">詳細 →</a>（実装計画は <a href="hackathon.html">ハッカソン</a>）</p>
 
     </main>
   </div>

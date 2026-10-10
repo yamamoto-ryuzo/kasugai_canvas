@@ -11,37 +11,25 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
-      <p>V5: アプリ化（ローカル連携） — ローカルサーバーと一体の「アプリ」だから実現できる機能群</p>
+      <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="app">V5: アプリ化（ローカル連携）</h2>
       <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。ブラウザの外（OS・ファイルシステム・ネイティブバイナリ）に踏み込むため、静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。ブラウザ GIS との差別化要因となる流れで、今後もこのテーマで拡張していきます。</p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>☁️ クラウドストレージ連携（rclone）</h3>
-          <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）で仮想ドライブ化するほか、アプリ内 <code>cloud:</code> スキームでレイヤーURLから直接参照可能。読み取り専用 / 読み書きの権限選択、フォルダURLによるルート固定、.kasc のクラウド保存に対応（ローカルサーバーのみ）</p>
-        </div>
-        <div class="feature-card">
-          <h3>💾 ローカルファイル保存</h3>
-          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能。描画ルート保存・インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet の自動行追記）にも利用</p>
-        </div>
-        <div class="feature-card">
-          <h3>📦 納品用ローカル化</h3>
-          <p>接続中のクラウドルートを <code>projects/&lt;id&gt;/DATA/</code> へ丸ごとコピーし、<code>.kasc</code> の <code>cloud:</code> 参照を <code>DATA/</code> に書き換えます。納品先は rclone・OAuth 設定不要でファイル一式だけで動くローカル完結パッケージになります</p>
-        </div>
-      </div>
+
+      <h3>☁️ クラウドストレージ連携（rclone）</h3>
+      <p>設定 → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続します。2つの利用形態があります：</p>
+      <ul>
+        <li><strong>Windows ドライブ割当</strong> — <code>rclone serve webdav</code> を localhost で起動し <code>net use</code> でドライブ化（既定 K:）。エクスプローラーや Office・QGIS など他のアプリから通常のドライブとして使えます</li>
+        <li><strong>アプリ内 <code>cloud:</code> スキーム</strong> — レイヤーURLに <code>cloud:フォルダ/file.geojson</code> と書くと <code>/api/cloud/file</code> プロキシ経由で接続中ストレージのファイルを読み込みます。HTTP Range を転送するため DuckDB-WASM 等の範囲読み経路でも利用でき、ドライブ割当なしで動作します</li>
+      </ul>
+      <p><strong>なぜ静的配信（HTTP サーバーのみ）では実現できないか</strong>: rclone の実行・ドライブ割当（<code>net use</code>）・<code>cloud:</code> の解決プロキシはすべてブラウザ外の処理であり、Box 等の OAuth 認可コードフローに必要な client_secret も静的 web には埋め込めません。そのため本機能はアプリ（ローカルサーバー）専用です。</p>
       <div class="url-box">
         <h3>クラウドストレージ連携（rclone）の詳細</h3>
         <p>Box Drive 等のクライアントがインストールできない環境でも、単体バイナリで動く <strong>rclone</strong> を介してクラウドストレージを利用する機能です。ローカルサーバー（local ティア）のみで有効で、<code>/api/capabilities</code> の <code>cloudRclone</code> で提供可否を判定します。コンテナ実行時は <code>/api/cloud/*</code> を公開しません。</p>
-        <p><strong>この連携の意義</strong>: 静的 HTTP サーバーにデータを置くのではなく、認証・ACL・監査・バージョン履歴を備えたクラウドストレージをデータ基盤にできます。各ユーザーは自分の OAuth アカウントで接続するためプロバイダ側で権限が強制され、<code>.kasc</code> には <code>cloud:</code> パスのみが書かれ認証情報は共有されません。同じフォルダを K: ドライブ経由で Office・QGIS・エクスプローラーからも使えるため、資料や GIS データを一元管理するシステムを組みやすい構成です。また「DATA/へ同期（納品用）」でクラウドの内容を <code>projects/&lt;id&gt;/DATA/</code> に丸ごとコピーし <code>cloud:</code> 参照を書き換えれば、rclone 不要のローカル完結パッケージとして納品できます。</p>
-        <p><strong>なぜ静的配信（HTTP サーバーのみ）では実現できないか</strong>: rclone の実行・ドライブ割当（<code>net use</code>）・<code>cloud:</code> の解決プロキシはすべてブラウザ外の処理であり、Box 等の OAuth 認可コードフローに必要な client_secret も静的 web には埋め込めません。そのため本機能はアプリ（ローカルサーバー）専用です。</p>
-        <h3>2つの利用形態</h3>
-        <ul>
-          <li><strong>Windows ドライブ割当</strong>: <code>rclone serve webdav</code> を localhost で起動し <code>net use</code> でドライブ化（既定 K:、E〜Z から選択可）。エクスプローラーや他のアプリから通常のドライブとして使えます</li>
-          <li><strong>アプリ内 <code>cloud:</code> スキーム</strong>: レイヤーURLに <code>cloud:フォルダ/file.geojson</code> と書くと、ローカルサーバーの <code>/api/cloud/file</code> プロキシ経由で接続中ストレージのファイルを直接読み込みます。HTTP Range を転送するため DuckDB-WASM 等の範囲読み経路でも利用でき、ドライブ割当なしで動作します</li>
-        </ul>
+        <p><strong>この連携の意義</strong>: 静的 HTTP サーバーにデータを置くのではなく、認証・ACL・監査・バージョン履歴を備えたクラウドストレージをデータ基盤にできます。各ユーザーは自分の OAuth アカウントで接続するためプロバイダ側で権限が強制され、<code>.kasc</code> には <code>cloud:</code> パスのみが書かれ認証情報は共有されません。同じフォルダを K: ドライブ経由で Office・QGIS・エクスプローラーからも使えるため、資料や GIS データを一元管理するシステムを組みやすい構成です。</p>
         <h3>rclone の導入</h3>
         <ul>
           <li>自動検出の順序: 設定ファイル（<code>kasugai_canvas.cloud.json</code> の <code>rclonePath</code>）→ PATH → <code>C:\kasugai\rclone\rclone.exe</code></li>
@@ -76,6 +64,15 @@ POST /api/cloud/localize  … 接続ルートを DATA/ へコピーし .kasc の
           <li>rclone の OAuth トークンは rclone 側の設定ファイル（<code>%APPDATA%\rclone\rclone.conf</code>）で管理されます</li>
         </ul>
       </div>
+
+      <h3>💾 ローカルファイル保存</h3>
+      <p>ローカルサーバー版の <code>/api/files</code> API で <code>projects/&lt;id&gt;/DATA/</code> へのファイル書き込み・一覧・削除ができます。ブラウザ側は File System Access API による DATA/ 直接保存も併存します（Chromium系のみ・選択フォルダへ直接書込み）。</p>
+      <p>利用例: 描画ルートの保存、インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet を選ぶと対応する行タイプのレイヤー行を自動追記）、ダウンロードしたデータのプロジェクト内配置など。静的配信では利用できません（サーバー API 依存機能）。</p>
+
+      <h3>📦 納品用ローカル化</h3>
+      <p>クラウドパネルの「クラウドの内容をDATA/へ同期（納品用）」ボタン（または <code>POST /api/cloud/localize</code>）で、接続中のクラウドルートを <code>rclone copy</code> で <code>projects/&lt;id&gt;/DATA/</code> へ丸ごとコピーし、<code>.kasc</code> 内の <code>cloud:パス</code> 参照を <code>DATA/パス</code> に書き換えます。</p>
+      <p>これにより「クラウドを正とした構築・共有 → 納品時にローカル完結パッケージ化」という流れができます。納品先は rclone の設定も元のクラウドの OAuth 認証情報も不要で、ファイル一式だけで動作します。</p>
+      <p>安全対策として、<code>..</code>・バックスラッシュ・制御文字を含む <code>cloud:</code> 参照はプロジェクト外に出るため書き換え対象外です（クラウド参照のまま残ります）。大容量フォルダではダウンロードに時間がかかる点と、同期後はクラウド側の更新が自動反映されない点に注意してください。</p>
 
     </main>
   </div>
