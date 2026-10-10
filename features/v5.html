@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.5.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.6.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -98,6 +98,8 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
 ├─ DATA/                  … 共有スコープ
 │  ├─ cloud/              … 取得元別サブフォルダ（生成物）
 │  ├─ http/               … HTTP・HTTPS データと _sources.json（生成物）
+│  │  ├─ 3dtiles/         … HTTP 由来の 3D Tiles タイルセット一式（_sources.json に記録）
+│  │  └─ xyz/             … XYZ タイルの受け皿（タイル本体はユーザーが配置）
 │  └─ local/              … 既存の共有 ../DATA の複製（../DATA/local/x で参照）
 └─ ProjectA/              … 元プロジェクトの複製（kasc・project.json・DATA/ 含む）
    ├─ a.kasc              … ../DATA/http/x.csv・DATA/local/x などの相対参照
@@ -107,11 +109,12 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
       <p>共有は <code>_local/DATA/</code> に保存して参照を <code>../DATA/http/x</code> に、専用は <code>_local/&lt;name&gt;/DATA/</code> に保存して参照を <code>DATA/http/x</code> に書き換えます。元プロジェクトの DATA/ は <code>DATA/local/</code>、親の共有 DATA/ は <code>_local/DATA/local/</code> に集約して複製し、既存参照も <code>DATA/local/x</code>・<code>../DATA/local/x</code> に書き換えるため、生成物（http/・cloud/）と元からあったデータ（local/）は別フォルダで混在しません。<code>_local/</code> フォルダだけで全参照が解決します。再実行は <code>_local/</code> を毎回作り直すので、前回の出力や別スコープの残りファイルは混ざりません（<code>_local/</code> 内に置いた独自ファイルは消えます）。ZIP 納品は <code>_local/</code> フォルダごと渡し、受け取り側は複製内の .kasc を開くだけで群登録されます。</p>
       <ul>
         <li><code>DATA/cloud/&lt;取得元ハッシュ&gt;/</code>: 接続中のクラウドルートを <code>rclone copy</code> でコピーします。別の接続先・ルートの同名ファイルが混ざらないよう取得元ごとに分け、共有時は <code>../DATA/cloud/&lt;取得元ハッシュ&gt;/パス</code> に書き換えます（未接続時はスキップ）。取得元の対応は <code>cloud/_sources.json</code> に保存します</li>
-        <li><code>DATA/http/</code>（共有時は <code>../DATA/http/</code>）: <code>.kasc</code> 内の http(s) URL をサーバーがダウンロードして保存し、複製 .kasc の参照を書き換えます。対象はベクター系レイヤー行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>fly_geojson:</code>）の URL フィールド、<code>style=</code>/<code>qml=</code> オプション、<code>info:</code>/<code>legend:</code>、および <code>sql:</code> クエリ内の URL リテラル（同じ URL が他の行で取得済みなら同一ファイルを指します）。タイル系（<code>xyz:</code>/<code>base:</code>/<code>3dtiles:</code>）は巨大なため対象外です</li>
+        <li><code>DATA/http/</code>（共有時は <code>../DATA/http/</code>）: <code>.kasc</code> 内の http(s) URL をサーバーがダウンロードして保存し、複製 .kasc の参照を書き換えます。対象はベクター系レイヤー行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>fly_geojson:</code>）の URL フィールド、<code>style=</code>/<code>qml=</code> オプション、<code>info:</code>/<code>legend:</code>、および <code>sql:</code> クエリ内の URL リテラル（同じ URL が他の行で取得済みなら同一ファイルを指します）。<code>xyz:</code> 行のリモート <code>{z}/{x}/{y}</code> テンプレートはタイル本体を取得せず、ユーザーがタイルを配置する受け皿 <code>http/xyz/&lt;name&gt;/</code>（配置手順の <code>_README.txt</code> 同梱）を生成して参照をローカルテンプレートへ書き換えます（元 URL は <code>http/_sources.json</code> に記録）。ローカルの <code>DATA/...</code> タイル参照はディレクトリごと <code>local/</code> に複製されます。ベースマップ相当（<code>base:</code> 行）は対象外です</li>
+        <li><code>DATA/http/3dtiles/&lt;name&gt;/</code>: <code>3dtiles:</code> 行のリモート URL は <code>tileset.json</code> を起点に、参照される外部タイルセット（.json）とコンテンツ（<code>content.uri</code>/<code>contents[].uri</code>）を再帰的に辿って一式取得します。ルート tileset.json のディレクトリ配下の参照は階層をそのまま保持し、ルート外・別オリジンの参照は <code>_ext/</code> に集めて参照元 JSON の uri を書き換えます。複製 .kasc の参照はローカルの tileset.json を指します。対応は <code>http/_sources.json</code> に保存します。ベースマップ相当のサービス（<code>tile.googleapis.com</code> の Google Photorealistic 3D Tiles・<code>assets.cesium.com</code>/<code>api.cesium.com</code> 等の全球・キー依存サービス）と implicit tiling は対象外で URL をそのまま残します。1タイルセットの取得上限は 10,000 ファイル・1ファイル 256MB です</li>
       </ul>
       <p>同一 URL の重複参照は1ファイルにまとめます。<code>http/_sources.json</code> の出典一覧と既存ファイルを確認し、別 URL の同名衝突（大文字小文字違いを含む）はハッシュ接尾辞で回避します。ダウンロード失敗時は元の URL を残し、応答の <code>failed</code> に記録します。<code>outputPath</code> はワークスペースのパス、<code>projectDir</code>・<code>dataPath</code> は実際の保存先、<code>dataReference</code> は複製 .kasc 基準の相対パスを返します。</p>
       <p><code>sql:</code> のファイル参照も <code>read_csv_auto('../DATA/http/x.csv')</code> のように相対パスで保存し、描画・属性検索時に現在のプロジェクトから解決します。納品先の登録IDに依存しません。HTTP(S)の保存先は <code>http/</code> に統一し、旧保存先との互換維持は行いません。スコープを切り替えると <code>_local/</code> 内の出力先が変わるだけで、元プロジェクト側のファイル移動は行いません。</p>
-      <p>これにより「クラウド・Web 上のデータを正とした構築 → 納品時にローカル完結パッケージ化」という流れができます。取得済みデータの参照には元のクラウドの認証情報は不要です。ただし対象外のタイル、取得失敗した参照、CDN依存資産などは別途必要であり、完全オフライン動作を保証するものではありません（クラウドの <code>cloud:</code> 接続行は自動接続を防ぐためコメント化されます）。</p>
+      <p>これにより「クラウド・Web 上のデータを正とした構築 → 納品時にローカル完結パッケージ化」という流れができます。取得済みデータの参照には元のクラウドの認証情報は不要です。ただし対象外のベースマップ（<code>base:</code>）やベースマップ相当の 3D Tiles、受け皿のみ生成した XYZ タイル本体、取得失敗した参照、CDN依存資産などは別途必要であり、完全オフライン動作を保証するものではありません（クラウドの <code>cloud:</code> 接続行は自動接続を防ぐためコメント化されます）。</p>
       <p>安全対策として、<code>..</code>・バックスラッシュ・制御文字を含む <code>cloud:</code> 参照はプロジェクト外に出るため書き換え対象外です（クラウド参照のまま残ります）。大容量フォルダではダウンロードに時間がかかる点に注意してください。元プロジェクトは変更されないため、再実行するたびに最新の .kasc から URL を再取得してワークスペースを作り直します（クラウド・元URL側の更新は再実行で反映されます）。</p>
 
       <h3>📂 .kasc ファイル関連付け（外部プロジェクト）</h3>

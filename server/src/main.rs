@@ -7,7 +7,7 @@ use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
@@ -1644,7 +1644,9 @@ enum RefPos {
 }
 
 // 行タイプごとの URL フィールド位置(| 区切りの先頭フィールドを 0 とする)。
-// タイル系(xyz/base/3dtiles)は巨大なため対象外で None を返す
+// タイル系(xyz/base/3dtiles)は DATA/http/ の単体取得では対象外で None を
+// 返す(3dtiles は tileset.json ツリーごと取るため collect_tileset_urls で
+// 別系統として収集する)
 fn kasc_url_field_index(line_type: &str, field_count: usize) -> Option<usize> {
     match line_type {
         "geojson" | "layer" | "geoparquet" | "flatgeobuf" | "gpkg" | "geopackage" | "duckdb"
@@ -1655,8 +1657,9 @@ fn kasc_url_field_index(line_type: &str, field_count: usize) -> Option<usize> {
     }
 }
 
-// ローカル参照の書き換え対象フィールド。タイル系はリモート取得こそ
-// 対象外だがローカルファイルを参照しうるため、全レイヤー行を対象にする
+// ローカル参照・リモート置換の書き換え対象フィールド。xyz/base のリモート
+// URL は取得しないがローカルファイルを参照しうるし、3dtiles は
+// DATA/http/3dtiles/ への参照に書き換えるため、全レイヤー行を対象にする
 fn kasc_local_ref_field_index(line_type: &str, field_count: usize) -> Option<usize> {
     match line_type {
         "xyz" | "base" | "3dtiles" => Some(1),
@@ -1899,14 +1902,450 @@ fn count_cloud_refs(text: &str) -> usize {
         .count()
 }
 
+// ---- 3dtiles のローカル化(tileset.json ツリーごと取得) ----
+// 3dtiles: 行のリモート参照は tileset.json 単体では意味を成さないため、
+// 参照される外部タイルセット(.json)とコンテンツ(content.uri/contents[].uri)
+// を辿って DATA/http/3dtiles/<name>/ 配下に一式取得する(取得元別の構成は
+// 他形式と同じ)。ルート tileset.json のディレクトリ配下に収まる参照は階層を
+// そのまま保持し、収まらない外部参照は _ext/ に集めて参照元 JSON の uri を
+// 書き換える
+
+// 1タイルセットの取得ファイル数上限(全球タイルセット等の暴走防止)
+const LOCALIZE_TILESET_MAX_FILES: usize = 10000;
+
+// ベースマップ相当の 3D Tiles サービス(全球カバレッジで APIキー/セッション
+// 依存のため納品パッケージへ取り込めないもの)は対象外とし URL を残す
+fn is_basemap_tileset_url(url: &str) -> bool {
+    let Some(host) = reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(|h| h.to_ascii_lowercase()))
+    else {
+        return false;
+    };
+    // Google Photorealistic 3D Tiles・Cesium ion 系
+    matches!(
+        host.as_str(),
+        "tile.googleapis.com" | "assets.cesium.com" | "api.cesium.com"
+    )
+}
+
+// .kasc 内の 3dtiles: 行の URL フィールド(タイトル | URL | ...)を正規化して
+// 列挙する。ツリーごとの取得になるため通常の DATA/http/ 収集とは別経路
+fn collect_tileset_urls(text: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let mut seen = HashSet::new();
+    for line in text.split('\n') {
+        let body = line.strip_suffix('\r').unwrap_or(line);
+        let Some(sep) = body.find(':') else {
+            continue;
+        };
+        if !body[..sep].trim().eq_ignore_ascii_case("3dtiles") {
+            continue;
+        }
+        let url = body[sep + 1..]
+            .split('|')
+            .nth(1)
+            .map(str::trim)
+            .unwrap_or_default();
+        if is_remote_url(url) {
+            let normalized = normalize_remote_url(url);
+            if seen.insert(normalized.clone()) {
+                urls.push(normalized);
+            }
+        }
+    }
+    urls
+}
+
+// http/3dtiles/ 内の保存先フォルダ名。tileset.json・root.json 等の汎用
+// ファイル名なら親フォルダ名を使い、衝突は呼び出し側で処理する
+fn localize_tileset_dir_name(url: &str) -> String {
+    let segments: Vec<String> = reqwest::Url::parse(url)
+        .ok()
+        .map(|u| {
+            u.path_segments()
+                .map(|s| {
+                    s.filter(|segment| !segment.is_empty())
+                        .map(percent_decode)
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    let stem = segments
+        .last()
+        .map(|name| split_file_ext(name).0.to_string())
+        .unwrap_or_default();
+    let name = if stem.is_empty()
+        || matches!(
+            stem.to_ascii_lowercase().as_str(),
+            "tileset" | "root" | "scene" | "index"
+        ) {
+        segments.iter().rev().nth(1).cloned().unwrap_or(stem)
+    } else {
+        stem
+    };
+    sanitize_file_name(&name)
+}
+
+// ルート tileset.json のディレクトリ配下に収まる URL なら、そのディレクトリ
+// からの相対パス(各セグメントをファイル名用にサニタイズ)を返す
+fn tileset_inner_path(root_dir: &reqwest::Url, url: &reqwest::Url) -> Option<String> {
+    if url.origin() != root_dir.origin() {
+        return None;
+    }
+    let inner = url.path().strip_prefix(root_dir.path())?;
+    let segments: Vec<String> = inner
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| sanitize_file_name(&percent_decode(segment)))
+        .collect();
+    if segments.is_empty() || segments.iter().any(|segment| segment.is_empty()) {
+        return None;
+    }
+    Some(segments.join("/"))
+}
+
+// ---- xyz: タイルのローカル化(受け皿のみ生成) ----
+// xyz: 行のリモート {z}/{x}/{y} テンプレートは、タイル本体の取得範囲が
+// 曖昧なため納品側ではダウンロードしない。代わりにユーザーがタイルを配置
+// する受け皿 DATA/http/xyz/<name>/ を生成し、参照をそのローカルテンプレート
+// へ書き換える(元 URL は http/_sources.json に記録)。base: のベースマップ
+// 相当は対象外。ローカル DATA/ 内のテンプレート参照は既存の local/ 集約で
+// ディレクトリごと複製される
+
+// xyz: 行の URL フィールドを (受け皿フォルダ名, ローカルテンプレート末尾)
+// に分解する。{z}/{x}/{y} 等のプレースホルダを含まない URL は None
+fn xyz_template_parts(url: &str) -> Option<(String, String)> {
+    let host_start = url.find("://").map(|i| i + 3)?;
+    let path_start = url[host_start..].find('/').map(|i| host_start + i + 1)?;
+    let path = url[path_start..]
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default();
+    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    // プレースホルダを含む最初のセグメント以降をテンプレート末尾とする
+    let index = segments.iter().position(|s| s.contains('{'))?;
+    let tail = segments[index..].join("/");
+    // 座標プレースホルダを含まないもの({s} のみ等)はタイルテンプレートとみなさない
+    if !tail.contains("{z}") && !tail.contains("{x}") && !tail.contains("{y}") {
+        return None;
+    }
+    // フォルダ名はプレースホルダ直前の実セグメント。無ければ URL ハッシュ
+    let name = segments[..index]
+        .last()
+        .map(|s| sanitize_file_name(&percent_decode(s)))
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| format!("xyz-{:016x}", fnv1a64(url)));
+    Some((name, tail))
+}
+
+// .kasc 内の xyz: 行のリモートタイルテンプレートを正規化して列挙する
+fn collect_xyz_template_urls(text: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let mut seen = HashSet::new();
+    for line in text.split('\n') {
+        let body = line.strip_suffix('\r').unwrap_or(line);
+        let Some(sep) = body.find(':') else {
+            continue;
+        };
+        if !body[..sep].trim().eq_ignore_ascii_case("xyz") {
+            continue;
+        }
+        let url = body[sep + 1..]
+            .split('|')
+            .nth(1)
+            .map(str::trim)
+            .unwrap_or_default();
+        if is_remote_url(url) && xyz_template_parts(url).is_some() {
+            let normalized = normalize_remote_url(url);
+            if seen.insert(normalized.clone()) {
+                urls.push(normalized);
+            }
+        }
+    }
+    urls
+}
+
+// xyz 受け皿フォルダに書く配置手順メッセージ
+fn xyz_container_readme(url: &str, tail: &str) -> String {
+    format!(
+        "このフォルダは XYZ タイルの受け皿です（納品パッケージ生成で作成）。\n\
+         タイル本体は取得していません。以下の階層でタイルファイルを配置してください。\n\n\
+         元の参照: {url}\n\
+         配置する構造: {tail}\n\
+         例: 15/28400/12902.png（{tail} のプレースホルダを座標に置き換えたパス）\n\n\
+         タイル画像を Z/X/Y の階層フォルダ（例: QGIS の XYZ Tiles エクスポート、\n\
+         gdal2tiles 等の出力）として出力し、このフォルダ直下にコピーしてください。\n\
+         表示するズーム範囲・範囲の限定は .kasc の xyz: 行で minZoom= / maxZoom= /\n\
+         bbox=西経,南緯,東経,北緯 を指定してください（bbox 指定で範囲外への要求を抑止）。\n"
+    )
+}
+
+// 保存先フォルダ名の重複を避ける。衝突時は URL ハッシュ接尾辞を付ける
+fn localize_unique_dir_name(stem: &str, url: &str, used: &mut HashSet<String>) -> String {
+    let mut name = stem.to_string();
+    if used.contains(&name.to_lowercase()) {
+        let mut candidate = format!("{stem}--{:016x}", fnv1a64(url));
+        let mut n = 2u32;
+        while used.contains(&candidate.to_lowercase()) {
+            candidate = format!("{stem}--{:016x}-{n}", fnv1a64(url));
+            n += 1;
+        }
+        name = candidate;
+    }
+    used.insert(name.to_lowercase());
+    name
+}
+
+// {z} 等のプレースホルダを残したまま URI パスをエンコードする
+// (Cesium が {z}/{x}/{y} を置換するため、括弧を %7B 等にしてはいけない)
+fn encode_uri_template(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut depth = 0u32;
+    let mut plain = String::new();
+    for ch in path.chars() {
+        match ch {
+            '{' if depth == 0 => {
+                out.push_str(&encode_uri_path(&plain));
+                plain.clear();
+                depth = 1;
+                out.push('{');
+            }
+            '}' if depth > 0 => {
+                depth -= 1;
+                out.push('}');
+            }
+            _ if depth > 0 => out.push(ch),
+            _ => plain.push(ch),
+        }
+    }
+    out.push_str(&encode_uri_path(&plain));
+    out
+}
+
+// implicit tiling のコンテンツ URI は {level}/{x}/{y} テンプレートで、実在
+// ファイルの集合が .subtree のビットストリーム依存のためローカル化できない
+fn contains_implicit_tiling(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => {
+            map.contains_key("implicitTiling") || map.values().any(contains_implicit_tiling)
+        }
+        Value::Array(items) => items.iter().any(contains_implicit_tiling),
+        _ => false,
+    }
+}
+
+// tileset JSON 内のコンテンツ参照(content.uri・contents[].uri、旧式の url
+// キーも)を再帰的に走査する。コールバックで文字列を書き換えると JSON に反映
+fn walk_tileset_uris(node: &mut Value, f: &mut impl FnMut(&mut String)) {
+    let Some(obj) = node.as_object_mut() else {
+        return;
+    };
+    for key in ["content", "contents"] {
+        match obj.get_mut(key) {
+            Some(Value::Object(content)) => {
+                for uri_key in ["uri", "url"] {
+                    if let Some(Value::String(uri)) = content.get_mut(uri_key) {
+                        f(uri);
+                    }
+                }
+            }
+            Some(Value::Array(items)) => {
+                for content in items.iter_mut().filter_map(Value::as_object_mut) {
+                    for uri_key in ["uri", "url"] {
+                        if let Some(Value::String(uri)) = content.get_mut(uri_key) {
+                            f(uri);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    // タイルツリーは root ノードから children へ再帰する構造
+    if let Some(root) = obj.get_mut("root") {
+        walk_tileset_uris(root, f);
+    }
+    if let Some(Value::Array(children)) = obj.get_mut("children") {
+        for child in children {
+            walk_tileset_uris(child, f);
+        }
+    }
+}
+
+async fn localize_fetch_bytes(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, String> {
+    let mut response = client.get(url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if bytes.len() + chunk.len() > LOCALIZE_FILE_MAX_BYTES {
+            return Err("サイズ上限(256MB)を超えています".to_string());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+// tileset.json を起点に参照ツリーごと dir_rel(例: "http/3dtiles/name")配下へ
+// 保存し、(ルート JSON の rel パス, 取得ファイル数)を返す。
+// 外部タイルセットは内容を辿るためキューで先に処理し、コンテンツは収集後に
+// 並列ダウンロードする
+async fn localize_tileset(
+    client: &reqwest::Client,
+    root_url: &str,
+    dir_rel: &str,
+    output_root: &Path,
+) -> Result<(String, usize), String> {
+    let root_parsed = reqwest::Url::parse(root_url).map_err(|e| e.to_string())?;
+    if !matches!(root_parsed.scheme(), "http" | "https") {
+        return Err("http(s) URL ではありません".to_string());
+    }
+    let root_dir = root_parsed.join("./").map_err(|e| e.to_string())?;
+    let root_name = root_parsed
+        .path_segments()
+        .and_then(|mut s| s.next_back().filter(|n| !n.is_empty()).map(str::to_string))
+        .unwrap_or_else(|| "tileset.json".to_string());
+    let root_rel = format!(
+        "{dir_rel}/{}",
+        sanitize_file_name(&percent_decode(&root_name))
+    );
+
+    // 解決済み URL → rel の対応表(同一ファイルの重複取得防止)
+    let mut known: HashMap<String, String> = HashMap::new();
+    known.insert(root_parsed.to_string(), root_rel.clone());
+    let mut tileset_queue: VecDeque<(String, String)> = VecDeque::new();
+    tileset_queue.push_back((root_parsed.to_string(), root_rel.clone()));
+    let mut content_jobs: Vec<(String, String)> = Vec::new();
+    let mut files = 0usize;
+
+    while let Some((url, rel)) = tileset_queue.pop_front() {
+        let bytes = localize_fetch_bytes(client, &url).await?;
+        let mut json_value: Value = serde_json::from_slice(&bytes)
+            .map_err(|_| "tileset JSON の解析に失敗しました".to_string())?;
+        if contains_implicit_tiling(&json_value) {
+            return Err("implicit tiling のタイルセットは対象外です".to_string());
+        }
+        let tile_dir = reqwest::Url::parse(&url)
+            .and_then(|u| u.join("./"))
+            .map_err(|e| e.to_string())?;
+        let mut discovered: Vec<(String, String, bool)> = Vec::new();
+        let mut changed = false;
+        walk_tileset_uris(&mut json_value, &mut |uri| {
+            let resolved = match reqwest::Url::parse(uri.as_str()) {
+                Ok(u) => u,
+                Err(_) => match tile_dir.join(uri.as_str()) {
+                    Ok(u) => u,
+                    Err(_) => return,
+                },
+            };
+            if !matches!(resolved.scheme(), "http" | "https") {
+                return;
+            }
+            let inner_rel = match tileset_inner_path(&root_dir, &resolved) {
+                Some(inner) => format!("{dir_rel}/{inner}"),
+                None => {
+                    // ルート外への参照は _ext/ に集める
+                    let base = resolved
+                        .path_segments()
+                        .and_then(|mut s| {
+                            s.next_back().filter(|n| !n.is_empty()).map(str::to_string)
+                        })
+                        .unwrap_or_else(|| "download".to_string());
+                    let name = sanitize_file_name(&percent_decode(&base));
+                    format!("{dir_rel}/_ext/{:016x}-{name}", fnv1a64(resolved.as_str()))
+                }
+            };
+            if let std::collections::hash_map::Entry::Vacant(entry) =
+                known.entry(resolved.to_string())
+            {
+                let is_tileset = resolved
+                    .path()
+                    .rsplit('/')
+                    .next()
+                    .is_some_and(|n| n.to_ascii_lowercase().ends_with(".json"));
+                discovered.push((resolved.to_string(), inner_rel.clone(), is_tileset));
+                entry.insert(inner_rel);
+            }
+            // ルート内の参照は階層を保持するので JSON 側は無変更。
+            // _ext へ逃がした参照だけ、参照元ファイルからの相対パスへ書き換える
+            let known_rel = &known[resolved.as_str()];
+            if let Some(name) = known_rel.strip_prefix(&format!("{dir_rel}/_ext/")) {
+                let ups = rel.matches('/').count() - dir_rel.matches('/').count() - 1;
+                *uri = format!("{}_ext/{name}", "../".repeat(ups));
+                changed = true;
+            }
+        });
+        for (u, r, is_tileset) in discovered {
+            if is_tileset {
+                tileset_queue.push_back((u, r));
+            } else {
+                content_jobs.push((u, r));
+            }
+        }
+        if known.len() > LOCALIZE_TILESET_MAX_FILES {
+            return Err(format!(
+                "ファイル数が上限({LOCALIZE_TILESET_MAX_FILES})を超えています"
+            ));
+        }
+        let out = if changed {
+            serde_json::to_vec(&json_value).map_err(|e| e.to_string())?
+        } else {
+            bytes
+        };
+        let path = localize_output_path(output_root, &rel).map_err(|(_, m)| m)?;
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        tokio::fs::write(&path, &out)
+            .await
+            .map_err(|e| e.to_string())?;
+        files += 1;
+    }
+
+    // コンテンツは全タイルセットを辿り終えてから並列取得する
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(8));
+    let mut tasks: tokio::task::JoinSet<Result<(), String>> = tokio::task::JoinSet::new();
+    for (url, rel) in content_jobs {
+        let client = client.clone();
+        let semaphore = semaphore.clone();
+        let root = output_root.to_path_buf();
+        tasks.spawn(async move {
+            let _permit = semaphore.acquire_owned().await.map_err(|e| e.to_string())?;
+            let bytes = localize_fetch_bytes(&client, &url).await?;
+            let path = localize_output_path(&root, &rel).map_err(|(_, m)| m)?;
+            if let Some(parent) = path.parent() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .map_err(|e| e.to_string())?;
+            }
+            tokio::fs::write(&path, &bytes)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        });
+    }
+    while let Some(result) = tasks.join_next().await {
+        result.map_err(|e| e.to_string())??;
+        files += 1;
+    }
+    Ok((root_rel, files))
+}
+
 // リモート参照のローカル化(納品用)。元プロジェクトは変更せず、
 // 兄弟に <dir>_local/ ワークスペース(群マニフェスト+プロジェクト複製+
 // DATA/)を生成する。接続中ならクラウドルートを選択先の
 // DATA/cloud/<取得元ハッシュ>/ へ rclone copy し、cloud: 参照を .kasc 基準の
 // 相対パスに書き換える。さらに http(s) 参照(レイヤーURL・style=・
 // info:/legend:・sql: クエリ内リテラル)を DATA/http/ へダウンロードして
-// 参照を書き換える。重複する URL は1ファイルにまとめ、sql: 文中の URL も
-// 同一ファイルを指す。納品先は rclone 設定・OAuth・ネット接続不要で
+// 参照を書き換える。3dtiles: 行のリモート URL は tileset.json から参照
+// ツリーごと DATA/http/3dtiles/<name>/ に取得する(ベースマップ相当のサービス
+// ・implicit tiling は対象外)。重複する URL は1ファイルにまとめ、sql: 文中の
+// URL も同一ファイルを指す。納品先は rclone 設定・OAuth・ネット接続不要で
 // ファイル一式だけで動く構成になる
 async fn cloud_localize(
     State(state): State<AppState>,
@@ -2079,11 +2518,17 @@ async fn cloud_localize(
         None
     });
 
+    // 3dtiles: 行は tileset.json ツリーごと取得するため別経路で先に列挙する
+    // (http(s) 由来の保存先は他形式と同じく取得元別の DATA/http/3dtiles/<name>/)
+    let tileset_urls = collect_tileset_urls(&text);
+    // xyz: 行のリモートタイルテンプレートは受け皿のみ生成(別経路)
+    let xyz_template_urls = collect_xyz_template_urls(&text);
+
     // DATA/http/<name> に割り当てて順次ダウンロード。失敗した参照は URL のまま残す
     let http_dir = localize_output_path(&output_root, "http")?;
     let manifest_path = localize_output_path(&output_root, "http/_sources.json")?;
     let mut sources = read_localize_sources(&manifest_path)?;
-    let occupied = if http_dir.exists() {
+    let mut occupied = if http_dir.exists() {
         std::fs::read_dir(&http_dir)
             .map_err(internal_error)?
             .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().to_string()))
@@ -2092,6 +2537,13 @@ async fn cloud_localize(
     } else {
         HashSet::new()
     };
+    // http/3dtiles/・http/xyz/ サブフォルダと同名のファイルが作られないよう予約する
+    if !tileset_urls.is_empty() {
+        occupied.insert("3dtiles".to_string());
+    }
+    if !xyz_template_urls.is_empty() {
+        occupied.insert("xyz".to_string());
+    }
     let names = assign_localize_names(&urls, &sources, &occupied);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(CLOUD_FETCH_TIMEOUT_SECS))
@@ -2101,21 +2553,7 @@ async fn cloud_localize(
     let mut failed: Vec<Value> = Vec::new();
     for url in &urls {
         let rel = &names[url];
-        let result = async {
-            let mut response = client.get(url).send().await.map_err(|e| e.to_string())?;
-            if !response.status().is_success() {
-                return Err(format!("HTTP {}", response.status()));
-            }
-            let mut bytes = Vec::new();
-            while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-                if bytes.len() + chunk.len() > LOCALIZE_FILE_MAX_BYTES {
-                    return Err("サイズ上限(256MB)を超えています".to_string());
-                }
-                bytes.extend_from_slice(&chunk);
-            }
-            Ok(bytes)
-        }
-        .await;
+        let result = localize_fetch_bytes(&client, url).await;
         match result {
             Ok(bytes) => {
                 let path = localize_output_path(&output_root, rel)?;
@@ -2139,8 +2577,90 @@ async fn cloud_localize(
             }
         }
     }
-    // どこからダウンロードしたかの一覧(整理用)。既存マニフェストにマージする
-    if !downloaded.is_empty() {
+    // 3dtiles: 行は tileset.json を起点に参照ツリーごと DATA/http/3dtiles/<name>/
+    // へ取得する。ベースマップ相当のサービス(Google Photorealistic 3D Tiles
+    // 等の全球・キー依存サービス)は対象外として URL を残す
+    let mut tilesets: Vec<Value> = Vec::new();
+    let mut tileset_skipped: Vec<Value> = Vec::new();
+    let mut tileset_paths: HashMap<String, String> = HashMap::new();
+    {
+        let mut used_dirs: HashSet<String> = sources
+            .keys()
+            .filter_map(|rel| rel.strip_prefix("http/3dtiles/"))
+            .filter(|name| !name.contains('/'))
+            .map(|name| name.to_lowercase())
+            .collect();
+        for url in tileset_urls {
+            if is_basemap_tileset_url(&url) {
+                tileset_skipped.push(json!({ "url": url }));
+                continue;
+            }
+            let name =
+                localize_unique_dir_name(&localize_tileset_dir_name(&url), &url, &mut used_dirs);
+            let dir_rel = format!("http/3dtiles/{name}");
+            match localize_tileset(&client, &url, &dir_rel, &output_root).await {
+                Ok((root_rel, count)) => {
+                    tileset_paths.insert(url.clone(), root_rel);
+                    sources.insert(dir_rel.clone(), json!(url));
+                    tilesets.push(json!({ "url": url, "dir": dir_rel, "files": count }));
+                }
+                Err(error) => {
+                    failed.push(json!({ "url": url, "error": error }));
+                    if let Ok(path) = localize_output_path(&output_root, &dir_rel) {
+                        let _ = remove_dir_all_retry(&path);
+                    }
+                }
+            }
+        }
+    }
+    // xyz: 行のリモートタイルテンプレートはタイル本体を取得せず、ユーザーが
+    // データを配置する受け皿 http/xyz/<name>/ のみ生成する(最低限の枠組み)。
+    // テンプレートのプレースホルダ以降の末尾構造はそのままローカル側へ引き継ぐ
+    let mut xyz_tiles: Vec<Value> = Vec::new();
+    let mut xyz_template_paths: HashMap<String, String> = HashMap::new();
+    {
+        let mut used_dirs: HashSet<String> = sources
+            .keys()
+            .filter_map(|rel| rel.strip_prefix("http/xyz/"))
+            .filter(|name| !name.contains('/'))
+            .map(|name| name.to_lowercase())
+            .collect();
+        for url in xyz_template_urls {
+            let Some((stem, tail)) = xyz_template_parts(&url) else {
+                continue;
+            };
+            let name = localize_unique_dir_name(&stem, &url, &mut used_dirs);
+            let dir_rel = format!("http/xyz/{name}");
+            match localize_output_path(&output_root, &dir_rel) {
+                Ok(path) => {
+                    if let Err(error) = tokio::fs::create_dir_all(&path)
+                        .await
+                        .map_err(internal_error)
+                    {
+                        failed.push(json!({ "url": url, "error": error.1 }));
+                        continue;
+                    }
+                    // 受け皿の使い方を同梱する(失敗しても受け皿自体は残す)
+                    let _ = tokio::fs::write(
+                        path.join("_README.txt"),
+                        xyz_container_readme(&url, &tail),
+                    )
+                    .await;
+                }
+                Err((_, error)) => {
+                    failed.push(json!({ "url": url, "error": error }));
+                    continue;
+                }
+            }
+            xyz_template_paths.insert(url.clone(), format!("{dir_rel}/{tail}"));
+            sources.insert(dir_rel.clone(), json!(url));
+            xyz_tiles.push(json!({ "url": url, "dir": dir_rel }));
+        }
+    }
+    // どこからダウンロードしたかの一覧(整理用)。既存マニフェストにマージする。
+    // ファイルは http/<name>、タイルセットは http/3dtiles/<name>、
+    // xyz テンプレートの受け皿は http/xyz/<name> をキーにする
+    if !downloaded.is_empty() || !tilesets.is_empty() || !xyz_tiles.is_empty() {
         let manifest =
             serde_json::to_string_pretty(&Value::Object(sources)).map_err(internal_error)?;
         tokio::fs::write(&manifest_path, manifest)
@@ -2150,22 +2670,35 @@ async fn cloud_localize(
 
     // 参照の書き換え。既存のローカル DATA 参照を先に local/ へ集約して
     // から、ダウンロード済みのリモート参照を http/・cloud/ へ置き換える
-    // (この順でないと生成した参照を二重書き換えしてしまう)
+    // (この順でないと生成した参照を二重書き換えしてしまう)。
+    // 書き換え対象は 3dtiles を含む全レイヤー行の URL フィールド
+    // (xyz は受け皿のローカルテンプレートへ、base はベースマップ相当のため無変更)
     let local_text = rewrite_kasc_refs(
         &text,
         None,
         kasc_local_ref_field_index,
         &mut |value, _pos| localize_data_ref(value),
     );
-    let new_text =
-        rewrite_kasc_remote_refs(&local_text, cloud_prefix.as_deref(), &mut |url, _pos| {
+    let new_text = rewrite_kasc_refs(
+        &local_text,
+        cloud_prefix.as_deref(),
+        kasc_local_ref_field_index,
+        &mut |url, _pos| {
             let normalized = normalize_remote_url(url);
+            if let Some(rel) = tileset_paths.get(&normalized) {
+                return Some(format!("{data_prefix}/{}", encode_uri_path(rel)));
+            }
+            // xyz テンプレートは {z} 等のプレースホルダを残して書き換える
+            if let Some(rel) = xyz_template_paths.get(&normalized) {
+                return Some(format!("{data_prefix}/{}", encode_uri_template(rel)));
+            }
             let rel = names.get(&normalized)?;
             if !downloaded.contains(&normalized) {
                 return None;
             }
             Some(format!("{data_prefix}/{}", encode_uri_path(rel)))
-        });
+        },
+    );
     // 書き換えは複製側の .kasc に反映し、元プロジェクトは変更しない
     let kasc_rewritten = new_text != text;
     if kasc_rewritten {
@@ -2177,6 +2710,9 @@ async fn cloud_localize(
         "ok": true,
         "cloudSynced": cloud_synced,
         "downloaded": downloaded.len(),
+        "tilesets": tilesets,
+        "tilesetSkipped": tileset_skipped,
+        "xyzTiles": xyz_tiles,
         "failed": failed,
         "cloudRefsRemaining": count_cloud_refs(&new_text),
         "kascRewritten": kasc_rewritten,
@@ -2593,6 +3129,179 @@ mod localize_tests {
             normalize_remote_url("https://example.com/x"),
             "https://example.com/x"
         );
+    }
+
+    #[test]
+    fn collects_tileset_urls_only_from_3dtiles_lines() {
+        let text = "3dtiles: a | https://x/a/tileset.json | on\n\
+                    3dtiles: b | https://x/a/tileset.json\n\
+                    3dtiles: c | DATA/local/tileset.json\n\
+                    geojson: d | https://x/d.geojson\n\
+                    # 3dtiles: e | https://x/e/tileset.json\n\
+                    xyz: t | https://x/{z}/{x}/{y}.png";
+        assert_eq!(collect_tileset_urls(text), vec!["https://x/a/tileset.json"]);
+        // xyz: 行の {z}/{x}/{y} テンプレートは別経路(受け皿生成)で列挙する
+        assert_eq!(
+            collect_xyz_template_urls(text),
+            vec!["https://x/{z}/{x}/{y}.png"]
+        );
+        // フォルダ名はプレースホルダ直前の実セグメント、末尾はテンプレート部分
+        assert_eq!(
+            xyz_template_parts("https://cyber/xyz/std/{z}/{x}/{y}.png?key=k"),
+            Some(("std".to_string(), "{z}/{x}/{y}.png".to_string()))
+        );
+        let (name, tail) = xyz_template_parts("https://x/{z}/{x}/{y}.png").unwrap();
+        assert!(name.starts_with("xyz-"));
+        assert_eq!(tail, "{z}/{x}/{y}.png");
+        // 座標プレースホルダのない URL はテンプレートとみなさない
+        assert_eq!(xyz_template_parts("https://x/a/{s}/tile.png"), None);
+        assert_eq!(xyz_template_parts("https://x/a/tile.png"), None);
+        // ベースマップ相当のサービスは対象外判定になる
+        assert!(is_basemap_tileset_url(
+            "https://tile.googleapis.com/v1/3dtiles/root.json?key=k"
+        ));
+        assert!(is_basemap_tileset_url(
+            "https://assets.cesium.com/1/tileset.json"
+        ));
+        assert!(!is_basemap_tileset_url("https://x/a/tileset.json"));
+        // フォルダ名は汎用ファイル名なら親ディレクトリ名になる
+        assert_eq!(
+            localize_tileset_dir_name("https://x/dir/lod1/tileset.json"),
+            "lod1"
+        );
+        assert_eq!(
+            localize_tileset_dir_name("https://x/dir/model.json"),
+            "model"
+        );
+    }
+
+    #[tokio::test]
+    async fn localize_downloads_3dtiles_tree() {
+        let env = TestWorkspace::new();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let box_volume =
+            r#"{"boundingVolume":{"box":[0,0,0,1,0,0,0,1,0,0,0,1]},"geometricError":0}"#;
+        let root_tileset = format!(
+            r#"{{"asset":{{"version":"1.0"}},"geometricError":1,"root":{{"boundingVolume":{{"box":[0,0,0,1,0,0,0,1,0,0,0,1]}},"geometricError":1,"children":[{{"boundingVolume":{{"box":[0,0,0,1,0,0,0,1,0,0,0,1]}},"geometricError":1,"content":{{"uri":"sub/child.json"}},"children":[{{"boundingVolume":{{"box":[0,0,0,1,0,0,0,1,0,0,0,1]}},"geometricError":0,"content":{{"uri":"a.b3dm"}}}}]}}]}}}}"#
+        );
+        let child_tileset = format!(
+            r#"{{"asset":{{"version":"1.0"}},"geometricError":1,"root":{{"boundingVolume":{{"box":[0,0,0,1,0,0,0,1,0,0,0,1]}},"geometricError":1,"content":{{"uri":"b.b3dm"}},"children":[{box_volume},{{"boundingVolume":{{"box":[0,0,0,1,0,0,0,1,0,0,0,1]}},"geometricError":0,"content":{{"uri":"../a.b3dm"}}}},{{"boundingVolume":{{"box":[0,0,0,1,0,0,0,1,0,0,0,1]}},"geometricError":0,"contents":[{{"uri":"{base}/ext/model.glb"}}]}}]}}}}"#
+        );
+        let task = tokio::spawn({
+            let root_tileset = root_tileset.clone();
+            let child_tileset = child_tileset.clone();
+            async move {
+                axum::serve(
+                    listener,
+                    Router::new()
+                        .route(
+                            "/tiles/tileset.json",
+                            get(move || {
+                                let t = root_tileset.clone();
+                                async move { t }
+                            }),
+                        )
+                        .route(
+                            "/tiles/sub/child.json",
+                            get(move || {
+                                let t = child_tileset.clone();
+                                async move { t }
+                            }),
+                        )
+                        .route("/tiles/a.b3dm", get(|| async { "a" }))
+                        .route("/tiles/sub/b.b3dm", get(|| async { "b" }))
+                        .route("/ext/model.glb", get(|| async { "m" })),
+                )
+                .await
+                .unwrap();
+            }
+        });
+        let dir = env.state.projects_dir.join("T");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(dir.join("DATA/xyz/ortho/0/0")).unwrap();
+        std::fs::write(dir.join("DATA/xyz/ortho/0/0/0.png"), "p").unwrap();
+        std::fs::write(
+            dir.join(KASC_FILE_NAME),
+            format!(
+                "3dtiles: tileset | {base}/tiles/tileset.json | on\n\
+                 3dtiles: google | https://tile.googleapis.com/v1/3dtiles/root.json?key=k | on\n\
+                 xyz: std | {base}/xyz/std/{{z}}/{{x}}/{{y}}.png | attr | maxZoom=15\n\
+                 xyz: ortho | DATA/xyz/ortho/{{z}}/{{x}}/{{y}}.png | on\n\
+                 base: gsi | https://cyberjapandata.gsi.go.jp/xyz/std/{{z}}/{{x}}/{{y}}.png | 出典 | maxZoom=18"
+            ),
+        )
+        .unwrap();
+        let result = cloud_localize(
+            State(env.state.clone()),
+            Json(CloudLocalizeRequest {
+                project: "T".to_string(),
+                scope: LocalizeScope::Shared,
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        let local_root = env.state.projects_dir.join("T_local");
+        // http 由来のタイルセットは他形式と同じく http/ 配下(3dtiles/ 区画)へ
+        // ルート内の参照は階層保持、ルート外は _ext/ へ
+        let data = local_root.join("DATA/http/3dtiles/tiles");
+        assert!(data.join("tileset.json").is_file());
+        assert!(data.join("sub/child.json").is_file());
+        assert!(data.join("a.b3dm").is_file());
+        assert!(data.join("sub/b.b3dm").is_file());
+        let ext: Vec<_> = std::fs::read_dir(data.join("_ext"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .collect();
+        assert_eq!(ext.len(), 1);
+        assert!(ext[0].file_name().to_string_lossy().ends_with("-model.glb"));
+        // 外部参照は参照元 JSON の uri を相対パスに書き換える
+        let child = std::fs::read_to_string(data.join("sub/child.json")).unwrap();
+        assert!(child.contains("\"uri\":\"../_ext/"));
+        assert!(child.contains("\"uri\":\"../a.b3dm\""));
+        assert_eq!(result["tilesets"].as_array().unwrap().len(), 1);
+        assert_eq!(result["tilesets"][0]["files"], 5);
+        assert_eq!(result["tilesetSkipped"].as_array().unwrap().len(), 1);
+        // .kasc の参照はルート tileset.json を指し、Google は URL のまま残る
+        let text = std::fs::read_to_string(local_root.join("T").join(KASC_FILE_NAME)).unwrap();
+        assert!(text.contains("| ../DATA/http/3dtiles/tiles/tileset.json |"));
+        assert!(text.contains("tile.googleapis.com"));
+        // タイルセットの対応も http/_sources.json に記録する
+        let sources = read_localize_sources(&local_root.join("DATA/http/_sources.json")).unwrap();
+        assert_eq!(
+            sources["http/3dtiles/tiles"],
+            json!(format!("{base}/tiles/tileset.json"))
+        );
+        // xyz: リモートテンプレートは受け皿のみ生成し参照をローカル化する。
+        // 受け皿には配置手順の _README.txt が入る(タイル本体は取得しない)
+        let xyz_dir = local_root.join("DATA/http/xyz/std");
+        let entries: Vec<_> = std::fs::read_dir(&xyz_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .collect();
+        assert_eq!(entries.len(), 1);
+        let readme = std::fs::read_to_string(xyz_dir.join("_README.txt")).unwrap();
+        assert!(readme.contains(&format!("{base}/xyz/std/")));
+        assert!(
+            text.contains("| ../DATA/http/xyz/std/{z}/{x}/{y}.png |"),
+            "{text}"
+        );
+        assert!(text.contains("maxZoom=15"));
+        assert_eq!(result["xyzTiles"].as_array().unwrap().len(), 1);
+        assert_eq!(result["xyzTiles"][0]["dir"], json!("http/xyz/std"));
+        assert_eq!(
+            sources["http/xyz/std"],
+            json!(format!("{base}/xyz/std/{{z}}/{{x}}/{{y}}.png"))
+        );
+        // ローカル DATA/ 内のテンプレートは local/ へ集約され複製される
+        assert!(local_root
+            .join("T/DATA/local/xyz/ortho/0/0/0.png")
+            .is_file());
+        assert!(text.contains("| DATA/local/xyz/ortho/{z}/{x}/{y}.png |"));
+        // base: のベースマップ相当はリモート URL のまま残る
+        assert!(text.contains("cyberjapandata.gsi.go.jp"));
+        task.abort();
     }
 }
 

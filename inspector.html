@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.5.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.6.0</span></h1>
       <p>.kasc 設定仕様 — インスペクター設定の完全な書式</p>
     </header>
     <main>
@@ -42,9 +42,9 @@ legend: 凡例|https://example.com/legend.png</code></pre>
         </div>
         <div class="url-box">
           <h3>設定種類</h3>
-          <p>納品用ローカル化は <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します（共有選択が既定）。HTTP(S) データは共有選択時に <code>_local/DATA/http/</code>（複製 .kasc からは <code>../DATA/http/</code> 参照）、専用選択時に複製内 <code>DATA/http/</code> へ出力され、既存のローカル参照は <code>DATA/local/</code>・<code>../DATA/local/</code> へ書き換えられます。<code>sql: 例 | SELECT * FROM read_csv_auto('../DATA/http/x.csv')</code> のように SQL のファイル参照も相対パスで保存できます。<code>FROM</code>/<code>JOIN</code> 直後や対応する <code>read_csv</code>/<code>read_parquet</code>/<code>read_json</code>/<code>ST_Read</code> 系の第1引数にある DATA/ 相対参照を、描画・属性検索時に現在のプロジェクトから解決します。通常の文字列値は変更しません。</p>
+          <p>納品用ローカル化は <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します（共有選択が既定）。HTTP(S) データは共有選択時に <code>_local/DATA/http/</code>（複製 .kasc からは <code>../DATA/http/</code> 参照）、専用選択時に複製内 <code>DATA/http/</code> へ出力され、既存のローカル参照は <code>DATA/local/</code>・<code>../DATA/local/</code> へ書き換えられます。<code>3dtiles:</code> 行のリモート URL は tileset.json から参照ツリーごと <code>DATA/http/3dtiles/</code> に取得します（ベースマップ相当の Google Photorealistic 等は対象外）。<code>xyz:</code> 行のリモート <code>{z}/{x}/{y}</code> テンプレートはタイル本体を取得せず、ユーザーがタイルを配置する受け皿 <code>DATA/http/xyz/&lt;name&gt;/</code> を生成して参照を書き換えます（元 URL は <code>http/_sources.json</code> に記録。受け皿内の <code>_README.txt</code> に配置手順を同梱）。ローカルの <code>DATA/.../{z}/{x}/{y}.png</code> 参照はディレクトリごと <code>DATA/local/</code> へ複製されます。<code>sql: 例 | SELECT * FROM read_csv_auto('../DATA/http/x.csv')</code> のように SQL のファイル参照も相対パスで保存できます。<code>FROM</code>/<code>JOIN</code> 直後や対応する <code>read_csv</code>/<code>read_parquet</code>/<code>read_json</code>/<code>ST_Read</code> 系の第1引数にある DATA/ 相対参照を、描画・属性検索時に現在のプロジェクトから解決します。通常の文字列値は変更しません。</p>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
-xyz: タイルレイヤ | 同上+off
+xyz: タイルレイヤ | 同上+off / minZoom=(minimumLevel=) / bbox=西経,南緯,東経,北緯 (URL は DATA/.../{z}/{x}/{y}.png のローカルテンプレートも可)
 3dtiles: レイヤ | off / proxy=off
 geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / render=primitive|entity / style=QMLファイルURL / attr=出典(3番目のフィールドに出典を直接書くことも可)
 gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / where=条件(SQLite式) / limit=件数 / columns=列,列 / bbox=auto(表示範囲連動・既定ON) / bbox=off(常時全件描画) / render=primitive|entity / style=QMLファイルURL / attr=出典 (layer_styles のQGIS埋め込みスタイルを自動適用)
@@ -55,7 +55,7 @@ fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID
 cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
           <ul>
-            <li><code>option</code> には <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換 alias <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code> などが使えます。</li>
+            <li><code>option</code> には <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換 alias <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code> などが使えます。<code>xyz:</code> 行ではさらに <code>minimumLevel=</code>（<code>minZoom</code>）と <code>bbox=西経,南緯,東経,北緯</code> が使え、bbox を指定すると範囲外へのタイル要求が発生せず flyTo もその範囲を向きます（ローカルタイル配置時の範囲限定に有効）。</li>
             <li>プロジェクトは <code>projects/&lt;project&gt;</code> 単位で切り替えます。設定ファイル内に <code>project</code> 項目はありません。</li>
           </ul>
         </div>

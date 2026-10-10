@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.6.0] - 2026-10-10
+
+### Added
+
+- 納品用ローカル化で `3dtiles:` レイヤーのリモート参照に対応。`tileset.json` を起点に外部タイルセット（.json）とコンテンツ（`content.uri`/`contents[].uri`）を再帰的に辿り、`DATA/http/3dtiles/<name>/` へ一式取得して複製 .kasc の参照をローカルの tileset.json に書き換える（保存先は取得元別 `cloud/`・`http/`・`local/` の原則に従う）。ルートディレクトリ外・別オリジンへの参照は `_ext/` に集約し参照元 JSON の uri を相対パスへ書き換え。対応は `http/_sources.json` に記録。ベースマップ相当のサービス（`tile.googleapis.com` の Google Photorealistic 3D Tiles・`assets.cesium.com`/`api.cesium.com`）と implicit tiling は対象外。上限は 1タイルセット 10,000 ファイル・1ファイル 256MB。API 応答に `tilesets`・`tilesetSkipped` を追加
+- 納品用ローカル化で `xyz:` 行のリモート `{z}/{x}/{y}` テンプレートに対応。タイル本体は取得せず（範囲が曖昧なため）、ユーザーがタイルを配置する受け皿 `DATA/http/xyz/<name>/` を生成し（配置手順の `_README.txt` を同梱）、複製 .kasc の参照をローカルテンプレートへ書き換える。元 URL は `http/_sources.json` に記録し API 応答に `xyzTiles` を追加。ローカルの `DATA/.../{z}/{x}/{y}.png` 参照は従来通り `DATA/local/` へディレクトリごと複製。`base:` のベースマップ相当は対象外
+- `xyz:` 行に `minimumLevel=`（互換 alias `minZoom`）と `bbox=西経,南緯,東経,北緯` オプションを追加。Cesium の `minimumLevel`/`rectangle` に反映され、タイル未配置範囲へのリクエストを抑止。bbox 指定時は flyTo もその範囲を向く
+
 ## [5.5.0] - 2026-10-10
 
 ### Added

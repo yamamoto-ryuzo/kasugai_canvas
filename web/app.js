@@ -901,7 +901,12 @@ async function focusLayer(layer) {
   }
   let target = layerRuntimeTargets.get(layer.id) || layer.dataSource || null;
   // XYZタイルは範囲情報を持たないため、ImageryLayer未生成時は全世界表示にフォールバックする
-  if (!target && layer.type === "tile") target = Cesium.Rectangle.clone(Cesium.Rectangle.MAX_VALUE);
+  // (bbox= 指定時はその範囲へ flyTo する)
+  if (!target && layer.type === "tile") {
+    target = layer.bbox
+      ? Cesium.Rectangle.fromDegrees(...layer.bbox)
+      : Cesium.Rectangle.clone(Cesium.Rectangle.MAX_VALUE);
+  }
   if (!target) return false;
   // GeoJsonPrimitive は flyTo の対象外なので内部の Buffer コレクションへフォーカスする
   if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
@@ -1347,6 +1352,11 @@ function createUrlTemplateProvider(options) {
   };
   // URL の {s} プレースホルダ用サブドメイン（"0123" 等の文字列で指定）
   if (options.subdomains) providerOptions.subdomains = options.subdomains;
+  if (Number.isInteger(options.minimumLevel) && options.minimumLevel >= 0) providerOptions.minimumLevel = options.minimumLevel;
+  // bbox=西,南,東,北: タイルの存在範囲。範囲外へのリクエスト自体を抑止する
+  if (Array.isArray(options.bbox) && options.bbox.length === 4) {
+    providerOptions.rectangle = Cesium.Rectangle.fromDegrees(...options.bbox);
+  }
   return new Cesium.UrlTemplateImageryProvider(providerOptions);
 }
 
@@ -2534,6 +2544,8 @@ async function refreshLayersImpl() {
         url: item.url,
         attribution: item.attribution,
         maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
+        minimumLevel: item.minimumLevel,
+        bbox: item.bbox,
         tileSize: item.tileSize || 256,
       });
       const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: item.opacity ?? 0.8 });
@@ -3478,12 +3490,20 @@ function applyInspector(text) {
         const number = Number(raw);
         if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
         if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
+        if ((key === "minimumLevel" || key === "minZoom") && Number.isInteger(number) && number >= 0) options.minimumLevel = number;
         if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
         if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
+        // bbox=西経,南緯,東経,北緯: タイルの存在範囲(rectangle)。未指定は全世界
+        if (key === "bbox" || key === "bounds" || key === "extent") {
+          const nums = raw.split(",").map(v => Number(v.trim()));
+          if (nums.length === 4 && nums.every(Number.isFinite)) options.bbox = nums;
+        }
       });
       const id = `inspector-layer-${inspectorLayerIndex++}`;
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parseAttributionField(parts[2]), proxy: options.proxy !== false, group, exclusiveGroup };
       if (options.maximumLevel !== undefined) item.maximumLevel = options.maximumLevel;
+      if (options.minimumLevel !== undefined) item.minimumLevel = options.minimumLevel;
+      if (options.bbox) item.bbox = options.bbox;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
       tileLayers.push(item);
       layerState.set(id, item);
@@ -5642,6 +5662,12 @@ function setupEvents() {
           } else {
             parts.push(t("cloud.status.localizedNothing"));
           }
+          if (result.tilesets?.length) {
+            const files = result.tilesets.reduce((sum, entry) => sum + (entry.files || 0), 0);
+            parts.push(t("cloud.status.localizedTiles", { count: result.tilesets.length, files, path: result.dataReference || path.replace(/\/$/, "") }));
+          }
+          if (result.tilesetSkipped?.length) parts.push(t("cloud.status.localizedTilesSkipped", { count: result.tilesetSkipped.length }));
+          if (result.xyzTiles?.length) parts.push(t("cloud.status.localizedXyz", { count: result.xyzTiles.length, path: result.dataReference || path.replace(/\/$/, "") }));
           if (result.failed?.length) parts.push(t("cloud.status.localizedFailed", { count: result.failed.length }));
           if (result.cloudRefsRemaining) parts.push(t("cloud.status.localizedCloudLeft", { count: result.cloudRefsRemaining }));
           if (result.outputPath) parts.push(t("cloud.status.localizedOut", { path: result.outputPath }));
