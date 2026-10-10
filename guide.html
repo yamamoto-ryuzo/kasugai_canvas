@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.1.0</span></h1>
       <p>使い方・インストール — 起動・プロジェクト構成・配布と公開</p>
     </header>
     <main>
@@ -114,6 +114,7 @@ info: https://example.com/project-info.html</code></pre>
             <li>「読み取り専用 / 読み書き」を選んで「接続開始」。「ドライブ割当」（既定 K:）を指定するとエクスプローラーからも使える仮想ドライブになります（Windows のみ）</li>
             <li>レイヤーURLには <code>cloud:</code> スキームが使えます。<code>geojson: 名 | cloud:フォルダ/file.geojson</code> のように接続中ストレージのファイルを直接参照でき、HTTP Range にも対応しています</li>
             <li>読み書きで接続中は「.kascをクラウドへ保存」で現在の設定をクラウド上に保存できます</li>
+            <li>「現在の設定をインスペクタに追記して接続」を押すと <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> 形式の設定行がインスペクタに追加されます。この行を <code>.kasc</code> に残すと、起動時・プロジェクト読み込み時に自動接続されます（<code>cloud: stop</code> で停止）</li>
           </ol>
           <p>ドライブ経由の読み書きは Windows WebClient の制約で約 50MB 超のファイルを扱えません（<code>cloud:</code> スキーム経由はこの制限を受けません）。この機能はローカルサーバー（local ティア）のみで有効です。</p>
         </div>

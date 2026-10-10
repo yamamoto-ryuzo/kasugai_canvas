@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.1.0</span></h1>
       <p>.kasc 設定仕様 — インスペクター設定の完全な書式</p>
     </header>
     <main>
@@ -50,7 +50,8 @@ duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=
 sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・| style=QML で QGIS スタイル適用・:bbox で表示範囲連動)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
-info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID</code></pre>
+info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID
+cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
           <ul>
             <li><code>option</code> には <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換 alias <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code> などが使えます。</li>
             <li>プロジェクトは <code>projects/&lt;project&gt;</code> 単位で切り替えます。設定ファイル内に <code>project</code> 項目はありません。</li>

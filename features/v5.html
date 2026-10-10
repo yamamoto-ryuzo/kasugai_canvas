@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.1.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -46,6 +46,28 @@
         <ul>
           <li><strong>読み取り専用</strong>: <code>rclone serve webdav --read-only</code> で起動し、プロキシ書き込みは 403 で拒否。意図しない書き込みを防げます</li>
           <li><strong>読み書き</strong>: <code>--vfs-cache-mode full</code> で起動。ファイルのアップロード・削除・<code>.kasc</code> のクラウド保存が可能</li>
+        </ul>
+        <h3>起動時の自動接続（インスペクタの <code>cloud:</code> 行）</h3>
+        <ul>
+          <li>インスペクタに設定行 <code>cloud: リモート名 | ルートフォルダ | perm=write | drive=K</code> を書くと、<code>.kasc</code> の読み込み（起動時・プロジェクト切替・登録ボタン）のたびに <code>/api/cloud/serve</code> が自動実行されます。<code>.kasc</code> に保存しておけば起動時に接続済みの状態で始まり、レイヤーURLの <code>cloud:パス</code> もそのまま使えます</li>
+          <li>ルートフォルダはパスでもフォルダURLでも指定でき、省略時はリモート直下です。<code>perm=write</code> で読み書き（省略時は読み取り専用）、<code>drive=K</code> で Windows ドライブ割当まで自動化します。rclone が未導入なら接続前に自動インストールします（既定 <code>C:\kasugai\rclone</code>。<code>install=off</code> で無効化）</li>
+          <li><code>cloud: stop</code>（または <code>disconnect</code>）は接続停止を意味します。行末の <code>| off</code> は「設定は残すが接続しない」です。クラウドタブの「現在の設定をインスペクタに追記して接続」ボタンで、入力中の設定からこの行を生成できます</li>
+          <li>ローカルサーバー版でのみ動作します（静的配信・Cloud Run では <code>/api/cloud/*</code> が存在しないため自動的に何もしません）。既に同じ内容で接続済みなら再起動せず、指定が変わったときだけ再接続します</li>
+        </ul>
+        <h3>WEB版での挙動（<code>cloud:</code> 行は無視される）</h3>
+        <ul>
+          <li>静的配信（<code>web/</code> のみの環境）では <code>GET /api/cloud/status</code> のプローブが1回だけ飛んで 404 → 早期リターンします。<code>install</code>・<code>serve</code>・<code>stop</code>・<code>drive</code> など副作用のある API は一切呼ばれません（実機検証済み）</li>
+          <li>エラー表示・例外も発生せず、クラウドタブは従来通り「ローカルサーバー版でのみ利用できます」の表示に落ちます。レイヤー行など他の設定行の処理は通常通り動作します</li>
+        </ul>
+        <h4>なぜアプリ版専用が妥当か</h4>
+        <ul>
+          <li><code>/api/cloud/*</code> は rclone のローカルプロセス起動（<code>rclone serve webdav</code>・<code>net use</code>・ファイルプロキシ）を行う API で、ブラウザ内では実現不可能です。ティア分けでも V5 機能＝「ローカル Rust サーバーと一体で動くアプリだから実現できる機能群」と定義しており、静的配信・Cloudflare Pages/Workers・Cloud Run には同等の実行基盤がありません</li>
+          <li>レイヤーURLの <code>cloud:</code> スキーム自体も <code>/api/cloud/file</code> プロキシ依存のため、WEB版で接続だけ自動化しても意味がありません。<code>cloud:</code> 参照は従来からアプリ専用で、自動接続も同じ境界に乗せるのが一貫した設計です</li>
+        </ul>
+        <h4>設計上の利点</h4>
+        <ul>
+          <li><code>.kasc</code> をアプリ版とWEB版で共有しても、<code>cloud:</code> 行は WEB 側で無害にスキップされるだけなので、同一の設定ファイルを環境非依存で使い回せます</li>
+          <li>WEB版でクラウドストレージを読みたい要件が出た場合は、rclone ではなく別経路（CORS対応の WebDAV 直読み、Workers プロキシ経由の R2/KV 等）を別機能として設計します</li>
         </ul>
         <h3>主な API</h3>
         <pre><code>GET  /api/cloud/status    … 検出状態・バージョン・リモート一覧・接続状態

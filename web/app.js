@@ -3272,6 +3272,8 @@ function applyInspector(text) {
   document.querySelector("#legend-panel img").removeAttribute("src");
 
   let inspectorLayerIndex = 0;
+  // cloud: 行(複数ある場合は最後の行を採用)。null=行なし、{stop:true}=停止
+  let inspectorCloudSpec = null;
   nextLines.forEach(line => {
     const separator = line.indexOf(":");
     if (separator < 0) return;
@@ -3297,6 +3299,42 @@ function applyInspector(text) {
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());
       document.querySelector("#legend-panel img").src = resolveProjectUrl(parts[parts.length - 1]);
+    }
+
+    // cloud: リモート名 | ルートフォルダ(パス or フォルダURL・省略可) | perm=write | drive=K | off
+    // → ローカルサーバー版では /api/cloud/serve を呼び rclone 接続を自動実行する。
+    // .kasc に書いておけば起動時(プロジェクト読み込み)に自動接続される。
+    // cloud: stop / disconnect は接続停止、末尾の off は「設定は残すが接続しない」。
+    if (type === "cloud") {
+      const parts = value.split("|").map(part => part.trim());
+      const spec = { remote: "", root: "", readOnly: true, drive: "", off: false, stop: false, install: true };
+      parts.forEach(part => {
+        if (!part) return;
+        if (/^(stop|disconnect)$/i.test(part) && !spec.remote) { spec.stop = true; return; }
+        if (/^(off|false)$/i.test(part)) { spec.off = true; return; }
+        const eq = part.indexOf("=");
+        const key = eq > 0 ? part.slice(0, eq).trim().toLowerCase() : "";
+        if (key === "perm" || key === "mode" || key === "access") {
+          spec.readOnly = !/^(write|rw|on)$/i.test(part.slice(eq + 1).trim());
+          return;
+        }
+        // install=off: rclone 未導入時の自動ダウンロードを無効化
+        if (key === "install" || key === "autoinstall") {
+          spec.install = !/^(off|no|false|0)$/i.test(part.slice(eq + 1).trim());
+          return;
+        }
+        if (key === "drive" || key === "letter") {
+          spec.drive = part.slice(eq + 1).trim().replace(/:$/, "").toUpperCase();
+          return;
+        }
+        if (key === "root" || key === "dir" || key === "folder") {
+          spec.root = part.slice(eq + 1).trim();
+          return;
+        }
+        if (!spec.remote) spec.remote = part;
+        else if (!spec.root) spec.root = part;
+      });
+      inspectorCloudSpec = spec;
     }
 
     if (type === "base") {
@@ -3569,6 +3607,104 @@ function applyInspector(text) {
   void ensureDrawnRouteFlyPath();
   refreshLayers();
   updateSearchProvider();
+  void applyInspectorCloud(inspectorCloudSpec);
+}
+
+// inspector の cloud: 行を実行する。/api/cloud/* はローカルサーバー版のみ
+// 登録されるため、静的配信・Cloud Run 環境では status が取れず自動的に何もしない。
+// 同一内容で接続済みなら serve を投げ直さない(再適用ごとの rclone 再起動を防ぐ)。
+// 自発行した serve については発行時 spec をキーに記憶し、フォルダURL指定のような
+// status から完全一致を判定できないケースでも再 apply で再起動しないようにする。
+let inspectorCloudAppliedKey = null;
+async function applyInspectorCloud(spec) {
+  if (!spec) return;
+  let status = null;
+  try {
+    const response = await fetch("./api/cloud/status", { cache: "no-store" });
+    if (response.ok) status = await response.json();
+  } catch {}
+  if (!status) return;
+  const setStatus = (text, isError = false) => {
+    const el = document.querySelector("#cloud-status");
+    if (!el) return;
+    el.textContent = text;
+    el.style.color = isError ? "#c0392b" : "";
+  };
+  const showServing = serving => {
+    const el = document.querySelector("#cloud-serve-status");
+    if (el) {
+      el.textContent = serving
+        ? `${serving.remote}:${serving.root || (serving.folderId ? `#${serving.folderId}` : "")} (port ${serving.port}, ${serving.readOnly ? "RO" : "RW"}${serving.drive ? `, ${serving.drive}:` : ""})`
+        : t("cloud.serve.none");
+    }
+  };
+  try {
+    if (spec.stop) {
+      inspectorCloudAppliedKey = null;
+      // serving が見えなくても stop は投げる(serve 発行直後の反映待ちで
+      // status が Null を返す間に抜けると、後から serve が残り続ける)
+      await fetch("./api/cloud/stop", { method: "POST" });
+      setStatus(t("cloud.status.stopped"));
+      showServing(null);
+      return;
+    }
+    if (spec.off || !spec.remote) return;
+    // rclone 未導入なら自動インストール(既定の配置先・install=off で無効化)。
+    // インストール先は localStorage の設定値、未設定ならサーバー既定(Windows は C:\kasugai\rclone)
+    if (!status.installed && spec.install) {
+      setStatus(t("cloud.status.installing"));
+      const installBody = {};
+      let installDir = "";
+      try { installDir = localStorage.getItem("kasugai.cloud.installDir") || ""; } catch (e) {}
+      if (installDir) installBody.dir = installDir;
+      const res = await fetch("./api/cloud/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(installBody),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || res.statusText);
+      // 導入後の状態で serve を続行するため status を取り直す
+      const res2 = await fetch("./api/cloud/status", { cache: "no-store" });
+      if (res2.ok) status = await res2.json();
+      if (!status.installed) throw new Error(t("cloud.rclone.notInstalled"));
+    }
+    const key = JSON.stringify(spec);
+    const serving = status.serving;
+    if (serving
+      && serving.remote === spec.remote
+      && !!serving.readOnly === spec.readOnly
+      && (serving.drive || "") === (spec.drive || "")
+      && (inspectorCloudAppliedKey === key
+        || (!/^https?:\/\//i.test(spec.root) && (serving.root || "") === spec.root))) {
+      showServing(serving);
+      return;
+    }
+    setStatus(t("cloud.status.connecting"));
+    const body = { remote: spec.remote, root: spec.root, readOnly: spec.readOnly };
+    // ドライブ割当は Windows のみ(他OSで渡すとサーバーが400を返す)
+    if (spec.drive && status.os === "windows") body.drive = spec.drive;
+    const response = await fetch("./api/cloud/serve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(text || response.statusText);
+    const data = text ? JSON.parse(text) : {};
+    inspectorCloudAppliedKey = key;
+    showServing(data.serving);
+    setStatus(t("cloud.status.connected"));
+    // クラウドタブの入力欄と揃えるため localStorage にも反映する
+    try {
+      localStorage.setItem("kasugai.cloud.remote", spec.remote);
+      localStorage.setItem("kasugai.cloud.root", spec.root);
+      localStorage.setItem("kasugai.cloud.perm", spec.readOnly ? "read" : "write");
+      if (spec.drive) localStorage.setItem("kasugai.cloud.drive", spec.drive);
+    } catch (e) {}
+  } catch (error) {
+    setStatus(error instanceof Error ? error.message : String(error), true);
+  }
 }
 
 // Google Photorealistic 3D Tiles: MapタブのトグルON時にレイヤ一覧へ自動追加する。
@@ -5207,6 +5343,7 @@ function setupEvents() {
     drive: document.querySelector("#cloud-drive"),
     mount: document.querySelector("#cloud-mount"),
     unmount: document.querySelector("#cloud-unmount"),
+    inspectorLine: document.querySelector("#cloud-inspector-line"),
     saveKasc: document.querySelector("#cloud-save-kasc"),
     localize: document.querySelector("#cloud-localize"),
     status: document.querySelector("#cloud-status"),
@@ -5381,6 +5518,32 @@ function setupEvents() {
         } catch (error) {
           setCloudStatus(error.message, true);
         }
+      });
+
+      // 現在の入力値から cloud: 設定行を生成し、インスペクタへ追記(既存行は置換)して適用する。
+      // .kasc に残れば次回起動・プロジェクト読み込み時に自動接続される
+      cloudEls.inspectorLine?.addEventListener("click", () => {
+        const remote = cloudEls.remote.value;
+        if (!remote) {
+          setCloudStatus(t("cloud.status.noRemote"), true);
+          return;
+        }
+        const segments = [remote];
+        const root = cloudEls.root.value.trim();
+        if (root) segments.push(root);
+        if (cloudEls.permWrite.checked) segments.push("perm=write");
+        const drive = cloudEls.drive.value;
+        if (drive) segments.push(`drive=${drive}`);
+        const line = `cloud: ${segments.join(" | ")}`;
+        const input = document.querySelector("#inspector-input");
+        if (!input) return;
+        const lines = input.value.split(/\r?\n/);
+        const index = lines.findIndex(l => /^\s*cloud\s*:/i.test(l));
+        if (index >= 0) lines[index] = line;
+        else lines.push(line);
+        input.value = lines.join("\n");
+        setCloudStatus(t("cloud.status.lineAdded"));
+        applyInspector(input.value);
       });
 
       cloudEls.saveKasc.addEventListener("click", async () => {
