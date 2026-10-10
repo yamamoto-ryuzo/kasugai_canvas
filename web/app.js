@@ -5405,7 +5405,7 @@ function setupEvents() {
       const scope = tab.closest(".plugin-panel") || document;
       scope.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
       scope.querySelectorAll(".settings-subpanel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel));
-      if (tab.dataset.settingsPanel === "settings-cloud-panel") void refreshCloudStatus();
+      if (["settings-cloud-panel", "settings-rclone-panel", "settings-drive-panel", "settings-save-panel"].includes(tab.dataset.settingsPanel)) void refreshCloudStatus();
       if (tab.dataset.settingsPanel === "settings-save-panel") void refreshSaveStatus();
     });
   });
@@ -5437,6 +5437,14 @@ function setupEvents() {
     localize: document.querySelector("#cloud-localize"),
     localizeScope: document.querySelector("#cloud-localize-scope"),
     status: document.querySelector("#cloud-status"),
+    // rclone タブ(別システム管理: 導入・リモート登録)側の要素
+    rcloneUnavailable: document.querySelector("#rclone-unavailable"),
+    rcloneControls: document.querySelector("#rclone-controls"),
+    rcloneStatusLine: document.querySelector("#rclone-status"),
+    // ドライブタブ(Windows net use)側の要素
+    driveUnavailable: document.querySelector("#drive-unavailable"),
+    driveControls: document.querySelector("#drive-controls"),
+    driveStatusLine: document.querySelector("#drive-status"),
   };
   const cloudStorage = {
     get: key => localStorage.getItem(`kasugai.cloud.${key}`) || "",
@@ -5447,6 +5455,18 @@ function setupEvents() {
     if (!cloudEls.status) return;
     cloudEls.status.textContent = text;
     cloudEls.status.style.color = isError ? "#c0392b" : "";
+  };
+  // rclone タブ側のステータス行(導入・リモート追加の結果表示)
+  const setRcloneStatus = (text, isError = false) => {
+    if (!cloudEls.rcloneStatusLine) return;
+    cloudEls.rcloneStatusLine.textContent = text;
+    cloudEls.rcloneStatusLine.style.color = isError ? "#c0392b" : "";
+  };
+  // ドライブタブ側のステータス行(割当・解除の結果表示)
+  const setDriveStatus = (text, isError = false) => {
+    if (!cloudEls.driveStatusLine) return;
+    cloudEls.driveStatusLine.textContent = text;
+    cloudEls.driveStatusLine.style.color = isError ? "#c0392b" : "";
   };
 
   // ---- 保存タブ (ローカルサーバー版のみ: クラウド保存・納品パッケージ) ----
@@ -5487,6 +5507,10 @@ function setupEvents() {
     const supported = hasBackendFeature("cloudRclone");
     cloudEls.unavailable.hidden = supported;
     cloudEls.controls.style.display = supported ? "" : "none";
+    if (cloudEls.rcloneUnavailable) cloudEls.rcloneUnavailable.hidden = supported;
+    if (cloudEls.rcloneControls) cloudEls.rcloneControls.style.display = supported ? "" : "none";
+    if (cloudEls.driveUnavailable) cloudEls.driveUnavailable.hidden = supported;
+    if (cloudEls.driveControls) cloudEls.driveControls.style.display = supported ? "" : "none";
     if (!supported) return null;
     try {
       const status = await cloudApi("status");
@@ -5533,14 +5557,14 @@ function setupEvents() {
 
       cloudEls.install.addEventListener("click", async () => {
         try {
-          setCloudStatus(t("cloud.status.installing"));
+          setRcloneStatus(t("cloud.status.installing"));
           const dir = cloudEls.installDir.value.trim();
           cloudStorage.set("installDir", dir);
           const result = await cloudPost("install", { dir: dir || undefined });
-          setCloudStatus(t("cloud.status.installed", { path: result.path }));
+          setRcloneStatus(t("cloud.status.installed", { path: result.path }));
           await refreshCloudStatus();
         } catch (error) {
-          setCloudStatus(error.message, true);
+          setRcloneStatus(error.message, true);
         }
       });
 
@@ -5549,24 +5573,24 @@ function setupEvents() {
         const name = cloudEls.remoteType.value;
         if ([...cloudEls.remote.options].some(option => option.value === name)) {
           cloudEls.remote.value = name;
-          setCloudStatus(t("cloud.status.remoteExists", { name }));
+          setRcloneStatus(t("cloud.status.remoteExists", { name }));
           return;
         }
         try {
           await cloudPost("config", { name, type: name });
-          setCloudStatus(t("cloud.status.authorizing"));
+          setRcloneStatus(t("cloud.status.authorizing"));
           // OAuth 認可の完了を remotes の増加で検出する(最大2分)
           for (let i = 0; i < 40; i++) {
             await new Promise(resolve => setTimeout(resolve, 3000));
             const status = await refreshCloudStatus();
             if (status?.remotes?.includes(name)) {
-              setCloudStatus(t("cloud.status.remoteAdded", { name }));
+              setRcloneStatus(t("cloud.status.remoteAdded", { name }));
               return;
             }
           }
-          setCloudStatus(t("cloud.status.authTimeout"), true);
+          setRcloneStatus(t("cloud.status.authTimeout"), true);
         } catch (error) {
-          setCloudStatus(error.message, true);
+          setRcloneStatus(error.message, true);
         }
       });
 
@@ -5609,10 +5633,10 @@ function setupEvents() {
         try {
           await cloudPost("drive", { action: "mount", drive });
           cloudStorage.set("drive", drive);
-          setCloudStatus(t("cloud.status.mounted", { drive }));
+          setDriveStatus(t("cloud.status.mounted", { drive }));
           await refreshCloudStatus();
         } catch (error) {
-          setCloudStatus(error.message, true);
+          setDriveStatus(error.message, true);
         }
       });
 
@@ -5621,10 +5645,10 @@ function setupEvents() {
         if (!drive) return;
         try {
           await cloudPost("drive", { action: "unmount", drive });
-          setCloudStatus(t("cloud.status.unmounted", { drive }));
+          setDriveStatus(t("cloud.status.unmounted", { drive }));
           await refreshCloudStatus();
         } catch (error) {
-          setCloudStatus(error.message, true);
+          setDriveStatus(error.message, true);
         }
       });
 
@@ -5633,7 +5657,7 @@ function setupEvents() {
       cloudEls.inspectorLine?.addEventListener("click", () => {
         const remote = cloudEls.remote.value;
         if (!remote) {
-          setCloudStatus(t("cloud.status.noRemote"), true);
+          setSaveStatus(t("cloud.status.noRemote"), true);
           return;
         }
         const segments = [remote];
@@ -5650,7 +5674,7 @@ function setupEvents() {
         if (index >= 0) lines[index] = line;
         else lines.push(line);
         input.value = lines.join("\n");
-        setCloudStatus(t("cloud.status.lineAdded"));
+        setSaveStatus(t("cloud.status.lineAdded"));
         applyInspector(input.value);
       });
 

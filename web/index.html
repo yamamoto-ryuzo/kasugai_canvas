@@ -320,13 +320,15 @@
             </section>
             <section id="app-panel" class="plugin-panel">
               <nav class="settings-tabs" aria-label="アプリカテゴリ" data-i18n-attr="aria-label:app.ariaLabel">
+                <button class="settings-tab" type="button" data-settings-panel="settings-rclone-panel" data-i18n="settings.tab.rclone">rclone</button>
                 <button class="settings-tab active" type="button" data-settings-panel="settings-cloud-panel" data-i18n="settings.tab.cloud">クラウド</button>
+                <button class="settings-tab" type="button" data-settings-panel="settings-drive-panel" data-i18n="settings.tab.drive">ドライブ</button>
                 <button class="settings-tab" type="button" data-settings-panel="settings-save-panel" data-i18n="settings.tab.save">保存</button>
               </nav>
-              <section id="settings-cloud-panel" class="settings-subpanel active">
-                <p class="hint" data-i18n-html="cloud.hint">クラウドストレージ(Box・Google Drive・OneDrive等)を rclone 経由で接続します。接続するとレイヤーURLに <code>cloud:フォルダ/ファイル名</code> と書けます。</p>
-                <p id="cloud-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
-                <div id="cloud-controls">
+              <section id="settings-rclone-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="cloud.rcloneIntro">外部ツール rclone の導入と、クラウドストレージのリモート登録（OAuth）を行います。接続はクラウドタブで行います。</p>
+                <p id="rclone-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                <div id="rclone-controls">
                   <div class="section-title" data-i18n="cloud.rclone.title">rclone</div>
                   <p class="hint"><span data-i18n="cloud.rclone.status">状態: </span><code id="cloud-rclone-status">-</code></p>
                   <label class="field-label" for="cloud-install-dir" data-i18n="cloud.installDir">インストール先フォルダ</label>
@@ -336,12 +338,8 @@
                     <button id="cloud-rclone-install" type="button" data-i18n="cloud.rclone.install">ダウンロードして配置</button>
                   </div>
 
-                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.remote.title">ストレージ</div>
+                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.remoteAdd.title">リモート追加</div>
                   <div style="display:flex;gap:6px;align-items:center;">
-                    <select id="cloud-remote" style="flex:1;min-width:0;" data-i18n-attr="aria-label:cloud.remote.title"></select>
-                    <button id="cloud-remote-refresh" type="button" style="flex:0 0 auto;" data-i18n="cloud.remote.refresh">更新</button>
-                  </div>
-                  <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
                     <select id="cloud-remote-type" style="flex:1;min-width:0;width:auto;">
                       <option value="box">Box</option>
                       <option value="drive">GoogleDrive</option>
@@ -354,7 +352,20 @@
                     </select>
                     <button id="cloud-remote-add" type="button" style="flex:0 0 auto;" data-i18n="cloud.remote.add">追加</button>
                   </div>
-                  <p class="hint" data-i18n="cloud.remote.addHint">「追加」でブラウザの認証画面が開きます。許可後に「更新」を押してください。</p>
+                  <p class="hint" data-i18n="cloud.remote.addHint">「追加」でブラウザの認証画面が開きます。許可後はクラウドタブでリモートを選択して接続してください。</p>
+                  <p id="rclone-status" class="hint" aria-live="polite"></p>
+                </div>
+              </section>
+              <section id="settings-cloud-panel" class="settings-subpanel active">
+                <p class="hint" data-i18n-html="cloud.hint">クラウドストレージ(Box・Google Drive・OneDrive等)を rclone 経由で接続します。接続するとレイヤーURLに <code>cloud:フォルダ/ファイル名</code> と書けます。</p>
+                <p class="hint" data-i18n="cloud.rcloneTabHint">rclone の導入とリモート追加は rclone タブで行います。</p>
+                <p id="cloud-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                <div id="cloud-controls">
+                  <div class="section-title" data-i18n="cloud.remote.title">ストレージ</div>
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <select id="cloud-remote" style="flex:1;min-width:0;" data-i18n-attr="aria-label:cloud.remote.title"></select>
+                    <button id="cloud-remote-refresh" type="button" style="flex:0 0 auto;" data-i18n="cloud.remote.refresh">更新</button>
+                  </div>
                   <label class="field-label" for="cloud-root" data-i18n="cloud.root.label">ルートフォルダ (パスまたはフォルダURL・省略可)</label>
                   <input id="cloud-root" type="text" placeholder="KASUGAI/ または https://app.box.com/folder/…" />
 
@@ -369,7 +380,14 @@
                   </div>
                   <p class="hint"><span data-i18n="cloud.serveStatus">接続状態: </span><code id="cloud-serve-status">-</code></p>
 
-                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.drive.title">ドライブ割当 (Windows)</div>
+                  <p id="cloud-status" class="hint" aria-live="polite"></p>
+                </div>
+              </section>
+              <section id="settings-drive-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="cloud.driveHint">接続中のストレージを Windows ドライブとして割り当てます（net use）。接続はクラウドタブで行います。</p>
+                <p id="drive-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                <div id="drive-controls">
+                  <div class="section-title" data-i18n="cloud.drive.title">ドライブ割当 (Windows)</div>
                   <div style="display:flex;gap:6px;align-items:center;">
                     <select id="cloud-drive" style="flex:0 0 auto;width:auto;">
                       <option value="">-</option>
@@ -377,18 +395,18 @@
                     <button id="cloud-mount" type="button" data-i18n="cloud.drive.mount">割り当て</button>
                     <button id="cloud-unmount" type="button" data-i18n="cloud.drive.unmount">解除</button>
                   </div>
-
-                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.inspector.title">起動時の自動接続</div>
-                  <p class="hint" data-i18n-html="cloud.inspectorHint">インスペクタの設定行 <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> でプロジェクト(.kasc)読み込み時に自動接続します。<code>cloud: stop</code> で停止します。</p>
-                  <button id="cloud-inspector-line" type="button" data-i18n="cloud.inspectorLine">現在の設定をインスペクタに追記して接続</button>
-
-                  <p id="cloud-status" class="hint" aria-live="polite"></p>
+                  <p id="drive-status" class="hint" aria-live="polite"></p>
                 </div>
               </section>
               <section id="settings-save-panel" class="settings-subpanel">
                 <p id="save-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
                 <div id="save-controls">
-                  <div class="section-title" data-i18n="cloud.project.title">プロジェクト保存</div>
+                  <div class="section-title" data-i18n="cloud.inspector.title">起動時の自動接続</div>
+                  <p class="hint" data-i18n-html="cloud.inspectorHint">インスペクタの設定行 <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> でプロジェクト(.kasc)読み込み時に自動接続します。<code>cloud: stop</code> で停止します。</p>
+                  <p class="hint" data-i18n="cloud.autoconnectHint">設定行はクラウドタブの現在の入力（リモート・ルート・権限・ドライブ）から生成されます。</p>
+                  <button id="cloud-inspector-line" type="button" data-i18n="cloud.inspectorLine">現在の設定をインスペクタに追記して接続</button>
+
+                  <div class="section-title" style="margin-top:14px;" data-i18n="cloud.project.title">プロジェクト保存</div>
                   <button id="cloud-save-kasc" type="button" data-i18n="cloud.saveKasc">現在の設定(.kasc)をクラウドへ保存</button>
                   <label class="field-label" for="cloud-localize-scope" data-i18n="cloud.localizeScope">納品用データの保存先</label>
                   <select id="cloud-localize-scope">

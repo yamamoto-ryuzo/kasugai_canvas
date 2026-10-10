@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.7.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.8.0</span></h1>
       <p>使い方・インストール — 起動・プロジェクト構成・配布と公開</p>
     </header>
     <main>
@@ -129,13 +129,13 @@ info: https://example.com/project-info.html</code></pre>
         <div class="install-steps">
           <h3>クラウドストレージ連携（rclone・ローカルサーバーのみ）</h3>
           <ol>
-            <li>アプリ → <strong>クラウド</strong> タブを開き、rclone の検出状態を確認。未導入なら「インストール先フォルダ」（既定 <code>C:\kasugai\rclone</code>）を指定して「ダウンロードして配置」</li>
-            <li>「ストレージ」で種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選んで「追加」。ブラウザで OAuth 認証画面が開くので、許可後に「更新」を押すとリモート一覧に反映されます</li>
+            <li>アプリ → <strong>rclone</strong> タブを開き、rclone の検出状態を確認。未導入なら「インストール先フォルダ」（既定 <code>C:\kasugai\rclone</code>）を指定して「ダウンロードして配置」</li>
+            <li>「リモート追加」で種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選んで「追加」。ブラウザで OAuth 認証画面が開くので、許可後はクラウドタブでリモートを選択してください</li>
             <li>「ルートフォルダ」に接続の起点を指定します（省略可）。フォルダパスのほか、Box の <code>https://app.box.com/folder/…</code>・共有リンク <code>…/s/…</code>、Google Drive の <code>…/folders/…</code>、OneDrive の <code>?id=…</code> といったフォルダURLも指定できます。URL指定はフォルダID起点で接続されるため、権限や共有経路によってリモート内の見える位置が異なる環境間でも、全員が同じフォルダをルートとして参照できます</li>
-            <li>「読み取り専用 / 読み書き」を選んで「接続開始」。「ドライブ割当」（既定 K:）を指定するとエクスプローラーからも使える仮想ドライブになります（Windows のみ）</li>
+            <li>「読み取り専用 / 読み書き」を選んで「接続開始」。ドライブタブで「割り当て」（既定 K:）を選ぶとエクスプローラーからも使える仮想ドライブになります（Windows のみ）</li>
             <li>レイヤーURLには <code>cloud:</code> スキームが使えます。<code>geojson: 名 | cloud:フォルダ/file.geojson</code> のように接続中ストレージのファイルを直接参照でき、HTTP Range にも対応しています</li>
             <li>読み書きで接続中はアプリ → 保存 タブの「.kascをクラウドへ保存」で現在の設定をクラウド上に保存できます</li>
-            <li>「現在の設定をインスペクタに追記して接続」を押すと <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> 形式の設定行がインスペクタに追加されます。この行を <code>.kasc</code> に残すと、起動時・プロジェクト読み込み時に自動接続されます（<code>cloud: stop</code> で停止）</li>
+            <li>アプリ → 保存 タブの「現在の設定をインスペクタに追記して接続」を押すと <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> 形式の設定行がインスペクタに追加されます。この行を <code>.kasc</code> に残すと、起動時・プロジェクト読み込み時に自動接続されます（<code>cloud: stop</code> で停止）</li>
           </ol>
           <p>ドライブ経由の読み書きは Windows WebClient の制約で約 50MB 超のファイルを扱えません（<code>cloud:</code> スキーム経由はこの制限を受けません）。この機能はローカルサーバー（local ティア）のみで有効です。</p>
         </div>
