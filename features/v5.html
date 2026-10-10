@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.1.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.2.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -78,7 +78,7 @@ POST /api/cloud/stop      … 停止（ドライブ割当も解除）
 POST /api/cloud/drive     … ドライブ割当・解除（Windows）
 GET  /api/cloud/list      … フォルダ一覧（rclone lsjson）
 GET/PUT/DELETE /api/cloud/file … ファイルの読み書き・削除（Range 転送対応）
-POST /api/cloud/localize  … 接続ルートを DATA/ へコピーし .kasc の cloud: を書換え（納品用）</code></pre>
+POST /api/cloud/localize  … 接続ルートを DATA/cloud/ へコピー + .kasc 内の http(s) 参照を DATA/net/ へダウンロードし参照書換え（納品用）</code></pre>
         <h3>制約・注意点</h3>
         <ul>
           <li>ドライブ経由の読み書きは Windows WebClient の既定上限（約 50MB）を受けます。<code>cloud:</code> スキーム（アプリ内プロキシ）はこの制限を受けません</li>
@@ -92,9 +92,26 @@ POST /api/cloud/localize  … 接続ルートを DATA/ へコピーし .kasc の
       <p>利用例: 描画ルートの保存、インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet を選ぶと対応する行タイプのレイヤー行を自動追記）、ダウンロードしたデータのプロジェクト内配置など。静的配信では利用できません（サーバー API 依存機能）。</p>
 
       <h3>📦 納品用ローカル化</h3>
-      <p>クラウドパネルの「クラウドの内容をDATA/へ同期（納品用）」ボタン（または <code>POST /api/cloud/localize</code>）で、接続中のクラウドルートを <code>rclone copy</code> で <code>projects/&lt;id&gt;/DATA/</code> へ丸ごとコピーし、<code>.kasc</code> 内の <code>cloud:パス</code> 参照を <code>DATA/パス</code> に書き換えます。</p>
-      <p>これにより「クラウドを正とした構築・共有 → 納品時にローカル完結パッケージ化」という流れができます。納品先は rclone の設定も元のクラウドの OAuth 認証情報も不要で、ファイル一式だけで動作します。</p>
-      <p>安全対策として、<code>..</code>・バックスラッシュ・制御文字を含む <code>cloud:</code> 参照はプロジェクト外に出るため書き換え対象外です（クラウド参照のまま残ります）。大容量フォルダではダウンロードに時間がかかる点と、同期後はクラウド側の更新が自動反映されない点に注意してください。</p>
+      <p>クラウドパネルの「リモートデータをDATA/へ同期（納品用）」ボタン（または <code>POST /api/cloud/localize</code>）で、<code>.kasc</code> が参照するリモートデータを <code>projects/&lt;id&gt;/DATA/</code> へ取り込み、参照をローカル相対に書き換えます。保存先は出所で分かれます。</p>
+      <ul>
+        <li><code>DATA/cloud/</code>: 接続中のクラウドルートを <code>rclone copy</code> で丸ごとコピーし、<code>cloud:パス</code> 参照を <code>DATA/cloud/パス</code> に書き換えます（未接続時はスキップ）</li>
+        <li><code>DATA/net/</code>: <code>.kasc</code> 内の http(s) URL をサーバーがダウンロードして保存し、参照を書き換えます。対象はベクター系レイヤー行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>fly_geojson:</code>）の URL フィールド、<code>style=</code>/<code>qml=</code> オプション、<code>info:</code>/<code>legend:</code>、および <code>sql:</code> クエリ内の URL リテラル（同じ URL が他の行で取得済みなら同一ファイルを指します）。タイル系（<code>xyz:</code>/<code>base:</code>/<code>3dtiles:</code>）は巨大なため対象外です</li>
+      </ul>
+      <p>同一 URL の重複参照は1ファイルにまとめ、別 URL の同名衝突はハッシュ接尾辞で回避します。<code>DATA/net/_sources.json</code> に「保存ファイル名 → 取得元 URL」の一覧を残すため、後から出所を遡れます。ダウンロードに失敗した参照は URL のまま残り、応答の <code>failed</code> に一覧が返ります。</p>
+      <p>これにより「クラウド・Web 上のデータを正とした構築 → 納品時にローカル完結パッケージ化」という流れができます。納品先は rclone の設定も元のクラウドの OAuth 認証情報もネット接続も不要で、ファイル一式だけで動作します（クラウドの <code>cloud:</code> 接続行は自動接続を防ぐためコメント化されます）。</p>
+      <p>安全対策として、<code>..</code>・バックスラッシュ・制御文字を含む <code>cloud:</code> 参照はプロジェクト外に出るため書き換え対象外です（クラウド参照のまま残ります）。大容量フォルダではダウンロードに時間がかかる点と、同期後はクラウド側・元URL側の更新が自動反映されない点に注意してください（再実行すれば最新に再取得されます）。</p>
+
+      <h3>📂 .kasc ファイル関連付け（外部プロジェクト）</h3>
+      <p>インストーラー版は <code>.kasc</code> 拡張子をアプリに関連付けます。<code>.kasc</code> ファイルをダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録し、そのプロジェクトを開いた状態でブラウザが起動します（起動済みなら実行中のインスタンスに <code>/api/projects/register</code> で登録を引き継ぎます）。</p>
+      <ul>
+        <li><strong>その場所がプロジェクトルート</strong>: <code>.kasc</code> のあるフォルダがそのまま <code>/projects/&lt;id&gt;/</code> の配信元になり、<code>DATA/</code> 等の相対参照はすべてそのフォルダ基準で解決されます。<code>.kasc</code> + <code>DATA/</code> をまとめたフォルダを納品すれば、受け取った側はダブルクリックだけで開けます（納品用ローカル化の出力とも整合）</li>
+        <li><strong>ファイル名は自由</strong>: <code>kasugai_canvas.kasc</code> 以外の名前でも開けます。同じフォルダに複数の .kasc を置けば、それぞれ別プロジェクトとして登録されます</li>
+        <li><strong>システムとプロジェクトの分離管理</strong>: 登録情報は exe 隣の <code>kasugai_canvas.projects.json</code> に永続化され、設定パネルのプロジェクト一覧に残ります（<code>external</code> フラグ付き）。プロジェクトをインストール先の <code>projects/</code> に置く必要はなく、任意のフォルダ・ドライブに配置できます</li>
+        <li><strong>表示名</strong>: フォルダ内に <code>project.json</code>（<code>{"title": "..."}</code>）があればその title、なければフォルダ名を表示名にします</li>
+        <li><strong>登録解除</strong>: <code>DELETE /api/projects/&lt;id&gt;</code> で一覧から外せます（ファイルは削除しません）</li>
+        <li><code>/api/files</code>・<code>/api/cloud/localize</code> 等のプロジェクト系 API も外部プロジェクトに対応します。DATA/ への書き込みやローカル化は登録フォルダ内に反映されます</li>
+        <li>ローカルサーバー（local ティア）のみの機能です。静的配信・コンテナ実行では関連付け自体が存在しません</li>
+      </ul>
 
     </main>
   </div>

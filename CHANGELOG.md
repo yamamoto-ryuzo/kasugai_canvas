@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.2.0] - 2026-10-10
+
+### Added
+
+- **.kasc ファイル関連付けによる起動（外部プロジェクト）**: インストーラー版で `.kasc` ファイルをダブルクリックすると、そのファイルをプロジェクトとして登録し `?project=<id>` で開く。`.kasc` のあるフォルダがそのままプロジェクトルート（`/projects/<id>/` の配信元）になり、`DATA/` 等の相対参照はそのフォルダ基準で解決されるため、`.kasc` + `DATA/` をまとめたフォルダをそのまま納品できる。ファイル名は `kasugai_canvas.kasc` 以外でも可（同一フォルダの複数 .kasc は別プロジェクトとして登録）
+  - 登録は exe 隣の `kasugai_canvas.projects.json` に永続化され、プロジェクト一覧に残る。システム（インストール先）とプロジェクト（任意の場所）を分けて管理できる
+  - 起動済みインスタンスがある場合は `POST /api/projects/register` で登録を引き継ぎ、そのプロジェクトをブラウザで開く
+  - `DELETE /api/projects/{id}` で外部プロジェクトの登録解除（ファイルは削除しない）
+  - `/api/files`・`/api/cloud/localize` 等のプロジェクト系 API も外部プロジェクトに対応（DATA/ の読み書き・ローカル化は登録フォルダに反映）
+- **納品用ローカル化の拡張（`POST /api/cloud/localize`）**: クラウドルートの `DATA/cloud/` コピーに加え、`.kasc` 内の http(s) 参照（ベクターレイヤー URL・`style=`/`qml=`・`info:`/`legend:`・`sql:` クエリ内 URL）を `DATA/net/` へダウンロードして参照を書き換える。重複 URL は1ファイルに集約し、出所一覧を `DATA/net/_sources.json` に記録。タイル系は対象外。クラウドパネルのステータスに同期結果の内訳を表示するよう改善
+
 ## [5.1.0] - 2026-10-10
 
 ### Added

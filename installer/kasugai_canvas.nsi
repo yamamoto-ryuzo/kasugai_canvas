@@ -27,10 +27,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "5.1.0.0"
+VIProductVersion "5.2.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "5.1.0"
+VIAddVersionKey "FileVersion" "5.2.0"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -82,7 +82,7 @@ default_manifest_exists:
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "InstallLocation" "$INSTDIR"
 
   WriteRegStr HKCU "Software\Classes\.kasc" "" "KASUGAI.Canvas"
-  WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas" "" "KASUGAI Canvas Inspector"
+  WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas" "" "KASUGAI Canvas ${U+30D7}${U+30ED}${U+30B8}${U+30A7}${U+30AF}${U+30C8}"
   WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas\DefaultIcon" "" "$INSTDIR\${APP_EXE},0"
   WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas\shell\open\command" "" '"$INSTDIR\${APP_EXE}" "--open-browser" "%1"'
   ; Windows 8+ ファイルの関連付け反映
@@ -100,6 +100,9 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\web"
   RMDir /r "$INSTDIR\projects"
   Delete "$INSTDIR\${APP_EXE}"
+  Delete "$INSTDIR\kasugai_canvas.update.json"
+  Delete "$INSTDIR\kasugai_canvas.cloud.json"
+  Delete "$INSTDIR\kasugai_canvas.projects.json"
   Delete "$INSTDIR\uninstall.exe"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas"

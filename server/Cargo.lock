@@ -612,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "kasugai_canvas"
-version = "5.1.0"
+version = "5.2.0"
 dependencies = [
  "axum",
  "opener",
@@ -620,6 +620,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "tower",
  "tower-http",
  "winres",
 ]

@@ -5569,7 +5569,13 @@ function setupEvents() {
         try {
           setCloudStatus(t("cloud.status.localizing"));
           const result = await cloudPost("localize", { project: currentProjectId || "default" });
-          setCloudStatus(t("cloud.status.localized"));
+          const parts = [
+            result.cloudSynced ? t("cloud.status.localizedCloud") : t("cloud.status.localizedNoCloud"),
+            t("cloud.status.localizedNet", { count: result.downloaded ?? 0 }),
+          ];
+          if (result.failed?.length) parts.push(t("cloud.status.localizedFailed", { count: result.failed.length }));
+          if (result.cloudRefsRemaining) parts.push(t("cloud.status.localizedCloudLeft", { count: result.cloudRefsRemaining }));
+          setCloudStatus(parts.join(" / "), !!result.failed?.length);
           if (result.kascRewritten) location.reload();
         } catch (error) {
           setCloudStatus(error.message, true);
