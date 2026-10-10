@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.4.0] - 2026-10-10
+
+### Changed
+
+- 納品用ローカル化の出力を `<プロジェクト名>_local/` ワークスペース生成に変更。元プロジェクトは変更せず、群マニフェスト `projects.json`・プロジェクト複製・`DATA/` を含む自己完結パッケージを生成する。フォルダごと ZIP にして渡せば受け取り側は複製内の .kasc を開くだけで群登録される
+- 複製した既存ローカルデータは `DATA/local/` に集約し、取得したデータ（`http/`・`cloud/`）と混在しない。複製 .kasc の既存参照は `DATA/local/x`・`../DATA/local/x` に書き換える（`sql:` クエリ内リテラル・`style=`/`qml=`・タイル系行のローカル参照も対象）
+- 共有スコープは `_local/DATA/`（`../DATA` 参照）、専用スコープは複製内 `DATA/`（`DATA` 参照）に取り込み、元のローカル `DATA/`・親の共有 `DATA/` も複製するため `_local/` 単体で全参照が解決する
+- 再実行は `_local/` を毎回作り直すため、前回出力や別スコープの残りファイルが混ざらない
+- UI は生成先パスを結果表示に含め、元プロジェクトが変わらないためリロードを廃止。API 応答に `outputPath`・`projectDir` を追加
+- 同梱サンプルプロジェクト（default）の .kasc をリモート URL 版に戻した（ローカル化は `_local/` 側で行うため）
+
 ## [5.3.1] - 2026-10-10
 
 ### Changed
