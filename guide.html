@@ -102,7 +102,7 @@ python run.py --release  # リリース版を起動</code></pre>
         <div class="url-box">
           <h3>納品用ローカル化の出力先（_local ワークスペース）</h3>
           <p>クラウドパネルで「共有（既定）」または「専用」を選んで「納品パッケージを生成」を実行すると、元のプロジェクトを変更せず、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> を生成します。共有の取り込み先は <code>_local/DATA/</code>、専用は <code>_local/&lt;name&gt;/DATA/</code> です。HTTP・HTTPS データは <code>http/</code>、クラウドは <code>cloud/取得元ハッシュ/</code> に保存します。</p>
-          <p><code>_local/</code> は群マニフェスト <code>projects.json</code> とプロジェクトの複製（書き換え済み .kasc＋ローカル DATA/）を含む自己完結パッケージで、フォルダごと ZIP にして渡せば受け取り側は複製内の .kasc を開くだけで使えます。参照は <code>../DATA/http/x.csv</code>（共有）または <code>DATA/http/x.csv</code>（専用）の相対パスで、登録IDが変わっても維持されます。再実行は <code>_local/</code> を作り直します。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
+          <p><code>_local/</code> は群マニフェスト <code>projects.json</code> とプロジェクトの複製（書き換え済み .kasc＋ローカル DATA/）を含む自己完結パッケージで、フォルダごと ZIP にして渡せば受け取り側は複製内の .kasc を開くだけで使えます。参照は <code>../DATA/http/x.csv</code>（共有）または <code>DATA/http/x.csv</code>（専用）の相対パスで、登録IDが変わっても維持されます。元からあったローカルデータは <code>DATA/local/</code> に集約して複製され、取得したデータ（http/・cloud/）とは別フォルダに分かれます。再実行は <code>_local/</code> を作り直します。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
         </div>
         <div class="url-box">
           <h3>設定の保存</h3>

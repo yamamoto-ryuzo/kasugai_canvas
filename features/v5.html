@@ -95,13 +95,16 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
       <p>クラウドパネルで<strong>「共有（既定）」または「専用」</strong>を選び、「納品パッケージを生成（_local/）」を実行します。<strong>元のプロジェクトは変更せず</strong>、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>
       <pre><code>ProjectA_local/           … 納品ワークスペース。このフォルダを ZIP にして渡す
 ├─ projects.json          … 群マニフェスト（複製内 .kasc を開くだけで登録される）
-├─ DATA/                  … 共有スコープの取り込み先＋既存 ../DATA の複製
-│  ├─ cloud/              … 取得元別サブフォルダ
-│  └─ http/               … HTTP・HTTPS データと _sources.json
+├─ DATA/                  … 共有スコープ
+│  ├─ cloud/              … 取得元別サブフォルダ（生成物）
+│  ├─ http/               … HTTP・HTTPS データと _sources.json（生成物）
+│  └─ local/              … 既存の共有 ../DATA の複製（../DATA/local/x で参照）
 └─ ProjectA/              … 元プロジェクトの複製（kasc・project.json・DATA/ 含む）
-   ├─ a.kasc              … ../DATA/http/x.csv などの相対参照
-   └─ DATA/               … 元からローカルだったデータ＋専用スコープの取り込み先</code></pre>
-      <p>共有は <code>_local/DATA/</code> に保存して参照を <code>../DATA/http/x</code> に、専用は <code>_local/&lt;name&gt;/DATA/</code> に保存して参照を <code>DATA/http/x</code> に書き換えます。元プロジェクトが参照していたローカル DATA/ と共有 ../DATA/ も複製されるため、<code>_local/</code> フォルダだけで全参照が解決します。再実行は <code>_local/</code> を毎回作り直すので、前回の出力や別スコープの残りファイルは混ざりません（<code>_local/</code> 内に置いた独自ファイルは消えます）。ZIP 納品は <code>_local/</code> フォルダごと渡し、受け取り側は複製内の .kasc を開くだけで群登録されます。</p>
+   ├─ a.kasc              … ../DATA/http/x.csv・DATA/local/x などの相対参照
+   └─ DATA/               … 専用スコープ
+      ├─ http/            … 専用スコープの取り込み先（生成物）
+      └─ local/           … 元からローカルだったデータ（DATA/local/x で参照）</code></pre>
+      <p>共有は <code>_local/DATA/</code> に保存して参照を <code>../DATA/http/x</code> に、専用は <code>_local/&lt;name&gt;/DATA/</code> に保存して参照を <code>DATA/http/x</code> に書き換えます。元プロジェクトの DATA/ は <code>DATA/local/</code>、親の共有 DATA/ は <code>_local/DATA/local/</code> に集約して複製し、既存参照も <code>DATA/local/x</code>・<code>../DATA/local/x</code> に書き換えるため、生成物（http/・cloud/）と元からあったデータ（local/）は別フォルダで混在しません。<code>_local/</code> フォルダだけで全参照が解決します。再実行は <code>_local/</code> を毎回作り直すので、前回の出力や別スコープの残りファイルは混ざりません（<code>_local/</code> 内に置いた独自ファイルは消えます）。ZIP 納品は <code>_local/</code> フォルダごと渡し、受け取り側は複製内の .kasc を開くだけで群登録されます。</p>
       <ul>
         <li><code>DATA/cloud/&lt;取得元ハッシュ&gt;/</code>: 接続中のクラウドルートを <code>rclone copy</code> でコピーします。別の接続先・ルートの同名ファイルが混ざらないよう取得元ごとに分け、共有時は <code>../DATA/cloud/&lt;取得元ハッシュ&gt;/パス</code> に書き換えます（未接続時はスキップ）。取得元の対応は <code>cloud/_sources.json</code> に保存します</li>
         <li><code>DATA/http/</code>（共有時は <code>../DATA/http/</code>）: <code>.kasc</code> 内の http(s) URL をサーバーがダウンロードして保存し、複製 .kasc の参照を書き換えます。対象はベクター系レイヤー行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>fly_geojson:</code>）の URL フィールド、<code>style=</code>/<code>qml=</code> オプション、<code>info:</code>/<code>legend:</code>、および <code>sql:</code> クエリ内の URL リテラル（同じ URL が他の行で取得済みなら同一ファイルを指します）。タイル系（<code>xyz:</code>/<code>base:</code>/<code>3dtiles:</code>）は巨大なため対象外です</li>

@@ -1337,10 +1337,15 @@ enum LocalizeScope {
 
 static LOCALIZE_LOCK: Mutex<()> = Mutex::const_new(());
 
-// ディレクトリを再帰的にコピーする。シンボリックリンクは辿らない
-async fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), (StatusCode, String)> {
-    let mut stack = vec![(src.to_path_buf(), dst.to_path_buf())];
-    while let Some((from_dir, to_dir)) = stack.pop() {
+// ディレクトリを再帰的にコピーする。シンボリックリンクは辿らない。
+// skip_top は最上位階層だけで除外するファイル・フォルダ名(大文字小文字無視)
+async fn copy_dir_all(
+    src: &Path,
+    dst: &Path,
+    skip_top: &[&str],
+) -> Result<(), (StatusCode, String)> {
+    let mut stack = vec![(src.to_path_buf(), dst.to_path_buf(), true)];
+    while let Some((from_dir, to_dir, is_top)) = stack.pop() {
         tokio::fs::create_dir_all(&to_dir)
             .await
             .map_err(internal_error)?;
@@ -1348,11 +1353,15 @@ async fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), (StatusCode, String)
             .await
             .map_err(internal_error)?;
         while let Some(entry) = entries.next_entry().await.map_err(internal_error)? {
+            let name = entry.file_name();
+            if is_top && skip_top.iter().any(|skip| name.eq_ignore_ascii_case(*skip)) {
+                continue;
+            }
             let file_type = entry.file_type().await.map_err(internal_error)?;
             if file_type.is_dir() {
-                stack.push((entry.path(), to_dir.join(entry.file_name())));
+                stack.push((entry.path(), to_dir.join(&name), false));
             } else if file_type.is_file() {
-                tokio::fs::copy(entry.path(), to_dir.join(entry.file_name()))
+                tokio::fs::copy(entry.path(), to_dir.join(&name))
                     .await
                     .map_err(internal_error)?;
             }
@@ -1646,6 +1655,33 @@ fn kasc_url_field_index(line_type: &str, field_count: usize) -> Option<usize> {
     }
 }
 
+// ローカル参照の書き換え対象フィールド。タイル系はリモート取得こそ
+// 対象外だがローカルファイルを参照しうるため、全レイヤー行を対象にする
+fn kasc_local_ref_field_index(line_type: &str, field_count: usize) -> Option<usize> {
+    match line_type {
+        "xyz" | "base" | "3dtiles" => Some(1),
+        _ => kasc_url_field_index(line_type, field_count),
+    }
+}
+
+// 複製では既存 DATA/ の中身を DATA/local/ に集約するため、既存のローカル
+// 参照を local/ 入りに書き換える。リモート URL・cloud: は対象外
+fn localize_data_ref(text: &str) -> Option<String> {
+    if is_remote_url(text) || strip_prefix_ci(text, "cloud:").is_some() {
+        return None;
+    }
+    if let Some(rest) = strip_prefix_ci(text, "data/") {
+        return Some(format!("DATA/local/{rest}"));
+    }
+    if let Some(rest) = strip_prefix_ci(text, "./data/") {
+        return Some(format!("DATA/local/{rest}"));
+    }
+    if let Some(rest) = strip_prefix_ci(text, "../data/") {
+        return Some(format!("../DATA/local/{rest}"));
+    }
+    None
+}
+
 // | 区切りフィールド1つの書き換え。
 // cloud: → cloud_prefix(指定時のみ)、URLフィールド・style=/qml= 値 → lookup の結果
 fn rewrite_kasc_field(
@@ -1667,7 +1703,7 @@ fn rewrite_kasc_field(
     }
     // 末尾空白は値に含めない(同一URLが末尾空白の有無で別扱いになるのを防ぐ)
     let url_text = trimmed.trim_end();
-    if is_url_field && is_remote_url(url_text) {
+    if is_url_field {
         if let Some(replacement) = lookup(url_text, RefPos::Field) {
             let trail = &trimmed[url_text.len()..];
             return format!("{indent}{replacement}{trail}");
@@ -1681,15 +1717,13 @@ fn rewrite_kasc_field(
             let after_eq = &trimmed[eq + 1..];
             let lead = after_eq.len() - after_eq.trim_start().len();
             let value = after_eq[lead..].trim_end();
-            if is_remote_url(value) {
-                if let Some(replacement) = lookup(value, RefPos::Field) {
-                    let trail = &after_eq[lead + value.len()..];
-                    return format!(
-                        "{indent}{}{}{replacement}{trail}",
-                        &trimmed[..eq + 1],
-                        &after_eq[..lead]
-                    );
-                }
+            if let Some(replacement) = lookup(value, RefPos::Field) {
+                let trail = &after_eq[lead + value.len()..];
+                return format!(
+                    "{indent}{}{}{replacement}{trail}",
+                    &trimmed[..eq + 1],
+                    &after_eq[..lead]
+                );
             }
         }
     }
@@ -1717,9 +1751,6 @@ fn rewrite_sql_tail_option(
             .find(|ch: char| ch == '|' || ch.is_whitespace())
             .unwrap_or(after_eq[lead2..].len());
         let token = &after_eq[lead2..][..token_end];
-        if !is_remote_url(token) {
-            return None;
-        }
         let replacement = lookup(token, RefPos::Field)?;
         let consumed = lead + key.len() + mid + 1 + lead2 + token.len();
         let text = format!(
@@ -1733,10 +1764,10 @@ fn rewrite_sql_tail_option(
     None
 }
 
-// sql: 行の値部分(タイトルの次の | 以降=クエリ+末尾オプション)中のリモートURLを書き換える。
-// クエリ内の 'https://...' / "https://..." 文字列リテラルは RefPos::Sql、
-// 末尾オプションの style=/qml= は RefPos::Field として lookup に渡す
-fn rewrite_sql_remote_urls(
+// sql: 行の値部分(タイトルの次の | 以降=クエリ+末尾オプション)中の参照を書き換える。
+// クエリ内のクォートリテラルは RefPos::Sql、末尾オプションの style=/qml= は
+// RefPos::Field として lookup に渡す。対象判定は lookup 側で行う
+fn rewrite_sql_refs(
     value: &str,
     lookup: &mut impl FnMut(&str, RefPos) -> Option<String>,
 ) -> String {
@@ -1762,14 +1793,12 @@ fn rewrite_sql_remote_urls(
             match end {
                 Some(end) => {
                     let inner = &rest[c.len_utf8()..end];
-                    if is_remote_url(inner) {
-                        if let Some(replacement) = lookup(inner, RefPos::Sql) {
-                            out.push(c);
-                            out.push_str(&replacement);
-                            out.push(c);
-                            rest = &rest[end + c.len_utf8()..];
-                            continue;
-                        }
+                    if let Some(replacement) = lookup(inner, RefPos::Sql) {
+                        out.push(c);
+                        out.push_str(&replacement);
+                        out.push(c);
+                        rest = &rest[end + c.len_utf8()..];
+                        continue;
                     }
                     out.push_str(&rest[..end + c.len_utf8()]);
                     rest = &rest[end + c.len_utf8()..];
@@ -1799,6 +1828,7 @@ fn rewrite_sql_remote_urls(
 fn rewrite_kasc_line(
     line: &str,
     cloud_prefix: Option<&str>,
+    url_field_index: fn(&str, usize) -> Option<usize>,
     lookup: &mut impl FnMut(&str, RefPos) -> Option<String>,
 ) -> String {
     let (body, cr) = match line.strip_suffix('\r') {
@@ -1823,10 +1853,10 @@ fn rewrite_kasc_line(
     let value = &body[sep + 1..];
     // sql: のクエリには | を含められるためフィールド分割せず専用スキャンで処理する
     if line_type == "sql" {
-        return format!("{prefix}{}{cr}", rewrite_sql_remote_urls(value, lookup));
+        return format!("{prefix}{}{cr}", rewrite_sql_refs(value, lookup));
     }
     let field_count = value.split('|').count();
-    let url_index = kasc_url_field_index(&line_type, field_count);
+    let url_index = url_field_index(&line_type, field_count);
     let parts: Vec<String> = value
         .split('|')
         .enumerate()
@@ -1837,18 +1867,28 @@ fn rewrite_kasc_line(
     format!("{prefix}{}{cr}", parts.join("|"))
 }
 
-// .kasc 全文のリモート参照を書き換える。lookup は URL(原文)を受け取り、
+// .kasc 全文の参照を書き換える。lookup は参照の原文を受け取り、
 // Some(置換文字列) を返せば差し替え、None なら参照をそのまま残す。
+// url_field_index は行タイプごとの URL フィールド位置を返す。
 // cloud_prefix=None のとき cloud: 参照・接続行は一切触らない
+fn rewrite_kasc_refs(
+    text: &str,
+    cloud_prefix: Option<&str>,
+    url_field_index: fn(&str, usize) -> Option<usize>,
+    lookup: &mut impl FnMut(&str, RefPos) -> Option<String>,
+) -> String {
+    text.split('\n')
+        .map(|line| rewrite_kasc_line(line, cloud_prefix, url_field_index, lookup))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn rewrite_kasc_remote_refs(
     text: &str,
     cloud_prefix: Option<&str>,
     lookup: &mut impl FnMut(&str, RefPos) -> Option<String>,
 ) -> String {
-    text.split('\n')
-        .map(|line| rewrite_kasc_line(line, cloud_prefix, lookup))
-        .collect::<Vec<_>>()
-        .join("\n")
+    rewrite_kasc_refs(text, cloud_prefix, kasc_url_field_index, lookup)
 }
 
 // 残った cloud: 参照の数(未同期・書き換え不能の目安として応答に含める)
@@ -1912,12 +1952,18 @@ async fn cloud_localize(
         ));
     }
     let local_project_dir = local_root.join(dir_name);
-    copy_dir_all(&project_dir, &local_project_dir).await?;
+    copy_dir_all(&project_dir, &local_project_dir, &["DATA"]).await?;
+    // 既存のローカル DATA/ は取得物(http/, cloud/)と混ざらないよう
+    // DATA/local/ に集約して複製する
+    let project_data = project_dir.join("DATA");
+    if project_data.is_dir() {
+        copy_dir_all(&project_data, &local_project_dir.join("DATA/local"), &[]).await?;
+    }
     // 共有スコープ(../DATA)が既存データを指している場合も _local 内で
     // 解決できるよう、親の DATA/ をワークスペース側へ複製しておく
     let shared_src = parent.join("DATA");
     if shared_src.is_dir() {
-        copy_dir_all(&shared_src, &local_root.join("DATA")).await?;
+        copy_dir_all(&shared_src, &local_root.join("DATA/local"), &[]).await?;
     }
     // 群マニフェスト: 生成フォルダ内の .kasc を開けば既存の群登録で
     // 取り込める構造にし、../ スコープの階層宣言としても機能させる
@@ -2023,6 +2069,9 @@ async fn cloud_localize(
     let mut urls: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     rewrite_kasc_remote_refs(&text, cloud_prefix.as_deref(), &mut |url, _pos| {
+        if !is_remote_url(url) {
+            return None;
+        }
         let normalized = normalize_remote_url(url);
         if seen.insert(normalized.clone()) {
             urls.push(normalized);
@@ -2099,22 +2148,30 @@ async fn cloud_localize(
             .map_err(internal_error)?;
     }
 
-    // 参照の書き換え。ダウンロード済みの URL のみ置き換える
-    let mut kasc_rewritten = false;
-    let new_text = rewrite_kasc_remote_refs(&text, cloud_prefix.as_deref(), &mut |url, _pos| {
-        let normalized = normalize_remote_url(url);
-        let rel = names.get(&normalized)?;
-        if !downloaded.contains(&normalized) {
-            return None;
-        }
-        Some(format!("{data_prefix}/{}", encode_uri_path(rel)))
-    });
+    // 参照の書き換え。既存のローカル DATA 参照を先に local/ へ集約して
+    // から、ダウンロード済みのリモート参照を http/・cloud/ へ置き換える
+    // (この順でないと生成した参照を二重書き換えしてしまう)
+    let local_text = rewrite_kasc_refs(
+        &text,
+        None,
+        kasc_local_ref_field_index,
+        &mut |value, _pos| localize_data_ref(value),
+    );
+    let new_text =
+        rewrite_kasc_remote_refs(&local_text, cloud_prefix.as_deref(), &mut |url, _pos| {
+            let normalized = normalize_remote_url(url);
+            let rel = names.get(&normalized)?;
+            if !downloaded.contains(&normalized) {
+                return None;
+            }
+            Some(format!("{data_prefix}/{}", encode_uri_path(rel)))
+        });
     // 書き換えは複製側の .kasc に反映し、元プロジェクトは変更しない
-    if new_text != text {
+    let kasc_rewritten = new_text != text;
+    if kasc_rewritten {
         tokio::fs::write(local_project_dir.join(&kasc_name), &new_text)
             .await
             .map_err(internal_error)?;
-        kasc_rewritten = true;
     }
     Ok(Json(json!({
         "ok": true,
@@ -2138,6 +2195,9 @@ mod localize_tests {
         let mut urls = Vec::new();
         let mut seen = HashSet::new();
         rewrite_kasc_remote_refs(text, None, &mut |url, _pos| {
+            if !is_remote_url(url) {
+                return None;
+            }
             let normalized = normalize_remote_url(url);
             if seen.insert(normalized.clone()) {
                 urls.push(normalized);
@@ -2334,12 +2394,14 @@ mod localize_tests {
         std::fs::create_dir_all(&shared_dir).unwrap();
         std::fs::write(shared_dir.join("shared.geojson"), "{}").unwrap();
         let dir = env.state.projects_dir.join("A");
-        std::fs::create_dir_all(dir.join("DATA")).unwrap();
+        std::fs::create_dir_all(dir.join("DATA/http")).unwrap();
         std::fs::write(dir.join("DATA/local.geojson"), "{}").unwrap();
+        // 元 DATA/http は生成物ではなくローカルデータとして local/ 側に集約する
+        std::fs::write(dir.join("DATA/http/old.geojson"), "{}").unwrap();
         std::fs::write(
             dir.join(KASC_FILE_NAME),
             format!(
-                "geojson: keep | DATA/local.geojson | on\ngeojson: shared | ../DATA/shared.geojson | on\nduckdb: data | {base}/a/data.csv\nsql: sql | SELECT * FROM read_csv('{base}/a/data.csv')"
+                "geojson: keep | DATA/local.geojson | on\ngeojson: shared | ../DATA/shared.geojson | on\ngeojson: old | DATA/http/old.geojson | on\nduckdb: data | {base}/a/data.csv\nsql: sql | SELECT * FROM read_csv('{base}/a/data.csv')\nsql: localsql | SELECT * FROM read_csv('DATA/local.geojson')"
             ),
         )
         .unwrap();
@@ -2364,7 +2426,14 @@ mod localize_tests {
             std::fs::read_to_string(dir.join(KASC_FILE_NAME)).unwrap(),
             original
         );
-        assert!(!dir.join("DATA/http").exists());
+        // ダウンロードは元の DATA/http に書き込まれない
+        assert_eq!(
+            std::fs::read_dir(dir.join("DATA/http"))
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .count(),
+            1
+        );
         // 群マニフェスト + プロジェクト複製 + DATA/ の構成
         let manifest: Value = serde_json::from_str(
             &std::fs::read_to_string(local_root.join(GROUP_MANIFEST_FILE_NAME)).unwrap(),
@@ -2376,12 +2445,19 @@ mod localize_tests {
         let text = std::fs::read_to_string(&copied).unwrap();
         assert!(text.contains("../DATA/http/data.csv"));
         assert!(text.contains("read_csv('../DATA/http/data.csv')"));
-        assert!(text.contains("DATA/local.geojson"));
-        assert!(text.contains("../DATA/shared.geojson"));
+        assert!(text.contains("| DATA/local/local.geojson |"));
+        assert!(!text.contains("| DATA/local.geojson |"));
+        assert!(text.contains("read_csv('DATA/local/local.geojson')"));
+        assert!(text.contains("| ../DATA/local/shared.geojson |"));
+        assert!(text.contains("| DATA/local/http/old.geojson |"));
         assert!(!text.contains(&base));
+        // 生成物(http/)と複製したローカルデータ(local/)は混在しない
         assert!(local_root.join("DATA/http/data.csv").is_file());
-        assert!(local_root.join("DATA/shared.geojson").is_file());
-        assert!(local_root.join("A/DATA/local.geojson").is_file());
+        assert!(!local_root.join("DATA/shared.geojson").exists());
+        assert!(local_root.join("DATA/local/shared.geojson").is_file());
+        assert!(!local_root.join("A/DATA/local.geojson").exists());
+        assert!(local_root.join("A/DATA/local/local.geojson").is_file());
+        assert!(local_root.join("A/DATA/local/http/old.geojson").is_file());
         let sources = read_localize_sources(&local_root.join("DATA/http/_sources.json")).unwrap();
         assert_eq!(sources.len(), 1);
         // 生成物はそのまま群として外部プロジェクト登録できる
@@ -2418,20 +2494,34 @@ mod localize_tests {
         assert!(!local_root.join("DATA/http/data.csv").exists());
         let text = std::fs::read_to_string(&copied).unwrap();
         assert!(text.contains("DATA/http/data.csv"));
-        // ソースの DATA/ に壊れた出典一覧があると複製後に衝突検出する
-        std::fs::create_dir_all(dir.join("DATA/http")).unwrap();
-        std::fs::write(dir.join("DATA/http/_sources.json"), "broken").unwrap();
-        let error = cloud_localize(
-            State(env.state.clone()),
-            Json(CloudLocalizeRequest {
-                project: "A".to_string(),
-                scope: LocalizeScope::Project,
-            }),
-        )
-        .await
-        .unwrap_err();
-        assert_eq!(error.0, StatusCode::CONFLICT);
+        assert!(text.contains("| DATA/local/local.geojson |"));
         task.abort();
+    }
+
+    #[test]
+    fn existing_local_refs_move_under_data_local() {
+        let text = "geojson: a | DATA/a.geojson | on\n\
+                    geojson: b | ../DATA/b.geojson | on\n\
+                    3dtiles: t | DATA/tiles/tileset.json\n\
+                    xyz: t | DATA/tiles/{z}/{x}/{y}.png\n\
+                    info: ./DATA/i.html\n\
+                    legend: l | DATA/l.png\n\
+                    sql: s | SELECT * FROM read_csv('DATA/x.csv')\n\
+                    geojson: c | cloud:folder/c.geojson\n\
+                    geojson: d | https://x/d.geojson";
+        let out = rewrite_kasc_refs(text, None, kasc_local_ref_field_index, &mut |v, _| {
+            localize_data_ref(v)
+        });
+        assert!(out.contains("| DATA/local/a.geojson |"));
+        assert!(out.contains("| ../DATA/local/b.geojson |"));
+        assert!(out.contains("3dtiles: t | DATA/local/tiles/tileset.json"));
+        assert!(out.contains("xyz: t | DATA/local/tiles/{z}/{x}/{y}.png"));
+        assert!(out.contains("info: DATA/local/i.html"));
+        assert!(out.contains("| DATA/local/l.png"));
+        assert!(out.contains("read_csv('DATA/local/x.csv')"));
+        // cloud:・リモート URL・非参照フィールドは無変更
+        assert!(out.contains("cloud:folder/c.geojson"));
+        assert!(out.contains("https://x/d.geojson"));
     }
 
     #[test]
