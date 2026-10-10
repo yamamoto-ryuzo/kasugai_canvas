@@ -42,7 +42,7 @@ legend: 凡例|https://example.com/legend.png</code></pre>
         </div>
         <div class="url-box">
           <h3>設定種類</h3>
-          <p>納品用ローカル化は共有保存が既定です。HTTP(S) データの出力先は <code>../DATA/http/</code>（専用選択時は <code>DATA/http/</code>）で、<code>sql: 例 | SELECT * FROM read_csv_auto('../DATA/http/x.csv')</code> のように SQL のファイル参照も相対パスで保存できます。<code>FROM</code>/<code>JOIN</code> 直後や対応する <code>read_csv</code>/<code>read_parquet</code>/<code>read_json</code>/<code>ST_Read</code> 系の第1引数にある DATA/ 相対参照を、描画・属性検索時に現在のプロジェクトから解決します。通常の文字列値は変更しません。</p>
+          <p>納品用ローカル化は <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します（共有選択が既定）。HTTP(S) データは共有選択時に <code>_local/DATA/http/</code>（複製 .kasc からは <code>../DATA/http/</code> 参照）、専用選択時に複製内 <code>DATA/http/</code> へ出力され、既存のローカル参照は <code>DATA/local/</code>・<code>../DATA/local/</code> へ書き換えられます。<code>sql: 例 | SELECT * FROM read_csv_auto('../DATA/http/x.csv')</code> のように SQL のファイル参照も相対パスで保存できます。<code>FROM</code>/<code>JOIN</code> 直後や対応する <code>read_csv</code>/<code>read_parquet</code>/<code>read_json</code>/<code>ST_Read</code> 系の第1引数にある DATA/ 相対参照を、描画・属性検索時に現在のプロジェクトから解決します。通常の文字列値は変更しません。</p>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
 xyz: タイルレイヤ | 同上+off
 3dtiles: レイヤ | off / proxy=off
