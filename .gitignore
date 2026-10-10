@@ -6,3 +6,5 @@ __pycache__/
 .wrangler/
 .dev.vars
 .datastore/
+# 納品用ローカル化の生成ワークスペース
+installer/projects/*_local/

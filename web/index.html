@@ -245,8 +245,8 @@
                     <option value="shared" selected data-i18n="cloud.localizeShared">共有（既定）: ../DATA/</option>
                     <option value="project" data-i18n="cloud.localizeProject">専用: DATA/</option>
                   </select>
-                  <p class="hint" data-i18n="cloud.localizeHint">共有はプロジェクトフォルダの1つ上、専用はプロジェクト内に保存します。納品時は参照先のDATA/も含めてください。</p>
-                  <button id="cloud-localize" type="button" data-i18n="cloud.localize">リモートデータをDATA/へ同期（納品用）</button>
+                  <p class="hint" data-i18n="cloud.localizeHint">プロジェクトの隣に &lt;name&gt;_local/（群マニフェスト＋プロジェクト複製＋DATA/）を生成します。共有は _local/DATA/、専用は _local/&lt;name&gt;/DATA/。元は変更されません。納品は _local フォルダごと渡してください。</p>
+                  <button id="cloud-localize" type="button" data-i18n="cloud.localize">納品パッケージを生成（_local/）</button>
                   <p id="cloud-status" class="hint" aria-live="polite"></p>
                 </div>
               </section>

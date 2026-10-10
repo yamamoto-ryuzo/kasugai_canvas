@@ -1337,20 +1337,64 @@ enum LocalizeScope {
 
 static LOCALIZE_LOCK: Mutex<()> = Mutex::const_new(());
 
-fn localize_destination(
-    project_dir: &Path,
-    scope: LocalizeScope,
-) -> Result<(PathBuf, &'static str), (StatusCode, String)> {
-    match scope {
-        LocalizeScope::Project => Ok((project_dir.to_path_buf(), "DATA")),
-        LocalizeScope::Shared => project_dir
-            .parent()
-            .map(|dir| (dir.to_path_buf(), "../DATA"))
-            .ok_or((
-                StatusCode::BAD_REQUEST,
-                "共有フォルダを特定できません".to_string(),
-            )),
+// ディレクトリを再帰的にコピーする。シンボリックリンクは辿らない
+async fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), (StatusCode, String)> {
+    let mut stack = vec![(src.to_path_buf(), dst.to_path_buf())];
+    while let Some((from_dir, to_dir)) = stack.pop() {
+        tokio::fs::create_dir_all(&to_dir)
+            .await
+            .map_err(internal_error)?;
+        let mut entries = tokio::fs::read_dir(&from_dir)
+            .await
+            .map_err(internal_error)?;
+        while let Some(entry) = entries.next_entry().await.map_err(internal_error)? {
+            let file_type = entry.file_type().await.map_err(internal_error)?;
+            if file_type.is_dir() {
+                stack.push((entry.path(), to_dir.join(entry.file_name())));
+            } else if file_type.is_file() {
+                tokio::fs::copy(entry.path(), to_dir.join(entry.file_name()))
+                    .await
+                    .map_err(internal_error)?;
+            }
+        }
     }
+    Ok(())
+}
+
+// ディレクトリを再帰的に削除する。Windows で残りがちな読み取り専用属性は
+// 外して削除し、シンボリックリンクはリンク自体だけを消す(中身は辿らない)
+fn remove_dir_all_forced(path: &Path) -> std::io::Result<()> {
+    let meta = std::fs::symlink_metadata(path)?;
+    if meta.is_dir() {
+        for entry in std::fs::read_dir(path)? {
+            remove_dir_all_forced(&entry?.path())?;
+        }
+        std::fs::remove_dir(path)
+    } else {
+        let mut permissions = meta.permissions();
+        if permissions.readonly() {
+            permissions.set_readonly(false);
+            let _ = std::fs::set_permissions(path, permissions);
+        }
+        std::fs::remove_file(path)
+    }
+}
+
+// 直前に書き込んだファイルが AV スキャン等で一時ロックされて削除に
+// 失敗することがあるため、一定回数リトライする
+fn remove_dir_all_retry(path: &Path) -> std::io::Result<()> {
+    let mut last_error = None;
+    for _ in 0..10 {
+        match remove_dir_all_forced(path) {
+            Ok(()) => return Ok(()),
+            Err(error) => {
+                last_error = Some(error);
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "remove_dir_all failed")))
 }
 
 fn localize_output_path(root: &Path, rel: &str) -> Result<PathBuf, (StatusCode, String)> {
@@ -1372,6 +1416,19 @@ fn localize_output_path(root: &Path, rel: &str) -> Result<PathBuf, (StatusCode, 
         }
     }
     Ok(path)
+}
+
+// 複製内の .kasc から見た DATA/ の位置。共有は _local/ 直下、
+// 専用は複製プロジェクト内に置く
+fn localize_output_scope(
+    local_root: &Path,
+    project_dir: &Path,
+    scope: LocalizeScope,
+) -> (PathBuf, &'static str) {
+    match scope {
+        LocalizeScope::Shared => (local_root.to_path_buf(), "../DATA"),
+        LocalizeScope::Project => (project_dir.to_path_buf(), "DATA"),
+    }
 }
 
 // ---- 納品用ローカル化(.kasc 内のリモート参照の DATA/ 化) ----
@@ -1802,10 +1859,12 @@ fn count_cloud_refs(text: &str) -> usize {
         .count()
 }
 
-// リモート参照のローカル化(納品用)。接続中ならクラウドルートを
-// 選択先の DATA/cloud/<取得元ハッシュ>/ へ rclone copy し、cloud: 参照を
-// .kasc 基準の相対パスに書き換える。さらに http(s) 参照(レイヤーURL・
-// style=・info:/legend:・sql: クエリ内リテラル)を DATA/http/ へダウンロードして
+// リモート参照のローカル化(納品用)。元プロジェクトは変更せず、
+// 兄弟に <dir>_local/ ワークスペース(群マニフェスト+プロジェクト複製+
+// DATA/)を生成する。接続中ならクラウドルートを選択先の
+// DATA/cloud/<取得元ハッシュ>/ へ rclone copy し、cloud: 参照を .kasc 基準の
+// 相対パスに書き換える。さらに http(s) 参照(レイヤーURL・style=・
+// info:/legend:・sql: クエリ内リテラル)を DATA/http/ へダウンロードして
 // 参照を書き換える。重複する URL は1ファイルにまとめ、sql: 文中の URL も
 // 同一ファイルを指す。納品先は rclone 設定・OAuth・ネット接続不要で
 // ファイル一式だけで動く構成になる
@@ -1821,11 +1880,89 @@ async fn cloud_localize(
             "プロジェクトが見つかりません".to_string(),
         ));
     }
-    let kasc_path = project_dir.join(project_kasc_name(&state, &request.project));
+    let kasc_name = project_kasc_name(&state, &request.project);
+    let kasc_path = project_dir.join(&kasc_name);
     let text = tokio::fs::read_to_string(&kasc_path)
         .await
         .map_err(internal_error)?;
-    let (output_root, data_prefix) = localize_destination(&project_dir, request.scope)?;
+
+    // 出力は元プロジェクトを変更しない納品ワークスペース。
+    // 兄弟に <dir>_local/ を作り、群マニフェスト + プロジェクト複製 +
+    // DATA/ を内包する自己完結パッケージにする。
+    // 既存 _local は毎回作り直し、スコープ違いの残りファイルが
+    // 混ざらないようにする
+    let dir_name = project_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or((
+            StatusCode::BAD_REQUEST,
+            "プロジェクトフォルダ名を特定できません".to_string(),
+        ))?;
+    let parent = project_dir.parent().ok_or((
+        StatusCode::BAD_REQUEST,
+        "プロジェクトの親フォルダを特定できません".to_string(),
+    ))?;
+    let local_root = normalize_fs_path(&parent.join(format!("{dir_name}_local")));
+    if local_root.is_dir() {
+        remove_dir_all_retry(&local_root).map_err(internal_error)?;
+    } else if local_root.exists() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "納品ワークスペースと同名のファイルが存在します".to_string(),
+        ));
+    }
+    let local_project_dir = local_root.join(dir_name);
+    copy_dir_all(&project_dir, &local_project_dir).await?;
+    // 共有スコープ(../DATA)が既存データを指している場合も _local 内で
+    // 解決できるよう、親の DATA/ をワークスペース側へ複製しておく
+    let shared_src = parent.join("DATA");
+    if shared_src.is_dir() {
+        copy_dir_all(&shared_src, &local_root.join("DATA")).await?;
+    }
+    // 群マニフェスト: 生成フォルダ内の .kasc を開けば既存の群登録で
+    // 取り込める構造にし、../ スコープの階層宣言としても機能させる
+    let title = read_project_title(&project_dir)
+        .or_else(|| {
+            state.external_projects.lock().ok().and_then(|list| {
+                list.iter()
+                    .find(|e| e.id == request.project)
+                    .map(|e| e.title.clone())
+            })
+        })
+        .or_else(|| {
+            std::fs::read_to_string(state.projects_dir.join(GROUP_MANIFEST_FILE_NAME))
+                .ok()
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+                .and_then(|value| {
+                    value.as_array().into_iter().flatten().find_map(|entry| {
+                        if entry.get("id").and_then(Value::as_str) == Some(request.project.as_str())
+                        {
+                            entry
+                                .get("title")
+                                .and_then(Value::as_str)
+                                .map(str::to_string)
+                        } else {
+                            None
+                        }
+                    })
+                })
+        })
+        .unwrap_or_else(|| dir_name.to_string());
+    let group_manifest = json!([{
+        "id": request.project,
+        "title": title,
+        "dir": dir_name,
+        "kasc": kasc_name,
+    }]);
+    tokio::fs::write(
+        local_root.join(GROUP_MANIFEST_FILE_NAME),
+        serde_json::to_vec_pretty(&group_manifest).map_err(internal_error)?,
+    )
+    .await
+    .map_err(internal_error)?;
+
+    let (output_root, data_prefix) =
+        localize_output_scope(&local_root, &local_project_dir, request.scope);
     let data_dir = localize_output_path(&output_root, "")?;
     tokio::fs::create_dir_all(&data_dir)
         .await
@@ -1972,8 +2109,9 @@ async fn cloud_localize(
         }
         Some(format!("{data_prefix}/{}", encode_uri_path(rel)))
     });
+    // 書き換えは複製側の .kasc に反映し、元プロジェクトは変更しない
     if new_text != text {
-        tokio::fs::write(&kasc_path, &new_text)
+        tokio::fs::write(local_project_dir.join(&kasc_name), &new_text)
             .await
             .map_err(internal_error)?;
         kasc_rewritten = true;
@@ -1985,6 +2123,8 @@ async fn cloud_localize(
         "failed": failed,
         "cloudRefsRemaining": count_cloud_refs(&new_text),
         "kascRewritten": kasc_rewritten,
+        "outputPath": local_root.to_string_lossy(),
+        "projectDir": local_project_dir.to_string_lossy(),
         "dataPath": data_dir.to_string_lossy(),
         "dataReference": data_prefix,
     })))
@@ -2175,7 +2315,7 @@ mod localize_tests {
     }
 
     #[tokio::test]
-    async fn localize_shared_private_and_repeated_downloads() {
+    async fn localize_builds_self_contained_workspace() {
         let env = TestWorkspace::new();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
@@ -2189,43 +2329,22 @@ mod localize_tests {
             .await
             .unwrap();
         });
-        let shared = env.state.projects_dir.join("DATA/http");
-        for (id, source) in [("A", "a"), ("B", "b"), ("C", "a")] {
-            let dir = env.state.projects_dir.join(id);
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join(KASC_FILE_NAME), format!("duckdb: data | {base}/{source}/data.csv\nsql: sql | SELECT * FROM read_csv('{base}/{source}/data.csv')")).unwrap();
-            let result = cloud_localize(
-                State(env.state.clone()),
-                Json(CloudLocalizeRequest {
-                    project: id.to_string(),
-                    scope: LocalizeScope::Shared,
-                }),
-            )
-            .await
-            .unwrap()
-            .0;
-            assert_eq!(result["downloaded"], 1);
-            assert_eq!(result["dataReference"], "../DATA");
-            assert!(!dir.join("DATA/http").exists());
-            let text = std::fs::read_to_string(dir.join(KASC_FILE_NAME)).unwrap();
-            assert!(text.contains("../DATA/http/"));
-            assert!(!text.contains("/projects/"));
-            assert!(!text.contains(&base));
-        }
-        assert_eq!(
-            std::fs::read_to_string(shared.join("data.csv")).unwrap(),
-            "lon,lat\n139,35\n"
-        );
-        let sources = read_localize_sources(&shared.join("_sources.json")).unwrap();
-        assert_eq!(sources.len(), 2);
-        let a = env.state.projects_dir.join("A");
-        let old = std::fs::read_to_string(a.join(KASC_FILE_NAME)).unwrap();
+        // 既存のローカル参照と共有 ../DATA が _local 内で解決できるかを見る
+        let shared_dir = env.state.projects_dir.join("DATA");
+        std::fs::create_dir_all(&shared_dir).unwrap();
+        std::fs::write(shared_dir.join("shared.geojson"), "{}").unwrap();
+        let dir = env.state.projects_dir.join("A");
+        std::fs::create_dir_all(dir.join("DATA")).unwrap();
+        std::fs::write(dir.join("DATA/local.geojson"), "{}").unwrap();
         std::fs::write(
-            a.join(KASC_FILE_NAME),
-            format!("{old}\nduckdb: extra | {base}/b/data.csv"),
+            dir.join(KASC_FILE_NAME),
+            format!(
+                "geojson: keep | DATA/local.geojson | on\ngeojson: shared | ../DATA/shared.geojson | on\nduckdb: data | {base}/a/data.csv\nsql: sql | SELECT * FROM read_csv('{base}/a/data.csv')"
+            ),
         )
         .unwrap();
-        let _ = cloud_localize(
+        let original = std::fs::read_to_string(dir.join(KASC_FILE_NAME)).unwrap();
+        let result = cloud_localize(
             State(env.state.clone()),
             Json(CloudLocalizeRequest {
                 project: "A".to_string(),
@@ -2233,16 +2352,57 @@ mod localize_tests {
             }),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .0;
+        let local_root = env.state.projects_dir.join("A_local");
+        let copied = local_root.join("A").join(KASC_FILE_NAME);
+        assert_eq!(result["downloaded"], 1);
+        assert_eq!(result["dataReference"], "../DATA");
+        assert_eq!(result["outputPath"], json!(local_root.to_string_lossy()));
+        // 元プロジェクトは kasc・DATA とも変更されない
         assert_eq!(
-            std::fs::read_to_string(shared.join("data.csv")).unwrap(),
-            "lon,lat\n139,35\n"
+            std::fs::read_to_string(dir.join(KASC_FILE_NAME)).unwrap(),
+            original
         );
-        std::fs::write(
-            a.join(KASC_FILE_NAME),
-            format!("duckdb: private | {base}/a/data.csv"),
+        assert!(!dir.join("DATA/http").exists());
+        // 群マニフェスト + プロジェクト複製 + DATA/ の構成
+        let manifest: Value = serde_json::from_str(
+            &std::fs::read_to_string(local_root.join(GROUP_MANIFEST_FILE_NAME)).unwrap(),
         )
         .unwrap();
+        assert_eq!(manifest[0]["id"], "A");
+        assert_eq!(manifest[0]["dir"], "A");
+        assert_eq!(manifest[0]["kasc"], json!(KASC_FILE_NAME));
+        let text = std::fs::read_to_string(&copied).unwrap();
+        assert!(text.contains("../DATA/http/data.csv"));
+        assert!(text.contains("read_csv('../DATA/http/data.csv')"));
+        assert!(text.contains("DATA/local.geojson"));
+        assert!(text.contains("../DATA/shared.geojson"));
+        assert!(!text.contains(&base));
+        assert!(local_root.join("DATA/http/data.csv").is_file());
+        assert!(local_root.join("DATA/shared.geojson").is_file());
+        assert!(local_root.join("A/DATA/local.geojson").is_file());
+        let sources = read_localize_sources(&local_root.join("DATA/http/_sources.json")).unwrap();
+        assert_eq!(sources.len(), 1);
+        // 生成物はそのまま群として外部プロジェクト登録できる
+        let (_primary, members) = register_external_project(&env.state, &copied).unwrap();
+        assert_eq!(members.len(), 1);
+        // 再実行はワークスペースを作り直すので残滓が混ざらない
+        std::fs::write(local_root.join("DATA/http/stale.tmp"), "stale").unwrap();
+        let result = cloud_localize(
+            State(env.state.clone()),
+            Json(CloudLocalizeRequest {
+                project: "A".to_string(),
+                scope: LocalizeScope::Shared,
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(result["downloaded"], 1);
+        assert!(!local_root.join("DATA/http/stale.tmp").exists());
+        assert!(local_root.join("DATA/http/data.csv").is_file());
+        // 専用スコープは複製プロジェクト内 DATA/ に置き直す
         let private = cloud_localize(
             State(env.state.clone()),
             Json(CloudLocalizeRequest {
@@ -2254,12 +2414,13 @@ mod localize_tests {
         .unwrap()
         .0;
         assert_eq!(private["dataReference"], "DATA");
-        assert!(a.join("DATA/http/data.csv").is_file());
-        assert_eq!(
-            std::fs::read_to_string(a.join(KASC_FILE_NAME)).unwrap(),
-            "duckdb: private | DATA/http/data.csv"
-        );
-        std::fs::write(a.join("DATA/http/_sources.json"), "broken").unwrap();
+        assert!(local_root.join("A/DATA/http/data.csv").is_file());
+        assert!(!local_root.join("DATA/http/data.csv").exists());
+        let text = std::fs::read_to_string(&copied).unwrap();
+        assert!(text.contains("DATA/http/data.csv"));
+        // ソースの DATA/ に壊れた出典一覧があると複製後に衝突検出する
+        std::fs::create_dir_all(dir.join("DATA/http")).unwrap();
+        std::fs::write(dir.join("DATA/http/_sources.json"), "broken").unwrap();
         let error = cloud_localize(
             State(env.state.clone()),
             Json(CloudLocalizeRequest {
@@ -2277,13 +2438,14 @@ mod localize_tests {
     fn shared_is_default_and_private_is_explicit() {
         let request: CloudLocalizeRequest = serde_json::from_value(json!({"project":"p"})).unwrap();
         assert_eq!(request.scope, LocalizeScope::Shared);
-        let dir = Path::new("workspace/group/p");
+        let root = Path::new("workspace/p_local");
+        let dir = root.join("p");
         assert_eq!(
-            localize_destination(dir, request.scope).unwrap(),
-            (PathBuf::from("workspace/group"), "../DATA")
+            localize_output_scope(root, &dir, request.scope),
+            (root.to_path_buf(), "../DATA")
         );
         assert_eq!(
-            localize_destination(dir, LocalizeScope::Project).unwrap(),
+            localize_output_scope(root, &dir, LocalizeScope::Project),
             (dir.to_path_buf(), "DATA")
         );
         assert!(serde_json::from_value::<CloudLocalizeRequest>(

@@ -5628,8 +5628,8 @@ function setupEvents() {
           }
           if (result.failed?.length) parts.push(t("cloud.status.localizedFailed", { count: result.failed.length }));
           if (result.cloudRefsRemaining) parts.push(t("cloud.status.localizedCloudLeft", { count: result.cloudRefsRemaining }));
+          if (result.outputPath) parts.push(t("cloud.status.localizedOut", { path: result.outputPath }));
           setCloudStatus(parts.join(" / "), !!result.failed?.length);
-          if (result.kascRewritten) location.reload();
         } catch (error) {
           setCloudStatus(error.message, true);
         } finally {
