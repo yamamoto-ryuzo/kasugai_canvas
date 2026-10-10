@@ -5620,8 +5620,12 @@ function setupEvents() {
           const result = await cloudPost("localize", { project: currentProjectId || "default", scope });
           const parts = [
             result.cloudSynced ? t("cloud.status.localizedCloud") : t("cloud.status.localizedNoCloud"),
-            t("cloud.status.localizedHttp", { count: result.downloaded ?? 0, path: result.dataReference || path.replace(/\/$/, "") }),
           ];
+          if (result.downloaded || result.failed?.length || result.kascRewritten) {
+            parts.push(t("cloud.status.localizedHttp", { count: result.downloaded ?? 0, path: result.dataReference || path.replace(/\/$/, "") }));
+          } else {
+            parts.push(t("cloud.status.localizedNothing"));
+          }
           if (result.failed?.length) parts.push(t("cloud.status.localizedFailed", { count: result.failed.length }));
           if (result.cloudRefsRemaining) parts.push(t("cloud.status.localizedCloudLeft", { count: result.cloudRefsRemaining }));
           setCloudStatus(parts.join(" / "), !!result.failed?.length);

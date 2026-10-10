@@ -93,6 +93,7 @@
   "cloud.status.localizedCloud": "클라우드: 동기화됨",
   "cloud.status.localizedNoCloud": "클라우드: 미연결",
   "cloud.status.localizedHttp": "HTTP 데이터 {count}건 → {path}/http/",
+  "cloud.status.localizedNothing": "동기화할 원격 참조가 없습니다(이미 로컬 / 타일 URL 제외)",
   "cloud.status.localizedFailed": "실패 {count}건",
   "cloud.status.localizedCloudLeft": "cloud: 참조가 {count}건 남아 있습니다",
   "cloud.status.installing": "rclone을 다운로드하고 있습니다...",

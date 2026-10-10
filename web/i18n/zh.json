@@ -93,6 +93,7 @@
   "cloud.status.localizedCloud": "云端：已同步",
   "cloud.status.localizedNoCloud": "云端：未连接",
   "cloud.status.localizedHttp": "HTTP 数据 {count} 个 → {path}/http/",
+  "cloud.status.localizedNothing": "没有需要同步的远程引用（已是本地 / 切片 URL 除外）",
   "cloud.status.localizedFailed": "失败 {count} 个",
   "cloud.status.localizedCloudLeft": "还有 {count} 个 cloud: 引用未同步",
   "cloud.status.installing": "正在下载 rclone...",

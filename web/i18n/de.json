@@ -93,6 +93,7 @@
   "cloud.status.localizedCloud": "Cloud: synchronisiert",
   "cloud.status.localizedNoCloud": "Cloud: nicht verbunden",
   "cloud.status.localizedHttp": "HTTP-Daten: {count} Datei(en) → {path}/http/",
+  "cloud.status.localizedNothing": "Keine fernen Verweise zu synchronisieren (bereits lokal / Kachel-URLs ausgeschlossen)",
   "cloud.status.localizedFailed": "Fehlgeschlagen: {count}",
   "cloud.status.localizedCloudLeft": "{count} cloud:-Verweis(e) verbleiben unsynchronisiert",
   "cloud.status.installing": "rclone wird heruntergeladen...",

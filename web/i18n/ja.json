@@ -93,6 +93,7 @@
   "cloud.status.localizedCloud": "クラウド: 同期済み",
   "cloud.status.localizedNoCloud": "クラウド: 未接続",
   "cloud.status.localizedHttp": "HTTPデータ {count} 件 → {path}/http/",
+  "cloud.status.localizedNothing": "同期対象のリモート参照はありません（ローカル済み・タイル系URLは対象外）",
   "cloud.status.localizedFailed": "失敗 {count} 件",
   "cloud.status.localizedCloudLeft": "cloud: 参照が {count} 件残っています",
   "cloud.status.installing": "rclone をダウンロードしています...",

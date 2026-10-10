@@ -93,6 +93,7 @@
   "cloud.status.localizedCloud": "Nube: sincronizada",
   "cloud.status.localizedNoCloud": "Nube: no conectada",
   "cloud.status.localizedHttp": "Datos HTTP: {count} archivo(s) → {path}/http/",
+  "cloud.status.localizedNothing": "No hay referencias remotas que sincronizar (ya son locales / teselas excluidas)",
   "cloud.status.localizedFailed": "Fallidos: {count}",
   "cloud.status.localizedCloudLeft": "Quedan {count} referencia(s) cloud: sin sincronizar",
   "cloud.status.installing": "Descargando rclone...",
