@@ -52,6 +52,11 @@ body.globe-hidden .viewport { background: transparent; }
 /* 同様に .terrain-control input{width:15px} が効くため、
    プロジェクトタブのパス表示も明示的に全幅に戻す */
 #project-root-path { width: 100%; }
+/* 同様にレイヤータブの件数入力も明示的に全幅に戻す */
+#settings-layer-panel input[type="number"] { width: 100%; }
+/* アプリパネルは terrain-control の外に移動したため、逆に .control-panel input{width:100%}
+   でラジオ/チェックボックスが全幅に伸びる。小さい既定サイズに戻す */
+#app-panel input[type="radio"], #app-panel input[type="checkbox"] { width: 15px; min-height: 15px; }
 .control-panel.collapsed { width: 40px; height: 40px; padding: 7px; overflow: hidden; }
 .control-panel.collapsed .panel-tabs { height: 26px; margin: 0; padding: 0; overflow: hidden; border-bottom: 0; }
 .control-panel.collapsed .panel-tab,

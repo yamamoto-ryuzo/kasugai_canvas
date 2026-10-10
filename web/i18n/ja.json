@@ -137,7 +137,7 @@
   "settings.layer.drapeTarget": "ドレープ対象地形",
   "settings.layer.drapeApply": "ドレープを適用するレイヤー",
   "settings.layer.geojsonPrimitive": "ベクター高速ドレープ (実験的)",
-  "settings.layer.primitiveHint": "CesiumJS 1.145 の GeoJsonPrimitive を使い、ベクターレイヤー(GeoJSON/GeoParquet/FlatGeobuf)を高品質・高速に地形や 3D Tiles にドレープします。有効時は属性クリックの対象外になります(ベクター検索は利用可能です)。",
+  "settings.layer.primitiveHint": "CesiumJS 1.146 の GeoJsonPrimitive を使い、ベクターレイヤー(GeoJSON/GeoParquet/FlatGeobuf)を高品質・高速に地形や 3D Tiles にドレープします。有効時は属性クリックの対象外になります(ベクター検索は利用可能です)。",
   "settings.layer.vectorLimit": "ベクター描画件数の上限",
   "settings.layer.vectorLimitHint": "1回の描画で entity 化するベクター地物数の合計上限(全レイヤー合算)。超過分は描画を省略してフリーズを防ぎます。0 で無制限。",
   "inspector.title": "インスペクター",

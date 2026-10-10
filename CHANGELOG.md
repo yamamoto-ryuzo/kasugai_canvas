@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.8.1] - 2026-10-10
+
+### Changed
+
+- CesiumJS を 1.145 から 1.146 に更新（implicit tiling の読み込み高速化・メモリ削減、ドレープされたポリラインの幅修正などを含む）
+
+### Fixed
+
+- レイヤータブの「ベクター描画件数の上限」入力欄が `.terrain-control input{width:15px}` の影響で 16px に潰れていた問題を修正
+- アプリパネル移動に伴い `.terrain-control` の外に出た権限ラジオボタンが全幅に伸びていた問題を修正（チェックボックス・ラジオを小さい既定サイズに戻す）
+
 ## [5.8.0] - 2026-10-10
 
 ### Changed

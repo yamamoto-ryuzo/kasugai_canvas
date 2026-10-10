@@ -137,7 +137,7 @@
   "settings.layer.drapeTarget": "Terrain to drape onto",
   "settings.layer.drapeApply": "Layers to drape",
   "settings.layer.geojsonPrimitive": "Fast vector drape (experimental)",
-  "settings.layer.primitiveHint": "Uses CesiumJS 1.145 GeoJsonPrimitive to drape vector layers (GeoJSON/GeoParquet/FlatGeobuf) onto terrain and 3D Tiles with high quality and speed. Attribute picking is unavailable while enabled; vector search remains available.",
+  "settings.layer.primitiveHint": "Uses CesiumJS 1.146 GeoJsonPrimitive to drape vector layers (GeoJSON/GeoParquet/FlatGeobuf) onto terrain and 3D Tiles with high quality and speed. Attribute picking is unavailable while enabled; vector search remains available.",
   "settings.layer.vectorLimit": "Vector entity draw limit",
   "settings.layer.vectorLimitHint": "Maximum total number of vector features rendered as entities per refresh (across all layers). Excess features are skipped to prevent freezes. Set 0 for no limit.",
   "inspector.title": "Inspector",
