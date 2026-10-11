@@ -31,7 +31,9 @@ Cloud Shell（ブラウザ）でもローカルの Google Cloud SDK でも実行
 
 import argparse
 import json
+import os
 import re
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -68,7 +70,10 @@ APIS = [
 
 def _gcloud(*args, input_text=None, stream=False):
     """gcloud を実行する。stream=True で出力をそのまま表示（長いビルド用）。"""
-    cmd = "gcloud " + " ".join(args)
+    argv = ["gcloud", *args]
+    # shell=True 経由のシェルが OS で異なる（Windows=cmd / POSIX=sh）ため、
+    # --format=value(...) のような引数をそれぞれの文法で引用する
+    cmd = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
     if stream:
         return subprocess.run(
             cmd, cwd=ROOT, shell=True, input=input_text,
