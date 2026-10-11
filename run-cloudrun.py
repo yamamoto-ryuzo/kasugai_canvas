@@ -59,6 +59,9 @@ ROOT = Path(__file__).resolve().parent
 TMPDIR = ROOT / ".testtmp"  # gitignore 済み
 # 環境ごとの非秘密デプロイ設定（gitignore 済み）。秘密値は絶対に書き込まない
 DEPLOY_CONFIG = ROOT / "kasugai_canvas.cloudrun.json"
+# このファイルがあればデプロイ時に gs://<bucket>/kasc/default へアップされ、
+# Cloud Run 版だけ web/projects/ とは別の初期 .kasc で動く（--kasc で差し替え可）
+DEFAULT_CLOUDRUN_KASC = ROOT / "agent" / "cloudrun.kasc"
 
 REGION_DEFAULT = "asia-northeast1"
 SERVICE_DEFAULT = "kasugai-canvas"
@@ -348,6 +351,35 @@ def setup_bucket(project: str, region: str, sa: str, bucket: str | None,
     return envs
 
 
+def upload_kasc(spec, project: str, bucket: str | None) -> None:
+    """クラウド用 .kasc を gs://<bucket>/kasc/<projectId> へアップする。
+
+    起動時シード（web/projects/）は既存オブジェクトを上書きしないため、
+    ここで上げた設定が Cloud Run 版の初期状態になる。ローカルの web/projects/ には影響しない。
+    spec: None → agent/cloudrun.kasc があれば採用 / "PROJ:FILE" でプロジェクトID指定可
+    / "none" で無効化。
+    """
+    if not bucket:
+        return
+    path = DEFAULT_CLOUDRUN_KASC
+    proj = "default"
+    if spec:
+        if spec.lower() in ("none", "off", "-"):
+            return
+        if ":" in spec and not re.match(r"^[A-Za-z]:[\\/]", spec):
+            proj, spec = spec.split(":", 1)
+        path = Path(spec)
+    if not path.exists():
+        if spec:
+            raise SystemExit(f"--kasc ファイルが見つかりません: {path}")
+        return
+    dest = f"gs://{bucket}/kasc/{proj}"
+    r = _gcloud("storage", "cp", str(path), dest, f"--project={project}")
+    if r.returncode != 0:
+        raise SystemExit(f".kasc のアップロードに失敗しました:\n{r.stderr or r.stdout}")
+    print(f"      {dest}: {path.name}（Cloud Run 専用の初期 .kasc）", flush=True)
+
+
 def deploy(project: str, region: str, service: str, image: str,
            envs: list[str], secrets: list[str], auth_mode: str | None) -> None:
     print(f"[7/8] Cloud Run にデプロイします: {service}（{region}）", flush=True)
@@ -427,6 +459,7 @@ def main() -> None:
     parser.add_argument("--auth-user", help="認証モードのユーザー ID（初回のみ必要）")
     parser.add_argument("--auth-pass", help="認証モードのパスワード（初回のみ必要）")
     parser.add_argument("--bucket", help=".kasc・秘匿データを保存する GCS バケット名（無ければ作成）")
+    parser.add_argument("--kasc", help="Cloud Run 版の初期 .kasc（既定: agent/cloudrun.kasc。PROJ:FILE でプロジェクト指定・none で無効化）")
     args = parser.parse_args()
 
     # 前回デプロイ時の非秘密設定を既定値として引き継ぐ（引数指定が優先）
@@ -447,6 +480,7 @@ def main() -> None:
     secrets = setup_secrets(args, project, sa, auth_mode)
     envs = setup_bucket(project, region, sa, bucket, auth_mode)
     deploy(project, region, service, image, envs, secrets, auth_mode)
+    upload_kasc(args.kasc, project, bucket)
     verify(service_url(project, region, service))
     save_config({
         "project": project, "region": region, "service": service,

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.13.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.14.0</span></h1>
       <p>Cloud Run 認証（cloudrun / cloudrun-gate / cloudrun-iap）</p>
     </header>
     <main>
@@ -93,6 +93,7 @@ Cloud Storage（KASUGAI_GCS_BUCKET）
         <p>リポジトリ直下の <code>run-cloudrun.py</code> が、API 有効化 → Artifact Registry → Cloud Build（ローカルの Docker 不要）→ Secret Manager → GCS バケット・権限付与 → <code>gcloud run deploy</code> → 動作確認までを一括で行います。Cloud Shell（ブラウザターミナル）でも実行できます。</p>
         <pre><code>python run-cloudrun.py --gemini-api-key KEY --maps-api-key MAPS_KEY \
   --auth-mode 5 --auth-user ID --auth-pass PASS --bucket kasugai-data-xxxx</code></pre>
+        <p>初回デプロイ後は非秘密の設定が <code>kasugai_canvas.cloudrun.json</code>（gitignore）に保存されるため、<strong>再デプロイは引数なしの <code>python run-cloudrun.py</code>（または <code>python run.py --cloudrun</code>）</strong>だけで実行できます。シークレットは Secret Manager の既存登録が再利用されます。<code>agent/cloudrun.kasc</code> が存在すると、デプロイ時に <code>gs://&lt;bucket&gt;/kasc/default</code> へアップロードされ、<strong>Cloud Run 版だけが <code>web/projects/</code> とは別の初期 .kasc で動きます</strong>（ベースマップ透明＋Google 3D ON＋レイヤー OFF の提出用初期状態を同梱済み。起動時シードは既存オブジェクトを上書きしないため維持される。<code>--kasc none</code> で無効化・<code>--kasc PROJ:FILE</code> でプロジェクト指定可）。</p>
         <p>手動で行う場合は <code>agent/README.md</code> の手順どおりです（コンテキストはリポジトリ直下）。以下は手動運用時の個別手順です。</p>
         <ol>
           <li>

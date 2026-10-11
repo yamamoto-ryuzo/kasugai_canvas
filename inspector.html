@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.13.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.14.0</span></h1>
       <p>.kasc 設定仕様 — インスペクター設定の完全な書式</p>
     </header>
     <main>
@@ -44,8 +44,10 @@ legend: 凡例|https://example.com/legend.png</code></pre>
           <h3>設定種類</h3>
           <p>納品用ローカル化は <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します（共有選択が既定）。HTTP(S) データは共有選択時に <code>_local/DATA/http/</code>（複製 .kasc からは <code>../DATA/http/</code> 参照）、専用選択時に複製内 <code>DATA/http/</code> へ出力され、既存のローカル参照は <code>DATA/local/</code>・<code>../DATA/local/</code> へ書き換えられます。<code>3dtiles:</code> 行のリモート URL は tileset.json から参照ツリーごと <code>DATA/http/3dtiles/</code> に取得します（ベースマップ相当の Google Photorealistic 等は対象外）。<code>xyz:</code> 行のリモート <code>{z}/{x}/{y}</code> テンプレートはタイル本体を取得せず、ユーザーがタイルを配置する受け皿 <code>DATA/http/xyz/&lt;name&gt;/</code> を生成して参照を書き換えます（元 URL は <code>http/_sources.json</code> に記録。受け皿内の <code>_README.txt</code> に配置手順を同梱）。ローカルの <code>DATA/.../{z}/{x}/{y}.png</code> 参照はディレクトリごと <code>DATA/local/</code> へ複製されます。<code>sql: 例 | SELECT * FROM read_csv_auto('../DATA/http/x.csv')</code> のように SQL のファイル参照も相対パスで保存できます。<code>FROM</code>/<code>JOIN</code> 直後や対応する <code>read_csv</code>/<code>read_parquet</code>/<code>read_json</code>/<code>ST_Read</code> 系の第1引数にある DATA/ 相対参照を、描画・属性検索時に現在のプロジェクトから解決します。通常の文字列値は変更しません。</p>
           <pre><code>base: ベースマップ(先頭が既定) | maxZoom= / tileSize= / opacity= / proxy=off
+base: 表示名 | transparent | （ベースマップ透明=地表透明を初期選択。レイヤーリストには加えず表示モードのみ指定）
+base: 表示名 | none | （ベースマップなしを初期選択）
 xyz: タイルレイヤ | 同上+off / minZoom=(minimumLevel=) / bbox=西経,南緯,東経,北緯 (URL は DATA/.../{z}/{x}/{y}.png のローカルテンプレートも可)
-3dtiles: レイヤ | off / proxy=off
+3dtiles: レイヤ | off / proxy=off  （URL が tile.googleapis.com なら Maps API キーを自動付与。key= は .kasc に書かない）
 geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / render=primitive|entity / style=QMLファイルURL / attr=出典(3番目のフィールドに出典を直接書くことも可)
 gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / where=条件(SQLite式) / limit=件数 / columns=列,列 / bbox=auto(表示範囲連動・既定ON) / bbox=off(常時全件描画) / render=primitive|entity / style=QMLファイルURL / attr=出典 (layer_styles のQGIS埋め込みスタイルを自動適用)
 duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / table=地物テーブル名(gpkg) / bbox=auto(表示範囲連動・既定ON)|bbox=off(常時全件描画) / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / style=QMLファイルURL / attr=出典

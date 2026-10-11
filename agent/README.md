@@ -91,6 +91,10 @@ python run-cloudrun.py --gemini-api-key YOUR_KEY \
     --auth-mode 5 --auth-user ID --auth-pass PASS --bucket kasugai-data
 ```
 
+初回デプロイで非秘密の設定が `kasugai_canvas.cloudrun.json`（gitignore）に保存されるため、2回目以降は引数なしの `python run-cloudrun.py`（または `python run.py --cloudrun`）で再デプロイできる。シークレットは Secret Manager の既存登録を再利用する。
+
+`agent/cloudrun.kasc` があれば、デプロイ時に `gs://<bucket>/kasc/default` へアップロードされ、Cloud Run 版だけ `web/projects/` と別の初期 .kasc で動く（起動時シードは既存オブジェクトを上書きしないため維持される）。`--kasc FILE` で差し替え、`--kasc PROJ:FILE` でプロジェクト指定、`--kasc none` で無効化。
+
 手動で行う場合の手順は以下。
 
 ```bash

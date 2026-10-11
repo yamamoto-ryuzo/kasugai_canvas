@@ -4,6 +4,16 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.14.0] - 2026-10-11
+
+### Added
+
+- `.kasc` の `base:` に特殊値 `transparent`（ベースマップ透明）・`none`（ベースマップなし）を追加 — 初期表示モードを設定ファイルで指定可能に（従来は UI 選択のみ・.kasc では表現不可）
+- `3dtiles:` 行で `tile.googleapis.com` の URL に Maps API キー（BYO またはサーバー配布）を自動付与 — `key=` を .kasc に書かずに Google Photorealistic 3D Tiles をレイヤーとして宣言可能に
+- Cloud Run 専用初期設定 `agent/cloudrun.kasc` — 存在すれば `run-cloudrun.py` がデプロイ時に `gs://<bucket>/kasc/default` へアップロードし、ローカルの `web/projects/` と別設定で動作（`--kasc FILE` / `PROJ:FILE` / `none` で制御可）
+- `run-cloudrun.py`: 非秘密のデプロイ設定を `kasugai_canvas.cloudrun.json`（gitignore）に保存し引数なし再デプロイ対応。認証・Gemini・Maps のシークレットは Secret Manager 既存登録を再利用。`gcloud` が PATH に無い場合も既定インストール位置から探索
+- `run.py --cloudrun`: 保存済み設定で Cloud Run へデプロイ。`--publish --cloudrun` でリリース→push→Cloud Run 反映まで一括化
+
 ## [5.13.0] - 2026-10-11
 
 ### Added

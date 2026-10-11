@@ -2635,7 +2635,7 @@ async function refreshLayersImpl() {
     if (!item.visible && item.type === "3dtiles") continue;
     if (item.type === "3dtiles") {
       try {
-        const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(item.url, item.proxy), getCesiumTilesetOptions());
+        const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(withGoogleTileKey(item.url), item.proxy), getCesiumTilesetOptions());
         if (drape3DTiles && Array.isArray(drapeProviders) && drapeProviders.length > 0) {
           drapeProviders.forEach(options => {
             try {
@@ -3390,6 +3390,8 @@ function applyInspector(text) {
   const nextLines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const parsedCameras = [];
   const parsedBasemaps = [];
+  // base: の特殊行(transparent/none)で指定された初期表示モード
+  let parsedBaseMode = "";
   layerState.clear();
   vectorSourceCache.clear();
   // gpkg Worker が url キーで開いたままの DB も破棄する(メモリ解放・再取得)
@@ -3483,7 +3485,13 @@ function applyInspector(text) {
 
     if (type === "base") {
       const parts = value.split("|").map(part => part.trim());
-      if (parts[0] && parts[1]) {
+      // 特殊値: base: 表示名 | transparent（地表透明=ベースマップ透明）/ none（ベースマップなし）。
+      // レイヤーリストには加えず初期表示モードだけを決める（行の位置は問わない）
+      if (parts[0] && parts[1] && /^(transparent|hide|__hide_globe__)$/i.test(parts[1])) {
+        parsedBaseMode = "hide";
+      } else if (parts[0] && parts[1] && /^(none|null)$/i.test(parts[1])) {
+        parsedBaseMode = "none";
+      } else if (parts[0] && parts[1]) {
         const options = {};
         parts.slice(3).forEach(part => {
           const eq = part.indexOf("=");
@@ -3748,7 +3756,9 @@ function applyInspector(text) {
 
   syncGoogle3dTilesLayer();
   basemaps.splice(0, basemaps.length, ...parsedBasemaps);
-  selectedBasemap = basemaps[0] || null;
+  // base: の先頭が既定。transparent/none の特殊行があれば地表透明/ベースマップなしに
+  globeHidden = parsedBaseMode === "hide";
+  selectedBasemap = parsedBaseMode ? null : (basemaps[0] || null);
   cameraPresets.splice(0, cameraPresets.length, ...parsedCameras);
   const uniqueFlyPaths = [...new Map(flyPaths.map(path => [path.url, path])).values()];
   flyPaths.splice(0, flyPaths.length, ...uniqueFlyPaths);
@@ -3857,6 +3867,21 @@ async function applyInspectorCloud(spec) {
   } catch (error) {
     setStatus(error instanceof Error ? error.message : String(error), true);
   }
+}
+
+// tile.googleapis.com の URL には Maps API キー（BYO またはサーバー配布）を自動付与する。
+// .kasc には key= を書かなくてよく、キーは設定に現れない
+function withGoogleTileKey(url) {
+  try {
+    const u = new URL(url, window.location.href);
+    if (u.hostname === "tile.googleapis.com" && !u.searchParams.get("key")) {
+      const key = getMapsWsKey();
+      if (!key) return url;
+      u.searchParams.set("key", key);
+      return u.toString();
+    }
+  } catch (e) {}
+  return url;
 }
 
 // Google Photorealistic 3D Tiles: MapタブのトグルON時にレイヤ一覧へ自動追加する。
