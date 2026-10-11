@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.12.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.13.0</span></h1>
       <p>Google 連携・AI — Gemini AIチャット・Maps Platform・エージェント連携</p>
     </header>
     <main>
@@ -41,6 +41,7 @@
               <li><strong>Street View Static API</strong> — Street View のメタデータ確認（「SV」ボタン・地図クリック・AIツール <code>openStreetView</code>。パノラマ自体は Google マップを別タブで開くだけなので API 不要）</li>
             </ul>
             <p>Geocoding / Places / Street View の Web サービス API は HTTP リファラー制限付きキーを拒否します。リファラー制限をかけたい場合は「Web サービス用キー」欄に制限なしの別キーを設定してください（Map Tiles API のみリファラー制限が有効なので、上の「Maps API キー」に制限付きキーを入れる運用が可能です）。Street View 候補ラインは Google マップ内部のカバレッジデータ（キー不要・非公式）を使用します</p>
+            <p><strong>サーバー配布（BYO 不要化）</strong>：バックエンド（Cloud Run・Cloudflare Pages/Workers）のシークレットに <code>GOOGLE_MAPS_API_KEY</code> を設定すると、<code>/api/capabilities</code> が <code>google.mapsApiKey</code> を通知し、ブラウザに Maps キーが未保存の場合に自動登録します。訪問者は何も入力せずに Maps 系機能を使えます（BYO キーが保存済みならそちらが優先）。Maps キーはタイル URL 等に埋め込まれる設計上の公開キーなので、保護は秘匿ではなく GCP コンソールの <strong>HTTP リファラ制限</strong>（<code>https://&lt;配信ドメイン&gt;/*</code>）で行ってください</p>
           </div>
           <div class="feature-card">
             <h3>⚙️ ローカルコマンド</h3>
@@ -94,7 +95,7 @@ DELETE /api/files/{project}/{path} → DATA/ 内のファイルを削除</code><
             <li><strong>Workers の共有書き込み</strong>：共有 .kasc カタログ・共有プラグインカタログへの書き込みは認証・承認フローが前提で未実装</li>
             <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送は管理 → AI → エージェント で設定可能）</li>
             <li><strong>ローカルファイル連携</strong>：DATA/ 書き込みは File System Access API（Chromium系）とローカルサーバー版の <code>/api/files</code> で実装済み。QGIS/GDAL 呼び出しは未実装</li>
-            <li><strong>Cloud Run 対応</strong>：<code>PORT</code> 環境変数での <code>0.0.0.0</code> バインドのみ対応済み。Dockerfile・コンテナビルド手順は未整備（永続化には別途ストレージ設計が必要）</li>
+            <li><strong>Cloud Run の長時間処理</strong>：<code>agent/</code> の FastAPI サービス（静的配信・認証・GCS 保存・<code>/api/gemini</code>・Maps キー配布）は実装済みで <code>run-cloudrun.py</code> でデプロイできます（詳細は <a href="auth/cloudrun.html">Cloud Run 認証</a>）。長時間エージェントループ・SSE は未実装</li>
           </ul>
         </div>
       </section>

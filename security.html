@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.12.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.13.0</span></h1>
       <p>セキュリティ対策 — 実装済みの保護機構と既知の制限</p>
     </header>
     <main>
@@ -21,6 +21,14 @@
         <div class="url-box">
           <h3>デプロイ形態と信頼境界</h3>
           <p>提供される API は実行形態で分離されています。<strong>高権限 API（ファイル書き込み・プラグイン書き込み・fetch プロキシ・rclone 連携・シャットダウン等）はローカル Rust サーバー（127.0.0.1 バインド）でのみ有効</strong>です。公開環境（Cloudflare Pages/Workers・Cloud Run）には認証済みの保存系 API（<code>/api/auth</code>・<code>/api/kasc</code>・<code>/api/data</code>・<code>/api/gemini</code>）のみが存在し、無制限の書き込み・fetch プロキシは提供しません。フロントエンドは <code>GET /api/capabilities</code> の応答でバックエンド能力を判定し、機能を出し分けます。</p>
+        </div>
+
+        <div class="url-box">
+          <h3>サーバー配布 API キーの取り扱い</h3>
+          <ul>
+            <li><strong>Gemini API キー（秘匿）</strong>：<code>GEMINI_API_KEY</code> は Secret Manager 等に置き、<code>/api/gemini</code> がブラウザのリクエストに注入して転送します。キー自体はブラウザに一切現れません。認証モード時は kasugai トークン（Cookie または <code>Authorization: Bearer</code>）・Cookie・IAP のいずれかの資格情報が必須です。</li>
+            <li><strong>Maps Platform キー（配布）</strong>：<code>GOOGLE_MAPS_API_KEY</code> は <code>/api/capabilities</code> の応答でブラウザへ通知され、未保存時に localStorage へ自動登録されます。タイル URL に埋め込まれる設計上の公開キーのため秘匿はせず、<strong>保護は GCP の HTTP リファラ制限で行います</strong>（<code>https://&lt;配信ドメイン&gt;/*</code> のみ許可）。リファラ制限を付ければ第三者が奪取しても別オリジンでは使えません。</li>
+          </ul>
         </div>
 
         <div class="url-box">

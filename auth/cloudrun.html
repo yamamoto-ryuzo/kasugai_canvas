@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.12.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.13.0</span></h1>
       <p>Cloud Run 認証（cloudrun / cloudrun-gate / cloudrun-iap）</p>
     </header>
     <main>
@@ -54,7 +54,8 @@
   ├─ POST /api/auth       … ID/PASS → {ok, token, kasc}（6 では Cookie も発行）
   ├─ POST /api/kasc       … トークン必須 → GCS kasc/&lt;projectId&gt; へ書き込み
   ├─ GET|PUT /api/data/*  … トークン必須 → GCS data/&lt;key&gt;（GET は署名付き URL へ 302）
-  └─ GET /api/capabilities … {tier:"cloudrun", features, auth:{mode}}
+  └─ GET /api/capabilities … {tier:"cloudrun", features, auth:{mode}, ai, google?}
+                               GOOGLE_MAPS_API_KEY 設定時は google.mapsApiKey を通知
 
 Cloud Storage（KASUGAI_GCS_BUCKET）
   ├─ kasc/&lt;プロジェクトID&gt;  … .kasc 本文（Cloudflare の kasc:&lt;id&gt; 相当）
@@ -89,7 +90,10 @@ Cloud Storage（KASUGAI_GCS_BUCKET）
       </div>
       <div class="url-box">
         <h3>デプロイ手順</h3>
-        <p>コンテナのビルド・デプロイは <code>agent/README.md</code> の手順どおりです（コンテキストはリポジトリ直下）。</p>
+        <p>リポジトリ直下の <code>run-cloudrun.py</code> が、API 有効化 → Artifact Registry → Cloud Build（ローカルの Docker 不要）→ Secret Manager → GCS バケット・権限付与 → <code>gcloud run deploy</code> → 動作確認までを一括で行います。Cloud Shell（ブラウザターミナル）でも実行できます。</p>
+        <pre><code>python run-cloudrun.py --gemini-api-key KEY --maps-api-key MAPS_KEY \
+  --auth-mode 5 --auth-user ID --auth-pass PASS --bucket kasugai-data-xxxx</code></pre>
+        <p>手動で行う場合は <code>agent/README.md</code> の手順どおりです（コンテキストはリポジトリ直下）。以下は手動運用時の個別手順です。</p>
         <ol>
           <li>
             <strong>GCS バケットを用意します</strong>（モード5/6 で .kasc・データを使う場合）。
@@ -148,6 +152,8 @@ gcloud run deploy kasugai-canvas --image ... --iap</code></pre>
             <tr><td><code>KASUGAI_SIGNED_URL_TTL</code></td><td>署名 URL 有効期限秒（既定 900）</td></tr>
             <tr><td><code>KASUGAI_IAP_AUDIENCE</code></td><td>モード7 の IAP JWT audience（設定時は署名検証）</td></tr>
             <tr><td><code>KASUGAI_SEED_KASC</code></td><td><code>0</code> で起動時の .kasc シードを無効化</td></tr>
+            <tr><td><code>GEMINI_API_KEY</code></td><td>Gemini API キー。<code>/api/gemini</code> でサーバーキー注入に使用（Secret Manager 推奨）</td></tr>
+            <tr><td><code>GOOGLE_MAPS_API_KEY</code></td><td>Maps Platform キー。<code>/api/capabilities</code> 経由でブラウザへ配布（秘匿ではない。リファラ制限で保護）</td></tr>
           </tbody>
         </table>
       </div>
@@ -193,6 +199,10 @@ gcloud run deploy kasugai-canvas --image ... --iap</code></pre>
               <td>✅ kasugai トークン or Bearer</td>
               <td>✅ Cookie セッション</td>
               <td>✅ IAP JWT</td>
+            </tr>
+            <tr>
+              <td>Maps API キー<br><small>（GOOGLE_MAPS_API_KEY）</small></td>
+              <td colspan="3">❌ 公開 — capabilities 経由でブラウザへ配布。タイル URL に露出する設計上の公開キーなので、GCP の HTTP リファラ制限で保護</td>
             </tr>
           </tbody>
         </table>

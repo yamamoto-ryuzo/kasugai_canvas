@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.13.0] - 2026-10-11
+
+### Added
+
+- Cloud Run デプロイ自動化スクリプト `run-cloudrun.py` — gcloud 認証確認・API 有効化・Artifact Registry・Cloud Build（ローカル Docker 不要）・Secret Manager 登録・GCS バケット作成・実行 SA 権限付与・`gcloud run deploy`・`/health`/`/api/capabilities` 検証まで一括。Cloud Shell でも実行可能
+- Google Maps Platform キーのサーバー配布 — バックエンドに `GOOGLE_MAPS_API_KEY` を設定すると `/api/capabilities` が `google.mapsApiKey` を通知し、ブラウザは `googleMapsApiKey` 未保存時に自動登録（BYO キー優先。Cloud Run・Cloudflare 双方で同一契約）。キーは設計上ブラウザに露出するため GCP の HTTP リファラ制限で保護
+- `.gcloudignore`（`.dockerignore`・`.gitignore` を再利用し Cloud Build のアップロードを軽量化）
+
+### Fixed
+
+- 認証モード時に `/api/gemini` 呼び出しへ kasugai トークンが付かず 401 になる問題を修正 — `callGemini` がプロキシ経由時に `Authorization: Bearer` を付与し、`functions/api/gemini.js` が Bearer の kasugai トークンを受理（Cloudflare Pages/Cloud Run モード5は Cookie を発行しないため必須）
+
 ## [5.12.0] - 2026-10-11
 
 ### Security
