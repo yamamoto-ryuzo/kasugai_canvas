@@ -79,6 +79,19 @@ uvicorn agent.app.main:app --port 8080
 
 ## Cloud Run デプロイ
 
+リポジトリ直下の `run-cloudrun.py` で一連の手順を自動化できる（Cloud Shell・ローカル SDK のどちらでも可。ローカルの Docker は不要で、ビルドは Cloud Build に投げる）:
+
+```bash
+# 最小構成（静的配信 + /api/gemini キー隠蔽プロキシ）
+python run-cloudrun.py --gemini-api-key YOUR_KEY
+
+# 認証モード5 + GCS 保存 + キーレスAI
+python run-cloudrun.py --gemini-api-key YOUR_KEY \
+    --auth-mode 5 --auth-user ID --auth-pass PASS --bucket kasugai-data
+```
+
+手動で行う場合の手順は以下。
+
 ```bash
 # Artifact Registry（初回のみ）
 gcloud artifacts repositories create kasugai --repository-format=docker --location=asia-northeast1

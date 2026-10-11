@@ -1,0 +1,4 @@
+# Cloud Build / gcloud アップロード対象の軽量化
+# .dockerignore（Cloud Run ビルドコンテキスト用）と .gitignore をそのまま再利用する
+#!include:.dockerignore
+#!include:.gitignore
