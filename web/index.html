@@ -36,13 +36,13 @@
             <nav class="panel-tabs" aria-label="Plugin panels">
               <button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
               <button class="panel-tab active" type="button" data-panel="layers-panel" data-i18n="tab.layers">レイヤ</button>
-              <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">カメラ</button>
-              <button class="panel-tab" type="button" data-panel="search-panel" data-i18n="tab.search">検索</button>
-              <button class="panel-tab" type="button" data-panel="share-panel" data-i18n="tab.share">共有</button>
-              <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
               <button class="panel-tab" type="button" data-panel="legend-panel" data-i18n="tab.legend">凡例</button>
+              <button class="panel-tab" type="button" data-panel="search-panel" data-i18n="tab.search">検索</button>
               <button class="panel-tab" type="button" data-panel="attr-panel" data-i18n="tab.attr">属性</button>
+              <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">カメラ</button>
               <button class="panel-tab" type="button" data-panel="display-panel" data-i18n="tab.display">表示</button>
+              <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
+              <button id="share-copy" class="panel-manage" type="button" title="現在位置URLをコピー" data-i18n-attr="title:share.copy;aria-label:share.copy">🔗</button>
               <button id="manage-open" class="panel-manage" type="button" title="管理" data-i18n-attr="title:manage.open;aria-label:manage.open">⚙</button>
               <a id="help-open" class="panel-manage" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer" title="ヘルプ" data-i18n-attr="title:help.open;aria-label:help.open">?</a>
             </nav>
@@ -120,11 +120,6 @@
                 </label>
               </div>
               <div id="search-status" style="font-size:0.85em;color:#666;margin-top:4px;"></div>
-            </section>
-            <section id="share-panel" class="plugin-panel">
-              <div class="section-title" data-i18n="share.title">共有</div>
-              <button id="copy-share-url" type="button" data-i18n="share.copy">現在位置URLをコピー</button>
-              <input id="share-url" class="share-url" readonly />
             </section>
             <section id="display-panel" class="plugin-panel terrain-control">
               <nav class="settings-tabs" aria-label="表示カテゴリ" data-i18n-attr="aria-label:display.ariaLabel">

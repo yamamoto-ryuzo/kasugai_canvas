@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.9.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.10.0</span></h1>
       <p>V0: システム基本構成 — バージョン横断の実装詳細</p>
     </header>
     <main>
@@ -91,7 +91,7 @@
       <tr>
       <td><strong>Camera</strong></td>
       <td><code>cam:</code>
-      で定義したカメラプリセット、緯度・経度・高さ・ピッチ・ヘディングの手動入力</td>
+      で定義したカメラプリセット、緯度・経度・高さ・ピッチ・ヘディングの手動入力、断面クリップ</td>
       </tr>
       <tr>
       <td><strong>Search</strong></td>
@@ -99,17 +99,17 @@
       選択可）、ベクトル検索（レイヤー・属性・値の三段階選択、テキスト検索、FlyTo）</td>
       </tr>
       <tr>
-      <td><strong>Share</strong></td>
-      <td>共有 URL コピー</td>
-      </tr>
-      <tr>
       <td><strong>Info / 凡例 / Attr</strong></td>
       <td>HTML 情報表示、凡例画像、選択地物の属性表示</td>
       </tr>
       <tr>
-      <td><strong>設定</strong></td>
-      <td>DEM / ドレープ、レイヤードレープ対象、Cesium 3D Tiles
-      パラメータ、表示効果、プロジェクト切替、Inspector、Help、断面クリップ（自動更新は静的配信では無効）</td>
+      <td><strong>表示</strong></td>
+      <td>地形（DEM / ドレープ）、ドレープ対象レイヤー、3D Tiles
+      パラメータ、表示効果</td>
+      </tr>
+      <tr>
+      <td><strong>🔗 / ⚙ / ?</strong></td>
+      <td>タブバー右端のアイコン。🔗 共有 URL コピー、⚙ 管理ウィンドウ（プロジェクト切替・Inspector・AI・Google Maps・アプリ・その他）、? オンラインヘルプ</td>
       </tr>
       </tbody>
       </table>
@@ -118,7 +118,7 @@
       で定義した経路の選択ドロップダウン、2D/3D
       切替、方位コンパスが配置されています。描画（Draw）は <strong>Fly
       パネル内の Draw タブ</strong> から行います。</p>
-      <p>URL パーマリンクの自動更新、共有 URL コピー、プロジェクト切替（<code>?project=&lt;project_id&gt;</code>）を実装しています。自動更新・ルート保存・タイルプロキシ等、サーバー API に依存する機能は静的配信では無効です。</p>
+      <p>URL パーマリンクの自動更新、🔗 ボタンによる共有 URL コピー、プロジェクト切替（<code>?project=&lt;project_id&gt;</code>）を実装しています。自動更新・ルート保存・タイルプロキシ等、サーバー API に依存する機能は静的配信では無効です。</p>
       <h3>Fly モード</h3>
       <p>Fly モードでは手動操縦か、<code>fly_geojson:</code>
       で定義した経路の自動追従を選択できます。インスペクターに

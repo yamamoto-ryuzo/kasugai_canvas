@@ -5334,7 +5334,8 @@ function setupEvents() {
     }
   });
 
-  document.querySelector("#copy-share-url").addEventListener("click", async () => {
+  const shareCopyBtn = document.querySelector("#share-copy");
+  shareCopyBtn.addEventListener("click", async () => {
     const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
     const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
     const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
@@ -5342,8 +5343,9 @@ function setupEvents() {
     const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
     const height = Number(c.height).toFixed(1);
     const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
-    document.querySelector("#share-url").value = url;
     await navigator.clipboard?.writeText(url);
+    shareCopyBtn.textContent = "✓";
+    setTimeout(() => { shareCopyBtn.textContent = "🔗"; }, 1500);
   });
 
   document.querySelector("#shutdown-app").addEventListener("click", async () => {

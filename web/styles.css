@@ -63,7 +63,7 @@ body.globe-hidden .viewport { background: transparent; }
 .control-panel.collapsed .plugin-panel { display: none; }
 /* 管理ボタン（⚙）: タブではなく管理ウィンドウを開くランチャー。タブ列の右端に寄せる */
 .panel-manage { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 1px 4px !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 14px !important; line-height: 1; cursor: pointer; }
-#manage-open { margin-left: auto; }
+#share-copy { margin-left: auto; }
 a.panel-manage { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; }
 .panel-manage.active { background: rgba(49,86,79,.36) !important; }
 /* 管理ウィンドウ: モードレスのフローティングパネル。ドラッグ移動・最小化可 */
