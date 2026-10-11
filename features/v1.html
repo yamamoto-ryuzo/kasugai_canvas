@@ -20,7 +20,7 @@
       <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。各機能の設定書式は <a href="../inspector.html">.kasc 設定仕様</a>、バージョン横断の実装詳細（描画順・ドレープ・高さ基準・制限）は <a href="v0.html">V0: システム基本構成</a> を参照してください。</p>
 
       <h3>📝 インスペクター一括設定</h3>
-      <p>プロジェクトの設定は <code>projects/&lt;id&gt;/kasugai_canvas.kasc</code> に行単位のテキストとして記述します。レイヤーパネルの「Inspector」タブでテキスト全体を確認・編集でき、「適用」で即時反映されます。レイヤー行は <code>種類: 名前 | URL | オプション</code> の形式で、<code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>flatgeobuf:</code> / <code>gpkg:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>cloud:</code> 参照 / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> / <code>fly_geojson:</code> 等を扱えます。テキストベースなので .kasc ファイルをそのまま共有・版管理できます。</p>
+      <p>プロジェクトの設定は <code>projects/&lt;id&gt;/kasugai_canvas.kasc</code> に行単位のテキストとして記述します。管理（⚙）→ プロジェクト → インスペクター でテキスト全体を確認・編集でき、「適用」で即時反映されます。レイヤー行は <code>種類: 名前 | URL | オプション</code> の形式で、<code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>flatgeobuf:</code> / <code>gpkg:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>cloud:</code> 参照 / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> / <code>fly_geojson:</code> 等を扱えます。テキストベースなので .kasc ファイルをそのまま共有・版管理できます。</p>
 
       <h3>🗺️ ベースマップ</h3>
       <p><code>base:</code> または <code>xyz:</code> 行で定義した XYZ/TMS タイルをベースマップとして扱い、ツールバーの Basemap セレクタで1つだけアクティブにします。「ベースマップなし」は背景を透過し、「ベースマップ透明」は地表色と背景を透過しつつ XYZ ドレープと地形の高さを維持します。セレクタ横の 🌐 アイコンは、現在の視点（位置・高度・方位・傾き）を Google Earth 形式に変換して新しいウィンドウで開きます。</p>

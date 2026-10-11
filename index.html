@@ -18,16 +18,14 @@
         <h2>📋 概要</h2>
         <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能・AIチャット（Gemini 連携）を備えています。</p>
         <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得は CesiumJS が直接行い、Rust サーバーはバージョン管理・シャットダウン・ヘルスチェック API のみ提供します。</small></p>
-        <div class="url-box">
-          <h3>メジャーバージョンの機能テーマ</h3>
-          <ul>
-            <li><strong>V1</strong>: GIS 基本機能</li>
-            <li><strong>V2</strong>: プレゼンテーション機能（Fly モード・描画ルート等）</li>
-            <li><strong>V3</strong>: AI 連携</li>
-            <li><strong>V4</strong>: プラグイン（認証機構）</li>
-            <li><strong>V5</strong>: アプリ化（ローカル連携）</li>
-            <li><strong>V6</strong>（予約）: ANTIGRAVITY エージェント完成</li>
-          </ul>
+        <div class="install-steps">
+          <h3>配布 ZIP / インストーラー</h3>
+          <p>最新のビルドは <code>download/</code> フォルダから直接ダウンロードできます。<strong>インストーラー版を推奨</strong>します — <code>.kasc</code> ファイルのダブルクリック起動（拡張子の関連付け＝外部プロジェクト登録）はインストーラー版でのみ利用できます。</p>
+          <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 15px 0;">
+            <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip" class="demo-link" target="_blank">DOWNLOAD: インストーラー ZIP（推奨）</a>
+            <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas.zip" class="demo-link" target="_blank">DOWNLOAD: ポータブル ZIP</a>
+          </div>
+          <p>詳しい手順は <a href="guide.html">使い方・インストール</a> を参照してください。</p>
         </div>
         <div style="margin: 15px 0;">
           <a href="web/" class="demo-link" target="_blank">▶ デモサイトを開く（インストール不要・ブラウザで即起動）</a>
@@ -95,19 +93,6 @@
             <h3>🏆 ハッカソン</h3>
             <p>第5回 Agentic AI Hackathon with Google Cloud 出展まとめ</p>
           </a>
-        </div>
-      </section>
-
-      <section>
-        <h2>🔗 インストール</h2>
-        <div class="install-steps">
-          <h3>配布 ZIP / インストーラー</h3>
-          <p>最新のビルドは <code>download/</code> フォルダから直接ダウンロードできます。</p>
-          <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 15px 0;">
-            <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas.zip" class="demo-link" target="_blank">DOWNLOAD: ポータブル ZIP</a>
-            <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip" class="demo-link" target="_blank">DOWNLOAD: インストーラー ZIP</a>
-          </div>
-          <p>詳しい手順は <a href="guide.html">使い方・インストール</a> を参照してください。</p>
         </div>
       </section>
 
