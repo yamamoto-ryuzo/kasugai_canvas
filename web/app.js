@@ -6209,6 +6209,7 @@ function setupAgentPanel() {
   const endpointInput = document.querySelector("#agent-endpoint");
   const tokenInput = document.querySelector("#agent-token");
   const enabledInput = document.querySelector("#agent-enabled");
+  const sendKeyInput = document.querySelector("#agent-send-key");
   const settingsSave = document.querySelector("#agent-settings-save");
   const settingsStatus = document.querySelector("#agent-settings-status");
   if (endpointInput && settingsSave) {
@@ -6218,12 +6219,14 @@ function setupAgentPanel() {
       endpointInput.value = localStorage.getItem("agentEndpoint") || "";
       if (tokenInput) tokenInput.value = config.token;
       if (enabledInput) enabledInput.checked = config.enabled;
+      if (sendKeyInput) sendKeyInput.checked = config.sendKey;
     } catch (e) {}
     settingsSave.addEventListener("click", () => {
       try {
         localStorage.setItem("agentEndpoint", endpointInput.value.trim());
         localStorage.setItem("agentToken", tokenInput ? tokenInput.value : "");
         localStorage.setItem("agentEnabled", enabledInput?.checked ? "1" : "0");
+        localStorage.setItem("agentSendKey", sendKeyInput?.checked ? "1" : "0");
         updateChatPanelVisibility();
         if (settingsStatus) settingsStatus.textContent = t("common.saved");
       } catch (error) {
@@ -6296,9 +6299,11 @@ function getAgentConfig() {
       // 「有効」の明示保存、または未保存＋既定エンドポイント存在で有効化。
       // "0" の明示保存（ユーザーが無効化して保存）は尊重する
       enabled: savedEnabled === "1" || (savedEnabled === null && !savedEndpoint && !!defaultAgentEndpoint()),
+      // BYO キー同梱は明示的な有効化のみ（既定 OFF）
+      sendKey: localStorage.getItem("agentSendKey") === "1",
     };
   } catch (e) {
-    return { endpoint: "", token: "", enabled: false };
+    return { endpoint: "", token: "", enabled: false, sendKey: false };
   }
 }
 function isAgentEnabled() {
@@ -6311,13 +6316,26 @@ function updateChatPanelVisibility() {
   if (panel) {
     let hasKey = false;
     try { hasKey = !!localStorage.getItem("googleApiKey"); } catch (e) {}
-    panel.style.display = (hasKey || isAgentEnabled()) ? "" : "none";
+    panel.style.display = (hasKey || isAgentEnabled() || hasBackendFeature("aiProxy")) ? "" : "none";
   }
   // 既定エンドポイント（バックエンド通知）を設定欄のプレースホルダに表示する
   const endpointInput = document.querySelector("#agent-endpoint");
   if (endpointInput && !endpointInput.value) {
     const fallback = defaultAgentEndpoint();
     if (fallback) endpointInput.placeholder = fallback;
+  }
+  // サーバーキーによるキーレスAI（aiProxy）の利用可否を Gemini 設定欄に表示する
+  const proxyStatus = document.querySelector("#google-proxy-status");
+  if (proxyStatus) {
+    proxyStatus.textContent = hasBackendFeature("aiProxy") ? t("google.gemini.proxyNote") : "";
+  }
+  // 検出バックエンド（workers/cloudrun/local 等）と自動解決エンドポイントを表示する
+  const backendStatus = document.querySelector("#agent-backend-status");
+  if (backendStatus) {
+    const fallback = defaultAgentEndpoint();
+    backendStatus.textContent = backendCapabilities?.tier
+      ? t("agent.backendDetected", { tier: backendCapabilities.tier, endpoint: fallback || "—" })
+      : t("agent.backendNone");
   }
 }
 
@@ -8765,17 +8783,32 @@ async function executeChatTool(name, args = {}) {
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 
+// サーバーキーによる内蔵AI用 Gemini プロキシ（capabilities が aiProxy を通知する環境）。
+// BYO（Bring Your Own：ブラウザ localStorage のユーザー自身のキー）があればそちらを優先し、
+// 無ければプロキシ経由でキーレス利用する
+function aiProxyEndpoint() {
+  const endpoint = backendCapabilities?.ai?.endpoint;
+  if (!endpoint || !hasBackendFeature("aiProxy")) return "";
+  try {
+    return new URL(endpoint, window.location.href).href;
+  } catch (e) {
+    return "";
+  }
+}
+
 // Gemini generateContent を呼び、function calling の往復を処理する
 async function callGemini(history) {
   const apiKey = window.kasugaiApi.getGoogleApiKey();
   const model = window.kasugaiApi.getGeminiModel();
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const proxy = apiKey ? "" : aiProxyEndpoint();
+  const endpoint = proxy || `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const executed = [];
   for (let step = 0; step < 5; step++) {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        ...(proxy ? { model } : {}),
         systemInstruction: { parts: [{ text: chatSystemInstruction() }] },
         contents: history,
         tools: activeChatTools(),
@@ -8876,6 +8909,8 @@ function setupChatPanel() {
     if (config.token) headers["Authorization"] = `Bearer ${config.token}`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 120000);
+    // BYO キー同梱が有効な場合のみ apiKey を付ける（未設定時はサーバー側のキーに委ねる）
+    const apiKey = config.sendKey ? (window.kasugaiApi.getGoogleApiKey() || "") : "";
     let response;
     try {
       response = await fetch(config.endpoint, {
@@ -8888,6 +8923,7 @@ function setupChatPanel() {
           camera: window.kasugaiApi.getCamera(),
           layers: window.kasugaiApi.listLayers(),
           history: loadChatLog().slice(-20),
+          ...(apiKey ? { apiKey } : {}),
         }),
       });
     } finally {
@@ -8943,7 +8979,8 @@ function setupChatPanel() {
       }
       return;
     }
-    if (!window.kasugaiApi.getGoogleApiKey()) {
+    // BYO キーが無くても、バックエンドが aiProxy を通知していればサーバーキーで動く
+    if (!window.kasugaiApi.getGoogleApiKey() && !aiProxyEndpoint()) {
       const local = await handleLocalChatCommand(text);
       addMessage("assistant", local || t("chat.noApiKey"));
       return;

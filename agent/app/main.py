@@ -1,6 +1,9 @@
-"""KASUGAI Canvas ANTIGRAVITY エージェント API（Cloud Run 用 FastAPI サービス）
+"""KASUGAI Canvas Cloud Run サービス（FastAPI）
 
-- POST /agent/chat  : 外部エージェントプロトコル {message,project,camera,layers,history} → {reply,actions,report}
+- POST /api/gemini     : 内蔵AI向けキー隠蔽プロキシ（サーバーキー注入転送）
+- POST /api/auth       : ID/PASS → {ok,token,kasc}（モード5/6）
+- POST /api/kasc       : .kasc の保存（トークン必須）
+- GET|PUT /api/data/*  : GCS 秘匿データ（トークン必須・gs:// 経由）
 - GET  /api/capabilities : フロントへの能力通知（tier=cloudrun）
 - GET  /health     : 起動確認
 - 認証モード（KASUGAI_AUTH_MODE。agent/AUTH_MODES.md 参照）:
@@ -10,18 +13,20 @@
 - /                : web/ の静的配信（同一オリジン運用・CORS 不要）
 """
 import collections
+import json
 import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import agent, auth as authmod, config, storage as store_mod
+from . import auth as authmod, config, storage as store_mod
 
 
 def _static_root() -> Path:
@@ -48,7 +53,7 @@ async def _lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="KASUGAI Canvas ANTIGRAVITY Agent", lifespan=_lifespan)
+app = FastAPI(title="KASUGAI Canvas", lifespan=_lifespan)
 
 if config.ALLOW_ORIGINS:
     app.add_middleware(
@@ -106,14 +111,6 @@ def _rate_limited(ip: str) -> bool:
     return False
 
 
-class ChatRequest(BaseModel):
-    message: str
-    project: str | None = None
-    camera: dict | None = None
-    layers: list | None = None
-    history: list | None = None
-
-
 @app.get("/health")
 def health():
     return {"ok": True}
@@ -122,12 +119,12 @@ def health():
 @app.get("/api/capabilities")
 def capabilities():
     mode = config.auth_mode()
-    features = ["agent"] + (["auth", "kascWrite", "dataStore"] if mode else [])
+    features = ["auth", "kascWrite", "dataStore"] if mode else []
     return {
         "tier": "cloudrun",
-        "features": features,
+        "features": features + (["aiProxy"] if config.API_KEY else []),
         "auth": {"mode": {"5": "token", "6": "cookie", "7": "iap"}.get(mode)},
-        "agent": {"endpoint": "/agent/chat"},
+        "ai": {"endpoint": "/api/gemini"},
     }
 
 
@@ -294,47 +291,67 @@ if config.auth_mode():
         return {"control": int(config.AUTH_MODE)}
 
 
-# ---- エージェント ----
+# ---- 内蔵AI向けキー隠蔽プロキシ ----
+# ブラウザの generateContent リクエストをサーバーキー付きで転送するだけで、
+# 推論ループはブラウザ側（内蔵AI）に留まる。BYO キーはブラウザから直接呼ぶため不要。
+_GEMINI_FORWARD_KEYS = ("contents", "systemInstruction", "tools", "generationConfig")
 
-def _agent_authorized(request: Request) -> bool:
+
+def _api_authorized(request: Request) -> bool:
     if config.AUTH_MODE and authmod.request_authorized(request):
         return True
     if config.AGENT_TOKEN and request.headers.get("Authorization", "") == f"Bearer {config.AGENT_TOKEN}":
         return True
     # 認証モード時はいずれかの資格情報が必須。無認証モードは従来どおり
     return not config.AUTH_MODE and not config.AGENT_TOKEN
+_MAX_GEMINI_BODY_BYTES = 1024 * 1024
 
 
-@app.post("/agent/chat")
-async def agent_chat(body: ChatRequest, request: Request):
-    if not body.message or not body.message.strip():
-        return JSONResponse({"error": "message が空です"}, status_code=400)
-    if len(body.message) > agent.MAX_MESSAGE_CHARS:
-        return JSONResponse({"error": "message が長すぎます"}, status_code=400)
-
-    if not _agent_authorized(request):
+@app.post("/api/gemini")
+async def api_gemini(request: Request):
+    if not config.API_KEY:
+        return JSONResponse(
+            {"error": "AI_PROXY_NOT_CONFIGURED", "detail": "GEMINI_API_KEY を設定してください"},
+            status_code=503,
+        )
+    if not _api_authorized(request):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
-
     client_ip = request.client.host if request.client else "unknown"
     if _rate_limited(client_ip):
         return JSONResponse({"error": "rate limit exceeded"}, status_code=429)
 
-    if config.MOCK:
-        return agent.mock_response(body.message)
-
-    if not config.configured():
-        return JSONResponse(
-            {"error": "AGENT_NOT_CONFIGURED", "detail": "GEMINI_API_KEY または Vertex AI (GOOGLE_GENAI_USE_VERTEXAI=1) を設定してください"},
-            status_code=503,
-        )
-
+    raw = await request.body()
+    if len(raw) > _MAX_GEMINI_BODY_BYTES:
+        return JSONResponse({"error": "リクエストが大きすぎます"}, status_code=400)
     try:
-        return await agent.run_agent(body.message, body.project, body.camera, body.layers, body.history)
+        body = json.loads(raw)
+    except ValueError:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    if not isinstance(body, dict) or not isinstance(body.get("contents"), list):
+        return JSONResponse({"error": "contents が必要です"}, status_code=400)
+
+    model = str(body.get("model") or "").strip()
+    if not model:
+        return JSONResponse({"error": "model が必要です"}, status_code=400)
+    if config.ALLOWED_MODELS and model not in config.ALLOWED_MODELS:
+        return JSONResponse({"error": f"model は許可されていません: {model}"}, status_code=400)
+
+    forward = {k: body[k] for k in _GEMINI_FORWARD_KEYS if k in body}
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                headers={"x-goog-api-key": config.API_KEY},
+                json=forward,
+            )
+        return Response(content=resp.content, status_code=resp.status_code,
+                        media_type="application/json",
+                        headers={"Cache-Control": "no-store"})
     except Exception as e:
-        return JSONResponse({"error": f"agent error: {e}"}, status_code=502)
+        return JSONResponse({"error": f"proxy error: {e}"}, status_code=502)
 
 
-# 静的配信は API ルートの後にマウント（同一オリジンでフロント＋エージェントを提供）
+# 静的配信は API ルートの後にマウント（同一オリジンでフロント＋API を提供）
 _static_dir = _static_root()
 if _static_dir.is_dir():
     app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="web")

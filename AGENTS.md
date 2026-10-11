@@ -8,12 +8,11 @@
   - **V3**: AI 連携
   - **V4**: プラグイン（認証機構）
   - **V5**: アプリ化（ローカル連携）— ローカル Rust サーバーと一体で動く「アプリ」だから実現できる機能群（rclone クラウドストレージ連携・ドライブ割当・ローカルファイル保存・納品用ローカル化など）。ブラウザのみ・コンテナ実行では提供されない
-  - **V6**（予約）: ANTIGRAVITY エージェント完成
 - ドキュメント（`features/` 配下）はこのテーマごとにページを分ける。バージョン横断の実装詳細は **V0: システム基本構成**（`features/v0.html`）に集約する
-- **v6.0 は全機能が完成した後に採番する**。それまでのリリースは 4.x〜5.x 系（4.0.0, 4.1.0, ...）で進める
-- v6.0 への到達条件: 当初の計画機能（AIチャット・外部エージェント連携・Google Maps Platform 連携・ローカルファイル保存）は v4.20.0 で実装済み。v6.0 は「**ANTIGRAVITY エージェント完成＝ハッカソン提出可能状態**」と定義する（詳細は `hackathon.html` の「今回追加する機能（実装計画）」節）:
-  - Cloud Run 上のエージェントサービス（FastAPI + Gemini API/ADK）が外部エージェントプロトコル（`POST /agent/chat` → `{reply, actions, report}`）で稼働している
-  - サンプルデータ自動生成・資料生成＋パーマリンク（`showReport`/`buildShareUrl`）が動作する
+- リリースは 4.x〜5.x 系（4.0.0, 4.1.0, ...）で進める
+- ハッカソン提出は「**V3（AI 連携）の強化**」として位置づける（詳細は `hackathon.html`）。提出可能状態の条件:
+  - Cloud Run 上に KASUGAI Canvas（静的配信）＋GIS 保存 API＋`/api/gemini`（内蔵AI向けキー隠蔽プロキシ）が稼働し、`GEMINI_API_KEY` で審査員キーレスの AI 利用ができる
+  - ブラウザ内蔵AI（Gemini function calling・48ツール）によるサンプルデータ生成・資料生成＋パーマリンク（`showReport`/`buildShareUrl`）が動作する
   - 審査用公開URLが維持され、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く
 
 ## バージョン管理手順
@@ -65,6 +64,13 @@
 
 AI機能は「操作の影響範囲」でティアを分ける。**誰でも使える公開環境には、その人のセッション内に閉じる安全な機能だけを提供し、永続化・共有・システムへの影響がある機能はローカル環境に限定する**。
 
+用語: **BYO（Bring Your Own）APIキー** = 各ユーザーが自分で発行した Gemini API キーを使う方式。対義はサーバーキー運用（サーバー側 secret の `GEMINI_API_KEY` を使い訪問者はキー不要）。
+
+キーの保管場所とセキュリティレベル:
+- BYO キー → ブラウザ `localStorage`（`googleApiKey`）。平文だが localStorage は「ブラウザプロファイル × オリジン」で分離されるため、**同一デプロイにアクセスする他のユーザーからは読み取れず、サーバーにも送信されない**（`agent.sendKeyLabel` opt-in 時のみ例外）。見えるのは同一 OS アカウント＋同一ブラウザプロファイルの操作者と、ブラウザ拡張・XSS 等の同一 JS 空間のみ — 端末・プロファイルを他者と共有しない運用が前提。キー自体を共有 .kasc やコードに書き込むことは禁止
+- サーバーキー → Cloudflare: `wrangler secret put`（暗号化・読み出し不可）/ Cloud Run: Secret Manager 推奨（環境変数でも可）
+- ローカル開発の `.dev.vars` → 平文ファイル（gitignore 済み・開発機内限定）
+
 - `static`（静的配信のみ / Cloudflare Pages単体）
   - BYO APIキーでAIチャット・地図操作・`runCode`・`fetchData`(CORS前提)・IndexedDBプラグイン生成が使える
   - ブラウザストレージに閉じるため、訪問者がAIに機能を作らせても他人に影響しない
@@ -77,7 +83,7 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
 
 フロントエンドは `GET /api/capabilities`（応答例: `{tier:"local", features:[...]}`）でバックエンドの能力を取得し、ツール定義・UI を出し分ける。バックエンドが無い環境では静的安全機能のみで動作すること。
 
-実装状況: 現在 `local` ティアの `/api/capabilities`・`/api/fetch`・`/api/plugins`・`/api/files`（`projects/<id>/DATA/` への書き込み・一覧・削除）を実装済み。ブラウザ側は File System Access API による DATA/ 保存も併存（Chromium系のみ・選択フォルダへ直接書込み）。`workers` ティアのプロキシ・共有書き込み、QGIS/GDAL 連携は設計方針のみで未実装。サーバーサイドエージェントは `agent/` に FastAPI + Gemini API（google-genai）で新設済み（`POST /agent/chat`＋`web/` 静的配信の同一オリジン構成。`GET /api/capabilities` は `{tier:"cloudrun", features:["agent"]}` を返す。サーバーツールは `fetch_url`（SSRF対策あり）と `generate_sample_geojson`（架空サンプルGeoJSON生成・properties に出典/生成時刻/AI生成明記を付与）。応答 actions は高権限・破壊的操作を除くホワイトリストでサニタイズ。Cloud Run デプロイは `agent/Dockerfile`・コンテキストはリポジトリ直下・手順は `agent/README.md`。起動制御は `KASUGAI_AUTH_MODE` で `5`（認証のみ・トークン保護の `/api/auth`・`/api/kasc`・`/api/data`＋GCS/`gs://`）・`6`（全ゲート・Cookie）・`7`（IAP）を実装済みで `web/auth-methods.json` の control 値と対応（設計は `agent/AUTH_MODES.md`、フロントは `serverKasc` フラグで保存可否判定）。長時間ループ・SSE は未実装）。外部エージェント呼び出し（エージェントタブでエンドポイントURLを設定し、チャット入力を POST `{message,project,camera,layers,history}` → 応答 `{reply,actions:[{name,args}]}` の actions をチャットツールとして実行）はブラウザ側で実装済み。**このプロトコルが ANTIGRAVITY エージェント API（Cloud Run・FastAPI + Gemini API/ADK）の契約であり、ハッカソン計画の必須エンドポイントは `POST /agent/chat` 1本に集約する**（レイヤー構成・サンプルデータは actions で表現、資料は `report` フィールド/`showReport` アクションで返す）。公開環境のエージェントが返す actions も同じ実行経路のため、破壊的ツール（`savePlugin`/`publishPlugin`/`deleteDataFile` 等）はフロント側の既存確認ダイアログで保護される。
+実装状況: 現在 `local` ティアの `/api/capabilities`・`/api/fetch`・`/api/plugins`・`/api/files`（`projects/<id>/DATA/` への書き込み・一覧・削除）を実装済み。ブラウザ側は File System Access API による DATA/ 保存も併存（Chromium系のみ・選択フォルダへ直接書込み）。`workers` ティアは `/api/capabilities`（`{tier:"workers"}`）・`/health`・`/api/gemini` を実装済み（`functions/api/gemini.js`。内蔵AI向けの薄いキー隠蔽プロキシ — ブラウザの generateContent リクエストに `GEMINI_API_KEY` secret を注入して転送するだけで、推論ループ・地図操作はブラウザ側に留まる。`GEMINI_MODELS` で許可モデル制限・`ANTIGRAVITY_RATE_LIMIT`（KV バインド時）対応。Pages Functions でも同パスで動く）。サーバーサイドエージェントは廃止 — 内蔵AI（ブラウザ）が本体であり、外部エージェントを繋ぐ場合はフロントのエージェント窓口から外部実装のURLを接続する構成（本リポジトリにサーバー側実装は同梱しない）。汎用 fetch プロキシ・共有書き込み、QGIS/GDAL 連携は設計方針のみで未実装。Cloud Run 側は `agent/` の FastAPI サービス1つで `web/` 静的配信・認証・GCS 保存・`POST /api/gemini`（Cloudflare 側と同一の内蔵AI向けキー隠蔽プロキシ・`GEMINI_API_KEY` 設定時）を提供する（`GET /api/capabilities` は `{tier:"cloudrun", features:["auth","kascWrite","dataStore","aiProxy"?]}` を返す。Cloud Run デプロイは `agent/Dockerfile`・コンテキストはリポジトリ直下・手順は `agent/README.md`。起動制御は `KASUGAI_AUTH_MODE` で `5`（認証のみ・トークン保護の `/api/auth`・`/api/kasc`・`/api/data`＋GCS/`gs://`）・`6`（全ゲート・Cookie）・`7`（IAP）を実装済みで `web/auth-methods.json` の control 値と対応（設計は `agent/AUTH_MODES.md`、フロントは `serverKasc` フラグで保存可否判定）。長時間ループ・SSE は未実装）。外部エージェント呼び出し（エージェントタブでエンドポイントURLを設定し、チャット入力を POST `{message,project,camera,layers,history,apiKey?}` → 応答 `{reply,actions:[{name,args}]}` の actions をチャットツールとして実行）はブラウザ側で実装済み — 外部実装の差込口として残置。外部エージェントが返す actions も同じ実行経路のため、破壊的ツール（`savePlugin`/`publishPlugin`/`deleteDataFile` 等）はフロント側の既存確認ダイアログで保護される。
 
 プラグインの昇格ルート: AI生成プラグインはまず IndexedDB（ブラウザローカル草稿）に保存 → `.kasp` でエクスポート可 → レビュー後にローカル版で `PLUGIN/` へ公開。これにより開発と公開、公開と非公開を分離する。
 

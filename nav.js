@@ -1,11 +1,11 @@
 // KASUGAI Canvas ドキュメント共通ナビゲーション
 // 使い方: <script src="nav.js" defer></script>（auth/ 配下は ../nav.js）
-// - 左サイドバーにサイト内リンク・デモリンク・ページ内目次を生成
+// - 左サイドバーにサイト内リンク・デモリンクを生成
 // - 現在ページを自動ハイライト
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v5.0.0';
+  const VERSION = 'v5.11.0';
 
   const GROUPS = [
     {
@@ -21,11 +21,11 @@
             { href: 'features/v2.html', text: 'V2: プレゼンテーション' },
             { href: 'features/v3.html', text: 'V3: AI 連携' },
             { href: 'features/v4.html', text: 'V4: プラグイン・外部連携' },
-            { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' },
-            { href: 'features/v6.html', text: 'V6: ANTIGRAVITY（構想）' }
+            { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' }
           ]
         },
-        { href: 'inspector.html', text: '.kasc 設定仕様' }
+        { href: 'inspector.html', text: '.kasc 設定仕様' },
+        { href: 'ai-tools.html', text: 'AI ツール仕様' }
       ]
     },
     {
@@ -106,18 +106,6 @@
       }
       html += '</li>';
     }
-    html += '</ul></div>';
-  }
-
-  // ページ内目次（h2 が複数あれば h2、単一なら h3 から自動生成）
-  const h2s = document.querySelectorAll('main h2');
-  const heads = h2s.length > 1 ? h2s : document.querySelectorAll('main h3');
-  if (heads.length > 1) {
-    html += '<div class="nav-group"><div class="nav-group-label">このページ</div><ul class="nav-toc">';
-    heads.forEach((h, i) => {
-      if (!h.id) h.id = 'sec-' + i;
-      html += `<li><a href="#${h.id}">${h.textContent.trim()}</a></li>`;
-    });
     html += '</ul></div>';
   }
 

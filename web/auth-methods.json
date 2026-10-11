@@ -94,7 +94,7 @@
         詳細は auth/workers.html を参照。
 
     5 = cloudrun（Cloud Run：認証のみ）
-        Cloud Run 版エージェント（agent/）上での ID/PASS 認証。
+        Cloud Run 版配信サービス（agent/）上での ID/PASS 認証。
         静的ファイルは公開のまま、.kasc（GCS の kasc/<ID>）と
         gs:// 秘匿データのみ保護します（3 に相当）。
         設定は環境変数: KASUGAI_AUTH_USER / KASUGAI_AUTH_PASS /

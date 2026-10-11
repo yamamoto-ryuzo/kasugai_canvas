@@ -4,6 +4,30 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.11.0] - 2026-10-11
+
+### Added
+
+- 内蔵AI向けのサーバーキー隠蔽プロキシ `POST /api/gemini` を Cloudflare（Pages Functions / Workers）と Cloud Run の両基盤に実装。`GEMINI_API_KEY` をサーバー側シークレットに設定すると `/api/capabilities` が `aiProxy` を通知し、BYO（Bring Your Own）キー未設定の訪問者でも内蔵AI（48ツール・地図操作・資料生成）がそのまま使える。`model` 必須・`GEMINI_MODELS` 許可リスト・1MB 上限・レート制限・認証モード連携（トークン/Cookie/IAP）
+- ドキュメントページ `ai-tools.html` — 内蔵AIが制御できる全48ツールの引数・提供条件・実行モデルの詳細仕様
+- Gemini 設定タブにサーバーキー経由のAI利用可否表示（`aiProxy` 検出時）
+
+### Changed
+
+- Gemini 既定モデルを `gemini-3.1-flash-lite` に更新（`gemini-2.5-flash` が新規キーで使用不可になったため）
+- Gemini 設定のセキュリティ注記を正確な脅威モデルに更新（localStorage はオリジン・プロファイル分離のため他ユーザーからは読み取れない旨を明記）
+- ハッカソン提出を「V3（AI 連携）の強化」として再構成（`hackathon.html`・`features/v3.html`）
+
+### Removed
+
+- サーバーサイドエージェント実装を廃止（Cloud Run `POST /agent/chat`・Cloudflare 移植版・`agent/app/agent.py`・`tools.py`・`google-genai` 依存）。エージェントはブラウザ内蔵AIに集約し、外部エージェント窓口は任意URL接続の拡張点として残置
+- V6（ANTIGRAVITY エージェント完成）のバージョン予約とドキュメントページ `features/v6.html` を撤去
+- ドキュメントサイドバーのページ内目次（このページ）
+
+### Fixed
+
+- BYO キー未設定時に `noApiKey` で早期 return し `/api/gemini` プロキシへ到達しなかった問題
+
 ## [5.10.0] - 2026-10-11
 
 ### Changed

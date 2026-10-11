@@ -8,7 +8,7 @@ Cloud Run の作法を優先しつつ、実装・運用負荷の軽い順にモ�
 ## 設計方針（Cloud Run らしさ）
 
 - **保護対象は API とデータ**。`web/` の静的ファイルは公開リポジトリのコードであり
-  秘匿しても意味が薄い。本当に守るべきは `/agent/chat`（Gemini 課金）と
+  秘匿しても意味が薄い。本当に守るべきは `/api/gemini`（Gemini 課金）と
   `.kasc`/`gs://` データ
 - **ゲートは必要な範囲だけに**。API 単位のトークン検証で足りるなら
   全リクエストのミドルウェアゲートは後回し
@@ -103,7 +103,7 @@ gcloud run services add-iam-policy-binding kasugai-canvas --region asia-northeas
 - `PUT /api/data/<key>?token=` → プロキシ書き込み（GCS put）
   - フロントが直接 PUT する既存経路（`app.js:4192`・ルート高度保存）を維持
   - Cloud Run リクエスト上限 32MiB（現用途は小さい JSON）
-- `/agent/chat` は `ANTIGRAVITY_TOKEN` Bearer or kasugai トークン併用
+- `/api/gemini` は `ANTIGRAVITY_TOKEN` Bearer or kasugai トークン併用
 
 フロント: `PLUGIN/auth-cloudrun/auth.js`（`auth-cloudflare` とほぼ同型）。
 `gs://<キー>` → `/api/data/<キー>?token=` の rewrite/restore を持ち、
@@ -127,7 +127,7 @@ gcloud run services add-iam-policy-binding kasugai-canvas --region asia-northeas
   と、自身でトークン検証する `/api/auth`・`/api/kasc`・`/api/data/*`・`/health`
 - `/api/*` はトークン検証を残したまま Cookie も受け付ける
   （`verify_request()` を Cookie or token 両対応にすれば1コードパスで済む）
-- `/agent/chat` も同じ認可で統一
+- `/api/gemini` も同じ認可で統一
 
 ## モード7 = cloudrun-iap
 
@@ -144,7 +144,7 @@ gcloud run services add-iam-policy-binding kasugai-canvas --region asia-northeas
 
 ## サービス間呼び出し（番号外）
 
-`POST /agent/chat` をブラウザ以外から叩く場合は
+`POST /api/gemini` 等の API をブラウザ以外から叩く場合は
 `--no-allow-unauthenticated` + 呼び出し側 ID トークン（`roles/run.invoker`）が
 Cloud Run の作法。control 番号とは別軸のデプロイオプション。
 
@@ -209,8 +209,8 @@ gcloud storage buckets update gs://BUCKET --cors-file=cors.json
 ## `/api/capabilities` 拡張
 
 ```json
-{"tier":"cloudrun","features":["agent","auth","kascWrite","dataStore"],
- "auth":{"mode":"token|cookie|iap"},"agent":{"endpoint":"/agent/chat"}}
+{"tier":"cloudrun","features":["auth","kascWrite","dataStore","aiProxy"],
+ "auth":{"mode":"token|cookie|iap"},"ai":{"endpoint":"/api/gemini"}}
 ```
 
 ## 実装状況
@@ -219,7 +219,7 @@ gcloud storage buckets update gs://BUCKET --cors-file=cors.json
   （`/api/auth`・`/api/kasc`・`/api/data`・Cookie ゲート・IAP JWT・起動シード・
   `KASUGAI_AUTH_MODE` による `/auth-methods.json` 動的化）・`auth-cloudrun`/`auth-iap` プラグイン
 - 検証済み（ローカル・LocalStore）: トークン発行・kasc 往復・data PUT/GET・Range(206)・
-  未認証 401・モード6 Cookie ゲート・モード7 IAP ヘッダ・`/agent/chat` 認可統合・
+  未認証 401・モード6 Cookie ゲート・モード7 IAP ヘッダ・`/api/gemini` 認可統合・
   Playwright でのログイン→起動→/api/kasc 保存
 - 未検証（要 GCP 環境）: GCS 本番接続・署名付き URL（signBlob 権限）・実 IAP
-- 後回し: 署名 URL 直 PUT（`saveData` フック）・SSE エージェント・Cloud Armor（LB 要）
+- 後回し: 署名 URL 直 PUT（`saveData` フック）・SSE 通知・Cloud Armor（LB 要）

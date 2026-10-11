@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI ツール仕様 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
+      <p>AI ツール仕様 — 内蔵AIが制御できる全48ツールの定義</p>
+    </header>
+    <main>
+      <section>
+        <h2>🤖 概要</h2>
+        <p>内蔵AI（Gemini function calling）が呼び出せるツールは <code>web/app.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>48 種</strong>です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="google.html">Google 連携・AI</a> を参照。</p>
+        <p>実行モデル：ユーザーの発言 → Gemini がツール呼び出しを返す → ブラウザが <code>kasugaiApi</code> 経由で実行 → 結果を Gemini に返す、の function calling ループ（最大5ステップ）。推論はすべてブラウザ側。破壊的ツールは実行前に確認ダイアログを挟み、最終判断はユーザーにあります。</p>
+
+        <h3>提供条件（activeChatTools で絞り込み）</h3>
+        <table>
+          <thead><tr><th>条件</th><th>対象ツール</th></tr></thead>
+          <tbody>
+            <tr><td>常時（43ツール）</td><td>下記以外のすべて</td></tr>
+            <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
+            <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
+            <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
+          </tbody>
+        </table>
+        <p>公開環境には「その人のセッション内に閉じる安全な機能」のみが渡ります（ティア分けはリポジトリの <code>AGENTS.md</code>「AI 機能のティア分け」参照）。</p>
+      </section>
+
+      <section>
+        <h2>📷 カメラ・視点（5）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数（＊=必須）</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>flyTo</code></td><td>latitude*, longitude*, height, pitch, heading</td><td>カメラを指定座標へ移動。height/pitch 省略時はドローン視点（対象地上+200m・-30°）。pitch=-90 で真上俯瞰</td></tr>
+            <tr><td><code>flyToFeature</code></td><td>latitude*, longitude*, height, pitch, heading</td><td>指定座標が画面中央に来るよう後退補正して移動。地点・地物を見せる場合はこちら</td></tr>
+            <tr><td><code>flyToPreset</code></td><td>name*</td><td>登録済みカメラプリセット名で移動（<code>listCameraPresets</code> で確認）</td></tr>
+            <tr><td><code>listCameraPresets</code></td><td>なし</td><td>登録済みカメラプリセット名の一覧を取得</td></tr>
+            <tr><td><code>getCamera</code></td><td>なし</td><td>現在のカメラ位置（緯度・経度・高さ・方位・ピッチ）を取得</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>🗂 レイヤー（7）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>listLayers</code></td><td>なし</td><td>登録レイヤー一覧（名前・表示状態）を取得</td></tr>
+            <tr><td><code>setLayerVisible</code></td><td>name*, visible*</td><td>レイヤー名指定で表示/非表示を切替</td></tr>
+            <tr><td><code>focusLayer</code></td><td>name*</td><td>レイヤー名または ID 指定で全体が収まるようカメラ移動。非表示レイヤーは自動表示してから移動</td></tr>
+            <tr><td><code>addLayer</code></td><td>title*, target*, type, options</td><td>ベクターレイヤーを追加して即適用。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は URL または DATA/ 相対パス（sql は SELECT 文）。options は <code>where=</code>/<code>limit=</code>/<code>format=</code>/<code>bbox=auto</code>/<code>proxy=on</code>/<code>render=primitive</code>/<code>attr=出典</code> 等を | 区切りで指定。インスペクター設定に反映されるためユーザー明示時のみ</td></tr>
+            <tr><td><code>addGeoJsonLayer</code></td><td>title*, url*</td><td>GeoJSON レイヤーを URL 指定（DATA/ 相対パスまたは外部 URL）で追加して即適用。他形式は <code>addLayer</code></td></tr>
+            <tr><td><code>applyInspector</code></td><td>text*</td><td>インスペクターの設定テキスト（.kasc 形式）を登録・適用。設定全体が上書きされるためユーザー明示時のみ。書式は <a href="inspector.html">.kasc 設定仕様</a></td></tr>
+            <tr><td><code>exportInspector</code></td><td>なし</td><td>現在の設定を .kasc ファイルとしてエクスポート（ダウンロード）</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>🌍 ベースマップ・地形・効果（6）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>listBasemaps</code></td><td>なし</td><td>選択可能なベースマップ一覧と現在の選択を取得</td></tr>
+            <tr><td><code>setBasemap</code></td><td>name*</td><td>ベースマップを名前または ID で切替</td></tr>
+            <tr><td><code>setTerrain</code></td><td>enabled*</td><td>地形（DEM）表示の ON/OFF</td></tr>
+            <tr><td><code>setEffect</code></td><td>name*, enabled*</td><td>表示効果の ON/OFF。name は lighting（地形照明）/ translucency（地下透過）/ fog（霧）/ atmosphere（大気）/ shadows（影）/ depthTest（地形深度テスト）</td></tr>
+            <tr><td><code>setUnderground</code></td><td>transparency, dive</td><td>地下表示の設定。transparency は地表の透過率 0〜1、dive は地下への移動許可</td></tr>
+            <tr><td><code>setClip</code></td><td>type*</td><td>カメラ中心に断面クリップを作成・解除。type は ns / ew / h / clear</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>✈ Fly・プレゼン（4）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>listFlyPaths</code></td><td>なし</td><td>登録済みフライパス（巡視ルート）一覧を取得</td></tr>
+            <tr><td><code>playFlyPath</code></td><td>name*</td><td>フライパスを名前または番号で再生し Fly モードで自動走行</td></tr>
+            <tr><td><code>stopFly</code></td><td>なし</td><td>Fly モード・フライパス再生を停止して Orbit（3D）モードへ戻る</td></tr>
+            <tr><td><code>toggleDrawMode</code></td><td>なし</td><td>Draw モード（地図上へのルート描画）を ON/OFF</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>🔍 検索（4）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>searchLocation</code></td><td>query*, provider</td><td>住所・地名・施設名を検索し候補（名称・住所・緯度経度）を返す。provider: gsi/google/places/yahoo（省略時は検索タブの選択。google=Geocoding+Places ハイブリッド、places=Places のみ）。結果へは flyTo/flyToFeature で移動</td></tr>
+            <tr><td><code>vectorSearch</code></td><td>query*</td><td>読み込み済みベクトルデータの属性を検索し、該当する属性名・値・位置を返す。結果の緯度経度へは flyToFeature で移動</td></tr>
+            <tr><td><code>searchPlaces</code> 🔑</td><td>query*</td><td>Google Places API（テキスト検索）で施設・店舗・観光地等を検索。Maps API キー設定時のみ</td></tr>
+            <tr><td><code>openStreetView</code> 🔑</td><td>latitude*, longitude*</td><td>指定座標の Google ストリートビューを別タブで開く。Maps API キー設定時のみ</td></tr>
+          </tbody>
+        </table>
+        <p>🔑 = Google Maps API キー必須（管理 → Google Maps で設定）</p>
+      </section>
+
+      <section>
+        <h2>📄 共有・資料生成（3）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>getShareUrl</code></td><td>なし</td><td>現在のカメラ位置・プロジェクトを含む共有 URL を取得</td></tr>
+            <tr><td><code>buildShareUrl</code></td><td>latitude*, longitude*, height, pitch, heading, project</td><td>指定座標・視点の共有 URL を組み立てる。省略引数は現在視点を使用。資料の各節に視点別パーマリンクを埋め込む用途</td></tr>
+            <tr><td><code>showReport</code></td><td>title*, content*, format</td><td>生成した資料をモーダル表示＋ダウンロード可能にする。「資料を作って」等の指示に対し、平面・内容・解決案の構成で content に本文（Markdown/HTML、各節に視点パーマリンクを含める）</td></tr>
+          </tbody>
+        </table>
+        <p>架空・サンプル GeoJSON を生成する場合は、feature の properties に <code>dataSource</code>・<code>generatedAt</code>・<code>aiGenerated:true</code> の出典スタンプが必須付与されます（システム指示）。</p>
+      </section>
+
+      <section>
+        <h2>📁 プロジェクト（2）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>listProjects</code></td><td>なし</td><td>切替可能なプロジェクト一覧を取得</td></tr>
+            <tr><td><code>switchProject</code></td><td>projectId*</td><td>プロジェクトを切替。レイヤー・カメラプリセット等の設定全体が入れ替わるためユーザー明示時のみ</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>🔄 データ取得・加工（4）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>fetchData</code></td><td>url*</td><td>外部 URL からテキスト/JSON/CSV 等を取得（CORS 許可サイトのみ・約400KB で打切り）。取得データは <code>runCode</code> で加工し <code>addDataLayer</code> で表示</td></tr>
+            <tr><td><code>getLayerGeoJson</code></td><td>name*</td><td>読み込み済みレイヤーの地物を GeoJSON で取得。属性検索より前にデータ全体が必要な時・変換加工の入力に</td></tr>
+            <tr><td><code>addDataLayer</code></td><td>title*, geojson*</td><td>GeoJSON オブジェクトを新規レイヤーとして直接表示（URL 不要の一時レイヤー・.kasc には含まれない）。feature の properties に simplestyle 属性（marker-color/marker-size/stroke/fill/fill-opacity/description 等）で色分け・ポップアップ制御</td></tr>
+            <tr><td><code>removeDataLayer</code></td><td>name*</td><td><code>addDataLayer</code> で追加した一時レイヤーを削除</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>🗃 データファイル（3）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>listDataFiles</code> 💻</td><td>なし</td><td>プロジェクトの DATA/ フォルダ内ファイル一覧（名前・サイズ・更新時刻）</td></tr>
+            <tr><td><code>saveDataFile</code> 💻</td><td>name*, content*</td><td>テキストを DATA/ へ保存（.geojson 等・サブフォルダ可）。既存ファイルの上書き時はユーザー確認</td></tr>
+            <tr><td><code>deleteDataFile</code> 💻</td><td>name*</td><td>DATA/ 内ファイルを削除。実行前にユーザー確認</td></tr>
+          </tbody>
+        </table>
+        <p>💻 = ローカルサーバー版のみ（capabilities の <code>fileWrite</code>）</p>
+      </section>
+
+      <section>
+        <h2>🧩 コード実行・プラグイン（7）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>runCode</code></td><td>code*</td><td>ブラウザ内サンドボックスで JavaScript を実行し戻り値と console 出力を返す。データ加工・集計・座標計算に。<code>api.&lt;関数名&gt;</code>（kasugaiApi と同じ）で地図操作が非同期呼出し可。DOM・localStorage・外部 fetch は不可</td></tr>
+            <tr><td><code>savePlugin</code></td><td>id*, code*, name, layer, enable</td><td>プラグインをブラウザ内 IndexedDB に保存・有効化する自己拡張ツール。code は <code>export async function init(api, manifest){}</code> 形式の ES モジュール。layer 指定でプラグイン専用レイヤー自動登録。保存前にコード確認ダイアログ。既存 id は上書き＋再読み込み</td></tr>
+            <tr><td><code>listPlugins</code></td><td>なし</td><td>同梱・保存済みプラグイン一覧（id/name/source/enabled/lastError）</td></tr>
+            <tr><td><code>getPluginCode</code></td><td>id*</td><td>保存済みプラグインのコードと設定を取得（修正→ savePlugin 再保存の修正ループ用）</td></tr>
+            <tr><td><code>removePlugin</code></td><td>id*</td><td>保存済みプラグインを削除。確認ダイアログあり</td></tr>
+            <tr><td><code>setPluginEnabled</code></td><td>id*, enabled*</td><td>保存済みプラグインの有効/無効切替</td></tr>
+            <tr><td><code>publishPlugin</code> 💻</td><td>id*</td><td>保存済みプラグインを配布用 PLUGIN/ に書き込み全利用者に公開（ローカルサーバー版のみ・取り消しは開発者作業）。確認ダイアログあり</td></tr>
+          </tbody>
+        </table>
+        <p>プラグインの昇格ルート：AI 生成 → IndexedDB（ブラウザローカル草稿）→ <code>.kasp</code> エクスポート可 → レビュー後にローカル版で PLUGIN/ へ公開。</p>
+      </section>
+
+      <section>
+        <h2>⚙ システム（3）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>checkUpdate</code></td><td>なし</td><td>アプリの最新バージョンを確認</td></tr>
+            <tr><td><code>installUpdate</code></td><td>なし</td><td>最新版をインストール（更新がある場合のみ有効）</td></tr>
+            <tr><td><code>shutdownApp</code></td><td>なし</td><td>アプリを停止。確認ダイアログが出るのでユーザーが最終判断。破壊的操作のためユーザー明示時のみ</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>🔗 関連仕様</h2>
+        <ul>
+          <li><a href="features/v3.html">V3: AI 連携</a> — AI チャット・runCode サンドボックス・kasugaiApi の概要</li>
+          <li><a href="google.html">Google 連携・AI</a> — Gemini API キー（BYO）・<code>/api/gemini</code> プロキシ・外部エージェント窓口・Maps Platform</li>
+          <li><a href="inspector.html">.kasc 設定仕様</a> — <code>applyInspector</code>/<code>exportInspector</code> が扱う設定フォーマット</li>
+          <li><a href="hackathon.html">ハッカソン</a> — 出展構成（Cloud Run＋<code>/api/gemini</code>＋内蔵AI）</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

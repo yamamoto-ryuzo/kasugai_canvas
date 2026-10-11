@@ -10,17 +10,17 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.10.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
       <p>Google 連携・AI — Gemini AIチャット・Maps Platform・エージェント連携</p>
     </header>
     <main>
       <section>
-        <h2>🔗 Google 連携（v6.0 へ向けた主要機能）</h2>
-        <p>Google 関連機能は管理ウィンドウ（サイドパネル右端の ⚙ ボタン）に集約しています。Gemini・外部エージェントは「AI」カテゴリ、Google Maps Platform は「Google Maps」カテゴリから設定・管理します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v6.0 をリリースする予定です。</strong></p>
+        <h2>🔗 Google 連携（V3: AI 連携の主要機能）</h2>
+        <p>Google 関連機能は管理ウィンドウ（サイドパネル右端の ⚙ ボタン）に集約しています。Gemini・外部エージェントは「AI」カテゴリ、Google Maps Platform は「Google Maps」カテゴリから設定・管理します。</p>
         <div class="features">
           <div class="feature-card">
             <h3>🤖 AIチャット（Gemini）</h3>
-            <p>右下の Chat パネルから Gemini API（function calling）で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。flyTo・レイヤ切替・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替まで網羅。AI移動はドローン視点（対象地上+200m・-30°）が既定。管理（⚙）→ AI → チャット で API キー・モデルを設定</p>
+            <p>右下の Chat パネルから Gemini API（function calling）で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。<strong>48ツール</strong>でカメラ・レイヤ・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替・データ取得/加工・プラグイン生成・資料生成（showReport＋パーマリンク）まで網羅（一覧は <a href="features/v3.html">V3: AI 連携</a>）。AI移動はドローン視点（対象地上+200m・-30°）が既定。管理（⚙）→ AI → チャット で API キー・モデルを設定。Cloudflare/Cloud Run にサーバーキー（<code>/api/gemini</code>）があればキー未設定でも動作</p>
           </div>
           <div class="feature-card">
             <h3>🗺️ Photorealistic 3D Tiles</h3>
@@ -90,7 +90,7 @@ DELETE /api/files/{project}/{path} → DATA/ 内のファイルを削除</code><
         <div class="url-box">
           <h3>未実装・今後の検討項目</h3>
           <ul>
-            <li><strong>Workers 側の AI/fetch プロキシ</strong>：Gemini キーを Workers のシークレットに置き、キー未設定の訪問者でもAIを試せる公開プロキシ（レート制限付き）は未実装。現在はどの環境でも Gemini キーのBYOが必要です</li>
+            <li><strong>Workers 側の fetch プロキシ</strong>：CORS 外の任意 URL を取り込む汎用 fetch プロキシは未実装（AI プロキシ <code>POST /api/gemini</code> は実装済み — Workers/Pages のシークレットに <code>GEMINI_API_KEY</code> を置けばキー未設定の訪問者でも内蔵AIが使える。BYO = Bring Your Own キーは引き続きどの環境でも利用可）</li>
             <li><strong>Workers の共有書き込み</strong>：共有 .kasc カタログ・共有プラグインカタログへの書き込みは認証・承認フローが前提で未実装</li>
             <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送は管理 → AI → エージェント で設定可能）</li>
             <li><strong>ローカルファイル連携</strong>：DATA/ 書き込みは File System Access API（Chromium系）とローカルサーバー版の <code>/api/files</code> で実装済み。QGIS/GDAL 呼び出しは未実装</li>

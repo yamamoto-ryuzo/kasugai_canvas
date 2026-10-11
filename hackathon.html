@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.10.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
       <p>ハッカソン — 第5回 Agentic AI Hackathon with Google Cloud 出展まとめ</p>
     </header>
     <main>
@@ -234,7 +234,8 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
       </ol>
 
       <h2 id="kasugai-concept">出展構想：KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント</h2>
-      <p>出展タイトルは <strong>「KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント」</strong> です。KASUGAI Canvas を、Agentic AI（ANTIGRAVITY エージェント）が空間情報レイヤーを自動構築・自動更新し、GIS の利活用を促進するプラットフォームとして出展します。GIS 本番導入前の「フロントローディング」として、利用者が GIS の利活用を体験し、正しい導入判断と課題解決につなげることを重視します。</p>
+      <p>出展タイトルは <strong>「KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント」</strong> です。KASUGAI Canvas を、Agentic AI（ANTIGRAVITY エージェント）が空間情報レイヤーを自動構築し、GIS の利活用を促進するプラットフォームとして出展します。GIS 本番導入前の「フロントローディング」として、利用者が GIS の利活用を体験し、正しい導入判断と課題解決につなげることを重視します。</p>
+      <p><strong>提出スコープ（2026/10/11 見直し）：</strong>提出締切（10/15）までの残り期間を考慮し、当初計画した MCP・協賛 API 連携はスコープ外（将来拡張）とし、<strong>V3（AI 連携）の強化として — Cloud Run を KASUGAI Canvas の稼働・保存先に、Gemini API を GIS 制御に使う、実装済みの構成のみで出展を組みます</strong>。本ページでアピールする機能はすべて実装済みであり、残作業は Cloud Run デプロイ・本番検証・提出物（構成図・デモ動画）のみです。</p>
 
       <h3>課題設定</h3>
       <p>多くの現場で GIS が導入に至らない、あるいは導入後も活用されない状況があります。原因は GIS 自体の理解不足と、「何ができて、どんな課題が解決できるか」を導入前に体験できる環境がないことです。本ハッカソン出展テーマとしては、<strong>「GIS に何ができて、どう課題解決に繋げられるか」を本番導入前に体験できる ANTIGRAVITY エージェントを作り、GIS の利活用を促進する</strong>ことに位置づけます。</p>
@@ -246,8 +247,8 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
           <tr><th>参加条件</th><th>KASUGAI Canvas での対応</th></tr>
         </thead>
         <tbody>
-          <tr><td>必須：アプリケーション実行プロダクト</td><td><strong>Cloud Run</strong> に KASUGAI Canvas 本体（静的フロント配信）＋ ANTIGRAVITY エージェント API（FastAPI + Gemini API/ADK）を1サービスとしてデプロイ。GeoJSON 変換・サンプルデータ生成・パーマリンク生成はエージェント内ツールとして実装</td></tr>
-          <tr><td>必須：Google Cloud AI 技術</td><td><strong>Gemini API</strong> で自然言語からのレイヤー・属性の自動構成と課題抽出を実装。<strong>ADK</strong> で ANTIGRAVITY エージェント（作る→見せる→説明する）のツール実行計画・MCP 連携を構築</td></tr>
+          <tr><td>必須：アプリケーション実行プロダクト</td><td><strong>Cloud Run</strong> に KASUGAI Canvas 本体（静的フロント配信）＋ AI プロキシ（<code>/api/gemini</code>）＋ GIS 保存 API（<code>/api/kasc</code>・<code>/api/data</code> → Cloud Storage）を1サービスとしてデプロイ（<code>agent/</code>・実装済み）。同一オリジン構成で CORS 不要・提出 URL 1本</td></tr>
+          <tr><td>必須：Google Cloud AI 技術</td><td><strong>Gemini API</strong> の function calling で、自然言語からの GIS 制御（レイヤー自動構成・サンプルデータ生成・課題抽出→資料作成）を実装。実行主体はブラウザ内蔵エージェント（48種のチャットツール）で、<code>/api/gemini</code> がサーバーキーを注入して審査員キーレスでの動作を実現。併用する Google Cloud プロダクトとして <strong>Cloud Storage</strong>（.kasc・<code>gs://</code> データ・V4 署名付き URL 転送）と <strong>Cloud IAP</strong>（起動制御モード7）を使用</td></tr>
           <tr><td>提出物 1：GitHub リポジトリ</td><td>kasugai_canvas リポジトリを連携（フロント・エージェント・IaC を含む）</td></tr>
           <tr><td>提出物 2：デプロイ URL</td><td>Cloud Run 上の公開 URL を提出し、審査期間中（〜2026/12/01）動作確認可能な状態を維持</td></tr>
           <tr><td>提出物 3：説明・構成図・デモ動画</td><td>プロジェクト説明＋システムアーキテクチャ図＋「○○の資料を作って」→ GIS 体験→資料生成までの 3 分デモ動画（YouTube 公開）</td></tr>
@@ -261,23 +262,24 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
         </thead>
         <tbody>
           <tr><td>課題の新規性と解決策の有効性</td><td>「GIS が導入前に体験できず、理解されないまま失敗する」という未解決課題に対し、サンプルデータ自動生成×資料×GIS 連動という体験先行型アプローチで解決</td></tr>
-          <tr><td>自律性・エージェントらしさ</td><td>自然言語の指示から、レイヤー選定→データ生成→課題抽出→資料作成までを自律実行。取得元・更新時刻・ライセンスの可視化（可観測性）と IAM 最小権限（セキュリティ）を担保</td></tr>
-          <tr><td>実装品質と拡張性</td><td>Cloud Run のサーバーレス構成で低コスト運用。MCP によるツール追加（駅すぱあと等）でデータソースを拡張可能</td></tr>
+          <tr><td>自律性・エージェントらしさ</td><td>自然言語の指示からブラウザ内蔵エージェントが function calling ループを自律実行し、レイヤー選定→サンプル GeoJSON 生成→課題抽出→資料作成までを一連のツール呼び出しとして完了する。実行したツールはチャットに記録され、生成データには出典・生成時刻・AI 生成明記を付与できる（可観測性）</td></tr>
+          <tr><td>実装品質と拡張性</td><td>公開エンドポイントのガバナンスを実装済み：<code>/api/gemini</code> はモデル許可リスト・1MB 上限・レート制限・Bearer トークン／ID-PASS／Cookie ゲート／IAP の認可で保護。データ転送は GCS V4 署名付き URL でコンテナを通さず、セッションはステートレス HMAC トークンでアフィニティ不要。外部エージェントプロトコルが契約としてフロントに開いているため、後から別実装のエージェントを差し込み拡張できる</td></tr>
         </tbody>
       </table>
 
       <h3>解決策：ANTIGRAVITY 情報レイヤー（GIS 利活用を促進する Agentic AI エージェント）</h3>
-      <p>本番導入前に、自然言語や文脈から「今必要な情報レイヤー」を自律的に選定・追加・更新するエージェント機能を提供します。重力に逆らって情報が自動的に「浮かび上がる」ように、必要なレイヤーが勝手に追加される体験を目指します。</p>
-      <p>ANTIGRAVITY の本質は、<strong>「GIS で何ができて、どんな課題が解決できるか」を本番前に体験してもらうためのエージェント</strong>にあります。サンプルデータ・資料・GIS を連動させることで、利用者の GIS 理解を先に深め、正しい導入判断と課題解決への期待値を形成します。</p>
+      <p>本番導入前に、自然言語や文脈から「今必要な情報レイヤー」を自律的に選定・追加するエージェント機能を提供します。重力に逆らって情報が自動的に「浮かび上がる」ように、必要なレイヤーが勝手に追加される体験を目指します。</p>
+      <p>ANTIGRAVITY の本質は、<strong>「GIS で何ができて、どんな課題が解決できるか」を本番前に体験してもらうためのエージェント</strong>にあります。サンプルデータ・資料・GIS を連動させることで、利用者の GIS 理解を先に深め、正しい導入判断と課題解決への期待値を形成します。以下の要素はすべて提出スコープ内の実装済み機能です。</p>
       <ul>
-        <li><strong>文脈理解：</strong>ユーザーの質問・目的・現在の視点を Gemini などの LLM で解析</li>
-        <li><strong>レイヤー推論：</strong>必要な GeoJSON、XYZ、3D Tiles、DEM、画像、属性情報を推定</li>
-        <li><strong>自動取得・変換：</strong>外部 API や Google Cloud 上のデータから自動取得し、表示可能なレイヤーへ変換</li>
-        <li><strong>ガバナンス：</strong>取得元・更新時刻・ライセンスを可視化し、不要なレイヤーは自動で非表示</li>
+        <li><strong>文脈理解：</strong>ユーザーの質問・目的・現在のカメラ視点・レイヤー一覧を Gemini API で解析</li>
+        <li><strong>レイヤー構成：</strong>必要なレイヤー・属性・カメラ位置を推定し、<code>addDataLayer</code>/<code>addLayer</code>/<code>flyTo</code> 等のチャットツールとしてブラウザが順次実行</li>
+        <li><strong>データ生成・取得：</strong>Gemini が架空サンプル GeoJSON を生成し <code>addGeoJsonLayer</code>／<code>addDataLayer</code> で投入。<code>fetchData</code> ツールで外部データ取得（CORS 範囲）</li>
+        <li><strong>ガバナンス：</strong>生成データへの出典・生成時刻の付与、破壊的ツールの確認ダイアログ、起動制御モード（トークン／Cookie ゲート／IAP）、GCS 署名付き URL による秘匿データ配信</li>
       </ul>
 
-      <h3 id="協賛api-gis">協賛企業 API・サービスの GIS 活用法</h3>
-      <p>本ハッカソンの Support スポンサーおよび Google Cloud が提供する API・サービスを、KASUGAI Canvas の空間情報レイヤーとしてどう活かせるか整理しました。参加条件の必須技術（Cloud Run / Gemini API / ADK）を中核に据えつつ、協賛企業 API を MCP・外部ツールとして ANTIGRAVITY エージェントから呼び出すことで、「GIS 利活用の促進」というテーマを協賛エコシステム全体で実現します。</p>
+      <h3 id="協賛api-gis">協賛企業 API・サービスの GIS 活用法（調査メモ・提出スコープ外）</h3>
+      <p><strong>※ 本節は将来拡張の調査メモであり、今回の提出スコープには含めません。</strong>時間の制約から協賛 API 連携は見送り、提出後の拡張候補として記録を残します。外部エージェントプロトコル（<code>{message,project,camera,layers,history,apiKey?}</code> → <code>{reply,actions,report}</code>）が拡張点としてフロントに開いているため、これらの連携は外部エージェント実装側のツール追加のみで実現できる設計です。</p>
+      <p>本ハッカソンの Support スポンサーおよび Google Cloud が提供する API・サービスを、KASUGAI Canvas の空間情報レイヤーとしてどう活かせるか整理したものです。協賛企業 API を MCP・外部ツールとして ANTIGRAVITY エージェントから呼び出すことで、「GIS 利活用の促進」というテーマを協賛エコシステム全体で実現する構想です。</p>
 
       <h4>駅すぱあと API MCP サーバー（株式会社ヴァル研究所）</h4>
       <p>電車・バス・飛行機・船などの経路探索を、LLM/エージェントから自然言語で直接呼び出せる MCP サーバーです。</p>
@@ -325,150 +327,88 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
       <p>ハッカソンの必須技術となる Google Cloud プロダクトを、GIS 用途に絞って整理します。</p>
       <ul>
         <li><strong>Gemini Enterprise Agent Platform / Gemini API / ADK：</strong>自然言語からレイヤー追加意図を理解し、実行計画を立てる AI エージェントの中核</li>
-        <li><strong>Cloud Run / Cloud Run functions：</strong>ANTIGRAVITY エージェント API、外部 API 連携、GeoJSON 変換処理をホスティング</li>
+        <li><strong>Cloud Run / Cloud Run functions：</strong>AI プロキシ・外部 API 連携、GeoJSON 変換処理をホスティング</li>
         <li><strong>Earth Engine：</strong>衛星画像・DEM・土地利用データの大規模分析。分析結果を KASUGAI Canvas 用 XYZ/GeoJSON タイルへエクスポート</li>
         <li><strong>BigQuery GIS：</strong>大規模空間データの集計・検索。例：「半径 1km 以内の全ての公園」などを SQL で抽出しレイヤー化</li>
         <li><strong>Cloud Storage / Firestore：</strong>生成したレイヤーファイル、メタデータ、キャッシュの保存</li>
         <li><strong>Vision AI / Natural Language AI / Translation AI：</strong>画像・テキスト・多言語の前処理。地名・住所の正規化、多言語属性表示など</li>
       </ul>
 
-      <h3 id="追加機能">今回追加する機能（実装計画）</h3>
-      <p>KASUGAI Canvas は v4.20.0 時点で、CesiumJS フロントエンド（レイヤー表示・FlyTo・Share URL・ベクトル検索・属性/凡例パネル・<code>.kasc</code> 設定）に加え、<strong>AIチャット（Gemini function calling・約40種のツール）・外部エージェント接続・Google Maps Platform 連携・ローカルファイル保存</strong>が実装済みです。エージェントの「手足」に加えて「接続口」（外部エージェントプロトコル）も揃ったため、残る新規実装は<strong>バックエンドのエージェント本体と資料生成</strong>に絞られます。</p>
+      <h3 id="追加機能">提出スコープ：実装済み機能で構成</h3>
+      <p>KASUGAI Canvas は v5.10.0 時点で、CesiumJS フロントエンド（レイヤー表示・FlyTo・Share URL・ベクトル検索・属性/凡例パネル・<code>.kasc</code> 設定）に加え、<strong>AIチャット（Gemini function calling・48種のツール＝カメラ/レイヤー/検索/データ加工/資料生成まで網羅）・外部エージェント接続・Google Maps Platform 連携・ローカルファイル保存</strong>が実装済みです。さらに提出構成（Cloud Run での稼働・保存＋Gemini API による GIS 制御）も <code>agent/</code> の FastAPI サービス1つに実装済みのため、<strong>提出に必要な機能に新規実装はありません</strong>。残作業はデプロイ・本番検証・提出物のみです。</p>
 
-      <h4>1. ANTIGRAVITY エージェント API（新規バックエンド／Cloud Run）</h4>
-      <p>FastAPI + Gemini API（ADK）による新サービス。参加条件の「Cloud Run ＋ Gemini API / ADK」を充足する中核部分です。フロント側に実装済みの<strong>外部エージェントプロトコルをそのまま契約として採用</strong>し、必須エンドポイントは <code>POST /agent/chat</code> 1本に集約します。</p>
+      <h4>Cloud Run サービス構成（実装済み）</h4>
+      <p><code>agent/</code> の FastAPI サービス1つで、KASUGAI Canvas 本体（静的配信）・GIS 保存 API・AI プロキシを Cloud Run 上に同居させます。プロジェクト設定・データの保存先は Cloud Storage（GCS・未設定時はローカルストアにフォールバック）、AI 制御は<strong>ブラウザ内蔵のエージェント</strong>が Gemini API（function calling・48種のチャットツール）を直接実行します。サーバー側のエージェント実装は廃止し、Cloud Run は「KASUGAI の稼働・保存先＋キー隠蔽プロキシ」に集約する構成です。</p>
       <table>
         <thead>
-          <tr><th>エンドポイント</th><th>機能</th></tr>
+          <tr><th>エンドポイント・機能</th><th>内容</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>POST /agent/chat</code>（必須）</td><td>リクエスト <code>{message, project, camera, layers, history}</code> を受け、<code>{reply, actions:[{name,args}]}</code> を返す。actions はフロントの既存ツール（<code>addDataLayer</code>/<code>addLayer</code>/<code>applyInspector</code>/<code>flyTo</code>/<code>getShareUrl</code> 等）として順次実行される。レイヤー自動構成・サンプルデータ生成はすべてこの actions で表現する</td></tr>
-          <tr><td>応答の <code>report</code> フィールド（または <code>showReport</code> アクション）</td><td>課題抽出結果をまとめた資料（Markdown/HTML）を返し、フロント側でモーダル表示・ダウンロードする</td></tr>
+          <tr><td><code>POST /api/gemini</code></td><td>内蔵AI向けの薄いキー隠蔽プロキシ。ブラウザの generateContent リクエスト（<code>{contents, systemInstruction, tools, generationConfig, model}</code>）にサーバーの <code>GEMINI_API_KEY</code> を注入して転送。推論ループ・ツール実行・地図操作はすべてブラウザ側。<code>model</code> 必須・<code>GEMINI_MODELS</code> 許可リスト・1MB 上限・レート制限・認証モードのトークン/Cookie/IAP で保護可能。<strong>キーを持たない審査員・訪問者でも内蔵AIの全機能がそのまま使える</strong></td></tr>
+          <tr><td><code>POST /api/auth</code>・<code>POST /api/kasc</code></td><td>ID/PASS ログインで HMAC トークンを発行し、プロジェクト設定（.kasc）を GCS の <code>kasc/&lt;ID&gt;</code> へ保存・ログイン時に一括返却。起動時に同梱 <code>web/projects/*/*.kasc</code> を冪等シード</td></tr>
+          <tr><td><code>GET/PUT /api/data/&lt;key&gt;</code></td><td><code>gs://</code> 秘匿データの保存・配信。GET は GCS V4 署名付き URL へ 302（データがコンテナを通らない直接転送。未整備環境は Range 対応プロキシ配信にフォールバック）</td></tr>
+          <tr><td>起動制御 <code>KASUGAI_AUTH_MODE=5/6/7</code></td><td>5=API・データのみトークン保護 / 6=<code>kasugai_session</code> Cookie 全ゲート / 7=Cloud IAP 委譲。<code>/auth-methods.json</code> を環境変数から動的応答するため、モード変更にイメージ再ビルドは不要</td></tr>
         </tbody>
       </table>
-      <p>当初計画していた <code>/agent/layers</code>・<code>/agent/sample-data</code>・<code>/agent/report</code> の個別エンドポイントは、actions プロトコルで表現できるため<strong>廃止</strong>し、エージェント内部の ADK ツール（サンプルGeoJSON生成・課題抽出・資料作成）として実装します。</p>
-
-      <h4>2. チャットパネル・エージェント接続（実装済→配線のみ）</h4>
       <ul>
-        <li><strong>実装済（v4.20.0）</strong>：チャットパネルと外部エージェント設定（エンドポイントURL・Bearerトークン・有効化トグル）。チャット入力をエンドポイントへ POST し、応答の actions を実行する</li>
-        <li><strong>実装済</strong>：バックエンドの capabilities が <code>agent</code> 機能を通知していれば、エンドポイント未設定でも <code>/agent/chat</code> を既定で使うよう解決（Cloud Run 同一オリジン運用で<strong>審査員が無設定で使える</strong>）。ユーザーが明示的に無効化して保存した場合は既定化を行わない</li>
-        <li>エージェントのツール実行はチャットにシステムメッセージとして記録済み。出典・ライセンスは生成 GeoJSON の properties・<code>attr=</code> 出典で表示し、審査基準の<strong>可観測性</strong>に対応</li>
+        <li><strong>自律実行：</strong>function calling ループはブラウザ側で回り、48種のチャットツール（カメラ・レイヤー・検索・データ加工・資料生成まで網羅）を直接実行する。レイヤー自動構成・サンプルデータ生成（Gemini が GeoJSON を生成し <code>addGeoJsonLayer</code> で投入）・<code>showReport</code> による資料出力・<code>buildShareUrl</code> による視点パーマリンク埋め込みはすべて内蔵ツールで完結</li>
+        <li><strong>キー方式：</strong>BYO（Bring Your Own）キー登録済みのブラウザは Gemini を直接呼び（キーは localStorage に閉じサーバーへ送らない）、未設定のブラウザは <code>/api/gemini</code> 経由でサーバーキーを使う。能力通知は <code>GET /api/capabilities</code> の <code>features:["aiProxy"]</code> で行われフロントが自動切替</li>
+        <li><strong>外部エージェント窓口：</strong>フロントのエージェント設定で任意のエンドポイントURLを指定すれば、<code>{message,project,camera,layers,history,apiKey?}</code> → <code>{reply,actions,report}</code> 契約の外部実装を差し込める（本リポジトリにはサーバー側実装を同梱しない）</li>
+      </ul>
+      <p>詳細は <code>agent/AUTH_MODES.md</code>・<code>auth/cloudrun.html</code>。審査用の公開 URL はモード 0（認証なし＋レート制限）で運用し、保存・認証系のデモは動画内でモード5の流れを見せる想定です。</p>
+
+      <h4>チャットパネル・エージェント接続（実装済み）</h4>
+      <ul>
+        <li><strong>実装済</strong>：内蔵AI（Gemini function calling・48ツール）が本体。<code>/api/capabilities</code> が <code>aiProxy</code> を通知する環境では BYO キー未設定でもそのまま動作し、<strong>審査員が無設定で使える</strong>。BYO キー登録時はサーバーを介さず直接呼ぶ</li>
+        <li><strong>実装済（v4.20.0）</strong>：外部エージェント設定（エンドポイントURL・Bearerトークン・有効化トグル）も残置 — 外部のエージェント実装があれば差し込める拡張窓口（サーバー側実装は同梱しない）</li>
+        <li>ツール実行はチャットにシステムメッセージとして記録済み。出典・ライセンスは生成 GeoJSON の properties・<code>attr=</code> 出典で表示し、審査基準の<strong>可観測性</strong>に対応</li>
       </ul>
 
-      <h4>3. レイヤー自動構成の実行層（実装済）</h4>
+      <h4>レイヤー自動構成の実行層（実装済み）</h4>
       <ul>
-        <li><strong>実装済（v4.20.0）</strong>：エージェント応答の <code>actions:[{name,args}]</code> をチャットツールと同名で順次実行する機構が <code>applyAgentLayers()</code> の役割を担う。追加実装は不要</li>
-        <li>既存の <code>.kasc</code> パーサー（<code>applyInspector</code>/<code>addLayer</code>）・FlyTo・凡例をそのまま再利用する方針を維持</li>
+        <li><strong>実装済（v4.20.0）</strong>：エージェント応答の <code>actions:[{name,args}]</code> をチャットツールと同名で順次実行する機構が <code>applyAgentLayers()</code> の役割を担う</li>
+        <li>既存の <code>.kasc</code> パーサー（<code>applyInspector</code>/<code>addLayer</code>）・FlyTo・凡例をそのまま再利用</li>
       </ul>
 
-      <h4>4. サンプルデータ自動生成（エージェント側 ADK ツール）</h4>
+      <h4>サンプルデータ自動生成（実装済み）</h4>
       <ul>
-        <li>Gemini に「春日井市の避難所 20 件、属性：収容人数・耐震・標高」等を生成させ GeoJSON 化し、<code>addDataLayer</code> アクションでフロントへ返す</li>
-        <li>生成 GeoJSON の <code>properties</code> に出典・生成時刻・「AI生成サンプル」の旨を付記し、データの性格を可視化する</li>
+        <li>内蔵AIが Gemini に「春日井市の避難所 20 件、属性：収容人数・耐震・標高」等を生成させ、<code>addGeoJsonLayer</code>／<code>addDataLayer</code> ツールでそのままレイヤー化する</li>
+        <li>生成 GeoJSON の <code>properties</code> に出典・生成時刻・「AI生成サンプル」の旨を付記するよう指示でき、データの性格を可視化する</li>
         <li>既存のベクトル検索・属性表示・凡例がそのまま動く形式で出力し、<strong>本番データなしで GIS 体験</strong>を実現</li>
       </ul>
 
-      <h4>5. 資料生成＋パーマリンク連携（フロント新規）</h4>
+      <h4>資料生成＋パーマリンク連携（実装済み）</h4>
       <ul>
         <li>属性から課題を抽出し、「平面・内容・解決案」構成の資料を自動生成（Markdown/HTML）</li>
         <li><strong><code>showReport</code> アクション（実装済）</strong>：エージェント応答の <code>report</code> フィールドまたは同名アクションで資料をモーダル表示＋ファイルダウンロード。Markdown は簡易レンダリング（リンククリック可）、HTML は sandbox 付き iframe で隔離表示</li>
-        <li><strong><code>buildShareUrl</code> ツール（実装済）</strong>：現行の <code>getShareUrl()</code> は現在視点のURLのみ返すため、座標・視点を引数指定してURLを組み立てられるようにし、資料の各節に視点別パーマリンクを埋め込む（URL形式は既存の <code>?longitude=...&amp;latitude=...&amp;height=...&amp;project=...</code> を踏襲）</li>
+        <li><strong><code>buildShareUrl</code> ツール（実装済）</strong>：座標・視点を引数指定してURLを組み立てられ、資料の各節に視点別パーマリンクを埋め込める（URL形式は既存の <code>?longitude=...&amp;latitude=...&amp;height=...&amp;project=...</code> を踏襲）</li>
         <li>QRコード・短縮URLは将来拡張とし、MVP ではURLリンク埋め込みとする</li>
       </ul>
 
-      <h4>6. MCP 連携（拡張・任意）</h4>
-      <p>ADK のエージェントに MCP クライアント／外部ツールを登録し、ANTIGRAVITY が必要と判断したときに自律的に呼び出します。取得結果はすべて<strong>GeoJSON への変換 → actions（<code>addDataLayer</code>/<code>addLayer</code>）で既存レイヤー機構へ追加</strong>という共通パターンに集約します。</p>
+      <h4>提出 MVP とデモシナリオ</h4>
+      <p>提出 MVP は<strong>すべて実装済み</strong>です。3 分デモ動画では、<strong>「避難所の資料を作って」→ サンプルレイヤー自動追加 → FlyTo → 属性から課題抽出 → パーマリンク付き資料出力</strong>の一連の流れをそのまま収録します。保存面のアピールとして、認証モードでのログイン → .kasc が GCS に保存され再訪時に復元される流れも動画に含めます。</p>
 
-      <h5>6-1. 駅すぱあと API MCP サーバー（経路・到達圏レイヤー）</h5>
-      <ul>
-        <li><strong>接続方法：</strong>ADK の <code>MCPToolset</code> にヴァル研究所提供の MCP サーバーを登録し、経路探索ツール（駅名解決・経路検索）をエージェントから呼び出し可能にする</li>
-        <li><strong>変換処理：</strong>エージェントサービス内の変換ツールとして実装。MCP の経路レスポンス（区間・駅リスト）を LineString（経路）＋ Point（駅・乗換駅）の FeatureCollection へ変換し、所要時間・運賃・路線名を <code>properties</code> に格納（Cloud Run functions への分割は不要）</li>
-        <li><strong>表示：</strong>経路は <code>geojson:</code> レイヤーとして追加し、駅ポイントは既存の属性表示・FlyTo と連動。乗換駅は色分けし凡例に反映</li>
-        <li><strong>到達圏（アイソクローン）：</strong>「渋谷から 30 分以内」の指示に対し、複数目的地への所要時間を MCP でバッチ照会 → 到達可能駅を集計 → 凸包/バッファで Polygon 化して到達圏レイヤーを生成</li>
-        <li><strong>デモシナリオ：</strong>「春日井市役所から名古屋駅までの通勤ルートを地図に出して」→ エージェントが MCP 呼び出し → 経路レイヤー追加 → 経路全体が入る視点へ FlyTo → 資料に所要時間・運賃と経路パーマリンクを記載</li>
-      </ul>
-
-      <h5>6-2. GMI Cloud（航空写真・衛星画像の AI 解析レイヤー）</h5>
-      <ul>
-        <li><strong>接続方法：</strong>GMI Cloud の推論 API（OpenAI 互換エンドポイント）を ADK のカスタムツール <code>detect_features_from_imagery</code> として登録</li>
-        <li><strong>処理フロー：</strong>現在のカメラ範囲（bbox）から XYZ タイル座標を計算 → 航空写真タイルを取得 → GMI Cloud 上の Vision モデルで物体検出（建物・道路・駐車場・植生） → ピクセル座標を bbox から地理座標へ逆変換 → Polygon/Point の GeoJSON 化</li>
-        <li><strong>属性設計：</strong><code>properties</code> に検出クラス・信頼度スコア・使用モデル名・推論日時を格納し、レイヤーの出典・鮮度を可視化（可観測性対応）</li>
-        <li><strong>デモシナリオ：</strong>「この辺りの駐車場を検出してレイヤーにして」→ 現在視点のタイルを解析 → 検出結果レイヤー追加 → 「駐車場が少ないエリア」を課題として資料に反映</li>
-      </ul>
-
-      <h5>6-3. Vision AI（POI・テキスト抽出）</h5>
-      <ul>
-        <li><strong>接続方法：</strong>Cloud Vision API（テキスト検出・ランドマーク検出・オブジェクト検出）を ADK ツールとして登録</li>
-        <li><strong>活用例 1 — 看板・地名の POI 化：</strong>ユーザーがアップロードした現地写真・ストリート画像から OCR で店名・看板を抽出 → Geocoding で座標付与 → POI ポイントレイヤーとして追加</li>
-        <li><strong>活用例 2 — 資料画像の取り込み：</strong>既存の紙地図・PDF のスクリーンショットから凡例・注記テキストを抽出し、エージェントがレイヤー構成のヒントとして利用</li>
-        <li><strong>参加条件との関係：</strong>Vision AI は必須 AI 技術リストに含まれるため、Gemini API / ADK に加えて使用技術としてアピール可能</li>
-      </ul>
-
-      <h5>共通アーキテクチャ</h5>
-      <pre class="text"><code>ユーザー指示（自然言語）
-    ↓
-POST /agent/chat → ANTIGRAVITY エージェント（Gemini API + ADK）… ツール選択を自律判断
-    ├─ MCPToolset: 駅すぱあと MCP（経路・到達圏）
-    ├─ カスタムツール: GMI Cloud 推論 API（画像解析）
-    └─ カスタムツール: Vision AI（OCR・POI 抽出）
-    ↓
-エージェントが GeoJSON 化（属性に出典・取得時刻・ライセンスを付与）
-    ↓
-応答 {reply, actions:[addDataLayer/flyTo/…]} → KASUGAI Canvas レイヤー追加・FlyTo・凡例更新</code></pre>
-
-      <h5>GIS 利活用促進の観点からの効果まとめ</h5>
-      <p>各 MCP 連携が「KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント」の目標（GIS で何ができるかを体験→理解→正しい導入判断・課題解決）にどう寄与するかを整理します。</p>
-      <table>
-        <thead>
-          <tr><th>連携</th><th>GIS 利活用促進への効果</th><th>解消する導入障壁</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>駅すぱあと API MCP</td>
-            <td><strong>「動き・時間」の GIS 体験を提供。</strong>静的な地図では伝わらない「移動・所要時間・到達圏」を、話しかけるだけでレイヤー化。通勤圏分析・施設配置検討・防災避難計画など、GIS が意思決定に直結する場面を非専門家がその場で体験できる</td>
-            <td>「GIS は地図を描くだけ」という誤解。時間・コストという業務上の関心事と地図が結びつき、GIS の実用価値が伝わる</td>
-          </tr>
-          <tr>
-            <td>GMI Cloud</td>
-            <td><strong>「データがなくても始められる」体験を提供。</strong>航空写真から建物・駐車場・植生を AI が自動抽出するため、整備済みの GIS データを持たない組織でも、いま見ている場所から即座にレイヤーが生まれる過程を体験できる。データ整備コストの見積り精度も向上</td>
-            <td>「使えるデータがないから GIS は導入できない」という最大の障壁。データ整備が導入の前提ではなく、AI で後追い可能であることを実証</td>
-          </tr>
-          <tr>
-            <td>Vision AI</td>
-            <td><strong>「手元の資料・写真が GIS 資産になる」体験を提供。</strong>現地写真や紙地図・PDF という既存の業務資産を OCR で POI・レイヤー構成ヒントへ変換し、これまでの仕事の蓄積がそのまま GIS で活きることを実感できる</td>
-            <td>「GIS 導入 = ゼロからの作り直し」という心理的負担。既存資料からの移行パスを示し、導入の初期ハードルを下げる</td>
-          </tr>
-        </tbody>
-      </table>
-      <p>3 つの連携に共通するのは、<strong>専門知識・本番データ・移行作業という従来の GIS 導入の三大障壁を、エージェントとの対話だけで乗り越えられる</strong>ことを体験してもらう点です。この体験が「GIS で何ができて、どんな課題が解決できるか」の理解を深め、正しい導入判断と課題解決につながります。</p>
-
-      <h4>最小プロトタイプ（MVP）の範囲</h4>
-      <p>機能 2・3 は実装済みのため、MVP は <strong>1（エージェントAPI）・4（サンプル生成）・5（資料＋パーマリンク）＋ Cloud Run 公開デプロイ</strong>です。3 分デモ動画では、<strong>「避難所の資料を作って」→ サンプルレイヤー自動追加 → FlyTo → 属性から課題抽出 → パーマリンク付き資料出力</strong>までの一連の流れを収めます。機能 6（MCP連携）は時間があれば追加する優先順位とします。</p>
-
-      <h3>技術スタック案</h3>
+      <h3>技術スタック（提出構成）</h3>
       <table>
         <thead>
           <tr><th>層</th><th>技術</th><th>用途</th></tr>
         </thead>
         <tbody>
-          <tr><td>フロントエンド</td><td>KASUGAI Canvas（CesiumJS）</td><td>3D 地球・レイヤー表示・FlyTo・Info 表示</td></tr>
-          <tr><td>ホスティング</td><td>Cloud Run <strong>（必須プロダクト充足）</strong></td><td>静的フロント配信＋ANTIGRAVITY エージェント API を1サービスに同居（同一オリジン・CORS 不要・提出URL 1本）</td></tr>
-          <tr><td>AI エージェント</td><td>Gemini API / ADK <strong>（必須 AI 技術充足）</strong></td><td>意図理解・レイヤー選定・MCP/ツール実行計画</td></tr>
-          <tr><td>交通データ</td><td>駅すぱあと API MCP サーバー</td><td>経路探索・到達圏レイヤー生成</td></tr>
-          <tr><td>画像生成・解析</td><td>YouCam API / GMI Cloud / Vision AI</td><td>外観生成・航空写真解析・POI 抽出</td></tr>
-          <tr><td>地理空間解析</td><td>Earth Engine / BigQuery GIS</td><td>衛星データ分析・大規模空間クエリ</td></tr>
-          <tr><td>データ保存</td><td>Firestore / Cloud Storage</td><td>レイヤー設定・生成済みデータのキャッシュ</td></tr>
-          <tr><td>セキュリティ</td><td>GMI Cloud TrendAI™ / Cloud IAM</td><td>エージェントの脅威分析・最小権限アクセス</td></tr>
+          <tr><td>フロントエンド</td><td>KASUGAI Canvas（CesiumJS）</td><td>3D 地球・レイヤー表示・FlyTo・チャット UI・資料モーダル</td></tr>
+          <tr><td>ホスティング</td><td>Cloud Run <strong>（必須プロダクト充足）</strong></td><td>静的フロント配信＋GIS 保存 API＋<code>/api/gemini</code> AI プロキシを1サービスに同居（同一オリジン・CORS 不要・提出URL 1本）</td></tr>
+          <tr><td>AI エージェント</td><td>Gemini API（function calling）<strong>（必須 AI 技術充足）</strong></td><td>ブラウザ内蔵エージェントが48種のチャットツールを直接実行 → レイヤー自動構成・資料生成まで自律実行</td></tr>
+          <tr><td>データ保存（GIS の保存先）</td><td>Cloud Storage</td><td>.kasc（<code>kasc/&lt;ID&gt;</code>）・<code>gs://</code> 秘匿データ（<code>data/&lt;key&gt;</code>）。GET は V4 署名付き URL でブラウザ⇄GCS 直接転送</td></tr>
+          <tr><td>セキュリティ</td><td>Cloud IAP / HMAC トークン / Secret Manager / Cloud IAM</td><td>起動制御モード5/6/7・秘匿情報は Secret Manager・実行サービスアカウントの最小権限</td></tr>
         </tbody>
       </table>
+      <p>将来拡張候補（提出スコープ外）：駅すぱあと API MCP・GMI Cloud・Vision AI・Earth Engine・BigQuery GIS 等。いずれもエージェント側ツールの追加で拡張できる設計です。</p>
 
-      <h2 id="todo">次のステップ</h2>
+      <h2 id="todo">次のステップ（提出までの残作業）</h2>
       <ol>
-        <li>エントリー済みか確認し、ダッシュボードへプロジェクト「KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント」を作成</li>
-        <li><code>agent/</code> サービス新設：FastAPI + Gemini API/ADK で既存の外部エージェントプロトコル（<code>POST /agent/chat</code> → <code>{reply, actions, report}</code>）を実装。ADK ツールとしてサンプルGeoJSON生成・課題抽出・資料作成を持たせる</li>
-        <li>Cloud Run へのデプロイ（静的 <code>web/</code> 配信＋<code>/agent/*</code> を1サービスに同居）と公開 URL の確保（審査期間中の稼働維持）</li>
-        <li>フロント拡張：<code>showReport</code> アクション（資料モーダル/ダウンロード）・<code>buildShareUrl</code> ツール・既定エンドポイントの同一オリジン解決・i18n 対応</li>
-        <li>システムアーキテクチャ図・3 分デモ動画（YouTube 公開）の制作</li>
+        <li>Cloud Run へのデプロイ：Artifact Registry 登録 → <code>agent/Dockerfile</code> でビルド → <code>gcloud run deploy</code>（手順は <code>agent/README.md</code>）。<code>GEMINI_API_KEY</code> を Secret Manager 経由で渡せば審査員キーレスで内蔵AIが動く</li>
+        <li>GCS バケット＋実行サービスアカウント権限の整備（<code>roles/storage.objectAdmin</code>・<code>roles/iam.serviceAccountTokenCreator</code>・バケット CORS）。署名付き URL 方式は本番未検証のため、問題があれば <code>KASUGAI_DATA_REDIRECT=0</code>（プロキシ配信）で提出</li>
+        <li>審査用公開 URL での通し検証：「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力。審査期間中（〜2026/12/01）の稼働維持（<code>--min-instances 1</code> 推奨）</li>
+        <li>システムアーキテクチャ図・3 分デモ動画（YouTube 公開）の制作。保存デモはモード5（ID/PASS ログイン → .kasc が GCS へ保存・復元）の流れを収録</li>
         <li>GitHub リポジトリ連携とプロジェクト提出（2026/10/15 締切）</li>
       </ol>
 

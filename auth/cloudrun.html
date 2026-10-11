@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.10.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
       <p>Cloud Run 認証（cloudrun / cloudrun-gate / cloudrun-iap）</p>
     </header>
     <main>
@@ -50,7 +50,7 @@
         <h3>構成</h3>
         <pre><code>Cloud Run（agent/ FastAPI コンテナ）
   ├─ /                    … web/ 静的配信
-  ├─ POST /agent/chat     … ANTIGRAVITY エージェント（認証モード時は認可必須）
+  ├─ POST /api/gemini     … 内蔵AI向け Gemini プロキシ（サーバーキー注入・認可必須）
   ├─ POST /api/auth       … ID/PASS → {ok, token, kasc}（6 では Cookie も発行）
   ├─ POST /api/kasc       … トークン必須 → GCS kasc/&lt;projectId&gt; へ書き込み
   ├─ GET|PUT /api/data/*  … トークン必須 → GCS data/&lt;key&gt;（GET は署名付き URL へ 302）
@@ -189,7 +189,7 @@ gcloud run deploy kasugai-canvas --image ... --iap</code></pre>
               <td>✅ IAP JWT or トークン</td>
             </tr>
             <tr>
-              <td>/agent/chat</td>
+              <td>/api/gemini</td>
               <td>✅ kasugai トークン or Bearer</td>
               <td>✅ Cookie セッション</td>
               <td>✅ IAP JWT</td>

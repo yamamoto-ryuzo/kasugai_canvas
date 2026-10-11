@@ -464,11 +464,6 @@ strong {
   padding: 4px 8px;
 }
 
-#site-nav .nav-toc a {
-  color: #666;
-  font-size: 0.9em;
-}
-
 .nav-toggle {
   display: none;
   position: fixed;

@@ -15,7 +15,7 @@ published: true
 | デプロイ URL | （提出時に記入） |
 | デモ動画 URL | （提出時に記入：YouTube 公開） |
 | システムアーキテクチャ図 | （画像を追加） |
-| 使用技術 | CesiumJS, Gemini API / ADK, Cloud Run, 駅すぱあと API MCP, GMI Cloud, Earth Engine 等 |
+| 使用技術 | CesiumJS, Gemini API（function calling）, Cloud Run, Cloud Storage, Cloud IAP |
 
 ## 6. ハッカソン概要
 
@@ -282,31 +282,30 @@ AI 肌解析、バーチャル試着、画像・動画生成など 50 種類以�
 ハッカソンの必須技術となる Google Cloud プロダクトを、GIS 用途に絞って整理します。
 
 - **Gemini Enterprise Agent Platform / Gemini API / ADK：**自然言語からレイヤー追加意図を理解し、実行計画を立てる AI エージェントの中核
-- **Cloud Run / Cloud Run functions：**ANTIGRAVITY エージェント API、外部 API 連携、GeoJSON 変換処理をホスティング
+- **Cloud Run / Cloud Run functions：**KASUGAI Canvas 本体の配信・GIS 保存 API・AI プロキシ、外部 API 連携、GeoJSON 変換処理をホスティング
 - **Earth Engine：**衛星画像・DEM・土地利用データの大規模分析。分析結果を KASUGAI Canvas 用 XYZ/GeoJSON タイルへエクスポート
 - **BigQuery GIS：**大規模空間データの集計・検索。例：「半径 1km 以内の全ての公園」などを SQL で抽出しレイヤー化
 - **Cloud Storage / Firestore：**生成したレイヤーファイル、メタデータ、キャッシュの保存
 - **Vision AI / Natural Language AI / Translation AI：**画像・テキスト・多言語の前処理。地名・住所の正規化、多言語属性表示など
 
-### 技術スタック案
+### 技術スタック（提出構成）
 
   層                技術                                 用途
   ----------------- ------------------------------------ --------------------------------------------
-  フロントエンド    KASUGAI Canvas（CesiumJS）           3D 地球・レイヤー表示・FlyTo・Info 表示
-  ホスティング      Cloud Run / Cloud Run functions      ANTIGRAVITY エージェント API・レイヤー変換
-  AI エージェント   Gemini API / ADK                     意図理解・レイヤー選定・MCP/ツール実行計画
-  交通データ        駅すぱあと API MCP サーバー          経路探索・到達圏レイヤー生成
-  画像生成・解析    YouCam API / GMI Cloud / Vision AI   外観生成・航空写真解析・POI 抽出
-  地理空間解析      Earth Engine / BigQuery GIS          衛星データ分析・大規模空間クエリ
-  データ保存        Firestore / Cloud Storage            レイヤー設定・生成済みデータのキャッシュ
-  セキュリティ      GMI Cloud TrendAI™ / Cloud IAM       エージェントの脅威分析・最小権限アクセス
+  フロントエンド    KASUGAI Canvas（CesiumJS）           3D 地球・レイヤー表示・FlyTo・チャット UI
+  ホスティング      Cloud Run                            静的配信・GIS 保存 API・/api/gemini AI プロキシ
+  AI エージェント   Gemini API（function calling）        ブラウザ内蔵エージェントが 48 種の GIS ツールを直接実行
+  データ保存        Cloud Storage                        .kasc・gs:// 秘匿データ（V4 署名付き URL 転送）
+  セキュリティ      Cloud IAP / HMAC トークン / Secret Manager   起動制御モード・最小権限アクセス
+
+将来拡張候補（提出スコープ外）：駅すぱあと API MCP・YouCam API・GMI Cloud・Earth Engine・BigQuery GIS 等。
 
 ## 次のステップ
 
 1.  エントリー済みか確認し、ダッシュボードへプロジェクトを作成
 2.  アーキテクチャ図・デモ動画の制作
 3.  Google Cloud へのデプロイ（Cloud Run 等）
-4.  ANTIGRAVITY レイヤー自動追加の最小プロトタイプ実装
+4.  審査用公開 URL での通し検証（「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力）
 5.  GitHub リポジトリ連携とプロジェクト提出
 
 ### 参考リンク

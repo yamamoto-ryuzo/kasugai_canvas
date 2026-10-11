@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.10.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
       <p>Cloudflare 認証 — Workers（cloudflare-workers）</p>
     </header>
     <main>
@@ -26,8 +26,13 @@
         <h3>構成</h3>
         <pre><code>workers/
   wrangler.toml  … assets=../web、KV/R2バインド、run_worker_first=true
-  worker.js      … /api/* ルーティング＋静的ファイル認証ゲート</code></pre>
-        <p><code>worker.js</code> は <code>functions/api/*</code>・<code>functions/_lib/token.js</code> のハンドラをそのまま再利用します。二重実装ではありません。</p>
+  worker.js      … /api/* ルーティング＋静的ファイル認証ゲート
+functions/
+  api/auth.js・api/kasc.js・api/data/  … 認証・保存API（Cloud Run 版と同一契約）
+  api/gemini.js                        … 内蔵AI向け Gemini プロキシ（サーバーキー注入）
+  api/capabilities.js・health.js       … 能力通知 {tier:"workers"}・起動確認</code></pre>
+        <p><code>worker.js</code> は <code>functions/api/*</code>・<code>functions/_lib/*</code> のハンドラをそのまま再利用します。二重実装ではありません。</p>
+        <p><code>POST /api/gemini</code> は内蔵AI（ブラウザ）向けの薄いキー隠蔽プロキシで、ブラウザの generateContent リクエストにサーバーキー（<code>wrangler secret put GEMINI_API_KEY</code>）を注入して Gemini へ転送します。推論ループ・地図操作はブラウザの内蔵AIが担うため、サーバー側にエージェント実装はありません。BYO キーがあるユーザーはブラウザから直接 Gemini を呼ぶためプロキシは使いません。<code>ANTIGRAVITY_TOKEN</code>（Bearer 必須化）・<code>GEMINI_MODELS</code>（許可モデル・カンマ区切り）・<code>ANTIGRAVITY_RATE_LIMIT</code>（KV バインド時の IP 毎時間制限）で制御できます。</p>
         <p>認証前に公開されるのはログイン画面に必要な最小限のみです（<code>index.html</code>・<code>styles.css</code>・<code>favicon.ico</code>・<code>auth-*.js</code>・<code>auth-methods.json</code>・<code>i18n.js</code>・<code>i18n/</code>・<code>PLUGIN/auth-*/</code>）。それ以外のファイル（<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等）はすべて未認証では 401 になります。</p>
       </div>
       <div class="url-box">

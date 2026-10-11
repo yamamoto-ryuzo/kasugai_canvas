@@ -1,6 +1,12 @@
+// Cloudflare Workers エントリポイント（wrangler.toml の main）。
+// /api/* ルーティング＋静的ファイル全量の認証ゲート（control=4 / cloudflare-workers）。
+// API ハンドラは functions/api/*（Cloudflare Pages Functions と共用）を再利用する。
 import { onRequestPost as handleAuth } from "../functions/api/auth.js";
 import { onRequestPost as handleKasc } from "../functions/api/kasc.js";
 import { onRequestGet as handleDataGet, onRequestPut as handleDataPut } from "../functions/api/data/[[path]].js";
+import { onRequestGet as handleCapabilities } from "../functions/api/capabilities.js";
+import { onRequestPost as handleGemini } from "../functions/api/gemini.js";
+import { onRequestGet as handleHealth } from "../functions/health.js";
 import { verifyToken } from "../functions/_lib/token.js";
 
 const COOKIE = "kasugai_session";
@@ -56,6 +62,24 @@ export default {
     if (path === "/api/kasc") {
       if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
       return handleKasc({ request, env });
+    }
+
+    // detectBackend() が最初に叩く到達確認。{ok:true} で capabilities 取得に進む
+    if (path === "/health") {
+      if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+      return handleHealth({ request, env });
+    }
+
+    // 能力通知（tier=workers）。内容は公開情報のみでゲート不要
+    if (path === "/api/capabilities") {
+      if (request.method !== "GET") return new Response("Method Not Allowed", { status: 405 });
+      return handleCapabilities({ request, env });
+    }
+
+    // 内蔵AI向けキー隠蔽プロキシ。認可（Cookie/Bearer）は関数内で判定
+    if (path === "/api/gemini") {
+      if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+      return handleGemini({ request, env });
     }
 
     if (path.startsWith("/api/data/")) {

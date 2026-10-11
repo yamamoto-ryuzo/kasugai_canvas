@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.10.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
       <p>認証とプラグイン — 認証方式の比較と拡張機能</p>
     </header>
     <main>
@@ -54,6 +54,29 @@
             <h3>7. Cloud Run 認証（cloudrun-iap）— IAP 委譲</h3>
             <p>Cloud IAP に認証を完全委譲。Google アカウントで全ファイルを保護。アプリ側コードほぼゼロ。</p>
           </a>
+        </div>
+        <div class="url-box">
+          <h3>2つのサーバーレス基盤（Cloudflare 系 / Cloud Run 系）</h3>
+          <p>サーバー側機能は <strong>Cloudflare（Pages Functions / Workers）と Google Cloud（Cloud Run）の2系統に対応</strong>しています。提供する API 契約（<code>/api/auth</code>・<code>/api/kasc</code>・<code>/api/data/*</code>・<code>/api/gemini</code>・<code>/api/capabilities</code>）は同一で、フロント側は <code>/api/capabilities</code> の応答（<code>tier</code>・<code>features</code>）だけを見て出し分けるため、どちらの基盤でも同じ <code>web/</code> がそのまま動きます。違いは実行基盤・永続化・設定方法だけです。</p>
+          <table>
+            <thead>
+              <tr><th>項目</th><th>Cloudflare 系（3 Pages / 4 Workers）</th><th>Cloud Run 系（5/6/7）</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>実行基盤</td><td>Pages Functions / Workers（エッジ・JS）</td><td>Cloud Run（コンテナ・FastAPI/Python）</td></tr>
+              <tr><td>実装</td><td><code>functions/</code>＋<code>workers/worker.js</code>（JS）</td><td><code>agent/</code>（FastAPI）</td></tr>
+              <tr><td>.kasc 保存先</td><td>KV（<code>kasc:&lt;id&gt;</code>）</td><td>GCS（<code>kasc/&lt;id&gt;</code>）</td></tr>
+              <tr><td>秘匿データ</td><td>R2（<code>r2://</code>）</td><td>GCS（<code>gs://</code>・署名付き URL 302）</td></tr>
+              <tr><td>AI プロキシ<br><small>POST /api/gemini</small></td><td><code>functions/api/gemini.js</code>（サーバーキー注入・転送のみ）</td><td><code>agent/app/main.py</code>（同一実装）</td></tr>
+              <tr><td>外部エージェント<br><small>POST /agent/chat</small></td><td colspan="2">両基盤ともサーバー側実装はなし（廃止）。外部実装を繋ぐ窓口はフロントの「エージェント」設定に常備</td></tr>
+              <tr><td>capabilities</td><td><code>{tier:"workers"}</code></td><td><code>{tier:"cloudrun"}</code></td></tr>
+              <tr><td>認証ゲート</td><td>3=APIのみ / 4=全リクエスト（Cookie）</td><td>5=APIのみ / 6=全リクエスト（Cookie）/ 7=IAP 委譲</td></tr>
+              <tr><td>設定・秘密情報</td><td><code>wrangler.toml</code>＋<code>wrangler secret put</code></td><td>環境変数＋Secret Manager</td></tr>
+              <tr><td>Gemini キー保管</td><td>サーバーキー: <code>wrangler secret put GEMINI_API_KEY</code>（暗号化・読み出し不可）</td><td>サーバーキー: 環境変数 or Secret Manager</td></tr>
+              <tr><td>デプロイ</td><td><code>python run-workers.py</code>（または <code>wrangler deploy</code>）</td><td><code>docker build</code>＋<code>gcloud run deploy</code>（<code>agent/README.md</code>）</td></tr>
+            </tbody>
+          </table>
+          <p><small><code>POST /api/gemini</code> は内蔵AI（ブラウザ）向けの薄いキー隠蔽プロキシです。ブラウザの generateContent リクエストにサーバーキー（<code>GEMINI_API_KEY</code>）を注入して転送するだけで、推論ループと地図操作はブラウザ側に留まります — BYO（Bring Your Own：各ユーザーがブラウザ localStorage に登録した自分の Gemini キー。サーバーには送られない）があればブラウザから直接 Gemini を呼び、無ければこのプロキシ経由でキーレス利用します。外部エージェントプロトコル（<code>{message,project,camera,layers,history,apiKey?}</code> → <code>{reply,actions,report}</code>）の送信窓口はフロントに常備しており、外部のエージェント実装があればエンドポイントURL設定で接続できます（サーバー側実装は廃止しました — 内蔵AIが本体のため）。レート制限は Cloud Run 側はプロセス内管理、Cloudflare 側は KV バインド時のみ有効です（<code>ANTIGRAVITY_RATE_LIMIT</code>）。</small></p>
         </div>
         <div class="url-box">
           <h3>資産ごとの秘匿状況（認証方式別）</h3>

@@ -1,35 +1,37 @@
-# agent/ — ANTIGRAVITY エージェント API（Cloud Run）
+# agent/ — KASUGAI Canvas Cloud Run サービス（FastAPI）
 
-ハッカソン出展用のエージェントサービス。FastAPI + Gemini API（google-genai）で、
-フロントエンド実装済みの**外部エージェントプロトコル**をそのまま実装する。
+Cloud Run への配布・公開用サービス。`web/` の静的配信・認証・GCS 永続化に加え、
+内蔵AI（ブラウザ）向けの薄いキー隠蔽プロキシを提供する。
+**エージェント実装は持たない** — 推論ループ・地図操作はすべてブラウザ側。
+サーバー側エージェント（旧 `POST /agent/chat`）は廃止。外部エージェントを繋ぐ場合は
+フロントの「エージェント」設定にエンドポイントURLを手動設定する。
 
-- `POST /agent/chat` : `{message, project, camera, layers, history}` → `{reply, actions:[{name,args}], report?, serverTools?}`
-- `GET /api/capabilities` : `{tier:"cloudrun", features:["agent"]}`（フロントの能力通知用）
+- `POST /api/gemini` : 内蔵AI向けキー隠蔽プロキシ。ブラウザの generateContent リクエスト `{contents, systemInstruction?, tools?, generationConfig?, model?}` にサーバーキーを注入して Gemini へ転送するだけ（推論ループ・地図操作はブラウザ側）。`model` は必須（BYO キーが無いユーザーでも内蔵AIが使えるようになる）
+- `POST /api/auth` / `POST /api/kasc` / `GET|PUT /api/data/*` : 起動制御・.kasc 保存・秘匿データ配信（Cloudflare `functions/` と同一契約）
+- `GET /api/capabilities` : `{tier:"cloudrun", features:["aiProxy"...], ai:{endpoint:"/api/gemini"}}`（フロントの能力通知用。`aiProxy` は `GEMINI_API_KEY` 設定時のみ）
 - `GET /health` : 起動確認
-- `/` : `web/` の静的配信（同一オリジン運用・提出URL 1本・CORS 不要）
+- `/` : `web/` の静的配信（同一オリジン運用・URL 1本・CORS 不要）
 
-## 動作構成
+## キー方式
 
-1. function calling ループでサーバーツール（`fetch_url` / `generate_sample_geojson`）を自律実行
-2. `response_schema` 構造化出力で `{reply, actions, report}` を生成
-   - `actions` は `addDataLayer`/`flyTo`/`showReport` 等の既存フロントツール名（公開環境向けにホワイトリスト制）
-   - `report` は「平面・内容・解決案」構成の Markdown/HTML 資料（視点パーマリンク埋め込み）
+- **BYO（Bring Your Own）キー**: ユーザーがブラウザの `localStorage`（`googleApiKey`）に
+  登録した自分のキーで、ブラウザから Gemini を直接呼ぶ。サーバーには送信されない。
+  この場合 `/api/gemini` は使われない
+- **サーバーキー**: `GEMINI_API_KEY` を環境変数/Secret Manager に設定すると
+  capabilities が `aiProxy` を通知し、キー未設定の訪問者でも内蔵AIが使える。
+  キーはブラウザに一切現れない
 
 ## ローカル実行
 
 ```bash
 pip install -r agent/requirements.txt
 
-# モックモード（APIキー不要・フロント開発用）
-set ANTIGRAVITY_MOCK=1
-uvicorn agent.app.main:app --port 8080
-
 # Gemini API キー（AI Studio）
 set GEMINI_API_KEY=...
 uvicorn agent.app.main:app --port 8080
 ```
 
-`http://localhost:8080` で KASUGAI Canvas 本体が開き、`/agent/chat` にエージェントが同居する。
+`http://localhost:8080` で KASUGAI Canvas 本体が開く。
 
 ## 起動制御モード（KASUGAI_AUTH_MODE）
 
@@ -59,11 +61,8 @@ uvicorn agent.app.main:app --port 8080
 
 | 変数 | 用途 |
 | --- | --- |
-| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Gemini API キー（AI Studio） |
-| `GOOGLE_GENAI_USE_VERTEXAI=1` | Vertex AI 経由に切替（Cloud Run のサービスアカウントで認証） |
-| `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` | Vertex AI のプロジェクト・リージョン |
-| `ANTIGRAVITY_MODEL` | モデル名（既定 `gemini-2.5-flash`） |
-| `ANTIGRAVITY_MOCK=1` | モック応答モード（Gemini 未接続で動作確認） |
+| `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Gemini API キー（AI Studio）。`/api/gemini` で使用 |
+| `GEMINI_MODELS` | `/api/gemini` で許可するモデル（カンマ区切り。未設定は全許可） |
 | `ANTIGRAVITY_TOKEN` | 設定時 `Authorization: Bearer` を必須化（認証モード時は kasugai トークン/Cookie/IAP も有効） |
 | `ANTIGRAVITY_RATE_LIMIT` | IPあたり時間当たりリクエスト上限（既定30・0で無効） |
 | `ALLOW_ORIGINS` | 別オリジン配信時の CORS 許可（カンマ区切り） |
@@ -88,28 +87,26 @@ gcloud artifacts repositories create kasugai --repository-format=docker --locati
 docker build -f agent/Dockerfile -t asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas .
 docker push asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas
 
-# デプロイ（Vertex AI で Gemini を呼ぶ構成・キー管理不要）
+# デプロイ（サーバーキーでキーレスAIを提供する例）
 gcloud run deploy kasugai-canvas \
   --image asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas \
   --region asia-northeast1 --allow-unauthenticated --min-instances 1 \
-  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_CLOUD_PROJECT=PROJECT,GOOGLE_CLOUD_LOCATION=us-central1
+  --set-secrets GEMINI_API_KEY=gemini-api-key:latest
 ```
 
 `--min-instances 1` はフロントの `/health` 検出（1秒タイムアウト）がコールドスタートを
-逃さないための推奨設定。
+逃さないための推奨設定。サーバーキーを置かない BYO 運用なら `GEMINI_API_KEY` は不要。
+無認証で公開する場合は `ANTIGRAVITY_TOKEN`・`ANTIGRAVITY_RATE_LIMIT`・`GEMINI_MODELS`
+での乱用対策を検討すること（`/api/gemini` は任意の generateContent を転送するため）。
 
 ```bash
 # 認証モード例（モード5 + GCS + Secret Manager のシークレット）
 gcloud run deploy kasugai-canvas \
   --image asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas \
   --region asia-northeast1 --allow-unauthenticated --min-instances 1 \
-  --set-env-vars KASUGAI_AUTH_MODE=5,KASUGAI_GCS_BUCKET=kasugai-data,GOOGLE_GENAI_USE_VERTEXAI=1,GOOGLE_CLOUD_PROJECT=PROJECT \
-  --set-secrets KASUGAI_AUTH_USER=kasugai-auth-user:latest,KASUGAI_AUTH_PASS=kasugai-auth-pass:latest
+  --set-env-vars KASUGAI_AUTH_MODE=5,KASUGAI_GCS_BUCKET=kasugai-data \
+  --set-secrets KASUGAI_AUTH_USER=kasugai-auth-user:latest,KASUGAI_AUTH_PASS=kasugai-auth-pass:latest,GEMINI_API_KEY=gemini-api-key:latest
 
 # IAP モード（モード7。Google アカウントで全ゲート）
 gcloud run deploy kasugai-canvas --image ... --iap
 ```
-
-Vertex AI を使う場合は Cloud Run のサービスアカウントに `roles/aiplatform.user` を付与し、
-プロジェクトで Vertex AI API を有効化すること。APIキー方式なら `GEMINI_API_KEY` を
-Secret Manager 経由で `--set-secrets` に渡す。

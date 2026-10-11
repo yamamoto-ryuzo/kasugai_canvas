@@ -1,16 +1,11 @@
 """環境変数ベースの設定。Cloud Run では --set-env-vars / Secret Manager 経由で注入する"""
 import os
 
-# Gemini API キー（AI Studio 発行）。Cloud Run では Vertex AI（ADC）推奨
+# Gemini API キー（AI Studio 発行）。/api/gemini プロキシで使用
 API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
-# "1"/"true" で Vertex AI 経由（Cloud Run のサービスアカウントで認証・キー管理不要）
-USE_VERTEX = os.environ.get("GOOGLE_GENAI_USE_VERTEXAI", "").lower() in ("1", "true", "yes")
-GCP_PROJECT = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
-GCP_LOCATION = os.environ.get("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-MODEL = os.environ.get("ANTIGRAVITY_MODEL", "gemini-2.5-flash")
-# APIキーなしでの動作確認・フロント開発用モックモード
-MOCK = os.environ.get("ANTIGRAVITY_MOCK", "").lower() in ("1", "true", "yes")
+# /api/gemini プロキシで許可するモデル（カンマ区切り。未設定は全モデル許可）
+ALLOWED_MODELS = [m.strip() for m in os.environ.get("GEMINI_MODELS", "").split(",") if m.strip()]
 # 設定時は Authorization: Bearer <token> を必須化（公開エンドポイントの乱用防止）
 AGENT_TOKEN = os.environ.get("ANTIGRAVITY_TOKEN", "")
 # IPあたりの時間当たりリクエスト上限（0で無効）
@@ -45,8 +40,3 @@ SEED_KASC = os.environ.get("KASUGAI_SEED_KASC", "1").lower() not in ("0", "false
 def auth_mode() -> str:
     """有効な認証モード（"5"|"6"|"7"）。認証なしは空文字"""
     return AUTH_MODE if AUTH_MODE in ("5", "6", "7") else ""
-
-
-def configured() -> bool:
-    """実際の Gemini 呼び出しが可能か"""
-    return MOCK or USE_VERTEX or bool(API_KEY)
