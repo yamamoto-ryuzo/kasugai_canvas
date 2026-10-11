@@ -3887,14 +3887,38 @@ function withGoogleTileKey(url) {
 // Google Photorealistic 3D Tiles: MapタブのトグルON時にレイヤ一覧へ自動追加する。
 // inspectorテキストには書き込まないため .kasc エクスポートにAPIキーは含まれない。
 const GOOGLE_3DTILES_LAYER_ID = "google-photorealistic-3dtiles";
+function isGoogle3dTilesUrl(url) {
+  try {
+    return new URL(url, window.location.href).hostname === "tile.googleapis.com";
+  } catch (e) { return false; }
+}
 function syncGoogle3dTilesLayer() {
   let enabled = false;
   let key = "";
+  let toggleSet = false;
   try {
-    enabled = localStorage.getItem("googleMaps3dTiles") === "1";
+    const stored = localStorage.getItem("googleMaps3dTiles");
+    toggleSet = stored !== null;
+    enabled = stored === "1";
     key = localStorage.getItem("googleMapsApiKey") || "";
   } catch (e) {}
+  // .kasc の 3dtiles: 行で Google Photorealistic が宣言済みならそちらを正本とし、
+  // 組み込みレイヤーは追加しない(同名レイヤーの二重登録を防ぐ)。
+  // トグルがユーザー操作で明示済みの場合のみ、宣言側の表示状態をトグルに同期する
+  const declared = layers.find(item => item.id !== GOOGLE_3DTILES_LAYER_ID && item.type === "3dtiles" && isGoogle3dTilesUrl(item.url));
   const index = layers.findIndex(item => item.id === GOOGLE_3DTILES_LAYER_ID);
+  if (declared) {
+    if (index !== -1) {
+      layers.splice(index, 1);
+      layerState.delete(GOOGLE_3DTILES_LAYER_ID);
+      const orderIndex = layerOrder.indexOf(GOOGLE_3DTILES_LAYER_ID);
+      if (orderIndex !== -1) layerOrder.splice(orderIndex, 1);
+    }
+    if (toggleSet) declared.visible = enabled && Boolean(key);
+    const toggleEl = document.querySelector("#google-3dtiles-toggle");
+    if (toggleEl) toggleEl.checked = declared.visible;
+    return;
+  }
   if (enabled && key) {
     const url = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(key)}`;
     if (index === -1) {
