@@ -40,6 +40,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -77,9 +78,28 @@ APIS = [
 ]
 
 
+_GCLOUD_CANDIDATES = [
+    Path(os.environ.get("LOCALAPPDATA", ""))
+    / "Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd",
+    Path("C:/Program Files (x86)/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd"),
+    Path("C:/Program Files/Google/Cloud SDK/google-cloud-sdk/bin/gcloud.cmd"),
+]
+_gcloud_path = None
+
+
+def _gcloud_bin() -> str:
+    """PATH 上になければ Windows の既定インストール位置も探す。"""
+    global _gcloud_path
+    if _gcloud_path is None:
+        _gcloud_path = shutil.which("gcloud") or next(
+            (str(p) for p in _GCLOUD_CANDIDATES if p.exists()), "gcloud"
+        )
+    return _gcloud_path
+
+
 def _gcloud(*args, input_text=None, stream=False):
     """gcloud を実行する。stream=True で出力をそのまま表示（長いビルド用）。"""
-    argv = ["gcloud", *args]
+    argv = [_gcloud_bin(), *args]
     # shell=True 経由のシェルが OS で異なる（Windows=cmd / POSIX=sh）ため、
     # --format=value(...) のような引数をそれぞれの文法で引用する
     cmd = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
