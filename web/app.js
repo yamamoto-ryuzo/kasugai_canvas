@@ -453,10 +453,10 @@ async function detectBackend() {
   }
 }
 
-// アプリタブ(クラウド・保存 = ローカルサーバー版のみの機能群)は
-// capabilities 判定後にのみ表示する。静的環境では hidden のまま
+// アプリカテゴリ(クラウド・保存 = ローカルサーバー版のみの機能群)は
+// capabilities 判定後にのみ管理ウィンドウのナビに表示する。静的環境では hidden のまま
 function updateAppPanelVisibility() {
-  const tab = document.querySelector('.panel-tab[data-panel="app-panel"]');
+  const tab = document.querySelector("#manage-nav-app");
   if (tab) tab.hidden = !hasBackendFeature("cloudRclone");
 }
 
@@ -5409,6 +5409,66 @@ function setupEvents() {
       if (tab.dataset.settingsPanel === "settings-save-panel") void refreshSaveStatus();
     });
   });
+
+  // ---- 管理ウィンドウ（⚙ボタンで開くモードレス・フローティングパネル） ----
+  const manageWindow = document.querySelector("#manage-window");
+  const manageOpenBtn = document.querySelector("#manage-open");
+  if (manageWindow && manageOpenBtn) {
+    const setManageOpen = (open) => {
+      manageWindow.hidden = !open;
+      manageOpenBtn.classList.toggle("active", open);
+      if (open) void refreshCloudStatus();
+    };
+    manageOpenBtn.addEventListener("click", () => setManageOpen(manageWindow.hidden));
+    manageWindow.querySelector("#manage-close")?.addEventListener("click", () => setManageOpen(false));
+    manageWindow.querySelector("#manage-minimize")?.addEventListener("click", () => manageWindow.classList.toggle("minimized"));
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !manageWindow.hidden) setManageOpen(false);
+    });
+    manageWindow.querySelectorAll(".manage-nav button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        manageWindow.querySelectorAll(".manage-nav button").forEach((item) => item.classList.toggle("active", item === btn));
+        manageWindow.querySelectorAll(".manage-pane").forEach((pane) => pane.classList.toggle("active", pane.id === btn.dataset.managePane));
+        if (btn.dataset.managePane === "manage-app") {
+          void refreshCloudStatus();
+          void refreshSaveStatus();
+        }
+      });
+    });
+    manageWindow.querySelectorAll(".manage-subnav button").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const pane = btn.closest(".manage-pane");
+        pane.querySelectorAll(".manage-subnav button").forEach((item) => item.classList.toggle("active", item === btn));
+        pane.querySelectorAll(".settings-subpanel").forEach((panel) => panel.classList.toggle("active", panel.id === btn.dataset.manageSub));
+        if (["settings-cloud-panel", "settings-rclone-panel", "settings-drive-panel", "settings-save-panel"].includes(btn.dataset.manageSub)) void refreshCloudStatus();
+        if (btn.dataset.manageSub === "settings-save-panel") void refreshSaveStatus();
+      });
+    });
+    const manageTitlebar = manageWindow.querySelector(".manage-titlebar");
+    manageTitlebar?.addEventListener("pointerdown", (event) => {
+      if (event.target.closest("button")) return;
+      event.preventDefault();
+      const parent = manageWindow.offsetParent || document.body;
+      const parentRect = parent.getBoundingClientRect();
+      const rect = manageWindow.getBoundingClientRect();
+      const offsetX = event.clientX - rect.left;
+      const offsetY = event.clientY - rect.top;
+      const onMove = (moveEvent) => {
+        const maxX = Math.max(0, parentRect.width - rect.width);
+        const maxY = Math.max(0, parentRect.height - rect.height);
+        const nextX = Math.max(0, Math.min(moveEvent.clientX - parentRect.left - offsetX, maxX));
+        const nextY = Math.max(0, Math.min(moveEvent.clientY - parentRect.top - offsetY, maxY));
+        manageWindow.style.left = `${nextX}px`;
+        manageWindow.style.top = `${nextY}px`;
+      };
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+    });
+  }
 
   // ---- クラウドストレージ設定タブ (rclone 連携) ----
   const cloudEls = {

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.8.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.9.0</span></h1>
       <p>V4: プラグイン（認証機構）・外部連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -34,8 +34,8 @@
       <p>クエリ系レイヤーは「検索は常に全件検索・表示はバッファの表示範囲のみ」の設計で、⏷フィルター編集による対話的な条件変更にも対応します。ベクター描画件数の上限・primitive バッチ描画（<code>render=primitive</code>）で大規模データにも対応します。形式の使い分けは <a href="../data.html">データ形式</a> を参照してください。</p>
 
       <h3>🗺️ Google Maps Platform 連携</h3>
-      <p>設定 → Google タブで API キーを登録すると、Geocoding / Places を使ったハイブリッド検索と、Street View リンク・候補ラインオーバーレイが利用できます。検索は国土地理院/Yahoo/Google を切り替えて使えます。</p>
-      <p>外部エージェント呼出し（エージェントタブにエンドポイント URL を設定し、チャット入力を <code>POST {message, project, camera, layers, history}</code> → 応答 <code>{reply, actions}</code> の actions をチャットツールとして実行）で Antigravity 等の外部構築エージェントと接続できます。このプロトコルが V6 の ANTIGRAVITY エージェント API の契約です。詳細は <a href="../google.html">Google 連携・AI</a> を参照してください。</p>
+      <p>管理（⚙）→ Google Maps で API キーを登録すると、Geocoding / Places を使ったハイブリッド検索と、Street View リンク・候補ラインオーバーレイが利用できます。検索は国土地理院/Yahoo/Google を切り替えて使えます。</p>
+      <p>外部エージェント呼出し（管理（⚙）→ AI → エージェント にエンドポイント URL を設定し、チャット入力を <code>POST {message, project, camera, layers, history}</code> → 応答 <code>{reply, actions}</code> の actions をチャットツールとして実行）で Antigravity 等の外部構築エージェントと接続できます。このプロトコルが V6 の ANTIGRAVITY エージェント API の契約です。詳細は <a href="../google.html">Google 連携・AI</a> を参照してください。</p>
 
     </main>
   </div>

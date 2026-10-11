@@ -10,16 +10,16 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.8.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.9.0</span></h1>
       <p>.kasc 設定仕様 — インスペクター設定の完全な書式</p>
     </header>
     <main>
       <section>
         <h2>📝 インスペクター設定（完全版）</h2>
-        <p>設定 → Inspector タブで <code>.kasc</code> 形式を編集・適用します。このページが設定仕様の正本です。ユーザーがテキストエリアに入力したレイヤー・ベースマップ・カメラプリセットを読み込み、CesiumJS Viewer へ反映します。設定の読み込みはブラウザ内で完結し、HTTP 通信は行いません。</p>
+        <p>管理（⚙）→ プロジェクト → インスペクター で <code>.kasc</code> 形式を編集・適用します。このページが設定仕様の正本です。ユーザーがテキストエリアに入力したレイヤー・ベースマップ・カメラプリセットを読み込み、CesiumJS Viewer へ反映します。設定の読み込みはブラウザ内で完結し、HTTP 通信は行いません。</p>
         <div class="url-box">
           <h3>Step 2: 設定方法</h3>
-          <p>設定 → Inspector（歯車タブ）のテキスト欄に、以下の形式で行ごとに入力し「登録」を押してください。設定行は順不同です。</p>
+          <p>管理（⚙）→ プロジェクト → インスペクター のテキスト欄に、以下の形式で行ごとに入力し「登録」を押してください。設定行は順不同です。</p>
           <pre><code>xyz: OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png
 base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18
 base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
@@ -92,9 +92,9 @@ format=read        → Shapefile / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡�
           <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・FlatGeobuf 等）を使いますが、非 COI 環境ではスレッド生成に失敗しリモート URL も読めないため、通常の配信環境では利用できません。なお <code>where=</code> の値には <code>|</code> を含められません（条件が複雑な場合は <code>sql:</code> を使用）。</p>
           <p><strong>取得プロキシ（<code>proxy=on</code>・ローカルサーバー版のみ）</strong>：<code>duckdb:</code> に <code>proxy=on</code> を付けると、ファイルの取得をローカルサーバーの <code>/api/fetch</code> 経由に切り替えます。CORS 非対応の外部サーバーにあるデータを読めます。<code>/api/fetch</code> は Range/HEAD リクエストを転送するため、Parquet の部分読み（メタデータ・row group スキップ）はプロキシ経由でも有効です。既定は直接接続で、静的配信環境やバックエンド非対応時は指定しても直接接続になります。<code>sql:</code> のクエリ内 URL には適用されません。Range 非対応のサーバーへ全件 GET が必要な形式（CSV/JSON 等）では 20MB 上限があります。</p>
           <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> と <code>gpkg:</code> は既定で <code>bbox=auto</code> が有効で、カメラ停止ごとに表示範囲で再クエリします（<code>duckdb:</code> は <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> または covering bbox 列への範囲述語、<code>gpkg:</code> は各行の GPkgBinary エンベロープで判定）。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用が標準動作です。常時全件描画にしたいレイヤーは <code>bbox=off</code> を付けます（範囲外に出ても地物が消えません）。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
-          <p><strong>ベクター描画件数の上限（描画は表示範囲・属性は全件）</strong>：設定タブの「ベクター描画件数の上限」（既定 20000、0・空欄=無制限）で、entity 描画するベクターレイヤーの<strong>合計</strong>描画件数を制限します。大量の entity 生成によるブラウザのフリーズを防ぐ安全弁で、上限を超えたレイヤーはレイヤー一覧に <code>描画数/全件数</code> のバッジが付きます。上限を超えた全件読み込み系レイヤーは「ファイル先頭から」ではなく<strong>表示範囲内の地物を優先</strong>して描画し、カメラを動かすたびにメモリ上の全件データから範囲内の地物を選び直します（再ダウンロード無し）。検索結果や属性一覧から未描画の地物へ飛んでも、その場所で描画が復活します。表示範囲外にデータがある間は <code>0/全件数</code> のバッジでデータが残っていることが分かります。切り捨ては描画だけの制限で、ベクター検索・属性一覧・プラグイン API の <code>getLayerGeoJson</code> は常にファイル全件を対象にします。<code>render=primitive</code> のバッチ描画は entity コストを支払わないため上限の対象外です。</p>
+          <p><strong>ベクター描画件数の上限（描画は表示範囲・属性は全件）</strong>：表示 → ドレープ の「ベクター描画件数の上限」（既定 20000、0・空欄=無制限）で、entity 描画するベクターレイヤーの<strong>合計</strong>描画件数を制限します。大量の entity 生成によるブラウザのフリーズを防ぐ安全弁で、上限を超えたレイヤーはレイヤー一覧に <code>描画数/全件数</code> のバッジが付きます。上限を超えた全件読み込み系レイヤーは「ファイル先頭から」ではなく<strong>表示範囲内の地物を優先</strong>して描画し、カメラを動かすたびにメモリ上の全件データから範囲内の地物を選び直します（再ダウンロード無し）。検索結果や属性一覧から未描画の地物へ飛んでも、その場所で描画が復活します。表示範囲外にデータがある間は <code>0/全件数</code> のバッジでデータが残っていることが分かります。切り捨ては描画だけの制限で、ベクター検索・属性一覧・プラグイン API の <code>getLayerGeoJson</code> は常にファイル全件を対象にします。<code>render=primitive</code> のバッチ描画は entity コストを支払わないため上限の対象外です。</p>
           <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
-          <p><strong>描画方式（既定は entity 描画）</strong>：ベクター系レイヤー（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>）は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。<code>render=primitive</code>（<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>、その他はオプション欄）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。レイヤー行の <code>render=</code> 指定は設定タブの「ベクター高速ドレープ」より優先され、<code>render=entity</code> を書くと高速ドレープが有効でもそのレイヤーだけ entity 描画に戻せます。違いは以下のとおりです。</p>
+          <p><strong>描画方式（既定は entity 描画）</strong>：ベクター系レイヤー（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>）は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。<code>render=primitive</code>（<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>、その他はオプション欄）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。レイヤー行の <code>render=</code> 指定は表示 → ドレープ の「ベクター高速ドレープ」より優先され、<code>render=entity</code> を書くと高速ドレープが有効でもそのレイヤーだけ entity 描画に戻せます。違いは以下のとおりです。</p>
           <pre><code>【entity(既定)】1地物ごとに Cesium Entity を生成
   ・地形/3D Tiles にドレープ可能(clampToGround)
   ・フォーカス・属性パネル等の entity 機能がすべて使える
@@ -168,7 +168,7 @@ fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height
         </div>
         <div class="url-box">
           <h3>未対応の記法（注意）</h3>
-          <p>Re:Earth GeoSuite 由来の以下の記法は本アプリでは未実装です：<code>layer:</code> によるシステムレイヤ制御、<code>max=</code>/<code>zoom=</code>（<code>maxZoom=</code> を使用）、行単位ドレープ（<code>| terrain</code> 等→設定タブのグローバル設定を使用）、<code>attrUrlOpen:</code>、<code>\</code> による初期展開。</p>
+          <p>Re:Earth GeoSuite 由来の以下の記法は本アプリでは未実装です：<code>layer:</code> によるシステムレイヤ制御、<code>max=</code>/<code>zoom=</code>（<code>maxZoom=</code> を使用）、行単位ドレープ（<code>| terrain</code> 等→表示 → ドレープ のグローバル設定を使用）、<code>attrUrlOpen:</code>、<code>\</code> による初期展開。</p>
         </div>
         <div class="url-box">
           <h3>ローカルファイルの追加（デモ用データ・Chromium系）</h3>

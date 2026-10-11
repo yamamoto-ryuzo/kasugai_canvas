@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.8.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.9.0</span></h1>
       <p>データ形式 — 2D/3D データの最適フォーマット、配信・管理</p>
     </header>
     <main>
@@ -34,7 +34,7 @@
       </div>
 
       <h3>ベクター：全件読み込み系</h3>
-      <p>ファイル全件を読み込んで描画する経路です（既定は entity 化・<code>render=primitive</code> でバッチ描画も可）。読み込みは必要となった初回（表示ON、属性・値一覧やベクター検索パネルでの選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧・検索では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。描画件数の上限（設定タブ・既定 20000）を超えるレイヤーは<strong>表示範囲内の地物のみ</strong>を描画し、カメラ移動で範囲内の地物に追随します（切り捨ては描画のみで、検索・属性一覧は常に全件対象）。</p>
+      <p>ファイル全件を読み込んで描画する経路です（既定は entity 化・<code>render=primitive</code> でバッチ描画も可）。読み込みは必要となった初回（表示ON、属性・値一覧やベクター検索パネルでの選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧・検索では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。描画件数の上限（表示 → ドレープ・既定 20000）を超えるレイヤーは<strong>表示範囲内の地物のみ</strong>を描画し、カメラ移動で範囲内の地物に追随します（切り捨ては描画のみで、検索・属性一覧は常に全件対象）。</p>
       <div class="features">
         <div class="feature-card">
           <h3>📍 GeoJSON <span class="badge">対応</span></h3>
@@ -451,7 +451,7 @@
       0.01m）かつ符号付き・条件分岐形式（<code>x &lt; 2^23</code>
       のとき <code>h = xu</code>、<code>x = 2^23</code> のとき
       NA、<code>x &gt; 2^23</code> のとき <code>h = (x - 2^24)u</code>）だが、この変換は
-      <code>gsiDecodeHeight</code> として実装済み。設定タブで
+      <code>gsiDecodeHeight</code> として実装済み。表示 → 地形 タブで
       Re:Earth Terrain（楕円体高 / 標高）・地理院 5m+10m・地理院 1m
       を切替可能</li>
       <li><strong>Three.js</strong>：DEM 画像から

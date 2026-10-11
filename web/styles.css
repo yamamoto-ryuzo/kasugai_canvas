@@ -52,8 +52,8 @@ body.globe-hidden .viewport { background: transparent; }
 /* 同様に .terrain-control input{width:15px} が効くため、
    プロジェクトタブのパス表示も明示的に全幅に戻す */
 #project-root-path { width: 100%; }
-/* 同様にレイヤータブの件数入力も明示的に全幅に戻す */
-#settings-layer-panel input[type="number"] { width: 100%; }
+/* 同様にドレープタブの件数入力も明示的に全幅に戻す */
+#display-drape-panel input[type="number"] { width: 100%; }
 /* アプリパネルは terrain-control の外に移動したため、逆に .control-panel input{width:100%}
    でラジオ/チェックボックスが全幅に伸びる。小さい既定サイズに戻す */
 #app-panel input[type="radio"], #app-panel input[type="checkbox"] { width: 15px; min-height: 15px; }
@@ -61,6 +61,33 @@ body.globe-hidden .viewport { background: transparent; }
 .control-panel.collapsed .panel-tabs { height: 26px; margin: 0; padding: 0; overflow: hidden; border-bottom: 0; }
 .control-panel.collapsed .panel-tab,
 .control-panel.collapsed .plugin-panel { display: none; }
+/* 管理ボタン（⚙）: タブではなく管理ウィンドウを開くランチャー。タブ列の右端に寄せる */
+.panel-manage { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 1px 4px !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 14px !important; line-height: 1; cursor: pointer; }
+#manage-open { margin-left: auto; }
+a.panel-manage { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; }
+.panel-manage.active { background: rgba(49,86,79,.36) !important; }
+/* 管理ウィンドウ: モードレスのフローティングパネル。ドラッグ移動・最小化可 */
+.manage-window { position: absolute; z-index: 4; top: 64px; left: 370px; width: 640px; max-width: calc(100% - 40px); max-height: calc(100% - 170px); display: flex; flex-direction: column; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.94); box-shadow: 0 12px 36px rgba(10,20,40,.25); pointer-events: auto; touch-action: auto; user-select: text; }
+.manage-window[hidden] { display: none; }
+.manage-titlebar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; border-bottom: 1px solid #e4ecef; border-radius: 8px 8px 0 0; background: rgba(49,86,79,.1); cursor: move; }
+.manage-title { flex: 1; color: #31564f; font-size: 14px; font-weight: 700; }
+.manage-titlebtn { flex: 0 0 24px; min-width: 24px !important; min-height: 24px !important; padding: 0 !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 14px !important; line-height: 1; }
+.manage-body { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.manage-window.minimized .manage-body { display: none; }
+.manage-nav { display: flex; flex-wrap: wrap; gap: 3px; padding: 6px 10px 0; border-bottom: 1px solid #e4ecef; }
+.manage-nav button { min-height: 28px !important; padding: 5px 10px !important; border: 0 !important; border-radius: 4px 4px 0 0 !important; background: transparent !important; color: #52636d !important; cursor: pointer; font-size: var(--basemap-select-font-size) !important; }
+.manage-nav button.active { background: rgba(49,86,79,.16) !important; color: #31564f !important; font-weight: 700; }
+.manage-content { flex: 1; min-width: 0; overflow-y: auto; padding: 12px 16px; }
+.manage-pane { display: none; }
+.manage-pane.active { display: block; }
+.manage-subnav { display: flex; flex-wrap: wrap; gap: 3px; margin: -2px -4px 8px; padding-bottom: 4px; border-bottom: 1px solid #e4ecef; }
+.manage-subnav button { min-height: 26px !important; padding: 4px 7px !important; border: 0 !important; border-radius: 4px 4px 0 0 !important; background: transparent !important; color: #52636d !important; cursor: pointer; font-size: var(--basemap-select-font-size) !important; }
+.manage-subnav button.active { background: rgba(49,86,79,.16) !important; color: #31564f !important; font-weight: 700; }
+.manage-window button { min-height: 30px; padding: 5px 8px; border: 1px solid #31564f; border-radius: 4px; background: #31564f; color: #fff; cursor: pointer; font-size: var(--basemap-select-font-size); }
+.manage-window .danger-button { margin-top: 8px; border-color: #a82020; background: #a82020; }
+.manage-window .manage-nav button, .manage-window .manage-titlebtn { border: 0; }
+.manage-window select, .manage-window input[type="text"], .manage-window input[type="password"], .manage-window input[type="number"], .manage-window textarea { min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; box-sizing: border-box; }
+.manage-window .hint { font-size: var(--basemap-select-font-size); }
 .info-content { width: 100%; }
 .info-content .tab-buttons { display: flex; flex-wrap: wrap; gap: 3px; margin: -2px -4px 0; padding-bottom: 4px; overflow: visible; }
 .info-content .tab-content { display: none; }
@@ -237,3 +264,21 @@ footer { padding: 0 28px 22px; }
 .chat-panel.collapsed .chat-messages,
 .chat-panel.collapsed .chat-form { display: none; }
 @media (max-width: 850px) { .chat-panel { right: 14px; left: 14px; bottom: 60px; width: auto; max-height: 45%; } }
+
+/* 表示 > 3D Tiles: 各項目の説明はホバーで対象の上にツールチップ表示 */
+#display-tiles-panel .opt-item { position: relative; align-self: stretch; display: flex; flex-direction: column; align-items: flex-start; }
+#display-tiles-panel .opt-item > label,
+#display-tiles-panel .opt-item > input { cursor: help; }
+#display-tiles-panel .opt-item > .hint {
+  position: absolute; left: 0; right: 0; bottom: 100%; z-index: 20;
+  pointer-events: none;
+  margin: 0 0 4px; padding: 6px 8px;
+  background: #fff; border: 1px solid #d8e2e8; border-radius: 5px;
+  box-shadow: 0 3px 10px rgba(29,43,53,.2);
+  visibility: hidden; opacity: 0;
+  transition: opacity .12s ease .15s, visibility 0s linear .3s;
+}
+#display-tiles-panel .opt-item:hover > .hint {
+  visibility: visible; opacity: 1;
+  transition: opacity .1s ease, visibility 0s;
+}

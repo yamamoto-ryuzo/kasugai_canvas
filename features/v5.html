@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.8.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.9.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -20,7 +20,7 @@
       <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。ブラウザの外（OS・ファイルシステム・ネイティブバイナリ）に踏み込むため、静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。ブラウザ GIS との差別化要因となる流れで、今後もこのテーマで拡張していきます。</p>
 
       <h3>☁️ クラウドストレージ連携（rclone）</h3>
-      <p>アプリ → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続します。ローカルサーバー版のみの機能はトップパネルの「アプリ」タブ（rclone・クラウド・ドライブ・保存のサブタブ）に集約されており、静的配信・コンテナ実行ではタブ自体が非表示になります。rclone タブは外部ツールの導入とリモート登録（OAuth）、クラウドタブは接続、ドライブタブは Windows ドライブ割当（net use）を担当します。2つの利用形態があります：</p>
+      <p>管理（⚙）→ アプリ → クラウド タブから rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続します。ローカルサーバー版のみの機能は管理ウィンドウの「アプリ」カテゴリ（rclone・クラウド・ドライブ・保存のサブタブ）に集約されており、静的配信・コンテナ実行ではカテゴリ自体が非表示になります。rclone タブは外部ツールの導入とリモート登録（OAuth）、クラウドタブは接続、ドライブタブは Windows ドライブ割当（net use）を担当します。2つの利用形態があります：</p>
       <ul>
         <li><strong>Windows ドライブ割当</strong> — <code>rclone serve webdav</code> を localhost で起動し <code>net use</code> でドライブ化（既定 K:）。エクスプローラーや Office・QGIS など他のアプリから通常のドライブとして使えます</li>
         <li><strong>アプリ内 <code>cloud:</code> スキーム</strong> — レイヤーURLに <code>cloud:フォルダ/file.geojson</code> と書くと <code>/api/cloud/file</code> プロキシ経由で接続中ストレージのファイルを読み込みます。HTTP Range を転送するため DuckDB-WASM 等の範囲読み経路でも利用でき、ドライブ割当なしで動作します</li>
@@ -51,13 +51,13 @@
         <ul>
           <li>インスペクタに設定行 <code>cloud: リモート名 | ルートフォルダ | perm=write | drive=K</code> を書くと、<code>.kasc</code> の読み込み（起動時・プロジェクト切替・登録ボタン）のたびに <code>/api/cloud/serve</code> が自動実行されます。<code>.kasc</code> に保存しておけば起動時に接続済みの状態で始まり、レイヤーURLの <code>cloud:パス</code> もそのまま使えます</li>
           <li>ルートフォルダはパスでもフォルダURLでも指定でき、省略時はリモート直下です。<code>perm=write</code> で読み書き（省略時は読み取り専用）、<code>drive=K</code> で Windows ドライブ割当まで自動化します。rclone が未導入なら接続前に自動インストールします（既定 <code>C:\kasugai\rclone</code>。<code>install=off</code> で無効化）</li>
-          <li><code>cloud: stop</code>（または <code>disconnect</code>）は接続停止を意味します。行末の <code>| off</code> は「設定は残すが接続しない」です。アプリ → 保存 タブの「現在の設定をインスペクタに追記して接続」ボタンで、クラウドタブの入力中の設定からこの行を生成できます</li>
+          <li><code>cloud: stop</code>（または <code>disconnect</code>）は接続停止を意味します。行末の <code>| off</code> は「設定は残すが接続しない」です。管理 → アプリ → 保存 の「現在の設定をインスペクタに追記して接続」ボタンで、クラウドタブの入力中の設定からこの行を生成できます</li>
           <li>ローカルサーバー版でのみ動作します（静的配信・Cloud Run では <code>/api/cloud/*</code> が存在しないため自動的に何もしません）。既に同じ内容で接続済みなら再起動せず、指定が変わったときだけ再接続します</li>
         </ul>
         <h3>WEB版での挙動（<code>cloud:</code> 行は無視される）</h3>
         <ul>
           <li>静的配信（<code>web/</code> のみの環境）では <code>GET /api/cloud/status</code> のプローブが1回だけ飛んで 404 → 早期リターンします。<code>install</code>・<code>serve</code>・<code>stop</code>・<code>drive</code> など副作用のある API は一切呼ばれません（実機検証済み）</li>
-          <li>エラー表示・例外も発生せず、アプリタブ自体が非表示になります。レイヤー行など他の設定行の処理は通常通り動作します</li>
+          <li>エラー表示・例外も発生せず、管理のアプリカテゴリ自体が非表示になります。レイヤー行など他の設定行の処理は通常通り動作します</li>
         </ul>
         <h4>なぜアプリ版専用が妥当か</h4>
         <ul>
@@ -92,7 +92,7 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
       <p>利用例: 描画ルートの保存、インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet を選ぶと対応する行タイプのレイヤー行を自動追記）、ダウンロードしたデータのプロジェクト内配置など。静的配信では利用できません（サーバー API 依存機能）。</p>
 
       <h3>📦 納品用ローカル化（_local ワークスペース）</h3>
-      <p>アプリ → 保存 タブで<strong>「共有（既定）」または「専用」</strong>を選び、「納品パッケージを生成（_local/）」を実行します。<strong>元のプロジェクトは変更せず</strong>、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>
+      <p>管理（⚙）→ アプリ → 保存 で<strong>「共有（既定）」または「専用」</strong>を選び、「納品パッケージを生成（_local/）」を実行します。<strong>元のプロジェクトは変更せず</strong>、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>
       <pre><code>ProjectA_local/           … 納品ワークスペース。このフォルダを ZIP にして渡す
 ├─ projects.json          … 群マニフェスト（複製内 .kasc を開くだけで登録される）
 ├─ DATA/                  … 共有スコープ
@@ -123,7 +123,7 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
         <li><strong>その場所がプロジェクトルート</strong>: <code>.kasc</code> のあるフォルダがそのまま <code>/projects/&lt;id&gt;/</code> の配信元になり、<code>DATA/</code> 等の相対参照はすべてそのフォルダ基準で解決されます。<code>.kasc</code> + <code>DATA/</code> をまとめたフォルダを納品すれば、受け取った側はダブルクリックだけで開けます（納品用ローカル化の出力とも整合）</li>
         <li><strong>ルートの確認</strong>: 設定 &gt; プロジェクトタブの「プロジェクトルート」に現在のプロジェクトの実フォルダが表示されます。外部プロジェクトは登録フォルダ、通常プロジェクトは <code>projects/&lt;id&gt;/</code> の実パスで、相対参照がどこに解決されるかをその場で確認できます</li>
         <li><strong>ファイル名は自由</strong>: <code>kasugai_canvas.kasc</code> 以外の名前でも開けます。同じフォルダに複数の .kasc を置けば、それぞれ別プロジェクトとして登録されます</li>
-        <li><strong>システムとプロジェクトの分離管理</strong>: 登録情報は exe 隣の <code>kasugai_canvas.projects.json</code> に永続化され、設定パネルのプロジェクト一覧に残ります（<code>external</code> フラグ付き）。プロジェクトをインストール先の <code>projects/</code> に置く必要はなく、任意のフォルダ・ドライブに配置できます</li>
+        <li><strong>システムとプロジェクトの分離管理</strong>: 登録情報は exe 隣の <code>kasugai_canvas.projects.json</code> に永続化され、管理（⚙）→ プロジェクト の一覧に残ります（<code>external</code> フラグ付き）。プロジェクトをインストール先の <code>projects/</code> に置く必要はなく、任意のフォルダ・ドライブに配置できます</li>
         <li><strong>表示名</strong>: フォルダ内に <code>project.json</code>（<code>{"title": "..."}</code>）があればその title、なければ群マニフェストの title、さらに無ければフォルダ名を表示名にします（起動対象も群メンバーも同じ規則）</li>
         <li><strong>共有データ（<code>../</code> 参照・階層スコープ）</strong>: 相対URLの <code>..</code> は .kasc のあるフォルダの1つ上を指します。プロジェクト群フォルダに <code>projects.json</code>（複数プロジェクト一覧のマニフェスト）を置くと「この上はワークスペース」の宣言になり、連続するマニフェストの数だけ上に出られます。<code>ProjectsA/ProjectA/</code> のような群構成なら <code>../</code> が群内共有、<code>../../DATA/</code> がワークスペースルートの全群共有 DATA になり、<code>ProjectsA/</code>・<code>ProjectsB/</code> のような複数のプロジェクト群で同じ DATA/ を共有できます。マニフェストが無いフラット構造は従来通り1階層上まで。通常プロジェクトも同じ意味で、<code>../</code> は <code>projects/</code> 直下（<code>../DATA/</code> = 全プロジェクト共有の <code>projects/DATA/</code>）を指します</li>
         <li><strong>プロジェクト群の一括登録</strong>: 群の中の .kasc を1つダブルクリック（または登録）すると、親フォルダの <code>projects.json</code> が読まれ、マニフェストに列挙された<strong>全プロジェクトがまとめて登録</strong>されます。エントリは例として <code>{"dir":"ProjectA","title":"計画A","kasc":"a.kasc"}</code> と記述できます。登録IDは指定不要です。従来の <code>id</code> も受理し、<code>dir</code> 省略時は id と同名のサブフォルダを使います。<code>kasc</code> 省略時はフォルダ直下の .kasc を辞書順で選ぶため、複数ファイルがある場合は明記してください。無効なフォルダ・明示されたファイルはスキップします。応答の <code>registered</code> に登録された全 id が返ります</li>

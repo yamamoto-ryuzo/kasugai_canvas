@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.8.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.9.0</span></h1>
       <p>使い方・インストール — 起動・プロジェクト構成・配布と公開</p>
     </header>
     <main>
@@ -38,7 +38,7 @@
         </div>
         <div class="url-box">
           <h3>自動更新</h3>
-          <p>Rust サーバー起動時は、設定パネルから最新リリースの確認・自動更新が行えます。更新時は EXE を自動的に差し替えて再起動します。</p>
+          <p>Rust サーバー起動時は、管理（⚙）→ その他 から最新リリースの確認・自動更新が行えます。更新時は EXE を自動的に差し替えて再起動します。</p>
         </div>
       </section>
 
@@ -60,7 +60,7 @@ python run.py --release  # リリース版を起動</code></pre>
         </div>
         <div class="url-box">
           <h3>起動方法（.kasc ファイルから起動・インストーラー版）</h3>
-          <p>インストーラー版は <code>.kasc</code> 拡張子を関連付けます。任意のフォルダにある <code>.kasc</code> をダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録して開きます。<code>.kasc</code> のあるフォルダがそのままプロジェクトルートになり、<code>DATA/</code> などの相対参照はそのフォルダ基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> をまとめたフォルダを渡すだけで納品できます。登録はプロジェクト一覧に残り、システムとは別の場所に複数プロジェクトを管理できます（ファイル名は <code>kasugai_canvas.kasc</code> 以外でも可）。設定 &gt; プロジェクトタブの「プロジェクトルート」で、現在のプロジェクトが実際にどのフォルダを基準にしているか確認できます。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
+          <p>インストーラー版は <code>.kasc</code> 拡張子を関連付けます。任意のフォルダにある <code>.kasc</code> をダブルクリックすると、そのファイルを<strong>外部プロジェクト</strong>として登録して開きます。<code>.kasc</code> のあるフォルダがそのままプロジェクトルートになり、<code>DATA/</code> などの相対参照はそのフォルダ基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> をまとめたフォルダを渡すだけで納品できます。登録はプロジェクト一覧に残り、システムとは別の場所に複数プロジェクトを管理できます（ファイル名は <code>kasugai_canvas.kasc</code> 以外でも可）。管理（⚙）→ プロジェクト の「プロジェクトルート」で、現在のプロジェクトが実際にどのフォルダを基準にしているか確認できます。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
           <h4>納品パッケージの推奨構造（プロジェクト群＋共有 DATA/）</h4>
           <pre><code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡す
 ├─ DATA/                  … 全プロジェクト群で共有（../../DATA/x で参照）
@@ -101,7 +101,7 @@ python run.py --release  # リリース版を起動</code></pre>
         </div>
         <div class="url-box">
           <h3>納品用ローカル化の出力先（_local ワークスペース）</h3>
-          <p>アプリ → 保存 タブで「共有（既定）」または「専用」を選んで「納品パッケージを生成」を実行すると、元のプロジェクトを変更せず、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> を生成します。共有の取り込み先は <code>_local/DATA/</code>、専用は <code>_local/&lt;name&gt;/DATA/</code> です。HTTP・HTTPS データは <code>http/</code>、<code>3dtiles:</code> レイヤーの HTTP タイルセットは一式を <code>http/3dtiles/</code>（クラウド・ローカル由来はそれぞれ <code>cloud/</code>・<code>local/</code>）、クラウドは <code>cloud/取得元ハッシュ/</code> に保存します。<code>xyz:</code> 行のリモートタイルは <code>http/xyz/&lt;name&gt;/</code> に受け皿フォルダのみ生成して参照を書き換えます（タイル本体はユーザーが配置）。ベースマップ相当の 3D Tiles（Google Photorealistic 等）と <code>base:</code> 行は対象外です。</p>
+          <p>管理（⚙）→ アプリ → 保存 で「共有（既定）」または「専用」を選んで「納品パッケージを生成」を実行すると、元のプロジェクトを変更せず、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> を生成します。共有の取り込み先は <code>_local/DATA/</code>、専用は <code>_local/&lt;name&gt;/DATA/</code> です。HTTP・HTTPS データは <code>http/</code>、<code>3dtiles:</code> レイヤーの HTTP タイルセットは一式を <code>http/3dtiles/</code>（クラウド・ローカル由来はそれぞれ <code>cloud/</code>・<code>local/</code>）、クラウドは <code>cloud/取得元ハッシュ/</code> に保存します。<code>xyz:</code> 行のリモートタイルは <code>http/xyz/&lt;name&gt;/</code> に受け皿フォルダのみ生成して参照を書き換えます（タイル本体はユーザーが配置）。ベースマップ相当の 3D Tiles（Google Photorealistic 等）と <code>base:</code> 行は対象外です。</p>
           <p><code>_local/</code> は群マニフェスト <code>projects.json</code> とプロジェクトの複製（書き換え済み .kasc＋ローカル DATA/）を含む自己完結パッケージで、フォルダごと ZIP にして渡せば受け取り側は複製内の .kasc を開くだけで使えます。参照は <code>../DATA/http/x.csv</code>（共有）または <code>DATA/http/x.csv</code>（専用）の相対パスで、登録IDが変わっても維持されます。元からあったローカルデータは <code>DATA/local/</code> に集約して複製され、取得したデータ（http/・cloud/）とは別フォルダに分かれます。再実行は <code>_local/</code> を作り直します。詳細は <a href="features/v5.html">V5: アプリ化</a> を参照してください。</p>
         </div>
         <div class="url-box">
@@ -129,13 +129,13 @@ info: https://example.com/project-info.html</code></pre>
         <div class="install-steps">
           <h3>クラウドストレージ連携（rclone・ローカルサーバーのみ）</h3>
           <ol>
-            <li>アプリ → <strong>rclone</strong> タブを開き、rclone の検出状態を確認。未導入なら「インストール先フォルダ」（既定 <code>C:\kasugai\rclone</code>）を指定して「ダウンロードして配置」</li>
-            <li>「リモート追加」で種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選んで「追加」。ブラウザで OAuth 認証画面が開くので、許可後はクラウドタブでリモートを選択してください</li>
+            <li>管理（⚙）→ アプリ → <strong>rclone</strong> を開き、rclone の検出状態を確認。未導入なら「インストール先フォルダ」（既定 <code>C:\kasugai\rclone</code>）を指定して「ダウンロードして配置」</li>
+            <li>「リモート追加」で種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選んで「追加」。ブラウザで OAuth 認証画面が開くので、許可後はクラウド サブタブでリモートを選択してください</li>
             <li>「ルートフォルダ」に接続の起点を指定します（省略可）。フォルダパスのほか、Box の <code>https://app.box.com/folder/…</code>・共有リンク <code>…/s/…</code>、Google Drive の <code>…/folders/…</code>、OneDrive の <code>?id=…</code> といったフォルダURLも指定できます。URL指定はフォルダID起点で接続されるため、権限や共有経路によってリモート内の見える位置が異なる環境間でも、全員が同じフォルダをルートとして参照できます</li>
-            <li>「読み取り専用 / 読み書き」を選んで「接続開始」。ドライブタブで「割り当て」（既定 K:）を選ぶとエクスプローラーからも使える仮想ドライブになります（Windows のみ）</li>
+            <li>「読み取り専用 / 読み書き」を選んで「接続開始」。ドライブ サブタブで「割り当て」（既定 K:）を選ぶとエクスプローラーからも使える仮想ドライブになります（Windows のみ）</li>
             <li>レイヤーURLには <code>cloud:</code> スキームが使えます。<code>geojson: 名 | cloud:フォルダ/file.geojson</code> のように接続中ストレージのファイルを直接参照でき、HTTP Range にも対応しています</li>
-            <li>読み書きで接続中はアプリ → 保存 タブの「.kascをクラウドへ保存」で現在の設定をクラウド上に保存できます</li>
-            <li>アプリ → 保存 タブの「現在の設定をインスペクタに追記して接続」を押すと <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> 形式の設定行がインスペクタに追加されます。この行を <code>.kasc</code> に残すと、起動時・プロジェクト読み込み時に自動接続されます（<code>cloud: stop</code> で停止）</li>
+            <li>読み書きで接続中は管理 → アプリ → 保存 の「.kascをクラウドへ保存」で現在の設定をクラウド上に保存できます</li>
+            <li>管理 → アプリ → 保存 の「現在の設定をインスペクタに追記して接続」を押すと <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> 形式の設定行がインスペクタに追加されます。この行を <code>.kasc</code> に残すと、起動時・プロジェクト読み込み時に自動接続されます（<code>cloud: stop</code> で停止）</li>
           </ol>
           <p>ドライブ経由の読み書きは Windows WebClient の制約で約 50MB 超のファイルを扱えません（<code>cloud:</code> スキーム経由はこの制限を受けません）。この機能はローカルサーバー（local ティア）のみで有効です。</p>
         </div>

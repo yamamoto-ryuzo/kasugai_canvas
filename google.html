@@ -10,21 +10,21 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.8.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.9.0</span></h1>
       <p>Google 連携・AI — Gemini AIチャット・Maps Platform・エージェント連携</p>
     </header>
     <main>
       <section>
         <h2>🔗 Google 連携（v6.0 へ向けた主要機能）</h2>
-        <p>トップレベルの「Google」タブ（設定の右）に Google 関連機能を集約しています。Gemini による AI チャットと Google Maps Platform の地図機能を、このタブのサブタブ（Gemini / Map / エージェント）から設定・管理します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v6.0 をリリースする予定です。</strong></p>
+        <p>Google 関連機能は管理ウィンドウ（サイドパネル右端の ⚙ ボタン）に集約しています。Gemini・外部エージェントは「AI」カテゴリ、Google Maps Platform は「Google Maps」カテゴリから設定・管理します。<strong>これらの Google 連携機能（AIチャット・エージェント連携・Maps Platform 各種 API）がすべて完成した時点で v6.0 をリリースする予定です。</strong></p>
         <div class="features">
           <div class="feature-card">
             <h3>🤖 AIチャット（Gemini）</h3>
-            <p>右下の Chat パネルから Gemini API（function calling）で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。flyTo・レイヤ切替・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替まで網羅。AI移動はドローン視点（対象地上+200m・-30°）が既定。Google → Gemini タブで API キー・モデルを設定</p>
+            <p>右下の Chat パネルから Gemini API（function calling）で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。flyTo・レイヤ切替・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替まで網羅。AI移動はドローン視点（対象地上+200m・-30°）が既定。管理（⚙）→ AI → チャット で API キー・モデルを設定</p>
           </div>
           <div class="feature-card">
             <h3>🗺️ Photorealistic 3D Tiles</h3>
-            <p>Google → Map タブで Maps Platform API キーを設定し、「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。Map Tiles API は従量課金です</p>
+            <p>管理（⚙）→ Google Maps で Maps Platform API キーを設定し、「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。Map Tiles API は従量課金です</p>
           </div>
           <div class="feature-card">
             <h3>🔍 Maps Platform の検索・ Places ・ Street View</h3>
@@ -60,11 +60,11 @@
           </div>
           <div class="feature-card">
             <h3>🤝 エージェント連携</h3>
-            <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します。Google → エージェント タブでエンドポイントURL・Bearerトークン（任意）を設定し「チャットを外部エージェントへ送信」をONにすると、チャット入力が Gemini より優先してそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history}</code>、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
+            <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します。管理（⚙）→ AI → エージェント でエンドポイントURL・Bearerトークン（任意）を設定し「チャットを外部エージェントへ送信」をONにすると、チャット入力が Gemini より優先してそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history}</code>、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
           </div>
           <div class="feature-card">
             <h3>🧩 AIプラグイン生成（自己拡張）</h3>
-            <p>チャットに「〜するプラグインを作って」と頼むと、AIがコードを生成してブラウザ内 IndexedDB に保存・即時有効化。適用前にコード全文の確認ダイアログが出ます。読み込みエラーはAIへ返るため、修正→再保存の自律ループが回ります。Google → エージェント タブで一覧・有効化・コード確認・<code>.kasp</code> 出力/取込・削除が可能。ストレージ保存のため配布物とは分離され、気に入ったものだけ <code>PLUGIN/</code> に登録して公開できます</p>
+            <p>チャットに「〜するプラグインを作って」と頼むと、AIがコードを生成してブラウザ内 IndexedDB に保存・即時有効化。適用前にコード全文の確認ダイアログが出ます。読み込みエラーはAIへ返るため、修正→再保存の自律ループが回ります。管理（⚙）→ AI → エージェント で一覧・有効化・コード確認・<code>.kasp</code> 出力/取込・削除が可能。ストレージ保存のため配布物とは分離され、気に入ったものだけ <code>PLUGIN/</code> に登録して公開できます</p>
           </div>
           <div class="feature-card">
             <h3>📊 データ取得・加工・表示パイプライン</h3>
@@ -92,7 +92,7 @@ DELETE /api/files/{project}/{path} → DATA/ 内のファイルを削除</code><
           <ul>
             <li><strong>Workers 側の AI/fetch プロキシ</strong>：Gemini キーを Workers のシークレットに置き、キー未設定の訪問者でもAIを試せる公開プロキシ（レート制限付き）は未実装。現在はどの環境でも Gemini キーのBYOが必要です</li>
             <li><strong>Workers の共有書き込み</strong>：共有 .kasc カタログ・共有プラグインカタログへの書き込みは認証・承認フローが前提で未実装</li>
-            <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送はエージェントタブで設定可能）</li>
+            <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送は管理 → AI → エージェント で設定可能）</li>
             <li><strong>ローカルファイル連携</strong>：DATA/ 書き込みは File System Access API（Chromium系）とローカルサーバー版の <code>/api/files</code> で実装済み。QGIS/GDAL 呼び出しは未実装</li>
             <li><strong>Cloud Run 対応</strong>：<code>PORT</code> 環境変数での <code>0.0.0.0</code> バインドのみ対応済み。Dockerfile・コンテナビルド手順は未整備（永続化には別途ストレージ設計が必要）</li>
           </ul>
