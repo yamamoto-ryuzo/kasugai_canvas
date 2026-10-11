@@ -94,11 +94,7 @@
       </ol>
 
       <h2 id="kasugai-concept">出展構想：KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント</h2>
-      <p>出展タイトルは <strong>「KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント」</strong> です。KASUGAI Canvas を、Agentic AI（ANTIGRAVITY エージェント）が空間情報レイヤーを自動構築し、GIS の利活用を促進するプラットフォームとして出展します。GIS 本番導入前の「フロントローディング」として、利用者が GIS の利活用を体験し、正しい導入判断と課題解決につなげることを重視します。</p>
-      <p><strong>提出スコープ（2026/10/11 見直し）：</strong><strong>V3（AI 連携）の強化として — Cloud Run を KASUGAI Canvas の稼働・保存先に、Gemini API を GIS 制御に使う、実装済みの構成のみで出展を組みます</strong>。本ページでアピールする機能はすべて実装済みであり、Cloud Run へのデプロイも完了しています。残作業は本番検証・提出物（構成図・デモ動画）のみです。</p>
-
-      <h3>課題設定</h3>
-      <p>多くの現場で GIS が導入に至らない、あるいは導入後も活用されない状況があります。原因は GIS 自体の理解不足と、「何ができて、どんな課題が解決できるか」を導入前に体験できる環境がないことです。本ハッカソン出展テーマとしては、<strong>「GIS に何ができて、どう課題解決に繋げられるか」を本番導入前に体験できる ANTIGRAVITY エージェントを作り、GIS の利活用を促進する</strong>ことに位置づけます。</p>
+      <p>出展タイトルは <strong>「KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント」</strong> です。ブラウザ内蔵の AI エージェント（Gemini API function calling）が自然言語の指示から空間情報レイヤーを自動構築し、FlyTo・資料生成まで行う構成で、<strong>Cloud Run を稼働・保存先とした実装済みの機能のみ</strong>で出展します。本ページに記載する機能はすべて実装済みで、審査用の公開 URL でそのまま確認できます。</p>
 
       <h3 id="参加条件対応">参加条件との対応</h3>
       <p>本ハッカソンの参加条件（必須プロダクト・必須 AI 技術・提出物）に対し、KASUGAI Canvas は以下のように対応します。</p>
@@ -127,68 +123,15 @@
         </tbody>
       </table>
 
-      <h3>解決策：ANTIGRAVITY 情報レイヤー（GIS 利活用を促進する Agentic AI エージェント）</h3>
-      <p>本番導入前に、自然言語の指示から「今必要な情報レイヤー」を選定・追加するエージェント機能を提供します。Gravity（重力）に逆らって情報が「浮かび上がる」ように、指示ひとつで必要なレイヤーが自動構成される体験を提供します。</p>
-      <p>ANTIGRAVITY の本質は、<strong>「GIS で何ができて、どんな課題が解決できるか」を本番前に体験してもらうためのエージェント</strong>にあります。サンプルデータ・資料・GIS を連動させることで、利用者の GIS 理解を先に深め、正しい導入判断と課題解決への期待値を形成します。以下の要素はすべて提出スコープ内の実装済み機能です。</p>
+      <h3>実装済み機能の概要</h3>
       <ul>
-        <li><strong>文脈理解：</strong>ユーザーの質問・目的・現在のカメラ視点・レイヤー一覧を Gemini API で解析</li>
-        <li><strong>レイヤー構成：</strong>必要なレイヤー・属性・カメラ位置を推定し、<code>addDataLayer</code>/<code>addLayer</code>/<code>flyTo</code> 等のチャットツールとしてブラウザが順次実行</li>
-        <li><strong>データ生成・取得：</strong>Gemini が架空サンプル GeoJSON を生成し <code>addGeoJsonLayer</code>／<code>addDataLayer</code> で投入。<code>fetchData</code> ツールで外部データ取得（CORS 範囲）</li>
-        <li><strong>ガバナンス：</strong>生成データへの出典・生成時刻の付与、破壊的ツールの確認ダイアログ、起動制御モード（トークン／Cookie ゲート／IAP）、GCS 署名付き URL による秘匿データ配信</li>
+        <li><strong>内蔵AIエージェント（ブラウザ側）：</strong>Gemini API の function calling で48種のチャットツールを実行し、「○○の資料を作って」→ レイヤー自動構成（<code>addLayer</code>/<code>addDataLayer</code>）→ サンプル GeoJSON 生成（<code>addGeoJsonLayer</code>）→ FlyTo → 資料出力（<code>showReport</code>、Markdown/HTML・ダウンロード可）→ 視点パーマリンク埋め込み（<code>buildShareUrl</code>）まで一連の流れを完結。生成データには出典・生成時刻・AI生成明記を付与でき、実行ツールはチャットに記録される（可観測性）</li>
+        <li><strong>AI プロキシ（キー隠蔽）：</strong><code>POST /api/gemini</code> がサーバーの <code>GEMINI_API_KEY</code> を注入して転送（モデル許可リスト・1MB 上限・レート制限・認証モードで保護）。BYO キー登録済みのブラウザは Gemini を直接呼び、未登録でも <code>/api/capabilities</code> の <code>aiProxy</code> 通知で自動的にサーバーキー経由になるため審査員はキー不要</li>
+        <li><strong>保存・認証：</strong>ID/PASS ログイン（<code>/api/auth</code>）で HMAC トークンを発行し、.kasc と <code>gs://</code> データを Cloud Storage に保存（<code>/api/kasc</code>・<code>/api/data/&lt;key&gt;</code>、GET は V4 署名付き URL でブラウザ⇄GCS 直接転送）。起動時に同梱 .kasc を冪等シード。審査用 URL は認証モード5で運用中</li>
+        <li><strong>キー・秘匿管理：</strong>Gemini・Maps キーと認証情報は Secret Manager 経由で環境変数に注入。Maps キーはブラウザ直接通信に必要なため capabilities で配布し、GCP 側の HTTP リファラ＋API 制限で保護</li>
+        <li><strong>拡張窓口：</strong>外部エージェントプロトコル（<code>{message,project,camera,layers,history,apiKey?}</code> → <code>{reply,actions,report}</code>）により、別実装のエージェントをエンドポイント URL 指定で差し込める</li>
       </ul>
-
-      <h3 id="追加機能">提出スコープ：実装済み機能で構成</h3>
-      <p>KASUGAI Canvas は v5.10.0 時点で、CesiumJS フロントエンド（レイヤー表示・FlyTo・Share URL・ベクトル検索・属性/凡例パネル・<code>.kasc</code> 設定）に加え、<strong>AIチャット（Gemini function calling・48種のツール＝カメラ/レイヤー/検索/データ加工/資料生成まで網羅）・外部エージェント接続・Google Maps Platform 連携・ローカルファイル保存</strong>が実装済みです。さらに提出構成（Cloud Run での稼働・保存＋Gemini API による GIS 制御）も <code>agent/</code> の FastAPI サービス1つに実装済みのため、<strong>提出に必要な機能に新規実装はありません</strong>。残作業はデプロイ・本番検証・提出物のみです。</p>
-
-      <h4>Cloud Run サービス構成（実装済み）</h4>
-      <p><code>agent/</code> の FastAPI サービス1つで、KASUGAI Canvas 本体（静的配信）・GIS 保存 API・AI プロキシを Cloud Run 上に同居させます。プロジェクト設定・データの保存先は Cloud Storage（GCS・未設定時はローカルストアにフォールバック）、AI 制御は<strong>ブラウザ内蔵のエージェント</strong>が Gemini API（function calling・48種のチャットツール）を直接実行します。サーバー側のエージェント実装は廃止し、Cloud Run は「KASUGAI の稼働・保存先＋キー隠蔽プロキシ」に集約する構成です。</p>
-      <table>
-        <thead>
-          <tr><th>エンドポイント・機能</th><th>内容</th></tr>
-        </thead>
-        <tbody>
-          <tr><td><code>POST /api/gemini</code></td><td>内蔵AI向けの薄いキー隠蔽プロキシ。ブラウザの generateContent リクエスト（<code>{contents, systemInstruction, tools, generationConfig, model}</code>）にサーバーの <code>GEMINI_API_KEY</code> を注入して転送。推論ループ・ツール実行・地図操作はすべてブラウザ側。<code>model</code> 必須・<code>GEMINI_MODELS</code> 許可リスト・1MB 上限・レート制限・認証モードのトークン/Cookie/IAP で保護可能。<strong>キーを持たない審査員・訪問者でも内蔵AIの全機能がそのまま使える</strong></td></tr>
-          <tr><td><code>POST /api/auth</code>・<code>POST /api/kasc</code></td><td>ID/PASS ログインで HMAC トークンを発行し、プロジェクト設定（.kasc）を GCS の <code>kasc/&lt;ID&gt;</code> へ保存・ログイン時に一括返却。起動時に同梱 <code>web/projects/*/*.kasc</code> を冪等シード</td></tr>
-          <tr><td><code>GET/PUT /api/data/&lt;key&gt;</code></td><td><code>gs://</code> 秘匿データの保存・配信。GET は GCS V4 署名付き URL へ 302（データがコンテナを通らない直接転送。未整備環境は Range 対応プロキシ配信にフォールバック）</td></tr>
-          <tr><td>起動制御 <code>KASUGAI_AUTH_MODE=5/6/7</code></td><td>5=API・データのみトークン保護 / 6=<code>kasugai_session</code> Cookie 全ゲート / 7=Cloud IAP 委譲。<code>/auth-methods.json</code> を環境変数から動的応答するため、モード変更にイメージ再ビルドは不要</td></tr>
-        </tbody>
-      </table>
-      <ul>
-        <li><strong>自律実行：</strong>function calling ループはブラウザ側で回り、48種のチャットツール（カメラ・レイヤー・検索・データ加工・資料生成まで網羅）を直接実行する。レイヤー自動構成・サンプルデータ生成（Gemini が GeoJSON を生成し <code>addGeoJsonLayer</code> で投入）・<code>showReport</code> による資料出力・<code>buildShareUrl</code> による視点パーマリンク埋め込みはすべて内蔵ツールで完結</li>
-        <li><strong>キー方式：</strong>BYO（Bring Your Own）キー登録済みのブラウザは Gemini を直接呼び（キーは localStorage に閉じサーバーへ送らない）、未設定のブラウザは <code>/api/gemini</code> 経由でサーバーキーを使う。能力通知は <code>GET /api/capabilities</code> の <code>features:["aiProxy"]</code> で行われフロントが自動切替</li>
-        <li><strong>外部エージェント窓口：</strong>フロントのエージェント設定で任意のエンドポイントURLを指定すれば、<code>{message,project,camera,layers,history,apiKey?}</code> → <code>{reply,actions,report}</code> 契約の外部実装を差し込める（本リポジトリにはサーバー側実装を同梱しない）</li>
-      </ul>
-      <p>詳細は <code>agent/AUTH_MODES.md</code>・<code>auth/cloudrun.html</code>。審査用の公開 URL はモード5（ID/PASS ログイン → HMAC トークン）で運用中で、ログイン後は内蔵AI・.kasc の GCS 保存・復元がそのまま使えます。</p>
-
-      <h4>チャットパネル・エージェント接続（実装済み）</h4>
-      <ul>
-        <li><strong>実装済</strong>：内蔵AI（Gemini function calling・48ツール）が本体。<code>/api/capabilities</code> が <code>aiProxy</code> を通知する環境では BYO キー未設定でもそのまま動作し、<strong>審査員が無設定で使える</strong>。BYO キー登録時はサーバーを介さず直接呼ぶ</li>
-        <li><strong>実装済（v4.20.0）</strong>：外部エージェント設定（エンドポイントURL・Bearerトークン・有効化トグル）も残置 — 外部のエージェント実装があれば差し込める拡張窓口（サーバー側実装は同梱しない）</li>
-        <li>ツール実行はチャットにシステムメッセージとして記録済み。出典・ライセンスは生成 GeoJSON の properties・<code>attr=</code> 出典で表示し、審査基準の<strong>可観測性</strong>に対応</li>
-      </ul>
-
-      <h4>レイヤー自動構成の実行層（実装済み）</h4>
-      <ul>
-        <li><strong>実装済（v4.20.0）</strong>：エージェント応答の <code>actions:[{name,args}]</code> をチャットツールと同名で順次実行する機構が <code>applyAgentLayers()</code> の役割を担う</li>
-        <li>既存の <code>.kasc</code> パーサー（<code>applyInspector</code>/<code>addLayer</code>）・FlyTo・凡例をそのまま再利用</li>
-      </ul>
-
-      <h4>サンプルデータ自動生成（実装済み）</h4>
-      <ul>
-        <li>内蔵AIが Gemini に「春日井市の避難所 20 件、属性：収容人数・耐震・標高」等を生成させ、<code>addGeoJsonLayer</code>／<code>addDataLayer</code> ツールでそのままレイヤー化する</li>
-        <li>生成 GeoJSON の <code>properties</code> に出典・生成時刻・「AI生成サンプル」の旨を付記するよう指示でき、データの性格を可視化する</li>
-        <li>既存のベクトル検索・属性表示・凡例がそのまま動く形式で出力し、<strong>本番データなしで GIS 体験</strong>を実現</li>
-      </ul>
-
-      <h4>資料生成＋パーマリンク連携（実装済み）</h4>
-      <ul>
-        <li>属性から課題を抽出し、「平面・内容・解決案」構成の資料を自動生成（Markdown/HTML）</li>
-        <li><strong><code>showReport</code> アクション（実装済）</strong>：エージェント応答の <code>report</code> フィールドまたは同名アクションで資料をモーダル表示＋ファイルダウンロード。Markdown は簡易レンダリング（リンククリック可）、HTML は sandbox 付き iframe で隔離表示</li>
-        <li><strong><code>buildShareUrl</code> ツール（実装済）</strong>：座標・視点を引数指定してURLを組み立てられ、資料の各節に視点別パーマリンクを埋め込める（URL形式は既存の <code>?longitude=...&amp;latitude=...&amp;height=...&amp;project=...</code> を踏襲）</li>
-      </ul>
-
-      <h4>提出 MVP とデモシナリオ</h4>
-      <p>提出 MVP は<strong>すべて実装済み</strong>です。3 分デモ動画では、<strong>「避難所の資料を作って」→ サンプルレイヤー自動追加 → FlyTo → 属性から課題抽出 → パーマリンク付き資料出力</strong>の一連の流れをそのまま収録します。保存面のアピールとして、認証モードでのログイン → .kasc が GCS に保存され再訪時に復元される流れも動画に含めます。</p>
+      <p>デモシナリオ（3分動画）：「避難所の資料を作って」→ サンプルレイヤー自動追加 → FlyTo → 属性から課題抽出 → パーマリンク付き資料出力の一連の流れ。保存面はログイン → .kasc が GCS に保存され再訪時に復元される流れを収録します。</p>
 
       <h3>システムアーキテクチャ図</h3>
       <svg viewBox="0 0 980 470" width="100%" style="max-width:980px;display:block;margin:0 auto;font-family:sans-serif;" role="img" aria-label="KASUGAI Canvas Cloud Run システム構成図">
