@@ -87,10 +87,14 @@ def check_auth(requested_project: str | None) -> str:
             "gcloud CLI が見つかりません。Cloud Shell（console.cloud.google.com 右上の '>_'）\n"
             "で実行するか、Google Cloud SDK をインストールして `gcloud auth login` してください。"
         )
-    r = _gcloud("auth", "list", "--filter=status:ACTIVE", "--format=value(account)")
-    if not r.stdout.strip():
-        raise SystemExit("gcloud にログインしていません。先に `gcloud auth login` を実行してください。")
-    print(f"[1/8] gcloud 認証確認 OK（{r.stdout.strip().splitlines()[0]}）", flush=True)
+    r = _gcloud("auth", "print-access-token")
+    if r.returncode != 0 or not r.stdout.strip():
+        raise SystemExit(
+            "gcloud にログインしていません。Cloud Shell では `gcloud auth login` を実行し、\n"
+            "表示される URL をブラウザで開いて認証コードを貼り付けてください。"
+        )
+    account = _gcloud("config", "get-value", "account").stdout.strip().splitlines()
+    print(f"[1/8] gcloud 認証確認 OK（{account[0] if account else '認証済み'}）", flush=True)
 
     project = requested_project
     if not project:
