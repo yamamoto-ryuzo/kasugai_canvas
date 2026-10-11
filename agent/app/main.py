@@ -134,15 +134,28 @@ _PROJECT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _MAX_KASC_BYTES = 1024 * 1024
 _KEY_RE = re.compile(r"^[A-Za-z0-9_.\-/]+$")
 
+# 配信Content-Typeは拡張子から決める。アップロード時の指定は信用しない
+# (html/svg/js等を意図的に含めず、実行可能な型での配信=stored XSSを防ぐ)
 _CONTENT_TYPES = {
     "geojson": "application/geo+json",
+    "topojson": "application/json",
     "json": "application/json",
     "czml": "application/json",
     "kml": "application/vnd.google-earth.kml+xml",
+    "csv": "text/csv",
+    "tsv": "text/tab-separated-values",
+    "txt": "text/plain",
     "png": "image/png",
     "jpg": "image/jpeg",
     "jpeg": "image/jpeg",
     "webp": "image/webp",
+    "tif": "image/tiff",
+    "tiff": "image/tiff",
+    "mp4": "video/mp4",
+    "glb": "model/gltf-binary",
+    "mvt": "application/vnd.mapbox-vector-tile",
+    "pbf": "application/x-protobuf",
+    "gpkg": "application/geopackage+sqlite3",
     "pmtiles": "application/octet-stream",
 }
 
@@ -277,9 +290,11 @@ async def api_data_put(key: str, request: Request):
     if not clean:
         return JSONResponse({"ok": False, "error": "Invalid path"}, status_code=400)
     body = await request.body()
+    # 保存Content-Typeも拡張子由来に固定する(署名付きURL経由の配信でも
+    # アップロード時指定の text/html 等が使われないようにするため)
     store_mod.get_store().put(
         f"{store_mod.DATA_PREFIX}{clean}", body,
-        request.headers.get("content-type") or _content_type(clean),
+        _content_type(clean),
     )
     return {"ok": True}
 

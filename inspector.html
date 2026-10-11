@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.12.0</span></h1>
       <p>.kasc 設定仕様 — インスペクター設定の完全な書式</p>
     </header>
     <main>
@@ -57,6 +57,7 @@ cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(�
           <ul>
             <li><code>option</code> には <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換 alias <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code> などが使えます。<code>xyz:</code> 行ではさらに <code>minimumLevel=</code>（<code>minZoom</code>）と <code>bbox=西経,南緯,東経,北緯</code> が使え、bbox を指定すると範囲外へのタイル要求が発生せず flyTo もその範囲を向きます（ローカルタイル配置時の範囲限定に有効）。</li>
             <li>プロジェクトは <code>projects/&lt;project&gt;</code> 単位で切り替えます。設定ファイル内に <code>project</code> 項目はありません。</li>
+            <li><code>attr=出典</code>・行の3番目フィールドの出典は、<code>&lt;</code> で始めると HTML として描画できます（例: <code>&lt;a href="https://example.jp"&gt;国土地理院&lt;/a&gt;</code>）。描画時に許可リストでサニタイズされ、<code>a</code>/<code>img</code>/装飾タグ（b・i・em・u・br・span・small・sub・sup）と <code>http(s):</code>/相対 URL のみが有効になります（スクリプト・イベント属性・その他タグは除去）。詳細は <a href="security.html">セキュリティ対策</a> を参照してください。</li>
           </ul>
         </div>
         <div class="url-box">

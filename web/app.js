@@ -406,12 +406,69 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
 }
 
+// attr 出典フィールドの HTML を許可リストでサニタイズする。
+// .kasc の出典には <a>/<img>/装飾タグのみを認め、URLスキームと属性を検証して
+// DOM を再構築する。描画時のみ適用し、ファイル上の値(エクスポート等)は変更しない
+const ATTRIBUTION_TAGS = new Set(["a", "b", "strong", "i", "em", "u", "sub", "sup", "br", "span", "small", "img"]);
+// 中身ごと捨てるタグ(script のコード文字列が出典に漏れないように)
+const ATTRIBUTION_DROP_TAGS = new Set(["script", "style", "iframe", "object", "embed", "template"]);
+
+function isSafeAttributionUrl(url) {
+  // http(s) またはスキーム無し(相対)のみ。javascript:/data: 等は拒否
+  return /^https?:/i.test(url) || !/^[a-z][a-z0-9+.-]*:/i.test(url);
+}
+
+function sanitizeAttributionFragment(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const clean = parent => {
+    const fragment = document.createDocumentFragment();
+    for (const child of parent.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        fragment.append(document.createTextNode(child.textContent));
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = child.tagName.toLowerCase();
+        if (ATTRIBUTION_DROP_TAGS.has(tag)) continue;
+        if (!ATTRIBUTION_TAGS.has(tag)) {
+          fragment.append(clean(child));
+          continue;
+        }
+        const el = document.createElement(tag);
+        if (tag === "a") {
+          const href = (child.getAttribute("href") || "").trim();
+          if (isSafeAttributionUrl(href)) {
+            el.setAttribute("href", href);
+            el.setAttribute("target", "_blank");
+            el.setAttribute("rel", "noopener noreferrer");
+          }
+        } else if (tag === "img") {
+          const src = (child.getAttribute("src") || "").trim();
+          if (isSafeAttributionUrl(src)) el.setAttribute("src", src);
+          const alt = child.getAttribute("alt");
+          if (alt) el.setAttribute("alt", alt);
+        }
+        const title = child.getAttribute("title");
+        if (title) el.setAttribute("title", title);
+        el.append(clean(child));
+        fragment.append(el);
+      }
+    }
+    return fragment;
+  };
+  return clean(doc.body);
+}
+
+function sanitizedAttributionHtml(html) {
+  const holder = document.createElement("div");
+  holder.append(sanitizeAttributionFragment(html));
+  return holder.innerHTML;
+}
+
 function appendAttributionText(container, text) {
   const trimmed = text.trim();
   if (!trimmed) return;
   if (trimmed.startsWith("<")) {
     const wrapper = document.createElement("span");
-    wrapper.innerHTML = trimmed;
+    wrapper.append(sanitizeAttributionFragment(trimmed));
     container.append(wrapper);
   } else {
     const span = document.createElement("span");
@@ -1352,7 +1409,7 @@ function proxyTemplateUrl(url, useProxy = true) {
 function createUrlTemplateProvider(options) {
   const providerOptions = {
     url: proxyTemplateUrl(options.url, options.proxy !== false),
-    credit: new Cesium.Credit(options.attribution || ""),
+    credit: new Cesium.Credit(sanitizedAttributionHtml(options.attribution || "")),
     maximumLevel: options.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
     tileWidth: options.tileSize || 256,
     tileHeight: options.tileSize || 256,
@@ -5064,7 +5121,11 @@ function setupEvents() {
   });
 
   document.querySelector("#export-inspector")?.addEventListener("click", () => {
-    const text = document.querySelector("#inspector-input").value;
+    // 認証モードでは /api/data/...?token= に書き換えられたURLが入っているため、
+    // エクスポート前に gs:// / r2:// 形式へ戻す(セッショントークンの持ち出し防止)
+    const auth = window.kasugaiAuth;
+    const rawText = document.querySelector("#inspector-input").value;
+    const text = auth && auth.restoreKasc ? auth.restoreKasc(rawText) : rawText;
     const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -5365,6 +5426,12 @@ function setupEvents() {
   document.querySelector("#auto-update").addEventListener("change", () => {
     void saveUpdateSettings().catch(error => {
       document.querySelector("#version-status").textContent = t("update.autoSaveError", { error: error.message });
+    });
+  });
+
+  document.querySelector("#fetch-allow-save")?.addEventListener("click", () => {
+    void saveFetchSettings().catch(error => {
+      document.querySelector("#fetch-allow-status").textContent = t("update.autoSaveError", { error: error.message });
     });
   });
 
@@ -5741,7 +5808,10 @@ function setupEvents() {
       });
 
       cloudEls.saveKasc.addEventListener("click", async () => {
-        const text = document.querySelector("#inspector-input")?.value || "";
+        // エクスポートと同じく ?token= を gs:// / r2:// に戻してから保存する
+        const auth = window.kasugaiAuth;
+        const rawText = document.querySelector("#inspector-input")?.value || "";
+        const text = auth && auth.restoreKasc ? auth.restoreKasc(rawText) : rawText;
         const fileName = `${currentProjectId || "kasugai_canvas"}.kasc`;
         if (!window.confirm(t("cloud.saveKascConfirm", { name: fileName }))) return;
         try {
@@ -6309,6 +6379,20 @@ function getAgentConfig() {
 function isAgentEnabled() {
   const config = getAgentConfig();
   return config.enabled && !!config.endpoint;
+}
+
+// BYOキーの送信先は https または localhost(開発用) に限定する。
+// 平文 http の外部エンドポイントへキーが流れないようにするガード
+function isSecureAgentEndpoint(endpoint) {
+  try {
+    const url = new URL(endpoint, window.location.href);
+    if (url.protocol === "https:") return true;
+    if (url.protocol !== "http:") return false;
+    const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    return host === "localhost" || host === "::1" || host.startsWith("127.");
+  } catch (e) {
+    return false;
+  }
 }
 
 function updateChatPanelVisibility() {
@@ -7011,6 +7095,7 @@ async function loadUpdateInfo() {
     current.textContent = health.version || "-";
     if (Number.isInteger(health.port)) document.querySelector("#current-port").value = health.port;
     document.querySelector("#auto-update").checked = settings.autoUpdate !== false;
+    void loadFetchSettings();
     await checkForUpdate(health.version);
   } catch (error) {
     current.textContent = "-";
@@ -7119,6 +7204,37 @@ async function saveUpdateSettings() {
   });
   if (!response.ok) throw new Error(await response.text());
   document.querySelector("#version-status").textContent = t("update.settingsSaved");
+}
+
+// /api/fetch の接続先許可リスト(ローカル版のみ提供)。社内LAN等の
+// プライベートアドレスからデータを取得したい場合の設定UI
+async function loadFetchSettings() {
+  const section = document.querySelector("#fetch-allow-section");
+  if (!section) return;
+  try {
+    const response = await fetch("/api/fetch/settings");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const settings = await response.json();
+    document.querySelector("#fetch-allow").value = (settings.allow || []).join("\n");
+    section.hidden = false;
+  } catch {
+    section.hidden = true;
+  }
+}
+
+async function saveFetchSettings() {
+  const allow = document
+    .querySelector("#fetch-allow")
+    .value.split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const response = await fetch("/api/fetch/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allow }),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  document.querySelector("#fetch-allow-status").textContent = t("update.settingsSaved");
 }
 
 const defaultConfig = `base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院
@@ -7940,7 +8056,11 @@ function renderMarkdownLite(markdown) {
   const inline = text => String(text)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, label, url) => {
+      // javascript: 等のスキームを除外し http(s)・相対パスのみリンク化する
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) && !/^https?:/i.test(url)) return label;
+      return `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;
+    });
   const out = [];
   let inList = false;
   for (const raw of escapeHtml(String(markdown ?? "")).split(/\r?\n/)) {
@@ -8911,6 +9031,10 @@ function setupChatPanel() {
     const timer = setTimeout(() => controller.abort(), 120000);
     // BYO キー同梱が有効な場合のみ apiKey を付ける（未設定時はサーバー側のキーに委ねる）
     const apiKey = config.sendKey ? (window.kasugaiApi.getGoogleApiKey() || "") : "";
+    // キーを平文で流出させないため、送信先は https または localhost のみ許可する
+    if (apiKey && !isSecureAgentEndpoint(config.endpoint)) {
+      throw new Error(t("agent.sendKeyInsecure"));
+    }
     let response;
     try {
       response = await fetch(config.endpoint, {

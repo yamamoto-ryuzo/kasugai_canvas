@@ -454,6 +454,13 @@
                     <button id="install-update" type="button" hidden data-i18n="update.install">最新版をインストール</button>
                     <button id="shutdown-app" type="button" class="danger-button" data-i18n="app.shutdown">停止</button>
                     <p id="version-status" class="hint" aria-live="polite"></p>
+                    <div id="fetch-allow-section" hidden>
+                      <div class="section-title" style="margin-top:14px;" data-i18n="fetch.title">データ取得プロキシ</div>
+                      <p class="hint" data-i18n="fetch.allowHint">社内ネットワークなどプライベートアドレスへの取得は既定で拒否されます。許可するホスト名・IPアドレス・CIDRを1行ずつ入力してください。</p>
+                      <textarea id="fetch-allow" rows="4" style="width:100%;box-sizing:border-box;font-family:monospace;" placeholder="192.168.0.0/16&#10;my.server.local&#10;127.0.0.1"></textarea>
+                      <button id="fetch-allow-save" type="button" data-i18n="fetch.allowSave">許可リストを保存</button>
+                      <p id="fetch-allow-status" class="hint" aria-live="polite"></p>
+                    </div>
                   </section>
                 </section>
               </div>

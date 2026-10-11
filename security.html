@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>セキュリティ対策 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.12.0</span></h1>
+      <p>セキュリティ対策 — 実装済みの保護機構と既知の制限</p>
+    </header>
+    <main>
+      <section>
+        <h2 id="security">🛡️ セキュリティ対策</h2>
+        <p>本ページは KASUGAI Canvas に実装されているセキュリティ対策と、現在判明している制限をまとめたものです。認証方式ごとの資産の秘匿範囲（.kasc・データ・静的ファイル）については <a href="auth/">認証とプラグイン</a> を参照してください。</p>
+
+        <div class="url-box">
+          <h3>デプロイ形態と信頼境界</h3>
+          <p>提供される API は実行形態で分離されています。<strong>高権限 API（ファイル書き込み・プラグイン書き込み・fetch プロキシ・rclone 連携・シャットダウン等）はローカル Rust サーバー（127.0.0.1 バインド）でのみ有効</strong>です。公開環境（Cloudflare Pages/Workers・Cloud Run）には認証済みの保存系 API（<code>/api/auth</code>・<code>/api/kasc</code>・<code>/api/data</code>・<code>/api/gemini</code>）のみが存在し、無制限の書き込み・fetch プロキシは提供しません。フロントエンドは <code>GET /api/capabilities</code> の応答でバックエンド能力を判定し、機能を出し分けます。</p>
+        </div>
+
+        <div class="url-box">
+          <h3>認証トークンと .kasc ファイル</h3>
+          <ul>
+            <li>方式3〜7 のセッショントークンは <code>expiry.HMAC-SHA256(expiry)</code> 形式で、<code>KASUGAI_TOKEN_SECRET</code> による HMAC 検証・タイミングセーフ比較・有効期限 12 時間です。Cookie（<code>kasugai_session</code>）には <code>HttpOnly; Secure; SameSite=Strict</code> を付与しています。</li>
+            <li><code>gs://</code>/<code>r2://</code> のデータ参照は読み込み時に <code>/api/data/...?token=…</code> へ書き換えられますが、<strong>.kasc のエクスポート・クラウド保存時には <code>restoreKasc</code> で元の <code>gs://</code>/<code>r2://</code> に復元</strong>されます。共有した .kasc にベアラトークンが混入することはありません。</li>
+            <li>BYO API キー（Gemini 等）は .kasc・共有ファイル・コードへの書き込みを禁止しています（<code>yahooappid:</code> など仕様上キーを含める行は限定的に存在するため、配布前に確認してください）。</li>
+          </ul>
+        </div>
+
+        <div class="url-box">
+          <h3>/api/data の Content-Type 固定（stored XSS 対策）</h3>
+          <p><code>PUT /api/data/*</code> で保存する Content-Type はリクエスト値を信用せず、<strong>GET 配信時にも拡張子由来の固定マッピングで返します</strong>（Workers/Pages Functions・Cloud Run 両方で同一方針）。保存済みオブジェクトに <code>text/html</code> が書き込まれていても、配信時に安全な型へ上書きされます。</p>
+          <table>
+            <thead><tr><th>拡張子</th><th>配信 Content-Type</th></tr></thead>
+            <tbody>
+              <tr><td><code>.geojson</code></td><td><code>application/geo+json</code></td></tr>
+              <tr><td><code>.json</code>・<code>.topojson</code>・<code>.czml</code></td><td><code>application/json</code></td></tr>
+              <tr><td><code>.kml</code></td><td><code>application/vnd.google-earth.kml+xml</code></td></tr>
+              <tr><td><code>.csv</code>・<code>.tsv</code>・<code>.txt</code>・<code>.tif</code>/<code>.tiff</code>・<code>.png</code>/<code>.jpg</code>/<code>.jpeg</code>/<code>.webp</code>・<code>.mp4</code>・<code>.glb</code>・<code>.mvt</code>/<code>.pbf</code>・<code>.gpkg</code> 等</td><td>各形式の既定 MIME</td></tr>
+              <tr><td><code>.html</code>・<code>.svg</code>・<code>.js</code>・<code>.pmtiles</code>・その他未知の拡張子</td><td><code>application/octet-stream</code>（ブラウザで実行・解釈されない）</td></tr>
+            </tbody>
+          </table>
+          <p><small>アプリ内のデータ読み込みは <code>fetch</code> 経由で Content-Type に依存しないため、実データ利用への影響はありません。</small></p>
+        </div>
+
+        <div class="url-box">
+          <h3>BYO API キーの取り扱い（外部エージェント）</h3>
+          <p>「エージェント」設定の <strong>Send my Gemini API key（sendKey）</strong> を ON にすると、外部エージェントのエンドポイントへ BYO キーが同梱されます。この場合の送信先は以下に限定されます。</p>
+          <ul>
+            <li><code>https://…</code> — 常に許可</li>
+            <li><code>http://localhost…</code>・<code>http://127.0.0.1…</code> — ローカル開発用の例外として許可</li>
+            <li>その他の <code>http://…</code> — <strong>リクエスト自体を送信前に中止</strong>します（平文でのキー流出防止）。sendKey が OFF の場合はエンドポイントに関係なくキーは同梱されません。</li>
+          </ul>
+        </div>
+
+        <div class="url-box">
+          <h3>/api/fetch の SSRF 対策（接続先許可リスト）</h3>
+          <p>ローカル版の CORS プロキシ <code>GET/HEAD /api/fetch</code> は、接続先がプライベート系アドレスの場合<strong>既定で 403 を返します</strong>。ホスト名指定は名前解決して IP で判定するため、<code>http://社内ホスト/</code> のような指定も対象になります。</p>
+          <table>
+            <thead><tr><th>既定で拒否される範囲</th></tr></thead>
+            <tbody>
+              <tr><td>ループバック（<code>127.0.0.0/8</code>・<code>::1</code>）、プライベート（<code>10.0.0.0/8</code>・<code>172.16.0.0/12</code>・<code>192.168.0.0/16</code>）、リンクローカル（<code>169.254.0.0/16</code> — クラウドのメタデータエンドポイント含む・<code>fe80::/10</code>）、ULA（<code>fc00::/7</code>）、共有アドレス空間（<code>100.64.0.0/10</code>）、<code>0.0.0.0</code>・未指定アドレス</td></tr>
+            </tbody>
+          </table>
+          <p>社内 LAN の GIS サーバー等からデータを取得したい場合は、exe 隣の <code>kasugai_canvas.fetch.json</code> に許可リストを記述します（リクエスト毎に読まれるため再起動不要）。</p>
+          <pre><code>{"allow":["192.168.0.0/16","geoserver.city.local","127.0.0.1"]}</code></pre>
+          <p>許可エントリは<strong>ホスト名・個別 IP・IPv4 CIDR</strong>のいずれかです（ホスト名一致はその名前への接続を全て許可）。管理ウィンドウの「その他」タブにある <strong>データ取得プロキシ</strong> セクションから GUI で編集・保存もできます（ローカル版でのみ表示）。</p>
+          <p><small>公開環境（Pages/Workers/Cloud Run）には <code>/api/fetch</code> は存在せず、ブラウザから直接 fetch する構成のため本対策の対象外です。</small></p>
+        </div>
+
+        <div class="url-box">
+          <h3>ページ内スクリプトの境界</h3>
+          <ul>
+            <li><strong>資料モーダルの Markdown</strong>：リンク化は <code>http:</code>/<code>https:</code> またはスキーム無し（相対パス）のみ。<code>javascript:</code>・<code>data:</code> 等はリンク化せずテキストとして残します。</li>
+            <li><strong><code>attr</code>（出典）フィールドの HTML</strong>：許可リスト型サニタイズを適用。<code>a</code>・<code>img</code>・装飾タグ（<code>b/i/em/u/br/span/small/sub/sup</code>）のみを認め、URL は <code>http(s):</code>・相対のみ検証、<code>on*</code> 等の属性は除去、リンクには <code>target="_blank" rel="noopener"</code> を強制します。非許可タグは剥がしてテキストのみ残ります（描画時のみ適用・.kasc 上の値は変更しません）。</li>
+            <li><strong><code>runCode</code>（AI 生成コード実行）</strong>：<code>sandbox="allow-scripts"</code> の iframe（opaque origin）内で実行し、ブリッジ API は <code>getGoogleApiKey</code>・<code>saveStoragePlugin</code>・<code>saveDataFile</code>・更新/停止系等の機密・高権限メソッドをブロックします。</li>
+            <li><strong>レポート HTML</strong>：sandboxed iframe で描画します。</li>
+            <li><strong>プラグイン</strong>：仕様上 <code>window.kasugaiApi</code> へのフルアクセスを持つため、AI 生成プラグインの保存・公開には必ずコード全文を確認するダイアログを挟みます。ストレージプラグインは IndexedDB（ブラウザローカル）に閉じます。</li>
+            <li><strong>外部エージェントの actions</strong>：破壊的ツール（<code>savePlugin</code>/<code>publishPlugin</code>/<code>deleteDataFile</code> 等）はフロント側の既存確認ダイアログで保護されます。</li>
+          </ul>
+        </div>
+
+        <div class="url-box">
+          <h3>既知の制限・残課題</h3>
+          <p>現時点で未対策と認識している項目です。信頼できない .kasc や不審な操作への注意をお願いします。</p>
+          <table>
+            <thead><tr><th>項目</th><th>状態</th></tr></thead>
+            <tbody>
+              <tr><td>ローカルサーバーへのクロスサイトリクエスト（他サイトからの <code>POST /api/shutdown</code> 等）</td><td><code>Origin</code> 検証は未実装。悪意あるページを開いたブラウザから <code>127.0.0.1</code> の API に単純リクエストが発射され得ます（プライベート帯への fetch 自体は上記許可リストで拒否済み）</td></tr>
+              <tr><td>CSP・<code>X-Content-Type-Options</code> 等のセキュリティヘッダ</td><td>未設定（blob import・srcdoc sandbox 等の機能と整合させる設計が必要）</td></tr>
+              <tr><td>CDN（jsdelivr の Cesium 等）のサブリソース完全性（SRI）</td><td>未適用</td></tr>
+              <tr><td>自己更新（<code>install_update</code>）の署名・ハッシュ検証</td><td>未実装（配布元は GitHub の固定 URL のみ）</td></tr>
+              <tr><td><code>POST /api/auth</code> のレート制限</td><td>未実装</td></tr>
+              <tr><td>外部プロジェクトの <code>@parent</code> 配信</td><td>.kasc 登録時に親フォルダ全体が HTTP 配信される設計。共有 DATA スコープの仕様ですが、登録時に配信範囲を確認してください</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

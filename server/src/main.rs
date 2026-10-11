@@ -18,6 +18,7 @@ use tower_http::services::ServeDir;
 
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const CLOUD_CONFIG_FILE_NAME: &str = "kasugai_canvas.cloud.json";
+const FETCH_CONFIG_FILE_NAME: &str = "kasugai_canvas.fetch.json";
 // 外部プロジェクト(.kasc ファイル関連付け等で登録された、インストール外の
 // フォルダにあるプロジェクト)の永続化レジストリ
 const EXTERNAL_PROJECTS_FILE_NAME: &str = "kasugai_canvas.projects.json";
@@ -45,6 +46,14 @@ fn default_true() -> bool {
     true
 }
 
+// /api/fetch の接続先許可リスト。exe 隣の kasugai_canvas.fetch.json に保存する
+#[derive(Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct FetchSettings {
+    #[serde(default)]
+    allow: Vec<String>,
+}
+
 // .kasc ファイルから起動(または /api/projects/register)した、
 // projects/ 以外の場所にあるプロジェクト。dir がプロジェクトルートになり、
 // /projects/<id>/ でそのフォルダを配信する。相対パス(DATA/ 等)は dir 基準
@@ -63,6 +72,7 @@ struct ExternalProject {
 struct AppState {
     update_config_path: Arc<PathBuf>,
     cloud_config_path: Arc<PathBuf>,
+    fetch_config_path: Arc<PathBuf>,
     external_projects_path: Arc<PathBuf>,
     external_projects: Arc<StdMutex<Vec<ExternalProject>>>,
     cloud: Arc<Mutex<CloudState>>,
@@ -109,6 +119,38 @@ async fn put_update_settings(
 ) -> Result<Json<UpdateSettings>, (StatusCode, String)> {
     let content = serde_json::to_string_pretty(&settings).map_err(internal_error)?;
     std::fs::write(state.update_config_path.as_ref(), content).map_err(internal_error)?;
+    Ok(Json(settings))
+}
+
+async fn get_fetch_settings(State(state): State<AppState>) -> Json<FetchSettings> {
+    Json(FetchSettings {
+        allow: fetch_allow_entries(&state.fetch_config_path),
+    })
+}
+
+async fn put_fetch_settings(
+    State(state): State<AppState>,
+    Json(settings): Json<FetchSettings>,
+) -> Result<Json<FetchSettings>, (StatusCode, String)> {
+    let allow: Vec<String> = settings
+        .allow
+        .iter()
+        .map(|entry| entry.trim().to_string())
+        .filter(|entry| !entry.is_empty())
+        .take(100)
+        .collect();
+    if allow
+        .iter()
+        .any(|entry| entry.len() > 253 || entry.chars().any(char::is_control))
+    {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "許可リストの値が不正です".to_string(),
+        ));
+    }
+    let settings = FetchSettings { allow };
+    let content = serde_json::to_string_pretty(&settings).map_err(internal_error)?;
+    std::fs::write(state.fetch_config_path.as_ref(), content).map_err(internal_error)?;
     Ok(Json(settings))
 }
 
@@ -169,12 +211,120 @@ struct FetchQuery {
     url: String,
 }
 
+// ---- /api/fetch の接続先制限(SSRF対策) ----
+// プライベート/ループバック/リンクローカル等のアドレスは既定で拒否する。
+// LAN内のデータソース(庁内GISサーバー等)を使う場合は exe 隣の
+// kasugai_canvas.fetch.json に {"allow":["192.168.0.0/16","my.server.local","127.0.0.1"]}
+// のように明示許可する(ホスト名・個別IP・IPv4 CIDR を混在可)
+
+fn is_private_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0b1100_0000) == 0b0100_0000)
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || (v6.segments()[0] & 0xffc0) == 0xfe80
+                || (v6.segments()[0] & 0xfe00) == 0xfc00
+                || v6
+                    .to_ipv4_mapped()
+                    .map(|v4| is_private_ip(&std::net::IpAddr::V4(v4)))
+                    .unwrap_or(false)
+        }
+    }
+}
+
+fn cidr_contains(cidr: &str, ip: &std::net::IpAddr) -> bool {
+    let Some((base, len)) = cidr.split_once('/') else {
+        return false;
+    };
+    let (Ok(base), Ok(len)) = (base.parse::<std::net::Ipv4Addr>(), len.parse::<u32>()) else {
+        return false;
+    };
+    let std::net::IpAddr::V4(ip) = ip else {
+        return false;
+    };
+    if len > 32 {
+        return false;
+    }
+    let mask: u32 = if len == 0 { 0 } else { u32::MAX << (32 - len) };
+    (u32::from(base) & mask) == (u32::from(*ip) & mask)
+}
+
+fn ip_allow_listed(ip: &std::net::IpAddr, allow: &[String]) -> bool {
+    allow.iter().any(|entry| {
+        let entry = entry.trim();
+        entry
+            .parse::<std::net::IpAddr>()
+            .map(|allowed| allowed == *ip)
+            .unwrap_or(false)
+            || cidr_contains(entry, ip)
+    })
+}
+
+fn fetch_allow_entries(path: &Path) -> Vec<String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|value| value.get("allow").and_then(Value::as_array).cloned())
+        .map(|list| {
+            list.iter()
+                .filter_map(|entry| entry.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+// 接続先URLが取得許可かを判定する。ホスト名は名前解決してIPで判定する
+// (解決結果に private が1つでも含まれ、allow に該当しない場合は拒否)
+async fn fetch_target_allowed(
+    state: &AppState,
+    url: &reqwest::Url,
+) -> Result<(), (StatusCode, String)> {
+    let forbidden = || {
+        (
+            StatusCode::FORBIDDEN,
+            "プライベートアドレスへの取得は許可されていません(kasugai_canvas.fetch.json の allow を確認してください)".to_string(),
+        )
+    };
+    let host = url.host_str().unwrap_or_default();
+    let allow = fetch_allow_entries(&state.fetch_config_path);
+    if allow.iter().any(|e| e.trim().eq_ignore_ascii_case(host)) {
+        return Ok(());
+    }
+    let ips: Vec<std::net::IpAddr> = match host.parse::<std::net::IpAddr>() {
+        Ok(ip) => vec![ip],
+        Err(_) => {
+            let port = url.port_or_known_default().unwrap_or(443);
+            tokio::net::lookup_host((host, port))
+                .await
+                .map_err(|_| (StatusCode::BAD_GATEWAY, "接続先を解決できません".to_string()))?
+                .map(|addr| addr.ip())
+                .collect()
+        }
+    };
+    if ips
+        .iter()
+        .any(|ip| is_private_ip(ip) && !ip_allow_listed(ip, &allow))
+    {
+        return Err(forbidden());
+    }
+    Ok(())
+}
+
 // CORS 非対応の外部データを取り込むための GET/HEAD プロキシ。
 // ローカルサーバー(127.0.0.1バインド)前提の機能で、呼び出し元はこのPCのブラウザのみ。
 // GET の Range ヘッダーを転送し 206 をそのまま返すため、DuckDB-WASM の httpfs による
 // Parquet の範囲読み(metadata・row group スキップ)がこの経路でも機能する。
 // 応答はいったんバッファするため、Range 無しの全件 GET は FETCH_MAX_BYTES 上限のまま
 async fn fetch_proxy(
+    State(state): State<AppState>,
     method: Method,
     headers: HeaderMap,
     axum::extract::Query(query): axum::extract::Query<FetchQuery>,
@@ -187,6 +337,7 @@ async fn fetch_proxy(
             "http/https のみ取得できます".to_string(),
         ));
     }
+    fetch_target_allowed(&state, &url).await?;
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
         .build()
@@ -4236,6 +4387,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
         cloud_config_path: Arc::new(executable_directory.join(CLOUD_CONFIG_FILE_NAME)),
+        fetch_config_path: Arc::new(executable_directory.join(FETCH_CONFIG_FILE_NAME)),
         external_projects_path: Arc::new(external_projects_path.clone()),
         external_projects: Arc::new(StdMutex::new(load_external_projects(
             &external_projects_path,
@@ -4293,6 +4445,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // クラウドストレージ(rclone)連携・外部プロジェクト登録はローカル実行時のみ公開する
     if is_local {
         app = app
+            .route(
+                "/api/fetch/settings",
+                get(get_fetch_settings).put(put_fetch_settings),
+            )
             .route("/api/projects/register", post(register_project))
             .route("/api/projects/{id}", delete(unregister_project))
             .route("/api/cloud/status", get(cloud_status))

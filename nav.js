@@ -5,7 +5,7 @@
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v5.11.0';
+  const VERSION = 'v5.12.0';
 
   const GROUPS = [
     {
@@ -33,7 +33,8 @@
       items: [
         { href: 'data.html', text: 'データ形式' },
         { href: 'library.html', text: 'ライブラリ' },
-        { href: 'architecture.html', text: 'システム構成' }
+        { href: 'architecture.html', text: 'システム構成' },
+        { href: 'security.html', text: 'セキュリティ対策' }
       ]
     },
     {

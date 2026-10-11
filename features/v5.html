@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.11.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.12.0</span></h1>
       <p>V5: アプリ化（ローカル連携） — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -90,6 +90,11 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
       <h3>💾 ローカルファイル保存</h3>
       <p>ローカルサーバー版の <code>/api/files</code> API で <code>projects/&lt;id&gt;/DATA/</code> へのファイル書き込み・一覧・削除ができます。ブラウザ側は File System Access API による DATA/ 直接保存も併存します（Chromium系のみ・選択フォルダへ直接書込み）。</p>
       <p>利用例: 描画ルートの保存、インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet を選ぶと対応する行タイプのレイヤー行を自動追記）、ダウンロードしたデータのプロジェクト内配置など。静的配信では利用できません（サーバー API 依存機能）。</p>
+
+      <h3>🌐 データ取得プロキシ（/api/fetch）と接続先許可リスト</h3>
+      <p><code>GET/HEAD /api/fetch</code> は CORS 非対応の外部データを取り込むためのプロキシです（<code>duckdb:</code> の <code>proxy=on</code> や AI の fetchData が利用。Range/HEAD 転送対応）。SSRF 対策として、プライベート・ループバック・リンクローカル等のアドレスへの接続は<strong>既定で拒否</strong>します（ホスト名は名前解決して IP で判定）。社内 LAN の GIS サーバー等からデータを取得したい場合は、exe 隣の <code>kasugai_canvas.fetch.json</code> に許可リストを記述します（リクエスト毎に読むため再起動不要）。</p>
+      <pre><code>{"allow":["192.168.0.0/16","geoserver.city.local","127.0.0.1"]}   … ホスト名・個別IP・IPv4 CIDR</code></pre>
+      <p>許可リストは管理（⚙）→ その他 の「データ取得プロキシ」セクションからも1行1エントリで編集・保存できます（保存で即時反映）。設定 API は <code>GET/PUT /api/fetch/settings</code> で、ローカル実行時のみ公開されます。既定で拒否される範囲の詳細は <a href="../security.html">セキュリティ対策</a> を参照してください。</p>
 
       <h3>📦 納品用ローカル化（_local ワークスペース）</h3>
       <p>管理（⚙）→ アプリ → 保存 で<strong>「共有（既定）」または「専用」</strong>を選び、「納品パッケージを生成（_local/）」を実行します。<strong>元のプロジェクトは変更せず</strong>、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>

@@ -2,15 +2,28 @@ import { verifyToken } from "../../_lib/token.js";
 
 const KEY_RE = /^[A-Za-z0-9_.\-/]+$/;
 
+// 配信Content-Typeは拡張子から決める。アップロード時の指定は信用しない
+// (html/svg/js等を意図的に含めず、実行可能な型での配信=stored XSSを防ぐ)
 const CONTENT_TYPES = {
   geojson: "application/geo+json",
+  topojson: "application/json",
   json: "application/json",
   czml: "application/json",
   kml: "application/vnd.google-earth.kml+xml",
+  csv: "text/csv",
+  tsv: "text/tab-separated-values",
+  txt: "text/plain",
   png: "image/png",
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
   webp: "image/webp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  mp4: "video/mp4",
+  glb: "model/gltf-binary",
+  mvt: "application/vnd.mapbox-vector-tile",
+  pbf: "application/x-protobuf",
+  gpkg: "application/geopackage+sqlite3",
   pmtiles: "application/octet-stream"
 };
 
@@ -56,7 +69,8 @@ export async function onRequestGet(context) {
 
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
-  if (!headers.has("Content-Type")) headers.set("Content-Type", contentTypeFallback(key));
+  // 保存時に指定されたContent-Typeではなく拡張子由来の型を必ず使う
+  headers.set("Content-Type", contentTypeFallback(key));
   headers.set("ETag", obj.httpEtag);
   headers.set("Cache-Control", "private, no-store");
   return new Response(obj.body, { headers });
@@ -70,7 +84,7 @@ export async function onRequestPut(context) {
   if (!key) return json({ ok: false, error: "Invalid path" }, 400);
 
   await bucket.put(key, context.request.body, {
-    httpMetadata: { contentType: context.request.headers.get("Content-Type") || contentTypeFallback(key) }
+    httpMetadata: { contentType: contentTypeFallback(key) }
   });
   return json({ ok: true }, 200);
 }

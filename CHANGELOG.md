@@ -4,6 +4,22 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.12.0] - 2026-10-11
+
+### Security
+
+- `.kasc` エクスポート・クラウド保存時に `restoreKasc` を適用し、`/api/data/...?token=` のセッショントークンが .kasc に混入しないよう `gs://`/`r2://` に復元
+- 資料モーダルの Markdown（`renderMarkdownLite`）で `javascript:`/`data:` 等のスキームをリンク化しないよう制限（http(s)/相対のみ）
+- `/api/data` の配信 Content-Type を拡張子由来の固定マッピングに変更（Workers・Cloud Run 両方）。保存・リクエストされた `text/html` 等は `application/octet-stream` で返し stored XSS を遮断
+- 外部エージェントへの BYO Gemini キー送信（sendKey）を `https:` または `localhost`/`127.0.0.1` のみに限定。他の `http:` 宛は送信前に中止
+- `attr`（出典）フィールドの HTML を許可リスト型サニタイズ。`a`/`img`/装飾タグのみ・URL スキーム検証・イベント属性除去で、細工した .kasc によるページ内スクリプト実行を遮断（描画時のみ・ファイル非破壊）
+- `/api/fetch`（ローカル版 CORS プロキシ）でプライベート/ループバック/リンクローカル等への接続を既定拒否（SSRF 対策）。`kasugai_canvas.fetch.json` の `allow`（ホスト名・個別IP・IPv4 CIDR）で社内 LAN 等を明示許可可能
+
+### Added
+
+- 管理ウィンドウ「その他」タブに「データ取得プロキシ」設定欄を追加（`/api/fetch` の許可リストを 1 行 1 エントリで編集・保存。`GET/PUT /api/fetch/settings`、ローカル実行のみ公開）
+- ドキュメントページ `security.html` — 実装済みの保護機構と既知の制限を集約
+
 ## [5.11.0] - 2026-10-11
 
 ### Added
