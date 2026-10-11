@@ -94,6 +94,7 @@ a.panel-manage { display: inline-flex; align-items: center; justify-content: cen
 .info-content .tab-content.active { display: block; }
 .embedded-content img { display: block; width: 100%; height: auto; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; }
 .field-label, .section-title { display: block; margin-bottom: 7px; color: #52636d; font-size: var(--basemap-select-font-size); font-weight: 700; }
+.drape-sub-group { margin-left: 1.4em; margin-bottom: 4px; }
 .control-panel select, .control-panel input { width: 100%; min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; }
 .basemap-control { position: absolute; z-index: 3; left: 14px; bottom: 14px; display: flex; align-items: center; gap: 6px; width: 285px; padding: 9px 10px; border: 1px solid rgba(14,32,64,.12); border-radius: 7px; background: rgba(255,255,255,.6); box-shadow: 0 4px 12px rgba(10,20,40,.14); pointer-events: auto; touch-action: auto; }
 .basemap-control select { flex: 1; width: 0; min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.8); color: #1d2b35; font-size: var(--basemap-select-font-size); }
@@ -177,6 +178,7 @@ a.panel-manage { display: inline-flex; align-items: center; justify-content: cen
 #current-port { width: 100%; min-height: 30px; }
 #google-api-key { display: block; width: 100% !important; min-width: 280px !important; min-height: 30px !important; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; font-size: var(--basemap-select-font-size); box-sizing: border-box !important; }
 #google-gemini-model { width: 100%; min-height: 30px; }
+#google-tool-max-steps { width: 100%; min-height: 30px; box-sizing: border-box; padding: 5px 7px; }
 .inspector-title { margin-top: 14px; }
 .inspector-input { display: block; width: 100%; min-height: 260px; margin-bottom: 7px; padding: 7px; resize: vertical; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.75); color: #1d2b35; font: var(--basemap-select-font-size)/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; }
 .search-results { display: grid; gap: 5px; margin-top: 8px; max-height: 220px; overflow-y: auto; }

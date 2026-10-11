@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.14.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.15.0</span></h1>
       <p>V0: システム基本構成 — バージョン横断の実装詳細</p>
     </header>
     <main>
@@ -330,8 +330,8 @@
       を選ぶ</li>
       <li><code>ドレープ対象地形</code> の DEM／3D Tiles
       から、表示中で利用可能な地形を選ぶ</li>
-      <li><code>ドレープを適用するレイヤー</code> で ON の XYZ・GeoJSON
-      だけへ、選択した地形を適用する</li>
+      <li>各対象地形の直下にある XYZ・ベクター・ベクター高速ドレープ
+      のチェックで、その地形へ適用するレイヤー種別を個別に選ぶ</li>
       <li>Base map は標準では <code>ImageryLayer</code> として Globe
       表面へ表示する</li>
       </ol>
@@ -369,12 +369,11 @@
       <td><code>ドレープ対象地形</code></td>
       <td>DEM と 3D Tiles を個別にドレープ面へ登録する</td>
       <td>DEM は初期状態で ON、3D Tiles は OFF。両方を ON
-      にすると、利用可能な両方をドレープ面にする</td>
-      </tr>
-      <tr>
-      <td><code>ドレープを適用するレイヤー</code></td>
-      <td>XYZ、GeoJSON の各レイヤーへ地形追従を付与する</td>
-      <td>XYZ・GeoJSON は初期状態で ON。ON
+      にすると、利用可能な両方をドレープ面にする。各対象の直下に
+      <code>XYZ</code>・<code>ベクター</code>・<code>ベクター高速ドレープ (実験的)</code>
+      のチェックがあり、その地形へ適用するレイヤー種別を対象ごとに選べる
+      （例: XYZ は 3D Tiles のみ、ベクターは DEM のみ、といった組み合わせが可能）。
+      初期状態は両対象とも XYZ・ベクターが ON。ON
       のレイヤーだけをドレープする。地形ソース自体の表示は変更しない</td>
       </tr>
       </tbody>
@@ -489,9 +488,9 @@
       <td>表示中の 3D Tiles をドレープ対象として有効化</td>
       </tr>
       <tr>
-      <td><code>ドレープを適用するレイヤー</code> → <code>XYZ</code>
-      ON</td>
-      <td>各 XYZ タイルを 3D Tiles 表面へドレープ</td>
+      <td><code>3D Tiles</code> 対象の <code>XYZ</code> ON</td>
+      <td>各 XYZ タイルを 3D Tiles 表面へドレープ（DEM 対象側の XYZ
+      設定とは独立）</td>
       </tr>
       <tr>
       <td><code>3D Tiles (BASEMAPドレープ)</code> ON</td>

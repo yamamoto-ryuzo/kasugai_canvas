@@ -10,20 +10,20 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.14.0</span></h1>
-      <p>AI ツール仕様 — 内蔵AIが制御できる全48ツールの定義</p>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.15.0</span></h1>
+      <p>AI ツール仕様 — 内蔵AIが制御できる全50ツールの定義</p>
     </header>
     <main>
       <section>
         <h2>🤖 概要</h2>
-        <p>内蔵AI（Gemini function calling）が呼び出せるツールは <code>web/app.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>48 種</strong>です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="google.html">Google 連携・AI</a> を参照。</p>
-        <p>実行モデル：ユーザーの発言 → Gemini がツール呼び出しを返す → ブラウザが <code>kasugaiApi</code> 経由で実行 → 結果を Gemini に返す、の function calling ループ（最大5ステップ）。推論はすべてブラウザ側。破壊的ツールは実行前に確認ダイアログを挟み、最終判断はユーザーにあります。</p>
+        <p>内蔵AI（Gemini function calling）が呼び出せるツールは <code>web/app.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>50 種</strong>です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="google.html">Google 連携・AI</a> を参照。</p>
+        <p>実行モデル：ユーザーの発言 → Gemini がツール呼び出しを返す → ブラウザが <code>kasugaiApi</code> 経由で実行 → 結果を Gemini に返す、の function calling ループ。ツール実行の上限往復数は既定10（管理 → AI → Gemini の「ツール実行の上限往復数」または AI への指示で <code>setToolMaxSteps</code> により 1〜20 で変更可）。上限到達時はユーザーに継続確認が出て、承認なら同じ往復数を1枠追加して続行、拒否なら中断します。推論はすべてブラウザ側。破壊的ツールは実行前に確認ダイアログを挟み、最終判断はユーザーにあります。</p>
 
         <h3>提供条件（activeChatTools で絞り込み）</h3>
         <table>
           <thead><tr><th>条件</th><th>対象ツール</th></tr></thead>
           <tbody>
-            <tr><td>常時（43ツール）</td><td>下記以外のすべて</td></tr>
+            <tr><td>常時（45ツール）</td><td>下記以外のすべて</td></tr>
             <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
@@ -54,9 +54,9 @@
             <tr><td><code>listLayers</code></td><td>なし</td><td>登録レイヤー一覧（名前・表示状態）を取得</td></tr>
             <tr><td><code>setLayerVisible</code></td><td>name*, visible*</td><td>レイヤー名指定で表示/非表示を切替</td></tr>
             <tr><td><code>focusLayer</code></td><td>name*</td><td>レイヤー名または ID 指定で全体が収まるようカメラ移動。非表示レイヤーは自動表示してから移動</td></tr>
-            <tr><td><code>addLayer</code></td><td>title*, target*, type, options</td><td>ベクターレイヤーを追加して即適用。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は URL または DATA/ 相対パス（sql は SELECT 文）。options は <code>where=</code>/<code>limit=</code>/<code>format=</code>/<code>bbox=auto</code>/<code>proxy=on</code>/<code>render=primitive</code>/<code>attr=出典</code> 等を | 区切りで指定。インスペクター設定に反映されるためユーザー明示時のみ</td></tr>
-            <tr><td><code>addGeoJsonLayer</code></td><td>title*, url*</td><td>GeoJSON レイヤーを URL 指定（DATA/ 相対パスまたは外部 URL）で追加して即適用。他形式は <code>addLayer</code></td></tr>
-            <tr><td><code>applyInspector</code></td><td>text*</td><td>インスペクターの設定テキスト（.kasc 形式）を登録・適用。設定全体が上書きされるためユーザー明示時のみ。書式は <a href="inspector.html">.kasc 設定仕様</a></td></tr>
+            <tr><td><code>addLayer</code></td><td>title*, target*, type, options</td><td>ベクターレイヤーを追加して即適用。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は URL または DATA/ 相対パス（sql は SELECT 文）。options は <code>where=</code>/<code>limit=</code>/<code>format=</code>/<code>bbox=auto</code>/<code>proxy=on</code>/<code>render=primitive</code>/<code>attr=出典</code> 等を | 区切りで指定。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。インスペクター設定に反映されるためユーザー明示時のみ</td></tr>
+            <tr><td><code>addGeoJsonLayer</code></td><td>title*, url*</td><td>GeoJSON レイヤーを URL 指定（DATA/ 相対パスまたは外部 URL）で追加して即適用。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。他形式は <code>addLayer</code></td></tr>
+            <tr><td><code>applyInspector</code></td><td>text*</td><td>インスペクターの設定テキスト（.kasc 形式）を登録・適用。新規追加されるデータレイヤー行の http(s) URL は適用前に実在確認され、到達不能なものがあると拒否される。設定全体が上書きされるためユーザー明示時のみ。書式は <a href="inspector.html">.kasc 設定仕様</a></td></tr>
             <tr><td><code>exportInspector</code></td><td>なし</td><td>現在の設定を .kasc ファイルとしてエクスポート（ダウンロード）</td></tr>
           </tbody>
         </table>
@@ -78,7 +78,7 @@
       </section>
 
       <section>
-        <h2>✈ Fly・プレゼン（4）</h2>
+        <h2>✈ Fly・プレゼン（5）</h2>
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
@@ -86,6 +86,7 @@
             <tr><td><code>playFlyPath</code></td><td>name*</td><td>フライパスを名前または番号で再生し Fly モードで自動走行</td></tr>
             <tr><td><code>stopFly</code></td><td>なし</td><td>Fly モード・フライパス再生を停止して Orbit（3D）モードへ戻る</td></tr>
             <tr><td><code>toggleDrawMode</code></td><td>なし</td><td>Draw モード（地図上へのルート描画）を ON/OFF</td></tr>
+            <tr><td><code>addFlyPath</code></td><td>name*, geojson*, speed, height, pitch, loop, view</td><td>GeoJSON LineString から飛行ルートを作成。手描きルートと同じ IndexedDB ストアに保存されるためリロード後も復元される。view は camera（一人称・既定）/ center（ルート中心俯瞰）。「○○を巡るルート」生成→<code>playFlyPath</code> の連携に使う</td></tr>
           </tbody>
         </table>
       </section>
@@ -172,13 +173,14 @@
       </section>
 
       <section>
-        <h2>⚙ システム（3）</h2>
+        <h2>⚙ システム（4）</h2>
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
             <tr><td><code>checkUpdate</code></td><td>なし</td><td>アプリの最新バージョンを確認</td></tr>
             <tr><td><code>installUpdate</code></td><td>なし</td><td>最新版をインストール（更新がある場合のみ有効）</td></tr>
             <tr><td><code>shutdownApp</code></td><td>なし</td><td>アプリを停止。確認ダイアログが出るのでユーザーが最終判断。破壊的操作のためユーザー明示時のみ</td></tr>
+            <tr><td><code>setToolMaxSteps</code></td><td>steps*</td><td>ツール実行の上限往復数を 1〜20 で変更（Gemini 設定パネルの「ツール実行の上限往復数」と同じ設定）。「上限を上げて/下げて」等の指示に使用</td></tr>
           </tbody>
         </table>
       </section>

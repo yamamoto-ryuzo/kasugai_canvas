@@ -108,12 +108,17 @@ docker push asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas
 # デプロイ（サーバーキーでキーレスAIを提供する例）
 gcloud run deploy kasugai-canvas \
   --image asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas \
-  --region asia-northeast1 --allow-unauthenticated --min-instances 1 \
+  --region asia-northeast1 --allow-unauthenticated --min-instances 0 \
   --set-secrets GEMINI_API_KEY=gemini-api-key:latest
 ```
 
-`--min-instances 1` はフロントの `/health` 検出（1秒タイムアウト）がコールドスタートを
-逃さないための推奨設定。サーバーキーを置かない BYO 運用なら `GEMINI_API_KEY` は不要。
+`--min-instances 0`（スケールトゥゼロ）で非アクセス時の課金を止める（既定）。
+コールドスタート後の初回ページ表示に数秒かかるが、フロントの `/health` 検出は
+失敗時リトライするため検出漏れはしない。審査・公開期間中など常時即応答にしたい
+期間だけ `python run-cloudrun.py --min-instances 1`（または
+`gcloud run services update kasugai-canvas --min-instances=1`）で常駐化し、
+終了後に 0 へ戻す（アイドル料金が継続発生）。
+サーバーキーを置かない BYO 運用なら `GEMINI_API_KEY` は不要。
 無認証で公開する場合は `ANTIGRAVITY_TOKEN`・`ANTIGRAVITY_RATE_LIMIT`・`GEMINI_MODELS`
 での乱用対策を検討すること（`/api/gemini` は任意の generateContent を転送するため）。
 
@@ -121,7 +126,7 @@ gcloud run deploy kasugai-canvas \
 # 認証モード例（モード5 + GCS + Secret Manager のシークレット）
 gcloud run deploy kasugai-canvas \
   --image asia-northeast1-docker.pkg.dev/PROJECT/kasugai/kasugai-canvas \
-  --region asia-northeast1 --allow-unauthenticated --min-instances 1 \
+  --region asia-northeast1 --allow-unauthenticated --min-instances 0 \
   --set-env-vars KASUGAI_AUTH_MODE=5,KASUGAI_GCS_BUCKET=kasugai-data \
   --set-secrets KASUGAI_AUTH_USER=kasugai-auth-user:latest,KASUGAI_AUTH_PASS=kasugai-auth-pass:latest,GEMINI_API_KEY=gemini-api-key:latest
 

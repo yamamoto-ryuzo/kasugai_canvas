@@ -42,6 +42,8 @@ viewer.camera.percentageChanged = 0.05;
 // (shouldAnimate が true のままだとシミュレーション時刻の変化で毎フレーム描画される)
 viewer.scene.requestRenderMode = true;
 viewer.clock.shouldAnimate = false;
+// 開発者ツール・E2E検証からの描画状態確認用(kasugaiApiと同じく内部向けの公開面)
+window._viewer = viewer;
 const requestRender = () => viewer.scene.requestRender();
 // 入力操作起因の変更(CallbackProperty・.show・設定変更等)は自動では描画要求されないため、
 // 入力イベントを捕捉して次フレームの描画を要求する。
@@ -348,8 +350,11 @@ let dataLayerSeq = 0;
 let vectorSearchData = null;
 const activePrimitives = [];
 const drapeTerrainSources = { dem: true, tiles3d: false };
-const drapeLayers = { xyz: true, geojson: true };
-let geojsonPrimitiveDrape = false;
+// ドレープ対象地形ごとの適用レイヤー種別(DEM と 3D Tiles で個別に選べる)
+const drapeLayers = {
+  dem: { xyz: true, geojson: true, primitive: false },
+  tiles3d: { xyz: true, geojson: true, primitive: false },
+};
 // レイヤー一覧に件数上限バッジが出ているか(解除時の再描画判定用)
 let entityLimitBadgeVisible = false;
 const demSources = {
@@ -487,34 +492,43 @@ function updateMapAttribution() {
 }
 
 async function detectBackend() {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1000);
-    const response = await fetch("./health", { signal: controller.signal, cache: "no-store" });
-    clearTimeout(timeout);
-    if (response.ok) {
-      const data = await response.json().catch(() => ({}));
-      backendEnabled = data?.name === "kasugai_canvas";
-      // ローカルRustサーバー以外（Cloud Run版エージェント等）でも /health が
-      // {ok:true} を返せば capabilities を取得する（静的配信のみの環境は404で到達しない）
-      if (backendEnabled || data?.ok === true) {
-        // 利用可能な機能（fetchプロキシ・プラグイン書込み・エージェント等）を取得する
-        const caps = await fetch("./api/capabilities", { cache: "no-store" })
-          .then(r => (r.ok ? r.json() : null))
-          .catch(() => null);
-        backendCapabilities = caps && caps.tier ? caps : null;
-        // サーバー提供の Maps API キーを、ブラウザに未保存の場合のみ自動登録する
-        //（ユーザーが手入力した BYO キーがあればそちらを優先）
-        try {
-          const mapsKey = backendCapabilities?.google?.mapsApiKey;
-          if (mapsKey && !localStorage.getItem("googleMapsApiKey")) {
-            localStorage.setItem("googleMapsApiKey", mapsKey);
-          }
-        } catch (e) {}
+  // スケールトゥゼロ環境のコールドスタートに備え、応答自体が無い場合は
+  // 最大3回までリトライする。404等のHTTP応答は得られ次第即確定（リトライしない）
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1000);
+      const response = await fetch("./health", { signal: controller.signal, cache: "no-store" });
+      clearTimeout(timeout);
+      if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        backendEnabled = data?.name === "kasugai_canvas";
+        // ローカルRustサーバー以外（Cloud Run版エージェント等）でも /health が
+        // {ok:true} を返せば capabilities を取得する（静的配信のみの環境は404で到達しない）
+        if (backendEnabled || data?.ok === true) {
+          // 利用可能な機能（fetchプロキシ・プラグイン書込み・エージェント等）を取得する
+          const caps = await fetch("./api/capabilities", { cache: "no-store" })
+            .then(r => (r.ok ? r.json() : null))
+            .catch(() => null);
+          backendCapabilities = caps && caps.tier ? caps : null;
+          // サーバー提供の Maps API キーを、ブラウザに未保存の場合のみ自動登録する
+          //（ユーザーが手入力した BYO キーがあればそちらを優先）
+          try {
+            const mapsKey = backendCapabilities?.google?.mapsApiKey;
+            if (mapsKey && !localStorage.getItem("googleMapsApiKey")) {
+              localStorage.setItem("googleMapsApiKey", mapsKey);
+            }
+          } catch (e) {}
+        }
       }
+      return;
+    } catch {
+      if (attempt >= 2) {
+        backendEnabled = false;
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
-  } catch {
-    backendEnabled = false;
   }
 }
 
@@ -2578,7 +2592,7 @@ async function refreshLayersImpl() {
         proxy: selectedBasemap.proxy,
       });
     }
-    if (drapeLayers.xyz) {
+    if (drapeLayers.tiles3d.xyz) {
       orderedTileLayers.filter(t => t.visible).forEach(item => {
         drapeProviders.push({
           url: item.url,
@@ -2610,7 +2624,7 @@ async function refreshLayersImpl() {
   // Globe 表面の XYZ
   for (const item of orderedTileLayers) {
     if (!item.visible) continue;
-    if ((drapeTerrainSources.dem || drape3DTiles) && (!drapeLayers.xyz || !drapeTerrainSources.dem)) continue;
+    if ((drapeTerrainSources.dem || drape3DTiles) && (!drapeLayers.dem.xyz || !drapeTerrainSources.dem)) continue;
     try {
       const provider = createUrlTemplateProvider({
         url: item.url,
@@ -2669,7 +2683,10 @@ async function refreshLayersImpl() {
       const decoder = vectorDecoders.get(item.type);
       try {
         if (!item.url && !item.data && !item.query) continue;
-        const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || drape3DTiles);
+        // 対象地形ごとのベクタードレープ指定。両方 false なら null(クランプなし)
+        const vectorDrape = getVectorDrapeFlags();
+        const primDem = !!vectorDrape?.dem && drapeLayers.dem.primitive;
+        const prim3d = !!vectorDrape?.tiles3d && drapeLayers.tiles3d.primitive;
         // 再描画のたびに描画ソース保持をリセットする(primitive/entity 経路で再セット。
         // 非表示レイヤーに古い GeoJSON が残らないようにする)
         item.geojsonSource = null;
@@ -2694,12 +2711,12 @@ async function refreshLayersImpl() {
         }
         // GeoJsonPrimitive ドレープ(実験的グローバル設定): 全件読み込み系ベクターが対象。
         // render= 明示指定のレイヤーとクエリ系(render= で個別指定する形式)は除外する
-        const primitiveDrape = clamp && geojsonPrimitiveDrape && Cesium.GeoJsonPrimitive && !isQueryDecoder(decoder, item) && !item.renderSpecified;
+        const primitiveDrape = (primDem || prim3d) && Cesium.GeoJsonPrimitive && !isQueryDecoder(decoder, item) && !item.renderSpecified;
         const source = await loadVectorSourceCached(item, decoder);
         // fromGeoJson 経路に統一する: ソースは vectorSourceCache の共有取得で二重
         // ダウンロードにならず、保持した GeoJSON が getLayerGeoJson・検索索引に使える
         if (primitiveDrape) {
-          const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: primitiveDrapeHeightReference(drape3DTiles), scene: viewer.scene });
+          const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: primitiveDrapeHeightReference(primDem, prim3d), scene: viewer.scene });
           applyQmlStyleToPrimitive(primitive, item.qmlStyle);
           registerPrimitiveLayer(item, primitive, source);
           continue;
@@ -2727,7 +2744,7 @@ async function refreshLayersImpl() {
           item._slicedFeatures = limited.source.features;
           item._slicedUsed = limited.used;
         }
-        const ds = await buildStyledGeoJsonDataSource(limited.source, clamp, item);
+        const ds = await buildStyledGeoJsonDataSource(limited.source, vectorDrape, item);
         try { ds.show = item.visible; } catch (e) {}
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
@@ -2769,10 +2786,10 @@ function registerPrimitiveLayer(item, primitive, geojson = null) {
 }
 
 // ドレープ先(地形/3D Tiles)に応じた GeoJsonPrimitive 用の HeightReference を返す
-function primitiveDrapeHeightReference(drape3DTiles) {
-  if (drapeTerrainSources.dem && drape3DTiles) return Cesium.HeightReference.CLAMP_TO_GROUND;
-  if (drape3DTiles) return Cesium.HeightReference.CLAMP_TO_3D_TILE;
-  if (drapeTerrainSources.dem) return Cesium.HeightReference.CLAMP_TO_TERRAIN;
+function primitiveDrapeHeightReference(dem, tiles3d) {
+  if (dem && tiles3d) return Cesium.HeightReference.CLAMP_TO_GROUND;
+  if (tiles3d) return Cesium.HeightReference.CLAMP_TO_3D_TILE;
+  if (dem) return Cesium.HeightReference.CLAMP_TO_TERRAIN;
   return Cesium.HeightReference.CLAMP_TO_GROUND;
 }
 
@@ -2791,13 +2808,22 @@ function isDrape3DTilesActive() {
   return drapeTerrainSources.tiles3d && layers.some(l => l.visible && l.type === "3dtiles");
 }
 
-async function buildStyledGeoJsonDataSource(source, clamp, item = null) {
+// 対象地形ごとのベクタードレープ(entity 経路)指定を返す。
+// { dem, tiles3d } のどちらかが true のときオブジェクト、どちらも対象外なら null
+function getVectorDrapeFlags() {
+  const dem = drapeLayers.dem.geojson && drapeTerrainSources.dem;
+  const tiles3d = drapeLayers.tiles3d.geojson && isDrape3DTilesActive();
+  return dem || tiles3d ? { dem, tiles3d } : null;
+}
+
+// drape: getVectorDrapeFlags() の戻り値(null または {dem, tiles3d})
+async function buildStyledGeoJsonDataSource(source, drape, item = null) {
+  const clamp = !!drape;
   let classification;
-  if (clamp) {
-    const drape3DTiles = isDrape3DTilesActive();
-    if (drapeTerrainSources.dem && drape3DTiles) classification = Cesium.ClassificationType.BOTH;
-    else if (drape3DTiles) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
-    else if (drapeTerrainSources.dem) classification = Cesium.ClassificationType.TERRAIN;
+  if (drape) {
+    if (drape.dem && drape.tiles3d) classification = Cesium.ClassificationType.BOTH;
+    else if (drape.tiles3d) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
+    else if (drape.dem) classification = Cesium.ClassificationType.TERRAIN;
   }
   const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp });
   // GeoJsonDataSource は polygon/polyline に arcType=RHUMB を設定するが、
@@ -2839,7 +2865,7 @@ async function reloadVectorLayer(item) {
   if (isViewportQueryLayer(item)) updateViewportFilter(item);
   if (item.styleUrl) await ensureQmlStyle(item);
   const geojson = await decoder.load(item);
-  const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || isDrape3DTilesActive());
+  const vectorDrape = getVectorDrapeFlags();
   const hadLimited = !!item.entityLimited;
   if (item.renderPrimitive && Cesium.GeoJsonPrimitive) {
     if (oldPrimitive) {
@@ -2855,7 +2881,7 @@ async function reloadVectorLayer(item) {
     return;
   }
   const limited = limitGeoJsonFeatures(geojson, getVectorEntityLimit(), item);
-  const ds = await buildStyledGeoJsonDataSource(limited.source, clamp, item);
+  const ds = await buildStyledGeoJsonDataSource(limited.source, vectorDrape, item);
   try { ds.show = item.visible; } catch (e) {}
   if (hadLimited || item.entityLimited) renderLayerList();
   viewer.dataSources.remove(entry.ds, false);
@@ -2937,8 +2963,7 @@ async function resliceViewportLayer(item, remaining) {
     return prev.length;
   }
   const limited = limitGeoJsonFeatures(viewSource, remaining, item);
-  const clamp = drapeLayers.geojson && (drapeTerrainSources.dem || isDrape3DTilesActive());
-  const ds = await buildStyledGeoJsonDataSource(limited.source, clamp, item);
+  const ds = await buildStyledGeoJsonDataSource(limited.source, getVectorDrapeFlags(), item);
   try { ds.show = item.visible; } catch (e) {}
   await viewer.dataSources.add(ds);
   viewer.dataSources.remove(entry.ds, false);
@@ -4137,19 +4162,19 @@ function setupEvents() {
     refreshLayers();
   });
 
-  document.querySelector("#drape-xyz").addEventListener("change", event => {
-    drapeLayers.xyz = event.target.checked;
-    refreshLayers();
-  });
-
-  document.querySelector("#drape-geojson").addEventListener("change", event => {
-    drapeLayers.geojson = event.target.checked;
-    refreshLayers();
-  });
-
-  document.querySelector("#drape-geojson-primitive")?.addEventListener("change", event => {
-    geojsonPrimitiveDrape = event.target.checked;
-    refreshLayers();
+  // ドレープ対象地形ごとの適用レイヤー(DEM / 3D Tiles × XYZ / ベクター / 高速ドレープ)
+  [
+    ["#drape-xyz-dem", "dem", "xyz"],
+    ["#drape-geojson-dem", "dem", "geojson"],
+    ["#drape-geojson-primitive-dem", "dem", "primitive"],
+    ["#drape-xyz-tiles3d", "tiles3d", "xyz"],
+    ["#drape-geojson-tiles3d", "tiles3d", "geojson"],
+    ["#drape-geojson-primitive-tiles3d", "tiles3d", "primitive"],
+  ].forEach(([selector, target, kind]) => {
+    document.querySelector(selector)?.addEventListener("change", event => {
+      drapeLayers[target][kind] = event.target.checked;
+      refreshLayers();
+    });
   });
 
   // ベクター描画件数の上限(フリーズ防止)。変更時は全レイヤーを再描画して反映
@@ -5343,7 +5368,16 @@ function setupEvents() {
     return "fsa";
   }
 
-  async function _ensureDrawnRouteFlyPath() {
+  // 並行呼び出し（init・Drawタブ・addFlyPath 等）が既存チェックのスナップショットで
+  // 重複登録するのを防ぐため、処理は直列化する
+  let drawnRouteEnsureQueue = Promise.resolve();
+  function _ensureDrawnRouteFlyPath() {
+    const run = drawnRouteEnsureQueue.then(() => ensureDrawnRouteFlyPathInner());
+    drawnRouteEnsureQueue = run.catch(() => {});
+    return run;
+  }
+
+  async function ensureDrawnRouteFlyPathInner() {
     const projectId = currentProjectId || "default";
     const existing = new Set(flyPaths.map(p => p.title));
     // IndexedDB の描画ルート（ピッカー・権限不要）
@@ -5390,6 +5424,7 @@ function setupEvents() {
   }
   window._ensureDrawnRouteFlyPath = _ensureDrawnRouteFlyPath;
   window._routeStoreGet = (projectId, name) => routeStore.get(projectId, name);
+  window._routeStoreSet = (projectId, name, text) => routeStore.set(projectId, name, text);
 
   document.querySelector("#inspector-data-dir")?.addEventListener("click", async () => {
     if (!window.showDirectoryPicker) {
@@ -6483,6 +6518,7 @@ function updateChatPanelVisibility() {
 function setupGoogleSettings() {
   const keyInput = document.querySelector("#google-api-key");
   const modelSelect = document.querySelector("#google-gemini-model");
+  const stepsInput = document.querySelector("#google-tool-max-steps");
   const saveButton = document.querySelector("#google-settings-save");
   const status = document.querySelector("#google-settings-status");
   if (!keyInput || !saveButton) return;
@@ -6490,11 +6526,16 @@ function setupGoogleSettings() {
     keyInput.value = localStorage.getItem("googleApiKey") || "";
     const savedModel = localStorage.getItem("googleGeminiModel");
     if (savedModel && modelSelect) modelSelect.value = savedModel;
+    if (stepsInput) stepsInput.value = String(getChatMaxToolSteps());
   } catch (e) {}
   saveButton.addEventListener("click", () => {
     try {
       localStorage.setItem("googleApiKey", keyInput.value.trim());
       if (modelSelect) localStorage.setItem("googleGeminiModel", modelSelect.value);
+      if (stepsInput) {
+        localStorage.setItem("geminiToolMaxSteps", String(clampToolSteps(stepsInput.value)));
+        stepsInput.value = String(getChatMaxToolSteps());
+      }
       updateChatPanelVisibility();
       if (status) status.textContent = t("common.saved");
     } catch (e) {
@@ -7681,6 +7722,37 @@ window.kasugaiApi = {
     if (uiHooks.setMode) uiHooks.setMode("orbit");
     return true;
   },
+  // AI が GeoJSON LineString から飛行ルートを作成する。
+  // 手描きルートと同じ IndexedDB ストアに保存し ensureDrawnRouteFlyPath 経由で
+  // flyPaths に登録するため、リロード後も描画ルートとして復元される
+  async addFlyPath(name, geojson, options = {}) {
+    const title = String(name || "").trim();
+    let parsed = null;
+    try { parsed = typeof geojson === "string" ? JSON.parse(geojson) : geojson; } catch (e) { parsed = null; }
+    if (!title || !parsed || !extractLineStringCoordinates(parsed).length) return { ok: false };
+    const text = typeof geojson === "string" ? geojson : JSON.stringify(geojson);
+    if (window._routeStoreSet) await window._routeStoreSet(currentProjectId || "default", title, text);
+    const prev = flyPaths.findIndex(p => p.title === title);
+    if (prev >= 0) flyPaths.splice(prev, 1);
+    await ensureDrawnRouteFlyPath();
+    if (!flyPaths.some(p => p.title === title)) {
+      // routeStore 未初期化時のフォールバック: blob URL の一時登録
+      const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
+      flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera" });
+    }
+    const entry = flyPaths.find(p => p.title === title);
+    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+    if (entry) {
+      if (num(options.speed) > 0) entry.speed = num(options.speed);
+      if (num(options.height) !== undefined) entry.height = num(options.height);
+      if (num(options.pitch) !== undefined) entry.pitch = num(options.pitch);
+      if (num(options.step) > 0) entry.step = num(options.step);
+      if (options.loop !== undefined) entry.loop = !!options.loop;
+      if (options.view !== undefined) entry.view = /^(center|chase|follow|3rd|third)$/i.test(String(options.view)) ? "center" : "camera";
+    }
+    renderFlyPathSelect();
+    return { ok: !!entry, name: title };
+  },
   listProjects() {
     const select = document.querySelector("#project-select");
     if (!select) return [];
@@ -8365,6 +8437,23 @@ const CHAT_TOOLS = [{
       parameters: { type: "OBJECT", properties: {} },
     },
     {
+      name: "addFlyPath",
+      description: "GeoJSONのLineStringから飛行ルート(フライパス)を作成する。描画ルートとして保存され、listFlyPathsで確認・playFlyPathで再生できる。「○○を巡るルートを作って」「このルートで飛んで」等に使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "ルート名" },
+          geojson: { type: "OBJECT", description: "LineStringまたはMultiLineStringを含むGeoJSON(FeatureCollection/Feature/ジオメトリいずれも可)。座標は[経度,緯度,高度(省略可)]" },
+          speed: { type: "NUMBER", description: "走行速度(m/s・省略時30)" },
+          height: { type: "NUMBER", description: "カメラの高さオフセット(m・省略時0)" },
+          pitch: { type: "NUMBER", description: "カメラピッチ(度・省略時-10)" },
+          loop: { type: "BOOLEAN", description: "ループ再生(省略時false)" },
+          view: { type: "STRING", description: "視点: camera(一人称・既定)/center(ルート中心俯瞰)" },
+        },
+        required: ["name", "geojson"],
+      },
+    },
+    {
       name: "vectorSearch",
       description: "読み込み済みベクトルデータ(GeoJSON等)の属性を検索し、該当する属性名・値・位置を返す。結果の緯度経度へはflyToFeatureで移動できる",
       parameters: {
@@ -8432,7 +8521,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "applyInspector",
-      description: "インスペクターの設定テキスト(.kasc形式)を登録・適用する。設定全体が上書きされるので、ユーザーが明示した場合のみ使う",
+      description: "インスペクターの設定テキスト(.kasc形式)を登録・適用する。データレイヤー行のhttp(s) URLは適用前に実在確認され、到達不能なものがあると拒否される。設定全体が上書きされるので、ユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -8469,7 +8558,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addLayer",
-      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は duckdb 以外はURLまたは DATA/相対パス、sql は SELECT 文。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は duckdb 以外はURLまたは DATA/相対パス、sql は SELECT 文。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -8483,7 +8572,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addGeoJsonLayer",
-      description: "GeoJSONレイヤをURL指定で追加して即座に適用する(urlはDATA/相対パスまたは外部URL)。他形式は addLayer を使う。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "GeoJSONレイヤをURL指定で追加して即座に適用する(urlはDATA/相対パスまたは外部URL)。他形式は addLayer を使う。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -8659,6 +8748,17 @@ const CHAT_TOOLS = [{
         required: ["name"],
       },
     },
+    {
+      name: "setToolMaxSteps",
+      description: "ツール実行の上限往復数を変更する。1回の指示でエージェントが繰り返せるツール実行の回数(1-20)。ユーザーが上限の引き上げ・引き下げを求めたときに使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          steps: { type: "NUMBER", description: "新しい上限往復数(1-20)" },
+        },
+        required: ["steps"],
+      },
+    },
   ],
 }];
 
@@ -8794,6 +8894,51 @@ async function applyDroneViewDefaults(args) {
   return merged;
 }
 
+// AI が提示した URL 指定レイヤーの実在確認（架空・存在しない URL の登録を防ぐ）。
+// http(s) 以外（DATA/ 相対パス・sql文等）と proxy=on 指定（直接取得しなくてよい）は検証しない
+async function verifyToolTargetUrl(target, options = "") {
+  const url = String(target || "");
+  if (!/^https?:\/\//i.test(url)) return { ok: true };
+  if (/proxy\s*=\s*(on|true|1)/i.test(String(options))) return { ok: true };
+  try {
+    // ローカル版は /api/fetch 経由で実在確認(CORSに左右されずレイヤー読み込みと同じ経路)
+    if (hasBackendFeature("fetchProxy")) {
+      const res = await fetch(`${location.origin}/api/fetch?url=${encodeURIComponent(url)}`);
+      return res.ok ? { ok: true } : { ok: false, status: res.status };
+    }
+    let res = await fetch(url, { method: "HEAD" });
+    if (res.status === 405 || res.status === 501) res = await fetch(url, { method: "GET" });
+    return res.ok ? { ok: true } : { ok: false, status: res.status };
+  } catch (e) {
+    return { ok: false, status: String(e && e.message || e) };
+  }
+}
+
+// applyInspector 用。.kasc テキスト中のデータレイヤー行(タイプ:タイトル|URL|オプション)で
+// 新規追加される http(s) URL を一括実在確認する。タイル系({x}{y}{z}プレースホルダ)・
+// route:/DATA/相対パス・proxy=on 指定は対象外。既存行に既に含まれる URL は再検証しない
+// (CORS非対応でも現状動いているURL・一時的な障害で設定全体の適用を妨げないため)
+const INSPECTOR_URL_LAYER_TYPES = new Set(["geojson", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "layer", "fly_geojson"]);
+
+async function findUnreachableInspectorUrls(text) {
+  const currentText = document.querySelector("#inspector-input")?.value || "";
+  const targets = [];
+  for (const rawLine of String(text || "").split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const sep = line.indexOf(":");
+    if (sep < 0) continue;
+    if (!INSPECTOR_URL_LAYER_TYPES.has(line.slice(0, sep).toLowerCase())) continue;
+    const parts = line.slice(sep + 1).split("|").map(part => part.trim());
+    const target = parts[1] || "";
+    if (!/^https?:\/\//i.test(target) || target.includes("{")) continue;
+    if (parts.slice(2).some(part => /^proxy\s*=\s*(on|true|1)$/i.test(part))) continue;
+    if (currentText.includes(target)) continue;
+    targets.push(target);
+  }
+  const checks = await Promise.all([...new Set(targets)].map(async url => ({ url, ...(await verifyToolTargetUrl(url)) })));
+  return checks.filter(check => !check.ok);
+}
+
 async function executeChatTool(name, args = {}) {
   if (name === "flyTo") {
     flyTo(await applyDroneViewDefaults(args));
@@ -8869,6 +9014,10 @@ async function executeChatTool(name, args = {}) {
     return { ok, message: ok ? undefined : t("tool.flyPathNotFound", { name: args.name }) };
   }
   if (name === "stopFly") return { ok: window.kasugaiApi.stopFly() };
+  if (name === "addFlyPath") {
+    const result = await window.kasugaiApi.addFlyPath(args.name, args.geojson, { speed: args.speed, height: args.height, pitch: args.pitch, loop: args.loop, view: args.view });
+    return result?.ok ? { ok: true, name: result.name } : { ok: false, message: t("tool.invalidGeoJson") };
+  }
   if (name === "vectorSearch") return { results: window.kasugaiApi.vectorSearch(args.query) };
   if (name === "getShareUrl") return { url: window.kasugaiApi.getShareUrl() };
   if (name === "buildShareUrl") return { url: window.kasugaiApi.buildShareUrl(args) };
@@ -8879,7 +9028,13 @@ async function executeChatTool(name, args = {}) {
     return { ok, message: ok ? undefined : t("tool.projectNotFound", { name: args.projectId }) };
   }
   if (name === "toggleDrawMode") return window.kasugaiApi.toggleDrawMode();
-  if (name === "applyInspector") return { ok: window.kasugaiApi.applyInspector(args.text) };
+  if (name === "applyInspector") {
+    const bad = await findUnreachableInspectorUrls(args.text);
+    if (bad.length) {
+      return { ok: false, message: t("tool.urlsUnreachable", { urls: bad.map(b => `${b.url}(${b.status})`).join(", ") }) };
+    }
+    return { ok: window.kasugaiApi.applyInspector(args.text) };
+  }
   if (name === "exportInspector") return { ok: window.kasugaiApi.exportInspector() };
   if (name === "checkUpdate") return { ok: window.kasugaiApi.checkUpdate() };
   if (name === "installUpdate") {
@@ -8894,8 +9049,16 @@ async function executeChatTool(name, args = {}) {
       return { ok: false, message: String(error && error.message || error) };
     }
   }
-  if (name === "addLayer") return { ok: window.kasugaiApi.addLayer(args.title, args.target, { type: args.type, options: args.options }) };
-  if (name === "addGeoJsonLayer") return { ok: window.kasugaiApi.addGeoJsonLayer(args.title, args.url) };
+  if (name === "addLayer") {
+    const check = await verifyToolTargetUrl(args.target, args.options);
+    if (!check.ok) return { ok: false, message: t("tool.urlUnreachable", { status: check.status }) };
+    return { ok: window.kasugaiApi.addLayer(args.title, args.target, { type: args.type, options: args.options }) };
+  }
+  if (name === "addGeoJsonLayer") {
+    const check = await verifyToolTargetUrl(args.url);
+    if (!check.ok) return { ok: false, message: t("tool.urlUnreachable", { status: check.status }) };
+    return { ok: window.kasugaiApi.addGeoJsonLayer(args.title, args.url) };
+  }
   if (name === "shutdownApp") return { ok: window.kasugaiApi.shutdownApp() };
   if (name === "savePlugin") {
     // 生成コードの適用前にユーザーへ全文確認を取る（プラグインはフル権限で動くため）
@@ -8958,6 +9121,9 @@ async function executeChatTool(name, args = {}) {
     const ok = await window.kasugaiApi.removeDataLayer(args.name);
     return { ok, message: ok ? undefined : t("tool.layerNotFound", { name: args.name }) };
   }
+  if (name === "setToolMaxSteps") {
+    return { ok: true, steps: setChatMaxToolSteps(args.steps) };
+  }
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 
@@ -8974,6 +9140,27 @@ function aiProxyEndpoint() {
   }
 }
 
+// AI チャットのツール実行ループ上限（往復数）。無限ループ防止の安全弁。
+// 設定は localStorage "geminiToolMaxSteps"（Gemini 設定パネル）。未設定・不正値は 10、範囲 1-20。
+function clampToolSteps(value) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.min(Math.max(n, 1), 20) : 10;
+}
+function getChatMaxToolSteps() {
+  try {
+    return clampToolSteps(localStorage.getItem("geminiToolMaxSteps") || "10");
+  } catch (e) { return 10; }
+}
+// AIツール(setToolMaxSteps)からも呼ばれる setter。localStorage へ保存し、
+// Gemini 設定パネルの入力欄が開いていれば表示も同期する
+function setChatMaxToolSteps(value) {
+  const n = clampToolSteps(value);
+  try { localStorage.setItem("geminiToolMaxSteps", String(n)); } catch (e) {}
+  const el = document.querySelector("#google-tool-max-steps");
+  if (el) el.value = String(n);
+  return n;
+}
+
 // Gemini generateContent を呼び、function calling の往復を処理する
 async function callGemini(history) {
   const apiKey = window.kasugaiApi.getGoogleApiKey();
@@ -8987,7 +9174,17 @@ async function callGemini(history) {
   if (proxy && window.kasugaiAuth?.token) {
     headers["Authorization"] = `Bearer ${window.kasugaiAuth.token}`;
   }
-  for (let step = 0; step < 5; step++) {
+  let maxSteps = getChatMaxToolSteps();
+  for (let step = 0; ; step++) {
+    if (step >= maxSteps) {
+      // 上限到達 — 続行するかユーザーに確認。承認なら現行の設定値を1枠追加して延長。
+      // ループ中に AI が setToolMaxSteps で上限を変えていれば新しい値がここで効く
+      const increment = getChatMaxToolSteps();
+      if (!window.confirm(t("chat.toolLimitContinue", { steps: increment }))) {
+        return { text: t("chat.toolLimit"), executed };
+      }
+      maxSteps += increment;
+    }
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
@@ -9015,7 +9212,6 @@ async function callGemini(history) {
     }
     history.push({ role: "user", parts: responseParts });
   }
-  return { text: t("chat.toolLimit"), executed };
 }
 
 function setupChatPanel() {

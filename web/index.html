@@ -146,11 +146,17 @@
               <section id="display-drape-panel" class="settings-subpanel">
                 <span class="field-label" data-i18n="settings.layer.drapeTarget">ドレープ対象地形</span>
                 <label><input id="drape-terrain-dem" type="checkbox" checked /> DEM</label>
+                <div class="drape-sub-group">
+                  <label><input id="drape-xyz-dem" type="checkbox" checked /> XYZ</label>
+                  <label><input id="drape-geojson-dem" type="checkbox" checked /> ベクター</label>
+                  <label><input id="drape-geojson-primitive-dem" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> ベクター高速ドレープ (実験的)</span></label>
+                </div>
                 <label><input id="drape-terrain-tiles3d" type="checkbox" /> 3D Tiles</label>
-                <span class="field-label" data-i18n="settings.layer.drapeApply">ドレープを適用するレイヤー</span>
-                <label><input id="drape-xyz" type="checkbox" checked /> XYZ</label>
-                <label><input id="drape-geojson" type="checkbox" checked /> ベクター</label>
-                <label><input id="drape-geojson-primitive" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> ベクター高速ドレープ (実験的)</span></label>
+                <div class="drape-sub-group">
+                  <label><input id="drape-xyz-tiles3d" type="checkbox" checked /> XYZ</label>
+                  <label><input id="drape-geojson-tiles3d" type="checkbox" checked /> ベクター</label>
+                  <label><input id="drape-geojson-primitive-tiles3d" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> ベクター高速ドレープ (実験的)</span></label>
+                </div>
                 <p class="hint" data-i18n="settings.layer.primitiveHint">CesiumJS 1.146 の GeoJsonPrimitive を使い、ベクターレイヤー(GeoJSON/GeoParquet/FlatGeobuf)を高品質・高速に地形や 3D Tiles にドレープします。有効時はベクター検索・属性クリックの対象外になります。</p>
                 <label class="field-label" for="vector-entity-limit" data-i18n="settings.layer.vectorLimit">ベクター描画件数の上限</label>
                 <input id="vector-entity-limit" type="number" min="0" step="1000" value="20000" />
@@ -282,6 +288,9 @@
                     <option value="gemini-3.5-flash">gemini-3.5-flash</option>
                     <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
                   </select>
+                  <label class="field-label" for="google-tool-max-steps" style="margin-top:10px;" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>
+                  <input id="google-tool-max-steps" type="number" min="1" max="20" step="1" />
+                  <p class="hint" data-i18n="google.gemini.toolStepsHint">1回の指示でエージェントがツール実行を繰り返せる回数（既定: 10・範囲 1〜20）。複雑な指示ほど大きくしますが、暴走時のコストも増えます。</p>
                   <div class="terrain-options" style="margin-top:10px;">
                     <button id="google-settings-save" type="button" data-i18n="common.save">保存</button>
                   </div>

@@ -9,7 +9,7 @@
   5. シークレット登録（--gemini-api-key / --auth-user・--auth-pass）と
      実行サービスアカウントへの権限付与
   6. GCS バケット（--bucket 指定時）の確認・作成と権限付与
-  7. gcloud run deploy（--allow-unauthenticated --min-instances 1）
+  7. gcloud run deploy（--allow-unauthenticated --min-instances 0。※--min-instances 引数で変更可）
   8. 簡易動作確認（/health・/api/capabilities・トップページ）
 
 Cloud Shell（ブラウザ）でもローカルの Google Cloud SDK でも実行できる。
@@ -381,7 +381,8 @@ def upload_kasc(spec, project: str, bucket: str | None) -> None:
 
 
 def deploy(project: str, region: str, service: str, image: str,
-           envs: list[str], secrets: list[str], auth_mode: str | None) -> None:
+           envs: list[str], secrets: list[str], auth_mode: str | None,
+           min_instances: str = "0") -> None:
     print(f"[7/8] Cloud Run にデプロイします: {service}（{region}）", flush=True)
     if auth_mode:
         envs = envs + [f"KASUGAI_AUTH_MODE={auth_mode}"]
@@ -389,7 +390,7 @@ def deploy(project: str, region: str, service: str, image: str,
         "run", "deploy", service,
         "--image", image,
         f"--region={region}", f"--project={project}",
-        "--allow-unauthenticated", "--min-instances=1",
+        "--allow-unauthenticated", f"--min-instances={min_instances or '0'}",
     ]
     if envs:
         args += ["--set-env-vars", ",".join(envs)]
@@ -460,6 +461,7 @@ def main() -> None:
     parser.add_argument("--auth-pass", help="認証モードのパスワード（初回のみ必要）")
     parser.add_argument("--bucket", help=".kasc・秘匿データを保存する GCS バケット名（無ければ作成）")
     parser.add_argument("--kasc", help="Cloud Run 版の初期 .kasc（既定: agent/cloudrun.kasc。PROJ:FILE でプロジェクト指定・none で無効化）")
+    parser.add_argument("--min-instances", help="最小インスタンス数（既定: 0＝スケールトゥゼロ。審査期間中の常駐化は 1）")
     args = parser.parse_args()
 
     # 前回デプロイ時の非秘密設定を既定値として引き継ぐ（引数指定が優先）
@@ -479,7 +481,8 @@ def main() -> None:
     sa = compute_sa(project)
     secrets = setup_secrets(args, project, sa, auth_mode)
     envs = setup_bucket(project, region, sa, bucket, auth_mode)
-    deploy(project, region, service, image, envs, secrets, auth_mode)
+    deploy(project, region, service, image, envs, secrets, auth_mode,
+           min_instances=args.min_instances or "0")
     upload_kasc(args.kasc, project, bucket)
     verify(service_url(project, region, service))
     save_config({

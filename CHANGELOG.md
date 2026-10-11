@@ -4,6 +4,28 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.15.0] - 2026-10-12
+
+### Added
+
+- AI チャットのツール実行上限を設定化 — Gemini 設定パネルの「ツール実行の上限往復数」（既定 10・1〜20 でクランプ）で変更可能に。上限到達時は一度中断してユーザーに継続確認を出し、承認なら現行設定値ぶんを 1 枠追加して続行、拒否なら中断
+- `setToolMaxSteps` ツール — AI への指示（「上限を 15 にして」等）でツール実行上限を変更（設定パネル・localStorage と同一の設定を更新）
+- `addFlyPath` ツール — GeoJSON LineString / MultiLineString から飛行ルートを生成・登録。手描きルートと同じ IndexedDB ストアに保存されるためリロード後も復元。`listFlyPaths` → `playFlyPath` と連携し「地点を巡るルートを作って飛んで」が一連の指示で完結
+- AI へのデータ作成指示で形式未指定の場合、GeoJSON を生成して `addDataLayer` で即表示する既定動作をシステム指示に明文化（全 8 言語）
+- AI が URL 指定で追加するレイヤーの実在確認 — `addLayer` / `addGeoJsonLayer` は適用前に http(s) URL への到達確認を行い、存在しない・到達不能な URL は拒否して理由をモデルへ返す。`applyInspector` は設定内で新規追加されるデータレイヤー行の URL のみ一括確認（`proxy=on`・`DATA/` 相対パス・タイル系・既存行の URL は対象外。ローカル版は `/api/fetch` 経由で検証）
+- チャットの AI 応答を Markdown 描画に対応
+- AI の位置リンク案内に自オリジン URL をシステム指示へ追加
+
+### Changed
+
+- ドレープ設定を対象地形ごとの個別選択に変更 — 「ドレープを適用するレイヤー」の共通選択を廃止し、DEM／3D Tiles それぞれの直下に XYZ・ベクター・ベクター高速ドレープ（実験的）のチェックを配置。対象ごとに適用レイヤーを独立して選べる（例: XYZ は 3D Tiles のみ、ベクターは DEM のみ）
+- `window._viewer` を開発者ツール・E2E 検証向けに公開（内部向けのデバッグ面）
+
+### Fixed
+
+- `.kasc` 宣言の Google 3D Tiles レイヤーと組み込みトグルの二重登録を解消
+- `ensureDrawnRouteFlyPath` の並行実行で同一描画ルートが多重登録される競合を直列化で修正
+
 ## [5.14.0] - 2026-10-11
 
 ### Added
