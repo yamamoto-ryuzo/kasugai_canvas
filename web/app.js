@@ -9021,7 +9021,10 @@ function setupChatPanel() {
   const addMessage = (role, text, { persist = true } = {}) => {
     const div = document.createElement("div");
     div.className = `chat-message ${role}`;
-    div.textContent = text;
+    // assistant の応答は Markdown（見出し・箇条書き・リンク・コード等）として描画。
+    // renderMarkdownLite は内部で escapeHtml 済みのため安全
+    if (role === "assistant") div.innerHTML = renderMarkdownLite(text);
+    else div.textContent = text;
     messages.append(div);
     messages.scrollTop = messages.scrollHeight;
     if (persist) saveChatLog(role, text);
