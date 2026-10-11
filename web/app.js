@@ -8662,7 +8662,8 @@ const CHAT_TOOLS = [{
   ],
 }];
 
-const chatSystemInstruction = () => t("chat.systemInstruction");
+// AI に自オリジンを教える — 位置リンクの案内でデプロイ先と異なるドメインを推測させないため
+const chatSystemInstruction = () => `${t("chat.systemInstruction")} ${t("chat.systemInstructionAppUrl", { url: `${window.location.origin}${window.location.pathname}` })}`;
 
 // バックエンドの能力に応じて公開するツールを絞る（公開環境に高権限ツールを見せない）
 // Mapsキー必須のツール・ローカルサーバー版のファイル書込みツールも同様に条件付き
