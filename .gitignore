@@ -1,5 +1,6 @@
 /server/target/
 __pycache__/
+/kasugai_canvas.cloudrun.json
 /browser-profile*
 /.testtmp/
 *.log

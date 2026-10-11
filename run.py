@@ -329,6 +329,25 @@ def publish_release() -> None:
     print(f"バージョン {cargo_version} をリモートへプッシュしました。")
 
 
+def deploy_cloudrun() -> None:
+    """run-cloudrun.py で Cloud Run へデプロイする。
+
+    設定は kasugai_canvas.cloudrun.json（初回の run-cloudrun.py 実行で作成）を
+    引き継ぐ。gcloud CLI のインストールと認証（gcloud auth login）が前提。
+    """
+    script = ROOT / "run-cloudrun.py"
+    if not script.exists():
+        raise SystemExit("run-cloudrun.py が見つかりません。")
+    if not (ROOT / "kasugai_canvas.cloudrun.json").exists():
+        raise SystemExit(
+            "kasugai_canvas.cloudrun.json がありません。初回は引数付きで実行してください:\n"
+            "  python run-cloudrun.py --gemini-api-key KEY --auth-mode 5 \\\n"
+            "    --auth-user ID --auth-pass PASS --bucket BUCKET"
+        )
+    print("Cloud Run へデプロイします...", flush=True)
+    subprocess.run([sys.executable, str(script)], cwd=ROOT, check=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="KASUGAI Canvas ランチャー")
     group = parser.add_mutually_exclusive_group()
@@ -353,6 +372,11 @@ def main() -> None:
         "--sync",
         action="store_true",
         help="server/Cargo.toml のバージョンを他の公開ファイルへ同期",
+    )
+    parser.add_argument(
+        "--cloudrun",
+        action="store_true",
+        help="Cloud Run へデプロイ（kasugai_canvas.cloudrun.json の設定を使用。--publish と併用可）",
     )
     parser.add_argument(
         "build_short",
@@ -384,10 +408,16 @@ def main() -> None:
             )
     elif args.build:
         build_release()
+        if args.cloudrun:
+            deploy_cloudrun()
     elif args.release:
         run_release()
     elif args.publish:
         publish_release()
+        if args.cloudrun:
+            deploy_cloudrun()
+    elif args.cloudrun:
+        deploy_cloudrun()
     else:
         run_dev()
 
