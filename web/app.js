@@ -8923,10 +8923,16 @@ async function callGemini(history) {
   const proxy = apiKey ? "" : aiProxyEndpoint();
   const endpoint = proxy || `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const executed = [];
+  // プロキシ経由の場合、認証モードではログイン済みの kasugai トークンが必須。
+  // 直接 Gemini を呼ぶ経路（BYO キー）には付けない（内部トークンを外部へ送らない）
+  const headers = { "Content-Type": "application/json" };
+  if (proxy && window.kasugaiAuth?.token) {
+    headers["Authorization"] = `Bearer ${window.kasugaiAuth.token}`;
+  }
   for (let step = 0; step < 5; step++) {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
         ...(proxy ? { model } : {}),
         systemInstruction: { parts: [{ text: chatSystemInstruction() }] },

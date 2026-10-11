@@ -28,9 +28,12 @@ function cookieToken(request) {
 
 async function authorized(request, env) {
   const secret = env.KASUGAI_TOKEN_SECRET || env.KASUGAI_AUTH_PASS;
+  const presented = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "");
+  // kasugai トークンは Cookie（workers 全ゲート）または Bearer（mode3/5 の JSON トークン）
   if (secret && (await verifyToken(cookieToken(request), secret))) return true;
+  if (secret && presented && (await verifyToken(presented, secret))) return true;
   const bearer = env.ANTIGRAVITY_TOKEN;
-  if (bearer && request.headers.get("Authorization") === `Bearer ${bearer}`) return true;
+  if (bearer && presented === bearer) return true;
   return !secret && !bearer;
 }
 
