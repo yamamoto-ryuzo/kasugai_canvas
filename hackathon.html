@@ -40,6 +40,131 @@
         </tbody>
       </table>
 
+      <h2 id="motivation">なぜこのシステムが必要か・誰のためのシステムか</h2>
+      <p>渋谷ミニハッカソンで痛感したのは、多くの現場で GIS が「地図を描くツール」にとどまり、「場と情報を一体化させて理解を支援する基盤」として使われていない点です。KASUGAI Canvas は、本来あるべき GIS の姿を実現することを目指します。</p>
+
+      <h3>現場の課題（渋谷ミニハッカソンでの課題発掘）</h3>
+      <div class="features">
+        <div class="feature-card">
+          <h3>地図情報の伝わりにくさ</h3>
+          <p>「地図情報がどのようなものか、何ができるか」が相手に正しく伝わりにくい。PDF 等の資料では実際の内容が正確に伝わらない。</p>
+        </div>
+        <div class="feature-card">
+          <h3>地図と情報の分断</h3>
+          <p>地図と情報が分断されやすく、地図が資料から孤立した「作り物」として残ってしまう。本来の価値が伝わらない。</p>
+        </div>
+        <div class="feature-card">
+          <h3>空中戦・取り残され</h3>
+          <p>会議等で位置や場所に詳しくない人が取り残され、理解が深まらないまま会議が進む「空中戦」が起きる。</p>
+        </div>
+      </div>
+      <h3>現在の対応とつらい点</h3>
+      <table>
+        <thead>
+          <tr><th>段階</th><th>内容</th><th>課題</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>事前の行動</td><td>説明できる事例をあらかじめ集める</td><td>GIS 自体の理解が浅く、何を示せばよいか分からない。実例も手間で作れない</td></tr>
+          <tr><td>資料化</td><td>PDF 等にまとめる</td><td>実際の地図・空間情報の操作性や詳細が正確に伝わりにくい</td></tr>
+          <tr><td>完成時</td><td>喜ばれる</td><td>ただし、作るまでに情報の伝達・分断・空中戦が発生しやすい</td></tr>
+        </tbody>
+      </table>
+      <p><strong>対象ユーザー：</strong>GIS 導入を検討する現場担当者、GIS 専門家ではない会議参加者、位置情報で合意形成したいチーム — 本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験したい人々です。</p>
+
+      <h3>一番大事なこと：GIS で「何ができて、何が解決できるか」を先に体験する</h3>
+      <p>結局、最も重要なのは、<strong>「GIS を使うことで何ができて、どんな課題が解決できるか」を本番導入前に体験できるか</strong>ということです。GIS 導入が進まない、あるいは導入されても活用されない現場の多くは、GIS 自体の理解が不足していることが原因です。</p>
+      <p>そのためのエージェントこそが、KASUGAI Canvas の ANTIGRAVITY 情報レイヤーです。</p>
+      <ul>
+        <li><strong>体験を先に：</strong>本番データを必要とせず、サンプル・資料・GIS が連動した状態で「GIS ならではの理解」を体験</li>
+        <li><strong>理解を深める：</strong>地図と情報の一体化、レイヤーの切り替え、FlyTo・属性表示など、GIS の利点を実感</li>
+        <li><strong>正しい導入判断へ：</strong>体験を通じて「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らす</li>
+      </ul>
+
+      <h3>ANTIGRAVITY エージェント：目標と 3 つの機能</h3>
+      <p>ANTIGRAVITY エージェントの<strong>目標</strong>は、利用者を<strong>正しい GIS 導入判断と課題解決へ導く</strong>ことです。そのために、以下 3 つの機能を実装しています。</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>自然言語からレイヤーと属性を自動構成</h3>
+          <p>「○○の資料を作って」と話すだけで、必要な地図レイヤー・属性・凡例・カメラ位置を選定・構成します（実在施設の検索 <code>searchPlaces</code>・URL 指定レイヤー <code>addLayer</code>・生成 GeoJSON の <code>addDataLayer</code>）。</p>
+        </div>
+        <div class="feature-card">
+          <h3>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</h3>
+          <p>本番データがなくても、エリア・業種・目的に応じた架空サンプルを GeoJSON で生成。地図と情報の一体化、レイヤー切り替え、FlyTo、属性表示など、GIS ならではの理解を実感してもらう。</p>
+        </div>
+        <div class="feature-card">
+          <h3>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</h3>
+          <p>レイヤー・属性から課題を抽出し、その平面（地図上の状況）・内容・解決案をまとめた資料のベースを生成（<code>showReport</code>）。資料には GIS へのパーマリンクを付与する（<code>buildShareUrl</code>）。</p>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px;">
+        <h3>目標：正しい GIS 導入判断と課題解決へ導く</h3>
+        <p>上記 3 つの機能を通じて、利用者は本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験します。その結果、「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らし、課題解決につながります。</p>
+      </div>
+
+      <h3>ANTIGRAVITY エージェントの本質：資料を作る・見せる・説明する</h3>
+      <p>ANTIGRAVITY エージェントは、資料の基本である <strong>作る → 見せる → 説明する</strong> を自動化するエージェントです。</p>
+      <table>
+        <thead>
+          <tr><th>資料の基本</th><th>ANTIGRAVITY の機能</th><th>具体的な動作</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>作る</td><td>自然言語からレイヤーと属性を自動構成</td><td>「○○の資料を作って」と話すだけで、必要なレイヤー・属性・サンプルデータを生成する</td></tr>
+          <tr><td>見せる</td><td>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</td><td>地図上にサンプルを表示し、レイヤー切り替え・FlyTo・属性表示で GIS 体験を提供する</td></tr>
+          <tr><td>説明する</td><td>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</td><td>属性から課題を読み取り、平面・内容・解決案をまとめた資料を作成する</td></tr>
+        </tbody>
+      </table>
+      <p>この 3 ステップを通じて、資料は「PDF への地図貼り付け」ではなく、<strong>GIS と連動した生きた理解資料</strong>となります。そして、その体験が正しい GIS 導入判断と課題解決へ繋がります。</p>
+
+      <h3>資料のベース作成と GIS パーマリンク連携</h3>
+      <p>最も重要なのは、<strong>資料は資料として必要なものである</strong>という点です。資料は会議の進行、結論の提示、合意形成のための要約として不可欠です。ANTIGRAVITY エージェントは、GIS 上のレイヤー・属性から課題を読み取り、<strong>平面（地図上の状況）・内容・解決案</strong>をまとめた資料のベースを作成します。</p>
+      <p>資料に載せきれない背景・範囲・詳細は GIS 側に置き、<strong>資料にパーマリンクを載せる</strong>ことで、資料と GIS を双方向に連動させます。</p>
+      <h4>なぜパーマリンクなのか</h4>
+      <ul>
+        <li><strong>資料の要約性を維持：</strong>資料は簡潔なままで、詳細は GIS へ誘導</li>
+        <li><strong>深い理解へ誘導：</strong>「なぜこの範囲か」「背景データは何か」「周辺の状況は」などを地図上で探索可能に</li>
+        <li><strong>会議の一体感：</strong>参加者全員が同じ URL から GIS を開き、同一視点・レイヤーで議論できる</li>
+        <li><strong>判断の加速：</strong>空中戦を減らし、必要な情報に即座にアクセスすることで、より速い課題解決・意思決定を実現</li>
+      </ul>
+      <h4>想定される使い方</h4>
+      <ol>
+        <li>資料の該当部分に <code>?longitude=...&amp;latitude=...&amp;height=...&amp;pitch=...&amp;heading=...</code> 形式のパーマリンクを配置（<code>buildShareUrl</code> が生成）</li>
+        <li>会議参加者がリンクを開くと、KASUGAI Canvas が即座にその場所・視点を表示</li>
+        <li>必要に応じてレイヤーを追加・非表示・属性をクリックし、深掘りを行う</li>
+        <li>新たな視点が見つかったら、新しいパーマリンクを生成し資料にフィードバック</li>
+      </ol>
+      <h4>ANTIGRAVITY との関係</h4>
+      <p>資料作成時に、ANTIGRAVITY エージェントが「資料に載せるべき GIS 視点」を提案し、パーマリンク付きで資料と GIS を同時生成します。資料と GIS がお互いを補完し合うことで、会議の一体感と意思決定のスピードが向上します。</p>
+
+      <h3>ANTIGRAVITY エージェントのワークフロー</h3>
+      <pre class="text"><code>自然言語での指示（「○○の資料を作って」）
+    ↓
+必要なレイヤー・属性・サンプルデータの構成（function calling）
+    ↓
+属性から課題を抽出し、平面・内容・解決案を提示した資料を作成
+    ↓
+資料用パーマリンクと GIS 表示の生成
+    ↓
+利用者が GIS で「何ができて、何が解決できるか」を体験
+    ↓
+GIS 理解の深化と正しい導入判断・課題解決</code></pre>
+
+      <h3>現在の GIS 活用とのギャップ</h3>
+      <table>
+        <thead>
+          <tr><th>目標・機能</th><th>現状の課題</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>自然言語からレイヤーと属性を自動構成</td><td>レイヤー追加・属性設定が手間で、GIS 専門家にしかできない</td></tr>
+          <tr><td>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</td><td>本番データがないと GIS 体験が作れず、会議参加者が GIS の可能性を理解できない</td></tr>
+          <tr><td>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</td><td>PDF やスライドに地図が貼られるだけで、課題と解決案が地図と結びついていない</td></tr>
+          <tr><td>目標：正しい GIS 導入判断と課題解決へ導く</td><td>GIS への理解が不足しており、導入前に「何ができるか」を体験できる環境がない</td></tr>
+        </tbody>
+      </table>
+
+      <h3>ANTIGRAVITY の狙い</h3>
+      <p>ANTIGRAVITY 情報レイヤーは、上記 3 つの機能を自然言語で実現し、「正しい GIS 導入判断と課題解決へ導く」ことを目指すエージェントです。「○○の資料を作って」と話すだけで、<strong>作る → 見せる → 説明する</strong> という資料作成の基本が自動化され、場と情報が一体化した GIS 体験が構築されます。</p>
+      <p>ANTIGRAVITY の最終目的は、<strong>利用者が本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験し、GIS への理解を深めること</strong>にあります。サンプルデータや資料×GIS 連携を通じて、正しい GIS 導入判断と課題解決を後押しします。</p>
+
       <h2 id="審査基準">審査基準</h2>
       <div class="features">
         <div class="feature-card">
@@ -73,7 +198,7 @@
       </ol>
 
       <h2 id="kasugai-concept">プロジェクト説明：KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント</h2>
-      <p><strong>KASUGAI Canvas</strong> は、ブラウザ上の 3D GIS（CesiumJS）に Gemini API の function calling を組み込んだ Agentic AI エージェント搭載アプリです。自然言語の指示（「○○の資料を作って」等）に対し、ブラウザ内蔵のエージェントが48種のチャットツールを自律的に呼び出し、URL 指定のベクターレイヤー追加・AI 生成サンプル GeoJSON のレイヤー表示・地図移動（FlyTo）・Markdown/HTML 資料の生成とダウンロード・視点パーマリンクの埋め込みまでを一連の流れとして実行します。「GIS が導入前に体験できず、理解されないまま失敗する」という課題に対し、AI がサンプルデータと資料をその場で生成する体験先行型のアプローチで解決します。</p>
+      <p><strong>KASUGAI Canvas</strong> は、ブラウザ上の 3D GIS（CesiumJS）に Gemini API の function calling を組み込んだ Agentic AI エージェント搭載アプリです。自然言語の指示（「○○の資料を作って」等）に対し、ブラウザ内蔵のエージェントが50種のチャットツールを自律的に呼び出し、URL 指定のベクターレイヤー追加・AI 生成サンプル GeoJSON のレイヤー表示・地図移動（FlyTo）・Markdown/HTML 資料の生成とダウンロード・視点パーマリンクの埋め込みまでを一連の流れとして実行します。「GIS が導入前に体験できず、理解されないまま失敗する」という課題に対し、AI がサンプルデータと資料をその場で生成する体験先行型のアプローチで解決します。</p>
       <p>バックエンドは Cloud Run（FastAPI）の1サービスに静的配信・<code>/api/gemini</code>（サーバーキー注入のプロキシ）・<code>/api/auth</code>・<code>/api/kasc</code>・<code>/api/data</code>（Cloud Storage への保存）を集約し、同一オリジンで提供します。保存データは V4 署名付き URL でブラウザ⇄Cloud Storage 間を直接転送し、Gemini キーは Secret Manager から注入されるためブラウザに露出しません。本ページに記載する機能はすべて実装済みで、審査用の公開 URL（<a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">https://kasugai-canvas-nqh4tuar6a-an.a.run.app/</a>）でそのまま確認できます。</p>
 
       <h3 id="参加条件対応">参加条件との対応</h3>
@@ -84,7 +209,7 @@
         </thead>
         <tbody>
           <tr><td>必須：アプリケーション実行プロダクト</td><td><strong>Cloud Run</strong> に KASUGAI Canvas 本体（静的フロント配信）＋ AI プロキシ（<code>/api/gemini</code>）＋ GIS 保存 API（<code>/api/kasc</code>・<code>/api/data</code> → Cloud Storage）を1サービスとしてデプロイ（<code>agent/</code>・実装済み）。同一オリジン構成で CORS 不要・提出 URL 1本</td></tr>
-          <tr><td>必須：Google Cloud AI 技術</td><td><strong>Gemini API</strong> の function calling で、自然言語からの GIS 制御（URL 指定レイヤー追加・サンプル GeoJSON 生成表示・資料作成）を実装。実行主体はブラウザ内蔵エージェント（48種のチャットツール）で、<code>/api/gemini</code> がサーバーキーを注入して審査員キーレスでの動作を実現。併用する Google Cloud プロダクトとして <strong>Cloud Storage</strong>（.kasc・<code>gs://</code> データ・V4 署名付き URL 転送）と <strong>Secret Manager</strong>（API キー・認証情報）を使用</td></tr>
+          <tr><td>必須：Google Cloud AI 技術</td><td><strong>Gemini API</strong> の function calling で、自然言語からの GIS 制御（URL 指定レイヤー追加・サンプル GeoJSON 生成表示・資料作成）を実装。実行主体はブラウザ内蔵エージェント（50種のチャットツール）で、<code>/api/gemini</code> がサーバーキーを注入して審査員キーレスでの動作を実現。併用する Google Cloud プロダクトとして <strong>Cloud Storage</strong>（.kasc・<code>gs://</code> データ・V4 署名付き URL 転送）と <strong>Secret Manager</strong>（API キー・認証情報）を使用</td></tr>
           <tr><td>提出物 1：GitHub リポジトリ</td><td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">github.com/yamamoto-ryuzo/kasugai_canvas</a> を連携（フロント・エージェント・IaC を含む）</td></tr>
           <tr><td>提出物 2：デプロイ URL</td><td><a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">https://kasugai-canvas-nqh4tuar6a-an.a.run.app/</a>（Cloud Run 上の公開 URL）を提出し、審査期間中（〜2026/12/01）動作確認可能な状態を維持</td></tr>
           <tr><td>提出物 3：説明・構成図・デモ動画</td><td>プロジェクト説明（<a href="#kasugai-concept">本ページ</a>）＋システムアーキテクチャ図（同ページの SVG 図）＋「○○の資料を作って」→ GIS 体験→資料生成までの 3 分デモ動画（YouTube 公開）</td></tr>
@@ -105,7 +230,7 @@
 
       <h3>実装済み機能の概要</h3>
       <ul>
-        <li><strong>内蔵AIエージェント（ブラウザ側）：</strong>Gemini API の function calling で48種のチャットツールを実行し、「○○の資料を作って」→ レイヤー追加（<code>addLayer</code>/<code>addGeoJsonLayer</code>：URL 指定で .kasc に追記・即時適用）→ サンプル GeoJSON の生成・表示（<code>addDataLayer</code>：AI が生成した GeoJSON オブジェクトを一時レイヤーとして直接表示）→ FlyTo → 資料出力（<code>showReport</code>、Markdown/HTML・ダウンロード可）→ 視点パーマリンク埋め込み（<code>buildShareUrl</code>）まで一連の流れを実行。生成データには出典・生成時刻・AI生成明記を付与する設計で、実行ツールはチャットに記録される（可観測性）</li>
+        <li><strong>内蔵AIエージェント（ブラウザ側）：</strong>Gemini API の function calling で50種のチャットツールを実行し、「○○の資料を作って」→ レイヤー追加（<code>addLayer</code>/<code>addGeoJsonLayer</code>：URL 指定で .kasc に追記・即時適用）→ サンプル GeoJSON の生成・表示（<code>addDataLayer</code>：AI が生成した GeoJSON オブジェクトを一時レイヤーとして直接表示）→ FlyTo → 資料出力（<code>showReport</code>、Markdown/HTML・ダウンロード可）→ 視点パーマリンク埋め込み（<code>buildShareUrl</code>）まで一連の流れを実行。生成データには出典・生成時刻・AI生成明記を付与する設計で、実行ツールはチャットに記録される（可観測性）</li>
         <li><strong>AI プロキシ（キー隠蔽）：</strong><code>POST /api/gemini</code> がサーバーの <code>GEMINI_API_KEY</code> を注入して転送（モデル許可リスト・1MB 上限・レート制限・認証モードで保護）。BYO キー登録済みのブラウザは Gemini を直接呼び、未登録でも <code>/api/capabilities</code> の <code>aiProxy</code> 通知で自動的にサーバーキー経由になるため審査員はキー不要</li>
         <li><strong>保存・認証：</strong>ID/PASS ログイン（<code>/api/auth</code>）で HMAC トークンを発行し、.kasc と <code>gs://</code> データを Cloud Storage に保存（<code>/api/kasc</code>・<code>/api/data/&lt;key&gt;</code>、GET は V4 署名付き URL でブラウザ⇄GCS 直接転送）。起動時に同梱 .kasc を冪等シード。審査用 URL は認証モード5で運用中</li>
         <li><strong>キー・秘匿管理：</strong>Gemini・Maps キーと認証情報は Secret Manager 経由で環境変数に注入。Maps キーはブラウザ直接通信に必要なため capabilities で配布し、GCP 側の HTTP リファラ＋API 制限で保護</li>
@@ -236,7 +361,7 @@
         <tbody>
           <tr><td>フロントエンド</td><td>KASUGAI Canvas（CesiumJS）</td><td>3D 地球・レイヤー表示・FlyTo・チャット UI・資料モーダル</td></tr>
           <tr><td>ホスティング</td><td>Cloud Run <strong>（必須プロダクト充足）</strong></td><td>静的フロント配信＋GIS 保存 API＋<code>/api/gemini</code> AI プロキシを1サービスに同居（同一オリジン・CORS 不要・提出URL 1本）</td></tr>
-          <tr><td>AI エージェント</td><td>Gemini API（function calling）<strong>（必須 AI 技術充足）</strong></td><td>ブラウザ内蔵エージェントが48種のチャットツールを直接実行 → レイヤー追加・サンプル生成・資料生成まで自律実行</td></tr>
+          <tr><td>AI エージェント</td><td>Gemini API（function calling）<strong>（必須 AI 技術充足）</strong></td><td>ブラウザ内蔵エージェントが50種のチャットツールを直接実行 → レイヤー追加・サンプル生成・資料生成まで自律実行</td></tr>
           <tr><td>データ保存（GIS の保存先）</td><td>Cloud Storage</td><td>.kasc（<code>kasc/&lt;ID&gt;</code>）・<code>gs://</code> 秘匿データ（<code>data/&lt;key&gt;</code>）。GET は V4 署名付き URL でブラウザ⇄GCS 直接転送</td></tr>
           <tr><td>セキュリティ</td><td>Cloud IAP / HMAC トークン / Secret Manager / Cloud IAM</td><td>起動制御モード5/6/7・秘匿情報は Secret Manager・実行サービスアカウントの最小権限</td></tr>
         </tbody>
