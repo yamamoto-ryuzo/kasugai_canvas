@@ -190,6 +190,95 @@
       <h4>提出 MVP とデモシナリオ</h4>
       <p>提出 MVP は<strong>すべて実装済み</strong>です。3 分デモ動画では、<strong>「避難所の資料を作って」→ サンプルレイヤー自動追加 → FlyTo → 属性から課題抽出 → パーマリンク付き資料出力</strong>の一連の流れをそのまま収録します。保存面のアピールとして、認証モードでのログイン → .kasc が GCS に保存され再訪時に復元される流れも動画に含めます。</p>
 
+      <h3>システムアーキテクチャ図</h3>
+      <svg viewBox="0 0 980 470" width="100%" style="max-width:980px;display:block;margin:0 auto;font-family:sans-serif;" role="img" aria-label="KASUGAI Canvas Cloud Run システム構成図">
+        <defs>
+          <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2f7d8c"/></marker>
+          <marker id="ahd" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8a9aa5"/></marker>
+        </defs>
+
+        <!-- ブラウザ -->
+        <rect x="20" y="60" width="300" height="250" rx="8" fill="#f4fafc" stroke="#2f7d8c" stroke-width="1.5"/>
+        <text x="170" y="84" text-anchor="middle" font-size="14" font-weight="bold" fill="#1d4e57">利用者のブラウザ</text>
+        <rect x="35" y="96" width="270" height="62" rx="5" fill="#fff" stroke="#9db8c0"/>
+        <text x="170" y="116" text-anchor="middle" font-size="12" font-weight="bold" fill="#1d2b35">KASUGAI Canvas（CesiumJS）</text>
+        <text x="170" y="133" text-anchor="middle" font-size="11" fill="#45566a">3D地球・レイヤー・FlyTo・資料モーダル</text>
+        <text x="170" y="148" text-anchor="middle" font-size="11" fill="#45566a">.kasc 設定の読み書き</text>
+        <rect x="35" y="168" width="270" height="62" rx="5" fill="#fff" stroke="#9db8c0"/>
+        <text x="170" y="188" text-anchor="middle" font-size="12" font-weight="bold" fill="#1d2b35">内蔵AIエージェント</text>
+        <text x="170" y="205" text-anchor="middle" font-size="11" fill="#45566a">Gemini function calling・48ツール</text>
+        <text x="170" y="220" text-anchor="middle" font-size="11" fill="#45566a">レイヤー構成・サンプル生成・資料作成</text>
+        <text x="170" y="252" text-anchor="middle" font-size="11" fill="#45566a">BYOキー: Gemini 直接呼出</text>
+        <text x="170" y="269" text-anchor="middle" font-size="11" fill="#45566a">キー無し: /api/gemini 経由（自動切替）</text>
+        <text x="170" y="293" text-anchor="middle" font-size="11" fill="#45566a">Maps キー: capabilities で自動登録</text>
+
+        <!-- Cloud Run -->
+        <rect x="370" y="60" width="300" height="250" rx="8" fill="#fdf8ee" stroke="#b98a1e" stroke-width="1.5"/>
+        <text x="520" y="84" text-anchor="middle" font-size="14" font-weight="bold" fill="#7a5a10">Cloud Run（asia-northeast1）</text>
+        <text x="520" y="101" text-anchor="middle" font-size="11" fill="#7a5a10">kasugai-canvas — FastAPI（agent/）</text>
+        <rect x="385" y="112" width="270" height="184" rx="5" fill="#fff" stroke="#d8c489"/>
+        <text x="520" y="132" text-anchor="middle" font-size="12" fill="#1d2b35">静的配信 web/（フロントエンド）</text>
+        <text x="520" y="156" text-anchor="middle" font-size="12" fill="#1d2b35">POST /api/auth — HMACトークン発行</text>
+        <text x="520" y="178" text-anchor="middle" font-size="12" fill="#1d2b35">POST /api/kasc — .kasc 保存・返却</text>
+        <text x="520" y="200" text-anchor="middle" font-size="12" fill="#1d2b35">GET/PUT /api/data — gs:// データ</text>
+        <text x="520" y="222" text-anchor="middle" font-size="12" fill="#1d2b35">GET /api/capabilities — 能力・キー通知</text>
+        <text x="520" y="252" text-anchor="middle" font-size="12" font-weight="bold" fill="#1d2b35">POST /api/gemini</text>
+        <text x="520" y="269" text-anchor="middle" font-size="11" fill="#45566a">GEMINI_API_KEY を注入して転送</text>
+        <text x="520" y="284" text-anchor="middle" font-size="11" fill="#45566a">（審査員はキー不要）</text>
+
+        <!-- 外部: Gemini -->
+        <rect x="730" y="60" width="230" height="64" rx="8" fill="#eef7ee" stroke="#4a7d4a" stroke-width="1.5"/>
+        <text x="845" y="86" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f5532">Gemini API</text>
+        <text x="845" y="104" text-anchor="middle" font-size="11" fill="#45566a">generativelanguage.googleapis.com</text>
+
+        <!-- 外部: Maps -->
+        <rect x="730" y="144" width="230" height="76" rx="8" fill="#eef7ee" stroke="#4a7d4a" stroke-width="1.5"/>
+        <text x="845" y="168" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f5532">Google Maps Platform</text>
+        <text x="845" y="186" text-anchor="middle" font-size="11" fill="#45566a">Map Tiles / Geocoding</text>
+        <text x="845" y="202" text-anchor="middle" font-size="11" fill="#45566a">Places / Street View Static</text>
+
+        <!-- Secret Manager -->
+        <rect x="730" y="240" width="230" height="64" rx="8" fill="#f1eefb" stroke="#6a5aa8" stroke-width="1.5"/>
+        <text x="845" y="264" text-anchor="middle" font-size="13" font-weight="bold" fill="#463a7a">Secret Manager</text>
+        <text x="845" y="282" text-anchor="middle" font-size="11" fill="#45566a">gemini-api-key / google-maps-api-key</text>
+        <text x="845" y="296" text-anchor="middle" font-size="11" fill="#45566a">kasugai-auth-user / -pass</text>
+
+        <!-- Cloud Storage -->
+        <rect x="730" y="344" width="230" height="80" rx="8" fill="#eef3f8" stroke="#3e6a9e" stroke-width="1.5"/>
+        <text x="845" y="368" text-anchor="middle" font-size="13" font-weight="bold" fill="#28517a">Cloud Storage</text>
+        <text x="845" y="386" text-anchor="middle" font-size="11" fill="#45566a">gs://kasugai-data-…</text>
+        <text x="845" y="402" text-anchor="middle" font-size="11" fill="#45566a">kasc/&lt;ID&gt;（.kasc 保存）・data/&lt;key&gt;</text>
+
+        <!-- 矢印: ブラウザ⇄Cloud Run -->
+        <line x1="320" y1="160" x2="370" y2="160" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
+        <text x="345" y="150" text-anchor="middle" font-size="11" fill="#1d4e57">静的配信・/api/*</text>
+
+        <!-- 矢印: BYOキー ブラウザ→Gemini（破線） -->
+        <path d="M250,60 V40 H845 V60" fill="none" stroke="#8a9aa5" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ahd)"/>
+        <text x="560" y="36" text-anchor="middle" font-size="11" fill="#5a6a75">BYOキー → Gemini 直接呼出</text>
+
+        <!-- 矢印: ブラウザ→Maps Platform（破線） -->
+        <path d="M300,60 V24 H900 V144" fill="none" stroke="#8a9aa5" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ahd)"/>
+        <text x="610" y="18" text-anchor="middle" font-size="11" fill="#5a6a75">Maps API（キーは /api/capabilities 配布・リファラ制限）</text>
+
+        <!-- 矢印: Cloud Run→Gemini -->
+        <line x1="670" y1="92" x2="730" y2="92" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="700" y="84" text-anchor="middle" font-size="10" fill="#1d4e57">キー注入</text>
+
+        <!-- 矢印: Cloud Run→Secret Manager -->
+        <line x1="670" y1="272" x2="730" y2="272" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="700" y="264" text-anchor="middle" font-size="10" fill="#1d4e57">env</text>
+
+        <!-- 矢印: Cloud Run→Cloud Storage -->
+        <path d="M670,300 V384 H730" fill="none" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)"/>
+        <text x="700" y="340" text-anchor="middle" font-size="10" fill="#1d4e57">kasc・data</text>
+
+        <!-- 矢印: GCS→ブラウザ 直接転送（破線） -->
+        <path d="M730,408 V446 H170 V310" fill="none" stroke="#8a9aa5" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ahd)"/>
+        <text x="450" y="442" text-anchor="middle" font-size="11" fill="#5a6a75">V4署名付きURL（302）でブラウザ⇄GCS 直接転送</text>
+      </svg>
+      <p>実線はサーバー経由、破線はブラウザ直接の通信です。Gemini キーは Secret Manager から Cloud Run の環境変数に注入され <code>/api/gemini</code> が転送時に付与するためブラウザには現れません。Maps キーはブラウザの直接通信に使われるため <code>/api/capabilities</code> で配布し、GCP 側の HTTP リファラ制限＋API 制限で保護します。</p>
+
       <h3>技術スタック（提出構成）</h3>
       <table>
         <thead>
