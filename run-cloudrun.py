@@ -55,6 +55,7 @@ REGION_DEFAULT = "asia-northeast1"
 SERVICE_DEFAULT = "kasugai-canvas"
 AR_REPO = "kasugai"
 SECRET_GEMINI = "gemini-api-key"
+SECRET_MAPS = "google-maps-api-key"
 SECRET_AUTH_USER = "kasugai-auth-user"
 SECRET_AUTH_PASS = "kasugai-auth-pass"
 
@@ -220,6 +221,14 @@ def setup_secrets(args, project: str, sa: str) -> list[str]:
             flush=True,
         )
 
+    if args.maps_api_key:
+        _ensure_secret(SECRET_MAPS, args.maps_api_key, project)
+    exists = _gcloud("secrets", "describe", SECRET_MAPS, f"--project={project}").returncode == 0
+    if exists:
+        _grant_secret(SECRET_MAPS, project, sa)
+        bindings.append(f"GOOGLE_MAPS_API_KEY={SECRET_MAPS}:latest")
+        print(f"      {SECRET_MAPS}: 登録済み → GOOGLE_MAPS_API_KEY", flush=True)
+
     if args.auth_mode:
         if not (args.auth_user and args.auth_pass):
             raise SystemExit(
@@ -362,6 +371,7 @@ def main() -> None:
     parser.add_argument("--region", default=REGION_DEFAULT, help=f"リージョン（既定: {REGION_DEFAULT}＝東京）")
     parser.add_argument("--service", default=SERVICE_DEFAULT, help=f"Cloud Run サービス名（既定: {SERVICE_DEFAULT}）")
     parser.add_argument("--gemini-api-key", help="Gemini API キー（Secret Manager の gemini-api-key に登録）")
+    parser.add_argument("--maps-api-key", help="Google Maps Platform API キー（google-maps-api-key に登録。capabilities 経由でブラウザへ配布）")
     parser.add_argument("--auth-mode", choices=["5", "6"], help="起動制御モード（5=認証のみ / 6=全ゲート）")
     parser.add_argument("--auth-user", help="認証モードのユーザー ID")
     parser.add_argument("--auth-pass", help="認証モードのパスワード")

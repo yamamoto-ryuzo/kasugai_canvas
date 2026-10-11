@@ -16,6 +16,9 @@ export async function onRequestGet(context) {
       features,
       auth: { mode: authed ? "cookie" : null },
       ai: { endpoint: "/api/gemini" },
+      // agent/app/main.py と同一契約。ブラウザから直接付くキーなので秘匿ではなく、
+      // GCP 側の HTTP リファラ制限で保護する
+      ...(env.GOOGLE_MAPS_API_KEY ? { google: { mapsApiKey: env.GOOGLE_MAPS_API_KEY } } : {}),
     }),
     { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } },
   );

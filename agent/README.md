@@ -62,6 +62,7 @@ uvicorn agent.app.main:app --port 8080
 | 変数 | 用途 |
 | --- | --- |
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Gemini API キー（AI Studio）。`/api/gemini` で使用 |
+| `GOOGLE_MAPS_API_KEY` | Maps Platform キー（Map Tiles/Places/Geocoding/SV）。設定時 `/api/capabilities` がブラウザへ通知し未保存時に自動登録。秘匿情報ではないため保護は GCP のリファラ制限で行う |
 | `GEMINI_MODELS` | `/api/gemini` で許可するモデル（カンマ区切り。未設定は全許可） |
 | `ANTIGRAVITY_TOKEN` | 設定時 `Authorization: Bearer` を必須化（認証モード時は kasugai トークン/Cookie/IAP も有効） |
 | `ANTIGRAVITY_RATE_LIMIT` | IPあたり時間当たりリクエスト上限（既定30・0で無効） |

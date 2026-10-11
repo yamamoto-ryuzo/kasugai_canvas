@@ -4,6 +4,12 @@ import os
 # Gemini API キー（AI Studio 発行）。/api/gemini プロキシで使用
 API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
 
+# Google Maps Platform API キー（Map Tiles / Places / Geocoding / Street View Static 等）
+# 設定時は /api/capabilities がフロントへ通知し、ブラウザは未保存時に自動登録する。
+# ブラウザから Google API へ直接付くキー（タイルURL等に露出）なので秘匿情報ではなく、
+# 悪用防止は GCP コンソールの HTTP リファラ制限で担保する
+MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
+
 # /api/gemini プロキシで許可するモデル（カンマ区切り。未設定は全モデル許可）
 ALLOWED_MODELS = [m.strip() for m in os.environ.get("GEMINI_MODELS", "").split(",") if m.strip()]
 # 設定時は Authorization: Bearer <token> を必須化（公開エンドポイントの乱用防止）

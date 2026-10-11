@@ -503,6 +503,14 @@ async function detectBackend() {
           .then(r => (r.ok ? r.json() : null))
           .catch(() => null);
         backendCapabilities = caps && caps.tier ? caps : null;
+        // サーバー提供の Maps API キーを、ブラウザに未保存の場合のみ自動登録する
+        //（ユーザーが手入力した BYO キーがあればそちらを優先）
+        try {
+          const mapsKey = backendCapabilities?.google?.mapsApiKey;
+          if (mapsKey && !localStorage.getItem("googleMapsApiKey")) {
+            localStorage.setItem("googleMapsApiKey", mapsKey);
+          }
+        } catch (e) {}
       }
     }
   } catch {

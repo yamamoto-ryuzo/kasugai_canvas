@@ -125,6 +125,8 @@ def capabilities():
         "features": features + (["aiProxy"] if config.API_KEY else []),
         "auth": {"mode": {"5": "token", "6": "cookie", "7": "iap"}.get(mode)},
         "ai": {"endpoint": "/api/gemini"},
+        # Maps キーはブラウザから直接 Google API に付ける設計（秘匿でなくリファラ制限で保護）
+        **({"google": {"mapsApiKey": config.MAPS_API_KEY}} if config.MAPS_API_KEY else {}),
     }
 
 
