@@ -293,3 +293,9 @@ footer { padding: 0 28px 22px; }
   visibility: visible; opacity: 1;
   transition: opacity .1s ease, visibility 0s;
 }
+
+/* 管理 > AI > データソース: MCP サーバー行 */
+.mcp-server-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #eef3f5; }
+.mcp-server-row .mcp-server-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #2b3f49; }
+.mcp-server-row .hint { margin: 0; }
+.mcp-server-row button { padding: 3px 8px; }

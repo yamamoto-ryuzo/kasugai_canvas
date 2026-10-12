@@ -202,6 +202,7 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
         "fileWrite",
         "update",
         "shutdown",
+        "mcpProxy",
     ];
     // ローカル実行のみ rclone 連携を公開する(0.0.0.0 バインドのコンテナ実行では無効)
     if state.is_local {
@@ -401,6 +402,68 @@ async fn fetch_proxy(
         return Err((
             StatusCode::PAYLOAD_TOO_LARGE,
             "取得データが上限を超えています".to_string(),
+        ));
+    }
+    builder
+        .body(axum::body::Body::from(bytes))
+        .map_err(internal_error)
+}
+
+// POST /api/mcp?url=<target> — リモート MCP サーバー（Streamable HTTP）への中継プロキシ。
+// CORS 非対応の MCP エンドポイントへブラウザから到達するための薄い転送で、
+// Authorization・MCP セッションヘッダとボディをそのまま転送する（キー隠蔽ではない。
+// トークンは BYO として各ユーザーのブラウザから付く）。tools/call は長時間になり
+// うるためタイムアウトは FETCH より長め。接続先は /api/fetch と同じ SSRF ポリシー
+const MCP_MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
+const MCP_MAX_RESPONSE_BYTES: usize = 32 * 1024 * 1024;
+const MCP_TIMEOUT_SECS: u64 = 130;
+
+async fn mcp_proxy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<FetchQuery>,
+    body: axum::body::Bytes,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let url = reqwest::Url::parse(&query.url)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "URLが不正です".to_string()))?;
+    if !matches!(url.scheme(), "http" | "https") {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "http/https のみ中継できます".to_string(),
+        ));
+    }
+    fetch_target_allowed(&state, &url).await?;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(MCP_TIMEOUT_SECS))
+        .build()
+        .map_err(internal_error)?;
+    let mut request = client.post(url).body(body);
+    for key in [
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::ACCEPT,
+        axum::http::header::AUTHORIZATION,
+        axum::http::HeaderName::from_static("mcp-session-id"),
+        axum::http::HeaderName::from_static("mcp-protocol-version"),
+    ] {
+        if let Some(value) = headers.get(&key) {
+            request = request.header(key, value.clone());
+        }
+    }
+    let response = request.send().await.map_err(internal_error)?;
+    let mut builder = axum::response::Response::builder().status(response.status());
+    for key in [
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderName::from_static("mcp-session-id"),
+    ] {
+        if let Some(value) = response.headers().get(&key) {
+            builder = builder.header(key, value.clone());
+        }
+    }
+    let bytes = response.bytes().await.map_err(internal_error)?;
+    if bytes.len() > MCP_MAX_RESPONSE_BYTES {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "応答が上限を超えています".to_string(),
         ));
     }
     builder
@@ -4648,6 +4711,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(health))
         .route("/api/capabilities", get(capabilities))
         .route("/api/fetch", get(fetch_proxy).head(fetch_proxy))
+        .route(
+            "/api/mcp",
+            post(mcp_proxy).layer(DefaultBodyLimit::max(MCP_MAX_BODY_BYTES)),
+        )
         .route("/api/plugins", post(save_plugin))
         .route("/api/plugins/{id}", delete(delete_plugin))
         .route("/api/files", get(list_data_files))

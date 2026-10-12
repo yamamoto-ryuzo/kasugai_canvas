@@ -1,5 +1,15 @@
 import * as THREE from "three";
 import { initI18n, t, applyI18n, setLanguage, getLanguage, SUPPORTED_LANGUAGES, LANGUAGE_NAMES } from "./i18n.js";
+import {
+  initMcp, listMcpServers, upsertMcpServer, removeMcpServer,
+  connectMcpServer, disconnectMcpServer, connectEnabledMcpServers,
+  mcpRuntime, mcpDeclarations, mcpToolTarget, callMcpTool,
+  getMcpAllowWrite, setMcpAllowWrite,
+} from "./mcp.js";
+import {
+  initBoxAuth, getBoxClientId, setBoxClientId, boxConnected,
+  startBoxAuth, disconnectBox, handleBoxRedirect,
+} from "./box.js";
 import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-style.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
 
@@ -6238,6 +6248,115 @@ function setupEvents() {
   setupChatPanel();
   setupGoogleSettings();
   setupAgentPanel();
+  setupDataSources();
+}
+
+// 管理 → AI → データソース: MCP サーバー接続（Box・任意のリモートMCP）の管理画面。
+// サーバー定義は localStorage "mcpServers"、Box のトークンは BYO（OAuth+PKCE）
+function setupDataSources() {
+  const panel = document.querySelector("#datasource-panel");
+  if (!panel) return;
+  const status = document.querySelector("#mcp-status");
+  const listEl = document.querySelector("#mcp-server-list");
+  const boxClientInput = document.querySelector("#box-client-id");
+  const boxStatus = document.querySelector("#box-status");
+  const allowWriteInput = document.querySelector("#mcp-allow-write");
+  const setStatus = message => { if (status) status.textContent = message || ""; };
+
+  if (boxClientInput) boxClientInput.value = getBoxClientId();
+  if (allowWriteInput) allowWriteInput.checked = getMcpAllowWrite();
+  allowWriteInput?.addEventListener("change", () => setMcpAllowWrite(allowWriteInput.checked));
+
+  const refreshBoxStatus = () => {
+    if (!boxStatus) return;
+    boxStatus.textContent = boxConnected()
+      ? t("mcp.box.connected")
+      : (getBoxClientId() ? t("mcp.box.ready") : t("mcp.box.notConfigured"));
+  };
+
+  const renderList = () => {
+    if (!listEl) return;
+    listEl.replaceChildren();
+    const servers = listMcpServers();
+    if (!servers.length) {
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = t("mcp.listEmpty");
+      listEl.append(empty);
+      return;
+    }
+    for (const server of servers) {
+      const state = mcpRuntime(server.key);
+      const row = document.createElement("div");
+      row.className = "mcp-server-row";
+      const toggle = document.createElement("input");
+      toggle.type = "checkbox";
+      toggle.checked = !!server.enabled;
+      toggle.addEventListener("change", async () => {
+        upsertMcpServer({ key: server.key, enabled: toggle.checked });
+        if (toggle.checked) await connectMcpServer(server.key);
+        else disconnectMcpServer(server.key);
+      });
+      const name = document.createElement("span");
+      name.className = "mcp-server-name";
+      name.textContent = server.name || server.key;
+      name.title = server.url;
+      const stateEl = document.createElement("span");
+      stateEl.className = "hint";
+      stateEl.textContent = state.connected
+        ? t("mcp.serverTools", { count: state.tools.length })
+        : (state.error ? t("mcp.serverError", { error: state.error }) : t("mcp.serverDisconnected"));
+      const reconnect = document.createElement("button");
+      reconnect.type = "button";
+      reconnect.textContent = t("mcp.reconnect");
+      reconnect.addEventListener("click", () => void connectMcpServer(server.key));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = t("mcp.remove");
+      remove.addEventListener("click", () => {
+        if (window.confirm(t("mcp.confirmRemove", { name: server.name || server.key }))) removeMcpServer(server.key);
+      });
+      row.append(toggle, name, stateEl, reconnect, remove);
+      listEl.append(row);
+    }
+  };
+
+  document.querySelector("#box-connect")?.addEventListener("click", () => {
+    setBoxClientId(boxClientInput?.value || "");
+    try {
+      void startBoxAuth();
+    } catch (error) {
+      if (boxStatus) boxStatus.textContent = t("common.error", { error: error.message });
+    }
+  });
+  document.querySelector("#box-disconnect")?.addEventListener("click", () => {
+    disconnectBox();
+    refreshBoxStatus();
+  });
+
+  document.querySelector("#mcp-add")?.addEventListener("click", async () => {
+    const name = (document.querySelector("#mcp-add-name")?.value || "").trim();
+    const url = (document.querySelector("#mcp-add-url")?.value || "").trim();
+    const token = (document.querySelector("#mcp-add-token")?.value || "").trim();
+    if (!name || !/^https?:\/\//i.test(url)) {
+      setStatus(t("mcp.addInvalid"));
+      return;
+    }
+    const key = name.toLowerCase().replace(/[^a-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || `srv${Date.now()}`;
+    upsertMcpServer({ key, name, url, enabled: true, ...(token ? { token } : {}) });
+    const result = await connectMcpServer(key);
+    setStatus(result.ok ? t("mcp.addOk", { count: result.tools.length }) : t("mcp.addNg", { error: result.error }));
+    const urlInput = document.querySelector("#mcp-add-url");
+    const nameInput = document.querySelector("#mcp-add-name");
+    const tokenInput = document.querySelector("#mcp-add-token");
+    if (result.ok && urlInput) urlInput.value = "";
+    if (result.ok && nameInput) nameInput.value = "";
+    if (result.ok && tokenInput) tokenInput.value = "";
+  });
+
+  document.addEventListener("mcp:changed", () => { renderList(); refreshBoxStatus(); });
+  renderList();
+  refreshBoxStatus();
 }
 
 // Google → プラグインタブ: IndexedDB に保存した AI生成/取込プラグインの管理画面。
@@ -8172,6 +8291,22 @@ window.kasugaiApi = {
     if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
     return { ok: true, name };
   },
+  // ---- MCP サーバー（Box 等・データソース接続基盤）----
+  // E2E 検証・プラグインからも操作できるよう公開面に置く
+  mcp: {
+    listServers: () => listMcpServers(),
+    upsertServer: entry => upsertMcpServer(entry),
+    removeServer: key => removeMcpServer(key),
+    connect: key => connectMcpServer(key),
+    disconnect: key => disconnectMcpServer(key),
+    runtime: key => mcpRuntime(key),
+    declarations: () => mcpDeclarations(),
+    call: (key, tool, args) => callMcpTool(key, tool, args),
+  },
+  // チャットツールを直接実行する（E2E 検証用）
+  async executeChatTool(name, args = {}) {
+    return await executeChatTool(name, args);
+  },
   // ---- ストレージプラグイン（IndexedDB・ブラウザローカル）----
   async listStoragePlugins() {
     return (await pluginStore.list()).map(({ code, ...meta }) => meta);
@@ -8950,7 +9085,9 @@ function activeChatTools() {
   const declarations = CHAT_TOOLS[0].functionDeclarations
     .filter(d => d.name !== "publishPlugin" || hasBackendFeature("pluginWrite"))
     .filter(d => !["searchPlaces", "openStreetView"].includes(d.name) || hasMapsKey)
-    .filter(d => !["listDataFiles", "saveDataFile", "deleteDataFile"].includes(d.name) || hasBackendFeature("fileWrite"));
+    .filter(d => !["listDataFiles", "saveDataFile", "deleteDataFile"].includes(d.name) || hasBackendFeature("fileWrite"))
+    // MCP サーバー（Box 等）のツールを末尾へ合成する
+    .concat(mcpDeclarations());
   return [{ functionDeclarations: declarations }];
 }
 
@@ -9118,6 +9255,19 @@ async function findUnreachableInspectorUrls(text) {
 }
 
 async function executeChatTool(name, args = {}) {
+  // MCP サーバー由来のツール（"<server>__<tool>" 名）は専用経路へ振り分ける。
+  // 書き込み系は実行のたびに確認ダイアログを挟む（高権限操作の既定ポリシー）
+  const mcpTarget = mcpToolTarget(name);
+  if (mcpTarget) {
+    if (mcpTarget.write && !window.confirm(t("mcp.writeConfirm", { server: mcpTarget.serverName, tool: mcpTarget.toolName }))) {
+      return { ok: false, message: t("mcp.writeDenied") };
+    }
+    try {
+      return await callMcpTool(mcpTarget.serverKey, mcpTarget.toolName, args);
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  }
   if (name === "flyTo") {
     flyTo(await applyDroneViewDefaults(args));
     return { ok: true };
@@ -9815,6 +9965,16 @@ window.addEventListener("pagehide", () => {
 
 (async () => {
   await detectBackend();
+  // MCP 接続基盤の初期化。capabilities 確定後に行い、mcpProxy の有無で
+  // 直叩き→プロキシのフォールバック可否を決める。Box の OAuth 戻りがあればここで処理し、
+  // 有効な MCP サーバーへはバックグラウンドで接続する（ツール一覧を activeChatTools へ合成）
+  initMcp({ hasProxy: () => hasBackendFeature("mcpProxy") });
+  initBoxAuth();
+  try {
+    const boxResult = await handleBoxRedirect();
+    if (boxResult === "done") console.log("[mcp] Box OAuth 接続が完了しました");
+  } catch (e) { console.error(e); }
+  void connectEnabledMcpServers();
   updateAppPanelVisibility();
   // capabilities 確定後に Copilot/Devin 選択肢の可否を再評価する（アプリ版のみ表示）
   updateBridgeProviderOptions();

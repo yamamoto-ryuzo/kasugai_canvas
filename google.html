@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.18.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.19.0</span></h1>
       <p>Google 連携・AI — Gemini AIチャット・Maps Platform・エージェント連携</p>
     </header>
     <main>
@@ -125,6 +125,10 @@
             <p><strong>Devin 接続</strong>：アプリ版の「Devin」を選択して保存すると、<code>devin-bridge/</code>（<code>127.0.0.1:8512</code>）へ接続します。ブリッジは <code>devin acp</code> に対して ACP 認証を行い、利用者自身のアカウントでモデルを利用します。ブラウザ認証または本人の <code>DEVIN_API_KEY</code> を使用し、ローカル CLI のログインだけに依存しません。手動起動時の既定ポートは 8789 です。<a href="#ai-connection-policy">接続方式の判断・利用条件と M365 を見送った理由</a>も参照してください。</p>
           </div>
           <div class="feature-card">
+            <h3>🗂️ データソース（MCP 接続）</h3>
+            <p>管理（⚙）→ AI → データソース でリモート MCP サーバー（Model Context Protocol・Streamable HTTP）を登録すると、そのサーバーのツールが AI チャットへ合成され、「Box の資料を検索して」等の指示で外部データを参照できます。<strong>Box</strong> は公式リモート MCP（mcp.box.com）専用ボタンがあり、Client ID を入れて OAuth 2.0 + PKCE でブラウザ内認証が完結します（Box Developer Console で Custom App 作成＋このアプリの URL をリダイレクト URI に登録が必要。Enterprise は Admin Console での MCP 有効化が前提）。その他の MCP サーバーは URL・Bearer トークン（任意）で追加できます。トークンは BYO として localStorage にのみ保存。読み取り系ツールのみ既定公開で、書き込み系は設定を ON にしても実行ごとに確認ダイアログが出ます。CORS 非対応のサーバーは <code>POST /api/mcp</code> 中継（ローカル版・Workers・Cloud Run で提供・BYO トークン転送のみ）に自動フォールバックします</p>
+          </div>
+          <div class="feature-card">
             <h3>🧩 AIプラグイン生成（自己拡張）</h3>
             <p>チャットに「〜するプラグインを作って」と頼むと、AIがコードを生成してブラウザ内 IndexedDB に保存・即時有効化。適用前にコード全文の確認ダイアログが出ます。読み込みエラーはAIへ返るため、修正→再保存の自律ループが回ります。管理（⚙）→ AI → プラグイン で一覧・有効化・コード確認・<code>.kasp</code> 出力/取込・削除が可能。ストレージ保存のため配布物とは分離され、気に入ったものだけ <code>PLUGIN/</code> に登録して公開できます</p>
           </div>
@@ -141,6 +145,10 @@
           <h3>ローカルサーバー版の独自API（公開環境では無効）</h3>
           <pre><code>GET  /api/capabilities   → {"tier":"local","features":["fetchProxy","pluginWrite","fileWrite",...]}
 GET  /api/fetch?url=...  → CORS回避のGETプロキシ（http/httpsのみ・30秒・20MB上限）
+POST /api/mcp?url=...    → リモート MCP サーバーへの中継プロキシ
+                           （Workers/Cloud Run にも同パスあり。Authorization・
+                           セッションヘッダ・ボディをそのまま転送。
+                           SSRF 制限は /api/fetch と同じ・応答32MB上限）
 POST /api/plugins        → {"id","name","version","description","layer","code"}
                            PLUGIN/&lt;id&gt;/plugin.js・manifest.json を作成し plugins.json に登録
 DELETE /api/plugins/{id} → プラグインの公開取り消し（PLUGIN/&lt;id&gt;/ と plugins.json 登録を削除）

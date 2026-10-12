@@ -273,6 +273,7 @@
                 <section id="manage-ai" class="manage-pane">
                   <nav class="manage-subnav">
                     <button type="button" class="active" data-manage-sub="gemini-panel" data-i18n="manage.section.chat">チャット (AI)</button>
+                    <button type="button" data-manage-sub="datasource-panel" data-i18n="manage.section.datasource">データソース</button>
                     <button type="button" data-manage-sub="plugin-panel" data-i18n="google.tab.plugin">プラグイン</button>
                   </nav>
                   <section id="gemini-panel" class="settings-subpanel active">
@@ -349,6 +350,34 @@
                     <button id="agent-refresh" type="button" data-i18n="agent.refresh">更新</button>
                   </div>
                   <p id="agent-status" class="hint" aria-live="polite"></p>
+                  </section>
+                  <section id="datasource-panel" class="settings-subpanel">
+                  <p class="hint" data-i18n-html="mcp.hint">AI チャットへ外部データソースのツールを追加します（MCP・Model Context Protocol）。接続したサーバーのツールはチャットツールとして合成され、AI がファイル検索や資料参照に利用します。読み取り系ツールのみ既定公開で、書き込み系は下の許可を ON にした場合のみ公開されます（実行時は確認ダイアログが出ます）。</p>
+                  <div class="section-title" data-i18n="mcp.box.title">Box</div>
+                  <p class="hint" data-i18n-html="mcp.box.hint">Box のリモート MCP（mcp.box.com）に接続し、Box 上のファイル検索・Box AI 問い合わせ等を AI チャットから使えるようにします。<a href="https://developer.box.com/guides/box-mcp" target="_blank" rel="noopener noreferrer">Box Developer Console</a> で Custom App (OAuth 2.0) を作成し、リダイレクト URI にこのアプリの URL を登録して Client ID を入力してください。Enterprise 契約では Admin Console での MCP 有効化が必要です。アクセストークンは BYO としてこのブラウザの localStorage にのみ保存されます。</p>
+                  <label class="field-label" for="box-client-id" data-i18n="mcp.box.clientIdLabel">Client ID</label>
+                  <input id="box-client-id" type="text" placeholder="Box アプリの Client ID" data-i18n-attr="placeholder:mcp.box.clientIdPlaceholder" autocomplete="off" size="28" />
+                  <div style="display:flex;gap:6px;margin-top:6px;">
+                    <button id="box-connect" type="button" data-i18n="mcp.box.connect">Box に接続</button>
+                    <button id="box-disconnect" type="button" data-i18n="mcp.box.disconnect">切断</button>
+                  </div>
+                  <p id="box-status" class="hint" aria-live="polite"></p>
+                  <div class="section-title" style="margin-top:14px;" data-i18n="mcp.add.title">MCP サーバー追加</div>
+                  <p class="hint" data-i18n="mcp.add.hint">Box 以外のリモート MCP サーバー（Streamable HTTP 対応）を追加します。固定の Bearer トークンが要る場合は入力してください。</p>
+                  <label class="field-label" for="mcp-add-name" data-i18n="mcp.add.nameLabel">名前</label>
+                  <input id="mcp-add-name" type="text" placeholder="my-server" autocomplete="off" size="28" />
+                  <label class="field-label" for="mcp-add-url" style="margin-top:6px;" data-i18n="mcp.add.urlLabel">エンドポイント URL</label>
+                  <input id="mcp-add-url" type="text" placeholder="https://example.com/mcp" autocomplete="off" size="28" />
+                  <label class="field-label" for="mcp-add-token" style="margin-top:6px;" data-i18n="mcp.add.tokenLabel">Bearer トークン（任意）</label>
+                  <input id="mcp-add-token" type="password" placeholder="省略可" data-i18n-attr="placeholder:mcp.add.tokenPlaceholder" autocomplete="off" size="28" />
+                  <div style="display:flex;gap:6px;margin-top:6px;">
+                    <button id="mcp-add" type="button" data-i18n="mcp.add.add">追加して接続</button>
+                  </div>
+                  <div class="section-title" style="margin-top:14px;" data-i18n="mcp.list.title">登録サーバー</div>
+                  <div id="mcp-server-list"></div>
+                  <label style="margin-top:10px;display:block;"><input id="mcp-allow-write" type="checkbox" /> <span data-i18n="mcp.allowWrite">書き込み系ツールも AI に公開する</span></label>
+                  <p class="hint" data-i18n="mcp.allowWriteHint">OFF の間はファイル作成・更新・削除などの書き込み系ツールを AI に公開しません。ON でも実行ごとに確認ダイアログが出ます。</p>
+                  <p id="mcp-status" class="hint" aria-live="polite"></p>
                   </section>
                 </section>
                 <section id="manage-gmaps" class="manage-pane">

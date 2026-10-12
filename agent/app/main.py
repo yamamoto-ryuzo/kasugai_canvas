@@ -13,9 +13,12 @@
 - /                : web/ の静的配信（同一オリジン運用・CORS 不要）
 """
 import collections
+import ipaddress
 import json
 import re
+import socket
 import time
+import urllib.parse
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -119,7 +122,7 @@ def health():
 @app.get("/api/capabilities")
 def capabilities():
     mode = config.auth_mode()
-    features = ["auth", "kascWrite", "dataStore"] if mode else []
+    features = (["auth", "kascWrite", "dataStore"] if mode else []) + ["mcpProxy"]
     return {
         "tier": "cloudrun",
         "features": features + (["aiProxy"] if config.API_KEY else []),
@@ -364,6 +367,67 @@ async def api_gemini(request: Request):
         return Response(content=resp.content, status_code=resp.status_code,
                         media_type="application/json",
                         headers={"Cache-Control": "no-store"})
+    except Exception as e:
+        return JSONResponse({"error": f"proxy error: {e}"}, status_code=502)
+
+
+# ---- リモート MCP サーバーへの中継プロキシ ----
+# CORS 非対応の MCP エンドポイント（Streamable HTTP）へブラウザから到達するための
+# 薄い転送。ユーザーの Bearer トークンをそのまま転送する（BYO・キー隠蔽ではない）。
+# SSRF 対策として private/loopback 等の接続先は拒否する（workers 側は https 限定）
+_MCP_MAX_BODY_BYTES = 8 * 1024 * 1024
+_MCP_FORWARD_REQ = ("content-type", "accept", "authorization", "mcp-session-id", "mcp-protocol-version")
+_MCP_FORWARD_RES = ("content-type", "mcp-session-id")
+
+
+def _mcp_target_allowed(target: str) -> bool:
+    try:
+        parsed = urllib.parse.urlsplit(target)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    host = parsed.hostname
+
+    def _blocked(ip) -> bool:
+        return (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified)
+
+    try:
+        return not _blocked(ipaddress.ip_address(host))
+    except ValueError:
+        pass
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False
+    for info in infos:
+        try:
+            if _blocked(ipaddress.ip_address(info[4][0])):
+                return False
+        except ValueError:
+            return False
+    return True
+
+
+@app.post("/api/mcp")
+async def api_mcp(request: Request):
+    if not _api_authorized(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    target = request.query_params.get("url") or ""
+    if not _mcp_target_allowed(target):
+        return JSONResponse({"error": "接続先が許可されていません"}, status_code=400)
+    body = await request.body()
+    if len(body) > _MCP_MAX_BODY_BYTES:
+        return JSONResponse({"error": "リクエストが大きすぎます"}, status_code=400)
+    headers = {k: v for k in _MCP_FORWARD_REQ if (v := request.headers.get(k))}
+    try:
+        async with httpx.AsyncClient(timeout=130.0) as client:
+            resp = await client.post(target, headers=headers, content=body)
+        out = {k: v for k in _MCP_FORWARD_RES if (v := resp.headers.get(k))}
+        out["Cache-Control"] = "no-store"
+        return Response(content=resp.content, status_code=resp.status_code, headers=out)
     except Exception as e:
         return JSONResponse({"error": f"proxy error: {e}"}, status_code=502)
 

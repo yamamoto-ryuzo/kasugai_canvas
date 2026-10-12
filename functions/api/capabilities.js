@@ -10,6 +10,8 @@ export async function onRequestGet(context) {
   if (authed && env.KASUGAI_DATA) features.push("dataStore");
   // サーバーキーによる内蔵AI用 Gemini プロキシ（キー隠蔽。訪問者はキー不要）
   if (env.GEMINI_API_KEY || env.GOOGLE_API_KEY) features.push("aiProxy");
+  // リモート MCP サーバーへの薄い中継（BYO トークン転送のみ・常時提供）
+  features.push("mcpProxy");
   return new Response(
     JSON.stringify({
       tier: "workers",

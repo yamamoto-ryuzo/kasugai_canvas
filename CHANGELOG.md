@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [5.19.0] - 2026-10-13
+
+### Added
+
+- データソース（MCP 接続）— 管理 → AI → データソース でリモート MCP サーバー（Model Context Protocol・Streamable HTTP）を登録し、そのツールを AI チャットの functionDeclarations へ `<サーバーキー>__<ツール名>` で合成（`web/mcp.js` 汎用クライアント＋localStorage `mcpServers` レジストリ。`initialize`→`tools/list`→`tools/call`、SSE 応答パース、`Mcp-Session-Id`/`MCP-Protocol-Version` ヘッダ、tools/list ページネーション対応）。読み取り系のみ既定公開で、書き込み系は「書き込み系ツールも AI に公開する」ON 時のみ合成＋実行ごとに確認ダイアログ。登録サーバーは起動時に自動接続され、`kasugaiApi.mcp` からも操作可能
+- Box 接続 — 公式リモート MCP（`https://mcp.box.com`）専用の接続ボタン。OAuth 2.0 + PKCE をブラウザ内で完結（client secret 不要・`web/box.js`）、アクセストークンは BYO として localStorage にのみ保存し、期限切れは refresh_token で自動更新。Box Developer Console での Custom App 作成＋リダイレクト URI 登録（Enterprise は Admin Console での MCP 有効化）が事前準備として必要
+- `POST /api/mcp?url=...` — CORS 非対応のリモート MCP サーバーへの薄い中継プロキシを3バックエンドに実装（ローカル Rust サーバー・`functions/api/mcp.js`・Cloud Run `agent/`）。Authorization・MCP セッションヘッダ・ボディをそのまま転送するのみ（BYO トークン転送・キー隠蔽ではない）。ブラウザは直叩きが TypeError（CORS）の場合に同パスへ自動フォールバック。capabilities の `mcpProxy` feature で通知。SSRF 対策: local は `/api/fetch` と同一ポリシー（`kasugai_canvas.fetch.json` で LAN 許可可）、workers は https 限定＋`MCP_ALLOWED_HOSTS` 環境変数で接続先制限可、cloudrun は private/loopback 解決結果を拒否
+
 ## [5.18.0] - 2026-10-13
 
 ### Added

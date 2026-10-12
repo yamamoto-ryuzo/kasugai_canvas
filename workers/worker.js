@@ -6,6 +6,7 @@ import { onRequestPost as handleKasc } from "../functions/api/kasc.js";
 import { onRequestGet as handleDataGet, onRequestPut as handleDataPut } from "../functions/api/data/[[path]].js";
 import { onRequestGet as handleCapabilities } from "../functions/api/capabilities.js";
 import { onRequestPost as handleGemini } from "../functions/api/gemini.js";
+import { onRequestPost as handleMcp } from "../functions/api/mcp.js";
 import { onRequestGet as handleHealth } from "../functions/health.js";
 import { verifyToken } from "../functions/_lib/token.js";
 
@@ -80,6 +81,12 @@ export default {
     if (path === "/api/gemini") {
       if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
       return handleGemini({ request, env });
+    }
+
+    // リモート MCP サーバーへの中継プロキシ。認可は関数内で判定
+    if (path === "/api/mcp") {
+      if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+      return handleMcp({ request, env });
     }
 
     if (path.startsWith("/api/data/")) {
