@@ -25,8 +25,8 @@
       <p><strong>AI プロバイダは切替式</strong>で、選択肢は名前の接頭辞どおり【API】系と【ブリッジ】系の2系統に分かれます。接続先・設定項目・ツール実行方式が系統ごとに異なり、function calling ループ（ツール結果を見て複数往復で判断する本体AIの動作）は【API】系のみが持ちます。</p>
       <ul>
         <li><strong>【API】 Gemini（既定）／ OpenAI互換</strong> — 公式APIへブラウザから直接接続する BYO キー方式。OpenAI互換は<a href="https://models.github.ai">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントにベースURL・キー・モデル名を指定して接続します。ツール定義・実行ループは Gemini と共通で、宣言を OpenAI 形式へ変換して送信します</li>
-        <li><strong>【ブリッジ】 GitHub Copilot</strong> — 同梱の <code>copilot-bridge/</code>（GitHub Copilot SDK・要 Copilot 契約）経由。<strong>プロバイダ選択肢はアプリ版のみに表示</strong>され（アプリが起動時にブリッジを自動起動・8511・要 Node.js）、選んで保存するだけで疎通したブリッジへ自動接続されます。Copilot に直接呼べる公開APIは無いためブリッジ経由が正規ルートです</li>
-        <li><strong>【ブリッジ】 外部エージェント</strong> — 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。通常版で手動起動した Copilot ブリッジ（既定 8788）や、Antigravity 等で構築した自作エージェントの接続に使います</li>
+        <li><strong>【ブリッジ】 GitHub Copilot</strong>（V5 アプリ版の機能）— 同梱の <code>copilot-bridge/</code>（GitHub Copilot SDK・要 Copilot 契約）経由。アプリが起動時にブリッジを子プロセスとして自動起動し 127.0.0.1:8511 で待受けるため、<strong>プロバイダ選択肢はアプリ版のみに表示</strong>されます（要 Node.js）。選んで保存するだけで疎通したブリッジへ自動接続されます。Copilot に直接呼べる公開APIは無いためブリッジ経由が正規ルートです</li>
+        <li><strong>【ブリッジ】 外部エージェント</strong>（通常版・アプリ版どちらでも利用可）— 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。ブラウザから届くURLであれば接続でき、エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。通常版で手動起動した Copilot ブリッジ（既定 8788）や、Antigravity 等で構築した自作エージェントの接続に使います</li>
       </ul>
       <p><strong>接続しない AI</strong>：Microsoft 365 Copilot・消費者向け Copilot など、プログラム利用を認めた公式経路を持たない AI への Web UI 自動化接続は、各サービスの使用条件（自動アクセスの禁止・技術的制限の回避の禁止）に抵触するため、本プロジェクトでは実装・提供しません。ブリッジ接続は公式 SDK/CLI 等の正規プログラム経路があるもの（現状は GitHub Copilot SDK）に限ります。</p>
       <p>AI の実行経路は function calling によるツール呼び出しで、<strong>48個のツール</strong>がアプリの全主要機能を網羅します：</p>
