@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.17.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.18.0</span></h1>
       <p>Google 連携・AI — Gemini AIチャット・Maps Platform・エージェント連携</p>
     </header>
     <main>
@@ -27,28 +27,53 @@
               <tr><td>OpenAI互換（GitHub Models・OpenAI・Ollama 等）</td><td>○（BYOキー・エンドポイントがCORS許可の場合）</td><td>○</td></tr>
               <tr><td>外部エージェント（汎用エンドポイント）</td><td>○（ブラウザから届くURL）</td><td>○</td></tr>
               <tr><td>GitHub Copilot（<code>copilot-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（アプリがブリッジを自動起動 :8511・要 Node.js＋Copilot CLI）</td></tr>
-              <tr><td>Microsoft 365 Copilot・消費者向け Copilot（Web UI自動化）</td><td colspan="2">✕ 提供しない（使用条件で自動アクセスを明示禁止。正規経路の Graph Copilot API は管理者同意＋有料ライセンスが必須）</td></tr>
+              <tr><td>Devin（<code>devin-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（アプリがブリッジを自動起動 :8512・要 Node.js＋Devin CLI・本人の ACP 認証）</td></tr>
+              <tr><td>Microsoft 365 Copilot（公式 Chat API）</td><td colspan="2">未実装・標準連携は見送り（ライセンス・アプリ登録・必要権限への管理者同意等が前提。接続自体の禁止ではない）</td></tr>
+              <tr><td>Microsoft Copilot / M365 Copilot（Web UI 自動化）</td><td colspan="2">提供しない（消費者向けは自動アクセスの明示禁止。職場・学校向けとの違いは<a href="#m365-connection-policy">見送り理由</a>を参照）</td></tr>
               <tr><td>高権限ツール（<code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code>・<code>publishPlugin</code>・ファイル保存）</td><td>—</td><td>○（local ティアのみ）</td></tr>
             </tbody>
           </table>
-          <p>「通常版」は静的配信・Cloudflare・Cloud Run などブラウザだけで開く形態、「アプリ版」はローカル Rust サーバー（kasugai_canvas.exe）で動かす形態です。AI チャット本体・地図操作・コード実行・プラグイン生成はどちらでも使え、違いは<strong>永続化・共有・システムに触れる高権限機能の有無</strong>だけです。GitHub Copilot はブラウザから直接呼べる公開APIを持たないためブリッジ（Node 製）が必須です。<strong>アプリ版は起動時に copilot-bridge を子プロセスとして自動起動し 127.0.0.1:8511 で待受けます</strong>（要 Node.js＋Copilot CLI のログイン。`KASUGAI_NO_COPILOT_BRIDGE` で無効化可）。プロバイダ選択肢の「GitHub Copilot」は<strong>アプリ版でのみ表示</strong>され、選択→保存で疎通するブリッジへ自動接続します（capabilities 通知 → 8511 → 8788 の順で検出）。通常版では選択肢は出ませんが、手動起動したブリッジ（既定 8788）へプロバイダ「外部エージェント」から接続すれば利用できます。</p>
-          <p><strong>提供しない AI 経路</strong>：Microsoft 365 Copilot・消費者向け Copilot（copilot.com 等）の Web UI を自動化して接続する方式は<strong>提供しません</strong>。Copilot 使用条件が「ツールやコンピューター プログラム（ボットやスクレイパー等）によるアクセス」を明示禁止しており、職場アカウント向けも技術的制限（ボット検知）の回避に該当し得るためです。M365 Copilot をプログラムから呼ぶ正規経路は Microsoft Graph の Copilot Chat API（アプリ登録＋7スコープのテナント管理者同意＋M365 Copilot 有料ライセンス必須）のみで、管理者権限なしで動く公式経路は存在しません。消費者向け ChatGPT・Gemini・Claude 等の Web UI 自動化も各社規約で同様に禁止されているため対象外です。ブリッジで接続するのは公式 SDK/CLI 等、プログラム利用を認められた経路に限ります。</p>
+          <p>「通常版」は静的配信・Cloudflare・Cloud Run などブラウザだけで開く形態、「アプリ版」はローカル Rust サーバー（kasugai_canvas.exe）で動かす形態です。AI チャット本体・地図操作・コード実行・プラグイン生成はどちらでも使え、アプリ版には<strong>永続化・共有・システムに触れる高権限機能とローカルブリッジの自動起動</strong>があります。</p>
+          <p><strong>GitHub Copilot / Devin はアプリ版でのみ専用プロバイダを表示</strong>します。アプリは <code>copilot-bridge</code> を <code>127.0.0.1:8511</code>、<code>devin-bridge</code> を <code>127.0.0.1:8512</code> で自動起動し、アプリ本体（既定 :8510）の終了時に両方を停止します。要 Node.js と各 CLI・本人の認証。<code>KASUGAI_NO_COPILOT_BRIDGE</code> / <code>KASUGAI_NO_DEVIN_BRIDGE</code> でそれぞれ自動起動を無効化できます。選択→保存で capabilities 通知のエンドポイント、アプリ用ポート、手動用ポートの順に自動検出します。通常版からは、本人の端末で手動起動したブリッジ（Copilot: 8788 / Devin: 8789）を「外部エージェント」から接続できます。</p>
+        </div>
+        <div class="url-box" id="ai-connection-policy">
+          <h3>AI 接続方式と利用規約上の判断</h3>
+          <p><strong>判断対象は「この接続方式でサービスに接続し、提供されるモデルを利用することが禁じられているか」です。</strong>以下は各利用者が自分のアカウントで正規認証し、利用可能なモデルを契約の利用枠内で使う構成についての判断です。OSS アプリ・自作ブリッジの配布と、配布者の AI アカウントの共有・AI サービス自体の再販は区別します。</p>
+          <table>
+            <thead><tr><th>接続方式</th><th>公式資料の根拠</th><th>本プロジェクトの判断</th></tr></thead>
+            <tbody>
+              <tr><td>GitHub Copilot：アプリ → ブリッジ → 公式 SDK / Copilot CLI → モデル</td><td><a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/auth/authenticate" target="_blank" rel="noopener noreferrer">SDK 認証ガイド</a>が、本人のログイン資格情報を使うデスクトップアプリ・開発／テスト環境を明示的に想定。</td><td><strong>採用。</strong>公式に想定された接続方式であり、この方式でのモデル利用を禁止する規定は確認されていません。</td></tr>
+              <tr><td>Devin：アプリ → ブリッジ → <code>devin acp</code> → モデル</td><td><a href="https://docs.devin.ai/cli/acp/zed" target="_blank" rel="noopener noreferrer">公式 ACP 連携ガイド</a>が、ACP 対応クライアントからの子プロセス起動とブラウザ認証を案内。</td><td><strong>採用。</strong>公式の外部接続機構を使用しており、この方式でのモデル利用を禁止する規定は確認されていません。KASUGAI 自体が Cognition の公式製品・認定連携という意味ではありません。</td></tr>
+            </tbody>
+          </table>
+          <p>上記の GitHub Copilot / Devin 経路について、<strong>ブリッジを挟むこと、自作 OSS アプリから呼ぶこと、通常の機能確認・回帰テストで自動呼び出しすること自体を一律に禁じる条項は、確認した資料には見当たりません</strong>。本人の利用枠・レート制限・組織ポリシーを守り、制限回避や第三者向けの共有バックエンド運用は行わない前提です。モデルへの会話・カメラ・レイヤー情報の送信自体を不採用理由にはしません（送信権限があり、サービスの禁止データに該当しないことが前提）。アクセス制御やツール制限の実装品質は、接続方式の可否とは別に確認します。</p>
+          <p>根拠となる規約：<a href="https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features" target="_blank" rel="noopener noreferrer">GitHub 追加製品規約（Copilot の契約別適用先）</a>・<a href="https://docs.github.com/en/site-policy/github-terms/github-terms-of-service" target="_blank" rel="noopener noreferrer">GitHub 利用規約</a>・<a href="https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies" target="_blank" rel="noopener noreferrer">GitHub AUP</a>・<a href="https://cognition.com/legal/platform-terms-of-service" target="_blank" rel="noopener noreferrer">Cognition 利用規約（§2）</a>・<a href="https://cognition.com/legal/acceptable-use-policy" target="_blank" rel="noopener noreferrer">Cognition AUP</a>。</p>
+          <h4 id="m365-connection-policy">M365 / Microsoft Copilot を見送った理由</h4>
+          <p><strong>「M365 のモデル利用そのものが禁止」ではありません。</strong>以前検討した Web UI 自動化と、条件を満たして使う公式 API を分けて判断します。GitHub Copilot と Microsoft 365 Copilot は別サービスです。</p>
+          <ul>
+            <li><strong>消費者向け Microsoft Copilot の Web UI 自動化：規約上の禁止が理由。</strong><a href="https://www.microsoft.com/en-us/microsoft-copilot/for-individuals/termsofuse" target="_blank" rel="noopener noreferrer">Microsoft Copilot 使用条件</a>の「WHO CAN USE COPILOT」は “Don’t use tools or computer programs (like bots or scrapers) to access Copilot.” と明示しています。画面への自動入力・送信・応答取得をブリッジ化する方式は採用しません。本人アカウント・ローカル利用だけでこの制限が解除されるわけではありません。</li>
+            <li><strong>職場・学校向け M365 Copilot の Web UI 自動化：正規のプログラム接続経路として採用しない方針。</strong>上記の消費者向け規約は、職場・学校・組織（Entra）アカウントには適用しないと明記されています。その条項を根拠に M365 も一律禁止とは断定しません。Web UI 自動化の許諾を確認できていない経路や、認証・アクセス制御・ボット対策の回避を前提とする経路は提供せず、連携を追加する場合は公式 API と適用契約に従います。</li>
+            <li><strong>M365 Copilot 公式 Chat API：禁止ではなく、導入条件により標準連携を見送り。</strong><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/overview" target="_blank" rel="noopener noreferrer">公式 Chat API（プレビュー）</a>は自作アプリへの組み込みを想定しています。ただし、Microsoft 365 Copilot アドオンライセンス・アプリ登録・職場／学校アカウントの委任アクセスと必要権限への同意が前提です。確認時点の <a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/copilotconversation-chat" target="_blank" rel="noopener noreferrer">chat API 仕様</a>では7権限すべてが必要で、個人 Microsoft アカウント・アプリケーション権限（ユーザーなしの app-only）は非対応です。</li>
+          </ul>
+          <p>必要な7権限：<code>Sites.Read.All</code>・<code>Mail.Read</code>・<code>People.Read.All</code>・<code>OnlineMeetingTranscript.Read.All</code>・<code>Chat.Read</code>・<code>ChannelMessage.Read.All</code>・<code>ExternalItem.Read.All</code>。このうち <a href="https://learn.microsoft.com/en-us/graph/permissions-reference#channelmessagereadall" target="_blank" rel="noopener noreferrer"><code>ChannelMessage.Read.All</code> などは管理者同意が必須</a>であり、利用者が自分でログインするだけでは導入できません。<strong>管理者同意が必要ということと、実際の利用者本人が管理者でなければならないということは別です。</strong></p>
+          <p>このため、組織の事前設定なしで使える標準ブリッジとしては見送っています。ライセンス・管理者同意等を整え、<a href="https://learn.microsoft.com/en-us/legal/m365-copilot-apis/terms-of-use" target="_blank" rel="noopener noreferrer">M365 Copilot APIs 使用条件</a>に従う公式 API 連携は別途検討可能です。確認時点では <code>/beta</code> API で本番利用は非サポートと案内されており、製品への採用時には提供状況の再確認も必要です。</p>
+          <p><small>確認日：2026年10月13日。上記は公開規約・公式資料に基づく接続方式の判断であり、提供元による本アプリの個別承認や、用途を問わない適合保証ではありません。個別契約・組織ポリシー・規約改定がある場合はそれらを確認してください。</small></p>
         </div>
         <div class="url-box">
           <h3>AI プロバイダの2系統（【API】と【ブリッジ】）</h3>
           <p>「AI プロバイダ」の選択肢は名前の先頭の接頭辞で2系統に分かれます。入力方法も動作モデルも異なるため、目的に応じて選びます。</p>
           <table>
-            <thead><tr><th></th><th>【API】Gemini / OpenAI互換</th><th>【ブリッジ】GitHub Copilot / 外部エージェント</th></tr></thead>
+            <thead><tr><th></th><th>【API】Gemini / OpenAI互換</th><th>【ブリッジ】GitHub Copilot / Devin / 外部エージェント</th></tr></thead>
             <tbody>
               <tr><td>接続先</td><td>プロバイダの公式 API へブラウザから直接接続（HTTPS）</td><td>ローカル等のエンドポイント（<code>/agent</code>）へ POST</td></tr>
               <tr><td>設定するもの</td><td>APIキー＋モデル（OpenAI互換はベースURLも）</td><td>エンドポイントURL＋トークン（任意）＋BYOキー送信（任意）</td></tr>
               <tr><td>AI 側の資格</td><td>BYO キー、またはサーバーキー（<code>/api/gemini</code>）</td><td>ブリッジ側が持つ（Copilot CLI ログイン等）。ブラウザにキーは不要</td></tr>
               <tr><td>ツール実行方式</td><td>function calling ループ — ツール結果を見て複数往復で判断するため多段操作に強い</td><td>単発キュー — 応答の <code>actions</code> を一括実行。ツール結果を見た往復はしない</td></tr>
               <tr><td>向いている用途</td><td>高精度な地図操作・プラグイン生成・資料生成などの本体 AI</td><td>既存の Copilot 契約や自作エージェント（外部実装）を繋いで使う</td></tr>
-              <tr><td>提供形態</td><td>通常版</td><td>GitHub Copilot は <strong>V5 アプリ版のみ</strong>（選択肢自体が非表示）。外部エージェントは通常版</td></tr>
+              <tr><td>提供形態</td><td>通常版</td><td>GitHub Copilot / Devin の専用選択肢は <strong>V5 アプリ版のみ</strong>。外部エージェントは通常版でも利用可</td></tr>
             </tbody>
           </table>
-          <p>どちらを選んでもチャット UI・地図操作・<code>runCode</code>・破壊的操作の確認ダイアログは共通です。ブリッジ系を選んだ場合のみ「エンドポイントURL・トークン・BYOキー送信」のブリッジ欄が表示され、GitHub Copilot ではさらにモデル選択と疎通ステータスが表示されます。</p>
+          <p>どちらを選んでもチャット UI・地図操作・<code>runCode</code>・破壊的操作の確認ダイアログは共通です。ブリッジ系を選んだ場合のみ「エンドポイントURL・トークン・BYOキー送信」のブリッジ欄が表示され、GitHub Copilot / Devin ではさらにモデル選択と疎通ステータスが表示されます。</p>
         </div>
         <div class="features">
           <div class="feature-card">
@@ -96,7 +121,8 @@
           <div class="feature-card">
             <h3>🤝 エージェント連携</h3>
             <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します。管理（⚙）→ AI → チャット で「AI プロバイダ」を「外部エージェント (ブリッジ)」にし、ブリッジ欄にエンドポイントURL・Bearerトークン（任意）を設定して保存すると、チャット入力がそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history, tools}</code>（<code>tools</code> は現在公開中のツール宣言・functionDeclarations 形式）、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
-            <p><strong>GitHub Copilot 接続</strong>：<strong>アプリ版では起動時に同梱の <code>copilot-bridge/</code>（<a href="https://github.com/github/copilot-sdk" target="_blank" rel="noopener noreferrer">GitHub Copilot SDK</a> 使用・要 Copilot サブスクリプション＋Node.js）が自動起動し 127.0.0.1:8511 で待受けます</strong>。管理（⚙）→ AI → チャット の「AI プロバイダ」に「GitHub Copilot」が表示される（<strong>アプリ版のみ</strong>）ので、選んで保存すれば疎通したブリッジへ自動接続され、Copilot を内蔵AIとして利用できます。通常版ではこの選択肢は表示されませんが、閲覧者のマシンでブリッジを手動起動し（既定 <code>http://127.0.0.1:8788/agent</code>・セットアップは同 README を参照）、プロバイダ「外部エージェント」から接続すれば利用できます。Copilot 本体をブラウザから直接呼ぶ公式APIは無いため、このブリッジ経由が正規の接続経路です</p>
+            <p><strong>GitHub Copilot 接続</strong>：<strong>アプリ版では起動時に同梱の <code>copilot-bridge/</code>（<a href="https://github.com/github/copilot-sdk" target="_blank" rel="noopener noreferrer">GitHub Copilot SDK</a> 使用・要 Copilot サブスクリプション＋Node.js）が自動起動し 127.0.0.1:8511 で待受けます</strong>。管理（⚙）→ AI → チャット の「AI プロバイダ」に「GitHub Copilot」が表示される（<strong>アプリ版のみ</strong>）ので、選んで保存すれば疎通したブリッジへ自動接続され、Copilot を内蔵AIとして利用できます。通常版ではこの選択肢は表示されませんが、閲覧者のマシンでブリッジを手動起動し（既定 <code>http://127.0.0.1:8788/agent</code>・セットアップは同 README を参照）、プロバイダ「外部エージェント」から接続すれば利用できます。本アプリでは、ブラウザからモデルへ直接接続する代わりに公式 SDK / CLI をローカルブリッジ経由で利用します</p>
+            <p><strong>Devin 接続</strong>：アプリ版の「Devin」を選択して保存すると、<code>devin-bridge/</code>（<code>127.0.0.1:8512</code>）へ接続します。ブリッジは <code>devin acp</code> に対して ACP 認証を行い、利用者自身のアカウントでモデルを利用します。ブラウザ認証または本人の <code>DEVIN_API_KEY</code> を使用し、ローカル CLI のログインだけに依存しません。手動起動時の既定ポートは 8789 です。<a href="#ai-connection-policy">接続方式の判断・利用条件と M365 を見送った理由</a>も参照してください。</p>
           </div>
           <div class="feature-card">
             <h3>🧩 AIプラグイン生成（自己拡張）</h3>

@@ -281,6 +281,7 @@
                     <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
                     <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
                     <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
+                    <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
                     <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
                   </select>
                   <div id="gemini-fields">
@@ -309,6 +310,7 @@
                   <div id="bridge-fields" hidden>
                   <p class="hint" data-i18n-html="agent.externalHint">チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
                   <p class="hint" data-i18n-html="chat.copilot.hint">GitHub Copilot の場合は同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）を起動し、エンドポイントに <code>http://127.0.0.1:8788/agent</code> を指定します（アプリ版では自動起動・空欄なら自動検出）。ブリッジの起動（<code>npm install && npm start</code>）と GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
+                  <p class="hint" data-i18n-html="chat.devin.hint">Devin の場合は同梱の Devin ブリッジ（<code>devin-bridge/</code>・<code>devin acp</code>）を起動し、エンドポイントに <code>http://127.0.0.1:8789/agent</code> を指定します（アプリ版では自動起動 :8512・空欄なら自動検出）。Devin CLI と利用者自身の Devin プランが必要で、ローカル・本人利用限定です — 手順と利用条件は devin-bridge/README.md。</p>
                   <p class="hint" id="agent-backend-status" aria-live="polite"></p>
                   <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
                   <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
@@ -319,6 +321,12 @@
                   <select id="copilot-model"></select>
                   <p class="hint" data-i18n="chat.copilot.modelHint">ブリッジから取得した利用可能な Copilot モデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
                   <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
+                  </div>
+                  <div id="devin-fields" hidden>
+                  <label class="field-label" for="devin-model" data-i18n="chat.devin.modelLabel">モデル</label>
+                  <select id="devin-model"></select>
+                  <p class="hint" data-i18n="chat.devin.modelHint">ブリッジから取得した Devin のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
+                  <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
                   </div>
                   <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
                   <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>

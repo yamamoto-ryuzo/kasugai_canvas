@@ -6457,27 +6457,31 @@ function isSecureAgentEndpoint(endpoint) {
   }
 }
 
-// GitHub Copilot プロバイダはアプリ版（local ティアで copilotBridge を通知する
-// 環境 = アプリがブリッジを自動起動する構成）のときのみ選択肢に出す。
+// GitHub Copilot / Devin プロバイダはアプリ版（local ティアで各ブリッジ feature を
+// 通知する環境 = アプリがブリッジを自動起動する構成）のときのみ選択肢に出す。
 // option 要素の hidden 属性はブラウザ差があるため、要素自体を着脱する。
 // 通常版で手動ブリッジを使う場合はプロバイダ「外部エージェント」から接続する
-let copilotProviderOption = null;
-function updateCopilotProviderOption() {
+const bridgeProviderOptionStash = {};
+function updateBridgeProviderOption(feature, value) {
   const select = document.querySelector("#chat-provider");
   if (!select) return;
-  const option = select.querySelector('option[value="copilot"]');
-  if (hasBackendFeature("copilotBridge")) {
+  const option = select.querySelector(`option[value="${value}"]`);
+  if (hasBackendFeature(feature)) {
     // 再接続時は【ブリッジ】系（agent の手前）に戻しカテゴリ順を保つ
-    if (!option && copilotProviderOption) {
+    if (!option && bridgeProviderOptionStash[value]) {
       const agentOpt = select.querySelector('option[value="agent"]');
-      select.insertBefore(copilotProviderOption, agentOpt || null);
+      select.insertBefore(bridgeProviderOptionStash[value], agentOpt || null);
     }
   } else if (option) {
-    const wasSelected = select.value === "copilot";
-    copilotProviderOption = option;
+    const wasSelected = select.value === value;
+    bridgeProviderOptionStash[value] = option;
     option.remove();
     if (wasSelected) select.dispatchEvent(new Event("change"));
   }
+}
+function updateBridgeProviderOptions() {
+  updateBridgeProviderOption("copilotBridge", "copilot");
+  updateBridgeProviderOption("devinBridge", "devin");
 }
 
 function updateChatPanelVisibility() {
@@ -6527,6 +6531,9 @@ function setupGoogleSettings() {
   const copilotFields = document.querySelector("#copilot-fields");
   const copilotStatus = document.querySelector("#copilot-endpoint-status");
   const copilotModelSelect = document.querySelector("#copilot-model");
+  const devinFields = document.querySelector("#devin-fields");
+  const devinStatus = document.querySelector("#devin-endpoint-status");
+  const devinModelSelect = document.querySelector("#devin-model");
   if (!keyInput || !saveButton) return;
   // ブリッジの /models から利用可能な Copilot モデル一覧を取り込む。
   // 保存済みの選択が一覧に無ければ先頭に残す。空値はブリッジ既定モデル
@@ -6572,21 +6579,66 @@ function setupGoogleSettings() {
       : t("chat.copilot.statusNg", { endpoint: fallback });
     void refreshCopilotModels(found?.endpoint || "");
   };
+  // Devin ブリッジの /models からモデル一覧を取り込む（copilot と同じ手順）
+  const refreshDevinModels = async (endpoint) => {
+    if (!devinModelSelect) return;
+    const saved = getDevinModel();
+    let models = [];
+    if (endpoint) {
+      try {
+        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(4000) });
+        const d = await r.json().catch(() => ({}));
+        if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
+      } catch (e) {}
+    }
+    devinModelSelect.textContent = "";
+    const add = (value, label) => {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = label;
+      devinModelSelect.appendChild(o);
+    };
+    add("", t("chat.devin.modelDefault"));
+    const seen = new Set();
+    if (saved && !models.some(m => m.id === saved)) { add(saved, saved); seen.add(saved); }
+    for (const m of models) {
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      add(m.id, m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id);
+    }
+    devinModelSelect.value = saved;
+    if (devinModelSelect.value !== saved) devinModelSelect.value = "";
+  };
+  // Devin ブリッジの疎通確認。未入力ならアプリ管理ブリッジ(8512)・手動ブリッジ(8789)を順に試す
+  const refreshDevinStatus = async () => {
+    if (!devinStatus) return;
+    const configured = (endpointInput?.value || "").trim();
+    const fallback = configured || devinBridgeCandidates()[0];
+    devinStatus.textContent = t("chat.devin.endpoint", { endpoint: fallback });
+    const found = configured ? await pingBridge(configured) : await detectDevinBridge();
+    devinStatus.textContent = found
+      ? t("chat.devin.statusOk", { endpoint: found.endpoint, model: found.model })
+      : t("chat.devin.statusNg", { endpoint: fallback });
+    void refreshDevinModels(found?.endpoint || "");
+  };
   const syncProviderFields = () => {
     const v = providerSelect?.value || "gemini";
     if (geminiFields) geminiFields.hidden = v !== "gemini";
     if (openaiFields) openaiFields.hidden = v !== "openai";
-    if (bridgeFields) bridgeFields.hidden = !(v === "copilot" || v === "agent");
+    if (bridgeFields) bridgeFields.hidden = !(v === "copilot" || v === "devin" || v === "agent");
     if (copilotFields) copilotFields.hidden = v !== "copilot";
-    if (v === "copilot") {
+    if (devinFields) devinFields.hidden = v !== "devin";
+    if (v === "copilot" || v === "devin") {
       // エンドポイント未入力なら疎通するブリッジを自動検出して入力する
+      const detect = v === "copilot" ? detectCopilotBridge : detectDevinBridge;
+      const refresh = v === "copilot" ? refreshCopilotStatus : refreshDevinStatus;
       if (endpointInput && !endpointInput.value.trim()) {
-        void detectCopilotBridge().then(found => {
+        void detect().then(found => {
           if (found && endpointInput && !endpointInput.value.trim()) endpointInput.value = found.endpoint;
-          void refreshCopilotStatus();
+          void refresh();
         });
       }
-      void refreshCopilotStatus();
+      void refresh();
     }
   };
   try {
@@ -6594,8 +6646,8 @@ function setupGoogleSettings() {
     const savedModel = localStorage.getItem("googleGeminiModel");
     if (savedModel && modelSelect) modelSelect.value = savedModel;
     if (providerSelect) providerSelect.value = getChatProvider();
-    // Copilot 選択肢はアプリ版のみ。非対応環境で保存値が copilot なら Gemini 表示に戻す
-    updateCopilotProviderOption();
+    // Copilot/Devin 選択肢はアプリ版のみ。非対応環境で保存値が該当プロバイダなら Gemini 表示に戻す
+    updateBridgeProviderOptions();
     if (openaiBaseUrlInput) openaiBaseUrlInput.value = localStorage.getItem("openaiBaseUrl") || "";
     if (openaiKeyInput) openaiKeyInput.value = localStorage.getItem("openaiApiKey") || "";
     if (openaiModelInput) openaiModelInput.value = localStorage.getItem("openaiModel") || "";
@@ -6604,6 +6656,7 @@ function setupGoogleSettings() {
     if (sendKeyInput) sendKeyInput.checked = localStorage.getItem("agentSendKey") === "1";
     if (stepsInput) stepsInput.value = String(getChatMaxToolSteps());
     void refreshCopilotModels(""); // 保存値・既定オプションだけ先に埋めておく
+    void refreshDevinModels("");
     syncProviderFields();
   } catch (e) {}
   providerSelect?.addEventListener("change", syncProviderFields);
@@ -6616,22 +6669,25 @@ function setupGoogleSettings() {
       if (openaiKeyInput) localStorage.setItem("openaiApiKey", openaiKeyInput.value.trim());
       if (openaiModelInput) localStorage.setItem("openaiModel", openaiModelInput.value.trim());
       if (copilotModelSelect) localStorage.setItem("copilotModel", copilotModelSelect.value);
-      // ブリッジ系プロバイダ（copilot/agent）はエージェント接続を有効化し、
+      if (devinModelSelect) localStorage.setItem("devinModel", devinModelSelect.value);
+      // ブリッジ系プロバイダ（copilot/devin/agent）はエージェント接続を有効化し、
       // API系（gemini/openai）は無効化する。プロバイダ選択が唯一の切替源
       const pv = providerSelect?.value || "gemini";
       if (endpointInput) {
         let ep = endpointInput.value.trim();
         if (!ep && pv === "copilot") ep = copilotBridgeCandidates()[0];
+        if (!ep && pv === "devin") ep = devinBridgeCandidates()[0];
         if (!ep && pv === "agent") ep = defaultAgentEndpoint() || "";
         endpointInput.value = ep;
         localStorage.setItem("agentEndpoint", ep);
       }
       if (tokenInput) localStorage.setItem("agentToken", tokenInput.value.trim());
       if (sendKeyInput) localStorage.setItem("agentSendKey", sendKeyInput.checked ? "1" : "0");
-      localStorage.setItem("agentEnabled", (pv === "copilot" || pv === "agent") ? "1" : "0");
+      localStorage.setItem("agentEnabled", (pv === "copilot" || pv === "devin" || pv === "agent") ? "1" : "0");
       // 旧自動設定マーカーは廃止（エンドポイント欄が明示されるため不要）
       localStorage.removeItem("agentAutoConfig");
       if (pv === "copilot") void refreshCopilotStatus();
+      if (pv === "devin") void refreshDevinStatus();
       if (stepsInput) {
         localStorage.setItem("geminiToolMaxSteps", String(clampToolSteps(stepsInput.value)));
         stepsInput.value = String(getChatMaxToolSteps());
@@ -9327,13 +9383,40 @@ function getCopilotModel() {
   try { return localStorage.getItem("copilotModel") || ""; } catch (e) { return ""; }
 }
 
+// Devin 接続用ブリッジ（devin-bridge/）の既定エンドポイント。
+// 手動起動ブリッジは 8789、アプリ版（local ティア）が自動起動するブリッジは 8512
+const DEVIN_BRIDGE_ENDPOINT = "http://127.0.0.1:8789/agent";
+const DEVIN_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8512/agent";
+
+function devinBridgeCandidates() {
+  const list = [];
+  const advertised = backendCapabilities?.devin?.endpoint;
+  if (advertised) list.push(advertised);
+  if (backendCapabilities?.tier === "local") list.push(DEVIN_BRIDGE_ENDPOINT_APP);
+  list.push(DEVIN_BRIDGE_ENDPOINT);
+  return [...new Set(list)];
+}
+
+async function detectDevinBridge() {
+  for (const endpoint of devinBridgeCandidates()) {
+    const found = await pingBridge(endpoint);
+    if (found) return found;
+  }
+  return null;
+}
+
+// 設定済みの Devin モデル（空 = ブリッジ既定モデル）。ブリッジへの要求に同梱する
+function getDevinModel() {
+  try { return localStorage.getItem("devinModel") || ""; } catch (e) { return ""; }
+}
+
 // 内蔵AIのプロバイダ選択。Gemini（BYOキーまたはサーバープロキシ）、
 // OpenAI互換API（GitHub Models・OpenAI・Ollama等）のAPI系と、
 // GitHub Copilot（copilot-bridge）・外部エージェントのブリッジ系のいずれか
 function getChatProvider() {
   try {
     const p = localStorage.getItem("chatProvider");
-    if (["gemini", "openai", "copilot", "agent"].includes(p)) return p;
+    if (["gemini", "openai", "copilot", "devin", "agent"].includes(p)) return p;
     // 移行前の利用形態を推定（プロバイダ未保存＋エージェント有効 → agent 相当）
     if (!p) {
       const enabledFlag = localStorage.getItem("agentEnabled");
@@ -9628,8 +9711,9 @@ function setupChatPanel() {
           // 外部エージェントがツール一覧を必要とする場合のため宣言を同梱する
           // （Copilot ブリッジ等が functionDeclarations をそのまま登録できる）
           tools: activeChatTools()[0]?.functionDeclarations || [],
-          // Copilot プロバイダ利用時は選択モデルをブリッジへ伝える
+          // Copilot/Devin プロバイダ利用時は選択モデルをブリッジへ伝える
           ...(getChatProvider() === "copilot" && getCopilotModel() ? { model: getCopilotModel() } : {}),
+          ...(getChatProvider() === "devin" && getDevinModel() ? { model: getDevinModel() } : {}),
           ...(apiKey ? { apiKey } : {}),
         }),
       });
@@ -9690,12 +9774,12 @@ function setupChatPanel() {
     const provider = getChatProvider();
     const hasKey = provider === "openai"
       ? !!getOpenAIConfig().apiKey
-      : (provider === "copilot" || provider === "agent")
+      : (provider === "copilot" || provider === "devin" || provider === "agent")
         ? isAgentEnabled()
         : (!!window.kasugaiApi.getGoogleApiKey() || !!aiProxyEndpoint());
     if (!hasKey) {
       const local = await handleLocalChatCommand(text);
-      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
+      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : provider === "devin" ? "chat.noApiKeyDevin" : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
       addMessage("assistant", local || t(key));
       return;
     }
@@ -9732,8 +9816,8 @@ window.addEventListener("pagehide", () => {
 (async () => {
   await detectBackend();
   updateAppPanelVisibility();
-  // capabilities 確定後に Copilot 選択肢の可否を再評価する（アプリ版のみ表示）
-  updateCopilotProviderOption();
+  // capabilities 確定後に Copilot/Devin 選択肢の可否を再評価する（アプリ版のみ表示）
+  updateBridgeProviderOptions();
   // capabilities 取得で既定エンドポイントが解決し自動接続が有効になった場合、
   // プロバイダ表示（起動時は capabilities 未取得で gemini 表示）を再同期する
   const providerSelectAfterCaps = document.querySelector("#chat-provider");

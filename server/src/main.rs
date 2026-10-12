@@ -85,8 +85,12 @@ struct AppState {
     // GitHub Copilot ブリッジ(copilot-bridge/server.mjs)の子プロセス。
     // アプリ版ではサーバーが自動起動し 127.0.0.1:8511 に待受けさせる
     copilot_bridge: Arc<Mutex<Option<tokio::process::Child>>>,
+    // Devin ブリッジ(devin-bridge/server.mjs)の子プロセス。
+    // アプリ版ではサーバーが自動起動し 127.0.0.1:8512 に待受けさせる
+    devin_bridge: Arc<Mutex<Option<tokio::process::Child>>>,
     // フロントへ通知するブリッジのエージェントエンドポイント(管理対象がある場合のみ)
     copilot_endpoint: Option<String>,
+    devin_endpoint: Option<String>,
 }
 
 // /api/fetch の上限とタイムアウト
@@ -207,12 +211,17 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
     if state.copilot_endpoint.is_some() {
         features.push("copilotBridge");
     }
+    // Devin ブリッジの管理対象があるときも同様に通知する
+    if state.devin_endpoint.is_some() {
+        features.push("devinBridge");
+    }
     Json(json!({
         "tier": "local",
         "name": "kasugai_canvas",
         "version": env!("CARGO_PKG_VERSION"),
         "features": features,
-        "copilot": state.copilot_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null)
+        "copilot": state.copilot_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null),
+        "devin": state.devin_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null)
     }))
 }
 
@@ -4332,13 +4341,24 @@ fn resolve_dir(
     fallback()
 }
 
-// ---- GitHub Copilot ブリッジの自動起動（アプリ版のみ） ----
+// ---- AI ブリッジの自動起動（アプリ版のみ） ----
 // Copilot はブラウザから直接呼べる公開APIを持たないため、公式 SDK を使う
 // Node 製ブリッジ(copilot-bridge/server.mjs)を子プロセスとして起動し、
 // 127.0.0.1:8511 に待受けさせる。要 Node.js（+ Copilot CLI のログイン）
 const COPILOT_BRIDGE_PORT: u16 = 8511;
+// Devin CLI 用ブリッジ(devin-bridge/server.mjs)は 127.0.0.1:8512。
+// devin acp（ACP）を駆動する。要 Node.js + Devin CLI（APIキーまたはブラウザログイン）
+const DEVIN_BRIDGE_PORT: u16 = 8512;
 
-fn spawn_copilot_bridge(bridge_dir: &Path, log_path: &Path) -> Option<tokio::process::Child> {
+// Node 製ブリッジ(server.mjs)を子プロセスとして起動する。
+// port_env_name にポート番号を渡す環境変数名、label にログ接頭辞を指定する
+fn spawn_node_bridge(
+    bridge_dir: &Path,
+    log_path: &Path,
+    port_env_name: &str,
+    port: u16,
+    label: &str,
+) -> Option<tokio::process::Child> {
     // windows_subsystem="windows" ではコンソールが無いため、
     // ブリッジの標準出力・エラーは exe 隣のログファイルに残す
     for name in ["node", "node.exe"] {
@@ -4359,7 +4379,7 @@ fn spawn_copilot_bridge(bridge_dir: &Path, log_path: &Path) -> Option<tokio::pro
         match tokio::process::Command::new(name)
             .arg("server.mjs")
             .current_dir(bridge_dir)
-            .env("COPILOT_BRIDGE_PORT", COPILOT_BRIDGE_PORT.to_string())
+            .env(port_env_name, port.to_string())
             .env("NODE_NO_WARNINGS", "1")
             .stdin(std::process::Stdio::null())
             .stdout(stdout)
@@ -4371,7 +4391,7 @@ fn spawn_copilot_bridge(bridge_dir: &Path, log_path: &Path) -> Option<tokio::pro
             Err(_) => continue,
         }
     }
-    eprintln!("copilot-bridge: Node.js が見つかりません（ブリッジは起動しません）");
+    eprintln!("{label}: Node.js が見つかりません（ブリッジは起動しません）");
     None
 }
 
@@ -4455,7 +4475,7 @@ async fn kill_bridge_on_port(port: u16) -> bool {
         return false;
     }
     for pid in pids {
-        eprintln!("copilot-bridge: ポート {port} の既存ブリッジ (pid {pid}) を停止します");
+        eprintln!("bridge: ポート {port} の既存ブリッジ (pid {pid}) を停止します");
         if cfg!(windows) {
             let _ = tokio::process::Command::new("taskkill")
                 .args(["/PID", &pid.to_string(), "/T", "/F"])
@@ -4471,9 +4491,9 @@ async fn kill_bridge_on_port(port: u16) -> bool {
     true
 }
 
-// Windows は taskkill /T で子孫(copilot CLI 等)まで落とす。
-// 他OSは直接の子のみ kill（孫プロセスは孤児になりうるが SDK 側で短命に終わる想定）
-async fn kill_copilot_bridge(mut child: tokio::process::Child) {
+// Windows は taskkill /T で子孫(Copilot/Devin CLI 等)まで落とす。
+// 他OSは直接の子のみ kill（孫プロセスは孤児になりうるが CLI 側で短命に終わる想定）
+async fn kill_bridge_child(mut child: tokio::process::Child) {
     #[cfg(windows)]
     if let Some(id) = child.id() {
         let _ = tokio::process::Command::new("taskkill")
@@ -4566,6 +4586,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_ref()
         .map(|_| format!("http://127.0.0.1:{COPILOT_BRIDGE_PORT}/agent"));
 
+    // Devin ブリッジ: ローカル実行かつ devin-bridge/ が見つかった場合のみ管理対象。
+    // KASUGAI_NO_DEVIN_BRIDGE で自動起動を無効化できる。
+    // 利用は各ユーザー自身の Devin CLI 認証が前提（ローカル・本人利用限定）
+    let devin_bridge_dir = resolve_dir(&exe_dir, "devin-bridge", || repo_dir.join("devin-bridge"));
+    let devin_bridge_dir = if is_local
+        && std::env::var_os("KASUGAI_NO_DEVIN_BRIDGE").is_none()
+        && devin_bridge_dir.join("server.mjs").is_file()
+    {
+        Some(devin_bridge_dir)
+    } else {
+        None
+    };
+    let devin_endpoint = devin_bridge_dir
+        .as_ref()
+        .map(|_| format!("http://127.0.0.1:{DEVIN_BRIDGE_PORT}/agent"));
+
     let external_projects_path = executable_directory.join(EXTERNAL_PROJECTS_FILE_NAME);
     let state = AppState {
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
@@ -4582,7 +4618,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         projects_dir: Arc::new(projects_dir.clone()),
         is_local,
         copilot_bridge: Arc::new(Mutex::new(None)),
+        devin_bridge: Arc::new(Mutex::new(None)),
         copilot_endpoint,
+        devin_endpoint,
     };
 
     // 引数指定の .kasc を外部プロジェクトとして登録し、そのプロジェクトで開く
@@ -4718,10 +4756,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     return;
                 }
             }
-            match spawn_copilot_bridge(&bridge_dir, &log_path) {
+            match spawn_node_bridge(
+                &bridge_dir,
+                &log_path,
+                "COPILOT_BRIDGE_PORT",
+                COPILOT_BRIDGE_PORT,
+                "copilot-bridge",
+            ) {
                 Some(child) => {
                     eprintln!("copilot-bridge: http://127.0.0.1:{COPILOT_BRIDGE_PORT}/agent");
                     bridge_state.copilot_bridge.lock().await.replace(child);
+                }
+                None => {}
+            }
+        });
+    }
+
+    // Devin ブリッジを子プロセスとして起動する（Copilot ブリッジと同じ管理手順）。
+    // 8512 が使用中でも占有者がブリッジなら強制停止して新版へ差し替える
+    if let Some(bridge_dir) = devin_bridge_dir {
+        let bridge_state = state.clone();
+        let log_path = executable_directory.join("devin-bridge.log");
+        tokio::spawn(async move {
+            let mut port_taken = TcpListener::bind(("127.0.0.1", DEVIN_BRIDGE_PORT))
+                .await
+                .is_err();
+            if port_taken && kill_bridge_on_port(DEVIN_BRIDGE_PORT).await {
+                for _ in 0..20 {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    if TcpListener::bind(("127.0.0.1", DEVIN_BRIDGE_PORT)).await.is_ok() {
+                        port_taken = false;
+                        break;
+                    }
+                }
+            }
+            if port_taken {
+                eprintln!("devin-bridge: 127.0.0.1:{DEVIN_BRIDGE_PORT} は別プロセスが使用中のため起動をスキップします");
+                return;
+            }
+            if !bridge_dir.join("node_modules").exists() {
+                eprintln!("devin-bridge: 依存をインストールしています (npm install)...");
+                if !install_bridge_deps(&bridge_dir).await {
+                    eprintln!("devin-bridge: npm install に失敗しました");
+                    return;
+                }
+            }
+            match spawn_node_bridge(
+                &bridge_dir,
+                &log_path,
+                "DEVIN_BRIDGE_PORT",
+                DEVIN_BRIDGE_PORT,
+                "devin-bridge",
+            ) {
+                Some(child) => {
+                    eprintln!("devin-bridge: http://127.0.0.1:{DEVIN_BRIDGE_PORT}/agent");
+                    bridge_state.devin_bridge.lock().await.replace(child);
                 }
                 None => {}
             }
@@ -4745,9 +4834,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(mut serve) = state.cloud.lock().await.serve.take() {
         let _ = serve.child.kill().await;
     }
-    // Copilot ブリッジの子プロセスも終了させる
+    // Copilot/Devin ブリッジの子プロセスも終了させる
     if let Some(child) = state.copilot_bridge.lock().await.take() {
-        kill_copilot_bridge(child).await;
+        kill_bridge_child(child).await;
+    }
+    if let Some(child) = state.devin_bridge.lock().await.take() {
+        kill_bridge_child(child).await;
     }
     Ok(())
 }

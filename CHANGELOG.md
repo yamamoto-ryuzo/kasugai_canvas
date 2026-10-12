@@ -6,6 +6,22 @@
 
 ## [Unreleased]
 
+## [5.18.0] - 2026-10-13
+
+### Added
+
+- `devin-bridge/` — Devin CLI の ACP（Agent Client Protocol）によるローカルブリッジ。AI プロバイダの「Devin」選択肢はアプリ版のみ表示され、選んで保存すると疎通したブリッジへエージェント接続が自動設定され、利用者自身の Devin アカウント（ブラウザ認証または `DEVIN_API_KEY`）を AI チャットのエンジンとして利用できる。ブリッジは `devin acp` を stdio JSON-RPC で駆動し、地図ツールはブリッジ内の HTTP Streamable MCP サーバー経由で Devin に公開。ツール呼び出しはブリッジでキューイングして `actions` として返し、実行はブラウザ側の既存仕組み（確認ダイアログ含む）に委譲する
+- アプリ版の Devin ブリッジ自動起動 — ローカルサーバー起動時に `devin-bridge/` を Node 子プロセスとして起動し `127.0.0.1:8512` で待受け（要 Node.js＋Devin CLI。`node_modules` 無しの初回は `npm install --omit=dev` を自動実行。`KASUGAI_NO_DEVIN_BRIDGE` で無効化・8512 使用中はスキップ・アプリ終了時に道連れ停止・標準出力は `devin-bridge.log` に記録）。`/api/capabilities` が `devin.endpoint` と feature `devinBridge` を通知し、フロントは通知エンドポイント → 8512 → 8789（手動起動の既定）の順で疎通するブリッジを自動検出する。配布 ZIP に `devin-bridge/` を同梱
+- Devin モデル選択 — Devin プロバイダの設定欄でブリッジの `GET /models` から取得した利用可能モデルを選択可能に。選択値は `/agent` 要求の `model` フィールドでブリッジへ送られ、新しいセッションに適用される
+
+### Changed
+
+- ドキュメントの AI 連携方針を更新 — Copilot は公式 Copilot SDK、Devin は公式 Devin CLI/ACP を使ったローカルブリッジ連携であることを明記。消費者向け Copilot Web UI の自動操作は提供しない。Microsoft 365 Copilot は公式 API が存在するが、ライセンス・アプリ登録・テナント管理者同意・権限設定を要するため本ブリッジには含めない旨を出典リンク付きで説明
+
+### Fixed
+
+- `web/app.js` 起動処理で残っていた旧関数名 `updateCopilotProviderOption()` の参照を `updateBridgeProviderOptions()` に修正（ページ初期化時の JavaScript エラーを解消）
+
 ## [5.17.0] - 2026-10-13
 
 ### Added
