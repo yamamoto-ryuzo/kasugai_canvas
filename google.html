@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.16.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.17.0</span></h1>
       <p>Google 連携・AI — Gemini AIチャット・Maps Platform・エージェント連携</p>
     </header>
     <main>
@@ -26,11 +26,13 @@
               <tr><td>Gemini（サーバーキー <code>/api/gemini</code>）</td><td>○（Cloudflare/Cloud Run デプロイ時）</td><td>—</td></tr>
               <tr><td>OpenAI互換（GitHub Models・OpenAI・Ollama 等）</td><td>○（BYOキー・エンドポイントがCORS許可の場合）</td><td>○</td></tr>
               <tr><td>外部エージェント（汎用エンドポイント）</td><td>○（ブラウザから届くURL）</td><td>○</td></tr>
-              <tr><td>GitHub Copilot（<code>copilot-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジはエージェントタブから接続可）</td><td>○（アプリがブリッジを自動起動 :8511・要 Node.js＋Copilot CLI）</td></tr>
+              <tr><td>GitHub Copilot（<code>copilot-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（アプリがブリッジを自動起動 :8511・要 Node.js＋Copilot CLI）</td></tr>
+              <tr><td>Microsoft 365 Copilot・消費者向け Copilot（Web UI自動化）</td><td colspan="2">✕ 提供しない（使用条件で自動アクセスを明示禁止。正規経路の Graph Copilot API は管理者同意＋有料ライセンスが必須）</td></tr>
               <tr><td>高権限ツール（<code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code>・<code>publishPlugin</code>・ファイル保存）</td><td>—</td><td>○（local ティアのみ）</td></tr>
             </tbody>
           </table>
-          <p>「通常版」は静的配信・Cloudflare・Cloud Run などブラウザだけで開く形態、「アプリ版」はローカル Rust サーバー（kasugai_canvas.exe）で動かす形態です。AI チャット本体・地図操作・コード実行・プラグイン生成はどちらでも使え、違いは<strong>永続化・共有・システムに触れる高権限機能の有無</strong>だけです。GitHub Copilot はブラウザから直接呼べる公開APIを持たないためブリッジ（Node 製）が必須です。<strong>アプリ版は起動時に copilot-bridge を子プロセスとして自動起動し 127.0.0.1:8511 で待受けます</strong>（要 Node.js＋Copilot CLI のログイン。`KASUGAI_NO_COPILOT_BRIDGE` で無効化可）。プロバイダ選択肢の「GitHub Copilot」は<strong>アプリ版でのみ表示</strong>され、選択→保存で疎通するブリッジへ自動接続します（capabilities 通知 → 8511 → 8788 の順で検出）。通常版では選択肢は出ませんが、手動起動したブリッジ（既定 8788）へエージェントタブから接続すれば利用できます。</p>
+          <p>「通常版」は静的配信・Cloudflare・Cloud Run などブラウザだけで開く形態、「アプリ版」はローカル Rust サーバー（kasugai_canvas.exe）で動かす形態です。AI チャット本体・地図操作・コード実行・プラグイン生成はどちらでも使え、違いは<strong>永続化・共有・システムに触れる高権限機能の有無</strong>だけです。GitHub Copilot はブラウザから直接呼べる公開APIを持たないためブリッジ（Node 製）が必須です。<strong>アプリ版は起動時に copilot-bridge を子プロセスとして自動起動し 127.0.0.1:8511 で待受けます</strong>（要 Node.js＋Copilot CLI のログイン。`KASUGAI_NO_COPILOT_BRIDGE` で無効化可）。プロバイダ選択肢の「GitHub Copilot」は<strong>アプリ版でのみ表示</strong>され、選択→保存で疎通するブリッジへ自動接続します（capabilities 通知 → 8511 → 8788 の順で検出）。通常版では選択肢は出ませんが、手動起動したブリッジ（既定 8788）へプロバイダ「外部エージェント」から接続すれば利用できます。</p>
+          <p><strong>提供しない AI 経路</strong>：Microsoft 365 Copilot・消費者向け Copilot（copilot.com 等）の Web UI を自動化して接続する方式は<strong>提供しません</strong>。Copilot 使用条件が「ツールやコンピューター プログラム（ボットやスクレイパー等）によるアクセス」を明示禁止しており、職場アカウント向けも技術的制限（ボット検知）の回避に該当し得るためです。M365 Copilot をプログラムから呼ぶ正規経路は Microsoft Graph の Copilot Chat API（アプリ登録＋7スコープのテナント管理者同意＋M365 Copilot 有料ライセンス必須）のみで、管理者権限なしで動く公式経路は存在しません。消費者向け ChatGPT・Gemini・Claude 等の Web UI 自動化も各社規約で同様に禁止されているため対象外です。ブリッジで接続するのは公式 SDK/CLI 等、プログラム利用を認められた経路に限ります。</p>
         </div>
         <div class="features">
           <div class="feature-card">
@@ -77,12 +79,12 @@
           </div>
           <div class="feature-card">
             <h3>🤝 エージェント連携</h3>
-            <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します。管理（⚙）→ AI → エージェント でエンドポイントURL・Bearerトークン（任意）を設定し「チャットを外部エージェントへ送信」をONにすると、チャット入力が内蔵AIより優先してそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history, tools}</code>（<code>tools</code> は現在公開中のツール宣言・functionDeclarations 形式）、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
-            <p><strong>GitHub Copilot 接続</strong>：<strong>アプリ版では起動時に同梱の <code>copilot-bridge/</code>（<a href="https://github.com/github/copilot-sdk" target="_blank" rel="noopener noreferrer">GitHub Copilot SDK</a> 使用・要 Copilot サブスクリプション＋Node.js）が自動起動し 127.0.0.1:8511 で待受けます</strong>。管理（⚙）→ AI → チャット の「AI プロバイダ」に「GitHub Copilot」が表示される（<strong>アプリ版のみ</strong>）ので、選んで保存すれば疎通したブリッジへ自動接続され、Copilot を内蔵AIとして利用できます。通常版ではこの選択肢は表示されませんが、閲覧者のマシンでブリッジを手動起動し（既定 <code>http://127.0.0.1:8788/agent</code>・セットアップは同 README を参照）、エージェントタブから接続すれば利用できます。Copilot 本体をブラウザから直接呼ぶ公式APIは無いため、このブリッジ経由が正規の接続経路です</p>
+            <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します。管理（⚙）→ AI → チャット で「AI プロバイダ」を「外部エージェント (ブリッジ)」にし、ブリッジ欄にエンドポイントURL・Bearerトークン（任意）を設定して保存すると、チャット入力がそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history, tools}</code>（<code>tools</code> は現在公開中のツール宣言・functionDeclarations 形式）、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
+            <p><strong>GitHub Copilot 接続</strong>：<strong>アプリ版では起動時に同梱の <code>copilot-bridge/</code>（<a href="https://github.com/github/copilot-sdk" target="_blank" rel="noopener noreferrer">GitHub Copilot SDK</a> 使用・要 Copilot サブスクリプション＋Node.js）が自動起動し 127.0.0.1:8511 で待受けます</strong>。管理（⚙）→ AI → チャット の「AI プロバイダ」に「GitHub Copilot」が表示される（<strong>アプリ版のみ</strong>）ので、選んで保存すれば疎通したブリッジへ自動接続され、Copilot を内蔵AIとして利用できます。通常版ではこの選択肢は表示されませんが、閲覧者のマシンでブリッジを手動起動し（既定 <code>http://127.0.0.1:8788/agent</code>・セットアップは同 README を参照）、プロバイダ「外部エージェント」から接続すれば利用できます。Copilot 本体をブラウザから直接呼ぶ公式APIは無いため、このブリッジ経由が正規の接続経路です</p>
           </div>
           <div class="feature-card">
             <h3>🧩 AIプラグイン生成（自己拡張）</h3>
-            <p>チャットに「〜するプラグインを作って」と頼むと、AIがコードを生成してブラウザ内 IndexedDB に保存・即時有効化。適用前にコード全文の確認ダイアログが出ます。読み込みエラーはAIへ返るため、修正→再保存の自律ループが回ります。管理（⚙）→ AI → エージェント で一覧・有効化・コード確認・<code>.kasp</code> 出力/取込・削除が可能。ストレージ保存のため配布物とは分離され、気に入ったものだけ <code>PLUGIN/</code> に登録して公開できます</p>
+            <p>チャットに「〜するプラグインを作って」と頼むと、AIがコードを生成してブラウザ内 IndexedDB に保存・即時有効化。適用前にコード全文の確認ダイアログが出ます。読み込みエラーはAIへ返るため、修正→再保存の自律ループが回ります。管理（⚙）→ AI → プラグイン で一覧・有効化・コード確認・<code>.kasp</code> 出力/取込・削除が可能。ストレージ保存のため配布物とは分離され、気に入ったものだけ <code>PLUGIN/</code> に登録して公開できます</p>
           </div>
           <div class="feature-card">
             <h3>📊 データ取得・加工・表示パイプライン</h3>
@@ -110,7 +112,7 @@ DELETE /api/files/{project}/{path} → DATA/ 内のファイルを削除</code><
           <ul>
             <li><strong>Workers 側の fetch プロキシ</strong>：CORS 外の任意 URL を取り込む汎用 fetch プロキシは未実装（AI プロキシ <code>POST /api/gemini</code> は実装済み — Workers/Pages のシークレットに <code>GEMINI_API_KEY</code> を置けばキー未設定の訪問者でも内蔵AIが使える。BYO = Bring Your Own キーは引き続きどの環境でも利用可）</li>
             <li><strong>Workers の共有書き込み</strong>：共有 .kasc カタログ・共有プラグインカタログへの書き込みは認証・承認フローが前提で未実装</li>
-            <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送は管理 → AI → エージェント で設定可能）</li>
+            <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送はプロバイダ「外部エージェント」で設定可能）</li>
             <li><strong>ローカルファイル連携</strong>：DATA/ 書き込みは File System Access API（Chromium系）とローカルサーバー版の <code>/api/files</code> で実装済み。QGIS/GDAL 呼び出しは未実装</li>
             <li><strong>Cloud Run の長時間処理</strong>：<code>agent/</code> の FastAPI サービス（静的配信・認証・GCS 保存・<code>/api/gemini</code>・Maps キー配布）は実装済みで <code>run-cloudrun.py</code> でデプロイできます（詳細は <a href="auth/cloudrun.html">Cloud Run 認証</a>）。長時間エージェントループ・SSE は未実装</li>
           </ul>

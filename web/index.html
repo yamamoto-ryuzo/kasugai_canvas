@@ -273,15 +273,15 @@
                 <section id="manage-ai" class="manage-pane">
                   <nav class="manage-subnav">
                     <button type="button" class="active" data-manage-sub="gemini-panel" data-i18n="manage.section.chat">チャット (AI)</button>
-                    <button type="button" data-manage-sub="agent-panel" data-i18n="google.tab.agent">エージェント</button>
                     <button type="button" data-manage-sub="plugin-panel" data-i18n="google.tab.plugin">プラグイン</button>
                   </nav>
                   <section id="gemini-panel" class="settings-subpanel active">
                   <label class="field-label" for="chat-provider" data-i18n="chat.provider.label">AI プロバイダ</label>
                   <select id="chat-provider">
-                    <option value="gemini" selected data-i18n="chat.provider.gemini">Gemini (Google)</option>
-                    <option value="openai" data-i18n="chat.provider.openai">OpenAI互換 (GitHub Models 等)</option>
-                    <option value="copilot" data-i18n="chat.provider.copilot">GitHub Copilot (ブリッジ)</option>
+                    <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
+                    <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+                    <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
+                    <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
                   </select>
                   <div id="gemini-fields">
                   <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
@@ -297,7 +297,7 @@
                   </select>
                   </div>
                   <div id="openai-fields" hidden>
-                  <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はエージェントタブから Copilot ブリッジ（copilot-bridge/）を接続してください。</p>
+                  <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はプロバイダを GitHub Copilot に変更し、表示されるブリッジ欄で Copilot ブリッジ（copilot-bridge/）を接続してください。</p>
                   <p class="hint" data-i18n-html="chat.openai.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は上のエンドポイントのみです。http（非HTTPS）のエンドポイントを指定するとキーが平文で送信されるため、localhost/127.0.0.1 以外では https を使ってください。キー自体を共有ファイル（.kasc等）やコードに書き込まないでください。</p>
                   <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
                   <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
@@ -306,12 +306,22 @@
                   <label class="field-label" for="openai-model" style="margin-top:10px;" data-i18n="chat.openai.modelLabel">モデル</label>
                   <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
                   </div>
+                  <div id="bridge-fields" hidden>
+                  <p class="hint" data-i18n-html="agent.externalHint">チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
+                  <p class="hint" data-i18n-html="chat.copilot.hint">GitHub Copilot の場合は同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）を起動し、エンドポイントに <code>http://127.0.0.1:8788/agent</code> を指定します（アプリ版では自動起動・空欄なら自動検出）。ブリッジの起動（<code>npm install && npm start</code>）と GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
+                  <p class="hint" id="agent-backend-status" aria-live="polite"></p>
+                  <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
+                  <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
+                  <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
+                  <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" data-i18n-attr="placeholder:agent.tokenPlaceholder" autocomplete="off" size="28" />
                   <div id="copilot-fields" hidden>
-                  <p class="hint" data-i18n-html="chat.copilot.hint">同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）経由で GitHub Copilot を使います。選択して保存すると、エージェント接続（既定 <code>http://127.0.0.1:8788/agent</code>）が自動で設定されます。ブリッジの起動（<code>npm install && npm start</code>）と GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
                   <label class="field-label" for="copilot-model" data-i18n="chat.copilot.modelLabel">モデル</label>
                   <select id="copilot-model"></select>
                   <p class="hint" data-i18n="chat.copilot.modelHint">ブリッジから取得した利用可能な Copilot モデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
                   <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
+                  </div>
+                  <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
+                  <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>
                   </div>
                   <label class="field-label" for="google-tool-max-steps" style="margin-top:10px;" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>
                   <input id="google-tool-max-steps" type="number" min="1" max="20" step="1" />
@@ -321,21 +331,6 @@
                   </div>
                   <p id="google-settings-status" class="hint" aria-live="polite"></p>
                   <p id="google-proxy-status" class="hint" aria-live="polite"></p>
-                  </section>
-                  <section id="agent-panel" class="settings-subpanel">
-                  <p class="hint" data-i18n-html="agent.externalHint">チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。有効時は Gemini より優先されます。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
-                  <p class="hint" id="agent-backend-status" aria-live="polite"></p>
-                  <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
-                  <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
-                  <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
-                  <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" data-i18n-attr="placeholder:agent.tokenPlaceholder" autocomplete="off" size="28" />
-                  <label><input id="agent-enabled" type="checkbox" /> <span data-i18n="agent.enableLabel">チャットを外部エージェントへ送信</span></label>
-                  <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
-                  <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>
-                  <div class="terrain-options" style="margin-top:10px;">
-                    <button id="agent-settings-save" type="button" data-i18n="common.save">保存</button>
-                  </div>
-                  <p id="agent-settings-status" class="hint" aria-live="polite"></p>
                   </section>
                   <section id="plugin-panel" class="settings-subpanel">
                   <p class="hint" data-i18n-html="agent.hint">AIチャットが生成したプラグイン（このブラウザの IndexedDB に保存）を管理します。有効化したプラグインは起動時に自動で読み込まれます。公開するプラグインは <code>PLUGIN/</code> フォルダと <code>plugins.json</code> へ登録します。</p>

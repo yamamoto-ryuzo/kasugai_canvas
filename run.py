@@ -188,7 +188,7 @@ def _wait_for_health(port: int, expected_version: str, timeout: float = 30.0) ->
                     f"EXE バージョンが一致しません: 期待 {expected_version}, 実際 {actual}"
                 )
             return
-        except (urllib.error.URLError, json.JSONDecodeError, ConnectionRefusedError):
+        except (urllib.error.URLError, json.JSONDecodeError, ConnectionRefusedError, TimeoutError):
             time.sleep(0.5)
     raise SystemExit(f"起動確認が {timeout} 秒以内に完了しませんでした: {url}")
 

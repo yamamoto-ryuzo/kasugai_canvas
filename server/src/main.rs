@@ -4394,6 +4394,83 @@ async fn install_bridge_deps(bridge_dir: &Path) -> bool {
     false
 }
 
+// 指定ポートを占有しているブリッジを強制終了する。
+// 占有者が Copilot ブリッジ（/health が {ok:true} を返す）と確認できた場合のみ
+// PID を特定して kill し true を返す。無関係なプロセスの誤終了を防ぐため、
+// ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）
+async fn kill_bridge_on_port(port: u16) -> bool {
+    let is_bridge = async {
+        let resp = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{port}/health"))
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await
+            .ok()?;
+        let body: serde_json::Value = resp.json().await.ok()?;
+        Some(
+            body.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                && (body.get("model").is_some() || body.get("sessions").is_some()),
+        )
+    }
+    .await
+    .unwrap_or(false);
+    if !is_bridge {
+        return false;
+    }
+    // 占有 PID を特定（Windows: netstat -ano、Unix: lsof）
+    let output = if cfg!(windows) {
+        tokio::process::Command::new("netstat")
+            .args(["-ano", "-p", "tcp"])
+            .output()
+            .await
+    } else {
+        tokio::process::Command::new("lsof")
+            .args(["-nP", "-t", "-i", &format!(":{port}"), "-sTCP:LISTEN"])
+            .output()
+            .await
+    };
+    let Ok(out) = output else { return false };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut pids = std::collections::HashSet::new();
+    if cfg!(windows) {
+        for line in text.lines() {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() >= 5
+                && cols[3].eq_ignore_ascii_case("LISTENING")
+                && cols[1].rsplit(':').next().and_then(|p| p.parse::<u16>().ok()) == Some(port)
+            {
+                if let Ok(pid) = cols[4].parse::<u32>() {
+                    pids.insert(pid);
+                }
+            }
+        }
+    } else {
+        for line in text.lines() {
+            if let Ok(pid) = line.trim().parse::<u32>() {
+                pids.insert(pid);
+            }
+        }
+    }
+    if pids.is_empty() {
+        return false;
+    }
+    for pid in pids {
+        eprintln!("copilot-bridge: ポート {port} の既存ブリッジ (pid {pid}) を停止します");
+        if cfg!(windows) {
+            let _ = tokio::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .output()
+                .await;
+        } else {
+            let _ = tokio::process::Command::new("kill")
+                .args(["-9", &pid.to_string()])
+                .output()
+                .await;
+        }
+    }
+    true
+}
+
 // Windows は taskkill /T で子孫(copilot CLI 等)まで落とす。
 // 他OSは直接の子のみ kill（孫プロセスは孤児になりうるが SDK 側で短命に終わる想定）
 async fn kill_copilot_bridge(mut child: tokio::process::Child) {
@@ -4610,31 +4687,45 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("KASUGAI Canvas: http://{address}");
 
     // Copilot ブリッジを子プロセスとして起動する。
-    // 8511 が既に使用中（外部管理のブリッジ・前回の残骸等）の場合は何もしない
+    // 8511 が使用中でも占有者がブリッジ（前回起動の残骸・旧バージョン等）なら
+    // 強制停止して新版へ差し替える。ブリッジ以外の占有時のみ起動をスキップする。
+    // 占有確認・kill・npm install は axum::serve を遅延させないよう spawn 内で行う
     if let Some(bridge_dir) = copilot_bridge_dir {
-        let port_taken = TcpListener::bind(("127.0.0.1", COPILOT_BRIDGE_PORT))
-            .await
-            .is_err();
-        if !port_taken {
-            let bridge_state = state.clone();
-            let log_path = executable_directory.join("copilot-bridge.log");
-            tokio::spawn(async move {
-                if !bridge_dir.join("node_modules").exists() {
-                    eprintln!("copilot-bridge: 依存をインストールしています (npm install)...");
-                    if !install_bridge_deps(&bridge_dir).await {
-                        eprintln!("copilot-bridge: npm install に失敗しました");
-                        return;
+        let bridge_state = state.clone();
+        let log_path = executable_directory.join("copilot-bridge.log");
+        tokio::spawn(async move {
+            let mut port_taken = TcpListener::bind(("127.0.0.1", COPILOT_BRIDGE_PORT))
+                .await
+                .is_err();
+            if port_taken && kill_bridge_on_port(COPILOT_BRIDGE_PORT).await {
+                // kill 直後はポート解放を短時間待つ
+                for _ in 0..20 {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    if TcpListener::bind(("127.0.0.1", COPILOT_BRIDGE_PORT)).await.is_ok() {
+                        port_taken = false;
+                        break;
                     }
                 }
-                match spawn_copilot_bridge(&bridge_dir, &log_path) {
-                    Some(child) => {
-                        eprintln!("copilot-bridge: http://127.0.0.1:{COPILOT_BRIDGE_PORT}/agent");
-                        bridge_state.copilot_bridge.lock().await.replace(child);
-                    }
-                    None => {}
+            }
+            if port_taken {
+                eprintln!("copilot-bridge: 127.0.0.1:{COPILOT_BRIDGE_PORT} は別プロセスが使用中のため起動をスキップします");
+                return;
+            }
+            if !bridge_dir.join("node_modules").exists() {
+                eprintln!("copilot-bridge: 依存をインストールしています (npm install)...");
+                if !install_bridge_deps(&bridge_dir).await {
+                    eprintln!("copilot-bridge: npm install に失敗しました");
+                    return;
                 }
-            });
-        }
+            }
+            match spawn_copilot_bridge(&bridge_dir, &log_path) {
+                Some(child) => {
+                    eprintln!("copilot-bridge: http://127.0.0.1:{COPILOT_BRIDGE_PORT}/agent");
+                    bridge_state.copilot_bridge.lock().await.replace(child);
+                }
+                None => {}
+            }
+        });
     }
 
     if open_browser_requested {

@@ -6240,7 +6240,7 @@ function setupEvents() {
   setupAgentPanel();
 }
 
-// Google → エージェントタブ: IndexedDB に保存した AI生成/取込プラグインの管理画面。
+// Google → プラグインタブ: IndexedDB に保存した AI生成/取込プラグインの管理画面。
 // 同梱 PLUGIN/ とは分離されたブラウザローカルの開発領域を一覧・有効化・削除・入出力する
 function setupAgentPanel() {
   const list = document.querySelector("#agent-plugin-list");
@@ -6367,36 +6367,6 @@ function setupAgentPanel() {
     }
   }
 
-  // 外部エージェント設定（チャット入力をHTTPエンドポイントへ転送する。Geminiより優先）
-  const endpointInput = document.querySelector("#agent-endpoint");
-  const tokenInput = document.querySelector("#agent-token");
-  const enabledInput = document.querySelector("#agent-enabled");
-  const sendKeyInput = document.querySelector("#agent-send-key");
-  const settingsSave = document.querySelector("#agent-settings-save");
-  const settingsStatus = document.querySelector("#agent-settings-status");
-  if (endpointInput && settingsSave) {
-    try {
-      const config = getAgentConfig();
-      // 入力欄には保存値のみ表示（バックエンド通知の既定値はプレースホルダで示す）
-      endpointInput.value = localStorage.getItem("agentEndpoint") || "";
-      if (tokenInput) tokenInput.value = config.token;
-      if (enabledInput) enabledInput.checked = config.enabled;
-      if (sendKeyInput) sendKeyInput.checked = config.sendKey;
-    } catch (e) {}
-    settingsSave.addEventListener("click", () => {
-      try {
-        localStorage.setItem("agentEndpoint", endpointInput.value.trim());
-        localStorage.setItem("agentToken", tokenInput ? tokenInput.value : "");
-        localStorage.setItem("agentEnabled", enabledInput?.checked ? "1" : "0");
-        localStorage.setItem("agentSendKey", sendKeyInput?.checked ? "1" : "0");
-        updateChatPanelVisibility();
-        if (settingsStatus) settingsStatus.textContent = t("common.saved");
-      } catch (error) {
-        if (settingsStatus) settingsStatus.textContent = t("common.saveError", { error: error.message });
-      }
-    });
-  }
-
   document.querySelector("#agent-refresh")?.addEventListener("click", () => void render());
   document.querySelector("#agent-import")?.addEventListener("click", () => fileInput?.click());
   fileInput?.addEventListener("change", async () => {
@@ -6490,14 +6460,18 @@ function isSecureAgentEndpoint(endpoint) {
 // GitHub Copilot プロバイダはアプリ版（local ティアで copilotBridge を通知する
 // 環境 = アプリがブリッジを自動起動する構成）のときのみ選択肢に出す。
 // option 要素の hidden 属性はブラウザ差があるため、要素自体を着脱する。
-// 通常版で手動ブリッジを使う場合はエージェントタブから接続する
+// 通常版で手動ブリッジを使う場合はプロバイダ「外部エージェント」から接続する
 let copilotProviderOption = null;
 function updateCopilotProviderOption() {
   const select = document.querySelector("#chat-provider");
   if (!select) return;
   const option = select.querySelector('option[value="copilot"]');
   if (hasBackendFeature("copilotBridge")) {
-    if (!option && copilotProviderOption) select.appendChild(copilotProviderOption);
+    // 再接続時は【ブリッジ】系（agent の手前）に戻しカテゴリ順を保つ
+    if (!option && copilotProviderOption) {
+      const agentOpt = select.querySelector('option[value="agent"]');
+      select.insertBefore(copilotProviderOption, agentOpt || null);
+    }
   } else if (option) {
     const wasSelected = select.value === "copilot";
     copilotProviderOption = option;
@@ -6546,6 +6520,10 @@ function setupGoogleSettings() {
   const openaiBaseUrlInput = document.querySelector("#openai-base-url");
   const openaiKeyInput = document.querySelector("#openai-api-key");
   const openaiModelInput = document.querySelector("#openai-model");
+  const bridgeFields = document.querySelector("#bridge-fields");
+  const endpointInput = document.querySelector("#agent-endpoint");
+  const tokenInput = document.querySelector("#agent-token");
+  const sendKeyInput = document.querySelector("#agent-send-key");
   const copilotFields = document.querySelector("#copilot-fields");
   const copilotStatus = document.querySelector("#copilot-endpoint-status");
   const copilotModelSelect = document.querySelector("#copilot-model");
@@ -6581,13 +6559,14 @@ function setupGoogleSettings() {
     copilotModelSelect.value = saved;
     if (copilotModelSelect.value !== saved) copilotModelSelect.value = "";
   };
-  // Copilot ブリッジの疎通確認。アプリ管理ブリッジ(8511)・手動ブリッジ(8788)等の
-  // 候補を順に試し、最初に応答したものを表示する（失敗しても設定は保存できる）
+  // Copilot ブリッジの疎通確認。入力済みエンドポイントがあればそれを、
+  // 未入力ならアプリ管理ブリッジ(8511)・手動ブリッジ(8788)の候補を順に試す
   const refreshCopilotStatus = async () => {
     if (!copilotStatus) return;
-    const fallback = getAgentConfig().endpoint || copilotBridgeCandidates()[0];
+    const configured = (endpointInput?.value || "").trim();
+    const fallback = configured || copilotBridgeCandidates()[0];
     copilotStatus.textContent = t("chat.copilot.endpoint", { endpoint: fallback });
-    const found = await detectCopilotBridge();
+    const found = configured ? await pingBridge(configured) : await detectCopilotBridge();
     copilotStatus.textContent = found
       ? t("chat.copilot.statusOk", { endpoint: found.endpoint, model: found.model })
       : t("chat.copilot.statusNg", { endpoint: fallback });
@@ -6597,8 +6576,18 @@ function setupGoogleSettings() {
     const v = providerSelect?.value || "gemini";
     if (geminiFields) geminiFields.hidden = v !== "gemini";
     if (openaiFields) openaiFields.hidden = v !== "openai";
+    if (bridgeFields) bridgeFields.hidden = !(v === "copilot" || v === "agent");
     if (copilotFields) copilotFields.hidden = v !== "copilot";
-    if (v === "copilot") void refreshCopilotStatus();
+    if (v === "copilot") {
+      // エンドポイント未入力なら疎通するブリッジを自動検出して入力する
+      if (endpointInput && !endpointInput.value.trim()) {
+        void detectCopilotBridge().then(found => {
+          if (found && endpointInput && !endpointInput.value.trim()) endpointInput.value = found.endpoint;
+          void refreshCopilotStatus();
+        });
+      }
+      void refreshCopilotStatus();
+    }
   };
   try {
     keyInput.value = localStorage.getItem("googleApiKey") || "";
@@ -6610,6 +6599,9 @@ function setupGoogleSettings() {
     if (openaiBaseUrlInput) openaiBaseUrlInput.value = localStorage.getItem("openaiBaseUrl") || "";
     if (openaiKeyInput) openaiKeyInput.value = localStorage.getItem("openaiApiKey") || "";
     if (openaiModelInput) openaiModelInput.value = localStorage.getItem("openaiModel") || "";
+    if (endpointInput) endpointInput.value = localStorage.getItem("agentEndpoint") || "";
+    if (tokenInput) tokenInput.value = localStorage.getItem("agentToken") || "";
+    if (sendKeyInput) sendKeyInput.checked = localStorage.getItem("agentSendKey") === "1";
     if (stepsInput) stepsInput.value = String(getChatMaxToolSteps());
     void refreshCopilotModels(""); // 保存値・既定オプションだけ先に埋めておく
     syncProviderFields();
@@ -6624,37 +6616,22 @@ function setupGoogleSettings() {
       if (openaiKeyInput) localStorage.setItem("openaiApiKey", openaiKeyInput.value.trim());
       if (openaiModelInput) localStorage.setItem("openaiModel", openaiModelInput.value.trim());
       if (copilotModelSelect) localStorage.setItem("copilotModel", copilotModelSelect.value);
-      if (providerSelect?.value === "copilot") {
-        // GitHub Copilot 選択時はエージェント接続を自動設定する。
-        // 自動設定分は agentAutoConfig マーカーで管理し、手動設定済みの
-        // エージェント（別URL）は上書きしない
-        const current = (localStorage.getItem("agentEndpoint") || "").trim();
-        if (!current || localStorage.getItem("agentAutoConfig") === "copilot") {
-          // 疎通できたブリッジ（アプリ管理 8511 / 手動 8788）を自動検出して設定する
-          void (async () => {
-            const found = await detectCopilotBridge();
-            const endpoint = found?.endpoint || copilotBridgeCandidates()[0];
-            localStorage.setItem("agentEndpoint", endpoint);
-            const endpointInput = document.querySelector("#agent-endpoint");
-            if (endpointInput) endpointInput.value = endpoint;
-            void refreshCopilotStatus();
-          })();
-          localStorage.setItem("agentEndpoint", copilotBridgeCandidates()[0]);
-        }
-        localStorage.setItem("agentEnabled", "1");
-        localStorage.setItem("agentAutoConfig", "copilot");
-      } else if (localStorage.getItem("agentAutoConfig") === "copilot") {
-        // Copilot→別プロバイダの切替時は、自分が自動設定した分だけ解除する
-        // （手動でエージェントを運用している設定には触れない）
-        const current = (localStorage.getItem("agentEndpoint") || "").trim();
-        if (copilotBridgeCandidates().includes(current)) {
-          localStorage.removeItem("agentEndpoint");
-          const endpointInput = document.querySelector("#agent-endpoint");
-          if (endpointInput) endpointInput.value = "";
-        }
-        localStorage.setItem("agentEnabled", "0");
-        localStorage.removeItem("agentAutoConfig");
+      // ブリッジ系プロバイダ（copilot/agent）はエージェント接続を有効化し、
+      // API系（gemini/openai）は無効化する。プロバイダ選択が唯一の切替源
+      const pv = providerSelect?.value || "gemini";
+      if (endpointInput) {
+        let ep = endpointInput.value.trim();
+        if (!ep && pv === "copilot") ep = copilotBridgeCandidates()[0];
+        if (!ep && pv === "agent") ep = defaultAgentEndpoint() || "";
+        endpointInput.value = ep;
+        localStorage.setItem("agentEndpoint", ep);
       }
+      if (tokenInput) localStorage.setItem("agentToken", tokenInput.value.trim());
+      if (sendKeyInput) localStorage.setItem("agentSendKey", sendKeyInput.checked ? "1" : "0");
+      localStorage.setItem("agentEnabled", (pv === "copilot" || pv === "agent") ? "1" : "0");
+      // 旧自動設定マーカーは廃止（エンドポイント欄が明示されるため不要）
+      localStorage.removeItem("agentAutoConfig");
+      if (pv === "copilot") void refreshCopilotStatus();
       if (stepsInput) {
         localStorage.setItem("geminiToolMaxSteps", String(clampToolSteps(stepsInput.value)));
         stepsInput.value = String(getChatMaxToolSteps());
@@ -9324,16 +9301,23 @@ function copilotBridgeCandidates() {
   return [...new Set(list)];
 }
 
+// 指定エンドポイントの /health を疎通確認する
+async function pingBridge(endpoint) {
+  let healthUrl = "";
+  try { healthUrl = new URL("/health", endpoint).href; } catch (e) { return null; }
+  try {
+    const r = await fetch(healthUrl, { signal: AbortSignal.timeout(2500) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d?.ok) return { endpoint, model: d?.model || "?" };
+  } catch (e) {}
+  return null;
+}
+
 // 候補を順に /health で疎通確認し、最初に応答したブリッジを返す
 async function detectCopilotBridge() {
   for (const endpoint of copilotBridgeCandidates()) {
-    let healthUrl = "";
-    try { healthUrl = new URL("/health", endpoint).href; } catch (e) { continue; }
-    try {
-      const r = await fetch(healthUrl, { signal: AbortSignal.timeout(2500) });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok && d?.ok) return { endpoint, model: d?.model || "?" };
-    } catch (e) {}
+    const found = await pingBridge(endpoint);
+    if (found) return found;
   }
   return null;
 }
@@ -9344,12 +9328,21 @@ function getCopilotModel() {
 }
 
 // 内蔵AIのプロバイダ選択。Gemini（BYOキーまたはサーバープロキシ）、
-// OpenAI互換API（GitHub Models・OpenAI・Ollama等）、
-// GitHub Copilot（copilot-bridge 経由のエージェント接続）のいずれか
+// OpenAI互換API（GitHub Models・OpenAI・Ollama等）のAPI系と、
+// GitHub Copilot（copilot-bridge）・外部エージェントのブリッジ系のいずれか
 function getChatProvider() {
   try {
     const p = localStorage.getItem("chatProvider");
-    return ["gemini", "openai", "copilot"].includes(p) ? p : "gemini";
+    if (["gemini", "openai", "copilot", "agent"].includes(p)) return p;
+    // 移行前の利用形態を推定（プロバイダ未保存＋エージェント有効 → agent 相当）
+    if (!p) {
+      const enabledFlag = localStorage.getItem("agentEnabled");
+      const autoEnabled = enabledFlag === null && !localStorage.getItem("agentEndpoint") && !!defaultAgentEndpoint();
+      if (enabledFlag === "1" || autoEnabled) {
+        return localStorage.getItem("agentAutoConfig") === "copilot" ? "copilot" : "agent";
+      }
+    }
+    return "gemini";
   } catch (e) { return "gemini"; }
 }
 
@@ -9697,12 +9690,12 @@ function setupChatPanel() {
     const provider = getChatProvider();
     const hasKey = provider === "openai"
       ? !!getOpenAIConfig().apiKey
-      : provider === "copilot"
+      : (provider === "copilot" || provider === "agent")
         ? isAgentEnabled()
         : (!!window.kasugaiApi.getGoogleApiKey() || !!aiProxyEndpoint());
     if (!hasKey) {
       const local = await handleLocalChatCommand(text);
-      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : "chat.noApiKey";
+      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
       addMessage("assistant", local || t(key));
       return;
     }
@@ -9741,6 +9734,16 @@ window.addEventListener("pagehide", () => {
   updateAppPanelVisibility();
   // capabilities 確定後に Copilot 選択肢の可否を再評価する（アプリ版のみ表示）
   updateCopilotProviderOption();
+  // capabilities 取得で既定エンドポイントが解決し自動接続が有効になった場合、
+  // プロバイダ表示（起動時は capabilities 未取得で gemini 表示）を再同期する
+  const providerSelectAfterCaps = document.querySelector("#chat-provider");
+  if (providerSelectAfterCaps && providerSelectAfterCaps.value !== getChatProvider()) {
+    const wanted = getChatProvider();
+    if (providerSelectAfterCaps.querySelector(`option[value="${wanted}"]`)) {
+      providerSelectAfterCaps.value = wanted;
+      providerSelectAfterCaps.dispatchEvent(new Event("change"));
+    }
+  }
   // capabilities 取得後に既定エージェントエンドポイントを反映するため再評価する
   updateChatPanelVisibility();
   try { await loadProjects(); } catch (e) { console.error(e); }
