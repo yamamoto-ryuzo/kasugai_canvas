@@ -9,3 +9,6 @@ __pycache__/
 .datastore/
 # 納品用ローカル化の生成ワークスペース
 installer/projects/*_local/
+
+# Node 依存（copilot-bridge 等）
+node_modules/

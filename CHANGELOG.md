@@ -4,6 +4,21 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [Unreleased]
+
+## [5.16.0] - 2026-10-12
+
+### Added
+
+- AI チャットのプロバイダ切替 — 管理 → AI → チャット の「AI プロバイダ」で Gemini（既定）と OpenAI互換 を選択可能に。OpenAI互換はベースURL・APIキー・モデル名を指定し、GitHub Models（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio 等の chat/completions 互換エンドポイントへ接続（ツール宣言は OpenAI tools 形式へ変換して function calling ループを共有）
+- `copilot-bridge/` — GitHub Copilot SDK によるローカルブリッジ。AI プロバイダの「GitHub Copilot」選択肢はアプリ版のみ表示され、選んで保存すると疎通したブリッジへエージェント接続が自動設定され Copilot 契約を AI チャットのエンジンとして利用できる（Copilot に直接呼べる公開APIは無いためブリッジ経由が正規ルート。要 Copilot サブスクリプション。通常版は選択肢非表示・手動ブリッジはエージェントタブから接続。ブリッジ疎通確認を設定画面に表示）
+- アプリ版の Copilot ブリッジ自動起動 — ローカルサーバー起動時に `copilot-bridge/` を Node 子プロセスとして起動し `127.0.0.1:8511` で待受け（要 Node.js＋Copilot CLI。`node_modules` 無しの初回は `npm install --omit=dev` を自動実行。`KASUGAI_NO_COPILOT_BRIDGE` で無効化・8511 使用中はスキップ・アプリ終了時に道連れ停止・標準出力は `copilot-bridge.log` に記録）。`/api/capabilities` が `copilot.endpoint` と feature `copilotBridge` を通知し、フロントは通知エンドポイント → 8511 → 8788（手動起動の既定）の順で疎通するブリッジを自動検出する。配布 ZIP に `copilot-bridge/` を同梱
+- Copilot モデル選択 — Copilot プロバイダの設定欄でブリッジの `GET /models` から取得した利用可能モデルを選択可能に（`gpt-5`・`claude-sonnet-4.5` 等）。選択値は `/agent` 要求の `model` フィールドでブリッジへ送られ、セッションのモデルが切り替わる。未選択時はブリッジ既定（`COPILOT_BRIDGE_MODEL`）
+
+### Changed
+
+- 外部エージェントへの要求 JSON に `tools` フィールドを追加 — 現在公開中のツール宣言（functionDeclarations 形式）を同梱。エージェント側がツール一覧を登録できる（copilot-bridge が使用。既存エージェントへの影響なし・追加フィールドのみ）
+
 ## [5.15.0] - 2026-10-12
 
 ### Added

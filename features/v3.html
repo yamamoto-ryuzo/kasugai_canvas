@@ -10,17 +10,19 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.15.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.16.0</span></h1>
       <p>V3: AI 連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="ai">V3: AI 連携</h2>
-      <p>Gemini API を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="../google.html">Google 連携・AI</a> を参照してください。</p>
+      <p>Gemini・OpenAI互換 API（GitHub Models・OpenAI・Ollama 等）・GitHub Copilot（ブリッジ経由）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="../google.html">Google 連携・AI</a> を参照してください（経路ごとの通常版/アプリ版対応は同ページの「AI の利用形態」表を参照）。</p>
+      <p><strong>通常版とアプリ版の違い</strong>：AI チャット本体・地図操作・コード実行・プラグイン生成は両方で使えます。アプリ版（ローカル exe）だけが持つのは <code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code> などの高権限ツール群と、<strong>GitHub Copilot プロバイダ</strong>（選択肢はアプリ版のみ表示。起動時に copilot-bridge を子プロセス化し 127.0.0.1:8511 で待受け・要 Node.js）です。通常版で手動ブリッジの Copilot を使う場合はエージェントタブから接続してください。</p>
 
-      <h3>🗨️ AI チャット（Gemini 連携）</h3>
+      <h3>🗨️ AI チャット（Gemini / OpenAI互換）</h3>
       <p>管理（⚙）→ AI → チャット で Gemini API キーを登録すると、右下のチャットパネルから自然言語で地図を操作できます。ブラウザから Gemini API を直接呼び出す構成（BYO = Bring Your Own キー方式：各ユーザーが自分の API キーを登録して使う）で、静的配信のまま利用可能です。<strong>キーの供給経路は2つ</strong>あり、BYO キーが無い環境でも、バックエンド（Cloudflare Pages/Workers・Cloud Run）が <code>POST /api/gemini</code>（<code>aiProxy</code> 機能）を通知していればサーバー側のキーでキーレス利用できます。</p>
+      <p><strong>AI プロバイダは切替式</strong>で、Gemini（既定）のほか「OpenAI互換」を選べます。<a href="https://models.github.ai">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントにベースURL・キー・モデル名を指定する BYO 構成で、ツール定義・実行ループは Gemini と共通（宣言を OpenAI 形式へ変換して送信）。<strong>GitHub Copilot</strong> は同梱の <code>copilot-bridge/</code>（GitHub Copilot SDK・要 Copilot 契約）経由で、<strong>プロバイダ選択肢はアプリ版のみに表示</strong>されます（アプリが起動時にブリッジを自動起動・8511・要 Node.js）。選んで保存するだけで疎通したブリッジへエージェント接続が自動設定されます。通常版では選択肢は出ませんが、手動起動したブリッジ（既定 8788）へエージェントタブから接続すれば利用可能です — Copilot に直接呼べる公開APIは無いためブリッジ経由が正規ルートです。</p>
       <p>AI の実行経路は function calling によるツール呼び出しで、<strong>48個のツール</strong>がアプリの全主要機能を網羅します：</p>
       <table>
         <thead><tr><th>カテゴリ</th><th>ツール</th></tr></thead>

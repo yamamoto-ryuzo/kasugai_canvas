@@ -2728,7 +2728,7 @@ async function refreshLayersImpl() {
         // moveEnd ごとの再スライスで見えている範囲に追従する(クライアント側 bbox=auto 相当)。
         // バジェット内に収まるレイヤーは従来どおり全件描画のまま
         let drawSource = source;
-        if (!isQueryDecoder(decoder, item) && Number.isFinite(vectorEntityBudget) && source.features.length > vectorEntityBudget) {
+        if (!isQueryDecoder(decoder, item) && Number.isFinite(vectorEntityBudget) && (source?.features?.length ?? 0) > vectorEntityBudget) {
           drawSource = sliceSourceToView(item, source);
           item.viewportSliced = true;
         }
@@ -6487,11 +6487,30 @@ function isSecureAgentEndpoint(endpoint) {
   }
 }
 
+// GitHub Copilot プロバイダはアプリ版（local ティアで copilotBridge を通知する
+// 環境 = アプリがブリッジを自動起動する構成）のときのみ選択肢に出す。
+// option 要素の hidden 属性はブラウザ差があるため、要素自体を着脱する。
+// 通常版で手動ブリッジを使う場合はエージェントタブから接続する
+let copilotProviderOption = null;
+function updateCopilotProviderOption() {
+  const select = document.querySelector("#chat-provider");
+  if (!select) return;
+  const option = select.querySelector('option[value="copilot"]');
+  if (hasBackendFeature("copilotBridge")) {
+    if (!option && copilotProviderOption) select.appendChild(copilotProviderOption);
+  } else if (option) {
+    const wasSelected = select.value === "copilot";
+    copilotProviderOption = option;
+    option.remove();
+    if (wasSelected) select.dispatchEvent(new Event("change"));
+  }
+}
+
 function updateChatPanelVisibility() {
   const panel = document.querySelector("#chat-panel");
   if (panel) {
     let hasKey = false;
-    try { hasKey = !!localStorage.getItem("googleApiKey"); } catch (e) {}
+    try { hasKey = !!localStorage.getItem("googleApiKey") || !!localStorage.getItem("openaiApiKey"); } catch (e) {}
     panel.style.display = (hasKey || isAgentEnabled() || hasBackendFeature("aiProxy")) ? "" : "none";
   }
   // 既定エンドポイント（バックエンド通知）を設定欄のプレースホルダに表示する
@@ -6521,17 +6540,121 @@ function setupGoogleSettings() {
   const stepsInput = document.querySelector("#google-tool-max-steps");
   const saveButton = document.querySelector("#google-settings-save");
   const status = document.querySelector("#google-settings-status");
+  const providerSelect = document.querySelector("#chat-provider");
+  const geminiFields = document.querySelector("#gemini-fields");
+  const openaiFields = document.querySelector("#openai-fields");
+  const openaiBaseUrlInput = document.querySelector("#openai-base-url");
+  const openaiKeyInput = document.querySelector("#openai-api-key");
+  const openaiModelInput = document.querySelector("#openai-model");
+  const copilotFields = document.querySelector("#copilot-fields");
+  const copilotStatus = document.querySelector("#copilot-endpoint-status");
+  const copilotModelSelect = document.querySelector("#copilot-model");
   if (!keyInput || !saveButton) return;
+  // ブリッジの /models から利用可能な Copilot モデル一覧を取り込む。
+  // 保存済みの選択が一覧に無ければ先頭に残す。空値はブリッジ既定モデル
+  const refreshCopilotModels = async (endpoint) => {
+    if (!copilotModelSelect) return;
+    const saved = getCopilotModel();
+    let models = [];
+    if (endpoint) {
+      try {
+        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(4000) });
+        const d = await r.json().catch(() => ({}));
+        if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
+      } catch (e) {}
+    }
+    copilotModelSelect.textContent = "";
+    const add = (value, label) => {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = label;
+      copilotModelSelect.appendChild(o);
+    };
+    add("", t("chat.copilot.modelDefault"));
+    const seen = new Set();
+    if (saved && !models.some(m => m.id === saved)) { add(saved, saved); seen.add(saved); }
+    for (const m of models) {
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      add(m.id, m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id);
+    }
+    copilotModelSelect.value = saved;
+    if (copilotModelSelect.value !== saved) copilotModelSelect.value = "";
+  };
+  // Copilot ブリッジの疎通確認。アプリ管理ブリッジ(8511)・手動ブリッジ(8788)等の
+  // 候補を順に試し、最初に応答したものを表示する（失敗しても設定は保存できる）
+  const refreshCopilotStatus = async () => {
+    if (!copilotStatus) return;
+    const fallback = getAgentConfig().endpoint || copilotBridgeCandidates()[0];
+    copilotStatus.textContent = t("chat.copilot.endpoint", { endpoint: fallback });
+    const found = await detectCopilotBridge();
+    copilotStatus.textContent = found
+      ? t("chat.copilot.statusOk", { endpoint: found.endpoint, model: found.model })
+      : t("chat.copilot.statusNg", { endpoint: fallback });
+    void refreshCopilotModels(found?.endpoint || "");
+  };
+  const syncProviderFields = () => {
+    const v = providerSelect?.value || "gemini";
+    if (geminiFields) geminiFields.hidden = v !== "gemini";
+    if (openaiFields) openaiFields.hidden = v !== "openai";
+    if (copilotFields) copilotFields.hidden = v !== "copilot";
+    if (v === "copilot") void refreshCopilotStatus();
+  };
   try {
     keyInput.value = localStorage.getItem("googleApiKey") || "";
     const savedModel = localStorage.getItem("googleGeminiModel");
     if (savedModel && modelSelect) modelSelect.value = savedModel;
+    if (providerSelect) providerSelect.value = getChatProvider();
+    // Copilot 選択肢はアプリ版のみ。非対応環境で保存値が copilot なら Gemini 表示に戻す
+    updateCopilotProviderOption();
+    if (openaiBaseUrlInput) openaiBaseUrlInput.value = localStorage.getItem("openaiBaseUrl") || "";
+    if (openaiKeyInput) openaiKeyInput.value = localStorage.getItem("openaiApiKey") || "";
+    if (openaiModelInput) openaiModelInput.value = localStorage.getItem("openaiModel") || "";
     if (stepsInput) stepsInput.value = String(getChatMaxToolSteps());
+    void refreshCopilotModels(""); // 保存値・既定オプションだけ先に埋めておく
+    syncProviderFields();
   } catch (e) {}
+  providerSelect?.addEventListener("change", syncProviderFields);
   saveButton.addEventListener("click", () => {
     try {
       localStorage.setItem("googleApiKey", keyInput.value.trim());
       if (modelSelect) localStorage.setItem("googleGeminiModel", modelSelect.value);
+      if (providerSelect) localStorage.setItem("chatProvider", providerSelect.value);
+      if (openaiBaseUrlInput) localStorage.setItem("openaiBaseUrl", openaiBaseUrlInput.value.trim());
+      if (openaiKeyInput) localStorage.setItem("openaiApiKey", openaiKeyInput.value.trim());
+      if (openaiModelInput) localStorage.setItem("openaiModel", openaiModelInput.value.trim());
+      if (copilotModelSelect) localStorage.setItem("copilotModel", copilotModelSelect.value);
+      if (providerSelect?.value === "copilot") {
+        // GitHub Copilot 選択時はエージェント接続を自動設定する。
+        // 自動設定分は agentAutoConfig マーカーで管理し、手動設定済みの
+        // エージェント（別URL）は上書きしない
+        const current = (localStorage.getItem("agentEndpoint") || "").trim();
+        if (!current || localStorage.getItem("agentAutoConfig") === "copilot") {
+          // 疎通できたブリッジ（アプリ管理 8511 / 手動 8788）を自動検出して設定する
+          void (async () => {
+            const found = await detectCopilotBridge();
+            const endpoint = found?.endpoint || copilotBridgeCandidates()[0];
+            localStorage.setItem("agentEndpoint", endpoint);
+            const endpointInput = document.querySelector("#agent-endpoint");
+            if (endpointInput) endpointInput.value = endpoint;
+            void refreshCopilotStatus();
+          })();
+          localStorage.setItem("agentEndpoint", copilotBridgeCandidates()[0]);
+        }
+        localStorage.setItem("agentEnabled", "1");
+        localStorage.setItem("agentAutoConfig", "copilot");
+      } else if (localStorage.getItem("agentAutoConfig") === "copilot") {
+        // Copilot→別プロバイダの切替時は、自分が自動設定した分だけ解除する
+        // （手動でエージェントを運用している設定には触れない）
+        const current = (localStorage.getItem("agentEndpoint") || "").trim();
+        if (copilotBridgeCandidates().includes(current)) {
+          localStorage.removeItem("agentEndpoint");
+          const endpointInput = document.querySelector("#agent-endpoint");
+          if (endpointInput) endpointInput.value = "";
+        }
+        localStorage.setItem("agentEnabled", "0");
+        localStorage.removeItem("agentAutoConfig");
+      }
       if (stepsInput) {
         localStorage.setItem("geminiToolMaxSteps", String(clampToolSteps(stepsInput.value)));
         stepsInput.value = String(getChatMaxToolSteps());
@@ -7439,7 +7562,7 @@ async function registerPluginLayer(config = {}, pluginId = "") {
     scope: config.scope === "project" ? "project" : "app",
     plugin: true,
     pluginId,
-    data: config.data || null,
+    data: normalizeGeoJsonInput(config.data),
     dataSource: null,
   };
   if (format === "entities") {
@@ -7473,17 +7596,39 @@ function findPluginLayer(idOrPluginId) {
   return pluginLayers.find(item => item.id === idOrPluginId || item.pluginId === idOrPluginId) || null;
 }
 
+// GeoJSON入力を FeatureCollection に正規化する。
+// 単体Feature・裸のジオメトリ・Feature配列・JSON文字列も受け付ける
+// (AIがaddDataLayerへFeatureCollection以外を渡しても描画できるようにする。
+// .features を持たないソースを通すと描画ループが地物数参照で落ちるため、
+// ここで統一する)。変換不能な場合は null
+function normalizeGeoJsonInput(input) {
+  let data = input;
+  if (typeof data === "string") { try { data = JSON.parse(data); } catch (e) { return null; } }
+  if (!data || typeof data !== "object") return null;
+  if (data.type === "FeatureCollection") return Array.isArray(data.features) ? data : null;
+  if (data.type === "Feature" || Array.isArray(data)) {
+    const features = (Array.isArray(data) ? data : [data]).filter(f => f && f.type === "Feature");
+    return features.length ? { type: "FeatureCollection", features } : null;
+  }
+  if (data.type === "GeometryCollection" || Array.isArray(data.coordinates)) {
+    return { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: data }] };
+  }
+  return null;
+}
+
 // インラインGeoJSONの一時レイヤー(AIのデータ加工結果の表示用)。
 // inspectorテキストには含まれないため .kasc エクスポート対象外で、
 // applyInspector 後に dataLayers から再登録されて存続する
 async function registerDataLayer(title, geojson) {
+  const data = normalizeGeoJsonInput(geojson);
+  if (!data) return null;
   const item = {
     id: `data-${++dataLayerSeq}`,
     title: title || `Data ${dataLayerSeq}`,
     type: "geojson",
     visible: true,
     group: "",
-    data: geojson,
+    data,
     ephemeral: true,
   };
   dataLayers.push(item);
@@ -7926,8 +8071,9 @@ window.kasugaiApi = {
   },
   async setPluginLayerData(idOrPluginId, geojson) {
     const item = findPluginLayer(idOrPluginId);
-    if (!item || item.type !== "geojson" || !geojson) return false;
-    item.data = geojson;
+    const data = normalizeGeoJsonInput(geojson);
+    if (!item || item.type !== "geojson" || !data) return false;
+    item.data = data;
     await refreshLayers();
     return true;
   },
@@ -7958,9 +8104,8 @@ window.kasugaiApi = {
   },
   // GeoJSONオブジェクトを一時レイヤーとして直接表示する
   async addDataLayer(title, geojson) {
-    if (!geojson || typeof geojson !== "object") return null;
     const item = await registerDataLayer(title, geojson);
-    return { id: item.id, title: item.title };
+    return item ? { id: item.id, title: item.title } : null;
   },
   async removeDataLayer(idOrTitle) {
     return await unregisterDataLayer(idOrTitle);
@@ -8676,12 +8821,12 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addDataLayer",
-      description: "GeoJSONオブジェクトを新規レイヤーとして直接表示する(URL不要の一時レイヤー・.kascには含まれない)。featureのpropertiesに simplestyle 属性(marker-color/marker-size/stroke/fill/fill-opacity/description等)を入れると色分け・ポップアップを制御できる",
+      description: "GeoJSONオブジェクトを新規レイヤーとして直接表示する(URL不要の一時レイヤー・.kascには含まれない)。Point/LineString/Polygon/Multi* いずれのジオメトリも描画できる。座標は必ず[経度,緯度]の順(緯度経度ではない)。featureのpropertiesに simplestyle 属性(marker-color/marker-size/stroke/fill/fill-opacity/description等)を入れると色分け・ポップアップを制御できる",
       parameters: {
         type: "OBJECT",
         properties: {
           title: { type: "STRING", description: "レイヤ名" },
-          geojson: { type: "OBJECT", description: "GeoJSON FeatureCollection オブジェクト" },
+          geojson: { type: "OBJECT", description: "GeoJSONオブジェクト(FeatureCollection推奨・単体Featureやジオメトリも可)" },
         },
         required: ["title", "geojson"],
       },
@@ -9161,6 +9306,183 @@ function setChatMaxToolSteps(value) {
   return n;
 }
 
+// GitHub Copilot 接続用ブリッジ（copilot-bridge/）の既定エンドポイント。
+// エージェント接続口経由で利用する（POST {message,...} → {reply,actions}）
+// 手動起動ブリッジは 8788、アプリ版（local ティア）が自動起動するブリッジは 8511
+const COPILOT_BRIDGE_ENDPOINT = "http://127.0.0.1:8788/agent";
+const COPILOT_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
+
+// 疎通を試みるブリッジ候補。アプリが capabilities で通知する
+// エンドポイントを最優先にし、local ティアではアプリ管理の 8511、
+// 最後に手動起動の既定 8788 を候補とする
+function copilotBridgeCandidates() {
+  const list = [];
+  const advertised = backendCapabilities?.copilot?.endpoint;
+  if (advertised) list.push(advertised);
+  if (backendCapabilities?.tier === "local") list.push(COPILOT_BRIDGE_ENDPOINT_APP);
+  list.push(COPILOT_BRIDGE_ENDPOINT);
+  return [...new Set(list)];
+}
+
+// 候補を順に /health で疎通確認し、最初に応答したブリッジを返す
+async function detectCopilotBridge() {
+  for (const endpoint of copilotBridgeCandidates()) {
+    let healthUrl = "";
+    try { healthUrl = new URL("/health", endpoint).href; } catch (e) { continue; }
+    try {
+      const r = await fetch(healthUrl, { signal: AbortSignal.timeout(2500) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d?.ok) return { endpoint, model: d?.model || "?" };
+    } catch (e) {}
+  }
+  return null;
+}
+
+// 設定済みの Copilot モデル（空 = ブリッジ既定モデル）。ブリッジへの要求に同梱する
+function getCopilotModel() {
+  try { return localStorage.getItem("copilotModel") || ""; } catch (e) { return ""; }
+}
+
+// 内蔵AIのプロバイダ選択。Gemini（BYOキーまたはサーバープロキシ）、
+// OpenAI互換API（GitHub Models・OpenAI・Ollama等）、
+// GitHub Copilot（copilot-bridge 経由のエージェント接続）のいずれか
+function getChatProvider() {
+  try {
+    const p = localStorage.getItem("chatProvider");
+    return ["gemini", "openai", "copilot"].includes(p) ? p : "gemini";
+  } catch (e) { return "gemini"; }
+}
+
+// OpenAI互換プロバイダの接続情報。既定は GitHub Models (models.github.ai)。
+// ベースURL・モデルを変えれば OpenAI 本家・Azure・Ollama・LM Studio 等にも流用できる
+function getOpenAIConfig() {
+  try {
+    return {
+      apiKey: (localStorage.getItem("openaiApiKey") || "").trim(),
+      baseUrl: ((localStorage.getItem("openaiBaseUrl") || "").trim() || "https://models.github.ai/inference").replace(/\/+$/, ""),
+      model: (localStorage.getItem("openaiModel") || "").trim() || "gpt-4o-mini",
+    };
+  } catch (e) {
+    return { apiKey: "", baseUrl: "https://models.github.ai/inference", model: "gpt-4o-mini" };
+  }
+}
+
+// Gemini形式スキーマ（type が大文字）を OpenAI tools が要求する JSON Schema（小文字）へ変換する
+function chatSchemaToJsonSchema(node) {
+  if (!node || typeof node !== "object") return node;
+  if (Array.isArray(node)) return node.map(chatSchemaToJsonSchema);
+  const out = {};
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "type" && typeof value === "string") out[key] = value.toLowerCase();
+    else if (value && typeof value === "object") out[key] = chatSchemaToJsonSchema(value);
+    else out[key] = value;
+  }
+  return out;
+}
+
+// activeChatTools の functionDeclarations を OpenAI tools 形式へ変換する
+function chatToolsOpenAI() {
+  return (activeChatTools()[0]?.functionDeclarations || []).map(d => ({
+    type: "function",
+    function: {
+      name: d.name,
+      description: d.description || "",
+      parameters: chatSchemaToJsonSchema(d.parameters || { type: "OBJECT", properties: {} }),
+    },
+  }));
+}
+
+// 履歴の正本（Gemini contents形式）を OpenAI messages 形式へ変換する。
+// functionCall/functionResponse も tool_calls / tool メッセージとして順序で対応付ける
+function chatHistoryToOpenAI(history) {
+  const messages = [];
+  let callSeq = 0;
+  const pendingIds = [];
+  for (const entry of history) {
+    const parts = Array.isArray(entry?.parts) ? entry.parts : [];
+    if (entry.role === "model") {
+      const content = parts.filter(p => p.text).map(p => p.text).join("");
+      const calls = parts.filter(p => p.functionCall);
+      if (!calls.length && !content) continue;
+      const msg = { role: "assistant", content: content || null };
+      if (calls.length) {
+        msg.tool_calls = calls.map(p => {
+          const id = `call_${callSeq++}`;
+          pendingIds.push(id);
+          return { id, type: "function", function: { name: p.functionCall.name, arguments: JSON.stringify(p.functionCall.args || {}) } };
+        });
+      }
+      messages.push(msg);
+    } else {
+      for (const p of parts) {
+        if (p.text) messages.push({ role: "user", content: p.text });
+        else if (p.functionResponse) {
+          messages.push({ role: "tool", tool_call_id: pendingIds.shift() || `call_${callSeq++}`, content: JSON.stringify(p.functionResponse.response ?? {}) });
+        }
+      }
+    }
+  }
+  return messages;
+}
+
+// OpenAI互換 chat/completions を呼び、tool calling の往復を処理する。
+// ツール往復はブラウザ内で行い、履歴の正本（contents形式）にも同内容を追記して
+// プロバイダを切り替えても会話が破綻しないようにする
+async function callOpenAICompat(history) {
+  const { apiKey, baseUrl, model } = getOpenAIConfig();
+  const executed = [];
+  const messages = [
+    { role: "system", content: chatSystemInstruction() },
+    ...chatHistoryToOpenAI(history),
+  ];
+  const tools = chatToolsOpenAI();
+  let maxSteps = getChatMaxToolSteps();
+  for (let step = 0; ; step++) {
+    if (step >= maxSteps) {
+      // 上限到達 — Gemini 側と同じく、続行するかユーザーに確認する
+      const increment = getChatMaxToolSteps();
+      if (!window.confirm(t("chat.toolLimitContinue", { steps: increment }))) {
+        return { text: t("chat.toolLimit"), executed };
+      }
+      maxSteps += increment;
+    }
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages, tools, tool_choice: "auto" }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    const msg = data?.choices?.[0]?.message;
+    if (!msg) throw new Error(t("chat.noResponse"));
+    messages.push(msg);
+    const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    const canonicalParts = [];
+    if (typeof msg.content === "string" && msg.content) canonicalParts.push({ text: msg.content });
+    for (const c of calls) {
+      let args = {};
+      try { args = JSON.parse(c.function?.arguments || "{}"); } catch (e) {}
+      canonicalParts.push({ functionCall: { name: c.function?.name, args } });
+    }
+    history.push({ role: "model", parts: canonicalParts });
+    if (!calls.length) {
+      const text = (typeof msg.content === "string" ? msg.content : "").trim();
+      return { text: text || t("chat.noResponse"), executed };
+    }
+    const responseParts = [];
+    for (const c of calls) {
+      const name = c.function?.name;
+      let args = {};
+      try { args = JSON.parse(c.function?.arguments || "{}"); } catch (e) {}
+      const result = await executeChatTool(name, args);
+      executed.push(`${name}(${JSON.stringify(args)})`);
+      messages.push({ role: "tool", tool_call_id: c.id, content: typeof result === "string" ? result : JSON.stringify(result ?? null) });
+      responseParts.push({ functionResponse: { name, response: { result } } });
+    }
+    history.push({ role: "user", parts: responseParts });
+  }
+}
+
 // Gemini generateContent を呼び、function calling の往復を処理する
 async function callGemini(history) {
   const apiKey = window.kasugaiApi.getGoogleApiKey();
@@ -9310,6 +9632,11 @@ function setupChatPanel() {
           camera: window.kasugaiApi.getCamera(),
           layers: window.kasugaiApi.listLayers(),
           history: loadChatLog().slice(-20),
+          // 外部エージェントがツール一覧を必要とする場合のため宣言を同梱する
+          // （Copilot ブリッジ等が functionDeclarations をそのまま登録できる）
+          tools: activeChatTools()[0]?.functionDeclarations || [],
+          // Copilot プロバイダ利用時は選択モデルをブリッジへ伝える
+          ...(getChatProvider() === "copilot" && getCopilotModel() ? { model: getCopilotModel() } : {}),
           ...(apiKey ? { apiKey } : {}),
         }),
       });
@@ -9367,9 +9694,16 @@ function setupChatPanel() {
       return;
     }
     // BYO キーが無くても、バックエンドが aiProxy を通知していればサーバーキーで動く
-    if (!window.kasugaiApi.getGoogleApiKey() && !aiProxyEndpoint()) {
+    const provider = getChatProvider();
+    const hasKey = provider === "openai"
+      ? !!getOpenAIConfig().apiKey
+      : provider === "copilot"
+        ? isAgentEnabled()
+        : (!!window.kasugaiApi.getGoogleApiKey() || !!aiProxyEndpoint());
+    if (!hasKey) {
       const local = await handleLocalChatCommand(text);
-      addMessage("assistant", local || t("chat.noApiKey"));
+      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : "chat.noApiKey";
+      addMessage("assistant", local || t(key));
       return;
     }
     const thinking = document.createElement("div");
@@ -9379,7 +9713,7 @@ function setupChatPanel() {
     messages.scrollTop = messages.scrollHeight;
     try {
       history.push({ role: "user", parts: [{ text }] });
-      const { text: reply, executed } = await callGemini(history);
+      const { text: reply, executed } = provider === "openai" ? await callOpenAICompat(history) : await callGemini(history);
       thinking.remove();
       executed.forEach(call => addMessage("system", t("chat.executed", { call })));
       addMessage("assistant", reply);
@@ -9405,6 +9739,8 @@ window.addEventListener("pagehide", () => {
 (async () => {
   await detectBackend();
   updateAppPanelVisibility();
+  // capabilities 確定後に Copilot 選択肢の可否を再評価する（アプリ版のみ表示）
+  updateCopilotProviderOption();
   // capabilities 取得後に既定エージェントエンドポイントを反映するため再評価する
   updateChatPanelVisibility();
   try { await loadProjects(); } catch (e) { console.error(e); }

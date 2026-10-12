@@ -1,0 +1,16 @@
+{
+  "name": "kasugai-copilot-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "KASUGAI Canvas AIチャット ↔ GitHub Copilot SDK ブリッジ（外部エージェント接続口）",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "1.0.16"
+  }
+}

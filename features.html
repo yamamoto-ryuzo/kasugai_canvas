@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.15.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.16.0</span></h1>
       <p>機能と実装 — 機能一覧と現行実装の仕組み・制限</p>
     </header>
     <main>
@@ -115,11 +115,11 @@
       </div>
 
       <h2 id="ai"><a href="features/v3.html">V3: AI 連携</a></h2>
-      <p>Gemini API を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。<a href="features/v3.html">詳細 →</a>（設定手順は <a href="google.html">Google 連携・AI</a>）</p>
+      <p>Gemini / OpenAI互換 / GitHub Copilot（ブリッジ）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。<a href="features/v3.html">詳細 →</a>（設定手順は <a href="google.html">Google 連携・AI</a>。通常版/アプリ版の対応表あり）</p>
       <div class="features">
         <div class="feature-card">
-          <h3>🗨️ AI チャット（Gemini 連携）</h3>
-          <p>管理（⚙）→ AI で API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセットなどを実行</p>
+          <h3>🗨️ AI チャット（Gemini / OpenAI互換 / Copilot）</h3>
+          <p>管理（⚙）→ AI でプロバイダを選び API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセットなどを実行。Copilot（アプリ版のみの選択肢）はブリッジ自動起動＋エージェント接続の自動設定</p>
         </div>
         <div class="feature-card">
           <h3>🧪 runCode サンドボックス</h3>

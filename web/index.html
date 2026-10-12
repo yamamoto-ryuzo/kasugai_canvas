@@ -272,11 +272,18 @@
                 </section>
                 <section id="manage-ai" class="manage-pane">
                   <nav class="manage-subnav">
-                    <button type="button" class="active" data-manage-sub="gemini-panel" data-i18n="manage.section.chat">チャット (Gemini)</button>
+                    <button type="button" class="active" data-manage-sub="gemini-panel" data-i18n="manage.section.chat">チャット (AI)</button>
                     <button type="button" data-manage-sub="agent-panel" data-i18n="google.tab.agent">エージェント</button>
                     <button type="button" data-manage-sub="plugin-panel" data-i18n="google.tab.plugin">プラグイン</button>
                   </nav>
                   <section id="gemini-panel" class="settings-subpanel active">
+                  <label class="field-label" for="chat-provider" data-i18n="chat.provider.label">AI プロバイダ</label>
+                  <select id="chat-provider">
+                    <option value="gemini" selected data-i18n="chat.provider.gemini">Gemini (Google)</option>
+                    <option value="openai" data-i18n="chat.provider.openai">OpenAI互換 (GitHub Models 等)</option>
+                    <option value="copilot" data-i18n="chat.provider.copilot">GitHub Copilot (ブリッジ)</option>
+                  </select>
+                  <div id="gemini-fields">
                   <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
                   <p class="hint" data-i18n-html="google.gemini.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。localStorage はオリジン・ブラウザプロファイルごとに分離されるため、<strong>同じデプロイにアクセスする他のユーザーからは読み取れません</strong>。ただし「このPC・ブラウザプロファイルを操作する人」「ブラウザ拡張機能」「ページ上のスクリプト」からは参照可能です — 端末・プロファイルを他者と共有しないでください。またキー自体を共有ファイル（.kasc等）やコードに書き込まないでください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
                   <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
@@ -288,6 +295,24 @@
                     <option value="gemini-3.5-flash">gemini-3.5-flash</option>
                     <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
                   </select>
+                  </div>
+                  <div id="openai-fields" hidden>
+                  <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はエージェントタブから Copilot ブリッジ（copilot-bridge/）を接続してください。</p>
+                  <p class="hint" data-i18n-html="chat.openai.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は上のエンドポイントのみです。http（非HTTPS）のエンドポイントを指定するとキーが平文で送信されるため、localhost/127.0.0.1 以外では https を使ってください。キー自体を共有ファイル（.kasc等）やコードに書き込まないでください。</p>
+                  <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
+                  <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
+                  <label class="field-label" for="openai-api-key" style="margin-top:10px;" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
+                  <input id="openai-api-key" type="password" placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
+                  <label class="field-label" for="openai-model" style="margin-top:10px;" data-i18n="chat.openai.modelLabel">モデル</label>
+                  <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
+                  </div>
+                  <div id="copilot-fields" hidden>
+                  <p class="hint" data-i18n-html="chat.copilot.hint">同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）経由で GitHub Copilot を使います。選択して保存すると、エージェント接続（既定 <code>http://127.0.0.1:8788/agent</code>）が自動で設定されます。ブリッジの起動（<code>npm install && npm start</code>）と GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
+                  <label class="field-label" for="copilot-model" data-i18n="chat.copilot.modelLabel">モデル</label>
+                  <select id="copilot-model"></select>
+                  <p class="hint" data-i18n="chat.copilot.modelHint">ブリッジから取得した利用可能な Copilot モデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
+                  <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
+                  </div>
                   <label class="field-label" for="google-tool-max-steps" style="margin-top:10px;" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>
                   <input id="google-tool-max-steps" type="number" min="1" max="20" step="1" />
                   <p class="hint" data-i18n="google.gemini.toolStepsHint">1回の指示でエージェントがツール実行を繰り返せる回数（既定: 10・範囲 1〜20）。複雑な指示ほど大きくしますが、暴走時のコストも増えます。</p>

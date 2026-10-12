@@ -82,6 +82,11 @@ struct AppState {
     projects_dir: Arc<PathBuf>,
     // ローカル実行(127.0.0.1バインド)のとき true。高権限APIの公開可否判定に使う
     is_local: bool,
+    // GitHub Copilot ブリッジ(copilot-bridge/server.mjs)の子プロセス。
+    // アプリ版ではサーバーが自動起動し 127.0.0.1:8511 に待受けさせる
+    copilot_bridge: Arc<Mutex<Option<tokio::process::Child>>>,
+    // フロントへ通知するブリッジのエージェントエンドポイント(管理対象がある場合のみ)
+    copilot_endpoint: Option<String>,
 }
 
 // /api/fetch の上限とタイムアウト
@@ -198,11 +203,16 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
     if state.is_local {
         features.push("cloudRclone");
     }
+    // Copilot ブリッジの管理対象があるときはエンドポイントを通知する
+    if state.copilot_endpoint.is_some() {
+        features.push("copilotBridge");
+    }
     Json(json!({
         "tier": "local",
         "name": "kasugai_canvas",
         "version": env!("CARGO_PKG_VERSION"),
-        "features": features
+        "features": features,
+        "copilot": state.copilot_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null)
     }))
 }
 
@@ -4322,6 +4332,85 @@ fn resolve_dir(
     fallback()
 }
 
+// ---- GitHub Copilot ブリッジの自動起動（アプリ版のみ） ----
+// Copilot はブラウザから直接呼べる公開APIを持たないため、公式 SDK を使う
+// Node 製ブリッジ(copilot-bridge/server.mjs)を子プロセスとして起動し、
+// 127.0.0.1:8511 に待受けさせる。要 Node.js（+ Copilot CLI のログイン）
+const COPILOT_BRIDGE_PORT: u16 = 8511;
+
+fn spawn_copilot_bridge(bridge_dir: &Path, log_path: &Path) -> Option<tokio::process::Child> {
+    // windows_subsystem="windows" ではコンソールが無いため、
+    // ブリッジの標準出力・エラーは exe 隣のログファイルに残す
+    for name in ["node", "node.exe"] {
+        // Stdio は clone 不可なので試行ごとにログファイルを開き直す
+        let open_log = || {
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(log_path)
+                .ok()
+        };
+        let stdout = open_log()
+            .map(std::process::Stdio::from)
+            .unwrap_or_else(std::process::Stdio::null);
+        let stderr = open_log()
+            .map(std::process::Stdio::from)
+            .unwrap_or_else(std::process::Stdio::null);
+        match tokio::process::Command::new(name)
+            .arg("server.mjs")
+            .current_dir(bridge_dir)
+            .env("COPILOT_BRIDGE_PORT", COPILOT_BRIDGE_PORT.to_string())
+            .env("NODE_NO_WARNINGS", "1")
+            .stdin(std::process::Stdio::null())
+            .stdout(stdout)
+            .stderr(stderr)
+            .kill_on_drop(true)
+            .spawn()
+        {
+            Ok(child) => return Some(child),
+            Err(_) => continue,
+        }
+    }
+    eprintln!("copilot-bridge: Node.js が見つかりません（ブリッジは起動しません）");
+    None
+}
+
+// 配布物に node_modules が含まれない場合に備え、初回のみ npm install を試みる
+async fn install_bridge_deps(bridge_dir: &Path) -> bool {
+    for name in ["npm", "npm.cmd", "npm.exe"] {
+        match tokio::process::Command::new(name)
+            .args(["install", "--omit=dev", "--no-audit", "--no-fund"])
+            .current_dir(bridge_dir)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await
+        {
+            Ok(status) => return status.success(),
+            Err(_) => continue,
+        }
+    }
+    false
+}
+
+// Windows は taskkill /T で子孫(copilot CLI 等)まで落とす。
+// 他OSは直接の子のみ kill（孫プロセスは孤児になりうるが SDK 側で短命に終わる想定）
+async fn kill_copilot_bridge(mut child: tokio::process::Child) {
+    #[cfg(windows)]
+    if let Some(id) = child.id() {
+        let _ = tokio::process::Command::new("taskkill")
+            .args(["/PID", &id.to_string(), "/T", "/F"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .await;
+        let _ = child.wait().await;
+        return;
+    }
+    let _ = child.kill().await;
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Cloud Run 等のコンテナ環境は PORT が設定される。その場合は 0.0.0.0 で待ち受け、
@@ -4383,6 +4472,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // コンテナ実行(PORT 設定時)は高権限APIを公開しない
     let is_local = cloud_port.is_none();
 
+    // Copilot ブリッジ: ローカル実行かつ copilot-bridge/ が見つかった場合のみ管理対象。
+    // KASUGAI_NO_COPILOT_BRIDGE で自動起動を無効化できる
+    let copilot_bridge_dir = resolve_dir(&exe_dir, "copilot-bridge", || {
+        repo_dir.join("copilot-bridge")
+    });
+    let copilot_bridge_dir = if is_local
+        && std::env::var_os("KASUGAI_NO_COPILOT_BRIDGE").is_none()
+        && copilot_bridge_dir.join("server.mjs").is_file()
+    {
+        Some(copilot_bridge_dir)
+    } else {
+        None
+    };
+    let copilot_endpoint = copilot_bridge_dir
+        .as_ref()
+        .map(|_| format!("http://127.0.0.1:{COPILOT_BRIDGE_PORT}/agent"));
+
     let external_projects_path = executable_directory.join(EXTERNAL_PROJECTS_FILE_NAME);
     let state = AppState {
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
@@ -4398,6 +4504,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         web_dir: Arc::new(web_dir.clone()),
         projects_dir: Arc::new(projects_dir.clone()),
         is_local,
+        copilot_bridge: Arc::new(Mutex::new(None)),
+        copilot_endpoint,
     };
 
     // 引数指定の .kasc を外部プロジェクトとして登録し、そのプロジェクトで開く
@@ -4501,6 +4609,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("KASUGAI Canvas: http://{address}");
 
+    // Copilot ブリッジを子プロセスとして起動する。
+    // 8511 が既に使用中（外部管理のブリッジ・前回の残骸等）の場合は何もしない
+    if let Some(bridge_dir) = copilot_bridge_dir {
+        let port_taken = TcpListener::bind(("127.0.0.1", COPILOT_BRIDGE_PORT))
+            .await
+            .is_err();
+        if !port_taken {
+            let bridge_state = state.clone();
+            let log_path = executable_directory.join("copilot-bridge.log");
+            tokio::spawn(async move {
+                if !bridge_dir.join("node_modules").exists() {
+                    eprintln!("copilot-bridge: 依存をインストールしています (npm install)...");
+                    if !install_bridge_deps(&bridge_dir).await {
+                        eprintln!("copilot-bridge: npm install に失敗しました");
+                        return;
+                    }
+                }
+                match spawn_copilot_bridge(&bridge_dir, &log_path) {
+                    Some(child) => {
+                        eprintln!("copilot-bridge: http://127.0.0.1:{COPILOT_BRIDGE_PORT}/agent");
+                        bridge_state.copilot_bridge.lock().await.replace(child);
+                    }
+                    None => {}
+                }
+            });
+        }
+    }
+
     if open_browser_requested {
         let query = startup_query.clone();
         tokio::spawn(async move {
@@ -4517,6 +4653,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // rclone serve 子プロセスが残らないようにする(ドライブ割当はOS側の設定なので残る)
     if let Some(mut serve) = state.cloud.lock().await.serve.take() {
         let _ = serve.child.kill().await;
+    }
+    // Copilot ブリッジの子プロセスも終了させる
+    if let Some(child) = state.copilot_bridge.lock().await.take() {
+        kill_copilot_bridge(child).await;
     }
     Ok(())
 }
