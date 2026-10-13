@@ -21,7 +21,10 @@ KASUGAI Canvas の AI チャットを **GitHub Copilot** で動かすための�
 ## 前提
 
 - Node.js 20.19+ / 22.12+
-- **GitHub Copilot サブスクリプション**（Free プラン可・プレミアムリクエストの quota を消費します）
+- **GitHub Copilot サブスクリプション** — Free / Pro / Pro+ / Max / Business / Enterprise の**いずれのプランでも動作**します（Copilot CLI は全プランに同梱のコア機能）。プレミアムリクエストの quota（AI クレジット）を消費します。
+  - Free プラン: AI クレジットの無料枠あり・モデルは自動選択のみ（モデル指定は有料プラン向け）
+  - Business / Enterprise: 組織管理者が Copilot CLI をポリシーで有効化している必要があります
+  - 参考: SDK は BYOK（独自 LLM プロバイダのキー）でも動作可能ですが、本ブリッジは未対応です
 - 認証は以下のいずれか:
   - `copilot` CLI でログイン済み（推奨・`copilot` をインストールして対話ログイン）
   - 環境変数 `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`（GitHub の OAuth トークン）

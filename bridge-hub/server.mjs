@@ -206,7 +206,7 @@ for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { stopActive(); p
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Devin-Api-Key");
   res.setHeader("Access-Control-Allow-Private-Network", "true");
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }

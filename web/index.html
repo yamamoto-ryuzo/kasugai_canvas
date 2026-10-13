@@ -310,35 +310,40 @@
                   <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
                   </div>
                   <div id="bridge-fields" hidden>
-                  <p class="hint" data-i18n-html="agent.externalHint">チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
-                  <p class="hint" data-i18n-html="chat.copilot.hint">GitHub Copilot の場合は同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
-                  <p class="hint" data-i18n-html="chat.devin.hint">Devin の場合は同梱の Devin ブリッジ（<code>devin-bridge/</code>・<code>devin acp</code>）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Devin CLI と利用者自身の Devin プランが必要で、ローカル・本人利用限定です — 手順と利用条件は devin-bridge/README.md。</p>
-                  <p class="hint" data-i18n-html="chat.antigravity.hint">Antigravity の場合は同梱の Antigravity ブリッジ（<code>antigravity-bridge/</code>・<code>agy</code> CLI）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要で、ローカル・本人利用限定です — 手順と利用条件は antigravity-bridge/README.md。</p>
-                  <p class="hint" id="agent-backend-status" aria-live="polite"></p>
+                  <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden>チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
+                  <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden>GitHub Copilot の場合は同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
+                  <p class="hint provider-only" data-for="devin" data-i18n-html="chat.devin.hint" hidden>Devin の場合は同梱の Devin ブリッジ（<code>devin-bridge/</code>・<code>devin acp</code>）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Devin CLI と利用者自身の Devin プランが必要で、ローカル・本人利用限定です — 手順と利用条件は devin-bridge/README.md。</p>
+                  <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden>Antigravity の場合は同梱の Antigravity ブリッジ（<code>antigravity-bridge/</code>・<code>agy</code> CLI）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要で、ローカル・本人利用限定です — 手順と利用条件は antigravity-bridge/README.md。</p>
                   <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
                   <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
+                  <div class="provider-only" data-for="agent" hidden>
                   <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
                   <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" data-i18n-attr="placeholder:agent.tokenPlaceholder" autocomplete="off" size="28" />
-                  <div id="copilot-fields" hidden>
+                  <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
+                  <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>
+                  <p class="hint" id="agent-backend-status" aria-live="polite"></p>
+                  </div>
+                  <div id="copilot-fields" class="provider-only" data-for="copilot" hidden>
                   <label class="field-label" for="copilot-model" data-i18n="chat.copilot.modelLabel">モデル</label>
                   <select id="copilot-model"></select>
                   <p class="hint" data-i18n="chat.copilot.modelHint">ブリッジから取得した利用可能な Copilot モデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
                   <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
                   </div>
-                  <div id="devin-fields" hidden>
+                  <div id="devin-fields" class="provider-only" data-for="devin" hidden>
+                  <label class="field-label" for="devin-api-key" data-i18n="chat.devin.apiKeyLabel">Devin APIキー（任意）</label>
+                  <input id="devin-api-key" type="password" placeholder="cog_..." data-i18n-attr="placeholder:chat.devin.apiKeyPlaceholder" autocomplete="off" size="28" />
+                  <p class="hint" data-i18n-html="chat.devin.apiKeyHint">Devin の認証に使うサービスユーザー APIキー。app.devin.ai → Settings → Devin API → Service users タブから発行します（ロール: Member・<code>cog_</code> で始まるトークン）。※PAT（Personal Access Token）は devin acp の認証では拒否されます。空欄の場合はブラウザで Devin にログインする PKCE 認証が起動します。キーは localStorage に保存され、ローカルのブリッジにのみ送信されて <code>devin acp</code> の認証に使われます。</p>
                   <label class="field-label" for="devin-model" data-i18n="chat.devin.modelLabel">モデル</label>
                   <select id="devin-model"></select>
                   <p class="hint" data-i18n="chat.devin.modelHint">ブリッジから取得した Devin のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
                   <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
                   </div>
-                  <div id="antigravity-fields" hidden>
+                  <div id="antigravity-fields" class="provider-only" data-for="antigravity" hidden>
                   <label class="field-label" for="antigravity-model" data-i18n="chat.antigravity.modelLabel">モデル</label>
                   <select id="antigravity-model"></select>
                   <p class="hint" data-i18n="chat.antigravity.modelHint">ブリッジから取得した Antigravity のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
                   <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
                   </div>
-                  <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
-                  <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>
                   </div>
                   <label class="field-label" for="google-tool-max-steps" style="margin-top:10px;" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>
                   <input id="google-tool-max-steps" type="number" min="1" max="20" step="1" />
@@ -632,7 +637,10 @@
           </aside>
           <aside class="chat-panel" id="chat-panel" aria-label="AIチャット" data-i18n-attr="aria-label:chat.ariaLabel">
             <div class="chat-header">
-              <strong id="chat-provider-label" class="chat-provider-label"></strong>
+              <span class="chat-provider-box">
+                <select id="chat-provider-switch" class="chat-provider-switch" title="使用するAIを選択" data-i18n-attr="title:chat.providerSwitch"></select>
+                <strong id="chat-provider-label" class="chat-provider-label"></strong>
+              </span>
               <span style="margin-left:auto;display:flex;gap:4px;">
                 <button id="chat-clear" class="chat-toggle" type="button" aria-label="履歴をクリア" title="履歴をクリア" data-i18n-attr="aria-label:chat.clear;title:chat.clear">🗑</button>
                 <button id="chat-panel-toggle" class="chat-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>

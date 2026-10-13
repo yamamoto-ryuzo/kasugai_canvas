@@ -28,7 +28,9 @@ const PORT = Number(process.env.DEVIN_BRIDGE_PORT || 8789);
 const MODEL = process.env.DEVIN_BRIDGE_MODEL || ""; // 空 = Devin 既定モデル
 const BRIDGE_TOKEN = process.env.DEVIN_BRIDGE_TOKEN || "";
 const SEND_TIMEOUT_MS = Number(process.env.DEVIN_BRIDGE_TIMEOUT_MS || 110000);
-const DEVIN_API_KEY = process.env.DEVIN_API_KEY || "";
+// Devin APIキー。環境変数のほか、ブラウザ設定画面から X-Devin-Api-Key
+// ヘッダで届いた値も使う（後者はリクエストごとに更新・キー変化で acp を再認証）
+let configuredApiKey = process.env.DEVIN_API_KEY || "";
 const DEBUG = !!process.env.DEVIN_BRIDGE_DEBUG;
 // Devin CLI のビルトインツール（ファイル・シェル）が触れる作業ディレクトリを
 // 空の専用ディレクトリに限定する
@@ -272,10 +274,10 @@ class AcpClient {
     }, 30000);
     this.authMethods = Array.isArray(init?.authMethods) ? init.authMethods : [];
     if (this.authMethods.length) {
-      if (DEVIN_API_KEY) {
+      if (configuredApiKey) {
         await this.rpc("authenticate", {
           methodId: this.authMethods[0].id,
-          _meta: { api_key: DEVIN_API_KEY },
+          _meta: { api_key: configuredApiKey },
         }, 30000);
       } else {
         // ブラウザ PKCE フロー（利用者のマシンでブラウザが開く）。
@@ -303,6 +305,8 @@ let acpQueue = Promise.resolve();
 const enqueue = (fn) => { acpQueue = acpQueue.then(fn, fn); return acpQueue; };
 // /models 用の acp 起動・モデル一覧取得の多重実行防止
 let modelsWarmup = null;
+// 直近の起動・認証失敗理由（アプリ側の「未接続」表示の詳細に使う）
+let lastWarmupError = "";
 
 async function getAcp() {
   if (acp && acp.ready) return acp;
@@ -321,8 +325,8 @@ async function getAcp() {
       try { c?.child?.kill(); } catch (_) {}
     }
   }
-  const hint = DEVIN_API_KEY
-    ? "DEVIN_API_KEY が無効な可能性があります"
+  const hint = configuredApiKey
+    ? "Devin APIキーが無効な可能性があります（環境変数 DEVIN_API_KEY または設定画面のキーを確認）"
     : "devin CLI が未インストール/未ログインの可能性があります（DEVIN_CLI_PATH・DEVIN_API_KEY を確認）";
   throw new Error(`devin acp への接続に失敗しました: ${lastErr?.message || "unknown"}。${hint}`);
 }
@@ -511,6 +515,20 @@ if (!BRIDGE_TOKEN) {
   console.warn("[bridge] DEVIN_BRIDGE_TOKEN が未設定です。このポートへのアクセスは無認証になります（ローカル専用で使う場合は問題ありませんが、共有端末ではトークン設定を推奨）。");
 }
 
+// ブラウザ設定画面から届いた APIキー（X-Devin-Api-Key ヘッダ）を取り込む。
+// キーが変化した場合は devin acp 子プロセスを再起動して新しいキーで
+// 認証し直す（ACP の資格はプロセス存続中のみ有効なため）
+function captureApiKey(req) {
+  const h = req.headers["x-devin-api-key"];
+  if (typeof h !== "string") return;
+  const key = h.trim();
+  if (key === configuredApiKey) return;
+  configuredApiKey = key;
+  console.log(`[bridge] Devin APIキーを${key ? "更新" : "クリア"}しました。次の要求で devin acp を再認証します`);
+  if (acp?.child) { try { acp.child.kill(); } catch (e) {} }
+  acp = null;
+}
+
 // acp 子プロセスの切断等で未処理の拒否/例外が上がると node が終了してしまう。
 // ブリッジは常駐プロセスなのでログだけ残して生かし続ける
 process.on("unhandledRejection", (e) => {
@@ -523,7 +541,7 @@ process.on("uncaughtException", (e) => {
 const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version, X-Devin-Api-Key");
   res.setHeader("Access-Control-Expose-Headers", "Mcp-Session-Id");
   // HTTPS の公開デプロイから localhost ブリッジを呼ぶ
   // public→private の Private Network Access プリフライトに応答する
@@ -538,14 +556,17 @@ const server = http.createServer(async (req, res) => {
   // acp 未起動時の起動・認証には数十秒〜ブラウザログイン要で数分かかる
   // ことがある。待たずに {pending:true} を即返し、起動は裏で進める
   if (req.method === "GET" && url.pathname === "/models") {
+    captureApiKey(req);
     if (!acp?.modelOptions?.length && !modelsWarmup) {
       modelsWarmup = enqueue(async () => {
         const c = await getAcp();
         if (!c.modelOptions.length) {
           await getSession("__models__", declsByProject.get("__models__") || [], MODEL);
         }
+        lastWarmupError = "";
       }).catch(e => {
-        console.error("[bridge] models warmup failed:", e?.message || e);
+        lastWarmupError = String(e?.message || e);
+        console.error("[bridge] models warmup failed:", lastWarmupError);
       }).finally(() => { modelsWarmup = null; });
     }
     return sendJson(res, 200, {
@@ -559,6 +580,8 @@ const server = http.createServer(async (req, res) => {
       model: MODEL || [...sessions.values()].map(s => s.model).find(Boolean) || null,
       // 直近ターンの usage_update（{used,size,cost}・未受信なら null）
       usage: acp?.lastUsage || null,
+      // 起動・認証の失敗理由（APIキー拒否等。成功時は空）
+      error: lastWarmupError || null,
     });
   }
   // MCP エンドポイント（Devin の MCP クライアントから呼ばれる）
@@ -577,6 +600,7 @@ const server = http.createServer(async (req, res) => {
   let body;
   try { body = JSON.parse(await readBody(req) || "{}"); }
   catch (e) { return sendJson(res, 400, { error: `invalid json: ${e.message}` }); }
+  captureApiKey(req);
   try {
     // ACP セッションの作成・プロンプトは直列化（同一セッションへの同時 prompt 防止）
     const result = await enqueue(() => handleAgent(body));

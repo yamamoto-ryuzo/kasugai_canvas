@@ -31,7 +31,7 @@ Copilot / Devin / Antigravity 各ブリッジはこのハブの子プロセス�
 
 | 変数 | 既定 | 説明 |
 |---|---|---|
-| `BRIDGE_HUB_PORT` | `8511` | ハブの待受ポート（127.0.0.1 のみバインド） |
+| `BRIDGE_HUB_PORT` | `8511` | ハブの待受ポート（127.0.0.1 のみバインド）。アプリ本体（kasugai_canvas.exe）起動時にも同じ環境変数が読まれ、待受ポート・占有チェック・`/api/capabilities` の通知エンドポイントがすべてこのポートに揃う |
 | `KASUGAI_NO_COPILOT_BRIDGE` | なし | copilot ブリッジを無効化 |
 | `KASUGAI_NO_DEVIN_BRIDGE` | なし | devin ブリッジを無効化 |
 | `KASUGAI_NO_ANTIGRAVITY_BRIDGE` | なし | antigravity ブリッジを無効化 |

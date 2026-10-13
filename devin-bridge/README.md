@@ -30,7 +30,9 @@ KASUGAI Canvas の AI チャットを **Devin（Devin CLI）** で動かすた�
 
 ACP モードの `devin` はローカルの `devin auth login` 資格を参照しないポリシーのため、ブリッジが ACP `authenticate` を行います。初回接続時に以下の順で試行されます。
 
-- `DEVIN_API_KEY` が設定されていれば API キー認証（`authenticate` の `meta.api_key`）
+- API キーがあれば API キー認証（`authenticate` の `meta.api_key`）。キーの供給元は2つ:
+  - 環境変数 `DEVIN_API_KEY`（アプリ起動環境から継承）
+  - **アプリ設定画面の「Devin APIキー」欄**（管理 → AI → チャット → プロバイダ「Devin」）— ブラウザの `localStorage` に保存され、`X-Devin-Api-Key` ヘッダで `/agent`・`/models` リクエストに同梱されます。ブリッジは受け取ったキーで認証し、キーが変化した場合は `devin acp` を再起動して再認証します。空を送るとブリッジ側のキーがクリアされブラウザ認証に戻ります。キーは `app.devin.ai` → Settings → Devin API → **Service users** タブで発行するサービスユーザーキー（`cog_`、ロール Member 推奨）を使います。**PAT（Personal Access Token）は `devin acp` の認証では `Invalid service key` として拒否されます**。フロントは https / localhost 以外の宛先にはヘッダを付けません
 - 未設定ならブラウザ PKCE フロー — **利用者のマシンでブラウザが開き**、Devin にログインすると以降のセッションが使えます（`devin acp` 子プロセスの存続中のみ有効）
 
 ## アプリ版との連携（ブリッジハブ経由・ポート 8511）
@@ -61,7 +63,7 @@ npm start
 | `DEVIN_BRIDGE_MODEL` | なし | `devin acp --model` に渡す既定モデル（アプリ側のモデル選択で上書きを試行） |
 | `DEVIN_BRIDGE_TOKEN` | なし | 設定すると `Authorization: Bearer <token>` を必須化（アプリ側「トークン」欄と合わせる） |
 | `DEVIN_BRIDGE_TIMEOUT_MS` | `110000` | Devin 応答の待機上限（アプリ側の中断は120秒） |
-| `DEVIN_API_KEY` | なし | Devin API キー。設定時はブラウザ認証なしで接続 |
+| `DEVIN_API_KEY` | なし | Devin API キー。設定時はブラウザ認証なしで接続（設定画面の「Devin APIキー」欄→`X-Devin-Api-Key` ヘッダでも供給可） |
 | `DEVIN_CLI_PATH` | 自動探索 | `devin` バイナリのパス（PATH・Devin Desktop 同梱を順に探索） |
 
 ## 注意・制限

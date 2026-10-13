@@ -4632,7 +4632,14 @@ fn resolve_dir(
 // ブリッジハブ(bridge-hub/server.mjs)は 127.0.0.1:8511。
 // Copilot/Devin/Antigravity の各ブリッジはハブの子プロセスとして
 // 選択されたものだけが遅延起動される（旧版の常駐ポート 8511/8512/8513 は廃止）
-const BRIDGE_HUB_PORT: u16 = 8511;
+// 待受ポートは既定 8511。BRIDGE_HUB_PORT 環境変数で変更できる
+//（capabilities が実ポートのエンドポイントを通知するためブラウザ側設定は不要）
+fn bridge_hub_port() -> u16 {
+    std::env::var("BRIDGE_HUB_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8511)
+}
 // 旧版が残したブリッジの掃除対象ポート（占有者がブリッジの場合のみ停止する）
 const LEGACY_BRIDGE_PORTS: [u16; 2] = [8512, 8513];
 
@@ -4848,7 +4855,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    let hub_endpoint = || format!("http://127.0.0.1:{BRIDGE_HUB_PORT}/agent");
+    let hub_port = bridge_hub_port();
+    let hub_endpoint = || format!("http://127.0.0.1:{hub_port}/agent");
     // プロバイダごとの提供可否は「ハブが起動できる・ブリッジ同梱・個別無効化なし」で決まる
     let provider_available = |dir_name: &str, disable_env: &str| {
         bridge_hub_dir.is_some()
@@ -5021,32 +5029,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("bridge-hub: 旧版ブリッジ (port {legacy_port}) を停止しました");
                 }
             }
-            let mut port_taken = TcpListener::bind(("127.0.0.1", BRIDGE_HUB_PORT))
+            let mut port_taken = TcpListener::bind(("127.0.0.1", hub_port))
                 .await
                 .is_err();
-            if port_taken && kill_bridge_on_port(BRIDGE_HUB_PORT).await {
+            if port_taken && kill_bridge_on_port(hub_port).await {
                 // kill 直後はポート解放を短時間待つ
                 for _ in 0..20 {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    if TcpListener::bind(("127.0.0.1", BRIDGE_HUB_PORT)).await.is_ok() {
+                    if TcpListener::bind(("127.0.0.1", hub_port)).await.is_ok() {
                         port_taken = false;
                         break;
                     }
                 }
             }
             if port_taken {
-                eprintln!("bridge-hub: 127.0.0.1:{BRIDGE_HUB_PORT} は別プロセスが使用中のため起動をスキップします");
+                eprintln!("bridge-hub: 127.0.0.1:{hub_port} は別プロセスが使用中のため起動をスキップします");
                 return;
             }
             match spawn_node_bridge(
                 &hub_dir,
                 &log_path,
                 "BRIDGE_HUB_PORT",
-                BRIDGE_HUB_PORT,
+                hub_port,
                 "bridge-hub",
             ) {
                 Some(child) => {
-                    eprintln!("bridge-hub: http://127.0.0.1:{BRIDGE_HUB_PORT}/agent");
+                    eprintln!("bridge-hub: http://127.0.0.1:{hub_port}/agent");
                     hub_state.bridge_hub.lock().await.replace(child);
                 }
                 None => {}
