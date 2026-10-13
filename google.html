@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.20.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.21.0</span></h1>
       <p>Google 連携・AI — Gemini AIチャット・Maps Platform・エージェント連携</p>
     </header>
     <main>
@@ -26,16 +26,16 @@
               <tr><td>Gemini（サーバーキー <code>/api/gemini</code>）</td><td>○（Cloudflare/Cloud Run デプロイ時）</td><td>—</td></tr>
               <tr><td>OpenAI互換（GitHub Models・OpenAI・Ollama 等）</td><td>○（BYOキー・エンドポイントがCORS許可の場合）</td><td>○</td></tr>
               <tr><td>外部エージェント（汎用エンドポイント）</td><td>○（ブラウザから届くURL）</td><td>○</td></tr>
-              <tr><td>GitHub Copilot（<code>copilot-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（アプリがブリッジを自動起動 :8511・要 Node.js＋Copilot CLI）</td></tr>
-              <tr><td>Devin（<code>devin-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（アプリがブリッジを自動起動 :8512・要 Node.js＋Devin CLI・本人の ACP 認証）</td></tr>
-              <tr><td>Antigravity（<code>antigravity-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（アプリがブリッジを自動起動 :8513・要 Node.js＋Antigravity CLI・本人の Google アカウントでの agy ログイン）</td></tr>
+              <tr><td>GitHub Copilot（<code>copilot-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（ブリッジハブ経由で自動起動 :8511・要 Node.js＋Copilot CLI）</td></tr>
+              <tr><td>Devin（<code>devin-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（ブリッジハブ経由で自動起動 :8511・要 Node.js＋Devin CLI・本人の ACP 認証）</td></tr>
+              <tr><td>Antigravity（<code>antigravity-bridge/</code>）</td><td>—（プロバイダ選択肢は非表示。手動ブリッジは「外部エージェント」プロバイダから接続可）</td><td>○（ブリッジハブ経由で自動起動 :8511・要 Node.js＋Antigravity CLI・本人の Google アカウントでの agy ログイン）</td></tr>
               <tr><td>Microsoft 365 Copilot（公式 Chat API）</td><td colspan="2">未実装・標準連携は見送り（ライセンス・アプリ登録・必要権限への管理者同意等が前提。接続自体の禁止ではない）</td></tr>
               <tr><td>Microsoft Copilot / M365 Copilot（Web UI 自動化）</td><td colspan="2">提供しない（消費者向けは自動アクセスの明示禁止。職場・学校向けとの違いは<a href="#m365-connection-policy">見送り理由</a>を参照）</td></tr>
               <tr><td>高権限ツール（<code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code>・<code>publishPlugin</code>・ファイル保存）</td><td>—</td><td>○（local ティアのみ）</td></tr>
             </tbody>
           </table>
           <p>「通常版」は静的配信・Cloudflare・Cloud Run などブラウザだけで開く形態、「アプリ版」はローカル Rust サーバー（kasugai_canvas.exe）で動かす形態です。AI チャット本体・地図操作・コード実行・プラグイン生成はどちらでも使え、アプリ版には<strong>永続化・共有・システムに触れる高権限機能とローカルブリッジの自動起動</strong>があります。</p>
-          <p><strong>GitHub Copilot / Devin / Antigravity はアプリ版でのみ専用プロバイダを表示</strong>します。アプリは <code>copilot-bridge</code> を <code>127.0.0.1:8511</code>、<code>devin-bridge</code> を <code>127.0.0.1:8512</code>、<code>antigravity-bridge</code> を <code>127.0.0.1:8513</code> で自動起動し、アプリ本体（既定 :8510）の終了時にすべてを停止します。要 Node.js と各 CLI・本人の認証。<code>KASUGAI_NO_COPILOT_BRIDGE</code> / <code>KASUGAI_NO_DEVIN_BRIDGE</code> / <code>KASUGAI_NO_ANTIGRAVITY_BRIDGE</code> でそれぞれ自動起動を無効化できます。選択→保存で capabilities 通知のエンドポイント、アプリ用ポート、手動用ポートの順に自動検出します。通常版からは、本人の端末で手動起動したブリッジ（Copilot: 8788 / Devin: 8789 / Antigravity: 8791）を「外部エージェント」から接続できます。</p>
+          <p><strong>GitHub Copilot / Devin / Antigravity はアプリ版でのみ専用プロバイダを表示</strong>します。アプリは <code>bridge-hub</code> を <code>127.0.0.1:8511</code> で自動起動し、ハブが選択中プロバイダのブリッジ（<code>copilot-bridge</code>／<code>devin-bridge</code>／<code>antigravity-bridge</code>）だけを内部ポートで遅延起動します（切替時は前の子を停止・常時最大1本）。アプリ本体（既定 :8510）の終了時にすべてを停止します。要 Node.js と各 CLI・本人の認証。<code>KASUGAI_NO_COPILOT_BRIDGE</code> / <code>KASUGAI_NO_DEVIN_BRIDGE</code> / <code>KASUGAI_NO_ANTIGRAVITY_BRIDGE</code> でそれぞれ自動起動を無効化できます。選択→保存で capabilities 通知のエンドポイント、アプリ用ポート、手動用ポートの順に自動検出します。通常版からは、本人の端末で手動起動したブリッジ（Copilot: 8788 / Devin: 8789 / Antigravity: 8791）を「外部エージェント」から接続できます。</p>
         </div>
         <div class="url-box" id="ai-connection-policy">
           <h3>AI 接続方式と利用規約上の判断</h3>
@@ -123,9 +123,9 @@
           <div class="feature-card">
             <h3>🤝 エージェント連携</h3>
             <p>ADK等のフレームワークは内蔵せず、外部で構築されたエージェント（Antigravity等）をAPIで呼び出す構成。アプリが担うのはチャットUI・地図操作・応答往復のみで、静的WEBサーバーのまま成立します。管理（⚙）→ AI → チャット で「AI プロバイダ」を「外部エージェント (ブリッジ)」にし、ブリッジ欄にエンドポイントURL・Bearerトークン（任意）を設定して保存すると、チャット入力がそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history, tools}</code>（<code>tools</code> は現在公開中のツール宣言・functionDeclarations 形式）、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
-            <p><strong>GitHub Copilot 接続</strong>：<strong>アプリ版では起動時に同梱の <code>copilot-bridge/</code>（<a href="https://github.com/github/copilot-sdk" target="_blank" rel="noopener noreferrer">GitHub Copilot SDK</a> 使用・要 Copilot サブスクリプション＋Node.js）が自動起動し 127.0.0.1:8511 で待受けます</strong>。管理（⚙）→ AI → チャット の「AI プロバイダ」に「GitHub Copilot」が表示される（<strong>アプリ版のみ</strong>）ので、選んで保存すれば疎通したブリッジへ自動接続され、Copilot を内蔵AIとして利用できます。通常版ではこの選択肢は表示されませんが、閲覧者のマシンでブリッジを手動起動し（既定 <code>http://127.0.0.1:8788/agent</code>・セットアップは同 README を参照）、プロバイダ「外部エージェント」から接続すれば利用できます。本アプリでは、ブラウザからモデルへ直接接続する代わりに公式 SDK / CLI をローカルブリッジ経由で利用します</p>
-            <p><strong>Devin 接続</strong>：アプリ版の「Devin」を選択して保存すると、<code>devin-bridge/</code>（<code>127.0.0.1:8512</code>）へ接続します。ブリッジは <code>devin acp</code> に対して ACP 認証を行い、利用者自身のアカウントでモデルを利用します。ブラウザ認証または本人の <code>DEVIN_API_KEY</code> を使用し、ローカル CLI のログインだけに依存しません。手動起動時の既定ポートは 8789 です。<a href="#ai-connection-policy">接続方式の判断・利用条件と M365 を見送った理由</a>も参照してください。</p>
-            <p><strong>Antigravity 接続</strong>：アプリ版の「Antigravity」を選択して保存すると、<code>antigravity-bridge/</code>（<code>127.0.0.1:8513</code>）へ接続します。ブリッジは Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動し、利用者自身の Google アカウントでの agy ログインと quota でモデルを利用します。ブリッジが <code>agy mcp add</code> で地図ツールを MCP として登録し、<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します（headless では未許可ツールが自動拒否されるため必須）。会話はプロジェクト単位で継続します。手動起動時の既定ポートは 8791 です。<a href="#ai-connection-policy">接続方式の判断・利用条件と M365 を見送った理由</a>も参照してください。</p>
+            <p><strong>GitHub Copilot 接続</strong>：<strong>アプリ版では起動時にブリッジハブ（<code>bridge-hub/</code>）が 127.0.0.1:8511 で待受け、Copilot 選択時に同梱の <code>copilot-bridge/</code>（<a href="https://github.com/github/copilot-sdk" target="_blank" rel="noopener noreferrer">GitHub Copilot SDK</a> 使用・要 Copilot サブスクリプション＋Node.js）を起動します</strong>。管理（⚙）→ AI → チャット の「AI プロバイダ」に「GitHub Copilot」が表示される（<strong>アプリ版のみ</strong>）ので、選んで保存すれば疎通したブリッジへ自動接続され、Copilot を内蔵AIとして利用できます。通常版ではこの選択肢は表示されませんが、閲覧者のマシンでブリッジを手動起動し（既定 <code>http://127.0.0.1:8788/agent</code>・セットアップは同 README を参照）、プロバイダ「外部エージェント」から接続すれば利用できます。本アプリでは、ブラウザからモデルへ直接接続する代わりに公式 SDK / CLI をローカルブリッジ経由で利用します</p>
+            <p><strong>Devin 接続</strong>：アプリ版の「Devin」を選択して保存すると、ブリッジハブ（<code>127.0.0.1:8511</code>）経由で <code>devin-bridge/</code> が起動・接続されます。ブリッジは <code>devin acp</code> に対して ACP 認証を行い、利用者自身のアカウントでモデルを利用します。ブラウザ認証または本人の <code>DEVIN_API_KEY</code> を使用し、ローカル CLI のログインだけに依存しません。手動起動時の既定ポートは 8789 です。<a href="#ai-connection-policy">接続方式の判断・利用条件と M365 を見送った理由</a>も参照してください。</p>
+            <p><strong>Antigravity 接続</strong>：アプリ版の「Antigravity」を選択して保存すると、ブリッジハブ（<code>127.0.0.1:8511</code>）経由で <code>antigravity-bridge/</code> が起動・接続されます。ブリッジは Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動し、利用者自身の Google アカウントでの agy ログインと quota でモデルを利用します。ブリッジが <code>agy mcp add</code> で地図ツールを MCP として登録し、<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します（headless では未許可ツールが自動拒否されるため必須）。会話はプロジェクト単位で継続します。手動起動時の既定ポートは 8791 です。<a href="#ai-connection-policy">接続方式の判断・利用条件と M365 を見送った理由</a>も参照してください。</p>
           </div>
           <div class="feature-card">
             <h3>🗂️ データソース（MCP 接続）</h3>

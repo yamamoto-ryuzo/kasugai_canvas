@@ -292,27 +292,15 @@ def build_release() -> None:
             for web_file in web_dir.rglob("*"):
                 if web_file.is_file():
                     archive.write(web_file, arcname=(Path("web") / web_file.relative_to(web_dir)).as_posix())
-        # GitHub Copilot ブリッジ（アプリ版が 8511 で自動起動する。要 Node.js。
-        # node_modules は含めず、初回起動時にアプリ側が npm install を実行する）
-        bridge_dir = ROOT / "copilot-bridge"
-        if bridge_dir.exists():
-            for bridge_file in bridge_dir.rglob("*"):
-                if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
-                    archive.write(bridge_file, arcname=(Path("copilot-bridge") / bridge_file.relative_to(bridge_dir)).as_posix())
-        # Devin ブリッジ（アプリ版が 8512 で自動起動する。要 Node.js＋Devin CLI。
-        # node_modules は含めず、初回起動時にアプリ側が npm install を実行する）
-        bridge_dir = ROOT / "devin-bridge"
-        if bridge_dir.exists():
-            for bridge_file in bridge_dir.rglob("*"):
-                if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
-                    archive.write(bridge_file, arcname=(Path("devin-bridge") / bridge_file.relative_to(bridge_dir)).as_posix())
-        # Antigravity ブリッジ（アプリ版が 8513 で自動起動する。要 Node.js＋Antigravity CLI。
-        # node_modules は含めず、初回起動時にアプリ側が npm install を実行する）
-        bridge_dir = ROOT / "antigravity-bridge"
-        if bridge_dir.exists():
-            for bridge_file in bridge_dir.rglob("*"):
-                if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
-                    archive.write(bridge_file, arcname=(Path("antigravity-bridge") / bridge_file.relative_to(bridge_dir)).as_posix())
+        # ブリッジハブ（アプリ版が 8511 で自動起動する統一エンドポイント。要 Node.js。
+        # Copilot/Devin/Antigravity の各ブリッジはハブが遅延起動する子プロセス）
+        # node_modules は含めず、初回起動時にハブ側が npm install を実行する
+        for bridge_name in ("bridge-hub", "copilot-bridge", "devin-bridge", "antigravity-bridge"):
+            bridge_dir = ROOT / bridge_name
+            if bridge_dir.exists():
+                for bridge_file in bridge_dir.rglob("*"):
+                    if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
+                        archive.write(bridge_file, arcname=(Path(bridge_name) / bridge_file.relative_to(bridge_dir)).as_posix())
     print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
 
     print("ZIP 内 EXE のバージョンを確認します...")

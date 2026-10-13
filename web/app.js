@@ -6664,16 +6664,27 @@ function setupGoogleSettings() {
   if (!keyInput || !saveButton) return;
   // ブリッジの /models から利用可能な Copilot モデル一覧を取り込む。
   // 保存済みの選択が一覧に無ければ先頭に残す。空値はブリッジ既定モデル
-  const refreshCopilotModels = async (endpoint) => {
+  const refreshCopilotModels = async (endpoint, retries = 4) => {
     if (!copilotModelSelect) return;
     const saved = getCopilotModel();
     let models = [];
+    let failed = false;
     if (endpoint) {
       try {
-        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(8000) });
+        // ブリッジハブ（複数プロバイダを統合して 8511 で受ける）は ?provider= で振り分ける。
+        // 単体ブリッジはクエリを無視してそのまま /models に応答する
+        const u = new URL("/models", endpoint);
+        u.searchParams.set("provider", "copilot");
+        const r = await fetch(u.href, { signal: AbortSignal.timeout(30000) });
         const d = await r.json().catch(() => ({}));
         if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
-      } catch (e) {}
+      } catch (e) { failed = true; }
+      // ハブが子ブリッジを起動中（コールドスタート）だと応答が遅れる/失敗するため再試行する
+      if (failed && retries > 0) {
+        setTimeout(() => {
+          if (providerSelect?.value === "copilot") void refreshCopilotModels(endpoint, retries - 1);
+        }, 8000);
+      }
     }
     copilotModelSelect.textContent = "";
     const add = (value, label) => {
@@ -6715,18 +6726,23 @@ function setupGoogleSettings() {
     if (!devinModelSelect) return;
     const saved = getDevinModel();
     let models = [];
+    let pending = false;
+    let failed = false;
     if (endpoint) {
       try {
-        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(8000) });
+        const u = new URL("/models", endpoint);
+        u.searchParams.set("provider", "devin");
+        const r = await fetch(u.href, { signal: AbortSignal.timeout(30000) });
         const d = await r.json().catch(() => ({}));
         if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
         if (d?.model) detectedBridgeModels.devin = d.model;
-        if (d?.pending && retries > 0) {
-          setTimeout(() => {
-            if (providerSelect?.value === "devin") void refreshDevinModels(endpoint, retries - 1);
-          }, 8000);
-        }
-      } catch (e) {}
+        pending = !!d?.pending;
+      } catch (e) { failed = true; }
+      if ((pending || failed) && retries > 0) {
+        setTimeout(() => {
+          if (providerSelect?.value === "devin") void refreshDevinModels(endpoint, retries - 1);
+        }, 8000);
+      }
     }
     updateChatProviderLabel();
     devinModelSelect.textContent = "";
@@ -6747,7 +6763,7 @@ function setupGoogleSettings() {
     devinModelSelect.value = saved;
     if (devinModelSelect.value !== saved) devinModelSelect.value = "";
   };
-  // Devin ブリッジの疎通確認。未入力ならアプリ管理ブリッジ(8512)・手動ブリッジ(8789)を順に試す
+  // Devin ブリッジの疎通確認。未入力ならアプリ管理ブリッジハブ(8511)・手動ブリッジ(8789)を順に試す
   const refreshDevinStatus = async () => {
     if (!devinStatus) return;
     const configured = (endpointInput?.value || "").trim();
@@ -6766,18 +6782,22 @@ function setupGoogleSettings() {
     if (!antigravityModelSelect) return;
     const saved = getAntigravityModel();
     let models = [];
+    let retry = false;
     if (endpoint) {
       try {
-        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(8000) });
+        const u = new URL("/models", endpoint);
+        u.searchParams.set("provider", "antigravity");
+        const r = await fetch(u.href, { signal: AbortSignal.timeout(30000) });
         const d = await r.json().catch(() => ({}));
         if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
         if (d?.model) detectedBridgeModels.antigravity = d.model;
-        if ((d?.pending || (d?.error && !models.length)) && retries > 0) {
-          setTimeout(() => {
-            if (providerSelect?.value === "antigravity") void refreshAntigravityModels(endpoint, retries - 1);
-          }, 8000);
-        }
-      } catch (e) {}
+        retry = !!(d?.pending || (d?.error && !models.length));
+      } catch (e) { retry = true; }
+      if (retry && retries > 0) {
+        setTimeout(() => {
+          if (providerSelect?.value === "antigravity") void refreshAntigravityModels(endpoint, retries - 1);
+        }, 8000);
+      }
     }
     updateChatProviderLabel();
     antigravityModelSelect.textContent = "";
@@ -6798,7 +6818,7 @@ function setupGoogleSettings() {
     antigravityModelSelect.value = saved;
     if (antigravityModelSelect.value !== saved) antigravityModelSelect.value = "";
   };
-  // Antigravity ブリッジの疎通確認。未入力ならアプリ管理ブリッジ(8513)・手動ブリッジ(8791)を順に試す
+  // Antigravity ブリッジの疎通確認。未入力ならアプリ管理ブリッジハブ(8511)・手動ブリッジ(8791)を順に試す
   const refreshAntigravityStatus = async () => {
     if (!antigravityStatus) return;
     const configured = (endpointInput?.value || "").trim();
@@ -9646,7 +9666,8 @@ async function pingBridge(endpoint, expect) {
     const r = await fetch(healthUrl, { signal: AbortSignal.timeout(2500) });
     const d = await r.json().catch(() => ({}));
     if (r.ok && d?.ok) {
-      if (expect && d?.bridge && d.bridge !== expect) return null;
+      // ブリッジハブ（hub:true）は全プロバイダを統合して受けるため expect に適合
+      if (expect && d?.bridge && d.bridge !== expect && !d?.hub) return null;
       return { endpoint, model: d?.model || "?", bridge: d?.bridge || "" };
     }
   } catch (e) {}
@@ -9668,9 +9689,9 @@ function getCopilotModel() {
 }
 
 // Devin 接続用ブリッジ（devin-bridge/）の既定エンドポイント。
-// 手動起動ブリッジは 8789、アプリ版（local ティア）が自動起動するブリッジは 8512
+// 手動起動ブリッジは 8789、アプリ版（local ティア）のブリッジハブは 8511
 const DEVIN_BRIDGE_ENDPOINT = "http://127.0.0.1:8789/agent";
-const DEVIN_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8512/agent";
+const DEVIN_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
 
 function devinBridgeCandidates() {
   const list = [];
@@ -9695,9 +9716,9 @@ function getDevinModel() {
 }
 
 // Antigravity 接続用ブリッジ（antigravity-bridge/）の既定エンドポイント。
-// 手動起動ブリッジは 8791、アプリ版（local ティア）が自動起動するブリッジは 8513
+// 手動起動ブリッジは 8791、アプリ版（local ティア）のブリッジハブは 8511
 const ANTIGRAVITY_BRIDGE_ENDPOINT = "http://127.0.0.1:8791/agent";
-const ANTIGRAVITY_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8513/agent";
+const ANTIGRAVITY_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
 
 function antigravityBridgeCandidates() {
   const list = [];
@@ -10082,6 +10103,9 @@ function setupChatPanel() {
           // 外部エージェントがツール一覧を必要とする場合のため宣言を同梱する
           // （Copilot ブリッジ等が functionDeclarations をそのまま登録できる）
           tools: activeChatTools()[0]?.functionDeclarations || [],
+          // ブリッジハブ（アプリ管理の統一エンドポイント）がバックエンドを
+          // 選ぶためのプロバイダ識別子。単体ブリッジはこのフィールドを無視する
+          provider: getChatProvider(),
           // Copilot/Devin/Antigravity プロバイダ利用時は選択モデルをブリッジへ伝える
           ...(getChatProvider() === "copilot" && getCopilotModel() ? { model: getCopilotModel() } : {}),
           ...(getChatProvider() === "devin" && getDevinModel() ? { model: getDevinModel() } : {}),

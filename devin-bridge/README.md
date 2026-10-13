@@ -33,12 +33,12 @@ ACP モードの `devin` はローカルの `devin auth login` 資格を参照�
 - `DEVIN_API_KEY` が設定されていれば API キー認証（`authenticate` の `meta.api_key`）
 - 未設定ならブラウザ PKCE フロー — **利用者のマシンでブラウザが開き**、Devin にログインすると以降のセッションが使えます（`devin acp` 子プロセスの存続中のみ有効）
 
-## アプリ版との連携（自動起動・ポート 8512）
+## アプリ版との連携（ブリッジハブ経由・ポート 8511）
 
-アプリ版（kasugai_canvas.exe）は起動時に `devin-bridge/` を探し、見つかれば `DEVIN_BRIDGE_PORT=8512` で本ブリッジを**子プロセスとして自動起動**します。アプリ終了時にはブリッジも道連れで停止します。
+アプリ版（kasugai_canvas.exe）は起動時に**ブリッジハブ**（`bridge-hub/`）を `127.0.0.1:8511` で起動し、ハブがプロバイダ「Devin」が選択されたときだけ本ブリッジを内部ポートで**子プロセスとして遅延起動**します。プロバイダ切替時は前のブリッジが停止され、常時最大1本だけが動きます。アプリ終了時にはハブごと停止します。
 
-- `GET /api/capabilities` が `devin.endpoint`（`http://127.0.0.1:8512/agent`）と features `devinBridge` を通知します。フロントの AI プロバイダ選択肢「Devin」は**この feature 通知がある環境（=アプリ版）でのみ表示**されます
-- ポート 8512 が使用中でも、占有者がブリッジ（`/health` で確認）なら強制停止して新版へ差し替えます。ブリッジ以外のプロセスが占有している場合のみ起動をスキップします
+- `GET /api/capabilities` が `devin.endpoint`（ハブの `http://127.0.0.1:8511/agent`）と features `devinBridge` を通知します。フロントの AI プロバイダ選択肢「Devin」は**この feature 通知がある環境（=アプリ版）でのみ表示**されます
+- ハブ経由ではなく本ブリッジ単体で手動起動する場合の既定ポートは 8789 です
 - 無効化: 環境変数 `KASUGAI_NO_DEVIN_BRIDGE` を設定してアプリを起動
 - `DEVIN_API_KEY`・`DEVIN_BRIDGE_TOKEN`・`DEVIN_BRIDGE_MODEL` 等はアプリ起動環境から子プロセスへ継承されます
 

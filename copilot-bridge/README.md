@@ -26,13 +26,13 @@ KASUGAI Canvas の AI チャットを **GitHub Copilot** で動かすための�
   - `copilot` CLI でログイン済み（推奨・`copilot` をインストールして対話ログイン）
   - 環境変数 `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`（GitHub の OAuth トークン）
 
-## アプリ版との連携（自動起動・ポート 8511）
+## アプリ版との連携（ブリッジハブ経由・ポート 8511）
 
-アプリ版（kasugai_canvas.exe）の機能の1つとして組み込まれています。アプリは起動時に `copilot-bridge/` を探し、見つかれば `COPILOT_BRIDGE_PORT=8511` で本ブリッジを**子プロセスとして自動起動**します（`node_modules` が無い初回は先に `npm install --omit=dev` を実行）。アプリ終了時にはブリッジも道連れで停止します。
+アプリ版（kasugai_canvas.exe）の機能の1つとして組み込まれています。アプリは起動時に**ブリッジハブ**（`bridge-hub/`）を `127.0.0.1:8511` で起動し、ハブがプロバイダ「GitHub Copilot」が選択されたときだけ本ブリッジを内部ポートで**子プロセスとして遅延起動**します（`node_modules` が無い初回は先に `npm install --omit=dev` を実行）。プロバイダ切替時は前のブリッジが停止され、常時最大1本だけが動きます。アプリ終了時にはハブごと停止します。
 
 - 前提: 利用者のマシンに **Node.js** と **Copilot CLI のログイン済み環境**があること（`node`/`npm` が PATH 上で見つかること）
-- `GET /api/capabilities` が `copilot.endpoint`（`http://127.0.0.1:8511/agent`）と features `copilotBridge` を通知します。フロントの AI プロバイダ選択肢「GitHub Copilot」は**この feature 通知がある環境（=アプリ版）でのみ表示**され、選択時にこのエンドポイントを優先検出します
-- ポート 8511 が使用中でも、占有者がブリッジ（`/health` で確認・前回起動の残骸や旧バージョン等）なら強制停止して新版へ差し替えます。ブリッジ以外のプロセスが占有している場合のみ起動をスキップします
+- `GET /api/capabilities` が `copilot.endpoint`（ハブの `http://127.0.0.1:8511/agent`）と features `copilotBridge` を通知します。フロントの AI プロバイダ選択肢「GitHub Copilot」は**この feature 通知がある環境（=アプリ版）でのみ表示**され、選択時にこのエンドポイントを優先検出します
+- ポート 8511 が使用中でも、占有者がブリッジ（`/health` で確認・前回起動の残骸や旧バージョン等）なら強制停止して新版へ差し替えます。ブリッジ以外のプロセスが占有している場合のみ起動をスキップします。旧版の常駐ブリッジが 8512/8513 に残っていれば起動時に掃除します
 - 無効化: 環境変数 `KASUGAI_NO_COPILOT_BRIDGE` を設定してアプリを起動
 - `COPILOT_BRIDGE_TOKEN` をアプリ起動環境で設定すると子プロセスにも継承されます。その場合はアプリ側のブリッジ設定欄「トークン（任意）」にも同じ値を入れてください
 

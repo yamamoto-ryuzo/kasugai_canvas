@@ -1,0 +1,14 @@
+{
+  "name": "kasugai-bridge-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "KASUGAI Canvas bridge hub — lazy-spawns one provider bridge (copilot/devin/antigravity) on demand",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

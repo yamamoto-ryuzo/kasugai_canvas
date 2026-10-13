@@ -28,12 +28,13 @@ KASUGAI Canvas の AI チャットを **Google Antigravity（Antigravity CLI / `
 2. **利用者本人の Antigravity ログインが必要** — ブリッジ自体は認証情報を持たず、起動したマシン上の `agy` ログイン（`agy` を一度対話起動して Google アカウントでサインイン）を各ユーザー自身で行います。消費されるのは利用者自身の quota です。
 3. **Antigravity CLI（`agy`）が必要** — Antigravity のインストールに含まれる `agy.exe` または単体インストールの `agy` が見つかること。見つからない場合は `AGY_CLI_PATH` で指定してください。
 
-## アプリ版との連携（自動起動・ポート 8513）
+## アプリ版との連携（ブリッジハブ経由・ポート 8511）
 
-アプリ版（kasugai_canvas.exe）は起動時に `antigravity-bridge/` を探し、見つかれば `ANTIGRAVITY_BRIDGE_PORT=8513` で本ブリッジを**子プロセスとして自動起動**します。アプリ終了時にはブリッジも道連れで停止します。
+アプリ版（kasugai_canvas.exe）は起動時に**ブリッジハブ**（`bridge-hub/`）を `127.0.0.1:8511` で起動し、ハブがプロバイダ「Antigravity」が選択されたときだけ本ブリッジを内部ポートで**子プロセスとして遅延起動**します。プロバイダ切替時は前のブリッジが停止され、常時最大1本だけが動きます。アプリ終了時にはハブごと停止します。
 
-- `GET /api/capabilities` が `antigravity.endpoint`（`http://127.0.0.1:8513/agent`）と features `antigravityBridge` を通知します。フロントの AI プロバイダ選択肢「Antigravity」は**この feature 通知がある環境（=アプリ版）でのみ表示**されます
-- ポート 8513 が使用中でも、占有者がブリッジ（`/health` で確認）なら強制停止して新版へ差し替えます。ブリッジ以外のプロセスが占有している場合のみ起動をスキップします
+- `GET /api/capabilities` が `antigravity.endpoint`（ハブの `http://127.0.0.1:8511/agent`）と features `antigravityBridge` を通知します。フロントの AI プロバイダ選択肢「Antigravity」は**この feature 通知がある環境（=アプリ版）でのみ表示**されます
+- `agy mcp add` で登録する `kasugai` MCP サーバーの URL は本ブリッジの待受ポートを指すため、ハブの子プロセスとして内部ポートで動いている場合も agy はブリッジへ直接接続します
+- ハブ経由ではなく本ブリッジ単体で手動起動する場合の既定ポートは 8791 です
 - 無効化: 環境変数 `KASUGAI_NO_ANTIGRAVITY_BRIDGE` を設定してアプリを起動
 - `ANTIGRAVITY_BRIDGE_TOKEN`・`ANTIGRAVITY_BRIDGE_MODEL` 等はアプリ起動環境から子プロセスへ継承されます
 
