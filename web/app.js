@@ -6582,7 +6582,7 @@ function isSecureAgentEndpoint(endpoint) {
 // GitHub Copilot / Devin プロバイダはアプリ版（local ティアで各ブリッジ feature を
 // 通知する環境 = アプリがブリッジを自動起動する構成）のときのみ選択肢に出す。
 // option 要素の hidden 属性はブラウザ差があるため、要素自体を着脱する。
-// 通常版で手動ブリッジを使う場合はプロバイダ「外部エージェント」から接続する
+// 同梱ブリッジはアプリ版のブリッジハブ経由で使う（プロバイダ「外部エージェント」は自作エージェント等の汎用接続口）
 const bridgeProviderOptionStash = {};
 function updateBridgeProviderOption(feature, value) {
   const select = document.querySelector("#chat-provider");
@@ -6705,7 +6705,7 @@ function setupGoogleSettings() {
     if (copilotModelSelect.value !== saved) copilotModelSelect.value = "";
   };
   // Copilot ブリッジの疎通確認。入力済みエンドポイントがあればそれを、
-  // 未入力ならアプリ管理ブリッジ(8511)・手動ブリッジ(8788)の候補を順に試す
+  // 未入力ならブリッジハブ(8511)の候補を試す
   const refreshCopilotStatus = async () => {
     if (!copilotStatus) return;
     const configured = (endpointInput?.value || "").trim();
@@ -6763,7 +6763,7 @@ function setupGoogleSettings() {
     devinModelSelect.value = saved;
     if (devinModelSelect.value !== saved) devinModelSelect.value = "";
   };
-  // Devin ブリッジの疎通確認。未入力ならアプリ管理ブリッジハブ(8511)・手動ブリッジ(8789)を順に試す
+  // Devin ブリッジの疎通確認。未入力ならブリッジハブ(8511)を試す
   const refreshDevinStatus = async () => {
     if (!devinStatus) return;
     const configured = (endpointInput?.value || "").trim();
@@ -6818,7 +6818,7 @@ function setupGoogleSettings() {
     antigravityModelSelect.value = saved;
     if (antigravityModelSelect.value !== saved) antigravityModelSelect.value = "";
   };
-  // Antigravity ブリッジの疎通確認。未入力ならアプリ管理ブリッジハブ(8511)・手動ブリッジ(8791)を順に試す
+  // Antigravity ブリッジの疎通確認。未入力ならブリッジハブ(8511)を試す
   const refreshAntigravityStatus = async () => {
     if (!antigravityStatus) return;
     const configured = (endpointInput?.value || "").trim();
@@ -9637,21 +9637,19 @@ function setChatMaxToolSteps(value) {
   return n;
 }
 
-// GitHub Copilot 接続用ブリッジ（copilot-bridge/）の既定エンドポイント。
-// エージェント接続口経由で利用する（POST {message,...} → {reply,actions}）
-// 手動起動ブリッジは 8788、アプリ版（local ティア）が自動起動するブリッジは 8511
-const COPILOT_BRIDGE_ENDPOINT = "http://127.0.0.1:8788/agent";
+// GitHub Copilot 接続用ブリッジの既定エンドポイント。
+// アプリ版（local ティア）ではブリッジハブ（bridge-hub/）が 8511 で待受け、
+// Copilot 選択時に copilot-bridge/ を遅延起動する
+// （POST {message,...} → {reply,actions} のエージェント接続口経由）
 const COPILOT_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
 
 // 疎通を試みるブリッジ候補。アプリが capabilities で通知する
-// エンドポイントを最優先にし、local ティアではアプリ管理の 8511、
-// 最後に手動起動の既定 8788 を候補とする
+// エンドポイントを最優先にし、local ティアではブリッジハブの 8511 を候補とする
 function copilotBridgeCandidates() {
   const list = [];
   const advertised = backendCapabilities?.copilot?.endpoint;
   if (advertised) list.push(advertised);
   if (backendCapabilities?.tier === "local") list.push(COPILOT_BRIDGE_ENDPOINT_APP);
-  list.push(COPILOT_BRIDGE_ENDPOINT);
   return [...new Set(list)];
 }
 
@@ -9689,8 +9687,8 @@ function getCopilotModel() {
 }
 
 // Devin 接続用ブリッジ（devin-bridge/）の既定エンドポイント。
-// 手動起動ブリッジは 8789、アプリ版（local ティア）のブリッジハブは 8511
-const DEVIN_BRIDGE_ENDPOINT = "http://127.0.0.1:8789/agent";
+// アプリ版（local ティア）ではブリッジハブ（bridge-hub/）が 8511 で待受け、
+// Devin 選択時に devin-bridge/ を遅延起動する
 const DEVIN_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
 
 function devinBridgeCandidates() {
@@ -9698,7 +9696,6 @@ function devinBridgeCandidates() {
   const advertised = backendCapabilities?.devin?.endpoint;
   if (advertised) list.push(advertised);
   if (backendCapabilities?.tier === "local") list.push(DEVIN_BRIDGE_ENDPOINT_APP);
-  list.push(DEVIN_BRIDGE_ENDPOINT);
   return [...new Set(list)];
 }
 
@@ -9716,8 +9713,8 @@ function getDevinModel() {
 }
 
 // Antigravity 接続用ブリッジ（antigravity-bridge/）の既定エンドポイント。
-// 手動起動ブリッジは 8791、アプリ版（local ティア）のブリッジハブは 8511
-const ANTIGRAVITY_BRIDGE_ENDPOINT = "http://127.0.0.1:8791/agent";
+// アプリ版（local ティア）ではブリッジハブ（bridge-hub/）が 8511 で待受け、
+// Antigravity 選択時に antigravity-bridge/ を遅延起動する
 const ANTIGRAVITY_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
 
 function antigravityBridgeCandidates() {
@@ -9725,7 +9722,6 @@ function antigravityBridgeCandidates() {
   const advertised = backendCapabilities?.antigravity?.endpoint;
   if (advertised) list.push(advertised);
   if (backendCapabilities?.tier === "local") list.push(ANTIGRAVITY_BRIDGE_ENDPOINT_APP);
-  list.push(ANTIGRAVITY_BRIDGE_ENDPOINT);
   return [...new Set(list)];
 }
 

@@ -14,7 +14,7 @@ KASUGAI Canvas の AI チャットを **Google Antigravity（Antigravity CLI / `
 
 - アプリはチャット入力を `POST /agent` に `{message, project, camera, layers, history, tools, model?}` で送ります（`tools` は現在ユーザーに公開されている地図操作ツールの宣言）。
 - ブリッジは起動時に `agy mcp add kasugai http://127.0.0.1:<port>/mcp` でブリッジ自身の MCP エンドポイントを agy のグローバル設定へ登録し、`~/.gemini/antigravity-cli/settings.json` の `permissions.allow` に `mcp(kasugai/*)` を追加します（headless モードは確認プロンプトを出せないため、未許可のツール呼び出しは自動拒否されます）。
-- MCP 登録はグローバル設定1本のため、別ポートのブリッジ（手動起動等）が上書きし得ます。`/agent` ごとに `~/.gemini/config/mcp_config.json` の登録URLを検査し、自分のポートと違えばその場で再登録します。また agy は会話開始時の URL に紐付き続けるため、古い登録URLで作られた会話の再開は接続拒否になり得ます — ターン中に `/mcp` へ一切届かずツール失敗・接続エラー系の応答が見えた場合は、その会話を破棄して新規会話で一度だけ再試行します（自己修復）。
+- MCP 登録はグローバル設定1本のため、別ポートのブリッジ（別インスタンスの単体起動等）が上書きし得ます。`/agent` ごとに `~/.gemini/config/mcp_config.json` の登録URLを検査し、自分のポートと違えばその場で再登録します。また agy は会話開始時の URL に紐付き続けるため、古い登録URLで作られた会話の再開は接続拒否になり得ます — ターン中に `/mcp` へ一切届かずツール失敗・接続エラー系の応答が見えた場合は、その会話を破棄して新規会話で一度だけ再試行します（自己修復）。
 - メッセージごとに `agy` を子プロセスとして起動し、プロンプトを stdin（`{"event":"user",...}` 形式の NDJSON）で渡します。会話の継続は `--conversation <id>` で agy 側の会話ストアを使い、プロジェクトごとに会話 ID を保持します。再開に失敗した場合は新規会話で一度だけ再試行します。
 - agy が `call_mcp_tool` で地図ツールを呼ぶと MCP の `tools/call` が届き、呼び出しを `actions` として収集してスタブ結果を返します。`result` イベントが返った時点で `{reply, actions}` をアプリへ返し、ブラウザ側が actions を順次実行します。破壊的操作（`savePlugin`・`publishPlugin`・`deleteDataFile` 等）はアプリ側の既存確認ダイアログで保護されます。
 - `listLayers` / `getCamera` だけはリクエスト同梱の現在状態から実値を返します。
@@ -34,11 +34,12 @@ KASUGAI Canvas の AI チャットを **Google Antigravity（Antigravity CLI / `
 
 - `GET /api/capabilities` が `antigravity.endpoint`（ハブの `http://127.0.0.1:8511/agent`）と features `antigravityBridge` を通知します。フロントの AI プロバイダ選択肢「Antigravity」は**この feature 通知がある環境（=アプリ版）でのみ表示**されます
 - `agy mcp add` で登録する `kasugai` MCP サーバーの URL は本ブリッジの待受ポートを指すため、ハブの子プロセスとして内部ポートで動いている場合も agy はブリッジへ直接接続します
-- ハブ経由ではなく本ブリッジ単体で手動起動する場合の既定ポートは 8791 です
 - 無効化: 環境変数 `KASUGAI_NO_ANTIGRAVITY_BRIDGE` を設定してアプリを起動
 - `ANTIGRAVITY_BRIDGE_TOKEN`・`ANTIGRAVITY_BRIDGE_MODEL` 等はアプリ起動環境から子プロセスへ継承されます
 
-## 使い方（手動起動）
+## 使い方（単体起動・開発/デバッグ用）
+
+通常はアプリ版のブリッジハブ経由で自動起動されるため手動起動は不要です。開発・デバッグ用に単体で起動する場合:
 
 ```bash
 cd antigravity-bridge
@@ -47,8 +48,6 @@ npm start
 ```
 
 依存パッケージはありません（Node.js 標準ライブラリのみ。`npm install` 不要）。
-
-アプリ側: **管理 → AI → チャット** で「AI プロバイダ」を「Antigravity」（アプリ版のみ表示）にするか、「外部エージェント (ブリッジ)」にしてエンドポイントURLに `http://127.0.0.1:8791/agent` を入力して保存します。
 
 ## 環境変数
 

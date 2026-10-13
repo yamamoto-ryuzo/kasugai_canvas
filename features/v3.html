@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.21.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.22.0</span></h1>
       <p>V3: AI 連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -18,7 +18,7 @@
 
       <h2 id="ai">V3: AI 連携</h2>
       <p>Gemini・OpenAI互換 API（GitHub Models・OpenAI・Ollama 等）・GitHub Copilot・Devin・Antigravity（ブリッジ経由）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="../google.html">Google 連携・AI</a> を参照してください（経路ごとの通常版/アプリ版対応は同ページの「AI の利用形態」表を参照）。</p>
-      <p><strong>通常版とアプリ版の違い</strong>：AI チャット本体・地図操作・コード実行・プラグイン生成は両方で使えます。アプリ版（ローカル exe）だけが持つのは <code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code> などの高権限ツール群と、<strong>GitHub Copilot / Devin / Antigravity プロバイダ</strong>（専用選択肢はアプリ版のみ表示。起動時にブリッジハブを 127.0.0.1:8511 で待受けさせ、選択中プロバイダのブリッジだけを子プロセスとして遅延起動（切替時は前の子を停止・常時最大1本。アプリ終了時に全停止）。要 Node.js・各 CLI・本人の認証）です。通常版で手動ブリッジを使う場合はプロバイダ「外部エージェント」から接続してください。</p>
+      <p><strong>通常版とアプリ版の違い</strong>：AI チャット本体・地図操作・コード実行・プラグイン生成は両方で使えます。アプリ版（ローカル exe）だけが持つのは <code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code> などの高権限ツール群と、<strong>GitHub Copilot / Devin / Antigravity プロバイダ</strong>（専用選択肢はアプリ版のみ表示。起動時にブリッジハブを 127.0.0.1:8511 で待受けさせ、選択中プロバイダのブリッジだけを子プロセスとして遅延起動（切替時は前の子を停止・常時最大1本。アプリ終了時に全停止）。要 Node.js・各 CLI・本人の認証）です。</p>
 
       <h3>🗨️ AI チャット（Gemini / OpenAI互換）</h3>
       <p>管理（⚙）→ AI → チャット で Gemini API キーを登録すると、右下のチャットパネルから自然言語で地図を操作できます。ブラウザから Gemini API を直接呼び出す構成（BYO = Bring Your Own キー方式：各ユーザーが自分の API キーを登録して使う）で、静的配信のまま利用可能です。<strong>キーの供給経路は2つ</strong>あり、BYO キーが無い環境でも、バックエンド（Cloudflare Pages/Workers・Cloud Run）が <code>POST /api/gemini</code>（<code>aiProxy</code> 機能）を通知していればサーバー側のキーでキーレス利用できます。</p>
@@ -26,9 +26,9 @@
       <ul>
         <li><strong>【API】 Gemini（既定）／ OpenAI互換</strong>（通常版）— 公式APIへブラウザから直接接続する BYO キー方式。OpenAI互換は<a href="https://models.github.ai">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントにベースURL・キー・モデル名を指定して接続します。ツール定義・実行ループは Gemini と共通で、宣言を OpenAI 形式へ変換して送信します</li>
         <li><strong>【ブリッジ】 GitHub Copilot</strong>（V5 アプリ版の機能）— 同梱の <code>copilot-bridge/</code>（GitHub Copilot SDK・要 Copilot 契約）経由。アプリはブリッジハブ（127.0.0.1:8511）経由で必要時に本ブリッジを起動するため、<strong>プロバイダ選択肢はアプリ版のみに表示</strong>されます（要 Node.js）。選んで保存するだけで疎通したブリッジへ自動接続されます。公式 SDK / CLI によるプログラム接続を利用します</li>
-        <li><strong>【ブリッジ】 Devin</strong>（V5 アプリ版の機能）— 同梱の <code>devin-bridge/</code> が公式の <code>devin acp</code> を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Devin 選択時にのみ起動し、本人の ACP 認証（ブラウザ認証または API キー）と利用枠でモデルを利用します。専用プロバイダはアプリ版のみ表示され、手動起動時の既定ポートは 8789 です</li>
-        <li><strong>【ブリッジ】 Antigravity</strong>（V5 アプリ版の機能）— 同梱の <code>antigravity-bridge/</code> が Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Antigravity 選択時にのみ起動し、ブリッジが <code>agy mcp add</code> で地図ツールを登録・<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します。本人の Google アカウントでの agy ログインと利用枠が前提で、専用プロバイダはアプリ版のみ表示され、手動起動時の既定ポートは 8791 です</li>
-        <li><strong>【ブリッジ】 外部エージェント</strong>（通常版）— 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。ブラウザから届くURLであれば接続でき、エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。通常版で手動起動した Copilot ブリッジ（既定 8788）や、Antigravity 等で構築した自作エージェントの接続に使います</li>
+        <li><strong>【ブリッジ】 Devin</strong>（V5 アプリ版の機能）— 同梱の <code>devin-bridge/</code> が公式の <code>devin acp</code> を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Devin 選択時にのみ起動し、本人の ACP 認証（ブラウザ認証または API キー）と利用枠でモデルを利用します。専用プロバイダはアプリ版のみ表示され</li>
+        <li><strong>【ブリッジ】 Antigravity</strong>（V5 アプリ版の機能）— 同梱の <code>antigravity-bridge/</code> が Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Antigravity 選択時にのみ起動し、ブリッジが <code>agy mcp add</code> で地図ツールを登録・<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します。本人の Google アカウントでの agy ログインと利用枠が前提で、専用プロバイダはアプリ版のみ表示され</li>
+        <li><strong>【ブリッジ】 外部エージェント</strong>（通常版）— 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。ブラウザから届くURLであれば接続でき、エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。自作エージェントの接続に使います</li>
       </ul>
       <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="../google.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>
       <p><strong>M365 / Microsoft Copilot を見送った理由</strong>：消費者向け Copilot はボット等によるアクセスを明示禁止しているため、Web UI 自動化を提供しません。この消費者向け規約は職場・学校アカウントには適用されず、M365 全体の禁止を意味しません。M365 の公式 Chat API は存在しますが、ライセンス・アプリ登録・必要権限への管理者同意等を要するため、本人のログインだけで使う標準連携としては見送り・未実装です。M365 の Web UI 自動化も、正規のプログラム接続としての許諾を確認できていないため採用しません。<a href="../google.html#m365-connection-policy">規約上の禁止と導入条件の違い・再検討条件</a>を参照してください。</p>
@@ -56,7 +56,7 @@
       <h3>�️ リモートコマンド経路（外部エージェント → ブラウザ）</h3>
       <p>上記のプロバイダ／ブリッジは「ブラウザのチャット → エージェント」方向ですが、アプリ版（local ティア）には逆方向の<strong>「外部エージェント → ブラウザ」を操る共通経路</strong>もあります。ローカルサーバーが <code>remoteCommand</code> 機能を通知している環境では、Devin Desktop・GitHub Copilot CLI・任意のスクリプトなど、HTTP を話せるローカルプロセスが開いている地図をリアルタイムに操作できます（エージェント識別は持たず、どのプロセスからでも同一エンドポイント・同一形式で利用）。</p>
       <pre>
-【エージェント → ブラウザ】（外から操る）…… 共通・1本
+【エージェント → ブラウザ】（外から操る）…… 共通・1本（アプリ本体 :8510）
   Devin Desktop ─┐
   Copilot CLI  ──┼─ POST /api/command ─→ ブラウザが long-poll 受信
   任意のcurl  ───┘      ↓ executeChatTool（確認ダイアログ保護も共通）
@@ -76,6 +76,21 @@
       </ul>
       <p>実行は AI チャットと同じ <code>executeChatTool</code> 経路のため、利用可能なコマンド・確認ダイアログ（savePlugin・publishPlugin・deleteDataFile 等の破壊的操作）は全て共通です。ツールの正本は <code>activeChatTools</code>（宣言）＋ <code>executeChatTool</code>（実装）で、Gemini function calling・外部エージェント actions・本経路は同じツール群を共有します。<strong>複数タブを開いている場合は全タブがコマンドを実行します</strong>（結果は重複して返ります）。キューはサーバーメモリ上の直近200件で、再起動で消えます。</p>
       <p>例：<code>curl -X POST http://127.0.0.1:8510/api/command -H "Content-Type: application/json" -d '{"name":"flyTo","args":{"latitude":35.658,"longitude":139.7454,"height":1200,"pitch":-40}}'</code></p>
+
+      <h3 id="bridge-hub-design">🧭 設計判断：ブリッジハブ（1ポート集約）</h3>
+      <p><strong>エージェント連携は双方向です</strong>。ハブ（8511）が担うのは「ブラウザのチャット → エージェント」方向のみで、逆方向の「外部エージェント → ブラウザを操る」は別経路としてアプリ本体（8510）の <code>/api/command</code> 上にあります。どちらも最終的にはブラウザ側の <code>executeChatTool</code> に集約されます。</p>
+      <p>v5.20 まではアプリ版が Copilot・Devin・Antigravity の3ブリッジを起動時にすべて常駐させていました（8511/8512/8513）。v5.21 で常駐を <code>bridge-hub/</code>（127.0.0.1:8511）1本に集約し、選択中プロバイダのブリッジだけを内部ポート（8521/8522/8523）で遅延起動する構成に変更しています。この判断は次の2つを分離して考えると整理できます。</p>
+      <table>
+        <thead><tr><th></th><th>3ポート分離（旧）</th><th>ハブ集約（現行）</th></tr></thead>
+        <tbody>
+          <tr><td><strong>単純さ・独立性</strong></td><td>◎ 1プロセス=1ポートで中継層なし。障害が波及しない</td><td>△ ハブが単一障害点になり、中継層固有の故障モードを持つ</td></tr>
+          <tr><td><strong>資源効率</strong></td><td>× 使わないブリッジ＋CLI 子プロセスが常駐</td><td>◎ 要求駆動の遅延起動。待機時は Node 1プロセスのみ</td></tr>
+          <tr><td><strong>インターフェース</strong></td><td>× ポート知識がフロント・設定・ドキュメントに分散</td><td>◎ ブラウザが知るのは 8511 の1点のみ（ファサード）</td></tr>
+          <tr><td><strong>拡張性</strong></td><td>× プロバイダ追加のたびにポート採番・サーバー・フロント変更</td><td>◎ ハブの <code>PROVIDERS</code> への1エントリ追加</td></tr>
+        </tbody>
+      </table>
+      <p><strong>トポロジーとポリシーの分離</strong>：現行構成は「単一エンドポイント＋provider ルーティング」という<em>トポロジー</em>と、「常時最大1子・切替時に前の子を停止」という<em>ポリシー</em>の合成です。ローカルアプリ・利用者1人・一度に1プロバイダという実態では、このポリシーが省資源に最適です。</p>
+      <p><strong>マルチエージェント観点</strong>：将来複数プロバイダを同時に使う（並行実行・合議・ファンアウト等の）マルチエージェント化を考えた場合も、見直すべきは「常時1本」のポリシーだけで、ハブというトポロジー自体はオーケストレーター型マルチエージェントの自然な土台になります（稼働中の子を単数→複数管理にし、停止契機を「切替時」から「アイドルタイムアウト」に変えればハブ内の変更だけで移行可能）。逆に3ポート分離はエージェント数をポート採番にハードコードするため、エージェントが増えるほど破綻します。同時実行数の制御・レート制限・監査のような横断的関心事も、一点で面倒を見るハブの方が実装しやすく、MCP ゲートウェイや LLM ルーターが業界的に収斂している構図と同じです。</p>
 
       <h3>�🗂️ データソース（MCP 接続）</h3>
       <p>管理（⚙）→ AI → データソース で、外部データソースの MCP サーバー（Model Context Protocol・Streamable HTTP 対応）を登録し、そのサーバーの公開ツールを AI チャットのチャットツールへ合成できます。ツール名は <code>&lt;サーバーキー&gt;__&lt;ツール名&gt;</code> の形で functionDeclarations に追加され、実行はブラウザ側の既存経路（<code>executeChatTool</code>）で振り分けられます。内蔵 AI（Gemini / OpenAI互換）に加え、プロバイダ「外部エージェント」へ渡す <code>tools</code> 宣言にも含まれます。</p>
