@@ -244,7 +244,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
   if (req.method === "GET" && url.pathname === "/health") {
-    return sendJson(res, 200, { ok: true, model: MODEL, sessions: sessions.size });
+    return sendJson(res, 200, { ok: true, model: MODEL, sessions: sessions.size, bridge: "copilot" });
   }
   // 利用可能な Copilot モデル一覧（アプリ側のモデル選択ドロップダウン用）
   if (req.method === "GET" && url.pathname === "/models") {

@@ -110,6 +110,9 @@ class AcpClient {
     this.authMethods = [];
     this.modelOptions = [];     // session/new の configOptions から拾う
     this.turnText = new Map();  // sessionId -> [text parts]
+    this.sessionModel = new Map();   // sessionId -> 選択中モデル id
+    this.contextByModel = new Map(); // modelId -> usage_update の実測コンテキストサイズ
+    this.lastUsage = null;           // 直近の usage_update {used,size,cost}
   }
 
   start() {
@@ -225,6 +228,15 @@ class AcpClient {
     if (u.sessionUpdate === "agent_message_chunk" && u.content?.type === "text") {
       const arr = this.turnText.get(p.sessionId);
       if (arr) arr.push(u.content.text || "");
+      return;
+    }
+    // usage_update: {size: コンテキスト総量, used: 使用量, cost?}
+    // 実測値をモデルに紐付けて /models の context 表示に使う
+    if (u.sessionUpdate === "usage_update") {
+      const usage = { used: u.used ?? null, size: u.size ?? null, cost: u.cost ?? null };
+      this.lastUsage = usage;
+      const model = this.sessionModel.get(p.sessionId);
+      if (model && usage.size) this.contextByModel.set(model, usage.size);
     }
   }
 
@@ -289,6 +301,8 @@ let acpBinUsed = "";
 // セッションの初期化・再作成の競合を避けるため簡易ロックをかける）
 let acpQueue = Promise.resolve();
 const enqueue = (fn) => { acpQueue = acpQueue.then(fn, fn); return acpQueue; };
+// /models 用の acp 起動・モデル一覧取得の多重実行防止
+let modelsWarmup = null;
 
 async function getAcp() {
   if (acp && acp.ready) return acp;
@@ -335,14 +349,19 @@ async function getSession(project, decls, model) {
   entry = { sessionId, toolsSig: sig, seeded: false, model: wantModel || "" };
   sessions.set(project, entry);
   c.turnText.set(sessionId, []);
-  // configOptions からモデル一覧を拾い /models 応答に使う
+  // モデル一覧を /models 応答用に拾う。ACP の configOptions（新形式）と
+  // session/new の models.availableModels（標準形式）の両方を見る
   const opts = Array.isArray(res?.configOptions) ? res.configOptions : [];
   const modelOpt = opts.find(o => o?.id === "model" || o?.category === "model");
-  if (Array.isArray(modelOpt?.options) && modelOpt.options.length) {
-    c.modelOptions = modelOpt.options
-      .map(o => ({ id: o?.value ?? o?.id, name: o?.name || o?.value || o?.id }))
-      .filter(m => m.id);
-    if (!wantModel && modelOpt.currentValue) entry.model = modelOpt.currentValue;
+  const fromOptions = (Array.isArray(modelOpt?.options) ? modelOpt.options : [])
+    .map(o => ({ id: o?.value ?? o?.id, name: o?.name || o?.value || o?.id }));
+  const fromModels = (Array.isArray(res?.models?.availableModels) ? res.models.availableModels : [])
+    .map(m => ({ id: m?.modelId ?? m?.id, name: m?.name || m?.modelId || m?.id }));
+  const seenIds = new Set();
+  const merged = [...fromOptions, ...fromModels].filter(m => m.id && !seenIds.has(m.id) && seenIds.add(m.id));
+  if (merged.length) {
+    c.modelOptions = merged;
+    if (!wantModel) entry.model = modelOpt?.currentValue || res?.models?.currentModelId || entry.model;
   }
   // 要求モデルがあれば切替を試みる（set_config_option → 未対応なら握りつぶす）
   if (wantModel && wantModel !== entry.model) {
@@ -358,6 +377,8 @@ async function getSession(project, decls, model) {
       }
     }
   }
+  // usage_update をモデルへ紐付けるため sessionId → model を記録する
+  if (entry.model) c.sessionModel.set(sessionId, entry.model);
   return entry;
 }
 
@@ -512,17 +533,33 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/health") {
     return sendJson(res, 200, { ok: true, model: MODEL || null, sessions: sessions.size, bridge: "devin" });
   }
-  // Devin 側が利用できるモデル一覧（セッションの configOptions から取得）
+  // Devin 側が利用できるモデル一覧。モデル情報は devin acp との
+  // セッション（configOptions / models.availableModels）からしか取れず、
+  // acp 未起動時の起動・認証には数十秒〜ブラウザログイン要で数分かかる
+  // ことがある。待たずに {pending:true} を即返し、起動は裏で進める
   if (req.method === "GET" && url.pathname === "/models") {
-    try {
-      const c = await getAcp();
-      if (c.modelOptions.length) return sendJson(res, 200, { models: c.modelOptions });
-      // セッション未作成時はセッションを1つ作って configOptions を読む
-      await getSession("__models__", declsByProject.get("__models__") || [], MODEL);
-      return sendJson(res, 200, { models: c.modelOptions });
-    } catch (e) {
-      return sendJson(res, 500, { error: String(e?.message || e) });
+    if (!acp?.modelOptions?.length && !modelsWarmup) {
+      modelsWarmup = enqueue(async () => {
+        const c = await getAcp();
+        if (!c.modelOptions.length) {
+          await getSession("__models__", declsByProject.get("__models__") || [], MODEL);
+        }
+      }).catch(e => {
+        console.error("[bridge] models warmup failed:", e?.message || e);
+      }).finally(() => { modelsWarmup = null; });
     }
+    return sendJson(res, 200, {
+      // 各モデルに実測コンテキストサイズ（usage_update 由来・未測定は省略）を添える
+      models: (acp?.modelOptions || []).map(m => ({
+        ...m,
+        ...(acp.contextByModel.get(m.id) ? { context: acp.contextByModel.get(m.id) } : {}),
+      })),
+      pending: !(acp?.modelOptions?.length),
+      // 現在の実モデル（未選択時の既定値。アプリ側の表示用）
+      model: MODEL || [...sessions.values()].map(s => s.model).find(Boolean) || null,
+      // 直近ターンの usage_update（{used,size,cost}・未受信なら null）
+      usage: acp?.lastUsage || null,
+    });
   }
   // MCP エンドポイント（Devin の MCP クライアントから呼ばれる）
   const mcpMatch = url.pathname.match(/^\/mcp\/(.+)$/);

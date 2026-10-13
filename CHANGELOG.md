@@ -4,7 +4,20 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
-## [Unreleased]
+## [5.20.1] - 2026-10-13
+
+### Fixed
+
+- Antigravity ブリッジの MCP 接続不整合を自己修復 — agy の MCP 登録はグローバル設定1本のため、別ポートのブリッジ（手動起動・既定8791等）が上書きすると agy 側が存在しないポートへ接続し「MCPサーバーへの接続エラー」（Connection refused）になっていた。`/agent` ごとに `~/.gemini/config/mcp_config.json` の登録URLを検査し、自分のポートと違えば agy 起動前に再登録するようにした。また agy は会話開始時の URL に紐付き続けるため、古い URL で作られた会話の再開は修復後も失敗し得る — ターン中にブリッジの `/mcp` へ一度もリクエストが届かず、ツール呼出の失敗または MCP 接続エラー系の応答が見えた場合はその会話を破棄して新規会話で一度だけ再試行する
+
+## [5.20.0] - 2026-10-13
+
+### Added
+
+- `antigravity-bridge/` — Google Antigravity CLI（`agy`）によるローカルブリッジ。AI プロバイダの「Antigravity」選択肢はアプリ版のみ表示され、利用者自身の Google アカウントでログインした agy を AI チャットのエンジンとして利用できる。ブリッジは agy の headless 実行（`--output-format stream-json`・stdin へ `{"event":"user"}` 形式で送信）を駆動し、プロジェクト単位で `--conversation` による会話継続を行う。地図ツールはブリッジ内の HTTP Streamable MCP サーバー（`/mcp/<project>`）を `agy mcp add` で登録・`permissions.allow` に `mcp(kasugai/*)` を追加して agy に公開。ツール呼び出しはブリッジでキューイングして `actions` として返し、実行はブラウザ側の既存仕組み（確認ダイアログ含む）に委譲する
+- アプリ版の Antigravity ブリッジ自動起動 — ローカルサーバー起動時に `antigravity-bridge/` を Node 子プロセスとして起動し `127.0.0.1:8513` で待受け（要 Node.js＋Antigravity CLI。`node_modules` 無しの初回は `npm install --omit=dev` を自動実行。`KASUGAI_NO_ANTIGRAVITY_BRIDGE` で無効化・8513 使用中はスキップ・アプリ終了時に道連れ停止・標準出力は `antigravity-bridge.log` に記録）。`/api/capabilities` が `antigravity.endpoint` と feature `antigravityBridge` を通知し、フロントは通知エンドポイント → 8513 → 8791（手動起動の既定）の順で疎通するブリッジを自動検出する。配布 ZIP に `antigravity-bridge/` を同梱
+- Antigravity モデル選択 — Antigravity プロバイダの設定欄でブリッジの `GET /models`（`agy models` 由来）から取得した利用可能モデルを選択可能に。選択値は `/agent` 要求の `model` フィールドでブリッジへ送られ、agy の `--model` に適用される
+- リモートコマンド経路（アプリ版・local ティア）— ローカルサーバーが `POST /api/command`（コマンド投入・採番 id 返却）・`GET /api/command?since=<id>&wait=<秒>`（ブラウザ側ロングポーリング受信）・`POST /api/command/results`・`GET /api/command/results`（外部プロセスの結果回収）を公開。Devin Desktop・Copilot CLI・任意スクリプトなど HTTP を話せるローカルプロセスが、チャットツールと同一のコマンド名・引数で開いている地図をリアルタイム操作できる（`{"name":"flyTo","args":{...}}` または `{"commands":[...]}`・最大50件/回）。実行結果は `{"id","ok","result"}` で返却され、破壊的操作はチャット同様確認ダイアログが出る。capabilities の `remoteCommand` feature で通知
 
 ## [5.19.0] - 2026-10-13
 

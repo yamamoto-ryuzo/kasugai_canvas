@@ -88,9 +88,33 @@ struct AppState {
     // Devin ブリッジ(devin-bridge/server.mjs)の子プロセス。
     // アプリ版ではサーバーが自動起動し 127.0.0.1:8512 に待受けさせる
     devin_bridge: Arc<Mutex<Option<tokio::process::Child>>>,
+    // Antigravity ブリッジ(antigravity-bridge/server.mjs)の子プロセス。
+    // アプリ版ではサーバーが自動起動し 127.0.0.1:8513 に待受けさせる
+    antigravity_bridge: Arc<Mutex<Option<tokio::process::Child>>>,
     // フロントへ通知するブリッジのエージェントエンドポイント(管理対象がある場合のみ)
     copilot_endpoint: Option<String>,
     devin_endpoint: Option<String>,
+    antigravity_endpoint: Option<String>,
+    // 外部プロセス→ブラウザへのリモートコマンド中継(local 実行時のみ公開)。
+    // POST /api/command で投入、フロントが GET /api/command?since=&wait= で
+    // ロングポーリング受信してチャットツールとして実行し、結果を
+    // POST /api/command/results で返す。外部は GET /api/command/results で回収する
+    remote: Arc<RemoteBus>,
+}
+
+// リモートコマンド中継の状態。キューは直近 REMOTE_QUEUE_MAX 件に制限する
+struct RemoteBus {
+    inner: StdMutex<RemoteInner>,
+    notify_commands: Notify,
+    notify_results: Notify,
+}
+
+#[derive(Default)]
+struct RemoteInner {
+    next_command_id: u64,
+    next_result_id: u64,
+    commands: VecDeque<Value>,
+    results: VecDeque<Value>,
 }
 
 // /api/fetch の上限とタイムアウト
@@ -204,9 +228,11 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
         "shutdown",
         "mcpProxy",
     ];
-    // ローカル実行のみ rclone 連携を公開する(0.0.0.0 バインドのコンテナ実行では無効)
+    // ローカル実行のみ rclone 連携・リモートコマンド経路を公開する
+    // (0.0.0.0 バインドのコンテナ実行では無効)
     if state.is_local {
         features.push("cloudRclone");
+        features.push("remoteCommand");
     }
     // Copilot ブリッジの管理対象があるときはエンドポイントを通知する
     if state.copilot_endpoint.is_some() {
@@ -216,14 +242,211 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
     if state.devin_endpoint.is_some() {
         features.push("devinBridge");
     }
+    // Antigravity ブリッジの管理対象があるときも同様に通知する
+    if state.antigravity_endpoint.is_some() {
+        features.push("antigravityBridge");
+    }
     Json(json!({
         "tier": "local",
         "name": "kasugai_canvas",
         "version": env!("CARGO_PKG_VERSION"),
         "features": features,
         "copilot": state.copilot_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null),
-        "devin": state.devin_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null)
+        "devin": state.devin_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null),
+        "antigravity": state.antigravity_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null)
     }))
+}
+
+// ---- リモートコマンド中継（ローカル実行時のみルート公開） ----
+// 外部プロセス(ローカルエージェント等)がコマンドを POST で投入し、ブラウザが
+// ロングポーリングで受信してチャットツールと同じ経路(executeChatTool)で実行する。
+// 実行結果はブラウザが results へ返し、外部が同様にポーリングで回収する
+const REMOTE_QUEUE_MAX: usize = 200;
+const REMOTE_WAIT_MAX_SECS: u64 = 60;
+const REMOTE_POST_MAX_ITEMS: usize = 50;
+// 巨大な結果(getLayerGeoJson 等)はメモリ保護のため打ち切る
+const REMOTE_RESULT_MAX_BYTES: usize = 256 * 1024;
+
+#[derive(Deserialize)]
+struct RemotePollQuery {
+    since: Option<u64>,
+    wait: Option<u64>,
+}
+
+// POST /api/command — {name, args?} または {commands:[{name, args?}]} をキューへ積み、
+// 採番したコマンド id を返す
+async fn push_remote_command(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let items: Vec<Value> = match body.get("commands").and_then(Value::as_array) {
+        Some(arr) => arr.clone(),
+        None => vec![body],
+    };
+    if items.is_empty() || items.len() > REMOTE_POST_MAX_ITEMS {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("commands は1〜{REMOTE_POST_MAX_ITEMS}件で指定してください"),
+        ));
+    }
+    let mut ids = Vec::with_capacity(items.len());
+    {
+        let mut inner = state
+            .remote
+            .inner
+            .lock()
+            .map_err(|_| internal_error("remote queue lock failed"))?;
+        for item in items {
+            let name = item
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .trim();
+            if name.is_empty()
+                || name.len() > 64
+                || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            {
+                return Err((StatusCode::BAD_REQUEST, format!("name が不正です: {name}")));
+            }
+            let args = match item.get("args") {
+                Some(v) if v.is_object() => v.clone(),
+                Some(_) => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        "args はオブジェクトで指定してください".to_string(),
+                    ))
+                }
+                None => json!({}),
+            };
+            inner.next_command_id += 1;
+            let id = inner.next_command_id;
+            inner
+                .commands
+                .push_back(json!({ "id": id, "name": name, "args": args }));
+            ids.push(id);
+        }
+        while inner.commands.len() > REMOTE_QUEUE_MAX {
+            inner.commands.pop_front();
+        }
+    }
+    state.remote.notify_commands.notify_waiters();
+    Ok(Json(json!({ "ok": true, "ids": ids })))
+}
+
+// GET /api/command?since=<id>&wait=<秒> — since より新しいコマンドを返す。
+// 無ければ最大 wait 秒(既定20・上限60)ブロックするロングポーリング。
+// latest は現時点の最新コマンド id(ブラウザの初回同期用)
+async fn poll_remote_command(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<RemotePollQuery>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let since = query.since.unwrap_or(0);
+    let wait = query.wait.unwrap_or(20).min(REMOTE_WAIT_MAX_SECS);
+    // 通知の取りこぼしを防ぐため、待機 future を enable してからキューを確認する
+    let notified = state.remote.notify_commands.notified();
+    tokio::pin!(notified);
+    notified.as_mut().enable();
+    let snapshot = |state: &AppState| -> Result<(Vec<Value>, u64), (StatusCode, String)> {
+        let inner = state
+            .remote
+            .inner
+            .lock()
+            .map_err(|_| internal_error("remote queue lock failed"))?;
+        Ok((
+            inner
+                .commands
+                .iter()
+                .filter(|c| c.get("id").and_then(Value::as_u64).unwrap_or(0) > since)
+                .cloned()
+                .collect(),
+            inner.next_command_id,
+        ))
+    };
+    let (mut commands, mut latest) = snapshot(&state)?;
+    if commands.is_empty() && wait > 0 {
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(wait), notified).await;
+        (commands, latest) = snapshot(&state)?;
+    }
+    Ok(Json(json!({ "commands": commands, "latest": latest })))
+}
+
+// POST /api/command/results — {id, ok?, result?} または {results:[...]}。
+// id は受け取ったコマンドの id(commandId として紐付ける)
+async fn push_remote_result(
+    State(state): State<AppState>,
+    Json(body): Json<Value>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let items: Vec<Value> = match body.get("results").and_then(Value::as_array) {
+        Some(arr) => arr.clone(),
+        None => vec![body],
+    };
+    if items.is_empty() || items.len() > REMOTE_POST_MAX_ITEMS {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("results は1〜{REMOTE_POST_MAX_ITEMS}件で指定してください"),
+        ));
+    }
+    {
+        let mut inner = state
+            .remote
+            .inner
+            .lock()
+            .map_err(|_| internal_error("remote queue lock failed"))?;
+        for item in items {
+            let Some(command_id) = item.get("id").and_then(Value::as_u64) else {
+                continue;
+            };
+            let ok = item.get("ok").and_then(Value::as_bool).unwrap_or(true);
+            let mut result = item.get("result").cloned().unwrap_or(Value::Null);
+            if serde_json::to_string(&result).map(|s| s.len()).unwrap_or(0)
+                > REMOTE_RESULT_MAX_BYTES
+            {
+                result = json!({ "truncated": true });
+            }
+            inner.next_result_id += 1;
+            let rid = inner.next_result_id;
+            inner.results.push_back(
+                json!({ "id": rid, "commandId": command_id, "ok": ok, "result": result }),
+            );
+        }
+        while inner.results.len() > REMOTE_QUEUE_MAX {
+            inner.results.pop_front();
+        }
+    }
+    state.remote.notify_results.notify_waiters();
+    Ok(Json(json!({ "ok": true })))
+}
+
+// GET /api/command/results?since=<id>&wait=<秒> — since より新しい実行結果を返す
+// (ポーリング挙動は /api/command と同じ)
+async fn poll_remote_results(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<RemotePollQuery>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let since = query.since.unwrap_or(0);
+    let wait = query.wait.unwrap_or(20).min(REMOTE_WAIT_MAX_SECS);
+    let notified = state.remote.notify_results.notified();
+    tokio::pin!(notified);
+    notified.as_mut().enable();
+    let snapshot = |state: &AppState| -> Result<Vec<Value>, (StatusCode, String)> {
+        let inner = state
+            .remote
+            .inner
+            .lock()
+            .map_err(|_| internal_error("remote queue lock failed"))?;
+        Ok(inner
+            .results
+            .iter()
+            .filter(|r| r.get("id").and_then(Value::as_u64).unwrap_or(0) > since)
+            .cloned()
+            .collect())
+    };
+    let mut results = snapshot(&state)?;
+    if results.is_empty() && wait > 0 {
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(wait), notified).await;
+        results = snapshot(&state)?;
+    }
+    Ok(Json(json!({ "results": results })))
 }
 
 #[derive(Deserialize)]
@@ -324,7 +547,12 @@ async fn fetch_target_allowed(
             let port = url.port_or_known_default().unwrap_or(443);
             tokio::net::lookup_host((host, port))
                 .await
-                .map_err(|_| (StatusCode::BAD_GATEWAY, "接続先を解決できません".to_string()))?
+                .map_err(|_| {
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        "接続先を解決できません".to_string(),
+                    )
+                })?
                 .map(|addr| addr.ip())
                 .collect()
         }
@@ -4412,6 +4640,9 @@ const COPILOT_BRIDGE_PORT: u16 = 8511;
 // Devin CLI 用ブリッジ(devin-bridge/server.mjs)は 127.0.0.1:8512。
 // devin acp（ACP）を駆動する。要 Node.js + Devin CLI（APIキーまたはブラウザログイン）
 const DEVIN_BRIDGE_PORT: u16 = 8512;
+// Antigravity CLI 用ブリッジ(antigravity-bridge/server.mjs)は 127.0.0.1:8513。
+// agy の headless 実行（stream-json）を駆動する。要 Node.js + Antigravity CLI（agy ログイン済み）
+const ANTIGRAVITY_BRIDGE_PORT: u16 = 8513;
 
 // Node 製ブリッジ(server.mjs)を子プロセスとして起動する。
 // port_env_name にポート番号を渡す環境変数名、label にログ接頭辞を指定する
@@ -4520,7 +4751,11 @@ async fn kill_bridge_on_port(port: u16) -> bool {
             let cols: Vec<&str> = line.split_whitespace().collect();
             if cols.len() >= 5
                 && cols[3].eq_ignore_ascii_case("LISTENING")
-                && cols[1].rsplit(':').next().and_then(|p| p.parse::<u16>().ok()) == Some(port)
+                && cols[1]
+                    .rsplit(':')
+                    .next()
+                    .and_then(|p| p.parse::<u16>().ok())
+                    == Some(port)
             {
                 if let Ok(pid) = cols[4].parse::<u32>() {
                     pids.insert(pid);
@@ -4665,6 +4900,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_ref()
         .map(|_| format!("http://127.0.0.1:{DEVIN_BRIDGE_PORT}/agent"));
 
+    // Antigravity ブリッジ: ローカル実行かつ antigravity-bridge/ が見つかった場合のみ管理対象。
+    // KASUGAI_NO_ANTIGRAVITY_BRIDGE で自動起動を無効化できる。
+    // 利用は各ユーザー自身の agy ログインが前提（ローカル・本人利用限定）
+    let antigravity_bridge_dir = resolve_dir(&exe_dir, "antigravity-bridge", || {
+        repo_dir.join("antigravity-bridge")
+    });
+    let antigravity_bridge_dir = if is_local
+        && std::env::var_os("KASUGAI_NO_ANTIGRAVITY_BRIDGE").is_none()
+        && antigravity_bridge_dir.join("server.mjs").is_file()
+    {
+        Some(antigravity_bridge_dir)
+    } else {
+        None
+    };
+    let antigravity_endpoint = antigravity_bridge_dir
+        .as_ref()
+        .map(|_| format!("http://127.0.0.1:{ANTIGRAVITY_BRIDGE_PORT}/agent"));
+
     let external_projects_path = executable_directory.join(EXTERNAL_PROJECTS_FILE_NAME);
     let state = AppState {
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
@@ -4682,8 +4935,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         is_local,
         copilot_bridge: Arc::new(Mutex::new(None)),
         devin_bridge: Arc::new(Mutex::new(None)),
+        antigravity_bridge: Arc::new(Mutex::new(None)),
         copilot_endpoint,
         devin_endpoint,
+        antigravity_endpoint,
+        remote: Arc::new(RemoteBus {
+            inner: StdMutex::new(RemoteInner::default()),
+            notify_commands: Notify::new(),
+            notify_results: Notify::new(),
+        }),
     };
 
     // 引数指定の .kasc を外部プロジェクトとして登録し、そのプロジェクトで開く
@@ -4732,9 +4992,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/update/install", post(install_update))
         .route("/api/shutdown", post(request_shutdown));
 
-    // クラウドストレージ(rclone)連携・外部プロジェクト登録はローカル実行時のみ公開する
+    // クラウドストレージ(rclone)連携・外部プロジェクト登録・リモートコマンド中継は
+    // ローカル実行時のみ公開する
     if is_local {
         app = app
+            .route(
+                "/api/command",
+                post(push_remote_command).get(poll_remote_command),
+            )
+            .route(
+                "/api/command/results",
+                post(push_remote_result).get(poll_remote_results),
+            )
             .route(
                 "/api/fetch/settings",
                 get(get_fetch_settings).put(put_fetch_settings),
@@ -4806,7 +5075,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // kill 直後はポート解放を短時間待つ
                 for _ in 0..20 {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    if TcpListener::bind(("127.0.0.1", COPILOT_BRIDGE_PORT)).await.is_ok() {
+                    if TcpListener::bind(("127.0.0.1", COPILOT_BRIDGE_PORT))
+                        .await
+                        .is_ok()
+                    {
                         port_taken = false;
                         break;
                     }
@@ -4851,7 +5123,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if port_taken && kill_bridge_on_port(DEVIN_BRIDGE_PORT).await {
                 for _ in 0..20 {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    if TcpListener::bind(("127.0.0.1", DEVIN_BRIDGE_PORT)).await.is_ok() {
+                    if TcpListener::bind(("127.0.0.1", DEVIN_BRIDGE_PORT))
+                        .await
+                        .is_ok()
+                    {
                         port_taken = false;
                         break;
                     }
@@ -4884,6 +5159,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // Antigravity ブリッジを子プロセスとして起動する（Devin ブリッジと同じ管理手順）。
+    // 8513 が使用中でも占有者がブリッジなら強制停止して新版へ差し替える
+    if let Some(bridge_dir) = antigravity_bridge_dir {
+        let bridge_state = state.clone();
+        let log_path = executable_directory.join("antigravity-bridge.log");
+        tokio::spawn(async move {
+            let mut port_taken = TcpListener::bind(("127.0.0.1", ANTIGRAVITY_BRIDGE_PORT))
+                .await
+                .is_err();
+            if port_taken && kill_bridge_on_port(ANTIGRAVITY_BRIDGE_PORT).await {
+                for _ in 0..20 {
+                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                    if TcpListener::bind(("127.0.0.1", ANTIGRAVITY_BRIDGE_PORT))
+                        .await
+                        .is_ok()
+                    {
+                        port_taken = false;
+                        break;
+                    }
+                }
+            }
+            if port_taken {
+                eprintln!("antigravity-bridge: 127.0.0.1:{ANTIGRAVITY_BRIDGE_PORT} は別プロセスが使用中のため起動をスキップします");
+                return;
+            }
+            if !bridge_dir.join("node_modules").exists() {
+                eprintln!("antigravity-bridge: 依存をインストールしています (npm install)...");
+                if !install_bridge_deps(&bridge_dir).await {
+                    eprintln!("antigravity-bridge: npm install に失敗しました");
+                    return;
+                }
+            }
+            match spawn_node_bridge(
+                &bridge_dir,
+                &log_path,
+                "ANTIGRAVITY_BRIDGE_PORT",
+                ANTIGRAVITY_BRIDGE_PORT,
+                "antigravity-bridge",
+            ) {
+                Some(child) => {
+                    eprintln!(
+                        "antigravity-bridge: http://127.0.0.1:{ANTIGRAVITY_BRIDGE_PORT}/agent"
+                    );
+                    bridge_state.antigravity_bridge.lock().await.replace(child);
+                }
+                None => {}
+            }
+        });
+    }
+
     if open_browser_requested {
         let query = startup_query.clone();
         tokio::spawn(async move {
@@ -4901,11 +5226,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(mut serve) = state.cloud.lock().await.serve.take() {
         let _ = serve.child.kill().await;
     }
-    // Copilot/Devin ブリッジの子プロセスも終了させる
+    // Copilot/Devin/Antigravity ブリッジの子プロセスも終了させる
     if let Some(child) = state.copilot_bridge.lock().await.take() {
         kill_bridge_child(child).await;
     }
     if let Some(child) = state.devin_bridge.lock().await.take() {
+        kill_bridge_child(child).await;
+    }
+    if let Some(child) = state.antigravity_bridge.lock().await.take() {
         kill_bridge_child(child).await;
     }
     Ok(())

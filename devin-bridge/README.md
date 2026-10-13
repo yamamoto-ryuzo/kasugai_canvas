@@ -71,4 +71,4 @@ npm start
 - Copilot ブリッジと同じく、ツール呼び出しは「キュー→一括実行」方式のため、参照系ツール（`listLayers`/`getCamera` 以外）の実結果を見て次の操作を決める往復はできません。
 - Devin はコーディングエージェントです。ブリッジは kasugai ツール以外の実行を権限レイヤで拒否しますが、信頼する自分の環境でのみ起動してください。
 - モデルの実行時切替は Devin 側の ACP 実装依存です（`session/set_config_option`/`session/set_model` を試行し、未対応なら起動時の `DEVIN_BRIDGE_MODEL`/既定に留まります）。
-- `POST /agent` 以外に `GET /health`（`{ok, model, sessions, bridge:"devin"}`）と `GET /models`（セッションが通知するモデル一覧 `{models:[{id,name}]}`）があります。
+- `POST /agent` 以外に `GET /health`（`{ok, model, sessions, bridge:"devin"}`）と `GET /models`（セッションが通知するモデル一覧 `{models:[{id,name}]}`）があります。`devin acp` 未起動時の `/models` は起動・認証をバックグラウンドで始めつつ `{models:[], pending:true}` を即座に返します（起動完了後の再取得で一覧が返ります）。

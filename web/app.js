@@ -395,6 +395,9 @@ let threeModel;
 let backendEnabled = false;
 // バックエンドの能力。{tier:"local"|..., features:[...]}。static環境では null のまま
 let backendCapabilities = null;
+// ブリッジの /health・/models から検出した実際の既定モデル（プロバイダ別）。
+// ユーザー未選択時にチャットヘッダーへ「実際に動くモデル」を表示するために使う
+const detectedBridgeModels = {};
 function hasBackendFeature(name) {
   return !!backendCapabilities?.features?.includes(name);
 }
@@ -6601,6 +6604,7 @@ function updateBridgeProviderOption(feature, value) {
 function updateBridgeProviderOptions() {
   updateBridgeProviderOption("copilotBridge", "copilot");
   updateBridgeProviderOption("devinBridge", "devin");
+  updateBridgeProviderOption("antigravityBridge", "antigravity");
 }
 
 function updateChatPanelVisibility() {
@@ -6629,6 +6633,7 @@ function updateChatPanelVisibility() {
       ? t("agent.backendDetected", { tier: backendCapabilities.tier, endpoint: fallback || "—" })
       : t("agent.backendNone");
   }
+  updateChatProviderLabel();
 }
 
 function setupGoogleSettings() {
@@ -6653,6 +6658,9 @@ function setupGoogleSettings() {
   const devinFields = document.querySelector("#devin-fields");
   const devinStatus = document.querySelector("#devin-endpoint-status");
   const devinModelSelect = document.querySelector("#devin-model");
+  const antigravityFields = document.querySelector("#antigravity-fields");
+  const antigravityStatus = document.querySelector("#antigravity-endpoint-status");
+  const antigravityModelSelect = document.querySelector("#antigravity-model");
   if (!keyInput || !saveButton) return;
   // ブリッジの /models から利用可能な Copilot モデル一覧を取り込む。
   // 保存済みの選択が一覧に無ければ先頭に残す。空値はブリッジ既定モデル
@@ -6662,7 +6670,7 @@ function setupGoogleSettings() {
     let models = [];
     if (endpoint) {
       try {
-        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(4000) });
+        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(8000) });
         const d = await r.json().catch(() => ({}));
         if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
       } catch (e) {}
@@ -6680,7 +6688,7 @@ function setupGoogleSettings() {
     for (const m of models) {
       if (seen.has(m.id)) continue;
       seen.add(m.id);
-      add(m.id, m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id);
+      add(m.id, modelOptionLabel(m));
     }
     copilotModelSelect.value = saved;
     if (copilotModelSelect.value !== saved) copilotModelSelect.value = "";
@@ -6692,24 +6700,35 @@ function setupGoogleSettings() {
     const configured = (endpointInput?.value || "").trim();
     const fallback = configured || copilotBridgeCandidates()[0];
     copilotStatus.textContent = t("chat.copilot.endpoint", { endpoint: fallback });
-    const found = configured ? await pingBridge(configured) : await detectCopilotBridge();
+    const found = configured ? await pingBridge(configured, "copilot") : await detectCopilotBridge();
     copilotStatus.textContent = found
       ? t("chat.copilot.statusOk", { endpoint: found.endpoint, model: found.model })
       : t("chat.copilot.statusNg", { endpoint: fallback });
+    detectedBridgeModels.copilot = found?.model || "";
+    updateChatProviderLabel();
     void refreshCopilotModels(found?.endpoint || "");
   };
-  // Devin ブリッジの /models からモデル一覧を取り込む（copilot と同じ手順）
-  const refreshDevinModels = async (endpoint) => {
+  // Devin ブリッジの /models からモデル一覧を取り込む（copilot と同じ手順）。
+  // ブリッジは devin acp 未起動時に {pending:true} を即返しバックグラウンドで
+  // 起動・認証を進めるため、pending の間は少し待って再取得する
+  const refreshDevinModels = async (endpoint, retries = 4) => {
     if (!devinModelSelect) return;
     const saved = getDevinModel();
     let models = [];
     if (endpoint) {
       try {
-        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(4000) });
+        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(8000) });
         const d = await r.json().catch(() => ({}));
         if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
+        if (d?.model) detectedBridgeModels.devin = d.model;
+        if (d?.pending && retries > 0) {
+          setTimeout(() => {
+            if (providerSelect?.value === "devin") void refreshDevinModels(endpoint, retries - 1);
+          }, 8000);
+        }
       } catch (e) {}
     }
+    updateChatProviderLabel();
     devinModelSelect.textContent = "";
     const add = (value, label) => {
       const o = document.createElement("option");
@@ -6723,7 +6742,7 @@ function setupGoogleSettings() {
     for (const m of models) {
       if (seen.has(m.id)) continue;
       seen.add(m.id);
-      add(m.id, m.name && m.name !== m.id ? `${m.name} (${m.id})` : m.id);
+      add(m.id, modelOptionLabel(m));
     }
     devinModelSelect.value = saved;
     if (devinModelSelect.value !== saved) devinModelSelect.value = "";
@@ -6734,31 +6753,129 @@ function setupGoogleSettings() {
     const configured = (endpointInput?.value || "").trim();
     const fallback = configured || devinBridgeCandidates()[0];
     devinStatus.textContent = t("chat.devin.endpoint", { endpoint: fallback });
-    const found = configured ? await pingBridge(configured) : await detectDevinBridge();
+    const found = configured ? await pingBridge(configured, "devin") : await detectDevinBridge();
     devinStatus.textContent = found
       ? t("chat.devin.statusOk", { endpoint: found.endpoint, model: found.model })
       : t("chat.devin.statusNg", { endpoint: fallback });
+    detectedBridgeModels.devin = found?.model || "";
+    updateChatProviderLabel();
     void refreshDevinModels(found?.endpoint || "");
+  };
+  // Antigravity ブリッジの /models からモデル一覧を取り込む（devin と同じ手順）
+  const refreshAntigravityModels = async (endpoint, retries = 4) => {
+    if (!antigravityModelSelect) return;
+    const saved = getAntigravityModel();
+    let models = [];
+    if (endpoint) {
+      try {
+        const r = await fetch(new URL("/models", endpoint).href, { signal: AbortSignal.timeout(8000) });
+        const d = await r.json().catch(() => ({}));
+        if (Array.isArray(d?.models)) models = d.models.filter(m => m?.id);
+        if (d?.model) detectedBridgeModels.antigravity = d.model;
+        if ((d?.pending || (d?.error && !models.length)) && retries > 0) {
+          setTimeout(() => {
+            if (providerSelect?.value === "antigravity") void refreshAntigravityModels(endpoint, retries - 1);
+          }, 8000);
+        }
+      } catch (e) {}
+    }
+    updateChatProviderLabel();
+    antigravityModelSelect.textContent = "";
+    const add = (value, label) => {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = label;
+      antigravityModelSelect.appendChild(o);
+    };
+    add("", t("chat.antigravity.modelDefault"));
+    const seen = new Set();
+    if (saved && !models.some(m => m.id === saved)) { add(saved, saved); seen.add(saved); }
+    for (const m of models) {
+      if (seen.has(m.id)) continue;
+      seen.add(m.id);
+      add(m.id, modelOptionLabel(m));
+    }
+    antigravityModelSelect.value = saved;
+    if (antigravityModelSelect.value !== saved) antigravityModelSelect.value = "";
+  };
+  // Antigravity ブリッジの疎通確認。未入力ならアプリ管理ブリッジ(8513)・手動ブリッジ(8791)を順に試す
+  const refreshAntigravityStatus = async () => {
+    if (!antigravityStatus) return;
+    const configured = (endpointInput?.value || "").trim();
+    const fallback = configured || antigravityBridgeCandidates()[0];
+    antigravityStatus.textContent = t("chat.antigravity.endpoint", { endpoint: fallback });
+    const found = configured ? await pingBridge(configured, "antigravity") : await detectAntigravityBridge();
+    antigravityStatus.textContent = found
+      ? t("chat.antigravity.statusOk", { endpoint: found.endpoint, model: found.model })
+      : t("chat.antigravity.statusNg", { endpoint: fallback });
+    detectedBridgeModels.antigravity = found?.model || "";
+    updateChatProviderLabel();
+    void refreshAntigravityModels(found?.endpoint || "");
+  };
+  // ブリッジ系プロバイダ（copilot/devin/antigravity/agent）のエンドポイント記憶キー。
+  // 入力欄は1つだが、切替時に前プロバイダの値を各キーへ退避し、
+  // 別ブリッジのURLを引き継いで送信先・モデル一覧が混線しないようにする
+  const bridgeEndpointKeys = {
+    copilot: "agentEndpoint.copilot",
+    devin: "agentEndpoint.devin",
+    antigravity: "agentEndpoint.antigravity",
+    agent: "agentEndpoint.agent",
+  };
+  // 入力欄の値がどのプロバイダのものか。初期値は読み込んだプロバイダ
+  let endpointOwner = getChatProvider();
+  const loadBridgeEndpoint = (v) => {
+    if (!endpointInput) return;
+    let ep = "";
+    try { ep = localStorage.getItem(bridgeEndpointKeys[v]) || ""; } catch (e) {}
+    // 「外部エージェント」は従来どおり共有 agentEndpoint を既定値にする。
+    // copilot/devin は別ブリッジのURLが紛れ込むため共有値は引き継がない
+    if (!ep && v === "agent") {
+      try { ep = localStorage.getItem("agentEndpoint") || ""; } catch (e) {}
+    }
+    endpointInput.value = ep;
   };
   const syncProviderFields = () => {
     const v = providerSelect?.value || "gemini";
     if (geminiFields) geminiFields.hidden = v !== "gemini";
     if (openaiFields) openaiFields.hidden = v !== "openai";
-    if (bridgeFields) bridgeFields.hidden = !(v === "copilot" || v === "devin" || v === "agent");
+    if (bridgeFields) bridgeFields.hidden = !(v === "copilot" || v === "devin" || v === "antigravity" || v === "agent");
     if (copilotFields) copilotFields.hidden = v !== "copilot";
     if (devinFields) devinFields.hidden = v !== "devin";
-    if (v === "copilot" || v === "devin") {
-      // エンドポイント未入力なら疎通するブリッジを自動検出して入力する
-      const detect = v === "copilot" ? detectCopilotBridge : detectDevinBridge;
-      const refresh = v === "copilot" ? refreshCopilotStatus : refreshDevinStatus;
-      if (endpointInput && !endpointInput.value.trim()) {
-        void detect().then(found => {
-          if (found && endpointInput && !endpointInput.value.trim()) endpointInput.value = found.endpoint;
-          void refresh();
-        });
+    if (antigravityFields) antigravityFields.hidden = v !== "antigravity";
+    // プロバイダ切替時は前プロバイダの入力値を記憶へ退避し、新プロバイダの値を読み込む
+    if (endpointOwner !== v) {
+      const prevKey = bridgeEndpointKeys[endpointOwner];
+      if (prevKey && endpointInput) {
+        try { localStorage.setItem(prevKey, endpointInput.value.trim()); } catch (e) {}
       }
-      void refresh();
+      if (bridgeEndpointKeys[v]) loadBridgeEndpoint(v);
+      endpointOwner = v;
     }
+    if (v === "copilot" || v === "devin" || v === "antigravity") {
+      // 残っている値が別ブリッジ（旧仕様の共有エンドポイント由来）なら
+      // 打ち消して自動検出に回す。手動URLは pingBridge の識別子チェックが担保する
+      const bridgeSpec = {
+        copilot: { candidates: copilotBridgeCandidates, detect: detectCopilotBridge, refresh: refreshCopilotStatus },
+        devin: { candidates: devinBridgeCandidates, detect: detectDevinBridge, refresh: refreshDevinStatus },
+        antigravity: { candidates: antigravityBridgeCandidates, detect: detectAntigravityBridge, refresh: refreshAntigravityStatus },
+      }[v];
+      const other = Object.values({ copilot: copilotBridgeCandidates, devin: devinBridgeCandidates, antigravity: antigravityBridgeCandidates })
+        .filter(fn => fn !== bridgeSpec.candidates)
+        .flatMap(fn => fn());
+      if (endpointInput && endpointInput.value.trim() && other.includes(endpointInput.value.trim())) {
+        endpointInput.value = "";
+      }
+      // エンドポイント未入力なら疎通するブリッジを自動検出して入力する
+      if (endpointInput && !endpointInput.value.trim()) {
+        void bridgeSpec.detect().then(found => {
+          if (found && endpointInput && !endpointInput.value.trim()) endpointInput.value = found.endpoint;
+          void bridgeSpec.refresh();
+        });
+      } else {
+        void bridgeSpec.refresh();
+      }
+    }
+    updateChatProviderLabel();
   };
   try {
     keyInput.value = localStorage.getItem("googleApiKey") || "";
@@ -6776,6 +6893,7 @@ function setupGoogleSettings() {
     if (stepsInput) stepsInput.value = String(getChatMaxToolSteps());
     void refreshCopilotModels(""); // 保存値・既定オプションだけ先に埋めておく
     void refreshDevinModels("");
+    void refreshAntigravityModels("");
     syncProviderFields();
   } catch (e) {}
   providerSelect?.addEventListener("change", syncProviderFields);
@@ -6789,29 +6907,39 @@ function setupGoogleSettings() {
       if (openaiModelInput) localStorage.setItem("openaiModel", openaiModelInput.value.trim());
       if (copilotModelSelect) localStorage.setItem("copilotModel", copilotModelSelect.value);
       if (devinModelSelect) localStorage.setItem("devinModel", devinModelSelect.value);
-      // ブリッジ系プロバイダ（copilot/devin/agent）はエージェント接続を有効化し、
+      if (antigravityModelSelect) localStorage.setItem("antigravityModel", antigravityModelSelect.value);
+      // ブリッジ系プロバイダ（copilot/devin/antigravity/agent）はエージェント接続を有効化し、
       // API系（gemini/openai）は無効化する。プロバイダ選択が唯一の切替源
       const pv = providerSelect?.value || "gemini";
       if (endpointInput) {
         let ep = endpointInput.value.trim();
         if (!ep && pv === "copilot") ep = copilotBridgeCandidates()[0];
         if (!ep && pv === "devin") ep = devinBridgeCandidates()[0];
+        if (!ep && pv === "antigravity") ep = antigravityBridgeCandidates()[0];
         if (!ep && pv === "agent") ep = defaultAgentEndpoint() || "";
         endpointInput.value = ep;
-        localStorage.setItem("agentEndpoint", ep);
+        // agentEndpoint は「現プロバイダの送信先」として使われるため
+        // ブリッジ系保存時のみ更新し、プロバイダ別の記憶にも残す
+        if (bridgeEndpointKeys[pv]) {
+          localStorage.setItem("agentEndpoint", ep);
+          localStorage.setItem(bridgeEndpointKeys[pv], ep);
+          endpointOwner = pv;
+        }
       }
       if (tokenInput) localStorage.setItem("agentToken", tokenInput.value.trim());
       if (sendKeyInput) localStorage.setItem("agentSendKey", sendKeyInput.checked ? "1" : "0");
-      localStorage.setItem("agentEnabled", (pv === "copilot" || pv === "devin" || pv === "agent") ? "1" : "0");
+      localStorage.setItem("agentEnabled", (pv === "copilot" || pv === "devin" || pv === "antigravity" || pv === "agent") ? "1" : "0");
       // 旧自動設定マーカーは廃止（エンドポイント欄が明示されるため不要）
       localStorage.removeItem("agentAutoConfig");
       if (pv === "copilot") void refreshCopilotStatus();
       if (pv === "devin") void refreshDevinStatus();
+      if (pv === "antigravity") void refreshAntigravityStatus();
       if (stepsInput) {
         localStorage.setItem("geminiToolMaxSteps", String(clampToolSteps(stepsInput.value)));
         stepsInput.value = String(getChatMaxToolSteps());
       }
       updateChatPanelVisibility();
+      updateChatProviderLabel();
       if (status) status.textContent = t("common.saved");
     } catch (e) {
       if (status) status.textContent = t("common.saveError", { error: e.message });
@@ -9507,14 +9635,20 @@ function copilotBridgeCandidates() {
   return [...new Set(list)];
 }
 
-// 指定エンドポイントの /health を疎通確認する
-async function pingBridge(endpoint) {
+// 指定エンドポイントの /health を疎通確認する。
+// expect（"copilot"/"devin"）を渡すと、応答の bridge 識別子が別ブリッジを
+// 示す場合に不一致とみなす（エンドポイント欄への別ブリッジURL残存対策。
+// bridge 識別子を返さない旧版ブリッジは従来どおり応答あり扱い）
+async function pingBridge(endpoint, expect) {
   let healthUrl = "";
   try { healthUrl = new URL("/health", endpoint).href; } catch (e) { return null; }
   try {
     const r = await fetch(healthUrl, { signal: AbortSignal.timeout(2500) });
     const d = await r.json().catch(() => ({}));
-    if (r.ok && d?.ok) return { endpoint, model: d?.model || "?" };
+    if (r.ok && d?.ok) {
+      if (expect && d?.bridge && d.bridge !== expect) return null;
+      return { endpoint, model: d?.model || "?", bridge: d?.bridge || "" };
+    }
   } catch (e) {}
   return null;
 }
@@ -9522,7 +9656,7 @@ async function pingBridge(endpoint) {
 // 候補を順に /health で疎通確認し、最初に応答したブリッジを返す
 async function detectCopilotBridge() {
   for (const endpoint of copilotBridgeCandidates()) {
-    const found = await pingBridge(endpoint);
+    const found = await pingBridge(endpoint, "copilot");
     if (found) return found;
   }
   return null;
@@ -9549,7 +9683,7 @@ function devinBridgeCandidates() {
 
 async function detectDevinBridge() {
   for (const endpoint of devinBridgeCandidates()) {
-    const found = await pingBridge(endpoint);
+    const found = await pingBridge(endpoint, "devin");
     if (found) return found;
   }
   return null;
@@ -9560,13 +9694,100 @@ function getDevinModel() {
   try { return localStorage.getItem("devinModel") || ""; } catch (e) { return ""; }
 }
 
+// Antigravity 接続用ブリッジ（antigravity-bridge/）の既定エンドポイント。
+// 手動起動ブリッジは 8791、アプリ版（local ティア）が自動起動するブリッジは 8513
+const ANTIGRAVITY_BRIDGE_ENDPOINT = "http://127.0.0.1:8791/agent";
+const ANTIGRAVITY_BRIDGE_ENDPOINT_APP = "http://127.0.0.1:8513/agent";
+
+function antigravityBridgeCandidates() {
+  const list = [];
+  const advertised = backendCapabilities?.antigravity?.endpoint;
+  if (advertised) list.push(advertised);
+  if (backendCapabilities?.tier === "local") list.push(ANTIGRAVITY_BRIDGE_ENDPOINT_APP);
+  list.push(ANTIGRAVITY_BRIDGE_ENDPOINT);
+  return [...new Set(list)];
+}
+
+async function detectAntigravityBridge() {
+  for (const endpoint of antigravityBridgeCandidates()) {
+    const found = await pingBridge(endpoint, "antigravity");
+    if (found) return found;
+  }
+  return null;
+}
+
+// 設定済みの Antigravity モデル（空 = ブリッジ既定モデル）。ブリッジへの要求に同梱する
+function getAntigravityModel() {
+  try { return localStorage.getItem("antigravityModel") || ""; } catch (e) { return ""; }
+}
+
+// チャットヘッダーに現在使用中のAIプロバイダ・モデルを表示する
+function updateChatProviderLabel() {
+  const el = document.querySelector("#chat-provider-label");
+  if (!el) return;
+  const provider = getChatProvider();
+  let name = "Gemini";
+  let model = "";
+  if (provider === "openai") {
+    name = "OpenAI";
+    model = getOpenAIConfig().model;
+  } else if (provider === "copilot" || provider === "devin" || provider === "antigravity") {
+    name = provider === "copilot" ? "Copilot" : provider === "devin" ? "Devin" : "Antigravity";
+    const selected = provider === "copilot" ? getCopilotModel() : provider === "devin" ? getDevinModel() : getAntigravityModel();
+    model = selected || detectedBridgeModels[provider] || "";
+  } else if (provider === "agent") {
+    name = "Agent";
+    try { model = new URL(getAgentConfig().endpoint || "").host || ""; } catch (e) {}
+  } else {
+    model = window.kasugaiApi?.getGeminiModel?.() || "";
+  }
+  el.textContent = model ? `${name} · ${model}` : name;
+}
+
+// トークン数の表示用フォーマット（1250000 → "1.3M"、200000 → "200K"）
+function formatTokenCount(n) {
+  if (!n || !Number.isFinite(n)) return "";
+  if (n >= 1e6) return `${Math.round(n / 1e5) / 10}M`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)}K`;
+  return String(Math.round(n));
+}
+
+// モデルIDからコンテキスト長の目安を推定する（表示のみ・ファミリー別の公称値）。
+// ブリッジが usage_update で実測値を通知した場合はそちらが優先される。
+// Cognition 独自モデル（swe/adaptive 等）は公称値が無いため空白にする
+function modelContextHint(id) {
+  const s = String(id || "").toLowerCase();
+  if (!s) return "";
+  if (/-1m($|-)/.test(s)) return "1M";            // glm-5-2-1m 等の1Mバリアント
+  if (s.startsWith("claude")) return "200K";
+  if (s.startsWith("gemini")) return "1M";
+  if (s.startsWith("gpt") || s.startsWith("codex")) return "400K";
+  if (s.startsWith("kimi")) return "256K";
+  if (s.startsWith("glm")) return "200K";
+  if (s.startsWith("qwen")) return "256K";
+  if (s.startsWith("grok")) return "256K";
+  if (s.startsWith("deepseek")) return "128K";
+  if (s.startsWith("llama")) return "128K";
+  if (s.startsWith("mistral") || s.startsWith("codestral") || s.startsWith("magistral")) return "256K";
+  if (s.startsWith("o1") || s.startsWith("o3") || s.startsWith("o4")) return "200K";
+  return "";
+}
+
+// モデル選択肢の表示名。ブリッジ通知の実測コンテキスト長（context）があれば
+// 正確な値を、なければファミリー推定値を「〜」付きで末尾に添える
+function modelOptionLabel(m) {
+  const base = m?.name && m.name !== m.id ? `${m.name} (${m.id})` : String(m?.id || "");
+  const ctx = m?.context ? formatTokenCount(m.context) : (modelContextHint(m?.id) ? `〜${modelContextHint(m.id)}` : "");
+  return ctx ? `${base} · ${ctx}` : base;
+}
+
 // 内蔵AIのプロバイダ選択。Gemini（BYOキーまたはサーバープロキシ）、
 // OpenAI互換API（GitHub Models・OpenAI・Ollama等）のAPI系と、
 // GitHub Copilot（copilot-bridge）・外部エージェントのブリッジ系のいずれか
 function getChatProvider() {
   try {
     const p = localStorage.getItem("chatProvider");
-    if (["gemini", "openai", "copilot", "devin", "agent"].includes(p)) return p;
+    if (["gemini", "openai", "copilot", "devin", "antigravity", "agent"].includes(p)) return p;
     // 移行前の利用形態を推定（プロバイダ未保存＋エージェント有効 → agent 相当）
     if (!p) {
       const enabledFlag = localStorage.getItem("agentEnabled");
@@ -9861,9 +10082,10 @@ function setupChatPanel() {
           // 外部エージェントがツール一覧を必要とする場合のため宣言を同梱する
           // （Copilot ブリッジ等が functionDeclarations をそのまま登録できる）
           tools: activeChatTools()[0]?.functionDeclarations || [],
-          // Copilot/Devin プロバイダ利用時は選択モデルをブリッジへ伝える
+          // Copilot/Devin/Antigravity プロバイダ利用時は選択モデルをブリッジへ伝える
           ...(getChatProvider() === "copilot" && getCopilotModel() ? { model: getCopilotModel() } : {}),
           ...(getChatProvider() === "devin" && getDevinModel() ? { model: getDevinModel() } : {}),
+          ...(getChatProvider() === "antigravity" && getAntigravityModel() ? { model: getAntigravityModel() } : {}),
           ...(apiKey ? { apiKey } : {}),
         }),
       });
@@ -9924,12 +10146,12 @@ function setupChatPanel() {
     const provider = getChatProvider();
     const hasKey = provider === "openai"
       ? !!getOpenAIConfig().apiKey
-      : (provider === "copilot" || provider === "devin" || provider === "agent")
+      : (provider === "copilot" || provider === "devin" || provider === "antigravity" || provider === "agent")
         ? isAgentEnabled()
         : (!!window.kasugaiApi.getGoogleApiKey() || !!aiProxyEndpoint());
     if (!hasKey) {
       const local = await handleLocalChatCommand(text);
-      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : provider === "devin" ? "chat.noApiKeyDevin" : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
+      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : provider === "devin" ? "chat.noApiKeyDevin" : provider === "antigravity" ? "chat.noApiKeyAntigravity" : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
       addMessage("assistant", local || t(key));
       return;
     }
@@ -9979,12 +10201,15 @@ window.addEventListener("pagehide", () => {
   // capabilities 確定後に Copilot/Devin 選択肢の可否を再評価する（アプリ版のみ表示）
   updateBridgeProviderOptions();
   // capabilities 取得で既定エンドポイントが解決し自動接続が有効になった場合、
-  // プロバイダ表示（起動時は capabilities 未取得で gemini 表示）を再同期する
+  // プロバイダ表示（起動時は capabilities 未取得で gemini 表示）を再同期する。
+  // 退避済み option の再挿入では selected が残ったまま復元され select.value だけが
+  // 保存プロバイダに戻る（change 未発火でフィールドが gemini のまま）ケースがあるため、
+  // 値の一致に関わらず change を投げて表示・ブリッジ検出を必ず同期する
   const providerSelectAfterCaps = document.querySelector("#chat-provider");
-  if (providerSelectAfterCaps && providerSelectAfterCaps.value !== getChatProvider()) {
+  if (providerSelectAfterCaps) {
     const wanted = getChatProvider();
     if (providerSelectAfterCaps.querySelector(`option[value="${wanted}"]`)) {
-      providerSelectAfterCaps.value = wanted;
+      if (providerSelectAfterCaps.value !== wanted) providerSelectAfterCaps.value = wanted;
       providerSelectAfterCaps.dispatchEvent(new Event("change"));
     }
   }
@@ -9994,6 +10219,47 @@ window.addEventListener("pagehide", () => {
   try { await loadInspectorConfig(); } catch (e) { console.error(e); }
   try { await ensureDrawnRouteFlyPath(); } catch (e) { console.error(e); }
   try { await loadUpdateInfo(); } catch (e) { console.error(e); }
+  // リモートコマンド経路(local ティアのみ): 外部プロセスが /api/command に POST した
+  // コマンドをロングポーリングで受信し、チャットツールと同じ経路(executeChatTool)で実行する。
+  // 実行結果は /api/command/results へ返す。破壊的操作はチャット同様確認ダイアログが出る
+  let remoteCommandSince = 0;
+  let remoteCommandInitialized = false;
+  const remoteCommandLoop = async () => {
+    for (;;) {
+      try {
+        const res = await fetch(`/api/command?since=${remoteCommandSince}&wait=25`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json().catch(() => ({}));
+        if (!remoteCommandInitialized) {
+          // ページ読込前に滞留したコマンドは実行せず、以降の新規分のみ処理する
+          remoteCommandSince = Number(data?.latest) || 0;
+          remoteCommandInitialized = true;
+          continue;
+        }
+        const results = [];
+        for (const cmd of Array.isArray(data?.commands) ? data.commands : []) {
+          remoteCommandSince = Math.max(remoteCommandSince, Number(cmd?.id) || 0);
+          if (!cmd || typeof cmd.name !== "string") continue;
+          try {
+            const out = await executeChatTool(cmd.name, cmd.args || {});
+            results.push({ id: cmd.id, ok: out?.ok !== false, result: out });
+          } catch (error) {
+            results.push({ id: cmd.id, ok: false, result: { message: String(error && error.message || error) } });
+          }
+        }
+        if (results.length) {
+          await fetch("/api/command/results", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ results }),
+          });
+        }
+      } catch (error) {
+        await new Promise(r => setTimeout(r, 3000));
+      }
+    }
+  };
+  if (hasBackendFeature("remoteCommand")) void remoteCommandLoop();
   const initialCamera = await resolveInitialCamera();
   // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
   if (hasLastCamera && lastCameraSearch !== initialCameraSource) {

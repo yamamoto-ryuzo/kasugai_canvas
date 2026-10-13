@@ -306,6 +306,13 @@ def build_release() -> None:
             for bridge_file in bridge_dir.rglob("*"):
                 if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
                     archive.write(bridge_file, arcname=(Path("devin-bridge") / bridge_file.relative_to(bridge_dir)).as_posix())
+        # Antigravity ブリッジ（アプリ版が 8513 で自動起動する。要 Node.js＋Antigravity CLI。
+        # node_modules は含めず、初回起動時にアプリ側が npm install を実行する）
+        bridge_dir = ROOT / "antigravity-bridge"
+        if bridge_dir.exists():
+            for bridge_file in bridge_dir.rglob("*"):
+                if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
+                    archive.write(bridge_file, arcname=(Path("antigravity-bridge") / bridge_file.relative_to(bridge_dir)).as_posix())
     print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
 
     print("ZIP 内 EXE のバージョンを確認します...")

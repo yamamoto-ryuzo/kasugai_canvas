@@ -283,6 +283,7 @@
                     <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
                     <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
                     <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
+                    <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
                     <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
                   </select>
                   <div id="gemini-fields">
@@ -312,6 +313,7 @@
                   <p class="hint" data-i18n-html="agent.externalHint">チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
                   <p class="hint" data-i18n-html="chat.copilot.hint">GitHub Copilot の場合は同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）を起動し、エンドポイントに <code>http://127.0.0.1:8788/agent</code> を指定します（アプリ版では自動起動・空欄なら自動検出）。ブリッジの起動（<code>npm install && npm start</code>）と GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
                   <p class="hint" data-i18n-html="chat.devin.hint">Devin の場合は同梱の Devin ブリッジ（<code>devin-bridge/</code>・<code>devin acp</code>）を起動し、エンドポイントに <code>http://127.0.0.1:8789/agent</code> を指定します（アプリ版では自動起動 :8512・空欄なら自動検出）。Devin CLI と利用者自身の Devin プランが必要で、ローカル・本人利用限定です — 手順と利用条件は devin-bridge/README.md。</p>
+                  <p class="hint" data-i18n-html="chat.antigravity.hint">Antigravity の場合は同梱の Antigravity ブリッジ（<code>antigravity-bridge/</code>・<code>agy</code> CLI）を起動し、エンドポイントに <code>http://127.0.0.1:8791/agent</code> を指定します（アプリ版では自動起動 :8513・空欄なら自動検出）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要で、ローカル・本人利用限定です — 手順と利用条件は antigravity-bridge/README.md。</p>
                   <p class="hint" id="agent-backend-status" aria-live="polite"></p>
                   <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
                   <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
@@ -328,6 +330,12 @@
                   <select id="devin-model"></select>
                   <p class="hint" data-i18n="chat.devin.modelHint">ブリッジから取得した Devin のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
                   <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
+                  </div>
+                  <div id="antigravity-fields" hidden>
+                  <label class="field-label" for="antigravity-model" data-i18n="chat.antigravity.modelLabel">モデル</label>
+                  <select id="antigravity-model"></select>
+                  <p class="hint" data-i18n="chat.antigravity.modelHint">ブリッジから取得した Antigravity のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
+                  <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
                   </div>
                   <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
                   <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>
@@ -624,7 +632,7 @@
           </aside>
           <aside class="chat-panel" id="chat-panel" aria-label="AIチャット" data-i18n-attr="aria-label:chat.ariaLabel">
             <div class="chat-header">
-              <strong>Chat</strong>
+              <strong id="chat-provider-label" class="chat-provider-label"></strong>
               <span style="margin-left:auto;display:flex;gap:4px;">
                 <button id="chat-clear" class="chat-toggle" type="button" aria-label="履歴をクリア" title="履歴をクリア" data-i18n-attr="aria-label:chat.clear;title:chat.clear">🗑</button>
                 <button id="chat-panel-toggle" class="chat-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
