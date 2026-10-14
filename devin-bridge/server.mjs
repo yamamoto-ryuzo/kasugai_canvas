@@ -37,6 +37,20 @@ const DEBUG = !!process.env.DEVIN_BRIDGE_DEBUG;
 const WORKDIR = path.join(os.tmpdir(), "kasugai-devin-bridge");
 fs.mkdirSync(WORKDIR, { recursive: true });
 
+// 前回起動に成功した devin バイナリのパスをキャッシュする。
+// 次回以降はこれを最優先で試し、PATH 上に存在しない候補への spawn を省略する
+const BIN_CACHE = path.join(WORKDIR, "acp-bin.txt");
+function cachedBin() {
+  try {
+    const p = fs.readFileSync(BIN_CACHE, "utf8").trim();
+    if (p && fs.existsSync(p)) return p;
+  } catch (e) {}
+  return "";
+}
+function rememberBin(bin) {
+  try { fs.writeFileSync(BIN_CACHE, bin); } catch (e) {}
+}
+
 const SYSTEM_PROMPT = `あなたは3D地図アプリ「KASUGAI Canvas」の操作アシスタントです。
 ユーザーの指示に応じて、登録された地図操作ツールで地図を操作してください。
 
@@ -56,10 +70,13 @@ const LOCAL_STATE_TOOLS = {
   getCamera: (state) => state.camera ?? null,
 };
 
-// Devin CLI の探索順。DEVIN_CLI_PATH > PATH 上の devin > 代表的なインストール先
+// Devin CLI の探索順。DEVIN_CLI_PATH > 前回成功パス > PATH 上の devin > 代表的なインストール先
+// 重複と「存在しない絶対パス」の候補は除外する（spawn 失敗を待つ時間を省く）
 function devinBinCandidates() {
   const list = [];
   if (process.env.DEVIN_CLI_PATH) list.push(process.env.DEVIN_CLI_PATH);
+  const cached = cachedBin();
+  if (cached) list.push(cached);
   list.push(process.platform === "win32" ? "devin.exe" : "devin", "devin");
   if (process.platform === "win32") {
     const local = process.env.LOCALAPPDATA || "";
@@ -70,7 +87,8 @@ function devinBinCandidates() {
     const home = os.homedir();
     list.push(path.join(home, ".local", "bin", "devin"), "/usr/local/bin/devin", "/opt/homebrew/bin/devin");
   }
-  return list;
+  const seen = new Set();
+  return list.filter(b => !seen.has(b) && seen.add(b) && (!path.isAbsolute(b) || fs.existsSync(b)));
 }
 
 // Gemini形式スキーマ（type が大文字）を JSON Schema（小文字）へ変換する
@@ -121,11 +139,17 @@ class AcpClient {
     if (this.child) return;
     const args = ["acp"];
     if (MODEL) args.push("--model", MODEL);
-    this.child = spawn(this.bin, args, {
-      cwd: WORKDIR,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env },
-    });
+    try {
+      this.child = spawn(this.bin, args, {
+        cwd: WORKDIR,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env },
+      });
+    } catch (e) {
+      // spawn が同期例外を投げた場合も即失敗させて次候補へ進める
+      console.error(`[bridge] devin acp spawn error (${this.bin}): ${e.message}`);
+      return;
+    }
     this.child.stdout.setEncoding("utf8");
     this.child.stdout.on("data", (chunk) => {
       this.buf += chunk;
@@ -158,7 +182,16 @@ class AcpClient {
       sessions.clear();
     });
     this.child.on("error", (e) => {
-      console.error("[bridge] devin acp spawn error:", e.message);
+      // spawn 失敗（ENOENT 等）では 'exit' が発火しないことがあるため、
+      // ここでも保留中の RPC を失敗させて次候補へ即座に進める
+      console.error(`[bridge] devin acp spawn error (${this.bin}): ${e.message}`);
+      this.child = null;
+      this.ready = false;
+      for (const [, p] of this.pending) {
+        clearTimeout(p.timer);
+        p.reject(new Error(`devin acp spawn failed: ${e.message}`));
+      }
+      this.pending.clear();
     });
   }
 
@@ -318,6 +351,7 @@ async function getAcp() {
       await c.ensureReady();
       acp = c;
       acpBinUsed = bin;
+      rememberBin(bin);
       console.log(`[bridge] devin acp connected: ${bin}`);
       return c;
     } catch (e) {
