@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.23.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.24.0</span></h1>
       <p>V2: プレゼンテーション機能 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -32,6 +32,7 @@
       <li>保存・読み込んだルートは Fly パネルのルート選択に追加されます。「取込」ボタンで任意の .geojson を IndexedDB へインポートでき、描画ルート選択時は「出力」（.geojson ダウンロード）「削除」ボタンが表示されます</li>
       </ol>
       <p>描画ルートの GeoJSON には各点の高さ <code>z</code> を <code>heightReference: "Terrain"</code> として保存し、<code>z</code> はその点の地形からの高さ（AGL）を表します。飛行時の実際のカメラ高さは <code>z + 地形高 + flyHeight</code> で計算します（<code>flyHeight</code> は操作中の補正値で GeoJSON には含まれません）。セグメント内では始点・終点の 3D 位置と地形高を距離に応じて補間し、滑らかな高度変化にします。点を選択して <code>z</code>（AGL）を編集し、保存ボタンで GeoJSON へ書き戻せます。</p>
+      <p>AI が生成するルート（<code>flyRoute</code> ツール）は <code>heightReference: "MSL"</code> として各点に絶対標高（地形標高＋地上高）を焼き込み、飛行時は地形加算を行いません。飛行設定（速度・高度オフセット・ピッチ・ループ・視点）は <code>properties.fly</code> に保存され、リロード後の復元時にも維持されます。速度未指定のルートは総距離から自動プロファイル（80〜2000km/h・地上高50m〜10km）が適用されます。</p>
 
       <h3>🎬 Google Earth 風 FlyTo</h3>
       <p>カメラ移動は Google Earth と同じく「距離に応じた飛行時間＋一度ズームアウトしてから降下する弧」を描いて移動します。カメラプリセット・検索結果・属性行クリック・URL ハッシュの座標変更など、あらゆる移動がこの FlyTo 経路を通ります。</p>

@@ -10,8 +10,8 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.23.0</span></h1>
-      <p>AI ツール仕様 — 内蔵AIが制御できる全50ツールの定義</p>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.24.0</span></h1>
+      <p>AI ツール仕様 — 内蔵AIが制御できる全52ツールの定義</p>
     </header>
     <main>
       <section>
@@ -23,7 +23,7 @@
         <table>
           <thead><tr><th>条件</th><th>対象ツール</th></tr></thead>
           <tbody>
-            <tr><td>常時（45ツール）</td><td>下記以外のすべて</td></tr>
+            <tr><td>常時（47ツール）</td><td>下記以外のすべて</td></tr>
             <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
@@ -78,7 +78,7 @@
       </section>
 
       <section>
-        <h2>✈ Fly・プレゼン（5）</h2>
+        <h2>✈ Fly・プレゼン（7）</h2>
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
@@ -86,7 +86,9 @@
             <tr><td><code>playFlyPath</code></td><td>name*</td><td>フライパスを名前または番号で再生し Fly モードで自動走行</td></tr>
             <tr><td><code>stopFly</code></td><td>なし</td><td>Fly モード・フライパス再生を停止して Orbit（3D）モードへ戻る</td></tr>
             <tr><td><code>toggleDrawMode</code></td><td>なし</td><td>Draw モード（地図上へのルート描画）を ON/OFF</td></tr>
-            <tr><td><code>addFlyPath</code></td><td>name*, geojson*, speed, height, pitch, loop, view</td><td>GeoJSON LineString から飛行ルートを作成。手描きルートと同じ IndexedDB ストアに保存されるためリロード後も復元される。view は camera（一人称・既定）/ center（ルート中心俯瞰）。「○○を巡るルート」生成→<code>playFlyPath</code> の連携に使う</td></tr>
+            <tr><td><code>addFlyPath</code></td><td>name*, geojson*, speed, height, pitch, loop, view</td><td>GeoJSON LineString から飛行ルートを作成。手描きルートと同じ IndexedDB ストアに保存されるためリロード後も復元される。speed は km/h・省略時はルート総距離から自動設定（80〜2000）。view は camera（一人称・既定）/ center（ルート中心俯瞰）。「○○を巡るルート」生成→<code>playFlyPath</code> の連携に使う</td></tr>
+            <tr><td><code>flyRoute</code></td><td>waypoints*, name, agl, spacing, speed, height, pitch, loop, view, autoplay, provider</td><td>地点A→B（経由地可）の飛行ルートを自動生成して再生。waypoints は座標・地名（query: ジオコーディング）・読込済み地物名（feature: vectorSearch）を混在指定可。経由地間を直線補間し地形標高をサンプリングして各点に高度を焼き込む（山岳部でも埋まらない）。speed/agl 省略時は総距離から自動決定（80〜2000km/h・50m〜10km）。「AからBまで飛んで」「Cを経由して」等に使う高レベルツール</td></tr>
+            <tr><td><code>setFlySettings</code></td><td>name, speed, agl, height, pitch, loop, view</td><td>フライパスの速度・地上高・ピッチ等を変更（name 省略時は再生中/選択中のルート）。agl は地形追従の目標地上高で高度オフセットへ自動変換される。「もっと速く」「地上50mで飛んで」等に使う。描画ルートは設定が GeoJSON へ保存されリロード後も維持</td></tr>
           </tbody>
         </table>
       </section>

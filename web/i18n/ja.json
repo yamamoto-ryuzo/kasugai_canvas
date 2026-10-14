@@ -405,6 +405,8 @@
   "tool.unknown": "未知のツール: {name}",
   "tool.urlUnreachable": "指定されたURLに到達できません（{status}）。存在しないか公開されていない可能性があります",
   "tool.urlsUnreachable": "設定テキスト内のURLに到達できません: {urls}。存在しないか公開されていない可能性があります",
+  "tool.flyRouteTooFew": "flyRouteには2件以上の経由地が必要です",
+  "tool.flyRouteWaypointFailed": "経由地{index}を解決できませんでした: {query}",
   "command.flyUsage": "使い方: /fly 緯度 経度 [高さm]",
   "command.flyMoved": "({lat}, {lng}) へ移動します。",
   "command.noLayers": "レイヤがありません。",

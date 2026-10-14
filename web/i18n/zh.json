@@ -405,6 +405,8 @@
   "tool.unknown": "未知工具：{name}",
   "tool.urlUnreachable": "无法访问该 URL（{status}）。可能不存在或未公开。",
   "tool.urlsUnreachable": "无法访问配置文本中的 URL：{urls}。可能不存在或未公开。",
+  "tool.flyRouteTooFew": "flyRoute 至少需要 2 个途经点",
+  "tool.flyRouteWaypointFailed": "无法解析途经点 {index}：{query}",
   "command.flyUsage": "用法：/fly 纬度 经度 [高度 m]",
   "command.flyMoved": "正在移动到 ({lat}, {lng})。",
   "command.noLayers": "没有图层。",

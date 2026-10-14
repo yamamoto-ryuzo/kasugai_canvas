@@ -405,6 +405,8 @@
   "tool.unknown": "Unbekanntes Werkzeug: {name}",
   "tool.urlUnreachable": "Die URL ist nicht erreichbar ({status}). Sie existiert möglicherweise nicht oder ist nicht öffentlich zugänglich.",
   "tool.urlsUnreachable": "URL(s) im Konfigurationstext nicht erreichbar: {urls}. Sie existieren möglicherweise nicht oder sind nicht öffentlich zugänglich.",
+  "tool.flyRouteTooFew": "flyRoute benötigt mindestens 2 Wegpunkte",
+  "tool.flyRouteWaypointFailed": "Wegpunkt {index} konnte nicht aufgelöst werden: {query}",
   "command.flyUsage": "Verwendung: /fly Breitengrad Längengrad [Höhe m]",
   "command.flyMoved": "Bewege zu ({lat}, {lng}).",
   "command.noLayers": "Keine Ebenen.",

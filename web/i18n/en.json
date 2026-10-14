@@ -405,6 +405,8 @@
   "tool.unknown": "Unknown tool: {name}",
   "tool.urlUnreachable": "Cannot reach the URL ({status}). It may not exist or may not be publicly accessible.",
   "tool.urlsUnreachable": "Cannot reach URL(s) in the config text: {urls}. They may not exist or may not be publicly accessible.",
+  "tool.flyRouteTooFew": "flyRoute requires at least 2 waypoints",
+  "tool.flyRouteWaypointFailed": "Could not resolve waypoint {index}: {query}",
   "command.flyUsage": "Usage: /fly latitude longitude [height m]",
   "command.flyMoved": "Moving to ({lat}, {lng}).",
   "command.noLayers": "No layers.",

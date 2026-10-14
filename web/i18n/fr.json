@@ -405,6 +405,8 @@
   "tool.unknown": "Outil inconnu : {name}",
   "tool.urlUnreachable": "Impossible d'accéder à l'URL ({status}). Elle n'existe peut-être pas ou n'est pas accessible publiquement.",
   "tool.urlsUnreachable": "Impossible d'accéder aux URL du texte de configuration : {urls}. Elles n'existent peut-être pas ou ne sont pas accessibles publiquement.",
+  "tool.flyRouteTooFew": "flyRoute nécessite au moins 2 points de passage",
+  "tool.flyRouteWaypointFailed": "Impossible de résoudre le point de passage {index} : {query}",
   "command.flyUsage": "Usage : /fly latitude longitude [hauteur m]",
   "command.flyMoved": "Déplacement vers ({lat}, {lng}).",
   "command.noLayers": "Aucune couche.",

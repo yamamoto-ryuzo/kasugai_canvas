@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.23.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.24.0</span></h1>
       <p>V3: AI 連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -34,14 +34,14 @@
       <p><strong>Devin の APIキー</strong>（v5.23〜）：Devin プロバイダの設定画面に「Devin APIキー」欄があります。app.devin.ai → Settings → Devin API → <strong>Service users</strong> タブで発行した <code>cog_</code> キーを入れると <code>devin acp</code> の認証を APIキーで完了でき、ブラウザの PKCE ログイン画面を省略できます（<strong>PAT は acp 認証で拒否される</strong>ためサービスユーザーキーが必要）。空欄なら従来どおりブラウザログイン。キーはブラウザの localStorage に保存され、ローカルのブリッジへ <code>X-Devin-Api-Key</code> ヘッダでのみ送信されます（外部・平文HTTPには送信しません）。</p>
       <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="../google.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>
       <p><strong>M365 / Microsoft Copilot を見送った理由</strong>：消費者向け Copilot はボット等によるアクセスを明示禁止しているため、Web UI 自動化を提供しません。この消費者向け規約は職場・学校アカウントには適用されず、M365 全体の禁止を意味しません。M365 の公式 Chat API は存在しますが、ライセンス・アプリ登録・必要権限への管理者同意等を要するため、本人のログインだけで使う標準連携としては見送り・未実装です。M365 の Web UI 自動化も、正規のプログラム接続としての許諾を確認できていないため採用しません。<a href="../google.html#m365-connection-policy">規約上の禁止と導入条件の違い・再検討条件</a>を参照してください。</p>
-      <p>AI の実行経路は function calling によるツール呼び出しで、<strong>48個のツール</strong>がアプリの全主要機能を網羅します：</p>
+      <p>AI の実行経路は function calling によるツール呼び出しで、<strong>52個のツール</strong>がアプリの全主要機能を網羅します：</p>
       <table>
         <thead><tr><th>カテゴリ</th><th>ツール</th></tr></thead>
         <tbody>
           <tr><td>カメラ・視点</td><td><code>flyTo</code>・<code>getCamera</code>・<code>flyToFeature</code>・<code>flyToPreset</code>・<code>listCameraPresets</code></td></tr>
           <tr><td>レイヤー</td><td><code>listLayers</code>・<code>setLayerVisible</code>・<code>focusLayer</code>・<code>addLayer</code>（geojson/geoparquet/duckdb/sql 等）・<code>addGeoJsonLayer</code>・<code>applyInspector</code>・<code>exportInspector</code></td></tr>
           <tr><td>ベースマップ・地形・効果</td><td><code>listBasemaps</code>・<code>setBasemap</code>・<code>setTerrain</code>・<code>setEffect</code>・<code>setUnderground</code>・<code>setClip</code></td></tr>
-          <tr><td>Fly・プレゼン</td><td><code>listFlyPaths</code>・<code>playFlyPath</code>・<code>stopFly</code>・<code>toggleDrawMode</code></td></tr>
+          <tr><td>Fly・プレゼン</td><td><code>listFlyPaths</code>・<code>playFlyPath</code>・<code>stopFly</code>・<code>toggleDrawMode</code>・<code>addFlyPath</code>・<code>flyRoute</code>（「AからBまで」「C経由で」のルート自動生成）・<code>setFlySettings</code>（速度・地上高の変更）</td></tr>
           <tr><td>検索</td><td><code>searchLocation</code>・<code>vectorSearch</code>・<code>searchPlaces</code>*・<code>openStreetView</code>*（* Maps キー設定時のみ）</td></tr>
           <tr><td>共有・資料生成</td><td><code>getShareUrl</code>・<code>buildShareUrl</code>（視点パーマリンク）・<code>showReport</code>（Markdown 資料をモーダル表示）</td></tr>
           <tr><td>プロジェクト</td><td><code>listProjects</code>・<code>switchProject</code></td></tr>
@@ -109,7 +109,7 @@
       <h3>🔌 kasugaiApi</h3>
       <p><code>window.kasugaiApi</code> は viewer・カメラ・レイヤー・イベントへ外部からアクセスする操作 API です。AI チャットの function calling、runCode サンドボックス内コード、プラグイン、外部エージェントの actions 実行がすべてこの API を通る共通経路になっています。イベント購読（<code>camera-changed</code> 等）もここから行えます。</p>
 
-      <p>この V3（AI 連携）の強化がハッカソン提出の中核です — Cloud Run へのデプロイ構成・<code>/api/gemini</code> キー隠蔽プロキシ・提出物については <a href="../hackathon.html">ハッカソン</a> を参照してください。50ツールの引数・提供条件の詳細仕様は <a href="../ai-tools.html">AI ツール仕様</a> を参照してください。</p>
+      <p>この V3（AI 連携）の強化がハッカソン提出の中核です — Cloud Run へのデプロイ構成・<code>/api/gemini</code> キー隠蔽プロキシ・提出物については <a href="../hackathon.html">ハッカソン</a> を参照してください。52ツールの引数・提供条件の詳細仕様は <a href="../ai-tools.html">AI ツール仕様</a> を参照してください。</p>
 
     </main>
   </div>

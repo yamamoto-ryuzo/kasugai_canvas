@@ -877,6 +877,42 @@ function buildFlyPath(rawCoords) {
   return { points, distances };
 }
 
+// LineString 座標列（[lng,lat,...] の配列）の総距離(m)を概算する
+function flyPathRouteDistance(coords) {
+  let dist = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const dx = (coords[i + 1][0] - coords[i][0]) * 111320 * Math.cos((coords[i][1] + coords[i + 1][1]) * Math.PI / 360);
+    const dy = (coords[i + 1][1] - coords[i][1]) * 111320;
+    dist += Math.sqrt(dx * dx + dy * dy);
+  }
+  return dist;
+}
+
+// GeoJSON properties.fly に保存された飛行設定（addFlyPath が埋め込む）を
+// flyPaths エントリへ復元する。リロード後も速度・ピッチ・ループ等が維持される
+function applyFlySettingsFromGeoJson(text, entry) {
+  try {
+    const geojson = JSON.parse(text);
+    const fly = geojson?.properties?.fly;
+    if (!fly || typeof fly !== "object") {
+      // fly設定を持たない旧形式の生成ルート（flyRoute生成物）は距離ベースの
+      // 自動プロファイルで速度を補う。手描きルートは従来どおり既定値のまま
+      const isGenerated = geojson?.properties?.source === "flyRoute" || geojson?.properties?.heightReference === "MSL";
+      if (isGenerated && entry && Number.isFinite(entry.speed)) {
+        const profile = flyRouteAutoProfile(flyPathRouteDistance(extractLineStringCoordinates(geojson)));
+        if (profile && Number.isFinite(profile.speed)) entry.speed = profile.speed;
+      }
+      return;
+    }
+    if (Number.isFinite(fly.speed) && fly.speed > 0) entry.speed = fly.speed;
+    if (Number.isFinite(fly.height)) entry.height = fly.height;
+    if (Number.isFinite(fly.pitch)) entry.pitch = fly.pitch;
+    if (Number.isFinite(fly.step) && fly.step > 0) entry.step = fly.step;
+    if (fly.loop !== undefined) entry.loop = !!fly.loop;
+    if (fly.view === "center" || fly.view === "camera") entry.view = fly.view;
+  } catch (e) { /* 不正なJSONは既定値のまま */ }
+}
+
 async function loadFlyGeoJson(url) {
   let text;
   if (typeof url === "string" && url.startsWith("route:")) {
@@ -902,6 +938,105 @@ function buildFlyPathLinePositions(coords) {
 
 function getFlyPathLinePositions() {
   return flyPathLinePositions;
+}
+
+// 候補の中から参照地点（前の経由地やカメラ位置）に最も近いものを選ぶ。
+// 同名の遠方地点への誤ヒットを減らすためのヒューリスティック
+function pickNearestLocation(items, ref) {
+  const valid = (items || []).filter(item => Number.isFinite(item.latitude) && Number.isFinite(item.longitude));
+  if (!ref || !Number.isFinite(ref.latitude) || valid.length < 2) return valid[0] || null;
+  let best = valid[0];
+  let bestDist = Infinity;
+  const cos = Math.cos(ref.latitude * Math.PI / 180);
+  for (const item of valid) {
+    const dx = (item.longitude - ref.longitude) * cos;
+    const dy = item.latitude - ref.latitude;
+    const d = dx * dx + dy * dy;
+    if (d < bestDist) { bestDist = d; best = item; }
+  }
+  return best;
+}
+
+// flyRoute ツール用: waypoint 指定を緯度経度へ解決する。
+// {latitude,longitude,height?} はそのまま、{feature:"地物名"} は読込済みベクトルデータを
+// vectorSearch で検索（見つからなければジオコーディングにフォールバック）、
+// {query:"地名・住所"}/{name:"..."} は searchLocation でジオコーディングする。
+// ref を渡すと複数候補から最も近い地点を選ぶ
+async function resolveFlyRouteWaypoint(waypoint, provider, ref = null) {
+  if (!waypoint || typeof waypoint !== "object") return null;
+  const lat = Number(waypoint.latitude);
+  const lng = Number(waypoint.longitude);
+  const agl = Number(waypoint.height);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return { latitude: lat, longitude: lng, agl, label: String(waypoint.name || waypoint.label || `${lat},${lng}`) };
+  }
+  const featureQuery = waypoint.feature ? String(waypoint.feature) : null;
+  if (featureQuery) {
+    const hit = pickNearestLocation(window.kasugaiApi.vectorSearch(featureQuery), ref);
+    if (hit) return { latitude: hit.latitude, longitude: hit.longitude, agl, label: featureQuery };
+  }
+  const query = waypoint.query ? String(waypoint.query) : (waypoint.name ? String(waypoint.name) : featureQuery);
+  if (query) {
+    const items = await window.kasugaiApi.searchLocation(query, provider).catch(() => []);
+    const hit = pickNearestLocation(items, ref);
+    if (hit) return { latitude: hit.latitude, longitude: hit.longitude, agl, label: hit.title || query };
+  }
+  return null;
+}
+
+// 経由地間を直線補間して密なルート点列を作る（飛行を滑らかにし地形サンプリングを密にするため）
+function densifyFlyRoutePoints(points, spacingMeters) {
+  const out = [];
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const dx = (b.longitude - a.longitude) * 111320 * Math.cos((a.latitude + b.latitude) * Math.PI / 360);
+    const dy = (b.latitude - a.latitude) * 111320;
+    const segLen = Math.sqrt(dx * dx + dy * dy);
+    const steps = Math.max(1, Math.ceil(segLen / spacingMeters));
+    for (let j = 0; j < steps; j++) {
+      const s = j / steps;
+      out.push({
+        latitude: a.latitude + (b.latitude - a.latitude) * s,
+        longitude: a.longitude + (b.longitude - a.longitude) * s,
+        agl: a.agl + (b.agl - a.agl) * s,
+      });
+    }
+  }
+  out.push({ latitude: points[points.length - 1].latitude, longitude: points[points.length - 1].longitude, agl: points[points.length - 1].agl });
+  return out;
+}
+
+// flyRoute 用: ルート総距離に応じた既定の地上高・速度を返す。
+// 短距離は低空低速、長距離は戦闘機並み（高度約10km・2000km/h）の高空高速
+function flyRouteAutoProfile(totalMeters) {
+  if (!Number.isFinite(totalMeters) || totalMeters < 0) return { agl: 300, speed: 200 };
+  if (totalMeters < 2000) return { agl: 50, speed: 80 };
+  if (totalMeters < 20000) return { agl: 300, speed: 200 };
+  if (totalMeters < 100000) return { agl: 800, speed: 400 };
+  if (totalMeters < 500000) return { agl: 3000, speed: 1000 };
+  return { agl: 10000, speed: 2000 };
+}
+
+// ルート点列の地形標高を一括サンプリングする。
+// 取得タイル数は距離に比例するためレベルは距離で適応させる（短距離は精密・長距離は粗く。
+// 高高度で飛ぶ長距離ほど細かい地形は不要）。失敗時は読み込み済みタイルにフォールバック
+async function sampleRouteTerrain(points, totalMeters = 0) {
+  const provider = viewer.terrainProvider;
+  const level = totalMeters < 20000 ? 13 : totalMeters < 200000 ? 12 : 11;
+  if (provider && !(provider instanceof Cesium.EllipsoidTerrainProvider) && typeof Cesium.sampleTerrain === "function") {
+    try {
+      const cartos = points.map(p => Cesium.Cartographic.fromDegrees(p.longitude, p.latitude));
+      const sampled = await Cesium.sampleTerrain(provider, level, cartos);
+      return sampled.map(c => (c && Number.isFinite(c.height)) ? c.height : null);
+    } catch (e) { /* フォールバックへ */ }
+  }
+  return points.map(p => {
+    try {
+      const h = viewer.scene.globe.getHeight(Cesium.Cartographic.fromDegrees(p.longitude, p.latitude));
+      return Number.isFinite(h) ? h : null;
+    } catch (e) { return null; }
+  });
 }
 
 function updateUrlFromCamera() {
@@ -4462,9 +4597,11 @@ function setupEvents() {
     if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
     if (flyViewSelect) flyViewSelect.value = flyPath.view === "center" ? "center" : "camera";
     if (!flyPathCoords || !flyPathCoords.length) return;
+    // heightReference: MSL のルートは座標高度が絶対標高のため地形加算しない
+    const absoluteAltitude = /^(msl|absolute)$/i.test(String(flyPathProperties.heightReference || ""));
     for (const point of flyPathCoords) {
       const carto = Cesium.Cartographic.fromDegrees(point.longitude, point.latitude);
-      point.terrain = carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0;
+      point.terrain = absoluteAltitude ? 0 : (carto ? (viewer.scene.globe.getHeight(carto) ?? 0) : 0);
     }
     flyPathLinePositions = buildFlyPathLinePositions(flyPathCoords);
     if (flyPathEntity) viewer.entities.remove(flyPathEntity);
@@ -4495,7 +4632,9 @@ function setupEvents() {
     flyPathRafId = null;
     if (!flyPathActive || !flyPathCoords || !flyPathCoords.length) return;
     try {
-      const delta = Math.min((timestamp - flyPathLastTime) / 1000, 0.1);
+      // rAF の timestamp はフレーム開始時刻のため直前に取った performance.now() より
+      // 過去になり得る。負の delta は flyPathDistance<0 判定で即停止してしまうので 0 下限にする
+      const delta = Math.max(0, Math.min((timestamp - flyPathLastTime) / 1000, 0.1));
       flyPathLastTime = timestamp;
       applyWalkKeys(delta);
 
@@ -4900,6 +5039,130 @@ function setupEvents() {
   uiHooks.setMode = setMode;
   uiHooks.startFlyPath = startFlyPath;
   uiHooks.stopFlyPath = stopFlyPath;
+  // AIツール用: ルートを選択して読み込み、完了後に自動で前進開始する。
+  // setMode("walk") 経由では startFlyPath が fire-and-forget で呼ばれるため、
+  // 読み込み完了（flyPathCoords 反映）をポーリングで待ってからループを起動する
+  uiHooks.playFlyPathAt = async (index, autoplay = true) => {
+    const target = flyPaths[index];
+    if (!target) return false;
+    const select = document.querySelector("#fly-path-select");
+    if (select) {
+      // エントリは復元済みでも option が未描画の時間窓（ensureDrawnRouteFlyPath 完了前）がある。
+      // 存在しない value を代入すると select.value は "" になり setMode が手動扱いするため、先に再描画する
+      renderFlyPathSelect();
+      select.value = String(index);
+    }
+    updateFlyPathDeleteButton();
+    if (walkModeActive) {
+      stopFlyPath();
+      if (walkRafId) {
+        cancelAnimationFrame(walkRafId);
+        walkRafId = null;
+      }
+      await startFlyPath(index);
+    } else {
+      setMode("walk");
+      // setMode は select.value 経由で startFlyPath を呼ぶ。何らかの理由で拾えなかった場合は直接呼ぶ
+      if (flyPath !== target) await startFlyPath(index);
+      for (let i = 0; i < 200 && (!flyPathCoords || !flyPathCoords.length); i++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+    if (flyPath !== target || !flyPathCoords || !flyPathCoords.length) return false;
+    updateFlyPathVisibilityButton();
+    if (autoplay) startFlyPathLoopIfNeeded();
+    return true;
+  };
+  // AIツール用: フライパスの速度・高度・ピッチ等を変更する。再生中のルートなら即時反映する
+  uiHooks.setFlySettings = (index, settings = {}) => {
+    const entry = flyPaths[index];
+    if (!entry) return false;
+    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+    if (num(settings.speed) > 0) entry.speed = num(settings.speed);
+    if (num(settings.height) !== undefined) entry.height = num(settings.height);
+    if (num(settings.pitch) !== undefined) entry.pitch = Math.max(-85, Math.min(0, num(settings.pitch)));
+    if (num(settings.step) > 0) entry.step = num(settings.step);
+    if (settings.loop !== undefined) entry.loop = !!settings.loop;
+    if (settings.view !== undefined) entry.view = /^(center|chase|follow|3rd|third)$/i.test(String(settings.view)) ? "center" : "camera";
+    if (flyPath === entry) {
+      if (num(settings.speed) > 0) flySpeed = entry.speed;
+      if (num(settings.height) !== undefined) flyHeight = entry.height;
+      if (walkSpeedEl) walkSpeedEl.value = flySpeed.toFixed(1);
+      if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
+      if (flyViewSelect) flyViewSelect.value = entry.view;
+    }
+    return true;
+  };
+  // AIツール用: 目標の地上高(agl)を高度オフセットへ変換して適用する。
+  // Terrain基準ルートはオフセット=地上高そのもの。MSLルート（高度焼き込み済み）は
+  // 生成時の地上高(properties.agl、旧形式は疎サンプリングで推定)との差分をオフセットにする
+  uiHooks.applyFlyAgl = async (entry, agl) => {
+    let text;
+    try {
+      if (entry.drawn?.kind === "idb" && window._routeStoreGet) {
+        text = await window._routeStoreGet(currentProjectId || "default", entry.drawn.name);
+      } else {
+        text = await (await fetch(entry.url)).text();
+      }
+    } catch (e) { return false; }
+    let geojson;
+    try { geojson = JSON.parse(text); } catch (e) { return false; }
+    const coords = extractLineStringCoordinates(geojson);
+    if (!coords.length) return false;
+    let offset = agl;
+    if (geojson.properties?.heightReference === "MSL") {
+      const originalAgl = Number(geojson.properties?.agl);
+      if (Number.isFinite(originalAgl)) {
+        offset = agl - originalAgl;
+      } else {
+        // 生成時の地上高が不明な旧形式ルートは、8点の地形サンプルで焼き込み高度との差から推定する
+        const count = Math.min(8, coords.length);
+        const pts = [];
+        const alts = [];
+        for (let i = 0; i < count; i++) {
+          const c = coords[Math.floor(i * (coords.length - 1) / Math.max(1, count - 1))];
+          pts.push({ longitude: c[0], latitude: c[1] });
+          alts.push(Number.isFinite(c[2]) ? c[2] : 0);
+        }
+        const terr = await sampleRouteTerrain(pts, flyPathRouteDistance(coords));
+        const diffs = alts.map((a, i) => Number.isFinite(terr[i]) ? a - terr[i] : null).filter(Number.isFinite).sort((a, b) => a - b);
+        offset = agl - (diffs.length ? diffs[Math.floor(diffs.length / 2)] : 0);
+      }
+      // 目標地上高を保存へ記録（persistFlySettings は fly のみ書き戻すためここで保存）
+      try {
+        geojson.properties = { ...(geojson.properties || {}), agl };
+        const newText = JSON.stringify(geojson);
+        if (entry.drawn?.kind === "idb" && window._routeStoreSet) {
+          await window._routeStoreSet(currentProjectId || "default", entry.drawn.name, newText);
+        } else if (entry.drawn?.kind === "server" && typeof window.kasugaiApi?.saveDataFile === "function") {
+          await window.kasugaiApi.saveDataFile(entry.drawn.name, newText);
+        }
+      } catch (e) { /* 保存失敗は無視 */ }
+    }
+    entry.height = offset;
+    if (flyPath === entry) {
+      flyHeight = offset;
+      if (walkOffsetEl) walkOffsetEl.value = flyHeight.toFixed(1);
+    }
+    return true;
+  };
+  // 設定変更を GeoJSON properties.fly へ書き戻してリロード後も維持する（IDB/サーバー保存の描画ルートのみ）
+  uiHooks.persistFlySettings = async (entry) => {
+    if (!entry?.drawn) return;
+    const fly = { speed: entry.speed, height: entry.height, pitch: entry.pitch, step: entry.step, loop: entry.loop, view: entry.view };
+    try {
+      if (entry.drawn.kind === "idb" && window._routeStoreGet && window._routeStoreSet) {
+        const pid = currentProjectId || "default";
+        const geojson = JSON.parse(await window._routeStoreGet(pid, entry.drawn.name));
+        geojson.properties = { ...(geojson.properties || {}), fly };
+        await window._routeStoreSet(pid, entry.drawn.name, JSON.stringify(geojson));
+      } else if (entry.drawn.kind === "server" && typeof window.kasugaiApi?.saveDataFile === "function") {
+        const geojson = JSON.parse(await (await fetch(entry.url)).text());
+        geojson.properties = { ...(geojson.properties || {}), fly };
+        await window.kasugaiApi.saveDataFile(entry.drawn.name, JSON.stringify(geojson));
+      }
+    } catch (e) { /* 永続化失敗は無視（メモリ上の設定は有効） */ }
+  };
 
   modeSelect.addEventListener("click", () => {
     drawTabActive = false;
@@ -5431,7 +5694,9 @@ function setupEvents() {
       const text = await routeStore.get(projectId, name);
       if (text == null) continue;
       const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
-      flyPaths.push({ title: name, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "idb", name } });
+      const path = { title: name, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "idb", name } };
+      applyFlySettingsFromGeoJson(text, path);
+      flyPaths.push(path);
       existing.add(name);
     }
     // 保存先フォルダ内の .geojson（許可済みの場合のみ・読み取り専用）
@@ -5446,7 +5711,9 @@ function setupEvents() {
           const file = await fileHandle.getFile();
           const text = await file.text();
           const objectUrl = URL.createObjectURL(new Blob([text], { type: "application/geo+json" }));
-          flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "file", name: entry.name } });
+          const path = { title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "file", name: entry.name } };
+          applyFlySettingsFromGeoJson(text, path);
+          flyPaths.push(path);
           existing.add(title);
         }
       } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
@@ -5460,7 +5727,9 @@ function setupEvents() {
           const title = entry.name.replace(/\.geojson$/, "");
           if (existing.has(title)) continue;
           const url = `projects/${encodeURIComponent(projectId)}/DATA/${entry.name.split("/").map(encodeURIComponent).join("/")}`;
-          flyPaths.push({ title, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "server", name: entry.name } });
+          const path = { title, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "server", name: entry.name } };
+          try { applyFlySettingsFromGeoJson(await (await fetch(url)).text(), path); } catch (e) { /* 既定値のまま */ }
+          flyPaths.push(path);
           existing.add(title);
         }
       } catch (e) { console.error("listDataFiles failed:", e); }
@@ -8138,22 +8407,39 @@ window.kasugaiApi = {
   listFlyPaths() {
     return flyPaths.map((path, index) => ({ index, title: path.title }));
   },
-  playFlyPath(nameOrIndex) {
+  // autoplay=true（既定）で読み込み後すぐ自動前進を開始する。
+  // false の場合はルート先頭へのカメラ移動のみ（手動でダブルクリック/Wキーで前進開始）
+  playFlyPath(nameOrIndex, autoplay = true) {
     const index = Number.isInteger(nameOrIndex) ? nameOrIndex : flyPaths.findIndex(path => path.title === nameOrIndex || path.title.includes(nameOrIndex));
     if (index < 0 || index >= flyPaths.length) return false;
-    const select = document.querySelector("#fly-path-select");
-    if (select) select.value = String(index);
-    if (walkModeActive && uiHooks.startFlyPath) {
-      uiHooks.stopFlyPath?.();
-      void uiHooks.startFlyPath(index);
-    } else if (uiHooks.setMode) {
-      uiHooks.setMode("walk");
+    if (uiHooks.playFlyPathAt) {
+      Promise.resolve(uiHooks.playFlyPathAt(index, autoplay)).catch(e => console.error("playFlyPathAt failed:", e));
     }
     return true;
   },
   stopFly() {
     if (uiHooks.setMode) uiHooks.setMode("orbit");
     return true;
+  },
+  // AIツール用: フライパスの速度・高度・ピッチ・ループ・視点を変更する。
+  // name省略時は再生中（なければ選択中）のルートが対象。描画ルートは設定を GeoJSON へ永続化する。
+  // settings.agl は地形追従の目標地上高(m)で、内部で高度オフセットへ変換する
+  async setFlySettings(nameOrIndex, settings = {}) {
+    let index;
+    if (Number.isInteger(nameOrIndex)) index = nameOrIndex;
+    else if (nameOrIndex !== undefined && nameOrIndex !== null && nameOrIndex !== "") {
+      index = flyPaths.findIndex(path => path.title === String(nameOrIndex) || path.title.includes(String(nameOrIndex)));
+    } else {
+      const sel = Number(document.querySelector("#fly-path-select")?.value);
+      index = flyPath ? flyPaths.indexOf(flyPath) : (Number.isInteger(sel) ? sel : -1);
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= flyPaths.length) return { ok: false };
+    const entry = flyPaths[index];
+    const agl = Number(settings.agl);
+    if (Number.isFinite(agl) && agl >= 0 && uiHooks.applyFlyAgl) await uiHooks.applyFlyAgl(entry, agl);
+    if (uiHooks.setFlySettings && !uiHooks.setFlySettings(index, settings)) return { ok: false };
+    void Promise.resolve(uiHooks.persistFlySettings?.(entry)).catch(() => {});
+    return { ok: true, name: entry.title, speed: entry.speed, height: entry.height, pitch: entry.pitch, loop: entry.loop, view: entry.view };
   },
   // AI が GeoJSON LineString から飛行ルートを作成する。
   // 手描きルートと同じ IndexedDB ストアに保存し ensureDrawnRouteFlyPath 経由で
@@ -8163,7 +8449,27 @@ window.kasugaiApi = {
     let parsed = null;
     try { parsed = typeof geojson === "string" ? JSON.parse(geojson) : geojson; } catch (e) { parsed = null; }
     if (!title || !parsed || !extractLineStringCoordinates(parsed).length) return { ok: false };
-    const text = typeof geojson === "string" ? geojson : JSON.stringify(geojson);
+    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
+    // 速度未指定ならルート総距離から自動プロファイルを適用する。
+    // AI が flyRoute ではなく addFlyPath を直接使った場合でも適切な速度になる
+    let speedOpt = num(options.speed);
+    if (speedOpt === undefined) {
+      speedOpt = flyRouteAutoProfile(flyPathRouteDistance(extractLineStringCoordinates(parsed))).speed;
+    }
+    // 飛行設定（速度・ピッチ等）を properties.fly として GeoJSON に埋め込み、
+    // リロード後の描画ルート復元時も設定が維持されるようにする
+    const flySettings = {
+      speed: speedOpt,
+      height: num(options.height),
+      pitch: num(options.pitch),
+      step: num(options.step),
+      loop: options.loop !== undefined ? !!options.loop : undefined,
+      view: options.view !== undefined ? String(options.view) : undefined,
+    };
+    if (Object.values(flySettings).some(v => v !== undefined)) {
+      parsed.properties = { ...(parsed.properties || {}), fly: flySettings };
+    }
+    const text = JSON.stringify(parsed);
     if (window._routeStoreSet) await window._routeStoreSet(currentProjectId || "default", title, text);
     const prev = flyPaths.findIndex(p => p.title === title);
     if (prev >= 0) flyPaths.splice(prev, 1);
@@ -8174,7 +8480,6 @@ window.kasugaiApi = {
       flyPaths.push({ title, url: objectUrl, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera" });
     }
     const entry = flyPaths.find(p => p.title === title);
-    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
     if (entry) {
       if (num(options.speed) > 0) entry.speed = num(options.speed);
       if (num(options.height) !== undefined) entry.height = num(options.height);
@@ -8185,6 +8490,95 @@ window.kasugaiApi = {
     }
     renderFlyPathSelect();
     return { ok: !!entry, name: title };
+  },
+  // AI flyRoute ツール用: 地点列(A→B・経由地)から飛行ルートを自動生成する。
+  // 地名(query)はジオコーディング・地物名(feature)はvectorSearchで座標解決し、
+  // 区間を直線補間した上で地形標高をサンプリングして各点に MSL 高度を焼き込む
+  // （山岳部で地形に埋まらないようにするため。サンプリング失敗時は Terrain 基準にフォールバック）
+  async flyRoute(waypoints, options = {}) {
+    const list = Array.isArray(waypoints) ? waypoints : [];
+    if (list.length < 2) return { ok: false, reason: "tooFewWaypoints" };
+    // 先頭の参照点は現在のカメラ位置、以降は直前の経由地。同名の遠方地点への誤ヒットを減らす
+    const camCarto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+    let refPoint = camCarto ? { latitude: Cesium.Math.toDegrees(camCarto.latitude), longitude: Cesium.Math.toDegrees(camCarto.longitude) } : null;
+    const resolved = [];
+    for (const wp of list) {
+      const point = await resolveFlyRouteWaypoint(wp, options.provider, refPoint);
+      resolved.push(point);
+      if (point) refPoint = point;
+    }
+    const failIndex = resolved.findIndex(p => !p);
+    if (failIndex >= 0) {
+      const wp = list[failIndex] || {};
+      return { ok: false, reason: "waypointFailed", index: failIndex, query: String(wp.query || wp.feature || wp.name || failIndex + 1) };
+    }
+    // 総距離から既定の地上高・速度を決める（短距離=低空低速、長距離=高空高速）。
+    // options.agl / options.speed の明示指定があればそちらを優先する
+    const totalDistance = flyPathRouteDistance(resolved.map(r => [r.longitude, r.latitude]));
+    const autoProfile = flyRouteAutoProfile(totalDistance);
+    const defaultAgl = Number.isFinite(Number(options.agl)) ? Number(options.agl) : autoProfile.agl;
+    const speed = Number.isFinite(Number(options.speed)) ? Number(options.speed) : autoProfile.speed;
+    for (const point of resolved) if (!Number.isFinite(point.agl)) point.agl = defaultAgl;
+    let spacing = Number.isFinite(Number(options.spacing)) && Number(options.spacing) > 0 ? Number(options.spacing) : 200;
+    let dense = densifyFlyRoutePoints(resolved, spacing);
+    if (dense.length > 800) {
+      spacing = spacing * dense.length / 800;
+      dense = densifyFlyRoutePoints(resolved, spacing);
+    }
+    const terrain = await sampleRouteTerrain(dense, totalDistance);
+    // 欠損点は両隣の有効値を線形補間して埋める（隣接値コピーだと高度が階段状に変化するため）。
+    // 先頭の欠損は最寄りの有効値、末尾の欠損も同様にする
+    {
+      const validIdx = [];
+      for (let i = 0; i < terrain.length; i++) if (Number.isFinite(terrain[i])) validIdx.push(i);
+      for (let k = 0; k + 1 < validIdx.length; k++) {
+        const a = validIdx[k];
+        const b = validIdx[k + 1];
+        for (let i = a + 1; i < b; i++) {
+          terrain[i] = terrain[a] + (terrain[b] - terrain[a]) * (i - a) / (b - a);
+        }
+      }
+      if (validIdx.length) {
+        for (let i = 0; i < validIdx[0]; i++) terrain[i] = terrain[validIdx[0]];
+        for (let i = validIdx[validIdx.length - 1] + 1; i < terrain.length; i++) terrain[i] = terrain[validIdx[validIdx.length - 1]];
+      }
+    }
+    const msl = terrain.some(h => Number.isFinite(h));
+    const coordinates = dense.map((p, i) => {
+      const alt = msl ? (Number.isFinite(terrain[i]) ? terrain[i] : 0) + p.agl : p.agl;
+      return [Number(p.longitude.toFixed(6)), Number(p.latitude.toFixed(6)), Math.round(alt * 10) / 10];
+    });
+    const title = String(options.name || "").trim() || `${resolved[0].label}→${resolved[resolved.length - 1].label}`;
+    const geojson = {
+      type: "Feature",
+      properties: {
+        heightReference: msl ? "MSL" : "Terrain",
+        heightOffset: 0,
+        source: "flyRoute",
+        agl: defaultAgl,
+        waypoints: resolved.map(r => ({ label: r.label, latitude: r.latitude, longitude: r.longitude })),
+      },
+      geometry: { type: "LineString", coordinates },
+    };
+    const added = await window.kasugaiApi.addFlyPath(title, geojson, {
+      speed,
+      height: options.height,
+      pitch: Number.isFinite(Number(options.pitch)) ? Number(options.pitch) : -10,
+      loop: options.loop,
+      view: options.view,
+    });
+    if (!added?.ok) return { ok: false, reason: "addFailed" };
+    if (options.autoplay !== false) window.kasugaiApi.playFlyPath(added.name);
+    return {
+      ok: true,
+      name: added.name,
+      distance: Math.round(totalDistance),
+      points: coordinates.length,
+      terrainSampled: msl,
+      agl: defaultAgl,
+      speed,
+      waypoints: resolved.map(r => ({ label: r.label, latitude: r.latitude, longitude: r.longitude })),
+    };
   },
   listProjects() {
     const select = document.querySelector("#project-select");
@@ -8886,6 +9280,22 @@ const CHAT_TOOLS = [{
       parameters: { type: "OBJECT", properties: {} },
     },
     {
+      name: "setFlySettings",
+      description: "フライパスの速度・高度・ピッチ等を変更する。name省略時は再生中（なければ選択中）のルートが対象。「もっと速く/ゆっくり」「高度を上げて」等に使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "フライパス名(省略時は再生中/選択中のルート)" },
+          speed: { type: "NUMBER", description: "走行速度(km/h)" },
+          agl: { type: "NUMBER", description: "地上高の目標値(m)。地形に追従したままルート全体の地上高を変える。「地上50mで飛んで」等はこちら" },
+          height: { type: "NUMBER", description: "カメラの高さオフセット(m・ルート高度からの相対値。絶対的な地上高を変えたい場合はaglを使う)" },
+          pitch: { type: "NUMBER", description: "カメラピッチ(度・-85〜0)" },
+          loop: { type: "BOOLEAN", description: "ループ再生" },
+          view: { type: "STRING", description: "視点: camera(一人称)/center(ルート中心俯瞰)" },
+        },
+      },
+    },
+    {
       name: "addFlyPath",
       description: "GeoJSONのLineStringから飛行ルート(フライパス)を作成する。描画ルートとして保存され、listFlyPathsで確認・playFlyPathで再生できる。「○○を巡るルートを作って」「このルートで飛んで」等に使う",
       parameters: {
@@ -8893,13 +9303,48 @@ const CHAT_TOOLS = [{
         properties: {
           name: { type: "STRING", description: "ルート名" },
           geojson: { type: "OBJECT", description: "LineStringまたはMultiLineStringを含むGeoJSON(FeatureCollection/Feature/ジオメトリいずれも可)。座標は[経度,緯度,高度(省略可)]" },
-          speed: { type: "NUMBER", description: "走行速度(m/s・省略時30)" },
+          speed: { type: "NUMBER", description: "走行速度(km/h・省略時はルート総距離から自動設定: 80〜2000)" },
           height: { type: "NUMBER", description: "カメラの高さオフセット(m・省略時0)" },
           pitch: { type: "NUMBER", description: "カメラピッチ(度・省略時-10)" },
           loop: { type: "BOOLEAN", description: "ループ再生(省略時false)" },
           view: { type: "STRING", description: "視点: camera(一人称・既定)/center(ルート中心俯瞰)" },
         },
         required: ["name", "geojson"],
+      },
+    },
+    {
+      name: "flyRoute",
+      description: "地点A→B(C経由等)の飛行ルートを自動生成してFlyモードで再生する。waypointsに座標・地名(query)・読込済み地物名(feature)を混在指定でき、地名は自動でジオコーディングされる。経由地間は直線補間し、地形標高をサンプリングして山岳部でも埋まらない高度を各点に付与する。「AからBまで飛んで」「Cを経由して」等に使う。addFlyPath+playFlyPathの高レベル版",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          waypoints: {
+            type: "ARRAY",
+            description: "経由地の配列(2件以上・順に飛行)。各要素は {latitude,longitude,height?} ・ {query:\"地名・住所\"} ・ {feature:\"読込済み地物の属性値\"} のいずれか。heightはその地点の地上高(m)",
+            items: {
+              type: "OBJECT",
+              properties: {
+                latitude: { type: "NUMBER" },
+                longitude: { type: "NUMBER" },
+                height: { type: "NUMBER", description: "その地点の地上高(m)" },
+                query: { type: "STRING", description: "地名・住所・施設名(ジオコーディング)" },
+                feature: { type: "STRING", description: "読込済みベクトル地物の属性値(vectorSearch)" },
+                name: { type: "STRING", description: "地点名(座標指定時のラベル、またはqueryの代替)" },
+              },
+            },
+          },
+          name: { type: "STRING", description: "ルート名(省略時は「起点→終点」)" },
+          agl: { type: "NUMBER", description: "各地点の既定地上高(m・省略時は総距離から自動: 短距離50m〜長距離10000m)" },
+          spacing: { type: "NUMBER", description: "ルート補間間隔(m・省略時200)" },
+          speed: { type: "NUMBER", description: "走行速度(km/h・省略時は総距離から自動: 短距離80〜長距離2000・戦闘機並み)" },
+          height: { type: "NUMBER", description: "カメラ高さオフセット(m・省略時0)" },
+          pitch: { type: "NUMBER", description: "カメラピッチ(度・省略時-10)" },
+          loop: { type: "BOOLEAN", description: "ループ再生(省略時false)" },
+          view: { type: "STRING", description: "視点: camera(一人称・既定)/center(ルート中心俯瞰)" },
+          autoplay: { type: "BOOLEAN", description: "生成後すぐ再生(省略時true)" },
+          provider: { type: "STRING", description: "地名解決プロバイダ(gsi/google/places/yahoo・省略時は検索タブの選択)" },
+        },
+        required: ["waypoints"],
       },
     },
     {
@@ -9478,9 +9923,24 @@ async function executeChatTool(name, args = {}) {
     return { ok, message: ok ? undefined : t("tool.flyPathNotFound", { name: args.name }) };
   }
   if (name === "stopFly") return { ok: window.kasugaiApi.stopFly() };
+  if (name === "setFlySettings") {
+    const result = await window.kasugaiApi.setFlySettings(args.name, { speed: args.speed, agl: args.agl, height: args.height, pitch: args.pitch, loop: args.loop, view: args.view });
+    return result?.ok ? result : { ok: false, message: t("tool.flyPathNotFound", { name: args.name || "(none)" }) };
+  }
   if (name === "addFlyPath") {
     const result = await window.kasugaiApi.addFlyPath(args.name, args.geojson, { speed: args.speed, height: args.height, pitch: args.pitch, loop: args.loop, view: args.view });
     return result?.ok ? { ok: true, name: result.name } : { ok: false, message: t("tool.invalidGeoJson") };
+  }
+  if (name === "flyRoute") {
+    const result = await window.kasugaiApi.flyRoute(args.waypoints, {
+      name: args.name, agl: args.agl, spacing: args.spacing, speed: args.speed,
+      height: args.height, pitch: args.pitch, loop: args.loop, view: args.view,
+      autoplay: args.autoplay, provider: args.provider,
+    });
+    if (result?.ok) return result;
+    if (result?.reason === "tooFewWaypoints") return { ok: false, message: t("tool.flyRouteTooFew") };
+    if (result?.reason === "waypointFailed") return { ok: false, message: t("tool.flyRouteWaypointFailed", { index: result.index + 1, query: result.query }) };
+    return { ok: false, message: t("tool.invalidGeoJson") };
   }
   if (name === "vectorSearch") return { results: window.kasugaiApi.vectorSearch(args.query) };
   if (name === "getShareUrl") return { url: window.kasugaiApi.getShareUrl() };
@@ -9827,8 +10287,50 @@ async function verifyAgentConnection(endpoint) {
   }
 }
 
+// ブリッジ系プロバイダの実接続テスト。/health 疎通に留めず /models を実際に取得する。
+// ハブはこのリクエストで子ブリッジを遅延起動し、Devin は acp 認証（必要なら
+// ブラウザ認証フロー）まで進むため「実際にAIが動くか」がここで確定する。
+// コールドスタート/acp 起動中は pending/error が返るため一定間隔でリトライする。
+// token は providerVerifyToken — 確認中にプロバイダが切り替わったら中断する
+async function verifyBridgeProviderConnection(v, token) {
+  // 疎通するエンドポイントを決める。保存済みが死んでいても他候補が生きていれば
+  // そちらへ自己修復する（healBridgeEndpoint と同じ効果）
+  let endpoint = "";
+  for (const candidate of bridgeCandidates(v)) {
+    if (await pingBridge(candidate, v)) { endpoint = candidate; break; }
+    if (providerVerifyToken !== token || getChatProvider() !== v) return false;
+  }
+  if (!endpoint) return false;
+  try {
+    const saved = (localStorage.getItem("agentEndpoint") || "").trim();
+    if (saved !== endpoint) {
+      localStorage.setItem("agentEndpoint", endpoint);
+      const key = PROVIDER_ENDPOINT_KEYS[v];
+      if (key) localStorage.setItem(key, endpoint);
+    }
+  } catch (e) {}
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (providerVerifyToken !== token || getChatProvider() !== v) return false;
+    try {
+      const u = new URL("/models", endpoint);
+      u.searchParams.set("provider", v);
+      const r = await fetch(u.href, {
+        signal: AbortSignal.timeout(45000),
+        headers: v === "devin" ? devinAuthHeaders(endpoint) : undefined,
+      });
+      const d = await r.json().catch(() => ({}));
+      if (d?.model) detectedBridgeModels[v] = d.model;
+      if (d?.error) providerConnDetail[v] = String(d.error);
+      if (r.ok && !d?.error && !d?.pending) { providerConnDetail[v] = ""; return true; }
+    } catch (e) { /* リトライ */ }
+    if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 8000));
+  }
+  return false;
+}
+
 // 選択したプロバイダに実際に接続できるか疎通確認し、結果をヘッダー表示へ反映する。
-// ブリッジ系は /health 生存確認のうえ /models で実接続テスト、
+// ブリッジ系は /health 生存確認のうえ /models で実接続テスト（ブリッジ起動・
+// Devin acp 認証まで通す — 軽い疎通だけでは実際にAIが動かないケースを拾えない）、
 // 外部エージェントはエンドポイントへの実 fetch、
 // API 系は設定済みのみ選択肢に出るため即 ok とみなす
 let providerVerifyToken = 0;
@@ -9841,14 +10343,7 @@ async function verifyChatProviderConnection(v) {
   try {
     let ok = true;
     if (BRIDGE_PROVIDERS.includes(v)) {
-      // チャット側は軽い接続確認のみ — 実接続テスト（/models での CLI/SDK 接続・
-      // モデル一覧取得・Devin の acp ウォームアップ）は設定画面側に集約する。
-      // ここで /models を叩くと、選択しただけで devin acp 起動やブラウザ認証まで
-      // 発火してしまい重い（高速化のため疎通だけ見る）
-      ok = false;
-      for (const endpoint of bridgeCandidates(v)) {
-        if (await pingBridge(endpoint, v)) { ok = true; break; }
-      }
+      ok = await verifyBridgeProviderConnection(v, token);
     } else if (v === "agent") {
       let endpoint = "";
       try { endpoint = (localStorage.getItem("agentEndpoint") || "").trim() || defaultAgentEndpoint(); } catch (e) {}
@@ -10170,14 +10665,17 @@ function setupChatPanel() {
     } catch (e) {}
   };
 
-  const addMessage = (role, text, { persist = true } = {}) => {
+  const addMessage = (role, text, { persist = true, anchor = null } = {}) => {
     const div = document.createElement("div");
     div.className = `chat-message ${role}`;
     // assistant の応答は Markdown（見出し・箇条書き・リンク・コード等）として描画。
     // renderMarkdownLite は内部で escapeHtml 済みのため安全
     if (role === "assistant") div.innerHTML = renderMarkdownLite(text);
     else div.textContent = text;
-    messages.append(div);
+    // anchor（質問直下の「…」プレースホルダ）が有効ならその直前に挿入する。
+    // キュー処理中に後続の質問が既に並んでいても回答は質問の直下に収まる
+    if (anchor && anchor.parentNode === messages) messages.insertBefore(div, anchor);
+    else messages.append(div);
     messages.scrollTop = messages.scrollHeight;
     if (persist) saveChatLog(role, text);
   };
@@ -10212,13 +10710,25 @@ function setupChatPanel() {
     addMessage("system", t("chat.cleared"), { persist: false });
   });
 
+  // 連続送信されたメッセージはキューで1件ずつ処理する。
+  // 並行実行すると全ターンが共有 history を同時に変更して会話順が壊れ、
+  // 前の質問への回答が次の質問の下に表示される（表示ずれ）ため逐次化する。
+  // 「…」プレースホルダは送信時点で質問の直下に置き、回答はその位置に挿入する
+  let chatChain = Promise.resolve();
   form?.addEventListener("submit", event => {
     event.preventDefault();
     const text = input.value.trim();
     if (!text) return;
     input.value = "";
     addMessage("user", text);
-    void respondToChat(text);
+    const thinking = document.createElement("div");
+    thinking.className = "chat-message assistant";
+    thinking.textContent = "…";
+    messages.append(thinking);
+    messages.scrollTop = messages.scrollHeight;
+    chatChain = chatChain
+      .then(() => respondToChat(text, thinking))
+      .catch(() => { thinking.remove(); });
   });
 
   // 外部エージェントへメッセージを送る。
@@ -10288,34 +10798,33 @@ function setupChatPanel() {
 
   // Google APIキーが設定されていれば Gemini (function calling)、未設定ならローカルコマンドのみ。
   // "kasugai:chat" カスタムイベントを購読し detail.reply をセットすれば外部エージェントへ橋渡しできる
-  async function respondToChat(text) {
+  // thinking は送信時に質問直下へ挿入済みの「…」プレースホルダ。
+  // 応答・実行ログはその直前に挿入し、完了時に取り除く
+  async function respondToChat(text, thinking) {
+    const say = (role, msg) => addMessage(role, msg, { anchor: thinking });
     const detail = { text, reply: null };
     window.dispatchEvent(new CustomEvent("kasugai:chat", { detail }));
     if (typeof detail.reply === "string" && detail.reply) {
-      addMessage("assistant", detail.reply);
+      say("assistant", detail.reply);
+      thinking.remove();
       return;
     }
     if (text.startsWith("/")) {
       const local = await handleLocalChatCommand(text);
-      addMessage("assistant", local || t("chat.unknownCommand", { command: text }));
+      say("assistant", local || t("chat.unknownCommand", { command: text }));
+      thinking.remove();
       return;
     }
     // 外部エージェントが有効なら Gemini より優先してエンドポイントへ送信する
     if (isAgentEnabled()) {
-      const thinking = document.createElement("div");
-      thinking.className = "chat-message assistant";
-      thinking.textContent = "…";
-      messages.append(thinking);
-      messages.scrollTop = messages.scrollHeight;
       try {
         const { text: reply, executed } = await callExternalAgent(text);
-        thinking.remove();
-        executed.forEach(call => addMessage("system", t("chat.executed", { call })));
-        addMessage("assistant", reply);
+        executed.forEach(call => say("system", t("chat.executed", { call })));
+        say("assistant", reply);
       } catch (error) {
-        thinking.remove();
-        addMessage("system", t("common.error", { error: error.message }));
+        say("system", t("common.error", { error: error.message }));
       }
+      thinking.remove();
       return;
     }
     // BYO キーが無くても、バックエンドが aiProxy を通知していればサーバーキーで動く
@@ -10328,25 +10837,22 @@ function setupChatPanel() {
     if (!hasKey) {
       const local = await handleLocalChatCommand(text);
       const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : provider === "devin" ? "chat.noApiKeyDevin" : provider === "antigravity" ? "chat.noApiKeyAntigravity" : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
-      addMessage("assistant", local || t(key));
+      say("assistant", local || t(key));
+      thinking.remove();
       return;
     }
-    const thinking = document.createElement("div");
-    thinking.className = "chat-message assistant";
-    thinking.textContent = "…";
-    messages.append(thinking);
-    messages.scrollTop = messages.scrollHeight;
+    const historyBase = history.length;
     try {
       history.push({ role: "user", parts: [{ text }] });
       const { text: reply, executed } = provider === "openai" ? await callOpenAICompat(history) : await callGemini(history);
-      thinking.remove();
-      executed.forEach(call => addMessage("system", t("chat.executed", { call })));
-      addMessage("assistant", reply);
+      executed.forEach(call => say("system", t("chat.executed", { call })));
+      say("assistant", reply);
     } catch (error) {
-      thinking.remove();
-      history.pop();
-      addMessage("system", t("common.error", { error: error.message }));
+      // 途中まで積まれた user/model/関数応答の往復ごとロールバックする
+      history.length = historyBase;
+      say("system", t("common.error", { error: error.message }));
     }
+    thinking.remove();
   }
 
   // 初回案内は表示しない（API未設定時のチュートリアル表示を省略）
