@@ -321,8 +321,9 @@ class AcpClient {
       } catch (e) {
         // authenticate は資格の受理後の後段処理（team settings 取得等）でも
         // 失敗し得る（個人プランのアカウントで Permission denied になる等）。
-        // 資格自体が生きている可能性があるため session/new まで進めてみて、
-        // 駄目ならそこで出たエラーを報告する
+        // 資格自体が生きている可能性があるため session/new まで進めてみる。
+        // 失敗時に根本原因を報告できるようエラーを保持しておく
+        this.authError = e;
         console.warn(`[bridge] authenticate に失敗しましたが継続します: ${e.message}`);
       }
     }
@@ -395,7 +396,16 @@ async function getSession(project, decls, model) {
       headers: [],
     }],
   };
-  const res = await c.rpc("session/new", params, 60000);
+  let res;
+  try {
+    res = await c.rpc("session/new", params, 60000);
+  } catch (e) {
+    // authenticate 失敗を継続した経路でここが失敗した場合、根本原因
+    // （認証エラー）を優先して報告する（"not authenticated" だけでは
+    // 個人プラン拒否等の実原因が見えないため）
+    if (c.authError) throw new Error(`${e.message}（認証時エラー: ${c.authError.message}）`);
+    throw e;
+  }
   const sessionId = res?.sessionId;
   if (!sessionId) throw new Error("session/new returned no sessionId");
   entry = { sessionId, toolsSig: sig, seeded: false, model: wantModel || "" };
