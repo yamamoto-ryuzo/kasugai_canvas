@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.24.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.25.0</span></h1>
       <p>AI ツール仕様 — 内蔵AIが制御できる全52ツールの定義</p>
     </header>
     <main>
@@ -67,8 +67,8 @@
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
-            <tr><td><code>listBasemaps</code></td><td>なし</td><td>選択可能なベースマップ一覧と現在の選択を取得</td></tr>
-            <tr><td><code>setBasemap</code></td><td>name*</td><td>ベースマップを名前または ID で切替</td></tr>
+            <tr><td><code>listBasemaps</code></td><td>なし</td><td>選択可能なベースマップ一覧と現在の選択を取得（「ベースマップなし」<code>none</code>・「ベースマップ透明」<code>transparent</code> の特殊モードを含む）</td></tr>
+            <tr><td><code>setBasemap</code></td><td>name*</td><td>ベースマップを名前または ID で切替。<code>none</code>=ベースマップなし、<code>transparent</code>=ベースマップ透明（地表・大気・背景を透明に）も指定可</td></tr>
             <tr><td><code>setTerrain</code></td><td>enabled*</td><td>地形（DEM）表示の ON/OFF</td></tr>
             <tr><td><code>setEffect</code></td><td>name*, enabled*</td><td>表示効果の ON/OFF。name は lighting（地形照明）/ translucency（地下透過）/ fog（霧）/ atmosphere（大気）/ shadows（影）/ depthTest（地形深度テスト）</td></tr>
             <tr><td><code>setUnderground</code></td><td>transparency, dive</td><td>地下表示の設定。transparency は地表の透過率 0〜1、dive は地下への移動許可</td></tr>

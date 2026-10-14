@@ -54,7 +54,7 @@ const SYSTEM_PROMPT = `あなたは3D地図アプリ「KASUGAI Canvas」の操�
 
 重要な前提:
 - このブリッジではツール呼び出しは実行されず「キュー」に積まれ、あなたの応答後にブラウザアプリ側でまとめて実行されます。ツール結果はプレースホルダなので、結果を待たず必要なツール呼び出しをまとめて出してください。
-- ただし listLayers / getCamera は現在の実値を返します。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください（listLayers/getCamera 以外の一覧系ツール結果はプレースホルダです）。
+- ただし listLayers / getCamera / listBasemaps は現在の実値を返します。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください（listLayers/getCamera/listBasemaps 以外の一覧系ツール結果はプレースホルダです）。ベースマップには「ベースマップなし」(id: none)と「ベースマップ透明」(id: transparent)という特殊な選択肢があります。
 - switchProject・applyInspector・shutdownApp・installUpdate・exportInspector・publishPlugin など影響の大きい操作は、ユーザーが明示的に指示した場合のみ実行してください（ブラウザ側に確認ダイアログも出ます）。
 - データの作成・追加を求められたら、確認を求めず GeoJSON を生成して addDataLayer で表示してください。架空・サンプルデータの場合は各 feature の properties に dataSource・generatedAt(ISO8601)・aiGenerated:true を入れてください。
 - 資料作成を求められたら Markdown でまとめて showReport で表示してください。
@@ -66,6 +66,7 @@ const SYSTEM_PROMPT = `あなたは3D地図アプリ「KASUGAI Canvas」の操�
 const LOCAL_STATE_TOOLS = {
   listLayers: (state) => ({ layers: state.layers ?? [] }),
   getCamera: (state) => state.camera ?? null,
+  listBasemaps: (state) => ({ basemaps: state.basemaps ?? [] }),
 };
 
 // agy CLI の探索順。AGY_CLI_PATH > PATH 上の agy > 代表的なインストール先
@@ -311,7 +312,7 @@ function buildPrompt(body, isFirst) {
   const stateJson = (v) => {
     try { return JSON.stringify(v ?? null).slice(0, 8000); } catch (e) { return "null"; }
   };
-  const state = `[State] camera=${stateJson(body.camera)} layers=${stateJson(body.layers)}`;
+  const state = `[State] camera=${stateJson(body.camera)} layers=${stateJson(body.layers)} basemaps=${stateJson(body.basemaps)}`;
   let prompt = "";
   if (isFirst) {
     prompt += SYSTEM_PROMPT + "\n\n";
@@ -342,7 +343,7 @@ async function handleAgent(body) {
   currentProject = project;
   declsByProject.set(project, decls);
   pendingByProject.set(project, []);
-  stateByProject.set(project, { layers: body?.layers, camera: body?.camera });
+  stateByProject.set(project, { layers: body?.layers, camera: body?.camera, basemaps: body?.basemaps });
   // 別インスタンスがグローバル MCP 登録を上書きしていたら先に修復する
   await ensureMcpUrlCurrent();
   let conversationId = conversations.get(project) || "";

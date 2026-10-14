@@ -3608,10 +3608,19 @@ function applyInspector(text) {
   layers.splice(0, layers.length);
   basemaps.splice(0, basemaps.length);
   layerOrder = [];
+  // 飛行中の再適用でもルート再生を継続できるよう、現在のルート・位置・再生状態を退避する
+  const flyResume = flyPath && flyPathCoords?.length
+    ? { title: flyPath.title, distance: flyPathDistance, active: flyPathActive }
+    : null;
   flyPaths.splice(0, flyPaths.length);
   flyPath = null;
+  flyPathProperties = {};
   flyPathCoords = null;
+  flyPathCumulativeDistances = [];
+  flyPathDistance = 0;
+  flyPathTargetDistance = null;
   flyPathLinePositions = [];
+  if (flyPathRafId !== null) { cancelAnimationFrame(flyPathRafId); flyPathRafId = null; }
   if (flyPathEntity) { viewer.entities.remove(flyPathEntity); flyPathEntity = null; }
   flyPathActive = false;
   flyPathProgress = 0;
@@ -3975,6 +3984,19 @@ function applyInspector(text) {
   refreshLayers();
   updateSearchProvider();
   void applyInspectorCloud(inspectorCloudSpec);
+  if (flyResume) {
+    // 描画ルートは IndexedDB から非同期（直列キュー）で再登録される。
+    // まず手動ウォークへ即座にフォールバックして入力を解放しつつ、同一タイトルの
+    // ルートが再登録されたら位置・再生状態ごと復帰する（登録タイミングに依存しないようポーリング）
+    void (async () => {
+      let restored = false;
+      for (let i = 0; i < 50 && !restored; i++) {
+        uiHooks.resumeManualWalk?.();
+        restored = await Promise.resolve(uiHooks.resumeFlyPathByTitle?.(flyResume.title, flyResume.distance, flyResume.active) ?? false).catch(() => false);
+        if (!restored) await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    })();
+  }
 }
 
 // inspector の cloud: 行を実行する。/api/cloud/* はローカルサーバー版のみ
@@ -5162,6 +5184,41 @@ function setupEvents() {
         await window.kasugaiApi.saveDataFile(entry.drawn.name, JSON.stringify(geojson));
       }
     } catch (e) { /* 永続化失敗は無視（メモリ上の設定は有効） */ }
+  };
+  // applyInspector でリセットされたルートをタイトル一致で復帰する。
+  // 位置と再生状態も戻す（設定変更で飛行が中断しないようにするため）
+  uiHooks.resumeFlyPathByTitle = async (title, distance, wasActive) => {
+    if (!walkModeActive || flyPath) return false;
+    const index = flyPaths.findIndex(path => path.title === title);
+    if (index < 0) return false;
+    const select = document.querySelector("#fly-path-select");
+    if (select) {
+      renderFlyPathSelect();
+      select.value = String(index);
+    }
+    updateFlyPathDeleteButton();
+    if (walkRafId !== null) {
+      cancelAnimationFrame(walkRafId);
+      walkRafId = null;
+    }
+    await startFlyPath(index);
+    if (!flyPathCoords || !flyPathCoords.length) {
+      // 読み込み失敗時は flyPath が選択済みのまま残るため、再試行・フォールバックが通るよう戻す
+      flyPath = null;
+      return false;
+    }
+    const total = flyPathCumulativeDistances[flyPathCumulativeDistances.length - 1] || 0;
+    flyPathDistance = Math.max(0, Math.min(distance || 0, total));
+    updateFlyPathCamera(flyPathDistance);
+    updateFlyPathVisibilityButton();
+    if (wasActive) startFlyPathLoopIfNeeded();
+    return true;
+  };
+  // ルート復帰に失敗した場合、手動ウォークとして入力を受け付けられる状態に戻す
+  uiHooks.resumeManualWalk = () => {
+    if (!walkModeActive || flyPath || walkRafId !== null) return;
+    walkLastTime = performance.now();
+    walkRafId = requestAnimationFrame(walkLoop);
   };
 
   modeSelect.addEventListener("click", () => {
@@ -8303,15 +8360,32 @@ window.kasugaiApi = {
     return focusLayer(layer);
   },
   listBasemaps() {
-    return basemaps.map(basemap => ({ id: basemap.id, title: basemap.title, selected: basemap === selectedBasemap }));
+    // 「ベースマップなし」(selectedBasemap=null)と「ベースマップ透明」(globeHidden=true)は
+    // basemaps 配列に無い選択肢のため疑似項目として先頭に載せる（AIやコマンドからも選べるように）
+    return [
+      { id: "none", title: t("basemap.none"), selected: !globeHidden && !selectedBasemap, note: "地表は通常描画・背景地図タイルのみ非表示" },
+      { id: "transparent", title: t("basemap.transparent"), selected: globeHidden, note: "地表・大気・背景をすべて透明にし、ドレープ画像だけを残す" },
+      ...basemaps.map(basemap => ({ id: basemap.id, title: basemap.title, selected: basemap === selectedBasemap })),
+    ];
   },
   setBasemap(idOrTitle) {
-    const basemap = basemaps.find(item => item.id === idOrTitle || item.title === idOrTitle);
-    if (!basemap) return false;
-    selectedBasemap = basemap;
-    globeHidden = false;
+    const name = String(idOrTitle ?? "").trim();
+    // 疑似項目の解釈: 内部IDと表示名（日本語/英語）の両方を受け付ける
+    if (/^(none|なし|ベースマップなし)$/i.test(name) || name === t("basemap.none")) {
+      globeHidden = false;
+      selectedBasemap = null;
+    } else if (/^(transparent|hide|__hide_globe__|透明|ベースマップ透明)$/i.test(name) || name === t("basemap.transparent")) {
+      globeHidden = true;
+      selectedBasemap = null;
+    } else {
+      const basemap = basemaps.find(item => item.id === name || item.title === name);
+      if (!basemap) return false;
+      globeHidden = false;
+      selectedBasemap = basemap;
+    }
     const select = document.querySelector("#basemap-select");
-    if (select) select.value = basemap.id;
+    if (select) select.value = globeHidden ? "__hide_globe__" : (selectedBasemap?.id || "");
+    applyGlobeVisibility();
     updateMapAttribution();
     refreshLayers();
     return true;
@@ -9161,11 +9235,11 @@ const CHAT_TOOLS = [{
     },
     {
       name: "setBasemap",
-      description: "ベースマップ(背景地図)を名前またはIDで切り替える",
+      description: "ベースマップ(背景地図)を名前またはIDで切り替える。特殊値: \"none\"=ベースマップなし(地表は通常描画・背景地図タイルのみ非表示)、\"transparent\"=ベースマップ透明(地表・大気・背景を透明にしてドレープ画像だけ残す)",
       parameters: {
         type: "OBJECT",
         properties: {
-          name: { type: "STRING", description: "ベースマップ名またはID(listBasemapsで確認)" },
+          name: { type: "STRING", description: "ベースマップ名またはID(listBasemapsで確認)。none=ベースマップなし / transparent=ベースマップ透明 も指定可" },
         },
         required: ["name"],
       },
@@ -10754,6 +10828,9 @@ function setupChatPanel() {
       project: currentProjectId || "default",
       camera: window.kasugaiApi.getCamera(),
       layers: window.kasugaiApi.listLayers(),
+      // ブリッジ側のローカル状態ツール（listBasemaps 等）が実値を返せるよう
+      // 疑似項目（ベースマップなし/透明）を含む一覧を同梱する
+      basemaps: window.kasugaiApi.listBasemaps(),
       history: loadChatLog().slice(-20),
       // 外部エージェントがツール一覧を必要とする場合のため宣言を同梱する
       // （Copilot ブリッジ等が functionDeclarations をそのまま登録できる）

@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.25.0] - 2026-10-15
+
+### Added
+
+- **AI が「ベースマップなし」「ベースマップ透明」を選択可能に** — `listBasemaps` が疑似項目（`none`／`transparent`）を一覧に含めるようになり、`setBasemap` が両モードを受け付ける。「ベースマップを透明にして」「ベースマップをなしにして」等の指示が正しく動作する。`setBasemap` は内部IDと表示名（日本語・英語）の両方を解釈する
+
+### Fixed
+
+- **飛行中のレイヤ設定変更（インスペクター「登録」）で飛行が死ぬ問題を修正** — `applyInspector` がルート・再生状態・カメラ駆動ループを無条件リセットし、`walkMode` のまま入力も受け付けないゾンビ状態になっていた。適用前にルートのタイトル・距離・再生状態を退避し、IndexedDB からの非同期再登録後に位置・再生を復帰する。ルートが削除済み・読込失敗の場合は手動ウォークへフォールバックし、復帰待ちの間もキー入力を即座に解放する
+- **`/basemap` コマンド・`setBasemap` API で「ベースマップなし」「ベースマップ透明」を選べなかった問題を修正**（上記 Added と同実装）
+- **AI ブリッジが `listBasemaps` に実値を返さなかった問題を修正** — Copilot/Devin/Antigravity ブリッジは `listLayers`/`getCamera` のみ実値応答で、一覧系はプレースホルダだったため、AI は「曖昧なら listBasemaps で確認」と指示されながら実際の選択肢を一度も見られなかった。3 ブリッジとも `listBasemaps` を実値応答（`LOCAL_STATE_TOOLS`）に追加し、リクエストの `[State]` にベースマップ一覧を同梱。システムプロンプトにも特殊モードを明記
+
 ## [5.24.0] - 2026-10-14
 
 ### Added

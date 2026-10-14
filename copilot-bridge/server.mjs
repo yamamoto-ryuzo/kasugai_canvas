@@ -36,18 +36,19 @@ const SYSTEM_PROMPT = `あなたは3D地図アプリ「KASUGAI Canvas」の操�
 
 重要な前提:
 - このブリッジではツール呼び出しは実行されず「キュー」に積まれ、あなたの応答後にブラウザアプリ側でまとめて実行されます。ツール結果はプレースホルダなので、結果を待たず必要なツール呼び出しをまとめて出してください。
-- ただし listLayers / getCamera は現在の実値を返します。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください（listLayers/getCamera 以外の一覧系ツール結果はプレースホルダです）。
+- ただし listLayers / getCamera / listBasemaps は現在の実値を返します。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください（listLayers/getCamera/listBasemaps 以外の一覧系ツール結果はプレースホルダです）。ベースマップには「ベースマップなし」(id: none)と「ベースマップ透明」(id: transparent)という特殊な選択肢があります。
 - switchProject・applyInspector・shutdownApp・installUpdate・exportInspector・publishPlugin など影響の大きい操作は、ユーザーが明示的に指示した場合のみ実行してください（ブラウザ側に確認ダイアログも出ます）。
 - データの作成・追加を求められたら、確認を求めず GeoJSON を生成して addDataLayer で表示してください。架空・サンプルデータの場合は各 feature の properties に dataSource・generatedAt(ISO8601)・aiGenerated:true を入れてください。
 - 資料作成を求められたら Markdown でまとめて showReport で表示してください。
 - ファイル操作・シェルなどのビルトインツールは使わないでください。地図操作は登録ツールのみで行います。
 - 回答は日本語で簡潔に。`;
 
-// リクエストの state（camera/layers）から実値を返せる参照系ツール。
+// リクエストの state（camera/layers/basemaps）から実値を返せる参照系ツール。
 // これらがプレースホルダだと、Copilot がレイヤ名を確認してから操作する流れが破綻するため実値を返す
 const LOCAL_STATE_TOOLS = {
   listLayers: (state) => ({ layers: state.layers ?? [] }),
   getCamera: (state) => state.camera ?? null,
+  listBasemaps: (state) => ({ basemaps: state.basemaps ?? [] }),
 };
 
 // Gemini形式スキーマ（type が大文字）を JSON Schema（小文字）へ変換する
@@ -176,7 +177,7 @@ function buildPrompt(body, entry) {
   const stateJson = (v) => {
     try { return JSON.stringify(v ?? null).slice(0, 8000); } catch (e) { return "null"; }
   };
-  const state = `[State] camera=${stateJson(body.camera)} layers=${stateJson(body.layers)}`;
+  const state = `[State] camera=${stateJson(body.camera)} layers=${stateJson(body.layers)} basemaps=${stateJson(body.basemaps)}`;
   if (!entry.seeded && Array.isArray(body.history) && body.history.length) {
     const lines = body.history.slice(-20).map(h => `${h.role}: ${String(h.text ?? "").slice(0, 2000)}`).join("\n");
     return `[Prior chat log]\n${lines}\n\n${state}\n\n${body.message}`;
@@ -195,7 +196,7 @@ async function handleAgent(body) {
   const project = typeof body?.project === "string" && body.project ? body.project : "default";
   const entry = await getSession(project, decls, requestModel(body));
   entry.ctx.pending = [];
-  entry.ctx.state = { layers: body?.layers, camera: body?.camera };
+  entry.ctx.state = { layers: body?.layers, camera: body?.camera, basemaps: body?.basemaps };
   const msg = await entry.session.sendAndWait({ prompt: buildPrompt(body, entry) }, SEND_TIMEOUT_MS);
   entry.seeded = true;
   const reply = typeof msg?.data?.content === "string" && msg.data.content ? msg.data.content : "";
