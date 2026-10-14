@@ -307,15 +307,23 @@ class AcpClient {
     }, 30000);
     this.authMethods = Array.isArray(init?.authMethods) ? init.authMethods : [];
     if (this.authMethods.length) {
-      if (configuredApiKey) {
-        await this.rpc("authenticate", {
-          methodId: this.authMethods[0].id,
-          _meta: { api_key: configuredApiKey },
-        }, 30000);
-      } else {
-        // ブラウザ PKCE フロー（利用者のマシンでブラウザが開く）。
-        // フロー完了まで時間がかかることがあるため長めに待つ
-        await this.rpc("authenticate", { methodId: this.authMethods[0].id }, 180000);
+      try {
+        if (configuredApiKey) {
+          await this.rpc("authenticate", {
+            methodId: this.authMethods[0].id,
+            _meta: { api_key: configuredApiKey },
+          }, 30000);
+        } else {
+          // ブラウザ PKCE フロー（利用者のマシンでブラウザが開く）。
+          // フロー完了まで時間がかかることがあるため長めに待つ
+          await this.rpc("authenticate", { methodId: this.authMethods[0].id }, 180000);
+        }
+      } catch (e) {
+        // authenticate は資格の受理後の後段処理（team settings 取得等）でも
+        // 失敗し得る（個人プランのアカウントで Permission denied になる等）。
+        // 資格自体が生きている可能性があるため session/new まで進めてみて、
+        // 駄目ならそこで出たエラーを報告する
+        console.warn(`[bridge] authenticate に失敗しましたが継続します: ${e.message}`);
       }
     }
     this.ready = true;
@@ -344,6 +352,10 @@ let lastWarmupError = "";
 async function getAcp() {
   if (acp && acp.ready) return acp;
   let lastErr = null;
+  // バイナリ未検出（spawn ENOENT 等）は探索ノイズなので、実際に起動できた
+  // 候補の失敗（認証エラー等）があればそちらを優先して報告する
+  let realErr = null;
+  const isSpawnErr = (e) => /spawn failed|is not running/.test(e?.message || "");
   for (const bin of devinBinCandidates()) {
     let c = null;
     try {
@@ -356,13 +368,15 @@ async function getAcp() {
       return c;
     } catch (e) {
       lastErr = e;
+      if (!isSpawnErr(e)) realErr = realErr || e;
       try { c?.child?.kill(); } catch (_) {}
     }
   }
-  const hint = configuredApiKey
-    ? "Devin APIキーが無効な可能性があります（環境変数 DEVIN_API_KEY または設定画面のキーを確認）"
-    : "devin CLI が未インストール/未ログインの可能性があります（DEVIN_CLI_PATH・DEVIN_API_KEY を確認）";
-  throw new Error(`devin acp への接続に失敗しました: ${lastErr?.message || "unknown"}。${hint}`);
+  const err = realErr || lastErr;
+  const hint = realErr
+    ? ""
+    : "devin CLI が見つかりません（DEVIN_CLI_PATH でインストール先を指定してください）";
+  throw new Error(`devin acp への接続に失敗しました: ${err?.message || "unknown"}${hint ? `。${hint}` : ""}`);
 }
 
 async function getSession(project, decls, model) {
