@@ -7600,6 +7600,33 @@ function setupVectorSearch() {
     return promise;
   }
 
+  // AI が追加するインライン GeoJSON は、地図描画用の Cesium 変換に失敗しても
+  // 属性そのものを表示できるよう、元フィーチャから一覧を構築する。
+  function buildVectorAttrWidgetRowsFromGeoJson(data) {
+    const features = data && data.type === "FeatureCollection" && Array.isArray(data.features) ? data.features : null;
+    if (!features) return false;
+    const attributes = [...new Set(features.flatMap(feature =>
+      feature && feature.properties && typeof feature.properties === "object" ? Object.keys(feature.properties) : []
+    ))].sort((a, b) => a.localeCompare(b));
+    if (!attributes.length) return false;
+    vectorAttrWidgetAttributes = attributes;
+    vectorAttrWidgetRows = features.filter(feature => feature && feature.type === "Feature").map(feature => {
+      const props = feature.properties || {};
+      const coordinates = feature.geometry && feature.geometry.type === "Point" && feature.geometry.coordinates;
+      const lng = coordinates && Number(coordinates[0]);
+      const lat = coordinates && Number(coordinates[1]);
+      return {
+        values: attributes.map(attr => {
+          const raw = props[attr];
+          return raw == null ? "" : (typeof raw === "object" ? JSON.stringify(raw) : String(raw));
+        }),
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+      };
+    });
+    return true;
+  }
+
   async function buildVectorAttrWidgetRows() {
     const requestSeq = ++vectorAttrWidgetRequestSeq;
     const isCurrent = () => requestSeq === vectorAttrWidgetRequestSeq;
@@ -7646,8 +7673,12 @@ function setupVectorSearch() {
         ds = await loadAttrWidgetDataSource(layerItem, layerDecoder);
       } catch (e) {
         if (isCurrent()) {
-          vectorAttrWidgetLoadError = true;
-          console.warn("属性一覧の読み込みに失敗しました:", layerItem.url || "", e);
+          if (layerItem.data && buildVectorAttrWidgetRowsFromGeoJson(layerItem.data)) {
+            console.warn("属性一覧をGeoJSONの元データから表示します:", layerItem.title, e);
+          } else {
+            vectorAttrWidgetLoadError = true;
+            console.warn("属性一覧の読み込みに失敗しました:", layerItem.url || "", e);
+          }
         }
       } finally {
         if (isCurrent()) vectorAttrWidgetLoading = false;
