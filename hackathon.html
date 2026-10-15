@@ -40,133 +40,64 @@
         </tbody>
       </table>
 
-      <h2 id="motivation">なぜこのシステムが必要か・誰のためのシステムか</h2>
-      <p>渋谷ミニハッカソンで痛感したのは、多くの現場で GIS が「地図を描くツール」にとどまり、「場と情報を一体化させて理解を支援する基盤」として使われていない点です。KASUGAI Canvas は、本来あるべき GIS の姿を実現することを目指します。</p>
+      <h2 id="kasugai-concept">プロジェクト概要</h2>
+      <p>KASUGAI Canvas は、CesiumJS のブラウザ GIS と Gemini を連携するアプリです。Cloud Run で静的配信・認証・Gemini API プロキシを提供し、Cloud Storage にプロジェクトとデータを保存します。Gemini が function calling で GIS ツールを選び、ブラウザ内蔵エージェントが実行します。ツールは Canvas の GIS API を通じてレイヤーや地図を操作します。自然言語の依頼を GIS 操作につなぐ構成で、審査用環境を公開しています。</p>
+      <figure>
+        <img src="images/%E3%82%B9%E3%82%AF%E3%83%AA%E3%83%BC%E3%83%B3%E3%82%B7%E3%83%A7%E3%83%83%E3%83%88%202026-10-15%20224131.png" alt="渋谷区の地図上にサンプルスポットのレイヤーを表示した KASUGAI Canvas" loading="lazy" decoding="async" style="max-width: 100%; height: auto;">
+        <figcaption>KASUGAI Canvas の画面例。渋谷区の地図上に AI 生成の架空サンプルレイヤーを表示しています。</figcaption>
+      </figure>
 
-      <h3>現場の課題（渋谷ミニハッカソンでの課題発掘）</h3>
-      <div class="features">
-        <div class="feature-card">
-          <h3>地図情報の伝わりにくさ</h3>
-          <p>「地図情報がどのようなものか、何ができるか」が相手に正しく伝わりにくい。PDF 等の資料では実際の内容が正確に伝わらない。</p>
-        </div>
-        <div class="feature-card">
-          <h3>地図と情報の分断</h3>
-          <p>地図と情報が分断されやすく、地図が資料から孤立した「作り物」として残ってしまう。本来の価値が伝わらない。</p>
-        </div>
-        <div class="feature-card">
-          <h3>空中戦・取り残され</h3>
-          <p>会議等で位置や場所に詳しくない人が取り残され、理解が深まらないまま会議が進む「空中戦」が起きる。</p>
-        </div>
-      </div>
-      <h3>現在の対応とつらい点</h3>
-      <table>
-        <thead>
-          <tr><th>段階</th><th>内容</th><th>課題</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>事前の行動</td><td>説明できる事例をあらかじめ集める</td><td>GIS 自体の理解が浅く、何を示せばよいか分からない。実例も手間で作れない</td></tr>
-          <tr><td>資料化</td><td>PDF 等にまとめる</td><td>実際の地図・空間情報の操作性や詳細が正確に伝わりにくい</td></tr>
-          <tr><td>完成時</td><td>喜ばれる</td><td>ただし、作るまでに情報の伝達・分断・空中戦が発生しやすい</td></tr>
-        </tbody>
-      </table>
-      <p><strong>対象ユーザー：</strong>GIS 導入を検討する現場担当者、GIS 専門家ではない会議参加者、位置情報で合意形成したいチーム — 本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験したい人々です。</p>
-
-      <h3>一番大事なこと：GIS で「何ができて、何が解決できるか」を先に体験する</h3>
-      <p>結局、最も重要なのは、<strong>「GIS を使うことで何ができて、どんな課題が解決できるか」を本番導入前に体験できるか</strong>ということです。GIS 導入が進まない、あるいは導入されても活用されない現場の多くは、GIS 自体の理解が不足していることが原因です。</p>
-      <p>そのためのエージェントが、Gemini モデルを使う KASUGAI Canvas のブラウザ内蔵 AI エージェントです。Gemini が function calling で操作するツールを選び、ブラウザ内蔵エージェントがそのツールを実行して GIS を操作します。</p>
+      <h2 id="motivation">課題と解決</h2>
+      <p>渋谷ミニハッカソンで、GIS が地図を描く道具にとどまり、場所と情報を一緒に見て理解や合意形成を支える活用が十分でない課題を確認しました。</p>
+      <h3>取り組んだ課題</h3>
       <ul>
-        <li><strong>体験を先に：</strong>本番データを必要とせず、サンプル・資料・GIS が連動した状態で「GIS ならではの理解」を体験</li>
-        <li><strong>理解を深める：</strong>地図と情報の一体化、レイヤーの切り替え、FlyTo・属性表示など、GIS の利点を実感</li>
-        <li><strong>正しい導入判断へ：</strong>体験を通じて「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らす</li>
+        <li>GIS で何が分かるか伝わりにくく、PDF の地図だけでは操作や詳細を共有しにくい。</li>
+        <li>地図・属性・説明資料が分断され、情報の背景や根拠を確かめにくい。</li>
+        <li>場所に不慣れな会議参加者が位置関係を理解できず、議論から取り残される。</li>
       </ul>
-
-      <h3>Gemini エージェント：目標と 3 つの機能</h3>
-      <p>Gemini モデルを使うブラウザ内蔵エージェントの<strong>目標</strong>は、利用者を<strong>正しい GIS 導入判断と課題解決へ導く</strong>ことです。Gemini が function calling でツールを選び、エージェントが Canvas の GIS API を実行して、以下 3 つの機能を実現します。</p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>自然言語からレイヤーと属性を自動構成</h3>
-          <p>「○○の資料を作って」と話すと、Gemini が必要な地図レイヤー・属性・凡例・カメラ位置を判断し、function calling で選んだツールをブラウザ内蔵エージェントが実行して構成します（実在施設の検索 <code>searchPlaces</code>・URL 指定レイヤー <code>addLayer</code>・生成 GeoJSON の <code>addDataLayer</code>）。</p>
-        </div>
-        <div class="feature-card">
-          <h3>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</h3>
-          <p>Gemini がエリア・業種・目的に応じた架空サンプルを GeoJSON で生成し、ブラウザ内蔵エージェントが GIS ツールで地図に表示します。本番データがなくても、レイヤー切り替え、FlyTo、属性表示などを通じて GIS ならではの理解を体験できます。</p>
-        </div>
-        <div class="feature-card">
-          <h3>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</h3>
-          <p>Gemini がレイヤー・属性から課題を読み取り、ブラウザ内蔵エージェントが資料作成ツール（<code>showReport</code>）を実行して、平面（地図上の状況）・内容・解決案をまとめた資料のベースを生成します。資料には GIS へのパーマリンクを付与します（<code>buildShareUrl</code>）。</p>
-        </div>
-      </div>
-      <div class="card" style="margin-top:20px;">
-        <h3>目標：正しい GIS 導入判断と課題解決へ導く</h3>
-        <p>上記 3 つの機能を通じて、利用者は本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験します。その結果、「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らし、課題解決につながります。</p>
-      </div>
-
-      <h3>Gemini エージェントの本質：資料を作る・見せる・説明する</h3>
-      <p>Gemini エージェントは、資料の基本である <strong>作る → 見せる → 説明する</strong> を自動化するエージェントです。</p>
-      <table>
-        <thead>
-          <tr><th>資料の基本</th><th>Gemini の機能</th><th>具体的な動作</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>作る</td><td>自然言語からレイヤーと属性を自動構成</td><td>「○○の資料を作って」と話すだけで、必要なレイヤー・属性・サンプルデータを生成する</td></tr>
-          <tr><td>見せる</td><td>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</td><td>地図上にサンプルを表示し、レイヤー切り替え・FlyTo・属性表示で GIS 体験を提供する</td></tr>
-          <tr><td>説明する</td><td>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</td><td>属性から課題を読み取り、平面・内容・解決案をまとめた資料を作成する</td></tr>
-        </tbody>
-      </table>
-      <p>この 3 ステップを通じて、資料は「PDF への地図貼り付け」ではなく、<strong>GIS と連動した生きた理解資料</strong>となります。そして、その体験が正しい GIS 導入判断と課題解決へ繋がります。</p>
-
-      <h3>資料のベース作成と GIS パーマリンク連携</h3>
-      <p>最も重要なのは、<strong>資料は資料として必要なものである</strong>という点です。資料は会議の進行、結論の提示、合意形成のための要約として不可欠です。Gemini エージェントは、GIS 上のレイヤー・属性から課題を読み取り、<strong>平面（地図上の状況）・内容・解決案</strong>をまとめた資料のベースを作成します。</p>
-      <p>資料に載せきれない背景・範囲・詳細は GIS 側に置き、<strong>資料にパーマリンクを載せる</strong>ことで、資料と GIS を双方向に連動させます。</p>
-      <h4>なぜパーマリンクなのか</h4>
-      <ul>
-        <li><strong>資料の要約性を維持：</strong>資料は簡潔なままで、詳細は GIS へ誘導</li>
-        <li><strong>深い理解へ誘導：</strong>「なぜこの範囲か」「背景データは何か」「周辺の状況は」などを地図上で探索可能に</li>
-        <li><strong>会議の一体感：</strong>参加者全員が同じ URL から GIS を開き、同一視点・レイヤーで議論できる</li>
-        <li><strong>判断の加速：</strong>空中戦を減らし、必要な情報に即座にアクセスすることで、より速い課題解決・意思決定を実現</li>
-      </ul>
-      <h4>想定される使い方</h4>
+      <p>説明用データや資料の準備には手間がかかり、GIS 導入前に活用イメージを共有しにくい状況です。対象は、GIS 導入を検討する現場担当者、GIS 専門家ではない会議参加者、位置情報で合意形成したいチームです。</p>
+      <h3>解決アプローチ</h3>
+      <p>Gemini が function calling でツールを選び、ブラウザ内蔵エージェントが Canvas の GIS API を操作します。</p>
       <ol>
-        <li>資料の該当部分に <code>?longitude=...&amp;latitude=...&amp;height=...&amp;pitch=...&amp;heading=...</code> 形式のパーマリンクを配置（<code>buildShareUrl</code> が生成）</li>
-        <li>会議参加者がリンクを開くと、KASUGAI Canvas が即座にその場所・視点を表示</li>
-        <li>必要に応じてレイヤーを追加・非表示・属性をクリックし、深掘りを行う</li>
-        <li>新たな視点が見つかったら、新しいパーマリンクを生成し資料にフィードバック</li>
+        <li>自然言語の依頼から地域や目的を読み取り、公開情報の検索やレイヤー追加を行う。</li>
+        <li>本番データがない場合は、架空サンプルであることを明示して地図に表示し、レイヤーや属性を見比べられるようにする。</li>
+        <li>確認できた状況と検討案を資料にまとめ、地図の視点を再現するパーマリンクで詳細情報につなぐ。根拠や限界も示す。</li>
       </ol>
-      <h4>Gemini との関係</h4>
-      <p>資料作成時に、Gemini モデルが「資料に載せるべき GIS 視点」を判断し、function calling で選んだツールをブラウザ内蔵エージェントが実行して、パーマリンク付き資料と GIS 表示を用意します。資料と GIS がお互いを補完し合うことで、会議の一体感と意思決定のスピードが向上します。</p>
+      <p>GIS の価値を導入前に体験し、必要なデータ・機能・運用を考えることで、適切な導入判断と課題解決を支援します。</p>
+      <h2 id="architecture">システムアーキテクチャ</h2>
+      <p>利用者の依頼をブラウザ内の AI が GIS 操作に変換し、Cloud Run が認証・AI 中継・保存を支えます。地図とデータはブラウザと Cloud Storage が連携して扱います。</p>
+      <ul>
+        <li><strong>AI と GIS 操作：</strong>利用者の依頼を受けたブラウザ内蔵 AI が Gemini の function calling でツールを選択。<code>executeChatTool</code> 経由で Canvas の GIS API を呼び、レイヤー・地図・資料を操作します。推論と GIS 操作はブラウザ内で行います。</li>
+        <li><strong>Gemini 接続：</strong>BYO キーがあればブラウザから Gemini API を直接呼び出します。未設定なら Cloud Run の <code>/api/gemini</code> が Secret Manager の <code>GEMINI_API_KEY</code> を注入して中継します。モデル許可リスト、1 MB 上限、レート制限、認証モードで保護し、キーはブラウザへ返しません。</li>
+        <li><strong>認証・保存：</strong>Cloud Run の FastAPI が静的配信、ID/PASS 認証、HMAC トークン発行、<code>.kasc</code>・データの保存 API を提供します。データ本体は Cloud Storage に置き、ブラウザが V4 署名付き URL で直接転送します。キーや認証情報は Secret Manager で管理します。</li>
+        <li><strong>地図表示：</strong>Maps キーはブラウザへ渡し、GCP 側の HTTP リファラと利用 API 制限で保護します。</li>
+      </ul>
+      <pre class="mermaid" aria-label="KASUGAI Canvas システムアーキテクチャ">
+flowchart TB
+  User[利用者] --> Agent
 
-      <h3>Gemini エージェントのワークフロー</h3>
-      <pre class="text"><code>自然言語での指示（「○○の資料を作って」）
-    ↓
-Gemini モデルが内容を判断し、function calling で実行する GIS ツールを選択
-    ↓
-ブラウザ内蔵エージェントがツールを実行して Canvas の GIS API でレイヤー・属性・サンプルデータを操作
-    ↓
-Gemini が属性から課題を読み取り、エージェントが資料作成・パーマリンク生成ツールを実行
-    ↓
-利用者が GIS で「何ができて、何が解決できるか」を体験
-    ↓
-GIS 理解の深化と正しい導入判断・課題解決</code></pre>
+  subgraph Browser[ブラウザ]
+    Agent[内蔵 AI エージェント]
+    Tool[executeChatTool]
+    Canvas[Canvas GIS API]
+    Agent -->|function calling| Tool -->|GIS 操作| Canvas
+  end
 
-      <h3>現在の GIS 活用とのギャップ</h3>
-      <table>
-        <thead>
-          <tr><th>目標・機能</th><th>現状の課題</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>自然言語からレイヤーと属性を自動構成</td><td>レイヤー追加・属性設定が手間で、GIS 専門家にしかできない</td></tr>
-          <tr><td>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</td><td>本番データがないと GIS 体験が作れず、会議参加者が GIS の可能性を理解できない</td></tr>
-          <tr><td>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</td><td>PDF やスライドに地図が貼られるだけで、課題と解決案が地図と結びついていない</td></tr>
-          <tr><td>目標：正しい GIS 導入判断と課題解決へ導く</td><td>GIS への理解が不足しており、導入前に「何ができるか」を体験できる環境がない</td></tr>
-        </tbody>
-      </table>
+  Agent <-->|BYO key| Gemini[Gemini API]
+  Agent <-->|キーなし：AI プロキシ| CloudRun[Cloud Run / FastAPI]
+  CloudRun <-->|サーバーキー| Gemini
+  Secrets[Secret Manager] -->|API キー・認証情報| CloudRun
 
-      <h3>Gemini の狙い</h3>
-      <p>Gemini モデルを使うブラウザ内蔵 AI エージェントは、Gemini の function calling で選ばれたツールを実行し、Canvas の GIS API を通じて上記 3 つの機能を実現します。「正しい GIS 導入判断と課題解決へ導く」ことを目指すエージェントです。「○○の資料を作って」と話すだけで、<strong>作る → 見せる → 説明する</strong> という資料作成の基本が自動化され、場と情報が一体化した GIS 体験が構築されます。</p>
-      <p>Gemini の最終目的は、<strong>利用者が本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験し、GIS への理解を深めること</strong>にあります。サンプルデータや資料×GIS 連携を通じて、正しい GIS 導入判断と課題解決を後押しします。</p>
+  Canvas <-->|認証・保存 API| CloudRun
+  CloudRun -->|署名 URL 発行| Canvas
+  Canvas <-->|署名 URL で直接転送| Storage[Cloud Storage]
+  CloudRun -->|Maps キー| Canvas
 
-
-      <h2 id="参加条件">参加条件・提出物</h2>
+      </pre>
+      <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+      </script><h2 id="参加条件">参加条件・提出物</h2>
       <h3>必須：Google Cloud アプリケーション実行プロダクト</h3>
       <ul>
         <li><strong>Cloud Run</strong> に KASUGAI Canvas をデプロイ</li>
@@ -179,15 +110,14 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
       <ul>
         <li><strong>GitHub リポジトリ：</strong><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">github.com/yamamoto-ryuzo/kasugai_canvas</a></li>
         <li><strong>デプロイ URL：</strong><a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">kasugai-canvas-nqh4tuar6a-an.a.run.app</a>（認証モード5。共有 ID/PASS でログイン。資格情報は提出フォームに記載）</li>
-        <li><strong>プロジェクト説明：</strong><a href="#kasugai-concept">本ページのプロジェクト説明</a></li>
-        <li><strong>システムアーキテクチャ図：</strong>本ページの SVG 図</li>
-        <li><strong>デモ動画：</strong>「○○の資料を作って」から GIS 体験・資料生成までを紹介する約3分の動画（制作・YouTube 公開後に URL を掲載）</li>
+        <li><strong>プロジェクト概要：</strong><a href="#kasugai-concept">本ページのプロジェクト概要</a></li>
+        <li><strong>システムアーキテクチャ：</strong><a href="#architecture">本ページの Mermaid 図</a></li>
+        <li><strong>デモ動画：</strong>ログインから GIS 画面、内蔵 AI の動作、今回できた基盤と今後の開発予定を紹介する動画（制作・公開後に URL を掲載）</li>
       </ul>
 
-      <h2 id="kasugai-concept">プロジェクト説明：KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント</h2>
-      <p><strong>KASUGAI Canvas</strong> は、ブラウザ上の 3D GIS（CesiumJS）に Gemini API の function calling を組み込んだ Agentic AI エージェント搭載アプリです。ブラウザ内蔵エージェントは Gemini を推論モデルとして使い、自然言語の指示（「○○の資料を作って」等）を受けた Gemini が function calling でチャットツールを選びます。ブラウザ内蔵エージェントがそのツールを実行し、Canvas の GIS API を通じてURL 指定のベクターレイヤー追加・AI 生成サンプル GeoJSON のレイヤー表示・地図移動（FlyTo）・Markdown/HTML 資料の生成とダウンロード・視点パーマリンクの埋め込みまでを一連の流れとして実行します。「GIS が導入前に体験できず、理解されないまま失敗する」という課題に対し、AI がサンプルデータと資料をその場で生成する体験先行型のアプローチで解決します。</p>
-      <p>バックエンドは Cloud Run（FastAPI）の1サービスに静的配信・<code>/api/gemini</code>（サーバーキー注入のプロキシ）・<code>/api/auth</code>・<code>/api/kasc</code>・<code>/api/data</code>（Cloud Storage への保存）を集約し、同一オリジンで提供します。保存データは V4 署名付き URL でブラウザ⇄Cloud Storage 間を直接転送し、Gemini キーは Secret Manager から注入されるためブラウザに露出しません。本ページに記載する機能はすべて実装済みで、審査用の公開 URL（<a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">https://kasugai-canvas-nqh4tuar6a-an.a.run.app/</a>）でそのまま確認できます。</p>
 
+
+      <h2 id="implementation-details">技術構成とデモ</h2>
       <h3 id="参加条件対応">参加条件との対応</h3>
       <p>本ハッカソンの参加条件（必須プロダクト・必須 AI 技術・提出物）に対し、KASUGAI Canvas は以下のように対応します。</p>
       <table>
@@ -196,16 +126,16 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
         </thead>
         <tbody>
           <tr><td>必須：アプリケーション実行プロダクト</td><td><strong>Cloud Run</strong> に KASUGAI Canvas 本体（静的フロント配信）＋ AI プロキシ（<code>/api/gemini</code>）＋ GIS 保存 API（<code>/api/kasc</code>・<code>/api/data</code> → Cloud Storage）を1サービスとしてデプロイ（<code>agent/</code>・実装済み）。同一オリジン構成で CORS 不要・提出 URL 1本</td></tr>
-          <tr><td>必須：Google Cloud AI 技術</td><td><strong>Gemini API</strong> の function calling で、自然言語からの GIS 制御（URL 指定レイヤー追加・サンプル GeoJSON 生成表示・資料作成）を実装。実行主体はブラウザ内蔵エージェント（50種のチャットツール）で、<code>/api/gemini</code> がサーバーキーを注入して審査員キーレスでの動作を実現。併用する Google Cloud プロダクトとして <strong>Cloud Storage</strong>（.kasc・<code>gs://</code> データ・V4 署名付き URL 転送）と <strong>Secret Manager</strong>（API キー・認証情報）を使用</td></tr>
+          <tr><td>必須：Google Cloud AI 技術</td><td><strong>Gemini API</strong> の function calling とブラウザ内蔵エージェントから GIS ツールを呼び出す基盤を実装。<code>/api/gemini</code> はサーバーキーを注入し、審査員が個人キーなしで利用できる構成です。回遊シナリオへの拡張を目指します。併用する Google Cloud プロダクトとして <strong>Cloud Storage</strong>（.kasc・<code>gs://</code> データ・V4 署名付き URL 転送）と <strong>Secret Manager</strong>（API キー・認証情報）を使用</td></tr>
           <tr><td>提出物 1：GitHub リポジトリ</td><td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">github.com/yamamoto-ryuzo/kasugai_canvas</a> を連携（フロント・エージェント・IaC を含む）</td></tr>
           <tr><td>提出物 2：デプロイ URL</td><td><a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">https://kasugai-canvas-nqh4tuar6a-an.a.run.app/</a>（Cloud Run 上の公開 URL）を提出し、審査期間中（〜2026/12/01）動作確認可能な状態を維持</td></tr>
-          <tr><td>提出物 3：説明・構成図・デモ動画</td><td>プロジェクト説明（<a href="#kasugai-concept">本ページ</a>）＋システムアーキテクチャ図（同ページの SVG 図）＋「○○の資料を作って」→ GIS 体験→資料生成までの約3分デモ動画（制作・YouTube 公開後に URL を掲載）</td></tr>
+          <tr><td>提出物 3：概要・構成図・デモ動画</td><td>プロジェクト概要（<a href="#kasugai-concept">本ページ</a>）＋Mermaid によるシステムアーキテクチャ＋ログイン、GIS 画面、内蔵 AI の基盤と今後の開発予定を紹介する動画（制作・公開後に URL を掲載）</td></tr>
         </tbody>
       </table>
 
-      <h3>実装済み機能の概要</h3>
+      <h3>今回実装した基盤</h3>
       <ul>
-        <li><strong>内蔵AIエージェント（ブラウザ側）：</strong>Gemini API の function calling で50種のチャットツールを実行し、「○○の資料を作って」→ レイヤー追加（<code>addLayer</code>/<code>addGeoJsonLayer</code>：URL 指定で .kasc に追記・即時適用）→ サンプル GeoJSON の生成・表示（<code>addDataLayer</code>：AI が生成した GeoJSON オブジェクトを一時レイヤーとして直接表示）→ FlyTo → 資料出力（<code>showReport</code>、Markdown/HTML・ダウンロード可）→ 視点パーマリンク埋め込み（<code>buildShareUrl</code>）→ 飛行ルート生成・再生（<code>addFlyPath</code>→<code>playFlyPath</code>：プレゼン用の自動巡視）まで一連の流れを実行。<code>addLayer</code>/<code>addGeoJsonLayer</code>/<code>applyInspector</code> は外部 http(s) URL を適用前に実在確認し、存在しない URL は拒否。ツール実行の往復上限は既定10で設定画面・AI 指示（<code>setToolMaxSteps</code>）の両方から 1〜20 で変更可、上限到達時はユーザーに継続確認して承認なら延長。生成データには出典・生成時刻・AI生成明記を付与する設計で、実行ツールはチャットに記録される（可観測性）</li>
+        <li><strong>ブラウザ内蔵 AI エージェント：</strong>Gemini の function calling から GIS 操作ツールを選び、<code>executeChatTool</code> 経由で Canvas の GIS API を実行する基盤。レイヤー操作・FlyTo・資料出力などの個別ツールを備え、回遊シナリオ全体への拡張を目指しています。</li>
         <li><strong>AI プロキシ（キー隠蔽）：</strong><code>POST /api/gemini</code> がサーバーの <code>GEMINI_API_KEY</code> を注入して転送（モデル許可リスト・1MB 上限・レート制限・認証モードで保護）。BYO キー登録済みのブラウザは Gemini を直接呼び、未登録でも <code>/api/capabilities</code> の <code>aiProxy</code> 通知で自動的にサーバーキー経由になるため審査員はキー不要</li>
         <li><strong>保存・認証：</strong>ID/PASS ログイン（<code>/api/auth</code>）で HMAC トークンを発行し、.kasc と <code>gs://</code> データを Cloud Storage に保存（<code>/api/kasc</code>・<code>/api/data/&lt;key&gt;</code>、GET は V4 署名付き URL でブラウザ⇄GCS 直接転送）。起動時に同梱 .kasc を冪等シード。審査用 URL は認証モード5で運用中</li>
         <li><strong>キー・秘匿管理：</strong>Gemini・Maps キーと認証情報は Secret Manager 経由で環境変数に注入。Maps キーはブラウザ直接通信に必要なため capabilities で配布し、GCP 側の HTTP リファラ＋API 制限で保護</li>
@@ -252,103 +182,13 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
 - 地図を開くパーマリンク
 
 検討案は、確認できたデータに基づく案として書き、根拠の限界や追加で必要なデータも必要に応じて示します。</code></pre>
-      <h3>デモシナリオ（3分動画）：渋谷区の回遊プランと公園周遊指示書を作る</h3>
-      <p>渋谷区の公園・文化／観光スポット・飲食店を地図で見比べ、見どころを紹介する資料と、公園を順番に巡る指示書を作るストーリーです。公園ルートはカメラのピッチを真下（-90°）にして FLY します。サンプルは実在施設の情報ではないことを明記します。</p>
-      <ol>
-        <li><strong>依頼：</strong>「渋谷区内の公園、文化・観光スポット、飲食店を、それぞれ約5か所ずつ架空のサンプルデータとして作成し、別々の点レイヤーに追加してください。サンプルデータであることを明記したうえで、各スポットの見どころを紹介する資料と、公園を順番に巡る指示書を作成してください。公園を巡る際は、カメラのピッチを真下（-90°）にして順番に FLY してください。」と入力します。</li>
-        <li><strong>3レイヤーを作成：</strong>Gemini が各カテゴリ約5件、合計約15件の架空サンプル地点を GeoJSON で生成し、<code>addDataLayer</code> で「公園」「文化・観光スポット」「飲食店」の点レイヤーを個別に地図へ追加します。各レイヤーに AI 生成サンプルであることを示します。</li>
-        <li><strong>地図で見比べる：</strong>Gemini が <code>flyTo</code> で渋谷区へ移動。3レイヤーを切り替え、約15件の点の分布や近さを地図上で確かめます。</li>
-        <li><strong>紹介資料と公園周遊指示書を作成：</strong><code>showReport</code> で各カテゴリの見どころと、公園を順番に巡る順序・各地点の案内をまとめます。公園の地点を <code>flyRoute</code> でつなぎ、<code>setFlySettings</code> でピッチを真下（-90°）に設定します。資料に <code>buildShareUrl</code> のパーマリンクを付け、地図と指示書を一緒に確認して締めくくります。</li>
-      </ol>
-
-      <h3>システムアーキテクチャ図</h3>
-      <svg viewBox="0 0 980 470" width="100%" style="max-width:980px;display:block;margin:0 auto;font-family:sans-serif;" role="img" aria-label="KASUGAI Canvas Cloud Run システム構成図">
-        <defs>
-          <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2f7d8c"/></marker>
-          <marker id="ahd" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#8a9aa5"/></marker>
-        </defs>
-
-        <!-- ブラウザ -->
-        <rect x="20" y="60" width="300" height="250" rx="8" fill="#f4fafc" stroke="#2f7d8c" stroke-width="1.5"/>
-        <text x="170" y="84" text-anchor="middle" font-size="14" font-weight="bold" fill="#1d4e57">利用者のブラウザ</text>
-        <rect x="35" y="96" width="270" height="62" rx="5" fill="#fff" stroke="#9db8c0"/>
-        <text x="170" y="116" text-anchor="middle" font-size="12" font-weight="bold" fill="#1d2b35">KASUGAI Canvas（CesiumJS）</text>
-        <text x="170" y="133" text-anchor="middle" font-size="11" fill="#45566a">3D地球・レイヤー・FlyTo・資料モーダル</text>
-        <text x="170" y="148" text-anchor="middle" font-size="11" fill="#45566a">.kasc 設定の読み書き</text>
-        <rect x="35" y="168" width="270" height="62" rx="5" fill="#fff" stroke="#9db8c0"/>
-        <text x="170" y="188" text-anchor="middle" font-size="12" font-weight="bold" fill="#1d2b35">内蔵AIエージェント</text>
-        <text x="170" y="205" text-anchor="middle" font-size="11" fill="#45566a">Gemini function calling・52ツール</text>
-        <text x="170" y="220" text-anchor="middle" font-size="11" fill="#45566a">レイヤー追加・サンプル生成・資料作成</text>
-        <text x="170" y="252" text-anchor="middle" font-size="11" fill="#45566a">BYOキー: Gemini 直接呼出</text>
-        <text x="170" y="269" text-anchor="middle" font-size="11" fill="#45566a">キー無し: /api/gemini 経由（自動切替）</text>
-        <text x="170" y="293" text-anchor="middle" font-size="11" fill="#45566a">Maps キー: capabilities で自動登録</text>
-
-        <!-- Cloud Run -->
-        <rect x="370" y="60" width="300" height="250" rx="8" fill="#fdf8ee" stroke="#b98a1e" stroke-width="1.5"/>
-        <text x="520" y="84" text-anchor="middle" font-size="14" font-weight="bold" fill="#7a5a10">Cloud Run（asia-northeast1）</text>
-        <text x="520" y="101" text-anchor="middle" font-size="11" fill="#7a5a10">kasugai-canvas — FastAPI（agent/）</text>
-        <rect x="385" y="112" width="270" height="184" rx="5" fill="#fff" stroke="#d8c489"/>
-        <text x="520" y="132" text-anchor="middle" font-size="12" fill="#1d2b35">静的配信 web/（フロントエンド）</text>
-        <text x="520" y="156" text-anchor="middle" font-size="12" fill="#1d2b35">POST /api/auth — HMACトークン発行</text>
-        <text x="520" y="178" text-anchor="middle" font-size="12" fill="#1d2b35">POST /api/kasc — .kasc 保存・返却</text>
-        <text x="520" y="200" text-anchor="middle" font-size="12" fill="#1d2b35">GET/PUT /api/data — gs:// データ</text>
-        <text x="520" y="222" text-anchor="middle" font-size="12" fill="#1d2b35">GET /api/capabilities — 能力・キー通知</text>
-        <text x="520" y="252" text-anchor="middle" font-size="12" font-weight="bold" fill="#1d2b35">POST /api/gemini</text>
-        <text x="520" y="269" text-anchor="middle" font-size="11" fill="#45566a">GEMINI_API_KEY を注入して転送</text>
-        <text x="520" y="284" text-anchor="middle" font-size="11" fill="#45566a">（審査員はキー不要）</text>
-
-        <!-- 外部: Gemini -->
-        <rect x="730" y="60" width="230" height="64" rx="8" fill="#eef7ee" stroke="#4a7d4a" stroke-width="1.5"/>
-        <text x="845" y="86" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f5532">Gemini API</text>
-        <text x="845" y="104" text-anchor="middle" font-size="11" fill="#45566a">generativelanguage.googleapis.com</text>
-
-        <!-- 外部: Maps -->
-        <rect x="730" y="144" width="230" height="76" rx="8" fill="#eef7ee" stroke="#4a7d4a" stroke-width="1.5"/>
-        <text x="845" y="168" text-anchor="middle" font-size="13" font-weight="bold" fill="#2f5532">Google Maps Platform</text>
-        <text x="845" y="186" text-anchor="middle" font-size="11" fill="#45566a">Map Tiles / Geocoding</text>
-        <text x="845" y="202" text-anchor="middle" font-size="11" fill="#45566a">Places / Street View Static</text>
-
-        <!-- Secret Manager -->
-        <rect x="730" y="240" width="230" height="64" rx="8" fill="#f1eefb" stroke="#6a5aa8" stroke-width="1.5"/>
-        <text x="845" y="264" text-anchor="middle" font-size="13" font-weight="bold" fill="#463a7a">Secret Manager</text>
-        <text x="845" y="282" text-anchor="middle" font-size="11" fill="#45566a">gemini-api-key / google-maps-api-key</text>
-        <text x="845" y="296" text-anchor="middle" font-size="11" fill="#45566a">kasugai-auth-user / -pass</text>
-
-        <!-- Cloud Storage -->
-        <rect x="730" y="344" width="230" height="80" rx="8" fill="#eef3f8" stroke="#3e6a9e" stroke-width="1.5"/>
-        <text x="845" y="368" text-anchor="middle" font-size="13" font-weight="bold" fill="#28517a">Cloud Storage</text>
-        <text x="845" y="386" text-anchor="middle" font-size="11" fill="#45566a">gs://kasugai-data-…</text>
-        <text x="845" y="402" text-anchor="middle" font-size="11" fill="#45566a">kasc/&lt;ID&gt;（.kasc 保存）・data/&lt;key&gt;</text>
-
-        <!-- 矢印: ブラウザ⇄Cloud Run -->
-        <line x1="320" y1="160" x2="370" y2="160" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)" marker-start="url(#ah)"/>
-        <text x="345" y="150" text-anchor="middle" font-size="11" fill="#1d4e57">静的配信・/api/*</text>
-
-        <!-- 矢印: BYOキー ブラウザ→Gemini（破線） -->
-        <path d="M250,60 V40 H845 V60" fill="none" stroke="#8a9aa5" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ahd)"/>
-        <text x="560" y="36" text-anchor="middle" font-size="11" fill="#5a6a75">BYOキー → Gemini 直接呼出</text>
-
-        <!-- 矢印: ブラウザ→Maps Platform（破線） -->
-        <path d="M300,60 V24 H900 V144" fill="none" stroke="#8a9aa5" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ahd)"/>
-        <text x="610" y="18" text-anchor="middle" font-size="11" fill="#5a6a75">Maps API（キーは /api/capabilities 配布・リファラ制限）</text>
-
-        <!-- 矢印: Cloud Run→Gemini -->
-        <line x1="670" y1="92" x2="730" y2="92" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)"/>
-        <text x="700" y="84" text-anchor="middle" font-size="10" fill="#1d4e57">キー注入</text>
-
-        <!-- 矢印: Cloud Run→Secret Manager -->
-        <line x1="670" y1="272" x2="730" y2="272" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)"/>
-        <text x="700" y="264" text-anchor="middle" font-size="10" fill="#1d4e57">env</text>
-
-        <!-- 矢印: Cloud Run→Cloud Storage -->
-        <path d="M670,300 V384 H730" fill="none" stroke="#2f7d8c" stroke-width="2" marker-end="url(#ah)"/>
-        <text x="700" y="340" text-anchor="middle" font-size="10" fill="#1d4e57">kasc・data</text>
-
-        <!-- 矢印: GCS→ブラウザ 直接転送（破線） -->
-        <path d="M730,408 V446 H170 V310" fill="none" stroke="#8a9aa5" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#ahd)"/>
-        <text x="450" y="442" text-anchor="middle" font-size="11" fill="#5a6a75">V4署名付きURL（302）でブラウザ⇄GCS 直接転送</text>
-      </svg>
-      <p>実線はサーバー経由、破線はブラウザ直接の通信です。Gemini キーは Secret Manager から Cloud Run の環境変数に注入され <code>/api/gemini</code> が転送時に付与するためブラウザには現れません。Maps キーはブラウザの直接通信に使われるため <code>/api/capabilities</code> で配布し、GCP 側の HTTP リファラ制限＋API 制限で保護します。</p>
+      <h3>目標デモシナリオ：渋谷区の回遊プランと公園周遊</h3>
+      <p>想定するデモでは、渋谷区の公園・文化／観光スポット・飲食店の架空サンプルを地図で見比べ、見どころの資料を作成し、公園を順番に巡ります。公園ルートはカメラのピッチを真下（-90°）にして FLY します。サンプルデータであることを明記する想定です。</p>
+      <p><strong>依頼：</strong>「渋谷区内の公園、文化・観光スポット、飲食店を、それぞれ約5か所ずつ架空のサンプルデータとして作成し、別々の点レイヤーに追加してください。サンプルデータであることを明記したうえで、各スポットの見どころを紹介する資料と、公園を順番に巡ってください。公園を巡る際は、カメラのピッチを真下（-90°）にして順番に FLY してください。」</p>
+      <div class="card">
+        <h4>読み原稿（プロジェクト動作デモ）</h4>
+        <p><strong>読み原稿：</strong>「まず Cloud Run 上の KASUGAI Canvas にログインします。CesiumJS の GIS 画面では、地図にレイヤーを重ね、場所と属性を確認できます。内蔵 AI に自然な言葉で依頼すると、Gemini が function calling でツールを選び、ブラウザ内のエージェントが Canvas の GIS API を呼び出します。今回はこのエージェントの基盤を整えました。資料作成や公園の自動周遊など、これから広がる KASUGAI Canvas にご期待ください。次回のハッカソンでお待ちしています。」</p>
+      </div>
 
       <h3>技術スタック（提出構成）</h3>
       <table>
@@ -358,7 +198,7 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
         <tbody>
           <tr><td>フロントエンド</td><td>KASUGAI Canvas（CesiumJS）</td><td>3D 地球・レイヤー表示・FlyTo・チャット UI・資料モーダル</td></tr>
           <tr><td>ホスティング</td><td>Cloud Run <strong>（必須プロダクト充足）</strong></td><td>静的フロント配信＋GIS 保存 API＋<code>/api/gemini</code> AI プロキシを1サービスに同居（同一オリジン・CORS 不要・提出URL 1本）</td></tr>
-          <tr><td>AI エージェント</td><td>Gemini API（function calling）<strong>（必須 AI 技術充足）</strong></td><td>Gemini モデルが function calling でツールを選択し、ブラウザ内蔵エージェントが50種のチャットツールを実行。Canvas の GIS API を通じてレイヤー追加・サンプル表示・資料生成まで自律実行</td></tr>
+          <tr><td>AI エージェント</td><td>Gemini API（function calling）<strong>（必須 AI 技術充足）</strong></td><td>Gemini がツールを選び、ブラウザ内蔵エージェントが GIS API を呼び出す基盤を実装。レイヤー操作などの個別機能を備え、サンプル生成・分析・資料作成・周遊をつなぐ体験への拡張を目指す</td></tr>
           <tr><td>データ保存（GIS の保存先）</td><td>Cloud Storage</td><td>.kasc（<code>kasc/&lt;ID&gt;</code>）・<code>gs://</code> 秘匿データ（<code>data/&lt;key&gt;</code>）。GET は V4 署名付き URL でブラウザ⇄GCS 直接転送</td></tr>
           <tr><td>セキュリティ</td><td>Cloud IAP / HMAC トークン / Secret Manager / Cloud IAM</td><td>起動制御モード5/6/7・秘匿情報は Secret Manager・実行サービスアカウントの最小権限</td></tr>
         </tbody>
