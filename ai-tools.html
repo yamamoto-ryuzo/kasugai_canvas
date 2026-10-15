@@ -11,19 +11,19 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v5.25.0</span></h1>
-      <p>AI ツール仕様 — 内蔵AIが制御できる全52ツールの定義</p>
+      <p>AI ツール仕様 — 内蔵AIが制御できる全55ツールの定義</p>
     </header>
     <main>
       <section>
         <h2>🤖 概要</h2>
-        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/app.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>50 種</strong>です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="google.html">Google 連携・AI</a> を参照。</p>
+        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/app.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>55 種</strong>です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="google.html">Google 連携・AI</a> を参照。</p>
         <p>実行モデル：ユーザーの発言 → AI がツール呼び出しを返す → ブラウザが <code>kasugaiApi</code> 経由で実行 → 結果を AI に返す、の function calling ループ（OpenAI互換選択時は宣言を OpenAI tools 形式へ変換し、往復結果は tool メッセージとして返送）。ツール実行の上限往復数は既定10（管理 → AI → チャット の「ツール実行の上限往復数」または AI への指示で <code>setToolMaxSteps</code> により 1〜20 で変更可）。上限到達時はユーザーに継続確認が出て、承認なら同じ往復数を1枠追加して続行、拒否なら中断します。推論はすべてブラウザ側。破壊的ツールは実行前に確認ダイアログを挟み、最終判断はユーザーにあります。</p>
 
         <h3>提供条件（activeChatTools で絞り込み）</h3>
         <table>
           <thead><tr><th>条件</th><th>対象ツール</th></tr></thead>
           <tbody>
-            <tr><td>常時（47ツール）</td><td>下記以外のすべて</td></tr>
+            <tr><td>常時（50ツール）</td><td>下記以外のすべて</td></tr>
             <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
@@ -47,11 +47,12 @@
       </section>
 
       <section>
-        <h2>🗂 レイヤー（7）</h2>
+        <h2>🗂 レイヤー（8）</h2>
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
-            <tr><td><code>listLayers</code></td><td>なし</td><td>登録レイヤー一覧（名前・表示状態）を取得</td></tr>
+            <tr><td><code>listLayers</code></td><td>なし</td><td>登録レイヤー一覧（名前・表示状態・適用中の絞り込み条件 filter）を取得</td></tr>
+            <tr><td><code>setLayerFilter</code></td><td>name*, filter*</td><td>クエリ系レイヤー（duckdb/sql/gpkg 等）の絞り込み条件を変更。レイヤー行の ⏷ ボタンと同じ操作。sql 型はクエリ全文、それ以外は WHERE 式を指定（空文字で解除・sql 型は空文字不可）</td></tr>
             <tr><td><code>setLayerVisible</code></td><td>name*, visible*</td><td>レイヤー名指定で表示/非表示を切替</td></tr>
             <tr><td><code>focusLayer</code></td><td>name*</td><td>レイヤー名または ID 指定で全体が収まるようカメラ移動。非表示レイヤーは自動表示してから移動</td></tr>
             <tr><td><code>addLayer</code></td><td>title*, target*, type, options</td><td>ベクターレイヤーを追加して即適用。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は URL または DATA/ 相対パス（sql は SELECT 文）。options は <code>where=</code>/<code>limit=</code>/<code>format=</code>/<code>bbox=auto</code>/<code>proxy=on</code>/<code>render=primitive</code>/<code>attr=出典</code> 等を | 区切りで指定。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。インスペクター設定に反映されるためユーザー明示時のみ</td></tr>
@@ -172,6 +173,18 @@
           </tbody>
         </table>
         <p>プラグインの昇格ルート：AI 生成 → IndexedDB（ブラウザローカル草稿）→ <code>.kasp</code> エクスポート可 → レビュー後にローカル版で PLUGIN/ へ公開。</p>
+      </section>
+
+      <section>
+        <h2>🖥 UI 操作（2）</h2>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>listUiControls</code></td><td>filter</td><td>アプリ内の操作可能な UI 要素（ボタン・入力欄・セレクト・パネルタブ等）を target/kind/label/value/checked/options/disabled/hidden 付きで列挙。filter は target・ラベルの部分一致。レイヤー行等の動的生成行は含まない（専用ツールで操作）</td></tr>
+            <tr><td><code>controlUi</code></td><td>target*, action, value</td><td>UI 要素を直接操作する汎用ツール。target は <code>listUiControls</code> の target（要素 id・<code>[data-panel="…"]</code> 等）。action: click（ボタン/タブ/リンク押下・チェックボックストグル）/ set（値設定。checkbox は boolean、select は option 値、入力欄は文字列・数値）/ get（現在値・表示テキスト取得）。省略時は value 指定で set、ボタン系で click、それ以外で get。DEM ソース・ドレープ設定・3D Tiles 描画パラメータ・言語・各種モデル選択など、専用ツールを持たない設定項目すべてに使える。ファイル/フォルダピッカーは開けるが選択自体はユーザー操作</td></tr>
+          </tbody>
+        </table>
+        <p>専用ツールが無い UI 項目はこの2ツールで網羅する設計です。新規 UI は「id またはタブ用 data-* 属性＋ click/change/input ハンドラ」で実装すればツール追加なしに AI 制御可能になります（リポジトリの <code>AGENTS.md</code>「UI方針」参照）。パスワード欄は値を返しません。</p>
       </section>
 
       <section>

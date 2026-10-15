@@ -3167,9 +3167,14 @@ async function editLayerQueryFilter(item) {
   const current = isSql ? (item.query || "") : (item.where || "");
   const input = window.prompt(t(isSql ? "layer.filter.promptSql" : "layer.filter.promptWhere"), current);
   if (input === null) return;
-  const value = input.trim();
+  await applyLayerQueryFilter(item, input.trim());
+}
+
+// クエリ系レイヤーのフィルター適用本体。⏷ボタンの prompt と AI ツール(setLayerFilter)の共通経路
+async function applyLayerQueryFilter(item, value) {
+  const isSql = item.type === "sql";
   if (isSql) {
-    if (!value) return;
+    if (!value) return false;
     item.query = value;
   } else {
     item.where = value || undefined;
@@ -3181,8 +3186,10 @@ async function editLayerQueryFilter(item) {
     updateVectorSearchUI();
     // 条件変更で一覧内容が変わるため、クエリ系も含めて属性一覧の行を再取得する
     uiHooks.refreshVectorAttrWidget?.(true);
+    return true;
   } catch (error) {
     console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+    return false;
   }
 }
 
@@ -8325,6 +8332,91 @@ function getLayerGeoJson(idOrTitle) {
   return entitiesToGeoJson(ds);
 }
 
+// ---- 汎用 UI ブリッジ ----
+// アプリ内の操作要素（id 付き button/input/select/textarea/a と data-* タブ）を列挙・操作する。
+// AI ツール(listUiControls/controlUi)・E2E 検証・プラグイン共通の基盤。
+// 新規 UI は「id またはタブ用 data-* 属性 + click/change/input ハンドラ」で実装すれば
+// 自動的に一覧へ載り AI 制御可能になる（AGENTS.md「AI 制御可能な UI」参照）
+const UI_TAB_TARGET_ATTRS = ["data-panel", "data-settings-panel", "data-manage-pane", "data-manage-sub", "data-tab"];
+// 動的生成コンテンツ領域（レイヤー行・検索結果等）は行番号が不安定なため列挙しない。
+// それらは setLayerVisible / focusLayer / setLayerFilter のような名前解決付き API で操作する
+const UI_BRIDGE_SKIP_SELECTOR = "#layer-list, #camera-presets, #agent-plugin-list, #mcp-server-list, #search-results, #vector-search-results, #chat-messages, #info-content, #attr-content, #vector-attr-widget-list, #vector-attr-widget-head, .cesium-viewer";
+
+// 要素を一意に指す controlUi 用セレクタを作る。id → タブ属性 → id祖先+クラス(+nth-of-type) の順
+function uiBridgeTarget(el) {
+  if (el.id) return `#${el.id}`;
+  for (const attr of UI_TAB_TARGET_ATTRS) {
+    const value = el.getAttribute(attr);
+    if (value) return `[${attr}="${value}"]`;
+  }
+  const anchor = el.closest("[id]");
+  if (!anchor) return null;
+  const cls = [...el.classList].find(c => /^[a-zA-Z][\w-]*$/.test(c));
+  let selector = `#${anchor.id} ${el.tagName.toLowerCase()}${cls ? `.${cls}` : ""}`;
+  if (document.querySelectorAll(selector).length > 1) {
+    const index = [...el.parentElement.children].filter(c => c.tagName === el.tagName).indexOf(el) + 1;
+    selector = `#${anchor.id} ${el.tagName.toLowerCase()}:nth-of-type(${index})`;
+  }
+  return selector;
+}
+
+function uiBridgeKind(el) {
+  const tag = el.tagName.toLowerCase();
+  if (tag === "input") return ["checkbox", "radio", "file", "range", "password"].includes(el.type) ? el.type : "input";
+  if (tag === "button" && UI_TAB_TARGET_ATTRS.some(attr => el.hasAttribute(attr))) return "tab";
+  return tag;
+}
+
+function uiBridgeLabel(el) {
+  const clean = value => String(value || "").replace(/\s+/g, " ").trim();
+  const direct = clean(el.getAttribute("aria-label")) || clean(el.title) || clean(el.placeholder) || clean(el.dataset?.i18n ? t(el.dataset.i18n) : "");
+  if (direct) return direct;
+  if (el.id) {
+    const forLabel = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    if (forLabel && clean(forLabel.textContent)) return clean(forLabel.textContent);
+  }
+  const wrap = el.closest("label");
+  if (wrap && clean(wrap.textContent)) return clean(wrap.textContent);
+  return clean(el.textContent).slice(0, 80);
+}
+
+// listUiControls / controlUi(get) 共通の状態スナップショット。
+// パスワード欄は値そのものを返さない（AIコンテキストにキーを持ち出さない）
+function uiBridgeEntry(el, { brief = true } = {}) {
+  const kind = uiBridgeKind(el);
+  const entry = { target: uiBridgeTarget(el), kind, label: uiBridgeLabel(el) };
+  if (el.disabled) entry.disabled = true;
+  if (el.readOnly) entry.readonly = true;
+  if (el.closest("[hidden]") !== null || el.offsetParent === null) entry.hidden = true;
+  if (kind === "checkbox" || kind === "radio") {
+    entry.checked = !!el.checked;
+  } else if (kind === "select") {
+    entry.value = el.value;
+    entry.options = [...el.options].slice(0, 60).map(o => ({ value: o.value, label: (o.textContent || "").trim() }));
+  } else if (kind === "password") {
+    entry.hasValue = !!el.value;
+  } else if (kind === "textarea") {
+    entry.value = brief && el.value.length > 500 ? `${el.value.slice(0, 500)}…(${el.value.length}chars)` : el.value;
+  } else if (kind === "input" || kind === "range") {
+    entry.value = el.value;
+  }
+  const text = (el.textContent || "").replace(/\s+/g, " ").trim();
+  if (text && (entry.label !== text)) entry.text = brief ? text.slice(0, 120) : text.slice(0, 2000);
+  return entry;
+}
+
+// controlUi の target 解決。裸の id・"#id"・属性/子孫セレクタを受け付ける
+function resolveUiControlTarget(target) {
+  const raw = String(target || "").trim();
+  if (!raw) return null;
+  const id = raw.replace(/^#/, "");
+  if (/^[\w-]+$/.test(id)) {
+    const byId = document.getElementById(id);
+    if (byId) return byId;
+  }
+  try { return document.querySelector(raw); } catch (e) { return null; }
+}
+
 window.kasugaiApi = {
   flyTo,
   getCamera() {
@@ -8339,7 +8431,7 @@ window.kasugaiApi = {
     };
   },
   listLayers() {
-    return getOrderedLayerItems().map(layer => ({ id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type, bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced }));
+    return getOrderedLayerItems().map(layer => ({ id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: layer.type === "sql" ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced }));
   },
   setLayerVisible(idOrTitle, visible) {
     const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
@@ -8358,6 +8450,15 @@ window.kasugaiApi = {
     const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
     if (!layer) return false;
     return focusLayer(layer);
+  },
+  // クエリ系レイヤー(duckdb/sql/gpkg等)の絞り込み条件を変更する。
+  // レイヤー行の ⏷ ボタン（window.prompt ベースで AI から直接操作できない）の API 版
+  async setLayerFilter(idOrTitle, filter) {
+    const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
+    if (!layer) return { ok: false, reason: "notFound" };
+    if (layer.type !== "sql" && !isQueryDecoder(vectorDecoders.get(layer.type), layer)) return { ok: false, reason: "unsupported" };
+    const ok = await applyLayerQueryFilter(layer, String(filter ?? "").trim());
+    return ok ? { ok: true } : { ok: false, reason: "failed" };
   },
   listBasemaps() {
     // 「ベースマップなし」(selectedBasemap=null)と「ベースマップ透明」(globeHidden=true)は
@@ -8972,6 +9073,74 @@ window.kasugaiApi = {
   async setStoragePluginError(id, message) {
     await pluginStore.setError(id, message);
     this.emit("storage-plugins-changed", {});
+  },
+  // ---- 汎用 UI ブリッジ（上部の UI_* / uiBridge* ヘルパー参照）----
+  // アプリ内の操作要素を列挙する。filter は target/label の部分一致
+  listUiControls(filter) {
+    const q = String(filter || "").toLowerCase().trim();
+    const entries = [];
+    const seen = new Set();
+    for (const el of document.querySelectorAll("button, input, select, textarea, a[href]")) {
+      if (el.type === "hidden") continue;
+      if (el.closest(UI_BRIDGE_SKIP_SELECTOR)) continue;
+      const entry = uiBridgeEntry(el);
+      if (!entry.target || seen.has(entry.target)) continue;
+      seen.add(entry.target);
+      if (q && !`${entry.target} ${entry.label}`.toLowerCase().includes(q)) continue;
+      entries.push(entry);
+    }
+    return entries;
+  },
+  // 任意の UI 要素を click/set/get で操作する。set は実ユーザー操作と同じく
+  // input→change イベントを発火させるため、設定保存・再描画も通常通り走る
+  controlUi(target, { action, value } = {}) {
+    const el = resolveUiControlTarget(target);
+    if (!el) return { ok: false, message: t("tool.uiTargetNotFound", { target }) };
+    const kind = uiBridgeKind(el);
+    const tag = el.tagName.toLowerCase();
+    const clickKind = kind === "button" || kind === "tab" || tag === "a" || kind === "file" || tag === "label";
+    const act = action ? String(action).toLowerCase() : (value !== undefined ? "set" : (clickKind ? "click" : "get"));
+    if (act === "get") return { ok: true, ...uiBridgeEntry(el, { brief: false }) };
+    if (act === "click") {
+      if (el.disabled) return { ok: false, message: t("tool.uiDisabled", { target }) };
+      // checkbox/radio は click() が checked 反転と input/change 発火まで行う（トグル操作）
+      // input[type=file] はクリックでピッカーが開く（ファイル選択自体はユーザー操作）
+      el.click();
+      return { ok: true, ...uiBridgeEntry(el) };
+    }
+    if (act !== "set") return { ok: false, message: t("tool.uiBadAction", { action: act, target }) };
+    if (kind === "file") return { ok: false, message: t("tool.uiFileInput", { target }) };
+    if (el.disabled) return { ok: false, message: t("tool.uiDisabled", { target }) };
+    if (el.readOnly) return { ok: false, message: t("tool.uiReadonly", { target }) };
+    if (kind === "checkbox" || kind === "radio") {
+      const on = typeof value === "boolean" ? value : /^(true|1|on|yes)$/i.test(String(value));
+      if (el.checked !== on) {
+        el.checked = on;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return { ok: true, ...uiBridgeEntry(el) };
+    }
+    if (kind === "select") {
+      const v = String(value ?? "");
+      const option = [...el.options].find(o => o.value === v || (o.textContent || "").trim() === v);
+      if (!option) {
+        return { ok: false, message: t("tool.uiInvalidValue", { value: v, target }), options: [...el.options].slice(0, 60).map(o => ({ value: o.value, label: (o.textContent || "").trim() })) };
+      }
+      if (el.value !== option.value) {
+        el.value = option.value;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      return { ok: true, ...uiBridgeEntry(el) };
+    }
+    if (kind === "input" || kind === "range" || kind === "password" || kind === "textarea") {
+      el.value = String(value ?? "");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      return { ok: true, ...uiBridgeEntry(el) };
+    }
+    return { ok: false, message: t("tool.uiBadAction", { action: "set", target }) };
   },
   getCapabilities() {
     // バックエンドの能力情報。静的配信のみの環境では null
@@ -9727,6 +9896,41 @@ const CHAT_TOOLS = [{
         required: ["steps"],
       },
     },
+    {
+      name: "setLayerFilter",
+      description: "クエリ系レイヤー(duckdb/sql/gpkg等)の絞り込み条件を変更する。レイヤー行の⏷ボタンと同じ操作。sql型はクエリ全文、それ以外はWHERE式をfilterに指定(空文字で解除・sql型は空文字不可)。現在の条件はlistLayersのfilter欄で確認できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名またはID(listLayersで確認)" },
+          filter: { type: "STRING", description: "WHERE式またはSQLクエリ全文" },
+        },
+        required: ["name", "filter"],
+      },
+    },
+    {
+      name: "listUiControls",
+      description: "アプリ内の操作可能なUI要素(ボタン・入力欄・セレクト・タブ等)の一覧を取得する。各項目の target を controlUi に渡すと操作できる。filterで対象名・ラベルの部分一致に絞れる。レイヤー行・検索結果など動的生成の行は含まれない(専用ツールで操作)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          filter: { type: "STRING", description: "target/ラベルの部分一致フィルタ(省略可)" },
+        },
+      },
+    },
+    {
+      name: "controlUi",
+      description: "UI要素を直接操作する汎用ツール(専用ツールが無い設定項目・パネル切替・ボタン押下用)。targetはlistUiControlsのtarget(要素id・[data-*=...]・CSSセレクタ)。action: click=ボタン/タブ/リンクの押下とチェックボックスのトグル、set=値設定(checkboxはboolean、selectはoption値・入力欄は文字列/数値)、get=現在値・表示テキストの取得。action省略時はvalue指定ならset、ボタン系ならclick、それ以外はget。ファイル選択・フォルダ選択のピッカー自体は開けるが中身の選択はユーザー操作になる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          target: { type: "STRING", description: "listUiControlsのtarget値" },
+          action: { type: "STRING", description: "click / set / get(省略時は自動判定)" },
+          value: { type: "STRING", description: "set時の値(checkboxはtrue/false・selectはoptionのvalue・入力欄は文字列)" },
+        },
+        required: ["target"],
+      },
+    },
   ],
 }];
 
@@ -9809,7 +10013,7 @@ function getChatSandbox() {
 
 // サンドボックスへ公開しないAPI（キー等の機密を外部送信されるのを防ぐ。
 // プラグイン書き込み系は確認ダイアログを迂回できるためブロックする）
-const CHAT_SANDBOX_BLOCKED_API = new Set(["getGoogleApiKey", "getGoogleMapsApiKey", "getGoogleMapsWsApiKey", "getGeminiModel", "applyInspector", "shutdownApp", "installUpdate", "saveStoragePlugin", "removeStoragePlugin", "setStoragePluginEnabled", "setStoragePluginError", "publishStoragePlugin", "saveDataFile", "deleteDataFile"]);
+const CHAT_SANDBOX_BLOCKED_API = new Set(["getGoogleApiKey", "getGoogleMapsApiKey", "getGoogleMapsWsApiKey", "getGeminiModel", "applyInspector", "shutdownApp", "installUpdate", "saveStoragePlugin", "removeStoragePlugin", "setStoragePluginEnabled", "setStoragePluginError", "publishStoragePlugin", "saveDataFile", "deleteDataFile", "controlUi", "setLayerFilter"]);
 
 // サンドボックスからの api.XXX 呼び出しを kasugaiApi に橋渡しする
 window.addEventListener("message", async event => {
@@ -10122,6 +10326,15 @@ async function executeChatTool(name, args = {}) {
   if (name === "setToolMaxSteps") {
     return { ok: true, steps: setChatMaxToolSteps(args.steps) };
   }
+  if (name === "setLayerFilter") {
+    const result = await window.kasugaiApi.setLayerFilter(args.name, args.filter);
+    if (result?.ok) return { ok: true };
+    if (result?.reason === "unsupported") return { ok: false, message: t("tool.layerFilterUnsupported", { name: args.name }) };
+    if (result?.reason === "failed") return { ok: false, message: t("tool.layerFilterFailed", { name: args.name }) };
+    return { ok: false, message: t("tool.layerNotFound", { name: args.name }) };
+  }
+  if (name === "listUiControls") return { controls: window.kasugaiApi.listUiControls(args.filter) };
+  if (name === "controlUi") return window.kasugaiApi.controlUi(args.target, { action: args.action, value: args.value });
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 

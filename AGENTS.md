@@ -12,7 +12,7 @@
 - リリースは 4.x〜5.x 系（4.0.0, 4.1.0, ...）で進める
 - ハッカソン提出は「**V3（AI 連携）の強化**」として位置づける（詳細は `hackathon.html`）。提出可能状態の条件:
   - Cloud Run 上に KASUGAI Canvas（静的配信）＋GIS 保存 API＋`/api/gemini`（内蔵AI向けキー隠蔽プロキシ）が稼働し、`GEMINI_API_KEY` で審査員キーレスの AI 利用ができる
-  - ブラウザ内蔵AI（Gemini function calling・50ツール）によるサンプルデータ生成・資料生成＋パーマリンク（`showReport`/`buildShareUrl`）が動作する
+  - ブラウザ内蔵AI（Gemini function calling・55ツール）によるサンプルデータ生成・資料生成＋パーマリンク（`showReport`/`buildShareUrl`）が動作する
   - 審査用公開URLが維持され、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く
 
 ## バージョン管理手順
@@ -55,6 +55,22 @@
   - アンカーは各項目を `position:relative` のラッパー（例: `.opt-item`）で包み `bottom:100%` で配置する。**flexコンテナ直下の絶対配置は使わない** — flex子要素の静的位置はDOM位置に関わらずコンテナ先頭に揃うため、全ポップアップが最上部に積み重なる
   - ポップアップには必ず `pointer-events:none` を付ける。ポップアップ越しに上の項目をホバー・クリック・入力できなければならない（表示専用）
   - 実装例: `#display-tiles-panel .opt-item > .hint`（`styles.css`）
+
+### AI 制御可能な UI（必須）
+
+アプリの全 UI 項目は AI（内蔵AIチャット・外部エージェント・`/api/command`。実行は `executeChatTool` に一本化）から操作できることを必須とする。**今後 UI を追加・変更するときもこの条件を満たすこと**。
+
+- **汎用ブリッジが既定経路**: `listUiControls`（操作要素を target/kind/label/value/checked/options/disabled/hidden 付きで列挙）と `controlUi`（target に対し click=押下/トグル・set=値設定・get=現在値取得）が、`button`・`input`・`select`・`textarea`・`a[href]` とタブ属性（`data-panel`/`data-settings-panel`/`data-manage-pane`/`data-manage-sub`/`data-tab`）を持つ要素を自動列挙する。**新しい UI は「安定した `id` またはタブ用 `data-*` 属性を持ち、click/change/input ハンドラで動作する」実装にすれば、ツール追加なしで自動的に AI 制御可能になる**。これが新規 UI の標準形
+- **汎用ブリッジが届かないものは専用 API を必ず併設する**。kasugaiApi メソッド追加 + CHAT_TOOLS 宣言 + `executeChatTool` 配線（+ `activeChatTools` のティア絞り込み）をセットで行い、`ai-tools.html` の仕様ミラーも更新すること:
+  - `window.prompt` / `prompt()` で値を受け取る操作（DOM から値を入れられないため。**prompt を新たに使う UI は禁止**。プロンプトが必要なら専用 API を用意するかモーダル化する。例: レイヤー行の ⏷ フィルター → `setLayerFilter` で API 化済み）
+  - レイヤー行・検索結果・プラグイン一覧など動的生成コンテンツ（行番号が不安定なため列挙対象外。`setLayerVisible`/`focusLayer` のように名前・ID 解決を持つセマンティック API で操作する）
+  - 地図キャンバス上のクリック・ドラッグ等の座標操作（`flyTo`/`addFlyPath` 等のセマンティック API で代替する）
+  - ドラッグ操作（リサイズ・並べ替え等）。意味のある並べ替え・リサイズは専用 API で状態を変更できるようにする
+- **ブラウザ仕様上の例外**（AI から完了させられないもの。これらを必須経路にしないこと。例: ファイル選択に代わる DATA/ パス指定や URL 指定の入力経路を併設する）:
+  - ファイル/フォルダピッカー（`input[type=file]`・File System Access API）のファイル選択自体 — ピッカーを開く click までは可能
+  - OAuth 等の別タブ認証フロー（Box 接続・rclone リモート追加など）
+  - ネイティブ `confirm`（安全性のためユーザーの最終判断を残す設計。迂回させない）
+- **セキュリティ**: パスワード欄（API キー等）の値は `listUiControls`/`controlUi` get の結果に含めない（AI コンテキストにキーを持ち出さない）。`controlUi`/`setLayerFilter` は runCode サンドボックスからはブロック済み（`CHAT_SANDBOX_BLOCKED_API`）— ツール経由でのみ使え、生成コードからの確認ダイアログ迂回を防ぐ
 
 ## サーバー方針
 
