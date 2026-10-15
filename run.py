@@ -64,6 +64,21 @@ def check_versions(check_latest: bool = True) -> None:
         "CHANGELOG.md": changelog_version,
     }
 
+    nav = (ROOT / "nav.js").read_text(encoding="utf-8")
+    nav_match = re.search(r"const VERSION = 'v([^']+)'", nav)
+    files["nav.js"] = nav_match.group(1) if nav_match else None
+
+    # ドキュメントのバージョンバッジも Cargo.toml と同期・検査する。
+    documentation_pages = [
+        *(page for page in ROOT.glob("*.html") if page.name != "home.html"),
+        *ROOT.glob("auth/*.html"),
+        *ROOT.glob("features/*.html"),
+    ]
+    for page in documentation_pages:
+        page_content = page.read_text(encoding="utf-8")
+        badge_match = re.search(r'class="version-badge">v([^<]+)</span>', page_content)
+        files[str(page.relative_to(ROOT))] = badge_match.group(1) if badge_match else None
+
     if check_latest:
         latest_json_path = DOWNLOAD_DIR / "latest.json"
         if latest_json_path.exists():
@@ -90,7 +105,7 @@ def check_versions(check_latest: bool = True) -> None:
 def sync_versions(write_latest: bool = True) -> None:
     """server/Cargo.toml のバージョンを他の公開ファイルへ同期する。
 
-    write_latest=False の場合、latest.json には書き込まず、README と NSIS メタデータのみ同期する。
+    write_latest=False の場合、latest.json には書き込まず、ドキュメント・ナビゲーション・README・NSIS を同期する。
     リリースビルドの途中で latest.json を更新しないようにするためのオプション。
     """
     cargo_version = _get_cargo_version()
@@ -116,6 +131,20 @@ def sync_versions(write_latest: bool = True) -> None:
     nsi = re.sub(r'VIProductVersion "[^"]+"', lambda m: f'VIProductVersion "{cargo_version}.0"', nsi)
     nsi = re.sub(r'VIAddVersionKey "FileVersion" "[^"]+"', lambda m: f'VIAddVersionKey "FileVersion" "{cargo_version}"', nsi)
     INSTALLER_SCRIPT.write_text(nsi, encoding="utf-8")
+
+    nav_path = ROOT / "nav.js"
+    nav = nav_path.read_text(encoding="utf-8")
+    nav = re.sub(r"const VERSION = 'v[^']+'", f"const VERSION = 'v{cargo_version}'", nav)
+    nav_path.write_text(nav, encoding="utf-8")
+
+    for page in [*ROOT.glob("*.html"), *ROOT.glob("auth/*.html"), *ROOT.glob("features/*.html")]:
+        page_content = page.read_text(encoding="utf-8")
+        page_content = re.sub(
+            r'(class="version-badge">)v[^<]+(</span>)',
+            lambda m: f"{m.group(1)}v{cargo_version}{m.group(2)}",
+            page_content,
+        )
+        page.write_text(page_content, encoding="utf-8")
 
     print(f"バージョンを {cargo_version} へ同期しました。", file=sys.stderr, flush=True)
 

@@ -5,7 +5,7 @@
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v5.18.0';
+  const VERSION = 'v5.26.0';
 
   const GROUPS = [
     {
@@ -58,7 +58,8 @@
     {
       label: '記録',
       items: [
-        { href: 'hackathon.html', text: 'ハッカソン' }
+        { href: 'hackathon.html', text: '第5回 Agentic AI Hackathon with Google Cloud' },
+        { href: 'g-idea.html', text: 'イチBizアワード 2026' }
       ]
     }
   ];
