@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.26.0] - 2026-10-15
+
+### Added
+
+- **AI の追加指示を保存・共有** — 管理 → AI → チャットの「追加指示」タブでモデルに依存しない指示を保存できる。通常はブラウザに保存し、Cloud Run では `KASUGAI_AI_INSTRUCTIONS` のサーバー設定を優先して `/api/gemini` 経由で適用する
+- **GIS 案内エージェントの標準指示** — 対象地域・目的の把握、実データと架空サンプルの区別、資料作成時の出典とパーマリンクなどの運用方針を追加
+
 ## [5.25.0] - 2026-10-15
 
 ### Added

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.25.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.26.0</span></h1>
       <p>ハッカソン — 第5回 Agentic AI Hackathon with Google Cloud 出展まとめ</p>
     </header>
     <main>
@@ -73,27 +73,27 @@
 
       <h3>一番大事なこと：GIS で「何ができて、何が解決できるか」を先に体験する</h3>
       <p>結局、最も重要なのは、<strong>「GIS を使うことで何ができて、どんな課題が解決できるか」を本番導入前に体験できるか</strong>ということです。GIS 導入が進まない、あるいは導入されても活用されない現場の多くは、GIS 自体の理解が不足していることが原因です。</p>
-      <p>そのためのエージェントこそが、KASUGAI Canvas の ANTIGRAVITY 情報レイヤーです。</p>
+      <p>そのためのエージェントが、Gemini モデルを使う KASUGAI Canvas のブラウザ内蔵 AI エージェントです。Gemini が function calling で操作するツールを選び、ブラウザ内蔵エージェントがそのツールを実行して GIS を操作します。</p>
       <ul>
         <li><strong>体験を先に：</strong>本番データを必要とせず、サンプル・資料・GIS が連動した状態で「GIS ならではの理解」を体験</li>
         <li><strong>理解を深める：</strong>地図と情報の一体化、レイヤーの切り替え、FlyTo・属性表示など、GIS の利点を実感</li>
         <li><strong>正しい導入判断へ：</strong>体験を通じて「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らす</li>
       </ul>
 
-      <h3>ANTIGRAVITY エージェント：目標と 3 つの機能</h3>
-      <p>ANTIGRAVITY エージェントの<strong>目標</strong>は、利用者を<strong>正しい GIS 導入判断と課題解決へ導く</strong>ことです。そのために、以下 3 つの機能を実装しています。</p>
+      <h3>Gemini エージェント：目標と 3 つの機能</h3>
+      <p>Gemini モデルを使うブラウザ内蔵エージェントの<strong>目標</strong>は、利用者を<strong>正しい GIS 導入判断と課題解決へ導く</strong>ことです。Gemini が function calling でツールを選び、エージェントが Canvas の GIS API を実行して、以下 3 つの機能を実現します。</p>
       <div class="features">
         <div class="feature-card">
           <h3>自然言語からレイヤーと属性を自動構成</h3>
-          <p>「○○の資料を作って」と話すだけで、必要な地図レイヤー・属性・凡例・カメラ位置を選定・構成します（実在施設の検索 <code>searchPlaces</code>・URL 指定レイヤー <code>addLayer</code>・生成 GeoJSON の <code>addDataLayer</code>）。</p>
+          <p>「○○の資料を作って」と話すと、Gemini が必要な地図レイヤー・属性・凡例・カメラ位置を判断し、function calling で選んだツールをブラウザ内蔵エージェントが実行して構成します（実在施設の検索 <code>searchPlaces</code>・URL 指定レイヤー <code>addLayer</code>・生成 GeoJSON の <code>addDataLayer</code>）。</p>
         </div>
         <div class="feature-card">
           <h3>現実に近いサンプルデータを自動生成し、GIS の利点を可視化・体験化</h3>
-          <p>本番データがなくても、エリア・業種・目的に応じた架空サンプルを GeoJSON で生成。地図と情報の一体化、レイヤー切り替え、FlyTo、属性表示など、GIS ならではの理解を実感してもらう。</p>
+          <p>Gemini がエリア・業種・目的に応じた架空サンプルを GeoJSON で生成し、ブラウザ内蔵エージェントが GIS ツールで地図に表示します。本番データがなくても、レイヤー切り替え、FlyTo、属性表示などを通じて GIS ならではの理解を体験できます。</p>
         </div>
         <div class="feature-card">
           <h3>属性から課題を抽出し、平面・内容・解決案を提示した資料作成</h3>
-          <p>レイヤー・属性から課題を抽出し、その平面（地図上の状況）・内容・解決案をまとめた資料のベースを生成（<code>showReport</code>）。資料には GIS へのパーマリンクを付与する（<code>buildShareUrl</code>）。</p>
+          <p>Gemini がレイヤー・属性から課題を読み取り、ブラウザ内蔵エージェントが資料作成ツール（<code>showReport</code>）を実行して、平面（地図上の状況）・内容・解決案をまとめた資料のベースを生成します。資料には GIS へのパーマリンクを付与します（<code>buildShareUrl</code>）。</p>
         </div>
       </div>
       <div class="card" style="margin-top:20px;">
@@ -101,11 +101,11 @@
         <p>上記 3 つの機能を通じて、利用者は本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験します。その結果、「本当に必要なデータ・機能・運用」が見え、無理な導入や失敗を減らし、課題解決につながります。</p>
       </div>
 
-      <h3>ANTIGRAVITY エージェントの本質：資料を作る・見せる・説明する</h3>
-      <p>ANTIGRAVITY エージェントは、資料の基本である <strong>作る → 見せる → 説明する</strong> を自動化するエージェントです。</p>
+      <h3>Gemini エージェントの本質：資料を作る・見せる・説明する</h3>
+      <p>Gemini エージェントは、資料の基本である <strong>作る → 見せる → 説明する</strong> を自動化するエージェントです。</p>
       <table>
         <thead>
-          <tr><th>資料の基本</th><th>ANTIGRAVITY の機能</th><th>具体的な動作</th></tr>
+          <tr><th>資料の基本</th><th>Gemini の機能</th><th>具体的な動作</th></tr>
         </thead>
         <tbody>
           <tr><td>作る</td><td>自然言語からレイヤーと属性を自動構成</td><td>「○○の資料を作って」と話すだけで、必要なレイヤー・属性・サンプルデータを生成する</td></tr>
@@ -116,7 +116,7 @@
       <p>この 3 ステップを通じて、資料は「PDF への地図貼り付け」ではなく、<strong>GIS と連動した生きた理解資料</strong>となります。そして、その体験が正しい GIS 導入判断と課題解決へ繋がります。</p>
 
       <h3>資料のベース作成と GIS パーマリンク連携</h3>
-      <p>最も重要なのは、<strong>資料は資料として必要なものである</strong>という点です。資料は会議の進行、結論の提示、合意形成のための要約として不可欠です。ANTIGRAVITY エージェントは、GIS 上のレイヤー・属性から課題を読み取り、<strong>平面（地図上の状況）・内容・解決案</strong>をまとめた資料のベースを作成します。</p>
+      <p>最も重要なのは、<strong>資料は資料として必要なものである</strong>という点です。資料は会議の進行、結論の提示、合意形成のための要約として不可欠です。Gemini エージェントは、GIS 上のレイヤー・属性から課題を読み取り、<strong>平面（地図上の状況）・内容・解決案</strong>をまとめた資料のベースを作成します。</p>
       <p>資料に載せきれない背景・範囲・詳細は GIS 側に置き、<strong>資料にパーマリンクを載せる</strong>ことで、資料と GIS を双方向に連動させます。</p>
       <h4>なぜパーマリンクなのか</h4>
       <ul>
@@ -132,17 +132,17 @@
         <li>必要に応じてレイヤーを追加・非表示・属性をクリックし、深掘りを行う</li>
         <li>新たな視点が見つかったら、新しいパーマリンクを生成し資料にフィードバック</li>
       </ol>
-      <h4>ANTIGRAVITY との関係</h4>
-      <p>資料作成時に、ANTIGRAVITY エージェントが「資料に載せるべき GIS 視点」を提案し、パーマリンク付きで資料と GIS を同時生成します。資料と GIS がお互いを補完し合うことで、会議の一体感と意思決定のスピードが向上します。</p>
+      <h4>Gemini との関係</h4>
+      <p>資料作成時に、Gemini モデルが「資料に載せるべき GIS 視点」を判断し、function calling で選んだツールをブラウザ内蔵エージェントが実行して、パーマリンク付き資料と GIS 表示を用意します。資料と GIS がお互いを補完し合うことで、会議の一体感と意思決定のスピードが向上します。</p>
 
-      <h3>ANTIGRAVITY エージェントのワークフロー</h3>
+      <h3>Gemini エージェントのワークフロー</h3>
       <pre class="text"><code>自然言語での指示（「○○の資料を作って」）
     ↓
-必要なレイヤー・属性・サンプルデータの構成（function calling）
+Gemini モデルが内容を判断し、function calling で実行する GIS ツールを選択
     ↓
-属性から課題を抽出し、平面・内容・解決案を提示した資料を作成
+ブラウザ内蔵エージェントがツールを実行して Canvas の GIS API でレイヤー・属性・サンプルデータを操作
     ↓
-資料用パーマリンクと GIS 表示の生成
+Gemini が属性から課題を読み取り、エージェントが資料作成・パーマリンク生成ツールを実行
     ↓
 利用者が GIS で「何ができて、何が解決できるか」を体験
     ↓
@@ -161,44 +161,31 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
         </tbody>
       </table>
 
-      <h3>ANTIGRAVITY の狙い</h3>
-      <p>ANTIGRAVITY 情報レイヤーは、上記 3 つの機能を自然言語で実現し、「正しい GIS 導入判断と課題解決へ導く」ことを目指すエージェントです。「○○の資料を作って」と話すだけで、<strong>作る → 見せる → 説明する</strong> という資料作成の基本が自動化され、場と情報が一体化した GIS 体験が構築されます。</p>
-      <p>ANTIGRAVITY の最終目的は、<strong>利用者が本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験し、GIS への理解を深めること</strong>にあります。サンプルデータや資料×GIS 連携を通じて、正しい GIS 導入判断と課題解決を後押しします。</p>
+      <h3>Gemini の狙い</h3>
+      <p>Gemini モデルを使うブラウザ内蔵 AI エージェントは、Gemini の function calling で選ばれたツールを実行し、Canvas の GIS API を通じて上記 3 つの機能を実現します。「正しい GIS 導入判断と課題解決へ導く」ことを目指すエージェントです。「○○の資料を作って」と話すだけで、<strong>作る → 見せる → 説明する</strong> という資料作成の基本が自動化され、場と情報が一体化した GIS 体験が構築されます。</p>
+      <p>Gemini の最終目的は、<strong>利用者が本番導入前に「GIS で何ができて、どんな課題が解決できるか」を体験し、GIS への理解を深めること</strong>にあります。サンプルデータや資料×GIS 連携を通じて、正しい GIS 導入判断と課題解決を後押しします。</p>
 
-      <h2 id="審査基準">審査基準</h2>
-      <div class="features">
-        <div class="feature-card">
-          <h3>課題の新規性と解決策の有効性</h3>
-          <p>未解決の課題を発見し、核心に効果的に対処する価値あるソリューション。</p>
-        </div>
-        <div class="feature-card">
-          <h3>自律性・エージェントらしさ</h3>
-          <p>状況を判断し自律的に行動しつつ、可観測性・セキュリティを備えた信頼できる動作。</p>
-        </div>
-        <div class="feature-card">
-          <h3>実装品質と拡張性</h3>
-          <p>高い品質で実現され、運用性・費用対効果を考慮した実用的なソリューション。</p>
-        </div>
-      </div>
 
       <h2 id="参加条件">参加条件・提出物</h2>
       <h3>必須：Google Cloud アプリケーション実行プロダクト</h3>
       <ul>
-        <li>App Engine / Compute Engine / GKE / <strong>Cloud Run（本プロジェクトで使用）</strong> / Cloud Run functions / Cloud TPU / GPU のいずれかを使用</li>
+        <li><strong>Cloud Run</strong> に KASUGAI Canvas をデプロイ</li>
       </ul>
       <h3>必須：Google Cloud AI 技術</h3>
       <ul>
-        <li>Gemini Enterprise Agent Platform / <strong>Gemini API（本プロジェクトで使用）</strong> / Gemma / Nano Banana / ADK / Speech-to-Text / Vision AI / Natural Language AI / Translation AI のいずれかを使用</li>
+        <li><strong>Gemini API</strong> の function calling でブラウザ内蔵エージェントから GIS 操作ツールを実行</li>
       </ul>
       <h3>提出物</h3>
-      <ol>
-        <li>GitHub リポジトリの連携（公開・非公開どちらでも可）：<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">https://github.com/yamamoto-ryuzo/kasugai_canvas</a></li>
-        <li>デプロイした URL（審査員が動作確認できる状態を維持）：<a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">https://kasugai-canvas-nqh4tuar6a-an.a.run.app/</a>（認証モード5。共有 ID/PASS でログインが必要・資格情報は提出フォームに記載）</li>
-        <li>プロジェクト説明（<a href="#kasugai-concept">本ページ「プロジェクト説明」節</a>）、システムアーキテクチャ図（同節の SVG 図）、3分程度のデモ動画（YouTube 公開）</li>
-      </ol>
+      <ul>
+        <li><strong>GitHub リポジトリ：</strong><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">github.com/yamamoto-ryuzo/kasugai_canvas</a></li>
+        <li><strong>デプロイ URL：</strong><a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">kasugai-canvas-nqh4tuar6a-an.a.run.app</a>（認証モード5。共有 ID/PASS でログイン。資格情報は提出フォームに記載）</li>
+        <li><strong>プロジェクト説明：</strong><a href="#kasugai-concept">本ページのプロジェクト説明</a></li>
+        <li><strong>システムアーキテクチャ図：</strong>本ページの SVG 図</li>
+        <li><strong>デモ動画：</strong>「○○の資料を作って」から GIS 体験・資料生成までを紹介する約3分の動画（制作・YouTube 公開後に URL を掲載）</li>
+      </ul>
 
       <h2 id="kasugai-concept">プロジェクト説明：KASUGAI Canvas — GIS 利活用を促進する Agentic AI エージェント</h2>
-      <p><strong>KASUGAI Canvas</strong> は、ブラウザ上の 3D GIS（CesiumJS）に Gemini API の function calling を組み込んだ Agentic AI エージェント搭載アプリです。自然言語の指示（「○○の資料を作って」等）に対し、ブラウザ内蔵のエージェントが50種のチャットツールを自律的に呼び出し、URL 指定のベクターレイヤー追加・AI 生成サンプル GeoJSON のレイヤー表示・地図移動（FlyTo）・Markdown/HTML 資料の生成とダウンロード・視点パーマリンクの埋め込みまでを一連の流れとして実行します。「GIS が導入前に体験できず、理解されないまま失敗する」という課題に対し、AI がサンプルデータと資料をその場で生成する体験先行型のアプローチで解決します。</p>
+      <p><strong>KASUGAI Canvas</strong> は、ブラウザ上の 3D GIS（CesiumJS）に Gemini API の function calling を組み込んだ Agentic AI エージェント搭載アプリです。ブラウザ内蔵エージェントは Gemini を推論モデルとして使い、自然言語の指示（「○○の資料を作って」等）を受けた Gemini が function calling でチャットツールを選びます。ブラウザ内蔵エージェントがそのツールを実行し、Canvas の GIS API を通じてURL 指定のベクターレイヤー追加・AI 生成サンプル GeoJSON のレイヤー表示・地図移動（FlyTo）・Markdown/HTML 資料の生成とダウンロード・視点パーマリンクの埋め込みまでを一連の流れとして実行します。「GIS が導入前に体験できず、理解されないまま失敗する」という課題に対し、AI がサンプルデータと資料をその場で生成する体験先行型のアプローチで解決します。</p>
       <p>バックエンドは Cloud Run（FastAPI）の1サービスに静的配信・<code>/api/gemini</code>（サーバーキー注入のプロキシ）・<code>/api/auth</code>・<code>/api/kasc</code>・<code>/api/data</code>（Cloud Storage への保存）を集約し、同一オリジンで提供します。保存データは V4 署名付き URL でブラウザ⇄Cloud Storage 間を直接転送し、Gemini キーは Secret Manager から注入されるためブラウザに露出しません。本ページに記載する機能はすべて実装済みで、審査用の公開 URL（<a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">https://kasugai-canvas-nqh4tuar6a-an.a.run.app/</a>）でそのまま確認できます。</p>
 
       <h3 id="参加条件対応">参加条件との対応</h3>
@@ -212,19 +199,7 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
           <tr><td>必須：Google Cloud AI 技術</td><td><strong>Gemini API</strong> の function calling で、自然言語からの GIS 制御（URL 指定レイヤー追加・サンプル GeoJSON 生成表示・資料作成）を実装。実行主体はブラウザ内蔵エージェント（50種のチャットツール）で、<code>/api/gemini</code> がサーバーキーを注入して審査員キーレスでの動作を実現。併用する Google Cloud プロダクトとして <strong>Cloud Storage</strong>（.kasc・<code>gs://</code> データ・V4 署名付き URL 転送）と <strong>Secret Manager</strong>（API キー・認証情報）を使用</td></tr>
           <tr><td>提出物 1：GitHub リポジトリ</td><td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas" target="_blank">github.com/yamamoto-ryuzo/kasugai_canvas</a> を連携（フロント・エージェント・IaC を含む）</td></tr>
           <tr><td>提出物 2：デプロイ URL</td><td><a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" target="_blank">https://kasugai-canvas-nqh4tuar6a-an.a.run.app/</a>（Cloud Run 上の公開 URL）を提出し、審査期間中（〜2026/12/01）動作確認可能な状態を維持</td></tr>
-          <tr><td>提出物 3：説明・構成図・デモ動画</td><td>プロジェクト説明（<a href="#kasugai-concept">本ページ</a>）＋システムアーキテクチャ図（同ページの SVG 図）＋「○○の資料を作って」→ GIS 体験→資料生成までの 3 分デモ動画（YouTube 公開）</td></tr>
-        </tbody>
-      </table>
-
-      <h3 id="審査基準対応">審査基準への対応</h3>
-      <table>
-        <thead>
-          <tr><th>審査基準</th><th>KASUGAI Canvas のアピールポイント</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>課題の新規性と解決策の有効性</td><td>「GIS が導入前に体験できず、理解されないまま失敗する」という未解決課題に対し、サンプルデータ自動生成×資料×GIS 連動という体験先行型アプローチで解決</td></tr>
-          <tr><td>自律性・エージェントらしさ</td><td>自然言語の指示からブラウザ内蔵エージェントが function calling ループを自律実行し、レイヤー操作→サンプル GeoJSON 生成表示→資料作成までを一連のツール呼び出しとして実行する。実行したツールはチャットに記録され、生成データには出典・生成時刻・AI 生成明記を付与する設計（可観測性）</td></tr>
-          <tr><td>実装品質と拡張性</td><td>公開エンドポイントのガバナンスを実装済み：<code>/api/gemini</code> はモデル許可リスト・1MB 上限・レート制限・Bearer トークン／ID-PASS／Cookie ゲート／IAP の認可で保護。データ転送は GCS V4 署名付き URL でコンテナを通さず、セッションはステートレス HMAC トークンでアフィニティ不要。外部エージェントプロトコルが契約としてフロントに開いているため、後から別実装のエージェントを差し込み拡張できる</td></tr>
+          <tr><td>提出物 3：説明・構成図・デモ動画</td><td>プロジェクト説明（<a href="#kasugai-concept">本ページ</a>）＋システムアーキテクチャ図（同ページの SVG 図）＋「○○の資料を作って」→ GIS 体験→資料生成までの約3分デモ動画（制作・YouTube 公開後に URL を掲載）</td></tr>
         </tbody>
       </table>
 
@@ -236,32 +211,54 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
         <li><strong>キー・秘匿管理：</strong>Gemini・Maps キーと認証情報は Secret Manager 経由で環境変数に注入。Maps キーはブラウザ直接通信に必要なため capabilities で配布し、GCP 側の HTTP リファラ＋API 制限で保護</li>
         <li><strong>拡張窓口：</strong>外部エージェントプロトコル（<code>{message,project,camera,layers,history,apiKey?}</code> → <code>{reply,actions,report}</code>）により、別実装のエージェントをエンドポイント URL 指定で差し込める</li>
       </ul>
-      <h3>デモシナリオ（3分動画）</h3>
-      <p>審査基準の3項目に沿った3部構成で収録します。全ステップ実装済みのツールのみで構成しています。</p>
 
-      <h4>第1部：課題の新規性と解決策の有効性 —「GIS を導入前に体験する」</h4>
-      <ol>
-        <li>複合指示を一発で投入：「春日井市の避難所を調べてレイヤーにし、想定される災害リスクのサンプルデータを重ねて、防災上の課題を資料にまとめて」</li>
-        <li><code>searchPlaces</code>（Google Places・実在施設）で候補を取得 → <code>addDataLayer</code> で「避難所」レイヤーを即席追加（実データが即座に体験できる）</li>
-        <li><code>addDataLayer</code> で想定リスクエリア（ポリゴン）を生成・重畳（実データが揃わない領域もサンプル生成で体験可能にする）</li>
-        <li><code>showReport</code> で Markdown 資料を出力。各節に <code>buildShareUrl</code> の視点パーマリンクを埋め込み、資料のリンクをクリックすると地図がその視点に飛ぶ（資料⇄GIS の双方向連携）</li>
-        <li><strong>プレゼンテーション締め：</strong>追い指示「さっきの避難所を巡るルートで飛んで」→ AI が先の <code>searchPlaces</code> 座標を結ぶ LineString を <code>addFlyPath</code> で生成 → <code>playFlyPath</code> で Fly モード自動巡視。<strong>AI が作った資料の地点を、AI が作ったルートで空から辿る</strong> — V2 Fly モード（プレゼンテーション機能）を V3 エージェントが生成・駆動する本作の核心です</li>
-      </ol>
+      <h3>内蔵 AI エージェントの指示文</h3>
+      <p>内蔵 AI エージェントには、モデルに依存しない次の指示を設定します。</p>
+      <pre><code>あなたは KASUGAI Canvas の GIS 案内エージェントです。
+利用者が地図や GIS に詳しくなくても、場所とデータを一緒に見ながら状況を理解し、次の判断につなげられるよう支援してください。
 
-      <h4>第2部：自律性・エージェントらしさ —「自律実行と可観測性」</h4>
-      <ol>
-        <li>第1部の一連の処理が function calling ループによる自律的なツール呼び出しの連鎖であることを示す（計画→実行→確認をエージェント自身が回す）</li>
-        <li><code>vectorSearch</code>・<code>getLayerGeoJson</code>・<code>runCode</code> で属性検索・集計を自律実行し課題を抽出</li>
-        <li>チャットに記録されたツール実行ログ（「実行: <code>searchPlaces(...)</code>」等）と、生成地物の <code>aiGenerated:true</code>・<code>dataSource</code>・<code>generatedAt</code> を画面で確認（AI 生成データの出自管理＝可観測性）</li>
-        <li><code>savePlugin</code> でエージェントがプラグインコードを生成 → 確認ダイアログで人間が承認して有効化（自律拡張＋人間統制のガバナンス）</li>
-      </ol>
+## 目標
+利用者の依頼に応じて、Canvas の地図・レイヤー・属性・資料を整え、
+「GIS で何が分かり、どんな課題解決に役立つか」を体験できる状態にします。
 
-      <h4>第3部：実装品質と拡張性 —「公開運用のガバナンス」</h4>
+## 進め方
+1. 依頼から対象地域、目的、必要な情報を読み取ります。不明点が結果を大きく左右するときだけ質問します。
+2. 実在施設や公開情報が必要なら、検索・既存データを使います。架空サンプルでよい依頼なら、現実の情報と誤認されないサンプルを生成します。
+3. 関連するデータを意味の分かる名前のレイヤーに分けて追加し、地図を対象地域へ移動します。
+4. 属性や分布から読み取れることを整理します。データだけでは裏付けられないことは事実のように断定しません。
+5. 必要なら資料を作成し、地図の状態を再現できるパーマリンクを付けます。
+6. 完了時に、追加したレイヤー、分かったこと、サンプルデータか実データか、資料へのリンクを簡潔に説明します。
+
+## サンプルデータの扱い
+- 架空データは、名前・説明・資料内に「AI 生成の架空サンプル」と明記します。
+- 架空の地点や属性を、実在施設の情報として紹介しません。
+- サンプルから導けるのは操作や分析の例までです。現実の意思決定に使える結論として扱いません。
+- サンプルを作るときは、依頼された地域・目的に沿った、地図上で比較できるデータにします。
+
+## ツールの使い方
+- 依頼を達成するために必要なツールを選び、実行結果を確認してから次へ進みます。
+- レイヤー生成は、出力が大きくなりすぎないよう原則1レイヤーずつ行います。
+- 同じレイヤーや資料を重複して作らないよう、現在の地図状態を確認します。
+- 必要のない設定変更やデータ削除は行いません。
+- ツールが失敗した場合は、成功したように装わず、失敗した操作と代替案を説明します。
+
+## 資料の作成
+資料には、次の内容を含めます。
+- 対象地域と目的
+- 地図上で確認できる状況
+- データや属性から読み取れる内容
+- 課題に対する検討案
+- データの出典、または「AI 生成の架空サンプル」である旨
+- 地図を開くパーマリンク
+
+検討案は、確認できたデータに基づく案として書き、根拠の限界や追加で必要なデータも必要に応じて示します。</code></pre>
+      <h3>デモシナリオ（3分動画）：渋谷区のまち歩きマップを作る</h3>
+      <p>渋谷区の回遊プランを考えるストーリーです。Gemini に頼むと、公園・文化／観光スポット・飲食店の架空サンプルを各約5件、計約15件の点データとして3レイヤーに作り、地図と案内資料にまとめます。出力を抑えるため、レイヤーは1つずつ順番に生成します。サンプルは実在施設の情報ではないことを明記します。</p>
       <ol>
-        <li>ID/PASS ログイン（認証モード5）→ .kasc が Cloud Storage に保存 → 再訪で復元（V4 署名付き URL でブラウザ⇄GCS 直接転送）。作成した飛行ルートは描画ルートとして IndexedDB に残り、再訪時も Fly モードのルート選択に現れる</li>
-        <li>審査員キーレスの AI 利用：<code>/api/gemini</code> がサーバーキーを注入（モデル許可リスト・1MB 上限・レート制限・認可で保護）。キーは Secret Manager 経由でブラウザに露出しない</li>
-        <li>スケールトゥゼロ運用で非アクセス時の課金ゼロ（費用対効果）。コールドスタートはフロントの <code>/health</code> リトライで吸収</li>
-        <li>締めの演出：Google Photorealistic 3D Tiles＋<code>setTerrain</code>＋<code>flyToFeature</code> のドローン視点（対象地上+200m・-30°）で対象地を映す</li>
+        <li><strong>依頼：</strong>「渋谷区の回遊プランを考えたい。公園、文化・観光スポット、飲食店の架空サンプルをそれぞれ約5件ずつ、別々の点レイヤーにして。サンプルデータであることを明記し、見どころを紹介する資料も作って」と入力します。</li>
+        <li><strong>3レイヤーを作成：</strong>Gemini が各カテゴリ約5件、合計約15件の架空サンプル地点を GeoJSON で生成し、<code>addDataLayer</code> で「公園」「文化・観光スポット」「飲食店」の点レイヤーを個別に地図へ追加します。各レイヤーに AI 生成サンプルであることを示します。</li>
+        <li><strong>地図で見比べる：</strong>Gemini が <code>flyTo</code> で渋谷区へ移動。3レイヤーを切り替え、約15件の点の分布や近さを地図上で確かめます。</li>
+        <li><strong>案内資料を作成：</strong><code>showReport</code> で各カテゴリの見どころをまとめ、<code>buildShareUrl</code> のパーマリンクを付けます。資料からリンクを開くと同じ地図の視点を再現できることを示して締めくくります。</li>
       </ol>
 
       <h3>システムアーキテクチャ図</h3>
@@ -361,20 +358,12 @@ GIS 理解の深化と正しい導入判断・課題解決</code></pre>
         <tbody>
           <tr><td>フロントエンド</td><td>KASUGAI Canvas（CesiumJS）</td><td>3D 地球・レイヤー表示・FlyTo・チャット UI・資料モーダル</td></tr>
           <tr><td>ホスティング</td><td>Cloud Run <strong>（必須プロダクト充足）</strong></td><td>静的フロント配信＋GIS 保存 API＋<code>/api/gemini</code> AI プロキシを1サービスに同居（同一オリジン・CORS 不要・提出URL 1本）</td></tr>
-          <tr><td>AI エージェント</td><td>Gemini API（function calling）<strong>（必須 AI 技術充足）</strong></td><td>ブラウザ内蔵エージェントが50種のチャットツールを直接実行 → レイヤー追加・サンプル生成・資料生成まで自律実行</td></tr>
+          <tr><td>AI エージェント</td><td>Gemini API（function calling）<strong>（必須 AI 技術充足）</strong></td><td>Gemini モデルが function calling でツールを選択し、ブラウザ内蔵エージェントが50種のチャットツールを実行。Canvas の GIS API を通じてレイヤー追加・サンプル表示・資料生成まで自律実行</td></tr>
           <tr><td>データ保存（GIS の保存先）</td><td>Cloud Storage</td><td>.kasc（<code>kasc/&lt;ID&gt;</code>）・<code>gs://</code> 秘匿データ（<code>data/&lt;key&gt;</code>）。GET は V4 署名付き URL でブラウザ⇄GCS 直接転送</td></tr>
           <tr><td>セキュリティ</td><td>Cloud IAP / HMAC トークン / Secret Manager / Cloud IAM</td><td>起動制御モード5/6/7・秘匿情報は Secret Manager・実行サービスアカウントの最小権限</td></tr>
         </tbody>
       </table>
-      <h2 id="todo">次のステップ（提出までの残作業）</h2>
-      <ol>
-        <li>審査用公開 URL での通し検証：「○○の資料を作って」→ サンプルデータのレイヤー追加 → FlyTo → 資料出力。稼働維持は提出締切 2026/10/15 以降の審査期間のみ <code>python run-cloudrun.py --min-instances 1</code> で常駐化（それ以外は <code>--min-instances 0</code> のスケールトゥゼロ運用。コールドスタートはフロントの <code>/health</code> リトライで吸収）</li>
-        <li>3 分デモ動画（YouTube 公開）の制作。保存デモはモード5（ID/PASS ログイン → .kasc が GCS へ保存・復元）の流れを収録</li>
-        <li>提出フォームに審査用の共有 ID/PASS を記載する（公開 URL は認証モード5のため、ログイン情報なしではアプリが起動しない。資格情報は公開リポジトリ・本ページには書かない）</li>
-        <li>GitHub リポジトリ連携とプロジェクト提出（2026/10/15 締切）</li>
-      </ol>
-
-      <section class="card">
+<section class="card">
         <h3>参考リンク</h3>
         <ul>
           <li><a href="https://zenn.dev/hackathons/google-cloud-japan-ai-hackathon-vol5" target="_blank">第5回 Agentic AI Hackathon with Google Cloud</a></li>
