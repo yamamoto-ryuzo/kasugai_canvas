@@ -548,5 +548,8 @@
   "mcp.allowWrite": "Exposer les outils d'écriture à l'IA",
   "mcp.allowWriteHint": "Tant que l'option est désactivée, les outils d'écriture (création/mise à jour/suppression de fichiers, etc.) ne sont pas exposés à l'IA. Même activée, chaque appel demande une confirmation.",
   "mcp.writeConfirm": "L'IA veut exécuter l'outil d'écriture « {tool} » sur {server}. Autoriser ?",
-  "mcp.writeDenied": "Opération d'écriture refusée par l'utilisateur."
+  "mcp.writeDenied": "Opération d'écriture refusée par l'utilisateur.",
+  "chat.customInstructionsLabel": "Instructions supplémentaires",
+  "chat.customInstructionsPlaceholder": "Saisissez les consignes que l’IA doit toujours suivre",
+  "chat.customInstructionsHint": "Enregistrées dans ce navigateur comme solution de repli. Si KASUGAI_AI_INSTRUCTIONS est défini sur Cloud Run, les consignes du serveur sont prioritaires."
 }

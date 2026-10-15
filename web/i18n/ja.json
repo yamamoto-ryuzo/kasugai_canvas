@@ -548,5 +548,8 @@
   "mcp.allowWrite": "書き込み系ツールも AI に公開する",
   "mcp.allowWriteHint": "OFF の間はファイル作成・更新・削除などの書き込み系ツールを AI に公開しません。ON でも実行ごとに確認ダイアログが出ます。",
   "mcp.writeConfirm": "AI が {server} の書き込み系ツール「{tool}」を実行しようとしています。許可しますか？",
-  "mcp.writeDenied": "ユーザーにより書き込み操作は拒否されました。"
+  "mcp.writeDenied": "ユーザーにより書き込み操作は拒否されました。",
+  "chat.customInstructionsLabel": "追加指示",
+  "chat.customInstructionsPlaceholder": "AIにいつも守ってほしい指示を入力",
+  "chat.customInstructionsHint": "通常はこのブラウザに保存します。Cloud Run に KASUGAI_AI_INSTRUCTIONS が設定されている場合は、サーバー側の指示を優先します。"
 }

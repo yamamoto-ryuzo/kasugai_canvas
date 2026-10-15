@@ -4,6 +4,9 @@ import os
 # Gemini API キー（AI Studio 発行）。/api/gemini プロキシで使用
 API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
 
+# サーバー管理の内蔵AI追加指示。設定時は利用者のブラウザ保存値より優先する。
+AI_INSTRUCTIONS = os.environ.get("KASUGAI_AI_INSTRUCTIONS", "").strip()
+
 # Google Maps Platform API キー（Map Tiles / Places / Geocoding / Street View Static 等）
 # 設定時は /api/capabilities がフロントへ通知し、ブラウザは未保存時に自動登録する。
 # ブラウザから Google API へ直接付くキー（タイルURL等に露出）なので秘匿情報ではなく、

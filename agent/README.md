@@ -62,6 +62,7 @@ uvicorn agent.app.main:app --port 8080
 | 変数 | 用途 |
 | --- | --- |
 | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Gemini API キー（AI Studio）。`/api/gemini` で使用 |
+| `KASUGAI_AI_INSTRUCTIONS` | Cloud Run 管理の内蔵AI追加指示。`GEMINI_API_KEY` と併せて設定すると、ブラウザ保存値やBYOキーより優先し、サーバープロキシ経由で適用 |
 | `GOOGLE_MAPS_API_KEY` | Maps Platform キー（Map Tiles/Places/Geocoding/SV）。設定時 `/api/capabilities` がブラウザへ通知し未保存時に自動登録。秘匿情報ではないため保護は GCP のリファラ制限で行う |
 | `GEMINI_MODELS` | `/api/gemini` で許可するモデル（カンマ区切り。未設定は全許可） |
 | `ANTIGRAVITY_TOKEN` | 設定時 `Authorization: Bearer` を必須化（認証モード時は kasugai トークン/Cookie/IAP も有効） |
@@ -85,6 +86,9 @@ uvicorn agent.app.main:app --port 8080
 ```bash
 # 最小構成（静的配信 + /api/gemini キー隠蔽プロキシ）
 python run-cloudrun.py --gemini-api-key YOUR_KEY
+
+# サーバー側の追加指示を設定（--gemini-api-key と同時に使用）
+python run-cloudrun.py --gemini-api-key YOUR_KEY --ai-instructions "指示文"
 
 # 認証モード5 + GCS 保存 + キーレスAI
 python run-cloudrun.py --gemini-api-key YOUR_KEY \

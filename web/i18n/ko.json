@@ -548,5 +548,8 @@
   "mcp.allowWrite": "쓰기 도구도 AI에 공개",
   "mcp.allowWriteHint": "OFF 상태에서는 파일 생성·수정·삭제 등의 쓰기 도구가 AI에 공개되지 않습니다. ON이어도 호출마다 확인 대화상자가 표시됩니다.",
   "mcp.writeConfirm": "AI가 {server}의 쓰기 도구 \"{tool}\"을(를) 실행하려 합니다. 허용하시겠습니까?",
-  "mcp.writeDenied": "사용자가 쓰기 작업을 거부했습니다."
+  "mcp.writeDenied": "사용자가 쓰기 작업을 거부했습니다.",
+  "chat.customInstructionsLabel": "추가 지침",
+  "chat.customInstructionsPlaceholder": "AI가 항상 따르기를 원하는 지침을 입력하세요",
+  "chat.customInstructionsHint": "이 브라우저에 대체 지침으로 저장됩니다. Cloud Run에 KASUGAI_AI_INSTRUCTIONS가 설정되어 있으면 서버 지침이 우선합니다."
 }

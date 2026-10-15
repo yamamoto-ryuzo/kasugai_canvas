@@ -548,5 +548,8 @@
   "mcp.allowWrite": "向 AI 公开写入工具",
   "mcp.allowWriteHint": "关闭时，文件创建·更新·删除等写入工具不会向 AI 公开。即使开启，每次调用也会弹出确认对话框。",
   "mcp.writeConfirm": "AI 要在 {server} 上执行写入工具\"{tool}\"。允许吗？",
-  "mcp.writeDenied": "用户拒绝了写入操作。"
+  "mcp.writeDenied": "用户拒绝了写入操作。",
+  "chat.customInstructionsLabel": "附加指令",
+  "chat.customInstructionsPlaceholder": "输入希望 AI 始终遵循的指令",
+  "chat.customInstructionsHint": "作为备用内容保存在此浏览器中。如果 Cloud Run 配置了 KASUGAI_AI_INSTRUCTIONS，则优先使用服务器指令。"
 }

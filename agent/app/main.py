@@ -127,7 +127,10 @@ def capabilities():
         "tier": "cloudrun",
         "features": features + (["aiProxy"] if config.API_KEY else []),
         "auth": {"mode": {"5": "token", "6": "cookie", "7": "iap"}.get(mode)},
-        "ai": {"endpoint": "/api/gemini"},
+        "ai": {
+            "endpoint": "/api/gemini",
+            **({"instructions": config.AI_INSTRUCTIONS} if config.AI_INSTRUCTIONS and config.API_KEY else {}),
+        },
         # Maps キーはブラウザから直接 Google API に付ける設計（秘匿でなくリファラ制限で保護）
         **({"google": {"mapsApiKey": config.MAPS_API_KEY}} if config.MAPS_API_KEY else {}),
     }
@@ -357,6 +360,17 @@ async def api_gemini(request: Request):
         return JSONResponse({"error": f"model は許可されていません: {model}"}, status_code=400)
 
     forward = {k: body[k] for k in _GEMINI_FORWARD_KEYS if k in body}
+    if config.AI_INSTRUCTIONS:
+        # クライアントが送ったローカル追加指示を除き、Cloud Run の設定値を優先する。
+        system = forward.get("systemInstruction")
+        if isinstance(system, dict):
+            parts = system.get("parts")
+            if isinstance(parts, list):
+                marker = "\n\nUser's additional instructions:\n"
+                for part in parts:
+                    if isinstance(part, dict) and isinstance(part.get("text"), str):
+                        base = part["text"].split(marker, 1)[0].rstrip()
+                        part["text"] = f"{base}{marker}{config.AI_INSTRUCTIONS}"
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(

@@ -548,5 +548,8 @@
   "mcp.allowWrite": "Expose write tools to the AI",
   "mcp.allowWriteHint": "While OFF, write tools (create/update/delete files etc.) are not exposed to the AI. Even when ON, a confirmation dialog appears for each call.",
   "mcp.writeConfirm": "The AI wants to run write tool \"{tool}\" on {server}. Allow?",
-  "mcp.writeDenied": "Write operation was denied by the user."
+  "mcp.writeDenied": "Write operation was denied by the user.",
+  "chat.customInstructionsLabel": "Additional instructions",
+  "chat.customInstructionsPlaceholder": "Enter instructions you want the AI to follow by default",
+  "chat.customInstructionsHint": "Saved in this browser as the fallback. If KASUGAI_AI_INSTRUCTIONS is configured on Cloud Run, the server instruction takes priority."
 }

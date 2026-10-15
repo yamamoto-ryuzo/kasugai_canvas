@@ -7031,6 +7031,9 @@ function setupGoogleSettings() {
   const keyInput = document.querySelector("#google-api-key");
   const modelSelect = document.querySelector("#google-gemini-model");
   const stepsInput = document.querySelector("#google-tool-max-steps");
+  const customInstructionsInput = document.querySelector("#chat-custom-instructions");
+  const customInstructionsSaveButton = document.querySelector("#chat-instructions-save");
+  const customInstructionsStatus = document.querySelector("#chat-instructions-status");
   const saveButton = document.querySelector("#google-settings-save");
   const status = document.querySelector("#google-settings-status");
   const providerSelect = document.querySelector("#chat-provider");
@@ -7226,6 +7229,7 @@ function setupGoogleSettings() {
     if (sendKeyInput) sendKeyInput.checked = localStorage.getItem("agentSendKey") === "1";
     if (devinApiKeyInput) devinApiKeyInput.value = localStorage.getItem("devinApiKey") || "";
     if (stepsInput) stepsInput.value = String(getChatMaxToolSteps());
+    if (customInstructionsInput) customInstructionsInput.value = localStorage.getItem("chatCustomInstructions") || "";
     // 保存値・既定オプションだけ先に埋めておく
     for (const p of BRIDGE_PROVIDERS) void refreshBridgeModels(p, "");
     syncProviderFields();
@@ -7284,6 +7288,15 @@ function setupGoogleSettings() {
       if (status) status.textContent = t("common.saved");
     } catch (e) {
       if (status) status.textContent = t("common.saveError", { error: e.message });
+    }
+  });
+
+  customInstructionsSaveButton?.addEventListener("click", () => {
+    try {
+      localStorage.setItem("chatCustomInstructions", customInstructionsInput?.value.trim() || "");
+      if (customInstructionsStatus) customInstructionsStatus.textContent = t("common.saved");
+    } catch (e) {
+      if (customInstructionsStatus) customInstructionsStatus.textContent = t("common.saveError", { error: e.message });
     }
   });
 
@@ -9935,7 +9948,13 @@ const CHAT_TOOLS = [{
 }];
 
 // AI に自オリジンを教える — 位置リンクの案内でデプロイ先と異なるドメインを推測させないため
-const chatSystemInstruction = () => `${t("chat.systemInstruction")} ${t("chat.systemInstructionAppUrl", { url: `${window.location.origin}${window.location.pathname}` })}`;
+const chatSystemInstruction = () => {
+  let custom = backendCapabilities?.ai?.instructions || "";
+  if (!custom) {
+    try { custom = localStorage.getItem("chatCustomInstructions") || ""; } catch (e) {}
+  }
+  return `${t("chat.systemInstruction")} ${t("chat.systemInstructionAppUrl", { url: `${window.location.origin}${window.location.pathname}` })}${custom.trim() ? `\n\nUser's additional instructions:\n${custom.trim()}` : ""}`;
+};
 
 // バックエンドの能力に応じて公開するツールを絞る（公開環境に高権限ツールを見せない）
 // Mapsキー必須のツール・ローカルサーバー版のファイル書込みツールも同様に条件付き
@@ -10878,7 +10897,10 @@ async function callOpenAICompat(history) {
 async function callGemini(history) {
   const apiKey = window.kasugaiApi.getGoogleApiKey();
   const model = window.kasugaiApi.getGeminiModel();
-  const proxy = apiKey ? "" : aiProxyEndpoint();
+  // Cloud Run 管理の追加指示がある場合はサーバープロキシを通し、BYOキー経路で迂回しない。
+  const proxy = backendCapabilities?.ai?.instructions
+    ? aiProxyEndpoint()
+    : (apiKey ? "" : aiProxyEndpoint());
   const endpoint = proxy || `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const executed = [];
   // プロキシ経由の場合、認証モードではログイン済みの kasugai トークンが必須。
@@ -11038,6 +11060,8 @@ function setupChatPanel() {
     }
     const body = JSON.stringify({
       message: text,
+      // 外部エージェントにもアプリの基本指示と保存済み追加指示を渡す
+      systemInstruction: chatSystemInstruction(),
       project: currentProjectId || "default",
       camera: window.kasugaiApi.getCamera(),
       layers: window.kasugaiApi.listLayers(),

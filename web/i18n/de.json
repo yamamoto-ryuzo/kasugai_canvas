@@ -548,5 +548,8 @@
   "mcp.allowWrite": "Schreib-Werkzeuge für die KI freigeben",
   "mcp.allowWriteHint": "Bei AUS werden Schreib-Werkzeuge (Erstellen/Aktualisieren/Löschen von Dateien usw.) nicht freigegeben. Auch bei EIN erscheint bei jedem Aufruf ein Bestätigungsdialog.",
   "mcp.writeConfirm": "Die KI möchte das Schreib-Werkzeug \"{tool}\" auf {server} ausführen. Zulassen?",
-  "mcp.writeDenied": "Schreibvorgang vom Benutzer abgelehnt."
+  "mcp.writeDenied": "Schreibvorgang vom Benutzer abgelehnt.",
+  "chat.customInstructionsLabel": "Zusätzliche Anweisungen",
+  "chat.customInstructionsPlaceholder": "Anweisungen eingeben, die die KI immer befolgen soll",
+  "chat.customInstructionsHint": "Wird als Rückfalloption in diesem Browser gespeichert. Ist KASUGAI_AI_INSTRUCTIONS in Cloud Run gesetzt, haben die Serveranweisungen Vorrang."
 }

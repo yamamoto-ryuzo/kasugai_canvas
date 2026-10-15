@@ -18,6 +18,7 @@ Cloud Shell（ブラウザ）でもローカルの Google Cloud SDK でも実行
 使い方:
   python run-cloudrun.py [--project ID] [--region REGION] [--service NAME]
       [--gemini-api-key KEY] [--maps-api-key KEY]
+      [--ai-instructions TEXT]
       [--auth-mode {5,6} --auth-user U --auth-pass P]
       [--bucket BUCKET]
 
@@ -393,7 +394,13 @@ def deploy(project: str, region: str, service: str, image: str,
         "--allow-unauthenticated", f"--min-instances={min_instances or '0'}",
     ]
     if envs:
-        args += ["--set-env-vars", ",".join(envs)]
+        # 指示文にカンマが含まれても gcloud の env-var 区切りと衝突させない
+        delimiter = next((chr(i) for i in range(33, 127)
+                          if not chr(i).isalnum() and chr(i) not in "^,"
+                          and all(chr(i) not in item for item in envs)), None)
+        if delimiter is None:
+            raise SystemExit("環境変数の値に使われていない区切り文字を選べません")
+        args += ["--set-env-vars", f"^{delimiter}^{delimiter.join(envs)}"]
     if secrets:
         args += ["--set-secrets", ",".join(secrets)]
     r = _gcloud(*args, stream=True)
@@ -455,6 +462,7 @@ def main() -> None:
     parser.add_argument("--region", help=f"リージョン（既定: {REGION_DEFAULT}＝東京）")
     parser.add_argument("--service", help=f"Cloud Run サービス名（既定: {SERVICE_DEFAULT}）")
     parser.add_argument("--gemini-api-key", help="Gemini API キー（Secret Manager の gemini-api-key に登録）")
+    parser.add_argument("--ai-instructions", help="Cloud Run の内蔵AIへ追加するサーバー指示文（省略時は前回設定を維持）")
     parser.add_argument("--maps-api-key", help="Google Maps Platform API キー（google-maps-api-key に登録。capabilities 経由でブラウザへ配布）")
     parser.add_argument("--auth-mode", choices=["5", "6"], help="起動制御モード（5=認証のみ / 6=全ゲート）")
     parser.add_argument("--auth-user", help="認証モードのユーザー ID（初回のみ必要）")
@@ -471,6 +479,7 @@ def main() -> None:
     service = args.service or saved.get("service") or SERVICE_DEFAULT
     bucket = args.bucket if args.bucket is not None else saved.get("bucket")
     auth_mode = args.auth_mode if args.auth_mode is not None else saved.get("auth_mode")
+    ai_instructions = args.ai_instructions if args.ai_instructions is not None else saved.get("ai_instructions", "")
     if saved:
         print(f"{DEPLOY_CONFIG.name} の設定を引き継ぎます（引数指定で上書き可）", flush=True)
 
@@ -481,6 +490,8 @@ def main() -> None:
     sa = compute_sa(project)
     secrets = setup_secrets(args, project, sa, auth_mode)
     envs = setup_bucket(project, region, sa, bucket, auth_mode)
+    if ai_instructions:
+        envs.append(f"KASUGAI_AI_INSTRUCTIONS={ai_instructions}")
     deploy(project, region, service, image, envs, secrets, auth_mode,
            min_instances=args.min_instances or "0")
     upload_kasc(args.kasc, project, bucket)
@@ -488,6 +499,7 @@ def main() -> None:
     save_config({
         "project": project, "region": region, "service": service,
         "bucket": bucket, "auth_mode": auth_mode,
+        "ai_instructions": ai_instructions,
     })
     print("完了しました。", flush=True)
 

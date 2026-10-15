@@ -548,5 +548,8 @@
   "mcp.allowWrite": "Expor ferramentas de escrita à IA",
   "mcp.allowWriteHint": "Enquanto desativado, ferramentas de escrita (criar/atualizar/excluir arquivos etc.) não são expostas à IA. Mesmo ativado, cada chamada pede confirmação.",
   "mcp.writeConfirm": "A IA quer executar a ferramenta de escrita \"{tool}\" em {server}. Permitir?",
-  "mcp.writeDenied": "Operação de escrita negada pelo usuário."
+  "mcp.writeDenied": "Operação de escrita negada pelo usuário.",
+  "chat.customInstructionsLabel": "Instruções adicionais",
+  "chat.customInstructionsPlaceholder": "Digite instruções que a IA deve sempre seguir",
+  "chat.customInstructionsHint": "Salvas neste navegador como alternativa. Se KASUGAI_AI_INSTRUCTIONS estiver definido no Cloud Run, as instruções do servidor terão prioridade."
 }
