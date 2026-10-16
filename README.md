@@ -6,7 +6,7 @@
 
 ## ドキュメント
 
-使い方・設定方法・AIチャット・インスペクター仕様などのドキュメントは公開サイトに集約しています。
+使い方・設定方法・AIチャット・インスペクター仕様などのドキュメントは `docs/` に集約しています。GitHub Pages の公開元は `main` ブランチの `/docs` を指定してください（公開 URL は従来どおりです）。
 
 - [KASUGAI Canvas ドキュメント（使い方・設定の正本）](https://yamamoto-ryuzo.github.io/kasugai_canvas/)
 - [変更履歴](CHANGELOG.md)
@@ -15,6 +15,10 @@
 
 ```text
 kasugai_canvas/
+├─ docs/                 # GitHub Pages ドキュメントサイト（公開元: /docs）
+│  ├─ features/          # V0〜V5 の機能ページ
+│  ├─ auth/              # 認証方式ごとの手順
+│  └─ images/            # ドキュメント画像
 ├─ server/               # Rust(Axum) 静的配信サーバー（オプション）
 ├─ web/                  # フロントエンド資産（index.html / app.js / styles.css）
 │  └─ projects/          # プロジェクト（projects.json / <id>/kasugai_canvas.kasc / DATA/）
@@ -47,7 +51,7 @@ python run-workers.py    # Workers（control: 4・全ファイル認証ゲート
 
 Cloud Run へのデプロイ（control: 5/6/7）は `agent/Dockerfile` と `agent/README.md` を参照してください。
 
-設定手順の詳細は [認証とプラグイン](auth/index.html) を参照してください。
+設定手順の詳細は [認証とプラグイン](docs/auth/index.html) を参照してください。
 
 ## ローカルサーバー API（オプション）
 
@@ -88,7 +92,7 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 
 ## 拡張機能（Plugin）と認証
 
-認証方式は `web/auth-methods.json` の `control` で 0〜7 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](auth/index.html) を参照してください。
+認証方式は `web/auth-methods.json` の `control` で 0〜7 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](docs/auth/index.html) を参照してください。
 
 ### 起動後通常プラグイン
 `web/plugin-loader.js` が `web/plugins.json` を読み込み、各プラグインを `import()` します。

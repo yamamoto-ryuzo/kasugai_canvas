@@ -65,7 +65,7 @@
   ];
 
   const DEMOS = [
-    { href: 'web/', text: '▶ デモ（このサイト内）' },
+    { href: '../web/', text: '▶ デモ（このサイト内）' },
     { href: 'https://cesium-5ie.pages.dev/', text: '▶ デモ（Cloudflare Pages）' },
     { href: 'https://kasugai-canvas.ryu-3cb.workers.dev/', text: '▶ デモ（Cloudflare Workers）' }
   ];
