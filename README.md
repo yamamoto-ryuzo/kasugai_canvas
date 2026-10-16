@@ -6,7 +6,7 @@
 
 ## ドキュメント
 
-使い方・設定方法・AIチャット・インスペクター仕様などのドキュメントは `docs/` に集約しています。GitHub Pages の公開元は `main` ブランチの `/docs` を指定してください（公開 URL は従来どおりです）。
+使い方・設定方法・AIチャット・インスペクター仕様などのドキュメントは `docs/` に集約しています。GitHub Pages は `main` ブランチのルートを公開元にしてください。ルートの `index.html` から `/docs/` へ転送し、アプリの `/web/` も同じサイトで配信します。
 
 - [KASUGAI Canvas ドキュメント（使い方・設定の正本）](https://yamamoto-ryuzo.github.io/kasugai_canvas/)
 - [変更履歴](CHANGELOG.md)
