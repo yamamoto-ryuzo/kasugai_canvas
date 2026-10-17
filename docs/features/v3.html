@@ -56,6 +56,30 @@
       <p>チャット履歴はプロジェクト単位で永続化されます。AI の回答言語は UI 言語に追随します。API キー未設定時はローカルコマンド（<code>/fly</code> 等）が使えます。</p>
       <p>実行されるツール群は <code>/api/capabilities</code> で取得したバックエンド能力に応じて出し分けられます（ティア分け。公開環境ではセッション内に閉じる安全な機能のみ）。</p>
 
+      <h3 id="ai-data-access">🔍 AI と読み込みデータの関係（検索モデル）</h3>
+      <p>内蔵 AI が地図上のデータを「認識」する方式は、埋め込みベクトル DB を使う RAG ではなく、<strong>AI が必要に応じてツールでデータを読みに行くエージェント的検索</strong>です。GIS データはコンテキストへ事前注入されず、モデルが「一覧 → 当たり → 詳細」の多段検索を自分で組み立てます。</p>
+      <h4>実装済み：ツールによる多段検索</h4>
+      <table>
+        <thead><tr><th>段階</th><th>ツール</th><th>届く範囲</th></tr></thead>
+        <tbody>
+          <tr><td>一覧</td><td><code>listLayers</code></td><td>レイヤーのメタ情報のみ（名前・type・filter・bboxAuto 等）。地物の中身は含まない</td></tr>
+          <tr><td>当たり</td><td><code>vectorSearch</code></td><td>読み込み済みレイヤーの属性索引（属性名・値・代表点座標）を部分一致検索。クエリ系レイヤー（duckdb/sql）は対象外 — SQL が索引の役割を担うため</td></tr>
+          <tr><td>詳細（小〜中規模）</td><td><code>getLayerGeoJson</code></td><td>レイヤー全地物を GeoJSON でコンテキストへ返す。約 400KB 上限で、超過時は vectorSearch / runCode / プラグインでの絞り込みを促すエラーを返す</td></tr>
+          <tr><td>詳細（大規模）</td><td><code>runCode</code>・<code>setLayerFilter</code></td><td>サンドボックス内で <code>api.getLayerGeoJson()</code> 等を呼び、集計・絞り込みした小さい結果だけをモデルへ返す。クエリ系レイヤーは WHERE/SQL で必要行のみ取得</td></tr>
+          <tr><td>外部</td><td><code>fetchData</code>・MCP ツール</td><td>外部 URL からの取得（約 400KB）。MCP サーバー登録で外部検索基盤のツールをチャットへ合成できる</td></tr>
+        </tbody>
+      </table>
+      <p><strong>実装済み機能の制約</strong>：<code>vectorSearch</code> の索引は<strong>読み込みが完了したレイヤーから順に構築</strong>されるため、起動直後や大きいリモートレイヤーのデコード中はヒットしないことがあります。非表示（未読込）レイヤーは索引対象外で、中身を検索するには先に <code>setLayerVisible</code> で読み込ませる必要があります（UI の検索パネルでは「（未読込）」として選択肢に出て、選択時にオンデマンドで読み込まれる）。検索は属性名・値の<strong>文字列部分一致</strong>で最大 20 件を返し、意味的な類似検索ではありません。</p>
+      <h4>未実装：意味検索・高度な条件検索</h4>
+      <table>
+        <thead><tr><th>機能</th><th>状態</th><th>代替・接続点</th></tr></thead>
+        <tbody>
+          <tr><td>意味検索（埋め込み RAG）</td><td>未実装</td><td>接続点は3つ：(a) プラグインとして実装（地物属性を埋め込み API でベクトル化 → IndexedDB に保存 → 類似検索を API 公開）、(b) sql 型レイヤー化（DuckDB の SQL を知識ベースへの問い合わせとして使う）、(c) MCP サーバー経由で外部 RAG 基盤（pgvector 等）のツールを合成。いずれも既存経路を変えずに追加できる</td></tr>
+          <tr><td>空間条件による直接検索（円内・ポリゴン内・近傍の専用ツール）</td><td>専用ツールなし</td><td><code>runCode</code> で座標計算・<code>setLayerFilter</code> の SQL（DuckDB spatial 拡張の空間述語）で代替可能</td></tr>
+          <tr><td>未読込レイヤーへの横断検索</td><td>索引対象外</td><td><code>setLayerVisible</code> で読み込んでから <code>vectorSearch</code>。非表示レイヤーは起動時にダウンロードしない設計のため</td></tr>
+        </tbody>
+      </table>
+
       <h3>�️ リモートコマンド経路（外部エージェント → ブラウザ）</h3>
       <p>上記のプロバイダ／ブリッジは「ブラウザのチャット → エージェント」方向ですが、アプリ版（local ティア）には逆方向の<strong>「外部エージェント → ブラウザ」を操る共通経路</strong>もあります。ローカルサーバーが <code>remoteCommand</code> 機能を通知している環境では、Devin Desktop・GitHub Copilot CLI・任意のスクリプトなど、HTTP を話せるローカルプロセスが開いている地図をリアルタイムに操作できます（エージェント識別は持たず、どのプロセスからでも同一エンドポイント・同一形式で利用）。</p>
       <pre>
