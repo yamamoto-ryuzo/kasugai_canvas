@@ -13,6 +13,19 @@
         "visible": true,
         "scope": "app"
       }
+    },
+    {
+      "id": "reinfolib",
+      "name": "不動産情報ライブラリ",
+      "version": "0.1.0",
+      "url": "./PLUGIN/reinfolib/plugin.js",
+      "options": {
+        "zoom": 11,
+        "maxTiles": 16,
+        "from": "20254",
+        "to": "20254",
+        "datasets": { "price": true, "shelter": true, "station": true, "zoning": false }
+      }
     }
   ]
 }

@@ -168,6 +168,16 @@ function isQueryDecoder(decoder, item) {
   if (!decoder || !decoder.query) return false;
   return typeof decoder.query === "function" ? !!decoder.query(item) : true;
 }
+// Cesium.GeoJsonDataSource/GeoJsonPrimitive は crsNames に無い CRS で load を失敗させる。
+// 不動産情報ライブラリ API の GeoJSON は crs=urn:ogc:def:crs:EPSG::6668(JGD2011)を付けるため、
+// WGS84 と実用同等の地理座標系(4326 系・CRS84・JGD)は crs メンバを剥がして既定として扱う。
+// それ以外の投影系は残して load 側のエラーに任せる(黙ってずらさない)
+const GEOJSON_WGS84_EQUIV_CRS = /^(urn:ogc:def:crs:)?(OGC:(1\.3:)?CRS84|EPSG::?(4326|4269|4612|6668))$/i;
+function normalizeGeoJsonCrs(data) {
+  const name = data && data.crs && data.crs.properties && data.crs.properties.name;
+  if (name && GEOJSON_WGS84_EQUIV_CRS.test(String(name))) delete data.crs;
+  return data;
+}
 function loadVectorSourceCached(item, decoder) {
   if (isQueryDecoder(decoder, item)) return decoder.load(item);
   if (item.data) return Promise.resolve(item.data);
@@ -177,7 +187,7 @@ function loadVectorSourceCached(item, decoder) {
     promise = decoder ? decoder.load(item) : (async () => {
       const response = await fetch(item.url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
+      return normalizeGeoJsonCrs(await response.json());
     })();
     promise.catch(() => { if (vectorSourceCache.get(key) === promise) vectorSourceCache.delete(key); });
     vectorSourceCache.set(key, promise);
@@ -8241,6 +8251,7 @@ async function registerPluginLayer(config = {}, pluginId = "") {
     scope: config.scope === "project" ? "project" : "app",
     plugin: true,
     pluginId,
+    attribution: typeof config.attribution === "string" ? config.attribution : "",
     data: normalizeGeoJsonInput(config.data),
     dataSource: null,
   };

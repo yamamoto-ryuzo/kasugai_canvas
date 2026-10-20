@@ -222,6 +222,7 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
         "update",
         "shutdown",
         "mcpProxy",
+        "reinfolibProxy",
     ];
     // ローカル実行のみ rclone 連携・リモートコマンド経路を公開する
     // (0.0.0.0 バインドのコンテナ実行では無効)
@@ -691,6 +692,88 @@ async fn mcp_proxy(
     }
     builder
         .body(axum::body::Body::from(bytes))
+        .map_err(internal_error)
+}
+
+// GET|HEAD /api/reinfolib?url=<target> — 不動産情報ライブラリ API への中継プロキシ。
+// 公式案内は CORS 回避のためブラウザからの直接リクエストを禁じているため、
+// Ocp-Apim-Subscription-Key をサーバー側で付与して転送する。
+// キーはクライアントの同ヘッダ(BYO)を優先し、無ければ環境変数 REINFOLIB_API_KEY。
+// 接続先は https://www.reinfolib.mlit.go.jp/ex-api/external/ 配下のみに固定する
+// (/api/fetch の汎用 SSRF ポリシーではなく対象ホストで制限)。
+// 応答が大きくなりうるためボディはバッファせずストリーム中継する。
+// reqwest は gzip を自動展開しないため content-encoding はそのまま透過する。
+async fn reinfolib_proxy(
+    method: Method,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<FetchQuery>,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let url = reqwest::Url::parse(&query.url)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "URLが不正です".to_string()))?;
+    if url.scheme() != "https"
+        || url.host_str() != Some("www.reinfolib.mlit.go.jp")
+        || !url.path().starts_with("/ex-api/external/")
+    {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "不動産情報ライブラリ API(/ex-api/external/)以外への中継はできません".to_string(),
+        ));
+    }
+    let key = headers
+        .get("ocp-apim-subscription-key")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string)
+        .or_else(|| std::env::var("REINFOLIB_API_KEY").ok())
+        .unwrap_or_default();
+    if key.trim().is_empty() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "REINFOLIB_API_KEY を設定するか Ocp-Apim-Subscription-Key ヘッダを付けてください"
+                .to_string(),
+        ));
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
+        .build()
+        .map_err(internal_error)?;
+    let is_head = method == Method::HEAD;
+    let upstream_method = if is_head {
+        reqwest::Method::HEAD
+    } else {
+        reqwest::Method::GET
+    };
+    let mut request = client
+        .request(upstream_method, url)
+        .header("Ocp-Apim-Subscription-Key", key);
+    if !is_head {
+        for key in [axum::http::header::RANGE, axum::http::header::ACCEPT] {
+            if let Some(value) = headers.get(&key) {
+                request = request.header(key, value.clone());
+            }
+        }
+    }
+    let response = request.send().await.map_err(internal_error)?;
+    let status = response.status();
+    let mut builder = axum::response::Response::builder().status(status);
+    for key in [
+        axum::http::header::CONTENT_TYPE,
+        axum::http::header::CONTENT_ENCODING,
+        axum::http::header::CONTENT_RANGE,
+        axum::http::header::ACCEPT_RANGES,
+        axum::http::header::ETAG,
+        axum::http::header::LAST_MODIFIED,
+    ] {
+        if let Some(value) = response.headers().get(&key) {
+            builder = builder.header(key, value.clone());
+        }
+    }
+    if is_head {
+        return builder
+            .body(axum::body::Body::empty())
+            .map_err(internal_error);
+    }
+    builder
+        .body(axum::body::Body::from_stream(response.bytes_stream()))
         .map_err(internal_error)
 }
 
@@ -4923,6 +5006,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/health", get(health))
         .route("/api/capabilities", get(capabilities))
         .route("/api/fetch", get(fetch_proxy).head(fetch_proxy))
+        .route("/api/reinfolib", get(reinfolib_proxy).head(reinfolib_proxy))
         .route(
             "/api/mcp",
             post(mcp_proxy).layer(DefaultBodyLimit::max(MCP_MAX_BODY_BYTES)),

@@ -63,7 +63,7 @@
       <p>不動産情報活用部門で、住まいの候補エリアを公開地理情報から比較するシナリオを提案します。家や物件を検索・推薦するのではなく、物件ポータルなどで候補を絞った後に「この地域で暮らすと何が近くにあり、どの公開情報を確認しておくべきか」を地図で理解する場面を、Canvas の機能改善に取り組む題材とします。</p>
 
       <h3>システム構成</h3>
-        <p>試作システムの構成です。課題の聞き取り・整理は LimeSurvey CE と Excalidraw が担い、地図比較と根拠付き資料化は KASUGAI Canvas が担います。不動産情報ライブラリ API は公式案内に従いブラウザーから直接リクエストせず、API キーを保護できるサーバー側中継を検討します。AI は内蔵 AI チャットが BYO API キーで Gemini を呼び、地図・レイヤー操作と比較シート作成を支援します。</p>
+        <p>試作システムの構成です。課題の聞き取り・整理は LimeSurvey CE と Excalidraw が担い、地図比較と根拠付き資料化は KASUGAI Canvas が担います。不動産情報ライブラリ API は公式案内に従いブラウザーから直接リクエストせず、キー保護のためのサーバー側中継（<code>/api/reinfolib</code>。BYO キー転送またはサーバーキー注入、<code>/ex-api/external/</code> 配下限定）を実装済みです。AI は内蔵 AI チャットが BYO API キーで Gemini を呼び、地図・レイヤー操作と比較シート作成を支援します。</p>
         <pre class="mermaid" aria-label="地域比較システム構成">
 flowchart TB
   User[利用者] --> Chat
@@ -79,7 +79,7 @@ flowchart TB
   end
 
   Chat <-->|BYO API キー| Gemini[Gemini API]
-  Plugin -->|API キー保護のため中継| Relay[サーバー側中継（検討）]
+  Plugin -->|API キー保護のため中継| Relay["サーバー側中継（実装済み /api/reinfolib）"]
   Relay --> MLIT[不動産情報ライブラリ API：価格・防災・都市計画・駅情報]
   Plugin --> Other[経路検索・施設情報 API・自治体オープンデータ]
 
@@ -122,7 +122,7 @@ flowchart TB
         <thead><tr><th>役割</th><th>連携候補・方式</th><th>Canvas側で担うこと</th><th>確認事項</th></tr></thead>
         <tbody>
           <tr><td>日本語での聞き取りと課題整理</td><td><a href="https://www.limesurvey.org/" target="_blank" rel="noopener noreferrer">LimeSurvey CE</a>で日本語の質問票・自由記述を収集し、回答を<a href="https://excalidraw.com/" target="_blank" rel="noopener noreferrer">Excalidraw</a>の日本語UI上でカード化して分類する。どちらもWebで利用でき、日本語画面を備えたOSS。LimeSurveyはセルフホスト版を選べる。</td><td>候補地・重視条件・困りごと・理由を質問票で集め、自由記述を引用単位のカードに分ける。参加者や担当者がExcalidraw上で似た意見をまとめ、課題・優先度・根拠・未確認事項を整理する。確定した課題をCanvasへ取り込み、地域の地理情報と照合して比較資料にする。</td><td>Excalidrawは定性分析専用ではなく、カード分類やテーマ確定は人が行う。アンケート回答とカードの対応関係、個人情報を含む回答の保管・削除、共同編集の運用を試作で確認する。LimeSurvey CEのセルフホストにはWebサーバー等が必要。</td></tr>
-          <tr><td>公的な不動産・地域情報</td><td>国土交通省「不動産情報ライブラリ」API。価格、都市計画、防災、駅情報等から対象地域で利用できるものを選ぶ。</td><td>取得データをレイヤーとして表示し、出典・基準日・対象範囲を比較資料に残す。</td><td>利用申請・APIキーが必要で、公式案内はCORS回避のためブラウザーから直接リクエストしないよう求めている。キーを保護できるサーバー側中継を検討し、利用条件と実データの地域カバーを確認する。</td></tr>
+          <tr><td>公的な不動産・地域情報</td><td>国土交通省「不動産情報ライブラリ」API。価格、都市計画、防災、駅情報等から対象地域で利用できるものを選ぶ。</td><td>取得データをレイヤーとして表示し、出典・基準日・対象範囲を比較資料に残す。</td><td>利用申請・APIキーが必要で、公式案内はCORS回避のためブラウザーから直接リクエストしないよう求めている。キーを保護するサーバー側中継（/api/reinfolib）を実装済みで、候補地域の実データ取得を確認した。</td></tr>
           <tr><td>所要時間・施設情報</td><td>経路検索、自治体オープンデータ、施設情報提供元のAPIまたは公開データを用途ごとに選定する。</td><td>公的APIで得られる情報と外部補足情報を分け、取得日・提供元・利用条件を表示する。</td><td>候補サービスのライセンス、商用・再配布条件、位置精度、更新頻度、APIキー保護、CORSを事前確認。ペット受入条件などAPIにない情報は自治体等の一次情報で確認する。</td></tr>
         </tbody>
       </table>
@@ -145,10 +145,10 @@ flowchart TB
       <table>
         <thead><tr><th>区分</th><th>確認項目</th><th>確認する内容</th><th>参照先・候補</th><th>状況</th></tr></thead>
         <tbody>
-          <tr><td>API内</td><td>駅・路線・乗降客数</td><td>候補範囲内の駅名、駅位置、路線、運営会社、乗降客数の対象年。所要時間は別途調べる。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/xkt015/" target="_blank" rel="noopener noreferrer">XKT015 駅別乗降客数 API</a></td><td>API項目確認済み／地域データ未確認</td></tr>
-          <tr><td>API内</td><td>不動産取引価格</td><td>候補駅周辺の取引・成約価格の対象期間、価格種別、地点・属性の有無。家賃やペット可否とは区別する。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/xit001/" target="_blank" rel="noopener noreferrer">XIT001 不動産価格 API</a></td><td>API項目確認済み／地域データ未確認</td></tr>
-          <tr><td>API内</td><td>災害情報・避難場所</td><td>候補地域で取得できる洪水・高潮・津波・土砂災害等の範囲、データ時点、避難場所の対象災害種別。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/" target="_blank" rel="noopener noreferrer">公開API一覧（防災情報）</a>、<a href="https://www.reinfolib.mlit.go.jp/help/apiManual/xgt001/" target="_blank" rel="noopener noreferrer">XGT001 指定緊急避難場所 API</a></td><td>API項目確認済み／地域データ未確認</td></tr>
-          <tr><td>API内</td><td>都市計画・土地利用</td><td>用途地域等の取得可否、候補地域のデータ整備範囲と時点。ペット可物件の判定には使わない。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/" target="_blank" rel="noopener noreferrer">公開API一覧（都市計画情報）</a></td><td>API項目確認済み／地域データ未確認</td></tr>
+          <tr><td>API内</td><td>駅・路線・乗降客数</td><td>候補範囲内の駅名、駅位置、路線、運営会社、乗降客数の対象年。所要時間は別途調べる。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/xkt015/" target="_blank" rel="noopener noreferrer">XKT015 駅別乗降客数 API</a></td><td>実データ確認済み（z11 都心タイルで276駅。駅名・路線・運営会社・2011年以降の各年乗降客数）</td></tr>
+          <tr><td>API内</td><td>不動産取引価格</td><td>候補駅周辺の取引・成約価格の対象期間、価格種別、地点・属性の有無。家賃やペット可否とは区別する。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/xit001/" target="_blank" rel="noopener noreferrer">XIT001 不動産価格 API</a>・XPT001 価格ポイント API</td><td>実データ確認済み（XIT001 は 2025Q4 東京都 16,401件。XPT001 は期間指定必須で z11 都心タイル 4,049点。取引総額・㎡単価・坪単価など）</td></tr>
+          <tr><td>API内</td><td>災害情報・避難場所</td><td>候補地域で取得できる洪水・高潮・津波・土砂災害等の範囲、データ時点、避難場所の対象災害種別。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/" target="_blank" rel="noopener noreferrer">公開API一覧（防災情報）</a>、<a href="https://www.reinfolib.mlit.go.jp/help/apiManual/xgt001/" target="_blank" rel="noopener noreferrer">XGT001 指定緊急避難場所 API</a></td><td>実データ確認済み（z11 都心タイルで344施設。洪水・地震・津波等の対象災害フラグ付き）</td></tr>
+          <tr><td>API内</td><td>都市計画・土地利用</td><td>用途地域等の取得可否、候補地域のデータ整備範囲と時点。ペット可物件の判定には使わない。</td><td><a href="https://www.reinfolib.mlit.go.jp/help/apiManual/" target="_blank" rel="noopener noreferrer">公開API一覧（都市計画情報）</a>、XKT002 用途地域 API</td><td>実データ確認済み（z11 都心タイルで1,715ポリゴン。商業・住居・工業等12区分、容積率・建蔽率付き）</td></tr>
           <tr><td>API外</td><td>東京駅から候補駅までの所要時間</td><td>平日／休日、検索時刻、乗換条件、駅間の列車所要時間を統一。駅までの徒歩を含めるか明記する。</td><td>経路検索 API または公開時刻表・経路データ（提供元と利用条件を選定）</td><td>提供元・基準を選定</td></tr>
           <tr><td>API外</td><td>動物病院</td><td>候補駅からの距離、診療時間、夜間・救急対応、データ更新日。単純な施設件数を評価点に直結させない。</td><td>自治体・獣医師会等の公開情報、施設情報 API（提供元を選定）</td><td>提供元・取得範囲を確認</td></tr>
           <tr><td>API外</td><td>公園・散歩場所・ドッグラン</td><td>位置、利用時間、犬の入場可否、リード等の利用規則、情報の更新日。</td><td>自治体の公園オープンデータ・施設案内（候補地域ごとに確認）</td><td>候補地域確定後に確認</td></tr>
@@ -169,7 +169,7 @@ flowchart TB
           <tr><td>候補地域の範囲</td><td>東京駅まで電車でおおむね30分以内</td></tr>
           <tr><td>候補駅の選定・比較条件</td><td>範囲内からペットと暮らしやすい駅周辺を選び、候補地域を比較する</td></tr>
           <tr><td>外部サービス</td><td>Canvas のAIは利用可能。経路検索・施設情報 API は追加データの候補とし、利用条件・キー管理・送信データを事前確認する</td></tr>
-          <tr><td>API 利用申請</td><td>2026年10月16日に申請送信済み。審査結果・API キー発行待ち</td></tr>
+          <tr><td>API 利用申請</td><td>2026年10月16日に申請送信済み。API キー発行済みで、サーバー側中継（/api/reinfolib）経由の実データ取得を確認した（2026年10月20日時点で取引価格は2025年第4四半期まで）</td></tr>
         </tbody>
       </table>
       <h4>作業スケジュール</h4>
@@ -177,8 +177,8 @@ flowchart TB
         <thead><tr><th>期間</th><th>作業</th><th>成果物・状況</th></tr></thead>
         <tbody>
           <tr><td><del>10月16日〜10月20日</del></td><td><del>東京駅まで電車でおおむね30分以内の範囲から候補駅を選ぶため、ペットの暮らしやすさを比べる項目と API 内外のデータを整理する。</del></td><td><del>ペットの暮らしやすさに基づく候補駅の選定方針、API 内外の確認項目一覧</del></td></tr>
-          <tr><td>10月21日〜10月30日</td><td>API キー発行状況を確認し、取得可能なデータを実地調査。サーバーレスの AI・経路検索・施設情報 API も候補を調べ、応答形式、地域カバー範囲、利用条件、キー管理、基準日、出典表記を記録する。</td><td>接続可否の判断、採用するデータ/API 2〜3種類、データ項目・属性・出典・時点</td></tr>
-          <tr><td>11月2日〜11月13日</td><td>最小の接続経路を実装し、取得データを地図レイヤーとして表示。取得失敗・未提供・認証エラーを利用者に説明できるようにする。</td><td>候補地域の実データを地図表示できる試作、失敗時の案内、出典と基準日の表示</td></tr>
+          <tr><td>10月21日〜10月30日</td><td><del>API キー発行状況を確認し、取得可能なデータを実地調査。</del>残タスク: サーバーレスの AI・経路検索・施設情報 API の候補調査（応答形式、地域カバー範囲、利用条件、キー管理、基準日、出典表記）。</td><td><del>接続可否の判断、採用するデータ/API 2〜3種類、データ項目・属性・出典・時点</del>（済: 取引価格・避難場所・駅乗降客数・用途地域を採用候補として実データ確認）</td></tr>
+          <tr><td><del>11月2日〜11月13日</del></td><td><del>最小の接続経路を実装し、取得データを地図レイヤーとして表示。取得失敗・未提供・認証エラーを利用者に説明できるようにする。</del></td><td><del>候補地域の実データを地図表示できる試作、失敗時の案内、出典と基準日の表示</del>（済: <code>.kasc</code> の <code>geojson:</code> 行に <code>/api/reinfolib?url=…</code> を書く直接接続と、表示範囲連動で XYZ タイルを取得してレイヤー化するプラグイン <code>web/PLUGIN/reinfolib/</code> の両方で、取引価格・避難場所・駅乗降客数の地図表示を確認。キー未設定時・認証失敗時は画面に案内を表示）</td></tr>
           <tr><td>11月16日〜11月20日</td><td>2〜3候補地域を同じ観点で確認する比較手順を試作。属性やデータの有無を確認し、確認済み・未確認を分けて記録する。</td><td>地域比較の操作手順、候補ごとの差と未確認項目を含む比較シート初版</td></tr>
           <tr><td>11月24日〜11月27日</td><td>比較シートから各候補地域の地図へ戻れるリンクを整備。実データで通し確認し、表示内容・出典・データ時点・注意書きをレビューする。</td><td>第三者が地図と根拠を追える資料、通し確認結果、応募内容の最終稿</td></tr>
           <tr><td>12月1日〜12月9日</td><td>不動産情報活用部門の応募内容を最終確認し、活用する不動産情報ライブラリの情報を明記したうえで、任意の補足資料を整える。</td><td>不動産情報活用部門の提出内容・補足資料（PDFまたはPPT、10ページ以内・10MB以下）の確定</td></tr>

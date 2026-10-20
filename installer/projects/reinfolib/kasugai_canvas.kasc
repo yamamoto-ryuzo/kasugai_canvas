@@ -1,0 +1,6 @@
+base: 地理院タイル 淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
+geojson: 不動産情報/取引価格ポイント(2025Q4) | /api/reinfolib?url=https%3A%2F%2Fwww.reinfolib.mlit.go.jp%2Fex-api%2Fexternal%2FXPT001%3Fresponse_format%3Dgeojson%26z%3D11%26x%3D1819%26y%3D806%26from%3D20254%26to%3D20254 | on | attr=不動産情報ライブラリ（国土交通省）
+geojson: 不動産情報/指定緊急避難場所 | /api/reinfolib?url=https%3A%2F%2Fwww.reinfolib.mlit.go.jp%2Fex-api%2Fexternal%2FXGT001%3Fresponse_format%3Dgeojson%26z%3D11%26x%3D1819%26y%3D806 | on | attr=不動産情報ライブラリ（国土交通省）
+geojson: 不動産情報/駅別乗降客数 | /api/reinfolib?url=https%3A%2F%2Fwww.reinfolib.mlit.go.jp%2Fex-api%2Fexternal%2FXKT015%3Fresponse_format%3Dgeojson%26z%3D11%26x%3D1819%26y%3D806 | on | attr=不動産情報ライブラリ（国土交通省）
+geojson: 不動産情報/用途地域 | /api/reinfolib?url=https%3A%2F%2Fwww.reinfolib.mlit.go.jp%2Fex-api%2Fexternal%2FXKT002%3Fresponse_format%3Dgeojson%26z%3D11%26x%3D1819%26y%3D806 | off | attr=不動産情報ライブラリ（国土交通省）
+cam:東京駅周辺|35.6812|139.7000|h=9000|p=-60|d=0

@@ -132,7 +132,7 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
 - Rust サーバーは原則として静的ファイル配信のみとし、独自 API は追加しない
 - ただし以下はこの制限から除く:
   - バージョンアップ関連の API (`/api/update/*`)、アプリ終了用の `/api/shutdown`、起動確認用の `/health`
-  - **ローカル開発向けの高権限 API**: `/api/capabilities`（能力通知）、`/api/fetch`（CORSプロキシ）、`/api/mcp`（リモート MCP 中継。`/api/fetch` と同じ SSRF ポリシー）、`/api/plugins`（PLUGIN/ へのプラグイン書き込み・削除）、`/api/files`（`projects/<id>/DATA/` へのファイル書き込み・一覧・削除）。これらはローカルサーバー（127.0.0.1）前提の機能であり、公開環境（Pages/Workers）では無制限の書き込み・fetchを無認証で提供してはならない
+  - **ローカル開発向けの高権限 API**: `/api/capabilities`（能力通知）、`/api/fetch`（CORSプロキシ）、`/api/mcp`（リモート MCP 中継。`/api/fetch` と同じ SSRF ポリシー）、`/api/reinfolib`（不動産情報ライブラリ API 中継。`https://www.reinfolib.mlit.go.jp/ex-api/external/` 配下限定・`Ocp-Apim-Subscription-Key` はクライアント BYO ヘッダまたは環境変数 `REINFOLIB_API_KEY` を注入）、`/api/plugins`（PLUGIN/ へのプラグイン書き込み・削除）、`/api/files`（`projects/<id>/DATA/` へのファイル書き込み・一覧・削除）。これらはローカルサーバー（127.0.0.1）前提の機能であり、公開環境（Pages/Workers）では無制限の書き込み・fetchを無認証で提供してはならない
   - `/api/fetch` は SSRF 対策としてプライベート/ループバック/リンクローカル等への接続を既定で拒否する（ホスト名は名前解決してIPで判定）。LAN内データソースは exe 隣の `kasugai_canvas.fetch.json` に `{"allow":["192.168.0.0/16","my.server.local","127.0.0.1"]}` のように許可リスト（ホスト名・個別IP・IPv4 CIDR）を書いて有効化する。`/api/mcp` も同じ判定を使う
 - 地図タイル・検索等の外部 API へのアクセスは、ブラウザから直接呼ぶか、CORS 対応を前提とする
 

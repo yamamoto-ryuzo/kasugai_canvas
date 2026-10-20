@@ -12,6 +12,8 @@ export async function onRequestGet(context) {
   if (env.GEMINI_API_KEY || env.GOOGLE_API_KEY) features.push("aiProxy");
   // リモート MCP サーバーへの薄い中継（BYO トークン転送のみ・常時提供）
   features.push("mcpProxy");
+  // 不動産情報ライブラリ API 中継（BYO キー転送または REINFOLIB_API_KEY 注入・常時提供）
+  features.push("reinfolibProxy");
   return new Response(
     JSON.stringify({
       tier: "workers",

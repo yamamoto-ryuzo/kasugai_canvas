@@ -1,0 +1,6 @@
+{
+  "id": "reinfolib",
+  "name": "不動産情報ライブラリ",
+  "version": "0.1.0",
+  "description": "国土交通省 不動産情報ライブラリ API のデータを表示範囲連動で地図レイヤー化する。/api/reinfolib 中継経由（APIキーはサーバー側または localStorage.reinfolibApiKey の BYO）"
+}

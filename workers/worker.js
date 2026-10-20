@@ -7,6 +7,7 @@ import { onRequestGet as handleDataGet, onRequestPut as handleDataPut } from "..
 import { onRequestGet as handleCapabilities } from "../functions/api/capabilities.js";
 import { onRequestPost as handleGemini } from "../functions/api/gemini.js";
 import { onRequestPost as handleMcp } from "../functions/api/mcp.js";
+import { onRequestGet as handleReinfolibGet, onRequestHead as handleReinfolibHead } from "../functions/api/reinfolib.js";
 import { onRequestGet as handleHealth } from "../functions/health.js";
 import { verifyToken } from "../functions/_lib/token.js";
 
@@ -87,6 +88,13 @@ export default {
     if (path === "/api/mcp") {
       if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
       return handleMcp({ request, env });
+    }
+
+    // 不動産情報ライブラリ API への中継プロキシ。認可は関数内で判定
+    if (path === "/api/reinfolib") {
+      if (request.method === "GET") return handleReinfolibGet({ request, env });
+      if (request.method === "HEAD") return handleReinfolibHead({ request, env });
+      return new Response("Method Not Allowed", { status: 405 });
     }
 
     if (path.startsWith("/api/data/")) {
