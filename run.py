@@ -41,9 +41,32 @@ def _get_cargo_version() -> str:
     return cargo_match.group(1)
 
 
+def _channel_info(cargo_version: str | None = None) -> dict:
+    """バージョンから自動更新チャンネルと配布物のファイル名を決定する。
+
+    公開チャンネル: "X.Y.Z"     → main ブランチの download/latest.json・kasugai_canvas.zip
+    開発チャンネル: "X.Y.Z-*"   → develop ブランチの download/latest-dev.json・kasugai_canvas_dev.zip
+    server が参照する URL も同じルール（バージョンの接尾辞）で切り替わる。
+    """
+    version = cargo_version or _get_cargo_version()
+    dev = "-" in version
+    return {
+        "version": version,
+        "dev": dev,
+        "branch": "develop" if dev else "main",
+        "latest_name": "latest-dev.json" if dev else "latest.json",
+        "zip_name": "kasugai_canvas_dev.zip" if dev else "kasugai_canvas.zip",
+        "installer_name": "kasugai_canvas_setup_dev.exe" if dev else "kasugai_canvas_setup.exe",
+        "installer_zip_name": "kasugai_canvas_setup_dev.zip" if dev else "kasugai_canvas_setup.zip",
+    }
+
+
 def check_versions(check_latest: bool = True) -> None:
     """各設定ファイルのバージョンが server/Cargo.toml と一致するか確認する。"""
     cargo_version = _get_cargo_version()
+    channel = _channel_info(cargo_version)
+    # VIProductVersion は数値のみ(X.Y.Z.W)なので接尾辞を除いた部分と比較する
+    numeric_version = cargo_version.split("-")[0]
 
     nsi = INSTALLER_SCRIPT.read_text(encoding="utf-8")
     product_match = re.search(r'VIProductVersion "([^"]+)"', nsi)
@@ -55,20 +78,26 @@ def check_versions(check_latest: bool = True) -> None:
     readme_match = re.search(r"現在のバージョンは \*\*([^*]+)\*\* です。", readme)
     readme_version = readme_match.group(1) if readme_match else None
 
-    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    changelog_match = re.search(r"^## \[(\d+\.\d+\.\d+)\] -", changelog, re.M)
-    changelog_version = changelog_match.group(1) if changelog_match else None
-
     files = {
         "installer/kasugai_canvas.nsi (VIProductVersion)": nsi_product,
         "installer/kasugai_canvas.nsi (FileVersion)": nsi_file,
         "README.md": readme_version,
-        "CHANGELOG.md": changelog_version,
     }
+    # 各ファイルが期待するバージョン。VIProductVersion は数値部分とのみ一致を要求する
+    expected = {name: cargo_version for name in files}
+    expected["installer/kasugai_canvas.nsi (VIProductVersion)"] = numeric_version
+
+    # CHANGELOG はリリース(公開チャンネル)のみ記録する。開発ビルドは対象外
+    if not channel["dev"]:
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        changelog_match = re.search(r"^## \[(\d+\.\d+\.\d+)\] -", changelog, re.M)
+        files["CHANGELOG.md"] = changelog_match.group(1) if changelog_match else None
+        expected["CHANGELOG.md"] = cargo_version
 
     nav = (DOCS_DIR / "nav.js").read_text(encoding="utf-8")
     nav_match = re.search(r"const VERSION = 'v([^']+)'", nav)
     files["docs/nav.js"] = nav_match.group(1) if nav_match else None
+    expected["docs/nav.js"] = cargo_version
 
     # ドキュメントのバージョンバッジも Cargo.toml と同期・検査する。
     documentation_pages = [
@@ -80,20 +109,22 @@ def check_versions(check_latest: bool = True) -> None:
         page_content = page.read_text(encoding="utf-8")
         badge_match = re.search(r'class="version-badge">v([^<]+)</span>', page_content)
         files[str(page.relative_to(ROOT))] = badge_match.group(1) if badge_match else None
+        expected[str(page.relative_to(ROOT))] = cargo_version
 
     if check_latest:
-        latest_json_path = DOWNLOAD_DIR / "latest.json"
+        latest_json_path = DOWNLOAD_DIR / channel["latest_name"]
         if latest_json_path.exists():
             latest_content = latest_json_path.read_text(encoding="utf-8")
             latest_match = re.search(r'"version"\s*:\s*"([^"]+)"', latest_content)
-            files["download/latest.json"] = latest_match.group(1) if latest_match else None
+            files[f"download/{channel['latest_name']}"] = latest_match.group(1) if latest_match else None
         else:
-            files["download/latest.json"] = None
+            files[f"download/{channel['latest_name']}"] = None
+        expected[f"download/{channel['latest_name']}"] = cargo_version
 
     mismatches = []
     for name, version in files.items():
-        if version != cargo_version:
-            mismatches.append(f"  {name}: {version} (server/Cargo.toml: {cargo_version})")
+        if version != expected[name]:
+            mismatches.append(f"  {name}: {version} (server/Cargo.toml: {expected[name]})")
 
     if mismatches:
         print("エラー: 以下のファイルのバージョンが server/Cargo.toml と一致していません。", file=sys.stderr, flush=True)
@@ -111,6 +142,8 @@ def sync_versions(write_latest: bool = True) -> None:
     リリースビルドの途中で latest.json を更新しないようにするためのオプション。
     """
     cargo_version = _get_cargo_version()
+    channel = _channel_info(cargo_version)
+    numeric_version = cargo_version.split("-")[0]
 
     if write_latest:
         latest_json = {
@@ -119,18 +152,18 @@ def sync_versions(write_latest: bool = True) -> None:
             "pub_date": datetime.date.today().isoformat(),
             "platforms": {
                 "windows-x86_64": {
-                    "url": f"https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip?v={cargo_version}"
+                    "url": f"https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/{channel['branch']}/download/{channel['zip_name']}?v={cargo_version}"
                 }
             }
         }
-        (DOWNLOAD_DIR / "latest.json").write_text(json.dumps(latest_json, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        (DOWNLOAD_DIR / channel["latest_name"]).write_text(json.dumps(latest_json, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme = re.sub(r"(現在のバージョンは \*\*)[^*]+(\*\* です。)", lambda m: f"{m.group(1)}{cargo_version}{m.group(2)}", readme)
     (ROOT / "README.md").write_text(readme, encoding="utf-8")
 
     nsi = INSTALLER_SCRIPT.read_text(encoding="utf-8")
-    nsi = re.sub(r'VIProductVersion "[^"]+"', lambda m: f'VIProductVersion "{cargo_version}.0"', nsi)
+    nsi = re.sub(r'VIProductVersion "[^"]+"', lambda m: f'VIProductVersion "{numeric_version}.0"', nsi)
     nsi = re.sub(r'VIAddVersionKey "FileVersion" "[^"]+"', lambda m: f'VIAddVersionKey "FileVersion" "{cargo_version}"', nsi)
     INSTALLER_SCRIPT.write_text(nsi, encoding="utf-8")
 
@@ -263,7 +296,7 @@ def run_dev() -> None:
     subprocess.run(["cargo", "run", "--", "--no-browser"], cwd=SERVER_DIR, check=True)
 
 
-def build_installer() -> None:
+def build_installer(channel: dict) -> None:
     """NSIS インストーラーを作成する。"""
     makensis = shutil.which("makensis") or shutil.which("makensis.exe")
     if not makensis:
@@ -284,22 +317,31 @@ def build_installer() -> None:
             f"/DBUILD_EXE={TARGET_EXE}",
             f"/DSAMPLE_PROJECTS={SAMPLE_PROJECTS}",
             f"/DWEB_DIR={WEB_DIR}",
+            f"/DSETUP_OUT={channel['installer_name']}",
             str(INSTALLER_SCRIPT),
         ],
         cwd=ROOT,
         check=True,
     )
-    print(f"インストーラーを作成しました: {DOWNLOAD_INSTALLER}")
+    installer = DOWNLOAD_DIR / channel["installer_name"]
+    installer_zip = DOWNLOAD_DIR / channel["installer_zip_name"]
+    print(f"インストーラーを作成しました: {installer}")
 
-    with zipfile.ZipFile(DOWNLOAD_INSTALLER_ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.write(DOWNLOAD_INSTALLER, arcname=DOWNLOAD_INSTALLER.name)
-    print(f"インストーラーZIPを作成しました: {DOWNLOAD_INSTALLER_ZIP}")
+    with zipfile.ZipFile(installer_zip, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(installer, arcname=installer.name)
+    print(f"インストーラーZIPを作成しました: {installer_zip}")
 
 
 def build_release() -> None:
-    """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。"""
+    """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。
+
+    バージョンが "X.Y.Z-*" なら開発チャンネル(kasugai_canvas_dev.zip / latest-dev.json)、
+    "X.Y.Z" なら公開チャンネル(kasugai_canvas.zip / latest.json) へ出力する。
+    """
     _kill_existing_kasugai()
     cargo_version = _get_cargo_version()
+    channel = _channel_info(cargo_version)
+    print(f"更新チャンネル: {'開発(develop)' if channel['dev'] else '公開(main)'}", flush=True)
     sync_versions(write_latest=False)
     check_versions(check_latest=False)
     subprocess.run(["cargo", "build", "--release"], cwd=SERVER_DIR, check=True)
@@ -313,8 +355,9 @@ def build_release() -> None:
         raise FileNotFoundError(f"初期サンプルプロジェクトがみつかりません: {SAMPLE_PROJECTS}")
 
     DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    download_zip = DOWNLOAD_DIR / channel["zip_name"]
     web_dir = ROOT / "web"
-    with zipfile.ZipFile(DOWNLOAD_ZIP, "w", zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(download_zip, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(TARGET_EXE, arcname=TARGET_EXE.name)
         for project_file in SAMPLE_PROJECTS.rglob("*"):
             if project_file.is_file():
@@ -332,12 +375,12 @@ def build_release() -> None:
                 for bridge_file in bridge_dir.rglob("*"):
                     if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
                         archive.write(bridge_file, arcname=(Path(bridge_name) / bridge_file.relative_to(bridge_dir)).as_posix())
-    print(f"ZIP を作成しました: {DOWNLOAD_ZIP}")
+    print(f"ZIP を作成しました: {download_zip}")
 
     print("ZIP 内 EXE のバージョンを確認します...")
-    _verify_zip_version(DOWNLOAD_ZIP, cargo_version)
+    _verify_zip_version(download_zip, cargo_version)
 
-    build_installer()
+    build_installer(channel)
     sync_versions(write_latest=True)
     check_versions(check_latest=True)
 
@@ -358,13 +401,15 @@ def run_release() -> None:
 def publish_release() -> None:
     """リリースビルド、コミット、プッシュまで行う。
 
-    自動更新は main ブランチの latest.json / kasugai_canvas.zip のみを参照するため、
-    タグは作成しない。
+    自動更新は main ブランチ(公開)・develop ブランチ(開発)の latest*.json / ZIP を
+    バージョン接尾辞に応じて参照するため、タグは作成しない。
     """
     build_release()
     cargo_version = _get_cargo_version()
+    channel = _channel_info(cargo_version)
+    message = f"{cargo_version} {'開発版ビルド' if channel['dev'] else 'リリース'}"
     subprocess.run(["git", "add", "-A"], cwd=ROOT, check=True)
-    subprocess.run(["git", "commit", "-m", f"{cargo_version} リリース"], cwd=ROOT, check=True)
+    subprocess.run(["git", "commit", "-m", message], cwd=ROOT, check=True)
     subprocess.run(["git", "push"], cwd=ROOT, check=True)
     print(f"バージョン {cargo_version} をリモートへプッシュしました。")
 
@@ -396,7 +441,7 @@ def main() -> None:
         "-B",
         "--build",
         action="store_true",
-        help="リリースビルドを行い download\\kasugai_canvas.zip を作成",
+        help="リリースビルドを行い配布 ZIP を作成（公開版=kasugai_canvas.zip、開発版=kasugai_canvas_dev.zip）",
     )
     group.add_argument(
         "--release",
@@ -434,15 +479,17 @@ def main() -> None:
 
     if args.sync:
         sync_versions()
-        # latest.json だけを新バージョンへ更新して配布 ZIP が古いままだと、
+        # latest*.json だけを新バージョンへ更新して配布 ZIP が古いままだと、
         # 公開時に全ユーザーの自動更新が無限ループする（4.20.0 で発生）。
         # --sync でも ZIP 内 exe の /health バージョンを検証してズレを止める
-        if DOWNLOAD_ZIP.exists():
+        channel = _channel_info()
+        download_zip = DOWNLOAD_DIR / channel["zip_name"]
+        if download_zip.exists():
             print("ZIP 内 EXE のバージョンを確認します...", file=sys.stderr, flush=True)
-            _verify_zip_version(DOWNLOAD_ZIP, _get_cargo_version())
+            _verify_zip_version(download_zip, _get_cargo_version())
         else:
             print(
-                "警告: download/kasugai_canvas.zip がありません。公開前に 'python run.py -B' で作成してください。",
+                f"警告: download/{channel['zip_name']} がありません。公開前に 'python run.py -B' で作成してください。",
                 file=sys.stderr,
                 flush=True,
             )

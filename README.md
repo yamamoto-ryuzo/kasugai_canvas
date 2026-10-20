@@ -71,24 +71,36 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 
 ## バージョン管理
 
-現在のバージョンは **5.27.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **5.28.0-dev** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
 - **ソースコード・リリースタグ**: [GitHub リポジトリ](https://github.com/yamamoto-ryuzo/kasugai_canvas)
-- **公開ドキュメント**: [GitHub Pages](https://yamamoto-ryuzo.github.io/kasugai_canvas/)
+- **公開ドキュメント**: [GitHub Pages](https://yamamoto-ryuzo.github.io/kasugai_canvas/)（`main` ブランチのルートが公開元）
 - **変更履歴**: [CHANGELOG.md](CHANGELOG.md)
 
-新しいリリースでは、次の順序で更新してください。
+### ブランチと自動更新チャンネル
 
-1. `server\Cargo.toml` の `package.version` を更新する
-2. `CHANGELOG.md` の `Unreleased` の内容を日付付きのバージョン欄へ移動する
-3. 変更を GitHub の `main` ブランチへ反映する
-4. 同じバージョンの Git タグ（例: `v2.0.6`）を作成して GitHub に公開する
-5. `python run.py -B` で配布 ZIP と NSIS インストーラーを作成し、GitHub のリリースへ添付する
+- **`main`（公開用）**: 公開リリースのみを置く。GitHub Pages の公開元であり、公開チャンネルの自動更新は `main/download/latest.json`・`main/download/kasugai_canvas.zip` を参照する
+- **`develop`（開発用）**: 日常の開発はこちら。開発チャンネルの自動更新は `develop/download/latest-dev.json`・`develop/download/kasugai_canvas_dev.zip` を参照する
+
+チャンネルはバージョン番号の接尾辞で自動的に決まります（exe に焼き付くため設定不要・取り違え不可）。
+
+- `X.Y.Z`（公開版）→ 公開チャンネルを参照
+- `X.Y.Z-dev`・`X.Y.Z-dev.N`（開発版）→ 開発チャンネルを参照
+
+`python run.py -B` はバージョンに応じて出力先を自動で切り替えます（開発版は `kasugai_canvas_dev.zip`・`kasugai_canvas_setup_dev.exe`・`latest-dev.json`）。開発版の採番は `-dev` → `-dev.1` → `-dev.2` のようにドット区切りで上げてください（`-dev1` のような接尾辞はバージョン比較で増分と認識されません）。
+
+### リリース手順
+
+1. `develop` で開発し、`server\Cargo.toml` の `package.version` は `X.Y.Z-dev[.N]` にする。開発版を開発機へ配布したいときはこの状態で `python run.py -B` → コミット → `develop` へプッシュ（開発チャンネルへ公開される）
+2. リリース時は `package.version` から `-dev` 接尾辞を除去し、`CHANGELOG.md` の `Unreleased` を日付付きのバージョン欄へ移動する
+3. `python run.py -B` で配布 ZIP・インストーラー・`latest.json` を作成し、コミットする
+4. `develop` を `main` へマージし、両ブランチをプッシュする（`latest.json` と ZIP は必ず同じコミットで更新する — 先に `latest.json` だけ上げると自動更新が無限ループする）
+5. `main` への反映後、`develop` の `package.version` を次の `X.Y.Z-dev` に更新して開発を継続する
 6. GitHub Pages の公開内容を確認する
 
-バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。自動更新用の公開メタデータは `download\latest.json` で管理し、`server\Cargo.toml` と同じバージョン番号に更新してください。
+バージョン番号を複数のファイルへ重複して記載せず、アプリのビルド時には `server\Cargo.toml` の値を使用してください。自動更新用のメタデータは `download\latest.json`（公開）・`download\latest-dev.json`（開発）で管理し、`server\Cargo.toml` と同じバージョン番号に更新してください。
 
 ## 拡張機能（Plugin）と認証
 

@@ -24,10 +24,29 @@ const FETCH_CONFIG_FILE_NAME: &str = "kasugai_canvas.fetch.json";
 const EXTERNAL_PROJECTS_FILE_NAME: &str = "kasugai_canvas.projects.json";
 const KASC_FILE_NAME: &str = "kasugai_canvas.kasc";
 const GROUP_MANIFEST_FILE_NAME: &str = "projects.json";
-const LATEST_JSON_URLS: [&str; 1] =
-    ["https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/latest.json"];
-const REPOSITORY_DOWNLOAD_URL: &str =
-    "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip";
+// 自動更新の参照先。公開チャンネル(main ブランチ)と開発チャンネル(develop ブランチ)を
+// バージョンのプレリリース接尾辞で切り替える: "X.Y.Z" は公開、"X.Y.Z-dev[.N]" は開発。
+// exe に焼き付くため、開発版が公開最新版へ誤更新されることは構造上あり得ない
+const UPDATE_REPOSITORY_BASE: &str = "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas";
+
+// (参照ブランチ, latest ファイル名, 配布 ZIP ファイル名) を返す
+fn update_channel() -> (&'static str, &'static str, &'static str) {
+    if env!("CARGO_PKG_VERSION").contains('-') {
+        ("develop", "latest-dev.json", "kasugai_canvas_dev.zip")
+    } else {
+        ("main", "latest.json", "kasugai_canvas.zip")
+    }
+}
+
+fn latest_json_url() -> String {
+    let (branch, latest_name, _) = update_channel();
+    format!("{UPDATE_REPOSITORY_BASE}/{branch}/download/{latest_name}")
+}
+
+fn repository_download_url() -> String {
+    let (branch, _, zip_name) = update_channel();
+    format!("{UPDATE_REPOSITORY_BASE}/{branch}/download/{zip_name}")
+}
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -187,24 +206,21 @@ async fn fetch_latest() -> Result<Value, (StatusCode, String)> {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let mut last_error = "最新バージョン情報を取得できませんでした".to_string();
-    for url in LATEST_JSON_URLS {
-        let busted = format!("{url}?t={now}");
-        match reqwest::get(busted.as_str()).await {
-            Ok(response) => match response.error_for_status() {
-                Ok(response) => match response.text().await {
-                    Ok(text) => match serde_json::from_str(&text) {
-                        Ok(data) => return Ok(data),
-                        Err(error) => last_error = error.to_string(),
-                    },
-                    Err(error) => last_error = error.to_string(),
+    let url = latest_json_url();
+    let busted = format!("{url}?t={now}");
+    match reqwest::get(busted.as_str()).await {
+        Ok(response) => match response.error_for_status() {
+            Ok(response) => match response.text().await {
+                Ok(text) => match serde_json::from_str(&text) {
+                    Ok(data) => Ok(data),
+                    Err(error) => Err((StatusCode::BAD_GATEWAY, error.to_string())),
                 },
-                Err(error) => last_error = error.to_string(),
+                Err(error) => Err((StatusCode::BAD_GATEWAY, error.to_string())),
             },
-            Err(error) => last_error = error.to_string(),
-        }
+            Err(error) => Err((StatusCode::BAD_GATEWAY, error.to_string())),
+        },
+        Err(error) => Err((StatusCode::BAD_GATEWAY, error.to_string())),
     }
-    Err((StatusCode::BAD_GATEWAY, last_error))
 }
 
 async fn update_latest() -> Result<Json<Value>, (StatusCode, String)> {
@@ -4052,10 +4068,11 @@ async fn install_update(
     if compare_versions(latest_version, env!("CARGO_PKG_VERSION")) != std::cmp::Ordering::Greater {
         return Err((StatusCode::CONFLICT, "既に最新バージョンです".to_string()));
     }
+    let fallback_url = repository_download_url();
     let url = latest["platforms"]["windows-x86_64"]["url"]
         .as_str()
-        .unwrap_or(REPOSITORY_DOWNLOAD_URL);
-    let allowed = reqwest::Url::parse(REPOSITORY_DOWNLOAD_URL).map_err(internal_error)?;
+        .unwrap_or(fallback_url.as_str());
+    let allowed = reqwest::Url::parse(fallback_url.as_str()).map_err(internal_error)?;
     let actual = reqwest::Url::parse(url).map_err(|_| {
         (
             StatusCode::BAD_REQUEST,

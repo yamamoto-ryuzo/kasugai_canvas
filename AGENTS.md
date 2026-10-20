@@ -22,7 +22,17 @@
 - `CHANGELOG.md` に日付付きセクションを追加（Keep a Changelog 形式）
 - **リリース時は必ずマニュアル（ドキュメントサイトの HTML ページ）を整備する**。そのリリースで追加・変更された機能・設定・UI が `guide.html`・`features.html` 等の該当ページに反映されていることを、バージョンアップの完了条件に含める。新機能がドキュメントに載っていない状態でリリースしない
 - 配布物は `python run.py -B` で `download/` に作成し、コミットしてプッシュ
-- **重要（無限ループ事故の再発防止）**: `download/latest.json` のバージョン更新と `download/kasugai_canvas.zip` の再ビルドは**必ず同じコミットで行う**。`latest.json` だけを先に上げると、全ユーザーの自動更新が「適用 → 再起動 → 依然古い → 再適用」の**無限ループ**に陥る（4.20.0 リリースで実際に発生し 4.20.1 で修正）。`latest.json` を手編集でだけ更新するリリースは禁止。必ず `python run.py -B`（または `--publish`）を通し、スクリプトによる ZIP 内 exe の `/health` バージョン検証を通過させること（`--sync` 実行時も同検証を行い、ズレた ZIP はブロックされる）。フロント側にも試行済みバージョンの記録によるループガードはあるが、配布物の整合はリリース手順で担保する
+- **重要（無限ループ事故の再発防止）**: `download/latest*.json` のバージョン更新と配布 ZIP の再ビルドは**必ず同じコミットで行う**。`latest.json` だけを先に上げると、全ユーザーの自動更新が「適用 → 再起動 → 依然古い → 再適用」の**無限ループ**に陥る（4.20.0 リリースで実際に発生し 4.20.1 で修正）。`latest.json`/`latest-dev.json` を手編集でだけ更新するリリースは禁止。必ず `python run.py -B`（または `--publish`）を通し、スクリプトによる ZIP 内 exe の `/health` バージョン検証を通過させること（`--sync` 実行時も同検証を行い、ズレた ZIP はブロックされる）。フロント側にも試行済みバージョンの記録によるループガードはあるが、配布物の整合はリリース手順で担保する
+
+## ブランチと自動更新チャンネル
+
+- **`main` = 公開用**: 公開リリースのみを置く。GitHub Pages（`main` ルートが公開元）と公開チャンネルの自動更新（`main/download/latest.json`・`main/download/kasugai_canvas.zip`）が参照する
+- **`develop` = 開発用**: 日常の開発はこちら。開発チャンネルの自動更新は `develop/download/latest-dev.json`・`develop/download/kasugai_canvas_dev.zip` を参照する
+- **チャンネルはバージョン接尾辞で決まる（exe に焼き付き・設定不要）**: `X.Y.Z` は公開チャンネル、`X.Y.Z-dev`・`X.Y.Z-dev.N` は開発チャンネルを参照する。開発版 exe が公開最新版へ巻き戻る事故は構造上起きない（`server/src/main.rs` の `update_channel()`）
+- **開発版の採番ルール**: `-dev` → `-dev.1` → `-dev.2` のように**ドット区切り**で上げること。`-dev1` のような接尾辞はバージョン比較で数値化できず増分と認識されない（自動更新が発火しない）
+- **開発版の配布**: `develop` で `python run.py -B` を実行すると開発チャンネル用配布物（`kasugai_canvas_dev.zip`・`kasugai_canvas_setup_dev.exe`・`latest-dev.json`）が生成される。コミット＆プッシュで開発機の自動更新が追従する。`CHANGELOG.md` はリリースのみ記録するため、開発版の整合チェック対象外
+- **リリースの流れ**: `develop` で `-dev` 接尾辞を除去 → `python run.py -B` → コミット → `develop` を `main` へマージして両方プッシュ → `develop` は次の `X.Y.Z-dev` へ更新して継続
+- **注意**: 開発版 exe（`target/debug` や `target/release`）が `develop` の `latest-dev.json` より古いバージョンだと、起動時の自動更新で exe+web が開発版配布物に差し替えられる（公開チャンネルでの既知事故と同型）。開発中は `Cargo.toml` を `latest-dev.json` 以上に保つか、設定の自動更新をオフにする
 
 ## 動作確認（Playwrigh：必須）
 

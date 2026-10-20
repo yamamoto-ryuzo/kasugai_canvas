@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **自動更新の開発チャンネル** — バージョンにプレリリース接尾辞（`X.Y.Z-dev[.N]`）が付いたビルドは、`main` ブランチの `latest.json` / `kasugai_canvas.zip` ではなく `develop` ブランチの `latest-dev.json` / `kasugai_canvas_dev.zip` を参照するようになった。開発版 exe が公開最新版へ誤更新される事故を構造的に防止し、開発機は開発チャンネルの最新開発ビルドへ自動追従できる。`python run.py -B` はバージョンに応じて公開用（`kasugai_canvas.zip`・`latest.json`）／開発用（`kasugai_canvas_dev.zip`・`kasugai_canvas_setup_dev.exe`・`latest-dev.json`）の配布物を自動で切り替えて生成する
+
 ## [5.27.0] - 2026-10-21
 
 ### Added

@@ -20,17 +20,21 @@ Name "${APP_NAME}"
 ; icon.ico は 16x16 から 256x256 までのマルチサイズ ICO を含む
 !define MUI_ICON "icon.ico"
 !define MUI_UNICON "icon.ico"
-OutFile "..\download\kasugai_canvas_setup.exe"
+; SETUP_OUT: run.py /D override (dev channel = kasugai_canvas_setup_dev.exe)
+!ifndef SETUP_OUT
+  !define SETUP_OUT "kasugai_canvas_setup.exe"
+!endif
+OutFile "..\download\${SETUP_OUT}"
 InstallDir "${INSTALL_DIR}"
 InstallDirRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas" "InstallLocation"
 RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "5.27.0.0"
+VIProductVersion "5.28.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "5.27.0"
+VIAddVersionKey "FileVersion" "5.28.0-dev"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
