@@ -10,7 +10,7 @@ import {
   initBoxAuth, getBoxClientId, setBoxClientId, boxConnected,
   startBoxAuth, disconnectBox, handleBoxRedirect,
 } from "./box.js";
-import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-style.js";
+import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive, setLayerVisibilityResolver } from "./qml-style.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
 
 await initI18n();
@@ -142,6 +142,20 @@ const vectorSourceCache = new Map();
 // style= で指定された QGIS レイヤースタイル(.qml)の取得・コンパイル結果キャッシュ。
 // URL キーで loadQmlStyle の Promise を保持し、applyInspector で破棄する
 const qmlStyleCache = new Map();
+// QML 式の is_layer_visible('名前') を KASUGAI のレイヤー表示状態に解決する。
+// QGIS ではレイヤーツリーのチェック状態を参照するため、ここでは item.visible を返す。
+// レイヤー名は QGIS 側のレイヤー名(= .kasc のタイトル末端)と照合し、
+// 見つからなければ非表示(false)として扱う(QGIS でレイヤー無しと同じ)
+setLayerVisibilityResolver(name => {
+  const key = String(name || "").trim();
+  if (!key) return false;
+  const hit = getOrderedLayerItems().find(item => {
+    if (item.title === key || item.id === key) return true;
+    const path = (item.group ? `${item.group}/${item.title}` : String(item.title || ""));
+    return path.split("/").map(seg => seg.trim()).includes(key);
+  });
+  return hit ? !!hit.visible : false;
+});
 // ベクター検索で未ロードレイヤーが選択された際のオンデマンド読み込み結果。
 // vectorSourceCache と同じく applyInspector(プロジェクト/インスペクター変更)で破棄する
 const vectorSearchLoadedSources = new Map();

@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [Unreleased]
+
+### Added
+
+- **QML スタイル式で `is_layer_visible('名前')` をサポート** — `style=` で読み込んだ QGIS レイヤースタイル（.qml）の式評価に `is_layer_visible` 関数を追加し、別レイヤーの表示状態を参照した条件付きスタイルが使えるようになった。QGIS のレイヤーツリー側のチェック状態に相当し、KASUGAI では該当レイヤーの表示（`item.visible`）を返す。レイヤー名はタイトル・ID・グループパスの各セグメントで照合し、見つからないレイヤーは非表示（false）として扱う（QGIS のレイヤー無しと同じ）
+
 ## [5.26.0] - 2026-10-15
 
 ### Added

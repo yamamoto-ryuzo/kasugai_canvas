@@ -208,6 +208,14 @@ function tokenizeExpr(src) {
   return tokens;
 }
 
+// QGIS 式関数 is_layer_visible('名前') の解決先。
+// アプリ側が setLayerVisibilityResolver で「レイヤー名 → 表示状態か」を注入する。
+// 未設定時・レイヤー未発見時は false(QGIS でレイヤー無し/非表示と同じ扱い)
+let layerVisibilityResolver = null;
+export function setLayerVisibilityResolver(fn) {
+  layerVisibilityResolver = (typeof fn === "function") ? fn : null;
+}
+
 const EXPR_FUNCS = {
   abs: Math.abs,
   ceil: Math.ceil, ceiling: Math.ceil, floor: Math.floor,
@@ -236,6 +244,10 @@ const EXPR_FUNCS = {
   to_string: v => String(v ?? ""), to_text: v => String(v ?? ""),
   coalesce: (...a) => a.find(v => v !== null && v !== undefined),
   if: (c, a, b) => (c ? a : b),
+  is_layer_visible: name => {
+    try { return layerVisibilityResolver ? !!layerVisibilityResolver(String(name ?? "")) : false; }
+    catch (e) { return false; }
+  },
   scale_linear: (v, a1, a2, b1, b2) => b1 + (Number(v) - a1) * (b2 - b1) / ((a2 - a1) || 1),
   scale_exp: (v, a1, a2, b1, b2) => b1 + (Number(v) - a1) * (b2 - b1) / ((a2 - a1) || 1),
   rand: (a = 0, b = 1) => a + Math.random() * (b - a),
