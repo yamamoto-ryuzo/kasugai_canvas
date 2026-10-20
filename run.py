@@ -28,6 +28,8 @@ DOWNLOAD_INSTALLER_ZIP = DOWNLOAD_DIR / "kasugai_canvas_setup.zip"
 SAMPLE_PROJECTS = ROOT / "installer" / "projects"
 WEB_DIR = ROOT / "web"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
+# 公開ドキュメントは docs/ 配下（GitHub Pages ソース）。バージョン同期の対象
+DOCS_DIR = ROOT / "docs"
 
 
 def _get_cargo_version() -> str:
@@ -64,15 +66,15 @@ def check_versions(check_latest: bool = True) -> None:
         "CHANGELOG.md": changelog_version,
     }
 
-    nav = (ROOT / "nav.js").read_text(encoding="utf-8")
+    nav = (DOCS_DIR / "nav.js").read_text(encoding="utf-8")
     nav_match = re.search(r"const VERSION = 'v([^']+)'", nav)
-    files["nav.js"] = nav_match.group(1) if nav_match else None
+    files["docs/nav.js"] = nav_match.group(1) if nav_match else None
 
     # ドキュメントのバージョンバッジも Cargo.toml と同期・検査する。
     documentation_pages = [
-        *(page for page in ROOT.glob("*.html") if page.name != "home.html"),
-        *ROOT.glob("auth/*.html"),
-        *ROOT.glob("features/*.html"),
+        *(page for page in DOCS_DIR.glob("*.html") if page.name != "home.html"),
+        *DOCS_DIR.glob("auth/*.html"),
+        *DOCS_DIR.glob("features/*.html"),
     ]
     for page in documentation_pages:
         page_content = page.read_text(encoding="utf-8")
@@ -132,12 +134,12 @@ def sync_versions(write_latest: bool = True) -> None:
     nsi = re.sub(r'VIAddVersionKey "FileVersion" "[^"]+"', lambda m: f'VIAddVersionKey "FileVersion" "{cargo_version}"', nsi)
     INSTALLER_SCRIPT.write_text(nsi, encoding="utf-8")
 
-    nav_path = ROOT / "nav.js"
+    nav_path = DOCS_DIR / "nav.js"
     nav = nav_path.read_text(encoding="utf-8")
     nav = re.sub(r"const VERSION = 'v[^']+'", f"const VERSION = 'v{cargo_version}'", nav)
     nav_path.write_text(nav, encoding="utf-8")
 
-    for page in [*ROOT.glob("*.html"), *ROOT.glob("auth/*.html"), *ROOT.glob("features/*.html")]:
+    for page in [*DOCS_DIR.glob("*.html"), *DOCS_DIR.glob("auth/*.html"), *DOCS_DIR.glob("features/*.html")]:
         page_content = page.read_text(encoding="utf-8")
         page_content = re.sub(
             r'(class="version-badge">)v[^<]+(</span>)',

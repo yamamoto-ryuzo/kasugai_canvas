@@ -8252,6 +8252,7 @@ async function registerPluginLayer(config = {}, pluginId = "") {
     plugin: true,
     pluginId,
     attribution: typeof config.attribution === "string" ? config.attribution : "",
+    styleUrl: typeof config.style === "string" && config.style.trim() ? config.style.trim() : null,
     data: normalizeGeoJsonInput(config.data),
     dataSource: null,
   };
@@ -9802,7 +9803,7 @@ const CHAT_TOOLS = [{
           id: { type: "STRING", description: "プラグインID(半角英数・ハイフン・アンダースコア)" },
           name: { type: "STRING", description: "表示名" },
           code: { type: "STRING", description: "プラグインのESモジュールコード全文" },
-          layer: { type: "OBJECT", description: "省略可。{title,group,format:\"entities\"|\"geojson\",visible,scope:\"app\"|\"project\"}。指定するとプラグイン専用レイヤーが自動登録され setPluginLayerData/getPluginDataSource で使える" },
+          layer: { type: "OBJECT", description: "省略可。{title,group,format:\"entities\"|\"geojson\",visible,scope:\"app\"|\"project\",style:\"QGISスタイル(.qml)のURL(任意・geojson形式のみ)\"}。指定するとプラグイン専用レイヤーが自動登録され setPluginLayerData/getPluginDataSource で使える" },
           enable: { type: "BOOLEAN", description: "省略時true。falseで保存のみ(読み込まない)" },
         },
         required: ["id", "code"],

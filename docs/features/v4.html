@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v5.26.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.27.0</span></h1>
       <p>V4: プラグイン（認証機構）・外部連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -22,6 +22,7 @@
       <h3>🧩 プラグイン機構・認証方式</h3>
       <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構です。認証方式は 0〜7（認証なし / ローカル / 簡易パスワード / Cloudflare Pages / Cloudflare Workers / Cloud Run / Cloud Run IAP）から選択でき、公開環境でも ID プロバイダの認証・承認の内側に置けます。</p>
       <p>プラグインは <code>window.kasugaiApi</code> を通じて地図を操作します。AI が生成したプラグインはまず IndexedDB（ブラウザローカル草稿）に保存され、<code>.kasp</code> でエクスポート可 → レビュー後にローカル版で <code>PLUGIN/</code> へ公開、という「開発→草稿→公開」の昇格ルートを持ちます。高権限操作（プラグイン公開等）はフロント側で必ず確認ダイアログを挟みます。詳細は <a href="../auth/">認証とプラグイン</a> を参照してください。</p>
+      <p>同梱プラグインの例として <strong>不動産情報ライブラリ連携</strong>（<code>PLUGIN/reinfolib</code>）があります。表示範囲に連動して国土交通省の不動産情報ライブラリ API から XYZ タイル形式の GeoJSON（取引価格ポイント・指定緊急避難場所・駅別乗降客数・用途地域）を取得し、<code>/api/reinfolib</code> 中継（API キーはサーバー側 <code>REINFOLIB_API_KEY</code> または <code>localStorage.reinfolibApiKey</code> の BYO キーで注入）経由で表示します。各データセットは同梱の QML スタイル（<code>PLUGIN/reinfolib/qml/</code>）でシンボル・分類色分け・駅名ラベル付きで描画されます。</p>
 
       <h3>🗃️ クエリ系・大規模ベクター</h3>
       <p>CesiumJS ネイティブ非対応の形式は「ブラウザ側でデコード → GeoJSON へ正規化 → 既存のベクター描画経路に流す」が基本ルールです。これによりレイヤー一覧・表示切替・フォーカス・ベクトル検索・属性パネルが新形式でも自動的に機能します。</p>

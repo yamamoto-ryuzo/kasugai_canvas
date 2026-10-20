@@ -19,15 +19,18 @@ const LAYER_GROUP = "不動産情報";
 const FETCH_GAP_MS = 250; // 公式案内の「連続実行しない」に合わせてタイル取得を空ける
 
 // 対象API。params は options を受けてクエリ片（urlencode前）を返す
+// style: レイヤー描画用の QGIS スタイル(.qml)。registerPluginLayer の style
+// オプション経由で本体の geojson 描画に適用される(styleUrl)。
 const DATASETS = {
   price: {
     api: "XPT001",
     title: opts => `取引価格ポイント(${opts.from.slice(0, 4)}Q${opts.from.slice(4)})`,
     params: opts => `from=${encodeURIComponent(opts.from)}&to=${encodeURIComponent(opts.to)}`,
+    style: "./PLUGIN/reinfolib/qml/price.qml",
   },
-  shelter: { api: "XGT001", title: () => "指定緊急避難場所", params: () => "" },
-  station: { api: "XKT015", title: () => "駅別乗降客数", params: () => "" },
-  zoning: { api: "XKT002", title: () => "用途地域", params: () => "" },
+  shelter: { api: "XGT001", title: () => "指定緊急避難場所", params: () => "", style: "./PLUGIN/reinfolib/qml/shelter.qml" },
+  station: { api: "XKT015", title: () => "駅別乗降客数", params: () => "", style: "./PLUGIN/reinfolib/qml/station.qml" },
+  zoning: { api: "XKT002", title: () => "用途地域", params: () => "", style: "./PLUGIN/reinfolib/qml/zoning.qml" },
 };
 
 const DEFAULT_OPTIONS = {
@@ -219,6 +222,7 @@ export async function init(api, manifest) {
         visible: true,
         scope: "app",
         attribution: ATTRIBUTION,
+        style: dataset.style,
       }, manifest.id);
       if (item?.id) state.layers.set(key, item.id);
     } catch (e) {

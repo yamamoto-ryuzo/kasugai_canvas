@@ -1,0 +1,20 @@
+<!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
+<qgis version="3.28" styleCategories="Symbology">
+ <renderer-v2 type="singleSymbol" symbollevels="0">
+  <symbols>
+   <symbol name="0" type="marker" alpha="0.95">
+    <layer class="SimpleMarker" enabled="1" pass="0">
+     <Option type="Map">
+      <Option name="color" value="46,125,50,255"/>
+      <Option name="name" value="shield"/>
+      <Option name="size" value="3.0"/>
+      <Option name="size_unit" value="MM"/>
+      <Option name="outline_color" value="255,255,255,255"/>
+      <Option name="outline_width" value="0.4"/>
+      <Option name="outline_style" value="solid"/>
+     </Option>
+    </layer>
+   </symbol>
+  </symbols>
+ </renderer-v2>
+</qgis>

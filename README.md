@@ -71,7 +71,7 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 
 ## バージョン管理
 
-現在のバージョンは **5.26.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
+現在のバージョンは **5.27.0** です。バージョン番号の正本は `server\Cargo.toml` の `package.version` とし、変更履歴は [CHANGELOG.md](CHANGELOG.md) で管理します。
 
 公開・リリース管理は次の場所で行います。
 
@@ -134,6 +134,7 @@ export async function init(api, manifest) {
 
 - `format: "entities"`：本体が `Cesium.CustomDataSource` を生成して貸し出します。`api.getPluginDataSource(manifest.id)` で取得し `ds.entities.add(...)` するだけで、動的な entity が管理対象になります
 - `format: "geojson"`：`api.setPluginLayerData(manifest.id, geojson)` で GeoJSON オブジェクトを渡すと、`geojson:` レイヤーと同じ描画経路（クランプ・ドレープ設定を含む）で表示されます。更新は再度呼び出すだけです
+- `style`：省略可。`"QMLファイルのURL"` を指定すると geojson 形式レイヤーに QGIS スタイル（単一・分類・ルールベース・ラベル）を適用します（`api.registerPluginLayer` の `style` オプションと同じ）
 - `scope`：`"app"`（既定）はプロジェクト切替をまたいで存続、`"project"` はプロジェクト切替時にレイヤーごと削除されます
 - `manifest.layer` を省略した場合は従来通りで、`viewer.entities.add` 等による直接描画も可能です（非管理・揮発データ）
 

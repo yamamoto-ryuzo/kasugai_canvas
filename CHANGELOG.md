@@ -6,9 +6,24 @@
 
 ## [Unreleased]
 
+## [5.27.0] - 2026-10-21
+
 ### Added
 
 - **QML スタイル式で `is_layer_visible('名前')` をサポート** — `style=` で読み込んだ QGIS レイヤースタイル（.qml）の式評価に `is_layer_visible` 関数を追加し、別レイヤーの表示状態を参照した条件付きスタイルが使えるようになった。QGIS のレイヤーツリー側のチェック状態に相当し、KASUGAI では該当レイヤーの表示（`item.visible`）を返す。レイヤー名はタイトル・ID・グループパスの各セグメントで照合し、見つからないレイヤーは非表示（false）として扱う（QGIS のレイヤー無しと同じ）
+- **不動産情報ライブラリ（国土交通省）連携プラグイン** — `web/PLUGIN/reinfolib` を同梱。表示範囲連動で XYZ タイル形式の GeoJSON（取引価格ポイント・指定緊急避難場所・駅別乗降客数・用途地域）を取得し、本体の geojson レイヤー経路に流す。取得は `/api/reinfolib?url=<target>` 中継経由（ローカルサーバー／Cloudflare Workers 双方に実装）で、API キーはサーバー側の `REINFOLIB_API_KEY` から注入（BYO キーは `localStorage.reinfolibApiKey`）。中継の接続先は `www.reinfolib.mlit.go.jp/ex-api/external/` 配下のみに限定
+- **プラグインレイヤーの `style` オプション** — `registerPluginLayer` / `plugins.json` の `layer` 宣言に `style: "QMLファイルURL"` を追加し、プラグインが流す geojson レイヤーにも QGIS スタイル（単一・分類・ルールベース・ラベル）を適用できる
+- **reinfolib 用バンドル QML スタイル** — `web/PLUGIN/reinfolib/qml/` に取引価格（オレンジ丸）・避難場所（緑シールド）・駅別乗降客数（紫ライン＋駅名ラベル）・用途地域（13区分＋その他の分類色分け）のスタイルを同梱し、プロジェクトの `geojson:` 行の `style=` からも参照できる
+- **地域比較シート試作ツール** — `tools/region-compare/compare.mjs`。2〜3候補地域を同一観点（取引価格・避難場所・乗降客数・用途地域・防災4種・小学校区・所要時間・動物病院・公園）で確認し、確認済み/データなし/未確認を分けた比較シート（Markdown）と候補円 GeoJSON・カメラプリセット `.kasc` 行を生成する
+
+### Changed
+
+- **ドキュメントを `docs/` ディレクトリへ集約** — サイトの HTML・画像・`nav.js` を `docs/` に移動し、ルートの `index.html` は `docs/` へのリダイレクトに変更（GitHub Pages ソースを一箇所に集約）
+- **reinfolib プロジェクトをスタイル付きに更新** — `installer/projects/reinfolib` の各 `geojson:` 行に `style=` を適用し、用途地域を既定表示化、`legend:` 行（凡例 SVG）と比較候補地域レイヤー・カメラプリセットを追加
+
+### Fixed
+
+- **run.py のバージョン同期がドキュメント移動に追随していなかった問題を修正** — `docs/` 集約後もルートの `nav.js`・各 HTML を参照していたため `--sync`/`-B` の整合チェックが失敗していた。同期・検査対象を `docs/` 配下へ更新
 
 ## [5.26.0] - 2026-10-15
 
