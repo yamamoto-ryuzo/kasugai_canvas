@@ -10,7 +10,7 @@ import {
   initBoxAuth, getBoxClientId, setBoxClientId, boxConnected,
   startBoxAuth, disconnectBox, handleBoxRedirect,
 } from "./box.js";
-import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive, setLayerVisibilityResolver } from "./qml-style.js";
+import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "./qml-style.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
 
 await initI18n();
@@ -305,6 +305,199 @@ async function ensureQmlStyle(item) {
     console.warn(`QML スタイル ${item.styleUrl}:`, item.qmlStyle.warnings.join(" / "));
   }
   return item.qmlStyle;
+}
+
+// ---------------------------------------------------------------------------
+// レイヤー一覧の凡例
+// ---------------------------------------------------------------------------
+// スウォッチ描画結果(dataURL)のキャッシュ。キーは描画指示オブジェクトの JSON
+const legendSwatchCache = new Map();
+const LEGEND_SWATCH_W = 26;
+const LEGEND_SWATCH_H = 16;
+// 条件別に分岐する凡例の折りたたみ状態(レイヤーid の Set)。既定は展開
+const collapsedLayerLegends = new Set();
+// 凡例スウォッチを出しうるレイヤー種別(ベクター系)
+const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "sql"]);
+
+// 描画指示内の canvas/画像をサイズ+src に正規化してキャッシュキーを作る
+function legendDescKey(desc) {
+  return JSON.stringify(desc, (key, value) => (value instanceof HTMLCanvasElement || value instanceof HTMLImageElement || (typeof ImageBitmap !== "undefined" && value instanceof ImageBitmap))
+    ? `[img ${value.src || "canvas"} ${value.width}x${value.height}]` : value);
+}
+
+// 描画指示 {marker|image|point|line|fill|outline} をスウォッチ dataURL に描く。
+// marker/image は元 canvas・画像。line={css,widthPx,dash}、fill={css|tile}、
+// outline={css,widthPx,dash}、point={css,sizePx,outlineCss}
+function buildLegendSwatchDataUrl(desc) {
+  const key = legendDescKey(desc);
+  const cached = legendSwatchCache.get(key);
+  if (cached) return cached;
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = LEGEND_SWATCH_W * scale;
+  canvas.height = LEGEND_SWATCH_H * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  const W = LEGEND_SWATCH_W, H = LEGEND_SWATCH_H;
+  const img = desc.marker || desc.image;
+  if (img) {
+    const ratio = img.height / (img.width || 1) || 1;
+    let w = W - 4, h = w * ratio;
+    if (h > H - 2) { h = H - 2; w = h / ratio; }
+    try { ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h); } catch (error) { /* 未ロード画像等 */ }
+  } else if (desc.point) {
+    const r = Math.min(Math.max(desc.point.sizePx || 7, 4), H - 4) / 2;
+    ctx.beginPath();
+    ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2);
+    ctx.fillStyle = desc.point.css;
+    ctx.fill();
+    ctx.strokeStyle = desc.point.outlineCss || "rgba(0,0,0,0.4)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  } else if (desc.line) {
+    ctx.strokeStyle = desc.line.css;
+    ctx.lineWidth = Math.min(Math.max(desc.line.widthPx || 2, 1), 5);
+    if (desc.line.dash?.length) ctx.setLineDash(desc.line.dash);
+    ctx.beginPath();
+    ctx.moveTo(1.5, H / 2);
+    ctx.lineTo(W - 1.5, H / 2);
+    ctx.stroke();
+  } else if (desc.fill || desc.outline) {
+    const x = 1.5, y = 2, w = W - 3, h = H - 4;
+    if (desc.fill?.tile) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, y, w, h);
+      ctx.clip();
+      const pattern = ctx.createPattern(desc.fill.tile, "repeat");
+      if (pattern) { ctx.fillStyle = pattern; ctx.fillRect(x, y, w, h); }
+      ctx.restore();
+    } else if (desc.fill?.css) {
+      ctx.fillStyle = desc.fill.css;
+      ctx.fillRect(x, y, w, h);
+    }
+    if (desc.outline?.css) {
+      ctx.strokeStyle = desc.outline.css;
+      ctx.lineWidth = Math.min(Math.max(desc.outline.widthPx || 1, 0.7), 3);
+      if (desc.outline.dash?.length) ctx.setLineDash(desc.outline.dash);
+      ctx.strokeRect(x, y, w, h);
+    } else {
+      // 白系・半透明の塗りでも存在が分かるよう薄い輪郭を足す
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.lineWidth = 0.7;
+      ctx.strokeRect(x, y, w, h);
+    }
+  }
+  const url = canvas.toDataURL();
+  if (legendSwatchCache.size >= 300) legendSwatchCache.clear();
+  legendSwatchCache.set(key, url);
+  return url;
+}
+
+// QML コンパイル済みスタイルの legend エントリ spec → スウォッチ描画指示
+function legendDescFromQmlSpec(spec) {
+  if (!spec) return null;
+  if (spec.markers?.length) return { marker: markerLayersToCanvas(spec.markers) };
+  if (spec.centroid?.length && !spec.fillParts?.length && !spec.line && !spec.outline) return { marker: markerLayersToCanvas(spec.centroid) };
+  if (spec.fillParts?.length || spec.outline) {
+    const desc = { outline: spec.outline ? { css: rgbaToCss(spec.outline.color), widthPx: spec.outline.widthPx, dash: spec.outline.dash } : null };
+    if (spec.fillParts?.length) {
+      const { solidBase, tile } = fillPartsToTile(spec.fillParts);
+      desc.fill = tile ? { tile } : solidBase ? { css: rgbaToCss(solidBase) } : null;
+    }
+    if (desc.fill || desc.outline) return desc;
+  }
+  if (spec.line) return { line: { css: rgbaToCss(spec.line.color), widthPx: spec.line.widthPx, dash: spec.line.dash } };
+  return null;
+}
+
+// スタイル未指定ベクターレイヤーの凡例: 描画済み DataSource の先頭の可視 entity から
+// 代表スタイルを拾う。未読み込み(非表示等)なら null(凡例なし)
+function legendDescFromEntitySample(item) {
+  const entry = vectorDataSources.find(e => e.id === item.id);
+  const ds = entry?.ds || item.dataSource || null;
+  if (!ds) return null;
+  const t = Cesium.JulianDate.now();
+  const colorOf = material => {
+    const value = material?.getValue?.(t);
+    return value instanceof Cesium.Color ? value : (value?.color instanceof Cesium.Color ? value.color : null);
+  };
+  const shown = g => !!g && g.show?.getValue?.(t) !== false;
+  for (const entity of ds.entities.values) {
+    try {
+      if (shown(entity.polygon)) {
+        const matValue = entity.polygon.material?.getValue?.(t);
+        const fill = colorOf(entity.polygon.material)
+          ? { css: colorOf(entity.polygon.material).toCssColorString() }
+          : (matValue?.image instanceof HTMLCanvasElement ? { tile: matValue.image } : null);
+        const outlineColor = entity.polygon.outline?.getValue?.(t) === true ? entity.polygon.outlineColor?.getValue?.(t) : null;
+        return { fill, outline: outlineColor ? { css: outlineColor.toCssColorString(), widthPx: entity.polygon.outlineWidth?.getValue?.(t) || 1 } : null };
+      }
+      if (shown(entity.polyline)) {
+        const color = colorOf(entity.polyline.material);
+        return { line: { css: color ? color.toCssColorString() : "#333", widthPx: entity.polyline.width?.getValue?.(t) || 2 } };
+      }
+      if (shown(entity.billboard)) {
+        const image = entity.billboard.image?.getValue?.(t);
+        if (image && (image instanceof HTMLCanvasElement || image instanceof HTMLImageElement || (typeof ImageBitmap !== "undefined" && image instanceof ImageBitmap))) return { image };
+        return { point: { css: "#2b6cb0", sizePx: 8 } };
+      }
+      if (shown(entity.point)) {
+        const color = entity.point.color?.getValue?.(t);
+        const outline = entity.point.outlineColor?.getValue?.(t);
+        return { point: { css: color ? color.toCssColorString() : "#2b6cb0", sizePx: entity.point.pixelSize?.getValue?.(t) || 8, outlineCss: outline ? outline.toCssColorString() : "" } };
+      }
+    } catch (error) { /* 取得不能な entity はスキップ */ }
+  }
+  return null;
+}
+
+// レイヤー行の凡例エントリを返す。{entries:[{label,desc,symbolName}]} または null。
+// entries>1 なら条件別に分岐表示する。style= 指定レイヤーは .qml 未取得なら
+// 読み込みを開始し、解決後に一覧を再描画する
+function getLayerLegend(item) {
+  if (!item) return null;
+  if (item.styleUrl) {
+    if (item.qmlStyle === undefined) {
+      ensureQmlStyle(item).then(() => { if (layerState.has(item.id)) renderLayerList(); });
+      return null;
+    }
+    const legend = item.qmlStyle?.legend;
+    if (legend?.length) {
+      return { entries: legend.map(e => ({ label: e.label, symbolName: e.symbolName, desc: e.spec ? legendDescFromQmlSpec(e.spec) : null })) };
+    }
+  }
+  if (LEGEND_VECTOR_TYPES.has(item.type)) {
+    const desc = legendDescFromEntitySample(item);
+    return desc ? { entries: [{ label: "", desc }] } : null;
+  }
+  return null;
+}
+
+// 凡例の条件別チェックの切り替え。該当シンボルにだけ評価される地物を
+// 描画中の DataSource/Primitive へ即時再適用し、未描画なら次回 refreshLayers で反映される
+function setLegendSymbolVisible(item, symbolName, visible) {
+  if (!item || !symbolName) return;
+  if (!item.legendHidden) item.legendHidden = new Set();
+  if (visible) item.legendHidden.delete(symbolName);
+  else item.legendHidden.add(symbolName);
+  if (!item.legendHidden.size) item.legendHidden = null;
+  const style = item.qmlStyle;
+  if (style) {
+    const entry = vectorDataSources.find(e => e.id === item.id);
+    if (entry) {
+      try { applyQmlStyleToDataSource(entry.ds, style, { clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden }); }
+      catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
+    } else {
+      const target = layerRuntimeTargets.get(item.id);
+      if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
+        try { applyQmlStyleToPrimitive(target, style, item.legendHidden); }
+        catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
+      }
+    }
+    requestRender();
+  }
+  renderLayerList();
 }
 // レイヤー行の📍フォーカス用: レイヤーID→実行時オブジェクト(ImageryLayer/Tileset/DataSource/Primitive)。
 // refreshLayers() のたびに再登録される
@@ -1243,14 +1436,39 @@ function renderLayerList() {
           const limitBadge = layer.entityLimited
             ? `<small class="entity-limit-badge" title="${escapeHtml(t("layer.entityLimited", { shown: layer.entityLimited.shown, total: layer.entityLimited.total }))}">${layer.entityLimited.shown}/${layer.entityLimited.total}</small>`
             : "";
+          const legendEntries = getLayerLegend(layer)?.entries || null;
+          const legendMulti = !!legendEntries && legendEntries.length > 1;
+          const legendCollapsed = legendMulti && collapsedLayerLegends.has(layer.id);
+          const legendToggle = legendMulti
+            ? `<button class="layer-legend-toggle" type="button" data-layer-id="${escapeHtml(layer.id)}" aria-label="${escapeHtml(t("layer.legendToggle"))}" aria-expanded="${!legendCollapsed}">${legendCollapsed ? "▸" : "▾"}</button>`
+            : "";
+          const inlineSwatch = legendEntries && !legendMulti && legendEntries[0].desc
+            ? `<img class="legend-swatch" src="${buildLegendSwatchDataUrl(legendEntries[0].desc)}" alt="">`
+            : "";
+          const legendItems = legendMulti
+            ? `<div class="layer-legend-items" data-layer-id="${escapeHtml(layer.id)}"${legendCollapsed ? " hidden" : ""}>${legendEntries.map((entry, entryIndex) => {
+                const entryInputId = `${inputId}-legend-${entryIndex}`;
+                const hidden = !!entry.symbolName && !!layer.legendHidden?.has(entry.symbolName);
+                return `<label class="legend-row" for="${entryInputId}">
+                  <input id="${entryInputId}" type="checkbox" class="legend-checkbox" data-layer-id="${escapeHtml(layer.id)}" data-symbol="${escapeHtml(entry.symbolName || "")}" ${hidden ? "" : "checked"}${entry.symbolName ? "" : " disabled"}>
+                  ${entry.desc ? `<img class="legend-swatch" src="${buildLegendSwatchDataUrl(entry.desc)}" alt="">` : `<span class="legend-swatch legend-swatch-empty"></span>`}
+                  <span class="legend-label">${escapeHtml(entry.label || entry.symbolName || "")}</span>
+                </label>`;
+              }).join("")}</div>`
+            : "";
           return `
+        <div class="layer-item">
         <label class="layer-row" for="${inputId}" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
+          ${legendToggle}
           <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""}>
+          ${inlineSwatch}
           <span>${escapeHtml(layer.title)}</span>
           ${filterButton}
           ${limitBadge}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
-        </label>`;
+        </label>
+        ${legendItems}
+        </div>`;
         }).join("")}
       </div>
     </section>`;
@@ -1323,6 +1541,27 @@ function renderLayerList() {
       event.preventDefault();
       event.stopPropagation();
       void editLayerQueryFilter(layerState.get(button.dataset.layerId));
+    });
+  });
+
+  list.querySelectorAll(".layer-legend-toggle").forEach(toggle => {
+    toggle.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = toggle.dataset.layerId;
+      const items = toggle.closest(".layer-item")?.querySelector(".layer-legend-items");
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+      toggle.textContent = expanded ? "▸" : "▾";
+      if (items) items.hidden = expanded;
+      if (expanded) collapsedLayerLegends.add(id);
+      else collapsedLayerLegends.delete(id);
+    });
+  });
+
+  list.querySelectorAll(".legend-checkbox").forEach(input => {
+    input.addEventListener("change", () => {
+      setLegendSymbolVisible(layerState.get(input.dataset.layerId), input.dataset.symbol, input.checked);
     });
   });
 
@@ -2921,7 +3160,7 @@ async function refreshLayersImpl() {
         // ダウンロードにならず、保持した GeoJSON が getLayerGeoJson・検索索引に使える
         if (primitiveDrape) {
           const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: primitiveDrapeHeightReference(primDem, prim3d), scene: viewer.scene });
-          applyQmlStyleToPrimitive(primitive, item.qmlStyle);
+          applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden);
           registerPrimitiveLayer(item, primitive, source);
           continue;
         }
@@ -2970,11 +3209,10 @@ async function refreshLayersImpl() {
   updateVectorSearchUI();
   updateMapAttribution();
   applyGlobeVisibility();
-  // 件数上限で切り詰めたレイヤーがあれば一覧にバッジを出す。
-  // 上限未適用へ戻ったときも stale バッジを消すため再描画する
-  const limitedNow = layers.some(item => item.entityLimited);
-  if (limitedNow || entityLimitBadgeVisible) renderLayerList();
-  entityLimitBadgeVisible = limitedNow;
+  // 件数上限バッジや描画完了後に確定する凡例スウォッチを反映するため再描画する。
+  // (entity サンプル方式の凡例は DataSource 構築後でないと色が取れない)
+  renderLayerList();
+  entityLimitBadgeVisible = layers.some(item => item.entityLimited);
 }
 
 // 描画した primitive を scene/管理リストへ登録する。
@@ -3003,7 +3241,7 @@ function primitiveDrapeHeightReference(dem, tiles3d) {
 // 属性はピック時に picked.properties から参照できる
 async function addGeoJsonPrimitiveLayer(item, geojson) {
   const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(geojson, { allowPicking: true });
-  applyQmlStyleToPrimitive(primitive, item.qmlStyle);
+  applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden);
   registerPrimitiveLayer(item, primitive, geojson);
 }
 
@@ -3051,7 +3289,8 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
   }
   // style= の QML スタイルがあれば entity 単位で適用する(失敗しても通常描画は維持)
   if (item?.qmlStyle) {
-    try { applyQmlStyleToDataSource(ds, item.qmlStyle, { clamp }); }
+    item._qmlClamp = clamp;
+    try { applyQmlStyleToDataSource(ds, item.qmlStyle, { clamp, hiddenSymbols: item.legendHidden }); }
     catch (error) { console.warn(`QML スタイルの適用に失敗しました: ${item.styleUrl || ""}`, error); }
   }
   return ds;
@@ -8501,7 +8740,24 @@ window.kasugaiApi = {
     };
   },
   listLayers() {
-    return getOrderedLayerItems().map(layer => ({ id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: layer.type === "sql" ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced }));
+    return getOrderedLayerItems().map(layer => {
+      const entry = { id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: layer.type === "sql" ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced };
+      const legend = layer.qmlStyle?.legend;
+      if (legend?.length > 1) entry.legend = legend.map(e => ({ label: e.label || e.symbolName, visible: !layer.legendHidden?.has(e.symbolName) }));
+      return entry;
+    });
+  },
+  // 凡例の条件別シンボルを表示/非表示にする。対象は style=(QML) の分類・段階・
+  // ルールレンダラを持つレイヤー。label は凡例ラベルまたはシンボル名
+  setLayerLegendVisible(idOrTitle, label, visible) {
+    const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
+    const legend = layer?.qmlStyle?.legend;
+    if (!layer || !legend?.length) return false;
+    const key = String(label ?? "").trim();
+    const entry = legend.find(e => e.label === key || e.symbolName === key);
+    if (!entry?.symbolName) return false;
+    setLegendSymbolVisible(layer, entry.symbolName, !!visible);
+    return true;
   },
   setLayerVisible(idOrTitle, visible) {
     const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
@@ -9447,6 +9703,19 @@ const CHAT_TOOLS = [{
       },
     },
     {
+      name: "setLayerLegendVisible",
+      description: "レイヤーの凡例(条件別シンボル)単位で表示/非表示を切り替える。style=(QML)の分類・段階・ルールレンダラを持つレイヤーで有効。凡例ラベルは listLayers の legend で確認できる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名(listLayersで確認)" },
+          label: { type: "STRING", description: "凡例ラベルまたはシンボル名(listLayersのlegendで確認)" },
+          visible: { type: "BOOLEAN", description: "trueで表示、falseで非表示" },
+        },
+        required: ["name", "label", "visible"],
+      },
+    },
+    {
       name: "listLayers",
       description: "登録されているレイヤ一覧(名前・表示状態)を取得する",
       parameters: { type: "OBJECT", properties: {} },
@@ -10215,6 +10484,10 @@ async function executeChatTool(name, args = {}) {
   if (name === "setLayerVisible") {
     const ok = window.kasugaiApi.setLayerVisible(args.name, args.visible);
     return { ok, message: ok ? undefined : t("tool.layerNotFound", { name: args.name }) };
+  }
+  if (name === "setLayerLegendVisible") {
+    const ok = window.kasugaiApi.setLayerLegendVisible(args.name, args.label, args.visible);
+    return { ok, message: ok ? undefined : t("tool.legendNotFound", { name: args.name }) };
   }
   if (name === "listLayers") return { layers: window.kasugaiApi.listLayers() };
   if (name === "focusLayer") {

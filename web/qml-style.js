@@ -582,7 +582,10 @@ function compileRenderer(rendererEl, warnings) {
         const symbolName = c.getAttribute("symbol") || "";
         const label = c.getAttribute("label") || String(value);
         const render = c.getAttribute("render") !== "false";
-        if (value === "" || value == null) elseSymbol = symbolName || elseSymbol;
+        if (value === "" || value == null) {
+          // 「その他」カテゴリ(ELSE 相当)も凡例に載せる。空 value が複数あっても1件だけ
+          if (!elseSymbol && symbolName) { elseSymbol = symbolName; legend.push({ label, symbolName }); }
+        }
         else { cats.push({ value, symbolName, render }); legend.push({ label, symbolName }); }
       }
       return {
@@ -839,7 +842,7 @@ async function loadSvgRecolored(url, fillColor, strokeColor, fetchText) {
   }
 }
 
-function rgbaToCss(rgba) {
+export function rgbaToCss(rgba) {
   const [r, g, b, a] = rgba.map(v => Math.round(v * 255));
   return a >= 255 ? `rgb(${r},${g},${b})` : `rgba(${r},${g},${b},${(rgba[3]).toFixed(3)})`;
 }
@@ -1238,17 +1241,24 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
     return out;
   };
 
+  // 地物プロパティからシンボル名の配列を返す(凡例の条件別表示/非表示切替用)
+  const namesFor = (props) => {
+    const result = renderer.evaluate(props || {});
+    return Array.isArray(result) ? result : (result?.names || []);
+  };
+
   const legend = renderer.legend.map(e => {
     const symbol = renderer.symbols.get(e.symbolName);
     let spec = null;
     if (symbol) {
       try { spec = resolveSymbolLayers(symbol, {}, images, warnings); } catch (err) { spec = null; }
     }
-    return { label: e.label, spec };
+    return { label: e.label, symbolName: e.symbolName, spec };
   });
 
   return {
     evaluate,
+    namesFor,
     labelFor: labelFn ? (props => labelFn(props)) : null,
     legend,
     warnings: [...warnings],
@@ -1513,12 +1523,16 @@ function dashMaterialProperty(color, dash) {
 // エンティティ(entity 描画経路)にコンパイル済みスタイルを適用する。
 // clamp: 地形ドレープ中か(ドレープ時はポリゴンのアウトラインが描かれないため
 // 周線を別途 polyline で引く)
-export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = null } = {}) {
+export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = null, hiddenSymbols = null } = {}) {
   if (!style) return;
   const t = time || Cesium.JulianDate.now();
+  const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
   for (const entity of ds.entities.values) {
     const props = entityFeatureProps(entity, t);
-    const spec = style.evaluate(props);
+    // 凡例の条件別チェックで非表示化されたシンボルにだけ該当する地物は隠す
+    const hiddenByLegend = hasHidden && style.namesFor
+      && (() => { const names = style.namesFor(props); return names.length > 0 && names.every(name => hiddenSymbols.has(name)); })();
+    const spec = hiddenByLegend ? null : style.evaluate(props);
     const hasPoint = !!entity.billboard;
     const hasLine = !!entity.polyline;
     const hasFill = !!entity.polygon;
@@ -1527,6 +1541,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
       if (entity.billboard) entity.billboard.show = new Cesium.ConstantProperty(false);
       if (entity.polyline) entity.polyline.show = new Cesium.ConstantProperty(false);
       if (entity.polygon) entity.polygon.show = new Cesium.ConstantProperty(false);
+      if (entity.label) entity.label.show = new Cesium.ConstantProperty(false);
       continue;
     }
 
@@ -1536,6 +1551,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
     if (hasPoint) {
       if (spec.markers?.length) {
         const canvas = markerLayersToCanvas(spec.markers);
+        entity.billboard.show = new Cesium.ConstantProperty(true);
         entity.billboard.image = new Cesium.ConstantProperty(canvas);
         entity.billboard.scale = new Cesium.ConstantProperty(1);
         entity.billboard.verticalOrigin = new Cesium.ConstantProperty(Cesium.VerticalOrigin.CENTER);
@@ -1551,6 +1567,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
     // ライン
     if (hasLine) {
       if (spec.line) {
+        entity.polyline.show = new Cesium.ConstantProperty(true);
         entity.polyline.material = dashMaterialProperty(spec.line.color, spec.line.dash);
         entity.polyline.width = new Cesium.ConstantProperty(spec.line.widthPx);
         if (ddc) entity.polyline.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
@@ -1562,6 +1579,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
     // ポリゴン
     if (hasFill) {
       if (spec.fillParts?.length) {
+        entity.polygon.show = new Cesium.ConstantProperty(true);
         const { solidBase, tile, tileMeters } = fillPartsToTile(spec.fillParts);
         if (tile) {
           const repeat = computeFillRepeat(entity, t, tileMeters);
@@ -1680,8 +1698,9 @@ function computeFillRepeat(entity, time, tileMeters) {
 // GeoJsonPrimitive(バッチ描画経路)にスタイルを適用する。
 // Buffer 系は featureId 単位で setMaterial できる。シェイプ・破線・パターンは
 // 表現できないため色・サイズ・線幅の対応のみ(フォールバック)
-export function applyQmlStyleToPrimitive(primitive, style) {
+export function applyQmlStyleToPrimitive(primitive, style, hiddenSymbols = null) {
   if (!style || !primitive) return;
+  const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
   const materialCache = new Map();
   const matFor = (kind, spec) => {
     const key = kind + JSON.stringify(spec);
@@ -1720,7 +1739,9 @@ export function applyQmlStyleToPrimitive(primitive, style) {
     for (let i = 0; i < collection.primitiveCount; i++) {
       collection.get(i, scratch);
       const props = primitive.getProperties(scratch.featureId) || {};
-      const spec = style.evaluate(props);
+      const hiddenByLegend = hasHidden && style.namesFor
+        && (() => { const names = style.namesFor(props); return names.length > 0 && names.every(name => hiddenSymbols.has(name)); })();
+      const spec = hiddenByLegend ? null : style.evaluate(props);
       if (!spec || !pick(spec)) {
         scratch.setMaterial(transparentMaterial(kind));
         continue;

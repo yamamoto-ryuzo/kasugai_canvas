@@ -47,13 +47,14 @@
       </section>
 
       <section>
-        <h2>🗂 レイヤー（8）</h2>
+        <h2>🗂 レイヤー（9）</h2>
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
-            <tr><td><code>listLayers</code></td><td>なし</td><td>登録レイヤー一覧（名前・表示状態・適用中の絞り込み条件 filter）を取得</td></tr>
+            <tr><td><code>listLayers</code></td><td>なし</td><td>登録レイヤー一覧（名前・表示状態・適用中の絞り込み条件 filter）を取得。条件別凡例を持つレイヤーは legend（label・visible）も返す</td></tr>
             <tr><td><code>setLayerFilter</code></td><td>name*, filter*</td><td>クエリ系レイヤー（duckdb/sql/gpkg 等）の絞り込み条件を変更。レイヤー行の ⏷ ボタンと同じ操作。sql 型はクエリ全文、それ以外は WHERE 式を指定（空文字で解除・sql 型は空文字不可）</td></tr>
             <tr><td><code>setLayerVisible</code></td><td>name*, visible*</td><td>レイヤー名指定で表示/非表示を切替</td></tr>
+            <tr><td><code>setLayerLegendVisible</code></td><td>name*, label*, visible*</td><td>style=(QML) の分類・段階・ルールレンダラを持つレイヤーで、凡例の条件別シンボル単位に表示/非表示を切替。レイヤー行の凡例チェックボックスと同じ操作。label は listLayers の legend で確認</td></tr>
             <tr><td><code>focusLayer</code></td><td>name*</td><td>レイヤー名または ID 指定で全体が収まるようカメラ移動。非表示レイヤーは自動表示してから移動</td></tr>
             <tr><td><code>addLayer</code></td><td>title*, target*, type, options</td><td>ベクターレイヤーを追加して即適用。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は URL または DATA/ 相対パス（sql は SELECT 文）。options は <code>where=</code>/<code>limit=</code>/<code>format=</code>/<code>bbox=auto</code>/<code>proxy=on</code>/<code>render=primitive</code>/<code>attr=出典</code> 等を | 区切りで指定。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。インスペクター設定に反映されるためユーザー明示時のみ</td></tr>
             <tr><td><code>addGeoJsonLayer</code></td><td>title*, url*</td><td>GeoJSON レイヤーを URL 指定（DATA/ 相対パスまたは外部 URL）で追加して即適用。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。他形式は <code>addLayer</code></td></tr>
