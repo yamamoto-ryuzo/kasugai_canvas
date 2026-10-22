@@ -166,7 +166,7 @@
           <tbody>
             <tr><td><code>runCode</code></td><td>code*</td><td>ブラウザ内サンドボックスで JavaScript を実行し戻り値と console 出力を返す。データ加工・集計・座標計算に。<code>api.&lt;関数名&gt;</code>（kasugaiApi と同じ）で地図操作が非同期呼出し可。DOM・localStorage・外部 fetch は不可</td></tr>
             <tr><td><code>savePlugin</code></td><td>id*, code*, name, layer, enable</td><td>プラグインをブラウザ内 IndexedDB に保存・有効化する自己拡張ツール。code は <code>export async function init(api, manifest){}</code> 形式の ES モジュール。layer 指定でプラグイン専用レイヤー自動登録。保存前にコード確認ダイアログ。既存 id は上書き＋再読み込み</td></tr>
-            <tr><td><code>listPlugins</code></td><td>なし</td><td>同梱・保存済みプラグイン一覧（id/name/source/enabled/lastError）</td></tr>
+            <tr><td><code>listPlugins</code></td><td>なし</td><td>起動中・保存済みプラグイン一覧（id/name/source/enabled/lastError）と、<code>plugin:</code> 行で指定できる同梱プラグインカタログ（catalog: id/name/version/auto）</td></tr>
             <tr><td><code>getPluginCode</code></td><td>id*</td><td>保存済みプラグインのコードと設定を取得（修正→ savePlugin 再保存の修正ループ用）</td></tr>
             <tr><td><code>removePlugin</code></td><td>id*</td><td>保存済みプラグインを削除。確認ダイアログあり</td></tr>
             <tr><td><code>setPluginEnabled</code></td><td>id*, enabled*</td><td>保存済みプラグインの有効/無効切替</td></tr>

@@ -8,7 +8,13 @@
 
 ### Added
 
+- **インスペクタの `plugin:` 行によるプラグイン起動** — `.kasc` に `plugin: <id> | key=value ...` と書くと、そのプロジェクトでのみプラグインを起動できる。`plugins.json` は利用可能プラグインのカタログとなり既定では自動ロードしない（`"auto": true` で常駐化も可）。宣言できるのはカタログまたはストレージプラグインの ID（外部 URL 直指定は不可）。起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替・行削除・`| off` 指定でレイヤー除去＋`registerPlugin` の `meta.dispose()` が呼ばれ停止する。オプションは `manifest.options` にマージして渡され、真偽値・数値・カンマ区切り（配列）を解釈する。`listPlugins` ツールの結果に起動可能なカタログ一覧（`catalog`）を追加
 - **自動更新の開発チャンネル** — バージョンにプレリリース接尾辞（`X.Y.Z-dev[.N]`）が付いたビルドは、`main` ブランチの `latest.json` / `kasugai_canvas.zip` ではなく `develop` ブランチの `latest-dev.json` / `kasugai_canvas_dev.zip` を参照するようになった。開発版 exe が公開最新版へ誤更新される事故を構造的に防止し、開発機は開発チャンネルの最新開発ビルドへ自動追従できる。`python run.py -B` はバージョンに応じて公開用（`kasugai_canvas.zip`・`latest.json`）／開発用（`kasugai_canvas_dev.zip`・`kasugai_canvas_setup_dev.exe`・`latest-dev.json`）の配布物を自動で切り替えて生成する
+
+### Changed
+
+- **reinfolib プロジェクトを `plugin:` 行方式へ移行** — `installer/projects/reinfolib` は固定タイル座標を `geojson:` 行で直書きする静的構成だったが、`plugin: reinfolib | datasets=price,shelter,station,zoning` に置き換え、プラグインの表示範囲連動の動的取得に戻した
+- **同梱プラグインの既定を宣言ロードへ変更** — `plugins.json` のエントリは従来の全自動ロードからカタログ化し、`plugin:` 行または `"auto": true` で起動する。これにより reinfolib 等が無関係なプロジェクトでも API を叩き続ける動作を解消
 
 ## [5.27.0] - 2026-10-21
 

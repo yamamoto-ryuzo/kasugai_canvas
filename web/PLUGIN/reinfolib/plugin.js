@@ -11,6 +11,7 @@
 // plugins.json の options で取得対象・期間・タイル条件を変えられる:
 //   "options": { "zoom": 11, "maxTiles": 16, "from": "20254", "to": "20254",
 //                "datasets": { "price": true, "shelter": true, "station": true, "zoning": false } }
+// .kasc の plugin: 行からは datasets=price,shelter のような配列指定も受け付ける。
 // from/to は YYYYN 形式（YYYY=西暦, N=四半期 1-4。XPT001 の必須パラメータ）
 
 const UPSTREAM_BASE = "https://www.reinfolib.mlit.go.jp/ex-api/external";
@@ -204,7 +205,12 @@ async function refresh() {
 export async function init(api, manifest) {
   state.api = api;
   state.opts = { ...DEFAULT_OPTIONS, ...(manifest.options || {}) };
-  state.opts.datasets = { ...DEFAULT_OPTIONS.datasets, ...(manifest.options?.datasets || {}) };
+  const datasetsOpt = manifest.options?.datasets;
+  // datasets は {price:true,...} のオブジェクトのほか、plugin: 行からの
+  // ["price","shelter"] 配列指定も受け付ける（カンマ区切り→配列に変換済みで来る）
+  state.opts.datasets = Array.isArray(datasetsOpt)
+    ? Object.fromEntries(Object.keys(DATASETS).map(key => [key, datasetsOpt.includes(key)]))
+    : { ...DEFAULT_OPTIONS.datasets, ...(datasetsOpt || {}) };
   const Cesium = api.getCesium();
   if (!Cesium || !api.getViewer?.()) {
     console.warn("[reinfolib] Cesium/viewer が見つかりません");
@@ -234,17 +240,27 @@ export async function init(api, manifest) {
     return;
   }
 
+  const onCameraChanged = () => {
+    clearTimeout(state.timer);
+    state.timer = setTimeout(() => void refresh(), 500);
+  };
+
   api.registerPlugin({
     id: manifest.id,
     name: manifest.name,
     version: manifest.version,
     refresh,
+    // inspector(plugin:行)起動時は宣言解除・プロジェクト切替で呼ばれ、
+    // イベント購読とタイマーを解放して停止する
+    dispose() {
+      clearTimeout(state.timer);
+      api.off("camera-changed", onCameraChanged);
+      state.layers.clear();
+      document.getElementById("reinfolib-status")?.remove();
+    },
   });
 
-  api.on("camera-changed", () => {
-    clearTimeout(state.timer);
-    state.timer = setTimeout(() => void refresh(), 500);
-  });
+  api.on("camera-changed", onCameraChanged);
   showStatus("不動産情報ライブラリ: データ取得中…", { sticky: true });
   await refresh();
 }

@@ -107,12 +107,19 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 認証方式は `web/auth-methods.json` の `control` で 0〜7 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](docs/auth/index.html) を参照してください。
 
 ### 起動後通常プラグイン
-`web/plugin-loader.js` が `web/plugins.json` を読み込み、各プラグインを `import()` します。
+`web/plugins.json` は利用可能な同梱プラグインの**カタログ**です。既定では自動ロードせず、プロジェクトの `.kasc`（インスペクタ）に `plugin:` 行で宣言したものだけを `web/plugin-loader.js` が `import()` します。`"auto": true` を付けたエントリのみ全プロジェクトで常駐ロードします。
+
+```kasc
+plugin: reinfolib | datasets=price,shelter
+```
+
+`key=value` は `plugins.json` 各エントリの `options`（既定値）にマージして `manifest.options` として渡され、真偽値・数値・カンマ区切り（配列）を解釈します。`plugin:` 行で起動したプラグインはプロジェクトスコープとして扱われ、作ったレイヤーはプロジェクト切替・行削除で除去され、`registerPlugin` の `dispose()` が呼ばれて停止します。`plugin: <id> | off` は宣言の明示解除（auto エントリ・有効なストレージプラグインの抑制にも使えます）。
 
 ```json
 {
   "plugins": [
-    { "id": "sample-hello", "url": "./PLUGIN/sample-hello/plugin.js" }
+    { "id": "sample-hello", "url": "./PLUGIN/sample-hello/plugin.js" },
+    { "id": "always-on", "url": "./PLUGIN/always-on/plugin.js", "auto": true }
   ]
 }
 ```
@@ -147,7 +154,7 @@ export async function init(api, manifest) {
 - `format: "entities"`：本体が `Cesium.CustomDataSource` を生成して貸し出します。`api.getPluginDataSource(manifest.id)` で取得し `ds.entities.add(...)` するだけで、動的な entity が管理対象になります
 - `format: "geojson"`：`api.setPluginLayerData(manifest.id, geojson)` で GeoJSON オブジェクトを渡すと、`geojson:` レイヤーと同じ描画経路（クランプ・ドレープ設定を含む）で表示されます。更新は再度呼び出すだけです
 - `style`：省略可。`"QMLファイルのURL"` を指定すると geojson 形式レイヤーに QGIS スタイル（単一・分類・ルールベース・ラベル）を適用します（`api.registerPluginLayer` の `style` オプションと同じ）
-- `scope`：`"app"`（既定）はプロジェクト切替をまたいで存続、`"project"` はプロジェクト切替時にレイヤーごと削除されます
+- `scope`：`"app"`（既定）はプロジェクト切替をまたいで存続、`"project"` はプロジェクト切替時にレイヤーごと削除されます。`plugin:` 行で起動したプラグインのレイヤーは宣言値に関わらず `"project"` として扱われます
 - `manifest.layer` を省略した場合は従来通りで、`viewer.entities.add` 等による直接描画も可能です（非管理・揮発データ）
 
 プラグインから任意のタイミングで追加する場合は `api.registerPluginLayer(config, pluginId)`、削除は `api.removePluginLayer(idOrPluginId)` も使えます。

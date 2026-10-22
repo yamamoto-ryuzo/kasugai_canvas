@@ -55,10 +55,12 @@ sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の 
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID
+plugin: プラグインID | key=value | off (plugins.json カタログ・ストレージプラグインをこのプロジェクトで有効化。レイヤーはプロジェクトスコープ)
 cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
           <ul>
             <li><code>option</code> には <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換 alias <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code> などが使えます。<code>xyz:</code> 行ではさらに <code>minimumLevel=</code>（<code>minZoom</code>）と <code>bbox=西経,南緯,東経,北緯</code> が使え、bbox を指定すると範囲外へのタイル要求が発生せず flyTo もその範囲を向きます（ローカルタイル配置時の範囲限定に有効）。</li>
             <li>プロジェクトは <code>projects/&lt;project&gt;</code> 単位で切り替えます。設定ファイル内に <code>project</code> 項目はありません。</li>
+            <li><code>plugin:</code> は <code>web/plugins.json</code> カタログまたは管理タブのストレージプラグインの ID を指定し、そのプロジェクトでのみプラグインを起動します（例: <code>plugin: reinfolib | datasets=price,shelter</code>）。<code>key=value</code> はプラグインの <code>manifest.options</code> にマージして渡され、真偽値・数値・カンマ区切り（配列）を解釈します。起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替や行の削除・<code>| off</code> 指定でレイヤー除去＋停止（<code>dispose</code> 呼出し）されます。指定できるのはカタログ/ストレージの ID のみで、外部 URL の直接指定はできません。</li>
             <li><code>attr=出典</code>・行の3番目フィールドの出典は、<code>&lt;</code> で始めると HTML として描画できます（例: <code>&lt;a href="https://example.jp"&gt;国土地理院&lt;/a&gt;</code>）。描画時に許可リストでサニタイズされ、<code>a</code>/<code>img</code>/装飾タグ（b・i・em・u・br・span・small・sub・sup）と <code>http(s):</code>/相対 URL のみが有効になります（スクリプト・イベント属性・その他タグは除去）。詳細は <a href="security.html">セキュリティ対策</a> を参照してください。</li>
           </ul>
         </div>

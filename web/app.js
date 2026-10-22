@@ -573,6 +573,10 @@ let pluginLayerSeq = 0;
 // AI等が生成したインラインデータの一時レイヤー。inspectorテキストには書き込まず
 // (.kascエクスポートに含まれない)、applyInspector 後に末尾へ再登録する
 const dataLayers = [];
+// インスペクタの plugin: 行で宣言されたプラグイン仕様 {id, options, off}[]。
+// applyInspector で再構築し、plugin-loader が inspector-plugins-changed で受けて
+// カタログ(plugins.json)/ストレージプラグインのロード・停止を差分管理する
+const inspectorPluginSpecs = [];
 let dataLayerSeq = 0;
 let vectorSearchData = null;
 const activePrimitives = [];
@@ -3861,6 +3865,15 @@ async function updateStreetViewPickCoverage() {
   }
 }
 
+// plugin: 行の key=value 値の型変換。真偽値・数値・カンマ区切り(配列)を解釈する
+function coercePluginOptionValue(raw) {
+  if (/^(true|on|yes)$/i.test(raw)) return true;
+  if (/^(false|off|no)$/i.test(raw)) return false;
+  if (raw !== "" && Number.isFinite(Number(raw))) return Number(raw);
+  if (raw.includes(",")) return raw.split(",").map(part => coercePluginOptionValue(part.trim()));
+  return raw;
+}
+
 function applyInspector(text) {
   const nextLines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const parsedCameras = [];
@@ -3868,6 +3881,7 @@ function applyInspector(text) {
   // base: の特殊行(transparent/none)で指定された初期表示モード
   let parsedBaseMode = "";
   layerState.clear();
+  inspectorPluginSpecs.splice(0, inspectorPluginSpecs.length);
   vectorSourceCache.clear();
   // gpkg Worker が url キーで開いたままの DB も破棄する(メモリ解放・再取得)
   resetGpkgWorkerDbs();
@@ -3965,6 +3979,30 @@ function applyInspector(text) {
         else if (!spec.root) spec.root = part;
       });
       inspectorCloudSpec = spec;
+    }
+
+    // plugin: プラグインID | key=value | off
+    // plugins.json カタログの同梱プラグインまたは IndexedDB ストレージプラグインを
+    // このプロジェクトで有効化する。実際のロード/停止は plugin-loader が
+    // inspector-plugins-changed を受けて差分実行する（プロジェクトスコープ扱い）
+    if (type === "plugin") {
+      const parts = value.split("|").map(part => part.trim());
+      const id = parts[0] || "";
+      if (!id || id.includes("=")) return;
+      const spec = { id, options: {}, off: false };
+      parts.slice(1).forEach(part => {
+        if (!part) return;
+        if (/^(off|false|disable)$/i.test(part)) { spec.off = true; return; }
+        if (/^(on|true|enable)$/i.test(part)) return;
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        const key = part.slice(0, eq).trim();
+        if (key) spec.options[key] = coercePluginOptionValue(part.slice(eq + 1).trim());
+      });
+      // 同一 id の重複行は後の行を採用する
+      const existing = inspectorPluginSpecs.findIndex(entry => entry.id === spec.id);
+      if (existing >= 0) inspectorPluginSpecs[existing] = spec;
+      else inspectorPluginSpecs.push(spec);
     }
 
     if (type === "base") {
@@ -4237,6 +4275,11 @@ function applyInspector(text) {
     layerState.set(item.id, item);
     layerOrder.push(item.id);
   }
+
+  // plugin: 行の宣言を plugin-loader へ通知（カタログ/ストレージからのロード・停止は
+  // loader が差分管理する。kasugaiApi 未初期化の起動直前呼び出しでは skip され、
+  // 起動時の loadPlugins が最新 specs を読むので問題ない）
+  window.kasugaiApi?.emit("inspector-plugins-changed", { plugins: window.kasugaiApi.getInspectorPlugins() });
 
   syncGoogle3dTilesLayer();
   basemaps.splice(0, basemaps.length, ...parsedBasemaps);
@@ -6120,6 +6163,9 @@ function setupEvents() {
     updateProjectRootPath();
     // scope:"project" のプラグインレイヤーはプロジェクト単位のデータとして切り離す
     pluginLayers.filter(item => item.scope === "project").forEach(removePluginLayer);
+    // plugin: 行で起動したプラグインはレイヤーが除去されるため、新 .kasc 適用後に
+    // plugin-loader 側で再起動できるよう切替を通知する
+    window.kasugaiApi?.emit("project-changed", { projectId: currentProjectId });
     try {
       setInspectorStatus(t("inspector.status.loadingProject"));
       await loadInspectorConfig();
@@ -9244,7 +9290,21 @@ window.kasugaiApi = {
     this.emit("plugin-registered", meta);
     console.log("[kasugaiApi] プラグイン登録:", meta.id || meta.name);
   },
+  // プラグインの登録解除。meta.dispose() があれば呼び出してリソース/イベントを解放する
+  unregisterPlugin(id) {
+    for (let i = this._plugins.length - 1; i >= 0; i--) {
+      const meta = this._plugins[i];
+      if (!meta || meta.id !== id) continue;
+      this._plugins.splice(i, 1);
+      try { meta.dispose?.(); } catch (e) { console.error(e); }
+    }
+    this.emit("plugin-unregistered", { id });
+  },
   getPlugins() { return this._plugins; },
+  // インスペクタの plugin: 行で宣言されたプラグイン仕様（plugin-loader が読む）
+  getInspectorPlugins() {
+    return inspectorPluginSpecs.map(spec => ({ ...spec, options: { ...spec.options } }));
+  },
   async registerPluginLayer(config, pluginId) {
     return await registerPluginLayer(config, pluginId);
   },
@@ -9997,7 +10057,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "applyInspector",
-      description: "インスペクターの設定テキスト(.kasc形式)を登録・適用する。データレイヤー行のhttp(s) URLは適用前に実在確認され、到達不能なものがあると拒否される。設定全体が上書きされるので、ユーザーが明示した場合のみ使う",
+      description: "インスペクターの設定テキスト(.kasc形式)を登録・適用する。plugin: <id> | key=value 行でカタログ/ストレージのプラグインをそのプロジェクト限定で起動できる(id は listPlugins の catalog で確認)。データレイヤー行のhttp(s) URLは適用前に実在確認され、到達不能なものがあると拒否される。設定全体が上書きされるので、ユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -10080,7 +10140,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "listPlugins",
-      description: "同梱プラグインと保存済みプラグインの一覧(id/name/source/enabled/lastError)を取得する",
+      description: "起動中・保存済みプラグインの一覧(id/name/source/enabled/lastError)と、.kasc の plugin: 行で指定できる同梱プラグインカタログ(catalog: id/name/version/auto)を取得する",
       parameters: { type: "OBJECT", properties: {} },
     },
     {
@@ -10620,7 +10680,9 @@ async function executeChatTool(name, args = {}) {
   if (name === "listPlugins") {
     const bundled = window.kasugaiApi.getPlugins().map(plugin => ({ id: plugin.id, name: plugin.name, source: "bundled" }));
     const stored = await window.kasugaiApi.listStoragePlugins();
-    return { plugins: [...bundled, ...stored.map(plugin => ({ ...plugin, source: "storage" }))] };
+    // plugin: 行で指定できる同梱プラグインカタログ(plugins.json)も併記する
+    const catalog = (window.kasugaiPluginLoader?.catalog?.() || []).map(m => ({ id: m.id, name: m.name, version: m.version, auto: !!m.auto }));
+    return { plugins: [...bundled, ...stored.map(plugin => ({ ...plugin, source: "storage" }))], catalog };
   }
   if (name === "getPluginCode") {
     const record = await window.kasugaiApi.getStoragePlugin(args.id);
