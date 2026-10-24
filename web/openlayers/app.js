@@ -10,6 +10,12 @@ import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
 import { fromLonLat } from "https://esm.sh/ol@10.6.1/proj.js";
 import { loadKascProject, resolveKascUrl, camToZoom } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
+import Style from "https://esm.sh/ol@10.6.1/style/Style.js";
+import Fill from "https://esm.sh/ol@10.6.1/style/Fill.js";
+import Stroke from "https://esm.sh/ol@10.6.1/style/Stroke.js";
+import CircleStyle from "https://esm.sh/ol@10.6.1/style/Circle.js";
+import Icon from "https://esm.sh/ol@10.6.1/style/Icon.js";
+import { loadCompiledQml, olQmlStyleFunction } from "/shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv"]);
 
@@ -45,7 +51,7 @@ async function buildLayer(item, baseUrl) {
   const source = xyzSource(item, baseUrl);
   if (VECTOR_TYPES.has(item.type)) {
     const { geojson } = await loadVectorItem(item, baseUrl);
-    return new VectorLayer({
+    const layer = new VectorLayer({
       source: new VectorSource({
         features: new GeoJSON().readFeatures(geojson, {
           featureProjection: "EPSG:3857",
@@ -53,6 +59,13 @@ async function buildLayer(item, baseUrl) {
         }),
       }),
     });
+    if (item.opts?.style) {
+      try {
+        const compiled = await loadCompiledQml(item.opts.style, baseUrl);
+        layer.setStyle(olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon }));
+      } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
+    }
+    return layer;
   }
   // xyz / base はラスタタイル
   const layer = new TileLayer({ source });

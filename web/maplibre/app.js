@@ -49,12 +49,19 @@ async function addKascLayer(item, baseUrl) {
   const lids = [];
   if (VECTOR_TYPES.has(item.type)) {
     const { geojson } = await loadVectorItem(item, baseUrl);
-    map.addSource(sid, { type: "geojson", data: geojson });
-    const kinds = [
+    let kinds = [
       ["fill", ["==", ["geometry-type"], "Polygon"], { "fill-color": "#3a7bd5", "fill-opacity": 0.4 }],
       ["line", ["!=", ["geometry-type"], "Point"], { "line-color": "#2c5ea8", "line-width": 1.5 }],
       ["circle", ["==", ["geometry-type"], "Point"], { "circle-radius": 5, "circle-color": "#2c5ea8" }],
     ];
+    if (item.opts?.style) {
+      try {
+        const { loadCompiledQml, maplibreApplyQml } = await import("/shared/qml-2d.js");
+        const compiled = await loadCompiledQml(item.opts.style, baseUrl);
+        kinds = maplibreApplyQml(geojson, compiled).kinds;
+      } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
+    }
+    map.addSource(sid, { type: "geojson", data: geojson });
     for (const [kind, filter, paint] of kinds) {
       const lid = `${sid}-${kind}`;
       map.addLayer({ id: lid, type: kind, source: sid, filter, paint, layout: { visibility: item.visible ? "visible" : "none" } });
