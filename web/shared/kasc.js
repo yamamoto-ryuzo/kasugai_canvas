@@ -86,7 +86,7 @@ export function parseKasc(text) {
       continue;
     }
     if (["xyz", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
-         "gpkg", "geopackage", "csv", "tsv"].includes(type)) {
+         "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"].includes(type)) {
       doc.layers.push(item);
       continue;
     }

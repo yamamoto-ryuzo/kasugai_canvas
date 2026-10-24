@@ -144,5 +144,9 @@ export async function loadVectorItem(item, baseUrl) {
     if (!res.ok) throw new Error(`${item.title}: ${res.status}`);
     return { geojson: loadCsvLike(await res.text(), type === "tsv" ? "\t" : ",") };
   }
+  if (type === "duckdb" || type === "sql") {
+    const { loadDuckdbItem } = await import("/shared/duckdb-load.js");
+    return loadDuckdbItem(item, baseUrl);
+  }
   throw new Error(`未対応のベクター形式: ${type}`);
 }

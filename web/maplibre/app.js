@@ -135,6 +135,20 @@ async function loadProject(id) {
     map.jumpTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) });
   }
   renderLayerRows(entries, unsupported);
+  for (const leg of doc.legends) {
+    const img = document.createElement("img");
+    img.src = resolveKascUrl(leg.url, baseUrl);
+    img.alt = leg.title || "legend";
+    img.style.cssText = "max-width:100%;display:block;margin:4px 0";
+    panel.layers.append(img);
+  }
+  if (doc.info) {
+    const a = document.createElement("a");
+    a.href = resolveKascUrl(doc.info, baseUrl);
+    a.target = "_blank";
+    a.textContent = "プロジェクト情報";
+    panel.layers.append(a);
+  }
 }
 
 map.on("load", () => {
