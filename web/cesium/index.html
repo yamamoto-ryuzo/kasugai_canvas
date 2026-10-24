@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>KASUGAI Canvas</title>
+    <link rel="icon" type="image/x-icon" href="./favicon.ico" />
+    <script>
+      // 静的配信は no-cache を付けないためキャッシュバスター付きで読み込む
+      document.head.appendChild(Object.assign(document.createElement("link"), {
+        rel: "stylesheet", href: `./styles.css?t=${Date.now()}`
+      }));
+    </script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.146.0/Build/Cesium/Widgets/widgets.css" crossorigin="anonymous" />
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.146.0/Build/Cesium/Cesium.js" crossorigin="anonymous"></script>
+    <script>
+      // DuckDB-WASM の CDN 資産(~60MB)を Service Worker + CacheStorage に永続キャッシュする。
+      // モジュールのキャッシュ鮮度に左右されないようインラインで最優先登録する。
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw-duckdb.js").catch(() => {});
+      }
+    </script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.165.0/build/three.module.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main class="workspace">
+      <section class="panel deck-panel">
+        <div id="cesium-container" class="viewport">
+          <aside class="control-panel">
+            <nav class="panel-tabs" aria-label="Plugin panels">
+              <button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
+              <button class="panel-tab active" type="button" data-panel="layers-panel" data-i18n="tab.layers">レイヤ</button>
+              <button class="panel-tab" type="button" data-panel="legend-panel" data-i18n="tab.legend">凡例</button>
+              <button class="panel-tab" type="button" data-panel="search-panel" data-i18n="tab.search">検索</button>
+              <button class="panel-tab" type="button" data-panel="attr-panel" data-i18n="tab.attr">属性</button>
+              <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">カメラ</button>
+              <button class="panel-tab" type="button" data-panel="display-panel" data-i18n="tab.display">表示</button>
+              <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
+              <button id="share-copy" class="panel-manage" type="button" title="現在位置URLをコピー" data-i18n-attr="title:share.copy;aria-label:share.copy">🔗</button>
+              <button id="manage-open" class="panel-manage" type="button" title="管理" data-i18n-attr="title:manage.open;aria-label:manage.open">⚙</button>
+              <a id="help-open" class="panel-manage" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer" title="ヘルプ" data-i18n-attr="title:help.open;aria-label:help.open">?</a>
+            </nav>
+            <section id="layers-panel" class="plugin-panel active">
+              <div id="layer-list"></div>
+            </section>
+            <section id="camera-panel" class="plugin-panel">
+              <div class="section-title" data-i18n="camera.presets">カメラプリセット</div>
+              <div id="camera-presets"></div>
+              <div class="camera-grid">
+                <input id="camera-longitude" type="number" step="any" aria-label="経度" data-i18n-attr="aria-label:camera.longitude" />
+                <input id="camera-latitude" type="number" step="any" aria-label="緯度" data-i18n-attr="aria-label:camera.latitude" />
+                <input id="camera-height" type="number" step="any" aria-label="高さ" data-i18n-attr="aria-label:camera.height" />
+                <input id="camera-pitch" type="number" step="any" aria-label="ピッチ" data-i18n-attr="aria-label:camera.pitch" />
+                <input id="camera-heading" type="number" step="any" aria-label="方位" data-i18n-attr="aria-label:camera.heading" />
+              </div>
+              <button id="apply-camera" type="button" data-i18n="camera.apply">カメラ適用</button>
+              <div class="section-title" style="margin-top:14px;" data-i18n="clip.title">断面クリップ</div>
+              <p class="hint" data-i18n="clip.hint">カメラ中心に断面を作成します。カメラ位置を移動してから実行してください。</p>
+              <div class="terrain-options" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
+                <button id="clip-ns" type="button" data-i18n="clip.ns">NS 断面</button>
+                <button id="clip-ew" type="button" data-i18n="clip.ew">EW 断面</button>
+                <button id="clip-h" type="button" data-i18n="clip.h">水平断面</button>
+                <button id="clip-clear" type="button" class="danger-button" data-i18n="clip.clear">クリア</button>
+              </div>
+              <p id="clip-status" class="hint" aria-live="polite"></p>
+            </section>
+            <section id="search-panel" class="plugin-panel">
+              <div id="vector-search" style="margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #e4ecef;">
+                <div style="font-weight:600;margin-bottom:6px;" data-i18n="vector.title">ベクトル検索</div>
+                <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+                  <select id="vector-layer" style="flex:1;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;min-width:0;">
+                    <option value="__all__" data-i18n="common.all">全選択</option>
+                  </select>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+                  <select id="vector-attr" disabled style="flex:1;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;min-width:0;">
+                    <option value="__all__" data-i18n="common.all">全選択</option>
+                  </select>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+                  <select id="vector-value" disabled style="flex:1;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;min-width:0;">
+                    <option value="" data-i18n="vector.valuePlaceholder">値を選択</option>
+                  </select>
+                  <button id="vector-fly-btn" type="button" style="flex:0 0 auto;white-space:nowrap;" disabled data-i18n="vector.fly">Fly</button>
+                </div>
+                <div style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+                  <input id="vector-search-text" type="text" placeholder="文字で検索" data-i18n-attr="placeholder:vector.searchPlaceholder" style="flex:1;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;min-width:0;" />
+                  <button id="vector-text-search-btn" type="button" style="flex:0 0 auto;white-space:nowrap;" data-i18n="common.search">検索</button>
+                </div>
+                <ul id="vector-search-results" style="list-style:none;padding:0;margin:0;max-height:160px;overflow:auto;font-size:0.85em;"></ul>
+                <button id="vector-refresh-btn" type="button" style="width:100%;font-size:0.9em;margin-top:6px;" data-i18n="vector.refresh">ベクトルデータを更新</button>
+                <button id="vector-attr-list-btn" type="button" style="width:100%;font-size:0.9em;margin-top:6px;" data-i18n="vector.attrList">選択中のレイヤ属性一覧</button>
+                <div id="vector-search-status" style="font-size:0.85em;color:#666;margin-top:4px;"></div>
+              </div>
+              <div id="search-title" class="section-title" data-i18n="search.title">住所検索</div>
+              <div style="display:flex;justify-content:flex-start;gap:8px;align-items:center;margin-bottom:8px;">
+                <select id="search-provider" style="flex:0 0 auto;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;background:#fff;color:#1d2b35;">
+                  <option value="gsi" selected data-i18n="search.provider.gsi">地理院</option>
+                  <option value="google" data-i18n="search.provider.google">Google</option>
+                  <option value="yahoo">Yahoo</option>
+                </select>
+                <span id="search-yahoo-warning" style="display:none;font-size:0.85em;color:#a82020;" data-i18n="search.yahooWarning">注意: yahooAppIdは漏洩する可能性があります。公開サイトでは使用しないでください。</span>
+              </div>
+              <form id="search-form">
+                <input id="search-query" placeholder="住所・施設名" data-i18n-attr="placeholder:search.placeholder" required />
+                <button type="submit" data-i18n="common.search">検索</button>
+              </form>
+              <ul id="search-results" class="search-results" style="list-style:none;padding:0;margin:8px 0 0;"></ul>
+              <div id="streetview-row" style="margin-top:8px;display:none;">
+                <button id="streetview-pick" type="button" data-i18n="search.streetviewPick">地図をクリック → Street View</button>
+                <label style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:0.9em;" data-i18n-attr="title:search.streetviewCoverageHint">
+                  <input id="streetview-coverage" type="checkbox" />
+                  <span data-i18n="search.streetviewCoverage">Street View の候補ラインを表示</span>
+                </label>
+              </div>
+              <div id="search-status" style="font-size:0.85em;color:#666;margin-top:4px;"></div>
+            </section>
+            <section id="display-panel" class="plugin-panel terrain-control">
+              <nav class="settings-tabs" aria-label="表示カテゴリ" data-i18n-attr="aria-label:display.ariaLabel">
+                <button class="settings-tab active" type="button" data-settings-panel="display-terrain-panel" data-i18n="settings.tab.terrain">地形</button>
+                <button class="settings-tab" type="button" data-settings-panel="display-drape-panel" data-i18n="settings.tab.drape">ドレープ</button>
+                <button class="settings-tab" type="button" data-settings-panel="display-tiles-panel" data-i18n="settings.tab.tiles">3D Tiles</button>
+                <button class="settings-tab" type="button" data-settings-panel="display-effects-panel" data-i18n="settings.tab.effects">効果</button>
+              </nav>
+              <section id="display-terrain-panel" class="settings-subpanel active">
+                <p class="hint terrain-definition" data-i18n-html="settings.dem.hint"><strong>DEMテクスチャー</strong>：DEMで作った地形メッシュにBase map画像を貼る表示。<br /><strong>ドレープ</strong>：XYZ・GeoJSONなどのレイヤーを地形表面の起伏に沿わせて貼る表示。</p>
+                <div class="terrain-options">
+                  <label><input id="terrain-toggle" type="checkbox" checked /><span data-i18n="settings.dem.terrain"> Terrain (DEM表示)</span></label>
+                  <label><input id="basemap-drape-3dtiles" type="checkbox" /><span data-i18n="settings.dem.tiles3d"> 3D Tiles (BASEMAPドレープ)</span></label>
+                </div>
+                <label class="field-label" for="dem-source">DEM</label>
+                <select id="dem-source">
+                  <option value="reearth-ellipsoid" selected data-i18n="settings.dem.reearthEllipsoid">Re:Earth Terrain (楕円体高 / WGS84, level 14)</option>
+                  <option value="reearth" data-i18n="settings.dem.reearth">Re:Earth Terrain (標高 / 平均海面基準, level 14)</option>
+                  <option value="gsi5m" data-i18n="settings.dem.gsi5m">地理院 5m+10mメッシュ (DEM5系+10B / 標高TP基準)</option>
+                  <option value="gsi1m" data-i18n="settings.dem.gsi1m">地理院 1mメッシュ (DEM1A / 航空レーザー / 標高TP基準)</option>
+                </select>
+                <p class="hint" data-i18n-html="settings.dem.heightHint"><strong>高さ基準</strong>：「楕円体高 / WGS84」は3D地球・PLATEAU等の3D Tilesと整合します。「標高 / 平均海面基準」「地理院(TP基準=東京湾平均潮位面)」はジオイド基準のため、ジオイド高（日本域で約30〜40m）の分だけ楕円体高より低く描画されます(3D Tilesが地面に埋もれて見える場合があります)。「地理院」は日本域のみ有効です。</p>
+              </section>
+              <section id="display-drape-panel" class="settings-subpanel">
+                <span class="field-label" data-i18n="settings.layer.drapeTarget">ドレープ対象地形</span>
+                <label><input id="drape-terrain-dem" type="checkbox" checked /> DEM</label>
+                <div class="drape-sub-group">
+                  <label><input id="drape-xyz-dem" type="checkbox" checked /> XYZ</label>
+                  <label><input id="drape-geojson-dem" type="checkbox" checked /> ベクター</label>
+                  <label><input id="drape-geojson-primitive-dem" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> ベクター高速ドレープ (実験的)</span></label>
+                </div>
+                <label><input id="drape-terrain-tiles3d" type="checkbox" /> 3D Tiles</label>
+                <div class="drape-sub-group">
+                  <label><input id="drape-xyz-tiles3d" type="checkbox" checked /> XYZ</label>
+                  <label><input id="drape-geojson-tiles3d" type="checkbox" checked /> ベクター</label>
+                  <label><input id="drape-geojson-primitive-tiles3d" type="checkbox" /><span data-i18n="settings.layer.geojsonPrimitive"> ベクター高速ドレープ (実験的)</span></label>
+                </div>
+                <p class="hint" data-i18n="settings.layer.primitiveHint">CesiumJS 1.146 の GeoJsonPrimitive を使い、ベクターレイヤー(GeoJSON/GeoParquet/FlatGeobuf)を高品質・高速に地形や 3D Tiles にドレープします。有効時はベクター検索・属性クリックの対象外になります。</p>
+                <label class="field-label" for="vector-entity-limit" data-i18n="settings.layer.vectorLimit">ベクター描画件数の上限</label>
+                <input id="vector-entity-limit" type="number" min="0" step="1000" value="20000" />
+                <p class="hint" data-i18n="settings.layer.vectorLimitHint">1回の描画で entity 化するベクター地物数の合計上限(全レイヤー合算)。超過分は描画を省略してフリーズを防ぎます。0 で無制限。</p>
+              </section>
+              <section id="display-tiles-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="cesium.hint">CesiumJS 3D Tiles 描画パラメータを調整します。値を変えると 3D レイヤーが再読み込みされます。</p>
+                <div class="terrain-options">
+                  <div class="opt-item">
+                    <p class="hint" data-i18n="cesium.sse.hint">値を大きくすると読み込むタイル数が減り、描画が軽快になります。小さいほど詳細です。</p>
+                    <label class="field-label" for="cesium-sse">Maximum Screen Space Error</label>
+                    <input id="cesium-sse" type="number" min="0" step="1" value="16" />
+                  </div>
+
+                  <div class="opt-item">
+                    <p class="hint" data-i18n="cesium.maxMemory.hint">3D Tiles のキャッシュメモリ上限です。小さいとタイルの再読み込みが増えます。</p>
+                    <label class="field-label" for="cesium-max-memory">Maximum Memory Usage (MB)</label>
+                    <input id="cesium-max-memory" type="number" min="0" step="64" value="2048" />
+                  </div>
+
+                  <div class="opt-item">
+                    <p class="hint" data-i18n="cesium.dynamicSse.hint">ON にすると遠景タイルを自動で粗くし、カメラ高度が高い場面で軽快になります。</p>
+                    <label><input id="cesium-dynamic-sse" type="checkbox" checked /><span data-i18n="cesium.dynamicSse"> Dynamic Screen Space Error</span></label>
+                  </div>
+
+                  <div class="opt-item">
+                    <p class="hint" data-i18n="cesium.cullChildren.hint">ON にすると子タイルの範囲から不要な親タイルを除外し、描画負荷を下げます。</p>
+                    <label><input id="cesium-cull-children" type="checkbox" checked /><span data-i18n="cesium.cullChildren"> Cull With Children Bounds</span></label>
+                  </div>
+
+                  <div class="opt-item">
+                    <p class="hint" data-i18n="cesium.preferLeaves.hint">ON にすると最も詳細なリーフタイルを優先的に読み込みます。重くなりやすいです。</p>
+                    <label><input id="cesium-prefer-leaves" type="checkbox" /><span data-i18n="cesium.preferLeaves"> Prefer Leaves</span></label>
+                  </div>
+
+                  <div class="opt-item">
+                    <p class="hint" data-i18n="cesium.skipLod.hint">ON にすると中間 LOD を読み飛ばし、素早く目的の解像度のタイルへ到達します。</p>
+                    <label><input id="cesium-skip-lod" type="checkbox" checked /><span data-i18n="cesium.skipLod"> Skip Level Of Detail</span></label>
+                  </div>
+                </div>
+              </section>
+              <section id="display-effects-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="effects.hint">CesiumJS の表示効果を調整します。</p>
+                <div class="terrain-options">
+                  <label><input id="effect-terrain-lighting" type="checkbox" /><span data-i18n="effects.lighting"> 地形照明</span></label>
+                  <label><input id="effect-translucency" type="checkbox" /><span data-i18n="effects.translucency"> 地下透過</span></label>
+                  <label><input id="effect-fog" type="checkbox" checked /><span data-i18n="effects.fog"> 霧</span></label>
+                  <label><input id="effect-sky-atmosphere" type="checkbox" checked /><span data-i18n="effects.atmosphere"> 大気</span></label>
+                  <label><input id="effect-shadows" type="checkbox" /><span data-i18n="effects.shadows"> 影</span></label>
+                  <label><input id="effect-depth-test" type="checkbox" checked /><span data-i18n="effects.depthTest"> 地形深度テスト</span></label>
+                  <label><input id="underground-dive-toggle" type="checkbox" /><span data-i18n="effects.undergroundDive"> 地下移動</span></label>
+                </div>
+                <label class="field-label" for="underground-transparency"><span data-i18n="effects.transparency">地表透過</span> <span id="underground-transparency-value">0%</span></label>
+                <input id="underground-transparency" type="range" min="0" max="1" step="0.05" value="0" style="width: 100%;" />
+              </section>
+            </section>
+            <section id="info-panel" class="plugin-panel embedded-content">
+              <div id="info-content" class="info-content"></div>
+            </section>
+            <section id="legend-panel" class="plugin-panel embedded-content">
+              <img alt="凡例" data-i18n-attr="alt:tab.legend" />
+            </section>
+            <section id="attr-panel" class="plugin-panel">
+              <div class="section-title" data-i18n="attr.title">属性</div>
+              <button id="attr-vector-attr-list-btn" type="button" style="width:100%;font-size:0.9em;margin-bottom:8px;" data-i18n="vector.attrList">選択中のレイヤ属性一覧</button>
+              <div id="attr-content" class="attr-content" data-i18n="attr.empty">地物を選択すると属性を表示します。</div>
+            </section>
+          </aside>
+          <aside id="manage-window" class="manage-window" aria-label="管理" data-i18n-attr="aria-label:manage.title" hidden>
+            <div class="manage-titlebar">
+              <span class="manage-title" data-i18n="manage.title">管理</span>
+              <button id="manage-minimize" class="manage-titlebtn" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
+              <button id="manage-close" class="manage-titlebtn" type="button" aria-label="閉じる" data-i18n-attr="aria-label:manage.close">×</button>
+            </div>
+            <div class="manage-body">
+              <nav class="manage-nav" aria-label="管理カテゴリ" data-i18n-attr="aria-label:manage.ariaLabel">
+                <button type="button" class="active" data-manage-pane="manage-project" data-i18n="manage.nav.project">プロジェクト</button>
+                <button type="button" data-manage-pane="manage-ai" data-i18n="manage.nav.ai">AI</button>
+                <button type="button" data-manage-pane="manage-gmaps" data-i18n="manage.nav.gmaps">Google Maps</button>
+                <button type="button" id="manage-nav-app" data-manage-pane="manage-app" data-i18n="manage.nav.app" hidden>アプリ</button>
+                <button type="button" data-manage-pane="manage-other" data-i18n="manage.nav.other">その他</button>
+              </nav>
+              <div class="manage-content">
+                <section id="manage-project" class="manage-pane active">
+                  <nav class="manage-subnav">
+                    <button type="button" class="active" data-manage-sub="settings-project-panel" data-i18n="settings.tab.project">プロジェクト</button>
+                    <button type="button" data-manage-sub="settings-inspector-panel" data-i18n="settings.tab.inspector">インスペクター</button>
+                  </nav>
+                  <section id="settings-project-panel" class="settings-subpanel active">
+                    <label class="field-label" for="project-select" data-i18n="settings.project.label">プロジェクト</label>
+                    <select id="project-select" aria-label="プロジェクト" data-i18n-attr="aria-label:settings.project.label"></select>
+                    <label class="field-label" for="project-root-path" style="margin-top:10px;" data-i18n="settings.project.root">プロジェクトルート</label>
+                    <input id="project-root-path" class="share-url" style="margin-top:0;" readonly />
+                    <p class="hint" data-i18n="settings.project.rootHint">プロジェクト内の相対パス(DATA/ 等)はこのフォルダを基準に解決されます。</p>
+                  </section>
+                  <section id="settings-inspector-panel" class="settings-subpanel">
+                    <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
+                    <button id="apply-inspector" type="button" data-i18n="inspector.apply">登録</button>
+                    <button id="export-inspector" type="button" data-i18n="inspector.export">エクスポート(.kasc)</button>
+                    <p id="inspector-status" class="hint" aria-live="polite"></p>
+                    <div class="section-title" style="margin-top:14px;" data-i18n="inspector.dataDirTitle">ファイル保存先</div>
+                    <label class="field-label" for="inspector-data-dir" data-i18n="inspector.dataDirLabel">保存先フォルダ (DATA/ を選択)</label>
+                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                      <button id="inspector-data-dir" type="button" style="flex:0 0 auto;" data-i18n="inspector.dataDirButton">フォルダを選択</button>
+                      <span id="inspector-data-dir-name" style="font-size:0.85em;color:#71818d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-i18n="inspector.dataDirNone">未選択</span>
+                    </div>
+                    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+                      <input id="inspector-add-file" type="file" multiple style="display:none;" />
+                      <button id="inspector-add-file-button" type="button" style="flex:0 0 auto;" data-i18n="inspector.addFileButton">DATA/ に保存して追加</button>
+                    </div>
+                    <p class="hint" data-i18n="inspector.addFileHint">選択したファイルを DATA/ へ保存し（ローカルサーバー版はサーバー側、それ以外は上で選択したフォルダ）、対応形式なら設定行を追記して即時反映します。対応: .geojson .json .gpkg .fgb .parquet</p>
+                  </section>
+                </section>
+                <section id="manage-ai" class="manage-pane">
+                  <nav class="manage-subnav">
+                    <button type="button" class="active" data-manage-sub="gemini-panel" data-i18n="manage.section.chat">チャット (AI)</button>
+                    <button type="button" data-manage-sub="chat-instructions-panel" data-i18n="chat.customInstructionsLabel">追加指示</button>
+                    <button type="button" data-manage-sub="datasource-panel" data-i18n="manage.section.datasource">データソース</button>
+                    <button type="button" data-manage-sub="plugin-panel" data-i18n="google.tab.plugin">プラグイン</button>
+                  </nav>
+                  <section id="gemini-panel" class="settings-subpanel active">
+                    <label class="field-label" for="chat-provider" data-i18n="chat.provider.label">AI プロバイダ</label>
+                    <select id="chat-provider">
+                      <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
+                      <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+                      <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
+                      <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
+                      <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
+                      <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
+                    </select>
+                    <div id="gemini-fields">
+                      <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
+                      <p class="hint" data-i18n-html="google.gemini.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。localStorage はオリジン・ブラウザプロファイルごとに分離されるため、<strong>同じデプロイにアクセスする他のユーザーからは読み取れません</strong>。ただし「このPC・ブラウザプロファイルを操作する人」「ブラウザ拡張機能」「ページ上のスクリプト」からは参照可能です — 端末・プロファイルを他者と共有しないでください。またキー自体を共有ファイル（.kasc等）やコードに書き込まないでください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
+                      <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
+                      <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" data-i18n-attr="placeholder:google.gemini.keyPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="google-gemini-model" style="margin-top:10px;" data-i18n="google.gemini.modelLabel">Gemini モデル</label>
+                      <select id="google-gemini-model">
+                        <option value="gemini-3.1-flash-lite" selected data-i18n="google.gemini.model.flashLite">gemini-3.1-flash-lite (標準・低コスト)</option>
+                        <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                        <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                      </select>
+                    </div>
+                    <div id="openai-fields" hidden>
+                      <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はプロバイダを GitHub Copilot に変更し、表示されるブリッジ欄で Copilot ブリッジ（copilot-bridge/）を接続してください。</p>
+                      <p class="hint" data-i18n-html="chat.openai.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は上のエンドポイントのみです。http（非HTTPS）のエンドポイントを指定するとキーが平文で送信されるため、localhost/127.0.0.1 以外では https を使ってください。キー自体を共有ファイル（.kasc等）やコードに書き込まないでください。</p>
+                      <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
+                      <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="openai-api-key" style="margin-top:10px;" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
+                      <input id="openai-api-key" type="password" placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="openai-model" style="margin-top:10px;" data-i18n="chat.openai.modelLabel">モデル</label>
+                      <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
+                    </div>
+                    <div id="bridge-fields" hidden>
+                      <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden>チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
+                      <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden>GitHub Copilot の場合は同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
+                      <p class="hint provider-only" data-for="devin" data-i18n-html="chat.devin.hint" hidden>Devin の場合は同梱の Devin ブリッジ（<code>devin-bridge/</code>・<code>devin acp</code>）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Devin CLI と利用者自身の Devin プランが必要で、ローカル・本人利用限定です — 手順と利用条件は devin-bridge/README.md。</p>
+                      <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden>Antigravity の場合は同梱の Antigravity ブリッジ（<code>antigravity-bridge/</code>・<code>agy</code> CLI）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要で、ローカル・本人利用限定です — 手順と利用条件は antigravity-bridge/README.md。</p>
+                      <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
+                      <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
+                      <div class="provider-only" data-for="agent" hidden>
+                        <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
+                        <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" data-i18n-attr="placeholder:agent.tokenPlaceholder" autocomplete="off" size="28" />
+                        <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
+                        <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>
+                        <p class="hint" id="agent-backend-status" aria-live="polite"></p>
+                      </div>
+                      <div id="copilot-fields" class="provider-only" data-for="copilot" hidden>
+                        <label class="field-label" for="copilot-model" data-i18n="chat.copilot.modelLabel">モデル</label>
+                        <select id="copilot-model"></select>
+                        <p class="hint" data-i18n="chat.copilot.modelHint">ブリッジから取得した利用可能な Copilot モデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
+                        <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
+                      </div>
+                      <div id="devin-fields" class="provider-only" data-for="devin" hidden>
+                        <label class="field-label" for="devin-api-key" data-i18n="chat.devin.apiKeyLabel">Devin APIキー（任意）</label>
+                        <input id="devin-api-key" type="password" placeholder="cog_..." data-i18n-attr="placeholder:chat.devin.apiKeyPlaceholder" autocomplete="off" size="28" />
+                        <p class="hint" data-i18n-html="chat.devin.apiKeyHint">Devin の認証に使うサービスユーザー APIキー。app.devin.ai → Settings → Devin API → Service users タブから発行します（ロール: Member・<code>cog_</code> で始まるトークン）。※PAT（Personal Access Token）は devin acp の認証では拒否されます。空欄の場合はブラウザで Devin にログインする PKCE 認証が起動します。キーは localStorage に保存され、ローカルのブリッジにのみ送信されて <code>devin acp</code> の認証に使われます。</p>
+                        <label class="field-label" for="devin-model" data-i18n="chat.devin.modelLabel">モデル</label>
+                        <select id="devin-model"></select>
+                        <p class="hint" data-i18n="chat.devin.modelHint">ブリッジから取得した Devin のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
+                        <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
+                      </div>
+                      <div id="antigravity-fields" class="provider-only" data-for="antigravity" hidden>
+                        <label class="field-label" for="antigravity-model" data-i18n="chat.antigravity.modelLabel">モデル</label>
+                        <select id="antigravity-model"></select>
+                        <p class="hint" data-i18n="chat.antigravity.modelHint">ブリッジから取得した Antigravity のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
+                        <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
+                      </div>
+                    </div>
+                    <label class="field-label" for="google-tool-max-steps" style="margin-top:10px;" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>
+                    <input id="google-tool-max-steps" type="number" min="1" max="20" step="1" />
+                    <p class="hint" data-i18n="google.gemini.toolStepsHint">1回の指示でエージェントがツール実行を繰り返せる回数（既定: 10・範囲 1〜20）。複雑な指示ほど大きくしますが、暴走時のコストも増えます。</p>
+                    <div class="terrain-options" style="margin-top:10px;">
+                      <button id="google-settings-save" type="button" data-i18n="common.save">保存</button>
+                    </div>
+                    <p id="google-settings-status" class="hint" aria-live="polite"></p>
+                    <p id="google-proxy-status" class="hint" aria-live="polite"></p>
+                  </section>
+                  <section id="chat-instructions-panel" class="settings-subpanel">
+                    <label class="field-label" for="chat-custom-instructions" data-i18n="chat.customInstructionsLabel">追加指示</label>
+                    <textarea id="chat-custom-instructions" rows="8" maxlength="8000" placeholder="AIにいつも守ってほしい指示を入力" data-i18n-attr="placeholder:chat.customInstructionsPlaceholder" style="width:100%;box-sizing:border-box;"></textarea>
+                    <p class="hint" data-i18n="chat.customInstructionsHint">通常はこのブラウザに保存します。Cloud Run に KASUGAI_AI_INSTRUCTIONS が設定されている場合は、サーバー側の指示を優先します。</p>
+                    <div class="terrain-options" style="margin-top:10px;">
+                      <button id="chat-instructions-save" type="button" data-i18n="common.save">保存</button>
+                    </div>
+                    <p id="chat-instructions-status" class="hint" aria-live="polite"></p>
+                  </section>
+                  <section id="plugin-panel" class="settings-subpanel">
+                    <p class="hint" data-i18n-html="agent.hint">AIチャットが生成したプラグイン（このブラウザの IndexedDB に保存）を管理します。有効化したプラグインは起動時に自動で読み込まれます。公開するプラグインは <code>PLUGIN/</code> フォルダと <code>plugins.json</code> へ登録します。</p>
+                    <div id="agent-plugin-list"></div>
+                    <div style="display:flex;gap:6px;margin-top:8px;">
+                      <button id="agent-import" type="button" data-i18n="agent.import">取込</button>
+                      <input id="agent-import-file" type="file" accept=".kasp,.json,.js" multiple style="display:none;" />
+                      <button id="agent-refresh" type="button" data-i18n="agent.refresh">更新</button>
+                    </div>
+                    <p id="agent-status" class="hint" aria-live="polite"></p>
+                  </section>
+                  <section id="datasource-panel" class="settings-subpanel">
+                    <p class="hint" data-i18n-html="mcp.hint">AI チャットへ外部データソースのツールを追加します（MCP・Model Context Protocol）。接続したサーバーのツールはチャットツールとして合成され、AI がファイル検索や資料参照に利用します。読み取り系ツールのみ既定公開で、書き込み系は下の許可を ON にした場合のみ公開されます（実行時は確認ダイアログが出ます）。</p>
+                    <div class="section-title" data-i18n="mcp.box.title">Box</div>
+                    <p class="hint" data-i18n-html="mcp.box.hint">Box のリモート MCP（mcp.box.com）に接続し、Box 上のファイル検索・Box AI 問い合わせ等を AI チャットから使えるようにします。<a href="https://developer.box.com/guides/box-mcp" target="_blank" rel="noopener noreferrer">Box Developer Console</a> で Custom App (OAuth 2.0) を作成し、リダイレクト URI にこのアプリの URL を登録して Client ID を入力してください。Enterprise 契約では Admin Console での MCP 有効化が必要です。アクセストークンは BYO としてこのブラウザの localStorage にのみ保存されます。</p>
+                    <label class="field-label" for="box-client-id" data-i18n="mcp.box.clientIdLabel">Client ID</label>
+                    <input id="box-client-id" type="text" placeholder="Box アプリの Client ID" data-i18n-attr="placeholder:mcp.box.clientIdPlaceholder" autocomplete="off" size="28" />
+                    <div style="display:flex;gap:6px;margin-top:6px;">
+                      <button id="box-connect" type="button" data-i18n="mcp.box.connect">Box に接続</button>
+                      <button id="box-disconnect" type="button" data-i18n="mcp.box.disconnect">切断</button>
+                    </div>
+                    <p id="box-status" class="hint" aria-live="polite"></p>
+                    <div class="section-title" style="margin-top:14px;" data-i18n="mcp.add.title">MCP サーバー追加</div>
+                    <p class="hint" data-i18n="mcp.add.hint">Box 以外のリモート MCP サーバー（Streamable HTTP 対応）を追加します。固定の Bearer トークンが要る場合は入力してください。</p>
+                    <label class="field-label" for="mcp-add-name" data-i18n="mcp.add.nameLabel">名前</label>
+                    <input id="mcp-add-name" type="text" placeholder="my-server" autocomplete="off" size="28" />
+                    <label class="field-label" for="mcp-add-url" style="margin-top:6px;" data-i18n="mcp.add.urlLabel">エンドポイント URL</label>
+                    <input id="mcp-add-url" type="text" placeholder="https://example.com/mcp" autocomplete="off" size="28" />
+                    <label class="field-label" for="mcp-add-token" style="margin-top:6px;" data-i18n="mcp.add.tokenLabel">Bearer トークン（任意）</label>
+                    <input id="mcp-add-token" type="password" placeholder="省略可" data-i18n-attr="placeholder:mcp.add.tokenPlaceholder" autocomplete="off" size="28" />
+                    <div style="display:flex;gap:6px;margin-top:6px;">
+                      <button id="mcp-add" type="button" data-i18n="mcp.add.add">追加して接続</button>
+                    </div>
+                    <div class="section-title" style="margin-top:14px;" data-i18n="mcp.list.title">登録サーバー</div>
+                    <div id="mcp-server-list"></div>
+                    <label style="margin-top:10px;display:block;"><input id="mcp-allow-write" type="checkbox" /> <span data-i18n="mcp.allowWrite">書き込み系ツールも AI に公開する</span></label>
+                    <p class="hint" data-i18n="mcp.allowWriteHint">OFF の間はファイル作成・更新・削除などの書き込み系ツールを AI に公開しません。ON でも実行ごとに確認ダイアログが出ます。</p>
+                    <p id="mcp-status" class="hint" aria-live="polite"></p>
+                  </section>
+                </section>
+                <section id="manage-gmaps" class="manage-pane">
+                  <section id="google-map-panel" class="settings-subpanel active">
+                    <p class="hint" data-i18n-html="google.maps.hint">Google Maps Platform の API キーです。<a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行したキーを入力してください。ジオコーディング・Places・Photorealistic 3D Tiles 等の地図機能で使用します。</p>
+                    <p class="hint" data-i18n-html="google.maps.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存されます。Gemini キーとは別キーを推奨します。Google Cloud 側で使用する API のみに絞る API 制限を推奨します。<strong>注意</strong>：Geocoding・Places・Street View などの Web サービス API は HTTP リファラー制限付きキーを拒否します（リファラー制限が有効なのは Map Tiles API = 3D Tiles のみ）。これらを使う場合はアプリケーションの制限を「なし」にするか、別キーを用意してください。従量課金のため、予算アラートの設定を推奨します。</p>
+                    <label class="field-label" for="google-maps-api-key" data-i18n="google.maps.keyLabel">Maps API キー</label>
+                    <input id="google-maps-api-key" type="password" placeholder="Maps APIキーを入力" data-i18n-attr="placeholder:google.maps.keyPlaceholder" autocomplete="off" size="28" />
+                    <label class="field-label" for="google-maps-ws-api-key" data-i18n="google.maps.wsKeyLabel">Web サービス用キー（任意）</label>
+                    <input id="google-maps-ws-api-key" type="password" placeholder="Webサービス用 Maps APIキー（省略可）" data-i18n-attr="placeholder:google.maps.wsKeyPlaceholder" autocomplete="off" size="28" />
+                    <p class="hint" data-i18n="google.maps.wsKeyHint">Geocoding・Places・Street View で使用します。未設定時は上のキーを使用。これらの API は HTTP リファラー制限付きキーを拒否するため、上のキーにリファラー制限をかけている場合はこちらに別キーを設定してください。</p>
+                    <div class="terrain-options" style="margin-top:10px;">
+                      <button id="google-maps-settings-save" type="button" data-i18n="common.save">保存</button>
+                    </div>
+                    <p id="google-maps-settings-status" class="hint" aria-live="polite"></p>
+                    <div class="section-title" style="margin-top:14px;" data-i18n="google.display">表示</div>
+                    <label><input id="google-3dtiles-toggle" type="checkbox" /> Photorealistic 3D Tiles</label>
+                    <p class="hint" data-i18n="google.tiles3dHint">ONにすると保存済みの Maps API キーで Google のフォトリアル3Dタイルをレイヤ一覧へ自動追加します。Map Tiles API の従量課金が発生します。</p>
+                  </section>
+                </section>
+                <section id="manage-app" class="manage-pane">
+                  <nav class="manage-subnav">
+                    <button type="button" class="active" data-manage-sub="settings-rclone-panel" data-i18n="settings.tab.rclone">rclone</button>
+                    <button type="button" data-manage-sub="settings-cloud-panel" data-i18n="settings.tab.cloud">クラウド</button>
+                    <button type="button" data-manage-sub="settings-drive-panel" data-i18n="settings.tab.drive">ドライブ</button>
+                    <button type="button" data-manage-sub="settings-save-panel" data-i18n="settings.tab.save">保存</button>
+                  </nav>
+                  <section id="settings-rclone-panel" class="settings-subpanel active">
+                    <p class="hint" data-i18n="cloud.rcloneIntro">外部ツール rclone の導入と、クラウドストレージのリモート登録（OAuth）を行います。接続はクラウドタブで行います。</p>
+                    <p id="rclone-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                    <div id="rclone-controls">
+                      <div class="section-title" data-i18n="cloud.rclone.title">rclone</div>
+                      <p class="hint"><span data-i18n="cloud.rclone.status">状態: </span><code id="cloud-rclone-status">-</code></p>
+                      <label class="field-label" for="cloud-install-dir" data-i18n="cloud.installDir">インストール先フォルダ</label>
+                      <input id="cloud-install-dir" type="text" placeholder="C:\kasugai\rclone" />
+                      <div style="display:flex;gap:6px;margin-top:6px;">
+                        <button id="cloud-rclone-recheck" type="button" data-i18n="cloud.rclone.recheck">再検出</button>
+                        <button id="cloud-rclone-install" type="button" data-i18n="cloud.rclone.install">ダウンロードして配置</button>
+                      </div>
+
+                      <div class="section-title" style="margin-top:14px;" data-i18n="cloud.remoteAdd.title">リモート追加</div>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <select id="cloud-remote-type" style="flex:1;min-width:0;width:auto;">
+                          <option value="box">Box</option>
+                          <option value="drive">GoogleDrive</option>
+                          <option value="onedrive">OneDrive</option>
+                          <option value="dropbox">Dropbox</option>
+                          <option value="pcloud">pCloud</option>
+                          <option value="mega">MEGA</option>
+                          <option value="webdav">WebDAV</option>
+                          <option value="s3">S3</option>
+                        </select>
+                        <button id="cloud-remote-add" type="button" style="flex:0 0 auto;" data-i18n="cloud.remote.add">追加</button>
+                      </div>
+                      <p class="hint" data-i18n="cloud.remote.addHint">「追加」でブラウザの認証画面が開きます。許可後はクラウドタブでリモートを選択して接続してください。</p>
+                      <p id="rclone-status" class="hint" aria-live="polite"></p>
+                    </div>
+                  </section>
+                  <section id="settings-cloud-panel" class="settings-subpanel">
+                    <p class="hint" data-i18n-html="cloud.hint">クラウドストレージ(Box・Google Drive・OneDrive等)を rclone 経由で接続します。接続するとレイヤーURLに <code>cloud:フォルダ/ファイル名</code> と書けます。</p>
+                    <p class="hint" data-i18n="cloud.rcloneTabHint">rclone の導入とリモート追加は rclone タブで行います。</p>
+                    <p id="cloud-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                    <div id="cloud-controls">
+                      <div class="section-title" data-i18n="cloud.remote.title">ストレージ</div>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <select id="cloud-remote" style="flex:1;min-width:0;" data-i18n-attr="aria-label:cloud.remote.title"></select>
+                        <button id="cloud-remote-refresh" type="button" style="flex:0 0 auto;" data-i18n="cloud.remote.refresh">更新</button>
+                      </div>
+                      <label class="field-label" for="cloud-root" data-i18n="cloud.root.label">ルートフォルダ (パスまたはフォルダURL・省略可)</label>
+                      <input id="cloud-root" type="text" placeholder="KASUGAI/ または https://app.box.com/folder/…" />
+
+                      <div class="section-title" style="margin-top:14px;" data-i18n="cloud.perm.title">権限</div>
+                      <div class="terrain-options" style="display:flex;flex-direction:row;gap:16px;">
+                        <label><input id="cloud-perm-read" name="cloud-perm" type="radio" checked /><span data-i18n="cloud.perm.read"> 読み取り専用</span></label>
+                        <label><input id="cloud-perm-write" name="cloud-perm" type="radio" /><span data-i18n="cloud.perm.write"> 読み書き</span></label>
+                      </div>
+                      <div style="display:flex;gap:6px;margin-top:6px;">
+                        <button id="cloud-connect" type="button" data-i18n="cloud.connect">接続開始</button>
+                        <button id="cloud-stop" type="button" class="danger-button" data-i18n="cloud.stop">停止</button>
+                      </div>
+                      <p class="hint"><span data-i18n="cloud.serveStatus">接続状態: </span><code id="cloud-serve-status">-</code></p>
+
+                      <p id="cloud-status" class="hint" aria-live="polite"></p>
+                    </div>
+                  </section>
+                  <section id="settings-drive-panel" class="settings-subpanel">
+                    <p class="hint" data-i18n="cloud.driveHint">接続中のストレージを Windows ドライブとして割り当てます（net use）。接続はクラウドタブで行います。</p>
+                    <p id="drive-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                    <div id="drive-controls">
+                      <div class="section-title" data-i18n="cloud.drive.title">ドライブ割当 (Windows)</div>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <select id="cloud-drive" style="flex:0 0 auto;width:auto;">
+                          <option value="">-</option>
+                        </select>
+                        <button id="cloud-mount" type="button" data-i18n="cloud.drive.mount">割り当て</button>
+                        <button id="cloud-unmount" type="button" data-i18n="cloud.drive.unmount">解除</button>
+                      </div>
+                      <p id="drive-status" class="hint" aria-live="polite"></p>
+                    </div>
+                  </section>
+                  <section id="settings-save-panel" class="settings-subpanel">
+                    <p id="save-unavailable" class="hint" hidden data-i18n="cloud.unavailable">この機能はローカルサーバー版でのみ利用できます。</p>
+                    <div id="save-controls">
+                      <div class="section-title" data-i18n="cloud.inspector.title">起動時の自動接続</div>
+                      <p class="hint" data-i18n-html="cloud.inspectorHint">インスペクタの設定行 <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> でプロジェクト(.kasc)読み込み時に自動接続します。<code>cloud: stop</code> で停止します。</p>
+                      <p class="hint" data-i18n="cloud.autoconnectHint">設定行はクラウドタブの現在の入力（リモート・ルート・権限・ドライブ）から生成されます。</p>
+                      <button id="cloud-inspector-line" type="button" data-i18n="cloud.inspectorLine">現在の設定をインスペクタに追記して接続</button>
+
+                      <div class="section-title" style="margin-top:14px;" data-i18n="cloud.project.title">プロジェクト保存</div>
+                      <button id="cloud-save-kasc" type="button" data-i18n="cloud.saveKasc">現在の設定(.kasc)をクラウドへ保存</button>
+                      <label class="field-label" for="cloud-localize-scope" data-i18n="cloud.localizeScope">納品用データの保存先</label>
+                      <select id="cloud-localize-scope">
+                        <option value="shared" selected data-i18n="cloud.localizeShared">共有（既定）: ../DATA/</option>
+                        <option value="project" data-i18n="cloud.localizeProject">専用: DATA/</option>
+                      </select>
+                      <p class="hint" data-i18n="cloud.localizeHint">プロジェクトの隣に &lt;name&gt;_local/（群マニフェスト＋プロジェクト複製＋DATA/）を生成します。共有は _local/DATA/、専用は _local/&lt;name&gt;/DATA/。元は変更されません。納品は _local フォルダごと渡してください。</p>
+                      <button id="cloud-localize" type="button" data-i18n="cloud.localize">納品パッケージを生成（_local/）</button>
+                      <p id="save-status" class="hint" aria-live="polite"></p>
+                    </div>
+                  </section>
+                </section>
+                <section id="manage-other" class="manage-pane">
+                  <section id="settings-other-panel" class="settings-subpanel active">
+                    <div class="section-title" data-i18n="language.title">言語</div>
+                    <select id="language-select" style="width:100%;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;background:#fff;">
+                      <option value="en">English</option>
+                      <option value="ja">日本語</option>
+                    </select>
+                    <div class="section-title" style="margin-top:14px;" data-i18n="settings.port.title">ポート番号</div>
+                    <label class="field-label" for="current-port" data-i18n="settings.port.label">現在の接続ポート</label>
+                    <input id="current-port" type="number" min="1" max="65535" readonly />
+                    <p class="hint" data-i18n="settings.port.hint">ポート番号の変更は、アプリ起動時の設定で行います。</p>
+                    <div class="section-title" data-i18n="update.title">バージョン・更新</div>
+                    <p class="hint"><span data-i18n="update.current">現在のバージョン: </span><code id="current-version">-</code></p>
+                    <p class="hint"><span data-i18n="update.latest">最新バージョン: </span><code id="latest-version">-</code> <span id="update-status"></span></p>
+                    <div class="terrain-options">
+                      <label><input id="auto-update" type="checkbox" checked /><span data-i18n="update.auto"> 起動時に自動更新</span></label>
+                    </div>
+                    <button id="check-update" type="button" data-i18n="update.check">更新を確認</button>
+                    <button id="install-update" type="button" hidden data-i18n="update.install">最新版をインストール</button>
+                    <button id="shutdown-app" type="button" class="danger-button" data-i18n="app.shutdown">停止</button>
+                    <p id="version-status" class="hint" aria-live="polite"></p>
+                    <div id="fetch-allow-section" hidden>
+                      <div class="section-title" style="margin-top:14px;" data-i18n="fetch.title">データ取得プロキシ</div>
+                      <p class="hint" data-i18n="fetch.allowHint">社内ネットワークなどプライベートアドレスへの取得は既定で拒否されます。許可するホスト名・IPアドレス・CIDRを1行ずつ入力してください。</p>
+                      <textarea id="fetch-allow" rows="4" style="width:100%;box-sizing:border-box;font-family:monospace;" placeholder="192.168.0.0/16&#10;my.server.local&#10;127.0.0.1"></textarea>
+                      <button id="fetch-allow-save" type="button" data-i18n="fetch.allowSave">許可リストを保存</button>
+                      <p id="fetch-allow-status" class="hint" aria-live="polite"></p>
+                    </div>
+                  </section>
+                </section>
+              </div>
+            </div>
+          </aside>
+          <div class="basemap-control">
+            <button id="basemap-toggle" class="basemap-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
+            <button id="basemap-globe" class="basemap-globe" type="button" title="Google Earth で現在の表示を開く" aria-label="Google Earth で現在の表示を開く" data-i18n-attr="title:basemap.googleEarth;aria-label:basemap.googleEarth">🌐</button>
+            <select id="basemap-select"></select>
+          </div>
+          <aside class="navigation-toolbar" aria-label="Navigation toolbar">
+            <div id="walk-help" class="walk-help">
+              <div class="walk-help-header">
+                <strong>Fly</strong>
+                <button id="fly-reverse-btn" type="button" style="font-size:0.85em;padding:2px 6px;" disabled data-i18n="fly.reverse">起終点逆転</button>
+                <button id="fly-path-visibility" type="button" style="font-size:0.85em;padding:4px 8px;" disabled data-i18n="fly.hide">非表示</button>
+                <button id="walk-help-toggle" class="walk-help-toggle" type="button" style="margin-left:auto;" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
+              </div>
+              <div class="walk-path-select" style="margin-bottom:8px;">
+                <select id="fly-path-select" style="width:100%;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;box-sizing:border-box;">
+                  <option value="__manual__" data-i18n="fly.manual">手動</option>
+                </select>
+                <div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end;">
+                  <button id="fly-path-import" type="button" style="font-size:0.85em;padding:4px 8px;" title=".geojsonをIndexedDBへ取り込み" data-i18n="fly.import" data-i18n-attr="title:fly.importTitle">取込</button>
+                  <input id="fly-path-import-file" type="file" accept=".geojson,application/geo+json" multiple style="display:none;">
+                  <button id="fly-path-download" type="button" style="display:none;font-size:0.85em;padding:4px 8px;" title="GeoJSONとして保存" data-i18n="fly.export" data-i18n-attr="title:fly.exportTitle">出力</button>
+                  <button id="fly-path-delete" type="button" style="display:none;font-size:0.85em;padding:4px 8px;" title="描画ルートを削除" data-i18n="fly.delete" data-i18n-attr="title:fly.deleteTitle">削除</button>
+                </div>
+              </div>
+              <div class="walk-preset-select" style="margin-bottom:8px;display:flex;gap:4px;align-items:center;">
+                <select id="fly-preset-select" style="flex:1;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;">
+                  <option value="custom" data-i18n="fly.preset.custom">カスタム</option>
+                  <option value="walk" data-i18n="fly.preset.walk">徒歩 (h2 s5 p-5)</option>
+                  <option value="drive" data-i18n="fly.preset.drive">車載 (h2 s60 p-10)</option>
+                  <option value="drone" data-i18n="fly.preset.drone">ドローン (h200 s60 p-30)</option>
+                  <option value="overview" data-i18n="fly.preset.overview">広域 (h1000 s300 p-45)</option>
+                </select>
+                <select id="fly-view-select" title="ルート座標の基準" aria-label="ルート座標の基準" data-i18n-attr="title:fly.viewTitle;aria-label:fly.viewTitle" style="border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;background:#fff;">
+                  <option value="camera" data-i18n="fly.view.camera">カメラ位置</option>
+                  <option value="center" data-i18n="fly.view.center">画面中心</option>
+                </select>
+              </div>
+              <div class="walk-help-tabs">
+                <button class="walk-help-tab active" data-tab="mouse" type="button" data-i18n="fly.tab.mouse">マウス</button>
+                <button class="walk-help-tab" data-tab="keyboard" type="button" data-i18n="fly.tab.keyboard">キー</button>
+                <button class="walk-help-tab" data-tab="draw" type="button" data-i18n="fly.tab.draw">編集</button>
+              </div>
+              <div class="walk-help-contents">
+                <div class="walk-help-content active" data-tab="mouse">
+                  <div data-i18n-html="fly.mouse.left"><kbd>左ﾀﾞﾌﾞﾙｸﾘｯｸ</kbd> 自動前進 ON/OFF</div>
+                  <div data-i18n-html="fly.mouse.right"><kbd>右ﾀﾞﾌﾞﾙｸﾘｯｸ</kbd> 自動後退 ON/OFF</div>
+                  <div data-i18n-html="fly.mouse.wheel"><kbd>ﾏｳｽﾎｲｰﾙ</kbd> 速度調整</div>
+                  <div data-i18n-html="fly.mouse.qe"><kbd>Q / E</kbd> 高さ調整</div>
+                </div>
+                <div class="walk-help-content" data-tab="keyboard">
+                  <div data-i18n-html="fly.keys.w"><kbd>W</kbd> 前進</div>
+                  <div data-i18n-html="fly.keys.s"><kbd>S</kbd> 後退</div>
+                  <div data-i18n-html="fly.keys.ad"><kbd>A / D</kbd> 旋回</div>
+                  <div data-i18n-html="fly.keys.arrows"><kbd>↑ / ↓</kbd> 上下</div>
+                  <div data-i18n-html="fly.keys.qe"><kbd>Q / E</kbd> 高さ調整</div>
+                  <div data-i18n-html="fly.keys.speed"><kbd>+ / -</kbd> 速度調整</div>
+                  <div data-i18n-html="fly.keys.esc"><kbd>Esc</kbd> 3D ﾓｰﾄﾞへ</div>
+                </div>
+                <div class="walk-help-content" data-tab="draw">
+                  <div style="display:flex;gap:4px;align-items:center;">
+                    <button id="draw-mode-toggle" class="draw-mode-toggle" type="button" aria-label="ルート描画開始" title="ルート描画開始" data-i18n="draw.start" data-i18n-attr="aria-label:draw.start;title:draw.start">ルート描画開始</button>
+                  </div>
+                  <div style="margin-top:8px;display:flex;gap:4px;align-items:center;">
+                    <label for="draw-agl" style="font-size:0.9em;" data-i18n="draw.agl">地上高（AGL）:</label>
+                    <input id="draw-agl" type="number" value="0.0" step="0.1" style="width:70px;">
+                    <span style="font-size:0.9em;">m</span>
+                  </div>
+                  <div style="margin-top:8px;font-size:0.9em;">
+                    <div data-i18n-html="draw.addPoint"><kbd>右クリック</kbd> 点追加</div>
+                    <div data-i18n-html="draw.finish"><kbd>右ダブルクリック</kbd> 描画終了＆保存</div>
+                  </div>
+                </div>
+              </div>
+              <div class="walk-height"><span id="walk-terrain-label" data-i18n="walk.terrain">地形高</span>: <strong id="walk-terrain">0.0</strong>m</div>
+              <div class="walk-height"><span data-i18n="walk.offset">補正: </span><input id="walk-offset" type="number" value="0.0" step="0.1" style="width:80px;">m</div>
+              <div class="walk-height"><span data-i18n="walk.speed">速度: </span><input id="walk-speed" type="number" value="30" step="1" style="width:80px;">km/h</div>
+              <div class="walk-height"><span data-i18n="walk.pitch">ピッチ: </span><input id="walk-pitch" type="number" value="-10" step="1" style="width:80px;">°</div>
+              <div id="fly-point-editor" class="walk-height" style="margin-top:8px;display:none;">
+                <span data-i18n="fly.point">点: </span><select id="fly-point-index" style="width:60px;"></select>
+                <span data-i18n="fly.pointHeight">点高: </span><input id="fly-point-offset" type="number" step="0.1" style="width:60px;">m
+                <button id="fly-point-save" type="button" style="font-size:0.9em;" data-i18n="common.save">保存</button>
+              </div>
+            </div>
+            <button id="compass-button" class="compass-button" type="button" title="北をリセット" data-i18n-attr="title:nav.compass">
+              <span class="compass-needle"></span><strong>N</strong>
+            </button>
+            <button id="top-down-button" type="button" aria-label="3D表示" title="3D表示" data-i18n-attr="aria-label:nav.topDown;title:nav.topDown">3D</button>
+            <button id="mode-select" class="mode-select" type="button" value="orbit" aria-label="オービット表示" data-i18n="nav.orbitMode" data-i18n-attr="aria-label:nav.orbit">オービット</button>
+            <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
+          </aside>
+          <aside class="chat-panel" id="chat-panel" aria-label="AIチャット" data-i18n-attr="aria-label:chat.ariaLabel">
+            <div class="chat-header">
+              <span class="chat-provider-box">
+                <select id="chat-provider-switch" class="chat-provider-switch" title="使用するAIを選択" data-i18n-attr="title:chat.providerSwitch"></select>
+                <strong id="chat-provider-label" class="chat-provider-label"></strong>
+              </span>
+              <span style="margin-left:auto;display:flex;gap:4px;">
+                <button id="chat-clear" class="chat-toggle" type="button" aria-label="履歴をクリア" title="履歴をクリア" data-i18n-attr="aria-label:chat.clear;title:chat.clear">🗑</button>
+                <button id="chat-panel-toggle" class="chat-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
+              </span>
+            </div>
+            <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+            <form id="chat-form" class="chat-form">
+              <input id="chat-input" type="text" placeholder="メッセージを入力 (/ でコマンド)" data-i18n-attr="placeholder:chat.placeholder" autocomplete="off" />
+              <button type="submit" data-i18n="chat.send">送信</button>
+            </form>
+          </aside>
+          <small id="map-attribution" class="map-attribution"></small>
+        </div>
+      </section>
+    </main>
+    <div id="vector-attr-widget" class="vector-attr-widget">
+      <div class="vector-attr-widget-inner">
+        <div class="vector-attr-widget-resizer" title="上下にドラッグして高さを変更" data-i18n-attr="title:vattr.resizer"></div>
+        <div class="vector-attr-widget-header">
+          <span class="vector-attr-widget-title" data-i18n="vattr.title">属性・値一覧</span>
+          <button class="vector-attr-widget-close" type="button" aria-label="閉じる" data-i18n-attr="aria-label:vattr.close">×</button>
+        </div>
+        <div class="vector-attr-widget-filter">
+          <select id="vector-attr-widget-layer" class="vector-attr-widget-layer" title="レイヤを選択" data-i18n-attr="title:vattr.layerTitle"></select>
+          <input id="vector-attr-widget-search" type="text" placeholder="属性または値で検索" data-i18n-attr="placeholder:vattr.search" />
+        </div>
+        <div class="vector-attr-widget-table-wrap">
+          <table class="vector-attr-widget-table">
+            <thead id="vector-attr-widget-head" class="vector-attr-widget-thead"></thead>
+            <tbody id="vector-attr-widget-list"></tbody>
+          </table>
+        </div>
+        <div class="vector-attr-widget-footer">
+          <span id="vector-attr-widget-count"></span>
+        </div>
+      </div>
+    </div>
+    <!-- 静的配信は no-cache を付けないため、 auth-selector.js → app.js の
+         連鎖がブラウザキャッシュで古いままになる事故を防ぐ(更新不整合対策) -->
+    <script type="module">import(`./auth-selector.js?t=${Date.now()}`);</script>
+  </body>
+</html>

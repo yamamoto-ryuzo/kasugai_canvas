@@ -18,14 +18,15 @@ const COOKIE_MAX_AGE = 12 * 60 * 60;
 const PUBLIC_PATHS = new Set([
   "/",
   "/index.html",
-  "/styles.css",
-  "/favicon.ico",
-  "/auth-selector.js",
-  "/auth-login-form.js",
-  "/auth-methods.json",
-  "/i18n.js"
+  "/cesium/index.html",
+  "/cesium/styles.css",
+  "/cesium/favicon.ico",
+  "/cesium/auth-selector.js",
+  "/cesium/auth-login-form.js",
+  "/cesium/auth-methods.json",
+  "/cesium/i18n.js"
 ]);
-const PUBLIC_PREFIXES = ["/PLUGIN/auth-", "/i18n/"];
+const PUBLIC_PREFIXES = ["/cesium/PLUGIN/auth-", "/cesium/i18n/"];
 
 function isPublic(path) {
   return PUBLIC_PATHS.has(path) || PUBLIC_PREFIXES.some(p => path.startsWith(p));

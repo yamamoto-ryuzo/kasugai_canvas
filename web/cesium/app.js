@@ -762,7 +762,7 @@ async function detectBackend() {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 1000);
-      const response = await fetch("./health", { signal: controller.signal, cache: "no-store" });
+      const response = await fetch("/health", { signal: controller.signal, cache: "no-store" });
       clearTimeout(timeout);
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -771,7 +771,7 @@ async function detectBackend() {
         // {ok:true} を返せば capabilities を取得する（静的配信のみの環境は404で到達しない）
         if (backendEnabled || data?.ok === true) {
           // 利用可能な機能（fetchプロキシ・プラグイン書込み・エージェント等）を取得する
-          const caps = await fetch("./api/capabilities", { cache: "no-store" })
+          const caps = await fetch("/api/capabilities", { cache: "no-store" })
             .then(r => (r.ok ? r.json() : null))
             .catch(() => null);
           backendCapabilities = caps && caps.tier ? caps : null;
@@ -845,7 +845,7 @@ function resolveProjectUrl(url) {
   // クラウドストレージから読める
   if (/^cloud:/i.test(trimmed)) {
     const path = trimmed.slice(6).replace(/^\/+/, "");
-    return `./api/cloud/file?path=${encodeURIComponent(path)}`;
+    return `/api/cloud/file?path=${encodeURIComponent(path)}`;
   }
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return normalizeRemoteUrl(trimmed);
   if (trimmed.startsWith("/")) return trimmed;
@@ -876,7 +876,7 @@ function resolveProjectUrl(url) {
 async function loadProjects() {
   let definitions = [];
   try {
-    const response = await fetch("./projects/projects.json", { cache: "no-store" });
+    const response = await fetch("/projects/projects.json", { cache: "no-store" });
     if (response.ok) definitions = await response.json();
   } catch {}
   if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
@@ -899,7 +899,7 @@ async function loadProjects() {
 async function loadInspectorConfig() {
   try {
     const projectId = currentProjectId || "default";
-    const staticUrl = `./projects/${encodeURIComponent(projectId)}/kasugai_canvas.kasc`;
+    const staticUrl = `/projects/${encodeURIComponent(projectId)}/kasugai_canvas.kasc`;
     let text = "";
     try {
       const response = await fetch(staticUrl, { cache: "no-store" });
@@ -4322,7 +4322,7 @@ async function applyInspectorCloud(spec) {
   if (!spec) return;
   let status = null;
   try {
-    const response = await fetch("./api/cloud/status", { cache: "no-store" });
+    const response = await fetch("/api/cloud/status", { cache: "no-store" });
     if (response.ok) status = await response.json();
   } catch {}
   if (!status) return;
@@ -4345,7 +4345,7 @@ async function applyInspectorCloud(spec) {
       inspectorCloudAppliedKey = null;
       // serving が見えなくても stop は投げる(serve 発行直後の反映待ちで
       // status が Null を返す間に抜けると、後から serve が残り続ける)
-      await fetch("./api/cloud/stop", { method: "POST" });
+      await fetch("/api/cloud/stop", { method: "POST" });
       setStatus(t("cloud.status.stopped"));
       showServing(null);
       return;
@@ -4359,7 +4359,7 @@ async function applyInspectorCloud(spec) {
       let installDir = "";
       try { installDir = localStorage.getItem("kasugai.cloud.installDir") || ""; } catch (e) {}
       if (installDir) installBody.dir = installDir;
-      const res = await fetch("./api/cloud/install", {
+      const res = await fetch("/api/cloud/install", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(installBody),
@@ -4367,7 +4367,7 @@ async function applyInspectorCloud(spec) {
       const text = await res.text();
       if (!res.ok) throw new Error(text || res.statusText);
       // 導入後の状態で serve を続行するため status を取り直す
-      const res2 = await fetch("./api/cloud/status", { cache: "no-store" });
+      const res2 = await fetch("/api/cloud/status", { cache: "no-store" });
       if (res2.ok) status = await res2.json();
       if (!status.installed) throw new Error(t("cloud.rclone.notInstalled"));
     }
@@ -4386,7 +4386,7 @@ async function applyInspectorCloud(spec) {
     const body = { remote: spec.remote, root: spec.root, readOnly: spec.readOnly };
     // ドライブ割当は Windows のみ(他OSで渡すとサーバーが400を返す)
     if (spec.drive && status.os === "windows") body.drive = spec.drive;
-    const response = await fetch("./api/cloud/serve", {
+    const response = await fetch("/api/cloud/serve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -6032,7 +6032,7 @@ function setupEvents() {
     if (hasBackendFeature("fileWrite")) {
       const project = currentProjectId || "default";
       const rel = String(name).split("/").filter(Boolean).map(encodeURIComponent).join("/");
-      const response = await fetch(`./api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
+      const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
       if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
       return "server";
     }
@@ -6396,7 +6396,7 @@ function setupEvents() {
   }
 
   const cloudApi = async (path, options = {}) => {
-    const response = await fetch(`./api/cloud/${path}`, { cache: "no-store", ...options });
+    const response = await fetch(`/api/cloud/${path}`, { cache: "no-store", ...options });
     const text = await response.text();
     if (!response.ok) throw new Error(text || response.statusText);
     try { return JSON.parse(text); } catch { return text; }
@@ -6594,7 +6594,7 @@ function setupEvents() {
         const fileName = `${currentProjectId || "kasugai_canvas"}.kasc`;
         if (!window.confirm(t("cloud.saveKascConfirm", { name: fileName }))) return;
         try {
-          await fetch(`./api/cloud/file?path=${encodeURIComponent(fileName)}`, {
+          await fetch(`/api/cloud/file?path=${encodeURIComponent(fileName)}`, {
             method: "PUT",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: text,
@@ -9358,7 +9358,7 @@ window.kasugaiApi = {
   async listDataFiles() {
     if (!hasBackendFeature("fileWrite")) return [];
     const project = currentProjectId || "default";
-    const response = await fetch(`./api/files?project=${encodeURIComponent(project)}`, { cache: "no-store" });
+    const response = await fetch(`/api/files?project=${encodeURIComponent(project)}`, { cache: "no-store" });
     if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
     const data = await response.json().catch(() => ({}));
     return Array.isArray(data?.files) ? data.files : [];
@@ -9369,7 +9369,7 @@ window.kasugaiApi = {
     const project = currentProjectId || "default";
     const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
     if (!rel) return { ok: false, error: "name is required" };
-    const response = await fetch(`./api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
+    const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
     if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
     return { ok: true, name };
   },
@@ -9378,7 +9378,7 @@ window.kasugaiApi = {
     const project = currentProjectId || "default";
     const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
     if (!rel) return { ok: false, error: "name is required" };
-    const response = await fetch(`./api/files/${encodeURIComponent(project)}/${rel}`, { method: "DELETE" });
+    const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "DELETE" });
     if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
     return { ok: true, name };
   },

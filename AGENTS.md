@@ -36,7 +36,7 @@
 
 ## 動作確認（Playwrigh：必須）
 
-- **コードを修正したら必ず動作確認を行う**。構文チェック（`node --check web/app.js`・`cargo check`）だけで完了とみなさない
+- **コードを修正したら必ず動作確認を行う**。構文チェック（`node --check web/cesium/app.js`・`cargo check`）だけで完了とみなさない
 - フロントエンドの挙動変更はブラウザで実際に検証する（Playwright + インストール済みブラウザによる自動化を推奨。`applyInspector`・`kasugaiApi`・`vectorAttrWidget.open()` 等を `page.evaluate` で直接叩けば UI 操作なしで検証できる）
 - 検証は「変更した機能が実際に動くこと」に加え、既存機能への影響（回帰）も対象とする
 - サーバー側の変更は起動して実リクエスト（curl 等）で確認する
@@ -54,9 +54,9 @@
 ## 言語方針
 
 - **リポジトリの基本言語は日本語**とする。ドキュメント・コードコメント・`web/index.html` のリテラルテキスト（`data-i18n` 適用前の初期表示）は日本語で記述する
-- **アプリの翻訳（i18n）の基準言語は英語**とする。`web/i18n/en.json` がフォールバック辞書であり、`t()` はキー未登録時に en の値を返す
-- 新しい翻訳キーを追加するときは `en.json` を正本として先に追加し、全言語の辞書（`web/i18n/*.json`）でキー数を一致させる
-- 対応言語は `web/i18n.js` の `SUPPORTED_LANGUAGES` で管理。言語追加は同配列と辞書ファイルの追加のみで行う
+- **アプリの翻訳（i18n）の基準言語は英語**とする。`web/cesium/i18n/en.json` がフォールバック辞書であり、`t()` はキー未登録時に en の値を返す
+- 新しい翻訳キーを追加するときは `en.json` を正本として先に追加し、全言語の辞書（`web/cesium/i18n/*.json`）でキー数を一致させる
+- 対応言語は `web/cesium/i18n.js` の `SUPPORTED_LANGUAGES` で管理。言語追加は同配列と辞書ファイルの追加のみで行う
 
 ## UI方針
 
@@ -87,6 +87,34 @@
 - フロントエンドは静的配信のみで動作させる（`web/` を任意のHTTPサーバーに置くだけ）
 - Rust サーバーは静的配信のオプション。独自APIは原則追加しない（例外は「API 方針」参照）
 - AI連携はブラウザから外部API（Gemini等）を直接呼ぶ構成とする
+
+## web/ レイアウト（マルチエンジン構成）
+
+`web/` はエンジン別フロントを並べるマルチエンジン構成。geo_webview との役割分担（geo_webview が `.kasc`+`DATA/` を出力し、再生プレイヤーは本アプリが担う）に基づく。
+
+```
+web/
+  index.html      エンジン選択リダイレクト（?engine=cesium|maplibre|openlayers、
+                  既定 cesium。engine 以外のクエリとハッシュは対象へ引継ぎ）
+  cesium/         Cesium フロント（現行アプリ一式:
+                  index.html/app.js/styles.css/PLUGIN/plugins.json/i18n 等）
+  maplibre/       MapLibre フロント（整備予定）
+  openlayers/     OpenLayers フロント（整備予定）
+  shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
+                  i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
+  projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）
+    projects.json          プロジェクト一覧マニフェスト（外部登録分はサーバーがマージ）
+    DATA/                  （任意）全プロジェクト共有のデータ。`../DATA/x` 参照がここに解決
+    <id>/                  プロジェクト（id 単位で複数管理。各プロジェクトは `.kasc`+`DATA/` の組）
+      kasugai_canvas.kasc  プロジェクト設定（外部登録は実ファイル名を登録名で保持）
+      DATA/                プロジェクト専用データ（.kasc 行の相対参照はこの dir 基準）
+```
+
+- **エンジン横断コードは `shared/`、エンジン固有コードは各エンジンフォルダに置く**。新規ファイルの置き場はこの基準で判断する
+- 認証・公開パスの許可リストは `/cesium/` 起点（`agent/app/main.py` の `_PUBLIC_PATHS`/`_PUBLIC_PREFIXES`・`workers/worker.js` の `PUBLIC_PATHS`/`PUBLIC_PREFIXES`）。新エンジン公開時は同様に更新する
+- `/api/plugins`（プラグイン保存/削除）の対象は `web/cesium/plugins.json`・`web/cesium/PLUGIN/`（プラグイン仕様は当面 Cesium 固有。エンジン横断プラグインは別途設計）
+- `sw-duckdb.js` の Service Worker スコープは登録元ディレクトリ（現状 `/cesium/`）。エンジンごとに登録する
+- API・データパスは `/api/*`・`/projects/*`・`/health` のルート起点で書く（`./api/` 等のページ相対はエンジン配下で壊れるため禁止）
 
 ## AI機能のティア分け（実行環境ごとの能力）
 
@@ -164,13 +192,13 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
 ### 経路の分類
 
 - **ネイティブ経路**: `3dtiles:` / `geojson:` / `xyz:` など CesiumJS が直接読める形式
-- **GeoJSON 正規化経路**: 非対応形式をデコーダーで GeoJSON 化して同じ DataSource 経路に乗せる。デコーダーは `web/app.js` の **`vectorDecoders` レジストリ**（type→`async (item) => GeoJSON` の Map）に登録する
+- **GeoJSON 正規化経路**: 非対応形式をデコーダーで GeoJSON 化して同じ DataSource 経路に乗せる。デコーダーは `web/cesium/app.js` の **`vectorDecoders` レジストリ**（type→`async (item) => GeoJSON` の Map）に登録する
   - 実装済み: `geoparquet:`（`loadGeoParquetAsGeoJson()`。hyparquet を CDN から遅延ロード、WKB/ネイティブ GEOMETRY 型の両方を GeoJSON ジオメトリに変換。**常に全件読み込み**で絞り込みは持たない。「Parquet をそのまま置くだけで表示」の利便性重視の経路で、中規模までが目安）
   - 実装済み: `flatgeobuf:`（`loadFlatGeobufAsGeoJson()`。flatgeobuf 公式 JS リーダーの geojson サブモジュールを CDN から遅延ロードし、レスポンスボディを ReadableStream のまま `deserialize` で逐次 GeoJSON Feature 化。空間インデックスによる範囲読みは持たず**全件読み込み**だが、全件バッファリングはしない）
-  - 実装済み: `gpkg:` / `geopackage:`（`loadGeoPackageAsGeoJson()` → **`web/gpkg-worker.js`** の module Worker に委譲。sql.js(SQLite WASM)を Worker 内で CDN から遅延ロードし、GPKG を SQLite として直接開く。fetch・DB 展開・WKB デコードが別スレッドで走るため大量地物でも地図操作をブロックしない。開いた DB は Worker が url キーで保持し、再クエリは再ダウンロード無しで走る。GPkgBinary ヘッダを剥がして WKB→GeoJSON ジオメトリに変換。`table=` で複数地物テーブルから対象を選択可。**絞り込みオプション**: `where=`（SQLite 式）/`limit=`/`columns=`（属性列プルーニング）/`bbox=auto`（**sql.js のビルドには rtree モジュールが無い**ため、各行の GPkgBinary ヘッダ内エンベロープを読んで JS で表示範囲判定し、範囲外地物の WKB デコードをスキップ。`camera.moveEnd`/`camera.changed` で再クエリ）。**`bbox=auto` は既定 ON**（`bbox=off` で明示解除すると全件読み込み系に戻る）。クエリ系扱い（`query` が item 判定関数。`isQueryDecoder()` が全使用箇所で評価）となり、⏷フィルター編集・検索索引からの除外・属性一覧の全件クエリ（`queryGpkgAttributeRows()`。行位置は GPkgBinary エンベロープの中心。エンベロープ非保持の地物は WKB デコードした座標範囲の中心にフォールバック）が有効になる。QGIS が「データベースに保存」する `layer_styles` テーブルの QML を読み取り `useAsDefault` を優先して `item.qmlStyle` に適用（`style=` 明示指定が優先）。**DuckDB spatial の `ST_Read` は非COI環境でスレッド生成に失敗しリモート URL も読めないため GPKG には使わない**。`duckdb:` で `.gpkg` 拡張子または `format=gpkg` を指定した場合も同関数へ振り分け（`isGpkgBackedItem()` で判定し属性一覧も同経路）。ファイル全体を初回ダウンロードするため超大規模 GPKG は不向き）
+  - 実装済み: `gpkg:` / `geopackage:`（`loadGeoPackageAsGeoJson()` → **`web/cesium/gpkg-worker.js`** の module Worker に委譲。sql.js(SQLite WASM)を Worker 内で CDN から遅延ロードし、GPKG を SQLite として直接開く。fetch・DB 展開・WKB デコードが別スレッドで走るため大量地物でも地図操作をブロックしない。開いた DB は Worker が url キーで保持し、再クエリは再ダウンロード無しで走る。GPkgBinary ヘッダを剥がして WKB→GeoJSON ジオメトリに変換。`table=` で複数地物テーブルから対象を選択可。**絞り込みオプション**: `where=`（SQLite 式）/`limit=`/`columns=`（属性列プルーニング）/`bbox=auto`（**sql.js のビルドには rtree モジュールが無い**ため、各行の GPkgBinary ヘッダ内エンベロープを読んで JS で表示範囲判定し、範囲外地物の WKB デコードをスキップ。`camera.moveEnd`/`camera.changed` で再クエリ）。**`bbox=auto` は既定 ON**（`bbox=off` で明示解除すると全件読み込み系に戻る）。クエリ系扱い（`query` が item 判定関数。`isQueryDecoder()` が全使用箇所で評価）となり、⏷フィルター編集・検索索引からの除外・属性一覧の全件クエリ（`queryGpkgAttributeRows()`。行位置は GPkgBinary エンベロープの中心。エンベロープ非保持の地物は WKB デコードした座標範囲の中心にフォールバック）が有効になる。QGIS が「データベースに保存」する `layer_styles` テーブルの QML を読み取り `useAsDefault` を優先して `item.qmlStyle` に適用（`style=` 明示指定が優先）。**DuckDB spatial の `ST_Read` は非COI環境でスレッド生成に失敗しリモート URL も読めないため GPKG には使わない**。`duckdb:` で `.gpkg` 拡張子または `format=gpkg` を指定した場合も同関数へ振り分け（`isGpkgBackedItem()` で判定し属性一覧も同経路）。ファイル全体を初回ダウンロードするため超大規模 GPKG は不向き）
   - 実装済み: `duckdb:` / `sql:`（`loadDuckDbLayerAsGeoJson()` / `loadDuckDbQueryAsGeoJson()`。DuckDB-WASM を CDN から遅延ロードし、SQL で絞り込んでから GeoJSON 化。`duckdb:` はファイル+`where=`/`limit=`/`geom=`/`lon=`・`lat=`/`format=`/`columns=`（属性列プルーニング）/`covering=`（xmin,xmax,ymin,ymax 列名）/`bbox=auto`（**既定 ON**。`bbox=off` で常時全件描画に解除）/`render=`/`proxy=on`（ローカルサーバーの `/api/fetch` 経由取得。Range/HEAD 転送対応・`fetchRange` 能力があるバックエンドでのみ有効。CORS 回避用の opt-in）の宣言的指定。ジオメトリは WKB バイナリで受領し、`bbox=auto` 時は GeoParquet 1.1 `covering` bbox 列への範囲述語を優先して row group 統計スキップを効かせる。`sql:` は任意の SELECT 文（`:bbox` プレースホルダで表示範囲連動・末尾 `| off` / `| render=entity` / `| render=primitive` / `| attr=出典` をオプションとして末尾から順に解釈。`attr=` の値に `|` は含められない）。spatial 拡張があれば WKT・ST_Read・空間述語も利用可、無くても WKB/GeoJSON テキストと lon/lat ポイント化は動作する）
     - **設計方針: 「検索は常に全件検索・表示はバッファの表示範囲のみ」**。クエリ系レイヤーはベクター検索パネル（読み込み済み GeoJSON/entity の索引）の対象外で、検索はファイル全件を対象とする SQL フィルター(⏷)に一本化する。属性値一覧ウィジェットにもクエリ系レイヤーは選択肢として出る（選択肢は索引ではなくレイヤー一覧から直接構築）し、一覧内容は `queryDuckDbAttributeRows()` が DuckDB に直接クエリして全件対象（bbox 非適用・`where=` 適用・位置は `ST_Centroid` または lon/lat 列）で取得する。`bbox=auto`+`where=` 併用時は `where=` のみの `COUNT(*)` を併走し「検索ヒット全 N 件 / 表示範囲内 M 件」をコンソールに出す。描画は既定で entity（`GeoJsonDataSource`・地形ドレープ可）で、`render=primitive` で `GeoJsonPrimitive` バッチ描画（entity 非経由・大量地物向け）に opt-in 可能。**注意**: `GeoJsonPrimitive` は `CLAMP_TO_*` 時に `scene.vectorProvider`（地形タイル焼き込み）へ回され `scene.pick` で拾えなくなるため、primitive 描画は常に `HeightReference.NONE`（ドレープ非対応。地形ありで埋まるため既定は entity としている）
-  - **スタイル `style=` は全ベクター系行タイプで共通**: `style=QMLファイルURL` で QGIS レイヤースタイル(.qml・QGIS4以降対象)を適用する。パース・式評価・シンボル/ラベル/パターン生成は `web/qml-style.js` に集約し、`loadQmlStyle`(URL) / `compileQmlStyle`(テキスト) → `applyQmlStyleToDataSource`(entity) / `applyQmlStyleToPrimitive`(primitive・BufferMaterial を featureId 単位で適用) で両描画経路に乗せる。スタイルは共有 GeoJSON キャッシュを汚さないよう entity/primitive に直接適用する。QML 取得・コンパイルは `ensureQmlStyle()` が `qmlStyleCache`(URL キー・applyInspector で破棄)で遅延実行し、非表示レイヤーは読まない。レンダラがシンボルを返さない feature は非表示(QGIS 準拠)
+  - **スタイル `style=` は全ベクター系行タイプで共通**: `style=QMLファイルURL` で QGIS レイヤースタイル(.qml・QGIS4以降対象)を適用する。パース・式評価・シンボル/ラベル/パターン生成は `web/cesium/qml-style.js` に集約し、`loadQmlStyle`(URL) / `compileQmlStyle`(テキスト) → `applyQmlStyleToDataSource`(entity) / `applyQmlStyleToPrimitive`(primitive・BufferMaterial を featureId 単位で適用) で両描画経路に乗せる。スタイルは共有 GeoJSON キャッシュを汚さないよう entity/primitive に直接適用する。QML 取得・コンパイルは `ensureQmlStyle()` が `qmlStyleCache`(URL キー・applyInspector で破棄)で遅延実行し、非表示レイヤーは読まない。レンダラがシンボルを返さない feature は非表示(QGIS 準拠)
   - クエリ系形式（`query` フラグ）は再クエリ対応: レイヤー一覧の ⏷ ボタンで WHERE 式/クエリを対話的に変更（`editLayerQueryFilter` → `reloadVectorLayer` で DataSource 差替え・`.kasc` 行にも反映）、`bbox=auto`/`:bbox` は `camera.moveEnd`/`camera.changed` デバウンスで表示範囲を再クエリする（`refreshViewportLayers`）。`query` は真値（常にクエリ系）または item 判定関数（条件付きクエリ系）を取り、判定は `isQueryDecoder()` に集約。gpkg:/duckdb: は `bbox=auto` が既定 ON のため通常クエリ系になる（`bbox=off` 明示の gpkg: のみ全件読み込み系としてキャッシュ・検索索引の対象のまま）
   - **描画方式 `render=` は全ベクター系行タイプで共通**: `geojson:`/`layer:`/`geoparquet:`/`flatgeobuf:`/`duckdb:`/`sql:` すべてで `render=primitive|entity` を指定できる（既定 entity。primitive は `GeoJsonPrimitive.fromGeoJson`+`HeightReference.NONE` のピック可能なバッチ描画）。レイヤー行の明示指定は設定タブの「ベクター高速ドレープ」グローバル設定より優先され、`render=entity` で個別に entity へ逃がせる。高速ドレープ ON 時は全件読み込み系が `GeoJsonPrimitive`+`CLAMP_*` で描画される（ピック対象外だがベクター検索は保持した GeoJSON から索引されるため利用可。クエリ系は `render=` で個別管理するため対象外）
   - **ベクター描画件数上限（`#vector-entity-limit`・既定 20000・0/空欄/不正値=無制限）**: entity 描画ベクターの**合計**件数バジェット（フリーズ防止の安全弁）。`refreshLayers` で描画順に残枠を減算し、entity 構築前に `features` を切り捨てる（`limitGeoJsonFeatures`。`vectorSourceCache` の共有ソースは浅いコピーで非破壊のため上限解除で全件復帰）。primitive 経路は entity コストを支払わないため対象外。`reloadVectorLayer`（⏷フィルター・`bbox=auto` 再クエリ）にも同じ上限を適用。切り捨てたレイヤーは `item.entityLimited` に `{shown,total}` を保持し一覧に `shown/total` バッジを出す。**切り捨ては描画のみ**: フルソースを `item.geojsonSource` に保持するため、ベクター検索索引・`getLayerGeoJson`・属性一覧は常に全件対象（「検索は常に全件検索」の設計方針と一致）

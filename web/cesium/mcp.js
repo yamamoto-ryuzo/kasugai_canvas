@@ -13,7 +13,7 @@
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const MCP_SERVERS_KEY = "mcpServers";
 const MCP_ALLOW_WRITE_KEY = "mcpAllowWrite";
-const MCP_PROXY_PATH = "./api/mcp";
+const MCP_PROXY_PATH = "/api/mcp";
 
 // バックエンドの mcpProxy capability。app.js が initMcp() で注入する
 let proxyAvailable = () => false;

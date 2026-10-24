@@ -143,6 +143,13 @@ GeoJSON 正規化 → GeoJsonDataSource / GeoJsonPrimitive</code></pre>
       <pre class="text"><code>QGIS / GDAL
     ↓ GeoJSON
 KASUGAI `geojson:` → `GeoJsonDataSource`</code></pre>
+      <p><strong>実装済み: QGIS→KASUGAI 送出(geo_webview)</strong>：QGIS プラグイン
+      <code>geo_webview</code> の「KASUGAI」ボタン / <code>GET /kasugai</code> エンドポイント /
+      bridge の <code>kasugaiExport</code> で、レイヤーツリーを .kasc+DATA/(スタイル .qml 同梱)
+      として出力し、起動中の KASUGAI へ外部プロジェクト登録・切替まで行える。
+      GPKG/GeoParquet/FlatGeobuf ソースは変換せずネイティブ参照し、それ以外のベクターは
+      GeoJSON(EPSG:4326)へ変換する。KASUGAI 側は web プラグイン <code>qgis-import</code>
+      (プラグインカタログ)の「QGISから取り込み」ボタンからも同エンドポイントを呼べる。</p>
       <h3
       id="mvt大規模ベクターの将来形式">MVT：大規模ベクターの将来形式</h3>
       <p>広域・大容量データでは、全件をGeoJSONで取得せず、表示範囲とズームに応じてMVTを取得する。</p>

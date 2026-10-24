@@ -845,7 +845,7 @@ async fn save_plugin(
     if request.code.trim().is_empty() {
         return Err((StatusCode::BAD_REQUEST, "code が空です".to_string()));
     }
-    let plugin_dir = state.web_dir.join("PLUGIN").join(&request.id);
+    let plugin_dir = state.web_dir.join("cesium").join("PLUGIN").join(&request.id);
     tokio::fs::create_dir_all(&plugin_dir)
         .await
         .map_err(internal_error)?;
@@ -872,7 +872,7 @@ async fn save_plugin(
     if let Some(layer) = request.layer {
         entry["layer"] = layer;
     }
-    update_plugins_json(&state.web_dir, &request.id, Some(entry))?;
+    update_plugins_json(&state.web_dir.join("cesium"), &request.id, Some(entry))?;
     Ok(Json(json!({ "ok": true, "id": request.id })))
 }
 
@@ -886,13 +886,13 @@ async fn delete_plugin(
             "プラグインIDが不正です".to_string(),
         ));
     }
-    let plugin_dir = state.web_dir.join("PLUGIN").join(&id);
+    let plugin_dir = state.web_dir.join("cesium").join("PLUGIN").join(&id);
     if plugin_dir.exists() {
         tokio::fs::remove_dir_all(&plugin_dir)
             .await
             .map_err(internal_error)?;
     }
-    update_plugins_json(&state.web_dir, &id, None)?;
+    update_plugins_json(&state.web_dir.join("cesium"), &id, None)?;
     Ok(Json(json!({ "ok": true, "id": id })))
 }
 

@@ -26,6 +26,15 @@
         "to": "20254",
         "datasets": { "price": true, "shelter": true, "station": true, "zoning": false }
       }
+    },
+    {
+      "id": "qgis-import",
+      "name": "QGIS取り込み",
+      "version": "0.1.0",
+      "url": "./PLUGIN/qgis-import/plugin.js",
+      "options": {
+        "port": 8089
+      }
     }
   ]
 }

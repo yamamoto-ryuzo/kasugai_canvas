@@ -70,10 +70,12 @@ if config.ALLOW_ORIGINS:
 
 # ログイン描画に必要な静的ファイルのみ公開（workers/worker.js の PUBLIC_PATHS 相当）
 _PUBLIC_PATHS = frozenset({
-    "/", "/index.html", "/styles.css", "/favicon.ico",
-    "/auth-selector.js", "/auth-login-form.js", "/auth-methods.json", "/i18n.js",
+    "/", "/index.html", "/favicon.ico",
+    "/cesium/index.html", "/cesium/styles.css", "/cesium/favicon.ico",
+    "/cesium/auth-selector.js", "/cesium/auth-login-form.js",
+    "/cesium/auth-methods.json", "/cesium/i18n.js",
 })
-_PUBLIC_PREFIXES = ("/i18n/", "/PLUGIN/auth-")
+_PUBLIC_PREFIXES = ("/cesium/i18n/", "/cesium/PLUGIN/auth-")
 # Cookie ゲートより先に自分で認証する API（worker.js と同じ処理順序）
 _SELF_AUTH_PATHS = frozenset({"/api/auth", "/api/kasc", "/health"})
 _SELF_AUTH_PREFIXES = ("/api/data/",)
@@ -310,6 +312,7 @@ async def api_data_put(key: str, request: Request):
 # KASUGAI_AUTH_MODE 設定時は control を動的に返す（モード変更にイメージ再ビルド不要）
 if config.auth_mode():
     @app.get("/auth-methods.json")
+    @app.get("/cesium/auth-methods.json")
     def auth_methods_json():
         return {"control": int(config.AUTH_MODE)}
 
