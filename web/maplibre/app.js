@@ -1,6 +1,9 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import { loadKascProject, resolveKascUrl, camToZoom } from "/shared/kasc.js";
+import { loadVectorItem } from "/shared/vector-load.js";
+
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv"]);
 
 const panel = {
   project: document.querySelector("#project-select"),
@@ -41,11 +44,12 @@ function rasterSource(item, baseUrl) {
 }
 
 // .kasc 1行 → レイヤ登録。戻り値はこの項目が持つレイヤ id の配列（表示切替用）
-function addKascLayer(item, baseUrl) {
+async function addKascLayer(item, baseUrl) {
   const sid = `kasc-${managedSources.length}`;
   const lids = [];
-  if (item.type === "geojson" || item.type === "layer") {
-    map.addSource(sid, { type: "geojson", data: resolveKascUrl(item.url, baseUrl) });
+  if (VECTOR_TYPES.has(item.type)) {
+    const { geojson } = await loadVectorItem(item, baseUrl);
+    map.addSource(sid, { type: "geojson", data: geojson });
     const kinds = [
       ["fill", ["==", ["geometry-type"], "Polygon"], { "fill-color": "#3a7bd5", "fill-opacity": 0.4 }],
       ["line", ["!=", ["geometry-type"], "Point"], { "line-color": "#2c5ea8", "line-width": 1.5 }],
@@ -112,14 +116,14 @@ async function loadProject(id) {
   for (const item of doc.bases) {
     if (item.mode === "none") continue;
     if (item.mode === "transparent") { document.querySelector("#map").style.background = "transparent"; continue; }
-    const lids = addKascLayer(item, baseUrl);
+    const lids = await addKascLayer(item, baseUrl);
     entries.push({ item, lids });
   }
   if (doc.background) document.querySelector("#map").style.background = doc.background;
 
   for (const item of doc.layers) {
     try {
-      const lids = addKascLayer(item, baseUrl);
+      const lids = await addKascLayer(item, baseUrl);
       entries.push({ item, lids });
     } catch (err) {
       unsupported.push({ ...item, type: `${item.type}(読込失敗)` });

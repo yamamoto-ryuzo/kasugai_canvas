@@ -9,6 +9,9 @@ import VectorSource from "https://esm.sh/ol@10.6.1/source/Vector.js";
 import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
 import { fromLonLat } from "https://esm.sh/ol@10.6.1/proj.js";
 import { loadKascProject, resolveKascUrl, camToZoom } from "/shared/kasc.js";
+import { loadVectorItem } from "/shared/vector-load.js";
+
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv"]);
 
 const panel = {
   project: document.querySelector("#project-select"),
@@ -40,10 +43,8 @@ function bboxExtent(item) {
 
 async function buildLayer(item, baseUrl) {
   const source = xyzSource(item, baseUrl);
-  if (item.type === "geojson" || item.type === "layer") {
-    const res = await fetch(resolveKascUrl(item.url, baseUrl));
-    if (!res.ok) throw new Error(`${item.title}: ${res.status}`);
-    const geojson = await res.json();
+  if (VECTOR_TYPES.has(item.type)) {
+    const { geojson } = await loadVectorItem(item, baseUrl);
     return new VectorLayer({
       source: new VectorSource({
         features: new GeoJSON().readFeatures(geojson, {
