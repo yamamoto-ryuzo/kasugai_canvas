@@ -84,6 +84,9 @@ async function addKascLayer(item, baseUrl) {
 
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
+  const tableBox = document.createElement("div");
+  tableBox.className = "note";
+  panel.layers.append(tableBox);
   for (const entry of entries) {
     const row = document.createElement("label");
     row.className = "layer-row";
@@ -95,8 +98,21 @@ function renderLayerRows(entries, unsupported) {
         if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", cb.checked ? "visible" : "none");
       }
     });
-    row.append(cb, document.createTextNode(entry.item.title || entry.item.url));
-    panel.layers.append(row);
+    const name = document.createElement("span");
+    name.textContent = entry.item.title || entry.item.url;
+    name.style.cursor = "pointer";
+    name.title = "属性一覧を表示";
+    name.addEventListener("click", () => {
+      const feats = (entry.item._geojson?.features || []).slice(0, 50);
+      const cols = [...new Set(feats.flatMap(f => Object.keys(f.properties || {})))].slice(0, 8);
+      if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
+      const rows = feats.map(f =>
+        `<tr>${cols.map(c => `<td style="border:1px solid #ccc;padding:1px 4px">${String(f.properties[c] ?? "")}`).join("")}</tr>`
+      ).join("");
+      tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table style="font-size:11px;border-collapse:collapse"><tr>${cols.map(c => `<th style="border:1px solid #ccc;padding:1px 4px;text-align:left">${c}`).join("")}</tr>${rows}</table>`;
+    });
+    row.append(cb, name);
+    panel.layers.insertBefore(row, tableBox);
   }
   panel.unsupported.textContent = unsupported.length
     ? `未対応行: ${unsupported.map(i => i.type).join(", ")}（Cesium 版で対応）`

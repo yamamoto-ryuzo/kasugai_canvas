@@ -80,6 +80,9 @@ async function buildLayer(item, baseUrl) {
 
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
+  const tableBox = document.createElement("div");
+  tableBox.className = "note";
+  panel.layers.append(tableBox);
   for (const entry of entries) {
     const row = document.createElement("label");
     row.className = "layer-row";
@@ -87,8 +90,24 @@ function renderLayerRows(entries, unsupported) {
     cb.type = "checkbox";
     cb.checked = entry.item.visible;
     cb.addEventListener("change", () => entry.layer.setVisible(cb.checked));
-    row.append(cb, document.createTextNode(entry.item.title || entry.item.url));
-    panel.layers.append(row);
+    const name = document.createElement("span");
+    name.textContent = entry.item.title || entry.item.url;
+    name.style.cursor = "pointer";
+    name.title = "属性一覧を表示";
+    name.addEventListener("click", () => {
+      const source = entry.layer.getSource?.();
+      if (!source?.getFeatures) { tableBox.textContent = "（属性なし）"; return; }
+      const feats = source.getFeatures().slice(0, 50);
+      const cols = [...new Set(feats.flatMap(f => Object.keys(f.getProperties()).filter(k => k !== "geometry")))].slice(0, 8);
+      if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
+      const rows = feats.map(f => {
+        const p = f.getProperties();
+        return `<tr>${cols.map(c => `<td>${String(p[c] ?? "")}`).join("")}</tr>`;
+      }).join("");
+      tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table style="font-size:11px;border-collapse:collapse"><tr>${cols.map(c => `<th style="border:1px solid #ccc;padding:1px 4px;text-align:left">${c}`).join("")}</tr>${rows.replace(/<td>/g, '<td style="border:1px solid #ccc;padding:1px 4px">')}</table>`;
+    });
+    row.append(cb, name);
+    panel.layers.insertBefore(row, tableBox);
   }
   panel.unsupported.textContent = unsupported.length
     ? `未対応行: ${unsupported.map(i => i.type).join(", ")}（Cesium 版で対応）`
