@@ -1,13 +1,13 @@
 // KASUGAI Canvas — OpenLayers フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を OpenLayers で再生する
-import Map from "https://cdn.jsdelivr.net/npm/ol@10.6.1/Map.js/+esm";
-import View from "https://cdn.jsdelivr.net/npm/ol@10.6.1/View.js/+esm";
-import TileLayer from "https://cdn.jsdelivr.net/npm/ol@10.6.1/layer/Tile.js/+esm";
-import VectorLayer from "https://cdn.jsdelivr.net/npm/ol@10.6.1/layer/Vector.js/+esm";
-import XYZ from "https://cdn.jsdelivr.net/npm/ol@10.6.1/source/XYZ.js/+esm";
-import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.6.1/source/Vector.js/+esm";
-import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.6.1/format/GeoJSON.js/+esm";
-import { fromLonLat } from "https://cdn.jsdelivr.net/npm/ol@10.6.1/proj.js/+esm";
+import Map from "https://esm.sh/ol@10.6.1/Map.js";
+import View from "https://esm.sh/ol@10.6.1/View.js";
+import TileLayer from "https://esm.sh/ol@10.6.1/layer/Tile.js";
+import VectorLayer from "https://esm.sh/ol@10.6.1/layer/Vector.js";
+import XYZ from "https://esm.sh/ol@10.6.1/source/XYZ.js";
+import VectorSource from "https://esm.sh/ol@10.6.1/source/Vector.js";
+import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
+import { fromLonLat } from "https://esm.sh/ol@10.6.1/proj.js";
 import { loadKascProject, resolveKascUrl, camToZoom } from "/shared/kasc.js";
 
 const panel = {
