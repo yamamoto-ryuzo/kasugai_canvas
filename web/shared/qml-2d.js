@@ -62,6 +62,23 @@ export function olQmlStyleFunction(compiled, OL) {
   };
 }
 
+// spec.scale {near,far}（Cesium のカメラ距離m指定）→ 2D の解像度範囲へ近似変換
+// 距離 ≈ 解像度(m/px) × 500（画面高500px相当）のヒューリスティック
+export function compiledScaleToResRange(compiled) {
+  const scale = compiled.evaluate({})?.scale;
+  if (!scale) return null;
+  const K = 500;
+  return {
+    minRes: (scale.near ?? 0) / K,
+    maxRes: Number.isFinite(scale.far) ? scale.far / K : Infinity,
+  };
+}
+
+// 解像度(m/px) → Web メルカトルズーム
+export function resToZoom(res, lat = 0) {
+  return Math.log2((156543.03392 * Math.cos(lat * Math.PI / 180)) / res);
+}
+
 // --- MapLibre: GeoJSON の各 feature に __kasc_* を焼き込み、データ駆動 paint 式で適用
 const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color"];
 

@@ -15,7 +15,7 @@ import Fill from "https://esm.sh/ol@10.6.1/style/Fill.js";
 import Stroke from "https://esm.sh/ol@10.6.1/style/Stroke.js";
 import CircleStyle from "https://esm.sh/ol@10.6.1/style/Circle.js";
 import Icon from "https://esm.sh/ol@10.6.1/style/Icon.js";
-import { loadCompiledQml, olQmlStyleFunction } from "/shared/qml-2d.js";
+import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange } from "/shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv"]);
 
@@ -66,6 +66,11 @@ async function buildLayer(item, baseUrl) {
       try {
         const compiled = await loadCompiledQml(item.opts.style, baseUrl);
         layer.setStyle(olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon }));
+        const range = compiledScaleToResRange(compiled);
+        if (range) {
+          layer.setMinResolution(range.minRes);
+          if (Number.isFinite(range.maxRes)) layer.setMaxResolution(range.maxRes);
+        }
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
     return layer;
@@ -270,3 +275,23 @@ if (window.KascPanel) KascPanel.init({ engine: "openlayers", map });
 loadProject().catch(err => {
   panel.unsupported.textContent = String(err.message || err);
 });
+
+// ?follow[=<base>] → geo_webview の /present/state をポーリングして表示を追従
+{
+  const params = new URLSearchParams(location.search);
+  if (params.has("follow") || params.has("present")) {
+    const base = params.get("follow") || params.get("present") || "";
+    const tick = async () => {
+      try {
+        const s = await (await fetch(`${base}/present/state`)).json();
+        const view = map.getView();
+        if (typeof s.x3857 === "number" && typeof s.y3857 === "number") view.setCenter([s.x3857, s.y3857]);
+        else if (typeof s.lon === "number" && typeof s.lat === "number") view.setCenter(fromLonLat([s.lon, s.lat]));
+        if (typeof s.zoom === "number") view.setZoom(s.zoom);
+        if (typeof s.rotation === "number") view.setRotation(-s.rotation * Math.PI / 180);
+      } catch (_) { /* 接続不可時は前回状態を維持 */ }
+    };
+    setInterval(tick, 1500);
+    tick();
+  }
+}

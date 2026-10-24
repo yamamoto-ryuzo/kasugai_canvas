@@ -54,11 +54,20 @@ async function addKascLayer(item, baseUrl) {
       ["line", ["!=", ["geometry-type"], "Point"], { "line-color": "#2c5ea8", "line-width": 1.5 }],
       ["circle", ["==", ["geometry-type"], "Point"], { "circle-radius": 5, "circle-color": "#2c5ea8" }],
     ];
+    let zoomRange = null;
     if (item.opts?.style) {
       try {
-        const { loadCompiledQml, maplibreApplyQml } = await import("/shared/qml-2d.js");
+        const { loadCompiledQml, maplibreApplyQml, compiledScaleToResRange, resToZoom } = await import("/shared/qml-2d.js");
         const compiled = await loadCompiledQml(item.opts.style, baseUrl);
         kinds = maplibreApplyQml(geojson, compiled).kinds;
+        const range = compiledScaleToResRange(compiled);
+        if (range) {
+          const lat = map.getCenter().lat;
+          zoomRange = {
+            minzoom: Math.max(0, resToZoom(range.maxRes === Infinity ? 1e9 : range.maxRes, lat)),
+            maxzoom: Math.min(24, resToZoom(Math.max(range.minRes, 0.01), lat)),
+          };
+        }
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
     const env = geojsonExtent(geojson);
@@ -67,7 +76,9 @@ async function addKascLayer(item, baseUrl) {
     map.addSource(sid, { type: "geojson", data: geojson, attribution: item.attr || undefined });
     for (const [kind, filter, paint] of kinds) {
       const lid = `${sid}-${kind}`;
-      map.addLayer({ id: lid, type: kind, source: sid, filter, paint, layout: { visibility: item.visible ? "visible" : "none" } });
+      const def = { id: lid, type: kind, source: sid, filter, paint, layout: { visibility: item.visible ? "visible" : "none" } };
+      if (zoomRange) { def.minzoom = zoomRange.minzoom; def.maxzoom = zoomRange.maxzoom; }
+      map.addLayer(def);
       lids.push(lid);
     }
   } else {
@@ -263,3 +274,23 @@ map.on("load", () => {
     panel.unsupported.textContent = String(err.message || err);
   });
 });
+
+// ?follow[=<base>] → geo_webview の /present/state をポーリングして表示を追従
+{
+  const params = new URLSearchParams(location.search);
+  if (params.has("follow") || params.has("present")) {
+    const base = params.get("follow") || params.get("present") || "";
+    const tick = async () => {
+      try {
+        const s = await (await fetch(`${base}/present/state`)).json();
+        const opt = {};
+        if (typeof s.lon === "number" && typeof s.lat === "number") opt.center = [s.lon, s.lat];
+        if (typeof s.zoom === "number") opt.zoom = s.zoom;
+        if (typeof s.rotation === "number") opt.bearing = -s.rotation;
+        map.jumpTo(opt);
+      } catch (_) { /* 接続不可時は前回状態を維持 */ }
+    };
+    setInterval(tick, 1500);
+    tick();
+  }
+}
