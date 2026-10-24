@@ -131,6 +131,9 @@ async function loadProject(id) {
   renderLayerRows(entries, unsupported);
 }
 
+if (window.KascPanel) KascPanel.init({ engine: "openlayers", map });
+
+
 loadProject().catch(err => {
   panel.unsupported.textContent = String(err.message || err);
 });
