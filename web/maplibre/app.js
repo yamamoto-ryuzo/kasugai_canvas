@@ -30,6 +30,7 @@ map.addControl(new maplibregl.NavigationControl(), "top-right");
 
 // 登録済み .kasc レイヤ/ソースの id（GeoJSON は fill/line/circle の3枚を一括管理）
 let managedLayers = [];
+let currentBaseEntries = [];
 let managedSources = [];
 
 function removeManaged() {
@@ -176,7 +177,8 @@ async function loadProject(id) {
   const entries = [];
   const unsupported = [...doc.unsupported];
 
-  const baseEntries = [];
+  currentBaseEntries = [];
+  const baseEntries = currentBaseEntries;
   for (const item of doc.bases) {
     if (item.mode === "none") continue;
     if (item.mode === "transparent") { document.querySelector("#map").style.background = "transparent"; continue; }
@@ -326,4 +328,20 @@ map.on("load", () => {
     setInterval(tick, 1500);
     tick();
   }
+}
+
+// 表示タブ: ベースマップ透過度・回転
+{
+  const opacity = document.querySelector("#display-opacity");
+  const rotation = document.querySelector("#display-rotation");
+  const north = document.querySelector("#display-north");
+  opacity?.addEventListener("input", () => {
+    for (const entry of currentBaseEntries) {
+      entry.lids.forEach(lid => map.getLayer(lid) && map.setPaintProperty(lid, "raster-opacity", Number(opacity.value)));
+    }
+  });
+  rotation?.addEventListener("change", () => map.setBearing(-Number(rotation.value || 0)));
+  north?.addEventListener("change", () => {
+    if (north.checked) { rotation.value = "0"; map.easeTo({ bearing: 0 }); }
+  });
 }

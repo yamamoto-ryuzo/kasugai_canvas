@@ -326,3 +326,19 @@ loadProject().catch(err => {
     tick();
   }
 }
+
+// 表示タブ: ベースマップ透過度・回転
+{
+  const opacity = document.querySelector("#display-opacity");
+  const rotation = document.querySelector("#display-rotation");
+  const north = document.querySelector("#display-north");
+  opacity?.addEventListener("input", () => {
+    map.getLayers().forEach(l => { if (l.getZIndex?.() === 0) l.setOpacity(Number(opacity.value)); });
+  });
+  rotation?.addEventListener("change", () => {
+    map.getView().setRotation(-Number(rotation.value || 0) * Math.PI / 180);
+  });
+  north?.addEventListener("change", () => {
+    if (north.checked) { rotation.value = "0"; map.getView().animate({ rotation: 0, duration: 300 }); }
+  });
+}
