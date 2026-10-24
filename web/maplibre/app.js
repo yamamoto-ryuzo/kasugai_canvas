@@ -63,6 +63,7 @@ async function addKascLayer(item, baseUrl) {
     }
     const env = geojsonExtent(geojson);
     if (env) item._env = env;
+    item._geojson = geojson;
     map.addSource(sid, { type: "geojson", data: geojson, attribution: item.attr || undefined });
     for (const [kind, filter, paint] of kinds) {
       const lid = `${sid}-${kind}`;
@@ -122,11 +123,28 @@ async function loadProject(id) {
   const entries = [];
   const unsupported = [...doc.unsupported];
 
+  const baseEntries = [];
   for (const item of doc.bases) {
     if (item.mode === "none") continue;
     if (item.mode === "transparent") { document.querySelector("#map").style.background = "transparent"; continue; }
     const lids = await addKascLayer(item, baseUrl);
-    entries.push({ item, lids });
+    baseEntries.push({ item, lids });
+  }
+  // 複数 base: → ベースマップ切替（先頭が既定）
+  baseEntries.forEach((entry, i) => {
+    if (i > 0) for (const lid of entry.lids) map.setLayoutProperty(lid, "visibility", "none");
+  });
+  if (baseEntries.length > 1) {
+    const sel = document.createElement("select");
+    sel.style.cssText = "width:100%;margin-bottom:8px";
+    baseEntries.forEach((entry, i) => {
+      const opt = document.createElement("option");
+      opt.value = i; opt.textContent = entry.item.title || `base ${i}`;
+      sel.append(opt);
+    });
+    sel.addEventListener("change", () => baseEntries.forEach((e, i) =>
+      e.lids.forEach(lid => map.getLayer(lid) && map.setLayoutProperty(lid, "visibility", i === Number(sel.value) ? "visible" : "none"))));
+    panel.project.insertAdjacentElement("afterend", sel);
   }
   if (doc.background) document.querySelector("#map").style.background = doc.background;
 
@@ -180,6 +198,36 @@ async function loadProject(id) {
     }
     panel.layers.append(wrap);
   }
+  // 属性検索（読み込んだベクターの全属性を対象）
+  const search = document.createElement("input");
+  search.placeholder = "属性検索";
+  search.style.cssText = "width:100%;box-sizing:border-box;margin-top:6px";
+  const results = document.createElement("div");
+  search.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || !search.value.trim()) return;
+    const needle = search.value.trim().toLowerCase();
+    results.innerHTML = "";
+    let count = 0;
+    for (const { item } of entries) {
+      for (const f of item._geojson?.features || []) {
+        if (count >= 20) break;
+        const hit = Object.entries(f.properties || {}).find(([k, v]) => String(v).toLowerCase().includes(needle));
+        if (!hit) continue;
+        count++;
+        const row = document.createElement("div");
+        row.className = "layer-row";
+        row.style.cursor = "pointer";
+        row.textContent = `${item.title}: ${hit[0]}=${hit[1]}`.slice(0, 60);
+        row.addEventListener("click", () => {
+          const env = geojsonExtent({ features: [f] });
+          if (env) map.fitBounds([env.west, env.south, env.east, env.north], { padding: 80, maxZoom: 18 });
+        });
+        results.append(row);
+      }
+    }
+    if (!count) results.textContent = "該当なし";
+  });
+  panel.layers.append(search, results);
 }
 
 // 地物クリック → 属性ポップアップ

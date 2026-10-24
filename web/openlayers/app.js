@@ -117,14 +117,27 @@ async function loadProject(id) {
   const unsupported = [...doc.unsupported];
 
   // base: は先頭が既定のベースマップ。transparent/none はモード指定（レイヤにしない）
+  const baseEntries = [];
   for (const item of doc.bases) {
     if (item.mode === "none") continue;
     if (item.mode === "transparent") { document.querySelector("#map").style.background = "transparent"; continue; }
     const layer = await buildLayer(item, baseUrl);
     layer.setZIndex(0);
-    layer.setVisible(item.visible);
     map.addLayer(layer);
-    entries.push({ item, layer });
+    baseEntries.push({ item, layer });
+  }
+  // 複数 base: → ベースマップ切替（先頭が既定）
+  baseEntries.forEach((e, i) => e.layer.setVisible(i === 0 && e.item.visible !== false));
+  if (baseEntries.length > 1) {
+    const sel = document.createElement("select");
+    sel.style.cssText = "width:100%;margin-bottom:8px";
+    baseEntries.forEach((e, i) => {
+      const opt = document.createElement("option");
+      opt.value = i; opt.textContent = e.item.title || `base ${i}`;
+      sel.append(opt);
+    });
+    sel.addEventListener("change", () => baseEntries.forEach((e, i) => e.layer.setVisible(i === Number(sel.value))));
+    panel.project.insertAdjacentElement("afterend", sel);
   }
   if (doc.background) document.querySelector("#map").style.background = doc.background;
 
@@ -183,6 +196,38 @@ async function loadProject(id) {
     }
     panel.layers.append(wrap);
   }
+  // 属性検索（ベクターレイヤの全属性を対象）
+  const search = document.createElement("input");
+  search.placeholder = "属性検索";
+  search.style.cssText = "width:100%;box-sizing:border-box;margin-top:6px";
+  const results = document.createElement("div");
+  search.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || !search.value.trim()) return;
+    const needle = search.value.trim().toLowerCase();
+    results.innerHTML = "";
+    let count = 0;
+    for (const { layer, item } of entries) {
+      const source = layer.getSource?.();
+      if (!source?.getFeatures) continue;
+      for (const f of source.getFeatures()) {
+        if (count >= 20) break;
+        const { geometry, ...props } = f.getProperties();
+        const hit = Object.entries(props).find(([k, v]) => String(v).toLowerCase().includes(needle));
+        if (!hit) continue;
+        count++;
+        const row = document.createElement("div");
+        row.className = "layer-row";
+        row.style.cursor = "pointer";
+        row.textContent = `${item.title}: ${hit[0]}=${hit[1]}`.slice(0, 60);
+        row.addEventListener("click", () => {
+          map.getView().fit(f.getGeometry().getExtent(), { padding: [60, 60, 60, 60], maxZoom: 18, duration: 400 });
+        });
+        results.append(row);
+      }
+    }
+    if (!count) results.textContent = "該当なし";
+  });
+  panel.layers.append(search, results);
 }
 
 // 地物クリック → 属性ポップアップ
