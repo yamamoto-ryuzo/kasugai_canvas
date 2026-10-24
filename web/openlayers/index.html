@@ -11,22 +11,33 @@
   #panel {
     position: absolute; top: 10px; left: 10px; z-index: 10;
     background: rgba(255,255,255,.94); border-radius: 8px; padding: 10px 12px;
-    max-width: 320px; max-height: 80vh; overflow: auto; box-shadow: 0 2px 8px rgba(0,0,0,.3);
-    font-size: 13px;
+    width: 320px; max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3); font-size: 13px;
   }
   #panel h1 { font-size: 14px; margin: 0 0 6px; }
-  #panel select { width: 100%; margin-bottom: 8px; }
+  #panel select, #panel input[type="text"] { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  #tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+  #tabs .tab { flex: 1; min-width: 44px; padding: 4px 0; font-size: 12px; border: 1px solid #ccc;
+               border-radius: 4px; background: #f4f6f8; cursor: pointer; }
+  #tabs .tab.active { background: #2c5ea8; color: #fff; border-color: #2c5ea8; }
+  .tab-pane { overflow: auto; flex: 1; min-height: 0; }
   .layer-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
   .layer-row input { margin: 0; }
-  .layer-row.unsupported { color: #999; }
   .note { color: #666; font-size: 11px; margin-top: 6px; }
-  #engines { margin-top: 8px; font-size: 11px; }
-  #engines a { margin-right: 6px; }
   .cam-btn { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 6px; font-size: 11px;
              border: 1px solid #bbb; border-radius: 4px; background: #f4f6f8; cursor: pointer; }
+  #engines { margin-top: 8px; font-size: 11px; flex: none; }
+  #engines a { margin-right: 6px; }
   #kasc-popup { display: none; position: absolute; z-index: 20; max-width: 280px; max-height: 240px;
                 overflow: auto; background: rgba(255,255,255,.96); border-radius: 6px;
                 padding: 8px 10px; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  /* 既定コントロールは左上でパネルと重なるため右側へ */
+  .ol-zoom { left: auto; right: .5em; }
+  .ol-rotate { left: auto; right: .5em; }
+  .ol-attribution { left: auto; }
+  #legends img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 4px 0; }
+  .attr-table { border-collapse: collapse; font-size: 11px; width: 100%; }
+  .attr-table th, .attr-table td { border: 1px solid #ccc; padding: 1px 4px; text-align: left; }
 </style>
 </head>
 <body>
@@ -34,12 +45,49 @@
 <div id="panel">
   <h1>KASUGAI Canvas <small>OpenLayers</small></h1>
   <select id="project-select"></select>
-  <div id="layers"></div>
-  <div id="unsupported" class="note"></div>
+  <div id="tabs">
+    <button class="tab active" data-tab="layers">レイヤ</button>
+    <button class="tab" data-tab="legend">凡例</button>
+    <button class="tab" data-tab="search">検索</button>
+    <button class="tab" data-tab="attr">属性</button>
+    <button class="tab" data-tab="camera">カメラ</button>
+    <button class="tab" data-tab="info">情報</button>
+  </div>
+  <div class="tab-pane" id="pane-layers">
+    <div id="basemap-slot"></div>
+    <div id="layers"></div>
+  </div>
+  <div class="tab-pane" id="pane-legend" hidden>
+    <div id="legends"></div>
+  </div>
+  <div class="tab-pane" id="pane-search" hidden>
+    <input id="search-input" type="text" placeholder="文字で検索" />
+    <div id="search-results"></div>
+  </div>
+  <div class="tab-pane" id="pane-attr" hidden>
+    <select id="attr-layer-select"></select>
+    <div id="attr-table"></div>
+  </div>
+  <div class="tab-pane" id="pane-camera" hidden>
+    <div id="cams"></div>
+  </div>
+  <div class="tab-pane" id="pane-info" hidden>
+    <div id="info-link"></div>
+    <div id="unsupported" class="note"></div>
+  </div>
   <div id="engines">
     engine: <a href="/?engine=cesium">cesium</a><a href="/?engine=maplibre">maplibre</a><b>openlayers</b>
   </div>
 </div>
+<script>
+  window.switchPanelTab = name => {
+    document.querySelectorAll("#tabs .tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+    document.querySelectorAll(".tab-pane").forEach(p => { p.hidden = p.id !== `pane-${name}`; });
+  };
+  for (const btn of document.querySelectorAll("#tabs .tab")) {
+    btn.addEventListener("click", () => switchPanelTab(btn.dataset.tab));
+  }
+</script>
 <script src="/shared/kasc_loader.js"></script>
 <script src="/shared/kasc_panel.js"></script>
 <script type="module" src="./app.js"></script>

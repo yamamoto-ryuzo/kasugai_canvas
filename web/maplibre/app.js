@@ -8,7 +8,15 @@ const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flat
 const panel = {
   project: document.querySelector("#project-select"),
   layers: document.querySelector("#layers"),
+  basemap: document.querySelector("#basemap-slot"),
+  cams: document.querySelector("#cams"),
+  legends: document.querySelector("#legends"),
+  infoLink: document.querySelector("#info-link"),
   unsupported: document.querySelector("#unsupported"),
+  searchInput: document.querySelector("#search-input"),
+  searchResults: document.querySelector("#search-results"),
+  attrTable: document.querySelector("#attr-table"),
+  attrSelect: document.querySelector("#attr-layer-select"),
 };
 
 const map = new maplibregl.Map({
@@ -93,11 +101,31 @@ async function addKascLayer(item, baseUrl) {
   return lids;
 }
 
+function showAttrTable(entry) {
+  const tableBox = panel.attrTable;
+  const feats = (entry.item._geojson?.features || []).slice(0, 50);
+  const cols = [...new Set(feats.flatMap(f => Object.keys(f.properties || {})))].slice(0, 8);
+  if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
+  const rows = feats.map(f =>
+    `<tr>${cols.map(c => `<td>${String(f.properties[c] ?? "")}`).join("")}</tr>`
+  ).join("");
+  tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table class="attr-table"><tr>${cols.map(c => `<th>${c}`).join("")}</tr>${rows}</table>`;
+}
+
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
-  const tableBox = document.createElement("div");
-  tableBox.className = "note";
-  panel.layers.append(tableBox);
+  panel.attrSelect.innerHTML = "";
+  const attrEntries = entries.filter(e => e.item._geojson?.features?.length);
+  for (const e of attrEntries) {
+    const opt = document.createElement("option");
+    opt.value = entries.indexOf(e);
+    opt.textContent = e.item.title || e.item.url;
+    panel.attrSelect.append(opt);
+  }
+  panel.attrSelect.onchange = () => showAttrTable(entries[Number(panel.attrSelect.value)]);
+  if (attrEntries.length) showAttrTable(attrEntries[0]);
+  else panel.attrTable.textContent = "（属性対象レイヤなし）";
+
   for (const entry of entries) {
     const row = document.createElement("label");
     row.className = "layer-row";
@@ -111,19 +139,17 @@ function renderLayerRows(entries, unsupported) {
     });
     const name = document.createElement("span");
     name.textContent = entry.item.title || entry.item.url;
-    name.style.cursor = "pointer";
-    name.title = "属性一覧を表示";
-    name.addEventListener("click", () => {
-      const feats = (entry.item._geojson?.features || []).slice(0, 50);
-      const cols = [...new Set(feats.flatMap(f => Object.keys(f.properties || {})))].slice(0, 8);
-      if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
-      const rows = feats.map(f =>
-        `<tr>${cols.map(c => `<td style="border:1px solid #ccc;padding:1px 4px">${String(f.properties[c] ?? "")}`).join("")}</tr>`
-      ).join("");
-      tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table style="font-size:11px;border-collapse:collapse"><tr>${cols.map(c => `<th style="border:1px solid #ccc;padding:1px 4px;text-align:left">${c}`).join("")}</tr>${rows}</table>`;
-    });
+    if (attrEntries.includes(entry)) {
+      name.style.cursor = "pointer";
+      name.title = "属性一覧を表示";
+      name.addEventListener("click", () => {
+        panel.attrSelect.value = entries.indexOf(entry);
+        showAttrTable(entry);
+        window.switchPanelTab?.("attr");
+      });
+    }
     row.append(cb, name);
-    panel.layers.insertBefore(row, tableBox);
+    panel.layers.append(row);
   }
   panel.unsupported.textContent = unsupported.length
     ? `未対応行: ${unsupported.map(i => i.type).join(", ")}（Cesium 版で対応）`
@@ -171,7 +197,9 @@ async function loadProject(id) {
     });
     sel.addEventListener("change", () => baseEntries.forEach((e, i) =>
       e.lids.forEach(lid => map.getLayer(lid) && map.setLayoutProperty(lid, "visibility", i === Number(sel.value) ? "visible" : "none"))));
-    panel.project.insertAdjacentElement("afterend", sel);
+    panel.basemap.replaceChildren(sel);
+  } else {
+    panel.basemap.replaceChildren();
   }
   if (doc.background) document.querySelector("#map").style.background = doc.background;
 
@@ -198,42 +226,48 @@ async function loadProject(id) {
     if (env) map.fitBounds(env, { padding: 40, maxZoom: 17 });
   }
   renderLayerRows(entries, unsupported);
+
+  // 凡例（URL 重複はまとめる）→ 凡例タブ
+  panel.legends.innerHTML = "";
+  const seenLegend = new Set();
   for (const leg of doc.legends) {
+    if (!leg.url || seenLegend.has(leg.url)) continue;
+    seenLegend.add(leg.url);
     const img = document.createElement("img");
     img.src = resolveKascUrl(leg.url, baseUrl);
     img.alt = leg.title || "legend";
-    img.style.cssText = "max-width:100%;display:block;margin:4px 0";
-    panel.layers.append(img);
+    panel.legends.append(img);
   }
+  if (!seenLegend.size) panel.legends.textContent = "（凡例なし）";
+
+  // info: → 情報タブ
+  panel.infoLink.innerHTML = "";
   if (doc.info) {
     const a = document.createElement("a");
     a.href = resolveKascUrl(doc.info, baseUrl);
     a.target = "_blank";
     a.textContent = "プロジェクト情報";
-    panel.layers.append(a);
+    panel.infoLink.append(a);
   }
-  if (doc.cams.length) {
-    const wrap = document.createElement("div");
-    for (const cam of doc.cams) {
-      const btn = document.createElement("button");
-      btn.className = "cam-btn";
-      btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
-      btn.addEventListener("click", () => {
-        map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) });
-      });
-      wrap.append(btn);
-    }
-    panel.layers.append(wrap);
+
+  // cam: プリセット → カメラタブ
+  panel.cams.innerHTML = "";
+  for (const cam of doc.cams) {
+    const btn = document.createElement("button");
+    btn.className = "cam-btn";
+    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+    btn.addEventListener("click", () => {
+      map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) });
+    });
+    panel.cams.append(btn);
   }
-  // 属性検索（読み込んだベクターの全属性を対象）
-  const search = document.createElement("input");
-  search.placeholder = "属性検索";
-  search.style.cssText = "width:100%;box-sizing:border-box;margin-top:6px";
-  const results = document.createElement("div");
-  search.addEventListener("keydown", e => {
-    if (e.key !== "Enter" || !search.value.trim()) return;
-    const needle = search.value.trim().toLowerCase();
-    results.innerHTML = "";
+  if (!doc.cams.length) panel.cams.textContent = "（プリセットなし）";
+
+  // 属性検索（読み込んだベクターの全属性を対象）→ 検索タブ
+  panel.searchInput.onkeydown = e => {
+    if (e.key !== "Enter" || !panel.searchInput.value.trim()) return;
+    const needle = panel.searchInput.value.trim().toLowerCase();
+    panel.searchResults.innerHTML = "";
     let count = 0;
     for (const { item } of entries) {
       for (const f of item._geojson?.features || []) {
@@ -249,12 +283,11 @@ async function loadProject(id) {
           const env = geojsonExtent({ features: [f] });
           if (env) map.fitBounds([env.west, env.south, env.east, env.north], { padding: 80, maxZoom: 18 });
         });
-        results.append(row);
+        panel.searchResults.append(row);
       }
     }
-    if (!count) results.textContent = "該当なし";
-  });
-  panel.layers.append(search, results);
+    if (!count) panel.searchResults.textContent = "該当なし";
+  };
 }
 
 // 地物クリック → 属性ポップアップ

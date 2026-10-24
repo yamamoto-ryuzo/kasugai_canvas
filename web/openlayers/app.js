@@ -22,7 +22,15 @@ const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flat
 const panel = {
   project: document.querySelector("#project-select"),
   layers: document.querySelector("#layers"),
+  basemap: document.querySelector("#basemap-slot"),
+  cams: document.querySelector("#cams"),
+  legends: document.querySelector("#legends"),
+  infoLink: document.querySelector("#info-link"),
   unsupported: document.querySelector("#unsupported"),
+  searchInput: document.querySelector("#search-input"),
+  searchResults: document.querySelector("#search-results"),
+  attrTable: document.querySelector("#attr-table"),
+  attrSelect: document.querySelector("#attr-layer-select"),
 };
 
 const map = new Map({
@@ -83,11 +91,33 @@ async function buildLayer(item, baseUrl) {
   return layer;
 }
 
+function showAttrTable(entry) {
+  const tableBox = panel.attrTable;
+  const source = entry.layer.getSource?.();
+  const feats = source?.getFeatures ? source.getFeatures().slice(0, 50) : [];
+  const cols = [...new Set(feats.flatMap(f => Object.keys(f.getProperties()).filter(k => k !== "geometry")))].slice(0, 8);
+  if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
+  const rows = feats.map(f => {
+    const p = f.getProperties();
+    return `<tr>${cols.map(c => `<td>${String(p[c] ?? "")}`).join("")}</tr>`;
+  }).join("");
+  tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table class="attr-table"><tr>${cols.map(c => `<th>${c}`).join("")}</tr>${rows.replace(/<td>/g, "<td>")}</table>`;
+}
+
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
-  const tableBox = document.createElement("div");
-  tableBox.className = "note";
-  panel.layers.append(tableBox);
+  panel.attrSelect.innerHTML = "";
+  const attrEntries = entries.filter(e => e.layer.getSource?.()?.getFeatures);
+  for (const e of attrEntries) {
+    const opt = document.createElement("option");
+    opt.value = entries.indexOf(e);
+    opt.textContent = e.item.title || e.item.url;
+    panel.attrSelect.append(opt);
+  }
+  panel.attrSelect.onchange = () => showAttrTable(entries[Number(panel.attrSelect.value)]);
+  if (attrEntries.length) showAttrTable(attrEntries[0]);
+  else panel.attrTable.textContent = "（属性対象レイヤなし）";
+
   for (const entry of entries) {
     const row = document.createElement("label");
     row.className = "layer-row";
@@ -97,22 +127,17 @@ function renderLayerRows(entries, unsupported) {
     cb.addEventListener("change", () => entry.layer.setVisible(cb.checked));
     const name = document.createElement("span");
     name.textContent = entry.item.title || entry.item.url;
-    name.style.cursor = "pointer";
-    name.title = "属性一覧を表示";
-    name.addEventListener("click", () => {
-      const source = entry.layer.getSource?.();
-      if (!source?.getFeatures) { tableBox.textContent = "（属性なし）"; return; }
-      const feats = source.getFeatures().slice(0, 50);
-      const cols = [...new Set(feats.flatMap(f => Object.keys(f.getProperties()).filter(k => k !== "geometry")))].slice(0, 8);
-      if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
-      const rows = feats.map(f => {
-        const p = f.getProperties();
-        return `<tr>${cols.map(c => `<td>${String(p[c] ?? "")}`).join("")}</tr>`;
-      }).join("");
-      tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table style="font-size:11px;border-collapse:collapse"><tr>${cols.map(c => `<th style="border:1px solid #ccc;padding:1px 4px;text-align:left">${c}`).join("")}</tr>${rows.replace(/<td>/g, '<td style="border:1px solid #ccc;padding:1px 4px">')}</table>`;
-    });
+    if (attrEntries.includes(entry)) {
+      name.style.cursor = "pointer";
+      name.title = "属性一覧を表示";
+      name.addEventListener("click", () => {
+        panel.attrSelect.value = entries.indexOf(entry);
+        showAttrTable(entry);
+        window.switchPanelTab?.("attr");
+      });
+    }
     row.append(cb, name);
-    panel.layers.insertBefore(row, tableBox);
+    panel.layers.append(row);
   }
   panel.unsupported.textContent = unsupported.length
     ? `未対応行: ${unsupported.map(i => i.type).join(", ")}（Cesium 版で対応）`
@@ -154,14 +179,15 @@ async function loadProject(id) {
   baseEntries.forEach((e, i) => e.layer.setVisible(i === 0 && e.item.visible !== false));
   if (baseEntries.length > 1) {
     const sel = document.createElement("select");
-    sel.style.cssText = "width:100%;margin-bottom:8px";
     baseEntries.forEach((e, i) => {
       const opt = document.createElement("option");
       opt.value = i; opt.textContent = e.item.title || `base ${i}`;
       sel.append(opt);
     });
     sel.addEventListener("change", () => baseEntries.forEach((e, i) => e.layer.setVisible(i === Number(sel.value))));
-    panel.project.insertAdjacentElement("afterend", sel);
+    panel.basemap.replaceChildren(sel);
+  } else {
+    panel.basemap.replaceChildren();
   }
   if (doc.background) document.querySelector("#map").style.background = doc.background;
 
@@ -193,42 +219,48 @@ async function loadProject(id) {
     if (union) map.getView().fit(union, { padding: [30, 30, 30, 30], maxZoom: 17 });
   }
   renderLayerRows(entries, unsupported);
+
+  // 凡例（URL 重複はまとめる）→ 凡例タブ
+  panel.legends.innerHTML = "";
+  const seenLegend = new Set();
   for (const leg of doc.legends) {
+    if (!leg.url || seenLegend.has(leg.url)) continue;
+    seenLegend.add(leg.url);
     const img = document.createElement("img");
     img.src = resolveKascUrl(leg.url, baseUrl);
     img.alt = leg.title || "legend";
-    img.style.cssText = "max-width:100%;display:block;margin:4px 0";
-    panel.layers.append(img);
+    panel.legends.append(img);
   }
+  if (!seenLegend.size) panel.legends.textContent = "（凡例なし）";
+
+  // info: → 情報タブ
+  panel.infoLink.innerHTML = "";
   if (doc.info) {
     const a = document.createElement("a");
     a.href = resolveKascUrl(doc.info, baseUrl);
     a.target = "_blank";
     a.textContent = "プロジェクト情報";
-    panel.layers.append(a);
+    panel.infoLink.append(a);
   }
-  if (doc.cams.length) {
-    const wrap = document.createElement("div");
-    for (const cam of doc.cams) {
-      const btn = document.createElement("button");
-      btn.className = "cam-btn";
-      btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
-      btn.addEventListener("click", () => {
-        map.getView().animate({ center: fromLonLat([cam.longitude, cam.latitude]), zoom: camToZoom(cam), duration: 600 });
-      });
-      wrap.append(btn);
-    }
-    panel.layers.append(wrap);
+
+  // cam: プリセット → カメラタブ
+  panel.cams.innerHTML = "";
+  for (const cam of doc.cams) {
+    const btn = document.createElement("button");
+    btn.className = "cam-btn";
+    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+    btn.addEventListener("click", () => {
+      map.getView().animate({ center: fromLonLat([cam.longitude, cam.latitude]), zoom: camToZoom(cam), duration: 600 });
+    });
+    panel.cams.append(btn);
   }
-  // 属性検索（ベクターレイヤの全属性を対象）
-  const search = document.createElement("input");
-  search.placeholder = "属性検索";
-  search.style.cssText = "width:100%;box-sizing:border-box;margin-top:6px";
-  const results = document.createElement("div");
-  search.addEventListener("keydown", e => {
-    if (e.key !== "Enter" || !search.value.trim()) return;
-    const needle = search.value.trim().toLowerCase();
-    results.innerHTML = "";
+  if (!doc.cams.length) panel.cams.textContent = "（プリセットなし）";
+
+  // 属性検索（ベクターレイヤの全属性を対象）→ 検索タブ
+  panel.searchInput.onkeydown = e => {
+    if (e.key !== "Enter" || !panel.searchInput.value.trim()) return;
+    const needle = panel.searchInput.value.trim().toLowerCase();
+    panel.searchResults.innerHTML = "";
     let count = 0;
     for (const { layer, item } of entries) {
       const source = layer.getSource?.();
@@ -246,12 +278,11 @@ async function loadProject(id) {
         row.addEventListener("click", () => {
           map.getView().fit(f.getGeometry().getExtent(), { padding: [60, 60, 60, 60], maxZoom: 18, duration: 400 });
         });
-        results.append(row);
+        panel.searchResults.append(row);
       }
     }
-    if (!count) results.textContent = "該当なし";
-  });
-  panel.layers.append(search, results);
+    if (!count) panel.searchResults.textContent = "該当なし";
+  };
 }
 
 // 地物クリック → 属性ポップアップ

@@ -68,7 +68,8 @@ export function parseKasc(text) {
       continue;
     }
     if (type === "legend") {
-      doc.legends.push({ title: parts[0], url: parts[1] });
+      // legend:<URL>（1フィールド）と legend:タイトル|<URL> の2形式がある
+      doc.legends.push(parts[1] ? { title: parts[0], url: parts[1] } : { title: null, url: parts[0] });
       continue;
     }
 
