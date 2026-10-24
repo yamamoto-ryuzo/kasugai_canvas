@@ -8,7 +8,7 @@ import XYZ from "https://esm.sh/ol@10.6.1/source/XYZ.js";
 import VectorSource from "https://esm.sh/ol@10.6.1/source/Vector.js";
 import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
 import { fromLonLat } from "https://esm.sh/ol@10.6.1/proj.js";
-import { loadKascProject, resolveKascUrl, camToZoom } from "/shared/kasc.js";
+import { loadKascProject, resolveKascUrl, camToZoom, geojsonExtent } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
 import Style from "https://esm.sh/ol@10.6.1/style/Style.js";
 import Fill from "https://esm.sh/ol@10.6.1/style/Fill.js";
@@ -33,7 +33,7 @@ const map = new Map({
 
 function xyzSource(item, baseUrl) {
   const opts = item.opts || {};
-  const src = { url: resolveKascUrl(item.url, baseUrl), crossOrigin: "anonymous" };
+  const src = { url: resolveKascUrl(item.url, baseUrl), crossOrigin: "anonymous", attributions: item.attr || undefined };
   if (opts.maxzoom ?? opts.maximumlevel) src.maxZoom = Number(opts.maxzoom ?? opts.maximumlevel);
   if (opts.minzoom ?? opts.minimumlevel) src.minZoom = Number(opts.minzoom ?? opts.minimumlevel);
   if (opts.tilesize) src.tileSize = Number(opts.tilesize);
@@ -53,12 +53,15 @@ async function buildLayer(item, baseUrl) {
     const { geojson } = await loadVectorItem(item, baseUrl);
     const layer = new VectorLayer({
       source: new VectorSource({
+        attributions: item.attr || undefined,
         features: new GeoJSON().readFeatures(geojson, {
           featureProjection: "EPSG:3857",
           dataProjection: "EPSG:4326",
         }),
       }),
     });
+    const env = geojsonExtent(geojson);
+    if (env) layer.set("kascEnv", env);
     if (item.opts?.style) {
       try {
         const compiled = await loadCompiledQml(item.opts.style, baseUrl);
@@ -141,6 +144,16 @@ async function loadProject(id) {
     const cam = doc.cams[0];
     map.getView().setCenter(fromLonLat([cam.longitude, cam.latitude]));
     map.getView().setZoom(camToZoom(cam));
+  } else {
+    // cam 未指定なら読み込んだデータ範囲へフィット
+    let union = null;
+    for (const { layer } of entries) {
+      const env = layer.get?.("kascEnv");
+      if (!env) continue;
+      const ext = [...fromLonLat([env.west, env.south]), ...fromLonLat([env.east, env.north])];
+      union = union ? [Math.min(union[0], ext[0]), Math.min(union[1], ext[1]), Math.max(union[2], ext[2]), Math.max(union[3], ext[3])] : ext;
+    }
+    if (union) map.getView().fit(union, { padding: [30, 30, 30, 30], maxZoom: 17 });
   }
   renderLayerRows(entries, unsupported);
   for (const leg of doc.legends) {
@@ -157,7 +170,35 @@ async function loadProject(id) {
     a.textContent = "プロジェクト情報";
     panel.layers.append(a);
   }
+  if (doc.cams.length) {
+    const wrap = document.createElement("div");
+    for (const cam of doc.cams) {
+      const btn = document.createElement("button");
+      btn.className = "cam-btn";
+      btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+      btn.addEventListener("click", () => {
+        map.getView().animate({ center: fromLonLat([cam.longitude, cam.latitude]), zoom: camToZoom(cam), duration: 600 });
+      });
+      wrap.append(btn);
+    }
+    panel.layers.append(wrap);
+  }
 }
+
+// 地物クリック → 属性ポップアップ
+const kascPopup = document.createElement("div");
+kascPopup.id = "kasc-popup";
+document.querySelector("#map").append(kascPopup);
+map.on("singleclick", e => {
+  let html = "";
+  map.forEachFeatureAtPixel(e.pixel, f => {
+    const { geometry, ...props } = f.getProperties ? f.getProperties() : {};
+    html = Object.entries(props).slice(0, 30).map(([k, v]) => `<b>${k}</b>: ${v}`).join("<br>");
+    return true;
+  }, { hitTolerance: 5 });
+  kascPopup.style.display = html ? "block" : "none";
+  if (html) { kascPopup.innerHTML = html; kascPopup.style.left = e.pixel[0] + 12 + "px"; kascPopup.style.top = e.pixel[1] + 12 + "px"; }
+});
 
 if (window.KascPanel) KascPanel.init({ engine: "openlayers", map });
 

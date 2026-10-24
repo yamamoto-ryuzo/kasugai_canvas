@@ -124,6 +124,27 @@ export async function loadKascProject(projectId) {
   return { id, manifest, baseUrl, doc: parseKasc(text), raw: text };
 }
 
+// GeoJSON の範囲 {west,south,east,north} を返す（空なら null）
+export function geojsonExtent(geojson) {
+  let env = null;
+  const visit = coords => {
+    if (typeof coords?.[0] === "number") {
+      const [x, y] = coords;
+      if (!env) env = { west: x, south: y, east: x, north: y };
+      else { env.west = Math.min(env.west, x); env.south = Math.min(env.south, y); env.east = Math.max(env.east, x); env.north = Math.max(env.north, y); }
+      return;
+    }
+    if (Array.isArray(coords)) coords.forEach(visit);
+  };
+  for (const f of geojson?.features || []) {
+    const g = f.geometry;
+    if (!g) continue;
+    if (g.type === "GeometryCollection") (g.geometries || []).forEach(x => visit(x.coordinates));
+    else visit(g.coordinates);
+  }
+  return env;
+}
+
 // カメラ高さ(m) → Web メルカトルズームの近似変換
 // m/px ≈ height * 2 / 256（視野角45°・画面高512px相当の近似）
 export function camToZoom(cam) {

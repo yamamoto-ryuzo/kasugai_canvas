@@ -1,6 +1,6 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
-import { loadKascProject, resolveKascUrl, camToZoom } from "/shared/kasc.js";
+import { loadKascProject, resolveKascUrl, camToZoom, geojsonExtent } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv"]);
@@ -37,7 +37,7 @@ function removeManaged() {
 
 function rasterSource(item, baseUrl) {
   const opts = item.opts || {};
-  const source = { type: "raster", tiles: [resolveKascUrl(item.url, baseUrl)], tileSize: Number(opts.tilesize) || 256 };
+  const source = { type: "raster", tiles: [resolveKascUrl(item.url, baseUrl)], tileSize: Number(opts.tilesize) || 256, attribution: item.attr || undefined };
   if (opts.maxzoom ?? opts.maximumlevel) source.maxzoom = Number(opts.maxzoom ?? opts.maximumlevel);
   if (opts.minzoom ?? opts.minimumlevel) source.minzoom = Number(opts.minzoom ?? opts.minimumlevel);
   return source;
@@ -61,7 +61,9 @@ async function addKascLayer(item, baseUrl) {
         kinds = maplibreApplyQml(geojson, compiled).kinds;
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
-    map.addSource(sid, { type: "geojson", data: geojson });
+    const env = geojsonExtent(geojson);
+    if (env) item._env = env;
+    map.addSource(sid, { type: "geojson", data: geojson, attribution: item.attr || undefined });
     for (const [kind, filter, paint] of kinds) {
       const lid = `${sid}-${kind}`;
       map.addLayer({ id: lid, type: kind, source: sid, filter, paint, layout: { visibility: item.visible ? "visible" : "none" } });
@@ -140,6 +142,15 @@ async function loadProject(id) {
   if (doc.cams.length) {
     const cam = doc.cams[0];
     map.jumpTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) });
+  } else {
+    let env = null;
+    for (const { item } of entries) {
+      if (!item._env) continue;
+      env = env
+        ? [Math.min(env[0], item._env.west), Math.min(env[1], item._env.south), Math.max(env[2], item._env.east), Math.max(env[3], item._env.north)]
+        : [item._env.west, item._env.south, item._env.east, item._env.north];
+    }
+    if (env) map.fitBounds(env, { padding: 40, maxZoom: 17 });
   }
   renderLayerRows(entries, unsupported);
   for (const leg of doc.legends) {
@@ -156,7 +167,31 @@ async function loadProject(id) {
     a.textContent = "プロジェクト情報";
     panel.layers.append(a);
   }
+  if (doc.cams.length) {
+    const wrap = document.createElement("div");
+    for (const cam of doc.cams) {
+      const btn = document.createElement("button");
+      btn.className = "cam-btn";
+      btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+      btn.addEventListener("click", () => {
+        map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) });
+      });
+      wrap.append(btn);
+    }
+    panel.layers.append(wrap);
+  }
 }
+
+// 地物クリック → 属性ポップアップ
+const kascPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+map.on("click", e => {
+  const features = map.queryRenderedFeatures(e.point, { layers: managedLayers });
+  const feature = features[0];
+  if (!feature) return;
+  const { geometry, ...props } = feature.properties || {};
+  const html = Object.entries(props).slice(0, 30).map(([k, v]) => `<b>${k}</b>: ${v}`).join("<br>");
+  kascPopup.setLngLat(e.lngLat).setHTML(html || "(属性なし)").addTo(map);
+});
 
 map.on("load", () => {
   if (window.KascPanel) KascPanel.init({ engine: "maplibre", map });
