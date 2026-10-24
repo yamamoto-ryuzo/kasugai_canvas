@@ -98,8 +98,8 @@ web/
                   既定 cesium。engine 以外のクエリとハッシュは対象へ引継ぎ）
   cesium/         Cesium フロント（現行アプリ一式:
                   index.html/app.js/styles.css/PLUGIN/plugins.json/i18n 等）
-  maplibre/       MapLibre フロント（整備予定）
-  openlayers/     OpenLayers フロント（整備予定）
+  maplibre/       MapLibre フロント（.kasc プレイヤー実装済み: 全ベクター行・QML・duckdb/sql・属性UI・6タブパネル）
+  openlayers/     OpenLayers フロント（.kasc プレイヤー実装済み: 同上）
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
                   i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
   projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）

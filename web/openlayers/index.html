@@ -43,7 +43,10 @@
 <body>
 <div id="map"></div>
 <div id="panel">
-  <h1>KASUGAI Canvas <small>OpenLayers</small></h1>
+  <h1 style="display:flex;justify-content:space-between;align-items:center">KASUGAI Canvas <small>OpenLayers</small><span>
+    <button id="share-copy" type="button" title="現在位置URLをコピー" style="border:none;background:none;cursor:pointer;font-size:14px">🔗</button>
+    <button id="panel-toggle" type="button" title="最小化" style="border:none;background:none;cursor:pointer;font-size:14px">−</button>
+  </span></h1>
   <select id="project-select"></select>
   <div id="tabs">
     <button class="tab active" data-tab="layers">レイヤ</button>
@@ -87,6 +90,14 @@
   for (const btn of document.querySelectorAll("#tabs .tab")) {
     btn.addEventListener("click", () => switchPanelTab(btn.dataset.tab));
   }
+  document.querySelector("#share-copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(location.href); } catch (e) {}
+  });
+  document.querySelector("#panel-toggle").addEventListener("click", e => {
+    const hide = !document.querySelector("#tabs").hidden;
+    for (const el of document.querySelectorAll("#tabs, .tab-pane, #project-select, #engines")) el.hidden = hide;
+    e.target.textContent = hide ? "＋" : "−";
+  });
 </script>
 <script src="/shared/kasc_loader.js"></script>
 <script src="/shared/kasc_panel.js"></script>
