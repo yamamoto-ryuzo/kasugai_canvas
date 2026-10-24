@@ -124,9 +124,10 @@ export async function loadKascProject(projectId) {
 }
 
 // カメラ高さ(m) → Web メルカトルズームの近似変換
+// m/px ≈ height * 2 / 256（視野角45°・画面高512px相当の近似）
 export function camToZoom(cam) {
   const lat = Math.max(-80, Math.min(80, cam.latitude || 0));
-  const metersPerPixel = (cam.height || 3000) / Math.max(200, Math.min(1200, (cam.height || 3000) / 2));
-  const zoom = Math.log2((156543.03392 * Math.cos(lat * Math.PI / 180)) / metersPerPixel);
+  const h = Math.max(10, cam.height || 3000);
+  const zoom = Math.log2((156543.03392 * Math.cos(lat * Math.PI / 180)) / (h * 2 / 256));
   return Math.max(2, Math.min(20, zoom));
 }
