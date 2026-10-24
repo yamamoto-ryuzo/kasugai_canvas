@@ -10,7 +10,8 @@ import {
   initBoxAuth, getBoxClientId, setBoxClientId, boxConnected,
   startBoxAuth, disconnectBox, handleBoxRedirect,
 } from "./box.js";
-import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "./qml-style.js";
+import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "/shared/qml-style.js";
+import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "/shared/vector-decode.js";
 
 await initI18n();
