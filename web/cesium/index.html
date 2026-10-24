@@ -17,7 +17,7 @@
       // DuckDB-WASM の CDN 資産(~60MB)を Service Worker + CacheStorage に永続キャッシュする。
       // モジュールのキャッシュ鮮度に左右されないようインラインで最優先登録する。
       if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.register("./sw-duckdb.js").catch(() => {});
+        navigator.serviceWorker.register("/sw-duckdb.js").catch(() => {});
       }
     </script>
     <script type="importmap">

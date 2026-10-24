@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { initI18n, t, applyI18n, setLanguage, getLanguage, SUPPORTED_LANGUAGES, LANGUAGE_NAMES } from "./i18n.js";
+import { initI18n, t, applyI18n, setLanguage, getLanguage, SUPPORTED_LANGUAGES, LANGUAGE_NAMES } from "/shared/i18n.js";
 import {
   initMcp, listMcpServers, upsertMcpServer, removeMcpServer,
   connectMcpServer, disconnectMcpServer, connectEnabledMcpServers,
@@ -11,7 +11,7 @@ import {
   startBoxAuth, disconnectBox, handleBoxRedirect,
 } from "./box.js";
 import { loadQmlStyle, compileQmlStyle, applyQmlStyleToDataSource, applyQmlStyleToPrimitive, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "./qml-style.js";
-import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
+import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "/shared/vector-decode.js";
 
 await initI18n();
 applyI18n();
@@ -2413,7 +2413,7 @@ let gpkgWorkerReqId = 0;
 const gpkgWorkerPending = new Map();
 function loadGpkgWorker() {
   if (!gpkgWorker) {
-    gpkgWorker = new Worker(new URL("./gpkg-worker.js", import.meta.url), { type: "module" });
+    gpkgWorker = new Worker(new URL("/shared/gpkg-worker.js", location.origin), { type: "module" });
     gpkgWorker.onmessage = event => {
       const data = event.data || {};
       const pending = gpkgWorkerPending.get(data.reqId);
