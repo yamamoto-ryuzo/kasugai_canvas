@@ -35,7 +35,7 @@
             </tbody>
           </table>
           <p>「通常版」は静的配信・Cloudflare・Cloud Run などブラウザだけで開く形態、「アプリ版」はローカル Rust サーバー（kasugai_canvas.exe）で動かす形態です。AI チャット本体・地図操作・コード実行・プラグイン生成はどちらでも使え、アプリ版には<strong>永続化・共有・システムに触れる高権限機能とローカルブリッジの自動起動</strong>があります。</p>
-          <p><strong>GitHub Copilot / Devin / Antigravity はアプリ版でのみ専用プロバイダを表示</strong>します。アプリは <code>bridge-hub</code> を <code>127.0.0.1:8511</code> で自動起動し、ハブが選択中プロバイダのブリッジ（<code>copilot-bridge</code>／<code>devin-bridge</code>／<code>antigravity-bridge</code>）だけを内部ポートで遅延起動します（切替時は前の子を停止・常時最大1本）。アプリ本体（既定 :8510）の終了時にすべてを停止します。要 Node.js と各 CLI・本人の認証。<code>KASUGAI_NO_COPILOT_BRIDGE</code> / <code>KASUGAI_NO_DEVIN_BRIDGE</code> / <code>KASUGAI_NO_ANTIGRAVITY_BRIDGE</code> でそれぞれ自動起動を無効化できます。選択→保存で capabilities 通知のエンドポイント、アプリ用ポート、手動用ポートの順に自動検出します。ハブに集約した設計判断（3ポート分離との比較・マルチエージェント観点）は <a href="features/v3.html#bridge-hub-design">V3: 設計判断：ブリッジハブ</a> を参照してください。</p>
+          <p><strong>GitHub Copilot / Devin / Antigravity はアプリ版でのみ専用プロバイダを表示</strong>します。アプリは <code>bridge-hub</code> を <code>127.0.0.1:8511</code> で自動起動し、ハブが選択中プロバイダのブリッジ（<code>copilot-bridge</code>／<code>devin-bridge</code>／<code>antigravity-bridge</code>）だけを内部ポートで遅延起動します（切替時は前の子を停止・常時最大1本）。アプリ本体（既定 :8510）の終了時にすべてを停止します。要 Node.js と各 CLI・本人の認証。<code>KASUGAI_NO_COPILOT_BRIDGE</code> / <code>KASUGAI_NO_DEVIN_BRIDGE</code> / <code>KASUGAI_NO_ANTIGRAVITY_BRIDGE</code> でそれぞれ自動起動を無効化でき、ハブの待受ポートは <code>BRIDGE_HUB_PORT</code> で変更できます（ブラウザ側は capabilities 通知の実ポートへ接続するため変更不要）。選択→保存で capabilities 通知のエンドポイント、アプリ用ポート、手動用ポートの順に自動検出します。ハブに集約した設計判断（3ポート分離との比較・マルチエージェント観点）は <a href="features/v3.html#bridge-hub-design">V3: 設計判断：ブリッジハブ</a> を参照してください。</p>
         </div>
         <div class="url-box" id="ai-connection-policy">
           <h3>AI 接続方式と利用規約上の判断</h3>

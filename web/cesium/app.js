@@ -93,7 +93,20 @@ const tileLayers = [];
 const layerState = new Map();
 let layerOrder = [];
 const expandedLayerGroups = new Set();
-let currentProjectId = urlParams.get("project") || "default";
+// ?kasc=<url>: 任意URLの .kasc を直接読むモード(サーバレス配信用)。
+// DATA/ 等の相対参照は .kasc のある URL 基準で解決する。
+// ?project= の標準プロジェクトモードと排他で、プロジェクト選択で解除される
+let currentKascUrl = (() => {
+  const raw = urlParams.get("kasc");
+  if (!raw) return null;
+  try { return new URL(raw, window.location.href).href; }
+  catch { return null; }
+})();
+const kascBaseUrl = () => currentKascUrl ? new URL("./", currentKascUrl).href : null;
+let currentProjectId = currentKascUrl
+  ? (decodeURIComponent(new URL(currentKascUrl).pathname.split("/").pop() || "")
+      .replace(/\.kasc$/i, "") || "kasc")
+  : (urlParams.get("project") || "default");
 let yahooAppId = "";
 let terrainEnabled = true;
 let undergroundTransparency = 0;
@@ -790,7 +803,14 @@ function updateAppPanelVisibility() {
 
 
 function getProjectBaseUrl() {
-  return `projects/${encodeURIComponent(currentProjectId || "default")}/`;
+  return `/projects/${encodeURIComponent(currentProjectId || "default")}/`;
+}
+
+// 共有URL等のプロジェクト指定部分。?kasc= モードでは project= ではなく
+// kasc=<url> を書いて開き直せるようにする(override 指定時は project= 優先)
+function projectQueryParam(projectOverride) {
+  if (currentKascUrl && !projectOverride) return `kasc=${encodeURIComponent(currentKascUrl)}`;
+  return `project=${encodeURIComponent(projectOverride || currentProjectId)}`;
 }
 
 // github.com の /raw/・/blob/ URL は raw.githubusercontent.com へのリダイレクト時に
@@ -815,7 +835,7 @@ function updateProjectRootPath() {
   if (!el) return;
   const id = currentProjectId || "default";
   const def = projectDefinitions.get(id);
-  el.value = def?.dir || `projects/${id}/`;
+  el.value = def?.dir || (currentKascUrl ? kascBaseUrl() : `projects/${id}/`);
   el.title = el.value;
 }
 
@@ -832,6 +852,9 @@ function resolveProjectUrl(url) {
   }
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return normalizeRemoteUrl(trimmed);
   if (trimmed.startsWith("/")) return trimmed;
+  // ?kasc= モード: DATA/ 等の相対参照は .kasc のある URL を基準に解決する。
+  // ../ 共有参照もブラウザの URL 正規化でそのまま祖先フォルダへ解決される
+  if (currentKascUrl) return new URL(trimmed, kascBaseUrl()).href;
   let path = trimmed;
   if (path.startsWith("./")) path = path.slice(2);
   const segments = path.split("/").filter(Boolean);
@@ -863,6 +886,11 @@ async function loadProjects() {
     if (response.ok) definitions = await response.json();
   } catch {}
   if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
+  // ?kasc= で直接読んだ .kasc はマニフェストに無いため、選択中として
+  // 一覧へ表示できるよう先頭に仮エントリを足す
+  if (currentKascUrl && !definitions.some(p => p.id === currentProjectId)) {
+    definitions.unshift({ id: currentProjectId, title: `${currentProjectId} (.kasc)`, external: true });
+  }
   externalProjectIds.clear();
   projectDefinitions.clear();
   const select = document.querySelector("#project-select");
@@ -882,7 +910,8 @@ async function loadProjects() {
 async function loadInspectorConfig() {
   try {
     const projectId = currentProjectId || "default";
-    const staticUrl = `/projects/${encodeURIComponent(projectId)}/kasugai_canvas.kasc`;
+    const staticUrl = currentKascUrl
+      || `/projects/${encodeURIComponent(projectId)}/kasugai_canvas.kasc`;
     let text = "";
     try {
       const response = await fetch(staticUrl, { cache: "no-store" });
@@ -1303,7 +1332,8 @@ function updateUrlFromCamera() {
   const height = Number(c.height).toFixed(1);
   const params = new URLSearchParams(window.location.search);
   ["latitude", "longitude", "height", "pitch", "heading"].forEach(key => params.delete(key));
-  if (currentProjectId) params.set("project", currentProjectId);
+  if (currentKascUrl) { params.set("kasc", currentKascUrl); params.delete("project"); }
+  else if (currentProjectId) params.set("project", currentProjectId);
   const hashParams = new URLSearchParams();
   hashParams.set("latitude", lat);
   hashParams.set("longitude", lon);
@@ -6386,9 +6416,12 @@ function setupEvents() {
 
   document.querySelector("#project-select")?.addEventListener("change", async event => {
     currentProjectId = event.target.value;
+    // 実プロジェクトの選択は ?kasc= 直読みモードを抜ける
+    currentKascUrl = null;
     const params = new URLSearchParams(window.location.search);
     if (currentProjectId) params.set("project", currentProjectId);
     else params.delete("project");
+    params.delete("kasc");
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
     updateProjectRootPath();
     // scope:"project" のプラグインレイヤーはプロジェクト単位のデータとして切り離す
@@ -6412,7 +6445,7 @@ function setupEvents() {
     const pitch = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
     const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
     const height = Number(c.height).toFixed(1);
-    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
+    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&${projectQueryParam()}`;
     await navigator.clipboard?.writeText(url);
     shareCopyBtn.textContent = "✓";
     setTimeout(() => { shareCopyBtn.textContent = "🔗"; }, 1500);
@@ -8681,7 +8714,7 @@ window.kasugaiApi = {
     const pitch = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
     const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
     const height = Number(c.height).toFixed(1);
-    return `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&project=${encodeURIComponent(currentProjectId)}`;
+    return `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&${projectQueryParam()}`;
   },
   // 任意の座標・視点の共有URLを組み立てる。省略した引数は現在視点を使う。
   // 資料の各節に視点別パーマリンクを埋め込む用途向け
@@ -8707,7 +8740,9 @@ window.kasugaiApi = {
     if (Number.isFinite(h)) params.set("height", h.toFixed(1));
     if (Number.isFinite(p)) params.set("pitch", p.toFixed(2));
     if (Number.isFinite(hd)) params.set("heading", hd.toFixed(2));
-    params.set("project", typeof project === "string" && project ? project : currentProjectId);
+    if (typeof project === "string" && project) params.set("project", project);
+    else if (currentKascUrl) params.set("kasc", currentKascUrl);
+    else params.set("project", currentProjectId);
     return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
   },
   // エージェント生成の資料（Markdown/HTML）をモーダル表示する

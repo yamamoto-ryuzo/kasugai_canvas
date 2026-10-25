@@ -6,6 +6,7 @@ import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
 import { createPlayerApi } from "/shared/player-api.js";
 
 import { groundDeckTileset } from "/shared/deck-ground.js";
+import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "/shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom } from "/shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
@@ -60,6 +61,9 @@ function removeManagedPanes() {
 let layerEntries = [];
 let currentBaseEntries = [];
 let lastBaseUrl = "";
+// ?kasc= で読み込んだ .kasc の URL。設定中は URL 書き換え時に
+// project= を書かず ?kasc= を維持する(実プロジェクト選択で空に戻る)
+let lastKascUrl = "";
 let currentProjectId = "";
 // URL ハッシュの初期ビューは最初の loadProject で一度だけ適用する
 // （プロジェクト切替時はそのプロジェクトの cam/範囲へ移動する既存挙動を維持）
@@ -186,6 +190,10 @@ function loadDeck() {
 let deckInst = null;             // deck.Deck インスタンス（オーバーレイキャンバス）
 let deckCanvas = null;           // オーバーレイ用 canvas 要素（ズームアニメ変形の対象）
 const deckDefs = new Map();      // lid("deck-N") → { item, url, opacity, pointSize, order }
+// 3D Tiles ドレープ設定（deck.gl TerrainExtension。
+// Cesium 版のドレープ対象地形=3D Tiles（drape-terrain-tiles3d・
+// basemap-drape-3dtiles・drape-xyz/​geojson-tiles3d）に相当）
+const drapeTiles3d = { enabled: true, basemap: true, xyz: true, vector: true };
 
 // deck が実際に描画している Leaflet ビュー（ズームアニメ中の CSS 変形の基準に使う）
 let deckView = { lng: 0, lat: 0, zoom: 0 };
@@ -235,8 +243,38 @@ async function ensureDeck() {
     layers: [],
     useDevicePixels: true,
   });
+  window.kascDeckInst = deckInst; // デバッグ/外部連携用参照（kascMap と同じ公開範囲）
   syncDeckView();
   return deckInst;
+}
+
+// 可視の 3dtiles が1枚でもある時だけドレープを有効化する
+// （地形ソースが無いと drape 先が存在しない）
+function deckDrapeActive() {
+  if (!drapeTiles3d.enabled) return false;
+  for (const def of deckDefs.values()) if (def.item.visible !== false) return true;
+  return false;
+}
+
+// ドレープ対象（選択中ベースマップ + 表示中 XYZ/ベクターレイヤー）を収集する。
+// 戻り値の配列順は terrain カバーへの描画順（後ほど前面）
+function collectDrapeItems() {
+  const rasterItems = [], vectorItems = [];
+  if (drapeTiles3d.basemap) {
+    const base = currentBaseEntries[Number(panel.basemapSelect?.value ?? 0)]?.item;
+    if (base?.url) rasterItems.push(base);
+  }
+  // layerEntries は .kasc 順（先頭=最前面）。カバー内では後描きが上に出るため逆順に積む
+  for (const e of [...layerEntries].reverse()) {
+    const it = e.item;
+    if (it.visible === false || it.type === "3dtiles") continue;
+    if (VECTOR_TYPES.has(it.type)) {
+      if (drapeTiles3d.vector && it._geojson?.features?.length) vectorItems.push(it);
+    } else if (drapeTiles3d.xyz && it.url) {
+      rasterItems.push(it);
+    }
+  }
+  return { rasterItems, vectorItems };
 }
 
 // deckDefs から毎回レイヤ実体を再構成する（id 同一ならタイルセットは再読込されない）
@@ -244,6 +282,7 @@ function syncDeckLayers() {
   if (!deckInst || !window.deck) return;
   const deck = window.deck;
   const layers = [];
+  const drapeOn = deckDrapeActive();
   // deckDefs は追加完了順に並ぶため、.kasc 行順(_idx)で描画順を揃える
   for (const [lid, def] of [...deckDefs.entries()].sort((a, b) => (a[1].order ?? 0) - (b[1].order ?? 0))) {
     const opts = {
@@ -252,6 +291,8 @@ function syncDeckLayers() {
       data: def.item.visible !== false ? def.url : null,
       visible: def.item.visible !== false,
       opacity: def.opacity,
+      // ドレープ有効時は 3D Tiles を地形ソース化する（drape レイヤーの貼り付け先）
+      operation: drapeOn ? "terrain+draw" : "draw",
       pickable: true,
       onTilesetLoad: tileset => {
         try {
@@ -266,6 +307,8 @@ function syncDeckLayers() {
     if (def.pointSize) opts.pointSize = def.pointSize;
     layers.push(new deck.Tile3DLayer(opts));
   }
+  // ベースマップ/XYZ/ベクターのドレープコピー（TerrainExtension）
+  if (drapeOn) layers.push(...buildDeckDrapeLayers(deck, collectDrapeItems(), lastBaseUrl));
   deckInst.setProps({ layers });
 }
 
@@ -378,17 +421,28 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     const env = geojsonExtent(geojson);
     if (env) item._env = env;
     item._geojson = geojson;
+    syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
     return { layer, styleFn, viewportQuery, zoomRange };
   }
   // ラスタ系（xyz / wms / wmts / base）
   const opts = item.opts || {};
   const url = resolveKascUrl(item.url, baseUrl);
+  // .kasc の maxZoom= はタイルソースのネイティブ最大ズーム。そのまま
+  // 表示上限(maxZoom)にすると超過ズームでレイヤが消えて真っ白になる
+  // ため maxNativeZoom（超過分は最終取得タイルを拡大表示）として解釈
+  // する。表示上限自体は 24 まで許す。WMS は任意ズームで再描画できる
+  // ので未指定時は上限を設けない
+  // ※ undefined を渡すと 1.9.4 の min/max 正規化で maxZoom=NaN になる
+  //   (プロトタイプ既定値をundefinedが上書き)ため、未指定キーは省略する
+  const nativeMax = Number(opts.maxzoom ?? opts.maximumlevel);
   const common = {
     pane,
     opacity: opts.opacity !== undefined ? Number(opts.opacity) : 1,
-    minZoom: Number(opts.minzoom ?? opts.minimumlevel) || undefined,
-    maxZoom: Number(opts.maxzoom ?? opts.maximumlevel) || undefined,
+    maxZoom: Math.max(24, Number.isFinite(nativeMax) ? nativeMax : 0),
   };
+  const minZ = Number(opts.minzoom ?? opts.minimumlevel);
+  if (Number.isFinite(minZ)) common.minZoom = minZ;
+  if (Number.isFinite(nativeMax)) common.maxNativeZoom = nativeMax;
   let layer;
   if (item.type === "wms") {
     // Leaflet 組み込みの WMS 対応（BBOX は Leaflet が計算）
@@ -406,6 +460,18 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     // wmts: は {z}/{x}/{y} テンプレートへ正規化してタイルレイヤ扱い
     const tileUrl = item.type === "wmts" ? buildWmtsTileTemplate(url, opts) : url;
     layer = L.tileLayer(tileUrl, { tileSize: Number(opts.tilesize) || 256, ...common });
+    // ネイティブ最大ズーム不明(or宣言が実際より過大)のソースでは、
+    // あるズームのタイル要求が全滅した時点で実データの上限を記憶し、
+    // 以降は最終取得成功レベルのタイルを拡大表示する(真っ白化を防ぐ)
+    layer.on("load", () => {
+      const z = layer._tileZoom;
+      if (!z) return;
+      const tiles = Object.values(layer._tiles || {}).filter(t => t.coords.z === z);
+      if (tiles.length > 0 && tiles.every(t => !t.el.classList.contains("leaflet-tile-loaded"))) {
+        layer.options.maxNativeZoom = Math.min(z - 1, layer.options.maxNativeZoom ?? z - 1);
+        layer.redraw();
+      }
+    });
   }
   const baseOpacity = common.opacity;
   return { layer, styleFn: null, viewportQuery: false, zoomRange: null, baseOpacity };
@@ -440,6 +506,7 @@ function applyEntryVisibility(entry) {
   const on = effectiveVisible(entry);
   if (on && !map.hasLayer(entry.layer)) map.addLayer(entry.layer);
   else if (!on && map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
+  syncDeckLayers(); // ドレープコピーの表示追従（deck 未初期化なら no-op）
   updateMapAttribution();
 }
 
@@ -472,6 +539,7 @@ function updateMapAttribution() {
 // 凡例シンボル単位の表示切替: styleFn が _legendHidden を見るため setStyle 再適用で切替
 function applyLegendFilter(entry) {
   if (entry.styleFn && entry.layer?.setStyle) entry.layer.setStyle(entry.styleFn);
+  syncDeckLayers(); // ドレープコピーにも凡例非表示を反映
 }
 
 // レイヤー行の📍: レイヤー範囲へ移動する。非表示なら表示してからフィットする
@@ -841,8 +909,9 @@ function fillCamPanel(cams) {
 let currentUnsupported = [];
 
 async function loadProject(id) {
-  const { id: loadedId, baseUrl, doc, manifest, raw } = await loadKascProject(id);
+  const { id: loadedId, baseUrl, doc, manifest, raw, kascUrl } = await loadKascProject(id);
   inspectorInput.value = raw;
+  lastKascUrl = kascUrl || "";
   await renderProject(loadedId, baseUrl, doc, manifest);
 }
 
@@ -910,6 +979,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
         if (i === Number(sel.value)) map.addLayer(e.layer);
         else if (map.hasLayer(e.layer)) map.removeLayer(e.layer);
       });
+      syncDeckLayers(); // ベースマップのドレープコピーを選択中タイルへ差替える
       updateMapAttribution();
     };
     panel.basemap.hidden = false;
@@ -1094,6 +1164,7 @@ function requeryViewportLayers(entries) {
       if (env) entry.item._env = env;
       entry.layer?.clearLayers?.();
       entry.layer?.addData?.(geojson);
+      syncDeckLayers(); // ドレープコピーのデータ更新
     }).catch(err => console.warn("viewport requery 失敗:", entry.item.title, err));
   }
 }
@@ -1102,12 +1173,15 @@ function requeryViewportLayers(entries) {
 let requeryTimer = null;
 map.on("moveend", () => {
   // 初期URLを読み取る前の初回moveendでパーマリンクを上書きしないよう消費済みを待つ
-  if (urlViewConsumed) writeUrlView(mapViewToUrl(), currentProjectId);
+  if (urlViewConsumed) writeUrlView(mapViewToUrl(), lastKascUrl ? undefined : currentProjectId);
   const targets = layerEntries.filter(e => e.item._viewportQuery && e.item.visible !== false);
   if (!targets.length) return;
   clearTimeout(requeryTimer);
   requeryTimer = setTimeout(() => requeryViewportLayers(targets), 400);
 });
+
+// 3D Tiles ドレープ品質: ズーム確定で terrain カバー FBO を現在解像度へ作り直す
+map.on("zoomend", () => invalidateDeckTerrainCovers(deckInst));
 
 // QML スケール範囲(zoomRange)を持つレイヤーはズームに応じて出し分ける
 map.on("zoomend", () => {
@@ -1199,6 +1273,16 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   document.querySelector("#display-popup")?.addEventListener("change", e => {
     popupEnabled = e.target.checked;
     if (!popupEnabled) map.closePopup();
+  });
+
+  // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当
+  [
+    ["#drape-tiles3d", v => { drapeTiles3d.enabled = v; }],
+    ["#drape-tiles3d-basemap", v => { drapeTiles3d.basemap = v; }],
+    ["#drape-tiles3d-xyz", v => { drapeTiles3d.xyz = v; }],
+    ["#drape-tiles3d-vector", v => { drapeTiles3d.vector = v; }],
+  ].forEach(([sel, set]) => {
+    document.querySelector(sel)?.addEventListener("change", e => { set(e.target.checked); syncDeckLayers(); });
   });
 }
 
@@ -1386,6 +1470,7 @@ window.kasugaiApi = createPlayerApi({
     if (env) entry.item._env = env;
     entry.layer?.clearLayers?.();
     entry.layer?.addData?.(geojson);
+    syncDeckLayers(); // ドレープコピーのデータ更新
   },
   getEntryGeoJson: entry => entry.item._geojson || null,
   setBaseEntryVisible: (entry, on) => {

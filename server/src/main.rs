@@ -4475,6 +4475,43 @@ struct RegisterProjectRequest {
 // 親にプロジェクト群マニフェスト(projects.json)があれば群の他プロジェクトも
 // まとめて登録し registered に全 id を返す。
 // ファイル関連付けで起動済みインスタンスに登録を依頼する用途
+// ローカルAPI(/api/*, /health)へ file:// 等の別オリジンからのアクセスを許可する。
+// エクスポートフォルダの <engine>.html ランチャー(file://)からの
+// /api/projects/register 呼び出し用。静的配信部分には付けない。
+async fn local_api_cors(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::header;
+    let is_api = req.uri().path() == "/health" || req.uri().path().starts_with("/api/");
+    if is_api && req.method() == Method::OPTIONS {
+        let mut res = axum::response::Response::new(axum::body::Body::empty());
+        *res.status_mut() = StatusCode::NO_CONTENT;
+        let h = res.headers_mut();
+        h.insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            axum::http::HeaderValue::from_static("*"),
+        );
+        h.insert(
+            header::ACCESS_CONTROL_ALLOW_METHODS,
+            axum::http::HeaderValue::from_static("GET,POST,PUT,DELETE,OPTIONS"),
+        );
+        h.insert(
+            header::ACCESS_CONTROL_ALLOW_HEADERS,
+            axum::http::HeaderValue::from_static("content-type"),
+        );
+        return res;
+    }
+    let mut res = next.run(req).await;
+    if is_api {
+        res.headers_mut().insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            axum::http::HeaderValue::from_static("*"),
+        );
+    }
+    res
+}
+
 async fn register_project(
     State(state): State<AppState>,
     Json(request): Json<RegisterProjectRequest>,
@@ -5084,6 +5121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = app
         .route("/projects/{*path}", get(serve_project_files))
         .fallback_service(ServeDir::new(web_dir).append_index_html_on_directories(true))
+        .layer(axum::middleware::from_fn(local_api_cors))
         .with_state(state.clone());
 
     // ウィンドウレス実行(windows_subsystem="windows")のためバインド失敗は利用者に見えない。

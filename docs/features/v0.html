@@ -573,6 +573,21 @@
       ではドレープが正しく描画されない場合があります。</li>
       </ul></li>
       </ul>
+      <h3>2D エンジンの 3D Tiles ドレープ（deck.gl）</h3>
+      <p>MapLibre / OpenLayers / Leaflet の各エンジンでも、deck.gl の
+      <code>TerrainExtension</code> を使って同様のドレープが可能です。
+      設定「表示」タブの「<strong>3D Tiles ドレープ（deck.gl）</strong>」で
+      対象レイヤー（ベースマップ / XYZ / ベクター）を選択します（既定は全て ON）。</p>
+      <ul>
+      <li>表示中の <code>3dtiles:</code> レイヤーが <code>operation:"terrain+draw"</code>
+      で地形ソース化され、対象レイヤーがその表面へテクスチャ投影されます。</li>
+      <li>ベースマップ / XYZ（WMS・WMTS 含む）は deck.gl の
+      <code>TileLayer</code>、ベクターは <code>GeoJsonLayer</code>
+      としてドレープコピーが生成されます。</li>
+      <li>deck.gl の TerrainCover はタイル範囲固定で初回ズームの解像度のまま
+      再描画されないため、ズーム確定ごとにカバーを破棄して現在ズームで再生成し、
+      解像度がズームに追従するよう補正しています。</li>
+      </ul>
       <h3>DEM / 地形</h3>
       <ul>
       <li>初期表示は <code>EllipsoidTerrainProvider</code>

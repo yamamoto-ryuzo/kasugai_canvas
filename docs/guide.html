@@ -154,7 +154,12 @@ info: https://example.com/project-info.html</code></pre>
             <p><code>web/</code> を静的サーバーにアップロード。同一オリジン内の <code>projects/&lt;id&gt;/DATA/</code> を相対パスで参照できます。</p>
           </div>
           <div class="feature-card">
-            <h3>🔒 読み取り専用</h3>
+            <h3>� 単独WEB配信（サーバレス）</h3>
+            <p>QGIS geo_webview の KASUGAI エクスポートが出力する <code>.kasc</code>・<code>DATA/</code>・<code>&lt;engine&gt;.html</code>・<code>index.html</code> を含むフォルダを、エンジン（<code>web/</code> の中身）と一緒に同じ静的サーバーへ置くだけで公開できます。各 <code>&lt;engine&gt;.html</code> はエンジンを自動探索して <code>?kasc=&lt;URL&gt;</code> 付きで起動します（配置が特殊なら HTML 内の <code>CANVAS_BASE</code> を設定）。プロジェクト登録・ローカルサーバー不要です。</p>
+            <p><strong>注意事項</strong>：エンジンはルートパス前提（<code>/shared/</code> 等）のため <code>web/</code> の中身をホストルートに置き、プロジェクトフォルダは配下の任意の場所へ配置してください。<code>file://</code> で開いた場合は起動中のローカル Canvas（127.0.0.1:8510）へ <code>/api/projects/register</code> で自動登録して開きます（CORS 対応ビルドが必要。未対応・未起動時は案内が表示されます）。受け取り側は「ローカル Canvas を入れてダブルクリック」または「フォルダごと静的ホスティングへ」の2択で開けます。</p>
+          </div>
+          <div class="feature-card">
+            <h3>�🔒 読み取り専用</h3>
             <p>プロジェクトファイルは Web サーバー側の権限で書き込み禁止にできます。変更は「エクスポート(.kasc)」でローカルに落として差し替えます。</p>
           </div>
           <div class="feature-card">

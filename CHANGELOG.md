@@ -8,6 +8,14 @@
 
 ### Added
 
+- **3D Tiles へのレイヤードレープ（deck.gl TerrainExtension）** — MapLibre / OpenLayers / Leaflet の各2Dエンジンに、Cesium 版の「ドレープ対象地形=3D Tiles」相当の設定を追加。設定「表示」タブの「3D Tiles ドレープ（deck.gl）」で、対象レイヤー種別（ベースマップ / XYZ / ベクター）を選んで `3dtiles:` 表面へ貼り付けられる。有効時は表示中の Tile3DLayer を `operation:"terrain+draw"` で地形ソース化し、選択したレイヤーを `drape-raster-*`（TileLayer+BitmapLayer）・`drape-vector-*`（GeoJsonLayer）として terrain カバーへ描画する。WMS/WMTS 行は `{bbox-epsg-3857}`・`{z}/{x}/{y}` テンプレートへ正規化して対応。ベクターは QML スタイル（`__kasc_*` 焼き込み値または `item._qml.evaluate`）と凡例シンボル非表示をドレープコピーにも反映。既定は全項目 ON（可視の `3dtiles:` がある場合のみ発動）。deck.gl の TerrainCover はタイル範囲固定・初回ズームでしか生成されないため、ズーム確定ごとにカバー FBO を破棄して現在ズームで再生成し、ドレープ解像度がズームに追従するよう補正している。共有ヘルパー `web/shared/deck-drape.js` を新設
+
+- **`?kasc=<url>` 直読みモード（単独WEB配信）** — 全エンジンが `/<engine>/?kasc=<.kascのURL>` で任意 URL の .kasc を直接読み込めるようになった。`DATA/` 等の相対参照は .kasc のある URL を基準に解決されるため `projects/` 構造は不要。geo_webview の KASUGAI エクスポートが出力する `<engine>.html`（cesium/maplibre/openlayers/leaflet）と `index.html` を .kasc と同じ場所に置き、フォルダとエンジン（`web/` の中身）を同じ静的サーバーへアップするだけでサーバレス公開できる。各 HTML は `./ ../ ../../ /` の順にエンジンを自動探索し、配置が特殊な場合は HTML 内の `CANVAS_BASE` で指定できる。共有 `..` 参照はブラウザの URL 正規化で祖先フォルダへ解決される
+
+### Fixed
+
+- **cesium エンジンで `.kasc` 内の相対参照（`DATA/` 等）が読めなくなっていた回帰を修正** — マルチエンジン再編（`web/cesium/` 移行）以降 `resolveProjectUrl` が `projects/<id>/` の相対パスを返し、`/cesium/` ページ基準で `/cesium/projects/...` へ解決されて全て 404 になっていた。ルート相対 `/projects/<id>/` を返すよう修正
+
 - **`.kasc` の `wms:`/`wmts:` 行（OGCタイルレイヤー）** — WMS/WMTS をレイヤーとして直接読み込めるようになった。`wms:タイトル | エンドポイント | layers=, styles=, format=, transparent=, version=` は GetMap を 256px タイル（EPSG:3857）へ分解して描画（Cesium は `{westProjected}` テンプレート、MapLibre は `{bbox-epsg-3857}`、OpenLayers は `ol.source.TileWMS`）。`wmts:` は `{z}/{x}/{y}`・`{TileMatrix}/{TileRow}/{TileCol}` の RESTful テンプレートと KVP GetTile エンドポイント（`layer=`/`tilematrixset=`/`matrixprefix=`）の両方を受け付け、`{z}/{x}/{y}` テンプレートへ正規化する。`opacity=`・`bbox=`・`off`・出典などタイル系の既存オプションも使え、データ取り込みパネル（kasc_loader/kasc_panel）からも利用可能。geo_webview の `/wms`・`/wmts` エンドポイントを指せば、稼働中 QGIS の描画をライブレイヤーとして表示できる
 - **インスペクタの `plugin:` 行によるプラグイン起動** — `.kasc` に `plugin: <id> | key=value ...` と書くと、そのプロジェクトでのみプラグインを起動できる。`plugins.json` は利用可能プラグインのカタログとなり既定では自動ロードしない（`"auto": true` で常駐化も可）。宣言できるのはカタログまたはストレージプラグインの ID（外部 URL 直指定は不可）。起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替・行削除・`| off` 指定でレイヤー除去＋`registerPlugin` の `meta.dispose()` が呼ばれ停止する。オプションは `manifest.options` にマージして渡され、真偽値・数値・カンマ区切り（配列）を解釈する。`listPlugins` ツールの結果に起動可能なカタログ一覧（`catalog`）を追加
 - **自動更新の開発チャンネル** — バージョンにプレリリース接尾辞（`X.Y.Z-dev[.N]`）が付いたビルドは、`main` ブランチの `latest.json` / `kasugai_canvas.zip` ではなく `develop` ブランチの `latest-dev.json` / `kasugai_canvas_dev.zip` を参照するようになった。開発版 exe が公開最新版へ誤更新される事故を構造的に防止し、開発機は開発チャンネルの最新開発ビルドへ自動追従できる。`python run.py -B` はバージョンに応じて公開用（`kasugai_canvas.zip`・`latest.json`）／開発用（`kasugai_canvas_dev.zip`・`kasugai_canvas_setup_dev.exe`・`latest-dev.json`）の配布物を自動で切り替えて生成する

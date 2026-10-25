@@ -202,24 +202,55 @@ export function fillThemeSelect(select, themes, promptText = "テーマを選択
 }
 
 // .kasc 内の参照を絶対 URL へ解決する。
-// 相対パスは projectBaseUrl(/projects/<id>/) 基準。`..` はブラウザの URL 正規化で
-// projects/ 直下（=全プロジェクト共有）に畳まれる
+// 相対パスは projectBaseUrl(/projects/<id>/ または ?kasc= 用の絶対URL) 基準。
+// `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる
 export function resolveKascUrl(url, projectBaseUrl) {
   if (!url) return url;
   if (/^https?:\/\//i.test(url) || url.startsWith("data:") || url.startsWith("blob:")) return url;
-  return new URL(url, location.origin + projectBaseUrl).href;
+  const base = /^https?:\/\//i.test(String(projectBaseUrl || ""))
+    ? projectBaseUrl
+    : location.origin + projectBaseUrl;
+  return new URL(url, base).href;
+}
+
+// .kasc の URL をプロジェクトとして読み込む(?kasc= モード)。
+// DATA/ 等の相対参照は .kasc のある URL を基準に解決されるため、
+// projects/ 構造を持たない任意フォルダを静的配信するだけで動く
+async function loadKascUrl(kascParam) {
+  const kascUrl = new URL(kascParam, location.href).href;
+  const res = await fetch(kascUrl, { cache: "no-store" });
+  if (!res.ok) throw new Error(`.kasc を読み込めません: ${kascUrl} (${res.status})`);
+  const text = await res.text();
+  const baseUrl = new URL("./", kascUrl).href;
+  const name = decodeURIComponent(
+    new URL(kascUrl).pathname.split("/").pop() || "")
+    .replace(/\.kasc$/i, "") || "kasc";
+  let manifest = [];
+  try {
+    const res2 = await fetch("/projects/projects.json", { cache: "no-store" });
+    if (res2.ok) manifest = await res2.json();
+  } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
+  // 選択中プロジェクトとして一覧へ表示できるよう先頭に仮エントリを足す
+  if (!manifest.some(e => (e.id || e) === name)) {
+    manifest.unshift({ id: name, title: name, external: true });
+  }
+  return { id: name, manifest, baseUrl, doc: parseKasc(text), raw: text, kascUrl };
 }
 
 // プロジェクト一覧と .kasc を読み込む。
-// ?project=<id> 指定があればそれを、なければマニフェスト先頭（または default）
+// 優先順位: 明示引数 > ?kasc=<url> > ?project=<id> > マニフェスト先頭(default)
 export async function loadKascProject(projectId) {
+  const params = new URLSearchParams(location.search);
+  const kascParam = params.get("kasc");
+  if (kascParam && !projectId) return loadKascUrl(kascParam);
+
   let manifest = [];
   try {
     const res = await fetch("/projects/projects.json", { cache: "no-store" });
     if (res.ok) manifest = await res.json();
   } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
 
-  const requested = projectId || new URLSearchParams(location.search).get("project");
+  const requested = projectId || params.get("project");
   const id = requested || (manifest[0] && (manifest[0].id || manifest[0])) || "default";
   const baseUrl = `/projects/${encodeURIComponent(id)}/`;
   const res = await fetch(`${baseUrl}kasugai_canvas.kasc`, { cache: "no-store" });
@@ -598,7 +629,8 @@ export function writeUrlView(view, projectId) {
   if (!hasUrlView(view)) return;
   const params = new URLSearchParams(window.location.search);
   ["latitude", "longitude", "zoom", "height", "pitch", "heading"].forEach(key => params.delete(key));
-  if (projectId) params.set("project", projectId);
+  // 実プロジェクトへ切り替えた時は ?kasc= モードを抜けるため除去する
+  if (projectId) { params.set("project", projectId); params.delete("kasc"); }
   const hashParams = new URLSearchParams();
   hashParams.set("latitude", Number(view.latitude).toFixed(6));
   hashParams.set("longitude", Number(view.longitude).toFixed(6));
