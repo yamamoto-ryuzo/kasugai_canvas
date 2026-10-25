@@ -10,6 +10,7 @@
 
 - **3D Tiles へのレイヤードレープ（deck.gl TerrainExtension）** — MapLibre / OpenLayers / Leaflet の各2Dエンジンに、Cesium 版の「ドレープ対象地形=3D Tiles」相当の設定を追加。設定「表示」タブの「3D Tiles ドレープ（deck.gl）」で、対象レイヤー種別（ベースマップ / XYZ / ベクター）を選んで `3dtiles:` 表面へ貼り付けられる。有効時は表示中の Tile3DLayer を `operation:"terrain+draw"` で地形ソース化し、選択したレイヤーを `drape-raster-*`（TileLayer+BitmapLayer）・`drape-vector-*`（GeoJsonLayer）として terrain カバーへ描画する。WMS/WMTS 行は `{bbox-epsg-3857}`・`{z}/{x}/{y}` テンプレートへ正規化して対応。ベクターは QML スタイル（`__kasc_*` 焼き込み値または `item._qml.evaluate`）と凡例シンボル非表示をドレープコピーにも反映。既定は全項目 ON（可視の `3dtiles:` がある場合のみ発動）。deck.gl の TerrainCover はタイル範囲固定・初回ズームでしか生成されないため、ズーム確定ごとにカバー FBO を破棄して現在ズームで再生成し、ドレープ解像度がズームに追従するよう補正している。共有ヘルパー `web/shared/deck-drape.js` を新設
 
+- **`?kasc=local` ローカルフォルダ直読み（leaflet/maplibre/openlayers）** — File System Access API で選択したローカルフォルダ内の `.kasc`+`DATA/` を、ホスト版エンジンが `localfs:///` 疑似URL + fetch シム経由で読む。サーバー・exe 不要で、フォルダハンドルは IndexedDB に保持（次回は「前回のフォルダで開く」1クリック）。Chromium 系のみ。選択フォルダ外の参照・ローカルXYZタイルツリー（`<img>` 経由）は未対応。cesium は Resource/XHR 層を使うため本機構の対象外
 - **`?kasc=<url>` 直読みモード（単独WEB配信）** — 全エンジンが `/<engine>/?kasc=<.kascのURL>` で任意 URL の .kasc を直接読み込めるようになった。`DATA/` 等の相対参照は .kasc のある URL を基準に解決されるため `projects/` 構造は不要。geo_webview の KASUGAI エクスポートが出力する `<engine>.html`（cesium/maplibre/openlayers/leaflet）と `index.html` を .kasc と同じ場所に置き、フォルダとエンジン（`web/` の中身）を同じ静的サーバーへアップするだけでサーバレス公開できる。各 HTML は `./ ../ ../../ /` の順にエンジンを自動探索し、配置が特殊な場合は HTML 内の `CANVAS_BASE` で指定できる。共有 `..` 参照はブラウザの URL 正規化で祖先フォルダへ解決される
 
 ### Fixed

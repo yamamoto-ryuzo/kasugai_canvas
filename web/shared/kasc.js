@@ -206,8 +206,8 @@ export function fillThemeSelect(select, themes, promptText = "テーマを選択
 // `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる
 export function resolveKascUrl(url, projectBaseUrl) {
   if (!url) return url;
-  if (/^https?:\/\//i.test(url) || url.startsWith("data:") || url.startsWith("blob:")) return url;
-  const base = /^https?:\/\//i.test(String(projectBaseUrl || ""))
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url; // http/data/blob/localfs 等は素通し
+  const base = /^[a-z][a-z0-9+.-]*:\/\//i.test(String(projectBaseUrl || ""))
     ? projectBaseUrl
     : location.origin + projectBaseUrl;
   return new URL(url, base).href;
@@ -215,8 +215,19 @@ export function resolveKascUrl(url, projectBaseUrl) {
 
 // .kasc の URL をプロジェクトとして読み込む(?kasc= モード)。
 // DATA/ 等の相対参照は .kasc のある URL を基準に解決されるため、
-// projects/ 構造を持たない任意フォルダを静的配信するだけで動く
+// projects/ 構造を持たない任意フォルダを静的配信するだけで動く。
+// ?kasc=local はローカルフォルダ直読み(File System Access API):
+// ホスト版ページが選択フォルハンドル内の .kasc+DATA/ を fetch シムで読む
 async function loadKascUrl(kascParam) {
+  if (kascParam === "local" || kascParam === "localfs") {
+    const { openLocalKascUrl } = await import("./localfs.js");
+    kascParam = await openLocalKascUrl();
+  } else if (kascParam.startsWith("localfs://")) {
+    // 共有URL/再読込で localfs:// が残った場合もフォルダ選択から復帰する
+    const lf = await import("./localfs.js");
+    await lf.pickProjectDir();
+    lf.installFetchShim();
+  }
   const kascUrl = new URL(kascParam, location.href).href;
   const res = await fetch(kascUrl, { cache: "no-store" });
   if (!res.ok) throw new Error(`.kasc を読み込めません: ${kascUrl} (${res.status})`);
