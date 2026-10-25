@@ -19,6 +19,10 @@
 - **reinfolib プロジェクトを `plugin:` 行方式へ移行** — `installer/projects/reinfolib` は固定タイル座標を `geojson:` 行で直書きする静的構成だったが、`plugin: reinfolib | datasets=price,shelter,station,zoning` に置き換え、プラグインの表示範囲連動の動的取得に戻した
 - **同梱プラグインの既定を宣言ロードへ変更** — `plugins.json` のエントリは従来の全自動ロードからカタログ化し、`plugin:` 行または `"auto": true` で起動する。これにより reinfolib 等が無関係なプロジェクトでも API を叩き続ける動作を解消
 
+### Fixed
+
+- **Leaflet 版で 3D Tiles がズーム操作時にベースマップから浮いて見える問題を修正** — `zoomanim` 発火時に deck.gl へ最終ビューを即座に適用していたため、タイル側の 0.25s CSS アニメーションと deck の先行描画がズレて建物が一瞬地面から浮いて見えていた。アニメーション中は `GridLayer._setZoomTransform` と同じ translate+scale を deck キャンバスへ掛けてタイルと一体で変形させ、終了時に来る `move` で変形を解除して実ビューへ再同期する方式へ変更。ドラッグ・ピンチ・flyTo・慣性パンは従来どおり `move` の毎フレーム同期で密着する（接地高 0m への自動接地 `groundDeckTileset` は従来から共通処理として適用済み）
+
 ## [5.27.0] - 2026-10-21
 
 ### Added
