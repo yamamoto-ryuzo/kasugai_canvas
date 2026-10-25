@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect } from "/shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
 import { createPlayerApi } from "/shared/player-api.js";
@@ -916,7 +916,11 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     entry.pending = false;
     syncRowStatus(entry);
     updateMapAttribution();
-    updateLoadProgress(++done, total, splitKascTitle(item.title).title || item.title || item.url);
+    // 残りの読込対象(=現在読み込み中を含む)を名前付きで進捗に出す
+    const rest = entries.filter(e => e.pending)
+      .map(e => splitKascTitle(e.item.title).title || e.item.title || e.item.url);
+    updateLoadProgress(++done, total,
+      rest.length ? `残り${rest.length}: ${rest.slice(0, 3).join(", ")}${rest.length > 3 ? "…" : ""}` : "");
   })()));
   if (seq !== renderSeq) return;
 
@@ -957,10 +961,11 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     panel.infoLink.append(a);
   }
 
-  // cam: プリセット → カメラタブ
+  // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
+  const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
   panel.cams.innerHTML = "";
-  currentCams = doc.cams;
-  for (const cam of doc.cams) {
+  currentCams = cams;
+  for (const cam of cams) {
     const btn = document.createElement("button");
     btn.className = "cam-btn";
     btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
@@ -969,7 +974,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     });
     panel.cams.append(btn);
   }
-  if (!doc.cams.length) panel.cams.textContent = "（プリセットなし）";
+  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
 
   // 属性検索（読み込んだベクターの全属性を対象）→ 検索タブ
   panel.searchInput.onkeydown = e => {

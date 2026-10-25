@@ -17,7 +17,7 @@ import {
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "/shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "/shared/vector-decode.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect } from "/shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks } from "/shared/kasc.js";
 
 await initI18n();
 applyI18n();
@@ -586,6 +586,10 @@ const inspectorPluginSpecs = [];
 // インスペクタの theme: 行で宣言された可視性プリセット {name, layers[], line}[]。
 // QGIS マップテーマ相当。applyInspector で再構築し #theme-select へ反映する
 const inspectorThemes = [];
+// インスペクタの bookmark: 行で宣言された QGIS ブックマーク XML 参照
+// {title, url}[]。applyInspector で収集し、非同期ロードでカメラプリセットへ展開する
+const inspectorBookmarkSpecs = [];
+let bookmarkLoadSeq = 0;
 let dataLayerSeq = 0;
 let vectorSearchData = null;
 const activePrimitives = [];
@@ -1372,6 +1376,19 @@ function renderPresets() {
     button.addEventListener("click", () => flyTo(preset));
     container.append(button);
   });
+}
+
+// bookmark: 行の QGIS ブックマーク XML を読み込み、カメラプリセットへ追加する。
+// applyInspector は同期関数のため、パース時に収集した specs をここで非同期解決する。
+// 再適用で specs が入れ替わった場合は古いロード結果を捨てる(seq 管理)
+async function loadInspectorBookmarks(specs) {
+  const seq = ++bookmarkLoadSeq;
+  if (!specs.length) return;
+  const resolved = specs.map(spec => ({ ...spec, url: resolveProjectUrl(spec.url) }));
+  const cams = await loadKascBookmarks(resolved, "");
+  if (seq !== bookmarkLoadSeq || !cams.length) return;
+  cameraPresets.push(...cams);
+  renderPresets();
 }
 
 function getOrderedLayerItems() {
@@ -3062,7 +3079,16 @@ async function refreshLayersImpl() {
     item.visible && item.type !== "entities" &&
     (item.type === "3dtiles" || item.url || item.data || item.query)));
   let loadedCount = 0;
-  const layerDone = item => updateLoadProgress(++loadedCount, loadTargets.size, item?.title || "");
+  // 残りの読込対象(直列のため先頭が現在読み込み中)を名前付きで進捗に出す
+  const pendingItems = new Set(loadTargets);
+  const pendingLabel = () => {
+    const names = [...pendingItems].map(i => i.title || i.url || "");
+    return names.length ? names.slice(0, 3).join(", ") + (names.length > 3 ? "…" : "") : "";
+  };
+  const layerDone = item => {
+    pendingItems.delete(item);
+    updateLoadProgress(++loadedCount, loadTargets.size, pendingLabel());
+  };
   const layerOk = item => { item._loadStatus = ""; item._loadError = ""; syncLayerStatusDom(item); layerDone(item); };
   const layerFail = (item, err) => { item._loadStatus = "failed"; item._loadError = String(err?.message || err || ""); syncLayerStatusDom(item); layerDone(item); };
   if (loadTargets.size) updateLoadProgress(0, loadTargets.size);
@@ -3951,6 +3977,7 @@ function applyInspector(text) {
   layerState.clear();
   inspectorPluginSpecs.splice(0, inspectorPluginSpecs.length);
   inspectorThemes.splice(0, inspectorThemes.length);
+  inspectorBookmarkSpecs.splice(0, inspectorBookmarkSpecs.length);
   vectorSourceCache.clear();
   // gpkg Worker が url キーで開いたままの DB も破棄する(メモリ解放・再取得)
   resetGpkgWorkerDbs();
@@ -4127,6 +4154,14 @@ function applyInspector(text) {
         if ((key === "h" || key === "height") && Number.isFinite(number)) camera.height = number;
       });
       if (Number.isFinite(camera.latitude) && Number.isFinite(camera.longitude)) parsedCameras.push(camera);
+    }
+
+    // bookmark: 名 | XML または bookmark: XML — QGIS ブックマークエクスポート
+    // (qgis_bookmarks 形式)への参照。実体は非同期で読み込みカメラプリセットへ展開
+    if (type === "bookmark") {
+      const parts = value.split("|").map(part => part.trim());
+      const url = parts[1] || parts[0];
+      if (url) inspectorBookmarkSpecs.push({ title: parts[1] ? parts[0] : null, url });
     }
 
     if (type === "fly_geojson") {
@@ -4407,6 +4442,8 @@ function applyInspector(text) {
   globeHidden = parsedBaseMode === "hide";
   selectedBasemap = parsedBaseMode ? null : (basemaps[0] || null);
   cameraPresets.splice(0, cameraPresets.length, ...parsedCameras);
+  // bookmark: 行の XML を非同期で読み込み、カメラプリセットへ追加する
+  void loadInspectorBookmarks(inspectorBookmarkSpecs.slice());
   const uniqueFlyPaths = [...new Map(flyPaths.map(path => [path.url, path])).values()];
   flyPaths.splice(0, flyPaths.length, ...uniqueFlyPaths);
   renderBasemapSelector();
