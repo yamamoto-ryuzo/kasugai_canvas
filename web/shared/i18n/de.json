@@ -553,5 +553,6 @@
   "mcp.writeDenied": "Schreibvorgang vom Benutzer abgelehnt.",
   "chat.customInstructionsLabel": "Zusätzliche Anweisungen",
   "chat.customInstructionsPlaceholder": "Anweisungen eingeben, die die KI immer befolgen soll",
-  "chat.customInstructionsHint": "Wird als Rückfalloption in diesem Browser gespeichert. Ist KASUGAI_AI_INSTRUCTIONS in Cloud Run gesetzt, haben die Serveranweisungen Vorrang."
+  "chat.customInstructionsHint": "Wird als Rückfalloption in diesem Browser gespeichert. Ist KASUGAI_AI_INSTRUCTIONS in Cloud Run gesetzt, haben die Serveranweisungen Vorrang.",
+  "theme.selectPrompt": "Thema auswählen"
 }

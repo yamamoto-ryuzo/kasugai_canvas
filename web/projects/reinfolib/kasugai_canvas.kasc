@@ -1,0 +1,10 @@
+base: 地理院タイル 淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
+legend: DATA/reinfolib-legend.svg
+plugin: reinfolib | datasets=price,shelter,station,zoning
+cam:東京駅周辺|35.6812|139.7000|h=9000|p=-60|d=0
+geojson: 比較/候補地域(半径1km) | DATA/areas.geojson | on | attr=region-compare試作 | style=DATA/candidates.qml
+cam:中野駅周辺|35.7058|139.6655|h=2000|p=-60|d=0
+cam:川口駅周辺|35.8019|139.7175|h=2000|p=-60|d=0
+cam:市川駅周辺|35.7287|139.9076|h=2000|p=-60|d=0
+theme: 候補地域のみ | 比較/候補地域(半径1km)
+theme: 全表示 | *

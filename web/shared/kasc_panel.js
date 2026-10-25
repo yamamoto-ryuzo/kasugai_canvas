@@ -28,7 +28,7 @@
     addFiles: 'Add files',
     close: 'Close',
     layersTitle: 'Imported layers',
-    hint: 'xyz:/base:/geojson:/geoparquet:/flatgeobuf:/gpkg:/duckdb:/sql:',
+    hint: 'xyz:/base:/wms:/wmts:/geojson:/geoparquet:/flatgeobuf:/gpkg:/duckdb:/sql:',
     fileHint: 'Files: .geojson .json .fgb .parquet .gpkg .csv .tsv .kasc',
     empty: 'No imported layers',
     fit: 'Fit',
@@ -93,7 +93,11 @@
     }); };
     var addRaster = function (item) { ready(function () {
       var sid = 'kasc-src-' + (++seq) + '-' + item.id;
-      var src = { type: 'raster', tiles: [item.url], tileSize: item.tileSize || 256 };
+      // wms: は GetMap タイルテンプレート、wmts: は {z}/{x}/{y} へ正規化済みの tileUrl
+      var tileUrl = item.type === 'wms' && window.KascLoader && window.KascLoader.wmsTileUrl
+        ? window.KascLoader.wmsTileUrl(item.url, item.ogc || {}, '{bbox-epsg-3857}')
+        : (item.type === 'wmts' && item.tileUrl ? item.tileUrl : item.url);
+      var src = { type: 'raster', tiles: [tileUrl], tileSize: item.tileSize || 256 };
       if (item.attribution) src.attribution = item.attribution;
       map.addSource(sid, src);
       var lid = sid + '-raster';
@@ -165,11 +169,33 @@
         item._source = source;
       },
       addRaster: function (item) {
-        var src = new ol.source.XYZ({ url: item.url });
-        if (item.attribution) src.setAttributions([item.attribution]);
-        if (item.bbox) {
-          var ext = toExtent4326({ west: item.bbox[0], south: item.bbox[1], east: item.bbox[2], north: item.bbox[3] });
-          if (ext) src = new ol.source.XYZ({ url: item.url, attributions: item.attribution ? [item.attribution] : undefined, extent: ext });
+        var src;
+        var ext = item.bbox
+          ? toExtent4326({ west: item.bbox[0], south: item.bbox[1], east: item.bbox[2], north: item.bbox[3] })
+          : null;
+        if (item.type === 'wms' && ol.source && ol.source.TileWMS) {
+          var ogc = item.ogc || {};
+          src = new ol.source.TileWMS({
+            url: item.url,
+            crossOrigin: 'anonymous',
+            params: {
+              LAYERS: ogc.layers || '',
+              STYLES: ogc.styles || '',
+              FORMAT: ogc.format || 'image/png',
+              TRANSPARENT: !/^(false|0|off)$/i.test(String(ogc.transparent != null ? ogc.transparent : 'true')),
+              VERSION: ogc.version || '1.1.1',
+              TILED: true
+            },
+            attributions: item.attribution ? [item.attribution] : undefined,
+            extent: ext || undefined
+          });
+        } else {
+          var tileUrl = item.type === 'wmts' && item.tileUrl ? item.tileUrl : item.url;
+          src = new ol.source.XYZ({
+            url: tileUrl,
+            attributions: item.attribution ? [item.attribution] : undefined,
+            extent: ext || undefined
+          });
         }
         var layer = new ol.layer.Tile({
           source: src,

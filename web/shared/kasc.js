@@ -46,7 +46,8 @@ function parseCamLine(parts) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], unsupported: [], background: null, info: null, legends: [] };
+  const doc = { layers: [], bases: [], cams: [], unsupported: [], background: null, info: null, legends: [], themes: [] };
+  let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#") || line.startsWith("//")) continue;
@@ -72,13 +73,23 @@ export function parseKasc(text) {
       doc.legends.push(parts[1] ? { title: parts[0], url: parts[1] } : { title: null, url: parts[0] });
       continue;
     }
+    if (type === "theme") {
+      // theme:名前 | 表示するレイヤタイトル[|タイトル…]（`*` で全表示）
+      // QGIS のマップテーマ相当の可視性プリセット。スタイルは含まない
+      doc.themes.push({ name: parts[0] || "", layers: parts.slice(1).filter(Boolean), line });
+      continue;
+    }
 
-    const item = classifyParts(parts.slice(1), {
+    const item = classifyParts(type === "sql" ? parts.slice(1) : parts.slice(2), {
       type,
       title: parts[0] || "",
       url: type === "sql" ? parts.slice(1).join("|") : (parts[1] || ""),
       line,
     });
+    // 行の出現順（doc.layers と doc.unsupported に分かれても元の並びを復元できる）
+    item._idx = order++;
+    // sql: には出典スロットが無い（クエリ断片を attr へ誤記録しないよう必ず空にする）
+    if (type === "sql") item.attr = "";
     if (type === "base") {
       // base: 表示名 | transparent | none は URL ではなくモード指定
       const mode = parts[1] && parts[1].toLowerCase();
@@ -86,8 +97,8 @@ export function parseKasc(text) {
       doc.bases.push(item);
       continue;
     }
-    if (["xyz", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
-         "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"].includes(type)) {
+    if (["xyz", "tile", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
+         "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "wms", "wmts"].includes(type)) {
       doc.layers.push(item);
       continue;
     }
@@ -96,6 +107,92 @@ export function parseKasc(text) {
     doc.unsupported.push(item);
   }
   return doc;
+}
+
+// 可視性フラグ(on/off)の書き換え対象外となる非レイヤ行タイプ。
+// これ以外の既知・未知の行タイプはすべて「表示を持つレイヤ行」として扱う
+const NON_LAYER_TYPES = new Set([
+  "cam", "background", "info", "legend", "theme", "base",
+  "cloud", "plugin", "yahooappid",
+]);
+
+// .kasc 1行の可視性フラグを書き換えて返す。
+// show は「表示するタイトル」の Set、null/undefined なら全表示(`*` 相当)。
+// レイヤ行は末尾の既存 on/off/true/false トークンを除去した上で、
+// 非表示なら `| off` を付与、表示ならフラグなし(既定=on)に戻す。
+// 非レイヤ行・コメント・空行はそのまま返す。
+export function rewriteKascLineVisibility(line, show) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) return line;
+  const sep = trimmed.indexOf(":");
+  if (sep < 0) return line;
+  const type = trimmed.slice(0, sep).trim().toLowerCase();
+  if (NON_LAYER_TYPES.has(type)) return line;
+  const fields = trimmed.split("|").map(f => f.trim());
+  // タイトルは / 区切りの空白揺れを正規化して照合する。
+  // show は正規化済みキー(フルパス+葉名)を含む前提
+  const rawTitle = (fields[0].slice(fields[0].indexOf(":") + 1) || "").trim();
+  const title = rawTitle.split("/").map(s => s.trim()).join("/");
+  const leaf = title.split("/").pop();
+  const visible = show == null ? true : (show.has(title) || show.has(leaf));
+  if (BOOL_RE.test(fields[fields.length - 1] || "")) fields.pop();
+  if (!visible) fields.push("off");
+  return fields.join(" | ");
+}
+
+// .kasc テキスト全体のレイヤ行の可視性フラグを書き換えて返す。
+// show は「表示するタイトル」の Set/配列、null/undefined で全表示。
+export function rewriteKascVisibility(text, show) {
+  const set = show == null ? null : (show instanceof Set ? show : new Set(show));
+  return String(text || "").split(/\r?\n/)
+    .map(line => rewriteKascLineVisibility(line, set))
+    .join("\n");
+}
+
+// ---- theme: 行（QGIS マップテーマ相当の可視性プリセット）の共通処理 ----
+
+// 照合キー正規化: "/"区切りタイトルの空白揺れを吸収する
+export function normKascTitle(title) {
+  return String(title || "").split("/").map(s => s.trim()).join("/");
+}
+
+// theme エントリ → 「表示するタイトル」の照合セット（正規化フルパス+葉名）。
+// `*` を含む場合は null（全表示）を返す。rewriteKascVisibility へもそのまま渡せる
+export function themeShowSet(theme) {
+  const layers = theme?.layers || [];
+  if (layers.includes("*")) return null;
+  const show = new Set();
+  for (const k of layers) {
+    const n = normKascTitle(k);
+    if (!n) continue;
+    show.add(n);
+    show.add(n.split("/").pop());
+  }
+  return show;
+}
+
+// レイヤタイトルがテーマの表示対象か（フルパスまたは葉名で一致）
+export function kascTitleInTheme(title, show) {
+  const n = normKascTitle(title);
+  return show.has(n) || show.has(n.split("/").pop());
+}
+
+// #theme-select の中身を構築する。themes が空なら非表示化
+export function fillThemeSelect(select, themes, promptText = "テーマを選択") {
+  if (!select) return;
+  select.innerHTML = "";
+  if (!themes?.length) { select.hidden = true; return; }
+  const prompt = document.createElement("option");
+  prompt.value = "";
+  prompt.textContent = promptText;
+  select.append(prompt);
+  for (const theme of themes) {
+    const opt = document.createElement("option");
+    opt.value = theme.name;
+    opt.textContent = theme.name;
+    select.append(opt);
+  }
+  select.hidden = false;
 }
 
 // .kasc 内の参照を絶対 URL へ解決する。
@@ -125,6 +222,80 @@ export async function loadKascProject(projectId) {
   return { id, manifest, baseUrl, doc: parseKasc(text), raw: text };
 }
 
+// wms: 行 → WMS GetMap タイル URL テンプレートを組み立てる。
+// url が既に BBOX=/{bbox…} を含む完全テンプレートならそのまま返す。
+// bboxToken には呼び出し側エンジンのプレースホルダを渡す:
+//   MapLibre raster: "{bbox-epsg-3857}"
+//   Cesium UrlTemplateImageryProvider:
+//     "{westProjected},{southProjected},{eastProjected},{northProjected}"
+// opts: layers/styles/format/transparent/version(既定1.1.1)/tilesize(既定256)
+// version が 1.3.x の場合は CRS=、それ以外は SRS= パラメータを使う。
+// 追加の拡張パラメータ(theme= 等)は url 側に ?key=value で付ければ
+// 標準パラメータと & で連結される
+export function buildWmsTileTemplate(url, opts = {}, bboxToken = "{bbox-epsg-3857}") {
+  if (!url) return url;
+  if (/[?&]bbox=/i.test(url) || /\{bbox/i.test(url)) return url;
+  const version = String(opts.version || "1.1.1").trim();
+  const srsKey = /^1\.3/.test(version) ? "CRS" : "SRS";
+  const transparent = /^(false|0|off)$/i.test(String(opts.transparent ?? "true")) ? "FALSE" : "TRUE";
+  const size = Number(opts.tilesize || opts.tileSize) || 256;
+  const params = [
+    "SERVICE=WMS",
+    "VERSION=" + encodeURIComponent(version),
+    "REQUEST=GetMap",
+    "LAYERS=" + encodeURIComponent(opts.layers ?? ""),
+    "STYLES=" + encodeURIComponent(opts.styles ?? ""),
+    "FORMAT=" + encodeURIComponent(opts.format || "image/png"),
+    "TRANSPARENT=" + transparent,
+    srsKey + "=EPSG:3857",
+    "BBOX=" + bboxToken,
+    "WIDTH=" + size,
+    "HEIGHT=" + size,
+  ];
+  return url + (url.includes("?") ? "&" : "?") + params.join("&");
+}
+
+// wmts: 行 → {z}/{x}/{y} タイル URL テンプレートへ正規化する。
+// - URL に {z}/{x}/{y} を含む: そのまま(XYZ テンプレートとして扱う)
+// - {TileMatrix}/{TileRow}/{TileCol} を含む RESTful テンプレート:
+//   {z}/{y}/{x} へ置換し、{TileMatrixSet}/{Style}/{Format} は opts で埋める
+// - それ以外: KVP GetTile エンドポイントとして標準クエリを構築する
+//   (opts: layer=/style=/tilematrixset= 既定 EPSG:3857/format=/matrixprefix=)
+export function buildWmtsTileTemplate(url, opts = {}) {
+  if (!url) return url;
+  if (/\{z\}/.test(url) && /\{x\}/.test(url) && /\{y\}/.test(url)) return url;
+  if (/\{TileMatrix\}/.test(url) || /\{TileRow\}/.test(url) || /\{TileCol\}/.test(url)) {
+    const tms = opts.tilematrixset || opts.matrixset || "EPSG:3857";
+    const style = opts.style || "default";
+    const fmt = String(opts.format || "png").split("/").pop();
+    return url
+      .replace(/\{TileMatrixSet\}/g, encodeURIComponent(tms))
+      .replace(/\{Style\}/g, encodeURIComponent(style))
+      .replace(/\{Format\}/g, fmt)
+      .replace(/\{TileMatrix\}/g, "{z}")
+      .replace(/\{TileRow\}/g, "{y}")
+      .replace(/\{TileCol\}/g, "{x}");
+  }
+  const layer = opts.layer ?? "";
+  const style = opts.style || "default";
+  const tms = opts.tilematrixset || opts.matrixset || "EPSG:3857";
+  const format = opts.format || "image/png";
+  const prefix = opts.matrixprefix || "";
+  const params = [
+    "SERVICE=WMTS",
+    "REQUEST=GetTile",
+    "VERSION=1.0.0",
+    "LAYER=" + encodeURIComponent(layer),
+    "STYLE=" + encodeURIComponent(style),
+    "TILEMATRIXSET=" + encodeURIComponent(tms),
+    "FORMAT=" + encodeURIComponent(format),
+    "TILEMATRIX=" + encodeURIComponent(prefix) + "{z}",
+    "TILEROW={y}",
+    "TILECOL={x}",
+  ];
+  return url + (url.includes("?") ? "&" : "?") + params.join("&");
+}
+
 // GeoJSON の範囲 {west,south,east,north} を返す（空なら null）
 export function geojsonExtent(geojson) {
   let env = null;
@@ -146,6 +317,69 @@ export function geojsonExtent(geojson) {
   return env;
 }
 
+// .kasc の出典(attr)に含まれるHTMLを許可リストでサニタイズする。
+// <a>/<img>/装飾タグのみ残し、URLスキームを検証する（Cesium 版と同規則）
+const ATTR_TAGS = new Set(["a", "b", "strong", "i", "em", "u", "sub", "sup", "br", "span", "small", "img"]);
+const ATTR_DROP = new Set(["script", "style", "iframe", "object", "embed", "template"]);
+function isSafeAttrUrl(url) {
+  return /^https?:/i.test(url) || !/^[a-z][a-z0-9+.-]*:/i.test(url);
+}
+export function sanitizeAttributionFragment(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const clean = parent => {
+    const fragment = document.createDocumentFragment();
+    for (const child of parent.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        fragment.append(document.createTextNode(child.textContent));
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = child.tagName.toLowerCase();
+        if (ATTR_DROP.has(tag)) continue;
+        if (!ATTR_TAGS.has(tag)) {
+          fragment.append(clean(child));
+          continue;
+        }
+        const el = document.createElement(tag);
+        if (tag === "a") {
+          const href = (child.getAttribute("href") || "").trim();
+          if (isSafeAttrUrl(href)) {
+            el.setAttribute("href", href);
+            el.setAttribute("target", "_blank");
+            el.setAttribute("rel", "noopener noreferrer");
+          }
+        } else if (tag === "img") {
+          const src = (child.getAttribute("src") || "").trim();
+          if (isSafeAttrUrl(src)) el.setAttribute("src", src);
+          const alt = child.getAttribute("alt");
+          if (alt) el.setAttribute("alt", alt);
+        }
+        const title = child.getAttribute("title");
+        if (title) el.setAttribute("title", title);
+        el.append(clean(child));
+        fragment.append(el);
+      }
+    }
+    return fragment;
+  };
+  return clean(doc.body);
+}
+
+// 行の出典表記を取り出す（出典スロット or attr=/attribution= オプション）
+export function layerAttribution(item) {
+  return String(item?.attr || item?.opts?.attr || item?.opts?.attribution || "").trim();
+}
+
+// .kasc タイトルを グループ/末端名 に分解する（"A/B/C" → グループ "A / B"・末端 "C"。
+// 区切りが二重 "//"・"\\" の場合は排他グループ。Cesium 版 parseLayerTitle と同じ規則）
+export function splitKascTitle(title) {
+  const raw = String(title || "");
+  const parts = raw.split(/[\\/]/).map(s => s.trim()).filter(Boolean);
+  return {
+    title: parts.at(-1) || raw,
+    group: parts.slice(0, -1).join(" / "),
+    exclusiveGroup: /[\\/]{2}/.test(raw),
+  };
+}
+
 // カメラ高さ(m) → Web メルカトルズームの近似変換
 // m/px ≈ height * 2 / 256（視野角45°・画面高512px相当の近似）
 export function camToZoom(cam) {
@@ -153,4 +387,57 @@ export function camToZoom(cam) {
   const h = Math.max(10, cam.height || 3000);
   const zoom = Math.log2((156543.03392 * Math.cos(lat * Math.PI / 180)) / (h * 2 / 256));
   return Math.max(2, Math.min(20, zoom));
+}
+
+// Web メルカトルズーム → カメラ高さ(m) の逆変換（camToZoom の逆。URL への height 併記用）
+export function zoomToCamHeight(latitude, zoom) {
+  const lat = Math.max(-80, Math.min(80, latitude || 0));
+  return 156543.03392 * Math.cos(lat * Math.PI / 180) * 128 / Math.pow(2, zoom);
+}
+
+// ビュー状態を表す URL パラメータ（Cesium 版と同形式）の読み書き。
+// 形式: #latitude=…&longitude=…&height=…&pitch=…&heading=…（2D エンジンは zoom= も併記）
+// pitch/heading は Cesium 規約（pitch: 直下=-90・水平=0、heading: 北=0・時計回り）。
+// 読み取りはハッシュ優先・クエリをフォールバックとし、欠けた値は NaN で返す
+export function parseUrlView(source = window.location.search + window.location.hash) {
+  const hashIndex = source.indexOf("#");
+  const searchPart = hashIndex >= 0 ? source.slice(0, hashIndex) : source;
+  const hashPart = hashIndex >= 0 ? source.slice(hashIndex + 1) : "";
+  const searchParams = new URLSearchParams(searchPart.startsWith("?") ? searchPart.slice(1) : searchPart);
+  const hashParams = new URLSearchParams(hashPart);
+  const getNumber = name => {
+    const raw = hashParams.get(name) ?? searchParams.get(name);
+    const value = Number(raw);
+    return raw !== null && raw !== "" && Number.isFinite(value) ? value : NaN;
+  };
+  return {
+    latitude: getNumber("latitude"),
+    longitude: getNumber("longitude"),
+    zoom: getNumber("zoom"),
+    height: getNumber("height"),
+    pitch: getNumber("pitch"),
+    heading: getNumber("heading"),
+  };
+}
+
+export function hasUrlView(view) {
+  return Number.isFinite(view?.latitude) && Number.isFinite(view?.longitude);
+}
+
+// 現在のクエリ（project= 等）を保ちつつビュー状態をハッシュへ反映する。
+// パラメータをクエリ側へ置いて来た古い URL 形式もハッシュ側へ寄せる
+export function writeUrlView(view, projectId) {
+  if (!hasUrlView(view)) return;
+  const params = new URLSearchParams(window.location.search);
+  ["latitude", "longitude", "zoom", "height", "pitch", "heading"].forEach(key => params.delete(key));
+  if (projectId) params.set("project", projectId);
+  const hashParams = new URLSearchParams();
+  hashParams.set("latitude", Number(view.latitude).toFixed(6));
+  hashParams.set("longitude", Number(view.longitude).toFixed(6));
+  if (Number.isFinite(view.zoom)) hashParams.set("zoom", Number(view.zoom).toFixed(3));
+  if (Number.isFinite(view.height)) hashParams.set("height", Number(view.height).toFixed(1));
+  if (Number.isFinite(view.pitch)) hashParams.set("pitch", Number(view.pitch).toFixed(2));
+  if (Number.isFinite(view.heading)) hashParams.set("heading", Number(view.heading).toFixed(2));
+  const search = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}#${hashParams.toString()}`);
 }

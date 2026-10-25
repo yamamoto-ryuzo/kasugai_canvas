@@ -13,6 +13,7 @@ import {
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "/shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "/shared/vector-decode.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect } from "/shared/kasc.js";
 
 await initI18n();
 applyI18n();
@@ -578,6 +579,9 @@ const dataLayers = [];
 // applyInspector で再構築し、plugin-loader が inspector-plugins-changed で受けて
 // カタログ(plugins.json)/ストレージプラグインのロード・停止を差分管理する
 const inspectorPluginSpecs = [];
+// インスペクタの theme: 行で宣言された可視性プリセット {name, layers[], line}[]。
+// QGIS マップテーマ相当。applyInspector で再構築し #theme-select へ反映する
+const inspectorThemes = [];
 let dataLayerSeq = 0;
 let vectorSearchData = null;
 const activePrimitives = [];
@@ -943,6 +947,41 @@ async function saveInspectorConfig() {
     throw new Error(data.error || t("error.saveFailed", { status: res.status }));
   }
   auth.updateKasc?.(projectId, text);
+}
+
+// ---- テーマ（theme: 行の可視性プリセット。QGIS マップテーマ相当） ----
+
+// theme: 行の一覧をレイヤーパネル上部のテーマ選択へ反映する。
+// theme: 行が無ければセレクト自体を隠す
+function updateThemeSelect() {
+  fillThemeSelect(document.querySelector("#theme-select"), inspectorThemes, t("theme.selectPrompt"));
+}
+
+// テーマ適用: .kasc 行を持つレイヤーの visible を一括更新する。
+// inspector テキストの on/off と item.sourceLine/sourceVisible も同期し、
+// テキスト⇔地図⇔レイヤー一覧の整合を保つ。.kasc 行を持たない
+// 一時レイヤー(inline data 等)はテーマ対象外とする
+function applyKascTheme(theme) {
+  const show = themeShowSet(theme);
+  const all = show == null;
+  const items = getOrderedLayerItems().filter(item => item.sourceLine);
+  for (const item of items) {
+    item.visible = all || kascTitleInTheme(item.sourceTitle || item.title, show);
+    item.sourceVisible = item.visible;
+  }
+  renderLayerList();
+  refreshLayers();
+  const input = document.querySelector("#inspector-input");
+  if (input) {
+    const lines = input.value.split(/\r?\n/);
+    for (const item of items) {
+      const idx = lines.indexOf(item.sourceLine);
+      const newLine = rewriteKascLineVisibility(item.sourceLine, show);
+      if (idx >= 0) lines[idx] = newLine;
+      item.sourceLine = newLine;
+    }
+    input.value = lines.join("\n");
+  }
 }
 
 function updateInspectorFromLayerOrder() {
@@ -3883,6 +3922,7 @@ function applyInspector(text) {
   let parsedBaseMode = "";
   layerState.clear();
   inspectorPluginSpecs.splice(0, inspectorPluginSpecs.length);
+  inspectorThemes.splice(0, inspectorThemes.length);
   vectorSourceCache.clear();
   // gpkg Worker が url キーで開いたままの DB も破棄する(メモリ解放・再取得)
   resetGpkgWorkerDbs();
@@ -3944,6 +3984,13 @@ function applyInspector(text) {
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());
       document.querySelector("#legend-panel img").src = resolveProjectUrl(parts[parts.length - 1]);
+    }
+
+    // theme: 名前 | 表示するレイヤタイトル[|タイトル…]（`*` で全表示）。
+    // QGIS マップテーマ相当の可視性プリセット（スタイルは含まない）
+    if (type === "theme") {
+      const parts = value.split("|").map(part => part.trim());
+      inspectorThemes.push({ name: parts[0] || "", layers: parts.slice(1).filter(Boolean), line });
     }
 
     // cloud: リモート名 | ルートフォルダ(パス or フォルダURL・省略可) | perm=write | drive=K | off
@@ -4104,6 +4151,50 @@ function applyInspector(text) {
       });
       const id = `inspector-layer-${inspectorLayerIndex++}`;
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", opacity: options.opacity ?? 0.8, attribution: parseAttributionField(parts[2]), proxy: options.proxy !== false, group, exclusiveGroup };
+      if (options.maximumLevel !== undefined) item.maximumLevel = options.maximumLevel;
+      if (options.minimumLevel !== undefined) item.minimumLevel = options.minimumLevel;
+      if (options.bbox) item.bbox = options.bbox;
+      if (options.tileSize !== undefined) item.tileSize = options.tileSize;
+      tileLayers.push(item);
+      layerState.set(id, item);
+      layerOrder.push(id);
+    }
+
+    if (type === "wms" || type === "wmts") {
+      // OGC タイル系: GetMap/GetTile をタイル URL テンプレートへ正規化して
+      // 通常の tile レイヤーとして流す(opacity/bbox/ドレープ等の既存機構を共用)
+      const parts = value.split("|").map(part => part.trim());
+      const title = parts[0];
+      const rawUrl = parts[1];
+      const off = parts.some(part => /^(off|false)$/i.test(part));
+      if (!title || !rawUrl) return;
+      const url0 = resolveProjectUrl(rawUrl);
+      const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
+      const kv = {};
+      const options = {};
+      // 出典スロット(3番目)に key=value を書いた場合も拾えるよう slice(2) から走査する
+      parts.slice(2).forEach(part => {
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        const key = part.slice(0, eq).trim();
+        const raw = part.slice(eq + 1).trim();
+        kv[key.toLowerCase()] = raw;
+        const number = Number(raw);
+        if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
+        if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
+        if ((key === "minimumLevel" || key === "minZoom") && Number.isInteger(number) && number >= 0) options.minimumLevel = number;
+        if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
+        if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
+        if (key === "bbox" || key === "bounds" || key === "extent") {
+          const nums = raw.split(",").map(v => Number(v.trim()));
+          if (nums.length === 4 && nums.every(Number.isFinite)) options.bbox = nums;
+        }
+      });
+      const url = type === "wms"
+        ? buildWmsTileTemplate(url0, kv, "{westProjected},{southProjected},{eastProjected},{northProjected}")
+        : buildWmtsTileTemplate(url0, kv);
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type: "tile", ogcType: type, opacity: options.opacity ?? 0.8, attribution: parseAttributionField(parts[2]) || kv.attr || null, proxy: options.proxy !== false, group, exclusiveGroup };
       if (options.maximumLevel !== undefined) item.maximumLevel = options.maximumLevel;
       if (options.minimumLevel !== undefined) item.minimumLevel = options.minimumLevel;
       if (options.bbox) item.bbox = options.bbox;
@@ -4293,6 +4384,7 @@ function applyInspector(text) {
   renderBasemapSelector();
   renderPresets();
   renderLayerList();
+  updateThemeSelect();
   renderFlyPathSelect();
   void ensureDrawnRouteFlyPath();
   refreshLayers();
@@ -5879,6 +5971,11 @@ function setupEvents() {
     } catch (error) {
       setInspectorStatus(t("inspector.status.saveFailed", { error: error instanceof Error ? error.message : error }), true);
     }
+  });
+
+  document.querySelector("#theme-select")?.addEventListener("change", event => {
+    const theme = inspectorThemes.find(entry => entry.name === event.target.value);
+    if (theme) applyKascTheme(theme);
   });
 
   document.querySelector("#export-inspector")?.addEventListener("click", () => {
@@ -8817,6 +8914,18 @@ window.kasugaiApi = {
     }
     renderLayerList();
     refreshLayers();
+    return true;
+  },
+  // theme: 行の可視性プリセット一覧/適用（QGIS マップテーマ相当）
+  listThemes() {
+    return inspectorThemes.map(theme => ({ name: theme.name, layers: [...theme.layers] }));
+  },
+  applyTheme(name) {
+    const theme = inspectorThemes.find(entry => entry.name === name);
+    if (!theme) return false;
+    applyKascTheme(theme);
+    const select = document.querySelector("#theme-select");
+    if (select) select.value = theme.name;
     return true;
   },
   async focusLayer(idOrTitle) {

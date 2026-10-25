@@ -92,14 +92,18 @@
 
 `web/` はエンジン別フロントを並べるマルチエンジン構成。geo_webview との役割分担（geo_webview が `.kasc`+`DATA/` を出力し、再生プレイヤーは本アプリが担う）に基づく。
 
+**メインエンジンは CesiumJS（`web/cesium/`）** — これは開発の基本方針。マルチエンジン構成ではあるが、新機能の実装・UI 整備・AI 制御対応はまず Cesium フロントを対象とし、`web/index.html` の既定エンジンも cesium。MapLibre/OpenLayers/Leaflet は `.kasc` プレイヤーとしての互換実装であり、Cesium 側の機能追従は必須ではない。
+
 ```
 web/
-  index.html      エンジン選択リダイレクト（?engine=cesium|maplibre|openlayers、
+  index.html      エンジン選択リダイレクト（?engine=cesium|maplibre|openlayers|leaflet、
                   既定 cesium。engine 以外のクエリとハッシュは対象へ引継ぎ）
   cesium/         Cesium フロント（現行アプリ一式:
                   index.html/app.js/styles.css/PLUGIN/plugins.json/i18n 等）
   maplibre/       MapLibre フロント（.kasc プレイヤー実装済み: 全ベクター行・QML・duckdb/sql・属性UI・6タブパネル）
   openlayers/     OpenLayers フロント（.kasc プレイヤー実装済み: 同上）
+  leaflet/        Leaflet フロント（.kasc プレイヤー実装済み: 同上。専用 pane で
+                  .kasc 積み順を再現、回転系設定なし）
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
                   i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
   projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）

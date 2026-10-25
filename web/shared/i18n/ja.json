@@ -553,5 +553,6 @@
   "mcp.writeDenied": "ユーザーにより書き込み操作は拒否されました。",
   "chat.customInstructionsLabel": "追加指示",
   "chat.customInstructionsPlaceholder": "AIにいつも守ってほしい指示を入力",
-  "chat.customInstructionsHint": "通常はこのブラウザに保存します。Cloud Run に KASUGAI_AI_INSTRUCTIONS が設定されている場合は、サーバー側の指示を優先します。"
+  "chat.customInstructionsHint": "通常はこのブラウザに保存します。Cloud Run に KASUGAI_AI_INSTRUCTIONS が設定されている場合は、サーバー側の指示を優先します。",
+  "theme.selectPrompt": "テーマを選択"
 }

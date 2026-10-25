@@ -7,6 +7,7 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 - `web/cesium/` … Cesium フロント（現行アプリ。ルート `index.html` は `?engine=` に応じて各エンジンへリダイレクト）
 - `web/maplibre/` … MapLibre フロント（実装済み）
 - `web/openlayers/` … OpenLayers フロント（実装済み）
+- `web/leaflet/` … Leaflet フロント（実装済み）
 - `web/shared/` … 本ディレクトリ。エンジン横断で使うコードをここへ段階的に切り出す
 - `web/projects/` … 静的配信用の同梱プロジェクトデータ（エンジン非依存）
 

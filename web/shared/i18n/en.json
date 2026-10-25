@@ -553,5 +553,6 @@
   "mcp.writeDenied": "Write operation was denied by the user.",
   "chat.customInstructionsLabel": "Additional instructions",
   "chat.customInstructionsPlaceholder": "Enter instructions you want the AI to follow by default",
-  "chat.customInstructionsHint": "Saved in this browser as the fallback. If KASUGAI_AI_INSTRUCTIONS is configured on Cloud Run, the server instruction takes priority."
+  "chat.customInstructionsHint": "Saved in this browser as the fallback. If KASUGAI_AI_INSTRUCTIONS is configured on Cloud Run, the server instruction takes priority.",
+  "theme.selectPrompt": "Select theme"
 }

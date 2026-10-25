@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="430" viewBox="0 0 300 430" font-family="sans-serif">
+  <rect width="300" height="430" fill="#ffffff"/>
+  <text x="12" y="22" font-size="13" font-weight="bold" fill="#263238">凡例 — 不動産情報ライブラリ</text>
+  <circle cx="22" cy="46" r="6" fill="#e65100" stroke="#ffffff" stroke-width="1.5"/>
+  <text x="40" y="50" font-size="11.5" fill="#37474f">取引価格ポイント</text>
+  <path d="M22,66 L28,68.5 L27.5,74.5 Q26.5,79.5 22,81 Q17.5,79.5 16.5,74.5 L16,68.5 Z" fill="#2e7d32" stroke="#ffffff" stroke-width="1"/>
+  <text x="40" y="76" font-size="11.5" fill="#37474f">指定緊急避難場所</text>
+  <path d="M22,88 L23.8,93.4 L29.6,93.6 L25,97.2 L26.6,103 L22,99.9 L17.4,103 L19,97.2 L14.4,93.6 L20.2,93.4 Z" fill="#6a1b9a" stroke="#ffffff" stroke-width="0.8"/>
+  <text x="40" y="99" font-size="11.5" fill="#37474f">駅別乗降客数</text>
+  <text x="12" y="126" font-size="11.5" font-weight="bold" fill="#37474f">用途地域</text>
+  <g font-size="10.5" fill="#37474f">
+    <rect x="16" y="134" width="16" height="11" fill="#aed581" opacity="0.7"/><text x="38" y="143">第１種低層住居専用</text>
+    <rect x="150" y="134" width="16" height="11" fill="#c5e1a5" opacity="0.7"/><text x="172" y="143">第２種低層住居専用</text>
+    <rect x="16" y="150" width="16" height="11" fill="#dceda0" opacity="0.7"/><text x="38" y="159">第１種中高層住居専用</text>
+    <rect x="150" y="150" width="16" height="11" fill="#e6f3b5" opacity="0.7"/><text x="172" y="159">第２種中高層住居専用</text>
+    <rect x="16" y="166" width="16" height="11" fill="#fff176" opacity="0.7"/><text x="38" y="175">第１種住居地域</text>
+    <rect x="150" y="166" width="16" height="11" fill="#ffe082" opacity="0.7"/><text x="172" y="175">第２種住居地域</text>
+    <rect x="16" y="182" width="16" height="11" fill="#ffecb3" opacity="0.7"/><text x="38" y="191">準住居地域</text>
+    <rect x="150" y="182" width="16" height="11" fill="#c5e6b7" opacity="0.7"/><text x="172" y="191">田園住居地域</text>
+    <rect x="16" y="198" width="16" height="11" fill="#ff8fbe" opacity="0.7"/><text x="38" y="207">近隣商業地域</text>
+    <rect x="150" y="198" width="16" height="11" fill="#f569a9" opacity="0.7"/><text x="172" y="207">商業地域</text>
+    <rect x="16" y="214" width="16" height="11" fill="#ce93ff" opacity="0.7"/><text x="38" y="223">準工業地域</text>
+    <rect x="150" y="214" width="16" height="11" fill="#b2dbe8" opacity="0.7"/><text x="172" y="223">工業地域</text>
+    <rect x="16" y="230" width="16" height="11" fill="#8dbed6" opacity="0.7"/><text x="38" y="239">工業専用地域</text>
+    <rect x="150" y="230" width="16" height="11" fill="#bdbdbd" opacity="0.45"/><text x="172" y="239">その他・無指定</text>
+  </g>
+  <text x="12" y="268" font-size="11.5" font-weight="bold" fill="#37474f">比較候補地域（半径1km）</text>
+  <g font-size="11.5" fill="#37474f">
+    <polygon points="22,280 27.2,283 27.2,289 22,292 16.8,289 16.8,283" fill="#d81b60" stroke="#ffffff" stroke-width="1.2"/>
+    <text x="40" y="289">候補A（例：中野駅）</text>
+    <polygon points="22,298 27.2,301 27.2,307 22,310 16.8,307 16.8,301" fill="#00acc1" stroke="#ffffff" stroke-width="1.2"/>
+    <text x="40" y="307">候補B（例：川口駅）</text>
+    <polygon points="22,316 27.2,319 27.2,325 22,328 16.8,325 16.8,319" fill="#ffb300" stroke="#ffffff" stroke-width="1.2"/>
+    <text x="40" y="325">候補C（例：市川駅）</text>
+    <circle cx="22" cy="340" r="6" fill="#d81b60" fill-opacity="0.12" stroke="#d81b60" stroke-width="1.5" stroke-dasharray="4,3"/>
+    <text x="40" y="344">比較範囲（破線円）</text>
+  </g>
+  <text x="12" y="374" font-size="11.5" font-weight="bold" fill="#37474f">記録の状況（比較シート）</text>
+  <g font-size="10.5" fill="#37474f">
+    <text x="16" y="391">◯ 確認済み（データ取得・照合済み）</text>
+    <text x="16" y="407">△ データなし（API応答済み・地物ゼロ）</text>
+    <text x="16" y="423">✗ 未確認（自治体一次情報等・要人手確認）</text>
+  </g>
+</svg>

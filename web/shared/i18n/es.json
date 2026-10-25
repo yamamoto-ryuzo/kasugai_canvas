@@ -553,5 +553,6 @@
   "mcp.writeDenied": "Operación de escritura denegada por el usuario.",
   "chat.customInstructionsLabel": "Instrucciones adicionales",
   "chat.customInstructionsPlaceholder": "Escribe instrucciones que la IA deba seguir siempre",
-  "chat.customInstructionsHint": "Se guarda en este navegador como alternativa. Si Cloud Run tiene KASUGAI_AI_INSTRUCTIONS, prevalecen las instrucciones del servidor."
+  "chat.customInstructionsHint": "Se guarda en este navegador como alternativa. Si Cloud Run tiene KASUGAI_AI_INSTRUCTIONS, prevalecen las instrucciones del servidor.",
+  "theme.selectPrompt": "Seleccionar tema"
 }

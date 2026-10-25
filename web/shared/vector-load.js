@@ -1,11 +1,14 @@
 // ベクター系 .kasc 行 → GeoJSON FeatureCollection（エンジン非依存ローダー）
-// 対象: geoparquet:/parquet: / flatgeobuf:/fgb: / gpkg:/geopackage: / csv:/tsv:
-// duckdb:/sql: はクエリ系のため別レイヤ（未対応として呼び出し側で報告）
+// 対象: geojson:/layer: / geoparquet:/parquet: / flatgeobuf:/fgb: / gpkg:/geopackage: /
+//       csv:/tsv: / duckdb: / sql:
+// duckdb:/sql: のクエリ実行は window.KascLoader(shared/kasc_loader.js) へ委譲する。
+// bounds = {ranges:[{west,east}],south,north} は bbox=auto/:bbox 系の表示範囲として使う
 import { wkbToGeoJsonGeometry } from "/shared/vector-decode.js";
 import { resolveKascUrl } from "/shared/kasc.js";
 
 const FGB_URL = "https://esm.sh/flatgeobuf@3.36.0/lib/mjs/geojson.js";
-const HYPARQUET_URL = "https://esm.sh/hyparquet@1.19.2";
+const HYPARQUET_URL = "https://cdn.jsdelivr.net/npm/hyparquet@1.30.1/+esm";
+const HYPARQUET_COMPRESSORS_URL = "https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm";
 
 let gpkgWorker = null;
 let gpkgReqId = 0;
@@ -54,7 +57,13 @@ function toFeatureCollection(items) {
       }
     }
     if (!geom || !geom.type) continue;
-    const { geometry: _g, geom: _g2, ...props } = row;
+    const { geometry: _g, geom: _g2, ...rawProps } = row;
+    // BigInt 等の structured-clone 不可な値は MapLibre GeoJSON ソースへ渡せないため変換
+    const props = {};
+    for (const [k, v] of Object.entries(rawProps)) {
+      if (typeof v === "bigint") props[k] = v >= -9007199254740991n && v <= 9007199254740991n ? Number(v) : String(v);
+      else props[k] = v;
+    }
     features.push({ type: "Feature", geometry: geom, properties: props });
   }
   return { type: "FeatureCollection", features };
@@ -72,10 +81,10 @@ async function loadFlatGeobuf(url) {
 }
 
 async function loadGeoParquet(url) {
-  const { parquetReadObjects } = await import(HYPARQUET_URL);
+  const [hp, hc] = await Promise.all([import(HYPARQUET_URL), import(HYPARQUET_COMPRESSORS_URL)]);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`geoparquet 取得失敗: ${res.status}`);
-  const rows = await parquetReadObjects({ file: await res.arrayBuffer() });
+  const rows = await hp.parquetReadObjects({ file: await res.arrayBuffer(), compressors: hc.compressors });
   return toFeatureCollection(rows);
 }
 
@@ -109,9 +118,66 @@ function loadCsvLike(text, delim) {
   return { type: "FeatureCollection", features };
 }
 
+const BBOX_OFF_RE = /^(off|none|false|static|manual)$/i;
+
+// 表示範囲連動クエリ(bbox=auto / :bbox プレースホルダ)が有効な行か。
+// gpkg:/duckdb: は bbox=off 系の明示指定が無い限り既定で viewport 絞り込み
+export function isViewportQueryItem(item) {
+  if (!item) return false;
+  if (item.type === "sql") return /:bbox\b/i.test(item.url || "");
+  if (item.type === "duckdb" || item.type === "gpkg" || item.type === "geopackage") {
+    return !BBOX_OFF_RE.test(String(item.opts?.bbox ?? "auto"));
+  }
+  return false;
+}
+
+// sql: 行のクエリ末尾に付く "| off" / "| attr=..." を除去する(kasc_loader.js と同じ規則)
+const SQL_TAIL_RE = /\|\s*(off|false|attr(?:ibution)?\s*=[^|]*)\s*$/i;
+function stripSqlTail(query) {
+  let q = String(query || "");
+  for (;;) {
+    const m = SQL_TAIL_RE.exec(q);
+    if (!m) return q;
+    q = q.slice(0, m.index).trim();
+  }
+}
+
+// parseKasc の item → KascLoader.load 用アイテム（相対参照は絶対URLへ解決済み）
+function toKascLoaderItem(item, baseUrl, bounds) {
+  const opts = item.opts || {};
+  const it = {
+    id: `kasc-${Math.random().toString(36).slice(2)}`,
+    type: item.type,
+    title: item.title,
+    visible: item.visible !== false,
+    sourceLine: item.line,
+    where: opts.where || undefined,
+    geom: opts.geom || opts.geometry || undefined,
+    lon: opts.lon || opts.lng || undefined,
+    lat: opts.lat || undefined,
+    format: opts.format || undefined,
+    gpkgTable: opts.table || undefined,
+    columns: opts.columns ? opts.columns.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+    covering: opts.covering ? opts.covering.split(",").map(s => s.trim()).filter(Boolean) : undefined,
+    limit: Number.isInteger(Number(opts.limit)) ? Math.floor(Number(opts.limit)) : undefined,
+    bboxAuto: isViewportQueryItem(item),
+    bboxBounds: null,
+  };
+  if (it.bboxAuto) it.bboxBounds = bounds || null;
+  if (item.type === "sql") {
+    // クエリ内の相対ファイル参照をプロジェクト基準の絶対URLへ解決(httpfs経由で読める形に)
+    it.query = stripSqlTail(item.url)
+      .replace(/'((?:\.\.?\/|DATA\/)[^']+)'/gi, (_, ref) => `'${resolveKascUrl(ref, baseUrl)}'`);
+  } else {
+    it.url = resolveKascUrl(item.url, baseUrl);
+  }
+  return it;
+}
+
 // item(.kasc 行) → GeoJSON FeatureCollection
-// 戻り値: { geojson, qml? } （gpkg は埋め込み QML があれば返す）
-export async function loadVectorItem(item, baseUrl) {
+// 戻り値: { geojson, qml?, viewportQuery? } （gpkg は埋め込み QML があれば返す。
+// viewportQuery=true の行は表示範囲の移動に合わせて再読込が必要）
+export async function loadVectorItem(item, baseUrl, bounds = null) {
   const url = resolveKascUrl(item.url, baseUrl);
   const type = item.type;
   if (type === "geojson" || type === "layer") {
@@ -127,6 +193,7 @@ export async function loadVectorItem(item, baseUrl) {
   }
   if (type === "gpkg" || type === "geopackage") {
     const opts = item.opts || {};
+    const viewportQuery = isViewportQueryItem(item);
     const result = await gpkgCommand({
       cmd: "load",
       url,
@@ -134,10 +201,10 @@ export async function loadVectorItem(item, baseUrl) {
       where: opts.where,
       limit: opts.limit ? Number(opts.limit) : undefined,
       columns: opts.columns ? opts.columns.split(",").map(s => s.trim()) : undefined,
-      bbox: opts.bbox === "off" ? undefined : (opts.bbox === "auto" || !opts.bbox ? "auto" : opts.bbox),
+      bbox: viewportQuery ? bounds || undefined : undefined,
       wantStyle: !!opts.style,
     });
-    return result;
+    return { ...result, viewportQuery };
   }
   if (type === "csv" || type === "tsv") {
     const res = await fetch(url);
@@ -145,8 +212,10 @@ export async function loadVectorItem(item, baseUrl) {
     return { geojson: loadCsvLike(await res.text(), type === "tsv" ? "\t" : ",") };
   }
   if (type === "duckdb" || type === "sql") {
-    const { loadDuckdbItem } = await import("/shared/duckdb-load.js");
-    return loadDuckdbItem(item, baseUrl);
+    if (!window.KascLoader) await import("/shared/kasc_loader.js");
+    const it = toKascLoaderItem(item, baseUrl, bounds);
+    const geojson = await window.KascLoader.load(it);
+    return { geojson, viewportQuery: it.bboxAuto };
   }
   throw new Error(`未対応のベクター形式: ${type}`);
 }

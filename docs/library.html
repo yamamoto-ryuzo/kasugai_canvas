@@ -65,6 +65,163 @@
       Tiles・DEM・XYZ・GeoJSON は CesiumJS のレイヤー /
       プリミティブとして配置する。</li>
       </ul>
+      <h2 id="地図エンジンの選定と追加候補">地図エンジン（フロントエンジン）の選定と追加候補</h2>
+      <p><code>web/</code> はエンジン別フロントを並べるマルチエンジン構成
+      （<code>?engine=</code> で切替）ですが、<strong>開発の基本としてメインエンジンは
+      CesiumJS</strong> です。新機能・UI・AI 制御対応はまず Cesium フロント
+      （<code>web/cesium/</code>）を対象とし、他エンジンは <code>.kasc</code>
+      プロジェクトの再生プレイヤーとしての互換実装です。プロジェクトデータは
+      エンジン非依存の <code>projects/</code> に置き、<code>web/shared/</code>
+      の .kasc ローダー・ベクターデコーダー・QML コンパイラを全エンジンで
+      共有するため、新しい 2D エンジンの追加コストは比較的小さくなっています。</p>
+      <h3 id="現在のエンジン構成">現在のエンジン構成</h3>
+      <table>
+      <colgroup>
+      <col style="width: 16%" />
+      <col style="width: 12%" />
+      <col style="width: 46%" />
+      <col style="width: 26%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>エンジン</th>
+      <th>位置づけ</th>
+      <th>特性</th>
+      <th>.kasc 対応</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>CesiumJS</strong></td>
+      <td>メイン（既定）</td>
+      <td>3D グローブ・3D Tiles・DEM ドレープ・TerrainProvider をネイティブ
+      対応する唯一のフル機能エンジン。SCENE2D で真上視点の 2D も可。
+      フットプリントは大きいが KASUGAI の全機能（FLY・AI ツール・プラグイン）はここに集約</td>
+      <td>全行タイプ対応（<code>3dtiles:</code> 含む）</td>
+      </tr>
+      <tr>
+      <td><strong>MapLibre GL</strong></td>
+      <td>2D プレイヤー</td>
+      <td>WebGL ベースの 2D ベクタータイルエンジン（Mapbox GL v1 フォーク・
+      OSS）。MVT ベクタータイルをネイティブ描画でき、回転・傾斜表示も可能。
+      スタイル仕様がデファクト標準（QGIS・geo_webview の <code>/maplibre</code>
+      配信とも整合）</td>
+      <td>2D 行・QML・duckdb/sql・属性 UI・<code>3dtiles:</code>
+      （deck.gl Tile3DLayer を必要時のみ遅延ロード）実装済み</td>
+      </tr>
+      <tr>
+      <td><strong>OpenLayers</strong></td>
+      <td>2D プレイヤー</td>
+      <td>OGC 準拠最良の 2D エンジン。WMS/WMTS/WFS・多様な投影系・ラスタ
+      演算に強く、Canvas レンダリングで WebGL 要件が緩い。QGIS 系ツール
+      （QGIS2Web・Lizmap）との親和性が高い</td>
+      <td>MapLibre 相当（QML・duckdb/sql・属性 UI）</td>
+      </tr>
+      <tr>
+      <td><strong>Leaflet</strong></td>
+      <td>2D プレイヤー</td>
+      <td>約 40KB の超軽量 2D エンジン。WebGL 不要の DOM/SVG 描画で
+      古いブラウザでも動作。専用 pane にレイヤーを割り当てて .kasc
+      の積み順を再現（ラスタ・ベクター混在も順序保持）。地図回転は
+      非対応のため回転系設定は設けていない</td>
+      <td>MapLibre 相当（QML・duckdb/sql・属性 UI・インスペクター）</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="追加候補の優先順位">追加候補エンジンの優先順位</h3>
+      <p>評価軸: <strong>①ライセンス（OSS か）</strong>、
+      <strong>②メンテナンス状況</strong>、<strong>③<code>web/shared/</code>
+      の .kasc 基盤を再利用できるか（移植コスト）</strong>、
+      <strong>④既存 3 エンジンでは埋まらない用途があるか</strong>。</p>
+      <table>
+      <colgroup>
+      <col style="width: 10%" />
+      <col style="width: 20%" />
+      <col style="width: 44%" />
+      <col style="width: 26%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>優先度</th>
+      <th>エンジン</th>
+      <th>特性・採用理由</th>
+      <th>用途・条件</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>中</strong></td>
+      <td><strong>deck.gl</strong>（オーバーレイ）</td>
+      <td>単独エンジンではなく MapLibre/Cesium 上に重ねる大規模データ
+      可視化レイヤ（ArcLayer・GridLayer・HexagonLayer・TripsLayer 等）。
+      MapboxOverlay で maplibre フロントに統合可能</td>
+      <td>数十万点規模の密度・集約・軌跡表現が要件化した場合</td>
+      </tr>
+      <tr>
+      <td><strong>中</strong></td>
+      <td><strong>ol-cesium（olcs）</strong>（連携方式）</td>
+      <td>新エンジンではなく OpenLayers 2D ↔ Cesium 3D のカメラ同期ライブラリ。
+      openlayers フロントで編集しながら cesium の 3D 確認を同時に行う
+      2D/3D 連動ビューを実現できる</td>
+      <td>2D/3D 連動表示が欲しくなった場合（同期モードとして実装）</td>
+      </tr>
+      <tr>
+      <td><strong>中</strong></td>
+      <td><strong>Potree</strong>（点群特化）</td>
+      <td>EPT/COPC 形式の大規模点群に特化した three.js 系ビューア。
+      Cesium の 3D Tiles（pnts）でも代替可能だが、LAS/LAZ の大量点群を
+      そのまま軽快に見せる用途では専用ビューアに分がある</td>
+      <td>kasuga_converter（PDAL 経路）の点群成果物の納品が要件化した場合</td>
+      </tr>
+      <tr>
+      <td><strong>中</strong></td>
+      <td><strong>Maptalks</strong></td>
+      <td>2D + 2.5D + 3D を1ライブラリで扱うハイブリッド（three.js 統合・
+      地形対応）。OpenLayers 的 API で 3D 建物まで描ける。活発に開発中だが
+      日本語情報・採用実績は少ない</td>
+      <td>OL の手軽さで軽い 3D まで欲しい場合（代替検討枠）</td>
+      </tr>
+      <tr>
+      <td><strong>低</strong></td>
+      <td><strong>iTowns</strong></td>
+      <td>IGN（フランス国土地理院）の three.js ベース 3D エンジン。
+      グローブ・3D Tiles・点群に対応し Cesium より軽量だが、
+      エコシステムが小さく役割が Cesium と重複</td>
+      <td>Cesium が重すぎる環境での軽量 3D が必要になった場合</td>
+      </tr>
+      <tr>
+      <td><strong>低</strong></td>
+      <td><strong>Mapbox GL JS</strong></td>
+      <td>MapLibre の本家。v2 以降はプロプライエタリで、スタイル仕様は
+      MapLibre と互換のため既存 maplibre フロントで事実上代替済み</td>
+      <td>Mapbox 独自サービス（Mapbox タイル・Search 等）を使う場合のみ</td>
+      </tr>
+      <tr>
+      <td><strong>低</strong></td>
+      <td><strong>Google Maps JS API ／ ArcGIS Maps SDK</strong></td>
+      <td>商用・API キー・課金必須。ベンダーロックインが .kasc
+      の中立性（エンジン非依存のプロジェクト形式）と衝突する</td>
+      <td>顧客要件で明示指定された場合のみ</td>
+      </tr>
+      <tr>
+      <td><strong>低</strong></td>
+      <td><strong>globe.gl / three-globe</strong></td>
+      <td>最小構成の three.js 地球儀。デモ・可視化特化で、地図レイヤ体系
+      （XYZ・ベクター・属性）は自前実装が必要</td>
+      <td>簡易 3D グローブのデモが必要な場合</td>
+      </tr>
+      <tr>
+      <td><strong>低</strong></td>
+      <td><strong>Mapillary JS / Panoramax ビューア</strong>（特殊用途）</td>
+      <td>街路画像の専用ビューア。地図エンジンではなく連携ウィジェットとして
+      既存フロントに組み込む性質のもの</td>
+      <td>kasugai_box の画像連携など、地点写真ビューアの構想が具体化した場合</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>参考（不採用）: <strong>Tangram</strong>（Mapzen の WebGL
+      ベクタータイルレンダラ）と <strong>harp.gl</strong>（HERE）は
+      いずれも開発が停止しており、新規採用の対象外です。</p>
       <h2 id="kasugai-canvas-で可能な表示モード">KASUGAI Canvas
       で可能な表示モード</h2>
       <table>

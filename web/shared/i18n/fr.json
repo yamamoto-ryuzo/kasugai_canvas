@@ -553,5 +553,6 @@
   "mcp.writeDenied": "Opération d'écriture refusée par l'utilisateur.",
   "chat.customInstructionsLabel": "Instructions supplémentaires",
   "chat.customInstructionsPlaceholder": "Saisissez les consignes que l’IA doit toujours suivre",
-  "chat.customInstructionsHint": "Enregistrées dans ce navigateur comme solution de repli. Si KASUGAI_AI_INSTRUCTIONS est défini sur Cloud Run, les consignes du serveur sont prioritaires."
+  "chat.customInstructionsHint": "Enregistrées dans ce navigateur comme solution de repli. Si KASUGAI_AI_INSTRUCTIONS est défini sur Cloud Run, les consignes du serveur sont prioritaires.",
+  "theme.selectPrompt": "Choisir un thème"
 }

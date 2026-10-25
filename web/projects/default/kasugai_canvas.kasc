@@ -25,3 +25,6 @@ base: 地理院タイル 1984～1986年 | https://cyberjapandata.gsi.go.jp/xyz/g
 base: 地理院タイル 1979～1983年 | https://cyberjapandata.gsi.go.jp/xyz/gazo2/{z}/{x}/{y}.jpg| 出典：国土地理院 | maxZoom=16
 base: 地理院タイル 1974～1978年 | https://cyberjapandata.gsi.go.jp/xyz/gazo1/{z}/{x}/{y}.jpg| 出典：国土地理院 | maxZoom=16
 yahooAppId: あなたのYahoo Local Search API AppID
+theme: サンプルデータ | ローカルサンプル | サンプル/NaturalEarth国ポリゴン | サンプル/国ポリゴン(FlatGeobuf) | サンプル/行政区域(GeoPackage) | テスト/FGB
+theme: 東京都 | 東京都/千代田区（建築物LOD1） | 東京都/行政区域
+theme: 全表示 | *

@@ -79,8 +79,38 @@ export function resToZoom(res, lat = 0) {
   return Math.log2((156543.03392 * Math.cos(lat * Math.PI / 180)) / res);
 }
 
+// 凡例エントリの spec → 小さなスウォッチ画像の data URL（2Dエンジン共通）
+export function qmlLegendSwatchDataUrl(spec, size = 18) {
+  try {
+    const s = specToStyle(spec) || {};
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    const pad = 2;
+    if (s.fill) {
+      ctx.fillStyle = s.fill;
+      ctx.fillRect(pad, size * 0.3, size - pad * 2, size * 0.6);
+    }
+    if (s.stroke) {
+      ctx.strokeStyle = s.stroke;
+      ctx.lineWidth = Math.max(1, Math.min(3, s.strokeWidth || 1));
+      if (s.fill) ctx.strokeRect(pad, size * 0.3, size - pad * 2, size * 0.6);
+      else { ctx.beginPath(); ctx.moveTo(pad, size / 2); ctx.lineTo(size - pad, size / 2); ctx.stroke(); }
+    }
+    if (s.markerCanvas) {
+      const m = s.markerCanvas;
+      const w = Math.min(size - pad * 2, m.width), h = Math.min(size - pad * 2, m.height);
+      ctx.drawImage(m, (size - w) / 2, (size - h) / 2, w, h);
+    } else if (!s.fill && !s.stroke) {
+      ctx.fillStyle = s.markerColor || "#2c5ea8";
+      ctx.beginPath(); ctx.arc(size / 2, size / 2, size / 3, 0, Math.PI * 2); ctx.fill();
+    }
+    return canvas.toDataURL();
+  } catch (_) { return ""; }
+}
+
 // --- MapLibre: GeoJSON の各 feature に __kasc_* を焼き込み、データ駆動 paint 式で適用
-const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color"];
+const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color", "__kasc_symbol"];
 
 export function maplibreApplyQml(geojson, compiled) {
   for (const feature of geojson.features || []) {
@@ -92,6 +122,9 @@ export function maplibreApplyQml(geojson, compiled) {
     if (s.stroke) feature.properties.__kasc_stroke = s.stroke;
     feature.properties.__kasc_width = s.strokeWidth;
     feature.properties.__kasc_color = s.markerColor;
+    // 凡例シンボル単位の表示切替フィルタ用（規則ベースで複数ヒットし得るため先頭名を採用）
+    const names = typeof compiled.namesFor === "function" ? compiled.namesFor(feature.properties) : null;
+    if (names?.length) feature.properties.__kasc_symbol = names[0];
   }
   return {
     kinds: [

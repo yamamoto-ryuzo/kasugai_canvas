@@ -553,5 +553,6 @@
   "mcp.writeDenied": "사용자가 쓰기 작업을 거부했습니다.",
   "chat.customInstructionsLabel": "추가 지침",
   "chat.customInstructionsPlaceholder": "AI가 항상 따르기를 원하는 지침을 입력하세요",
-  "chat.customInstructionsHint": "이 브라우저에 대체 지침으로 저장됩니다. Cloud Run에 KASUGAI_AI_INSTRUCTIONS가 설정되어 있으면 서버 지침이 우선합니다."
+  "chat.customInstructionsHint": "이 브라우저에 대체 지침으로 저장됩니다. Cloud Run에 KASUGAI_AI_INSTRUCTIONS가 설정되어 있으면 서버 지침이 우선합니다.",
+  "theme.selectPrompt": "테마 선택"
 }

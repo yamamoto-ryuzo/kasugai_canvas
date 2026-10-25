@@ -13,6 +13,7 @@
  *
  * サポートする行:
  *   xyz:/tile:/base:   タイルレイヤ (maxZoom=/minZoom=/opacity=/tileSize=/bbox=)
+ *   wms:/wmts:         OGCタイル (wms=GetMap タイル化 / wmts=テンプレート or KVP GetTile)
  *   geojson:/layer:    GeoJSON 全件読込
  *   geoparquet:/parquet:  GeoParquet (hyparquet)
  *   flatgeobuf:/fgb:   FlatGeobuf (公式 JS リーダー)
@@ -175,6 +176,68 @@
     '3dtiles': 1, '3d-tiles': 1, tiles3d: 1
   };
 
+  // wms: 行 → WMS GetMap タイル URL テンプレート。
+  // url が既に BBOX=/{bbox…} を含むならそのまま返す。
+  // bboxToken: maplibre は '{bbox-epsg-3857}'、cesium は
+  // '{westProjected},{southProjected},{eastProjected},{northProjected}'
+  function wmsTileUrl(url, opt, bboxToken) {
+    if (!url) return url;
+    if (/[?&]bbox=/i.test(url) || /\{bbox/i.test(url)) return url;
+    var version = String(opt.version || '1.1.1').trim();
+    var srsKey = /^1\.3/.test(version) ? 'CRS' : 'SRS';
+    var transparent = /^(false|0|off)$/i.test(String(opt.transparent != null ? opt.transparent : 'true')) ? 'FALSE' : 'TRUE';
+    var size = Number(opt.tilesize || opt.tileSize) || 256;
+    var params = [
+      'SERVICE=WMS',
+      'VERSION=' + encodeURIComponent(version),
+      'REQUEST=GetMap',
+      'LAYERS=' + encodeURIComponent(opt.layers != null ? opt.layers : ''),
+      'STYLES=' + encodeURIComponent(opt.styles != null ? opt.styles : ''),
+      'FORMAT=' + encodeURIComponent(opt.format || 'image/png'),
+      'TRANSPARENT=' + transparent,
+      srsKey + '=EPSG:3857',
+      'BBOX=' + bboxToken,
+      'WIDTH=' + size,
+      'HEIGHT=' + size
+    ];
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + params.join('&');
+  }
+
+  // wmts: 行 → {z}/{x}/{y} タイル URL テンプレートへ正規化。
+  // {z}/{x}/{y} 済み → そのまま。{TileMatrix}/{TileRow}/{TileCol} の RESTful → 置換。
+  // それ以外 → KVP GetTile(layer=/style=/tilematrixset=/format=/matrixprefix=)
+  function wmtsTileUrl(url, opt) {
+    if (!url) return url;
+    if (/\{z\}/.test(url) && /\{x\}/.test(url) && /\{y\}/.test(url)) return url;
+    if (/\{TileMatrix\}/.test(url) || /\{TileRow\}/.test(url) || /\{TileCol\}/.test(url)) {
+      var tms = opt.tilematrixset || opt.matrixset || 'EPSG:3857';
+      var style = opt.style || 'default';
+      var fmt = String(opt.format || 'png').split('/').pop();
+      return url
+        .replace(/\{TileMatrixSet\}/g, encodeURIComponent(tms))
+        .replace(/\{Style\}/g, encodeURIComponent(style))
+        .replace(/\{Format\}/g, fmt)
+        .replace(/\{TileMatrix\}/g, '{z}')
+        .replace(/\{TileRow\}/g, '{y}')
+        .replace(/\{TileCol\}/g, '{x}');
+    }
+    var params = [
+      'SERVICE=WMTS',
+      'REQUEST=GetTile',
+      'VERSION=1.0.0',
+      'LAYER=' + encodeURIComponent(opt.layer != null ? opt.layer : ''),
+      'STYLE=' + encodeURIComponent(opt.style || 'default'),
+      'TILEMATRIXSET=' + encodeURIComponent(opt.tilematrixset || opt.matrixset || 'EPSG:3857'),
+      'FORMAT=' + encodeURIComponent(opt.format || 'image/png'),
+      'TILEMATRIX=' + encodeURIComponent(opt.matrixprefix || '') + '{z}',
+      'TILEROW={y}',
+      'TILECOL={x}'
+    ];
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + params.join('&');
+  }
+  KascLoader.wmsTileUrl = wmsTileUrl;
+  KascLoader.wmtsTileUrl = wmtsTileUrl;
+
   KascLoader.parseLines = function (text) {
     var items = [];
     var skipped = [];
@@ -224,6 +287,49 @@
           minZoom: opt.minZoom, maxZoom: opt.maxZoom, tileSize: opt.tileSize,
           bbox: opt.bbox || null, sourceLine: line
         });
+        return;
+      }
+
+      // ---- wms:/wmts: OGCタイル ----
+      // kind は 'raster'。wms は描画側が GetMap テンプレート(wmsTileUrl)を組み立て、
+      // wmts は tileUrl に {z}/{x}/{y} テンプレートを保持する
+      if (type === 'wms' || type === 'wmts') {
+        var wparts = value.split('|').map(function (p) { return p.trim(); });
+        var wtitle = wparts[0];
+        var wurl = wparts[1];
+        var wvisible = !wparts.some(function (p) { return /^(off|false)$/i.test(p); });
+        if (!wtitle || !wurl || !/^https?:\/\//i.test(wurl)) {
+          skipped.push({ line: line, reason: 'title|url required' });
+          return;
+        }
+        var wopt = {};
+        // 出典スロット(3番目)に key=value を書いた場合も拾えるよう slice(2) から走査する
+        // (= を含まない先頭トークンは出典として parseAttributionField 側で処理)
+        wparts.slice(2).forEach(function (p) {
+          var eq = p.indexOf('=');
+          if (eq < 0) return;
+          wopt[p.slice(0, eq).trim().toLowerCase()] = p.slice(eq + 1).trim();
+        });
+        var wnum = function (k) { var n = Number(wopt[k]); return Number.isFinite(n) ? n : undefined; };
+        var witem = {
+          id: id, kind: 'raster', type: type, title: wtitle, url: wurl,
+          visible: wvisible,
+          attribution: parseAttributionField(wparts[2]) || wopt.attr || wopt.attribution || null,
+          opacity: wnum('opacity') != null ? Math.max(0, Math.min(1, wnum('opacity'))) : 0.8,
+          ogc: wopt, sourceLine: line
+        };
+        if (type === 'wmts') witem.tileUrl = wmtsTileUrl(wurl, wopt);
+        var ts = Number(wopt.tilesize);
+        if (ts === 256 || ts === 512) witem.tileSize = ts;
+        var mz = wopt.maxzoom != null ? wopt.maxzoom : wopt.maximumlevel;
+        if (mz != null && Number.isInteger(Number(mz))) witem.maxZoom = Number(mz);
+        var nz = wopt.minzoom != null ? wopt.minzoom : wopt.minimumlevel;
+        if (nz != null && Number.isInteger(Number(nz))) witem.minZoom = Number(nz);
+        if (wopt.bbox) {
+          var bn = String(wopt.bbox).split(',').map(function (v) { return Number(v.trim()); });
+          if (bn.length === 4 && bn.every(Number.isFinite)) witem.bbox = bn;
+        }
+        items.push(witem);
         return;
       }
 

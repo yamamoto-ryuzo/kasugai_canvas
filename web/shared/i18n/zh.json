@@ -553,5 +553,6 @@
   "mcp.writeDenied": "用户拒绝了写入操作。",
   "chat.customInstructionsLabel": "附加指令",
   "chat.customInstructionsPlaceholder": "输入希望 AI 始终遵循的指令",
-  "chat.customInstructionsHint": "作为备用内容保存在此浏览器中。如果 Cloud Run 配置了 KASUGAI_AI_INSTRUCTIONS，则优先使用服务器指令。"
+  "chat.customInstructionsHint": "作为备用内容保存在此浏览器中。如果 Cloud Run 配置了 KASUGAI_AI_INSTRUCTIONS，则优先使用服务器指令。",
+  "theme.selectPrompt": "选择主题"
 }
