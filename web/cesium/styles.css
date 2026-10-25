@@ -29,6 +29,8 @@ body.globe-hidden .viewport { background: transparent; }
 .panel-title { margin-bottom: 14px; font-size: 16px; font-weight: 700; }
 .control-panel section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e4ecef; }
 .control-panel > .plugin-panel { margin-top: 0; padding-top: 0; border-top: 0; }
+.control-panel > #engines { margin-top: 10px; font-size: 11px; }
+.control-panel > #engines a { margin-right: 6px; }
 .panel-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: -2px -4px 0; padding-bottom: 4px; overflow: visible; }
 .panel-toggle { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 1px 4px !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 18px !important; line-height: 1; }
 .panel-tab,
@@ -60,7 +62,8 @@ body.globe-hidden .viewport { background: transparent; }
 .control-panel.collapsed { width: 40px; height: 40px; padding: 7px; overflow: hidden; }
 .control-panel.collapsed .panel-tabs { height: 26px; margin: 0; padding: 0; overflow: hidden; border-bottom: 0; }
 .control-panel.collapsed .panel-tab,
-.control-panel.collapsed .plugin-panel { display: none; }
+.control-panel.collapsed .plugin-panel,
+.control-panel.collapsed #engines { display: none; }
 /* 管理ボタン（⚙）: タブではなく管理ウィンドウを開くランチャー。タブ列の右端に寄せる */
 .panel-manage { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 1px 4px !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 14px !important; line-height: 1; cursor: pointer; }
 #share-copy { margin-left: auto; }

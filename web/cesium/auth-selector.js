@@ -1,4 +1,4 @@
-import { initI18n, t } from "/shared/i18n.js";
+import { initI18n, t } from "../shared/i18n.js";
 
 function stripComments(text) {
   return text.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");

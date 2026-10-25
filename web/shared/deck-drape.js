@@ -13,8 +13,8 @@
 //   // Tile3DLayer の opts に operation: drapeOn ? "terrain+draw" : "draw" を付ける
 //   if (drapeOn) layers.push(...buildDeckDrapeLayers(deck, collectDrapeItems(), baseUrl));
 
-import { resolveKascUrl, buildWmsTileTemplate, buildWmtsTileTemplate } from "/shared/kasc.js";
-import { specToStyle } from "/shared/qml-2d.js";
+import { resolveKascUrl, buildWmsTileTemplate, buildWmtsTileTemplate } from "./kasc.js";
+import { specToStyle } from "./qml-2d.js";
 
 // ドレープ品質: deck.gl の TerrainCover は 3D Tiles タイルの boundingBox に固定された
 // テクスチャを「最初に見えたズーム」で1度だけ生成し、ズームインしても再描画しない。

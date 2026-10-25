@@ -3,8 +3,8 @@
 //       csv:/tsv: / duckdb: / sql:
 // duckdb:/sql: のクエリ実行は window.KascLoader(shared/kasc_loader.js) へ委譲する。
 // bounds = {ranges:[{west,east}],south,north} は bbox=auto/:bbox 系の表示範囲として使う
-import { wkbToGeoJsonGeometry } from "/shared/vector-decode.js";
-import { resolveKascUrl } from "/shared/kasc.js";
+import { wkbToGeoJsonGeometry } from "./vector-decode.js";
+import { resolveKascUrl } from "./kasc.js";
 
 const FGB_URL = "https://esm.sh/flatgeobuf@3.36.0/lib/mjs/geojson.js";
 const HYPARQUET_URL = "https://cdn.jsdelivr.net/npm/hyparquet@1.30.1/+esm";
@@ -16,7 +16,7 @@ const gpkgPending = new Map();
 
 function ensureGpkgWorker() {
   if (!gpkgWorker) {
-    gpkgWorker = new Worker("/shared/gpkg-worker.js", { type: "module" });
+    gpkgWorker = new Worker("./gpkg-worker.js", { type: "module" });
     gpkgWorker.onmessage = event => {
       const { reqId, error, ...result } = event.data || {};
       const entry = gpkgPending.get(reqId);
@@ -212,7 +212,7 @@ export async function loadVectorItem(item, baseUrl, bounds = null) {
     return { geojson: loadCsvLike(await res.text(), type === "tsv" ? "\t" : ",") };
   }
   if (type === "duckdb" || type === "sql") {
-    if (!window.KascLoader) await import("/shared/kasc_loader.js");
+    if (!window.KascLoader) await import("./kasc_loader.js");
     const it = toKascLoaderItem(item, baseUrl, bounds);
     const geojson = await window.KascLoader.load(it);
     return { geojson, viewportQuery: it.bboxAuto };

@@ -1,13 +1,14 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "/shared/kasc.js";
-import { loadVectorItem } from "/shared/vector-load.js";
-import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
-import { createPlayerApi } from "/shared/player-api.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
+import { loadVectorItem } from "../shared/vector-load.js";
+import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
+import { createPlayerApi } from "../shared/player-api.js";
+import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 
-import { groundDeckTileset } from "/shared/deck-ground.js";
-import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "/shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom } from "/shared/qml-2d.js";
+import { groundDeckTileset } from "../shared/deck-ground.js";
+import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
+import { qmlLegendSwatchDataUrl, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom } from "../shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
 
@@ -910,9 +911,12 @@ let currentUnsupported = [];
 
 async function loadProject(id) {
   const { id: loadedId, baseUrl, doc, manifest, raw, kascUrl } = await loadKascProject(id);
-  inspectorInput.value = raw;
+  switchRestore = pendingSwitchState;
+  pendingSwitchState = null;
+  const text = switchRestore?.inspector ?? raw;
+  inspectorInput.value = text;
   lastKascUrl = kascUrl || "";
-  await renderProject(loadedId, baseUrl, doc, manifest);
+  await renderProject(loadedId, baseUrl, text === raw ? doc : parseKasc(text), manifest);
 }
 
 // インスペクターの「登録」: 編集済み .kasc テキストを現在プロジェクトの
@@ -920,6 +924,38 @@ async function loadProject(id) {
 async function applyInspectorText(text) {
   const baseUrl = lastBaseUrl || `/projects/${encodeURIComponent(currentProjectId || "default")}/`;
   await renderProject(currentProjectId || "default", baseUrl, parseKasc(text));
+}
+
+// 他エンジンからの切替時、同一プロジェクトなら引き継がれたレイヤ状態
+// (インスペクタ内容・テーマ選択・各レイヤの可視性)を適用する。
+// 状態はモジュール評価時に即消費して保持し(データ読込完了を待たない)、
+// loadProject/renderProject の初回描画へそのまま反映する
+let pendingSwitchState = consumeEngineSwitchState();
+let switchRestore = null;
+
+function applySwitchRestore(sw) {
+  if (Array.isArray(sw.vis)) {
+    const exact = new Map(layerEntries.map(e => [e.item.title, e]));
+    const leafOf = t => String(t).split("/").map(s => s.trim()).pop();
+    const byLeaf = new Map();
+    for (const e of layerEntries) {
+      const k = leafOf(e.item.title);
+      byLeaf.set(k, byLeaf.has(k) ? null : e);
+    }
+    let changed = false;
+    for (const { t: title, v } of sw.vis) {
+      const e = exact.get(title) || byLeaf.get(leafOf(title));
+      if (e && !!e.item.visible !== !!v) {
+        e.item.visible = !!v;
+        applyEntryVisibility(e);
+        changed = true;
+      }
+    }
+    if (changed) renderLayerRows(layerEntries, currentUnsupported);
+  }
+  if (sw.theme && themeSelect && [...themeSelect.options].some(o => o.value === sw.theme)) {
+    themeSelect.value = sw.theme;
+  }
 }
 
 // .kasc 文書(doc)を描画する。loadProject(ファイル読込)と
@@ -1020,6 +1056,10 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   renderLayerRows(entries, unsupported);
   currentUnsupported = unsupported;
   updateThemeSelect(doc.themes || []);
+
+  // エンジン切替の引継ぎ状態を初期描画へ反映(初回のみ)
+  const sw = switchRestore; switchRestore = null;
+  if (sw) applySwitchRestore(sw);
 
   const isDeferred = it => VECTOR_TYPES.has(it.type) && it.visible === false;
   // 残りの読込対象(=読み込み中を含む)を「残りN: 名前…」で進捗に出す
@@ -1481,4 +1521,5 @@ window.kasugaiApi = createPlayerApi({
     updateMapAttribution();
   },
 });
+mountEngineSwitcher(document.querySelector("#engines"), "leaflet");
 void initAiChat({ engine: "leaflet", manageBackend: true });

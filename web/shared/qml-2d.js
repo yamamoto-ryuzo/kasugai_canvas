@@ -2,8 +2,8 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas } from "/shared/qml-style.js";
-import { resolveKascUrl } from "/shared/kasc.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas } from "./qml-style.js";
+import { resolveKascUrl } from "./kasc.js";
 
 export async function loadCompiledQml(urlOrPath, baseUrl) {
   const url = resolveKascUrl(urlOrPath, baseUrl);

@@ -1,7 +1,7 @@
 // duckdb:/sql: 行 → GeoJSON FeatureCollection（DuckDB-Wasm 経由・エンジン非依存）
 // ファイル参照は fetch で取得して registerFileBuffer に登録（httpfs/CORS 非依存）
-import { wkbToGeoJsonGeometry } from "/shared/vector-decode.js";
-import { resolveKascUrl } from "/shared/kasc.js";
+import { wkbToGeoJsonGeometry } from "./vector-decode.js";
+import { resolveKascUrl } from "./kasc.js";
 
 const DUCKDB_URL = "https://esm.sh/@duckdb/duckdb-wasm@1.30.0";
 let dbPromise = null;
