@@ -125,9 +125,14 @@ function _showOverlay(dirName) {
   const box = document.createElement("div");
   box.style.cssText =
     "background:#fff;border-radius:10px;padding:24px 28px;width:360px;max-width:88vw;text-align:center";
+  var hint = "";
+  try {
+    hint = new URLSearchParams(location.search).get("dirhint") || "";
+  } catch (_) { }
   box.innerHTML =
     "<h2 style='margin:0 0 10px;font-size:16px'>ローカルプロジェクトを開く</h2>" +
     "<p style='margin:0 0 12px;font-size:13px'>.kasc のあるフォルダを選択してください" +
+    (hint ? "（期待: <strong>" + hint.replace(/[<>&"]/g, "") + "</strong>）" : "") +
     "（DATA/ はフォルダ内から読み込みます）</p>";
   const btn = document.createElement("button");
   btn.textContent = dirName ? `「${dirName}」で開く` : "フォルダを選択";
