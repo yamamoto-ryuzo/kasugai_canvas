@@ -9,7 +9,7 @@ import TileWMS from "https://esm.sh/ol@10.6.1/source/TileWMS.js";
 import VectorSource from "https://esm.sh/ol@10.6.1/source/Vector.js";
 import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent } from "https://esm.sh/ol@10.6.1/proj.js";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks } from "/shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
 import { createPlayerApi } from "/shared/player-api.js";
@@ -35,6 +35,12 @@ const panel = {
   basemap: document.querySelector("#basemap-ctl"),
   basemapSelect: document.querySelector("#basemap-select"),
   cams: document.querySelector("#cams"),
+  camsExport: document.querySelector("#cams-export"),
+  camsExportCam: document.querySelector("#cams-export-cam"),
+  camsImport: document.querySelector("#cams-import"),
+  camsImportFile: document.querySelector("#cams-import-file"),
+  camsImportCam: document.querySelector("#cams-import-cam"),
+  camsImportCamFile: document.querySelector("#cams-import-cam-file"),
   legends: document.querySelector("#legends"),
   infoLink: document.querySelector("#info-link"),
   unsupported: document.querySelector("#unsupported"),
@@ -737,6 +743,39 @@ const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
 let currentCams = [];
+
+// cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
+// 混在する場合は CAM / BOOKMARK の見出しで区別する
+function fillCamPanel(cams) {
+  panel.cams.innerHTML = "";
+  const mixedCams = cams.some(c => c.bookmark) && cams.some(c => !c.bookmark);
+  let lastCamKind = "";
+  for (const cam of cams) {
+    const kind = cam.bookmark ? "QGIS-XML" : "CAM";
+    if (mixedCams && kind !== lastCamKind) {
+      const label = document.createElement("div");
+      label.className = "cam-group-label";
+      label.textContent = kind;
+      panel.cams.append(label);
+      lastCamKind = kind;
+    }
+    const btn = document.createElement("button");
+    btn.className = "cam-btn" + (cam.bookmark ? " bm-btn" : "");
+    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+    btn.addEventListener("click", () => {
+      const e = cam._extent;
+      if (e) {
+        map.getView().fit(
+          transformExtent([e.west, e.south, e.east, e.north], "EPSG:4326", "EPSG:3857"),
+          { padding: [40, 40, 40, 40], duration: 600, maxZoom: 20 });
+      } else {
+        map.getView().animate({ center: fromLonLat([cam.longitude, cam.latitude]), zoom: camToZoom(cam), duration: 600 });
+      }
+    });
+    panel.cams.append(btn);
+  }
+  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
+}
 let currentUnsupported = [];
 
 async function loadProject(id) {
@@ -925,18 +964,36 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 
   // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
-  panel.cams.innerHTML = "";
   currentCams = cams;
-  for (const cam of cams) {
-    const btn = document.createElement("button");
-    btn.className = "cam-btn";
-    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
-    btn.addEventListener("click", () => {
-      map.getView().animate({ center: fromLonLat([cam.longitude, cam.latitude]), zoom: camToZoom(cam), duration: 600 });
+  fillCamPanel(cams);
+  // XML保存/読込: プリセットを qgis_bookmarks 形式で出し入れする
+  panel.camsExport.onclick = () => downloadQgisBookmarksXml(currentCams);
+  panel.camsExportCam.onclick = () => downloadKascCamLines(currentCams);
+  panel.camsImport.onclick = () => panel.camsImportFile.click();
+  panel.camsImportFile.onchange = async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseQgisBookmarksXml(await f.text()).map(bm => {
+      const cam = qgisBookmarkToCam(bm);
+      cam.bookmark = true;
+      return cam;
     });
-    panel.cams.append(btn);
-  }
-  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
+    if (!added.length) return;
+    currentCams = currentCams.concat(added);
+    fillCamPanel(currentCams);
+  };
+  // CAM読込: cam: 行テキスト(.kasc 抜粋可)をプリセットへ追加
+  panel.camsImportCam.onclick = () => panel.camsImportCamFile.click();
+  panel.camsImportCamFile.onchange = async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseKasc(await f.text()).cams;
+    if (!added.length) return;
+    currentCams = currentCams.concat(added);
+    fillCamPanel(currentCams);
+  };
 
   // 属性検索（ベクターレイヤの全属性を対象）→ 検索タブ
   panel.searchInput.onkeydown = e => {
@@ -1243,12 +1300,16 @@ window.kasugaiApi = createPlayerApi({
     return true;
   },
   getCams: () => currentCams,
-  flyToView: v => map.getView().animate({
-    center: fromLonLat([Number(v.longitude), Number(v.latitude)]),
-    zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
-    rotation: Number.isFinite(v.heading) ? -v.heading * Math.PI / 180 : undefined,
-    duration: 600,
-  }),
+  flyToView: v => {
+    // heading 未指定時は rotation を渡さない（undefined は現在角を壊し得るため）
+    const opts = {
+      center: fromLonLat([Number(v.longitude), Number(v.latitude)]),
+      zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
+      duration: 600,
+    };
+    if (Number.isFinite(v.heading)) opts.rotation = -v.heading * Math.PI / 180;
+    map.getView().animate(opts);
+  },
   getViewInfo: () => {
     const c = toLonLat(map.getView().getCenter() || [0, 0]);
     return { latitude: c[1], longitude: c[0], zoom: map.getView().getZoom(), heading: -map.getView().getRotation() * 180 / Math.PI, pitchDeg: 0 };

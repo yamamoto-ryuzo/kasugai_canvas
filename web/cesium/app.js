@@ -17,7 +17,7 @@ import {
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "/shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "/shared/vector-decode.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks } from "/shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc } from "/shared/kasc.js";
 
 await initI18n();
 applyI18n();
@@ -1026,6 +1026,22 @@ function flyTo(options = {}, duration = null) {
   viewer.camera.flyTo(flight);
 }
 
+// bookmark: 由来の範囲プリセット(_extent 保持)へ移動する。height 近似ではなく
+// extent そのものへフレームするため、範囲フィットを使う他エンジンと同一の表示になる
+function flyToExtent(cam) {
+  const e = cam._extent;
+  const rect = Cesium.Rectangle.fromDegrees(e.west, e.south, e.east, e.north);
+  const ssec = viewer.scene.screenSpaceCameraController;
+  viewer.camera.flyTo({
+    destination: rect,
+    orientation: {
+      heading: Cesium.Math.toRadians(Number(cam.heading) || 0),
+      pitch: Cesium.Math.toRadians(ssec.enableTilt ? -84.99 : -90),
+      roll: 0,
+    },
+  });
+}
+
 // 検索座標の地形標高を事前に読み込んで返す（未読み込みタイルもダウンロードする）
 async function sampleGroundHeight(lat, lng) {
   const carto = Cesium.Cartographic.fromDegrees(lng, lat);
@@ -1368,12 +1384,24 @@ function renderBasemapSelector() {
 function renderPresets() {
   const container = document.querySelector("#camera-presets");
   container.replaceChildren();
+  // cam: 行と bookmark: 行(XML) が混在する場合は見出しで区別する
+  const mixed = cameraPresets.some(p => p.bookmark) && cameraPresets.some(p => !p.bookmark);
+  let lastKind = "";
   cameraPresets.forEach((preset, index) => {
+    const kind = preset.bookmark ? "QGIS-XML" : "CAM";
+    if (mixed && kind !== lastKind) {
+      const label = document.createElement("div");
+      label.className = "cam-group-label";
+      label.textContent = kind;
+      container.append(label);
+      lastKind = kind;
+    }
     const button = document.createElement("button");
     button.type = "button";
     button.textContent = preset.title;
     button.dataset.preset = String(index);
-    button.addEventListener("click", () => flyTo(preset));
+    if (preset.bookmark) button.classList.add("bm-btn");
+    button.addEventListener("click", () => preset._extent ? flyToExtent(preset) : flyTo(preset));
     container.append(button);
   });
 }
@@ -4729,6 +4757,42 @@ function setupEvents() {
   });
 
   document.querySelector("#basemap-globe").addEventListener("click", openGoogleEarth);
+
+  // cam プリセットの qgis_bookmarks XML 保存/読込
+  document.querySelector("#cams-export")?.addEventListener("click", () =>
+    downloadQgisBookmarksXml(cameraPresets));
+  document.querySelector("#cams-export-cam")?.addEventListener("click", () =>
+    downloadKascCamLines(cameraPresets));
+  document.querySelector("#cams-import")?.addEventListener("click", () =>
+    document.querySelector("#cams-import-file")?.click());
+  document.querySelector("#cams-import-file")?.addEventListener("change", async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseQgisBookmarksXml(await f.text()).map(bm => {
+      const cam = qgisBookmarkToCam(bm);
+      cam.bookmark = true;
+      return cam;
+    });
+    if (!added.length) return;
+    cameraPresets.push(...added);
+    renderPresets();
+  });
+  // CAM読込: cam: 行テキスト(.kasc 抜粋可)をプリセットへ追加
+  document.querySelector("#cams-import-cam")?.addEventListener("click", () =>
+    document.querySelector("#cams-import-cam-file")?.click());
+  document.querySelector("#cams-import-cam-file")?.addEventListener("change", async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseKasc(await f.text()).cams.map(c => ({
+      title: c.name || "cam", latitude: c.latitude, longitude: c.longitude,
+      height: c.height, pitch: c.pitch, heading: c.heading,
+    }));
+    if (!added.length) return;
+    cameraPresets.push(...added);
+    renderPresets();
+  });
 
   document.querySelector("#apply-camera").addEventListener("click", () => {
     const next = {};

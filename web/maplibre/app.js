@@ -1,6 +1,6 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks } from "/shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
 import { createPlayerApi } from "/shared/player-api.js";
@@ -16,6 +16,12 @@ const panel = {
   basemap: document.querySelector("#basemap-ctl"),
   basemapSelect: document.querySelector("#basemap-select"),
   cams: document.querySelector("#cams"),
+  camsExport: document.querySelector("#cams-export"),
+  camsExportCam: document.querySelector("#cams-export-cam"),
+  camsImport: document.querySelector("#cams-import"),
+  camsImportFile: document.querySelector("#cams-import-file"),
+  camsImportCam: document.querySelector("#cams-import-cam"),
+  camsImportCamFile: document.querySelector("#cams-import-cam-file"),
   legends: document.querySelector("#legends"),
   infoLink: document.querySelector("#info-link"),
   unsupported: document.querySelector("#unsupported"),
@@ -48,9 +54,11 @@ let currentProjectId = "";
 let urlViewConsumed = false;
 
 // MapLibre ビュー ⇄ URL パラメータ（Cesium 規約: pitch は直下=-90・水平=0、heading は北=0・時計回り）
+// URL/共有側の zoom は 256px タイル基準の正典(camToZoom と同じ。Leaflet/OL が素の値を書く)。
+// MapLibre は 512px 基準のため書き出しは +1、読み込みは -1 する
 function mapViewToUrl() {
   const c = map.getCenter();
-  const zoom = map.getZoom();
+  const zoom = map.getZoom() + 1;
   return {
     latitude: c.lat,
     longitude: c.lng,
@@ -64,7 +72,7 @@ function mapViewToUrl() {
 function urlViewToMapOptions(v) {
   return {
     center: [v.longitude, v.latitude],
-    zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
+    zoom: (Number.isFinite(v.zoom) ? v.zoom : camToZoom(v)) - 1,
     bearing: Number.isFinite(v.heading) ? -v.heading : 0,
     pitch: Number.isFinite(v.pitch) ? Math.max(0, Math.min(60, v.pitch + 90)) : 0,
   };
@@ -285,8 +293,9 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
         if (range) {
           const lat = map.getCenter().lat;
           zoomRange = {
-            minzoom: Math.max(0, resToZoom(range.maxRes === Infinity ? 1e9 : range.maxRes, lat)),
-            maxzoom: Math.min(24, resToZoom(Math.max(range.minRes, 0.01), lat)),
+            // resToZoom は 256px 基準のため maplibre レイヤ指定では -1
+            minzoom: Math.max(0, resToZoom(range.maxRes === Infinity ? 1e9 : range.maxRes, lat) - 1),
+            maxzoom: Math.min(24, resToZoom(Math.max(range.minRes, 0.01), lat) - 1),
           };
         }
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
@@ -723,6 +732,34 @@ const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
 let currentCams = [];
+
+// cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
+// 混在する場合は CAM / BOOKMARK の見出しで区別する
+function fillCamPanel(cams) {
+  panel.cams.innerHTML = "";
+  const mixedCams = cams.some(c => c.bookmark) && cams.some(c => !c.bookmark);
+  let lastCamKind = "";
+  for (const cam of cams) {
+    const kind = cam.bookmark ? "QGIS-XML" : "CAM";
+    if (mixedCams && kind !== lastCamKind) {
+      const label = document.createElement("div");
+      label.className = "cam-group-label";
+      label.textContent = kind;
+      panel.cams.append(label);
+      lastCamKind = kind;
+    }
+    const btn = document.createElement("button");
+    btn.className = "cam-btn" + (cam.bookmark ? " bm-btn" : "");
+    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+    btn.addEventListener("click", () => {
+      const e = cam._extent;
+      if (e) map.fitBounds([[e.west, e.south], [e.east, e.north]], { padding: 40, duration: 800, maxZoom: 20 });
+      else map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) - 1 });
+    });
+    panel.cams.append(btn);
+  }
+  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
+}
 let currentUnsupported = [];
 
 async function loadProject(id) {
@@ -806,7 +843,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     map.jumpTo(urlViewToMapOptions(urlView));
   } else if (doc.cams.length) {
     const cam = doc.cams[0];
-    map.jumpTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) });
+    map.jumpTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) - 1 });
   } else {
     needExtentFit = true;
   }
@@ -906,18 +943,36 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 
   // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
-  panel.cams.innerHTML = "";
   currentCams = cams;
-  for (const cam of cams) {
-    const btn = document.createElement("button");
-    btn.className = "cam-btn";
-    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
-    btn.addEventListener("click", () => {
-      map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) });
+  fillCamPanel(cams);
+  // XML保存/読込: プリセットを qgis_bookmarks 形式で出し入れする
+  panel.camsExport.onclick = () => downloadQgisBookmarksXml(currentCams);
+  panel.camsExportCam.onclick = () => downloadKascCamLines(currentCams);
+  panel.camsImport.onclick = () => panel.camsImportFile.click();
+  panel.camsImportFile.onchange = async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseQgisBookmarksXml(await f.text()).map(bm => {
+      const cam = qgisBookmarkToCam(bm);
+      cam.bookmark = true;
+      return cam;
     });
-    panel.cams.append(btn);
-  }
-  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
+    if (!added.length) return;
+    currentCams = currentCams.concat(added);
+    fillCamPanel(currentCams);
+  };
+  // CAM読込: cam: 行テキスト(.kasc 抜粋可)をプリセットへ追加
+  panel.camsImportCam.onclick = () => panel.camsImportCamFile.click();
+  panel.camsImportCamFile.onchange = async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseKasc(await f.text()).cams;
+    if (!added.length) return;
+    currentCams = currentCams.concat(added);
+    fillCamPanel(currentCams);
+  };
 
   // 属性検索（読み込んだベクターの全属性を対象）→ 検索タブ
   panel.searchInput.onkeydown = e => {
@@ -998,7 +1053,8 @@ map.on("load", () => {
         const s = await (await fetch(`${base}/present/state`)).json();
         const opt = {};
         if (typeof s.lon === "number" && typeof s.lat === "number") opt.center = [s.lon, s.lat];
-        if (typeof s.zoom === "number") opt.zoom = s.zoom;
+        // /present/state の zoom は OL 規約(256px基準)のため -1
+        if (typeof s.zoom === "number") opt.zoom = s.zoom - 1;
         if (typeof s.rotation === "number") opt.bearing = -s.rotation;
         map.jumpTo(opt);
       } catch (_) { /* 接続不可時は前回状態を維持 */ }
@@ -1033,12 +1089,14 @@ const terrainDemSources = {
   maplibre: { url: "https://demotiles.maplibre.org/terrain-tiles/tiles.json" },
 };
 let terrainEnabled = false;
-let terrainDemKey = "reearth-ellipsoid";
+let terrainDemKey = "none"; // "none" = DEMなし。初期値は DEMソース選択肢の既定と一致させる
 let terrainExaggeration = 1;
 let appliedTerrainDemKey = null;
 
 function applyTerrain() {
-  if (!map.isStyleLoaded()) { map.once("load", applyTerrain); return; }
+  // "load" は初回スタイル読込で一度しか発火しないため、プロジェクト読込等で
+  // スタイル再処理中に来た呼び出しはポーリングで再試行する
+  if (!map.isStyleLoaded()) { setTimeout(applyTerrain, 250); return; }
   if (!terrainEnabled) {
     if (map.getTerrain()) map.setTerrain(null);
     // ピッチ緩和は deck.gl overlay 側でも必要なので、overlay 無しの時だけ戻す
@@ -1138,11 +1196,20 @@ map.on("sourcedata", e => {
   const terrainExaggSlider = document.querySelector("#display-terrain-exagg");
   terrainToggle?.addEventListener("change", () => {
     terrainEnabled = terrainToggle.checked;
+    // "DEMなし" 選択中に ON にした場合は既定の DEM ソースへ戻す
+    if (terrainEnabled && !terrainDemSources[terrainDemKey]) {
+      terrainDemKey = "reearth-ellipsoid";
+      if (terrainSourceSel) terrainSourceSel.value = terrainDemKey;
+    }
     applyTerrain();
   });
   terrainSourceSel?.addEventListener("change", () => {
     terrainDemKey = terrainSourceSel.value;
-    if (terrainEnabled) applyTerrain();
+    // DEM ソース選択時はテレイン表示を既定 ON にする（"none"=DEMなし は OFF。
+    // Cesium 版 #dem-source と同じ挙動）
+    terrainEnabled = terrainDemKey !== "none";
+    if (terrainToggle) terrainToggle.checked = terrainEnabled;
+    applyTerrain();
   });
   terrainExaggSlider?.addEventListener("input", () => {
     terrainExaggeration = Number(terrainExaggSlider.value);
@@ -1305,12 +1372,16 @@ window.kasugaiApi = createPlayerApi({
     return true;
   },
   getCams: () => currentCams,
-  flyToView: v => map.flyTo({
-    center: [Number(v.longitude), Number(v.latitude)],
-    zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
-    bearing: Number.isFinite(v.heading) ? -v.heading : undefined,
-    pitch: Number.isFinite(v.pitch) ? Math.max(0, Math.min(60, v.pitch + 90)) : undefined,
-  }),
+  flyToView: v => {
+    // undefined キー(bearing/pitch)を渡すと maplibre-gl v5 の flyTo が
+    // _calcMatrices でクラッシュしレンダーループが止まるため省略して組み立てる
+    const opts = { center: [Number(v.longitude), Number(v.latitude)] };
+    // v.zoom は engine ネイティブ(getViewInfo と往復)なので素通し、camToZoom 由来は -1
+    opts.zoom = Number.isFinite(v.zoom) ? v.zoom : camToZoom(v) - 1;
+    if (Number.isFinite(v.heading)) opts.bearing = -v.heading;
+    if (Number.isFinite(v.pitch)) opts.pitch = Math.max(0, Math.min(60, v.pitch + 90));
+    map.flyTo(opts);
+  },
   getViewInfo: () => {
     const c = map.getCenter();
     return { latitude: c.lat, longitude: c.lng, zoom: map.getZoom(), heading: -map.getBearing(), pitchDeg: map.getPitch() };

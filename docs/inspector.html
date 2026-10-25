@@ -56,7 +56,7 @@ gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / whe
 duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / table=地物テーブル名(gpkg) / bbox=auto(表示範囲連動・既定ON)|bbox=off(常時全件描画) / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / style=QMLファイルURL / attr=出典
 sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・| style=QML で QGIS スタイル適用・:bbox で表示範囲連動)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
-bookmark: QGISブックマーク | bookmark:XMLファイルURL （QGIS のブックマークエクスポート XML・qgis_bookmarks 形式を読み込み、各ブックマークをカメラプリセットへ展開。geo_webview の /kasugai エクスポートでは bookmarks.xml として自動出力）
+bookmark: QGISブックマーク | bookmark:XMLファイルURL （QGIS のブックマークエクスポート XML・qgis_bookmarks 形式を読み込み、各ブックマークをカメラプリセットへ展開。geo_webview の /kasugai エクスポートでは bookmarks.xml として自動出力。カメラパネルの「XML保存」「XML読込」ボタンでも同形式でプリセットを出し入れできる）
 theme: テーマ名 | 表示するレイヤタイトル[|タイトル…] （QGIS マップテーマ相当の可視性プリセット。`*` で全表示。レイヤーパネル上部のテーマ選択から適用すると各レイヤ行の on/off が書き換わる）
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID

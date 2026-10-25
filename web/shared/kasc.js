@@ -440,22 +440,34 @@ export function qgisBookmarkToCam(bm) {
     (srid !== QGIS_SRSID_4326 &&
       Math.max(Math.abs(xmin), Math.abs(ymin), Math.abs(xmax), Math.abs(ymax)) > 180);
   let longitude, latitude, w, h;
+  const extent = {};
   if (mercator) {
     longitude = mercatorToLon((xmin + xmax) / 2);
     latitude = mercatorToLat((ymin + ymax) / 2);
     w = Math.abs(xmax - xmin);
     h = Math.abs(ymax - ymin);
+    extent.west = mercatorToLon(Math.min(xmin, xmax));
+    extent.east = mercatorToLon(Math.max(xmin, xmax));
+    extent.south = mercatorToLat(Math.min(ymin, ymax));
+    extent.north = mercatorToLat(Math.max(ymin, ymax));
   } else {
     longitude = (xmin + xmax) / 2;
     latitude = (ymin + ymax) / 2;
     w = Math.abs(xmax - xmin) * 111320 * Math.cos(latitude * Math.PI / 180);
     h = Math.abs(ymax - ymin) * 111320;
+    extent.west = Math.min(xmin, xmax);
+    extent.east = Math.max(xmin, xmax);
+    extent.south = Math.min(ymin, ymax);
+    extent.north = Math.max(ymin, ymax);
   }
   const name = (bm.group ? `${bm.group}/` : "") + (bm.name || "Bookmark");
   const cam = {
     name, title: name, latitude, longitude,
     height: Math.max(120, Math.min(20000000, Math.max(w, h) / 4)),
     pitch: -90,
+    // ブックマークは本来「範囲」。遷移時に height 近似ではなく範囲フィットを
+    // 使い、ズーム規約の異なるエンジン間でも同一の表示に揃えるため保持する
+    _extent: extent,
   };
   if (bm.rotation) cam.heading = ((bm.rotation % 360) + 360) % 360;
   return cam;
@@ -470,10 +482,85 @@ export async function loadKascBookmarks(specs, projectBaseUrl) {
     try {
       const res = await fetch(resolveKascUrl(spec.url, projectBaseUrl), { cache: "no-store" });
       if (!res.ok) continue;
-      for (const bm of parseQgisBookmarksXml(await res.text())) cams.push(qgisBookmarkToCam(bm));
+      // bookmark: 由来であることを UI で区別できるようフラグを付ける
+      for (const bm of parseQgisBookmarksXml(await res.text())) {
+        const cam = qgisBookmarkToCam(bm);
+        cam.bookmark = true;
+        cams.push(cam);
+      }
     } catch (_) { /* 読めない bookmark: 参照は無視する */ }
   }
   return cams;
+}
+
+// cam プリセット配列 → qgis_bookmarks 形式の XML テキスト。
+// cam が持つのは中心+高さだけなので extent は逆算する:
+// 表示高≒h*4(m・camToZoom 規約)の正方形範囲をEPSG:4326(sr_id=3452)で書く。
+// このファイルは bookmark: 行や QGIS のブックマークインポートで再利用できる
+export function camsToQgisBookmarksXml(cams) {
+  const esc = s => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const items = (cams || [])
+    .filter(c => Number.isFinite(c.latitude) && Number.isFinite(c.longitude))
+    .map((c, i) => {
+      const h = Math.max(10, c.height || 3000);
+      const half = h * 2; // 表示高 h*4 の半分
+      const dLat = half / 111320;
+      const dLon = half / (111320 * Math.cos(c.latitude * Math.PI / 180) || 1e-6);
+      const name = c.name || c.title || `cam ${i + 1}`;
+      return [
+        "  <bookmark>",
+        `    <id>{00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}}</id>`,
+        `    <name>${esc(name)}</name>`,
+        "    <project></project>",
+        `    <xmin>${c.longitude - dLon}</xmin>`,
+        `    <ymin>${c.latitude - dLat}</ymin>`,
+        `    <xmax>${c.longitude + dLon}</xmax>`,
+        `    <ymax>${c.latitude + dLat}</ymax>`,
+        `    <rotation>${Number(c.heading) || 0}</rotation>`,
+        "    <sr_id>3452</sr_id>",
+        "  </bookmark>",
+      ].join("\n");
+    });
+  return "<!DOCTYPE qgis_bookmarks>\n<qgis_bookmarks>\n"
+    + items.join("\n") + "\n</qgis_bookmarks>\n";
+}
+
+// cam プリセットを qgis_bookmarks XML としてダウンロードする
+export function downloadQgisBookmarksXml(cams, filename = "bookmarks.xml") {
+  downloadTextFile(camsToQgisBookmarksXml(cams), filename, "text/xml");
+}
+
+// cam プリセット → .kasc の cam: 行テキスト(完全往復形式)。
+// 緯度・経度・高さ・ピッチ・方位をすべて保持する。インスペクタへ
+// 貼り付けたり別プロジェクトへ持ち出す用途
+export function camsToKascLines(cams) {
+  return (cams || [])
+    .filter(c => Number.isFinite(c.latitude) && Number.isFinite(c.longitude))
+    .map(c => {
+      const name = String(c.name || c.title || "cam").replace(/[|\r\n]+/g, " ").trim() || "cam";
+      let line = `cam:${name}|${(+c.latitude).toFixed(6)}|${(+c.longitude).toFixed(6)}`;
+      if (Number.isFinite(c.height)) line += `|h=${(+c.height).toFixed(1)}`;
+      if (Number.isFinite(c.pitch)) line += `|p=${(+c.pitch).toFixed(2)}`;
+      if (Number.isFinite(c.heading)) line += `|d=${(+c.heading).toFixed(2)}`;
+      return line;
+    }).join("\n") + "\n";
+}
+
+// cam プリセットを cam: 行テキストとしてダウンロードする
+export function downloadKascCamLines(cams, filename = "cams.txt") {
+  downloadTextFile(camsToKascLines(cams), filename, "text/plain");
+}
+
+function downloadTextFile(text, filename, type) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.append(a); // detached <a> では download が発火しない環境がある
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ビュー状態を表す URL パラメータ（Cesium 版と同形式）の読み書き。

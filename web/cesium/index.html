@@ -54,6 +54,14 @@
             <section id="camera-panel" class="plugin-panel">
               <div class="section-title" data-i18n="camera.presets">カメラプリセット</div>
               <div id="camera-presets"></div>
+              <div class="cams-io">
+                <button id="cams-export" type="button">QGIS-XML保存</button>
+                <button id="cams-import" type="button">QGIS-XML読込</button>
+                <button id="cams-export-cam" type="button">CAM保存</button>
+                <button id="cams-import-cam" type="button">CAM読込</button>
+                <input id="cams-import-file" type="file" accept=".xml" hidden>
+                <input id="cams-import-cam-file" type="file" accept=".txt,.kasc" hidden>
+              </div>
               <div class="camera-grid">
                 <input id="camera-longitude" type="number" step="any" aria-label="経度" data-i18n-attr="aria-label:camera.longitude" />
                 <input id="camera-latitude" type="number" step="any" aria-label="緯度" data-i18n-attr="aria-label:camera.latitude" />

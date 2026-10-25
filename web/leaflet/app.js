@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks } from "/shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
 import { createPlayerApi } from "/shared/player-api.js";
@@ -16,6 +16,12 @@ const panel = {
   basemap: document.querySelector("#basemap-ctl"),
   basemapSelect: document.querySelector("#basemap-select"),
   cams: document.querySelector("#cams"),
+  camsExport: document.querySelector("#cams-export"),
+  camsExportCam: document.querySelector("#cams-export-cam"),
+  camsImport: document.querySelector("#cams-import"),
+  camsImportFile: document.querySelector("#cams-import-file"),
+  camsImportCam: document.querySelector("#cams-import-cam"),
+  camsImportCamFile: document.querySelector("#cams-import-cam-file"),
   legends: document.querySelector("#legends"),
   infoLink: document.querySelector("#info-link"),
   unsupported: document.querySelector("#unsupported"),
@@ -772,6 +778,34 @@ const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
 let currentCams = [];
+
+// cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
+// 混在する場合は CAM / BOOKMARK の見出しで区別する
+function fillCamPanel(cams) {
+  panel.cams.innerHTML = "";
+  const mixedCams = cams.some(c => c.bookmark) && cams.some(c => !c.bookmark);
+  let lastCamKind = "";
+  for (const cam of cams) {
+    const kind = cam.bookmark ? "QGIS-XML" : "CAM";
+    if (mixedCams && kind !== lastCamKind) {
+      const label = document.createElement("div");
+      label.className = "cam-group-label";
+      label.textContent = kind;
+      panel.cams.append(label);
+      lastCamKind = kind;
+    }
+    const btn = document.createElement("button");
+    btn.className = "cam-btn" + (cam.bookmark ? " bm-btn" : "");
+    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+    btn.addEventListener("click", () => {
+      const e = cam._extent;
+      if (e) map.flyToBounds([[e.south, e.west], [e.north, e.east]], { padding: [40, 40], maxZoom: 20 });
+      else map.flyTo([cam.latitude, cam.longitude], camToZoom(cam));
+    });
+    panel.cams.append(btn);
+  }
+  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
+}
 let currentUnsupported = [];
 
 async function loadProject(id) {
@@ -965,18 +999,36 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 
   // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
-  panel.cams.innerHTML = "";
   currentCams = cams;
-  for (const cam of cams) {
-    const btn = document.createElement("button");
-    btn.className = "cam-btn";
-    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
-    btn.addEventListener("click", () => {
-      map.flyTo([cam.latitude, cam.longitude], camToZoom(cam));
+  fillCamPanel(cams);
+  // XML保存/読込: プリセットを qgis_bookmarks 形式で出し入れする
+  panel.camsExport.onclick = () => downloadQgisBookmarksXml(currentCams);
+  panel.camsExportCam.onclick = () => downloadKascCamLines(currentCams);
+  panel.camsImport.onclick = () => panel.camsImportFile.click();
+  panel.camsImportFile.onchange = async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseQgisBookmarksXml(await f.text()).map(bm => {
+      const cam = qgisBookmarkToCam(bm);
+      cam.bookmark = true;
+      return cam;
     });
-    panel.cams.append(btn);
-  }
-  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
+    if (!added.length) return;
+    currentCams = currentCams.concat(added);
+    fillCamPanel(currentCams);
+  };
+  // CAM読込: cam: 行テキスト(.kasc 抜粋可)をプリセットへ追加
+  panel.camsImportCam.onclick = () => panel.camsImportCamFile.click();
+  panel.camsImportCamFile.onchange = async e => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    const added = parseKasc(await f.text()).cams;
+    if (!added.length) return;
+    currentCams = currentCams.concat(added);
+    fillCamPanel(currentCams);
+  };
 
   // 属性検索（読み込んだベクターの全属性を対象）→ 検索タブ
   panel.searchInput.onkeydown = e => {
