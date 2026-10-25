@@ -250,6 +250,8 @@
   "basemap.none": "Sem mapa base",
   "basemap.transparent": "Mapa base transparente",
   "basemap.googleEarth": "Abrir visualização atual no Google Earth",
+  "basemap.expandAll": "Expandir tudo",
+  "basemap.collapseAll": "Recolher tudo",
   "credit.gsi": "Fonte: GSI (tiles de elevação)",
   "fly.reverse": "Inverter início/fim",
   "fly.show": "Mostrar",

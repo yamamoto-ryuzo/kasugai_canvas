@@ -250,6 +250,8 @@
   "basemap.none": "No basemap",
   "basemap.transparent": "Transparent basemap",
   "basemap.googleEarth": "Open current view in Google Earth",
+  "basemap.expandAll": "Expand all",
+  "basemap.collapseAll": "Collapse all",
   "credit.gsi": "Credit: GSI (elevation tiles)",
   "fly.reverse": "Reverse start/end",
   "fly.show": "Show",

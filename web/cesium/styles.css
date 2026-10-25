@@ -115,6 +115,9 @@ a.panel-manage { display: inline-flex; align-items: center; justify-content: cen
 .basemap-control .basemap-group-head { display: flex; align-items: center; gap: 4px; padding: 3px 4px; font-weight: 600; color: #31564f; cursor: pointer; user-select: none; }
 .basemap-control .basemap-group-toggle { font-size: 10px; }
 .basemap-control .basemap-group-items .basemap-item { padding-left: 20px; }
+.basemap-control .basemap-list-tools { display: flex; gap: 4px; padding: 0 0 4px; border-bottom: 1px solid rgba(49,86,79,.18); margin-bottom: 3px; }
+.basemap-control .basemap-tool { padding: 1px 7px; border: 1px solid rgba(49,86,79,.4); border-radius: 4px; background: rgba(255,255,255,.7); color: #31564f; cursor: pointer; font-size: 11px; line-height: 1.6; }
+.basemap-control .basemap-tool:hover { background: rgba(49,86,79,.14); }
 .basemap-control.collapsed .basemap-toggle { position: static; }
 .basemap-control.collapsed .basemap-globe { display: none; }
 #layer-list { font-size: var(--basemap-select-font-size); }

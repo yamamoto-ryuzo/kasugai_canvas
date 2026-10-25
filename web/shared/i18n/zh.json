@@ -250,6 +250,8 @@
   "basemap.none": "无底图",
   "basemap.transparent": "透明底图",
   "basemap.googleEarth": "在 Google Earth 中打开当前视图",
+  "basemap.expandAll": "全部展开",
+  "basemap.collapseAll": "全部折叠",
   "credit.gsi": "来源：国土地理院（高程瓦片）",
   "fly.reverse": "反转起终点",
   "fly.show": "显示",

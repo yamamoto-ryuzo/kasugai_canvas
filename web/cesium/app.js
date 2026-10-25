@@ -1424,7 +1424,10 @@ function renderBasemapSelector() {
     if (basemap.id === selectedBasemap?.id) option.selected = true;
     return option;
   });
-  syncBasemapList(select);
+  syncBasemapList(select, {
+    expandAll: t("basemap.expandAll"),
+    collapseAll: t("basemap.collapseAll"),
+  });
 }
 
 // CAM / QGIS-XML の2系統。各見出しにその形式の保存・読込ボタンを置く

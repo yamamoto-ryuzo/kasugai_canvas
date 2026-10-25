@@ -250,6 +250,8 @@
   "basemap.none": "ベースマップなし",
   "basemap.transparent": "ベースマップ透明",
   "basemap.googleEarth": "Google Earth で現在の表示を開く",
+  "basemap.expandAll": "すべて展開",
+  "basemap.collapseAll": "すべて閉じる",
   "credit.gsi": "出典：国土地理院(標高タイル)",
   "fly.reverse": "起終点逆転",
   "fly.show": "表示",

@@ -467,10 +467,13 @@ const _basemapListState = new WeakMap();
 // (.basemap-list) を select の親内へ同期描画する。
 // - optgroup が無い場合は素の select を表示し、リストは除去する
 // - optgroup がある場合は select を隠し、グループ見出し(▸/▾で
-//   折りたたみ)付きのリストへ置き換える
+//   折りたたみ)付きのリストへ置き換える。グループは初期状態で閉じ
+//   (expanded に含まれるもののみ展開)。先頭の「すべて展開」
+//   「すべて閉じる」ボタンで一括操作できる
 // - 項目クリックは select.value 更新 + change 発火なので、
 //   既存の select.onchange ハンドラ・AI 制御がそのまま動く
-export function syncBasemapList(select) {
+// - labels.expandAll / labels.collapseAll でボタン文言を上書きできる
+export function syncBasemapList(select, labels) {
   if (!select?.parentElement) return null;
   const container = select.parentElement;
   let list = container.querySelector(".basemap-list");
@@ -487,7 +490,7 @@ export function syncBasemapList(select) {
   }
   let st = _basemapListState.get(select);
   if (!st) {
-    st = { collapsed: new Set(), changeBound: false };
+    st = { expanded: new Set(), open: true, changeBound: false };
     _basemapListState.set(select, st);
   }
   if (!st.changeBound) {
@@ -499,6 +502,51 @@ export function syncBasemapList(select) {
     st.changeBound = true;
   }
   list.replaceChildren();
+  if (!st.open) {
+    // 選択後の畳み状態: 現在値だけを1行表示し、クリックで一覧を再展開
+    const cur = document.createElement("div");
+    cur.className = "basemap-item selected basemap-current";
+    const selOpt = [...select.options].find(o => o.value === select.value)
+      || select.selectedOptions?.[0];
+    const og = selOpt?.parentElement;
+    const tg = document.createElement("span");
+    tg.className = "basemap-group-toggle";
+    tg.textContent = "▸";
+    cur.append(tg, document.createTextNode(
+      og?.tagName === "OPTGROUP"
+        ? og.label + "/" + selOpt.textContent
+        : (selOpt?.textContent || "")));
+    cur.addEventListener("click", () => {
+      st.open = true;
+      syncBasemapList(select, labels);
+    });
+    list.append(cur);
+    return list;
+  }
+  const groupNames = [...select.querySelectorAll("optgroup")]
+    .map(o => o.label);
+  if (groupNames.length) {
+    const tools = document.createElement("div");
+    tools.className = "basemap-list-tools";
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "basemap-tool";
+    expand.textContent = labels?.expandAll || "すべて展開";
+    expand.addEventListener("click", () => {
+      groupNames.forEach(g => st.expanded.add(g));
+      syncBasemapList(select, labels);
+    });
+    const collapse = document.createElement("button");
+    collapse.type = "button";
+    collapse.className = "basemap-tool";
+    collapse.textContent = labels?.collapseAll || "すべて閉じる";
+    collapse.addEventListener("click", () => {
+      st.expanded.clear();
+      syncBasemapList(select, labels);
+    });
+    tools.append(expand, collapse);
+    list.append(tools);
+  }
   const makeItem = opt => {
     const row = document.createElement("div");
     row.className = "basemap-item" + (opt.selected ? " selected" : "");
@@ -507,13 +555,16 @@ export function syncBasemapList(select) {
     row.addEventListener("click", () => {
       select.value = opt.value;
       select.dispatchEvent(new Event("change"));
+      // 選択後は従来の select と同様、現在値のみ表示する状態へ畳む
+      st.open = false;
+      syncBasemapList(select, labels);
     });
     return row;
   };
   for (const el of select.children) {
     if (el.tagName === "OPTGROUP") {
       const gname = el.label;
-      const collapsed = st.collapsed.has(gname);
+      const collapsed = !st.expanded.has(gname);
       const head = document.createElement("div");
       head.className = "basemap-group-head";
       const toggle = document.createElement("span");
@@ -525,9 +576,9 @@ export function syncBasemapList(select) {
       items.hidden = collapsed;
       for (const opt of el.children) items.append(makeItem(opt));
       head.addEventListener("click", () => {
-        if (st.collapsed.has(gname)) st.collapsed.delete(gname);
-        else st.collapsed.add(gname);
-        syncBasemapList(select);
+        if (st.expanded.has(gname)) st.expanded.delete(gname);
+        else st.expanded.add(gname);
+        syncBasemapList(select, labels);
       });
       list.append(head, items);
     } else if (el.tagName === "OPTION") {

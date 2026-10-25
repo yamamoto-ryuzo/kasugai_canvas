@@ -250,6 +250,8 @@
   "basemap.none": "베이스맵 없음",
   "basemap.transparent": "투명 베이스맵",
   "basemap.googleEarth": "Google Earth에서 현재 보기 열기",
+  "basemap.expandAll": "모두 펼치기",
+  "basemap.collapseAll": "모두 접기",
   "credit.gsi": "출처: 국토지리원 (표고 타일)",
   "fly.reverse": "기종점 반전",
   "fly.show": "표시",

@@ -250,6 +250,8 @@
   "basemap.none": "Keine Basiskarte",
   "basemap.transparent": "Transparente Basiskarte",
   "basemap.googleEarth": "Aktuelle Ansicht in Google Earth öffnen",
+  "basemap.expandAll": "Alle aufklappen",
+  "basemap.collapseAll": "Alle zuklappen",
   "credit.gsi": "Quelle: GSI (Höhenkacheln)",
   "fly.reverse": "Start/Ende umkehren",
   "fly.show": "Anzeigen",
