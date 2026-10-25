@@ -158,11 +158,18 @@ export async function pickProjectDir() {
   const saved = await _idbGet(_KEY);
   if (saved) {
     try {
-      if (await saved.queryPermission({ mode: "read" }) === "granted") {
+      let perm = await saved.queryPermission({ mode: "read" });
+      if (perm !== "granted") {
+        // prompt でも直接 requestPermission を試す — ブラウザ/サイト設定が
+        // 自動許可する環境ならボタンを出さずに開始できる。
+        // ユーザージェスチャ必須の場合は例外となり従来のボタン経路へ
+        perm = await saved.requestPermission({ mode: "read" });
+      }
+      if (perm === "granted") {
         rootHandle = saved;
         return saved;
       }
-    } catch (_) { /* ハンドル失効は選択へ回す */ }
+    } catch (_) { /* ハンドル失効・ジェスチャ不足は選択へ回す */ }
   }
   if (!localfsAvailable()) {
     throw new Error("このブラウザはローカルフォルダ選択(File System Access API)に未対応です");
