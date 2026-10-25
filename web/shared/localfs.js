@@ -185,6 +185,8 @@ export async function pickProjectDir() {
   _hideOverlay();
   rootHandle = dir;
   void _idbSet(_KEY, dir);
+  // ハンドルの IndexedDB 退避を防ぐため永続ストレージを要求
+  try { navigator.storage?.persist?.(); } catch (_) { }
   return dir;
 }
 
