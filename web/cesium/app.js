@@ -1381,29 +1381,41 @@ function renderBasemapSelector() {
   });
 }
 
+// CAM / QGIS-XML の2系統。各見出しにその形式の保存・読込ボタンを置く
+const CAM_PRESET_GROUPS = [
+  { key: "CAM", match: p => !p.bookmark, file: "#cams-import-cam-file",
+    onSave: items => downloadKascCamLines(items) },
+  { key: "QGIS-XML", match: p => !!p.bookmark, file: "#cams-import-file",
+    onSave: items => downloadQgisBookmarksXml(items) },
+];
 function renderPresets() {
   const container = document.querySelector("#camera-presets");
   container.replaceChildren();
-  // cam: 行と bookmark: 行(XML) が混在する場合は見出しで区別する
-  const mixed = cameraPresets.some(p => p.bookmark) && cameraPresets.some(p => !p.bookmark);
-  let lastKind = "";
-  cameraPresets.forEach((preset, index) => {
-    const kind = preset.bookmark ? "QGIS-XML" : "CAM";
-    if (mixed && kind !== lastKind) {
-      const label = document.createElement("div");
-      label.className = "cam-group-label";
-      label.textContent = kind;
-      container.append(label);
-      lastKind = kind;
-    }
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = preset.title;
-    button.dataset.preset = String(index);
-    if (preset.bookmark) button.classList.add("bm-btn");
-    button.addEventListener("click", () => preset._extent ? flyToExtent(preset) : flyTo(preset));
-    container.append(button);
-  });
+  for (const g of CAM_PRESET_GROUPS) {
+    const head = document.createElement("div");
+    head.className = "cam-group-label";
+    head.append(document.createTextNode(g.key));
+    const save = document.createElement("button");
+    save.type = "button";
+    save.textContent = "保存";
+    save.addEventListener("click", () => g.onSave(cameraPresets.filter(g.match)));
+    const load = document.createElement("button");
+    load.type = "button";
+    load.textContent = "読込";
+    load.addEventListener("click", () => document.querySelector(g.file)?.click());
+    head.append(save, load);
+    container.append(head);
+    cameraPresets.forEach((preset, index) => {
+      if (!g.match(preset)) return;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = preset.title;
+      button.dataset.preset = String(index);
+      if (preset.bookmark) button.classList.add("bm-btn");
+      button.addEventListener("click", () => preset._extent ? flyToExtent(preset) : flyTo(preset));
+      container.append(button);
+    });
+  }
 }
 
 // bookmark: 行の QGIS ブックマーク XML を読み込み、カメラプリセットへ追加する。
@@ -4758,13 +4770,7 @@ function setupEvents() {
 
   document.querySelector("#basemap-globe").addEventListener("click", openGoogleEarth);
 
-  // cam プリセットの qgis_bookmarks XML 保存/読込
-  document.querySelector("#cams-export")?.addEventListener("click", () =>
-    downloadQgisBookmarksXml(cameraPresets));
-  document.querySelector("#cams-export-cam")?.addEventListener("click", () =>
-    downloadKascCamLines(cameraPresets));
-  document.querySelector("#cams-import")?.addEventListener("click", () =>
-    document.querySelector("#cams-import-file")?.click());
+  // cam プリセットの qgis_bookmarks XML / cam: 行テキスト 読込
   document.querySelector("#cams-import-file")?.addEventListener("change", async e => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -4778,9 +4784,6 @@ function setupEvents() {
     cameraPresets.push(...added);
     renderPresets();
   });
-  // CAM読込: cam: 行テキスト(.kasc 抜粋可)をプリセットへ追加
-  document.querySelector("#cams-import-cam")?.addEventListener("click", () =>
-    document.querySelector("#cams-import-cam-file")?.click());
   document.querySelector("#cams-import-cam-file")?.addEventListener("change", async e => {
     const f = e.target.files?.[0];
     e.target.value = "";

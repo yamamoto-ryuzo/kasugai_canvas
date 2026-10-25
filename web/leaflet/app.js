@@ -16,11 +16,7 @@ const panel = {
   basemap: document.querySelector("#basemap-ctl"),
   basemapSelect: document.querySelector("#basemap-select"),
   cams: document.querySelector("#cams"),
-  camsExport: document.querySelector("#cams-export"),
-  camsExportCam: document.querySelector("#cams-export-cam"),
-  camsImport: document.querySelector("#cams-import"),
   camsImportFile: document.querySelector("#cams-import-file"),
-  camsImportCam: document.querySelector("#cams-import-cam"),
   camsImportCamFile: document.querySelector("#cams-import-cam-file"),
   legends: document.querySelector("#legends"),
   infoLink: document.querySelector("#info-link"),
@@ -188,7 +184,11 @@ function loadDeck() {
 }
 
 let deckInst = null;             // deck.Deck インスタンス（オーバーレイキャンバス）
+let deckCanvas = null;           // オーバーレイ用 canvas 要素（ズームアニメ変形の対象）
 const deckDefs = new Map();      // lid("deck-N") → { item, url, opacity, pointSize, order }
+
+// deck が実際に描画している Leaflet ビュー（ズームアニメ中の CSS 変形の基準に使う）
+let deckView = { lng: 0, lat: 0, zoom: 0 };
 
 // Leaflet ビュー → deck viewState。Leaflet zoom0=世界256px / deck(Mapbox系)
 // zoom0=世界512px なので -1 換算。bearing/pitch は Leaflet 2Dビューに合わせ 0 固定
@@ -207,13 +207,22 @@ function deckViewState(center, zoom) {
   };
 }
 function syncDeckView() {
-  if (deckInst) deckInst.setProps(deckViewState(map.getCenter(), map.getZoom()));
+  if (!deckInst) return;
+  const c = map.getCenter();
+  const z = map.getZoom();
+  deckView = { lng: c.lng, lat: c.lat, zoom: z };
+  deckInst.setProps(deckViewState(c, z));
+}
+
+// ズームアニメ中にキャンバスへ掛けた一時変形を解除する
+function clearDeckZoomAnim() {
+  if (deckCanvas?.style.transform) { deckCanvas.style.transform = ""; deckCanvas.style.transition = ""; }
 }
 
 async function ensureDeck() {
   const deck = await loadDeck();
   if (deckInst) return deckInst;
-  const canvas = document.createElement("canvas");
+  const canvas = deckCanvas = document.createElement("canvas");
   canvas.id = "deck-canvas";
   // .leaflet-pane(400系・内部に popupPane 700 まで)より手前、コントロール(1000系)より奥
   canvas.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:800;";
@@ -270,16 +279,31 @@ async function syncDeckLayersAsync() {
   syncDeckLayers();
 }
 
-// Leaflet のビュー変化を deck へ反映する。zoomanim はピンチ等の連続ズームで毎フレーム、
-// ホイール/ボタン等のアニメーションズームでは目標ビューを1度だけ渡す（アニメーション中は
-// deck が目標状態へ先行するため一時的にベースマップとズレる。CSS トランスフォームでは
-// WebGL キャンバスを滑らかに追従させられないための妥協）
+// Leaflet のビュー変化を deck へ反映する。move/resize は実ビュー変化なので viewState を
+// 即同期する（ドラッグ・ピンチ・flyTo・慣性パンは move が毎フレーム来るため密着する）。
+// zoomanim はホイール/ボタン/ピンチ終端スナップ等の0.25s CSSアニメーション開始時に1度だけ
+// 来る。ここで最終ビューへ即座に再描画するとタイル側の変形アニメとズレて deck だけが
+// 地面から浮いて見えるため、GridLayer._setZoomTransform と同じ translate+scale を
+// キャンバスへ掛けてタイルと一体で変形させる。終了時に来る move で変形を解除して
+// 実ビューへ再同期する
 map.on("move zoomanim resize", e => {
   if (!deckInst) return;
-  if (e.type === "zoomanim" && e.center && e.zoom !== undefined) {
-    deckInst.setProps(deckViewState(e.center, e.zoom));
+  if (e.type === "zoomanim" && e.center && e.zoom !== undefined && deckCanvas) {
+    // deck の描画ビュー V0(deckView) → アニメ目標 V1(e.center, e.zoom) への
+    // コンテナ座標変換: p1 = scale*p0 + scale*origin0 - origin1
+    // （origin = project(center, zoom) - size/2。mapPanePos はコンテナ座標では相殺される）
+    const scale = map.getZoomScale(e.zoom, deckView.zoom);
+    const half = map.getSize().divideBy(2);
+    const off = map.project([deckView.lat, deckView.lng], deckView.zoom)
+      .multiplyBy(scale)
+      .subtract(map.project(e.center, e.zoom))
+      .add(half.multiplyBy(1 - scale));
+    deckCanvas.style.transition = "transform .25s cubic-bezier(0,0,.25,1)";
+    deckCanvas.style.transformOrigin = "0 0";
+    L.DomUtil.setTransform(deckCanvas, off, scale);
     return;
   }
+  clearDeckZoomAnim();
   syncDeckView();
 });
 
@@ -780,31 +804,39 @@ let currentThemes = [];
 let currentCams = [];
 
 // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
-// 混在する場合は CAM / BOOKMARK の見出しで区別する
+// CAM / QGIS-XML の2系統をグループ見出し+それぞれの保存・読込ボタンで区別する
+const CAM_GROUPS = [
+  { key: "CAM", match: c => !c.bookmark, fileKey: "camsImportCamFile",
+    onSave: items => downloadKascCamLines(items) },
+  { key: "QGIS-XML", match: c => !!c.bookmark, fileKey: "camsImportFile",
+    onSave: items => downloadQgisBookmarksXml(items) },
+];
 function fillCamPanel(cams) {
   panel.cams.innerHTML = "";
-  const mixedCams = cams.some(c => c.bookmark) && cams.some(c => !c.bookmark);
-  let lastCamKind = "";
-  for (const cam of cams) {
-    const kind = cam.bookmark ? "QGIS-XML" : "CAM";
-    if (mixedCams && kind !== lastCamKind) {
-      const label = document.createElement("div");
-      label.className = "cam-group-label";
-      label.textContent = kind;
-      panel.cams.append(label);
-      lastCamKind = kind;
+  for (const g of CAM_GROUPS) {
+    const head = document.createElement("div");
+    head.className = "cam-group-label";
+    head.append(document.createTextNode(g.key));
+    const save = document.createElement("button");
+    save.textContent = "保存";
+    save.addEventListener("click", () => g.onSave(currentCams.filter(g.match)));
+    const load = document.createElement("button");
+    load.textContent = "読込";
+    load.addEventListener("click", () => panel[g.fileKey].click());
+    head.append(save, load);
+    panel.cams.append(head);
+    for (const cam of cams.filter(g.match)) {
+      const btn = document.createElement("button");
+      btn.className = "cam-btn" + (cam.bookmark ? " bm-btn" : "");
+      btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+      btn.addEventListener("click", () => {
+        const e = cam._extent;
+        if (e) map.flyToBounds([[e.south, e.west], [e.north, e.east]], { padding: [40, 40], maxZoom: 20 });
+        else map.flyTo([cam.latitude, cam.longitude], camToZoom(cam));
+      });
+      panel.cams.append(btn);
     }
-    const btn = document.createElement("button");
-    btn.className = "cam-btn" + (cam.bookmark ? " bm-btn" : "");
-    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
-    btn.addEventListener("click", () => {
-      const e = cam._extent;
-      if (e) map.flyToBounds([[e.south, e.west], [e.north, e.east]], { padding: [40, 40], maxZoom: 20 });
-      else map.flyTo([cam.latitude, cam.longitude], camToZoom(cam));
-    });
-    panel.cams.append(btn);
   }
-  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
 }
 let currentUnsupported = [];
 
@@ -1001,10 +1033,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
   currentCams = cams;
   fillCamPanel(cams);
-  // XML保存/読込: プリセットを qgis_bookmarks 形式で出し入れする
-  panel.camsExport.onclick = () => downloadQgisBookmarksXml(currentCams);
-  panel.camsExportCam.onclick = () => downloadKascCamLines(currentCams);
-  panel.camsImport.onclick = () => panel.camsImportFile.click();
+  // 各グループ見出しの「読込」ボタンが開く file input のハンドラ
   panel.camsImportFile.onchange = async e => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -1018,8 +1047,6 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     currentCams = currentCams.concat(added);
     fillCamPanel(currentCams);
   };
-  // CAM読込: cam: 行テキスト(.kasc 抜粋可)をプリセットへ追加
-  panel.camsImportCam.onclick = () => panel.camsImportCamFile.click();
   panel.camsImportCamFile.onchange = async e => {
     const f = e.target.files?.[0];
     e.target.value = "";

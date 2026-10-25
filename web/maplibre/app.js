@@ -16,11 +16,7 @@ const panel = {
   basemap: document.querySelector("#basemap-ctl"),
   basemapSelect: document.querySelector("#basemap-select"),
   cams: document.querySelector("#cams"),
-  camsExport: document.querySelector("#cams-export"),
-  camsExportCam: document.querySelector("#cams-export-cam"),
-  camsImport: document.querySelector("#cams-import"),
   camsImportFile: document.querySelector("#cams-import-file"),
-  camsImportCam: document.querySelector("#cams-import-cam"),
   camsImportCamFile: document.querySelector("#cams-import-cam-file"),
   legends: document.querySelector("#legends"),
   infoLink: document.querySelector("#info-link"),
@@ -734,31 +730,39 @@ let currentThemes = [];
 let currentCams = [];
 
 // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
-// 混在する場合は CAM / BOOKMARK の見出しで区別する
+// CAM / QGIS-XML の2系統をグループ見出し+それぞれの保存・読込ボタンで区別する
+const CAM_GROUPS = [
+  { key: "CAM", match: c => !c.bookmark, fileKey: "camsImportCamFile",
+    onSave: items => downloadKascCamLines(items) },
+  { key: "QGIS-XML", match: c => !!c.bookmark, fileKey: "camsImportFile",
+    onSave: items => downloadQgisBookmarksXml(items) },
+];
 function fillCamPanel(cams) {
   panel.cams.innerHTML = "";
-  const mixedCams = cams.some(c => c.bookmark) && cams.some(c => !c.bookmark);
-  let lastCamKind = "";
-  for (const cam of cams) {
-    const kind = cam.bookmark ? "QGIS-XML" : "CAM";
-    if (mixedCams && kind !== lastCamKind) {
-      const label = document.createElement("div");
-      label.className = "cam-group-label";
-      label.textContent = kind;
-      panel.cams.append(label);
-      lastCamKind = kind;
+  for (const g of CAM_GROUPS) {
+    const head = document.createElement("div");
+    head.className = "cam-group-label";
+    head.append(document.createTextNode(g.key));
+    const save = document.createElement("button");
+    save.textContent = "保存";
+    save.addEventListener("click", () => g.onSave(currentCams.filter(g.match)));
+    const load = document.createElement("button");
+    load.textContent = "読込";
+    load.addEventListener("click", () => panel[g.fileKey].click());
+    head.append(save, load);
+    panel.cams.append(head);
+    for (const cam of cams.filter(g.match)) {
+      const btn = document.createElement("button");
+      btn.className = "cam-btn" + (cam.bookmark ? " bm-btn" : "");
+      btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+      btn.addEventListener("click", () => {
+        const e = cam._extent;
+        if (e) map.fitBounds([[e.west, e.south], [e.east, e.north]], { padding: 40, duration: 800, maxZoom: 20 });
+        else map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) - 1 });
+      });
+      panel.cams.append(btn);
     }
-    const btn = document.createElement("button");
-    btn.className = "cam-btn" + (cam.bookmark ? " bm-btn" : "");
-    btn.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
-    btn.addEventListener("click", () => {
-      const e = cam._extent;
-      if (e) map.fitBounds([[e.west, e.south], [e.east, e.north]], { padding: 40, duration: 800, maxZoom: 20 });
-      else map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) - 1 });
-    });
-    panel.cams.append(btn);
   }
-  if (!cams.length) panel.cams.textContent = "（プリセットなし）";
 }
 let currentUnsupported = [];
 
@@ -945,10 +949,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
   currentCams = cams;
   fillCamPanel(cams);
-  // XML保存/読込: プリセットを qgis_bookmarks 形式で出し入れする
-  panel.camsExport.onclick = () => downloadQgisBookmarksXml(currentCams);
-  panel.camsExportCam.onclick = () => downloadKascCamLines(currentCams);
-  panel.camsImport.onclick = () => panel.camsImportFile.click();
+  // 各グループ見出しの「読込」ボタンが開く file input のハンドラ
   panel.camsImportFile.onchange = async e => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -962,8 +963,6 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     currentCams = currentCams.concat(added);
     fillCamPanel(currentCams);
   };
-  // CAM読込: cam: 行テキスト(.kasc 抜粋可)をプリセットへ追加
-  panel.camsImportCam.onclick = () => panel.camsImportCamFile.click();
   panel.camsImportCamFile.onchange = async e => {
     const f = e.target.files?.[0];
     e.target.value = "";
