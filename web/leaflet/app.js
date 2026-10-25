@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -1002,10 +1002,15 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     sel.innerHTML = "";
     let active = baseEntries.findIndex(e => e.item.visible !== false);
     if (active < 0) active = 0;
-    baseEntries.forEach((entry, i) => {
+    // "グループ/名前" タイトルは optgroup でグループ化表示する。
+    // optgroup があれば select を折りたたみ可能なリスト UI へ置き換える
+    appendGroupedTitleOptions(sel, baseEntries.map(e => e.item), (item, leafTitle, i) => {
       const opt = document.createElement("option");
-      opt.value = i; opt.textContent = entry.item.title || `base ${i}`;
-      sel.append(opt);
+      opt.value = i; opt.textContent = leafTitle || `base ${i}`;
+      return opt;
+    });
+    syncBasemapList(sel);
+    baseEntries.forEach((entry, i) => {
       if (i === active) map.addLayer(entry.layer);
       else if (map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
     });

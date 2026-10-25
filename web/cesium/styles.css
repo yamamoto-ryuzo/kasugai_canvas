@@ -106,6 +106,15 @@ a.panel-manage { display: inline-flex; align-items: center; justify-content: cen
 .basemap-globe:hover { background: rgba(49,86,79,.24); }
 .basemap-control.collapsed { width: 40px; height: 40px; padding: 7px; }
 .basemap-control.collapsed select { display: none; }
+.basemap-control.collapsed .basemap-list { display: none; }
+/* ベースマップのグループ化表示(select optgroup を折りたたみ可能なリストへ置き換え) */
+.basemap-control .basemap-list { flex: 1; width: 0; max-height: 45vh; overflow-y: auto; font-size: var(--basemap-select-font-size); }
+.basemap-control .basemap-item { padding: 4px 6px; border-radius: 4px; color: #1d2b35; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.basemap-control .basemap-item:hover { background: rgba(49,86,79,.14); }
+.basemap-control .basemap-item.selected { background: rgba(49,86,79,.22); font-weight: 600; }
+.basemap-control .basemap-group-head { display: flex; align-items: center; gap: 4px; padding: 3px 4px; font-weight: 600; color: #31564f; cursor: pointer; user-select: none; }
+.basemap-control .basemap-group-toggle { font-size: 10px; }
+.basemap-control .basemap-group-items .basemap-item { padding-left: 20px; }
 .basemap-control.collapsed .basemap-toggle { position: static; }
 .basemap-control.collapsed .basemap-globe { display: none; }
 #layer-list { font-size: var(--basemap-select-font-size); }

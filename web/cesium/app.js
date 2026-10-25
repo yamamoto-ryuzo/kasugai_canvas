@@ -17,7 +17,7 @@ import {
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 
 await initI18n();
@@ -1414,13 +1414,17 @@ function renderBasemapSelector() {
   hideGlobe.textContent = t("basemap.transparent");
   hideGlobe.selected = globeHidden;
   select.append(hideGlobe);
-  basemaps.forEach(basemap => {
+  // タイトルの "グループ/名前" 階層は optgroup でグループ化表示する
+  // (QGIS エクスポートのベースマップグループ配下サブグループ等)。
+  // optgroup があれば select を折りたたみ可能なリスト UI へ置き換える
+  appendGroupedTitleOptions(select, basemaps, (basemap, leafTitle) => {
     const option = document.createElement("option");
     option.value = basemap.id;
-    option.textContent = basemap.title;
+    option.textContent = leafTitle;
     if (basemap.id === selectedBasemap?.id) option.selected = true;
-    select.append(option);
+    return option;
   });
+  syncBasemapList(select);
 }
 
 // CAM / QGIS-XML の2系統。各見出しにその形式の保存・読込ボタンを置く
@@ -4200,9 +4204,15 @@ function applyInspector(text) {
         parsedBaseMode = "none";
       } else if (parts[0] && parts[1]) {
         const options = {};
-        parts.slice(3).forEach(part => {
+        // parts[2] は出典スロットだが、出典無しで maxZoom= 等の
+        // オプションキーが来る行もあるため、認識できる key=value は
+        // 出典ではなくオプションとして解釈する
+        const baseOptKeyRe = /^(tileSize|maximumLevel|maxZoom|opacity|proxy)\s*=/i;
+        let attribution = "";
+        for (const part of parts.slice(2)) {
+          if (/^(on|off|true|false)$/i.test(part)) continue;
+          if (!baseOptKeyRe.test(part)) { if (!attribution) attribution = part; continue; }
           const eq = part.indexOf("=");
-          if (eq < 0) return;
           const key = part.slice(0, eq).trim();
           const raw = part.slice(eq + 1).trim();
           const number = Number(raw);
@@ -4210,12 +4220,12 @@ function applyInspector(text) {
           if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
           if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
           if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
-        });
+        }
         parsedBasemaps.push({
           id: `inspector-base-${parsedBasemaps.length}`,
           title: parts[0],
           url: resolveProjectUrl(parts[1]),
-          attribution: parts[2] && !/^(on|off|true|false)$/i.test(parts[2]) ? parts[2] : "",
+          attribution,
           tileSize: options.tileSize || 256,
           opacity: options.opacity ?? 1.0,
           proxy: options.proxy !== false,
@@ -8385,7 +8395,8 @@ window.kasugaiApi = {
       globeHidden = true;
       selectedBasemap = null;
     } else {
-      const basemap = basemaps.find(item => item.id === name || item.title === name);
+      // グループ化タイトル("グループ/名前")は末端名でも一致させる
+      const basemap = basemaps.find(item => item.id === name || item.title === name || parseLayerTitle(item.title).title === name);
       if (!basemap) return false;
       globeHidden = false;
       selectedBasemap = basemap;

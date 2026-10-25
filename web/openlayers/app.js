@@ -9,7 +9,7 @@ import TileWMS from "https://esm.sh/ol@10.6.1/source/TileWMS.js";
 import VectorSource from "https://esm.sh/ol@10.6.1/source/Vector.js";
 import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent } from "https://esm.sh/ol@10.6.1/proj.js";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -921,10 +921,15 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     sel.innerHTML = "";
     let active = baseEntries.findIndex(e => e.item.visible !== false);
     if (active < 0) active = 0;
-    baseEntries.forEach((entry, i) => {
+    // "グループ/名前" タイトルは optgroup でグループ化表示する。
+    // optgroup があれば select を折りたたみ可能なリスト UI へ置き換える
+    appendGroupedTitleOptions(sel, baseEntries.map(e => e.item), (item, leafTitle, i) => {
       const opt = document.createElement("option");
-      opt.value = i; opt.textContent = entry.item.title || `base ${i}`;
-      sel.append(opt);
+      opt.value = i; opt.textContent = leafTitle || `base ${i}`;
+      return opt;
+    });
+    syncBasemapList(sel);
+    baseEntries.forEach((entry, i) => {
       entry.layer.setVisible(i === active);
     });
     sel.value = active;

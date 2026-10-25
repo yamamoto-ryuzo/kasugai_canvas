@@ -1,6 +1,6 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -903,10 +903,15 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     sel.innerHTML = "";
     let active = baseEntries.findIndex(e => e.item.visible !== false);
     if (active < 0) active = 0;
-    baseEntries.forEach((entry, i) => {
+    // "グループ/名前" タイトルは optgroup でグループ化表示する。
+    // optgroup があれば select を折りたたみ可能なリスト UI へ置き換える
+    appendGroupedTitleOptions(sel, baseEntries.map(e => e.item), (item, leafTitle, i) => {
       const opt = document.createElement("option");
-      opt.value = i; opt.textContent = entry.item.title || `base ${i}`;
-      sel.append(opt);
+      opt.value = i; opt.textContent = leafTitle || `base ${i}`;
+      return opt;
+    });
+    syncBasemapList(sel);
+    baseEntries.forEach((entry, i) => {
       entry.lids.forEach(lid => map.getLayer(lid) && map.setLayoutProperty(lid, "visibility", i === active ? "visible" : "none"));
     });
     sel.value = active;
