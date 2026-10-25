@@ -74,8 +74,10 @@ function bvMinHeight(bv, depth = 0) {
 }
 
 // タイルセット全体の接地高さ（最下端の測地高）を推定する。
-// ルート + 全タイルヘッダの boundingVolume を走査し、box/region の確定値を優先、
-// 無ければ sphere の推定値、それも無ければ cartographicCenter の高さを使う
+// ルートから children を再帰走査して全タイルヘッダの boundingVolume を見る
+// （loaders.gl は region を OrientedBoundingBox に変換済みで .region は残らない）。
+// box/region 由来の確定値を優先、無ければ sphere の推定値、それも無ければ
+// cartographicCenter の高さにフォールバックする
 function tilesetMinGroundHeight(tileset) {
   let exactMin = Infinity, looseMin = Infinity;
   const add = bv => {
@@ -85,13 +87,16 @@ function tilesetMinGroundHeight(tileset) {
     else if (r.h < looseMin) looseMin = r.h;
   };
   add(tileset.boundingVolume);
-  // tileset.json 内の全タイルヘッダはロード時点で parse 済み。子タイルほど
-  // bounds がタイトなので最小値が実地形に近づく（sphere の緩さを実質緩和）
-  const tiles = tileset.tiles;
-  if (Array.isArray(tiles)) {
-    const n = Math.min(tiles.length, 20000);
-    for (let i = 0; i < n; i++) add(tiles[i]?.boundingVolume);
-  }
+  // 子タイルほど bounds がタイトなので最小値が実地形に近づく（sphere の緩さを実質緩和）。
+  // 外部 tileset.json 参照は未ロードだが、参照を持つ親タイルの bounds がその分をカバーする
+  let count = 0;
+  const walk = header => {
+    if (!header || count++ > 20000) return;
+    add(header.boundingVolume);
+    const ch = header.children;
+    if (Array.isArray(ch)) for (const c of ch) walk(c);
+  };
+  walk(tileset.root);
   if (exactMin !== Infinity) return exactMin;
   // sphere 由来の推定は緩く、負値（=コンテンツが楕円体より下）を信用すると
   // タイルセットを不当に持ち上げ得るため 0 以上にクランプ（下げる方向のみ許可）

@@ -46,7 +46,7 @@ function parseCamLine(parts) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], unsupported: [], background: null, info: null, legends: [], themes: [] };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [] };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -71,6 +71,12 @@ export function parseKasc(text) {
     if (type === "legend") {
       // legend:<URL>（1フィールド）と legend:タイトル|<URL> の2形式がある
       doc.legends.push(parts[1] ? { title: parts[0], url: parts[1] } : { title: null, url: parts[0] });
+      continue;
+    }
+    if (type === "bookmark") {
+      // QGIS ブックマークエクスポート XML(qgis_bookmarks 形式)への参照。
+      // bookmark:<URL> / bookmark:タイトル|<URL>。内容はカメラプリセットへ展開
+      doc.bookmarks.push(parts[1] ? { title: parts[0], url: parts[1] } : { title: null, url: parts[0] });
       continue;
     }
     if (type === "theme") {
@@ -113,7 +119,7 @@ export function parseKasc(text) {
 // これ以外の既知・未知の行タイプはすべて「表示を持つレイヤ行」として扱う
 const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base",
-  "cloud", "plugin", "yahooappid",
+  "bookmark", "cloud", "plugin", "yahooappid",
 ]);
 
 // .kasc 1行の可視性フラグを書き換えて返す。
@@ -393,6 +399,81 @@ export function camToZoom(cam) {
 export function zoomToCamHeight(latitude, zoom) {
   const lat = Math.max(-80, Math.min(80, latitude || 0));
   return 156543.03392 * Math.cos(lat * Math.PI / 180) * 128 / Math.pow(2, zoom);
+}
+
+// ---- bookmark: 行（QGIS ブックマークエクスポート XML → カメラプリセット） ----
+
+// qgis_bookmarks XML の sr_id は QGIS 内部 srsid で EPSG とは一致しない。
+// この機能で出力する XML は EPSG:4326(srsid=3452) に正規化済みが前提。
+// 外部でエクスポートされた XML 用に 3857 と値の大きさによる推定も用意する
+const QGIS_SRSID_4326 = 3452;
+const QGIS_SRSID_3857 = 3857;
+const WEBMERC_R = 6378137;
+const mercatorToLon = x => x / WEBMERC_R * 180 / Math.PI;
+const mercatorToLat = y => (2 * Math.atan(Math.exp(y / WEBMERC_R)) - Math.PI / 2) * 180 / Math.PI;
+
+// qgis_bookmarks 形式の XML テキスト → [{name, group, xmin..ymax, rotation, srid}]
+export function parseQgisBookmarksXml(text) {
+  const dom = new DOMParser().parseFromString(String(text || ""), "text/xml");
+  if (!dom || dom.querySelector("parsererror")) return [];
+  const out = [];
+  for (const el of dom.querySelectorAll("bookmark")) {
+    const tag = name => (el.getElementsByTagName(name)[0]?.textContent ?? "").trim();
+    const [xmin, ymin, xmax, ymax] = ["xmin", "ymin", "xmax", "ymax"].map(t => Number(tag(t)));
+    if (![xmin, ymin, xmax, ymax].every(Number.isFinite)) continue;
+    out.push({
+      name: tag("name"),
+      group: tag("project"), // エクスポートXMLでは project 要素にグループ名が入る
+      xmin, ymin, xmax, ymax,
+      rotation: Number(tag("rotation")) || 0,
+      srid: Number(tag("sr_id")) || 0,
+    });
+  }
+  return out;
+}
+
+// ブックマーク矩形 → cam プリセット相当オブジェクト。
+// height は extent が画面512px相当に収まる近似（camToZoom の逆: m/px≒h*2/256）
+export function qgisBookmarkToCam(bm) {
+  const { xmin, ymin, xmax, ymax, srid } = bm;
+  const mercator = srid === QGIS_SRSID_3857 ||
+    (srid !== QGIS_SRSID_4326 &&
+      Math.max(Math.abs(xmin), Math.abs(ymin), Math.abs(xmax), Math.abs(ymax)) > 180);
+  let longitude, latitude, w, h;
+  if (mercator) {
+    longitude = mercatorToLon((xmin + xmax) / 2);
+    latitude = mercatorToLat((ymin + ymax) / 2);
+    w = Math.abs(xmax - xmin);
+    h = Math.abs(ymax - ymin);
+  } else {
+    longitude = (xmin + xmax) / 2;
+    latitude = (ymin + ymax) / 2;
+    w = Math.abs(xmax - xmin) * 111320 * Math.cos(latitude * Math.PI / 180);
+    h = Math.abs(ymax - ymin) * 111320;
+  }
+  const name = (bm.group ? `${bm.group}/` : "") + (bm.name || "Bookmark");
+  const cam = {
+    name, title: name, latitude, longitude,
+    height: Math.max(120, Math.min(20000000, Math.max(w, h) / 4)),
+    pitch: -90,
+  };
+  if (bm.rotation) cam.heading = ((bm.rotation % 360) + 360) % 360;
+  return cam;
+}
+
+// bookmark: 行の XML を取得してカメラプリセット配列へ展開する。
+// specs は parseKasc の doc.bookmarks（{title, url}）。失敗した参照は無視
+export async function loadKascBookmarks(specs, projectBaseUrl) {
+  const cams = [];
+  for (const spec of specs || []) {
+    if (!spec?.url) continue;
+    try {
+      const res = await fetch(resolveKascUrl(spec.url, projectBaseUrl), { cache: "no-store" });
+      if (!res.ok) continue;
+      for (const bm of parseQgisBookmarksXml(await res.text())) cams.push(qgisBookmarkToCam(bm));
+    } catch (_) { /* 読めない bookmark: 参照は無視する */ }
+  }
+  return cams;
 }
 
 // ビュー状態を表す URL パラメータ（Cesium 版と同形式）の読み書き。

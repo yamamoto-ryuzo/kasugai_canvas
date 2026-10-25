@@ -8172,6 +8172,7 @@ function getLayerGeoJson(idOrTitle) {
 }
 
 window.kasugaiApi = {
+  engine: "cesium",
   flyTo,
   sampleGroundHeight,
   getProjectId() { return currentProjectId; },

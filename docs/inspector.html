@@ -32,6 +32,7 @@ sql: 圏内の施設 | SELECT * FROM 'https://example.com/facilities.parquet' WH
 background: #ffffff
 info: https://example.com/project-info.html
 cam: 東京駅|35.653108|139.761449|h=2200.6|p=-30
+bookmark: bookmarks.xml
 legend: 凡例|https://example.com/legend.png</code></pre>
         </div>
         <div class="url-box">
@@ -49,12 +50,13 @@ base: 表示名 | none | （ベースマップなしを初期選択）
 xyz: タイルレイヤ | 同上+off / minZoom=(minimumLevel=) / bbox=西経,南緯,東経,北緯 (URL は DATA/.../{z}/{x}/{y}.png のローカルテンプレートも可)
 wms: WMSレイヤ | WMSエンドポイント | off / layers=名前,名前 / styles= / format=image/png / transparent=true / version=1.1.1 / opacity= / maxZoom= / bbox= （GetMap を256pxタイルへ分解してEPSG:3857で要求。追加パラメータはURL側へ ?key=value で記述可）
 wmts: WMTSレイヤ | タイルテンプレート or KVPエンドポイント | off / layer= / style= / tilematrixset=EPSG:3857 / format= / matrixprefix= / opacity= （{z}/{x}/{y} または {TileMatrix}/{TileRow}/{TileCol} テンプレートはそのまま利用。それ以外は GetTile KVP クエリを自動構築）
-3dtiles: レイヤ | off / proxy=off  （URL が tile.googleapis.com なら Maps API キーを自動付与。key= は .kasc に書かない）
+3dtiles: レイヤ | off / proxy=off / ground=off / zoffset=<m>  （URL が tile.googleapis.com なら Maps API キーを自動付与。key= は .kasc に書かない。テレインのない2Dエンジンではバウンディングボリューム最小高を推定して z=0 平面へ自動接地。ground=off で無効化、zoffset= で高さを手動補正）
 geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / render=primitive|entity / style=QMLファイルURL / attr=出典(3番目のフィールドに出典を直接書くことも可)
 gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / where=条件(SQLite式) / limit=件数 / columns=列,列 / bbox=auto(表示範囲連動・既定ON) / bbox=off(常時全件描画) / render=primitive|entity / style=QMLファイルURL / attr=出典 (layer_styles のQGIS埋め込みスタイルを自動適用)
 duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / table=地物テーブル名(gpkg) / bbox=auto(表示範囲連動・既定ON)|bbox=off(常時全件描画) / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / style=QMLファイルURL / attr=出典
 sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・| style=QML で QGIS スタイル適用・:bbox で表示範囲連動)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
+bookmark: QGISブックマーク | bookmark:XMLファイルURL （QGIS のブックマークエクスポート XML・qgis_bookmarks 形式を読み込み、各ブックマークをカメラプリセットへ展開。geo_webview の /kasugai エクスポートでは bookmarks.xml として自動出力）
 theme: テーマ名 | 表示するレイヤタイトル[|タイトル…] （QGIS マップテーマ相当の可視性プリセット。`*` で全表示。レイヤーパネル上部のテーマ選択から適用すると各レイヤ行の on/off が書き換わる）
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
 info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID

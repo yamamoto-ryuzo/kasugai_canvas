@@ -1689,7 +1689,7 @@ const chatSystemInstruction = () => {
   if (!custom) {
     try { custom = localStorage.getItem("chatCustomInstructions") || ""; } catch (e) {}
   }
-  const engineNote = aiEngine === "cesium" ? "" : `\n\nNote: this page runs the "${aiEngine}" 2D map engine (KASUGAI Canvas .kasc player). 3D/drawing/flyPath tools are unavailable here.`;
+  const engineNote = `\n\nCurrent map engine: "${aiEngine}"${aiEngine === "cesium" ? " (CesiumJS・3D 全機能)" : " (KASUGAI Canvas .kasc 2D プレイヤー。3D・描画・flyPath 系ツールはこのエンジンでは利用不可)"}`;
   return `${t("chat.systemInstruction")} ${t("chat.systemInstructionAppUrl", { url: `${window.location.origin}${window.location.pathname}` })}${engineNote}${custom.trim() ? `\n\nUser's additional instructions:\n${custom.trim()}` : ""}`;
 };
 
@@ -2811,6 +2811,7 @@ export function setupChatPanel() {
       // 外部エージェントにもアプリの基本指示と保存済み追加指示を渡す
       systemInstruction: chatSystemInstruction(),
       project: chatProjectId(),
+      engine: aiEngine,
       camera: window.kasugaiApi?.getCamera?.(),
       layers: window.kasugaiApi?.listLayers?.() ?? [],
       // ブリッジ側のローカル状態ツール（listBasemaps 等）が実値を返せるよう
