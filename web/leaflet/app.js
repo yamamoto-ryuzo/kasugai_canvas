@@ -155,9 +155,153 @@ function attrPopupHtml(properties) {
   return html || "(属性なし)";
 }
 
+// ---- deck.gl（3dtiles: 行専用・初回利用時にCDNから遅延ロード） ----
+// 軽量プレイヤー維持のため 3dtiles を含む .kasc の時だけ読み込む。
+// OL 版と同様に deck.Deck を #map 上のオーバーレイキャンバスとして viewState を
+// 手動同期する（Leaflet は2Dビューのため真俯瞰の 2.5D 表示。キャンバス単位のため
+// 全 Leaflet レイヤより手前に1枚で描かれ、Leaflet レイヤとの相互挿入はしない）
+const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9/dist.min.js";
+let deckLoadPromise = null;
+function loadDeck() {
+  if (window.deck) return Promise.resolve(window.deck);
+  if (!deckLoadPromise) {
+    deckLoadPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = DECK_CDN;
+      s.crossOrigin = "anonymous";
+      s.onload = () => (window.deck ? resolve(window.deck) : reject(new Error("deck.gl が初期化されませんでした")));
+      s.onerror = () => { deckLoadPromise = null; reject(new Error("deck.gl の読み込みに失敗しました")); };
+      document.head.append(s);
+    });
+  }
+  return deckLoadPromise;
+}
+
+let deckInst = null;             // deck.Deck インスタンス（オーバーレイキャンバス）
+const deckDefs = new Map();      // lid("deck-N") → { item, url, opacity, pointSize, order }
+
+// Leaflet ビュー → deck viewState。Leaflet zoom0=世界256px / deck(Mapbox系)
+// zoom0=世界512px なので -1 換算。bearing/pitch は Leaflet 2Dビューに合わせ 0 固定
+function deckViewState(center, zoom) {
+  const size = map.getSize();
+  return {
+    width: size.x,
+    height: size.y,
+    viewState: {
+      longitude: center.lng,
+      latitude: center.lat,
+      zoom: zoom - 1,
+      bearing: 0,
+      pitch: 0,
+    },
+  };
+}
+function syncDeckView() {
+  if (deckInst) deckInst.setProps(deckViewState(map.getCenter(), map.getZoom()));
+}
+
+async function ensureDeck() {
+  const deck = await loadDeck();
+  if (deckInst) return deckInst;
+  const canvas = document.createElement("canvas");
+  canvas.id = "deck-canvas";
+  // .leaflet-pane(400系・内部に popupPane 700 まで)より手前、コントロール(1000系)より奥
+  canvas.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:800;";
+  document.querySelector("#map").append(canvas);
+  deckInst = new deck.Deck({
+    canvas,
+    views: new deck.MapView({ repeat: true }),
+    initialViewState: { longitude: 0, latitude: 0, zoom: 0, pitch: 0, bearing: 0 },
+    controller: false,
+    layers: [],
+    useDevicePixels: true,
+  });
+  syncDeckView();
+  return deckInst;
+}
+
+// deckDefs から毎回レイヤ実体を再構成する（id 同一ならタイルセットは再読込されない）
+function syncDeckLayers() {
+  if (!deckInst || !window.deck) return;
+  const deck = window.deck;
+  const layers = [];
+  // deckDefs は追加完了順に並ぶため、.kasc 行順(_idx)で描画順を揃える
+  for (const [lid, def] of [...deckDefs.entries()].sort((a, b) => (a[1].order ?? 0) - (b[1].order ?? 0))) {
+    const opts = {
+      id: lid,
+      // 非表示レイヤーは tileset.json 自体を取得しない（Cesium 版の遅延方針に合わせる）
+      data: def.item.visible !== false ? def.url : null,
+      visible: def.item.visible !== false,
+      opacity: def.opacity,
+      pickable: true,
+      onTilesetLoad: tileset => {
+        try {
+          const c = tileset?.cartographicCenter;
+          if (Array.isArray(c) && !def.item._env) def.item._center = [c[0], c[1]];
+        } catch (_) {}
+      },
+    };
+    if (def.pointSize) opts.pointSize = def.pointSize;
+    layers.push(new deck.Tile3DLayer(opts));
+  }
+  deckInst.setProps({ layers });
+}
+
+// deck 未初期化(起動時に可視の 3dtiles が無かった)場合の遅延初期化つき同期。
+// 非表示 3dtiles を後から ON にした経路で使う
+async function syncDeckLayersAsync() {
+  if (!deckInst) {
+    try { await ensureDeck(); }
+    catch (err) { console.warn("deck 初期化失敗:", err); return; }
+  }
+  syncDeckLayers();
+}
+
+// Leaflet のビュー変化を deck へ反映する。zoomanim はピンチ等の連続ズームで毎フレーム、
+// ホイール/ボタン等のアニメーションズームでは目標ビューを1度だけ渡す（アニメーション中は
+// deck が目標状態へ先行するため一時的にベースマップとズレる。CSS トランスフォームでは
+// WebGL キャンバスを滑らかに追従させられないための妥協）
+map.on("move zoomanim resize", e => {
+  if (!deckInst) return;
+  if (e.type === "zoomanim" && e.center && e.zoom !== undefined) {
+    deckInst.setProps(deckViewState(e.center, e.zoom));
+    return;
+  }
+  syncDeckView();
+});
+
 // .kasc 1行 → Leaflet レイヤ。戻り値は { layer, styleFn, viewportQuery, zoomRange }
 // paneName 指定時は新規 pane を作らずその pane に配置する（ベースマップ用）
 async function addKascLayer(item, baseUrl, preloaded, paneName) {
+  if (item.type === "3dtiles") {
+    // deck.gl Tile3DLayer で描画。deck は Leaflet レイヤではないため地図へは addLayer
+    // せず、レイヤー行の表示/不透明度操作を deckDefs へ委譲するスタブを返す
+    const opts = item.opts || {};
+    const def = {
+      item,
+      url: resolveKascUrl(item.url, baseUrl),
+      opacity: opts.opacity !== undefined ? Number(opts.opacity) : 1,
+      pointSize: opts.pointsize !== undefined ? Number(opts.pointsize) : undefined,
+      order: item._idx ?? 0,
+    };
+    const lid = `deck-${deckDefs.size}`;
+    deckDefs.set(lid, def);
+    // 可視の 3dtiles がある時だけ deck.gl 本体(CDN)を初期化する。
+    // 全て | off なら CDN ロード自体を発生させない
+    if (item.visible !== false || deckInst) {
+      await ensureDeck();
+      syncDeckLayers();
+    }
+    return {
+      layer: {
+        _isDeck: true,
+        // 非表示エントリへの初期適用では deckInst 未初期化なら CDN ロード自体を発生させない
+        setVisible() { if (def.item.visible !== false || deckInst) void syncDeckLayersAsync(); },
+        setOpacity(v) { def.opacity = v; syncDeckLayers(); },
+      },
+      styleFn: null, viewportQuery: false, zoomRange: null, baseOpacity: def.opacity,
+    };
+  }
   const pane = paneName || newKascPane();
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = preloaded || await loadVectorItem(item, baseUrl, getViewBounds());
@@ -254,6 +398,8 @@ function effectiveVisible(entry) {
 function applyEntryVisibility(entry) {
   // 未読込(遅延ロード)エントリは layer が無いのでスキップする
   if (!entry.layer) { updateMapAttribution(); return; }
+  // deck(3dtiles)スタブは Leaflet レイヤではないため専用の同期経路へ回す
+  if (entry.layer._isDeck) { entry.layer.setVisible(); updateMapAttribution(); return; }
   const on = effectiveVisible(entry);
   if (on && !map.hasLayer(entry.layer)) map.addLayer(entry.layer);
   else if (!on && map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
@@ -306,6 +452,7 @@ function focusEntry(entry) {
     if (b.length === 4 && b.every(Number.isFinite)) env = { west: b[0], south: b[1], east: b[2], north: b[3] };
   }
   if (env) map.flyToBounds(envToLatLngBounds(env), { padding: [60, 60], maxZoom: 17 });
+  else if (item._center) map.flyTo([item._center[1], item._center[0]], 15);
 }
 
 function buildLayerRow(entry, exclusive, radioName, attrCtx) {
@@ -638,9 +785,11 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   const seq = ++renderSeq;
   clearTimeout(progressHideTimer);
   if (progressEl) progressEl.hidden = true;
-  for (const e of layerEntries) if (e.layer && map.hasLayer(e.layer)) map.removeLayer(e.layer);
+  for (const e of layerEntries) if (e.layer && !e.layer._isDeck && map.hasLayer(e.layer)) map.removeLayer(e.layer);
   for (const e of currentBaseEntries) if (map.hasLayer(e.layer)) map.removeLayer(e.layer);
   removeManagedPanes();
+  deckDefs.clear();
+  syncDeckLayers();
   layerEntries = [];
   panel.layers.innerHTML = "";
   currentProjectId = loadedId;
@@ -656,7 +805,9 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }
   panel.project.value = loadedId;
 
-  const unsupported = [...doc.unsupported];
+  // 3dtiles: 行は deck.gl で対応するため未対応通知から外し、
+  // _idx（.kasc 上の行順）で doc.layers と混ぜてレイヤツリー順を再現する
+  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles");
 
   currentBaseEntries = [];
   const baseEntries = currentBaseEntries;
@@ -713,11 +864,13 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // 地図へ追加する。専用 pane の zIndex で積み順を再現するため、.kasc 順
   // (先頭=最前面)の末尾から pane を事前割当する(先頭エントリが最大 zIndex)。
   // `| off` のベクター行は表示 ON までデータ取得を遅延する
-  const orderedItems = [...doc.layers].sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
+  const orderedItems = [...doc.layers, ...doc.unsupported.filter(i => i.type === "3dtiles")]
+    .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
   const entries = orderedItems.map(item => ({
     item, layer: null, styleFn: null, zoomRange: null, baseOpacity: 1, pending: true,
   }));
-  for (let i = entries.length - 1; i >= 0; i--) entries[i].paneName = newKascPane();
+  // 3dtiles は Leaflet pane を持たない(deckDefs 管理)ため割当をスキップする
+  for (let i = entries.length - 1; i >= 0; i--) if (entries[i].item.type !== "3dtiles") entries[i].paneName = newKascPane();
   layerEntries = entries;
   lastBaseUrl = baseUrl;
   renderLayerRows(entries, unsupported);
@@ -864,6 +1017,21 @@ map.on("moveend", () => {
 // QML スケール範囲(zoomRange)を持つレイヤーはズームに応じて出し分ける
 map.on("zoomend", () => {
   for (const e of layerEntries) if (e.zoomRange) applyEntryVisibility(e);
+});
+
+// 地図クリック → deck(3dtiles)を pick して属性ポップアップ。
+// propagatedFrom のあるイベントはベクター地物由来（そちらのポップアップが
+// 先に開く）なので、二重表示を避けてこちらは処理しない
+map.on("click", e => {
+  if (!popupEnabled || !deckInst || e.propagatedFrom) return;
+  try {
+    const p = e.containerPoint;
+    const info = deckInst.pickObject({ x: p.x, y: p.y, radius: 5 });
+    const props = info?.object?.properties;
+    if (props) {
+      L.popup({ maxHeight: 240 }).setLatLng(e.latlng).setContent(attrPopupHtml(props)).openOn(map);
+    }
+  } catch (_) {}
 });
 
 loadProject().catch(err => {

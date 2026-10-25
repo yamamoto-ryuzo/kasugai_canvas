@@ -312,3 +312,21 @@ footer { padding: 0 28px 22px; }
 .mcp-server-row .mcp-server-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #2b3f49; }
 .mcp-server-row .hint { margin: 0; }
 .mcp-server-row button { padding: 3px 8px; }
+
+/* 地図上部の読込進捗ピル(レイヤの段階読み込み状況) */
+#load-progress { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 1005; display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+  background: rgba(255,255,255,.95); border-radius: 14px; font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 70vw; }
+#load-progress[hidden] { display: none; }
+#load-progress-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#load-progress-track { width: 110px; height: 4px; background: #dde4ea; border-radius: 2px;
+  overflow: hidden; flex: none; }
+#load-progress-bar { display: block; height: 100%; width: 0; background: #2c5ea8;
+  transition: width .25s; }
+/* レイヤ行の読込ステータス(スピナー/失敗) */
+.layer-status { flex: none; font-size: 10px; color: #8a97a3; }
+.layer-status.loading { width: 11px; height: 11px; border: 2px solid #d5dde4;
+  border-top-color: #2c5ea8; border-radius: 50%; animation: layer-spin .8s linear infinite; }
+.layer-status.failed { color: #c0392b; }
+@keyframes layer-spin { to { transform: rotate(360deg); } }

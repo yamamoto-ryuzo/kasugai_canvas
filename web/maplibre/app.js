@@ -975,6 +975,59 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   e.target.textContent = ctl.classList.contains("collapsed") ? "＋" : "−";
 });
 
+// ---- テレイン(3D地形): raster-dem ソース + map.setTerrain ----
+// raster-dem は Terrarium/Mapbox encoding のタイルのみ読める
+// (地理院 dem_png は独自 encoding のため MapLibre では使えない)
+const TERRAIN_SOURCE_ID = "kasc-terrain-dem";
+const terrainDemSources = {
+  mapterhorn: { url: "https://tiles.mapterhorn.com/tilejson.json" },
+  aws: {
+    tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+    maxzoom: 15,
+    attribution: "© AWS Terrain Tiles / Mapzen",
+  },
+  maplibre: { url: "https://demotiles.maplibre.org/terrain-tiles/tiles.json" },
+};
+let terrainEnabled = false;
+let terrainDemKey = "mapterhorn";
+let terrainExaggeration = 1;
+let appliedTerrainDemKey = null;
+
+function applyTerrain() {
+  if (!map.isStyleLoaded()) { map.once("load", applyTerrain); return; }
+  if (!terrainEnabled) {
+    if (map.getTerrain()) map.setTerrain(null);
+    // ピッチ緩和は deck.gl overlay 側でも必要なので、overlay 無しの時だけ戻す
+    if (!deckOverlay) { try { map.setMaxPitch(60); } catch (_) {} }
+    return;
+  }
+  const def = terrainDemSources[terrainDemKey];
+  if (!def) return;
+  // DEM ソース変更時は terrain を外してからソースを張り替える
+  if (appliedTerrainDemKey !== terrainDemKey && map.getSource(TERRAIN_SOURCE_ID)) {
+    map.setTerrain(null);
+    map.removeSource(TERRAIN_SOURCE_ID);
+    appliedTerrainDemKey = null;
+  }
+  if (!map.getSource(TERRAIN_SOURCE_ID)) {
+    const spec = { type: "raster-dem" };
+    if (def.url) {
+      spec.url = def.url;
+    } else {
+      spec.tiles = def.tiles;
+      spec.tileSize = 256;
+      spec.encoding = "terrarium";
+      if (def.maxzoom) spec.maxzoom = def.maxzoom;
+      if (def.attribution) spec.attribution = def.attribution;
+    }
+    map.addSource(TERRAIN_SOURCE_ID, spec);
+    appliedTerrainDemKey = terrainDemKey;
+  }
+  map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: terrainExaggeration });
+  // 地形を眺められるよう最大ピッチを緩和(deck.gl overlay と同じ措置)
+  try { if (map.getMaxPitch() < 70) map.setMaxPitch(85); } catch (_) {}
+}
+
 // 表示タブ: ベースマップ透過度・回転・レイヤー透過度・スケールバー・座標・ポップアップ
 {
   const opacity = document.querySelector("#display-opacity");
@@ -1022,6 +1075,24 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   document.querySelector("#display-popup")?.addEventListener("change", e => {
     popupEnabled = e.target.checked;
     if (!popupEnabled) kascPopup.remove();
+  });
+
+  const terrainToggle = document.querySelector("#display-terrain");
+  const terrainSourceSel = document.querySelector("#display-terrain-source");
+  const terrainExaggSlider = document.querySelector("#display-terrain-exagg");
+  terrainToggle?.addEventListener("change", () => {
+    terrainEnabled = terrainToggle.checked;
+    applyTerrain();
+  });
+  terrainSourceSel?.addEventListener("change", () => {
+    terrainDemKey = terrainSourceSel.value;
+    if (terrainEnabled) applyTerrain();
+  });
+  terrainExaggSlider?.addEventListener("input", () => {
+    terrainExaggeration = Number(terrainExaggSlider.value);
+    if (terrainEnabled && map.getTerrain()) {
+      map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: terrainExaggeration });
+    }
   });
 }
 

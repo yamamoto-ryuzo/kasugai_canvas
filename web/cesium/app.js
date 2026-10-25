@@ -1507,6 +1507,7 @@ function renderLayerList() {
           <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""}>
           ${inlineSwatch}
           <span>${escapeHtml(layer.title)}</span>
+          <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadError || "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : ""}</span>
           ${filterButton}
           ${limitBadge}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
@@ -2988,6 +2989,38 @@ const vectorDecoders = new Map([
 // 実行中に再度呼ばれた場合は最新状態で最後にもう一度だけやり直す
 let refreshLayersRunning = false;
 let refreshLayersQueued = false;
+// ---- 段階読み込み: 行ステータス・進捗 ----
+
+// レイヤ行のステータス領域を item._loadStatus(loading/failed)へ同期する。
+// renderLayerList 全再描画を待たずに行だけ更新する(スクロール・展開状態を維持)
+function syncLayerStatusDom(item) {
+  const el = document.querySelector(`#layer-list .layer-status[data-layer-id="${CSS.escape(item.id)}"]`);
+  if (!el) return;
+  el.classList.toggle("loading", item._loadStatus === "loading");
+  el.classList.toggle("failed", item._loadStatus === "failed");
+  el.textContent = item._loadStatus === "failed" ? t("layer.loadFailed") : "";
+  el.title = item._loadError || "";
+}
+
+// 地図上部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
+const progressEl = document.querySelector("#load-progress");
+const progressBar = document.querySelector("#load-progress-bar");
+const progressText = document.querySelector("#load-progress-text");
+let progressHideTimer = null;
+function updateLoadProgress(done, total, label) {
+  if (!progressEl) return;
+  clearTimeout(progressHideTimer);
+  progressEl.hidden = false;
+  progressBar.style.width = `${total ? Math.round((done / total) * 100) : 0}%`;
+  if (total > 0 && done >= total) {
+    progressText.textContent = t("layer.loadingDone", { done, total });
+    progressHideTimer = setTimeout(() => { progressEl.hidden = true; }, 1200);
+  } else {
+    // name が無いとき末尾の区切り記号が残らないよう削る
+    progressText.textContent = t("layer.loadingProgress", { done, total, name: label || "" }).replace(/\s*—\s*$/, "");
+  }
+}
+
 async function refreshLayers() {
   if (refreshLayersRunning) { refreshLayersQueued = true; return; }
   refreshLayersRunning = true;
@@ -3048,6 +3081,18 @@ async function refreshLayersImpl() {
   const orderedItems = getOrderedLayerItems();
   const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
   const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities" || vectorDecoders.has(layer.type)).slice().reverse();
+
+  // 読込対象(表示中・データ取得が発生するレイヤー)。entities はプラグイン所有で
+  // ここでは読み込まないため除外する。進捗ピルと行ステータスの母数
+  const loadTargets = new Set(orderedOtherLayers.filter(item =>
+    item.visible && item.type !== "entities" &&
+    (item.type === "3dtiles" || item.url || item.data || item.query)));
+  let loadedCount = 0;
+  const layerDone = item => updateLoadProgress(++loadedCount, loadTargets.size, item?.title || "");
+  const layerOk = item => { item._loadStatus = ""; item._loadError = ""; syncLayerStatusDom(item); layerDone(item); };
+  const layerFail = (item, err) => { item._loadStatus = "failed"; item._loadError = String(err?.message || err || ""); syncLayerStatusDom(item); layerDone(item); };
+  if (loadTargets.size) updateLoadProgress(0, loadTargets.size);
+  else { clearTimeout(progressHideTimer); if (progressEl) progressEl.hidden = true; }
 
   // クエリ系レイヤー(duckdb:/sql:)があれば DuckDB-WASM の初期化を先行して開始する。
   // CDN 資産は sw-duckdb.js が永続キャッシュするため、キャッシュ済みなら
@@ -3133,6 +3178,9 @@ async function refreshLayersImpl() {
   // entity 描画するベクター地物の合計上限(フリーズ防止)。primitive 経路は消費しない
   let vectorEntityBudget = getVectorEntityLimit();
   for (const item of orderedOtherLayers) {
+    // 読込対象の行にスピナーを出す(非表示・entities は対象外)
+    const loadTarget = loadTargets.has(item);
+    if (loadTarget) { item._loadStatus = "loading"; item._loadError = ""; syncLayerStatusDom(item); }
     if (!item.visible && item.type === "3dtiles") continue;
     if (item.type === "3dtiles") {
       try {
@@ -3152,8 +3200,10 @@ async function refreshLayersImpl() {
         viewer.scene.primitives.add(tileset);
         activePrimitives.push(tileset);
         layerRuntimeTargets.set(item.id, tileset);
+        if (loadTarget) layerOk(item);
       } catch (error) {
         console.warn("3D Tiles の読み込みに失敗しました:", item.url, error);
+        if (loadTarget) layerFail(item, error);
       }
     } else if (item.type === "entities") {
       // プラグイン宣言レイヤー: DataSource は本体で所有・refresh をまたいで存続し、
@@ -3194,6 +3244,7 @@ async function refreshLayersImpl() {
         if (item.renderPrimitive && Cesium.GeoJsonPrimitive) {
           const source = await loadVectorSourceCached(item, decoder);
           await addGeoJsonPrimitiveLayer(item, source);
+          if (loadTarget) layerOk(item);
           continue;
         }
         // GeoJsonPrimitive ドレープ(実験的グローバル設定): 全件読み込み系ベクターが対象。
@@ -3206,6 +3257,7 @@ async function refreshLayersImpl() {
           const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: primitiveDrapeHeightReference(primDem, prim3d), scene: viewer.scene });
           applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden);
           registerPrimitiveLayer(item, primitive, source);
+          if (loadTarget) layerOk(item);
           continue;
         }
         // entity 経路でもフルソースを保持する。件数上限で描画を切り捨てても
@@ -3240,8 +3292,10 @@ async function refreshLayersImpl() {
         // 重いデコーダーの待機中でも先行レイヤーが検索・属性一覧に出るようにする
         buildVectorSearchIndex();
         updateVectorSearchUI();
+        if (loadTarget) layerOk(item);
       } catch (error) {
         console.warn(`${decoder ? item.type.toUpperCase() : "GeoJSON"} の読み込みに失敗しました:`, item.url || item.query || "", error);
+        if (loadTarget) layerFail(item, error);
       }
     }
   }
