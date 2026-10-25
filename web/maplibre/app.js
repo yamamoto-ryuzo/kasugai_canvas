@@ -825,9 +825,15 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   updateThemeSelect(doc.themes || []);
 
   const isDeferred = it => VECTOR_TYPES.has(it.type) && it.visible === false;
+  // 残りの読込対象(=読み込み中を含む)を「残りN: 名前…」で進捗に出す
+  const restLabel = () => {
+    const rest = entries.filter(e => e.pending && !isDeferred(e.item))
+      .map(e => splitKascTitle(e.item.title).title || e.item.title || e.item.url);
+    return rest.length ? `残り${rest.length}: ${rest.slice(0, 3).join(", ")}${rest.length > 3 ? "…" : ""}` : "";
+  };
   const total = entries.filter(e => !isDeferred(e.item)).length;
   let done = 0;
-  if (total) updateLoadProgress(0, total);
+  if (total) updateLoadProgress(0, total, restLabel());
   await Promise.allSettled(entries.map((entry, index) => (async () => {
     const item = entry.item;
     if (isDeferred(item)) {
@@ -857,11 +863,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     entry.pending = false;
     syncRowStatus(entry);
     updateMapAttribution();
-    // 残りの読込対象(=現在読み込み中を含む)を名前付きで進捗に出す
-    const rest = entries.filter(e => e.pending)
-      .map(e => splitKascTitle(e.item.title).title || e.item.title || e.item.url);
-    updateLoadProgress(++done, total,
-      rest.length ? `残り${rest.length}: ${rest.slice(0, 3).join(", ")}${rest.length > 3 ? "…" : ""}` : "");
+    updateLoadProgress(++done, total, restLabel());
   })()));
   if (seq !== renderSeq) return;
 

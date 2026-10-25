@@ -3091,7 +3091,7 @@ async function refreshLayersImpl() {
   };
   const layerOk = item => { item._loadStatus = ""; item._loadError = ""; syncLayerStatusDom(item); layerDone(item); };
   const layerFail = (item, err) => { item._loadStatus = "failed"; item._loadError = String(err?.message || err || ""); syncLayerStatusDom(item); layerDone(item); };
-  if (loadTargets.size) updateLoadProgress(0, loadTargets.size);
+  if (loadTargets.size) updateLoadProgress(0, loadTargets.size, pendingLabel());
   else { clearTimeout(progressHideTimer); if (progressEl) progressEl.hidden = true; }
 
   // クエリ系レイヤー(duckdb:/sql:)があれば DuckDB-WASM の初期化を先行して開始する。
