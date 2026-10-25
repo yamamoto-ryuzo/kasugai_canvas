@@ -8,7 +8,7 @@ import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, installLayerVisibilityResolver, bakeQmlLabels } from "../shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
 
@@ -31,7 +31,9 @@ const panel = {
 
 const map = new maplibregl.Map({
   container: "map",
-  style: { version: 8, sources: {}, layers: [] },
+  // glyphs は QML <labeling> の symbol レイヤが必要とするフォント PBF。
+  // openmaptiles の Noto Sans は日本語を含む(demotiles.maplibre.org は非CJK)
+  style: { version: 8, glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf", sources: {}, layers: [] },
   center: [139.767, 35.681],
   zoom: 10,
   attributionControl: false, // 出典は Cesium 版と同型の右下オーバーレイで表示
@@ -45,6 +47,19 @@ let currentBaseEntries = [];
 let managedSources = [];
 // 現在プロジェクトのレイヤーエントリ（表示範囲連動の再クエリ用）
 let layerEntries = [];
+// QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
+installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+
+// QML <labeling> は is_layer_visible で他レイヤーの表示状態を参照し得るため、
+// 表示切替のたびに全ラベル付きエントリの __kasc_label を焼き直してソースを更新する
+function refreshQmlLabels() {
+  for (const entry of layerEntries) {
+    const item = entry.item;
+    if (!item?._qml?.labelFor || !entry.sid || !item._geojson) continue;
+    bakeQmlLabels(item._geojson, item._qml);
+    map.getSource(entry.sid)?.setData?.(item._geojson);
+  }
+}
 let lastBaseUrl = "";
 // ?kasc= で読み込んだ .kasc の URL。設定中は URL 書き換え時に
 // project= を書かず ?kasc= を維持する(実プロジェクト選択で空に戻る)
@@ -345,15 +360,16 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     item._geojson = geojson;
     const before = beforeId();
     map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined });
-    for (const [kind, filter, paint] of kinds) {
+    for (const [kind, filter, paint, layout] of kinds) {
       const lid = `${sid}-${kind}`;
-      const def = { id: lid, type: kind, source: sid, filter, paint, layout: { visibility: item.visible ? "visible" : "none" } };
+      const def = { id: lid, type: kind, source: sid, filter, paint, layout: { ...layout, visibility: item.visible ? "visible" : "none" } };
       if (zoomRange) { def.minzoom = zoomRange.minzoom; def.maxzoom = zoomRange.maxzoom; }
       map.addLayer(def, before);
       lids.push(lid);
       if (!filters) filters = new Map();
       filters.set(lid, filter);
-      const opaProp = `${kind}-opacity`;
+      // symbol レイヤに symbol-opacity は無いため text-opacity を使う
+      const opaProp = kind === "symbol" ? "text-opacity" : `${kind}-opacity`;
       opas.set(lid, { prop: opaProp, base: typeof paint?.[opaProp] === "number" ? paint[opaProp] : 1 });
     }
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
@@ -389,6 +405,7 @@ function applyEntryVisibility(entry) {
   }
   if (deckDirty) void syncDeckLayersAsync();
   else syncDeckLayers(); // ドレープコピーの表示追従（deck 未初期化なら no-op）
+  refreshQmlLabels();
   updateMapAttribution();
 }
 

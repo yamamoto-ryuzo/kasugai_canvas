@@ -23,7 +23,8 @@ import Fill from "https://esm.sh/ol@10.6.1/style/Fill.js";
 import Stroke from "https://esm.sh/ol@10.6.1/style/Stroke.js";
 import CircleStyle from "https://esm.sh/ol@10.6.1/style/Circle.js";
 import Icon from "https://esm.sh/ol@10.6.1/style/Icon.js";
-import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange } from "../shared/qml-2d.js";
+import Text from "https://esm.sh/ol@10.6.1/style/Text.js";
+import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver } from "../shared/qml-2d.js";
 import { defaults as defaultControls } from "https://esm.sh/ol@10.6.1/control/defaults.js";
 import ScaleLine from "https://esm.sh/ol@10.6.1/control/ScaleLine.js";
 import MousePosition from "https://esm.sh/ol@10.6.1/control/MousePosition.js";
@@ -67,6 +68,8 @@ window.ol = {
 
 // 現在プロジェクトのレイヤーエントリ（表示範囲連動の再クエリ用）
 let layerEntries = [];
+// QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
+installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
 let lastBaseUrl = "";
 let currentBaseEntries = [];
 // ?kasc= で読み込んだ .kasc の URL。設定中は URL 書き換え時に
@@ -336,7 +339,7 @@ async function buildLayer(item, baseUrl, preloaded) {
       try {
         const compiled = await loadCompiledQml(item.opts.style, baseUrl);
         item._qml = compiled;
-        const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon });
+        const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text });
         // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない
         layer.setStyle(f => {
           const names = compiled.namesFor?.(f.getProperties() || {});

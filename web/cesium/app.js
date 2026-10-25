@@ -2534,7 +2534,9 @@ let gpkgWorkerReqId = 0;
 const gpkgWorkerPending = new Map();
 function loadGpkgWorker() {
   if (!gpkgWorker) {
-    gpkgWorker = new Worker(new URL("../shared/gpkg-worker.js", location.origin), { type: "module" });
+    // baseURI 基準で解決する(location.origin だと GitHub Pages の
+    // /<repo>/<channel>/cesium/ 配下で /shared/ へ飛んで 404 になる)
+    gpkgWorker = new Worker(new URL("../shared/gpkg-worker.js", document.baseURI), { type: "module" });
     gpkgWorker.onmessage = event => {
       const data = event.data || {};
       const pending = gpkgWorkerPending.get(data.reqId);
@@ -2547,6 +2549,10 @@ function loadGpkgWorker() {
       const error = new Error(event.message || "gpkg-worker の実行に失敗しました");
       for (const pending of gpkgWorkerPending.values()) pending.reject(error);
       gpkgWorkerPending.clear();
+      // 起動失敗した Worker を保持し続けると以後の呼出が永久に応答無し
+      // (loading 固着)になるため破棄して次回作り直せるようにする
+      try { gpkgWorker.terminate(); } catch (e) { /* ignore */ }
+      gpkgWorker = null;
     };
   }
   return gpkgWorker;

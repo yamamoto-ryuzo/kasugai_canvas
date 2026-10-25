@@ -2,8 +2,74 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas } from "./qml-style.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, setLayerVisibilityResolver } from "./qml-style.js";
 import { resolveKascUrl } from "./kasc.js";
+
+// QML 式の is_layer_visible('名前') を各エンジンのレイヤー表示状態へ解決する。
+// getItems は現在のレイヤー item 配列を返す関数({title,id,visible})。
+// 照合は Cesium 版と同じ規則: タイトル全体/レイヤ id/パス区切りのいずれかの
+// セグメント一致。未発見は非表示(false)扱い(QGIS でレイヤー無しと同じ)
+export function installLayerVisibilityResolver(getItems) {
+  setLayerVisibilityResolver(name => {
+    const key = String(name || "").trim();
+    if (!key) return false;
+    const items = getItems?.() || [];
+    const hit = items.find(item => {
+      if (!item) return false;
+      if (item.title === key || item.id === key) return true;
+      const path = (item.group ? `${item.group}/${item.title}` : String(item.title || ""));
+      return path.split("/").map(seg => seg.trim()).includes(key);
+    });
+    return hit ? !!hit.visible : false;
+  });
+}
+
+// QML <labeling> の評価結果を地物プロパティへ焼き込む（MapLibre の
+// データ駆動スタイル用）。is_layer_visible 等の式を含むため、
+// レイヤー表示切替ごとに呼び直して再焼き込みする運用を想定。
+// 戻り値: ラベルが1件でも付いたか
+export const QML_LABEL_PROPS = ["__kasc_label", "__kasc_label_size", "__kasc_label_color", "__kasc_label_halo", "__kasc_label_halo_w"];
+export function bakeQmlLabels(geojson, compiled) {
+  if (!compiled?.labelFor) return false;
+  let any = false;
+  for (const feature of geojson?.features || []) {
+    const props = feature.properties || (feature.properties = {});
+    const spec = compiled.labelFor(props);
+    const text = spec ? String(spec.getText?.(props) ?? "").trim() : "";
+    if (spec && text) {
+      props.__kasc_label = text;
+      props.__kasc_label_size = Math.max(Math.round(spec.sizePx || 12), 6);
+      props.__kasc_label_color = rgbaToCss(spec.fill || [0, 0, 0, 1]);
+      props.__kasc_label_halo = spec.halo ? rgbaToCss(spec.halo.color) : "rgba(0,0,0,0)";
+      props.__kasc_label_halo_w = spec.halo ? Math.max(Number(spec.halo.widthPx) || 0, 0) : 0;
+      any = true;
+    } else {
+      for (const k of QML_LABEL_PROPS) delete props[k];
+    }
+  }
+  return any;
+}
+
+// labelFor の spec → ラベル HTML 要素(Leaflet 等 DOM 描画用)。
+// テキストが空なら null。色は fill、縁取りは text-shadow 多方向で近似する
+export function qmlLabelElement(compiled, props) {
+  const spec = compiled?.labelFor ? compiled.labelFor(props) : null;
+  const text = spec ? String(spec.getText?.(props) ?? "").trim() : "";
+  if (!spec || !text) return null;
+  const span = document.createElement("span");
+  span.textContent = text;
+  span.style.color = rgbaToCss(spec.fill || [0, 0, 0, 1]);
+  span.style.font = spec.fontCss || "12px sans-serif";
+  if (spec.halo) {
+    const c = rgbaToCss(spec.halo.color);
+    const w = Math.max(Number(spec.halo.widthPx) || 1, 1);
+    span.style.textShadow = [
+      `-${w}px 0 0 ${c}`, `${w}px 0 0 ${c}`, `0 -${w}px 0 ${c}`, `0 ${w}px 0 ${c}`,
+      `-${w}px -${w}px 0 ${c}`, `${w}px -${w}px 0 ${c}`, `-${w}px ${w}px 0 ${c}`, `${w}px ${w}px 0 ${c}`,
+    ].join(",");
+  }
+  return span;
+}
 
 export async function loadCompiledQml(urlOrPath, baseUrl) {
   const url = resolveKascUrl(urlOrPath, baseUrl);
@@ -42,9 +108,10 @@ export function specToStyle(spec) {
 
 // --- OpenLayers: feature → ol.style.Style のスタイル関数を生成
 export function olQmlStyleFunction(compiled, OL) {
-  const { Style, Fill, Stroke, Circle: CircleStyle, Icon } = OL;
+  const { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text } = OL;
   return feature => {
-    const spec = compiled.evaluate(feature.getProperties() || {});
+    const props = feature.getProperties() || {};
+    const spec = compiled.evaluate(props);
     if (!spec) return null;
     const s = specToStyle(spec);
     const geomType = feature.getGeometry()?.getType() || "";
@@ -57,6 +124,21 @@ export function olQmlStyleFunction(compiled, OL) {
       styleOpts.image = s.markerCanvas
         ? new Icon({ img: s.markerCanvas, anchor: [0.5, 0.5] })
         : new CircleStyle({ radius: 5, fill: new Fill({ color: s.markerColor }), stroke: s.stroke ? new Stroke({ color: s.stroke, width: 1 }) : null });
+    }
+    // <labeling>: ラベルspec があれば Text を付ける(描画ごとに再評価されるため
+    // is_layer_visible 連動も表示切替でそのまま追従する)
+    if (Text) {
+      const labelSpec = compiled.labelFor ? compiled.labelFor(props) : null;
+      const labelText = labelSpec ? String(labelSpec.getText?.(props) ?? "") : "";
+      if (labelSpec && labelText) {
+        styleOpts.text = new Text({
+          text: labelText,
+          font: labelSpec.fontCss || "12px sans-serif",
+          fill: new Fill({ color: rgbaToCss(labelSpec.fill || [0, 0, 0, 1]) }),
+          stroke: labelSpec.halo ? new Stroke({ color: rgbaToCss(labelSpec.halo.color), width: Math.max(Number(labelSpec.halo.widthPx) || 1, 1) }) : undefined,
+          overflow: true,
+        });
+      }
     }
     return new Style(styleOpts);
   };
@@ -126,8 +208,7 @@ export function maplibreApplyQml(geojson, compiled) {
     const names = typeof compiled.namesFor === "function" ? compiled.namesFor(feature.properties) : null;
     if (names?.length) feature.properties.__kasc_symbol = names[0];
   }
-  return {
-    kinds: [
+  const kinds = [
       ["fill", ["==", ["geometry-type"], "Polygon"], {
         "fill-color": ["coalesce", ["get", "__kasc_fill"], "#3a7bd5"],
         "fill-opacity": 0.5,
@@ -142,7 +223,23 @@ export function maplibreApplyQml(geojson, compiled) {
         "circle-stroke-color": ["coalesce", ["get", "__kasc_stroke"], "#ffffff"],
         "circle-stroke-width": 1,
       }],
-    ],
+  ];
+  // <labeling>: 焼き込んだ __kasc_label 系プロパティを参照する symbol レイヤを追加。
+  // 4要素目は追加 layout(text-field は feature プロパティ参照可)
+  if (bakeQmlLabels(geojson, compiled)) {
+    kinds.push(["symbol", ["has", "__kasc_label"], {
+      "text-color": ["coalesce", ["get", "__kasc_label_color"], "#222222"],
+      "text-halo-color": ["coalesce", ["get", "__kasc_label_halo"], "rgba(0,0,0,0)"],
+      "text-halo-width": ["coalesce", ["get", "__kasc_label_halo_w"], 0],
+    }, {
+      "text-field": ["get", "__kasc_label"],
+      "text-size": ["coalesce", ["get", "__kasc_label_size"], 12],
+      "text-font": ["literal", ["Noto Sans Regular"]],
+      "text-allow-overlap": false,
+    }]);
+  }
+  return {
+    kinds,
     props: KASC_PROPS,
   };
 }
