@@ -2,6 +2,10 @@
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
 import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
+import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
+import { createPlayerApi } from "/shared/player-api.js";
+
+import { groundDeckTileset } from "/shared/deck-ground.js";
 import { qmlLegendSwatchDataUrl, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom } from "/shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
@@ -238,6 +242,9 @@ function syncDeckLayers() {
         try {
           const c = tileset?.cartographicCenter;
           if (Array.isArray(c) && !def.item._env) def.item._center = [c[0], c[1]];
+          // テレイン不在のためバウンディングボリューム最小高で z=0 平面へ接地させる
+          // （.kasc opts: ground=off で無効化、zoffset=<m> で手動補正）
+          groundDeckTileset(tileset, def.item.opts);
         } catch (_) {}
       },
     };
@@ -764,6 +771,7 @@ function updateLoadProgress(done, total, label) {
 const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
+let currentCams = [];
 let currentUnsupported = [];
 
 async function loadProject(id) {
@@ -951,6 +959,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 
   // cam: プリセット → カメラタブ
   panel.cams.innerHTML = "";
+  currentCams = doc.cams;
   for (const cam of doc.cams) {
     const btn = document.createElement("button");
     btn.className = "cam-btn";
@@ -1160,21 +1169,8 @@ document.querySelector("#export-inspector")?.addEventListener("click", () => {
   setInspectorStatus("エクスポートしました");
 });
 
-// バックエンド機能の検出（Cesium 版 detectBackend と同じ /health + /api/capabilities 判定。
-// fileWrite = ローカルサーバー版で DATA/ へのファイル保存が使える）
-let backendFeatures = null;
-void (async () => {
-  try {
-    const r = await fetch("/health", { cache: "no-store" });
-    if (!r.ok) return;
-    const d = await r.json().catch(() => ({}));
-    if (d?.name === "kasugai_canvas" || d?.ok === true) {
-      const caps = await fetch("/api/capabilities", { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
-      if (caps?.tier) backendFeatures = caps;
-    }
-  } catch { /* 静的配信のみの環境は到達しない */ }
-})();
-const hasBackendFeature = n => !!backendFeatures?.features?.includes(n);
+// バックエンド機能検出は shared/ai-chat.js の initAiChat(manageBackend) が行い、
+// hasBackendFeature は同モジュールから取得する
 
 // DATA/ への保存先。fileWrite 時はサーバー側 projects/<id>/DATA/、
 // それ以外は「フォルダを選択」で選んだ DATA/ フォルダ(File System Access API)
@@ -1249,3 +1245,69 @@ async function saveToDataDir(name, content) {
 }
 
 let popupEnabled = true;
+
+// ---- AI チャット連携（kasugaiApi アダプタ + shared/ai-chat.js） ----
+let apiPaneSeq = 0;
+window.kasugaiApi = createPlayerApi({
+  engine: "leaflet",
+  getEntries: () => layerEntries,
+  getBaseEntries: () => currentBaseEntries,
+  getProjectId: () => currentProjectId,
+  getBaseUrl: () => lastBaseUrl,
+  loadProject,
+  applyInspectorText,
+  getInspectorText: () => inspectorInput.value,
+  setInspectorText: v => { inspectorInput.value = v; },
+  applyEntryVisibility, focusEntry, maybeLoadEntry,
+  applyLegendFilter: entry => applyEntryVisibility(entry),
+  rerenderLayers: () => renderLayerRows(layerEntries, currentUnsupported),
+  getThemes: () => currentThemes,
+  applyThemeByName: name => {
+    const theme = currentThemes.find(t => t.name === name);
+    if (!theme) return false;
+    applyKascTheme(theme);
+    if (themeSelect) themeSelect.value = theme.name;
+    return true;
+  },
+  getCams: () => currentCams,
+  flyToView: v => map.flyTo([Number(v.latitude), Number(v.longitude)],
+    Number.isFinite(v.zoom) ? v.zoom : camToZoom(v)),
+  getViewInfo: () => {
+    const c = map.getCenter();
+    return { latitude: c.lat, longitude: c.lng, zoom: map.getZoom(), heading: 0, pitchDeg: 0 };
+  },
+  fitBoundsView: (w, s, e, n) => map.fitBounds([[s, w], [n, e]], { padding: [50, 50], maxZoom: 17 }),
+  mountEntry: async (entry, preloaded) => {
+    entry.paneName ||= `kasc-pane-api-${++apiPaneSeq}`;
+    if (!map.getPane(entry.paneName)) {
+      map.createPane(entry.paneName);
+      map.getPane(entry.paneName).style.zIndex = 650;
+    }
+    const r = await addKascLayer(entry.item, lastBaseUrl, preloaded || entry.item._preloaded, entry.paneName);
+    entry.layer = r.layer; entry.styleFn = r.styleFn; entry.zoomRange = r.zoomRange;
+    entry.baseOpacity = r.baseOpacity; entry.item._viewportQuery = r.viewportQuery;
+    applyEntryVisibility(entry);
+    updateMapAttribution();
+  },
+  unmountEntry: entry => {
+    if (entry.layer && !entry.layer._isDeck && map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
+    updateMapAttribution();
+  },
+  reloadEntryData: async entry => {
+    const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds());
+    entry.item._geojson = geojson;
+    const env = geojsonExtent(geojson);
+    if (env) entry.item._env = env;
+    entry.layer?.clearLayers?.();
+    entry.layer?.addData?.(geojson);
+  },
+  getEntryGeoJson: entry => entry.item._geojson || null,
+  setBaseEntryVisible: (entry, on) => {
+    if (entry.layer && !entry.layer._isDeck) {
+      if (on && !map.hasLayer(entry.layer)) map.addLayer(entry.layer);
+      else if (!on && map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
+    }
+    updateMapAttribution();
+  },
+});
+void initAiChat({ engine: "leaflet", manageBackend: true });

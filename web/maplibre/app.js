@@ -2,6 +2,10 @@
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
+import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
+import { createPlayerApi } from "/shared/player-api.js";
+
+import { groundDeckTileset } from "/shared/deck-ground.js";
 import { qmlLegendSwatchDataUrl } from "/shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
@@ -171,6 +175,8 @@ function syncDeckLayers() {
         try {
           const c = tileset?.cartographicCenter;
           if (Array.isArray(c) && !def.item._env) def.item._center = [c[0], c[1]];
+          def.tileset = tileset;
+          regroundDeckDef(def);
         } catch (_) {}
       },
     };
@@ -188,6 +194,31 @@ async function syncDeckLayersAsync() {
     catch (err) { console.warn("deck overlay 初期化失敗:", err); return; }
   }
   syncDeckLayers();
+}
+
+// deck.gl Tile3DLayer の接地高。deck は MapLibre テレインを知らないため
+// （z=0 平面基準で描画される）、テレイン ON 時はタイルセット中心の DEM 標高を
+// 接地高にする。queryTerrainElevation は誇張込みの高さ[m]を返す。
+// OFF・DEM タイル未読込時は 0（z=0 平面へ接地）
+function deckGroundLevel(lon, lat) {
+  if (!terrainEnabled || !map.getTerrain?.()) return 0;
+  try {
+    const h = map.queryTerrainElevation([lon, lat]);
+    return Number.isFinite(h) ? h : 0;
+  } catch (_) { return 0; }
+}
+
+function regroundDeckDef(def) {
+  const tileset = def.tileset;
+  if (!tileset) return;
+  const c = tileset.cartographicCenter;
+  groundDeckTileset(tileset, def.item.opts, Array.isArray(c) ? deckGroundLevel(c[0], c[1]) : 0);
+}
+
+// テレインの ON/OFF・DEM ソース/誇張変更・DEM タイル読込後に全 3D Tiles を再接地する
+function regroundAllDeck() {
+  for (const def of deckDefs.values()) regroundDeckDef(def);
+  map.triggerRepaint();
 }
 
 function rasterSource(item, baseUrl) {
@@ -691,6 +722,7 @@ function updateLoadProgress(done, total, label) {
 const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
+let currentCams = [];
 let currentUnsupported = [];
 
 async function loadProject(id) {
@@ -868,6 +900,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 
   // cam: プリセット → カメラタブ
   panel.cams.innerHTML = "";
+  currentCams = doc.cams;
   for (const cam of doc.cams) {
     const btn = document.createElement("button");
     btn.className = "cam-btn";
@@ -980,6 +1013,10 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
 // (地理院 dem_png は独自 encoding のため MapLibre では使えない)
 const TERRAIN_SOURCE_ID = "kasc-terrain-dem";
 const terrainDemSources = {
+  // Cesium 版 demSources と同じ Re:Earth Terrain。terrarium encoding の
+  // TileJSON を配信している（z14・全球。mapterhorn-egm08 ベース）
+  "reearth-ellipsoid": { url: "https://terrain.reearth.land/terrarium/ellipsoid/tilejson.json" },
+  reearth: { url: "https://terrain.reearth.land/terrarium/elevation/tilejson.json" },
   mapterhorn: { url: "https://tiles.mapterhorn.com/tilejson.json" },
   aws: {
     tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
@@ -989,7 +1026,7 @@ const terrainDemSources = {
   maplibre: { url: "https://demotiles.maplibre.org/terrain-tiles/tiles.json" },
 };
 let terrainEnabled = false;
-let terrainDemKey = "mapterhorn";
+let terrainDemKey = "reearth-ellipsoid";
 let terrainExaggeration = 1;
 let appliedTerrainDemKey = null;
 
@@ -999,6 +1036,7 @@ function applyTerrain() {
     if (map.getTerrain()) map.setTerrain(null);
     // ピッチ緩和は deck.gl overlay 側でも必要なので、overlay 無しの時だけ戻す
     if (!deckOverlay) { try { map.setMaxPitch(60); } catch (_) {} }
+    regroundAllDeck();
     return;
   }
   const def = terrainDemSources[terrainDemKey];
@@ -1026,7 +1064,18 @@ function applyTerrain() {
   map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: terrainExaggeration });
   // 地形を眺められるよう最大ピッチを緩和(deck.gl overlay と同じ措置)
   try { if (map.getMaxPitch() < 70) map.setMaxPitch(85); } catch (_) {}
+  regroundAllDeck();
 }
+
+// DEM タイルの到着に合わせて 3D Tiles の接地高を再サンプルする。
+// テレイン ON 直後・未読込領域では queryTerrainElevation が 0 を返すため、
+// タイル読込(sourcedata)をトリガに遅延して再接地する
+let regroundTimer = null;
+map.on("sourcedata", e => {
+  if (e.sourceId !== TERRAIN_SOURCE_ID) return;
+  clearTimeout(regroundTimer);
+  regroundTimer = setTimeout(regroundAllDeck, 300);
+});
 
 // 表示タブ: ベースマップ透過度・回転・レイヤー透過度・スケールバー・座標・ポップアップ
 {
@@ -1092,6 +1141,7 @@ function applyTerrain() {
     terrainExaggeration = Number(terrainExaggSlider.value);
     if (terrainEnabled && map.getTerrain()) {
       map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: terrainExaggeration });
+      regroundAllDeck(); // queryTerrainElevation は誇張込みのため再接地が必要
     }
   });
 }
@@ -1149,21 +1199,8 @@ document.querySelector("#export-inspector")?.addEventListener("click", () => {
   setInspectorStatus("エクスポートしました");
 });
 
-// バックエンド機能の検出（Cesium 版 detectBackend と同じ /health + /api/capabilities 判定。
-// fileWrite = ローカルサーバー版で DATA/ へのファイル保存が使える）
-let backendFeatures = null;
-void (async () => {
-  try {
-    const r = await fetch("/health", { cache: "no-store" });
-    if (!r.ok) return;
-    const d = await r.json().catch(() => ({}));
-    if (d?.name === "kasugai_canvas" || d?.ok === true) {
-      const caps = await fetch("/api/capabilities", { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
-      if (caps?.tier) backendFeatures = caps;
-    }
-  } catch { /* 静的配信のみの環境は到達しない */ }
-})();
-const hasBackendFeature = n => !!backendFeatures?.features?.includes(n);
+// バックエンド機能検出は shared/ai-chat.js の initAiChat(manageBackend) が行い、
+// hasBackendFeature は同モジュールから取得する
 
 // DATA/ への保存先。fileWrite 時はサーバー側 projects/<id>/DATA/、
 // それ以外は「フォルダを選択」で選んだ DATA/ フォルダ(File System Access API)
@@ -1238,3 +1275,72 @@ async function saveToDataDir(name, content) {
 }
 
 let popupEnabled = true;
+
+// ---- AI チャット連携（kasugaiApi アダプタ + shared/ai-chat.js） ----
+window.kasugaiApi = createPlayerApi({
+  engine: "maplibre",
+  getEntries: () => layerEntries,
+  getBaseEntries: () => currentBaseEntries,
+  getProjectId: () => currentProjectId,
+  getBaseUrl: () => lastBaseUrl,
+  loadProject,
+  applyInspectorText,
+  getInspectorText: () => inspectorInput.value,
+  setInspectorText: v => { inspectorInput.value = v; },
+  applyEntryVisibility, focusEntry, maybeLoadEntry, applyLegendFilter,
+  rerenderLayers: () => renderLayerRows(layerEntries, currentUnsupported),
+  getThemes: () => currentThemes,
+  applyThemeByName: name => {
+    const theme = currentThemes.find(t => t.name === name);
+    if (!theme) return false;
+    applyKascTheme(theme);
+    if (themeSelect) themeSelect.value = theme.name;
+    return true;
+  },
+  getCams: () => currentCams,
+  flyToView: v => map.flyTo({
+    center: [Number(v.longitude), Number(v.latitude)],
+    zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
+    bearing: Number.isFinite(v.heading) ? -v.heading : undefined,
+    pitch: Number.isFinite(v.pitch) ? Math.max(0, Math.min(60, v.pitch + 90)) : undefined,
+  }),
+  getViewInfo: () => {
+    const c = map.getCenter();
+    return { latitude: c.lat, longitude: c.lng, zoom: map.getZoom(), heading: -map.getBearing(), pitchDeg: map.getPitch() };
+  },
+  fitBoundsView: (w, s, e, n) => map.fitBounds([w, s, e, n], { padding: 60, maxZoom: 17 }),
+  mountEntry: async (entry, preloaded) => {
+    const idx = layerEntries.indexOf(entry);
+    const r = await addKascLayer(entry.item, lastBaseUrl, preloaded || entry.item._preloaded,
+      () => findInsertBeforeId(idx < 0 ? layerEntries.length : idx));
+    entry.lids = r.lids; entry.sid = r.sid; entry.filters = r.filters; entry.opas = r.opas;
+    entry.item._viewportQuery = r.viewportQuery;
+    applyEntryVisibility(entry);
+    updateMapAttribution();
+  },
+  unmountEntry: entry => {
+    for (const lid of entry.lids || []) {
+      if (deckDefs.has(lid)) { deckDefs.delete(lid); continue; }
+      if (map.getLayer(lid)) map.removeLayer(lid);
+    }
+    if (entry.sid && map.getSource(entry.sid)) map.removeSource(entry.sid);
+    syncDeckLayers();
+    updateMapAttribution();
+  },
+  reloadEntryData: async entry => {
+    const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds());
+    entry.item._geojson = geojson;
+    const env = geojsonExtent(geojson);
+    if (env) entry.item._env = env;
+    const src = map.getSource(entry.sid);
+    if (src?.setData) src.setData(geojson);
+  },
+  getEntryGeoJson: entry => entry.item._geojson || null,
+  setBaseEntryVisible: (entry, on) => {
+    for (const lid of entry.lids || []) {
+      if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", on ? "visible" : "none");
+    }
+    updateMapAttribution();
+  },
+});
+void initAiChat({ engine: "maplibre", manageBackend: true });

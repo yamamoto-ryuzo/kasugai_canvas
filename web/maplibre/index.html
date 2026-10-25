@@ -103,6 +103,7 @@
   <div id="settings-tabs">
     <button class="tab active" data-settab="display" type="button">表示</button>
     <button class="tab" data-settab="inspector" type="button">インスペクター</button>
+    <button class="tab" data-settab="ai" type="button">AI</button>
   </div>
   <div class="set-pane" id="setpane-display">
     <label class="set-row">ベースマップ透過度
@@ -118,6 +119,8 @@
     <label class="set-row"><input id="display-terrain" type="checkbox" /> 3D地形（テレイン）を表示</label>
     <label class="set-row">DEMソース
       <select id="display-terrain-source" style="width:100%;box-sizing:border-box;">
+        <option value="reearth-ellipsoid">Re:Earth Terrain（楕円体高 / WGS84, z14）</option>
+        <option value="reearth">Re:Earth Terrain（標高 / elevation, z14）</option>
         <option value="mapterhorn">Mapterhorn（全球）</option>
         <option value="aws">AWS Terrain Tiles（Terrarium, z15）</option>
         <option value="maplibre">MapLibre デモ地形タイル</option>
@@ -144,6 +147,7 @@
     </div>
     <p class="note">選択したファイルを DATA/ へ保存し（ローカルサーバー版はサーバー側、それ以外は上で選択したフォルダ）、対応形式なら設定行を追記して即時反映します。対応: .geojson .json .gpkg .fgb .parquet</p>
   </div>
+<div class="set-pane" id="setpane-ai" hidden></div>
 </div>
 <div id="panel">
   <h1 style="display:flex;justify-content:space-between;align-items:center">KASUGAI Canvas <small>MapLibre</small><span>

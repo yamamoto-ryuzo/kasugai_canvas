@@ -11,6 +11,10 @@ import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent } from "https://esm.sh/ol@10.6.1/proj.js";
 import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect } from "/shared/kasc.js";
 import { loadVectorItem } from "/shared/vector-load.js";
+import { initAiChat, hasBackendFeature } from "/shared/ai-chat.js";
+import { createPlayerApi } from "/shared/player-api.js";
+
+import { groundDeckTileset } from "/shared/deck-ground.js";
 import { qmlLegendSwatchDataUrl } from "/shared/qml-2d.js";
 import Style from "https://esm.sh/ol@10.6.1/style/Style.js";
 import Fill from "https://esm.sh/ol@10.6.1/style/Fill.js";
@@ -177,6 +181,9 @@ function syncDeckLayers() {
         try {
           const c = tileset?.cartographicCenter;
           if (Array.isArray(c) && !def.item._env) def.item._center = [c[0], c[1]];
+          // テレイン不在のためバウンディングボリューム最小高で z=0 平面へ接地させる
+          // （.kasc opts: ground=off で無効化、zoffset=<m> で手動補正）
+          groundDeckTileset(tileset, def.item.opts);
         } catch (_) {}
       },
     };
@@ -729,6 +736,7 @@ function updateLoadProgress(done, total, label) {
 const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
+let currentCams = [];
 let currentUnsupported = [];
 
 async function loadProject(id) {
@@ -911,6 +919,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 
   // cam: プリセット → カメラタブ
   panel.cams.innerHTML = "";
+  currentCams = doc.cams;
   for (const cam of doc.cams) {
     const btn = document.createElement("button");
     btn.className = "cam-btn";
@@ -1127,21 +1136,8 @@ document.querySelector("#export-inspector")?.addEventListener("click", () => {
   setInspectorStatus("エクスポートしました");
 });
 
-// バックエンド機能の検出（Cesium 版 detectBackend と同じ /health + /api/capabilities 判定。
-// fileWrite = ローカルサーバー版で DATA/ へのファイル保存が使える）
-let backendFeatures = null;
-void (async () => {
-  try {
-    const r = await fetch("/health", { cache: "no-store" });
-    if (!r.ok) return;
-    const d = await r.json().catch(() => ({}));
-    if (d?.name === "kasugai_canvas" || d?.ok === true) {
-      const caps = await fetch("/api/capabilities", { cache: "no-store" }).then(r => r.ok ? r.json() : null).catch(() => null);
-      if (caps?.tier) backendFeatures = caps;
-    }
-  } catch { /* 静的配信のみの環境は到達しない */ }
-})();
-const hasBackendFeature = n => !!backendFeatures?.features?.includes(n);
+// バックエンド機能検出は shared/ai-chat.js の initAiChat(manageBackend) が行い、
+// hasBackendFeature は同モジュールから取得する
 
 // DATA/ への保存先。fileWrite 時はサーバー側 projects/<id>/DATA/、
 // それ以外は「フォルダを選択」で選んだ DATA/ フォルダ(File System Access API)
@@ -1216,3 +1212,66 @@ async function saveToDataDir(name, content) {
 }
 
 let popupEnabled = true;
+
+// ---- AI チャット連携（kasugaiApi アダプタ + shared/ai-chat.js） ----
+window.kasugaiApi = createPlayerApi({
+  engine: "openlayers",
+  getEntries: () => layerEntries,
+  getBaseEntries: () => currentBaseEntries,
+  getProjectId: () => currentProjectId,
+  getBaseUrl: () => lastBaseUrl,
+  loadProject,
+  applyInspectorText,
+  getInspectorText: () => inspectorInput.value,
+  setInspectorText: v => { inspectorInput.value = v; },
+  applyEntryVisibility, focusEntry, maybeLoadEntry,
+  applyLegendFilter: entry => { entry.layer?.changed?.(); },
+  rerenderLayers: () => renderLayerRows(layerEntries, currentUnsupported),
+  getThemes: () => currentThemes,
+  applyThemeByName: name => {
+    const theme = currentThemes.find(t => t.name === name);
+    if (!theme) return false;
+    applyKascTheme(theme);
+    if (themeSelect) themeSelect.value = theme.name;
+    return true;
+  },
+  getCams: () => currentCams,
+  flyToView: v => map.getView().animate({
+    center: fromLonLat([Number(v.longitude), Number(v.latitude)]),
+    zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
+    rotation: Number.isFinite(v.heading) ? -v.heading * Math.PI / 180 : undefined,
+    duration: 600,
+  }),
+  getViewInfo: () => {
+    const c = toLonLat(map.getView().getCenter() || [0, 0]);
+    return { latitude: c[1], longitude: c[0], zoom: map.getView().getZoom(), heading: -map.getView().getRotation() * 180 / Math.PI, pitchDeg: 0 };
+  },
+  fitBoundsView: (w, s, e, n) => map.getView().fit([...fromLonLat([w, s]), ...fromLonLat([e, n])], { padding: [50, 50, 50, 50], maxZoom: 17 }),
+  mountEntry: async (entry, preloaded) => {
+    const layer = await buildLayer(entry.item, lastBaseUrl, preloaded || entry.item._preloaded);
+    entry.layer = layer;
+    if (!layer._isDeck) insertEntryLayer(entry, layerEntries.indexOf(entry));
+    applyEntryVisibility(entry);
+    updateMapAttribution();
+  },
+  unmountEntry: entry => {
+    if (entry.layer && !entry.layer._isDeck) map.removeLayer(entry.layer);
+    updateMapAttribution();
+  },
+  reloadEntryData: async entry => {
+    const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds());
+    entry.item._geojson = geojson;
+    const src = entry.layer?.getSource?.();
+    if (src) {
+      src.clear();
+      src.addFeatures(new GeoJSON().readFeatures(geojson, { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" }));
+    }
+  },
+  getEntryGeoJson: entry => {
+    const src = entry.layer?.getSource?.();
+    if (!src?.getFeatures) return entry.item._geojson || null;
+    return new GeoJSON().writeFeaturesObject(src.getFeatures(), { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" });
+  },
+  setBaseEntryVisible: (entry, on) => { entry.layer?.setVisible?.(on); updateMapAttribution(); },
+});
+void initAiChat({ engine: "openlayers", manageBackend: true });
