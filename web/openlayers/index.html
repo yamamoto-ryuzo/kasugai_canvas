@@ -114,8 +114,7 @@
     border: 1px solid rgba(0,0,0,.08); border-radius: 7px;
     background: linear-gradient(#fff, #f1f4f8); color: #263643; cursor: pointer; font-size: 13px; }
   .navigation-toolbar button:hover { background: #e7f3f0; }
-  .navigation-toolbar.collapsed .compass-button,
-  .navigation-toolbar.collapsed #nav-home { display: none; }
+  .navigation-toolbar.collapsed button:not(.navigation-toggle) { display: none; }
   .navigation-toolbar.collapsed { width: 40px; height: 40px; padding: 7px; box-sizing: border-box; gap: 0; }
   .navigation-toolbar.collapsed .navigation-toggle { width: 26px; min-width: 26px; min-height: 26px; padding: 1px 4px; }
   .navigation-toggle { font-size: 17px !important; line-height: 1; }
