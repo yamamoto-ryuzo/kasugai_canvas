@@ -490,7 +490,9 @@ export function syncBasemapList(select, labels) {
   }
   let st = _basemapListState.get(select);
   if (!st) {
-    st = { expanded: new Set(), open: true, changeBound: false };
+    // 初期表示は選択中の1レイヤのみを示す畳み状態(open=false)に統一し、
+    // クリックで一覧を展開する
+    st = { expanded: new Set(), open: false, changeBound: false };
     _basemapListState.set(select, st);
   }
   if (!st.changeBound) {

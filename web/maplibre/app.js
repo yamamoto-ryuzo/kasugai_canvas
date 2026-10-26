@@ -1,6 +1,6 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -927,11 +927,13 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
       opt.value = i; opt.textContent = leafTitle || `base ${i}`;
       return opt;
     });
-    syncBasemapList(sel);
     baseEntries.forEach((entry, i) => {
       entry.lids.forEach(lid => map.getLayer(lid) && map.setLayoutProperty(lid, "visibility", i === active ? "visible" : "none"));
     });
     sel.value = active;
+    // 初期表示は選択中の1レイヤのみ示す畳み状態で同期するため、
+    // sel.value 確定後にリストを描画する
+    syncBasemapList(sel);
     sel.onchange = () => {
       baseEntries.forEach((e, i) =>
         e.lids.forEach(lid => map.getLayer(lid) && map.setLayoutProperty(lid, "visibility", i === Number(sel.value) ? "visible" : "none")));
@@ -1184,6 +1186,25 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   ctl.classList.toggle("collapsed");
   e.target.textContent = ctl.classList.contains("collapsed") ? "＋" : "−";
 });
+
+// 🌐 ボタン: 現在の表示位置を Google Earth (Web) で開く。
+// heading は bearing の符号反転（getViewState と同規則）、
+// tilt は pitch、distance は実ビューポート高 + 垂直FOV60° 換算の
+// カメラ高で、傾斜時は高さ/cos(tilt) で視線距離へ換算
+function openGoogleEarth() {
+  try {
+    const c = map.getCenter();
+    const heading = ((-map.getBearing()) % 360 + 360) % 360;
+    const tilt = Math.max(0, Math.min(90, map.getPitch()));
+    const tiltRad = tilt * Math.PI / 180;
+    const vh = map.getCanvas().clientHeight || map.getContainer().clientHeight;
+    const height = Math.max(50, zoomToCamHeightView(c.lat, map.getZoom(), vh));
+    const distance = tiltRad > 0.01 ? height / Math.cos(tiltRad) : height;
+    const url = `https://earth.google.com/web/@${c.lat.toFixed(6)},${c.lng.toFixed(6)},0a,${distance.toFixed(2)}d,35y,${heading.toFixed(1)}h,${tilt.toFixed(1)}t,0r`;
+    window.open(url, "_blank", "noopener");
+  } catch (e) { console.error("Google Earth 連携エラー:", e); }
+}
+document.querySelector("#basemap-globe").addEventListener("click", openGoogleEarth);
 
 // ---- テレイン(3D地形): raster-dem ソース + map.setTerrain ----
 // raster-dem は Terrarium/Mapbox encoding のタイルのみ読める

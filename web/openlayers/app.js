@@ -9,7 +9,7 @@ import TileWMS from "https://esm.sh/ol@10.6.1/source/TileWMS.js";
 import VectorSource from "https://esm.sh/ol@10.6.1/source/Vector.js";
 import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent } from "https://esm.sh/ol@10.6.1/proj.js";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -931,11 +931,13 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
       opt.value = i; opt.textContent = leafTitle || `base ${i}`;
       return opt;
     });
-    syncBasemapList(sel);
     baseEntries.forEach((entry, i) => {
       entry.layer.setVisible(i === active);
     });
     sel.value = active;
+    // 初期表示は選択中の1レイヤのみ示す畳み状態で同期するため、
+    // sel.value 確定後にリストを描画する
+    syncBasemapList(sel);
     sel.onchange = () => {
       baseEntries.forEach((e, i) => e.layer.setVisible(i === Number(sel.value)));
       syncDeckLayers(); // ベースマップのドレープコピーを選択中タイルへ差替える
@@ -1210,6 +1212,23 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   ctl.classList.toggle("collapsed");
   e.target.textContent = ctl.classList.contains("collapsed") ? "＋" : "−";
 });
+
+// 🌐 ボタン: 現在の表示位置を Google Earth (Web) で開く。
+// distance は実ビューポート高 + 垂直FOV60° 換算のカメラ距離。
+// heading は view rotation の符号反転（getViewState と同規則）、
+// OpenLayers は傾斜を持たないため tilt は 0 固定
+function openGoogleEarth() {
+  try {
+    const view = map.getView();
+    const [lon, lat] = toLonLat(view.getCenter() || [0, 0]);
+    const vh = (map.getSize() || [0, 0])[1];
+    const distance = Math.max(50, zoomToCamHeightView(lat, view.getZoom() ?? 10, vh));
+    const heading = ((-view.getRotation() * 180 / Math.PI) % 360 + 360) % 360;
+    const url = `https://earth.google.com/web/@${lat.toFixed(6)},${lon.toFixed(6)},0a,${distance.toFixed(2)}d,35y,${heading.toFixed(1)}h,0t,0r`;
+    window.open(url, "_blank", "noopener");
+  } catch (e) { console.error("Google Earth 連携エラー:", e); }
+}
+document.querySelector("#basemap-globe").addEventListener("click", openGoogleEarth);
 
 // 表示タブ: ベースマップ透過度・回転・レイヤー透過度・スケールバー・座標・ポップアップ
 {

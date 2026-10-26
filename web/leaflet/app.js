@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -8,7 +8,7 @@ import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement } from "../shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
 
@@ -60,6 +60,28 @@ function removeManagedPanes() {
 
 // 現在プロジェクトのレイヤーエントリ（表示範囲連動の再クエリ用）
 let layerEntries = [];
+// QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
+installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+
+// QML <labeling> のラベルを永久 tooltip として付ける/更新する。
+// is_layer_visible で他レイヤーの表示状態を参照し得るため、
+// 表示切替のたびに refreshQmlLabels 経由で再評価される
+function syncLeafletLabel(sub) {
+  const st = sub._kascLabel;
+  if (!st) return;
+  const el = qmlLabelElement(st.item._qml, st.feature.properties || {});
+  if (el) {
+    if (sub.getTooltip()) sub.setTooltipContent(el);
+    else sub.bindTooltip(el, { permanent: true, direction: "center", className: "kasc-label", interactive: false });
+  } else if (sub.getTooltip()) {
+    sub.unbindTooltip();
+  }
+}
+function refreshQmlLabels() {
+  for (const entry of layerEntries) {
+    entry.layer?.eachLayer?.(sub => { if (sub._kascLabel) syncLeafletLabel(sub); });
+  }
+}
 let currentBaseEntries = [];
 let lastBaseUrl = "";
 // ?kasc= で読み込んだ .kasc の URL。設定中は URL 書き換え時に
@@ -399,6 +421,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       style: styleFn,
       pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, pane }),
       onEachFeature: (f, l) => {
+        if (item._qml?.labelFor) { l._kascLabel = { item, feature: f }; syncLeafletLabel(l); }
         l.on("click", e => {
           if (!popupEnabled) return;
           L.popup({ maxHeight: 240 })
@@ -508,6 +531,7 @@ function applyEntryVisibility(entry) {
   if (on && !map.hasLayer(entry.layer)) map.addLayer(entry.layer);
   else if (!on && map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
   syncDeckLayers(); // ドレープコピーの表示追従（deck 未初期化なら no-op）
+  refreshQmlLabels();
   updateMapAttribution();
 }
 
@@ -1009,12 +1033,14 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
       opt.value = i; opt.textContent = leafTitle || `base ${i}`;
       return opt;
     });
-    syncBasemapList(sel);
     baseEntries.forEach((entry, i) => {
       if (i === active) map.addLayer(entry.layer);
       else if (map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
     });
     sel.value = active;
+    // 初期表示は選択中の1レイヤのみ示す畳み状態で同期するため、
+    // sel.value 確定後にリストを描画する
+    syncBasemapList(sel);
     sel.onchange = () => {
       baseEntries.forEach((e, i) => {
         if (i === Number(sel.value)) map.addLayer(e.layer);
@@ -1278,6 +1304,21 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   ctl.classList.toggle("collapsed");
   e.target.textContent = ctl.classList.contains("collapsed") ? "＋" : "−";
 });
+
+// 🌐 ボタン: 現在の表示位置を Google Earth (Web) で開く。
+// distance は実ビューポート高 + 垂直FOV60° 換算のカメラ距離
+// (Google Earth は d=視線距離なので、メルカトル m/px から実寸変換する)。
+// Leaflet は回転・傾斜を持たないため heading/tilt は 0 固定
+function openGoogleEarth() {
+  try {
+    const c = map.getCenter();
+    const vh = map.getSize().y;
+    const distance = Math.max(50, zoomToCamHeightView(c.lat, map.getZoom(), vh));
+    const url = `https://earth.google.com/web/@${c.lat.toFixed(6)},${c.lng.toFixed(6)},0a,${distance.toFixed(2)}d,35y,0h,0t,0r`;
+    window.open(url, "_blank", "noopener");
+  } catch (e) { console.error("Google Earth 連携エラー:", e); }
+}
+document.querySelector("#basemap-globe").addEventListener("click", openGoogleEarth);
 
 // 表示タブ: ベースマップ透過度・レイヤー透過度・スケールバー・座標・ポップアップ
 // （Leaflet は地図回転を持たないため回転・北固定の設定は設けない）
