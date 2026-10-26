@@ -3,7 +3,7 @@
 //       csv:/tsv: / duckdb: / sql:
 // duckdb:/sql: のクエリ実行は window.KascLoader(shared/kasc_loader.js) へ委譲する。
 // bounds = {ranges:[{west,east}],south,north} は bbox=auto/:bbox 系の表示範囲として使う
-import { wkbToGeoJsonGeometry } from "./vector-decode.js";
+import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue } from "./vector-decode.js";
 import { resolveKascUrl } from "./kasc.js";
 
 const FGB_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson.js/+esm";
@@ -74,23 +74,90 @@ function toFeatureCollection(items) {
   return { type: "FeatureCollection", features };
 }
 
+// 属性値の正規化(sanitize)は Cesium 版と共通。BigInt 等 structured-clone 不可な値も潰す
 async function loadFlatGeobuf(url) {
-  const mod = await import(FGB_URL);
+  const { deserialize } = await import(FGB_URL);
   const res = await fetch(url);
   if (!res.ok || !res.body) throw new Error(`flatgeobuf 取得失敗: ${res.status}`);
   const fc = { type: "FeatureCollection", features: [] };
-  for await (const feature of mod.deserialize(res.body)) {
-    if (feature) fc.features.push(feature);
+  for await (const feature of deserialize(res.body)) {
+    if (!feature || !feature.geometry) continue;
+    const properties = feature.properties;
+    if (properties) {
+      for (const key of Object.keys(properties)) {
+        properties[key] = sanitizeVectorPropertyValue(properties[key]);
+      }
+    }
+    fc.features.push(feature);
   }
   return fc;
 }
 
+let hyparquetLoaderPromise = null;
+function loadHyparquet() {
+  if (!hyparquetLoaderPromise) {
+    hyparquetLoaderPromise = Promise.all([
+      import(HYPARQUET_URL),
+      import(HYPARQUET_COMPRESSORS_URL),
+    ]).then(([hp, hc]) => ({
+      parquetReadObjects: hp.parquetReadObjects,
+      parquetMetadata: hp.parquetMetadataAsync || hp.parquetMetadata,
+      asyncBufferFromUrl: hp.asyncBufferFromUrl,
+      compressors: hc.compressors,
+    }));
+  }
+  return hyparquetLoaderPromise;
+}
+
+// Cesium 版と同一実装: Range Request 対応の非同期バッファを優先し、
+// geo メタデータの primary_column でジオメトリ列を特定する
 async function loadGeoParquet(url) {
-  const [hp, hc] = await Promise.all([import(HYPARQUET_URL), import(HYPARQUET_COMPRESSORS_URL)]);
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`geoparquet 取得失敗: ${res.status}`);
-  const rows = await hp.parquetReadObjects({ file: await res.arrayBuffer(), compressors: hc.compressors });
-  return toFeatureCollection(rows);
+  const { parquetReadObjects, parquetMetadata, asyncBufferFromUrl, compressors } = await loadHyparquet();
+  let file;
+  try {
+    file = await asyncBufferFromUrl({ url });
+  } catch {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`geoparquet 取得失敗: ${res.status}`);
+    file = await res.arrayBuffer();
+  }
+  const rows = await parquetReadObjects({ file, compressors });
+  if (!rows.length) return { type: "FeatureCollection", features: [] };
+  let geomColumn = null;
+  try {
+    const meta = await parquetMetadata(file);
+    const kv = meta && (meta.key_value_metadata || meta.metadata || []);
+    const entry = Array.isArray(kv)
+      ? kv.find(item => item.key === "geo")
+      : (kv instanceof Map ? { value: kv.get("geo") } : null);
+    const rawGeo = entry && entry.value;
+    const geoText = rawGeo instanceof Uint8Array ? new TextDecoder().decode(rawGeo) : rawGeo;
+    const geo = geoText ? JSON.parse(geoText) : null;
+    if (geo && geo.primary_column) geomColumn = geo.primary_column;
+  } catch {}
+  const isGeometryValue = value =>
+    value instanceof Uint8Array || (value && typeof value === "object" && typeof value.type === "string" && ("coordinates" in value || "geometries" in value));
+  const firstRow = rows[0];
+  if (!geomColumn || !(geomColumn in firstRow)) {
+    geomColumn = "geometry" in firstRow ? "geometry"
+      : Object.keys(firstRow).find(key => isGeometryValue(firstRow[key]));
+  }
+  if (!geomColumn) throw new Error("ジオメトリ列が見つかりません");
+  const features = [];
+  for (const row of rows) {
+    const value = row[geomColumn];
+    const geometry = value instanceof Uint8Array
+      ? wkbToGeoJsonGeometry(value)
+      : (isGeometryValue(value) ? value : null);
+    if (!geometry) continue;
+    const properties = {};
+    for (const key of Object.keys(row)) {
+      if (key === geomColumn) continue;
+      properties[key] = sanitizeVectorPropertyValue(row[key]);
+    }
+    features.push({ type: "Feature", geometry, properties });
+  }
+  return { type: "FeatureCollection", features };
 }
 
 function parseDelimited(text, delim) {

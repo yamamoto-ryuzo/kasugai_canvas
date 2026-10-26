@@ -135,6 +135,7 @@
                 <button class="settings-tab" type="button" data-settings-panel="display-drape-panel" data-i18n="settings.tab.drape">ドレープ</button>
                 <button class="settings-tab" type="button" data-settings-panel="display-tiles-panel" data-i18n="settings.tab.tiles">3D Tiles</button>
                 <button class="settings-tab" type="button" data-settings-panel="display-effects-panel" data-i18n="settings.tab.effects">効果</button>
+                <button class="settings-tab" type="button" data-settings-panel="display-general-panel" data-i18n="settings.tab.general">一般</button>
               </nav>
               <section id="display-terrain-panel" class="settings-subpanel active">
                 <p class="hint terrain-definition" data-i18n-html="settings.dem.hint"><strong>DEMテクスチャー</strong>：DEMで作った地形メッシュにBase map画像を貼る表示。<br /><strong>ドレープ</strong>：XYZ・GeoJSONなどのレイヤーを地形表面の起伏に沿わせて貼る表示。</p>
@@ -149,6 +150,8 @@
                   <option value="gsi5m" data-i18n="settings.dem.gsi5m">地理院 5m+10mメッシュ (DEM5系+10B / 標高TP基準)</option>
                   <option value="gsi1m" data-i18n="settings.dem.gsi1m">地理院 1mメッシュ (DEM1A / 航空レーザー / 標高TP基準)</option>
                 </select>
+                <label class="field-label" for="terrain-exaggeration"><span data-i18n="settings.dem.exaggeration">地形の誇張</span> <span id="terrain-exaggeration-value">×1.0</span></label>
+                <input id="terrain-exaggeration" type="range" min="0" max="3" step="0.1" value="1" style="width: 100%;" />
                 <p class="hint" data-i18n-html="settings.dem.heightHint"><strong>高さ基準</strong>：「楕円体高 / WGS84」は3D地球・PLATEAU等の3D Tilesと整合します。「標高 / 平均海面基準」「地理院(TP基準=東京湾平均潮位面)」はジオイド基準のため、ジオイド高（日本域で約30〜40m）の分だけ楕円体高より低く描画されます(3D Tilesが地面に埋もれて見える場合があります)。「地理院」は日本域のみ有効です。</p>
               </section>
               <section id="display-drape-panel" class="settings-subpanel">
@@ -219,6 +222,17 @@
                 </div>
                 <label class="field-label" for="underground-transparency"><span data-i18n="effects.transparency">地表透過</span> <span id="underground-transparency-value">0%</span></label>
                 <input id="underground-transparency" type="range" min="0" max="1" step="0.05" value="0" style="width: 100%;" />
+              </section>
+              <section id="display-general-panel" class="settings-subpanel">
+                <label class="field-label" for="display-basemap-opacity" data-i18n="display.basemapOpacity">ベースマップ透過度</label>
+                <input id="display-basemap-opacity" type="range" min="0" max="1" step="0.05" value="1" style="width: 100%;" />
+                <label class="field-label" for="display-layer-opacity" data-i18n="display.layerOpacity">レイヤー透過度</label>
+                <input id="display-layer-opacity" type="range" min="0" max="1" step="0.05" value="1" style="width: 100%;" />
+                <div class="terrain-options">
+                  <label><input id="display-scalebar" type="checkbox" checked /><span data-i18n="display.scalebar"> スケールバーを表示</span></label>
+                  <label><input id="display-coords" type="checkbox" checked /><span data-i18n="display.coords"> カーソル座標を表示</span></label>
+                  <label><input id="display-popup" type="checkbox" /><span data-i18n="display.popup"> 地物クリックで属性ポップアップ</span></label>
+                </div>
               </section>
             </section>
             <section id="info-panel" class="plugin-panel embedded-content">
@@ -671,6 +685,9 @@
               <button type="submit" data-i18n="chat.send">送信</button>
             </form>
           </aside>
+          <div id="cesium-scalebar" hidden></div>
+          <div id="cesium-coords" hidden></div>
+          <div id="attr-popup" hidden></div>
           <small id="map-attribution" class="map-attribution"></small>
         </div>
       </section>

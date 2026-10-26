@@ -13,7 +13,7 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 
 ## ここに置くもの（予定）
 
-- `.kasc` 行パーサー・ローダー（geo_webview 側 `kasc_loader.js`/`kasc_panel.js` の還流）
+- `.kasc` 行パーサー・ローダー（geo_webview 側 `kasc_loader.js` の還流）
 - `vector-decode.js`・`gpkg-worker.js`・`sw-duckdb.js` 等のデコード/Worker 層
 - `i18n.js`・`i18n/`（翻訳辞書）
 - QML→スタイルコンパイラ（`qml/cesium.js`・`qml/maplibre.js`・`qml/openlayers.js`）

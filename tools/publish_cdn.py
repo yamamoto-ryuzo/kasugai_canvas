@@ -6,11 +6,14 @@ kasugai_canvas の web/ を CDN リポジトリ(kasugai-canvas-web)の
 (旧来のルート絶対参照書き換えは不要になった)。
 
 レイアウト:
-    <cdn>/unstable/     develop の web/ 同期先(version.json を付与)
-    <cdn>/stable/       検証済み unstable/ の格上げ先(再ビルドしない)
+    <cdn>/unstable/     web/ の同期先(開発版。version.json を付与)
+    <cdn>/stable/       web/ の同期先(安定版。version.json を付与)
     <cdn>/latest/       stable/ へのリダイレクト(静的・更新不要)
     <cdn>/index.html    stable/ へのリダイレクト(静的・更新不要)
     <cdn>/channels.json 各ステージの現在バージョン
+
+    --channel はコピー先のステージを選ぶだけで、どちらも web/ を直接同期する
+    (stable への格上げに unstable 同期を先行させる必要はない)
 
 usage:
     python tools/publish_cdn.py [cdn_repo_dir] --channel unstable
@@ -99,35 +102,19 @@ def _commit_and_push(cdn_dir, message, push):
         print('pushed')
 
 
-def sync_unstable(cdn_dir):
-    stage = os.path.join(cdn_dir, 'unstable')
+def sync_channel(cdn_dir, channel):
+    """web/ を指定ステージへ直接同期する。"""
+    stage = os.path.join(cdn_dir, channel)
     _replace_dir(WEB_DIR, stage)
     version = _cargo_version()
     _write_version_json(stage, {
         'version': version,
-        'channel': 'unstable',
+        'channel': channel,
         'source_repo': SOURCE_REPO,
         'source_branch': 'develop',
     })
-    _update_channels(cdn_dir, 'unstable', version)
-    return version, 'Sync web/ from kasugai_canvas develop (v{0})'.format(version)
-
-
-def sync_stable(cdn_dir):
-    unstable = os.path.join(cdn_dir, 'unstable')
-    if not os.path.isdir(unstable):
-        raise SystemExit('error: <cdn>/unstable が無いため格上げできません。'
-                         '先に --channel unstable を実行してください')
-    stage = os.path.join(cdn_dir, 'stable')
-    _replace_dir(unstable, stage)
-    info = _read_version_json(os.path.join(stage, 'version.json'))
-    info.pop('note', None)
-    info['channel'] = 'stable'
-    version = info.get('version', _cargo_version())
-    info['version'] = version
-    _write_version_json(stage, info)
-    _update_channels(cdn_dir, 'stable', version)
-    return version, 'Promote unstable -> stable (v{0})'.format(version)
+    _update_channels(cdn_dir, channel, version)
+    return version, 'Sync web/ to {0} (v{1})'.format(channel, version)
 
 
 def main():
@@ -136,8 +123,8 @@ def main():
                    help='kasugai-canvas-web リポジトリのパス'
                         ' (default: %(default)s)')
     p.add_argument('--channel', required=True, choices=CHANNELS,
-                   help='unstable=develop web/ を同期 / '
-                        'stable=検証済み unstable/ を格上げ')
+                   help='同期先ステージ(unstable=開発版 / stable=安定版)。'
+                        'どちらも web/ を直接コピーする')
     p.add_argument('--commit', action='store_true',
                    help='CDN リポジトリで変更をコミットする')
     p.add_argument('--push', action='store_true',
@@ -150,10 +137,7 @@ def main():
     if args.push and not args.commit:
         p.error('--push は --commit と併用してください')
 
-    if args.channel == 'unstable':
-        version, message = sync_unstable(cdn_dir)
-    else:
-        version, message = sync_stable(cdn_dir)
+    version, message = sync_channel(cdn_dir, args.channel)
     print('{0}: v{1} -> {2}'.format(args.channel, version, cdn_dir))
 
     if args.commit:

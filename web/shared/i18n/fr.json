@@ -126,6 +126,7 @@
   "settings.dem.reearth": "Re:Earth Terrain (altitude / niveau moyen de la mer, niveau 14)",
   "settings.dem.gsi5m": "Maillage GSI 5m+10m (série DEM5 +10B / altitude datum TP)",
   "settings.dem.gsi1m": "Maillage GSI 1m (DEM1A / LiDAR aérien / altitude datum TP)",
+  "settings.dem.exaggeration": "Exagération du terrain",
   "settings.dem.heightHint": "<strong>Datum de hauteur</strong> : « Hauteur ellipsoïdale / WGS84 » s'aligne avec le globe 3D et les 3D Tiles comme PLATEAU. « Altitude / niveau moyen de la mer » et « GSI (datum TP = niveau moyen des marées de la baie de Tokyo) » sont référencées au géoïde et apparaissent donc environ 30–40 m sous la hauteur ellipsoïdale, soit l'ondulation du géoïde au Japon (les 3D Tiles peuvent sembler enfouis). Les sources « GSI » ne couvrent que le Japon.",
   "settings.project.label": "Projet",
   "settings.project.root": "Racine du projet",
@@ -559,5 +560,11 @@
   "chat.customInstructionsLabel": "Instructions supplémentaires",
   "chat.customInstructionsPlaceholder": "Saisissez les consignes que l’IA doit toujours suivre",
   "chat.customInstructionsHint": "Enregistrées dans ce navigateur comme solution de repli. Si KASUGAI_AI_INSTRUCTIONS est défini sur Cloud Run, les consignes du serveur sont prioritaires.",
-  "theme.selectPrompt": "Choisir un thème"
+  "theme.selectPrompt": "Choisir un thème",
+  "settings.tab.general": "Général",
+  "display.basemapOpacity": "Opacité du fond de carte",
+  "display.layerOpacity": "Opacité des couches",
+  "display.scalebar": "Afficher l’échelle",
+  "display.coords": "Afficher les coordonnées du curseur",
+  "display.popup": "Popup d’attributs au clic"
 }

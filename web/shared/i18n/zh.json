@@ -126,6 +126,7 @@
   "settings.dem.reearth": "Re:Earth 地形（海拔 / 平均海平面，level 14）",
   "settings.dem.gsi5m": "国土地理院 5m+10m 网格（DEM5 系列 +10B / 海拔 TP 基准）",
   "settings.dem.gsi1m": "国土地理院 1m 网格（DEM1A / 航空激光雷达 / 海拔 TP 基准）",
+  "settings.dem.exaggeration": "地形夸张",
   "settings.dem.heightHint": "<strong>高程基准</strong>：“椭球高 / WGS84”与 3D 地球及 PLATEAU 等 3D Tiles 对齐。“海拔 / 平均海平面”和“国土地理院（TP 基准 = 东京湾平均潮位面）”以大地水准面为基准，因此在日本地区比椭球高低约 30–40 米（3D Tiles 可能看起来被埋入地下）。“国土地理院”数据源仅覆盖日本。",
   "settings.project.label": "项目",
   "settings.project.root": "项目根目录",
@@ -559,5 +560,11 @@
   "chat.customInstructionsLabel": "附加指令",
   "chat.customInstructionsPlaceholder": "输入希望 AI 始终遵循的指令",
   "chat.customInstructionsHint": "作为备用内容保存在此浏览器中。如果 Cloud Run 配置了 KASUGAI_AI_INSTRUCTIONS，则优先使用服务器指令。",
-  "theme.selectPrompt": "选择主题"
+  "theme.selectPrompt": "选择主题",
+  "settings.tab.general": "常规",
+  "display.basemapOpacity": "底图不透明度",
+  "display.layerOpacity": "图层不透明度",
+  "display.scalebar": "显示比例尺",
+  "display.coords": "显示光标坐标",
+  "display.popup": "点击要素时显示属性弹窗"
 }

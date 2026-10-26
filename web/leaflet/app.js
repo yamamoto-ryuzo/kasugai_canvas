@@ -506,10 +506,15 @@ function showAttrTable(entry) {
   const feats = (entry.item._geojson?.features || []).slice(0, 50);
   const cols = [...new Set(feats.flatMap(f => Object.keys(f.properties || {})))].slice(0, 8);
   if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
-  const rows = feats.map(f =>
-    `<tr>${cols.map(c => `<td>${String(f.properties[c] ?? "")}`).join("")}</tr>`
+  const rows = feats.map((f, i) =>
+    `<tr data-idx="${i}" style="cursor:pointer" title="クリックで移動">${cols.map(c => `<td>${String(f.properties[c] ?? "")}`).join("")}</tr>`
   ).join("");
   tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table class="attr-table"><tr>${cols.map(c => `<th>${c}`).join("")}</tr>${rows}</table>`;
+  // 行クリックでその地物へ移動（検索結果の行クリックと同じ挙動）
+  tableBox.querySelectorAll("tr[data-idx]").forEach(tr => tr.addEventListener("click", () => {
+    const env = geojsonExtent({ features: [feats[Number(tr.dataset.idx)]] });
+    if (env) map.fitBounds(envToLatLngBounds(env), { padding: [80, 80], maxZoom: 18 });
+  }));
 }
 
 // 表示状態 + QML スケール範囲(zoomRange)の両方を見て add/remove を判定する

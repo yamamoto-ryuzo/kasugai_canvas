@@ -56,15 +56,7 @@ const map = new Map({
   layers: [],
   view: new View({ center: fromLonLat([139.767, 35.681]), zoom: 10 }),
 });
-window.kascMap = map; // デバッグ/外部連携用参照（KascPanel と同じ公開範囲）
-// shared/kasc_panel.js の OpenLayers アダプタが参照する ol グローバル（ESM 取り込み分を公開）
-window.ol = {
-  layer: { Tile: TileLayer, Vector: VectorLayer },
-  source: { XYZ, Vector: VectorSource, TileWMS },
-  format: { GeoJSON },
-  proj: { fromLonLat, toLonLat, transformExtent },
-  style: { Style, Fill, Stroke, Circle: CircleStyle, Icon },
-};
+window.kascMap = map; // デバッグ/外部連携用参照（他エンジンと同じ公開範囲）
 
 // 現在プロジェクトのレイヤーエントリ（表示範囲連動の再クエリ用）
 let layerEntries = [];
@@ -400,11 +392,16 @@ function showAttrTable(entry) {
   const feats = source?.getFeatures ? source.getFeatures().slice(0, 50) : [];
   const cols = [...new Set(feats.flatMap(f => Object.keys(f.getProperties()).filter(k => k !== "geometry")))].slice(0, 8);
   if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
-  const rows = feats.map(f => {
+  const rows = feats.map((f, i) => {
     const p = f.getProperties();
-    return `<tr>${cols.map(c => `<td>${String(p[c] ?? "")}`).join("")}</tr>`;
+    return `<tr data-idx="${i}" style="cursor:pointer" title="クリックで移動">${cols.map(c => `<td>${String(p[c] ?? "")}`).join("")}</tr>`;
   }).join("");
   tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table class="attr-table"><tr>${cols.map(c => `<th>${c}`).join("")}</tr>${rows.replace(/<td>/g, "<td>")}</table>`;
+  // 行クリックでその地物へ移動（検索結果の行クリックと同じ挙動）
+  tableBox.querySelectorAll("tr[data-idx]").forEach(tr => tr.addEventListener("click", () => {
+    const geom = feats[Number(tr.dataset.idx)]?.getGeometry?.();
+    if (geom) map.getView().fit(geom.getExtent(), { padding: [60, 60, 60, 60], maxZoom: 18, duration: 400 });
+  }));
 }
 
 function applyEntryVisibility(entry) {
