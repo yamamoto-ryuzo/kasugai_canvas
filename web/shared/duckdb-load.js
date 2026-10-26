@@ -3,7 +3,7 @@
 import { wkbToGeoJsonGeometry } from "./vector-decode.js";
 import { resolveKascUrl } from "./kasc.js";
 
-const DUCKDB_URL = "https://esm.sh/@duckdb/duckdb-wasm@1.30.0";
+const DUCKDB_URL = "https://esm.sh/@duckdb/duckdb-wasm@1.32.0";
 let dbPromise = null;
 
 async function getDb() {

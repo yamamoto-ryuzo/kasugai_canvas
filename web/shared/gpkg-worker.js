@@ -6,7 +6,7 @@
 // GPKG には使わず、SQLite として直接開く
 import { wkbToGeoJsonGeometry, gpkgGeometryToWkb, gpkgGeometryEnvelope, geoJsonGeometryEnvelope, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "./vector-decode.js";
 
-const SQL_JS_VERSION = "1.13.0";
+const SQL_JS_VERSION = "1.15.1";
 let sqlJsPromise = null;
 function loadSqlJs() {
   if (!sqlJsPromise) {

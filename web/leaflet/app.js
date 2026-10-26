@@ -193,7 +193,7 @@ function attrPopupHtml(properties) {
 // OL 版と同様に deck.Deck を #map 上のオーバーレイキャンバスとして viewState を
 // 手動同期する（Leaflet は2Dビューのため真俯瞰の 2.5D 表示。キャンバス単位のため
 // 全 Leaflet レイヤより手前に1枚で描かれ、Leaflet レイヤとの相互挿入はしない）
-const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9/dist.min.js";
+const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.0/dist.min.js";
 let deckLoadPromise = null;
 function loadDeck() {
   if (window.deck) return Promise.resolve(window.deck);

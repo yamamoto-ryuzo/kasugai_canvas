@@ -1,14 +1,14 @@
 // KASUGAI Canvas — OpenLayers フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を OpenLayers で再生する
-import Map from "https://esm.sh/ol@10.6.1/Map.js";
-import View from "https://esm.sh/ol@10.6.1/View.js";
-import TileLayer from "https://esm.sh/ol@10.6.1/layer/Tile.js";
-import VectorLayer from "https://esm.sh/ol@10.6.1/layer/Vector.js";
-import XYZ from "https://esm.sh/ol@10.6.1/source/XYZ.js";
-import TileWMS from "https://esm.sh/ol@10.6.1/source/TileWMS.js";
-import VectorSource from "https://esm.sh/ol@10.6.1/source/Vector.js";
-import GeoJSON from "https://esm.sh/ol@10.6.1/format/GeoJSON.js";
-import { fromLonLat, toLonLat, transformExtent } from "https://esm.sh/ol@10.6.1/proj.js";
+import Map from "https://cdn.jsdelivr.net/npm/ol@10.11.0/Map.js";
+import View from "https://cdn.jsdelivr.net/npm/ol@10.11.0/View.js";
+import TileLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Tile.js";
+import VectorLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Vector.js";
+import XYZ from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/XYZ.js";
+import TileWMS from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/TileWMS.js";
+import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Vector.js";
+import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
+import { fromLonLat, toLonLat, transformExtent } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
 import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -18,17 +18,17 @@ import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl } from "../shared/qml-2d.js";
-import Style from "https://esm.sh/ol@10.6.1/style/Style.js";
-import Fill from "https://esm.sh/ol@10.6.1/style/Fill.js";
-import Stroke from "https://esm.sh/ol@10.6.1/style/Stroke.js";
-import CircleStyle from "https://esm.sh/ol@10.6.1/style/Circle.js";
-import Icon from "https://esm.sh/ol@10.6.1/style/Icon.js";
-import Text from "https://esm.sh/ol@10.6.1/style/Text.js";
+import Style from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Style.js";
+import Fill from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Fill.js";
+import Stroke from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Stroke.js";
+import CircleStyle from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Circle.js";
+import Icon from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Icon.js";
+import Text from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Text.js";
 import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver } from "../shared/qml-2d.js";
-import { defaults as defaultControls } from "https://esm.sh/ol@10.6.1/control/defaults.js";
-import ScaleLine from "https://esm.sh/ol@10.6.1/control/ScaleLine.js";
-import MousePosition from "https://esm.sh/ol@10.6.1/control/MousePosition.js";
-import { createStringXY } from "https://esm.sh/ol@10.6.1/coordinate.js";
+import { defaults as defaultControls } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/defaults.js";
+import ScaleLine from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/ScaleLine.js";
+import MousePosition from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/MousePosition.js";
+import { createStringXY } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/coordinate.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
 
@@ -134,7 +134,7 @@ function getViewBounds() {
 // deck.Deck を #map 上のオーバーレイキャンバスとして viewState を手動同期する
 // （OL は2Dビューのため真俯瞰の 2.5D 表示。キャンバス単位のため全 OL レイヤより
 // 手前に1枚で描かれ、OL レイヤとの相互挿入はしない）
-const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9/dist.min.js";
+const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.0/dist.min.js";
 let deckLoadPromise = null;
 function loadDeck() {
   if (window.deck) return Promise.resolve(window.deck);

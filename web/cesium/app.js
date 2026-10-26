@@ -2424,8 +2424,8 @@ let hyparquetLoaderPromise = null;
 function loadHyparquet() {
   if (!hyparquetLoaderPromise) {
     hyparquetLoaderPromise = Promise.all([
-      import("https://cdn.jsdelivr.net/npm/hyparquet@1.30.1/+esm"),
-      import("https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm"),
+      import("https://cdn.jsdelivr.net/npm/hyparquet@1.31.5/+esm"),
+      import("https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.2/+esm"),
     ]).then(([hp, hc]) => ({
       parquetReadObjects: hp.parquetReadObjects,
       parquetMetadata: hp.parquetMetadataAsync || hp.parquetMetadata,
@@ -2500,7 +2500,7 @@ async function loadGeoParquetAsGeoJson(url) {
 let flatgeobufLoaderPromise = null;
 function loadFlatGeobuf() {
   if (!flatgeobufLoaderPromise) {
-    flatgeobufLoaderPromise = import("https://cdn.jsdelivr.net/npm/flatgeobuf@4.4.0/lib/mjs/geojson.js/+esm");
+    flatgeobufLoaderPromise = import("https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson.js/+esm");
   }
   return flatgeobufLoaderPromise;
 }

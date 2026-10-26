@@ -6,9 +6,9 @@
 import { wkbToGeoJsonGeometry } from "./vector-decode.js";
 import { resolveKascUrl } from "./kasc.js";
 
-const FGB_URL = "https://esm.sh/flatgeobuf@3.36.0/lib/mjs/geojson.js";
-const HYPARQUET_URL = "https://cdn.jsdelivr.net/npm/hyparquet@1.30.1/+esm";
-const HYPARQUET_COMPRESSORS_URL = "https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm";
+const FGB_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson.js/+esm";
+const HYPARQUET_URL = "https://cdn.jsdelivr.net/npm/hyparquet@1.31.5/+esm";
+const HYPARQUET_COMPRESSORS_URL = "https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.2/+esm";
 
 let gpkgWorker = null;
 let gpkgReqId = 0;

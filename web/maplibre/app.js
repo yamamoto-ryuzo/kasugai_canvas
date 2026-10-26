@@ -1,5 +1,6 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
+import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
 import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -132,7 +133,7 @@ function removeManaged() {
 
 // ---- deck.gl（3dtiles: 行専用・初回利用時にCDNから遅延ロード） ----
 // 軽量プレイヤー維持のため 3dtiles を含む .kasc の時だけ読み込む
-const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9/dist.min.js";
+const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.0/dist.min.js";
 let deckLoadPromise = null;
 function loadDeck() {
   if (window.deck) return Promise.resolve(window.deck);

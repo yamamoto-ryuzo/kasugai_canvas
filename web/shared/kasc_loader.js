@@ -443,7 +443,7 @@
   var fgbPromise = null;
   function loadFlatGeobufModule() {
     if (!fgbPromise) {
-      fgbPromise = import('https://cdn.jsdelivr.net/npm/flatgeobuf@4.4.0/lib/mjs/geojson.js/+esm');
+      fgbPromise = import('https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson.js/+esm');
       fgbPromise.catch(function () { fgbPromise = null; });
     }
     return fgbPromise;
@@ -488,8 +488,8 @@
   function loadHyparquet() {
     if (!pqPromise) {
       pqPromise = Promise.all([
-        import('https://cdn.jsdelivr.net/npm/hyparquet@1.30.1/+esm'),
-        import('https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.1/+esm')
+        import('https://cdn.jsdelivr.net/npm/hyparquet@1.31.5/+esm'),
+        import('https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.2/+esm')
       ]).then(function (mods) {
         var hp = mods[0], hc = mods[1];
         return {
@@ -564,7 +564,7 @@
   // Worker ソースはテンプレートリテラル内に埋め込むため ${ } と
   // バッククォートは使わない。importScripts は UMD 版 sql.js を使う。
   var GPKG_WORKER_SRC = [
-    'var SQL_JS_VERSION = "1.13.0";',
+    'var SQL_JS_VERSION = "1.15.1";',
     'var sqlJsPromise = null;',
     'function loadSqlJs() {',
     '  if (!sqlJsPromise) {',
