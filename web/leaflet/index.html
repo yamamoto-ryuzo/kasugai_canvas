@@ -95,8 +95,7 @@
   .leaflet-popup-content { max-height: 240px; overflow: auto; font-size: 12px; margin: 8px 10px; }
   .leaflet-popup-content-wrapper { font-size: 12px; }
   #legends img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 4px 0; }
-  .attr-table { border-collapse: collapse; font-size: 11px; width: 100%; }
-  .attr-table th, .attr-table td { border: 1px solid #ccc; padding: 1px 4px; text-align: left; }
+  
   /* 地図上部の読込進捗ピル(レイヤの段階読み込み状況) */
   #load-progress { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
     z-index: 1005; display: flex; align-items: center; gap: 8px; padding: 5px 12px;
@@ -117,10 +116,26 @@
   /* QML <labeling> の地物ラベル(永久 tooltip を透明化してテキストのみ表示) */
   .kasc-label.leaflet-tooltip { background: transparent; border: none; box-shadow: none; padding: 0; }
   .kasc-label.leaflet-tooltip:before { display: none; }
+  /* ナビゲーションツールバー（OpenLayers/Cesium 版と同型の右上配置） */
+  .navigation-toolbar { position: absolute; z-index: 1004; top: 14px; right: 14px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7px 5px;
+    border: 1px solid rgba(14,32,64,.12); border-radius: 10px;
+    background: rgba(255,255,255,.6); box-shadow: 0 8px 18px rgba(10,20,40,.16); }
+  .navigation-toolbar button { min-width: 42px; min-height: 29px; padding: 5px 7px;
+    border: 1px solid rgba(0,0,0,.08); border-radius: 7px;
+    background: linear-gradient(#fff, #f1f4f8); color: #263643; cursor: pointer; font-size: 13px; }
+  .navigation-toolbar button:hover { background: #e7f3f0; }
+  .navigation-toolbar.collapsed button:not(.navigation-toggle) { display: none; }
+  .navigation-toolbar.collapsed { width: 40px; height: 40px; padding: 7px; box-sizing: border-box; gap: 0; }
+  .navigation-toolbar.collapsed .navigation-toggle { width: 26px; min-width: 26px; min-height: 26px; padding: 1px 4px; }
+  .navigation-toggle { font-size: 17px !important; line-height: 1; }
 </style>
 </head>
 <body>
-<div id="map"><small id="map-attribution" class="map-attribution"></small><div id="map-coords" class="map-coords"></div><div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div></div>
+<div id="map"><small id="map-attribution" class="map-attribution"></small><div id="map-coords" class="map-coords"></div><div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div><aside class="navigation-toolbar" aria-label="ナビゲーション">
+  <button id="nav-home" type="button" title="全体表示（データ範囲へフィット）" aria-label="全体表示">⌂</button>
+  <button id="navigation-toggle" class="navigation-toggle" type="button" title="最小化" aria-label="最小化">−</button>
+</aside></div>
 <div id="settings-window" hidden>
   <div class="settings-head"><span>設定</span><button id="settings-close" type="button" title="閉じる">×</button></div>
   <div id="settings-tabs">
@@ -192,8 +207,8 @@
     <div id="search-results"></div>
   </div>
   <div class="tab-pane" id="pane-attr" hidden>
-    <select id="attr-layer-select"></select>
-    <div id="attr-table"></div>
+    <button id="attr-widget-open" type="button" style="width:100%;margin-bottom:6px;padding:4px;border:1px solid #ccc;border-radius:4px;background:#f4f6f8;cursor:pointer;">選択中のレイヤ属性一覧</button>
+    <div id="attr-content">地物を選択すると属性を表示します。</div>
   </div>
   <div class="tab-pane" id="pane-camera" hidden>
     <div id="cams"></div>

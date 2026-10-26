@@ -1,7 +1,8 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines } from "../shared/kasc.js";
-import { loadVectorItem } from "../shared/vector-load.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl } from "../shared/kasc.js";
+import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
@@ -25,16 +26,65 @@ const panel = {
   unsupported: document.querySelector("#unsupported"),
   searchInput: document.querySelector("#search-input"),
   searchResults: document.querySelector("#search-results"),
-  attrTable: document.querySelector("#attr-table"),
-  attrSelect: document.querySelector("#attr-layer-select"),
+  attrContent: document.querySelector("#attr-content"),
 };
 
 const map = L.map("map", {
   center: [35.681, 139.767],
   zoom: 10,
   attributionControl: false, // 出典は Cesium 版と同型の右下オーバーレイで表示
+  zoomControl: false, // 拡縮ボタンは出さない（ホイール/ピンチのみ。右上ツールバーは ⌂ のみ）
 });
 window.kascMap = map; // デバッグ/外部連携用参照（他エンジンと同じ公開範囲）
+
+// 地物(GeoJSON Feature)の範囲へ移動。属性一覧・属性タブの行クリックで共通使用
+function focusFeatureExtent(feature) {
+  const env = geojsonExtent({ type: "FeatureCollection", features: [feature] });
+  if (env) map.fitBounds(envToLatLngBounds(env), { padding: [80, 80], maxZoom: 18 });
+}
+
+// 全レイヤのデータ範囲（item._env）の合範囲へ fit する。
+// 範囲が取れなければ false を返す。プロジェクト初期表示と ⌂ ボタンで共用
+function fitDataExtent({ padding = [40, 40], maxZoom = 17, animate = false } = {}) {
+  let env = null;
+  for (const { item } of layerEntries) {
+    if (!item._env) continue;
+    env = env
+      ? [Math.min(env[0], item._env.west), Math.min(env[1], item._env.south), Math.max(env[2], item._env.east), Math.max(env[3], item._env.north)]
+      : [item._env.west, item._env.south, item._env.east, item._env.north];
+  }
+  if (!env) return false;
+  const bounds = [[env[1], env[0]], [env[3], env[2]]];
+  if (animate) map.flyToBounds(bounds, { padding, maxZoom });
+  else map.fitBounds(bounds, { padding, maxZoom });
+  return true;
+}
+
+// 「属性・値一覧」ボトムシート（Cesium 版 vector-attr-widget と同等）。
+// レイヤ id は layerEntries のインデックス
+const attrWidget = createAttrWidget({
+  listLayers: () => layerEntries
+    .map((entry, i) => ({ id: String(i), title: splitKascTitle(entry.item.title).title || entry.item.title || entry.item.url, entry }))
+    .filter(o => VECTOR_TYPES.has(o.entry.item.type)),
+  getFeatures: async entry => {
+    const item = entry.item;
+    // bbox=auto・:bbox 等の表示範囲連動クエリ系は _geojson が表示中範囲分のみ
+    // なので、属性一覧は bounds なしの全件読込にする(Cesium 版の全件クエリと同等)
+    if (isViewportQueryItem(item)) {
+      const { geojson } = await loadVectorItem(item, lastBaseUrl, null);
+      return { features: geojson?.features || [] };
+    }
+    // `| off` で未読込のレイヤは選択時に読み込む（表示状態は変えない）
+    if (entry.deferred) await ensureEntryLoaded(entry);
+    if (entry.failed) throw new Error(entry.error || "load failed");
+    return { features: item._geojson?.features || [] };
+  },
+  focusFeature: focusFeatureExtent,
+});
+// 「選択中のレイヤ属性一覧」: 属性タブに記録された地物のレイヤ(または直前の選択)で開く
+document.querySelector("#attr-widget-open")?.addEventListener("click", () => {
+  attrWidget.open(panel.attrContent?.dataset.layerId || null);
+});
 
 // .kasc レイヤは専用 pane に1層ずつ割り当てて積み順を再現する
 // （Leaflet の既定 pane ではラスタ/ベクターの混在順が保持できないため）。
@@ -423,6 +473,15 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       onEachFeature: (f, l) => {
         if (item._qml?.labelFor) { l._kascLabel = { item, feature: f }; syncLeafletLabel(l); }
         l.on("click", e => {
+          // 属性タブ(Cesium 版 attr-panel 相当): クリックした地物の属性を表示
+          const entry = layerEntries.find(en => en.item === item);
+          renderAttrContent(panel.attrContent, [{
+            title: item.title || item.url,
+            entries: attrEntriesFromProps(f.properties),
+            layerId: entry ? String(layerEntries.indexOf(entry)) : null,
+            feature: f,
+            flyable: !!f?.geometry,
+          }], { onRecordClick: rec => focusFeatureExtent(rec.feature) });
           if (!popupEnabled) return;
           L.popup({ maxHeight: 240 })
             .setLatLng(e.latlng)
@@ -501,22 +560,6 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
   return { layer, styleFn: null, viewportQuery: false, zoomRange: null, baseOpacity };
 }
 
-function showAttrTable(entry) {
-  const tableBox = panel.attrTable;
-  const feats = (entry.item._geojson?.features || []).slice(0, 50);
-  const cols = [...new Set(feats.flatMap(f => Object.keys(f.properties || {})))].slice(0, 8);
-  if (!cols.length) { tableBox.textContent = "（属性なし）"; return; }
-  const rows = feats.map((f, i) =>
-    `<tr data-idx="${i}" style="cursor:pointer" title="クリックで移動">${cols.map(c => `<td>${String(f.properties[c] ?? "")}`).join("")}</tr>`
-  ).join("");
-  tableBox.innerHTML = `<b>${entry.item.title}</b>（先頭${feats.length}件）<table class="attr-table"><tr>${cols.map(c => `<th>${c}`).join("")}</tr>${rows}</table>`;
-  // 行クリックでその地物へ移動（検索結果の行クリックと同じ挙動）
-  tableBox.querySelectorAll("tr[data-idx]").forEach(tr => tr.addEventListener("click", () => {
-    const env = geojsonExtent({ features: [feats[Number(tr.dataset.idx)]] });
-    if (env) map.fitBounds(envToLatLngBounds(env), { padding: [80, 80], maxZoom: 18 });
-  }));
-}
-
 // 表示状態 + QML スケール範囲(zoomRange)の両方を見て add/remove を判定する
 function effectiveVisible(entry) {
   if (!entry.item.visible) return false;
@@ -590,7 +633,7 @@ function focusEntry(entry) {
   else if (item._center) map.flyTo([item._center[1], item._center[0]], 15);
 }
 
-function buildLayerRow(entry, exclusive, radioName, attrCtx) {
+function buildLayerRow(entry, exclusive, radioName) {
   const item = entry.item;
   const wrap = document.createElement("div");
   wrap.className = "layer-item";
@@ -657,14 +700,11 @@ function buildLayerRow(entry, exclusive, radioName, attrCtx) {
   const name = document.createElement("span");
   name.textContent = entry._leaf || item.url;
   if (item.title && item.title !== entry._leaf) name.title = item.title;
-  if (attrCtx.entries.includes(entry)) {
+  // ベクターレイヤは名前クリックで「属性・値一覧」ウィジェットを開く
+  if (VECTOR_TYPES.has(item.type)) {
     name.style.cursor = "pointer";
     name.title = "属性一覧を表示";
-    name.addEventListener("click", () => {
-      attrCtx.select.value = attrCtx.entries.indexOf(entry);
-      showAttrTable(entry);
-      window.switchPanelTab?.("attr");
-    });
+    name.addEventListener("click", () => attrWidget.open(String(layerEntries.indexOf(entry))));
   }
   row.append(name);
 
@@ -716,18 +756,6 @@ const collapsedGroups = new Set();
 
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
-  panel.attrSelect.innerHTML = "";
-  const attrEntries = entries.filter(e => e.item._geojson?.features?.length);
-  for (const e of attrEntries) {
-    const opt = document.createElement("option");
-    opt.value = entries.indexOf(e);
-    opt.textContent = splitKascTitle(e.item.title).title || e.item.url;
-    panel.attrSelect.append(opt);
-  }
-  panel.attrSelect.onchange = () => showAttrTable(entries[Number(panel.attrSelect.value)]);
-  if (attrEntries.length) showAttrTable(attrEntries[0]);
-  else panel.attrTable.textContent = "（属性対象レイヤなし）";
-  const attrCtx = { entries: attrEntries, select: panel.attrSelect };
 
   // "グループ/レイヤ名"（"//"は排他グループ）でグループセクション化する
   const grouped = new Map();
@@ -742,7 +770,7 @@ function renderLayerRows(entries, unsupported) {
   for (const { group, exclusive, members } of grouped.values()) {
     for (const e of members) e._siblings = members;
     if (!group) {
-      for (const e of members) panel.layers.append(buildLayerRow(e, false, null, attrCtx));
+      for (const e of members) panel.layers.append(buildLayerRow(e, false, null));
       continue;
     }
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
@@ -771,7 +799,7 @@ function renderLayerRows(entries, unsupported) {
     const children = document.createElement("div");
     children.className = "layer-group-children";
     children.hidden = collapsedGroups.has(key);
-    for (const e of members) children.append(buildLayerRow(e, exclusive, `grp-${key}`, attrCtx));
+    for (const e of members) children.append(buildLayerRow(e, exclusive, `grp-${key}`));
     section.append(head, children);
     panel.layers.append(section);
 
@@ -821,6 +849,8 @@ function renderLayerRows(entries, unsupported) {
   panel.unsupported.textContent = unsupported.length
     ? `未対応行: ${unsupported.map(i => i.type).join(", ")}（Cesium 版で対応）`
     : "";
+  // 開いている属性一覧ウィジェットの選択肢・行をレイヤ一覧へ追従させる
+  attrWidget.refresh();
 }
 
 // ---- 段階読み込み: 行ステータス・進捗・遅延ロード ----
@@ -951,7 +981,7 @@ async function loadProject(id) {
 // インスペクターの「登録」: 編集済み .kasc テキストを現在プロジェクトの
 // baseUrl で再描画する。プロジェクトファイル自体は書き換えない
 async function applyInspectorText(text) {
-  const baseUrl = lastBaseUrl || `/projects/${encodeURIComponent(currentProjectId || "default")}/`;
+  const baseUrl = lastBaseUrl || projectsBaseUrl(currentProjectId);
   await renderProject(currentProjectId || "default", baseUrl, parseKasc(text));
 }
 
@@ -1139,16 +1169,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   if (seq !== renderSeq) return;
 
   // cam/url 指定が無かった場合だけ、読み込んだレイヤの範囲へ合わせる
-  if (needExtentFit) {
-    let env = null;
-    for (const { item } of entries) {
-      if (!item._env) continue;
-      env = env
-        ? [Math.min(env[0], item._env.west), Math.min(env[1], item._env.south), Math.max(env[2], item._env.east), Math.max(env[3], item._env.north)]
-        : [item._env.west, item._env.south, item._env.east, item._env.north];
-    }
-    if (env) map.fitBounds([[env[1], env[0]], [env[3], env[2]]], { padding: [40, 40], maxZoom: 17 });
-  }
+  if (needExtentFit) fitDataExtent();
   updateMapAttribution();
   renderLayerRows(entries, unsupported);
 
@@ -1241,6 +1262,7 @@ function requeryViewportLayers(entries) {
       entry.layer?.clearLayers?.();
       entry.layer?.addData?.(geojson);
       syncDeckLayers(); // ドレープコピーのデータ更新
+      attrWidget.refresh(); // 表示範囲分の行が差し替わった場合に追従
     }).catch(err => console.warn("viewport requery 失敗:", entry.item.title, err));
   }
 }
@@ -1264,17 +1286,26 @@ map.on("zoomend", () => {
   for (const e of layerEntries) if (e.zoomRange) applyEntryVisibility(e);
 });
 
-// 地図クリック → deck(3dtiles)を pick して属性ポップアップ。
-// propagatedFrom のあるイベントはベクター地物由来（そちらのポップアップが
-// 先に開く）なので、二重表示を避けてこちらは処理しない
+// 地図クリック → deck(3dtiles)を pick して属性ポップアップ + 属性タブ表示。
+// ベクター地物(Leaflet interactive path)由来のクリックは地物側ハンドラで
+// 属性タブを更新済みのため、二重表示・クリアをしない。
+// (map の click には propagatedFrom が乗らないため DOM ターゲットで判定)
 map.on("click", e => {
-  if (!popupEnabled || !deckInst || e.propagatedFrom) return;
+  const target = e.originalEvent?.target;
+  if (target && target.closest && target.closest(".leaflet-interactive")) return;
+  if (!deckInst) { renderAttrContent(panel.attrContent, []); return; }
   try {
     const p = e.containerPoint;
     const info = deckInst.pickObject({ x: p.x, y: p.y, radius: 5 });
     const props = info?.object?.properties;
     if (props) {
-      L.popup({ maxHeight: 240 }).setLatLng(e.latlng).setContent(attrPopupHtml(props)).openOn(map);
+      const def = deckDefs.get(info?.layer?.id);
+      renderAttrContent(panel.attrContent, [{ title: def?.item?.title, entries: attrEntriesFromProps(props) }]);
+      if (popupEnabled) {
+        L.popup({ maxHeight: 240 }).setLatLng(e.latlng).setContent(attrPopupHtml(props)).openOn(map);
+      }
+    } else {
+      renderAttrContent(panel.attrContent, []);
     }
   } catch (_) {}
 });
@@ -1309,6 +1340,21 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   ctl.classList.toggle("collapsed");
   e.target.textContent = ctl.classList.contains("collapsed") ? "＋" : "−";
 });
+
+// ナビゲーションツールバー（OpenLayers/Cesium 版と同型の右上配置。
+// Leaflet は地図回転を持たないためコンパスは出さず ⌂ 全体表示と最小化のみ）
+{
+  document.querySelector("#nav-home")?.addEventListener("click", () => {
+    // データ範囲が取れない場合は初期ビュー（東京駅付近）へ戻す
+    if (!fitDataExtent({ animate: true })) map.flyTo([35.681, 139.767], 10);
+  });
+  document.querySelector("#navigation-toggle")?.addEventListener("click", e => {
+    const bar = e.currentTarget.closest(".navigation-toolbar");
+    const collapsed = bar.classList.toggle("collapsed");
+    e.currentTarget.textContent = collapsed ? "＋" : "−";
+    e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+  });
+}
 
 // 🌐 ボタン: 現在の表示位置を Google Earth (Web) で開く。
 // distance は実ビューポート高 + 垂直FOV60° 換算のカメラ距離
