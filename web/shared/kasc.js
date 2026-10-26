@@ -213,6 +213,20 @@ export function resolveKascUrl(url, projectBaseUrl) {
   return new URL(url, base).href;
 }
 
+// .kasc と同じフォルダの project.json から表示タイトルを取る。
+// geo_webview 等が .kasc+DATA/ と一緒に出力する {"title": ...} を使い、
+// 無ければ null（呼び出し側は .kasc ファイル名へフォールバックする）
+export async function fetchKascProjectTitle(baseUrl) {
+  try {
+    const res = await fetch(new URL("project.json", baseUrl).href, { cache: "no-store" });
+    if (!res.ok) return null;
+    const title = (await res.json())?.title;
+    return typeof title === "string" && title.trim() ? title.trim() : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // .kasc の URL をプロジェクトとして読み込む(?kasc= モード)。
 // DATA/ 等の相対参照は .kasc のある URL を基準に解決されるため、
 // projects/ 構造を持たない任意フォルダを静的配信するだけで動く。
@@ -242,6 +256,7 @@ async function loadKascUrl(kascParam) {
   if (!res.ok) throw new Error(`.kasc を読み込めません: ${kascUrl} (${res.status})`);
   const text = await res.text();
   const baseUrl = new URL("./", kascUrl).href;
+  const title = await fetchKascProjectTitle(baseUrl);
   const name = decodeURIComponent(
     new URL(kascUrl).pathname.split("/").pop() || "")
     .replace(/\.kasc$/i, "") || "kasc";
@@ -252,9 +267,9 @@ async function loadKascUrl(kascParam) {
   } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
   // 選択中プロジェクトとして一覧へ表示できるよう先頭に仮エントリを足す
   if (!manifest.some(e => (e.id || e) === name)) {
-    manifest.unshift({ id: name, title: name, external: true });
+    manifest.unshift({ id: name, title: title || name, external: true });
   }
-  return { id: name, manifest, baseUrl, doc: parseKasc(text), raw: text, kascUrl };
+  return { id: name, title: title || name, manifest, baseUrl, doc: parseKasc(text), raw: text, kascUrl };
 }
 
 // プロジェクト一覧と .kasc を読み込む。

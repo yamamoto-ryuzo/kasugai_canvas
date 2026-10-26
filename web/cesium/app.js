@@ -17,7 +17,7 @@ import {
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 
 await initI18n();
@@ -891,7 +891,8 @@ async function loadProjects() {
   // ?kasc= で直接読んだ .kasc はマニフェストに無いため、選択中として
   // 一覧へ表示できるよう先頭に仮エントリを足す
   if (currentKascUrl && !definitions.some(p => p.id === currentProjectId)) {
-    definitions.unshift({ id: currentProjectId, title: `${currentProjectId} (.kasc)`, external: true });
+    const kascTitle = await fetchKascProjectTitle(kascBaseUrl());
+    definitions.unshift({ id: currentProjectId, title: `${kascTitle || currentProjectId} (.kasc)`, external: true });
   }
   externalProjectIds.clear();
   projectDefinitions.clear();
