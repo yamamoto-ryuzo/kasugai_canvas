@@ -1,35 +1,41 @@
 #!/usr/bin/env python3
-"""KASUGAI Canvas CDN publisher.
+"""KASUGAI Canvas CDN publisher (kasugai-canvas-web).
 
-web/ の中身を CDN リポジトリ(kasugai-canvas-web)へバージョン付きで公開する。
-エンジンはルート絶対参照(/shared/ 等)を使うため、サブパス配信
-(<repo>/v<version>/leaflet/ 等)では壊れる。本スクリプトはコピー時に
-既知のトップレベル参照を相対パスへ書き換え、各バージョンを自己完結にする。
+kasugai_canvas の web/ を CDN リポジトリ(kasugai-canvas-web)の
+ステージへ同期する。web/ は相対パス構成済みのため単純コピーでよい
+(旧来のルート絶対参照書き換えは不要になった)。
 
-出力レイアウト:
-    <cdn>/v<YYYYMMDD[-N]>/   web/ の中身(書換済み)
-        version.txt          semver(Cargo.toml) + 公開日時
-    <cdn>/index.html         バージョン一覧(最新が先頭)
-    <cdn>/latest.txt         最新バージョンのディレクトリ名
+レイアウト:
+    <cdn>/unstable/     develop の web/ 同期先(version.json を付与)
+    <cdn>/stable/       検証済み unstable/ の格上げ先(再ビルドしない)
+    <cdn>/latest/       stable/ へのリダイレクト(静的・更新不要)
+    <cdn>/index.html    stable/ へのリダイレクト(静的・更新不要)
+    <cdn>/channels.json 各ステージの現在バージョン
 
 usage:
-    python tools/publish_cdn.py <cdn_repo_dir> [--date YYYYMMDD]
+    python tools/publish_cdn.py [cdn_repo_dir] --channel unstable
+    python tools/publish_cdn.py [cdn_repo_dir] --channel stable
+    python tools/publish_cdn.py [cdn_repo_dir] --channel unstable --commit --push
+
+    cdn_repo_dir 省略時は <kasugai_canvas>/../kasugai-canvas-web
 """
 
-import datetime
+import argparse
+import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB_DIR = os.path.join(REPO_DIR, 'web')
 CARGO_TOML = os.path.join(REPO_DIR, 'server', 'Cargo.toml')
+DEFAULT_CDN_DIR = os.path.join(os.path.dirname(REPO_DIR),
+                               'kasugai-canvas-web')
+SOURCE_REPO = 'yamamoto-ryuzo/kasugai_canvas'
 
-# 書き換え対象 = web/ のトップレベル実在エントリ(/api/, /health は残す)
-def _tops(web_dir):
-    return [n for n in os.listdir(web_dir)
-            if n not in ('api', 'health') and not n.startswith('.')]
+CHANNELS = ('unstable', 'stable')
 
 
 def _cargo_version():
@@ -43,132 +49,115 @@ def _cargo_version():
     return 'unknown'
 
 
-def _rewrite_file(path, ver_root, tops_re, is_html):
-    """ファイル内の "/<top>/..." を、そのファイル位置からの相対パスに直す。
-
-    文字列リテラルのみ対象(" ' ` の直後)。正規表現リテラル(/"/g 等)や
-    url(...) は触らない — 開き括弧は正規表現リテラルと区別不能のため除外。
-    """
+def _read_version_json(path):
     try:
         with open(path, encoding='utf-8') as f:
-            text = f.read()
-    except (UnicodeDecodeError, OSError):
-        return 0
-    fdir = os.path.dirname(path)
-    count = 0
-
-    def repl(m):
-        nonlocal count
-        quote, relp = m.group(1), m.group(2)
-        target = os.path.join(ver_root, relp.lstrip('/'))
-        rel = os.path.relpath(target, fdir).replace(os.sep, '/')
-        count += 1
-        return quote + rel
-
-    out = tops_re.sub(repl, text)
-    if is_html:
-        # ルート参照("/?engine=" や "/")をバージョンルートへ。
-        # 属性コンテキスト(href= src= 等)のみ対象として
-        # インラインJS内の正規表現リテラル誤爆を防ぐ
-        root_rel = os.path.relpath(ver_root, fdir).replace(os.sep, '/')
-        out2 = re.sub(
-            r'(href|src|action|poster)=(["\'])/(?=[?\'"])',
-            lambda m: m.group(1) + '=' + m.group(2) + root_rel + '/', out)
-        if out2 != out:
-            count += 1
-        out = out2
-    if count:
-        with open(path, 'w', encoding='utf-8', newline='') as f:
-            f.write(out)
-    return count
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
-def publish(cdn_dir, date_str=None):
-    today = date_str or datetime.date.today().strftime('%Y%m%d')
-    ver_name = 'v' + today
-    n = 2
-    while os.path.isdir(os.path.join(cdn_dir, ver_name)):
-        ver_name = 'v{0}-{1}'.format(today, n)
-        n += 1
-    ver_dir = os.path.join(cdn_dir, ver_name)
+def _write_version_json(stage_dir, data):
+    path = os.path.join(stage_dir, 'version.json')
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
 
-    tops = _tops(WEB_DIR)
-    shutil.copytree(WEB_DIR, ver_dir)
 
-    # "/<top>/" または "/<top>" 自体を相対へ。文字列開始(" ' `)の直後のみ。
-    # 対象トップ名の後は / ・終端・区切りのみ許可
-    tops_re = re.compile(
-        r'(["\'`])/(' + '|'.join(re.escape(t) for t in tops) +
-        r')((?:/[^"\'`\)\s]*)?)')
+def _replace_dir(src, dst):
+    if os.path.isdir(dst):
+        shutil.rmtree(dst)
+    shutil.copytree(src, dst)
 
-    n_files = n_refs = 0
-    for root, _dirs, files in os.walk(ver_dir):
-        for name in files:
-            if name.lower().endswith(('.js', '.html', '.css')):
-                p = os.path.join(root, name)
-                c = _rewrite_file(p, ver_dir, tops_re,
-                                  name.lower().endswith('.html'))
-                if c:
-                    n_files += 1
-                    n_refs += c
 
-    semver = _cargo_version()
-    with open(os.path.join(ver_dir, 'version.txt'), 'w',
-              encoding='utf-8') as f:
-        f.write('app_version={0}\npublished={1}\n'.format(
-            semver, datetime.datetime.now().isoformat(timespec='seconds')))
+def _update_channels(cdn_dir, channel, version):
+    path = os.path.join(cdn_dir, 'channels.json')
+    data = _read_version_json(path)  # 同じJSON読み出しで流用
+    data[channel] = version
+    data.setdefault('default', 'stable')
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write('\n')
 
-    # バージョン一覧(ルート index.html + latest.txt)
-    versions = sorted(
-        (d for d in os.listdir(cdn_dir)
-         if d.startswith('v') and os.path.isdir(os.path.join(cdn_dir, d))),
-        reverse=True)
-    meta = {}
-    for d in versions:
-        try:
-            for line in open(os.path.join(cdn_dir, d, 'version.txt'),
-                             encoding='utf-8'):
-                if line.startswith('app_version='):
-                    meta[d] = line.split('=', 1)[1].strip()
-        except OSError:
-            pass
-    rows = ''.join(
-        '<li><a href="{0}/">{0}</a> <small>(app {1})</small></li>'.format(
-            d, meta.get(d, ''))
-        for d in versions)
-    with open(os.path.join(cdn_dir, 'index.html'), 'w',
-              encoding='utf-8') as f:
-        f.write('<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">'
-                '<title>KASUGAI Canvas CDN</title></head><body>'
-                '<h1>KASUGAI Canvas CDN</h1>'
-                '<p>各バージョンは <code>v&lt;date&gt;/&lt;engine&gt;/</code>'
-                ' 形式で配信(自己完結・相対参照済み)。'
-                '<code>&lt;engine&gt;/?kasc=&lt;url&gt;</code> で任意 .kasc、'
-                '<code>&lt;engine&gt;/?kasc=local</code> でローカルフォルダ。</p>'
-                '<ul>' + rows + '</ul></body></html>')
-    if versions:
-        with open(os.path.join(cdn_dir, 'latest.txt'), 'w',
-                  encoding='utf-8') as f:
-            f.write(versions[0] + '\n')
-        # 安定URL用 latest/ 複製(ピン留めしたくない向け。
-        # 納品は不変の v<date>/ を指すのが本来の使い方)
-        latest_dir = os.path.join(cdn_dir, 'latest')
-        shutil.rmtree(latest_dir, ignore_errors=True)
-        shutil.copytree(ver_dir, latest_dir)
-    return ver_name, n_files, n_refs
+
+def _git(cdn_dir, *args, check=True):
+    return subprocess.run(['git', '-C', cdn_dir] + list(args),
+                          check=check, capture_output=True, text=True,
+                          encoding='utf-8', errors='replace')
+
+
+def _commit_and_push(cdn_dir, message, push):
+    _git(cdn_dir, 'add', '-A')
+    diff = _git(cdn_dir, 'diff', '--cached', '--quiet', check=False)
+    if diff.returncode == 0:
+        print('no changes to commit')
+        return
+    _git(cdn_dir, 'commit', '-m', message)
+    print('committed: {0}'.format(message))
+    if push:
+        _git(cdn_dir, 'push')
+        print('pushed')
+
+
+def sync_unstable(cdn_dir):
+    stage = os.path.join(cdn_dir, 'unstable')
+    _replace_dir(WEB_DIR, stage)
+    version = _cargo_version()
+    _write_version_json(stage, {
+        'version': version,
+        'channel': 'unstable',
+        'source_repo': SOURCE_REPO,
+        'source_branch': 'develop',
+    })
+    _update_channels(cdn_dir, 'unstable', version)
+    return version, 'Sync web/ from kasugai_canvas develop (v{0})'.format(version)
+
+
+def sync_stable(cdn_dir):
+    unstable = os.path.join(cdn_dir, 'unstable')
+    if not os.path.isdir(unstable):
+        raise SystemExit('error: <cdn>/unstable が無いため格上げできません。'
+                         '先に --channel unstable を実行してください')
+    stage = os.path.join(cdn_dir, 'stable')
+    _replace_dir(unstable, stage)
+    info = _read_version_json(os.path.join(stage, 'version.json'))
+    info.pop('note', None)
+    info['channel'] = 'stable'
+    version = info.get('version', _cargo_version())
+    info['version'] = version
+    _write_version_json(stage, info)
+    _update_channels(cdn_dir, 'stable', version)
+    return version, 'Promote unstable -> stable (v{0})'.format(version)
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(__doc__)
-        return 1
-    cdn_dir = sys.argv[1]
-    date_str = None
-    if '--date' in sys.argv:
-        date_str = sys.argv[sys.argv.index('--date') + 1]
-    os.makedirs(cdn_dir, exist_ok=True)
-    name, nf, nr = publish(cdn_dir, date_str)
-    print('published {0} ({1} files, {2} refs rewritten)'.format(name, nf, nr))
+    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p.add_argument('cdn_dir', nargs='?', default=DEFAULT_CDN_DIR,
+                   help='kasugai-canvas-web リポジトリのパス'
+                        ' (default: %(default)s)')
+    p.add_argument('--channel', required=True, choices=CHANNELS,
+                   help='unstable=develop web/ を同期 / '
+                        'stable=検証済み unstable/ を格上げ')
+    p.add_argument('--commit', action='store_true',
+                   help='CDN リポジトリで変更をコミットする')
+    p.add_argument('--push', action='store_true',
+                   help='コミット後に push する(--commit 必須)')
+    args = p.parse_args()
+
+    cdn_dir = os.path.abspath(args.cdn_dir)
+    if not os.path.isdir(cdn_dir):
+        p.error('cdn_dir が存在しません: {0}'.format(cdn_dir))
+    if args.push and not args.commit:
+        p.error('--push は --commit と併用してください')
+
+    if args.channel == 'unstable':
+        version, message = sync_unstable(cdn_dir)
+    else:
+        version, message = sync_stable(cdn_dir)
+    print('{0}: v{1} -> {2}'.format(args.channel, version, cdn_dir))
+
+    if args.commit:
+        _commit_and_push(cdn_dir, message, args.push)
     return 0
 
 

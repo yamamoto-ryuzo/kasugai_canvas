@@ -34,6 +34,16 @@
 - **リリースの流れ**: `develop` で `-dev` 接尾辞を除去 → `python run.py -B` → コミット → `develop` を `main` へマージして両方プッシュ → `develop` は次の `X.Y.Z-dev` へ更新して継続
 - **注意**: 開発版 exe（`target/debug` や `target/release`）が `develop` の `latest-dev.json` より古いバージョンだと、起動時の自動更新で exe+web が開発版配布物に差し替えられる（公開チャンネルでの既知事故と同型）。開発中は `Cargo.toml` を `latest-dev.json` 以上に保つか、設定の自動更新をオフにする
 
+## CDN ホスト版（kasugai-canvas-web）の同期
+
+- **配信先**: `yamamoto-ryuzo/kasugai-canvas-web`（GitHub Pages）。`stable/`（既定・リリース版）/ `unstable/`（develop 追従）/ `latest/`（stable へのリダイレクト・静的で更新不要）/ `channels.json`（各ステージのバージョン表）
+- **正本は本リポジトリの `web/`**。CDN リポジトリ側は発行物のみで直接編集しない。`web/` は相対パス構成済みのため同期は単純コピーでよい
+- **同期は `python tools/publish_cdn.py` で行う**（手コピー・CDN 側の手編集はしない）:
+  - `python tools/publish_cdn.py --channel unstable` — `web/` → `unstable/` へ同期し `version.json`・`channels.json` を更新。`--commit` / `--push` でコミット・push まで実行
+  - `python tools/publish_cdn.py --channel stable` — 検証済み `unstable/` の中身を `stable/` へそのまま格上げ（再ビルドしない）。先に unstable 同期しておくこと
+  - CDN リポジトリのパスは省略時 `<kasugai_canvas>/../kasugai-canvas-web`（`C:\devin` ワークスペースなら省略可）
+- **運用**: `web/` に配信したい変更が入ったら unstable 同期、リリース時（`develop` → `main` マージのタイミング）に stable 格上げ。`latest/` とルート `index.html` はリダイレクト固定で触らない
+
 ## 動作確認（Playwrigh：必須）
 
 - **コードを修正したら必ず動作確認を行う**。構文チェック（`node --check web/cesium/app.js`・`cargo check`）だけで完了とみなさない
