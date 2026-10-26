@@ -201,6 +201,14 @@ export function fillThemeSelect(select, themes, promptText = "テーマを選択
   select.hidden = false;
 }
 
+// projects/ 静的配信への基準パス。各エンジンのページは <root>/<stage>/<engine>/
+// にあるため ../projects でルート配信(localhost)・ステージ配信(CDN)の両方を
+// カバーする。baseUrl は絶対 URL で返し、呼び出し側の URL 解決を統一する
+export const PROJECTS_MANIFEST_URL = "../projects/projects.json";
+export function projectsBaseUrl(id = "default") {
+  return new URL(`../projects/${encodeURIComponent(id || "default")}/`, location.href).href;
+}
+
 // .kasc 内の参照を絶対 URL へ解決する。
 // 相対パスは projectBaseUrl(/projects/<id>/ または ?kasc= 用の絶対URL) 基準。
 // `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる
@@ -209,7 +217,7 @@ export function resolveKascUrl(url, projectBaseUrl) {
   if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url; // http/data/blob/localfs 等は素通し
   const base = /^[a-z][a-z0-9+.-]*:\/\//i.test(String(projectBaseUrl || ""))
     ? projectBaseUrl
-    : location.origin + projectBaseUrl;
+    : new URL(String(projectBaseUrl || "./"), location.href).href;
   return new URL(url, base).href;
 }
 
@@ -262,7 +270,7 @@ async function loadKascUrl(kascParam) {
     .replace(/\.kasc$/i, "") || "kasc";
   let manifest = [];
   try {
-    const res2 = await fetch("/projects/projects.json", { cache: "no-store" });
+    const res2 = await fetch(PROJECTS_MANIFEST_URL, { cache: "no-store" });
     if (res2.ok) manifest = await res2.json();
   } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
   // 選択中プロジェクトとして一覧へ表示できるよう先頭に仮エントリを足す
@@ -281,13 +289,13 @@ export async function loadKascProject(projectId) {
 
   let manifest = [];
   try {
-    const res = await fetch("/projects/projects.json", { cache: "no-store" });
+    const res = await fetch(PROJECTS_MANIFEST_URL, { cache: "no-store" });
     if (res.ok) manifest = await res.json();
   } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
 
   const requested = projectId || params.get("project");
   const id = requested || (manifest[0] && (manifest[0].id || manifest[0])) || "default";
-  const baseUrl = `/projects/${encodeURIComponent(id)}/`;
+  const baseUrl = projectsBaseUrl(id);
   const res = await fetch(`${baseUrl}kasugai_canvas.kasc`, { cache: "no-store" });
   if (!res.ok) throw new Error(`.kasc を読み込めません: ${baseUrl}kasugai_canvas.kasc (${res.status})`);
   const text = await res.text();

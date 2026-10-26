@@ -18,7 +18,7 @@ import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayers
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, PROJECTS_MANIFEST_URL } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 
 await initI18n();
@@ -810,7 +810,7 @@ function updateAppPanelVisibility() {
 
 
 function getProjectBaseUrl() {
-  return `/projects/${encodeURIComponent(currentProjectId || "default")}/`;
+  return projectsBaseUrl(currentProjectId);
 }
 
 // 共有URL等のプロジェクト指定部分。?kasc= モードでは project= ではなく
@@ -889,7 +889,7 @@ function resolveProjectUrl(url) {
 async function loadProjects() {
   let definitions = [];
   try {
-    const response = await fetch("/projects/projects.json", { cache: "no-store" });
+    const response = await fetch(PROJECTS_MANIFEST_URL, { cache: "no-store" });
     if (response.ok) definitions = await response.json();
   } catch {}
   if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
@@ -923,7 +923,7 @@ async function loadInspectorConfig() {
   try {
     const projectId = currentProjectId || "default";
     const staticUrl = currentKascUrl
-      || `/projects/${encodeURIComponent(projectId)}/kasugai_canvas.kasc`;
+      || `${projectsBaseUrl(projectId)}kasugai_canvas.kasc`;
     let text = "";
     try {
       const response = await fetch(staticUrl, { cache: "no-store" });
@@ -6425,7 +6425,7 @@ function setupEvents() {
           if (!entry.name?.endsWith(".geojson")) continue;
           const title = entry.name.replace(/\.geojson$/, "");
           if (existing.has(title)) continue;
-          const url = `projects/${encodeURIComponent(projectId)}/DATA/${entry.name.split("/").map(encodeURIComponent).join("/")}`;
+          const url = `${projectsBaseUrl(projectId)}DATA/${entry.name.split("/").map(encodeURIComponent).join("/")}`;
           const path = { title, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "server", name: entry.name } };
           try { applyFlySettingsFromGeoJson(await (await fetch(url)).text(), path); } catch (e) { /* 既定値のまま */ }
           flyPaths.push(path);
