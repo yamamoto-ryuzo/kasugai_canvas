@@ -47,7 +47,7 @@ SECRET_PASS = "KASUGAI_AUTH_PASS"
 def _wrangler(*args):
     """リポジトリルートで npx wrangler を実行する（functions/ 自動検出のため）。"""
     cmd = "npx wrangler " + " ".join(args)
-    return subprocess.run(
+    return subprocess.run(  # nosec B602
         cmd, cwd=ROOT, shell=True,
         capture_output=True, text=True,
         encoding="utf-8", errors="replace",

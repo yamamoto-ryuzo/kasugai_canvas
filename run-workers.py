@@ -46,7 +46,7 @@ SECRET_PASS = "KASUGAI_AUTH_PASS"
 def _wrangler(*args, capture=True):
     """workers/ で npx wrangler を実行する。"""
     cmd = "npx wrangler " + " ".join(args)
-    return subprocess.run(
+    return subprocess.run(  # nosec B602
         cmd, cwd=WORKERS_DIR, shell=True,
         capture_output=capture, text=True,
         encoding="utf-8", errors="replace",
@@ -56,7 +56,7 @@ def _wrangler(*args, capture=True):
 def _wrangler_live(*args):
     """対話が必要な wrangler コマンドを標準入出力を引き継いで実行する。"""
     cmd = "npx wrangler " + " ".join(args)
-    return subprocess.run(cmd, cwd=WORKERS_DIR, shell=True)
+    return subprocess.run(cmd, cwd=WORKERS_DIR, shell=True)  # nosec B602
 
 
 def check_login() -> None:

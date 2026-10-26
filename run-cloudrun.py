@@ -108,11 +108,11 @@ def _gcloud(*args, input_text=None, stream=False):
     # --format=value(...) のような引数をそれぞれの文法で引用する
     cmd = subprocess.list2cmdline(argv) if os.name == "nt" else shlex.join(argv)
     if stream:
-        return subprocess.run(
+        return subprocess.run(  # nosec B602
             cmd, cwd=ROOT, shell=True, input=input_text,
             text=True, encoding="utf-8", errors="replace",
         )
-    return subprocess.run(
+    return subprocess.run(  # nosec B602
         cmd, cwd=ROOT, shell=True, input=input_text,
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
