@@ -1474,6 +1474,7 @@ function renderPresets() {
       button.type = "button";
       button.textContent = preset.title;
       button.dataset.preset = String(index);
+      button.classList.add("preset-button");
       if (preset.bookmark) button.classList.add("bm-btn");
       button.addEventListener("click", () => preset._extent ? flyToExtent(preset) : flyTo(preset));
       container.append(button);
