@@ -111,7 +111,7 @@ def sync_channel(cdn_dir, channel):
         'version': version,
         'channel': channel,
         'source_repo': SOURCE_REPO,
-        'source_branch': 'develop',
+        'source_branch': 'main',
     })
     _update_channels(cdn_dir, channel, version)
     return version, 'Sync web/ to {0} (v{1})'.format(channel, version)

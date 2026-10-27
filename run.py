@@ -42,22 +42,22 @@ def _get_cargo_version() -> str:
 
 
 def _channel_info(cargo_version: str | None = None) -> dict:
-    """バージョンから自動更新チャンネルと配布物のファイル名を決定する。
+    """バージョンから配布物のファイル名等を決定する。
 
-    公開チャンネル: "X.Y.Z"     → main ブランチの download/latest.json・kasugai_canvas.zip
-    開発チャンネル: "X.Y.Z-*"   → develop ブランチの download/latest-dev.json・kasugai_canvas_dev.zip
-    server が参照する URL も同じルール（バージョンの接尾辞）で切り替わる。
+    自動更新は単一チャンネル(main ブランチの download/latest.json・kasugai_canvas.zip)。
+    "X.Y.Z-*" の開発版バージョンは配布ビルド(-B/--sync の latest.json 書き込み)不可で、
+    dev フラグはその判定と CHANGELOG 照合のスキップに使う。
     """
     version = cargo_version or _get_cargo_version()
     dev = "-" in version
     return {
         "version": version,
         "dev": dev,
-        "branch": "develop" if dev else "main",
-        "latest_name": "latest-dev.json" if dev else "latest.json",
-        "zip_name": "kasugai_canvas_dev.zip" if dev else "kasugai_canvas.zip",
-        "installer_name": "kasugai_canvas_setup_dev.exe" if dev else "kasugai_canvas_setup.exe",
-        "installer_zip_name": "kasugai_canvas_setup_dev.zip" if dev else "kasugai_canvas_setup.zip",
+        "branch": "main",
+        "latest_name": "latest.json",
+        "zip_name": "kasugai_canvas.zip",
+        "installer_name": "kasugai_canvas_setup.exe",
+        "installer_zip_name": "kasugai_canvas_setup.zip",
     }
 
 
@@ -111,7 +111,8 @@ def check_versions(check_latest: bool = True) -> None:
         files[str(page.relative_to(ROOT))] = badge_match.group(1) if badge_match else None
         expected[str(page.relative_to(ROOT))] = cargo_version
 
-    if check_latest:
+    # 開発版バージョンでは latest.json は書き換えない(配布不可)ため照合もスキップする
+    if check_latest and not channel["dev"]:
         latest_json_path = DOWNLOAD_DIR / channel["latest_name"]
         if latest_json_path.exists():
             latest_content = latest_json_path.read_text(encoding="utf-8")
@@ -144,6 +145,12 @@ def sync_versions(write_latest: bool = True) -> None:
     cargo_version = _get_cargo_version()
     channel = _channel_info(cargo_version)
     numeric_version = cargo_version.split("-")[0]
+
+    if write_latest and channel["dev"]:
+        raise SystemExit(
+            f"開発版バージョン {cargo_version} では latest.json を更新できません。"
+            "Cargo.toml のバージョンから -dev 接尾辞を除去してから実行してください。"
+        )
 
     if write_latest:
         latest_json = {
@@ -335,13 +342,18 @@ def build_installer(channel: dict) -> None:
 def build_release() -> None:
     """リリースビルド、配布 ZIP、NSIS インストーラーを作成する。
 
-    バージョンが "X.Y.Z-*" なら開発チャンネル(kasugai_canvas_dev.zip / latest-dev.json)、
-    "X.Y.Z" なら公開チャンネル(kasugai_canvas.zip / latest.json) へ出力する。
+    配布は単一チャンネル(kasugai_canvas.zip / latest.json)。開発版バージョン
+    ("X.Y.Z-*")では実行不可。
     """
-    _kill_existing_kasugai()
     cargo_version = _get_cargo_version()
     channel = _channel_info(cargo_version)
-    print(f"更新チャンネル: {'開発(develop)' if channel['dev'] else '公開(main)'}", flush=True)
+    if channel["dev"]:
+        raise SystemExit(
+            f"開発版バージョン {cargo_version} では配布ビルドできません。"
+            "Cargo.toml のバージョンから -dev 接尾辞を除去してから実行してください。"
+        )
+    _kill_existing_kasugai()
+    print("更新チャンネル: 公開(main)", flush=True)
     sync_versions(write_latest=False)
     check_versions(check_latest=False)
     subprocess.run(["cargo", "build", "--release"], cwd=SERVER_DIR, check=True)
@@ -401,13 +413,11 @@ def run_release() -> None:
 def publish_release() -> None:
     """リリースビルド、コミット、プッシュまで行う。
 
-    自動更新は main ブランチ(公開)・develop ブランチ(開発)の latest*.json / ZIP を
-    バージョン接尾辞に応じて参照するため、タグは作成しない。
+    自動更新は main ブランチの latest.json / ZIP を参照するため、タグは作成しない。
     """
     build_release()
     cargo_version = _get_cargo_version()
-    channel = _channel_info(cargo_version)
-    message = f"{cargo_version} {'開発版ビルド' if channel['dev'] else 'リリース'}"
+    message = f"{cargo_version} リリース"
     subprocess.run(["git", "add", "-A"], cwd=ROOT, check=True)
     subprocess.run(["git", "commit", "-m", message], cwd=ROOT, check=True)
     subprocess.run(["git", "push"], cwd=ROOT, check=True)
@@ -441,7 +451,7 @@ def main() -> None:
         "-B",
         "--build",
         action="store_true",
-        help="リリースビルドを行い配布 ZIP を作成（公開版=kasugai_canvas.zip、開発版=kasugai_canvas_dev.zip）",
+        help="リリースビルドを行い配布 ZIP を作成（kasugai_canvas.zip。-dev 付きバージョンでは実行不可）",
     )
     group.add_argument(
         "--release",
@@ -479,7 +489,7 @@ def main() -> None:
 
     if args.sync:
         sync_versions()
-        # latest*.json だけを新バージョンへ更新して配布 ZIP が古いままだと、
+        # latest.json だけを新バージョンへ更新して配布 ZIP が古いままだと、
         # 公開時に全ユーザーの自動更新が無限ループする（4.20.0 で発生）。
         # --sync でも ZIP 内 exe の /health バージョンを検証してズレを止める
         channel = _channel_info()

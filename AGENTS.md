@@ -26,23 +26,21 @@
 
 ## ブランチと自動更新チャンネル
 
-- **`main` = 公開用**: 公開リリースのみを置く。GitHub Pages（`main` ルートが公開元）と公開チャンネルの自動更新（`main/download/latest.json`・`main/download/kasugai_canvas.zip`）が参照する
-- **`develop` = 開発用**: 日常の開発はこちら。開発チャンネルの自動更新は `develop/download/latest-dev.json`・`develop/download/kasugai_canvas_dev.zip` を参照する
-- **チャンネルはバージョン接尾辞で決まる（exe に焼き付き・設定不要）**: `X.Y.Z` は公開チャンネル、`X.Y.Z-dev`・`X.Y.Z-dev.N` は開発チャンネルを参照する。開発版 exe が公開最新版へ巻き戻る事故は構造上起きない（`server/src/main.rs` の `update_channel()`）
-- **開発版の採番ルール**: `-dev` → `-dev.1` → `-dev.2` のように**ドット区切り**で上げること。`-dev1` のような接尾辞はバージョン比較で数値化できず増分と認識されない（自動更新が発火しない）
-- **開発版の配布**: `develop` で `python run.py -B` を実行すると開発チャンネル用配布物（`kasugai_canvas_dev.zip`・`kasugai_canvas_setup_dev.exe`・`latest-dev.json`）が生成される。コミット＆プッシュで開発機の自動更新が追従する。`CHANGELOG.md` はリリースのみ記録するため、開発版の整合チェック対象外
-- **リリースの流れ**: `develop` で `-dev` 接尾辞を除去 → `python run.py -B` → コミット → `develop` を `main` へマージして両方プッシュ → `develop` は次の `X.Y.Z-dev` へ更新して継続
-- **注意**: 開発版 exe（`target/debug` や `target/release`）が `develop` の `latest-dev.json` より古いバージョンだと、起動時の自動更新で exe+web が開発版配布物に差し替えられる（公開チャンネルでの既知事故と同型）。開発中は `Cargo.toml` を `latest-dev.json` 以上に保つか、設定の自動更新をオフにする
+- **`main` のみで運用**（develop ブランチは廃止）。日常の開発も main で行い、GitHub Pages（`main` ルートが公開元）と自動更新（`main/download/latest.json`・`main/download/kasugai_canvas.zip`）も同じブランチを参照する
+- **自動更新は単一チャンネル**: `server/src/main.rs` は全バージョンが `main/download/latest.json` を参照する。`X.Y.Z-dev[.N]` の開発版 exe も同じ `latest.json` を見るため、**最新リリースより古い dev ビルドは起動時の自動更新でリリース版へ差し替えられる**（開発中は `Cargo.toml` を `latest.json` 以上に保つか、設定の自動更新をオフにする）
+- **開発中の採番**: リリース版と混同しないよう `Cargo.toml` は `X.Y.Z-dev[.N]` にして開発してよい。採番は `-dev` → `-dev.1` → `-dev.2` のように**ドット区切り**で上げること（`-dev1` はバージョン比較で増分と認識されない）
+- **開発版バージョンでは配布物を作れない**: `-dev` 付きバージョンで `python run.py -B`（および `--sync` の latest.json 書き込み）は拒否される。`CHANGELOG.md` はリリースのみ記録するため、開発版の整合チェック対象外
+- **リリースの流れ**: `main` で `-dev` 接尾辞を除去 → `python run.py -B` → コミット＆プッシュ → 次の開発は `X.(Y+1).0-dev` へ更新して継続
 
 ## CDN ホスト版（kasugai-canvas-web）の同期
 
-- **配信先**: `yamamoto-ryuzo/kasugai-canvas-web`（GitHub Pages）。`stable/`（既定・リリース版）/ `unstable/`（develop 追従）/ `latest/`（stable へのリダイレクト・静的で更新不要）/ `channels.json`（各ステージのバージョン表）
+- **配信先**: `yamamoto-ryuzo/kasugai-canvas-web`（GitHub Pages）。`stable/`（既定・リリース版）/ `unstable/`（main の最新 `web/` 追従）/ `latest/`（stable へのリダイレクト・静的で更新不要）/ `channels.json`（各ステージのバージョン表）
 - **正本は本リポジトリの `web/`**。CDN リポジトリ側は発行物のみで直接編集しない。`web/` は相対パス構成済みのため同期は単純コピーでよい
 - **同期は `python tools/publish_cdn.py` で行う**（手コピー・CDN 側の手編集はしない）。`--channel` はコピー先ステージを選ぶだけで、どちらも `web/` を直接同期する（stable への格上げに unstable 同期は不要）:
   - `python tools/publish_cdn.py --channel unstable` — `web/` → `unstable/` へ同期し `version.json`・`channels.json` を更新。`--commit` / `--push` でコミット・push まで実行
   - `python tools/publish_cdn.py --channel stable` — `web/` → `stable/` へ直接同期（unstable を経由しない）
   - CDN リポジトリのパスは省略時 `<kasugai_canvas>/../kasugai-canvas-web`（`C:\devin` ワークスペースなら省略可）
-- **運用**: `web/` に配信したい変更が入ったら unstable 同期、リリース時（`develop` → `main` マージのタイミング）に stable 同期。`latest/` とルート `index.html` はリダイレクト固定で触らない
+- **運用**: `web/` に配信したい変更が入ったら unstable 同期、リリース時（`-B` で配布物を作るタイミング）に stable 同期。`latest/` とルート `index.html` はリダイレクト固定で触らない
 
 ## 動作確認（Playwrigh：必須）
 

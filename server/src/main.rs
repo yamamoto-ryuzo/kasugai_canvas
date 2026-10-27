@@ -24,28 +24,17 @@ const FETCH_CONFIG_FILE_NAME: &str = "kasugai_canvas.fetch.json";
 const EXTERNAL_PROJECTS_FILE_NAME: &str = "kasugai_canvas.projects.json";
 const KASC_FILE_NAME: &str = "kasugai_canvas.kasc";
 const GROUP_MANIFEST_FILE_NAME: &str = "projects.json";
-// 自動更新の参照先。公開チャンネル(main ブランチ)と開発チャンネル(develop ブランチ)を
-// バージョンのプレリリース接尾辞で切り替える: "X.Y.Z" は公開、"X.Y.Z-dev[.N]" は開発。
-// exe に焼き付くため、開発版が公開最新版へ誤更新されることは構造上あり得ない
+// 自動更新の参照先。単一チャンネル(main ブランチ)を全バージョンが参照する。
+// 開発版(-dev 接尾辞)も同じ latest.json を見るため、最新リリースより古い dev ビルドは
+// リリース版へ自動更新される
 const UPDATE_REPOSITORY_BASE: &str = "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas";
 
-// (参照ブランチ, latest ファイル名, 配布 ZIP ファイル名) を返す
-fn update_channel() -> (&'static str, &'static str, &'static str) {
-    if env!("CARGO_PKG_VERSION").contains('-') {
-        ("develop", "latest-dev.json", "kasugai_canvas_dev.zip")
-    } else {
-        ("main", "latest.json", "kasugai_canvas.zip")
-    }
-}
-
 fn latest_json_url() -> String {
-    let (branch, latest_name, _) = update_channel();
-    format!("{UPDATE_REPOSITORY_BASE}/{branch}/download/{latest_name}")
+    format!("{UPDATE_REPOSITORY_BASE}/main/download/latest.json")
 }
 
 fn repository_download_url() -> String {
-    let (branch, _, zip_name) = update_channel();
-    format!("{UPDATE_REPOSITORY_BASE}/{branch}/download/{zip_name}")
+    format!("{UPDATE_REPOSITORY_BASE}/main/download/kasugai_canvas.zip")
 }
 
 #[derive(Clone, Serialize, Deserialize)]

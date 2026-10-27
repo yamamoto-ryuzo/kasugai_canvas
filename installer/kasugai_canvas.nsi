@@ -20,7 +20,7 @@ Name "${APP_NAME}"
 ; icon.ico は 16x16 から 256x256 までのマルチサイズ ICO を含む
 !define MUI_ICON "icon.ico"
 !define MUI_UNICON "icon.ico"
-; SETUP_OUT: run.py /D override (dev channel = kasugai_canvas_setup_dev.exe)
+; SETUP_OUT: run.py /D override
 !ifndef SETUP_OUT
   !define SETUP_OUT "kasugai_canvas_setup.exe"
 !endif
