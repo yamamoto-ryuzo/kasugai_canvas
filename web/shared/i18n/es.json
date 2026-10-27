@@ -145,6 +145,7 @@
   "inspector.dataDirButton": "Seleccionar carpeta",
   "inspector.dataDirNone": "No seleccionado",
   "inspector.status.noKasc": "No hay ningún .kasc registrado en KV.",
+  "inspector.status.notFound": "No se encontró el .kasc del proyecto especificado.",
   "inspector.status.loaded": "Ajustes cargados.",
   "inspector.status.loadFailed": "No se pudieron cargar los ajustes: {error}",
   "inspector.status.saving": "Guardando ajustes...",

@@ -145,6 +145,7 @@
   "inspector.dataDirButton": "选择文件夹",
   "inspector.dataDirNone": "未选择",
   "inspector.status.noKasc": "KV 中未注册 .kasc。",
+  "inspector.status.notFound": "未找到指定项目的 .kasc。",
   "inspector.status.loaded": "已加载设置。",
   "inspector.status.loadFailed": "无法加载设置：{error}",
   "inspector.status.saving": "正在保存设置...",

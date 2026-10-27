@@ -930,11 +930,19 @@ async function loadInspectorConfig() {
       if (response.ok) text = await response.text();
     } catch {}
     if (!text) {
+      // 明示指定されたプロジェクト/?kasc= の .kasc が無いときに内蔵デフォルトへ
+      // 逃げると、別プロジェクト(東京都/千代田区サンプル)が表示されて誤解を招く
+      // (プレイヤー系エンジンは空表示)。フォールバックは既定プロジェクトのみ
       if (window.kasugaiAuth?.serverKasc) {
-        // サーバーの .kasc に無いプロジェクトは静的 .kasc も内蔵デフォルトも使わず空で起動する
         document.querySelector("#inspector-input").value = "";
         applyInspector("");
         setInspectorStatus(t("inspector.status.noKasc"), true);
+        return;
+      }
+      if (currentKascUrl || currentProjectId !== "default") {
+        document.querySelector("#inspector-input").value = "";
+        applyInspector("");
+        setInspectorStatus(t("inspector.status.notFound"), true);
         return;
       }
       text = defaultConfig;

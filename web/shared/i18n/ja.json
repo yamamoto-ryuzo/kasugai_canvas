@@ -145,6 +145,7 @@
   "inspector.dataDirButton": "フォルダを選択",
   "inspector.dataDirNone": "未選択",
   "inspector.status.noKasc": "KV に .kasc が登録されていません。",
+  "inspector.status.notFound": "指定されたプロジェクトの .kasc が見つかりません。",
   "inspector.status.loaded": "設定を読み込みました。",
   "inspector.status.loadFailed": "設定を読み込めません: {error}",
   "inspector.status.saving": "設定を保存しています。",
