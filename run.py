@@ -41,12 +41,33 @@ def _get_cargo_version() -> str:
     return cargo_match.group(1)
 
 
+def _version_key(version: str) -> tuple:
+    """"5.29.0" 形式のバージョンを比較用タプルへ（欠けた要素は 0 扱い）。"""
+    parts = []
+    for part in version.split("."):
+        m = re.match(r"\d+", part)
+        parts.append(int(m.group(0)) if m else 0)
+    return tuple(parts)
+
+
+def _latest_json_version() -> str | None:
+    """download/latest.json に記録されている現行リリース番号を返す。"""
+    latest_json_path = DOWNLOAD_DIR / "latest.json"
+    if not latest_json_path.exists():
+        return None
+    latest_match = re.search(
+        r'"version"\s*:\s*"([^"]+)"', latest_json_path.read_text(encoding="utf-8")
+    )
+    return latest_match.group(1) if latest_match else None
+
+
 def _channel_info(cargo_version: str | None = None) -> dict:
     """バージョンから配布物のファイル名等を決定する。
 
     自動更新は単一チャンネル(main ブランチの download/latest.json・kasugai_canvas.zip)。
-    "X.Y.Z-*" の開発版バージョンは配布ビルド(-B/--sync の latest.json 書き込み)不可で、
-    dev フラグはその判定と CHANGELOG 照合のスキップに使う。
+    リリース番号は接尾辞なしの X.Y.Z で、Cargo.toml は常に latest.json より
+    先の番号に保つ運用。dev フラグは「接尾辞付き=配布不可・CHANGELOG照合スキップ」
+    の判定にのみ使う。
     """
     version = cargo_version or _get_cargo_version()
     dev = "-" in version
@@ -87,7 +108,7 @@ def check_versions(check_latest: bool = True) -> None:
     expected = {name: cargo_version for name in files}
     expected["installer/kasugai_canvas.nsi (VIProductVersion)"] = numeric_version
 
-    # CHANGELOG はリリース(公開チャンネル)のみ記録する。開発ビルドは対象外
+    # CHANGELOG はリリースのみ記録する。接尾辞付きバージョンは対象外
     if not channel["dev"]:
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         changelog_match = re.search(r"^## \[(\d+\.\d+\.\d+)\] -", changelog, re.M)
@@ -111,7 +132,7 @@ def check_versions(check_latest: bool = True) -> None:
         files[str(page.relative_to(ROOT))] = badge_match.group(1) if badge_match else None
         expected[str(page.relative_to(ROOT))] = cargo_version
 
-    # 開発版バージョンでは latest.json は書き換えない(配布不可)ため照合もスキップする
+    # 接尾辞付きバージョンでは latest.json は書き換えない(配布不可)ため照合もスキップする
     if check_latest and not channel["dev"]:
         latest_json_path = DOWNLOAD_DIR / channel["latest_name"]
         if latest_json_path.exists():
@@ -148,8 +169,8 @@ def sync_versions(write_latest: bool = True) -> None:
 
     if write_latest and channel["dev"]:
         raise SystemExit(
-            f"開発版バージョン {cargo_version} では latest.json を更新できません。"
-            "Cargo.toml のバージョンから -dev 接尾辞を除去してから実行してください。"
+            f"接尾辞付きバージョン {cargo_version} では latest.json を更新できません。"
+            "Cargo.toml のバージョンを接尾辞なしのリリース番号にしてください。"
         )
 
     if write_latest:
@@ -349,8 +370,15 @@ def build_release() -> None:
     channel = _channel_info(cargo_version)
     if channel["dev"]:
         raise SystemExit(
-            f"開発版バージョン {cargo_version} では配布ビルドできません。"
-            "Cargo.toml のバージョンから -dev 接尾辞を除去してから実行してください。"
+            f"接尾辞付きバージョン {cargo_version} では配布ビルドできません。"
+            "Cargo.toml のバージョンを接尾辞なしのリリース番号にしてください。"
+        )
+    # リリース番号は必ず繰り上げる（同一番号・降格の再配布を禁止）
+    latest_version = _latest_json_version()
+    if latest_version and _version_key(cargo_version) <= _version_key(latest_version):
+        raise SystemExit(
+            f"バージョン {cargo_version} は最新リリース {latest_version} 以下のため"
+            "配布ビルドできません。Cargo.toml を次の番号へ上げてください。"
         )
     _kill_existing_kasugai()
     print("更新チャンネル: 公開(main)", flush=True)
@@ -451,7 +479,7 @@ def main() -> None:
         "-B",
         "--build",
         action="store_true",
-        help="リリースビルドを行い配布 ZIP を作成（kasugai_canvas.zip。-dev 付きバージョンでは実行不可）",
+        help="リリースビルドを行い配布 ZIP を作成（kasugai_canvas.zip。latest.json 以下または接尾辞付きバージョンでは実行不可）",
     )
     group.add_argument(
         "--release",
@@ -488,7 +516,18 @@ def main() -> None:
         args.build = True
 
     if args.sync:
-        sync_versions()
+        # --sync はリリース済み番号との整合確認専用。Cargo.toml が
+        # latest.json と異なる(開発中・古いブランチ)ときに実行すると
+        # 公開ファイルを未リリース番号へ書き換えてしまうため拒否する
+        latest_version = _latest_json_version()
+        cargo_version = _get_cargo_version()
+        if latest_version and _version_key(cargo_version) != _version_key(latest_version):
+            raise SystemExit(
+                f"Cargo.toml のバージョン {cargo_version} と最新リリース"
+                f" {latest_version} が一致しません。--sync はリリース直後の"
+                "整合確認用です。配布は python run.py -B を実行してください。"
+            )
+        sync_versions(write_latest=False)
         # latest.json だけを新バージョンへ更新して配布 ZIP が古いままだと、
         # 公開時に全ユーザーの自動更新が無限ループする（4.20.0 で発生）。
         # --sync でも ZIP 内 exe の /health バージョンを検証してズレを止める

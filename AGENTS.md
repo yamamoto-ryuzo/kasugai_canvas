@@ -27,10 +27,10 @@
 ## ブランチと自動更新チャンネル
 
 - **`main` のみで運用**（develop ブランチは廃止）。日常の開発も main で行い、GitHub Pages（`main` ルートが公開元）と自動更新（`main/download/latest.json`・`main/download/kasugai_canvas.zip`）も同じブランチを参照する
-- **自動更新は単一チャンネル**: `server/src/main.rs` は全バージョンが `main/download/latest.json` を参照する。`X.Y.Z-dev[.N]` の開発版 exe も同じ `latest.json` を見るため、**最新リリースより古い dev ビルドは起動時の自動更新でリリース版へ差し替えられる**（開発中は `Cargo.toml` を `latest.json` 以上に保つか、設定の自動更新をオフにする）
-- **開発中の採番**: リリース版と混同しないよう `Cargo.toml` は `X.Y.Z-dev[.N]` にして開発してよい。採番は `-dev` → `-dev.1` → `-dev.2` のように**ドット区切り**で上げること（`-dev1` はバージョン比較で増分と認識されない）
-- **開発版バージョンでは配布物を作れない**: `-dev` 付きバージョンで `python run.py -B`（および `--sync` の latest.json 書き込み）は拒否される。`CHANGELOG.md` はリリースのみ記録するため、開発版の整合チェック対象外
-- **リリースの流れ**: `main` で `-dev` 接尾辞を除去 → `python run.py -B` → コミット＆プッシュ → 次の開発は `X.(Y+1).0-dev` へ更新して継続
+- **自動更新は単一チャンネル**: `server/src/main.rs` は全バージョンが `main/download/latest.json` を参照する。**最新リリースより古い実行バージョンは起動時の自動更新でリリース版へ差し替えられる**ため、開発中は `Cargo.toml` を `latest.json` より先の番号に保つか、設定の自動更新をオフにする
+- **採番ルール（-dev 廃止）**: `Cargo.toml` は常に**次のリリース予定番号（`download/latest.json` より先）を名乗る**。開発中から `X.(Y+1).0` 等の接尾辞なし番号で進め、リリース時に番号を変えない（`-dev` 接尾辞の運用は廃止）
+- **同一番号・降格では配布物を作れない**: `python run.py -B`（および `--publish`）は `Cargo.toml` が `download/latest.json` より**大きい**場合のみ実行可能（同一番号の再配布・過去番号への降格を禁止）。接尾辞付きバージョンも拒否される。`--sync` は `Cargo.toml` が `latest.json` より古い場合は拒否（同一は許容）。`CHANGELOG.md` はリリースのみ記録する
+- **リリースの流れ**: `main` で `Cargo.toml` を次のリリース番号へ更新 → `python run.py -B` → コミット＆プッシュ
 - **更新時のポート奪取(重要・再発防止)**: 「更新が適用されず旧版が残る」問題は過去に繰り返し発生しており、原因は `--finish-update` 後続プロセスが 8510 の解放を**待つだけ**で、旧プロセスが終了しないと 60 秒で bind 失敗し「ファイルは新しいがサーバー未起動」状態に陥る設計にあった。現行の `bind_for_update` は次の順でポートを奪取する:
   1. **フェーズ1(5秒)**: 旧プロセスの自主終了を待つ通常経路(`/api/update/install` の応答完了・子プロセス停止の猶予)
   2. **フェーズ2**: 占有者を `/health` で確認し `name=="kasugai_canvas"` の場合のみ `port_owner_pids()` で PID 特定 → `taskkill /T /F`(**/T で rclone serve・ブリッジハブ等の子プロセスごと落とし孤児化を防ぐ**)→ 10 秒待機して bind

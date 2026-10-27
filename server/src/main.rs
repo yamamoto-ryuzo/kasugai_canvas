@@ -25,8 +25,8 @@ const EXTERNAL_PROJECTS_FILE_NAME: &str = "kasugai_canvas.projects.json";
 const KASC_FILE_NAME: &str = "kasugai_canvas.kasc";
 const GROUP_MANIFEST_FILE_NAME: &str = "projects.json";
 // 自動更新の参照先。単一チャンネル(main ブランチ)を全バージョンが参照する。
-// 開発版(-dev 接尾辞)も同じ latest.json を見るため、最新リリースより古い dev ビルドは
-// リリース版へ自動更新される
+// 実行バージョンが最新リリースより古いとリリース版へ自動更新されるため、
+// 開発中は Cargo.toml を latest.json より先の番号に保つ運用
 const UPDATE_REPOSITORY_BASE: &str = "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas";
 
 // 更新配信先の基準URL。KASUGAI_UPDATE_BASE で差し替え可能(検証用)
