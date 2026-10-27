@@ -1175,10 +1175,7 @@ map.on("moveend", () => {
   requeryTimer = setTimeout(() => requeryViewportLayers(targets), 400);
 });
 
-// 地物クリック → 属性タブ表示(Cesium 版 attr-panel 相当) + 属性ポップアップ
-const kascPopup = document.createElement("div");
-kascPopup.id = "kasc-popup";
-document.querySelector("#map").append(kascPopup);
+// 地物クリック → 属性タブを自動で開いて属性を表示(Cesium 版 attr-panel と同様)
 map.on("singleclick", e => {
   // 重なった地物を全件拾い、属性タブへ表示する
   const picked = [];
@@ -1194,27 +1191,19 @@ map.on("singleclick", e => {
       flyable: !!f?.getGeometry?.(),
     };
   });
-  let html = "";
-  if (picked.length) {
-    const { geometry, ...props } = picked[0].f.getProperties ? picked[0].f.getProperties() : {};
-    html = Object.entries(props).slice(0, 30).map(([k, v]) => `<b>${k}</b>: ${v}`).join("<br>");
-  }
   // OL の地物にヒットしなければ deck(3dtiles)を pick する
   if (!picked.length && deckInst) {
     try {
       const info = deckInst.pickObject({ x: e.pixel[0], y: e.pixel[1], radius: 5 });
       const props = info?.object?.properties;
       if (props) {
-        html = Object.entries(props).slice(0, 30).map(([k, v]) => `<b>${k}</b>: ${v}`).join("<br>");
         const def = deckDefs.get(info?.layer?.id);
         records.push({ title: def?.item?.title, entries: attrEntriesFromProps(props) });
       }
     } catch (_) {}
   }
+  window.switchPanelTab?.("attr");
   renderAttrContent(panel.attrContent, records, { onRecordClick: rec => focusFeatureExtent(rec.feature) });
-  if (!popupEnabled) { kascPopup.style.display = "none"; return; }
-  kascPopup.style.display = html ? "block" : "none";
-  if (html) { kascPopup.innerHTML = html; kascPopup.style.left = e.pixel[0] + 12 + "px"; kascPopup.style.top = e.pixel[1] + 12 + "px"; }
 });
 
 loadProject().catch(err => {
@@ -1328,11 +1317,6 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (e.target.checked) map.addControl(coordsCtl);
     else map.removeControl(coordsCtl);
-  });
-
-  document.querySelector("#display-popup")?.addEventListener("change", e => {
-    popupEnabled = e.target.checked;
-    if (!popupEnabled) kascPopup.style.display = "none";
   });
 
   // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当
@@ -1473,8 +1457,6 @@ async function saveToDataDir(name, content) {
     }
   });
 }
-
-let popupEnabled = true;
 
 // ---- AI チャット連携（kasugaiApi アダプタ + shared/ai-chat.js） ----
 window.kasugaiApi = createPlayerApi({

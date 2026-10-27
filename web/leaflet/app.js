@@ -232,12 +232,6 @@ function makeVectorStyleFn(item) {
   };
 }
 
-function attrPopupHtml(properties) {
-  const html = Object.entries(properties || {}).slice(0, 30)
-    .map(([k, v]) => `<b>${k}</b>: ${v}`).join("<br>");
-  return html || "(属性なし)";
-}
-
 // ---- deck.gl（3dtiles: 行専用・初回利用時にCDNから遅延ロード） ----
 // 軽量プレイヤー維持のため 3dtiles を含む .kasc の時だけ読み込む。
 // OL 版と同様に deck.Deck を #map 上のオーバーレイキャンバスとして viewState を
@@ -473,7 +467,8 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       onEachFeature: (f, l) => {
         if (item._qml?.labelFor) { l._kascLabel = { item, feature: f }; syncLeafletLabel(l); }
         l.on("click", e => {
-          // 属性タブ(Cesium 版 attr-panel 相当): クリックした地物の属性を表示
+          // 属性タブ(Cesium 版 attr-panel 相当)を自動で開き、クリックした地物の属性を表示
+          window.switchPanelTab?.("attr");
           const entry = layerEntries.find(en => en.item === item);
           renderAttrContent(panel.attrContent, [{
             title: item.title || item.url,
@@ -482,11 +477,6 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
             feature: f,
             flyable: !!f?.geometry,
           }], { onRecordClick: rec => focusFeatureExtent(rec.feature) });
-          if (!popupEnabled) return;
-          L.popup({ maxHeight: 240 })
-            .setLatLng(e.latlng)
-            .setContent(attrPopupHtml(f.properties))
-            .openOn(map);
         });
       },
     });
@@ -1286,13 +1276,14 @@ map.on("zoomend", () => {
   for (const e of layerEntries) if (e.zoomRange) applyEntryVisibility(e);
 });
 
-// 地図クリック → deck(3dtiles)を pick して属性ポップアップ + 属性タブ表示。
+// 地図クリック → deck(3dtiles)を pick して属性タブ表示。
 // ベクター地物(Leaflet interactive path)由来のクリックは地物側ハンドラで
 // 属性タブを更新済みのため、二重表示・クリアをしない。
 // (map の click には propagatedFrom が乗らないため DOM ターゲットで判定)
 map.on("click", e => {
   const target = e.originalEvent?.target;
   if (target && target.closest && target.closest(".leaflet-interactive")) return;
+  window.switchPanelTab?.("attr");
   if (!deckInst) { renderAttrContent(panel.attrContent, []); return; }
   try {
     const p = e.containerPoint;
@@ -1301,9 +1292,6 @@ map.on("click", e => {
     if (props) {
       const def = deckDefs.get(info?.layer?.id);
       renderAttrContent(panel.attrContent, [{ title: def?.item?.title, entries: attrEntriesFromProps(props) }]);
-      if (popupEnabled) {
-        L.popup({ maxHeight: 240 }).setLatLng(e.latlng).setContent(attrPopupHtml(props)).openOn(map);
-      }
     } else {
       renderAttrContent(panel.attrContent, []);
     }
@@ -1405,11 +1393,6 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
   });
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (coordsEl) coordsEl.style.display = e.target.checked ? "" : "none";
-  });
-
-  document.querySelector("#display-popup")?.addEventListener("change", e => {
-    popupEnabled = e.target.checked;
-    if (!popupEnabled) map.closePopup();
   });
 
   // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当
@@ -1550,8 +1533,6 @@ async function saveToDataDir(name, content) {
     }
   });
 }
-
-let popupEnabled = true;
 
 // ---- AI チャット連携（kasugaiApi アダプタ + shared/ai-chat.js） ----
 let apiPaneSeq = 0;

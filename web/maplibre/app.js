@@ -277,10 +277,8 @@ function syncDeckLayers() {
         try {
           const props = info?.object?.properties;
           if (!props) return;
+          window.switchPanelTab?.("attr");
           renderAttrContent(panel.attrContent, [{ title: def.item?.title, entries: attrEntriesFromProps(props) }]);
-          if (!popupEnabled) return;
-          const html = Object.entries(props).slice(0, 30).map(([k, v]) => `<b>${k}</b>: ${v}`).join("<br>");
-          kascPopup.setLngLat(info.coordinate).setHTML(html || "(属性なし)").addTo(map);
         } catch (_) {}
       },
       onTilesetLoad: tileset => {
@@ -1161,8 +1159,7 @@ map.on("moveend", () => {
   requeryTimer = setTimeout(() => requeryViewportLayers(targets), 400);
 });
 
-// 地物クリック → 属性タブ表示(Cesium 版 attr-panel 相当) + 属性ポップアップ
-const kascPopup = new maplibregl.Popup({ closeButton: true, closeOnClick: true });
+// 地物クリック → 属性タブを自動で開いて属性を表示(Cesium 版 attr-panel と同様)
 map.on("click", e => {
   const features = map.queryRenderedFeatures(e.point, { layers: managedLayers });
   // 重なった地物を全件拾う。同一地物が fill/line/symbol の複数スタイルレイヤに
@@ -1182,12 +1179,8 @@ map.on("click", e => {
       flyable: !!f.geometry,
     });
   }
+  window.switchPanelTab?.("attr");
   renderAttrContent(panel.attrContent, records, { onRecordClick: rec => focusFeatureExtent(rec.feature) });
-  const feature = features[0];
-  if (!popupEnabled || !feature) return;
-  const { geometry, ...props } = feature.properties || {};
-  const html = Object.entries(props).slice(0, 30).map(([k, v]) => `<b>${k}</b>: ${v}`).join("<br>");
-  kascPopup.setLngLat(e.lngLat).setHTML(html || "(属性なし)").addTo(map);
 });
 
 map.on("load", () => {
@@ -1390,11 +1383,6 @@ map.on("sourcedata", e => {
     if (coordsEl) coordsEl.style.display = e.target.checked ? "" : "none";
   });
 
-  document.querySelector("#display-popup")?.addEventListener("change", e => {
-    popupEnabled = e.target.checked;
-    if (!popupEnabled) kascPopup.remove();
-  });
-
   // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当
   [
     ["#drape-tiles3d", v => { drapeTiles3d.enabled = v; }],
@@ -1561,8 +1549,6 @@ async function saveToDataDir(name, content) {
     }
   });
 }
-
-let popupEnabled = true;
 
 // ---- AI チャット連携（kasugaiApi アダプタ + shared/ai-chat.js） ----
 window.kasugaiApi = createPlayerApi({

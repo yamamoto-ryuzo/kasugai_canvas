@@ -4,7 +4,7 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
-## [Unreleased]
+## [5.28.0] - 2026-10-27
 
 ### Added
 
