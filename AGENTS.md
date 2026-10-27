@@ -29,13 +29,14 @@
 - **`main` のみで運用**（develop ブランチは廃止）。日常の開発も main で行い、GitHub Pages（`main` ルートが公開元）と自動更新（`main/download/latest.json`・`main/download/kasugai_canvas.zip`）も同じブランチを参照する
 - **自動更新は単一チャンネル**: `server/src/main.rs` は全バージョンが `main/download/latest.json` を参照する。**最新リリースより古い実行バージョンは起動時の自動更新でリリース版へ差し替えられる**ため、開発中は `Cargo.toml` を `latest.json` より先の番号に保つか、設定の自動更新をオフにする
 - **採番ルール（-dev 廃止）**: `Cargo.toml` は常に**次のリリース予定番号（`download/latest.json` より先）を名乗る**。開発中から `X.(Y+1).0` 等の接尾辞なし番号で進め、リリース時に番号を変えない（`-dev` 接尾辞の運用は廃止）
-- **同一番号・降格では配布物を作れない**: `python run.py -B`（および `--publish`）は `Cargo.toml` が `download/latest.json` より**大きい**場合のみ実行可能（同一番号の再配布・過去番号への降格を禁止）。接尾辞付きバージョンも拒否される。`--sync` は `Cargo.toml` が `latest.json` より古い場合は拒否（同一は許容）。`CHANGELOG.md` はリリースのみ記録する
+- **同一番号・降格では配布物を作れない**: `python run.py -B`（および `--publish`）は `Cargo.toml` が `download/latest.json` より**大きい**場合のみ実行可能（同一番号の再配布・過去番号への降格を禁止）。接尾辞付きバージョンも拒否される。`--sync` は `Cargo.toml` と `latest.json` の番号が一致する場合のみ実行可能（リリース直後の整合確認専用・開発中は拒否）。`CHANGELOG.md` はリリースのみ記録する
 - **リリースの流れ**: `main` で `Cargo.toml` を次のリリース番号へ更新 → `python run.py -B` → コミット＆プッシュ
 - **更新時のポート奪取(重要・再発防止)**: 「更新が適用されず旧版が残る」問題は過去に繰り返し発生しており、原因は `--finish-update` 後続プロセスが 8510 の解放を**待つだけ**で、旧プロセスが終了しないと 60 秒で bind 失敗し「ファイルは新しいがサーバー未起動」状態に陥る設計にあった。現行の `bind_for_update` は次の順でポートを奪取する:
   1. **フェーズ1(5秒)**: 旧プロセスの自主終了を待つ通常経路(`/api/update/install` の応答完了・子プロセス停止の猶予)
   2. **フェーズ2**: 占有者を `/health` で確認し `name=="kasugai_canvas"` の場合のみ `port_owner_pids()` で PID 特定 → `taskkill /T /F`(**/T で rclone serve・ブリッジハブ等の子プロセスごと落とし孤児化を防ぐ**)→ 10 秒待機して bind
   - **最初から kill しない理由**: 応答を返す前に親を殺すとブラウザ側が更新失敗表示になるため。Windows では子プロセス停止がどの経路でも強制 kill 相当のため、待機が長いことの利点はほぼ無い
   - **kasugai_canvas 以外の占有者は絶対に kill しない**(無関係プロセスの巻き添え防止)。占有者が kasugai_canvas でない・PID 特定に失敗した場合は従来通り AddrInUse で終了(ファイルは適用済みなので次回起動で新版になる)
+  - **残骸掃除のタイミング(重要)**: 旧 exe の退避 `*.update-old` や旧 web 退避 `web.update-old` は旧プロセスが握っているため起動直後の掃除では消せず、かつては残骸が残った。`bind_for_update` はポート確保(=旧プロセス終了)後の `apply_update_files` 直後に `cleanup_update_leftovers` を必ず実行し、**更新直後に残骸を残さない**。通常起動時にも同じ掃除を行い前回分の保険とする
   - この占有者 kill と同じ考えで、通常起動時は `is_existing_instance` で既存インスタンスのブラウザを開き二重起動しない、ブリッジハブ(8511)はブリッジと確認できた場合のみ `kill_bridge_on_port` で強制停止する設計になっている
 
 ## CDN ホスト版（kasugai-canvas-web）の同期

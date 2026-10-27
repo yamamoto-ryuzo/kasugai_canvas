@@ -4301,6 +4301,11 @@ async fn bind_for_update(
     // ポート解放直後も旧プロセスの終了処理が残っている場合があるため僅かに待つ
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     apply_update_files(update_pid, web_dir, exe_dir);
+    // 旧プロセスが握っていた *.update-old(旧 exe・旧 web 退避)は起動時
+    // 掃除では消せないため、ポート確保(=旧プロセス終了)後に必ず掃除する
+    if let Some(dir) = exe_dir {
+        cleanup_update_leftovers(dir);
+    }
     listener.ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::AddrInUse,
