@@ -4,7 +4,7 @@
 // kasugaiApi 互換の API 面をここで構成する。AI チャット（shared/ai-chat.js）の
 // ツールはこの api メソッドの有無で公開可否が決まる。
 import { camToZoom, zoomToCamHeight, geojsonExtent, splitKascTitle } from "./kasc.js";
-import { hasBackendFeature, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
+import { hasBackendFeature, isFetchProxyTarget, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
 
 // hooks:
 //   engine            : "maplibre" | "openlayers" | "leaflet"
@@ -354,8 +354,8 @@ export function createPlayerApi(hooks) {
     async fetchData(url, { maxChars = 400000 } = {}) {
       const target = String(url || "");
       if (!/^https?:\/\//i.test(target)) throw new Error("invalid url");
-      const fetchUrl = hasBackendFeature("fetchProxy") ? `/api/fetch?url=${encodeURIComponent(target)}` : target;
-      const response = await fetch(fetchUrl, hasBackendFeature("fetchProxy") ? {} : { mode: "cors" });
+      const useProxy = hasBackendFeature("fetchProxy") && isFetchProxyTarget(target);
+      const response = await fetch(useProxy ? `/api/fetch?url=${encodeURIComponent(target)}` : target, useProxy ? {} : { mode: "cors" });
       const contentType = response.headers.get("content-type") || "";
       const text = await response.text();
       return { status: response.status, contentType, truncated: text.length > maxChars, text: text.slice(0, maxChars) };

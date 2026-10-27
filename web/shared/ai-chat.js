@@ -30,6 +30,22 @@ export function hasBackendFeature(name) {
   return !!backendCapabilities?.features?.includes(name);
 }
 
+// /api/fetch プロキシに渡せる取得先かを判定する。同一オリジンは直接取得できる
+// ためプロキシ不要で、ループバック(localhost/127.x/::1)は SSRF 対策により
+// /api/fetch が 403 を返すため対象外としブラウザから直接取得させる
+export function isFetchProxyTarget(url) {
+  try {
+    const target = new URL(String(url || ""));
+    if (target.protocol !== "http:" && target.protocol !== "https:") return false;
+    if (target.origin === location.origin) return false;
+    const host = target.hostname.toLowerCase();
+    return !(host === "localhost" || host.endsWith(".localhost")
+      || host === "::1" || host === "[::1]" || /^127\./.test(host));
+  } catch (e) {
+    return false;
+  }
+}
+
 // /health + /api/capabilities によるバックエンド検出。
 // 静的配信のみの環境では /health が404で到達せず capabilities は null のまま確定する
 export async function loadBackendCapabilities() {
@@ -1833,7 +1849,7 @@ async function verifyToolTargetUrl(target, options = "") {
   if (/proxy\s*=\s*(on|true|1)/i.test(String(options))) return { ok: true };
   try {
     // ローカル版は /api/fetch 経由で実在確認(CORSに左右されずレイヤー読み込みと同じ経路)
-    if (hasBackendFeature("fetchProxy")) {
+    if (hasBackendFeature("fetchProxy") && isFetchProxyTarget(url)) {
       const res = await fetch(`${location.origin}/api/fetch?url=${encodeURIComponent(url)}`);
       return res.ok ? { ok: true } : { ok: false, status: res.status };
     }

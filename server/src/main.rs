@@ -29,12 +29,21 @@ const GROUP_MANIFEST_FILE_NAME: &str = "projects.json";
 // リリース版へ自動更新される
 const UPDATE_REPOSITORY_BASE: &str = "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas";
 
+// 更新配信先の基準URL。KASUGAI_UPDATE_BASE で差し替え可能(検証用)
+fn update_repository_base() -> String {
+    std::env::var("KASUGAI_UPDATE_BASE")
+        .ok()
+        .map(|s| s.trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| UPDATE_REPOSITORY_BASE.to_string())
+}
+
 fn latest_json_url() -> String {
-    format!("{UPDATE_REPOSITORY_BASE}/main/download/latest.json")
+    format!("{}/main/download/latest.json", update_repository_base())
 }
 
 fn repository_download_url() -> String {
-    format!("{UPDATE_REPOSITORY_BASE}/main/download/kasugai_canvas.zip")
+    format!("{}/main/download/kasugai_canvas.zip", update_repository_base())
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -1479,47 +1488,13 @@ async fn cloud_install(
     tokio::fs::write(&zip_path, bytes)
         .await
         .map_err(internal_error)?;
-    #[cfg(windows)]
+    // ZIP 展開は Rust で行う(外部プロセス非依存。自動更新と同じ経路)
     {
-        let status = tokio::process::Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                "Expand-Archive",
-                "-Path",
-                &zip_path.to_string_lossy(),
-                "-DestinationPath",
-                &extract_dir.to_string_lossy(),
-                "-Force",
-            ])
-            .status()
+        let zip_path = zip_path.clone();
+        let extract_dir = extract_dir.clone();
+        tokio::task::spawn_blocking(move || extract_zip(&zip_path, &extract_dir))
             .await
-            .map_err(internal_error)?;
-        if !status.success() {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "ZIP展開に失敗しました".to_string(),
-            ));
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        let status = tokio::process::Command::new("unzip")
-            .args(["-o", "-q"])
-            .arg(&zip_path)
-            .arg("-d")
-            .arg(&extract_dir)
-            .status()
-            .await
-            .map_err(internal_error)?;
-        if !status.success() {
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "ZIP展開に失敗しました".to_string(),
-            ));
-        }
+            .map_err(internal_error)??;
     }
     // rclone-vX.Y.Z-<os>-<arch>/rclone[.exe] を探して exe 隣の rclone/ へ移す
     let exe_name = if cfg!(windows) {
@@ -3404,6 +3379,7 @@ mod localize_tests {
             let state = AppState {
                 update_config_path: Arc::new(root.join("update.json")),
                 cloud_config_path: Arc::new(root.join("cloud.json")),
+                fetch_config_path: Arc::new(root.join("fetch.json")),
                 external_projects_path: Arc::new(root.join("registry.json")),
                 external_projects: Arc::new(StdMutex::new(Vec::new())),
                 cloud: Arc::new(Mutex::new(CloudState::default())),
@@ -3412,6 +3388,15 @@ mod localize_tests {
                 web_dir: Arc::new(root.clone()),
                 projects_dir: Arc::new(root.join("projects")),
                 is_local: true,
+                bridge_hub: Arc::new(Mutex::new(None)),
+                copilot_endpoint: None,
+                devin_endpoint: None,
+                antigravity_endpoint: None,
+                remote: Arc::new(RemoteBus {
+                    inner: StdMutex::new(RemoteInner::default()),
+                    notify_commands: Notify::new(),
+                    notify_results: Notify::new(),
+                }),
             };
             Self { root, state }
         }
@@ -4096,24 +4081,13 @@ async fn install_update(
         .await
         .map_err(internal_error)?;
 
-    let extract_status = tokio::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            "Expand-Archive",
-            "-Path",
-            &zip_path.to_string_lossy(),
-            "-DestinationPath",
-            &extract_dir.to_string_lossy(),
-            "-Force",
-        ])
-        .status()
-        .await
-        .map_err(internal_error)?;
-    if !extract_status.success() {
-        return Err((StatusCode::BAD_REQUEST, "ZIP展開に失敗しました".to_string()));
+    // ZIP 展開は Rust で行う(外部プロセス非依存)
+    {
+        let zip_path = zip_path.clone();
+        let extract_dir = extract_dir.clone();
+        tokio::task::spawn_blocking(move || extract_zip(&zip_path, &extract_dir))
+            .await
+            .map_err(internal_error)??;
     }
 
     let new_exe = extract_dir.join("kasugai_canvas.exe");
@@ -4124,34 +4098,39 @@ async fn install_update(
         ));
     }
 
-    let install_dir = current_exe.parent().map(PathBuf::from).ok_or((
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "インストール先ディレクトリを取得できません".to_string(),
-    ))?;
-    let new_web_dir = extract_dir.join("web");
-    let current_web_dir = install_dir.join("web");
+    // 実行中の exe は Windows でもリネームできる(上書き・削除は不可)。
+    // 現行を退避して新 exe を元のパスへ置き、後続プロセスに更新完了を委ねる
+    let file_name = current_exe
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "kasugai_canvas.exe".to_string());
+    let backup_exe = current_exe.with_file_name(format!("{file_name}.update-old"));
+    if backup_exe.exists() {
+        let _ = std::fs::remove_file(&backup_exe);
+    }
+    std::fs::rename(&current_exe, &backup_exe).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("実行ファイルの退避に失敗しました: {e}"),
+        )
+    })?;
+    if let Err(e) = std::fs::copy(&new_exe, &current_exe) {
+        // 新 exe の配置に失敗したら退避分を戻して現行を維持する
+        let _ = std::fs::rename(&backup_exe, &current_exe);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("実行ファイルの差し替えに失敗しました: {e}"),
+        ));
+    }
 
-    let script_path = tmp_dir.join("update.ps1");
-    let script = format!(
-        "$parentPid = {parent_pid}\n$newExe = '{new}'\n$currentExe = '{current}'\n$newWeb = '{new_web}'\n$currentWeb = '{current_web}'\nwhile (Get-Process -Id $parentPid -ErrorAction SilentlyContinue) {{ Start-Sleep -Milliseconds 500 }}\n$ErrorActionPreference = 'Stop'\ntry {{\n    Copy-Item -Path $newExe -Destination $currentExe -Force\n    if (Test-Path $newWeb) {{\n        if (Test-Path $currentWeb) {{ Remove-Item -Path $currentWeb -Recurse -Force }}\n        Copy-Item -Path $newWeb -Destination $currentWeb -Recurse -Force\n    }}\n    Start-Process -FilePath $currentExe -ArgumentList '--no-browser' -WindowStyle Hidden\n}} catch {{\n    Write-Error \"更新ファイルの差し替えに失敗しました: $_\"\n    exit 1\n}}\n",
-        new = new_exe.to_string_lossy().replace('\'', "''"),
-        current = current_exe.to_string_lossy().replace('\'', "''"),
-        new_web = new_web_dir.to_string_lossy().replace('\'', "''"),
-        current_web = current_web_dir.to_string_lossy().replace('\'', "''")
-    );
-    tokio::fs::write(&script_path, script)
-        .await
-        .map_err(internal_error)?;
-
-    tokio::process::Command::new("powershell")
-        .args([
-            "-WindowStyle",
-            "Hidden",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            &script_path.to_string_lossy(),
-        ])
+    // 新 exe を --finish-update <pid> で起動する。後続プロセスは
+    // 旧プロセス(このプロセス)がポートを手放すのを待ってから web/ の
+    // 差し替えと残骸掃除を行い通常起動する。外部プロセスは使わない
+    tokio::process::Command::new(&current_exe)
+        .args(["--no-browser", "--finish-update", &parent_pid.to_string()])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
         .spawn()
         .map_err(internal_error)?;
 
@@ -4164,6 +4143,170 @@ async fn install_update(
     Ok(Json(json!({
         "message": "アップデートを開始しました。数秒後に再起動します。"
     })))
+}
+
+// 配布ZIPを dest 以下へ展開する。".." を含むパス(zip slip)は除外する
+fn extract_zip(zip_path: &Path, dest: &Path) -> Result<(), (StatusCode, String)> {
+    let file = std::fs::File::open(zip_path).map_err(internal_error)?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("ZIP展開に失敗しました: {e}")))?;
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).map_err(internal_error)?;
+        let Some(rel) = entry.enclosed_name() else {
+            continue;
+        };
+        let target = dest.join(rel);
+        if entry.is_dir() {
+            std::fs::create_dir_all(&target).map_err(internal_error)?;
+        } else {
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(internal_error)?;
+            }
+            let mut out = std::fs::File::create(&target).map_err(internal_error)?;
+            std::io::copy(&mut entry, &mut out).map_err(internal_error)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_dir_sync(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let (s, d) = (entry.path(), dst.join(entry.file_name()));
+        if s.is_dir() {
+            copy_dir_sync(&s, &d)?;
+        } else {
+            std::fs::copy(&s, &d)?;
+        }
+    }
+    Ok(())
+}
+
+// src を dst へ移動する。rename は同一ドライブのみ有効なため、
+// 失敗時はコピー+削除にフォールバックする
+fn move_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+    if std::fs::rename(src, dst).is_ok() {
+        return Ok(());
+    }
+    copy_dir_sync(src, dst)?;
+    std::fs::remove_dir_all(src)
+}
+
+// --finish-update 側で行う web/ の差し替えと作業フォルダの掃除。
+// exe の差し替えは呼び出し元(旧プロセス)が完了させている。
+// 失敗しても起動は継続する(残骸は次回起動時に掃除される)
+fn apply_update_files(update_pid: u32, web_dir: &Path, exe_dir: Option<&Path>) {
+    let tmp_dir = std::env::temp_dir().join(format!("kasugai_canvas_update_{update_pid}"));
+    let new_web = tmp_dir.join("extracted").join("web");
+    // web_dir が exe 隣の web/ でない構成(repo フォールバック等)では触らない
+    let managed = exe_dir.is_some_and(|dir| web_dir == dir.join("web"));
+    if managed && new_web.is_dir() {
+        let backup_web = web_dir.with_file_name("web.update-old");
+        let _ = std::fs::remove_dir_all(&backup_web);
+        if std::fs::rename(web_dir, &backup_web).is_ok() {
+            match move_dir_all(&new_web, web_dir) {
+                Ok(()) => {
+                    let _ = std::fs::remove_dir_all(&backup_web);
+                }
+                Err(e) => {
+                    let _ = std::fs::rename(&backup_web, web_dir);
+                    eprintln!("web の更新に失敗しました: {e}");
+                }
+            }
+        } else {
+            eprintln!("web の退避に失敗しました: {}", web_dir.display());
+        }
+    }
+    let _ = std::fs::remove_dir_all(&tmp_dir);
+}
+
+// 更新で残った *.update-old(旧 exe・旧 web 退避)を掃除する。
+// 通常起動・--finish-update 起動のどちらでも呼ぶ
+fn cleanup_update_leftovers(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if name.to_string_lossy().ends_with(".update-old") {
+            let path = entry.path();
+            if path.is_dir() {
+                let _ = std::fs::remove_dir_all(&path);
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+}
+
+// AddrInUse が解消するまで bind をリトライする。確保できなければ None、
+// AddrInUse 以外のエラーは即座に返す
+async fn wait_port_bind(
+    address: SocketAddr,
+    secs: u64,
+) -> Result<Option<TcpListener>, std::io::Error> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+    loop {
+        match TcpListener::bind(address).await {
+            Ok(listener) => return Ok(Some(listener)),
+            Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+                if std::time::Instant::now() >= deadline {
+                    return Ok(None);
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+// --finish-update 用のポート確保。旧プロセスがアドレスを手放すまで
+// bind をリトライし、確保後に更新ファイルを適用する
+async fn bind_for_update(
+    address: SocketAddr,
+    update_pid: u32,
+    web_dir: &Path,
+    exe_dir: Option<&Path>,
+) -> Result<TcpListener, std::io::Error> {
+    // フェーズ1: 旧プロセスが自身の shutdown で直ぐに終了する通常経路を数秒待つ。
+    // (/api/update/install の HTTP 応答完了・子プロセス停止処理の猶予)
+    let mut listener = wait_port_bind(address, 5).await?;
+    if listener.is_none() && is_existing_instance(address.port()).await {
+        // フェーズ2: 占有者が KASUGAI Canvas(終了しない親・別インスタンス)なら
+        // PID を特定して強制終了しポートを奪う。Windows では子プロセスの停止が
+        // どの経路でも TerminateProcess/taskkill /F 相当のため、graceful 待機を
+        // 長く取っても得るものはほぼ無い。/T で子プロセス(rclone serve・
+        // ブリッジハブ等)ごと落とし孤児化を防ぐ。
+        // KASUGAI Canvas 以外の占有者は殺さず従来通りエラーとする
+        for pid in port_owner_pids(address.port()).await {
+            eprintln!(
+                "update: ポート {} を解放するため pid {pid} を強制終了します",
+                address.port()
+            );
+            if cfg!(windows) {
+                let _ = tokio::process::Command::new("taskkill")
+                    .args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .output()
+                    .await;
+            } else {
+                let _ = tokio::process::Command::new("kill")
+                    .args(["-9", &pid.to_string()])
+                    .output()
+                    .await;
+            }
+        }
+        listener = wait_port_bind(address, 10).await?;
+    }
+    // ポート解放直後も旧プロセスの終了処理が残っている場合があるため僅かに待つ
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    apply_update_files(update_pid, web_dir, exe_dir);
+    listener.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::AddrInUse,
+            "更新後のポート確保に失敗しました",
+        )
+    })
 }
 
 fn internal_error(error: impl std::fmt::Display) -> (StatusCode, String) {
@@ -4814,30 +4957,9 @@ fn spawn_node_bridge(
     None
 }
 
-// 指定ポートを占有しているブリッジを強制終了する。
-// 占有者が Copilot ブリッジ（/health が {ok:true} を返す）と確認できた場合のみ
-// PID を特定して kill し true を返す。無関係なプロセスの誤終了を防ぐため、
-// ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）
-async fn kill_bridge_on_port(port: u16) -> bool {
-    let is_bridge = async {
-        let resp = reqwest::Client::new()
-            .get(format!("http://127.0.0.1:{port}/health"))
-            .timeout(std::time::Duration::from_secs(2))
-            .send()
-            .await
-            .ok()?;
-        let body: serde_json::Value = resp.json().await.ok()?;
-        Some(
-            body.get("ok").and_then(|v| v.as_bool()) == Some(true)
-                && (body.get("model").is_some() || body.get("sessions").is_some()),
-        )
-    }
-    .await
-    .unwrap_or(false);
-    if !is_bridge {
-        return false;
-    }
-    // 占有 PID を特定（Windows: netstat -ano、Unix: lsof）
+// 指定ポートを LISTEN しているプロセスの PID 一覧。
+// Windows は netstat -ano、Unix は lsof で取得する
+async fn port_owner_pids(port: u16) -> Vec<u32> {
     let output = if cfg!(windows) {
         tokio::process::Command::new("netstat")
             .args(["-ano", "-p", "tcp"])
@@ -4849,7 +4971,7 @@ async fn kill_bridge_on_port(port: u16) -> bool {
             .output()
             .await
     };
-    let Ok(out) = output else { return false };
+    let Ok(out) = output else { return Vec::new() };
     let text = String::from_utf8_lossy(&out.stdout);
     let mut pids = std::collections::HashSet::new();
     if cfg!(windows) {
@@ -4875,6 +4997,33 @@ async fn kill_bridge_on_port(port: u16) -> bool {
             }
         }
     }
+    pids.into_iter().collect()
+}
+
+// 指定ポートを占有しているブリッジを強制終了する。
+// 占有者が Copilot ブリッジ（/health が {ok:true} を返す）と確認できた場合のみ
+// PID を特定して kill し true を返す。無関係なプロセスの誤終了を防ぐため、
+// ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）
+async fn kill_bridge_on_port(port: u16) -> bool {
+    let is_bridge = async {
+        let resp = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{port}/health"))
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await
+            .ok()?;
+        let body: serde_json::Value = resp.json().await.ok()?;
+        Some(
+            body.get("ok").and_then(|v| v.as_bool()) == Some(true)
+                && (body.get("model").is_some() || body.get("sessions").is_some()),
+        )
+    }
+    .await
+    .unwrap_or(false);
+    if !is_bridge {
+        return false;
+    }
+    let pids = port_owner_pids(port).await;
     if pids.is_empty() {
         return false;
     }
@@ -5109,34 +5258,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = app
         .route("/projects/{*path}", get(serve_project_files))
-        .fallback_service(ServeDir::new(web_dir).append_index_html_on_directories(true))
+        .fallback_service(ServeDir::new(&web_dir).append_index_html_on_directories(true))
         .layer(axum::middleware::from_fn(local_api_cors))
         .with_state(state.clone());
+
+    // 自動更新の残骸(旧 exe/web の .update-old 退避)を掃除する。
+    // --finish-update 側の掃除が失敗した場合の保険も兼ねる
+    if let Some(dir) = &exe_dir {
+        cleanup_update_leftovers(dir);
+    }
+
+    // --finish-update <pid>: 自動更新で旧プロセスが起動した後続プロセス。
+    // ポートが空くまで待って更新ファイルを適用してから通常起動へ合流する
+    let finish_update_pid = {
+        let args: Vec<String> = std::env::args().collect();
+        args.iter()
+            .position(|a| a == "--finish-update")
+            .and_then(|i| args.get(i + 1))
+            .and_then(|a| a.parse::<u32>().ok())
+    };
 
     // ウィンドウレス実行(windows_subsystem="windows")のためバインド失敗は利用者に見えない。
     // 既に起動済みのインスタンスがポートを占有している場合は、無言終了ではなく
     // 既存インスタンスのブラウザを開いて正常終了する(ショートカット再クリック対策)
-    let listener = match TcpListener::bind(address).await {
-        Ok(listener) => listener,
-        Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
-            if is_existing_instance(port).await {
-                println!("KASUGAI Canvas は既に起動しています: http://{address}");
-                // 引数の .kasc は起動済みインスタンスへ登録を依頼し、
-                // そのプロジェクトをブラウザで開く
-                let mut query = String::new();
-                if let Some(path) = &kasc_arg {
-                    if let Some(id) = register_remote_project(port, path).await {
-                        query = format!("?project={id}");
+    let listener = if let Some(update_pid) = finish_update_pid {
+        bind_for_update(address, update_pid, &web_dir, exe_dir.as_deref()).await?
+    } else {
+        match TcpListener::bind(address).await {
+            Ok(listener) => listener,
+            Err(err) if err.kind() == std::io::ErrorKind::AddrInUse => {
+                if is_existing_instance(port).await {
+                    println!("KASUGAI Canvas は既に起動しています: http://{address}");
+                    // 引数の .kasc は起動済みインスタンスへ登録を依頼し、
+                    // そのプロジェクトをブラウザで開く
+                    let mut query = String::new();
+                    if let Some(path) = &kasc_arg {
+                        if let Some(id) = register_remote_project(port, path).await {
+                            query = format!("?project={id}");
+                        }
                     }
+                    if open_browser_requested {
+                        open_browser(port, &query);
+                    }
+                    return Ok(());
                 }
-                if open_browser_requested {
-                    open_browser(port, &query);
-                }
-                return Ok(());
+                return Err(err.into());
             }
-            return Err(err.into());
+            Err(err) => return Err(err.into()),
         }
-        Err(err) => return Err(err.into()),
     };
     println!("KASUGAI Canvas: http://{address}");
 

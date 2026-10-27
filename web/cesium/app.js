@@ -12,7 +12,7 @@ import {
   initAiChat, executeChatTool, showReportModal,
   listUiControls as sharedListUiControls, controlUi as sharedControlUi,
   updateChatPanelVisibility, updateBridgeProviderOptions, resyncProviderSelect,
-  startRemoteCommandLoop, setBackendCapabilities,
+  startRemoteCommandLoop, setBackendCapabilities, isFetchProxyTarget,
 } from "../shared/ai-chat.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
@@ -306,7 +306,7 @@ async function fetchStyleText(url) {
     const response = await fetch(url, { mode: "cors" });
     if (response.ok) return await response.text();
   } catch (error) { /* CORS 等 → プロキシへ */ }
-  if (hasBackendFeature("fetchProxy") && /^https?:\/\//i.test(String(url))) {
+  if (hasBackendFeature("fetchProxy") && isFetchProxyTarget(url)) {
     const response = await fetch(`${location.origin}/api/fetch?url=${encodeURIComponent(url)}`);
     if (response.ok) return await response.text();
     throw new Error(`HTTP ${response.status}`);
@@ -1995,6 +1995,7 @@ function proxyTileUrl(url, useProxy = true) {
 function proxyFetchUrl(url, useProxy = false) {
   if (!useProxy || !/^https?:\/\//i.test(String(url || ""))) return url;
   if (!hasBackendFeature("fetchRange")) return url;
+  if (!isFetchProxyTarget(url)) return url;
   return `${location.origin}/api/fetch?url=${encodeURIComponent(url)}`;
 }
 
@@ -8941,10 +8942,8 @@ window.kasugaiApi = {
   async fetchData(url, { maxChars = 400000 } = {}) {
     const target = String(url || "");
     if (!/^https?:\/\//i.test(target)) throw new Error(t("error.invalidUrl"));
-    const fetchUrl = hasBackendFeature("fetchProxy")
-      ? `/api/fetch?url=${encodeURIComponent(target)}`
-      : target;
-    const response = await fetch(fetchUrl, hasBackendFeature("fetchProxy") ? {} : { mode: "cors" });
+    const useProxy = hasBackendFeature("fetchProxy") && isFetchProxyTarget(target);
+    const response = await fetch(useProxy ? `/api/fetch?url=${encodeURIComponent(target)}` : target, useProxy ? {} : { mode: "cors" });
     const contentType = response.headers.get("content-type") || "";
     const text = await response.text();
     return { status: response.status, contentType, truncated: text.length > maxChars, text: text.slice(0, maxChars) };

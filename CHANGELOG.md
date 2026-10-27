@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [5.29.0] - 2026-10-27
+
+### Changed
+
+- **自動更新を外部プロセス非依存の純粋 Rust 実装へ刷新** — 従来は ZIP 展開に `powershell Expand-Archive`、exe 差し替え・再起動に生成した `update.ps1` を使っていたため、実行環境の PATH に PowerShell が無いと `program not found` で更新が失敗していた。`zip` crate で展開し、実行中 exe はリネーム（`*.update-old` 退避）→新 exe コピー→`--finish-update <pid>` 付きで後続プロセスを起動する方式へ変更。後続プロセスはポートを bind リトライして旧プロセスの退出を待ち、`web/` 差し替えと残骸掃除を行って通常起動へ合流する。外部プロセス（PowerShell/cmd）は一切不要になった
+- **rclone 自動インストールの ZIP 展開も同じ Rust 展開へ統一** — Windows の `powershell Expand-Archive`・Unix の `unzip` 呼び出しを廃止
+- **`/api/fetch` プロキシ対象の判定を共通化** — 新設の `isFetchProxyTarget` で同一オリジン・ループバック（localhost/127.x/::1）をプロキシ対象外としブラウザから直接取得。`/api/fetch` が SSRF 対策でループバックを 403 にするため、これらへプロキシ経由で届いていたリクエストが必ず失敗していたのを解消（`fetchData`・スタイル取得・`verifyToolTargetUrl` 等）
+
+### Fixed
+
+- **更新後プロセスのポート奪取を強化** — `--finish-update` 後続プロセスは 5 秒の自主終了待機（フェーズ1）の後、占有者を `/health` で `kasugai_canvas` と確認できた場合のみ `taskkill /T /F` で子プロセスごと強制終了してポートを奪取（フェーズ2）。旧プロセスが終了しないと 60 秒で bind 失敗し「ファイルは新しいがサーバー未起動」になる設計だった問題を修正。無関係プロセスの巻き添え防止のため占有者が `kasugai_canvas` でない場合は従来通り AddrInUse で終了する
+
 ## [5.28.0] - 2026-10-27
 
 ### Added
