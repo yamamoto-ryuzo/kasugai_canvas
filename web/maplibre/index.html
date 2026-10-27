@@ -132,10 +132,19 @@
     border-bottom: 27px solid #e33d3d; transform: translate(-7px, -27px); transform-origin: 7px 27px; }
   .compass-needle::after { content: ""; position: absolute; left: 0; top: 27px;
     border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 27px solid #a82020; }
+  /* ホバーヒント(コンパスは transform で回転するため、針と別の .nav-item ラッパーに置く) */
+  .navigation-toolbar .nav-item { position: relative; display: flex; }
+  .navigation-toolbar .nav-hint { position: absolute; right: calc(100% + 8px); top: 50%;
+    transform: translateY(-50%); padding: 4px 8px; border-radius: 6px;
+    background: rgba(20,30,40,.85); color: #fff; font-size: 11px; white-space: nowrap;
+    pointer-events: none; opacity: 0; transition: opacity .15s; }
+  .navigation-toolbar .nav-item:hover .nav-hint,
+  .navigation-toolbar .nav-item:focus-within .nav-hint { opacity: 1; }
+</style>
 </head>
 <body>
 <div id="map"><small id="map-attribution" class="map-attribution"></small><div id="map-coords" class="map-coords"></div><div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div><aside class="navigation-toolbar" aria-label="ナビゲーション">
-  <button id="nav-compass" class="compass-button" type="button" title="北をリセット" aria-label="北をリセット"><span class="compass-needle"></span><strong>N</strong></button>
+  <span class="nav-item"><button id="nav-compass" class="compass-button" type="button" title="北をリセット" aria-label="北をリセット"><span class="compass-needle"></span><strong>N</strong></button><span class="nav-hint" role="tooltip">右ドラッグで回転・傾斜</span></span>
   <button id="nav-home" type="button" title="全体表示（データ範囲へフィット）" aria-label="全体表示">⌂</button>
   <button id="navigation-toggle" class="navigation-toggle" type="button" title="最小化" aria-label="最小化">−</button>
 </aside></div>

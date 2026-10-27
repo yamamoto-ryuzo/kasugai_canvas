@@ -1230,10 +1230,10 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   const compass = document.querySelector("#nav-compass");
   const rotInput = document.querySelector("#display-rotation");
   // bearing → コンパス針と設定タブの回転入力へ反映。
-  // MapLibre の bearing は反時計回り正のため OL の rotation と同符号に扱える
+  // 針は Cesium と同じく -heading 回転（bearing が heading 相当のため -b）
   map.on("move", () => {
     const b = map.getBearing();
-    if (compass) compass.style.transform = `rotateZ(${b}deg)`;
+    if (compass) compass.style.transform = `rotateZ(${-b}deg)`;
     if (rotInput && document.activeElement !== rotInput) rotInput.value = String(Math.round(-b));
   });
   compass?.addEventListener("click", () => {
