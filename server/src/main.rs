@@ -4624,15 +4624,26 @@ fn cors_allowed_origin(origin: &str) -> bool {
     // kasugai-canvas-web(stable/unstable)・kasugai_canvas Pages を同じ
     // オリジンでカバー。ループバックはローカルの別ポートのページからの
     // 開発・連携用に許可する(同一マシン上のプロセスは CORS 無しで
-    // 読めるため実質的な追加露出にならない)
-    origin == "null"
-        || origin == "https://yamamoto-ryuzo.github.io"
-        || origin.starts_with("http://127.0.0.1")
-        || origin.starts_with("https://127.0.0.1")
-        || origin.starts_with("http://localhost")
-        || origin.starts_with("https://localhost")
-        || origin.starts_with("http://[::1]")
-        || origin.starts_with("https://[::1]")
+    // 読めるため実質的な追加露出にならない)。
+    // prefix 一致だと http://localhost.evil.com 等の偽サブドメインが
+    // 通るため、ループバックはホスト名を厳密に抜き出して比較する
+    if origin == "null" || origin == "https://yamamoto-ryuzo.github.io" {
+        return true;
+    }
+    let rest = match origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+    {
+        Some(r) => r,
+        None => return false,
+    };
+    let hostport = rest.split('/').next().unwrap_or("");
+    let host = if let Some(v6) = hostport.strip_prefix('[') {
+        v6.split(']').next().unwrap_or("")
+    } else {
+        hostport.split(':').next().unwrap_or("")
+    };
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
 }
 
 async fn local_api_cors(
