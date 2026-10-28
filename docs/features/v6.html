@@ -102,6 +102,10 @@
 
       <h3>🗾 GSI Maps エンジン（地理院地図組み込み・調整中）</h3>
       <p>vendored 地理院地図（<code>web/vendor/gsimaps/</code>・上流無改変）を同一オリジン iframe（<code>index_pm.html</code>）として組み込み、左の中間層パネルが .kasc を GSI/Leaflet API 経由で再生します。</p>
+      <figure>
+      <img src="../images/gsimaps-panel.png" alt="GSI Maps エンジン：左の中間層パネル（情報タブ・AI チャット）とエンジン切替フッタ" />
+      <figcaption aria-hidden="true">GSI Maps エンジンの中間層パネル（下部はエンジン切替）</figcaption>
+      </figure>
       <p><strong>※現在調整中</strong>: iframe 内の vendored コードを <code>GSI.GLOBALS</code> 内部 API 経由で操作する構造のため AI 制御の安定化が難しく、本エンジンの挙動・ツール仕様は今後変更される可能性があります。</p>
       <ul>
         <li><strong>.kasc → gsimaps の対応</strong>: ベクター系行は GeoJSON へ変換して作図リスト（SakuzuListItem）として注入（スタイルは <code>_</code>-props へ畳み込み）。<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code> は外部タイル（appendOutSideTile）として追加し、地理院タイルのベースは gsimaps 標準ベースマップへマップします。<code>cam:</code> は URL ハッシュと setView、<code>theme:</code> は可視性プリセットとして処理。3dtiles 等の非対応行は情報タブへ警告します</li>

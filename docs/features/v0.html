@@ -125,6 +125,14 @@
       切替、方位コンパスが配置されています。描画（Draw）は <strong>Fly
       パネル内の Draw タブ</strong> から行います。</p>
       <p>URL パーマリンクの自動更新、🔗 ボタンによる共有 URL コピー、プロジェクト切替（<code>?project=&lt;project_id&gt;</code>）を実装しています。自動更新・ルート保存・タイルプロキシ等、サーバー API に依存する機能は静的配信では無効です。</p>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../images/display-drape.png" alt="表示 → ドレープ：ドレープ対象地形（DEM / 3D Tiles）と適用レイヤー種別、ベクター描画件数の上限" style="max-width:31%; flex:1 1 220px;" />
+      <img src="../images/display-3dtiles.png" alt="表示 → 3D Tiles：Maximum Screen Space Error・Memory Usage 等の描画パラメータ" style="max-width:31%; flex:1 1 220px;" />
+      <img src="../images/display-effects.png" alt="表示 → 効果：地形照明・地下透過・霧・大気・影・地表透過スライダ" style="max-width:31%; flex:1 1 220px;" />
+      </div>
+      <figcaption aria-hidden="true">表示パネルのサブタブ（左から ドレープ / 3D Tiles / 効果）</figcaption>
+      </figure>
       <h3>Fly モード</h3>
       <p>Fly モードでは手動操縦か、<code>fly_geojson:</code>
       で定義した経路の自動追従を選択できます。インスペクターに

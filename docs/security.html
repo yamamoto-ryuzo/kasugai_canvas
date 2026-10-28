@@ -78,6 +78,10 @@
           <p>社内 LAN の GIS サーバー等からデータを取得したい場合は、exe 隣の <code>kasugai_canvas.fetch.json</code> に許可リストを記述します（リクエスト毎に読まれるため再起動不要）。</p>
           <pre><code>{"allow":["192.168.0.0/16","geoserver.city.local","127.0.0.1"]}</code></pre>
           <p>許可エントリは<strong>ホスト名・個別 IP・IPv4 CIDR</strong>のいずれかです（ホスト名一致はその名前への接続を全て許可）。管理ウィンドウの「その他」タブにある <strong>データ取得プロキシ</strong> セクションから GUI で編集・保存もできます（ローカル版でのみ表示）。</p>
+          <figure>
+          <img src="images/manage-others.png" alt="管理（⚙）→ その他：データ取得プロキシの許可リスト編集欄" />
+          <figcaption aria-hidden="true">管理（⚙）→ その他 の「データ取得プロキシ」編集欄</figcaption>
+          </figure>
           <p><small>公開環境（Pages/Workers/Cloud Run）には <code>/api/fetch</code> は存在せず、ブラウザから直接 fetch する構成のため本対策の対象外です。</small></p>
         </div>
 

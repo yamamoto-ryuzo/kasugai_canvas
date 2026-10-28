@@ -39,6 +39,10 @@
         <div class="url-box">
           <h3>自動更新</h3>
           <p>Rust サーバー起動時は、管理（⚙）→ その他 から最新リリースの確認・自動更新が行えます。更新時は EXE を自動的に差し替えて再起動します。</p>
+          <figure>
+          <img src="images/manage-others.png" alt="管理（⚙）→ その他：言語・ポート番号・バージョン更新・データ取得プロキシ許可リスト" />
+          <figcaption aria-hidden="true">管理（⚙）→ その他：バージョン・自動更新とデータ取得プロキシ許可リスト</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -80,6 +84,10 @@ python run.py --release  # リリース版を起動</code></pre>
         <h2>📖 使い方</h2>
         <div class="url-box">
           <h3>基本の流れ</h3>
+          <figure>
+          <img src="images/app-overview.png" alt="KASUGAI Canvas の画面：左にレイヤーパネル、地図上に OpenStreetMap" />
+          <figcaption aria-hidden="true">起動直後の画面（レイヤーパネル＋地図）</figcaption>
+          </figure>
           <ul>
             <li>設定は <code>projects/&lt;project&gt;/kasugai_canvas.kasc</code> に記述します。</li>
             <li>ローカルデータは <code>projects/&lt;project&gt;/DATA/</code> 以下に置き、設定から相対パスで参照できます。</li>
@@ -137,6 +145,10 @@ info: https://example.com/project-info.html</code></pre>
             <li>読み書きで接続中は管理 → アプリ → 保存 の「.kascをクラウドへ保存」で現在の設定をクラウド上に保存できます</li>
             <li>管理 → アプリ → 保存 の「現在の設定をインスペクタに追記して接続」を押すと <code>cloud: リモート | ルートフォルダ | perm=write | drive=K</code> 形式の設定行がインスペクタに追加されます。この行を <code>.kasc</code> に残すと、起動時・プロジェクト読み込み時に自動接続されます（<code>cloud: stop</code> で停止）</li>
           </ol>
+          <figure>
+          <img src="images/manage-rclone.png" alt="管理（⚙）→ アプリ → rclone：rclone の検出状態・インストール先フォルダ・リモート追加" />
+          <figcaption aria-hidden="true">管理（⚙）→ アプリ → rclone：導入とリモート追加</figcaption>
+          </figure>
           <p>ドライブ経由の読み書きは Windows WebClient の制約で約 50MB 超のファイルを扱えません（<code>cloud:</code> スキーム経由はこの制限を受けません）。この機能はローカルサーバー（local ティア）のみで有効です。</p>
         </div>
       </section>

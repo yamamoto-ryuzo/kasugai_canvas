@@ -22,6 +22,10 @@
 
       <h3>🗨️ AI チャット（Gemini / OpenAI互換）</h3>
       <p>管理（⚙）→ AI → チャット で Gemini API キーを登録すると、右下のチャットパネルから自然言語で地図を操作できます。ブラウザから Gemini API を直接呼び出す構成（BYO = Bring Your Own キー方式：各ユーザーが自分の API キーを登録して使う）で、静的配信のまま利用可能です。<strong>キーの供給経路は2つ</strong>あり、BYO キーが無い環境でも、バックエンド（Cloudflare Pages/Workers・Cloud Run）が <code>POST /api/gemini</code>（<code>aiProxy</code> 機能）を通知していればサーバー側のキーでキーレス利用できます。</p>
+      <figure>
+      <img src="../images/manage-ai.png" alt="管理（⚙）→ AI → チャット：Gemini API キーとモデル選択" />
+      <figcaption aria-hidden="true">管理（⚙）→ AI → チャット：API キー・モデルの設定</figcaption>
+      </figure>
       <p><strong>AI プロバイダは切替式</strong>で、選択肢は名前の接頭辞どおり【API】系と【ブリッジ】系の2系統に分かれます。接続先・設定項目・ツール実行方式が系統ごとに異なり、function calling ループ（ツール結果を見て複数往復で判断する本体AIの動作）は【API】系のみが持ちます。</p>
       <p><strong>モデル共通の追加指示</strong>：管理 → AI → チャット →「追加指示」タブで、Gemini や OpenAI 互換モデルに共通する指示を保存できます。通常はブラウザに保存されます。Cloud Run で <code>KASUGAI_AI_INSTRUCTIONS</code> を設定すると、サーバー側の指示を優先し、内蔵 AI の <code>/api/gemini</code> 経由のリクエストへ適用します。指示文の例は <a href="../hackathon.html">ハッカソン</a> を参照してください。</p>
       <ul>
@@ -31,6 +35,10 @@
         <li><strong>【ブリッジ】 Antigravity</strong>（V5 アプリ版の機能）— 同梱の <code>antigravity-bridge/</code> が Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Antigravity 選択時にのみ起動し、ブリッジが <code>agy mcp add</code> で地図ツールを登録・<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します。本人の Google アカウントでの agy ログインと利用枠が前提で、専用プロバイダはアプリ版のみ表示され</li>
         <li><strong>【ブリッジ】 外部エージェント</strong>（通常版）— 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。ブラウザから届くURLであれば接続でき、エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。自作エージェントの接続に使います</li>
       </ul>
+      <figure>
+      <img src="../images/manage-agent.png" alt="管理（⚙）→ AI → エージェント：AI 生成プラグインの管理と外部エージェント接続設定" />
+      <figcaption aria-hidden="true">管理（⚙）→ AI → エージェント：外部エージェント接続と AI 生成プラグインの管理</figcaption>
+      </figure>
       <p><strong>設定と利用の分離（v5.23〜）</strong>：設定画面（管理 → AI → チャット）はプロバイダ別の専用項目のみを表示し（Copilot/Devin/Antigravity/外部エージェントで案内文・モデル欄・トークン欄が混在しない）、選択・保存時に実接続テスト（ブリッジ系は <code>/models</code> でモデル一覧まで取得、外部エージェントは <code>/agent</code> プローブ）を行います。一方、チャットパネルのヘッダーにあるプロバイダ切替ドロップダウンは「設定済みで使えるものだけ」を選択肢に出す利用側で、選択時は軽い疎通確認（<code>/health</code>）のみを行います — Devin の <code>acp</code> 起動やブラウザ認証がチャットの切替だけで発火することはありません。モデル選択・APIキー・エンドポイントの編集は設定画面のみです。チャット側の状態表示は「接続中…」（赤・確認待ち）→ モデル名表示（確認済み）、失敗時は赤のまま「未接続」（失敗理由はツールチップまたは設定画面のステータス欄に表示）。</p>
       <p><strong>Devin の APIキー</strong>（v5.23〜）：Devin プロバイダの設定画面に「Devin APIキー」欄があります。app.devin.ai → Settings → Devin API → <strong>Service users</strong> タブで発行した <code>cog_</code> キーを入れると <code>devin acp</code> の認証を APIキーで完了でき、ブラウザの PKCE ログイン画面を省略できます（<strong>PAT は acp 認証で拒否される</strong>ためサービスユーザーキーが必要）。空欄なら従来どおりブラウザログイン。キーはブラウザの localStorage に保存され、ローカルのブリッジへ <code>X-Devin-Api-Key</code> ヘッダでのみ送信されます（外部・平文HTTPには送信しません）。</p>
       <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="../google.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>

@@ -72,6 +72,13 @@
 
       <h3>📊 属性（Attr）表示</h3>
       <p>地物をクリックすると属性を Attr パネルに一覧表示します。重なった地物（ポリゴン等の面重なり）は <code>scene.drillPick</code> で最大16件を手前から順に拾い、件数付きヘッダー一覧として表示し、行クリックで個別属性を展開します。3D Tiles（構造化メタデータ <code>Cesium3DTileFeature</code>）・ベクター（entity/primitive）の各描画経路を同じ形式に正規化して扱います。</p>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../images/attr-panel.png" alt="属性タブ：クリックした建築物（3D Tiles）の属性一覧" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../images/attr-panel-overlap.png" alt="属性タブ：重なった地物 3 件のドリルピック一覧" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">属性タブ（左：選択地物の属性、右：重なった地物のドリルピック一覧）</figcaption>
+      </figure>
 
       <h3>🌐 多言語対応（8言語）</h3>
       <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の8言語に対応しています。管理（⚙）→ その他 の言語セレクタで即時切替でき、初回はブラウザ言語から自動判定します（未対応言語は英語）。選択は localStorage に保存され、AIチャットの回答言語も UI 言語に追随します。翻訳の基準言語は英語（<code>en.json</code> がフォールバック辞書）です。</p>

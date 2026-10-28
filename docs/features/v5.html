@@ -36,6 +36,10 @@
           <li>未導入時は rclone タブで「インストール先フォルダ」を指定して「ダウンロードして配置」で公式配布物を取得（インストーラー不要の単体バイナリ）</li>
           <li>リモート追加は rclone タブで種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選ぶだけで、その種別名をリモート名として <code>rclone config create</code> を起動し、ブラウザで OAuth 認証します。登録したリモートの選択・接続はクラウドタブで行います</li>
         </ul>
+        <figure>
+        <img src="../images/manage-rclone.png" alt="管理（⚙）→ アプリ → rclone：rclone の検出状態・インストール先フォルダ・リモート追加" />
+        <figcaption aria-hidden="true">管理（⚙）→ アプリ → rclone タブ</figcaption>
+        </figure>
         <h3>ルートフォルダとフォルダURL</h3>
         <ul>
           <li>「ルートフォルダ」に指定したフォルダが接続の起点になります（空欄はリモート全体）</li>
@@ -95,9 +99,17 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
       <p><code>GET/HEAD /api/fetch</code> は CORS 非対応の外部データを取り込むためのプロキシです（<code>duckdb:</code> の <code>proxy=on</code> や AI の fetchData が利用。Range/HEAD 転送対応）。SSRF 対策として、プライベート・ループバック・リンクローカル等のアドレスへの接続は<strong>既定で拒否</strong>します（ホスト名は名前解決して IP で判定）。社内 LAN の GIS サーバー等からデータを取得したい場合は、exe 隣の <code>kasugai_canvas.fetch.json</code> に許可リストを記述します（リクエスト毎に読むため再起動不要）。</p>
       <pre><code>{"allow":["192.168.0.0/16","geoserver.city.local","127.0.0.1"]}   … ホスト名・個別IP・IPv4 CIDR</code></pre>
       <p>許可リストは管理（⚙）→ その他 の「データ取得プロキシ」セクションからも1行1エントリで編集・保存できます（保存で即時反映）。設定 API は <code>GET/PUT /api/fetch/settings</code> で、ローカル実行時のみ公開されます。既定で拒否される範囲の詳細は <a href="../security.html">セキュリティ対策</a> を参照してください。</p>
+      <figure>
+      <img src="../images/manage-others.png" alt="管理（⚙）→ その他：データ取得プロキシの許可リスト編集欄" />
+      <figcaption aria-hidden="true">管理（⚙）→ その他 の「データ取得プロキシ」セクション</figcaption>
+      </figure>
 
       <h3>📦 納品用ローカル化（_local ワークスペース）</h3>
       <p>管理（⚙）→ アプリ → 保存 で<strong>「共有（既定）」または「専用」</strong>を選び、「納品パッケージを生成（_local/）」を実行します。<strong>元のプロジェクトは変更せず</strong>、プロジェクトフォルダの隣に <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します。API は <code>POST /api/cloud/localize {"project":"内部ID","scope":"shared"}</code>（省略時も shared）、専用は <code>scope:"project"</code> です。対象はディスクに保存済みの .kasc であり、インスペクターの未保存編集ではありません。</p>
+      <figure>
+      <img src="../images/manage-save.png" alt="管理（⚙）→ アプリ → 保存：起動時の自動接続・プロジェクト保存・納品パッケージ生成" />
+      <figcaption aria-hidden="true">管理（⚙）→ アプリ → 保存：自動接続・.kasc 保存・納品パッケージ生成</figcaption>
+      </figure>
       <pre><code>ProjectA_local/           … 納品ワークスペース。このフォルダを ZIP にして渡す
 ├─ projects.json          … 群マニフェスト（複製内 .kasc を開くだけで登録される）
 ├─ DATA/                  … 共有スコープ
@@ -136,6 +148,10 @@ POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既
         <li><code>/api/files</code>・<code>/api/cloud/localize</code> 等のプロジェクト系 API も外部プロジェクトに対応します。通常のファイル保存は登録フォルダ内、納品用ローカル化は登録フォルダの隣に <code>&lt;dir&gt;_local/</code> ワークスペースを生成します</li>
         <li>ローカルサーバー（local ティア）のみの機能です。静的配信・コンテナ実行では関連付け自体が存在しません</li>
       </ul>
+      <figure>
+      <img src="../images/settings-project.png" alt="設定 → プロジェクト：プロジェクト選択とプロジェクトルートの表示" />
+      <figcaption aria-hidden="true">設定 → プロジェクトタブの「プロジェクトルート」表示</figcaption>
+      </figure>
       <h4>推奨納品パッケージ構造（プロジェクト群＋共有DATA）</h4>
       <pre><code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡せる
 ├─ DATA/                  … 全プロジェクト群で共有（../../DATA/… で参照）
