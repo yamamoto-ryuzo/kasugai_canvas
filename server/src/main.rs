@@ -4280,23 +4280,16 @@ async fn bind_for_update(
         // どの経路でも TerminateProcess/taskkill /F 相当のため、graceful 待機を
         // 長く取っても得るものはほぼ無い。/T で子プロセス(rclone serve・
         // ブリッジハブ等)ごと落とし孤児化を防ぐ。
+        // ただし占有者が update_pid(=自分を起動した旧プロセス・祖先)の場合は
+        // /T を使うと子孫の自分も道連れで終了してしまうため、kill_process_forced
+        // が祖先だけ単独 kill + 兄弟プロセス個別 kill に切り替える。
         // KASUGAI Canvas 以外の占有者は殺さず従来通りエラーとする
         for pid in port_owner_pids(address.port()).await {
             eprintln!(
                 "update: ポート {} を解放するため pid {pid} を強制終了します",
                 address.port()
             );
-            if cfg!(windows) {
-                let _ = tokio::process::Command::new("taskkill")
-                    .args(["/PID", &pid.to_string(), "/T", "/F"])
-                    .output()
-                    .await;
-            } else {
-                let _ = tokio::process::Command::new("kill")
-                    .args(["-9", &pid.to_string()])
-                    .output()
-                    .await;
-            }
+            kill_process_forced(pid, Some(update_pid)).await;
         }
         listener = wait_port_bind(address, 10).await?;
     }
@@ -5053,11 +5046,72 @@ async fn port_owner_pids(port: u16) -> Vec<u32> {
     pids.into_iter().collect()
 }
 
+// parent_pid の直接の子プロセス PID 一覧(Windows のみ・PowerShell CIM)。
+// except_pid は結果から除外する(自分自身を兄弟リストから外す用途)
+async fn child_pids(parent_pid: u32, except_pid: u32) -> Vec<u32> {
+    if !cfg!(windows) {
+        return Vec::new();
+    }
+    let output = tokio::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!(
+                "(Get-CimInstance Win32_Process -Filter \"ParentProcessId={parent_pid}\").ProcessId"
+            ),
+        ])
+        .output()
+        .await;
+    let Ok(out) = output else {
+        return Vec::new();
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .split_whitespace()
+        .filter_map(|s| s.parse::<u32>().ok())
+        .filter(|pid| *pid != except_pid)
+        .collect()
+}
+
+// プロセスを強制終了する。Windows の taskkill /T はツリーごと落とすため
+// rclone serve・ブリッジ CLI 等の孤児化を防げるが、対象が自分の祖先
+// (=自動更新で自分を起動した旧プロセス)だと子孫の自分も道連れで終了する。
+// ancestor_pid と一致する場合は、対象の他の子(=自分の兄弟)を個別に /T で
+// 落としてから対象を単独 /F で落とし、自殺を回避する
+async fn kill_process_forced(pid: u32, ancestor_pid: Option<u32>) {
+    if cfg!(windows) {
+        if Some(pid) == ancestor_pid {
+            for child in child_pids(pid, std::process::id()).await {
+                let _ = tokio::process::Command::new("taskkill")
+                    .args(["/PID", &child.to_string(), "/T", "/F"])
+                    .output()
+                    .await;
+            }
+            let _ = tokio::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/F"])
+                .output()
+                .await;
+        } else {
+            let _ = tokio::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/T", "/F"])
+                .output()
+                .await;
+        }
+    } else {
+        let _ = tokio::process::Command::new("kill")
+            .args(["-9", &pid.to_string()])
+            .output()
+            .await;
+    }
+}
+
 // 指定ポートを占有しているブリッジを強制終了する。
 // 占有者が Copilot ブリッジ（/health が {ok:true} を返す）と確認できた場合のみ
 // PID を特定して kill し true を返す。無関係なプロセスの誤終了を防ぐため、
-// ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）
-async fn kill_bridge_on_port(port: u16) -> bool {
+// ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）。
+// ancestor_pid は自分の祖先(自動更新の旧プロセス)。占有者が祖先に一致する
+// 場合は taskkill /T が自分を道連れにするため kill_process_forced が単独 kill する
+async fn kill_bridge_on_port(port: u16, ancestor_pid: Option<u32>) -> bool {
     let is_bridge = async {
         let resp = reqwest::Client::new()
             .get(format!("http://127.0.0.1:{port}/health"))
@@ -5082,17 +5136,7 @@ async fn kill_bridge_on_port(port: u16) -> bool {
     }
     for pid in pids {
         eprintln!("bridge: ポート {port} の既存ブリッジ (pid {pid}) を停止します");
-        if cfg!(windows) {
-            let _ = tokio::process::Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/T", "/F"])
-                .output()
-                .await;
-        } else {
-            let _ = tokio::process::Command::new("kill")
-                .args(["-9", &pid.to_string()])
-                .output()
-                .await;
-        }
+        kill_process_forced(pid, ancestor_pid).await;
     }
     true
 }
@@ -5351,13 +5395,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // 旧版ブリッジ（8512/8513）が残っていれば停止する
             for legacy_port in LEGACY_BRIDGE_PORTS {
                 if TcpListener::bind(("127.0.0.1", legacy_port)).await.is_err()
-                    && kill_bridge_on_port(legacy_port).await
+                    && kill_bridge_on_port(legacy_port, finish_update_pid).await
                 {
                     eprintln!("bridge-hub: 旧版ブリッジ (port {legacy_port}) を停止しました");
                 }
             }
             let mut listener = TcpListener::bind(("127.0.0.1", hub_port)).await.ok();
-            if listener.is_none() && kill_bridge_on_port(hub_port).await {
+            if listener.is_none() && kill_bridge_on_port(hub_port, finish_update_pid).await {
                 // kill 直後はポート解放を短時間待つ
                 for _ in 0..20 {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
