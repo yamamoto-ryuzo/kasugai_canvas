@@ -54,6 +54,7 @@ function guardFrameDoc() {
       lastFrameDoc = frame.contentDocument;
       frame.style.visibility = "visible";
       mirrorGlobeView();
+      maybeInjectGlobeLayers();
       return;
     }
     if (!path.endsWith("/vendor/gsimaps/index_pm.html")) {
@@ -229,6 +230,7 @@ function enterGlobe(url) {
   syncUrlViewNow();
   globeMode = true;
   lastGlobeHash = "";
+  globeInjected = false;
   showGlobeBack(true);
   try {
     frame.src = new URL(url, frame.contentWindow.location.href).href;
@@ -290,6 +292,129 @@ function exitGlobe() {
   lastVendorSrc = frame.src;
 }
 document.getElementById("globe-back")?.addEventListener("click", exitGlobe);
+
+// ---- Globe 上への Canvas レイヤ注入 ----
+// Globe は Cesium アプリ(GLOBE.MAP.viewer)。同一オリジンのため親から直接
+// DataSource/ImageryLayer を追加できる。.kasc ベクター行 → GeoJsonDataSource、
+// xyz/wms/wmts 行 → ImageryLayer。上流コードは無改変のまま、注入物はこちら側で
+// 管理し可視性もパネルのチェックへ同期する
+let globeInjected = false;
+
+function globeApis() {
+  const w = frame.contentWindow;
+  return { viewer: w?.GLOBE?.MAP?.viewer, C: w?.Cesium };
+}
+
+// Globe ページの viewer 生成を待って現在のレイヤを注入する
+function maybeInjectGlobeLayers() {
+  const { viewer, C } = globeApis();
+  if (!viewer || !C || globeInjected) return;
+  globeInjected = true;
+  void injectGlobeLayers();
+}
+
+async function injectGlobeLayers() {
+  const { viewer, C } = globeApis();
+  if (!viewer || !C) { globeInjected = false; return; }
+  for (const e of layerEntries) {
+    try { await mountGlobeEntry(e); }
+    catch (err) { console.warn("[globe] inject:", e.item.title, err); }
+  }
+  // 外部タイルのベース行も地表イメージとして載せる(GSIベースは globe 側の base= に委譲)
+  const sel = document.getElementById("basemap-select");
+  const idx = Number(sel?.value ?? -1);
+  const b = baseEntries[idx];
+  if (b && !b.gsiId && !b._globeImagery && b.item.url && !baseHidden) {
+    try { b._globeImagery = addGlobeImagery(b.item); } catch (err) { console.warn("[globe] base:", err); }
+  }
+}
+
+async function mountGlobeEntry(e) {
+  const item = e.item;
+  if (e._globeDs || e._globeImagery) return;
+  const on = item.visible !== false;
+  if (VECTOR_TYPES.has(item.type)) {
+    if (!item._geojson) {
+      const result = await loadVectorItem(item, lastBaseUrl);
+      item._geojson = result.geojson;
+    }
+    e._globeDs = await addGlobeGeoJson(item._geojson);
+    if (e._globeDs) e._globeDs.show = on;
+    return;
+  }
+  if (TILE_TYPES.has(item.type)) {
+    e._globeImagery = addGlobeImagery(item);
+    if (e._globeImagery) e._globeImagery.show = on;
+  }
+}
+
+// GeoJSON → Globe の Cesium GeoJsonDataSource。`_`-props の解決済みスタイルを
+// entity へ適用する(旧Cesiumでも動くよう clamp 系は存在確認つき)
+async function addGlobeGeoJson(geojson) {
+  const { viewer, C } = globeApis();
+  if (!viewer || !C) return null;
+  const features = geojson?.features || [];
+  if (!features.length) return null;
+  const ds = await C.GeoJsonDataSource.load(
+    { type: "FeatureCollection", features }, { clampToGround: true });
+  for (const ent of ds.entities.values) styleGlobeEntity(ent, C);
+  viewer.dataSources.add(ds);
+  return ds;
+}
+
+function styleGlobeEntity(ent, C) {
+  let p = {};
+  try { p = ent.properties?.getValue?.(C.JulianDate.now()) || {}; } catch (_) {}
+  const css = (v, fb) => { try { return C.Color.fromCssColorString(v || fb); } catch (_) { return C.Color.fromCssColorString(fb); } };
+  const withA = (c, a) => { const x = c.clone(); x.alpha = a == null ? 1 : Number(a); return x; };
+  if (ent.billboard || ent.position && !ent.polyline && !ent.polygon) {
+    if (ent.billboard) ent.billboard = undefined;
+    ent.point = new C.PointGraphics({
+      pixelSize: Math.max(2, (Number(p._radius) || 5) * 2),
+      color: withA(css(p._fillColor, "#3a7bd5"), p._fillOpacity ?? 1),
+      outlineColor: withA(css(p._color, "#ffffff"), p._opacity ?? 1),
+      outlineWidth: Number(p._weight) || 1,
+    });
+    if (C.HeightReference?.CLAMP_TO_GROUND != null && "heightReference" in ent.point)
+      ent.point.heightReference = C.HeightReference.CLAMP_TO_GROUND;
+  }
+  if (ent.polyline) {
+    ent.polyline.width = Number(p._weight) || 2;
+    ent.polyline.material = withA(css(p._color, "#2c5ea8"), p._opacity ?? 1);
+    if ("clampToGround" in ent.polyline) ent.polyline.clampToGround = true;
+  }
+  if (ent.polygon) {
+    ent.polygon.material = withA(css(p._fillColor, "#3a7bd5"), p._fillOpacity ?? 0.4);
+    ent.polygon.outline = false; // 地形クランプポリゴンは輪郭描画に非対応
+    if ("perPositionHeight" in ent.polygon) ent.polygon.perPositionHeight = false;
+    if (C.HeightReference?.CLAMP_TO_GROUND != null && "heightReference" in ent.polygon)
+      ent.polygon.heightReference = C.HeightReference.CLAMP_TO_GROUND;
+  }
+}
+
+// xyz/wmts 行 → UrlTemplateImageryProvider({z}/{x}/{y})、wms 行 →
+// WebMapServiceImageryProvider。Leaflet 用 {bbox-epsg-3857} テンプレートは
+// Cesium では使えないため wms はプロバイダ側へ分解して渡す
+function addGlobeImagery(item) {
+  const { viewer, C } = globeApis();
+  if (!viewer || !C) return null;
+  const opts = item.opts || {};
+  if (item.type === "wms") {
+    return viewer.imageryLayers.addImageryProvider(new C.WebMapServiceImageryProvider({
+      url: resolveKascUrl(item.url, lastBaseUrl),
+      layers: opts.layers ?? "",
+      parameters: {
+        transparent: String(opts.transparent ?? "true"),
+        format: opts.format || "image/png",
+        version: opts.version || "1.1.1",
+        styles: opts.styles || "",
+      },
+    }));
+  }
+  const url = tileUrlOf(item); // wmts も {z}/{x}/{y} へ正規化済み
+  if (!/\{[zxy]\}/.test(url)) return null;
+  return viewer.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url }));
+}
 
 // 新しい iframe 地図へのイベント配線(reboot 時にも呼ぶ)
 function wireMapEvents() {
@@ -394,8 +519,13 @@ function effectiveVisible(entry) {
 }
 
 function applyEntryVisibility(entry) {
-  if (globeMode) return; // map 参照は死んでいる。item.visible は呼出側で更新済み・2D復帰時に再構築
   const on = effectiveVisible(entry);
+  if (globeMode) {
+    // map 参照は死んでいるため globe 注入物の表示だけ同期する
+    if (entry._globeDs) entry._globeDs.show = on;
+    if (entry._globeImagery) entry._globeImagery.show = on;
+    return;
+  }
   if (entry.sakuzu) entry.sakuzu.setVisible(on);
   if (entry.tileLayer && gmap) {
     if (on && !gmap.hasLayer(entry.tileLayer)) gmap.addLayer(entry.tileLayer);
@@ -822,7 +952,8 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
 
 // ---- kasugaiApi（AI/外部制御） ----
 function maybeLoadEntry(entry) {
-  if (globeMode || entry.pending || entry.sakuzu || entry.tileLayer) return;
+  if (globeMode) { void mountGlobeEntry(entry); return; }
+  if (entry.pending || entry.sakuzu || entry.tileLayer) return;
   entry.pending = true;
   mountEntry(entry).then(() => { entry.pending = false; renderLayerRows(); })
     .catch(err => { entry.pending = false; entry.failed = true; renderLayerRows(); console.warn(err); });
