@@ -1,19 +1,24 @@
 [package]
 name = "kasugai_canvas"
-version = "6.0.0"
+version = "6.1.0"
 edition = "2021"
 license = "MIT"
 description = "KASUGAI Canvas CesiumJS and Three.js viewer"
 
 [dependencies]
+async-trait = "0.1"
 axum = "0.8"
+# AIブリッジ(Copilot)は外部 copilot CLI を子プロセス起動して stdio 接続する
+# 外部ストリーム専用: default-features = false でランタイムのDL/同梱を行わない
+github-copilot-sdk = { version = "1.0.28", default-features = false }
 opener = "0.7.2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "process", "sync", "time", "fs"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "process", "sync", "time", "fs", "io-util"] }
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.6", features = ["fs", "cors"] }
+uuid = { version = "1", features = ["v4"] }
 zip = { version = "9.1.2", default-features = false, features = ["deflate"] }
 
 [build-dependencies]

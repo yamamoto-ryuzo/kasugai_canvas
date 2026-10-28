@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use axum::extract::{DefaultBodyLimit, State};
-use axum::http::{HeaderMap, Method, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
@@ -15,6 +15,8 @@ use tokio::net::TcpListener;
 use tokio::sync::{Mutex, Notify};
 use tower::ServiceExt;
 use tower_http::services::ServeDir;
+
+mod bridge;
 
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const CLOUD_CONFIG_FILE_NAME: &str = "kasugai_canvas.cloud.json";
@@ -99,10 +101,10 @@ struct AppState {
     projects_dir: Arc<PathBuf>,
     // ローカル実行(127.0.0.1バインド)のとき true。高権限APIの公開可否判定に使う
     is_local: bool,
-    // ブリッジハブ(bridge-hub/server.mjs)の子プロセス。
-    // アプリ版ではサーバーが自動起動し 127.0.0.1:8511 に待受けさせる。
-    // ハブが選択中プロバイダのブリッジだけを遅延起動する（常時1プロセスのみ）
-    bridge_hub: Arc<Mutex<Option<tokio::process::Child>>>,
+    // AIブリッジハブ（アプリ内モジュール。127.0.0.1:8511 で待受）。
+    // Copilot/Devin/Antigravity 各プロバイダは外部 CLI を遅延起動する。
+    // ローカル実行時のみ Some
+    bridge_state: Option<Arc<bridge::BridgeState>>,
     // フロントへ通知するブリッジのエージェントエンドポイント(管理対象がある場合のみ)
     copilot_endpoint: Option<String>,
     devin_endpoint: Option<String>,
@@ -3388,7 +3390,7 @@ mod localize_tests {
                 web_dir: Arc::new(root.clone()),
                 projects_dir: Arc::new(root.join("projects")),
                 is_local: true,
-                bridge_hub: Arc::new(Mutex::new(None)),
+                bridge_state: None,
                 copilot_endpoint: None,
                 devin_endpoint: None,
                 antigravity_endpoint: None,
@@ -4318,6 +4320,20 @@ fn internal_error(error: impl std::fmt::Display) -> (StatusCode, String) {
     (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
 }
 
+// 応答に Cache-Control: no-cache を付けるミドルウェア。
+// ServeDir は Last-Modified を返し If-Modified-Since で 304 再検証できるため、
+// no-cache(保存可・利用前に再検証必須)で鮮度を保証しつつ転送量を抑える
+async fn no_cache_middleware(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    response
+}
+
 // ---- 外部プロジェクト(.kasc ファイル関連付け起動) ----
 // インストールフォルダ外にある .kasc をプロジェクトとして登録する。
 // .kasc のあるフォルダがそのまま /projects/<id>/ のルートになるため、
@@ -4980,11 +4996,9 @@ fn resolve_dir(
     fallback()
 }
 
-// ---- AI ブリッジの自動起動（アプリ版のみ） ----
-// Copilot はブラウザから直接呼べる公開APIを持たないため、公式 SDK を使う
-// ブリッジハブ(bridge-hub/server.mjs)は 127.0.0.1:8511。
-// Copilot/Devin/Antigravity の各ブリッジはハブの子プロセスとして
-// 選択されたものだけが遅延起動される（旧版の常駐ポート 8511/8512/8513 は廃止）
+// ---- AI ブリッジハブ（アプリ版のみ） ----
+// Copilot/Devin/Antigravity はブラウザから直接呼べる公開APIを持たないため、
+// アプリ内モジュールが各 CLI を子プロセス起動して中継する（bridge/ モジュール）。
 // 待受ポートは既定 8511。BRIDGE_HUB_PORT 環境変数で変更できる
 //（capabilities が実ポートのエンドポイントを通知するためブラウザ側設定は不要）
 fn bridge_hub_port() -> u16 {
@@ -4995,51 +5009,6 @@ fn bridge_hub_port() -> u16 {
 }
 // 旧版が残したブリッジの掃除対象ポート（占有者がブリッジの場合のみ停止する）
 const LEGACY_BRIDGE_PORTS: [u16; 2] = [8512, 8513];
-
-// Node 製ブリッジ(server.mjs)を子プロセスとして起動する。
-// port_env_name にポート番号を渡す環境変数名、label にログ接頭辞を指定する
-fn spawn_node_bridge(
-    bridge_dir: &Path,
-    log_path: &Path,
-    port_env_name: &str,
-    port: u16,
-    label: &str,
-) -> Option<tokio::process::Child> {
-    // windows_subsystem="windows" ではコンソールが無いため、
-    // ブリッジの標準出力・エラーは exe 隣のログファイルに残す
-    for name in ["node", "node.exe"] {
-        // Stdio は clone 不可なので試行ごとにログファイルを開き直す
-        let open_log = || {
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(log_path)
-                .ok()
-        };
-        let stdout = open_log()
-            .map(std::process::Stdio::from)
-            .unwrap_or_else(std::process::Stdio::null);
-        let stderr = open_log()
-            .map(std::process::Stdio::from)
-            .unwrap_or_else(std::process::Stdio::null);
-        match tokio::process::Command::new(name)
-            .arg("server.mjs")
-            .current_dir(bridge_dir)
-            .env(port_env_name, port.to_string())
-            .env("NODE_NO_WARNINGS", "1")
-            .stdin(std::process::Stdio::null())
-            .stdout(stdout)
-            .stderr(stderr)
-            .kill_on_drop(true)
-            .spawn()
-        {
-            Ok(child) => return Some(child),
-            Err(_) => continue,
-        }
-    }
-    eprintln!("{label}: Node.js が見つかりません（ブリッジは起動しません）");
-    None
-}
 
 // 指定ポートを LISTEN しているプロセスの PID 一覧。
 // Windows は netstat -ano、Unix は lsof で取得する
@@ -5130,20 +5099,7 @@ async fn kill_bridge_on_port(port: u16) -> bool {
 
 // Windows は taskkill /T で子孫(Copilot/Devin CLI 等)まで落とす。
 // 他OSは直接の子のみ kill（孫プロセスは孤児になりうるが CLI 側で短命に終わる想定）
-async fn kill_bridge_child(mut child: tokio::process::Child) {
-    #[cfg(windows)]
-    if let Some(id) = child.id() {
-        let _ = tokio::process::Command::new("taskkill")
-            .args(["/PID", &id.to_string(), "/T", "/F"])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .await;
-        let _ = child.wait().await;
-        return;
-    }
-    let _ = child.kill().await;
-}
+// ブリッジ占有者の強制終了は kill_bridge_on_port 側で行う（taskkill /T /F）
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -5206,30 +5162,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // コンテナ実行(PORT 設定時)は高権限APIを公開しない
     let is_local = cloud_port.is_none();
 
-    // ブリッジハブ: ローカル実行かつ bridge-hub/ が見つかった場合のみ管理対象。
-    // 各プロバイダブリッジの起動・切替はハブに委譲し、ここではハブ1本だけを起動する
-    let bridge_hub_dir = resolve_dir(&exe_dir, "bridge-hub", || repo_dir.join("bridge-hub"));
-    let bridge_hub_dir = if is_local && bridge_hub_dir.join("server.mjs").is_file() {
-        Some(bridge_hub_dir)
-    } else {
-        None
-    };
+    // ブリッジハブ: ローカル実行時のみ管理対象（アプリ内モジュール bridge/）。
+    // Copilot/Devin/Antigravity 各プロバイダは外部 CLI を必要時に spawn する
     let hub_port = bridge_hub_port();
     let hub_endpoint = || format!("http://127.0.0.1:{hub_port}/agent");
-    // プロバイダごとの提供可否は「ハブが起動できる・ブリッジ同梱・個別無効化なし」で決まる
-    let provider_available = |dir_name: &str, disable_env: &str| {
-        bridge_hub_dir.is_some()
-            && std::env::var_os(disable_env).is_none()
-            && resolve_dir(&exe_dir, dir_name, || repo_dir.join(dir_name))
-                .join("server.mjs")
-                .is_file()
-    };
-    let copilot_endpoint = provider_available("copilot-bridge", "KASUGAI_NO_COPILOT_BRIDGE")
-        .then(hub_endpoint);
-    let devin_endpoint =
-        provider_available("devin-bridge", "KASUGAI_NO_DEVIN_BRIDGE").then(hub_endpoint);
-    let antigravity_endpoint =
-        provider_available("antigravity-bridge", "KASUGAI_NO_ANTIGRAVITY_BRIDGE").then(hub_endpoint);
+    // プロバイダごとの提供可否は「ローカル実行・個別無効化なし」で決まる
+    let provider_available = |disable_env: &str| is_local && std::env::var_os(disable_env).is_none();
+    let copilot_endpoint = provider_available("KASUGAI_NO_COPILOT_BRIDGE").then(hub_endpoint);
+    let devin_endpoint = provider_available("KASUGAI_NO_DEVIN_BRIDGE").then(hub_endpoint);
+    let antigravity_endpoint = provider_available("KASUGAI_NO_ANTIGRAVITY_BRIDGE").then(hub_endpoint);
 
     let external_projects_path = executable_directory.join(EXTERNAL_PROJECTS_FILE_NAME);
     let state = AppState {
@@ -5246,7 +5187,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         web_dir: Arc::new(web_dir.clone()),
         projects_dir: Arc::new(projects_dir.clone()),
         is_local,
-        bridge_hub: Arc::new(Mutex::new(None)),
+        bridge_state: (copilot_endpoint.is_some()
+            || devin_endpoint.is_some()
+            || antigravity_endpoint.is_some())
+        .then(|| Arc::new(bridge::BridgeState::new(hub_port))),
         copilot_endpoint,
         devin_endpoint,
         antigravity_endpoint,
@@ -5340,9 +5284,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
     }
 
+    // 静的配信は Cache-Control を出さないとブラウザがヒューリスティックに長期キャッシュし、
+    // ?t= バスターで更新されるエントリ(app.js 等)と入れ子 import(../shared/*.js)の版がズレて
+    // 起動不能になる。no-cache で毎回再検証させる(未変更なら 304 で転送量は増えない)
     let app = app
         .route("/projects/{*path}", get(serve_project_files))
         .fallback_service(ServeDir::new(&web_dir).append_index_html_on_directories(true))
+        .layer(axum::middleware::from_fn(no_cache_middleware))
         .layer(axum::middleware::from_fn(local_api_cors))
         .with_state(state.clone());
 
@@ -5393,14 +5341,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("KASUGAI Canvas: http://{address}");
 
-    // ブリッジハブを子プロセスとして起動する。
+    // ブリッジハブ（アプリ内モジュール bridge/）を起動する。
     // 8511 が使用中でも占有者がブリッジ（前回起動の残骸・旧バージョン等）なら
     // 強制停止して新版へ差し替える。ブリッジ以外の占有時のみ起動をスキップする。
     // ついでに旧版の常駐ポート（8512/8513）に残ったブリッジ残骸も掃除する。
     // 占有確認・kill は axum::serve を遅延させないよう spawn 内で行う
-    if let Some(hub_dir) = bridge_hub_dir {
-        let hub_state = state.clone();
-        let log_path = executable_directory.join("bridge-hub.log");
+    if let Some(bridge_state) = state.bridge_state.clone() {
         tokio::spawn(async move {
             // 旧版ブリッジ（8512/8513）が残っていれば停止する
             for legacy_port in LEGACY_BRIDGE_PORTS {
@@ -5410,35 +5356,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("bridge-hub: 旧版ブリッジ (port {legacy_port}) を停止しました");
                 }
             }
-            let mut port_taken = TcpListener::bind(("127.0.0.1", hub_port))
-                .await
-                .is_err();
-            if port_taken && kill_bridge_on_port(hub_port).await {
+            let mut listener = TcpListener::bind(("127.0.0.1", hub_port)).await.ok();
+            if listener.is_none() && kill_bridge_on_port(hub_port).await {
                 // kill 直後はポート解放を短時間待つ
                 for _ in 0..20 {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    if TcpListener::bind(("127.0.0.1", hub_port)).await.is_ok() {
-                        port_taken = false;
+                    if let Ok(l) = TcpListener::bind(("127.0.0.1", hub_port)).await {
+                        listener = Some(l);
                         break;
                     }
                 }
             }
-            if port_taken {
-                eprintln!("bridge-hub: 127.0.0.1:{hub_port} は別プロセスが使用中のため起動をスキップします");
-                return;
-            }
-            match spawn_node_bridge(
-                &hub_dir,
-                &log_path,
-                "BRIDGE_HUB_PORT",
-                hub_port,
-                "bridge-hub",
-            ) {
-                Some(child) => {
+            match listener {
+                Some(l) => {
                     eprintln!("bridge-hub: http://127.0.0.1:{hub_port}/agent");
-                    hub_state.bridge_hub.lock().await.replace(child);
+                    bridge::serve(bridge_state, l).await;
                 }
-                None => {}
+                None => {
+                    eprintln!("bridge-hub: 127.0.0.1:{hub_port} は別プロセスが使用中のため起動をスキップします");
+                }
             }
         });
     }
@@ -5460,9 +5396,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(mut serve) = state.cloud.lock().await.serve.take() {
         let _ = serve.child.kill().await;
     }
-    // ブリッジハブの子プロセスも終了させる（ハブは道連れに子ブリッジを止める）
-    if let Some(child) = state.bridge_hub.lock().await.take() {
-        kill_bridge_child(child).await;
+    // ブリッジハブのエージェント子プロセスも終了させる
+    if let Some(bs) = &state.bridge_state {
+        bs.shutdown().await;
     }
     Ok(())
 }

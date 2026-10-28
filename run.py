@@ -409,15 +409,8 @@ def build_release() -> None:
                     continue
                 if web_file.is_file():
                     archive.write(web_file, arcname=(Path("web") / web_file.relative_to(web_dir)).as_posix())
-        # ブリッジハブ（アプリ版が 8511 で自動起動する統一エンドポイント。要 Node.js。
-        # Copilot/Devin/Antigravity の各ブリッジはハブが遅延起動する子プロセス）
-        # node_modules は含めず、初回起動時にハブ側が npm install を実行する
-        for bridge_name in ("bridge-hub", "copilot-bridge", "devin-bridge", "antigravity-bridge"):
-            bridge_dir = ROOT / bridge_name
-            if bridge_dir.exists():
-                for bridge_file in bridge_dir.rglob("*"):
-                    if bridge_file.is_file() and "node_modules" not in bridge_file.parts:
-                        archive.write(bridge_file, arcname=(Path(bridge_name) / bridge_file.relative_to(bridge_dir)).as_posix())
+        # AI ブリッジハブは Rust 製アプリ内モジュールに統合済み（server/src/bridge/）。
+        # Node 製 bridge-hub/・*-bridge/ は参照実装として残置し、配布物には含めない
     print(f"ZIP を作成しました: {download_zip}")
 
     print("ZIP 内 EXE のバージョンを確認します...")

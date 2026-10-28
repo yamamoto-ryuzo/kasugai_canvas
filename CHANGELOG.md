@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.1.0] - 2026-10-29
+
+### Changed
+
+- **AI ブリッジハブを Node.js から Rust 製アプリ内モジュールへ移行**（`server/src/bridge/`）— 旧 `bridge-hub/server.mjs`（Node 子プロセス）と各 `*-bridge/server.mjs` を Rust に移植し本体へ統合。配布物・実行ともに **Node.js 不要**になった（旧 Node 実装は手動起動用の参照実装として残置し、配布 ZIP には含めない）。待受ポート・/agent・/models・/mcp の外部仕様は維持
+- Copilot プロバイダはランタイムを内蔵せず、ユーザー導入済みの `copilot` CLI を `--server --stdio` で起動して `github-copilot-sdk` の外部ストリームで接続する方式へ変更（`COPILOT_CLI_PATH` でパス指定可・npm グローバルの cmd shim にも対応）。devin（`devin acp` ACP）・antigravity（`agy` headless）は従来通り外部 CLI を起動
+
 ## [6.0.0] - 2026-10-28
 
 ### Added
