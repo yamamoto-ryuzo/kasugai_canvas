@@ -116,6 +116,16 @@
         <li><strong>geo_webview 連携</strong>: QGIS geo_webview のエクスポートは各エンジン用の <code>&lt;engine&gt;.html</code>（エンジン自動探索・<code>CANVAS_BASE</code> 上書き可）とリンク一覧の <code>index.html</code> を .kasc と同じ場所へ出力します。<code>file://</code> で開いた場合は起動中のローカル Canvas（127.0.0.1:8510）へプロジェクトを登録して開きます</li>
       </ul>
 
+      <h3>🌐 CDN ホスト版（kasugai-canvas-web）</h3>
+      <p>エンジン一式（<code>web/</code>）を CDN ライブラリのように静的配信する専用ホストが <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web</a>（GitHub Pages）です。「アプリはホスト・データはローカル（または任意 URL）」の構造で、KASUGAI Canvas 未インストールの環境でも <code>.kasc</code>+<code>DATA/</code> をブラウザ再生できます。</p>
+      <ul>
+        <li><strong>起動形式</strong>: <code>…/kasugai-canvas-web/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;url&gt;</code>。各ステージ配下に全エンジン（cesium・maplibre・openlayers・leaflet・gsimaps）が同居し、ステージルートの <code>?engine=</code> でも選択できます。<code>?kasc=local</code> ならローカルフォルダの .kasc を直接開けます（ホストされたエンジンがローカルのデータだけを読む、CDN ライブラリと同じ使い方）</li>
+        <li><strong>2チャンネル</strong>: <code>stable/</code>（既定・リリース版）と <code>unstable/</code>（kasugai_canvas 側 <code>main</code> の最新 <code>web/</code> 追従）。<code>latest/</code> は stable への静的リダイレクト、<code>channels.json</code> と各ステージの <code>version.json</code> がバージョン表です</li>
+        <li><strong>正本と同期</strong>: 正本は kasugai_canvas 側の <code>web/</code> で、CDN リポジトリは発行物のみ（直接編集しない）。同期は <code>python tools/publish_cdn.py --channel unstable|stable</code> で行い、どちらのチャンネルも <code>web/</code> を直接同期します（unstable 経由の格上げではない）。運用は「web/ に配信したい変更 → unstable 同期・リリース時に stable 同期」</li>
+        <li><strong>gsimaps の vendor 配置</strong>: 各ステージへ同期する際、gitignore 対象の <code>web/vendor/</code> 実体（地理院地図）も <code>vendor.json</code> の sha に従って配置されます</li>
+        <li><strong>利用者向けガイド</strong>: エンジン説明・QGIS からの出力手順はホスト側の <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">guide/</a> に集約しています</li>
+      </ul>
+
       <h3>⚙️ 開発ルール（マルチエンジン前提の設計）</h3>
       <ul>
         <li><strong>メインエンジンは CesiumJS</strong>: 新機能・UI 整備・AI 制御対応はまず Cesium フロントを対象とし、他エンジンは .kasc プレイヤーとしての互換実装です（Cesium 側の機能追従は必須ではありません）</li>
