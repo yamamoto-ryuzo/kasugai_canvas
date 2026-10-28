@@ -624,7 +624,7 @@ function buildLayerRow(entry, exclusive, radioName) {
   return wrap;
 }
 
-const collapsedGroups = new Set();
+const expandedLayerGroups = new Set();
 
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
@@ -653,8 +653,8 @@ function renderLayerRows(entries, unsupported) {
     const tg = document.createElement("button");
     tg.type = "button";
     tg.className = "layer-group-toggle";
-    tg.textContent = collapsedGroups.has(key) ? "▸" : "▾";
-    tg.setAttribute("aria-expanded", String(!collapsedGroups.has(key)));
+    tg.textContent = expandedLayerGroups.has(key) ? "▾" : "▸";
+    tg.setAttribute("aria-expanded", String(expandedLayerGroups.has(key)));
     const gcb = document.createElement("input");
     gcb.type = "checkbox";
     gcb.className = "layer-group-checkbox";
@@ -670,7 +670,7 @@ function renderLayerRows(entries, unsupported) {
     }
     const children = document.createElement("div");
     children.className = "layer-group-children";
-    children.hidden = collapsedGroups.has(key);
+    children.hidden = !expandedLayerGroups.has(key);
     for (const e of members) children.append(buildLayerRow(e, exclusive, `grp-${key}`));
     section.append(head, children);
     panel.layers.append(section);
@@ -690,8 +690,8 @@ function renderLayerRows(entries, unsupported) {
       children.hidden = collapsed;
       tg.textContent = collapsed ? "▸" : "▾";
       tg.setAttribute("aria-expanded", String(!collapsed));
-      if (collapsed) collapsedGroups.add(key);
-      else collapsedGroups.delete(key);
+      if (collapsed) expandedLayerGroups.delete(key);
+      else expandedLayerGroups.add(key);
     });
     gcb.addEventListener("change", () => {
       if (exclusive) {
