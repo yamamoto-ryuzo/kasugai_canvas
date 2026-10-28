@@ -59,6 +59,20 @@
   .layer-status.loading { width: 11px; height: 11px; border: 2px solid #d5dde4;
     border-top-color: #2c5ea8; border-radius: 50%; animation: layer-spin .8s linear infinite; }
   .layer-status.failed { color: #c0392b; }
+  /* グループ/凡例 UI(Leaflet 版と同じ構造) */
+  .layer-group-title { display: flex; align-items: center; gap: 4px; padding: 2px 0; font-weight: 600; }
+  .layer-group-title input { margin: 0; }
+  .layer-group-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layer-group-toggle, .layer-legend-toggle, .layer-focus {
+    border: none; background: none; cursor: pointer; padding: 0 2px; font-size: 11px; flex: none; }
+  .layer-group-children { margin-left: 14px; }
+  .layer-legend-items { margin-left: 22px; }
+  .legend-row { display: flex; align-items: center; gap: 5px; padding: 1px 0; font-size: 11px; }
+  .legend-row input { margin: 0; }
+  .legend-swatch { width: 16px; height: 16px; object-fit: contain; flex: none; }
+  .legend-row .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .exclusive-badge { color: #888; font-size: 10px; flex: none; }
+  #legends img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 4px 0; }
   @keyframes layer-spin { to { transform: rotate(360deg); } }
   .layer-focus { border: none; background: none; cursor: pointer; padding: 0 2px; font-size: 11px; flex: none; }
   .cam-btn { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 6px; font-size: 11px;
@@ -146,18 +160,27 @@
   </div>
   <button id="globe-back" type="button" hidden>← 2D地図に戻る（Globe表示中）</button>
   <div id="tabs">
-    <button class="tab active" data-tab="layers" type="button">レイヤ</button>
-    <button class="tab" data-tab="search" type="button">検索</button>
-    <button class="tab" data-tab="camera" type="button">カメラ</button>
-    <button class="tab" data-tab="info" type="button">情報</button>
+    <button class="tab active" data-tab="layers">レイヤ</button>
+    <button class="tab" data-tab="legend">凡例</button>
+    <button class="tab" data-tab="search">検索</button>
+    <button class="tab" data-tab="attr">属性</button>
+    <button class="tab" data-tab="camera">カメラ</button>
+    <button class="tab" data-tab="info">情報</button>
   </div>
   <div class="tab-pane" id="pane-layers">
     <select id="theme-select" hidden style="width:100%;margin-bottom:6px;"></select>
     <div id="layers"></div>
   </div>
+  <div class="tab-pane" id="pane-legend" hidden>
+    <div id="legends"></div>
+  </div>
   <div class="tab-pane" id="pane-search" hidden>
     <input id="search-input" type="text" placeholder="文字で検索" />
     <div id="search-results"></div>
+  </div>
+  <div class="tab-pane" id="pane-attr" hidden>
+    <button id="attr-widget-open" type="button" style="width:100%;margin-bottom:6px;padding:4px;border:1px solid #ccc;border-radius:4px;background:#f4f6f8;cursor:pointer;">選択中のレイヤ属性一覧</button>
+    <div id="attr-content">地物を選択すると属性を表示します。</div>
   </div>
   <div class="tab-pane" id="pane-camera" hidden>
     <div id="cams"></div>

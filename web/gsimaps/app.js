@@ -20,6 +20,8 @@ import {
   defaultPointRadius, buildWmsTileTemplate, buildWmtsTileTemplate,
 } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
+import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../shared/attr-widget.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initAiChat } from "../shared/ai-chat.js";
@@ -469,6 +471,8 @@ function injectSakuzuLayer(item, geojson) {
   const fc = { type: "FeatureCollection", features: (geojson?.features || []).map(f => styledFeature(item, f)) };
   const layer = new G.GeoJSON(null, { geodesic: true });
   layer.addData(fc);
+  // 地物クリック → 親の属性タブへ(Leaflet 版と同じ導線)
+  layer.eachLayer(l => l.on("click", () => showFeatureAttrs(l.feature?.properties || {})));
   const title = item.title || "layer";
   const fileName = /\.[a-z0-9]+$/i.test(title) ? title : `${title}.geojson`;
   const sk = new G.SakuzuListItem(
@@ -595,6 +599,46 @@ function scheduleViewportReload() {
   }, 400);
 }
 
+// ---- 属性 ----
+const attrContentEl = () => document.getElementById("attr-content");
+
+// iframe 内地物クリック → 属性タブへ表示。`_`-props(中間層の内部スタイル値)は除く
+function showFeatureAttrs(props) {
+  const el = attrContentEl();
+  if (!el) return;
+  const clean = {};
+  for (const [k, v] of Object.entries(props || {})) if (!k.startsWith("_")) clean[k] = v;
+  renderAttrContent(el, attrEntriesFromProps(clean));
+}
+
+function focusFeatureExtent(feature) {
+  if (!gmap || globeMode) return;
+  const env = geojsonExtent({ type: "FeatureCollection", features: feature ? [feature] : [] });
+  if (env) gmap.fitBounds([[env.south, env.west], [env.north, env.east]], { padding: [50, 50] });
+}
+
+// 「属性・値一覧」ボトムシート(Leaflet 版と同じ共有ウィジェット)
+const attrWidget = createAttrWidget({
+  listLayers: () => layerEntries
+    .map((entry, i) => ({ id: String(i), title: splitKascTitle(entry.item.title).title || entry.item.title || entry.item.url, entry }))
+    .filter(o => VECTOR_TYPES.has(o.entry.item.type)),
+  getFeatures: async entry => {
+    const item = entry.item;
+    // bbox 連動クエリ系は表示範囲分しか持たないため、属性一覧は全件読込にする
+    if (isViewportQueryItem(item)) {
+      const { geojson } = await loadVectorItem(item, lastBaseUrl, null);
+      return { features: geojson?.features || [] };
+    }
+    if (!item._geojson && !entry.failed) await mountEntry(entry);
+    if (entry.failed) throw new Error(entry.error || "load failed");
+    return { features: item._geojson?.features || [] };
+  },
+  focusFeature: focusFeatureExtent,
+});
+document.getElementById("attr-widget-open")?.addEventListener("click", () => {
+  attrWidget.open(attrContentEl()?.dataset.layerId || null);
+});
+
 // ---- パネル ----
 function updateLoadProgress(done, total, label) {
   const el = document.getElementById("load-progress");
@@ -605,78 +649,189 @@ function updateLoadProgress(done, total, label) {
   el.hidden = done >= total;
 }
 
+// レイヤ行のステータス領域を entry の状態(読込中/失敗)へ同期する
+function syncRowStatus(entry) {
+  const el = entry.statusEl;
+  if (!el) return;
+  el.classList.toggle("loading", !!entry.pending);
+  el.classList.toggle("failed", !entry.pending && !!entry.failed);
+  el.textContent = entry.pending ? "" : entry.failed ? "失敗" : "";
+  el.title = entry.failed ? String(entry.error || "") : "";
+}
+
+// style 未指定ベクターの自動凡例: Leaflet 版と同じ既定色スウォッチ spec を
+// 先頭地物のジオメトリ種別から作る
+function defaultLegendSpec(item) {
+  if (!VECTOR_TYPES.has(item.type)) return null;
+  for (const f of item._geojson?.features || []) {
+    const spec = defaultVectorLegendSpec(f?.geometry?.type || "");
+    if (spec) return spec;
+  }
+  return null;
+}
+
+function buildLayerRow(entry, exclusive, radioName) {
+  const item = entry.item;
+  const wrap = document.createElement("div");
+  wrap.className = "layer-item";
+  const row = document.createElement("label");
+  row.className = "layer-row";
+
+  const cb = document.createElement("input");
+  cb.type = exclusive ? "radio" : "checkbox";
+  if (exclusive) cb.name = radioName;
+  cb.checked = item.visible !== false;
+  entry.cb = cb;
+  cb.addEventListener("change", () => {
+    item.visible = cb.checked;
+    if (cb.checked && exclusive) {
+      for (const sib of entry._siblings || []) {
+        if (sib === entry) continue;
+        sib.item.visible = false;
+        if (sib.cb) sib.cb.checked = false;
+        applyEntryVisibility(sib);
+      }
+    }
+    applyEntryVisibility(entry);
+    if (cb.checked) maybeLoadEntry(entry);
+    entry._groupCtl?.sync();
+  });
+  row.append(cb);
+
+  const statusEl = document.createElement("span");
+  statusEl.className = "layer-status";
+  entry.statusEl = statusEl;
+  syncRowStatus(entry);
+
+  const legendSpec = defaultLegendSpec(item);
+  if (legendSpec) {
+    const sw = document.createElement("img");
+    sw.className = "legend-swatch";
+    sw.src = qmlLegendSwatchDataUrl(legendSpec);
+    row.append(sw);
+  }
+
+  const name = document.createElement("span");
+  name.textContent = entry._leaf || item.url;
+  if (item.title && item.title !== entry._leaf) name.title = item.title;
+  // ベクターレイヤは名前クリックで「属性・値一覧」ウィジェットを開く
+  if (VECTOR_TYPES.has(item.type)) {
+    name.style.cursor = "pointer";
+    name.title = "属性一覧を表示";
+    name.addEventListener("click", ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      attrWidget.open(String(layerEntries.indexOf(entry)));
+    });
+  }
+  row.append(name, statusEl);
+
+  const fb = document.createElement("button");
+  fb.type = "button";
+  fb.className = "layer-focus";
+  fb.textContent = "📍";
+  fb.title = "レイヤーへ移動";
+  fb.addEventListener("click", ev => { ev.preventDefault(); ev.stopPropagation(); focusEntry(entry); });
+  row.append(fb);
+  wrap.append(row);
+  return wrap;
+}
+
+const expandedLayerGroups = new Set();
+
+// "グループ/レイヤ名"（"//"は排他グループ）でグループセクション化する。
+// Leaflet 版と同じ構造: 折りたたみ・グループチェック(不確定表示)・排他バッジ
 function renderLayerRows() {
   const box = document.getElementById("layers");
   box.replaceChildren();
-  const exclusiveGroups = new Map();
-  for (const e of layerEntries) {
-    const { group, title, exclusiveGroup } = splitKascTitle(e.item.title);
-    if (exclusiveGroup && group) {
-      if (!exclusiveGroups.has(group)) exclusiveGroups.set(group, []);
-      exclusiveGroups.get(group).push(e);
-    }
+  const grouped = new Map();
+  for (const entry of layerEntries) {
+    const sp = splitKascTitle(entry.item.title);
+    entry._leaf = sp.title;
+    const key = `${sp.group}|${sp.exclusiveGroup ? "exclusive" : "regular"}`;
+    if (!grouped.has(key)) grouped.set(key, { group: sp.group, exclusive: sp.exclusiveGroup, members: [] });
+    grouped.get(key).members.push(entry);
   }
-  for (const members of exclusiveGroups.values()) members.forEach(e => { e._siblings = members; e._radio = members.length > 1; });
 
-  const groups = new Map();
-  for (const e of layerEntries) {
-    const { group } = splitKascTitle(e.item.title);
-    if (!groups.has(group || "")) groups.set(group || "", []);
-    groups.get(group || "").push(e);
-  }
-  const addRow = (e, container) => {
-    const { title } = splitKascTitle(e.item.title);
-    const row = document.createElement("div");
-    row.className = "layer-row";
-    const cb = document.createElement("input");
-    cb.type = e._radio ? "radio" : "checkbox";
-    cb.checked = e.item.visible !== false;
-    e.cb = cb;
-    cb.addEventListener("change", () => {
-      if (e._radio && cb.checked) {
-        for (const sib of e._siblings) {
-          if (sib === e) continue;
-          sib.item.visible = false; if (sib.cb) sib.cb.checked = false;
-          applyEntryVisibility(sib);
+  for (const { group, exclusive, members } of grouped.values()) {
+    for (const e of members) e._siblings = members;
+    if (!group) {
+      for (const e of members) box.append(buildLayerRow(e, false, null));
+      continue;
+    }
+    const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
+    const section = document.createElement("section");
+    section.className = "layer-group";
+    const head = document.createElement("div");
+    head.className = "layer-group-title";
+    const tg = document.createElement("button");
+    tg.type = "button";
+    tg.className = "layer-group-toggle";
+    tg.textContent = expandedLayerGroups.has(key) ? "▾" : "▸";
+    tg.setAttribute("aria-expanded", String(expandedLayerGroups.has(key)));
+    const gcb = document.createElement("input");
+    gcb.type = "checkbox";
+    gcb.className = "layer-group-checkbox";
+    const glabel = document.createElement("span");
+    glabel.className = "layer-group-label";
+    glabel.textContent = group;
+    head.append(tg, gcb, glabel);
+    if (exclusive) {
+      const badge = document.createElement("small");
+      badge.className = "exclusive-badge";
+      badge.textContent = "排他";
+      head.append(badge);
+    }
+    const children = document.createElement("div");
+    children.className = "layer-group-children";
+    children.hidden = !expandedLayerGroups.has(key);
+    for (const e of members) children.append(buildLayerRow(e, exclusive, `grp-${key}`));
+    section.append(head, children);
+    box.append(section);
+
+    const ctl = {
+      sync() {
+        const anyOn = members.some(e => e.item.visible !== false);
+        gcb.checked = anyOn;
+        gcb.indeterminate = !exclusive && anyOn && members.some(e => e.item.visible === false);
+      },
+    };
+    for (const e of members) e._groupCtl = ctl;
+    ctl.sync();
+
+    tg.addEventListener("click", () => {
+      const collapsed = !children.hidden;
+      children.hidden = collapsed;
+      tg.textContent = collapsed ? "▸" : "▾";
+      tg.setAttribute("aria-expanded", String(!collapsed));
+      if (collapsed) expandedLayerGroups.delete(key);
+      else expandedLayerGroups.add(key);
+    });
+    gcb.addEventListener("change", () => {
+      if (exclusive) {
+        // 排他グループ: ON → 先頭(または現表示)のみ表示、OFF → 全て非表示
+        const on = gcb.checked ? (members.find(e => e.item.visible !== false) || members[0]) : null;
+        for (const e of members) {
+          e.item.visible = e === on;
+          if (e.cb) e.cb.checked = e === on;
+          applyEntryVisibility(e);
+          if (e === on) maybeLoadEntry(e);
+        }
+      } else {
+        for (const e of members) {
+          e.item.visible = gcb.checked;
+          if (e.cb) e.cb.checked = gcb.checked;
+          applyEntryVisibility(e);
+          maybeLoadEntry(e);
         }
       }
-      e.item.visible = cb.checked;
-      applyEntryVisibility(e);
-      maybeLoadEntry(e);
+      ctl.sync();
     });
-    const st = document.createElement("span");
-    st.className = "layer-status";
-    entry_status(e, st);
-    const name = document.createElement("span");
-    name.textContent = title || e.item.url || e.item.type;
-    name.title = e.item.title || "";
-    const fb = document.createElement("button");
-    fb.type = "button"; fb.className = "layer-focus"; fb.textContent = "◎";
-    fb.title = "範囲へ移動";
-    fb.addEventListener("click", ev => { ev.stopPropagation(); focusEntry(e); });
-    row.append(cb, st, name, fb);
-    container.append(row);
-  };
-  for (const [group, members] of groups) {
-    const container = box;
-    if (group) {
-      const head = document.createElement("div");
-      head.className = "layer-row";
-      head.innerHTML = `<span style="font-weight:600;">${group}</span>`;
-      container.append(head);
-    }
-    for (const e of members) addRow(e, container);
   }
+
   const unsup = document.getElementById("unsupported");
   unsup.textContent = currentUnsupported.length
-    ? `未対応行: ${[...new Set(currentUnsupported.map(i => i.type))].join(", ")}（他エンジンで対応）`
+    ? `未対応行: ${[...new Set(currentUnsupported.map(i => i.type))].join(", ")}（Cesium 版で対応）`
     : "";
-}
-
-function entry_status(e, st) {
-  if (e.failed) { st.textContent = "失敗"; st.classList.add("failed"); }
-  else if (e.pending) st.classList.add("loading");
-  else st.textContent = "";
 }
 
 // ---- テーマ ----
@@ -917,6 +1072,7 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
     } catch (err) {
       console.warn(e.item.title, err);
       e.pending = false; e.failed = true;
+      e.error = err?.message || err;
       currentUnsupported.push({ type: `${e.item.type}(読込失敗)` });
     }
     updateLoadProgress(++done, total, e.item.title);
@@ -933,13 +1089,15 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
   const info = document.getElementById("info-link");
   info.replaceChildren();
   if (doc.info) info.append(sanitizeAttributionFragment(doc.info));
+  const legendsBox = document.getElementById("legends");
+  legendsBox?.replaceChildren();
   if (doc.legends?.length) {
     for (const lg of doc.legends) {
       const img = document.createElement("img");
       img.src = resolveKascUrl(lg.url, baseUrl);
       img.alt = lg.title || "凡例";
       img.style.maxWidth = "100%";
-      info.append(img);
+      legendsBox?.append(img);
     }
   }
 
