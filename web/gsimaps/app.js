@@ -21,7 +21,7 @@ import {
 } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { mountEngineSwitcher, consumeEngineSwitchState, storeEngineSwitchState, engineSwitchUrl } from "../shared/engine-switch.js";
+import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initAiChat } from "../shared/ai-chat.js";
 
 // 診断: この中間エンジンが iframe 内で読み込まれた場合(ネスト)、
@@ -46,7 +46,17 @@ function guardFrameDoc() {
   try {
     const loc = frame.contentWindow?.location;
     if (!loc || loc.href === "about:blank") return;
-    if (!loc.pathname.endsWith("/vendor/gsimaps/index_pm.html")) {
+    const path = loc.pathname;
+    if (GSI_GLOBE_RE.test(path)) {
+      // Globe 表示中(上流ページのまま)。2D復帰までは gsimaps 参照を張り直さず、
+      // iframe ハッシュの視点だけ親URLへミラーする
+      if (!globeMode) { globeMode = true; showGlobeBack(true); }
+      lastFrameDoc = frame.contentDocument;
+      frame.style.visibility = "visible";
+      mirrorGlobeView();
+      return;
+    }
+    if (!path.endsWith("/vendor/gsimaps/index_pm.html")) {
       if (frame.src) {
         console.warn("[gsimaps] iframe が想定外のページを読込 → vendor へ戻す:", loc.href);
         frame.style.visibility = "hidden";
@@ -54,6 +64,7 @@ function guardFrameDoc() {
       }
       return;
     }
+    if (globeMode) { globeMode = false; showGlobeBack(false); }
     frame.style.visibility = "visible";
     // 予期しない iframe 再読込では GSI 参照が死ぬため再ブートする
     if (booted && frame.contentDocument !== lastFrameDoc) {
@@ -175,39 +186,110 @@ function waitGsimaps(timeoutMs = 30000) {
   });
 }
 
-// 地理院地図の「Globe」(gsiglobe)は iframe 内 window.open で別タブの
-// globe/index_globe.html を開き、.kasc レイヤ等の Canvas 状態を持たない
-// 単独ページへ出てしまう。Canvas における Globe 相当は cesium エンジンなので
-// window.open をフックしてエンジン切替(レイヤ・視点引継ぎつき)へ差し替える
+// ---- GSI Globe(iframe内表示) ----
+// 「Globe」(gsiglobe)は上流では iframe 内 window.open で globe/index_globe.html を
+// 別タブへ開き、Canvas の状態を持たない単独ページへ出る。ここでは window.open を
+// フックして iframe 内表示へ差し替え、左パネルを維持する。Globe は地理院地図専用
+// アプリのため .kasc レイヤは出せないが、「2D地図に戻る」で reboot() が再構築する
+let globeMode = false;
+let lastGlobeHash = "";
+const GSI_GLOBE_RE = /\/vendor\/gsimaps\/globe\/index_globe\.html$/;
+
+function showGlobeBack(on) {
+  const b = document.getElementById("globe-back");
+  if (b) b.hidden = !on;
+}
+
 function interceptGlobeOpen(w) {
   if (!w || w.__kasugaiGlobeHooked) return;
   w.__kasugaiGlobeHooked = true;
   const origOpen = w.open?.bind(w);
   w.open = (url, target, features) => {
     if (typeof url === "string" && /globe\/index_globe\.html/.test(url)) {
-      switchToCesium();
+      enterGlobe(url);
       return null;
     }
     return origOpen ? origOpen(url, target, features) : null;
   };
 }
 
-function switchToCesium() {
-  // moveend デバウンスを待たず現在視点をハッシュへ確定させてから遷移する
+// iframe 地図の現在視点をデバウンス無しで親URLハッシュへ書き込む
+function syncUrlViewNow() {
   try {
-    if (gmap) {
-      const c = gmap.getCenter();
-      writeUrlView({
-        latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
-        height: zoomToCamHeight(c.lat, gmap.getZoom()), pitch: -90, heading: 0,
-      }, currentProjectId);
-    }
-  } catch (_) { /* 視点書込失敗でも切替自体は行う */ }
-  storeEngineSwitchState();
-  // location.href への相対URL代入は entry settings object(呼出側=iframe realm)
-  // 基準で解決されるため、ここで親URL基準の絶対URLへ確定させる
-  window.location.href = new URL(engineSwitchUrl("cesium"), window.location.href).href;
+    if (!gmap) return;
+    const c = gmap.getCenter();
+    writeUrlView({
+      latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
+      height: zoomToCamHeight(c.lat, gmap.getZoom()), pitch: -90, heading: 0,
+    }, currentProjectId);
+  } catch (_) { /* 視点書込失敗は無視 */ }
 }
+
+function enterGlobe(url) {
+  syncUrlViewNow();
+  globeMode = true;
+  lastGlobeHash = "";
+  showGlobeBack(true);
+  try {
+    frame.src = new URL(url, frame.contentWindow.location.href).href;
+  } catch (_) { frame.src = url; }
+}
+
+// globe の location.hash(#height/lat/lon/power/heading/pitch/roll/&…)を
+// Canvas ビューへ変換。起動直後の #zoom/lat/lon/…(ISFROMGSIMAP 形式)も許容
+function globeHashView() {
+  try {
+    const core = String(frame.contentWindow?.location?.hash || "")
+      .replace(/^#/, "").replace(/\/?\&.*/, "");
+    const parts = core.split("/");
+    const lat = Number(parts[1]), lon = Number(parts[2]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    const v0 = Number(parts[0]);
+    const isZoom = parts.length <= 4;
+    const zoom = isZoom ? v0 : camToZoom({ latitude: lat, height: v0 });
+    const heading = Number(parts[4]), pitch = Number(parts[5]);
+    return {
+      latitude: lat, longitude: lon, zoom,
+      height: isZoom ? zoomToCamHeight(lat, zoom) : v0,
+      pitch: Number.isFinite(pitch) ? pitch : -90,
+      heading: Number.isFinite(heading) ? heading : 0,
+    };
+  } catch (_) { return null; }
+}
+
+function globeHashBase() {
+  try {
+    const m = /&base=([^&]*)/.exec(frame.contentWindow?.location?.hash || "");
+    return m ? decodeURIComponent(m[1]) : null;
+  } catch (_) { return null; }
+}
+
+// globe 表示中は iframe ハッシュの視点を親URLへミラーする
+// (エンジン切替・URL共有・2D復帰が globe の現在視点を拾うため)
+function mirrorGlobeView() {
+  const h = frame.contentWindow?.location?.hash || "";
+  if (h === lastGlobeHash) return;
+  lastGlobeHash = h;
+  const v = globeHashView();
+  if (v) writeUrlView(v, currentProjectId);
+}
+
+// 「2D地図に戻る」: globe の現在視点を引き継いで index_pm.html へ戻す。
+// 再読込は guardFrameDoc → reboot() が検出し、parseUrlView の視点復元と
+// buildFromDoc(lastDocCtx) で全レイヤが再構築される
+function exitGlobe() {
+  const v = globeHashView();
+  if (v) writeUrlView(v, currentProjectId);
+  const z = v ? Math.max(2, Math.min(18, Math.round(v.zoom))) : DEFAULT_ZOOM;
+  const lat = v ? v.latitude : DEFAULT_CENTER.lat;
+  const lng = v ? v.longitude : DEFAULT_CENTER.lng;
+  const base = globeHashBase() || "std";
+  globeMode = false;
+  showGlobeBack(false);
+  frame.src = `${GSI_VENDOR_URL}#${z}/${lat.toFixed(6)}/${lng.toFixed(6)}/&base=${base}&ls=${base}&disp=1`;
+  lastVendorSrc = frame.src;
+}
+document.getElementById("globe-back")?.addEventListener("click", exitGlobe);
 
 // 新しい iframe 地図へのイベント配線(reboot 時にも呼ぶ)
 function wireMapEvents() {
@@ -225,13 +307,8 @@ function bindViewSync() {
     // 親 replaceState と iframe 側 L.Hash の hash 書込が連鎖すると
     // joint session history で iframe が親URLを拾うケースがあるため、
     // 親への書き込みはデバウンスして頻度を下げる
-    const c = gmap.getCenter();
-    const view = {
-      latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
-      height: zoomToCamHeight(c.lat, gmap.getZoom()), pitch: -90, heading: 0,
-    };
     clearTimeout(urlViewTimer);
-    urlViewTimer = setTimeout(() => writeUrlView(view, currentProjectId), 300);
+    urlViewTimer = setTimeout(syncUrlViewNow, 300);
   });
 }
 
@@ -317,6 +394,7 @@ function effectiveVisible(entry) {
 }
 
 function applyEntryVisibility(entry) {
+  if (globeMode) return; // map 参照は死んでいる。item.visible は呼出側で更新済み・2D復帰時に再構築
   const on = effectiveVisible(entry);
   if (entry.sakuzu) entry.sakuzu.setVisible(on);
   if (entry.tileLayer && gmap) {
@@ -326,7 +404,7 @@ function applyEntryVisibility(entry) {
 }
 
 function focusEntry(entry) {
-  if (!gmap) return;
+  if (!gmap || globeMode) return;
   const env = entry.item._env || (entry.item._geojson && geojsonExtent(entry.item._geojson));
   if (env) gmap.fitBounds([[env.south, env.west], [env.north, env.east]], { padding: [40, 40] });
   else if (entry.sakuzu?._layer?.getBounds) {
@@ -509,7 +587,7 @@ function fillCamPanel(cams) {
   }
 }
 function flyToCam(cam) {
-  if (!gmap) return;
+  if (!gmap || globeMode) return;
   const zoom = Number.isFinite(cam.zoom) ? cam.zoom : camToZoom(cam);
   gmap.setView([Number(cam.latitude), Number(cam.longitude)], zoom);
 }
@@ -558,6 +636,7 @@ function rebuildBasemapSelect() {
   sel.value = baseHidden ? "-1" : "0";
 }
 function applyBaseSelection() {
+  if (globeMode) return;
   const sel = document.getElementById("basemap-select");
   const idx = Number(sel?.value ?? -1);
   baseHidden = idx < 0;
@@ -743,7 +822,7 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
 
 // ---- kasugaiApi（AI/外部制御） ----
 function maybeLoadEntry(entry) {
-  if (entry.pending || entry.sakuzu || entry.tileLayer) return;
+  if (globeMode || entry.pending || entry.sakuzu || entry.tileLayer) return;
   entry.pending = true;
   mountEntry(entry).then(() => { entry.pending = false; renderLayerRows(); })
     .catch(err => { entry.pending = false; entry.failed = true; renderLayerRows(); console.warn(err); });

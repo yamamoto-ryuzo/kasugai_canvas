@@ -116,6 +116,11 @@
     overflow: hidden; flex: none; }
   #load-progress-bar { display: block; height: 100%; width: 0; background: #2c5ea8;
     transition: width .25s; }
+  /* Globe 表示中のみ出す 2D 復帰ボタン(左ドック内・vendored UI と衝突しない) */
+  #globe-back { width: 100%; margin: 0 0 8px; padding: 7px 10px;
+    border: 1px solid #2c5ea8; border-radius: 6px; background: #2c5ea8;
+    color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+  #globe-back[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -139,6 +144,7 @@
     <select id="project-select"></select>
     <button id="share-copy" type="button" title="現在位置URLをコピー">🔗</button>
   </div>
+  <button id="globe-back" type="button" hidden>← 2D地図に戻る（Globe表示中）</button>
   <div id="tabs">
     <button class="tab active" data-tab="layers" type="button">レイヤ</button>
     <button class="tab" data-tab="search" type="button">検索</button>
