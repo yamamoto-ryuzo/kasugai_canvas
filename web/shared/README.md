@@ -11,8 +11,11 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 - `web/leaflet/` … Leaflet フロント（.kasc プレイヤー・実装済み）
 - `web/gsimaps/` … GSI Maps フロント（中間エンジン・**現在調整中**。vendored 地理院地図
   `web/vendor/gsimaps/` を同一オリジン iframe で組み込み、.kasc を
-  GSI/Leaflet API 経由で再生。上流コードは無改変。iframe 内を `GSI.GLOBALS`
-  内部 API 経由で操作する構造のため AI 制御の安定化が難しい）
+  GSI/Leaflet API 経由で再生。上流コードは無改変。vendor 実体は
+  リポジトリ・配布物に同梱せず CDN（kasugai-canvas-web）へ移行し、
+  ローカルで vendor が無い環境では index.html 先頭の検出スクリプトが
+  ホスト版 gsimaps へ `?kasc=<ローカル絶対URL>` で転送する。iframe 内を
+  `GSI.GLOBALS` 内部 API 経由で操作する構造のため AI 制御の安定化が難しい）
 - `web/shared/` … 本ディレクトリ。エンジン横断で使うコードをここへ集約する
 - `web/projects/` … 静的配信用の同梱プロジェクトデータ（エンジン非依存）
 

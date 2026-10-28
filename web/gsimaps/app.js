@@ -2,6 +2,9 @@
 // vendored 地理院地図(gsi-cyberjapan/gsimaps, web/vendor/gsimaps/)を同一オリジン
 // iframe として組み込み、.kasc プロジェクトを GSI/Leaflet API 経由で再生する。
 // 上流コードは無改変で、制御・変換はすべてこの中間層が担う。
+// vendor 実体は配布物に同梱せず CDN 側提供。ローカルに無い環境では
+// index.html 先頭の検出スクリプトがホスト版(kasugai-canvas-web)へ転送するため、
+// このモジュールが動く時点で vendor iframe は同一オリジンが保証される
 //
 // .kasc → gsimaps の対応:
 //   ベクター系(geojson/gpkg/fgb/parquet/csv/tsv/duckdb/sql) → GeoJSON へ変換し

@@ -61,7 +61,9 @@ Section "Install"
   File "${BUILD_EXE}"
 
   SetOutPath "$INSTDIR\web"
-  File /r "${WEB_DIR}\*"
+  ; vendor/(vendored 地理院地図)は CDN 配信へ移行したため同梱しない。
+  ; publish_cdn.py 実行後のローカルに再実体化された場合も /x で除外する
+  File /r /x "vendor" "${WEB_DIR}\*"
 
   SetOutPath "$INSTDIR\projects"
   File /nonfatal /r /x "default" "${SAMPLE_PROJECTS}\*"

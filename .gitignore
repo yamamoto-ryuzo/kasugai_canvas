@@ -12,3 +12,7 @@ installer/projects/*_local/
 
 # Node 依存（copilot-bridge 等）
 node_modules/
+
+# vendored 地理院地図（CDN 配信へ移行したため同梱しない。
+# tools/publish_cdn.py が発行時に fetch_vendor 経由で再実体化する）
+/web/vendor/

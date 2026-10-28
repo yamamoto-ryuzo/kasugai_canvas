@@ -5,12 +5,63 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>KASUGAI Canvas — GSI Maps</title>
 <script>
-  // この中間エンジンページはトップレベル専用。
-  // 何らかの経路で iframe 内に読み込まれた場合は、DOM描画前に
-  // vendored 地理院地図へ差し替えて自己修復(ネスト二重表示の根絶)
-  if (window.parent !== window) {
-    location.replace("../vendor/gsimaps/index_pm.html");
-  }
+  // vendored 地理院地図(web/vendor/gsimaps)は配布物・リポジトリに同梱しない。
+  // ローカルに vendor が残る環境(fetch_vendor 実行後の開発環境等)では従来通り
+  // 動かし、無い場合はホスト版(kasugai-canvas-web)の gsimaps エンジンへ転送する。
+  // iframe の制御は同一オリジンが必須なので、ローカル vendor の有無を
+  // HEAD で調べてから振り分ける
+  (function () {
+    var VENDOR_URL = "../vendor/gsimaps/index_pm.html";
+    var DEFAULT_HOSTED = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";
+    function hostedBase() {
+      var h = new URLSearchParams(location.search).get("hosted");
+      if (!h) { try { h = localStorage.getItem("kasugai_hosted_base") || ""; } catch (e) {} }
+      return (h || DEFAULT_HOSTED).replace(/\/?$/, "/");
+    }
+    fetch(new URL(VENDOR_URL, location.href), { method: "HEAD", cache: "no-store" })
+      .then(function (r) { return r.ok; })
+      .catch(function () { return false; })
+      .then(function (hasVendor) {
+        if (window.parent !== window) {
+          // この中間エンジンページはトップレベル専用。iframe 内に読み込まれた
+          // 場合は vendored 地理院地図へ差し替えて自己修復(ネスト二重表示の根絶)
+          var raw = hasVendor ? new URL(VENDOR_URL, location.href).href
+                              : hostedBase() + "vendor/gsimaps/index_pm.html";
+          location.replace(raw + location.hash);
+          return;
+        }
+        if (hasVendor) return; // ローカル vendor で通常起動
+        var p = new URLSearchParams(location.search);
+        var kasc = p.get("kasc");
+        function go(kascUrl) {
+          var target = hostedBase() + "gsimaps/?kasc=" + encodeURIComponent(kascUrl);
+          if (p.get("dirhint")) target += "&dirhint=" + encodeURIComponent(p.get("dirhint"));
+          location.replace(target + location.hash);
+        }
+        function projectKasc(id) {
+          return new URL("../projects/" + encodeURIComponent(id || "default") +
+            "/kasugai_canvas.kasc", location.href).href;
+        }
+        if (kasc) {
+          if (kasc !== "local" && !/^localfs:/i.test(kasc)) {
+            kasc = new URL(kasc, location.href).href;
+            // file:// はCDNから読めないためローカルフォルダ直読みモードへ誘導
+            if (/^file:/i.test(kasc)) kasc = "local";
+          }
+          go(kasc);
+          return;
+        }
+        if (p.get("project")) { go(projectKasc(p.get("project"))); return; }
+        // 既定プロジェクト = projects マニフェスト先頭
+        fetch(new URL("../projects/projects.json", location.href), { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .catch(function () { return []; })
+          .then(function (m) {
+            var first = m && m[0];
+            go(projectKasc(first && (first.id || first)));
+          });
+      });
+  })();
 </script>
 <link rel="icon" type="image/x-icon" href="../favicon.ico" />
 <style>
@@ -217,8 +268,10 @@
 <div id="map-wrap">
 <iframe id="gsi-frame" title="地理院地図" allow="geolocation" data-ui-bridge></iframe>
 <div id="gsi-missing" hidden>
-  <div>vendored 地理院地図が見つかりません。<br>
-  <code>python tools/fetch_vendor.py</code> を実行して web/vendor/gsimaps/ を取得してください。</div>
+  <div>地理院地図を初期化できませんでした。<br>
+  通常はホスト版(kasugai-canvas-web)へ自動転送されます。ローカルの
+  <code>web/vendor/gsimaps/</code> で動かす場合は
+  <code>python tools/fetch_vendor.py</code> で取得してください。</div>
 </div>
 <div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div>
 </div>
