@@ -9,7 +9,7 @@ import TileWMS from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/TileWMS.js";
 import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Vector.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -1126,15 +1126,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }
   if (!seenLegend.size) panel.legends.textContent = "（凡例なし）";
 
-  // info: → 情報タブ
-  panel.infoLink.innerHTML = "";
-  if (doc.info) {
-    const a = document.createElement("a");
-    a.href = resolveKascUrl(doc.info, baseUrl);
-    a.target = "_blank";
-    a.textContent = "プロジェクト情報";
-    panel.infoLink.append(a);
-  }
+  // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
+  void loadKascInfoContent(panel.infoLink, doc.info, baseUrl);
 
   // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
@@ -1548,7 +1541,15 @@ window.kasugaiApi = createPlayerApi({
       duration: 600,
     };
     if (Number.isFinite(v.heading)) opts.rotation = -v.heading * Math.PI / 180;
-    map.getView().animate(opts);
+    const view = map.getView();
+    // instant=フライパス巡回等の高頻度更新。animate の逐次再起動を避け即時配置する
+    if (v.instant) {
+      view.setCenter(opts.center);
+      view.setZoom(opts.zoom);
+      if (opts.rotation !== undefined) view.setRotation(opts.rotation);
+    } else {
+      view.animate(opts);
+    }
   },
   getViewInfo: () => {
     const c = toLonLat(map.getView().getCenter() || [0, 0]);

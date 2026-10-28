@@ -18,7 +18,7 @@ import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayers
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, PROJECTS_MANIFEST_URL, applyPanelTitle, parseDefaultStyleSpec as parseKascDefaultStyleSpec } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, PROJECTS_MANIFEST_URL, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initPrint } from "../shared/print.js";
 
@@ -121,7 +121,6 @@ let basemapDrape3DTiles = false;
 let basemapOpacityFactor = 1;
 let layerOpacityFactor = 1;
 let basemapImageryLayer = null;
-let infoRequestId = 0;
 let walkModeActive = false;
 let streetViewPickMode = false;
 // Street View カバレッジ表示の状態
@@ -3804,45 +3803,16 @@ function syncLayerSourceLine(item) {
   item.sourceLine = line;
 }
 
-function setupInfoTabs(content) {
-  const buttons = [...content.querySelectorAll(".tab-button")];
-  const panels = [...content.querySelectorAll(".tab-content")];
-  if (!buttons.length || !panels.length) return;
-  const activate = index => {
-    buttons.forEach((button, i) => button.classList.toggle("active", i === index));
-    panels.forEach((panel, i) => {
-      panel.classList.toggle("active", i === index);
-      panel.hidden = i !== index;
-    });
-  };
-  buttons.forEach((button, index) => button.addEventListener("click", () => activate(index)));
-  activate(Math.max(0, buttons.findIndex(button => button.classList.contains("active"))));
-}
-
-async function loadInfoContent(url) {
-  const content = document.querySelector("#info-content");
-  if (!content) return;
-  const requestId = ++infoRequestId;
-  content.replaceChildren();
-  if (!url) return;
-  try {
-    const infoUrl = url;
-    const response = await fetch(infoUrl, { mode: "cors" });
-    if (!response.ok) throw new Error(await response.text());
-    const html = await response.text();
-    if (requestId !== infoRequestId) return;
-    const documentFragment = new DOMParser().parseFromString(html, "text/html");
-    documentFragment.querySelectorAll("script, iframe, object, embed, form, link, style").forEach(node => node.remove());
-    documentFragment.querySelectorAll("*").forEach(node => {
-      [...node.attributes].forEach(attribute => {
-        if (/^on/i.test(attribute.name) || /javascript:/i.test(attribute.value)) node.removeAttribute(attribute.name);
-      });
-    });
-    content.replaceChildren(...[...documentFragment.body.childNodes].map(node => document.importNode(node, true)));
-    setupInfoTabs(content);
-  } catch (error) {
-    if (requestId === infoRequestId) content.textContent = t("info.loadFailed", { error: error instanceof Error ? error.message : error });
-  }
+// info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ。
+// 共有パーサと同じく `info: タイトル | URL` は URL 部のみ使い、
+// `<` 始まりはインラインHTMLとして URL 解決せずそのまま渡す）
+function loadInfoContent(value) {
+  const parts = String(value || "").split("|").map(p => p.trim());
+  const body = parts.slice(1).join("|") || parts[0];
+  const url = body.startsWith("<") ? body : resolveProjectUrl(body);
+  void loadKascInfoContent(document.querySelector("#info-content"), url, null, {
+    errorText: error => t("info.loadFailed", { error }),
+  });
 }
 
 // Geocoding/Places/Street View などの Web サービス API 用キー。
@@ -4215,8 +4185,7 @@ function applyInspector(text) {
 
   document.body.style.background = "";
   undergroundBackgroundColor = Cesium.Color.BLACK;
-  ++infoRequestId;
-  document.querySelector("#info-content").replaceChildren();
+  clearKascInfoContent(document.querySelector("#info-content"));
   document.querySelector("#legend-panel img").removeAttribute("src");
 
   let inspectorLayerIndex = 0;
@@ -4247,7 +4216,7 @@ function applyInspector(text) {
       updateSearchProvider();
     }
     if (type === "info") {
-      void loadInfoContent(resolveProjectUrl(value));
+      loadInfoContent(value);
     }
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());

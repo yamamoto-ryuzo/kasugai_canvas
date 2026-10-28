@@ -1,7 +1,7 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -1114,15 +1114,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }
   if (!seenLegend.size) panel.legends.textContent = "（凡例なし）";
 
-  // info: → 情報タブ
-  panel.infoLink.innerHTML = "";
-  if (doc.info) {
-    const a = document.createElement("a");
-    a.href = resolveKascUrl(doc.info, baseUrl);
-    a.target = "_blank";
-    a.textContent = "プロジェクト情報";
-    panel.infoLink.append(a);
-  }
+  // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
+  void loadKascInfoContent(panel.infoLink, doc.info, baseUrl);
 
   // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
@@ -1631,7 +1624,9 @@ window.kasugaiApi = createPlayerApi({
     opts.zoom = Number.isFinite(v.zoom) ? v.zoom : camToZoom(v) - 1;
     if (Number.isFinite(v.heading)) opts.bearing = -v.heading;
     if (Number.isFinite(v.pitch)) opts.pitch = Math.max(0, Math.min(60, v.pitch + 90));
-    map.flyTo(opts);
+    // instant=フライパス巡回等の高頻度更新。flyTo の逐次再起動を避け即時配置する
+    if (v.instant) map.jumpTo(opts);
+    else map.flyTo(opts);
   },
   getViewInfo: () => {
     const c = map.getCenter();

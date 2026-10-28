@@ -55,8 +55,8 @@ const SYSTEM_PROMPT = `あなたは3D地図アプリ「KASUGAI Canvas」の操�
 ユーザーの指示に応じて、登録された地図操作ツールで地図を操作してください。
 
 重要な前提:
-- このブリッジではツール呼び出しは実行されず「キュー」に積まれ、あなたの応答後にブラウザアプリ側でまとめて実行されます。ツール結果はプレースホルダなので、結果を待たず必要なツール呼び出しをまとめて出してください。
-- ただし listLayers / getCamera / listBasemaps は現在の実値を返します。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください（listLayers/getCamera/listBasemaps 以外の一覧系ツール結果はプレースホルダです）。ベースマップには「ベースマップなし」(id: none)と「ベースマップ透明」(id: transparent)という特殊な選択肢があります。
+- このブリッジではツール呼び出しは「キュー」に積まれ、あなたの応答後にブラウザアプリ側で実行されます。実行結果は次のターンに [ツール実行結果] としてあなたへ返されるので、一覧・検索・確認系ツールも呼び出せば結果を見てから回答・追加操作ができます。結果に依存しない操作系の呼び出しはまとめて出せます。
+- listLayers / getCamera / listBasemaps は現在の実値を即時返します（それ以外のツール結果は呼び出し時点ではプレースホルダで、実値は次ターンの [ツール実行結果] で届きます）。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください。ベースマップには「ベースマップなし」(id: none)と「ベースマップ透明」(id: transparent)という特殊な選択肢があります。
 - switchProject・applyInspector・shutdownApp・installUpdate・exportInspector・publishPlugin など影響の大きい操作は、ユーザーが明示的に指示した場合のみ実行してください（ブラウザ側に確認ダイアログも出ます）。
 - データの作成・追加を求められたら、確認を求めず GeoJSON を生成して addDataLayer で表示してください。架空・サンプルデータの場合は各 feature の properties に dataSource・generatedAt(ISO8601)・aiGenerated:true を入れてください。
 - 資料作成を求められたら Markdown でまとめて showReport で表示してください。
@@ -458,9 +458,17 @@ function buildPrompt(body, entry) {
       prompt += `[Prior chat log]\n${lines}\n\n`;
     }
   }
+  // ブラウザで実行されたキュー済みツールの実結果。toolResults を含むターンは
+  // 「結果を踏えて完遂する」フェーズとして、結果を先に展開してから指示を置く
+  const tr = Array.isArray(body.toolResults) && body.toolResults.length
+    ? `\n\n[キューへ積んだツールのブラウザ側実行結果]\n${JSON.stringify(body.toolResults).slice(0, 20000)}`
+    : "";
+  const tail = tr
+    ? "上記の実行結果を踏えてユーザーの指示を完遂・回答してください。追加のツール呼び出しが必要なら呼び出し、終わったら結果を日本語で簡潔に報告してください。"
+    : "この指示に今すぐ従ってください。地図操作が必要なら登録ツール（kasugai の MCP ツール）を呼び出し、終わったら結果を日本語で簡潔に報告してください。";
   // 末尾に明示的なタスク枠を置く。システム指示＋状態だけだと
   // モデルが「準備完了」のみ返して実指示を実行しないことがあるため
-  return `${prompt}${state}\n\n[ユーザーの指示]\n${body.message}\n\nこの指示に今すぐ従ってください。地図操作が必要なら登録ツール（kasugai の MCP ツール）を呼び出し、終わったら結果を日本語で簡潔に報告してください。`;
+  return `${prompt}${state}\n\n[ユーザーの指示]\n${body.message}${tr}\n\n${tail}`;
 }
 
 // アプリが指定するモデル。要求の model フィールド優先、なければ既定
@@ -544,7 +552,7 @@ async function handleMcp(req, res, project) {
       pendingByProject.get(project).push({ name, args });
       return sendJson(res, 200, mcpResult(id, mcpToolText({
         queued: true,
-        note: "Action queued; it runs in the browser after your reply. Do not wait for a real result.",
+        note: "Action queued; it runs in the browser after your reply and the real result is delivered back to you in the next turn.",
       })));
     }
     default:

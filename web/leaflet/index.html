@@ -112,6 +112,13 @@
   .leaflet-popup-content { max-height: 240px; overflow: auto; font-size: 12px; margin: 8px 10px; }
   .leaflet-popup-content-wrapper { font-size: 12px; }
   #legends img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 4px 0; }
+  /* info: 埋め込みHTML内のサブタブ(.tab-button/.tab-content)と画像 */
+  #info-link .tab-buttons { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; }
+  #info-link .tab-button { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0; background: transparent; color: #52636d; cursor: pointer; font-size: 12px; }
+  #info-link .tab-button.active { background: rgba(44,94,168,.16); color: #2c5ea8; font-weight: 700; }
+  #info-link .tab-content { display: none; }
+  #info-link .tab-content.active { display: block; }
+  #info-link img { max-width: 100%; height: auto; }
   
   /* 地図上部の読込進捗ピル(レイヤの段階読み込み状況) */
   #load-progress { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);

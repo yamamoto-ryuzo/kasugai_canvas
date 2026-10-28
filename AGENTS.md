@@ -8,7 +8,7 @@
   - **V3**: AI 連携
   - **V4**: プラグイン（認証機構）
   - **V5**: アプリ化（ローカル連携）— ローカル Rust サーバーと一体で動く「アプリ」だから実現できる機能群（rclone クラウドストレージ連携・ドライブ割当・ローカルファイル保存・納品用ローカル化など）。ブラウザのみ・コンテナ実行では提供されない
-  - **V6**: マルチエンジン — `web/` をエンジン別フロント（Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps）に分割し、`.kasc` をエンジン非依存のプロジェクト形式として各エンジンで再生する構成。`?engine=` 選択・エンジン切替 UI・状態引継ぎ・`web/shared/` へのエンジン非依存コアの集約・CDN ホスト版（`kasugai-canvas-web` でエンジン一式を静的配信）を含む。メインエンジンは CesiumJS で、他エンジンは `.kasc` プレイヤーとしての互換実装
+  - **V6**: マルチエンジン — `web/` をエンジン別フロント（Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps※調整中）に分割し、`.kasc` をエンジン非依存のプロジェクト形式として各エンジンで再生する構成。`?engine=` 選択・エンジン切替 UI・状態引継ぎ・`web/shared/` へのエンジン非依存コアの集約・CDN ホスト版（`kasugai-canvas-web` でエンジン一式を静的配信）を含む。メインエンジンは CesiumJS で、他エンジンは `.kasc` プレイヤーとしての互換実装
 - ドキュメント（`features/` 配下）はこのテーマごとにページを分ける。バージョン横断の実装詳細は **V0: システム基本構成**（`features/v0.html`）に集約する
 - リリースは 4.x〜5.x 系（4.0.0, 4.1.0, ...）で進める
 - ハッカソン提出は「**V3（AI 連携）の強化**」として位置づける（詳細は `hackathon.html`）。提出可能状態の条件:
@@ -93,6 +93,7 @@
   - レイヤー行・検索結果・プラグイン一覧など動的生成コンテンツ（行番号が不安定なため列挙対象外。`setLayerVisible`/`focusLayer` のように名前・ID 解決を持つセマンティック API で操作する）
   - 地図キャンバス上のクリック・ドラッグ等の座標操作（`flyTo`/`addFlyPath` 等のセマンティック API で代替する）
   - ドラッグ操作（リサイズ・並べ替え等）。意味のある並べ替え・リサイズは専用 API で状態を変更できるようにする
+- **GSI Maps エンジン（`web/gsimaps/`）は本要件の適用を調整中**: vendored 地理院地図を iframe で組み込み `GSI.GLOBALS` 内部 API へ依存する構造のため AI 制御の安定化が難しく、専用17ツール・`data-ui-bridge` 経由の汎用ブリッジは現状ベストエフォート扱いとする
 - **ブラウザ仕様上の例外**（AI から完了させられないもの。これらを必須経路にしないこと。例: ファイル選択に代わる DATA/ パス指定や URL 指定の入力経路を併設する）:
   - ファイル/フォルダピッカー（`input[type=file]`・File System Access API）のファイル選択自体 — ピッカーを開く click までは可能
   - OAuth 等の別タブ認証フロー（Box 接続・rclone リモート追加など）
@@ -126,7 +127,9 @@ web/
                   組み込み、.kasc を GSI/Leaflet API 経由で再生。ベンダーは
                   web/vendor/gsimaps/(gitignore・tools/fetch_vendor.py で
                   web/gsimaps/vendor.json の sha へ同期・publish 時に CDN 各
-                  チャンネルへ実ファイル配置)。上流コードは無改変で維持）
+                  チャンネルへ実ファイル配置)。上流コードは無改変で維持。
+                  ※現在調整中: vendored iframe を GSI.GLOBALS 内部 API 経由で
+                  操作する構造のため AI 制御の安定化が難しい）
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
                   i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
   projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）

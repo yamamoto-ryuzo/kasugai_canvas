@@ -35,8 +35,8 @@ const SYSTEM_PROMPT = `あなたは3D地図アプリ「KASUGAI Canvas」の操�
 ユーザーの指示に応じて、登録された地図操作ツールで地図を操作してください。
 
 重要な前提:
-- このブリッジではツール呼び出しは実行されず「キュー」に積まれ、あなたの応答後にブラウザアプリ側でまとめて実行されます。ツール結果はプレースホルダなので、結果を待たず必要なツール呼び出しをまとめて出してください。
-- ただし listLayers / getCamera / listBasemaps は現在の実値を返します。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください（listLayers/getCamera/listBasemaps 以外の一覧系ツール結果はプレースホルダです）。ベースマップには「ベースマップなし」(id: none)と「ベースマップ透明」(id: transparent)という特殊な選択肢があります。
+- このブリッジではツール呼び出しは「キュー」に積まれ、あなたの応答後にブラウザアプリ側で実行されます。実行結果は次のターンに [ツール実行結果] としてあなたへ返されるので、一覧・検索・確認系ツールも呼び出せば結果を見てから回答・追加操作ができます。結果に依存しない操作系の呼び出しはまとめて出せます。
+- listLayers / getCamera / listBasemaps は現在の実値を即時返します（それ以外のツール結果は呼び出し時点ではプレースホルダで、実値は次ターンの [ツール実行結果] で届きます）。レイヤ名が曖昧な場合は listLayers、ベースマップ名が曖昧な場合は listBasemaps で確認し、最も近いものを使ってください。ベースマップには「ベースマップなし」(id: none)と「ベースマップ透明」(id: transparent)という特殊な選択肢があります。
 - switchProject・applyInspector・shutdownApp・installUpdate・exportInspector・publishPlugin など影響の大きい操作は、ユーザーが明示的に指示した場合のみ実行してください（ブラウザ側に確認ダイアログも出ます）。
 - データの作成・追加を求められたら、確認を求めず GeoJSON を生成して addDataLayer で表示してください。架空・サンプルデータの場合は各 feature の properties に dataSource・generatedAt(ISO8601)・aiGenerated:true を入れてください。
 - 資料作成を求められたら Markdown でまとめて showReport で表示してください。
@@ -99,7 +99,7 @@ function buildToolDefs(decls, ctx) {
     handler: async (args) => {
       if (LOCAL_STATE_TOOLS[d.name]) return LOCAL_STATE_TOOLS[d.name](ctx.state || {});
       ctx.pending.push({ name: d.name, args: args ?? {} });
-      return { queued: true, note: "Action queued; it runs in the browser after your reply. Do not wait for a real result." };
+      return { queued: true, note: "Action queued; it runs in the browser after your reply and the real result is delivered back to you in the next turn." };
     },
   }));
 }
@@ -178,11 +178,15 @@ function buildPrompt(body, entry) {
     try { return JSON.stringify(v ?? null).slice(0, 8000); } catch (e) { return "null"; }
   };
   const state = `[State] camera=${stateJson(body.camera)} layers=${stateJson(body.layers)} basemaps=${stateJson(body.basemaps)}`;
+  // ブラウザで実行されたキュー済みツールの実結果。届いたターンは結果を踏えて完遂する
+  const tr = Array.isArray(body.toolResults) && body.toolResults.length
+    ? `\n\n[キューへ積んだツールのブラウザ側実行結果]\n${JSON.stringify(body.toolResults).slice(0, 20000)}\n\n上記の実行結果を踏えてユーザーの指示を完遂・回答してください。`
+    : "";
   if (!entry.seeded && Array.isArray(body.history) && body.history.length) {
     const lines = body.history.slice(-20).map(h => `${h.role}: ${String(h.text ?? "").slice(0, 2000)}`).join("\n");
-    return `[Prior chat log]\n${lines}\n\n${state}\n\n${body.message}`;
+    return `[Prior chat log]\n${lines}\n\n${state}\n\n${body.message}${tr}`;
   }
-  return `${state}\n\n${body.message}`;
+  return `${state}\n\n${body.message}${tr}`;
 }
 
 // アプリが指定する Copilot モデル。要求の model フィールド優先、なければ既定
@@ -191,13 +195,36 @@ function requestModel(body) {
   return m || MODEL;
 }
 
+// タイムアウト付き Promise ラッパ（listModels 等の SDK 呼び出しが
+// 応答しない場合に HTTP リクエストとハブの直列キューを塞がないためのもの）
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
+  ]);
+}
+
+// セッションが詰まった/失敗した場合に破棄する。
+// 残置すると以降の sendAndWait がすべて進行中ターン待ちでタイムアウトし続ける
+async function dropSession(project, entry) {
+  try { await entry?.session?.disconnect?.(); } catch (e) {}
+  if (sessions.get(project) === entry) sessions.delete(project);
+}
+
 async function handleAgent(body) {
   const decls = normalizeToolDecls(body?.tools);
   const project = typeof body?.project === "string" && body.project ? body.project : "default";
   const entry = await getSession(project, decls, requestModel(body));
   entry.ctx.pending = [];
   entry.ctx.state = { layers: body?.layers, camera: body?.camera, basemaps: body?.basemaps };
-  const msg = await entry.session.sendAndWait({ prompt: buildPrompt(body, entry) }, SEND_TIMEOUT_MS);
+  let msg;
+  try {
+    msg = await entry.session.sendAndWait({ prompt: buildPrompt(body, entry) }, SEND_TIMEOUT_MS);
+  } catch (e) {
+    // 送受信に失敗したセッションは再利用せず破棄（次回リクエストで作り直す）
+    await dropSession(project, entry);
+    throw e;
+  }
   entry.seeded = true;
   const reply = typeof msg?.data?.content === "string" && msg.data.content ? msg.data.content : "";
   return { reply, actions: entry.ctx.pending.slice() };
@@ -251,7 +278,9 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && url.pathname === "/models") {
     try {
       const c = await getClient();
-      const list = await c.listModels();
+      // listModels が稀に応答しなくなることがあるためタイムアウトをかける。
+      // ハングするとハブの直列キューを占有し /agent も含め全要求が滞留する
+      const list = await withTimeout(c.listModels(), 20000, "listModels");
       let models = (Array.isArray(list) ? list : [])
         .map(m => (typeof m === "string" ? { id: m, name: m } : { id: m?.id, name: m?.name || m?.id }))
         .filter(m => m.id);

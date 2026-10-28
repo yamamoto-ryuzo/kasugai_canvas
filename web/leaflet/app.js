@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -1210,15 +1210,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }
   if (!seenLegend.size) panel.legends.textContent = "（凡例なし）";
 
-  // info: → 情報タブ
-  panel.infoLink.innerHTML = "";
-  if (doc.info) {
-    const a = document.createElement("a");
-    a.href = resolveKascUrl(doc.info, baseUrl);
-    a.target = "_blank";
-    a.textContent = "プロジェクト情報";
-    panel.infoLink.append(a);
-  }
+  // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
+  void loadKascInfoContent(panel.infoLink, doc.info, baseUrl);
 
   // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
@@ -1593,8 +1586,13 @@ window.kasugaiApi = createPlayerApi({
     return true;
   },
   getCams: () => currentCams,
-  flyToView: v => map.flyTo([Number(v.latitude), Number(v.longitude)],
-    Number.isFinite(v.zoom) ? v.zoom : camToZoom(v)),
+  flyToView: v => {
+    const center = [Number(v.latitude), Number(v.longitude)];
+    const zoom = Number.isFinite(v.zoom) ? v.zoom : camToZoom(v);
+    // instant=フライパス巡回等の高頻度更新。flyTo の逐次再起動を避け即時配置する
+    if (v.instant) map.setView(center, zoom, { animate: false });
+    else map.flyTo(center, zoom);
+  },
   getViewInfo: () => {
     const c = map.getCenter();
     return { latitude: c.lat, longitude: c.lng, zoom: map.getZoom(), heading: 0, pitchDeg: 0 };

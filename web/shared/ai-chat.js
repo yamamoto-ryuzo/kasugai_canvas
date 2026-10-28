@@ -79,6 +79,11 @@ export async function loadBackendCapabilities() {
   }
 }
 
+// LLM API 呼び出し（Gemini generateContent / OpenAI chat completions）の
+// 1リクエストあたりのタイムアウト。応答しない接続が「…」のまま
+// チャットキュー全体を塞ぐのを防ぐ
+const CHAT_LLM_TIMEOUT_MS = 120000;
+
 const chatProjectId = () => window.kasugaiApi?.getProjectId?.() || "default";
 const chatGoogleApiKey = () => window.kasugaiApi?.getGoogleApiKey?.() || localStorage.getItem("googleApiKey") || "";
 const chatGeminiModel = () => window.kasugaiApi?.getGeminiModel?.() || localStorage.getItem("googleGeminiModel") || "gemini-3.1-flash-lite";
@@ -131,6 +136,7 @@ const CHAT_TOOL_API = {
   importGsiCatalog: "importGsiCatalog",
   setGsiLayerHidden: "setGsiLayerHidden", removeGsiSakuzu: "removeGsiSakuzu",
   getGsiElevation: "getGsiElevation",
+  getGsiShareUrl: "getGsiShareUrl", setGsiGlobe: "setGsiGlobe",
 };
 
 function chatToolAvailable(name) {
@@ -1201,7 +1207,7 @@ const CHAT_TOOLS = [{
         type: "OBJECT",
         properties: {
           query: { type: "STRING", description: "検索語(例: 春日井市役所)" },
-          provider: { type: "STRING", description: "検索プロバイダ(省略時は検索タブの選択): gsi/google/places/yahoo (google=Geocoding+Placesハイブリッド、places=Placesのみ)" },
+          provider: { type: "STRING", description: "検索プロバイダ(省略時は検索タブの選択): gsi/google/places/osm/yahoo (google=Geocoding+Placesハイブリッド、places=Placesのみ、osm=OpenStreetMap Nominatim。osmは2Dエンジンのみ)" },
         },
         required: ["query"],
       },
@@ -1338,7 +1344,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "flyRoute",
-      description: "地点A→B(C経由等)の飛行ルートを自動生成してFlyモードで再生する。waypointsに座標・地名(query)・読込済み地物名(feature)を混在指定でき、地名は自動でジオコーディングされる。経由地間は直線補間し、地形標高をサンプリングして山岳部でも埋まらない高度を各点に付与する。「AからBまで飛んで」「Cを経由して」等に使う。addFlyPath+playFlyPathの高レベル版",
+      description: "地点A→B(C経由等)の飛行ルートを自動生成してFlyモードで再生する。waypointsに座標・地名(query)・読込済み地物名(feature)を混在指定でき、地名は自動でジオコーディングされる。経由地間は直線補間し、地形標高をサンプリングして山岳部でも埋まらない高度を各点に付与する(2Dエンジンでは標高サンプリングなしのカメラ巡回のみ)。「AからBまで飛んで」「Cを経由して」等に使う。addFlyPath+playFlyPathの高レベル版",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -1764,7 +1770,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "listGsiCatalog",
-      description: "GSI Mapsエンジン専用。地理院地図のレイヤカタログ(layers.txt全件)を検索する。id・タイトル・URL・表示中か・取込可否に使う layerType・確認要否(needsConfirm)を返す。filter で部分一致絞り込み",
+      description: "GSI Mapsエンジン専用。地理院地図のレイヤカタログ(layers.txt全件+災害トピック等の遅延ロード群)を検索する。id・タイトル・URL・表示中か・取込可否に使う layerType・確認要否(needsConfirm)を返す。filter で部分一致絞り込み(親フォルダ名=災害名でも子レイヤにヒットする)",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -1774,7 +1780,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addGsiLayer",
-      description: "GSI Mapsエンジン専用。地理院地図のレイヤカタログから id/タイトル指定で直接表示する(レイヤツリーでチェックを入れるのと同じ。idはlistGsiCatalogで確認)。hidden=trueで非表示のまま追加。要確認レイヤは confirmPending で返り地理院地図側の確認ダイアログ承認が必要",
+      description: "GSI Mapsエンジン専用。地理院地図のレイヤカタログから id/タイトル指定で直接表示する(レイヤツリーでチェックを入れるのと同じ。idはlistGsiCatalogで確認)。hidden=trueで非表示のまま追加。要確認レイヤは confirmPending で返り地理院地図側の確認ダイアログ承認が必要。notFound時は candidates に類似レイヤの id/タイトルが返るので、その id で再試行する",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -1860,6 +1866,22 @@ const CHAT_TOOLS = [{
         required: ["latitude", "longitude"],
       },
     },
+    {
+      name: "getGsiShareUrl",
+      description: "GSI Mapsエンジン専用。現在の視点・ベースマップ・表示中レイヤを maps.gsi.go.jp の共有URLとして返す。実サイトで同じ状態が開ける",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "setGsiGlobe",
+      description: "GSI Mapsエンジン専用。地理院地図の Globe(3D)表示へ進入/復帰する。on=trueで現在の視点・ベース・表示中レイヤを引き継いでGlobeへ、falseで2D地図へ戻る(Globeの現在視点を引き継ぐ)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          on: { type: "BOOLEAN", description: "true=Globeへ進入 / false=2D地図へ復帰" },
+        },
+        required: ["on"],
+      },
+    },
   ],
 }];
 
@@ -1869,7 +1891,11 @@ const chatSystemInstruction = () => {
   if (!custom) {
     try { custom = localStorage.getItem("chatCustomInstructions") || ""; } catch (e) {}
   }
-  const engineNote = `\n\nCurrent map engine: "${aiEngine}"${aiEngine === "cesium" ? " (CesiumJS・3D 全機能)" : " (KASUGAI Canvas .kasc 2D プレイヤー。3D・描画・flyPath 系ツールはこのエンジンでは利用不可)"}`;
+  const engineNote = `\n\nCurrent map engine: "${aiEngine}"${aiEngine === "cesium"
+    ? " (CesiumJS・3D 全機能)"
+    : aiEngine === "gsimaps"
+      ? " (KASUGAI Canvas .kasc プレイヤー(地理院地図)。地形起伏・断面クリップ・描画モード等の一部3Dツールは利用不可。setGsiGlobe で Globe(Cesium) へ切替可能。flyPath 系はカメラ巡回のみで地形追従しない)"
+      : " (KASUGAI Canvas .kasc 2D プレイヤー。3D地形・断面クリップ・描画モード系ツールはこのエンジンでは利用不可。flyPath 系はカメラ巡回のみで地形追従しない)"}`;
   return `${t("chat.systemInstruction")} ${t("chat.systemInstructionAppUrl", { url: `${window.location.origin}${window.location.pathname}` })}${engineNote}${custom.trim() ? `\n\nUser's additional instructions:\n${custom.trim()}` : ""}`;
 };
 
@@ -1881,6 +1907,9 @@ function activeChatTools() {
     .filter(d => d.name !== "publishPlugin" || hasBackendFeature("pluginWrite"))
     .filter(d => !["searchPlaces", "openStreetView"].includes(d.name) || hasMapsKey)
     .filter(d => !["listDataFiles", "saveDataFile", "deleteDataFile"].includes(d.name) || hasBackendFeature("fileWrite"))
+    // 更新・停止はローカルサーバー版のみ（静的配信では非公開）
+    .filter(d => !["checkUpdate", "installUpdate"].includes(d.name) || hasBackendFeature("update"))
+    .filter(d => d.name !== "shutdownApp" || hasBackendFeature("shutdown"))
     .filter(d => chatToolAvailable(d.name))
     // MCP サーバー（Box 等）のツールを末尾へ合成する
     .concat(mcpDeclarations());
@@ -2014,11 +2043,11 @@ async function verifyToolTargetUrl(target, options = "") {
   try {
     // ローカル版は /api/fetch 経由で実在確認(CORSに左右されずレイヤー読み込みと同じ経路)
     if (hasBackendFeature("fetchProxy") && isFetchProxyTarget(url)) {
-      const res = await fetch(`${location.origin}/api/fetch?url=${encodeURIComponent(url)}`);
+      const res = await fetch(`${location.origin}/api/fetch?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(15000) });
       return res.ok ? { ok: true } : { ok: false, status: res.status };
     }
-    let res = await fetch(url, { method: "HEAD" });
-    if (res.status === 405 || res.status === 501) res = await fetch(url, { method: "GET" });
+    let res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(15000) });
+    if (res.status === 405 || res.status === 501) res = await fetch(url, { method: "GET", signal: AbortSignal.timeout(15000) });
     return res.ok ? { ok: true } : { ok: false, status: res.status };
   } catch (e) {
     return { ok: false, status: String(e && e.message || e) };
@@ -2183,10 +2212,14 @@ export async function executeChatTool(name, args = {}) {
     return { ok: window.kasugaiApi.applyInspector(args.text) };
   }
   if (name === "exportInspector") return { ok: window.kasugaiApi.exportInspector() };
-  if (name === "checkUpdate") return { ok: window.kasugaiApi.checkUpdate() };
+  if (name === "checkUpdate") {
+    const r = await window.kasugaiApi.checkUpdate();
+    return r && typeof r === "object" ? r : { ok: !!r };
+  }
   if (name === "installUpdate") {
-    const ok = window.kasugaiApi.installUpdate();
-    return { ok, message: ok ? undefined : t("tool.noUpdate") };
+    const r = await window.kasugaiApi.installUpdate();
+    if (r && typeof r === "object") return r.ok !== undefined ? r : { ok: true, ...r };
+    return { ok: !!r, message: r ? undefined : t("tool.noUpdate") };
   }
   if (name === "runCode") {
     try {
@@ -2206,7 +2239,10 @@ export async function executeChatTool(name, args = {}) {
     if (!check.ok) return { ok: false, message: t("tool.urlUnreachable", { status: check.status }) };
     return { ok: window.kasugaiApi.addGeoJsonLayer(args.title, args.url) };
   }
-  if (name === "shutdownApp") return { ok: window.kasugaiApi.shutdownApp() };
+  if (name === "shutdownApp") {
+    const r = await window.kasugaiApi.shutdownApp();
+    return r && typeof r === "object" ? r : { ok: !!r };
+  }
   if (name === "savePlugin") {
     // 生成コードの適用前にユーザーへ全文確認を取る（プラグインはフル権限で動くため）
     const approved = await confirmPluginApply({ id: args.id, name: args.name, code: String(args.code || "") });
@@ -2297,6 +2333,8 @@ export async function executeChatTool(name, args = {}) {
   if (name === "setGsiLayerHidden") return window.kasugaiApi.setGsiLayerHidden(args.id, args.hidden);
   if (name === "removeGsiSakuzu") return window.kasugaiApi.removeGsiSakuzu({ indices: args.indices });
   if (name === "getGsiElevation") return await window.kasugaiApi.getGsiElevation(args.latitude, args.longitude);
+  if (name === "getGsiShareUrl") return window.kasugaiApi.getGsiShareUrl();
+  if (name === "setGsiGlobe") return window.kasugaiApi.setGsiGlobe(args.on);
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 
@@ -2802,6 +2840,7 @@ async function callOpenAICompat(history) {
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(CHAT_LLM_TIMEOUT_MS),
       body: JSON.stringify({ model, messages, tools, tool_choice: "auto" }),
     });
     const data = await response.json();
@@ -2866,6 +2905,7 @@ async function callGemini(history) {
     const response = await fetch(endpoint, {
       method: "POST",
       headers,
+      signal: AbortSignal.timeout(CHAT_LLM_TIMEOUT_MS),
       body: JSON.stringify({
         ...(proxy ? { model } : {}),
         systemInstruction: { parts: [{ text: chatSystemInstruction() }] },
@@ -2980,11 +3020,19 @@ export function setupChatPanel() {
     messages.scrollTop = messages.scrollHeight;
     chatChain = chatChain
       .then(() => respondToChat(text, thinking))
-      .catch(() => { thinking.remove(); });
+      .catch(error => {
+        // 例外はここで握りつぶさず必ず表示する。
+        // 黙って「…」を消すだけだと質問だけが残り無応答に見える
+        thinking.remove();
+        addMessage("system", t("common.error", { error: String(error?.message || error) }));
+      });
   });
 
   // 外部エージェントへメッセージを送る。
-  // 応答は {reply: "...", actions: [{name, args}]} で、actions はチャットツールと同名で順次実行される
+  // 応答は {reply: "...", actions: [{name, args}]} で、actions はチャットツールと同名で順次実行される。
+  // 実行した各アクションの結果は toolResults としてブリッジへ送り返し、結果を踏えた
+  // 続きの回答・追加アクションを受け取る往復を、追加アクションが無くなるまで繰り返す
+  // （一覧・検索系ツールの実値をエージェントが見て回答できるようにするためのもの）
   async function callExternalAgent(text) {
     const config = getAgentConfig();
     const headers = { "Content-Type": "application/json" };
@@ -2993,15 +3041,14 @@ export function setupChatPanel() {
     // Devin プロバイダは設定済みの APIキーをブリッジへ渡して acp 認証に使わせる
     // （未設定時はブリッジ側でブラウザ PKCE 認証が起動する）
     if (provider === "devin") Object.assign(headers, devinAuthHeaders(config.endpoint));
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
     // BYO キー同梱が有効な場合のみ apiKey を付ける（未設定時はサーバー側のキーに委ねる）
     const apiKey = config.sendKey ? (chatGoogleApiKey() || "") : "";
     // キーを平文で流出させないため、送信先は https または localhost のみ許可する
     if (apiKey && !isSecureAgentEndpoint(config.endpoint)) {
       throw new Error(t("agent.sendKeyInsecure"));
     }
-    const body = JSON.stringify({
+    // 各ラウンドで最新のカメラ・レイヤ状態を取り直して送る（直前アクションで変わるため）
+    const makeBody = (extra = {}) => JSON.stringify({
       message: text,
       // 外部エージェントにもアプリの基本指示と保存済み追加指示を渡す
       systemInstruction: chatSystemInstruction(),
@@ -3022,36 +3069,59 @@ export function setupChatPanel() {
       // Copilot/Devin/Antigravity プロバイダ利用時は選択モデルをブリッジへ伝える
       ...(BRIDGE_PROVIDERS.includes(provider) && getBridgeModel(provider) ? { model: getBridgeModel(provider) } : {}),
       ...(apiKey ? { apiKey } : {}),
+      ...extra,
     });
-    const post = (endpoint) => fetch(endpoint, { method: "POST", headers, signal: controller.signal, body });
-    let response;
-    try {
-      response = await post(config.endpoint);
-    } catch (err) {
-      // 接続拒否等（保存済みエンドポイントが旧バージョンのポートで死んでいる等）の場合、
-      // ブリッジ系プロバイダは既知候補を疎通確認して生存している方へ一度だけ再試行する
-      const healed = err instanceof TypeError ? await healBridgeEndpoint(provider, config.endpoint) : null;
-      if (!healed || (apiKey && !isSecureAgentEndpoint(healed))) throw err;
-      response = await post(healed);
-    } finally {
-      clearTimeout(timer);
-    }
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
-    const executed = [];
-    for (const action of Array.isArray(data?.actions) ? data.actions : []) {
-      if (!action || typeof action.name !== "string") continue;
-      await executeChatTool(action.name, action.args || {});
-      executed.push(`${action.name}(${JSON.stringify(action.args || {})})`);
-    }
-    // 資料フィールドが返された場合は showReport と同等に扱ってモーダル表示する
-    if (data?.report && typeof data.report === "object") {
+    const postOnce = async (endpoint, payload) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 120000);
       try {
-        await executeChatTool("showReport", { title: data.report.title, format: data.report.format, content: data.report.content });
-        executed.push(`showReport(${JSON.stringify({ title: data.report.title || "" })})`);
-      } catch (e) {}
+        const r = await fetch(endpoint, { method: "POST", headers, signal: controller.signal, body: payload });
+        const d = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(d?.error || `HTTP ${r.status}`);
+        return d || {};
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    const post = async (payload) => {
+      try {
+        return await postOnce(config.endpoint, payload);
+      } catch (err) {
+        // 接続拒否等（保存済みエンドポイントが旧バージョンのポートで死んでいる等）の場合、
+        // ブリッジ系プロバイダは既知候補を疎通確認して生存している方へ一度だけ再試行する
+        const healed = err instanceof TypeError ? await healBridgeEndpoint(provider, config.endpoint) : null;
+        if (!healed || (apiKey && !isSecureAgentEndpoint(healed))) throw err;
+        return await postOnce(healed, payload);
+      }
+    };
+
+    const executed = [];
+    let reply = "";
+    let data = await post(makeBody());
+    // actions を実行→結果を toolResults で返送→続きの回答/追加 actions、を最大5往復
+    for (let round = 0; round < 5; round++) {
+      reply = typeof data?.reply === "string" && data.reply ? data.reply : reply;
+      // 資料フィールドが返された場合は showReport と同等に扱ってモーダル表示する
+      if (data?.report && typeof data.report === "object") {
+        try {
+          await executeChatTool("showReport", { title: data.report.title, format: data.report.format, content: data.report.content });
+          executed.push(`showReport(${JSON.stringify({ title: data.report.title || "" })})`);
+        } catch (e) {}
+      }
+      const actions = (Array.isArray(data?.actions) ? data.actions : [])
+        .filter(a => a && typeof a.name === "string");
+      if (!actions.length) break;
+      const results = [];
+      for (const action of actions) {
+        let result = null;
+        try { result = await executeChatTool(action.name, action.args || {}); }
+        catch (e) { result = { error: String(e?.message || e) }; }
+        results.push({ name: action.name, args: action.args || {}, result });
+        executed.push(`${action.name}(${JSON.stringify(action.args || {})})`);
+      }
+      data = await post(makeBody({ toolResults: results }));
     }
-    return { text: typeof data?.reply === "string" && data.reply ? data.reply : t("chat.noResponse"), executed };
+    return { text: reply || t("chat.noResponse"), executed };
   }
 
   // Google APIキーが設定されていれば Gemini (function calling)、未設定ならローカルコマンドのみ。

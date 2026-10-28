@@ -488,6 +488,102 @@ export function layerAttribution(item) {
   return String(item?.attr || item?.opts?.attr || item?.opts?.attribution || "").trim();
 }
 
+// ---- info: 行の外部HTML埋め込み（情報タブ） ----
+// info: <URL> で指定した HTML 文書を fetch・サニタイズして情報タブへ埋め込む。
+// Cesium 版 loadInfoContent と同じ規則を全エンジンで共有する。
+// 中身ごと捨てる要素（script のコード文字列や外部リソース読込・フォーム送信を防ぐ）
+const INFO_DROP_SELECTOR = "script, iframe, object, embed, form, link, style";
+// info HTML 内の相対参照を info 文書の URL 基準で絶対化する属性
+const INFO_RESOURCE_ATTRS = new Set(["src", "href", "poster", "background"]);
+
+// 情報HTML内のサブタブ（.tab-button と .tab-content の組）を配線する。
+// 対象が無ければ何もしない。Cesium 版 setupInfoTabs と同じ規則
+export function setupKascInfoTabs(content) {
+  const buttons = [...content.querySelectorAll(".tab-button")];
+  const panels = [...content.querySelectorAll(".tab-content")];
+  if (!buttons.length || !panels.length) return;
+  const activate = index => {
+    buttons.forEach((button, i) => button.classList.toggle("active", i === index));
+    panels.forEach((panel, i) => {
+      panel.classList.toggle("active", i === index);
+      panel.hidden = i !== index;
+    });
+  };
+  buttons.forEach((button, index) => button.addEventListener("click", () => activate(index)));
+  activate(Math.max(0, buttons.findIndex(button => button.classList.contains("active"))));
+}
+
+// 取得済みの info HTML をサニタイズして container へ埋め込む。
+// docUrl は info 文書自身の URL（相対 img/href の解決基準。不明なら null 可）
+export function embedKascInfoHtml(container, html, docUrl = null) {
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  parsed.querySelectorAll(INFO_DROP_SELECTOR).forEach(node => node.remove());
+  parsed.querySelectorAll("*").forEach(node => {
+    [...node.attributes].forEach(attribute => {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value || "";
+      if (/^on/i.test(name) || /javascript:/i.test(value)) {
+        node.removeAttribute(attribute.name);
+        return;
+      }
+      // 相対参照は .kasc ではなく info 文書の URL を基準に解決する。
+      // #fragment は同一文書内アンカーとして残す
+      if (docUrl && INFO_RESOURCE_ATTRS.has(name) && value && !value.startsWith("#") &&
+          !/^[a-z][a-z0-9+.-]*:/i.test(value)) {
+        try { node.setAttribute(attribute.name, new URL(value, docUrl).href); } catch (_) { /* 不正URLはそのまま */ }
+      }
+    });
+    // パネル内リンクでアプリ自体を遷移させない（target 未指定は新規タブへ）
+    if (node.tagName === "A" && !node.getAttribute("target")) {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+  container.replaceChildren(...[...parsed.body.childNodes].map(node => document.importNode(node, true)));
+  setupKascInfoTabs(container);
+}
+
+// container ごとの読み込みシーケンス。プロジェクト切替等で遅れて届いた
+// fetch 結果が新しい内容を上書きしないよう、古い応答を破棄する
+const infoLoadSeq = new WeakMap();
+
+// 情報タブを空にし、飛行中の読み込みを無効化する（.kasc 適用時のリセット用）
+export function clearKascInfoContent(container) {
+  if (!container) return;
+  infoLoadSeq.set(container, (infoLoadSeq.get(container) || 0) + 1);
+  container.replaceChildren();
+}
+
+// info: 行の値（URL または `<` で始まるインラインHTML）を情報タブへ読み込む。
+// errorText は失敗時の表示文字列を返す関数（i18n 済みの文言を渡す用）
+export async function loadKascInfoContent(container, spec, projectBaseUrl, { errorText } = {}) {
+  if (!container) return;
+  const seq = (infoLoadSeq.get(container) || 0) + 1;
+  infoLoadSeq.set(container, seq);
+  container.replaceChildren();
+  const value = String(spec || "").trim();
+  if (!value) return;
+  // インライン HTML（`<` 始まり）は fetch せず直接埋め込む
+  if (value.startsWith("<")) {
+    embedKascInfoHtml(container, value, null);
+    return;
+  }
+  const url = resolveKascUrl(value, projectBaseUrl);
+  try {
+    const response = await fetch(url, { mode: "cors" });
+    if (!response.ok) throw new Error(await response.text());
+    const html = await response.text();
+    if (infoLoadSeq.get(container) !== seq) return;
+    embedKascInfoHtml(container, html, url);
+  } catch (error) {
+    if (infoLoadSeq.get(container) !== seq) return;
+    const message = error instanceof Error ? error.message : String(error);
+    container.textContent = typeof errorText === "function"
+      ? errorText(message)
+      : `情報を読み込めませんでした: ${message}`;
+  }
+}
+
 // .kasc タイトルを グループ/末端名 に分解する（"A/B/C" → グループ "A / B"・末端 "C"。
 // 区切りが二重 "//"・"\\" の場合は排他グループ。Cesium 版 parseLayerTitle と同じ規則）
 export function splitKascTitle(title) {

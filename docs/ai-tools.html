@@ -27,7 +27,7 @@
             <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
-            <tr><td>GSI Maps エンジン（<code>?engine=gsimaps</code>）</td><td><code>listGsiLayers</code>・<code>importGsiLayers</code>・<code>setGsiLayerOpacity</code>・<code>moveGsiLayer</code>・<code>removeGsiLayer</code>・<code>listGsiCatalog</code>・<code>addGsiLayer</code>・<code>listGsiSakuzu</code>・<code>importGsiSakuzu</code>・<code>listGsiBasemaps</code>・<code>setGsiBasemap</code>・<code>importGsiCatalog</code>・<code>setGsiLayerHidden</code>・<code>removeGsiSakuzu</code>・<code>getGsiElevation</code></td></tr>
+            <tr><td>GSI Maps エンジン（<code>?engine=gsimaps</code>・調整中）</td><td><code>listGsiLayers</code>・<code>importGsiLayers</code>・<code>setGsiLayerOpacity</code>・<code>moveGsiLayer</code>・<code>removeGsiLayer</code>・<code>listGsiCatalog</code>・<code>addGsiLayer</code>・<code>listGsiSakuzu</code>・<code>importGsiSakuzu</code>・<code>listGsiBasemaps</code>・<code>setGsiBasemap</code>・<code>importGsiCatalog</code>・<code>setGsiLayerHidden</code>・<code>removeGsiSakuzu</code>・<code>getGsiElevation</code>・<code>getGsiShareUrl</code>・<code>setGsiGlobe</code></td></tr>
           </tbody>
         </table>
         <p>公開環境には「その人のセッション内に閉じる安全な機能」のみが渡ります（ティア分けはリポジトリの <code>AGENTS.md</code>「AI 機能のティア分け」参照）。</p>
@@ -66,8 +66,8 @@
       </section>
 
       <section>
-        <h2>🗾 GSI Maps エンジン（15）</h2>
-        <p>iframe 内の地理院地図（同一オリジンの vendored 版）を <code>GSI.GLOBALS</code> 内部 API 経由で操作する専用ツール群。vendored コードは無改変で、すべて中間層からのフック。レイヤーの「表示中」状態は地理院地図側の表示中レイヤーパネルと常に同期する。</p>
+        <h2>🗾 GSI Maps エンジン（17・調整中）</h2>
+        <p>iframe 内の地理院地図（同一オリジンの vendored 版）を <code>GSI.GLOBALS</code> 内部 API 経由で操作する専用ツール群。vendored コードは無改変で、すべて中間層からのフック。レイヤーの「表示中」状態は地理院地図側の表示中レイヤーパネルと常に同期する。<strong>現在調整中</strong>: 内部 API 依存のため AI 制御の安定化が難しく、ツール仕様・挙動は今後変更される可能性があります。</p>
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
@@ -86,6 +86,8 @@
             <tr><td><code>setGsiLayerHidden</code></td><td>id*, hidden*</td><td>表示中レイヤーを解除せず一時的に非表示/再表示（表示中レイヤーパネルの非表示チェックと同じ操作。ベースマップは対象外）</td></tr>
             <tr><td><code>removeGsiSakuzu</code></td><td>indices</td><td>作図（sakuzu）を削除。indices は index またはタイトル（省略時は全作図）。Canvas 管理レイヤ由来（<code>ours=true</code>）は対象外</td></tr>
             <tr><td><code>getGsiElevation</code></td><td>latitude*, longitude*</td><td>地理院地図の標高 API で指定地点の標高（m）を取得。<code>source</code> はメッシュ種別（例: 5mメッシュ（レーザ））</td></tr>
+            <tr><td><code>getGsiShareUrl</code></td><td>なし</td><td>現在の視点・ベースマップ・表示中レイヤを <code>maps.gsi.go.jp</code> の共有 URL（<code>#z/lat/lon/&base=&ls=&disp=</code> 形式）として返す。実サイトで同じ状態が開ける</td></tr>
+            <tr><td><code>setGsiGlobe</code></td><td>on*</td><td>地理院地図の Globe（3D）表示へ進入/復帰。true で現在の視点・ベース・表示中レイヤを引き継いで Globe へ、false で「2D地図に戻る」と同じ復帰（Globe の視点を引き継ぐ）</td></tr>
           </tbody>
         </table>
       </section>

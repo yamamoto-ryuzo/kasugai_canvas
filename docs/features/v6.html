@@ -17,7 +17,7 @@
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="multi">V6: マルチエンジン</h2>
-      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> プロジェクトを複数の地図エンジンで再生できる構成です。<strong>メインエンジンは CesiumJS</strong>（開発の主対象・既定エンジン）で、MapLibre / OpenLayers / Leaflet / GSI Maps は <code>.kasc</code> プレイヤーとしての互換実装です。プロジェクトデータ（<code>projects/</code>）はエンジン非依存で、描画に依存しないコードは <code>web/shared/</code> に集約しています。</p>
+      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> プロジェクトを複数の地図エンジンで再生できる構成です。<strong>メインエンジンは CesiumJS</strong>（開発の主対象・既定エンジン）で、MapLibre / OpenLayers / Leaflet / GSI Maps（※現在調整中）は <code>.kasc</code> プレイヤーとしての互換実装です。プロジェクトデータ（<code>projects/</code>）はエンジン非依存で、描画に依存しないコードは <code>web/shared/</code> に集約しています。</p>
       <p><strong>ねらい</strong>: 同じ <code>.kasc</code> を「高機能3D（Cesium）」「軽量2D（Leaflet 等）」「地理院地図の UI（GSI Maps）」など、配布先の環境・用途に合ったエンジンで開けます。納品物は <code>.kasc</code>+<code>DATA/</code>+エンジン一式の静的ファイルだけで成立し、受け取り側がエンジンを選ぶ余地も残せます。</p>
 
       <h3>🧭 エンジン構成</h3>
@@ -57,7 +57,7 @@
       </tr>
       <tr>
       <td><code>gsimaps/</code></td>
-      <td><strong>GSI Maps</strong>（中間エンジン）</td>
+      <td><strong>GSI Maps</strong>（中間エンジン・調整中）</td>
       <td>vendored 地理院地図（gsi-cyberjapan/gsimaps）を同一オリジン iframe で組み込み、<code>.kasc</code> を GSI/Leaflet API 経由で再生。上流コードは無改変で、変換・制御はすべて中間層が担う（下記「GSI Maps エンジン」節）</td>
       </tr>
       </tbody>
@@ -100,13 +100,14 @@
         <li><strong>未対応行の扱い</strong>: そのエンジンで再現できない行タイプはパネルに「未対応行: …（Cesium 版で対応）」と警告表示されます</li>
       </ul>
 
-      <h3>🗾 GSI Maps エンジン（地理院地図組み込み）</h3>
+      <h3>🗾 GSI Maps エンジン（地理院地図組み込み・調整中）</h3>
       <p>vendored 地理院地図（<code>web/vendor/gsimaps/</code>・上流無改変）を同一オリジン iframe（<code>index_pm.html</code>）として組み込み、左の中間層パネルが .kasc を GSI/Leaflet API 経由で再生します。</p>
+      <p><strong>※現在調整中</strong>: iframe 内の vendored コードを <code>GSI.GLOBALS</code> 内部 API 経由で操作する構造のため AI 制御の安定化が難しく、本エンジンの挙動・ツール仕様は今後変更される可能性があります。</p>
       <ul>
         <li><strong>.kasc → gsimaps の対応</strong>: ベクター系行は GeoJSON へ変換して作図リスト（SakuzuListItem）として注入（スタイルは <code>_</code>-props へ畳み込み）。<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code> は外部タイル（appendOutSideTile）として追加し、地理院タイルのベースは gsimaps 標準ベースマップへマップします。<code>cam:</code> は URL ハッシュと setView、<code>theme:</code> は可視性プリセットとして処理。3dtiles 等の非対応行は情報タブへ警告します</li>
         <li><strong>Globe 表示</strong>: 上流の「Globe」起動（window.open）をフックして iframe 内表示へ差し替え、左パネルを維持します。Globe は Cesium アプリのため、読み込み済みの .kasc レイヤを viewer へ注入して 3D 表示でき、可視性も双方向で同期します。表示中の視点は親 URL ハッシュへミラーされ、「← 2D地図に戻る」で視点を引き継いで復帰します</li>
         <li><strong>レイヤ取り込み</strong>: 「地理院地図の表示レイヤを取り込み」ボタンで、地理院地図側で表示中のレイヤを <code>xyz:</code> 行の Canvas レイヤとして .kasc へ追記できます（Globe 表示中は不可）</li>
-        <li><strong>AI ツール群</strong>: 地理院地図の操作は専用ツール15本で AI 制御できます（<a href="../ai-tools.html">AI ツール仕様</a>）。表示中レイヤの一覧・取り込み（<code>listGsiLayers</code>/<code>importGsiLayers</code>）、透過率・積み順・解除（<code>setGsiLayerOpacity</code>/<code>moveGsiLayer</code>/<code>removeGsiLayer</code>）、カタログ検索・表示・直接取り込み（<code>listGsiCatalog</code>/<code>addGsiLayer</code>/<code>importGsiCatalog</code>）、作図取り込み（<code>listGsiSakuzu</code>/<code>importGsiSakuzu</code>）、ベースマップの一覧・切替（<code>listGsiBasemaps</code>/<code>setGsiBasemap</code>。切替は <code>base:</code> 行を .kasc へ自動追記し、他エンジンでも同じベースが再現されます）。ほかに表示中レイヤの一時非表示（<code>setGsiLayerHidden</code>）・作図削除（<code>removeGsiSakuzu</code>）・地点標高取得（<code>getGsiElevation</code>）もあります）。地理院地図側の UI 自体も <code>data-ui-bridge</code> 経由で汎用 <code>listUiControls</code>/<code>controlUi</code> の対象になります</li>
+        <li><strong>AI ツール群</strong>: 地理院地図の操作は専用ツール17本で AI 制御できます（<a href="../ai-tools.html">AI ツール仕様</a>）。表示中レイヤの一覧・取り込み（<code>listGsiLayers</code>/<code>importGsiLayers</code>）、透過率・積み順・解除（<code>setGsiLayerOpacity</code>/<code>moveGsiLayer</code>/<code>removeGsiLayer</code>）、カタログ検索・表示・直接取り込み（<code>listGsiCatalog</code>/<code>addGsiLayer</code>/<code>importGsiCatalog</code>）、作図取り込み（<code>listGsiSakuzu</code>/<code>importGsiSakuzu</code>）、ベースマップの一覧・切替（<code>listGsiBasemaps</code>/<code>setGsiBasemap</code>。切替は <code>base:</code> 行を .kasc へ自動追記し、他エンジンでも同じベースが再現されます）。ほかに表示中レイヤの一時非表示（<code>setGsiLayerHidden</code>）・作図削除（<code>removeGsiSakuzu</code>）・地点標高取得（<code>getGsiElevation</code>）もあります）。地理院地図側の UI 自体も <code>data-ui-bridge</code> 経由で汎用 <code>listUiControls</code>/<code>controlUi</code> の対象になります</li>
         <li><strong>ベンダー管理</strong>: vendor 実体は gitignore で、<code>tools/fetch_vendor.py</code> が <code>gsimaps/vendor.json</code> の sha へ同期します。CDN 公開時も各チャンネルへ実ファイルが配置されます</li>
       </ul>
 
