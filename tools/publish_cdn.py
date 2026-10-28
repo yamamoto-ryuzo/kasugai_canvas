@@ -67,10 +67,27 @@ def _write_version_json(stage_dir, data):
         f.write('\n')
 
 
-def _replace_dir(src, dst):
-    if os.path.isdir(dst):
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst)
+def _replace_dir(src, dst, exclude=()):
+    # exclude のエントリは dst 側に残したまま、それ以外を src と一致させる
+    # (mirror 同期。vendor のような別管理ディレクトリを温存するため)
+    os.makedirs(dst, exist_ok=True)
+    for entry in os.listdir(dst):
+        if entry in exclude:
+            continue
+        p = os.path.join(dst, entry)
+        if os.path.isdir(p) and not os.path.islink(p):
+            shutil.rmtree(p)
+        else:
+            os.remove(p)
+    for entry in sorted(os.listdir(src)):
+        if entry in exclude:
+            continue
+        s = os.path.join(src, entry)
+        d = os.path.join(dst, entry)
+        if os.path.isdir(s):
+            shutil.copytree(s, d)
+        else:
+            shutil.copy2(s, d)
 
 
 def _update_channels(cdn_dir, channel, version):
@@ -102,22 +119,35 @@ def _commit_and_push(cdn_dir, message, push):
         print('pushed')
 
 
-def _ensure_vendors():
-    """vendor.json が指す上流スナップショットを web/vendor/ へ保証する。
+def _sync_vendors(stage):
+    """vendor を CDN ステージへ sha 差分時のみ同期する。
 
-    web/vendor/ は git 管理だが、ローカルが欠落・stale なまま発行すると
-    CDN 側で不一致になる。発行前に fetch_vendor で sha を突き合わせて揃える
+    web/ 本体は毎回全量同期するが、めったに変わらない vendor(約75MB)は
+    ステージ側の VENDOR.json sha と vendor.json の pin を比較し、
+    差異・欠落時だけ fetch_vendor で取得して反映する。
+    一致時はローカルへの再実体化自体も行わない
     """
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import fetch_vendor
-    fetch_vendor.ensure_vendors(web_dir=WEB_DIR)
+    for spec_path in fetch_vendor._find_vendor_specs(WEB_DIR):
+        spec = fetch_vendor._read_json(spec_path)
+        name = spec.get('name') or os.path.basename(os.path.dirname(spec_path))
+        sha = spec.get('sha') or spec.get('ref') or 'HEAD'
+        dst = os.path.join(stage, 'vendor', name)
+        if os.path.isdir(dst) and fetch_vendor._current_sha(dst) == sha:
+            print('vendor {0}: channel already at {1} (skip)'.format(
+                name, sha[:8]))
+            continue
+        src = fetch_vendor.fetch_vendor(spec_path)
+        _replace_dir(src, dst)
 
 
 def sync_channel(cdn_dir, channel):
     """web/ を指定ステージへ直接同期する。"""
     stage = os.path.join(cdn_dir, channel)
-    _ensure_vendors()
-    _replace_dir(WEB_DIR, stage)
+    # vendor は別管理(_sync_vendors)のため web/ 全量コピーから除外
+    _replace_dir(WEB_DIR, stage, exclude=('vendor',))
+    _sync_vendors(stage)
     version = _cargo_version()
     _write_version_json(stage, {
         'version': version,
