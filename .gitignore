@@ -12,4 +12,3 @@ installer/projects/*_local/
 
 # Node 依存（copilot-bridge 等）
 node_modules/
-/web/vendor/
