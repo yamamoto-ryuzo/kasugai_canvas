@@ -387,6 +387,11 @@ def deploy(project: str, region: str, service: str, image: str,
     print(f"[7/8] Cloud Run にデプロイします: {service}（{region}）", flush=True)
     if auth_mode:
         envs = envs + [f"KASUGAI_AUTH_MODE={auth_mode}"]
+    if os.name == "nt":
+        # _gcloud は cmd 経由で実行するため、値内の改行でコマンドが分断され
+        # 以降の env 項目ごと脱落する。改行・連続空白を単一スペースへ畳む
+        # (POSIX は shlex.join の引用で改行を保持できるため対象外)
+        envs = [re.sub(r"\s+", " ", e).strip() for e in envs]
     args = [
         "run", "deploy", service,
         "--image", image,
