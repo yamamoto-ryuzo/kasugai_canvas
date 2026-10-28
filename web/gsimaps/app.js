@@ -471,8 +471,15 @@ function injectSakuzuLayer(item, geojson) {
   const fc = { type: "FeatureCollection", features: (geojson?.features || []).map(f => styledFeature(item, f)) };
   const layer = new G.GeoJSON(null, { geodesic: true });
   layer.addData(fc);
-  // 地物クリック → 親の属性タブへ(Leaflet 版と同じ導線)
-  layer.eachLayer(l => l.on("click", () => showFeatureAttrs(l.feature?.properties || {})));
+  // 地物クリック → 親の属性タブへ(Leaflet 版と同じ導線)。
+  // G.GeoJSON は gsimaps 独自ラッパーで eachLayer を持たず、内部の実
+  // L.GeoJSON は this.layer に格納されるため、それ経由で付与する
+  try {
+    const inner = layer.layer || layer;
+    if (typeof inner.eachLayer === "function") {
+      inner.eachLayer(l => l.on?.("click", () => showFeatureAttrs(l.feature?.properties || {})));
+    }
+  } catch (_) { /* クリック付与失敗は表示自体を妨げない */ }
   const title = item.title || "layer";
   const fileName = /\.[a-z0-9]+$/i.test(title) ? title : `${title}.geojson`;
   const sk = new G.SakuzuListItem(
