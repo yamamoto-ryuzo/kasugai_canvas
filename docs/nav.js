@@ -21,7 +21,8 @@
             { href: 'features/v2.html', text: 'V2: プレゼンテーション' },
             { href: 'features/v3.html', text: 'V3: AI 連携' },
             { href: 'features/v4.html', text: 'V4: プラグイン・外部連携' },
-            { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' }
+            { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' },
+            { href: 'features/v6.html', text: 'V6: マルチエンジン' }
           ]
         },
         { href: 'inspector.html', text: '.kasc 設定仕様' },

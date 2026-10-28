@@ -169,6 +169,27 @@
         </div>
       </div>
 
+      <h2 id="multi"><a href="features/v6.html">V6: マルチエンジン</a></h2>
+      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> をエンジン非依存のプロジェクト形式として各エンジンで再生する構成です。メインエンジンは CesiumJS、他エンジンは .kasc プレイヤーとしての互換実装です。<a href="features/v6.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🔀 エンジン選択と切替</h3>
+          <p><code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps</code> で起動エンジンを選択（既定 cesium）。パネルの切替リンクはプロジェクト・カメラ位置・インスペクター編集・レイヤ可視性を引き継ぐ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ 2D プレイヤー（MapLibre / OpenLayers / Leaflet）</h3>
+          <p>全ベクター行・QML・duckdb/sql・属性 UI の .kasc 再生。<code>3dtiles:</code> は deck.gl を遅延ロードして表示・3D Tiles ドレープにも対応</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗾 GSI Maps エンジン</h3>
+          <p>vendored 地理院地図を iframe で組み込む中間エンジン。.kasc を作図リスト・外部タイルとして再生し、Globe 上へのレイヤ注入・地理院地図レイヤの .kasc 取り込みも可能</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧩 エンジン非依存コア（shared/）</h3>
+          <p>.kasc ローダー・ベクターデコーダー・QML コンパイラ・属性ウィジェット・AI チャット・印刷を <code>web/shared/</code> に集約。新エンジン追加コストを低減</p>
+        </div>
+      </div>
+
 
     </main>
   </div>

@@ -128,6 +128,17 @@
       <td>MapLibre 相当（QML・duckdb/sql・属性 UI・インスペクター・<code>3dtiles:</code>
       （deck.gl Tile3DLayer をオーバーレイキャンバスで必要時のみ遅延ロード））</td>
       </tr>
+      <tr>
+      <td><strong>GSI Maps</strong></td>
+      <td>中間エンジン</td>
+      <td>vendored 地理院地図（gsi-cyberjapan/gsimaps）を同一オリジン iframe で
+      組み込み、上流コード無改変のまま中間層が GSI/Leaflet API 経由で .kasc
+      を再生。地理院地図の標準 UI（情報リスト・Globe 等）をそのまま利用でき、
+      Globe 表示時は .kasc レイヤを Cesium 注入で 3D 表示する</td>
+      <td>ベクター行→作図リスト注入、<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code>→外部タイル。
+      <code>cam:</code>/<code>theme:</code>・属性 UI 対応。地理院地図の表示レイヤを
+      <code>xyz:</code> 行として .kasc へ取り込み可。<code>3dtiles:</code> 等は未対応</td>
+      </tr>
       </tbody>
       </table>
       <h3 id="追加候補の優先順位">追加候補エンジンの優先順位</h3>

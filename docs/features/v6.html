@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V6: マルチエンジン — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v5.30.0</span></h1>
+      <p>V6: マルチエンジン — 各機能カードの詳細説明</p>
+    </header>
+    <main>
+      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+
+      <h2 id="multi">V6: マルチエンジン</h2>
+      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> プロジェクトを複数の地図エンジンで再生できる構成です。<strong>メインエンジンは CesiumJS</strong>（開発の主対象・既定エンジン）で、MapLibre / OpenLayers / Leaflet / GSI Maps は <code>.kasc</code> プレイヤーとしての互換実装です。プロジェクトデータ（<code>projects/</code>）はエンジン非依存で、描画に依存しないコードは <code>web/shared/</code> に集約しています。</p>
+      <p><strong>ねらい</strong>: 同じ <code>.kasc</code> を「高機能3D（Cesium）」「軽量2D（Leaflet 等）」「地理院地図の UI（GSI Maps）」など、配布先の環境・用途に合ったエンジンで開けます。納品物は <code>.kasc</code>+<code>DATA/</code>+エンジン一式の静的ファイルだけで成立し、受け取り側がエンジンを選ぶ余地も残せます。</p>
+
+      <h3>🧭 エンジン構成</h3>
+      <table>
+      <colgroup>
+      <col style="width: 14%" />
+      <col style="width: 14%" />
+      <col style="width: 72%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>フォルダ</th>
+      <th>エンジン</th>
+      <th>位置づけ・対応範囲</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><code>cesium/</code></td>
+      <td><strong>CesiumJS</strong>（メイン・既定）</td>
+      <td>全行タイプ（<code>3dtiles:</code> 含む）・FLY・AI ツール・プラグイン・地形/DEM ドレープ・SCENE2D。KASUGAI の全機能が集約される唯一のフル機能エンジン</td>
+      </tr>
+      <tr>
+      <td><code>maplibre/</code></td>
+      <td><strong>MapLibre GL</strong>（2D プレイヤー）</td>
+      <td>WebGL ベースの 2D エンジン。全ベクター行・QML・duckdb/sql・属性 UI・6 タブパネル。<code>3dtiles:</code> は deck.gl Tile3DLayer を遅延ロードし、TerrainExtension による 3D Tiles 表面ドレープにも対応。回転・傾斜表示可</td>
+      </tr>
+      <tr>
+      <td><code>openlayers/</code></td>
+      <td><strong>OpenLayers</strong>（2D プレイヤー）</td>
+      <td>OGC 準拠最良の 2D エンジン。MapLibre 相当の .kasc 再生（QML・duckdb/sql・属性 UI）。Canvas レンダリングで WebGL 要件が緩い</td>
+      </tr>
+      <tr>
+      <td><code>leaflet/</code></td>
+      <td><strong>Leaflet</strong>（2D プレイヤー）</td>
+      <td>約 40KB の超軽量 2D エンジン。WebGL 不要の DOM/SVG 描画で古いブラウザでも動作。専用 pane にレイヤーを割り当てて .kasc の積み順を再現（回転系設定なし）。<code>3dtiles:</code> は deck.gl オーバーレイキャンバスで遅延ロード</td>
+      </tr>
+      <tr>
+      <td><code>gsimaps/</code></td>
+      <td><strong>GSI Maps</strong>（中間エンジン）</td>
+      <td>vendored 地理院地図（gsi-cyberjapan/gsimaps）を同一オリジン iframe で組み込み、<code>.kasc</code> を GSI/Leaflet API 経由で再生。上流コードは無改変で、変換・制御はすべて中間層が担う（下記「GSI Maps エンジン」節）</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>各エンジンの特性比較と追加候補の評価は <a href="../library.html#地図エンジンの選定と追加候補">ライブラリ — 地図エンジンの選定と追加候補</a> を参照してください。</p>
+
+      <h3>🔀 エンジン選択と切替</h3>
+      <ul>
+        <li><strong><code>?engine=</code> リダイレクト</strong>: ルートの <code>web/index.html</code> は <code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps</code>（既定 cesium）を読み、対象エンジンの <code>index.html</code> へリダイレクトします。<code>engine</code> 以外のクエリ（<code>project=</code>・<code>kasc=</code>）とハッシュ（ビュー状態）はそのまま引き継ぐため、同じ URL をエンジンを変えて開き直せます</li>
+        <li><strong>切替 UI</strong>: 各エンジンのパネルにある「engine:」リンク（<code>shared/engine-switch.js</code>）から別エンジンへ遷移します。現在のクエリとハッシュを引き継ぐため、プロジェクトとカメラ位置を保ったまま切り替えられます（リンクは <code>../?engine=…</code> の相対パスで、GitHub Pages 等のパスプレフィックス配信でも動作）</li>
+        <li><strong>レイヤ状態の引継ぎ</strong>: 切替直前にインスペクターの .kasc テキスト・テーマ選択・各レイヤの可視性を localStorage へ一時保存し、切替先が起動時に一度だけ消費します（TTL 120 秒・URL の project/kasc が一致したときのみ適用）。切替元で加えた未保存の編集や表示切替が切替先にも反映されます</li>
+        <li><strong>URL ハッシュの互換</strong>: カメラ状態のハッシュ形式はエンジン共通です（緯度・経度・高さに加え、2D 側は zoom を併記。heading/pitch は各エンジンの規約へ相互変換）。変換規則の詳細は <a href="v0.html">V0: システム基本構成 — URL パーマリンク</a> を参照</li>
+      </ul>
+
+      <h3>🧩 エンジン非依存コア（<code>web/shared/</code>）</h3>
+      <p>エンジン横断のコードは <code>shared/</code> に集約し、各エンジンの <code>app.js</code> は描画層と薄いアダプタを持つ構成です。新しい 2D エンジンの追加は「shared の各モジュールを使い回し、描画フックだけ実装する」形で行えます。</p>
+      <ul>
+        <li><code>kasc.js</code> — .kasc 行パーサー＋プロジェクトローダー。cam↔zoom 変換・URL ビュー読み書き・テーマ（<code>theme:</code>）・ブックマーク（<code>cam:</code> 行 / QGIS XML）・<code>?kasc=</code> 直読みを担当</li>
+        <li><code>vector-load.js</code> / <code>vector-decode.js</code> / <code>gpkg-worker.js</code> — ベクター系行タイプ（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>duckdb:</code>/<code>sql:</code> 等）を GeoJSON FeatureCollection へ正規化するローダー。GPKG は sql.js(SQLite WASM) Worker で別スレッド処理</li>
+        <li><code>qml-style.js</code> / <code>qml-2d.js</code> — QGIS レイヤースタイル（.qml）のコンパイルと 2D エンジンへの適用アダプタ</li>
+        <li><code>attr-widget.js</code> — 画面下部にドッキングする属性テーブル（レイヤ選択・全文検索・列ソート・行クリック移動）</li>
+        <li><code>player-api.js</code> — 2D プレイヤー向けの <code>window.kasugaiApi</code> アダプタ。各エンジンの共通構造（レイヤリスト＋描画フック）へ API 面を構成し、AI チャットの公開ツールは api メソッドの有無で自動絞り込み</li>
+        <li><code>ai-chat.js</code> / <code>mcp.js</code> / <code>box.js</code> — エンジン横断の AI チャット基盤（プロバイダ接続・ツール実行・MCP リモートサーバー接続・Box OAuth）</li>
+        <li><code>engine-switch.js</code> — 切替 UI とレイヤ状態引継ぎ（上記）</li>
+        <li><code>print.js</code> — 印刷・帳票出力（地図画像化→タイトル/凡例/縮尺/方位/出典の帳票合成）</li>
+        <li><code>i18n.js</code> + <code>i18n/</code> — 共有の翻訳辞書と適用機構</li>
+        <li><code>deck-drape.js</code> / <code>deck-ground.js</code> — 2D エンジン上の deck.gl 3D Tiles 表示（ドレープ・自動接地）</li>
+        <li><code>localfs.js</code> — <code>?kasc=local</code> のローカルフォルダ直読み（File System Access API・後述）</li>
+        <li><code>kasc_loader.js</code> — geo_webview が生成するビューア HTML へのインライン埋め込み用 .kasc ローダー</li>
+      </ul>
+
+      <h3>🗺️ 2D プレイヤー（MapLibre / OpenLayers / Leaflet）</h3>
+      <p>3 エンジンはほぼ同機能の .kasc プレイヤーで、左パネルの 6 タブ（レイヤ・凡例・検索・属性・カメラ・情報）＋表示・インスペクター・AI の各タブを持ちます。</p>
+      <ul>
+        <li><strong>対応行タイプ</strong>: 全ベクター行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>tsv:</code>/<code>duckdb:</code>/<code>sql:</code>）、ラスタ行（<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code>）、<code>cam:</code>/<code>legend:</code>/<code>info:</code>/<code>theme:</code>/<code>3dtiles:</code>。<code>3dtiles:</code> は deck.gl Tile3DLayer を<strong>含む .kasc のときだけ CDN から遅延ロード</strong>し、軽量プレイヤーを維持します</li>
+        <li><strong>3D Tiles ドレープ</strong>: MapLibre では deck.gl TerrainExtension により 2D データを 3D Tiles 表面へ貼り付け可能（Cesium 版の「ドレープ対象地形=3D Tiles」相当）。<code>deck-ground.js</code> の自動接地で絶対高を持つタイルセットを z≈0 に補正します（<code>ground=off</code> で無効化・<code>zoffset=</code> で手動補正）</li>
+        <li><strong>QML スタイル</strong>: <code>style=</code> の .qml をコンパイルして各エンジンのスタイルへ適用（単一/分類/段階/ルールレンダラ・ラベル・凡例スウォッチ）</li>
+        <li><strong>属性・検索</strong>: 地物クリックの属性表示、属性値一覧ウィジェット、ベクター属性検索、カメラタブ（cam: プリセット・QGIS XML 読み書き）</li>
+        <li><strong>AI チャット</strong>: <code>player-api.js</code> が提供する kasugaiApi アダプタ経由で共通の AI チャットを利用（公開ツールはエンジンの実装済み api に応じて絞られる）</li>
+        <li><strong>未対応行の扱い</strong>: そのエンジンで再現できない行タイプはパネルに「未対応行: …（Cesium 版で対応）」と警告表示されます</li>
+      </ul>
+
+      <h3>🗾 GSI Maps エンジン（地理院地図組み込み）</h3>
+      <p>vendored 地理院地図（<code>web/vendor/gsimaps/</code>・上流無改変）を同一オリジン iframe（<code>index_pm.html</code>）として組み込み、左の中間層パネルが .kasc を GSI/Leaflet API 経由で再生します。</p>
+      <ul>
+        <li><strong>.kasc → gsimaps の対応</strong>: ベクター系行は GeoJSON へ変換して作図リスト（SakuzuListItem）として注入（スタイルは <code>_</code>-props へ畳み込み）。<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code> は外部タイル（appendOutSideTile）として追加し、地理院タイルのベースは gsimaps 標準ベースマップへマップします。<code>cam:</code> は URL ハッシュと setView、<code>theme:</code> は可視性プリセットとして処理。3dtiles 等の非対応行は情報タブへ警告します</li>
+        <li><strong>Globe 表示</strong>: 上流の「Globe」起動（window.open）をフックして iframe 内表示へ差し替え、左パネルを維持します。Globe は Cesium アプリのため、読み込み済みの .kasc レイヤを viewer へ注入して 3D 表示でき、可視性も双方向で同期します。表示中の視点は親 URL ハッシュへミラーされ、「← 2D地図に戻る」で視点を引き継いで復帰します</li>
+        <li><strong>レイヤ取り込み</strong>: 「地理院地図の表示レイヤを取り込み」ボタンで、地理院地図側で表示中のレイヤを <code>xyz:</code> 行の Canvas レイヤとして .kasc へ追記できます（Globe 表示中は不可）</li>
+        <li><strong>ベンダー管理</strong>: vendor 実体は gitignore で、<code>tools/fetch_vendor.py</code> が <code>gsimaps/vendor.json</code> の sha へ同期します。CDN 公開時も各チャンネルへ実ファイルが配置されます</li>
+      </ul>
+
+      <h3>📄 プロジェクト直読み（<code>?kasc=</code>）とサーバレス配信</h3>
+      <ul>
+        <li><strong><code>?kasc=&lt;url&gt;</code></strong>: 全エンジンで任意 URL の .kasc を直接読めます。<code>DATA/</code> 等の相対参照は .kasc のある URL 基準で解決され、<code>projects/</code> 構造は不要です。<code>.kasc</code>+<code>DATA/</code>+起動 HTML と <code>web/</code> の中身を同じ静的サーバーへ置くだけで配信できます（登録 API 不要）</li>
+        <li><strong><code>?kasc=local</code></strong>: 2D プレイヤー系エンジンでは、File System Access API で選択したローカルフォルダの <code>.kasc</code>+<code>DATA/</code> を <code>localfs:///</code> 疑似 URL＋fetch シムで読めます（ホスト版エンジンがローカルフォルダを直接開く「アプリはホスト・データはローカル」の構造）。フォルダハンドルは IndexedDB に永続化されます。Chromium 系限定・フォルダ外参照不可・ローカル XYZ タイルは未対応</li>
+        <li><strong>geo_webview 連携</strong>: QGIS geo_webview のエクスポートは各エンジン用の <code>&lt;engine&gt;.html</code>（エンジン自動探索・<code>CANVAS_BASE</code> 上書き可）とリンク一覧の <code>index.html</code> を .kasc と同じ場所へ出力します。<code>file://</code> で開いた場合は起動中のローカル Canvas（127.0.0.1:8510）へプロジェクトを登録して開きます</li>
+      </ul>
+
+      <h3>⚙️ 開発ルール（マルチエンジン前提の設計）</h3>
+      <ul>
+        <li><strong>メインエンジンは CesiumJS</strong>: 新機能・UI 整備・AI 制御対応はまず Cesium フロントを対象とし、他エンジンは .kasc プレイヤーとしての互換実装です（Cesium 側の機能追従は必須ではありません）</li>
+        <li><strong>コードの置き場</strong>: エンジン横断コードは <code>shared/</code>、エンジン固有コードは各エンジンフォルダへ置きます</li>
+        <li><strong>AI 制御の共通化</strong>: 2D プレイヤーは <code>player-api.js</code> の kasugaiApi アダプタで API 面を揃え、AI ツールは実装済みメソッドの有無で公開可否が決まります</li>
+        <li><strong>パスの起点</strong>: API・データパスは <code>/api/*</code>・<code>/projects/*</code>・<code>/health</code> のルート起点で書きます（ページ相対はエンジン配下で壊れるため）。認証・公開パスの許可リストは <code>/cesium/</code> 起点で、新エンジン公開時は同様に更新します</li>
+        <li><strong>vendor の無改変原則</strong>: <code>web/vendor/</code> 配下は上流スナップショットで一切改変しません。挙動変更は組み込み側（中間層）でフック・差し替え・ラップします</li>
+      </ul>
+
+    </main>
+  </div>
+</body>
+</html>
