@@ -1308,17 +1308,20 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
   applyPanelTitle(doc.title || null);
   // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
   void loadKascInfoContent(document.getElementById("info-link"), doc.info, baseUrl);
+  // 凡例（URL 重複はまとめる）→ 凡例タブ。他エンジン(Leaflet等)と同じ処理
   const legendsBox = document.getElementById("legends");
   legendsBox?.replaceChildren();
-  if (doc.legends?.length) {
-    for (const lg of doc.legends) {
-      const img = document.createElement("img");
-      img.src = resolveKascUrl(lg.url, baseUrl);
-      img.alt = lg.title || "凡例";
-      img.style.maxWidth = "100%";
-      legendsBox?.append(img);
-    }
+  const seenLegend = new Set();
+  for (const lg of doc.legends || []) {
+    if (!lg.url || seenLegend.has(lg.url)) continue;
+    seenLegend.add(lg.url);
+    const img = document.createElement("img");
+    img.src = resolveKascUrl(lg.url, baseUrl);
+    img.alt = lg.title || "凡例";
+    img.style.maxWidth = "100%";
+    legendsBox?.append(img);
   }
+  if (!seenLegend.size && legendsBox) legendsBox.textContent = "（凡例なし）";
 
   // 初回表示: URL/cam 指定が無ければデータ範囲へフィット
   if (!noFit) {
