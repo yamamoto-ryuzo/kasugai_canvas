@@ -204,7 +204,9 @@ function switchToCesium() {
     }
   } catch (_) { /* 視点書込失敗でも切替自体は行う */ }
   storeEngineSwitchState();
-  window.location.href = engineSwitchUrl("cesium");
+  // location.href への相対URL代入は entry settings object(呼出側=iframe realm)
+  // 基準で解決されるため、ここで親URL基準の絶対URLへ確定させる
+  window.location.href = new URL(engineSwitchUrl("cesium"), window.location.href).href;
 }
 
 // 新しい iframe 地図へのイベント配線(reboot 時にも呼ぶ)
