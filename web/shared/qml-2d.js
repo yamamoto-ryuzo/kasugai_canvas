@@ -191,6 +191,16 @@ export function qmlLegendSwatchDataUrl(spec, size = 18) {
   } catch (_) { return ""; }
 }
 
+// style= 未指定ベクターの自動凡例: 既定色とジオメトリ種別から代表シンボルの
+// spec を組み立てる(Cesium 版の entity サンプル凡例相当)。colors には
+// 各エンジンが実際の描画に使っている既定スタイルを渡す
+export function defaultVectorLegendSpec(geomType, { fill = [58 / 255, 123 / 255, 213 / 255, 0.4], stroke = [44 / 255, 94 / 255, 168 / 255, 1], strokeWidth = 1.5, point = [44 / 255, 94 / 255, 168 / 255, 1] } = {}) {
+  if (/Polygon/.test(geomType)) return { fillParts: [{ solid: fill }], outline: { color: stroke, widthPx: strokeWidth } };
+  if (/Line/.test(geomType)) return { line: { color: stroke, widthPx: strokeWidth } };
+  if (/Point/.test(geomType)) return { markers: [{ color: point }] };
+  return null;
+}
+
 // --- MapLibre: GeoJSON の各 feature に __kasc_* を焼き込み、データ駆動 paint 式で適用
 const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color", "__kasc_symbol"];
 

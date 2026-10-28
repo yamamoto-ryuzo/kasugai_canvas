@@ -16,19 +16,36 @@
     width: 320px; max-height: 80vh; display: flex; flex-direction: column;
     box-shadow: 0 2px 8px rgba(0,0,0,.3); font-size: 13px;
   }
-  #panel h1 { font-size: 14px; margin: 0 0 6px; }
+  #panel h1 { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0 0 6px; }
+  #panel h1 .panel-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #panel select, #panel input[type="text"] { width: 100%; box-sizing: border-box; margin-bottom: 8px; }
+  /* プロジェクト選択行: 左=プロジェクトセレクト、右=機能ボタン(リンクコピー・印刷)。
+     ボタンは行の高さ(=セレクトの高さ)いっぱいに伸ばして正方形に揃える */
+  .project-row { display: flex; gap: 4px; height: 30px; margin-bottom: 8px; }
+  .project-row > #project-select { flex: 1; min-width: 0; margin-bottom: 0; }
+  .project-row > button { flex: 0 0 30px; padding: 0; border: 1px solid #ccc; border-radius: 4px; background: #f4f6f8; cursor: pointer; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; }
+  .project-row > #print-open { padding: 4px; }
+  .project-row > #print-open > svg { width: 100%; height: 100%; display: block; }
   #tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
   #tabs .tab { flex: 1; min-width: 44px; padding: 4px 0; font-size: 12px; border: 1px solid #ccc;
                border-radius: 4px; background: #f4f6f8; cursor: pointer; }
   #tabs .tab.active { background: #2c5ea8; color: #fff; border-color: #2c5ea8; }
   .tab-pane { overflow: auto; flex: 1; min-height: 0; }
+  /* パネル最小化（Cesium 版 .control-panel.collapsed と同型: 40x40 に縮めてトグルのみ残す） */
+  #panel-toggle { flex: 0 0 26px; min-width: 26px; min-height: 26px; padding: 1px 4px;
+    border: 0; border-radius: 4px; background: rgba(44,94,168,.12); color: #2c5ea8;
+    font-size: 18px; line-height: 1; cursor: pointer; }
+  #panel.collapsed { width: 40px; height: 40px; padding: 7px; box-sizing: border-box; overflow: hidden; }
+  #panel.collapsed > *:not(h1) { display: none; }
+  #panel.collapsed h1 { margin: 0; gap: 0; }
+  #panel.collapsed h1 > *:not(#panel-toggle) { display: none; }
   .layer-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
   .layer-row input { margin: 0; }
   .layer-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layer-item { min-width: 0; }
   .layer-group-title { display: flex; align-items: center; gap: 4px; padding: 2px 0; font-weight: 600; }
   .layer-group-title input { margin: 0; }
+  .layer-group-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layer-group-toggle, .layer-legend-toggle, .layer-focus {
     border: none; background: none; cursor: pointer; padding: 0 2px; font-size: 11px; flex: none; }
   .layer-group-children { margin-left: 14px; }
@@ -37,7 +54,7 @@
   .legend-row { display: flex; align-items: center; gap: 5px; padding: 1px 0; font-size: 11px; }
   .legend-row input { margin: 0; }
   .legend-swatch { width: 16px; height: 16px; object-fit: contain; flex: none; }
-  .legend-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .legend-row .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .basemap-control { position: absolute; left: 12px; bottom: 12px; z-index: 1004; display: flex;
     align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid rgba(14,32,64,.15);
     border-radius: 7px; background: rgba(255,255,255,.9); box-shadow: 0 2px 8px rgba(10,20,40,.15); }
@@ -108,7 +125,7 @@
   #load-progress-bar { display: block; height: 100%; width: 0; background: #2c5ea8;
     transition: width .25s; }
   /* レイヤ行の読込ステータス(スピナー/未読込/失敗) */
-  .layer-status { flex: none; font-size: 10px; color: #8a97a3; }
+  .layer-row > .layer-status { flex: none; font-size: 10px; color: #8a97a3; }
   .layer-status.loading { width: 11px; height: 11px; border: 2px solid #d5dde4;
     border-top-color: #2c5ea8; border-radius: 50%; animation: layer-spin .8s linear infinite; }
   .layer-status.failed { color: #c0392b; }
@@ -180,12 +197,15 @@
 <div class="set-pane" id="setpane-ai" hidden></div>
 </div>
 <div id="panel">
-  <h1 style="display:flex;justify-content:space-between;align-items:center">KASUGAI Canvas <small>Leaflet</small><span>
-    <button id="share-copy" type="button" title="現在位置URLをコピー" style="border:none;background:none;cursor:pointer;font-size:14px">🔗</button>
+  <h1><button id="panel-toggle" type="button" title="最小化" aria-label="最小化">−</button><span class="panel-title-text">KASUGAI Canvas <small>Leaflet</small></span><span>
     <button id="settings-open" type="button" title="設定" style="border:none;background:none;cursor:pointer;font-size:14px">⚙</button>
-    <button id="panel-toggle" type="button" title="最小化" style="border:none;background:none;cursor:pointer;font-size:14px">−</button>
+    <a id="help-open" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer" title="ヘルプ" style="text-decoration:none;color:inherit;font-size:14px">?</a>
   </span></h1>
-  <select id="project-select"></select>
+  <div class="project-row">
+    <select id="project-select"></select>
+    <button id="share-copy" type="button" title="現在位置URLをコピー">🔗</button>
+    <button id="print-open" type="button" title="印刷" aria-label="印刷"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1"/><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1"/></svg></button>
+  </div>
   <div id="tabs">
     <button class="tab active" data-tab="layers">レイヤ</button>
     <button class="tab" data-tab="legend">凡例</button>
@@ -247,10 +267,10 @@
     try { await navigator.clipboard.writeText(location.href); } catch (e) {}
   });
   document.querySelector("#panel-toggle").addEventListener("click", e => {
-    const hide = !document.querySelector("#tabs").hidden;
-    for (const el of document.querySelectorAll("#tabs, .tab-pane, #project-select, #engines")) el.hidden = hide;
-    if (!hide) switchPanelTab(document.querySelector("#tabs .tab.active")?.dataset.tab || "layers");
-    e.target.textContent = hide ? "＋" : "−";
+    const collapsed = document.querySelector("#panel").classList.toggle("collapsed");
+    e.currentTarget.textContent = collapsed ? "+" : "−";
+    e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    e.currentTarget.title = collapsed ? "展開" : "最小化";
   });
 </script>
 <div id="basemap-ctl" class="basemap-control" hidden>

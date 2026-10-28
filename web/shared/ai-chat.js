@@ -2979,7 +2979,10 @@ const AI_CHAT_CSS = `
 #setpane-ai .hint { color: #666; font-size: 11px; margin: 6px 0; }
 #setpane-ai .hint code { background: #eef2f4; padding: 0 3px; border-radius: 3px; }
 #setpane-ai input[type="text"], #setpane-ai input[type="password"], #setpane-ai input[type="number"], #setpane-ai select, #setpane-ai textarea { box-sizing: border-box; max-width: 100%; }
-#setpane-ai .ai-sec { border-top: 1px solid #dde4e8; margin-top: 12px; padding-top: 6px; }
+#setpane-ai .ai-subnav { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+#setpane-ai .ai-subnav button { flex: 1; min-width: 60px; padding: 4px 2px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; background: #f4f6f8; cursor: pointer; }
+#setpane-ai .ai-subnav button.active { background: #2c5ea8; color: #fff; border-color: #2c5ea8; }
+#setpane-ai .ai-subpane:not(.active) { display: none; }
 #setpane-ai .ai-sec-title { font-weight: 600; font-size: 12px; margin: 4px 0; }
 .mcp-server-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 3px 0; }
 .mcp-server-row button { font-size: 11px; padding: 1px 6px; }
@@ -3005,11 +3008,16 @@ const CHAT_PANEL_HTML = `
   </form>
 </aside>`;
 
-// プレイヤー向け AI 設定（cesium の管理 → AI ペインと同じ要素 id を持つ簡略版）。
+// プレイヤー向け AI 設定（cesium の管理 → AI ペインと同じ要素 id・同じサブタブ構成の簡略版）。
 // 各エンジンの index.html が置いた #setpane-ai へ注入し setupAiSettings が配線する
 const AI_SETTINGS_HTML = `
-<div class="ai-sec">
-  <div class="ai-sec-title" data-i18n="manage.section.chat">チャット (AI)</div>
+<nav class="ai-subnav">
+  <button type="button" class="active" data-manage-sub="ai-pane-chat" data-i18n="manage.section.chat">チャット (AI)</button>
+  <button type="button" data-manage-sub="ai-pane-instructions" data-i18n="chat.customInstructionsLabel">追加指示</button>
+  <button type="button" data-manage-sub="datasource-panel" data-i18n="manage.section.datasource">データソース</button>
+  <button type="button" data-manage-sub="plugin-panel" data-i18n="google.tab.plugin">プラグイン</button>
+</nav>
+<section id="ai-pane-chat" class="ai-subpane active">
   <label class="field-label" for="chat-provider" data-i18n="chat.provider.label">AI プロバイダ</label>
   <select id="chat-provider">
     <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
@@ -3078,17 +3086,15 @@ const AI_SETTINGS_HTML = `
   </div>
   <p id="google-settings-status" class="hint" aria-live="polite"></p>
   <p id="google-proxy-status" class="hint" aria-live="polite"></p>
-</div>
-<div class="ai-sec">
-  <div class="ai-sec-title" data-i18n="chat.customInstructionsLabel">追加指示</div>
+</section>
+<section id="ai-pane-instructions" class="ai-subpane">
   <textarea id="chat-custom-instructions" rows="6" maxlength="8000" placeholder="AIにいつも守ってほしい指示を入力" style="width:100%;box-sizing:border-box;"></textarea>
   <div style="margin-top:6px;">
     <button id="chat-instructions-save" type="button" data-i18n="common.save">保存</button>
   </div>
   <p id="chat-instructions-status" class="hint" aria-live="polite"></p>
-</div>
-<section id="datasource-panel" class="ai-sec">
-  <div class="ai-sec-title" data-i18n="manage.section.datasource">データソース</div>
+</section>
+<section id="datasource-panel" class="ai-subpane">
   <p class="hint" data-i18n-html="mcp.hint">AI チャットへ外部データソースのツールを追加します（MCP）。</p>
   <div class="ai-sec-title" data-i18n="mcp.box.title">Box</div>
   <label class="field-label" for="box-client-id" data-i18n="mcp.box.clientIdLabel">Client ID</label>
@@ -3113,8 +3119,7 @@ const AI_SETTINGS_HTML = `
   <label style="margin-top:10px;display:block;"><input id="mcp-allow-write" type="checkbox" /> <span data-i18n="mcp.allowWrite">書き込み系ツールも AI に公開する</span></label>
   <p id="mcp-status" class="hint" aria-live="polite"></p>
 </section>
-<section id="plugin-panel" class="ai-sec">
-  <div class="ai-sec-title" data-i18n="google.tab.plugin">プラグイン</div>
+<section id="plugin-panel" class="ai-subpane">
   <div id="agent-plugin-list"></div>
   <div style="display:flex;gap:6px;margin-top:8px;">
     <button id="agent-import" type="button" data-i18n="agent.import">取込</button>
@@ -3150,6 +3155,13 @@ function ensureAiSettingsDom() {
   const pane = document.querySelector("#setpane-ai");
   if (!pane) return;
   pane.innerHTML = AI_SETTINGS_HTML;
+  // cesium の manage-subnav と同じく data-manage-sub 指名でサブパネルを切替える
+  pane.querySelectorAll(".ai-subnav button[data-manage-sub]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      pane.querySelectorAll(".ai-subnav button").forEach(item => item.classList.toggle("active", item === btn));
+      pane.querySelectorAll(".ai-subpane").forEach(panel => panel.classList.toggle("active", panel.id === btn.dataset.manageSub));
+    });
+  });
   applyI18n(pane);
 }
 

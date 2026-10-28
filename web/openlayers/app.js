@@ -8,17 +8,18 @@ import XYZ from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/XYZ.js";
 import TileWMS from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/TileWMS.js";
 import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Vector.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
-import { fromLonLat, toLonLat, transformExtent } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl } from "../shared/kasc.js";
+import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
+import { initPrint, compositeCanvases } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import Style from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Style.js";
 import Fill from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Fill.js";
 import Stroke from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Stroke.js";
@@ -403,6 +404,8 @@ async function buildLayer(item, baseUrl, preloaded) {
           if (Number.isFinite(range.maxRes)) layer.setMaxResolution(range.maxRes);
         }
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
+    } else {
+      layer.setStyle(makeDefaultVectorStyle());
     }
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
     return layer;
@@ -501,6 +504,56 @@ function focusEntry(entry) {
   }
 }
 
+// style= 未指定ベクターの自動凡例: OL 既定スタイル(薄白塗り・#3399CC線)と
+// 先頭地物のジオメトリ種別から代表スウォッチ spec を作る(Cesium 版の entity
+// サンプル凡例相当)。未読込(遅延ロード)は _geojson が無いので null を返し、
+// ensureEntryLoaded 後の renderLayerRows 再描画でスウォッチが出る
+const OL_DEFAULT_VECTOR_COLORS = { fill: [1, 1, 1, 0.4], stroke: [0.2, 0.6, 0.8, 1], strokeWidth: 1.25, point: [0.2, 0.6, 0.8, 1] };
+// OL 既定スタイルと同じ見た目をベースに、simplestyle > default_style: > OL既定 の
+// 順で各項目を解決するスタイル関数。同じ解決結果は Style インスタンスを使い回す
+const OL_POINT_DFLT = { color: "rgba(255,255,255,0.4)", size: 0, opacity: 1 };
+const OL_LINE_DFLT = { color: "rgba(51,153,204,1)", width: 1.25, opacity: 1 };
+const OL_POLY_DFLT = { fill: "rgba(255,255,255,0.4)", fillOpacity: 1, stroke: "rgba(51,153,204,1)", strokeWidth: 1.25, strokeOpacity: 1 };
+function makeDefaultVectorStyle() {
+  const ds = currentDefaultStyles || {};
+  const styleCache = new Map();
+  return feature => {
+    const props = feature.getProperties() || {};
+    const gt = feature.getGeometry()?.getType() || "";
+    const key = gt + "|" + JSON.stringify(props);
+    let st = styleCache.get(key);
+    if (!st) {
+      const opts = {};
+      if (/Polygon|Collection/.test(gt)) {
+        const s = resolveDefaultPolygonStyle(props, ds.polygon, ds.line, OL_POLY_DFLT);
+        opts.fill = new Fill({ color: cssColorWithAlpha(s.fill, s.fillOpacity) });
+        opts.stroke = new Stroke({ color: cssColorWithAlpha(s.stroke, s.strokeOpacity), width: s.strokeWidth });
+      } else if (/Point/.test(gt)) {
+        const s = resolveDefaultPointStyle(props, ds.point, OL_POINT_DFLT);
+        opts.image = new CircleStyle({
+          radius: s.size ? defaultPointRadius(s.size) : 5,
+          fill: new Fill({ color: cssColorWithAlpha(s.color, s.opacity) }),
+          stroke: new Stroke({ color: cssColorWithAlpha(props.stroke ?? ds.line?.color ?? OL_LINE_DFLT.color, Number(props["stroke-opacity"]) || 1), width: Number(props["stroke-width"]) || 1.25 }),
+        });
+      } else {
+        const s = resolveDefaultLineStyle(props, ds.line, OL_LINE_DFLT);
+        opts.stroke = new Stroke({ color: cssColorWithAlpha(s.color, s.opacity), width: s.width });
+      }
+      st = new Style(opts);
+      styleCache.set(key, st);
+    }
+    return st;
+  };
+}
+function defaultLegendSpec(item) {
+  if (item._qml || !VECTOR_TYPES.has(item.type)) return null;
+  for (const f of item._geojson?.features || []) {
+    const spec = defaultVectorLegendSpec(f?.geometry?.type || "", OL_DEFAULT_VECTOR_COLORS);
+    if (spec) return spec;
+  }
+  return null;
+}
+
 function buildLayerRow(entry, exclusive, radioName) {
   const item = entry.item;
   const wrap = document.createElement("div");
@@ -555,13 +608,13 @@ function buildLayerRow(entry, exclusive, radioName) {
   const statusEl = document.createElement("span");
   statusEl.className = "layer-status";
   entry.statusEl = statusEl;
-  row.append(statusEl);
   syncRowStatus(entry);
 
-  if (!legendMulti && legendEntries?.[0]?.spec) {
+  const legendSpec = legendEntries?.[0]?.spec || defaultLegendSpec(item);
+  if (!legendMulti && legendSpec) {
     const sw = document.createElement("img");
     sw.className = "legend-swatch";
-    sw.src = qmlLegendSwatchDataUrl(legendEntries[0].spec);
+    sw.src = qmlLegendSwatchDataUrl(legendSpec);
     row.append(sw);
   }
 
@@ -575,6 +628,7 @@ function buildLayerRow(entry, exclusive, radioName) {
     name.addEventListener("click", () => attrWidget.open(String(layerEntries.indexOf(entry))));
   }
   row.append(name);
+  row.append(statusEl);
 
   const fb = document.createElement("button");
   fb.type = "button";
@@ -815,6 +869,8 @@ function updateLoadProgress(done, total, label) {
 const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
+// 現在の .kasc の default_style: 行(スタイル未指定地物の既定値)。renderProject で更新
+let currentDefaultStyles = null;
 let currentCams = [];
 
 // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
@@ -916,6 +972,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   layerEntries = [];
   panel.layers.innerHTML = "";
   currentProjectId = loadedId;
+  applyPanelTitle(doc.title);
+  currentDefaultStyles = doc.defaultStyles || null;
 
   // プロジェクト選択の反映（初回のみ構築）
   if (panel.project.options.length === 0 && Array.isArray(manifest)) {
@@ -1233,8 +1291,9 @@ loadProject().catch(err => {
 // ベースマップコントロールの最小化トグル
 document.querySelector("#basemap-toggle").addEventListener("click", e => {
   const ctl = document.querySelector("#basemap-ctl");
-  ctl.classList.toggle("collapsed");
-  e.target.textContent = ctl.classList.contains("collapsed") ? "＋" : "−";
+  const collapsed = ctl.classList.toggle("collapsed");
+  e.currentTarget.textContent = collapsed ? "+" : "−";
+  e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
 });
 
 // ナビゲーションツールバー（Cesium 版 .navigation-toolbar と同等:
@@ -1263,7 +1322,7 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   document.querySelector("#navigation-toggle")?.addEventListener("click", e => {
     const bar = e.currentTarget.closest(".navigation-toolbar");
     const collapsed = bar.classList.toggle("collapsed");
-    e.currentTarget.textContent = collapsed ? "＋" : "−";
+    e.currentTarget.textContent = collapsed ? "+" : "−";
     e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
   });
 }
@@ -1526,3 +1585,21 @@ window.kasugaiApi = createPlayerApi({
 });
 mountEngineSwitcher(document.querySelector("#engines"), "openlayers");
 void initAiChat({ engine: "openlayers", manageBackend: true });
+
+// 印刷: rendercomplete 後に .ol-layer canvas を表示位置で合成
+initPrint({
+  button: document.querySelector("#print-open"),
+  captureMap: async () => {
+    const c = await new Promise(res => {
+      map.once("rendercomplete", () => res(compositeCanvases(map.getTargetElement())));
+      map.renderSync();
+    });
+    return c ? c.toDataURL("image/png") : null;
+  },
+  getScaleDenominator: () => {
+    const v = map.getView();
+    const res = getPointResolution(v.getProjection(), v.getResolution(), v.getCenter(), "m");
+    return res > 0 ? res / 0.00028 : null;
+  },
+  getNorthAngleDeg: () => map.getView().getRotation() * 180 / Math.PI,
+});

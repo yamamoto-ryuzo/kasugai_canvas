@@ -1,15 +1,16 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
+import { initPrint, compositeDomMap } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement } from "../shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
 
@@ -224,11 +225,23 @@ function makeVectorStyleFn(item) {
         }
       }
     }
-    return isPoint
-      ? { radius: 5, color: "#ffffff", weight: 1, fillColor: "#2c5ea8",
-          fillOpacity: o, opacity: o, interactive: true }
-      : { color: "#2c5ea8", weight: 1.5, fillColor: "#3a7bd5",
-          fillOpacity: 0.4 * o, opacity: o, interactive: true };
+    // スタイル未指定地物: simplestyle > default_style: > エンジン既定 の順で解決
+    const ds = currentDefaultStyles || {};
+    if (isPoint) {
+      const s = resolveDefaultPointStyle(props, ds.point, { color: "#2c5ea8", size: 0, opacity: 1 });
+      const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+      return { radius: s.size ? defaultPointRadius(s.size) : 5,
+        color: props.stroke ?? "#ffffff", weight: num(props["stroke-width"]) ?? 1,
+        fillColor: s.color, fillOpacity: s.opacity * o,
+        opacity: (num(props["stroke-opacity"]) ?? 1) * o, interactive: true };
+    }
+    if (/Polygon/.test(gt)) {
+      const s = resolveDefaultPolygonStyle(props, ds.polygon, ds.line, { fill: "#3a7bd5", fillOpacity: 0.4, stroke: "#2c5ea8", strokeWidth: 1.5, strokeOpacity: 1 });
+      return { color: s.stroke, weight: s.strokeWidth, opacity: s.strokeOpacity * o,
+        fillColor: s.fill, fillOpacity: s.fillOpacity * o, fill: true, interactive: true };
+    }
+    const s = resolveDefaultLineStyle(props, ds.line, { color: "#2c5ea8", width: 1.5, opacity: 1 });
+    return { color: s.color, weight: s.width, opacity: s.opacity * o, interactive: true };
   };
 }
 
@@ -512,6 +525,9 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     pane,
     opacity: opts.opacity !== undefined ? Number(opts.opacity) : 1,
     maxZoom: Math.max(24, Number.isFinite(nativeMax) ? nativeMax : 0),
+    // 印刷合成でタイルを canvas へ描けるよう CORS 属性を付ける
+    // (非対応ソースは画像が読み込めず失敗するため、CORS対応ソース向け)
+    crossOrigin: "anonymous",
   };
   const minZ = Number(opts.minzoom ?? opts.minimumlevel);
   if (Number.isFinite(minZ)) common.minZoom = minZ;
@@ -623,6 +639,19 @@ function focusEntry(entry) {
   else if (item._center) map.flyTo([item._center[1], item._center[0]], 15);
 }
 
+// style= 未指定ベクターの自動凡例: 既定色(塗り #3a7bd5α0.4 / 線・点 #2c5ea8)と
+// 先頭地物のジオメトリ種別から代表スウォッチ spec を作る(Cesium 版の entity
+// サンプル凡例相当)。未読込(遅延ロード)は _geojson が無いので null を返し、
+// ensureEntryLoaded 後の renderLayerRows 再描画でスウォッチが出る
+function defaultLegendSpec(item) {
+  if (item._qml || !VECTOR_TYPES.has(item.type)) return null;
+  for (const f of item._geojson?.features || []) {
+    const spec = defaultVectorLegendSpec(f?.geometry?.type || "");
+    if (spec) return spec;
+  }
+  return null;
+}
+
 function buildLayerRow(entry, exclusive, radioName) {
   const item = entry.item;
   const wrap = document.createElement("div");
@@ -677,13 +706,13 @@ function buildLayerRow(entry, exclusive, radioName) {
   const statusEl = document.createElement("span");
   statusEl.className = "layer-status";
   entry.statusEl = statusEl;
-  row.append(statusEl);
   syncRowStatus(entry);
 
-  if (!legendMulti && legendEntries?.[0]?.spec) {
+  const legendSpec = legendEntries?.[0]?.spec || defaultLegendSpec(item);
+  if (!legendMulti && legendSpec) {
     const sw = document.createElement("img");
     sw.className = "legend-swatch";
-    sw.src = qmlLegendSwatchDataUrl(legendEntries[0].spec);
+    sw.src = qmlLegendSwatchDataUrl(legendSpec);
     row.append(sw);
   }
 
@@ -697,6 +726,7 @@ function buildLayerRow(entry, exclusive, radioName) {
     name.addEventListener("click", () => attrWidget.open(String(layerEntries.indexOf(entry))));
   }
   row.append(name);
+  row.append(statusEl);
 
   const fb = document.createElement("button");
   fb.type = "button";
@@ -919,6 +949,8 @@ function updateLoadProgress(done, total, label) {
 const inspectorInput = document.querySelector("#inspector-input");
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
+// 現在の .kasc の default_style: 行(スタイル未指定地物の既定値)。renderProject で更新
+let currentDefaultStyles = null;
 let currentCams = [];
 
 // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
@@ -1021,6 +1053,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   layerEntries = [];
   panel.layers.innerHTML = "";
   currentProjectId = loadedId;
+  applyPanelTitle(doc.title);
+  currentDefaultStyles = doc.defaultStyles || null;
 
   if (panel.project.options.length === 0 && Array.isArray(manifest)) {
     for (const entry of manifest) {
@@ -1325,8 +1359,9 @@ loadProject().catch(err => {
 // ベースマップコントロールの最小化トグル
 document.querySelector("#basemap-toggle").addEventListener("click", e => {
   const ctl = document.querySelector("#basemap-ctl");
-  ctl.classList.toggle("collapsed");
-  e.target.textContent = ctl.classList.contains("collapsed") ? "＋" : "−";
+  const collapsed = ctl.classList.toggle("collapsed");
+  e.currentTarget.textContent = collapsed ? "+" : "−";
+  e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
 });
 
 // ナビゲーションツールバー（OpenLayers/Cesium 版と同型の右上配置。
@@ -1339,7 +1374,7 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   document.querySelector("#navigation-toggle")?.addEventListener("click", e => {
     const bar = e.currentTarget.closest(".navigation-toolbar");
     const collapsed = bar.classList.toggle("collapsed");
-    e.currentTarget.textContent = collapsed ? "＋" : "−";
+    e.currentTarget.textContent = collapsed ? "+" : "−";
     e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
   });
 }
@@ -1601,3 +1636,21 @@ window.kasugaiApi = createPlayerApi({
 });
 mountEngineSwitcher(document.querySelector("#engines"), "leaflet");
 void initAiChat({ engine: "leaflet", manageBackend: true });
+
+// 印刷: Leaflet は DOM 描画のためタイルimg・SVGオーバーレイ・マーカーを
+// 表示位置で合成する(CORS非対応タイルがある場合は取得失敗→地図なし帳票)
+initPrint({
+  button: document.querySelector("#print-open"),
+  captureMap: async () => {
+    const r = await compositeDomMap(map.getContainer());
+    return r ? r.canvas.toDataURL("image/png") : null;
+  },
+  getScaleDenominator: () => {
+    const size = map.getSize();
+    const p0 = map.containerPointToLatLng([size.x / 2, size.y / 2]);
+    const p1 = map.containerPointToLatLng([size.x / 2 + 64, size.y / 2]);
+    const mpp = map.distance(p0, p1) / 64;
+    return mpp > 0 ? mpp / 0.00028 : null;
+  },
+  getNorthAngleDeg: () => 0,
+});

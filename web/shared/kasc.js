@@ -46,7 +46,7 @@ function parseCamLine(parts) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [] };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], title: null, defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -85,6 +85,12 @@ export function parseKasc(text) {
       doc.themes.push({ name: parts[0] || "", layers: parts.slice(1).filter(Boolean), line });
       continue;
     }
+    if (type === "title") {
+      // title: アプリ表示名 — パネルタイトルとブラウザタブのタイトルを差し替える。
+      // 複数行ある場合は最後の行を採用。空値・行なしは既定表示に戻す
+      doc.title = line.slice(sep + 1).trim() || null;
+      continue;
+    }
 
     const item = classifyParts(type === "sql" ? parts.slice(1) : parts.slice(2), {
       type,
@@ -108,6 +114,13 @@ export function parseKasc(text) {
       doc.layers.push(item);
       continue;
     }
+    // default_style: point|line|polygon | key=value…
+    // スタイル未指定地物の既定スタイル(地物側 simplestyle や style=QML が優先)
+    if (type === "default_style" || type === "defaultstyle") {
+      const spec = parseDefaultStyleSpec(parts);
+      if (spec) doc.defaultStyles[spec.kind] = spec.values;
+      continue;
+    }
     // このコアでは未対応の行タイプ（geoparquet/flatgeobuf/gpkg/duckdb/sql/
     // 3dtiles/fly_geojson/plugin/cloud/yahooappid 等）は呼び出し側へ通知
     doc.unsupported.push(item);
@@ -119,7 +132,7 @@ export function parseKasc(text) {
 // これ以外の既知・未知の行タイプはすべて「表示を持つレイヤ行」として扱う
 const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base",
-  "bookmark", "cloud", "plugin", "yahooappid",
+  "bookmark", "cloud", "plugin", "yahooappid", "title",
 ]);
 
 // .kasc 1行の可視性フラグを書き換えて返す。
@@ -199,6 +212,33 @@ export function fillThemeSelect(select, themes, promptText = "テーマを選択
     select.append(opt);
   }
   select.hidden = false;
+}
+
+// title: 行 → パネルタイトルとブラウザタブ(document.title)へ反映する。
+// .panel-title-text は「テキスト + <small>エンジン名</small>」構造(全エンジン共通)
+// を想定し、<small> 手前のテキストノードだけを差し替えてエンジン名は残す。
+// 空値・行なしはページ初期表示のタイトルへ戻す
+let defaultPanelTitle = null;
+let defaultDocumentTitle = null;
+export function applyPanelTitle(title) {
+  const el = document.querySelector(".panel-title-text");
+  if (!el) return;
+  const small = el.querySelector("small");
+  if (defaultPanelTitle == null) {
+    const node = small ? Array.from(el.childNodes).find(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim()) : null;
+    defaultPanelTitle = (node ? node.textContent : el.textContent).trim() || "KASUGAI Canvas";
+  }
+  if (defaultDocumentTitle == null) defaultDocumentTitle = document.title;
+  const text = String(title || "").trim() || defaultPanelTitle;
+  const label = text + (small ? " " : "");
+  const texts = Array.from(el.childNodes).filter(n => n.nodeType === Node.TEXT_NODE);
+  const node = texts.find(n => n.textContent.trim()) || texts[0];
+  if (node) node.textContent = label;
+  else if (small) small.before(document.createTextNode(label));
+  else el.textContent = text;
+  // 省略表示(text-overflow:ellipsis)時にホバーで全文を見られるよう title を付ける
+  el.title = text;
+  document.title = text === defaultPanelTitle ? defaultDocumentTitle : text;
 }
 
 // projects/ 静的配信への基準パス。各エンジンのページは <root>/<stage>/<engine>/
@@ -856,4 +896,127 @@ export function writeUrlView(view, projectId) {
   if (Number.isFinite(view.heading)) hashParams.set("heading", Number(view.heading).toFixed(2));
   const search = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}#${hashParams.toString()}`);
+}
+
+// ---- default_style: 行（ベクター地物の既定スタイル）----
+// default_style: point|line|polygon | key=value…
+// スタイル未指定地物への既定値。地物側の simplestyle(marker-color/stroke/fill 等)
+// や style=QML が優先され、ここは「未設定項目」のフォールバックとして働く。
+// 値は CSS 色文字列・数値のまま保持し、変換は各エンジンが行う
+export function parseDefaultStyleSpec(parts) {
+  const token = (parts[0] || "").toLowerCase();
+  const kind = /^(point|p|marker|dot)$/.test(token) ? "point"
+    : /^(line|l|polyline)$/.test(token) ? "line"
+    : /^(polygon|poly|area|fill)$/.test(token) ? "polygon" : null;
+  if (!kind) return null;
+  const values = {};
+  const markerSizes = { small: 24, medium: 48, large: 64 };
+  for (const part of parts.slice(1)) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const key = part.slice(0, eq).trim().toLowerCase().replace(/-/g, "_");
+    const raw = part.slice(eq + 1).trim();
+    if (!raw) continue;
+    const number = Number(raw);
+    const opacity = Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : null;
+    if (kind === "point") {
+      if (key === "color" || key === "marker_color" || key === "fill") values.color = raw;
+      else if (key === "size" || key === "marker_size") {
+        const size = markerSizes[raw.toLowerCase()] ?? number;
+        if (Number.isFinite(size) && size > 0) values.size = size;
+      }
+      else if (key === "symbol" || key === "marker_symbol") values.symbol = raw;
+      else if (key === "opacity" && opacity !== null) values.opacity = opacity;
+    } else if (kind === "line") {
+      if (key === "color" || key === "stroke") values.color = raw;
+      else if ((key === "width" || key === "stroke_width") && Number.isFinite(number) && number > 0) values.width = number;
+      else if ((key === "opacity" || key === "stroke_opacity") && opacity !== null) values.opacity = opacity;
+    } else {
+      // polygon: fill/fill_opacity は塗り、stroke/stroke_width/stroke_opacity は輪郭
+      if (key === "fill" || key === "color") values.fill = raw;
+      else if ((key === "fill_opacity" || key === "opacity") && opacity !== null) values.fillOpacity = opacity;
+      else if (key === "stroke" || key === "outline" || key === "outline_color" || key === "line") values.stroke = raw;
+      else if ((key === "stroke_width" || key === "outline_width" || key === "width") && Number.isFinite(number) && number > 0) values.strokeWidth = number;
+      else if ((key === "stroke_opacity" || key === "outline_opacity") && opacity !== null) values.strokeOpacity = opacity;
+    }
+  }
+  return { kind, values };
+}
+
+// CSS 色を {r,g,b(0-255),a(0-1)} へ正規化する(canvas fillStyle の正規化を借用)。
+// 解釈できない色は null
+let _colorProbe = null;
+export function cssColorToRgba(css) {
+  try {
+    _colorProbe = _colorProbe || document.createElement("canvas").getContext("2d");
+    _colorProbe.fillStyle = "#000";
+    _colorProbe.fillStyle = String(css);
+    const v = _colorProbe.fillStyle;
+    let m = /^#([0-9a-f]{8})$/i.exec(v);
+    if (m) { const n = parseInt(m[1], 16); return { r: (n >>> 24) & 255, g: (n >>> 16) & 255, b: (n >>> 8) & 255, a: (n & 255) / 255 }; }
+    m = /^#([0-9a-f]{6})$/i.exec(v);
+    if (m) { const n = parseInt(m[1], 16); return { r: (n >>> 16) & 255, g: (n >>> 8) & 255, b: n & 255, a: 1 }; }
+    m = /^rgba?\(([^)]+)\)$/i.exec(v);
+    if (m) { const p = m[1].split(",").map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
+  } catch (_) { /* 不正な色指定は null */ }
+  return null;
+}
+export function cssColorAlpha(css) { return cssColorToRgba(css)?.a ?? 1; }
+// CSS 色に不透明度を掛けた rgba() 文字列を返す(色自体のアルファと乗算)
+export function cssColorWithAlpha(css, alpha) {
+  const c = cssColorToRgba(css);
+  if (!c) return css;
+  const a = Math.max(0, Math.min(1, c.a * (Number.isFinite(alpha) ? alpha : 1)));
+  return `rgba(${c.r},${c.g},${c.b},${a})`;
+}
+
+// ピンサイズ(px) → 2D エンジンのドット半径(直径≈size/6)
+export function defaultPointRadius(pinPx) {
+  return Math.max(Math.round((Number(pinPx) || 0) / 6), 2);
+}
+
+const _num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+// 不透明度の解決: 明示指定(地物 > default_style) > 色のアルファ込みなら1 > エンジン既定。
+// エンジン側は「色のアルファ × この opacity」を最終アルファとして描画する
+function _effOpacity(ownOpacity, dfltOpacity, winningColor, engineOpacity) {
+  if (ownOpacity != null) return ownOpacity;
+  if (dfltOpacity != null) return dfltOpacity;
+  return cssColorAlpha(winningColor) < 1 ? 1 : engineOpacity;
+}
+const _MARKER_SIZES = { small: 24, medium: 48, large: 64 };
+const _markerSize = v => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : _MARKER_SIZES[String(v || "").toLowerCase()] ?? _num(v));
+
+// 地物 simplestyle > default_style: > engineDefault で各項目を解決する。
+// 戻り値は {color,size(px),opacity,symbol} / {color,width,opacity} /
+// {fill,fillOpacity,stroke,strokeWidth,strokeOpacity}
+export function resolveDefaultPointStyle(props, dflt, engine = {}) {
+  const p = props || {};
+  const color = p["marker-color"] ?? dflt?.color ?? engine.color;
+  return {
+    color,
+    size: _markerSize(p["marker-size"]) ?? dflt?.size ?? engine.size,
+    opacity: _effOpacity(null, dflt?.opacity, color, engine.opacity ?? 1),
+    symbol: p["marker-symbol"] ?? dflt?.symbol,
+  };
+}
+export function resolveDefaultLineStyle(props, dflt, engine = {}) {
+  const p = props || {};
+  const color = p.stroke ?? dflt?.color ?? engine.color;
+  return {
+    color,
+    width: _num(p["stroke-width"]) ?? dflt?.width ?? engine.width,
+    opacity: _effOpacity(_num(p["stroke-opacity"]), p.stroke != null ? null : dflt?.opacity, color, engine.opacity ?? 1),
+  };
+}
+export function resolveDefaultPolygonStyle(props, dflt, lineDflt, engine = {}) {
+  const p = props || {};
+  const fill = p.fill ?? dflt?.fill ?? engine.fill;
+  const stroke = p.stroke ?? dflt?.stroke ?? lineDflt?.color ?? engine.stroke;
+  return {
+    fill,
+    fillOpacity: _effOpacity(_num(p["fill-opacity"]), dflt?.fillOpacity, fill, engine.fillOpacity ?? 1),
+    stroke,
+    strokeWidth: _num(p["stroke-width"]) ?? dflt?.strokeWidth ?? lineDflt?.width ?? engine.strokeWidth,
+    strokeOpacity: _effOpacity(_num(p["stroke-opacity"]), p.stroke != null ? null : (dflt?.strokeOpacity ?? lineDflt?.opacity), stroke, engine.strokeOpacity ?? 1),
+  };
 }

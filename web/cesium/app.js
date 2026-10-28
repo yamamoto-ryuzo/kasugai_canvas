@@ -18,8 +18,9 @@ import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayers
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, PROJECTS_MANIFEST_URL } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, PROJECTS_MANIFEST_URL, applyPanelTitle, parseDefaultStyleSpec as parseKascDefaultStyleSpec } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
+import { initPrint } from "../shared/print.js";
 
 await initI18n();
 applyI18n();
@@ -187,6 +188,27 @@ setLayerVisibilityResolver(name => {
 const vectorSearchLoadedSources = new Map();
 // 検索用オンデマンド読み込みに失敗したレイヤー。選択肢変更のたびに再試行しない
 const vectorSearchLoadFailed = new Set();
+// inspector の default_style: 行で設定するベクター地物の既定スタイル。
+// 地物側の simplestyle(marker-color/stroke/fill 等)や style= の QML がある
+// 地物には適用しない(未設定項目だけのフォールバック)。applyInspector で再構築する
+const vectorDefaultStyles = { point: null, line: null, polygon: null };
+function parseCssColor(raw) {
+  try { return Cesium.Color.fromCssColorString(String(raw)) || null; } catch { return null; }
+}
+// default_style: point|line|polygon | key=value… のパース。
+// 文法は shared/kasc.js の parseDefaultStyleSpec が正本(全エンジン共通)。
+// ここでは解決済みの色文字列を Cesium.Color へ変換するだけ。種別が解釈できない行は null
+function parseDefaultStyleSpec(parts) {
+  const spec = parseKascDefaultStyleSpec(parts);
+  if (!spec) return null;
+  const values = {};
+  for (const [k, v] of Object.entries(spec.values)) {
+    if (k === "color" || k === "stroke") { const c = parseCssColor(v); if (c) values[k] = c; }
+    else if (k === "fill") { const c = parseCssColor(v); if (c) { values.fill = c; values.fillHasAlpha = c.alpha < 1; } }
+    else values[k] = v;
+  }
+  return { kind: spec.kind, values };
+}
 // デコーダーの query 指定でクエリ系レイヤーかを判定する。query は真値
 // (常にクエリ系: duckdb:/sql:)または item を受け取る判定関数
 // (gpkg:/geopackage: は bbox=auto が既定 ON のため通常はクエリ系。bbox=off 明示時のみ全件読み込み系)
@@ -1595,6 +1617,7 @@ function renderLayerList() {
                 </label>`;
               }).join("")}</div>`
             : "";
+          const deferred = isLayerDeferred(layer);
           return `
         <div class="layer-item">
         <label class="layer-row" for="${inputId}" draggable="true" data-layer-id="${escapeHtml(layer.id)}">
@@ -1602,7 +1625,7 @@ function renderLayerList() {
           <input id="${inputId}" type="${exclusive ? "radio" : "checkbox"}" ${exclusive ? `name="${escapeHtml(groupId)}"` : ""} data-layer-id="${escapeHtml(layer.id)}" data-group="${escapeHtml(layer.group || "")}" data-exclusive="${exclusive ? "true" : "false"}" ${layer.visible ? "checked" : ""}>
           ${inlineSwatch}
           <span>${escapeHtml(layer.title)}</span>
-          <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadError || "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : ""}</span>
+          <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}${deferred ? " deferred" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadStatus === "failed" ? (layer._loadError || "") : deferred ? t("layer.notLoadedHint") : "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : deferred ? escapeHtml(t("layer.notLoaded")) : ""}</span>
           ${filterButton}
           ${limitBadge}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
@@ -2993,15 +3016,26 @@ let refreshLayersRunning = false;
 let refreshLayersQueued = false;
 // ---- 段階読み込み: 行ステータス・進捗 ----
 
-// レイヤ行のステータス領域を item._loadStatus(loading/failed)へ同期する。
+// 非表示かつ一度も読み込んでいないレイヤー(表示ONの refreshLayers まで
+// 読み込みが遅延されているもの)を「未読込」とする。entities はプラグイン所有で
+// 常時保持済み、読込失敗は failed 表示を優先するため対象外
+function isLayerDeferred(item) {
+  if (!item || item.visible || item._loaded || item.type === "entities") return false;
+  if (item._loadStatus === "loading" || item._loadStatus === "failed") return false;
+  return !!(item.url || item.data || item.query);
+}
+
+// レイヤ行のステータス領域を item._loadStatus(loading/failed)・未読込状態へ同期する。
 // renderLayerList 全再描画を待たずに行だけ更新する(スクロール・展開状態を維持)
 function syncLayerStatusDom(item) {
   const el = document.querySelector(`#layer-list .layer-status[data-layer-id="${CSS.escape(item.id)}"]`);
   if (!el) return;
+  const deferred = isLayerDeferred(item);
   el.classList.toggle("loading", item._loadStatus === "loading");
   el.classList.toggle("failed", item._loadStatus === "failed");
-  el.textContent = item._loadStatus === "failed" ? t("layer.loadFailed") : "";
-  el.title = item._loadError || "";
+  el.classList.toggle("deferred", deferred);
+  el.textContent = item._loadStatus === "failed" ? t("layer.loadFailed") : deferred ? t("layer.notLoaded") : "";
+  el.title = item._loadStatus === "failed" ? (item._loadError || "") : deferred ? t("layer.notLoadedHint") : "";
 }
 
 // 地図上部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
@@ -3089,6 +3123,14 @@ async function refreshLayersImpl() {
   const loadTargets = new Set(orderedOtherLayers.filter(item =>
     item.visible && item.type !== "entities" &&
     (item.type === "3dtiles" || item.url || item.data || item.query)));
+  // 前回の読み込み中に非表示へ切り替わった行は loading が残ったままになる。
+  // 今回の読込対象外で loading だけが残っているものはクリアする(failed は履歴として残す)
+  for (const item of orderedOtherLayers) {
+    if (!loadTargets.has(item) && item._loadStatus === "loading") {
+      item._loadStatus = "";
+      syncLayerStatusDom(item);
+    }
+  }
   let loadedCount = 0;
   // 残りの読込対象(直列のため先頭が現在読み込み中)を名前付きで進捗に出す
   const pendingItems = new Set(loadTargets);
@@ -3100,7 +3142,7 @@ async function refreshLayersImpl() {
     pendingItems.delete(item);
     updateLoadProgress(++loadedCount, loadTargets.size, pendingLabel());
   };
-  const layerOk = item => { item._loadStatus = ""; item._loadError = ""; syncLayerStatusDom(item); layerDone(item); };
+  const layerOk = item => { item._loaded = true; item._loadStatus = ""; item._loadError = ""; syncLayerStatusDom(item); layerDone(item); };
   const layerFail = (item, err) => { item._loadStatus = "failed"; item._loadError = String(err?.message || err || ""); syncLayerStatusDom(item); layerDone(item); };
   if (loadTargets.size) updateLoadProgress(0, loadTargets.size, pendingLabel());
   else { clearTimeout(progressHideTimer); if (progressEl) progressEl.hidden = true; }
@@ -3183,6 +3225,7 @@ async function refreshLayersImpl() {
       imageryLayer._baseAlpha = item.opacity ?? 0.8;
       viewer.imageryLayers.add(imageryLayer);
       layerRuntimeTargets.set(item.id, imageryLayer);
+      item._loaded = true;
     } catch (error) {
       console.warn("XYZ タイルの作成に失敗しました:", item.url, error);
     }
@@ -3269,7 +3312,7 @@ async function refreshLayersImpl() {
         // ダウンロードにならず、保持した GeoJSON が getLayerGeoJson・検索索引に使える
         if (primitiveDrape) {
           const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: primitiveDrapeHeightReference(primDem, prim3d), scene: viewer.scene });
-          applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden);
+          applyPrimitiveVectorStyle(primitive, item);
           registerPrimitiveLayer(item, primitive, source);
           if (loadTarget) layerOk(item);
           continue;
@@ -3347,13 +3390,87 @@ function primitiveDrapeHeightReference(dem, tiles3d) {
   return Cesium.HeightReference.CLAMP_TO_GROUND;
 }
 
+// primitive 経路のスタイル適用。style= の QML があればそちら、
+// なければ default_style: 行の既定値(地物側 simplestyle がさらに優先)を適用する
+function applyPrimitiveVectorStyle(primitive, item) {
+  if (item?.qmlStyle) {
+    applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden);
+    return;
+  }
+  applyVectorDefaultStyleToPrimitive(primitive);
+}
+
+// default_style: 行の既定を GeoJsonPrimitive(バッチ描画)へ適用する。
+// 地物ごとに simplestyle → default_style → Cesium 既定(entity 経路と同じ既定値)の
+// 順で値を決めて Buffer マテリアルを設定する。行が1つも無ければ何もしない
+function applyVectorDefaultStyleToPrimitive(primitive) {
+  const dflt = vectorDefaultStyles;
+  if (!primitive || (!dflt.point && !dflt.line && !dflt.polygon)) return;
+  const markerSizes = { small: 24, medium: 48, large: 64 };
+  const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  const materialCache = new Map();
+  const applyTo = (collection, ctor, kind, specFor, materialFor) => {
+    if (!collection) return;
+    const scratch = new ctor();
+    for (let i = 0; i < collection.primitiveCount; i++) {
+      collection.get(i, scratch);
+      const props = primitive.getProperties(scratch.featureId) || {};
+      const spec = specFor(props);
+      const key = kind + JSON.stringify(spec);
+      let m = materialCache.get(key);
+      if (!m) { m = materialFor(spec); materialCache.set(key, m); }
+      scratch.setMaterial(m);
+    }
+  };
+  const polygonOutlineOn = !!(dflt.polygon && (dflt.polygon.stroke || Number.isFinite(dflt.polygon.strokeWidth) || Number.isFinite(dflt.polygon.strokeOpacity)));
+  // entity 経路と同じく、不透明色だけの指定では既定の半透明を維持する
+  const polygonFillAlpha = (dflt.polygon && (Number.isFinite(dflt.polygon.fillOpacity) ? dflt.polygon.fillOpacity
+    : (dflt.polygon.fillHasAlpha && dflt.polygon.fill ? dflt.polygon.fill.alpha : null)))
+    ?? Cesium.GeoJsonDataSource.fill.alpha;
+  applyTo(primitive.points, Cesium.BufferPoint, "point",
+    p => {
+      const own = parseCssColor(p["marker-color"]);
+      const color = (own || (dflt.point && dflt.point.color) || Cesium.GeoJsonDataSource.markerColor).clone();
+      if (!own && dflt.point && Number.isFinite(dflt.point.opacity)) color.alpha = dflt.point.opacity;
+      const pinSize = markerSizes[String(p["marker-size"] || "").toLowerCase()] ?? num(p["marker-size"]) ?? (dflt.point && dflt.point.size) ?? Cesium.GeoJsonDataSource.markerSize;
+      return { color, size: Math.max(Math.round(pinSize / 6), 2) };
+    },
+    s => new Cesium.BufferPointMaterial({ color: s.color, size: s.size }));
+  applyTo(primitive.polylines, Cesium.BufferPolyline, "line",
+    p => {
+      const own = parseCssColor(p.stroke);
+      const color = (own || (dflt.line && dflt.line.color) || Cesium.GeoJsonDataSource.stroke).clone();
+      const opacity = num(p["stroke-opacity"]) ?? (own ? null : (dflt.line && dflt.line.opacity));
+      if (opacity !== null && opacity !== undefined) color.alpha = opacity;
+      const width = num(p["stroke-width"]) ?? (dflt.line && dflt.line.width) ?? Cesium.GeoJsonDataSource.strokeWidth;
+      return { color, width: Math.max(width, 1) };
+    },
+    s => new Cesium.BufferPolylineMaterial({ color: s.color, width: s.width }));
+  applyTo(primitive.polygons, Cesium.BufferPolygon, "fill",
+    p => {
+      const own = parseCssColor(p.fill);
+      const color = (own || (dflt.polygon && dflt.polygon.fill) || Cesium.GeoJsonDataSource.fill).clone();
+      // 地物側 fill は Cesium と同じく既定のアルファを引き継ぐ(fill-opacity が優先)
+      color.alpha = num(p["fill-opacity"]) ?? polygonFillAlpha;
+      const ownStroke = parseCssColor(p.stroke);
+      const outline = (ownStroke || (dflt.polygon && dflt.polygon.stroke) || (dflt.line && dflt.line.color) || Cesium.GeoJsonDataSource.stroke).clone();
+      const strokeOpacity = num(p["stroke-opacity"]) ?? (ownStroke || !dflt.polygon ? null : dflt.polygon.strokeOpacity);
+      if (strokeOpacity !== null && strokeOpacity !== undefined) outline.alpha = strokeOpacity;
+      const outlineWidth = polygonOutlineOn
+        ? Math.max(num(p["stroke-width"]) ?? (dflt.polygon && dflt.polygon.strokeWidth) ?? (dflt.line && dflt.line.width) ?? Cesium.GeoJsonDataSource.strokeWidth, 1)
+        : 0;
+      return { color, outline, outlineWidth };
+    },
+    s => new Cesium.BufferPolygonMaterial({ color: s.color, outlineColor: s.outline, outlineWidth: s.outlineWidth }));
+}
+
 // GeoJSON を GeoJsonPrimitive(entity を介さないバッチ描画)として scene に追加する。
 // heightReference は常に NONE: CLAMP 系は内部で scene.vectorProvider(地形タイル焼き込み)
 // に回され scene.pick で拾えなくなるため、ピックできる単純な描画を優先する。
 // 属性はピック時に picked.properties から参照できる
 async function addGeoJsonPrimitiveLayer(item, geojson) {
   const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(geojson, { allowPicking: true });
-  applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden);
+  applyPrimitiveVectorStyle(primitive, item);
   registerPrimitiveLayer(item, primitive, geojson);
 }
 
@@ -3370,6 +3487,73 @@ function getVectorDrapeFlags() {
   return dem || tiles3d ? { dem, tiles3d } : null;
 }
 
+// default_style: 行を GeoJsonDataSource.load の既定スタイルオプションへ変換する。
+// 地物側に simplestyle 指定がある項目は Cesium が地物側を優先するため、
+// ここでは「未指定項目の既定値」だけを渡せばよい
+function vectorDefaultStyleLoadOptions() {
+  const dflt = vectorDefaultStyles;
+  const options = {};
+  if (dflt.point) {
+    if (dflt.point.color) {
+      const c = dflt.point.color.clone();
+      if (Number.isFinite(dflt.point.opacity)) c.alpha = dflt.point.opacity;
+      options.markerColor = c;
+    }
+    if (Number.isFinite(dflt.point.size)) options.markerSize = dflt.point.size;
+    if (dflt.point.symbol !== undefined) options.markerSymbol = dflt.point.symbol;
+  }
+  if (dflt.line) {
+    if (dflt.line.color || Number.isFinite(dflt.line.opacity)) {
+      const c = dflt.line.color ? dflt.line.color.clone() : Cesium.GeoJsonDataSource.stroke.clone();
+      if (Number.isFinite(dflt.line.opacity)) c.alpha = dflt.line.opacity;
+      options.stroke = c;
+    }
+    if (Number.isFinite(dflt.line.width)) options.strokeWidth = dflt.line.width;
+  }
+  if (dflt.polygon) {
+    if (dflt.polygon.fill || Number.isFinite(dflt.polygon.fillOpacity)) {
+      const c = dflt.polygon.fill ? dflt.polygon.fill.clone() : Cesium.GeoJsonDataSource.fill.clone();
+      if (Number.isFinite(dflt.polygon.fillOpacity)) c.alpha = dflt.polygon.fillOpacity;
+      // 不透明色(#rrggbb 等)の fill= だけでは既定の半透明を維持する。
+      // アルファ付き色(rgba/#rrggbbaa)か fill_opacity= で変える
+      else if (!dflt.polygon.fillHasAlpha) c.alpha = Cesium.GeoJsonDataSource.fill.alpha;
+      options.fill = c;
+    }
+  }
+  return options;
+}
+
+// default_style: polygon の輪郭指定をポリゴン地物へ適用する。
+// 地物側に stroke/stroke-width/stroke-opacity がある項目は地物側を優先する。
+// ドレープ(clamp)時は polygon.outline が描かれないため QML と同じく周線を polyline で引く
+function applyDefaultPolygonOutline(entity, polygonDflt, clamp, time) {
+  const props = (entity.properties && entity.properties.getValue) ? (entity.properties.getValue(time) || {}) : (entity.properties || {});
+  const hasStroke = props.stroke != null;
+  const hasStrokeWidth = props["stroke-width"] != null;
+  const hasStrokeOpacity = props["stroke-opacity"] != null;
+  const currentColor = entity.polygon.outlineColor?.getValue?.(time);
+  const color = (!hasStroke && polygonDflt.stroke) ? polygonDflt.stroke.clone() : (currentColor ? currentColor.clone() : null);
+  if (!color) return;
+  if (!hasStrokeOpacity && Number.isFinite(polygonDflt.strokeOpacity)) color.alpha = polygonDflt.strokeOpacity;
+  const width = (!hasStrokeWidth && Number.isFinite(polygonDflt.strokeWidth)) ? polygonDflt.strokeWidth : entity.polygon.outlineWidth?.getValue?.(time);
+  if (clamp && !entity.polyline) {
+    const ring = entity.polygon.hierarchy?.getValue?.(time)?.positions;
+    if (ring?.length) {
+      entity.polyline = new Cesium.PolylineGraphics();
+      entity.polyline.positions = new Cesium.ConstantProperty(ring.concat([ring[0]]));
+      entity.polyline.width = new Cesium.ConstantProperty(width);
+      entity.polyline.material = new Cesium.ColorMaterialProperty(color);
+      entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
+      entity.polyline.classificationType = entity.polygon.classificationType;
+      entity.polyline.arcType = new Cesium.ConstantProperty(Cesium.ArcType.GEODESIC);
+    }
+    return;
+  }
+  entity.polygon.outline = new Cesium.ConstantProperty(true);
+  entity.polygon.outlineColor = new Cesium.ConstantProperty(color);
+  if (width != null) entity.polygon.outlineWidth = new Cesium.ConstantProperty(width);
+}
+
 // drape: getVectorDrapeFlags() の戻り値(null または {dem, tiles3d})
 async function buildStyledGeoJsonDataSource(source, drape, item = null) {
   const clamp = !!drape;
@@ -3379,17 +3563,24 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
     else if (drape.tiles3d) classification = Cesium.ClassificationType.CESIUM_3D_TILE;
     else if (drape.dem) classification = Cesium.ClassificationType.TERRAIN;
   }
-  const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp });
+  const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp, ...vectorDefaultStyleLoadOptions() });
   // GeoJsonDataSource は polygon/polyline に arcType=RHUMB を設定するが、
   // 極域(南極)・日付変更線跨ぎ・重複点を含むデータで rhumb 細分化が暴走し
   // レンダリング全体が停止する既知バグがある(Cesium #7550/#7864/#8599)。
   // GEODESIC に戻して回避する
   const geodesic = new Cesium.ConstantProperty(Cesium.ArcType.GEODESIC);
+  const polygonDflt = vectorDefaultStyles.polygon;
+  // ポリゴン輪郭は既定で描かない(3D での見た目が悪いため)が、
+  // default_style: polygon の輪郭キーがあればユーザー指定として有効化する
+  // style= の QML があるレイヤーは輪郭も QML が管理するため既定値は適用しない
+  const polygonOutlineDefault = !item?.qmlStyle && !!(polygonDflt && (polygonDflt.stroke || Number.isFinite(polygonDflt.strokeWidth) || Number.isFinite(polygonDflt.strokeOpacity)));
+  const styleTime = Cesium.JulianDate.now();
   for (const entity of ds.entities.values) {
     if (entity.polygon) {
       entity.polygon.outline = new Cesium.ConstantProperty(false);
       entity.polygon.arcType = geodesic;
       if (clamp) entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
+      if (polygonOutlineDefault) applyDefaultPolygonOutline(entity, polygonDflt, clamp, styleTime);
     }
     if (entity.polyline) {
       entity.polyline.arcType = geodesic;
@@ -3992,6 +4183,9 @@ function applyInspector(text) {
   inspectorPluginSpecs.splice(0, inspectorPluginSpecs.length);
   inspectorThemes.splice(0, inspectorThemes.length);
   inspectorBookmarkSpecs.splice(0, inspectorBookmarkSpecs.length);
+  vectorDefaultStyles.point = null;
+  vectorDefaultStyles.line = null;
+  vectorDefaultStyles.polygon = null;
   vectorSourceCache.clear();
   // gpkg Worker が url キーで開いたままの DB も破棄する(メモリ解放・再取得)
   resetGpkgWorkerDbs();
@@ -4028,12 +4222,17 @@ function applyInspector(text) {
   let inspectorLayerIndex = 0;
   // cloud: 行(複数ある場合は最後の行を採用)。null=行なし、{stop:true}=停止
   let inspectorCloudSpec = null;
+  // title: 行(複数ある場合は最後の行を採用)。null=行なし=既定表示に戻す
+  let parsedPanelTitle = null;
   nextLines.forEach(line => {
     const separator = line.indexOf(":");
     if (separator < 0) return;
     const type = line.slice(0, separator).toLowerCase();
     const value = line.slice(separator + 1).trim();
 
+    if (type === "title") {
+      parsedPanelTitle = value || null;
+    }
     if (type === "background") {
       document.body.style.background = value;
       const baseColor = Cesium.Color.fromCssColorString(value);
@@ -4053,6 +4252,15 @@ function applyInspector(text) {
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());
       document.querySelector("#legend-panel img").src = resolveProjectUrl(parts[parts.length - 1]);
+    }
+
+    // default_style: point|line|polygon | color= / size= / width= / opacity= / fill= / stroke=…
+    // スタイル未指定のベクター地物へ適用する既定スタイル。地物側の
+    // simplestyle(marker-color/stroke/fill 等)と style= の QML が優先される
+    if (type === "default_style" || type === "defaultstyle") {
+      const parts = value.split("|").map(part => part.trim());
+      const spec = parseDefaultStyleSpec(parts);
+      if (spec) vectorDefaultStyles[spec.kind] = spec.values;
     }
 
     // theme: 名前 | 表示するレイヤタイトル[|タイトル…]（`*` で全表示）。
@@ -4466,6 +4674,7 @@ function applyInspector(text) {
   void loadInspectorBookmarks(inspectorBookmarkSpecs.slice());
   const uniqueFlyPaths = [...new Map(flyPaths.map(path => [path.url, path])).values()];
   flyPaths.splice(0, flyPaths.length, ...uniqueFlyPaths);
+  applyPanelTitle(parsedPanelTitle);
   renderBasemapSelector();
   renderPresets();
   renderLayerList();
@@ -6528,6 +6737,44 @@ function setupEvents() {
     await navigator.clipboard?.writeText(url);
     shareCopyBtn.textContent = "✓";
     setTimeout(() => { shareCopyBtn.textContent = "🔗"; }, 1500);
+  });
+
+  initPrint({
+    button: document.querySelector("#print-open"),
+    t,
+    captureMap: async () => {
+      // 地表タイルの読み込み完了を待ってから描画(タイムアウト15s)
+      await new Promise(res => {
+        const t0 = Date.now();
+        const check = () => {
+          if (viewer.scene.globe.tilesLoaded || Date.now() - t0 > 15000) res();
+          else setTimeout(check, 250);
+        };
+        check();
+      });
+      // 同一タスク内で render→toDataURL すれば preserveDrawingBuffer 不要
+      viewer.render();
+      return viewer.canvas.toDataURL("image/png");
+    },
+    // 画面中央の地表 m/px から概算縮尺分母を求める(3D視点の近似)
+    getScaleDenominator: () => {
+      try {
+        const canvas = viewer.scene.canvas;
+        const px = canvas.clientWidth ? canvas.width / canvas.clientWidth : 1;
+        const pick = (x, y) => {
+          const ray = viewer.camera.getPickRay(new Cesium.Cartesian2(x * px, y * px));
+          return ray ? viewer.scene.globe.pick(ray, viewer.scene) : null;
+        };
+        const p0 = pick(canvas.clientWidth / 2, canvas.clientHeight / 2);
+        const p1 = pick(canvas.clientWidth / 2 + 64, canvas.clientHeight / 2);
+        if (!p0 || !p1) return null;
+        const mpp = Cesium.Cartesian3.distance(p0, p1) / 64;
+        return mpp > 0 ? mpp / 0.00028 : null;
+      } catch {
+        return null;
+      }
+    },
+    getNorthAngleDeg: () => -(viewer.camera.heading * 180 / Math.PI),
   });
 
   document.querySelector("#shutdown-app").addEventListener("click", async () => {

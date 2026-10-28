@@ -36,8 +36,16 @@
         <div id="cesium-container" class="viewport">
           <div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div>
           <aside class="control-panel">
+            <h1 class="panel-title"><button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button><span class="panel-title-text">KASUGAI Canvas <small>Cesium</small></span><span class="panel-title-tools">
+              <button id="manage-open" class="panel-manage" type="button" title="管理" data-i18n-attr="title:manage.open;aria-label:manage.open">⚙</button>
+              <a id="help-open" class="panel-manage" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer" title="ヘルプ" data-i18n-attr="title:help.open;aria-label:help.open">?</a>
+            </span></h1>
+            <div class="project-row">
+              <select id="project-select" aria-label="プロジェクト" data-i18n-attr="aria-label:settings.project.label"></select>
+              <button id="share-copy" class="panel-manage" type="button" title="現在位置URLをコピー" data-i18n-attr="title:share.copy;aria-label:share.copy">🔗</button>
+              <button id="print-open" class="panel-manage" type="button" title="印刷" data-i18n-attr="title:print.open;aria-label:print.open"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1"/><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1"/></svg></button>
+            </div>
             <nav class="panel-tabs" aria-label="Plugin panels">
-              <button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
               <button class="panel-tab active" type="button" data-panel="layers-panel" data-i18n="tab.layers">レイヤ</button>
               <button class="panel-tab" type="button" data-panel="legend-panel" data-i18n="tab.legend">凡例</button>
               <button class="panel-tab" type="button" data-panel="search-panel" data-i18n="tab.search">検索</button>
@@ -45,9 +53,6 @@
               <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">カメラ</button>
               <button class="panel-tab" type="button" data-panel="display-panel" data-i18n="tab.display">表示</button>
               <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
-              <button id="share-copy" class="panel-manage" type="button" title="現在位置URLをコピー" data-i18n-attr="title:share.copy;aria-label:share.copy">🔗</button>
-              <button id="manage-open" class="panel-manage" type="button" title="管理" data-i18n-attr="title:manage.open;aria-label:manage.open">⚙</button>
-              <a id="help-open" class="panel-manage" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer" title="ヘルプ" data-i18n-attr="title:help.open;aria-label:help.open">?</a>
             </nav>
             <section id="layers-panel" class="plugin-panel active">
               <select id="theme-select" hidden></select>
@@ -269,8 +274,7 @@
                     <button type="button" data-manage-sub="settings-inspector-panel" data-i18n="settings.tab.inspector">インスペクター</button>
                   </nav>
                   <section id="settings-project-panel" class="settings-subpanel active">
-                    <label class="field-label" for="project-select" data-i18n="settings.project.label">プロジェクト</label>
-                    <select id="project-select" aria-label="プロジェクト" data-i18n-attr="aria-label:settings.project.label"></select>
+                    <p class="hint" data-i18n="settings.project.panelHint">プロジェクトの切替はパネル上部のリストから行います。</p>
                     <label class="field-label" for="project-root-path" style="margin-top:10px;" data-i18n="settings.project.root">プロジェクトルート</label>
                     <input id="project-root-path" class="share-url" style="margin-top:0;" readonly />
                     <p class="hint" data-i18n="settings.project.rootHint">プロジェクト内の相対パス(DATA/ 等)はこのフォルダを基準に解決されます。</p>

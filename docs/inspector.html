@@ -30,6 +30,7 @@ flatgeobuf: 全国/国ポリゴン | https://example.com/countries.fgb | on
 duckdb: 全国/河川(上位100件) | https://example.com/rivers.parquet | on | limit=100
 sql: 圏内の施設 | SELECT * FROM 'https://example.com/facilities.parquet' WHERE ST_Intersects(geometry, ST_MakeEnvelope(139.7, 35.6, 139.9, 35.8))
 background: #ffffff
+title: 春日井市 防災マップ
 info: https://example.com/project-info.html
 cam: 東京駅|35.653108|139.761449|h=2200.6|p=-30
 bookmark: bookmarks.xml
@@ -55,11 +56,12 @@ geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / rende
 gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / where=条件(SQLite式) / limit=件数 / columns=列,列 / bbox=auto(表示範囲連動・既定ON) / bbox=off(常時全件描画) / render=primitive|entity / style=QMLファイルURL / attr=出典 (layer_styles のQGIS埋め込みスタイルを自動適用)
 duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / table=地物テーブル名(gpkg) / bbox=auto(表示範囲連動・既定ON)|bbox=off(常時全件描画) / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / style=QMLファイルURL / attr=出典
 sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・| style=QML で QGIS スタイル適用・:bbox で表示範囲連動)
+default_style: point|line|polygon | スタイル未指定地物の既定スタイル(下記参照。地物側の simplestyle や style=QML が優先)
 cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
 bookmark: QGISブックマーク | bookmark:XMLファイルURL （QGIS のブックマークエクスポート XML・qgis_bookmarks 形式を読み込み、各ブックマークをカメラプリセットへ展開。geo_webview の /kasugai エクスポートでは bookmarks.xml として自動出力。カメラパネルの「XML保存」「XML読込」ボタンでも同形式でプリセットを出し入れできる）
 theme: テーマ名 | 表示するレイヤタイトル[|タイトル…] （QGIS マップテーマ相当の可視性プリセット。`*` で全表示。レイヤーパネル上部のテーマ選択から適用すると各レイヤ行の on/off が書き換わる）
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
-info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / yahooAppId: Yahoo検索ID
+info: InfoパネルHTML / legend: 凡例画像 / background: 背景色 / title: アプリ表示名 / yahooAppId: Yahoo検索ID
 plugin: プラグインID | key=value | off (plugins.json カタログ・ストレージプラグインをこのプロジェクトで有効化。レイヤーはプロジェクトスコープ)
 cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
           <ul>
@@ -67,6 +69,7 @@ cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(�
             <li>プロジェクトは <code>projects/&lt;project&gt;</code> 単位で切り替えます。設定ファイル内に <code>project</code> 項目はありません。</li>
             <li><code>plugin:</code> は <code>web/plugins.json</code> カタログまたは管理タブのストレージプラグインの ID を指定し、そのプロジェクトでのみプラグインを起動します（例: <code>plugin: reinfolib | datasets=price,shelter</code>）。<code>key=value</code> はプラグインの <code>manifest.options</code> にマージして渡され、真偽値・数値・カンマ区切り（配列）を解釈します。起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替や行の削除・<code>| off</code> 指定でレイヤー除去＋停止（<code>dispose</code> 呼出し）されます。指定できるのはカタログ/ストレージの ID のみで、外部 URL の直接指定はできません。</li>
             <li><code>attr=出典</code>・行の3番目フィールドの出典は、<code>&lt;</code> で始めると HTML として描画できます（例: <code>&lt;a href="https://example.jp"&gt;国土地理院&lt;/a&gt;</code>）。描画時に許可リストでサニタイズされ、<code>a</code>/<code>img</code>/装飾タグ（b・i・em・u・br・span・small・sub・sup）と <code>http(s):</code>/相対 URL のみが有効になります（スクリプト・イベント属性・その他タグは除去）。詳細は <a href="security.html">セキュリティ対策</a> を参照してください。</li>
+            <li><code>title: 表示名</code> はレイヤーパネル左上のタイトル（既定「KASUGAI Canvas」の部分）とブラウザタブのタイトルを差し替えます。プロジェクト名や納品先名を表示する用途を想定しています。エンジン名の小表記（Cesium 等）は残り、行が無い・空値なら既定表示に戻ります。複数行ある場合は最後の行が採用されます。</li>
           </ul>
         </div>
         <div class="url-box">
@@ -87,6 +90,57 @@ cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(�
           <p><strong>読み込みタイミング</strong>：全件読み込み系レイヤーは、必要となった初回（表示ON、属性・値一覧やベクター検索パネルでレイヤーを選択した時点）にダウンロード＋デコードします。ベクター検索パネルのレイヤー選択肢には未読み込みのレイヤーも「(未読込)」付きで表示され、選択すると読み込み後に索引されて検索できるようになります。「全選択」で文字検索を実行すると、非表示・未読み込みのレイヤーもその時点でまとめて読み込んで検索対象にします。表示中のレイヤーだけを対象にしたい場合は「表示レイヤ」を選択してください。<code>off</code> のレイヤーは起動時に読み込まれません。取得結果はメモリに保持されるため、2回目以降の表示切替・ドレープ変更・属性一覧では再取得せず即座に反映されます（キャッシュはインスペクター/プロジェクト変更で破棄）。クエリ系は条件ごとに結果が変わるため毎回クエリします。</p>
           <p><strong>QGIS スタイル（<code>style=</code>）</strong>：ベクター系レイヤー全般に <code>style=QMLファイルのURL</code> を付けると、QGIS のレイヤースタイルファイル（.qml）を取得して描画に適用します。単一シンボル・属性値による分類（categorizedSymbol）・数値段階（graduatedSymbol）・ルールベース（RuleBased・QGIS 式のサブセットを評価）の各レンダラに対応し、シンプルマーカー/SVG・ラスタ/フォントマーカー、実線・破線、単色塗り・ハッチ/ドット/画像パターン塗り、ラベル（<code>&lt;labeling&gt;</code> のシンプル/ルールベース）を再現します。データ定義プロパティ（式による色・サイズの上書き）や縮尺依存ルール（概算のカメラ距離へ変換）も反映します。式関数 <code>is_layer_visible('レイヤー名')</code> にも対応し、別レイヤーの表示状態を参照した条件付きスタイルが使えます（レイヤー名はタイトル・ID・グループパスで照合、見つからないレイヤーは非表示として扱います）。QGIS で再現困難な要素（ジオメトリジェネレータ・ヒートマップ等）は最も近い表現にフォールバックし、コンソールに警告を出します。<code>render=primitive</code> 経路では色・サイズ・線幅のみ適用（形状・破線・パターンは簡略化）。<code>.kasc</code> プロジェクトと同じ場所に .qml を置けば相対パスでも解決します。</p>
           <p><strong>GeoPackage の埋め込みスタイル</strong>：<code>gpkg:</code>（または <code>duckdb:</code> で <code>.gpkg</code> ファイル・<code>format=gpkg</code> を指定した場合）は、QGIS の「スタイルを保存 → データベースに保存」で GPKG 内の <code>layer_styles</code> テーブルに書き込まれる QML を自動的に読み取り、<code>useAsDefault</code> のスタイルを描画に適用します。データとスタイルを1ファイルで配布できます。<code>style=</code> を明示した場合はそちらが優先されます。複数の地物テーブルを持つ GPKG は <code>table=テーブル名</code> で対象を指定できます。GPKG は SQLite として読み込みます。sql.js（SQLite WASM）を <strong>Web Worker 内で遅延ロード・実行</strong>するため、デコード中も地図の操作をブロックしません。ファイル全体の初回ダウンロードは必要ですが、開いた DB は Worker が保持するため、<code>bbox=auto</code> の表示範囲再クエリ・⏷フィルター変更・属性一覧のクエリは再ダウンロード無しで実行されます。</p>
+          <p><strong>GeoPackage の埋め込みスタイル</strong>：なお <code>default_style:</code> 行で地物の既定スタイルを指定できます（後述の専用節を参照）。</p>
+        </div>
+        <div class="url-box">
+          <h3>地物の既定スタイル（default_style:）</h3>
+          <p>ベクター系レイヤー（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>）の地物で、<strong>スタイル指定を持たない項目</strong>に適用する既定値を、ジオメトリ種別ごとに1行ずつ設定します。配色をプロジェクト単位で調整したいときに使います。地物ごとの優先順位は次のとおりです。</p>
+          <pre><code>地物の simplestyle プロパティ(marker-color / stroke / fill 等)
+    &gt; style= の QML スタイル(レイヤー全体)
+    &gt; default_style: 行(この設定)
+    &gt; エンジン既定色</code></pre>
+          <p>地物側にその項目の指定があれば地物側が優先され、<code>default_style:</code> はあくまで「未指定項目の穴埋め」です。<code>style=</code> の QML が適用されたレイヤーには適用されません。設定はプロジェクト（.kasc）スコープで、同じ種別の行を複数書いた場合は<strong>後の行</strong>が採用されます。</p>
+          <pre><code>default_style: point   | color=#3388ff | size=48 | symbol= | opacity=1
+default_style: line    | color=#ff0000 | width=2 | opacity=0.8
+default_style: polygon | fill=#3388ff | fill_opacity=0.3 | stroke=#000000 | stroke_width=1 | stroke_opacity=1</code></pre>
+          <table>
+            <thead>
+              <tr><th>種別</th><th>キー</th><th>意味</th><th>既定</th></tr>
+            </thead>
+            <tbody>
+              <tr><td rowspan="4"><code>point</code></td>
+                <td><code>color=</code>（<code>marker-color=</code>・<code>fill=</code> も可）</td>
+                <td>ポイントの色（Cesium: ピンの色 / 2D: ドットの塗り色）</td><td>エンジン既定</td></tr>
+              <tr><td><code>size=</code>（<code>marker-size=</code> も可）</td>
+                <td>ピンのピクセルサイズ。<code>small</code>(24)/<code>medium</code>(48)/<code>large</code>(64) の名前または数値。2D エンジンでは約1/6のドット半径で描画（48 → 半径8px）</td><td>48 / 2D は半径5px</td></tr>
+              <tr><td><code>symbol=</code>（<code>marker-symbol=</code> も可）</td>
+                <td>Cesium ピンに描く Maki アイコン ID または1文字。2D エンジン・primitive 経路では無視</td><td>なし（通常のピン）</td></tr>
+              <tr><td><code>opacity=</code></td><td>不透明度 0〜1</td><td>1</td></tr>
+              <tr><td rowspan="3"><code>line</code></td>
+                <td><code>color=</code>（<code>stroke=</code> も可）</td><td>線色</td><td>エンジン既定（Cesium: 黄）</td></tr>
+              <tr><td><code>width=</code>（<code>stroke-width=</code> も可）</td><td>線幅（ピクセル）</td><td>2 / 2D は 1.5</td></tr>
+              <tr><td><code>opacity=</code>（<code>stroke-opacity=</code> も可）</td><td>不透明度 0〜1</td><td>1</td></tr>
+              <tr><td rowspan="5"><code>polygon</code></td>
+                <td><code>fill=</code>（<code>color=</code> も可）</td><td>塗り色</td><td>エンジン既定（Cesium: 黄α0.39）</td></tr>
+              <tr><td><code>fill_opacity=</code>（<code>opacity=</code> も可）</td><td>塗り不透明度 0〜1。省略時はエンジン既定の半透明を維持（アルファ付き色でも指定可）</td><td>約0.4</td></tr>
+              <tr><td><code>stroke=</code>（<code>outline=</code>・<code>line=</code> も可）</td><td>輪郭色</td><td>—</td></tr>
+              <tr><td><code>stroke_width=</code>（<code>width=</code>・<code>outline_width=</code> も可）</td><td>輪郭幅（ピクセル）</td><td>—</td></tr>
+              <tr><td><code>stroke_opacity=</code>（<code>outline_opacity=</code> も可）</td><td>輪郭不透明度 0〜1</td><td>1</td></tr>
+            </tbody>
+          </table>
+          <ul>
+            <li>色は <code>#rgb</code>・<code>#rrggbb</code>・<code>#rrggbbaa</code>・<code>rgba(...)</code>・色名など CSS 色指定が使えます。<strong>不透明度は「色のアルファ × opacity 値」</strong>で決まります。ポリゴン塗りだけは不透明色を指定しても既定の半透明を維持します（<code>fill_opacity=1</code> で不透明にできます）。</li>
+            <li><strong>ポリゴンの輪郭</strong>：Cesium 版では <code>stroke=</code>・<code>stroke_width=</code>・<code>stroke_opacity=</code> のいずれかを指定した場合のみ輪郭を描きます（通常は輪郭なし。地物側の <code>stroke</code> プロパティがあればその色が優先）。ドレープ（地形/3D Tiles へのクランプ）時は周線をポリラインで描きます。2D エンジンではポリゴンに常に輪郭があるため、未指定時はエンジン既定の輪郭色が使われます。</li>
+            <li><strong>ポイントの描画差</strong>：Cesium（entity 経路）はピン形状で描画し <code>size=</code> はピンの高さ(px)。<code>render=primitive</code>（バッチ描画）と 2D エンジンはドット描画のため約1/6の径に換算します。</li>
+            <li><strong>地物側の指定との併用</strong>：GeoJSON プロパティの <code>marker-color</code>/<code>marker-size</code>/<code>marker-symbol</code>/<code>stroke</code>/<code>stroke-width</code>/<code>stroke-opacity</code>/<code>fill</code>/<code>fill-opacity</code>（simplestyle）が各項目に優先します。例えば <code>default_style: line | color=#ff0000</code> でも <code>stroke</code> プロパティを持つラインはその色で描かれます。</li>
+            <li><strong>適用対象</strong>：entity・primitive（render=primitive）の両描画経路、および全エンジン（Cesium / MapLibre / OpenLayers / Leaflet）に適用されます。エンジン切替でも同じ .kasc がそのまま使えます。</li>
+            <li>種別は <code>point</code>/<code>p</code>/<code>marker</code>/<code>dot</code>、<code>line</code>/<code>l</code>/<code>polyline</code>、<code>polygon</code>/<code>poly</code>/<code>area</code>/<code>fill</code> の別名を受け付けます。解釈できない種別の行は無視されます。</li>
+          </ul>
+          <p><strong>使用例</strong>：属性を持たない公共測量データを区別したい場合：</p>
+          <pre><code>default_style: point   | color=#e34a33 | size=32
+default_style: line    | color=#636363 | width=1.5
+default_style: polygon | fill=#fef0d9 | fill_opacity=0.6 | stroke=#b30000 | stroke_width=1.5
+geojson: 公共測量 | DATA/public_survey.geojson</code></pre>
         </div>
         <div class="url-box">
           <h3>duckdb: / sql:（SQL絞り込みレイヤ）</h3>

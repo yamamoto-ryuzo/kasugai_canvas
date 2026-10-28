@@ -27,6 +27,16 @@ body.globe-hidden .viewport { background: transparent; }
 .map-attribution { position: absolute; right: 8px; bottom: 6px; z-index: 1; padding: 3px 5px; color: #52636d; background: rgba(255,255,255,.8); font-size: 10px; }
 .control-panel { position: absolute; z-index: 2; top: 14px; left: 14px; width: 336px; max-height: calc(100% - var(--control-panel-bottom-clearance)); overflow-y: auto; padding: 14px; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.6); box-shadow: 0 8px 24px rgba(29,43,53,.14); pointer-events: auto; touch-action: auto; user-select: text; }
 .panel-title { margin-bottom: 14px; font-size: 16px; font-weight: 700; }
+/* パネル先頭のタイトル行（他エンジン #panel h1 と同型: 左=最小化トグル+タイトル、右=管理ボタン） */
+.control-panel > h1.panel-title { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 14px; }
+.control-panel > h1.panel-title .panel-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.control-panel > h1.panel-title small { font-weight: 400; color: #52636d; }
+.panel-title-tools { display: flex; gap: 4px; }
+/* プロジェクト選択行: 左=プロジェクトセレクト、右=機能ボタン(リンクコピー・印刷)。
+   ボタンは行の高さ(=セレクトの高さ)いっぱいに伸ばして正方形に揃える */
+.project-row { display: flex; gap: 4px; margin-bottom: 8px; }
+.project-row > #project-select { flex: 1; min-width: 0; }
+.project-row > .panel-manage { flex-basis: 30px; }
 .control-panel section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e4ecef; }
 .control-panel > .plugin-panel { margin-top: 0; padding-top: 0; border-top: 0; }
 .control-panel > #engines { margin-top: 10px; font-size: 11px; }
@@ -60,13 +70,11 @@ body.globe-hidden .viewport { background: transparent; }
    でラジオ/チェックボックスが全幅に伸びる。小さい既定サイズに戻す */
 #app-panel input[type="radio"], #app-panel input[type="checkbox"] { width: 15px; min-height: 15px; }
 .control-panel.collapsed { width: 40px; height: 40px; padding: 7px; overflow: hidden; }
-.control-panel.collapsed .panel-tabs { height: 26px; margin: 0; padding: 0; overflow: hidden; border-bottom: 0; }
-.control-panel.collapsed .panel-tab,
-.control-panel.collapsed .plugin-panel,
-.control-panel.collapsed #engines { display: none; }
+.control-panel.collapsed > *:not(h1) { display: none; }
+.control-panel.collapsed h1.panel-title { margin: 0; gap: 0; }
+.control-panel.collapsed h1 > *:not(.panel-toggle) { display: none; }
 /* 管理ボタン（⚙）: タブではなく管理ウィンドウを開くランチャー。タブ列の右端に寄せる */
 .panel-manage { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 1px 4px !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 14px !important; line-height: 1; cursor: pointer; }
-#share-copy { margin-left: auto; }
 a.panel-manage { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; }
 .panel-manage.active { background: rgba(49,86,79,.36) !important; }
 /* 管理ウィンドウ: モードレスのフローティングパネル。ドラッグ移動・最小化可 */
@@ -343,7 +351,7 @@ footer { padding: 0 28px 22px; }
 #load-progress-bar { display: block; height: 100%; width: 0; background: #2c5ea8;
   transition: width .25s; }
 /* レイヤ行の読込ステータス(スピナー/失敗) */
-.layer-status { flex: none; font-size: 10px; color: #8a97a3; }
+.layer-row > .layer-status { flex: none; font-size: 10px; color: #8a97a3; }
 .layer-status.loading { width: 11px; height: 11px; border: 2px solid #d5dde4;
   border-top-color: #2c5ea8; border-radius: 50%; animation: layer-spin .8s linear infinite; }
 .layer-status.failed { color: #c0392b; }
@@ -362,3 +370,5 @@ footer { padding: 0 28px 22px; }
 #attr-popup .attr-popup-title { font-weight: 600; margin-bottom: 4px; }
 #attr-popup table { width: 100%; border-collapse: collapse; font-size: 11px; }
 #attr-popup th, #attr-popup td { padding: 1px 4px; border-bottom: 1px solid #e4ecef; text-align: left; }
+#print-open { padding: 3px !important; }
+#print-open > svg { width: 100%; height: 100%; display: block; }
