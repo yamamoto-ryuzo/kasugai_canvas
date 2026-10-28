@@ -4,6 +4,29 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.0.0] - 2026-10-28
+
+### Added
+
+- **GSI Maps エンジン（`web/gsimaps/`）を追加** — vendored 地理院地図（gsi-cyberjapan/gsimaps）を同一オリジン iframe（index_pm.html）で組み込み、`.kasc` を GSI/Leaflet API 経由で再生する中間エンジン。ベクター行は作図リストへ、xyz/wms/wmts 行は外部タイルへ注入し、ベースマップ切替・GSI カタログ取込・作図取り込み・表示中レイヤの `.kasc` 反映も可能。地理院 Globe も iframe 内表示（2D復帰ボタン付き）で、Globe 上へ Canvas レイヤを Cesium 注入で表示できる。ベースマップ・カタログ・作図・一時非表示・標高取得などの専用 AI ツールも搭載（`GSI.GLOBALS` 内部 API 依存のため現在調整中）
+- **`/projects/*` を許可オリジン限定で CORS+Private Network Access 対応** — ホスト版エンジン（kasugai-canvas-web の github.io）がローカルの `.kasc`+`DATA/` を読めるようになった。file:// 起動HTML・ループバックも許可する一方、許可リスト外のオリジンには ACAO を返さず、任意サイトからのローカルデータ読み取りは遮断する
+- **印刷パネルの QGIS 検出ポートを 8089-8091 へ拡張**し、二重実行ガードを追加
+
+### Changed
+
+- **vendored 地理院地図を CDN 提供へ移行し配布物から除外** — `web/vendor/gsimaps/`（約75MB・約1600ファイル）はリポジトリ・配布ZIP・インストーラーに同梱しない。他4エンジンの jsdelivr 依存と同様、GSI Maps もオンライン前提へ揃え、ローカルに vendor が無い環境で `gsimaps/` を開くと `?project=`/`?kasc=` をローカルの絶対URLへ変換して CDN 版エンジン（kasugai-canvas-web）へ自動転送する。iframe 制御の同一オリジン要件を保つためページごと転送する設計で、`?hosted=<base>` で転送先を上書き可能。開発時にローカルで動かす場合は `tools/fetch_vendor.py` で取得すれば従来通り
+- **publish_cdn の vendor 同期を手動運用化** — 発行のたび vendor を全量同期していたのをやめ、`--vendor` 指定時に sha 差分がある場合のみ取得・反映する方式へ変更。通常発行は差分警告のみ（web/ 本体は毎回同期）
+- **gsimaps のレイヤ管理を Leaflet 版と同じ構成へ統一**
+- **2Dエンジンのレイヤパネル初期状態をCesium同様に全折りたたみへ変更**
+- **CORS 許可リストのループバック判定をホスト厳密比較へ**（偽サブドメイン経由の許可回避を防止）
+
+### Fixed
+
+- **gsimaps 凡例タブの URL 重複を除外**し、空時の表示を追加
+- **gsimaps 地物クリック処理で全ベクター行が読込失敗する退行を修正**
+- **gsimaps Globe 切替の遷移先を絶対URL化して 404 を修正**
+- **更新後の `*.update-old` 残骸をポート確保後に必ず掃除**
+
 ## [5.30.0] - 2026-10-27
 
 ### Fixed

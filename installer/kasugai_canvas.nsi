@@ -31,10 +31,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "5.30.0.0"
+VIProductVersion "6.0.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "5.30.0"
+VIAddVersionKey "FileVersion" "6.0.0"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -61,8 +61,8 @@ Section "Install"
   File "${BUILD_EXE}"
 
   SetOutPath "$INSTDIR\web"
-  ; vendor/(vendored 地理院地図)は CDN 配信へ移行したため同梱しない。
-  ; publish_cdn.py 実行後のローカルに再実体化された場合も /x で除外する
+  ; vendor/ (vendored gsimaps) is served from the CDN and must not be bundled.
+  ; The /x exclusion also covers a locally re-fetched web/vendor/.
   File /r /x "vendor" "${WEB_DIR}\*"
 
   SetOutPath "$INSTDIR\projects"
