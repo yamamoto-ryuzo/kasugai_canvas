@@ -181,6 +181,24 @@ img, video {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
+figure {
+  margin: 1.2em 0;
+}
+
+figure > figcaption {
+  text-align: center;
+}
+
+figure > img, figure > video {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+figure > video {
+  max-height: 70vh;
+}
+
 blockquote {
   margin: 1.2em 0;
   padding: 14px 20px;
