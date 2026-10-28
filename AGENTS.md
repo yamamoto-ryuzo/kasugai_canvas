@@ -129,9 +129,10 @@ web/
                   配布物に同梱せず kasugai-canvas-web 側提供へ移行:
                   ローカルに vendor が無い環境では index.html 先頭の検出
                   スクリプトがホスト版 gsimaps(?kasc=<ローカル絶対URL>)へ転送
-                  する。CDN 発行時は publish_cdn.py が web/gsimaps/vendor.json
-                  の sha で tools/fetch_vendor.py 経由の再取得を保証する
-                  (ローカルの web/vendor/ は gitignore 済み)。
+                  する。vendor の更新は手動運用: vendor.json の sha を上げて
+                  publish_cdn.py --vendor で CDN へ反映する(通常発行では
+                  sha 差分の警告のみ。ローカルの web/vendor/ は gitignore
+                  済みで、手元で動かす場合は tools/fetch_vendor.py で取得)。
                   ※現在調整中: vendored iframe を GSI.GLOBALS 内部 API 経由で
                   操作する構造のため AI 制御の安定化が難しい）
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・

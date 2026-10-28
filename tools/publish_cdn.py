@@ -19,6 +19,8 @@ usage:
     python tools/publish_cdn.py [cdn_repo_dir] --channel unstable
     python tools/publish_cdn.py [cdn_repo_dir] --channel stable
     python tools/publish_cdn.py [cdn_repo_dir] --channel unstable --commit --push
+    python tools/publish_cdn.py [cdn_repo_dir] --channel stable --vendor
+        # vendor/ も同期(vendor.json の sha 更新時など。既定は web/ 本体のみ)
 
     cdn_repo_dir 省略時は <kasugai_canvas>/../kasugai-canvas-web
 """
@@ -119,13 +121,13 @@ def _commit_and_push(cdn_dir, message, push):
         print('pushed')
 
 
-def _sync_vendors(stage):
-    """vendor を CDN ステージへ sha 差分時のみ同期する。
+def _sync_vendors(stage, apply=False):
+    """vendor の CDN ステージとの sha 差分を報告し、apply 時のみ同期する。
 
-    web/ 本体は毎回全量同期するが、めったに変わらない vendor(約75MB)は
-    ステージ側の VENDOR.json sha と vendor.json の pin を比較し、
-    差異・欠落時だけ fetch_vendor で取得して反映する。
-    一致時はローカルへの再実体化自体も行わない
+    vendor(約75MB)の更新は手動運用が基本。発行のたび自動取得はせず、
+    ステージ側の VENDOR.json sha と vendor.json の pin を比較して
+    差異・欠落があれば警告するだけにし、--vendor 指定時だけ
+    fetch_vendor で取得して反映する
     """
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import fetch_vendor
@@ -134,20 +136,27 @@ def _sync_vendors(stage):
         name = spec.get('name') or os.path.basename(os.path.dirname(spec_path))
         sha = spec.get('sha') or spec.get('ref') or 'HEAD'
         dst = os.path.join(stage, 'vendor', name)
-        if os.path.isdir(dst) and fetch_vendor._current_sha(dst) == sha:
+        cur = fetch_vendor._current_sha(dst) if os.path.isdir(dst) else None
+        if cur == sha:
             print('vendor {0}: channel already at {1} (skip)'.format(
                 name, sha[:8]))
+            continue
+        if not apply:
+            print('vendor {0}: pin {1} != channel {2}'
+                  ' (--vendor で同期)'.format(
+                      name, sha[:8], (cur[:8] if cur else 'missing')))
             continue
         src = fetch_vendor.fetch_vendor(spec_path)
         _replace_dir(src, dst)
 
 
-def sync_channel(cdn_dir, channel):
+def sync_channel(cdn_dir, channel, vendor=False):
     """web/ を指定ステージへ直接同期する。"""
     stage = os.path.join(cdn_dir, channel)
-    # vendor は別管理(_sync_vendors)のため web/ 全量コピーから除外
+    # vendor は別管理(手動・--vendor 指定時のみ同期)のため
+    # web/ 全量コピーから除外
     _replace_dir(WEB_DIR, stage, exclude=('vendor',))
-    _sync_vendors(stage)
+    _sync_vendors(stage, apply=vendor)
     version = _cargo_version()
     _write_version_json(stage, {
         'version': version,
@@ -171,6 +180,9 @@ def main():
                    help='CDN リポジトリで変更をコミットする')
     p.add_argument('--push', action='store_true',
                    help='コミット後に push する(--commit 必須)')
+    p.add_argument('--vendor', action='store_true',
+                   help='vendor/ も sha 差分時に fetch_vendor で取得して'
+                        '同期する(既定は web/ 本体のみ。vendor 更新は手動)')
     args = p.parse_args()
 
     cdn_dir = os.path.abspath(args.cdn_dir)
@@ -179,7 +191,8 @@ def main():
     if args.push and not args.commit:
         p.error('--push は --commit と併用してください')
 
-    version, message = sync_channel(cdn_dir, args.channel)
+    version, message = sync_channel(cdn_dir, args.channel,
+                                    vendor=args.vendor)
     print('{0}: v{1} -> {2}'.format(args.channel, version, cdn_dir))
 
     if args.commit:
