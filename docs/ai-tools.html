@@ -27,7 +27,7 @@
             <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
-            <tr><td>GSI Maps エンジン（<code>?engine=gsimaps</code>）</td><td><code>listGsiLayers</code>・<code>importGsiLayers</code>・<code>setGsiLayerOpacity</code>・<code>moveGsiLayer</code>・<code>removeGsiLayer</code>・<code>listGsiCatalog</code>・<code>addGsiLayer</code>・<code>listGsiSakuzu</code>・<code>importGsiSakuzu</code>・<code>listGsiBasemaps</code>・<code>setGsiBasemap</code>・<code>importGsiCatalog</code></td></tr>
+            <tr><td>GSI Maps エンジン（<code>?engine=gsimaps</code>）</td><td><code>listGsiLayers</code>・<code>importGsiLayers</code>・<code>setGsiLayerOpacity</code>・<code>moveGsiLayer</code>・<code>removeGsiLayer</code>・<code>listGsiCatalog</code>・<code>addGsiLayer</code>・<code>listGsiSakuzu</code>・<code>importGsiSakuzu</code>・<code>listGsiBasemaps</code>・<code>setGsiBasemap</code>・<code>importGsiCatalog</code>・<code>setGsiLayerHidden</code>・<code>removeGsiSakuzu</code>・<code>getGsiElevation</code></td></tr>
           </tbody>
         </table>
         <p>公開環境には「その人のセッション内に閉じる安全な機能」のみが渡ります（ティア分けはリポジトリの <code>AGENTS.md</code>「AI 機能のティア分け」参照）。</p>
@@ -66,7 +66,7 @@
       </section>
 
       <section>
-        <h2>🗾 GSI Maps エンジン（12）</h2>
+        <h2>🗾 GSI Maps エンジン（15）</h2>
         <p>iframe 内の地理院地図（同一オリジンの vendored 版）を <code>GSI.GLOBALS</code> 内部 API 経由で操作する専用ツール群。vendored コードは無改変で、すべて中間層からのフック。レイヤーの「表示中」状態は地理院地図側の表示中レイヤーパネルと常に同期する。</p>
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
@@ -83,6 +83,9 @@
             <tr><td><code>listGsiBasemaps</code></td><td>なし</td><td>地理院地図のベースマップ（地図の種類: 標準地図/淡色地図/白地図/写真/English 等）の一覧を取得。<code>active</code>=GSI 側で表示中・<code>selected</code>=Canvas のベースマップ選択中・<code>imported</code>=.kasc の <code>base:</code> 行あり</td></tr>
             <tr><td><code>setGsiBasemap</code></td><td>id*</td><td>地理院地図のベースマップを id/タイトルで切替える。対応する <code>base:</code> 行が .kasc に無ければ自動で追記され、他エンジンでも同じベースマップが再現される。汎用 <code>setBasemap</code> も .kasc 未登録の GSI ベースマップ名はこのツールへフォールバックする</td></tr>
             <tr><td><code>importGsiCatalog</code></td><td>ids*</td><td>レイヤカタログから id/タイトル指定で <code>xyz:</code> 行として直接取り込む（GSI 側に表示していなくても可）。表示中レイヤの取り込みは <code>importGsiLayers</code>、ベースマップは <code>setGsiBasemap</code> を使う</td></tr>
+            <tr><td><code>setGsiLayerHidden</code></td><td>id*, hidden*</td><td>表示中レイヤーを解除せず一時的に非表示/再表示（表示中レイヤーパネルの非表示チェックと同じ操作。ベースマップは対象外）</td></tr>
+            <tr><td><code>removeGsiSakuzu</code></td><td>indices</td><td>作図（sakuzu）を削除。indices は index またはタイトル（省略時は全作図）。Canvas 管理レイヤ由来（<code>ours=true</code>）は対象外</td></tr>
+            <tr><td><code>getGsiElevation</code></td><td>latitude*, longitude*</td><td>地理院地図の標高 API で指定地点の標高（m）を取得。<code>source</code> はメッシュ種別（例: 5mメッシュ（レーザ））</td></tr>
           </tbody>
         </table>
       </section>

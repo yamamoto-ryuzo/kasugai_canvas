@@ -129,6 +129,8 @@ const CHAT_TOOL_API = {
   listGsiSakuzu: "listGsiSakuzu", importGsiSakuzu: "importGsiSakuzu",
   listGsiBasemaps: "listGsiBasemaps", setGsiBasemap: "setGsiBasemap",
   importGsiCatalog: "importGsiCatalog",
+  setGsiLayerHidden: "setGsiLayerHidden", removeGsiSakuzu: "removeGsiSakuzu",
+  getGsiElevation: "getGsiElevation",
 };
 
 function chatToolAvailable(name) {
@@ -1824,6 +1826,40 @@ const CHAT_TOOLS = [{
         required: ["ids"],
       },
     },
+    {
+      name: "setGsiLayerHidden",
+      description: "GSI Mapsエンジン専用。表示中レイヤーを解除せず一時的に非表示/再表示する(表示中レイヤーパネルの非表示チェックと同じ操作。ベースマップは対象外)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "レイヤidまたはタイトル(listGsiLayersで確認)" },
+          hidden: { type: "BOOLEAN", description: "true=非表示 / false=再表示" },
+        },
+        required: ["id", "hidden"],
+      },
+    },
+    {
+      name: "removeGsiSakuzu",
+      description: "GSI Mapsエンジン専用。地理院地図の作図(sakuzu)を削除する。indicesはindexまたはタイトル(listGsiSakuzuで確認)、省略時は全作図。Canvas管理レイヤ由来の作図(ours=true)は対象外",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          indices: { type: "ARRAY", items: { type: "STRING" }, description: "削除する作図のindexまたはタイトル。省略時は全作図" },
+        },
+      },
+    },
+    {
+      name: "getGsiElevation",
+      description: "GSI Mapsエンジン専用。地理院地図の標高APIで指定地点の標高(m)を取得する。sourceはメッシュ種別(例: 5mメッシュ（レーザ）)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          latitude: { type: "NUMBER", description: "緯度(度数)" },
+          longitude: { type: "NUMBER", description: "経度(度数)" },
+        },
+        required: ["latitude", "longitude"],
+      },
+    },
   ],
 }];
 
@@ -2258,6 +2294,9 @@ export async function executeChatTool(name, args = {}) {
   if (name === "listGsiBasemaps") return { basemaps: window.kasugaiApi.listGsiBasemaps() };
   if (name === "setGsiBasemap") return window.kasugaiApi.setGsiBasemap(args.id);
   if (name === "importGsiCatalog") return await window.kasugaiApi.importGsiCatalog({ ids: args.ids });
+  if (name === "setGsiLayerHidden") return window.kasugaiApi.setGsiLayerHidden(args.id, args.hidden);
+  if (name === "removeGsiSakuzu") return window.kasugaiApi.removeGsiSakuzu({ indices: args.indices });
+  if (name === "getGsiElevation") return await window.kasugaiApi.getGsiElevation(args.latitude, args.longitude);
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 

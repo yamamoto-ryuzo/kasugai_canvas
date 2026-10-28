@@ -1294,15 +1294,73 @@ function gsiConfirmIds() {
   return ids;
 }
 
-function listGsiCatalog(filter) {
-  const hash = gsiApp?._mainMap?._layersJSON?.layersHash || {};
+// info/グループノードの祖先フォルダ名を含む検索用文字列。
+// 「珠洲地区（1/2撮影）」のような地区名だけの災害レイヤも
+// 親フォルダ名(令和6年(2024年)能登半島地震)で絞り込めるようにする
+function gsiPathText(info) {
+  if (info._gsiPathText) return info._gsiPathText;
+  const parts = [String(info.id || ""), String(info.title || ""), String(info.src || "")];
+  let p = info.parent, guard = 0;
+  while (p && guard++ < 8) { if (p.title) parts.push(String(p.title)); p = p.parent; }
+  return (info._gsiPathText = parts.join(" ").toLowerCase());
+}
+
+// トピックファイル等の src 参照 LayerGroup はツリー展開まで entries を持たず
+// layersHash にも登録されない(例: 令和6年能登半島地震=layers_20240102noto.txt)。
+// 未ロード群は _data ツリー内にあり、src を読んで _initializeTree すると
+// layersHash へ登録される。matchFn 指定時はパス文字列が一致するグループのみ読む
+async function gsiLoadLazyGroups(matchFn = null) {
+  const lj = gsiApp?._mainMap?._layersJSON;
+  if (!lj) return 0;
+  const cache = frame.contentWindow?.GSI?.GLOBALS?.layersJSONCache;
+  const doneUrls = new Set();
+  let loaded = 0;
+  for (let iter = 0; iter < 8; iter++) {
+    const pending = new Map(); // url → node(同一srcの重複定義を除外)
+    const walk = nodes => (nodes || []).forEach(n => {
+      if (!n || typeof n !== "object") return;
+      if (n.entries) walk(n.entries);
+      else if (n.src && !n._gsiLazyDone && (!matchFn || matchFn(gsiPathText(n)))) {
+        const url = new URL(n.src, String(n.src_url || frame.src || "")).href;
+        if (!doneUrls.has(url)) pending.set(url, n);
+      }
+    });
+    walk(lj._data);
+    walk(lj.tree);
+    if (!pending.size) break;
+    await Promise.all([...pending].map(async ([url, g]) => {
+      g._gsiLazyDone = true;
+      doneUrls.add(url);
+      try {
+        let text = cache?.[url] ?? cache?.[g.src] ?? null;
+        if (text == null) {
+          const res = await fetch(url);
+          if (!res.ok) return;
+          text = await res.text();
+        }
+        const json = JSON.parse(text);
+        if (!Array.isArray(json?.layers)) return;
+        json.layers.forEach(l => { l.parent = g; l.src_url = g.src_url; });
+        g.entries = json.layers;
+        lj._initializeTree(g.entries, g);
+        loaded++;
+      } catch (_) { /* 読み込めない src はスキップ */ }
+    }));
+  }
+  return loaded;
+}
+
+// filter 指定時はパス文字列が一致する遅延トピック群を読み込んでから絞り込む
+async function listGsiCatalog(filter) {
   const q = String(filter || "").toLowerCase().trim();
+  if (q) await gsiLoadLazyGroups(path => path.includes(q));
+  const hash = gsiApp?._mainMap?._layersJSON?.layersHash || {};
   const active = gsiCatalogIds(), confirm = gsiConfirmIds();
   const out = [];
   let total = 0;
   for (const info of Object.values(hash)) {
     if (!info?.url) continue;
-    if (q && !`${info.id} ${info.title}`.toLowerCase().includes(q)) continue;
+    if (q && !gsiPathText(info).includes(q)) continue;
     total++;
     if (out.length < 100) out.push({
       id: info.id || "", title: String(info.title || info.id || ""),
@@ -1317,14 +1375,25 @@ function listGsiCatalog(filter) {
 // レイヤツリーを開かずカタログ info を _mapLayerList.append へ直接登録。
 // noFinishMove=true で自動フィットを抑止(AIは flyTo で制御)。
 // CONFIRM_LAYERS 該当は確認ダイアログが出るため未追加として confirmPending を返す
-function addGsiLayer(key, { hidden = false } = {}) {
+async function addGsiLayer(key, { hidden = false } = {}) {
   const lj = gsiApp?._mainMap?._layersJSON;
   const ml = gsiApp?._mainMap?._mapLayerList;
   if (!lj || !ml) return { ok: false, reason: "unavailable" };
   const k = String(key ?? "").trim();
-  const hash = lj.layersHash || {};
-  const info = hash[k] || Object.values(hash).find(i => i.title === k && i.url);
-  if (!info?.url) return { ok: false, reason: "notFound" };
+  const find = () => {
+    const hash = lj.layersHash || {};
+    return hash[k] || Object.values(hash).find(i => i.title === k && i.url) || null;
+  };
+  let info = find();
+  if (!info?.url) { await gsiLoadLazyGroups(); info = find(); }
+  if (!info?.url) {
+    // 見つからない場合はキーのトークンを全て含む候補を最大8件提示する
+    const toks = k.toLowerCase().split(/\s+/).filter(t => t.length >= 2);
+    const candidates = toks.length ? Object.values(lj.layersHash || {})
+      .filter(i => i?.url && toks.every(t => gsiPathText(i).includes(t)))
+      .slice(0, 8).map(i => ({ id: i.id, title: String(i.title || i.id) })) : [];
+    return { ok: false, reason: "notFound", candidates };
+  }
   if (ml.exists(info)) return { ok: true, already: true, id: info.id, title: info.title };
   ml.append(info, true, hidden);
   return ml.exists(info)
@@ -1395,9 +1464,14 @@ function setGsiBasemap(key) {
 // 表示中レイヤの取り込みは importGsiLayers、こちらはカタログ直接版
 async function importGsiCatalog({ ids = null } = {}) {
   if (globeMode) return { ok: false, message: "Globe表示中は取り込めません。「2D地図に戻る」後に実行してください" };
-  const hash = gsiApp?._mainMap?._layersJSON?.layersHash || {};
-  const wanted = Object.values(hash).filter(i => i?.url &&
-    (!ids?.length || ids.includes(i.id) || ids.includes(i.title)));
+  let wanted = Object.values(gsiApp?._mainMap?._layersJSON?.layersHash || {})
+    .filter(i => i?.url && (!ids?.length || ids.includes(i.id) || ids.includes(i.title)));
+  if (!wanted.length) {
+    // 遅延ロードのトピック群(src参照)を読み込んで再検索
+    await gsiLoadLazyGroups();
+    wanted = Object.values(gsiApp?._mainMap?._layersJSON?.layersHash || {})
+      .filter(i => i?.url && (!ids?.length || ids.includes(i.id) || ids.includes(i.title)));
+  }
   if (!wanted.length) return { ok: false, message: "対象レイヤが見つかりません(listGsiCatalog で id/タイトルを確認)", imported: [], skipped: [], unsupported: [], failed: [] };
   const unsupported = [], skipped = [], imported = [], failed = [], lines = [];
   for (const info of wanted) {
@@ -1436,6 +1510,54 @@ async function importGsiCatalog({ ids = null } = {}) {
   if (unsupported.length) parts.push(`${unsupported.length}件未対応`);
   if (failed.length) parts.push(`${failed.length}件失敗`);
   return { ok: imported.length > 0 || skipped.length > 0, imported, skipped, unsupported, failed, message: parts.join("・") };
+}
+
+// ---- GSI 表示中レイヤの一時非表示/再表示 ----
+// レイヤ解除(removeGsiLayer)とは別に、表示中レイヤーパネルの「非表示」
+// チェックと同じ状態(_visibleInfo._isHidden + レイヤの着脱)を切り替える
+function setGsiLayerHidden(key, hidden) {
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  const info = gsiFindLayerInfo(key);
+  if (!ml || !info) return { ok: false, reason: "notFound" };
+  if (gsiIsBaseInfo(info)) return { ok: false, reason: "baseLayer" };
+  const vi = info._visibleInfo;
+  if (!vi?.layer) return { ok: false, reason: "notMounted" };
+  const on = !hidden;
+  vi._isHidden = !!hidden;
+  if (on && !gmap.hasLayer(vi.layer)) gmap.addLayer(vi.layer);
+  else if (!on && gmap.hasLayer(vi.layer)) gmap.removeLayer(vi.layer);
+  ml.fire("change");
+  return { ok: true, hidden: !!hidden };
+}
+
+// ---- GSI 作図の削除 ----
+// listGsiSakuzu の index/タイトルで作図を削除する(Canvas管理レイヤ由来の
+// ours=true は Canvas レイヤ側の操作に任せるため対象外)
+function removeGsiSakuzu({ indices = null } = {}) {
+  const wanted = gsiSakuzuItems().filter(s => !s.ours &&
+    (!indices?.length || indices.includes(s.index) || indices.includes(s.title)));
+  if (!wanted.length) return { ok: false, message: "対象の作図が見つかりません(Canvas管理レイヤ以外の作図がありません)", removed: [] };
+  const removed = [];
+  for (const s of wanted) {
+    const item = sakuzu._list[s.index];
+    if (!item) continue;
+    removeSakuzuItem(item);
+    removed.push({ index: s.index, title: s.title });
+  }
+  return { ok: removed.length > 0, removed, message: `${removed.length}件削除` };
+}
+
+// ---- 地理院DEMによる地点標高 ----
+// 地理院地図の標高API(getelevation.php)を直接呼ぶ。elevation は m、
+// source はメッシュ種別(例: 5mメッシュ（レーザ）)
+async function getGsiElevation(latitude, longitude) {
+  const lat = Number(latitude), lon = Number(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return { ok: false, reason: "invalid" };
+  const u = `https://cyberjapandata2.gsi.go.jp/general/dem/scripts/getelevation.php?lon=${encodeURIComponent(lon)}&lat=${encodeURIComponent(lat)}&outtype=JSON`;
+  const r = await fetch(u);
+  if (!r.ok) return { ok: false, reason: `http ${r.status}` };
+  const j = await r.json();
+  return { ok: true, latitude: lat, longitude: lon, elevation: j?.elevation ?? null, source: j?.hsrc || "" };
 }
 
 // ---- GSI 作図(sakuzu)の取り込み ----
@@ -1567,8 +1689,10 @@ Object.assign(window.kasugaiApi, {
   listGsiCatalog, addGsiLayer, importGsiCatalog: opts => importGsiCatalog(opts),
   listGsiSakuzu: () => gsiSakuzuItems(),
   importGsiSakuzu: opts => importGsiSakuzu(opts),
+  removeGsiSakuzu: opts => removeGsiSakuzu(opts),
   listGsiBasemaps: () => gsiBasemapEntries(),
-  setGsiBasemap,
+  setGsiBasemap, setGsiLayerHidden,
+  getGsiElevation: (lat, lon) => getGsiElevation(lat, lon),
 });
 // 汎用 setBasemap は .kasc 未登録の GSI ベースマップ名も受け付ける
 // (base: 行の自動追記まで行う setGsiBasemap へフォールバック)
