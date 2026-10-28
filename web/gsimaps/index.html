@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KASUGAI Canvas — GSI Maps</title>
+<script>
+  // この中間エンジンページはトップレベル専用。
+  // 何らかの経路で iframe 内に読み込まれた場合は、DOM描画前に
+  // vendored 地理院地図へ差し替えて自己修復(ネスト二重表示の根絶)
+  if (window.parent !== window) {
+    location.replace("../vendor/gsimaps/index_pm.html");
+  }
+</script>
+<link rel="icon" type="image/x-icon" href="../favicon.ico" />
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, "Segoe UI", "Yu Gothic", sans-serif; }
+  /* 左: 中間層パネル(実幅のドック) + 右: vendored 地理院地図(index_pm.html)。
+     オーバーレイにすると gsimaps 左側UI が隠れて操作不能になるため隣接配置にする */
+  #layout { display: flex; height: 100%; width: 100%; }
+  #map-wrap { flex: 1; position: relative; min-width: 0; }
+  #gsi-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #20262b; }
+  #gsi-missing {
+    position: absolute; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center;
+    background: #20262b; color: #dde4ea; font-size: 14px; text-align: center; line-height: 1.8; padding: 24px;
+  }
+  #gsi-missing[hidden] { display: none; }
+  #panel {
+    position: relative; z-index: 1000; flex: 0 0 320px; height: 100%;
+    background: rgba(255,255,255,.97); padding: 10px 12px; box-sizing: border-box;
+    width: 320px; max-height: none; display: flex; flex-direction: column;
+    box-shadow: 2px 0 8px rgba(0,0,0,.2); font-size: 13px;
+    /* 区画高の合計が画面高を超えた場合はパネル自体がスクロールする */
+    overflow-y: auto; overflow-x: hidden;
+  }
+  #panel h1 { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0 0 6px; }
+  #panel h1 .panel-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #panel select { width: 100%; box-sizing: border-box; }
+  .project-row { display: flex; gap: 4px; height: 30px; margin-bottom: 8px; }
+  .project-row > #project-select { flex: 1; min-width: 0; }
+  .project-row > button { flex: 0 0 30px; padding: 0; border: 1px solid #ccc; border-radius: 4px; background: #f4f6f8; cursor: pointer; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; }
+  #tabs { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+  #tabs .tab { flex: 1; min-width: 44px; padding: 4px 0; font-size: 12px; border: 1px solid #ccc;
+               border-radius: 4px; background: #f4f6f8; cursor: pointer; }
+  #tabs .tab.active { background: #2c5ea8; color: #fff; border-color: #2c5ea8; }
+  .tab-pane { overflow: auto; flex: 1; min-height: 0; }
+  #theme-select { width: 100%; margin-bottom: 6px; }
+  #panel-toggle { flex: 0 0 26px; min-width: 26px; min-height: 26px; padding: 1px 4px;
+    border: 0; border-radius: 4px; background: rgba(44,94,168,.12); color: #2c5ea8;
+    font-size: 18px; line-height: 1; cursor: pointer; }
+  #panel.collapsed { flex: 0 0 40px; width: 40px; padding: 7px; box-sizing: border-box; overflow: hidden; }
+  #panel.collapsed > *:not(h1) { display: none; }
+  #panel.collapsed h1 { margin: 0; gap: 0; }
+  #panel.collapsed h1 > *:not(#panel-toggle) { display: none; }
+  .layer-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+  .layer-row input { margin: 0; }
+  .layer-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layer-row > .layer-status { flex: none; font-size: 10px; color: #8a97a3; }
+  .layer-status.loading { width: 11px; height: 11px; border: 2px solid #d5dde4;
+    border-top-color: #2c5ea8; border-radius: 50%; animation: layer-spin .8s linear infinite; }
+  .layer-status.failed { color: #c0392b; }
+  @keyframes layer-spin { to { transform: rotate(360deg); } }
+  .layer-focus { border: none; background: none; cursor: pointer; padding: 0 2px; font-size: 11px; flex: none; }
+  .cam-btn { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 6px; font-size: 11px;
+             border: 1px solid #bbb; border-radius: 4px; background: #f4f6f8; cursor: pointer; }
+  .cam-btn.bm-btn { background: #eef3fb; border-color: #9fb8dd; }
+  .note { color: #666; font-size: 11px; margin-top: 6px; }
+  #engines { margin-top: 8px; font-size: 11px; flex: none; }
+  #engines a { margin-right: 6px; }
+  #search-input { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+  .search-hit { padding: 3px 4px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 12px; }
+  .search-hit:hover { background: rgba(44,94,168,.1); }
+  .search-hit small { color: #888; display: block; }
+  #settings-window { position: absolute; top: 60px; left: 360px; z-index: 1002; width: 340px;
+    max-height: 75vh; overflow: auto; background: rgba(255,255,255,.95); border: 1px solid #ccc;
+    border-radius: 8px; padding: 10px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: 13px; }
+  #settings-window .settings-head { display: flex; justify-content: space-between; align-items: center;
+    font-weight: 600; margin-bottom: 8px; }
+  #settings-window .settings-head button { border: none; background: none; cursor: pointer; font-size: 16px; }
+  .inspector-input { width: 100%; box-sizing: border-box; height: 150px; font-family: monospace;
+                     font-size: 11px; border: 1px solid #ccc; border-radius: 4px; }
+  /* CANVAS 形式のベースマップコントロール。左ドックのレイヤ一覧下に独立配置 */
+  .basemap-control { display: flex; align-items: center; gap: 6px; margin-top: 8px;
+    padding: 6px 8px; border: 1px solid rgba(14,32,64,.15); flex: none;
+    border-radius: 7px; background: rgba(255,255,255,.9); box-shadow: 0 2px 8px rgba(10,20,40,.15); }
+  .basemap-control select { min-width: 0; flex: 1; padding: 4px 6px;
+    border: 1px solid #cbd9de; border-radius: 4px; background: #fff; font-size: 13px; }
+  /* レイヤ/AI/ベースマップを独立フレーム化。スプリッタで高さ調整可 */
+  .splitter { flex: none; height: 5px; cursor: ns-resize; margin: 4px -2px;
+    background: linear-gradient(#eef2f4, #dfe6ea); border-radius: 3px;
+    border-top: 1px solid #ccd4d9; }
+  .splitter:hover, .splitter.dragging { background: #2c5ea8; }
+  .tab-pane { min-height: 80px; }
+  #ai-section { flex: none; display: flex; flex-direction: column;
+    height: 30vh; min-height: 140px; overflow: hidden; }
+  /* chat-panel は区画の高さに縛り、回答欄のみ flex+内部スクロール。
+     入力欄(.chat-form)は常時表示 */
+  #ai-section .chat-panel { position: static; height: 100%; width: 100%;
+    max-height: none; padding: 0; border: 0; background: transparent; box-shadow: none;
+    display: flex; flex-direction: column; overflow: hidden; }
+  #ai-section .chat-panel > * { flex: none; }
+  #ai-section .chat-messages { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+  #ai-section .chat-form { flex: none; }
+  #chat-panel-toggle { display: none; }
+  #setpane-ai .field-label { display: block; font-size: 12px; margin: 8px 0 3px; }
+  .basemap-control.collapsed { padding: 4px; }
+  .basemap-control.collapsed select { display: none; }
+  #basemap-toggle { border: none; background: none; cursor: pointer; font-size: 14px; }
+  #load-progress { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    z-index: 1005; display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+    background: rgba(255,255,255,.95); border-radius: 14px; font-size: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 70vw; }
+  #load-progress[hidden] { display: none; }
+  #load-progress-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #load-progress-track { width: 110px; height: 4px; background: #dde4ea; border-radius: 2px;
+    overflow: hidden; flex: none; }
+  #load-progress-bar { display: block; height: 100%; width: 0; background: #2c5ea8;
+    transition: width .25s; }
+</style>
+</head>
+<body>
+<div id="layout">
+<div id="settings-window" hidden>
+  <div class="settings-head"><span>インスペクター</span><button id="settings-close" type="button" title="閉じる">×</button></div>
+  <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
+  <div style="display:flex;gap:6px;margin-top:6px;">
+    <button id="apply-inspector" type="button" style="flex:1;padding:5px;border:1px solid #4682b4;background:#4682b4;color:#fff;border-radius:4px;cursor:pointer;">登録</button>
+    <button id="export-inspector" type="button" style="flex:1;padding:5px;border:1px solid #666;background:#fff;border-radius:4px;cursor:pointer;">エクスポート(.kasc)</button>
+  </div>
+  <p id="inspector-status" class="note" aria-live="polite"></p>
+  <div id="setpane-ai"></div>
+</div>
+<div id="panel">
+  <h1><button id="panel-toggle" type="button" title="最小化" aria-label="最小化">−</button><span class="panel-title-text">KASUGAI Canvas <small>GSI Maps</small></span><span>
+    <button id="settings-open" type="button" title="インスペクター" style="border:none;background:none;cursor:pointer;font-size:14px">⚙</button>
+    <a id="help-open" href="https://yamamoto-ryuzo.github.io/kasugai_canvas/" target="_blank" rel="noopener noreferrer" title="ヘルプ" style="text-decoration:none;color:inherit;font-size:14px">?</a>
+  </span></h1>
+  <div class="project-row">
+    <select id="project-select"></select>
+    <button id="share-copy" type="button" title="現在位置URLをコピー">🔗</button>
+  </div>
+  <div id="tabs">
+    <button class="tab active" data-tab="layers" type="button">レイヤ</button>
+    <button class="tab" data-tab="search" type="button">検索</button>
+    <button class="tab" data-tab="camera" type="button">カメラ</button>
+    <button class="tab" data-tab="info" type="button">情報</button>
+  </div>
+  <div class="tab-pane" id="pane-layers">
+    <select id="theme-select" hidden style="width:100%;margin-bottom:6px;"></select>
+    <div id="layers"></div>
+  </div>
+  <div class="tab-pane" id="pane-search" hidden>
+    <input id="search-input" type="text" placeholder="文字で検索" />
+    <div id="search-results"></div>
+  </div>
+  <div class="tab-pane" id="pane-camera" hidden>
+    <div id="cams"></div>
+    <div class="cams-io" style="margin-top:6px;display:flex;gap:6px;">
+      <button id="cams-save-kasc" type="button" class="cam-btn" style="flex:1;">cam: 保存</button>
+      <button id="cams-save-qgis" type="button" class="cam-btn" style="flex:1;">QGIS XML 保存</button>
+      <input id="cams-import-file" type="file" accept=".xml" hidden>
+      <input id="cams-import-cam-file" type="file" accept=".txt,.kasc" hidden>
+      <button id="cams-load" type="button" class="cam-btn" style="flex:1;">読込</button>
+    </div>
+  </div>
+  <div class="tab-pane" id="pane-info" hidden>
+    <div id="info-link"></div>
+    <div id="unsupported" class="note"></div>
+  </div>
+  <div class="splitter" id="split-ai" title="ドラッグで高さ調整"></div>
+  <div id="ai-section" class="basemap-control">
+    <div class="ai-sec-title" style="font-weight:600;font-size:12px;margin-bottom:4px;">AI</div>
+  </div>
+  <div id="basemap-ctl" class="basemap-control">
+    <button id="basemap-toggle" type="button" aria-label="最小化">−</button>
+    <select id="basemap-select"></select>
+  </div>
+  <div id="engines"></div>
+</div>
+<div id="map-wrap">
+<iframe id="gsi-frame" title="地理院地図" allow="geolocation"></iframe>
+<div id="gsi-missing" hidden>
+  <div>vendored 地理院地図が見つかりません。<br>
+  <code>python tools/fetch_vendor.py</code> を実行して web/vendor/gsimaps/ を取得してください。</div>
+</div>
+<div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div>
+</div>
+</div>
+<script>
+  for (const btn of document.querySelectorAll("#tabs .tab")) {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#tabs .tab").forEach(b => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".tab-pane").forEach(p => { p.hidden = p.id !== `pane-${btn.dataset.tab}`; });
+    });
+  }
+  document.querySelector("#settings-open").addEventListener("click", () => {
+    const w = document.querySelector("#settings-window");
+    w.hidden = !w.hidden;
+  });
+  document.querySelector("#settings-close").addEventListener("click", () => {
+    document.querySelector("#settings-window").hidden = true;
+  });
+  document.querySelector("#share-copy").addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(location.href); } catch (e) {}
+  });
+  document.querySelector("#panel-toggle").addEventListener("click", e => {
+    const collapsed = document.querySelector("#panel").classList.toggle("collapsed");
+    e.currentTarget.textContent = collapsed ? "+" : "−";
+    e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    e.currentTarget.title = collapsed ? "展開" : "最小化";
+  });
+  document.querySelector("#basemap-toggle").addEventListener("click", () => {
+    document.querySelector("#basemap-ctl").classList.toggle("collapsed");
+  });
+  // スプリッタ: ドラッグで AI 区画の高さを変更(レイヤ区画は残りを占有)
+  (() => {
+    const split = document.getElementById("split-ai");
+    const target = document.getElementById("ai-section");
+    let dragging = false, startY = 0, startH = 0;
+    split.addEventListener("mousedown", e => {
+      dragging = true; startY = e.clientY; startH = target.getBoundingClientRect().height;
+      split.classList.add("dragging");
+      e.preventDefault();
+    });
+    window.addEventListener("mousemove", e => {
+      if (!dragging) return;
+      // 対象はハンドルの下側区画: 上に引くほど高くなるため符号は逆
+      const h = Math.min(Math.max(startH - (e.clientY - startY), 120), window.innerHeight - 280);
+      target.style.height = h + "px";
+    });
+    window.addEventListener("mouseup", () => { dragging = false; split.classList.remove("dragging"); });
+  })();
+</script>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

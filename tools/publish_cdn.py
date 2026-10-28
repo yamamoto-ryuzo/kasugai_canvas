@@ -102,9 +102,22 @@ def _commit_and_push(cdn_dir, message, push):
         print('pushed')
 
 
+def _ensure_vendors():
+    """vendor.json が指す上流スナップショットを web/vendor/ へ保証する。
+
+    web/vendor/ は kasugai_canvas 側では gitignore されているため、
+    ローカル未取得や stale なまま発行すると CDN 側で欠落・不一致になる。
+    発行前に fetch_vendor で sha を突き合わせて揃える
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import fetch_vendor
+    fetch_vendor.ensure_vendors(web_dir=WEB_DIR)
+
+
 def sync_channel(cdn_dir, channel):
     """web/ を指定ステージへ直接同期する。"""
     stage = os.path.join(cdn_dir, channel)
+    _ensure_vendors()
     _replace_dir(WEB_DIR, stage)
     version = _cargo_version()
     _write_version_json(stage, {

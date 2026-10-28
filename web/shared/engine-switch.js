@@ -6,7 +6,7 @@
 // 各エンジンは <webroot>/<name>/ に同居するため、ルートは絶対パスではなく
 // "../" で解決する(GitHub Pages 等のパスプレフィックス配信でも動く)。
 
-export const ENGINE_IDS = ["cesium", "maplibre", "openlayers", "leaflet"];
+export const ENGINE_IDS = ["cesium", "maplibre", "openlayers", "leaflet", "gsimaps"];
 
 // ---- 切替時のレイヤ状態引継ぎ ----
 // 切替元の表示状態(インスペクタの .kasc テキスト・テーマ選択・各レイヤの可視性)を

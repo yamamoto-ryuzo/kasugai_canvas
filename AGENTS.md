@@ -112,7 +112,7 @@
 
 ```
 web/
-  index.html      エンジン選択リダイレクト（?engine=cesium|maplibre|openlayers|leaflet、
+  index.html      エンジン選択リダイレクト（?engine=cesium|maplibre|openlayers|leaflet|gsimaps、
                   既定 cesium。engine 以外のクエリとハッシュは対象へ引継ぎ）
   cesium/         Cesium フロント（現行アプリ一式:
                   index.html/app.js/styles.css/PLUGIN/plugins.json/i18n 等）
@@ -120,6 +120,12 @@ web/
   openlayers/     OpenLayers フロント（.kasc プレイヤー実装済み: 同上）
   leaflet/        Leaflet フロント（.kasc プレイヤー実装済み: 同上。専用 pane で
                   .kasc 積み順を再現、回転系設定なし）
+  gsimaps/        GSI Maps フロント（中間エンジン: vendored 地理院地図
+                  gsi-cyberjapan/gsimaps を同一オリジン iframe(index_pm.html)で
+                  組み込み、.kasc を GSI/Leaflet API 経由で再生。ベンダーは
+                  web/vendor/gsimaps/(gitignore・tools/fetch_vendor.py で
+                  web/gsimaps/vendor.json の sha へ同期・publish 時に CDN 各
+                  チャンネルへ実ファイル配置)。上流コードは無改変で維持）
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
                   i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
   projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）

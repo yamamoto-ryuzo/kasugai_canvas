@@ -1,0 +1,788 @@
+// KASUGAI Canvas — GSI Maps フロント（中間エンジン）
+// vendored 地理院地図(gsi-cyberjapan/gsimaps, web/vendor/gsimaps/)を同一オリジン
+// iframe として組み込み、.kasc プロジェクトを GSI/Leaflet API 経由で再生する。
+// 上流コードは無改変で、制御・変換はすべてこの中間層が担う。
+//
+// .kasc → gsimaps の対応:
+//   ベクター系(geojson/gpkg/fgb/parquet/csv/tsv/duckdb/sql) → GeoJSON へ変換し
+//     作図リスト(SakuzuListItem)として注入。スタイルは `_`-props へ畳み込み
+//   base:/xyz:/wms:/wmts: → 外部タイル(appendOutSideTile)。地理院タイルの
+//     ベースは gsimaps 標準ベースマップ(base=)へマップ
+//   cam: → #z/lat/lon と setView。theme: → 可視性プリセット
+//   非対応(3dtiles 等) → 情報タブへ警告
+import {
+  loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight,
+  parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle,
+  fillThemeSelect, themeShowSet, kascTitleInTheme, rewriteKascVisibility,
+  applyPanelTitle, loadKascBookmarks, downloadKascCamLines, downloadQgisBookmarksXml,
+  layerAttribution, sanitizeAttributionFragment,
+  resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle,
+  defaultPointRadius, buildWmsTileTemplate, buildWmtsTileTemplate,
+} from "../shared/kasc.js";
+import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { createPlayerApi } from "../shared/player-api.js";
+import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
+import { initAiChat } from "../shared/ai-chat.js";
+
+// 診断: この中間エンジンが iframe 内で読み込まれた場合(ネスト)、
+// パネルに赤枠+バッジを付けて二重表示の切り分けに使う
+if (window.parent !== window) {
+  addEventListener("DOMContentLoaded", () => {
+    const p = document.getElementById("panel");
+    if (p) { p.style.outline = "4px solid #e33"; p.dataset.nested = "1"; }
+  });
+}
+
+const GSI_VENDOR_URL = "../vendor/gsimaps/index_pm.html";
+
+// ガード: iframe が何らかの経路で gsimaps 以外(自ページ含む)を読んだら
+// vendor URL へ戻す。load イベントで即検査して誤表示自体を見せない
+let lastVendorSrc = "";
+let lastFrameDoc = null;   // 最後に確認した iframe ドキュメント
+let booted = false;        // 初回ブート完了後は予期しない再読込を検出する
+let rebooting = false;
+let lastDocCtx = null;     // 再構築用 {doc, baseUrl}
+function guardFrameDoc() {
+  try {
+    const loc = frame.contentWindow?.location;
+    if (!loc || loc.href === "about:blank") return;
+    if (!loc.pathname.endsWith("/vendor/gsimaps/index_pm.html")) {
+      if (frame.src) {
+        console.warn("[gsimaps] iframe が想定外のページを読込 → vendor へ戻す:", loc.href);
+        frame.style.visibility = "hidden";
+        frame.src = lastVendorSrc || frame.src;
+      }
+      return;
+    }
+    frame.style.visibility = "visible";
+    // 予期しない iframe 再読込では GSI 参照が死ぬため再ブートする
+    if (booted && frame.contentDocument !== lastFrameDoc) {
+      lastFrameDoc = frame.contentDocument;
+      void reboot();
+      return;
+    }
+    lastFrameDoc = frame.contentDocument;
+  } catch (_) { /* cross-origin 時は触れない(発生しない想定) */ }
+}
+// iframe が再読込された時の再初期化: waitGsimaps→参照再取得→現プロジェクト再構築
+async function reboot() {
+  if (rebooting) return;
+  rebooting = true;
+  try {
+    gmap = null; sakuzu = null; gsiApp = null;
+    await waitGsimaps();
+    wireMapEvents();
+    // 再読込は frame.src の初期ハッシュで起き直るため、親が記録している
+    // 現在視点をレイヤ再構築より先に復元する(「一度移動して戻る」対策)
+    const v = parseUrlView();
+    if (hasUrlView(v) && gmap) {
+      gmap.setView([v.latitude, v.longitude], Number.isFinite(v.zoom) ? v.zoom : gmap.getZoom());
+    }
+    if (lastDocCtx) await buildFromDoc(lastDocCtx);
+  } catch (e) { console.error(e); }
+  finally { rebooting = false; }
+}
+// (登録は frame 宣言後)
+// layers0.txt のベースマップID。地理院タイルURLの /xyz/<id>/ をキーに、
+// gsimaps の base= id へマップする。それ以外は外部タイル扱い
+const GSI_BASE_ID_BY_TILE = {
+  std: "std", pale: "pale", blank: "blank", english: "english",
+  ort: "ort", seamlessphoto: "ort", // ort の実体URLは seamlessphoto
+};
+const VECTOR_TYPES = new Set([
+  "geojson", "layer", "flatgeobuf", "fgb", "geoparquet", "parquet",
+  "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql",
+]);
+const TILE_TYPES = new Set(["xyz", "tile", "wms", "wmts"]);
+const DEFAULT_CENTER = { lat: 36.104611, lng: 140.084556 };
+const DEFAULT_ZOOM = 5;
+
+const frame = document.getElementById("gsi-frame");
+frame.addEventListener("load", guardFrameDoc);
+setInterval(guardFrameDoc, 2000);
+const inspectorInput = document.getElementById("inspector-input");
+const themeSelect = document.getElementById("theme-select");
+const projectSelect = document.getElementById("project-select");
+
+let G = null;            // iframe 内の GSI 名前空間
+let gmap = null;         // iframe 内の Leaflet map
+let sakuzu = null;       // gsimaps 作図リスト
+let gsiApp = null;       // gsimaps インスタンス（_baseLayer は遅延生成のため都度参照）
+const gsiBase = () => gsiApp?._mainMap?._baseLayer;
+let currentProjectId = null;
+let lastBaseUrl = null;
+let layerEntries = [];   // {item, sakuzu, cb, pending, failed, _siblings}
+let baseEntries = [];    // {item, gsiId|null, tileLayer|null}
+let baseHidden = false;
+let currentCams = [];
+let currentThemes = [];
+let currentUnsupported = [];
+let currentDefaultStyles = {};
+let currentManifest = [];
+
+// ---- gsimaps 内部APIへの薄いアクセス ----
+function gsiBaseIdFromUrl(url) {
+  const m = /(?:maps\.gsi\.go\.jp|cyberjapandata\.gsi\.go\.jp)\/xyz\/([a-z0-9_]+)\//i.exec(String(url || ""));
+  return m ? (GSI_BASE_ID_BY_TILE[m[1]] || null) : null;
+}
+
+// iframe 側の gsimaps 初期化完了を待つ。vendor 未配置時はタイムアウトで案内。
+// 注意: gsimaps は layersJSON 読込→レイヤツリー構築(ls= 適用)完了時に
+// "initialized" を発火する。それより前に外部タイルを登録すると初期化で
+// tileList が作り直され消されるため、必ず initialized 後に注入する
+function waitGsimaps(timeoutMs = 30000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      document.getElementById("gsi-missing").hidden = false;
+      reject(new Error("地理院地図の初期化がタイムアウトしました"));
+    }, timeoutMs);
+    const done = gm => {
+      clearTimeout(timer);
+      const w = frame.contentWindow;
+      G = w.GSI;
+      gsiApp = gm;
+      gmap = gm._mainMap.getMap();
+      sakuzu = gm._sakuzuList;
+      resolve();
+    };
+    const tick = () => {
+      try {
+        const gm = frame.contentWindow?.GSI?.GLOBALS?.gsimaps;
+        // initialized 後のフォールバック判定: sakuzuList+mapLayerList+mapMenu
+        // が揃っていれば既に発火済みとみなす
+        if (gm?._mainMap?.getMap?.() && gm._sakuzuList &&
+            gm._mainMap._mapLayerList && gm._mainMap._mapMenu) {
+          return done(gm);
+        }
+        if (gm?.on && !tick._bound) {
+          tick._bound = true;
+          gm.on("initialized", () => done(gm));
+        }
+      } catch (_) { /* 初期化途上・読み込み失敗は次ポーリングへ */ }
+      setTimeout(tick, 200);
+    };
+    tick();
+  });
+}
+
+// 新しい iframe 地図へのイベント配線(reboot 時にも呼ぶ)
+function wireMapEvents() {
+  bindViewSync();
+  gmap?.on("moveend", scheduleViewportReload);
+}
+
+// iframe 地図移動 → 親ページ URL ハッシュ(#latitude=…&zoom=…)へ同期
+let boundViewMap = null;
+let urlViewTimer = null;
+function bindViewSync() {
+  if (!gmap || boundViewMap === gmap) return;
+  boundViewMap = gmap;
+  gmap.on("moveend", () => {
+    // 親 replaceState と iframe 側 L.Hash の hash 書込が連鎖すると
+    // joint session history で iframe が親URLを拾うケースがあるため、
+    // 親への書き込みはデバウンスして頻度を下げる
+    const c = gmap.getCenter();
+    const view = {
+      latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
+      height: zoomToCamHeight(c.lat, gmap.getZoom()), pitch: -90, heading: 0,
+    };
+    clearTimeout(urlViewTimer);
+    urlViewTimer = setTimeout(() => writeUrlView(view, currentProjectId), 300);
+  });
+}
+
+// ---- スタイル: kasc/simplestyle/default_style → sakuzuList の `_`-props ----
+function styledFeature(item, feature) {
+  const props = { ...(feature.properties || {}) };
+  const gt = feature.geometry?.type || "";
+  const ds = currentDefaultStyles || {};
+  const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  if (/Point/.test(gt)) {
+    const s = resolveDefaultPointStyle(props, ds.point, { color: "#2c5ea8", size: 0, opacity: 1 });
+    props._markerType = "CircleMarker";
+    props._radius = s.size ? defaultPointRadius(s.size) : 5;
+    props._color = props.stroke ?? "#ffffff";
+    props._weight = num(props["stroke-width"]) ?? 1;
+    props._fillColor = s.color;
+    props._fillOpacity = s.opacity ?? 1;
+    props._opacity = num(props["stroke-opacity"]) ?? 1;
+  } else if (/Polygon/.test(gt)) {
+    const s = resolveDefaultPolygonStyle(props, ds.polygon, ds.line,
+      { fill: "#3a7bd5", fillOpacity: 0.4, stroke: "#2c5ea8", strokeWidth: 1.5, strokeOpacity: 1 });
+    props._color = s.stroke; props._weight = s.strokeWidth; props._opacity = s.strokeOpacity;
+    props._fillColor = s.fill; props._fillOpacity = s.fillOpacity; props._fill = true;
+  } else {
+    const s = resolveDefaultLineStyle(props, ds.line, { color: "#2c5ea8", width: 1.5, opacity: 1 });
+    props._color = s.color; props._weight = s.width; props._opacity = s.opacity;
+  }
+  return { ...feature, properties: props };
+}
+
+// GeoJSON を作図アイテムとして注入。visible=false なら非表示で登録のみ
+function injectSakuzuLayer(item, geojson) {
+  const fc = { type: "FeatureCollection", features: (geojson?.features || []).map(f => styledFeature(item, f)) };
+  const layer = new G.GeoJSON(null, { geodesic: true });
+  layer.addData(fc);
+  const title = item.title || "layer";
+  const fileName = /\.[a-z0-9]+$/i.test(title) ? title : `${title}.geojson`;
+  const sk = new G.SakuzuListItem(
+    sakuzu, G.SakuzuListItem.GEOJSON, title, fileName, layer,
+    item.visible !== false, false, null);
+  sakuzu._list.push(sk);
+  sakuzu.fire("change");
+  return sk;
+}
+
+function removeSakuzuItem(sk) {
+  if (!sk) return;
+  try { sk.setVisible(false); } catch (_) {}
+  const idx = sakuzu._list.indexOf(sk);
+  if (idx >= 0) sakuzu._list.splice(idx, 1);
+  sakuzu.fire("change");
+}
+
+// ---- ベースマップ ----
+// 地理院タイルの base: 行は gsimaps の baseLayer.setActiveId、それ以外の
+// xyz/wms/wmts 系は外部タイルとして登録して select で切り替える
+function tileUrlOf(item) {
+  const url = resolveKascUrl(item.url, lastBaseUrl);
+  if (item.type === "wms") return buildWmsTileTemplate(url, item.opts || {});
+  if (item.type === "wmts") return buildWmtsTileTemplate(url, item.opts || {});
+  return url;
+}
+
+// タイル行 → 中間層管理の Leaflet tileLayer。
+// gsimaps の外部タイル機構(appendOutSideTile)は refreshTileList で tileList が
+// 全置換され消えるため使わず、同一オリジンの Leaflet に直接載せて管理する
+function createTileLayer(item) {
+  const w = frame.contentWindow;
+  const opts = item.opts || {};
+  return w.L.tileLayer(tileUrlOf(item), {
+    minZoom: opts.minzoom ? Number(opts.minzoom) : undefined,
+    maxZoom: opts.maxzoom ? Number(opts.maxzoom) : undefined,
+    attribution: layerAttribution(item) || "",
+    opacity: 1,
+    // base 行は GSI タイルと同じ低 zIndex、オーバーレイはその上
+    zIndex: item.type === "base" ? 1 : 10,
+  });
+}
+
+// ---- レイヤー行 ----
+function effectiveVisible(entry) {
+  return entry.item.visible !== false;
+}
+
+function applyEntryVisibility(entry) {
+  const on = effectiveVisible(entry);
+  if (entry.sakuzu) entry.sakuzu.setVisible(on);
+  if (entry.tileLayer && gmap) {
+    if (on && !gmap.hasLayer(entry.tileLayer)) gmap.addLayer(entry.tileLayer);
+    else if (!on && gmap.hasLayer(entry.tileLayer)) gmap.removeLayer(entry.tileLayer);
+  }
+}
+
+function focusEntry(entry) {
+  if (!gmap) return;
+  const env = entry.item._env || (entry.item._geojson && geojsonExtent(entry.item._geojson));
+  if (env) gmap.fitBounds([[env.south, env.west], [env.north, env.east]], { padding: [40, 40] });
+  else if (entry.sakuzu?._layer?.getBounds) {
+    try { const b = entry.sakuzu._layer.getBounds(); if (b?.isValid?.()) gmap.fitBounds(b, { padding: [40, 40] }); } catch (_) {}
+  }
+}
+
+async function mountEntry(entry, preloaded) {
+  const item = entry.item;
+  if (VECTOR_TYPES.has(item.type)) {
+    const result = preloaded?.geojson ? { geojson: preloaded.geojson } : await loadVectorItem(item, lastBaseUrl);
+    item._geojson = result.geojson;
+    item._env = geojsonExtent(result.geojson) || null;
+    if (result.viewportQuery) item._viewportQuery = true;
+    if (item.opts?.style) entry._qmlPending = true; // QML→_props 変換は未対応
+    entry.sakuzu = injectSakuzuLayer(item, item._geojson);
+    return;
+  }
+  if (TILE_TYPES.has(item.type) || item.type === "base") {
+    entry.tileLayer = createTileLayer(item);
+    if (item.visible !== false && gmap) gmap.addLayer(entry.tileLayer);
+    return;
+  }
+  throw new Error(`未対応の行: ${item.type}`);
+}
+
+function unmountEntry(entry) {
+  if (entry.sakuzu) { removeSakuzuItem(entry.sakuzu); entry.sakuzu = null; }
+  if (entry.tileLayer && gmap?.hasLayer(entry.tileLayer)) gmap.removeLayer(entry.tileLayer);
+  entry.tileLayer = null;
+}
+
+// viewportQuery 行は表示範囲変化で再取得が必要（moveend で再注入）
+async function reloadEntryData(entry) {
+  const wasVisible = effectiveVisible(entry);
+  removeSakuzuItem(entry.sakuzu);
+  entry.sakuzu = null;
+  const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds());
+  entry.item._geojson = result.geojson;
+  entry.item._env = geojsonExtent(result.geojson) || null;
+  entry.sakuzu = injectSakuzuLayer(entry.item, result.geojson);
+  if (!wasVisible) entry.sakuzu.setVisible(false);
+}
+
+function viewBounds() {
+  if (!gmap) return null;
+  const b = gmap.getBounds();
+  return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+}
+
+let viewportReloadTimer = null;
+function scheduleViewportReload() {
+  clearTimeout(viewportReloadTimer);
+  viewportReloadTimer = setTimeout(() => {
+    for (const e of layerEntries) {
+      if (e.item._viewportQuery && effectiveVisible(e)) reloadEntryData(e).catch(console.error);
+    }
+  }, 400);
+}
+
+// ---- パネル ----
+function updateLoadProgress(done, total, label) {
+  const el = document.getElementById("load-progress");
+  const bar = document.getElementById("load-progress-bar");
+  document.getElementById("load-progress-text").textContent =
+    total ? `読込中 ${done}/${total}${label ? ` ${label}` : ""}` : "";
+  bar.style.width = total ? `${Math.round(done / total * 100)}%` : "0";
+  el.hidden = done >= total;
+}
+
+function renderLayerRows() {
+  const box = document.getElementById("layers");
+  box.replaceChildren();
+  const exclusiveGroups = new Map();
+  for (const e of layerEntries) {
+    const { group, title, exclusiveGroup } = splitKascTitle(e.item.title);
+    if (exclusiveGroup && group) {
+      if (!exclusiveGroups.has(group)) exclusiveGroups.set(group, []);
+      exclusiveGroups.get(group).push(e);
+    }
+  }
+  for (const members of exclusiveGroups.values()) members.forEach(e => { e._siblings = members; e._radio = members.length > 1; });
+
+  const groups = new Map();
+  for (const e of layerEntries) {
+    const { group } = splitKascTitle(e.item.title);
+    if (!groups.has(group || "")) groups.set(group || "", []);
+    groups.get(group || "").push(e);
+  }
+  const addRow = (e, container) => {
+    const { title } = splitKascTitle(e.item.title);
+    const row = document.createElement("div");
+    row.className = "layer-row";
+    const cb = document.createElement("input");
+    cb.type = e._radio ? "radio" : "checkbox";
+    cb.checked = e.item.visible !== false;
+    e.cb = cb;
+    cb.addEventListener("change", () => {
+      if (e._radio && cb.checked) {
+        for (const sib of e._siblings) {
+          if (sib === e) continue;
+          sib.item.visible = false; if (sib.cb) sib.cb.checked = false;
+          applyEntryVisibility(sib);
+        }
+      }
+      e.item.visible = cb.checked;
+      applyEntryVisibility(e);
+      maybeLoadEntry(e);
+    });
+    const st = document.createElement("span");
+    st.className = "layer-status";
+    entry_status(e, st);
+    const name = document.createElement("span");
+    name.textContent = title || e.item.url || e.item.type;
+    name.title = e.item.title || "";
+    const fb = document.createElement("button");
+    fb.type = "button"; fb.className = "layer-focus"; fb.textContent = "◎";
+    fb.title = "範囲へ移動";
+    fb.addEventListener("click", ev => { ev.stopPropagation(); focusEntry(e); });
+    row.append(cb, st, name, fb);
+    container.append(row);
+  };
+  for (const [group, members] of groups) {
+    const container = box;
+    if (group) {
+      const head = document.createElement("div");
+      head.className = "layer-row";
+      head.innerHTML = `<span style="font-weight:600;">${group}</span>`;
+      container.append(head);
+    }
+    for (const e of members) addRow(e, container);
+  }
+  const unsup = document.getElementById("unsupported");
+  unsup.textContent = currentUnsupported.length
+    ? `未対応行: ${[...new Set(currentUnsupported.map(i => i.type))].join(", ")}（他エンジンで対応）`
+    : "";
+}
+
+function entry_status(e, st) {
+  if (e.failed) { st.textContent = "失敗"; st.classList.add("failed"); }
+  else if (e.pending) st.classList.add("loading");
+  else st.textContent = "";
+}
+
+// ---- テーマ ----
+function updateThemeSelect(themes) {
+  currentThemes = themes || [];
+  fillThemeSelect(themeSelect, currentThemes);
+}
+function applyKascTheme(theme) {
+  const show = themeShowSet(theme);
+  for (const e of layerEntries) {
+    e.item.visible = show == null || kascTitleInTheme(e.item.title, show);
+    applyEntryVisibility(e);
+    maybeLoadEntry(e);
+  }
+  renderLayerRows();
+  inspectorInput.value = rewriteKascVisibility(inspectorInput.value, show);
+}
+themeSelect?.addEventListener("change", () => {
+  const theme = currentThemes.find(t => t.name === themeSelect.value);
+  if (theme) applyKascTheme(theme);
+});
+
+// ---- カメラ ----
+function fillCamPanel(cams) {
+  const box = document.getElementById("cams");
+  box.replaceChildren();
+  for (const c of cams || []) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "cam-btn" + (c.bookmark ? " bm-btn" : "");
+    b.textContent = c.name || `${Number(c.latitude).toFixed(4)},${Number(c.longitude).toFixed(4)}`;
+    b.title = `${c.latitude}, ${c.longitude}`;
+    b.addEventListener("click", () => {
+      if (c._extent && gmap) gmap.fitBounds([[c._extent.south, c._extent.west], [c._extent.north, c._extent.east]], { padding: [30, 30] });
+      else flyToCam(c);
+    });
+    box.append(b);
+  }
+}
+function flyToCam(cam) {
+  if (!gmap) return;
+  const zoom = Number.isFinite(cam.zoom) ? cam.zoom : camToZoom(cam);
+  gmap.setView([Number(cam.latitude), Number(cam.longitude)], zoom);
+}
+document.getElementById("cams-save-kasc")?.addEventListener("click", () => downloadKascCamLines(currentCams));
+document.getElementById("cams-save-qgis")?.addEventListener("click", () => downloadQgisBookmarksXml(currentCams));
+document.getElementById("cams-load")?.addEventListener("click", () => document.getElementById("cams-import-file")?.click());
+document.getElementById("cams-import-file")?.addEventListener("change", async e => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  const text = await file.text();
+  const list = (await import("../shared/kasc.js")).parseQgisBookmarksXml(text);
+  for (const bm of list) { const c = (await import("../shared/kasc.js")).qgisBookmarkToCam(bm); c.bookmark = true; currentCams.push(c); }
+  fillCamPanel(currentCams);
+});
+
+// ---- 検索（親側のデータを対象。gsimaps 検索は外部依存のため使わない）----
+document.getElementById("search-input")?.addEventListener("input", () => {
+  const q = document.getElementById("search-input").value.trim();
+  const box = document.getElementById("search-results");
+  box.replaceChildren();
+  if (!q || !window.kasugaiApi) return;
+  for (const hit of window.kasugaiApi.vectorSearch(q)) {
+    const el = document.createElement("div");
+    el.className = "search-hit";
+    el.innerHTML = `<small>${hit.layer} / ${hit.property}</small>${String(hit.value).slice(0, 60)}`;
+    el.addEventListener("click", () => {
+      if (Number.isFinite(hit.latitude) && gmap) gmap.setView([hit.latitude, hit.longitude], Math.max(gmap.getZoom(), 14));
+    });
+    box.append(el);
+  }
+});
+
+// ---- ベースマップ select ----
+function rebuildBasemapSelect() {
+  const sel = document.getElementById("basemap-select");
+  sel.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "-1"; none.textContent = "ベースマップなし";
+  sel.append(none);
+  baseEntries.forEach((e, i) => {
+    const o = document.createElement("option");
+    o.value = String(i); o.textContent = e.item.title || `base ${i + 1}`;
+    sel.append(o);
+  });
+  sel.value = baseHidden ? "-1" : "0";
+}
+function applyBaseSelection() {
+  const sel = document.getElementById("basemap-select");
+  const idx = Number(sel?.value ?? -1);
+  baseHidden = idx < 0;
+  // gsimaps 標準ベースマップ: .kasc の先頭 GSI ベース行が選ばれた時だけ使い、
+  // それ以外・なし選択時は blank(白地図)にして外部タイルを実質ベースにする
+  const gsiEntry = baseEntries.find(e => e.gsiId);
+  const active = baseEntries[idx];
+  const bl = gsiBase();
+  if (bl) {
+    const id = (!baseHidden && active?.gsiId) ? active.gsiId
+      : (!baseHidden && !active && gsiEntry?.gsiId) ? gsiEntry.gsiId : "blank";
+    try { bl.setActiveId(id); } catch (_) {}
+  } else {
+    // _baseLayer は gsimaps 内部で遅延生成されるため未到達時は一度だけ再試行
+    setTimeout(applyBaseSelection, 800);
+  }
+  baseEntries.forEach((e, i) => {
+    if (!e.tileLayer || !gmap) return;
+    const on = !baseHidden && i === idx;
+    if (on && !gmap.hasLayer(e.tileLayer)) gmap.addLayer(e.tileLayer);
+    else if (!on && gmap.hasLayer(e.tileLayer)) gmap.removeLayer(e.tileLayer);
+  });
+}
+document.getElementById("basemap-select")?.addEventListener("change", applyBaseSelection);
+
+// ---- inspector ----
+function setInspectorStatus(msg, isError = false) {
+  const el = document.getElementById("inspector-status");
+  el.textContent = msg || "";
+  el.style.color = isError ? "#c0392b" : "#666";
+}
+async function applyInspectorText(text) {
+  const doc = parseKasc(String(text ?? ""));
+  await buildFromDoc({ doc, baseUrl: lastBaseUrl });
+  inspectorInput.value = String(text ?? "");
+}
+document.getElementById("apply-inspector")?.addEventListener("click", async () => {
+  try { setInspectorStatus("適用中…"); await applyInspectorText(inspectorInput.value); setInspectorStatus("適用しました"); }
+  catch (e) { setInspectorStatus(`適用失敗: ${e?.message || e}`, true); }
+});
+document.getElementById("export-inspector")?.addEventListener("click", () => {
+  const blob = new Blob([inspectorInput.value], { type: "text/plain" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "kasugai_canvas.kasc"; a.click();
+  URL.revokeObjectURL(a.href);
+  setInspectorStatus("エクスポートしました");
+});
+
+// ---- プロジェクト切替 ----
+function fillProjectSelect(manifest, selected) {
+  projectSelect.replaceChildren();
+  for (const entry of manifest || []) {
+    const id = entry.id || entry;
+    const o = document.createElement("option");
+    o.value = id; o.textContent = entry.title || id;
+    projectSelect.append(o);
+  }
+  if (selected) projectSelect.value = selected;
+}
+projectSelect?.addEventListener("change", () => { void loadProject(projectSelect.value); });
+
+async function loadProject(projectId) {
+  const proj = await loadKascProject(projectId);
+  currentManifest = proj.manifest;
+  fillProjectSelect(proj.manifest, proj.id);
+  await applyProject(proj);
+}
+
+// ---- .kasc doc → gsimaps 構築 ----
+function resetAll() {
+  for (const e of layerEntries) {
+    if (e.sakuzu) removeSakuzuItem(e.sakuzu);
+    if (e.tileLayer && gmap?.hasLayer(e.tileLayer)) gmap.removeLayer(e.tileLayer);
+  }
+  layerEntries = [];
+  for (const e of baseEntries) {
+    if (e.tileLayer && gmap?.hasLayer(e.tileLayer)) gmap.removeLayer(e.tileLayer);
+  }
+  baseEntries = [];
+  currentUnsupported = [];
+}
+
+async function applyProject(proj) {
+  lastBaseUrl = proj.baseUrl;
+  currentProjectId = proj.id;
+  inspectorInput.value = proj.raw || "";
+  applyPanelTitle(proj.doc.title || proj.title);
+  // 起動用ハッシュ: URL ビュー > 最初の cam > 既定
+  const uv = parseUrlView();
+  const cam = proj.doc.cams.find(c => !c.bookmark) || proj.doc.cams[0];
+  const lat = hasUrlView(uv) ? uv.latitude : (cam?.latitude ?? DEFAULT_CENTER.lat);
+  const lng = hasUrlView(uv) ? uv.longitude : (cam?.longitude ?? DEFAULT_CENTER.lng);
+  const zoom = hasUrlView(uv) && Number.isFinite(uv.zoom) ? uv.zoom : (cam ? camToZoom(cam) : DEFAULT_ZOOM);
+  // 最初の表示 GSI ベース行 → base=。無ければ std（後で外部タイルが上に乗る）
+  const gsiBaseRow = proj.doc.bases.find(b => b.visible !== false && gsiBaseIdFromUrl(b.url));
+  const baseId = gsiBaseRow ? gsiBaseIdFromUrl(gsiBaseRow.url) : "std";
+  const z = Math.max(2, Math.min(18, Math.round(zoom)));
+  frame.src = `${GSI_VENDOR_URL}#${z}/${lat.toFixed(6)}/${lng.toFixed(6)}/&base=${baseId}&ls=${baseId}&disp=1`;
+  lastVendorSrc = frame.src;
+  await waitGsimaps();
+  wireMapEvents();
+  await buildFromDoc({ doc: proj.doc, baseUrl: proj.baseUrl, noFit: hasUrlView(uv) || !!cam });
+  booted = true;
+  // エンジン切替時の引継ぎ状態を一度だけ消費
+  const sw = consumeEngineSwitchState();
+  if (sw?.inspector) {
+    inspectorInput.value = sw.inspector;
+    await applyInspectorText(sw.inspector);
+    if (sw.theme) {
+      const th = currentThemes.find(t => t.name === sw.theme);
+      if (th) { themeSelect.value = th.name; applyKascTheme(th); }
+    }
+  }
+}
+
+async function buildFromDoc({ doc, baseUrl, noFit = false }) {
+  lastDocCtx = { doc, baseUrl };
+  resetAll();
+  currentDefaultStyles = doc.defaultStyles || {};
+  currentUnsupported = [...doc.unsupported];
+  lastBaseUrl = baseUrl || lastBaseUrl;
+
+  // base: 行（GSI は select 項目として登録、外部タイルも同様）
+  for (const item of doc.bases) {
+    const gsiId = gsiBaseIdFromUrl(item.url);
+    const entry = { item, gsiId, tileLayer: null };
+    baseEntries.push(entry);
+  }
+  // base 行の外部タイル分は作成のみ（表示は applyBaseSelection が制御）
+  for (const e of baseEntries) {
+    if (e.gsiId || e.item.mode) continue; // transparent/none はタイル無し
+    try { e.tileLayer = createTileLayer({ ...e.item, type: "xyz" }); } catch (err) { console.warn(err); }
+  }
+  rebuildBasemapSelect();
+  applyBaseSelection();
+
+  // ベクター・タイル行
+  layerEntries = doc.layers
+    .filter(item => VECTOR_TYPES.has(item.type) || TILE_TYPES.has(item.type))
+    .map(item => ({ item, pending: true }));
+  renderLayerRows();
+  let done = 0;
+  const total = layerEntries.length;
+  for (const e of layerEntries) {
+    try {
+      await mountEntry(e);
+      e.pending = false;
+    } catch (err) {
+      console.warn(e.item.title, err);
+      e.pending = false; e.failed = true;
+      currentUnsupported.push({ type: `${e.item.type}(読込失敗)` });
+    }
+    updateLoadProgress(++done, total, e.item.title);
+    renderLayerRows();
+  }
+  updateLoadProgress(total, total);
+
+  // cam/bookmark/テーマ/凡例/情報
+  const bmCams = await loadKascBookmarks(doc.bookmarks, baseUrl).catch(() => []);
+  currentCams = [...doc.cams, ...bmCams];
+  fillCamPanel(currentCams);
+  updateThemeSelect(doc.themes);
+  applyPanelTitle(doc.title || null);
+  const info = document.getElementById("info-link");
+  info.replaceChildren();
+  if (doc.info) info.append(sanitizeAttributionFragment(doc.info));
+  if (doc.legends?.length) {
+    for (const lg of doc.legends) {
+      const img = document.createElement("img");
+      img.src = resolveKascUrl(lg.url, baseUrl);
+      img.alt = lg.title || "凡例";
+      img.style.maxWidth = "100%";
+      info.append(img);
+    }
+  }
+
+  // 初回表示: URL/cam 指定が無ければデータ範囲へフィット
+  if (!noFit) {
+    const env = layerEntries.map(e => e.item._env).find(Boolean);
+    if (env && gmap) gmap.fitBounds([[env.south, env.west], [env.north, env.east]], { padding: [40, 40] });
+  }
+}
+
+// ---- kasugaiApi（AI/外部制御） ----
+function maybeLoadEntry(entry) {
+  if (entry.pending || entry.sakuzu || entry.tileLayer) return;
+  entry.pending = true;
+  mountEntry(entry).then(() => { entry.pending = false; renderLayerRows(); })
+    .catch(err => { entry.pending = false; entry.failed = true; renderLayerRows(); console.warn(err); });
+}
+
+window.kasugaiApi = createPlayerApi({
+  engine: "gsimaps",
+  getEntries: () => layerEntries,
+  getBaseEntries: () => baseEntries,
+  getProjectId: () => currentProjectId,
+  getBaseUrl: () => lastBaseUrl,
+  loadProject,
+  applyInspectorText,
+  getInspectorText: () => inspectorInput.value,
+  setInspectorText: v => { inspectorInput.value = v; },
+  applyEntryVisibility, focusEntry, maybeLoadEntry,
+  applyLegendFilter: entry => applyEntryVisibility(entry),
+  rerenderLayers: renderLayerRows,
+  getThemes: () => currentThemes,
+  applyThemeByName: name => {
+    const theme = currentThemes.find(t => t.name === name);
+    if (!theme) return false;
+    applyKascTheme(theme);
+    if (themeSelect) themeSelect.value = theme.name;
+    return true;
+  },
+  getCams: () => currentCams,
+  flyToView: v => gmap?.setView([Number(v.latitude), Number(v.longitude)],
+    Number.isFinite(v.zoom) ? v.zoom : camToZoom(v)),
+  getViewInfo: () => {
+    if (!gmap) return null;
+    const c = gmap.getCenter();
+    return { latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(), heading: 0, pitchDeg: 0 };
+  },
+  fitBoundsView: (w, s, e, n) => gmap?.fitBounds([[s, w], [n, e]], { padding: [50, 50] }),
+  mountEntry: async (entry, preloaded) => {
+    await mountEntry(entry, preloaded);
+    applyEntryVisibility(entry);
+  },
+  unmountEntry,
+  reloadEntryData: async entry => {
+    const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds());
+    entry.item._geojson = result.geojson;
+    entry.item._env = geojsonExtent(result.geojson) || null;
+    removeSakuzuItem(entry.sakuzu);
+    entry.sakuzu = injectSakuzuLayer(entry.item, result.geojson);
+    applyEntryVisibility(entry);
+  },
+  getEntryGeoJson: entry => entry.item._geojson || null,
+  setBaseEntryVisible: (entry, on) => {
+    const bl = gsiBase();
+    if (entry.gsiId && bl) { try { if (on) bl.setActiveId(entry.gsiId); } catch (_) {} }
+    if (entry.tileLayer && gmap) {
+      if (on && !gmap.hasLayer(entry.tileLayer)) gmap.addLayer(entry.tileLayer);
+      else if (!on && gmap.hasLayer(entry.tileLayer)) gmap.removeLayer(entry.tileLayer);
+    }
+  },
+});
+mountEngineSwitcher(document.querySelector("#engines"), "gsimaps");
+void initAiChat({ engine: "gsimaps", manageBackend: true });
+// ai-chat.js が body 直下に作る #chat-panel(fixed 浮遊)を左ドックの AI 区画へ移設。
+// 再生成・遅延生成にも対応するため MutationObserver で常時監視する
+function dockChatPanel() {
+  const chat = document.querySelector("#chat-panel");
+  const dock = document.querySelector("#ai-section");
+  if (chat && dock && chat.parentElement !== dock) dock.appendChild(chat);
+}
+new MutationObserver(dockChatPanel).observe(document.body, { childList: true });
+setTimeout(dockChatPanel, 0);
+// デバッグ/検証用（内部構造の読み取りのみ）
+window._gsimapsDbg = {
+  get baseEntries() { return baseEntries; },
+  get layerEntries() { return layerEntries; },
+  get gsiLayerList() { return gsiApp?._mainMap?._mapLayerList; },
+};
+
+// ---- 起動 ----
+(async () => {
+  try {
+    await loadProject();
+  } catch (e) {
+    console.error(e);
+    setInspectorStatus(`読み込み失敗: ${e?.message || e}`, true);
+    document.getElementById("unsupported").textContent = `プロジェクト読込失敗: ${e?.message || e}`;
+  }
+})();
