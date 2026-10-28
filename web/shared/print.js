@@ -54,7 +54,9 @@ const PAPERS = {
   a3p: { w: 297, h: 420 },
 };
 
-const QGIS_PORTS = [8089];
+// geo_webview の優先ポートは8089。占有時は連番フォールバックするため
+// 検出は8089-8091を順に試す
+const QGIS_PORTS = [8089, 8090, 8091];
 
 const mm2px = (mm, dpi) => Math.round(mm / 25.4 * dpi);
 
@@ -468,7 +470,10 @@ export function initPrint(opts) {
   }
 
   // ブラウザ印刷: 合成画像を print-only のシートに入れて window.print()
+  let printing = false;
   $("#print-do").addEventListener("click", async () => {
+    if (printing) return;
+    printing = true;
     $("#print-do").disabled = true;
     try {
       const c = await compose();
@@ -487,21 +492,26 @@ export function initPrint(opts) {
       }
       sheet.innerHTML = "";
       const img = document.createElement("img");
-      img.src = c.toDataURL("image/png");
-      sheet.appendChild(img);
-      img.onload = () => {
+      img.addEventListener("load", () => {
         window.print();
         $("#print-do").disabled = false;
+        printing = false;
         status("");
-      };
+      }, { once: true });
+      sheet.appendChild(img);
+      img.src = c.toDataURL("image/png");
     } catch (e) {
       $("#print-do").disabled = false;
+      printing = false;
       status(String(e), true);
     }
   });
 
   // PNG 保存
+  let saving = false;
   $("#print-png").addEventListener("click", async () => {
+    if (saving) return;
+    saving = true;
     $("#print-png").disabled = true;
     try {
       const c = await compose();
@@ -514,6 +524,7 @@ export function initPrint(opts) {
       status(String(e), true);
     } finally {
       $("#print-png").disabled = false;
+      saving = false;
     }
   });
 
