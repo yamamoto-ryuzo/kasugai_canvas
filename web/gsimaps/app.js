@@ -15,7 +15,7 @@ import {
   parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle,
   fillThemeSelect, themeShowSet, kascTitleInTheme, rewriteKascVisibility,
   applyPanelTitle, loadKascBookmarks, downloadKascCamLines, downloadQgisBookmarksXml,
-  layerAttribution, sanitizeAttributionFragment,
+  layerAttribution, loadKascInfoContent,
   resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle,
   defaultPointRadius, buildWmsTileTemplate, buildWmtsTileTemplate,
 } from "../shared/kasc.js";
@@ -163,8 +163,13 @@ function waitGsimaps(timeoutMs = 30000) {
       // 親側の管理に一元化する。ベンダー側の表示機能には影響しない
       const h = gm._hash;
       if (h) {
+        // removeFrom は this.map=null にするが isListening=false だと残った
+        // moveend/hashchange リスナが this.map._loaded で落ちるため、ハンドラ
+        // 自体を no-op 化してから detach する
+        try { h.onMapMove = () => {}; h.onHashChange = () => {}; } catch (_) {}
+        try { h.movingMap = true; h.stopListening?.(); } catch (_) {}
         try { h.removeFrom?.(gmap); } catch (_) {}
-        try { if (h._interval) clearInterval(h._interval); } catch (_) {}
+        try { if (h.hashChangeInterval) clearInterval(h.hashChangeInterval); } catch (_) {}
       }
       interceptGlobeOpen(w);
       resolve();
@@ -514,14 +519,18 @@ function tileUrlOf(item) {
 function createTileLayer(item) {
   const w = frame.contentWindow;
   const opts = item.opts || {};
-  return w.L.tileLayer(tileUrlOf(item), {
+  const layerOpts = {
     minZoom: opts.minzoom ? Number(opts.minzoom) : undefined,
     maxZoom: opts.maxzoom ? Number(opts.maxzoom) : undefined,
     attribution: layerAttribution(item) || "",
-    opacity: 1,
+    opacity: opts.opacity != null ? Number(opts.opacity) : 1,
     // base 行は GSI タイルと同じ低 zIndex、オーバーレイはその上
     zIndex: item.type === "base" ? 1 : 10,
-  });
+  };
+  // undefined だと Leaflet 既定値('abc')を undefined で上書きし _getSubdomain が
+  // 落ちるため、値がある時だけ渡す
+  if (opts.subdomains) layerOpts.subdomains = String(opts.subdomains);
+  return w.L.tileLayer(tileUrlOf(item), layerOpts);
 }
 
 // ---- レイヤー行 ----
@@ -1093,9 +1102,8 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
   fillCamPanel(currentCams);
   updateThemeSelect(doc.themes);
   applyPanelTitle(doc.title || null);
-  const info = document.getElementById("info-link");
-  info.replaceChildren();
-  if (doc.info) info.append(sanitizeAttributionFragment(doc.info));
+  // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
+  void loadKascInfoContent(document.getElementById("info-link"), doc.info, baseUrl);
   const legendsBox = document.getElementById("legends");
   legendsBox?.replaceChildren();
   if (doc.legends?.length) {
@@ -1113,6 +1121,379 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
     const env = layerEntries.map(e => e.item._env).find(Boolean);
     if (env && gmap) gmap.fitBounds([[env.south, env.west], [env.north, env.east]], { padding: [40, 40] });
   }
+}
+
+// ---- GSI 表示レイヤの取得・取り込み ----
+// iframe 内 gsimaps の _mapLayerList(tileList=タイル系/list=ファイル系)を読み、
+// Canvas レイヤ(xyz行)へ反映する。tileList は先頭=最前面のため、取り込みは
+// 末尾から mount して積み順を再現する
+// カタログ/表示中レイヤの info が .kasc の xyz: 行で表現できるかを判定する
+function gsiTileImportable(info) {
+  const url = String(info?.url || "");
+  // ベースマップフォルダ(layerBaseFolderSYS)の子は gsimaps のベース切替対象で、
+  // オーバーレイ取り込みするとベースと二重描画になるため対象外とする
+  const isBase = info.parent && info.parent.title_sys === frame.contentWindow?.CONFIG?.layerBaseFolderSYS;
+  if (isBase) return { importable: false, reason: "ベースマップレイヤ(setGsiBasemap で切替)" };
+  if (info._isComparePhoto) return { importable: false, reason: "時系列表示レイヤは取り込めません" };
+  if (info.layerType === "kml" || /\.kml(\?|$)/i.test(url)) return { importable: false, reason: "KML レイヤは.kascで表現できません" };
+  if (/\{z\}/i.test(url) && /\.(png|jpe?g|webp|gif|avif)(\?.*)?$/i.test(url)) return { importable: true, reason: "" };
+  if (/\{z\}/i.test(url)) return { importable: false, reason: "ベクタ系タイル(geojson等)は.kascのxyz行で表現できません" };
+  return { importable: false, reason: "タイルURLではないため取り込めません" };
+}
+
+function gsiDisplayedLayers() {
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  if (!ml) return [];
+  const rows = [];
+  const readInfo = (info, kind) => {
+    const vi = info._visibleInfo || {};
+    // プロトコル相対を https へ正規化(.kasc へ書き出す形に揃える)
+    const url = String(info.url || "").replace(/^\/\//, "https://");
+    const { importable, reason } = gsiTileImportable(info);
+    const imported = layerEntries.some(e => e.item._gsiId === info.id || (url && e.item.url === url));
+    return {
+      id: info.id || "", title: String(info.title || info.id || ""), kind, url,
+      importable, reason, imported,
+      visible: !vi._isHidden,
+      opacity: Number.isFinite(vi.opacity) ? vi.opacity : 1,
+      minZoom: info.minZoom, maxZoom: info.maxZoom,
+      legendUrl: info.legendUrl || "", outside: !!info._isOutside,
+      subdomains: String(info.subdomains || info.subdmains || ""),
+      attribution: String(info.attribution || ""),
+    };
+  };
+  for (const info of ml.tileList || []) rows.push(readInfo(info, "tile"));
+  for (const info of ml.list || []) rows.push(readInfo(info, "file"));
+  return rows;
+}
+
+function gsiLayerAttr(l) {
+  if (l.attribution) return l.attribution;
+  if (/(maps|cyberjapandata)\.gsi\.go\.jp/i.test(l.url)) return "国土地理院";
+  return "";
+}
+
+// 表示中レイヤを Canvas レイヤ+インスペクタ(.kasc)へ反映。
+// ids 省略時は取込可能な全レイヤ。同一 id/URL の既存レイヤはスキップする
+async function importGsiLayers({ ids = null } = {}) {
+  if (globeMode) return { ok: false, message: "Globe表示中は取り込めません。「2D地図に戻る」後に実行してください" };
+  const wanted = gsiDisplayedLayers().filter(l => !ids?.length || ids.includes(l.id) || ids.includes(l.title));
+  if (!wanted.length) return { ok: false, message: "対象レイヤが見つかりません(地理院地図側でレイヤが表示されていない、または id/タイトルが不一致)", imported: [], skipped: [], unsupported: [], failed: [] };
+  const unsupported = wanted.filter(l => !l.importable).map(l => ({ id: l.id, title: l.title, reason: l.reason }));
+  const skipped = wanted.filter(l => l.importable && l.imported).map(l => ({ id: l.id, title: l.title, reason: "取り込み済み" }));
+  const imported = [], failed = [], lines = [];
+  for (const l of wanted.filter(l => l.importable && !l.imported).slice().reverse()) {
+    const title = l.title.replace(/\|/g, "/");
+    const opts = {};
+    if (Number.isFinite(l.minZoom)) opts.minzoom = l.minZoom;
+    if (Number.isFinite(l.maxZoom)) opts.maxzoom = l.maxZoom;
+    if (l.opacity < 1) opts.opacity = l.opacity;
+    if (l.subdomains) opts.subdomains = l.subdomains;
+    const attr = gsiLayerAttr(l); if (attr) opts.attr = attr;
+    const item = { type: "xyz", title, url: l.url, opts, visible: l.visible, _gsiId: l.id, _idx: 1e9 + layerEntries.length };
+    const entry = { item, pending: true };
+    layerEntries.push(entry);
+    try {
+      await mountEntry(entry);
+      applyEntryVisibility(entry);
+      entry.pending = false;
+      imported.push({ id: l.id, title });
+      const optStr = Object.entries(opts).map(([k, v]) => `${k}=${v}`).join(" | ");
+      lines.push(`xyz:${title} | ${l.url}${optStr ? ` | ${optStr}` : ""}${l.visible ? "" : " | off"}`);
+    } catch (err) {
+      layerEntries.splice(layerEntries.indexOf(entry), 1);
+      failed.push({ id: l.id, title, reason: String(err?.message || err) });
+    }
+  }
+  if (lines.length) {
+    inspectorInput.value = `${String(inspectorInput.value || "").replace(/\s*$/, "")}\n${lines.join("\n")}\n`;
+  }
+  renderLayerRows();
+  const parts = [`${imported.length}件取り込み`];
+  if (skipped.length) parts.push(`${skipped.length}件スキップ(取込済み)`);
+  if (unsupported.length) parts.push(`${unsupported.length}件未対応`);
+  if (failed.length) parts.push(`${failed.length}件失敗`);
+  return { ok: imported.length > 0 || skipped.length > 0, imported, skipped, unsupported, failed, message: parts.join("・") };
+}
+
+// ---- GSI 表示レイヤの操作(透過/並べ替え/削除) ----
+// tileList/list の info オブジェクトを id またはタイトルで引く
+function gsiFindLayerInfo(key) {
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  const k = String(key ?? "").trim();
+  if (!ml || !k) return null;
+  for (const arr of [ml.tileList || [], ml.list || []]) {
+    const hit = arr.find(i => i.id === k) || arr.find(i => i.title === k);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+const gsiIsBaseInfo = info => !!info?.parent && info.parent.title_sys === frame.contentWindow?.CONFIG?.layerBaseFolderSYS;
+
+// 透過率設定は表示中レイヤーパネルのスライダと同じ経路
+// (ベースフォルダの子は _baseLayer.setOpacity、それ以外は layer.setOpacity)
+function setGsiLayerOpacity(key, opacity) {
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  const info = gsiFindLayerInfo(key);
+  if (!ml || !info) return { ok: false, reason: "notFound" };
+  const op = Math.min(1, Math.max(0, Number(opacity)));
+  if (!Number.isFinite(op)) return { ok: false, reason: "invalid" };
+  if (gsiIsBaseInfo(info)) gsiApp?._mainMap?._baseLayer?.setOpacity(op);
+  else if (info._visibleInfo?.layer?.setOpacity) info._visibleInfo.layer.setOpacity(op);
+  else if (info._visibleInfo?.layer && frame.contentWindow?.GSI?.LayerOpacitySetter) {
+    new frame.contentWindow.GSI.LayerOpacitySetter().setOpacity(info._visibleInfo.layer, op);
+  }
+  if (info._visibleInfo) info._visibleInfo.opacity = op;
+  ml.fire("change");
+  return { ok: true, opacity: op };
+}
+
+// tileList 先頭=最前面。position は top/front・bottom/back・up・down・数値index
+function moveGsiLayer(key, position) {
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  const info = gsiFindLayerInfo(key);
+  const arr = ml?.tileList;
+  if (!arr || !info) return { ok: false, reason: "notFound" };
+  const idx = arr.indexOf(info);
+  if (idx < 0) return { ok: false, reason: "notTile" };
+  let to = idx;
+  const p = String(position ?? "").toLowerCase();
+  if (p === "top" || p === "front") to = 0;
+  else if (p === "bottom" || p === "back") to = arr.length - 1;
+  else if (p === "up") to = Math.max(0, idx - 1);
+  else if (p === "down") to = Math.min(arr.length - 1, idx + 1);
+  else {
+    const n = Number(position);
+    if (Number.isFinite(n)) to = Math.min(arr.length - 1, Math.max(0, Math.round(n)));
+  }
+  if (to !== idx) { arr.splice(idx, 1); arr.splice(to, 0, info); ml._initZIndex?.(arr); }
+  ml.fire("change");
+  return { ok: true, index: to };
+}
+
+function removeGsiLayer(key) {
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  const info = gsiFindLayerInfo(key);
+  if (!ml || !info) return { ok: false, reason: "notFound" };
+  if (gsiIsBaseInfo(info)) return { ok: false, reason: "baseLayer" };
+  ml.remove(info);
+  return { ok: true };
+}
+
+// ---- GSI レイヤカタログ(layersJSON)検索・直接追加 ----
+// layersHash は id → カタログ info の辞書。url を持たない LayerGroup 節は除外する
+function gsiCatalogIds() {
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  return new Set([...(ml?.tileList || []), ...(ml?.list || [])].map(i => i.id));
+}
+function gsiConfirmIds() {
+  const cc = frame.contentWindow?.CONFIG?.CONFIRM_LAYERS || {};
+  const ids = new Set();
+  for (const c of Object.values(cc)) for (const id of c?.layers || []) ids.add(id);
+  return ids;
+}
+
+function listGsiCatalog(filter) {
+  const hash = gsiApp?._mainMap?._layersJSON?.layersHash || {};
+  const q = String(filter || "").toLowerCase().trim();
+  const active = gsiCatalogIds(), confirm = gsiConfirmIds();
+  const out = [];
+  let total = 0;
+  for (const info of Object.values(hash)) {
+    if (!info?.url) continue;
+    if (q && !`${info.id} ${info.title}`.toLowerCase().includes(q)) continue;
+    total++;
+    if (out.length < 100) out.push({
+      id: info.id || "", title: String(info.title || info.id || ""),
+      url: String(info.url || "").replace(/^\/\//, "https://"), layerType: info.layerType || "tile",
+      legendUrl: info.legendUrl || "", cocotile: !!info.cocotile,
+      active: active.has(info.id), needsConfirm: confirm.has(info.id),
+    });
+  }
+  return { total, truncated: total > out.length, layers: out };
+}
+
+// レイヤツリーを開かずカタログ info を _mapLayerList.append へ直接登録。
+// noFinishMove=true で自動フィットを抑止(AIは flyTo で制御)。
+// CONFIRM_LAYERS 該当は確認ダイアログが出るため未追加として confirmPending を返す
+function addGsiLayer(key, { hidden = false } = {}) {
+  const lj = gsiApp?._mainMap?._layersJSON;
+  const ml = gsiApp?._mainMap?._mapLayerList;
+  if (!lj || !ml) return { ok: false, reason: "unavailable" };
+  const k = String(key ?? "").trim();
+  const hash = lj.layersHash || {};
+  const info = hash[k] || Object.values(hash).find(i => i.title === k && i.url);
+  if (!info?.url) return { ok: false, reason: "notFound" };
+  if (ml.exists(info)) return { ok: true, already: true, id: info.id, title: info.title };
+  ml.append(info, true, hidden);
+  return ml.exists(info)
+    ? { ok: true, id: info.id, title: info.title }
+    : { ok: false, confirmPending: true, id: info.id, title: info.title,
+        reason: "確認ダイアログ保留中です(地理院地図側の確認を承認してください)" };
+}
+
+// ---- GSI ベースマップ(地図の種類)の取得・切替 ----
+// カタログは _layersJSON.getBase()(layers0.txt=ベースマップフォルダ相当)。
+// _baseLayer.setActiveId が表示切替。.kasc への永続化は base: 行で行う
+function gsiBasemapEntries() {
+  const lj = gsiApp?._mainMap?._layersJSON;
+  const list = (typeof lj?.getBase === "function" ? lj.getBase() : null)
+    || gsiBase()?.baseLayerList || [];
+  const activeId = (() => { try { return gsiBase()?.getActiveId() ?? null; } catch (_) { return null; } })();
+  const selIdx = Number(document.getElementById("basemap-select")?.value ?? -1);
+  const selectedGsiId = !baseHidden && selIdx >= 0 ? baseEntries[selIdx]?.gsiId || null : null;
+  return list.filter(b => b?.id && b.url).map(b => ({
+    id: String(b.id), title: String(b.title || b.id),
+    // プロトコル相対(//host)を https へ正規化して返す(.kasc・file:// でも解決できる形)
+    url: String(b.url).replace(/^\/\//, "https://"),
+    maxNativeZoom: b.maxNativeZoom,
+    active: b.id === activeId,
+    selected: b.id === selectedGsiId,
+    imported: baseEntries.some(e => e.gsiId === b.id),
+  }));
+}
+
+// .kasc 記述用の地理院タイルURL。プロトコル相対を https 化し、ホストは
+// 既存 .kasc/geo_webview 出力と同じ cyberjapandata 側へ寄せ、
+// キャッシュキー(?_=)は落とす
+function gsiKascBaseUrl(url) {
+  return String(url).split("?")[0]
+    .replace(/^\/\//, "https://")
+    .replace("://maps.gsi.go.jp", "://cyberjapandata.gsi.go.jp");
+}
+
+// id/タイトルで地理院地図のベースマップを切替え、対応する base: 行を
+// .kasc へ反映する(無ければ追記)。他エンジンへ切り替えても同じベースが再現される
+function setGsiBasemap(key) {
+  if (globeMode) return { ok: false, message: "Globe表示中は切り替えられません。「2D地図に戻る」後に実行してください" };
+  const k = String(key ?? "").trim();
+  const b = gsiBasemapEntries().find(x => x.id === k || x.title === k);
+  if (!b) return { ok: false, reason: "notFound", message: `ベースマップ「${k}」が見つかりません(listGsiBasemaps で id/タイトルを確認)` };
+  let added = false;
+  let idx = baseEntries.findIndex(e => e.gsiId === b.id);
+  if (idx < 0) {
+    const url = gsiKascBaseUrl(b.url);
+    baseEntries.push({ item: { type: "base", title: b.title, url, opts: {}, _idx: 1e9 + baseEntries.length }, gsiId: b.id, tileLayer: null });
+    idx = baseEntries.length - 1;
+    inspectorInput.value = `${String(inspectorInput.value || "").replace(/\s*$/, "")}\nbase:${b.title.replace(/\|/g, "/")} | ${url} | 出典：国土地理院\n`;
+    added = true;
+    rebuildBasemapSelect();
+  }
+  const sel = document.getElementById("basemap-select");
+  if (sel) sel.value = String(idx);
+  baseHidden = false;
+  applyBaseSelection();
+  let active = null;
+  try { active = gsiBase()?.getActiveId() ?? null; } catch (_) { /* 未到達時は null */ }
+  return { ok: true, id: b.id, title: b.title, added, active };
+}
+
+// ---- GSI カタログから .kasc への直接取り込み ----
+// GSI 側に表示していなくても、カタログ(layersHash)の info から xyz: 行を
+// 生成して Canvas レイヤ＋インスペクタへ反映する。
+// 表示中レイヤの取り込みは importGsiLayers、こちらはカタログ直接版
+async function importGsiCatalog({ ids = null } = {}) {
+  if (globeMode) return { ok: false, message: "Globe表示中は取り込めません。「2D地図に戻る」後に実行してください" };
+  const hash = gsiApp?._mainMap?._layersJSON?.layersHash || {};
+  const wanted = Object.values(hash).filter(i => i?.url &&
+    (!ids?.length || ids.includes(i.id) || ids.includes(i.title)));
+  if (!wanted.length) return { ok: false, message: "対象レイヤが見つかりません(listGsiCatalog で id/タイトルを確認)", imported: [], skipped: [], unsupported: [], failed: [] };
+  const unsupported = [], skipped = [], imported = [], failed = [], lines = [];
+  for (const info of wanted) {
+    const url = String(info.url || "").replace(/^\/\//, "https://");
+    const title = String(info.title || info.id || "");
+    const chk = gsiTileImportable(info);
+    if (!chk.importable) { unsupported.push({ id: info.id, title, reason: chk.reason }); continue; }
+    if (layerEntries.some(e => e.item._gsiId === info.id || e.item.url === url)) { skipped.push({ id: info.id, title, reason: "取り込み済み" }); continue; }
+    const opts = {};
+    if (Number.isFinite(info.minZoom)) opts.minzoom = info.minZoom;
+    if (Number.isFinite(info.maxZoom)) opts.maxzoom = info.maxZoom;
+    const subs = String(info.subdomains || info.subdmains || ""); if (subs) opts.subdomains = subs;
+    const attr = info.attribution || (/(maps|cyberjapandata)\.gsi\.go\.jp/i.test(url) ? "国土地理院" : "");
+    if (attr) opts.attr = attr;
+    const item = { type: "xyz", title: title.replace(/\|/g, "/"), url, opts, visible: true, _gsiId: info.id, _idx: 1e9 + layerEntries.length };
+    const entry = { item, pending: true };
+    layerEntries.push(entry);
+    try {
+      await mountEntry(entry);
+      applyEntryVisibility(entry);
+      entry.pending = false;
+      imported.push({ id: info.id, title });
+      const optStr = Object.entries(opts).map(([k, v]) => `${k}=${v}`).join(" | ");
+      lines.push(`xyz:${item.title} | ${url}${optStr ? ` | ${optStr}` : ""}`);
+    } catch (err) {
+      layerEntries.splice(layerEntries.indexOf(entry), 1);
+      failed.push({ id: info.id, title, reason: String(err?.message || err) });
+    }
+  }
+  if (lines.length) {
+    inspectorInput.value = `${String(inspectorInput.value || "").replace(/\s*$/, "")}\n${lines.join("\n")}\n`;
+  }
+  renderLayerRows();
+  const parts = [`${imported.length}件取り込み`];
+  if (skipped.length) parts.push(`${skipped.length}件スキップ(取込済み)`);
+  if (unsupported.length) parts.push(`${unsupported.length}件未対応`);
+  if (failed.length) parts.push(`${failed.length}件失敗`);
+  return { ok: imported.length > 0 || skipped.length > 0, imported, skipped, unsupported, failed, message: parts.join("・") };
+}
+
+// ---- GSI 作図(sakuzu)の取り込み ----
+// Canvas が注入した sakuzu item(entry.sakuzu と同一)は既存レイヤ扱いで除外。
+// 取り込みは GeoJSON コピー(元の作図は二重描画防止で非表示化)。
+// fileWrite 可能環境では DATA/ へ保存し geojson: 行として .kasc 永続化する
+function gsiSakuzuItems() {
+  const ours = new Set(layerEntries.map(e => e.sakuzu).filter(Boolean));
+  return (sakuzu?._list || []).map((item, i) => {
+    let features = 0;
+    try {
+      const gj = item._layer?.toGeoJSON?.();
+      features = gj?.type === "FeatureCollection" ? gj.features.length : (gj ? 1 : 0);
+    } catch (_) { /* toGeoJSON 非対応の層は0件扱い */ }
+    return {
+      index: i, title: String(item.getTitle?.() || item._title || `作図${i + 1}`),
+      fileName: String(item.getFileName?.() || ""), dataType: item.getDataType?.() ?? item._dataType,
+      visible: !!item.getVisible?.(), features, ours: ours.has(item),
+    };
+  });
+}
+
+async function importGsiSakuzu({ indices = null } = {}) {
+  if (globeMode) return { ok: false, message: "Globe表示中は取り込めません。「2D地図に戻る」後に実行してください" };
+  const wanted = gsiSakuzuItems().filter(s => !s.ours &&
+    (!indices?.length || indices.includes(s.index) || indices.includes(s.title)));
+  if (!wanted.length) return { ok: false, message: "対象の作図が見つかりません(Canvas管理レイヤ以外の作図がありません)", imported: [], skipped: [], failed: [] };
+  const imported = [], skipped = [], failed = [];
+  for (const s of wanted) {
+    const item = sakuzu._list[s.index];
+    try {
+      const gj = item?._layer?.toGeoJSON?.();
+      const geojson = gj?.type === "Feature" ? { type: "FeatureCollection", features: [gj] } : gj;
+      if (!geojson?.features?.length) { skipped.push({ index: s.index, title: s.title, reason: "地物なし" }); continue; }
+      const title = s.title.replace(/\|/g, "/");
+      let persistent = false;
+      try {
+        const name = `gsi_sakuzu_${s.index}_${Date.now().toString(36)}.geojson`;
+        const saved = await window.kasugaiApi.saveDataFile(name, JSON.stringify(geojson));
+        if (saved?.ok) {
+          await window.kasugaiApi.addLayer(title, `DATA/${name}`, { type: "geojson" });
+          persistent = true;
+        }
+      } catch (_) { /* fileWrite 不可環境は一時レイヤーへフォールバック */ }
+      if (!persistent) await window.kasugaiApi.addDataLayer(title, geojson);
+      try { item.setVisible(false); } catch (_) { /* 元作図の非表示化失敗は無視 */ }
+      imported.push({ index: s.index, title, features: geojson.features.length, persistent });
+    } catch (err) {
+      failed.push({ index: s.index, title: s.title, reason: String(err?.message || err) });
+    }
+  }
+  const parts = [`${imported.length}件取り込み`];
+  if (skipped.length) parts.push(`${skipped.length}件スキップ`);
+  if (failed.length) parts.push(`${failed.length}件失敗`);
+  const sessionOnly = imported.length && imported.every(x => !x.persistent);
+  return { ok: imported.length > 0 || skipped.length > 0, imported, skipped, failed,
+    persistent: imported.some(x => x.persistent),
+    message: parts.join("・") + (sessionOnly ? "（この環境では DATA/ 保存不可のため一時レイヤー。永続化はローカルサーバー版で）" : "") };
 }
 
 // ---- kasugaiApi（AI/外部制御） ----
@@ -1176,6 +1557,26 @@ window.kasugaiApi = createPlayerApi({
       else if (!on && gmap.hasLayer(entry.tileLayer)) gmap.removeLayer(entry.tileLayer);
     }
   },
+});
+// gsimaps 専用: 地理院地図の表示中レイヤ取得・取り込み・操作・カタログ追加・
+// 作図取り込み（他エンジンではメソッドが無いため各ツールは自動的に非公開になる）
+Object.assign(window.kasugaiApi, {
+  listGsiLayers: () => gsiDisplayedLayers(),
+  importGsiLayers: opts => importGsiLayers(opts),
+  setGsiLayerOpacity, moveGsiLayer, removeGsiLayer,
+  listGsiCatalog, addGsiLayer, importGsiCatalog: opts => importGsiCatalog(opts),
+  listGsiSakuzu: () => gsiSakuzuItems(),
+  importGsiSakuzu: opts => importGsiSakuzu(opts),
+  listGsiBasemaps: () => gsiBasemapEntries(),
+  setGsiBasemap,
+});
+// 汎用 setBasemap は .kasc 未登録の GSI ベースマップ名も受け付ける
+// (base: 行の自動追記まで行う setGsiBasemap へフォールバック)
+const genericSetBasemap = window.kasugaiApi.setBasemap;
+window.kasugaiApi.setBasemap = name => genericSetBasemap(name) || !!setGsiBasemap(name).ok;
+document.getElementById("gsi-import-layers")?.addEventListener("click", async () => {
+  const r = await importGsiLayers().catch(err => ({ ok: false, message: String(err?.message || err) }));
+  setInspectorStatus(r.message || "", !r.ok);
 });
 mountEngineSwitcher(document.querySelector("#engines"), "gsimaps");
 void initAiChat({ engine: "gsimaps", manageBackend: true });

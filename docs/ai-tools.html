@@ -27,6 +27,7 @@
             <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
+            <tr><td>GSI Maps エンジン（<code>?engine=gsimaps</code>）</td><td><code>listGsiLayers</code>・<code>importGsiLayers</code>・<code>setGsiLayerOpacity</code>・<code>moveGsiLayer</code>・<code>removeGsiLayer</code>・<code>listGsiCatalog</code>・<code>addGsiLayer</code>・<code>listGsiSakuzu</code>・<code>importGsiSakuzu</code>・<code>listGsiBasemaps</code>・<code>setGsiBasemap</code>・<code>importGsiCatalog</code></td></tr>
           </tbody>
         </table>
         <p>公開環境には「その人のセッション内に閉じる安全な機能」のみが渡ります（ティア分けはリポジトリの <code>AGENTS.md</code>「AI 機能のティア分け」参照）。</p>
@@ -60,6 +61,28 @@
             <tr><td><code>addGeoJsonLayer</code></td><td>title*, url*</td><td>GeoJSON レイヤーを URL 指定（DATA/ 相対パスまたは外部 URL）で追加して即適用。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。他形式は <code>addLayer</code></td></tr>
             <tr><td><code>applyInspector</code></td><td>text*</td><td>インスペクターの設定テキスト（.kasc 形式）を登録・適用。新規追加されるデータレイヤー行の http(s) URL は適用前に実在確認され、到達不能なものがあると拒否される。設定全体が上書きされるためユーザー明示時のみ。書式は <a href="inspector.html">.kasc 設定仕様</a></td></tr>
             <tr><td><code>exportInspector</code></td><td>なし</td><td>現在の設定を .kasc ファイルとしてエクスポート（ダウンロード）</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>🗾 GSI Maps エンジン（12）</h2>
+        <p>iframe 内の地理院地図（同一オリジンの vendored 版）を <code>GSI.GLOBALS</code> 内部 API 経由で操作する専用ツール群。vendored コードは無改変で、すべて中間層からのフック。レイヤーの「表示中」状態は地理院地図側の表示中レイヤーパネルと常に同期する。</p>
+        <table>
+          <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>listGsiLayers</code></td><td>なし</td><td>地理院地図で現在表示中のレイヤ一覧（id・タイトル・タイルURL・透過率・取込可否）を取得</td></tr>
+            <tr><td><code>importGsiLayers</code></td><td>ids</td><td>表示中レイヤーを Canvas レイヤー（<code>xyz:</code> 行）として取り込み、インスペクタ（.kasc）へ追記して永続化。ids に取り込むレイヤの id またはタイトルを指定（省略時は取込可能な全レイヤー）。積み順・透過率・非表示状態を再現。cocotile（geojsonタイル）・KML・時系列表示は未対応で <code>unsupported</code> として返る</td></tr>
+            <tr><td><code>setGsiLayerOpacity</code></td><td>id*, opacity*</td><td>表示中レイヤーの透過率を変更（表示中レイヤーパネルの透過率スライダと同じ操作。ベースマップにも可）。opacity は不透明度 0〜1</td></tr>
+            <tr><td><code>moveGsiLayer</code></td><td>id*, position*</td><td>表示中レイヤーの積み順を変更。position: top/front=最前面・bottom/back=最背面・up/down=1段・数値=位置index</td></tr>
+            <tr><td><code>removeGsiLayer</code></td><td>id*</td><td>表示中レイヤーを解除（レイヤツリーでチェックを外すのと同じ。ベースマップは対象外）</td></tr>
+            <tr><td><code>listGsiCatalog</code></td><td>filter</td><td>レイヤカタログ（layers.txt 全件）を id/タイトル部分一致で検索。URL・layerType・表示中か・確認要否（needsConfirm）を返す</td></tr>
+            <tr><td><code>addGsiLayer</code></td><td>id*, hidden</td><td>カタログから直接表示（レイヤツリーのチェックと同じ）。hidden=true で非表示のまま追加。要確認レイヤは <code>confirmPending</code> で返り地理院地図側ダイアログの承認が必要</td></tr>
+            <tr><td><code>listGsiSakuzu</code></td><td>なし</td><td>作図（sakuzu）リストを取得。ユーザーが GSI 側で描いた点線面・テキストを <code>importGsiSakuzu</code> で取り込める。<code>ours=true</code> は Canvas 管理レイヤ由来で取込対象外</td></tr>
+            <tr><td><code>importGsiSakuzu</code></td><td>indices</td><td>作図を GeoJSON として Canvas レイヤーへ取り込む（元の作図は二重描画防止で非表示化）。ローカルサーバー版では DATA/ へ保存し <code>geojson:</code> 行で .kasc 永続化、静的配信環境では一時レイヤー。indices 省略時は全作図</td></tr>
+            <tr><td><code>listGsiBasemaps</code></td><td>なし</td><td>地理院地図のベースマップ（地図の種類: 標準地図/淡色地図/白地図/写真/English 等）の一覧を取得。<code>active</code>=GSI 側で表示中・<code>selected</code>=Canvas のベースマップ選択中・<code>imported</code>=.kasc の <code>base:</code> 行あり</td></tr>
+            <tr><td><code>setGsiBasemap</code></td><td>id*</td><td>地理院地図のベースマップを id/タイトルで切替える。対応する <code>base:</code> 行が .kasc に無ければ自動で追記され、他エンジンでも同じベースマップが再現される。汎用 <code>setBasemap</code> も .kasc 未登録の GSI ベースマップ名はこのツールへフォールバックする</td></tr>
+            <tr><td><code>importGsiCatalog</code></td><td>ids*</td><td>レイヤカタログから id/タイトル指定で <code>xyz:</code> 行として直接取り込む（GSI 側に表示していなくても可）。表示中レイヤの取り込みは <code>importGsiLayers</code>、ベースマップは <code>setGsiBasemap</code> を使う</td></tr>
           </tbody>
         </table>
       </section>
@@ -181,8 +204,8 @@
         <table>
           <thead><tr><th>ツール</th><th>引数</th><th>説明</th></tr></thead>
           <tbody>
-            <tr><td><code>listUiControls</code></td><td>filter</td><td>アプリ内の操作可能な UI 要素（ボタン・入力欄・セレクト・パネルタブ等）を target/kind/label/value/checked/options/disabled/hidden 付きで列挙。filter は target・ラベルの部分一致。レイヤー行等の動的生成行は含まない（専用ツールで操作）</td></tr>
-            <tr><td><code>controlUi</code></td><td>target*, action, value</td><td>UI 要素を直接操作する汎用ツール。target は <code>listUiControls</code> の target（要素 id・<code>[data-panel="…"]</code> 等）。action: click（ボタン/タブ/リンク押下・チェックボックストグル）/ set（値設定。checkbox は boolean、select は option 値、入力欄は文字列・数値）/ get（現在値・表示テキスト取得）。省略時は value 指定で set、ボタン系で click、それ以外で get。DEM ソース・ドレープ設定・3D Tiles 描画パラメータ・言語・各種モデル選択など、専用ツールを持たない設定項目すべてに使える。ファイル/フォルダピッカーは開けるが選択自体はユーザー操作</td></tr>
+            <tr><td><code>listUiControls</code></td><td>filter</td><td>アプリ内の操作可能な UI 要素（ボタン・入力欄・セレクト・パネルタブ等）を target/kind/label/value/checked/options/disabled/hidden 付きで列挙。filter は target・ラベルの部分一致。レイヤー行等の動的生成行は含まない（専用ツールで操作）。<code>data-ui-bridge</code> 属性を持つ同一オリジン iframe 内の要素は <code>#&lt;iframeId&gt;/</code> 接頭辞付きの target で列挙される（gsimaps エンジンでは地理院地図側 UI が対象）</td></tr>
+            <tr><td><code>controlUi</code></td><td>target*, action, value</td><td>UI 要素を直接操作する汎用ツール。target は <code>listUiControls</code> の target（要素 id・<code>[data-panel="…"]</code> 等・<code>#&lt;iframeId&gt;/&lt;セレクタ&gt;</code> 形式の iframe 内要素）。action: click（ボタン/タブ/リンク押下・チェックボックストグル）/ set（値設定。checkbox は boolean、select は option 値、入力欄は文字列・数値）/ get（現在値・表示テキスト取得）。省略時は value 指定で set、ボタン系で click、それ以外で get。DEM ソース・ドレープ設定・3D Tiles 描画パラメータ・言語・各種モデル選択など、専用ツールを持たない設定項目すべてに使える。ファイル/フォルダピッカーは開けるが選択自体はユーザー操作</td></tr>
           </tbody>
         </table>
         <p>専用ツールが無い UI 項目はこの2ツールで網羅する設計です。新規 UI は「id またはタブ用 data-* 属性＋ click/change/input ハンドラ」で実装すればツール追加なしに AI 制御可能になります（リポジトリの <code>AGENTS.md</code>「UI方針」参照）。パスワード欄は値を返しません。</p>

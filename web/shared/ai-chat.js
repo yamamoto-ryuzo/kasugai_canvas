@@ -123,6 +123,12 @@ const CHAT_TOOL_API = {
   addDataLayer: "addDataLayer", removeDataLayer: "removeDataLayer",
   setToolMaxSteps: "local:setToolMaxSteps",
   setLayerFilter: "setLayerFilter", listUiControls: "listUiControls", controlUi: "controlUi",
+  listGsiLayers: "listGsiLayers", importGsiLayers: "importGsiLayers",
+  listGsiCatalog: "listGsiCatalog", addGsiLayer: "addGsiLayer",
+  setGsiLayerOpacity: "setGsiLayerOpacity", moveGsiLayer: "moveGsiLayer", removeGsiLayer: "removeGsiLayer",
+  listGsiSakuzu: "listGsiSakuzu", importGsiSakuzu: "importGsiSakuzu",
+  listGsiBasemaps: "listGsiBasemaps", setGsiBasemap: "setGsiBasemap",
+  importGsiCatalog: "importGsiCatalog",
 };
 
 function chatToolAvailable(name) {
@@ -864,7 +870,7 @@ function uiBridgeTarget(el) {
   if (!anchor) return null;
   const cls = [...el.classList].find(c => /^[a-zA-Z][\w-]*$/.test(c));
   let selector = `#${anchor.id} ${el.tagName.toLowerCase()}${cls ? `.${cls}` : ""}`;
-  if (document.querySelectorAll(selector).length > 1) {
+  if (el.ownerDocument.querySelectorAll(selector).length > 1) {
     const index = [...el.parentElement.children].filter(c => c.tagName === el.tagName).indexOf(el) + 1;
     selector = `#${anchor.id} ${el.tagName.toLowerCase()}:nth-of-type(${index})`;
   }
@@ -883,7 +889,7 @@ function uiBridgeLabel(el) {
   const direct = clean(el.getAttribute("aria-label")) || clean(el.title) || clean(el.placeholder) || clean(el.dataset?.i18n ? t(el.dataset.i18n) : "");
   if (direct) return direct;
   if (el.id) {
-    const forLabel = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+    const forLabel = el.ownerDocument.querySelector(`label[for="${CSS.escape(el.id)}"]`);
     if (forLabel && clean(forLabel.textContent)) return clean(forLabel.textContent);
   }
   const wrap = el.closest("label");
@@ -916,16 +922,24 @@ function uiBridgeEntry(el, { brief = true } = {}) {
   return entry;
 }
 
-// controlUi の target 解決。裸の id・"#id"・属性/子孫セレクタを受け付ける
+// controlUi の target 解決。裸の id・"#id"・属性/子孫セレクタを受け付ける。
+// "#<iframeId>/<セレクタ>" 形式は同一オリジン iframe の文書内を探す
 function resolveUiControlTarget(target) {
   const raw = String(target || "").trim();
   if (!raw) return null;
-  const id = raw.replace(/^#/, "");
+  const fm = /^#([\w-]+)\/(.+)$/.exec(raw);
+  let scope = document, body = raw;
+  if (fm) {
+    try { scope = document.getElementById(fm[1])?.contentDocument; } catch (_) { scope = null; }
+    if (!scope) return null;
+    body = fm[2].trim();
+  }
+  const id = body.replace(/^#/, "");
   if (/^[\w-]+$/.test(id)) {
-    const byId = document.getElementById(id);
+    const byId = scope.getElementById(id);
     if (byId) return byId;
   }
-  try { return document.querySelector(raw); } catch (e) { return null; }
+  try { return scope.querySelector(body); } catch (e) { return null; }
 }
 
 // ローカルコマンド: AI接続前でも操作APIの動作確認ができる
@@ -1675,7 +1689,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "listUiControls",
-      description: "アプリ内の操作可能なUI要素(ボタン・入力欄・セレクト・タブ等)の一覧を取得する。各項目の target を controlUi に渡すと操作できる。filterで対象名・ラベルの部分一致に絞れる。レイヤー行・検索結果など動的生成の行は含まれない(専用ツールで操作)",
+      description: "アプリ内の操作可能なUI要素(ボタン・入力欄・セレクト・タブ等)の一覧を取得する。各項目の target を controlUi に渡すと操作できる。filterで対象名・ラベルの部分一致に絞れる。レイヤー行・検索結果など動的生成の行は含まれない(専用ツールで操作)。data-ui-bridge属性を持つ同一オリジンiframe内の要素は `#<iframeId>/` 接頭辞付きのtargetで列挙・操作できる",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -1685,7 +1699,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "controlUi",
-      description: "UI要素を直接操作する汎用ツール(専用ツールが無い設定項目・パネル切替・ボタン押下用)。targetはlistUiControlsのtarget(要素id・[data-*=...]・CSSセレクタ)。action: click=ボタン/タブ/リンクの押下とチェックボックスのトグル、set=値設定(checkboxはboolean、selectはoption値・入力欄は文字列/数値)、get=現在値・表示テキストの取得。action省略時はvalue指定ならset、ボタン系ならclick、それ以外はget。ファイル選択・フォルダ選択のピッカー自体は開けるが中身の選択はユーザー操作になる",
+      description: "UI要素を直接操作する汎用ツール(専用ツールが無い設定項目・パネル切替・ボタン押下用)。targetはlistUiControlsのtarget(要素id・[data-*=...]・CSSセレクタ・`#<iframeId>/<セレクタ>`形式のiframe内要素)。action: click=ボタン/タブ/リンクの押下とチェックボックスのトグル、set=値設定(checkboxはboolean、selectはoption値・入力欄は文字列/数値)、get=現在値・表示テキストの取得。action省略時はvalue指定ならset、ボタン系ならclick、それ以外はget。ファイル選択・フォルダ選択のピッカー自体は開けるが中身の選択はユーザー操作になる",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -1694,6 +1708,120 @@ const CHAT_TOOLS = [{
           value: { type: "STRING", description: "set時の値(checkboxはtrue/false・selectはoptionのvalue・入力欄は文字列)" },
         },
         required: ["target"],
+      },
+    },
+    {
+      name: "listGsiLayers",
+      description: "GSI Mapsエンジン(engine=gsimaps)専用。iframe内の地理院地図で現在表示中のレイヤ一覧(id・タイトル・タイルURL・透過率・取込可否)を取得する。importGsiLayers でCanvasレイヤーへ取り込める",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "importGsiLayers",
+      description: "GSI Mapsエンジン(engine=gsimaps)専用。地理院地図の表示中レイヤーをCanvasレイヤー(xyz行)として取り込み、インスペクタ(.kasc)へ追記して永続化する。ids省略時は取込可能な全レイヤー。cocotile(geojsonタイル)・KML・時系列表示レイヤは未対応で unsupported として返る",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          ids: { type: "ARRAY", items: { type: "STRING" }, description: "取り込むレイヤのidまたはタイトル(listGsiLayersで確認)。省略時は取込可能な全レイヤー" },
+        },
+      },
+    },
+    {
+      name: "setGsiLayerOpacity",
+      description: "GSI Mapsエンジン専用。地理院地図の表示中レイヤーの透過率を変更する(表示中レイヤーパネルの透過率スライダと同じ操作。ベースマップにも使える)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "レイヤidまたはタイトル(listGsiLayersで確認)" },
+          opacity: { type: "NUMBER", description: "不透明度 0〜1(0=透明,1=不透明)" },
+        },
+        required: ["id", "opacity"],
+      },
+    },
+    {
+      name: "moveGsiLayer",
+      description: "GSI Mapsエンジン専用。地理院地図の表示中レイヤーの積み順を変える(top/front=最前面・bottom/back=最背面・up/down=1段移動・数値=位置index)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "レイヤidまたはタイトル" },
+          position: { type: "STRING", description: "top / bottom / up / down / 数値index" },
+        },
+        required: ["id", "position"],
+      },
+    },
+    {
+      name: "removeGsiLayer",
+      description: "GSI Mapsエンジン専用。地理院地図の表示中レイヤーを解除する(レイヤツリーでチェックを外すのと同じ。ベースマップは対象外)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "レイヤidまたはタイトル" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "listGsiCatalog",
+      description: "GSI Mapsエンジン専用。地理院地図のレイヤカタログ(layers.txt全件)を検索する。id・タイトル・URL・表示中か・取込可否に使う layerType・確認要否(needsConfirm)を返す。filter で部分一致絞り込み",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          filter: { type: "STRING", description: "id/タイトルの部分一致フィルタ(省略可)" },
+        },
+      },
+    },
+    {
+      name: "addGsiLayer",
+      description: "GSI Mapsエンジン専用。地理院地図のレイヤカタログから id/タイトル指定で直接表示する(レイヤツリーでチェックを入れるのと同じ。idはlistGsiCatalogで確認)。hidden=trueで非表示のまま追加。要確認レイヤは confirmPending で返り地理院地図側の確認ダイアログ承認が必要",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "カタログのレイヤidまたはタイトル" },
+          hidden: { type: "BOOLEAN", description: "trueで非表示のまま追加(省略時false)" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "listGsiSakuzu",
+      description: "GSI Mapsエンジン専用。地理院地図の作図(sakuzu)リストを取得する。ユーザーがGSI側で描いた点線面・テキストを importGsiSakuzu でCanvasレイヤーへ取り込める。ours=true はCanvas管理レイヤ由来で取込対象外",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "importGsiSakuzu",
+      description: "GSI Mapsエンジン専用。地理院地図の作図をGeoJSONとしてCanvasレイヤーへ取り込む(元の作図は二重描画防止で非表示化)。ローカルサーバー版では DATA/ へ保存し geojson: 行で .kasc 永続化、静的配信環境では一時レイヤーになる。indices省略時は全作図",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          indices: { type: "ARRAY", items: { type: "STRING" }, description: "取り込む作図のindexまたはタイトル(listGsiSakuzuで確認)。省略時は全作図" },
+        },
+      },
+    },
+    {
+      name: "listGsiBasemaps",
+      description: "GSI Mapsエンジン専用。地理院地図のベースマップ(地図の種類: 標準地図/淡色地図/白地図/写真/English等)の一覧を取得する。active=GSI側で表示中・selected=Canvasのベースマップ選択中・imported=.kascのbase:行あり",
+      parameters: { type: "OBJECT", properties: {} },
+    },
+    {
+      name: "setGsiBasemap",
+      description: "GSI Mapsエンジン専用。地理院地図のベースマップを id/タイトルで切替える(listGsiBasemapsで確認)。対応する base: 行が .kasc に無ければ自動で追記され、他エンジンでも同じベースマップが再現される",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          id: { type: "STRING", description: "ベースマップのidまたはタイトル" },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "importGsiCatalog",
+      description: "GSI Mapsエンジン専用。地理院地図のレイヤカタログから id/タイトル指定で .kasc の xyz: 行として直接取り込む(GSI側に表示していなくても可。idはlistGsiCatalogで確認)。表示中レイヤの取り込みは importGsiLayers、ベースマップは setGsiBasemap を使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          ids: { type: "ARRAY", items: { type: "STRING" }, description: "取り込むカタログレイヤのidまたはタイトルの配列" },
+        },
+        required: ["ids"],
       },
     },
   ],
@@ -2118,6 +2246,18 @@ export async function executeChatTool(name, args = {}) {
   }
   if (name === "listUiControls") return { controls: window.kasugaiApi.listUiControls(args.filter) };
   if (name === "controlUi") return window.kasugaiApi.controlUi(args.target, { action: args.action, value: args.value });
+  if (name === "listGsiLayers") return { layers: window.kasugaiApi.listGsiLayers() };
+  if (name === "importGsiLayers") return await window.kasugaiApi.importGsiLayers({ ids: args.ids });
+  if (name === "setGsiLayerOpacity") return window.kasugaiApi.setGsiLayerOpacity(args.id, args.opacity);
+  if (name === "moveGsiLayer") return window.kasugaiApi.moveGsiLayer(args.id, args.position);
+  if (name === "removeGsiLayer") return window.kasugaiApi.removeGsiLayer(args.id);
+  if (name === "listGsiCatalog") return window.kasugaiApi.listGsiCatalog(args.filter);
+  if (name === "addGsiLayer") return window.kasugaiApi.addGsiLayer(args.id, { hidden: args.hidden });
+  if (name === "listGsiSakuzu") return { items: window.kasugaiApi.listGsiSakuzu() };
+  if (name === "importGsiSakuzu") return await window.kasugaiApi.importGsiSakuzu({ indices: args.indices });
+  if (name === "listGsiBasemaps") return { basemaps: window.kasugaiApi.listGsiBasemaps() };
+  if (name === "setGsiBasemap") return window.kasugaiApi.setGsiBasemap(args.id);
+  if (name === "importGsiCatalog") return await window.kasugaiApi.importGsiCatalog({ ids: args.ids });
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 
@@ -3260,18 +3400,36 @@ export async function initAiChat({ engine = "cesium", manageBackend = false } = 
 
 // ---- 汎用 UI ブリッジ公開面（kasugaiApi.listUiControls/controlUi の実体） ----
 // アプリ内の操作要素を列挙する。filter は target/label の部分一致
+// listUiControls の走査対象文書。data-ui-bridge 属性を持つ同一オリジン iframe
+// の文書も含め、その中の要素は target に "#<iframeId>/" 接頭辞が付く
+// (クロスオリジン・sandbox iframe は contentDocument に触れないため自動除外)
+function uiBridgeDocuments() {
+  const docs = [{ doc: document, prefix: "" }];
+  for (const f of document.querySelectorAll("iframe[data-ui-bridge][id]")) {
+    try {
+      const d = f.contentDocument;
+      if (d) docs.push({ doc: d, prefix: `#${f.id}/` });
+    } catch (_) { /* クロスオリジン・sandbox は除外 */ }
+  }
+  return docs;
+}
+
 export function listUiControls(filter) {
   const q = String(filter || "").toLowerCase().trim();
   const entries = [];
   const seen = new Set();
-  for (const el of document.querySelectorAll("button, input, select, textarea, a[href]")) {
-    if (el.type === "hidden") continue;
-    if (el.closest(UI_BRIDGE_SKIP_SELECTOR)) continue;
-    const entry = uiBridgeEntry(el);
-    if (!entry.target || seen.has(entry.target)) continue;
-    seen.add(entry.target);
-    if (q && !`${entry.target} ${entry.label}`.toLowerCase().includes(q)) continue;
-    entries.push(entry);
+  for (const { doc, prefix } of uiBridgeDocuments()) {
+    for (const el of doc.querySelectorAll("button, input, select, textarea, a[href]")) {
+      if (el.type === "hidden") continue;
+      if (el.closest(UI_BRIDGE_SKIP_SELECTOR)) continue;
+      const entry = uiBridgeEntry(el);
+      if (!entry.target) continue;
+      if (prefix) entry.target = prefix + entry.target;
+      if (seen.has(entry.target)) continue;
+      seen.add(entry.target);
+      if (q && !`${entry.target} ${entry.label}`.toLowerCase().includes(q)) continue;
+      entries.push(entry);
+    }
   }
   return entries;
 }
@@ -3279,17 +3437,25 @@ export function listUiControls(filter) {
 // 任意の UI 要素を click/set/get で操作する。set は実ユーザー操作と同じく
 // input→change イベントを発火させるため、設定保存・再描画も通常通り走る
 export function controlUi(target, { action, value } = {}) {
+  // "#<iframeId>/..." で解決した要素は、返す target にも接頭辞を戻す
+  // (そのまま再指定できるよう listUiControls と同じ形式に揃える)
+  const prefix = /^#[\w-]+\//.exec(String(target || "").trim())?.[0] || "";
+  const entryOf = (el, opts) => {
+    const e = uiBridgeEntry(el, opts);
+    if (prefix && e.target) e.target = prefix + e.target;
+    return e;
+  };
   const el = resolveUiControlTarget(target);
   if (!el) return { ok: false, message: t("tool.uiTargetNotFound", { target }) };
   const kind = uiBridgeKind(el);
   const tag = el.tagName.toLowerCase();
   const clickKind = kind === "button" || kind === "tab" || tag === "a" || kind === "file" || tag === "label";
   const act = action ? String(action).toLowerCase() : (value !== undefined ? "set" : (clickKind ? "click" : "get"));
-  if (act === "get") return { ok: true, ...uiBridgeEntry(el, { brief: false }) };
+  if (act === "get") return { ok: true, ...entryOf(el, { brief: false }) };
   if (act === "click") {
     if (el.disabled) return { ok: false, message: t("tool.uiDisabled", { target }) };
     el.click();
-    return { ok: true, ...uiBridgeEntry(el) };
+    return { ok: true, ...entryOf(el) };
   }
   if (act !== "set") return { ok: false, message: t("tool.uiBadAction", { action: act, target }) };
   if (kind === "file") return { ok: false, message: t("tool.uiFileInput", { target }) };
@@ -3302,7 +3468,7 @@ export function controlUi(target, { action, value } = {}) {
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     }
-    return { ok: true, ...uiBridgeEntry(el) };
+    return { ok: true, ...entryOf(el) };
   }
   if (kind === "select") {
     const v = String(value ?? "");
@@ -3315,13 +3481,13 @@ export function controlUi(target, { action, value } = {}) {
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
     }
-    return { ok: true, ...uiBridgeEntry(el) };
+    return { ok: true, ...entryOf(el) };
   }
   if (kind === "input" || kind === "range" || kind === "password" || kind === "textarea") {
     el.value = String(value ?? "");
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
-    return { ok: true, ...uiBridgeEntry(el) };
+    return { ok: true, ...entryOf(el) };
   }
   return { ok: false, message: t("tool.uiBadAction", { action: "set", target }) };
 }
