@@ -1,4 +1,4 @@
-!include "MUI2.nsh"
+﻿!include "MUI2.nsh"
 
 !ifndef BUILD_EXE
   !define BUILD_EXE "..\server\target\release\kasugai_canvas.exe"
@@ -31,10 +31,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "6.1.0.0"
+VIProductVersion "6.1.1.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "6.1.0"
+VIAddVersionKey "FileVersion" "6.1.1"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -66,17 +66,21 @@ Section "Install"
   File /r /x "vendor" "${WEB_DIR}\*"
 
   SetOutPath "$INSTDIR\projects"
+  ; /x "default" は相対パスではなく項目名にマッチするため、
+  ; default/ と default_local\default/ の両方がここで除外される
   File /nonfatal /r /x "default" "${SAMPLE_PROJECTS}\*"
 
   CreateDirectory "$INSTDIR\projects\default"
   CreateDirectory "$INSTDIR\data"
+  ; ユーザーが編集し得るプロジェクト(.kasc・DATA 等)は既存ファイルを
+  ; 上書きせず、不足分のみ補充する(SetOverwrite off)。
+  ; /x で抜けた default/ と default_local\default/ の両方が対象
+  SetOverwrite off
   SetOutPath "$INSTDIR\projects\default"
-  IfFileExists "$INSTDIR\projects\default\${CONFIG_FILE_NAME}" default_config_exists
-  File "${SAMPLE_PROJECTS}\default\${CONFIG_FILE_NAME}"
-default_config_exists:
-  IfFileExists "$INSTDIR\projects\default\${PROJECT_MANIFEST_FILE_NAME}" default_manifest_exists
-  File "${SAMPLE_PROJECTS}\default\${PROJECT_MANIFEST_FILE_NAME}"
-default_manifest_exists:
+  File /nonfatal /r "${SAMPLE_PROJECTS}\default\*"
+  SetOutPath "$INSTDIR\projects\default_local\default"
+  File /nonfatal /r "${SAMPLE_PROJECTS}\default_local\default\*"
+  SetOverwrite on
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 

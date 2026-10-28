@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.1.1] - 2026-10-29
+
+### Fixed
+
+- **インストーラーが `projects/default/DATA/`・`default_local/default/` をインストールしない問題を修正** — `File /r /x "default"` の除外が項目名単位で効くため、意図したトップレベル `default/` に加え `default_local\default/` も抜け、かつ補充が `.kasc`・`project.json` の2ファイルだけだったため `default/DATA/sample.geojson` 等が同梱されず 404 になっていた。除外後の補充を `SetOverwrite off` + `File /r`（不足分のみ追加・ユーザー編集済みファイルは保持）へ変更し、両プロジェクトの全内容を配置するようにした
+- **kasugai_canvas.nsi に UTF-8 BOM を付与** — BOM 無しでは makensis が ACP(CP932) 解釈し、コメントの UTF-8 バイト列が CP932 で解読不能な並びになると「Bad text encoding」でコンパイル失敗していた（従来のコメントは偶然解読可能な並びだった）
+
 ## [6.1.0] - 2026-10-29
 
 ### Changed
