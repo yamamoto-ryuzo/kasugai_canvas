@@ -142,6 +142,13 @@ web/
 - `sw-duckdb.js` の Service Worker スコープは登録元ディレクトリ（現状 `/cesium/`）。エンジンごとに登録する
 - API・データパスは `/api/*`・`/projects/*`・`/health` のルート起点で書く（`./api/` 等のページ相対はエンジン配下で壊れるため禁止）
 
+## web/vendor/（上流スナップショット）の改変禁止
+
+- **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流（`web/vendor/` は gitignore・`tools/fetch_vendor.py` が `web/<engine>/vendor.json` の sha へ同期して配置する）
+- 挙動を変えたい場合は vendor 側を直さず、組み込み側（中間層 `web/<engine>/` 等）でフック・差し替え・ラップする（例: gsimaps の Globe 起動は iframe の `window.open` を親側でフックして差し替え）
+- 上流側の修正・更新が必要なら上流へ PR するか、`vendor.json` の sha を上げて `python tools/fetch_vendor.py` で再取得する。vendor 実体の手編集・部分的差し替えは禁止
+- 例外は fetch_vendor が整合記録用に書き込む `VENDOR.json` のみ（上流ファイルではなく自動生成物）
+
 ## AI機能のティア分け（実行環境ごとの能力）
 
 AI機能は「操作の影響範囲」でティアを分ける。**誰でも使える公開環境には、その人のセッション内に閉じる安全な機能だけを提供し、永続化・共有・システムへの影響がある機能はローカル環境に限定する**。
