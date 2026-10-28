@@ -67,6 +67,7 @@
 
   const DEMOS = [
     { href: 'https://yamamoto-ryuzo.github.io/kasugai-canvas-web/', text: '▶ デモ（CDN ホスト版）' },
+    { href: 'https://kasugai-canvas-nqh4tuar6a-an.a.run.app/', text: '▶ デモ（Cloud Run・認証方式5）' },
     { href: 'https://cesium-5ie.pages.dev/', text: '▶ デモ（Cloudflare Pages）' },
     { href: 'https://kasugai-canvas.ryu-3cb.workers.dev/', text: '▶ デモ（Cloudflare Workers）' }
   ];
