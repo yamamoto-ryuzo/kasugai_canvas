@@ -4614,29 +4614,89 @@ struct RegisterProjectRequest {
 // ファイル関連付けで起動済みインスタンスに登録を依頼する用途
 // ローカルAPI(/api/*, /health)へ file:// 等の別オリジンからのアクセスを許可する。
 // エクスポートフォルダの <engine>.html ランチャー(file://)からの
-// /api/projects/register 呼び出し用。静的配信部分には付けない。
+// /api/projects/register 呼び出し用。
+// /projects/* はホスト版エンジン(CDN)がローカルの .kasc+DATA/ を読む用途で
+// CORS+Private Network Access を許可するが、許可リスト外のオリジンからは
+// 読めないよう Access-Control-Allow-Origin をエコーしない(任意サイトからの
+// ローカルデータ読み取りを防ぐ)。その他の静的配信部分には付けない。
+fn cors_allowed_origin(origin: &str) -> bool {
+    // file:// ページは Origin "null"。ホスト版エンジンは github.io の
+    // kasugai-canvas-web(stable/unstable)・kasugai_canvas Pages を同じ
+    // オリジンでカバー。ループバックはローカルの別ポートのページからの
+    // 開発・連携用に許可する(同一マシン上のプロセスは CORS 無しで
+    // 読めるため実質的な追加露出にならない)
+    origin == "null"
+        || origin == "https://yamamoto-ryuzo.github.io"
+        || origin.starts_with("http://127.0.0.1")
+        || origin.starts_with("https://127.0.0.1")
+        || origin.starts_with("http://localhost")
+        || origin.starts_with("https://localhost")
+        || origin.starts_with("http://[::1]")
+        || origin.starts_with("https://[::1]")
+}
+
 async fn local_api_cors(
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
     use axum::http::header;
-    let is_api = req.uri().path() == "/health" || req.uri().path().starts_with("/api/");
-    if is_api && req.method() == Method::OPTIONS {
+    let path = req.uri().path();
+    let is_api = path == "/health" || path.starts_with("/api/");
+    let is_shared = path.starts_with("/projects/");
+    let origin = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+    let shared_allowed = is_shared
+        && origin
+            .as_deref()
+            .map(cors_allowed_origin)
+            .unwrap_or(false);
+
+    if (is_api || is_shared) && req.method() == Method::OPTIONS {
         let mut res = axum::response::Response::new(axum::body::Body::empty());
         *res.status_mut() = StatusCode::NO_CONTENT;
         let h = res.headers_mut();
-        h.insert(
-            header::ACCESS_CONTROL_ALLOW_ORIGIN,
-            axum::http::HeaderValue::from_static("*"),
-        );
-        h.insert(
-            header::ACCESS_CONTROL_ALLOW_METHODS,
-            axum::http::HeaderValue::from_static("GET,POST,PUT,DELETE,OPTIONS"),
-        );
-        h.insert(
-            header::ACCESS_CONTROL_ALLOW_HEADERS,
-            axum::http::HeaderValue::from_static("content-type"),
-        );
+        if is_api {
+            h.insert(
+                header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                axum::http::HeaderValue::from_static("*"),
+            );
+            h.insert(
+                header::ACCESS_CONTROL_ALLOW_METHODS,
+                axum::http::HeaderValue::from_static("GET,POST,PUT,DELETE,OPTIONS"),
+            );
+            h.insert(
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
+                axum::http::HeaderValue::from_static("content-type"),
+            );
+        } else if let (true, Some(o)) = (shared_allowed, &origin) {
+            h.insert(
+                header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                axum::http::HeaderValue::from_str(o)
+                    .unwrap_or_else(|_| axum::http::HeaderValue::from_static("null")),
+            );
+            h.insert(
+                header::ACCESS_CONTROL_ALLOW_METHODS,
+                axum::http::HeaderValue::from_static("GET,HEAD,OPTIONS"),
+            );
+            h.insert(
+                header::ACCESS_CONTROL_ALLOW_HEADERS,
+                axum::http::HeaderValue::from_static("*"),
+            );
+            // https 公開ページ → localhost の fetch に必要(Private Network Access)
+            h.insert(
+                axum::http::HeaderName::from_static(
+                    "access-control-allow-private-network",
+                ),
+                axum::http::HeaderValue::from_static("true"),
+            );
+            h.insert(
+                header::ACCESS_CONTROL_MAX_AGE,
+                axum::http::HeaderValue::from_static("600"),
+            );
+        }
         return res;
     }
     let mut res = next.run(req).await;
@@ -4645,6 +4705,14 @@ async fn local_api_cors(
             header::ACCESS_CONTROL_ALLOW_ORIGIN,
             axum::http::HeaderValue::from_static("*"),
         );
+    } else if let (true, Some(o)) = (shared_allowed, &origin) {
+        let h = res.headers_mut();
+        h.insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            axum::http::HeaderValue::from_str(&o)
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("null")),
+        );
+        h.insert(header::VARY, axum::http::HeaderValue::from_static("Origin"));
     }
     res
 }
