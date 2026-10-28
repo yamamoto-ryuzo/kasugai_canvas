@@ -8,7 +8,7 @@ publish_cdn.py から呼ばれ、発行物へ実ファイルとして含まれ�
 
 レイアウト:
     web/gsimaps/vendor.json   上流ピン情報(repo/ref/sha)
-    web/vendor/gsimaps/       スナップショット実体(gitignore・正本は上流)
+    web/vendor/gsimaps/       スナップショット実体(git 管理・正本は上流)
     web/vendor/gsimaps/VENDOR.json  取得済み sha の記録(整合確認用)
 
 usage:

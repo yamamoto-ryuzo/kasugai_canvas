@@ -105,9 +105,8 @@ def _commit_and_push(cdn_dir, message, push):
 def _ensure_vendors():
     """vendor.json が指す上流スナップショットを web/vendor/ へ保証する。
 
-    web/vendor/ は kasugai_canvas 側では gitignore されているため、
-    ローカル未取得や stale なまま発行すると CDN 側で欠落・不一致になる。
-    発行前に fetch_vendor で sha を突き合わせて揃える
+    web/vendor/ は git 管理だが、ローカルが欠落・stale なまま発行すると
+    CDN 側で不一致になる。発行前に fetch_vendor で sha を突き合わせて揃える
     """
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import fetch_vendor

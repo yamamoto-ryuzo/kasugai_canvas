@@ -125,9 +125,9 @@ web/
   gsimaps/        GSI Maps フロント（中間エンジン: vendored 地理院地図
                   gsi-cyberjapan/gsimaps を同一オリジン iframe(index_pm.html)で
                   組み込み、.kasc を GSI/Leaflet API 経由で再生。ベンダーは
-                  web/vendor/gsimaps/(gitignore・tools/fetch_vendor.py で
-                  web/gsimaps/vendor.json の sha へ同期・publish 時に CDN 各
-                  チャンネルへ実ファイル配置)。上流コードは無改変で維持。
+                  web/vendor/gsimaps/(git 管理・上流スナップショットを
+                  web/gsimaps/vendor.json の sha でピン。sha 更新時は
+                  tools/fetch_vendor.py で再取得)。上流コードは無改変で維持。
                   ※現在調整中: vendored iframe を GSI.GLOBALS 内部 API 経由で
                   操作する構造のため AI 制御の安定化が難しい）
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
@@ -148,7 +148,7 @@ web/
 
 ## web/vendor/（上流スナップショット）の改変禁止
 
-- **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流（`web/vendor/` は gitignore・`tools/fetch_vendor.py` が `web/<engine>/vendor.json` の sha へ同期して配置する）
+- **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流（`web/vendor/` は git 管理でリポジトリに同梱し、`web/<engine>/vendor.json` の sha でピン。sha 更新・再取得は `tools/fetch_vendor.py` が行う）
 - 挙動を変えたい場合は vendor 側を直さず、組み込み側（中間層 `web/<engine>/` 等）でフック・差し替え・ラップする（例: gsimaps の Globe 起動は iframe の `window.open` を親側でフックして差し替え）
 - 上流側の修正・更新が必要なら上流へ PR するか、`vendor.json` の sha を上げて `python tools/fetch_vendor.py` で再取得する。vendor 実体の手編集・部分的差し替えは禁止
 - 例外は fetch_vendor が整合記録用に書き込む `VENDOR.json` のみ（上流ファイルではなく自動生成物）

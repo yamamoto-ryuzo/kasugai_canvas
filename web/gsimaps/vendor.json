@@ -7,5 +7,5 @@
   "vendorDir": "../vendor/gsimaps",
   "entry": "index_pm.html",
   "license": "BSD-2-Clause",
-  "note": "上流スナップショット。sha を変えたら tools/fetch_vendor.py で再取得する。vendor 実体は kasugai-canvas-web の各チャンネルへ publish 時に配置される"
+  "note": "上流スナップショット。sha を変えたら tools/fetch_vendor.py で再取得する。vendor 実体は kasugai-canvas-web の各チャンネルへ publish 時に配置される。globe/Build/Cesium* 内に Cesium 同梱の公開デフォルトトークン(Mapbox pk./ion JWT)が含まれるが上流コードの既知の仕様であり、シークレットスキャンでは false positive として扱う"
 }
