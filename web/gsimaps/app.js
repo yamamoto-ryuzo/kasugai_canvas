@@ -128,6 +128,9 @@ let gsiApp = null;       // gsimaps インスタンス（_baseLayer は遅延生
 const gsiBase = () => gsiApp?._mainMap?._baseLayer;
 let currentProjectId = null;
 let lastBaseUrl = null;
+// ?kasc= 直読み中は実URLを保持する。writeUrlView は kasc= を残すため
+// projectId へ undefined を渡す（他プレイヤーエンジンと同じ扱い）
+let lastKascUrl = "";
 let layerEntries = [];   // {item, sakuzu, cb, pending, failed, _siblings}
 let baseEntries = [];    // {item, gsiId|null, tileLayer|null}
 let baseHidden = false;
@@ -233,7 +236,7 @@ function syncUrlViewNow() {
     writeUrlView({
       latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
       height: zoomToCamHeight(c.lat, gmap.getZoom()), pitch: -90, heading: 0,
-    }, currentProjectId);
+    }, lastKascUrl ? undefined : currentProjectId);
   } catch (_) { /* 視点書込失敗は無視 */ }
 }
 
@@ -284,7 +287,7 @@ function mirrorGlobeView() {
   if (h === lastGlobeHash) return;
   lastGlobeHash = h;
   const v = globeHashView();
-  if (v) writeUrlView(v, currentProjectId);
+  if (v) writeUrlView(v, lastKascUrl ? undefined : currentProjectId);
 }
 
 // 「2D地図に戻る」: globe の現在視点を引き継いで index_pm.html へ戻す。
@@ -292,7 +295,7 @@ function mirrorGlobeView() {
 // buildFromDoc(lastDocCtx) で全レイヤが再構築される
 function exitGlobe() {
   const v = globeHashView();
-  if (v) writeUrlView(v, currentProjectId);
+  if (v) writeUrlView(v, lastKascUrl ? undefined : currentProjectId);
   const z = v ? Math.max(2, Math.min(18, Math.round(v.zoom))) : DEFAULT_ZOOM;
   const lat = v ? v.latitude : DEFAULT_CENTER.lat;
   const lng = v ? v.longitude : DEFAULT_CENTER.lng;
@@ -1226,6 +1229,7 @@ function resetAll() {
 
 async function applyProject(proj) {
   lastBaseUrl = proj.baseUrl;
+  lastKascUrl = proj.kascUrl || "";
   currentProjectId = proj.id;
   inspectorInput.value = proj.raw || "";
   applyPanelTitle(proj.doc.title || proj.title);
