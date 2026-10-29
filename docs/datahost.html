@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>外部データホスト（.kasc 配信） — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+    .ftree { font-family: ui-monospace, Consolas, "Noto Sans JP", monospace; background: #f6f8fa; border-radius: 8px; padding: 14px 18px; }
+    .ftree .ft-root { font-weight: 700; margin-bottom: 4px; }
+    .ftree ul { list-style: none; margin: 0; padding-left: 0; }
+    .ftree ul ul { border-left: 1px solid #c9d2dc; margin-left: .55em; }
+    .ftree li { position: relative; padding: 3px 0 3px 1.4em; }
+    .ftree ul ul li::before { content: ""; position: absolute; left: 0; top: .95em; width: 1em; border-top: 1px solid #c9d2dc; }
+    .ftree ul ul li:last-child::after { content: ""; position: absolute; left: -1px; top: 1em; bottom: 0; background: #f6f8fa; }
+    .ft-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5em; }
+    .ft-tag { font-size: .7em; padding: .1em .55em; border-radius: 8px; font-weight: 700; white-space: nowrap; }
+    .ft-tag.req { background: #e9f7ee; color: #237a44; border: 1px solid #2e9e56; }
+    .ft-tag.opt { background: #eef0f3; color: #5a6577; border: 1px solid #9aa5b1; }
+    .ft-tag.cond { background: #fdf3e3; color: #b26a00; border: 1px solid #d9a03f; }
+    .ft-note { color: #5a6577; font-family: inherit; font-size: .85em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.2.0</span></h1>
+      <p>外部データホスト（.kasc + DATA/ の静的配信）</p>
+    </header>
+    <main>
+      <section>
+        <h2>全体構成 — エンジンとデータは分離</h2>
+        <p>
+          KASUGAI Canvas は <strong>エンジン（プレイヤー本体）とデータ（.kasc + DATA/）が分離</strong>した設計です。
+          エンジンは CDN（<a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/">kasugai-canvas-web</a>）が配信し、
+          データは<strong>任意の静的ホスト</strong>に置くだけで、<code>?kasc=&lt;URL&gt;</code> で再生できます（サーバーレス・インストール不要）。
+          CDN はエンジン本体のみを配信し、プロジェクトのカタログは持ちません — 変動するプロジェクト一覧は各データホスト側が持つ設計です。
+        </p>
+        <pre class="mermaid">
+flowchart LR
+  QGIS["QGIS + geo_webview<br/>エクスポート"]
+  subgraph HOST["データホスト（静的ホスト）"]
+    DATA[".kasc + DATA/<br/>…/&amp;lt;id&amp;gt;/"]
+    PJ["projects.json【複数指定する場合は必須】<br/>群マニフェスト<br/>→ エンジンの選択肢・一覧に使用"]
+  end
+  CDN["kasugai-canvas-web<br/>stable/・unstable/<br/>5エンジン"]
+  WEB["ブラウザ WebGIS<br/>?kasc=&amp;lt;.kascのURL&amp;gt;"]
+
+  QGIS --&gt;|"アップロード"| DATA
+  CDN ==&gt;|"エンジンを配信"| WEB
+  DATA -.->|"?kasc= で指定"| WEB
+        </pre>
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+        </script>
+      </section>
+
+      <section>
+        <h2>配置するファイル — 必須3点セット</h2>
+        <p>再生に必要な最低限は <strong>.kasc ファイル1つ</strong>、一覧・選択肢に出すには <strong><code>projects.json</code> と <code>&lt;id&gt;/</code> フォルダ</strong>を加えた3点が必須です。</p>
+        <div class="ftree">
+          <div class="ft-root">（データホスト）/</div>
+          <ul>
+            <li>
+              <div class="ft-row"><code>projects.json</code><span class="ft-tag req">必須</span><span class="ft-note">群マニフェスト。一覧・選択肢に使用。未登録時は単独プロジェクトとして <code>&lt;id&gt;</code> 等を名に使う</span></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>&lt;id&gt;/</code><span class="ft-tag req">必須</span><span class="ft-note">フォルダ名 = プロジェクトID。<code>?kasc=</code> URL は <code>&lt;id&gt;/kasugai_canvas.kasc</code> を前提</span></div>
+              <ul>
+                <li>
+                  <div class="ft-row"><code>kasugai_canvas.kasc</code><span class="ft-tag req">必須</span><span class="ft-note">CDN エンジンの <code>?kasc=</code> に指定する URL（これだけで動く）。書式は <a href="inspector.html">.kasc 設定仕様</a></span></div>
+                </li>
+                <li>
+                  <div class="ft-row"><code>project.json</code><span class="ft-tag opt">任意</span><span class="ft-note">プロジェクト名の表示に使用</span></div>
+                </li>
+                <li>
+                  <div class="ft-row"><code>DATA/</code><span class="ft-tag cond">条件付き</span><span class="ft-note">相対参照データがある場合のみ</span></div>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+        <table>
+          <tr><th>ファイル</th><th>必須</th><th>条件</th></tr>
+          <tr>
+            <td><code>&lt;id&gt;/kasugai_canvas.kasc</code></td>
+            <td><strong>必須</strong></td>
+            <td><code>?kasc=</code> に渡す URL は <strong>この .kasc ファイルの URL そのもの</strong>。<code>DATA/</code> 等の相対参照はこの URL のフォルダ基準で解決されます。全レイヤーが URL 直参照ならこれだけで動きます。書式の詳細は <a href="inspector.html">.kasc 設定仕様</a> を参照</td>
+          </tr>
+          <tr>
+            <td><code>&lt;id&gt;/DATA/</code></td>
+            <td>条件付き</td>
+            <td>.kasc 内で <code>DATA/...</code> 等の相対参照しているローカルデータがある場合のみ（.kasc と同じフォルダに置く）</td>
+          </tr>
+          <tr>
+            <td><code>&lt;id&gt;/project.json</code></td>
+            <td>任意</td>
+            <td><strong>単独プロジェクトの表示名として優先</strong>（一覧・複数選択では <code>projects.json</code> の <code>title</code> が優先）。無ければ <code>&lt;id&gt;</code>・ファイル名が使われる</td>
+          </tr>
+          <tr>
+            <td><code>projects.json</code> への登録</td>
+            <td><strong>必須</strong>（一覧・選択肢に出すため）</td>
+            <td>群マニフェスト。<code>?kasc=</code> で開いたエンジンが .kasc の祖先として読み、同一ホスト上の他プロジェクトをドロップボックスに並べます。未登録・無タイトルの単独プロジェクトは <code>&lt;id&gt;</code>（フォルダ名）をプロジェクト名として扱います</td>
+          </tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>追加手順（ファイル順に設定）</h2>
+        <ol>
+          <li><strong><code>projects.json</code>【必須】</strong> —
+            ホスト直下の群マニフェストに、プロジェクトを1エントリ追記します。
+            <pre>[\n  { "id": "default", "title": "サンプルプロジェクト" },\n  { "id": "&lt;id&gt;", "title": "&lt;プロジェクト名&gt;" }\n]</pre>
+            未登録でも単独プロジェクトとしては動きますが（<code>&lt;id&gt;</code> 等が名に使われる）、一覧・選択肢に出すには登録が必須です。</li>
+          <li><strong><code>&lt;id&gt;/</code>【必須】</strong> —
+            フォルダ名 = プロジェクトID で作ります。<code>?kasc=</code> の URL は <code>…/&lt;id&gt;/kasugai_canvas.kasc</code> になる前提です。</li>
+          <li><strong><code>&lt;id&gt;/kasugai_canvas.kasc</code>【必須】</strong> —
+            QGIS プラグイン <code>geo_webview</code> の <code>Export</code> 出力をそのまま置きます。<strong>このファイルの URL を CDN エンジンの <code>?kasc=</code> に指定する</strong>のが再生の本体で、これだけ置けば動きます。</li>
+          <li><strong><code>&lt;id&gt;/project.json</code>（任意）</strong> —
+            表示名を付けたい場合に <code>{"title": "&lt;プロジェクト名&gt;"}</code> と書きます。単独プロジェクトではこの名前が優先され、複数・一覧では <code>projects.json</code> の <code>title</code> が優先されます（無ければ <code>&lt;id&gt;</code>・ファイル名で表示）。</li>
+          <li><strong><code>&lt;id&gt;/DATA/</code>（条件付き）</strong> —
+            .kasc が <code>DATA/...</code> 等の相対参照を持つローカルデータがある場合のみ、.kasc と同じフォルダに置きます。</li>
+          <li><strong>公開</strong> — 静的ホストへアップロードするだけです（GitHub Pages 等）。</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>再生 URL の形式</h2>
+        <pre>https://yamamoto-ryuzo.github.io/kasugai-canvas-web/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;ホスト上の .kasc URL&gt;</pre>
+        <table>
+          <tr><th>要素</th><th>値</th><th>意味</th></tr>
+          <tr>
+            <td><code>&lt;stage&gt;</code></td>
+            <td><code>stable</code>（既定）/ <code>unstable</code> / <code>latest</code></td>
+            <td>CDN の配信チャンネル。stable=安定版・unstable=開発版・latest=stable へのリダイレクト</td>
+          </tr>
+          <tr>
+            <td><code>&lt;engine&gt;</code></td>
+            <td><code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code></td>
+            <td>再生に使う描画エンジン。<code>cesium</code> がメイン（3D・フル機能）、他は同じ .kasc を読む互換プレイヤー</td>
+          </tr>
+          <tr>
+            <td><code>?kasc=</code></td>
+            <td>.kasc ファイルの URL（要 URL エンコード）</td>
+            <td>ホスト上のプロジェクトを指定。相対参照は .kasc のある URL 基準で解決</td>
+          </tr>
+        </table>
+      </section>
+
+      <section>
+        <h2>注意点</h2>
+        <ul>
+          <li><strong>.kasc と DATA/ は同じフォルダに置く</strong> — 相対参照は .kasc のある URL を基準に解決されます。</li>
+          <li><strong>CORS</strong> — エンジンは別オリジンからデータを fetch するため、ホスト側は <code>Access-Control-Allow-Origin</code> が必要です（GitHub Pages は <code>*</code> が既定でそのまま使えます）。</li>
+          <li><strong>スナップショット方式</strong> — .kasc はエクスポート時点の状態です。QGIS 側の編集は再エクスポートで反映してください。</li>
+          <li><strong>大きなファイル</strong> — GitHub Pages の1ファイル上限は 100MB です。大容量データはオブジェクトストレージ等を URL 直参照で使い分けてください。</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>実例・関連リンク</h2>
+        <ul>
+          <li><a href="https://yamamoto-ryuzo.github.io/kasugai_canvas_weGIS/">kasugai_canvas_weGIS（この構成の実例サイト）</a></li>
+          <li><a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/">kasugai-canvas-web ガイド（エンジン側）</a></li>
+          <li><a href="inspector.html">.kasc 設定仕様</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
