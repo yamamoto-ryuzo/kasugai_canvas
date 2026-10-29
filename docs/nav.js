@@ -54,7 +54,7 @@
         },
         { href: 'google.html', text: 'Google 連携・AI' },
         { href: 'qgis.html', text: 'QGIS・GDAL 連携（構想）' },
-        { href: 'datahost.html', text: '外部データホスト（.kasc 配信）' }
+        { href: 'datahost.html', text: 'ブラウザ WebGIS（外部ホスト配信）' }
       ]
     },
     {
