@@ -81,7 +81,9 @@ function byoKey() {
 }
 
 function relayUrl(upstreamUrl) {
-  return `/api/reinfolib?url=${encodeURIComponent(upstreamUrl)}`;
+  // ホスト版エンジンがローカルアプリをバックエンド検出した環境ではそちらへ向く
+  const base = window.kasugaiApi?.backendUrl?.("/api/reinfolib") || "/api/reinfolib";
+  return `${base}?url=${encodeURIComponent(upstreamUrl)}`;
 }
 
 // エラーを利用者向けの案内文に分類する

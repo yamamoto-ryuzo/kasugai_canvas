@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.2.0] - 2026-10-29
+
+### Added
+
+- **CDN ホスト版からローカルアプリをバックエンド検出**（`web/shared/backend.js` 新設）— 同一オリジンの `/health` が見つからない静的配信環境（kasugai-canvas-web・file://）で、起動中のローカルアプリ `127.0.0.1:8510` をバックエンドとして検出する。検出後は `/api/*`・`/projects/*`・`/health` の全呼出しがローカルアプリへ向き、**ホスト版でも AI ブリッジ（Copilot/Devin/Antigravity）・外部登録プロジェクト（QGIS 出力の .kasc+DATA/）・fileWrite/fetchProxy 等のアプリ機能がそのまま使える**。Chrome の Local Network Access 権限が `prompt` の場合は実リクエストでプロンプトを発火し、許可されてバックエンドが見つかったら自動リロードして有効化（`denied` は従来通り静的動作のみ）
+- **`?project=<ファイル名>` の仮IDリンクを `?kasc=` へ復元** — `?kasc=` 読込プロジェクトはファイル名由来の仮IDが付くため、それを `project=` へ入れた共有URLが 404 になっていた。`buildShareUrl` は `?kasc=` 中 `kasc=<url>` を出すよう修正し、読込時に記憶した `.kasc` URL（localStorage）からの復元で既存の壊れたリンクも同一ブラウザでは開けるようにした
+
+### Fixed
+
+- **`/api/*`・`/health` の OPTIONS に Private Network Access 応答を追加** — `/projects/*` は対応済みだったが `/api/*` 側が未対応で、https 公開ページから localhost へのプリフライトが拒否され得た。`access-control-allow-private-network: true` と `allow-headers: *`（MCP プロキシの `Mcp-Session-Id`/`Authorization` 通過用）を付与
+
 ## [6.1.2] - 2026-10-29
 
 ### Fixed

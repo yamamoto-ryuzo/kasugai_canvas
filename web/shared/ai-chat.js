@@ -13,22 +13,24 @@ import {
   initBoxAuth, getBoxClientId, setBoxClientId, boxConnected,
   startBoxAuth, disconnectBox, handleBoxRedirect,
 } from "./box.js";
+import {
+  backendUrl, detectBackend, getBackendCapabilities, hasBackendFeature,
+  isBackendCapabilitiesResolved, setBackendCapabilities as setBackendCaps,
+} from "./backend.js";
 
 // ---- バックエンド capabilities（エンジン横断で共有する状態） ----
-// cesium 側は app.js の detectBackend が setBackendCapabilities で流し込み、
-// プレイヤー系エンジンは initAiChat の loadBackendCapabilities が取得する
-let backendCapabilities = null;
-let backendCapabilitiesResolved = false;
+// 状態の正本は shared/backend.js。検出は detectBackend が同一オリジン優先・
+// 静的配信はローカルアプリ(127.0.0.1:8510)へフォールバックして行い、
+// cesium は app.js の detectBackend、プレイヤー系は initAiChat の
+// loadBackendCapabilities が起動時に呼ぶ
+export {
+  backendUrl, getBackendCapabilities, hasBackendFeature,
+  isBackendCapabilitiesResolved, LOCAL_BACKEND_ORIGIN, backendBaseUrl,
+} from "./backend.js";
+export function setBackendCapabilities(caps, resolved = true, base = "") {
+  setBackendCaps(caps, resolved, base);
+}
 let aiEngine = "cesium";
-
-export function setBackendCapabilities(caps, resolved = true) {
-  backendCapabilities = caps && caps.tier ? caps : null;
-  backendCapabilitiesResolved = resolved;
-}
-export function getBackendCapabilities() { return backendCapabilities; }
-export function hasBackendFeature(name) {
-  return !!backendCapabilities?.features?.includes(name);
-}
 
 // /api/fetch プロキシに渡せる取得先かを判定する。同一オリジンは直接取得できる
 // ためプロキシ不要で、ループバック(localhost/127.x/::1)は SSRF 対策により
@@ -47,36 +49,11 @@ export function isFetchProxyTarget(url) {
 }
 
 // /health + /api/capabilities によるバックエンド検出。
-// 静的配信のみの環境では /health が404で到達せず capabilities は null のまま確定する
+// 検出本体は shared/backend.js（同一オリジン優先・静的配信ではローカル
+// アプリ 127.0.0.1:8510 をバックエンドとして検出）。検出 Promise は
+// モジュール内で共有されるため他モジュールの先行呼び出しと重複しない
 export async function loadBackendCapabilities() {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 1000);
-      const response = await fetch("/health", { signal: controller.signal, cache: "no-store" });
-      clearTimeout(timeout);
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}));
-        if (data?.name === "kasugai_canvas" || data?.ok === true) {
-          const caps = await fetch("/api/capabilities", { cache: "no-store" })
-            .then(r => (r.ok ? r.json() : null)).catch(() => null);
-          backendCapabilities = caps && caps.tier ? caps : null;
-          // サーバー提供の Maps API キーは未保存時のみ自動登録（BYO キー優先）
-          try {
-            const mapsKey = backendCapabilities?.google?.mapsApiKey;
-            if (mapsKey && !localStorage.getItem("googleMapsApiKey")) {
-              localStorage.setItem("googleMapsApiKey", mapsKey);
-            }
-          } catch (e) {}
-        }
-      }
-      backendCapabilitiesResolved = true;
-      return backendCapabilities;
-    } catch {
-      if (attempt >= 2) { backendCapabilitiesResolved = true; return backendCapabilities; }
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-  }
+  return detectBackend();
 }
 
 // LLM API 呼び出し（Gemini generateContent / OpenAI chat completions）の
@@ -454,7 +431,7 @@ function setupAgentPanel() {
 // バックエンドが agent 機能を通知していれば既定エンドポイントとして使う
 // （Cloud Run 版など公開デプロイを審査員が無設定で使えるようにするため）
 function defaultAgentEndpoint() {
-  const endpoint = backendCapabilities?.agent?.endpoint;
+  const endpoint = getBackendCapabilities()?.agent?.endpoint;
   if (!endpoint || !hasBackendFeature("agent")) return "";
   try {
     return new URL(endpoint, window.location.href).href;
@@ -575,8 +552,8 @@ export function updateChatPanelVisibility() {
   const backendStatus = document.querySelector("#agent-backend-status");
   if (backendStatus && !backendStatus.textContent) {
     const fallback = defaultAgentEndpoint();
-    backendStatus.textContent = backendCapabilities?.tier
-      ? t("agent.backendDetected", { tier: backendCapabilities.tier, endpoint: fallback || "—" })
+    backendStatus.textContent = getBackendCapabilities()?.tier
+      ? t("agent.backendDetected", { tier: getBackendCapabilities().tier, endpoint: fallback || "—" })
       : t("agent.backendNone");
   }
   updateChatProviderLabel();
@@ -1887,7 +1864,7 @@ const CHAT_TOOLS = [{
 
 // AI に自オリジンを教える — 位置リンクの案内でデプロイ先と異なるドメインを推測させないため
 const chatSystemInstruction = () => {
-  let custom = backendCapabilities?.ai?.instructions || "";
+  let custom = getBackendCapabilities()?.ai?.instructions || "";
   if (!custom) {
     try { custom = localStorage.getItem("chatCustomInstructions") || ""; } catch (e) {}
   }
@@ -2043,7 +2020,7 @@ async function verifyToolTargetUrl(target, options = "") {
   try {
     // ローカル版は /api/fetch 経由で実在確認(CORSに左右されずレイヤー読み込みと同じ経路)
     if (hasBackendFeature("fetchProxy") && isFetchProxyTarget(url)) {
-      const res = await fetch(`${location.origin}/api/fetch?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(15000) });
+      const res = await fetch(`${backendUrl("/api/fetch")}?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(15000) });
       return res.ok ? { ok: true } : { ok: false, status: res.status };
     }
     let res = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(15000) });
@@ -2342,7 +2319,7 @@ export async function executeChatTool(name, args = {}) {
 // BYO（Bring Your Own：ブラウザ localStorage のユーザー自身のキー）があればそちらを優先し、
 // 無ければプロキシ経由でキーレス利用する
 function aiProxyEndpoint() {
-  const endpoint = backendCapabilities?.ai?.endpoint;
+  const endpoint = getBackendCapabilities()?.ai?.endpoint;
   if (!endpoint || !hasBackendFeature("aiProxy")) return "";
   try {
     return new URL(endpoint, window.location.href).href;
@@ -2376,9 +2353,9 @@ function setChatMaxToolSteps(value) {
 // エンドポイントを最優先にし、local ティアではブリッジハブの 8511 を候補とする
 function bridgeCandidates(provider) {
   const list = [];
-  const advertised = backendCapabilities?.[provider]?.endpoint;
+  const advertised = getBackendCapabilities()?.[provider]?.endpoint;
   if (advertised) list.push(advertised);
-  if (backendCapabilities?.tier === "local") list.push(BRIDGE_HUB_ENDPOINT_APP);
+  if (getBackendCapabilities()?.tier === "local") list.push(BRIDGE_HUB_ENDPOINT_APP);
   return [...new Set(list)];
 }
 
@@ -2471,7 +2448,7 @@ async function refreshChatProviderSwitch() {
   const select = document.querySelector("#chat-provider-switch");
   if (!select) return;
   // capabilities 評価前はブリッジ系が「使えない」と誤判定されるため再構築を遅延する
-  if (!backendCapabilitiesResolved) return;
+  if (!isBackendCapabilitiesResolved()) return;
   const usable = await usableChatProviders();
   const prevValue = select.value;
   select.textContent = "";
@@ -2880,7 +2857,7 @@ async function callGemini(history) {
   const apiKey = chatGoogleApiKey();
   const model = chatGeminiModel();
   // Cloud Run 管理の追加指示がある場合はサーバープロキシを通し、BYOキー経路で迂回しない。
-  const proxy = backendCapabilities?.ai?.instructions
+  const proxy = getBackendCapabilities()?.ai?.instructions
     ? aiProxyEndpoint()
     : (apiKey ? "" : aiProxyEndpoint());
   const endpoint = proxy || `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -3436,7 +3413,7 @@ export function startRemoteCommandLoop() {
   const remoteCommandLoop = async () => {
     for (;;) {
       try {
-        const res = await fetch(`/api/command?since=${remoteCommandSince}&wait=25`, { cache: "no-store" });
+        const res = await fetch(backendUrl(`/api/command?since=${remoteCommandSince}&wait=25`), { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json().catch(() => ({}));
         if (!remoteCommandInitialized) {
@@ -3457,7 +3434,7 @@ export function startRemoteCommandLoop() {
           }
         }
         if (results.length) {
-          await fetch("/api/command/results", {
+          await fetch(backendUrl("/api/command/results"), {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ results }),

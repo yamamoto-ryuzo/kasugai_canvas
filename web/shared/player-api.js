@@ -4,6 +4,7 @@
 // kasugaiApi 互換の API 面をここで構成する。AI チャット（shared/ai-chat.js）の
 // ツールはこの api メソッドの有無で公開可否が決まる。
 import { camToZoom, zoomToCamHeight, geojsonExtent, splitKascTitle } from "./kasc.js";
+import { backendUrl } from "./backend.js";
 import { hasBackendFeature, isFetchProxyTarget, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
 import { getLanguage, t } from "./i18n.js";
 
@@ -294,6 +295,9 @@ export function createPlayerApi(hooks) {
   const api = {
     isReady: true,
     engine: hooks.engine,
+    // プラグインがバックエンドAPI(/api/*)へ接続するためのURL解決。
+    // 静的配信でローカルアプリを検出した環境ではそちらへ向く
+    backendUrl,
 
     getProjectId: hooks.getProjectId,
 
@@ -499,7 +503,11 @@ export function createPlayerApi(hooks) {
     buildShareUrl({ latitude, longitude, height, zoom, pitch, heading, project } = {}) {
       const params = new URLSearchParams();
       params.set("engine", hooks.engine);
-      params.set("project", project || hooks.getProjectId() || "default");
+      // ?kasc= 読込中は id がファイル名由来の仮名のため、project= ではなく
+      // kasc=<url> を共有URLへ入れる（projects/ 配下に存在しないため404になる）
+      const curKasc = new URLSearchParams(window.location.search).get("kasc");
+      if (curKasc && !project) params.set("kasc", curKasc);
+      else params.set("project", project || hooks.getProjectId() || "default");
       const hash = new URLSearchParams();
       const c = hooks.getViewInfo() || {};
       const lat2 = Number.isFinite(latitude) ? latitude : c.latitude;
@@ -704,7 +712,7 @@ export function createPlayerApi(hooks) {
     async listDataFiles() {
       if (!hasBackendFeature("fileWrite")) return [];
       const project = hooks.getProjectId() || "default";
-      const response = await fetch(`/api/files?project=${encodeURIComponent(project)}`, { cache: "no-store" });
+      const response = await fetch(backendUrl(`/api/files?project=${encodeURIComponent(project)}`), { cache: "no-store" });
       if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
       const data = await response.json().catch(() => ({}));
       return Array.isArray(data?.files) ? data.files : [];
@@ -714,7 +722,7 @@ export function createPlayerApi(hooks) {
       const project = hooks.getProjectId() || "default";
       const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
       if (!rel) return { ok: false, error: "name is required" };
-      const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
+      const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
       if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
       return { ok: true, name };
     },
@@ -723,7 +731,7 @@ export function createPlayerApi(hooks) {
       const project = hooks.getProjectId() || "default";
       const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
       if (!rel) return { ok: false, error: "name is required" };
-      const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "DELETE" });
+      const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "DELETE" });
       if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
       return { ok: true, name };
     },
@@ -731,7 +739,7 @@ export function createPlayerApi(hooks) {
       const target = String(url || "");
       if (!/^https?:\/\//i.test(target)) throw new Error("invalid url");
       const useProxy = hasBackendFeature("fetchProxy") && isFetchProxyTarget(target);
-      const response = await fetch(useProxy ? `/api/fetch?url=${encodeURIComponent(target)}` : target,
+      const response = await fetch(useProxy ? `${backendUrl("/api/fetch")}?url=${encodeURIComponent(target)}` : target,
         useProxy ? { signal: AbortSignal.timeout(30000) } : { mode: "cors", signal: AbortSignal.timeout(30000) });
       const contentType = response.headers.get("content-type") || "";
       const text = await response.text();
@@ -745,8 +753,8 @@ export function createPlayerApi(hooks) {
       if (!hasBackendFeature("update")) return { ok: false, message: "この配信元では更新機能を利用できません" };
       try {
         const [healthRes, latestRes] = await Promise.all([
-          fetch("/health", { cache: "no-store" }),
-          fetch("/api/update/latest"),
+          fetch(backendUrl("/health"), { cache: "no-store" }),
+          fetch(backendUrl("/api/update/latest")),
         ]);
         if (!latestRes.ok) throw new Error(`HTTP ${latestRes.status}`);
         const health = healthRes.ok ? await healthRes.json().catch(() => ({})) : {};
@@ -764,13 +772,13 @@ export function createPlayerApi(hooks) {
       if (!hasBackendFeature("update")) return false;
       let latest = "";
       try {
-        const r = await fetch("/api/update/latest");
+        const r = await fetch(backendUrl("/api/update/latest"));
         latest = (await r.json().catch(() => ({}))).version || "";
       } catch (_) {}
       if (!window.confirm(t("update.confirm", { version: latest || "?" }))) return false;
-      const response = await fetch("/api/update/install", { method: "POST" });
+      const response = await fetch(backendUrl("/api/update/install"), { method: "POST" });
       if (!response.ok) return false;
-      const ping = async () => { try { return (await fetch("/health", { cache: "no-store" })).ok; } catch { return false; } };
+      const ping = async () => { try { return (await fetch(backendUrl("/health"), { cache: "no-store" })).ok; } catch { return false; } };
       void (async () => {
         for (let i = 0; i < 60 && await ping(); i++) await flySleep(1000); // 旧サーバー停止待ち
         for (let i = 0; i < 120; i++) {                                    // 新サーバー起動待ち
@@ -783,7 +791,7 @@ export function createPlayerApi(hooks) {
     async shutdownApp() {
       if (!hasBackendFeature("shutdown")) return false;
       if (!window.confirm(t("app.confirmShutdown"))) return false;
-      try { await fetch("/api/shutdown", { method: "POST" }); } catch (_) {}
+      try { await fetch(backendUrl("/api/shutdown"), { method: "POST" }); } catch (_) {}
       return true;
     },
 

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.1.2</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.2.0</span></h1>
       <p>V6: マルチエンジン — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -129,6 +129,7 @@
         <li><strong>2チャンネル</strong>: <code>stable/</code>（既定・リリース版）と <code>unstable/</code>（kasugai_canvas 側 <code>main</code> の最新 <code>web/</code> 追従）。<code>latest/</code> は stable への静的リダイレクト、<code>channels.json</code> と各ステージの <code>version.json</code> がバージョン表です</li>
         <li><strong>正本と同期</strong>: 正本は kasugai_canvas 側の <code>web/</code> で、CDN リポジトリは発行物のみ（直接編集しない）。同期は <code>python tools/publish_cdn.py --channel unstable|stable</code> で行い、どちらのチャンネルも <code>web/</code> を直接同期します（unstable 経由の格上げではない）。運用は「web/ に配信したい変更 → unstable 同期・リリース時に stable 同期」</li>
         <li><strong>gsimaps の vendor 配置</strong>: 各ステージへ同期する際、<code>web/vendor/</code> 実体（地理院地図）も <code>vendor.json</code> の sha に従って配置されます</li>
+        <li><strong>ローカルアプリ連携（バックエンド検出）</strong>: 同一オリジンにバックエンドが無い静的配信では、起動中のローカルアプリ（<code>127.0.0.1:8510</code>）を自動検出し、<code>/api/*</code>・<code>/projects/*</code> をそちらへ向けます。ホスト版でも AI ブリッジ（Copilot/Devin/Antigravity）や外部登録プロジェクト（QGIS 出力の .kasc+DATA/）・fileWrite/fetchProxy が使えます。Chrome の「ローカルネットワークアクセス」権限が求められたら許可してください（許可で自動リロードして有効化。拒否時は静的機能のみ）</li>
         <li><strong>利用者向けガイド</strong>: エンジン説明・QGIS からの出力手順はホスト側の <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">guide/</a> に集約しています</li>
       </ul>
 

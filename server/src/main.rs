@@ -4687,9 +4687,24 @@ async fn local_api_cors(
                 header::ACCESS_CONTROL_ALLOW_METHODS,
                 axum::http::HeaderValue::from_static("GET,POST,PUT,DELETE,OPTIONS"),
             );
+            // MCPプロキシ等が Mcp-Session-Id・Authorization を送るため
+            // プリフライトはヘッダ全許可とする(実リクエスト側は ACAO:* で
+            // 読めるのは /api/* のみで、データ本体の /projects/* とは別管理)
             h.insert(
                 header::ACCESS_CONTROL_ALLOW_HEADERS,
-                axum::http::HeaderValue::from_static("content-type"),
+                axum::http::HeaderValue::from_static("*"),
+            );
+            // https 公開ページ(ホスト版エンジン)→ localhost の fetch に必要
+            // (Private Network Access)
+            h.insert(
+                axum::http::HeaderName::from_static(
+                    "access-control-allow-private-network",
+                ),
+                axum::http::HeaderValue::from_static("true"),
+            );
+            h.insert(
+                header::ACCESS_CONTROL_MAX_AGE,
+                axum::http::HeaderValue::from_static("600"),
             );
         } else if let (true, Some(o)) = (shared_allowed, &origin) {
             h.insert(

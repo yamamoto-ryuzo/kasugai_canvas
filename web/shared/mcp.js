@@ -10,6 +10,8 @@
 // - CORS: 直叩きで TypeError になった場合、同一オリジン /api/mcp プロキシへ
 //   自動フォールバック（capabilities が mcpProxy を通知する環境のみ）
 
+import { backendUrl } from "./backend.js";
+
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const MCP_SERVERS_KEY = "mcpServers";
 const MCP_ALLOW_WRITE_KEY = "mcpAllowWrite";
@@ -108,7 +110,7 @@ export async function mcpFetch(url, init = {}) {
     return await fetch(url, init);
   } catch (error) {
     if (!proxyAvailable() || !(error instanceof TypeError)) throw error;
-    const proxied = `${MCP_PROXY_PATH}?url=${encodeURIComponent(url)}`;
+    const proxied = `${backendUrl(MCP_PROXY_PATH)}?url=${encodeURIComponent(url)}`;
     return await fetch(proxied, init);
   }
 }

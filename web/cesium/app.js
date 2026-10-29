@@ -12,13 +12,16 @@ import {
   initAiChat, executeChatTool, showReportModal,
   listUiControls as sharedListUiControls, controlUi as sharedControlUi,
   updateChatPanelVisibility, updateBridgeProviderOptions, resyncProviderSelect,
-  startRemoteCommandLoop, setBackendCapabilities, isFetchProxyTarget,
+  startRemoteCommandLoop, isFetchProxyTarget,
 } from "../shared/ai-chat.js";
+import {
+  detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature,
+} from "../shared/backend.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, PROJECTS_MANIFEST_URL, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initPrint } from "../shared/print.js";
 
@@ -328,7 +331,7 @@ async function fetchStyleText(url) {
     if (response.ok) return await response.text();
   } catch (error) { /* CORS 等 → プロキシへ */ }
   if (hasBackendFeature("fetchProxy") && isFetchProxyTarget(url)) {
-    const response = await fetch(`${location.origin}/api/fetch?url=${encodeURIComponent(url)}`);
+    const response = await fetch(`${backendUrl("/api/fetch")}?url=${encodeURIComponent(url)}`);
     if (response.ok) return await response.text();
     throw new Error(`HTTP ${response.status}`);
   }
@@ -667,15 +670,8 @@ let threeRenderer;
 let threeScene;
 let threeCamera;
 let threeModel;
-let backendEnabled = false;
-// バックエンドの能力。{tier:"local"|..., features:[...]}。static環境では null のまま
-let backendCapabilities = null;
-// detectBackend の初回評価が完了したか。capabilities 未確定の間に
-// ブリッジ系プロバイダを「無効」と誤判定して自動切替しないためのガード
-let backendCapabilitiesResolved = false;
-function hasBackendFeature(name) {
-  return !!backendCapabilities?.features?.includes(name);
-}
+// バックエンド検出・capabilities は shared/backend.js が管理する。
+// 同一オリジン優先・静的配信ではローカルアプリ(127.0.0.1:8510)を検出する
 
 // レイヤー行の出典フィールドを解釈する。on/off 等の表示指定や key=value 形式の
 // オプション記述(render= / proxy= / attr= 等)が来た場合はオプションとみなし出典にしない
@@ -779,48 +775,8 @@ function updateMapAttribution() {
   });
 }
 
-async function detectBackend() {
-  // スケールトゥゼロ環境のコールドスタートに備え、応答自体が無い場合は
-  // 最大3回までリトライする。404等のHTTP応答は得られ次第即確定（リトライしない）
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 1000);
-      const response = await fetch("/health", { signal: controller.signal, cache: "no-store" });
-      clearTimeout(timeout);
-      if (response.ok) {
-        const data = await response.json().catch(() => ({}));
-        backendEnabled = data?.name === "kasugai_canvas";
-        // ローカルRustサーバー以外（Cloud Run版エージェント等）でも /health が
-        // {ok:true} を返せば capabilities を取得する（静的配信のみの環境は404で到達しない）
-        if (backendEnabled || data?.ok === true) {
-          // 利用可能な機能（fetchプロキシ・プラグイン書込み・エージェント等）を取得する
-          const caps = await fetch("/api/capabilities", { cache: "no-store" })
-            .then(r => (r.ok ? r.json() : null))
-            .catch(() => null);
-          backendCapabilities = caps && caps.tier ? caps : null;
-          // サーバー提供の Maps API キーを、ブラウザに未保存の場合のみ自動登録する
-          //（ユーザーが手入力した BYO キーがあればそちらを優先）
-          try {
-            const mapsKey = backendCapabilities?.google?.mapsApiKey;
-            if (mapsKey && !localStorage.getItem("googleMapsApiKey")) {
-              localStorage.setItem("googleMapsApiKey", mapsKey);
-            }
-          } catch (e) {}
-        }
-      }
-      backendCapabilitiesResolved = true;
-      return;
-    } catch {
-      if (attempt >= 2) {
-        backendEnabled = false;
-        backendCapabilitiesResolved = true;
-        return;
-      }
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
-  }
-}
+// バックエンド検出本体は shared/backend.js へ集約済み
+// （detectBackend は同一オリジン優先・静的配信ではローカルアプリを検出）
 
 // アプリカテゴリ(クラウド・保存 = ローカルサーバー版のみの機能群)は
 // capabilities 判定後にのみ管理ウィンドウのナビに表示する。静的環境では hidden のまま
@@ -876,7 +832,7 @@ function resolveProjectUrl(url) {
   // クラウドストレージから読める
   if (/^cloud:/i.test(trimmed)) {
     const path = trimmed.slice(6).replace(/^\/+/, "");
-    return `/api/cloud/file?path=${encodeURIComponent(path)}`;
+    return backendUrl(`/api/cloud/file?path=${encodeURIComponent(path)}`);
   }
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return normalizeRemoteUrl(trimmed);
   if (trimmed.startsWith("/")) return trimmed;
@@ -910,7 +866,7 @@ function resolveProjectUrl(url) {
 async function loadProjects() {
   let definitions = [];
   try {
-    const response = await fetch(PROJECTS_MANIFEST_URL, { cache: "no-store" });
+    const response = await fetch(projectsManifestUrl(), { cache: "no-store" });
     if (response.ok) definitions = await response.json();
   } catch {}
   if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
@@ -987,7 +943,7 @@ async function saveInspectorConfig() {
   const projectId = currentProjectId || "default";
   const rawText = document.querySelector("#inspector-input").value;
   const text = auth.restoreKasc ? auth.restoreKasc(rawText) : rawText;
-  const res = await fetch("/api/kasc", {
+  const res = await fetch(backendUrl("/api/kasc"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: auth.token, project: projectId, text })
@@ -2027,7 +1983,7 @@ function proxyFetchUrl(url, useProxy = false) {
   if (!useProxy || !/^https?:\/\//i.test(String(url || ""))) return url;
   if (!hasBackendFeature("fetchRange")) return url;
   if (!isFetchProxyTarget(url)) return url;
-  return `${location.origin}/api/fetch?url=${encodeURIComponent(url)}`;
+  return `${backendUrl("/api/fetch")}?url=${encodeURIComponent(url)}`;
 }
 
 function proxyTemplateUrl(url, useProxy = true) {
@@ -4678,7 +4634,7 @@ async function applyInspectorCloud(spec) {
   if (!spec) return;
   let status = null;
   try {
-    const response = await fetch("/api/cloud/status", { cache: "no-store" });
+    const response = await fetch(backendUrl("/api/cloud/status"), { cache: "no-store" });
     if (response.ok) status = await response.json();
   } catch {}
   if (!status) return;
@@ -4701,7 +4657,7 @@ async function applyInspectorCloud(spec) {
       inspectorCloudAppliedKey = null;
       // serving が見えなくても stop は投げる(serve 発行直後の反映待ちで
       // status が Null を返す間に抜けると、後から serve が残り続ける)
-      await fetch("/api/cloud/stop", { method: "POST" });
+      await fetch(backendUrl("/api/cloud/stop"), { method: "POST" });
       setStatus(t("cloud.status.stopped"));
       showServing(null);
       return;
@@ -4715,7 +4671,7 @@ async function applyInspectorCloud(spec) {
       let installDir = "";
       try { installDir = localStorage.getItem("kasugai.cloud.installDir") || ""; } catch (e) {}
       if (installDir) installBody.dir = installDir;
-      const res = await fetch("/api/cloud/install", {
+      const res = await fetch(backendUrl("/api/cloud/install"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(installBody),
@@ -4723,7 +4679,7 @@ async function applyInspectorCloud(spec) {
       const text = await res.text();
       if (!res.ok) throw new Error(text || res.statusText);
       // 導入後の状態で serve を続行するため status を取り直す
-      const res2 = await fetch("/api/cloud/status", { cache: "no-store" });
+      const res2 = await fetch(backendUrl("/api/cloud/status"), { cache: "no-store" });
       if (res2.ok) status = await res2.json();
       if (!status.installed) throw new Error(t("cloud.rclone.notInstalled"));
     }
@@ -4742,7 +4698,7 @@ async function applyInspectorCloud(spec) {
     const body = { remote: spec.remote, root: spec.root, readOnly: spec.readOnly };
     // ドライブ割当は Windows のみ(他OSで渡すとサーバーが400を返す)
     if (spec.drive && status.os === "windows") body.drive = spec.drive;
-    const response = await fetch("/api/cloud/serve", {
+    const response = await fetch(backendUrl("/api/cloud/serve"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -6549,7 +6505,7 @@ function setupEvents() {
     if (hasBackendFeature("fileWrite")) {
       const project = currentProjectId || "default";
       const rel = String(name).split("/").filter(Boolean).map(encodeURIComponent).join("/");
-      const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
+      const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
       if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
       return "server";
     }
@@ -6747,9 +6703,9 @@ function setupEvents() {
   });
 
   document.querySelector("#shutdown-app").addEventListener("click", async () => {
-    if (!backendEnabled) return;
+    if (!isBackendAlive()) return;
     if (!confirm(t("app.confirmShutdown"))) return;
-    await fetch("/api/shutdown", { method: "POST" });
+    await fetch(backendUrl("/api/shutdown"), { method: "POST" });
   });
 
   document.querySelector("#check-update").addEventListener("click", () => {
@@ -6954,7 +6910,7 @@ function setupEvents() {
   }
 
   const cloudApi = async (path, options = {}) => {
-    const response = await fetch(`/api/cloud/${path}`, { cache: "no-store", ...options });
+    const response = await fetch(backendUrl(`/api/cloud/${path}`), { cache: "no-store", ...options });
     const text = await response.text();
     if (!response.ok) throw new Error(text || response.statusText);
     try { return JSON.parse(text); } catch { return text; }
@@ -7152,7 +7108,7 @@ function setupEvents() {
         const fileName = `${currentProjectId || "kasugai_canvas"}.kasc`;
         if (!window.confirm(t("cloud.saveKascConfirm", { name: fileName }))) return;
         try {
-          await fetch(`/api/cloud/file?path=${encodeURIComponent(fileName)}`, {
+          await fetch(backendUrl(`/api/cloud/file?path=${encodeURIComponent(fileName)}`), {
             method: "PUT",
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: text,
@@ -8164,14 +8120,14 @@ function compareVersions(left, right) {
 
 async function loadUpdateInfo() {
   const current = document.querySelector("#current-version");
-  if (!backendEnabled) {
+  if (!isBackendAlive()) {
     if (current) current.textContent = "-";
     return;
   }
   try {
     const [healthResponse, settingsResponse] = await Promise.all([
-      fetch("/health"),
-      fetch("/api/update/settings"),
+      fetch(backendUrl("/health")),
+      fetch(backendUrl("/api/update/settings")),
     ]);
     if (!healthResponse.ok || !settingsResponse.ok) throw new Error(t("update.fetchFailed"));
     const health = await healthResponse.json();
@@ -8194,7 +8150,7 @@ async function checkForUpdate(currentVersion = document.querySelector("#current-
   status.textContent = t("update.checking");
   installButton.hidden = true;
   try {
-    const response = await fetch("/api/update/latest");
+    const response = await fetch(backendUrl("/api/update/latest"));
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const latestVersion = data.version || "-";
@@ -8235,7 +8191,7 @@ async function installUpdate(latestVersion = document.querySelector("#latest-ver
   button.disabled = true;
   document.querySelector("#version-status").textContent = t("update.preparing");
   try {
-    const response = await fetch("/api/update/install", { method: "POST" });
+    const response = await fetch(backendUrl("/api/update/install"), { method: "POST" });
     const body = await response.text();
     let data;
     try {
@@ -8257,7 +8213,7 @@ async function reloadAfterRestart() {
   const status = document.querySelector("#version-status");
   const ping = async () => {
     try {
-      const response = await fetch("/health", { cache: "no-store" });
+      const response = await fetch(backendUrl("/health"), { cache: "no-store" });
       return response.ok;
     } catch {
       return false;
@@ -8279,9 +8235,9 @@ async function reloadAfterRestart() {
 }
 
 async function saveUpdateSettings() {
-  if (!backendEnabled) return;
+  if (!isBackendAlive()) return;
   const autoUpdate = document.querySelector("#auto-update").checked;
-  const response = await fetch("/api/update/settings", {
+  const response = await fetch(backendUrl("/api/update/settings"), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ autoUpdate }),
@@ -8296,7 +8252,7 @@ async function loadFetchSettings() {
   const section = document.querySelector("#fetch-allow-section");
   if (!section) return;
   try {
-    const response = await fetch("/api/fetch/settings");
+    const response = await fetch(backendUrl("/api/fetch/settings"));
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const settings = await response.json();
     document.querySelector("#fetch-allow").value = (settings.allow || []).join("\n");
@@ -8312,7 +8268,7 @@ async function saveFetchSettings() {
     .value.split(/\r?\n/)
     .map(line => line.trim())
     .filter(Boolean);
-  const response = await fetch("/api/fetch/settings", {
+  const response = await fetch(backendUrl("/api/fetch/settings"), {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ allow }),
@@ -8588,6 +8544,9 @@ window.kasugaiApi = {
   engine: "cesium",
   flyTo,
   sampleGroundHeight,
+  // プラグインがバックエンドAPI(/api/*)へ接続するためのURL解決。
+  // 静的配信でローカルアプリを検出した環境ではそちらへ向く
+  backendUrl,
   getProjectId() { return currentProjectId; },
   getCamera() {
     const carto = Cesium.Cartographic.fromCartesian(viewer.camera.position);
@@ -9168,7 +9127,7 @@ window.kasugaiApi = {
     const target = String(url || "");
     if (!/^https?:\/\//i.test(target)) throw new Error(t("error.invalidUrl"));
     const useProxy = hasBackendFeature("fetchProxy") && isFetchProxyTarget(target);
-    const response = await fetch(useProxy ? `/api/fetch?url=${encodeURIComponent(target)}` : target, useProxy ? {} : { mode: "cors" });
+    const response = await fetch(useProxy ? `${backendUrl("/api/fetch")}?url=${encodeURIComponent(target)}` : target, useProxy ? {} : { mode: "cors" });
     const contentType = response.headers.get("content-type") || "";
     const text = await response.text();
     return { status: response.status, contentType, truncated: text.length > maxChars, text: text.slice(0, maxChars) };
@@ -9190,7 +9149,7 @@ window.kasugaiApi = {
   async listDataFiles() {
     if (!hasBackendFeature("fileWrite")) return [];
     const project = currentProjectId || "default";
-    const response = await fetch(`/api/files?project=${encodeURIComponent(project)}`, { cache: "no-store" });
+    const response = await fetch(backendUrl(`/api/files?project=${encodeURIComponent(project)}`), { cache: "no-store" });
     if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
     const data = await response.json().catch(() => ({}));
     return Array.isArray(data?.files) ? data.files : [];
@@ -9201,7 +9160,7 @@ window.kasugaiApi = {
     const project = currentProjectId || "default";
     const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
     if (!rel) return { ok: false, error: "name is required" };
-    const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "PUT", body: content });
+    const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
     if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
     return { ok: true, name };
   },
@@ -9210,7 +9169,7 @@ window.kasugaiApi = {
     const project = currentProjectId || "default";
     const rel = String(name || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
     if (!rel) return { ok: false, error: "name is required" };
-    const response = await fetch(`/api/files/${encodeURIComponent(project)}/${rel}`, { method: "DELETE" });
+    const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "DELETE" });
     if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
     return { ok: true, name };
   },
@@ -9300,7 +9259,7 @@ window.kasugaiApi = {
   controlUi: sharedControlUi,
   getCapabilities() {
     // バックエンドの能力情報。静的配信のみの環境では null
-    return backendCapabilities ? { ...backendCapabilities } : null;
+    return getBackendCapabilities() ? { ...getBackendCapabilities() } : null;
   },
   // IndexedDBのストレージプラグインを配布用 PLUGIN/ へ昇格させる（ローカルサーバー版のみ）
   async publishStoragePlugin(id) {
@@ -9310,7 +9269,7 @@ window.kasugaiApi = {
     const record = await pluginStore.get(id);
     if (!record) return { error: `plugin '${id}' not found` };
     try {
-      const response = await fetch("/api/plugins", {
+      const response = await fetch(backendUrl("/api/plugins"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -9343,7 +9302,6 @@ window.addEventListener("pagehide", () => {
 
 (async () => {
   await detectBackend();
-  setBackendCapabilities(backendCapabilities, backendCapabilitiesResolved);
   // MCP 接続基盤の初期化。capabilities 確定後に行い、mcpProxy の有無で
   // 直叩き→プロキシのフォールバック可否を決める。Box の OAuth 戻りがあればここで処理し、
   // 有効な MCP サーバーへはバックグラウンドで接続する（ツール一覧を activeChatTools へ合成）
