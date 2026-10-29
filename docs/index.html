@@ -19,8 +19,8 @@
         <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能・AIチャット（Gemini / OpenAI互換 / GitHub Copilot・Devin・Antigravity（アプリ版）連携）を備えています。</p>
         <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得は CesiumJS が直接行い、Rust サーバーはバージョン管理・シャットダウン・ヘルスチェック API のみ提供します。</small></p>
         <figure>
-        <img src="images/KASUGAI_Canvas_v6.1.0概要.png" alt="KASUGAI Canvas v6.1.0 概要：AI連携・FLYプレゼンテーション・マルチエンジン・.kasc+DATA 納品構造" />
-        <figcaption aria-hidden="true">v6.1.0 の概要（AI 連携・FLY プレゼン・マルチエンジン・納品構造）</figcaption>
+        <img src="images/KASUGAI_Canvas_概要.png" alt="KASUGAI Canvas 概要：AI連携・FLYプレゼンテーション・マルチエンジン・.kasc+DATA 納品構造" />
+        <figcaption aria-hidden="true">概要（AI 連携・FLY プレゼン・マルチエンジン・納品構造）</figcaption>
         </figure>
         <figure>
         <video src="images/ブラウザが最強の3D地図に変わるKASUGAI_Canvasの凄さ.mp4" controls preload="metadata"></video>
@@ -35,22 +35,51 @@
           </div>
           <p>詳しい手順は <a href="guide.html">使い方・インストール</a> を参照してください。</p>
         </div>
-        <div style="margin: 15px 0;">
-          <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/" class="demo-link" target="_blank" rel="noopener noreferrer">▶ デモサイトを開く（CDN ホスト版・インストール不要）</a>
-        </div>
-        <p><small>デモは kasugai-canvas-web（GitHub Pages）上の静的配信版です。設定の保存・サーバー経由の一部機能は無効ですが、地図閲覧・Fly など主要機能はそのまま試せます。</small></p>
-        <div style="margin: 15px 0;">
-          <a href="https://cesium-5ie.pages.dev/" class="demo-link cloudflare" target="_blank" rel="noopener noreferrer">▶ デモサイトを開く（Cloudflare Pages・認証方式3）</a>
-        </div>
-        <p><small>Cloudflare Pages 上のデモです。認証方式 3（Pages Functions + KV）で動作しており、ログイン ID／パスワードはいずれも <code>demo</code> です。</small></p>
-        <div style="margin: 15px 0;">
-          <a href="https://kasugai-canvas.ryu-3cb.workers.dev/" class="demo-link cloudflare" target="_blank" rel="noopener noreferrer">▶ デモサイトを開く（Cloudflare Workers・認証方式4）</a>
-        </div>
-        <p><small>Cloudflare Workers 上のデモです。認証方式 4（Worker + KV・全ファイル認証ゲート）で動作しており、未ログインでは静的ファイルも取得できません。ログイン ID は <code>admin</code>、パスワードは <code>admin123</code> です。</small></p>
-        <div style="margin: 15px 0;">
-          <a href="https://kasugai-canvas-nqh4tuar6a-an.a.run.app/" class="demo-link cloudflare" target="_blank" rel="noopener noreferrer">▶ デモサイトを開く（Cloud Run・認証方式5）</a>
-        </div>
-        <p><small>Cloud Run 上のデモです。認証方式 5（認証のみ）で動作しており、ログイン画面が表示されます。</small></p>
+        <p>公開デモ（ブラウザ WebGIS の実例）は <a href="datahost.html">ブラウザ WebGIS</a> ページにまとめています。</p>
+      </section>
+
+      <section>
+        <h2>🔗 連携構成図 — どこで動くか</h2>
+        <p>KASUGAI Canvas は <strong>エンジン（プレイヤー本体）とデータ（.kasc + DATA/）が分離</strong>した設計です。開発の起点は <code>kasugai_canvas</code> リポジトリの <code>web/</code>（エンジン正本）で、そこから <strong>GitHub Pages CDN（kasugai-canvas-web）</strong> と <strong>配布 ZIP（ローカルアプリ）</strong> の2経路で発行されます。メインの使い方は、CDN が配信するエンジンに静的ホスト上の <code>.kasc</code> を <code>?kasc=</code> で指定して開く <strong>サーバレスな WebGIS</strong> です（インストール不要）。</p>
+        <pre class="mermaid" aria-label="KASUGAI Canvas 連携構成図">
+flowchart TB
+  REPO["kasugai_canvas リポジトリ（開発の起点）<br/>web/ = エンジン正本 ＋ server/ = Rust アプリ"]
+
+  REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/・latest/<br/>cesium / maplibre / openlayers / leaflet / gsimaps"]
+  REPO ==>|"run.py -B → ZIP（自動更新）"| APP["ローカルアプリ<br/>kasugai_canvas.exe :8510<br/>フル機能（QGIS連携・保存・rclone）"]
+
+  QGIS["QGIS + geo_webview"] -->|"エクスポート"| DATA[".kasc + DATA/ のみ配置<br/>任意の静的ホスト or :8089<br/>（エンジンは CDN 経由）"]
+
+  CDN ==>|"エンジンを配信"| WEB["ブラウザ WebGIS（メインの利用形態）<br/>…/&amp;lt;engine&amp;gt;/?kasc=&amp;lt;.kascのURL&amp;gt;<br/>CDN経由ならインストール不要"]
+  DATA -.->|"?kasc= で指定"| WEB
+  QGIS -.->|"▶ Canvas で登録"| APP
+
+  WEB --- DEMO["公開デモ（WebGIS の実例）<br/>CDNホスト版＝CDN経由<br/>Cloudflare Pages / Workers / Cloud Run<br/>＝web/自前配信＋認証・/api/*"]
+        </pre>
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+        </script>
+        <p>再生 URL <code>…/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;.kascのURL&gt;</code> の意味:</p>
+        <table>
+          <tr><th>要素</th><th>値</th><th>意味</th></tr>
+          <tr>
+            <td><code>&lt;stage&gt;</code></td>
+            <td><code>stable</code>（既定）/ <code>unstable</code> / <code>latest</code></td>
+            <td>CDN の配信チャンネル。stable=安定版・unstable=開発版・latest=stable へのリダイレクト</td>
+          </tr>
+          <tr>
+            <td><code>&lt;engine&gt;</code></td>
+            <td><code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code></td>
+            <td>再生に使う描画エンジン。<code>cesium</code> がメイン（3D・フル機能）、他は同じ <code>.kasc</code> を読む互換プレイヤー</td>
+          </tr>
+          <tr>
+            <td><code>?kasc=</code></td>
+            <td>.kasc ファイルの URL（要 URL エンコード）</td>
+            <td>DATA/ 等の相対参照は .kasc のある URL 基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> は同じフォルダに置く</td>
+          </tr>
+        </table>
+        <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・AIブリッジ）を持ち、CDN 経由はブラウザ閲覧中心です。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（localhost:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
       </section>
 
       <section>
