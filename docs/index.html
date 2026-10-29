@@ -15,7 +15,7 @@
     </header>
     <main>
       <section>
-        <h2>📋 概要</h2>
+        <h2>1. 📋 概要</h2>
         <p>KASUGAI Canvas は、CesiumJS + Three.js を核とした 2D/3D データ可視化システムです。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能・AIチャット（Gemini / OpenAI互換 / GitHub Copilot・Devin・Antigravity（アプリ版）連携）を備えています。</p>
         <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得は CesiumJS が直接行い、Rust サーバーはバージョン管理・シャットダウン・ヘルスチェック API のみ提供します。</small></p>
         <figure>
@@ -26,8 +26,18 @@
         <video src="images/ブラウザが最強の3D地図に変わるKASUGAI_Canvasの凄さ.mp4" controls preload="metadata"></video>
         <figcaption aria-hidden="true">紹介動画：ブラウザが最強の3D地図に変わる KASUGAI Canvas の凄さ</figcaption>
         </figure>
+      </section>
+
+      <section>
+        <h2>2. 🌐💻 2つの利用形態</h2>
+        <p>利用形態は2系統です。メインはインストール不要の<strong>ブラウザ WebGIS</strong>（CDN エンジン × 外部ホストの .kasc）、フル機能が必要な場合は<strong>ローカルアプリ</strong>を使います。</p>
         <div class="install-steps">
-          <h3>ローカルアプリ kasugai_canvas.exe</h3>
+          <h3>ブラウザ WebGIS（メイン・インストール不要）</h3>
+          <p>CDN（<a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web</a>）が配信するエンジンに、外部ホストの <code>.kasc</code> を <code>?kasc=</code> で指定して開くサーバレスな WebGIS です。QGIS の geo_webview でエクスポートした <code>.kasc</code>+<code>DATA/</code> を任意の静的ホストに置くだけで使えます。公開デモもこの形態の実例です。</p>
+          <p>詳細は <a href="datahost.html">ブラウザ WebGIS ガイド</a>（必須ファイル・?kasc= 仕様・公開デモ）を参照してください。</p>
+        </div>
+        <div class="install-steps">
+          <h3>ローカルアプリ kasugai_canvas.exe（フル機能）</h3>
           <p>インストールして使う<strong>フル機能版</strong>です（QGIS連携・ファイル保存・rclone クラウド連携・AIブリッジなど、<code>localhost:8510</code> で動作）。配布物は <code>download/</code> フォルダから直接ダウンロードできます。<strong>インストーラー版を推奨</strong>します — <code>.kasc</code> ファイルのダブルクリック起動（拡張子の関連付け＝外部プロジェクト登録）はインストーラー版でのみ利用できます。</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 15px 0;">
             <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip" class="demo-link" target="_blank">DOWNLOAD: インストーラー ZIP（推奨）</a>
@@ -35,11 +45,10 @@
           </div>
           <p>詳しい手順は <a href="guide.html">ローカルアプリのガイド</a> を参照してください。</p>
         </div>
-        <p>公開デモ（ブラウザ WebGIS の実例）は <a href="datahost.html">ブラウザ WebGIS</a> ページにまとめています。</p>
       </section>
 
       <section>
-        <h2>🔗 連携構成図 — どこで動くか</h2>
+        <h2>3. 🔗 連携構成図 — どこで動くか</h2>
         <p>KASUGAI Canvas は <strong>エンジン（プレイヤー本体）とデータ（.kasc + DATA/）が分離</strong>した設計です。開発の起点は <code>kasugai_canvas</code> リポジトリの <code>web/</code>（エンジン正本）で、そこから <strong>GitHub Pages CDN（kasugai-canvas-web）</strong> と <strong>配布 ZIP（ローカルアプリ）</strong> の2経路で発行されます。メインの使い方は、CDN が配信するエンジンに静的ホスト上の <code>.kasc</code> を <code>?kasc=</code> で指定して開く <strong>サーバレスな WebGIS</strong> です（インストール不要）。</p>
         <pre class="mermaid" aria-label="KASUGAI Canvas 連携構成図">
 flowchart TB
@@ -83,7 +92,7 @@ flowchart TB
       </section>
 
       <section>
-        <h2>📚 ドキュメント</h2>
+        <h2>4. 📚 ドキュメント</h2>
         <div class="features">
           <a class="feature-card" href="datahost.html">
             <h3>🌐 ブラウザ WebGIS（外部ホスト配信）</h3>
