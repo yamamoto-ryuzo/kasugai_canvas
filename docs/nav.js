@@ -12,6 +12,7 @@
       label: null,
       items: [
         { href: 'index.html', text: 'トップ・概要' },
+        { href: 'datahost.html', text: 'ブラウザ WebGIS（外部ホスト配信）' },
         { href: 'guide.html', text: '使い方・インストール' },
         {
           href: 'features.html', text: '機能と実装',
@@ -53,8 +54,7 @@
           ]
         },
         { href: 'google.html', text: 'Google 連携・AI' },
-        { href: 'qgis.html', text: 'QGIS・GDAL 連携（構想）' },
-        { href: 'datahost.html', text: 'ブラウザ WebGIS（外部ホスト配信）' }
+        { href: 'qgis.html', text: 'QGIS・GDAL 連携（構想）' }
       ]
     },
     {
