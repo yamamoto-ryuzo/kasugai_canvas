@@ -76,12 +76,6 @@
     }
   ];
 
-  const DEMOS = [
-    { href: 'https://yamamoto-ryuzo.github.io/kasugai-canvas-web/', text: '▶ デモ（CDN ホスト版）' },
-    { href: 'https://cesium-5ie.pages.dev/', text: '▶ デモ（Cloudflare Pages）' },
-    { href: 'https://kasugai-canvas.ryu-3cb.workers.dev/', text: '▶ デモ（Cloudflare Workers）' },
-    { href: 'https://kasugai-canvas-nqh4tuar6a-an.a.run.app/', text: '▶ デモ（Cloud Run・認証方式5）' }
-  ];
 
   function norm(path) {
     // 末尾の index.html / / を正規化して比較できる形にする
@@ -98,11 +92,6 @@
 
   let html = `<div class="nav-title"><a href="${base}index.html">KASUGAI Canvas</a><span class="nav-version">${VERSION}</span></div>`;
 
-  html += '<div class="nav-demos">';
-  for (const d of DEMOS) {
-    html += `<a class="nav-demo" href="${d.href.startsWith('http') ? d.href : base + d.href}"${d.href.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : ''}>${d.text}</a>`;
-  }
-  html += '</div>';
 
   for (const g of GROUPS) {
     html += '<div class="nav-group">';
