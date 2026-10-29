@@ -155,7 +155,7 @@ def sync_channel(cdn_dir, channel, vendor=False):
     stage = os.path.join(cdn_dir, channel)
     # vendor は別管理(手動・--vendor 指定時のみ同期)のため
     # web/ 全量コピーから除外
-    _replace_dir(WEB_DIR, stage, exclude=('vendor',))
+    _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))
     _sync_vendors(stage, apply=vendor)
     version = _cargo_version()
     _write_version_json(stage, {
