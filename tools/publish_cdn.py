@@ -8,7 +8,6 @@ kasugai_canvas の web/ を CDN リポジトリ(kasugai-canvas-web)の
 レイアウト:
     <cdn>/unstable/     web/ の同期先(開発版。version.json を付与)
     <cdn>/stable/       web/ の同期先(安定版。version.json を付与)
-    <cdn>/latest/       stable/ へのリダイレクト(静的・更新不要)
     <cdn>/index.html    stable/ へのリダイレクト(静的・更新不要)
     <cdn>/channels.json 各ステージの現在バージョン
 

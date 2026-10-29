@@ -42,13 +42,13 @@
 
 ## CDN ホスト版（kasugai-canvas-web）の同期
 
-- **配信先**: `yamamoto-ryuzo/kasugai-canvas-web`（GitHub Pages）。`stable/`（既定・リリース版）/ `unstable/`（main の最新 `web/` 追従）/ `latest/`（stable へのリダイレクト・静的で更新不要）/ `channels.json`（各ステージのバージョン表）
+- **配信先**: `yamamoto-ryuzo/kasugai-canvas-web`（GitHub Pages）。`stable/`（既定・リリース版）/ `unstable/`（main の最新 `web/` 追従）/ `channels.json`（各ステージのバージョン表）
 - **正本は本リポジトリの `web/`**。CDN リポジトリ側は発行物のみで直接編集しない。`web/` は相対パス構成済みのため同期は単純コピーでよい
 - **同期は `python tools/publish_cdn.py` で行う**（手コピー・CDN 側の手編集はしない）。`--channel` はコピー先ステージを選ぶだけで、どちらも `web/` を直接同期する（stable への格上げに unstable 同期は不要）:
   - `python tools/publish_cdn.py --channel unstable` — `web/` → `unstable/` へ同期し `version.json`・`channels.json` を更新。`--commit` / `--push` でコミット・push まで実行
   - `python tools/publish_cdn.py --channel stable` — `web/` → `stable/` へ直接同期（unstable を経由しない）
   - CDN リポジトリのパスは省略時 `<kasugai_canvas>/../kasugai-canvas-web`（`C:\devin` ワークスペースなら省略可）
-- **運用**: `web/` に配信したい変更が入ったら unstable 同期、リリース時（`-B` で配布物を作るタイミング）に stable 同期。`latest/` とルート `index.html` はリダイレクト固定で触らない
+- **運用**: `web/` に配信したい変更が入ったら unstable 同期、リリース時（`-B` で配布物を作るタイミング）に stable 同期。ルート `index.html` はリダイレクト固定で触らない
 
 ## 動作テストの2系統（CDN を忘れない）
 

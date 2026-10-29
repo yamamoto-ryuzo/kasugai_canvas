@@ -54,7 +54,7 @@
 flowchart TB
   REPO["kasugai_canvas リポジトリ（開発の起点）<br/>web/ = エンジン正本 ＋ server/ = Rust アプリ"]
 
-  REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/・latest/<br/>cesium / maplibre / openlayers / leaflet / gsimaps"]
+  REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/<br/>cesium / maplibre / openlayers / leaflet / gsimaps"]
   REPO ==>|"run.py -B → ZIP（自動更新）"| APP["ローカルアプリ<br/>kasugai_canvas.exe :8510<br/>フル機能（QGIS連携・保存・rclone）"]
 
   QGIS["QGIS + geo_webview"] -->|"エクスポート"| DATA[".kasc + DATA/ のみ配置<br/>任意の静的ホスト or :8089<br/>（エンジンは CDN 経由）"]
@@ -81,8 +81,8 @@ flowchart TB
           <tr><th>要素</th><th>値</th><th>意味</th></tr>
           <tr>
             <td><code>&lt;stage&gt;</code></td>
-            <td><code>stable</code>（既定）/ <code>unstable</code> / <code>latest</code></td>
-            <td>CDN の配信チャンネル。stable=安定版・unstable=開発版・latest=stable へのリダイレクト</td>
+            <td><code>stable</code>（既定）/ <code>unstable</code></td>
+            <td>CDN の配信チャンネル。stable=安定版・unstable=開発版</td>
           </tr>
           <tr>
             <td><code>&lt;engine&gt;</code></td>
