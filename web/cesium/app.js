@@ -21,7 +21,7 @@ import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayers
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initPrint } from "../shared/print.js";
 
@@ -813,6 +813,9 @@ const externalProjectIds = new Set();
 // loadProjects で取得した projects.json のエントリ(id → 定義)。
 // ローカルサーバー時は dir(プロジェクトルートの実パス)・kasc(実ファイル名)を含む
 const projectDefinitions = new Map();
+// ?kasc= モード時に .kasc の祖先 projects.json(群マニフェスト)から読んだ
+// エントリの解決済み .kasc URL(id → 絶対URL)。loadProjects で構築する
+const kascLinkedUrls = new Map();
 
 function updateProjectRootPath() {
   const el = document.querySelector("#project-root-path");
@@ -876,6 +879,29 @@ async function loadProjects() {
     const kascTitle = await fetchKascProjectTitle(kascBaseUrl());
     definitions.unshift({ id: currentProjectId, title: `${kascTitle || currentProjectId} (.kasc)`, external: true });
   }
+  // ?kasc= モードでは .kasc の祖先 projects.json(群マニフェスト)を
+  // データホスト側から読み、同一ホスト上の他プロジェクトも選択肢にする。
+  // カタログはデータ側に置き、エンジンはデータを持たない構成のままにする
+  kascLinkedUrls.clear();
+  if (currentKascUrl) {
+    try {
+      const manifestUrl = new URL("../projects.json", kascBaseUrl()).href;
+      const res = await fetch(manifestUrl, { cache: "no-store" });
+      if (res.ok) {
+        const manifestBase = new URL("./", manifestUrl).href;
+        for (const e of await res.json()) {
+          const id = e.id || e;
+          const dir = e.dir || id;
+          const kascFile = e.kasc || "kasugai_canvas.kasc";
+          const url = new URL(`${String(dir).replace(/\/+$/, "")}/${kascFile}`, manifestBase).href;
+          kascLinkedUrls.set(id, url);
+          if (!definitions.some(p => p.id === id)) {
+            definitions.push({ id, title: e.title || id, dir: new URL(`${String(dir).replace(/\/+$/, "")}/`, manifestBase).href, external: true });
+          }
+        }
+      }
+    } catch { /* データホストに群マニフェストが無ければ従来通り */ }
+  }
   externalProjectIds.clear();
   projectDefinitions.clear();
   const select = document.querySelector("#project-select");
@@ -906,6 +932,29 @@ async function loadInspectorConfig() {
       const response = await fetch(staticUrl, { cache: "no-store" });
       if (response.ok) text = await response.text();
     } catch {}
+    if (!text && !currentKascUrl) {
+      // ?project=<.kascファイル名> は projects/ 直下に存在しない仮ID
+      // (?kasc= 読込のファイル名由来。プレイヤーエンジンと同じく、記憶した
+      // .kasc URL から ?kasc= モードへ復元する。gsimaps が kasc= を
+      // project= へ書き換えたURL・仮エントリ再選択の救済経路)
+      const remembered = rememberedKascUrl(projectId);
+      if (remembered) {
+        try {
+          if (/^localfs:/i.test(remembered)) {
+            const lf = await import("../shared/localfs.js");
+            await lf.pickProjectDir();
+            lf.installFetchShim();
+          }
+          const res2 = await fetch(remembered, { cache: "no-store" });
+          if (res2.ok) {
+            text = await res2.text();
+            currentKascUrl = remembered;
+            // 仮エントリをプロジェクト一覧へ再掲する
+            void loadProjects();
+          }
+        } catch {}
+      }
+    }
     if (!text) {
       // 明示指定されたプロジェクト/?kasc= の .kasc が無いときに内蔵デフォルトへ
       // 逃げると、別プロジェクト(東京都/千代田区サンプル)が表示されて誤解を招く
@@ -923,6 +972,12 @@ async function loadInspectorConfig() {
         return;
       }
       text = defaultConfig;
+    }
+    // ?kasc= で読んだ .kasc URL を仮ID(ファイル名)と紐付けて記憶する。
+    // ?project=<仮ID> 形式のURLからの復元に使う（プレイヤーエンジンの
+    // loadKascUrl と同じ記録）
+    if (currentKascUrl) {
+      try { localStorage.setItem(`kasc:lastProjectUrl:${projectId}`, currentKascUrl); } catch (e) {}
     }
     // エンジン切替の引継ぎ .kasc があれば初期テキストとして使う
     if (switchRestore?.inspector != null && switchRestore.inspector !== text) text = switchRestore.inspector;
@@ -6629,12 +6684,20 @@ function setupEvents() {
 
   document.querySelector("#project-select")?.addEventListener("change", async event => {
     currentProjectId = event.target.value;
-    // 実プロジェクトの選択は ?kasc= 直読みモードを抜ける
-    currentKascUrl = null;
+    const linkedKascUrl = kascLinkedUrls.get(currentProjectId);
     const params = new URLSearchParams(window.location.search);
-    if (currentProjectId) params.set("project", currentProjectId);
-    else params.delete("project");
-    params.delete("kasc");
+    if (linkedKascUrl) {
+      // 群マニフェスト由来のエントリは ?kasc= 直読みのまま切り替える
+      currentKascUrl = linkedKascUrl;
+      params.set("kasc", linkedKascUrl);
+      params.delete("project");
+    } else {
+      // 実プロジェクトの選択は ?kasc= 直読みモードを抜ける
+      currentKascUrl = null;
+      if (currentProjectId) params.set("project", currentProjectId);
+      else params.delete("project");
+      params.delete("kasc");
+    }
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
     updateProjectRootPath();
     // scope:"project" のプラグインレイヤーはプロジェクト単位のデータとして切り離す
