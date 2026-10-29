@@ -6,10 +6,11 @@
 <title>KASUGAI Canvas — GSI Maps</title>
 <script>
   // vendored 地理院地図(web/vendor/gsimaps)は配布物・リポジトリに同梱しない。
-  // ローカルに vendor が残る環境(fetch_vendor 実行後の開発環境等)では従来通り
-  // 動かし、無い場合はホスト版(kasugai-canvas-web)の gsimaps エンジンへ転送する。
-  // iframe の制御は同一オリジンが必須なので、ローカル vendor の有無を
-  // HEAD で調べてから振り分ける
+  // ローカルアプリ(:8510)は /vendor/* のミスを CDN へプロキシして同一オリジン
+  // 供給するため、HEAD が通れば vendor 実体が無くてもローカルのまま起動する。
+  // HEAD が通らない環境(静的配信・CDN 不通)のみホスト版(kasugai-canvas-web)の
+  // gsimaps エンジンへ転送する。iframe の制御は同一オリジンが必須なので、
+  // vendor の有無を HEAD で調べてから振り分ける
   (function () {
     var VENDOR_URL = "../vendor/gsimaps/index_pm.html";
     var DEFAULT_HOSTED = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";

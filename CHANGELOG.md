@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.4.0] - 2026-10-30
+
+### Added
+
+- **`/vendor/` の CDN フォールバックプロキシ**（`server/src/main.rs`）— `web/vendor/`（vendored 地理院地図）実体が無い環境で `/vendor/*` への GET/HEAD がミスした場合、ローカルサーバーが `kasugai-canvas-web/stable/vendor/` へ中継して同一オリジン供給する（`KASUGAI_VENDOR_CDN_BASE` で転送先上書き可）。GSI Maps エンジンは iframe 内 vendor を `GSI.GLOBALS` で制御するため同一オリジンが必須であり、これにより**ローカルアプリでもホスト版へのページ転送なしに `gsimaps/` がそのまま起動する**。Range・`If-None-Match`/`If-Modified-Since` 転送で globe アセットの範囲読みと 304 再検証も成立。ローカルに vendor 実体があれば従来通りそれを優先し、CDN 不通時は非200を返して従来のホスト版転送へフォールバック
+
 ## [6.3.0] - 2026-10-29
 
 ### Changed

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.3.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.4.0</span></h1>
       <p>V6: マルチエンジン — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -112,7 +112,7 @@
         <li><strong>Globe 表示</strong>: 上流の「Globe」起動（window.open）をフックして iframe 内表示へ差し替え、左パネルを維持します。Globe は Cesium アプリのため、読み込み済みの .kasc レイヤを viewer へ注入して 3D 表示でき、可視性も双方向で同期します。表示中の視点は親 URL ハッシュへミラーされ、「← 2D地図に戻る」で視点を引き継いで復帰します</li>
         <li><strong>レイヤ取り込み</strong>: 「地理院地図の表示レイヤを取り込み」ボタンで、地理院地図側で表示中のレイヤを <code>xyz:</code> 行の Canvas レイヤとして .kasc へ追記できます（Globe 表示中は不可）</li>
         <li><strong>AI ツール群</strong>: 地理院地図の操作は専用ツール17本で AI 制御できます（<a href="../ai-tools.html">AI ツール仕様</a>）。表示中レイヤの一覧・取り込み（<code>listGsiLayers</code>/<code>importGsiLayers</code>）、透過率・積み順・解除（<code>setGsiLayerOpacity</code>/<code>moveGsiLayer</code>/<code>removeGsiLayer</code>）、カタログ検索・表示・直接取り込み（<code>listGsiCatalog</code>/<code>addGsiLayer</code>/<code>importGsiCatalog</code>）、作図取り込み（<code>listGsiSakuzu</code>/<code>importGsiSakuzu</code>）、ベースマップの一覧・切替（<code>listGsiBasemaps</code>/<code>setGsiBasemap</code>。切替は <code>base:</code> 行を .kasc へ自動追記し、他エンジンでも同じベースが再現されます）。ほかに表示中レイヤの一時非表示（<code>setGsiLayerHidden</code>）・作図削除（<code>removeGsiSakuzu</code>）・地点標高取得（<code>getGsiElevation</code>）もあります）。地理院地図側の UI 自体も <code>data-ui-bridge</code> 経由で汎用 <code>listUiControls</code>/<code>controlUi</code> の対象になります</li>
-        <li><strong>ベンダー管理</strong>: vendor 実体は git 管理（上流スナップショットを <code>gsimaps/vendor.json</code> の sha でピン）。sha 更新時は <code>tools/fetch_vendor.py</code> で再取得します。CDN 公開時も各チャンネルへ実ファイルが配置されます。<strong>同梱トークンについて</strong>: <code>globe/Build/Cesium*</code> には Cesium 公式の公開デフォルトトークン（Mapbox <code>pk.</code> トークン・ion の JWT）が含まれます。これは Cesium が全配布物に同梱する公開仕様（利用時は「自前トークンを設定せよ」の警告を出力する既定動作）であり、シークレットスキャン（detect-secrets・GitHub Push Protection）では false positive として扱います — detect-secrets は <code>.secrets.baseline</code>、GitHub 側は unblock URL の許可で対応済み</li>
+        <li><strong>ベンダー管理</strong>: vendor 実体（約75MB）はリポジトリ・配布 ZIP・インストーラーに同梱せず、CDN（kasugai-canvas-web 各ステージ）へ <code>gsimaps/vendor.json</code> の sha でピンして配置します。ローカルアプリ（:8510）は <code>/vendor/*</code> のミスを CDN へプロキシして同一オリジン供給するため、vendor 未配置でも gsimaps はローカル URL のまま動作します（CDN 不通時のみ従来通りホスト版へ転送。転送先は <code>KASUGAI_VENDOR_CDN_BASE</code> で上書き可）。オフライン開発等で実体が必要な場合のみ <code>tools/fetch_vendor.py</code> で取得してください（ローカル実体が優先されます）。<strong>同梱トークンについて</strong>: <code>globe/Build/Cesium*</code> には Cesium 公式の公開デフォルトトークン（Mapbox <code>pk.</code> トークン・ion の JWT）が含まれます。これは Cesium が全配布物に同梱する公開仕様（利用時は「自前トークンを設定せよ」の警告を出力する既定動作）であり、シークレットスキャン（detect-secrets・GitHub Push Protection）では false positive として扱います — detect-secrets は <code>.secrets.baseline</code>、GitHub 側は unblock URL の許可で対応済み</li>
       </ul>
 
       <h3>📄 プロジェクト直読み（<code>?kasc=</code>）とサーバレス配信</h3>
@@ -128,7 +128,7 @@
         <li><strong>起動形式</strong>: <code>…/kasugai-canvas-web/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;url&gt;</code>。各ステージ配下に全エンジン（cesium・maplibre・openlayers・leaflet・gsimaps）が同居し、ステージルートの <code>?engine=</code> でも選択できます。<code>?kasc=local</code> ならローカルフォルダの .kasc を直接開けます（ホストされたエンジンがローカルのデータだけを読む、CDN ライブラリと同じ使い方）</li>
         <li><strong>2チャンネル</strong>: <code>stable/</code>（既定・リリース版）と <code>unstable/</code>（kasugai_canvas 側 <code>main</code> の最新 <code>web/</code> 追従）。<code>channels.json</code> と各ステージの <code>version.json</code> がバージョン表です</li>
         <li><strong>正本と同期</strong>: 正本は kasugai_canvas 側の <code>web/</code> で、CDN リポジトリは発行物のみ（直接編集しない）。同期は <code>python tools/publish_cdn.py --channel unstable|stable</code> で行い、どちらのチャンネルも <code>web/</code> を直接同期します（unstable 経由の格上げではない）。運用は「web/ に配信したい変更 → unstable 同期・リリース時に stable 同期」</li>
-        <li><strong>gsimaps の vendor 配置</strong>: 各ステージへ同期する際、<code>web/vendor/</code> 実体（地理院地図）も <code>vendor.json</code> の sha に従って配置されます</li>
+        <li><strong>gsimaps の vendor 配置</strong>: 各ステージへ同期する際、<code>web/vendor/</code> 実体（地理院地図）も <code>vendor.json</code> の sha に従って配置されます（ローカルアプリはこの CDN vendor を <code>/vendor/</code> プロキシ経由で同一オリジン供給）</li>
         <li><strong>ローカルアプリ連携（バックエンド検出）</strong>: 同一オリジンにバックエンドが無い静的配信では、起動中のローカルアプリ（<code>127.0.0.1:8510</code>）を自動検出し、<code>/api/*</code>・<code>/projects/*</code> をそちらへ向けます。ホスト版でも AI ブリッジ（Copilot/Devin/Antigravity）や外部登録プロジェクト（QGIS 出力の .kasc+DATA/）・fileWrite/fetchProxy が使えます。Chrome の「ローカルネットワークアクセス」権限が求められたら許可してください（許可で自動リロードして有効化。拒否時は静的機能のみ）</li>
         <li><strong>利用者向けガイド</strong>: エンジン説明・QGIS からの出力手順はホスト側の <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">guide/</a> に集約しています</li>
       </ul>

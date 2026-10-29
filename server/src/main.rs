@@ -4327,6 +4327,113 @@ async fn no_cache_middleware(
     response
 }
 
+// ---- vendor プロキシ(vendored 地理院地図の CDN フォールバック) ----
+// web/vendor/ は配布物に同梱しないため、ローカルに実体が無い環境では
+// /vendor/* のミスを CDN(kasugai-canvas-web)へ中継して同一オリジン供給する。
+// gsimaps エンジンは vendor を iframe で組み込み GSI.GLOBALS で制御するため
+// 同一オリジンが必須であり、この経路が通れば gsimaps/index.html の HEAD 検出が
+// 成功してホスト版へのページ転送を回避できる。取得失敗時は非200を返し、
+// フロント側は従来通り CDN 転送へフォールバックする
+const VENDOR_CDN_BASE: &str = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";
+
+// 転送先ステージの上書き(検証用)。KASUGAI_VENDOR_CDN_BASE=<base URL>
+fn vendor_cdn_base() -> String {
+    std::env::var("KASUGAI_VENDOR_CDN_BASE")
+        .ok()
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("{s}/"))
+        .unwrap_or_else(|| VENDOR_CDN_BASE.to_string())
+}
+
+// ServeDir のフォールバックとして動く(service_fn 経由)。/vendor/ 配下で
+// ローカル実体が無い GET/HEAD のみ CDN へ中継し、それ以外は 404。
+// Range・条件付きヘッダを転送するため、大きな globe アセットの範囲読みと
+// ブラウザキャッシュの 304 再検証(no-cache で毎回再検証される)が成立する
+async fn vendor_cdn_fallback(
+    request: axum::extract::Request,
+) -> Result<axum::response::Response, std::convert::Infallible> {
+    let plain = |status: StatusCode| {
+        axum::response::Response::builder()
+            .status(status)
+            .body(axum::body::Body::empty())
+            .unwrap_or_else(|_| StatusCode::NOT_FOUND.into_response())
+    };
+    let method = request.method().clone();
+    if method != Method::GET && method != Method::HEAD {
+        return Ok(plain(StatusCode::NOT_FOUND));
+    }
+    let Some(rel) = request.uri().path().strip_prefix("/vendor/") else {
+        return Ok(plain(StatusCode::NOT_FOUND));
+    };
+    // %XX デコード後に不正なセグメント(空・.・..)やバックスラッシュを含むものは
+    // URL 正規化で vendor/ の外へ出られるため拒否する。upstream には
+    // エンコード済みの生パスを使い、rel を再度デコードしない
+    let decoded = percent_decode(rel);
+    if rel.is_empty()
+        || decoded.contains('\\')
+        || decoded
+            .split('/')
+            .any(|seg| seg.is_empty() || seg == "." || seg == "..")
+    {
+        return Ok(plain(StatusCode::NOT_FOUND));
+    }
+    let url = match reqwest::Url::parse(&format!("{}vendor/{}", vendor_cdn_base(), rel)) {
+        Ok(url) => url,
+        Err(_) => return Ok(plain(StatusCode::NOT_FOUND)),
+    };
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => return Ok(plain(StatusCode::BAD_GATEWAY)),
+    };
+    let upstream_method = if method == Method::HEAD {
+        reqwest::Method::HEAD
+    } else {
+        reqwest::Method::GET
+    };
+    let mut upstream_request = client.request(upstream_method, url);
+    for key in [
+        header::RANGE,
+        header::IF_NONE_MATCH,
+        header::IF_MODIFIED_SINCE,
+    ] {
+        if let Some(value) = request.headers().get(&key) {
+            upstream_request = upstream_request.header(key, value.clone());
+        }
+    }
+    let response = match upstream_request.send().await {
+        Ok(response) => response,
+        // CDN 不通は 404 扱いにしてフロントのホスト転送判定に委ねる
+        Err(_) => return Ok(plain(StatusCode::BAD_GATEWAY)),
+    };
+    let mut builder = axum::response::Response::builder().status(response.status());
+    for key in [
+        header::CONTENT_TYPE,
+        header::CONTENT_LENGTH,
+        header::CONTENT_RANGE,
+        header::ACCEPT_RANGES,
+        header::ETAG,
+        header::LAST_MODIFIED,
+    ] {
+        if let Some(value) = response.headers().get(&key) {
+            builder = builder.header(key, value.clone());
+        }
+    }
+    // vendor は sha ピンの不変アセット。globe の Cesium アセット等が大きいため
+    // バッファ上限は設けずストリーミングで返す
+    let body = if method == Method::HEAD {
+        axum::body::Body::empty()
+    } else {
+        axum::body::Body::from_stream(response.bytes_stream())
+    };
+    Ok(builder
+        .body(body)
+        .unwrap_or_else(|_| StatusCode::BAD_GATEWAY.into_response()))
+}
+
 // ---- 外部プロジェクト(.kasc ファイル関連付け起動) ----
 // インストールフォルダ外にある .kasc をプロジェクトとして登録する。
 // .kasc のあるフォルダがそのまま /projects/<id>/ のルートになるため、
@@ -5356,7 +5463,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 起動不能になる。no-cache で毎回再検証させる(未変更なら 304 で転送量は増えない)
     let app = app
         .route("/projects/{*path}", get(serve_project_files))
-        .fallback_service(ServeDir::new(&web_dir).append_index_html_on_directories(true))
+        // /vendor/ 実体が無い環境(配布版)では CDN へ中継し、
+        // gsimaps エンジンを同一オリジンのまま動かす(vendor_cdn_fallback)
+        .fallback_service(
+            ServeDir::new(&web_dir)
+                .append_index_html_on_directories(true)
+                .fallback(tower::service_fn(vendor_cdn_fallback)),
+        )
         .layer(axum::middleware::from_fn(no_cache_middleware))
         .layer(axum::middleware::from_fn(local_api_cors))
         .with_state(state.clone());
