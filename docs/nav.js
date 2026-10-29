@@ -11,9 +11,19 @@
     {
       label: null,
       items: [
-        { href: 'index.html', text: 'トップ・概要' },
+        { href: 'index.html', text: 'トップ・概要' }
+      ]
+    },
+    {
+      label: '利用形態（2系統）',
+      items: [
         { href: 'datahost.html', text: 'ブラウザ WebGIS（外部ホスト配信）' },
-        { href: 'guide.html', text: '使い方・インストール（ローカルアプリ）' },
+        { href: 'guide.html', text: 'ローカルアプリ（kasugai_canvas.exe）' }
+      ]
+    },
+    {
+      label: '仕様',
+      items: [
         {
           href: 'features.html', text: '機能と実装',
           children: [
