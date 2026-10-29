@@ -56,9 +56,9 @@
 
 1. **ブラウザ WebGIS（CDN × 外部データホスト）— メインの利用形態**
    - エンジン: `kasugai-canvas-web`（GitHub Pages CDN。エンジン本体のみ配信し `projects/` は同梱しない）。`stable/`=リリース版・`unstable/`=最新 `web/` 追従。`web/` の変更は `python tools/publish_cdn.py --channel unstable --commit --push` で同期してから検証する
-   - テストデータホスト: `yamamoto-ryuzo/kasugai_canvas_weGIS`（GitHub Pages。`.kasc + DATA/` + 群マニフェスト `projects.json`）— エンジン以外のテストデータの置き場
+   - テストデータホスト: `yamamoto-ryuzo/kasugai_canvas_webGIS`（GitHub Pages。`.kasc + DATA/` + 群マニフェスト `projects.json`）— エンジン以外のテストデータの置き場
    - 再生: `…/kasugai-canvas-web/<stage>/<engine>/?kasc=<.kasc URL>`。開いた .kasc の祖先 `projects.json`（群マニフェスト）をエンジンが読み、同一ホストの他プロジェクトをドロップボックスに並べる（cesium 実装済み）
-   - 検証例: `https://yamamoto-ryuzo.github.io/kasugai-canvas-web/unstable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_weGIS%2Fdefault%2Fkasugai_canvas.kasc`
+   - 検証例: `https://yamamoto-ryuzo.github.io/kasugai-canvas-web/unstable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fdefault%2Fkasugai_canvas.kasc`
    - ドキュメント正本: `docs/datahost.html`（ブラウザ WebGIS）。`weGIS/index.html` はホスト固有の運用ページ
 2. **ローカルアプリ（kasugai_canvas.exe :8510）— フル機能**
    - 従来通り開発ビルドまたは配布 ZIP で 8510 起動 → 以降の検証ルールに準拠
@@ -67,6 +67,7 @@
 
 - **コードを修正したら必ず動作確認を行う**。構文チェック（`node --check web/cesium/app.js`・`cargo check`）だけで完了とみなさない
 - フロントエンドの挙動変更はブラウザで実際に検証する（Playwright + インストール済みブラウザによる自動化を推奨。`applyInspector`・`kasugaiApi`・`vectorAttrWidget.open()` 等を `page.evaluate` で直接叩けば UI 操作なしで検証できる）
+- **ブラウザ検証を始める前に、まず Chrome がインストール済みか確認する**。Playwright 管理ブラウザ（`ms-playwright/` キャッシュ）が空でも、`chromium.launch({ channel: 'chrome' })`・`channel: 'msedge'` で OS インストール済みブラウザをそのまま headless 起動できる。Chrome → Edge の順で探し、両方無い場合だけ `npx playwright install` で取得する（重いダウンロードを避け、まず既存ブラウザを使う）
 - 検証は「変更した機能が実際に動くこと」に加え、既存機能への影響（回帰）も対象とする
 - サーバー側の変更は起動して実リクエスト（curl 等）で確認する
 - 検証用の一時ファイル・スクリプトはシステムの temp ディレクトリ（Windows: `%TEMP%`）に置く。`.testtmp/` は gitignore 対象パスのためエージェントのファイル作成ツールで書き込めず、使わないこと（シェルのリダイレクトで生成する分には可）
