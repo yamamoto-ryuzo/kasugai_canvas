@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.3.0] - 2026-10-29
+
+### Changed
+
+- **ブラウザ WebGIS 向けスタンドアロン ブリッジハブを Rust 製 `bridge-hub.exe` 化**（`server/src/bin/bridge-hub.rs`）— `server/src/bridge/` の本体共有モジュールを単独バイナリとして配布する構成に変更し、`bridge-hub.zip` の中身を Node スクリプトから exe＋起動スクリプト一式へ差し替え。**ブラウザ WebGIS でも Node.js 不要**になり、必要なのは各プロバイダの CLI と本人の認証のみ（Copilot を npm で導入する場合のみ例外的に Node.js が必要）
+- AI プロバイダ設定の案内を形態別に整理 — 「アプリ版=ハブ内蔵」「ブラウザ WebGIS（CDN・静的配信）=bridge-hub.zip」に用語統一し、Node.js 言及を撤去。各プロバイダのヒントに CLI 導入要件（copilot / devin / agy）を明示、接続失敗時の案内も形態別の確認項目に修正
+
+### Removed
+
+- 旧 Node 製ブリッジを撤去 — `bridge-hub/server.mjs`・`package.json`、および `copilot-bridge/`・`devin-bridge/`・`antigravity-bridge/` 各ディレクトリ（参照実装として残置していた Node 実装）
+
 ## [6.2.0] - 2026-10-29
 
 ### Added

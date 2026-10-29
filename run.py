@@ -410,7 +410,8 @@ def build_release() -> None:
                 if web_file.is_file():
                     archive.write(web_file, arcname=(Path("web") / web_file.relative_to(web_dir)).as_posix())
         # AI ブリッジハブは Rust 製アプリ内モジュールに統合済み（server/src/bridge/）。
-        # Node 製 bridge-hub/・*-bridge/ は参照実装として残置し、配布物には含めない
+        # 旧 Node 製ブリッジは撤去済み。ブラウザ WebGIS 向け配布 bridge-hub.zip は
+        # Rust 製 bridge-hub.exe（web/download/ 経由で配信・tools/build_bridge_zip.py）
     print(f"ZIP を作成しました: {download_zip}")
 
     print("ZIP 内 EXE のバージョンを確認します...")

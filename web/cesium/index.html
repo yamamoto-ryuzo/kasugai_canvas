@@ -328,7 +328,7 @@
                       </select>
                     </div>
                     <div id="openai-fields" hidden>
-                      <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はプロバイダを GitHub Copilot に変更し、表示されるブリッジ欄で Copilot ブリッジ（copilot-bridge/）を接続してください。</p>
+                      <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はプロバイダを GitHub Copilot に変更し、表示されるブリッジ欄で Copilot ブリッジ（copilot CLI 経由）を接続してください。</p>
                       <p class="hint" data-i18n-html="chat.openai.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は上のエンドポイントのみです。http（非HTTPS）のエンドポイントを指定するとキーが平文で送信されるため、localhost/127.0.0.1 以外では https を使ってください。キー自体を共有ファイル（.kasc等）やコードに書き込まないでください。</p>
                       <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
                       <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
@@ -339,9 +339,9 @@
                     </div>
                     <div id="bridge-fields" hidden>
                       <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden>チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
-                      <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden>GitHub Copilot の場合は同梱の Copilot ブリッジ（<code>copilot-bridge/</code>・GitHub Copilot SDK）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。GitHub Copilot 契約が必要です — 手順は copilot-bridge/README.md。</p>
-                      <p class="hint provider-only" data-for="devin" data-i18n-html="chat.devin.hint" hidden>Devin の場合は同梱の Devin ブリッジ（<code>devin-bridge/</code>・<code>devin acp</code>）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Devin CLI と利用者自身の Devin プランが必要で、ローカル・本人利用限定です — 手順と利用条件は devin-bridge/README.md。</p>
-                      <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden>Antigravity の場合は同梱の Antigravity ブリッジ（<code>antigravity-bridge/</code>・<code>agy</code> CLI）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要で、ローカル・本人利用限定です — 手順と利用条件は antigravity-bridge/README.md。</p>
+                      <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden>GitHub Copilot の場合はブリッジハブ経由で <code>copilot</code> CLI へ接続します（:8511 自動検出・空欄可）。GitHub Copilot 契約と <code>copilot</code> CLI の導入・ログインが必要です — 導入手順は <a href="https://github.com/github/copilot-cli" target="_blank" rel="noopener">github/copilot-cli</a> を参照（npm 版は <a href="https://nodejs.org/" target="_blank" rel="noopener">Node.js</a> も必要）。</p>
+                      <p class="hint provider-only" data-for="devin" data-i18n-html="chat.devin.hint" hidden>Devin の場合はブリッジハブ経由で <code>devin acp</code>（Devin CLI）へ接続します（:8511 自動検出・空欄可）。Devin CLI と利用者自身の Devin プラン・本人の ACP 認証が必要です（Node.js 不要・ローカル・本人利用限定） — 手順と利用条件は bridge-hub/README.md。</p>
+                      <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden>Antigravity の場合はブリッジハブ経由で <code>agy</code> CLI へ接続します（:8511 自動検出・空欄可）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要です（Node.js 不要・ローカル・本人利用限定） — 手順と利用条件は bridge-hub/README.md。</p>
                       <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
                       <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
                       <p class="hint" id="bridge-hub-note" hidden>

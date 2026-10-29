@@ -16,7 +16,7 @@ use tokio::sync::{Mutex, Notify};
 use tower::ServiceExt;
 use tower_http::services::ServeDir;
 
-mod bridge;
+use kasugai_canvas::bridge;
 
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const CLOUD_CONFIG_FILE_NAME: &str = "kasugai_canvas.cloud.json";
@@ -5016,7 +5016,7 @@ fn bridge_hub_port() -> u16 {
         .unwrap_or(8511)
 }
 // 旧版が残したブリッジの掃除対象ポート（占有者がブリッジの場合のみ停止する）
-// ただし 8512 はスタンドアロン bridge-hub（アプリ未導入環境向けの手動起動
+// ただし 8512 はブラウザ WebGIS 用 bridge-hub（アプリ未導入環境向けの手動起動
 // ハブ）の既定ポートでもあるため、/health が hub:true を返すプロセスは
 // 掃除対象から外す（kill_bridge_on_port の kill_hub=false 参照）
 const LEGACY_BRIDGE_PORTS: [u16; 2] = [8512, 8513];
@@ -5128,7 +5128,7 @@ async fn kill_process_forced(pid: u32, ancestor_pid: Option<u32>) {
 // PID を特定して kill し true を返す。無関係なプロセスの誤終了を防ぐため、
 // ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）。
 // kill_hub=false の場合は応答が hub:true のブリッジハブを kill しない
-// （8512 はスタンドアロン bridge-hub の既定ポートとして残すため。
+// （8512 はブラウザ WebGIS 用 bridge-hub の既定ポートとして残すため。
 // 旧ブリッジは hub キーを返さないので従来通り掃除される）
 // ancestor_pid は自分の祖先(自動更新の旧プロセス)。占有者が祖先に一致する
 // 場合は taskkill /T が自分を道連れにするため kill_process_forced が単独 kill する
@@ -5416,7 +5416,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(bridge_state) = state.bridge_state.clone() {
         tokio::spawn(async move {
             // 旧版ブリッジ（8512/8513）が残っていれば停止する。
-            // ハブ(hub:true)は残す — 8512 はスタンドアロン bridge-hub の既定ポート
+            // ハブ(hub:true)は残す — 8512 はブラウザ WebGIS 用 bridge-hub の既定ポート
             for legacy_port in LEGACY_BRIDGE_PORTS {
                 if TcpListener::bind(("127.0.0.1", legacy_port)).await.is_err()
                     && kill_bridge_on_port(legacy_port, finish_update_pid, false).await

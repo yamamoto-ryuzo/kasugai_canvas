@@ -7,11 +7,11 @@ $taskName = "KasugaiCanvasBridgeHub"
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 Write-Host "タスクを削除しました: $taskName"
 
-# このフォルダの server.mjs を実行中の node を特定してツリーごと停止する
-# （子ブリッジ・その孫プロセスも /T でまとめて落とす）
-$escaped = [regex]::Escape($hub)
-$procs = Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
-  Where-Object { $_.CommandLine -and $_.CommandLine -match $escaped }
+# このフォルダの bridge-hub.exe を実行中のプロセスを特定してツリーごと停止する
+# （copilot CLI・devin acp・agy 等の子プロセスも /T でまとめて落とす）
+$exe = Join-Path $hub "bridge-hub.exe"
+$procs = Get-CimInstance Win32_Process -Filter "Name='bridge-hub.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.ExecutablePath -eq $exe }
 foreach ($p in $procs) {
   taskkill /PID $p.ProcessId /T /F | Out-Null
   Write-Host "ハブを停止しました (pid $($p.ProcessId))"

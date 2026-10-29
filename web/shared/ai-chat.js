@@ -140,11 +140,11 @@ let suppressSettingsVerify = false;
 // ※ setupGoogleSettings() 等がモジュール評価中に実行されるため、
 //   初期化で参照する定数は呼び出し位置より前に置く（TDZ 回避）
 const BRIDGE_HUB_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
-// スタンドアロン bridge-hub（手動起動の server.mjs）の検出ポート。
-// 8512 = スタンドアロン既定（run-hidden.vbs/install-autostart.ps1）。
+// ブラウザ WebGIS 用 bridge-hub（bridge-hub.exe）の検出ポート。
+// 8512 = ブラウザ WebGIS 用既定（run-hidden.vbs/install-autostart.ps1）。
 // 8511 も探すのは、BRIDGE_HUB_PORT を変えずに手動起動したハブや
 // capabilities が届かない経路でアプリ版ハブだけが居るケースのため
-const STANDALONE_HUB_PORTS = [8512, 8511];
+const WEBGIS_HUB_PORTS = [8512, 8511];
 // ブリッジ経由のプロバイダ（capabilities の同名キーがエンドポイントを通知する）
 const BRIDGE_PROVIDERS = ["copilot", "devin", "antigravity"];
 // ブリッジ系プロバイダ（copilot/devin/antigravity/agent）のエンドポイント記憶キー。
@@ -157,42 +157,42 @@ const PROVIDER_ENDPOINT_KEYS = {
   agent: "agentEndpoint.agent",
 };
 const PROVIDER_ORDER = ["gemini", "openai", "copilot", "devin", "antigravity", "agent"];
-// ---- スタンドアロン bridge-hub 検出 ----
+// ---- ブラウザ WebGIS 用 bridge-hub 検出 ----
 // アプリ版を持たない環境（CDN ホスト版・静的配信・他ポート起動など）でも、
-// ユーザーが bridge-hub/server.mjs を起動していれば /health が hub:true を返す。
+// ユーザーが bridge-hub（bridge-hub.exe）を起動していれば /health が hub:true を返す。
 // その場合は capabilities の feature 通知が無くてもブリッジ系プロバイダを
-// 有効とみなす。8511 はアプリのハブ口なので、スタンドアロンの既定は 8512
+// 有効とみなす。8511 はアプリのハブ口なので、ブラウザ WebGIS 用の既定は 8512
 // （run-hidden.vbs / install-autostart.ps1。新版アプリは 8512 のハブを
 // 旧ブリッジ掃除の対象から外している）
-let standaloneHub = undefined; // {endpoint, providers:{...}} = 検出 / null = 未検出
-let standaloneHubAt = 0;
-const STANDALONE_HUB_TTL_MS = 15000;
-async function probeStandaloneHub() {
-  if (standaloneHub !== undefined
-    && Date.now() - standaloneHubAt < STANDALONE_HUB_TTL_MS) return standaloneHub;
-  standaloneHubAt = Date.now();
-  for (const port of STANDALONE_HUB_PORTS) {
+let webgisHub = undefined; // {endpoint, providers:{...}} = 検出 / null = 未検出
+let webgisHubAt = 0;
+const WEBGIS_HUB_TTL_MS = 15000;
+async function probeWebgisHub() {
+  if (webgisHub !== undefined
+    && Date.now() - webgisHubAt < WEBGIS_HUB_TTL_MS) return webgisHub;
+  webgisHubAt = Date.now();
+  for (const port of WEBGIS_HUB_PORTS) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/health`,
         { signal: AbortSignal.timeout(2000), cache: "no-store" });
       const d = await r.json().catch(() => ({}));
       if (r.ok && d?.hub) {
-        standaloneHub = {
+        webgisHub = {
           endpoint: `http://127.0.0.1:${port}/agent`,
           providers: d.providers || {},
         };
-        return standaloneHub;
+        return webgisHub;
       }
     } catch (e) { /* 次の候補へ */ }
   }
-  standaloneHub = null;
+  webgisHub = null;
   return null;
 }
 // ブリッジ系プロバイダの利用可否。アプリ版は capabilities の feature 通知、
-// スタンドアロンはハブの providers.<名>.available で判定する
+// ブラウザ WebGIS 用はハブの providers.<名>.available で判定する
 function bridgeFeatureAvailable(provider) {
   if (hasBackendFeature(provider + "Bridge")) return true;
-  return standaloneHub?.providers?.[provider]?.available === true;
+  return webgisHub?.providers?.[provider]?.available === true;
 }
 // 管理 → AI → データソース: MCP サーバー接続（Box・任意のリモートMCP）の管理画面。
 // サーバー定義は localStorage "mcpServers"、Box のトークンは BYO（OAuth+PKCE）
@@ -526,7 +526,7 @@ function sanitizeHeaderToken(s) {
   return String(s || "").replace(/[\s  -​　]+/g, "");
 }
 // 設定画面で保存した Devin APIキー。ブリッジへは X-Devin-Api-Key ヘッダで
-// 渡し、devin-bridge が devin acp の authenticate（meta.api_key）に使う。
+// 渡し、Devin ブリッジが devin acp の authenticate（meta.api_key）に使う。
 // 空値も送ってブリッジ側のキーをクリアできるようにする（再びブラウザ認証へ戻る）。
 // BYO キーと同じポリシーで https / localhost 以外の宛先には付けない
 function getDevinApiKey() {
@@ -541,7 +541,7 @@ function devinAuthHeaders(endpoint) {
 }
 
 // GitHub Copilot / Devin / Antigravity プロバイダはブリッジが使える環境
-// （アプリ版の feature 通知、またはスタンドアロン bridge-hub の検出）のとき
+// （アプリ版の feature 通知、またはブラウザ WebGIS 用 bridge-hub の検出）のとき
 // のみ選択肢に出す。option 要素の hidden 属性はブラウザ差があるため、
 // 要素自体を着脱する。
 // （プロバイダ「外部エージェント」は自作エージェント等の汎用接続口）
@@ -567,11 +567,11 @@ function updateBridgeProviderOption(value) {
   }
 }
 export function updateBridgeProviderOptions() {
-  // アプリ通知の capabilities とは別に、手動起動のスタンドアロン
+  // アプリ通知の capabilities とは別に、手動起動のブラウザ WebGIS 用
   // bridge-hub（8511）も疎通してから選択肢を更新する。プローブは非同期の
   // ため、戻ってきた選択肢に合わせて設定欄も再同期する
   void (async () => {
-    await probeStandaloneHub();
+    await probeWebgisHub();
     for (const v of BRIDGE_PROVIDERS) updateBridgeProviderOption(v);
     resyncProviderSelect();
   })();
@@ -2411,10 +2411,10 @@ function bridgeCandidates(provider) {
   const advertised = getBackendCapabilities()?.[provider]?.endpoint;
   if (advertised) list.push(advertised);
   // 既定のハブ口(8511)は通知の有無にかかわらず候補に入れる。
-  // スタンドアロン bridge-hub（8512 等）が検出済みならその口も足す。
+  // ブラウザ WebGIS 用 bridge-hub（8512 等）が検出済みならその口も足す。
   // localhost への疎通失敗は即座に返るためコストは無視できる
   list.push(BRIDGE_HUB_ENDPOINT_APP);
-  if (standaloneHub?.endpoint) list.push(standaloneHub.endpoint);
+  if (webgisHub?.endpoint) list.push(webgisHub.endpoint);
   return [...new Set(list)];
 }
 
@@ -2508,8 +2508,8 @@ async function refreshChatProviderSwitch() {
   if (!select) return;
   // capabilities 評価前はブリッジ系が「使えない」と誤判定されるため再構築を遅延する
   if (!isBackendCapabilitiesResolved()) return;
-  // 手動起動のスタンドアロン bridge-hub も選択肢対象にするため併せて疎通する
-  await probeStandaloneHub();
+  // 手動起動のブラウザ WebGIS 用 bridge-hub も選択肢対象にするため併せて疎通する
+  await probeWebgisHub();
   const usable = await usableChatProviders();
   const prevValue = select.value;
   select.textContent = "";
@@ -2765,7 +2765,7 @@ function modelOptionLabel(m) {
 
 // 内蔵AIのプロバイダ選択。Gemini（BYOキーまたはサーバープロキシ）、
 // OpenAI互換API（GitHub Models・OpenAI・Ollama等）のAPI系と、
-// GitHub Copilot（copilot-bridge）・外部エージェントのブリッジ系のいずれか
+// GitHub Copilot（copilot ブリッジ）・外部エージェントのブリッジ系のいずれか
 export function getChatProvider() {
   try {
     const p = localStorage.getItem("chatProvider");

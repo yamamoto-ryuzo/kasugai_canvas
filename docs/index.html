@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.2.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.3.0</span></h1>
       <p>ローカルPC・ブラウザ完結で動作する 2D/3D データ可視化システムのドキュメント</p>
     </header>
     <main>
@@ -63,7 +63,7 @@ flowchart TB
   DATA -.->|"?kasc= で指定"| WEB
   QGIS -.->|"▶ Canvas で登録"| APP
 
-  AGENTS["外部エージェント<br/>GitHub Copilot / Devin / Antigravity<br/>要各CLI・本人認証"] ==>|"AI が地図を制御<br/>（reply/actions を返す）"| BRIDGE["AIブリッジハブ<br/>ローカルアプリ=8511 / スタンドアロン=8512<br/>チャット ─POST /agent {provider,...}→<br/>選択中プロバイダのみ内部起動"]
+  AGENTS["外部エージェント<br/>GitHub Copilot / Devin / Antigravity<br/>要各CLI・本人認証"] ==>|"AI が地図を制御<br/>（reply/actions を返す）"| BRIDGE["AIブリッジハブ<br/>ローカルアプリ=8511 / ブラウザ WebGIS=8512<br/>チャット ─POST /agent {provider,...}→<br/>選択中プロバイダのみ内部起動"]
   APP ---|"アプリ内モジュール（自動待受 :8511）"| BRIDGE
   CDN -.->|"download/bridge-hub.zip を配信"| BRIDGE
   BRIDGE -.->|"同一PCなら /health 検出（8512→8511）で接続"| WEB
@@ -103,7 +103,7 @@ flowchart TB
             <td>DATA/ 等の相対参照は .kasc のある URL 基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> は同じフォルダに置く</td>
           </tr>
         </table>
-        <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・AIブリッジ）を持ち、内蔵AI（Gemini / OpenAI互換）はハブを介さず、ブラウザから API へ直接（BYOキー）またはバックエンドの <code>/api/gemini</code> キー隠蔽プロキシ経由で動作します。AIブリッジはブリッジハブがチャットの <code>POST /agent</code> を受けて GitHub Copilot / Devin / Antigravity へ中継します。ハブはアプリ内モジュールが <code>127.0.0.1:8511</code> で自動待受し、アプリ未導入環境では <code>bridge-hub/server.mjs</code> の単体起動（同梱スクリプトは <code>8512</code> 既定）で常駐させられ、スタンドアロン一式は CDN の <code>download/bridge-hub.zip</code> から取得できます（AI 設定画面にダウンロードリンクあり）。フロントは同一 PC の <code>8512 → 8511</code> の順に <code>/health</code> を検出して接続するため、CDN 経由のブラウザ WebGIS からもブリッジ系プロバイダが選べます（逆方向の「外部 → ブラウザを操る」はアプリ本体 :8510 の <code>/api/command</code>）。CDN 経由はブラウザ閲覧中心です。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（localhost:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
+        <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・AIブリッジ）を持ち、内蔵AI（Gemini / OpenAI互換）はハブを介さず、ブラウザから API へ直接（BYOキー）またはバックエンドの <code>/api/gemini</code> キー隠蔽プロキシ経由で動作します。AIブリッジはブリッジハブがチャットの <code>POST /agent</code> を受けて GitHub Copilot / Devin / Antigravity へ中継します。ハブはアプリ内モジュールが <code>127.0.0.1:8511</code> で自動待受し、アプリ未導入環境では <code>bridge-hub</code>（Rust 製 bridge-hub.exe・Node.js 不要）の単体起動（同梱スクリプトは <code>8512</code> 既定）で常駐させられ、ブラウザ WebGIS 用の一式は CDN の <code>download/bridge-hub.zip</code> から取得できます（AI 設定画面にダウンロードリンクあり）。フロントは同一 PC の <code>8512 → 8511</code> の順に <code>/health</code> を検出して接続するため、CDN 経由のブラウザ WebGIS からもブリッジ系プロバイダが選べます（逆方向の「外部 → ブラウザを操る」はアプリ本体 :8510 の <code>/api/command</code>）。CDN 経由はブラウザ閲覧中心です。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（localhost:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
       </section>
 
       <section>

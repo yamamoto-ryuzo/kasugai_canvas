@@ -36,8 +36,8 @@ repos:
         pass_filenames: false
         files: '^server/Cargo\.(toml|lock)$'
       - id: npm-audit
-        name: npm audit (bridges)
-        entry: python tools/security_audit.py --npm antigravity-bridge --npm copilot-bridge --npm devin-bridge --npm bridge-hub
+        name: npm audit (web/vendor)
+        entry: python tools/security_audit.py --npm web/vendor/gsimaps
         language: system
         pass_filenames: false
         files: '(^|/)package(-lock)?\.json$'

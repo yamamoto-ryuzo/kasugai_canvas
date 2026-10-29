@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.2.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.3.0</span></h1>
       <p>V3: AI 連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -30,9 +30,9 @@
       <p><strong>モデル共通の追加指示</strong>：管理 → AI → チャット →「追加指示」タブで、Gemini や OpenAI 互換モデルに共通する指示を保存できます。通常はブラウザに保存されます。Cloud Run で <code>KASUGAI_AI_INSTRUCTIONS</code> を設定すると、サーバー側の指示を優先し、内蔵 AI の <code>/api/gemini</code> 経由のリクエストへ適用します。指示文の例は <a href="../hackathon.html">ハッカソン</a> を参照してください。</p>
       <ul>
         <li><strong>【API】 Gemini（既定）／ OpenAI互換</strong>（通常版）— 公式APIへブラウザから直接接続する BYO キー方式。OpenAI互換は<a href="https://models.github.ai">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントにベースURL・キー・モデル名を指定して接続します。ツール定義・実行ループは Gemini と共通で、宣言を OpenAI 形式へ変換して送信します</li>
-        <li><strong>【ブリッジ】 GitHub Copilot</strong>（V5 アプリ版の機能）— アプリ内実装（GitHub Copilot CLI の stdio サーバーを github-copilot-sdk 経由で駆動・要 Copilot 契約）経由。アプリはブリッジハブ（127.0.0.1:8511）経由で接続するため、<strong>プロバイダ選択肢はアプリ版のみに表示</strong>されます（要 copilot CLI・Node.js 不要）。旧 <code>copilot-bridge/</code>（Node 実装）も参照用に残置選んで保存するだけで疎通したブリッジへ自動接続されます。公式 SDK / CLI によるプログラム接続を利用します</li>
-        <li><strong>【ブリッジ】 Devin</strong>（V5 アプリ版の機能）— 同梱の <code>devin-bridge/</code> が公式の <code>devin acp</code> を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Devin 選択時にのみ起動し、本人の ACP 認証（ブラウザ認証または API キー）と利用枠でモデルを利用します。専用プロバイダはアプリ版のみ表示され</li>
-        <li><strong>【ブリッジ】 Antigravity</strong>（V5 アプリ版の機能）— 同梱の <code>antigravity-bridge/</code> が Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Antigravity 選択時にのみ起動し、ブリッジが <code>agy mcp add</code> で地図ツールを登録・<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します。本人の Google アカウントでの agy ログインと利用枠が前提で、専用プロバイダはアプリ版のみ表示され</li>
+        <li><strong>【ブリッジ】 GitHub Copilot</strong>（V5 アプリ版の機能）— アプリ内実装（GitHub Copilot CLI の stdio サーバーを github-copilot-sdk 経由で駆動・要 Copilot 契約）経由。アプリはブリッジハブ（127.0.0.1:8511）経由で接続するため、<strong>プロバイダ選択肢はアプリ版のみに表示</strong>されます（要 copilot CLI・Node.js 不要）。選んで保存するだけで疎通したブリッジへ自動接続されます。公式 SDK / CLI によるプログラム接続を利用します</li>
+        <li><strong>【ブリッジ】 Devin</strong>（V5 アプリ版の機能）— アプリ内の Devin ブリッジが公式の <code>devin acp</code> を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Devin 選択時にのみ起動し、本人の ACP 認証（ブラウザ認証または API キー）と利用枠でモデルを利用します。専用プロバイダはアプリ版のみ表示され</li>
+        <li><strong>【ブリッジ】 Antigravity</strong>（V5 アプリ版の機能）— アプリ内の Antigravity ブリッジが Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Antigravity 選択時にのみ起動し、ブリッジが <code>agy mcp add</code> で地図ツールを登録・<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します。本人の Google アカウントでの agy ログインと利用枠が前提で、専用プロバイダはアプリ版のみ表示され</li>
         <li><strong>【ブリッジ】 外部エージェント</strong>（通常版）— 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。ブラウザから届くURLであれば接続でき、エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。自作エージェントの接続に使います</li>
       </ul>
       <figure>
@@ -99,9 +99,9 @@
 
 【ブラウザ → エージェント】（チャットから使う）…… I/F共通・実装3本
   Canvas チャット ─POST /agent {provider,message,tools,...}→ bridge-hub (8511)
-       ├─(内部8521) copilot-bridge     → @github/copilot-sdk    → Copilot
-       ├─(内部8522) devin-bridge       → devin acp (ACP)        → Devin
-       └─(内部8523) antigravity-bridge → agy (stream-json +MCP) → Antigravity
+       ├─ copilot     → copilot CLI (stdio・github-copilot-sdk) → Copilot
+       ├─ devin       → devin acp (ACP)                        → Devin
+       └─ antigravity → agy (stream-json +MCP)                 → Antigravity
       </pre>
       <ul>
         <li><code>POST /api/command</code> — <code>{"name":"flyTo","args":{...}}</code> または <code>{"commands":[...]}</code>（最大50件/回）を投入すると採番 id を返します。コマンド名・引数はチャットツールと同一です</li>

@@ -1,10 +1,10 @@
 {
-  "version": "6.2.0",
-  "notes": "KASUGAI Canvas 6.2.0",
-  "pub_date": "2026-10-29",
+  "version": "6.3.0",
+  "notes": "KASUGAI Canvas 6.3.0",
+  "pub_date": "2026-10-30",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip?v=6.2.0"
+      "url": "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas.zip?v=6.3.0"
     }
   }
 }
