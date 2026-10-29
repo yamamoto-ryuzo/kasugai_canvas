@@ -50,6 +50,19 @@
   - CDN リポジトリのパスは省略時 `<kasugai_canvas>/../kasugai-canvas-web`（`C:\devin` ワークスペースなら省略可）
 - **運用**: `web/` に配信したい変更が入ったら unstable 同期、リリース時（`-B` で配布物を作るタイミング）に stable 同期。`latest/` とルート `index.html` はリダイレクト固定で触らない
 
+## 動作テストの2系統（CDN を忘れない）
+
+今後の動作確認は以下の2系統を対象に行う:
+
+1. **ブラウザ WebGIS（CDN × 外部データホスト）— メインの利用形態**
+   - エンジン: `kasugai-canvas-web`（GitHub Pages CDN。エンジン本体のみ配信し `projects/` は同梱しない）。`stable/`=リリース版・`unstable/`=最新 `web/` 追従。`web/` の変更は `python tools/publish_cdn.py --channel unstable --commit --push` で同期してから検証する
+   - テストデータホスト: `yamamoto-ryuzo/kasugai_canvas_weGIS`（GitHub Pages。`.kasc + DATA/` + 群マニフェスト `projects.json`）— エンジン以外のテストデータの置き場
+   - 再生: `…/kasugai-canvas-web/<stage>/<engine>/?kasc=<.kasc URL>`。開いた .kasc の祖先 `projects.json`（群マニフェスト）をエンジンが読み、同一ホストの他プロジェクトをドロップボックスに並べる（cesium 実装済み）
+   - 検証例: `https://yamamoto-ryuzo.github.io/kasugai-canvas-web/unstable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_weGIS%2Fdefault%2Fkasugai_canvas.kasc`
+   - ドキュメント正本: `docs/datahost.html`（ブラウザ WebGIS）。`weGIS/index.html` はホスト固有の運用ページ
+2. **ローカルアプリ（kasugai_canvas.exe :8510）— フル機能**
+   - 従来通り開発ビルドまたは配布 ZIP で 8510 起動 → 以降の検証ルールに準拠
+
 ## 動作確認（Playwrigh：必須）
 
 - **コードを修正したら必ず動作確認を行う**。構文チェック（`node --check web/cesium/app.js`・`cargo check`）だけで完了とみなさない
