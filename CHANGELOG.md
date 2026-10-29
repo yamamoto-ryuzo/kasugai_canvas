@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.4.1] - 2026-10-30
+
+### Changed
+
+- **ドキュメント: 連携構成図へローカルアプリ→CDN の `/vendor/` プロキシ配線を追加し「実行時の供給元」節を新設**（`docs/index.html`）— ローカルアプリが vendored 地理院地図を CDN から同一オリジン供給される経路を図示。プレイヤーコード（`web/` 複写・同梱）／vendored vendor（CDN＋プロキシ）／描画ライブラリ（jsdelivr・unpkg）／タイル・データの4層で供給元を対照化し、用語・表記を統一
+
 ## [6.4.0] - 2026-10-30
 
 ### Added
