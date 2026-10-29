@@ -89,6 +89,31 @@ flowchart TB
           import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
           mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
         </script>
+        <h3>実行時の供給元 — 何をどこから読むか</h3>
+        <p><code>web/</code> 一式は <code>publish_cdn.py</code> が CDN へ丸ごとミラーするため、<code>shared/</code> 等の同じファイルが CDN と配布 ZIP の両方に存在します。どちらを読むかは<strong>開いているページのオリジンで決まります</strong>（エンジンコードは全て相対パス参照）。ローカルアプリが kasugai-canvas-web を参照するのは <code>/vendor/*</code> のみです。</p>
+        <table>
+          <tr><th>取得物</th><th>ローカルアプリ（:8510）</th><th>ブラウザ WebGIS（CDN エンジン）</th></tr>
+          <tr>
+            <td>プレイヤーコード<br/>（<code>web/&lt;engine&gt;/</code>・<code>shared/</code>）</td>
+            <td>アプリ同梱 <code>web/</code> から配信</td>
+            <td>CDN から配信</td>
+          </tr>
+          <tr>
+            <td>vendored 地理院地図<br/>（<code>vendor/gsimaps/</code>・約75MB）</td>
+            <td>同梱せず → <code>/vendor/</code> プロキシ経由で CDN から<br/>（CDN 不通時はホスト版へ転送）</td>
+            <td>CDN から</td>
+          </tr>
+          <tr>
+            <td>描画ライブラリ<br/>（CesiumJS・Leaflet・MapLibre・OL・DuckDB-WASM 等）</td>
+            <td>jsdelivr / unpkg</td>
+            <td>jsdelivr / unpkg</td>
+          </tr>
+          <tr>
+            <td>地図タイル・データ</td>
+            <td>地理院・OSM 等の外部サーバー</td>
+            <td>同左</td>
+          </tr>
+        </table>
         <p>再生 URL <code>…/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;.kascのURL&gt;</code> の意味:</p>
         <table>
           <tr><th>要素</th><th>値</th><th>意味</th></tr>
