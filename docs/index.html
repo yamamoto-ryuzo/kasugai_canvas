@@ -58,10 +58,6 @@ flowchart TB
   REPO ==>|"run.py -B → ZIP（自動更新）"| APP["ローカルアプリ<br/>kasugai_canvas.exe :8510<br/>フル機能（QGIS連携・保存・rclone・AIブリッジ）"]
   CDN -.->|"vendored gsimaps を<br/>/vendor/ プロキシでオンデマンド配信"| APP
 
-  LIBCDN["公開ライブラリ CDN<br/>jsdelivr / unpkg<br/>CesiumJS・Leaflet・MapLibre・OL・DuckDB-WASM 等"]
-  LIBCDN -.->|"描画ライブラリを配信<br/>（全エンジン・全形態でオンライン前提）"| WEB
-  LIBCDN -.->|"アプリ同梱 web/ が参照"| APP
-
   QGIS["QGIS + geo_webview"] -->|"エクスポート"| DATA[".kasc + DATA/ のみ配置<br/>任意の静的ホスト or :8089<br/>（エンジンは CDN 経由）"]
 
   CDN ==>|"エンジンを配信"| WEB["ブラウザ WebGIS（メインの利用形態）<br/>…/&amp;lt;engine&amp;gt;/?kasc=&amp;lt;.kascのURL&amp;gt;<br/>CDN経由ならインストール不要"]
@@ -83,7 +79,7 @@ flowchart TB
   class WEB,CDN webgis
   class APP localapp
   class BRIDGE,AGENTS,AIAPI ai
-  class QGIS,DATA,DEMO,LIBCDN neutral
+  class QGIS,DATA,DEMO neutral
         </pre>
         <script type="module">
           import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
