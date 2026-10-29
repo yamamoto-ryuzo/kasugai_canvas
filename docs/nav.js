@@ -11,21 +11,21 @@
     {
       label: null,
       items: [
-        { href: 'index.html', text: 'トップ・概要' }
+        { href: 'index.html', text: '1. トップ・概要' }
       ]
     },
     {
       label: '利用形態（2系統）',
       items: [
-        { href: 'datahost.html', text: 'ブラウザ WebGIS（外部ホスト配信）' },
-        { href: 'guide.html', text: 'ローカルアプリ（kasugai_canvas.exe）' }
+        { href: 'datahost.html', text: '2. ブラウザ WebGIS（外部ホスト配信）' },
+        { href: 'guide.html', text: '3. ローカルアプリ（kasugai_canvas.exe）' }
       ]
     },
     {
       label: '仕様',
       items: [
         {
-          href: 'features.html', text: '機能と実装',
+          href: 'features.html', text: '4. 機能と実装',
           children: [
             { href: 'features/v0.html', text: 'V0: システム基本構成' },
             { href: 'features/v1.html', text: 'V1: GIS 基本機能' },
@@ -36,24 +36,24 @@
             { href: 'features/v6.html', text: 'V6: マルチエンジン' }
           ]
         },
-        { href: 'inspector.html', text: '.kasc 設定仕様' },
-        { href: 'ai-tools.html', text: 'AI ツール仕様' }
+        { href: 'inspector.html', text: '5. .kasc 設定仕様' },
+        { href: 'ai-tools.html', text: '6. AI ツール仕様' }
       ]
     },
     {
       label: '技術選定',
       items: [
-        { href: 'data.html', text: 'データ形式' },
-        { href: 'library.html', text: 'ライブラリ' },
-        { href: 'architecture.html', text: 'システム構成' },
-        { href: 'security.html', text: 'セキュリティ対策' }
+        { href: 'data.html', text: '7. データ形式' },
+        { href: 'library.html', text: '8. ライブラリ' },
+        { href: 'architecture.html', text: '9. システム構成' },
+        { href: 'security.html', text: '10. セキュリティ対策' }
       ]
     },
     {
       label: '拡張・連携',
       items: [
         {
-          href: 'auth/', text: '認証とプラグイン',
+          href: 'auth/', text: '11. 認証とプラグイン',
           children: [
             { href: 'auth/none.html', text: '0. 認証なし（none）' },
             { href: 'auth/local.html', text: '1. ローカル認証' },
@@ -63,15 +63,15 @@
             { href: 'auth/cloudrun.html', text: '5-7. Cloud Run' }
           ]
         },
-        { href: 'google.html', text: 'Google 連携・AI' },
-        { href: 'qgis.html', text: 'QGIS・GDAL 連携（構想）' }
+        { href: 'google.html', text: '12. Google 連携・AI' },
+        { href: 'qgis.html', text: '13. QGIS・GDAL 連携（構想）' }
       ]
     },
     {
       label: '記録',
       items: [
-        { href: 'hackathon.html', text: '第5回 Agentic AI Hackathon with Google Cloud' },
-        { href: 'g-idea.html', text: 'イチBizアワード 2026' }
+        { href: 'hackathon.html', text: '14. 第5回 Agentic AI Hackathon with Google Cloud' },
+        { href: 'g-idea.html', text: '15. イチBizアワード 2026' }
       ]
     }
   ];
