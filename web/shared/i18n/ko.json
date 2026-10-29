@@ -345,6 +345,8 @@
   "chat.provider.agent": "[브리지] 외부 에이전트",
   "chat.provider.devin": "[브리지] Devin",
   "chat.provider.antigravity": "[브리지] Antigravity",
+  "chat.bridge.hubNote": "이 프로바이더는 로컬 브리지 허브가 필요합니다 (Node.js 20.19+ 및 각 CLI 로그인). 압축을 풀고 install-autostart.ps1을 실행하면 로그인 시 자동 시작됩니다.",
+  "chat.bridge.hubDownload": "bridge-hub.zip 다운로드",
   "chat.copilot.hint": "동봉된 Copilot 브리지(<code>copilot-bridge/</code> · GitHub Copilot SDK)로 GitHub Copilot을 사용합니다. 앱 버전에서는 브리지 허브를 통해 :8511 에서 자동 실행되며 빈 엔드포인트는 자동 감지됩니다. GitHub Copilot 구독이 필요합니다 — 자세한 내용은 copilot-bridge/README.md.",
   "chat.copilot.endpoint": "접속 대상: {endpoint}",
   "chat.copilot.statusOk": "브리지 연결됨: {endpoint}（model: {model}）",

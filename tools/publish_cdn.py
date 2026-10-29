@@ -152,6 +152,11 @@ def _sync_vendors(stage, apply=False):
 def sync_channel(cdn_dir, channel, vendor=False):
     """web/ を指定ステージへ直接同期する。"""
     stage = os.path.join(cdn_dir, channel)
+    # ブリッジハブ配布 ZIP を生成して web/download/ に入れておく
+    # (CDN 配信版の AI 設定から単品ダウンロードできるようにするため)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import build_bridge_zip
+    build_bridge_zip.build()
     # vendor は別管理(手動・--vendor 指定時のみ同期)のため
     # web/ 全量コピーから除外
     _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))

@@ -5016,6 +5016,9 @@ fn bridge_hub_port() -> u16 {
         .unwrap_or(8511)
 }
 // 旧版が残したブリッジの掃除対象ポート（占有者がブリッジの場合のみ停止する）
+// ただし 8512 はスタンドアロン bridge-hub（アプリ未導入環境向けの手動起動
+// ハブ）の既定ポートでもあるため、/health が hub:true を返すプロセスは
+// 掃除対象から外す（kill_bridge_on_port の kill_hub=false 参照）
 const LEGACY_BRIDGE_PORTS: [u16; 2] = [8512, 8513];
 
 // 指定ポートを LISTEN しているプロセスの PID 一覧。
@@ -5124,9 +5127,12 @@ async fn kill_process_forced(pid: u32, ancestor_pid: Option<u32>) {
 // 占有者が Copilot ブリッジ（/health が {ok:true} を返す）と確認できた場合のみ
 // PID を特定して kill し true を返す。無関係なプロセスの誤終了を防ぐため、
 // ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）。
+// kill_hub=false の場合は応答が hub:true のブリッジハブを kill しない
+// （8512 はスタンドアロン bridge-hub の既定ポートとして残すため。
+// 旧ブリッジは hub キーを返さないので従来通り掃除される）
 // ancestor_pid は自分の祖先(自動更新の旧プロセス)。占有者が祖先に一致する
 // 場合は taskkill /T が自分を道連れにするため kill_process_forced が単独 kill する
-async fn kill_bridge_on_port(port: u16, ancestor_pid: Option<u32>) -> bool {
+async fn kill_bridge_on_port(port: u16, ancestor_pid: Option<u32>, kill_hub: bool) -> bool {
     let is_bridge = async {
         let resp = reqwest::Client::new()
             .get(format!("http://127.0.0.1:{port}/health"))
@@ -5137,7 +5143,9 @@ async fn kill_bridge_on_port(port: u16, ancestor_pid: Option<u32>) -> bool {
         let body: serde_json::Value = resp.json().await.ok()?;
         Some(
             body.get("ok").and_then(|v| v.as_bool()) == Some(true)
-                && (body.get("model").is_some() || body.get("sessions").is_some()),
+                && (body.get("model").is_some() || body.get("sessions").is_some())
+                && (kill_hub
+                    || body.get("hub").and_then(|v| v.as_bool()) != Some(true)),
         )
     }
     .await
@@ -5407,16 +5415,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 占有確認・kill は axum::serve を遅延させないよう spawn 内で行う
     if let Some(bridge_state) = state.bridge_state.clone() {
         tokio::spawn(async move {
-            // 旧版ブリッジ（8512/8513）が残っていれば停止する
+            // 旧版ブリッジ（8512/8513）が残っていれば停止する。
+            // ハブ(hub:true)は残す — 8512 はスタンドアロン bridge-hub の既定ポート
             for legacy_port in LEGACY_BRIDGE_PORTS {
                 if TcpListener::bind(("127.0.0.1", legacy_port)).await.is_err()
-                    && kill_bridge_on_port(legacy_port, finish_update_pid).await
+                    && kill_bridge_on_port(legacy_port, finish_update_pid, false).await
                 {
                     eprintln!("bridge-hub: 旧版ブリッジ (port {legacy_port}) を停止しました");
                 }
             }
             let mut listener = TcpListener::bind(("127.0.0.1", hub_port)).await.ok();
-            if listener.is_none() && kill_bridge_on_port(hub_port, finish_update_pid).await {
+            if listener.is_none() && kill_bridge_on_port(hub_port, finish_update_pid, true).await {
                 // kill 直後はポート解放を短時間待つ
                 for _ in 0..20 {
                     tokio::time::sleep(std::time::Duration::from_millis(250)).await;

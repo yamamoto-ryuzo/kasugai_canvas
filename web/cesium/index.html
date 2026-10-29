@@ -344,6 +344,10 @@
                       <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden>Antigravity の場合は同梱の Antigravity ブリッジ（<code>antigravity-bridge/</code>・<code>agy</code> CLI）経由で接続します（ブリッジハブ経由で自動起動 :8511・空欄なら自動検出）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要で、ローカル・本人利用限定です — 手順と利用条件は antigravity-bridge/README.md。</p>
                       <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
                       <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
+                      <p class="hint" id="bridge-hub-note" hidden>
+                        <span data-i18n-html="chat.bridge.hubNote"></span>
+                        <a href="../download/bridge-hub.zip" download data-i18n="chat.bridge.hubDownload">bridge-hub.zip をダウンロード</a>
+                      </p>
                       <div class="provider-only" data-for="agent" hidden>
                         <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
                         <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" data-i18n-attr="placeholder:agent.tokenPlaceholder" autocomplete="off" size="28" />

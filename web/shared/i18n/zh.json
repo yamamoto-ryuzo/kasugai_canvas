@@ -345,6 +345,8 @@
   "chat.provider.agent": "【桥接】 外部代理",
   "chat.provider.devin": "【桥接】 Devin",
   "chat.provider.antigravity": "【桥接】 Antigravity",
+  "chat.bridge.hubNote": "此提供程序需要本地桥接中心（Node.js 20.19+ 及相应 CLI 登录）。解压后运行 install-autostart.ps1 即可在登录时自动启动。",
+  "chat.bridge.hubDownload": "下载 bridge-hub.zip",
   "chat.copilot.hint": "通过随附的 Copilot 桥接（<code>copilot-bridge/</code> · GitHub Copilot SDK）使用 GitHub Copilot。应用版中通过桥接中心在 :8511 自动启动，端点留空则自动检测。需要 GitHub Copilot 订阅 — 详见 copilot-bridge/README.md。",
   "chat.copilot.endpoint": "连接目标: {endpoint}",
   "chat.copilot.statusOk": "桥接已连接: {endpoint}（model: {model}）",

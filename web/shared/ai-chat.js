@@ -140,6 +140,11 @@ let suppressSettingsVerify = false;
 // ※ setupGoogleSettings() 等がモジュール評価中に実行されるため、
 //   初期化で参照する定数は呼び出し位置より前に置く（TDZ 回避）
 const BRIDGE_HUB_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
+// スタンドアロン bridge-hub（手動起動の server.mjs）の検出ポート。
+// 8512 = スタンドアロン既定（run-hidden.vbs/install-autostart.ps1）。
+// 8511 も探すのは、BRIDGE_HUB_PORT を変えずに手動起動したハブや
+// capabilities が届かない経路でアプリ版ハブだけが居るケースのため
+const STANDALONE_HUB_PORTS = [8512, 8511];
 // ブリッジ経由のプロバイダ（capabilities の同名キーがエンドポイントを通知する）
 const BRIDGE_PROVIDERS = ["copilot", "devin", "antigravity"];
 // ブリッジ系プロバイダ（copilot/devin/antigravity/agent）のエンドポイント記憶キー。
@@ -152,6 +157,43 @@ const PROVIDER_ENDPOINT_KEYS = {
   agent: "agentEndpoint.agent",
 };
 const PROVIDER_ORDER = ["gemini", "openai", "copilot", "devin", "antigravity", "agent"];
+// ---- スタンドアロン bridge-hub 検出 ----
+// アプリ版を持たない環境（CDN ホスト版・静的配信・他ポート起動など）でも、
+// ユーザーが bridge-hub/server.mjs を起動していれば /health が hub:true を返す。
+// その場合は capabilities の feature 通知が無くてもブリッジ系プロバイダを
+// 有効とみなす。8511 はアプリのハブ口なので、スタンドアロンの既定は 8512
+// （run-hidden.vbs / install-autostart.ps1。新版アプリは 8512 のハブを
+// 旧ブリッジ掃除の対象から外している）
+let standaloneHub = undefined; // {endpoint, providers:{...}} = 検出 / null = 未検出
+let standaloneHubAt = 0;
+const STANDALONE_HUB_TTL_MS = 15000;
+async function probeStandaloneHub() {
+  if (standaloneHub !== undefined
+    && Date.now() - standaloneHubAt < STANDALONE_HUB_TTL_MS) return standaloneHub;
+  standaloneHubAt = Date.now();
+  for (const port of STANDALONE_HUB_PORTS) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/health`,
+        { signal: AbortSignal.timeout(2000), cache: "no-store" });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d?.hub) {
+        standaloneHub = {
+          endpoint: `http://127.0.0.1:${port}/agent`,
+          providers: d.providers || {},
+        };
+        return standaloneHub;
+      }
+    } catch (e) { /* 次の候補へ */ }
+  }
+  standaloneHub = null;
+  return null;
+}
+// ブリッジ系プロバイダの利用可否。アプリ版は capabilities の feature 通知、
+// スタンドアロンはハブの providers.<名>.available で判定する
+function bridgeFeatureAvailable(provider) {
+  if (hasBackendFeature(provider + "Bridge")) return true;
+  return standaloneHub?.providers?.[provider]?.available === true;
+}
 // 管理 → AI → データソース: MCP サーバー接続（Box・任意のリモートMCP）の管理画面。
 // サーバー定義は localStorage "mcpServers"、Box のトークンは BYO（OAuth+PKCE）
 function setupDataSources() {
@@ -498,20 +540,24 @@ function devinAuthHeaders(endpoint) {
   return { "X-Devin-Api-Key": key };
 }
 
-// GitHub Copilot / Devin プロバイダはアプリ版（local ティアで各ブリッジ feature を
-// 通知する環境 = アプリがブリッジを自動起動する構成）のときのみ選択肢に出す。
-// option 要素の hidden 属性はブラウザ差があるため、要素自体を着脱する。
-// 同梱ブリッジはアプリ版のブリッジハブ経由で使う（プロバイダ「外部エージェント」は自作エージェント等の汎用接続口）
+// GitHub Copilot / Devin / Antigravity プロバイダはブリッジが使える環境
+// （アプリ版の feature 通知、またはスタンドアロン bridge-hub の検出）のとき
+// のみ選択肢に出す。option 要素の hidden 属性はブラウザ差があるため、
+// 要素自体を着脱する。
+// （プロバイダ「外部エージェント」は自作エージェント等の汎用接続口）
 const bridgeProviderOptionStash = {};
-function updateBridgeProviderOption(feature, value) {
+function updateBridgeProviderOption(value) {
   const select = document.querySelector("#chat-provider");
   if (!select) return;
   const option = select.querySelector(`option[value="${value}"]`);
-  if (hasBackendFeature(feature)) {
+  if (bridgeFeatureAvailable(value)) {
     // 再接続時は【ブリッジ】系（agent の手前）に戻しカテゴリ順を保つ
     if (!option && bridgeProviderOptionStash[value]) {
       const agentOpt = select.querySelector('option[value="agent"]');
       select.insertBefore(bridgeProviderOptionStash[value], agentOpt || null);
+      // 隠れている間に保存プロバイダが他へ切り替わっていた場合に備え、
+      // 記憶上のプロバイダがこの値なら表示を戻す
+      if (getChatProvider() === value) select.value = value;
     }
   } else if (option) {
     const wasSelected = select.value === value;
@@ -521,9 +567,14 @@ function updateBridgeProviderOption(feature, value) {
   }
 }
 export function updateBridgeProviderOptions() {
-  updateBridgeProviderOption("copilotBridge", "copilot");
-  updateBridgeProviderOption("devinBridge", "devin");
-  updateBridgeProviderOption("antigravityBridge", "antigravity");
+  // アプリ通知の capabilities とは別に、手動起動のスタンドアロン
+  // bridge-hub（8511）も疎通してから選択肢を更新する。プローブは非同期の
+  // ため、戻ってきた選択肢に合わせて設定欄も再同期する
+  void (async () => {
+    await probeStandaloneHub();
+    for (const v of BRIDGE_PROVIDERS) updateBridgeProviderOption(v);
+    resyncProviderSelect();
+  })();
 }
 
 export function updateChatPanelVisibility() {
@@ -533,7 +584,7 @@ export function updateChatPanelVisibility() {
     try { hasKey = !!localStorage.getItem("googleApiKey") || !!localStorage.getItem("openaiApiKey"); } catch (e) {}
     // アプリ管理ブリッジが使える環境ではキー未設定でもチャットを開ける
     // （ヘッダーのドロップダウンに有効なプロバイダだけが出る）
-    const hasBridge = hasBackendFeature("copilotBridge") || hasBackendFeature("devinBridge") || hasBackendFeature("antigravityBridge");
+    const hasBridge = BRIDGE_PROVIDERS.some(bridgeFeatureAvailable);
     panel.style.display = (hasKey || isAgentEnabled() || hasBackendFeature("aiProxy") || hasBridge) ? "" : "none";
   }
   // 既定エンドポイント（バックエンド通知）を設定欄のプレースホルダに表示する
@@ -712,6 +763,10 @@ export function setupAiSettings() {
         el.hidden = el.dataset.for !== v;
       });
     }
+    // ブリッジハブ導入の案内は専用プロバイダ（copilot/devin/antigravity）のみ。
+    // 「外部エージェント」（自作実装の接続口）には出さない
+    const hubNote = document.querySelector("#bridge-hub-note");
+    if (hubNote) hubNote.hidden = !BRIDGE_PROVIDERS.includes(v);
     // プロバイダ切替時は前プロバイダの入力値を記憶へ退避し、新プロバイダの値を読み込む
     if (endpointOwner !== v) {
       const prevKey = PROVIDER_ENDPOINT_KEYS[endpointOwner];
@@ -2355,7 +2410,11 @@ function bridgeCandidates(provider) {
   const list = [];
   const advertised = getBackendCapabilities()?.[provider]?.endpoint;
   if (advertised) list.push(advertised);
-  if (getBackendCapabilities()?.tier === "local") list.push(BRIDGE_HUB_ENDPOINT_APP);
+  // 既定のハブ口(8511)は通知の有無にかかわらず候補に入れる。
+  // スタンドアロン bridge-hub（8512 等）が検出済みならその口も足す。
+  // localhost への疎通失敗は即座に返るためコストは無視できる
+  list.push(BRIDGE_HUB_ENDPOINT_APP);
+  if (standaloneHub?.endpoint) list.push(standaloneHub.endpoint);
   return [...new Set(list)];
 }
 
@@ -2422,7 +2481,7 @@ async function usableChatProviders() {
     if (localStorage.getItem("openaiApiKey")) set.add("openai");
   } catch (e) {}
   await Promise.all(BRIDGE_PROVIDERS.map(async (v) => {
-    if (!hasBackendFeature(v + "Bridge")) return;
+    if (!bridgeFeatureAvailable(v)) return;
     for (const endpoint of bridgeCandidates(v)) {
       const found = await pingBridge(endpoint, v);
       if (!found) continue;
@@ -2449,6 +2508,8 @@ async function refreshChatProviderSwitch() {
   if (!select) return;
   // capabilities 評価前はブリッジ系が「使えない」と誤判定されるため再構築を遅延する
   if (!isBackendCapabilitiesResolved()) return;
+  // 手動起動のスタンドアロン bridge-hub も選択肢対象にするため併せて疎通する
+  await probeStandaloneHub();
   const usable = await usableChatProviders();
   const prevValue = select.value;
   select.textContent = "";
@@ -3281,6 +3342,10 @@ const AI_SETTINGS_HTML = `
     <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden></p>
     <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
     <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" autocomplete="off" size="28" />
+    <p class="hint" id="bridge-hub-note" hidden>
+      <span data-i18n-html="chat.bridge.hubNote"></span>
+      <a href="../download/bridge-hub.zip" download data-i18n="chat.bridge.hubDownload">bridge-hub.zip をダウンロード</a>
+    </p>
     <div class="provider-only" data-for="agent" hidden>
       <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
       <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" autocomplete="off" size="28" />

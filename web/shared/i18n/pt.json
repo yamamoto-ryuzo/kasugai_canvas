@@ -345,6 +345,8 @@
   "chat.provider.agent": "[Ponte] Agente externo",
   "chat.provider.devin": "[Ponte] Devin",
   "chat.provider.antigravity": "[Ponte] Antigravity",
+  "chat.bridge.hubNote": "Este provedor precisa do hub de pontes local (Node.js 20.19+ e a CLI conectada com sua conta). Extraia o ZIP e execute install-autostart.ps1 para iniciá-lo no logon.",
+  "chat.bridge.hubDownload": "Baixar bridge-hub.zip",
   "chat.copilot.hint": "Use o GitHub Copilot através da ponte Copilot incluída (<code>copilot-bridge/</code> · GitHub Copilot SDK). Na versão do aplicativo, ela inicia automaticamente via hub de pontes em :8511 e um endpoint vazio é detectado automaticamente. Requer uma assinatura do GitHub Copilot — veja copilot-bridge/README.md.",
   "chat.copilot.endpoint": "Endpoint: {endpoint}",
   "chat.copilot.statusOk": "Ponte conectada: {endpoint} (modelo: {model})",

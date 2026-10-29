@@ -22,25 +22,30 @@ import { fileURLToPath } from "node:url";
 const PORT = Number(process.env.BRIDGE_HUB_PORT || 8511);
 const HUB_DIR = path.dirname(fileURLToPath(import.meta.url));
 
+// 子ブリッジの待受ポート基準。copilot=base+1・devin=base+2・antigravity=base+3。
+// 既定 8520（=8521〜8523）。複数ハブを同時稼働させて子ポートが衝突する
+// 場合だけ BRIDGE_HUB_CHILD_BASE でずらす（例: 8530→8531〜8533）
+const CHILD_BASE = Number(process.env.BRIDGE_HUB_CHILD_BASE || 8520);
+
 // プロバイダごとの子ブリッジ定義。dir は bridge-hub/ と同階層に置く
 const PROVIDERS = {
   copilot: {
     dir: "copilot-bridge",
     portEnv: "COPILOT_BRIDGE_PORT",
-    internalPort: 8521,
+    internalPort: CHILD_BASE + 1,
     disableEnv: "KASUGAI_NO_COPILOT_BRIDGE",
     needsInstall: true, // package.json に依存あり（@github/copilot-sdk）
   },
   devin: {
     dir: "devin-bridge",
     portEnv: "DEVIN_BRIDGE_PORT",
-    internalPort: 8522,
+    internalPort: CHILD_BASE + 2,
     disableEnv: "KASUGAI_NO_DEVIN_BRIDGE",
   },
   antigravity: {
     dir: "antigravity-bridge",
     portEnv: "ANTIGRAVITY_BRIDGE_PORT",
-    internalPort: 8523,
+    internalPort: CHILD_BASE + 3,
     disableEnv: "KASUGAI_NO_ANTIGRAVITY_BRIDGE",
   },
 };
