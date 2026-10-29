@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QGIS・GDAL連携（構想） — KASUGAI Canvas ドキュメント</title>
+  <title>QGIS・GDAL連携 — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="style.css">
   <script src="nav.js" defer></script>
 </head>
@@ -11,14 +11,17 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v6.2.0</span></h1>
-      <p>QGIS・GDAL連携（構想） — QGIS・GDALを活用した連携構想</p>
+      <p>QGIS・GDAL連携 — geo_webview によるエクスポート連携（実装済み）と将来の拡張構想</p>
     </header>
     <main>
-      <h2 id="qgisgdal連携構想">QGIS・GDAL連携（構想）</h2>
+      <h2 id="qgisgdal連携構想">QGIS・GDAL連携</h2>
       <p>本章では、KASUGAI
-      Canvasをメイン画面・最終2D/3D表示エンジンとし、QGIS・GDALを多様なGISデータを扱うための変換・編集・解析基盤として連携する構想をまとめる。</p>
-      <p>これは現行実装の説明ではなく、現在のGeoJSON・XYZ・DEM・3D
-      Tiles対応を出発点として、QGIS・GDAL対応を段階的に追加するための設計方針である。</p>
+      Canvasをメイン画面・最終2D/3D表示エンジンとし、QGIS・GDALを多様なGISデータを扱うための変換・編集・解析基盤として連携する構成をまとめる。</p>
+      <p><strong>QGIS→KASUGAI の送出は実装済み</strong>です。QGIS プラグイン <code>geo_webview</code>
+      （<a href="https://github.com/yamamoto-ryuzo/qgis_live_harness" target="_blank" rel="noopener noreferrer">qgis_live_harness</a>）が
+      レイヤーツリーを <code>.kasc + DATA/</code> としてエクスポートし、「▶ Canvas」でローカルアプリへ外部プロジェクト登録、
+      または静的ホストへ配信して <a href="datahost.html">ブラウザ WebGIS</a>（<code>?kasc=</code>）で再生できます。
+      本章の残りは、MVT・大容量データ等の<strong>将来の拡張構想</strong>です。</p>
       <figure>
       <img src="images/canvas_QGIS.png" alt="QGIS連携構想" />
       <figcaption aria-hidden="true">QGIS連携構想</figcaption>

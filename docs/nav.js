@@ -64,7 +64,7 @@
           ]
         },
         { href: 'google.html', text: '12. Google 連携・AI' },
-        { href: 'qgis.html', text: '13. QGIS・GDAL 連携（構想）' }
+        { href: 'qgis.html', text: '13. QGIS・GDAL 連携' }
       ]
     },
     {
