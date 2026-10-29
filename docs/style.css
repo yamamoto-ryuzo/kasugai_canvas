@@ -331,6 +331,17 @@ strong {
   margin: 0 0 10px;
 }
 
+.install-steps.webgis {
+  background: #eef0ff;
+  border-left-color: #667eea;
+}
+.install-steps.webgis h3 { color: #4a5dd4; }
+.install-steps.app {
+  background: #e9f7ee;
+  border-left-color: #2e9e56;
+}
+.install-steps.app h3 { color: #237a44; }
+
 .install-steps ol {
   margin-left: 20px;
 }

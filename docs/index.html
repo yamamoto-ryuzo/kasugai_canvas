@@ -31,12 +31,12 @@
       <section>
         <h2>2. 🌐💻 2つの利用形態</h2>
         <p>利用形態は2系統です。メインはインストール不要の<strong>ブラウザ WebGIS</strong>（CDN エンジン × 外部ホストの .kasc）、フル機能が必要な場合は<strong>ローカルアプリ</strong>を使います。</p>
-        <div class="install-steps">
+        <div class="install-steps webgis">
           <h3>ブラウザ WebGIS（メイン・インストール不要）</h3>
           <p>CDN（<a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web</a>）が配信するエンジンに、外部ホストの <code>.kasc</code> を <code>?kasc=</code> で指定して開くサーバレスな WebGIS です。QGIS の geo_webview でエクスポートした <code>.kasc</code>+<code>DATA/</code> を任意の静的ホストに置くだけで使えます。公開デモもこの形態の実例です。</p>
           <p>詳細は <a href="datahost.html">ブラウザ WebGIS ガイド</a>（必須ファイル・?kasc= 仕様・公開デモ）を参照してください。</p>
         </div>
-        <div class="install-steps">
+        <div class="install-steps app">
           <h3>ローカルアプリ kasugai_canvas.exe（フル機能）</h3>
           <p>インストールして使う<strong>フル機能版</strong>です（QGIS連携・ファイル保存・rclone クラウド連携・AIブリッジなど、<code>localhost:8510</code> で動作）。配布物は <code>download/</code> フォルダから直接ダウンロードできます。<strong>インストーラー版を推奨</strong>します — <code>.kasc</code> ファイルのダブルクリック起動（拡張子の関連付け＝外部プロジェクト登録）はインストーラー版でのみ利用できます。</p>
           <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 15px 0;">
@@ -64,6 +64,13 @@ flowchart TB
   QGIS -.->|"▶ Canvas で登録"| APP
 
   WEB --- DEMO["公開デモ（WebGIS の実例）<br/>CDNホスト版＝CDN経由<br/>Cloudflare Pages / Workers / Cloud Run<br/>＝web/自前配信＋認証・/api/*"]
+
+  classDef webgis fill:#eef0ff,stroke:#667eea,color:#1a2230
+  classDef localapp fill:#e9f7ee,stroke:#2e9e56,color:#1a2230
+  classDef neutral fill:#f6f8fa,stroke:#9aa5b1,color:#5a6577
+  class WEB,CDN webgis
+  class APP localapp
+  class QGIS,DATA,DEMO neutral
         </pre>
         <script type="module">
           import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
