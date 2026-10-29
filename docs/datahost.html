@@ -59,6 +59,24 @@ flowchart LR
       </section>
 
       <section>
+        <h2>CDN（kasugai-canvas-web）とは</h2>
+        <p>
+          エンジン本体を静的配信する GitHub Pages ホストです。<strong>エンジンだけを配信</strong>し、
+          プロジェクトデータ（<code>projects/</code>）は同梱しません — カタログは各データホストが持ちます。
+        </p>
+        <table>
+          <tr><th>要素</th><th>内容</th></tr>
+          <tr><td>ベース URL</td><td><code>https://yamamoto-ryuzo.github.io/kasugai-canvas-web/</code>（ルートは <code>stable/</code> へリダイレクト）</td></tr>
+          <tr><td><code>stable/</code></td><td>安定版・既定チャンネル（リリースに合わせて同期）</td></tr>
+          <tr><td><code>unstable/</code></td><td>開発版チャンネル（<code>kasugai_canvas</code> 最新の <code>web/</code> を追従）</td></tr>
+          <tr><td><code>latest/</code></td><td><code>stable/</code> へのリダイレクト（静的・更新不要）</td></tr>
+          <tr><td>エンジン</td><td><code>cesium</code>（メイン・フル機能）/ <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code>（.kasc プレイヤーとして互換）</td></tr>
+          <tr><td>正本・同期</td><td>正本は <code>kasugai_canvas</code> の <code>web/</code>。<code>python tools/publish_cdn.py --channel stable|unstable</code> で同期（CDN 側の直接編集はしない）</td></tr>
+        </table>
+        <p><small>詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
+      </section>
+
+      <section>
         <h2>配置するファイル — 必須3点セット</h2>
         <p>再生に必要な最低限は <strong>.kasc ファイル1つ</strong>、一覧・選択肢に出すには <strong><code>projects.json</code> と <code>&lt;id&gt;/</code> フォルダ</strong>を加えた3点が必須です。</p>
         <div class="ftree">
