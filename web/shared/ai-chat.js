@@ -791,6 +791,31 @@ export function setupAiSettings() {
   };
   // ブリッジの疎通確認。入力済みエンドポイントがあればそれを、
   // 未入力ならブリッジハブ(8511)の候補を試す
+  // 「インストール」タブの導入状態チップ（導入済み=緑・未導入=赤・不明=灰）
+  const refreshCliSetupStates = async () => {
+    const chips = document.querySelectorAll(".cli-state");
+    if (!chips.length) return;
+    const setChip = (prov, state) => {
+      chips.forEach((c) => {
+        if (c.dataset.provider !== prov) return;
+        c.textContent = state === "installed" ? t("chat.bridge.cliInstalled")
+          : state === "missing" ? t("chat.bridge.cliMissing") : t("chat.bridge.cliUnknown");
+        c.style.color = state === "installed" ? "#2e7d32" : state === "missing" ? "#c62828" : "#777";
+        c.style.fontWeight = "bold";
+      });
+    };
+    const hub = await probeWebgisHub();
+    setChip("hub", hub ? "installed" : "missing");
+    if (!hub) { for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown"); return; }
+    try {
+      const r = await fetch(hub.endpoint.replace(/\/agent$/, "") + "/setup",
+        { signal: AbortSignal.timeout(5000), cache: "no-store" });
+      const d = await r.json();
+      for (const p of BRIDGE_PROVIDERS) setChip(p, d?.[p]?.cli_found ? "installed" : "missing");
+    } catch (e) {
+      for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
+    }
+  };
   const refreshBridgeStatus = async (provider) => {
     const ui = bridgeUi[provider];
     if (!ui?.status) return;
@@ -983,6 +1008,7 @@ export function setupAiSettings() {
       // 旧自動設定マーカーは廃止（エンドポイント欄が明示されるため不要）
       localStorage.removeItem("agentAutoConfig");
       if (BRIDGE_PROVIDERS.includes(pv)) void refreshBridgeStatus(pv);
+      void refreshCliSetupStates();
       if (pv === "agent") void refreshAgentStatus();
       if (stepsInput) {
         localStorage.setItem("geminiToolMaxSteps", String(clampToolSteps(stepsInput.value)));
@@ -1045,6 +1071,7 @@ export function setupAiSettings() {
         }
       } finally {
         btn.disabled = false;
+        void refreshCliSetupStates();
       }
     });
   });
@@ -1063,9 +1090,11 @@ export function setupAiSettings() {
           note.textContent = r.ok
             ? (r.already ? t("chat.bridge.loginAlready") : t("chat.bridge.loginStarted"))
             : t("chat.bridge.loginFailed", { error: r.message || "" });
+          void refreshCliSetupStates();
         }
       } finally {
         btn.disabled = false;
+        void refreshCliSetupStates();
       }
     });
   });
@@ -4518,21 +4547,22 @@ const AI_SETTINGS_HTML = `
     <a href="../download/bridge-hub.zip" download="bridge-hub.zip" data-i18n="chat.bridge.hubDownload">bridge-hub.zip をダウンロード</a>
     <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownloadExe">bridge-hub.exe をダウンロード</a>
     <span id="bridge-hub-status" aria-live="polite"></span>
+    <span class="cli-state" data-provider="hub" aria-live="polite"></span>
   </p>
   <div class="install-row" data-for="copilot" style="margin-top:8px;">
-    <strong>GitHub Copilot</strong><br />
+    <strong>GitHub Copilot</strong> <span class="cli-state" data-provider="copilot" aria-live="polite"></span><br />
     <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
     <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
     <span class="hint bridge-setup-note" aria-live="polite"></span>
   </div>
   <div class="install-row" data-for="devin" style="margin-top:8px;">
-    <strong>Devin</strong><br />
+    <strong>Devin</strong> <span class="cli-state" data-provider="devin" aria-live="polite"></span><br />
     <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
     <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
     <span class="hint bridge-setup-note" aria-live="polite"></span>
   </div>
   <div class="install-row" data-for="antigravity" style="margin-top:8px;">
-    <strong>Antigravity</strong><br />
+    <strong>Antigravity</strong> <span class="cli-state" data-provider="antigravity" aria-live="polite"></span><br />
     <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
     <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
     <span class="hint bridge-setup-note" aria-live="polite"></span>
