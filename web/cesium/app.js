@@ -8169,6 +8169,8 @@ function setupVectorSearch() {
 // 自動更新の無限ループ防止用。更新適用→再起動→リロード後もバージョンが変わらない
 // （配布ZIPの中身が古い等）場合に、同一タブ内での再試行を止めるため試行済みバージョンを記録する
 const UPDATE_ATTEMPT_KEY = "kasugaiUpdateAttempt";
+// CDN/静的配信で最新版を得るための公開 latest.json（raw.githubusercontent.com は CORS 許可済み）
+const CDN_LATEST_JSON = "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/latest.json";
 
 function compareVersions(left, right) {
   const a = left.split(".").map(Number);
@@ -8191,6 +8193,13 @@ async function loadUpdateInfo() {
       const d = await r.json().catch(() => ({}));
       if (current) current.textContent = (r.ok && d?.version) || "-";
     } catch (e) { if (current) current.textContent = "-"; }
+    // 最新版はメインリポジトリの latest.json から取得
+    const latest = document.querySelector("#latest-version");
+    try {
+      const lr = await fetch(CDN_LATEST_JSON, { cache: "no-store" });
+      const ld = await lr.json().catch(() => ({}));
+      if (latest) latest.textContent = (lr.ok && ld?.version) || "-";
+    } catch (e) { if (latest) latest.textContent = "-"; }
     const installButton = document.querySelector("#install-update");
     if (installButton) installButton.hidden = true;
     const autoUpdate = document.querySelector("#auto-update");
