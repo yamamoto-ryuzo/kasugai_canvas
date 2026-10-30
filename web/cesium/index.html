@@ -318,7 +318,7 @@
                       <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
                       <p class="hint" data-i18n-html="google.gemini.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。localStorage はオリジン・ブラウザプロファイルごとに分離されるため、<strong>同じデプロイにアクセスする他のユーザーからは読み取れません</strong>。ただし「このPC・ブラウザプロファイルを操作する人」「ブラウザ拡張機能」「ページ上のスクリプト」からは参照可能です — 端末・プロファイルを他者と共有しないでください。またキー自体を共有ファイル（.kasc等）やコードに書き込まないでください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
                       <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
-                      <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" data-i18n-attr="placeholder:google.gemini.keyPlaceholder" autocomplete="off" size="28" />
+                      <input id="google-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Gemini APIキーを入力" data-i18n-attr="placeholder:google.gemini.keyPlaceholder" autocomplete="off" size="28" />
                       <label class="field-label" for="google-gemini-model" style="margin-top:10px;" data-i18n="google.gemini.modelLabel">Gemini モデル</label>
                       <select id="google-gemini-model">
                         <option value="gemini-3.1-flash-lite" selected data-i18n="google.gemini.model.flashLite">gemini-3.1-flash-lite (標準・低コスト)</option>
@@ -333,7 +333,7 @@
                       <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
                       <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
                       <label class="field-label" for="openai-api-key" style="margin-top:10px;" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
-                      <input id="openai-api-key" type="password" placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
+                      <input id="openai-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
                       <label class="field-label" for="openai-model" style="margin-top:10px;" data-i18n="chat.openai.modelLabel">モデル</label>
                       <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
                     </div>
@@ -352,7 +352,7 @@
                       </p>
                       <div class="provider-only" data-for="agent" hidden>
                         <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
-                        <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" data-i18n-attr="placeholder:agent.tokenPlaceholder" autocomplete="off" size="28" />
+                        <input id="agent-token" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Bearer トークン（省略可）" data-i18n-attr="placeholder:agent.tokenPlaceholder" autocomplete="off" size="28" />
                         <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
                         <p class="hint" data-i18n-html="agent.sendKeyHint">有効にすると「チャット (Gemini)」で登録した API キーがエージェントへのリクエストに含まれ、サーバー側にキー設定がない環境でも各ユーザー自身のキーでエージェントが動作します（自己ホスト・同一オリジンの配布システム向け）。信頼できないエンドポイントでは有効にしないでください。</p>
                         <p class="hint" id="agent-backend-status" aria-live="polite"></p>
@@ -365,7 +365,7 @@
                       </div>
                       <div id="devin-fields" class="provider-only" data-for="devin" hidden>
                         <label class="field-label" for="devin-api-key" data-i18n="chat.devin.apiKeyLabel">Devin APIキー（任意）</label>
-                        <input id="devin-api-key" type="password" placeholder="cog_..." data-i18n-attr="placeholder:chat.devin.apiKeyPlaceholder" autocomplete="off" size="28" />
+                        <input id="devin-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="cog_..." data-i18n-attr="placeholder:chat.devin.apiKeyPlaceholder" autocomplete="off" size="28" />
                         <p class="hint" data-i18n-html="chat.devin.apiKeyHint">Devin の認証に使うサービスユーザー APIキー。app.devin.ai → Settings → Devin API → Service users タブから発行します（ロール: Member・<code>cog_</code> で始まるトークン）。※PAT（Personal Access Token）は devin acp の認証では拒否されます。空欄の場合はブラウザで Devin にログインする PKCE 認証が起動します。キーは localStorage に保存され、ローカルのブリッジにのみ送信されて <code>devin acp</code> の認証に使われます。</p>
                         <label class="field-label" for="devin-model" data-i18n="chat.devin.modelLabel">モデル</label>
                         <select id="devin-model"></select>
@@ -425,7 +425,7 @@
                     <label class="field-label" for="mcp-add-url" style="margin-top:6px;" data-i18n="mcp.add.urlLabel">エンドポイント URL</label>
                     <input id="mcp-add-url" type="text" placeholder="https://example.com/mcp" autocomplete="off" size="28" />
                     <label class="field-label" for="mcp-add-token" style="margin-top:6px;" data-i18n="mcp.add.tokenLabel">Bearer トークン（任意）</label>
-                    <input id="mcp-add-token" type="password" placeholder="省略可" data-i18n-attr="placeholder:mcp.add.tokenPlaceholder" autocomplete="off" size="28" />
+                    <input id="mcp-add-token" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="省略可" data-i18n-attr="placeholder:mcp.add.tokenPlaceholder" autocomplete="off" size="28" />
                     <div style="display:flex;gap:6px;margin-top:6px;">
                       <button id="mcp-add" type="button" data-i18n="mcp.add.add">追加して接続</button>
                     </div>
@@ -441,9 +441,9 @@
                     <p class="hint" data-i18n-html="google.maps.hint">Google Maps Platform の API キーです。<a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行したキーを入力してください。ジオコーディング・Places・Photorealistic 3D Tiles 等の地図機能で使用します。</p>
                     <p class="hint" data-i18n-html="google.maps.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存されます。Gemini キーとは別キーを推奨します。Google Cloud 側で使用する API のみに絞る API 制限を推奨します。<strong>注意</strong>：Geocoding・Places・Street View などの Web サービス API は HTTP リファラー制限付きキーを拒否します（リファラー制限が有効なのは Map Tiles API = 3D Tiles のみ）。これらを使う場合はアプリケーションの制限を「なし」にするか、別キーを用意してください。従量課金のため、予算アラートの設定を推奨します。</p>
                     <label class="field-label" for="google-maps-api-key" data-i18n="google.maps.keyLabel">Maps API キー</label>
-                    <input id="google-maps-api-key" type="password" placeholder="Maps APIキーを入力" data-i18n-attr="placeholder:google.maps.keyPlaceholder" autocomplete="off" size="28" />
+                    <input id="google-maps-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Maps APIキーを入力" data-i18n-attr="placeholder:google.maps.keyPlaceholder" autocomplete="off" size="28" />
                     <label class="field-label" for="google-maps-ws-api-key" data-i18n="google.maps.wsKeyLabel">Web サービス用キー（任意）</label>
-                    <input id="google-maps-ws-api-key" type="password" placeholder="Webサービス用 Maps APIキー（省略可）" data-i18n-attr="placeholder:google.maps.wsKeyPlaceholder" autocomplete="off" size="28" />
+                    <input id="google-maps-ws-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Webサービス用 Maps APIキー（省略可）" data-i18n-attr="placeholder:google.maps.wsKeyPlaceholder" autocomplete="off" size="28" />
                     <p class="hint" data-i18n="google.maps.wsKeyHint">Geocoding・Places・Street View で使用します。未設定時は上のキーを使用。これらの API は HTTP リファラー制限付きキーを拒否するため、上のキーにリファラー制限をかけている場合はこちらに別キーを設定してください。</p>
                     <div class="terrain-options" style="margin-top:10px;">
                       <button id="google-maps-settings-save" type="button" data-i18n="common.save">保存</button>
