@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.3] - 2026-10-30
+
+### Fixed
+
+- **「ハブを自動インストール」ボタンが待機中に反応しない問題を修正**（`web/shared/ai-chat.js`）— 起動待機ポーリング中の再クリックがガードで握り潰され、再DLも再案内もできなかった。クリック毎に exe DL を発火し待機状態を更新するよう変更（ポーリングは1本に維持）
+- ハブ案内の文言を「ハブ＋CLI（copilot/devin）も自動インストール」に修正（8言語）— exe 実行で CLI まで入ることが分かりにくかった
+
 ## [6.5.2] - 2026-10-30
 
 ### Fixed

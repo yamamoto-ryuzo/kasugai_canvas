@@ -214,16 +214,17 @@ async function offerHubInstall(provider, auto) {
   if (!note || !btn) return;
   note.hidden = false;
   const start = async () => {
-    if (hubInstallWait) return;
+    // exe のダウンロードは常に発火する（待機中の再クリック＝再DL・再案内
+    // のリトライ導線。ポーリング自体は1本に保つ）
+    const a = document.createElement("a");
+    a.href = "../download/bridge-hub.exe";
+    a.download = "bridge-hub.exe";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if (status) status.textContent = t("chat.bridge.hubWaitExe");
+    if (hubInstallWait) return hubInstallWait;
     hubInstallWait = (async () => {
-      // 自己インストール exe のダウンロードを発火
-      const a = document.createElement("a");
-      a.href = "../download/bridge-hub.exe";
-      a.download = "bridge-hub.exe";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      if (status) status.textContent = t("chat.bridge.hubWaitExe");
       const hub = await waitForWebgisHub(180000);
       if (hub) {
         const input = document.querySelector("#agent-endpoint");
