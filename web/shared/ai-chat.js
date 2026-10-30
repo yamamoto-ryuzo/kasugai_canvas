@@ -1010,7 +1010,7 @@ export function setupAiSettings() {
   // 検出状況 → 確認 → install ジョブの完了までを進行表示する
   document.querySelectorAll(".bridge-setup-install").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const holder = btn.closest(".provider-only");
+      const holder = btn.closest("[data-for]");
       const provider = holder?.dataset.for || "";
       const note = holder?.querySelector(".bridge-setup-note");
       if (!BRIDGE_PROVIDERS.includes(provider)) return;
@@ -1050,7 +1050,7 @@ export function setupAiSettings() {
   // できないため、ハブの login アクションで別コンソールを開いてもらう
   document.querySelectorAll(".bridge-setup-login").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const holder = btn.closest(".provider-only");
+      const holder = btn.closest("[data-for]");
       const provider = holder?.dataset.for || "";
       const note = holder?.querySelector(".bridge-setup-note");
       if (!BRIDGE_PROVIDERS.includes(provider)) return;
@@ -4411,6 +4411,7 @@ const CHAT_PANEL_HTML = `
 const AI_SETTINGS_HTML = `
 <nav class="ai-subnav">
   <button type="button" class="active" data-manage-sub="ai-pane-chat" data-i18n="manage.section.chat">チャット (AI)</button>
+  <button type="button" data-manage-sub="ai-install-panel" data-i18n="manage.section.install">インストール</button>
   <button type="button" data-manage-sub="ai-pane-instructions" data-i18n="chat.customInstructionsLabel">追加指示</button>
   <button type="button" data-manage-sub="datasource-panel" data-i18n="manage.section.datasource">データソース</button>
   <button type="button" data-manage-sub="plugin-panel" data-i18n="google.tab.plugin">プラグイン</button>
@@ -4475,12 +4476,7 @@ const AI_SETTINGS_HTML = `
     <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden></p>
     <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
     <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" autocomplete="off" size="28" />
-    <p class="hint" id="bridge-hub-note" hidden>
-      <span data-i18n-html="chat.bridge.hubNote"></span><br />
-      <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
-      <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownload">bridge-hub.exe をダウンロード</a>
-      <span id="bridge-hub-status" aria-live="polite"></span>
-    </p>
+    <p class="hint" data-i18n-html="chat.bridge.installTabHint"></p>
     <div class="provider-only" data-for="agent" hidden>
       <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
       <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" autocomplete="off" size="28" />
@@ -4491,11 +4487,6 @@ const AI_SETTINGS_HTML = `
       <label class="field-label" for="copilot-model" data-i18n="chat.copilot.modelLabel">モデル</label>
       <select id="copilot-model"></select>
       <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
-      <div style="margin-top:4px;">
-        <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
-        <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
-        <span class="hint bridge-setup-note" aria-live="polite"></span>
-      </div>
     </div>
     <div id="devin-fields" class="provider-only" data-for="devin" hidden>
       <label class="field-label" for="devin-api-key" data-i18n="chat.devin.apiKeyLabel">Devin APIキー（任意）</label>
@@ -4503,21 +4494,11 @@ const AI_SETTINGS_HTML = `
       <label class="field-label" for="devin-model" data-i18n="chat.devin.modelLabel">モデル</label>
       <select id="devin-model"></select>
       <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
-      <div style="margin-top:4px;">
-        <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
-        <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
-        <span class="hint bridge-setup-note" aria-live="polite"></span>
-      </div>
     </div>
     <div id="antigravity-fields" class="provider-only" data-for="antigravity" hidden>
       <label class="field-label" for="antigravity-model" data-i18n="chat.antigravity.modelLabel">モデル</label>
       <select id="antigravity-model"></select>
       <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
-      <div style="margin-top:4px;">
-        <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
-        <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
-        <span class="hint bridge-setup-note" aria-live="polite"></span>
-      </div>
     </div>
   </div>
   <label class="field-label" for="google-tool-max-steps" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>
@@ -4527,6 +4508,32 @@ const AI_SETTINGS_HTML = `
   </div>
   <p id="google-settings-status" class="hint" aria-live="polite"></p>
   <p id="google-proxy-status" class="hint" aria-live="polite"></p>
+</section>
+<section id="ai-install-panel" class="ai-subpane">
+  <p class="hint" id="bridge-hub-note">
+    <span data-i18n-html="chat.bridge.hubNote"></span><br />
+    <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
+    <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownload">bridge-hub.exe をダウンロード</a>
+    <span id="bridge-hub-status" aria-live="polite"></span>
+  </p>
+  <div class="install-row" data-for="copilot" style="margin-top:8px;">
+    <strong>GitHub Copilot</strong><br />
+    <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+    <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
+    <span class="hint bridge-setup-note" aria-live="polite"></span>
+  </div>
+  <div class="install-row" data-for="devin" style="margin-top:8px;">
+    <strong>Devin</strong><br />
+    <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+    <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
+    <span class="hint bridge-setup-note" aria-live="polite"></span>
+  </div>
+  <div class="install-row" data-for="antigravity" style="margin-top:8px;">
+    <strong>Antigravity</strong><br />
+    <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+    <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
+    <span class="hint bridge-setup-note" aria-live="polite"></span>
+  </div>
 </section>
 <section id="ai-pane-instructions" class="ai-subpane">
   <textarea id="chat-custom-instructions" rows="6" maxlength="8000" placeholder="AIにいつも守ってほしい指示を入力" style="width:100%;box-sizing:border-box;"></textarea>
