@@ -220,8 +220,8 @@ async function offerHubInstall(provider, auto) {
     // exe のダウンロードは常に発火する（待機中の再クリック＝再DL・再案内
     // のリトライ導線。ポーリング自体は1本に保つ）
     const a = document.createElement("a");
-    a.href = "../download/bridge-hub.exe";
-    a.download = "bridge-hub.exe";
+    a.href = "../download/bridge-hub.zip";
+    a.download = "bridge-hub.zip";
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -4513,7 +4513,8 @@ const AI_SETTINGS_HTML = `
   <p class="hint" id="bridge-hub-note">
     <span data-i18n-html="chat.bridge.hubNote"></span><br />
     <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
-    <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownload">bridge-hub.exe をダウンロード</a>
+    <a href="../download/bridge-hub.zip" download="bridge-hub.zip" data-i18n="chat.bridge.hubDownload">bridge-hub.zip をダウンロード</a>
+    <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownloadExe">bridge-hub.exe をダウンロード</a>
     <span id="bridge-hub-status" aria-live="polite"></span>
   </p>
   <div class="install-row" data-for="copilot" style="margin-top:8px;">

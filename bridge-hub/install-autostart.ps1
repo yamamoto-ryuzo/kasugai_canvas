@@ -1,4 +1,4 @@
-# KASUGAI Canvas ブリッジハブを「ログイン時に自動起動」で登録する。
+﻿# KASUGAI Canvas ブリッジハブを「ログイン時に自動起動」で登録する。
 # 使い方: powershell -ExecutionPolicy Bypass -File install-autostart.ps1
 #
 # bridge-hub.exe --install と同じ動作をスクリプトで行う版。
@@ -9,7 +9,37 @@
 # 新版アプリは 8512 のハブを掃除対象から外すため同時稼働しても潰されない
 # （旧版アプリは 8512 のハブを旧ブリッジ掃除対象として落とす点に注意）。
 $ErrorActionPreference = "Stop"
-$hub = Split-Path -Parent $MyInvocation.MyCommand.Path
+$src = Split-Path -Parent $MyInvocation.MyCommand.Path
+$installDir = Join-Path $env:LOCALAPPDATA "kasugai\bridge-hub"
+
+# ---- ポータブルインストール ----
+# ZIP展開先・Downloads 等、インストール先以外から実行されたら:
+#   1) ポート8512の占有者が bridge-hub.exe なら停止（イメージ名判定でハング中も拾う）
+#   2) 旧インストールを削除して新しい一式を配置
+#   3) インストール先の自分を再起動して登録・起動フェーズへ進む
+if ($src -ne $installDir) {
+  Get-NetTCPConnection -LocalPort 8512 -State Listen -ErrorAction SilentlyContinue |
+    ForEach-Object {
+      try {
+        $p = Get-Process -Id $_.OwningProcess -ErrorAction Stop
+        if ($p.ProcessName -match "bridge-hub") {
+          Stop-Process -Id $p.Id -Force -ErrorAction Stop
+          Write-Host "ポート8512の既存ハブを停止しました (PID $($p.Id))"
+        }
+      } catch {}
+    }
+  Get-Process bridge-hub -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -and $_.Path.StartsWith($installDir) } |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+  Copy-Item (Join-Path $src "*") $installDir -Recurse -Force
+  Get-ChildItem -Recurse $installDir -File | Unblock-File -ErrorAction SilentlyContinue
+  Write-Host "インストールしました: $installDir"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installDir "install-autostart.ps1")
+  exit $LASTEXITCODE
+}
+# ここから先はインストール先での実行（登録＋起動フェーズ）
+$hub = $installDir
 $vbs = Join-Path $hub "run-hidden.vbs"
 $taskName = "KasugaiCanvasBridgeHub"
 $startupVbs = Join-Path ([Environment]::GetFolderPath("Startup")) "$taskName.vbs"

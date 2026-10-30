@@ -1,4 +1,4 @@
-# install-autostart.ps1 で登録した自動起動を解除し、起動中のハブも停止する。
+﻿# install-autostart.ps1 で登録した自動起動を解除し、起動中のハブも停止する。
 # 使い方: powershell -ExecutionPolicy Bypass -File uninstall-autostart.ps1
 $ErrorActionPreference = "Stop"
 $hub = Split-Path -Parent $MyInvocation.MyCommand.Path

@@ -20,7 +20,12 @@ if exist "%~dp0install-autostart.ps1" (
 
 echo.
 rem ブリッジ用CLI(copilot/devin)の導入状況確認＋未導入分の自動インストール
-"%~dp0bridge-hub.exe" --setup all
+rem （install-autostart.ps1 が %LOCALAPPDATA% へ自己配置済みなので本体側を使う）
+if exist "%LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe" (
+  "%LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe" --setup all
+) else (
+  "%~dp0bridge-hub.exe" --setup all
+)
 
 echo.
 echo 確認: http://127.0.0.1:8512/health
