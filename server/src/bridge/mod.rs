@@ -112,6 +112,9 @@ async fn health(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
         "ok": true,
         "bridge": "hub",
         "hub": true,
+        // フロントが旧ハブ（fallback フラグ非対応・version フィールド無し）を
+        // 識別できるよう同梱バージョンを返す
+        "version": env!("CARGO_PKG_VERSION"),
         "active": active,
         "providers": providers,
         "model": Value::Null,

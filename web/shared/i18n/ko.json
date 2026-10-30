@@ -350,6 +350,7 @@
   "chat.bridge.hubDownload": "bridge-hub.exe 다운로드",
   "chat.bridge.hubInstall": "허브 + CLI 자동 설치",
   "chat.bridge.hubWaitExe": "bridge-hub.exe를 다운로드했습니다. 실행하면 허브와 copilot/devin CLI가 자동으로 설치·시작됩니다. 허브를 기다리는 중… (다운로드한 파일을 여세요)",
+  "chat.bridge.hubOld": "구버전 브리지 허브에 연결되어 있습니다({endpoint}) — 새 bridge-hub.exe를 다운로드해 실행하여 업데이트하세요",
   "chat.bridge.modelsFallback": "모델 목록을 가져올 수 없습니다(copilot CLI 로그인을 확인하세요)",
   "chat.bridge.hubDetected": "브리지 허브를 감지했습니다(자동 연결)",
   "chat.bridge.autoInstall": "CLI 자동 설치",

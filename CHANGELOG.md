@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.5] - 2026-10-30
+
+### Fixed
+
+- **旧版ブリッジハブ（fallback 判定・version フィールド非対応）に接続した際、固定フォールバック一覧が実値のように表示され「接続OK」になる問題を修正** — ハブの `/health` に `version` を追加し、version 無しのハブは「旧版ハブ — 新しい bridge-hub.exe で更新」と接続失敗（NG）として明示（`server/src/bridge/mod.rs`・`web/shared/ai-chat.js`、8言語）
+- CDN/静的配信版でバージョンが「-」・更新確認が HTTP 404 になる問題を修正 — ステージの `version.json` を表示し自己更新 UI は無効化（`web/cesium/app.js`、先の `49535f9` で配信済み）
+
 ## [6.5.4] - 2026-10-30
 
 ### Fixed

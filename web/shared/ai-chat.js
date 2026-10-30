@@ -768,9 +768,18 @@ export function setupAiSettings() {
     const fallback = configured || bridgeCandidates(provider)[0];
     ui.status.textContent = t(`chat.${provider}.endpoint`, { endpoint: fallback });
     const found = configured ? await pingBridge(configured, provider) : await detectBridge(provider);
-    ui.status.textContent = found
-      ? t(`chat.${provider}.statusOk`, { endpoint: found.endpoint, model: found.model })
-      : t(`chat.${provider}.statusNg`, { endpoint: fallback });
+    // /health に version が無いハブは旧版（fallback 判定等に非対応）なので
+    // 接続OK扱いせず「要更新」として明示し接続状態も NG にする
+    const outdatedHub = found && found.hub === true && typeof found.version !== "string";
+    if (outdatedHub) {
+      ui.status.textContent = t("chat.bridge.hubOld", { endpoint: found.endpoint });
+      providerConnDetail[provider] = t("chat.bridge.hubOld", { endpoint: found.endpoint });
+      providerConnState = { provider, state: "ng", detail: providerConnDetail[provider] };
+    } else {
+      ui.status.textContent = found
+        ? t(`chat.${provider}.statusOk`, { endpoint: found.endpoint, model: found.model })
+        : t(`chat.${provider}.statusNg`, { endpoint: fallback });
+    }
     detectedBridgeModels[provider] = found?.model || "";
     updateChatProviderLabel();
     void refreshChatProviderSwitch();

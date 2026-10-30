@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "kasugai_canvas"
-version = "6.5.4"
+version = "6.5.5"
 dependencies = [
  "async-trait",
  "axum",
