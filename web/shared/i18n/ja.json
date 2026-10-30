@@ -349,6 +349,7 @@
   "chat.bridge.hubDownload": "bridge-hub.exe をダウンロード",
   "chat.bridge.hubInstall": "ハブ＋CLI を自動インストール",
   "chat.bridge.hubWaitExe": "bridge-hub.exe をダウンロードしました。実行するとハブと copilot/devin CLI を自動でインストール＆起動します。起動を待っています…（ダウンロードしたファイルを開いてください）",
+  "chat.bridge.modelsFallback": "モデル一覧を取得できません（copilot CLI のログイン状態を確認してください）",
   "chat.bridge.hubDetected": "ブリッジハブを検出しました（自動接続）",
   "chat.bridge.autoInstall": "CLI を自動インストール",
   "chat.bridge.installConfirm": "{provider} 用の CLI をこのPCへ自動インストールします。実行しますか?",

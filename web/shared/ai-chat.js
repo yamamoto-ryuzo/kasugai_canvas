@@ -716,12 +716,22 @@ export function setupAiSettings() {
         if (d?.model) detectedBridgeModels[provider] = d.model;
         retry = !!(d?.pending || (d?.error && !models.length));
         // ブリッジが返す失敗理由（APIキー拒否・起動失敗等）を保持し、
-        // statusError キーがあるプロバイダ（devin）はステータス欄にも出す
+        // 接続失敗としてステータス欄・接続状態へ反映する（全プロバイダ共通）
         if (d?.error) {
           providerConnDetail[provider] = String(d.error);
-          if (provider === "devin" && ui.status) {
+          providerConnState = { provider, state: "ng", detail: String(d.error).slice(0, 200) };
+          if (ui.status) {
             ui.status.textContent = t("chat.devin.statusError", { error: String(d.error).slice(0, 300) });
           }
+        } else if (d?.fallback) {
+          // モデル一覧を実取得できず固定一覧が返った = CLI 未ログイン等の
+          // エラー状態。実在する一覧のふりをしないため選択肢は既定のみにし、
+          // 接続失敗として明示する（再試行はしない — ログインしないと解消しない）
+          providerConnDetail[provider] = t("chat.bridge.modelsFallback");
+          providerConnState = { provider, state: "ng", detail: providerConnDetail[provider] };
+          if (ui.status) ui.status.textContent = providerConnDetail[provider];
+          models = [];
+          retry = false;
         }
       } catch (e) { retry = true; }
       if (retry && retries > 0) {

@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.4] - 2026-10-30
+
+### Fixed
+
+- **copilot CLI がモデル一覧を返さない（未ログイン等）環境で、固定フォールバック一覧が実在する一覧のように表示される問題を修正**（`server/src/bridge/copilot.rs`・`web/shared/ai-chat.js`）— ハブは fallback 使用時に `fallback:true` を返し、フロントは接続失敗としてステータス欄に「モデル一覧を取得できません（CLI ログイン確認）」と表示して選択肢を既定のみにする。`/models` の `error` 応答も全プロバイダで接続失敗（赤・NG）として扱うよう統一
+
 ## [6.5.3] - 2026-10-30
 
 ### Fixed

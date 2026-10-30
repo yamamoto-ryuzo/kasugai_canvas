@@ -349,6 +349,7 @@
   "chat.bridge.hubDownload": "Download bridge-hub.exe",
   "chat.bridge.hubInstall": "Install hub + CLIs automatically",
   "chat.bridge.hubWaitExe": "bridge-hub.exe downloaded. Run it to auto-install and start the hub and the copilot/devin CLIs. Waiting for the hub... (open the downloaded file)",
+  "chat.bridge.modelsFallback": "Could not fetch the model list (check the copilot CLI sign-in)",
   "chat.bridge.hubDetected": "Bridge hub detected (connected automatically)",
   "chat.bridge.autoInstall": "Install CLI automatically",
   "chat.bridge.installConfirm": "Install the {provider} CLI on this PC automatically. Continue?",

@@ -397,10 +397,14 @@ impl CopilotBridge {
             })
             .collect();
         if models.is_empty() {
+            // CLI がモデル一覧を返さない（未ログイン等）場合の既定一覧。
+            // 実在する一覧のふりをしないよう fallback フラグを付け、
+            // フロント側は「取得失敗」として扱う
             models = FALLBACK_MODELS
                 .iter()
                 .map(|id| json!({ "id": id, "name": id }))
                 .collect();
+            return json!({ "models": models, "fallback": true });
         }
         json!({ "models": models })
     }
