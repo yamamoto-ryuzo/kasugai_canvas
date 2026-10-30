@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.12] - 2026-10-30
+
+### Fixed
+
+- **「CLI ログイン」のコンソールがアプリ版ハブでも開かない問題を修正**（`server/src/bridge/setup.rs`）— `CREATE_NEW_CONSOLE` 直起動でも親が非表示コンテキストだとウィンドウが出ないケースが残っていたため、PowerShell `Start-Process`（ShellExecute 相当）で CLI を既定動作で開く方式に変更。実機で `cmd /c copilot.cmd` のコンソール起動を確認
+
 ## [6.5.11] - 2026-10-30
 
 ### Fixed
