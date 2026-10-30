@@ -317,49 +317,6 @@
                       <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
                       <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
                     </select>
-                    <div id="gemini-fields">
-                      <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
-                      <p class="hint" data-i18n-html="google.gemini.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。localStorage はオリジン・ブラウザプロファイルごとに分離されるため、<strong>同じデプロイにアクセスする他のユーザーからは読み取れません</strong>。ただし「このPC・ブラウザプロファイルを操作する人」「ブラウザ拡張機能」「ページ上のスクリプト」からは参照可能です — 端末・プロファイルを他者と共有しないでください。またキー自体を共有ファイル（.kasc等）やコードに書き込まないでください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
-                      <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
-                      <input id="google-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Gemini APIキーを入力" data-i18n-attr="placeholder:google.gemini.keyPlaceholder" autocomplete="off" size="28" />
-                      <label class="field-label" for="google-gemini-model" style="margin-top:10px;" data-i18n="google.gemini.modelLabel">Gemini モデル</label>
-                      <select id="google-gemini-model">
-                        <option value="gemini-3.1-flash-lite" selected data-i18n="google.gemini.model.flashLite">gemini-3.1-flash-lite (標準・低コスト)</option>
-                        <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-                        <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-                        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-                      </select>
-                    </div>
-                    <div id="openai-fields" hidden>
-                      <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はプロバイダを GitHub Copilot に変更し、表示されるブリッジ欄で Copilot ブリッジ（copilot CLI 経由）を接続してください。</p>
-                      <p class="hint" data-i18n-html="chat.openai.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は上のエンドポイントのみです。http（非HTTPS）のエンドポイントを指定するとキーが平文で送信されるため、localhost/127.0.0.1 以外では https を使ってください。キー自体を共有ファイル（.kasc等）やコードに書き込まないでください。</p>
-                      <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
-                      <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
-                      <label class="field-label" for="openai-api-key" style="margin-top:10px;" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
-                      <input id="openai-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
-                      <label class="field-label" for="openai-model" style="margin-top:10px;" data-i18n="chat.openai.modelLabel">モデル</label>
-                      <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
-                    </div>
-                    <div id="anthropic-fields" hidden>
-                      <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
-                      <label class="field-label" for="anthropic-api-key" data-i18n="chat.anthropic.keyLabel">APIキー</label>
-                      <input id="anthropic-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="sk-ant-..." data-i18n-attr="placeholder:chat.anthropic.keyPlaceholder" autocomplete="off" size="28" />
-                      <label class="field-label" for="anthropic-model" style="margin-top:10px;" data-i18n="chat.anthropic.modelLabel">モデル</label>
-                      <input id="anthropic-model" type="text" placeholder="claude-sonnet-4-5" data-i18n-attr="placeholder:chat.anthropic.modelPlaceholder" autocomplete="off" size="28" />
-                      <label class="field-label" for="anthropic-base-url" style="margin-top:10px;" data-i18n="chat.anthropic.baseUrlLabel">エンドポイント ベースURL（省略可）</label>
-                      <input id="anthropic-base-url" type="text" placeholder="https://api.anthropic.com" autocomplete="off" size="28" />
-                    </div>
-                    <div id="azure-fields" hidden>
-                      <p class="hint" data-i18n-html="chat.azure.hint"></p>
-                      <label class="field-label" for="azure-base-url" data-i18n="chat.azure.baseUrlLabel">リソース エンドポイントURL</label>
-                      <input id="azure-base-url" type="text" placeholder="https://<resource>.openai.azure.com" data-i18n-attr="placeholder:chat.azure.baseUrlPlaceholder" autocomplete="off" size="28" />
-                      <label class="field-label" for="azure-api-key" style="margin-top:10px;" data-i18n="chat.azure.keyLabel">APIキー</label>
-                      <input id="azure-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore autocomplete="off" size="28" />
-                      <label class="field-label" for="azure-deployment" style="margin-top:10px;" data-i18n="chat.azure.deploymentLabel">デプロイ名</label>
-                      <input id="azure-deployment" type="text" placeholder="my-deployment" data-i18n-attr="placeholder:chat.azure.deploymentPlaceholder" autocomplete="off" size="28" />
-                      <label class="field-label" for="azure-api-version" style="margin-top:10px;" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
-                      <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
-                    </div>
                     <div id="bridge-fields" hidden>
                       <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden>チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
                       <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden>GitHub Copilot の場合はブリッジハブ経由で <code>copilot</code> CLI へ接続します（:8511 自動検出・空欄可）。GitHub Copilot 契約と <code>copilot</code> CLI の導入・ログインが必要です — 導入手順は <a href="https://github.com/github/copilot-cli" target="_blank" rel="noopener">github/copilot-cli</a> を参照（npm 版は <a href="https://nodejs.org/" target="_blank" rel="noopener">Node.js</a> も必要）。</p>
@@ -407,6 +364,50 @@
                     <p id="google-proxy-status" class="hint" aria-live="polite"></p>
                   </section>
                   <section id="ai-install-panel" class="settings-subpanel">
+                    <div id="gemini-fields">
+                      <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
+                      <p class="hint" data-i18n-html="google.gemini.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は Google の API エンドポイント（HTTPS）のみです。localStorage はオリジン・ブラウザプロファイルごとに分離されるため、<strong>同じデプロイにアクセスする他のユーザーからは読み取れません</strong>。ただし「このPC・ブラウザプロファイルを操作する人」「ブラウザ拡張機能」「ページ上のスクリプト」からは参照可能です — 端末・プロファイルを他者と共有しないでください。またキー自体を共有ファイル（.kasc等）やコードに書き込まないでください。Google Cloud 側でキーに「Generative Language APIのみ」等のAPI制限をかけることを推奨します。</p>
+                      <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
+                      <input id="google-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Gemini APIキーを入力" data-i18n-attr="placeholder:google.gemini.keyPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="google-gemini-model" style="margin-top:10px;" data-i18n="google.gemini.modelLabel">Gemini モデル</label>
+                      <select id="google-gemini-model">
+                        <option value="gemini-3.1-flash-lite" selected data-i18n="google.gemini.model.flashLite">gemini-3.1-flash-lite (標準・低コスト)</option>
+                        <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+                        <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+                        <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+                      </select>
+                    </div>
+                    <div id="openai-fields" style="margin-top:12px;">
+                      <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はプロバイダを GitHub Copilot に変更し、表示されるブリッジ欄で Copilot ブリッジ（copilot CLI 経由）を接続してください。</p>
+                      <p class="hint" data-i18n-html="chat.openai.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は上のエンドポイントのみです。http（非HTTPS）のエンドポイントを指定するとキーが平文で送信されるため、localhost/127.0.0.1 以外では https を使ってください。キー自体を共有ファイル（.kasc等）やコードに書き込まないでください。</p>
+                      <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
+                      <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="openai-api-key" style="margin-top:10px;" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
+                      <input id="openai-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="openai-model" style="margin-top:10px;" data-i18n="chat.openai.modelLabel">モデル</label>
+                      <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
+                    </div>
+                    <div id="anthropic-fields" style="margin-top:12px;">
+                      <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
+                      <label class="field-label" for="anthropic-api-key" data-i18n="chat.anthropic.keyLabel">APIキー</label>
+                      <input id="anthropic-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="sk-ant-..." data-i18n-attr="placeholder:chat.anthropic.keyPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="anthropic-model" style="margin-top:10px;" data-i18n="chat.anthropic.modelLabel">モデル</label>
+                      <input id="anthropic-model" type="text" placeholder="claude-sonnet-4-5" data-i18n-attr="placeholder:chat.anthropic.modelPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="anthropic-base-url" style="margin-top:10px;" data-i18n="chat.anthropic.baseUrlLabel">エンドポイント ベースURL（省略可）</label>
+                      <input id="anthropic-base-url" type="text" placeholder="https://api.anthropic.com" autocomplete="off" size="28" />
+                    </div>
+                    <div id="azure-fields" style="margin-top:12px;">
+                      <p class="hint" data-i18n-html="chat.azure.hint"></p>
+                      <label class="field-label" for="azure-base-url" data-i18n="chat.azure.baseUrlLabel">リソース エンドポイントURL</label>
+                      <input id="azure-base-url" type="text" placeholder="https://<resource>.openai.azure.com" data-i18n-attr="placeholder:chat.azure.baseUrlPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="azure-api-key" style="margin-top:10px;" data-i18n="chat.azure.keyLabel">APIキー</label>
+                      <input id="azure-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore autocomplete="off" size="28" />
+                      <label class="field-label" for="azure-deployment" style="margin-top:10px;" data-i18n="chat.azure.deploymentLabel">デプロイ名</label>
+                      <input id="azure-deployment" type="text" placeholder="my-deployment" data-i18n-attr="placeholder:chat.azure.deploymentPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="azure-api-version" style="margin-top:10px;" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
+                      <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
+                    </div>
+                    <hr style="margin:14px 0;border:none;border-top:1px solid #d1d9e0;" />
                     <p class="hint" id="bridge-hub-note">
                       <span data-i18n-html="chat.bridge.hubNote"></span><br />
                       <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
