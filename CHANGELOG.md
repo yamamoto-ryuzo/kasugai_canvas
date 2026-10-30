@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.11] - 2026-10-30
+
+### Fixed
+
+- **「CLI ログイン」が「コンソールを開きました」と出るのに実際にはコンソールが開かない問題を修正**（`server/src/bridge/setup.rs`）— wscript 経由の非表示プロセスから `cmd /c start` では新規ウィンドウが作れないケースがあるため、`CREATE_NEW_CONSOLE` フラグで確実に可視コンソールを生成する方式に変更。devin は `devin login` がブラウザ PKCE を開く、copilot は TUI の `/login`（デバイスフロー）を利用
+
 ## [6.5.10] - 2026-10-30
 
 ### Added

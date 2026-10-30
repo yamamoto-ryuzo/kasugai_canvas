@@ -759,10 +759,15 @@ pub async fn cli_main(target: &str) -> std::process::ExitCode {
 }
 
 // 対話ログイン用に CLI を別コンソールで起動する。
-// copilot は TUI 内で /login、devin は `devin login`（ブラウザ PKCE）。
+// copilot は TUI 内で /login（デバイスフロー・コンソールに URL/コードが出る）、
+// devin は `devin login`（CLI がブラウザ PKCE を開く）。
+// wscript 経由の非表示プロセスから `cmd /c start` では新規ウィンドウが
+// 作れないケースがあるため CREATE_NEW_CONSOLE で確実に可視コンソールを作る。
 // antigravity は IDE の GUI ログインのため対象外（呼び出し側で弾く）
 #[cfg(windows)]
 pub fn spawn_login(provider: &str) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
     let path = detect(provider)
         .ok_or_else(|| "CLI が検出できません（先にインストールしてください）".to_string())?;
     let cmdline = if provider == "devin" {
@@ -771,7 +776,8 @@ pub fn spawn_login(provider: &str) -> Result<(), String> {
         format!("\"{path}\"")
     };
     std::process::Command::new("cmd")
-        .args(["/c", "start", "", "cmd", "/k", &cmdline])
+        .args(["/k", &cmdline])
+        .creation_flags(CREATE_NEW_CONSOLE)
         .spawn()
         .map_err(|e| format!("ログインコンソールの起動に失敗: {e}"))?;
     Ok(())
