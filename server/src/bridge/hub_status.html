@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KASUGAI Bridge Hub</title>
+<style>
+body { font-family: system-ui, sans-serif; max-width: 560px; margin: 40px auto; padding: 0 16px; color: #1f2328; }
+h1 { font-size: 1.3rem; }
+.ok { color: #1a7f37; } .ng { color: #cf222e; } .dim { color: #59636e; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+td, th { border: 1px solid #d1d9e0; padding: 6px 10px; text-align: left; font-size: .9rem; }
+code, a.ep { background: #f6f8fa; border: 1px solid #d1d9e0; border-radius: 4px; padding: 1px 6px; }
+a { color: #0969da; }
+#body-error { color: #cf222e; }
+</style>
+</head>
+<body>
+<h1>KASUGAI Canvas — ブリッジハブ状態</h1>
+<div id="body">読み込み中…</div>
+<script>
+(async () => {
+  const el = document.getElementById("body");
+  const esc = s => String(s == null ? "?" : s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  try {
+    const [h, s] = await Promise.all([
+      fetch("/health").then(r => r.json()),
+      fetch("/setup").then(r => r.json()).catch(() => null),
+    ]);
+    const rows = [];
+    for (const [name, p] of Object.entries(h.providers || {})) {
+      const cli = s && s.providers && s.providers[name];
+      const cliPath = cli && cli.path ? esc(cli.path) : '<span class="dim">未検出</span>';
+      const cliMark = cli && cli.detected ? '<span class="ok">導入済み</span>' : '<span class="ng">未導入</span>';
+      rows.push("<tr><th>" + esc(name) + "</th><td>" +
+        (p.available ? '<span class="ok">利用可</span>' : '<span class="ng">不可</span>') +
+        " / " + (p.running ? "稼働" : "待機") + "</td><td>" + cliMark + " " + cliPath + "</td></tr>");
+    }
+    el.innerHTML =
+      "<p><span class='ok'>● 稼働中</span> — version <b>" + esc(h.version) + "</b>" +
+      " / active: " + esc(h.active) + " / sessions: " + esc(h.sessions) + "</p>" +
+      "<h2>プロバイダ / CLI</h2><table><tr><th>provider</th><th>bridge</th><th>CLI</th></tr>" +
+      rows.join("") + "</table>" +
+      "<h2>エンドポイント</h2>" +
+      "<p>Agent: <code>POST " + location.origin + "/agent</code>（ブラウザで開いても表示されません）<br>" +
+      "Health: <a class='ep' href='/health'>" + location.origin + "/health</a><br>" +
+      "Models: <a class='ep' href='/models?provider=copilot'>" + location.origin + "/models?provider=copilot</a><br>" +
+      "Setup: <a class='ep' href='/setup'>" + location.origin + "/setup</a></p>" +
+      "<p class='dim'>モデル一覧が既定一覧（fallback）になる場合は各 CLI のログイン状態を確認してください。</p>";
+  } catch (e) {
+    el.innerHTML = "<p id='body-error'>状態を取得できません: " + esc(e.message || e) + "</p>";
+  }
+})();
+</script>
+</body>
+</html>

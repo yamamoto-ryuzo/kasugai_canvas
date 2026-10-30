@@ -24,7 +24,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{response::Html, Json, Router};
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -120,6 +120,13 @@ async fn health(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
         "model": Value::Null,
         "sessions": state.copilot.session_count(),
     }))
+}
+
+// ブラウザで開けるハブ状態確認ページ（GET /）。表示側 JS が /health・/setup を
+// 取って描画するためサーバー側テンプレは不要。/agent は POST 専用でブラウザ
+// からは確認できないため、動作確認用の着地点としてこのページを提供する
+async fn status_page() -> Html<&'static str> {
+    Html(include_str!("hub_status.html"))
 }
 
 async fn models(
@@ -422,6 +429,7 @@ fn router(state: Arc<BridgeState>) -> Router {
     // public→private の Private Network Access プリフライトに応答する
     let cors = CorsLayer::very_permissive().allow_private_network(true);
     Router::new()
+        .route("/", get(status_page))
         .route("/health", get(health))
         .route("/models", get(models))
         .route("/agent", post(agent))

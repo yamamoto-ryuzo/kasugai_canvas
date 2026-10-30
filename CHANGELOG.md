@@ -4,6 +4,17 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.6] - 2026-10-30
+
+### Added
+
+- **ブリッジハブの状態確認ページ `GET /` を追加**（`server/src/bridge/mod.rs`・`hub_status.html`）— `http://127.0.0.1:8512/` をブラウザで開くとハブのバージョン・各プロバイダの bridge/CLI 状態・主要エンドポイントを表示。`/agent` は POST 専用でブラウザ確認できないため、動作確認の着地点として用意
+
+### Fixed
+
+- APIキー入力欄（7か所）を `type="password"` から `type="text"`＋マスク表示に変更 — Chrome がログインフォームと誤認してパスワード保存ダイアログを出す問題を解消（先の `2eb23da` で配信済み）
+- ブリッジ接続 NG/エラー時にステータス行とモデル選択を赤表示（先のコミットで配信済み）
+
 ## [6.5.5] - 2026-10-30
 
 ### Fixed
