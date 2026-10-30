@@ -12,7 +12,7 @@ import {
   initAiChat, executeChatTool, showReportModal,
   listUiControls as sharedListUiControls, controlUi as sharedControlUi,
   updateChatPanelVisibility, updateBridgeProviderOptions, resyncProviderSelect,
-  startRemoteCommandLoop, isFetchProxyTarget,
+  startRemoteCommandLoop, isFetchProxyTarget, refreshCliSetupStates,
 } from "../shared/ai-chat.js";
 import {
   detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature,
@@ -6867,6 +6867,7 @@ function setupEvents() {
         pane.querySelectorAll(".settings-subpanel").forEach((panel) => panel.classList.toggle("active", panel.id === btn.dataset.manageSub));
         if (["settings-cloud-panel", "settings-rclone-panel", "settings-drive-panel", "settings-save-panel"].includes(btn.dataset.manageSub)) void refreshCloudStatus();
         if (btn.dataset.manageSub === "settings-save-panel") void refreshSaveStatus();
+        if (btn.dataset.manageSub === "ai-install-panel") void refreshCliSetupStates();
       });
     });
     const manageTitlebar = manageWindow.querySelector(".manage-titlebar");

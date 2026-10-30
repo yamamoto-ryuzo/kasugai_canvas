@@ -664,6 +664,32 @@ export function updateChatPanelVisibility() {
   void refreshChatProviderSwitch();
 }
 
+// 「インストール」タブの導入状態チップ（導入済み=緑・未導入=赤・不明=灰）
+export async function refreshCliSetupStates() {
+  const chips = document.querySelectorAll(".cli-state");
+  if (!chips.length) return;
+  const setChip = (prov, state) => {
+    chips.forEach((c) => {
+      if (c.dataset.provider !== prov) return;
+      c.textContent = state === "installed" ? t("chat.bridge.cliInstalled")
+        : state === "missing" ? t("chat.bridge.cliMissing") : t("chat.bridge.cliUnknown");
+      c.style.color = state === "installed" ? "#2e7d32" : state === "missing" ? "#c62828" : "#777";
+      c.style.fontWeight = "bold";
+    });
+  };
+  const hub = await probeWebgisHub();
+  setChip("hub", hub ? "installed" : "missing");
+  if (!hub) { for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown"); return; }
+  try {
+    const r = await fetch(hub.endpoint.replace(/\/agent$/, "") + "/setup",
+      { signal: AbortSignal.timeout(5000), cache: "no-store" });
+    const d = await r.json();
+    for (const p of BRIDGE_PROVIDERS) setChip(p, d?.[p]?.cli_found ? "installed" : "missing");
+  } catch (e) {
+    for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
+  }
+}
+
 export function setupAiSettings() {
   const keyInput = document.querySelector("#google-api-key");
   const modelSelect = document.querySelector("#google-gemini-model");
@@ -791,31 +817,6 @@ export function setupAiSettings() {
   };
   // ブリッジの疎通確認。入力済みエンドポイントがあればそれを、
   // 未入力ならブリッジハブ(8511)の候補を試す
-  // 「インストール」タブの導入状態チップ（導入済み=緑・未導入=赤・不明=灰）
-  const refreshCliSetupStates = async () => {
-    const chips = document.querySelectorAll(".cli-state");
-    if (!chips.length) return;
-    const setChip = (prov, state) => {
-      chips.forEach((c) => {
-        if (c.dataset.provider !== prov) return;
-        c.textContent = state === "installed" ? t("chat.bridge.cliInstalled")
-          : state === "missing" ? t("chat.bridge.cliMissing") : t("chat.bridge.cliUnknown");
-        c.style.color = state === "installed" ? "#2e7d32" : state === "missing" ? "#c62828" : "#777";
-        c.style.fontWeight = "bold";
-      });
-    };
-    const hub = await probeWebgisHub();
-    setChip("hub", hub ? "installed" : "missing");
-    if (!hub) { for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown"); return; }
-    try {
-      const r = await fetch(hub.endpoint.replace(/\/agent$/, "") + "/setup",
-        { signal: AbortSignal.timeout(5000), cache: "no-store" });
-      const d = await r.json();
-      for (const p of BRIDGE_PROVIDERS) setChip(p, d?.[p]?.cli_found ? "installed" : "missing");
-    } catch (e) {
-      for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
-    }
-  };
   const refreshBridgeStatus = async (provider) => {
     const ui = bridgeUi[provider];
     if (!ui?.status) return;
@@ -4642,6 +4643,7 @@ function ensureAiSettingsDom() {
     btn.addEventListener("click", () => {
       pane.querySelectorAll(".ai-subnav button").forEach(item => item.classList.toggle("active", item === btn));
       pane.querySelectorAll(".ai-subpane").forEach(panel => panel.classList.toggle("active", panel.id === btn.dataset.manageSub));
+      if (btn.dataset.manageSub === "ai-install-panel") void refreshCliSetupStates();
     });
   });
   applyI18n(pane);
