@@ -176,6 +176,7 @@
   "update.install": "Install latest",
   "update.fetchFailed": "Could not fetch update info",
   "update.fetchFailedError": "Could not fetch update info: {error}",
+  "update.cdnNote": "CDN / static-hosted build — update checks are unavailable (updates are delivered by host sync)",
   "update.checking": "Checking for updates...",
   "update.availableMark": "(a new version is available)",
   "update.available": "Update available",

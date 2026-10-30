@@ -176,6 +176,7 @@
   "update.install": "安装最新版",
   "update.fetchFailed": "无法获取更新信息",
   "update.fetchFailedError": "无法获取更新信息：{error}",
+  "update.cdnNote": "CDN／静态托管版本 —— 无法检查更新（更新由托管方同步发布）",
   "update.checking": "正在检查更新...",
   "update.availableMark": "（有新版本可用）",
   "update.available": "有可用更新",

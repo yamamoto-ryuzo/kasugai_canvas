@@ -176,6 +176,7 @@
   "update.install": "最新版をインストール",
   "update.fetchFailed": "更新情報を取得できませんでした",
   "update.fetchFailedError": "更新情報を取得できません: {error}",
+  "update.cdnNote": "CDN・静的配信版のため更新確認は利用できません（更新は配信側の同期で行われます）",
   "update.checking": "最新バージョンを確認中...",
   "update.availableMark": "（新しいバージョンがあります）",
   "update.available": "更新が利用可能です",

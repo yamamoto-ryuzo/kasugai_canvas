@@ -176,6 +176,7 @@
   "update.install": "Instalar la última versión",
   "update.fetchFailed": "No se pudo obtener la información de actualización",
   "update.fetchFailedError": "No se pudo obtener la información de actualización: {error}",
+  "update.cdnNote": "Versión CDN / alojamiento estático — la comprobación de actualizaciones no está disponible (las actualizaciones llegan por sincronización del host)",
   "update.checking": "Buscando actualizaciones...",
   "update.availableMark": "(hay una nueva versión disponible)",
   "update.available": "Actualización disponible",

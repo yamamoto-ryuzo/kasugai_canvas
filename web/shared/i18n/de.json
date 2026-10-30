@@ -176,6 +176,7 @@
   "update.install": "Neueste installieren",
   "update.fetchFailed": "Update-Informationen konnten nicht abgerufen werden",
   "update.fetchFailedError": "Update-Informationen konnten nicht abgerufen werden: {error}",
+  "update.cdnNote": "CDN-/statisch gehostete Version — Update-Prüfung nicht verfügbar (Updates erfolgen über die Host-Synchronisierung)",
   "update.checking": "Suche nach Updates...",
   "update.availableMark": "(eine neue Version ist verfügbar)",
   "update.available": "Update verfügbar",
