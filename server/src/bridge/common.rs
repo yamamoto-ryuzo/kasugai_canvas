@@ -440,3 +440,141 @@ pub fn new_command(program: &str) -> tokio::process::Command {
     cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     cmd
 }
+
+// ---- /setup（CLI導入支援）で使う共通部品 ----
+
+// ハブが自動インストールしたCLIの置き場（プロセス再起動をまたいで残る場所。
+// %TEMP% ではなくユーザースコープの永続領域に置く）
+pub fn setup_store_dir() -> PathBuf {
+    #[cfg(windows)]
+    {
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            return PathBuf::from(local)
+                .join("kasugai")
+                .join("bridge-cli");
+        }
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home)
+        .join(".local")
+        .join("share")
+        .join("kasugai")
+        .join("bridge-cli")
+}
+
+// /setup が自動インストールしたCLIの管理パス（例: <store>/copilot/copilot.exe）
+pub fn managed_cli(provider: &str) -> PathBuf {
+    let name = if cfg!(windows) {
+        format!("{provider}.exe")
+    } else {
+        provider.to_string()
+    };
+    setup_store_dir().join(provider).join(name)
+}
+
+// PATH 上の実行ファイルを絶対パスで探す。
+// 常駐ハブのプロセス環境は古い PATH を持つため、Windows では
+// レジストリの User/Machine PATH（インストーラが更新する方）も見る。
+// これにより winget / setup.ps1 で直後に入れたCLIを再起動なしで検出できる
+pub fn find_executable(name: &str) -> Option<PathBuf> {
+    for dir in path_dirs() {
+        for cand in exe_variants(&dir.join(name)) {
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+    None
+}
+
+// 検索対象のPATHディレクトリ一覧（プロセス環境 + Windowsはレジストリ側も）
+pub fn path_dirs() -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    #[cfg(windows)]
+    dirs.extend(registry_path_dirs());
+    let mut seen = std::collections::HashSet::new();
+    dirs.into_iter().filter(|d| seen.insert(d.clone())).collect()
+}
+
+fn exe_variants(base: &PathBuf) -> Vec<PathBuf> {
+    #[cfg(windows)]
+    {
+        if base.extension().is_none() {
+            return vec![
+                base.with_extension("exe"),
+                base.with_extension("cmd"),
+                base.with_extension("bat"),
+                base.clone(),
+            ];
+        }
+    }
+    vec![base.clone()]
+}
+
+// レジストリの User/Machine 環境変数 PATH を読む。
+// reg query で取得し %VAR% 形式をプロセス環境で展開する
+#[cfg(windows)]
+fn registry_path_dirs() -> Vec<PathBuf> {
+    use std::os::windows::process::CommandExt;
+    let mut out = Vec::new();
+    for scope in [
+        r"HKCU\Environment",
+        r"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+    ] {
+        let res = std::process::Command::new("reg")
+            .args(["query", scope, "/v", "Path"])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output();
+        let Ok(res) = res else { continue };
+        if !res.status.success() {
+            continue;
+        }
+        let text = String::from_utf8_lossy(&res.stdout);
+        for line in text.lines() {
+            let line = line.trim();
+            // "    Path    REG_EXPAND_SZ    %USERPROFILE%\...;C:\..." 形式
+            let Some(pos) = line.find("REG_") else { continue };
+            let type_len = line[pos..]
+                .split_whitespace()
+                .next()
+                .map(|t| t.len())
+                .unwrap_or(0);
+            let raw = line[pos + type_len..].trim();
+            for part in expand_windows_env(raw).split(';') {
+                let part = part.trim();
+                if !part.is_empty() {
+                    out.push(PathBuf::from(part));
+                }
+            }
+        }
+    }
+    out
+}
+
+#[cfg(windows)]
+fn expand_windows_env(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(start) = rest.find('%') {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start + 1..];
+        match tail.find('%') {
+            Some(end) => {
+                let name = &tail[..end];
+                out.push_str(&std::env::var(name).unwrap_or_default());
+                rest = &tail[end + 1..];
+            }
+            None => {
+                out.push('%');
+                out.push_str(tail);
+                rest = "";
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}

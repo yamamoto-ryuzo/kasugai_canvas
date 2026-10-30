@@ -113,6 +113,28 @@ fn cli_candidates() -> Vec<(String, Vec<String>)> {
             list.push((p, Vec::new()));
         }
     }
+    // ハブの自動セットアップ(/setup・--setup)が配置した管理コピー
+    let managed = common::managed_cli("copilot");
+    if managed.is_file() {
+        list.push((managed.to_string_lossy().to_string(), Vec::new()));
+    }
+    // プロセス環境＋レジストリの最新 PATH で解決した絶対パス。
+    // 直後インストール(winget/npm)も常駐プロセスから拾える
+    if let Some(p) = common::find_executable("copilot") {
+        list.push((p.to_string_lossy().to_string(), Vec::new()));
+    }
+    #[cfg(windows)]
+    if let Ok(local) = std::env::var("LOCALAPPDATA") {
+        // winget install GitHub.Copilot の shim 置き場
+        let shim = PathBuf::from(&local)
+            .join("Microsoft")
+            .join("WinGet")
+            .join("Links")
+            .join("copilot.exe");
+        if shim.is_file() {
+            list.push((shim.to_string_lossy().to_string(), Vec::new()));
+        }
+    }
     // PATH 解決に任せる直接起動（CreateProcess は .exe は補うが .cmd は解決しない）
     list.push(("copilot.exe".to_string(), Vec::new()));
     list.push(("copilot".to_string(), Vec::new()));

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.4.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
       <p>イチBizアワード2026｜不動産情報活用部門 提案書</p>
     </header>
     <main>
@@ -153,7 +153,7 @@ flowchart TB
           <tr><td>API外</td><td>動物病院</td><td>候補駅からの距離、診療時間、夜間・救急対応、データ更新日。単純な施設件数を評価点に直結させない。</td><td>Overpass API（第一候補）＋自治体・獣医師会等の一次情報（下記候補調査参照）</td><td>候補調査済み・候補地域での網羅性確認は未実施</td></tr>
           <tr><td>API外</td><td>公園・散歩場所・ドッグラン</td><td>位置、利用時間、犬の入場可否、リード等の利用規則、情報の更新日。</td><td>自治体の公園オープンデータ・施設案内（候補地域ごとに確認）</td><td>候補地域確定後に確認</td></tr>
           <tr><td>API外</td><td>避難所のペット受入条件</td><td>同行避難の可否、避難所での受入場所・方法、災害種別や施設ごとの差、自治体の最新案内。</td><td>各自治体の防災計画・避難所案内。APIの避難場所情報だけで受入可否を推定しない。</td><td>候補地域確定後に確認</td></tr>
-          <tr><td>Canvas の AI 機能</td><td>自然文による地図・レイヤー操作と比較資料の作成</td><td>Gemini / OpenAI互換モデルで、取得済みデータの検索・表示・整理を支援。APIキー方式または対応環境のサーバープロキシを利用し、生成内容を元データと照合する。</td><td><a href="features/v3.html">V3: AI 連携</a>、<a href="google.html">Google 連携・AI</a></td><td>汎用機能あり／地域比較向け指示・資料を改善</td></tr>
+          <tr><td>Canvas の AI 機能</td><td>自然文による地図・レイヤー操作と比較資料の作成</td><td>Gemini / OpenAI互換モデルで、取得済みデータの検索・表示・整理を支援。APIキー方式または対応環境のサーバープロキシを利用し、生成内容を元データと照合する。</td><td><a href="features/v3.html">V3: AI 連携</a>、<a href="ai-api.html">【API】内蔵AI（Google 連携・AI）</a></td><td>汎用機能あり／地域比較向け指示・資料を改善</td></tr>
         </tbody>
       </table>
       <p>したがって、今回の試作では「不動産情報ライブラリの API で確認できる価格・防災・駅情報」と、「別途確認する所要時間・動物病院・公園利用条件・避難所のペット受入情報」を区別して比較シートに載せます。API マニュアルは CORS 回避のためブラウザーから直接 API リクエストしないよう案内しているため、接続方式も申請後に利用条件と合わせて確認します。</p>

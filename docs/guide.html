@@ -3,21 +3,39 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ローカルアプリ（kasugai_canvas.exe）— KASUGAI Canvas ドキュメント</title>
+  <title>【アプリ】ローカルアプリ（kasugai_canvas.exe）— KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="style.css">
   <script src="nav.js" defer></script>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.4.1</span></h1>
-      <p>ローカルアプリ（kasugai_canvas.exe）— インストール・起動・使い方・配布と公開</p>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
+      <p>【アプリ】ローカルアプリ（kasugai_canvas.exe）— フル機能版のインストールと使い方</p>
     </header>
     <main>
-      <section>
-        <p>このページは<strong>ローカルアプリ（kasugai_canvas.exe）</strong>のガイドです。ブラウザで使うサーバレス WebGIS（<code>?kasc=</code>・外部ホスト配信）は <a href="datahost.html">ブラウザ WebGIS</a> を参照してください。</p>
+      <nav class="form-nav" aria-label="利用形態の切替">
+        <a href="datahost.html" class="webgis">🌐 【WebGIS】ブラウザ WebGIS</a>
+        <a href="guide.html" class="app current">💻 【アプリ】ローカルアプリ</a>
+        <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
+        <a href="ai-bridge.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
+      </nav>
 
-        <h2>🔗 インストール</h2>
+      <section>
+        <h2>1. 概要 — ローカルアプリとは</h2>
+        <p>ローカルにインストールして <code>localhost:8510</code> で動く<strong>フル機能版</strong>です。<a href="datahost.html">【WebGIS】ブラウザ WebGIS</a> と同じ <code>.kasc</code> プロジェクトを再生しつつ、ローカルだからこその以下の機能が使えます。</p>
+        <ul>
+          <li><code>.kasc</code> のダブルクリック起動・外部プロジェクト登録（インストーラー版のみ）</li>
+          <li>設定のサーバー保存・<code>DATA/</code> へのファイル書き込み（<code>/api/files</code>）</li>
+          <li>rclone クラウドストレージ連携・仮想ドライブ割当（V5）</li>
+          <li>AI ブリッジハブの自動待受（<code>:8511</code>。GitHub Copilot / Devin / Antigravity）</li>
+          <li><code>/api/fetch</code>（CORS 回避プロキシ）・<code>/api/plugins</code> などの高権限 API</li>
+          <li>QGIS geo_webview からの「▶ Canvas で登録」（127.0.0.1:8510 固定で検出）</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. 導入・セットアップ — インストールと起動</h2>
         <div class="install-steps">
           <h3>配布 ZIP / インストーラー</h3>
           <p>最新のビルドは <code>download/</code> フォルダから直接ダウンロードできます。<strong>インストーラー版を推奨</strong>します — <code>.kasc</code> ファイルのダブルクリック起動（拡張子の関連付け＝外部プロジェクト登録）はインストーラー版でのみ利用できます。</p>
@@ -46,10 +64,8 @@
           <figcaption aria-hidden="true">管理（⚙）→ その他：バージョン・自動更新とデータ取得プロキシ許可リスト</figcaption>
           </figure>
         </div>
-      </section>
 
-      <section>
-        <h2>📖 起動方法</h2>
+        <h3>起動方法</h3>
         <div class="url-box">
           <h3>起動方法（通常のHTTPサーバー）</h3>
           <pre><code>cd web
@@ -83,7 +99,7 @@ python run.py --release  # リリース版を起動</code></pre>
       </section>
 
       <section>
-        <h2>📖 使い方</h2>
+        <h2>3. 使い方 — 主な機能</h2>
         <div class="url-box">
           <h3>基本の流れ</h3>
           <figure>
@@ -156,7 +172,7 @@ info: https://example.com/project-info.html</code></pre>
       </section>
 
       <section>
-        <h2>🌐 ハイブリッド配布・公開構成</h2>
+        <h2>4. 注意点・制限 — 配布と公開の形態</h2>
         <p>KASUGAI Canvas は、ブラウザ完結の CesiumJS フロントエンドに整理されています。Rust/Axum サーバーはあくまで <strong>最小限の静的ファイル配信</strong>で、<code>web/</code> ディレクトリそのものを nginx / Apache / IIS / GitHub Pages などに置くだけで一般公開もできます。</p>
         <div class="features">
           <div class="feature-card">
@@ -168,12 +184,12 @@ info: https://example.com/project-info.html</code></pre>
             <p><code>web/</code> を静的サーバーにアップロード。同一オリジン内の <code>projects/&lt;id&gt;/DATA/</code> を相対パスで参照できます。</p>
           </div>
           <div class="feature-card">
-            <h3>� 単独WEB配信（サーバレス）</h3>
+            <h3>📡 単独WEB配信（サーバレス）</h3>
             <p>QGIS geo_webview の KASUGAI エクスポートが出力する <code>.kasc</code>・<code>DATA/</code>・<code>&lt;engine&gt;.html</code>・<code>index.html</code> を含むフォルダを、エンジン（<code>web/</code> の中身）と一緒に同じ静的サーバーへ置くだけで公開できます。各 <code>&lt;engine&gt;.html</code> はエンジンを自動探索して <code>?kasc=&lt;URL&gt;</code> 付きで起動します（配置が特殊なら HTML 内の <code>CANVAS_BASE</code> を設定）。プロジェクト登録・ローカルサーバー不要です。</p>
             <p><strong>注意事項</strong>：エンジンはルートパス前提（<code>/shared/</code> 等）のため <code>web/</code> の中身をホストルートに置き、プロジェクトフォルダは配下の任意の場所へ配置してください。<code>file://</code> で開いた場合は起動中のローカル Canvas（127.0.0.1:8510）へ <code>/api/projects/register</code> で自動登録して開きます（CORS 対応ビルドが必要。未対応・未起動時は案内が表示されます）。受け取り側は「ローカル Canvas を入れてダブルクリック」または「フォルダごと静的ホスティングへ」の2択で開けます。</p>
           </div>
           <div class="feature-card">
-            <h3>�🔒 読み取り専用</h3>
+            <h3>🔒 読み取り専用</h3>
             <p>プロジェクトファイルは Web サーバー側の権限で書き込み禁止にできます。変更は「エクスポート(.kasc)」でローカルに落として差し替えます。</p>
           </div>
           <div class="feature-card">
@@ -181,6 +197,16 @@ info: https://example.com/project-info.html</code></pre>
             <p>外部 3D Tiles / GeoJSON は CORS が必要。Yahoo AppID 等の認証情報を <code>.kasc</code> に書くと公開サイトで漏洩します。</p>
           </div>
         </div>
+      </section>
+
+      <section class="card">
+        <h2>5. 関連リンク</h2>
+        <ul>
+          <li><a href="datahost.html">【WebGIS】ブラウザ WebGIS（インストール不要の利用形態）</a></li>
+          <li><a href="features/v5.html">V5: アプリ化（ローカル連携）</a></li>
+          <li><a href="inspector.html">.kasc 設定仕様</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
       </section>
     </main>
   </div>

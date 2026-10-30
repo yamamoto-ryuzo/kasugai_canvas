@@ -95,6 +95,7 @@ const CHAT_TOOL_API = {
   showReport: "showReport", listProjects: "listProjects", switchProject: "switchProject",
   toggleDrawMode: "toggleDrawMode", applyInspector: "applyInspector", exportInspector: "exportInspector",
   checkUpdate: "checkUpdate", installUpdate: "installUpdate",
+  bridgeSetup: "local:bridgeSetup",
   runCode: "local:runCode",
   addLayer: "addLayer", addGeoJsonLayer: "addGeoJsonLayer",
   shutdownApp: "shutdownApp",
@@ -187,6 +188,57 @@ async function probeWebgisHub() {
   }
   webgisHub = null;
   return null;
+}
+// /health をポーリングしてハブの立ち上がりを待つ（自己インストール exe の
+// 実行待ち用。TTL を無視して都度疎通する）
+async function waitForWebgisHub(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    webgisHub = undefined;
+    if (await probeWebgisHub()) return webgisHub;
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  return null;
+}
+// ハブ未検出時の自動インストール誘導。
+// フロー: bridge-hub.exe（自己インストール型）を DL → ユーザーが実行すると
+// %LOCALAPPDATA%\kasugai\bridge-hub へコピー＋自動起動登録＋8512 で起動 →
+// こちらは /health ポーリングで検出して接続まで自動完了する。
+// ブラウザから exe を直接起動することはできないため、ユーザー操作は
+// 「DL した exe を実行」の1回のみ（以後はログイン時自動起動）
+let hubInstallWait = null; // 重複実行ガード
+async function offerHubInstall(provider, auto) {
+  const note = document.querySelector("#bridge-hub-note");
+  const btn = document.querySelector("#bridge-hub-install");
+  const status = document.querySelector("#bridge-hub-status");
+  if (!note || !btn) return;
+  note.hidden = false;
+  const start = async () => {
+    if (hubInstallWait) return;
+    hubInstallWait = (async () => {
+      // 自己インストール exe のダウンロードを発火
+      const a = document.createElement("a");
+      a.href = "../download/bridge-hub.exe";
+      a.download = "bridge-hub.exe";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (status) status.textContent = t("chat.bridge.hubWaitExe");
+      const hub = await waitForWebgisHub(180000);
+      if (hub) {
+        const input = document.querySelector("#agent-endpoint");
+        if (input && !input.value.trim()) input.value = hub.endpoint;
+        if (status) status.textContent = t("chat.bridge.hubDetected");
+        void refreshBridgeStatus(provider);
+      } else if (status) {
+        status.textContent = t("chat.bridge.hubNotFound");
+      }
+    })().finally(() => { hubInstallWait = null; });
+    return hubInstallWait;
+  };
+  btn.onclick = () => void start();
+  // プロバイダ選択（ユーザーの明示操作）に続けて自動でも DL+待機を開始する
+  if (auto) void start();
 }
 // ブリッジ系プロバイダの利用可否。アプリ版は capabilities の feature 通知、
 // ブラウザ WebGIS 用はハブの providers.<名>.available で判定する
@@ -751,7 +803,7 @@ export function setupAiSettings() {
     }
     endpointInput.value = ep;
   };
-  const syncProviderFields = () => {
+  const syncProviderFields = (userAction) => {
     const v = providerSelect?.value || "gemini";
     if (geminiFields) geminiFields.hidden = v !== "gemini";
     if (openaiFields) openaiFields.hidden = v !== "openai";
@@ -787,11 +839,13 @@ export function setupAiSettings() {
       // チャット側ドロップダウンからの切替では suppressSettingsVerify が立ち、
       // ここでの重い検証（Devin の acp 起動・ブラウザ認証を含み得る）はスキップする
       if (!suppressSettingsVerify) {
-        // エンドポイント未入力なら疎通するブリッジを自動検出して入力する
+        // エンドポイント未入力なら疎通するブリッジを自動検出して入力する。
+        // 見つからずユーザーが明示選択した場合はハブの自動インストールを開始する
         if (endpointInput && !endpointInput.value.trim()) {
           void detectBridge(v).then(found => {
             if (found && endpointInput && !endpointInput.value.trim()) endpointInput.value = found.endpoint;
             void refreshBridgeStatus(v);
+            if (!found && userAction) void offerHubInstall(v, true);
           });
         } else {
           void refreshBridgeStatus(v);
@@ -822,7 +876,7 @@ export function setupAiSettings() {
     for (const p of BRIDGE_PROVIDERS) void refreshBridgeModels(p, "");
     syncProviderFields();
   } catch (e) {}
-  providerSelect?.addEventListener("change", syncProviderFields);
+  providerSelect?.addEventListener("change", () => syncProviderFields(true));
   saveButton.addEventListener("click", () => {
     try {
       localStorage.setItem("googleApiKey", keyInput.value.trim());
@@ -886,6 +940,47 @@ export function setupAiSettings() {
     } catch (e) {
       if (customInstructionsStatus) customInstructionsStatus.textContent = t("common.saveError", { error: e.message });
     }
+  });
+
+  // 「CLI を自動インストール」ボタン — ハブの /setup を呼び、
+  // 検出状況 → 確認 → install ジョブの完了までを進行表示する
+  document.querySelectorAll(".bridge-setup-install").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const holder = btn.closest(".provider-only");
+      const provider = holder?.dataset.for || "";
+      const note = holder?.querySelector(".bridge-setup-note");
+      if (!BRIDGE_PROVIDERS.includes(provider)) return;
+      btn.disabled = true;
+      if (note) note.textContent = "";
+      try {
+        const st = await bridgeSetupRun(provider, "status");
+        if (!st.ok) {
+          if (note) note.textContent = st.message || "";
+          return;
+        }
+        if (st.status?.cli_found) {
+          if (note) note.textContent = t("chat.bridge.cliDetected", { path: st.status.cli_path || "" });
+          void refreshBridgeStatus(provider);
+          return;
+        }
+        if (!st.status?.auto_install) {
+          if (note) note.textContent = st.status?.note || "";
+          return;
+        }
+        if (!window.confirm(t("chat.bridge.installConfirm", { provider }))) return;
+        if (note) note.textContent = t("chat.bridge.installing");
+        const r = await bridgeSetupRun(provider, "install");
+        if (r.ok) {
+          if (note) note.textContent = t("chat.bridge.installDone", { path: r.result?.cli_path || "" });
+          void refreshBridgeStatus(provider);
+        } else if (note) {
+          note.textContent = t("chat.bridge.installFailed",
+            { error: r.result?.error || r.message || r.status || "" });
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
   });
 }
 
@@ -1502,6 +1597,18 @@ const CHAT_TOOLS = [{
       parameters: { type: "OBJECT", properties: {} },
     },
     {
+      name: "bridgeSetup",
+      description: "ブリッジハブ(127.0.0.1)経由でブリッジ系プロバイダ用CLIの導入状況確認・自動インストールを行う。action=status(既定)は対象プロバイダのCLI検出状況と自動化可否を返し、action=installは公式手順でCLIを自動導入する(copilot/devinのみ・antigravityは案内のみ)。installはPCにソフトウェアをインストールするため、ユーザーが明示的に導入を求めた場合のみ使う(実行前に確認ダイアログが出る)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          provider: { type: "STRING", description: "copilot / devin / antigravity" },
+          action: { type: "STRING", description: "status(既定) / install" },
+        },
+        required: ["provider"],
+      },
+    },
+    {
       name: "runCode",
       description: "ブラウザ内サンドボックスでJavaScriptを実行し、戻り値とconsole出力を返す。データ加工・集計・座標計算などに使う。api.flyTo(...)等の地図操作APIが非同期で呼べる(api.<関数名>はkasugaiApiと同じ)。例: const layers = await api.listLayers(); return layers.length; ※DOM・localStorage・外部fetchは不可",
       parameters: {
@@ -1942,6 +2049,8 @@ function activeChatTools() {
     // 更新・停止はローカルサーバー版のみ（静的配信では非公開）
     .filter(d => !["checkUpdate", "installUpdate"].includes(d.name) || hasBackendFeature("update"))
     .filter(d => d.name !== "shutdownApp" || hasBackendFeature("shutdown"))
+    // ブリッジCLI導入ツールはハブが検出できる環境のみ（内蔵AIからも使える導線）
+    .filter(d => d.name !== "bridgeSetup" || bridgeSetupHubMaybe())
     .filter(d => chatToolAvailable(d.name))
     // MCP サーバー（Box 等）のツールを末尾へ合成する
     .concat(mcpDeclarations());
@@ -2275,6 +2384,19 @@ export async function executeChatTool(name, args = {}) {
     const r = await window.kasugaiApi.shutdownApp();
     return r && typeof r === "object" ? r : { ok: !!r };
   }
+  if (name === "bridgeSetup") {
+    const provider = String(args.provider || "").toLowerCase().trim();
+    if (!BRIDGE_PROVIDERS.includes(provider)) {
+      return { ok: false, message: `unknown provider: ${provider}` };
+    }
+    const action = String(args.action || "status").toLowerCase();
+    // ソフトウェアのインストールは実行前に必ずユーザー確認を取る
+    if (action === "install"
+      && !window.confirm(t("chat.bridge.installConfirm", { provider }))) {
+      return { ok: false, message: t("agent.cancelled") };
+    }
+    return await bridgeSetupRun(provider, action);
+  }
   if (name === "savePlugin") {
     // 生成コードの適用前にユーザーへ全文確認を取る（プラグインはフル権限で動くため）
     const approved = await confirmPluginApply({ id: args.id, name: args.name, code: String(args.code || "") });
@@ -2468,6 +2590,80 @@ async function healBridgeEndpoint(provider, failedEndpoint) {
     return endpoint;
   }
   return null;
+}
+
+// ブリッジハブのオリジン(http://127.0.0.1:<port>)を検出する。
+// /agent エンドポイント記憶・webgis 検出・既定ポートを順に試し、
+// /health が hub:true を返した最初のオリジンを返す(なければ null)
+async function detectBridgeHubBase() {
+  const eps = [];
+  try {
+    const saved = (localStorage.getItem("agentEndpoint") || "").trim();
+    if (saved) eps.push(saved);
+  } catch (e) {}
+  if (webgisHub?.endpoint) eps.push(webgisHub.endpoint);
+  eps.push(BRIDGE_HUB_ENDPOINT_APP, "http://127.0.0.1:8512/agent");
+  for (const ep of [...new Set(eps)]) {
+    try {
+      const r = await fetch(new URL("/health", ep).href,
+        { signal: AbortSignal.timeout(2000), cache: "no-store" });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d?.hub) return new URL(ep).origin;
+    } catch (e) { /* 次の候補へ */ }
+  }
+  return null;
+}
+
+// bridgeSetup ツールを公開する目安（正確な可否は実行時に detectBridgeHubBase で確認）
+function bridgeSetupHubMaybe() {
+  return BRIDGE_PROVIDERS.some(p => hasBackendFeature(p + "Bridge"))
+    || !!webgisHub?.endpoint;
+}
+
+// ハブの /setup を呼ぶ。action=status は GET、install はジョブを開始して
+// 完了(またはタイムアウト)までポーリングする。戻り値はツール結果向けの要約
+async function bridgeSetupRun(provider, action) {
+  const hub = await detectBridgeHubBase();
+  if (!hub) return { ok: false, message: t("chat.bridge.hubNotFound") };
+  if (action !== "install") {
+    try {
+      const r = await fetch(`${hub}/setup`, { signal: AbortSignal.timeout(15000) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return { ok: false, message: d?.error || `HTTP ${r.status}` };
+      return { ok: true, provider, status: d?.providers?.[provider] || null };
+    } catch (e) {
+      return { ok: false, message: String(e?.message || e) };
+    }
+  }
+  try {
+    const r = await fetch(`${hub}/setup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, action: "install", confirm: true }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, message: d?.error || `HTTP ${r.status}`, guide: d?.guide };
+    const jobId = d?.job;
+    const deadline = Date.now() + 480000;
+    let last = null;
+    for (;;) {
+      await new Promise(res => setTimeout(res, 2000));
+      try {
+        const jr = await fetch(`${hub}/setup/job/${jobId}`, { signal: AbortSignal.timeout(10000) });
+        last = await jr.json().catch(() => ({}));
+      } catch (e) { /* ポーリング継続 */ }
+      if (last?.status && last.status !== "running") break;
+      if (Date.now() > deadline) break;
+    }
+    return {
+      ok: last?.status === "done",
+      status: last?.status || "timeout",
+      result: last?.result || null,
+      log: (last?.log || []).slice(-15),
+    };
+  } catch (e) {
+    return { ok: false, message: String(e?.message || e) };
+  }
 }
 
 // 現環境で実際に使えるプロバイダ一覧を返す（チャットヘッダーのドロップダウン用）。
@@ -3343,8 +3539,10 @@ const AI_SETTINGS_HTML = `
     <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
     <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" autocomplete="off" size="28" />
     <p class="hint" id="bridge-hub-note" hidden>
-      <span data-i18n-html="chat.bridge.hubNote"></span>
-      <a href="../download/bridge-hub.zip" download data-i18n="chat.bridge.hubDownload">bridge-hub.zip をダウンロード</a>
+      <span data-i18n-html="chat.bridge.hubNote"></span><br />
+      <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
+      <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownload">bridge-hub.exe をダウンロード</a>
+      <span id="bridge-hub-status" aria-live="polite"></span>
     </p>
     <div class="provider-only" data-for="agent" hidden>
       <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
@@ -3356,6 +3554,10 @@ const AI_SETTINGS_HTML = `
       <label class="field-label" for="copilot-model" data-i18n="chat.copilot.modelLabel">モデル</label>
       <select id="copilot-model"></select>
       <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
+      <div style="margin-top:4px;">
+        <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+        <span class="hint bridge-setup-note" aria-live="polite"></span>
+      </div>
     </div>
     <div id="devin-fields" class="provider-only" data-for="devin" hidden>
       <label class="field-label" for="devin-api-key" data-i18n="chat.devin.apiKeyLabel">Devin APIキー（任意）</label>
@@ -3363,11 +3565,19 @@ const AI_SETTINGS_HTML = `
       <label class="field-label" for="devin-model" data-i18n="chat.devin.modelLabel">モデル</label>
       <select id="devin-model"></select>
       <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
+      <div style="margin-top:4px;">
+        <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+        <span class="hint bridge-setup-note" aria-live="polite"></span>
+      </div>
     </div>
     <div id="antigravity-fields" class="provider-only" data-for="antigravity" hidden>
       <label class="field-label" for="antigravity-model" data-i18n="chat.antigravity.modelLabel">モデル</label>
       <select id="antigravity-model"></select>
       <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
+      <div style="margin-top:4px;">
+        <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+        <span class="hint bridge-setup-note" aria-live="polite"></span>
+      </div>
     </div>
   </div>
   <label class="field-label" for="google-tool-max-steps" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>

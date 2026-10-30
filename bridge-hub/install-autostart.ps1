@@ -1,6 +1,7 @@
 # KASUGAI Canvas ブリッジハブを「ログイン時に自動起動」で登録する。
 # 使い方: powershell -ExecutionPolicy Bypass -File install-autostart.ps1
 #
+# bridge-hub.exe --install と同じ動作をスクリプトで行う版。
 # 常駐するのはハブ（127.0.0.1:8512・Rust 製 bridge-hub.exe）だけで、
 # copilot 等の各 CLI はプロバイダが実際に使われた時点で遅延起動される
 # （アプリ版と同じ動作。Node.js 不要）。
@@ -11,6 +12,7 @@ $ErrorActionPreference = "Stop"
 $hub = Split-Path -Parent $MyInvocation.MyCommand.Path
 $vbs = Join-Path $hub "run-hidden.vbs"
 $taskName = "KasugaiCanvasBridgeHub"
+$startupVbs = Join-Path ([Environment]::GetFolderPath("Startup")) "$taskName.vbs"
 
 if (-not (Test-Path (Join-Path $hub "bridge-hub.exe"))) {
   Write-Error "bridge-hub.exe が見つかりません: $hub"
@@ -19,20 +21,33 @@ if (-not (Test-Path $vbs)) {
   Write-Error "run-hidden.vbs が見つかりません: $hub"
 }
 
-$action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`""
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-  -Principal $principal -Settings $settings -Force `
-  -Description "KASUGAI Canvas AI bridge hub (http://127.0.0.1:8512/agent)" | Out-Null
-Write-Host "タスクを登録しました: $taskName（ログイン時に自動起動）"
+# 1) タスクスケジューラで登録（ユーザー自身のタスク・管理者権限不要）
+$taskRegistered = $false
+try {
+  $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbs`""
+  $trigger = New-ScheduledTaskTrigger -AtLogOn
+  $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
+    -Principal $principal -Settings $settings -Force `
+    -Description "KASUGAI Canvas AI bridge hub (http://127.0.0.1:8512/agent)" -ErrorAction Stop | Out-Null
+  $taskRegistered = $true
+  Write-Host "タスクを登録しました: $taskName（ログイン時に自動起動）"
+} catch {
+  # 2) タスク登録が拒否される環境ではスタートアップフォルダへ vbs を配置
+  Copy-Item $vbs $startupVbs -Force
+  Write-Host "スタートアップフォルダに登録しました: $startupVbs（ログイン時に自動起動）"
+}
 
 # 未起動なら今すぐ起動する（ブラウザ WebGIS 用既定ポートは 8512）
 try {
   $r = Invoke-RestMethod -Uri "http://127.0.0.1:8512/health" -TimeoutSec 2
   Write-Host "ハブは既に起動中です (providers: $(($r.providers.PSObject.Properties.Name) -join ', '))"
 } catch {
-  Start-ScheduledTask -TaskName $taskName
+  if ($taskRegistered) {
+    Start-ScheduledTask -TaskName $taskName
+  } else {
+    & wscript.exe "$startupVbs"
+  }
   Write-Host "ハブを起動しました。確認: http://127.0.0.1:8512/health"
 }

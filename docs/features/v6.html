@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>V6: マルチエンジン — KASUGAI Canvas ドキュメント</title>
+  <title>マルチエンジン — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="../style.css">
   <script src="../nav.js" defer></script>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.4.1</span></h1>
-      <p>V6: マルチエンジン — 各機能カードの詳細説明</p>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
+      <p>マルチエンジン — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
-      <h2 id="multi">V6: マルチエンジン</h2>
+      <h2 id="multi">マルチエンジン</h2>
       <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> プロジェクトを複数の地図エンジンで再生できる構成です。<strong>メインエンジンは CesiumJS</strong>（開発の主対象・既定エンジン）で、MapLibre / OpenLayers / Leaflet / GSI Maps（※現在調整中）は <code>.kasc</code> プレイヤーとしての互換実装です。プロジェクトデータ（<code>projects/</code>）はエンジン非依存で、描画に依存しないコードは <code>web/shared/</code> に集約しています。</p>
       <p><strong>ねらい</strong>: 同じ <code>.kasc</code> を「高機能3D（Cesium）」「軽量2D（Leaflet 等）」「地理院地図の UI（GSI Maps）」など、配布先の環境・用途に合ったエンジンで開けます。納品物は <code>.kasc</code>+<code>DATA/</code>+エンジン一式の静的ファイルだけで成立し、受け取り側がエンジンを選ぶ余地も残せます。</p>
 

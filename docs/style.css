@@ -350,6 +350,46 @@ strong {
   margin: 10px 0;
 }
 
+/* ===== 4形態ナビ（各ガイドページ共通） ===== */
+.form-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0 0 28px;
+}
+
+.form-nav a {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-left: 4px solid #9aa5b1;
+  color: #333;
+  font-size: 0.9em;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.form-nav a.webgis { border-left-color: #667eea; }
+.form-nav a.app { border-left-color: #2e9e56; }
+.form-nav a.api { border-left-color: #8a4fff; }
+.form-nav a.bridge { border-left-color: #e06c00; }
+
+.form-nav a:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
+  text-decoration: none;
+}
+
+.form-nav a.current {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-color: #5a6fd0;
+  color: #fff;
+  pointer-events: none;
+}
+
 @media (max-width: 720px) {
   body {
     padding: 12px;

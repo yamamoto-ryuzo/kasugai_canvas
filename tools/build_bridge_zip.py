@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Build web/download/bridge-hub.zip — スタンドアロン ブリッジハブ配布 ZIP。
+"""Build web/download/bridge-hub.zip + bridge-hub.exe — ブリッジハブ配布物。
 
 CDN/静的配信版の AI 設定画面からダウンロードさせるための単品配布物。
-Rust 製 bridge-hub.exe（server/src/bin/bridge-hub.rs）と起動スクリプト一式を
-bridge-hub/ として ZIP 化する。Node.js 不要（旧 server.mjs 版は廃止）。
+Rust 製 bridge-hub.exe（server/src/bin/bridge-hub.rs）は
+・単体 exe（自己インストール型: 実行するだけで %LOCALAPPDATA% へコピー＋
+  ログイン時自動起動登録＋8512 で起動）… web/download/bridge-hub.exe
+・起動スクリプト一式を添えた bridge-hub/ ZIP（自動機・個別操作用）
+  … web/download/bridge-hub.zip
+として出力する。Node.js 不要（旧 server.mjs 版は廃止）。
 web/ 直下に置くため、CDN 同期（publish_cdn.py）にそのまま含まれる。
 
 usage:
@@ -11,6 +15,7 @@ usage:
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -21,6 +26,7 @@ EXE = os.path.join(SERVER_DIR, 'target', 'release', 'bridge-hub.exe')
 DEFAULT_OUT = os.path.join(REPO_DIR, 'web', 'download', 'bridge-hub.zip')
 BUNDLE_DIR = 'bridge-hub'
 BUNDLE_FILES = (
+    'setup.cmd',
     'install-autostart.ps1',
     'uninstall-autostart.ps1',
     'run-hidden.vbs',
@@ -50,6 +56,11 @@ def build(out=DEFAULT_OUT, cargo=True):
             z.write(p, os.path.join(BUNDLE_DIR, fn))
             count += 1
     print('built: {0} ({1} files)'.format(out, count))
+    # 自己インストール型の単体 exe も同じ download/ に置く
+    # （AI 設定の「ハブをインストール」ボタンが直接 DL する配布物）
+    exe_out = os.path.join(os.path.dirname(out), 'bridge-hub.exe')
+    shutil.copyfile(EXE, exe_out)
+    print('built: {0}'.format(exe_out))
     return out
 
 

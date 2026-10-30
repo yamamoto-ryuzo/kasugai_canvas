@@ -4,6 +4,22 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.0] - 2026-10-30
+
+### Added
+
+- **ブリッジハブの自己インストール型 exe 化**（`server/src/bin/bridge-hub.rs`・`download/bridge-hub.exe`）— 単体 exe をダウンロードして実行するだけで `%LOCALAPPDATA%\kasugai\bridge-hub\` への自己コピー・ログイン時自動起動登録・`127.0.0.1:8512` での非表示起動まで完了（管理者権限不要）。`--install`/`--serve`/`--uninstall`/`--setup` の明示サブコマンドを持ち、タスク登録が拒否される環境ではスタートアップフォルダへフォールバック。ブラウザ WebGIS での導入が「DL→実行」の2操作に短縮
+- **ハブの `/setup` API**（`server/src/bridge/setup.rs`）— `GET /setup`（各プロバイダ CLI の検出状況・自動化可否）・`POST /setup`（公式手順の自動インストールをジョブ実行）・`GET /setup/job/<id>`。copilot は winget→npm→GitHub Releases 直接DL の順にフォールバック、devin は公式インストーラで導入。POST は loopback＋既知デプロイホストの Origin のみ受理。`bridge-hub.exe --setup` で CLI からも同機能を実行可能
+- **AI 設定画面の「CLI を自動インストール」ボタンと `bridgeSetup` チャットツール**（`web/shared/ai-chat.js`）— 各プロバイダ欄から CLI の自動導入を実行でき、Gemini 等の内蔵AIからも「copilot をインストールして」と指示可能
+- **ブラウザ WebGIS でのブリッジハブ自動検出・自動導入フロー**（`web/shared/ai-chat.js`）— capabilities 通知が無くても同一 PC のハブ `/health`（8512→8511 の順）疎通で `hub:true` を検出してブリッジ系プロバイダを表示。プロバイダ選択時にハブ未検出なら `bridge-hub.exe` を自動ダウンロードし、`/health` ポーリングで起動検出→エンドポイント入力・接続まで自動完了
+- **Devin ブリッジの認証経路**— サービスユーザー API キー（`DEVIN_API_KEY`・`cog_`・設定画面入力可）または初回接続時のブラウザ PKCE ログイン。ローカル CLI ログインに依存しない
+- **【ブリッジ】ドキュメントページ新設**（`docs/ai-bridge.html`）— 導入手順（exe 自己インストール／自動機向け zip・PowerShell 無人導入）・接続方式ごとの規約判断（GitHub Copilot・Devin・Antigravity の採用根拠、M365/Microsoft Copilot を見送った理由）
+
+### Changed
+
+- **`bridge-hub.zip` を自動機・スクリプト向け配布物に再定義**（`bridge-hub/`・`tools/build_bridge_zip.py`）— exe＋起動スクリプト一式を同梱し、`setup.cmd --nopause` で無人実行可能。`install-autostart.ps1` もタスク登録失敗時はスタートアップフォルダへフォールバック。自己インストールと同一タスク名を使い経路間で互換
+- Antigravity ブリッジは `agy mcp add` で地図ツールを MCP 登録し `permissions.allow` に `mcp(kasugai/*)` を自動付与（headless の未許可ツール自動拒否対策）
+
 ## [6.4.1] - 2026-10-30
 
 ### Changed

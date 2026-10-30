@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>【API】内蔵AI（Google 連携・AI）— KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
+      <p>【API】内蔵AI — Gemini・OpenAI互換・Google Maps Platform</p>
+    </header>
+    <main>
+      <nav class="form-nav" aria-label="利用形態の切替">
+        <a href="datahost.html" class="webgis">🌐 【WebGIS】ブラウザ WebGIS</a>
+        <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
+        <a href="ai-api.html" class="api current">🤖 【API】内蔵AI</a>
+        <a href="ai-bridge.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
+      </nav>
+
+      <section>
+        <h2>1. 概要 — 【API】内蔵AI とは</h2>
+        <p>【API】系統は、ブラウザからプロバイダの<strong>公式 API へ直接接続</strong>する内蔵AI（Gemini・OpenAI互換）と Google 連携です。Google 関連機能は管理ウィンドウ（サイドパネル右端の ⚙ ボタン）に集約しており、Gemini・外部エージェントは「AI」カテゴリ、Google Maps Platform は「Google Maps」カテゴリから設定・管理します。<strong>【ブリッジ】系統（GitHub Copilot・Devin・Antigravity・外部エージェント）</strong>は <a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a> に分離しています。</p>
+        <div class="url-box">
+          <h3>AI の利用形態（通常版 / アプリ版）</h3>
+          <table>
+            <thead><tr><th>AI 経路</th><th>通常版（ブラウザ/公開デプロイ）</th><th>アプリ版（ローカル exe）</th></tr></thead>
+            <tbody>
+              <tr><td>Gemini（BYO APIキー）</td><td>○</td><td>○</td></tr>
+              <tr><td>Gemini（サーバーキー <code>/api/gemini</code>）</td><td>○（Cloudflare/Cloud Run デプロイ時）</td><td>—</td></tr>
+              <tr><td>OpenAI互換（GitHub Models・OpenAI・Ollama 等）</td><td>○（BYOキー・エンドポイントがCORS許可の場合）</td><td>○</td></tr>
+              <tr><td>外部エージェント（汎用エンドポイント）</td><td>○（ブラウザから届くURL）</td><td>○</td></tr>
+              <tr><td>GitHub Copilot（ブリッジ）</td><td>○</td><td>○</td></tr>
+              <tr><td>Devin（ブリッジ）</td><td>○</td><td>○</td></tr>
+              <tr><td>Antigravity（ブリッジ）</td><td>○</td><td>○</td></tr>
+              <tr><td>Microsoft 365 Copilot（公式 Chat API）</td><td colspan="2">未実装・標準連携は見送り（ライセンス・アプリ登録・必要権限への管理者同意等が前提。接続自体の禁止ではない）</td></tr>
+              <tr><td>Microsoft Copilot / M365 Copilot（Web UI 自動化）</td><td colspan="2">提供しない（消費者向けは自動アクセスの明示禁止。職場・学校向けとの違いは<a href="ai-bridge.html#m365-connection-policy">見送り理由</a>を参照）</td></tr>
+              <tr><td>高権限ツール（<code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code>・<code>publishPlugin</code>・ファイル保存）</td><td>—</td><td>○（local ティアのみ）</td></tr>
+            </tbody>
+          </table>
+          <p>「通常版」は静的配信・Cloudflare・Cloud Run などブラウザだけで開く形態、「アプリ版」はローカル Rust サーバー（kasugai_canvas.exe）で動かす形態です。AI チャット本体・地図操作・コード実行・プラグイン生成はどちらでも使え、アプリ版には<strong>永続化・共有・システムに触れる高権限機能とローカルブリッジの自動起動</strong>があります。</p>
+          <p>【ブリッジ】系統（GitHub Copilot・Devin・Antigravity・外部エージェント）の設定手順・ブリッジハブ構成（待受ポート・CLI 要件・環境変数）は <a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a> に集約しています。</p>
+        </div>
+        <div class="url-box">
+          <h3>AI プロバイダの2系統（【API】と【ブリッジ】）</h3>
+          <p>「AI プロバイダ」の選択肢は名前の先頭の接頭辞で2系統に分かれます。入力方法も動作モデルも異なるため、目的に応じて選びます。</p>
+          <table>
+            <thead><tr><th></th><th>【API】Gemini / OpenAI互換</th><th>【ブリッジ】GitHub Copilot / Devin / Antigravity / 外部エージェント</th></tr></thead>
+            <tbody>
+              <tr><td>接続先</td><td>プロバイダの公式 API へブラウザから直接接続（HTTPS）</td><td>ローカル等のエンドポイント（<code>/agent</code>）へ POST</td></tr>
+              <tr><td>設定するもの</td><td>APIキー＋モデル（OpenAI互換はベースURLも）</td><td>エンドポイントURL＋トークン（任意）＋BYOキー送信（任意）</td></tr>
+              <tr><td>AI 側の資格</td><td>BYO キー、またはサーバーキー（<code>/api/gemini</code>）</td><td>ブリッジ側が持つ（Copilot CLI ログイン等）。ブラウザにキーは不要</td></tr>
+              <tr><td>ツール実行方式</td><td>function calling ループ — ツール結果を見て複数往復で判断するため多段操作に強い</td><td>単発キュー — 応答の <code>actions</code> を一括実行。ツール結果を見た往復はしない</td></tr>
+              <tr><td>向いている用途</td><td>高精度な地図操作・プラグイン生成・資料生成などの本体 AI</td><td>既存の Copilot 契約や自作エージェント（外部実装）を繋いで使う</td></tr>
+              <tr><td>提供形態</td><td>通常版</td><td>外部エージェントは両形態。GitHub Copilot / Devin / Antigravity の専用選択肢は <strong>ブリッジハブ検出環境</strong>（アプリ版 :8511 または同一PCのブラウザ WebGIS 用 bridge-hub :8512）で表示</td></tr>
+            </tbody>
+          </table>
+          <p>どちらを選んでもチャット UI・地図操作・<code>runCode</code>・破壊的操作の確認ダイアログは共通です。ブリッジ系を選んだ場合のみ「エンドポイントURL・トークン・BYOキー送信」のブリッジ欄が表示され、GitHub Copilot / Devin / Antigravity ではさらにモデル選択と疎通ステータスが表示されます。</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>2. 導入・セットアップ — API キーの発行と設定</h2>
+        <div class="url-box">
+          <h3>🔑 API キー管理</h3>
+          <p>Gemini キーは <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>、Maps キーは <a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行。キーは localStorage にのみ保存され、.kasc エクスポートには含まれません。発行したキーは 管理（⚙）→ AI → チャット（Gemini）・管理（⚙）→ Google Maps（Maps キー）で設定します。</p>
+          <p><strong>Google Cloud で有効化・キー制限への追加が必要な API:</strong></p>
+          <ul>
+            <li><strong>Map Tiles API</strong> — Photorealistic 3D Tiles</li>
+            <li><strong>Geocoding API</strong> — 検索プロバイダ「Google」（ハイブリッド検索の住所側）</li>
+            <li><strong>Places API (New)</strong> — ハイブリッド検索の施設・キーワード側 / AIツール <code>searchPlaces</code></li>
+            <li><strong>Street View Static API</strong> — Street View のメタデータ確認（「SV」ボタン・地図クリック・AIツール <code>openStreetView</code>。パノラマ自体は Google マップを別タブで開くだけなので API 不要）</li>
+          </ul>
+          <p>Geocoding / Places / Street View の Web サービス API は HTTP リファラー制限付きキーを拒否します。リファラー制限をかけたい場合は「Web サービス用キー」欄に制限なしの別キーを設定してください（Map Tiles API のみリファラー制限が有効なので、上の「Maps API キー」に制限付きキーを入れる運用が可能です）。Street View 候補ラインは Google マップ内部のカバレッジデータ（キー不要・非公式）を使用します</p>
+          <p><strong>サーバー配布（BYO 不要化）</strong>：バックエンド（Cloud Run・Cloudflare Pages/Workers）のシークレットに <code>GOOGLE_MAPS_API_KEY</code> を設定すると、<code>/api/capabilities</code> が <code>google.mapsApiKey</code> を通知し、ブラウザに Maps キーが未保存の場合に自動登録します。訪問者は何も入力せずに Maps 系機能を使えます（BYO キーが保存済みならそちらが優先）。Maps キーはタイル URL 等に埋め込まれる設計上の公開キーなので、保護は秘匿ではなく GCP コンソールの <strong>HTTP リファラ制限</strong>（<code>https://&lt;配信ドメイン&gt;/*</code>）で行ってください</p>
+        </div>
+        <div class="url-box">
+          <h3>OpenAI互換エンドポイントの設定</h3>
+          <p>「AI プロバイダ」で「OpenAI互換」を選ぶと、<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントに、ベースURL・キー・モデル名を指定して接続できます（ブラウザから直接接続するため、エンドポイント側の CORS 許可が必要です）。GitHub Copilot 契約を使いたい場合は <a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a> を参照してください。</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. 使い方 — 主な機能</h2>
+        <div class="features">
+          <div class="feature-card" id="ai-api">
+            <h3>🤖 AIチャット（Gemini / OpenAI互換）</h3>
+            <p>右下の Chat パネルから AI の function calling で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。<strong>52ツール</strong>でカメラ・レイヤ・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替・データ取得/加工・プラグイン生成・資料生成（showReport＋パーマリンク）まで網羅（一覧は <a href="features/v3.html">V3: AI 連携</a>）。AI移動はドローン視点（対象地上+200m・-30°）が既定。管理（⚙）→ AI → チャット で API キー・モデルを設定。Cloudflare/Cloud Run にサーバーキー（<code>/api/gemini</code>）があればキー未設定でも動作</p>
+          </div>
+          <div class="feature-card">
+            <h3>🗺️ Photorealistic 3D Tiles</h3>
+            <p>管理（⚙）→ Google Maps で Maps Platform API キーを設定し、「Photorealistic 3D Tiles」を ON にすると、Google のフォトリアル3Dタイルがレイヤ一覧へ自動追加され表示されます。Map Tiles API は従量課金です</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔍 Maps Platform の検索・ Places ・ Street View</h3>
+            <p>Maps API キーを保存すると、住所検索タブのプロバイダに「Google」が追加されます。Geocoding API と Places テキスト検索を並列で呼ぶハイブリッド検索で、住所・施設名・キーワードのいずれにも対応します。検索結果の「SV」ボタンや「地図をクリック → Street View」でストリートビューを別タブで開き、「候補ラインを表示」で撮影済み道路の青いラインを地図上に重ねられます。AIチャットには <code>searchPlaces</code>（Places テキスト検索）・<code>openStreetView</code>（ストリートビューを別タブで開く）ツールが有効時のみ公開され、「近くのカフェを探して」「この地点のストリートビューを見せて」といった指示に対応します</p>
+          </div>
+          <div class="feature-card">
+            <h3>⚙️ ローカルコマンド</h3>
+            <p>APIキー未設定でも <code>/fly</code> <code>/layers</code> <code>/layer</code> <code>/basemaps</code> <code>/search</code> <code>/camera</code> で地図操作を試せます</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧪 コード実行サンドボックス</h3>
+            <p><code>runCode</code> ツールでAI生成JSを sandbox iframe（opaque origin）内で実行。集計・加工・座標計算が無料・高速。地図操作は <code>api</code> ブリッジ経由のみ</p>
+          </div>
+          <div class="feature-card">
+            <h3>📜 履歴・透明性</h3>
+            <p>履歴はプロジェクト単位で localStorage に永続化（最大200件・ヘッダーの🗑でクリア）。AIのツール実行は「実行: ...」とログ表示</p>
+          </div>
+          <div class="feature-card">
+            <h3>🔐 セキュリティ</h3>
+            <p>APIキーは localStorage のみ・送信先は Google のAPI（HTTPS）のみ。Google Cloud 側でAPI制限推奨。<code>window.kasugaiApi</code> は開いたブラウザ内からのみ実行可能で外部経路なし。影響の大きい操作（プロジェクト切替・設定適用・停止等）はユーザー明示時のみ</p>
+          </div>
+          <div class="feature-card">
+            <h3>🗂️ データソース（MCP 接続）</h3>
+            <p>管理（⚙）→ AI → データソース でリモート MCP サーバー（Model Context Protocol・Streamable HTTP）を登録すると、そのサーバーのツールが AI チャットへ合成され、「Box の資料を検索して」等の指示で外部データを参照できます。<strong>Box</strong> は公式リモート MCP（mcp.box.com）専用ボタンがあり、Client ID を入れて OAuth 2.0 + PKCE でブラウザ内認証が完結します（Box Developer Console で Custom App 作成＋このアプリの URL をリダイレクト URI に登録が必要。Enterprise は Admin Console での MCP 有効化が前提）。その他の MCP サーバーは URL・Bearer トークン（任意）で追加できます。トークンは BYO として localStorage にのみ保存。読み取り系ツールのみ既定公開で、書き込み系は設定を ON にしても実行ごとに確認ダイアログが出ます。CORS 非対応のサーバーは <code>POST /api/mcp</code> 中継（ローカル版・Workers・Cloud Run で提供・BYO トークン転送のみ）に自動フォールバックします</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧩 AIプラグイン生成（自己拡張）</h3>
+            <p>チャットに「〜するプラグインを作って」と頼むと、AIがコードを生成してブラウザ内 IndexedDB に保存・即時有効化。適用前にコード全文の確認ダイアログが出ます。読み込みエラーはAIへ返るため、修正→再保存の自律ループが回ります。管理（⚙）→ AI → プラグイン で一覧・有効化・コード確認・<code>.kasp</code> 出力/取込・削除が可能。ストレージ保存のため配布物とは分離され、気に入ったものだけ <code>PLUGIN/</code> に登録して公開できます</p>
+          </div>
+          <div class="feature-card">
+            <h3>📊 データ取得・加工・表示パイプライン</h3>
+            <p><code>fetchData</code>（外部URL取得・CORS前提）と <code>getLayerGeoJson</code>（読込済みレイヤーのGeoJSON取り出し・描画切り捨て時も全件）でデータを取得し、<code>runCode</code> で任意の加工・集計・変換を行い、<code>addDataLayer</code> で GeoJSON を直接レイヤー表示。feature の properties に simplestyle 属性（marker-color/fill/stroke/description 等）を書けば色分け・ポップアップも制御できます。一時レイヤーは .kasc には含まれません。URL・ファイル指定のレイヤーを .kasc に永続追加する場合は <code>addLayer</code>（geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql の各行タイプに対応、duckdb は where=/limit=/bbox=auto 等のオプション指定可）を使います</p>
+          </div>
+          <div class="feature-card">
+            <h3>🌐 実行環境ティア（公開/ローカルの使い分け）</h3>
+            <p>AI機能は操作の影響範囲で3ティアに分かれます。<strong>static</strong>（静的配信のみ）と <strong>workers</strong>（Cloudflare Pages/Workers 公開環境）では、セッション内に閉じる安全な機能（地図操作・runCode・データ加工・IndexedDBプラグイン生成）を誰でも利用可能。<strong>local</strong>（ローカルサーバー版）では永続化・共有・システムに触れる高権限機能（<code>/api/fetch</code> によるCORS回避の取得プロキシ、<code>/api/plugins</code> による PLUGIN/ へのプラグイン公開、ファイル保存）が使えます。フロントは <code>/api/capabilities</code> で能力を検出してツール・UIを出し分け、バックエンド無しでも安全機能のみで動作します。昇格ルートは「IndexedDB草稿 → .kasp出力 → ローカル版で公開ボタン → PLUGIN/」です</p>
+          </div>
+        </div>
+        <div class="url-box">
+          <h3>ローカルサーバー版の独自API（公開環境では無効）</h3>
+          <pre><code>GET  /api/capabilities   → {"tier":"local","features":["fetchProxy","pluginWrite","fileWrite",...]}
+GET  /api/fetch?url=...  → CORS回避のGETプロキシ（http/httpsのみ・30秒・20MB上限）
+POST /api/mcp?url=...    → リモート MCP サーバーへの中継プロキシ
+                           （Workers/Cloud Run にも同パスあり。Authorization・
+                           セッションヘッダ・ボディをそのまま転送。
+                           SSRF 制限は /api/fetch と同じ・応答32MB上限）
+POST /api/plugins        → {"id","name","version","description","layer","code"}
+                           PLUGIN/&lt;id&gt;/plugin.js・manifest.json を作成し plugins.json に登録
+DELETE /api/plugins/{id} → プラグインの公開取り消し（PLUGIN/&lt;id&gt;/ と plugins.json 登録を削除）
+GET  /api/files?project= → projects/&lt;project&gt;/DATA/ 内のファイル一覧（{name,size,modified}[]）
+PUT  /api/files/{project}/{path} → DATA/ へボディを書き込み（サブフォルダ可・64MB上限）
+DELETE /api/files/{project}/{path} → DATA/ 内のファイルを削除</code></pre>
+          <p>プラグインIDは半角英数・<code>-</code>・<code>_</code> のみ（64文字まで）。公開・削除は実ファイルを書き換えるため、フロント側では必ず確認ダイアログが出ます。公開環境（Pages/Workers）に同等の無認証書き込みAPIを置かないでください。</p>
+        </div>
+      </section>
+
+      <section>
+        <h2>4. 注意点・制限 — 未実装・今後の検討項目</h2>
+        <ul>
+          <li><strong>Workers 側の fetch プロキシ</strong>：CORS 外の任意 URL を取り込む汎用 fetch プロキシは未実装（AI プロキシ <code>POST /api/gemini</code> は実装済み — Workers/Pages のシークレットに <code>GEMINI_API_KEY</code> を置けばキー未設定の訪問者でも内蔵AIが使える。BYO = Bring Your Own キーは引き続きどの環境でも利用可）</li>
+          <li><strong>Workers の共有書き込み</strong>：共有 .kasc カタログ・共有プラグインカタログへの書き込みは認証・承認フローが前提で未実装</li>
+          <li><strong>サーバーサイドエージェント</strong>：Rust 側の長時間エージェントループ・SSE/WebSocket によるサーバー起点の通知・会話メモリ/RAG は未実装（現状のAIループはブラウザ内・最大5ステップ・タブを閉じると停止。外部エージェントへのHTTP転送はプロバイダ「外部エージェント」で設定可能）</li>
+          <li><strong>ローカルファイル連携</strong>：DATA/ 書き込みは File System Access API（Chromium系）とローカルサーバー版の <code>/api/files</code> で実装済み。QGIS/GDAL 呼び出しは未実装</li>
+          <li><strong>Cloud Run の長時間処理</strong>：<code>agent/</code> の FastAPI サービス（静的配信・認証・GCS 保存・<code>/api/gemini</code>・Maps キー配布）は実装済みで <code>run-cloudrun.py</code> でデプロイできます（詳細は <a href="auth/cloudrun.html">Cloud Run 認証</a>）。長時間エージェントループ・SSE は未実装</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>5. 関連リンク</h2>
+        <ul>
+          <li><a href="ai-tools.html">AI ツール仕様（全52ツールの定義）</a></li>
+          <li><a href="ai-bridge.html">【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）</a></li>
+          <li><a href="features/v3.html">V3: AI 連携</a></li>
+          <li><a href="security.html">セキュリティ対策</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

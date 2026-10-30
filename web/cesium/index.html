@@ -345,8 +345,10 @@
                       <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
                       <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
                       <p class="hint" id="bridge-hub-note" hidden>
-                        <span data-i18n-html="chat.bridge.hubNote"></span>
-                        <a href="../download/bridge-hub.zip" download data-i18n="chat.bridge.hubDownload">bridge-hub.zip をダウンロード</a>
+                        <span data-i18n-html="chat.bridge.hubNote"></span><br />
+                        <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
+                        <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownload">bridge-hub.exe をダウンロード</a>
+                        <span id="bridge-hub-status" aria-live="polite"></span>
                       </p>
                       <div class="provider-only" data-for="agent" hidden>
                         <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>

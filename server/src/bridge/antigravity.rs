@@ -80,6 +80,10 @@ fn agy_bin_candidates() -> Vec<String> {
             list.push(p);
         }
     }
+    // プロセス環境＋レジストリの最新 PATH(導入直後も拾える)
+    if let Some(p) = common::find_executable("agy") {
+        list.push(p.to_string_lossy().to_string());
+    }
     list.push(if cfg!(windows) { "agy.exe" } else { "agy" }.to_string());
     list.push("agy".to_string());
     if cfg!(windows) {

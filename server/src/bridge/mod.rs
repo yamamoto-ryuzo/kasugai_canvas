@@ -18,6 +18,7 @@ pub mod antigravity;
 pub mod common;
 pub mod copilot;
 pub mod devin;
+pub mod setup;
 
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -43,6 +44,7 @@ pub struct BridgeState {
     devin: Arc<devin::DevinBridge>,
     antigravity: antigravity::AntiBridge,
     pub mcp: Arc<McpShared>,
+    pub setup: setup::SetupJobs,
     // 起動・切替は直列化して競合を防ぐ（/agent 処理中に別プロバイダの
     // /models が来ても進行中の会話を乱さない）
     serialize: Mutex<()>,
@@ -57,6 +59,7 @@ impl BridgeState {
             devin: Arc::new(devin::DevinBridge::new(hub_port)),
             antigravity: antigravity::AntiBridge::new(hub_port),
             mcp: Arc::new(McpShared::default()),
+            setup: setup::SetupJobs::default(),
             serialize: Mutex::new(()),
             active: StdMutex::new(None),
         }
@@ -228,6 +231,123 @@ async fn agent(
     }
 }
 
+// ---- /setup: ブリッジ用CLIの導入状況確認・自動インストール ----
+// Origin ガード(ブラウザ発の踏み台防止) + 任意トークン。
+// install はホワイトリスト化した公式手順のみ実行する
+
+fn setup_forbidden(headers: &HeaderMap) -> Option<(StatusCode, Json<Value>)> {
+    if !setup::origin_allowed(headers) {
+        return Some((
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "この Origin からのセットアップ要求は許可されていません" })),
+        ));
+    }
+    if !common::authorized(&setup::token(), headers) {
+        return Some((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "unauthorized" })),
+        ));
+    }
+    None
+}
+
+async fn setup_status(headers: HeaderMap) -> impl IntoResponse {
+    if let Some(res) = setup_forbidden(&headers) {
+        return res;
+    }
+    (StatusCode::OK, Json(setup::status_all()))
+}
+
+async fn setup_run(
+    State(state): State<Arc<BridgeState>>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    if let Some(res) = setup_forbidden(&headers) {
+        return res;
+    }
+    if body.len() > 64 * 1024 {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "body too large" })),
+        );
+    }
+    let body: Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": format!("invalid json: {e}") })),
+            )
+        }
+    };
+    let provider = body
+        .get("provider")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    let action = body
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("status");
+    match action {
+        "status" => (StatusCode::OK, Json(setup::status_all())),
+        "install" => {
+            if body.get("confirm").and_then(|v| v.as_bool()) != Some(true) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": "install には confirm:true が必要です" })),
+                );
+            }
+            if !setup::SETUP_PROVIDERS.contains(&provider) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": format!("unknown provider: {provider}") })),
+                );
+            }
+            if provider == "antigravity" {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "error": "antigravity は自動インストール非対応です",
+                        "guide": "Antigravity(IDE) を導入し、agy で Google ログインしてください",
+                    })),
+                );
+            }
+            match state.setup.start(provider) {
+                Ok(id) => (
+                    StatusCode::ACCEPTED,
+                    Json(json!({ "job": id, "status": "running" })),
+                ),
+                Err(e) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": e })),
+                ),
+            }
+        }
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": format!("unknown action: {action}") })),
+        ),
+    }
+}
+
+async fn setup_job(
+    State(state): State<Arc<BridgeState>>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Some(res) = setup_forbidden(&headers) {
+        return res;
+    }
+    match state.setup.describe(&id) {
+        Some(v) => (StatusCode::OK, Json(v)),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "job not found" })),
+        ),
+    }
+}
+
 // MCP エンドポイント（devin / agy の MCP クライアントから呼ばれる）。
 // /mcp は現在処理中のプロジェクト、/mcp/<project> は明示指定として扱う
 async fn mcp(
@@ -302,6 +422,8 @@ fn router(state: Arc<BridgeState>) -> Router {
         .route("/health", get(health))
         .route("/models", get(models))
         .route("/agent", post(agent))
+        .route("/setup", get(setup_status).post(setup_run))
+        .route("/setup/job/{id}", get(setup_job))
         .route("/mcp", post(mcp_root).delete(mcp_root_delete))
         .route("/mcp/{project}", post(mcp_project).delete(mcp_project_delete))
         .layer(cors)

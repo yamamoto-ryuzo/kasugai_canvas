@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>【ブリッジ】外部エージェント連携 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
+      <p>【ブリッジ】外部エージェント連携 — GitHub Copilot・Devin・Antigravity</p>
+    </header>
+    <main>
+      <nav class="form-nav" aria-label="利用形態の切替">
+        <a href="datahost.html" class="webgis">🌐 【WebGIS】ブラウザ WebGIS</a>
+        <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
+        <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
+        <a href="ai-bridge.html" class="bridge current">🔌 【ブリッジ】外部エージェント連携</a>
+      </nav>
+
+      <section>
+        <h2 id="ai-bridge">1. 概要 — 【ブリッジ】とは</h2>
+        <p>【ブリッジ】系統は、チャットの <code>POST /agent</code> をローカルのブリッジハブ（アプリ内モジュール :8511・単体 bridge-hub :8512）が受けて外部 CLI（copilot / devin / agy）へ中継する方式です。ブラウザからモデルへ直接接続する代わりに、公式 SDK / CLI をローカルブリッジ経由で利用するため、<strong>ブラウザに API キーは不要</strong>で、既存の Copilot 契約や自作エージェントをそのまま繋げます。専用プロバイダの選択肢はハブを検出できる環境でのみ表示されます。</p>
+        <p>内蔵AI（Gemini・OpenAI互換）による公式 API 直通は <a href="ai-api.html">【API】内蔵AI</a>、接続方式ごとの規約判断は「<a href="#ai-connection-policy">5. 注意点・制限</a>」を参照してください。</p>
+      </section>
+
+      <section>
+        <h2>2. 導入・セットアップ — ブリッジハブのインストール</h2>
+        <div class="url-box">
+          <h3>アプリ版（kasugai_canvas.exe）— 追加導入は不要</h3>
+          <p>アプリ版ではブリッジハブ（Rust 製アプリ内モジュール）が起動時に <code>127.0.0.1:8511</code> で自動待受するため、<strong>アプリをインストールすればブリッジも使えます</strong>。インストール手順は <a href="guide.html">【アプリ】ローカルアプリ</a> を参照。アプリ本体（既定 :8510）の終了時にすべて停止します。</p>
+        </div>
+        <div class="install-steps">
+          <h3>ブラウザ WebGIS / 通常版 — bridge-hub.exe を導入</h3>
+          <p>静的配信・CDN のブラウザ WebGIS からブリッジ系プロバイダを使うには、ブラウザと<strong>同じ PC</strong> に単体のブリッジハブを常駐させます。Rust 製の単一 exe（<code>bridge-hub.exe</code>）のため Node.js は不要です。</p>
+          <div style="margin: 15px 0;">
+            <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/download/bridge-hub.exe" class="demo-link" target="_blank" rel="noopener noreferrer">DOWNLOAD: bridge-hub.exe（CDN・自己インストール型）</a>
+          </div>
+          <p><strong>基本は「ダウンロード → 実行」の2操作で完結します。</strong>実行すると <code>%LOCALAPPDATA%\kasugai\bridge-hub\</code> へ自己インストールされ、<strong>ログイン時自動起動の登録（タスク <code>KasugaiCanvasBridgeHub</code>）＋即時起動（ポート <code>8512</code>・コンソール非表示）</strong>まで自動で行われます。管理者権限は不要です。AI 設定画面でブリッジ系プロバイダを選ぶとハブ未検出時にこのダウンロードが自動で始まり、実行後はフロントが <code>/health</code> のポーリングで検出して接続まで自動完了します。</p>
+          <ol>
+            <li><strong>bridge-hub.exe をダウンロードして実行</strong>（AI 設定画面の「ハブを自動インストール」ボタン・ダウンロードリンク、または上のリンクから取得。実行は最初の1回のみ）</li>
+            <li>解除は <code>bridge-hub.exe --uninstall</code>（自動起動解除＋停止＋インストール先の削除）。起動後、Canvas の管理（⚙）→ AI → チャット で「AI プロバイダ」に「GitHub Copilot」「Devin」「Antigravity」が表示されます（フロントが同一 PC の <code>8512 → 8511</code> の順に <code>/health</code> を疎通して検出）</li>
+          </ol>
+          <h4>自動機・スクリプトからの導入（bridge-hub.zip）</h4>
+          <p>AI エージェント・スクリプトからの無人導入は <code>download/bridge-hub.zip</code>（exe＋起動スクリプト一式）を使い、すべてコマンドで完結します（対話が必要なのは各プロバイダ CLI への本人ログインのみ）:</p>
+          <pre><code>$dst = "$env:LOCALAPPDATA\kasugai"
+Invoke-WebRequest "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/download/bridge-hub.zip" -OutFile "$env:TEMP\bridge-hub.zip"
+Expand-Archive "$env:TEMP\bridge-hub.zip" $dst -Force
+Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
+&amp; "$dst\bridge-hub\bridge-hub.exe" --install
+&amp; "$dst\bridge-hub\bridge-hub.exe" --setup all
+1..15 | % { try { Invoke-RestMethod http://127.0.0.1:8512/health -TimeoutSec 2; break } catch { Start-Sleep 1 } }</code></pre>
+          <ol>
+            <li><code>bridge-hub.exe --install</code> は自動起動登録（8512）＋即時起動まで非対話で行います。exe 単体をダウンロードして <code>--install</code> 実行でも同じです（zip 展開は不要）</li>
+            <li>インストールせずその場でハブを起動する場合は <code>bridge-hub.exe --serve</code>（環境変数 <code>BRIDGE_HUB_PORT</code> 指定時も裸実行は起動のみ）。CLI 導入のみは <code>--setup all</code>、状態確認は <code>GET /setup</code>・<code>GET /health</code>、解除は <code>--uninstall</code></li>
+            <li>zip 同梱のスクリプト群もそのまま使えます（<code>setup.cmd --nopause</code> で無人実行・<code>install-autostart.ps1</code> / <code>uninstall-autostart.ps1</code> / <code>run-hidden.vbs</code>）。exe の自己インストールと同じタスク名（<code>KasugaiCanvasBridgeHub</code>）を使うためどちらの経路でも同じ登録になります</li>
+          </ol>
+          <p><small>アプリ版と同時稼働してもポートが競合しません（新版アプリは 8512 のハブを旧ブリッジ掃除の対象外とする。旧版アプリは 8512 のハブを落とす点に注意）。エージェントからのプロバイダ別 CLI 導入・状態確認はハブの <code>GET/POST /setup</code> API からも実行できます。</small></p>
+        </div>
+        <div class="url-box">
+          <h3>プロバイダ別 CLI の導入</h3>
+          <p>各プロバイダは実際に使われた時点で対応する外部 CLI を子プロセス起動します。ハブの <code>/setup</code> API で公式手順の自動導入もできます（Canvas の AI 設定画面の「CLI を自動インストール」ボタン、または <code>bridge-hub.exe --setup copilot|devin|all</code>）。</p>
+          <table>
+            <thead><tr><th>プロバイダ</th><th>必要なもの</th><th>認証</th></tr></thead>
+            <tbody>
+              <tr><td>GitHub Copilot</td><td><code>copilot</code> CLI（npm 版は Node.js も必要）＋Copilot 契約（Free〜Enterprise）</td><td><code>copilot</code> CLI で対話ログイン済み、または <code>COPILOT_GITHUB_TOKEN</code> / <code>GH_TOKEN</code> / <code>GITHUB_TOKEN</code></td></tr>
+              <tr><td>Devin</td><td><code>devin</code> CLI（Devin Desktop 同梱または単体。<code>DEVIN_CLI_PATH</code> で指定可）＋本人の Devin プラン</td><td>サービスユーザー APIキー（<code>cog_</code>・<code>DEVIN_API_KEY</code> またはアプリ設定画面。PAT は拒否）または初回接続時のブラウザ PKCE ログイン</td></tr>
+              <tr><td>Antigravity</td><td><code>agy</code> CLI（Antigravity のインストールに同梱。<code>AGY_CLI_PATH</code> で指定可）</td><td>利用者自身の Google アカウントでの <code>agy</code> ログイン（一度対話起動してサインイン）</td></tr>
+              <tr><td>外部エージェント（汎用）</td><td>なし（ハブ不要・エンドポイント URL だけ設定）</td><td>エンドポイント側の仕様に従う（Bearer トークン任意）</td></tr>
+            </tbody>
+          </table>
+          <p><small>Copilot・Devin CLI はハブ経由で自動導入可能（copilot: winget → npm → 直接DL の順にフォールバック。devin: 公式インストーラ）。Antigravity は IDE インストーラ＋対話ログインのため案内のみです。</small></p>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. 使い方 — プロバイダ別の接続手順</h2>
+        <p>共通の流れ: 管理（⚙）→ AI → チャット で「AI プロバイダ」を選んで保存するだけです。ADK 等のフレームワークは内蔵せず、外部で構築されたエージェントを API で呼び出す構成のため、アプリが担うのはチャット UI・地図操作・応答往復のみです。</p>
+        <div class="features">
+          <div class="feature-card">
+            <h3>🤝 外部エージェント（汎用 /agent）</h3>
+            <p>「AI プロバイダ」を「外部エージェント (ブリッジ)」にし、ブリッジ欄にエンドポイントURL・Bearerトークン（任意）を設定して保存すると、チャット入力がそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history, tools}</code>（<code>tools</code> は現在公開中のツール宣言・functionDeclarations 形式）、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
+          </div>
+          <div class="feature-card">
+            <h3>🐙 GitHub Copilot</h3>
+            <p>「AI プロバイダ」に「GitHub Copilot」を選んで保存すれば、疎通したブリッジへ自動接続され Copilot を内蔵AIとして利用できます。アプリ版では起動時にブリッジハブが <code>:8511</code> で待受け、選択時にアプリ内の Copilot ブリッジ（copilot CLI への stdio 接続）が起動します（要 Copilot サブスクリプション＋copilot CLI）。通常版でも同一 PC の bridge-hub（:8512）が動いていれば同じ選択肢が出ます</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧠 Devin</h3>
+            <p>「Devin」を選択して保存すると、ブリッジハブ（<code>127.0.0.1:8511</code>）経由でアプリ内の Devin ブリッジが起動・接続されます。ブリッジは <code>devin acp</code> に対して ACP 認証を行い、利用者自身のアカウントでモデルを利用します。ブラウザ認証または本人の <code>DEVIN_API_KEY</code> を使用し、ローカル CLI のログインだけに依存しません。<a href="#ai-connection-policy">接続方式の判断・利用条件と M365 を見送った理由</a>も参照してください</p>
+          </div>
+          <div class="feature-card">
+            <h3>🪐 Antigravity</h3>
+            <p>「Antigravity」を選択して保存すると、ブリッジハブ経由でアプリ内の Antigravity ブリッジが起動・接続されます。ブリッジは Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動し、利用者自身の Google アカウントでの agy ログインと quota でモデルを利用します。ブリッジが <code>agy mcp add</code> で地図ツールを MCP として登録し、<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します（headless では未許可ツールが自動拒否されるため必須）。会話はプロジェクト単位で継続します</p>
+          </div>
+        </div>
+        <p><small>逆方向の「外部 → ブラウザを操る」はアプリ本体（<code>127.0.0.1:8510</code>）の <code>/api/command</code> 経路です。</small></p>
+      </section>
+
+      <section>
+        <h2>4. ブリッジハブの構成（待受ポート・検出・環境変数）</h2>
+        <div class="url-box">
+          <h3>ポートと検出</h3>
+          <p>アプリ版は <code>:8511</code>、ブラウザ WebGIS 用の単体ハブは <code>:8512</code> で待受け、フロントは <code>8512 → 8511</code> の順に <code>/health</code> を疎通してハブ（<code>hub:true</code>）を検出します。選択→保存で capabilities 通知のエンドポイント、アプリ用ポート、手動用ポートの順に自動検出します。ハブに集約した設計判断（3ポート分離との比較・マルチエージェント観点）は <a href="features/v3.html#bridge-hub-design">V3: 設計判断：ブリッジハブ</a> を参照してください。</p>
+        </div>
+        <div class="url-box">
+          <h3>環境変数</h3>
+          <table>
+            <thead><tr><th>変数</th><th>既定</th><th>説明</th></tr></thead>
+            <tbody>
+              <tr><td><code>BRIDGE_HUB_PORT</code></td><td>8511</td><td>ハブの待受ポート（127.0.0.1 のみバインド）。WebGIS 用同梱スクリプトは 8512 を設定。ブラウザ側は capabilities 通知の実ポートへ接続するため変更不要</td></tr>
+              <tr><td><code>KASUGAI_NO_COPILOT_BRIDGE</code></td><td>なし</td><td>copilot プロバイダを無効化</td></tr>
+              <tr><td><code>KASUGAI_NO_DEVIN_BRIDGE</code></td><td>なし</td><td>devin プロバイダを無効化</td></tr>
+              <tr><td><code>KASUGAI_NO_ANTIGRAVITY_BRIDGE</code></td><td>なし</td><td>antigravity プロバイダを無効化</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="ai-connection-policy">
+        <h2>5. 注意点・制限 — AI 接続方式と利用規約上の判断</h2>
+        <div class="url-box">
+          <h3>接続方式ごとの判断</h3>
+          <p><strong>判断対象は「この接続方式でサービスに接続し、提供されるモデルを利用することが禁じられているか」です。</strong>以下は各利用者が自分のアカウントで正規認証し、利用可能なモデルを契約の利用枠内で使う構成についての判断です。OSS アプリ・自作ブリッジの配布と、配布者の AI アカウントの共有・AI サービス自体の再販は区別します。</p>
+          <table>
+            <thead><tr><th>接続方式</th><th>公式資料の根拠</th><th>本プロジェクトの判断</th></tr></thead>
+            <tbody>
+              <tr><td>GitHub Copilot：アプリ → ブリッジ → 公式 SDK / Copilot CLI → モデル</td><td><a href="https://docs.github.com/en/copilot/how-tos/copilot-sdk/auth/authenticate" target="_blank" rel="noopener noreferrer">SDK 認証ガイド</a>が、本人のログイン資格情報を使うデスクトップアプリ・開発／テスト環境を明示的に想定。</td><td><strong>採用。</strong>公式に想定された接続方式であり、この方式でのモデル利用を禁止する規定は確認されていません。</td></tr>
+              <tr><td>Devin：アプリ → ブリッジ → <code>devin acp</code> → モデル</td><td><a href="https://docs.devin.ai/cli/acp/zed" target="_blank" rel="noopener noreferrer">公式 ACP 連携ガイド</a>が、ACP 対応クライアントからの子プロセス起動とブラウザ認証を案内。</td><td><strong>採用。</strong>公式の外部接続機構を使用しており、この方式でのモデル利用を禁止する規定は確認されていません。KASUGAI 自体が Cognition の公式製品・認定連携という意味ではありません。</td></tr>
+              <tr><td>Antigravity：アプリ → ブリッジ → <code>agy</code>（headless）→ モデル</td><td><a href="https://www.antigravity.google/docs/cli/headless/" target="_blank" rel="noopener noreferrer">公式 headless モードガイド</a>が、スクリプト・CI・外部プログラムからの非対話実行（stream-json 入出力）を明示的に案内。MCP サーバー登録（<code>agy mcp add</code>）も公式機構。</td><td><strong>採用。</strong>公式に想定された外部接続機構を使用しており、この方式でのモデル利用を禁止する規定は確認されていません。ローカル・本人利用限定（自分のアカウント quota で自分のチャットのみ処理）。KASUGAI 自体が Google の公式製品・認定連携という意味ではありません。</td></tr>
+            </tbody>
+          </table>
+          <p>上記の GitHub Copilot / Devin / Antigravity 経路について、<strong>ブリッジを挟むこと、自作 OSS アプリから呼ぶこと、通常の機能確認・回帰テストで自動呼び出しすること自体を一律に禁じる条項は、確認した資料には見当たりません</strong>。本人の利用枠・レート制限・組織ポリシーを守り、制限回避や第三者向けの共有バックエンド運用は行わない前提です。モデルへの会話・カメラ・レイヤー情報の送信自体を不採用理由にはしません（送信権限があり、サービスの禁止データに該当しないことが前提）。アクセス制御やツール制限の実装品質は、接続方式の可否とは別に確認します。</p>
+          <p>根拠となる規約：<a href="https://docs.github.com/en/site-policy/github-terms/github-terms-for-additional-products-and-features" target="_blank" rel="noopener noreferrer">GitHub 追加製品規約（Copilot の契約別適用先）</a>・<a href="https://docs.github.com/en/site-policy/github-terms/github-terms-of-service" target="_blank" rel="noopener noreferrer">GitHub 利用規約</a>・<a href="https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies" target="_blank" rel="noopener noreferrer">GitHub AUP</a>・<a href="https://cognition.com/legal/platform-terms-of-service" target="_blank" rel="noopener noreferrer">Cognition 利用規約（§2）</a>・<a href="https://cognition.com/legal/acceptable-use-policy" target="_blank" rel="noopener noreferrer">Cognition AUP</a>。</p>
+          <h4 id="m365-connection-policy">M365 / Microsoft Copilot を見送った理由</h4>
+          <p><strong>「M365 のモデル利用そのものが禁止」ではありません。</strong>以前検討した Web UI 自動化と、条件を満たして使う公式 API を分けて判断します。GitHub Copilot と Microsoft 365 Copilot は別サービスです。</p>
+          <ul>
+            <li><strong>消費者向け Microsoft Copilot の Web UI 自動化：規約上の禁止が理由。</strong><a href="https://www.microsoft.com/en-us/microsoft-copilot/for-individuals/termsofuse" target="_blank" rel="noopener noreferrer">Microsoft Copilot 使用条件</a>の「WHO CAN USE COPILOT」は “Don’t use tools or computer programs (like bots or scrapers) to access Copilot.” と明示しています。画面への自動入力・送信・応答取得をブリッジ化する方式は採用しません。本人アカウント・ローカル利用だけでこの制限が解除されるわけではありません。</li>
+            <li><strong>職場・学校向け M365 Copilot の Web UI 自動化：正規のプログラム接続経路として採用しない方針。</strong>上記の消費者向け規約は、職場・学校・組織（Entra）アカウントには適用しないと明記されています。その条項を根拠に M365 も一律禁止とは断定しません。Web UI 自動化の許諾を確認できていない経路や、認証・アクセス制御・ボット対策の回避を前提とする経路は提供せず、連携を追加する場合は公式 API と適用契約に従います。</li>
+            <li><strong>M365 Copilot 公式 Chat API：禁止ではなく、導入条件により標準連携を見送り。</strong><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/overview" target="_blank" rel="noopener noreferrer">公式 Chat API（プレビュー）</a>は自作アプリへの組み込みを想定しています。ただし、Microsoft 365 Copilot アドオンライセンス・アプリ登録・職場／学校アカウントの委任アクセスと必要権限への同意が前提です。確認時点の <a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/api/ai-services/chat/copilotconversation-chat" target="_blank" rel="noopener noreferrer">chat API 仕様</a>では7権限すべてが必要で、個人 Microsoft アカウント・アプリケーション権限（ユーザーなしの app-only）は非対応です。</li>
+          </ul>
+          <p>必要な7権限：<code>Sites.Read.All</code>・<code>Mail.Read</code>・<code>People.Read.All</code>・<code>OnlineMeetingTranscript.Read.All</code>・<code>Chat.Read</code>・<code>ChannelMessage.Read.All</code>・<code>ExternalItem.Read.All</code>。このうち <a href="https://learn.microsoft.com/en-us/graph/permissions-reference#channelmessagereadall" target="_blank" rel="noopener noreferrer"><code>ChannelMessage.Read.All</code> などは管理者同意が必須</a>であり、利用者が自分でログインするだけでは導入できません。<strong>管理者同意が必要ということと、実際の利用者本人が管理者でなければならないということは別です。</strong></p>
+          <p>このため、組織の事前設定なしで使える標準ブリッジとしては見送っています。ライセンス・管理者同意等を整え、<a href="https://learn.microsoft.com/en-us/legal/m365-copilot-apis/terms-of-use" target="_blank" rel="noopener noreferrer">M365 Copilot APIs 使用条件</a>に従う公式 API 連携は別途検討可能です。確認時点では <code>/beta</code> API で本番利用は非サポートと案内されており、製品への採用時には提供状況の再確認も必要です。</p>
+          <p><small>確認日：2026年10月13日。上記は公開規約・公式資料に基づく接続方式の判断であり、提供元による本アプリの個別承認や、用途を問わない適合保証ではありません。個別契約・組織ポリシー・規約改定がある場合はそれらを確認してください。</small></p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>6. 関連リンク</h2>
+        <ul>
+          <li><a href="ai-api.html">【API】内蔵AI（Gemini・OpenAI互換）</a></li>
+          <li><a href="ai-tools.html">AI ツール仕様（全52ツールの定義）</a></li>
+          <li><a href="features/v3.html#bridge-hub-design">V3: 設計判断 — ブリッジハブ</a></li>
+          <li><a href="guide.html">【アプリ】ローカルアプリ（ハブ内蔵のフル機能版）</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

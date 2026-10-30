@@ -10,14 +10,14 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.4.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
       <p>V3: AI 連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="ai">V3: AI 連携</h2>
-      <p>Gemini・OpenAI互換 API（GitHub Models・OpenAI・Ollama 等）・GitHub Copilot・Devin・Antigravity（ブリッジ経由）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="../google.html">Google 連携・AI</a> を参照してください（経路ごとの通常版/アプリ版対応は同ページの「AI の利用形態」表を参照）。</p>
+      <p>Gemini・OpenAI互換 API（GitHub Models・OpenAI・Ollama 等）・GitHub Copilot・Devin・Antigravity（ブリッジ経由）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="../ai-api.html">【API】内蔵AI（Google 連携・AI）</a> を参照してください（経路ごとの通常版/アプリ版対応は同ページの「AI の利用形態」表を参照）。</p>
       <p><strong>通常版とアプリ版の違い</strong>：AI チャット本体・地図操作・コード実行・プラグイン生成は両方で使えます。アプリ版（ローカル exe）だけが持つのは <code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code> などの高権限ツール群と、<strong>GitHub Copilot / Devin / Antigravity プロバイダ</strong>（専用選択肢はアプリ版のみ表示。起動時にブリッジハブを 127.0.0.1:8511 で待受けさせ、各プロバイダはアプリ内モジュールが必要時に外部 CLI を子プロセス起動（アプリ終了時に全停止）。要各 CLI・本人の認証（Node.js 不要。v6.1 以降は Rust 製アプリ内実装））です。</p>
 
       <h3>🗨️ AI チャット（Gemini / OpenAI互換）</h3>
@@ -41,8 +41,8 @@
       </figure>
       <p><strong>設定と利用の分離（v5.23〜）</strong>：設定画面（管理 → AI → チャット）はプロバイダ別の専用項目のみを表示し（Copilot/Devin/Antigravity/外部エージェントで案内文・モデル欄・トークン欄が混在しない）、選択・保存時に実接続テスト（ブリッジ系は <code>/models</code> でモデル一覧まで取得、外部エージェントは <code>/agent</code> プローブ）を行います。一方、チャットパネルのヘッダーにあるプロバイダ切替ドロップダウンは「設定済みで使えるものだけ」を選択肢に出す利用側で、選択時は軽い疎通確認（<code>/health</code>）のみを行います — Devin の <code>acp</code> 起動やブラウザ認証がチャットの切替だけで発火することはありません。モデル選択・APIキー・エンドポイントの編集は設定画面のみです。チャット側の状態表示は「接続中…」（赤・確認待ち）→ モデル名表示（確認済み）、失敗時は赤のまま「未接続」（失敗理由はツールチップまたは設定画面のステータス欄に表示）。</p>
       <p><strong>Devin の APIキー</strong>（v5.23〜）：Devin プロバイダの設定画面に「Devin APIキー」欄があります。app.devin.ai → Settings → Devin API → <strong>Service users</strong> タブで発行した <code>cog_</code> キーを入れると <code>devin acp</code> の認証を APIキーで完了でき、ブラウザの PKCE ログイン画面を省略できます（<strong>PAT は acp 認証で拒否される</strong>ためサービスユーザーキーが必要）。空欄なら従来どおりブラウザログイン。キーはブラウザの localStorage に保存され、ローカルのブリッジへ <code>X-Devin-Api-Key</code> ヘッダでのみ送信されます（外部・平文HTTPには送信しません）。</p>
-      <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="../google.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>
-      <p><strong>M365 / Microsoft Copilot を見送った理由</strong>：消費者向け Copilot はボット等によるアクセスを明示禁止しているため、Web UI 自動化を提供しません。この消費者向け規約は職場・学校アカウントには適用されず、M365 全体の禁止を意味しません。M365 の公式 Chat API は存在しますが、ライセンス・アプリ登録・必要権限への管理者同意等を要するため、本人のログインだけで使う標準連携としては見送り・未実装です。M365 の Web UI 自動化も、正規のプログラム接続としての許諾を確認できていないため採用しません。<a href="../google.html#m365-connection-policy">規約上の禁止と導入条件の違い・再検討条件</a>を参照してください。</p>
+      <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="../ai-bridge.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>
+      <p><strong>M365 / Microsoft Copilot を見送った理由</strong>：消費者向け Copilot はボット等によるアクセスを明示禁止しているため、Web UI 自動化を提供しません。この消費者向け規約は職場・学校アカウントには適用されず、M365 全体の禁止を意味しません。M365 の公式 Chat API は存在しますが、ライセンス・アプリ登録・必要権限への管理者同意等を要するため、本人のログインだけで使う標準連携としては見送り・未実装です。M365 の Web UI 自動化も、正規のプログラム接続としての許諾を確認できていないため採用しません。<a href="../ai-bridge.html#m365-connection-policy">規約上の禁止と導入条件の違い・再検討条件</a>を参照してください。</p>
       <p>AI の実行経路は function calling によるツール呼び出しで、<strong>52個のツール</strong>がアプリの全主要機能を網羅します：</p>
       <table>
         <thead><tr><th>カテゴリ</th><th>ツール</th></tr></thead>
@@ -88,7 +88,7 @@
         </tbody>
       </table>
 
-      <h3>�️ リモートコマンド経路（外部エージェント → ブラウザ）</h3>
+      <h3>🖥️ リモートコマンド経路（外部エージェント → ブラウザ）</h3>
       <p>上記のプロバイダ／ブリッジは「ブラウザのチャット → エージェント」方向ですが、アプリ版（local ティア）には逆方向の<strong>「外部エージェント → ブラウザ」を操る共通経路</strong>もあります。ローカルサーバーが <code>remoteCommand</code> 機能を通知している環境では、Devin Desktop・GitHub Copilot CLI・任意のスクリプトなど、HTTP を話せるローカルプロセスが開いている地図をリアルタイムに操作できます（エージェント識別は持たず、どのプロセスからでも同一エンドポイント・同一形式で利用）。</p>
       <pre>
 【エージェント → ブラウザ】（外から操る）…… 共通・1本（アプリ本体 :8510）
@@ -127,7 +127,7 @@
       <p><strong>トポロジーとポリシーの分離</strong>：現行構成は「単一エンドポイント＋provider ルーティング」という<em>トポロジー</em>と、「常時最大1子・切替時に前の子を停止」という<em>ポリシー</em>の合成です。ローカルアプリ・利用者1人・一度に1プロバイダという実態では、このポリシーが省資源に最適です。</p>
       <p><strong>マルチエージェント観点</strong>：将来複数プロバイダを同時に使う（並行実行・合議・ファンアウト等の）マルチエージェント化を考えた場合も、見直すべきは「常時1本」のポリシーだけで、ハブというトポロジー自体はオーケストレーター型マルチエージェントの自然な土台になります（稼働中の子を単数→複数管理にし、停止契機を「切替時」から「アイドルタイムアウト」に変えればハブ内の変更だけで移行可能）。逆に3ポート分離はエージェント数をポート採番にハードコードするため、エージェントが増えるほど破綻します。同時実行数の制御・レート制限・監査のような横断的関心事も、一点で面倒を見るハブの方が実装しやすく、MCP ゲートウェイや LLM ルーターが業界的に収斂している構図と同じです。</p>
 
-      <h3>�🗂️ データソース（MCP 接続）</h3>
+      <h3>🗂️ データソース（MCP 接続）</h3>
       <p>管理（⚙）→ AI → データソース で、外部データソースの MCP サーバー（Model Context Protocol・Streamable HTTP 対応）を登録し、そのサーバーの公開ツールを AI チャットのチャットツールへ合成できます。ツール名は <code>&lt;サーバーキー&gt;__&lt;ツール名&gt;</code> の形で functionDeclarations に追加され、実行はブラウザ側の既存経路（<code>executeChatTool</code>）で振り分けられます。内蔵 AI（Gemini / OpenAI互換）に加え、プロバイダ「外部エージェント」へ渡す <code>tools</code> 宣言にも含まれます。</p>
       <ul>
         <li><strong>Box</strong> — 公式リモート MCP（<code>https://mcp.box.com</code>）専用の接続ボタンを用意。<a href="https://developer.box.com/guides/box-mcp" target="_blank" rel="noopener noreferrer">Box Developer Console</a> で Custom App（OAuth 2.0）を作成し、リダイレクト URI にこのアプリの URL を登録して Client ID を入力すると、OAuth 2.0 + PKCE でブラウザ内認証が完結します（client secret 不要）。Enterprise 契約では Admin Console での MCP 有効化が前提です。Box 上のファイル検索・Box AI 問い合わせ等のツールが「Box の資料を検索して」といった指示で使えます（Box AI ツールは対象プラン限定）</li>

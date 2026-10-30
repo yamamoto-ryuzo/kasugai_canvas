@@ -5,7 +5,7 @@
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v6.4.1';
+  const VERSION = 'v6.5.0';
 
   const GROUPS = [
     {
@@ -15,17 +15,27 @@
       ]
     },
     {
-      label: '利用形態（2系統）',
+      label: 'マルチエンジン — WebGIS / ローカルアプリ',
       items: [
-        { href: 'datahost.html', text: '2. ブラウザ WebGIS（外部ホスト配信）' },
-        { href: 'guide.html', text: '3. ローカルアプリ（kasugai_canvas.exe）' }
+        { href: 'datahost.html', text: '2. 【WebGIS】ブラウザ WebGIS（外部ホスト配信）' },
+        { href: 'guide.html', text: '3. 【アプリ】ローカルアプリ（kasugai_canvas.exe）' },
+        { href: 'features/v6.html', text: '4. マルチエンジン（5エンジン）' },
+        { href: 'inspector.html', text: '5. .kasc 設定仕様' }
+      ]
+    },
+    {
+      label: 'AI — API / ブリッジ',
+      items: [
+        { href: 'ai-api.html', text: '6. 【API】内蔵AI（Google 連携・AI）' },
+        { href: 'ai-bridge.html', text: '7. 【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）' },
+        { href: 'ai-tools.html', text: '8. AI ツール仕様' }
       ]
     },
     {
       label: '仕様',
       items: [
         {
-          href: 'features.html', text: '4. 機能と実装',
+          href: 'features.html', text: '9. 機能と実装',
           children: [
             { href: 'features/v0.html', text: 'V0: システム基本構成' },
             { href: 'features/v1.html', text: 'V1: GIS 基本機能' },
@@ -35,25 +45,23 @@
             { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' },
             { href: 'features/v6.html', text: 'V6: マルチエンジン' }
           ]
-        },
-        { href: 'inspector.html', text: '5. .kasc 設定仕様' },
-        { href: 'ai-tools.html', text: '6. AI ツール仕様' }
+        }
       ]
     },
     {
       label: '技術選定',
       items: [
-        { href: 'data.html', text: '7. データ形式' },
-        { href: 'library.html', text: '8. ライブラリ' },
-        { href: 'architecture.html', text: '9. システム構成' },
-        { href: 'security.html', text: '10. セキュリティ対策' }
+        { href: 'data.html', text: '10. データ形式' },
+        { href: 'library.html', text: '11. ライブラリ' },
+        { href: 'architecture.html', text: '12. システム構成' },
+        { href: 'security.html', text: '13. セキュリティ対策' }
       ]
     },
     {
       label: '拡張・連携',
       items: [
         {
-          href: 'auth/', text: '11. 認証とプラグイン',
+          href: 'auth/', text: '14. 認証とプラグイン',
           children: [
             { href: 'auth/none.html', text: '0. 認証なし（none）' },
             { href: 'auth/local.html', text: '1. ローカル認証' },
@@ -63,15 +71,14 @@
             { href: 'auth/cloudrun.html', text: '5-7. Cloud Run' }
           ]
         },
-        { href: 'google.html', text: '12. Google 連携・AI' },
-        { href: 'qgis.html', text: '13. QGIS・GDAL 連携' }
+        { href: 'qgis.html', text: '15. QGIS・GDAL連携' }
       ]
     },
     {
       label: '記録',
       items: [
-        { href: 'hackathon.html', text: '14. 第5回 Agentic AI Hackathon with Google Cloud' },
-        { href: 'g-idea.html', text: '15. イチBizアワード 2026' }
+        { href: 'hackathon.html', text: '16. 第5回 Agentic AI Hackathon with Google Cloud' },
+        { href: 'g-idea.html', text: '17. イチBizアワード2026 提案書' }
       ]
     }
   ];

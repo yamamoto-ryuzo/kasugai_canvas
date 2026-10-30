@@ -10,13 +10,13 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.4.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
       <p>AI ツール仕様 — 内蔵AIが制御できる全55ツールの定義</p>
     </header>
     <main>
       <section>
         <h2>🤖 概要</h2>
-        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/app.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>55 種</strong>です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="google.html">Google 連携・AI</a> を参照。</p>
+        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/app.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>55 種</strong>です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="ai-api.html">【API】内蔵AI（Google 連携・AI）</a> を参照。</p>
         <p>実行モデル：ユーザーの発言 → AI がツール呼び出しを返す → ブラウザが <code>kasugaiApi</code> 経由で実行 → 結果を AI に返す、の function calling ループ（OpenAI互換選択時は宣言を OpenAI tools 形式へ変換し、往復結果は tool メッセージとして返送）。ツール実行の上限往復数は既定10（管理 → AI → チャット の「ツール実行の上限往復数」または AI への指示で <code>setToolMaxSteps</code> により 1〜20 で変更可）。上限到達時はユーザーに継続確認が出て、承認なら同じ往復数を1枠追加して続行、拒否なら中断します。推論はすべてブラウザ側。破壊的ツールは実行前に確認ダイアログを挟み、最終判断はユーザーにあります。</p>
 
         <h3>提供条件（activeChatTools で絞り込み）</h3>
@@ -233,7 +233,7 @@
         <h2>🔗 関連仕様</h2>
         <ul>
           <li><a href="features/v3.html">V3: AI 連携</a> — AI チャット・runCode サンドボックス・kasugaiApi の概要</li>
-          <li><a href="google.html">Google 連携・AI</a> — Gemini API キー（BYO）・<code>/api/gemini</code> プロキシ・外部エージェント窓口・Maps Platform</li>
+          <li><a href="ai-api.html">【API】内蔵AI（Google 連携・AI）</a> — Gemini API キー（BYO）・<code>/api/gemini</code> プロキシ・外部エージェント窓口・Maps Platform</li>
           <li><a href="inspector.html">.kasc 設定仕様</a> — <code>applyInspector</code>/<code>exportInspector</code> が扱う設定フォーマット</li>
           <li><a href="hackathon.html">ハッカソン</a> — 出展構成（Cloud Run＋<code>/api/gemini</code>＋内蔵AI）</li>
         </ul>

@@ -438,6 +438,15 @@ fn devin_bin_candidates() -> Vec<String> {
             list.push(p);
         }
     }
+    // ハブの自動セットアップ(/setup)が配置した管理コピー
+    let managed = common::managed_cli("devin");
+    if managed.is_file() {
+        list.push(managed.to_string_lossy().to_string());
+    }
+    // プロセス環境＋レジストリの最新 PATH(setup.ps1 直後も拾える)
+    if let Some(p) = common::find_executable("devin") {
+        list.push(p.to_string_lossy().to_string());
+    }
     list.push(if cfg!(windows) { "devin.exe" } else { "devin" }.to_string());
     list.push("devin".to_string());
     if cfg!(windows) {

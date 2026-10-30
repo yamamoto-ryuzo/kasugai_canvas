@@ -7,6 +7,13 @@ $taskName = "KasugaiCanvasBridgeHub"
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 Write-Host "タスクを削除しました: $taskName"
 
+# スタートアップフォルダ経由の登録（install-autostart.ps1 のフォールバック）も解除
+$startupVbs = Join-Path ([Environment]::GetFolderPath("Startup")) "$taskName.vbs"
+if (Test-Path $startupVbs) {
+  Remove-Item $startupVbs -Force
+  Write-Host "スタートアップの登録を解除しました: $startupVbs"
+}
+
 # このフォルダの bridge-hub.exe を実行中のプロセスを特定してツリーごと停止する
 # （copilot CLI・devin acp・agy 等の子プロセスも /T でまとめて落とす）
 $exe = Join-Path $hub "bridge-hub.exe"
