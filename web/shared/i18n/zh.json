@@ -354,6 +354,7 @@
   "chat.bridge.hubWaitExe": "已下载 bridge-hub.zip。解压后运行 setup.cmd 即可自动安装并启动。正在等待桥接中心…",
   "chat.bridge.login": "CLI 登录",
   "chat.bridge.loginStarted": "已打开登录控制台。登录完成后请重新确认连接",
+  "chat.bridge.loginAlready": "登录控制台已打开（请将其置前并继续）",
   "chat.bridge.loginFailed": "启动登录失败：{error}",
   "chat.bridge.hubOld": "已连接到旧版桥接中心（{endpoint}）—— 请下载并运行新的 bridge-hub.exe 进行更新",
   "chat.bridge.modelsFallbackCli": "已找到 {provider} CLI（{path}），但无法获取模型列表 —— 可能尚未完成登录。请使用“CLI 登录”",

@@ -354,6 +354,7 @@
   "chat.bridge.hubWaitExe": "bridge-hub.zip descargado. Extráigalo y ejecute setup.cmd para instalar e iniciar automáticamente. Esperando al hub…",
   "chat.bridge.login": "Iniciar sesión en CLI",
   "chat.bridge.loginStarted": "Se abrió una consola de inicio de sesión. Vuelva a comprobar la conexión tras iniciar sesión",
+  "chat.bridge.loginAlready": "Ya hay una consola de inicio de sesión abierta (tráigala al frente y continúe)",
   "chat.bridge.loginFailed": "No se pudo iniciar la sesión: {error}",
   "chat.bridge.hubOld": "Conectado a un hub de puentes antiguo ({endpoint}) — descargue y ejecute el nuevo bridge-hub.exe para actualizar",
   "chat.bridge.modelsFallbackCli": "{provider} CLI instalado ({path}) pero no se pudo obtener la lista de modelos — el inicio de sesión puede estar incompleto. Use \"Iniciar sesión en CLI\"",

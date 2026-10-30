@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.13] - 2026-10-30
+
+### Fixed
+
+- **「CLI ログイン」を二重に押すとログインコンソールが複数開く問題を修正**（`server/src/bridge/setup.rs`・`mod.rs`）— 同じ CLI のログインコンソールが既に開いている場合は新規起動せず `already` を返し、UI には「既に開いています（前面に出して続けてください）」と表示（ブリッジ内部の --server プロセスは対象外に判定）
+- bridge-hub のポータブルインストーラー化 — `install-autostart.ps1` が ZIP 展開先等からの実行時に自己配置（8512 占有者のイメージ名判定停止 → %LOCALAPPDATA% へ一式配置 → 自己再起動 → 自動起動登録 → 起動）。AV が exe 直 DL をブロックする環境向けに zip+setup.cmd を主経路化、UI の DL リンク/自動 DL を zip 優先に変更、ps1 の BOM 欠落による文字化け構文エラーも修正
+- 「インストール」タブでブリッジ系プロバイダ未選択時にハブ案内が非表示になる問題を修正（タブ内は常時表示）
+
 ## [6.5.12] - 2026-10-30
 
 ### Fixed

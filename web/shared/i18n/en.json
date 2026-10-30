@@ -354,6 +354,7 @@
   "chat.bridge.hubWaitExe": "bridge-hub.zip downloaded. Extract it and run setup.cmd to auto-install and start. Waiting for the hub...",
   "chat.bridge.login": "CLI sign-in",
   "chat.bridge.loginStarted": "A sign-in console was opened. Re-check the connection after signing in",
+  "chat.bridge.loginAlready": "A sign-in console is already open (bring it to the front and continue)",
   "chat.bridge.loginFailed": "Failed to start sign-in: {error}",
   "chat.bridge.hubOld": "Connected to an outdated bridge hub ({endpoint}) — download and run the new bridge-hub.exe to update",
   "chat.bridge.modelsFallbackCli": "{provider} CLI is installed ({path}) but the model list could not be fetched — sign-in may be incomplete. Use \"CLI sign-in\"",

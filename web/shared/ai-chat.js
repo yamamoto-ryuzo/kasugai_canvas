@@ -1061,7 +1061,7 @@ export function setupAiSettings() {
         const r = await bridgeSetupRun(provider, "login");
         if (note) {
           note.textContent = r.ok
-            ? t("chat.bridge.loginStarted")
+            ? (r.already ? t("chat.bridge.loginAlready") : t("chat.bridge.loginStarted"))
             : t("chat.bridge.loginFailed", { error: r.message || "" });
         }
       } finally {
@@ -3054,7 +3054,7 @@ async function bridgeSetupRun(provider, action) {
         signal: AbortSignal.timeout(15000),
       });
       const d = await r.json().catch(() => ({}));
-      return r.ok ? { ok: true } : { ok: false, message: d?.error || `HTTP ${r.status}` };
+      return r.ok ? { ok: true, already: !!d?.already } : { ok: false, message: d?.error || `HTTP ${r.status}` };
     } catch (e) {
       return { ok: false, message: String(e?.message || e) };
     }

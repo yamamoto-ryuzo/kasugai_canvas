@@ -354,6 +354,7 @@
   "chat.bridge.hubWaitExe": "bridge-hub.zip をダウンロードしました。展開して setup.cmd を実行すると自動でインストール＆起動します。起動を待っています…",
   "chat.bridge.login": "CLI ログイン",
   "chat.bridge.loginStarted": "ログイン用のコンソールを開きました。ログイン完了後、接続を再確認してください",
+  "chat.bridge.loginAlready": "ログインコンソールは既に開いています（前面に出して続けてください）",
   "chat.bridge.loginFailed": "ログインの起動に失敗: {error}",
   "chat.bridge.hubOld": "旧版のブリッジハブに接続しています（{endpoint}）— 新しい bridge-hub.exe をダウンロードして実行し更新してください",
   "chat.bridge.installTabHint": "ブリッジハブと各プロバイダ CLI の導入・ログインは「インストール」タブで行えます",

@@ -765,12 +765,34 @@ pub async fn cli_main(target: &str) -> std::process::ExitCode {
 // PowerShell Start-Process（ShellExecute 相当）が最も確実
 // （.cmd/exe を既定動作で開くと新規コンソールウィンドウになる）。
 // antigravity は IDE の GUI ログインのため対象外（呼び出し側で弾く）
+// 同じ CLI のログインコンソールが既に開いているか（二重起動防止）。
+// ブリッジ内部の --server プロセスは除外する
 #[cfg(windows)]
-pub fn spawn_login(provider: &str) -> Result<(), String> {
+fn login_console_running(cli_path: &str) -> bool {
+    let pat = cli_path.replace('\'', "''");
+    let script = format!(
+        "(Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -match [regex]::Escape('{pat}') -and $_.CommandLine -notmatch '--server' }}).Count"
+    );
+    std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok())
+        .unwrap_or(0)
+        > 0
+}
+
+#[cfg(windows)]
+pub fn spawn_login(provider: &str) -> Result<bool, String> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let path = detect(provider)
         .ok_or_else(|| "CLI が検出できません（先にインストールしてください）".to_string())?;
+    // 失敗したログインコンソールが残っている場合は二重に開かない
+    // （copilot は複数 TUI がセッション競合するため）
+    if login_console_running(&path) {
+        return Ok(false);
+    }
     let ps = if provider == "devin" {
         format!("Start-Process -FilePath \"{path}\" -ArgumentList \"login\"")
     } else {
@@ -781,11 +803,11 @@ pub fn spawn_login(provider: &str) -> Result<(), String> {
         .creation_flags(CREATE_NO_WINDOW)
         .spawn()
         .map_err(|e| format!("ログインコンソールの起動に失敗: {e}"))?;
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(not(windows))]
-pub fn spawn_login(_provider: &str) -> Result<(), String> {
+pub fn spawn_login(_provider: &str) -> Result<bool, String> {
     Err("この OS ではログインコンソールの自動起動に未対応です。ターミナルで手動実行してください"
         .to_string())
 }

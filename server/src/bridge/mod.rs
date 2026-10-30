@@ -318,7 +318,7 @@ async fn setup_run(
                 );
             }
             match setup::spawn_login(provider) {
-                Ok(_) => (StatusCode::OK, Json(json!({ "ok": true }))),
+                Ok(spawned) => (StatusCode::OK, Json(json!({ "ok": true, "already": !spawned }))),
                 Err(e) => (StatusCode::BAD_REQUEST, Json(json!({ "error": e }))),
             }
         }

@@ -354,6 +354,7 @@
   "chat.bridge.hubWaitExe": "bridge-hub.zip téléchargé. Extrayez-le et exécutez setup.cmd pour installer et démarrer automatiquement. En attente du hub…",
   "chat.bridge.login": "Connexion CLI",
   "chat.bridge.loginStarted": "Une console de connexion a été ouverte. Revérifiez la connexion après vous être connecté",
+  "chat.bridge.loginAlready": "Une console de connexion est déjà ouverte (mettez-la au premier plan et continuez)",
   "chat.bridge.loginFailed": "Échec du lancement de la connexion : {error}",
   "chat.bridge.hubOld": "Connecté à un hub de ponts obsolète ({endpoint}) — téléchargez et exécutez le nouveau bridge-hub.exe pour mettre à jour",
   "chat.bridge.modelsFallbackCli": "{provider} CLI trouvé ({path}) mais la liste des modèles n'a pas pu être récupérée — connexion probablement incomplète. Utilisez « Connexion CLI »",
