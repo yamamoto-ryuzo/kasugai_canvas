@@ -10,7 +10,10 @@
 //                              %LOCALAPPDATA%\kasugai\bridge-hub\ へコピー →
 //                              ログイン時自動起動タスク登録 → 8512 で起動）
 //   bridge-hub.exe --serve    （インストールせずその場でハブ起動・既定 8511）
-//   bridge-hub.exe --install  （自己インストールを明示実行）
+//   bridge-hub.exe --install  （自己インストールを明示実行。
+//                              既定ではブリッジ用 CLI の未導入分も
+//                              --setup all 相当で自動導入する。
+//                              --no-cli-setup で CLI 導入を省略）
 //   bridge-hub.exe --uninstall（自動起動解除＋停止＋インストール先の削除）
 //   bridge-hub.exe --setup …  （CLI 導入状況確認・自動インストールのみ）
 //   BRIDGE_HUB_PORT=<port>    （待受ポート指定。指定時は裸実行でもインストールせず起動）
@@ -117,10 +120,11 @@ fn kill_all_hub_processes() {
 }
 
 // 自己インストール: インストール先へ自己コピー → run-hidden.vbs 書出し →
-// ログイン時自動起動タスク登録 → 8512 で非表示起動。
-// 管理者権限は不要（%LOCALAPPDATA%・ユーザー自身のタスクのみ触る）
+// ログイン時自動起動タスク登録 → 8512 で非表示起動 → ブリッジ用 CLI 導入。
+// 管理者権限は不要（%LOCALAPPDATA%・ユーザー自身のタスクのみ触る）。
+// install_cli=false（--no-cli-setup）なら CLI 導入を省略する
 #[cfg(windows)]
-async fn self_install() -> std::process::ExitCode {
+async fn self_install(install_cli: bool) -> std::process::ExitCode {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     const DETACHED_PROCESS: u32 = 0x0000_0008;
@@ -221,9 +225,21 @@ async fn self_install() -> std::process::ExitCode {
         eprintln!("bridge-hub: 起動に失敗しました: {}", dst.display());
         return std::process::ExitCode::FAILURE;
     }
+    // ブリッジ用 CLI（copilot/devin）の未導入分も自動導入する。
+    // 「exe 実行1回でハブ＋CLI まで」を既定にする（無人導入前提）。
+    // winget/npm の DL で数分かかることがある。--no-cli-setup で省略可
+    if install_cli {
+        eprintln!("bridge-hub: ブリッジ用 CLI の導入状況を確認します…");
+        if kasugai_canvas::bridge::setup::cli_main("all").await
+            != std::process::ExitCode::SUCCESS
+        {
+            eprintln!("bridge-hub: 一部の CLI 導入に失敗しました（後で bridge-hub.exe --setup all で再試行できます）");
+        }
+    }
     eprintln!("bridge-hub: インストールしました -> {} （自動起動: {autostart_via}）", dir.display());
     eprintln!("bridge-hub: http://127.0.0.1:{WEBGIS_PORT}/health で起動中（ログイン時に自動起動）");
     eprintln!("bridge-hub: 解除は bridge-hub.exe --uninstall");
+    // ハブ自体は起動済みなので、CLI 失敗があっても SUCCESS は維持する
     std::process::ExitCode::SUCCESS
 }
 
@@ -308,7 +324,7 @@ async fn main() -> std::process::ExitCode {
         if argv.iter().any(|a| a == "--install")
             || (!argv.iter().any(|a| a == "--serve") && should_self_install())
         {
-            return self_install().await;
+            return self_install(!argv.iter().any(|a| a == "--no-cli-setup")).await;
         }
     }
     let port = hub_port();

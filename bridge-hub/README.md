@@ -75,7 +75,9 @@ Devin なら `devin` CLI、Antigravity なら `agy` CLI＋Google ログイン）
 
 `bridge-hub.exe` を **ダウンロードして実行するだけ**で、
 `%LOCALAPPDATA%\kasugai\bridge-hub\` への自己コピー → ログイン時自動起動
-タスク登録 → `127.0.0.1:8512` での非表示起動まで自動で行われます。
+タスク登録 → `127.0.0.1:8512` での非表示起動 → **ブリッジ用 CLI
+（copilot/devin）の未導入分の自動インストール**まで一括で行われます
+（`--no-cli-setup` で CLI 導入を省略可。CLI DL に数分かかることがあります）。
 管理者権限は不要です。Canvas の AI 設定画面でブリッジ系プロバイダを
 選んだ際にも、ハブ未検出ならこの exe のダウンロードが自動で始まり、
 実行後はブラウザ側が `/health` ポーリングで検出して接続まで完了します。
@@ -84,7 +86,9 @@ Devin なら `devin` CLI、Antigravity なら `agy` CLI＋Google ログイン）
 bridge-hub.exe              # 自己インストール（DL直後の実行）
                             #   ※ インストール先からの実行・BRIDGE_HUB_PORT 指定時は
                             #     その場でハブ起動（--serve と同じ）
-bridge-hub.exe --install    # 自己インストールを明示実行（スクリプト向け）
+bridge-hub.exe --install [--no-cli-setup]
+                            # 自己インストールを明示実行（スクリプト向け。
+                            #   --no-cli-setup で CLI 自動導入を省略）
 bridge-hub.exe --serve      # インストールせずその場でハブ起動（既定 8511）
 bridge-hub.exe --uninstall  # 自動起動解除＋停止＋インストール先の削除
 ```

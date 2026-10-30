@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.1] - 2026-10-30
+
+### Changed
+
+- **`bridge-hub.exe` の自己インストールにブリッジ用 CLI 自動導入を統合**（`server/src/bin/bridge-hub.rs`）— `--install`・裸実行時に、ハブ起動後そのまま `--setup all` 相当で copilot/devin の未導入分を自動インストールするよう変更。「exe 実行1回でハブ＋CLI まで」が既定動作になり、CLI 導入は `--no-cli-setup` で省略可能。併せて、起動前に 8512 を占有する旧ハブを `/health` の `hub:true` で確認して停止・置き換える処理を追加（無関係な占有者は kill せず警告のみ）
+
 ## [6.5.0] - 2026-10-30
 
 ### Added

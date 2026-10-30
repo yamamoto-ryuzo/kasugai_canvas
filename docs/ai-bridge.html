@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.5.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.1</span></h1>
       <p>【ブリッジ】外部エージェント連携 — GitHub Copilot・Devin・Antigravity</p>
     </header>
     <main>
@@ -39,7 +39,7 @@
           <div style="margin: 15px 0;">
             <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/download/bridge-hub.exe" class="demo-link" target="_blank" rel="noopener noreferrer">DOWNLOAD: bridge-hub.exe（CDN・自己インストール型）</a>
           </div>
-          <p><strong>基本は「ダウンロード → 実行」の2操作で完結します。</strong>実行すると <code>%LOCALAPPDATA%\kasugai\bridge-hub\</code> へ自己インストールされ、<strong>ログイン時自動起動の登録（タスク <code>KasugaiCanvasBridgeHub</code>）＋即時起動（ポート <code>8512</code>・コンソール非表示）</strong>まで自動で行われます。管理者権限は不要です。AI 設定画面でブリッジ系プロバイダを選ぶとハブ未検出時にこのダウンロードが自動で始まり、実行後はフロントが <code>/health</code> のポーリングで検出して接続まで自動完了します。</p>
+          <p><strong>基本は「ダウンロード → 実行」の2操作で完結します。</strong>実行すると <code>%LOCALAPPDATA%\kasugai\bridge-hub\</code> へ自己インストールされ、<strong>ログイン時自動起動の登録（タスク <code>KasugaiCanvasBridgeHub</code>）＋即時起動（ポート <code>8512</code>・コンソール非表示）＋ブリッジ用 CLI（copilot/devin）未導入分の自動インストール</strong>まで一括で行われます（<code>--no-cli-setup</code> で CLI 導入を省略可）。管理者権限は不要です。AI 設定画面でブリッジ系プロバイダを選ぶとハブ未検出時にこのダウンロードが自動で始まり、実行後はフロントが <code>/health</code> のポーリングで検出して接続まで自動完了します。</p>
           <ol>
             <li><strong>bridge-hub.exe をダウンロードして実行</strong>（AI 設定画面の「ハブを自動インストール」ボタン・ダウンロードリンク、または上のリンクから取得。実行は最初の1回のみ）</li>
             <li>解除は <code>bridge-hub.exe --uninstall</code>（自動起動解除＋停止＋インストール先の削除）。起動後、Canvas の管理（⚙）→ AI → チャット で「AI プロバイダ」に「GitHub Copilot」「Devin」「Antigravity」が表示されます（フロントが同一 PC の <code>8512 → 8511</code> の順に <code>/health</code> を疎通して検出）</li>
@@ -54,7 +54,7 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
 &amp; "$dst\bridge-hub\bridge-hub.exe" --setup all
 1..15 | % { try { Invoke-RestMethod http://127.0.0.1:8512/health -TimeoutSec 2; break } catch { Start-Sleep 1 } }</code></pre>
           <ol>
-            <li><code>bridge-hub.exe --install</code> は自動起動登録（8512）＋即時起動まで非対話で行います。exe 単体をダウンロードして <code>--install</code> 実行でも同じです（zip 展開は不要）</li>
+            <li><code>bridge-hub.exe --install</code> は自動起動登録（8512）＋即時起動＋ブリッジ用 CLI 導入まで非対話で行います（<code>--no-cli-setup</code> で CLI 導入を省略可）。exe 単体をダウンロードして <code>--install</code> 実行でも同じです（zip 展開は不要）</li>
             <li>インストールせずその場でハブを起動する場合は <code>bridge-hub.exe --serve</code>（環境変数 <code>BRIDGE_HUB_PORT</code> 指定時も裸実行は起動のみ）。CLI 導入のみは <code>--setup all</code>、状態確認は <code>GET /setup</code>・<code>GET /health</code>、解除は <code>--uninstall</code></li>
             <li>zip 同梱のスクリプト群もそのまま使えます（<code>setup.cmd --nopause</code> で無人実行・<code>install-autostart.ps1</code> / <code>uninstall-autostart.ps1</code> / <code>run-hidden.vbs</code>）。exe の自己インストールと同じタスク名（<code>KasugaiCanvasBridgeHub</code>）を使うためどちらの経路でも同じ登録になります</li>
           </ol>
