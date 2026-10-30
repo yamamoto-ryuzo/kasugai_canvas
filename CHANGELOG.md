@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.2] - 2026-10-30
+
+### Fixed
+
+- **ブリッジハブ未導入環境でブリッジ系プロバイダの選択肢が一切表示されない問題を修正**（`web/shared/ai-chat.js`）— Copilot/Devin/Antigravity はハブ検出時のみ選択肢に出す仕様だったため、ハブ未導入の PC では「選択 → 自動インストール」の導線に永遠に入れなかった。設定画面では常時表示とし、選択 → ハブ未検出で自己インストール exe の自動 DL＋起動待機が始まる流れに統一（利用可否の絞り込みはチャット側ドロップダウンが担う）
+
 ## [6.5.1] - 2026-10-30
 
 ### Changed

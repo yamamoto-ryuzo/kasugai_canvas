@@ -592,30 +592,23 @@ function devinAuthHeaders(endpoint) {
   return { "X-Devin-Api-Key": key };
 }
 
-// GitHub Copilot / Devin / Antigravity プロバイダはブリッジが使える環境
-// （アプリ版の feature 通知、またはブラウザ WebGIS 用 bridge-hub の検出）のとき
-// のみ選択肢に出す。option 要素の hidden 属性はブラウザ差があるため、
-// 要素自体を着脱する。
+// GitHub Copilot / Devin / Antigravity プロバイダの選択肢管理。
+// ハブ未検出でも設定画面では常時表示する — 未導入環境では選択が
+// 「ハブの自己インストール exe 自動DL＋起動待機」の導線になるため。
+// 利用可否の絞り込みはチャット側ドロップダウン（usableChatProviders）が担う。
 // （プロバイダ「外部エージェント」は自作エージェント等の汎用接続口）
 const bridgeProviderOptionStash = {};
 function updateBridgeProviderOption(value) {
   const select = document.querySelector("#chat-provider");
   if (!select) return;
   const option = select.querySelector(`option[value="${value}"]`);
-  if (bridgeFeatureAvailable(value)) {
-    // 再接続時は【ブリッジ】系（agent の手前）に戻しカテゴリ順を保つ
-    if (!option && bridgeProviderOptionStash[value]) {
-      const agentOpt = select.querySelector('option[value="agent"]');
-      select.insertBefore(bridgeProviderOptionStash[value], agentOpt || null);
-      // 隠れている間に保存プロバイダが他へ切り替わっていた場合に備え、
-      // 記憶上のプロバイダがこの値なら表示を戻す
-      if (getChatProvider() === value) select.value = value;
-    }
-  } else if (option) {
-    const wasSelected = select.value === value;
-    bridgeProviderOptionStash[value] = option;
-    option.remove();
-    if (wasSelected) select.dispatchEvent(new Event("change"));
+  // 旧版で外された選択肢があれば【ブリッジ】系（agent の手前）に戻す
+  if (!option && bridgeProviderOptionStash[value]) {
+    const agentOpt = select.querySelector('option[value="agent"]');
+    select.insertBefore(bridgeProviderOptionStash[value], agentOpt || null);
+    // 隠れている間に保存プロバイダが他へ切り替わっていた場合に備え、
+    // 記憶上のプロバイダがこの値なら表示を戻す
+    if (getChatProvider() === value) select.value = value;
   }
 }
 export function updateBridgeProviderOptions() {
