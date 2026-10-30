@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.7] - 2026-10-30
+
+### Added
+
+- **ブリッジ CLI のログイン起動を UI/API から可能に**（`server/src/bridge/setup.rs`・`mod.rs`・`web/shared/ai-chat.js`）— `POST /setup` action `login` で検出済み CLI を別コンソールで起動（copilot=TUI `/login`・devin=`devin login` PKCE）。各プロバイダ欄に「CLI ログイン」ボタン追加。antigravity は IDE GUI ログインのため対象外（8言語）
+
 ## [6.5.6] - 2026-10-30
 
 ### Added

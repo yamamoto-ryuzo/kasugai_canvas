@@ -1006,6 +1006,27 @@ export function setupAiSettings() {
       }
     });
   });
+  // CLI の対話ログイン（copilot /login・devin login）はハブから代理実行
+  // できないため、ハブの login アクションで別コンソールを開いてもらう
+  document.querySelectorAll(".bridge-setup-login").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const holder = btn.closest(".provider-only");
+      const provider = holder?.dataset.for || "";
+      const note = holder?.querySelector(".bridge-setup-note");
+      if (!BRIDGE_PROVIDERS.includes(provider)) return;
+      btn.disabled = true;
+      try {
+        const r = await bridgeSetupRun(provider, "login");
+        if (note) {
+          note.textContent = r.ok
+            ? t("chat.bridge.loginStarted")
+            : t("chat.bridge.loginFailed", { error: r.message || "" });
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 // ---- 汎用 UI ブリッジ ----
@@ -2659,6 +2680,20 @@ async function bridgeSetupRun(provider, action) {
       return { ok: false, message: String(e?.message || e) };
     }
   }
+  if (action === "login") {
+    try {
+      const r = await fetch(`${hub}/setup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, action: "login" }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const d = await r.json().catch(() => ({}));
+      return r.ok ? { ok: true } : { ok: false, message: d?.error || `HTTP ${r.status}` };
+    } catch (e) {
+      return { ok: false, message: String(e?.message || e) };
+    }
+  }
   try {
     const r = await fetch(`${hub}/setup`, {
       method: "POST",
@@ -3580,6 +3615,7 @@ const AI_SETTINGS_HTML = `
       <p class="hint" id="copilot-endpoint-status" aria-live="polite"></p>
       <div style="margin-top:4px;">
         <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+        <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
         <span class="hint bridge-setup-note" aria-live="polite"></span>
       </div>
     </div>
@@ -3591,6 +3627,7 @@ const AI_SETTINGS_HTML = `
       <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
       <div style="margin-top:4px;">
         <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+        <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
         <span class="hint bridge-setup-note" aria-live="polite"></span>
       </div>
     </div>
@@ -3600,6 +3637,7 @@ const AI_SETTINGS_HTML = `
       <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
       <div style="margin-top:4px;">
         <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>
+        <button type="button" class="bridge-setup-login" data-i18n="chat.bridge.login">CLI ログイン</button>
         <span class="hint bridge-setup-note" aria-live="polite"></span>
       </div>
     </div>

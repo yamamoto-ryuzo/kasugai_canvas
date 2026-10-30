@@ -757,3 +757,28 @@ pub async fn cli_main(target: &str) -> std::process::ExitCode {
         std::process::ExitCode::SUCCESS
     }
 }
+
+// 対話ログイン用に CLI を別コンソールで起動する。
+// copilot は TUI 内で /login、devin は `devin login`（ブラウザ PKCE）。
+// antigravity は IDE の GUI ログインのため対象外（呼び出し側で弾く）
+#[cfg(windows)]
+pub fn spawn_login(provider: &str) -> Result<(), String> {
+    let path = detect(provider)
+        .ok_or_else(|| "CLI が検出できません（先にインストールしてください）".to_string())?;
+    let cmdline = if provider == "devin" {
+        format!("\"{path}\" login")
+    } else {
+        format!("\"{path}\"")
+    };
+    std::process::Command::new("cmd")
+        .args(["/c", "start", "", "cmd", "/k", &cmdline])
+        .spawn()
+        .map_err(|e| format!("ログインコンソールの起動に失敗: {e}"))?;
+    Ok(())
+}
+
+#[cfg(not(windows))]
+pub fn spawn_login(_provider: &str) -> Result<(), String> {
+    Err("この OS ではログインコンソールの自動起動に未対応です。ターミナルで手動実行してください"
+        .to_string())
+}

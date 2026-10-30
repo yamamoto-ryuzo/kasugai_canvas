@@ -301,6 +301,27 @@ async fn setup_run(
         .unwrap_or("status");
     match action {
         "status" => (StatusCode::OK, Json(setup::status_all())),
+        "login" => {
+            // 対話ログイン（copilot の /login・devin のブラウザ PKCE）はハブから
+            // 代理実行できないため、CLI を別コンソールで起動してユーザー自身に
+            // 完了してもらう。完了後はクライアント側で接続を再確認する
+            if !setup::SETUP_PROVIDERS.contains(&provider) {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": format!("unknown provider: {provider}") })),
+                );
+            }
+            if provider == "antigravity" {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({ "error": "antigravity は Antigravity(IDE) の GUI から Google ログインしてください" })),
+                );
+            }
+            match setup::spawn_login(provider) {
+                Ok(_) => (StatusCode::OK, Json(json!({ "ok": true }))),
+                Err(e) => (StatusCode::BAD_REQUEST, Json(json!({ "error": e }))),
+            }
+        }
         "install" => {
             if body.get("confirm").and_then(|v| v.as_bool()) != Some(true) {
                 return (
