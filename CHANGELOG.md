@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.9] - 2026-10-30
+
+### Fixed
+
+- **ハブ状態確認ページ（`GET /`）の CLI 欄が常に「未導入・未検出」と表示される問題を修正**（`server/src/bridge/hub_status.html`）— `/setup` API のフィールド名（`cli_found`/`cli_path`）とページ側の参照名（`detected`/`path`）が食い違っていた。実際は CLI が検出されていても誤表示になっていた
+
 ## [6.5.8] - 2026-10-30
 
 ### Fixed

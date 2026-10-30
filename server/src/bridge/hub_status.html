@@ -30,8 +30,8 @@ a { color: #0969da; }
     const rows = [];
     for (const [name, p] of Object.entries(h.providers || {})) {
       const cli = s && s.providers && s.providers[name];
-      const cliPath = cli && cli.path ? esc(cli.path) : '<span class="dim">未検出</span>';
-      const cliMark = cli && cli.detected ? '<span class="ok">導入済み</span>' : '<span class="ng">未導入</span>';
+      const cliPath = cli && cli.cli_path ? esc(cli.cli_path) : '<span class="dim">未検出</span>';
+      const cliMark = cli && cli.cli_found ? '<span class="ok">導入済み</span>' : '<span class="ng">未導入</span>';
       rows.push("<tr><th>" + esc(name) + "</th><td>" +
         (p.available ? '<span class="ok">利用可</span>' : '<span class="ng">不可</span>') +
         " / " + (p.running ? "稼働" : "待機") + "</td><td>" + cliMark + " " + cliPath + "</td></tr>");

@@ -161,8 +161,6 @@ const PROVIDER_ENDPOINT_KEYS = {
   agent: "agentEndpoint.agent",
 };
 const PROVIDER_ORDER = ["gemini", "openai", "anthropic", "azure", "copilot", "devin", "antigravity", "agent"];
-// APIキー系プロバイダ（ブリッジ不要・localStorage の設定だけで動く）
-const API_PROVIDERS = ["gemini", "openai", "anthropic", "azure"];
 // ---- ブラウザ WebGIS 用 bridge-hub 検出 ----
 // アプリ版を持たない環境（CDN ホスト版・静的配信・他ポート起動など）でも、
 // ユーザーが bridge-hub（bridge-hub.exe）を起動していれば /health が hub:true を返す。
@@ -681,6 +679,15 @@ export function setupAiSettings() {
   const openaiBaseUrlInput = document.querySelector("#openai-base-url");
   const openaiKeyInput = document.querySelector("#openai-api-key");
   const openaiModelInput = document.querySelector("#openai-model");
+  const anthropicFields = document.querySelector("#anthropic-fields");
+  const anthropicBaseUrlInput = document.querySelector("#anthropic-base-url");
+  const anthropicKeyInput = document.querySelector("#anthropic-api-key");
+  const anthropicModelInput = document.querySelector("#anthropic-model");
+  const azureFields = document.querySelector("#azure-fields");
+  const azureBaseUrlInput = document.querySelector("#azure-base-url");
+  const azureKeyInput = document.querySelector("#azure-api-key");
+  const azureDeploymentInput = document.querySelector("#azure-deployment");
+  const azureApiVersionInput = document.querySelector("#azure-api-version");
   const bridgeFields = document.querySelector("#bridge-fields");
   const endpointInput = document.querySelector("#agent-endpoint");
   const tokenInput = document.querySelector("#agent-token");
@@ -840,6 +847,8 @@ export function setupAiSettings() {
     const v = providerSelect?.value || "gemini";
     if (geminiFields) geminiFields.hidden = v !== "gemini";
     if (openaiFields) openaiFields.hidden = v !== "openai";
+    if (anthropicFields) anthropicFields.hidden = v !== "anthropic";
+    if (azureFields) azureFields.hidden = v !== "azure";
     const isBridge = v === "copilot" || v === "devin" || v === "antigravity" || v === "agent";
     if (bridgeFields) {
       bridgeFields.hidden = !isBridge;
@@ -899,6 +908,13 @@ export function setupAiSettings() {
     if (openaiBaseUrlInput) openaiBaseUrlInput.value = localStorage.getItem("openaiBaseUrl") || "";
     if (openaiKeyInput) openaiKeyInput.value = localStorage.getItem("openaiApiKey") || "";
     if (openaiModelInput) openaiModelInput.value = localStorage.getItem("openaiModel") || "";
+    if (anthropicBaseUrlInput) anthropicBaseUrlInput.value = localStorage.getItem("anthropicBaseUrl") || "";
+    if (anthropicKeyInput) anthropicKeyInput.value = localStorage.getItem("anthropicApiKey") || "";
+    if (anthropicModelInput) anthropicModelInput.value = localStorage.getItem("anthropicModel") || "";
+    if (azureBaseUrlInput) azureBaseUrlInput.value = localStorage.getItem("azureBaseUrl") || "";
+    if (azureKeyInput) azureKeyInput.value = localStorage.getItem("azureApiKey") || "";
+    if (azureDeploymentInput) azureDeploymentInput.value = localStorage.getItem("azureDeployment") || "";
+    if (azureApiVersionInput) azureApiVersionInput.value = localStorage.getItem("azureApiVersion") || "";
     if (endpointInput) endpointInput.value = localStorage.getItem("agentEndpoint") || "";
     if (tokenInput) tokenInput.value = localStorage.getItem("agentToken") || "";
     if (sendKeyInput) sendKeyInput.checked = localStorage.getItem("agentSendKey") === "1";
@@ -918,6 +934,13 @@ export function setupAiSettings() {
       if (openaiBaseUrlInput) localStorage.setItem("openaiBaseUrl", openaiBaseUrlInput.value.trim());
       if (openaiKeyInput) localStorage.setItem("openaiApiKey", openaiKeyInput.value.trim());
       if (openaiModelInput) localStorage.setItem("openaiModel", openaiModelInput.value.trim());
+      if (anthropicBaseUrlInput) localStorage.setItem("anthropicBaseUrl", anthropicBaseUrlInput.value.trim());
+      if (anthropicKeyInput) localStorage.setItem("anthropicApiKey", anthropicKeyInput.value.trim());
+      if (anthropicModelInput) localStorage.setItem("anthropicModel", anthropicModelInput.value.trim());
+      if (azureBaseUrlInput) localStorage.setItem("azureBaseUrl", azureBaseUrlInput.value.trim());
+      if (azureKeyInput) localStorage.setItem("azureApiKey", azureKeyInput.value.trim());
+      if (azureDeploymentInput) localStorage.setItem("azureDeployment", azureDeploymentInput.value.trim());
+      if (azureApiVersionInput) localStorage.setItem("azureApiVersion", azureApiVersionInput.value.trim());
       if (copilotModelSelect) localStorage.setItem("copilotModel", copilotModelSelect.value);
       if (devinModelSelect) localStorage.setItem("devinModel", devinModelSelect.value);
       if (antigravityModelSelect) localStorage.setItem("antigravityModel", antigravityModelSelect.value);
@@ -974,6 +997,9 @@ export function setupAiSettings() {
       if (customInstructionsStatus) customInstructionsStatus.textContent = t("common.saveError", { error: e.message });
     }
   });
+
+  // 指示書（agents/skills）管理 UI を「追加指示」ペインへ描画する
+  renderAiInstruments();
 
   // 「CLI を自動インストール」ボタン — ハブの /setup を呼び、
   // 検出状況 → 確認 → install ジョブの完了までを進行表示する
@@ -2232,6 +2258,139 @@ function aiInstrPromptText() {
   return parts.join("\n\n");
 }
 
+// ---- 指示書（agents/skills）管理 UI ----
+// 設定画面「追加指示」ペイン内の #ai-instr-root へ動的に描画する。
+// agents はチェックで常時注入の有効/無効を切り替え、skills はオンデマンド
+// 手順書として登録する。AI ツール側からも renderAiInstruments() で再描画できる
+function renderAiInstruments() {
+  const root = document.querySelector("#ai-instr-root");
+  if (!root) return;
+  root.replaceChildren();
+
+  // 新規・編集共用のインラインエディタ
+  const editor = document.createElement("div");
+  editor.className = "ai-instr-editor";
+  editor.hidden = true;
+  let editKind = "agents";
+  let editingId = "";
+  const editorTitle = document.createElement("div");
+  editorTitle.className = "ai-sec-title";
+  const idInput = document.createElement("input");
+  idInput.type = "text";
+  idInput.setAttribute("data-i18n-attr", "placeholder:instr.idPlaceholder");
+  idInput.placeholder = t("instr.idPlaceholder");
+  const textArea = document.createElement("textarea");
+  textArea.rows = 8;
+  textArea.style.cssText = "width:100%;box-sizing:border-box;";
+  const btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex;gap:6px;margin-top:6px;";
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.textContent = t("common.save");
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.textContent = t("common.cancel");
+  const status = document.createElement("p");
+  status.className = "hint";
+  btnRow.append(saveBtn, cancelBtn);
+  editor.append(editorTitle, idInput, textArea, btnRow, status);
+
+  const openEditor = (kind, id) => {
+    editKind = kind;
+    editingId = id || "";
+    editorTitle.textContent = editingId
+      ? t("instr.editTitle", { id: editingId })
+      : t("instr.newTitle", { kind: t(`instr.kind.${kind}`) });
+    idInput.value = editingId;
+    idInput.disabled = !!editingId;
+    textArea.value = editingId ? (aiInstrRead(kind, editingId) || "") : "";
+    status.textContent = "";
+    editor.hidden = false;
+    textArea.focus();
+  };
+  cancelBtn.addEventListener("click", () => { editor.hidden = true; });
+  saveBtn.addEventListener("click", () => {
+    const target = editingId || aiInstrId(idInput.value);
+    if (!target) {
+      status.textContent = t("instr.badId");
+      return;
+    }
+    aiInstrWrite(editKind, target, textArea.value);
+    // 新規作成した agents は既定で有効化する（常時注入の意図に即す）
+    if (editKind === "agents" && !editingId) {
+      const store = aiInstrStore();
+      store.enabledAgents = [...new Set([...store.enabledAgents, target])];
+      aiInstrSaveStore(store);
+    }
+    editor.hidden = true;
+    renderAiInstruments();
+  });
+
+  for (const kind of AI_INSTR_KINDS) {
+    const title = document.createElement("div");
+    title.className = "ai-sec-title";
+    title.textContent = t(`instr.${kind}Title`);
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = t(`instr.${kind}Hint`);
+    const list = document.createElement("div");
+    list.className = "ai-instr-list";
+    for (const item of aiInstrList(kind)) {
+      const row = document.createElement("div");
+      row.className = "ai-instr-row";
+      const name = document.createElement("span");
+      name.className = "ai-instr-name";
+      name.textContent = item.id;
+      name.title = item.summary;
+      if (kind === "agents") {
+        const label = document.createElement("label");
+        label.className = "ai-instr-name";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!item.enabled;
+        cb.addEventListener("change", () => {
+          const store = aiInstrStore();
+          store.enabledAgents = cb.checked
+            ? [...new Set([...store.enabledAgents, item.id])]
+            : store.enabledAgents.filter(v => v !== item.id);
+          aiInstrSaveStore(store);
+        });
+        label.append(cb, name);
+        row.append(label);
+      } else {
+        row.append(name);
+      }
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = t("common.edit");
+      editBtn.addEventListener("click", () => openEditor(kind, item.id));
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.textContent = t("common.delete");
+      delBtn.addEventListener("click", () => {
+        if (window.confirm(t("instr.confirmDelete", { id: item.id }))) {
+          aiInstrDelete(kind, item.id);
+          renderAiInstruments();
+        }
+      });
+      row.append(editBtn, delBtn);
+      list.append(row);
+    }
+    if (!list.children.length) {
+      const empty = document.createElement("p");
+      empty.className = "hint";
+      empty.textContent = t("instr.empty");
+      list.append(empty);
+    }
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.textContent = t("instr.add");
+    addBtn.addEventListener("click", () => openEditor(kind, ""));
+    root.append(title, hint, list, addBtn);
+  }
+  root.append(editor);
+}
+
 // AI に自オリジンを教える — 位置リンクの案内でデプロイ先と異なるドメインを推測させないため
 const chatSystemInstruction = () => {
   let custom = getBackendCapabilities()?.ai?.instructions || "";
@@ -3196,6 +3355,27 @@ function formatTokenCount(n) {
   return String(Math.round(n));
 }
 
+// モデル単価の概算表（USD / 1Mトークン [入力, 出力]）。ファミリー名の
+// 部分一致で引く。公表価格は変動するため表示は「〜$」（概算）とし、
+// 未掲載モデルは料金を出さない
+const MODEL_PRICE_TABLE = [
+  [/flash-lite/i, [0.10, 0.40]],
+  [/flash/i, [0.30, 2.50]],
+  [/haiku/i, [0.80, 4.00]],
+  [/sonnet/i, [3.00, 15.00]],
+  [/opus/i, [15.00, 75.00]],
+  [/4o-mini|mini/i, [0.15, 0.60]],
+  [/gpt-4o|gpt-4\.1/i, [2.50, 10.00]],
+  [/pro/i, [1.25, 10.00]],
+];
+// 概算料金（USD）。単価表に無いモデルは null
+function estimateUsageCost(usage) {
+  if (!usage?.model) return null;
+  const hit = MODEL_PRICE_TABLE.find(([re]) => re.test(usage.model));
+  if (!hit) return null;
+  return (usage.input * hit[1][0] + usage.output * hit[1][1]) / 1e6;
+}
+
 // モデルIDからコンテキスト長の目安を推定する（表示のみ・ファミリー別の公称値）。
 // ブリッジが usage_update で実測値を通知した場合はそちらが優先される。
 // Cognition 独自モデル（swe/adaptive 等）は公称値が無いため空白にする
@@ -3362,6 +3542,14 @@ function chatHistoryToAnthropic(history) {
   const messages = [];
   let callSeq = 0;
   const pendingIds = [];
+  // Anthropic は user/assistant の交互が必須。system ロールのスキップ等で
+  // 連続した同ロールは content をマージして正規化する
+  const push = (role, content) => {
+    if (!content.length) return;
+    const last = messages[messages.length - 1];
+    if (last?.role === role) last.content.push(...content);
+    else messages.push({ role, content });
+  };
   for (const entry of history) {
     const parts = Array.isArray(entry?.parts) ? entry.parts : [];
     if (entry.role === "model") {
@@ -3374,7 +3562,7 @@ function chatHistoryToAnthropic(history) {
           content.push({ type: "tool_use", id, name: p.functionCall.name, input: p.functionCall.args || {} });
         }
       }
-      if (content.length) messages.push({ role: "assistant", content });
+      push("assistant", content);
     } else {
       const content = [];
       for (const p of parts) {
@@ -3385,7 +3573,7 @@ function chatHistoryToAnthropic(history) {
           content.push({ type: "tool_result", tool_use_id: pendingIds.shift() || `call_${callSeq++}`, content: JSON.stringify(p.functionResponse.response ?? {}) });
         }
       }
-      if (content.length) messages.push({ role: "user", content });
+      push("user", content);
     }
   }
   return messages;
@@ -3609,44 +3797,274 @@ export function setupChatPanel() {
   const input = document.querySelector("#chat-input");
   const history = [];
 
-  // チャット履歴はプロジェクト単位で localStorage に保存する
-  const historyKey = `kasugaiChatHistory_${chatProjectId()}`;
-  const loadChatLog = () => {
+  // ---- チャットセッション ----
+  // 複数セッションをプロジェクト単位で localStorage へ保存する
+  // （LIVE ハーネスのチャット保存・復元に相当）。
+  // 旧仕様の単一ログ kasugaiChatHistory_<project> は初回読み込み時にセッションへ移行する。
+  // セッション: {id, title, created, updated, usage:{in,out}, log:[{role,text,images?}]}
+  const sessionsKey = `kasugaiChatSessions_${chatProjectId()}`;
+  const activeKey = `kasugaiChatSession_${chatProjectId()}`;
+  const legacyKey = `kasugaiChatHistory_${chatProjectId()}`;
+  const newSessionId = () => `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const sanitizeSession = (s) => (s && typeof s === "object" ? {
+    id: typeof s.id === "string" && s.id ? s.id : newSessionId(),
+    title: typeof s.title === "string" ? s.title : "",
+    created: Number(s.created) || Date.now(),
+    updated: Number(s.updated) || Date.now(),
+    usage: { in: Number(s.usage?.in) || 0, out: Number(s.usage?.out) || 0 },
+    log: Array.isArray(s.log) ? s.log : [],
+  } : null);
+  const loadSessions = () => {
+    let sessions = [];
     try {
-      const saved = JSON.parse(localStorage.getItem(historyKey) || "[]");
-      return Array.isArray(saved) ? saved : [];
-    } catch (e) { return []; }
+      const parsed = JSON.parse(localStorage.getItem(sessionsKey) || "[]");
+      if (Array.isArray(parsed)) sessions = parsed.map(sanitizeSession).filter(Boolean);
+    } catch (e) {}
+    // 旧単一ログの移行（移行できた時だけ元キーを消す）
+    try {
+      const legacy = JSON.parse(localStorage.getItem(legacyKey) || "null");
+      if (Array.isArray(legacy) && legacy.length) {
+        sessions.unshift({ id: newSessionId(), title: "", created: Date.now(), updated: Date.now(), usage: { in: 0, out: 0 }, log: legacy });
+        localStorage.removeItem(legacyKey);
+      }
+    } catch (e) {}
+    if (!sessions.length) sessions = [sanitizeSession({})];
+    return sessions;
   };
-  const saveChatLog = (role, text) => {
+  let chatSessions = loadSessions();
+  let activeSessionId = (() => {
     try {
-      const log = loadChatLog();
-      log.push({ role, text });
-      localStorage.setItem(historyKey, JSON.stringify(log.slice(-200)));
+      const saved = localStorage.getItem(activeKey);
+      if (saved && chatSessions.some(s => s.id === saved)) return saved;
+    } catch (e) {}
+    return chatSessions[0].id;
+  })();
+  const activeSession = () => chatSessions.find(s => s.id === activeSessionId) || chatSessions[0];
+  const persistSessions = () => {
+    try {
+      localStorage.setItem(activeKey, activeSessionId);
+      try {
+        localStorage.setItem(sessionsKey, JSON.stringify(chatSessions));
+      } catch (e) {
+        // 容量超過時は画像データを削って再試行する
+        const stripped = chatSessions.map(s => ({ ...s, log: s.log.map(m => ({ ...m, images: undefined })) }));
+        try { localStorage.setItem(sessionsKey, JSON.stringify(stripped)); } catch (e2) {}
+      }
     } catch (e) {}
   };
+  const loadChatLog = () => activeSession()?.log || [];
+  const sessionSelect = document.querySelector("#chat-session-select");
+  function refreshSessionSelect() {
+    if (!sessionSelect) return;
+    const cur = sessionSelect.value;
+    sessionSelect.textContent = "";
+    for (const s of chatSessions) {
+      const o = document.createElement("option");
+      o.value = s.id;
+      o.textContent = s.title || t("chat.sessionUntitled");
+      sessionSelect.append(o);
+    }
+    sessionSelect.value = chatSessions.some(s => s.id === cur) ? cur : activeSessionId;
+  }
+  const saveChatLog = (role, text, images) => {
+    const session = activeSession();
+    if (!session) return;
+    const entry = { role, text };
+    if (Array.isArray(images) && images.length) entry.images = images.slice(0, 6);
+    session.log.push(entry);
+    session.log = session.log.slice(-200);
+    session.updated = Date.now();
+    // 最初のユーザーメッセージをセッション名にする
+    if (!session.title && role === "user" && text) session.title = text.slice(0, 40);
+    persistSessions();
+    refreshSessionSelect();
+  };
 
-  const addMessage = (role, text, { persist = true, anchor = null } = {}) => {
+  // ---- トークン使用量 ----
+  // 各プロバイダ呼び出しが返す usage{input,output,model} をセッションへ累積し、
+  // セッションバーの #chat-usage へ合計、応答へ1回分の内訳を表示する。
+  // 料金は MODEL_PRICE_TABLE による概算（〜表記）
+  const usageEl = document.querySelector("#chat-usage");
+  const refreshUsageLabel = () => {
+    if (!usageEl) return;
+    const u = activeSession()?.usage;
+    usageEl.textContent = u && (u.in || u.out)
+      ? t("chat.usageTotal", { input: formatTokenCount(u.in), output: formatTokenCount(u.out) })
+      : "";
+  };
+  const addUsage = (usage) => {
+    if (!usage || !(usage.input || usage.output)) return null;
+    const session = activeSession();
+    if (session) {
+      session.usage.in += usage.input;
+      session.usage.out += usage.output;
+      persistSessions();
+    }
+    refreshUsageLabel();
+    const cost = estimateUsageCost(usage);
+    return t("chat.usage", {
+      input: formatTokenCount(usage.input),
+      output: formatTokenCount(usage.output),
+      cost: cost != null ? t("chat.usageCost", { cost: cost < 0.0001 ? "<0.0001" : cost.toFixed(4) }) : "",
+    });
+  };
+
+  const addMessage = (role, text, { persist = true, anchor = null, images = null, meta = null } = {}) => {
     const div = document.createElement("div");
     div.className = `chat-message ${role}`;
     // assistant の応答は Markdown（見出し・箇条書き・リンク・コード等）として描画。
     // renderMarkdownLite は内部で escapeHtml 済みのため安全
     if (role === "assistant") div.innerHTML = renderMarkdownLite(text);
     else div.textContent = text;
+    if (Array.isArray(images) && images.length) {
+      const strip = document.createElement("div");
+      strip.className = "chat-msg-images";
+      for (const img of images) {
+        const el = document.createElement("img");
+        el.src = `data:${img.mimeType || "image/png"};base64,${img.data}`;
+        el.alt = img.name || "image";
+        strip.append(el);
+      }
+      div.append(strip);
+    }
+    if (meta) {
+      const metaEl = document.createElement("div");
+      metaEl.className = "chat-meta";
+      metaEl.textContent = meta;
+      div.append(metaEl);
+    }
     // anchor（質問直下の「…」プレースホルダ）が有効ならその直前に挿入する。
     // キュー処理中に後続の質問が既に並んでいても回答は質問の直下に収まる
     if (anchor && anchor.parentNode === messages) messages.insertBefore(div, anchor);
     else messages.append(div);
     messages.scrollTop = messages.scrollHeight;
-    if (persist) saveChatLog(role, text);
+    if (persist) saveChatLog(role, text, images);
   };
 
-  // 保存済み履歴を復元し、Gemini の会話コンテキストも user/model ペアで再構成する
-  const savedLog = loadChatLog();
-  savedLog.forEach(entry => {
-    if (!entry || typeof entry.text !== "string") return;
-    addMessage(entry.role, entry.text, { persist: false });
-    if (entry.role === "user") history.push({ role: "user", parts: [{ text: entry.text }] });
-    else if (entry.role === "assistant") history.push({ role: "model", parts: [{ text: entry.text }] });
+  // 保存済み履歴を復元し、Gemini の会話コンテキストも user/model ペアで再構成する。
+  // 画像は表示のみ復元し、コンテキストには添付枚数の注記だけを残す
+  // （復元で大きな画像を毎回のコンテキストに戻さないため）
+  const restoreLog = (log) => {
+    messages.replaceChildren();
+    history.length = 0;
+    (log || []).forEach(entry => {
+      if (!entry || typeof entry.text !== "string") return;
+      addMessage(entry.role, entry.text, { persist: false, images: entry.images });
+      if (entry.role === "user") {
+        const note = entry.images?.length ? `\n[${t("chat.imagesAttached", { count: entry.images.length })}]` : "";
+        history.push({ role: "user", parts: [{ text: `${entry.text}${note}` }] });
+      } else if (entry.role === "assistant") {
+        history.push({ role: "model", parts: [{ text: entry.text }] });
+      }
+    });
+    messages.scrollTop = messages.scrollHeight;
+  };
+  restoreLog(loadChatLog());
+  refreshSessionSelect();
+  refreshUsageLabel();
+
+  // セッションの切替・新規・削除・エクスポート
+  const switchSession = (id) => {
+    if (!chatSessions.some(s => s.id === id) || id === activeSessionId) return;
+    activeSessionId = id;
+    persistSessions();
+    restoreLog(loadChatLog());
+    refreshSessionSelect();
+    refreshUsageLabel();
+  };
+  sessionSelect?.addEventListener("change", (e) => switchSession(e.target.value));
+  document.querySelector("#chat-session-new")?.addEventListener("click", () => {
+    const s = sanitizeSession({});
+    chatSessions.push(s);
+    activeSessionId = s.id;
+    persistSessions();
+    restoreLog([]);
+    refreshSessionSelect();
+    refreshUsageLabel();
+    input?.focus();
+  });
+  document.querySelector("#chat-session-delete")?.addEventListener("click", () => {
+    const s = activeSession();
+    if (!s || !window.confirm(t("chat.sessionDeleteConfirm", { title: s.title || t("chat.sessionUntitled") }))) return;
+    chatSessions = chatSessions.filter(item => item.id !== s.id);
+    if (!chatSessions.length) chatSessions = [sanitizeSession({})];
+    activeSessionId = chatSessions[chatSessions.length - 1].id;
+    persistSessions();
+    restoreLog(loadChatLog());
+    refreshSessionSelect();
+    refreshUsageLabel();
+  });
+  document.querySelector("#chat-session-export")?.addEventListener("click", () => {
+    const s = activeSession();
+    if (!s || !s.log.length) return;
+    const lines = [`# ${s.title || t("chat.sessionUntitled")}`, ""];
+    for (const m of s.log) {
+      lines.push(`**${m.role}**: ${m.text}`);
+      if (m.images?.length) lines.push(`(${t("chat.imagesAttached", { count: m.images.length })})`);
+      lines.push("");
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(s.title || "chat").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60) || "chat"}.md`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  });
+
+  // ---- 画像添付（ファイル選択・ペースト・ドラッグ&ドロップ）----
+  const pendingImages = []; // {mimeType, data, name}
+  const attachBar = document.querySelector("#chat-attachments");
+  const attachFile = document.querySelector("#chat-attach-file");
+  const renderAttachments = () => {
+    if (!attachBar) return;
+    attachBar.hidden = !pendingImages.length;
+    attachBar.replaceChildren();
+    pendingImages.forEach((img, i) => {
+      const chip = document.createElement("span");
+      chip.className = "chat-attach-chip";
+      const thumb = document.createElement("img");
+      thumb.src = `data:${img.mimeType};base64,${img.data}`;
+      thumb.alt = img.name || "";
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.textContent = "×";
+      rm.addEventListener("click", () => { pendingImages.splice(i, 1); renderAttachments(); });
+      chip.append(thumb, rm);
+      attachBar.append(chip);
+    });
+  };
+  const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+  const addImageFiles = (files) => {
+    for (const file of [...(files || [])]) {
+      if (!file || !/^image\//.test(file.type)) continue;
+      if (file.size > MAX_IMAGE_BYTES) {
+        addMessage("system", t("chat.imageTooLarge", { name: file.name }), { persist: false });
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const m = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(String(reader.result || ""));
+        if (!m) return;
+        pendingImages.push({ mimeType: m[1], data: m[2], name: file.name });
+        renderAttachments();
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  document.querySelector("#chat-attach")?.addEventListener("click", () => attachFile?.click());
+  attachFile?.addEventListener("change", () => { addImageFiles(attachFile.files); attachFile.value = ""; });
+  input?.addEventListener("paste", (e) => {
+    const files = [...(e.clipboardData?.items || [])]
+      .filter(item => item.kind === "file").map(item => item.getAsFile()).filter(Boolean);
+    if (files.length) {
+      e.preventDefault();
+      addImageFiles(files);
+    }
+  });
+  form?.addEventListener("dragover", (e) => { e.preventDefault(); });
+  form?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    addImageFiles(e.dataTransfer?.files);
   });
 
   // チャットヘッダーのプロバイダドロップダウン。実際に使えるプロバイダのみが
@@ -3664,9 +4082,15 @@ export function setupChatPanel() {
 
   const clearButton = document.querySelector("#chat-clear");
   clearButton?.addEventListener("click", () => {
-    try { localStorage.removeItem(historyKey); } catch (e) {}
+    const session = activeSession();
+    if (session) {
+      session.log = [];
+      session.usage = { in: 0, out: 0 };
+      persistSessions();
+    }
     history.length = 0;
     messages.replaceChildren();
+    refreshUsageLabel();
     addMessage("system", t("chat.cleared"), { persist: false });
   });
 
@@ -3678,16 +4102,18 @@ export function setupChatPanel() {
   form?.addEventListener("submit", event => {
     event.preventDefault();
     const text = input.value.trim();
-    if (!text) return;
+    const images = pendingImages.splice(0, pendingImages.length);
+    if (!text && !images.length) return;
     input.value = "";
-    addMessage("user", text);
+    renderAttachments();
+    addMessage("user", text || t("chat.imageOnly"), { images });
     const thinking = document.createElement("div");
     thinking.className = "chat-message assistant";
     thinking.textContent = "…";
     messages.append(thinking);
     messages.scrollTop = messages.scrollHeight;
     chatChain = chatChain
-      .then(() => respondToChat(text, thinking))
+      .then(() => respondToChat(text, thinking, images))
       .catch(error => {
         // 例外はここで握りつぶさず必ず表示する。
         // 黙って「…」を消すだけだと質問だけが残り無応答に見える
@@ -3727,7 +4153,8 @@ export function setupChatPanel() {
       // ブリッジ側のローカル状態ツール（listBasemaps 等）が実値を返せるよう
       // 疑似項目（ベースマップなし/透明）を含む一覧を同梱する
       basemaps: window.kasugaiApi?.listBasemaps?.() ?? [],
-      history: loadChatLog().slice(-20),
+      // 画像データ（base64）はブリッジへ送らずテキストのみに絞る
+      history: loadChatLog().slice(-20).map(m => ({ role: m.role, text: m.text })),
       // 外部エージェントがツール一覧を必要とする場合のため宣言を同梱する
       // （Copilot ブリッジ等が functionDeclarations をそのまま登録できる）
       tools: activeChatTools()[0]?.functionDeclarations || [],
@@ -3796,8 +4223,8 @@ export function setupChatPanel() {
   // "kasugai:chat" カスタムイベントを購読し detail.reply をセットすれば外部エージェントへ橋渡しできる
   // thinking は送信時に質問直下へ挿入済みの「…」プレースホルダ。
   // 応答・実行ログはその直前に挿入し、完了時に取り除く
-  async function respondToChat(text, thinking) {
-    const say = (role, msg) => addMessage(role, msg, { anchor: thinking });
+  async function respondToChat(text, thinking, images = []) {
+    const say = (role, msg, opts = {}) => addMessage(role, msg, { anchor: thinking, ...opts });
     const detail = { text, reply: null };
     window.dispatchEvent(new CustomEvent("kasugai:chat", { detail }));
     if (typeof detail.reply === "string" && detail.reply) {
@@ -3827,22 +4254,41 @@ export function setupChatPanel() {
     const provider = getChatProvider();
     const hasKey = provider === "openai"
       ? !!getOpenAIConfig().apiKey
-      : (provider === "copilot" || provider === "devin" || provider === "antigravity" || provider === "agent")
-        ? isAgentEnabled()
-        : (!!chatGoogleApiKey() || !!aiProxyEndpoint());
+      : provider === "anthropic"
+        ? !!getAnthropicConfig().apiKey
+        : provider === "azure"
+          ? !!(getAzureConfig().apiKey && getAzureConfig().baseUrl && getAzureConfig().deployment)
+          : (provider === "copilot" || provider === "devin" || provider === "antigravity" || provider === "agent")
+            ? isAgentEnabled()
+            : (!!chatGoogleApiKey() || !!aiProxyEndpoint());
     if (!hasKey) {
       const local = await handleLocalChatCommand(text);
-      const key = provider === "openai" ? "chat.noApiKeyOpenai" : provider === "copilot" ? "chat.noApiKeyCopilot" : provider === "devin" ? "chat.noApiKeyDevin" : provider === "antigravity" ? "chat.noApiKeyAntigravity" : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
+      const key = provider === "openai" ? "chat.noApiKeyOpenai"
+        : provider === "anthropic" ? "chat.noApiKeyAnthropic"
+          : provider === "azure" ? "chat.noApiKeyAzure"
+            : provider === "copilot" ? "chat.noApiKeyCopilot"
+              : provider === "devin" ? "chat.noApiKeyDevin"
+                : provider === "antigravity" ? "chat.noApiKeyAntigravity"
+                  : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
       say("assistant", local || t(key));
       thinking.remove();
       return;
     }
     const historyBase = history.length;
     try {
-      history.push({ role: "user", parts: [{ text }] });
-      const { text: reply, executed } = provider === "openai" ? await callOpenAICompat(history) : await callGemini(history);
+      const imageParts = (images || [])
+        .filter(img => img?.data)
+        .map(img => ({ inlineData: { mimeType: img.mimeType || "image/png", data: img.data } }));
+      history.push({ role: "user", parts: [{ text: text || t("chat.imageOnly") }, ...imageParts] });
+      const { text: reply, executed, usage } = provider === "openai"
+        ? await callOpenAICompat(history)
+        : provider === "azure"
+          ? await callAzureOpenAI(history)
+          : provider === "anthropic"
+            ? await callAnthropic(history)
+            : await callGemini(history);
       executed.forEach(call => say("system", t("chat.executed", { call })));
-      say("assistant", reply);
+      say("assistant", reply, { meta: addUsage(usage) });
     } catch (error) {
       // 途中まで積まれた user/model/関数応答の往復ごとロールバックする
       history.length = historyBase;
@@ -3884,12 +4330,32 @@ const AI_CHAT_CSS = `
 .chat-form { display: flex; gap: 6px; }
 .chat-form input { flex: 1; min-width: 0; min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; }
 .chat-form button { min-height: 30px; padding: 5px 10px; border: 1px solid #31564f; border-radius: 4px; background: #31564f; color: #fff; cursor: pointer; }
+.chat-sessions-bar { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.chat-session-select { flex: 1; min-width: 0; min-height: 22px; padding: 1px 4px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.85); color: #31564f; font-size: 11px; }
+.chat-sessions-bar .chat-toggle { flex: 0 0 22px; min-width: 22px; min-height: 22px; font-size: 12px; }
+.chat-usage { flex: 0 0 auto; margin-left: 2px; color: #71818d; font-size: 10px; white-space: nowrap; }
+.chat-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.chat-attach-chip { position: relative; display: inline-flex; }
+.chat-attach-chip img { width: 44px; height: 44px; object-fit: cover; border: 1px solid #cbd9de; border-radius: 4px; }
+.chat-attach-chip button { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: #31564f; color: #fff; font-size: 11px; line-height: 1; cursor: pointer; }
+.chat-attach { flex: 0 0 auto; min-width: 30px; padding: 5px 6px !important; border: 1px solid #cbd9de !important; background: rgba(255,255,255,.85) !important; color: #31564f !important; font-size: 14px; }
+.chat-msg-images { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.chat-msg-images img { max-width: 120px; max-height: 90px; border-radius: 4px; }
+.chat-meta { margin-top: 4px; color: #71818d; font-size: 10px; }
+.chat-message.user .chat-meta { color: rgba(255,255,255,.7); }
+.ai-instr-list { margin: 4px 0; }
+.ai-instr-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 3px 0; }
+.ai-instr-row button { font-size: 11px; padding: 1px 6px; }
+.ai-instr-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.ai-instr-editor { margin-top: 8px; padding: 6px; border: 1px solid #cbd9de; border-radius: 6px; }
 .chat-panel.collapsed { width: 40px; height: 40px; padding: 7px; overflow: hidden; }
 .chat-panel.collapsed .chat-header { justify-content: center; }
 .chat-panel.collapsed .chat-header strong,
 .chat-panel.collapsed .chat-header .chat-provider-box,
 .chat-panel.collapsed .chat-header #chat-clear,
+.chat-panel.collapsed .chat-sessions-bar,
 .chat-panel.collapsed .chat-messages,
+.chat-panel.collapsed .chat-attachments,
 .chat-panel.collapsed .chat-form { display: none; }
 @media (max-width: 850px) { .chat-panel { right: 14px; left: 14px; bottom: 60px; width: auto; max-height: 45%; } }
 #setpane-ai .field-label { display: block; font-size: 12px; margin: 8px 0 3px; }
@@ -3918,8 +4384,18 @@ const CHAT_PANEL_HTML = `
       <button id="chat-panel-toggle" class="chat-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
     </span>
   </div>
+  <div class="chat-sessions-bar">
+    <select id="chat-session-select" class="chat-session-select" title="チャットセッション" data-i18n-attr="title:chat.sessionSelect"></select>
+    <button id="chat-session-new" class="chat-toggle" type="button" title="新規チャット" data-i18n-attr="title:chat.sessionNew">＋</button>
+    <button id="chat-session-export" class="chat-toggle" type="button" title="エクスポート" data-i18n-attr="title:chat.sessionExport">⤓</button>
+    <button id="chat-session-delete" class="chat-toggle" type="button" title="セッションを削除" data-i18n-attr="title:chat.sessionDelete">✕</button>
+    <span id="chat-usage" class="chat-usage"></span>
+  </div>
   <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+  <div id="chat-attachments" class="chat-attachments" hidden></div>
   <form id="chat-form" class="chat-form">
+    <button id="chat-attach" class="chat-attach" type="button" title="画像を添付" data-i18n-attr="title:chat.attach">📎</button>
+    <input id="chat-attach-file" type="file" accept="image/*" multiple hidden />
     <input id="chat-input" type="text" placeholder="メッセージを入力 (/ でコマンド)" data-i18n-attr="placeholder:chat.placeholder" autocomplete="off" />
     <button type="submit" data-i18n="chat.send">送信</button>
   </form>
@@ -3939,6 +4415,8 @@ const AI_SETTINGS_HTML = `
   <select id="chat-provider">
     <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
     <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+    <option value="anthropic" data-i18n="chat.provider.anthropic">【API】Anthropic (Claude)</option>
+    <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
     <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
     <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
     <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
@@ -3964,6 +4442,26 @@ const AI_SETTINGS_HTML = `
     <input id="openai-api-key" type="password" placeholder="GitHub PAT 等" autocomplete="off" size="28" />
     <label class="field-label" for="openai-model" data-i18n="chat.openai.modelLabel">モデル</label>
     <input id="openai-model" type="text" placeholder="gpt-4o-mini" autocomplete="off" size="28" />
+  </div>
+  <div id="anthropic-fields" hidden>
+    <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
+    <label class="field-label" for="anthropic-api-key" data-i18n="chat.anthropic.keyLabel">APIキー</label>
+    <input id="anthropic-api-key" type="password" placeholder="sk-ant-..." autocomplete="off" size="28" />
+    <label class="field-label" for="anthropic-model" data-i18n="chat.anthropic.modelLabel">モデル</label>
+    <input id="anthropic-model" type="text" placeholder="claude-sonnet-4-5" autocomplete="off" size="28" />
+    <label class="field-label" for="anthropic-base-url" data-i18n="chat.anthropic.baseUrlLabel">エンドポイント ベースURL（省略可）</label>
+    <input id="anthropic-base-url" type="text" placeholder="https://api.anthropic.com" autocomplete="off" size="28" />
+  </div>
+  <div id="azure-fields" hidden>
+    <p class="hint" data-i18n-html="chat.azure.hint"></p>
+    <label class="field-label" for="azure-base-url" data-i18n="chat.azure.baseUrlLabel">リソース エンドポイントURL</label>
+    <input id="azure-base-url" type="text" placeholder="https://<resource>.openai.azure.com" autocomplete="off" size="28" />
+    <label class="field-label" for="azure-api-key" data-i18n="chat.azure.keyLabel">APIキー</label>
+    <input id="azure-api-key" type="password" autocomplete="off" size="28" />
+    <label class="field-label" for="azure-deployment" data-i18n="chat.azure.deploymentLabel">デプロイ名</label>
+    <input id="azure-deployment" type="text" placeholder="my-deployment" autocomplete="off" size="28" />
+    <label class="field-label" for="azure-api-version" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
+    <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
   </div>
   <div id="bridge-fields" hidden>
     <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden></p>
@@ -4031,6 +4529,7 @@ const AI_SETTINGS_HTML = `
     <button id="chat-instructions-save" type="button" data-i18n="common.save">保存</button>
   </div>
   <p id="chat-instructions-status" class="hint" aria-live="polite"></p>
+  <div id="ai-instr-root"></div>
 </section>
 <section id="datasource-panel" class="ai-subpane">
   <p class="hint" data-i18n-html="mcp.hint">AI チャットへ外部データソースのツールを追加します（MCP）。</p>

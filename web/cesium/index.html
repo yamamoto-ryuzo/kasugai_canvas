@@ -309,6 +309,8 @@
                     <select id="chat-provider">
                       <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
                       <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+                      <option value="anthropic" data-i18n="chat.provider.anthropic">【API】Anthropic (Claude)</option>
+                      <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
                       <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
                       <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
                       <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
@@ -336,6 +338,26 @@
                       <input id="openai-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
                       <label class="field-label" for="openai-model" style="margin-top:10px;" data-i18n="chat.openai.modelLabel">モデル</label>
                       <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
+                    </div>
+                    <div id="anthropic-fields" hidden>
+                      <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
+                      <label class="field-label" for="anthropic-api-key" data-i18n="chat.anthropic.keyLabel">APIキー</label>
+                      <input id="anthropic-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="sk-ant-..." data-i18n-attr="placeholder:chat.anthropic.keyPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="anthropic-model" style="margin-top:10px;" data-i18n="chat.anthropic.modelLabel">モデル</label>
+                      <input id="anthropic-model" type="text" placeholder="claude-sonnet-4-5" data-i18n-attr="placeholder:chat.anthropic.modelPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="anthropic-base-url" style="margin-top:10px;" data-i18n="chat.anthropic.baseUrlLabel">エンドポイント ベースURL（省略可）</label>
+                      <input id="anthropic-base-url" type="text" placeholder="https://api.anthropic.com" autocomplete="off" size="28" />
+                    </div>
+                    <div id="azure-fields" hidden>
+                      <p class="hint" data-i18n-html="chat.azure.hint"></p>
+                      <label class="field-label" for="azure-base-url" data-i18n="chat.azure.baseUrlLabel">リソース エンドポイントURL</label>
+                      <input id="azure-base-url" type="text" placeholder="https://<resource>.openai.azure.com" data-i18n-attr="placeholder:chat.azure.baseUrlPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="azure-api-key" style="margin-top:10px;" data-i18n="chat.azure.keyLabel">APIキー</label>
+                      <input id="azure-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore autocomplete="off" size="28" />
+                      <label class="field-label" for="azure-deployment" style="margin-top:10px;" data-i18n="chat.azure.deploymentLabel">デプロイ名</label>
+                      <input id="azure-deployment" type="text" placeholder="my-deployment" data-i18n-attr="placeholder:chat.azure.deploymentPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="azure-api-version" style="margin-top:10px;" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
+                      <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
                     </div>
                     <div id="bridge-fields" hidden>
                       <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden>チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
@@ -396,6 +418,7 @@
                       <button id="chat-instructions-save" type="button" data-i18n="common.save">保存</button>
                     </div>
                     <p id="chat-instructions-status" class="hint" aria-live="polite"></p>
+                    <div id="ai-instr-root"></div>
                   </section>
                   <section id="plugin-panel" class="settings-subpanel">
                     <p class="hint" data-i18n-html="agent.hint">AIチャットが生成したプラグイン（このブラウザの IndexedDB に保存）を管理します。有効化したプラグインは起動時に自動で読み込まれます。公開するプラグインは <code>PLUGIN/</code> フォルダと <code>plugins.json</code> へ登録します。</p>
@@ -689,8 +712,18 @@
                 <button id="chat-panel-toggle" class="chat-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
               </span>
             </div>
+            <div class="chat-sessions-bar">
+              <select id="chat-session-select" class="chat-session-select" title="チャットセッション" data-i18n-attr="title:chat.sessionSelect"></select>
+              <button id="chat-session-new" class="chat-toggle" type="button" title="新規チャット" data-i18n-attr="title:chat.sessionNew">＋</button>
+              <button id="chat-session-export" class="chat-toggle" type="button" title="エクスポート" data-i18n-attr="title:chat.sessionExport">⤓</button>
+              <button id="chat-session-delete" class="chat-toggle" type="button" title="セッションを削除" data-i18n-attr="title:chat.sessionDelete">✕</button>
+              <span id="chat-usage" class="chat-usage"></span>
+            </div>
             <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+            <div id="chat-attachments" class="chat-attachments" hidden></div>
             <form id="chat-form" class="chat-form">
+              <button id="chat-attach" class="chat-attach" type="button" title="画像を添付" data-i18n-attr="title:chat.attach">📎</button>
+              <input id="chat-attach-file" type="file" accept="image/*" multiple hidden />
               <input id="chat-input" type="text" placeholder="メッセージを入力 (/ でコマンド)" data-i18n-attr="placeholder:chat.placeholder" autocomplete="off" />
               <button type="submit" data-i18n="chat.send">送信</button>
             </form>

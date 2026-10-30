@@ -311,8 +311,28 @@ footer { padding: 0 28px 22px; }
 .chat-panel.collapsed .chat-header strong,
 .chat-panel.collapsed .chat-header .chat-provider-box,
 .chat-panel.collapsed .chat-header #chat-clear,
+.chat-panel.collapsed .chat-sessions-bar,
 .chat-panel.collapsed .chat-messages,
+.chat-panel.collapsed .chat-attachments,
 .chat-panel.collapsed .chat-form { display: none; }
+.chat-sessions-bar { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.chat-session-select { flex: 1; min-width: 0; min-height: 22px; padding: 1px 4px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.85); color: #31564f; font-size: 11px; }
+.chat-sessions-bar .chat-toggle { flex: 0 0 22px; min-width: 22px; min-height: 22px; font-size: 12px; }
+.chat-usage { flex: 0 0 auto; margin-left: 2px; color: #71818d; font-size: 10px; white-space: nowrap; }
+.chat-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.chat-attach-chip { position: relative; display: inline-flex; }
+.chat-attach-chip img { width: 44px; height: 44px; object-fit: cover; border: 1px solid #cbd9de; border-radius: 4px; }
+.chat-attach-chip button { position: absolute; top: -6px; right: -6px; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: #31564f; color: #fff; font-size: 11px; line-height: 1; cursor: pointer; }
+.chat-attach { flex: 0 0 auto; min-width: 30px; padding: 5px 6px !important; border: 1px solid #cbd9de !important; background: rgba(255,255,255,.85) !important; color: #31564f !important; font-size: 14px; }
+.chat-msg-images { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.chat-msg-images img { max-width: 120px; max-height: 90px; border-radius: 4px; }
+.chat-meta { margin-top: 4px; color: #71818d; font-size: 10px; }
+.chat-message.user .chat-meta { color: rgba(255,255,255,.7); }
+.ai-instr-list { margin: 4px 0; }
+.ai-instr-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin: 3px 0; }
+.ai-instr-row button { font-size: 11px; padding: 1px 6px; }
+.ai-instr-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
+.ai-instr-editor { margin-top: 8px; padding: 6px; border: 1px solid #cbd9de; border-radius: 6px; }
 @media (max-width: 850px) { .chat-panel { right: 14px; left: 14px; bottom: 60px; width: auto; max-height: 45%; } }
 
 /* 表示 > 3D Tiles: 各項目の説明はホバーで対象の上にツールチップ表示 */
