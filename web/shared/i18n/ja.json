@@ -364,7 +364,7 @@
   "chat.bridge.installFailed": "インストールに失敗: {error}",
   "chat.bridge.hubNotFound": "ブリッジハブが見つかりません（アプリまたは bridge-hub を起動してください）",
   "chat.bridge.cliDetected": "CLI 検出済み: {path}",
-  "chat.copilot.hint": "GitHub Copilot の場合はブリッジハブ経由で <code>copilot</code> CLI へ接続します（:8511 自動検出・空欄可）。GitHub Copilot 契約と <code>copilot</code> CLI の導入・ログインが必要です — 導入手順は <a href=\"https://github.com/github/copilot-cli\" target=\"_blank\" rel=\"noopener\">github/copilot-cli</a> を参照（npm 版は <a href=\"https://nodejs.org/\" target=\"_blank\" rel=\"noopener\">Node.js</a> も必要）。",
+  "chat.copilot.hint": "GitHub Copilot の場合はブリッジハブ経由で <code>copilot</code> CLI へ接続します（:8511 自動検出・空欄可）。GitHub Copilot 契約と <code>copilot</code> CLI の導入・ログインが必要です。"https://github.com/github/copilot-cli\" target=\"_blank\" rel=\"noopener\">github/copilot-cli</a> を参照（npm 版は <a href=\"https://nodejs.org/\" target=\"_blank\" rel=\"noopener\">Node.js</a> も必要）。",
   "chat.copilot.endpoint": "接続先: {endpoint}",
   "chat.copilot.statusOk": "ブリッジ接続OK: {endpoint}（model: {model}）",
   "chat.copilot.statusNg": "ブリッジに接続できません（{endpoint}）— アプリ版ならアプリの起動と copilot CLI の導入・ログインを、ブラウザ WebGIS 利用時なら bridge-hub の起動（install-autostart.ps1）を確認してください",
