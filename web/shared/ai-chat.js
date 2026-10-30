@@ -694,6 +694,15 @@ export function setupAiSettings() {
   // 保存済みの選択が一覧に無ければ先頭に残す。空値はブリッジ既定モデル。
   // ハブが子ブリッジを起動中（コールドスタート）や、Devin の acp が pending を
   // 返している間は応答が遅れる/失敗するため一定間隔で再取得する
+  // ブリッジ系の接続状態表示。NG/エラー時はステータス文字とモデル選択を
+  // 赤にして未接続が一目で分かるようにする（OK/中立時は元の色に戻す）
+  const setBridgeStatus = (ui, text, ok) => {
+    if (!ui) return;
+    if (text !== undefined && ui.status) ui.status.textContent = text;
+    const ng = ok === false;
+    if (ui.status) ui.status.style.color = ng ? "#c0392b" : "";
+    if (ui.modelSelect) ui.modelSelect.style.borderColor = ng ? "#c0392b" : "";
+  };
   const refreshBridgeModels = async (provider, endpoint, retries = 4) => {
     const ui = bridgeUi[provider];
     if (!ui?.modelSelect) return;
@@ -720,18 +729,18 @@ export function setupAiSettings() {
         if (d?.error) {
           providerConnDetail[provider] = String(d.error);
           providerConnState = { provider, state: "ng", detail: String(d.error).slice(0, 200) };
-          if (ui.status) {
-            ui.status.textContent = t("chat.devin.statusError", { error: String(d.error).slice(0, 300) });
-          }
+          setBridgeStatus(ui, t("chat.devin.statusError", { error: String(d.error).slice(0, 300) }), false);
         } else if (d?.fallback) {
           // モデル一覧を実取得できず固定一覧が返った = CLI 未ログイン等の
           // エラー状態。実在する一覧のふりをしないため選択肢は既定のみにし、
           // 接続失敗として明示する（再試行はしない — ログインしないと解消しない）
           providerConnDetail[provider] = t("chat.bridge.modelsFallback");
           providerConnState = { provider, state: "ng", detail: providerConnDetail[provider] };
-          if (ui.status) ui.status.textContent = providerConnDetail[provider];
+          setBridgeStatus(ui, providerConnDetail[provider], false);
           models = [];
           retry = false;
+        } else {
+          setBridgeStatus(ui, undefined, true);
         }
       } catch (e) { retry = true; }
       if (retry && retries > 0) {
@@ -766,19 +775,21 @@ export function setupAiSettings() {
     if (!ui?.status) return;
     const configured = (endpointInput?.value || "").trim();
     const fallback = configured || bridgeCandidates(provider)[0];
-    ui.status.textContent = t(`chat.${provider}.endpoint`, { endpoint: fallback });
+    setBridgeStatus(ui, t(`chat.${provider}.endpoint`, { endpoint: fallback }), true);
     const found = configured ? await pingBridge(configured, provider) : await detectBridge(provider);
     // /health に version が無いハブは旧版（fallback 判定等に非対応）なので
     // 接続OK扱いせず「要更新」として明示し接続状態も NG にする
     const outdatedHub = found && found.hub === true && typeof found.version !== "string";
     if (outdatedHub) {
-      ui.status.textContent = t("chat.bridge.hubOld", { endpoint: found.endpoint });
       providerConnDetail[provider] = t("chat.bridge.hubOld", { endpoint: found.endpoint });
       providerConnState = { provider, state: "ng", detail: providerConnDetail[provider] };
+      setBridgeStatus(ui, providerConnDetail[provider], false);
     } else {
-      ui.status.textContent = found
-        ? t(`chat.${provider}.statusOk`, { endpoint: found.endpoint, model: found.model })
-        : t(`chat.${provider}.statusNg`, { endpoint: fallback });
+      setBridgeStatus(ui,
+        found
+          ? t(`chat.${provider}.statusOk`, { endpoint: found.endpoint, model: found.model })
+          : t(`chat.${provider}.statusNg`, { endpoint: fallback }),
+        !!found);
     }
     detectedBridgeModels[provider] = found?.model || "";
     updateChatProviderLabel();
