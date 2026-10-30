@@ -8213,7 +8213,12 @@ async function loadUpdateInfo() {
     void loadFetchSettings();
     await checkForUpdate(health.version);
   } catch (error) {
-    current.textContent = "-";
+    // バックエンド応答が取れない場合も CDN/静的配信の version.json で現在版を表示
+    try {
+      const r = await fetch("../version.json", { cache: "no-store" });
+      const d = await r.json().catch(() => ({}));
+      current.textContent = (r.ok && d?.version) || "-";
+    } catch (_) { current.textContent = "-"; }
     document.querySelector("#version-status").textContent = t("update.fetchFailedError", { error: error.message });
   }
 }
