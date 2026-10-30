@@ -8184,7 +8184,19 @@ function compareVersions(left, right) {
 async function loadUpdateInfo() {
   const current = document.querySelector("#current-version");
   if (!isBackendAlive()) {
-    if (current) current.textContent = "-";
+    // CDN/静的配信（バックエンド無し）はステージの version.json を表示。
+    // ローカル exe が無いため自己更新 UI は出さない（更新は配信側同期）
+    try {
+      const r = await fetch("../version.json", { cache: "no-store" });
+      const d = await r.json().catch(() => ({}));
+      if (current) current.textContent = (r.ok && d?.version) || "-";
+    } catch (e) { if (current) current.textContent = "-"; }
+    const installButton = document.querySelector("#install-update");
+    if (installButton) installButton.hidden = true;
+    const autoUpdate = document.querySelector("#auto-update");
+    if (autoUpdate) { autoUpdate.checked = false; autoUpdate.disabled = true; }
+    const status = document.querySelector("#version-status");
+    if (status) status.textContent = t("update.cdnNote");
     return;
   }
   try {
@@ -8210,6 +8222,13 @@ async function checkForUpdate(currentVersion = document.querySelector("#current-
   const status = document.querySelector("#version-status");
   const updateStatus = document.querySelector("#update-status");
   const installButton = document.querySelector("#install-update");
+  // CDN/静的配信は自己更新対象外（/api/update/* が存在せず 404 になるため早期に抜ける）
+  if (!isBackendAlive()) {
+    if (installButton) installButton.hidden = true;
+    if (updateStatus) updateStatus.textContent = "";
+    status.textContent = t("update.cdnNote");
+    return;
+  }
   status.textContent = t("update.checking");
   installButton.hidden = true;
   try {
