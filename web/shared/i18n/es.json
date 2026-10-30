@@ -354,6 +354,7 @@
   "chat.bridge.loginStarted": "Se abrió una consola de inicio de sesión. Vuelva a comprobar la conexión tras iniciar sesión",
   "chat.bridge.loginFailed": "No se pudo iniciar la sesión: {error}",
   "chat.bridge.hubOld": "Conectado a un hub de puentes antiguo ({endpoint}) — descargue y ejecute el nuevo bridge-hub.exe para actualizar",
+  "chat.bridge.modelsFallbackCli": "{provider} CLI instalado ({path}) pero no se pudo obtener la lista de modelos — el inicio de sesión puede estar incompleto. Use \"Iniciar sesión en CLI\"",
   "chat.bridge.modelsFallback": "No se pudo obtener la lista de modelos (revisa el inicio de sesión de copilot CLI)",
   "chat.bridge.hubDetected": "Hub de puentes detectado (conectado automáticamente)",
   "chat.bridge.autoInstall": "Instalar CLI automáticamente",

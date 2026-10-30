@@ -354,6 +354,7 @@
   "chat.bridge.loginStarted": "ログイン用のコンソールを開きました。ログイン完了後、接続を再確認してください",
   "chat.bridge.loginFailed": "ログインの起動に失敗: {error}",
   "chat.bridge.hubOld": "旧版のブリッジハブに接続しています（{endpoint}）— 新しい bridge-hub.exe をダウンロードして実行し更新してください",
+  "chat.bridge.modelsFallbackCli": "{provider} CLI は検出済み（{path}）ですがモデル一覧を取得できません — ログイン未完了の可能性があります。「CLI ログイン」でサインインしてください",
   "chat.bridge.modelsFallback": "モデル一覧を取得できません（copilot CLI のログイン状態を確認してください）",
   "chat.bridge.hubDetected": "ブリッジハブを検出しました（自動接続）",
   "chat.bridge.autoInstall": "CLI を自動インストール",

@@ -750,7 +750,12 @@ export function setupAiSettings() {
           // モデル一覧を実取得できず固定一覧が返った = CLI 未ログイン等の
           // エラー状態。実在する一覧のふりをしないため選択肢は既定のみにし、
           // 接続失敗として明示する（再試行はしない — ログインしないと解消しない）
-          providerConnDetail[provider] = t("chat.bridge.modelsFallback");
+          // CLI の検出状態（見つかっているか/パス）も併せて表示し、
+          // 「未導入なのか、導入済みだが未ログインなのか」を区別できるようにする
+          const st = await bridgeSetupRun(provider, "status").catch(() => null);
+          providerConnDetail[provider] = st?.ok && st.status?.cli_found
+            ? t("chat.bridge.modelsFallbackCli", { provider, path: st.status.cli_path || "?" })
+            : t("chat.bridge.modelsFallback");
           providerConnState = { provider, state: "ng", detail: providerConnDetail[provider] };
           setBridgeStatus(ui, providerConnDetail[provider], false);
           models = [];

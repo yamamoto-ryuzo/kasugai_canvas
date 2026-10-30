@@ -354,6 +354,7 @@
   "chat.bridge.loginStarted": "Ein Anmeldefenster wurde geöffnet. Verbindung nach der Anmeldung erneut prüfen",
   "chat.bridge.loginFailed": "Anmeldung konnte nicht gestartet werden: {error}",
   "chat.bridge.hubOld": "Veralteter Bridge-Hub verbunden ({endpoint}) — neue bridge-hub.exe herunterladen und ausführen, um zu aktualisieren",
+  "chat.bridge.modelsFallbackCli": "{provider} CLI gefunden ({path}), aber die Modellliste konnte nicht abgerufen werden — Anmeldung möglicherweise unvollständig. \"CLI-Anmeldung\" verwenden",
   "chat.bridge.modelsFallback": "Modellliste konnte nicht abgerufen werden (copilot CLI-Anmeldung prüfen)",
   "chat.bridge.hubDetected": "Bridge-Hub gefunden (automatisch verbunden)",
   "chat.bridge.autoInstall": "CLI automatisch installieren",
