@@ -4,6 +4,21 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.15] - 2026-10-31
+
+### Added
+
+- **「インストール」タブに導入状態チップを追加**（`web/shared/ai-chat.js`・`web/cesium/index.html`）— ハブ・各プロバイダ CLI の導入状況を「導入済み（緑）/未導入（赤）/不明（灰）」で表示。タブ選択時・セットアップ実行後に `/setup` の `cli_found` とハブ検出結果から自動更新
+- CDN/静的配信版で「最新バージョン」を `download/latest.json`（raw.githubusercontent.com）から表示
+
+### Changed
+
+- 「ハブ＋CLI を自動インストール」ボタンを「ハブを自動インストール」に改称（CLI 導入は各プロバイダ行に分離済みのため）
+
+### Fixed
+
+- CDN 版でバックエンドのバージョン取得失敗時に「現在のバージョン」が「-」になる問題を修正（`version.json` へフォールバック）
+
 ## [6.5.14] - 2026-10-30
 
 ### Fixed
