@@ -205,7 +205,16 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
         match TcpListener::bind(("127.0.0.1", WEBGIS_PORT)).await {
             Ok(l) => drop(l),
             Err(_) => {
-                eprintln!("bridge-hub: 警告: 127.0.0.1:{WEBGIS_PORT} は別プロセスが使用中です。起動は次回以降に再試行されます");
+                // /health が応答しない = ハング中の旧ハブ等。占有者のイメージ名が
+                // bridge-hub.exe なら本製品のハブとみなして停止・置き換える。
+                // それ以外のプロセスは kill しない（アプリ本体の更新ポリシーと同じ）
+                if port_owner_image_is_hub(WEBGIS_PORT) {
+                    eprintln!("bridge-hub: 応答しない既存ハブを停止して新版へ置き換えます");
+                    kill_all_hub_processes();
+                    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+                } else {
+                    eprintln!("bridge-hub: 警告: 127.0.0.1:{WEBGIS_PORT} は別プロセスが使用中です。起動は次回以降に再試行されます");
+                }
             }
         }
     }
@@ -286,6 +295,32 @@ fn self_uninstall() -> std::process::ExitCode {
     }
     eprintln!("bridge-hub: 自動起動を解除し、ハブを停止しました");
     std::process::ExitCode::SUCCESS
+}
+
+// /health が応答しない場合の識別補助: ポート占有者のイメージ名が
+// bridge-hub.exe なら true。ハング中の旧ハブ（応答不能）はこれで拾う
+#[cfg(windows)]
+fn port_owner_image_is_hub(port: u16) -> bool {
+    let out = std::process::Command::new("cmd")
+        .args(["/c", &format!("netstat -ano | findstr :{port} | findstr LISTENING")])
+        .output();
+    let Ok(out) = out else { return false };
+    let text = String::from_utf8_lossy(&out.stdout);
+    for line in text.lines() {
+        let pid = line.split_whitespace().last().unwrap_or("");
+        if pid.is_empty() || pid == "0" || !pid.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let img = std::process::Command::new("cmd")
+            .args(["/c", &format!("tasklist /FI \"PID eq {pid}\" /FO CSV /NH")])
+            .output();
+        if let Ok(o) = img {
+            if String::from_utf8_lossy(&o.stdout).to_lowercase().contains("bridge-hub.exe") {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // 指定ポートの占有者がブリッジハブかを /health で確認する

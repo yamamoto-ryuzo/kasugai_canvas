@@ -1410,8 +1410,8 @@ map.on("sourcedata", e => {
     if (deckDirty) syncDeckLayers();
   });
 
-  // 右上はナビゲーションツールバーが占有するため、スケールは
-  // 他エンジンと同じ左下へ置く
+  // スケールは他エンジンと同じ中央下へ置く（addControl は四隅のみ対応のため
+  // bottom-left コンテナを index.html 側の CSS で中央寄せしている）
   const scaleCtl = new maplibregl.ScaleControl({ unit: "metric" });
   map.addControl(scaleCtl, "bottom-left");
   document.querySelector("#display-scalebar")?.addEventListener("change", e => {

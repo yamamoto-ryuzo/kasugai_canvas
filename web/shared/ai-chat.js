@@ -112,6 +112,9 @@ const CHAT_TOOL_API = {
   listGsiSakuzu: "listGsiSakuzu", importGsiSakuzu: "importGsiSakuzu",
   listGsiBasemaps: "listGsiBasemaps", setGsiBasemap: "setGsiBasemap",
   importGsiCatalog: "importGsiCatalog",
+  listInstructions: "local:listInstructions", readInstruction: "local:readInstruction",
+  saveInstruction: "local:saveInstruction", deleteInstruction: "local:deleteInstruction",
+  selectAgents: "local:selectAgents",
   setGsiLayerHidden: "setGsiLayerHidden", removeGsiSakuzu: "removeGsiSakuzu",
   getGsiElevation: "getGsiElevation",
   getGsiShareUrl: "getGsiShareUrl", setGsiGlobe: "setGsiGlobe",
@@ -157,7 +160,9 @@ const PROVIDER_ENDPOINT_KEYS = {
   antigravity: "agentEndpoint.antigravity",
   agent: "agentEndpoint.agent",
 };
-const PROVIDER_ORDER = ["gemini", "openai", "copilot", "devin", "antigravity", "agent"];
+const PROVIDER_ORDER = ["gemini", "openai", "anthropic", "azure", "copilot", "devin", "antigravity", "agent"];
+// APIキー系プロバイダ（ブリッジ不要・localStorage の設定だけで動く）
+const API_PROVIDERS = ["gemini", "openai", "anthropic", "azure"];
 // ---- ブラウザ WebGIS 用 bridge-hub 検出 ----
 // アプリ版を持たない環境（CDN ホスト版・静的配信・他ポート起動など）でも、
 // ユーザーが bridge-hub（bridge-hub.exe）を起動していれば /health が hub:true を返す。
@@ -627,7 +632,11 @@ export function updateChatPanelVisibility() {
   const panel = document.querySelector("#chat-panel");
   if (panel) {
     let hasKey = false;
-    try { hasKey = !!localStorage.getItem("googleApiKey") || !!localStorage.getItem("openaiApiKey"); } catch (e) {}
+    try {
+      hasKey = !!localStorage.getItem("googleApiKey") || !!localStorage.getItem("openaiApiKey")
+        || !!localStorage.getItem("anthropicApiKey")
+        || !!(localStorage.getItem("azureApiKey") && localStorage.getItem("azureBaseUrl"));
+    } catch (e) {}
     // アプリ管理ブリッジが使える環境ではキー未設定でもチャットを開ける
     // （ヘッダーのドロップダウンに有効なプロバイダだけが出る）
     const hasBridge = BRIDGE_PROVIDERS.some(bridgeFeatureAvailable);
@@ -2066,8 +2075,162 @@ const CHAT_TOOLS = [{
         required: ["on"],
       },
     },
+    {
+      name: "listInstructions",
+      description: "AI の指示書ファイルを一覧する。kind=\"agents\" はシステム指示へ常時注入される常駐指示書（enabled=有効化中）、kind=\"skills\" はオンデマンド手順書",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          kind: { type: "STRING", description: "\"agents\" または \"skills\"" },
+        },
+        required: ["kind"],
+      },
+    },
+    {
+      name: "readInstruction",
+      description: "指示書ファイルの本文を読む。スキルの詳細な手順が必要なときに使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          kind: { type: "STRING", description: "\"agents\" または \"skills\"" },
+          id: { type: "STRING", description: "指示書ID（listInstructionsで確認）" },
+        },
+        required: ["kind", "id"],
+      },
+    },
+    {
+      name: "saveInstruction",
+      description: "指示書ファイルを新規作成・上書き保存する。kind=\"agents\" は常時注入される常駐指示書、kind=\"skills\" はオンデマンド手順書。既存IDの上書き・新規作成ともにユーザーへ確認が出る場合がある",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          kind: { type: "STRING", description: "\"agents\" または \"skills\"" },
+          id: { type: "STRING", description: "指示書ID（空白・パス区切り不可）" },
+          text: { type: "STRING", description: "指示書本文（Markdown）" },
+        },
+        required: ["kind", "id", "text"],
+      },
+    },
+    {
+      name: "deleteInstruction",
+      description: "指示書ファイルを削除する",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          kind: { type: "STRING", description: "\"agents\" または \"skills\"" },
+          id: { type: "STRING", description: "指示書ID" },
+        },
+        required: ["kind", "id"],
+      },
+    },
+    {
+      name: "selectAgents",
+      description: "常時注入する agents 指示書を選択する（複数選択・全置換）。ids に含めた agents のみ有効になる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          ids: { type: "ARRAY", description: "有効化する agents の指示書ID一覧", items: { type: "STRING" } },
+        },
+        required: ["ids"],
+      },
+    },
   ],
 }];
+
+// ---- 指示書ファイル（agents / skills） ----
+// LIVE ハーネス（qgis_live_driver）の ~/.qgis-live/agents|skills/*.md に相当。
+//   agents … システム指示へ常時注入される常駐指示書（複数選択可）
+//   skills … 一覧のみプロンプトへ載せ、モデルが readInstruction ツールで
+//            必要時に本文を読むオンデマンド手順書
+// ブラウザ単体（CDN・静的配信）でも動くよう正本は localStorage。
+// 指示書自体の一覧・読み書き・選択は ai 系ツール（listInstructions 等）から
+// モデルが操作でき、設定画面の「追加指示」ペインでも編集できる
+const AI_INSTR_KEY = "kasugaiAiInstructions";
+const AI_INSTR_KINDS = ["agents", "skills"];
+
+function aiInstrStore() {
+  try {
+    const s = JSON.parse(localStorage.getItem(AI_INSTR_KEY) || "{}");
+    return {
+      agents: s?.agents && typeof s.agents === "object" ? s.agents : {},
+      skills: s?.skills && typeof s.skills === "object" ? s.skills : {},
+      enabledAgents: Array.isArray(s?.enabledAgents) ? s.enabledAgents.filter(v => typeof v === "string") : [],
+    };
+  } catch (e) {
+    return { agents: {}, skills: {}, enabledAgents: [] };
+  }
+}
+function aiInstrSaveStore(store) {
+  try { localStorage.setItem(AI_INSTR_KEY, JSON.stringify(store)); } catch (e) {}
+}
+
+// 指示書ID（ファイル名相当）。空白は _ に、パス区切り等の危険文字は除去
+function aiInstrId(name) {
+  return String(name || "").trim().replace(/\s+/g, "_")
+    .replace(/[\\/:*?"<>|#%{}$!'@+`=~^&;,[\]()]/g, "")
+    .replace(/^\.+/, "").slice(0, 80);
+}
+
+function aiInstrList(kind) {
+  const store = aiInstrStore();
+  const bag = store[kind] || {};
+  const enabled = new Set(store.enabledAgents);
+  return Object.keys(bag).sort().map(id => ({
+    id,
+    enabled: kind === "agents" ? enabled.has(id) : undefined,
+    summary: (bag[id]?.text || "").split(/\r?\n/).find(l => l.trim())?.trim().slice(0, 80) || "",
+  }));
+}
+
+function aiInstrRead(kind, id) {
+  const item = aiInstrStore()[kind]?.[id];
+  return item && typeof item.text === "string" ? item.text : null;
+}
+
+// kind="agents" なら有効化状態を保つため enabledAgents 側も掃除する
+function aiInstrWrite(kind, id, text) {
+  const store = aiInstrStore();
+  store[kind][id] = { text: String(text ?? ""), updated: Date.now() };
+  aiInstrSaveStore(store);
+  return id;
+}
+function aiInstrDelete(kind, id) {
+  const store = aiInstrStore();
+  if (!store[kind][id]) return false;
+  delete store[kind][id];
+  store.enabledAgents = store.enabledAgents.filter(v => v !== id);
+  aiInstrSaveStore(store);
+  return true;
+}
+function aiInstrSelectAgents(ids) {
+  const store = aiInstrStore();
+  const known = new Set(Object.keys(store.agents));
+  store.enabledAgents = [...new Set((Array.isArray(ids) ? ids : []).map(String))].filter(id => known.has(id));
+  aiInstrSaveStore(store);
+  return store.enabledAgents;
+}
+function aiInstrEnabledAgents() {
+  const store = aiInstrStore();
+  const known = new Set(Object.keys(store.agents));
+  return store.enabledAgents.filter(id => known.has(id));
+}
+
+// システム指示への注入片。agents は本文を常時注入、skills は id+要約の一覧のみ
+function aiInstrPromptText() {
+  const store = aiInstrStore();
+  const enabled = aiInstrEnabledAgents();
+  const parts = [];
+  if (enabled.length) {
+    const texts = enabled.map(id => `### Agent instruction "${id}"\n${store.agents[id]?.text || ""}`.trim());
+    parts.push(`Additional instruction files (always applied):\n${texts.join("\n\n")}`);
+  }
+  const skills = aiInstrList("skills");
+  if (skills.length) {
+    const list = skills.map(s => `- ${s.id}${s.summary ? `: ${s.summary}` : ""}`).join("\n");
+    parts.push(`Available skill files (read the full text on demand via the readInstruction tool with kind="skills"):\n${list}`);
+  }
+  return parts.join("\n\n");
+}
 
 // AI に自オリジンを教える — 位置リンクの案内でデプロイ先と異なるドメインを推測させないため
 const chatSystemInstruction = () => {
@@ -2080,7 +2243,8 @@ const chatSystemInstruction = () => {
     : aiEngine === "gsimaps"
       ? " (KASUGAI Canvas .kasc プレイヤー(地理院地図)。地形起伏・断面クリップ・描画モード等の一部3Dツールは利用不可。setGsiGlobe で Globe(Cesium) へ切替可能。flyPath 系はカメラ巡回のみで地形追従しない)"
       : " (KASUGAI Canvas .kasc 2D プレイヤー。3D地形・断面クリップ・描画モード系ツールはこのエンジンでは利用不可。flyPath 系はカメラ巡回のみで地形追従しない)"}`;
-  return `${t("chat.systemInstruction")} ${t("chat.systemInstructionAppUrl", { url: `${window.location.origin}${window.location.pathname}` })}${engineNote}${custom.trim() ? `\n\nUser's additional instructions:\n${custom.trim()}` : ""}`;
+  const instr = aiInstrPromptText();
+  return `${t("chat.systemInstruction")} ${t("chat.systemInstructionAppUrl", { url: `${window.location.origin}${window.location.pathname}` })}${engineNote}${custom.trim() ? `\n\nUser's additional instructions:\n${custom.trim()}` : ""}${instr ? `\n\n${instr}` : ""}`;
 };
 
 // バックエンドの能力に応じて公開するツールを絞る（公開環境に高権限ツールを見せない）
@@ -2282,6 +2446,41 @@ export async function executeChatTool(name, args = {}) {
   const requiredApi = CHAT_TOOL_API[name] ?? name;
   if (!requiredApi.startsWith("local:") && typeof window.kasugaiApi?.[requiredApi] !== "function") {
     return { ok: false, message: t("tool.unknown", { name }) };
+  }
+  // ---- 指示書ツール（agents/skills）。ブラウザ localStorage の指示書ストアを操作 ----
+  if (["listInstructions", "readInstruction", "saveInstruction", "deleteInstruction", "selectAgents"].includes(name)) {
+    const kind = AI_INSTR_KINDS.includes(args.kind) ? args.kind : null;
+    if (name !== "selectAgents" && !kind) return { ok: false, message: t("instr.badKind") };
+    if (name === "listInstructions") return { items: aiInstrList(kind) };
+    if (name === "readInstruction") {
+      const id = aiInstrId(args.id);
+      const text = aiInstrRead(kind, id) ?? aiInstrRead(kind, String(args.id || ""));
+      if (text === null) return { ok: false, message: t("instr.notFound", { id: args.id || "" }) };
+      return { id, text };
+    }
+    if (name === "saveInstruction") {
+      const id = aiInstrId(args.id);
+      if (!id) return { ok: false, message: t("instr.badId") };
+      if (aiInstrRead(kind, id) !== null
+        && !window.confirm(t("instr.confirmOverwrite", { id }))) {
+        return { ok: false, message: t("agent.cancelled") };
+      }
+      aiInstrWrite(kind, id, args.text);
+      renderAiInstruments();
+      return { ok: true, id };
+    }
+    if (name === "deleteInstruction") {
+      const id = aiInstrId(args.id) || String(args.id || "");
+      if (aiInstrRead(kind, id) === null) return { ok: false, message: t("instr.notFound", { id }) };
+      if (!window.confirm(t("instr.confirmDelete", { id }))) return { ok: false, message: t("agent.cancelled") };
+      aiInstrDelete(kind, id);
+      renderAiInstruments();
+      return { ok: true, id };
+    }
+    // selectAgents — 常時注入の有効セットを全置換
+    const enabled = aiInstrSelectAgents(args.ids);
+    renderAiInstruments();
+    return { ok: true, enabled };
   }
   if (name === "flyTo") {
     await window.kasugaiApi?.flyTo?.(await applyDroneViewDefaults(args));
@@ -2734,6 +2933,10 @@ async function usableChatProviders() {
   try {
     if (localStorage.getItem("googleApiKey") || hasBackendFeature("aiProxy")) set.add("gemini");
     if (localStorage.getItem("openaiApiKey")) set.add("openai");
+    if (localStorage.getItem("anthropicApiKey")) set.add("anthropic");
+    // Azure はキーとリソースURL・デプロイ名の3点が揃っているときだけ有効
+    if (localStorage.getItem("azureApiKey") && localStorage.getItem("azureBaseUrl")
+      && localStorage.getItem("azureDeployment")) set.add("azure");
   } catch (e) {}
   await Promise.all(BRIDGE_PROVIDERS.map(async (v) => {
     if (!bridgeFeatureAvailable(v)) return;
@@ -2953,6 +3156,10 @@ function updateChatProviderLabel() {
   let model = "";
   if (provider === "openai") {
     model = getOpenAIConfig().model;
+  } else if (provider === "anthropic") {
+    model = getAnthropicConfig().model;
+  } else if (provider === "azure") {
+    model = getAzureConfig().deployment;
   } else if (provider === "copilot" || provider === "devin" || provider === "antigravity") {
     const selected = getBridgeModel(provider);
     model = selected || detectedBridgeModels[provider] || "";
@@ -3024,7 +3231,7 @@ function modelOptionLabel(m) {
 export function getChatProvider() {
   try {
     const p = localStorage.getItem("chatProvider");
-    if (["gemini", "openai", "copilot", "devin", "antigravity", "agent"].includes(p)) return p;
+    if (["gemini", "openai", "anthropic", "azure", "copilot", "devin", "antigravity", "agent"].includes(p)) return p;
     // 移行前の利用形態を推定（プロバイダ未保存＋エージェント有効 → agent 相当）
     if (!p) {
       const enabledFlag = localStorage.getItem("agentEnabled");
@@ -3048,6 +3255,36 @@ function getOpenAIConfig() {
     };
   } catch (e) {
     return { apiKey: "", baseUrl: "https://models.github.ai/inference", model: "gpt-4o-mini" };
+  }
+}
+
+// Anthropic Messages API プロバイダの接続情報。
+// ブラウザからの直接呼び出しには anthropic-dangerous-direct-browser-access ヘッダが必要
+function getAnthropicConfig() {
+  try {
+    return {
+      apiKey: sanitizeHeaderToken(localStorage.getItem("anthropicApiKey")),
+      baseUrl: ((localStorage.getItem("anthropicBaseUrl") || "").trim() || "https://api.anthropic.com").replace(/\/+$/, ""),
+      model: (localStorage.getItem("anthropicModel") || "").trim() || "claude-sonnet-4-5",
+    };
+  } catch (e) {
+    return { apiKey: "", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-4-5" };
+  }
+}
+
+// Azure OpenAI プロバイダの接続情報。ベースURLは https://<リソース>.openai.azure.com。
+// 「モデル」欄はデプロイ名として使い、URLへ /openai/deployments/<dep>/ で埋め込む。
+// 認証は Authorization: Bearer ではなく api-key ヘッダ
+function getAzureConfig() {
+  try {
+    return {
+      apiKey: sanitizeHeaderToken(localStorage.getItem("azureApiKey")),
+      baseUrl: (localStorage.getItem("azureBaseUrl") || "").trim().replace(/\/+$/, ""),
+      deployment: (localStorage.getItem("azureDeployment") || "").trim(),
+      apiVersion: (localStorage.getItem("azureApiVersion") || "").trim() || "2024-10-21",
+    };
+  } catch (e) {
+    return { apiKey: "", baseUrl: "", deployment: "", apiVersion: "2024-10-21" };
   }
 }
 
@@ -3098,23 +3335,80 @@ function chatHistoryToOpenAI(history) {
       }
       messages.push(msg);
     } else {
+      // テキスト＋画像（inlineData）を1つの user メッセージへまとめる。
+      // 画像無しの従来どおり文字列 content のままにする（エンドポイント互換維持）
+      const blocks = [];
       for (const p of parts) {
-        if (p.text) messages.push({ role: "user", content: p.text });
-        else if (p.functionResponse) {
+        if (p.text) blocks.push({ type: "text", text: p.text });
+        else if (p.inlineData?.data) {
+          blocks.push({ type: "image_url", image_url: { url: `data:${p.inlineData.mimeType || "image/png"};base64,${p.inlineData.data}` } });
+        } else if (p.functionResponse) {
           messages.push({ role: "tool", tool_call_id: pendingIds.shift() || `call_${callSeq++}`, content: JSON.stringify(p.functionResponse.response ?? {}) });
         }
+      }
+      if (blocks.length) {
+        messages.push(blocks.every(b => b.type === "text") && blocks.length === 1
+          ? { role: "user", content: blocks[0].text }
+          : { role: "user", content: blocks });
       }
     }
   }
   return messages;
 }
 
+// 履歴の正本（Gemini contents形式）を Anthropic messages 形式へ変換する。
+// functionCall → tool_use、functionResponse → tool_result（user ロール内ブロック）
+function chatHistoryToAnthropic(history) {
+  const messages = [];
+  let callSeq = 0;
+  const pendingIds = [];
+  for (const entry of history) {
+    const parts = Array.isArray(entry?.parts) ? entry.parts : [];
+    if (entry.role === "model") {
+      const content = [];
+      for (const p of parts) {
+        if (p.text) content.push({ type: "text", text: p.text });
+        else if (p.functionCall) {
+          const id = `call_${callSeq++}`;
+          pendingIds.push(id);
+          content.push({ type: "tool_use", id, name: p.functionCall.name, input: p.functionCall.args || {} });
+        }
+      }
+      if (content.length) messages.push({ role: "assistant", content });
+    } else {
+      const content = [];
+      for (const p of parts) {
+        if (p.text) content.push({ type: "text", text: p.text });
+        else if (p.inlineData?.data) {
+          content.push({ type: "image", source: { type: "base64", media_type: p.inlineData.mimeType || "image/png", data: p.inlineData.data } });
+        } else if (p.functionResponse) {
+          content.push({ type: "tool_result", tool_use_id: pendingIds.shift() || `call_${callSeq++}`, content: JSON.stringify(p.functionResponse.response ?? {}) });
+        }
+      }
+      if (content.length) messages.push({ role: "user", content });
+    }
+  }
+  return messages;
+}
+
+// activeChatTools の functionDeclarations を Anthropic tools 形式へ変換する
+function chatToolsAnthropic() {
+  return (activeChatTools()[0]?.functionDeclarations || []).map(d => ({
+    name: d.name,
+    description: d.description || "",
+    input_schema: chatSchemaToJsonSchema(d.parameters || { type: "OBJECT", properties: {} }),
+  }));
+}
+
 // OpenAI互換 chat/completions を呼び、tool calling の往復を処理する。
 // ツール往復はブラウザ内で行い、履歴の正本（contents形式）にも同内容を追記して
 // プロバイダを切り替えても会話が破綻しないようにする
-async function callOpenAICompat(history) {
-  const { apiKey, baseUrl, model } = getOpenAIConfig();
+async function callOpenAICompat(history, request = null) {
+  const { apiKey, baseUrl, model } = request || getOpenAIConfig();
+  const url = request?.url || `${baseUrl}/chat/completions`;
+  const headers = request?.headers || { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
   const executed = [];
+  const usage = { input: 0, output: 0, model };
   const messages = [
     { role: "system", content: chatSystemInstruction() },
     ...chatHistoryToOpenAI(history),
@@ -3126,18 +3420,20 @@ async function callOpenAICompat(history) {
       // 上限到達 — Gemini 側と同じく、続行するかユーザーに確認する
       const increment = getChatMaxToolSteps();
       if (!window.confirm(t("chat.toolLimitContinue", { steps: increment }))) {
-        return { text: t("chat.toolLimit"), executed };
+        return { text: t("chat.toolLimit"), executed, usage };
       }
       maxSteps += increment;
     }
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      headers,
       signal: AbortSignal.timeout(CHAT_LLM_TIMEOUT_MS),
       body: JSON.stringify({ model, messages, tools, tool_choice: "auto" }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    usage.input += Number(data?.usage?.prompt_tokens) || 0;
+    usage.output += Number(data?.usage?.completion_tokens) || 0;
     const msg = data?.choices?.[0]?.message;
     if (!msg) throw new Error(t("chat.noResponse"));
     messages.push(msg);
@@ -3152,7 +3448,7 @@ async function callOpenAICompat(history) {
     history.push({ role: "model", parts: canonicalParts });
     if (!calls.length) {
       const text = (typeof msg.content === "string" ? msg.content : "").trim();
-      return { text: text || t("chat.noResponse"), executed };
+      return { text: text || t("chat.noResponse"), executed, usage };
     }
     const responseParts = [];
     for (const c of calls) {
@@ -3184,6 +3480,7 @@ async function callGemini(history) {
   if (proxy && window.kasugaiAuth?.token) {
     headers["Authorization"] = `Bearer ${window.kasugaiAuth.token}`;
   }
+  const usage = { input: 0, output: 0, model };
   let maxSteps = getChatMaxToolSteps();
   for (let step = 0; ; step++) {
     if (step >= maxSteps) {
@@ -3191,7 +3488,7 @@ async function callGemini(history) {
       // ループ中に AI が setToolMaxSteps で上限を変えていれば新しい値がここで効く
       const increment = getChatMaxToolSteps();
       if (!window.confirm(t("chat.toolLimitContinue", { steps: increment }))) {
-        return { text: t("chat.toolLimit"), executed };
+        return { text: t("chat.toolLimit"), executed, usage };
       }
       maxSteps += increment;
     }
@@ -3209,11 +3506,13 @@ async function callGemini(history) {
     const data = await response.json();
     if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
     const parts = data?.candidates?.[0]?.content?.parts || [];
+    usage.input += Number(data?.usageMetadata?.promptTokenCount) || 0;
+    usage.output += Number(data?.usageMetadata?.candidatesTokenCount) || 0;
     history.push({ role: "model", parts });
     const calls = parts.filter(part => part.functionCall);
     if (!calls.length) {
       const text = parts.map(part => part.text || "").join("").trim();
-      return { text: text || t("chat.noResponse"), executed };
+      return { text: text || t("chat.noResponse"), executed, usage };
     }
     const responseParts = [];
     for (const part of calls) {
@@ -3221,6 +3520,82 @@ async function callGemini(history) {
       executed.push(`${part.functionCall.name}(${JSON.stringify(part.functionCall.args || {})})`);
       responseParts.push({ functionResponse: { name: part.functionCall.name, response: { result } } });
     }
+    history.push({ role: "user", parts: responseParts });
+  }
+}
+
+// Azure OpenAI の chat/completions。OpenAI互換ボディをそのまま使い、
+// URL を /openai/deployments/<dep>/chat/completions?api-version=… に、
+// 認証を api-key ヘッダに変えたもの。モデル名はデプロイ名が担う
+async function callAzureOpenAI(history) {
+  const c = getAzureConfig();
+  const request = {
+    url: `${c.baseUrl}/openai/deployments/${encodeURIComponent(c.deployment)}/chat/completions?api-version=${encodeURIComponent(c.apiVersion)}`,
+    headers: { "Content-Type": "application/json", "api-key": c.apiKey },
+    model: c.deployment,
+  };
+  return callOpenAICompat(history, request);
+}
+
+// Anthropic Messages API を呼び、tool_use の往復を処理する。
+// ブラウザ直叩きのため anthropic-dangerous-direct-browser-access ヘッダを付ける
+// （APIキーが Anthropic へ直接送られる点は BYO キーでユーザーが許容する前提）
+async function callAnthropic(history) {
+  const { apiKey, baseUrl, model } = getAnthropicConfig();
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+    "anthropic-dangerous-direct-browser-access": "true",
+  };
+  const executed = [];
+  const usage = { input: 0, output: 0, model };
+  const messages = chatHistoryToAnthropic(history);
+  const tools = chatToolsAnthropic();
+  let maxSteps = getChatMaxToolSteps();
+  for (let step = 0; ; step++) {
+    if (step >= maxSteps) {
+      const increment = getChatMaxToolSteps();
+      if (!window.confirm(t("chat.toolLimitContinue", { steps: increment }))) {
+        return { text: t("chat.toolLimit"), executed, usage };
+      }
+      maxSteps += increment;
+    }
+    const response = await fetch(`${baseUrl}/v1/messages`, {
+      method: "POST",
+      headers,
+      signal: AbortSignal.timeout(CHAT_LLM_TIMEOUT_MS),
+      body: JSON.stringify({ model, max_tokens: 8192, system: chatSystemInstruction(), messages, tools }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+    usage.input += Number(data?.usage?.input_tokens) || 0;
+    usage.output += Number(data?.usage?.output_tokens) || 0;
+    const content = Array.isArray(data?.content) ? data.content : [];
+    messages.push({ role: "assistant", content });
+    const canonicalParts = [];
+    const calls = [];
+    for (const block of content) {
+      if (block?.type === "text" && block.text) canonicalParts.push({ text: block.text });
+      else if (block?.type === "tool_use") {
+        canonicalParts.push({ functionCall: { name: block.name, args: block.input || {} } });
+        calls.push(block);
+      }
+    }
+    history.push({ role: "model", parts: canonicalParts });
+    if (!calls.length) {
+      const text = content.filter(b => b?.type === "text").map(b => b.text || "").join("").trim();
+      return { text: text || t("chat.noResponse"), executed, usage };
+    }
+    const responseParts = [];
+    const resultBlocks = [];
+    for (const block of calls) {
+      const result = await executeChatTool(block.name, block.input || {});
+      executed.push(`${block.name}(${JSON.stringify(block.input || {})})`);
+      resultBlocks.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(result ?? null) });
+      responseParts.push({ functionResponse: { name: block.name, response: { result } } });
+    }
+    messages.push({ role: "user", content: resultBlocks });
     history.push({ role: "user", parts: responseParts });
   }
 }

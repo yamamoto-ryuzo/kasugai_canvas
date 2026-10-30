@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.8] - 2026-10-30
+
+### Fixed
+
+- **bridge-hub.exe の自己インストールが、応答しない（ハング中の）旧ハブを置き換えられない問題を修正**（`server/src/bin/bridge-hub.rs`）— 従来は `/health` が `hub:true` を返す場合のみ旧ハブを停止していたため、`/health` がタイムアウトする旧ハブは識別できず kill されず、新ハブが bind 失敗して「インストールしました」と出るのに旧ハブが残り続けた。bind 失敗時に占有者のイメージ名を netstat/tasklist で確認し、`bridge-hub.exe` なら停止・置き換えるフォールバックを追加（それ以外のプロセスは従来通り kill しない）
+
 ## [6.5.7] - 2026-10-30
 
 ### Added
