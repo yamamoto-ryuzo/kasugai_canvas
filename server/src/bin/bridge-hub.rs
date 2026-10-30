@@ -143,10 +143,19 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
     }
     let dst = dir.join("bridge-hub.exe");
     if src != dst {
-        // 実行中でロックされている場合は同パスのプロセスを停止して再試行
-        if std::fs::copy(&src, &dst).is_err() {
-            kill_installed_hub(&dir);
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        // 実行中でロックされている場合は旧ハブを停止してから再試行する。
+        // イメージ名一致の kill_all_hub_processes を使う（kill_installed_hub より
+        // 確実 — 自 PID は関数内で除外済み。旧ハブのロック解放待ちも取る）
+        let mut copied = false;
+        for _ in 0..4 {
+            if std::fs::copy(&src, &dst).is_ok() {
+                copied = true;
+                break;
+            }
+            kill_all_hub_processes();
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+        if !copied {
             if let Err(e) = std::fs::copy(&src, &dst) {
                 eprintln!("bridge-hub: コピーに失敗しました {} -> {}: {e}", src.display(), dst.display());
                 return std::process::ExitCode::FAILURE;

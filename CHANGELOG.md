@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.14] - 2026-10-30
+
+### Fixed
+
+- **「CLI ログイン」二重起動防止が機能しない問題を修正**（`server/src/bridge/setup.rs`）— WMI 照会方式が判定できず毎回新規起動していたため、`Start-Process -PassThru` で起動したコンソールの PID を記録・`tasklist` で生存確認する方式に変更。実機で 2回目以降 `already:true` 応答を確認
+- **bridge-hub.exe 自己インストールが実行中ハブのファイルロックで失敗する問題を修正**（`server/src/bin/bridge-hub.rs`）— コピー失敗時の kill が旧ハブを停止できないケースがあったため、イメージ名一致の確実な停止＋リトライに変更
+
 ## [6.5.13] - 2026-10-30
 
 ### Fixed

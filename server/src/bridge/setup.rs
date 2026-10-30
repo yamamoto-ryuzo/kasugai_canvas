@@ -765,21 +765,23 @@ pub async fn cli_main(target: &str) -> std::process::ExitCode {
 // PowerShell Start-Process（ShellExecute 相当）が最も確実
 // （.cmd/exe を既定動作で開くと新規コンソールウィンドウになる）。
 // antigravity は IDE の GUI ログインのため対象外（呼び出し側で弾く）
-// 同じ CLI のログインコンソールが既に開いているか（二重起動防止）。
-// ブリッジ内部の --server プロセスは除外する
+// 二重起動防止: 自分が起動したログインコンソールの PID を記録し、
+// 生存している間は新規起動しない（copilot は複数 TUI が競合するため）
 #[cfg(windows)]
-fn login_console_running(cli_path: &str) -> bool {
-    let pat = cli_path.replace('\'', "''");
-    let script = format!(
-        "(Get-CimInstance Win32_Process | Where-Object {{ $_.CommandLine -match [regex]::Escape('{pat}') -and $_.CommandLine -notmatch '--server' }}).Count"
-    );
-    std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
+static LOGIN_PIDS: std::sync::OnceLock<std::sync::Mutex<Vec<u32>>> = std::sync::OnceLock::new();
+
+#[cfg(windows)]
+fn login_pids() -> &'static std::sync::Mutex<Vec<u32>> {
+    LOGIN_PIDS.get_or_init(|| std::sync::Mutex::new(Vec::new()))
+}
+
+#[cfg(windows)]
+fn pid_alive(pid: u32) -> bool {
+    std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
         .output()
-        .ok()
-        .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse::<u32>().ok())
-        .unwrap_or(0)
-        > 0
+        .map(|o| String::from_utf8_lossy(&o.stdout).contains(&format!(",\"{pid}\",")))
+        .unwrap_or(false)
 }
 
 #[cfg(windows)]
@@ -788,21 +790,29 @@ pub fn spawn_login(provider: &str) -> Result<bool, String> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let path = detect(provider)
         .ok_or_else(|| "CLI が検出できません（先にインストールしてください）".to_string())?;
-    // 失敗したログインコンソールが残っている場合は二重に開かない
-    // （copilot は複数 TUI がセッション競合するため）
-    if login_console_running(&path) {
-        return Ok(false);
+    {
+        let mut pids = login_pids().lock().map_err(|_| "lock".to_string())?;
+        pids.retain(|&p| pid_alive(p));
+        if !pids.is_empty() {
+            return Ok(false);
+        }
     }
+    // Start-Process -PassThru で起動したコンソールの PID を取得して記録する
     let ps = if provider == "devin" {
-        format!("Start-Process -FilePath \"{path}\" -ArgumentList \"login\"")
+        format!("$p = Start-Process -PassThru -FilePath \"{path}\" -ArgumentList \"login\"; $p.Id")
     } else {
-        format!("Start-Process -FilePath \"{path}\"")
+        format!("$p = Start-Process -PassThru -FilePath \"{path}\"; $p.Id")
     };
-    std::process::Command::new("powershell")
+    let out = std::process::Command::new("powershell")
         .args(["-NoProfile", "-Command", &ps])
         .creation_flags(CREATE_NO_WINDOW)
-        .spawn()
+        .output()
         .map_err(|e| format!("ログインコンソールの起動に失敗: {e}"))?;
+    if let Ok(pid) = String::from_utf8_lossy(&out.stdout).trim().parse::<u32>() {
+        if pid > 0 {
+            login_pids().lock().map(|mut v| v.push(pid)).ok();
+        }
+    }
     Ok(true)
 }
 
