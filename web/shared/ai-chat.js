@@ -850,7 +850,10 @@ export function setupAiSettings() {
   };
   const syncProviderFields = (userAction) => {
     const v = providerSelect?.value || "gemini";
-    // APIキー系フィールドは「インストール」タブに常時表示（共通画面化）
+    if (geminiFields) geminiFields.hidden = v !== "gemini";
+    if (openaiFields) openaiFields.hidden = v !== "openai";
+    if (anthropicFields) anthropicFields.hidden = v !== "anthropic";
+    if (azureFields) azureFields.hidden = v !== "azure";
     const isBridge = v === "copilot" || v === "devin" || v === "antigravity" || v === "agent";
     if (bridgeFields) {
       bridgeFields.hidden = !isBridge;
@@ -861,8 +864,10 @@ export function setupAiSettings() {
     }
     // ブリッジハブ導入の案内は専用プロバイダ（copilot/devin/antigravity）のみ。
     // 「外部エージェント」（自作実装の接続口）には出さない
-    const hubNote = document.querySelector("#bridge-hub-note");
-    if (hubNote) hubNote.hidden = !BRIDGE_PROVIDERS.includes(v);
+    // ハブ案内は「インストール」タブの主コンテンツなのでプロバイダ選択に
+    // 関わらず常時表示。切替えるのはチャットタブ側の案内文のみ
+    const installHint = document.querySelector("#bridge-install-hint");
+    if (installHint) installHint.hidden = !BRIDGE_PROVIDERS.includes(v);
     // プロバイダ切替時は前プロバイダの入力値を記憶へ退避し、新プロバイダの値を読み込む
     if (endpointOwner !== v) {
       const prevKey = PROVIDER_ENDPOINT_KEYS[endpointOwner];
@@ -4425,6 +4430,47 @@ const AI_SETTINGS_HTML = `
     <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
     <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
   </select>
+  <div id="gemini-fields">
+    <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
+    <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
+    <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" autocomplete="off" size="28" />
+    <label class="field-label" for="google-gemini-model" data-i18n="google.gemini.modelLabel">Gemini モデル</label>
+    <select id="google-gemini-model">
+      <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (標準・低コスト)</option>
+      <option value="gemini-3.6-flash">gemini-3.6-flash</option>
+      <option value="gemini-3.5-flash">gemini-3.5-flash</option>
+      <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
+    </select>
+  </div>
+  <div id="openai-fields" hidden>
+    <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。</p>
+    <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
+    <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" autocomplete="off" size="28" />
+    <label class="field-label" for="openai-api-key" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
+    <input id="openai-api-key" type="password" placeholder="GitHub PAT 等" autocomplete="off" size="28" />
+    <label class="field-label" for="openai-model" data-i18n="chat.openai.modelLabel">モデル</label>
+    <input id="openai-model" type="text" placeholder="gpt-4o-mini" autocomplete="off" size="28" />
+  </div>
+  <div id="anthropic-fields" hidden>
+    <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
+    <label class="field-label" for="anthropic-api-key" data-i18n="chat.anthropic.keyLabel">APIキー</label>
+    <input id="anthropic-api-key" type="password" placeholder="sk-ant-..." autocomplete="off" size="28" />
+    <label class="field-label" for="anthropic-model" data-i18n="chat.anthropic.modelLabel">モデル</label>
+    <input id="anthropic-model" type="text" placeholder="claude-sonnet-4-5" autocomplete="off" size="28" />
+    <label class="field-label" for="anthropic-base-url" data-i18n="chat.anthropic.baseUrlLabel">エンドポイント ベースURL（省略可）</label>
+    <input id="anthropic-base-url" type="text" placeholder="https://api.anthropic.com" autocomplete="off" size="28" />
+  </div>
+  <div id="azure-fields" hidden>
+    <p class="hint" data-i18n-html="chat.azure.hint"></p>
+    <label class="field-label" for="azure-base-url" data-i18n="chat.azure.baseUrlLabel">リソース エンドポイントURL</label>
+    <input id="azure-base-url" type="text" placeholder="https://<resource>.openai.azure.com" autocomplete="off" size="28" />
+    <label class="field-label" for="azure-api-key" data-i18n="chat.azure.keyLabel">APIキー</label>
+    <input id="azure-api-key" type="password" autocomplete="off" size="28" />
+    <label class="field-label" for="azure-deployment" data-i18n="chat.azure.deploymentLabel">デプロイ名</label>
+    <input id="azure-deployment" type="text" placeholder="my-deployment" autocomplete="off" size="28" />
+    <label class="field-label" for="azure-api-version" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
+    <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
+  </div>
   <div id="bridge-fields" hidden>
     <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden></p>
     <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden></p>
@@ -4432,7 +4478,7 @@ const AI_SETTINGS_HTML = `
     <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden></p>
     <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
     <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" autocomplete="off" size="28" />
-    <p class="hint" data-i18n-html="chat.bridge.installTabHint"></p>
+    <p class="hint" id="bridge-install-hint" data-i18n-html="chat.bridge.installTabHint" hidden></p>
     <div class="provider-only" data-for="agent" hidden>
       <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
       <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" autocomplete="off" size="28" />
@@ -4466,48 +4512,6 @@ const AI_SETTINGS_HTML = `
   <p id="google-proxy-status" class="hint" aria-live="polite"></p>
 </section>
 <section id="ai-install-panel" class="ai-subpane">
-  <div id="gemini-fields">
-    <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
-    <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
-    <input id="google-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Gemini APIキーを入力" autocomplete="off" size="28" />
-    <label class="field-label" for="google-gemini-model" data-i18n="google.gemini.modelLabel">Gemini モデル</label>
-    <select id="google-gemini-model">
-      <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (標準・低コスト)</option>
-      <option value="gemini-3.6-flash">gemini-3.6-flash</option>
-      <option value="gemini-3.5-flash">gemini-3.5-flash</option>
-      <option value="gemini-3.1-pro-preview">gemini-3.1-pro-preview</option>
-    </select>
-  </div>
-  <div id="openai-fields" style="margin-top:12px;">
-    <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。</p>
-    <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
-    <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" autocomplete="off" size="28" />
-    <label class="field-label" for="openai-api-key" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
-    <input id="openai-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="GitHub PAT 等" autocomplete="off" size="28" />
-    <label class="field-label" for="openai-model" data-i18n="chat.openai.modelLabel">モデル</label>
-    <input id="openai-model" type="text" placeholder="gpt-4o-mini" autocomplete="off" size="28" />
-  </div>
-  <div id="anthropic-fields" style="margin-top:12px;">
-    <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
-    <label class="field-label" for="anthropic-api-key" data-i18n="chat.anthropic.keyLabel">APIキー</label>
-    <input id="anthropic-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="sk-ant-..." autocomplete="off" size="28" />
-    <label class="field-label" for="anthropic-model" data-i18n="chat.anthropic.modelLabel">モデル</label>
-    <input id="anthropic-model" type="text" placeholder="claude-sonnet-4-5" autocomplete="off" size="28" />
-    <label class="field-label" for="anthropic-base-url" data-i18n="chat.anthropic.baseUrlLabel">エンドポイント ベースURL（省略可）</label>
-    <input id="anthropic-base-url" type="text" placeholder="https://api.anthropic.com" autocomplete="off" size="28" />
-  </div>
-  <div id="azure-fields" style="margin-top:12px;">
-    <p class="hint" data-i18n-html="chat.azure.hint"></p>
-    <label class="field-label" for="azure-base-url" data-i18n="chat.azure.baseUrlLabel">リソース エンドポイントURL</label>
-    <input id="azure-base-url" type="text" placeholder="https://<resource>.openai.azure.com" autocomplete="off" size="28" />
-    <label class="field-label" for="azure-api-key" data-i18n="chat.azure.keyLabel">APIキー</label>
-    <input id="azure-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore autocomplete="off" size="28" />
-    <label class="field-label" for="azure-deployment" data-i18n="chat.azure.deploymentLabel">デプロイ名</label>
-    <input id="azure-deployment" type="text" placeholder="my-deployment" autocomplete="off" size="28" />
-    <label class="field-label" for="azure-api-version" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
-    <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
-  </div>
-  <hr style="margin:14px 0;border:none;border-top:1px solid #d1d9e0;" />
   <p class="hint" id="bridge-hub-note">
     <span data-i18n-html="chat.bridge.hubNote"></span><br />
     <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
