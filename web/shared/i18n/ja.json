@@ -352,7 +352,7 @@
   "chat.provider.agent": "【ブリッジ】 外部エージェント",
   "chat.provider.devin": "【ブリッジ】 Devin",
   "chat.provider.antigravity": "【ブリッジ】 Antigravity",
-  "chat.bridge.hubNote": "このプロバイダはローカルのブリッジハブが必要です。アプリ版はハブ内蔵のため追加インストール不要です。ブラウザ WebGIS（CDN・静的配信）で使う場合は bridge-hub.exe をダウンロードして実行してください — %LOCALAPPDATA% への自己インストール・ログイン時自動起動の登録・即時起動（:8512）に加え、copilot/devin 用 CLI の未導入分も自動でインストールします（実行は1回のみ・Node.js不要）。antigravity は別途 Antigravity(IDE) の導入と Google ログインが必要です。",
+  "chat.bridge.hubNote": "このプロバイダはローカルのブリッジハブが必要です（アプリ版・ブラウザ WebGIS 共通）。bridge-hub.exe をダウンロードして実行してください — %LOCALAPPDATA% への自己インストール・ログイン時自動起動の登録・:8511 での起動に加え、copilot/devin 用 CLI の未導入分も自動でインストールします（実行は1回のみ・Node.js不要）。antigravity は別途 Antigravity(IDE) の導入と Google ログインが必要です。",
   "chat.bridge.hubDownload": "bridge-hub.zip をダウンロード",
   "chat.bridge.hubDownloadExe": "bridge-hub.exe をダウンロード",
   "chat.bridge.hubTitle": "ブリッジハブ",

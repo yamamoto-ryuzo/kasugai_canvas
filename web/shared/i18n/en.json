@@ -352,7 +352,7 @@
   "chat.provider.agent": "[Bridge] External agent",
   "chat.provider.devin": "[Bridge] Devin",
   "chat.provider.antigravity": "[Bridge] Antigravity",
-  "chat.bridge.hubNote": "This provider needs the local bridge hub. The app version has it built in — nothing extra to install. For browser WebGIS (CDN / static hosting), download and run bridge-hub.exe — it self-installs to %LOCALAPPDATA%, registers a logon autostart, starts on :8512, and also auto-installs the copilot/devin CLIs (one run only; no Node.js needed). Antigravity additionally requires the Antigravity IDE install and a Google sign-in.",
+  "chat.bridge.hubNote": "This provider needs the local bridge hub (shared by the app and browser WebGIS). Download and run bridge-hub.exe — it self-installs to %LOCALAPPDATA%, registers a logon autostart, starts on :8511, and also auto-installs the copilot/devin CLIs (one run only; no Node.js needed). Antigravity additionally requires the Antigravity IDE install and a Google sign-in.",
   "chat.bridge.hubDownload": "Download bridge-hub.zip",
   "chat.bridge.hubDownloadExe": "Download bridge-hub.exe",
   "chat.bridge.hubTitle": "Bridge Hub",

@@ -13,7 +13,7 @@ echo.
 rem ダウンロードZIP由来のブロック属性(MOTW)を解除
 powershell -NoProfile -Command "Get-ChildItem -Recurse '%~dp0' -File | Unblock-File" >nul 2>&1
 
-rem ログイン時自動起動の登録＋ハブ起動(ポート8512)
+rem ログイン時自動起動の登録＋ハブ起動(ポート8511)
 if exist "%~dp0install-autostart.ps1" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-autostart.ps1"
 )
@@ -28,7 +28,7 @@ if exist "%LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe" (
 )
 
 echo.
-echo 確認: http://127.0.0.1:8512/health
+echo 確認: http://127.0.0.1:8511/health
 if /i "%~1"=="--nopause" exit /b 0
 if /i "%~1"=="--quiet" exit /b 0
 if defined CI exit /b 0

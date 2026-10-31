@@ -62,9 +62,8 @@ bridge-hub.exe --setup all           # 自動化可能な未導入CLIをまと�
 
 アプリ版（kasugai_canvas.exe）を持たない環境でも、本ハブを起動しておけば
 CDN ホスト版・静的配信の Canvas から同じようにブリッジ系プロバイダが使えます。
-フロントは 127.0.0.1 のハブ `/health`（8512 → 8511 の順）を疎通し、`hub:true`
-が返れば capabilities 通知が無くても「【ブリッジ】GitHub Copilot」等の
-選択肢を出します（接続は全てローカルへ。公開デプロイからも localhost への
+フロントは 127.0.0.1:8511 のハブ `/health` を疎通し、`hub:true` が返れば
+「【ブリッジ】GitHub Copilot」等の選択肢を出します（接続は全てローカルへ。公開デプロイからも localhost への
 http は許可）。
 
 前提: **実行環境は何も不要（単一 exe）**。ただし使うプロバイダの CLI と
@@ -75,7 +74,7 @@ Devin なら `devin` CLI、Antigravity なら `agy` CLI＋Google ログイン）
 
 `bridge-hub.exe` を **ダウンロードして実行するだけ**で、
 `%LOCALAPPDATA%\kasugai\bridge-hub\` への自己コピー → ログイン時自動起動
-タスク登録 → `127.0.0.1:8512` での非表示起動 → **ブリッジ用 CLI
+タスク登録 → `127.0.0.1:8511` での非表示起動 → **ブリッジ用 CLI
 （copilot/devin）の未導入分の自動インストール**まで一括で行われます
 （`--no-cli-setup` で CLI 導入を省略可。CLI DL に数分かかることがあります）。
 管理者権限は不要です。Canvas の AI 設定画面でブリッジ系プロバイダを
@@ -100,10 +99,10 @@ bridge-hub.exe --uninstall  # 自動起動解除＋停止＋インストール�
 ```powershell
 Invoke-WebRequest "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/download/bridge-hub.exe" -OutFile "$env:TEMP\bridge-hub.exe"
 Unblock-File "$env:TEMP\bridge-hub.exe"
-& "$env:TEMP\bridge-hub.exe" --install     # 自動起動登録(8512)+即時起動
+& "$env:TEMP\bridge-hub.exe" --install     # 自動起動登録(8511)+即時起動
 & "$env:TEMP\bridge-hub.exe" --setup all   # copilot/devin CLI を自動導入
 # 疎通確認（起動反映まで数秒かかることがあるためリトライ）
-1..15 | % { try { Invoke-RestMethod http://127.0.0.1:8512/health -TimeoutSec 2; break } catch { Start-Sleep 1 } }
+1..15 | % { try { Invoke-RestMethod http://127.0.0.1:8511/health -TimeoutSec 2; break } catch { Start-Sleep 1 } }
 ```
 
 ### zip 版（スクリプト一式・個別操作向け）
@@ -113,22 +112,19 @@ exe の自己インストールと同じタスク名（`KasugaiCanvasBridgeHub`�
 ため、どちらの経路で登録しても同じ自動起動になります。
 
 ```
-powershell -ExecutionPolicy Bypass -File install-autostart.ps1   # 自動起動登録(8512)+即時起動
+powershell -ExecutionPolicy Bypass -File install-autostart.ps1   # 自動起動登録(8511)+即時起動
 powershell -ExecutionPolicy Bypass -File uninstall-autostart.ps1 # 登録解除＋停止
 bridge-hub.exe --setup all     # CLI 導入のみ
-wscript run-hidden.vbs         # その場起動のみ（非表示・8512）
+wscript run-hidden.vbs         # その場起動のみ（非表示・8511）
 setup.cmd [--nopause]          # 対話環境の一発セットアップ（--nopause で無人化）
 ```
 
-**アプリ版との併用**: アプリのハブは 8511 を占有し、起動時に占有者が
-ブリッジなら強制停止して置き換えます。ブラウザ WebGIS 用常駐の既定ポートは
-**8512**（`run-hidden.vbs`/`install-autostart.ps1` が `BRIDGE_HUB_PORT=8512`
-を設定）で、新版アプリは旧ブリッジ掃除（8512/8513）の際に `hub:true` の
-ハブを潰さないよう除外するため**同時稼働できます**。
-**注意**: この除外は新版アプリの動作のため、旧版アプリ（リリース済み）は
-8512 のハブを旧ブリッジとして落とします。インストールせず `bridge-hub.exe`
-をその場で起動する `--serve` は既定 8511 なので、併用時は
-`BRIDGE_HUB_PORT=8512` を指定してください。
+**アプリ版との併用**: ハブはアプリ版・ブラウザ WebGIS 共通で 8511 に
+一本化されています。アプリはハブを内蔵せず、起動時に 8511 のハブが未応答なら
+インストール済みの本 exe を `BRIDGE_HUB_PORT=8511` で自動起動します（本
+exe が旧版でもポートは 8511 に統一されます）。**注意**: 旧ブラウザ WebGIS 用に
+8512 で常駐していたハブは全て旧版のため、本ハブのインストール時・および
+新版アプリの起動時に自動で停止されます。`--serve` の既定も 8511 です。
 
 停止だけしたい場合は、このフォルダの `bridge-hub.exe` を実行中のプロセスを
 終了してください（`bridge-hub.exe --uninstall` /
@@ -155,7 +151,7 @@ setup.cmd [--nopause]          # 対話環境の一発セットアップ（--nop
 
 | 変数 | 既定 | 説明 |
 |---|---|---|
-| `BRIDGE_HUB_PORT` | `8511` | ハブの待受ポート（127.0.0.1 のみバインド）。アプリ本体（kasugai_canvas.exe）起動時にも同じ環境変数が読まれ、待受ポート・占有チェック・`/api/capabilities` の通知エンドポイントがすべてこのポートに揃う。ブラウザ WebGIS 用同梱スクリプトは `8512` を設定する |
+| `BRIDGE_HUB_PORT` | `8511` | ハブの待受ポート（127.0.0.1 のみバインド）。アプリ版・ブラウザ WebGIS 共通の統一ポート。変更するとブラウザがハブを検出できなくなるため通常は変更不要 |
 | `KASUGAI_NO_COPILOT_BRIDGE` | なし | copilot プロバイダを無効化 |
 | `KASUGAI_NO_DEVIN_BRIDGE` | なし | devin プロバイダを無効化 |
 | `KASUGAI_NO_ANTIGRAVITY_BRIDGE` | なし | antigravity プロバイダを無効化 |

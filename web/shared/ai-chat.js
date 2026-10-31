@@ -138,17 +138,17 @@ const providerConnDetail = {};
 // テスト＝devin acp 起動やブラウザ認証まで発火し得る）を抑制するフラグ。
 // モデル確認・実接続テストは設定画面での操作時のみ行う
 let suppressSettingsVerify = false;
-// ブリッジハブの既定エンドポイント。アプリ版（local ティア）では bridge-hub/ が
-// 8511 で待受け、選択されたプロバイダのブリッジを遅延起動して振り分ける
-// （POST {message,...} → {reply,actions} のエージェント接続口経由）。
+// ブリッジハブの既定エンドポイント。ハブは常駐の bridge-hub.exe（8511）に
+// 一本化され、アプリ版・ブラウザ WebGIS のどちらからもこの1点を使う
+// （アプリはハブを内蔵しない。POST {message,...} → {reply,actions} の
+// エージェント接続口経由で、選択されたプロバイダのブリッジを遅延起動して振り分ける）。
 // ※ setupGoogleSettings() 等がモジュール評価中に実行されるため、
 //   初期化で参照する定数は呼び出し位置より前に置く（TDZ 回避）
-const BRIDGE_HUB_ENDPOINT_APP = "http://127.0.0.1:8511/agent";
-// ブラウザ WebGIS 用 bridge-hub（bridge-hub.exe）の検出ポート。
-// 8512 = ブラウザ WebGIS 用既定（run-hidden.vbs/install-autostart.ps1）。
-// 8511 も探すのは、BRIDGE_HUB_PORT を変えずに手動起動したハブや
-// capabilities が届かない経路でアプリ版ハブだけが居るケースのため
-const WEBGIS_HUB_PORTS = [8512, 8511];
+const BRIDGE_HUB_ENDPOINT = "http://127.0.0.1:8511/agent";
+// bridge-hub（bridge-hub.exe）の検出ポート。8511 に一本化済み
+//（旧ブラウザ WebGIS 用の 8512 は廃止 — 残存する旧ハブはハブ側・アプリ側の
+//  起動時掃除で停止されるためフロントは探さない）
+const WEBGIS_HUB_PORTS = [8511];
 // ブリッジ経由のプロバイダ（capabilities の同名キーがエンドポイントを通知する）
 const BRIDGE_PROVIDERS = ["copilot", "devin", "antigravity"];
 // ブリッジ系プロバイダ（copilot/devin/antigravity/agent）のエンドポイント記憶キー。
@@ -161,13 +161,11 @@ const PROVIDER_ENDPOINT_KEYS = {
   agent: "agentEndpoint.agent",
 };
 const PROVIDER_ORDER = ["gemini", "openai", "anthropic", "azure", "copilot", "devin", "antigravity", "agent"];
-// ---- ブラウザ WebGIS 用 bridge-hub 検出 ----
-// アプリ版を持たない環境（CDN ホスト版・静的配信・他ポート起動など）でも、
-// ユーザーが bridge-hub（bridge-hub.exe）を起動していれば /health が hub:true を返す。
-// その場合は capabilities の feature 通知が無くてもブリッジ系プロバイダを
-// 有効とみなす。8511 はアプリのハブ口なので、ブラウザ WebGIS 用の既定は 8512
-// （run-hidden.vbs / install-autostart.ps1。新版アプリは 8512 のハブを
-// 旧ブリッジ掃除の対象から外している）
+// ---- bridge-hub 検出 ----
+// 常駐の bridge-hub（bridge-hub.exe）が起動していれば /health が hub:true を返す。
+// ハブはアプリ版・ブラウザ WebGIS 共通で 8511 に一本化（アプリはハブを内蔵せず、
+// インストール済みハブを起動時に自動起動するだけ）。capabilities の feature
+// 通知が無い環境でも、この検出でブリッジ系プロバイダを有効とみなす
 let webgisHub = undefined; // {endpoint, providers:{...}} = 検出 / null = 未検出
 let webgisHubAt = 0;
 const WEBGIS_HUB_TTL_MS = 15000;
@@ -205,7 +203,7 @@ async function waitForWebgisHub(timeoutMs) {
 }
 // ハブ未検出時の自動インストール誘導。
 // フロー: bridge-hub.exe（自己インストール型）を DL → ユーザーが実行すると
-// %LOCALAPPDATA%\kasugai\bridge-hub へコピー＋自動起動登録＋8512 で起動 →
+// %LOCALAPPDATA%\kasugai\bridge-hub へコピー＋自動起動登録＋8511 で起動 →
 // こちらは /health ポーリングで検出して接続まで自動完了する。
 // ブラウザから exe を直接起動することはできないため、ユーザー操作は
 // 「DL した exe を実行」の1回のみ（以後はログイン時自動起動）
@@ -3012,9 +3010,9 @@ function bridgeCandidates(provider) {
   const advertised = getBackendCapabilities()?.[provider]?.endpoint;
   if (advertised) list.push(advertised);
   // 既定のハブ口(8511)は通知の有無にかかわらず候補に入れる。
-  // ブラウザ WebGIS 用 bridge-hub（8512 等）が検出済みならその口も足す。
+  // 検出済みのハブ口があればその口も足す。
   // localhost への疎通失敗は即座に返るためコストは無視できる
-  list.push(BRIDGE_HUB_ENDPOINT_APP);
+  list.push(BRIDGE_HUB_ENDPOINT);
   if (webgisHub?.endpoint) list.push(webgisHub.endpoint);
   return [...new Set(list)];
 }
@@ -3081,7 +3079,7 @@ async function detectBridgeHubBase() {
     if (saved) eps.push(saved);
   } catch (e) {}
   if (webgisHub?.endpoint) eps.push(webgisHub.endpoint);
-  eps.push(BRIDGE_HUB_ENDPOINT_APP, "http://127.0.0.1:8512/agent");
+  eps.push(BRIDGE_HUB_ENDPOINT);
   for (const ep of [...new Set(eps)]) {
     try {
       const r = await fetch(new URL("/health", ep).href,

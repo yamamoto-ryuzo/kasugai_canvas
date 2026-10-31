@@ -1,14 +1,15 @@
-// KASUGAI Canvas ブリッジハブ — ブラウザ WebGIS 用（Rust 実装・Node.js 不要）。
-// アプリ版（kasugai_canvas.exe）を持たない環境で、ブラウザ WebGIS
-//（CDN・静的配信）からブリッジ系プロバイダ（copilot / devin / antigravity）
-// を使うための常駐プロセス。本体のアプリ内モジュール bridge/ と同一実装を
-// 127.0.0.1 で待受させる（各プロバイダは利用時に外部 CLI を子プロセス起動）。
+// KASUGAI Canvas ブリッジハブ — 唯一の常駐ハブ（Rust 実装・Node.js 不要）。
+// ブリッジ系プロバイダ（copilot / devin / antigravity）を使うための常駐
+// プロセスで、アプリ版・ブラウザ WebGIS（CDN・静的配信）のどちらからも
+// この1本を共有する（アプリはハブを内蔵しない。アプリ起動時に未起動なら
+// 本体がこの exe を自動起動する）。実装は bridge/ モジュールを 127.0.0.1
+// で待受させるだけ（各プロバイダは利用時に外部 CLI を子プロセス起動）。
 //
 // 起動:
 //   bridge-hub.exe            （インストール先以外からの実行 = 自己インストール。
 //                              ダウンロード直後に実行するだけで
 //                              %LOCALAPPDATA%\kasugai\bridge-hub\ へコピー →
-//                              ログイン時自動起動タスク登録 → 8512 で起動）
+//                              ログイン時自動起動タスク登録 → 8511 で起動）
 //   bridge-hub.exe --serve    （インストールせずその場でハブ起動・既定 8511）
 //   bridge-hub.exe --install  （自己インストールを明示実行。
 //                              既定ではブリッジ用 CLI の未導入分も
@@ -23,10 +24,13 @@ use kasugai_canvas::bridge::{self, BridgeState};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-// 既定はアプリのハブと同じ 8511。ブラウザ WebGIS 用の自動起動は 8512
+// 待受ポート。ハブは全環境で 8511 に一本化（旧ブラウザ WebGIS 用の 8512 は廃止）
 const DEFAULT_PORT: u16 = 8511;
 #[cfg(windows)]
-const WEBGIS_PORT: u16 = 8512;
+const WEBGIS_PORT: u16 = 8511;
+// 旧ブラウザ WebGIS 用ハブの常駐ポート。移行時に残存していれば掃除する
+#[cfg(windows)]
+const LEGACY_WEBGIS_PORT: u16 = 8512;
 // 自動起動タスク名（install-autostart.ps1 と同じ名前を使い互換にする）
 #[cfg(windows)]
 const TASK_NAME: &str = "KasugaiCanvasBridgeHub";
@@ -38,7 +42,7 @@ Set fso = CreateObject(\"Scripting.FileSystemObject\")
 dir = fso.GetParentFolderName(WScript.ScriptFullName)
 Set shell = CreateObject(\"WScript.Shell\")
 shell.CurrentDirectory = dir
-shell.Environment(\"PROCESS\").Item(\"BRIDGE_HUB_PORT\") = \"8512\"
+shell.Environment(\"PROCESS\").Item(\"BRIDGE_HUB_PORT\") = \"8511\"
 shell.Run \"\"\"\" & dir & \"\\bridge-hub.exe\"\"\", 0, False
 ";
 
@@ -120,7 +124,7 @@ fn kill_all_hub_processes() {
 }
 
 // 自己インストール: インストール先へ自己コピー → run-hidden.vbs 書出し →
-// ログイン時自動起動タスク登録 → 8512 で非表示起動 → ブリッジ用 CLI 導入。
+// ログイン時自動起動タスク登録 → 8511 で非表示起動 → ブリッジ用 CLI 導入。
 // 管理者権限は不要（%LOCALAPPDATA%・ユーザー自身のタスクのみ触る）。
 // install_cli=false（--no-cli-setup）なら CLI 導入を省略する
 #[cfg(windows)]
@@ -177,7 +181,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
          $p = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited; \
          $s = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero); \
          try {{ Register-ScheduledTask -TaskName '{}' -Action $a -Trigger $t -Principal $p -Settings $s -Force \
-           -Description 'KASUGAI Canvas AI bridge hub (http://127.0.0.1:8512/agent)' -ErrorAction Stop | Out-Null; exit 0 }} \
+           -Description 'KASUGAI Canvas AI bridge hub (http://127.0.0.1:8511/agent)' -ErrorAction Stop | Out-Null; exit 0 }} \
          catch {{ exit 1 }}",
         vbs.display(),
         TASK_NAME
@@ -202,11 +206,18 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     }
-    // 8512 の占有者を整理してから起動する:
+    // 旧ブラウザ WebGIS 用ハブ（8512 常駐）が残っていれば掃除する。
+    // 8511 への一本化で 8512 のハブは全て旧版なので問答無用で停止する
+    if occupied_by_hub(LEGACY_WEBGIS_PORT).await || port_owner_image_is_hub(LEGACY_WEBGIS_PORT) {
+        eprintln!("bridge-hub: 旧ポート 8512 のハブを停止します（8511 へ一本化）");
+        kill_all_hub_processes();
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    }
+    // {WEBGIS_PORT} の占有者を整理してから起動する:
     // - 占有者がハブ（/health が hub:true）なら旧版とみなして停止し新版へ置き換える
     // - 無関係な別プロセスなら kill せず警告だけ出す（アプリ本体の更新ポリシーと同じ）
     if occupied_by_hub(WEBGIS_PORT).await {
-        eprintln!("bridge-hub: 8512 の既存ハブを停止して新版へ置き換えます");
+        eprintln!("bridge-hub: {WEBGIS_PORT} の既存ハブを停止して新版へ置き換えます");
         kill_all_hub_processes();
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     } else {

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.5.18</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.6.0</span></h1>
       <p>【API】内蔵AI — Gemini・OpenAI互換・Google Maps Platform</p>
     </header>
     <main>
@@ -55,7 +55,7 @@
               <tr><td>AI 側の資格</td><td>BYO キー、またはサーバーキー（<code>/api/gemini</code>）</td><td>ブリッジ側が持つ（Copilot CLI ログイン等）。ブラウザにキーは不要</td></tr>
               <tr><td>ツール実行方式</td><td>function calling ループ — ツール結果を見て複数往復で判断するため多段操作に強い</td><td>単発キュー — 応答の <code>actions</code> を一括実行。ツール結果を見た往復はしない</td></tr>
               <tr><td>向いている用途</td><td>高精度な地図操作・プラグイン生成・資料生成などの本体 AI</td><td>既存の Copilot 契約や自作エージェント（外部実装）を繋いで使う</td></tr>
-              <tr><td>提供形態</td><td>通常版</td><td>外部エージェントは両形態。GitHub Copilot / Devin / Antigravity の専用選択肢は <strong>ブリッジハブ検出環境</strong>（アプリ版 :8511 または同一PCのブラウザ WebGIS 用 bridge-hub :8512）で表示</td></tr>
+              <tr><td>提供形態</td><td>通常版</td><td>外部エージェントは両形態。GitHub Copilot / Devin / Antigravity の専用選択肢は <strong>ブリッジハブ検出環境</strong>（同一PCの常駐 bridge-hub :8511 — アプリ版・ブラウザ WebGIS 共通）で表示</td></tr>
             </tbody>
           </table>
           <p>どちらを選んでもチャット UI・地図操作・<code>runCode</code>・破壊的操作の確認ダイアログは共通です。ブリッジ系を選んだ場合のみ「エンドポイントURL・トークン・BYOキー送信」のブリッジ欄が表示され、GitHub Copilot / Devin / Antigravity ではさらにモデル選択と疎通ステータスが表示されます。</p>

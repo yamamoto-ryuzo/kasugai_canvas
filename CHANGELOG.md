@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.6.0] - 2026-10-31
+
+### Changed
+
+- **AI ブリッジハブを常駐の bridge-hub.exe 1本（127.0.0.1:8511）に一本化** — アプリ内蔵ハブ（:8511）とブラウザ WebGIS 用 bridge-hub.exe（:8512）の二重管理を解消し、アプリ版・CDN のどちらからも同じ常駐ハブを使う構成に変更。アプリはハブを内蔵せず、起動時に 8511 のハブが未応答ならインストール済み `bridge-hub.exe` を `BRIDGE_HUB_PORT=8511` で自動起動する（`ensure_standalone_hub`）。capabilities からのブリッジ feature/endpoint 通知も廃止し、フロントは 8511 の `/health` が `hub:true` を返すかで検出する（`WEBGIS_HUB_PORTS` は [8511] のみ）
+- **旧 8512 常駐ハブは起動時に自動掃除** — ハブ側（自己インストール時）とアプリ側（起動時）の両方が 8512/8513 のブリッジ占有者を停止して 8511 へ移行させる。`run-hidden.vbs`/`install-autostart.ps1`/`setup.cmd`・`bridge-hub.zip`・自己インストール exe もすべて 8511 指定に更新
+
 ## [6.5.18] - 2026-10-31
 
 ### Changed

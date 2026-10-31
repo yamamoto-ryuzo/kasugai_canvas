@@ -352,7 +352,7 @@
   "chat.provider.agent": "【桥接】 外部代理",
   "chat.provider.devin": "【桥接】 Devin",
   "chat.provider.antigravity": "【桥接】 Antigravity",
-  "chat.bridge.hubNote": "此提供程序需要本地桥接中心。应用版已内置，无需额外安装。若要在浏览器 WebGIS（CDN／静态托管）中使用，请下载并运行 bridge-hub.exe —— 它会自行安装到 %LOCALAPPDATA%，注册登录时自动启动并以 :8512 启动，还会自动安装 copilot/devin CLI（只需运行一次；无需 Node.js）。Antigravity 还需另行安装 Antigravity(IDE) 并登录 Google。",
+  "chat.bridge.hubNote": "此提供程序需要本地桥接中心（应用版与浏览器 WebGIS 共用）。请下载并运行 bridge-hub.exe —— 它会自行安装到 %LOCALAPPDATA%，注册登录时自动启动并以 :8511 启动，还会自动安装 copilot/devin CLI（只需运行一次；无需 Node.js）。Antigravity 还需另行安装 Antigravity(IDE) 并登录 Google。",
   "chat.bridge.hubDownload": "下载 bridge-hub.zip",
   "chat.bridge.hubDownloadExe": "下载 bridge-hub.exe",
   "chat.bridge.hubTitle": "桥接中心",

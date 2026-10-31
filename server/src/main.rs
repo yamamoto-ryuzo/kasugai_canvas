@@ -16,8 +16,6 @@ use tokio::sync::{Mutex, Notify};
 use tower::ServiceExt;
 use tower_http::services::ServeDir;
 
-use kasugai_canvas::bridge;
-
 const UPDATE_CONFIG_FILE_NAME: &str = "kasugai_canvas.update.json";
 const CLOUD_CONFIG_FILE_NAME: &str = "kasugai_canvas.cloud.json";
 const FETCH_CONFIG_FILE_NAME: &str = "kasugai_canvas.fetch.json";
@@ -101,14 +99,6 @@ struct AppState {
     projects_dir: Arc<PathBuf>,
     // ローカル実行(127.0.0.1バインド)のとき true。高権限APIの公開可否判定に使う
     is_local: bool,
-    // AIブリッジハブ（アプリ内モジュール。127.0.0.1:8511 で待受）。
-    // Copilot/Devin/Antigravity 各プロバイダは外部 CLI を遅延起動する。
-    // ローカル実行時のみ Some
-    bridge_state: Option<Arc<bridge::BridgeState>>,
-    // フロントへ通知するブリッジのエージェントエンドポイント(管理対象がある場合のみ)
-    copilot_endpoint: Option<String>,
-    devin_endpoint: Option<String>,
-    antigravity_endpoint: Option<String>,
     // 外部プロセス→ブラウザへのリモートコマンド中継(local 実行時のみ公開)。
     // POST /api/command で投入、フロントが GET /api/command?since=&wait= で
     // ロングポーリング受信してチャットツールとして実行し、結果を
@@ -246,26 +236,14 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
         features.push("cloudRclone");
         features.push("remoteCommand");
     }
-    // Copilot ブリッジの管理対象があるときはエンドポイントを通知する
-    if state.copilot_endpoint.is_some() {
-        features.push("copilotBridge");
-    }
-    // Devin ブリッジの管理対象があるときも同様に通知する
-    if state.devin_endpoint.is_some() {
-        features.push("devinBridge");
-    }
-    // Antigravity ブリッジの管理対象があるときも同様に通知する
-    if state.antigravity_endpoint.is_some() {
-        features.push("antigravityBridge");
-    }
+    // ブリッジハブはアプリ内蔵を廃止し、常駐の bridge-hub.exe（127.0.0.1:8511）
+    // に一本化したため capabilities では通知しない。フロントは /health 疎通で
+    // ハブを検出する（ブラウザ WebGIS と同じ経路）
     Json(json!({
         "tier": "local",
         "name": "kasugai_canvas",
         "version": env!("CARGO_PKG_VERSION"),
         "features": features,
-        "copilot": state.copilot_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null),
-        "devin": state.devin_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null),
-        "antigravity": state.antigravity_endpoint.as_ref().map(|e| json!({ "endpoint": e })).unwrap_or(Value::Null)
     }))
 }
 
@@ -3390,10 +3368,6 @@ mod localize_tests {
                 web_dir: Arc::new(root.clone()),
                 projects_dir: Arc::new(root.join("projects")),
                 is_local: true,
-                bridge_state: None,
-                copilot_endpoint: None,
-                devin_endpoint: None,
-                antigravity_endpoint: None,
                 remote: Arc::new(RemoteBus {
                     inner: StdMutex::new(RemoteInner::default()),
                     notify_commands: Notify::new(),
@@ -5111,21 +5085,13 @@ fn resolve_dir(
     fallback()
 }
 
-// ---- AI ブリッジハブ（アプリ版のみ） ----
-// Copilot/Devin/Antigravity はブラウザから直接呼べる公開APIを持たないため、
-// アプリ内モジュールが各 CLI を子プロセス起動して中継する（bridge/ モジュール）。
-// 待受ポートは既定 8511。BRIDGE_HUB_PORT 環境変数で変更できる
-//（capabilities が実ポートのエンドポイントを通知するためブラウザ側設定は不要）
-fn bridge_hub_port() -> u16 {
-    std::env::var("BRIDGE_HUB_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8511)
-}
-// 旧版が残したブリッジの掃除対象ポート（占有者がブリッジの場合のみ停止する）
-// ただし 8512 はブラウザ WebGIS 用 bridge-hub（アプリ未導入環境向けの手動起動
-// ハブ）の既定ポートでもあるため、/health が hub:true を返すプロセスは
-// 掃除対象から外す（kill_bridge_on_port の kill_hub=false 参照）
+// ---- AI ブリッジハブ ----
+// ハブは常駐の bridge-hub.exe（127.0.0.1:8511）に一本化し、アプリは内蔵しない。
+// アプリ起動時に 8511 のハブ未応答なら、インストール済みの bridge-hub.exe を
+// 自動起動する（未インストールならフロントの自己インストール導線が案内する）
+const BRIDGE_HUB_PORT: u16 = 8511;
+// 旧常駐ハブ・旧ブリッジの掃除対象ポート。8511 への一本化で 8512/8513 の
+// ブリッジは全て旧版なので、占有者がブリッジなら停止して新版へ移行させる
 const LEGACY_BRIDGE_PORTS: [u16; 2] = [8512, 8513];
 
 // 指定ポートを LISTEN しているプロセスの PID 一覧。
@@ -5235,8 +5201,7 @@ async fn kill_process_forced(pid: u32, ancestor_pid: Option<u32>) {
 // PID を特定して kill し true を返す。無関係なプロセスの誤終了を防ぐため、
 // ブリッジ以外が使っている場合は何もしない（従来通り起動スキップの扱い）。
 // kill_hub=false の場合は応答が hub:true のブリッジハブを kill しない
-// （8512 はブラウザ WebGIS 用 bridge-hub の既定ポートとして残すため。
-// 旧ブリッジは hub キーを返さないので従来通り掃除される）
+//（旧ブリッジは hub キーを返さないので従来通り掃除される）
 // ancestor_pid は自分の祖先(自動更新の旧プロセス)。占有者が祖先に一致する
 // 場合は taskkill /T が自分を道連れにするため kill_process_forced が単独 kill する
 async fn kill_bridge_on_port(port: u16, ancestor_pid: Option<u32>, kill_hub: bool) -> bool {
@@ -5270,6 +5235,72 @@ async fn kill_bridge_on_port(port: u16, ancestor_pid: Option<u32>, kill_hub: boo
     }
     true
 }
+
+// 8511 のハブが応答しなければ、インストール済みの bridge-hub.exe を起動する。
+// ハブはアプリ・ブラウザ WebGIS 共通の常駐プロセスに一本化したため、アプリは
+// 内蔵せず「インストール済みなら起動しておく」だけを担う（未インストールなら
+// フロントの自己インストール導線が案内する）。占有者がハブ以外なら警告のみ
+async fn ensure_standalone_hub(hub_port: u16, ancestor_pid: Option<u32>) {
+    let hub_ok = async {
+        let r = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{hub_port}/health"))
+            .timeout(std::time::Duration::from_secs(2))
+            .send()
+            .await
+            .ok()?;
+        let v: serde_json::Value = r.json().await.ok()?;
+        v.get("hub").and_then(|h| h.as_bool())
+    }
+    .await
+    .unwrap_or(false);
+    if hub_ok {
+        return;
+    }
+    // 占有者が応答しない旧ハブなら停止してから起動する
+    if TcpListener::bind(("127.0.0.1", hub_port)).await.is_err()
+        && kill_bridge_on_port(hub_port, ancestor_pid, true).await
+    {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    if TcpListener::bind(("127.0.0.1", hub_port)).await.is_err() {
+        eprintln!("bridge-hub: 127.0.0.1:{hub_port} はハブ以外のプロセスが使用中のため起動をスキップします");
+        return;
+    }
+    launch_installed_hub(hub_port);
+}
+
+// インストール済み bridge-hub.exe（%LOCALAPPDATA%\kasugai\bridge-hub）を
+// 非表示・親から切り離して起動する。BRIDGE_HUB_PORT を明示するため、
+// インストール済み exe が旧版（vbs が 8512 指定）でも 8511 に統一される。
+// Windows 専用（他 OS はインストーラーが無いため何もしない）
+#[cfg(windows)]
+fn launch_installed_hub(hub_port: u16) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+    let Some(exe) = std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .map(|p| p.join("kasugai").join("bridge-hub").join("bridge-hub.exe"))
+        .filter(|p| p.exists())
+    else {
+        eprintln!("bridge-hub: 未インストールのため起動しません（チャットのブリッジ系プロバイダ選択時にインストール案内が出ます）");
+        return;
+    };
+    let spawned = std::process::Command::new(&exe)
+        .env("BRIDGE_HUB_PORT", hub_port.to_string())
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
+        .spawn();
+    match spawned {
+        Ok(_) => eprintln!("bridge-hub: インストール済みハブを起動しました ({})", exe.display()),
+        Err(e) => eprintln!("bridge-hub: 起動に失敗しました: {e}"),
+    }
+}
+
+#[cfg(not(windows))]
+fn launch_installed_hub(_hub_port: u16) {}
 
 // Windows は taskkill /T で子孫(Copilot/Devin CLI 等)まで落とす。
 // 他OSは直接の子のみ kill（孫プロセスは孤児になりうるが CLI 側で短命に終わる想定）
@@ -5336,16 +5367,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // コンテナ実行(PORT 設定時)は高権限APIを公開しない
     let is_local = cloud_port.is_none();
 
-    // ブリッジハブ: ローカル実行時のみ管理対象（アプリ内モジュール bridge/）。
-    // Copilot/Devin/Antigravity 各プロバイダは外部 CLI を必要時に spawn する
-    let hub_port = bridge_hub_port();
-    let hub_endpoint = || format!("http://127.0.0.1:{hub_port}/agent");
-    // プロバイダごとの提供可否は「ローカル実行・個別無効化なし」で決まる
-    let provider_available = |disable_env: &str| is_local && std::env::var_os(disable_env).is_none();
-    let copilot_endpoint = provider_available("KASUGAI_NO_COPILOT_BRIDGE").then(hub_endpoint);
-    let devin_endpoint = provider_available("KASUGAI_NO_DEVIN_BRIDGE").then(hub_endpoint);
-    let antigravity_endpoint = provider_available("KASUGAI_NO_ANTIGRAVITY_BRIDGE").then(hub_endpoint);
-
     let external_projects_path = executable_directory.join(EXTERNAL_PROJECTS_FILE_NAME);
     let state = AppState {
         update_config_path: Arc::new(executable_directory.join(UPDATE_CONFIG_FILE_NAME)),
@@ -5361,13 +5382,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         web_dir: Arc::new(web_dir.clone()),
         projects_dir: Arc::new(projects_dir.clone()),
         is_local,
-        bridge_state: (copilot_endpoint.is_some()
-            || devin_endpoint.is_some()
-            || antigravity_endpoint.is_some())
-        .then(|| Arc::new(bridge::BridgeState::new(hub_port))),
-        copilot_endpoint,
-        devin_endpoint,
-        antigravity_endpoint,
         remote: Arc::new(RemoteBus {
             inner: StdMutex::new(RemoteInner::default()),
             notify_commands: Notify::new(),
@@ -5521,42 +5535,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("KASUGAI Canvas: http://{address}");
 
-    // ブリッジハブ（アプリ内モジュール bridge/）を起動する。
-    // 8511 が使用中でも占有者がブリッジ（前回起動の残骸・旧バージョン等）なら
-    // 強制停止して新版へ差し替える。ブリッジ以外の占有時のみ起動をスキップする。
-    // ついでに旧版の常駐ポート（8512/8513）に残ったブリッジ残骸も掃除する。
-    // 占有確認・kill は axum::serve を遅延させないよう spawn 内で行う
-    if let Some(bridge_state) = state.bridge_state.clone() {
+    // ブリッジハブは常駐の bridge-hub.exe（127.0.0.1:8511）に一本化し、
+    // アプリ内蔵は廃止。旧版の常駐ポート（8512/8513）に残ったブリッジは掃除し、
+    // 8511 のハブが未応答ならインストール済みの bridge-hub.exe を自動起動する。
+    // 疎通確認・kill・起動は axum::serve を遅延させないよう spawn 内で行う
+    if is_local {
         tokio::spawn(async move {
-            // 旧版ブリッジ（8512/8513）が残っていれば停止する。
-            // ハブ(hub:true)は残す — 8512 はブラウザ WebGIS 用 bridge-hub の既定ポート
             for legacy_port in LEGACY_BRIDGE_PORTS {
                 if TcpListener::bind(("127.0.0.1", legacy_port)).await.is_err()
-                    && kill_bridge_on_port(legacy_port, finish_update_pid, false).await
+                    && kill_bridge_on_port(legacy_port, finish_update_pid, true).await
                 {
                     eprintln!("bridge-hub: 旧版ブリッジ (port {legacy_port}) を停止しました");
                 }
             }
-            let mut listener = TcpListener::bind(("127.0.0.1", hub_port)).await.ok();
-            if listener.is_none() && kill_bridge_on_port(hub_port, finish_update_pid, true).await {
-                // kill 直後はポート解放を短時間待つ
-                for _ in 0..20 {
-                    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    if let Ok(l) = TcpListener::bind(("127.0.0.1", hub_port)).await {
-                        listener = Some(l);
-                        break;
-                    }
-                }
-            }
-            match listener {
-                Some(l) => {
-                    eprintln!("bridge-hub: http://127.0.0.1:{hub_port}/agent");
-                    bridge::serve(bridge_state, l).await;
-                }
-                None => {
-                    eprintln!("bridge-hub: 127.0.0.1:{hub_port} は別プロセスが使用中のため起動をスキップします");
-                }
-            }
+            ensure_standalone_hub(BRIDGE_HUB_PORT, finish_update_pid).await;
         });
     }
 
@@ -5576,10 +5568,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // rclone serve 子プロセスが残らないようにする(ドライブ割当はOS側の設定なので残る)
     if let Some(mut serve) = state.cloud.lock().await.serve.take() {
         let _ = serve.child.kill().await;
-    }
-    // ブリッジハブのエージェント子プロセスも終了させる
-    if let Some(bs) = &state.bridge_state {
-        bs.shutdown().await;
     }
     Ok(())
 }

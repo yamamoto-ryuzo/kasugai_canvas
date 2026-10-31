@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SERVER_DIR = ROOT / "server"
 TARGET_EXE = SERVER_DIR / "target" / "release" / "kasugai_canvas.exe"
+BRIDGE_EXE = SERVER_DIR / "target" / "release" / "bridge-hub.exe"
 DOWNLOAD_DIR = ROOT / "download"
 DOWNLOAD_ZIP = DOWNLOAD_DIR / "kasugai_canvas.zip"
 DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
@@ -339,10 +340,18 @@ def build_installer(channel: dict) -> None:
         print("makensis が見つからないため、インストーラー作成をスキップします。")
         print("NSIS をインストールしてから再実行してください。")
         return
+    # bridge-hub.exe はインストーラーが %LOCALAPPDATA% へ自己インストールさせる
+    # 同梱物（アプリ・ブラウザ WebGIS 共通の常駐ハブ:8511）。欠けていれば作る
+    if not BRIDGE_EXE.exists():
+        subprocess.run(
+            ["cargo", "build", "--release", "--bin", "bridge-hub"],
+            cwd=SERVER_DIR, check=True,
+        )
     subprocess.run(
         [
             makensis,
             f"/DBUILD_EXE={TARGET_EXE}",
+            f"/DBUILD_BRIDGE_EXE={BRIDGE_EXE}",
             f"/DSAMPLE_PROJECTS={SAMPLE_PROJECTS}",
             f"/DWEB_DIR={WEB_DIR}",
             f"/DSETUP_OUT={channel['installer_name']}",
@@ -409,9 +418,10 @@ def build_release() -> None:
                     continue
                 if web_file.is_file():
                     archive.write(web_file, arcname=(Path("web") / web_file.relative_to(web_dir)).as_posix())
-        # AI ブリッジハブは Rust 製アプリ内モジュールに統合済み（server/src/bridge/）。
-        # 旧 Node 製ブリッジは撤去済み。ブラウザ WebGIS 向け配布 bridge-hub.zip は
-        # Rust 製 bridge-hub.exe（web/download/ 経由で配信・tools/build_bridge_zip.py）
+        # AI ブリッジハブは常駐の bridge-hub.exe（server/src/bin/bridge-hub.rs）
+        # 1本に集約済み（:8511・アプリ内蔵なし）。ブラウザ WebGIS 向け配布
+        # bridge-hub.zip は web/download/ 経由（tools/build_bridge_zip.py）。
+        # インストーラー側は bridge-hub.exe を同梱し --install で常駐登録する
     print(f"ZIP を作成しました: {download_zip}")
 
     print("ZIP 内 EXE のバージョンを確認します...")

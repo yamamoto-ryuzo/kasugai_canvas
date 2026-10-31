@@ -3,6 +3,9 @@
 !ifndef BUILD_EXE
   !define BUILD_EXE "..\server\target\release\kasugai_canvas.exe"
 !endif
+!ifndef BUILD_BRIDGE_EXE
+  !define BUILD_BRIDGE_EXE "..\server\target\release\bridge-hub.exe"
+!endif
 !ifndef SAMPLE_PROJECTS
   !define SAMPLE_PROJECTS "..\installer\projects"
 !endif
@@ -31,10 +34,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "6.5.18.0"
+VIProductVersion "6.6.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "6.5.18"
+VIAddVersionKey "FileVersion" "6.6.0"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -53,12 +56,22 @@ VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC
 !insertmacro MUI_LANGUAGE "Japanese"
 
 Function .onInit
+  ; 既存の本体プロセスは停止する（8510・旧版の内蔵ハブ8511も道連れ解放）。
+  ; 常駐の bridge-hub.exe は共有コンポーネントのためここでは殺さず、
+  ; 後段の --install 自己インストールが旧ハブを停止して差し替える
   ExecWait '"$SYSDIR\taskkill.exe" /IM "${APP_EXE}" /T /F'
 FunctionEnd
 
 Section "Install"
   SetOutPath "$INSTDIR"
   File "${BUILD_EXE}"
+  File "${BUILD_BRIDGE_EXE}"
+  ; AI ブリッジハブ（アプリ・ブラウザ WebGIS 共通の常駐1本・:8511）を
+  ; 自己インストール: %LOCALAPPDATA%\kasugai\bridge-hub へ配置 +
+  ; ログイン時自動起動登録 + 8511 で起動。既存ハブは自己インストール側が
+  ; 停止して差し替える。--no-cli-setup で CLI 導入は省く（利用時に /setup で遅延導入）。
+  ; ハブは共有インフラのためアンインストールでは削除しない
+  ExecWait '"$INSTDIR\bridge-hub.exe" --install --no-cli-setup'
 
   SetOutPath "$INSTDIR\web"
   ; vendor/ (vendored gsimaps) is served from the CDN and must not be bundled.
@@ -110,6 +123,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\web"
   RMDir /r "$INSTDIR\projects"
   Delete "$INSTDIR\${APP_EXE}"
+  Delete "$INSTDIR\bridge-hub.exe"
   Delete "$INSTDIR\kasugai_canvas.update.json"
   Delete "$INSTDIR\kasugai_canvas.cloud.json"
   Delete "$INSTDIR\kasugai_canvas.projects.json"
