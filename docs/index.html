@@ -91,8 +91,8 @@ flowchart TB
 
   REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/<br/>cesium / maplibre / openlayers / leaflet / gsimaps / navara(試験)"]
   REPO ==>|"run.py -B → ZIP（自動更新）"| APP["ローカルアプリ<br/>kasugai_canvas.exe :8510<br/>フル機能（QGIS連携・保存・rclone・AIブリッジ）"]
-  CDN -.->|"vendor/*（gsimaps・navara）は<br/>vendor-proxy-sw.js（SW 制御）が<br/>同一オリジン中継"| APP
-  CDN -.->|"vendor/*（gsimaps・navara）は<br/>vendor-proxy-sw.js（SW 制御）が<br/>同一オリジン中継"| WEB
+  CDN -.->|"vendor/*（gsimaps・navara）<br/>SW 制御"| APP
+  CDN -.->|"vendor/*（gsimaps・navara）<br/>SW 制御"| WEB
 
   QGIS["QGIS + geo_webview"] -->|"エクスポート"| DATA[".kasc + DATA/ のみ配置<br/>任意の静的ホスト or :8089<br/>（エンジンは CDN 経由）"]
 
