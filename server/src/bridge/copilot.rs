@@ -166,6 +166,22 @@ fn cli_candidates() -> Vec<(String, Vec<String>)> {
     list
 }
 
+// GitHub CLI (gh) が認証済みならトークンを取得する
+// （copilot CLI の TUI /login を省略するための自動認証用）
+fn gh_auth_token() -> Option<String> {
+    std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| {
+            let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if t.is_empty() { None } else { Some(t) }
+        })
+}
+
 impl CopilotBridge {
     pub fn new() -> Self {
         Self {
@@ -194,6 +210,11 @@ impl CopilotBridge {
             return Ok(c.clone());
         }
         let workdir = common::workdir("copilot");
+        // GitHub CLI (gh) が認証済みなら token を環境変数で渡し、copilot の
+        // TUI /login を省略して自動認証する（devin の PKCE 自動認証相当）。
+        // 既に COPILOT_GITHUB_TOKEN/GH_TOKEN が設定済みなら spawn に自動継承される
+        let gh_tok = if std::env::var("COPILOT_GITHUB_TOKEN").is_ok()
+            || std::env::var("GH_TOKEN").is_ok() { None } else { gh_auth_token() };
         let mut last_err = String::from("copilot CLI が見つかりません（COPILOT_CLI_PATH でインストール先を指定してください）");
         for (program, prefix) in cli_candidates() {
             let mut cmd = common::new_command(&program);
@@ -204,6 +225,9 @@ impl CopilotBridge {
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .kill_on_drop(true);
+            if let Some(tok) = &gh_tok {
+                cmd.env("COPILOT_GITHUB_TOKEN", tok).env("GH_TOKEN", tok);
+            }
             let mut child = match cmd.spawn() {
                 Ok(c) => c,
                 Err(_) => continue,

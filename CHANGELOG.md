@@ -4,6 +4,22 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.16] - 2026-10-31
+
+### Added
+
+- **copilot CLI の自動認証**（`server/src/bridge/copilot.rs`）— GitHub CLI（gh）が認証済みの場合、`gh auth token` で得たトークンを `COPILOT_GITHUB_TOKEN`/`GH_TOKEN` として copilot プロセスへ自動注入し、TUI の `/login` を省略（devin の PKCE 自動認証相当）。環境変数が既設定ならそちらを優先
+- ブリッジ設定タブの状態チップに**ログイン状態を追加**（導入済み・ログイン済み=緑 / 導入済み・未ログイン=橙）— `/models` で実一覧が取れるかで判定し、未ログインが残れば30秒後に一度だけ再チェック（モデル確認が devin PKCE 等の認証フローを起動し得るため）
+- 環境バッジ「環境: アプリ／CDN・静的配信」をバージョン欄とブリッジ設定タブ先頭に表示
+
+### Changed
+
+- 「インストール」タブを「ブリッジ設定」に改名し、各行を【CDN】【アプリ】の利用環境タグで明示（ハブ=CDN専用／CLI=両環境利用）
+
+### Fixed
+
+- 状態チップが `/setup` 応答の `providers.*` 配下を読めず全員「未導入」になっていた問題を修正
+
 ## [6.5.15] - 2026-10-31
 
 ### Added
