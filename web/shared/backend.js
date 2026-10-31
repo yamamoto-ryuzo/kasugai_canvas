@@ -81,16 +81,26 @@ async function probeLocalBackend(timeoutMs) {
   return false;
 }
 
+// prompt 経路の再読込は同一タブで1回に制限する。権限が prompt のまま
+// 疎通だけ通る環境(headless・PNA未強化)では、再読込後も同じ経路が発火して
+// ロードループになるため。フラグ済みの2回目以降は通常疎通で capabilities
+// を直接採用して終了する
+const BACKEND_RELOAD_FLAG = "kasugai_backend_reloaded";
+
 // 静的配信環境でのフォールバック検出
 async function detectLocalBackend() {
   const perm = await localNetworkPermission();
-  if (perm?.state === "prompt") {
+  let reloaded = false;
+  try { reloaded = !!sessionStorage.getItem(BACKEND_RELOAD_FLAG); } catch (e) {}
+  if (perm?.state === "prompt" && !reloaded) {
     // 権限プロンプトはローカルへの実リクエストで発火し、応答はユーザーの
     // 判断を待って保留される。ページ読込を止めないよう検出とは別に長めの
     // 疎通を投げ、許可されてバックエンドが見つかった場合だけ再読込して
     // ローカル連携（ブリッジ・/projects/*）を有効化する
     void (async () => {
-      if (await probeLocalBackend(60000)) window.location.reload();
+      if (!(await probeLocalBackend(60000))) return;
+      try { sessionStorage.setItem(BACKEND_RELOAD_FLAG, "1"); } catch (e) {}
+      window.location.reload();
     })();
     return;
   }

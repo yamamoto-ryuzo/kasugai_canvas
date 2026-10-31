@@ -9,52 +9,16 @@
   // vendored 地理院地図(web/vendor/gsimaps)は配布物・リポジトリに同梱しない。
   // vendorGuardProbe(shared/vendor-guard.js)が vendor-proxy-sw を登録し、
   // vendor/* を CDN へ同一オリジン中継する（github.io のような静的配信でも
-  // 有効）。HEAD が通ればローカルのまま起動し、
-  // 通らない環境(SW 非対応・CDN 不通)のみホスト版(kasugai-canvas-web)の
-  // gsimaps エンジンへ転送する
+  // 有効）。Service Worker 前提（SW 非対応環境のフォールバックは持たない）
   (function () {
     var VENDOR_URL = "../vendor/gsimaps/index_pm.html";
-    var hostedBase = window.vendorHostedBase;
     vendorGuardProbe(VENDOR_URL)
-      .then(function (hasVendor) {
+      .then(function () {
         if (window.parent !== window) {
           // この中間エンジンページはトップレベル専用。iframe 内に読み込まれた
           // 場合は vendored 地理院地図へ差し替えて自己修復(ネスト二重表示の根絶)
-          var raw = hasVendor ? new URL(VENDOR_URL, location.href).href
-                              : hostedBase() + "vendor/gsimaps/index_pm.html";
-          location.replace(raw + location.hash);
-          return;
+          location.replace(new URL(VENDOR_URL, location.href).href + location.hash);
         }
-        if (hasVendor) return; // ローカル vendor で通常起動
-        var p = new URLSearchParams(location.search);
-        var kasc = p.get("kasc");
-        function go(kascUrl) {
-          var target = hostedBase() + "gsimaps/?kasc=" + encodeURIComponent(kascUrl);
-          if (p.get("dirhint")) target += "&dirhint=" + encodeURIComponent(p.get("dirhint"));
-          location.replace(target + location.hash);
-        }
-        function projectKasc(id) {
-          return new URL("../projects/" + encodeURIComponent(id || "default") +
-            "/kasugai_canvas.kasc", location.href).href;
-        }
-        if (kasc) {
-          if (kasc !== "local" && !/^localfs:/i.test(kasc)) {
-            kasc = new URL(kasc, location.href).href;
-            // file:// はCDNから読めないためローカルフォルダ直読みモードへ誘導
-            if (/^file:/i.test(kasc)) kasc = "local";
-          }
-          go(kasc);
-          return;
-        }
-        if (p.get("project")) { go(projectKasc(p.get("project"))); return; }
-        // 既定プロジェクト = projects マニフェスト先頭
-        fetch(new URL("../projects/projects.json", location.href), { cache: "no-store" })
-          .then(function (r) { return r.ok ? r.json() : []; })
-          .catch(function () { return []; })
-          .then(function (m) {
-            var first = m && m[0];
-            go(projectKasc(first && (first.id || first)));
-          });
       });
   })();
 </script>

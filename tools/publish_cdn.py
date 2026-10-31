@@ -19,7 +19,9 @@ usage:
     python tools/publish_cdn.py [cdn_repo_dir] --channel stable
     python tools/publish_cdn.py [cdn_repo_dir] --channel unstable --commit --push
     python tools/publish_cdn.py [cdn_repo_dir] --channel stable --vendor
-        # vendor/ も同期(vendor.json の sha 更新時など。既定は web/ 本体のみ)
+        # vendor/ も同期(vendor.json の sha 更新時など。既定は web/ 本体のみ。
+        # vendor 実体を置くのは stable のみ — SW の upstream が stable
+        # 固定のため unstable/vendor は参照されず配置しない)
 
     cdn_repo_dir 省略時は <kasugai_canvas>/../kasugai-canvas-web
 """
@@ -121,7 +123,7 @@ def _commit_and_push(cdn_dir, message, push):
 
 
 def _sync_vendors(stage, apply=False):
-    """vendor の CDN ステージとの sha 差分を報告し、apply 時のみ同期する。
+    """vendor の CDN ステージ(stable のみ)との sha 差分を報告し、apply 時のみ同期する。
 
     vendor(約75MB)の更新は手動運用が基本。発行のたび自動取得はせず、
     ステージ側の VENDOR.json sha と vendor.json の pin を比較して
@@ -160,7 +162,10 @@ def sync_channel(cdn_dir, channel, vendor=False):
     # vendor は別管理(手動・--vendor 指定時のみ同期)のため
     # web/ 全量コピーから除外
     _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))
-    _sync_vendors(stage, apply=vendor)
+    # vendor 実体が必要なのは stable のみ(SW の upstream が stable 固定。
+    # unstable/vendor は参照されないため配置・チェックとも行わない)
+    if channel == 'stable':
+        _sync_vendors(stage, apply=vendor)
     version = _cargo_version()
     _write_version_json(stage, {
         'version': version,

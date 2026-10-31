@@ -4,7 +4,7 @@
 // UI/共通機構は shared/ を他エンジンと共用する。
 import ThreeView, { Color } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, themeShowSet, fillThemeSelect, loadKascBookmarks, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, themeShowSet, fillThemeSelect, kascTitleInTheme, loadKascBookmarks, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat } from "../shared/ai-chat.js";
@@ -101,10 +101,32 @@ function focusExtent(env) {
   if (!env) return;
   flyTo({ longitude: (env.west + env.east) / 2, latitude: (env.south + env.north) / 2, height: zoomToCamHeight((env.south + env.north) / 2, 15) });
 }
+// Navara のリソースレイヤ(Layer ハンドル)には visible が無い。
+// 表示可否は各マテリアルの show で制御し、update() は全置換のため
+// 登録時に保存した desc へ show をマージした複製を渡す
+const LAYER_MATERIAL_KEYS = ["point", "polyline", "polygon", "text", "billboard", "raster", "hillshade", "elevationHeatmap", "model", "terrain", "ellipsoid"];
+const DEFAULT_MATERIAL_KEY = { raster: "raster", "3d-tiles": "model", terrain: "terrain" };
+function navaraSetShow(entry, on) {
+  const layer = entry.layer, desc = entry.desc;
+  if (!layer || typeof layer.update !== "function" || !desc) return;
+  const next = { ...desc };
+  let touched = false;
+  for (const k of LAYER_MATERIAL_KEYS) {
+    if (next[k] && typeof next[k] === "object") { next[k] = { ...next[k], show: on }; touched = true; }
+  }
+  // マテリアル未指定で追加したレイヤ(暗黙既定)は型既定のキーを補う
+  if (!touched) {
+    const k = DEFAULT_MATERIAL_KEY[next.type];
+    if (k) next[k] = { show: on };
+  }
+  try { layer.update(next); } catch (e) { console.warn("layer visibility", e); }
+}
 function setEntryVisible(entry, on) {
+  // applyEntryVisibility(entry) は引数1つで呼ばれ item.visible 前提のため、
+  // 未指定時は item.visible を正とする
+  if (on === undefined) on = entry.item.visible !== false;
   entry.item.visible = on;
-  try { entry.layer.visible = on; return; } catch (_) {}
-  try { entry.layer?.update?.({ visible: on }); } catch (_) {}
+  navaraSetShow(entry, on);
 }
 function progress(n, total, label) {
   if (!total) { panel.progress.hidden = true; return; }
@@ -140,7 +162,7 @@ async function maybeLoadEntry(entry) {
   entry.loading = true; syncRowStatus(entry);
   try {
     const r = await addKascLayer(entry.item, lastBaseUrl);
-    if (r) { entry.src = r.src; entry.layer = r.layer; }
+    if (r) { entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc; }
   } catch (e) { entry.failed = true; entry.error = String(e?.message || e); console.warn("layer failed", entry.item.title, e); }
   entry.loading = false; syncRowStatus(entry);
 }
@@ -431,9 +453,10 @@ async function applyBasemap(idx) {
   const b = baseDocs[idx];
   if (!b) return;
   basemapSrc = view.addSource({ type: "raster-tile", url: resolveKascUrl(b.url, lastBaseUrl), maxZoom: Number(b.opts?.maxzoom) || 18 });
-  basemapLayer = view.addLayer({ type: "raster", source: basemapSrc });
+  const desc = { type: "raster", source: basemapSrc };
+  basemapLayer = view.addLayer(desc);
   baseEntries.length = 0;
-  baseEntries.push({ item: b, src: basemapSrc, layer: basemapLayer });
+  baseEntries.push({ item: b, src: basemapSrc, layer: basemapLayer, desc });
 }
 panel.basemapSelect?.addEventListener("change", () => applyBasemap(Number(panel.basemapSelect.value)));
 
@@ -479,16 +502,18 @@ async function addKascLayer(item, baseUrl) {
   const url = item.url ? resolveKascUrl(item.url, baseUrl) : null;
   if (item.type === "3dtiles") {
     const src = view.addSource({ type: "3d-tiles", url });
-    const layer = view.addLayer({ type: "3d-tiles", source: src, model: { color: new Color().setHex(0xffffff), metalness: 0, roughness: 1, castShadow: true, receiveShadow: true } });
-    return { src, layer };
+    const desc = { type: "3d-tiles", source: src, model: { color: new Color().setHex(0xffffff), metalness: 0, roughness: 1, castShadow: true, receiveShadow: true } };
+    const layer = view.addLayer(desc);
+    return { src, layer, desc };
   }
   if (RASTER_TYPES.has(item.type)) {
     const src = view.addSource({ type: "raster-tile", url, maxZoom: Number(item.opts?.maxzoom) || 18, ...(item.opts?.minzoom ? { minZoom: Number(item.opts.minzoom) } : {}) });
-    const layer = view.addLayer({ type: "raster", source: src });
-    return { src, layer };
+    const desc = { type: "raster", source: src };
+    const layer = view.addLayer(desc);
+    return { src, layer, desc };
   }
   if (VECTOR_TYPES.has(item.type)) {
-    const loaded = await loadVectorItem(item, baseUrl, null);
+    const loaded = item._geojson ? { geojson: item._geojson } : await loadVectorItem(item, baseUrl, null);
     item._geojson = loaded.geojson;
     // QML スタイル: 代表地物の spec からレイヤ既定色を取る（Navara はレイヤ単位マテリアル）
     let fillCss = item.opts?.fill, strokeCss = item.opts?.stroke || item.opts?.color, markerCss = item.opts?.marker_color;
@@ -502,11 +527,12 @@ async function addKascLayer(item, baseUrl) {
       } catch (_) {}
     }
     const src = view.addSource({ type: "geojson", data: item._geojson, tiled: true });
-    const layer = view.addLayer({ type: "vector", source: src,
+    const desc = { type: "vector", source: src,
       polygon: { color: css2hex(fillCss || "#3d7dd9"), clampToGround: true },
       polyline: { color: css2hex(strokeCss || "#2c5ea8"), width: Number(item.opts?.width) || 3, clampToGround: true },
-      point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true } });
-    return { src, layer };
+      point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true } };
+    const layer = view.addLayer(desc);
+    return { src, layer, desc };
   }
   return null;
 }
@@ -525,7 +551,7 @@ async function renderLayers(doc, baseUrl) {
     if (item.visible === false) { progress(++done, visibleCount); continue; }
     try {
       const r = await addKascLayer(item, baseUrl);
-      if (r) { entry.src = r.src; entry.layer = r.layer; }
+      if (r) { entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc; }
     } catch (e) { entry.failed = true; entry.error = String(e?.message || e); console.warn("layer failed", item.title, e); }
     progress(++done, visibleCount, item.title || item.url);
   }
@@ -631,7 +657,7 @@ async function applyInspectorText(text) {
     const visMap = new Map(switchState.vis.map(v => [v.t, v.v]));
     for (const e of layerEntries) {
       const key = splitKascTitle(e.item.title).title || e.item.title;
-      if (visMap.has(key)) setEntryVisible(e, visMap.get(key));
+      if (visMap.has(key)) { setEntryVisible(e, visMap.get(key)); void maybeLoadEntry(e); }
     }
     buildLayerList(); syncAttribution();
   }
@@ -647,7 +673,7 @@ async function applyInspectorText(text) {
     const theme = currentThemes.find(t => t.name === panel.themeSelect.value);
     const show = themeShowSet(theme);
     if (!show) return;
-    for (const e of layerEntries) setEntryVisible(e, kascTitleInTheme(e.item.title, show));
+    for (const e of layerEntries) { setEntryVisible(e, kascTitleInTheme(e.item.title, show)); void maybeLoadEntry(e); }
     buildLayerList(); syncAttribution();
   });
   $("#apply-inspector")?.addEventListener("click", () => applyInspectorText(panel.inspector.value));
@@ -684,10 +710,24 @@ async function applyInspectorText(text) {
     getProjectId: () => currentProjectId,
     getEntries: () => layerEntries,
     getBaseEntries: () => baseEntries,
-    setBaseEntryVisible: (e, on) => { try { e.layer.visible = on; } catch (_) {} },
+    setBaseEntryVisible: (e, on) => navaraSetShow(e, on),
     applyEntryVisibility: (e, on) => setEntryVisible(e, on),
-    mountEntry: e => setEntryVisible(e, true),
-    unmountEntry: e => setEntryVisible(e, false),
+    mountEntry: async (e, preloaded) => {
+      if (!e.layer) {
+        if (preloaded?.geojson) e.item._geojson = preloaded.geojson;
+        const r = await addKascLayer(e.item, lastBaseUrl);
+        if (r) { e.src = r.src; e.layer = r.layer; e.desc = r.desc; }
+      }
+      setEntryVisible(e, true);
+      syncAttribution();
+    },
+    unmountEntry: e => {
+      try { e.layer?.delete(); } catch (_) {}
+      try { e.src?.delete(); } catch (_) {}
+      e.layer = e.src = e.desc = null;
+      e.item.visible = false;
+      syncAttribution();
+    },
     getViewInfo: () => { syncCamFromView(); return { latitude: lastCam.lat, longitude: lastCam.lng, height: lastCam.height, zoom: navaraZoom(), heading: lastCam.heading, pitchDeg: (lastCam.pitch ?? -45) + 90 }; },
     flyToView: v => { if (Number.isFinite(v.latitude) && Number.isFinite(v.longitude)) flyTo({ longitude: v.longitude, latitude: v.latitude, height: v.height ?? (Number.isFinite(v.zoom) ? zoomToCamHeightView(v.latitude, v.zoom, viewMetrics().vh, viewMetrics().fov) : undefined), heading: v.heading, pitch: v.pitch ?? (Number.isFinite(v.pitchDeg) ? v.pitchDeg - 90 : undefined) }); },
     getEntryGeoJson: e => e.item._geojson,
@@ -697,7 +737,7 @@ async function applyInspectorText(text) {
     applyInspectorText,
     getInspectorText: () => panel.inspector?.value || lastKascRaw,
     setInspectorText: t => { if (panel.inspector) panel.inspector.value = t; },
-    maybeLoadEntry: async e => e,
+    maybeLoadEntry: async e => { await maybeLoadEntry(e); return e; },
     loadProject: pid => loadProject(pid),
     focusEntry: e => focusExtent(e.item._geojson && geojsonExtent(e.item._geojson)),
     reloadEntryData: async e => { const r = await loadVectorItem(e.item, lastBaseUrl, null); e.item._geojson = r.geojson; },

@@ -20,8 +20,8 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
   `vendor/gsimaps/` を同一オリジン iframe で組み込み、.kasc を
   GSI/Leaflet API 経由で再生。上流コードは無改変。vendor 実体は
   リポジトリ・配布物・ローカルに置かず CDN のみを供給元とし、
-  `vendor-proxy-sw.js` が CDN から同一オリジン中継する。SW が効かない
-  環境のみホスト版 gsimaps へ `?kasc=<ローカル絶対URL>` で転送する。iframe 内を
+  `vendor-proxy-sw.js` が CDN から同一オリジン中継する（Service Worker 前提。
+  SW 非対応環境のフォールバックは持たない）。iframe 内を
   `GSI.GLOBALS` 内部 API 経由で操作する構造のため AI 制御の安定化が難しい）
 - `web/vendor-proxy-sw.js` + `web/shared/vendor-guard.js` … vendor/* を
   CDN(kasugai-canvas-web)から同一オリジン供給する Service Worker と、

@@ -147,14 +147,16 @@ web/
                   内部 API 経由で操作する構造のため AI 制御の安定化が難しい）
   vendor-proxy-sw.js  vendor/* を CDN(kasugai-canvas-web)から同一オリジン供給する
                   Service Worker。vendor が必要なエンジン（navara・gsimaps）は
-                  shared/vendor-guard.js 経由で登録し、probe で供給可否を調べて
-                  から起動/ホスト版転送を振り分ける。vendor 実体はリポジトリ・
-                  配布物・ローカル開発のいずれにも置かず CDN が唯一の供給元。
-                  非 SW 環境（古い WebView 等）は各ガードがホスト版エンジンへ
-                  転送する。vendor 更新は手動運用: vendor.json の sha を上げて
-                  publish_cdn.py --vendor で CDN へ反映する(通常発行では
-                  sha 差分の警告のみ。ローカルの web/vendor/ は gitignore 済み・
-                  ローカル実体は参照しないため fetch_vendor.py は CDN 発行専用)
+                  shared/vendor-guard.js 経由で登録し、probe で SW 制御の確定を
+                  待ってから起動する。vendor 実体はリポジトリ・配布物・ローカル
+                  開発のいずれにも置かず CDN が唯一の供給元（stable のみ。SW の
+                  upstream が stable 固定のため unstable/vendor は配置しない）。
+                  Service Worker 前提で、SW 非対応環境のフォールバックは持たない。
+                  vendor 更新は手動運用: vendor.json の sha を上げて
+                  publish_cdn.py --channel stable --vendor で CDN へ反映する
+                  (通常発行では sha 差分の警告のみ。ローカルの web/vendor/ は
+                  gitignore 済み・ローカル実体は参照しないため fetch_vendor.py
+                  は CDN 発行専用)
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
                   i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
   projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）
