@@ -665,6 +665,9 @@ export function updateChatPanelVisibility() {
 }
 
 // 「インストール」タブの導入状態チップ（導入済み=緑・未導入=赤・不明=灰）
+// モデル確認で認証フローが起動されるプロバイダ（devin PKCE 等）があるため、
+// 未ログインが残った場合は遅延で一度だけ再チェックして表示を更新する
+let cliRecheckTimer = null;
 export async function refreshCliSetupStates() {
   const chips = document.querySelectorAll(".cli-state");
   if (!chips.length) return;
@@ -689,15 +692,38 @@ export async function refreshCliSetupStates() {
     const d = await r.json();
     const prov = d?.providers || d; // 応答は {providers:{copilot:{cli_found..}}} 形
     const base = hub.endpoint.replace(/\/agent$/, "");
+    const probes = [];
     for (const p of BRIDGE_PROVIDERS) {
       if (!prov?.[p]?.cli_found) { setChip(p, "missing"); continue; }
       setChip(p, "installed");
       // ログイン状態は実モデル一覧が取れるかで判定（fallback/error = 未ログイン疑い）
-      fetch(`${base}/models?provider=${p}`, { signal: AbortSignal.timeout(25000), cache: "no-store" })
-        .then((r2) => r2.json().catch(() => ({})))
-        .then((m) => setChip(p, (!m?.error && !m?.fallback && Array.isArray(m?.models) && m.models.length) ? "signedin" : "signedout"))
-        .catch(() => setChip(p, "signedout"));
+      probes.push(
+        fetch(`${base}/models?provider=${p}`, { signal: AbortSignal.timeout(25000), cache: "no-store" })
+          .then((r2) => r2.json().catch(() => ({})))
+          .then((m) => {
+            const ok = !m?.error && !m?.fallback && Array.isArray(m?.models) && m.models.length;
+            setChip(p, ok ? "signedin" : "signedout");
+            return ok ? null : p;
+          })
+          .catch(() => { setChip(p, "signedout"); return p; })
+      );
     }
+    // 未ログイン判定が残った場合は遅延で一度だけ再チェック
+    // （上の /models 確認が devin 等の認証フローを起動し、その間に完了することがある）
+    void Promise.all(probes).then((failed) => {
+      const rest = failed.filter(Boolean);
+      if (!rest.length) return;
+      if (cliRecheckTimer) clearTimeout(cliRecheckTimer);
+      cliRecheckTimer = setTimeout(() => {
+        cliRecheckTimer = null;
+        for (const p of rest) {
+          fetch(`${base}/models?provider=${p}`, { signal: AbortSignal.timeout(25000), cache: "no-store" })
+            .then((r2) => r2.json().catch(() => ({})))
+            .then((m) => setChip(p, (!m?.error && !m?.fallback && Array.isArray(m?.models) && m.models.length) ? "signedin" : "signedout"))
+            .catch(() => {});
+        }
+      }, 30000);
+    });
   } catch (e) {
     for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
   }
