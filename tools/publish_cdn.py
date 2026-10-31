@@ -19,9 +19,10 @@ usage:
     python tools/publish_cdn.py [cdn_repo_dir] --channel stable
     python tools/publish_cdn.py [cdn_repo_dir] --channel unstable --commit --push
     python tools/publish_cdn.py [cdn_repo_dir] --channel stable --vendor
-        # vendor/ も同期(vendor.json の sha 更新時など。既定は web/ 本体のみ。
-        # vendor 実体を置くのは stable のみ — SW の upstream が stable
-        # 固定のため unstable/vendor は参照されず配置しない)
+        # stable/vendor/ も同期(vendor.json の sha 更新時など。既定は web/
+        # 本体のみ。stable/vendor は upstream が stable 固定だった旧
+        # リリース版クライアント互換のミラー — 新クライアントの SW は
+        # vendor.json のピン先オリジナルへ直接解決するため参照しない)
 
     cdn_repo_dir 省略時は <kasugai_canvas>/../kasugai-canvas-web
 """
@@ -162,8 +163,9 @@ def sync_channel(cdn_dir, channel, vendor=False):
     # vendor は別管理(手動・--vendor 指定時のみ同期)のため
     # web/ 全量コピーから除外
     _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))
-    # vendor 実体が必要なのは stable のみ(SW の upstream が stable 固定。
-    # unstable/vendor は参照されないため配置・チェックとも行わない)
+    # stable/vendor/ は旧リリース版クライアント(SW upstream が stable 固定)
+    # 互換のミラー。新クライアントは vendor.json のピン先オリジナルへ直接
+    # 解決するため unstable 側の配置・チェックは行わない
     if channel == 'stable':
         _sync_vendors(stage, apply=vendor)
     version = _cargo_version()

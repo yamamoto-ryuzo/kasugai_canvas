@@ -145,18 +145,21 @@ web/
                   組み込み、.kasc を GSI/Leaflet API 経由で再生。上流コードは
                   無改変で維持。※現在調整中: vendored iframe を GSI.GLOBALS
                   内部 API 経由で操作する構造のため AI 制御の安定化が難しい）
-  vendor-proxy-sw.js  vendor/* を CDN(kasugai-canvas-web)から同一オリジン供給する
+  vendor-proxy-sw.js  vendor/* を上流オリジナルから同一オリジン供給する
                   Service Worker。vendor が必要なエンジン（navara・gsimaps）は
                   shared/vendor-guard.js 経由で登録し、probe で SW 制御の確定を
                   待ってから起動する。vendor 実体はリポジトリ・配布物・ローカル
-                  開発のいずれにも置かず CDN が唯一の供給元（stable のみ。SW の
-                  upstream が stable 固定のため unstable/vendor は配置しない）。
-                  Service Worker 前提で、SW 非対応環境のフォールバックは持たない。
-                  vendor 更新は手動運用: vendor.json の sha を上げて
-                  publish_cdn.py --channel stable --vendor で CDN へ反映する
-                  (通常発行では sha 差分の警告のみ。ローカルの web/vendor/ は
-                  gitignore 済み・ローカル実体は参照しないため fetch_vendor.py
-                  は CDN 発行専用)
+                  開発・CDN のいずれにも置かず、SW が <scope>/<engine>/vendor.json
+                  のピンを読んで上流へ直接解決する（npm → jsdelivr/npm、
+                  github → jsdelivr/gh、失敗時 raw.githubusercontent。
+                  ?hosted=/kasugai_hosted_base 指定時のみ自前ミラーモード）。
+                  kasugai-canvas-web の stable/vendor/ は upstream が stable
+                  固定だった旧リリース版クライアント互換のミラーとして残置
+                  （新クライアントは参照しない。vendor.json 更新を旧版にも
+                  届ける必要がある間だけ publish_cdn.py --channel stable
+                  --vendor で更新）。Service Worker 前提で、SW 非対応環境の
+                  フォールバックは持たない。ローカルの web/vendor/ は
+                  gitignore 済み・参照されない
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
                   i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
   projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）
@@ -175,7 +178,7 @@ web/
 
 ## web/vendor/（上流スナップショット）の改変禁止
 
-- **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流。`web/vendor/` は **git 管理・配布物（run.py の ZIP・NSIS インストーラー）の対象外**（`.gitignore` 済み）で、ローカルにも実体を置かない — 供給は `vendor-proxy-sw.js` が CDN(kasugai-canvas-web) から同一オリジン中継する方式に一本化済み（ローカル実体を置いても参照されない）。実体が存在するのは CDN 側の発行物（`publish_cdn.py --vendor` が `tools/fetch_vendor.py` 経由で配置）のみ
+- **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流。`web/vendor/` は **git 管理・配布物（run.py の ZIP・NSIS インストーラー）の対象外**（`.gitignore` 済み）で、ローカルにも実体を置かない — 供給は `vendor-proxy-sw.js` が `vendor.json` のピン先（jsdelivr/raw.githubusercontent）から同一オリジン中継する方式に一本化済み（ローカル実体を置いても参照されない）。実体が残るのは kasugai-canvas-web の `stable/vendor/`（旧リリース版クライアント互換ミラー）のみ
 - 挙動を変えたい場合は vendor 側を直さず、組み込み側（中間層 `web/<engine>/` 等）でフック・差し替え・ラップする（例: gsimaps の Globe 起動は iframe の `window.open` を親側でフックして差し替え）
 - 上流側の修正・更新が必要なら上流へ PR するか、`vendor.json` の sha を上げて `python tools/fetch_vendor.py` で再取得する。vendor 実体の手編集・部分的差し替えは禁止
 - 例外は fetch_vendor が整合記録用に書き込む `VENDOR.json` のみ（上流ファイルではなく自動生成物）

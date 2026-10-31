@@ -8,8 +8,9 @@
 <script>
   // vendored 地理院地図(web/vendor/gsimaps)は配布物・リポジトリに同梱しない。
   // vendorGuardProbe(shared/vendor-guard.js)が vendor-proxy-sw を登録し、
-  // vendor/* を CDN へ同一オリジン中継する（github.io のような静的配信でも
-  // 有効）。Service Worker 前提（SW 非対応環境のフォールバックは持たない）
+  // vendor/* を上流オリジナル(vendor.json のピン先 CDN)から同一オリジン中継
+  // する（github.io のような静的配信でも有効）。
+  // Service Worker 前提（SW 非対応環境のフォールバックは持たない）
   (function () {
     var VENDOR_URL = "../vendor/gsimaps/index_pm.html";
     vendorGuardProbe(VENDOR_URL)

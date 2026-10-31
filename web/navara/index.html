@@ -8,9 +8,10 @@
 <script>
   // vendored Navara(web/vendor/navara)は配布物・リポジトリに同梱しない。
   // vendorGuardProbe(shared/vendor-guard.js)が vendor-proxy-sw を登録し、
-  // vendor/* を CDN へ同一オリジン中継する（github.io のような静的配信でも
-  // 有効）。Worker は import.meta.url 相対・同一オリジン必須のため、
-  // importmap の外部 CDN 直読みではなく SW 中継で供給する。
+  // vendor/* を上流オリジナル(vendor.json のピン先 CDN)から同一オリジン中継
+  // する（github.io のような静的配信でも有効）。Worker は import.meta.url
+  // 相対・同一オリジン必須のため、importmap の外部 CDN 直読みではなく
+  // SW 中継で供給する。
   // Service Worker 前提（SW 非対応環境のフォールバックは持たない）
   (function () {
     var VENDOR_URL = "../vendor/navara/@navaramap/three/dist/index.js";

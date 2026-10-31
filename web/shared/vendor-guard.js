@@ -5,26 +5,34 @@
 // Service Worker 前提（SW 非対応環境のフォールバックは持たない）。
 //
 // 仕組み: vendor-proxy-sw.js を登録すると、スコープ配下の vendor/* GET/HEAD は
-// SW が CDN(kasugai-canvas-web)から同一オリジン供給する。
-// これによりローカルアプリ(:8510)に加え github.io のような静的配信でも
-// Worker・iframe 制御の同一オリジン制約を満たしたまま CDN 直読みできる。
+// SW が上流オリジナル（vendor.json のピン先: jsdelivr/raw.githubusercontent）
+// から同一オリジン供給する。これによりローカルアプリ(:8510)に加え github.io
+// のような静的配信でも Worker・iframe 制御の同一オリジン制約を満たしたまま
+// 外部 CDN 直読みできる。
 (function () {
   var DEFAULT_HOSTED = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";
 
-  // vendor 供給元（SW の upstream）ベース
-  // （?hosted=<base> または localStorage:kasugai_hosted_base で上書き可）
-  window.vendorHostedBase = function () {
+  // vendor ミラーの明示オーバーライド（?hosted=<base> または
+  // localStorage:kasugai_hosted_base）。指定時のみ SW はミラーモード
+  // (<base>/vendor/* を参照)で動く。未指定 = オリジナル直読み
+  var explicitHosted = (function () {
     var h = new URLSearchParams(location.search).get("hosted");
     if (!h) { try { h = localStorage.getItem("kasugai_hosted_base") || ""; } catch (e) {} }
-    return (h || DEFAULT_HOSTED).replace(/\/?$/, "/");
+    return h;
+  })();
+  window.vendorHostedBase = function () {
+    return (explicitHosted || DEFAULT_HOSTED).replace(/\/?$/, "/");
   };
 
-  // 供給元は SW スクリプト URL の ?u= で渡す（postMessage だと初回プローブと
-  // 競合し得るため）。登録→活性化(clients.claim)完了を待つ Promise
+  // ミラーの場合のみ SW スクリプト URL の ?u= で供給元を渡す（postMessage だと
+  // 初回プローブと競合し得るため）。登録→活性化(clients.claim)完了を待つ Promise
+  var swUrl = new URL("../vendor-proxy-sw.js", location.href);
+  if (explicitHosted) {
+    swUrl.search = "?u=" + encodeURIComponent(window.vendorHostedBase());
+  }
   var swReady = ("serviceWorker" in navigator)
     ? navigator.serviceWorker
-        .register(new URL("../vendor-proxy-sw.js?u=" +
-          encodeURIComponent(window.vendorHostedBase()), location.href))
+        .register(swUrl)
         .then(function () { return navigator.serviceWorker.ready; })
         .then(function () {
           // ready は active 化を待つが、初回は controller 反映が僅かに遅れる
