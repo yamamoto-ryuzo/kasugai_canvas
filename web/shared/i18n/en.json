@@ -350,6 +350,7 @@
   "chat.bridge.hubNote": "This provider needs the local bridge hub. The app version has it built in — nothing extra to install. For browser WebGIS (CDN / static hosting), download and run bridge-hub.exe — it self-installs to %LOCALAPPDATA%, registers a logon autostart, starts on :8512, and also auto-installs the copilot/devin CLIs (one run only; no Node.js needed). Antigravity additionally requires the Antigravity IDE install and a Google sign-in.",
   "chat.bridge.hubDownload": "Download bridge-hub.zip",
   "chat.bridge.hubDownloadExe": "Download bridge-hub.exe",
+  "chat.bridge.hubTitle": "Bridge Hub",
   "chat.bridge.hubInstall": "Install hub automatically",
   "chat.bridge.hubWaitExe": "bridge-hub.zip downloaded. Extract it and run setup.cmd to auto-install and start. Waiting for the hub...",
   "chat.bridge.login": "CLI sign-in",

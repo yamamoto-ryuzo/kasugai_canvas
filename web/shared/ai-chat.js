@@ -4542,14 +4542,14 @@ const AI_SETTINGS_HTML = `
   <p id="google-proxy-status" class="hint" aria-live="polite"></p>
 </section>
 <section id="ai-install-panel" class="ai-subpane">
-  <p class="hint" id="bridge-hub-note">
-    <span data-i18n-html="chat.bridge.hubNote"></span><br />
+  <div class="install-row" data-for="hub">
+    <strong data-i18n="chat.bridge.hubTitle">ブリッジハブ</strong> <span class="cli-state" data-provider="hub" aria-live="polite"></span><br />
+    <p class="hint" id="bridge-hub-note"><span data-i18n-html="chat.bridge.hubNote"></span></p>
     <button type="button" id="bridge-hub-install" data-i18n="chat.bridge.hubInstall">ハブを自動インストール</button>
     <a href="../download/bridge-hub.zip" download="bridge-hub.zip" data-i18n="chat.bridge.hubDownload">bridge-hub.zip をダウンロード</a>
     <a href="../download/bridge-hub.exe" download="bridge-hub.exe" data-i18n="chat.bridge.hubDownloadExe">bridge-hub.exe をダウンロード</a>
     <span id="bridge-hub-status" aria-live="polite"></span>
-    <span class="cli-state" data-provider="hub" aria-live="polite"></span>
-  </p>
+  </div>
   <div class="install-row" data-for="copilot" style="margin-top:8px;">
     <strong>GitHub Copilot</strong> <span class="cli-state" data-provider="copilot" aria-live="polite"></span><br />
     <button type="button" class="bridge-setup-install" data-i18n="chat.bridge.autoInstall">CLI を自動インストール</button>

@@ -350,6 +350,7 @@
   "chat.bridge.hubNote": "Ce fournisseur nécessite le hub de ponts local. La version application l'intègre — rien d'autre à installer. Pour le WebGIS du navigateur (CDN / hébergement statique), téléchargez et exécutez bridge-hub.exe — il s'auto-installe dans %LOCALAPPDATA%, enregistre un démarrage automatique à l'ouverture de session, démarre sur :8512 et installe aussi automatiquement les CLI copilot/devin (une seule exécution ; Node.js inutile). Antigravity nécessite en plus l'installation d'Antigravity (IDE) et une connexion Google.",
   "chat.bridge.hubDownload": "Télécharger bridge-hub.zip",
   "chat.bridge.hubDownloadExe": "Télécharger bridge-hub.exe",
+  "chat.bridge.hubTitle": "Hub passerelle",
   "chat.bridge.hubInstall": "Installer le hub automatiquement",
   "chat.bridge.hubWaitExe": "bridge-hub.zip téléchargé. Extrayez-le et exécutez setup.cmd pour installer et démarrer automatiquement. En attente du hub…",
   "chat.bridge.login": "Connexion CLI",

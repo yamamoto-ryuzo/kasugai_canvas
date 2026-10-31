@@ -350,6 +350,7 @@
   "chat.bridge.hubNote": "此提供程序需要本地桥接中心。应用版已内置，无需额外安装。若要在浏览器 WebGIS（CDN／静态托管）中使用，请下载并运行 bridge-hub.exe —— 它会自行安装到 %LOCALAPPDATA%，注册登录时自动启动并以 :8512 启动，还会自动安装 copilot/devin CLI（只需运行一次；无需 Node.js）。Antigravity 还需另行安装 Antigravity(IDE) 并登录 Google。",
   "chat.bridge.hubDownload": "下载 bridge-hub.zip",
   "chat.bridge.hubDownloadExe": "下载 bridge-hub.exe",
+  "chat.bridge.hubTitle": "桥接中心",
   "chat.bridge.hubInstall": "自动安装桥接中心",
   "chat.bridge.hubWaitExe": "已下载 bridge-hub.zip。解压后运行 setup.cmd 即可自动安装并启动。正在等待桥接中心…",
   "chat.bridge.login": "CLI 登录",

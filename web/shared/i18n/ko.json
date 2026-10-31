@@ -350,6 +350,7 @@
   "chat.bridge.hubNote": "이 프로바이더는 로컬 브리지 허브가 필요합니다. 앱 버전에는 허브가 내장되어 있어 추가 설치가 필요 없습니다. 브라우저 WebGIS(CDN·정적 호스팅)에서 사용하려면 bridge-hub.exe를 다운로드해 실행하세요 — %LOCALAPPDATA%에 자동 설치되고 로그인 시 자동 시작 등록 후 :8512로 시작되며, copilot/devin CLI도 미설치분을 자동 설치합니다(실행은 한 번만·Node.js 불필요). antigravity는 별도로 Antigravity(IDE) 설치와 Google 로그인이 필요합니다.",
   "chat.bridge.hubDownload": "bridge-hub.zip 다운로드",
   "chat.bridge.hubDownloadExe": "bridge-hub.exe 다운로드",
+  "chat.bridge.hubTitle": "브리지 허브",
   "chat.bridge.hubInstall": "허브 자동 설치",
   "chat.bridge.hubWaitExe": "bridge-hub.zip을 다운로드했습니다. 압축을 풀고 setup.cmd를 실행하면 자동으로 설치·시작됩니다. 허브를 기다리는 중…",
   "chat.bridge.login": "CLI 로그인",
