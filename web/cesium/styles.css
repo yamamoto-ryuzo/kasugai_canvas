@@ -286,7 +286,7 @@ footer { padding: 0 28px 22px; }
 .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chat-header strong { font-size: 14px; color: #31564f; }
 .chat-provider-box { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.chat-provider-switch { min-width: 0; max-width: 160px; min-height: 24px; padding: 1px 4px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.85); color: #31564f; font-size: 12px; }
+.chat-provider-switch { flex: 0 0 auto; min-width: 0; max-width: 240px; min-height: 24px; padding: 1px 4px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.85); color: #31564f; font-size: 12px; }
 .chat-provider-switch.unverified { background: #b03a2e; border-color: #922b21; color: #fff; }
 .chat-provider-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: normal; }
 .chat-toggle { flex: 0 0 26px; min-width: 26px; min-height: 26px; padding: 1px 4px; border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f; cursor: pointer; font-size: 18px; line-height: 1; }

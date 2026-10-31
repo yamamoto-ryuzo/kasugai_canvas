@@ -3194,6 +3194,22 @@ async function usableChatProviders() {
   return PROVIDER_ORDER.filter(v => set.has(v));
 }
 
+// チャットヘッダーのプロバイダドロップダウンを、選択中の項目が収まる幅に調整する。
+// CSS の固定幅だと「【ブリッジ】GitHub Copilot」等が見切れるため、選択項目の
+// テキストを実測して矢印・余白分を足した明示 width を与える
+let providerSwitchMeasureCtx = null;
+function fitChatProviderSwitchWidth() {
+  const select = document.querySelector("#chat-provider-switch");
+  if (!select) return;
+  const text = select.selectedOptions?.[0]?.textContent || "";
+  if (!text) { select.style.width = ""; return; }
+  if (!providerSwitchMeasureCtx) providerSwitchMeasureCtx = document.createElement("canvas").getContext("2d");
+  const cs = getComputedStyle(select);
+  providerSwitchMeasureCtx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  // +34px は左右 padding・ボーダー・ドロップダウン矢印の分
+  select.style.width = `${Math.ceil(providerSwitchMeasureCtx.measureText(text).width) + 34}px`;
+}
+
 // チャットヘッダーのプロバイダドロップダウンを「使えるものだけ」で再構築する。
 // 現在の選択が無効になった場合は先頭の有効プロバイダへ自動で切り替える
 async function refreshChatProviderSwitch() {
@@ -3209,7 +3225,11 @@ async function refreshChatProviderSwitch() {
   for (const v of usable) {
     const o = document.createElement("option");
     o.value = v;
-    o.textContent = t(`chat.provider.${v}`);
+    // クイック切替は幅が限られるため括弧内の補足（"(GitHub Models 等)" 等）を
+    // 落とした短縮表示にする。全文はホバーの title で参照できる
+    const full = t(`chat.provider.${v}`);
+    o.textContent = full.replace(/\s*\([^)]*\)/g, "");
+    o.title = full;
     select.appendChild(o);
   }
   select.style.display = usable.length ? "" : "none";
@@ -3233,6 +3253,7 @@ async function refreshChatProviderSwitch() {
   if (prevValue && usable.includes(prevValue) && getChatProvider() !== prevValue) {
     selectChatProvider(prevValue);
   }
+  fitChatProviderSwitchWidth();
 }
 
 // チャットヘッダーのドロップダウンからの切替。プロバイダ記憶・エンドポイント・
@@ -3420,6 +3441,7 @@ function updateChatProviderLabel() {
     if (select.querySelector(`option[value="${provider}"]`) && select.value !== provider) {
       select.value = provider;
     }
+    fitChatProviderSwitchWidth();
   }
 }
 
@@ -4387,7 +4409,7 @@ const AI_CHAT_CSS = `
 .chat-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .chat-header strong { font-size: 14px; color: #31564f; }
 .chat-provider-box { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.chat-provider-switch { min-width: 0; max-width: 160px; min-height: 24px; padding: 1px 4px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.85); color: #31564f; font-size: 12px; }
+.chat-provider-switch { flex: 0 0 auto; min-width: 0; max-width: 240px; min-height: 24px; padding: 1px 4px; border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.85); color: #31564f; font-size: 12px; }
 .chat-provider-switch.unverified { background: #b03a2e; border-color: #922b21; color: #fff; }
 .chat-provider-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: normal; }
 .chat-toggle { flex: 0 0 26px; min-width: 26px; min-height: 26px; padding: 1px 4px; border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f; cursor: pointer; font-size: 18px; line-height: 1; }

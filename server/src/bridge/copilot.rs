@@ -36,18 +36,8 @@ fn token() -> String {
     std::env::var("COPILOT_BRIDGE_TOKEN").unwrap_or_default()
 }
 
-// listModels() が空を返すランタイム/アカウント向けの既知モデル一覧
-const FALLBACK_MODELS: &[&str] = &[
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-4.1",
-    "gpt-4o",
-    "claude-sonnet-4.5",
-    "claude-haiku-4.5",
-    "claude-sonnet-4",
-    "claude-opus-4.1",
-    "gemini-2.5-pro",
-];
+// （旧: models.list が空のとき FALLBACK_MODELS の固定一覧を返していたが、
+//   実在しない選択肢を誤認させるため廃止。取得失敗時は空+fallback で返す）
 
 // ツール呼び出しをキューへ積むだけのハンドラ（実実行はブラウザ）
 struct QueueCtx {
@@ -182,6 +172,37 @@ fn gh_auth_token() -> Option<String> {
         })
 }
 
+// `copilot login --with-token` にトークンを渡して資格を永続化する。
+// サーバーモード(--server)でも環境変数(COPILOT_GITHUB_TOKEN/GH_TOKEN/GITHUB_TOKEN)
+// 経由のトークンで認証自体は通るが、その経路は authType="env" となり
+// models.list が空を返す（カタログ取得に失敗する）実動作のため、
+// 保存資格による auto-login（authType="user"）の方が正しく動く
+async fn login_with_token(program: &str, prefix: &[String], token: &str) -> bool {
+    use tokio::io::AsyncWriteExt;
+    let mut cmd = common::new_command(program);
+    cmd.args(prefix)
+        .args(["login", "--with-token"])
+        .current_dir(common::workdir("copilot"))
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let Ok(mut child) = cmd.spawn() else { return false };
+    if let Some(mut stdin) = child.stdin.take() {
+        let mut line = token.to_string();
+        line.push('\n');
+        let _ = stdin.write_all(line.as_bytes()).await;
+        // EOF を送るため stdin を閉じる
+        drop(stdin);
+    }
+    match tokio::time::timeout(Duration::from_secs(45), child.wait()).await {
+        Ok(Ok(status)) => status.success(),
+        _ => {
+            let _ = child.kill().await;
+            false
+        }
+    }
+}
+
 impl CopilotBridge {
     pub fn new() -> Self {
         Self {
@@ -210,13 +231,30 @@ impl CopilotBridge {
             return Ok(c.clone());
         }
         let workdir = common::workdir("copilot");
-        // GitHub CLI (gh) が認証済みなら token を環境変数で渡し、copilot の
-        // TUI /login を省略して自動認証する（devin の PKCE 自動認証相当）。
-        // 既に COPILOT_GITHUB_TOKEN/GH_TOKEN が設定済みなら spawn に自動継承される
+        // GitHub CLI (gh) が認証済みなら `copilot login --with-token` で資格を
+        // 永続化し、TUI /login を省略して自動認証する（devin の PKCE 自動認証相当）。
+        // 環境変数での直接注入は authType="env" となり models.list が空を返すため
+        // 使わない。環境変数がユーザー設定済みの場合はそれを尊重して何もしない
         let gh_tok = if std::env::var("COPILOT_GITHUB_TOKEN").is_ok()
-            || std::env::var("GH_TOKEN").is_ok() { None } else { gh_auth_token() };
+            || std::env::var("GH_TOKEN").is_ok()
+            || std::env::var("GITHUB_TOKEN").is_ok()
+        {
+            None
+        } else {
+            gh_auth_token()
+        };
+        let mut login_done = gh_tok.is_none();
         let mut last_err = String::from("copilot CLI が見つかりません（COPILOT_CLI_PATH でインストール先を指定してください）");
         for (program, prefix) in cli_candidates() {
+            // 起動する候補と同じバイナリでログインを試みる（成功するまで各候補で試行）
+            if !login_done {
+                if let Some(tok) = &gh_tok {
+                    login_done = login_with_token(&program, &prefix, tok).await;
+                    if login_done {
+                        eprintln!("bridge: copilot login --with-token で資格を登録しました ({program})");
+                    }
+                }
+            }
             let mut cmd = common::new_command(&program);
             cmd.args(&prefix)
                 .args(["--server", "--stdio", "--no-auto-update"])
@@ -225,9 +263,6 @@ impl CopilotBridge {
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .kill_on_drop(true);
-            if let Some(tok) = &gh_tok {
-                cmd.env("COPILOT_GITHUB_TOKEN", tok).env("GH_TOKEN", tok);
-            }
             let mut child = match cmd.spawn() {
                 Ok(c) => c,
                 Err(_) => continue,
@@ -420,15 +455,30 @@ impl CopilotBridge {
                 }))
             })
             .collect();
+        // models.list はアカウントが広告するモデルのみ返す（Copilot Free では
+        // "auto" のみ）。CLI の /model ピッカーと同じビルトインカタログを併合
+        // して既知モデルも選択肢に出す（エントリは id のみ。実利用可否は
+        // サービス側が最終判定する）
+        if let Ok(Ok(cat)) = tokio::time::timeout(
+            Duration::from_secs(15),
+            client.call("models.getBuiltInCatalog", None),
+        )
+        .await
+        {
+            if let Some(arr) = cat.get("models").and_then(|m| m.as_array()) {
+                for e in arr {
+                    let Some(id) = e.get("id").and_then(|i| i.as_str()) else { continue };
+                    if models.iter().any(|m| m.get("id").and_then(|i| i.as_str()) == Some(id)) {
+                        continue;
+                    }
+                    models.push(json!({ "id": id, "name": id }));
+                }
+            }
+        }
         if models.is_empty() {
-            // CLI がモデル一覧を返さない（未ログイン等）場合の既定一覧。
-            // 実在する一覧のふりをしないよう fallback フラグを付け、
-            // フロント側は「取得失敗」として扱う
-            models = FALLBACK_MODELS
-                .iter()
-                .map(|id| json!({ "id": id, "name": id }))
-                .collect();
-            return json!({ "models": models, "fallback": true });
+            // 一覧を実取得できなかった（未ログイン等）。既定一覧を捏造せず
+            // 空で返し、フロント側は「取得失敗（未接続）」として扱う
+            return json!({ "models": [], "fallback": true });
         }
         json!({ "models": models })
     }

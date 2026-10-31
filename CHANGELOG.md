@@ -4,6 +4,24 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.17] - 2026-10-31
+
+### Added
+
+- **Devin ブリッジのモデル切替を実装**（`server/src/bridge/devin.rs`）— セッション作成後 `session/set_config_option`（configId=model）で要求モデルへ切替。実測で `apply_model_change` の完了を確認
+- **Copilot のモデル一覧を実カタログへ拡充**（`server/src/bridge/copilot.rs`）— `models.list`（アカウント広告分）に CLI 内蔵カタログ `models.getBuiltInCatalog` を併合し、Copilot Free で `auto` のみだった一覧から 69 モデルが選択可能に
+
+### Changed
+
+- **Devin の APIキー認証失敗時はブラウザ PKCE へ自動フォールバック** — 無効・期限切れ・個人プランでサービスキー（`cog_`）が発行できない場合も、設定画面に古いキーが残っていても自動でブラウザログインへ切替
+- **Copilot の自動認証を `copilot login --with-token` 経由に変更** — gh トークンを `COPILOT_GITHUB_TOKEN`/`GH_TOKEN` 環境変数で注入する方式は authType="env" となり `models.list` が空を返すため廃止。gh ログイン済みなら保存資格（authType="user"）へ自動登録してからサーバー起動
+- **Copilot のモデル取得失敗時の既定一覧（FALLBACK_MODELS）を廃止** — 実在しない選択肢を見せないよう、取得失敗時は空一覧＋`fallback` フラグを返す
+
+### Fixed
+
+- **Devin のモデル切替が常に実行されなかった問題を修正** — `effective_model` を要求モデルで初期化していたため切替判定が常に偽となり `session/set_config_option` が一度も呼ばれていなかった
+- チャットヘッダーのプロバイダドロップダウンが「【ブリッジ】GitHub Copilot」等の長いプロバイダ名で見切れる問題を修正（選択項目の実測幅に自動調整）
+
 ## [6.5.16] - 2026-10-31
 
 ### Added

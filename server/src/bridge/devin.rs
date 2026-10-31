@@ -354,7 +354,7 @@ impl Acp {
         *self.inner.auth_methods.lock().await = auth_methods.clone();
         if !auth_methods.is_empty() {
             let method_id = auth_methods[0].get("id").cloned().unwrap_or(Value::Null);
-            let result = if !api_key.is_empty() {
+            let mut result = if !api_key.is_empty() {
                 Self::rpc(
                     &self.inner,
                     "authenticate",
@@ -373,6 +373,19 @@ impl Acp {
                 )
                 .await
             };
+            // APIキー経路の失敗（無効・期限切れ・個人プランでサービスキーが
+            // 発行できない等）はブラウザ PKCE へフォールバックする。
+            // 設定画面に古いキーが残っていてもログインに進めるようにする
+            if result.is_err() && !api_key.is_empty() {
+                eprintln!("[bridge] APIキー認証に失敗したためブラウザ認証にフォールバックします");
+                result = Self::rpc(
+                    &self.inner,
+                    "authenticate",
+                    json!({ "methodId": method_id }),
+                    180000,
+                )
+                .await;
+            }
             // authenticate は資格の受理後の後段処理（team settings 取得等）でも
             // 失敗し得る（個人プランのアカウントで Permission denied になる等）。
             // 資格自体が生きている可能性があるため session/new まで進めてみる。
@@ -734,18 +747,17 @@ impl DevinBridge {
                 })
             })
             .collect();
-        let mut effective_model = want_model.clone();
         if !merged.is_empty() {
             *acp.inner.model_options.lock().await = merged;
-            if want_model.is_empty() {
-                effective_model = model_opt
-                    .and_then(|o| o.get("currentValue"))
-                    .or_else(|| res.pointer("/models/currentModelId"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or_default()
-                    .to_string();
-            }
         }
+        // セッションの現在モデル。要求モデルとの差分で切替要否を判定する
+        // （want_model で初期化すると差分判定が常に偽になり切替されない）
+        let mut effective_model = model_opt
+            .and_then(|o| o.get("currentValue"))
+            .or_else(|| res.pointer("/models/currentModelId"))
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .to_string();
         // 要求モデルがあれば切替を試みる（set_config_option → 未対応なら握りつぶす）
         if !want_model.is_empty() && want_model != effective_model {
             let switched = Acp::rpc(

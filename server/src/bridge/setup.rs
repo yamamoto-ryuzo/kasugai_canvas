@@ -232,7 +232,7 @@ fn provider_status(provider: &str) -> Value {
     let cli_path = detect(provider);
     let methods = provider_methods(provider);
     let note = match provider {
-        "copilot" => "認証: 初回のみ `copilot` を一度起動して /login するか、GH_TOKEN / COPILOT_GITHUB_TOKEN を設定",
+        "copilot" => "認証: gh CLI ログイン済みなら自動（login --with-token で資格登録）。未導入なら `copilot` を一度起動して /login",
         "devin" => "認証: 初回接続時のブラウザ PKCE ログイン、または DEVIN_API_KEY(cog_...) を設定",
         "antigravity" => "自動インストール非対応。Antigravity(IDE) を導入し agy で Google ログイン",
         _ => "",
@@ -313,7 +313,7 @@ async fn run_capture(
 
 fn done_result(provider: &str, path: &str, method: &str) -> Value {
     let next = match provider {
-        "copilot" => "あと1ステップ: `copilot` を一度起動して /login するか、GH_TOKEN / COPILOT_GITHUB_TOKEN を設定してください",
+        "copilot" => "あと1ステップ: gh CLI ログイン済みなら自動で資格登録されます。未導入なら `copilot` を一度起動して /login してください",
         "devin" => "認証: 初回接続時にブラウザ PKCE ログインが開きます(DEVIN_API_KEY=cog_... でも可)",
         _ => "設定画面でプロバイダを選び直してください",
     };

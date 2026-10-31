@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.5.16</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.17</span></h1>
       <p>【ブリッジ】外部エージェント連携 — GitHub Copilot・Devin・Antigravity</p>
     </header>
     <main>
@@ -66,8 +66,8 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
           <table>
             <thead><tr><th>プロバイダ</th><th>必要なもの</th><th>認証</th></tr></thead>
             <tbody>
-              <tr><td>GitHub Copilot</td><td><code>copilot</code> CLI（npm 版は Node.js も必要）＋Copilot 契約（Free〜Enterprise）</td><td><code>copilot</code> CLI で対話ログイン済み、または <code>COPILOT_GITHUB_TOKEN</code> / <code>GH_TOKEN</code> / <code>GITHUB_TOKEN</code></td></tr>
-              <tr><td>Devin</td><td><code>devin</code> CLI（Devin Desktop 同梱または単体。<code>DEVIN_CLI_PATH</code> で指定可）＋本人の Devin プラン</td><td>サービスユーザー APIキー（<code>cog_</code>・<code>DEVIN_API_KEY</code> またはアプリ設定画面。PAT は拒否）または初回接続時のブラウザ PKCE ログイン</td></tr>
+              <tr><td>GitHub Copilot</td><td><code>copilot</code> CLI（npm 版は Node.js も必要）＋Copilot 契約（Free〜Enterprise）</td><td><code>copilot</code> CLI で対話ログイン済み、または gh CLI ログイン済みなら <code>login --with-token</code> で自動登録（v6.5.17〜）</td></tr>
+              <tr><td>Devin</td><td><code>devin</code> CLI（Devin Desktop 同梱または単体。<code>DEVIN_CLI_PATH</code> で指定可）＋本人の Devin プラン</td><td>サービスユーザー APIキー（<code>cog_</code>・チームプランのみ・<code>DEVIN_API_KEY</code> またはアプリ設定画面。PAT は拒否）または初回接続時のブラウザ PKCE ログイン（キー失敗時も自動フォールバック・v6.5.17〜）</td></tr>
               <tr><td>Antigravity</td><td><code>agy</code> CLI（Antigravity のインストールに同梱。<code>AGY_CLI_PATH</code> で指定可）</td><td>利用者自身の Google アカウントでの <code>agy</code> ログイン（一度対話起動してサインイン）</td></tr>
               <tr><td>外部エージェント（汎用）</td><td>なし（ハブ不要・エンドポイント URL だけ設定）</td><td>エンドポイント側の仕様に従う（Bearer トークン任意）</td></tr>
             </tbody>

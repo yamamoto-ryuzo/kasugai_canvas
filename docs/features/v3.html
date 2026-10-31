@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.5.16</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.17</span></h1>
       <p>V3: AI 連携 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -30,7 +30,7 @@
       <p><strong>モデル共通の追加指示</strong>：管理 → AI → チャット →「追加指示」タブで、Gemini や OpenAI 互換モデルに共通する指示を保存できます。通常はブラウザに保存されます。Cloud Run で <code>KASUGAI_AI_INSTRUCTIONS</code> を設定すると、サーバー側の指示を優先し、内蔵 AI の <code>/api/gemini</code> 経由のリクエストへ適用します。指示文の例は <a href="../hackathon.html">ハッカソン</a> を参照してください。</p>
       <ul>
         <li><strong>【API】 Gemini（既定）／ OpenAI互換</strong>（通常版）— 公式APIへブラウザから直接接続する BYO キー方式。OpenAI互換は<a href="https://models.github.ai">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントにベースURL・キー・モデル名を指定して接続します。ツール定義・実行ループは Gemini と共通で、宣言を OpenAI 形式へ変換して送信します</li>
-        <li><strong>【ブリッジ】 GitHub Copilot</strong>（V5 アプリ版の機能）— アプリ内実装（GitHub Copilot CLI の stdio サーバーを github-copilot-sdk 経由で駆動・要 Copilot 契約）経由。アプリはブリッジハブ（127.0.0.1:8511）経由で接続するため、<strong>プロバイダ選択肢はアプリ版のみに表示</strong>されます（要 copilot CLI・Node.js 不要）。選んで保存するだけで疎通したブリッジへ自動接続されます。公式 SDK / CLI によるプログラム接続を利用します</li>
+        <li><strong>【ブリッジ】 GitHub Copilot</strong>（V5 アプリ版の機能）— アプリ内実装（GitHub Copilot CLI の stdio サーバーを github-copilot-sdk 経由で駆動・要 Copilot 契約）経由。アプリはブリッジハブ（127.0.0.1:8511）経由で接続するため、<strong>プロバイダ選択肢はアプリ版のみに表示</strong>されます（要 copilot CLI・Node.js 不要）。選んで保存するだけで疎通したブリッジへ自動接続されます。<strong>GitHub CLI（gh）でログイン済みなら <code>copilot login --with-token</code> で資格を自動登録</strong>し、対話ログインも省略できます（v6.5.17〜）。モデル一覧はアカウント広告分に CLI 内蔵カタログを併合したものが出ます。公式 SDK / CLI によるプログラム接続を利用します</li>
         <li><strong>【ブリッジ】 Devin</strong>（V5 アプリ版の機能）— アプリ内の Devin ブリッジが公式の <code>devin acp</code> を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Devin 選択時にのみ起動し、本人の ACP 認証（ブラウザ認証または API キー）と利用枠でモデルを利用します。専用プロバイダはアプリ版のみ表示され</li>
         <li><strong>【ブリッジ】 Antigravity</strong>（V5 アプリ版の機能）— アプリ内の Antigravity ブリッジが Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動します。アプリのブリッジハブ（<code>127.0.0.1:8511</code>）が Antigravity 選択時にのみ起動し、ブリッジが <code>agy mcp add</code> で地図ツールを登録・<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します。本人の Google アカウントでの agy ログインと利用枠が前提で、専用プロバイダはアプリ版のみ表示され</li>
         <li><strong>【ブリッジ】 外部エージェント</strong>（通常版）— 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。ブラウザから届くURLであれば接続でき、エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。自作エージェントの接続に使います</li>
@@ -40,7 +40,7 @@
       <figcaption aria-hidden="true">管理（⚙）→ AI → エージェント：外部エージェント接続と AI 生成プラグインの管理</figcaption>
       </figure>
       <p><strong>設定と利用の分離（v5.23〜）</strong>：設定画面（管理 → AI → チャット）はプロバイダ別の専用項目のみを表示し（Copilot/Devin/Antigravity/外部エージェントで案内文・モデル欄・トークン欄が混在しない）、選択・保存時に実接続テスト（ブリッジ系は <code>/models</code> でモデル一覧まで取得、外部エージェントは <code>/agent</code> プローブ）を行います。一方、チャットパネルのヘッダーにあるプロバイダ切替ドロップダウンは「設定済みで使えるものだけ」を選択肢に出す利用側で、選択時は軽い疎通確認（<code>/health</code>）のみを行います — Devin の <code>acp</code> 起動やブラウザ認証がチャットの切替だけで発火することはありません。モデル選択・APIキー・エンドポイントの編集は設定画面のみです。チャット側の状態表示は「接続中…」（赤・確認待ち）→ モデル名表示（確認済み）、失敗時は赤のまま「未接続」（失敗理由はツールチップまたは設定画面のステータス欄に表示）。</p>
-      <p><strong>Devin の APIキー</strong>（v5.23〜）：Devin プロバイダの設定画面に「Devin APIキー」欄があります。app.devin.ai → Settings → Devin API → <strong>Service users</strong> タブで発行した <code>cog_</code> キーを入れると <code>devin acp</code> の認証を APIキーで完了でき、ブラウザの PKCE ログイン画面を省略できます（<strong>PAT は acp 認証で拒否される</strong>ためサービスユーザーキーが必要）。空欄なら従来どおりブラウザログイン。キーはブラウザの localStorage に保存され、ローカルのブリッジへ <code>X-Devin-Api-Key</code> ヘッダでのみ送信されます（外部・平文HTTPには送信しません）。</p>
+      <p><strong>Devin の APIキー</strong>（v5.23〜）：Devin プロバイダの設定画面に「Devin APIキー」欄があります。app.devin.ai → Settings → Devin API → <strong>Service users</strong> タブで発行した <code>cog_</code> キーを入れると <code>devin acp</code> の認証を APIキーで完了でき、ブラウザの PKCE ログイン画面を省略できます（<strong>PAT は acp 認証で拒否される</strong>ためサービスユーザーキーが必要。サービスユーザーはチームプラン向けの機能で、<strong>個人プランでは発行できません</strong>）。空欄なら従来どおりブラウザログイン。v6.5.17〜 はキー認証が失敗しても<strong>ブラウザ PKCE へ自動フォールバック</strong>するため、無効・期限切れ・個人プランのキーが残っていてもログインに進めます。キーはブラウザの localStorage に保存され、ローカルのブリッジへ <code>X-Devin-Api-Key</code> ヘッダでのみ送信されます（外部・平文HTTPには送信しません）。</p>
       <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="../ai-bridge.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>
       <p><strong>M365 / Microsoft Copilot を見送った理由</strong>：消費者向け Copilot はボット等によるアクセスを明示禁止しているため、Web UI 自動化を提供しません。この消費者向け規約は職場・学校アカウントには適用されず、M365 全体の禁止を意味しません。M365 の公式 Chat API は存在しますが、ライセンス・アプリ登録・必要権限への管理者同意等を要するため、本人のログインだけで使う標準連携としては見送り・未実装です。M365 の Web UI 自動化も、正規のプログラム接続としての許諾を確認できていないため採用しません。<a href="../ai-bridge.html#m365-connection-policy">規約上の禁止と導入条件の違い・再検討条件</a>を参照してください。</p>
       <p>AI の実行経路は function calling によるツール呼び出しで、<strong>52個のツール</strong>がアプリの全主要機能を網羅します：</p>
