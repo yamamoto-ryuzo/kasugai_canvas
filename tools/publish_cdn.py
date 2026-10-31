@@ -18,11 +18,6 @@ usage:
     python tools/publish_cdn.py [cdn_repo_dir] --channel unstable
     python tools/publish_cdn.py [cdn_repo_dir] --channel stable
     python tools/publish_cdn.py [cdn_repo_dir] --channel unstable --commit --push
-    python tools/publish_cdn.py [cdn_repo_dir] --channel stable --vendor
-        # stable/vendor/ も同期(vendor.json の sha 更新時など。既定は web/
-        # 本体のみ。stable/vendor は upstream が stable 固定だった旧
-        # リリース版クライアント互換のミラー — 新クライアントの SW は
-        # vendor.json のピン先オリジナルへ直接解決するため参照しない)
 
     cdn_repo_dir 省略時は <kasugai_canvas>/../kasugai-canvas-web
 """
@@ -123,36 +118,7 @@ def _commit_and_push(cdn_dir, message, push):
         print('pushed')
 
 
-def _sync_vendors(stage, apply=False):
-    """vendor の CDN ステージ(stable のみ)との sha 差分を報告し、apply 時のみ同期する。
-
-    vendor(約75MB)の更新は手動運用が基本。発行のたび自動取得はせず、
-    ステージ側の VENDOR.json sha と vendor.json の pin を比較して
-    差異・欠落があれば警告するだけにし、--vendor 指定時だけ
-    fetch_vendor で取得して反映する
-    """
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import fetch_vendor
-    for spec_path in fetch_vendor._find_vendor_specs(WEB_DIR):
-        spec = fetch_vendor._read_json(spec_path)
-        name = spec.get('name') or os.path.basename(os.path.dirname(spec_path))
-        sha = fetch_vendor._spec_pin(spec)
-        dst = os.path.join(stage, 'vendor', name)
-        cur = fetch_vendor._current_sha(dst) if os.path.isdir(dst) else None
-        if cur == sha:
-            print('vendor {0}: channel already at {1} (skip)'.format(
-                name, sha[:8]))
-            continue
-        if not apply:
-            print('vendor {0}: pin {1} != channel {2}'
-                  ' (--vendor で同期)'.format(
-                      name, sha[:8], (cur[:8] if cur else 'missing')))
-            continue
-        src = fetch_vendor.fetch_vendor(spec_path)
-        _replace_dir(src, dst)
-
-
-def sync_channel(cdn_dir, channel, vendor=False):
+def sync_channel(cdn_dir, channel):
     """web/ を指定ステージへ直接同期する。"""
     stage = os.path.join(cdn_dir, channel)
     # ブリッジハブ配布 ZIP を生成して web/download/ に入れておく
@@ -160,14 +126,10 @@ def sync_channel(cdn_dir, channel, vendor=False):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import build_bridge_zip
     build_bridge_zip.build()
-    # vendor は別管理(手動・--vendor 指定時のみ同期)のため
-    # web/ 全量コピーから除外
+    # vendor は CDN へ配置しない(SW が vendor.json のピン先オリジナルへ
+    # 直接解決する方式)。ローカルに web/vendor/ があっても誤って
+    # ミラーしないよう除外する
     _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))
-    # stable/vendor/ は旧リリース版クライアント(SW upstream が stable 固定)
-    # 互換のミラー。新クライアントは vendor.json のピン先オリジナルへ直接
-    # 解決するため unstable 側の配置・チェックは行わない
-    if channel == 'stable':
-        _sync_vendors(stage, apply=vendor)
     version = _cargo_version()
     _write_version_json(stage, {
         'version': version,
@@ -191,9 +153,6 @@ def main():
                    help='CDN リポジトリで変更をコミットする')
     p.add_argument('--push', action='store_true',
                    help='コミット後に push する(--commit 必須)')
-    p.add_argument('--vendor', action='store_true',
-                   help='vendor/ も sha 差分時に fetch_vendor で取得して'
-                        '同期する(既定は web/ 本体のみ。vendor 更新は手動)')
     args = p.parse_args()
 
     cdn_dir = os.path.abspath(args.cdn_dir)
@@ -202,8 +161,7 @@ def main():
     if args.push and not args.commit:
         p.error('--push は --commit と併用してください')
 
-    version, message = sync_channel(cdn_dir, args.channel,
-                                    vendor=args.vendor)
+    version, message = sync_channel(cdn_dir, args.channel)
     print('{0}: v{1} -> {2}'.format(args.channel, version, cdn_dir))
 
     if args.commit:

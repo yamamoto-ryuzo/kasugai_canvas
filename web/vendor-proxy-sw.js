@@ -11,13 +11,9 @@
 //     npm ピン(navara):     https://cdn.jsdelivr.net/npm/<pkg>@<ver>/<tail>
 //     github ピン(gsimaps): https://cdn.jsdelivr.net/gh/<repo>@<sha>/<rest>
 //       → 失敗時 raw.githubusercontent.com/<repo>/<sha>/<rest> に再試行
-//   いずれも解決・取得できない場合のみ、旧配布互換の保険として
-//   kasugai-canvas-web stable/vendor を参照する。
 //   SW スクリプト URL に ?u=<base> が明示指定された場合はミラーモード:
-//   <base>/vendor/<rel> をそのまま参照する（セルフホスト・旧ガード互換。
+//   <base>/vendor/<rel> をそのまま参照する（自前ミラー・オフライン開発用。
 //   postMessage だと初回プローブと競合し得るため URL クエリで渡す）。
-
-const LEGACY_MIRROR = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";
 const mirrorBase = (() => {
   const u = new URL(self.location.href).searchParams.get("u");
   return u && /^https:\/\/[\w.-]+(?::\d+)?\//.test(u)
@@ -101,8 +97,6 @@ async function upstreamUrls(rel) {
       JSDELIVR + "gh/" + spec.repo + "@" + ref + "/" + rest,
       RAW_GH + spec.repo + "/" + ref + "/" + rest);
   }
-  // 解決失敗・上流不通の保険（旧配布クライアント互換の残存ミラー）
-  urls.push(LEGACY_MIRROR + "vendor/" + rel);
   return urls;
 }
 

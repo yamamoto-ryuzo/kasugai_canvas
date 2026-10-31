@@ -10,8 +10,6 @@
 // のような静的配信でも Worker・iframe 制御の同一オリジン制約を満たしたまま
 // 外部 CDN 直読みできる。
 (function () {
-  var DEFAULT_HOSTED = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";
-
   // vendor ミラーの明示オーバーライド（?hosted=<base> または
   // localStorage:kasugai_hosted_base）。指定時のみ SW はミラーモード
   // (<base>/vendor/* を参照)で動く。未指定 = オリジナル直読み
@@ -20,15 +18,12 @@
     if (!h) { try { h = localStorage.getItem("kasugai_hosted_base") || ""; } catch (e) {} }
     return h;
   })();
-  window.vendorHostedBase = function () {
-    return (explicitHosted || DEFAULT_HOSTED).replace(/\/?$/, "/");
-  };
 
   // ミラーの場合のみ SW スクリプト URL の ?u= で供給元を渡す（postMessage だと
   // 初回プローブと競合し得るため）。登録→活性化(clients.claim)完了を待つ Promise
   var swUrl = new URL("../vendor-proxy-sw.js", location.href);
   if (explicitHosted) {
-    swUrl.search = "?u=" + encodeURIComponent(window.vendorHostedBase());
+    swUrl.search = "?u=" + encodeURIComponent(explicitHosted.replace(/\/?$/, "/"));
   }
   var swReady = ("serviceWorker" in navigator)
     ? navigator.serviceWorker

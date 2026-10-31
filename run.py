@@ -413,7 +413,7 @@ def build_release() -> None:
                 archive.write(project_file, arcname=(Path("projects") / project_file.relative_to(SAMPLE_PROJECTS)).as_posix())
         if web_dir.exists():
             for web_file in web_dir.rglob("*"):
-                # vendor/(vendored 地理院地図)は CDN 配信へ移行したため配布物へ含めない
+                # vendor/ は SW が vendor.json のピン先 CDN へ直接解決するため配布物へ含めない
                 if "vendor" in web_file.relative_to(web_dir).parts:
                     continue
                 if web_file.is_file():

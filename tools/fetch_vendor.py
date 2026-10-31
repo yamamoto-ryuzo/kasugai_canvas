@@ -2,12 +2,10 @@
 """KASUGAI Canvas vendor fetcher.
 
 web/ 配下の各エンジンが持つ vendor.json を読み、上流スナップショットを
-web/vendor/ へ配置する。kasugai-canvas-web への publish 時にも
-publish_cdn.py から呼ばれ、stable/vendor/ へ実ファイルとして含まれる
-(GitHub Pages は submodule を解決しないため実ファイル必須)。
-stable/vendor/ は upstream が stable 固定だった旧リリース版
-クライアントの SW 互換ミラー（新クライアントの SW は vendor.json の
-ピン先オリジナルへ直接解決するため参照しない）。
+web/vendor/ へ配置する。通常運用では不要 — vendor-proxy-sw.js が
+vendor.json のピン先オリジナルへ直接解決するため実体は参照されない。
+用途はオフライン開発・自前ミラーのみ（取得した web/vendor/ を静的配信し、
+?hosted=<そのbase> で SW のミラーモードへ切り替えて使う）。
 
 レイアウト:
     web/gsimaps/vendor.json   上流ピン情報(repo/ref/sha)
