@@ -359,6 +359,8 @@
   "chat.bridge.login": "Connexion CLI",
   "chat.bridge.loginStarted": "Une console de connexion a été ouverte. Revérifiez la connexion après vous être connecté",
   "chat.bridge.loginAlready": "Une console de connexion est déjà ouverte (mettez-la au premier plan et continuez)",
+  "chat.bridge.cliSignedIn": "installé, connecté",
+  "chat.bridge.cliSignedOut": "installé, non connecté",
   "chat.bridge.cliInstalled": "installé",
   "chat.bridge.cliMissing": "non installé",
   "chat.bridge.cliUnknown": "inconnu",

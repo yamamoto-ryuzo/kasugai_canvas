@@ -359,6 +359,8 @@
   "chat.bridge.login": "Iniciar sesión en CLI",
   "chat.bridge.loginStarted": "Se abrió una consola de inicio de sesión. Vuelva a comprobar la conexión tras iniciar sesión",
   "chat.bridge.loginAlready": "Ya hay una consola de inicio de sesión abierta (tráigala al frente y continúe)",
+  "chat.bridge.cliSignedIn": "instalado, sesión iniciada",
+  "chat.bridge.cliSignedOut": "instalado, sin sesión",
   "chat.bridge.cliInstalled": "instalado",
   "chat.bridge.cliMissing": "no instalado",
   "chat.bridge.cliUnknown": "desconocido",

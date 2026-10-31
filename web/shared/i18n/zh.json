@@ -359,6 +359,8 @@
   "chat.bridge.login": "CLI 登录",
   "chat.bridge.loginStarted": "已打开登录控制台。登录完成后请重新确认连接",
   "chat.bridge.loginAlready": "登录控制台已打开（请将其置前并继续）",
+  "chat.bridge.cliSignedIn": "已安装·已登录",
+  "chat.bridge.cliSignedOut": "已安装·未登录",
   "chat.bridge.cliInstalled": "已安装",
   "chat.bridge.cliMissing": "未安装",
   "chat.bridge.cliUnknown": "未知",

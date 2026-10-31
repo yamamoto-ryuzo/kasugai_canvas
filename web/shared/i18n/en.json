@@ -359,6 +359,8 @@
   "chat.bridge.login": "CLI sign-in",
   "chat.bridge.loginStarted": "A sign-in console was opened. Re-check the connection after signing in",
   "chat.bridge.loginAlready": "A sign-in console is already open (bring it to the front and continue)",
+  "chat.bridge.cliSignedIn": "installed, signed in",
+  "chat.bridge.cliSignedOut": "installed, not signed in",
   "chat.bridge.cliInstalled": "installed",
   "chat.bridge.cliMissing": "not installed",
   "chat.bridge.cliUnknown": "unknown",

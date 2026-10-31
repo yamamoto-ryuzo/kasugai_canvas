@@ -359,6 +359,8 @@
   "chat.bridge.login": "CLI ログイン",
   "chat.bridge.loginStarted": "ログイン用のコンソールを開きました。ログイン完了後、接続を再確認してください",
   "chat.bridge.loginAlready": "ログインコンソールは既に開いています（前面に出して続けてください）",
+  "chat.bridge.cliSignedIn": "導入済み・ログイン済み",
+  "chat.bridge.cliSignedOut": "導入済み・未ログイン",
   "chat.bridge.cliInstalled": "導入済み",
   "chat.bridge.cliMissing": "未導入",
   "chat.bridge.cliUnknown": "不明",

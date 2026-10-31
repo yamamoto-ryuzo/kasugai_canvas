@@ -359,6 +359,8 @@
   "chat.bridge.login": "CLI-Anmeldung",
   "chat.bridge.loginStarted": "Ein Anmeldefenster wurde geöffnet. Verbindung nach der Anmeldung erneut prüfen",
   "chat.bridge.loginAlready": "Ein Anmeldefenster ist bereits geöffnet (in den Vordergrund holen und fortfahren)",
+  "chat.bridge.cliSignedIn": "installiert, angemeldet",
+  "chat.bridge.cliSignedOut": "installiert, nicht angemeldet",
   "chat.bridge.cliInstalled": "installiert",
   "chat.bridge.cliMissing": "nicht installiert",
   "chat.bridge.cliUnknown": "unbekannt",

@@ -672,8 +672,11 @@ export async function refreshCliSetupStates() {
     chips.forEach((c) => {
       if (c.dataset.provider !== prov) return;
       c.textContent = state === "installed" ? t("chat.bridge.cliInstalled")
+        : state === "signedin" ? t("chat.bridge.cliSignedIn")
+        : state === "signedout" ? t("chat.bridge.cliSignedOut")
         : state === "missing" ? t("chat.bridge.cliMissing") : t("chat.bridge.cliUnknown");
-      c.style.color = state === "installed" ? "#2e7d32" : state === "missing" ? "#c62828" : "#777";
+      c.style.color = (state === "installed" || state === "signedin") ? "#2e7d32"
+        : state === "signedout" ? "#e65100" : state === "missing" ? "#c62828" : "#777";
       c.style.fontWeight = "bold";
     });
   };
@@ -685,7 +688,16 @@ export async function refreshCliSetupStates() {
       { signal: AbortSignal.timeout(5000), cache: "no-store" });
     const d = await r.json();
     const prov = d?.providers || d; // 応答は {providers:{copilot:{cli_found..}}} 形
-    for (const p of BRIDGE_PROVIDERS) setChip(p, prov?.[p]?.cli_found ? "installed" : "missing");
+    const base = hub.endpoint.replace(/\/agent$/, "");
+    for (const p of BRIDGE_PROVIDERS) {
+      if (!prov?.[p]?.cli_found) { setChip(p, "missing"); continue; }
+      setChip(p, "installed");
+      // ログイン状態は実モデル一覧が取れるかで判定（fallback/error = 未ログイン疑い）
+      fetch(`${base}/models?provider=${p}`, { signal: AbortSignal.timeout(25000), cache: "no-store" })
+        .then((r2) => r2.json().catch(() => ({})))
+        .then((m) => setChip(p, (!m?.error && !m?.fallback && Array.isArray(m?.models) && m.models.length) ? "signedin" : "signedout"))
+        .catch(() => setChip(p, "signedout"));
+    }
   } catch (e) {
     for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
   }
