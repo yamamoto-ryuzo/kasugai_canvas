@@ -5,7 +5,7 @@
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v6.7.0';
+  const VERSION = 'v6.8.0';
 
   const GROUPS = [
     {
@@ -19,7 +19,7 @@
       items: [
         { href: 'datahost.html', text: '2. 【WebGIS】ブラウザ WebGIS（外部ホスト配信）' },
         { href: 'guide.html', text: '3. 【アプリ】ローカルアプリ（kasugai_canvas.exe）' },
-        { href: 'features/v6.html', text: '4. マルチエンジン（5エンジン）' },
+        { href: 'features/v6.html', text: '4. マルチエンジン（6エンジン）' },
         { href: 'inspector.html', text: '5. .kasc 設定仕様' }
       ]
     },

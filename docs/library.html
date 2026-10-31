@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.7.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.8.0</span></h1>
       <p>ライブラリ — 主要ライブラリと描画基盤</p>
     </header>
     <main>
@@ -138,6 +138,18 @@
       <td>ベクター行→作図リスト注入、<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code>→外部タイル。
       <code>cam:</code>/<code>theme:</code>・属性 UI 対応。地理院地図の表示レイヤを
       <code>xyz:</code> 行として .kasc へ取り込み可。<code>3dtiles:</code> 等は未対応</td>
+      </tr>
+      <tr>
+      <td><strong>Navara</strong></td>
+      <td>試験的（写実 3D）</td>
+      <td><code>@navaramap/three</code>（Rust/WASM GIS コア + Three.js）による
+      写実 3D プレゼンエンジン。大気散乱・太陽・影のフォトリアルシーンと
+      quantized-mesh 地形（Re:Earth Terrain）を持つ。ライブラリは npm dist
+      スナップショットを <code>vendor/navara/</code> にピン留めし importmap
+      で読む（Worker が import.meta.url 相対のため同一オリジン必須）</td>
+      <td>ベクター行・<code>base:</code>/<code>xyz:</code>・<code>3dtiles:</code>・
+      <code>cam:</code>/<code>theme:</code> 対応。<code>wms:</code>/<code>wmts:</code>・
+      3D Tiles ドレープ・地物単位の凡例フィルタは未対応</td>
       </tr>
       </tbody>
       </table>

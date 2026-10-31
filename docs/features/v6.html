@@ -10,14 +10,14 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.7.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.8.0</span></h1>
       <p>マルチエンジン — 各機能カードの詳細説明</p>
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
 
       <h2 id="multi">マルチエンジン</h2>
-      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> プロジェクトを複数の地図エンジンで再生できる構成です。<strong>メインエンジンは CesiumJS</strong>（開発の主対象・既定エンジン）で、MapLibre / OpenLayers / Leaflet / GSI Maps（※現在調整中）は <code>.kasc</code> プレイヤーとしての互換実装です。プロジェクトデータ（<code>projects/</code>）はエンジン非依存で、描画に依存しないコードは <code>web/shared/</code> に集約しています。</p>
+      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> プロジェクトを複数の地図エンジンで再生できる構成です。<strong>メインエンジンは CesiumJS</strong>（開発の主対象・既定エンジン）で、MapLibre / OpenLayers / Leaflet / GSI Maps（※現在調整中）/ Navara（※試験的）は <code>.kasc</code> プレイヤーとしての互換実装です。プロジェクトデータ（<code>projects/</code>）はエンジン非依存で、描画に依存しないコードは <code>web/shared/</code> に集約しています。</p>
       <p><strong>ねらい</strong>: 同じ <code>.kasc</code> を「高機能3D（Cesium）」「軽量2D（Leaflet 等）」「地理院地図の UI（GSI Maps）」など、配布先の環境・用途に合ったエンジンで開けます。納品物は <code>.kasc</code>+<code>DATA/</code>+エンジン一式の静的ファイルだけで成立し、受け取り側がエンジンを選ぶ余地も残せます。</p>
 
       <h3>🧭 エンジン構成</h3>
@@ -60,13 +60,18 @@
       <td><strong>GSI Maps</strong>（中間エンジン・調整中）</td>
       <td>vendored 地理院地図（gsi-cyberjapan/gsimaps）を同一オリジン iframe で組み込み、<code>.kasc</code> を GSI/Leaflet API 経由で再生。上流コードは無改変で、変換・制御はすべて中間層が担う（下記「GSI Maps エンジン」節）</td>
       </tr>
+      <tr>
+      <td><code>navara/</code></td>
+      <td><strong>Navara</strong>（試験的・写実3D）</td>
+      <td><code>@navaramap/three</code>（Rust/WASM GIS コア + Three.js）による写実 3D プレゼンエンジン。ベクター行・ラスタ行・<code>3dtiles:</code>・<code>cam:</code>/<code>theme:</code> を再生し、大気・太陽光のフォトリアルシーンと quantized-mesh 地形を持つ。<code>wms:</code>/<code>wmts:</code>・3D Tiles ドレープは未対応（下記「Navara エンジン」節）</td>
+      </tr>
       </tbody>
       </table>
       <p>各エンジンの特性比較と追加候補の評価は <a href="../library.html#地図エンジンの選定と追加候補">ライブラリ — 地図エンジンの選定と追加候補</a> を参照してください。</p>
 
       <h3>🔀 エンジン選択と切替</h3>
       <ul>
-        <li><strong><code>?engine=</code> リダイレクト</strong>: ルートの <code>web/index.html</code> は <code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps</code>（既定 cesium）を読み、対象エンジンの <code>index.html</code> へリダイレクトします。<code>engine</code> 以外のクエリ（<code>project=</code>・<code>kasc=</code>）とハッシュ（ビュー状態）はそのまま引き継ぐため、同じ URL をエンジンを変えて開き直せます</li>
+        <li><strong><code>?engine=</code> リダイレクト</strong>: ルートの <code>web/index.html</code> は <code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara</code>（既定 cesium）を読み、対象エンジンの <code>index.html</code> へリダイレクトします。<code>engine</code> 以外のクエリ（<code>project=</code>・<code>kasc=</code>）とハッシュ（ビュー状態）はそのまま引き継ぐため、同じ URL をエンジンを変えて開き直せます</li>
         <li><strong>切替 UI</strong>: 各エンジンのパネルにある「engine:」リンク（<code>shared/engine-switch.js</code>）から別エンジンへ遷移します。現在のクエリとハッシュを引き継ぐため、プロジェクトとカメラ位置を保ったまま切り替えられます（リンクは <code>../?engine=…</code> の相対パスで、GitHub Pages 等のパスプレフィックス配信でも動作）</li>
         <li><strong>レイヤ状態の引継ぎ</strong>: 切替直前にインスペクターの .kasc テキスト・テーマ選択・各レイヤの可視性を localStorage へ一時保存し、切替先が起動時に一度だけ消費します（TTL 120 秒・URL の project/kasc が一致したときのみ適用）。切替元で加えた未保存の編集や表示切替が切替先にも反映されます</li>
         <li><strong>URL ハッシュの互換</strong>: カメラ状態のハッシュ形式はエンジン共通です（緯度・経度・高さに加え、2D 側は zoom を併記。heading/pitch は各エンジンの規約へ相互変換）。変換規則の詳細は <a href="v0.html">V0: システム基本構成 — URL パーマリンク</a> を参照</li>
@@ -115,6 +120,14 @@
         <li><strong>ベンダー管理</strong>: vendor 実体（約75MB）はリポジトリ・配布 ZIP・インストーラーに同梱せず、CDN（kasugai-canvas-web 各ステージ）へ <code>gsimaps/vendor.json</code> の sha でピンして配置します。ローカルアプリ（:8510）は <code>/vendor/*</code> のミスを CDN へプロキシして同一オリジン供給するため、vendor 未配置でも gsimaps はローカル URL のまま動作します（CDN 不通時のみ従来通りホスト版へ転送。転送先は <code>KASUGAI_VENDOR_CDN_BASE</code> で上書き可）。オフライン開発等で実体が必要な場合のみ <code>tools/fetch_vendor.py</code> で取得してください（ローカル実体が優先されます）。<strong>同梱トークンについて</strong>: <code>globe/Build/Cesium*</code> には Cesium 公式の公開デフォルトトークン（Mapbox <code>pk.</code> トークン・ion の JWT）が含まれます。これは Cesium が全配布物に同梱する公開仕様（利用時は「自前トークンを設定せよ」の警告を出力する既定動作）であり、シークレットスキャン（detect-secrets・GitHub Push Protection）では false positive として扱います — detect-secrets は <code>.secrets.baseline</code>、GitHub 側は unblock URL の許可で対応済み</li>
       </ul>
 
+      <h3>🌍 Navara エンジン（試験的）</h3>
+      <p><code>@navaramap/three</code>（<a href="https://github.com/maplibre/navara" target="_blank" rel="noopener noreferrer">Navara</a> の Rust/WASM GIS コア + Three.js レンダラ）で <code>.kasc</code> を再生する<strong>試験的エンジン</strong>です。Cesium とは別系統の 3D 描画で、大気散乱・太陽・影のフォトリアルシーン（<code>addDefaultPhotorealScene</code>）と Re:Earth Terrain（quantized-mesh）の地形を備え、写実的な 3D プレゼン用途を検証する位置づけです。エンジン切替 UI では <code>[navara]</code> と括弧付きで表示され、試験的エンジンの目印になっています（ENGINE_LABELS の <code>[]</code> 表記）。</p>
+      <ul>
+        <li><strong>.kasc → navara の対応</strong>: ベクター系行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>tsv:</code>/<code>duckdb:</code>/<code>sql:</code>）は shared のローダーで GeoJSON 化して geojson ソースへ流し込み（QML は代表地物のスタイルをレイヤ単位マテリアルへ反映）、<code>base:</code>/<code>xyz:</code> は raster-tile ソース、<code>3dtiles:</code> は 3d-tiles ソースとして追加。<code>cam:</code>・<code>theme:</code>・ブックマーク・属性 UI・AI チャット・印刷は shared 共通です。<code>wms:</code>/<code>wmts:</code>・3D Tiles 表面ドレープ・地物単位の凡例フィルタは未対応で、非対応行は情報タブへ警告します</li>
+        <li><strong>ベンダー管理</strong>: ライブラリは npm ビルド済み dist のスナップショットを <code>vendor/navara/</code>（<code>navara/vendor.json</code> でピン・gitignore）に置き、importmap で読み込みます。Worker が <code>import.meta.url</code> 相対で生成されるため<strong>同一オリジン必須</strong>で、外部 CDN 直読みは動きません（地物メッシュ・地形・3D Tiles が停止）。<code>three</code>/<code>postprocessing</code> も peer 参照を同一インスタンスに揃えるため同梱します。ローカル実体の取得は <code>tools/fetch_vendor.py</code>、CDN への配置は <code>publish_cdn.py --vendor</code> で行います（gsimaps と同じく vendor はリポジトリ・配布 ZIP に同梱しない発行物）</li>
+        <li><strong>写実・地形の操作</strong>: 設定ペインの「地形（Re:Earth Terrain）」で quantized-mesh 地形を ON/OFF でき、「写実シーン（大気・太陽・雲）」・影・時刻（UTC）の調整もそこから行います。既定では描画負荷を抑える設定（影 OFF・マルチサンプリングなし）で起動します</li>
+      </ul>
+
       <h3>📄 プロジェクト直読み（<code>?kasc=</code>）とサーバレス配信</h3>
       <ul>
         <li><strong><code>?kasc=&lt;url&gt;</code></strong>: 全エンジンで任意 URL の .kasc を直接読めます。<code>DATA/</code> 等の相対参照は .kasc のある URL 基準で解決され、<code>projects/</code> 構造は不要です。<code>.kasc</code>+<code>DATA/</code>+起動 HTML と <code>web/</code> の中身を同じ静的サーバーへ置くだけで配信できます（登録 API 不要）</li>
@@ -125,10 +138,10 @@
       <h3>🌐 CDN ホスト版（kasugai-canvas-web）</h3>
       <p>エンジン一式（<code>web/</code>）を CDN ライブラリのように静的配信する専用ホストが <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web</a>（GitHub Pages）です。「アプリはホスト・データはローカル（または任意 URL）」の構造で、KASUGAI Canvas 未インストールの環境でも <code>.kasc</code>+<code>DATA/</code> をブラウザ再生できます。</p>
       <ul>
-        <li><strong>起動形式</strong>: <code>…/kasugai-canvas-web/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;url&gt;</code>。各ステージ配下に全エンジン（cesium・maplibre・openlayers・leaflet・gsimaps）が同居し、ステージルートの <code>?engine=</code> でも選択できます。<code>?kasc=local</code> ならローカルフォルダの .kasc を直接開けます（ホストされたエンジンがローカルのデータだけを読む、CDN ライブラリと同じ使い方）</li>
+        <li><strong>起動形式</strong>: <code>…/kasugai-canvas-web/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;url&gt;</code>。各ステージ配下に全エンジン（cesium・maplibre・openlayers・leaflet・gsimaps・navara）が同居し、ステージルートの <code>?engine=</code> でも選択できます。<code>?kasc=local</code> ならローカルフォルダの .kasc を直接開けます（ホストされたエンジンがローカルのデータだけを読む、CDN ライブラリと同じ使い方）</li>
         <li><strong>2チャンネル</strong>: <code>stable/</code>（既定・リリース版）と <code>unstable/</code>（kasugai_canvas 側 <code>main</code> の最新 <code>web/</code> 追従）。<code>channels.json</code> と各ステージの <code>version.json</code> がバージョン表です</li>
         <li><strong>正本と同期</strong>: 正本は kasugai_canvas 側の <code>web/</code> で、CDN リポジトリは発行物のみ（直接編集しない）。同期は <code>python tools/publish_cdn.py --channel unstable|stable</code> で行い、どちらのチャンネルも <code>web/</code> を直接同期します（unstable 経由の格上げではない）。運用は「web/ に配信したい変更 → unstable 同期・リリース時に stable 同期」</li>
-        <li><strong>gsimaps の vendor 配置</strong>: 各ステージへ同期する際、<code>web/vendor/</code> 実体（地理院地図）も <code>vendor.json</code> の sha に従って配置されます（ローカルアプリはこの CDN vendor を <code>/vendor/</code> プロキシ経由で同一オリジン供給）</li>
+        <li><strong>vendor の配置（gsimaps・navara）</strong>: 各ステージへ同期する際、<code>web/vendor/</code> 実体（地理院地図・Navara ライブラリ）も <code>vendor.json</code> の sha に従って配置されます（ローカルアプリはこの CDN vendor を <code>/vendor/</code> プロキシ経由で同一オリジン供給。navara は vendor 未配置だと起動できません）</li>
         <li><strong>ローカルアプリ連携（バックエンド検出）</strong>: 同一オリジンにバックエンドが無い静的配信では、起動中のローカルアプリ（<code>127.0.0.1:8510</code>）を自動検出し、<code>/api/*</code>・<code>/projects/*</code> をそちらへ向けます。ホスト版でも AI ブリッジ（Copilot/Devin/Antigravity）や外部登録プロジェクト（QGIS 出力の .kasc+DATA/）・fileWrite/fetchProxy が使えます。Chrome の「ローカルネットワークアクセス」権限が求められたら許可してください（許可で自動リロードして有効化。拒否時は静的機能のみ）</li>
         <li><strong>利用者向けガイド</strong>: エンジン説明・QGIS からの出力手順はホスト側の <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">guide/</a> に集約しています</li>
       </ul>

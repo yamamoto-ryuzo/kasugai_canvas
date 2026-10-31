@@ -10,13 +10,13 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.7.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.8.0</span></h1>
       <p><strong>AIとマルチエンジンが拓く 2D/3D GIS</strong> — ローカルPC・ブラウザ完結で動作するデータ可視化システムのドキュメント</p>
     </header>
     <main>
       <section>
         <h2>1. 📋 概要</h2>
-        <p>KASUGAI Canvas は、<strong>AI とマルチエンジンで拓く 2D/3D GIS</strong> です。CesiumJS + Three.js（メイン・3D）を核に、MapLibre / OpenLayers / Leaflet / GSI Maps の互換プレイヤーが同じ <code>.kasc</code> プロジェクトを再生するマルチエンジン構成を採り、AI チャット（Gemini / OpenAI互換 の内蔵AI、GitHub Copilot・Devin・Antigravity のブリッジ連携）で地図を操作できます。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能を備えています。</p>
+        <p>KASUGAI Canvas は、<strong>AI とマルチエンジンで拓く 2D/3D GIS</strong> です。CesiumJS + Three.js（メイン・3D）を核に、MapLibre / OpenLayers / Leaflet / GSI Maps の互換プレイヤーと試験的エンジン Navara が同じ <code>.kasc</code> プロジェクトを再生するマルチエンジン構成を採り、AI チャット（Gemini / OpenAI互換 の内蔵AI、GitHub Copilot・Devin・Antigravity のブリッジ連携）で地図を操作できます。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能を備えています。</p>
         <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得は CesiumJS が直接行い、Rust サーバーはバージョン管理・シャットダウン・ヘルスチェック API のみ提供します。</small></p>
         <figure>
         <img src="images/KASUGAI_Canvas_概要.png" alt="KASUGAI Canvas 概要：AI連携・FLYプレゼンテーション・マルチエンジン・.kasc+DATA 納品構造" />
@@ -30,7 +30,7 @@
 
       <section>
         <h2>2. 🌐💻 マルチエンジン — ブラウザ WebGIS とローカルアプリ</h2>
-        <p>マルチエンジン構成（Cesium＋4互換プレイヤー）の利用形態は2系統です。メインはインストール不要の<strong>ブラウザ WebGIS</strong>（CDN エンジン × 外部ホストの .kasc）、フル機能が必要な場合は<strong>ローカルアプリ</strong>を使います。</p>
+        <p>マルチエンジン構成（Cesium＋4互換プレイヤー＋試験的 Navara）の利用形態は2系統です。メインはインストール不要の<strong>ブラウザ WebGIS</strong>（CDN エンジン × 外部ホストの .kasc）、フル機能が必要な場合は<strong>ローカルアプリ</strong>を使います。</p>
         <div class="install-steps webgis">
           <h3>【WebGIS】ブラウザ WebGIS（メイン・インストール不要）</h3>
           <p>CDN（<a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web</a>）が配信するエンジンに、外部ホストの <code>.kasc</code> を <code>?kasc=</code> で指定して開くサーバレスな WebGIS です。QGIS の geo_webview でエクスポートした <code>.kasc</code>+<code>DATA/</code> を任意の静的ホストに置くだけで使えます。公開デモもこの形態の実例です。</p>
@@ -89,7 +89,7 @@
 flowchart TB
   REPO["kasugai_canvas リポジトリ（開発の起点）<br/>web/ = エンジン正本 ＋ server/ = Rust アプリ"]
 
-  REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/<br/>cesium / maplibre / openlayers / leaflet / gsimaps"]
+  REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/<br/>cesium / maplibre / openlayers / leaflet / gsimaps / navara(試験)"]
   REPO ==>|"run.py -B → ZIP（自動更新）"| APP["ローカルアプリ<br/>kasugai_canvas.exe :8510<br/>フル機能（QGIS連携・保存・rclone・AIブリッジ）"]
   CDN -.->|"vendored 地理院地図（約75MB）を<br/>/vendor/ プロキシでオンデマンド配信"| APP
 
@@ -155,8 +155,8 @@ flowchart TB
           </tr>
           <tr>
             <td><code>&lt;engine&gt;</code></td>
-            <td><code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code></td>
-            <td>再生に使う描画エンジン。<code>cesium</code> がメイン（3D・フル機能）、他は同じ <code>.kasc</code> を読む互換プレイヤー</td>
+            <td><code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code> / <code>navara</code></td>
+            <td>再生に使う描画エンジン。<code>cesium</code> がメイン（3D・フル機能）、他は同じ <code>.kasc</code> を読む互換プレイヤー。<code>navara</code> は試験的エンジン（写実3D）</td>
           </tr>
           <tr>
             <td><code>?kasc=</code></td>
@@ -164,7 +164,7 @@ flowchart TB
             <td>DATA/ 等の相対参照は .kasc のある URL 基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> は同じフォルダに置く</td>
           </tr>
         </table>
-        <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・ブリッジハブの自動起動）を持ちます。AI の接続系統とブリッジハブの構成（<code>:8511</code> に一本化・<code>bridge-hub.zip</code>）は「<a href="#ai-2keito">3. AI — API 直通とブリッジ経由</a>」にまとめています。CDN 経由はブラウザ閲覧中心です。なおローカルアプリも vendored 地理院地図（gsimaps vendor・約75MB）は同梱せず、<code>/vendor/*</code> のミスを CDN へプロキシして同一オリジン供給するため、vendor については実行時も CDN が配信元になります。さらに描画ライブラリ（CesiumJS・Leaflet・MapLibre・OpenLayers・DuckDB-WASM 等）は全エンジンが jsdelivr/unpkg から読み込むため、配布形態に関わらずブラウザ実行は常にオンライン前提です。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布 ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（127.0.0.1:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
+        <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・ブリッジハブの自動起動）を持ちます。AI の接続系統とブリッジハブの構成（<code>:8511</code> に一本化・<code>bridge-hub.zip</code>）は「<a href="#ai-2keito">3. AI — API 直通とブリッジ経由</a>」にまとめています。CDN 経由はブラウザ閲覧中心です。なおローカルアプリも vendored 地理院地図（gsimaps vendor・約75MB）は同梱せず、<code>/vendor/*</code> のミスを CDN へプロキシして同一オリジン供給するため、vendor については実行時も CDN が配信元になります。さらに描画ライブラリ（CesiumJS・Leaflet・MapLibre・OpenLayers・DuckDB-WASM 等）は jsdelivr/unpkg から読み込むため、配布形態に関わらずブラウザ実行は常にオンライン前提です（試験的エンジン Navara は Worker の同一オリジン要件から <code>vendor/navara/</code> 同梱 dist を使用）。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布 ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（127.0.0.1:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
       </section>
 
       <section>
@@ -181,7 +181,7 @@ flowchart TB
           </a>
           <a class="feature-card" href="features/v6.html">
             <h3>🔀 マルチエンジン</h3>
-            <p>Cesium（メイン）＋ MapLibre / OpenLayers / Leaflet / GSI Maps — 同じ .kasc を5エンジンで再生。エンジン切替・状態引継ぎ・CDN ホスト版</p>
+            <p>Cesium（メイン）＋ MapLibre / OpenLayers / Leaflet / GSI Maps ＋ Navara（試験的）— 同じ .kasc を6エンジンで再生。エンジン切替・状態引継ぎ・CDN ホスト版</p>
           </a>
           <a class="feature-card" href="inspector.html">
             <h3>📝 .kasc 設定仕様</h3>

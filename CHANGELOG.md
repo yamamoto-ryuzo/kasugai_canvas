@@ -4,6 +4,21 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.8.0] - 2026-10-31
+
+### Added
+
+- **Navara エンジン（試験的）を追加** — `@navaramap/three`（Rust/WASM GIS コア + Three.js レンダラ）で `.kasc` を再生する写実 3D エンジン。大気散乱・太陽・影のフォトリアルシーン（`addDefaultPhotorealScene`）と Re:Earth Terrain（quantized-mesh）の地形を備え、写実的な 3D プレゼン用途を検証する位置づけ:
+  - ベクター系行（`geojson:`/`layer:`/`geoparquet:`/`flatgeobuf:`/`gpkg:`/`csv:`/`tsv:`/`duckdb:`/`sql:`）は shared ローダーで GeoJSON 化して geojson ソースへ流し込み（QML は代表地物のスタイルをレイヤ単位マテリアルへ反映）、`base:`/`xyz:` は raster-tile ソース、`3dtiles:` は 3d-tiles ソースとして追加。`cam:`・`theme:`・ブックマーク・属性 UI・AI チャット・印刷は shared 共通
+  - `wms:`/`wmts:`・3D Tiles 表面ドレープ・地物単位の凡例フィルタは未対応（非対応行は情報タブへ警告）
+  - `?engine=navara` で起動でき、エンジン切替 UI では試験的エンジンの目印として `[navara]` と括弧付き表示（`ENGINE_LABELS` の `[]` 表記）
+  - 設定ペインの「地形（Re:Earth Terrain）」で quantized-mesh 地形の ON/OFF・写実シーン（大気・太陽・雲）・影・時刻（UTC）を調整。既定は描画負荷を抑える設定（影 OFF・マルチサンプリングなし）
+- **npm ベンダーのピン取得に対応**（`tools/fetch_vendor.py`）— `vendor.json` に `npm` 指定を書けるようにし、レジストリ tarball を `vendor/navara/` へ配置。gsimaps と同じく vendor 実体はリポジトリ・配布 ZIP に同梱せず、CDN（kasugai-canvas-web）へ `publish_cdn.py --vendor` で発行する（Worker が `import.meta.url` 相対のため同一オリジン必須・外部 CDN 直読み不可）
+
+### Changed
+
+- **2D エンジンのパネル UI を Cesium 版に統一** — maplibre / openlayers / leaflet / navara のパネル外観（幅・半透明背景・タブ・ボタン・入力コントロール）を `.control-panel` と同じ値に揃え、エンジン間で見た目が変わらないようにした
+
 ## [6.7.0] - 2026-10-31
 
 ### Changed

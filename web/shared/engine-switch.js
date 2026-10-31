@@ -6,7 +6,10 @@
 // 各エンジンは <webroot>/<name>/ に同居するため、ルートは絶対パスではなく
 // "../" で解決する(GitHub Pages 等のパスプレフィックス配信でも動く)。
 
-export const ENGINE_IDS = ["cesium", "maplibre", "openlayers", "leaflet", "gsimaps"];
+export const ENGINE_IDS = ["cesium", "maplibre", "openlayers", "leaflet", "gsimaps", "navara"];
+// 表示名の上書き（[] は試験的エンジンの目印。engine id 自体は変えない）
+const ENGINE_LABELS = { navara: "[navara]" };
+const engineLabel = id => ENGINE_LABELS[id] || id;
 
 // ---- 切替時のレイヤ状態引継ぎ ----
 // 切替元の表示状態(インスペクタの .kasc テキスト・テーマ選択・各レイヤの可視性)を
@@ -66,14 +69,14 @@ export function mountEngineSwitcher(container, currentEngine, engines = ENGINE_I
   for (const name of engines) {
     if (name === currentEngine) {
       const b = document.createElement("b");
-      b.textContent = name;
+      b.textContent = engineLabel(name);
       el.append(b);
       continue;
     }
     const a = document.createElement("a");
     a.dataset.engine = name;
     a.href = engineSwitchUrl(name);
-    a.textContent = name;
+    a.textContent = engineLabel(name);
     links.push(a);
     el.append(a);
   }

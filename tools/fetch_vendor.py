@@ -23,6 +23,7 @@ import os
 import shutil
 import sys
 import tarfile
+import time
 import urllib.request
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -53,26 +54,101 @@ def _current_sha(vendor_dir):
         return None
 
 
+def _spec_pin(spec):
+    """vendor.json の整合確認用ピン。github は sha/ref、npm は全版の合成。"""
+    if spec.get('npm'):
+        return 'npm:' + ','.join(
+            '{0}@{1}'.format(pkg, spec['npm'][pkg])
+            for pkg in sorted(spec['npm']))
+    return spec.get('sha') or spec.get('ref') or 'HEAD'
+
+
+def _move_tree(tmp, vendor_dir):
+    """tmp を vendor_dir へ原子的に移す。Windows では展開直後の AV/インデックス
+    走査で os.replace が一時的に WinError 5 を返すことがあるため短い再試行と
+    shutil.move フォールバックを入れる"""
+    if os.path.isdir(vendor_dir):
+        shutil.rmtree(vendor_dir)
+    last = None
+    for _ in range(5):
+        try:
+            os.replace(tmp, vendor_dir)
+            return
+        except PermissionError as e:
+            last = e
+            time.sleep(0.5)
+    shutil.move(tmp, vendor_dir)
+
+
+def _fetch_url(url):
+    req = urllib.request.Request(url, headers={'User-Agent': 'kasugai-canvas'})
+    with urllib.request.urlopen(req, timeout=300) as res:
+        return res.read()
+
+
+def _extract_targz(payload, tmp, strip_prefix):
+    """tar.gz を tmp へ展開。strip_prefix に一致する先頭階層を剥がす。"""
+    with tarfile.open(fileobj=io.BytesIO(payload), mode='r:gz') as tf:
+        for m in tf.getmembers():
+            parts = m.name.split('/', 1)
+            if parts[0] != strip_prefix or len(parts) < 2 or not parts[1]:
+                continue
+            m.name = parts[1]
+            tf.extract(m, tmp)
+
+
+def _fetch_npm_vendor(spec, name, vendor_dir):
+    """npm レジストリの tarball を package/ ルートごと vendorDir/<pkg>/ へ配置。
+
+    scoped 名はそのままディレクトリ名に使う（@navaramap/three →
+    vendor/navara/@navaramap/three/）。importmap から <pkg>/dist/... への
+    パスで参照できるよう npm の内部構造を維持する
+    """
+    tmp = vendor_dir + '.tmp'
+    if os.path.isdir(tmp):
+        shutil.rmtree(tmp)
+    os.makedirs(tmp)
+    for pkg, ver in sorted(spec['npm'].items()):
+        base = pkg.split('/')[-1]
+        url = 'https://registry.npmjs.org/{0}/-/{1}-{2}.tgz'.format(
+            pkg, base, ver)
+        print('{0}: fetching {1} ({2})'.format(name, url, pkg))
+        payload = _fetch_url(url)
+        dst = os.path.join(tmp, *pkg.split('/'))
+        os.makedirs(dst)
+        _extract_targz(payload, dst, 'package')
+    _move_tree(tmp, vendor_dir)
+    pin = _spec_pin(spec)
+    with open(os.path.join(vendor_dir, 'VENDOR.json'), 'w', encoding='utf-8') as f:
+        json.dump({'name': name, 'npm': spec['npm'], 'sha': pin},
+                  f, ensure_ascii=False, indent=2)
+        f.write('\n')
+    print('{0}: installed {1} -> {2}'.format(name, pin[:24], vendor_dir))
+    return vendor_dir
+
+
 def fetch_vendor(spec_path, force=False):
     """vendor.json 1件分のスナップショットを取得・配置する。"""
     spec = _read_json(spec_path)
     name = spec.get('name') or os.path.basename(os.path.dirname(spec_path))
-    repo = spec['repo']
-    ref = spec.get('ref') or 'HEAD'
-    sha = spec.get('sha') or ref
     vendor_dir = os.path.normpath(
         os.path.join(os.path.dirname(spec_path),
                      spec.get('vendorDir', os.path.join('..', 'vendor', name))))
+    pin = _spec_pin(spec)
 
-    if not force and _current_sha(vendor_dir) == sha and os.path.isdir(vendor_dir):
-        print('{0}: already at {1} (skip)'.format(name, sha[:8]))
+    if not force and _current_sha(vendor_dir) == pin and os.path.isdir(vendor_dir):
+        print('{0}: already at {1} (skip)'.format(name, pin[:24]))
         return vendor_dir
 
+    if spec.get('npm'):
+        return _fetch_npm_vendor(spec, name, vendor_dir)
+
+    repo = spec['repo']
+    ref = spec.get('ref') or 'HEAD'
+    sha = spec.get('sha') or ref
     url = 'https://github.com/{0}/archive/{1}.tar.gz'.format(repo, sha)
     print('{0}: fetching {1}'.format(name, url))
-    req = urllib.request.Request(url, headers={'User-Agent': 'kasugai-canvas'})
-    with urllib.request.urlopen(req, timeout=300) as res:
-        payload = res.read()
+    payload = _fetch_url(url)
 
     tmp = vendor_dir + '.tmp'
     if os.path.isdir(tmp):
@@ -87,9 +163,7 @@ def fetch_vendor(spec_path, force=False):
                 continue
             m.name = parts[1]
             tf.extract(m, tmp)
-    if os.path.isdir(vendor_dir):
-        shutil.rmtree(vendor_dir)
-    os.replace(tmp, vendor_dir)
+    _move_tree(tmp, vendor_dir)
 
     with open(os.path.join(vendor_dir, 'VENDOR.json'), 'w', encoding='utf-8') as f:
         json.dump({'name': name, 'repo': repo, 'ref': ref, 'sha': sha},

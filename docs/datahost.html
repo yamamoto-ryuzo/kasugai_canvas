@@ -26,7 +26,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.7.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.8.0</span></h1>
       <p>【WebGIS】ブラウザ WebGIS — 外部ホストの .kasc + DATA/ を CDN エンジンで再生（インストール不要）</p>
     </header>
     <main>
@@ -52,7 +52,7 @@ flowchart LR
     DATA[".kasc + DATA/<br/>…/&amp;lt;id&amp;gt;/"]
     PJ["projects.json【複数指定する場合は必須】<br/>群マニフェスト<br/>→ エンジンの選択肢・一覧に使用"]
   end
-  CDN["CDN（kasugai-canvas-web）<br/>GitHub Pages エンジン配信<br/>stable/・unstable/・5エンジン"]
+  CDN["CDN（kasugai-canvas-web）<br/>GitHub Pages エンジン配信<br/>stable/・unstable/・6エンジン"]
   WEB["ブラウザ WebGIS<br/>?kasc=&amp;lt;.kascのURL&amp;gt;"]
 
   QGIS --&gt;|"アップロード"| DATA
@@ -73,7 +73,7 @@ flowchart LR
           <tr><td>ベース URL</td><td><code>https://yamamoto-ryuzo.github.io/kasugai-canvas-web/</code>（ルートは <code>stable/</code> へリダイレクト）</td></tr>
           <tr><td><code>stable/</code></td><td>安定版・既定チャンネル（リリースに合わせて同期）</td></tr>
           <tr><td><code>unstable/</code></td><td>開発版チャンネル（<code>kasugai_canvas</code> 最新の <code>web/</code> を追従）</td></tr>
-          <tr><td>エンジン</td><td><code>cesium</code>（メイン・フル機能）/ <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code>（.kasc プレイヤーとして互換）</td></tr>
+          <tr><td>エンジン</td><td><code>cesium</code>（メイン・フル機能）/ <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code>（.kasc プレイヤーとして互換）/ <code>navara</code>（試験的・写実3D）</td></tr>
           <tr><td>正本・同期</td><td>正本は <code>kasugai_canvas</code> の <code>web/</code>。<code>python tools/publish_cdn.py --channel stable|unstable</code> で同期（CDN 側の直接編集はしない）</td></tr>
         </table>
         <p><small>詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
@@ -159,8 +159,8 @@ flowchart LR
           </tr>
           <tr>
             <td><code>&lt;engine&gt;</code></td>
-            <td><code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code></td>
-            <td>再生に使う描画エンジン。<code>cesium</code> がメイン（3D・フル機能）、他は同じ .kasc を読む互換プレイヤー</td>
+            <td><code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code> / <code>navara</code></td>
+            <td>再生に使う描画エンジン。<code>cesium</code> がメイン（3D・フル機能）、他は同じ .kasc を読む互換プレイヤー。<code>navara</code> は試験的エンジン（写実3D・要 vendor 同期）</td>
           </tr>
           <tr>
             <td><code>?kasc=</code></td>

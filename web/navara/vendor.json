@@ -1,0 +1,18 @@
+{
+  "name": "navara",
+  "title": "Navara (@navaramap/three)",
+  "npm": {
+    "three": "0.185.1",
+    "postprocessing": "6.39.4",
+    "@navaramap/three": "0.2.1",
+    "@navaramap/three-default-plugin": "0.2.1",
+    "@navaramap/three-default-descs": "0.2.1",
+    "@navaramap/engine": "0.2.1",
+    "@navaramap/engine-api": "0.2.1",
+    "@navaramap/engine-worker": "0.2.1"
+  },
+  "vendorDir": "../vendor/navara",
+  "entry": "index.html",
+  "license": "MIT OR Apache-2.0",
+  "note": "npm ビルド済み dist のスナップショット（@navaramap/* はソース tarball では動かないため npm パッケージをピン）。バージョンを変えたら tools/fetch_vendor.py で再取得し、publish_cdn.py --vendor で CDN へ反映する。Worker は import.meta.url 相対・同一オリジン必須のため外部 CDN 直読みは不可（SecurityError で地物メッシュ・地形・3D Tiles が停止する）。three/postprocessing も peer 参照を同一インスタンスに揃えるため同梱する"
+}

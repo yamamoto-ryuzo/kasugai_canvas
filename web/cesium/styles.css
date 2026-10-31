@@ -40,7 +40,7 @@ body.globe-hidden .viewport { background: transparent; }
 .control-panel section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e4ecef; }
 .control-panel > .plugin-panel { margin-top: 0; padding-top: 0; border-top: 0; }
 .control-panel > #engines { margin-top: 10px; font-size: 11px; }
-.control-panel > #engines a { margin-right: 6px; }
+.control-panel > #engines a, .control-panel > #engines b { margin-right: 6px; }
 .panel-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: -2px -4px 0; padding-bottom: 4px; overflow: visible; }
 .panel-toggle { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 1px 4px !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 18px !important; line-height: 1; }
 .panel-tab,

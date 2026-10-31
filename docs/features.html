@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.7.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.8.0</span></h1>
       <p>機能と実装 — 機能一覧と現行実装の仕組み・制限</p>
     </header>
     <main>
@@ -174,7 +174,7 @@
       <div class="features">
         <div class="feature-card">
           <h3>🔀 エンジン選択と切替</h3>
-          <p><code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps</code> で起動エンジンを選択（既定 cesium）。パネルの切替リンクはプロジェクト・カメラ位置・インスペクター編集・レイヤ可視性を引き継ぐ</p>
+          <p><code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara</code> で起動エンジンを選択（既定 cesium）。パネルの切替リンクはプロジェクト・カメラ位置・インスペクター編集・レイヤ可視性を引き継ぐ</p>
         </div>
         <div class="feature-card">
           <h3>🗺️ 2D プレイヤー（MapLibre / OpenLayers / Leaflet）</h3>
@@ -183,6 +183,10 @@
         <div class="feature-card">
           <h3>🗾 GSI Maps エンジン（調整中）</h3>
           <p>vendored 地理院地図を iframe で組み込む中間エンジン。.kasc を作図リスト・外部タイルとして再生し、Globe 上へのレイヤ注入・地理院地図レイヤの .kasc 取り込みも可能。ベースマップ切替・カタログ取込・Globe 進入等の17本の AI ツールで地理院地図を制御（内部 API 依存のため AI 制御は現在調整中）</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌍 Navara エンジン（試験的）</h3>
+          <p><code>@navaramap/three</code>（Rust/WASM + Three.js）による写実 3D プレゼンエンジン。ベクター行・<code>3dtiles:</code>・ベースマップをフォトリアルシーン（大気・太陽・地形）で描画。<code>wms:</code>/<code>wmts:</code> は未対応</p>
         </div>
         <div class="feature-card">
           <h3>🧩 エンジン非依存コア（shared/）</h3>

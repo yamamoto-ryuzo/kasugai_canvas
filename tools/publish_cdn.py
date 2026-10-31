@@ -133,7 +133,7 @@ def _sync_vendors(stage, apply=False):
     for spec_path in fetch_vendor._find_vendor_specs(WEB_DIR):
         spec = fetch_vendor._read_json(spec_path)
         name = spec.get('name') or os.path.basename(os.path.dirname(spec_path))
-        sha = spec.get('sha') or spec.get('ref') or 'HEAD'
+        sha = fetch_vendor._spec_pin(spec)
         dst = os.path.join(stage, 'vendor', name)
         cur = fetch_vendor._current_sha(dst) if os.path.isdir(dst) else None
         if cur == sha:

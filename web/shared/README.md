@@ -9,6 +9,13 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 - `web/maplibre/` … MapLibre フロント（.kasc プレイヤー・実装済み）
 - `web/openlayers/` … OpenLayers フロント（.kasc プレイヤー・実装済み）
 - `web/leaflet/` … Leaflet フロント（.kasc プレイヤー・実装済み）
+- `web/navara/` … Navara フロント（写実 3D プレゼンエンジン）。`@navaramap/three`
+  （Rust/WASM GIS コア + Three.js）で .kasc を再生。ライブラリは npm dist を
+  `web/vendor/navara/`（`web/navara/vendor.json` でバージョンピン・gitignore）
+  から importmap 経由で読み、**同一オリジン必須**（Worker が `import.meta.url`
+  相対で生成されるため外部 CDN 直読みは不可）。CDN には publish_cdn.py
+  `--vendor` で発行物として配置される。対応行: base:/xyz:/geojson 系・
+  3dtiles:・cam:。wms/wmts・ドレープ先=3DTiles は未対応
 - `web/gsimaps/` … GSI Maps フロント（中間エンジン・**現在調整中**。vendored 地理院地図
   `web/vendor/gsimaps/` を同一オリジン iframe で組み込み、.kasc を
   GSI/Leaflet API 経由で再生。上流コードは無改変。vendor 実体は
