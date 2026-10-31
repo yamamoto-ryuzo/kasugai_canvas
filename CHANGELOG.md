@@ -4,6 +4,20 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.10.0] - 2026-11-01
+
+### Changed
+
+- **vendor 供給を Service Worker 中継の上流オリジナル直読みへ一本化** — gsimaps（地理院地図）・navara（Navara ライブラリ）の `vendor/*` を、`vendor-proxy-sw.js` が各エンジンの `vendor.json` ピン先（npm → jsdelivr/npm、GitHub → jsdelivr/gh、失敗時 raw.githubusercontent）から同一オリジン中継する方式に変更。応答はページと同一オリジンになるため、Worker（`import.meta.url` 相対）・iframe 制御（`GSI.GLOBALS`）の同一オリジン制約を満たしたまま外部 CDN を直読みできる。上流が `text/plain`+`nosniff` を返すため、包み直し時の Content-Type は拡張子で決め打ちする
+- **Service Worker 前提化** — vendor 依存エンジン（gsimaps・navara）の起動は `shared/vendor-guard.js` が SW 登録＋制御確定を待ってから行う。`?hosted=` / localStorage `kasugai_hosted_base` 指定時のみ自前ミラーモードで動作（オフライン開発等）
+
+### Removed
+
+- **vendor 実体の同梱・配信を全廃止** — `web/vendor/`（リポジトリ・配布 ZIP・インストーラー同梱なし）に加え、kasugai-canvas-web の `stable/vendor/`・`unstable/vendor/`（計約360MB）も削除。サーバー側の vendor CDN プロキシ・SW 非対応時のホスト版転送フォールバック・`publish_cdn.py --vendor` 運用をすべて廃止。vendor 更新は `vendor.json` のピン変更のみで完結する
+- **`tools/fetch_vendor.py`** はオフライン開発・自前ミラー準備専用に変更（`?hosted=` と組み合わせて使う）
+
+**注意**: 本バージョン以前にインストールされたクライアントは gsimaps・navara エンジンが動作しません（旧 SW が削除済みの `stable/vendor/` を参照するため）。自動更新で本バージョン以降へ更新すれば復旧します
+
 ## [6.9.0] - 2026-10-31
 
 ### Changed
