@@ -4,24 +4,18 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>KASUGAI Canvas — GSI Maps</title>
+<script src="../shared/vendor-guard.js"></script>
 <script>
   // vendored 地理院地図(web/vendor/gsimaps)は配布物・リポジトリに同梱しない。
-  // ローカルアプリ(:8510)は /vendor/* のミスを CDN へプロキシして同一オリジン
-  // 供給するため、HEAD が通れば vendor 実体が無くてもローカルのまま起動する。
-  // HEAD が通らない環境(静的配信・CDN 不通)のみホスト版(kasugai-canvas-web)の
-  // gsimaps エンジンへ転送する。iframe の制御は同一オリジンが必須なので、
-  // vendor の有無を HEAD で調べてから振り分ける
+  // vendorGuardProbe(shared/vendor-guard.js)が vendor-proxy-sw を登録し、
+  // vendor/* を CDN へ同一オリジン中継する（:8510 のサーバープロキシに加え
+  // github.io のような静的配信でも有効）。HEAD が通ればローカルのまま起動し、
+  // 通らない環境(SW 非対応・CDN 不通)のみホスト版(kasugai-canvas-web)の
+  // gsimaps エンジンへ転送する
   (function () {
     var VENDOR_URL = "../vendor/gsimaps/index_pm.html";
-    var DEFAULT_HOSTED = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";
-    function hostedBase() {
-      var h = new URLSearchParams(location.search).get("hosted");
-      if (!h) { try { h = localStorage.getItem("kasugai_hosted_base") || ""; } catch (e) {} }
-      return (h || DEFAULT_HOSTED).replace(/\/?$/, "/");
-    }
-    fetch(new URL(VENDOR_URL, location.href), { method: "HEAD", cache: "no-store" })
-      .then(function (r) { return r.ok; })
-      .catch(function () { return false; })
+    var hostedBase = window.vendorHostedBase;
+    vendorGuardProbe(VENDOR_URL)
       .then(function (hasVendor) {
         if (window.parent !== window) {
           // この中間エンジンページはトップレベル専用。iframe 内に読み込まれた
@@ -302,8 +296,9 @@
 <iframe id="gsi-frame" title="地理院地図" allow="geolocation" data-ui-bridge></iframe>
 <div id="gsi-missing" hidden>
   <div>地理院地図を初期化できませんでした。<br>
-  通常はホスト版(kasugai-canvas-web)へ自動転送されます。ローカルの
-  <code>web/vendor/gsimaps/</code> で動かす場合は
+  通常は Service Worker 経由で CDN(kasugai-canvas-web) から供給されるか、
+  ホスト版へ自動転送されます。オフライン用にローカルの
+  <code>web/vendor/gsimaps/</code> で動かす場合のみ
   <code>python tools/fetch_vendor.py</code> で取得してください。</div>
 </div>
 <div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div>

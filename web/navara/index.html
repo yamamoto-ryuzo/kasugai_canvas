@@ -4,6 +4,63 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>KASUGAI Canvas — Navara</title>
+<script src="../shared/vendor-guard.js"></script>
+<script>
+  // vendored Navara(web/vendor/navara)は配布物・リポジトリに同梱しない。
+  // vendorGuardProbe(shared/vendor-guard.js)が vendor-proxy-sw を登録し、
+  // vendor/* を CDN へ同一オリジン中継する（:8510 のサーバープロキシに加え
+  // github.io のような静的配信でも有効）。HEAD が通ればローカルのまま起動し、
+  // 通らない環境(SW 非対応・CDN 不通)のみホスト版(kasugai-canvas-web)の
+  // navara エンジンへ転送する。Worker は import.meta.url 相対・同一オリジン
+  // 必須のため、importmap の外部 CDN 直読みではなく SW 中継/ページ転送で
+  // 振り分ける
+  (function () {
+    var VENDOR_URL = "../vendor/navara/@navaramap/three/dist/index.js";
+    var hostedBase = window.vendorHostedBase;
+    // app.js は静的な <script type=module> ではなくプローブ後に注入する。
+    // 静的読み込みだと初回訪問で SW 制御前に vendor を取りに行き 404 確定
+    // するため、中継可否を確定してからモジュールを起動する
+    function startApp() {
+      var s = document.createElement("script");
+      s.type = "module";
+      s.src = "./app.js";
+      document.head.appendChild(s);
+    }
+    vendorGuardProbe(VENDOR_URL)
+      .then(function (hasVendor) {
+        if (hasVendor) { startApp(); return; } // ローカル/SW 中継で起動
+        var p = new URLSearchParams(location.search);
+        var kasc = p.get("kasc");
+        function go(kascUrl) {
+          var target = hostedBase() + "navara/?kasc=" + encodeURIComponent(kascUrl);
+          if (p.get("dirhint")) target += "&dirhint=" + encodeURIComponent(p.get("dirhint"));
+          location.replace(target + location.hash);
+        }
+        function projectKasc(id) {
+          return new URL("../projects/" + encodeURIComponent(id || "default") +
+            "/kasugai_canvas.kasc", location.href).href;
+        }
+        if (kasc) {
+          if (kasc !== "local" && !/^localfs:/i.test(kasc)) {
+            kasc = new URL(kasc, location.href).href;
+            // file:// はCDNから読めないためローカルフォルダ直読みモードへ誘導
+            if (/^file:/i.test(kasc)) kasc = "local";
+          }
+          go(kasc);
+          return;
+        }
+        if (p.get("project")) { go(projectKasc(p.get("project"))); return; }
+        // 既定プロジェクト = projects マニフェスト先頭
+        fetch(new URL("../projects/projects.json", location.href), { cache: "no-store" })
+          .then(function (r) { return r.ok ? r.json() : []; })
+          .catch(function () { return []; })
+          .then(function (m) {
+            var first = m && m[0];
+            go(projectKasc(first && (first.id || first)));
+          });
+      });
+  })();
+</script>
 <link rel="icon" type="image/x-icon" href="../favicon.ico" />
 <script type="importmap">
 {
@@ -360,6 +417,5 @@
   <button id="basemap-globe" type="button" title="Google Earth で現在の表示を開く" aria-label="Google Earth で現在の表示を開く">🌐</button>
   <select id="basemap-select"></select>
 </div>
-<script type="module" src="./app.js"></script>
 </body>
 </html>

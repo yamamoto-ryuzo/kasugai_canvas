@@ -128,7 +128,7 @@
 
 ```
 web/
-  index.html      エンジン選択リダイレクト（?engine=cesium|maplibre|openlayers|leaflet|gsimaps、
+  index.html      エンジン選択リダイレクト（?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara、
                   既定 cesium。engine 以外のクエリとハッシュは対象へ引継ぎ）
   cesium/         Cesium フロント（現行アプリ一式:
                   index.html/app.js/styles.css/PLUGIN/plugins.json/i18n 等）
@@ -136,19 +136,26 @@ web/
   openlayers/     OpenLayers フロント（.kasc プレイヤー実装済み: 同上）
   leaflet/        Leaflet フロント（.kasc プレイヤー実装済み: 同上。専用 pane で
                   .kasc 積み順を再現、回転系設定なし）
+  navara/         Navara フロント（写実 3D プレゼンエンジン・試験的。
+                  @navaramap/three(Rust/WASM+Three.js)を importmap で vendor から読み
+                  .kasc を再生。Worker 同一オリジン必須のため vendor 供給は下記
+                  SW 中継に一本化）
   gsimaps/        GSI Maps フロント（中間エンジン: vendored 地理院地図
                   gsi-cyberjapan/gsimaps を同一オリジン iframe(index_pm.html)で
                   組み込み、.kasc を GSI/Leaflet API 経由で再生。上流コードは
-                  無改変で維持。vendor 実体(web/vendor/gsimaps/)はリポジトリ・
-                  配布物に同梱せず kasugai-canvas-web 側提供へ移行:
-                  ローカルに vendor が無い環境では index.html 先頭の検出
-                  スクリプトがホスト版 gsimaps(?kasc=<ローカル絶対URL>)へ転送
-                  する。vendor の更新は手動運用: vendor.json の sha を上げて
+                  無改変で維持。※現在調整中: vendored iframe を GSI.GLOBALS
+                  内部 API 経由で操作する構造のため AI 制御の安定化が難しい）
+  vendor-proxy-sw.js  vendor/* を「ローカル実体 → CDN(kasugai-canvas-web)」の順で
+                  同一オリジン供給する Service Worker。vendor が必要なエンジン
+                  （navara・gsimaps）は shared/vendor-guard.js 経由で登録し、
+                  probe で供給可否を調べてから起動/ホスト版転送を振り分ける。
+                  vendor 実体はリポジトリ・配布物・ローカル開発のいずれにも置かず
+                  CDN が唯一の供給元（:8510 ではサーバー側 vendor_cdn_fallback
+                  が実体の代わりを務め、SW のローカル実体チェックがそれを拾う）。
+                  vendor 更新は手動運用: vendor.json の sha を上げて
                   publish_cdn.py --vendor で CDN へ反映する(通常発行では
-                  sha 差分の警告のみ。ローカルの web/vendor/ は gitignore
-                  済みで、手元で動かす場合は tools/fetch_vendor.py で取得)。
-                  ※現在調整中: vendored iframe を GSI.GLOBALS 内部 API 経由で
-                  操作する構造のため AI 制御の安定化が難しい）
+                  sha 差分の警告のみ。ローカルの web/vendor/ は gitignore 済み・
+                  オフライン開発等で実体が欲しい場合のみ tools/fetch_vendor.py)
   shared/         エンジン非依存コア置き場（.kasc ローダー・デコーダー・
                   i18n・QMLスタイルコンパイラを段階的に切出し。web/shared/README.md 参照）
   projects/       同梱プロジェクトデータ（静的配信用。エンジン非依存）
@@ -167,7 +174,7 @@ web/
 
 ## web/vendor/（上流スナップショット）の改変禁止
 
-- **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流。`web/vendor/` は **git 管理・配布物（run.py の ZIP・NSIS インストーラー）の対象外**（`.gitignore` 済み）で、`tools/fetch_vendor.py` が `web/<engine>/vendor.json` の sha でピン取得したローカル実体と、kasugai-canvas-web 発行時に `publish_cdn.py` が CDN 側へ配置する発行物のみが存在する
+- **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流。`web/vendor/` は **git 管理・配布物（run.py の ZIP・NSIS インストーラー）の対象外**（`.gitignore` 済み）で、通常運用ではローカルにも実体を置かない — 供給は `vendor-proxy-sw.js` が CDN(kasugai-canvas-web) から同一オリジン中継する方式に一本化済み。実体が存在するのは CDN 側の発行物（`publish_cdn.py --vendor` が `tools/fetch_vendor.py` 経由で配置）のみ。オフライン開発等でローカル実体が必要な場合のみ `tools/fetch_vendor.py` で取得する
 - 挙動を変えたい場合は vendor 側を直さず、組み込み側（中間層 `web/<engine>/` 等）でフック・差し替え・ラップする（例: gsimaps の Globe 起動は iframe の `window.open` を親側でフックして差し替え）
 - 上流側の修正・更新が必要なら上流へ PR するか、`vendor.json` の sha を上げて `python tools/fetch_vendor.py` で再取得する。vendor 実体の手編集・部分的差し替えは禁止
 - 例外は fetch_vendor が整合記録用に書き込む `VENDOR.json` のみ（上流ファイルではなく自動生成物）
