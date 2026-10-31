@@ -4543,6 +4543,7 @@ const AI_SETTINGS_HTML = `
   <p id="google-proxy-status" class="hint" aria-live="polite"></p>
 </section>
 <section id="ai-install-panel" class="ai-subpane">
+  <p class="hint"><span data-i18n="env.label">環境: </span><code class="env-kind">-</code></p>
   <div class="install-row" data-for="hub">
     <strong data-i18n="chat.bridge.hubTitle">ブリッジハブ</strong> <span class="cli-state" data-provider="hub" aria-live="polite"></span><br />
     <p class="hint" id="bridge-hub-note"><span data-i18n-html="chat.bridge.hubNote"></span></p>

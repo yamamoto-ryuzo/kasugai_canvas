@@ -8187,8 +8187,8 @@ function compareVersions(left, right) {
 async function loadUpdateInfo() {
   const current = document.querySelector("#current-version");
   // 動作環境の明示（アプリ=ローカル exe / CDN=静的配信）
-  const envKind = document.querySelector("#env-kind");
-  if (envKind) envKind.textContent = isBackendAlive() ? t("env.app") : t("env.cdn");
+  const envText = isBackendAlive() ? t("env.app") : t("env.cdn");
+  document.querySelectorAll(".env-kind").forEach((el) => { el.textContent = envText; });
   if (!isBackendAlive()) {
     // CDN/静的配信（バックエンド無し）はステージの version.json を表示。
     // ローカル exe が無いため自己更新 UI は出さない（更新は配信側同期）
