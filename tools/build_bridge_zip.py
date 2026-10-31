@@ -2,11 +2,12 @@
 """Build web/download/bridge-hub.zip + bridge-hub.exe — ブリッジハブ配布物。
 
 CDN/静的配信版の AI 設定画面からダウンロードさせるための単品配布物。
-Rust 製 bridge-hub.exe（server/src/bin/bridge-hub.rs）は
-・単体 exe（自己インストール型: 実行するだけで %LOCALAPPDATA% へコピー＋
-  ログイン時自動起動登録＋8512 で起動）… web/download/bridge-hub.exe
-・起動スクリプト一式を添えた bridge-hub/ ZIP（自動機・個別操作用）
-  … web/download/bridge-hub.zip
+Rust 製 bridge-hub.exe（server/src/bin/bridge-hub.rs）は GUI subsystem
+ビルドの単一 exe で、実行するだけで %LOCALAPPDATA% へ自己コピー＋
+ログイン時自動起動登録＋8511 で起動する（スクリプト不要 — 旧同梱の
+vbs/ps1/cmd は廃止し、AV 誤検知回避のため ZIP は exe+README のみ）。
+・bridge-hub.exe 単品 … web/download/bridge-hub.exe
+・exe + README の ZIP … web/download/bridge-hub.zip
 として出力する。Node.js 不要（旧 server.mjs 版は廃止）。
 web/ 直下に置くため、CDN 同期（publish_cdn.py）にそのまま含まれる。
 
@@ -26,10 +27,6 @@ EXE = os.path.join(SERVER_DIR, 'target', 'release', 'bridge-hub.exe')
 DEFAULT_OUT = os.path.join(REPO_DIR, 'web', 'download', 'bridge-hub.zip')
 BUNDLE_DIR = 'bridge-hub'
 BUNDLE_FILES = (
-    'setup.cmd',
-    'install-autostart.ps1',
-    'uninstall-autostart.ps1',
-    'run-hidden.vbs',
     'README.md',
 )
 

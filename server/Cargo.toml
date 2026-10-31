@@ -1,6 +1,6 @@
 [package]
 name = "kasugai_canvas"
-version = "6.6.0"
+version = "6.7.0"
 edition = "2021"
 license = "MIT"
 description = "KASUGAI Canvas CesiumJS and Three.js viewer"
@@ -20,6 +20,11 @@ tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["fs", "cors"] }
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "9.1.2", default-features = false, features = ["deflate"] }
+
+# bridge-hub.exe のスクリプトレス化用（プロセス停止・コンソール接続・MessageBox）
+[target.'cfg(windows)'.dependencies]
+sysinfo = "0.40.1"
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_WindowsAndMessaging"] }
 
 [build-dependencies]
 winres = "0.1.12"

@@ -74,9 +74,11 @@ Devin なら `devin` CLI、Antigravity なら `agy` CLI＋Google ログイン）
 
 `bridge-hub.exe` を **ダウンロードして実行するだけ**で、
 `%LOCALAPPDATA%\kasugai\bridge-hub\` への自己コピー → ログイン時自動起動
-タスク登録 → `127.0.0.1:8511` での非表示起動 → **ブリッジ用 CLI
+登録（タスクスケジューラ。登録できない環境では HKCU Run キー）→
+`127.0.0.1:8511` での起動 → **ブリッジ用 CLI
 （copilot/devin）の未導入分の自動インストール**まで一括で行われます
 （`--no-cli-setup` で CLI 導入を省略可。CLI DL に数分かかることがあります）。
+コンソールは表示されず、結果はメッセージボックスで通知されます。
 管理者権限は不要です。Canvas の AI 設定画面でブリッジ系プロバイダを
 選んだ際にも、ハブ未検出ならこの exe のダウンロードが自動で始まり、
 実行後はブラウザ側が `/health` ポーリングで検出して接続まで完了します。
@@ -105,19 +107,13 @@ Unblock-File "$env:TEMP\bridge-hub.exe"
 1..15 | % { try { Invoke-RestMethod http://127.0.0.1:8511/health -TimeoutSec 2; break } catch { Start-Sleep 1 } }
 ```
 
-### zip 版（スクリプト一式・個別操作向け）
+### zip 版（bridge-hub.zip）
 
-`download/bridge-hub.zip` には exe＋起動スクリプト一式が入っています。
-exe の自己インストールと同じタスク名（`KasugaiCanvasBridgeHub`）を使う
-ため、どちらの経路で登録しても同じ自動起動になります。
-
-```
-powershell -ExecutionPolicy Bypass -File install-autostart.ps1   # 自動起動登録(8511)+即時起動
-powershell -ExecutionPolicy Bypass -File uninstall-autostart.ps1 # 登録解除＋停止
-bridge-hub.exe --setup all     # CLI 導入のみ
-wscript run-hidden.vbs         # その場起動のみ（非表示・8511）
-setup.cmd [--nopause]          # 対話環境の一発セットアップ（--nopause で無人化）
-```
+`download/bridge-hub.zip` には `bridge-hub/bridge-hub.exe` と README のみが
+入っています（スクリプト同梱は廃止。exe は GUI subsystem ビルドで
+コンソールを持たないため、非表示起動用の vbs/ps1 は不要になりました）。
+展開して `bridge-hub.exe` を実行すれば上記の自己インストールが行われ、
+`--install` / `--serve` / `--uninstall` / `--setup` もそのまま使えます。
 
 **アプリ版との併用**: ハブはアプリ版・ブラウザ WebGIS 共通で 8511 に
 一本化されています。アプリはハブを内蔵せず、起動時に 8511 のハブが未応答なら
@@ -126,9 +122,9 @@ exe が旧版でもポートは 8511 に統一されます）。**注意**: 旧�
 8512 で常駐していたハブは全て旧版のため、本ハブのインストール時・および
 新版アプリの起動時に自動で停止されます。`--serve` の既定も 8511 です。
 
-停止だけしたい場合は、このフォルダの `bridge-hub.exe` を実行中のプロセスを
-終了してください（`bridge-hub.exe --uninstall` /
-`uninstall-autostart.ps1` は自動起動解除＋停止を行います）。
+停止だけしたい場合は、`bridge-hub.exe` を実行中のプロセスを
+タスクマネージャー等で終了してください
+（`bridge-hub.exe --uninstall` は自動起動解除＋停止＋削除を行います）。
 
 ## プロバイダ別の前提と利用条件（必読）
 

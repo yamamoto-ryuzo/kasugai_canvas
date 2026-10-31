@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.7.0] - 2026-10-31
+
+### Changed
+
+- **bridge-hub をスクリプトレスの単一 exe に刷新** — Windows Defender が `bridge-hub.zip`（`Trojan:Script/Sabsik.FL.A!ml`）と `bridge-hub.exe`（`Trojan:Win32/Bearfoos`）を ML ヒューリスティックで誤検知していた問題への対策として、同梱スクリプト（`run-hidden.vbs`・`install-autostart.ps1`・`uninstall-autostart.ps1`・`setup.cmd`）と exe 内のスクリプト生成・PowerShell 呼び出しを全廃:
+  - exe を `windows_subsystem` ビルドに変更しコンソールを持たないため、非表示起動用の vbs は不要。自動起動タスクは `bridge-hub.exe --serve` を直接実行（`schtasks /Create /XML` で登録者本人のログオン限定に登録。拒否される環境では HKCU Run キーへフォールバック）
+  - プロセス停止は sysinfo 経由の TerminateProcess、ポート占有者判定は netstat+sysinfo で実施し、PowerShell/taskkill/子スクリプトを生成しない
+  - 端末からの引数付き実行は `AttachConsole` で親コンソールへ出力を戻し、引数なし実行（ダブルクリック相当）は結果をメッセージボックスで通知
+  - 旧方式の残骸（インストール先・スタートアップフォルダの vbs）はインストール/アンインストール時に自動掃除。旧 8512 ハブの置き換え・無関係プロセス占有時の非 kill ポリシーは従来通り
+- **`bridge-hub.zip` の同梱物を `bridge-hub.exe`＋README のみに変更**（スクリプト一式は廃止）
+- exe にバージョン情報リソース（ProductName/FileDescription 等）を追加
+
 ## [6.6.0] - 2026-10-31
 
 ### Changed
