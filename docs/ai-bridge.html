@@ -104,7 +104,7 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
         <h2>4. ブリッジハブの構成（待受ポート・検出・環境変数）</h2>
         <div class="url-box">
           <h3>ポートと検出</h3>
-          <p>ハブはアプリ版・ブラウザ WebGIS 共通で <code>:8511</code> の1本に集約（旧 8512 常駐ハブは廃止）。フロントは <code>:8511</code> の <code>/health</code> を疎通してハブ（<code>hub:true</code>）を検出します。ハブに集約した設計判断（3ポート分離との比較・マルチエージェント観点）は <a href="features/v3.html#bridge-hub-design">V3: 設計判断：ブリッジハブ</a> を参照してください。</p>
+          <p>ハブはアプリ版・ブラウザ WebGIS 共通で <code>:8511</code> の1本に集約（旧 8512 常駐ハブは廃止）。フロントは <code>:8511</code> の <code>/health</code> を疎通してハブ（<code>hub:true</code>）を検出します。ハブの全 API・CLI フラグ・詳細仕様は <a href="bridge-hub.html">ブリッジハブ（bridge-hub.exe）</a>、ハブに集約した設計判断（3ポート分離との比較・マルチエージェント観点）は <a href="features/v3.html#bridge-hub-design">V3: 設計判断：ブリッジハブ</a> を参照してください。</p>
         </div>
         <div class="url-box">
           <h3>環境変数</h3>
@@ -153,6 +153,7 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
         <ul>
           <li><a href="ai-api.html">【API】内蔵AI（Gemini・OpenAI互換）</a></li>
           <li><a href="ai-tools.html">AI ツール仕様（全52ツールの定義）</a></li>
+          <li><a href="bridge-hub.html">ブリッジハブ（bridge-hub.exe）— 常駐ハブの詳細仕様</a></li>
           <li><a href="features/v3.html#bridge-hub-design">V3: 設計判断 — ブリッジハブ</a></li>
           <li><a href="guide.html">【アプリ】ローカルアプリ（ハブ内蔵のフル機能版）</a></li>
           <li><a href="index.html">← ドキュメントトップへ</a></li>

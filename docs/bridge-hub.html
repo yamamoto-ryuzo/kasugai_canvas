@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ブリッジハブ（bridge-hub.exe）— KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.7.0</span></h1>
+      <p>ブリッジハブ（bridge-hub.exe）— 常駐プロセスの詳細仕様</p>
+    </header>
+    <main>
+      <nav class="form-nav" aria-label="利用形態の切替">
+        <a href="datahost.html" class="webgis">🌐 【WebGIS】ブラウザ WebGIS</a>
+        <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
+        <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
+        <a href="ai-bridge.html" class="bridge current">🔌 【ブリッジ】外部エージェント連携</a>
+      </nav>
+
+      <section>
+        <h2 id="hub-overview">1. 概要 — bridge-hub.exe とは</h2>
+        <p>ローカルに常駐させるブリッジを <strong>1本（127.0.0.1:8511）に集約</strong>するハブです。<strong>Rust 製の単一 exe（<code>bridge-hub.exe</code>）で、Node.js は不要</strong>です。アプリ版（kasugai_canvas.exe）と同じ <code>server/src/bridge/</code> 実装を使い、Copilot / Devin / Antigravity の各プロバイダは実際に使われた時点で外部 CLI を子プロセスとして遅延起動します。</p>
+        <p>アプリ版・ブラウザ WebGIS 共通の1本で、アプリはハブを内蔵しません。起動時に <code>:8511</code> のハブが未応答なら、インストール済みの本 exe を <code>BRIDGE_HUB_PORT=8511</code> で自動起動します（旧ブラウザ WebGIS 用に 8512 で常駐していたハブは全て旧版のため、本ハブのインストール時・および新版アプリの起動時に自動で停止されます）。</p>
+        <div class="url-box">
+          <h3>エージェント連携は双方向</h3>
+          <p>このハブは「ブラウザ → エージェント」方向だけを担います。逆方向は別経路です:</p>
+          <ul>
+            <li><strong>ブラウザ → エージェント</strong>（チャットから AI を使う）… 本ハブ（<code>/agent</code>・<code>/models</code>）</li>
+            <li><strong>エージェント → ブラウザ</strong>（外から地図を操る）… アプリ本体（<code>127.0.0.1:8510</code>）の <code>/api/command</code>。Devin Desktop・Copilot CLI・任意スクリプトが <code>{"name":"flyTo","args":{...}}</code> を投入すると、ブラウザがロングポーリングで受信して <code>executeChatTool</code> で実行します</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="hub-install">2. 導入・起動・解除</h2>
+        <div class="install-steps">
+          <h3>基本導入（自己インストール型 exe）</h3>
+          <p><code>bridge-hub.exe</code> を <strong>ダウンロードして実行するだけ</strong>で、<code>%LOCALAPPDATA%\kasugai\bridge-hub\</code> への自己コピー → ログイン時自動起動登録（タスク <code>KasugaiCanvasBridgeHub</code>・登録できない環境では HKCU Run キー）→ <code>127.0.0.1:8511</code> での起動 → <strong>ブリッジ用 CLI（copilot/devin）の未導入分の自動インストール</strong>まで一括で行われます（<code>--no-cli-setup</code> で CLI 導入を省略可。CLI DL に数分かかることがあります）。コンソールは表示されず、結果はメッセージボックスで通知されます。管理者権限は不要です。</p>
+          <p>Canvas の AI 設定画面でブリッジ系プロバイダを選んだ際にも、ハブ未検出ならこの exe のダウンロードが自動で始まり、実行後はブラウザ側が <code>/health</code> ポーリングで検出して接続まで完了します。</p>
+          <pre><code>bridge-hub.exe              # 自己インストール（DL直後の実行）
+                            #   ※ インストール先からの実行・BRIDGE_HUB_PORT 指定時は
+                            #     その場でハブ起動（--serve と同じ）
+bridge-hub.exe --install [--no-cli-setup]
+                            # 自己インストールを明示実行（スクリプト向け。
+                            #   --no-cli-setup で CLI 自動導入を省略）
+bridge-hub.exe --serve      # インストールせずその場でハブ起動（既定 8511）
+bridge-hub.exe --uninstall  # 自動起動解除＋停止＋インストール先の削除
+bridge-hub.exe --setup status        # 全プロバイダの検出状況を表示
+bridge-hub.exe --setup copilot       # copilot CLI を自動インストール
+bridge-hub.exe --setup devin         # devin CLI を自動インストール
+bridge-hub.exe --setup all           # 自動化可能な未導入CLIをまとめて導入</code></pre>
+          <p><small>停止だけしたい場合は、実行中の <code>bridge-hub.exe</code> プロセスをタスクマネージャー等で終了してください（<code>--uninstall</code> は自動起動解除＋停止＋削除を行います）。</small></p>
+        </div>
+        <div class="install-steps">
+          <h3>無人導入（PowerShell 一発）</h3>
+          <p>ダウンロード → インストール → CLI 自動導入 → 疎通確認まで一括で行います。</p>
+          <pre><code>Invoke-WebRequest "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/download/bridge-hub.exe" -OutFile "$env:TEMP\bridge-hub.exe"
+Unblock-File "$env:TEMP\bridge-hub.exe"
+&amp; "$env:TEMP\bridge-hub.exe" --install     # 自動起動登録(8511)+即時起動
+&amp; "$env:TEMP\bridge-hub.exe" --setup all   # copilot/devin CLI を自動導入
+# 疎通確認（起動反映まで数秒かかることがあるためリトライ）
+1..15 | % { try { Invoke-RestMethod http://127.0.0.1:8511/health -TimeoutSec 2; break } catch { Start-Sleep 1 } }</code></pre>
+          <p><small><code>download/bridge-hub.zip</code> には <code>bridge-hub/bridge-hub.exe</code> と README のみが入っています（スクリプト同梱は廃止。exe は GUI subsystem ビルドでコンソールを持たないため、非表示起動用の vbs/ps1 は不要です）。展開して実行すれば同じ自己インストールが行われ、<code>--install</code> / <code>--serve</code> / <code>--uninstall</code> / <code>--setup</code> もそのまま使えます。</small></p>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="hub-api">3. HTTP API 一覧（127.0.0.1:8511）</h2>
+        <table>
+          <thead><tr><th>エンドポイント</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /</code></td><td>ハブ状態確認ページ（ブラウザで開ける。表示側 JS が <code>/health</code>・<code>/setup</code> を取って描画）</td></tr>
+            <tr><td><code>GET /health</code></td><td>ハブ自身の状態（<code>hub:true</code>・<code>providers.&lt;名&gt;.available/running</code>・<code>active</code>）</td></tr>
+            <tr><td><code>GET /models?provider=&lt;copilot|devin|antigravity&gt;</code></td><td>対象プロバイダの <code>/models</code></td></tr>
+            <tr><td><code>POST /agent</code></td><td>ボディの <code>provider</code> フィールドでプロバイダを選択・起動。ブラウザから設定するエンドポイントは <code>http://127.0.0.1:&lt;port&gt;/agent</code></td></tr>
+            <tr><td><code>POST|DELETE /mcp[/&lt;project&gt;]</code></td><td>地図ツールの MCP 公開（devin/agy から呼ばれる。<code>/mcp</code> は処理中プロジェクト、<code>/mcp/&lt;project&gt;</code> は明示指定）</td></tr>
+            <tr><td><code>GET /setup</code></td><td>各プロバイダ用 CLI の検出状況と自動化可否（<code>cli_found</code>/<code>cli_path</code>/<code>auto_install</code>/<code>methods</code>）</td></tr>
+            <tr><td><code>POST /setup</code></td><td><code>{provider, action:"install", confirm:true}</code> で公式手順の自動インストールをジョブ開始（<code>{"job": "&lt;id&gt;"}</code> を返す）</td></tr>
+            <tr><td><code>GET /setup/job/&lt;id&gt;</code></td><td>ジョブの状態（<code>running</code>/<code>done</code>/<code>failed</code>）・ログ・結果</td></tr>
+          </tbody>
+        </table>
+        <p><small><code>POST /setup</code> はブラウザ経由の踏み台を防ぐため、<code>Origin</code> が loopback または Canvas の既知デプロイホスト（<code>*.github.io</code>/<code>*.run.app</code>/<code>*.pages.dev</code>、<code>BRIDGE_SETUP_ORIGINS</code> で追加可）の場合のみ受け付けます。</small></p>
+      </section>
+
+      <section>
+        <h2 id="hub-setup">4. /setup による CLI 自動導入</h2>
+        <p>「<code>copilot</code>/<code>devin</code> CLI が見つかりません」系の導入エラーを減らすため、ハブは各プロバイダ公式の導入手順を実行できます（ホワイトリスト化済み・任意コマンドは実行しません）:</p>
+        <table>
+          <thead><tr><th>プロバイダ</th><th>自動導入手順（順にフォールバック）</th></tr></thead>
+          <tbody>
+            <tr><td>copilot</td><td><code>winget install GitHub.Copilot</code> → <code>npm i -g @github/copilot</code> → GitHub Releases から <code>copilot-win32-*.zip</code> を直接DL（ハブ管理ディレクトリ <code>%LOCALAPPDATA%\kasugai\bridge-cli\copilot\</code> へ配置）</td></tr>
+            <tr><td>devin</td><td>公式 <code>irm https://static.devin.ai/cli/setup.ps1 | iex</code>（unix は <code>install.sh</code>）</td></tr>
+            <tr><td>antigravity</td><td>自動化不可（IDE インストーラ＋対話 Google ログインのため案内のみ）</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>導入直後の CLI はプロセス環境の古い PATH では見えないことがあるため、検出・起動の両方で <strong>レジストリの最新 User/Machine PATH</strong> も参照します（ハブ再起動なしで検出できます）</li>
+          <li>Canvas の AI 設定画面の各プロバイダ欄にある「CLI を自動インストール」ボタンと、チャットツール <code>bridgeSetup</code>（Gemini 等の内蔵AIからも「copilot をインストールして」と指示できる）がこの API を使います</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 id="hub-providers">5. プロバイダ別の前提と利用条件（必読）</h2>
+        <p>いずれのブリッジも公式連携ではなく、公開インターフェースを使ったサードパーティ製クライアントです。各サービスの利用規約に沿うため、<strong>ローカル・本人利用限定</strong>で使ってください（127.0.0.1 にのみバインド。自分のアカウントで他者のチャットを処理する形態は禁止）。</p>
+        <table>
+          <thead><tr><th>プロバイダ</th><th>必要なもの</th><th>認証</th></tr></thead>
+          <tbody>
+            <tr><td>GitHub Copilot</td><td><code>copilot</code> CLI（npm 版は Node.js も必要）＋Copilot 契約（Free〜Enterprise いずれのプランでも可）</td><td><code>copilot</code> CLI で対話ログイン済み、または <code>COPILOT_GITHUB_TOKEN</code> / <code>GH_TOKEN</code> / <code>GITHUB_TOKEN</code></td></tr>
+            <tr><td>Devin</td><td><code>devin</code> CLI（Devin Desktop 同梱の <code>devin.exe</code> または単体インストール。<code>DEVIN_CLI_PATH</code> で指定可）＋本人の Devin プラン</td><td>サービスユーザー APIキー（<code>cog_</code>、app.devin.ai → Settings → Devin API → Service users・ロール Member。<code>DEVIN_API_KEY</code> またはアプリ設定画面。PAT は拒否）または初回接続時のブラウザ PKCE ログイン</td></tr>
+            <tr><td>Antigravity</td><td><code>agy</code> CLI（Antigravity のインストールに含まれる <code>agy.exe</code>。<code>AGY_CLI_PATH</code> で指定可）</td><td>利用者自身の Google アカウントでの <code>agy</code> ログイン（一度対話起動してサインイン）</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>Copilot: プレミアムリクエストの quota（AI クレジット）を消費。Free プランはモデル自動選択のみ</li>
+          <li>Devin: 消費されるのは利用者自身の quota。ローカル CLI のログイン資格は ACP モードでは使われない</li>
+          <li>Antigravity: ブリッジが <code>agy mcp add kasugai</code> で地図ツールを MCP 登録し、<code>~/.gemini/antigravity-cli/settings.json</code> の <code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加（headless では未許可ツールが自動拒否されるため必須）。ファイル書込み・シェル実行等の内蔵ツールは利用者が自分で許可ルールを足さない限り拒否され、作業ディレクトリも空の <code>%TEMP%/kasugai-antigravity-bridge</code> に限定される</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 id="hub-env">6. 環境変数</h2>
+        <table>
+          <thead><tr><th>変数</th><th>既定</th><th>説明</th></tr></thead>
+          <tbody>
+            <tr><td><code>BRIDGE_HUB_PORT</code></td><td><code>8511</code></td><td>ハブの待受ポート（127.0.0.1 のみバインド）。アプリ版・ブラウザ WebGIS 共通の統一ポート。変更するとブラウザがハブを検出できなくなるため通常は変更不要</td></tr>
+            <tr><td><code>BRIDGE_SETUP_ORIGINS</code></td><td>なし</td><td><code>POST /setup</code> を受け付ける Origin の追加許可リスト（loopback・既知デプロイホスト以外を許可する場合）</td></tr>
+            <tr><td><code>KASUGAI_NO_COPILOT_BRIDGE</code></td><td>なし</td><td>copilot プロバイダを無効化</td></tr>
+            <tr><td><code>KASUGAI_NO_DEVIN_BRIDGE</code></td><td>なし</td><td>devin プロバイダを無効化</td></tr>
+            <tr><td><code>KASUGAI_NO_ANTIGRAVITY_BRIDGE</code></td><td>なし</td><td>antigravity プロバイダを無効化</td></tr>
+          </tbody>
+        </table>
+        <p><small>各プロバイダ固有の環境変数（<code>DEVIN_API_KEY</code>・<code>COPILOT_CLI_PATH</code>・<code>DEVIN_CLI_PATH</code>・<code>AGY_CLI_PATH</code>・<code>*_BRIDGE_TOKEN</code> 等）はアプリ版と同じものがそのまま使えます。</small></p>
+      </section>
+
+      <section class="card">
+        <h2>7. 関連リンク</h2>
+        <ul>
+          <li><a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a> — 利用者向けの導入・接続手順と規約判断</li>
+          <li><a href="ai-tools.html">AI ツール仕様</a> — 内蔵AIが制御できるツールの定義（<code>bridgeSetup</code> 等）</li>
+          <li><a href="features/v3.html#bridge-hub-design">V3: 設計判断 — ブリッジハブ</a> — ハブ集約の設計判断（3ポート分離との比較）</li>
+          <li><a href="guide.html">【アプリ】ローカルアプリ</a> — ハブ未応答時に自動起動するアプリ本体</li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

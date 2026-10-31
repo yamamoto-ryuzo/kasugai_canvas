@@ -28,14 +28,15 @@
       items: [
         { href: 'ai-api.html', text: '6. 【API】内蔵AI（Google 連携・AI）' },
         { href: 'ai-bridge.html', text: '7. 【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）' },
-        { href: 'ai-tools.html', text: '8. AI ツール仕様' }
+        { href: 'ai-tools.html', text: '8. AI ツール仕様' },
+        { href: 'bridge-hub.html', text: '9. ブリッジハブ（bridge-hub.exe）' }
       ]
     },
     {
       label: '仕様',
       items: [
         {
-          href: 'features.html', text: '9. 機能と実装',
+          href: 'features.html', text: '10. 機能と実装',
           children: [
             { href: 'features/v0.html', text: 'V0: システム基本構成' },
             { href: 'features/v1.html', text: 'V1: GIS 基本機能' },
@@ -51,17 +52,17 @@
     {
       label: '技術選定',
       items: [
-        { href: 'data.html', text: '10. データ形式' },
-        { href: 'library.html', text: '11. ライブラリ' },
-        { href: 'architecture.html', text: '12. システム構成' },
-        { href: 'security.html', text: '13. セキュリティ対策' }
+        { href: 'data.html', text: '11. データ形式' },
+        { href: 'library.html', text: '12. ライブラリ' },
+        { href: 'architecture.html', text: '13. システム構成' },
+        { href: 'security.html', text: '14. セキュリティ対策' }
       ]
     },
     {
       label: '拡張・連携',
       items: [
         {
-          href: 'auth/', text: '14. 認証とプラグイン',
+          href: 'auth/', text: '15. 認証とプラグイン',
           children: [
             { href: 'auth/none.html', text: '0. 認証なし（none）' },
             { href: 'auth/local.html', text: '1. ローカル認証' },
@@ -71,14 +72,14 @@
             { href: 'auth/cloudrun.html', text: '5-7. Cloud Run' }
           ]
         },
-        { href: 'qgis.html', text: '15. QGIS・GDAL連携' }
+        { href: 'qgis.html', text: '16. QGIS・GDAL連携' }
       ]
     },
     {
       label: '記録',
       items: [
-        { href: 'hackathon.html', text: '16. 第5回 Agentic AI Hackathon with Google Cloud' },
-        { href: 'g-idea.html', text: '17. イチBizアワード2026 提案書' }
+        { href: 'hackathon.html', text: '17. 第5回 Agentic AI Hackathon with Google Cloud' },
+        { href: 'g-idea.html', text: '18. イチBizアワード2026 提案書' }
       ]
     }
   ];
