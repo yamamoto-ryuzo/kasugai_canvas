@@ -8,6 +8,7 @@
   "common.saved": "Salvo.",
   "common.saveError": "Erro ao salvar: {error}",
   "common.error": "Erro: {error}",
+  "common.reset": "Redefinir",
   "tab.layers": "Camadas",
   "tab.camera": "Câmera",
   "tab.search": "Pesquisar",

@@ -8,6 +8,7 @@
   "common.saved": "已保存。",
   "common.saveError": "保存错误：{error}",
   "common.error": "错误：{error}",
+  "common.reset": "重置",
   "tab.layers": "图层",
   "tab.camera": "相机",
   "tab.search": "搜索",

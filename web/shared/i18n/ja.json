@@ -8,6 +8,7 @@
   "common.saved": "保存しました。",
   "common.saveError": "保存エラー: {error}",
   "common.error": "エラー: {error}",
+  "common.reset": "リセット",
   "tab.layers": "レイヤ",
   "tab.camera": "カメラ",
   "tab.search": "検索",

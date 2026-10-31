@@ -5208,13 +5208,14 @@ function setupEvents() {
 
   // 地形の誇張（CesiumJS 1.113+ の scene.verticalExaggeration。地形と 3D Tiles に同時に効く）
   const terrainExaggInput = document.querySelector("#terrain-exaggeration");
-  const terrainExaggValue = document.querySelector("#terrain-exaggeration-value");
   if (terrainExaggInput) {
     terrainExaggInput.addEventListener("input", event => {
-      const v = Number(event.target.value);
-      viewer.scene.verticalExaggeration = Number.isFinite(v) ? v : 1;
-      if (terrainExaggValue) terrainExaggValue.textContent = `×${(Number.isFinite(v) ? v : 1).toFixed(1)}`;
-      requestRender();
+      const v = event.target.value === "" ? NaN : Number(event.target.value);
+      if (Number.isFinite(v) && v >= 0) { viewer.scene.verticalExaggeration = v; requestRender(); }
+    });
+    document.querySelector("#terrain-exaggeration-reset")?.addEventListener("click", () => {
+      terrainExaggInput.value = "1";
+      terrainExaggInput.dispatchEvent(new Event("input"));
     });
   }
 

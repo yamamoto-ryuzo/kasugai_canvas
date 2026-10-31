@@ -18,12 +18,12 @@
     background: rgba(255,255,255,.6); box-shadow: 0 8px 24px rgba(29,43,53,.14);
     display: flex; flex-direction: column; font-size: 16px; user-select: text;
   }
-  #panel h1 { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0 0 8px; }
+  #panel h1 { display: flex; align-items: center; gap: 6px; font-size: 14px; margin: 0 0 3px; }
   #panel h1 .panel-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #panel h1 small { font-weight: 400; color: #52636d; }
   /* 入力コントロールは Cesium 版 .control-panel select/input と同型 */
   #panel select, #panel input[type="text"], #panel input[type="number"] {
-    width: 100%; box-sizing: border-box; min-height: 30px; margin-bottom: 8px;
+    width: 100%; box-sizing: border-box; min-height: 30px; margin-bottom: 3px;
     padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px;
     background: #fff; color: #1d2b35; font-size: 16px; }
   /* ペイン内ボタンは Cesium 版 .control-panel button と同型（濃緑） */
@@ -38,23 +38,23 @@
     box-sizing: border-box; text-decoration: none; }
   /* プロジェクト選択行: 左=プロジェクトセレクト、右=機能ボタン(リンクコピー・印刷)。
      ボタンは行の高さ(=セレクトの高さ)いっぱいに伸ばして正方形に揃える */
-  .project-row { display: flex; gap: 4px; height: 30px; margin-bottom: 8px; }
+  .project-row { display: flex; gap: 4px; height: 30px; margin-bottom: 0; }
   .project-row > #project-select { flex: 1; min-width: 0; margin-bottom: 0; }
   .project-row > button { flex: 0 0 30px; padding: 0; border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f; cursor: pointer; font-size: 14px; display: inline-flex; align-items: center; justify-content: center; }
   .project-row > #print-open { padding: 4px; }
   .project-row > #print-open > svg { width: 100%; height: 100%; display: block; }
   /* タブは Cesium 版 .panel-tabs/.panel-tab と同型（透明・上だけ丸・選択は緑系ハイライト） */
-  #tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: -2px -4px 4px; padding-bottom: 4px; }
+  #tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px -4px; padding-bottom: 4px; }
   #tabs .tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0;
-               background: transparent; color: #52636d; cursor: pointer; font-size: 16px; }
+               background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   #tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
   .tab-pane { overflow: auto; flex: 1; min-height: 0; }
   /* 表示タブ内のサブタブ（Cesium 版 .settings-tabs/.settings-subpanel と同型） */
-  .display-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: -2px -4px 4px; padding-bottom: 4px; }
+  .display-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 0 0 3px; padding-bottom: 4px; }
   .display-tabs .tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0;
-                       background: transparent; color: #52636d; cursor: pointer; font-size: 16px; }
+                       background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   .display-tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
-  .display-subpane .set-row { display: block; margin: 8px 0; }
+  .display-subpane .set-row { display: block; margin: 3px 0; }
   .display-subpane .set-row input[type=range] { width: 100%; }
   /* パネル最小化（Cesium 版 .control-panel.collapsed と同型: 40x40 に縮めてトグルのみ残す） */
   #panel-toggle { flex: 0 0 26px; min-width: 26px; min-height: 26px; padding: 1px 4px;
@@ -64,25 +64,28 @@
   #panel.collapsed > *:not(h1) { display: none; }
   #panel.collapsed h1 { margin: 0; gap: 0; }
   #panel.collapsed h1 > *:not(#panel-toggle) { display: none; }
-  .layer-row { display: flex; align-items: center; gap: 7px; min-height: 31px; padding: 2px 0; }
+  .layer-row { display: flex; align-items: center; gap: 7px; min-height: 16px; line-height: 1; padding: 0; }
   .layer-row input { margin: 0; }
   .layer-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layer-item { min-width: 0; }
-  .layer-group-title { display: flex; align-items: center; gap: 5px; min-height: 31px; padding: 3px 7px 3px 4px; font-weight: 700; color: #31564f; background: rgba(49,86,79,.08); }
+  #layers { font-size: 18px; }
+  .layer-item, .layer-group, .legend-row { margin: 3px 0; }
+  #layers > .layer-item:first-child, #layers > .layer-group:first-child { margin-top: 0; }
+  .layer-group-title { display: flex; align-items: center; gap: 5px; min-height: 16px; padding: 1px 7px 1px 4px; line-height: 1; font-weight: 700; color: #31564f; background: rgba(49,86,79,.08); }
   .layer-group-title input { margin: 0; }
   .layer-group-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 小アイコンボタンは .tab-pane button（濃緑）ルールに負けないよう !important 付き（Cesium 版と同じ方式） */
-  .layer-group-toggle { width: 18px; min-width: 18px !important; min-height: 22px !important; padding: 0 !important;
+  .layer-group-toggle { width: 18px; min-width: 18px !important; min-height: 16px !important; padding: 0 !important;
     border: 0 !important; background: transparent !important; color: #52636d !important; font-size: 15px !important; line-height: 1; cursor: pointer; }
-  .layer-legend-toggle { width: 14px; min-width: 14px !important; min-height: 22px !important; padding: 0 !important;
+  .layer-legend-toggle { width: 14px; min-width: 14px !important; min-height: 16px !important; padding: 0 !important;
     border: 0 !important; background: transparent !important; color: #52636d !important; font-size: 11px !important; line-height: 1; cursor: pointer; }
-  .layer-focus { width: 24px; min-width: 24px !important; min-height: 24px !important; padding: 0 !important;
+  .layer-focus { width: 24px; min-width: 24px !important; min-height: 16px !important; padding: 0 !important;
     border: 0 !important; background: transparent !important; color: #1d2b35 !important; font-size: 15px !important; line-height: 1; cursor: pointer; opacity: .7; }
   .layer-focus:hover { opacity: 1; }
   .layer-group-children { margin-left: 14px; }
   .exclusive-badge { padding: 1px 4px; border-radius: 3px; background: #7b9ee8; color: #fff; font-size: 10px; font-weight: 700; margin-left: 2px; }
   .layer-legend-items { margin-left: 22px; }
-  .legend-row { display: flex; align-items: center; gap: 6px; min-height: 24px; font-size: 90%; }
+  .legend-row { display: flex; align-items: center; gap: 6px; min-height: 16px; line-height: 1; font-size: 90%; }
   .legend-row input { margin: 0; }
   .legend-swatch { width: 26px; height: 16px; object-fit: contain; flex: none; }
   .legend-row .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -129,31 +132,31 @@
   #settings-window .settings-head button { flex: 0 0 24px; min-width: 24px; min-height: 24px;
     border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f;
     font-size: 14px; line-height: 1; cursor: pointer; }
-  #settings-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
+  #settings-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0; }
   #settings-tabs .tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0;
-                        background: transparent; color: #52636d; cursor: pointer; font-size: 16px; }
+                        background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   #settings-tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
-  #settings-window .set-row { display: block; margin: 8px 0; }
+  #settings-window .set-row { display: block; margin: 3px 0; }
   #settings-window .set-row input[type=range] { width: 100%; }
   .inspector-input { width: 100%; box-sizing: border-box; height: 150px; font-family: monospace;
                      font-size: 11px; border: 1px solid #ccc; border-radius: 4px; }
-  .note { color: #666; margin-top: 6px; }
+  .note { color: #666; margin-top: 3px; }
   .cam-btn { display: inline-block; margin: 2px 4px 2px 0; padding: 2px 6px; font-size: 11px;
              border: 1px solid #bbb; border-radius: 4px; background: #f4f6f8; cursor: pointer; }
   .cam-btn.bm-btn { background: #eef3fb; border-color: #9fb8dd; }
   .cam-group-label { display: flex; align-items: center; gap: 6px; width: 100%; font-size: 12px;
-                     font-weight: 600; color: #444; margin: 8px 0 4px; padding-bottom: 3px;
+                     font-weight: 600; color: #444; margin: 3px 0; padding-bottom: 3px;
                      border-bottom: 1px solid #d5dde4; }
   .cam-group-label button { padding: 1px 8px; font-size: 11px; font-weight: 400; border: 1px solid #bbb;
                             border-radius: 3px; background: #fff; color: #444; cursor: pointer; }
-  #engines { margin-top: 8px; font-size: 11px; flex: none; }
+  #engines { margin-top: 3px; font-size: 11px; flex: none; }
   #engines a, #engines b { margin-right: 6px; }
   .leaflet-popup-content { max-height: 240px; overflow: auto; font-size: 12px; margin: 8px 10px; }
   .leaflet-popup-content-wrapper { font-size: 12px; }
-  #legends img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 4px 0; }
+  #legends img { max-width: 100%; max-height: 200px; object-fit: contain; display: block; margin: 3px 0; }
   /* info: 埋め込みHTML内のサブタブ(.tab-button/.tab-content)と画像 */
-  #info-link .tab-buttons { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 4px; }
-  #info-link .tab-button { min-height: 26px !important; padding: 4px 7px !important; border: 0 !important; border-radius: 4px 4px 0 0 !important; background: transparent !important; color: #52636d !important; cursor: pointer; font-size: 16px; }
+  #info-link .tab-buttons { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0; }
+  #info-link .tab-button { min-height: 26px !important; padding: 4px 7px !important; border: 0 !important; border-radius: 4px 4px 0 0 !important; background: transparent !important; color: #52636d !important; cursor: pointer; font-size: 18px; }
   #info-link .tab-button.active { background: rgba(49,86,79,.16) !important; color: #31564f !important; font-weight: 700; }
   #info-link .tab-content { display: none; }
   #info-link .tab-content.active { display: block; }
@@ -207,18 +210,18 @@
   </div>
   <div class="set-pane" id="setpane-inspector">
     <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
-    <div style="display:flex;gap:6px;margin-top:6px;">
+    <div style="display:flex;gap:6px;margin-top:3px;">
       <button id="apply-inspector" type="button" style="flex:1;padding:5px;border:1px solid #4682b4;background:#4682b4;color:#fff;border-radius:4px;cursor:pointer;">登録</button>
       <button id="export-inspector" type="button" style="flex:1;padding:5px;border:1px solid #666;background:#fff;border-radius:4px;cursor:pointer;">エクスポート(.kasc)</button>
     </div>
     <p id="inspector-status" class="note" aria-live="polite"></p>
-    <div style="font-weight:600;margin-top:8px;font-size:12px;">ファイル保存先</div>
+    <div style="font-weight:600;margin-top:3px;font-size:12px;">ファイル保存先</div>
     <label class="field-label" for="inspector-data-dir" style="display:block;font-size:11px;color:#666;margin:4px 0;">保存先フォルダ (DATA/ を選択)</label>
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;">
       <button id="inspector-data-dir" type="button" style="flex:0 0 auto;">フォルダを選択</button>
       <span id="inspector-data-dir-name" style="font-size:0.85em;color:#71818d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">未選択</span>
     </div>
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;">
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;">
       <input id="inspector-add-file" type="file" multiple style="display:none;" />
       <button id="inspector-add-file-button" type="button" style="flex:0 0 auto;">DATA/ に保存して追加</button>
     </div>
@@ -246,7 +249,7 @@
     <button class="tab" data-tab="info">情報</button>
   </div>
   <div class="tab-pane" id="pane-layers">
-    <select id="theme-select" hidden style="width:100%;margin-bottom:6px;"></select>
+    <select id="theme-select" hidden style="width:100%;margin-bottom:3px;"></select>
     <div id="layers"></div>
   </div>
   <div class="tab-pane" id="pane-legend" hidden>
@@ -257,7 +260,7 @@
     <div id="search-results"></div>
   </div>
   <div class="tab-pane" id="pane-attr" hidden>
-    <button id="attr-widget-open" type="button" style="width:100%;margin-bottom:6px;">選択中のレイヤ属性一覧</button>
+    <button id="attr-widget-open" type="button" style="width:100%;margin-bottom:3px;">選択中のレイヤ属性一覧</button>
     <div id="attr-content">地物を選択すると属性を表示します。</div>
   </div>
   <div class="tab-pane" id="pane-camera" hidden>

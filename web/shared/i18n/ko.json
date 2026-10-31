@@ -8,6 +8,7 @@
   "common.saved": "저장했습니다.",
   "common.saveError": "저장 오류: {error}",
   "common.error": "오류: {error}",
+  "common.reset": "초기화",
   "tab.layers": "레이어",
   "tab.camera": "카메라",
   "tab.search": "검색",

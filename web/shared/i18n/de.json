@@ -8,6 +8,7 @@
   "common.saved": "Gespeichert.",
   "common.saveError": "Speicherfehler: {error}",
   "common.error": "Fehler: {error}",
+  "common.reset": "Zurücksetzen",
   "tab.layers": "Ebenen",
   "tab.camera": "Kamera",
   "tab.search": "Suche",

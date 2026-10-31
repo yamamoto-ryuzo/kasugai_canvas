@@ -8,6 +8,7 @@
   "common.saved": "Enregistré.",
   "common.saveError": "Erreur d'enregistrement : {error}",
   "common.error": "Erreur : {error}",
+  "common.reset": "Réinitialiser",
   "tab.layers": "Couches",
   "tab.camera": "Caméra",
   "tab.search": "Rechercher",

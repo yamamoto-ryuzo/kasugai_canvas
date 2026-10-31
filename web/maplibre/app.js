@@ -1440,7 +1440,7 @@ map.on("sourcedata", e => {
 
   const terrainToggle = document.querySelector("#display-terrain");
   const terrainSourceSel = document.querySelector("#display-terrain-source");
-  const terrainExaggSlider = document.querySelector("#display-terrain-exagg");
+  const terrainExaggInput = document.querySelector("#display-terrain-exagg");
   terrainToggle?.addEventListener("change", () => {
     terrainEnabled = terrainToggle.checked;
     // "DEMなし" 選択中に ON にした場合は既定の DEM ソースへ戻す
@@ -1458,12 +1458,19 @@ map.on("sourcedata", e => {
     if (terrainToggle) terrainToggle.checked = terrainEnabled;
     applyTerrain();
   });
-  terrainExaggSlider?.addEventListener("input", () => {
-    terrainExaggeration = Number(terrainExaggSlider.value);
+  terrainExaggInput?.addEventListener("input", () => {
+    const v = terrainExaggInput.value === "" ? NaN : Number(terrainExaggInput.value);
+    if (!Number.isFinite(v) || v < 0) return;
+    terrainExaggeration = v;
     if (terrainEnabled && map.getTerrain()) {
       map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: terrainExaggeration });
       regroundAllDeck(); // queryTerrainElevation は誇張込みのため再接地が必要
     }
+  });
+  document.querySelector("#display-terrain-exagg-reset")?.addEventListener("click", () => {
+    if (!terrainExaggInput) return;
+    terrainExaggInput.value = "1";
+    terrainExaggInput.dispatchEvent(new Event("input"));
   });
 }
 
