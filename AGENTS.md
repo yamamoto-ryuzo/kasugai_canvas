@@ -150,8 +150,8 @@ web/
                   （navara・gsimaps）は shared/vendor-guard.js 経由で登録し、
                   probe で供給可否を調べてから起動/ホスト版転送を振り分ける。
                   vendor 実体はリポジトリ・配布物・ローカル開発のいずれにも置かず
-                  CDN が唯一の供給元（:8510 ではサーバー側 vendor_cdn_fallback
-                  が実体の代わりを務め、SW のローカル実体チェックがそれを拾う）。
+                  CDN が唯一の供給元。非 SW 環境（古い WebView 等）は
+                  各ガードがホスト版エンジンへ転送する。
                   vendor 更新は手動運用: vendor.json の sha を上げて
                   publish_cdn.py --vendor で CDN へ反映する(通常発行では
                   sha 差分の警告のみ。ローカルの web/vendor/ は gitignore 済み・

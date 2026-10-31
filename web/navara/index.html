@@ -8,8 +8,8 @@
 <script>
   // vendored Navara(web/vendor/navara)は配布物・リポジトリに同梱しない。
   // vendorGuardProbe(shared/vendor-guard.js)が vendor-proxy-sw を登録し、
-  // vendor/* を CDN へ同一オリジン中継する（:8510 のサーバープロキシに加え
-  // github.io のような静的配信でも有効）。HEAD が通ればローカルのまま起動し、
+  // vendor/* を CDN へ同一オリジン中継する（github.io のような静的配信でも
+  // 有効）。HEAD が通ればローカルのまま起動し、
   // 通らない環境(SW 非対応・CDN 不通)のみホスト版(kasugai-canvas-web)の
   // navara エンジンへ転送する。Worker は import.meta.url 相対・同一オリジン
   // 必須のため、importmap の外部 CDN 直読みではなく SW 中継/ページ転送で

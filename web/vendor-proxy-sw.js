@@ -29,7 +29,7 @@ self.addEventListener("fetch", e => {
 });
 
 async function proxyVendor(request, rel) {
-  // 1) ローカル実体（CDN ホスト版・開発 checkout・:8510 のサーバープロキシ）を優先。
+  // 1) ローカル実体（CDN ホスト版・fetch_vendor.py で置いた開発用実体）を優先。
   //    SW 内の fetch は自 SW を再経由しないため素通しでオリジンへ届く
   const local = await fetch(request).catch(() => null);
   if (local && local.status !== 404) return local;
