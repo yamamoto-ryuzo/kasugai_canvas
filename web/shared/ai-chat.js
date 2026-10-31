@@ -684,7 +684,8 @@ export async function refreshCliSetupStates() {
     const r = await fetch(hub.endpoint.replace(/\/agent$/, "") + "/setup",
       { signal: AbortSignal.timeout(5000), cache: "no-store" });
     const d = await r.json();
-    for (const p of BRIDGE_PROVIDERS) setChip(p, d?.[p]?.cli_found ? "installed" : "missing");
+    const prov = d?.providers || d; // 応答は {providers:{copilot:{cli_found..}}} 形
+    for (const p of BRIDGE_PROVIDERS) setChip(p, prov?.[p]?.cli_found ? "installed" : "missing");
   } catch (e) {
     for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
   }
