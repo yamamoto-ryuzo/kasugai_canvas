@@ -1,7 +1,6 @@
 // KASUGAI Canvas — vendor 同一オリジン・プロキシ Service Worker
-// web/vendor/ は配布物・リポジトリに同梱しない。github.io/kasugai_canvas のような
-// サーバーレス静的配信では vendor 実体が無いため、この SW がスコープ配下の
-// vendor/* GET/HEAD を拾い、ローカル実体 → CDN(kasugai-canvas-web) の順で供給する。
+// web/vendor/ は配布物・リポジトリに同梱しない。この SW がスコープ配下の
+// vendor/* GET/HEAD を拾い、CDN(kasugai-canvas-web)からそのまま供給する。
 // 応答はページと同一オリジンとして返るため、importmap・Worker(import.meta.url 相対)
 // ・iframe 制御(GSI.GLOBALS) の同一オリジン制約を満たしたまま CDN 直読みができる。
 // navara 等の index.html ガードが登録する（登録されない環境では無害に無効）。
@@ -29,11 +28,8 @@ self.addEventListener("fetch", e => {
 });
 
 async function proxyVendor(request, rel) {
-  // 1) ローカル実体（CDN ホスト版・fetch_vendor.py で置いた開発用実体）を優先。
-  //    SW 内の fetch は自 SW を再経由しないため素通しでオリジンへ届く
-  const local = await fetch(request).catch(() => null);
-  if (local && local.status !== 404) return local;
-  // 2) 実体が無ければ自前 CDN へ中継（Range/条件付きを転送）
+  // vendor/* は常に CDN を参照する（Range/条件付きを転送）。
+  // SW 内の fetch は自 SW を再経由しないため素通しでオリジンへ届く
   const headers = new Headers();
   for (const k of ["range", "if-none-match", "if-modified-since"]) {
     const v = request.headers.get(k);
@@ -44,9 +40,9 @@ async function proxyVendor(request, rel) {
     up = await fetch(upstreamBase + "vendor/" + rel, { headers, cache: "no-store" });
   } catch (_) {
     const cached = await caches.match(request);
-    return cached || local || new Response(null, { status: 502 });
+    return cached || new Response(null, { status: 502 });
   }
-  // 3) 上流 Response の url は転送先のままなので new Response で包み直す。
+  // 上流 Response の url は転送先のままなので new Response で包み直す。
   //    このまま返すとモジュールの import.meta.url がクロスオリジン化し、
   //    Worker 生成が SecurityError で失敗する（url 空=リクエスト URL 扱いに
   //    なるため同一オリジンが維持される）。CORS 応答で読み出せるヘッダは

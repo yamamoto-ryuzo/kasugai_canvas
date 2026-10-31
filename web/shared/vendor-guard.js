@@ -4,7 +4,7 @@
 // vendorGuardProbe(probeUrl) で供給可否を調べてから起動/転送を振り分ける。
 //
 // 仕組み: vendor-proxy-sw.js を登録すると、スコープ配下の vendor/* GET/HEAD は
-// SW が「ローカル実体 → CDN(kasugai-canvas-web)」の順で同一オリジン供給する。
+// SW が CDN(kasugai-canvas-web)から同一オリジン供給する。
 // これによりローカルアプリ(:8510)に加え github.io のような静的配信でも
 // Worker・iframe 制御の同一オリジン制約を満たしたまま CDN 直読みできる。
 // SW 非対応・登録失敗時はプローブが素通しで 404 になり、呼び出し側の
