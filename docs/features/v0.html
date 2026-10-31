@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.5.17</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.5.18</span></h1>
       <p>V0: システム基本構成 — バージョン横断の実装詳細</p>
     </header>
     <main>
@@ -390,12 +390,10 @@
       <ol type="1">
       <li><code>DEM</code> で Terrain 表示に使う DEM / TerrainProvider
       を選ぶ</li>
-      <li><code>ドレープ対象地形</code> の DEM／3D Tiles
-      から、表示中で利用可能な地形を選ぶ</li>
-      <li>各対象地形の直下にある XYZ・ベクター・ベクター高速ドレープ
-      のチェックで、その地形へ適用するレイヤー種別を個別に選ぶ</li>
-      <li>Base map は標準では <code>ImageryLayer</code> として Globe
-      表面へ表示する</li>
+      <li>コンテンツ別の行（ベースマップ・XYZ・ベクター・ベクター高速）ごとに、
+      <code>DEM</code> / <code>3D Tiles</code> のどこへドレープするかを個別に選ぶ</li>
+      <li>ベースマップ→DEM は Globe 表面へのベースマップ表示そのもの。
+      OFF で地表はベース色のみになる</li>
       </ol>
       <table>
       <thead>
@@ -422,28 +420,24 @@
       の表示・選択は変更しない</td>
       </tr>
       <tr>
-      <td><code>3D Tiles (BASEMAPドレープ)</code></td>
-      <td>Base map 専用の 3D Tiles ドレープを有効にする</td>
-      <td>表示中の 3D Tiles がある場合、Base map の代わりに 3D Tiles
-      表面へテクスチャを重ねる。XYZ・GeoJSON の設定には影響しない</td>
+      <td><code>ベースマップ</code></td>
+      <td>DEM=ON: Globe 表面へのベースマップ表示。3D Tiles=ON: ベースマップを
+      3D Tiles 表面へドレープ</td>
+      <td>DEM は既定 ON。3D Tiles は OFF</td>
       </tr>
       <tr>
-      <td><code>ドレープ対象地形</code></td>
-      <td>DEM と 3D Tiles を個別にドレープ面へ登録する</td>
-      <td>DEM は初期状態で ON、3D Tiles は OFF。両方を ON
-      にすると、利用可能な両方をドレープ面にする。各対象の直下に
-      <code>XYZ</code>・<code>ベクター</code>・<code>ベクター高速ドレープ (実験的)</code>
-      のチェックがあり、その地形へ適用するレイヤー種別を対象ごとに選べる
-      （例: XYZ は 3D Tiles のみ、ベクターは DEM のみ、といった組み合わせが可能）。
-      初期状態は両対象とも XYZ・ベクターが ON。ON
-      のレイヤーだけをドレープする。地形ソース自体の表示は変更しない</td>
+      <td><code>XYZ</code> / <code>ベクター</code> / <code>ベクター高速 (実験的)</code></td>
+      <td>各行ごとに DEM / 3D Tiles のどこへドレープするかを選ぶ</td>
+      <td>XYZ・ベクターは両対象が既定 ON。高速は OFF。例:
+      XYZ は 3D Tiles のみ、ベクターは DEM のみ、といった組み合わせが可能。
+      地形ソース自体の表示は変更しない</td>
       </tr>
       </tbody>
       </table>
       <table>
       <thead>
       <tr>
-      <th>ドレープ対象地形</th>
+      <th>対象地形</th>
       <th>有効になる条件</th>
       <th>ドレープ面</th>
       </tr>
@@ -532,11 +526,13 @@
       <code>TerrariumTerrainProvider</code> 経由で利用します。</p>
       <h2 id="limits">制限・注意事項</h2>
       <h3>3D Tiles への XYZ ドレープ</h3>
-      <p>CesiumJS 1.130 以降で
-      <code>Cesium3DTileset.imageryLayers</code> が追加され、3D Tiles
-      表面に <code>ImageryLayer</code>
-      をドレープできるようになりました。KASUGAI Canvas では 1.146.0
-      を使用しています。</p>
+      <p>ラスター（ベースマップ / XYZ）の 3D Tiles ドレープは、現在の視野に応じた
+      ズームのタイル画像を縫合したキャンバスを、分類矩形（GroundPrimitive、
+      ベクタードレープと同じ per-pixel 機構）として 3D Tiles 表面へ貼る
+      画面連動方式です。カメラ停止ごとにカバーを再構築し、実質画面解像度の
+      ドレープになります（deck.gl TerrainExtension と同じ考え方）。
+      以前の <code>Cesium3DTileset.imageryLayers</code> 方式（1プリミティブ
+      ≈1タイルの解像度固定）は廃止しました。</p>
       <table>
       <thead>
       <tr>
@@ -546,16 +542,12 @@
       </thead>
       <tbody>
       <tr>
-      <td><code>ドレープ対象地形</code> → <code>3D Tiles</code> ON</td>
-      <td>表示中の 3D Tiles をドレープ対象として有効化</td>
-      </tr>
-      <tr>
-      <td><code>3D Tiles</code> 対象の <code>XYZ</code> ON</td>
-      <td>各 XYZ タイルを 3D Tiles 表面へドレープ（DEM 対象側の XYZ
+      <td><code>XYZ</code> → <code>3D Tiles</code> ON</td>
+      <td>各 XYZ タイルを 3D Tiles 表面へドレープ（DEM 側の XYZ
       設定とは独立）</td>
       </tr>
       <tr>
-      <td><code>3D Tiles (BASEMAPドレープ)</code> ON</td>
+      <td><code>ベースマップ</code> → <code>3D Tiles</code> ON</td>
       <td>ベースマップを 3D Tiles 表面へドレープ</td>
       </tr>
       </tbody>
@@ -564,16 +556,16 @@
       表面には重ねず、3D Tiles 表面のみに表示されます。</p>
       <h3>既知の制限</h3>
       <ul>
-      <li><strong>アップサンプリング未対応</strong>
+      <li><strong>カメラ移動中は移動前のカバーが残る</strong>
       <ul>
-      <li>3D Tiles のジオメトリが粗い場合、高精細な XYZ
-      画像をそのままドレープしても、ジオメトリの解像度に制限されます。</li>
+      <li>カバーはカメラ停止(moveEnd)で再構築されるため、移動中は直前の
+      ズーム・範囲のテクスチャが残ります。カバー外の領域は再構築まで
+      ドレープなしで表示されます。</li>
       </ul></li>
-      <li><strong>テクスチャユニット制限</strong>
+      <li><strong>1 カバーあたり約 96 タイル上限</strong>
       <ul>
-      <li>同時に使用できるテクスチャ数は GPU によりますが、おおよそ 16
-      枚程度です。複数の高解像度 XYZ を 1 つの 3D Tiles
-      に重ねると、一部のテクスチャが省略されることがあります。</li>
+      <li>遠景では自動的に低ズームのカバーへ切り替わるため、常に
+      視点に見合った解像度になります。</li>
       </ul></li>
       <li><strong><code>CESIUM_primitive_outline</code> 非対応</strong>
       <ul>

@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.5.18] - 2026-10-31
+
+### Changed
+
+- **3D Tiles へのベースマップ/XYZ ドレープを画面連動方式へ刷新**（Cesium版）— 以前の tileset.imageryLayers 方式は「1プリミティブ≈1タイル」の解像度固定で PLATEAU 等の大きなタイルでは著しく荒かったため、現在の視野に応じたズームのタイルを縫合したキャンバスを分類矩形(GroundPrimitive)として 3D Tiles 表面へ貼る方式に変更。ズームに追従する実質画面解像度のドレープ（deck.gl TerrainExtension 相当）になり、カメラ停止ごとにカバー再構築
+- **表示→ドレープ設定をコンテンツ別×対象地形の統一マトリクスに再構成** — 「ベースマップ / XYZ / ベクター / ベクター高速(実験的)」各行に DEM・3D Tiles の対象チェックを配置。「ドレープ対象地形」マスタートグルと BASEMAP ドレープの特例扱いは廃止
+- ドレープの説明ヒントを地形タブからドレープタブへ移動
+
+### Added
+
+- **ベースマップ→DEM トグルを追加** — Globe へのベースマップ表示を ON/OFF 可能に（OFF で地表はベース色のみ）
+
 ## [6.5.17] - 2026-10-31
 
 ### Added

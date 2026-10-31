@@ -120,6 +120,8 @@ let undergroundTransparency = 0;
 let undergroundDiveEnabled = true;
 let undergroundBackgroundColor = Cesium.Color.BLACK;
 let basemapDrape3DTiles = false;
+// ベースマップ→DEM(globe へのベースマップ表示)。OFF で地表はベース色のみになる
+let basemapDrapeDem = true;
 // 表示>一般タブ: 透過度スライダ(ベースマップ/レイヤー)の係数と現在のベースマップ ImageryLayer
 let basemapOpacityFactor = 1;
 let layerOpacityFactor = 1;
@@ -637,8 +639,7 @@ let bookmarkLoadSeq = 0;
 let dataLayerSeq = 0;
 let vectorSearchData = null;
 const activePrimitives = [];
-const drapeTerrainSources = { dem: true, tiles3d: false };
-// ドレープ対象地形ごとの適用レイヤー種別(DEM と 3D Tiles で個別に選べる)
+// コンテンツ別×対象地形のドレープ有無(ベクター/XYZ/高速は DEM と 3D Tiles で個別に選べる)
 const drapeLayers = {
   dem: { xyz: true, geojson: true, primitive: false },
   tiles3d: { xyz: true, geojson: true, primitive: false },
@@ -2063,6 +2064,198 @@ function createUrlTemplateProvider(options) {
   return new Cesium.UrlTemplateImageryProvider(providerOptions);
 }
 
+// 3D Tiles ドレープ用プロバイダー定義を集める(basemap + 表示中XYZレイヤー)
+function collectDrapeProviders() {
+  const providers = [];
+  if (basemapDrape3DTiles && selectedBasemap?.url) {
+    providers.push({
+      url: selectedBasemap.url,
+      attribution: selectedBasemap.attribution,
+      maximumLevel: selectedBasemap.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
+      tileSize: selectedBasemap.tileSize || 256,
+      opacity: selectedBasemap.opacity ?? 1.0,
+      proxy: selectedBasemap.proxy,
+    });
+  }
+  if (drapeLayers.tiles3d.xyz) {
+    const tileItems = getOrderedLayerItems().filter(layer => layer.type === "tile").slice().reverse();
+    tileItems.filter(t => t.visible).forEach(item => {
+      providers.push({
+        url: item.url,
+        attribution: item.attribution,
+        maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
+        tileSize: item.tileSize || 256,
+        opacity: item.opacity ?? 0.8,
+        proxy: item.proxy,
+      });
+    });
+  }
+  return providers;
+}
+
+// 3D Tiles ドレープ(画面連動): 現在のビューに応じたズームのタイル画像を縫合した
+// キャンバスを分類矩形(GroundPrimitive)として 3D Tiles 表面へ貼る方式。
+// tileset.imageryLayers の「1プリミティブ≈1タイル」制限を回避し、カメラ移動に
+// 追従して作り直す実質画面解像度のドレープ(deck.gl TerrainExtension と同じ考え方)
+const drapeCoverEntities = new Map(); // key -> entity
+const drapeCoverState = new Map();    // key -> 再構築判定シグネチャ
+const drapeCoverProviders = new Map(); // url -> UrlTemplateImageryProvider(タイル取得用)
+let drapeCoverTimer = 0;
+let drapeCoverSeq = 0;
+let drapeCoverKeySeq = 0;
+
+// タイルセットのおおよその地理範囲(boundingVolume の region か boundingSphere から)
+function getTilesetCoverRectangle(tileset) {
+  try {
+    const bv = tileset.root?.boundingVolume;
+    const rect = bv?.rectangle || bv?.boundingVolume?.rectangle;
+    if (rect) return rect;
+    const s = tileset.boundingSphere;
+    if (s) {
+      const c = Cesium.Cartographic.fromCartesian(s.center);
+      const d = (s.radius || 0) / 6378137.0;
+      return new Cesium.Rectangle(c.longitude - d, c.latitude - d, c.longitude + d, c.latitude + d);
+    }
+  } catch (_) {}
+  return null;
+}
+
+// 矩形をタイル数上限(≈96枚)内に収まる最も細かいズームでタイルカバーへ展開する
+function pickDrapeTileCover(scheme, rect, maxLevel) {
+  const zMax = Math.min(19, Number.isInteger(maxLevel) ? maxLevel : 19);
+  for (let z = zMax; z >= 0; z--) {
+    const a = scheme.positionToTileXY(Cesium.Cartographic.fromRadians(rect.west, rect.north), z);
+    const b = scheme.positionToTileXY(Cesium.Cartographic.fromRadians(rect.east, rect.south), z);
+    if (!a || !b) continue;
+    const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
+    const y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 96) continue;
+    const r0 = scheme.tileXYToRectangle(x0, y0, z);
+    const r1 = scheme.tileXYToRectangle(x1, y1, z);
+    return {
+      z, x0, y0, x1, y1,
+      rect: new Cesium.Rectangle(
+        Math.min(r0.west, r1.west), Math.min(r0.south, r1.south),
+        Math.max(r0.east, r1.east), Math.max(r0.north, r1.north)),
+    };
+  }
+  return null;
+}
+
+async function buildDrapeCoverCanvas(provider, cov) {
+  const tw = provider.tileWidth || 256;
+  const th = provider.tileHeight || tw;
+  const canvas = document.createElement("canvas");
+  canvas.width = (cov.x1 - cov.x0 + 1) * tw;
+  canvas.height = (cov.y1 - cov.y0 + 1) * th;
+  const ctx = canvas.getContext("2d");
+  const jobs = [];
+  for (let ty = cov.y0; ty <= cov.y1; ty++) {
+    for (let tx = cov.x0; tx <= cov.x1; tx++) {
+      const dx = (tx - cov.x0) * tw;
+      const dy = (ty - cov.y0) * th;
+      jobs.push(
+        Promise.resolve(provider.requestImage(tx, ty, cov.z))
+          .then(image => {
+            if (!image) return;
+            // ImageBitmap は flipY 済みで返るため縦反転して描き、canvas を
+            // 正立(上=北)に揃える。HTMLImageElement は自然方向のまま描ける
+            if (typeof ImageBitmap !== "undefined" && image instanceof ImageBitmap) {
+              ctx.save();
+              ctx.translate(dx, dy + th);
+              ctx.scale(1, -1);
+              ctx.drawImage(image, 0, 0, tw, th);
+              ctx.restore();
+            } else {
+              ctx.drawImage(image, dx, dy, tw, th);
+            }
+          })
+          .catch(() => {}));
+    }
+  }
+  await Promise.all(jobs);
+  return canvas;
+}
+
+function getDrapeCoverProvider(opts) {
+  const key = `${opts.url}|${opts.tileSize}|${opts.maximumLevel}`;
+  let provider = drapeCoverProviders.get(key);
+  if (!provider) {
+    provider = createUrlTemplateProvider(opts);
+    drapeCoverProviders.set(key, provider);
+  }
+  return provider;
+}
+
+// 表示中タイルセット × ドレーププロバイダごとにカバーを再構築する。
+// 矩形+ズームのシグネチャが変わった組み合わせだけ作り直し、
+// 対象外・モード解除になったカバーは除去する
+async function refresh3DTilesDrapeCovers() {
+  const seq = ++drapeCoverSeq;
+  const useCover = isDrape3DTilesActive();
+  const tilesets = useCover
+    ? activePrimitives.filter(p => p instanceof Cesium.Cesium3DTileset && p.show !== false)
+    : [];
+  const providers = useCover ? collectDrapeProviders() : [];
+  const view = useCover ? viewer.camera.computeViewRectangle() : null;
+  const keep = new Set();
+  if (view) {
+    for (const tileset of tilesets) {
+      const tsRect = getTilesetCoverRectangle(tileset);
+      for (let i = 0; i < providers.length; i++) {
+        const opts = providers[i];
+        const provider = getDrapeCoverProvider(opts);
+        let rect = Cesium.Rectangle.intersection(view, provider.rectangle);
+        if (rect && tsRect) rect = Cesium.Rectangle.intersection(rect, tsRect);
+        if (!rect) continue;
+        const cov = pickDrapeTileCover(provider.tilingScheme, rect, opts.maximumLevel);
+        if (!cov) continue;
+        tileset._kascDrapeId ??= ++drapeCoverKeySeq;
+        const key = `${tileset._kascDrapeId}|${opts.url}`;
+        const sig = `${cov.z}:${cov.x0},${cov.y0},${cov.x1},${cov.y1}`;
+        keep.add(key);
+        if (drapeCoverState.get(key) === sig) continue;
+        drapeCoverState.set(key, sig);
+        buildDrapeCoverCanvas(provider, cov).then(canvas => {
+          if (seq !== drapeCoverSeq || drapeCoverState.get(key) !== sig) return;
+          const opacity = Math.min(1, Math.max(0, opts.opacity ?? 1));
+          const prev = drapeCoverEntities.get(key);
+          drapeCoverEntities.set(key, viewer.entities.add({
+            rectangle: {
+              coordinates: cov.rect,
+              material: new Cesium.ImageMaterialProperty({
+                image: canvas,
+                color: new Cesium.Color(1, 1, 1, opacity),
+                transparent: opacity < 1,
+              }),
+              classificationType: Cesium.ClassificationType.CESIUM_3D_TILE,
+              zIndex: i,
+            },
+          }));
+          if (prev) try { viewer.entities.remove(prev); } catch (_) {}
+          viewer.scene.requestRender();
+        }).catch(() => {});
+      }
+    }
+  }
+  for (const [key, entity] of [...drapeCoverEntities]) {
+    if (!keep.has(key)) {
+      try { viewer.entities.remove(entity); } catch (_) {}
+      drapeCoverEntities.delete(key);
+      drapeCoverState.delete(key);
+    }
+  }
+  // keep 外のシグネチャも掃除(再構築待ちの残骸)
+  for (const key of [...drapeCoverState.keys()]) {
+    if (!keep.has(key)) drapeCoverState.delete(key);
+  }
+}
+
+function scheduleDrapeCoverRefresh() {
+  clearTimeout(drapeCoverTimer);
+  drapeCoverTimer = setTimeout(() => { refresh3DTilesDrapeCovers().catch(() => {}); }, 350);
+}
+
 function createClippingPlaneFromEnu(normalEnu) {
   const center = viewer.camera.position.clone();
   const transform = Cesium.Transforms.eastNorthUpToFixedFrame(center);
@@ -3123,7 +3316,6 @@ async function refreshLayersImpl() {
     viewer.terrainProvider = new Cesium.EllipsoidTerrainProvider();
   }
 
-  const drape3DTiles = isDrape3DTilesActive();
   const orderedItems = getOrderedLayerItems();
   const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
   const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities" || vectorDecoders.has(layer.type)).slice().reverse();
@@ -3174,35 +3366,8 @@ async function refreshLayersImpl() {
     void gpkgWorkerCall("warm").catch(() => {});
   }
 
-  // 3D Tiles ドレープ用プロバイダー定義
-  const drapeProviders = [];
-  if (drape3DTiles) {
-    if (basemapDrape3DTiles && selectedBasemap?.url) {
-      drapeProviders.push({
-        url: selectedBasemap.url,
-        attribution: selectedBasemap.attribution,
-        maximumLevel: selectedBasemap.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
-        tileSize: selectedBasemap.tileSize || 256,
-        opacity: selectedBasemap.opacity ?? 1.0,
-        proxy: selectedBasemap.proxy,
-      });
-    }
-    if (drapeLayers.tiles3d.xyz) {
-      orderedTileLayers.filter(t => t.visible).forEach(item => {
-        drapeProviders.push({
-          url: item.url,
-          attribution: item.attribution,
-          maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
-          tileSize: item.tileSize || 256,
-          opacity: item.opacity ?? 0.8,
-          proxy: item.proxy,
-        });
-      });
-    }
-  }
-
-  // Globe 表面のベースマップ
-  if (!globeHidden && selectedBasemap?.url) {
+  // Globe 表面のベースマップ(ベースマップ→DEM の ON/OFF で制御)
+  if (!globeHidden && basemapDrapeDem && selectedBasemap?.url) {
     try {
       const provider = createUrlTemplateProvider({
         url: selectedBasemap.url,
@@ -3221,7 +3386,8 @@ async function refreshLayersImpl() {
   // Globe 表面の XYZ
   for (const item of orderedTileLayers) {
     if (!item.visible) continue;
-    if ((drapeTerrainSources.dem || drape3DTiles) && (!drapeLayers.dem.xyz || !drapeTerrainSources.dem)) continue;
+    // XYZ→DEM が OFF なら globe の imagery には載せない(3D Tiles へのドレープだけ残る)
+    if (!drapeLayers.dem.xyz) continue;
     try {
       const provider = createUrlTemplateProvider({
         url: item.url,
@@ -3252,17 +3418,6 @@ async function refreshLayersImpl() {
     if (item.type === "3dtiles") {
       try {
         const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(withGoogleTileKey(item.url), item.proxy), getCesiumTilesetOptions());
-        if (drape3DTiles && Array.isArray(drapeProviders) && drapeProviders.length > 0) {
-          drapeProviders.forEach(options => {
-            try {
-              const provider = createUrlTemplateProvider(options);
-              const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: options.opacity ?? 0.8 });
-              tileset.imageryLayers.add(imageryLayer);
-            } catch (drapeError) {
-              console.warn("3D Tiles ドレープレイヤー追加失敗:", options.url, drapeError);
-            }
-          });
-        }
         applyClippingPlanes(tileset);
         viewer.scene.primitives.add(tileset);
         activePrimitives.push(tileset);
@@ -3378,6 +3533,7 @@ async function refreshLayersImpl() {
   // (entity サンプル方式の凡例は DataSource 構築後でないと色が取れない)
   renderLayerList();
   entityLimitBadgeVisible = layers.some(item => item.entityLimited);
+  scheduleDrapeCoverRefresh();
 }
 
 // 描画した primitive を scene/管理リストへ登録する。
@@ -3486,14 +3642,15 @@ async function addGeoJsonPrimitiveLayer(item, geojson) {
 
 // GeoJSON をスタイル適用済みの GeoJsonDataSource に変換する(初回ロードと再クエリで共用)
 function isDrape3DTilesActive() {
-  return drapeTerrainSources.tiles3d && layers.some(l => l.visible && l.type === "3dtiles");
+  const content = basemapDrape3DTiles || drapeLayers.tiles3d.xyz || drapeLayers.tiles3d.geojson || drapeLayers.tiles3d.primitive;
+  return content && layers.some(l => l.visible && l.type === "3dtiles");
 }
 
 // 対象地形ごとのベクタードレープ(entity 経路)指定を返す。
 // { dem, tiles3d } のどちらかが true のときオブジェクト、どちらも対象外なら null
 function getVectorDrapeFlags() {
-  const dem = drapeLayers.dem.geojson && drapeTerrainSources.dem;
-  const tiles3d = drapeLayers.tiles3d.geojson && isDrape3DTilesActive();
+  const dem = drapeLayers.dem.geojson || drapeLayers.dem.primitive;
+  const tiles3d = (drapeLayers.tiles3d.geojson || drapeLayers.tiles3d.primitive) && isDrape3DTilesActive();
   return dem || tiles3d ? { dem, tiles3d } : null;
 }
 
@@ -5190,13 +5347,8 @@ function setupEvents() {
     refreshLayers();
   });
 
-  document.querySelector("#drape-terrain-dem").addEventListener("change", event => {
-    drapeTerrainSources.dem = event.target.checked;
-    refreshLayers();
-  });
-
-  document.querySelector("#drape-terrain-tiles3d").addEventListener("change", event => {
-    drapeTerrainSources.tiles3d = event.target.checked;
+  document.querySelector("#basemap-drape-dem").addEventListener("change", event => {
+    basemapDrapeDem = event.target.checked;
     refreshLayers();
   });
 
@@ -8385,6 +8537,7 @@ document.querySelector("#current-port").value = window.location.port || (window.
 setupEvents();
 
 viewer.camera.moveEnd.addEventListener(() => {
+  scheduleDrapeCoverRefresh();
   const ssec = viewer.scene.screenSpaceCameraController;
   if (!ssec.enableTilt) return;
   const pitchDeg = viewer.camera.pitch * 180 / Math.PI;
