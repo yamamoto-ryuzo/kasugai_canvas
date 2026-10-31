@@ -91,7 +91,8 @@ flowchart TB
 
   REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/<br/>cesium / maplibre / openlayers / leaflet / gsimaps / navara(試験)"]
   REPO ==>|"run.py -B → ZIP（自動更新）"| APP["ローカルアプリ<br/>kasugai_canvas.exe :8510<br/>フル機能（QGIS連携・保存・rclone・AIブリッジ）"]
-  CDN -.->|"vendored 地理院地図（約75MB）を<br/>/vendor/ プロキシでオンデマンド配信"| APP
+  CDN -.->|"vendor/*（gsimaps・navara）を<br/>/vendor/ プロキシでオンデマンド配信"| APP
+  CDN -.->|"vendor/*（gsimaps・navara）を<br/>vendor-proxy-sw.js（SW 制御）で<br/>同一オリジン中継"| WEB
 
   QGIS["QGIS + geo_webview"] -->|"エクスポート"| DATA[".kasc + DATA/ のみ配置<br/>任意の静的ホスト or :8089<br/>（エンジンは CDN 経由）"]
 
@@ -121,7 +122,7 @@ flowchart TB
           mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
         </script>
         <h3>実行時の供給元 — 何をどこから読むか</h3>
-        <p><code>web/</code> 一式は <code>publish_cdn.py</code> が CDN へ丸ごとミラーするため、<code>shared/</code> 等の同じファイルが CDN と配布物（ZIP・インストーラー）の両方に存在します。どちらを読むかは<strong>開いているページのオリジンで決まります</strong>（エンジンコードは全て相対パス参照）。ローカルアプリが kasugai-canvas-web を参照するのは <code>/vendor/*</code> のみです。</p>
+        <p><code>web/</code> 一式は <code>publish_cdn.py</code> が CDN へ丸ごとミラーするため、<code>shared/</code> 等の同じファイルが CDN と配布物（ZIP・インストーラー）の両方に存在します。どちらを読むかは<strong>開いているページのオリジンで決まります</strong>（エンジンコードは全て相対パス参照）。外部を参照するのは <code>/vendor/*</code>（gsimaps・navara）のみで、実体は CDN のみに置き <strong>Service Worker（<code>vendor-proxy-sw.js</code>・SW 制御）</strong>がどのオリジンでも同一オリジン供給します。SW が効かない環境ではホスト版エンジンへ転送します。</p>
         <table>
           <tr><th>取得物</th><th>ローカルアプリ（:8510）</th><th>ブラウザ WebGIS（CDN エンジン）</th></tr>
           <tr>
@@ -130,9 +131,9 @@ flowchart TB
             <td>CDN から配信</td>
           </tr>
           <tr>
-            <td>vendored 地理院地図<br/>（<code>vendor/gsimaps/</code>・約75MB）</td>
-            <td>同梱せず → <code>/vendor/</code> プロキシ経由で CDN から配信<br/>（CDN 不通時はホスト版へ転送）</td>
-            <td>CDN から配信</td>
+            <td>vendored ライブラリ<br/>（<code>vendor/gsimaps/</code>・<code>vendor/navara/</code>）</td>
+            <td>同梱せず → <code>vendor-proxy-sw.js</code>（SW 制御）が中継。<br/>実体は <code>:8510</code> の <code>/vendor/</code> プロキシ経由で CDN から配信</td>
+            <td><code>vendor-proxy-sw.js</code>（SW 制御）が CDN から同一オリジン中継<br/>（SW 非対応時はホスト版エンジンへ転送）</td>
           </tr>
           <tr>
             <td>描画ライブラリ<br/>（CesiumJS・Leaflet・MapLibre・OpenLayers・DuckDB-WASM 等）</td>

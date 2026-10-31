@@ -26,16 +26,39 @@
         .register(new URL("../vendor-proxy-sw.js?u=" +
           encodeURIComponent(window.vendorHostedBase()), location.href))
         .then(function () { return navigator.serviceWorker.ready; })
+        .then(function () {
+          // ready は active 化を待つが、初回は controller 反映が僅かに遅れる
+          // ことがある。制御確定前にプローブすると実体なし 404 で誤転送する
+          // ため controllerchange まで待つ（timeout 付き・既に制御済みなら即）
+          if (navigator.serviceWorker.controller) return null;
+          return new Promise(function (res) {
+            var t = setTimeout(res, 3000);
+            navigator.serviceWorker.addEventListener("controllerchange", function () {
+              clearTimeout(t);
+              res();
+            }, { once: true });
+          });
+        })
         .catch(function () { return null; })
     : Promise.resolve(null);
 
   // SW 制御確定後に probeUrl を HEAD で調べ、供給可否(true/false)を返す。
   // SW 中継が効く環境ではローカル実体が無くても true が返る
+  function headProbe(absUrl) {
+    return fetch(absUrl, { method: "HEAD", cache: "no-store" })
+      .then(function (r) { return r.ok; })
+      .catch(function () { return false; });
+  }
   window.vendorGuardProbe = function (probeUrl) {
+    var abs = new URL(probeUrl, location.href);
     return swReady.then(function () {
-      return fetch(new URL(probeUrl, location.href), { method: "HEAD", cache: "no-store" })
-        .then(function (r) { return r.ok; })
-        .catch(function () { return false; });
+      return headProbe(abs).then(function (ok) {
+        // controller 反映後も fetch 中継の有効化が一拍遅れる環境があるため、
+        // SW 制御下で 404 だった場合のみ待って再試行してから判定する
+        if (ok || !navigator.serviceWorker.controller) return ok;
+        return new Promise(function (res) { setTimeout(res, 600); })
+          .then(function () { return headProbe(abs); });
+      });
     });
   };
 })();
