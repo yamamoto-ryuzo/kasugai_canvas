@@ -1,13 +1,14 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
+import { mountEngineSwitcher } from "../shared/engine-switch.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initPrint, compositeDomMap } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
@@ -684,7 +685,12 @@ function buildLayerRow(entry, exclusive, radioName) {
 
   const cb = document.createElement("input");
   cb.type = exclusive ? "radio" : "checkbox";
+  if (entry.unsupported) { cb.disabled = true; row.style.opacity = ".45"; row.title = "このエンジン未対応の形式(Cesium 版で対応)"; }
   if (exclusive) cb.name = radioName;
+  if (exclusive) {
+    cb.addEventListener("pointerdown", () => { cb._wasChecked = cb.checked; });
+    cb.addEventListener("click", () => { if (cb._wasChecked) { cb.checked = false; cb.dispatchEvent(new Event("change")); } });
+  }
   cb.checked = item.visible;
   entry.cb = cb;
   cb.addEventListener("change", () => {
@@ -813,7 +819,7 @@ function renderLayerRows(entries, unsupported) {
     }
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const section = document.createElement("section");
-    section.className = "layer-group";
+    section.className = "layer-group" + (exclusive ? " exclusive" : "");
     const head = document.createElement("div");
     head.className = "layer-group-title";
     const tg = document.createElement("button");
@@ -822,7 +828,8 @@ function renderLayerRows(entries, unsupported) {
     tg.textContent = expandedLayerGroups.has(key) ? "▾" : "▸";
     tg.setAttribute("aria-expanded", String(expandedLayerGroups.has(key)));
     const gcb = document.createElement("input");
-    gcb.type = "checkbox";
+    gcb.type = exclusive ? "radio" : "checkbox";
+    if (exclusive) gcb.name = `grp-excl-${key}`;
     gcb.className = "layer-group-checkbox";
     const glabel = document.createElement("span");
     glabel.className = "layer-group-label";
@@ -1037,32 +1044,15 @@ async function applyInspectorText(text) {
 // (インスペクタ内容・テーマ選択・各レイヤの可視性)を適用する。
 // 状態はモジュール評価時に即消費して保持し(データ読込完了を待たない)、
 // loadProject/renderProject の初回描画へそのまま反映する
-let pendingSwitchState = consumeEngineSwitchState();
+let pendingSwitchState = matchSessionState();
 let switchRestore = null;
 
 function applySwitchRestore(sw) {
-  if (Array.isArray(sw.vis)) {
-    const exact = new Map(layerEntries.map(e => [e.item.title, e]));
-    const leafOf = t => String(t).split("/").map(s => s.trim()).pop();
-    const byLeaf = new Map();
-    for (const e of layerEntries) {
-      const k = leafOf(e.item.title);
-      byLeaf.set(k, byLeaf.has(k) ? null : e);
-    }
-    let changed = false;
-    for (const { t: title, v } of sw.vis) {
-      const e = exact.get(title) || byLeaf.get(leafOf(title));
-      if (e && !!e.item.visible !== !!v) {
-        e.item.visible = !!v;
-        applyEntryVisibility(e);
-        changed = true;
-      }
-    }
-    if (changed) renderLayerRows(layerEntries, currentUnsupported);
-  }
-  if (sw.theme && themeSelect && [...themeSelect.options].some(o => o.value === sw.theme)) {
-    themeSelect.value = sw.theme;
-  }
+  applySessionState(sw, {
+    entries: layerEntries, themeSelect,
+    setVisible: (e, on) => { e.item.visible = on; if (!e.unsupported) applyEntryVisibility(e); },
+    rerender: () => renderLayerRows(layerEntries, currentUnsupported),
+  });
 }
 
 // .kasc 文書(doc)を描画する。loadProject(ファイル読込)と
@@ -1097,7 +1087,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // _idx（.kasc 上の行順）で doc.layers と混ぜてレイヤツリー順を再現する
   // 3dtiles: は deck.gl、fly_geojson: はフライパスとして対応するため未対応通知から外す
   kascFlyPaths.setItems(doc.unsupported);
-  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson");
+  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type));
 
   currentBaseEntries = [];
   const baseEntries = currentBaseEntries;
@@ -1145,7 +1135,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 
   // 初期ビューはレイヤ読込を待たず即時適用する(cam/url 指定が無い場合のみ、
   // 全レイヤ読込後にデータ範囲へ fit する)
-  const urlView = urlViewConsumed ? null : parseUrlView();
+  const urlView = urlViewConsumed ? null : sessionBootView(switchRestore);
   urlViewConsumed = true;
   let needExtentFit = false;
   if (hasUrlView(urlView)) {
@@ -1162,10 +1152,11 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // 地図へ追加する。専用 pane の zIndex で積み順を再現するため、.kasc 順
   // (先頭=最前面)の末尾から pane を事前割当する(先頭エントリが最大 zIndex)。
   // `| off` のベクター行は表示 ON までデータ取得を遅延する
-  const orderedItems = [...doc.layers, ...doc.unsupported.filter(i => i.type === "3dtiles")]
+  const orderedItems = [...doc.layers, ...doc.unsupported.filter(i => i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type))]
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
   const entries = orderedItems.map(item => ({
     item, layer: null, styleFn: null, zoomRange: null, baseOpacity: 1, pending: true,
+    unsupported: doc.unsupported.includes(item) && item.type !== "3dtiles",
   }));
   // 3dtiles は Leaflet pane を持たない(deckDefs 管理)ため割当をスキップする
   for (let i = entries.length - 1; i >= 0; i--) if (entries[i].item.type !== "3dtiles") entries[i].paneName = newKascPane();
@@ -1191,6 +1182,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   if (total) updateLoadProgress(0, total, restLabel());
   await Promise.allSettled(entries.map(entry => (async () => {
     const item = entry.item;
+    if (entry.unsupported) { entry.pending = false; syncRowStatus(entry); return; }
     if (isDeferred(item)) {
       // `| off` ベクターはここでは読まず、表示 ON 時に ensureEntryLoaded で読む
       entry.deferred = true;
@@ -1710,6 +1702,8 @@ window.kasugaiApi = createPlayerApi({
   syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
 });
 mountEngineSwitcher(document.querySelector("#engines"), "leaflet");
+// カレント状態ファイル(Cesium規約)へ現在値を反映する(変化イベント駆動)
+bindSessionState("leaflet");
 void initAiChat({ engine: "leaflet", manageBackend: true });
 
 // 印刷: Leaflet は DOM 描画のためタイルimg・SVGオーバーレイ・マーカーを

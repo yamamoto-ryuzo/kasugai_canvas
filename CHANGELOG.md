@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.12.0] - 2026-11-01
+
+### Added
+
+- **カレント状態ファイル `session-state`（全エンジン統一）** — エンジン切替時の「現在地」引き継ぎを localStorage `kasugai:session-state`（Cesium 規約の正典ドキュメント）へ集約。`.kasc` は起動時に一度だけ読む**初期値**、以後は全エンジンが `session-state` を**現在値の正典**として参照するモデルに統一（`shared/session-state.js`）。書き込みは定期採取を廃止したイベント駆動 write-through（`bindSessionState` — DOM input/change・`history.replaceState` フック・`kasugaiApi` メソッド呼出しの3系統で状態変化時のみ反映、差分ガードで無変化なら書き込まない）。読み取りは `matchSessionState` の消費1回ガードで起動時のみ。`docs/features/v6.html` に `.kasc`/`session-state` 分離の時系列図を整備
+- **レイヤ一覧の全エンジン統一** — 表示順を `.kasc` 出現順（`_idx`）＝Cesium と同一に統一（navara にソート追加）。非対応形式のレイヤ行は一覧から消さず**グレーアウト表示**（無効チェック・半透明・ツールチップ）に統一 — `session-state` 正典の一覧とパネルが一致。設定系の非レイヤ行（`cam:`/`base:`/`yahooappid:`/`plugin:`/`cloud:` 等）は `NON_LAYER_TYPES`（`shared/kasc.js` export）で一覧対象外に統一。判定はエンジン能力基準（3dtiles は cesium/players/navara で有効・gsimaps でグレー）
+- **排他グループ（`//`）の表記・操作統一** — 見出し input を `radio` 化＋`exclusive` クラス＋「排他」バッジ（Cesium 表記）。排他ラジオは選択済みを**再クリックで OFF** にできる（radio の change 非発火対策を全エンジンに実装）
+
+### Fixed
+
+- **gsimaps の session-state 引き継ぎ不具合を修正** — `matchSessionState` がプロジェクト切替でも再評価され旧 inspector 全文が再適用され得た問題を消費1回ガードで解消。併せて引継ぎ inspector を「ファイル doc で一度描画→再構築」の二重ビルドから初回描画 doc への単一ビルドへ変更し、引継ぎカメラが extent fit で上書きされる問題と残留レイヤの混在を解消
+
 ## [6.11.1] - 2026-11-01
 
 ### Fixed

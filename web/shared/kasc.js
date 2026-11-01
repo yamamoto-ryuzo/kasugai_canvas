@@ -131,7 +131,7 @@ export function parseKasc(text) {
 
 // 可視性フラグ(on/off)の書き換え対象外となる非レイヤ行タイプ。
 // これ以外の既知・未知の行タイプはすべて「表示を持つレイヤ行」として扱う
-const NON_LAYER_TYPES = new Set([
+export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
 ]);

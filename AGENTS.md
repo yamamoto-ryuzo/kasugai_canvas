@@ -179,6 +179,25 @@ web/
 - `sw-duckdb.js` の Service Worker スコープは登録元ディレクトリ（現状 `/cesium/`）。エンジンごとに登録する
 - API・データパスは `/api/*`・`/projects/*`・`/health` のルート起点で書く（`./api/` 等のページ相対はエンジン配下で壊れるため禁止）
 
+## カレント状態ファイル（session-state）ルール
+
+エンジン間を「現在地」（カメラ位置・表示レイヤ・テーマ・ベースマップ・編集中 .kasc）を保って遷移するための共通状態は、**localStorage `kasugai:session-state`（Cesium 規約の正典ドキュメント）** に集約する。読み書き・適用ロジックは **`web/shared/session-state.js` のみ**に置き、各エンジンはこのモジュール経由で必ず従う（自前の状態保存・別キーへの退避は作らない）。詳細仕様は `docs/features/v6.html`「カレント状態ファイル」節。
+
+- **正典は Cesium 規約**（メインエンジンが CesiumJS で、URL ハッシュ・`cam:` 行も同規約のため）。camera は pitch 直下=-90・水平=0、heading 北=0・時計回り、zoom=256pxタイル基準、height=楕円体高(m)
+- **命名規則（2段ルール）**: ルート直下の無印フィールドは Cesium 規約正典値のみ。規約・単位の異なる別表現は `x-` プレフィックス（例 `x-zoomNative`）、エンジン固有情報は `engines.<id>` 名前空間へ隔離。拡張は `v` 据え置きでフィールド追加
+- **書き込み（変化イベント駆動）**: `session-state` は同期対象ではなくエンジンの内部データそのもの（現在値の正典）。各エンジンは `bindSessionState(engine)` で正典を結び、**状態変化イベント時のみ反映**する（定期採取・ポーリング禁止。検知は DOM input/change・`history.replaceState` フック・`kasugaiApi` メソッド呼出しの3系統＋差分ガードで無変化なら書き込まない）。切替リンク押下時も `snapshotSessionState()` で最新化される
+- **適用**: 起動時に `matchSessionState()` を呼び、URL の `project`/`kasc` 完全一致＋TTL 120 秒以内なら遷移セッションとして適用する。**一致するセッションが無い起動＝初期表示は `.kasc` 初期値で描画**し、カレント状態は適用しない
+- **適用順序**: `sessionBootView()`（ハッシュ > セッション camera）と `applySessionState()`（vis は完全タイトル→葉名一意の2段照合・theme は select 値のみ・basemap は API 優先+DOM フォールバック）を初回描画へ一度だけ適用する。プロジェクト切替等の2回目以降の描画には適用しない（新プロジェクトの `cam:`/`.kasc` 初期値へ）
+- **読み取りは起動時1回のみ（消費1回ガード）**: `matchSessionState()` はモジュール評価時に一度だけ呼び pending 変数へ保持し、初回描画で消費（null 化）する。ファイルは読んでも消えない常駐ドキュメントのため、`loadProject`/`applyProject` 等の再入する関数内で毎回呼ぶと、プロジェクト切替直後（`?project=` 書き替え前）にも一致判定を通り、旧プロジェクトの `inspector`/`vis` を新プロジェクトへ誤適用する
+- **新エンジン追加時の要件**: `matchSessionState` → `applySessionState`/`sessionBootView` → `bindSessionState` の3点を組み込めばカレント状態ファイル対応が完了する設計。`kasugaiApi`（`listLayers`/`listBasemaps`/`getViewInfo`/`getInspectorText`）と `#inspector-input`/`#theme-select`/`#basemap-select` の DOM 規約を満たすこと
+
+## レイヤ一覧パネルの統一ルール（全エンジン Cesium 準拠）
+
+- **表示対象**: レイヤ一覧は `session-state` 正典の一覧をそのまま表現する。`doc.layers` ＋ `doc.unsupported` から**設定系の非レイヤ行を除いた全行**を行化する — `NON_LAYER_TYPES`（`cam`/`base`/`theme`/`bookmark`/`cloud`/`plugin`/`yahooappid`/`title` 等）は一覧に出さず、`fly_geojson` はフライパスとして別処理。`NON_LAYER_TYPES` の正典は `shared/kasc.js` の export を使い回すこと
+- **並び順**: `.kasc` 出現順（`item._idx`）でソートして Cesium と同一順にする（`doc.layers`/`doc.unsupported` を結合しただけでは順が崩れるため必ず `_idx` ソートを噛ませる）
+- **非対応形式はグレーアウト（消さない）**: エンジンがマウントできない**レイヤ型**の行は `unsupported` フラグを付け、チェック無効＋半透明＋ツールチップで一覧に残す。判定は**エンジン能力基準** — `doc.unsupported`（共有コア非対応）でも当該エンジンがマウント可能な型（例: 3dtiles は cesium/players/navara 有効・gsimaps 無効）は有効行のまま。グレー行は `session-state` 正典どおり一覧に残るため、切替先でも同一構成が見える
+- **排他グループ（`//`）表記**: Cesium と同一にする — 見出し input を `radio` 化＋ `name` 付与＋section に `exclusive` クラス＋「排他」バッジ。排他ラジオは**選択済みを再クリックすると OFF** にできる（radio は change が発火しないため pointerdown/click ガードで手動 uncheck→change 送出する実装を全エンジンで踏襲すること）
+
 ## web/vendor/（上流スナップショット）の改変禁止
 
 - **`web/vendor/` 配下のファイルは一切改変しない**。上流リポジトリのスナップショットであり、正本は常に上流。`web/vendor/` は **git 管理・配布物（run.py の ZIP・NSIS インストーラー）の対象外**（`.gitignore` 済み）で、ローカルにも実体を置かない — 供給は `vendor-proxy-sw.js` が `vendor.json` のピン先（jsdelivr/raw.githubusercontent）から同一オリジン中継する方式に一本化済み（ローカル実体を置いても参照されない）。実体は CDN にも置かない

@@ -23,7 +23,8 @@ import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quote
 import { loadVectorItem } from "../shared/vector-load.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
-import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
+import { mountEngineSwitcher } from "../shared/engine-switch.js";
+import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
 import { initPrint } from "../shared/print.js";
 
 await initI18n();
@@ -1689,6 +1690,15 @@ function renderLayerList() {
   });
 
   list.querySelectorAll(".layer-row input").forEach(input => {
+    // 排他(radio)は選択済みの再クリックで OFF にできるようにする
+    // (radio は仕様上チェック済みを再クリックしても change が発火しない)
+    input.addEventListener("pointerdown", () => { input._wasChecked = input.checked; });
+    input.addEventListener("click", () => {
+      if (input.dataset.exclusive === "true" && input._wasChecked) {
+        input.checked = false;
+        input.dispatchEvent(new Event("change"));
+      }
+    });
     input.addEventListener("change", () => {
       const layer = layerState.get(input.dataset.layerId);
       if (!layer) return;
@@ -8838,7 +8848,7 @@ window.kasugaiApi = {
   },
   listLayers() {
     return getOrderedLayerItems().map(layer => {
-      const entry = { id: layer.id, title: layer.title, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: layer.type === "sql" ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced };
+      const entry = { id: layer.id, title: layer.title, sourceTitle: layer.sourceTitle || null, exclusiveGroup: !!layer.exclusiveGroup, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: layer.type === "sql" ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced };
       const legend = layer.qmlStyle?.legend;
       if (legend?.length > 1) entry.legend = legend.map(e => ({ label: e.label || e.symbolName, visible: !layer.legendHidden?.has(e.symbolName) }));
       return entry;
@@ -9596,7 +9606,7 @@ window.addEventListener("pagehide", () => {
   // capabilities 取得後に既定エージェントエンドポイントを反映するため再評価する
   updateChatPanelVisibility();
   try { await loadProjects(); } catch (e) { console.error(e); }
-  try { switchRestore = consumeEngineSwitchState(); } catch (e) {}
+  try { switchRestore = matchSessionState(); } catch (e) {}
   // ?kasc=local / localfs:// — File System Access API でローカルフォルダを直読みする
   // （shared/kasc.js のプレイヤー系と同じ入口。fetch シムで DATA/ 等の相対参照も通す）
   try {
@@ -9624,32 +9634,23 @@ window.addEventListener("pagehide", () => {
     const st = switchRestore;
     switchRestore = null;
     if (st) {
-      if (Array.isArray(st.vis)) {
-        const items = getOrderedLayerItems();
-        const leafOf = t => String(t).split("/").map(s => s.trim()).pop();
-        const exact = new Map(items.map(i => [i.title, i]));
-        const byFull = new Map(), byLeaf = new Map();
-        for (const i of items) {
-          byFull.set(i.sourceTitle || (i.group ? `${i.group}/${i.title}` : i.title), i);
-          const k = leafOf(i.title);
-          byLeaf.set(k, byLeaf.has(k) ? null : i);
-        }
-        let changed = false;
-        for (const { t: title, v } of st.vis) {
-          const item = exact.get(title) || byFull.get(title) || byLeaf.get(leafOf(title));
-          if (!item || !!item.visible === !!v) continue;
-          item.visible = !!v;
-          if (item.visible && item.exclusiveGroup) {
+      const items = getOrderedLayerItems();
+      // 正典の可視性キーは listLayers の title。sourceTitle(グループ/名前
+      // の完全形)優先で照合する（葉名一意は共有ヘルパー側で処理）
+      applySessionState(st, {
+        entries: items, themeSelect: document.querySelector("#theme-select"),
+        getTitle: i => i.sourceTitle || (i.group ? `${i.group}/${i.title}` : i.title),
+        getVisible: i => !!i.visible,
+        setVisible: (item, on) => {
+          item.visible = on;
+          if (on && item.exclusiveGroup) {
             for (const other of items) {
               if (other !== item && other.group === item.group && other.exclusiveGroup) other.visible = false;
             }
           }
-          changed = true;
-        }
-        if (changed) { renderLayerList(); refreshLayers(); }
-      }
-      const sel = document.querySelector("#theme-select");
-      if (st.theme && sel && [...sel.options].some(o => o.value === st.theme)) sel.value = st.theme;
+        },
+        rerender: () => { renderLayerList(); refreshLayers(); },
+      });
     }
   } catch (e) { console.error(e); }
   try { await ensureDrawnRouteFlyPath(); } catch (e) { console.error(e); }
@@ -9668,6 +9669,8 @@ window.addEventListener("pagehide", () => {
   renderPresets();
   window.kasugaiApi.isReady = true;
   window.kasugaiApi.emit("ready");
+  // カレント状態ファイル(Cesium規約)へ現在値を反映する(変化イベント駆動)
+  bindSessionState("cesium");
 })();
 
 // ?follow[=<base>] → geo_webview の /present/state をポーリングして QGIS キャンバスに追従

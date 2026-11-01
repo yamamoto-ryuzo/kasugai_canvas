@@ -6,11 +6,14 @@
   <title>マルチエンジン — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="../style.css">
   <script src="../nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+  </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.11.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.12.0</span></h1>
       <p>マルチエンジン — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -73,8 +76,76 @@
       <ul>
         <li><strong><code>?engine=</code> リダイレクト</strong>: ルートの <code>web/index.html</code> は <code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara</code>（既定 cesium）を読み、対象エンジンの <code>index.html</code> へリダイレクトします。<code>engine</code> 以外のクエリ（<code>project=</code>・<code>kasc=</code>）とハッシュ（ビュー状態）はそのまま引き継ぐため、同じ URL をエンジンを変えて開き直せます</li>
         <li><strong>切替 UI</strong>: 各エンジンのパネルにある「engine:」リンク（<code>shared/engine-switch.js</code>）から別エンジンへ遷移します。現在のクエリとハッシュを引き継ぐため、プロジェクトとカメラ位置を保ったまま切り替えられます（リンクは <code>../?engine=…</code> の相対パスで、GitHub Pages 等のパスプレフィックス配信でも動作）</li>
-        <li><strong>レイヤ状態の引継ぎ</strong>: 切替直前にインスペクターの .kasc テキスト・テーマ選択・各レイヤの可視性を localStorage へ一時保存し、切替先が起動時に一度だけ消費します（TTL 120 秒・URL の project/kasc が一致したときのみ適用）。切替元で加えた未保存の編集や表示切替が切替先にも反映されます</li>
+        <li><strong>レイヤ状態の引継ぎ（カレント状態ファイル）</strong>: 稼働中のエンジンは自身の状態を <strong>Cesium 規約の正典ドキュメント</strong>（localStorage <code>kasugai:session-state</code>）として <code>shared/session-state.js</code> 経由で常時同期し、切替先エンジンが起動時に適用します。詳細な仕様は次節「カレント状態ファイル」を参照してください</li>
         <li><strong>URL ハッシュの互換</strong>: カメラ状態のハッシュ形式はエンジン共通です（緯度・経度・高さに加え、2D 側は zoom を併記。heading/pitch は各エンジンの規約へ相互変換）。変換規則の詳細は <a href="v0.html">V0: システム基本構成 — URL パーマリンク</a> を参照</li>
+      </ul>
+
+      <h3>📄 カレント状態ファイル（<code>session-state</code>）</h3>
+      <p><code>.kasc</code> がプロジェクトの<strong>初期値</strong>であるのに対し、カレント状態ファイルは稼働中の<strong>現在値</strong>（カメラ位置・表示レイヤ・テーマ・ベースマップ・インスペクタの編集中テキスト）を保持するエンジン共通の正典ドキュメントです。物理ファイルではなく localStorage の1レコード（キー <code>kasugai:session-state</code>、JSON）として常駐し、読み書きはすべて <code>shared/session-state.js</code> に集約されています。</p>
+      <p><strong>正典は Cesium 規約</strong>です（メインエンジンが CesiumJS であり、URL ハッシュと <code>cam:</code> 行も同規約のため）。各エンジンは自形式 → Cesium 規約へ書き込み時に正規化し、読み込み時に自形式へ変換します。</p>
+
+      <h4>スキーマ（<code>v: 1</code>）</h4>
+      <table>
+        <thead><tr><th>フィールド</th><th>型</th><th>内容</th></tr></thead>
+        <tbody>
+        <tr><td><code>v</code> / <code>at</code> / <code>engine</code></td><td>number / number / string</td><td>スキーマ版・最終更新時刻(ms)・最後に書いたエンジン ID</td></tr>
+        <tr><td><code>project</code> / <code>kasc</code></td><td>string|null</td><td>書込み時点の <code>?project=</code> / <code>?kasc=</code>（適用はこれらの<strong>完全一致</strong>が条件）</td></tr>
+        <tr><td><code>camera</code></td><td>object</td><td><code>latitude</code>/<code>longitude</code>(deg)・<code>height</code>(m・楕円体高)・<code>zoom</code>(256pxタイル基準)・<code>pitch</code>(直下=-90・水平=0)・<code>heading</code>(北=0・時計回り)。URL ハッシュと同形式</td></tr>
+        <tr><td><code>inspector</code></td><td>string</td><td>現在の .kasc テキスト全文（ファイル内容ではなく編集後を含む現在値）</td></tr>
+        <tr><td><code>theme</code></td><td>string|null</td><td><code>#theme-select</code> の選択値（<code>theme:</code> 名。未選択は null）</td></tr>
+        <tr><td><code>basemap</code></td><td>object</td><td><code>{id, title}</code>（選択中ベースマップ。title は <code>base:</code> 行の item.title 正典）</td></tr>
+        <tr><td><code>vis</code></td><td>object</td><td><code>{完全タイトル: bool}</code>（<code>listLayers()</code> の title を「グループ/名前」へ正規化した可視性マップ）</td></tr>
+        </tbody>
+      </table>
+
+      <h4>ライフサイクル</h4>
+      <ul>
+        <li><strong>書き込み（変化イベント駆動）</strong>: <code>session-state</code> は同期対象ではなく<strong>エンジンの内部データそのもの</strong>（現在値の正典）です。稼働エンジンは <code>bindSessionState(engine)</code> で正典を結び、<strong>状態変化のイベントが起きた時点でだけ</strong>反映します — 定期採取・ポーリングは存在しません。検知面はエンジン非依存の3系統: DOM の <code>input</code>/<code>change</code> 捕捉（インスペクタ編集・テーマ/ベースマップ選択・レイヤチェック）、<code>history.replaceState</code> フック（全エンジンがカメラ移動時に正典ハッシュを書く共通経路）、<code>kasugaiApi</code> メソッド呼出し（AI ツール等の API 経路）。反映は debounce＋内容差分ガードで、<strong>無変化なら書き込みません</strong>。起動時に現在値を構築し、タブ終了 <code>pagehide</code>・非表示遷移時は即時反映します。採取元は <code>kasugaiApi</code>（<code>listLayers</code>/<code>listBasemaps</code>/<code>getViewInfo</code>/<code>getCamera</code>/<code>getInspectorText</code>）と DOM（<code>#inspector-input</code>/<code>#theme-select</code>）。正規化の要点: カメラは正典化済みの <strong>URL ハッシュ値を優先</strong>し、欠けた分だけ <code>getViewInfo</code>（pitchDeg−90 変換）/ <code>getCamera</code>（Cesium pitch 直値）で補います — MapLibre の 512px 基準 zoom のようなエンジン固有値が正典へ紛れ込むのを防ぐためです</li>
+        <li><strong>適用判定</strong>: 起動時に <code>matchSessionState()</code> を呼び、<code>project</code>/<code>kasc</code> が URL と完全一致かつ <code>at</code> が <strong>TTL 120 秒以内</strong>なら遷移・継続セッションとして復元対象になります。<strong>読み取りで消去はしません</strong> — ファイルは常駐し、引き継いだ側のエンジンが以後の書き込み主になります（別タブで同じプロジェクトを開いても「生きている」状態が続きます）</li>
+        <li><strong>消費は起動時の1回のみ（消費1回ガード）</strong>: <code>matchSessionState()</code> はモジュール評価時に一度だけ呼んで pending 変数へ保持し、初回描画で消費（null 化）します。<code>loadProject</code>/<code>applyProject</code> などプロジェクト切替で再入する関数内で毎回呼んではいけません — ファイルは常駐するため、<code>?project=</code> が書き替わる前の切替直後でも一致判定を通ってしまい、旧プロジェクトの <code>inspector</code>/<code>vis</code> が新プロジェクトへ誤適用されます</li>
+        <li><strong>初期表示</strong>: 一致する鮮度内セッションが無い起動は「初期表示」とみなし、各エンジンは <code>.kasc</code> ファイルの初期値で描画します（カレント状態は適用しません）</li>
+      </ul>
+
+      <p><code>.kasc</code>（プロジェクトの<strong>初期値</strong>）と <code>session-state</code>（稼働中の<strong>現在値</strong>）は役割が異なります。起動したエンジンは <code>.kasc</code> を一度読んで <code>session-state</code>（現在値）を構築し、<strong>以後はすべてのエンジンが <code>session-state</code> を正典として常時参照・更新</strong>します — 切替先エンジンも別ドキュメントではなく同じこの正典を引き継ぎます：</p>
+      <pre class="mermaid" aria-label=".kasc と session-state の時系列">
+sequenceDiagram
+    autonumber
+    participant K as .kasc<br/>初期値（プロジェクトファイル・不変）
+    participant A as エンジンA<br/>(起動)
+    participant S as session-state<br/>現在値（localStorage・常駐・正典）
+    participant B as エンジンB<br/>(切替先)
+
+    K->>A: 起動時に読み込む (初期値)
+    A->>S: 現在値を構築（以後は S が正典）
+    loop 稼働中は常時
+        A->>S: 状態変化のたび更新<br/>(イベント駆動)
+    end
+    A->>B: engine リンクで遷移<br/>(クエリ・ハッシュ継承)
+    Note over B: 起動は A と同じ構造。<br/>正典を読んで開始するだけ
+    B->>S: 起動時に正典を読み込む<br/>(消費1回ガード)
+    loop 稼働中は常時
+        B->>S: 状態変化のたび更新 (イベント駆動)
+    end
+    Note over K: .kasc は初期値のまま不変。<br/>稼働中の正典は常に session-state
+      </pre>
+      <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+      </script>
+
+      <h4>復元の照合ルール</h4>
+      <ul>
+        <li><strong>カメラ</strong>: <code>sessionBootView()</code> が URL ハッシュ → <code>session.camera</code> の順で解決します（切替時はハッシュが常に最新のため、ファイル値はハッシュ欠落時のフォールバック）</li>
+        <li><strong>可視性</strong>: <code>sessionVisChanges()</code> が「完全タイトル（グループ/名前）→ 葉名（一意のときのみ）」の2段照合で適用差分を返します。グループ配下レイヤも確実に復元されます</li>
+        <li><strong>テーマ</strong>: <code>#theme-select</code> の選択値のみ復元します（実表示は vis マップが担うため <code>change</code> は発火させません）</li>
+        <li><strong>ベースマップ</strong>: <code>kasugaiApi.setBasemap</code>（<code>none</code>/<code>transparent</code> 等の疑似項目を扱える）を優先し、API 未生成や不一致の場合は <code>#basemap-select</code> の option を title/葉名/id で直接選択して <code>change</code> を発火します</li>
+        <li><strong>インスペクタ</strong>: 切替元の .kasc テキストをそのまま描画ソースに使います（未保存の編集・行追加・<code>where=</code> フィルタも引き継がれます）</li>
+      </ul>
+      <h4>命名規則と拡張方針（2段ルール）</h4>
+      <p>ドキュメントのルート直下に無印で並ぶフィールドは<strong>すべて Cesium 規約の正典値</strong>と決め、それ以外の値は名前で区別します。将来の拡張（グループ展開状態・凡例フィルタなど）は <code>v</code> を据えたままフィールド追加で行い、以下の規則に従います：</p>
+      <ul>
+        <li><strong>規約・単位が異なる別表現の値 → <code>x-</code> プレフィックス</strong>: 例えば MapLibre の 512px 基準 zoom を残したい場合は <code>x-zoomNative</code> のように、規約が分かる名前を付けます（既存コードの <code>pitch</code>（Cesium 規約）vs <code>pitchDeg</code>（エンジン固有）の区別と同じ考えです）</li>
+        <li><strong>エンジン固有情報 → <code>engines.&lt;id&gt;</code> 名前空間</strong>: Navara の photoreal/fx 設定のような他エンジンと共有しない値は <code>engines.navara.*</code> のようにエンジン ID で隔離します</li>
       </ul>
 
       <h3>🧩 エンジン非依存コア（<code>web/shared/</code>）</h3>
@@ -86,7 +157,7 @@
         <li><code>attr-widget.js</code> — 画面下部にドッキングする属性テーブル（レイヤ選択・全文検索・列ソート・行クリック移動）</li>
         <li><code>player-api.js</code> — 2D プレイヤー向けの <code>window.kasugaiApi</code> アダプタ。各エンジンの共通構造（レイヤリスト＋描画フック）へ API 面を構成し、AI チャットの公開ツールは api メソッドの有無で自動絞り込み</li>
         <li><code>ai-chat.js</code> / <code>mcp.js</code> / <code>box.js</code> — エンジン横断の AI チャット基盤（プロバイダ接続・ツール実行・MCP リモートサーバー接続・Box OAuth）</li>
-        <li><code>engine-switch.js</code> — 切替 UI とレイヤ状態引継ぎ（上記）</li>
+        <li><code>engine-switch.js</code> / <code>session-state.js</code> — 切替 UI とカレント状態ファイル（Cesium 規約の共通状態。上記「レイヤ状態の引継ぎ」）</li>
         <li><code>print.js</code> — 印刷・帳票出力（地図画像化→タイトル/凡例/縮尺/方位/出典の帳票合成）</li>
         <li><code>i18n.js</code> + <code>i18n/</code> — 共有の翻訳辞書と適用機構</li>
         <li><code>deck-drape.js</code> / <code>deck-ground.js</code> — 2D エンジン上の deck.gl 3D Tiles 表示（ドレープ・自動接地）</li>
@@ -102,7 +173,8 @@
         <li><strong>QML スタイル</strong>: <code>style=</code> の .qml をコンパイルして各エンジンのスタイルへ適用（単一/分類/段階/ルールレンダラ・ラベル・凡例スウォッチ）</li>
         <li><strong>属性・検索</strong>: 地物クリックの属性表示、属性値一覧ウィジェット、ベクター属性検索、カメラタブ（cam: プリセット・QGIS XML 読み書き）</li>
         <li><strong>AI チャット</strong>: <code>player-api.js</code> が提供する kasugaiApi アダプタ経由で共通の AI チャットを利用（公開ツールはエンジンの実装済み api に応じて絞られる）</li>
-        <li><strong>未対応行の扱い</strong>: そのエンジンで再現できない行タイプはパネルに「未対応行: …（Cesium 版で対応）」と警告表示されます</li>
+        <li><strong>レイヤ一覧の統一（全エンジン共通）</strong>: 行順は .kasc 出現順（<code>_idx</code>）で Cesium と同一。設定系の非レイヤ行（<code>cam:</code>/<code>base:</code>/<code>theme:</code>/<code>bookmark:</code>/<code>cloud:</code>/<code>plugin:</code>/<code>yahooappid:</code> 等の <code>NON_LAYER_TYPES</code>）は一覧に出さず、<code>fly_geojson:</code> はフライパスとして別処理。排他グループ（<code>//</code>）は Cesium と同じ表記 — 見出し input が <code>radio</code> ＋ <code>exclusive</code> クラス＋「排他」バッジ、メンバー行はラジオで<strong>選択済みを再クリックすると OFF</strong> にできます</li>
+        <li><strong>未対応行の扱い（グレーアウト統一）</strong>: そのエンジンで再現できない<strong>レイヤ型</strong>の行は、一覧から消さず<strong>グレーアウト行</strong>（チェック無効・半透明・ツールチップ「このエンジン未対応の形式」）として残します — <code>session-state</code> 正典のレイヤ一覧とパネル表示が一致するため。判定は<strong>エンジン能力基準</strong>（3dtiles は cesium/players/navara で有効・gsimaps でグレー）。併せて情報タブの「未対応行」警告も出ます</li>
       </ul>
 
       <h3>🗾 GSI Maps エンジン（地理院地図組み込み・調整中）</h3>
@@ -113,8 +185,8 @@
       </figure>
       <p><strong>※現在調整中</strong>: iframe 内の vendored コードを <code>GSI.GLOBALS</code> 内部 API 経由で操作する構造のため AI 制御の安定化が難しく、本エンジンの挙動・ツール仕様は今後変更される可能性があります。</p>
       <ul>
-        <li><strong>.kasc → gsimaps の対応</strong>: ベクター系行は GeoJSON へ変換して作図リスト（SakuzuListItem）として注入（スタイルは <code>_</code>-props へ畳み込み）。<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code> は外部タイル（appendOutSideTile）として追加し、地理院タイルのベースは gsimaps 標準ベースマップへマップします。<code>cam:</code> は URL ハッシュと setView、<code>theme:</code> は可視性プリセットとして処理。3dtiles 等の非対応行は情報タブへ警告します</li>
-        <li><strong>Globe 表示</strong>: 上流の「Globe」起動（window.open）をフックして iframe 内表示へ差し替え、左パネルを維持します。Globe は Cesium アプリのため、読み込み済みの .kasc レイヤを viewer へ注入して 3D 表示でき、可視性も双方向で同期します。表示中の視点は親 URL ハッシュへミラーされ、「← 2D地図に戻る」で視点を引き継いで復帰します</li>
+        <li><strong>.kasc → gsimaps の対応</strong>: ベクター系行は GeoJSON へ変換して作図リスト（SakuzuListItem）として注入（スタイルは <code>_</code>-props へ畳み込み）。<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code> は外部タイル（appendOutSideTile）として追加し、地理院タイルのベースは gsimaps 標準ベースマップへマップします。<code>cam:</code> は URL ハッシュと setView、<code>theme:</code> は可視性プリセットとして処理。3dtiles 等の非対応行はレイヤ一覧でグレーアウト表示（消えません）＋情報タブへ警告します</li>
+        <li><strong>Globe 表示</strong>: 上流の「Globe」起動（window.open）をフックして iframe 内表示へ差し替え、左パネルを維持します。Globe は Cesium アプリのため、読み込み済みの .kasc レイヤを viewer へ注入して 3D 表示でき、可視性も双方向で同期します（Globe 中の対応形式は 2D と同一 — 注入経路は GeoJSON と imagery のみで、3dtiles 等のグレー行はどちらでも未対応のまま）。表示中の視点は親 URL ハッシュへミラーされ、「← 2D地図に戻る」で視点を引き継いで復帰します</li>
         <li><strong>レイヤ取り込み</strong>: 「地理院地図の表示レイヤを取り込み」ボタンで、地理院地図側で表示中のレイヤを <code>xyz:</code> 行の Canvas レイヤとして .kasc へ追記できます（Globe 表示中は不可）</li>
         <li><strong>AI ツール群</strong>: 地理院地図の操作は専用ツール17本で AI 制御できます（<a href="../ai-tools.html">AI ツール仕様</a>）。表示中レイヤの一覧・取り込み（<code>listGsiLayers</code>/<code>importGsiLayers</code>）、透過率・積み順・解除（<code>setGsiLayerOpacity</code>/<code>moveGsiLayer</code>/<code>removeGsiLayer</code>）、カタログ検索・表示・直接取り込み（<code>listGsiCatalog</code>/<code>addGsiLayer</code>/<code>importGsiCatalog</code>）、作図取り込み（<code>listGsiSakuzu</code>/<code>importGsiSakuzu</code>）、ベースマップの一覧・切替（<code>listGsiBasemaps</code>/<code>setGsiBasemap</code>。切替は <code>base:</code> 行を .kasc へ自動追記し、他エンジンでも同じベースが再現されます）。ほかに表示中レイヤの一時非表示（<code>setGsiLayerHidden</code>）・作図削除（<code>removeGsiSakuzu</code>）・地点標高取得（<code>getGsiElevation</code>）もあります）。地理院地図側の UI 自体も <code>data-ui-bridge</code> 経由で汎用 <code>listUiControls</code>/<code>controlUi</code> の対象になります</li>
         <li><strong>ベンダー管理</strong>: vendor 実体（約75MB）はリポジトリ・配布 ZIP・インストーラー・ローカル開発・CDN のいずれにも置きません（<code>gsimaps/vendor.json</code> の sha でピン）。供給経路は <code>vendor-proxy-sw.js</code>（Service Worker・<code>shared/vendor-guard.js</code> が登録）に一本化されており、SW が <code>/vendor/*</code> を vendor.json のピン先（jsdelivr/gh・失敗時 raw.githubusercontent）から同一オリジン中継するため、github.io のような静的配信やローカル開発でも vendor 未配置のままその場で動作します（Service Worker 前提。<code>?hosted=</code> または localStorage <code>kasugai_hosted_base</code> で自前ミラー指定も可 — オフライン開発等は <code>tools/fetch_vendor.py</code> で取得した実体を自前配信してそこを指します）。vendor 更新は <code>vendor.json</code> のピン変更のみで完結し、CDN への実ファイル配置はありません。<strong>同梱トークンについて</strong>: <code>globe/Build/Cesium*</code> には Cesium 公式の公開デフォルトトークン（Mapbox <code>pk.</code> トークン・ion の JWT）が含まれます。これは Cesium が全配布物に同梱する公開仕様（利用時は「自前トークンを設定せよ」の警告を出力する既定動作）であり、シークレットスキャン（detect-secrets・GitHub Push Protection）では false positive として扱います — detect-secrets は <code>.secrets.baseline</code>、GitHub 側は unblock URL の許可で対応済み</li>
@@ -123,7 +195,7 @@
       <h3>🌍 Navara エンジン（試験的）</h3>
       <p><code>@navaramap/three</code>（<a href="https://github.com/maplibre/navara" target="_blank" rel="noopener noreferrer">Navara</a> の Rust/WASM GIS コア + Three.js レンダラ）で <code>.kasc</code> を再生する<strong>試験的エンジン</strong>です。Cesium とは別系統の 3D 描画で、大気散乱・太陽・影のフォトリアルシーン（<code>addDefaultPhotorealScene</code>）と Re:Earth Terrain（quantized-mesh）の地形を備え、写実的な 3D プレゼン用途を検証する位置づけです。エンジン切替 UI では <code>[navara]</code> と括弧付きで表示され、試験的エンジンの目印になっています（ENGINE_LABELS の <code>[]</code> 表記）。</p>
       <ul>
-        <li><strong>.kasc → navara の対応</strong>: ベクター系行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>tsv:</code>/<code>duckdb:</code>/<code>sql:</code>）は shared のローダーで GeoJSON 化して geojson ソースへ流し込み（QML は代表地物のスタイルをレイヤ単位マテリアルへ反映）、<code>base:</code>/<code>xyz:</code> は raster-tile ソース、<code>3dtiles:</code> は 3d-tiles ソースとして追加。<code>cam:</code>・<code>theme:</code>・ブックマーク・<code>legend:</code>・<code>default_style:</code>・<code>fly_geojson:</code>・属性 UI・AI チャット・印刷は shared 共通です。<code>wms:</code>/<code>wmts:</code>・3D Tiles 表面ドレープ・地物単位の凡例フィルタは未対応で、非対応行は情報タブへ警告します</li>
+        <li><strong>.kasc → navara の対応</strong>: ベクター系行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>tsv:</code>/<code>duckdb:</code>/<code>sql:</code>）は shared のローダーで GeoJSON 化して geojson ソースへ流し込み（QML は代表地物のスタイルをレイヤ単位マテリアルへ反映）、<code>base:</code>/<code>xyz:</code> は raster-tile ソース、<code>3dtiles:</code> は 3d-tiles ソースとして追加。<code>cam:</code>・<code>theme:</code>・ブックマーク・<code>legend:</code>・<code>default_style:</code>・<code>fly_geojson:</code>・属性 UI・AI チャット・印刷は shared 共通です。<code>wms:</code>/<code>wmts:</code>・3D Tiles 表面ドレープ・地物単位の凡例フィルタは未対応で、非対応行はレイヤ一覧でグレーアウト表示＋情報タブへ警告します</li>
         <li><strong>ベンダー管理</strong>: ライブラリは npm ビルド済み dist のスナップショットを <code>vendor/navara/</code>（<code>navara/vendor.json</code> でピン）から importmap で読み込みます。Worker が <code>import.meta.url</code> 相対で生成されるため<strong>同一オリジン必須</strong>で、外部 CDN 直読みは動きません（地物メッシュ・地形・3D Tiles が停止）。<code>three</code>/<code>postprocessing</code> も peer 参照を同一インスタンスに揃えるため同梱します。vendor 実体は gsimaps と同じくどこにも置かず、<code>vendor-proxy-sw.js</code>（SW 制御）が <code>vendor.json</code> の npm ピン先（jsdelivr/npm）から同一オリジン中継して供給します — ローカルの <code>web/vendor/</code> は不要です（オフライン開発用に実体が欲しい場合のみ <code>tools/fetch_vendor.py</code> + <code>?hosted=</code> ミラー指定）</li>
         <li><strong>写実・地形の操作</strong>: 設定ペインの「地形（Re:Earth Terrain）」で quantized-mesh 地形を ON/OFF でき、「写実シーン（大気・太陽・雲）」・影・時刻（UTC）の調整もそこから行います。既定では描画負荷を抑える設定（影 OFF・マルチサンプリングなし）で起動します</li>
       </ul>

@@ -4,14 +4,15 @@
 // UI/共通機構は shared/ を他エンジンと共用する。
 import ThreeView, { Color } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
+import { mountEngineSwitcher } from "../shared/engine-switch.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initPrint } from "../shared/print.js";
 import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import { mountSunControls } from "../shared/sun-time.js";
@@ -69,6 +70,9 @@ const kascFlyPaths = createKascFlyPaths({
 // 起動直後・loadProject が URL ハッシュを読む前に、初期カメラの moveend が
 // ハッシュをデフォルト位置で上書きするのを防ぐ（MapLibre と同じガード）
 let urlViewConsumed = false;
+// エンジン遷移で引き継ぐカレント状態。初回 loadProject で一度だけ適用する
+// (後続のプロジェクト切替には適用しない)
+let pendingSession = null;
 
 function setCamera(cam) {
   lastCam = { lng: cam.lng ?? cam.longitude, lat: cam.lat ?? cam.latitude, height: cam.height ?? lastCam.height, heading: cam.heading ?? lastCam.heading, pitch: cam.pitch ?? lastCam.pitch, roll: cam.roll || 0 };
@@ -222,7 +226,12 @@ function buildLayerRow(entry, exclusive, radioName) {
 
   const cb = document.createElement("input");
   cb.type = exclusive ? "radio" : "checkbox";
+  if (entry.unsupported) { cb.disabled = true; row.style.opacity = ".45"; row.title = "このエンジン未対応の形式(Cesium 版で対応)"; }
   if (exclusive) cb.name = radioName;
+  if (exclusive) {
+    cb.addEventListener("pointerdown", () => { cb._wasChecked = cb.checked; });
+    cb.addEventListener("click", () => { if (cb._wasChecked) { cb.checked = false; cb.dispatchEvent(new Event("change")); } });
+  }
   cb.checked = item.visible !== false;
   entry.cb = cb;
   cb.addEventListener("change", () => {
@@ -345,7 +354,7 @@ function buildLayerList() {
     }
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const section = document.createElement("section");
-    section.className = "layer-group";
+    section.className = "layer-group" + (exclusive ? " exclusive" : "");
     const head = document.createElement("div");
     head.className = "layer-group-title";
     const tg = document.createElement("button");
@@ -354,7 +363,8 @@ function buildLayerList() {
     tg.textContent = expandedLayerGroups.has(key) ? "▾" : "▸";
     tg.setAttribute("aria-expanded", String(expandedLayerGroups.has(key)));
     const gcb = document.createElement("input");
-    gcb.type = "checkbox";
+    gcb.type = exclusive ? "radio" : "checkbox";
+    if (exclusive) gcb.name = `grp-excl-${key}`;
     gcb.className = "layer-group-checkbox";
     const glabel = document.createElement("span");
     glabel.className = "layer-group-label";
@@ -735,15 +745,16 @@ async function renderLayers(doc, baseUrl) {
   currentDefaultStyles = doc.defaultStyles || null;
   currentLegends = doc.legends || [];
   kascFlyPaths.setItems(doc.unsupported);
-  const items = [...doc.layers, ...doc.unsupported.filter(u => u.type === "3dtiles")];
-  const unsupported = doc.unsupported.filter(u => u.type !== "3dtiles" && u.type !== "fly_geojson");
+  const items = [...doc.layers, ...doc.unsupported.filter(u => u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type))]
+    .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
+  const unsupported = doc.unsupported.filter(u => u.type !== "3dtiles" && u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type));
   const visibleCount = items.filter(i => i.visible !== false).length;
   let done = 0;
   progress(0, visibleCount, "");
   for (const item of items) {
-    const entry = { item, sid: String(item._idx ?? item.url) };
+    const entry = { item, sid: String(item._idx ?? item.url), unsupported: doc.unsupported.includes(item) && item.type !== "3dtiles" };
     layerEntries.push(entry);
-    if (item.visible === false) { progress(++done, visibleCount); continue; }
+    if (entry.unsupported || item.visible === false) { progress(++done, visibleCount); continue; }
     try {
       const r = await addKascLayer(item, baseUrl);
       if (r) { entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc; }
@@ -846,7 +857,12 @@ async function renderDoc(doc, baseUrl) {
 async function loadProject(projectId) {
   const { id, manifest, baseUrl, doc, raw } = await loadKascProject(projectId);
   currentProjectId = id; lastBaseUrl = baseUrl; lastKascRaw = raw || "";
-  if (panel.inspector && !panel.inspector.value) panel.inspector.value = lastKascRaw;
+  // カレント状態ファイルは初回描画へ一度だけ適用する
+  const sess = pendingSession; pendingSession = null;
+  // インスペクタは「現在の .kasc」（切替元の編集込み）を優先。
+  // 初期表示はファイル内容。プロジェクト切替時も新しい raw で更新する
+  const text = sess?.inspector ?? lastKascRaw;
+  if (panel.inspector) panel.inspector.value = text;
 
   panel.project.replaceChildren();
   appendGroupedTitleOptions(panel.project, manifest, (m, title) => {
@@ -860,10 +876,18 @@ async function loadProject(projectId) {
   }
   panel.project.value = id;
 
-  await renderDoc(doc, baseUrl);
+  await renderDoc(text === lastKascRaw ? doc : parseKasc(text), baseUrl);
 
-  // 初期カメラ: URL view > 先頭 cam
-  const uv = parseUrlView();
+  // カレント状態のレイヤ関連を復元（vis は完全タイトル→葉名一意の2段照合）
+  applySessionState(sess, {
+    entries: layerEntries, themeSelect: panel.themeSelect,
+    setVisible: (e, on) => { setEntryVisible(e, on); if (on && !e.unsupported) void maybeLoadEntry(e); },
+    rerender: () => { buildLayerList(); syncAttribution(); },
+  });
+
+  // 初期カメラ: 初回のみ URL view/セッション > 先頭 cam。
+  // プロジェクト切替（2回目以降）は新プロジェクトの cam へ移る（他エンジンと同じ）
+  const uv = urlViewConsumed ? null : sessionBootView(sess);
   if (hasUrlView(uv)) setCamera({ longitude: uv.longitude, latitude: uv.latitude, height: urlViewHeight(uv), heading: uv.heading, pitch: uv.pitch });
   else if (doc.cams[0]) { const c = doc.cams[0]; flyTo({ longitude: c.longitude, latitude: c.latitude, height: c.height, heading: c.heading, pitch: c.pitch }); }
   urlViewConsumed = true;
@@ -1013,10 +1037,12 @@ async function saveToDataDir(name, content) {
   // 地形(Re:Earth Terrain)は既定 ON
   await applyTerrain(true);
 
+  // エンジン遷移のカレント状態を起動時に判定する（初期表示なら null → .kasc 初期値）
+  pendingSession = matchSessionState();
   // URL のビュー状態はレイヤ読込前に適用する。
   // (Navara は一部のレイヤ/ソース追加後にカメラ制御が停止するケースがあり、
   //  loadProject 末尾まで待つと初期位置が適用されないため)
-  const bootView = parseUrlView();
+  const bootView = sessionBootView(pendingSession);
   if (hasUrlView(bootView)) setCamera({ longitude: bootView.longitude, latitude: bootView.latitude, height: urlViewHeight(bootView), heading: bootView.heading, pitch: bootView.pitch });
 
   // カメラ追従: マウス操作時も lastCam・URLハッシュ・camera-changed を同期
@@ -1027,17 +1053,7 @@ async function saveToDataDir(name, content) {
     view.camera.on("moveend", () => { syncCamFromView(); if (urlViewConsumed) writeUrlView(urlViewFromCam(), currentProjectId); });
   } catch (_) {}
 
-  mountEngineSwitcher($("#engines"), "navara");
-  const switchState = consumeEngineSwitchState();
   await loadProject();
-  if (switchState?.vis) {
-    const visMap = new Map(switchState.vis.map(v => [v.t, v.v]));
-    for (const e of layerEntries) {
-      const key = splitKascTitle(e.item.title).title || e.item.title;
-      if (visMap.has(key)) { setEntryVisible(e, visMap.get(key)); void maybeLoadEntry(e); }
-    }
-    buildLayerList(); syncAttribution();
-  }
 
   // 表示タブの Navara 固有コントロール（index.html 側の静的マークアップへバインド）
   $("#nv-terrain")?.addEventListener("change", e => applyTerrain(e.target.checked));
@@ -1089,7 +1105,9 @@ async function saveToDataDir(name, content) {
     engine: "navara",
     getProjectId: () => currentProjectId,
     getEntries: () => layerEntries,
-    getBaseEntries: () => baseEntries,
+    // 全ベース候補を返す（listBasemaps/setBasemap が選択肢全体を扱うため）。
+    // 実レイヤを持つのは選択中の1件だけなので、それは baseEntries の実体を返す
+    getBaseEntries: () => baseDocs.map(b => baseEntries[0]?.item === b ? baseEntries[0] : { item: b }),
     setBaseEntryVisible: (e, on) => navaraSetShow(e, on),
     applyEntryVisibility: (e, on) => setEntryVisible(e, on),
     mountEntry: async (e, preloaded) => {
@@ -1132,4 +1150,17 @@ async function saveToDataDir(name, content) {
     syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
     applyLegendFilter: () => {},
   });
+
+  // エンジン切替UIとカレント状態ファイルの定期同期は kasugaiApi 生成後に開始
+  // (切替時のスナップショットが listLayers 等を使うため)
+  mountEngineSwitcher($("#engines"), "navara");
+  bindSessionState("navara");
 })();
+
+// ブラウザ戻る/進む・ハッシュ編集からの視点復元（MapLibre 版 applyUrlView と同じ）
+const applyUrlView = () => {
+  const v = parseUrlView();
+  if (hasUrlView(v)) flyTo({ longitude: v.longitude, latitude: v.latitude, height: urlViewHeight(v), heading: v.heading, pitch: v.pitch });
+};
+window.addEventListener("popstate", applyUrlView);
+window.addEventListener("hashchange", applyUrlView);

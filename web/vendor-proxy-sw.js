@@ -12,8 +12,9 @@
 //     github ピン(gsimaps): https://cdn.jsdelivr.net/gh/<repo>@<sha>/<rest>
 //       → 失敗時 raw.githubusercontent.com/<repo>/<sha>/<rest> に再試行
 //   SW スクリプト URL に ?u=<base> が明示指定された場合はミラーモード:
-//   <base>/vendor/<rel> をそのまま参照する（自前ミラー・オフライン開発用。
-//   postMessage だと初回プローブと競合し得るため URL クエリで渡す）。
+//   <base>/vendor/<rel> を優先参照し、失敗時はオリジナルピンへフォール
+//   バックする（自前ミラー・オフライン開発用。postMessage だと初回
+//   プローブと競合し得るため URL クエリで渡す）。
 const mirrorBase = (() => {
   const u = new URL(self.location.href).searchParams.get("u");
   return u && /^https:\/\/[\w.-]+(?::\d+)?\//.test(u)
@@ -77,12 +78,16 @@ function vendorSpecs() {
 
 // vendor/<name>/<rest> を上流 URL 候補列へ解決（先頭から順に試す）
 async function upstreamUrls(rel) {
-  if (mirrorBase) return [mirrorBase + "vendor/" + rel];
+  const urls = [];
+  // ミラーモードでもオリジナルピンを候補に残す。ミラー側にファイルが無い
+  // (vendored mirror 廃止後に kasugai-canvas-web を指す旧設定が残る等)と
+  // ミラーの 404 がそのまま返って供給不能になるため、失敗時はオリジナルへ
+  // フォールバックする（ミラーが応答すれば従来通りミラーが優先される）
+  if (mirrorBase) urls.push(mirrorBase + "vendor/" + rel);
   const i = rel.indexOf("/");
   const name = i < 0 ? rel : rel.slice(0, i);
   const rest = rel.slice(name.length + 1);
   const spec = (await vendorSpecs())[name];
-  const urls = [];
   if (spec && spec.npm) {
     // npm ピン: パッケージ名は先頭1セグメント(@scope なら2セグメント)
     const segs = rest.split("/");
