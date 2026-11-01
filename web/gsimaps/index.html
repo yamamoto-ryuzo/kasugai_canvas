@@ -13,13 +13,31 @@
   // Service Worker 前提（SW 非対応環境のフォールバックは持たない）
   (function () {
     var VENDOR_URL = "../vendor/gsimaps/index_pm.html";
-    vendorGuardProbe(VENDOR_URL)
+    var domReady = new Promise(function (res) {
+      if (document.readyState !== "loading") res();
+      else document.addEventListener("DOMContentLoaded", res, { once: true });
+    });
+    // app.js は静的な <script type=module> ではなくプローブ後に注入する。
+    // 静的読み込みだと初回訪問で SW 制御前に iframe が vendor を取りに行き
+    // 404 確定するため、SW 制御の確定を待ってからモジュールを起動する
+    // (navara/index.html と同じゲート)
+    Promise.resolve(vendorGuardProbe(VENDOR_URL))
+      .catch(function () { return null; })
       .then(function () {
         if (window.parent !== window) {
           // この中間エンジンページはトップレベル専用。iframe 内に読み込まれた
           // 場合は vendored 地理院地図へ差し替えて自己修復(ネスト二重表示の根絶)
           location.replace(new URL(VENDOR_URL, location.href).href + location.hash);
+          return;
         }
+        // app.js はモジュール評価時点で body 内要素を参照するため
+        // DOM 構築完了も待ち合わせる
+        domReady.then(function () {
+          var s = document.createElement("script");
+          s.type = "module";
+          s.src = "./app.js";
+          document.head.appendChild(s);
+        });
       });
   })();
 </script>
@@ -312,6 +330,7 @@
     window.addEventListener("mouseup", () => { dragging = false; split.classList.remove("dragging"); });
   })();
 </script>
-<script type="module" src="./app.js"></script>
+<!-- app.js は head の vendorGuardProbe 完了後に動的注入される（SW 制御確定前の
+     vendor 参照で iframe が 404 になるのを防ぐため。navara と同方式） -->
 </body>
 </html>

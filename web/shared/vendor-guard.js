@@ -15,7 +15,15 @@
   // (<base>/vendor/* を参照)で動く。未指定 = オリジナル直読み
   var explicitHosted = (function () {
     var h = new URLSearchParams(location.search).get("hosted");
-    if (!h) { try { h = localStorage.getItem("kasugai_hosted_base") || ""; } catch (e) {} }
+    if (h) return h;
+    try { h = localStorage.getItem("kasugai_hosted_base") || ""; } catch (e) {}
+    // vendored mirror は廃止済み（vendor 供給はオリジナル直読みに一本化）。
+    // 旧既定値(kasugai-canvas-web)が localStorage に残っていると
+    // ミラーモードで全 vendor/* が 404 になるため、保存値を無効化する
+    if (h && /kasugai-canvas-web/i.test(h)) {
+      try { localStorage.removeItem("kasugai_hosted_base"); } catch (e) {}
+      return "";
+    }
     return h;
   })();
 
@@ -25,15 +33,24 @@
   if (explicitHosted) {
     swUrl.search = "?u=" + encodeURIComponent(explicitHosted.replace(/\/?$/, "/"));
   }
+  var swReg = null;
   var swReady = ("serviceWorker" in navigator)
     ? navigator.serviceWorker
         .register(swUrl)
-        .then(function () { return navigator.serviceWorker.ready; })
+        .then(function (reg) {
+          swReg = reg;
+          return navigator.serviceWorker.ready;
+        })
         .then(function () {
           // ready は active 化を待つが、初回は controller 反映が僅かに遅れる
           // ことがある。制御確定前にプローブすると実体なし 404 で誤判定する
-          // ため controllerchange まで待つ（timeout 付き・既に制御済みなら即）
-          if (navigator.serviceWorker.controller) return null;
+          // ため controllerchange まで待つ（timeout 付き）。
+          // 「controller が居る」だけでは不十分: 旧版SW(?u=付き登録)が制御中
+          // だったり新SWが installing/waiting 中なら、controllerchange で
+          // 新版への切替を待たないと旧版経路で 404 になる
+          var ctl = navigator.serviceWorker.controller;
+          var updating = swReg && (swReg.installing || swReg.waiting);
+          if (ctl && ctl.scriptURL === swUrl.href && !updating) return null;
           return new Promise(function (res) {
             var t = setTimeout(res, 3000);
             navigator.serviceWorker.addEventListener("controllerchange", function () {
@@ -59,7 +76,8 @@
       return headProbe(abs).then(function (ok) {
         // controller 反映後も fetch 中継の有効化が一拍遅れる環境があるため、
         // SW 制御下で 404 だった場合のみ待って再試行してから判定する
-        if (ok || !navigator.serviceWorker.controller) return ok;
+        var ctl = navigator.serviceWorker && navigator.serviceWorker.controller;
+        if (ok || !ctl) return ok;
         return new Promise(function (res) { setTimeout(res, 600); })
           .then(function () { return headProbe(abs); });
       });
