@@ -14,7 +14,7 @@
 //   cam: → #z/lat/lon と setView。theme: → 可視性プリセット
 //   非対応(3dtiles 等) → 情報タブへ警告
 import {
-  loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight,
+  loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, heightToViewZoom, viewZoomToHeight, groundCenterFromCam,
   parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle,
   fillThemeSelect, themeShowSet, kascTitleInTheme, rewriteKascVisibility,
   applyPanelTitle, loadKascBookmarks, downloadKascCamLines, downloadQgisBookmarksXml,
@@ -95,7 +95,8 @@ async function reboot() {
     // 現在視点をレイヤ再構築より先に復元する(「一度移動して戻る」対策)
     const v = parseUrlView();
     if (hasUrlView(v) && gmap) {
-      gmap.setView([v.latitude, v.longitude], Number.isFinite(v.zoom) ? v.zoom : gmap.getZoom());
+      // 正典ハッシュは zoom を持たないため、無ければ height から換算する
+      { const gc = groundCenterFromCam(v); gmap.setView([gc.latitude, gc.longitude], Number.isFinite(v.zoom) ? v.zoom : heightToViewZoom(gc.latitude, v.height, gmapH())); }
     }
     if (lastDocCtx) await buildFromDoc(lastDocCtx);
   } catch (e) { console.error(e); }
@@ -117,6 +118,8 @@ const DEFAULT_CENTER = { lat: 36.104611, lng: 140.084556 };
 const DEFAULT_ZOOM = 5;
 
 const frame = document.getElementById("gsi-frame");
+// 正典 height ⇄ 表示ズームの換算に使う実ビューポート高（iframe 内 Leaflet のサイズ）
+const gmapH = () => gmap?.getSize?.().x || frame?.clientWidth || 512;
 frame.addEventListener("load", guardFrameDoc);
 setInterval(guardFrameDoc, 2000);
 const inspectorInput = document.getElementById("inspector-input");
@@ -243,7 +246,7 @@ function syncUrlViewNow() {
     const c = gmap.getCenter();
     writeUrlView({
       latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
-      height: zoomToCamHeight(c.lat, gmap.getZoom()), pitch: -90, heading: 0,
+      height: viewZoomToHeight(c.lat, gmap.getZoom(), gmapH()), pitch: -90, heading: 0,
     }, lastKascUrl ? undefined : currentProjectId);
   } catch (_) { /* 視点書込失敗は無視 */ }
 }
@@ -270,11 +273,11 @@ function globeHashView() {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
     const v0 = Number(parts[0]);
     const isZoom = parts.length <= 4;
-    const zoom = isZoom ? v0 : camToZoom({ latitude: lat, height: v0 });
+    const zoom = isZoom ? v0 : heightToViewZoom(lat, v0, gmapH());
     const heading = Number(parts[4]), pitch = Number(parts[5]);
     return {
       latitude: lat, longitude: lon, zoom,
-      height: isZoom ? zoomToCamHeight(lat, zoom) : v0,
+      height: isZoom ? viewZoomToHeight(lat, zoom, gmapH()) : v0,
       pitch: Number.isFinite(pitch) ? pitch : -90,
       heading: Number.isFinite(heading) ? heading : 0,
     };
@@ -438,7 +441,7 @@ function globeFlyTo(view = {}) {
   const lat = Number.isFinite(num(view.latitude)) ? num(view.latitude) : C.Math.toDegrees(carto.latitude);
   const lon = Number.isFinite(num(view.longitude)) ? num(view.longitude) : C.Math.toDegrees(carto.longitude);
   const height = Number.isFinite(num(view.height)) ? num(view.height)
-    : (Number.isFinite(num(view.zoom)) ? zoomToCamHeight(lat, num(view.zoom)) : carto.height);
+    : (Number.isFinite(num(view.zoom)) ? viewZoomToHeight(lat, num(view.zoom), gmapH()) : carto.height);
   const heading = Number.isFinite(num(view.heading)) ? num(view.heading) : C.Math.toDegrees(cam.heading);
   const pitch = Number.isFinite(num(view.pitch)) ? num(view.pitch) : C.Math.toDegrees(cam.pitch);
   try {
@@ -465,7 +468,7 @@ function globeViewInfo() {
   const height = carto.height;
   return {
     latitude, longitude, height,
-    zoom: camToZoom({ latitude, height }),
+    zoom: heightToViewZoom(latitude, height, gmapH()),
     heading: C.Math.toDegrees(cam.heading),
     // getCamera() は pitchDeg-90 を .kasc pitch として返すため +90 で補正する
     pitchDeg: C.Math.toDegrees(cam.pitch) + 90,
@@ -1063,8 +1066,9 @@ function flyToCam(cam) {
     return;
   }
   if (!gmap) return;
-  const zoom = Number.isFinite(cam.zoom) ? cam.zoom : camToZoom(cam);
-  gmap.setView([Number(cam.latitude), Number(cam.longitude)], zoom);
+  const gc = groundCenterFromCam(cam);
+  const zoom = Number.isFinite(cam.zoom) ? cam.zoom : heightToViewZoom(gc.latitude, cam.height, gmapH());
+  gmap.setView([gc.latitude, gc.longitude], zoom);
 }
 document.getElementById("cams-save-kasc")?.addEventListener("click", () => downloadKascCamLines(currentCams));
 document.getElementById("cams-save-qgis")?.addEventListener("click", () => downloadQgisBookmarksXml(currentCams));
@@ -1267,9 +1271,16 @@ async function applyProject(proj) {
   // 起動用ハッシュ: URL ビュー/セッションカメラ > 最初の cam > 既定
   const uv = sessionBootView(sw);
   const cam = doc.cams.find(c => !c.bookmark) || doc.cams[0];
-  const lat = hasUrlView(uv) ? uv.latitude : (cam?.latitude ?? DEFAULT_CENTER.lat);
-  const lng = hasUrlView(uv) ? uv.longitude : (cam?.longitude ?? DEFAULT_CENTER.lng);
-  const zoom = hasUrlView(uv) && Number.isFinite(uv.zoom) ? uv.zoom : (cam ? camToZoom(cam) : DEFAULT_ZOOM);
+  // 正典 lat/lon はカメラ位置。pitch は座標計算にのみ使い、傾斜時は視線の地面交点が表示中心
+  const gcSrc = hasUrlView(uv) ? uv : cam;
+  const gc = gcSrc ? groundCenterFromCam(gcSrc) : null;
+  const lat = gc ? gc.latitude : DEFAULT_CENTER.lat;
+  const lng = gc ? gc.longitude : DEFAULT_CENTER.lng;
+  // 正典URLは zoom を持たないため uv.zoom 無しなら uv の height から換算する
+  const zoom = hasUrlView(uv)
+    ? (Number.isFinite(uv.height) ? heightToViewZoom(lat, uv.height, gmapH())
+      : (Number.isFinite(uv.zoom) ? uv.zoom : camToZoom(uv)))
+    : (cam ? heightToViewZoom(lat, cam.height, gmapH()) : DEFAULT_ZOOM);
   // 最初の表示 GSI ベース行 → base=。無ければ std（後で外部タイルが上に乗る）
   const gsiBaseRow = doc.bases.find(b => b.visible !== false && gsiBaseIdFromUrl(b.url));
   const baseId = gsiBaseRow ? gsiBaseIdFromUrl(gsiBaseRow.url) : "std";
@@ -2008,7 +2019,7 @@ window.kasugaiApi = createPlayerApi({
   flyToView: v => {
     if (globeMode) { globeFlyTo(v); return; }
     gmap?.setView([Number(v.latitude), Number(v.longitude)],
-      Number.isFinite(v.zoom) ? v.zoom : camToZoom(v));
+      Number.isFinite(v.zoom) ? v.zoom : heightToViewZoom(v.latitude, v.height, gmapH()));
   },
   getViewInfo: () => {
     // Globe 表示中は gmap が無いため Cesium カメラから視点を返す
@@ -2016,6 +2027,14 @@ window.kasugaiApi = createPlayerApi({
     if (!gmap) return null;
     const c = gmap.getCenter();
     return { latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(), heading: 0, pitchDeg: 0 };
+  },
+  // 正典ビュー（Cesium 規約）。Globe 中は iframe ハッシュの視点を正典変換して返す
+  viewToUrl: () => {
+    if (globeMode) return globeHashView();
+    if (!gmap) return null;
+    const c = gmap.getCenter();
+    return { latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
+      height: viewZoomToHeight(c.lat, gmap.getZoom(), gmapH()), pitch: -90, heading: 0 };
   },
   fitBoundsView: (w, s, e, n) => {
     if (globeMode) { globeFitBounds(w, s, e, n); return; }

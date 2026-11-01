@@ -3,7 +3,7 @@
 // エンジン別の描画フック）を持つため、エンジン差分は hooks として注入し、
 // kasugaiApi 互換の API 面をここで構成する。AI チャット（shared/ai-chat.js）の
 // ツールはこの api メソッドの有無で公開可否が決まる。
-import { camToZoom, zoomToCamHeight, geojsonExtent, splitKascTitle } from "./kasc.js";
+import { camToZoom, viewZoomToHeight, geojsonExtent, splitKascTitle, buildViewUrl } from "./kasc.js";
 import { backendUrl } from "./backend.js";
 import { hasBackendFeature, isFetchProxyTarget, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
 import { getLanguage, t } from "./i18n.js";
@@ -23,6 +23,9 @@ import { getLanguage, t } from "./i18n.js";
 //   getThemes() / applyThemeByName(name)
 //   flyToView(view)   : {latitude,longitude,zoom,height,heading,pitch} → 地図移動
 //   getViewInfo()     : () => {latitude,longitude,zoom,heading,pitchDeg}
+//   viewToUrl()       : () => 正典ビュー {latitude,longitude,height,zoom,pitch,heading}
+//                     （Cesium 規約・zoom は 256px 基準。省略可: 無い場合は
+//                       getViewInfo のネイティブ値から変換する）
 //   fitBoundsView(w,s,e,n)
 //   mountEntry(entry, preloaded) : 新規エントリを地図へ追加（item._preloaded に GeoJSON 可）
 //   unmountEntry(entry)          : 地図から除去
@@ -292,6 +295,54 @@ export function createPlayerApi(hooks) {
     return token === flyToken;
   };
 
+  // 正典ビュー(Cesium 規約: lat/lon/height/zoom/pitch/heading、zoom は 256px 基準)。
+  // hooks.viewToUrl(エンジン側で正規化済み)を優先し、無い場合は getViewInfo
+  // (エンジンネイティブ値: zoom は MapLibre 512px 基準・pitchDeg は直下=0)を正典へ変換する
+  const canonicalView = () => {
+    const v = hooks.viewToUrl?.();
+    if (v) return v;
+    const c = hooks.getViewInfo?.() || {};
+    const zoom = Number.isFinite(c.zoom) ? c.zoom + (hooks.engine === "maplibre" ? 1 : 0) : undefined;
+    return {
+      latitude: c.latitude,
+      longitude: c.longitude,
+      zoom,
+      height: Number.isFinite(c.height) ? c.height
+        : (Number.isFinite(zoom) ? viewZoomToHeight(c.latitude, zoom, 512) : undefined),
+      heading: c.heading,
+      pitch: Number.isFinite(c.pitch) ? c.pitch
+        : (Number.isFinite(c.pitchDeg) ? c.pitchDeg - 90 : undefined),
+    };
+  };
+
+  // 正典 URL を組み立てる: ビュー状態はハッシュ、project/kasc/engine はクエリ。
+  // ?kasc= 読込中は id がファイル名由来の仮名のため、project= ではなく
+  // kasc=<url> を共有URLへ入れる（projects/ 配下に存在しないため404になる）
+  const buildShareUrlImpl = ({ latitude, longitude, height, zoom, pitch, heading, project } = {}) => {
+    const curKasc = new URLSearchParams(window.location.search).get("kasc");
+    const v = canonicalView();
+    const lat = Number.isFinite(latitude) ? latitude : v.latitude;
+    // 正典は完全 Cesium 規約 — zoom は URL に書かず height のみ（zoom 指定・
+    // zoom しか持たない現在値は zoomToCamHeight で height へ換算する）
+    const h = Number.isFinite(height) ? height
+      : (Number.isFinite(v.height) ? v.height
+        : (() => {
+          const z = Number.isFinite(zoom) ? zoom : v.zoom;
+          return Number.isFinite(z) && Number.isFinite(lat) ? viewZoomToHeight(lat, z, 512) : undefined;
+        })());
+    return buildViewUrl({
+      latitude: lat,
+      longitude: Number.isFinite(longitude) ? longitude : v.longitude,
+      height: h,
+      pitch: Number.isFinite(pitch) ? pitch : v.pitch,
+      heading: Number.isFinite(heading) ? heading : v.heading,
+    }, {
+      engine: hooks.engine,
+      kascUrl: curKasc && !project ? curKasc : undefined,
+      projectId: curKasc && !project ? undefined : (project || hooks.getProjectId() || "default"),
+    });
+  };
+
   const api = {
     isReady: true,
     engine: hooks.engine,
@@ -312,11 +363,16 @@ export function createPlayerApi(hooks) {
     getCamera() {
       const v = hooks.getViewInfo();
       if (!v) return null;
+      // zoom/height は正典値（zoom=256px 基準・height=m）を返す。viewToUrl が
+      // あればそれを使い（MapLibre のネイティブ zoom が紛れ込まない）、
+      // 無ければネイティブ値から換算する
+      const canon = hooks.viewToUrl?.() || {};
+      const zoom = Number.isFinite(canon.zoom) ? canon.zoom : v.zoom;
       return {
         latitude: v.latitude,
         longitude: v.longitude,
-        zoom: v.zoom,
-        height: zoomToCamHeight(v.latitude, v.zoom),
+        zoom,
+        height: Number.isFinite(canon.height) ? canon.height : viewZoomToHeight(v.latitude, zoom, 512),
         heading: v.heading ?? 0,
         pitch: (v.pitchDeg ?? 0) - 90,
       };
@@ -499,25 +555,8 @@ export function createPlayerApi(hooks) {
       return out;
     },
 
-    getShareUrl() { return window.location.href; },
-    buildShareUrl({ latitude, longitude, height, zoom, pitch, heading, project } = {}) {
-      const params = new URLSearchParams();
-      params.set("engine", hooks.engine);
-      // ?kasc= 読込中は id がファイル名由来の仮名のため、project= ではなく
-      // kasc=<url> を共有URLへ入れる（projects/ 配下に存在しないため404になる）
-      const curKasc = new URLSearchParams(window.location.search).get("kasc");
-      if (curKasc && !project) params.set("kasc", curKasc);
-      else params.set("project", project || hooks.getProjectId() || "default");
-      const hash = new URLSearchParams();
-      const c = hooks.getViewInfo() || {};
-      const lat2 = Number.isFinite(latitude) ? latitude : c.latitude;
-      const lng2 = Number.isFinite(longitude) ? longitude : c.longitude;
-      if (Number.isFinite(lat2)) hash.set("latitude", lat2.toFixed(6));
-      if (Number.isFinite(lng2)) hash.set("longitude", lng2.toFixed(6));
-      const z = Number.isFinite(zoom) ? zoom : (Number.isFinite(height) ? camToZoom({ latitude: lat2, height }) : c.zoom);
-      if (Number.isFinite(z)) hash.set("zoom", z.toFixed(3));
-      return `${window.location.origin}${window.location.pathname}?${params}#${hash}`;
-    },
+    getShareUrl() { return buildShareUrlImpl({}); },
+    buildShareUrl(args = {}) { return buildShareUrlImpl(args); },
 
     listProjects() {
       const sel = document.querySelector("#project-select");

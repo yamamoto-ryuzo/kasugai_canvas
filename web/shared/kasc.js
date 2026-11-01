@@ -832,11 +832,74 @@ export function zoomToCamHeight(latitude, zoom) {
 // camToZoom/zoomToCamHeight は固定近似（画面512px・視野角45°相当）だが、実際の
 // 見え方は垂直FOVとキャンバス高で決まる。3Dエンジン(Cesium)で他エンジンと
 // スケールを揃えるため、実値で相互変換する版。傾斜時は直下換算の近似。
+// 直下視カメラの可視縦範囲(m)を球体幾何で求める。
+// 高度 h・半角 FOV θ の視線が球面と交わる中心角 α:
+//   sin(α+θ) = (1+h/R)·sinθ  →  α = asin((1+h/R)·sinθ) − θ
+// FOV 端が地平線を超える場合は可視キャップ α_h = acos(R/(R+h)) に制限。
+// 低高度では α ≈ h·tanθ/R となり平面近似 E=2h·tanθ と一致する
+const EARTH_R_M = 6371008.8; // 地球平均半径(m)
+
+// ルール: pitch はスケール(zoom 換算)・回転(heading)には使わず、
+// 座標計算（カメラ位置 → 視線の地面交点）にのみ使う。
+// 正典 lat/lon はカメラ位置。pitch=-90 以外ではカメラは heading 方向に傾いているため、
+// 2D 表示の中心は「視線が地面と交わる点」= カメラ位置から heading 方向へ
+// 地表距離 d = h·tan(pitch+90°) 進んだ点（大圏目的地計算）になる。
+// pitch>=0（地平線以上を向く）では地面交点を定義できないため入力座標をそのまま返す。
+export function groundCenterFromCam(cam) {
+  const lat = cam?.latitude, lon = cam?.longitude;
+  const pitch = Number.isFinite(cam?.pitch) ? cam.pitch : -90;
+  const h = Number.isFinite(cam?.height) ? cam.height : 0;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || pitch <= -90 || pitch >= 0 || h <= 0) {
+    return { latitude: lat, longitude: lon };
+  }
+  const d = h * Math.tan((pitch + 90) * Math.PI / 180);
+  const brng = (Number.isFinite(cam?.heading) ? cam.heading : 0) * Math.PI / 180;
+  const delta = d / EARTH_R_M;
+  const phi1 = lat * Math.PI / 180, lam1 = lon * Math.PI / 180;
+  const phi2 = Math.asin(Math.sin(phi1) * Math.cos(delta) + Math.cos(phi1) * Math.sin(delta) * Math.cos(brng));
+  const lam2 = lam1 + Math.atan2(
+    Math.sin(brng) * Math.sin(delta) * Math.cos(phi1),
+    Math.cos(delta) - Math.sin(phi1) * Math.sin(phi2));
+  return { latitude: phi2 * 180 / Math.PI, longitude: lam2 * 180 / Math.PI };
+}
+
+// groundCenterFromCam の逆変換: 地面注視点 + 正典姿勢 + 視線距離 → 正典カメラ位置。
+// 傾斜 θ = pitch+90 に対し、視線距離 s のカメラは地面から鉛直高 h = s·cosθ に
+// あり、注視点から heading 逆方向へ d = s·sinθ だけ後退した位置にある
+// （注視点中心で傾く MapLibre のようなエンジンの正典書き出し用）。
+// pitch=-90（直下）なら θ=0 で入力そのまま。
+export function camFromGroundCenter(ground, pitchDeg, headingDeg, slantHeight) {
+  const lat = ground?.latitude, lon = ground?.longitude;
+  const s = Math.max(1, slantHeight || 0);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return { latitude: lat, longitude: lon, height: s };
+  }
+  const th = Math.max(0, Math.min(89.9, (Number.isFinite(pitchDeg) ? pitchDeg : -90) + 90)) * Math.PI / 180;
+  const sinT = Math.sin(th), cosT = Math.cos(th);
+  if (sinT < 1e-6) return { latitude: lat, longitude: lon, height: s };
+  const d = s * sinT;
+  const brng = ((Number.isFinite(headingDeg) ? headingDeg : 0) + 180) * Math.PI / 180;
+  const delta = d / EARTH_R_M;
+  const phi1 = lat * Math.PI / 180, lam1 = lon * Math.PI / 180;
+  const phi2 = Math.asin(Math.sin(phi1) * Math.cos(delta) + Math.cos(phi1) * Math.sin(delta) * Math.cos(brng));
+  const lam2 = lam1 + Math.atan2(
+    Math.sin(brng) * Math.sin(delta) * Math.cos(phi1),
+    Math.cos(delta) - Math.sin(phi1) * Math.sin(phi2));
+  return { latitude: phi2 * 180 / Math.PI, longitude: lam2 * 180 / Math.PI, height: s * cosT };
+}
+
+export function nadirVisibleExtent(height, fovYDeg = 60) {
+  const h = Math.max(1, height || 0);
+  const th = fovYDeg * Math.PI / 360;
+  const x = (1 + h / EARTH_R_M) * Math.sin(th);
+  const alpha = x >= 1 ? Math.acos(EARTH_R_M / (EARTH_R_M + h)) : Math.asin(x) - th;
+  return 2 * alpha * EARTH_R_M;
+}
+
 export function camToZoomView(cam, viewportHeightPx = 512, fovYDeg = 60) {
   const lat = Math.max(-80, Math.min(80, cam.latitude || 0));
-  const h = Math.max(1, cam.height || 3000);
   const vh = Math.max(1, viewportHeightPx || 512);
-  const mpp = (2 * h * Math.tan(fovYDeg * Math.PI / 360)) / vh;
+  const mpp = nadirVisibleExtent(cam.height || 3000, fovYDeg) / vh;
   const zoom = Math.log2((156543.03392 * Math.cos(lat * Math.PI / 180)) / mpp);
   return Math.max(2, Math.min(20, zoom));
 }
@@ -845,7 +908,28 @@ export function zoomToCamHeightView(latitude, zoom, viewportHeightPx = 512, fovY
   const lat = Math.max(-80, Math.min(80, latitude || 0));
   const vh = Math.max(1, viewportHeightPx || 512);
   const mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, zoom);
-  return (mpp * vh) / (2 * Math.tan(fovYDeg * Math.PI / 360));
+  // 逆変換: 弧範囲 E = mpp·vh → α = E/2R → h = R·(sin(α+θ)/sinθ − 1)
+  const alpha = (mpp * vh) / (2 * EARTH_R_M);
+  const th = fovYDeg * Math.PI / 360;
+  return EARTH_R_M * (Math.sin(alpha + th) / Math.sin(th) - 1);
+}
+
+// 正典 height ⇄ 表示ズームのエンジン別換算（真俯瞰・直下視を前提）。
+// Cesium の PerspectiveFrustum.fov は「水平 FOV」で既定 60°（垂直 FOV は
+// アスペクト比依存・16:9 で約36°）。高さ h の直下カメラが見る横方向範囲
+// E_h を球体幾何で求め、各エンジンは自分の実キャンバス「幅」(px) で割って
+// 表示ズームへ換算する（メルカトルは正方ピクセルなので幅換算で縦も一致）。
+// これにより同じ height を開いた全エンジンが同じ地面範囲を表示する。
+export const CANONICAL_FOV_DEG = 60;
+
+// 正典 height(m) → 表示ズーム(256px 基準)。canvasW はそのエンジンの実キャンバス幅
+export function heightToViewZoom(latitude, height, canvasW) {
+  return camToZoomView({ latitude, height }, canvasW, CANONICAL_FOV_DEG);
+}
+
+// 表示ズーム(256px 基準) → 正典 height(m)。canvasW はそのエンジンの実キャンバス幅
+export function viewZoomToHeight(latitude, zoom, canvasW) {
+  return zoomToCamHeightView(latitude, zoom, canvasW, CANONICAL_FOV_DEG);
 }
 
 // ---- bookmark: 行（QGIS ブックマークエクスポート XML → カメラプリセット） ----
@@ -1010,10 +1094,16 @@ function downloadTextFile(text, filename, type) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ビュー状態を表す URL パラメータ（Cesium 版と同形式）の読み書き。
-// 形式: #latitude=…&longitude=…&height=…&pitch=…&heading=…（2D エンジンは zoom= も併記）
+// ビュー状態を表す URL パラメータの正典形式（完全 Cesium 規約）。
+// 正典: ビュー状態はハッシュ側 #latitude=…&longitude=…&height=…&pitch=…&heading=…
+//       （キー順はこの固定。height は m）
+//       プロジェクト等の選択子はクエリ側 ?project= / ?kasc= / ?engine=
 // pitch/heading は Cesium 規約（pitch: 直下=-90・水平=0、heading: 北=0・時計回り）。
-// 読み取りはハッシュ優先・クエリをフォールバックとし、欠けた値は NaN で返す
+// zoom は URL に書かない — 2D エンジンは読み込み時に height → camToZoom で、
+// 書き込み時に zoom → zoomToCamHeight で各々換算する（camToZoom/zoomToCamHeight は
+// 厳密な逆関数なので 2D 間の往復もロスなく復元される）。
+// 読み取りはハッシュ優先・クエリをフォールバックとし、欠けた値は NaN で返す。
+// zoom= を含む旧形式 URL も互換のため引き続き読み取る
 export function parseUrlView(source = window.location.search + window.location.hash) {
   const hashIndex = source.indexOf("#");
   const searchPart = hashIndex >= 0 ? source.slice(0, hashIndex) : source;
@@ -1047,15 +1137,38 @@ export function writeUrlView(view, projectId) {
   ["latitude", "longitude", "zoom", "height", "pitch", "heading"].forEach(key => params.delete(key));
   // 実プロジェクトへ切り替えた時は ?kasc= モードを抜けるため除去する
   if (projectId) { params.set("project", projectId); params.delete("kasc"); }
-  const hashParams = new URLSearchParams();
-  hashParams.set("latitude", Number(view.latitude).toFixed(6));
-  hashParams.set("longitude", Number(view.longitude).toFixed(6));
-  if (Number.isFinite(view.zoom)) hashParams.set("zoom", Number(view.zoom).toFixed(3));
-  if (Number.isFinite(view.height)) hashParams.set("height", Number(view.height).toFixed(1));
-  if (Number.isFinite(view.pitch)) hashParams.set("pitch", Number(view.pitch).toFixed(2));
-  if (Number.isFinite(view.heading)) hashParams.set("heading", Number(view.heading).toFixed(2));
   const search = params.toString();
-  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}#${hashParams.toString()}`);
+  window.history.replaceState(null, "", `${window.location.pathname}${search ? `?${search}` : ""}#${urlViewHash(view)}`);
+}
+
+// 正典ハッシュ文字列（#無し）を組み立てる。有限値のキーのみ出力し、
+// キー順は latitude/longitude/height/pitch/heading で固定（完全 Cesium 規約）。
+// zoom は出力しない — height 未設定で zoom だけある入力は zoomToCamHeight で
+// height へ換算して書く（各エンジンへの換算は読み込み側に委ねる）
+export function urlViewHash(view = {}) {
+  const hash = new URLSearchParams();
+  if (Number.isFinite(view.latitude)) hash.set("latitude", Number(view.latitude).toFixed(6));
+  if (Number.isFinite(view.longitude)) hash.set("longitude", Number(view.longitude).toFixed(6));
+  const height = Number.isFinite(view.height) ? view.height
+    : (Number.isFinite(view.zoom) && Number.isFinite(view.latitude)
+      ? viewZoomToHeight(view.latitude, view.zoom, 512) : NaN);
+  if (Number.isFinite(height)) hash.set("height", height.toFixed(1));
+  if (Number.isFinite(view.pitch)) hash.set("pitch", Number(view.pitch).toFixed(2));
+  if (Number.isFinite(view.heading)) hash.set("heading", ((view.heading % 360) + 360) % 360 === 0 ? "0.00" : (((view.heading % 360) + 360) % 360).toFixed(2));
+  return hash.toString();
+}
+
+// 正典の共有 URL を組み立てる: ビュー状態はハッシュ、選択子はクエリ。
+// opts: { projectId, kascUrl（指定時 projectId より優先）, engine, base }。
+// base 省略時は現在の origin+pathname（エンジン自身の URL）
+export function buildViewUrl(view = {}, { projectId, kascUrl, engine, base } = {}) {
+  const params = new URLSearchParams();
+  if (engine) params.set("engine", engine);
+  if (kascUrl) params.set("kasc", kascUrl);
+  else if (projectId) params.set("project", projectId);
+  const search = params.toString();
+  const hash = urlViewHash(view);
+  return `${base || `${window.location.origin}${window.location.pathname}`}${search ? `?${search}` : ""}${hash ? `#${hash}` : ""}`;
 }
 
 // ---- default_style: 行（ベクター地物の既定スタイル）----

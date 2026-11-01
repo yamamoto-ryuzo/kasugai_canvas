@@ -4,6 +4,20 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.13.0] - 2026-11-02
+
+### Changed
+
+- **URL ハッシュを完全 Cesium 規約へ統一** — 正典ハッシュは `#latitude&longitude&height&pitch&heading` の5キーのみ・固定順に統一し、`zoom` など余計なキーは書かない。選択子（`project`/`kasc`/`engine`）はクエリ側に分離。共有 URL 生成（各エンジンの share-copy・`getShareUrl`・`buildShareUrl`）を `buildViewUrl` 経由に一本化（`shared/kasc.js` の `urlViewHash`/`buildViewUrl` 新設、`shared/player-api.js` の `viewToUrl` フック追加）。旧形式（クエリ側ビュー・`zoom=` 併記）は互換のため引き続き読み取る
+- **高さ ⇄ ズーム換算をエンジン別実換算へ** — 固定近似（512px 基準）を廃止し、Cesium 規約の「水平 FOV=60° 直下カメラ」を正典モデルとして、各エンジンが**自キャンバス幅 px** で換算する方式に変更（`heightToViewZoom`/`viewZoomToHeight`）。可視範囲は球体幾何で算出（`nadirVisibleExtent`）し、高高度（地球規模ビュー）で平面近似が崩れる問題を補正
+- **ピッチのルールを定義** — `pitch` はスケール・回転に使わず**座標計算（カメラ位置 ⇄ 地面注視点）にのみ**使用するルールに固定。`groundCenterFromCam`/`camFromGroundCenter`（大圏目的地計算）を新設し、傾斜した Cesium ビューを 2D エンジンで開くとカメラ位置ではなく視線の地面交点が表示中心になるよう統一。MapLibre の正典書き出しも注視点ではなくカメラ位置へ修正
+- **session-state の zoom 導出を正典基準化** — 正典ハッシュに zoom を持たないため、互換 zoom は正典 height から `heightToViewZoom(…,512)` で導出（MapLibre 512px 基準ネイティブ zoom の正典への混入を防止）
+
+### Fixed
+
+- **MapLibre の heading が鏡像だったバグを修正** — `bearing` は正典 heading と同規約（北=0・時計回り）だが符号反転されており、回転方向が逆になっていた問題を修正（`maplibre/app.js` の全9箇所を `bearing=heading` に統一）。北が正しい方向へ傾くことを実機検証済み
+- `heading=360.00` の出力揺れを `urlViewHash` で `[0,360)` 正規化
+
 ## [6.12.0] - 2026-11-01
 
 ### Added

@@ -17,12 +17,13 @@ import {
 import {
   detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature,
 } from "../shared/backend.js";
+import { buildViewUrl } from "../shared/kasc.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { mountSunControls } from "../shared/sun-time.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
 import { initPrint } from "../shared/print.js";
@@ -793,12 +794,8 @@ function getProjectBaseUrl() {
   return projectsBaseUrl(currentProjectId);
 }
 
-// 共有URL等のプロジェクト指定部分。?kasc= モードでは project= ではなく
-// kasc=<url> を書いて開き直せるようにする(override 指定時は project= 優先)
-function projectQueryParam(projectOverride) {
-  if (currentKascUrl && !projectOverride) return `kasc=${encodeURIComponent(currentKascUrl)}`;
-  return `project=${encodeURIComponent(projectOverride || currentProjectId)}`;
-}
+// 共有URLのプロジェクト指定は shared/kasc.js の buildViewUrl が正典形式で組み立てる
+// (?kasc= モードでは project= ではなく kasc=<url>。override 指定時は project= 優先)
 
 // github.com の /raw/・/blob/ URL は raw.githubusercontent.com へのリダイレクト時に
 // Access-Control-Allow-Origin が付かずブラウザの CORS fetch が失敗するため、
@@ -1395,10 +1392,8 @@ function updateUrlFromCamera() {
   hashParams.set("latitude", lat);
   hashParams.set("longitude", lon);
   hashParams.set("height", height);
-  // 実ビューポート換算のズームを併記する（2Dエンジンは zoom 優先で読むため
-  // height だけではスケールがずれる。傾斜時は直下換算の近似）
-  const zoom = camToZoomView({ latitude: Number(lat), height: Number(height) }, viewer.canvas.clientHeight, Cesium.Math.toDegrees(viewer.camera.frustum.fovy));
-  hashParams.set("zoom", zoom.toFixed(3));
+  // 正典は完全 Cesium 規約(latitude/longitude/height/pitch/heading)のみ。
+  // zoom は書かない — 2D エンジンが読み込み時に height から換算する
   hashParams.set("pitch", pitch);
   hashParams.set("heading", heading);
   const search = params.toString();
@@ -6901,14 +6896,9 @@ function setupEvents() {
 
   const shareCopyBtn = document.querySelector("#share-copy");
   shareCopyBtn.addEventListener("click", async () => {
-    const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
-    const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
-    const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
-    const pitch = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
-    const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-    const height = Number(c.height).toFixed(1);
-    const url = `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&pitch=${pitch}&heading=${heading}&${projectQueryParam()}`;
-    await navigator.clipboard?.writeText(url);
+    // 正典形式（ビュー→ハッシュ）で最新化してから現在URLをコピーする
+    updateUrlFromCamera();
+    await navigator.clipboard?.writeText(window.location.href);
     shareCopyBtn.textContent = "✓";
     setTimeout(() => { shareCopyBtn.textContent = "🔗"; }, 1500);
   });
@@ -8620,7 +8610,7 @@ function parseUrlCamera(source = window.location.search + window.location.hash) 
   // 高さへ変換し、無ければ（従来URLやCesium自身のheightのみのURL）は
   // height をそのまま使う
   const height = Number.isFinite(zoom)
-    ? zoomToCamHeightView(latitude, zoom, viewer.canvas.clientHeight, Cesium.Math.toDegrees(viewer.camera.frustum.fovy))
+    ? zoomToCamHeightView(latitude, zoom)
     : getNumber("height", DEFAULT_VIEW.height);
   return {
     latitude,
@@ -9269,13 +9259,18 @@ window.kasugaiApi = {
   getShareUrl() {
     const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
     if (!c) return null;
-    const lon = Number(c.longitude * 180 / Math.PI).toFixed(6);
-    const lat = Number(c.latitude * 180 / Math.PI).toFixed(6);
-    const pitch = Number(viewer.camera.pitch * 180 / Math.PI).toFixed(2);
-    const heading = Number(viewer.camera.heading * 180 / Math.PI).toFixed(2);
-    const height = Number(c.height).toFixed(1);
-    const zoom = camToZoomView({ latitude: Number(lat), height: Number(height) }, viewer.canvas.clientHeight, Cesium.Math.toDegrees(viewer.camera.frustum.fovy)).toFixed(3);
-    return `${window.location.origin}${window.location.pathname}?longitude=${lon}&latitude=${lat}&height=${height}&zoom=${zoom}&pitch=${pitch}&heading=${heading}&${projectQueryParam()}`;
+    const lat = c.latitude * 180 / Math.PI;
+    const height = c.height;
+    return buildViewUrl({
+      latitude: lat,
+      longitude: c.longitude * 180 / Math.PI,
+      height,
+      pitch: viewer.camera.pitch * 180 / Math.PI,
+      heading: viewer.camera.heading * 180 / Math.PI,
+    }, {
+      kascUrl: currentKascUrl || undefined,
+      projectId: currentKascUrl ? undefined : currentProjectId,
+    });
   },
   // 任意の座標・視点の共有URLを組み立てる。省略した引数は現在視点を使う。
   // 資料の各節に視点別パーマリンクを埋め込む用途向け
@@ -9292,22 +9287,17 @@ window.kasugaiApi = {
     const lon = pick(longitude, current.longitude);
     const lat = pick(latitude, current.latitude);
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
-    const params = new URLSearchParams();
-    params.set("longitude", lon.toFixed(6));
-    params.set("latitude", lat.toFixed(6));
     const h = pick(height, current.height);
-    const p = pick(pitch, current.pitch);
-    const hd = pick(heading, current.heading);
-    if (Number.isFinite(h)) {
-      params.set("height", h.toFixed(1));
-      params.set("zoom", camToZoomView({ latitude: lat, height: h }, viewer.canvas.clientHeight, Cesium.Math.toDegrees(viewer.camera.frustum.fovy)).toFixed(3));
-    }
-    if (Number.isFinite(p)) params.set("pitch", p.toFixed(2));
-    if (Number.isFinite(hd)) params.set("heading", hd.toFixed(2));
-    if (typeof project === "string" && project) params.set("project", project);
-    else if (currentKascUrl) params.set("kasc", currentKascUrl);
-    else params.set("project", currentProjectId);
-    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    return buildViewUrl({
+      latitude: lat,
+      longitude: lon,
+      height: h,
+      pitch: pick(pitch, current.pitch),
+      heading: pick(heading, current.heading),
+    }, {
+      projectId: (typeof project === "string" && project) ? project : (currentKascUrl ? undefined : currentProjectId),
+      kascUrl: (typeof project === "string" && project) ? undefined : (currentKascUrl || undefined),
+    });
   },
   // エージェント生成の資料（Markdown/HTML）をモーダル表示する
   showReport(args = {}) {

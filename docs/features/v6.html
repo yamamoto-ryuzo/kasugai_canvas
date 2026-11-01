@@ -13,7 +13,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.12.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.13.0</span></h1>
       <p>マルチエンジン — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -77,7 +77,7 @@
         <li><strong><code>?engine=</code> リダイレクト</strong>: ルートの <code>web/index.html</code> は <code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara</code>（既定 cesium）を読み、対象エンジンの <code>index.html</code> へリダイレクトします。<code>engine</code> 以外のクエリ（<code>project=</code>・<code>kasc=</code>）とハッシュ（ビュー状態）はそのまま引き継ぐため、同じ URL をエンジンを変えて開き直せます</li>
         <li><strong>切替 UI</strong>: 各エンジンのパネルにある「engine:」リンク（<code>shared/engine-switch.js</code>）から別エンジンへ遷移します。現在のクエリとハッシュを引き継ぐため、プロジェクトとカメラ位置を保ったまま切り替えられます（リンクは <code>../?engine=…</code> の相対パスで、GitHub Pages 等のパスプレフィックス配信でも動作）</li>
         <li><strong>レイヤ状態の引継ぎ（カレント状態ファイル）</strong>: 稼働中のエンジンは自身の状態を <strong>Cesium 規約の正典ドキュメント</strong>（localStorage <code>kasugai:session-state</code>）として <code>shared/session-state.js</code> 経由で常時同期し、切替先エンジンが起動時に適用します。詳細な仕様は次節「カレント状態ファイル」を参照してください</li>
-        <li><strong>URL ハッシュの互換</strong>: カメラ状態のハッシュ形式はエンジン共通です（緯度・経度・高さに加え、2D 側は zoom を併記。heading/pitch は各エンジンの規約へ相互変換）。変換規則の詳細は <a href="v0.html">V0: システム基本構成 — URL パーマリンク</a> を参照</li>
+        <li><strong>URL ハッシュの互換</strong>: カメラ状態のハッシュ形式はエンジン共通です（<strong>完全 Cesium 規約</strong>: 緯度・経度・高さ・pitch・heading の5キーのみ。zoom は URL に書かず、2D エンジンは height と相互換算。heading/pitch も各エンジンの規約へ変換）。変換規則と各エンジンのネイティブハッシュ形式との比較表は <a href="v0.html">V0: システム基本構成 — URL パーマリンク</a> を参照</li>
       </ul>
 
       <h3>📄 カレント状態ファイル（<code>session-state</code>）</h3>
@@ -90,7 +90,7 @@
         <tbody>
         <tr><td><code>v</code> / <code>at</code> / <code>engine</code></td><td>number / number / string</td><td>スキーマ版・最終更新時刻(ms)・最後に書いたエンジン ID</td></tr>
         <tr><td><code>project</code> / <code>kasc</code></td><td>string|null</td><td>書込み時点の <code>?project=</code> / <code>?kasc=</code>（適用はこれらの<strong>完全一致</strong>が条件）</td></tr>
-        <tr><td><code>camera</code></td><td>object</td><td><code>latitude</code>/<code>longitude</code>(deg)・<code>height</code>(m・楕円体高)・<code>zoom</code>(256pxタイル基準)・<code>pitch</code>(直下=-90・水平=0)・<code>heading</code>(北=0・時計回り)。URL ハッシュと同形式</td></tr>
+        <tr><td><code>camera</code></td><td>object</td><td><code>latitude</code>/<code>longitude</code>(deg)・<code>height</code>(m・楕円体高)・<code>zoom</code>(256pxタイル基準・正典 height から導出。URL ハッシュ自体に zoom キーは無い)・<code>pitch</code>(直下=-90・水平=0)・<code>heading</code>(北=0・時計回り)。すべて Cesium 規約の正典値</td></tr>
         <tr><td><code>inspector</code></td><td>string</td><td>現在の .kasc テキスト全文（ファイル内容ではなく編集後を含む現在値）</td></tr>
         <tr><td><code>theme</code></td><td>string|null</td><td><code>#theme-select</code> の選択値（<code>theme:</code> 名。未選択は null）</td></tr>
         <tr><td><code>basemap</code></td><td>object</td><td><code>{id, title}</code>（選択中ベースマップ。title は <code>base:</code> 行の item.title 正典）</td></tr>

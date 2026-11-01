@@ -1,7 +1,7 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
@@ -126,26 +126,36 @@ let currentProjectId = "";
 let urlViewConsumed = false;
 
 // MapLibre ビュー ⇄ URL パラメータ（Cesium 規約: pitch は直下=-90・水平=0、heading は北=0・時計回り）
-// URL/共有側の zoom は 256px タイル基準の正典(camToZoom と同じ。Leaflet/OL が素の値を書く)。
-// MapLibre は 512px 基準のため書き出しは +1、読み込みは -1 する
+// height は正典 height(m)。⇄ 表示ズームの換算は実キャンバス高＋正典 FOV(60°)の
+// heightToViewZoom/viewZoomToHeight で行う。MapLibre のネイティブ zoom は 512px
+// 基準のため、正典(256px 基準)との間で書き出し +1・読み込み -1 する。
+// bearing は heading と同規約（北=0・時計回り）で符号反転しない
+const mapCanvasH = () => map.getCanvas()?.clientWidth || 512;
 function mapViewToUrl() {
-  const c = map.getCenter();
+  const c = map.getCenter(); // 地面注視点（画面中心の地面交点）
   const zoom = map.getZoom() + 1;
+  const pitch = map.getPitch() - 90;   // 正典 pitch
+  const heading = map.getBearing();    // 正典 heading（同規約）
+  const slant = viewZoomToHeight(c.lat, zoom, mapCanvasH());
+  // 正典 lat/lon/height はカメラ位置: 注視点 + 正典姿勢から逆算する
+  const cam = camFromGroundCenter({ latitude: c.lat, longitude: c.lng }, pitch, heading, slant);
   return {
-    latitude: c.lat,
-    longitude: c.lng,
+    latitude: cam.latitude,
+    longitude: cam.longitude,
     zoom,
-    height: zoomToCamHeight(c.lat, zoom),
-    pitch: map.getPitch() - 90,
-    heading: -map.getBearing(),
+    height: cam.height,
+    pitch,
+    heading,
   };
 }
 
 function urlViewToMapOptions(v) {
+  const gc = groundCenterFromCam(v); // pitch は座標計算にのみ使用
   return {
-    center: [v.longitude, v.latitude],
-    zoom: (Number.isFinite(v.zoom) ? v.zoom : camToZoom(v)) - 1,
-    bearing: Number.isFinite(v.heading) ? -v.heading : 0,
+    center: [gc.longitude, gc.latitude],
+    zoom: (Number.isFinite(v.height) ? heightToViewZoom(gc.latitude, v.height, mapCanvasH())
+      : (Number.isFinite(v.zoom) ? v.zoom : camToZoom(v))) - 1,
+    bearing: Number.isFinite(v.heading) ? v.heading : 0,
     pitch: Number.isFinite(v.pitch) ? Math.max(0, Math.min(60, v.pitch + 90)) : 0,
   };
 }
@@ -930,7 +940,7 @@ function fillCamPanel(cams) {
       btn.addEventListener("click", () => {
         const e = cam._extent;
         if (e) map.fitBounds([[e.west, e.south], [e.east, e.north]], { padding: 40, duration: 800, maxZoom: 20 });
-        else map.flyTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) - 1 });
+        else { const gc = groundCenterFromCam(cam); map.flyTo({ center: [gc.longitude, gc.latitude], zoom: heightToViewZoom(gc.latitude, cam.height, mapCanvasH()) - 1 }); }
       });
       panel.cams.append(btn);
     }
@@ -1050,7 +1060,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     map.jumpTo(urlViewToMapOptions(urlView));
   } else if (doc.cams.length) {
     const cam = doc.cams[0];
-    map.jumpTo({ center: [cam.longitude, cam.latitude], zoom: camToZoom(cam) - 1 });
+    { const gc = groundCenterFromCam(cam); map.jumpTo({ center: [gc.longitude, gc.latitude], zoom: heightToViewZoom(gc.latitude, cam.height, mapCanvasH()) - 1 }); }
   } else {
     needExtentFit = true;
   }
@@ -1307,7 +1317,7 @@ map.on("load", () => {
         if (typeof s.lon === "number" && typeof s.lat === "number") opt.center = [s.lon, s.lat];
         // /present/state の zoom は OL 規約(256px基準)のため -1
         if (typeof s.zoom === "number") opt.zoom = s.zoom - 1;
-        if (typeof s.rotation === "number") opt.bearing = -s.rotation;
+        if (typeof s.rotation === "number") opt.bearing = s.rotation;
         map.jumpTo(opt);
       } catch (_) { /* 接続不可時は前回状態を維持 */ }
     };
@@ -1334,7 +1344,7 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   map.on("move", () => {
     const b = map.getBearing();
     if (compass) compass.style.transform = `rotateZ(${-b}deg)`;
-    if (rotInput && document.activeElement !== rotInput) rotInput.value = String(Math.round(-b));
+    if (rotInput && document.activeElement !== rotInput) rotInput.value = String(Math.round(b));
   });
   compass?.addEventListener("click", () => {
     map.easeTo({ bearing: 0, duration: 300 });
@@ -1361,7 +1371,7 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
 function openGoogleEarth() {
   try {
     const c = map.getCenter();
-    const heading = ((-map.getBearing()) % 360 + 360) % 360;
+    const heading = ((map.getBearing()) % 360 + 360) % 360;
     const tilt = Math.max(0, Math.min(90, map.getPitch()));
     const tiltRad = tilt * Math.PI / 180;
     const vh = map.getCanvas().clientHeight || map.getContainer().clientHeight;
@@ -1454,7 +1464,7 @@ map.on("sourcedata", e => {
       entry.lids.forEach(lid => map.getLayer(lid) && map.setPaintProperty(lid, "raster-opacity", Number(opacity.value)));
     }
   });
-  rotation?.addEventListener("change", () => map.setBearing(-Number(rotation.value || 0)));
+  rotation?.addEventListener("change", () => map.setBearing(Number(rotation.value || 0)));
   north?.addEventListener("change", () => {
     if (north.checked) { rotation.value = "0"; map.easeTo({ bearing: 0 }); }
   });
@@ -1728,9 +1738,9 @@ window.kasugaiApi = createPlayerApi({
     // undefined キー(bearing/pitch)を渡すと maplibre-gl v5 の flyTo が
     // _calcMatrices でクラッシュしレンダーループが止まるため省略して組み立てる
     const opts = { center: [Number(v.longitude), Number(v.latitude)] };
-    // v.zoom は engine ネイティブ(getViewInfo と往復)なので素通し、camToZoom 由来は -1
-    opts.zoom = Number.isFinite(v.zoom) ? v.zoom : camToZoom(v) - 1;
-    if (Number.isFinite(v.heading)) opts.bearing = -v.heading;
+    // v.zoom は engine ネイティブ(getViewInfo と往復)なので素通し、height 由来は -1
+    opts.zoom = Number.isFinite(v.zoom) ? v.zoom : heightToViewZoom(v.latitude, v.height, mapCanvasH()) - 1;
+    if (Number.isFinite(v.heading)) opts.bearing = v.heading;
     if (Number.isFinite(v.pitch)) opts.pitch = Math.max(0, Math.min(60, v.pitch + 90));
     // instant=フライパス巡回等の高頻度更新。flyTo の逐次再起動を避け即時配置する
     if (v.instant) map.jumpTo(opts);
@@ -1738,8 +1748,9 @@ window.kasugaiApi = createPlayerApi({
   },
   getViewInfo: () => {
     const c = map.getCenter();
-    return { latitude: c.lat, longitude: c.lng, zoom: map.getZoom(), heading: -map.getBearing(), pitchDeg: map.getPitch() };
+    return { latitude: c.lat, longitude: c.lng, zoom: map.getZoom(), heading: map.getBearing(), pitchDeg: map.getPitch() };
   },
+  viewToUrl: () => mapViewToUrl(),
   fitBoundsView: (w, s, e, n) => map.fitBounds([w, s, e, n], { padding: 60, maxZoom: 17 }),
   mountEntry: async (entry, preloaded) => {
     const idx = layerEntries.indexOf(entry);

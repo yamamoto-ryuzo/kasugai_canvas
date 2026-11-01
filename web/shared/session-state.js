@@ -25,7 +25,7 @@
 //   - エンジン固有情報は `engines.<id>` 名前空間へ隔離する（例: engines.navara.fx）
 // 将来の拡張フィールドはこの規則に従い v を据え置いて追加する
 
-import { parseUrlView, hasUrlView, splitKascTitle } from "./kasc.js";
+import { parseUrlView, hasUrlView, splitKascTitle, heightToViewZoom } from "./kasc.js";
 
 const KEY = "kasugai:session-state";
 const TTL = 120000; // セッションを「生きている」とみなす鮮度。切替・リロード直後のみ引き継ぐ
@@ -121,14 +121,18 @@ function collectSessionPatch() {
 
   // カメラは正典化済みの URL ハッシュを優先し、欠けた分だけ
   // getViewInfo(pitchDeg系)/getCamera(Cesium pitch系)で補う
-  // (エンジン固有 zoom — MapLibre 512px基準等 — が正典へ紛れ込むのを防ぐ)
+  // (エンジン固有 zoom — MapLibre 512px基準等 — が正典へ紛れ込むのを防ぐ。
+  //  正典ハッシュは zoom を持たないため、zoom は正典 height から camToZoom で導出する)
   const hv = parseUrlView();
   const c = api?.getViewInfo?.() || api?.getCamera?.();
+  const camHeight = num(hv.height) ?? num(c?.height);
+  const camLatitude = num(hv.latitude) ?? num(c?.latitude);
   const cam = {
-    latitude: num(hv.latitude) ?? num(c?.latitude),
+    latitude: camLatitude,
     longitude: num(hv.longitude) ?? num(c?.longitude),
-    zoom: num(hv.zoom) ?? num(c?.zoom),
-    height: num(hv.height) ?? num(c?.height),
+    zoom: num(hv.zoom)
+      ?? (camHeight != null && camLatitude != null ? heightToViewZoom(camLatitude, camHeight, 512) : undefined),
+    height: camHeight,
     heading: num(hv.heading) ?? num(c?.heading),
     pitch: num(hv.pitch) ?? (num(c?.pitch) ?? (num(c?.pitchDeg) != null ? num(c.pitchDeg) - 90 : undefined)),
   };

@@ -4,7 +4,7 @@
 // UI/共通機構は shared/ を他エンジンと共用する。
 import ThreeView, { Color } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem } from "../shared/vector-load.js";
@@ -101,7 +101,7 @@ function viewMetrics() {
   return { vh, fov };
 }
 function navaraZoom() {
-  return camToZoomView({ latitude: lastCam.lat, height: lastCam.height }, viewMetrics().vh, viewMetrics().fov);
+  return heightToViewZoom(lastCam.lat, lastCam.height, 512);
 }
 function urlViewFromCam() {
   return { latitude: lastCam.lat, longitude: lastCam.lng, height: lastCam.height, pitch: lastCam.pitch, heading: lastCam.heading, zoom: navaraZoom() };
@@ -111,14 +111,13 @@ function urlViewFromCam() {
 function urlViewHeight(uv) {
   if (Number.isFinite(uv.height) && !Number.isFinite(uv.zoom)) return uv.height;
   if (Number.isFinite(uv.zoom)) {
-    const { vh, fov } = viewMetrics();
-    return zoomToCamHeightView(uv.latitude, uv.zoom, vh, fov);
+    return viewZoomToHeight(uv.latitude, uv.zoom, 512);
   }
   return undefined;
 }
 function focusExtent(env) {
   if (!env) return;
-  flyTo({ longitude: (env.west + env.east) / 2, latitude: (env.south + env.north) / 2, height: zoomToCamHeight((env.south + env.north) / 2, 15) });
+  flyTo({ longitude: (env.west + env.east) / 2, latitude: (env.south + env.north) / 2, height: viewZoomToHeight((env.south + env.north) / 2, 15, 512) });
 }
 // Navara のリソースレイヤ(Layer ハンドル)には visible が無い。
 // 表示可否は各マテリアルの show で制御し、update() は全置換のため
@@ -1077,11 +1076,7 @@ async function saveToDataDir(name, content) {
     const blob = new Blob([panel.inspector.value || lastKascRaw], { type: "text/plain" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "project.kasc"; a.click(); URL.revokeObjectURL(a.href);
   });
-  $("#share-copy")?.addEventListener("click", () => {
-    syncCamFromView();
-    writeUrlView(urlViewFromCam(), currentProjectId);
-    try { navigator.clipboard.writeText(location.href); } catch (_) {}
-  });
+  // #share-copy は index.html 側の共通ハンドラ（kasugaiApi.getShareUrl 経由）に統一
   $("#nav-compass")?.addEventListener("click", () => flyTo({ heading: 0 }));
   $("#nav-home")?.addEventListener("click", () => {
     let env = null;
@@ -1127,7 +1122,8 @@ async function saveToDataDir(name, content) {
       syncAttribution();
     },
     getViewInfo: () => { syncCamFromView(); return { latitude: lastCam.lat, longitude: lastCam.lng, height: lastCam.height, zoom: navaraZoom(), heading: lastCam.heading, pitchDeg: (lastCam.pitch ?? -45) + 90 }; },
-    flyToView: v => { if (Number.isFinite(v.latitude) && Number.isFinite(v.longitude)) flyTo({ longitude: v.longitude, latitude: v.latitude, height: v.height ?? (Number.isFinite(v.zoom) ? zoomToCamHeightView(v.latitude, v.zoom, viewMetrics().vh, viewMetrics().fov) : undefined), heading: v.heading, pitch: v.pitch ?? (Number.isFinite(v.pitchDeg) ? v.pitchDeg - 90 : undefined) }); },
+    viewToUrl: () => { syncCamFromView(); return urlViewFromCam(); },
+    flyToView: v => { if (Number.isFinite(v.latitude) && Number.isFinite(v.longitude)) flyTo({ longitude: v.longitude, latitude: v.latitude, height: v.height ?? (Number.isFinite(v.zoom) ? viewZoomToHeight(v.latitude, v.zoom, 512) : undefined), heading: v.heading, pitch: v.pitch ?? (Number.isFinite(v.pitchDeg) ? v.pitchDeg - 90 : undefined) }); },
     getEntryGeoJson: e => e.item._geojson,
     getCams: () => currentCams,
     getThemes: () => currentThemes,

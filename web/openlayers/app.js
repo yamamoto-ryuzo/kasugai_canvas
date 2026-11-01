@@ -9,7 +9,7 @@ import TileWMS from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/TileWMS.js";
 import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Vector.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
@@ -139,6 +139,7 @@ let urlViewConsumed = false;
 
 // OpenLayers ビュー ⇄ URL パラメータ（Cesium 規約: pitch は直下=-90、heading は北=0・時計回り。
 // OL の2Dビューはピッチを持たないため、書き出しは -90 固定・読み込みでは無視する）
+const mapCanvasH = () => map.getSize()?.[0] || 512;
 function mapViewToUrl() {
   const view = map.getView();
   const lonlat = toLonLat(view.getCenter() || [0, 0]);
@@ -147,16 +148,18 @@ function mapViewToUrl() {
     latitude: lonlat[1],
     longitude: lonlat[0],
     zoom,
-    height: Number.isFinite(zoom) ? zoomToCamHeight(lonlat[1], zoom) : NaN,
+    height: Number.isFinite(zoom) ? viewZoomToHeight(lonlat[1], zoom, mapCanvasH()) : NaN,
     pitch: -90,
     heading: -(view.getRotation() * 180 / Math.PI),
   };
 }
 
 function urlViewToViewOptions(v) {
+  const gc = groundCenterFromCam(v); // pitch は座標計算にのみ使用
   return {
-    center: fromLonLat([v.longitude, v.latitude]),
-    zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
+    center: fromLonLat([gc.longitude, gc.latitude]),
+    zoom: Number.isFinite(v.height) ? heightToViewZoom(gc.latitude, v.height, mapCanvasH())
+      : (Number.isFinite(v.zoom) ? v.zoom : camToZoom(v)),
     rotation: Number.isFinite(v.heading) ? -v.heading * Math.PI / 180 : 0,
   };
 }
@@ -935,7 +938,7 @@ function fillCamPanel(cams) {
       btn.addEventListener("click", () => {
         const e = cam._extent;
         if (e) map.getView().fit([...fromLonLat([e.west, e.south]), ...fromLonLat([e.east, e.north])], { padding: [40, 40, 40, 40], maxZoom: 20, duration: 600 });
-        else map.getView().animate({ center: fromLonLat([cam.longitude, cam.latitude]), zoom: camToZoom(cam), duration: 600 });
+        else { const gc = groundCenterFromCam(cam); map.getView().animate({ center: fromLonLat([gc.longitude, gc.latitude]), zoom: heightToViewZoom(gc.latitude, cam.height, mapCanvasH()), duration: 600 }); }
       });
       panel.cams.append(btn);
     }
@@ -1063,8 +1066,9 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     view.setRotation(opts.rotation);
   } else if (doc.cams.length) {
     const cam = doc.cams[0];
-    map.getView().setCenter(fromLonLat([cam.longitude, cam.latitude]));
-    map.getView().setZoom(camToZoom(cam));
+    const gc = groundCenterFromCam(cam);
+    map.getView().setCenter(fromLonLat([gc.longitude, gc.latitude]));
+    map.getView().setZoom(heightToViewZoom(gc.latitude, cam.height, mapCanvasH()));
   } else {
     needExtentFit = true;
   }
@@ -1613,7 +1617,7 @@ window.kasugaiApi = createPlayerApi({
     // heading 未指定時は rotation を渡さない（undefined は現在角を壊し得るため）
     const opts = {
       center: fromLonLat([Number(v.longitude), Number(v.latitude)]),
-      zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
+      zoom: Number.isFinite(v.zoom) ? v.zoom : heightToViewZoom(v.latitude, v.height, mapCanvasH()),
       duration: 600,
     };
     if (Number.isFinite(v.heading)) opts.rotation = -v.heading * Math.PI / 180;
@@ -1631,6 +1635,7 @@ window.kasugaiApi = createPlayerApi({
     const c = toLonLat(map.getView().getCenter() || [0, 0]);
     return { latitude: c[1], longitude: c[0], zoom: map.getView().getZoom(), heading: -map.getView().getRotation() * 180 / Math.PI, pitchDeg: 0 };
   },
+  viewToUrl: () => mapViewToUrl(),
   fitBoundsView: (w, s, e, n) => map.getView().fit([...fromLonLat([w, s]), ...fromLonLat([e, n])], { padding: [50, 50, 50, 50], maxZoom: 17 }),
   mountEntry: async (entry, preloaded) => {
     const layer = await buildLayer(entry.item, lastBaseUrl, preloaded || entry.item._preloaded);

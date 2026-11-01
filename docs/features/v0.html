@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.12.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.13.0</span></h1>
       <p>V0: システム基本構成 — バージョン横断の実装詳細</p>
     </header>
     <main>
@@ -216,53 +216,83 @@
       風（距離に応じた飛行時間＋一度ズームアウトして降下する弧）に FLYTO
       します。<code>project</code>
       などカメラ以外のパラメータはクエリ（<code>?project=...</code>）に保持します。</p>
-      <p>このハッシュ形式は <strong>Cesium / MapLibre / OpenLayers
-      の3エンジンで共通</strong>です。ルートの <code>?engine=</code>
+      <p>このハッシュ形式は <strong>全6エンジン（Cesium / MapLibre /
+      OpenLayers / Leaflet / GSI Maps / Navara）で共通</strong>です。ルートの
+      <code>?engine=</code>
       リダイレクトはハッシュをそのまま引き継ぐため、同じ URL
       を別エンジンで開き直すと同じ地点が復元されます。移動するたびに
       <code>moveend</code>（Cesium は <code>camera.changed</code>）でハッシュが自動更新されます。</p>
+      <p>正典は<strong>完全 Cesium 規約</strong>です — ハッシュには
+      <code>latitude</code> / <code>longitude</code> / <code>height</code> /
+      <code>pitch</code> / <code>heading</code>
+      の5キーのみをこの順で書き、<code>zoom</code>
+      など余計なキーは書きません。2D エンジンは読み込み時に
+      <code>height → heightToViewZoom</code>、書き込み時に <code>zoom →
+      viewZoomToHeight</code> で各々換算します（正典モデル: Cesium
+      規約の直下カメラ＝水平 FOV=60°、可視範囲は球体幾何で算出。
+      各エンジンは自キャンバス幅 px で換算し、同じ height
+      が全エンジンで同じ地面範囲になります）。</p>
       <table>
       <thead>
       <tr>
-      <th>パラメータ</th>
-      <th>Cesium</th>
-      <th>MapLibre / OpenLayers</th>
+      <th>エンジン</th>
+      <th>latitude</th>
+      <th>longitude</th>
+      <th>height</th>
+      <th>pitch</th>
+      <th>heading</th>
+      <th>ネイティブハッシュ</th>
       </tr>
       </thead>
       <tbody>
       <tr>
-      <td><code>latitude</code> / <code>longitude</code></td>
-      <td>カメラ位置（WGS84 度数）</td>
-      <td>ビュー中心（WGS84 度数）</td>
+      <td>Cesium</td>
+      <td>○</td><td>○</td><td>○ ネイティブ</td><td>○ ネイティブ</td><td>○ ネイティブ</td>
+      <td>—（正典そのもの）</td>
       </tr>
       <tr>
-      <td><code>height</code></td>
-      <td>カメラ高さ（m）</td>
-      <td>ズームから逆算した近似値を併記する（<code>camToZoom</code>
-      の逆変換）。Cesium で開いたとき同じ縮尺で復元される</td>
+      <td>Navara</td>
+      <td>○</td><td>○</td><td>○ ネイティブ</td><td>○ ネイティブ</td><td>○ ネイティブ</td>
+      <td>—</td>
       </tr>
       <tr>
-      <td><code>zoom</code></td>
-      <td>書かない（読み時も無視）</td>
-      <td>Web メルカトルズームを併記。読み時は
-      <code>zoom</code> を優先し、無ければ <code>height</code>
-      から逆算する</td>
+      <td>MapLibre</td>
+      <td>○</td><td>○</td><td>⇄ zoom 換算</td><td>+90° 変換</td><td>○ 同規約（bearing=heading）</td>
+      <td><code>#&lt;zoom&gt;/&lt;lat&gt;/&lt;lon&gt;/&lt;bearing&gt;/&lt;pitch&gt;</code></td>
       </tr>
       <tr>
-      <td><code>heading</code></td>
-      <td>北=0°・時計回り</td>
-      <td>MapLibre の bearing・OpenLayers の rotation
-      とは符号が逆のため変換して読み書きする</td>
+      <td>OpenLayers</td>
+      <td>○</td><td>○</td><td>⇄ zoom 換算</td><td>−90° 固定</td><td>±反転</td>
+      <td>—</td>
       </tr>
       <tr>
-      <td><code>pitch</code></td>
-      <td>Cesium 規約（真下=−90°・水平=0°）</td>
-      <td>MapLibre は <code>pitch + 90°</code>
-      に変換（0〜60° のチルトとして適用）。OpenLayers は 2D
-      ビューのためピッチを持たず、書き出しは −90°（真下）固定・読み込みでは無視</td>
+      <td>Leaflet</td>
+      <td>○</td><td>○</td><td>⇄ zoom 換算</td><td>−90° 固定</td><td>0° 固定</td>
+      <td>—（プラグインは <code>#&lt;z&gt;/&lt;lat&gt;/&lt;lon&gt;</code>）</td>
+      </tr>
+      <tr>
+      <td>GSI Maps（2D）</td>
+      <td>○</td><td>○</td><td>⇄ zoom 換算</td><td>−90° 固定</td><td>0° 固定</td>
+      <td>iframe 内 <code>#&lt;z&gt;/&lt;lat&gt;/&lt;lon&gt;/&amp;base=…</code></td>
+      </tr>
+      <tr>
+      <td>GSI Maps（Globe）</td>
+      <td>○</td><td>○</td><td>○（iframe 内ネイティブ）</td><td>○（同上）</td><td>○（同上）</td>
+      <td>iframe 内 <code>#&lt;h&gt;/&lt;lat&gt;/&lt;lon&gt;/&lt;power&gt;/&lt;hdg&gt;/&lt;pitch&gt;/&lt;roll&gt;/</code></td>
       </tr>
       </tbody>
       </table>
+      <p>○=ネイティブ値、⇄=変換、固定=2D で持たないため固定値を書く。アドレスバーに現れるのはすべて正典形式で、ネイティブ形式が使われるのは
+      GSI Maps の iframe 内部だけです。高さをネイティブに持つのは
+      <strong>Cesium / Navara</strong>（と GSI Globe 内部）のみです。</p>
+      <p><strong>pitch のルール</strong>: 正典の
+      <code>latitude</code>/<code>longitude</code>/<code>height</code>
+      はカメラ位置を表します。<code>pitch</code>
+      はスケール（zoom/height 換算）・回転（heading）には使わず、<strong>座標計算にのみ使う</strong>ルールです
+      — 傾斜時（pitch ≠ −90）は 2D エンジンがカメラ位置の代わりに
+      <code>groundCenterFromCam</code> で視線の地面交点（heading 方向へ
+      h·tan(pitch+90°) 進んだ点）を表示中心にします。pitch ≥ 0
+      （地平線以上）は交点を定義できないためカメラ位置をそのまま使います。</p>
       <p>2D エンジン側は初回ロード時に URL のビュー指定を
       <code>cam:</code> プリセットより優先して適用します（プロジェクト切替時は従来どおりそのプロジェクトの
       cam / データ範囲へ移動）。初回 <code>moveend</code> が URL

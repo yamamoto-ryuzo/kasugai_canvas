@@ -358,7 +358,7 @@
     document.querySelector("#settings-window").hidden = true;
   });
   document.querySelector("#share-copy").addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(location.href); } catch (e) {}
+    try { await navigator.clipboard.writeText(window.kasugaiApi?.getShareUrl?.() || location.href); } catch (e) {}
   });
   document.querySelector("#panel-toggle").addEventListener("click", e => {
     const collapsed = document.querySelector("#panel").classList.toggle("collapsed");

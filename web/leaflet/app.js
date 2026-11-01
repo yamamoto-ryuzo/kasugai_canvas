@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
@@ -150,6 +150,7 @@ let urlViewConsumed = false;
 
 // Leaflet ビュー ⇄ URL パラメータ（Cesium 規約: pitch は直下=-90、heading は北=0。
 // Leaflet の2Dビューは回転を持たないため、書き出しは pitch=-90/heading=0 固定）
+const mapCanvasH = () => map.getSize().x || 512;
 function mapViewToUrl() {
   const c = map.getCenter();
   const zoom = map.getZoom();
@@ -157,16 +158,18 @@ function mapViewToUrl() {
     latitude: c.lat,
     longitude: c.lng,
     zoom,
-    height: Number.isFinite(zoom) ? zoomToCamHeight(c.lat, zoom) : NaN,
+    height: Number.isFinite(zoom) ? viewZoomToHeight(c.lat, zoom, mapCanvasH()) : NaN,
     pitch: -90,
     heading: 0,
   };
 }
 
 function urlViewToCenter(v) {
+  const gc = groundCenterFromCam(v); // pitch は座標計算にのみ使用
   return {
-    center: [v.latitude, v.longitude],
-    zoom: Number.isFinite(v.zoom) ? v.zoom : camToZoom(v),
+    center: [gc.latitude, gc.longitude],
+    zoom: Number.isFinite(v.height) ? heightToViewZoom(gc.latitude, v.height, mapCanvasH())
+      : (Number.isFinite(v.zoom) ? v.zoom : camToZoom(v)),
   };
 }
 
@@ -1015,7 +1018,7 @@ function fillCamPanel(cams) {
       btn.addEventListener("click", () => {
         const e = cam._extent;
         if (e) map.flyToBounds([[e.south, e.west], [e.north, e.east]], { padding: [40, 40], maxZoom: 20 });
-        else map.flyTo([cam.latitude, cam.longitude], camToZoom(cam));
+        else { const gc = groundCenterFromCam(cam); map.flyTo([gc.latitude, gc.longitude], heightToViewZoom(gc.latitude, cam.height, mapCanvasH())); }
       });
       panel.cams.append(btn);
     }
@@ -1143,7 +1146,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     map.setView(o.center, o.zoom);
   } else if (doc.cams.length) {
     const cam = doc.cams[0];
-    map.setView([cam.latitude, cam.longitude], camToZoom(cam));
+    { const gc = groundCenterFromCam(cam); map.setView([gc.latitude, gc.longitude], heightToViewZoom(gc.latitude, cam.height, mapCanvasH())); }
   } else {
     needExtentFit = true;
   }
@@ -1662,7 +1665,7 @@ window.kasugaiApi = createPlayerApi({
   getCams: () => currentCams,
   flyToView: v => {
     const center = [Number(v.latitude), Number(v.longitude)];
-    const zoom = Number.isFinite(v.zoom) ? v.zoom : camToZoom(v);
+    const zoom = Number.isFinite(v.zoom) ? v.zoom : heightToViewZoom(v.latitude, v.height, mapCanvasH());
     // instant=フライパス巡回等の高頻度更新。flyTo の逐次再起動を避け即時配置する
     if (v.instant) map.setView(center, zoom, { animate: false });
     else map.flyTo(center, zoom);
@@ -1671,6 +1674,7 @@ window.kasugaiApi = createPlayerApi({
     const c = map.getCenter();
     return { latitude: c.lat, longitude: c.lng, zoom: map.getZoom(), heading: 0, pitchDeg: 0 };
   },
+  viewToUrl: () => mapViewToUrl(),
   fitBoundsView: (w, s, e, n) => map.fitBounds([[s, w], [n, e]], { padding: [50, 50], maxZoom: 17 }),
   mountEntry: async (entry, preloaded) => {
     entry.paneName ||= `kasc-pane-api-${++apiPaneSeq}`;
