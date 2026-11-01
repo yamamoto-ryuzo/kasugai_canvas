@@ -83,7 +83,7 @@
   #tabs .tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0;
                background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   #tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
-  .tab-pane { overflow: auto; flex: 1; min-height: 0; scrollbar-width: none; }
+  .tab-pane { overflow-x: hidden; overflow-y: auto; flex: 1; min-height: 0; scrollbar-width: none; }
   .tab-pane::-webkit-scrollbar { display: none; }
   /* 表示タブ内のサブタブ（Cesium 版 .settings-tabs/.settings-subpanel と同型） */
   .display-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 0 0 3px; padding-bottom: 4px; }
@@ -91,7 +91,7 @@
                        background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   .display-tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
   .display-subpane .set-row { display: block; margin: 3px 0; }
-  .display-subpane .set-row input[type=range] { width: 100%; }
+  .display-subpane .set-row input[type=range] { width: 100%; box-sizing: border-box; margin: 2px 0; }
   /* 効果ペインのスライダー行: 名前＋レンジ＋値の1行レイアウト */
   .display-subpane .set-row.fx { display: flex; align-items: center; gap: 6px; }
   .display-subpane .fx-name { flex: 0 0 auto; white-space: nowrap; }
@@ -164,7 +164,7 @@
   .maplibregl-ctrl-bottom-left { left: 50%; bottom: 32px; transform: translateX(-50%); }
   /* Cesium 版 .manage-window と同型のフローティング窓 */
   #settings-window { position: absolute; top: 64px; left: 370px; z-index: 1006; width: 300px;
-    max-height: calc(100% - 170px); overflow: auto; background: rgba(255,255,255,.94);
+    max-height: calc(100% - 170px); overflow-y: auto; overflow-x: hidden; background: rgba(255,255,255,.94);
     border: 1px solid #d9e4e9; border-radius: 8px; padding: 10px 12px;
     box-shadow: 0 12px 36px rgba(10,20,40,.25); font-size: 16px; }
   #settings-window .settings-head { display: flex; justify-content: space-between; align-items: center;
@@ -179,7 +179,7 @@
                         background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   #settings-tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
   #settings-window .set-row { display: block; margin: 3px 0; }
-  #settings-window .set-row input[type=range] { width: 100%; }
+  #settings-window .set-row input[type=range] { width: 100%; box-sizing: border-box; margin: 2px 0; }
   .inspector-input { width: 100%; box-sizing: border-box; height: 150px; font-family: monospace;
                      font-size: 11px; border: 1px solid #ccc; border-radius: 4px; }
   .note { color: #666; margin-top: 3px; }

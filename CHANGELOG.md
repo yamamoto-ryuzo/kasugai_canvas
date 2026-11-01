@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.11.1] - 2026-11-01
+
+### Fixed
+
+- **表示タブ「一般」などでパネルが横スクロールする問題を修正（全エンジン）** — `input[type=range]` の UA 既定左右マージンと `datetime-local` 入力の `content-box` 計算でコンテンツがパネル幅を数px超過し、`.tab-pane` に表示枠ごと横移動するスクロールバーが出ていた。range 入力の左右マージン除去＋`box-sizing:border-box` 化で溢れを解消し、`.tab-pane`・`.control-panel`・`.manage-content`・`#settings-window` に `overflow-x:hidden` を付けて今後の再発も抑止
+
 ## [6.11.0] - 2026-11-01
 
 ### Added

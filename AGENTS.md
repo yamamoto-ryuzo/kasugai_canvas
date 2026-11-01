@@ -96,6 +96,10 @@
   - アンカーは各項目を `position:relative` のラッパー（例: `.opt-item`）で包み `bottom:100%` で配置する。**flexコンテナ直下の絶対配置は使わない** — flex子要素の静的位置はDOM位置に関わらずコンテナ先頭に揃うため、全ポップアップが最上部に積み重なる
   - ポップアップには必ず `pointer-events:none` を付ける。ポップアップ越しに上の項目をホバー・クリック・入力できなければならない（表示専用）
   - 実装例: `#display-tiles-panel .opt-item > .hint`（`styles.css`）
+- **横スクロールバー（横スライドバー）は使わないのが基本**: サイドパネル・設定ウィンドウ等の表示枠内でコンテンツが横にはみ出し、表示枠ごと横移動するスクロールバーが出る状態は禁止。新規 UI も含め、コンテンツは枠内に収める（`flex-wrap` で折り返し・`text-overflow:ellipsis`・`overflow-wrap:anywhere`・`box-sizing:border-box`・`width` は 100% まで）
+  - スクロール容器には保険として `overflow-x:hidden`（縦のみ `overflow-y:auto`）を付ける。対象: `.control-panel`・`.manage-content`（cesium `styles.css`）、`.tab-pane`・`#settings-window`（各エンジン `index.html`）
+  - よくあるはみ出し原因: `input[type=range]` は UA 既定で左右 `margin:2px` を持ち `width:100%` で 4px 溢れる → `margin:2px 0` で左右マージンを消す（`.display-subpane`/`.set-row` の range ルールに済）。`datetime-local` 等は `#panel input[type="datetime-local"]` を枠付き入力セレクタに含め `box-sizing:border-box` にする
+  - 属性テーブル・地物ポップアップ等、データが本質的に横長になる領域だけが例外
 
 ### AI 制御可能な UI（必須）
 
