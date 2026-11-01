@@ -21,6 +21,7 @@ import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayers
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
+import { mountSunControls } from "../shared/sun-time.js";
 import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, camToZoomView, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initPrint } from "../shared/print.js";
@@ -2348,7 +2349,11 @@ function updateEffectSettings() {
   const depthTestInput = document.querySelector("#effect-depth-test");
 
   viewer.scene.globe.enableLighting = terrainLightingInput?.checked ?? false;
-  viewer.scene.shadows = shadowsInput?.checked ?? false;
+  // scene.shadows への代入は効かない（Scene には該当プロパティが無い）。
+  // 正しくは shadowMap.enabled を直接切り替える
+  viewer.scene.shadowMap.enabled = shadowsInput?.checked ?? false;
+  // requestRenderMode 下で即時反映するため必ず描画を要求する
+  viewer.scene.requestRender();
   viewer.scene.globe.depthTestAgainstTerrain = (depthTestInput?.checked ?? true) && hasTerrain && undergroundTransparency === 0;
   viewer.scene.globe.translucency.enabled = (translucencyInput?.checked ?? false) || globeHidden;
   if (viewer.scene.fog) viewer.scene.fog.enabled = fogInput?.checked ?? true;
@@ -5374,6 +5379,9 @@ function setupEvents() {
   ["#effect-terrain-lighting", "#effect-translucency", "#effect-fog", "#effect-sky-atmosphere", "#effect-shadows", "#effect-depth-test"].forEach(selector => {
     document.querySelector(selector)?.addEventListener("change", () => updateEffectSettings());
   });
+  // 太陽日時コントロール（TZ選択＋日時入力＋スライダー）→ viewer.clock.currentTime
+  mountSunControls({ tz: document.querySelector("#cesium-tz"), datetime: document.querySelector("#cesium-datetime"), hour: document.querySelector("#cesium-hour") },
+    ms => { try { viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ms)); viewer.scene.requestRender?.(); } catch (_) {} });
 
   const transparencyInput = document.querySelector("#underground-transparency");
   const transparencyValue = document.querySelector("#underground-transparency-value");
@@ -5389,6 +5397,21 @@ function setupEvents() {
   undergroundDiveToggle.addEventListener("change", event => {
     undergroundDiveEnabled = event.target.checked;
     updateUndergroundView();
+  });
+
+  // 効果設定を既定値へ戻す（時刻コントロールは対象外）
+  document.querySelector("#effects-reset")?.addEventListener("click", () => {
+    for (const [sel, on] of [
+      ["#effect-terrain-lighting", false], ["#effect-translucency", false],
+      ["#effect-fog", true], ["#effect-sky-atmosphere", true],
+      ["#effect-shadows", false], ["#effect-depth-test", true],
+      ["#underground-dive-toggle", true],
+    ]) {
+      const el = document.querySelector(sel);
+      if (el && el.checked !== on) { el.checked = on; el.dispatchEvent(new Event("change", { bubbles: true })); }
+    }
+    const tr = document.querySelector("#underground-transparency");
+    if (tr && Number(tr.value) !== 0) { tr.value = "0"; tr.dispatchEvent(new Event("input", { bubbles: true })); }
   });
 
   ["#cesium-sse", "#cesium-max-memory"].forEach(selector => {

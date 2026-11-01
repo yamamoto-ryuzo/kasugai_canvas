@@ -28,6 +28,7 @@ import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../sh
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initAiChat } from "../shared/ai-chat.js";
+import { createKascFlyPaths } from "../shared/fly-kasc.js";
 
 // 診断: この中間エンジンが iframe 内で読み込まれた場合(ネスト)、
 // パネルに赤枠+バッジを付けて二重表示の切り分けに使う
@@ -137,7 +138,13 @@ let baseHidden = false;
 let currentCams = [];
 let currentThemes = [];
 let currentUnsupported = [];
-let flyPathItems = [];       // .kasc fly_geojson: 行（フライパス定義。player-api の getFlyPaths 経由で AI ツールへ公開）
+// .kasc fly_geojson: 行 → フライパス定義（player-api のフックへ展開し AI ツールへ公開。
+// shared/fly-kasc.js がインスペクタ行の追記・書き戻しも面倒を見る）
+const kascFlyPaths = createKascFlyPaths({
+  resolveUrl: u => resolveKascUrl(u, lastBaseUrl),
+  getInspectorText: () => inspectorInput.value,
+  setInspectorText: v => { inspectorInput.value = v; },
+});
 let currentDefaultStyles = {};
 let currentManifest = [];
 
@@ -1224,7 +1231,7 @@ function resetAll() {
   }
   baseEntries = [];
   currentUnsupported = [];
-  flyPathItems = [];
+  kascFlyPaths.setItems([]);
 }
 
 async function applyProject(proj) {
@@ -1266,7 +1273,7 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
   resetAll();
   currentDefaultStyles = doc.defaultStyles || {};
   // fly_geojson: はフライパスとして扱う（未対応警告には出さない）
-  flyPathItems = doc.unsupported.filter(i => i.type === "fly_geojson");
+  kascFlyPaths.setItems(doc.unsupported);
   currentUnsupported = doc.unsupported.filter(i => i.type !== "fly_geojson");
   lastBaseUrl = baseUrl || lastBaseUrl;
 
@@ -2028,50 +2035,12 @@ window.kasugaiApi = createPlayerApi({
     }
   },
   // .kasc fly_geojson: 行 → フライパス定義（speedはm/s。setFlySettings の書き戻し用に _item を持たせる）
-  getFlyPaths: () => flyPathItems.map(item => {
-    const o = item.opts || {};
-    const num = v => { const n = Number(v); return Number.isFinite(n) ? n : undefined; };
-    return {
-      title: item.title || item.url,
-      url: resolveKascUrl(item.url, lastBaseUrl),
-      speed: num(o.speed), height: num(o.height), pitch: num(o.pitch),
-      loop: /^(true|1|on|yes)$/i.test(o.loop || ""), view: o.view,
-      _item: item,
-    };
-  }),
+  getFlyPaths: kascFlyPaths.getFlyPaths,
   // flyRoute/addFlyPath の永続化: GeoJSON を DATA/ へ保存し fly_geojson: 行を追記。
   // ファイル書込み可能なローカルサーバー版のみ（静的配信ではメモリ登録のみで false を返す）
-  persistFlyPath: async (title, geojson, path) => {
-    const safe = String(title || "route").replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40) || "route";
-    const name = `fly_${safe}.geojson`;
-    const r = await window.kasugaiApi.saveDataFile(name, JSON.stringify(geojson)).catch(() => null);
-    if (!r?.ok) return false;
-    const opts = [`speed=${Math.round(path.speed * 10) / 10}`];
-    if (Number.isFinite(path.height)) opts.push(`height=${path.height}`);
-    if (Number.isFinite(path.pitch)) opts.push(`pitch=${path.pitch}`);
-    if (path.loop) opts.push("loop=true");
-    const line = `fly_geojson:${title}|DATA/${name}|${opts.join("|")}`;
-    inspectorInput.value = `${inspectorInput.value.replace(/\s*$/, "")}\n${line}\n`;
-    // セッション内でも getFlyPaths が拾えるよう item 登録（memoryFlyPaths と同名なら先勝ちで一つに見える）
-    flyPathItems.push({
-      type: "fly_geojson", title, url: `DATA/${name}`, visible: true,
-      opts: Object.fromEntries(opts.map(o => o.split("="))), line,
-    });
-    return true;
-  },
+  persistFlyPath: kascFlyPaths.persistFlyPath,
   // setFlySettings で書き換えた item.opts をインスペクタの fly_geojson: 行へ反映
-  syncFlyPathLine: item => {
-    if (!item?.line || !inspectorInput.value.includes(item.line)) return;
-    const o = item.opts || {};
-    const parts = [`fly_geojson:${item.title || ""}`, item.url || ""];
-    for (const k of ["speed", "height", "pitch", "step", "view"]) {
-      if (o[k] !== undefined && o[k] !== "") parts.push(`${k}=${o[k]}`);
-    }
-    if (o.loop) parts.push(`loop=${o.loop}`);
-    const nl = parts.join("|");
-    inspectorInput.value = inspectorInput.value.replace(item.line, nl);
-    item.line = nl;
-  },
+  syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
 });
 // gsimaps 専用: 地理院地図の表示中レイヤ取得・取り込み・操作・カタログ追加・
 // 作図取り込み（他エンジンではメソッドが無いため各ツールは自動的に非公開になる）

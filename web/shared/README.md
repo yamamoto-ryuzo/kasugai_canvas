@@ -43,6 +43,7 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 | `qml-style.js` / `qml-2d.js` | QGIS .qml スタイルのコンパイルと 2D エンジンへの適用アダプタ |
 | `attr-widget.js` | 画面下部ドッキングの属性テーブル |
 | `player-api.js` | 2D プレイヤー向け `window.kasugaiApi` アダプタ（AI ツール公開の土台） |
+| `fly-kasc.js` | `fly_geojson:` 行 → フライパス定義＋player-api フック（全プレイヤーエンジン共通） |
 | `ai-chat.js` / `mcp.js` / `box.js` | エンジン横断 AI チャット基盤（プロバイダ接続・ツール実行・MCP・Box OAuth） |
 | `engine-switch.js` | エンジン切替 UI とレイヤ状態引継ぎ |
 | `print.js` | 印刷・帳票出力 |

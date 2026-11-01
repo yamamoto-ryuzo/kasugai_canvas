@@ -4,6 +4,24 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.11.0] - 2026-11-01
+
+### Added
+
+- **`fly_geojson:` を全プレイヤーエンジンで再生可能に**（MapLibre / OpenLayers / Leaflet / Navara）— これまで Cesium・gsimaps のみが対応していたフライパス行を、新設 `shared/fly-kasc.js` に共通化したフック（`getFlyPaths`/`persistFlyPath`/`syncFlyPathLine`）経由で全エンジンへ配線。パネルの「未対応行」警告も解消。`listFlyPaths`/`playFlyPath`/`flyRoute`/`setFlySettings` 等の AI ツールがそのまま使え、ローカルサーバー版では AI 作成ルートの `fly_geojson:` 行への永続化も行う
+- **クエリ系レイヤの ⏷ フィルタ編集ボタン（全プレイヤーエンジン）** — `gpkg:`/`duckdb:`/`sql:` のレイヤ行に Cesium 版と同じ ⏷ ボタンを追加。WHERE式（sql: はクエリ全文）を対話的に変更して再読み込みでき、変更はインスペクタの .kasc 行へも同期される
+- **太陽日時コントロール（Cesium / MapLibre / Navara）** — `shared/sun-time.js` によるタイムゾーン選択＋日時入力＋時刻スライダーを追加。Cesium は `viewer.clock.currentTime`、MapLibre は `map.setLight`（hillshade/extrusion へ反映）、Navara は大気の太陽へ反映
+- **表示設定のリセットボタン** — Cesium の効果パネルに「リセット」、MapLibre/OpenLayers/Leaflet の表示・一般パネルに「設定をリセット」を追加。透過度・回転・スケールバー・座標表示等を既定値へ一括復帰できる
+
+### Fixed
+
+- **Navara エンジンの未実装・不整合を一括解消** — `fly_geojson:` の空スタブを実フックへ差替え、`getCams` が `{title}` のみ返して `listCameraPresets`/`flyToPreset` が機能していなかった問題を修正、`getThemes` がレイヤ一覧を落としていた問題を修正、`legend:` 行が凡例タブに描画されない問題・`default_style:` が無視される問題を解消、属性一覧ウィジェットのレイヤ id 不整合（別レイヤの属性が開く可能性）を修正、マークアップだけ存在した DATA/ フォルダ選択・ファイル追加・カメラプリセットの保存/読込ボタンを配線、インスペクタ適用時にテーマ/カメラ/凡例/ベースマップが更新されない問題を renderDoc 共通化で解消
+- **Cesium: 影トグルが効かない問題を修正** — `scene.shadows`（存在しないプロパティ）への代入を `scene.shadowMap.enabled` ＋ `requestRender()` へ変更
+
+### Changed
+
+- **gsimaps の fly パス実装を `shared/fly-kasc.js` へ集約** — エンジン間で重複していた実装を共通モジュールに統一
+
 ## [6.10.0] - 2026-11-01
 
 ### Changed

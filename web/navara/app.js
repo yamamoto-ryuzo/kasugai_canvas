@@ -4,22 +4,28 @@
 // UI/共通機構は shared/ を他エンジンと共用する。
 import ThreeView, { Color } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, themeShowSet, fillThemeSelect, kascTitleInTheme, loadKascBookmarks, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle } from "../shared/kasc.js";
-import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha } from "../shared/kasc.js";
+import { createKascFlyPaths } from "../shared/fly-kasc.js";
+import { backendUrl } from "../shared/backend.js";
+import { loadVectorItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
-import { initAiChat } from "../shared/ai-chat.js";
+import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher, consumeEngineSwitchState } from "../shared/engine-switch.js";
 import { initPrint } from "../shared/print.js";
 import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
+import { mountSunControls } from "../shared/sun-time.js";
 
 const TERRAIN_URL = "https://terrain.reearth.land/cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain";
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
 const RASTER_TYPES = new Set(["xyz", "tile"]);
+// ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
+const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql"]);
 const $ = s => document.querySelector(s);
 
 const panel = {
   project: $("#project-select"), layers: $("#layers"), cams: $("#cams"),
+  camsImportFile: $("#cams-import-file"), camsImportCamFile: $("#cams-import-cam-file"),
   basemap: $("#basemap-ctl"), basemapSelect: $("#basemap-select"),
   legends: $("#legends"), infoLink: $("#info-link"), unsupported: $("#unsupported"),
   themeSelect: $("#theme-select"), searchInput: $("#search-input"),
@@ -49,8 +55,17 @@ const themes = [];
 let baseDocs = [], basemapSrc = null, basemapLayer = null;
 let terrainSrc = null, terrainLayer = null;
 let currentProjectId = "", lastBaseUrl = "", lastKascRaw = "", currentThemes = [];
+let currentCams = [], currentLegends = [], currentDefaultStyles = null;
 let lastCam = { lng: 139.767, lat: 35.681, height: 3000, heading: 0, pitch: -45, roll: 0 };
 let photorealScene = null;
+
+// .kasc fly_geojson: 行 → フライパス（player-api のフックへ展開。
+// shared/fly-kasc.js がインスペクタ行の追記・書き戻しも面倒を見る）
+const kascFlyPaths = createKascFlyPaths({
+  resolveUrl: u => resolveKascUrl(u, lastBaseUrl),
+  getInspectorText: () => panel.inspector?.value || lastKascRaw,
+  setInspectorText: v => { if (panel.inspector) panel.inspector.value = v; },
+});
 // 起動直後・loadProject が URL ハッシュを読む前に、初期カメラの moveend が
 // ハッシュをデフォルト位置で上書きするのを防ぐ（MapLibre と同じガード）
 let urlViewConsumed = false;
@@ -261,6 +276,20 @@ function buildLayerRow(entry, exclusive, radioName) {
     focusExtent(item._geojson && geojsonExtent(item._geojson));
   });
   row.append(fb);
+
+  // クエリ系レイヤーの絞り込み条件変更（Cesium 版の ⏷ ボタン相当）
+  if (QUERY_TYPES.has(item.type)) {
+    const qb = document.createElement("button");
+    qb.type = "button";
+    qb.className = "layer-filter";
+    qb.textContent = "⏷";
+    qb.title = item.type === "sql" ? "クエリを編集" : "絞り込み条件（WHERE式）を編集";
+    qb.addEventListener("click", ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      void editEntryQueryFilter(entry);
+    });
+    row.append(qb);
+  }
   wrap.append(row);
 
   if (legendMulti) {
@@ -386,9 +415,23 @@ function buildLayerList() {
   }
 }
 
-// ---- 凡例タブ（QML legend があればスウォッチ表示） ----
+// ---- 凡例タブ（legend: 行の画像 + QML legend があればスウォッチ表示） ----
 function buildLegends() {
   panel.legends.replaceChildren();
+  let any = false;
+  for (const leg of currentLegends) {
+    const img = document.createElement("img");
+    img.src = resolveKascUrl(leg.url, lastBaseUrl);
+    img.alt = leg.title || "legend";
+    img.style.maxWidth = "100%";
+    if (leg.title) {
+      const t = document.createElement("div");
+      t.textContent = leg.title;
+      panel.legends.append(t);
+    }
+    panel.legends.append(img);
+    any = true;
+  }
   for (const entry of layerEntries) {
     const specs = entry.item._qml?.legend;
     if (!specs?.length) continue;
@@ -407,13 +450,18 @@ function buildLegends() {
       row.append(img, lbl); wrap.append(row);
     }
     panel.legends.append(wrap);
+    any = true;
   }
+  if (!any) panel.legends.textContent = "（凡例なし）";
 }
 
 // ---- 属性一覧 ----
 const attrWidget = createAttrWidget({
-  listLayers: () => layerEntries.filter(e => VECTOR_TYPES.has(e.item.type))
-    .map((entry, i) => ({ id: String(i), title: splitKascTitle(entry.item.title).title || entry.item.title || entry.item.url, entry })),
+  // レイヤ id は layerEntries のインデックス（filter 後に採番すると
+  // buildLayerRow 側の indexOf(entry) とズレるため先に採番する）
+  listLayers: () => layerEntries
+    .map((entry, i) => ({ id: String(i), title: splitKascTitle(entry.item.title).title || entry.item.title || entry.item.url, entry }))
+    .filter(o => VECTOR_TYPES.has(o.entry.item.type)),
   getFeatures: async entry => ({ features: entry.item._geojson?.features || [] }),
   focusFeature: f => focusExtent(geojsonExtent({ type: "FeatureCollection", features: [f] })),
 });
@@ -464,23 +512,148 @@ panel.basemapSelect?.addEventListener("change", () => applyBasemap(Number(panel.
 async function applyTerrain(on) {
   if (terrainLayer) { try { terrainLayer.delete(); terrainSrc.delete(); } catch (_) {} terrainLayer = terrainSrc = null; }
   if (!on) return;
-  terrainSrc = view.addSource({ type: "quantized-mesh", url: TERRAIN_URL, maxZoom: 15, requestVertexNormals: true });
-  terrainLayer = view.addLayer({ type: "terrain", source: terrainSrc, terrain: { castShadow: true, receiveShadow: true } });
+  try {
+    terrainSrc = view.addSource({ type: "quantized-mesh", url: TERRAIN_URL, maxZoom: 15, requestVertexNormals: true });
+    terrainLayer = view.addLayer({ type: "terrain", source: terrainSrc, terrain: { castShadow: true, receiveShadow: true } });
+  } catch (e) {
+    console.warn("terrain", e);
+    try { terrainSrc?.delete(); } catch (_) {}
+    terrainLayer = terrainSrc = null;
+    // 既定 ON のため失敗時はチェック状態も戻して UI と実態を合わせる
+    const c = $("#nv-terrain"); if (c) c.checked = false;
+  }
 }
-let manualLights = [];
+let manualLights = [], manualSun = null, shadowOn = false;
+// ---- Navara 固有の光・エフェクト設定（表示タブ「効果」ペイン） ----
+// 写実シーン(addDefaultPhotorealScene)と手動ライトの両モードへ適用する。
+// sunInt はモード別に値を持つ（写実=物理ベース既定1・手動=補正済み既定1.8）
+const FX_DEFAULTS = {
+  sunInt: { pr: 1, manual: 1.8 },
+  ambientInt: 0.8, skyProbeInt: 1, exposure: 1, shadowInt: 1,
+  moon: true, moonInt: 1,
+  stars: true, starsInt: 10,
+  flare: true, flareInt: 0.005,
+  toneMode: 8,
+  clouds: false, cloudCov: 0.25,
+  ssao: false,
+};
+const fx = structuredClone(FX_DEFAULTS);
+let cloudsEffect = null, ssaoEffect = null;
+const sunHandle = () => photorealScene?.sun || manualSun;
+// 影は複数箇所のフラグをまとめて切り替える。
+// view.shadow への代入は効かない（コンストラクタオプションのみで実行時セッター無し）
+function applyShadow() {
+  try { const r = view._renderer; if (r) r.shadowMap.enabled = shadowOn; } catch (_) {}
+  try { view.atmosphere.enableShadows.value = shadowOn; } catch (_) {}
+  try { photorealScene?.sun?.update?.({ sun: { castShadow: shadowOn } }); } catch (_) {}
+  try { photorealScene?.aerialPerspective?.update?.({ aerialPerspective: { shadow: shadowOn } }); } catch (_) {}
+  try { manualSun?.update?.({ sun: { castShadow: shadowOn } }); } catch (_) {}
+  try { view.forceUpdate?.(); } catch (_) {}
+}
 // 写実シーンON時は addDefaultPhotorealScene が sun を内包するため
 // 手動 sun を足すと CSM uniform(csmCascades等)が二重注入され全シェーダが
 // 破壊される（実GPUで Shader Error: redefinition → 画面全滅）。
 // そのため手動ライトは photoreal OFF 時のみ追加する
 function syncLights() {
   for (const l of manualLights) { try { l.delete?.(); } catch (_) {} }
-  manualLights = [];
-  if (photorealScene) { manualLights.push(view.addLight({ ambient: { intensity: 0.8 } })); }
+  manualLights = []; manualSun = null;
+  if (photorealScene) { manualLights.push(view.addLight({ ambient: { intensity: fx.ambientInt } })); }
   else {
     manualLights.push(
-      view.addLight({ ambient: { intensity: 0.8 } }),
-      view.addLight({ sun: { intensity: 1.8, applyColor: true } }));
+      view.addLight({ ambient: { intensity: fx.ambientInt } }),
+      (manualSun = view.addLight({ sun: { intensity: fx.sunInt.manual, applyColor: true } })));
   }
+  applyShadow();
+}
+// 各 fx 値を現在のシーンハンドルへ反映する（写実 OFF 時は存在しないハンドルは無害にスキップ）
+function applyFxSun() { try { sunHandle()?.update?.({ sun: { intensity: fx.sunInt[photorealScene ? "pr" : "manual"] } }); } catch (_) {} }
+function applyFxAmbient() { try { manualLights[0]?.update?.({ ambient: { intensity: fx.ambientInt } }); } catch (_) {} }
+function applyFxSkyProbe() { try { photorealScene?.skyLightProbe?.update?.({ skyLightProbe: { intensity: fx.skyProbeInt } }); } catch (_) {} }
+function applyFxExposure() { try { view.toneMappingExposure = fx.exposure; } catch (_) {} }
+function applyFxShadowInt() { try { sunHandle()?.update?.({ sun: { shadowIntensity: fx.shadowInt } }); } catch (_) {} }
+function applyFxMoon() { try { photorealScene?.sky?.update?.({ sky: { moon: fx.moon, moonIntensity: fx.moonInt } }); } catch (_) {} }
+function applyFxStars() { try { const s = photorealScene?.stars; if (!s) return; s.visible = fx.stars; s.update?.({ stars: { intensity: fx.starsInt } }); } catch (_) {} }
+function applyFxFlare() { try { const f = photorealScene?.lensFlare; if (!f) return; f.visible = fx.flare; f.update?.({ lensFlare: { intensity: fx.flareInt } }); } catch (_) {} }
+function applyFxToneMode() { try { photorealScene?.toneMapping?.update?.({ toneMapping: { mode: fx.toneMode } }); } catch (_) {} }
+// 雲・SSAO は写実シーンの構成外のため、トグルで addEffect/delete する
+function applyFxClouds() {
+  if (fx.clouds && !cloudsEffect) {
+    try { cloudsEffect = view.addEffect({ clouds: { coverage: fx.cloudCov } }); }
+    catch (e) { console.warn("clouds", e); }
+  } else if (!fx.clouds && cloudsEffect) {
+    try { cloudsEffect.delete(); } catch (_) {}
+    cloudsEffect = null;
+  } else if (cloudsEffect) {
+    try { cloudsEffect.update({ clouds: { coverage: fx.cloudCov } }); } catch (_) {}
+  }
+}
+function applyFxSsao() {
+  if (fx.ssao && !ssaoEffect) {
+    try { ssaoEffect = view.addEffect({ ssao: {} }); }
+    catch (e) { console.warn("ssao", e); }
+  } else if (!fx.ssao && ssaoEffect) {
+    try { ssaoEffect.delete(); } catch (_) {}
+    ssaoEffect = null;
+  }
+}
+function applyFxAll() {
+  applyFxSun(); applyFxAmbient(); applyFxSkyProbe(); applyFxExposure();
+  applyFxShadowInt(); applyFxMoon(); applyFxStars(); applyFxFlare();
+  applyFxToneMode(); applyFxClouds(); applyFxSsao();
+}
+// 写実 ON/OFF に応じて .nv-pr 行の有効/無効と太陽スライダーの表示値を同期する
+function syncFxUi() {
+  const pr = !!photorealScene;
+  const sunEl = $("#nv-sun-int");
+  if (sunEl) {
+    sunEl.value = String(fx.sunInt[pr ? "pr" : "manual"]);
+    const v = $("#nv-sun-int-val"); if (v) v.textContent = Number(sunEl.value).toFixed(2);
+  }
+  for (const el of document.querySelectorAll(".nv-pr input, .nv-pr select")) el.disabled = !pr;
+}
+function initFxControls() {
+  const bind = (sel, valSel, fmt, fn) => {
+    const el = $(sel); if (!el) return;
+    const show = () => { const v = $(valSel); if (v) v.textContent = fmt ? fmt(Number(el.value)) : el.value; };
+    el.addEventListener("input", () => { show(); fn(Number(el.value)); });
+    show();
+  };
+  bind("#nv-sun-int", "#nv-sun-int-val", v => v.toFixed(2), v => { fx.sunInt[photorealScene ? "pr" : "manual"] = v; applyFxSun(); });
+  bind("#nv-amb-int", "#nv-amb-int-val", v => v.toFixed(2), v => { fx.ambientInt = v; applyFxAmbient(); });
+  bind("#nv-sky-int", "#nv-sky-int-val", v => v.toFixed(2), v => { fx.skyProbeInt = v; applyFxSkyProbe(); });
+  bind("#nv-exposure", "#nv-exposure-val", v => v.toFixed(2), v => { fx.exposure = v; applyFxExposure(); });
+  bind("#nv-shd-int", "#nv-shd-int-val", v => v.toFixed(2), v => { fx.shadowInt = v; applyFxShadowInt(); });
+  bind("#nv-moon-int", "#nv-moon-int-val", v => v.toFixed(2), v => { fx.moonInt = v; applyFxMoon(); });
+  bind("#nv-stars-int", "#nv-stars-int-val", v => v.toFixed(1), v => { fx.starsInt = v; applyFxStars(); });
+  bind("#nv-flare-int", "#nv-flare-int-val", v => v.toFixed(3), v => { fx.flareInt = v; applyFxFlare(); });
+  bind("#nv-clouds-cov", "#nv-clouds-cov-val", v => v.toFixed(2), v => { fx.cloudCov = v; applyFxClouds(); });
+  $("#nv-moon")?.addEventListener("change", e => { fx.moon = e.target.checked; applyFxMoon(); });
+  $("#nv-stars")?.addEventListener("change", e => { fx.stars = e.target.checked; applyFxStars(); });
+  $("#nv-flare")?.addEventListener("change", e => { fx.flare = e.target.checked; applyFxFlare(); });
+  $("#nv-tonemode")?.addEventListener("change", e => { fx.toneMode = Number(e.target.value); applyFxToneMode(); });
+  $("#nv-clouds")?.addEventListener("change", e => { fx.clouds = e.target.checked; applyFxClouds(); });
+  $("#nv-ssao")?.addEventListener("change", e => { fx.ssao = e.target.checked; applyFxSsao(); });
+  $("#nv-fx-reset")?.addEventListener("click", resetFx);
+  syncFxUi();
+}
+// 効果設定を既定値へ戻す。コントロールへ値を書き戻してイベントを発火させ、
+// 個別適用は既存ハンドラへ委譲する（時刻行は対象外）
+function resetFx() {
+  Object.assign(fx, structuredClone(FX_DEFAULTS));
+  const setC = (sel, on) => { const el = $(sel); if (el && el.checked !== on) { el.checked = on; el.dispatchEvent(new Event("change", { bubbles: true })); } };
+  const setV = (sel, v) => { const el = $(sel); if (el) { el.value = String(v); el.dispatchEvent(new Event("input", { bubbles: true })); } };
+  const setS = (sel, v) => { const el = $(sel); if (el) { el.value = String(v); el.dispatchEvent(new Event("change", { bubbles: true })); } };
+  setC("#nv-photoreal", true);   // 先に写実シーンを戻し .nv-pr を有効化する
+  setC("#nv-shadow", false);
+  setC("#nv-moon", fx.moon); setC("#nv-stars", fx.stars); setC("#nv-flare", fx.flare);
+  setC("#nv-clouds", false); setC("#nv-ssao", false);
+  setV("#nv-amb-int", fx.ambientInt); setV("#nv-sky-int", fx.skyProbeInt);
+  setV("#nv-exposure", fx.exposure); setV("#nv-shd-int", fx.shadowInt);
+  setV("#nv-moon-int", fx.moonInt); setV("#nv-stars-int", fx.starsInt);
+  setV("#nv-flare-int", fx.flareInt); setV("#nv-clouds-cov", fx.cloudCov);
+  setS("#nv-tonemode", fx.toneMode);
+  applyFxAll();
+  syncFxUi();
 }
 function applyPhotoreal(on) {
   if (photorealScene) {
@@ -492,10 +665,10 @@ function applyPhotoreal(on) {
     catch (e) { console.warn("photoreal", e); photorealScene = null; }
   }
   syncLights();
+  applyFxAll();
+  syncFxUi();
 }
-function applySunHour(h) {
-  try { const d = new Date(); d.setUTCHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0); view.atmosphere.date = d; } catch (_) {}
-}
+// 太陽日時コントロール（TZ選択＋日時入力＋スライダー）は shared/sun-time.js 共通
 
 // ---- .kasc → Navara ----
 async function addKascLayer(item, baseUrl) {
@@ -515,6 +688,12 @@ async function addKascLayer(item, baseUrl) {
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = item._geojson ? { geojson: item._geojson } : await loadVectorItem(item, baseUrl, null);
     item._geojson = loaded.geojson;
+    // default_style: 行の既定値（地物側指定 > style=QML > default_style: > エンジン既定。
+    // Navara はレイヤ単位マテリアルのため地物ごとの解決はできずレイヤ既定へ畳み込む）
+    const ds = currentDefaultStyles || {};
+    const pd = ds.point ? resolveDefaultPointStyle({}, ds.point, {}) : null;
+    const ld = ds.line ? resolveDefaultLineStyle({}, ds.line, {}) : null;
+    const gd = ds.polygon ? resolveDefaultPolygonStyle({}, ds.polygon, ds.line, {}) : null;
     // QML スタイル: 代表地物の spec からレイヤ既定色を取る（Navara はレイヤ単位マテリアル）
     let fillCss = item.opts?.fill, strokeCss = item.opts?.stroke || item.opts?.color, markerCss = item.opts?.marker_color;
     if (item.opts?.style) {
@@ -526,11 +705,22 @@ async function addKascLayer(item, baseUrl) {
         if (s) { fillCss ||= s.fill; strokeCss ||= s.stroke; markerCss ||= s.markerColor; }
       } catch (_) {}
     }
+    fillCss ||= gd?.fill;
+    strokeCss ||= gd?.stroke ?? ld?.color;
+    markerCss ||= pd?.color;
+    // 不透明度: opts 明示(fill_opacity/stroke_opacity/opacity) > 色のアルファ
+    // (QML rgba 含む) > default_style: > 既定。塗りは他エンジンと同じ半透明 0.4 が既定。
+    // Navara マテリアルは透過描画に transparent フラグも必要
+    const oNum = v => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : null; };
+    const aOf = css => { const a = cssColorAlpha(css); return a < 1 ? a : null; };
+    const polyFillO = oNum(item.opts?.fill_opacity) ?? oNum(item.opts?.opacity) ?? aOf(fillCss) ?? gd?.fillOpacity ?? 0.4;
+    const polyLineO = oNum(item.opts?.stroke_opacity) ?? oNum(item.opts?.opacity) ?? aOf(strokeCss) ?? gd?.strokeOpacity ?? ld?.opacity ?? 1;
+    const pointO = oNum(item.opts?.opacity) ?? aOf(markerCss) ?? pd?.opacity ?? 1;
     const src = view.addSource({ type: "geojson", data: item._geojson, tiled: true });
     const desc = { type: "vector", source: src,
-      polygon: { color: css2hex(fillCss || "#3d7dd9"), clampToGround: true },
-      polyline: { color: css2hex(strokeCss || "#2c5ea8"), width: Number(item.opts?.width) || 3, clampToGround: true },
-      point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true } };
+      polygon: { color: css2hex(fillCss || "#3d7dd9"), clampToGround: true, opacity: polyFillO, transparent: polyFillO < 1 },
+      polyline: { color: css2hex(strokeCss || "#2c5ea8"), width: Number(item.opts?.width) || gd?.strokeWidth || ld?.width || 3, clampToGround: true, opacity: polyLineO, transparent: polyLineO < 1 },
+      point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true, opacity: pointO, transparent: pointO < 1 } };
     const layer = view.addLayer(desc);
     return { src, layer, desc };
   }
@@ -540,8 +730,13 @@ async function addKascLayer(item, baseUrl) {
 async function renderLayers(doc, baseUrl) {
   for (const e of layerEntries) { try { e.layer?.delete(); } catch (_) {} try { e.src?.delete(); } catch (_) {} }
   layerEntries.length = 0;
+  // default_style:/legend:/fly_geojson: もここで doc から反映する
+  // （renderLayers は loadProject とインスペクタ適用の共通経路）
+  currentDefaultStyles = doc.defaultStyles || null;
+  currentLegends = doc.legends || [];
+  kascFlyPaths.setItems(doc.unsupported);
   const items = [...doc.layers, ...doc.unsupported.filter(u => u.type === "3dtiles")];
-  const unsupported = doc.unsupported.filter(u => u.type !== "3dtiles");
+  const unsupported = doc.unsupported.filter(u => u.type !== "3dtiles" && u.type !== "fly_geojson");
   const visibleCount = items.filter(i => i.visible !== false).length;
   let done = 0;
   progress(0, visibleCount, "");
@@ -560,23 +755,67 @@ async function renderLayers(doc, baseUrl) {
   buildLayerList(); buildLegends(); syncAttribution();
 }
 
-async function loadProject(projectId) {
-  const { id, manifest, baseUrl, doc, raw } = await loadKascProject(projectId);
-  currentProjectId = id; lastBaseUrl = baseUrl; lastKascRaw = raw || "";
-  applyPanelTitle(doc.title);
-  if (panel.inspector && !panel.inspector.value) panel.inspector.value = lastKascRaw;
-
-  panel.project.replaceChildren();
-  appendGroupedTitleOptions(panel.project, manifest, (m, title) => {
-    const opt = document.createElement("option");
-    opt.value = m.id || m; opt.textContent = title || m.title || m.id || m;
-    if ((m.id || m) === id) opt.selected = true;
-    return opt;
-  });
-  if (![...panel.project.options].some(o => o.value === id)) {
-    const opt = document.createElement("option"); opt.value = id; opt.textContent = doc.title || id; panel.project.append(opt);
+// cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ。
+// CAM / QGIS-XML の2系統をグループ見出し+それぞれの保存・読込ボタンで区別する
+const CAM_GROUPS = [
+  { key: "CAM", match: c => !c.bookmark, fileKey: "camsImportCamFile",
+    onSave: items => downloadKascCamLines(items) },
+  { key: "QGIS-XML", match: c => !!c.bookmark, fileKey: "camsImportFile",
+    onSave: items => downloadQgisBookmarksXml(items) },
+];
+function fillCamPanel(cams) {
+  panel.cams.innerHTML = "";
+  for (const g of CAM_GROUPS) {
+    const head = document.createElement("div");
+    head.className = "cam-group-label";
+    head.append(document.createTextNode(g.key));
+    const save = document.createElement("button");
+    save.type = "button";
+    save.textContent = "保存";
+    save.addEventListener("click", () => g.onSave(currentCams.filter(g.match)));
+    const load = document.createElement("button");
+    load.type = "button";
+    load.textContent = "読込";
+    load.addEventListener("click", () => panel[g.fileKey]?.click());
+    head.append(save, load);
+    panel.cams.append(head);
+    for (const cam of cams.filter(g.match)) {
+      const b = document.createElement("button");
+      b.className = "cam-btn" + (cam.bookmark ? " bm-btn" : ""); b.type = "button";
+      b.textContent = cam.name || `${cam.latitude.toFixed(4)},${cam.longitude.toFixed(4)}`;
+      b.addEventListener("click", () => flyTo({ longitude: cam.longitude, latitude: cam.latitude, height: cam.height, heading: cam.heading, pitch: cam.pitch }));
+      panel.cams.append(b);
+    }
   }
-  panel.project.value = id;
+}
+// 各グループ見出しの「読込」ボタンが開く file input のハンドラ
+if (panel.camsImportFile) panel.camsImportFile.onchange = async e => {
+  const f = e.target.files?.[0];
+  e.target.value = "";
+  if (!f) return;
+  const added = parseQgisBookmarksXml(await f.text()).map(bm => {
+    const cam = qgisBookmarkToCam(bm);
+    cam.bookmark = true;
+    return cam;
+  });
+  if (!added.length) return;
+  currentCams = currentCams.concat(added);
+  fillCamPanel(currentCams);
+};
+if (panel.camsImportCamFile) panel.camsImportCamFile.onchange = async e => {
+  const f = e.target.files?.[0];
+  e.target.value = "";
+  if (!f) return;
+  const added = parseKasc(await f.text()).cams;
+  if (!added.length) return;
+  currentCams = currentCams.concat(added);
+  fillCamPanel(currentCams);
+};
+
+// .kasc 文書(doc)を描画する。loadProject(ファイル読込)と
+// インスペクター(テキスト適用)の共通経路
+async function renderDoc(doc, baseUrl) {
+  applyPanelTitle(doc.title);
 
   // ベースマップ
   panel.basemap.hidden = false;
@@ -596,18 +835,32 @@ async function loadProject(projectId) {
   panel.themeSelect.hidden = !currentThemes.length;
 
   // cam（ブックマーク XML 展開込み）
-  panel.cams.replaceChildren();
-  const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl).catch(() => []));
-  for (const cam of cams) {
-    const b = document.createElement("button");
-    b.className = "cam-btn bm-btn"; b.type = "button"; b.textContent = cam.name || "cam";
-    b.addEventListener("click", () => flyTo({ longitude: cam.longitude, latitude: cam.latitude, height: cam.height, heading: cam.heading, pitch: cam.pitch }));
-    panel.cams.append(b);
-  }
+  currentCams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl).catch(() => []));
+  fillCamPanel(currentCams);
 
   // info タブ
   panel.infoLink.replaceChildren();
   void loadKascInfoContent(panel.infoLink, doc.info, baseUrl);
+}
+
+async function loadProject(projectId) {
+  const { id, manifest, baseUrl, doc, raw } = await loadKascProject(projectId);
+  currentProjectId = id; lastBaseUrl = baseUrl; lastKascRaw = raw || "";
+  if (panel.inspector && !panel.inspector.value) panel.inspector.value = lastKascRaw;
+
+  panel.project.replaceChildren();
+  appendGroupedTitleOptions(panel.project, manifest, (m, title) => {
+    const opt = document.createElement("option");
+    opt.value = m.id || m; opt.textContent = title || m.title || m.id || m;
+    if ((m.id || m) === id) opt.selected = true;
+    return opt;
+  });
+  if (![...panel.project.options].some(o => o.value === id)) {
+    const opt = document.createElement("option"); opt.value = id; opt.textContent = doc.title || id; panel.project.append(opt);
+  }
+  panel.project.value = id;
+
+  await renderDoc(doc, baseUrl);
 
   // 初期カメラ: URL view > 先頭 cam
   const uv = parseUrlView();
@@ -616,12 +869,132 @@ async function loadProject(projectId) {
   urlViewConsumed = true;
 }
 
+function setInspectorStatus(msg, isErr) {
+  const el = $("#inspector-status");
+  if (el) { el.textContent = msg; el.style.color = isErr ? "#c33" : ""; }
+}
+
 // インスペクタ: テキスト → doc 再構築してレイヤ反映
 async function applyInspectorText(text) {
   const doc = parseKasc(text || "");
   lastKascRaw = text;
-  await renderLayers(doc, lastBaseUrl);
-  $("#inspector-status") && ($("#inspector-status").textContent = "反映しました");
+  await renderDoc(doc, lastBaseUrl);
+  setInspectorStatus("反映しました");
+}
+
+// エントリのデータを現在の条件で再読み込みする。
+// player-api の reloadEntryData フックと ⏷ フィルタ編集の共通経路。
+// Navara の geojson ソースは差し替え API が無いためレイヤーを作り直す
+async function reloadEntryData(entry) {
+  const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, null);
+  entry.item._geojson = geojson;
+  if (!entry.layer) return;
+  try { entry.layer.delete(); } catch (_) {}
+  try { entry.src?.delete(); } catch (_) {}
+  const r = await addKascLayer(entry.item, lastBaseUrl);
+  if (r) { entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc; }
+}
+
+// クエリ系レイヤーの絞り込み条件を対話的に変更し、item とインスペクタ行を
+// 同期して再読み込みする（Cesium 版 editLayerQueryFilter 相当）
+async function editEntryQueryFilter(entry) {
+  const item = entry.item;
+  const isSql = item.type === "sql";
+  const current = isSql ? (item.url || "") : (item.opts?.where || "");
+  const input = window.prompt(isSql ? "SQLクエリを入力" : "WHERE式を入力（空欄で解除）", current);
+  if (input === null) return;
+  const value = input.trim();
+  const oldLine = item.line;
+  if (isSql) {
+    if (!value) return;
+    item.url = value;
+    item.line = `sql:${item.title} | ${value}${item.visible === false ? " | off" : ""}`;
+  } else {
+    item.opts ||= {};
+    item.opts.where = value || undefined;
+    if (oldLine) item.line = rewriteKascLineOpt(oldLine, "where", value);
+  }
+  if (oldLine && item.line && item.line !== oldLine && panel.inspector) {
+    panel.inspector.value = panel.inspector.value
+      .split(/\r?\n/).map(l => (l.trim() === oldLine ? item.line : l)).join("\n");
+  }
+  try {
+    await reloadEntryData(entry);
+    attrWidget.refresh();
+  } catch (e) {
+    console.warn("フィルタ再読み込み失敗:", item.title, e);
+  }
+}
+
+// ---- DATA/ へのファイル保存（ローカルサーバー / File System Access API） ----
+let dataDirHandle = null;
+const dataDirName = $("#inspector-data-dir-name");
+function updateDataDirLabel() {
+  if (!dataDirName) return;
+  if (!window.showDirectoryPicker) { dataDirName.textContent = "このブラウザは非対応"; return; }
+  dataDirName.textContent = dataDirHandle ? dataDirHandle.name : "未選択";
+}
+$("#inspector-data-dir")?.addEventListener("click", async () => {
+  if (!window.showDirectoryPicker) { setInspectorStatus("このブラウザはフォルダ選択に対応していません", true); return; }
+  try {
+    dataDirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    updateDataDirLabel();
+  } catch (e) {
+    if (e?.name !== "AbortError") setInspectorStatus(`フォルダ選択失敗: ${e?.message || e}`, true);
+  }
+});
+updateDataDirLabel();
+
+async function saveToDataDir(name, content) {
+  if (hasBackendFeature("fileWrite")) {
+    const project = currentProjectId || "default";
+    const rel = String(name).split("/").filter(Boolean).map(encodeURIComponent).join("/");
+    const res = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
+    if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
+    return;
+  }
+  if (!window.showDirectoryPicker) throw new Error("ファイル保存にはローカルサーバー版または対応ブラウザが必要です");
+  if (!dataDirHandle) {
+    dataDirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    updateDataDirLabel();
+  }
+  const fh = await dataDirHandle.getFileHandle(String(name).split("/").filter(Boolean).pop(), { create: true });
+  const w = await fh.createWritable();
+  await w.write(content);
+  await w.close();
+}
+
+// ファイルを DATA/ へ保存し、拡張子に応じた .kasc 行を設定へ追記して即時適用する
+{
+  const addFileInput = $("#inspector-add-file");
+  $("#inspector-add-file-button")?.addEventListener("click", () => addFileInput?.click());
+  addFileInput?.addEventListener("change", async () => {
+    const files = [...(addFileInput.files || [])];
+    addFileInput.value = "";
+    let appended = 0;
+    for (const file of files) {
+      try {
+        await saveToDataDir(file.name, file);
+        const ext = file.name.toLowerCase().split(".").pop() || "";
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet" }[ext];
+        if (type) {
+          const title = file.name.replace(/\.[^.]+$/, "");
+          panel.inspector.value = panel.inspector.value.replace(/\s*$/, "") + `\n${type}:${title} | DATA/${file.name}\n`;
+          appended++;
+          setInspectorStatus(`${file.name} を DATA/ へ保存し設定に追記しました`);
+        } else {
+          setInspectorStatus(`${file.name} を DATA/ へ保存しました（未対応形式のため行は未追記）`);
+        }
+      } catch (e) {
+        if (e?.name === "AbortError") continue;
+        setInspectorStatus(`保存失敗: ${e?.message || e}`, true);
+      }
+    }
+    if (appended) {
+      try { await applyInspectorText(panel.inspector.value); }
+      catch (e) { setInspectorStatus(`適用失敗: ${e?.message || e}`, true); }
+    }
+  });
 }
 
 // ---- boot ----
@@ -634,7 +1007,11 @@ async function applyInspectorText(text) {
   // 写実シーン（内部に sun を内包。手動 sun は二重 CSM 注入になるため
   // 足さない。失敗時は通常ライトへフォールバック）
   applyPhotoreal(true);
-  applySunHour(10);
+  // 太陽日時コントロール（TZ選択＋日時入力＋スライダー）をマウント
+  mountSunControls({ tz: $("#nv-tz"), datetime: $("#nv-datetime"), hour: $("#nv-hour") },
+    ms => { try { view.atmosphere.date = new Date(ms); } catch (_) {} });
+  // 地形(Re:Earth Terrain)は既定 ON
+  await applyTerrain(true);
 
   // URL のビュー状態はレイヤ読込前に適用する。
   // (Navara は一部のレイヤ/ソース追加後にカメラ制御が停止するケースがあり、
@@ -665,8 +1042,11 @@ async function applyInspectorText(text) {
   // 表示タブの Navara 固有コントロール（index.html 側の静的マークアップへバインド）
   $("#nv-terrain")?.addEventListener("change", e => applyTerrain(e.target.checked));
   $("#nv-photoreal")?.addEventListener("change", e => applyPhotoreal(e.target.checked));
-  $("#nv-shadow")?.addEventListener("change", e => { try { view.shadow = e.target.checked; } catch (_) {} });
-  $("#nv-hour")?.addEventListener("input", e => applySunHour(Number(e.target.value)));
+  $("#nv-shadow")?.addEventListener("change", e => { shadowOn = e.target.checked; applyShadow(); });
+  // 光・エフェクト系の Navara 固有コントロールをバインド＋初期同期
+  initFxControls();
+  applyFxAll();
+  // 太陽日時コントロールのリスナは mountSunControls 内でバインド済み
 
   panel.project.addEventListener("change", () => loadProject(panel.project.value));
   panel.themeSelect?.addEventListener("change", () => {
@@ -731,20 +1111,25 @@ async function applyInspectorText(text) {
     getViewInfo: () => { syncCamFromView(); return { latitude: lastCam.lat, longitude: lastCam.lng, height: lastCam.height, zoom: navaraZoom(), heading: lastCam.heading, pitchDeg: (lastCam.pitch ?? -45) + 90 }; },
     flyToView: v => { if (Number.isFinite(v.latitude) && Number.isFinite(v.longitude)) flyTo({ longitude: v.longitude, latitude: v.latitude, height: v.height ?? (Number.isFinite(v.zoom) ? zoomToCamHeightView(v.latitude, v.zoom, viewMetrics().vh, viewMetrics().fov) : undefined), heading: v.heading, pitch: v.pitch ?? (Number.isFinite(v.pitchDeg) ? v.pitchDeg - 90 : undefined) }); },
     getEntryGeoJson: e => e.item._geojson,
-    getCams: () => [...panel.cams.querySelectorAll("button")].map(b => ({ title: b.textContent })),
-    getThemes: () => currentThemes.map(t => t.name),
-    applyThemeByName: name => { const s = panel.themeSelect; if (s) { s.value = name; s.dispatchEvent(new Event("change")); } },
+    getCams: () => currentCams,
+    getThemes: () => currentThemes,
+    applyThemeByName: name => {
+      if (!currentThemes.some(t => t.name === name)) return false;
+      const s = panel.themeSelect;
+      if (s) { s.value = name; s.dispatchEvent(new Event("change")); }
+      return true;
+    },
     applyInspectorText,
     getInspectorText: () => panel.inspector?.value || lastKascRaw,
     setInspectorText: t => { if (panel.inspector) panel.inspector.value = t; },
     maybeLoadEntry: async e => { await maybeLoadEntry(e); return e; },
     loadProject: pid => loadProject(pid),
     focusEntry: e => focusExtent(e.item._geojson && geojsonExtent(e.item._geojson)),
-    reloadEntryData: async e => { const r = await loadVectorItem(e.item, lastBaseUrl, null); e.item._geojson = r.geojson; },
+    reloadEntryData,
     rerenderLayers: () => { buildLayerList(); syncAttribution(); },
-    getFlyPaths: () => [],
-    persistFlyPath: () => {},
-    syncFlyPathLine: () => {},
+    getFlyPaths: kascFlyPaths.getFlyPaths,
+    persistFlyPath: kascFlyPaths.persistFlyPath,
+    syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
     applyLegendFilter: () => {},
   });
 })();

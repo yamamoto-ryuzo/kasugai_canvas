@@ -1,9 +1,11 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha } from "../shared/kasc.js";
+import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { mountSunControls } from "../shared/sun-time.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -15,6 +17,8 @@ import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/dec
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, installLayerVisibilityResolver, bakeQmlLabels } from "../shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
+// ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
+const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql"]);
 
 const panel = {
   project: document.querySelector("#project-select"),
@@ -637,6 +641,20 @@ function buildLayerRow(entry, exclusive, radioName) {
     focusEntry(entry);
   });
   row.append(fb);
+
+  // クエリ系レイヤーの絞り込み条件変更（Cesium 版の ⏷ ボタン相当）
+  if (QUERY_TYPES.has(item.type)) {
+    const qb = document.createElement("button");
+    qb.type = "button";
+    qb.className = "layer-filter";
+    qb.textContent = "⏷";
+    qb.title = item.type === "sql" ? "クエリを編集" : "絞り込み条件（WHERE式）を編集";
+    qb.addEventListener("click", ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      void editEntryQueryFilter(entry);
+    });
+    row.append(qb);
+  }
   wrap.append(row);
 
   if (legendMulti) {
@@ -862,6 +880,14 @@ function updateLoadProgress(done, total, label) {
 }
 
 const inspectorInput = document.querySelector("#inspector-input");
+
+// .kasc fly_geojson: 行 → フライパス（player-api のフックへ展開。
+// shared/fly-kasc.js がインスペクタ行の追記・書き戻しも面倒を見る）
+const kascFlyPaths = createKascFlyPaths({
+  resolveUrl: u => resolveKascUrl(u, lastBaseUrl),
+  getInspectorText: () => inspectorInput.value,
+  setInspectorText: v => { inspectorInput.value = v; },
+});
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
 // 現在の .kasc の default_style: 行(スタイル未指定地物の既定値)。renderProject で更新
@@ -978,9 +1004,11 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }
   panel.project.value = loadedId;
 
-  // 3dtiles: 行は deck.gl で対応するため未対応通知から外し、
-  // _idx（.kasc 上の行順）で doc.layers と混ぜてレイヤツリー順を再現する
-  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles");
+  // 3dtiles: 行は deck.gl、fly_geojson: 行はフライパスとして対応するため
+  // 未対応通知から外す。3dtiles は _idx（.kasc 上の行順）で doc.layers と
+  // 混ぜてレイヤツリー順を再現する
+  kascFlyPaths.setItems(doc.unsupported);
+  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson");
 
   currentBaseEntries = [];
   const baseEntries = currentBaseEntries;
@@ -1171,6 +1199,49 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     }
     if (!count) panel.searchResults.textContent = "該当なし";
   };
+}
+
+// エントリのデータを現在の表示範囲・条件で再読み込みする。
+// player-api の reloadEntryData フックと ⏷ フィルタ編集の共通経路
+async function reloadEntryData(entry) {
+  const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds());
+  entry.item._geojson = geojson;
+  const env = geojsonExtent(geojson);
+  if (env) entry.item._env = env;
+  const src = map.getSource(entry.sid);
+  if (src?.setData) src.setData(geojson);
+}
+
+// クエリ系レイヤーの絞り込み条件を対話的に変更し、item とインスペクタ行を
+// 同期して再読み込みする（Cesium 版 editLayerQueryFilter 相当）
+async function editEntryQueryFilter(entry) {
+  const item = entry.item;
+  const isSql = item.type === "sql";
+  const current = isSql ? (item.url || "") : (item.opts?.where || "");
+  const input = window.prompt(isSql ? "SQLクエリを入力" : "WHERE式を入力（空欄で解除）", current);
+  if (input === null) return;
+  const value = input.trim();
+  const oldLine = item.line;
+  if (isSql) {
+    if (!value) return;
+    item.url = value;
+    item.line = `sql:${item.title} | ${value}${item.visible === false ? " | off" : ""}`;
+  } else {
+    item.opts ||= {};
+    item.opts.where = value || undefined;
+    if (oldLine) item.line = rewriteKascLineOpt(oldLine, "where", value);
+  }
+  if (oldLine && item.line && item.line !== oldLine) {
+    inspectorInput.value = inspectorInput.value
+      .split(/\r?\n/).map(l => (l.trim() === oldLine ? item.line : l)).join("\n");
+  }
+  if (entry.deferred) { renderLayerRows(layerEntries, currentUnsupported); return; }
+  try {
+    await reloadEntryData(entry);
+    attrWidget.refresh();
+  } catch (e) {
+    console.warn("フィルタ再読み込み失敗:", item.title, e);
+  }
 }
 
 // bbox=auto / :bbox 系レイヤーを現在の表示範囲で再クエリする
@@ -1428,6 +1499,44 @@ map.on("sourcedata", e => {
     if (coordsEl) coordsEl.style.display = e.target.checked ? "" : "none";
   });
 
+  // 一般設定を既定値へ戻す（時刻は対象外）
+  document.querySelector("#display-general-reset")?.addEventListener("click", () => {
+    const setV = (sel, v, ev) => { const el = document.querySelector(sel); if (el && el.value !== String(v)) { el.value = String(v); el.dispatchEvent(new Event(ev, { bubbles: true })); } };
+    const setC = (sel, on) => { const el = document.querySelector(sel); if (el && el.checked !== on) { el.checked = on; el.dispatchEvent(new Event("change", { bubbles: true })); } };
+    setV("#display-opacity", 1, "input");
+    setV("#display-layer-opacity", 1, "input");
+    setV("#display-rotation", 0, "change");
+    setC("#display-north", false);
+    setC("#display-scalebar", true);
+    setC("#display-coords", true);
+  });
+
+  // 太陽日時コントロール → 画面中心の太陽位置を計算して map.setLight（hillshade/extrusion に反映）
+  const sunPos = (latDeg, lngDeg, ms) => {
+    const rad = Math.PI / 180, day = 86400000;
+    const d = ms / day - 0.5 + 2440588 - 2451545;
+    const phi = rad * latDeg, lw = rad * -lngDeg;
+    const M = rad * (357.5291 + 0.98560028 * d);
+    const C = rad * (1.9148 * Math.sin(M) + 0.02 * Math.sin(2 * M) + 0.0003 * Math.sin(3 * M));
+    const L = rad * (280.4665 + 0.98564736 * d) + C + Math.PI;
+    const e = rad * 23.4397;
+    const dec = Math.asin(Math.sin(L) * Math.sin(e));
+    const ra = Math.atan2(Math.sin(L) * Math.cos(e) * -1, Math.cos(L) * -1) - Math.PI / 2;
+    const sid = rad * (280.16 + 360.9856235 * d) - lw;
+    const H = sid - ra;
+    const alt = Math.asin(Math.sin(phi) * Math.sin(dec) + Math.cos(phi) * Math.cos(dec) * Math.cos(H));
+    const az = Math.atan2(Math.sin(H), Math.cos(H) * Math.sin(phi) - Math.tan(dec) * Math.cos(phi));
+    return { azimuth: az / rad + 180, elevation: alt / rad };
+  };
+  mountSunControls({ tz: document.querySelector("#ml-tz"), datetime: document.querySelector("#ml-datetime"), hour: document.querySelector("#ml-hour") },
+    ms => {
+      try {
+        const c = map.getCenter();
+        const s = sunPos(c.lat, c.lng, ms);
+        map.setLight({ position: [1.15, s.azimuth, Math.max(0, 90 - s.elevation)], intensity: s.elevation > 0 ? 0.5 : 0.15 });
+      } catch (_) {}
+    });
+
   // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当
   [
     ["#drape-tiles3d", v => { drapeTiles3d.enabled = v; }],
@@ -1659,15 +1768,11 @@ window.kasugaiApi = createPlayerApi({
     syncDeckLayers();
     updateMapAttribution();
   },
-  reloadEntryData: async entry => {
-    const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds());
-    entry.item._geojson = geojson;
-    const env = geojsonExtent(geojson);
-    if (env) entry.item._env = env;
-    const src = map.getSource(entry.sid);
-    if (src?.setData) src.setData(geojson);
-  },
+  reloadEntryData,
   getEntryGeoJson: entry => entry.item._geojson || null,
+  getFlyPaths: kascFlyPaths.getFlyPaths,
+  persistFlyPath: kascFlyPaths.persistFlyPath,
+  syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
   setBaseEntryVisible: (entry, on) => {
     for (const lid of entry.lids || []) {
       if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", on ? "visible" : "none");

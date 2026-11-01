@@ -57,7 +57,7 @@
   #panel h1 .panel-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #panel h1 small { font-weight: 400; color: #52636d; }
   /* 入力コントロールは Cesium 版 .control-panel select/input と同型 */
-  #panel select, #panel input[type="text"], #panel input[type="number"] {
+  #panel select, #panel input[type="text"], #panel input[type="number"], #panel input[type="datetime-local"] {
     width: 100%; box-sizing: border-box; min-height: 30px; margin-bottom: 3px;
     padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px;
     background: #fff; color: #1d2b35; font-size: 16px; }
@@ -83,7 +83,8 @@
   #tabs .tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0;
                background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   #tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
-  .tab-pane { overflow: auto; flex: 1; min-height: 0; }
+  .tab-pane { overflow: auto; flex: 1; min-height: 0; scrollbar-width: none; }
+  .tab-pane::-webkit-scrollbar { display: none; }
   /* 表示タブ内のサブタブ（Cesium 版 .settings-tabs/.settings-subpanel と同型） */
   .display-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 0 0 3px; padding-bottom: 4px; }
   .display-tabs .tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0;
@@ -91,6 +92,12 @@
   .display-tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
   .display-subpane .set-row { display: block; margin: 3px 0; }
   .display-subpane .set-row input[type=range] { width: 100%; }
+  /* 効果ペインのスライダー行: 名前＋レンジ＋値の1行レイアウト */
+  .display-subpane .set-row.fx { display: flex; align-items: center; gap: 6px; }
+  .display-subpane .fx-name { flex: 0 0 auto; white-space: nowrap; }
+  .display-subpane .fx-val { flex: 0 0 3.4em; text-align: right; font-size: 12px; color: #52636d; }
+  .display-subpane .set-row.fx input[type=range] { flex: 1; min-width: 0; width: auto; }
+  .display-subpane .nv-pr input:disabled, .display-subpane .nv-pr select:disabled { opacity: .5; }
   /* パネル最小化（Cesium 版 .control-panel.collapsed と同型: 40x40 に縮めてトグルのみ残す） */
   #panel-toggle { flex: 0 0 26px; min-width: 26px; min-height: 26px; padding: 1px 4px;
     border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f;
@@ -114,9 +121,9 @@
     border: 0 !important; background: transparent !important; color: #52636d !important; font-size: 15px !important; line-height: 1; cursor: pointer; }
   .layer-legend-toggle { width: 14px; min-width: 14px !important; min-height: 16px !important; padding: 0 !important;
     border: 0 !important; background: transparent !important; color: #52636d !important; font-size: 11px !important; line-height: 1; cursor: pointer; }
-  .layer-focus { width: 24px; min-width: 24px !important; min-height: 16px !important; padding: 0 !important;
+  .layer-focus, .layer-filter { width: 24px; min-width: 24px !important; min-height: 16px !important; padding: 0 !important;
     border: 0 !important; background: transparent !important; color: #1d2b35 !important; font-size: 15px !important; line-height: 1; cursor: pointer; opacity: .7; }
-  .layer-focus:hover { opacity: 1; }
+  .layer-focus:hover, .layer-filter:hover { opacity: 1; }
   .layer-group-children { margin-left: 14px; }
   .exclusive-badge { padding: 1px 4px; border-radius: 3px; background: #7b9ee8; color: #fff; font-size: 10px; font-weight: 700; margin-left: 2px; }
   .layer-legend-items { margin-left: 22px; }
@@ -324,12 +331,34 @@
       <button class="tab" data-settings-panel="display-effects-panel" type="button">効果</button>
     </div>
     <div class="display-subpane" id="display-terrain-panel">
-      <label class="set-row"><input id="nv-terrain" type="checkbox" /> 地形（Re:Earth Terrain）</label>
+      <label class="set-row"><input id="nv-terrain" type="checkbox" checked /> 地形（Re:Earth Terrain）</label>
     </div>
     <div class="display-subpane" id="display-effects-panel" hidden>
-      <label class="set-row"><input id="nv-photoreal" type="checkbox" checked /> 写実シーン（大気・太陽・雲）</label>
+      <label class="set-row"><input id="nv-photoreal" type="checkbox" checked /> 写実シーン（大気・太陽・空）</label>
       <label class="set-row"><input id="nv-shadow" type="checkbox" /> 影（高負荷）</label>
-      <label class="set-row">時刻(UTC) <input id="nv-hour" type="range" min="0" max="24" step="0.5" value="10" /></label>
+      <label class="set-row">時刻 <select id="nv-tz" style="width:auto;"></select><input id="nv-datetime" type="datetime-local" step="300" /><input id="nv-hour" type="range" min="0" max="24" step="0.5" value="10" /></label>
+      <label class="set-row fx"><span class="fx-name">太陽の強さ</span><input id="nv-sun-int" type="range" min="0" max="4" step="0.05" value="1" /><span class="fx-val" id="nv-sun-int-val">1.00</span></label>
+      <label class="set-row fx"><span class="fx-name">環境光の強さ</span><input id="nv-amb-int" type="range" min="0" max="2" step="0.05" value="0.8" /><span class="fx-val" id="nv-amb-int-val">0.80</span></label>
+      <label class="set-row fx nv-pr" title="写実シーン時のみ有効"><span class="fx-name">空の光の強さ</span><input id="nv-sky-int" type="range" min="0" max="2" step="0.05" value="1" /><span class="fx-val" id="nv-sky-int-val">1.00</span></label>
+      <label class="set-row fx"><span class="fx-name">露出</span><input id="nv-exposure" type="range" min="0" max="3" step="0.05" value="1" /><span class="fx-val" id="nv-exposure-val">1.00</span></label>
+      <label class="set-row fx"><span class="fx-name">影の濃さ</span><input id="nv-shd-int" type="range" min="0" max="1" step="0.05" value="1" /><span class="fx-val" id="nv-shd-int-val">1.00</span></label>
+      <label class="set-row fx nv-pr" title="写実シーン時のみ有効"><input id="nv-moon" type="checkbox" checked /><span class="fx-name">月</span><input id="nv-moon-int" type="range" min="0" max="4" step="0.05" value="1" /><span class="fx-val" id="nv-moon-int-val">1.00</span></label>
+      <label class="set-row fx nv-pr" title="写実シーン時のみ有効"><input id="nv-stars" type="checkbox" checked /><span class="fx-name">星</span><input id="nv-stars-int" type="range" min="0" max="30" step="0.5" value="10" /><span class="fx-val" id="nv-stars-int-val">10</span></label>
+      <label class="set-row fx nv-pr" title="写実シーン時のみ有効"><input id="nv-flare" type="checkbox" checked /><span class="fx-name">レンズフレア</span><input id="nv-flare-int" type="range" min="0" max="0.05" step="0.001" value="0.005" /><span class="fx-val" id="nv-flare-int-val">0.005</span></label>
+      <label class="set-row nv-pr" title="写実シーン時のみ有効">トーンマッピング <select id="nv-tonemode" style="width:auto;">
+        <option value="0">LINEAR</option>
+        <option value="1">REINHARD</option>
+        <option value="2">REINHARD2</option>
+        <option value="4">UNCHARTED2</option>
+        <option value="5">OPTIMIZED_CINEON</option>
+        <option value="6">CINEON</option>
+        <option value="7">ACES_FILMIC</option>
+        <option value="8" selected>AGX</option>
+        <option value="9">NEUTRAL</option>
+      </select></label>
+      <label class="set-row fx"><input id="nv-clouds" type="checkbox" /><span class="fx-name">雲</span><input id="nv-clouds-cov" type="range" min="0" max="1" step="0.05" value="0.25" /><span class="fx-val" id="nv-clouds-cov-val">0.25</span></label>
+      <label class="set-row"><input id="nv-ssao" type="checkbox" /> AO（立体の陰影・高負荷）</label>
+      <button id="nv-fx-reset" type="button" style="width:100%;margin-top:6px;" title="効果設定を既定値に戻す">効果設定をリセット</button>
     </div>
   </div>
   <div class="tab-pane" id="pane-info" hidden>

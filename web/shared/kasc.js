@@ -169,6 +169,18 @@ export function rewriteKascVisibility(text, show) {
     .join("\n");
 }
 
+// レイヤ行の key=value オプションを1つ書き換えた行文字列を返す。
+// 同じ key の既存フィールドは除去し、value が空(null/undefined/"")なら
+// 追加しない(=key 除去)。タイトル/URL/出典・on/off・他の key=value は保持する。
+// （sql: 行のように | を値に含む形式には使わないこと）
+export function rewriteKascLineOpt(line, key, value) {
+  const re = new RegExp(`^${String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=`, "i");
+  const fields = String(line || "").split("|").map(f => f.trim());
+  const rest = fields.filter((f, i) => !(i > 0 && re.test(f)));
+  if (value !== null && value !== undefined && value !== "") rest.push(`${key}=${value}`);
+  return rest.join(" | ");
+}
+
 // ---- theme: 行（QGIS マップテーマ相当の可視性プリセット）の共通処理 ----
 
 // 照合キー正規化: "/"区切りタイトルの空白揺れを吸収する

@@ -83,9 +83,9 @@
     border: 0 !important; background: transparent !important; color: #52636d !important; font-size: 15px !important; line-height: 1; cursor: pointer; }
   .layer-legend-toggle { width: 14px; min-width: 14px !important; min-height: 16px !important; padding: 0 !important;
     border: 0 !important; background: transparent !important; color: #52636d !important; font-size: 11px !important; line-height: 1; cursor: pointer; }
-  .layer-focus { width: 24px; min-width: 24px !important; min-height: 16px !important; padding: 0 !important;
+  .layer-focus, .layer-filter { width: 24px; min-width: 24px !important; min-height: 16px !important; padding: 0 !important;
     border: 0 !important; background: transparent !important; color: #1d2b35 !important; font-size: 15px !important; line-height: 1; cursor: pointer; opacity: .7; }
-  .layer-focus:hover { opacity: 1; }
+  .layer-focus:hover, .layer-filter:hover { opacity: 1; }
   .layer-group-children { margin-left: 14px; }
   .exclusive-badge { padding: 1px 4px; border-radius: 3px; background: #7b9ee8; color: #fff; font-size: 10px; font-weight: 700; margin-left: 2px; }
   .layer-legend-items { margin-left: 22px; }
@@ -323,8 +323,12 @@
       <label class="set-row">回転（度）
         <input id="display-rotation" type="number" step="1" value="0" style="width:80px" /></label>
       <label class="set-row"><input id="display-north" type="checkbox" /> 北を上に固定</label>
+      <label class="set-row">時刻 <select id="ml-tz" style="width:auto;"></select>
+        <input id="ml-datetime" type="datetime-local" step="300" style="width:100%;" />
+        <input id="ml-hour" type="range" min="0" max="24" step="0.5" value="10" /></label>
       <label class="set-row"><input id="display-scalebar" type="checkbox" checked /> スケールバーを表示</label>
       <label class="set-row"><input id="display-coords" type="checkbox" checked /> カーソル座標を表示</label>
+      <button id="display-general-reset" type="button" style="width:100%;margin-top:6px;">設定をリセット</button>
     </div>
   </div>
   <div class="tab-pane" id="pane-info" hidden>

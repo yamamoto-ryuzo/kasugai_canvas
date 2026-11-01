@@ -229,10 +229,14 @@
                   <label><input id="effect-sky-atmosphere" type="checkbox" checked /><span data-i18n="effects.atmosphere"> 大気</span></label>
                   <label><input id="effect-shadows" type="checkbox" /><span data-i18n="effects.shadows"> 影</span></label>
                   <label><input id="effect-depth-test" type="checkbox" checked /><span data-i18n="effects.depthTest"> 地形深度テスト</span></label>
-                  <label><input id="underground-dive-toggle" type="checkbox" /><span data-i18n="effects.undergroundDive"> 地下移動</span></label>
+                  <label><input id="underground-dive-toggle" type="checkbox" checked /><span data-i18n="effects.undergroundDive"> 地下移動</span></label>
                 </div>
+                <label class="field-label">時刻 <select id="cesium-tz" style="width:auto;"></select></label>
+                <input id="cesium-datetime" type="datetime-local" step="300" style="width: 100%;" />
+                <input id="cesium-hour" type="range" min="0" max="24" step="0.5" value="10" style="width: 100%;" />
                 <label class="field-label" for="underground-transparency"><span data-i18n="effects.transparency">地表透過</span> <span id="underground-transparency-value">0%</span></label>
                 <input id="underground-transparency" type="range" min="0" max="1" step="0.05" value="0" style="width: 100%;" />
+                <button id="effects-reset" type="button" style="width: 100%; margin-top: 6px;" data-i18n="common.reset">リセット</button>
               </section>
               <section id="display-general-panel" class="settings-subpanel">
                 <label class="field-label" for="display-basemap-opacity" data-i18n="display.basemapOpacity">ベースマップ透過度</label>

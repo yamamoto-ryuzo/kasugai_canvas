@@ -9,7 +9,8 @@ import TileWMS from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/TileWMS.js";
 import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Vector.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
+import { loadKascProject, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, zoomToCamHeightView, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
+import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
@@ -34,6 +35,8 @@ import MousePosition from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/Mouse
 import { createStringXY } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/coordinate.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
+// ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
+const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql"]);
 
 const panel = {
   project: document.querySelector("#project-select"),
@@ -641,6 +644,20 @@ function buildLayerRow(entry, exclusive, radioName) {
     focusEntry(entry);
   });
   row.append(fb);
+
+  // クエリ系レイヤーの絞り込み条件変更（Cesium 版の ⏷ ボタン相当）
+  if (QUERY_TYPES.has(item.type)) {
+    const qb = document.createElement("button");
+    qb.type = "button";
+    qb.className = "layer-filter";
+    qb.textContent = "⏷";
+    qb.title = item.type === "sql" ? "クエリを編集" : "絞り込み条件（WHERE式）を編集";
+    qb.addEventListener("click", ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      void editEntryQueryFilter(entry);
+    });
+    row.append(qb);
+  }
   wrap.append(row);
 
   if (legendMulti) {
@@ -868,6 +885,14 @@ function updateLoadProgress(done, total, label) {
 }
 
 const inspectorInput = document.querySelector("#inspector-input");
+
+// .kasc fly_geojson: 行 → フライパス（player-api のフックへ展開。
+// shared/fly-kasc.js がインスペクタ行の追記・書き戻しも面倒を見る）
+const kascFlyPaths = createKascFlyPaths({
+  resolveUrl: u => resolveKascUrl(u, lastBaseUrl),
+  getInspectorText: () => inspectorInput.value,
+  setInspectorText: v => { inspectorInput.value = v; },
+});
 const themeSelect = document.querySelector("#theme-select");
 let currentThemes = [];
 // 現在の .kasc の default_style: 行(スタイル未指定地物の既定値)。renderProject で更新
@@ -989,7 +1014,9 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   panel.project.value = loadedId;
 
   // 3dtiles: 行は deck.gl で対応するため未対応通知から外す
-  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles");
+  // 3dtiles: は deck.gl、fly_geojson: はフライパスとして対応するため未対応通知から外す
+  kascFlyPaths.setItems(doc.unsupported);
+  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson");
 
   // base: は先頭が既定のベースマップ。transparent/none はモード指定（レイヤにしない）
   currentBaseEntries = [];
@@ -1187,6 +1214,51 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   };
 }
 
+// エントリのデータを現在の表示範囲・条件で再読み込みする。
+// player-api の reloadEntryData フックと ⏷ フィルタ編集の共通経路
+async function reloadEntryData(entry) {
+  const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds());
+  entry.item._geojson = geojson;
+  const src = entry.layer?.getSource?.();
+  if (src) {
+    src.clear();
+    src.addFeatures(new GeoJSON().readFeatures(geojson, { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" }));
+  }
+  syncDeckLayers(); // ドレープコピーのデータ更新
+}
+
+// クエリ系レイヤーの絞り込み条件を対話的に変更し、item とインスペクタ行を
+// 同期して再読み込みする（Cesium 版 editLayerQueryFilter 相当）
+async function editEntryQueryFilter(entry) {
+  const item = entry.item;
+  const isSql = item.type === "sql";
+  const current = isSql ? (item.url || "") : (item.opts?.where || "");
+  const input = window.prompt(isSql ? "SQLクエリを入力" : "WHERE式を入力（空欄で解除）", current);
+  if (input === null) return;
+  const value = input.trim();
+  const oldLine = item.line;
+  if (isSql) {
+    if (!value) return;
+    item.url = value;
+    item.line = `sql:${item.title} | ${value}${item.visible === false ? " | off" : ""}`;
+  } else {
+    item.opts ||= {};
+    item.opts.where = value || undefined;
+    if (oldLine) item.line = rewriteKascLineOpt(oldLine, "where", value);
+  }
+  if (oldLine && item.line && item.line !== oldLine) {
+    inspectorInput.value = inspectorInput.value
+      .split(/\r?\n/).map(l => (l.trim() === oldLine ? item.line : l)).join("\n");
+  }
+  if (entry.deferred) { renderLayerRows(layerEntries, currentUnsupported); return; }
+  try {
+    await reloadEntryData(entry);
+    attrWidget.refresh();
+  } catch (e) {
+    console.warn("フィルタ再読み込み失敗:", item.title, e);
+  }
+}
+
 // bbox=auto / :bbox 系レイヤーを現在の表示範囲で再クエリする
 function requeryViewportLayers(entries) {
   const bounds = getViewBounds();
@@ -1370,6 +1442,18 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (e.target.checked) map.addControl(coordsCtl);
     else map.removeControl(coordsCtl);
+  });
+
+  // 一般設定を既定値へ戻す
+  document.querySelector("#display-general-reset")?.addEventListener("click", () => {
+    const setV = (sel, v, ev) => { const el = document.querySelector(sel); if (el && el.value !== String(v)) { el.value = String(v); el.dispatchEvent(new Event(ev, { bubbles: true })); } };
+    const setC = (sel, on) => { const el = document.querySelector(sel); if (el && el.checked !== on) { el.checked = on; el.dispatchEvent(new Event("change", { bubbles: true })); } };
+    setV("#display-opacity", 1, "input");
+    setV("#display-layer-opacity", 1, "input");
+    setV("#display-rotation", 0, "change");
+    setC("#display-north", false);
+    setC("#display-scalebar", true);
+    setC("#display-coords", true);
   });
 
   // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当
@@ -1568,22 +1652,16 @@ window.kasugaiApi = createPlayerApi({
     if (entry.layer && !entry.layer._isDeck) map.removeLayer(entry.layer);
     updateMapAttribution();
   },
-  reloadEntryData: async entry => {
-    const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds());
-    entry.item._geojson = geojson;
-    const src = entry.layer?.getSource?.();
-    if (src) {
-      src.clear();
-      src.addFeatures(new GeoJSON().readFeatures(geojson, { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" }));
-    }
-    syncDeckLayers(); // ドレープコピーのデータ更新
-  },
+  reloadEntryData,
   getEntryGeoJson: entry => {
     const src = entry.layer?.getSource?.();
     if (!src?.getFeatures) return entry.item._geojson || null;
     return new GeoJSON().writeFeaturesObject(src.getFeatures(), { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" });
   },
   setBaseEntryVisible: (entry, on) => { entry.layer?.setVisible?.(on); updateMapAttribution(); },
+  getFlyPaths: kascFlyPaths.getFlyPaths,
+  persistFlyPath: kascFlyPaths.persistFlyPath,
+  syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
 });
 mountEngineSwitcher(document.querySelector("#engines"), "openlayers");
 void initAiChat({ engine: "openlayers", manageBackend: true });
