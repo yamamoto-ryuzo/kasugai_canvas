@@ -16,6 +16,54 @@
 import { resolveKascUrl, buildWmsTileTemplate, buildWmtsTileTemplate } from "./kasc.js";
 import { specToStyle } from "./qml-2d.js";
 
+// Google Photorealistic 3D Tiles(tile.googleapis.com)かどうか。
+// ドレープ対象タイルセットからの除外判定に使う(Cesium 版の同名関数と同じ判定)
+export function isGoogle3dTilesUrl(url) {
+  try {
+    return new URL(url, window.location.href).hostname === "tile.googleapis.com";
+  } catch (_) {
+    return false;
+  }
+}
+
+// tile.googleapis.com の URL へ Maps API キー(localStorage の googleMapsApiKey)を
+// 付与する。Google の 3D Tiles は tileset.json もタイル本体も全リクエストに
+// key= が必須のため、Tile3DLayer の fetch フック経由で使う(Cesium 版の
+// withGoogleTileKey と同じ発想)
+export function withGoogleTileKey(url) {
+  try {
+    const u = new URL(url, window.location.href);
+    if (u.hostname === "tile.googleapis.com" && !u.searchParams.get("key")) {
+      const key = localStorage.getItem("googleMapsApiKey") || "";
+      if (key) {
+        u.searchParams.set("key", key);
+        return u.href;
+      }
+    }
+  } catch (_) {}
+  return url;
+}
+
+// window.fetch へ 1 度だけ key= 付与を仕込む。
+// deck.gl/loaders.gl は Tile3DLayer の fetch prop ではなくグローバル fetch を
+// 使うため、Google 3D Tiles を読むエンジンではこれで全リクエストにキーを載せる
+let googleTileKeyFetchInstalled = false;
+export function ensureGoogleTileKeyFetch() {
+  if (googleTileKeyFetchInstalled) return;
+  googleTileKeyFetchInstalled = true;
+  const origFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    try {
+      const url = typeof input === "string" ? input : input?.url;
+      const patched = url && withGoogleTileKey(url);
+      if (patched && patched !== url) {
+        input = typeof input === "string" ? patched : new Request(patched, input);
+      }
+    } catch (_) {}
+    return origFetch(input, init);
+  };
+}
+
 // ドレープ品質: deck.gl の TerrainCover は 3D Tiles タイルの boundingBox に固定された
 // テクスチャを「最初に見えたズーム」で1度だけ生成し、ズームインしても再描画しない。
 // そのままでは低ズームの粗いテクスチャが引き伸ばされてドレープがぼやけるため、

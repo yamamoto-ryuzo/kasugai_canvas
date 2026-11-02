@@ -15,7 +15,7 @@ import { formatLatLng } from "../shared/coords-format.js";
 import { initPrint, compositeDomMap } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
-import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
+import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement } from "../shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql"]);
@@ -284,7 +284,7 @@ const deckDefs = new Map();      // lid("deck-N") → { item, url, opacity, poin
 // 3D Tiles ドレープ設定（deck.gl TerrainExtension。
 // Cesium 版のドレープ対象地形=3D Tiles（drape-terrain-tiles3d・
 // basemap-drape-3dtiles・drape-xyz/​geojson-tiles3d）に相当）
-const drapeTiles3d = { enabled: true, basemap: true, xyz: true, vector: true };
+const drapeTiles3d = { enabled: true, basemap: true, xyz: true, vector: true, google: false };
 
 // deck が実際に描画している Leaflet ビュー（ズームアニメ中の CSS 変形の基準に使う）
 let deckView = { lng: 0, lat: 0, zoom: 0 };
@@ -343,7 +343,7 @@ async function ensureDeck() {
 // （地形ソースが無いと drape 先が存在しない）
 function deckDrapeActive() {
   if (!drapeTiles3d.enabled) return false;
-  for (const def of deckDefs.values()) if (def.item.visible !== false) return true;
+  for (const def of deckDefs.values()) if (def.item.visible !== false && (drapeTiles3d.google || !isGoogle3dTilesUrl(def.url))) return true;
   return false;
 }
 
@@ -383,15 +383,17 @@ function syncDeckLayers() {
       visible: def.item.visible !== false,
       opacity: def.opacity,
       // ドレープ有効時は 3D Tiles を地形ソース化する（drape レイヤーの貼り付け先）
-      operation: drapeOn ? "terrain+draw" : "draw",
+      operation: drapeOn && (drapeTiles3d.google || !isGoogle3dTilesUrl(def.url)) ? "terrain+draw" : "draw",
       pickable: true,
       onTilesetLoad: tileset => {
         try {
           const c = tileset?.cartographicCenter;
           if (Array.isArray(c) && !def.item._env) def.item._center = [c[0], c[1]];
           // テレイン不在のためバウンディングボリューム最小高で z=0 平面へ接地させる
-          // （.kasc opts: ground=off で無効化、zoffset=<m> で手動補正）
-          groundDeckTileset(tileset, def.item.opts);
+          // （.kasc opts: ground=off で無効化、zoffset=<m> で手動補正。
+          //   Google Photorealistic はジオリファレンス済みかつ全球規模の
+          //   boundingVolume が接地高推定を狂わせるため対象外）
+          if (!isGoogle3dTilesUrl(def.url)) groundDeckTileset(tileset, def.item.opts);
         } catch (_) {}
       },
     };
@@ -1063,8 +1065,43 @@ function applySwitchRestore(sw) {
 
 // .kasc 文書(doc)を描画する。loadProject(ファイル読込)と
 // インスペクター(テキスト適用)の共通経路
+
+// ---- Google Maps（Maps API キー + Photorealistic 3D Tiles） ----
+// 設定で ON かつキー保存済みならレイヤ一覧へ自動追加する（.kasc 宣言済みなら重複しない）
+const GOOGLE_3DTILES_ID = "google-photorealistic-3dtiles";
+const GOOGLE_3DTILES_URL = "https://tile.googleapis.com/v1/3dtiles/root.json";
+const google3dTilesEnabled = () =>
+  localStorage.getItem("googleMaps3dTiles") === "1" && !!localStorage.getItem("googleMapsApiKey");
+// Google 3D Tiles(tileset.json・タイル本体とも key= 必須)向けに fetch フックを仕込む
+ensureGoogleTileKeyFetch();
+let lastDoc = null;
+
+// doc.layers へ auto 印の Google 3D 行を注入する（既存の auto 行は張り替え、
+// 表示状態だけは直前のものを引き継ぐ）
+function injectGoogle3dTilesItem(doc) {
+  const prev = (doc.layers || []).find(i => i.id === GOOGLE_3DTILES_ID);
+  doc.layers = (doc.layers || []).filter(i => i.id !== GOOGLE_3DTILES_ID);
+  if (!google3dTilesEnabled()) return;
+  if (doc.layers.some(i => i.type === "3dtiles" && isGoogle3dTilesUrl(i.url))) return;
+  doc.layers.unshift({
+    id: GOOGLE_3DTILES_ID, type: "3dtiles",
+    title: "Google Photorealistic 3D Tiles", url: GOOGLE_3DTILES_URL,
+    visible: prev ? prev.visible !== false : true,
+    _idx: -Number.MAX_SAFE_INTEGER,
+  });
+}
+
+async function rerenderProjectKeepView() {
+  if (!lastDoc) return;
+  const c = map.getCenter(), z = map.getZoom();
+  await renderProject(currentProjectId, lastBaseUrl, lastDoc);
+  map.setView(c, z);
+}
+
 async function renderProject(loadedId, baseUrl, doc, manifest) {
   const seq = ++renderSeq;
+  lastDoc = doc;
+  injectGoogle3dTilesItem(doc);
   clearTimeout(progressHideTimer);
   if (progressEl) progressEl.hidden = true;
   for (const e of layerEntries) if (e.layer && !e.layer._isDeck && map.hasLayer(e.layer)) map.removeLayer(e.layer);
@@ -1513,9 +1550,24 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
     ["#drape-tiles3d-basemap", v => { drapeTiles3d.basemap = v; }],
     ["#drape-tiles3d-xyz", v => { drapeTiles3d.xyz = v; }],
     ["#drape-tiles3d-vector", v => { drapeTiles3d.vector = v; }],
+    ["#drape-tiles3d-google", v => { drapeTiles3d.google = v; }],
   ].forEach(([sel, set]) => {
     document.querySelector(sel)?.addEventListener("change", e => { set(e.target.checked); syncDeckLayers(); });
   });
+
+  // Google Maps 設定（Maps API キー + Photorealistic 3D Tiles 表示）
+  const gmapsKeyInput = document.querySelector("#gmaps-api-key");
+  const gmapsToggle = document.querySelector("#gmaps-3dtiles-toggle");
+  const gmapsStatus = document.querySelector("#gmaps-status");
+  if (gmapsKeyInput) gmapsKeyInput.value = localStorage.getItem("googleMapsApiKey") || "";
+  if (gmapsToggle) gmapsToggle.checked = localStorage.getItem("googleMaps3dTiles") === "1";
+  document.querySelector("#gmaps-save")?.addEventListener("click", () => {
+    localStorage.setItem("googleMapsApiKey", gmapsKeyInput?.value.trim() || "");
+    localStorage.setItem("googleMaps3dTiles", gmapsToggle?.checked ? "1" : "0");
+    if (gmapsStatus) gmapsStatus.textContent = "保存しました";
+    void rerenderProjectKeepView();
+  });
+
 }
 
 // ---- テーマ（theme: 行による可視性プリセット。QGIS マップテーマ相当） ----

@@ -163,8 +163,13 @@
                 <span class="field-label" data-i18n="settings.layer.drapeBasemap">ベースマップ</span>
                 <div class="drape-sub-group">
                   <label><input id="basemap-drape-dem" type="checkbox" checked /> DEM</label>
-                  <label><input id="basemap-drape-3dtiles" type="checkbox" /> 3D Tiles</label>
+                  <label><input id="basemap-drape-3dtiles" type="checkbox" checked /> 3D Tiles</label>
                 </div>
+                <span class="field-label" data-i18n="settings.layer.drapeGoogle3d">Google 3D Tiles</span>
+                <div class="drape-sub-group">
+                  <label><input id="drape-google-3dtiles" type="checkbox" /> <span data-i18n="settings.layer.drapeGoogle3dTarget">ドレープ対象に含める</span></label>
+                </div>
+                <p class="hint" data-i18n-html="settings.layer.drapeGoogle3dHint">Google 3D Tiles へのドレープは他の 3D Tiles と分離できないため、このスイッチは →3D Tiles の各設定と同じ状態に同期します。</p>
                 <span class="field-label">XYZ</span>
                 <div class="drape-sub-group">
                   <label><input id="drape-xyz-dem" type="checkbox" checked /> DEM</label>

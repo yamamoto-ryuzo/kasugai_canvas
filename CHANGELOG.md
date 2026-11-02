@@ -4,6 +4,23 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.16.0] - 2026-11-03
+
+### Added
+
+- **MapLibre / OpenLayers / Leaflet に Google Maps 設定タブを追加** — 設定ウィンドウに「Google Maps」タブを新設し、Maps API キーと「Google Photorealistic 3D Tiles を表示」トグルを管理可能に（キーは Cesium 版と共通の `googleMapsApiKey`/`googleMaps3dTiles` を共有）。ON+キー保存でレイヤ一覧へ「Google Photorealistic 3D Tiles」を自動追加（`.kasc` 宣言済みなら重複しない）。`tile.googleapis.com` の全リクエストへ `key=` を付与する fetch フックを `shared/deck-drape.js` に実装
+- **Google 3D Tiles ドレープスイッチを全ドレープ対応エンジンへ追加（既定OFF）** — Cesium はドレープ設定タブに「Google 3D Tiles → ドレープ対象に含める」、deck.gl 系は「Google 3D Tiles もドレープ対象にする」を追加。deck.gl 系は `operation:"terrain+draw"` を付けない真の個別除外が可能。Cesium は classification がタイルセット単位で分離できないため、Google 表示中+OFF では 3D Tiles ドレープ全体を停止し「ベースマップ→3D Tiles」と双方向同期する設計（分離不可である旨の注意書きを8言語で併記）
+- **Google 3D レイヤーをレイヤ一覧の最上位に固定** — 背景地図的存在として全エンジンで先頭に表示
+
+### Changed
+
+- **ベースマップ→3D Tiles ドレープを既定ON化（Cesium）** — deck.gl 系エンジンと挙動を統一
+- **既定ベースマップを地理院タイル 全国最新写真に変更** — 既定プロジェクト `.kasc` の `base:` 順序（先頭=既定）と Cesium 内蔵 `defaultConfig` を更新
+
+### Fixed
+
+- **deck.gl 系エンジンで Google 3D Tiles が表示されない問題を修正** — `groundDeckTileset` が全球規模の boundingVolume から接地高を誤推定し巨大なシフトで画面外へ飛ばしていたため、ジオリファレンス済みの Google タイルセットは接地対象外に変更
+
 ## [6.15.0] - 2026-11-03
 
 ### Added

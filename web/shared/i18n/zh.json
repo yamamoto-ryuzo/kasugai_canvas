@@ -137,6 +137,9 @@
   "settings.project.rootHint": "项目中的相对路径（DATA/ 等）以此文件夹为基准解析。",
   "settings.layer.geojsonPrimitive": "矢量高速贴地（实验性）",
   "settings.layer.drapeBasemap": "底图",
+  "settings.layer.drapeGoogle3d": "Google 3D Tiles",
+  "settings.layer.drapeGoogle3dTarget": "纳入贴地目标",
+  "settings.layer.drapeGoogle3dHint": "无法将 Google 3D Tiles 的贴地与其他 3D Tiles 分离，因此此开关与底图 →3D Tiles 设置双向同步。",
   "settings.layer.drapeVector": "矢量",
   "settings.layer.drapeVectorFast": "快速矢量（实验性）",
   "settings.layer.primitiveHint": "使用 CesiumJS 1.146 的 GeoJsonPrimitive 将矢量图层（GeoJSON/GeoParquet/FlatGeobuf）高质量、快速地贴附到地形和 3D Tiles 上。启用期间无法点击拾取属性，但矢量搜索仍可用。",
@@ -359,7 +362,6 @@
   "chat.openai.modelPlaceholder": "例: gpt-4o-mini",
   "chat.noApiKeyOpenai": "未设置 OpenAI 兼容提供方的 API 密钥。请在 ⚙管理 → AI 中保存密钥后使用聊天功能。\n可用命令：/fly /layers /layer /basemaps /basemap /search /camera",
   "chat.sakura.hint": "AI 聊天使用的 <a href=\"https://ai.sakura.ad.jp/sakura-ai/ai-engine/\" target=\"_blank\" rel=\"noopener noreferrer\">Sakura AI Engine</a>（OpenAI 兼容 API）设置。端点固定为 <code>https://api.ai.sakura.ad.jp/v1</code>。请输入在 Sakura Cloud 控制面板签发的账户令牌。",
-
   "chat.sakura.keyPlaceholder": "账户令牌",
   "chat.sakura.modelPlaceholder": "例: gpt-oss-120b",
   "chat.noApiKeySakura": "未设置 Sakura AI Engine 的账户令牌。请在 ⚙管理 → AI 中保存密钥后使用聊天功能。\n可用命令：/fly /layers /layer /basemaps /basemap /search /camera",

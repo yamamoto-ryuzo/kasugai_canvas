@@ -137,6 +137,9 @@
   "settings.project.rootHint": "Os caminhos relativos do projeto (DATA/ etc.) são resolvidos a partir desta pasta.",
   "settings.layer.geojsonPrimitive": "Drapeamento rápido de vetores (experimental)",
   "settings.layer.drapeBasemap": "Mapa base",
+  "settings.layer.drapeGoogle3d": "Google 3D Tiles",
+  "settings.layer.drapeGoogle3dTarget": "Incluir como alvo de drape",
+  "settings.layer.drapeGoogle3dHint": "O drape no Google 3D Tiles não pode ser separado de outros 3D Tiles; este interruptor sincroniza nos dois sentidos com a configuração →3D Tiles do mapa base.",
   "settings.layer.drapeVector": "Vetorial",
   "settings.layer.drapeVectorFast": "Vetorial rápido (experimental)",
   "settings.layer.primitiveHint": "Usa o GeoJsonPrimitive do CesiumJS 1.146 para drapejar camadas vetoriais (GeoJSON/GeoParquet/FlatGeobuf) sobre o terreno e 3D Tiles com alta qualidade e velocidade. Excluídas da consulta de atributos por clique enquanto ativado; a pesquisa vetorial permanece disponível.",
@@ -359,7 +362,6 @@
   "chat.openai.modelPlaceholder": "ex.: gpt-4o-mini",
   "chat.noApiKeyOpenai": "Nenhuma chave de API configurada para o provedor compatível com OpenAI. Salve uma chave em ⚙ Gerenciar → IA para conversar.\nComandos disponíveis: /fly /layers /layer /basemaps /basemap /search /camera",
   "chat.sakura.hint": "Configurações do <a href=\"https://ai.sakura.ad.jp/sakura-ai/ai-engine/\" target=\"_blank\" rel=\"noopener noreferrer\">Sakura AI Engine</a> (API compatível com OpenAI) para o chat de IA. O endpoint é fixo: <code>https://api.ai.sakura.ad.jp/v1</code>. Introduza o token de conta emitido no painel de controlo do Sakura Cloud.",
-
   "chat.sakura.keyPlaceholder": "Token de conta",
   "chat.sakura.modelPlaceholder": "ex.: gpt-oss-120b",
   "chat.noApiKeySakura": "Nenhum token de conta configurado para o Sakura AI Engine. Salve uma chave em ⚙ Gerenciar → IA para conversar.\nComandos disponíveis: /fly /layers /layer /basemaps /basemap /search /camera",

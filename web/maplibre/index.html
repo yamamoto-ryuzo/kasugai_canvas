@@ -226,6 +226,7 @@
   <div id="settings-tabs">
     <button class="tab active" data-settab="inspector" type="button">インスペクター</button>
     <button class="tab" data-settab="ai" type="button">AI</button>
+    <button class="tab" data-settab="gmaps" type="button">Google Maps</button>
   </div>
   <div class="set-pane" id="setpane-inspector">
     <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
@@ -247,6 +248,14 @@
     <p class="note">選択したファイルを DATA/ へ保存し（ローカルサーバー版はサーバー側、それ以外は上で選択したフォルダ）、対応形式なら設定行を追記して即時反映します。対応: .geojson .json .gpkg .fgb .parquet</p>
   </div>
 <div class="set-pane" id="setpane-ai" hidden></div>
+<div class="set-pane" id="setpane-gmaps" hidden>
+    <p class="note">Google Maps Platform の API キーです。<a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行したキーを入力してください。Photorealistic 3D Tiles で使用します。</p>
+    <label class="set-row">Maps API キー
+      <input id="gmaps-api-key" type="password" placeholder="Maps APIキーを入力" autocomplete="off" style="width:100%;box-sizing:border-box;" /></label>
+    <label class="set-row"><input id="gmaps-3dtiles-toggle" type="checkbox" /> Google Photorealistic 3D Tiles を表示</label>
+    <button id="gmaps-save" type="button" style="width:100%;margin-top:4px;">保存</button>
+    <p id="gmaps-status" class="note" aria-live="polite"></p>
+  </div>
 </div>
 <div id="panel">
   <h1><button id="panel-toggle" type="button" title="最小化" aria-label="最小化">−</button><span class="panel-title-text">KASUGAI Canvas <small>MapLibre</small></span><span>
@@ -317,6 +326,7 @@
         <label class="set-row"><input id="drape-tiles3d-xyz" type="checkbox" checked /> XYZ レイヤー</label>
         <label class="set-row"><input id="drape-tiles3d-vector" type="checkbox" checked /> ベクターレイヤー</label>
       </div>
+      <label class="set-row"><input id="drape-tiles3d-google" type="checkbox" /> Google 3D Tiles もドレープ対象にする</label>
     </div>
     <div class="display-subpane" id="display-general-panel" hidden>
       <label class="set-row">ベースマップ透過度

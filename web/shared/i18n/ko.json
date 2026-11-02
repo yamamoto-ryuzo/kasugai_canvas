@@ -137,6 +137,9 @@
   "settings.project.rootHint": "프로젝트 내 상대 경로(DATA/ 등)는 이 폴더를 기준으로 해석됩니다.",
   "settings.layer.geojsonPrimitive": "벡터 고속 드레이프 (실험적)",
   "settings.layer.drapeBasemap": "베이스맵",
+  "settings.layer.drapeGoogle3d": "Google 3D Tiles",
+  "settings.layer.drapeGoogle3dTarget": "드레이프 대상에 포함",
+  "settings.layer.drapeGoogle3dHint": "Google 3D Tiles로의 드레이프는 다른 3D Tiles와 분리할 수 없으므로, 이 스위치는 베이스맵 →3D Tiles 설정과 상호 동기화됩니다.",
   "settings.layer.drapeVector": "벡터",
   "settings.layer.drapeVectorFast": "벡터 고속 (실험적)",
   "settings.layer.primitiveHint": "CesiumJS 1.146의 GeoJsonPrimitive를 사용하여 벡터 레이어(GeoJSON/GeoParquet/FlatGeobuf)를 지형 및 3D Tiles에 고품질·고속으로 드레이프합니다. 활성화된 동안에는 속성 클릭 대상에서 제외됩니다(벡터 검색은 사용 가능).",
@@ -359,7 +362,6 @@
   "chat.openai.modelPlaceholder": "예: gpt-4o-mini",
   "chat.noApiKeyOpenai": "OpenAI 호환 프로바이더의 API 키가 설정되지 않았습니다. ⚙관리 → AI에서 키를 저장하면 채팅할 수 있습니다.\n사용 가능한 명령: /fly /layers /layer /basemaps /basemap /search /camera",
   "chat.sakura.hint": "AI 채팅에 사용하는 <a href=\"https://ai.sakura.ad.jp/sakura-ai/ai-engine/\" target=\"_blank\" rel=\"noopener noreferrer\">Sakura AI Engine</a>(OpenAI 호환 API) 설정입니다. 엔드포인트는 <code>https://api.ai.sakura.ad.jp/v1</code>로 고정되어 있습니다. Sakura Cloud 컨트롤 패널에서 발급한 계정 토큰을 입력하세요.",
-
   "chat.sakura.keyPlaceholder": "계정 토큰",
   "chat.sakura.modelPlaceholder": "예: gpt-oss-120b",
   "chat.noApiKeySakura": "Sakura AI Engine의 계정 토큰이 설정되지 않았습니다. ⚙관리 → AI에서 키를 저장하면 채팅할 수 있습니다.\n사용 가능한 명령: /fly /layers /layer /basemaps /basemap /search /camera",

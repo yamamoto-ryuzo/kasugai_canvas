@@ -137,6 +137,9 @@
   "settings.project.rootHint": "プロジェクト内の相対パス(DATA/ 等)はこのフォルダを基準に解決されます。",
   "settings.layer.geojsonPrimitive": "ベクター高速ドレープ (実験的)",
   "settings.layer.drapeBasemap": "ベースマップ",
+  "settings.layer.drapeGoogle3d": "Google 3D Tiles",
+  "settings.layer.drapeGoogle3dTarget": "ドレープ対象に含める",
+  "settings.layer.drapeGoogle3dHint": "Google 3D Tiles へのドレープは他の 3D Tiles と分離できないため、このスイッチは ベースマップ→3D Tiles と相互に同期します。",
   "settings.layer.drapeVector": "ベクター",
   "settings.layer.drapeVectorFast": "ベクター高速 (実験的)",
   "settings.layer.primitiveHint": "CesiumJS 1.146 の GeoJsonPrimitive を使い、ベクターレイヤー(GeoJSON/GeoParquet/FlatGeobuf)を高品質・高速に地形や 3D Tiles にドレープします。有効時は属性クリックの対象外になります(ベクター検索は利用可能です)。",
@@ -366,7 +369,6 @@
   "chat.openai.modelsFetchCors": "接続できませんでした。エンドポイントの CORS 許可・URL・ネットワークを確認してください",
   "chat.noApiKeyOpenai": "OpenAI互換プロバイダのAPIキーが未設定です。⚙管理 → AI でキーを保存すると会話できます。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera",
   "chat.sakura.hint": "AIチャットに使う<a href=\"https://ai.sakura.ad.jp/sakura-ai/ai-engine/\" target=\"_blank\" rel=\"noopener noreferrer\">さくらのAI Engine</a>（OpenAI 互換 API）の設定です。エンドポイントは <code>https://api.ai.sakura.ad.jp/v1</code> 固定です。さくらのクラウド コントロールパネルで発行したアカウントトークンを入力してください。",
-
   "chat.sakura.keyPlaceholder": "アカウントトークン",
   "chat.sakura.modelPlaceholder": "例: gpt-oss-120b",
   "chat.noApiKeySakura": "さくらAIEngineのアカウントトークンが未設定です。⚙管理 → AI でキーを保存すると会話できます。\n使えるコマンド: /fly /layers /layer /basemaps /basemap /search /camera",

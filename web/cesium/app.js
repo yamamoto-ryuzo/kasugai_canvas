@@ -125,7 +125,10 @@ let terrainEnabled = true;
 let undergroundTransparency = 0;
 let undergroundDiveEnabled = true;
 let undergroundBackgroundColor = Cesium.Color.BLACK;
-let basemapDrape3DTiles = false;
+let basemapDrape3DTiles = true;
+// Google Photorealistic 3D Tiles をドレープ対象に含めるか(既定は含めない。
+// ON にすると Google タイルセットの範囲にもドレープカバーを生成する)
+let drapeGoogle3dTiles = false;
 // ベースマップ→DEM(globe へのベースマップ表示)。OFF で地表はベース色のみになる
 let basemapDrapeDem = true;
 // 表示>一般タブ: 透過度スライダ(ベースマップ/レイヤー)の係数と現在のベースマップ ImageryLayer
@@ -2244,7 +2247,7 @@ async function refresh3DTilesDrapeCovers() {
   const seq = ++drapeCoverSeq;
   const useCover = isDrape3DTilesActive();
   const tilesets = useCover
-    ? activePrimitives.filter(p => p instanceof Cesium.Cesium3DTileset && p.show !== false)
+    ? activePrimitives.filter(p => p instanceof Cesium.Cesium3DTileset && p.show !== false && (drapeGoogle3dTiles || !p._kascGoogle3d))
     : [];
   const providers = useCover ? collectDrapeProviders() : [];
   const view = useCover ? viewer.camera.computeViewRectangle() : null;
@@ -3472,6 +3475,7 @@ async function refreshLayersImpl() {
     if (item.type === "3dtiles") {
       try {
         const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(withGoogleTileKey(item.url), item.proxy), getCesiumTilesetOptions());
+        tileset._kascGoogle3d = isGoogle3dTilesUrl(item.url);
         applyClippingPlanes(tileset);
         viewer.scene.primitives.add(tileset);
         activePrimitives.push(tileset);
@@ -3695,9 +3699,21 @@ async function addGeoJsonPrimitiveLayer(item, geojson) {
 }
 
 // GeoJSON をスタイル適用済みの GeoJsonDataSource に変換する(初回ロードと再クエリで共用)
+// ドレープ対象になり得る 3D Tiles レイヤーが表示中か。
+// Google Photorealistic は drapeGoogle3dTiles が ON の時だけ対象に数える
+function hasDrapable3dTilesetLayer() {
+  return layers.some(l => l.visible && l.type === "3dtiles" && (drapeGoogle3dTiles || !isGoogle3dTilesUrl(l.url)));
+}
+
 function isDrape3DTilesActive() {
   const content = basemapDrape3DTiles || drapeLayers.tiles3d.xyz || drapeLayers.tiles3d.geojson || drapeLayers.tiles3d.primitive;
-  return content && layers.some(l => l.visible && l.type === "3dtiles");
+  if (!content || !hasDrapable3dTilesetLayer()) return false;
+  // Google 3D 表示中にスイッチ OFF では、他タイルセット向けの分類カバーも
+  // Google タイルへ貼り付いてしまう(タイルセット単位の除外は Cesium では
+  // 不可能)。「Google にドレープしない」を保証するため Google 表示中は
+  // 3D Tiles ドレープ全体を停止する
+  if (!drapeGoogle3dTiles && layers.some(l => l.visible && l.type === "3dtiles" && isGoogle3dTilesUrl(l.url))) return false;
+  return true;
 }
 
 // 対象地形ごとのベクタードレープ(entity 経路)指定を返す。
@@ -5041,9 +5057,10 @@ function syncGoogle3dTilesLayer() {
     const url = `https://tile.googleapis.com/v1/3dtiles/root.json?key=${encodeURIComponent(key)}`;
     if (index === -1) {
       const item = { id: GOOGLE_3DTILES_LAYER_ID, title: "Google Photorealistic 3D Tiles", sourceTitle: "Google Photorealistic 3D Tiles", type: "3dtiles", url, visible: true, attribution: "Google", proxy: false };
-      layers.push(item);
+      // 背景地図的存在のためレイヤ一覧の最上位に固定する
+      layers.unshift(item);
       layerState.set(item.id, item);
-      layerOrder.push(item.id);
+      layerOrder.unshift(item.id);
     } else {
       layers[index].url = url;
     }
@@ -5407,6 +5424,25 @@ function setupEvents() {
   document.querySelector("#basemap-drape-3dtiles").addEventListener("change", event => {
     basemapDrape3DTiles = event.target.checked;
     refreshLayers();
+  });
+
+  document.querySelector("#drape-google-3dtiles").addEventListener("change", event => {
+    drapeGoogle3dTiles = event.target.checked;
+    refreshLayers();
+  });
+
+  // ベースマップ→3D Tiles と Google 3D Tiles はタイルセット単位で分離できない
+  // ため双方向に同期する（どちらかを切るともう片方も同じ ON/OFF になる）
+  const drapeTiles3dSyncSelectors = ["#basemap-drape-3dtiles", "#drape-google-3dtiles"];
+  drapeTiles3dSyncSelectors.forEach(sel => {
+    document.querySelector(sel)?.addEventListener("change", event => {
+      const on = event.target.checked;
+      for (const other of drapeTiles3dSyncSelectors) {
+        if (other === sel) continue;
+        const el = document.querySelector(other);
+        if (el && el.checked !== on) { el.checked = on; el.dispatchEvent(new Event("change", { bubbles: true })); }
+      }
+    });
   });
 
   document.querySelector("#basemap-drape-dem").addEventListener("change", event => {
@@ -8948,7 +8984,7 @@ async function saveFetchSettings() {
   document.querySelector("#fetch-allow-status").textContent = t("update.settingsSaved");
 }
 
-const defaultConfig = `base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院
+const defaultConfig = `base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院
 3dtiles: 東京都/千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json
 cam:東京駅|35.653108|139.761449|height=2200.6|pitch=-30|heading=348.5`;
 
