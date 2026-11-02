@@ -322,7 +322,7 @@ def run_dev() -> None:
         for project in SAMPLE_PROJECTS.iterdir():
             if project.is_dir() and not (dev_projects / project.name).exists():
                 shutil.copytree(project, dev_projects / project.name)
-    subprocess.run(["cargo", "run", "--", "--no-browser"], cwd=SERVER_DIR, check=True)
+    subprocess.run(["cargo", "run", "--bin", "kasugai_canvas", "--", "--no-browser"], cwd=SERVER_DIR, check=True)
 
 
 def build_installer(channel: dict) -> None:

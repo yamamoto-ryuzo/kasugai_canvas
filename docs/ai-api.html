@@ -79,7 +79,7 @@
         </div>
         <div class="url-box">
           <h3>OpenAI互換エンドポイントの設定</h3>
-          <p>「AI プロバイダ」で「OpenAI互換」を選ぶと、<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントに、ベースURL・キー・モデル名を指定して接続できます（ブラウザから直接接続するため、エンドポイント側の CORS 許可が必要です）。GitHub Copilot 契約を使いたい場合は <a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a> を参照してください。</p>
+          <p>「AI プロバイダ」で「OpenAI互換」を選ぶと、<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントに、ベースURL・キー・モデル名を指定して接続できます（ブラウザから直接接続するため、エンドポイント側の CORS 許可が必要です）。「接続プリセット」で主要サービスのベースURLを自動入力でき、「モデル一覧を取得」ボタンは <code>{ベースURL}/models</code> をブラウザから取得して接続・キー・CORS の疎通確認を行い、取得したモデル ID をモデル欄の選択肢へ反映します。<a href="https://ai.sakura.ad.jp/sakura-ai/ai-engine/" target="_blank" rel="noopener noreferrer">さくらのAI Engine</a> は専用プロバイダ「【API】さくらAIEngine」として用意されており、エンドポイント（<code>https://api.ai.sakura.ad.jp/v1</code>）固定でアカウントトークンとモデルだけを設定します（OpenAI互換側にさくら向け設定が残っていた場合は初回起動時に自動移行されます）。GitHub Copilot 契約を使いたい場合は <a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a> を参照してください。</p>
         </div>
       </section>
 

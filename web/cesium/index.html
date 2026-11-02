@@ -334,6 +334,7 @@
                     <select id="chat-provider">
                       <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
                       <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+                      <option value="sakura" data-i18n="chat.provider.sakura">【API】さくらAIEngine</option>
                       <option value="anthropic" data-i18n="chat.provider.anthropic">【API】Anthropic (Claude)</option>
                       <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
                       <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
@@ -357,12 +358,36 @@
                     <div id="openai-fields" hidden>
                       <p class="hint" data-i18n-html="chat.openai.hint">AIチャットに使う OpenAI 互換 API の設定です。<a href="https://models.github.ai" target="_blank" rel="noopener noreferrer">GitHub Models</a>（GitHub PAT を使用）のほか、OpenAI・Azure OpenAI・Ollama・LM Studio など OpenAI 互換のエンドポイントに接続できます。GitHub Copilot を使う場合はプロバイダを GitHub Copilot に変更し、表示されるブリッジ欄で Copilot ブリッジ（copilot CLI 経由）を接続してください。</p>
                       <p class="hint" data-i18n-html="chat.openai.security"><strong>セキュリティについて</strong>：キーはブラウザの localStorage にのみ保存され、送信先は上のエンドポイントのみです。http（非HTTPS）のエンドポイントを指定するとキーが平文で送信されるため、localhost/127.0.0.1 以外では https を使ってください。キー自体を共有ファイル（.kasc等）やコードに書き込まないでください。</p>
-                      <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
+                      <label class="field-label" for="openai-preset" data-i18n="chat.openai.presetLabel">接続プリセット</label>
+                      <select id="openai-preset">
+                        <option value="" data-i18n="chat.openai.presetCustom">カスタム（手動入力）</option>
+                        <option value="https://models.github.ai/inference">GitHub Models</option>
+                        <option value="https://api.openai.com/v1">OpenAI</option>
+                        <option value="http://localhost:11434/v1">Ollama (localhost:11434)</option>
+                        <option value="http://localhost:1234/v1">LM Studio (localhost:1234)</option>
+                      </select>
+                      <label class="field-label" for="openai-base-url" style="margin-top:3px;" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
                       <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" data-i18n-attr="placeholder:chat.openai.baseUrlPlaceholder" autocomplete="off" size="28" />
                       <label class="field-label" for="openai-api-key" style="margin-top:3px;" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
                       <input id="openai-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="GitHub PAT 等" data-i18n-attr="placeholder:chat.openai.keyPlaceholder" autocomplete="off" size="28" />
                       <label class="field-label" for="openai-model" style="margin-top:3px;" data-i18n="chat.openai.modelLabel">モデル</label>
-                      <input id="openai-model" type="text" placeholder="gpt-4o-mini" data-i18n-attr="placeholder:chat.openai.modelPlaceholder" autocomplete="off" size="28" />
+                      <select id="openai-model"></select>
+                      <div style="display:flex;gap:6px;margin-top:6px;">
+                        <button id="openai-fetch-models" type="button" data-i18n="chat.openai.fetchModels">モデル一覧を取得</button>
+                      </div>
+                      <p id="openai-models-status" class="hint" aria-live="polite"></p>
+                    </div>
+                    <div id="sakura-fields" hidden>
+                      <p class="hint" data-i18n-html="chat.sakura.hint"></p>
+                      <p class="hint" data-i18n-html="chat.openai.security"></p>
+                      <label class="field-label" for="sakura-api-key" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
+                      <input id="sakura-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="アカウントトークン" data-i18n-attr="placeholder:chat.sakura.keyPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="sakura-model" style="margin-top:3px;" data-i18n="chat.openai.modelLabel">モデル</label>
+                      <select id="sakura-model"></select>
+                      <div style="display:flex;gap:6px;margin-top:6px;">
+                        <button id="sakura-fetch-models" type="button" data-i18n="chat.openai.fetchModels">モデル一覧を取得</button>
+                      </div>
+                      <p id="sakura-models-status" class="hint" aria-live="polite"></p>
                     </div>
                     <div id="anthropic-fields" hidden>
                       <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
