@@ -12,7 +12,7 @@ import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../sh
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
-import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges } from "../shared/session-state.js";
 import { initPrint } from "../shared/print.js";
 import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import { mountSunControls } from "../shared/sun-time.js";
@@ -55,7 +55,7 @@ const baseEntries = [];    // 選択中ベースマップ {item, src, layer}
 const themes = [];
 let baseDocs = [], basemapSrc = null, basemapLayer = null;
 let terrainSrc = null, terrainLayer = null;
-let currentProjectId = "", lastBaseUrl = "", lastKascRaw = "", currentThemes = [];
+let currentProjectId = "", lastBaseUrl = "", lastKascRaw = "", lastKascUrl = "", currentThemes = [];
 let currentCams = [], currentLegends = [], currentDefaultStyles = null;
 let lastCam = { lng: 139.767, lat: 35.681, height: 3000, heading: 0, pitch: -45, roll: 0 };
 let photorealScene = null;
@@ -70,9 +70,10 @@ const kascFlyPaths = createKascFlyPaths({
 // 起動直後・loadProject が URL ハッシュを読む前に、初期カメラの moveend が
 // ハッシュをデフォルト位置で上書きするのを防ぐ（MapLibre と同じガード）
 let urlViewConsumed = false;
-// エンジン遷移で引き継ぐカレント状態。初回 loadProject で一度だけ適用する
-// (後続のプロジェクト切替には適用しない)
-let pendingSession = null;
+// エンジン遷移で引き継ぐカレント状態。モジュール評価時に一度だけ読み、
+// 初回 loadProject で一度だけ適用する（他エンジンと同じ消費1回ガード。
+// 後続のプロジェクト切替には適用しない）
+let pendingSession = matchSessionState();
 
 function setCamera(cam) {
   lastCam = { lng: cam.lng ?? cam.longitude, lat: cam.lat ?? cam.latitude, height: cam.height ?? lastCam.height, heading: cam.heading ?? lastCam.heading, pitch: cam.pitch ?? lastCam.pitch, roll: cam.roll || 0 };
@@ -180,7 +181,12 @@ async function maybeLoadEntry(entry) {
   entry.loading = true; syncRowStatus(entry);
   try {
     const r = await addKascLayer(entry.item, lastBaseUrl);
-    if (r) { entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc; }
+    if (r) {
+      entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc;
+      // 読込中に表示状態が変わっている可能性があるため、追加後に現在値を再適用する
+      // （OFF→ON→OFF 等の競合で、非表示のはずのレイヤが残るのを防ぐ）
+      navaraSetShow(entry, entry.item.visible !== false);
+    }
   } catch (e) { entry.failed = true; entry.error = String(e?.message || e); console.warn("layer failed", entry.item.title, e); }
   entry.loading = false; syncRowStatus(entry);
 }
@@ -504,7 +510,12 @@ panel.searchInput?.addEventListener("input", () => {
 });
 
 // ---- ベースマップ ----
+let currentBasemapIdx = -1;
 async function applyBasemap(idx) {
+  // 同一選択の再適用は張り替えない（session 復元で二度適用されてもタイルを
+  // 読み直さない。「ベースマップなし」等で show=false 中なら戻すだけ）
+  if (idx === currentBasemapIdx && baseEntries[0] && baseEntries[0].item === baseDocs[idx]) { navaraSetShow(baseEntries[0], true); return; }
+  currentBasemapIdx = idx;
   if (basemapLayer) { try { basemapLayer.delete(); } catch (_) {} basemapLayer = null; }
   if (basemapSrc) { try { basemapSrc.delete(); } catch (_) {} basemapSrc = null; }
   const b = baseDocs[idx];
@@ -538,7 +549,7 @@ let manualLights = [], manualSun = null, shadowOn = false;
 // sunInt はモード別に値を持つ（写実=物理ベース既定1・手動=補正済み既定1.8）
 const FX_DEFAULTS = {
   sunInt: { pr: 1, manual: 1.8 },
-  ambientInt: 0.8, skyProbeInt: 1, exposure: 1, shadowInt: 1,
+  ambientInt: 2, skyProbeInt: 2, exposure: 1, shadowInt: 1,
   moon: true, moonInt: 1,
   stars: true, starsInt: 10,
   flare: true, flareInt: 0.005,
@@ -823,8 +834,9 @@ if (panel.camsImportCamFile) panel.camsImportCamFile.onchange = async e => {
 };
 
 // .kasc 文書(doc)を描画する。loadProject(ファイル読込)と
-// インスペクター(テキスト適用)の共通経路
-async function renderDoc(doc, baseUrl) {
+// インスペクター(テキスト適用)の共通経路。
+// presetBase はエンジン遷移時の session ベースマップ（無い起動は undefined）
+async function renderDoc(doc, baseUrl, presetBase) {
   applyPanelTitle(doc.title);
 
   // ベースマップ
@@ -834,8 +846,21 @@ async function renderDoc(doc, baseUrl) {
   appendGroupedTitleOptions(panel.basemapSelect, baseDocs, (b, title, i) => {
     const opt = document.createElement("option"); opt.value = String(i); opt.textContent = title; return opt;
   });
+  // 初期選択は session 値 > .kasc 初期値（|off でない先頭＝他エンジンと同じ規則）。
+  // 先頭固定で描画してから差し替えると別タイルが一瞬表示される
+  const noneSel = presetBase && /^(none|なし|ベースマップなし)$/i.test(String(presetBase.id ?? presetBase.title ?? ""));
+  let initIdx = -1;
+  if (presetBase && !noneSel) {
+    initIdx = presetBase.title ? baseDocs.findIndex(b => b.title === presetBase.title) : -1;
+    if (initIdx < 0 && Number.isFinite(Number(presetBase.id))) {
+      const i = Number(presetBase.id);
+      if (i >= 0 && i < baseDocs.length) initIdx = i;
+    }
+  }
+  if (!noneSel && initIdx < 0) initIdx = Math.max(0, baseDocs.findIndex(b => b.visible !== false));
+  if (initIdx >= 0) panel.basemapSelect.value = String(initIdx);
   syncBasemapList(panel.basemapSelect);
-  await applyBasemap(Number(panel.basemapSelect.value || 0));
+  await applyBasemap(noneSel ? -1 : initIdx);
 
   await renderLayers(doc, baseUrl);
 
@@ -853,9 +878,30 @@ async function renderDoc(doc, baseUrl) {
   void loadKascInfoContent(panel.infoLink, doc.info, baseUrl);
 }
 
+// session-state の可視性を描画前の doc アイテムへ先適用する。
+// renderLayers が doc 上の |on でレイヤを追加・表示してから applySessionState で
+// 隠す流れだと、session で OFF のレイヤが一瞬表示され無駄な読込も発生する。
+// 照合は sessionVisChanges（完全タイトル→葉名一意の2段）を流用し、
+// 排他グループ(//)の正規化も applySessionState と同じルールで行う
+function applySessionVisToDoc(doc, vis) {
+  if (!vis || typeof vis !== "object") return;
+  const items = [...doc.layers, ...doc.unsupported.filter(u => u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type))];
+  const grpOf = i => { const sp = splitKascTitle(i.title); return `${sp.group}|${sp.exclusiveGroup}`; };
+  const isExcl = i => splitKascTitle(i.title).exclusiveGroup;
+  for (const { entry: item, on } of sessionVisChanges(items, vis, i => i.title, i => i.visible !== false)) {
+    item.visible = on;
+    if (on && isExcl(item)) {
+      const g = grpOf(item);
+      for (const sib of items) {
+        if (sib !== item && grpOf(sib) === g && sib.visible !== false) sib.visible = false;
+      }
+    }
+  }
+}
+
 async function loadProject(projectId) {
-  const { id, manifest, baseUrl, doc, raw } = await loadKascProject(projectId);
-  currentProjectId = id; lastBaseUrl = baseUrl; lastKascRaw = raw || "";
+  const { id, manifest, baseUrl, doc, raw, kascUrl } = await loadKascProject(projectId);
+  currentProjectId = id; lastBaseUrl = baseUrl; lastKascRaw = raw || ""; lastKascUrl = kascUrl || "";
   // カレント状態ファイルは初回描画へ一度だけ適用する
   const sess = pendingSession; pendingSession = null;
   // インスペクタは「現在の .kasc」（切替元の編集込み）を優先。
@@ -875,7 +921,9 @@ async function loadProject(projectId) {
   }
   panel.project.value = id;
 
-  await renderDoc(text === lastKascRaw ? doc : parseKasc(text), baseUrl);
+  const renderDocTarget = text === lastKascRaw ? doc : parseKasc(text);
+  applySessionVisToDoc(renderDocTarget, sess?.vis);
+  await renderDoc(renderDocTarget, baseUrl, sess?.basemap);
 
   // カレント状態のレイヤ関連を復元（vis は完全タイトル→葉名一意の2段照合）
   applySessionState(sess, {
@@ -888,7 +936,7 @@ async function loadProject(projectId) {
   // プロジェクト切替（2回目以降）は新プロジェクトの cam へ移る（他エンジンと同じ）
   const uv = urlViewConsumed ? null : sessionBootView(sess);
   if (hasUrlView(uv)) setCamera({ longitude: uv.longitude, latitude: uv.latitude, height: urlViewHeight(uv), heading: uv.heading, pitch: uv.pitch });
-  else if (doc.cams[0]) { const c = doc.cams[0]; flyTo({ longitude: c.longitude, latitude: c.latitude, height: c.height, heading: c.heading, pitch: c.pitch }); }
+  else if (renderDocTarget.cams[0]) { const c = renderDocTarget.cams[0]; flyTo({ longitude: c.longitude, latitude: c.latitude, height: c.height, heading: c.heading, pitch: c.pitch }); }
   urlViewConsumed = true;
 }
 
@@ -1036,8 +1084,6 @@ async function saveToDataDir(name, content) {
   // 地形(Re:Earth Terrain)は既定 ON
   await applyTerrain(true);
 
-  // エンジン遷移のカレント状態を起動時に判定する（初期表示なら null → .kasc 初期値）
-  pendingSession = matchSessionState();
   // URL のビュー状態はレイヤ読込前に適用する。
   // (Navara は一部のレイヤ/ソース追加後にカメラ制御が停止するケースがあり、
   //  loadProject 末尾まで待つと初期位置が適用されないため)
@@ -1049,7 +1095,7 @@ async function saveToDataDir(name, content) {
   // 座標引継ぎは URL ハッシュ経由のため moveend で書き込む)
   try {
     view.camera.on("move", () => { syncCamFromView(); window.kasugaiApi?.emit("camera-changed", window.kasugaiApi.getCamera()); });
-    view.camera.on("moveend", () => { syncCamFromView(); if (urlViewConsumed) writeUrlView(urlViewFromCam(), currentProjectId); });
+    view.camera.on("moveend", () => { syncCamFromView(); if (urlViewConsumed) writeUrlView(urlViewFromCam(), lastKascUrl ? undefined : currentProjectId); });
   } catch (_) {}
 
   await loadProject();
@@ -1066,10 +1112,12 @@ async function saveToDataDir(name, content) {
   panel.project.addEventListener("change", () => loadProject(panel.project.value));
   panel.themeSelect?.addEventListener("change", () => {
     const theme = currentThemes.find(t => t.name === panel.themeSelect.value);
+    if (!theme) return;
     const show = themeShowSet(theme);
-    if (!show) return;
-    for (const e of layerEntries) { setEntryVisible(e, kascTitleInTheme(e.item.title, show)); void maybeLoadEntry(e); }
+    for (const e of layerEntries) { setEntryVisible(e, show == null || kascTitleInTheme(e.item.title, show)); void maybeLoadEntry(e); }
     buildLayerList(); syncAttribution();
+    // 可視性をインスペクタの .kasc テキストへも書き戻して整合を保つ（他エンジンと同じ）
+    if (panel.inspector) panel.inspector.value = rewriteKascVisibility(panel.inspector.value, show);
   });
   $("#apply-inspector")?.addEventListener("click", () => applyInspectorText(panel.inspector.value));
   $("#export-inspector")?.addEventListener("click", () => {
