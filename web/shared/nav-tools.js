@@ -212,6 +212,13 @@ export function initNavTools(a) {
     });
   } else hide("#locate-button");
 
+  // マップ内の UI コントロール（ツールバー・ポップアップ・ベースマップ等）上のポインタは
+  // 矩形ズーム/地点座標モードの対象外にする（これがないとモード解除ボタン自体を押せなくなる）
+  const onUiControl = e => {
+    const t = e.target;
+    return t !== a.el && !!t.closest("button, input, select, textarea, a[href], label, aside, .ol-control, .leaflet-control, .maplibregl-ctrl, .nav-item, #coord-popup, .view-history-list");
+  };
+
   // ---- 地点座標取得 ----
   const pickBtn = $("#coordpick-button");
   if (a.toLatLng && a.el) {
@@ -242,7 +249,7 @@ export function initNavTools(a) {
       if (lastDeg) a.setMarker?.({ ...lastDeg, kind: "pin" }, lastDeg);
     });
     a.el.addEventListener("click", e => {
-      if (!pickMode) return;
+      if (!pickMode || onUiControl(e)) return;
       e.stopPropagation();
       const r = a.el.getBoundingClientRect();
       const ll = a.toLatLng(e.clientX - r.left, e.clientY - r.top);
@@ -317,7 +324,7 @@ export function initNavTools(a) {
       a.fitBounds(Math.min(c0.lng, c1.lng), Math.min(c0.lat, c1.lat), Math.max(c0.lng, c1.lng), Math.max(c0.lat, c1.lat));
     };
     a.el.addEventListener("pointerdown", e => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || onUiControl(e)) return;
       const useRect = mode || (!a.nativeBoxZoom && e.shiftKey);
       if (!useRect) return;
       e.preventDefault(); e.stopPropagation();
