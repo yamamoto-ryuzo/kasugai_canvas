@@ -76,10 +76,13 @@
       ]
     },
     {
-      label: '記録',
+      // NAV には挑戦中のイベントのみ掲載。終了したイベントはここから外し、
+      // records.html（終了したイベントの記録）のテーブルへ移して履歴として残す
+      label: '記録（挑戦中）',
       items: [
-        { href: 'hackathon.html', text: '17. 第5回 Agentic AI Hackathon with Google Cloud' },
-        { href: 'g-idea.html', text: '18. イチBizアワード2026 提案書' }
+        { href: 'g-idea.html', text: '2026/09-12 イチBizアワード2026 提案書' },
+        { href: 'zennfes.html', text: '2026/11-12 Zennfes Autumn 2026 さくらのAIチャレンジ祭り' },
+        { href: 'records.html', text: '📁 終了したイベントの記録' }
       ]
     }
   ];

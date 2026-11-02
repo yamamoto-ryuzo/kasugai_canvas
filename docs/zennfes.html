@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zennfes Autumn 2026 さくらのAIチャレンジ祭り — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.14.2</span></h1>
+      <p>Zennfes Autumn 2026 — さくらのAIチャレンジ祭り 参加記録</p>
+    </header>
+    <main>
+      <h2 id="概要">コンテスト概要</h2>
+      <p><a href="https://zenn.dev/contests/zennfes-autumn-2026-sakura" target="_blank">AIでつくる、公開する、動かし続ける。さくらのAIチャレンジ祭り</a> は、<a href="https://zenn.dev/events/zennfes-autumn-2026" target="_blank">Zennfes Autumn 2026</a> の投稿テーマの一つで、さくらインターネット株式会社が提供するコンテストです。AI を組み込んだアプリ開発・作品の公開・AI サービスの 24 時間稼働など、同社サービスを活用した取り組みを Zenn 記事として投稿します。</p>
+
+      <div class="card">
+        <h3>基本情報</h3>
+        <ul>
+          <li><strong>期間：</strong>2026/11/02（月）〜 2026/12/16（水）</li>
+          <li><strong>主催：</strong>Zenn（クラスメソッド株式会社）/ テーマ提供：さくらインターネット株式会社</li>
+          <li><strong>参加方法：</strong>Zenn に記事を公開し、記事ページ上部の「コンテストに応募する」ボタンから応募</li>
+          <li><strong>対象サービス：</strong>さくらのAI Engine・さくらのレンタルサーバ・さくらのVPS</li>
+        </ul>
+      </div>
+
+      <h2 id="部門">部門と賞品</h2>
+      <p>テーマに投稿された記事の内容をもとに、審査時に部門が判断されます。</p>
+      <table>
+        <thead>
+          <tr><th>部門</th><th>賞</th><th>賞品</th></tr>
+        </thead>
+        <tbody>
+          <tr><td rowspan="3">さくらのAI Engine 3,000リクエストチャレンジ部門<br><small>OpenAI・Anthropic互換APIが無料！さくらのAI Engine 3,000リクエストで何するチャレンジ</small></td><td>チャレンジ賞</td><td>Amazonギフトカード 2万円分</td></tr>
+          <tr><td>ものづくり賞</td><td>Amazonギフトカード 2万円分</td></tr>
+          <tr><td>徹底検証賞</td><td>Amazonギフトカード 2万円分</td></tr>
+          <tr><td rowspan="2">さくらのレンタルサーバ活用チャレンジ部門<br><small>こんな使い方もあったの！？さくらのレンタルサーバの可能性にチャレンジ</small></td><td>アイデア賞</td><td>Amazonギフトカード 1万円分</td></tr>
+          <tr><td>使いこなし賞</td><td>Amazonギフトカード 1万円分</td></tr>
+          <tr><td rowspan="2">さくらのVPS 24時間稼働チャレンジ部門<br><small>24時間動くさくらのVPSでアイデアを形に！AIサービス活用チャレンジ</small></td><td>24時間稼働アイデア賞</td><td>Amazonギフトカード 1万円分</td></tr>
+          <tr><td>チャレンジ賞</td><td>Amazonギフトカード 1万円分</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="特典">参加特典</h2>
+      <ul>
+        <li><strong>さくらのAI Engine：</strong>無償プランで Chat completions（テキスト応答生成）を月 3,000 リクエストまで無料（Audio transcriptions・Audio speeches は月 50 リクエスト）</li>
+        <li><strong>さくらのVPS：</strong>クレジットカード払い選択時、全プランで 2 週間の無料お試し期間</li>
+        <li><strong>さくらのレンタルサーバ：</strong>スタンダードプランを利用開始から 92 日間無償で使えるクーポン（要申請・数に限りあり）</li>
+      </ul>
+
+      <h2 id="canvas">KASUGAI Canvas との関連</h2>
+      <ul>
+        <li><strong>さくらのAI Engine：</strong>OpenAI・Anthropic 互換 API を提供するため、内蔵AI の <strong>OpenAI互換プロバイダ</strong> として設定できます（<a href="ai-api.html">【API】内蔵AI</a> 参照）。Gemini 以外のモデルで GIS ツールの function calling を試す経路として使えます。</li>
+        <li><strong>さくらのVPS / レンタルサーバ：</strong><code>.kasc</code>+<code>DATA/</code> のデータホストや、ローカルアプリの常時稼働先として活用できます（<a href="datahost.html">ブラウザ WebGIS ガイド</a> の外部ホスト配信に相当）。</li>
+      </ul>
+
+      <h2 id="方針">検証方針（徹底検証賞）</h2>
+      <p><strong>検証テーマ：「国内 OpenAI 互換 API で GIS エージェントは実用になるか」</strong> — さくらのAI Engine を内蔵AI の OpenAI互換プロバイダとして接続し、52ツールの function calling ループがどこまで回るかを系統的に検証します。新規開発は行わず、既存の検証台（ツール定義・多段ループ・実行ログ）をそのまま使う方針です。</p>
+      <h3>検証軸</h3>
+      <ul>
+        <li><strong>ツール選択精度：</strong>日本語の自然な指示から適切なツールが選ばれるか（カメラ・レイヤ・検索等のカテゴリ別）</li>
+        <li><strong>引数適合率：</strong>JSON スキーマに適合する引数が生成されるか</li>
+        <li><strong>多段ループ完走率：</strong>ツール結果を見る往復を複数回こなしてタスク完了に至るか</li>
+        <li><strong>実シナリオ：</strong>「サンプルレイヤ生成 → FlyTo → 資料作成（showReport＋パーマリンク）」の通しデモが成立するか</li>
+        <li><strong>ベースライン比較：</strong>同一プロンプト集を Gemini（実績のある既定プロバイダ）にも適用し、相対性能として記録</li>
+      </ul>
+      <h3>検証設計</h3>
+      <ul>
+        <li><strong>対象モデル：</strong><code>/models</code> で提供モデル一覧を取得し、tools 対応のものから代表を選定</li>
+        <li><strong>評価プロンプト：</strong>単発（ツール1回）・多段（複数往復）・シナリオ（資料作成まで）の3段構成。カテゴリ別に代表プロンプトを用意</li>
+        <li><strong>記録方法：</strong>プロンプト・期待ツール・実ツール・引数適否・完走可否・消費リクエスト数を表形式で集計し、再現可能な形で公開（検証手順とプロンプト集も記事に付記）</li>
+      </ul>
+      <h3>前提確認とリスク</h3>
+      <ul>
+        <li>さくらのAI Engine の chat/completions 互換エンドポイントが <code>tools</code>（function calling）パラメータを受け付けるかを最初に確認。非対応・精度不足の場合は「チャレンジ賞」（過程重視の記事）へピボット</li>
+        <li>Canvas はブラウザから API を直接叩くためエンドポイント側の CORS 許可が必要。非対応ならローカルアプリの中継経由に切替（これ自体も記事の題材）</li>
+        <li>リクエスト予算は無償枠 月3,000。1ツール往復=1リクエストとしてモデル×プロンプトのマトリクスを予算内に設計（多段ループは消費が膨らむため試行回数を制御）</li>
+      </ul>
+
+      <h2 id="スケジュール">タイムスケジュール</h2>
+      <table>
+        <thead>
+          <tr><th>期間</th><th>作業</th><th>成果物</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>11/02〜11/08</td><td>環境準備。さくらのAI Engine 無償プラン申込・<code>/models</code> でモデル一覧確認・OpenAI互換プロバイダへ接続設定・tools/CORS 対応のスモークテスト</td><td>接続可否・検証対象モデル一覧（非対応なら賞のピボット判断）</td></tr>
+          <tr><td>11/09〜11/15</td><td>検証設計。評価プロンプト集（単発・多段・シナリオ）と採点基準の作成、記録フォーマット整備、Gemini ベースライン試行</td><td>検証手順書・プロンプト集・ベースライン結果</td></tr>
+          <tr><td>11/16〜11/29</td><td>実測。モデル×カテゴリの検証実行、消費リクエストを管理しながら結果を集計、必要に応じて追加検証</td><td>検証結果テーブル（モデル×タスク分類×成否・消費数）</td></tr>
+          <tr><td>11/30〜12/06</td><td>記事執筆。目的・環境・方法・結果・考察を再現可能な形で構成</td><td>Zenn 記事下書き</td></tr>
+          <tr><td>12/07〜12/13</td><td>推敲・公開・コンテスト応募（締切 12/16 の3日前までに投稿完了を目標）</td><td>公開記事＋応募完了</td></tr>
+          <tr><td>12/14〜12/16</td><td>バッファ。応募状態の確認・誤記修正</td><td>—</td></tr>
+        </tbody>
+      </table>
+
+      <section class="card">
+        <h3>参考リンク</h3>
+        <ul>
+          <li><a href="https://zenn.dev/contests/zennfes-autumn-2026-sakura" target="_blank">さくらのAIチャレンジ祭り（コンテストページ）</a></li>
+          <li><a href="https://zenn.dev/events/zennfes-autumn-2026" target="_blank">Zennfes Autumn 2026（メインページ）</a></li>
+          <li><a href="https://ai.sakura.ad.jp/sakura-ai/ai-engine/" target="_blank">さくらのAI Engine</a></li>
+          <li><a href="https://rs.sakura.ad.jp/" target="_blank">さくらのレンタルサーバ</a></li>
+          <li><a href="https://vps.sakura.ad.jp/" target="_blank">さくらのVPS</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
