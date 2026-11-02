@@ -3,17 +3,6 @@
 // adapter 仕様は各エンジン app.js の initNavTools 呼び出しを参照。機能が無い場合は該当ボタンを隠す
 import { formatLatLng, parseCoordinateQuery } from "./coords-format.js";
 
-// マップキャンバスの縮小サムネイルを返す（エンジン切替プレビュ等。アスペクト比維持で最大maxW×maxH）
-export function canvasThumb(source, maxW = 320, maxH = 240) {
-  if (!source || !source.width || !source.height) return null;
-  const scale = Math.min(maxW / source.width, maxH / source.height, 1);
-  const out = document.createElement("canvas");
-  out.width = Math.max(1, Math.round(source.width * scale));
-  out.height = Math.max(1, Math.round(source.height * scale));
-  out.getContext("2d").drawImage(source, 0, 0, out.width, out.height);
-  return out;
-}
-
 const STYLE = `
 .nav-history-row{display:flex;gap:4px}
 .nav-history-row button{min-width:28px!important}
@@ -362,8 +351,5 @@ export function initNavTools(a) {
   // ---- kasugaiApi への汎用配線（エンジン側に無ければアダプタから補完）----
   if (a.fitBounds && window.kasugaiApi && !window.kasugaiApi.zoomToExtent) {
     window.kasugaiApi.zoomToExtent = (w, s, e, n) => { a.fitBounds(Number(w), Number(s), Number(e), Number(n)); return true; };
-  }
-  if (a.captureThumb && window.kasugaiApi && !window.kasugaiApi.captureThumb) {
-    window.kasugaiApi.captureThumb = a.captureThumb;
   }
 }
