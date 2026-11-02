@@ -177,9 +177,12 @@ a.panel-manage { display: inline-flex; align-items: center; justify-content: cen
 .navigation-toolbar.collapsed #top-down-button,
 .navigation-toolbar.collapsed .mode-select,
 .navigation-toolbar.collapsed .nav-extra,
+.navigation-toolbar.collapsed .nav-extra-grid,
 .navigation-toolbar.collapsed .nav-history-row { display: none; }
 .navigation-toolbar .nav-history-row { display: flex; gap: 4px; }
 .navigation-toolbar .nav-history-row button { min-width: 28px; }
+.navigation-toolbar .nav-extra-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.navigation-toolbar .nav-extra-grid button { min-width: 28px; }
 .navigation-toolbar button.nav-active { border-color: #31564f; background: #31564f; color: #fff; }
 .navigation-toolbar button:disabled { opacity: .45; cursor: default; }
 .navigation-toolbar .mode-select { min-width: 60px; min-height: 29px; padding: 5px 7px; border: 1px solid rgba(0,0,0,.08); border-radius: 7px; background: linear-gradient(#fff, #f1f4f8); color: #263643; cursor: pointer; font-size: var(--basemap-select-font-size); }
