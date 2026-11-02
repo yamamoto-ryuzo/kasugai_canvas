@@ -1824,6 +1824,8 @@ initNavTools({
   onMoveEnd: cb => map.on("moveend", cb),
   toLatLng: (x, y) => { const ll = map.unproject([x, y]); return { lat: ll.lat, lng: ll.lng }; },
   setMarker: ll => { initNavTools._mk?.remove(); initNavTools._mk = ll ? new maplibregl.Marker().setLngLat([ll.lng, ll.lat]).addTo(map) : null; },
+  setPin: ll => { (initNavTools._pins ??= []).push(new maplibregl.Marker({ color: "#e33d3d" }).setLngLat([ll.lng, ll.lat]).addTo(map)); },
+  clearPins: () => { initNavTools._pins?.forEach(m => m.remove()); initNavTools._pins = []; },
   capturePng: () => new Promise(res => { map.once("render", () => map.getCanvas().toBlob(res, "image/png")); map.triggerRepaint(); }),
   nativeBoxZoom: true,
 });

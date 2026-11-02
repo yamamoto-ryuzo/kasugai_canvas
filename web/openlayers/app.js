@@ -1707,6 +1707,16 @@ initNavTools({
       });
     }
   },
+  setPin: ll => {
+    const el = document.createElement("div");
+    el.textContent = "📍"; el.style.cssText = "font-size:22px;pointer-events:none;text-shadow:0 0 3px #fff;";
+    import("https://cdn.jsdelivr.net/npm/ol@10.11.0/Overlay.js").then(m => {
+      const ov = new m.default({ element: el, position: fromLonLat([ll.lng, ll.lat]), positioning: "bottom-center", stopEvent: false });
+      (initNavTools._pins ??= []).push(ov);
+      map.addOverlay(ov);
+    });
+  },
+  clearPins: () => { initNavTools._pins?.forEach(o => map.removeOverlay(o)); initNavTools._pins = []; },
   capturePng: () => new Promise(res => {
     map.once("rendercomplete", () => { const c = compositeCanvases(map.getViewport()); c ? c.toBlob(res, "image/png") : res(null); });
     map.renderSync();

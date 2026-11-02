@@ -227,7 +227,7 @@ export function initNavTools(a) {
       popup = document.createElement("div");
       popup.id = "coord-popup";
       popup.hidden = true;
-      popup.innerHTML = `<div id="coord-popup-text" class="coord-popup-text"></div><div id="coord-popup-address" class="coord-popup-address"></div><div class="coord-popup-actions"><button id="coord-popup-copy" type="button">コピー</button><button id="coord-popup-pin" type="button">ピン</button><button id="coord-popup-close" type="button">×</button></div>`;
+      popup.innerHTML = `<div id="coord-popup-text" class="coord-popup-text"></div><div id="coord-popup-address" class="coord-popup-address"></div><div class="coord-popup-actions"><button id="coord-popup-copy" type="button">コピー</button><button id="coord-popup-pin" type="button">ピン</button><button id="coord-popup-clear" type="button">クリア</button><button id="coord-popup-close" type="button">×</button></div>`;
       (a.el || document.body).appendChild(popup);
     }
     const pText = popup.querySelector("#coord-popup-text"), pAddr = popup.querySelector("#coord-popup-address");
@@ -246,7 +246,12 @@ export function initNavTools(a) {
       setTimeout(() => { e.target.textContent = "コピー"; }, 1500);
     });
     popup.querySelector("#coord-popup-pin").addEventListener("click", () => {
-      if (lastDeg) a.setMarker?.({ ...lastDeg, kind: "pin" }, lastDeg);
+      if (!lastDeg) return;
+      if (a.setPin) a.setPin({ ...lastDeg, kind: "pin" });
+      else a.setMarker?.({ ...lastDeg, kind: "pin" }, lastDeg);
+    });
+    popup.querySelector("#coord-popup-clear").addEventListener("click", () => {
+      a.clearPins?.();
     });
     a.el.addEventListener("click", e => {
       if (!pickMode || onUiControl(e)) return;

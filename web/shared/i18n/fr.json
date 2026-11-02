@@ -649,5 +649,8 @@
   "print.captureFailed": "Échec de capture de la carte (impression sans carte)",
   "print.pdfExporting": "Export PDF via QGIS…",
   "print.pdfFailed": "Échec de l'export PDF",
-  "print.scalePrefix": "Échelle 1:"
+  "print.scalePrefix": "Échelle 1:",
+  "coordpick": {
+    "clear": "Effacer"
+  }
 }

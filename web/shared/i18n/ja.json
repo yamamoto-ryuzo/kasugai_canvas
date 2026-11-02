@@ -698,5 +698,8 @@
   "print.captureFailed": "地図画像を取得できませんでした(地図なしで出力)",
   "print.pdfExporting": "QGISでPDF出力中…",
   "print.pdfFailed": "PDF出力に失敗しました",
-  "print.scalePrefix": "縮尺 1:"
+  "print.scalePrefix": "縮尺 1:",
+  "coordpick": {
+    "clear": "クリア"
+  }
 }

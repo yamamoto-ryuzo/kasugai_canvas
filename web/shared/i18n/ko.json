@@ -649,5 +649,8 @@
   "print.captureFailed": "지도 이미지를 가져올 수 없습니다(지도 없이 출력)",
   "print.pdfExporting": "QGIS에서 PDF 출력 중…",
   "print.pdfFailed": "PDF 출력 실패",
-  "print.scalePrefix": "축척 1:"
+  "print.scalePrefix": "축척 1:",
+  "coordpick": {
+    "clear": "지우기"
+  }
 }

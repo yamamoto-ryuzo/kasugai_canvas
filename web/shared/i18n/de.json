@@ -649,5 +649,8 @@
   "print.captureFailed": "Kartenbild konnte nicht erfasst werden (Ausgabe ohne Karte)",
   "print.pdfExporting": "PDF wird über QGIS exportiert…",
   "print.pdfFailed": "PDF-Export fehlgeschlagen",
-  "print.scalePrefix": "Maßstab 1:"
+  "print.scalePrefix": "Maßstab 1:",
+  "coordpick": {
+    "clear": "Löschen"
+  }
 }

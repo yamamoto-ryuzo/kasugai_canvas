@@ -649,5 +649,8 @@
   "print.captureFailed": "地图图像获取失败(不含地图输出)",
   "print.pdfExporting": "正在通过QGIS导出PDF…",
   "print.pdfFailed": "PDF导出失败",
-  "print.scalePrefix": "比例尺 1:"
+  "print.scalePrefix": "比例尺 1:",
+  "coordpick": {
+    "clear": "清除"
+  }
 }

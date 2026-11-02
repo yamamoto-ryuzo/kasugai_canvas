@@ -649,5 +649,8 @@
   "print.captureFailed": "No se pudo capturar el mapa (se imprime sin mapa)",
   "print.pdfExporting": "Exportando PDF con QGIS…",
   "print.pdfFailed": "Falló la exportación del PDF",
-  "print.scalePrefix": "Escala 1:"
+  "print.scalePrefix": "Escala 1:",
+  "coordpick": {
+    "clear": "Limpiar"
+  }
 }

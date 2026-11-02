@@ -5730,7 +5730,7 @@ function setupEvents() {
   const coordPopupText = document.querySelector("#coord-popup-text");
   const coordPopupAddress = document.querySelector("#coord-popup-address");
   let coordPickMode = false;
-  let coordPin = null;
+  const coordPins = [];
   let coordLastDeg = null;
   const setCoordPickMode = on => {
     coordPickMode = on;
@@ -5754,15 +5754,18 @@ function setupEvents() {
   });
   document.querySelector("#coord-popup-pin")?.addEventListener("click", () => {
     if (!coordLastDeg) return;
-    if (coordPin) viewer.entities.remove(coordPin);
-    coordPin = viewer.entities.add({
+    coordPins.push(viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(coordLastDeg.lng, coordLastDeg.lat),
       billboard: {
         image: "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42"><path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="#e33d3d" stroke="#fff" stroke-width="2"/><circle cx="16" cy="16" r="6" fill="#fff"/></svg>'),
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
-    });
+    }));
+    requestRender();
+  });
+  document.querySelector("#coord-popup-clear")?.addEventListener("click", () => {
+    while (coordPins.length) viewer.entities.remove(coordPins.pop());
     requestRender();
   });
   // クリック位置の座標をポップアップ表示し、地理院の逆ジオコーダで地名を引く
