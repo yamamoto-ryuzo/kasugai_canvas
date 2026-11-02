@@ -95,9 +95,9 @@ export function installViewHistory(opts) {
     listEl = document.createElement("div");
     listEl.className = "view-history-list";
     const entries = [
-      ...back.map((v, i) => ({ v, where: "back", i })),
-      { v: null, where: "current" },
       ...[...fwd].reverse().map((v, k) => ({ v, where: "fwd", i: fwd.length - 1 - k })),
+      { v: null, where: "current" },
+      ...[...back].reverse().map((v, k) => ({ v, where: "back", i: back.length - 1 - k })),
     ];
     entries.forEach((ent, idx) => {
       const b = document.createElement("button");
