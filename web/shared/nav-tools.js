@@ -35,6 +35,22 @@ function ensureNavToolsStyle() {
   document.head.appendChild(st);
 }
 
+// 履歴一覧の地名表示用キャッシュ（座標を約100m単位に丸めてキー化し再利用）
+const histNameCache = new Map();
+const histNameKey = v => `${Number(v.lat ?? v.latitude).toFixed(3)},${Number(v.lng ?? v.longitude).toFixed(3)}`;
+function histGeocodeName(v) {
+  const lat = Number(v.lat ?? v.latitude), lng = Number(v.lng ?? v.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return Promise.resolve("");
+  const key = histNameKey(v);
+  if (!histNameCache.has(key)) {
+    histNameCache.set(key, fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lon=${lng}&lat=${lat}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => d?.results?.lv01Nm || "")
+      .catch(() => ""));
+  }
+  return histNameCache.get(key);
+}
+
 // 表示履歴の前へ/次へボタンへ「クリック=1ステップ移動 / ダブルクリック=履歴一覧から任意ジャンプ」を装着する
 // opts: { backBtn, fwdBtn, getStacks() -> {back,fwd}（ミュータブル配列・endがtop）, getView(), setView(v),
 //         label(v), beforeNavigate(), sync() }
@@ -101,10 +117,16 @@ export function installViewHistory(opts) {
       ...[...back].reverse().map((v, k) => ({ v, where: "back", i: back.length - 1 - k })),
     ];
     entries.forEach((ent, idx) => {
+      const v = ent.where === "current" ? cur : ent.v;
       const b = document.createElement("button");
       b.type = "button";
       b.className = "view-history-item" + (ent.where === "current" ? " is-current" : "");
-      b.textContent = ent.where === "current" ? `● ${idx + 1}: ${label(cur)}（現在）` : `${idx + 1}: ${label(ent.v)}`;
+      // 地名が取れたら先頭に付ける（非同期・キャッシュ付き）
+      const setText = name => {
+        b.textContent = `${ent.where === "current" ? "● " : ""}${idx + 1}: ${name ? `${name} ` : ""}${label(v)}${ent.where === "current" ? "（現在）" : ""}`;
+      };
+      setText(histNameCache.get(histNameKey(v)) === "" ? "" : histNameCache.get(histNameKey(v)) || "");
+      if (!histNameCache.has(histNameKey(v))) void histGeocodeName(v).then(setText);
       if (ent.where !== "current") b.addEventListener("click", () => { jumpToIndex(ent.where, ent.i); closeList(); });
       listEl.appendChild(b);
     });
