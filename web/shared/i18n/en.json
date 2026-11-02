@@ -670,6 +670,7 @@
   "coordpick.copy": "Copy",
   "coordpick.copied": "Copied",
   "coordpick.pin": "Pin",
+  "coordpick.clear": "Clear",
   "display.popup": "Attribute popup on feature click",
   "print.open": "Print",
   "print.dialogTitle": "Print",

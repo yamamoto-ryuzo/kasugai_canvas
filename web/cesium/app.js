@@ -29,6 +29,7 @@ import { matchSessionState, bindSessionState, applySessionState } from "../share
 import { initPrint } from "../shared/print.js";
 import { formatLatLng, parseCoordinateQuery } from "../shared/coords-format.js";
 import { installViewHistory } from "../shared/nav-tools.js";
+import { coordPins as coordPinStore } from "../shared/coord-pins.js";
 
 await initI18n();
 applyI18n();
@@ -5730,7 +5731,6 @@ function setupEvents() {
   const coordPopupText = document.querySelector("#coord-popup-text");
   const coordPopupAddress = document.querySelector("#coord-popup-address");
   let coordPickMode = false;
-  const coordPins = [];
   let coordLastDeg = null;
   let coordLastAddr = "";
   const setCoordPickMode = on => {
@@ -5755,27 +5755,52 @@ function setupEvents() {
   });
   document.querySelector("#coord-popup-pin")?.addEventListener("click", () => {
     if (!coordLastDeg) return;
-    coordPins.push(viewer.entities.add({
-      name: "座標ピン",
-      position: Cesium.Cartesian3.fromDegrees(coordLastDeg.lng, coordLastDeg.lat),
-      properties: {
-        種別: "座標ピン",
-        緯度: coordLastDeg.lat.toFixed(6),
-        経度: coordLastDeg.lng.toFixed(6),
-        地名: coordLastAddr || "",
-        作成時刻: new Date().toLocaleString(),
-      },
-      billboard: {
-        image: "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42"><path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="#e33d3d" stroke="#fff" stroke-width="2"/><circle cx="16" cy="16" r="6" fill="#fff"/></svg>'),
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      },
-    }));
-    requestRender();
+    coordPinStore.add({ lat: coordLastDeg.lat, lng: coordLastDeg.lng, address: coordLastAddr });
   });
   document.querySelector("#coord-popup-clear")?.addEventListener("click", () => {
-    while (coordPins.length) viewer.entities.remove(coordPins.pop());
+    coordPinStore.clear();
+  });
+  // 座標ピンは共有 GeoJSON ストア(shared/coord-pins.js)を正本とし、プラグイン
+  // geojson レイヤーとして描画する。レイヤ一覧・属性表示・ベクター検索・
+  // getLayerGeoJson 等が通常レイヤーと同じ経路で使える
+  let coordPinLayerItem = null;
+  let coordPinSyncTail = Promise.resolve();
+  const syncCoordPinLayer = async fc => {
+    if (!fc.features.length) {
+      if (coordPinLayerItem) {
+        removePluginLayer(coordPinLayerItem);
+        coordPinLayerItem = null;
+        renderLayerList();
+        await refreshLayers();
+      }
+      return;
+    }
+    if (!coordPinLayerItem || !pluginLayers.includes(coordPinLayerItem)) {
+      coordPinLayerItem = await registerPluginLayer({ title: "座標ピン", format: "geojson", data: fc }, "coordpick");
+      return;
+    }
+    coordPinLayerItem.data = fc;
+    coordPinLayerItem.geojsonSource = fc;
+    // 描画中レイヤーは DataSource だけ差し替える(resliceViewportLayer と同じ
+    // 新規追加→旧除去の順で空白を出さない)。未描画なら全体 refresh に任せる
+    const entry = vectorDataSources.find(e => e.id === coordPinLayerItem.id);
+    if (!entry) {
+      if (coordPinLayerItem.visible) await refreshLayers();
+      return;
+    }
+    const ds = await buildStyledGeoJsonDataSource(fc, getVectorDrapeFlags(), coordPinLayerItem);
+    try { ds.show = coordPinLayerItem.visible; } catch (e) {}
+    await viewer.dataSources.add(ds);
+    viewer.dataSources.remove(entry.ds, false);
+    entry.ds = ds;
+    layerRuntimeTargets.set(coordPinLayerItem.id, ds);
+    buildVectorSearchIndex();
+    updateVectorSearchUI();
     requestRender();
+  };
+  coordPinStore.setRenderer(fc => {
+    // 連続したピン追加・クリアを直列化して二重登録を防ぐ
+    coordPinSyncTail = coordPinSyncTail.then(() => syncCoordPinLayer(fc)).catch(e => console.warn("座標ピンレイヤーの同期に失敗:", e));
   });
   // クリック位置の座標をポップアップ表示し、地理院の逆ジオコーダで地名を引く
   const showCoordPopup = (pos, lat, lng) => {

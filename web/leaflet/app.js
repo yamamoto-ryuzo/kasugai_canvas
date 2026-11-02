@@ -10,6 +10,7 @@ import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
+import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
 import { initPrint, compositeDomMap } from "../shared/print.js";
 
@@ -1291,6 +1292,10 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     }
     if (!count) panel.searchResults.textContent = "該当なし";
   };
+
+  // プロジェクト再描画で除去された管理レイヤー・pane を含め、
+  // 共有ストアの状態へ座標ピンレイヤーを再同期する
+  coordPins.refresh();
 }
 
 // エントリのデータを現在の表示範囲・条件で再読み込みする。
@@ -1741,7 +1746,57 @@ initNavTools({
   onMoveEnd: cb => map.on("moveend", cb),
   toLatLng: (x, y) => { const ll = map.containerPointToLatLng([x, y]); return { lat: ll.lat, lng: ll.lng }; },
   setMarker: ll => { initNavTools._mk?.remove(); initNavTools._mk = ll ? L.marker([ll.lat, ll.lng]).addTo(map) : null; },
-  setPin: ll => { (initNavTools._pins ??= []).push(L.marker([ll.lat, ll.lng]).bindPopup(`座標ピン ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}${ll.address ? ` ${ll.address}` : ""}`).addTo(map)); },
-  clearPins: () => { initNavTools._pins?.forEach(m => m.remove()); initNavTools._pins = []; },
   nativeBoxZoom: true,
 });
+
+// ---- 座標ピン（shared/coord-pins.js の共有 GeoJSON を一般レイヤーとして描画）----
+// layerEntries に正規エントリを持つため、レイヤ一覧・属性表示(クリック)・
+// 属性検索・属性一覧ウィジェットが通常レイヤーと同じ経路で使える
+let pinEntry = null;
+function syncCoordPinLayer(fc) {
+  // プロジェクト再描画(removeManagedPanes で pane ごと除去)で消えた分を含め、
+  // ストアの状態へ収束させる。L.geoJSON グループは同期のたびに作り直す
+  if (pinEntry && !layerEntries.includes(pinEntry)) pinEntry = null;
+  if (pinEntry?.layer && map.hasLayer(pinEntry.layer)) map.removeLayer(pinEntry.layer);
+  if (!fc.features.length) {
+    if (pinEntry) {
+      const i = layerEntries.indexOf(pinEntry);
+      if (i >= 0) layerEntries.splice(i, 1);
+      pinEntry = null;
+      renderLayerRows(layerEntries, currentUnsupported);
+    }
+    return;
+  }
+  if (!pinEntry) {
+    pinEntry = { item: { title: "座標ピン", type: "geojson", visible: true }, layer: null, paneName: newKascPane(), pending: false, baseOpacity: 1 };
+    layerEntries.unshift(pinEntry);
+  }
+  const entry = pinEntry;
+  entry.item._geojson = fc;
+  const env = geojsonExtent(fc);
+  if (env) entry.item._env = env;
+  entry.layer = L.geoJSON(fc, {
+    pane: entry.paneName,
+    pointToLayer: (f, ll) => L.circleMarker(ll, {
+      radius: 7, pane: entry.paneName,
+      color: "#fff", weight: 2,
+      fillColor: f.properties?.["marker-color"] || "#e33d3d", fillOpacity: 1,
+    }),
+    onEachFeature: (f, l) => {
+      l.on("click", () => {
+        // 属性タブ(Cesium 版 attr-panel 相当)へ通常地物と同じ内容を表示する
+        window.switchPanelTab?.("attr");
+        renderAttrContent(panel.attrContent, [{
+          title: entry.item.title,
+          entries: attrEntriesFromProps(f.properties),
+          layerId: String(layerEntries.indexOf(entry)),
+          feature: f,
+          flyable: !!f?.geometry,
+        }], { onRecordClick: rec => focusFeatureExtent(rec.feature) });
+      });
+    },
+  });
+  applyEntryVisibility(entry);
+  renderLayerRows(layerEntries, currentUnsupported);
+}
+coordPins.setRenderer(syncCoordPinLayer);

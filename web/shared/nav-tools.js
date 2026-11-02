@@ -2,6 +2,7 @@
 // フルスクリーン / 表示履歴 / 現在地(GPS) / 地点座標取得 / 矩形ズーム / スクリーンショット / 検索座標直入力
 // adapter 仕様は各エンジン app.js の initNavTools 呼び出しを参照。機能が無い場合は該当ボタンを隠す
 import { formatLatLng, parseCoordinateQuery } from "./coords-format.js";
+import { coordPins } from "./coord-pins.js";
 
 const STYLE = `
 .nav-history-row{display:flex;gap:4px}
@@ -248,11 +249,15 @@ export function initNavTools(a) {
     popup.querySelector("#coord-popup-pin").addEventListener("click", () => {
       if (!lastDeg) return;
       const pin = { ...lastDeg, kind: "pin", address: pAddr.textContent || "" };
-      if (a.setPin) a.setPin(pin);
+      // 共有 GeoJSON ストア経由なら各エンジンの一般レイヤーとして描画される。
+      // 未対応エンジン(setRenderer 未登録)は旧アダプタのマーカー経路にフォールバック
+      if (coordPins.hasRenderer()) coordPins.add(pin);
+      else if (a.setPin) a.setPin(pin);
       else a.setMarker?.(pin, lastDeg);
     });
     popup.querySelector("#coord-popup-clear").addEventListener("click", () => {
-      a.clearPins?.();
+      if (coordPins.hasRenderer()) coordPins.clear();
+      else a.clearPins?.();
     });
     a.el.addEventListener("click", e => {
       if (!pickMode || onUiControl(e)) return;

@@ -621,6 +621,7 @@
   "coordpick.copy": "복사",
   "coordpick.copied": "복사됨",
   "coordpick.pin": "핀 고정",
+  "coordpick.clear": "지우기",
   "display.popup": "지물 클릭 시 속성 팝업",
   "print.open": "인쇄",
   "print.dialogTitle": "인쇄",

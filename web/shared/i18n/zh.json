@@ -621,6 +621,7 @@
   "coordpick.copy": "复制",
   "coordpick.copied": "已复制",
   "coordpick.pin": "固定标记",
+  "coordpick.clear": "清除",
   "display.popup": "点击要素时显示属性弹窗",
   "print.open": "打印",
   "print.dialogTitle": "打印",

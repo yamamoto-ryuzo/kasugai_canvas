@@ -621,6 +621,7 @@
   "coordpick.copy": "Copiar",
   "coordpick.copied": "Copiado",
   "coordpick.pin": "Fijar",
+  "coordpick.clear": "Limpiar",
   "display.popup": "Ventana de atributos al hacer clic",
   "print.open": "Imprimir",
   "print.dialogTitle": "Imprimir",

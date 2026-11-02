@@ -20,6 +20,7 @@ import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
 import { initNavTools } from "../shared/nav-tools.js";
+import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
@@ -1209,6 +1210,10 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     }
     if (!count) panel.searchResults.textContent = "該当なし";
   };
+
+  // プロジェクト再描画で map.getLayers().clear された分を含め、
+  // 共有ストアの状態へ座標ピンレイヤーを再同期する
+  coordPins.refresh();
 }
 
 // エントリのデータを現在の表示範囲・条件で再読み込みする。
@@ -1707,19 +1712,55 @@ initNavTools({
       });
     }
   },
-  setPin: ll => {
-    const el = document.createElement("div");
-    el.textContent = "📍"; el.style.cssText = "font-size:22px;pointer-events:none;text-shadow:0 0 3px #fff;";
-    el.title = `座標ピン ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}${ll.address ? ` ${ll.address}` : ""}`;
-    import("https://cdn.jsdelivr.net/npm/ol@10.11.0/Overlay.js").then(m => {
-      const ov = new m.default({ element: el, position: fromLonLat([ll.lng, ll.lat]), positioning: "bottom-center", stopEvent: false });
-      (initNavTools._pins ??= []).push(ov);
-      map.addOverlay(ov);
-    });
-  },
-  clearPins: () => { initNavTools._pins?.forEach(o => map.removeOverlay(o)); initNavTools._pins = []; },
   capturePng: () => new Promise(res => {
     map.once("rendercomplete", () => { const c = compositeCanvases(map.getViewport()); c ? c.toBlob(res, "image/png") : res(null); });
     map.renderSync();
   }),
 });
+
+// ---- 座標ピン（shared/coord-pins.js の共有 GeoJSON を一般レイヤーとして描画）----
+// layerEntries に正規エントリを持つため、レイヤ一覧・属性表示(クリック)・
+// 属性検索・属性一覧ウィジェットが通常レイヤーと同じ経路で使える
+let pinEntry = null;
+const pinSource = new VectorSource();
+const pinLayer = new VectorLayer({
+  source: pinSource,
+  style: f => new Style({
+    image: new CircleStyle({
+      radius: 7,
+      fill: new Fill({ color: f.get("marker-color") || "#e33d3d" }),
+      stroke: new Stroke({ color: "#fff", width: 2 }),
+    }),
+  }),
+});
+const pinLayerOnMap = () => map.getLayers().getArray().includes(pinLayer);
+function syncCoordPinLayer(fc) {
+  // プロジェクト再描画(map.getLayers().clear)で消えた分を含め、ストアの状態へ収束させる
+  if (pinEntry && !layerEntries.includes(pinEntry)) {
+    pinEntry = null;
+    if (pinLayerOnMap()) map.removeLayer(pinLayer);
+  }
+  if (!fc.features.length) {
+    if (pinEntry) {
+      const i = layerEntries.indexOf(pinEntry);
+      if (i >= 0) layerEntries.splice(i, 1);
+      pinEntry = null;
+      renderLayerRows(layerEntries, currentUnsupported);
+    }
+    if (pinLayerOnMap()) map.removeLayer(pinLayer);
+    pinSource.clear();
+    return;
+  }
+  if (!pinEntry) {
+    pinEntry = { item: { title: "座標ピン", type: "geojson", visible: true }, layer: pinLayer, pending: false, opa: 1 };
+    layerEntries.unshift(pinEntry);
+    renderLayerRows(layerEntries, currentUnsupported);
+  }
+  pinEntry.item._geojson = fc;
+  const env = geojsonExtent(fc);
+  if (env) { pinEntry.item._env = env; pinLayer.set("kascEnv", env); }
+  pinSource.clear();
+  pinSource.addFeatures(new GeoJSON().readFeatures(fc, { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" }));
+  if (!pinLayerOnMap()) insertEntryLayer(pinEntry, layerEntries.indexOf(pinEntry));
+}
+coordPins.setRenderer(syncCoordPinLayer);
