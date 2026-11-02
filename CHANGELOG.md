@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.14.1] - 2026-11-02
+
+### Fixed
+
+- **GSI Maps で session 非表示レイヤが一瞬表示されるバグを修正** — エンジン切替時、`buildFromDoc` が全レイヤを `.kasc` doc 宣言の可視性で mount した後に `applySessionState` で隠していたため、session で OFF のレイヤが一度地図へ追加→除去されていた（`.kasc` の `| off` は実行時トグルを反映せず `vis` マップのみが正典）。他エンジン（leaflet/maplibre 等）と同じく、mount ループの前に session の `vis` を `item.visible` へ畳み込む順序へ修正。Playwright で修正前の add→rm 記録を再現し、修正後は一度も地図へ追加されないことを検証済み
+
 ## [6.14.0] - 2026-11-02
 
 ### Fixed

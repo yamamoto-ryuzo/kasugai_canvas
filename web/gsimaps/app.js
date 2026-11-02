@@ -1289,9 +1289,10 @@ async function applyProject(proj) {
   lastVendorSrc = frame.src;
   await waitGsimaps();
   wireMapEvents();
-  await buildFromDoc({ doc, baseUrl: proj.baseUrl, noFit: hasUrlView(uv) || !!cam });
+  await buildFromDoc({ doc, baseUrl: proj.baseUrl, noFit: hasUrlView(uv) || !!cam, sw });
   booted = true;
-  // カレント状態のレイヤ関連を復元（vis・theme・basemap。inspector は初回 doc へ反映済み）
+  // theme/basemap は themeSelect/select の選択肢が揃う buildFromDoc 後に適用する
+  // (vis は mount 前に畳み込み済みのため、ここでは差分なしの no-op)
   applySessionState(sw, {
     entries: layerEntries, themeSelect,
     setVisible: (e, on) => { e.item.visible = on; if (!e.unsupported) applyEntryVisibility(e); },
@@ -1299,7 +1300,7 @@ async function applyProject(proj) {
   });
 }
 
-async function buildFromDoc({ doc, baseUrl, noFit = false }) {
+async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
   lastDocCtx = { doc, baseUrl };
   resetAll();
   currentDefaultStyles = doc.defaultStyles || {};
@@ -1330,6 +1331,14 @@ async function buildFromDoc({ doc, baseUrl, noFit = false }) {
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0))
     .map(item => ({ item, pending: true, unsupported: doc.unsupported.includes(item) || !(VECTOR_TYPES.has(item.type) || TILE_TYPES.has(item.type)) }));
   renderLayerRows();
+  // 引継ぎセッションの可視性を mount 前に item.visible へ畳み込む。
+  // doc の |off は実行時トグルを反映しない(正典は vis マップ)ため、
+  // mount 後に隠すと非表示レイヤが一瞬地図へ出る(他エンジンは mount 前適用)
+  if (sw) applySessionState(sw, {
+    entries: layerEntries, themeSelect,
+    setVisible: (e, on) => { e.item.visible = on; if (!e.unsupported) applyEntryVisibility(e); },
+    rerender: renderLayerRows,
+  });
   let done = 0;
   const total = layerEntries.length;
   for (const e of layerEntries) {
