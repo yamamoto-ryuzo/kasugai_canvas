@@ -18,6 +18,7 @@ const STYLE = `
 #coord-popup .coord-popup-actions{display:flex;gap:4px;margin-top:5px}
 #coord-popup .coord-popup-actions button{padding:2px 8px;border:1px solid rgba(0,0,0,.1);border-radius:4px;background:#f1f4f8;color:#263643;cursor:pointer;font-size:11px}
 #coord-popup .coord-popup-actions button:hover{background:#e7f3f0}
+#screenshot-button{font-size:20px;line-height:1;padding:0}
 #coords-format{width:100%;min-height:30px;padding:5px 7px;border:1px solid #cbd9de;border-radius:4px;background:#fff;color:#1d2b35;font-size:var(--basemap-select-font-size,13px);box-sizing:border-box}
 `;
 
