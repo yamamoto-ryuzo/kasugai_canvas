@@ -99,14 +99,14 @@ export function installViewHistory(opts) {
       { v: null, where: "current" },
       ...[...fwd].reverse().map((v, k) => ({ v, where: "fwd", i: fwd.length - 1 - k })),
     ];
-    for (const ent of entries) {
+    entries.forEach((ent, idx) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "view-history-item" + (ent.where === "current" ? " is-current" : "");
-      b.textContent = ent.where === "current" ? `● ${label(cur)}（現在）` : label(ent.v);
+      b.textContent = ent.where === "current" ? `● ${idx + 1}: ${label(cur)}（現在）` : `${idx + 1}: ${label(ent.v)}`;
       if (ent.where !== "current") b.addEventListener("click", () => { jumpToIndex(ent.where, ent.i); closeList(); });
       listEl.appendChild(b);
-    }
+    });
     const anchor = (anchorDir < 0 ? backBtn : fwdBtn) || backBtn || fwdBtn;
     const r = (anchor || document.body).getBoundingClientRect();
     listEl.style.right = `${Math.max(8, innerWidth - r.left + 8)}px`;
