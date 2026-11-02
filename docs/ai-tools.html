@@ -34,12 +34,13 @@
       </section>
 
       <section>
-        <h2>📷 カメラ・視点（5）</h2>
+        <h2>📷 カメラ・視点（6）</h2>
         <table>
           <thead><tr><th>ツール</th><th>引数（＊=必須）</th><th>説明</th></tr></thead>
           <tbody>
             <tr><td><code>flyTo</code></td><td>latitude*, longitude*, height, pitch, heading</td><td>カメラを指定座標へ移動。height/pitch 省略時はドローン視点（対象地上+200m・-30°）。pitch=-90 で真上俯瞰</td></tr>
             <tr><td><code>flyToFeature</code></td><td>latitude*, longitude*, height, pitch, heading</td><td>指定座標が画面中央に来るよう後退補正して移動。地点・地物を見せる場合はこちら</td></tr>
+            <tr><td><code>zoomToExtent</code></td><td>west*, south*, east*, north*</td><td>緯度経度の矩形範囲が画面に収まるようカメラを移動（矩形ズーム相当）</td></tr>
             <tr><td><code>flyToPreset</code></td><td>name*</td><td>登録済みカメラプリセット名で移動（<code>listCameraPresets</code> で確認）</td></tr>
             <tr><td><code>listCameraPresets</code></td><td>なし</td><td>登録済みカメラプリセット名の一覧を取得</td></tr>
             <tr><td><code>getCamera</code></td><td>なし</td><td>現在のカメラ位置（緯度・経度・高さ・方位・ピッチ）を取得</td></tr>

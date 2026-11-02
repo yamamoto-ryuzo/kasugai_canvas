@@ -81,7 +81,7 @@ function escapeHtml(value) {
 // "local:" 始まりは api 不要のローカル実装ツール。エンジンが api メソッドを
 // 実装していないツールは AI に公開しない（2D プレイヤーで 3D 操作を出さない等）
 const CHAT_TOOL_API = {
-  flyTo: "flyTo", flyToFeature: "flyToFeature",
+  flyTo: "flyTo", flyToFeature: "flyToFeature", zoomToExtent: "zoomToExtent",
   setLayerVisible: "setLayerVisible", setLayerLegendVisible: "setLayerLegendVisible",
   listLayers: "listLayers", focusLayer: "focusLayer", getCamera: "getCamera",
   listBasemaps: "listBasemaps", setBasemap: "setBasemap",
@@ -1509,6 +1509,20 @@ const CHAT_TOOLS = [{
       },
     },
     {
+      name: "zoomToExtent",
+      description: "緯度経度の矩形範囲(west/south/east/north)が画面に収まるようカメラを移動する(矩形ズーム相当)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          west: { type: "NUMBER", description: "西端経度(度)" },
+          south: { type: "NUMBER", description: "南端緯度(度)" },
+          east: { type: "NUMBER", description: "東端経度(度)" },
+          north: { type: "NUMBER", description: "北端緯度(度)" },
+        },
+        required: ["west", "south", "east", "north"],
+      },
+    },
+    {
       name: "flyToPreset",
       description: "登録済みのカメラプリセット名を指定して移動する。listCameraPresetsで一覧を確認できる",
       parameters: {
@@ -2723,6 +2737,10 @@ export async function executeChatTool(name, args = {}) {
     const merged = await applyDroneViewDefaults(args);
     await flyToFeatureOrView(Number(merged.latitude), Number(merged.longitude), merged);
     return { ok: true };
+  }
+  if (name === "zoomToExtent") {
+    const ok = window.kasugaiApi.zoomToExtent(args.west, args.south, args.east, args.north);
+    return { ok: ok !== false };
   }
   if (name === "setLayerVisible") {
     const ok = window.kasugaiApi.setLayerVisible(args.name, args.visible);

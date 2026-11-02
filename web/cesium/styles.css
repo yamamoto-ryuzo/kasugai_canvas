@@ -175,7 +175,13 @@ a.panel-manage { display: inline-flex; align-items: center; justify-content: cen
 .navigation-toolbar button:hover { background: #e7f3f0; }
 .navigation-toolbar.collapsed .compass-button,
 .navigation-toolbar.collapsed #top-down-button,
-.navigation-toolbar.collapsed .mode-select { display: none; }
+.navigation-toolbar.collapsed .mode-select,
+.navigation-toolbar.collapsed .nav-extra,
+.navigation-toolbar.collapsed .nav-history-row { display: none; }
+.navigation-toolbar .nav-history-row { display: flex; gap: 4px; }
+.navigation-toolbar .nav-history-row button { min-width: 28px; }
+.navigation-toolbar button.nav-active { border-color: #31564f; background: #31564f; color: #fff; }
+.navigation-toolbar button:disabled { opacity: .45; cursor: default; }
 .navigation-toolbar .mode-select { min-width: 60px; min-height: 29px; padding: 5px 7px; border: 1px solid rgba(0,0,0,.08); border-radius: 7px; background: linear-gradient(#fff, #f1f4f8); color: #263643; cursor: pointer; font-size: var(--basemap-select-font-size); }
 .walk-help { display: none; position: absolute; right: 100%; top: 0; margin-right: 6px; padding: 7px 10px; border: 1px solid rgba(14,32,64,.12); border-radius: 10px; background: rgba(255,255,255,.6); box-shadow: 0 8px 18px rgba(10,20,40,.16); color: #263643; font-size: var(--basemap-select-font-size); white-space: nowrap; min-width: 250px; font-variant-numeric: tabular-nums; }
 .walk-help.minimized { min-width: 0; }
@@ -395,4 +401,17 @@ footer { padding: 0 28px 22px; }
 #attr-popup th, #attr-popup td { padding: 1px 4px; border-bottom: 1px solid #e4ecef; text-align: left; }
 #print-open { padding: 3px !important; }
 #print-open > svg { width: 100%; height: 100%; display: block; }
+#screenshot-button { padding: 3px !important; }
+/* 矩形ズームのドラッグ範囲表示 */
+.rect-zoom-box { position: absolute; z-index: 1009; border: 2px dashed #31564f; background: rgba(49,86,79,.12); pointer-events: none; box-sizing: border-box; }
+/* 地点座標取得ポップアップ */
+#coord-popup { position: absolute; z-index: 1010; min-width: 200px; max-width: 280px;
+  background: rgba(255,255,255,.96); border-radius: 6px; padding: 8px 10px; font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+#coord-popup .coord-popup-text { font-family: monospace; font-weight: 600; color: #1d2b35; overflow-wrap: anywhere; }
+#coord-popup .coord-popup-address { margin-top: 2px; color: #52636d; font-size: 11px; overflow-wrap: anywhere; }
+#coord-popup .coord-popup-actions { display: flex; gap: 4px; margin-top: 5px; }
+#coord-popup .coord-popup-actions button { padding: 2px 8px; border: 1px solid rgba(0,0,0,.1); border-radius: 4px; background: #f1f4f8; color: #263643; cursor: pointer; font-size: 11px; }
+#coord-popup .coord-popup-actions button:hover { background: #e7f3f0; }
+#coords-format { width: 100%; min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; font-size: var(--basemap-select-font-size); box-sizing: border-box; }
 .secret { -webkit-text-security: disc; }

@@ -1178,6 +1178,175 @@ async function flyToFeature(lat, lng, options = {}) {
   flyTo({ latitude: cameraLat, longitude: cameraLng, height, pitch: pitchDeg, heading: headingDeg });
 }
 
+// 現在カメラを {latitude,longitude,height,pitch,heading} で取り出す（表示履歴・プリセット用）
+function snapshotCamera() {
+  const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  if (!c) return null;
+  return {
+    latitude: c.latitude * 180 / Math.PI,
+    longitude: c.longitude * 180 / Math.PI,
+    height: c.height,
+    pitch: viewer.camera.pitch * 180 / Math.PI,
+    heading: viewer.camera.heading * 180 / Math.PI,
+  };
+}
+
+function sameCameraView(a, b) {
+  return a && b
+    && Math.abs(a.latitude - b.latitude) < 1e-7
+    && Math.abs(a.longitude - b.longitude) < 1e-7
+    && Math.abs(a.height - b.height) < 0.5
+    && Math.abs(a.pitch - b.pitch) < 0.01
+    && Math.abs(a.heading - b.heading) < 0.01;
+}
+
+// 矩形(west,south,east,north 度)へフレームする。矩形ズーム・AI ツール共用
+function flyToRectangle(west, south, east, north) {
+  if (![west, south, east, north].every(Number.isFinite)) return false;
+  const rect = Cesium.Rectangle.fromDegrees(
+    Math.min(west, east), Math.max(-90, Math.min(90, Math.min(south, north))),
+    Math.max(west, east), Math.max(-90, Math.min(90, Math.max(south, north))));
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  const ssec = viewer.scene.screenSpaceCameraController;
+  viewer.camera.flyTo({
+    destination: rect,
+    orientation: {
+      heading: viewer.camera.heading,
+      pitch: Cesium.Math.toRadians(ssec.enableTilt ? -84.99 : -90),
+      roll: 0,
+    },
+  });
+  return true;
+}
+
+// ---- 座標表示形式（度 / 度分秒 / UTM / 平面直角座標系）----
+function dmsString(deg, posMark, negMark) {
+  const mark = deg < 0 ? negMark : posMark;
+  const v = Math.abs(deg);
+  const d = Math.floor(v);
+  const mFloat = (v - d) * 60;
+  const m = Math.floor(mFloat);
+  const s = (mFloat - m) * 60;
+  return `${d}°${String(m).padStart(2, "0")}'${s.toFixed(1)}"${mark}`;
+}
+
+// 横メルカトル(Gauss-Krüger 系)正規化変換。UTM(縮尺0.9996)・平面直角座標系(0.9999)で共用。
+// 返り値 x=北方向(m)・y=東方向(m)（いずれも原点基準・縮尺補正込み）
+function gaussKruger(latDeg, lonDeg, lat0Deg, lon0Deg, k0) {
+  const a = 6378137;
+  const f = 1 / 298.257222101; // GRS80
+  const n = f / (2 - f);
+  const n2 = n * n, n3 = n2 * n, n4 = n3 * n, n5 = n4 * n, n6 = n5 * n;
+  const A = k0 * a / (1 + n) * (1 + n2 / 4 + n4 / 64);
+  const alpha = [
+    n / 2 - 2 * n2 / 3 + 5 * n3 / 16 + 41 * n4 / 180 - 127 * n5 / 288,
+    13 * n2 / 48 - 3 * n3 / 5 + 557 * n4 / 1440 + 281 * n5 / 630,
+    61 * n3 / 240 - 103 * n4 / 140 + 15061 * n5 / 26880,
+    49561 * n4 / 161280 - 179 * n5 / 168 + 6601661 * n6 / 7257600,
+    34729 * n5 / 80640 - 3418889 * n6 / 1995840,
+    212378941 * n6 / 319467840,
+  ];
+  const rad = d => d * Math.PI / 180;
+  const nSqrt2 = 2 * Math.sqrt(n) / (1 + n);
+  const confLat = phi => Math.atan2(
+    Math.sinh(Math.atanh(Math.sin(phi)) - nSqrt2 * Math.atanh(nSqrt2 * Math.sin(phi))), 1);
+  const phi = rad(latDeg);
+  const lam = rad(lonDeg - lon0Deg);
+  const lamCos = Math.cos(lam);
+  const t = Math.sinh(Math.atanh(Math.sin(phi)) - nSqrt2 * Math.atanh(nSqrt2 * Math.sin(phi)));
+  const xi = Math.atan2(t, lamCos);
+  const eta = Math.atanh(Math.sin(lam) / Math.sqrt(t * t + lamCos * lamCos));
+  const xi0 = confLat(rad(lat0Deg));
+  let x = A * (xi - xi0);
+  let y = A * eta;
+  for (let j = 1; j <= 6; j++) {
+    x += A * alpha[j - 1] * (Math.sin(2 * j * xi) * Math.cosh(2 * j * eta) - Math.sin(2 * j * xi0));
+    y += A * alpha[j - 1] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
+  }
+  return { x, y };
+}
+
+function utmString(latDeg, lonDeg) {
+  const zone = Math.min(60, Math.max(1, Math.floor((lonDeg + 180) / 6) + 1));
+  const { x, y } = gaussKruger(latDeg, lonDeg, 0, zone * 6 - 183, 0.9996);
+  const northing = latDeg < 0 ? x + 10000000 : x;
+  return `${zone}${latDeg < 0 ? "S" : "N"} E${(y + 500000).toFixed(1)} N${northing.toFixed(1)}`;
+}
+
+// 平面直角座標系(JGD2011) 系番号1-19の原点(緯度,経度 度)
+const JPX_ZONES = [
+  [33, 129.5], [33, 131], [36, 132.166667], [33, 133.5], [36, 134.333333],
+  [36, 136], [36, 137.166667], [36, 138.5], [36, 139.833333], [40, 140.833333],
+  [44, 140.25], [44, 142.25], [44, 144.25], [26, 142], [26, 127.5],
+  [26, 124], [26, 131], [20, 136], [26, 154],
+];
+const JPX_ZONE_NAMES = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX"];
+
+function jpxString(latDeg, lonDeg) {
+  // 最も近い原点の系を選ぶ（日本域外では単なる最近傍になる点に注意）
+  let zone = 0;
+  let best = Infinity;
+  const cosLat = Math.cos(latDeg * Math.PI / 180);
+  JPX_ZONES.forEach(([la, lo], i) => {
+    const d = (latDeg - la) ** 2 + ((lonDeg - lo) * cosLat) ** 2;
+    if (d < best) { best = d; zone = i; }
+  });
+  const [la, lo] = JPX_ZONES[zone];
+  const { x, y } = gaussKruger(latDeg, lonDeg, la, lo, 0.9999);
+  return `${JPX_ZONE_NAMES[zone]}系 X=${x.toFixed(3)} Y=${y.toFixed(3)}`;
+}
+
+function formatLatLng(latDeg, lonDeg) {
+  const format = document.querySelector("#coords-format")?.value || "deg";
+  switch (format) {
+    case "dms": return `${dmsString(latDeg, "N", "S")} ${dmsString(lonDeg, "E", "W")}`;
+    case "utm": return `UTM ${utmString(latDeg, lonDeg)}`;
+    case "jpx": return jpxString(latDeg, lonDeg);
+    default: return `${latDeg.toFixed(5)}, ${lonDeg.toFixed(5)}`;
+  }
+}
+
+// ---- 検索窓の座標直入力パーサ ----
+// "35.6,139.7" / "139.7,35.6" / "N35°36'50" E139°43'0"" / "35度36分 139度43分" 等を
+// {lat,lng} に正規化する。座標と解釈できなければ null
+function parseCoordinateQuery(text) {
+  const s = String(text || "").trim()
+    .replace(/[，、]/g, ",")
+    .replace(/北緯/g, "N").replace(/南緯/g, "S").replace(/東経/g, "E").replace(/西経/g, "W")
+    .replace(/度/g, "°").replace(/分/g, "'").replace(/秒/g, '"')
+    .replace(/[′’`]/g, "'").replace(/[″”]/g, '"');
+  if (!s || !/\d/.test(s)) return null;
+  const orderLatLng = (va, vb) => {
+    const aIsLon = va.hemi === "E" || va.hemi === "W" || (Math.abs(va.v) > 90 && Math.abs(vb.v) <= 90);
+    const bIsLat = vb.hemi === "N" || vb.hemi === "S";
+    const lat = (aIsLon && !bIsLat) || bIsLat ? vb.v : va.v;
+    const lng = (aIsLon && !bIsLat) || bIsLat ? va.v : vb.v;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    return { lat, lng };
+  };
+  const parseComponent = str => {
+    const m = String(str).trim().match(/^([NSEW])?\s*([+-]?\d+(?:\.\d+)?)(?:\s*°\s*(\d+(?:\.\d+)?))?(?:\s*'\s*(\d+(?:\.\d+)?))?(?:\s*")?\s*([NSEW])?$/i);
+    if (!m) return null;
+    let v = Math.abs(parseFloat(m[2])) + (Number(m[3]) || 0) / 60 + (Number(m[4]) || 0) / 3600;
+    const hemi = (m[1] || m[5] || "").toUpperCase();
+    if (hemi === "S" || hemi === "W" || m[2].startsWith("-")) v = -v;
+    return { v, hemi };
+  };
+  // コンマ区切りを最優先で試し、駄目なら空白区切りの全分割点を試す
+  const candidates = s.includes(",")
+    ? s.split(",").map(p => p.trim()).filter(Boolean)
+    : s.split(/\s+/).filter(Boolean);
+  for (let i = 1; i < candidates.length; i++) {
+    const a = parseComponent(candidates.slice(0, i).join(" "));
+    const b = parseComponent(candidates.slice(i).join(" "));
+    if (a && b) {
+      const result = orderLatLng(a, b);
+      if (result) return result;
+    }
+  }
+  return null;
+}
+
 function extractLineStringCoordinates(geojson) {
   if (!geojson || typeof geojson !== "object") return [];
   const coords = [];
@@ -5159,6 +5328,13 @@ function setupEvents() {
       results.innerHTML = '<li style="padding:8px;color:#71818d;">' + escapeHtml(t("search.enterQuery")) + '</li>';
       return;
     }
+    // 座標直入力("35.6,139.7"・DMS 等)はジオコーディングを通さずその地点へ FlyTo
+    const coord = parseCoordinateQuery(query);
+    if (coord) {
+      results.innerHTML = `<li style="padding:8px;color:#52636d;">${escapeHtml(formatLatLng(coord.lat, coord.lng))}</li>`;
+      void flyToFeature(coord.lat, coord.lng);
+      return;
+    }
     results.innerHTML = '<li style="padding:8px;color:#71818d;">' + escapeHtml(t("search.searching")) + '</li>';
     try {
       const provider = searchProviders[searchProvider?.value] || searchProviders.gsi;
@@ -5293,7 +5469,7 @@ function setupEvents() {
     const cart = viewer.camera.pickEllipsoid(pos, viewer.scene.globe.ellipsoid);
     if (!cart) { coordsEl.hidden = true; return; }
     const c = Cesium.Cartographic.fromCartesian(cart);
-    coordsEl.textContent = `${(c.latitude * 180 / Math.PI).toFixed(5)}, ${(c.longitude * 180 / Math.PI).toFixed(5)}`;
+    coordsEl.textContent = formatLatLng(c.latitude * 180 / Math.PI, c.longitude * 180 / Math.PI);
     coordsEl.hidden = false;
   });
   document.querySelector("#display-coords")?.addEventListener("change", e => {
@@ -5476,6 +5652,249 @@ function setupEvents() {
   document.querySelector("#top-down-button").addEventListener("click", () => {
     setTopDown(viewer.scene.screenSpaceCameraController.enableTilt);
   });
+
+  // ---- フルスクリーンボタン ----
+  const fullscreenBtn = document.querySelector("#fullscreen-button");
+  fullscreenBtn?.addEventListener("click", () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void (document.querySelector("#cesium-container") || document.documentElement).requestFullscreen?.();
+  });
+  document.addEventListener("fullscreenchange", () => {
+    const on = !!document.fullscreenElement;
+    fullscreenBtn?.classList.toggle("nav-active", on);
+    fullscreenBtn?.setAttribute("title", t(on ? "nav.exitFullscreen" : "nav.fullscreen"));
+  });
+
+  // ---- 表示履歴（前へ / 次へ）----
+  // moveStart 時のカメラを退避し、moveEnd で実際に動いていれば「戻る」スタックへ積む。
+  // 履歴ボタンによる flyTo は historyNavigating で記録対象から除外する
+  const viewBackStack = [];
+  const viewForwardStack = [];
+  let pendingViewStart = null;
+  let historyNavigating = false;
+  const updateViewHistoryButtons = () => {
+    const back = document.querySelector("#view-back");
+    const fwd = document.querySelector("#view-forward");
+    if (back) back.disabled = !viewBackStack.length;
+    if (fwd) fwd.disabled = !viewForwardStack.length;
+  };
+  viewer.camera.moveStart.addEventListener(() => {
+    if (!historyNavigating) pendingViewStart = snapshotCamera();
+  });
+  viewer.camera.moveEnd.addEventListener(() => {
+    if (historyNavigating) { historyNavigating = false; return; }
+    if (!pendingViewStart) return;
+    const start = pendingViewStart;
+    pendingViewStart = null;
+    if (sameCameraView(start, snapshotCamera())) return;
+    viewBackStack.push(start);
+    if (viewBackStack.length > 100) viewBackStack.shift();
+    viewForwardStack.length = 0;
+    updateViewHistoryButtons();
+  });
+  document.querySelector("#view-back")?.addEventListener("click", () => {
+    const prev = viewBackStack.pop();
+    if (!prev) return;
+    const current = snapshotCamera();
+    if (current) viewForwardStack.push(current);
+    historyNavigating = true;
+    flyTo(prev);
+    updateViewHistoryButtons();
+  });
+  document.querySelector("#view-forward")?.addEventListener("click", () => {
+    const next = viewForwardStack.pop();
+    if (!next) return;
+    const current = snapshotCamera();
+    if (current) viewBackStack.push(current);
+    historyNavigating = true;
+    flyTo(next);
+    updateViewHistoryButtons();
+  });
+  // Alt+← / Alt+→ のショートカット
+  window.addEventListener("keydown", event => {
+    if (!event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "ArrowLeft") { event.preventDefault(); document.querySelector("#view-back")?.click(); }
+    else if (event.key === "ArrowRight") { event.preventDefault(); document.querySelector("#view-forward")?.click(); }
+  });
+
+  // ---- 現在地 (GPS) ボタン: クリックで追従ON/OFF ----
+  // ON の間は watchPosition でマーカーを更新し、3秒以上たった更新でカメラも追従する
+  const locateBtn = document.querySelector("#locate-button");
+  let locateWatchId = null;
+  let locateEntity = null;
+  let locatePosition = null;
+  let locateAccuracy = 0;
+  let locateLastFly = 0;
+  const stopLocate = () => {
+    if (locateWatchId !== null) { navigator.geolocation.clearWatch(locateWatchId); locateWatchId = null; }
+    if (locateEntity) { viewer.entities.remove(locateEntity); locateEntity = null; }
+    locatePosition = null;
+    locateBtn?.classList.remove("nav-active");
+    requestRender();
+  };
+  locateBtn?.addEventListener("click", () => {
+    if (locateWatchId !== null) { stopLocate(); return; }
+    if (!navigator.geolocation) return;
+    locateBtn.classList.add("nav-active");
+    locateLastFly = 0;
+    locateWatchId = navigator.geolocation.watchPosition(pos => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      locatePosition = Cesium.Cartesian3.fromDegrees(longitude, latitude);
+      locateAccuracy = Number.isFinite(accuracy) ? accuracy : 0;
+      if (!locateEntity) {
+        locateEntity = viewer.entities.add({
+          position: new Cesium.CallbackProperty(() => locatePosition, false),
+          point: {
+            pixelSize: 14, color: Cesium.Color.DEEPSKYBLUE,
+            outlineColor: Cesium.Color.WHITE, outlineWidth: 3,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          ellipse: {
+            semiMajorAxis: new Cesium.CallbackProperty(() => locateAccuracy, false),
+            semiMinorAxis: new Cesium.CallbackProperty(() => locateAccuracy, false),
+            material: Cesium.Color.DEEPSKYBLUE.withAlpha(0.15),
+            height: 0,
+          },
+        });
+      }
+      requestRender();
+      // 追従: 初回と3秒以上経過した更新でその地点へ FlyTo
+      const now = Date.now();
+      if (now - locateLastFly > 3000) {
+        locateLastFly = now;
+        void flyToFeature(latitude, longitude);
+      }
+    }, () => stopLocate(), { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 });
+  });
+
+  // ---- 矩形ズーム: Shift+ドラッグ または ツールバーのモード切替 ----
+  const rectzoomBtn = document.querySelector("#rectzoom-button");
+  let rectZoomMode = false;
+  let rectZoom = null;
+  const rectZoomBegin = pos => {
+    if (rectZoom) return;
+    const box = document.createElement("div");
+    box.className = "rect-zoom-box";
+    document.querySelector("#cesium-container").appendChild(box);
+    rectZoom = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y, box };
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+  };
+  const rectZoomUpdate = pos => {
+    if (!rectZoom) return;
+    rectZoom.x1 = pos.x;
+    rectZoom.y1 = pos.y;
+    const x = Math.min(rectZoom.x0, rectZoom.x1);
+    const y = Math.min(rectZoom.y0, rectZoom.y1);
+    const w = Math.abs(rectZoom.x1 - rectZoom.x0);
+    const h = Math.abs(rectZoom.y1 - rectZoom.y0);
+    Object.assign(rectZoom.box.style, { left: `${x}px`, top: `${y}px`, width: `${w}px`, height: `${h}px` });
+  };
+  const rectZoomEnd = (pos, commit) => {
+    if (!rectZoom) return;
+    const { x0, y0 } = rectZoom;
+    rectZoomUpdate(pos);
+    const x1 = rectZoom.x1, y1 = rectZoom.y1;
+    const w = Math.abs(x1 - x0);
+    const h = Math.abs(y1 - y0);
+    rectZoom.box.remove();
+    rectZoom = null;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    if (!commit || w < 4 || h < 4) return;
+    const ellipsoid = viewer.scene.globe.ellipsoid;
+    const pick = (x, y) => viewer.camera.pickEllipsoid(new Cesium.Cartesian2(x, y), ellipsoid);
+    const c0 = pick(Math.min(x0, x1), Math.min(y0, y1));
+    const c1 = pick(Math.max(x0, x1), Math.max(y0, y1));
+    if (!c0 || !c1) return;
+    const g0 = Cesium.Cartographic.fromCartesian(c0);
+    const g1 = Cesium.Cartographic.fromCartesian(c1);
+    flyToRectangle(
+      Math.min(g0.longitude, g1.longitude) * 180 / Math.PI,
+      Math.min(g0.latitude, g1.latitude) * 180 / Math.PI,
+      Math.max(g0.longitude, g1.longitude) * 180 / Math.PI,
+      Math.max(g0.latitude, g1.latitude) * 180 / Math.PI);
+  };
+  rectzoomBtn?.addEventListener("click", () => {
+    rectZoomMode = !rectZoomMode;
+    rectzoomBtn.classList.toggle("nav-active", rectZoomMode);
+    if (!rectZoomMode && rectZoom) rectZoomEnd({ x: 0, y: 0 }, false);
+  });
+  const rectZoomHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
+  rectZoomHandler.setInputAction(e => rectZoomBegin(e.position), Cesium.ScreenSpaceEventType.LEFT_DOWN, Cesium.KeyboardEventModifier.SHIFT);
+  rectZoomHandler.setInputAction(e => { if (rectZoomMode) rectZoomBegin(e.position); }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+  rectZoomHandler.setInputAction(e => rectZoomUpdate(e.endPosition), Cesium.ScreenSpaceEventType.MOUSE_MOVE, Cesium.KeyboardEventModifier.SHIFT);
+  rectZoomHandler.setInputAction(e => rectZoomUpdate(e.endPosition), Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+  rectZoomHandler.setInputAction(e => rectZoomEnd(e.position, true), Cesium.ScreenSpaceEventType.LEFT_UP, Cesium.KeyboardEventModifier.SHIFT);
+  rectZoomHandler.setInputAction(e => rectZoomEnd(e.position, true), Cesium.ScreenSpaceEventType.LEFT_UP);
+  window.addEventListener("keydown", event => {
+    if (event.key === "Escape" && rectZoom) rectZoomEnd({ x: 0, y: 0 }, false);
+  });
+
+  // ---- 地点座標取得モード: クリック地点の緯度経度表示・コピー・逆ジオコード・ピン ----
+  const coordpickBtn = document.querySelector("#coordpick-button");
+  const coordPopup = document.querySelector("#coord-popup");
+  const coordPopupText = document.querySelector("#coord-popup-text");
+  const coordPopupAddress = document.querySelector("#coord-popup-address");
+  let coordPickMode = false;
+  let coordPin = null;
+  let coordLastDeg = null;
+  const setCoordPickMode = on => {
+    coordPickMode = on;
+    coordpickBtn?.classList.toggle("nav-active", on);
+    viewer.canvas.style.cursor = on ? "crosshair" : "";
+    if (!on && coordPopup) coordPopup.hidden = true;
+  };
+  coordpickBtn?.addEventListener("click", () => setCoordPickMode(!coordPickMode));
+  document.querySelector("#coord-popup-close")?.addEventListener("click", () => {
+    if (coordPopup) coordPopup.hidden = true;
+  });
+  document.querySelector("#coord-popup-copy")?.addEventListener("click", async () => {
+    if (!coordLastDeg) return;
+    const text = `${coordLastDeg.lat.toFixed(6)}, ${coordLastDeg.lng.toFixed(6)}`;
+    await navigator.clipboard?.writeText(text);
+    const btn = document.querySelector("#coord-popup-copy");
+    if (btn) {
+      btn.textContent = t("coordpick.copied");
+      setTimeout(() => { btn.textContent = t("coordpick.copy"); }, 1500);
+    }
+  });
+  document.querySelector("#coord-popup-pin")?.addEventListener("click", () => {
+    if (!coordLastDeg) return;
+    if (coordPin) viewer.entities.remove(coordPin);
+    coordPin = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(coordLastDeg.lng, coordLastDeg.lat),
+      billboard: {
+        image: "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42"><path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="#e33d3d" stroke="#fff" stroke-width="2"/><circle cx="16" cy="16" r="6" fill="#fff"/></svg>'),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    });
+    requestRender();
+  });
+  // クリック位置の座標をポップアップ表示し、地理院の逆ジオコーダで地名を引く
+  const showCoordPopup = (pos, lat, lng) => {
+    if (!coordPopup) return;
+    coordLastDeg = { lat, lng };
+    coordPopupText.textContent = formatLatLng(lat, lng);
+    coordPopupAddress.textContent = "";
+    const container = document.querySelector("#cesium-container");
+    const rect = container.getBoundingClientRect();
+    const canvasRect = viewer.canvas.getBoundingClientRect();
+    const px = canvasRect.left - rect.left + pos.x;
+    const py = canvasRect.top - rect.top + pos.y;
+    coordPopup.style.left = `${Math.min(px + 12, rect.width - 290)}px`;
+    coordPopup.style.top = `${Math.max(8, py - 10)}px`;
+    coordPopup.hidden = false;
+    // 逆ジオコーディング(地理院 mreverse-geocoder・キー不要)
+    const reqLat = lat, reqLng = lng;
+    fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lon=${reqLng}&lat=${reqLat}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data?.results || coordLastDeg?.lat !== reqLat || coordLastDeg?.lng !== reqLng) return;
+        const { muniCd, lv01Nm } = data.results;
+        coordPopupAddress.textContent = `${lv01Nm || ""} (muniCd: ${muniCd || "-"})`.trim();
+      })
+      .catch(() => {});
+  };
 
   function getBearing(a, b) {
     const lat1 = a.latitude * Math.PI / 180;
@@ -6903,6 +7322,35 @@ function setupEvents() {
     setTimeout(() => { shareCopyBtn.textContent = "🔗"; }, 1500);
   });
 
+  // スクリーンショット: 地表タイルの読み込みを待ってから render→toBlob で PNG 保存
+  const screenshotBtn = document.querySelector("#screenshot-button");
+  screenshotBtn?.addEventListener("click", () => {
+    void (async () => {
+      await new Promise(res => {
+        const t0 = Date.now();
+        const check = () => {
+          if (viewer.scene.globe.tilesLoaded || Date.now() - t0 > 15000) res();
+          else setTimeout(check, 250);
+        };
+        check();
+      });
+      // 同一タスク内で render→toBlob すれば preserveDrawingBuffer 不要
+      viewer.render();
+      viewer.canvas.toBlob(blob => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+        a.href = url;
+        a.download = `kasugai_canvas_${currentProjectId || "map"}_${stamp}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }, "image/png");
+    })();
+  });
+
   initPrint({
     button: document.querySelector("#print-open"),
     t,
@@ -7519,6 +7967,19 @@ function setupEvents() {
       if (cartesian) {
         const carto = Cesium.Cartographic.fromCartesian(cartesian);
         void openStreetViewAt(carto.latitude * 180 / Math.PI, carto.longitude * 180 / Math.PI);
+      }
+      return;
+    }
+    // 地点座標取得モード: 属性ピックより優先して座標ポップアップを出す
+    if (coordPickMode) {
+      const ray = viewer.camera.getPickRay(movement.position);
+      const cartesian = ray
+        ? ((() => { try { return viewer.scene.globe.pick(ray, viewer.scene); } catch (e) { return null; } })()
+          || viewer.camera.pickEllipsoid(movement.position, viewer.scene.globe.ellipsoid))
+        : null;
+      if (cartesian) {
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        showCoordPopup(movement.position, carto.latitude * 180 / Math.PI, carto.longitude * 180 / Math.PI);
       }
       return;
     }
@@ -8962,6 +9423,10 @@ window.kasugaiApi = {
     return { ok: true, url };
   },
   flyToFeature,
+  // 緯度経度の矩形範囲へフレーム（矩形ズームの AI 向けセマンティック API）
+  zoomToExtent(west, south, east, north) {
+    return flyToRectangle(Number(west), Number(south), Number(east), Number(north));
+  },
   listCameraPresets() {
     return cameraPresets.map(preset => preset.title);
   },

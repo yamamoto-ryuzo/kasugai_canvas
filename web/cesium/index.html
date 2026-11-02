@@ -43,6 +43,7 @@
             <div class="project-row">
               <select id="project-select" aria-label="プロジェクト" data-i18n-attr="aria-label:settings.project.label"></select>
               <button id="share-copy" class="panel-manage" type="button" title="現在位置URLをコピー" data-i18n-attr="title:share.copy;aria-label:share.copy">🔗</button>
+              <button id="screenshot-button" class="panel-manage" type="button" title="画面をPNG画像で保存" data-i18n-attr="title:share.screenshot;aria-label:share.screenshot">📷</button>
               <button id="print-open" class="panel-manage" type="button" title="印刷" data-i18n-attr="title:print.open;aria-label:print.open"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1"/><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1"/></svg></button>
             </div>
             <nav class="panel-tabs" aria-label="Plugin panels">
@@ -246,6 +247,13 @@
                 <div class="terrain-options">
                   <label><input id="display-scalebar" type="checkbox" checked /><span data-i18n="display.scalebar"> スケールバーを表示</span></label>
                   <label><input id="display-coords" type="checkbox" checked /><span data-i18n="display.coords"> カーソル座標を表示</span></label>
+                  <label class="field-label" for="coords-format" data-i18n="display.coordsFormat">座標表示形式</label>
+                  <select id="coords-format">
+                    <option value="deg" selected data-i18n="display.coordsDeg">度 (10進)</option>
+                    <option value="dms" data-i18n="display.coordsDms">度分秒 (DMS)</option>
+                    <option value="utm" data-i18n="display.coordsUtm">UTM</option>
+                    <option value="jpx" data-i18n="display.coordsJpx">平面直角座標系</option>
+                  </select>
                   <label><input id="display-popup" type="checkbox" /><span data-i18n="display.popup"> 地物クリックで属性ポップアップ</span></label>
                 </div>
               </section>
@@ -735,6 +743,14 @@
             </button>
             <button id="top-down-button" type="button" aria-label="3D表示" title="3D表示" data-i18n-attr="aria-label:nav.topDown;title:nav.topDown">3D</button>
             <button id="mode-select" class="mode-select" type="button" value="orbit" aria-label="オービット表示" data-i18n="nav.orbitMode" data-i18n-attr="aria-label:nav.orbit">オービット</button>
+            <div class="nav-history-row">
+              <button id="view-back" class="nav-extra" type="button" disabled title="前の表示" data-i18n-attr="title:nav.back;aria-label:nav.back">◀</button>
+              <button id="view-forward" class="nav-extra" type="button" disabled title="次の表示" data-i18n-attr="title:nav.forward;aria-label:nav.forward">▶</button>
+            </div>
+            <button id="rectzoom-button" class="nav-extra" type="button" title="矩形ズーム (Shift+ドラッグ)" data-i18n-attr="title:nav.rectzoom;aria-label:nav.rectzoom">▭</button>
+            <button id="coordpick-button" class="nav-extra" type="button" title="地点座標の取得" data-i18n-attr="title:nav.coordpick;aria-label:nav.coordpick">⌖</button>
+            <button id="locate-button" class="nav-extra" type="button" title="現在地へ移動" data-i18n-attr="title:nav.locate;aria-label:nav.locate">📍</button>
+            <button id="fullscreen-button" class="nav-extra" type="button" title="フルスクリーン" data-i18n-attr="title:nav.fullscreen;aria-label:nav.fullscreen">⛶</button>
             <button id="navigation-toggle" class="navigation-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
           </aside>
           <aside class="chat-panel" id="chat-panel" aria-label="AIチャット" data-i18n-attr="aria-label:chat.ariaLabel">
@@ -767,6 +783,15 @@
           <div id="cesium-scalebar" hidden></div>
           <div id="cesium-coords" hidden></div>
           <div id="attr-popup" hidden></div>
+          <div id="coord-popup" hidden>
+            <div id="coord-popup-text" class="coord-popup-text"></div>
+            <div id="coord-popup-address" class="coord-popup-address"></div>
+            <div class="coord-popup-actions">
+              <button id="coord-popup-copy" type="button" data-i18n="coordpick.copy">コピー</button>
+              <button id="coord-popup-pin" type="button" data-i18n="coordpick.pin">ピン</button>
+              <button id="coord-popup-close" type="button" aria-label="閉じる" data-i18n-attr="aria-label:manage.close">×</button>
+            </div>
+          </div>
           <small id="map-attribution" class="map-attribution"></small>
         </div>
       </section>
