@@ -289,10 +289,19 @@ export function initNavTools(a) {
       const { x0, y0, x1, y1 } = rz;
       rz.box.remove(); rz = null;
       if (!commit || Math.abs(x1 - x0) < 4 || Math.abs(y1 - y0) < 4) return;
+      const zoomOut = x1 < x0 && y1 < y0;
+      const vr = a.el.getBoundingClientRect();
+      const diagRect = Math.hypot(x1 - x0, y1 - y0);
+      const diagView = Math.hypot(vr.width, vr.height);
+      // 傾斜視点・縮小時は矩形中心+倍率ズーム（角2点の逆投影は傾斜時に破綻するため）
+      if (a.centerZoom && (zoomOut || a.isTilted?.())) {
+        const mid = a.toLatLng((x0 + x1) / 2, (y0 + y1) / 2);
+        if (mid) a.centerZoom(mid, zoomOut ? diagView / diagRect : diagRect / diagView);
+        return;
+      }
       let c0, c1;
-      if (x1 < x0 && y1 < y0) {
+      if (zoomOut) {
         // 左上ドラッグ = 縮小: 矩形中心を起点にビューポート全面ぶんの範囲へ広げる
-        const vr = a.el.getBoundingClientRect();
         const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
         c0 = a.toLatLng(cx - vr.width / 2, cy - vr.height / 2);
         c1 = a.toLatLng(cx + vr.width / 2, cy + vr.height / 2);

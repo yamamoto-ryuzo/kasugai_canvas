@@ -1818,6 +1818,8 @@ initNavTools({
   viewsEqual: (x, y) => x && y && Math.abs(x.lat - y.lat) < 1e-7 && Math.abs(x.lng - y.lng) < 1e-7 && Math.abs((x.zoom ?? 0) - (y.zoom ?? 0)) < 0.001 && Math.abs((x.bearing ?? 0) - (y.bearing ?? 0)) < 0.5 && Math.abs((x.pitch ?? 0) - (y.pitch ?? 0)) < 0.5,
   flyTo: (lat, lng) => map.flyTo({ center: [lng, lat] }),
   fitBounds: (w, s, e, n) => map.fitBounds([[w, s], [e, n]]),
+  isTilted: () => map.getPitch() > 0.5 || Math.abs(map.getBearing()) > 0.5,
+  centerZoom: (c, scale) => map.flyTo({ center: [c.lng, c.lat], zoom: map.getZoom() - Math.log2(scale) }),
   onMoveStart: cb => map.on("movestart", cb),
   onMoveEnd: cb => map.on("moveend", cb),
   toLatLng: (x, y) => { const ll = map.unproject([x, y]); return { lat: ll.lat, lng: ll.lng }; },

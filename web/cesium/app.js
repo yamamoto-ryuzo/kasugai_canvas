@@ -5668,19 +5668,19 @@ function setupEvents() {
     if (!commit || w < 4 || h < 4) return;
     const ellipsoid = viewer.scene.globe.ellipsoid;
     const pick = (x, y) => viewer.camera.pickEllipsoid(new Cesium.Cartesian2(x, y), ellipsoid);
-    if (x1 < x0 && y1 < y0) {
-      // 左上ドラッグ = 縮小: 画面対角/矩形対角の倍率で高度を上げる（向き・中心は矩形中心を維持）
-      const factor = Math.min(100, Math.hypot(viewer.canvas.clientWidth, viewer.canvas.clientHeight) / Math.hypot(w, h));
+    const cam = viewer.camera;
+    const zoomOut = x1 < x0 && y1 < y0;
+    const tilted = Math.abs(cam.pitch + Math.PI / 2) > 0.035; // 傾斜約2°超
+    if (zoomOut || tilted) {
+      // 傾斜視点・縮小時はレイベース方式: 矩形中心の地点を支点にカメラ距離を縮放する
+      // （傾斜時に角2点を緯度経度矩形へ押し込むと全く別地点へ飛ぶため）
       const cMid = pick((x0 + x1) / 2, (y0 + y1) / 2);
       if (!cMid) return;
-      const g = Cesium.Cartographic.fromCartesian(cMid);
-      const cam = viewer.camera;
-      flyTo({
-        latitude: g.latitude * 180 / Math.PI,
-        longitude: g.longitude * 180 / Math.PI,
-        height: cam.positionCartographic.height * factor,
-        heading: cam.heading, pitch: cam.pitch,
-      });
+      const diagView = Math.hypot(viewer.canvas.clientWidth, viewer.canvas.clientHeight);
+      const scale = zoomOut ? diagView / Math.hypot(w, h) : Math.hypot(w, h) / diagView;
+      const dir = Cesium.Cartesian3.subtract(cam.position, cMid, new Cesium.Cartesian3());
+      const dest = Cesium.Cartesian3.add(cMid, Cesium.Cartesian3.multiplyByScalar(dir, scale, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+      cam.flyTo({ destination: dest, orientation: { heading: cam.heading, pitch: cam.pitch, roll: 0 } });
       return;
     }
     const c0 = pick(Math.min(x0, x1), Math.min(y0, y1));
