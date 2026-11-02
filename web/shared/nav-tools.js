@@ -26,6 +26,15 @@ const STYLE = `
 #coords-format{width:100%;min-height:30px;padding:5px 7px;border:1px solid #cbd9de;border-radius:4px;background:#fff;color:#1d2b35;font-size:var(--basemap-select-font-size,13px);box-sizing:border-box}
 `;
 
+// スタイルを1度だけ注入する（installViewHistory を単独で使う Cesium 等でも必須）
+function ensureNavToolsStyle() {
+  if (document.getElementById("nav-tools-style")) return;
+  const st = document.createElement("style");
+  st.id = "nav-tools-style";
+  st.textContent = STYLE;
+  document.head.appendChild(st);
+}
+
 // 表示履歴の前へ/次へボタンへ「クリック=1ステップ移動 / ダブルクリック=履歴一覧から任意ジャンプ」を装着する
 // opts: { backBtn, fwdBtn, getStacks() -> {back,fwd}（ミュータブル配列・endがtop）, getView(), setView(v),
 //         label(v), beforeNavigate(), sync() }
@@ -79,6 +88,7 @@ export function installViewHistory(opts) {
   const closeList = () => { listEl?.remove(); listEl = null; document.removeEventListener("pointerdown", onDocDown, true); };
   const openList = anchorDir => {
     closeList();
+    ensureNavToolsStyle();
     const { back, fwd } = opts.getStacks();
     const cur = opts.getView();
     if (!back.length && !fwd.length && !cur) return;
@@ -108,12 +118,7 @@ export function installViewHistory(opts) {
 }
 
 export function initNavTools(a) {
-  if (!document.getElementById("nav-tools-style")) {
-    const st = document.createElement("style");
-    st.id = "nav-tools-style";
-    st.textContent = STYLE;
-    document.head.appendChild(st);
-  }
+  ensureNavToolsStyle();
   const $ = s => document.querySelector(s);
   const hide = id => { const el = $(id); if (el) el.style.display = "none"; };
 
