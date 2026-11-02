@@ -33,6 +33,13 @@
   if (explicitHosted) {
     swUrl.search = "?u=" + encodeURIComponent(explicitHosted.replace(/\/?$/, "/"));
   }
+  // 同スコープを sw-duckdb.js(cesium) と共有するため、エンジン切替のたびに
+  // register が SW 更新を起こし vendor-proxy SW が制御を取るまでには
+  // install→activate→clients.claim の一往復が必要。初回訪問や切替直後に
+  // 制御確定前へ進むと vendor/* が中継されず素通り 404 で起動不能になる。
+  // 制御が取れなかった場合は一度だけリロードして SW 制御下で読み直す
+  // （リロード後は SW が active 済みなので最初から制御下で起動できる）。
+  var RELOAD_FLAG = "kasugai_vendor_sw_reload";
   var swReg = null;
   var swReady = ("serviceWorker" in navigator)
     ? navigator.serviceWorker
@@ -44,20 +51,39 @@
         .then(function () {
           // ready は active 化を待つが、初回は controller 反映が僅かに遅れる
           // ことがある。制御確定前にプローブすると実体なし 404 で誤判定する
-          // ため controllerchange まで待つ（timeout 付き）。
-          // 「controller が居る」だけでは不十分: 旧版SW(?u=付き登録)が制御中
-          // だったり新SWが installing/waiting 中なら、controllerchange で
-          // 新版への切替を待たないと旧版経路で 404 になる
-          var ctl = navigator.serviceWorker.controller;
+          // ため controllerchange まで待つ。
+          // 「controller が居る」だけでは不十分: 旧版SW(?u=付き登録)や
+          // sw-duckdb.js が制御中だったり新SWが installing/waiting 中なら、
+          // controllerchange で新版への切替を待たないと旧版経路で 404 になる
+          function ours() {
+            var c = navigator.serviceWorker.controller;
+            return !!(c && c.scriptURL === swUrl.href);
+          }
           var updating = swReg && (swReg.installing || swReg.waiting);
-          if (ctl && ctl.scriptURL === swUrl.href && !updating) return null;
+          if (ours() && !updating) return true;
           return new Promise(function (res) {
-            var t = setTimeout(res, 3000);
+            var t = setTimeout(function () { res(ours()); }, 8000);
             navigator.serviceWorker.addEventListener("controllerchange", function () {
               clearTimeout(t);
-              res();
+              res(ours());
             }, { once: true });
           });
+        })
+        .then(function (controlled) {
+          if (controlled) {
+            try { sessionStorage.removeItem(RELOAD_FLAG); } catch (e) {}
+            return;
+          }
+          // 制御確定できないまま起動すると vendor/* が 404 確定するため、
+          // 一度だけリロードする（無限ループ防止に sessionStorage フラグで
+          // 1回限り）。未解決 Promise を返してプローブ・起動を保留にする
+          try {
+            if (!sessionStorage.getItem(RELOAD_FLAG)) {
+              sessionStorage.setItem(RELOAD_FLAG, "1");
+              location.reload();
+              return new Promise(function () {});
+            }
+          } catch (e) {}
         })
         .catch(function () { return null; })
     : Promise.resolve(null);

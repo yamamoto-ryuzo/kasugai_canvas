@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.14.2] - 2026-11-02
+
+### Fixed
+
+- **navara・gsimaps エンジンの初回起動時に vendor の `index.js` が404で起動不能になるバグを修正** — `sw-duckdb.js`(cesium)と `vendor-proxy-sw.js` が同一スコープを共有するためエンジン切替のたびに SW 更新（install→activate→`clients.claim()`）が走り、`vendor-guard.js` の制御確定待機（従来3秒）が間に合わないと vendor/* が中継されずオリジンへ素通り 404 になっていた。待機を8秒へ延長し、それでも制御が取れない場合は sessionStorage フラグで**一度だけ**リロードして SW 制御下で読み直す方式に変更（リロード後は SW が active 済みのためページ生成時点で制御下になる）。Playwright+実Chrome で cesium→navara 切替後の正常起動と、制御不能時のリロード1回・無限ループなしを検証済み
+
 ## [6.14.1] - 2026-11-02
 
 ### Fixed
