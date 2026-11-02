@@ -5745,7 +5745,7 @@ function setupEvents() {
   });
   document.querySelector("#coord-popup-copy")?.addEventListener("click", async () => {
     if (!coordLastDeg) return;
-    const text = `${coordLastDeg.lat.toFixed(6)}, ${coordLastDeg.lng.toFixed(6)}`;
+    const text = formatLatLng(coordLastDeg.lat, coordLastDeg.lng);
     await navigator.clipboard?.writeText(text);
     const btn = document.querySelector("#coord-popup-copy");
     if (btn) {

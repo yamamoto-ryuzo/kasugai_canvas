@@ -357,6 +357,14 @@
       で指定した画像を表示します。<strong>Info</strong> は
       <code>info:</code> で指定した URL の HTML
       をサニタイズして表示します。</p>
+      <h3 id="coords-datum">座標・測地系の扱い</h3>
+      <p><strong>内部座標はすべて WGS84（EPSG:4326 系）で一元管理</strong>します。カーソル位置・プロジェクトデータ（GeoJSON は RFC 7946 で WGS84 固定）・パーマリンクのいずれも WGS84 で、表示形式・測地系への変換は表示層の最終段でのみ行い、描画側の CRS（球面メルカトル等）には依存しません。実装は全エンジン共通の <code>web/shared/coords-format.js</code> に集約しています。</p>
+      <ul>
+      <li><strong>表示形式</strong>: 度(10進) / 度分秒(DMS) / UTM / 平面直角座標系（I〜XIX系・原点は最近傍自動選択・縮尺係数 0.9999）。投影は Gauss-Krüger n⁶級数で PROJ と nm 級一致。</li>
+      <li><strong>測地系</strong>: <code>#coords-datum</code>（JGD2024・JGD2011 / JGD2000 / 日本測地系）に応じ、WGS84 の緯度経度を当該測地系の緯度経度に変換してから表示形式を適用します（日本測地系では Bessel 楕円体で投影）。</li>
+      <li><strong>変換は国土地理院の公式パラメータ由来</strong>: 日本測地系は TKY2JGD.par Ver.2.1.2、JGD2000 は PatchJGD（平成23年東北地方太平洋沖地震）Ver.4.0.0 を <code>tools/convert_coords_datum.py</code> でバイナリ化した <code>coords-datum-*.bin</code> を使用。メッシュ節点の dB/dL をバイリニア補間（公式 TKY2JGD 準拠）、逆変換は固定点反復です。選択時のみ lazy fetch するため、未使用なら転送されません。PatchJGD 対象外の地域は測地成果2000と2011が同値のためそのまま表示します。</li>
+      </ul>
+      <p><strong>注意: 他測地系の座標は参考値です</strong>。WGS84 は動的フレーム（ITRF に追随＝現在位置）ですが、JGD2011/2024 の水平位置は 2011 年時点の実現値に固定されているため、現在位置と公式成果の間には地殻変動分（地域により十〜数十 cm）の差が累積しています。変換自体は公式パラメータで厳密に行いますが、「点の現在位置」の前提が異なるため、<strong>表示・コピーされる JGD2000・日本測地系・UTM・平面直角座標は参考値であり、測量成果としての利用は想定していません</strong>。このため座標表示では、WGS84 ネイティブの緯度経度（度・度分秒・既定測地系）以外の形式には末尾に <strong>（参考値）</strong> を付けて明示します（コピーされる文字列にも含まれます）。測量実務級の一致が必要な場合は GEONET 地殻変動補正（SemiDynaEXE/POS2JGD）の適用が別途必要です。</p>
       <h2 id="draw-order">レイヤーと描画順</h2>
       <table>
       <thead>

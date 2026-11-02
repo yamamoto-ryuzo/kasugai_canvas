@@ -242,7 +242,7 @@ export function initNavTools(a) {
     popup.querySelector("#coord-popup-close").addEventListener("click", () => { popup.hidden = true; });
     popup.querySelector("#coord-popup-copy").addEventListener("click", async e => {
       if (!lastDeg) return;
-      await navigator.clipboard?.writeText(`${lastDeg.lat.toFixed(6)}, ${lastDeg.lng.toFixed(6)}`);
+      await navigator.clipboard?.writeText(formatLatLng(lastDeg.lat, lastDeg.lng));
       e.target.textContent = "コピーしました";
       setTimeout(() => { e.target.textContent = "コピー"; }, 1500);
     });
