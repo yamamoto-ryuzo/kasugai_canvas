@@ -12,6 +12,7 @@ const STYLE = `
 .navigation-toolbar button:disabled{opacity:.45;cursor:default}
 .navigation-toolbar.collapsed .nav-history-row,.navigation-toolbar.collapsed .nav-extra-grid{display:none}
 .rect-zoom-box{position:absolute;z-index:1009;border:2px dashed #31564f;background:rgba(49,86,79,.12);pointer-events:none;box-sizing:border-box}
+.rect-zoom-box.rect-zoom-out{border-color:#b04020;background:rgba(176,64,32,.10)}
 #coord-popup{position:absolute;z-index:1010;min-width:200px;max-width:280px;background:rgba(255,255,255,.96);border-radius:6px;padding:8px 10px;font-size:12px;box-shadow:0 2px 8px rgba(0,0,0,.35)}
 #coord-popup .coord-popup-text{font-family:monospace;font-weight:600;color:#1d2b35;overflow-wrap:anywhere}
 #coord-popup .coord-popup-address{margin-top:2px;color:#52636d;font-size:11px;overflow-wrap:anywhere}
@@ -275,6 +276,8 @@ export function initNavTools(a) {
     const update = (x, y) => {
       if (!rz) return;
       rz.x1 = x; rz.y1 = y;
+      // 左上方向へのドラッグ = 縮小ズームの合図（色を変えて予告）
+      rz.box.classList.toggle("rect-zoom-out", x < rz.x0 && y < rz.y0);
       Object.assign(rz.box.style, {
         left: `${Math.min(rz.x0, rz.x1)}px`, top: `${Math.min(rz.y0, rz.y1)}px`,
         width: `${Math.abs(rz.x1 - rz.x0)}px`, height: `${Math.abs(rz.y1 - rz.y0)}px`,
@@ -286,8 +289,17 @@ export function initNavTools(a) {
       const { x0, y0, x1, y1 } = rz;
       rz.box.remove(); rz = null;
       if (!commit || Math.abs(x1 - x0) < 4 || Math.abs(y1 - y0) < 4) return;
-      const c0 = a.toLatLng(Math.min(x0, x1), Math.min(y0, y1));
-      const c1 = a.toLatLng(Math.max(x0, x1), Math.max(y0, y1));
+      let c0, c1;
+      if (x1 < x0 && y1 < y0) {
+        // 左上ドラッグ = 縮小: 矩形中心を起点にビューポート全面ぶんの範囲へ広げる
+        const vr = a.el.getBoundingClientRect();
+        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+        c0 = a.toLatLng(cx - vr.width / 2, cy - vr.height / 2);
+        c1 = a.toLatLng(cx + vr.width / 2, cy + vr.height / 2);
+      } else {
+        c0 = a.toLatLng(Math.min(x0, x1), Math.min(y0, y1));
+        c1 = a.toLatLng(Math.max(x0, x1), Math.max(y0, y1));
+      }
       if (!c0 || !c1) return;
       a.fitBounds(Math.min(c0.lng, c1.lng), Math.min(c0.lat, c1.lat), Math.max(c0.lng, c1.lng), Math.max(c0.lat, c1.lat));
     };

@@ -5648,6 +5648,7 @@ function setupEvents() {
     if (!rectZoom) return;
     rectZoom.x1 = pos.x;
     rectZoom.y1 = pos.y;
+    rectZoom.box.classList.toggle("rect-zoom-out", pos.x < rectZoom.x0 && pos.y < rectZoom.y0);
     const x = Math.min(rectZoom.x0, rectZoom.x1);
     const y = Math.min(rectZoom.y0, rectZoom.y1);
     const w = Math.abs(rectZoom.x1 - rectZoom.x0);
@@ -5667,6 +5668,21 @@ function setupEvents() {
     if (!commit || w < 4 || h < 4) return;
     const ellipsoid = viewer.scene.globe.ellipsoid;
     const pick = (x, y) => viewer.camera.pickEllipsoid(new Cesium.Cartesian2(x, y), ellipsoid);
+    if (x1 < x0 && y1 < y0) {
+      // 左上ドラッグ = 縮小: 画面対角/矩形対角の倍率で高度を上げる（向き・中心は矩形中心を維持）
+      const factor = Math.min(100, Math.hypot(viewer.canvas.clientWidth, viewer.canvas.clientHeight) / Math.hypot(w, h));
+      const cMid = pick((x0 + x1) / 2, (y0 + y1) / 2);
+      if (!cMid) return;
+      const g = Cesium.Cartographic.fromCartesian(cMid);
+      const cam = viewer.camera;
+      flyTo({
+        latitude: g.latitude * 180 / Math.PI,
+        longitude: g.longitude * 180 / Math.PI,
+        height: cam.positionCartographic.height * factor,
+        heading: cam.heading, pitch: cam.pitch,
+      });
+      return;
+    }
     const c0 = pick(Math.min(x0, x1), Math.min(y0, y1));
     const c1 = pick(Math.max(x0, x1), Math.max(y0, y1));
     if (!c0 || !c1) return;
