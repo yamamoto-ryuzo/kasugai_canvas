@@ -301,10 +301,14 @@ export function initNavTools(a) {
       }
       let c0, c1;
       if (zoomOut) {
-        // 左上ドラッグ = 縮小: 矩形中心を起点にビューポート全面ぶんの範囲へ広げる
-        const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
-        c0 = a.toLatLng(cx - vr.width / 2, cy - vr.height / 2);
-        c1 = a.toLatLng(cx + vr.width / 2, cy + vr.height / 2);
+        // 左上ドラッグ = 縮小（拡大の逆変換）:
+        // 拡大は「矩形→画面全体」の写像なので、その逆で「画面全体が矩形に写る」範囲を求める。
+        // 軸ごとに k = V/rectSize、新画面区間 = [ -r0*k, (V - r0)*k ] を世界座標に戻す
+        const rx0 = Math.min(x0, x1), rx1 = Math.max(x0, x1);
+        const ry0 = Math.min(y0, y1), ry1 = Math.max(y0, y1);
+        const kx = vr.width / (rx1 - rx0), ky = vr.height / (ry1 - ry0);
+        c0 = a.toLatLng(-rx0 * kx, -ry0 * ky);
+        c1 = a.toLatLng((vr.width - rx0) * kx, (vr.height - ry0) * ky);
       } else {
         c0 = a.toLatLng(Math.min(x0, x1), Math.min(y0, y1));
         c1 = a.toLatLng(Math.max(x0, x1), Math.max(y0, y1));

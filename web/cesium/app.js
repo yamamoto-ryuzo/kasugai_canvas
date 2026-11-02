@@ -5672,14 +5672,28 @@ function setupEvents() {
     const zoomOut = x1 < x0 && y1 < y0;
     const tilted = Math.abs(cam.pitch + Math.PI / 2) > 0.035; // 傾斜約2°超
     if (zoomOut || tilted) {
-      // 傾斜視点・縮小時はレイベース方式: 矩形中心の地点を支点にカメラ距離を縮放する
+      // 傾斜視点・縮小時はレイベース方式: アンカー地点を支点にカメラ距離を縮放する
       // （傾斜時に角2点を緯度経度矩形へ押し込むと全く別地点へ飛ぶため）
-      const cMid = pick((x0 + x1) / 2, (y0 + y1) / 2);
-      if (!cMid) return;
       const diagView = Math.hypot(viewer.canvas.clientWidth, viewer.canvas.clientHeight);
-      const scale = zoomOut ? diagView / Math.hypot(w, h) : Math.hypot(w, h) / diagView;
-      const dir = Cesium.Cartesian3.subtract(cam.position, cMid, new Cesium.Cartesian3());
-      const dest = Cesium.Cartesian3.add(cMid, Cesium.Cartesian3.multiplyByScalar(dir, scale, new Cesium.Cartesian3()), new Cesium.Cartesian3());
+      let anchorX = (x0 + x1) / 2, anchorY = (y0 + y1) / 2;
+      let scale = Math.hypot(w, h) / diagView;
+      if (zoomOut) {
+        // 縮小は拡大の逆変換: 拡大の写像 f が不動点 t*=r0*k/(k-1) を持つので、
+        // その画面上の点の地点を支点に距離を拡大する
+        const rx0 = Math.min(x0, x1), rx1 = Math.max(x0, x1);
+        const ry0 = Math.min(y0, y1), ry1 = Math.max(y0, y1);
+        const kx = viewer.canvas.clientWidth / (rx1 - rx0);
+        const ky = viewer.canvas.clientHeight / (ry1 - ry0);
+        if (kx > 1 && ky > 1) {
+          anchorX = rx0 * kx / (kx - 1);
+          anchorY = ry0 * ky / (ky - 1);
+        }
+        scale = diagView / Math.hypot(w, h);
+      }
+      const cAnchor = pick(anchorX, anchorY);
+      if (!cAnchor) return;
+      const dir = Cesium.Cartesian3.subtract(cam.position, cAnchor, new Cesium.Cartesian3());
+      const dest = Cesium.Cartesian3.add(cAnchor, Cesium.Cartesian3.multiplyByScalar(dir, scale, new Cesium.Cartesian3()), new Cesium.Cartesian3());
       cam.flyTo({ destination: dest, orientation: { heading: cam.heading, pitch: cam.pitch, roll: 0 } });
       return;
     }
