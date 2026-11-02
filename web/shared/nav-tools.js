@@ -94,8 +94,9 @@ export function installViewHistory(opts) {
     if (!back.length && !fwd.length && !cur) return;
     listEl = document.createElement("div");
     listEl.className = "view-history-list";
+    // 新しい順: fwd[0]が時系列で最新（スタック奥=最後に居た地点）、current、続いて back 新→旧
     const entries = [
-      ...[...fwd].reverse().map((v, k) => ({ v, where: "fwd", i: fwd.length - 1 - k })),
+      ...fwd.map((v, i) => ({ v, where: "fwd", i })),
       { v: null, where: "current" },
       ...[...back].reverse().map((v, k) => ({ v, where: "back", i: back.length - 1 - k })),
     ];
