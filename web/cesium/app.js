@@ -28,6 +28,7 @@ import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
 import { initPrint } from "../shared/print.js";
 import { formatLatLng, parseCoordinateQuery } from "../shared/coords-format.js";
+import { installViewHistory } from "../shared/nav-tools.js";
 
 await initI18n();
 applyI18n();
@@ -5565,23 +5566,14 @@ function setupEvents() {
     viewForwardStack.length = 0;
     updateViewHistoryButtons();
   });
-  document.querySelector("#view-back")?.addEventListener("click", () => {
-    const prev = viewBackStack.pop();
-    if (!prev) return;
-    const current = snapshotCamera();
-    if (current) viewForwardStack.push(current);
-    historyNavigating = true;
-    flyTo(prev);
-    updateViewHistoryButtons();
-  });
-  document.querySelector("#view-forward")?.addEventListener("click", () => {
-    const next = viewForwardStack.pop();
-    if (!next) return;
-    const current = snapshotCamera();
-    if (current) viewBackStack.push(current);
-    historyNavigating = true;
-    flyTo(next);
-    updateViewHistoryButtons();
+  // クリック=1ステップ / ダブルクリック=履歴一覧から任意ジャンプ（shared/nav-tools.js）
+  installViewHistory({
+    backBtn: "#view-back", fwdBtn: "#view-forward",
+    getStacks: () => ({ back: viewBackStack, fwd: viewForwardStack }),
+    getView: snapshotCamera, setView: v => flyTo(v),
+    label: v => `${v.latitude.toFixed(5)}, ${v.longitude.toFixed(5)} h=${v.height.toFixed(0)}m`,
+    beforeNavigate: () => { historyNavigating = true; },
+    sync: updateViewHistoryButtons,
   });
   // Alt+← / Alt+→ のショートカット
   window.addEventListener("keydown", event => {

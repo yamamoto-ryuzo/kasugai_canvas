@@ -18,9 +18,94 @@ const STYLE = `
 #coord-popup .coord-popup-actions{display:flex;gap:4px;margin-top:5px}
 #coord-popup .coord-popup-actions button{padding:2px 8px;border:1px solid rgba(0,0,0,.1);border-radius:4px;background:#f1f4f8;color:#263643;cursor:pointer;font-size:11px}
 #coord-popup .coord-popup-actions button:hover{background:#e7f3f0}
+.view-history-list{position:fixed;z-index:1200;min-width:220px;max-width:330px;max-height:320px;overflow-y:auto;background:rgba(255,255,255,.97);border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.4);padding:4px;display:flex;flex-direction:column;gap:2px}
+.view-history-item{text-align:left;padding:4px 8px;border:none;border-radius:4px;background:transparent;color:#263643;cursor:pointer;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.view-history-item:hover{background:#e7f3f0}
+.view-history-item.is-current{font-weight:700;background:#eef4f3;cursor:default}
 #screenshot-button{font-size:20px;line-height:1;padding:0}
 #coords-format{width:100%;min-height:30px;padding:5px 7px;border:1px solid #cbd9de;border-radius:4px;background:#fff;color:#1d2b35;font-size:var(--basemap-select-font-size,13px);box-sizing:border-box}
 `;
+
+// 表示履歴の前へ/次へボタンへ「クリック=1ステップ移動 / ダブルクリック=履歴一覧から任意ジャンプ」を装着する
+// opts: { backBtn, fwdBtn, getStacks() -> {back,fwd}（ミュータブル配列・endがtop）, getView(), setView(v),
+//         label(v), beforeNavigate(), sync() }
+export function installViewHistory(opts) {
+  const backBtn = typeof opts.backBtn === "string" ? document.querySelector(opts.backBtn) : opts.backBtn;
+  const fwdBtn = typeof opts.fwdBtn === "string" ? document.querySelector(opts.fwdBtn) : opts.fwdBtn;
+  const label = opts.label || (v => `${Number(v.lat ?? v.latitude).toFixed(5)}, ${Number(v.lng ?? v.longitude).toFixed(5)}`);
+  const jump = v => { opts.beforeNavigate?.(); opts.setView(v); opts.sync?.(); };
+  const step = dir => {
+    const { back, fwd } = opts.getStacks();
+    const v = (dir < 0 ? back : fwd).pop();
+    if (!v) return;
+    const cur = opts.getView();
+    if (cur) (dir < 0 ? fwd : back).push(cur);
+    jump(v);
+  };
+  // 履歴内の任意位置へジャンプ（残り分は反対スタックへ移す）
+  const jumpToIndex = (where, i) => {
+    const { back, fwd } = opts.getStacks();
+    const cur = opts.getView();
+    if (where === "back") {
+      const target = back[i];
+      if (cur) fwd.push(cur);
+      for (let j = back.length - 1; j > i; j--) fwd.push(back[j]);
+      back.length = i;
+      jump(target);
+    } else {
+      const target = fwd[i];
+      if (cur) back.push(cur);
+      for (let j = fwd.length - 1; j > i; j--) back.push(fwd[j]);
+      fwd.length = i;
+      jump(target);
+    }
+  };
+  // シングルクリックはダブルクリック判別のため遅延実行
+  let clickTimer = null;
+  const bindBtn = (btn, dir) => {
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; return; }
+      clickTimer = setTimeout(() => { clickTimer = null; step(dir); }, 260);
+    });
+    btn.addEventListener("dblclick", e => { e.preventDefault(); openList(dir); });
+  };
+  bindBtn(backBtn, -1);
+  bindBtn(fwdBtn, 1);
+
+  // ---- 履歴一覧ポップアップ ----
+  let listEl = null;
+  const onDocDown = e => { if (listEl && !listEl.contains(e.target)) closeList(); };
+  const closeList = () => { listEl?.remove(); listEl = null; document.removeEventListener("pointerdown", onDocDown, true); };
+  const openList = anchorDir => {
+    closeList();
+    const { back, fwd } = opts.getStacks();
+    const cur = opts.getView();
+    if (!back.length && !fwd.length && !cur) return;
+    listEl = document.createElement("div");
+    listEl.className = "view-history-list";
+    const entries = [
+      ...back.map((v, i) => ({ v, where: "back", i })),
+      { v: null, where: "current" },
+      ...[...fwd].reverse().map((v, k) => ({ v, where: "fwd", i: fwd.length - 1 - k })),
+    ];
+    for (const ent of entries) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "view-history-item" + (ent.where === "current" ? " is-current" : "");
+      b.textContent = ent.where === "current" ? `● ${label(cur)}（現在）` : label(ent.v);
+      if (ent.where !== "current") b.addEventListener("click", () => { jumpToIndex(ent.where, ent.i); closeList(); });
+      listEl.appendChild(b);
+    }
+    const anchor = (anchorDir < 0 ? backBtn : fwdBtn) || backBtn || fwdBtn;
+    const r = (anchor || document.body).getBoundingClientRect();
+    listEl.style.right = `${Math.max(8, innerWidth - r.left + 8)}px`;
+    listEl.style.top = `${Math.max(8, Math.min(r.top, innerHeight - 340))}px`;
+    document.body.appendChild(listEl);
+    document.addEventListener("pointerdown", onDocDown, true);
+  };
+  window.addEventListener("keydown", e => { if (e.key === "Escape") closeList(); });
+}
 
 export function initNavTools(a) {
   if (!document.getElementById("nav-tools-style")) {
@@ -61,13 +146,12 @@ export function initNavTools(a) {
       fwdStack.length = 0;
       syncHistBtns();
     });
-    $("#view-back")?.addEventListener("click", () => {
-      const v = backStack.pop(); if (!v) return;
-      fwdStack.push(a.getView()); navigating = true; a.setView(v); syncHistBtns();
-    });
-    $("#view-forward")?.addEventListener("click", () => {
-      const v = fwdStack.pop(); if (!v) return;
-      backStack.push(a.getView()); navigating = true; a.setView(v); syncHistBtns();
+    installViewHistory({
+      backBtn: "#view-back", fwdBtn: "#view-forward",
+      getStacks: () => ({ back: backStack, fwd: fwdStack }),
+      getView: a.getView, setView: a.setView,
+      beforeNavigate: () => { navigating = true; },
+      sync: syncHistBtns,
     });
     window.addEventListener("keydown", e => {
       if (!e.altKey || e.ctrlKey || e.metaKey) return;
