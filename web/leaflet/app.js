@@ -1741,7 +1741,7 @@ initNavTools({
   onMoveEnd: cb => map.on("moveend", cb),
   toLatLng: (x, y) => { const ll = map.containerPointToLatLng([x, y]); return { lat: ll.lat, lng: ll.lng }; },
   setMarker: ll => { initNavTools._mk?.remove(); initNavTools._mk = ll ? L.marker([ll.lat, ll.lng]).addTo(map) : null; },
-  setPin: ll => { (initNavTools._pins ??= []).push(L.marker([ll.lat, ll.lng]).addTo(map)); },
+  setPin: ll => { (initNavTools._pins ??= []).push(L.marker([ll.lat, ll.lng]).bindPopup(`座標ピン ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}${ll.address ? ` ${ll.address}` : ""}`).addTo(map)); },
   clearPins: () => { initNavTools._pins?.forEach(m => m.remove()); initNavTools._pins = []; },
   nativeBoxZoom: true,
 });

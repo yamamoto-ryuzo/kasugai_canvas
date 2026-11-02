@@ -1710,6 +1710,7 @@ initNavTools({
   setPin: ll => {
     const el = document.createElement("div");
     el.textContent = "📍"; el.style.cssText = "font-size:22px;pointer-events:none;text-shadow:0 0 3px #fff;";
+    el.title = `座標ピン ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}${ll.address ? ` ${ll.address}` : ""}`;
     import("https://cdn.jsdelivr.net/npm/ol@10.11.0/Overlay.js").then(m => {
       const ov = new m.default({ element: el, position: fromLonLat([ll.lng, ll.lat]), positioning: "bottom-center", stopEvent: false });
       (initNavTools._pins ??= []).push(ov);

@@ -5732,6 +5732,7 @@ function setupEvents() {
   let coordPickMode = false;
   const coordPins = [];
   let coordLastDeg = null;
+  let coordLastAddr = "";
   const setCoordPickMode = on => {
     coordPickMode = on;
     coordpickBtn?.classList.toggle("nav-active", on);
@@ -5755,7 +5756,15 @@ function setupEvents() {
   document.querySelector("#coord-popup-pin")?.addEventListener("click", () => {
     if (!coordLastDeg) return;
     coordPins.push(viewer.entities.add({
+      name: "座標ピン",
       position: Cesium.Cartesian3.fromDegrees(coordLastDeg.lng, coordLastDeg.lat),
+      properties: {
+        種別: "座標ピン",
+        緯度: coordLastDeg.lat.toFixed(6),
+        経度: coordLastDeg.lng.toFixed(6),
+        地名: coordLastAddr || "",
+        作成時刻: new Date().toLocaleString(),
+      },
       billboard: {
         image: "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="42" viewBox="0 0 32 42"><path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 26 16 26s16-14 16-26C32 7.2 24.8 0 16 0z" fill="#e33d3d" stroke="#fff" stroke-width="2"/><circle cx="16" cy="16" r="6" fill="#fff"/></svg>'),
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
@@ -5772,6 +5781,7 @@ function setupEvents() {
   const showCoordPopup = (pos, lat, lng) => {
     if (!coordPopup) return;
     coordLastDeg = { lat, lng };
+    coordLastAddr = "";
     coordPopupText.textContent = formatLatLng(lat, lng);
     coordPopupAddress.textContent = "";
     const container = document.querySelector("#cesium-container");
@@ -5789,7 +5799,8 @@ function setupEvents() {
       .then(data => {
         if (!data?.results || coordLastDeg?.lat !== reqLat || coordLastDeg?.lng !== reqLng) return;
         const { muniCd, lv01Nm } = data.results;
-        coordPopupAddress.textContent = `${lv01Nm || ""} (muniCd: ${muniCd || "-"})`.trim();
+        coordLastAddr = `${lv01Nm || ""} (muniCd: ${muniCd || "-"})`.trim();
+        coordPopupAddress.textContent = coordLastAddr;
       })
       .catch(() => {});
   };

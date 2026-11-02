@@ -247,8 +247,9 @@ export function initNavTools(a) {
     });
     popup.querySelector("#coord-popup-pin").addEventListener("click", () => {
       if (!lastDeg) return;
-      if (a.setPin) a.setPin({ ...lastDeg, kind: "pin" });
-      else a.setMarker?.({ ...lastDeg, kind: "pin" }, lastDeg);
+      const pin = { ...lastDeg, kind: "pin", address: pAddr.textContent || "" };
+      if (a.setPin) a.setPin(pin);
+      else a.setMarker?.(pin, lastDeg);
     });
     popup.querySelector("#coord-popup-clear").addEventListener("click", () => {
       a.clearPins?.();
