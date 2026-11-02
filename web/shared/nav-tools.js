@@ -121,12 +121,12 @@ export function installViewHistory(opts) {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "view-history-item" + (ent.where === "current" ? " is-current" : "");
-      // 地名が取れたら先頭に付ける（非同期・キャッシュ付き）
+      // 地名が取れたら先頭に付ける（非同期・キャッシュ付き。キャッシュはPromiseなので必ずthenで解決する）
       const setText = name => {
         b.textContent = `${ent.where === "current" ? "● " : ""}${idx + 1}: ${name ? `${name} ` : ""}${label(v)}${ent.where === "current" ? "（現在）" : ""}`;
       };
-      setText(histNameCache.get(histNameKey(v)) === "" ? "" : histNameCache.get(histNameKey(v)) || "");
-      if (!histNameCache.has(histNameKey(v))) void histGeocodeName(v).then(setText);
+      setText("");
+      void histGeocodeName(v).then(setText);
       if (ent.where !== "current") b.addEventListener("click", () => { jumpToIndex(ent.where, ent.i); closeList(); });
       listEl.appendChild(b);
     });
