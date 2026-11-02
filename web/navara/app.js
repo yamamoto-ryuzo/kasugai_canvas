@@ -13,6 +13,8 @@ import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges } from "../shared/session-state.js";
+import { initNavTools } from "../shared/nav-tools.js";
+import { formatLatLng } from "../shared/coords-format.js";
 import { initPrint } from "../shared/print.js";
 import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import { mountSunControls } from "../shared/sun-time.js";
@@ -1208,3 +1210,14 @@ const applyUrlView = () => {
 };
 window.addEventListener("popstate", applyUrlView);
 window.addEventListener("hashchange", applyUrlView);
+
+// ---- ナビゲーション共通ツール（shared/nav-tools.js）----
+initNavTools({
+  el: document.getElementById("map"),
+  getView: () => ({ lat: lastCam.lat, lng: lastCam.lng, height: lastCam.height, heading: lastCam.heading, pitch: lastCam.pitch }),
+  setView: v => setCamera({ longitude: v.lng, latitude: v.lat, height: v.height, heading: v.heading, pitch: v.pitch }),
+  viewsEqual: (x, y) => x && y && Math.abs(x.lat - y.lat) < 1e-7 && Math.abs(x.lng - y.lng) < 1e-7 && Math.abs((x.height ?? 0) - (y.height ?? 0)) < 0.5 && Math.abs((x.heading ?? 0) - (y.heading ?? 0)) < 0.01 && Math.abs((x.pitch ?? 0) - (y.pitch ?? 0)) < 0.01,
+  flyTo: (lat, lng) => flyTo({ longitude: lng, latitude: lat }),
+  onMoveEnd: cb => view.camera.on("moveend", cb),
+  capturePng: () => new Promise(res => { try { view._render?.(); } catch (_) {} const c = document.querySelector("#map canvas"); c ? c.toBlob(res, "image/png") : res(null); }),
+});

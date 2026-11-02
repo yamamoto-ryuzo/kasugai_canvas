@@ -9,6 +9,8 @@ import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
+import { initNavTools } from "../shared/nav-tools.js";
+import { formatLatLng } from "../shared/coords-format.js";
 import { initPrint, compositeDomMap } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
@@ -1484,7 +1486,7 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
   const coordsEl = document.querySelector("#map-coords");
   map.on("mousemove", e => {
     if (!coordsEl || !document.querySelector("#display-coords")?.checked) return;
-    coordsEl.textContent = `${e.latlng.lng.toFixed(5)}, ${e.latlng.lat.toFixed(5)}`;
+    coordsEl.textContent = formatLatLng(e.latlng.lat, e.latlng.lng);
   });
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (coordsEl) coordsEl.style.display = e.target.checked ? "" : "none";
@@ -1726,4 +1728,18 @@ initPrint({
     return mpp > 0 ? mpp / 0.00028 : null;
   },
   getNorthAngleDeg: () => 0,
+});
+
+// ---- ナビゲーション共通ツール（shared/nav-tools.js）----
+initNavTools({
+  el: document.getElementById("map"),
+  getView: () => ({ lat: map.getCenter().lat, lng: map.getCenter().lng, zoom: map.getZoom() }),
+  setView: v => map.setView([v.lat, v.lng], v.zoom, { animate: false }),
+  flyTo: (lat, lng) => map.flyTo([lat, lng]),
+  fitBounds: (w, s, e, n) => map.flyToBounds([[s, w], [n, e]]),
+  onMoveStart: cb => map.on("movestart", cb),
+  onMoveEnd: cb => map.on("moveend", cb),
+  toLatLng: (x, y) => { const ll = map.containerPointToLatLng([x, y]); return { lat: ll.lat, lng: ll.lng }; },
+  setMarker: ll => { initNavTools._mk?.remove(); initNavTools._mk = ll ? L.marker([ll.lat, ll.lng]).addTo(map) : null; },
+  nativeBoxZoom: true,
 });

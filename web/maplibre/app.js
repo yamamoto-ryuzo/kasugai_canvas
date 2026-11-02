@@ -11,6 +11,8 @@ import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
+import { initNavTools } from "../shared/nav-tools.js";
+import { formatLatLng } from "../shared/coords-format.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
@@ -1494,7 +1496,7 @@ map.on("sourcedata", e => {
   const coordsEl = document.querySelector("#map-coords");
   map.on("mousemove", e => {
     if (!coordsEl || !document.querySelector("#display-coords")?.checked) return;
-    coordsEl.textContent = `${e.lngLat.lng.toFixed(5)}, ${e.lngLat.lat.toFixed(5)}`;
+    coordsEl.textContent = formatLatLng(e.lngLat.lat, e.lngLat.lng);
   });
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (coordsEl) coordsEl.style.display = e.target.checked ? "" : "none";
@@ -1806,4 +1808,20 @@ initPrint({
     return mpp / 0.00028;
   },
   getNorthAngleDeg: () => -map.getBearing(),
+});
+
+// ---- ナビゲーション共通ツール（shared/nav-tools.js）----
+initNavTools({
+  el: document.getElementById("map"),
+  getView: () => ({ lat: map.getCenter().lat, lng: map.getCenter().lng, zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() }),
+  setView: v => map.jumpTo({ center: [v.lng, v.lat], zoom: v.zoom, bearing: v.bearing || 0, pitch: v.pitch || 0 }),
+  viewsEqual: (x, y) => x && y && Math.abs(x.lat - y.lat) < 1e-7 && Math.abs(x.lng - y.lng) < 1e-7 && Math.abs((x.zoom ?? 0) - (y.zoom ?? 0)) < 0.001 && Math.abs((x.bearing ?? 0) - (y.bearing ?? 0)) < 0.5 && Math.abs((x.pitch ?? 0) - (y.pitch ?? 0)) < 0.5,
+  flyTo: (lat, lng) => map.flyTo({ center: [lng, lat] }),
+  fitBounds: (w, s, e, n) => map.fitBounds([[w, s], [e, n]]),
+  onMoveStart: cb => map.on("movestart", cb),
+  onMoveEnd: cb => map.on("moveend", cb),
+  toLatLng: (x, y) => { const ll = map.unproject([x, y]); return { lat: ll.lat, lng: ll.lng }; },
+  setMarker: ll => { initNavTools._mk?.remove(); initNavTools._mk = ll ? new maplibregl.Marker().setLngLat([ll.lng, ll.lat]).addTo(map) : null; },
+  capturePng: () => new Promise(res => { map.once("render", () => map.getCanvas().toBlob(res, "image/png")); map.triggerRepaint(); }),
+  nativeBoxZoom: true,
 });

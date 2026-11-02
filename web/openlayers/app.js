@@ -19,6 +19,8 @@ import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
+import { initNavTools } from "../shared/nav-tools.js";
+import { formatLatLng } from "../shared/coords-format.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers } from "../shared/deck-drape.js";
@@ -1427,7 +1429,7 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
   });
 
   const scaleCtl = new ScaleLine({ units: "metric", className: "ol-scale-line kasc-scale" });
-  const coordsCtl = new MousePosition({ className: "ol-mouse-position map-coords", coordinateFormat: createStringXY(5), projection: "EPSG:4326" });
+  const coordsCtl = new MousePosition({ className: "ol-mouse-position map-coords", coordinateFormat: c => formatLatLng(c[1], c[0]), projection: "EPSG:4326" });
   map.addControl(scaleCtl);
   map.addControl(coordsCtl);
   document.querySelector("#display-scalebar")?.addEventListener("change", e => {
@@ -1680,4 +1682,33 @@ initPrint({
     return res > 0 ? res / 0.00028 : null;
   },
   getNorthAngleDeg: () => map.getView().getRotation() * 180 / Math.PI,
+});
+
+// ---- ナビゲーション共通ツール（shared/nav-tools.js）----
+import("https://cdn.jsdelivr.net/npm/ol@10.11.0/Overlay.js").then(() => {});
+initNavTools({
+  el: document.getElementById("map"),
+  getView: () => { const c = toLonLat(map.getView().getCenter()); return { lat: c[1], lng: c[0], zoom: map.getView().getZoom(), rotation: map.getView().getRotation() }; },
+  setView: v => { map.getView().setCenter(fromLonLat([v.lng, v.lat])); map.getView().setZoom(v.zoom); map.getView().setRotation(v.rotation || 0); },
+  viewsEqual: (x, y) => x && y && Math.abs(x.lat - y.lat) < 1e-7 && Math.abs(x.lng - y.lng) < 1e-7 && Math.abs((x.zoom ?? 0) - (y.zoom ?? 0)) < 0.001 && Math.abs((x.rotation ?? 0) - (y.rotation ?? 0)) < 0.01,
+  flyTo: (lat, lng) => map.getView().animate({ center: fromLonLat([lng, lat]), duration: 500 }),
+  fitBounds: (w, s, e, n) => map.getView().fit(transformExtent([w, s, e, n], "EPSG:4326", map.getView().getProjection()), { duration: 300 }),
+  onMoveStart: cb => map.on("movestart", cb),
+  onMoveEnd: cb => map.on("moveend", cb),
+  toLatLng: (x, y) => { const c = map.getCoordinateFromPixel([x, y]); if (!c) return null; const ll = toLonLat(c); return { lat: ll[1], lng: ll[0] }; },
+  setMarker: ll => {
+    if (initNavTools._ov) { map.removeOverlay(initNavTools._ov); initNavTools._ov = null; }
+    if (ll) {
+      const el = document.createElement("div");
+      el.textContent = "📍"; el.style.cssText = "font-size:22px;pointer-events:none;text-shadow:0 0 3px #fff;";
+      import("https://cdn.jsdelivr.net/npm/ol@10.11.0/Overlay.js").then(m => {
+        initNavTools._ov = new m.default({ element: el, position: fromLonLat([ll.lng, ll.lat]), positioning: "bottom-center", stopEvent: false });
+        map.addOverlay(initNavTools._ov);
+      });
+    }
+  },
+  capturePng: () => new Promise(res => {
+    map.once("rendercomplete", () => { const c = compositeCanvases(map.getViewport()); c ? c.toBlob(res, "image/png") : res(null); });
+    map.renderSync();
+  }),
 });
