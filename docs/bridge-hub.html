@@ -26,6 +26,12 @@
         <h2 id="hub-overview">1. 概要 — bridge-hub.exe とは</h2>
         <p>ローカルに常駐させるブリッジを <strong>1本（127.0.0.1:8511）に集約</strong>するハブです。<strong>Rust 製の単一 exe（<code>bridge-hub.exe</code>）で、Node.js は不要</strong>です。アプリ版（kasugai_canvas.exe）と同じ <code>server/src/bridge/</code> 実装を使い、Copilot / Devin / Antigravity の各プロバイダは実際に使われた時点で外部 CLI を子プロセスとして遅延起動します。</p>
         <p>アプリ版・ブラウザ WebGIS 共通の1本で、アプリはハブを内蔵しません。起動時に <code>:8511</code> のハブが未応答なら、インストール済みの本 exe を <code>BRIDGE_HUB_PORT=8511</code> で自動起動します（旧ブラウザ WebGIS 用に 8512 で常駐していたハブは全て旧版のため、本ハブのインストール時・および新版アプリの起動時に自動で停止されます）。</p>
+        <p><strong>位置づけはオプションの拡張コンポーネントです</strong>。地図閲覧・<code>.kasc</code> 再生・プロジェクト管理などの本体機能と、Gemini 等の内蔵 AI はハブなしで動作し、未インストールでもアプリは正常に起動します。本ハブが必要になるのは次の機能を使う場合だけです:</p>
+        <ul>
+          <li><strong>AI チャットのブリッジ系プロバイダ</strong>（GitHub Copilot / Devin / Antigravity）</li>
+          <li><strong><code>/vector</code> ローカルベクトルサービス</strong>（ローカル永続 DuckDB → GeoJSON 配信）</li>
+        </ul>
+        <p>インストーラー版（<code>kasugai_canvas_setup.exe</code>）ではセットアップ時に自動導入されますが、これらを使わなければ常駐しているだけです。ZIP 版・ブラウザ WebGIS では導入は必須ではなく、ブリッジ系プロバイダ選択時の案内からその場で導入できます。</p>
         <div class="url-box">
           <h3>ハブの役割（エージェント連携＋ベクトルサービス）</h3>
           <p>AI 連携は「ブラウザ → エージェント」方向を担い、逆方向は別経路です。さらにローカルベクトル配信サービス（<code>/vector</code>）も内蔵します:</p>
