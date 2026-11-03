@@ -61,10 +61,11 @@ duckdb CLI は `bridge-hub.exe --setup duckdb` または
 GitHub Releases から自動導入されます（`%LOCALAPPDATA%\kasugai\bridge-cli\duckdb\`）。
 `DUCKDB_CLI_PATH` 環境変数で任意パスも指定可能です。
 
-なお、直前の duckdb プロセスが残っている間（クライアント側タイムアウトや
-ハブ異常終了後）は永続 DB のロックにより 502「File is already open in
-duckdb.exe」が返ります。処理完了を待つか、残った `duckdb.exe` を終了して
-再試行してください。
+なお、直前の duckdb プロセスが残っている間（クライアント側が先に切断
+した場合やハブ異常終了後）は永続 DB のロックにより 502「File is already
+open in duckdb.exe」が返ります。サーバー側のタイムアウトでは子プロセスを
+kill するため孤児は残りませんが、クライアント側の切断でハブの処理は止まり
+ません。処理完了を待つか、残った `duckdb.exe` を終了して再試行してください。
 
 ## 詳細
 

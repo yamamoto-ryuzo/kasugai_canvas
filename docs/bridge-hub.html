@@ -170,7 +170,7 @@ curl "http://127.0.0.1:8511/vector/geojson/rivers?bbox=139.5,35.5,140.0,35.9&lim
           <li><strong>信頼境界は /agent と同じ</strong> — 127.0.0.1 専用のローカルエージェント経路ですが、到達者は登録ソースの内容を読め、<code>/vector/query</code>・<code>kind:"sql"</code> 経由では httpfs で参照可能なローカルファイルも読めます</li>
           <li><strong>ブラウザからの直接 fetch</strong> — CORS と PNA プリフライト（<code>Access-Control-Allow-Private-Network</code>）に対応済みのため、<code>*.github.io</code> 等の公開 HTTPS ページからも <code>http://127.0.0.1:8511/vector/geojson/&lt;name&gt;</code> を fetch できます</li>
           <li>取込みテーブル名は <code>v_&lt;name&gt;</code>、レジストリは <code>%LOCALAPPDATA%\kasugai\vector\sources.json</code> です。duckdb 呼出しはプロセス内で直列化されます（永続 DB の書込みロック対策）</li>
-          <li><strong>502「File is already open in duckdb.exe」が返る場合</strong> — 直前リクエストの duckdb プロセスがまだ実行中か（クライアント側タイムアウトではサーバー側の処理は止まりません）、ハブ異常終了で残った孤児 <code>duckdb.exe</code> が永続 DB のロックを握っています。処理の完了を待つか、残った <code>duckdb.exe</code> を終了してから再試行してください</li>
+          <li><strong>502「File is already open in duckdb.exe」が返る場合</strong> — 直前リクエストの duckdb プロセスがまだ実行中か（クライアント側の切断ではサーバー側の処理は止まりません）、ハブ異常終了で残った孤児 <code>duckdb.exe</code> が永続 DB のロックを握っています。サーバー側タイムアウトでは子プロセスを kill するため孤児は残りません。処理の完了を待つか、残った <code>duckdb.exe</code> を終了してから再試行してください</li>
         </ul>
       </section>
 
