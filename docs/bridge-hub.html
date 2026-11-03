@@ -27,11 +27,12 @@
         <p>ローカルに常駐させるブリッジを <strong>1本（127.0.0.1:8511）に集約</strong>するハブです。<strong>Rust 製の単一 exe（<code>bridge-hub.exe</code>）で、Node.js は不要</strong>です。アプリ版（kasugai_canvas.exe）と同じ <code>server/src/bridge/</code> 実装を使い、Copilot / Devin / Antigravity の各プロバイダは実際に使われた時点で外部 CLI を子プロセスとして遅延起動します。</p>
         <p>アプリ版・ブラウザ WebGIS 共通の1本で、アプリはハブを内蔵しません。起動時に <code>:8511</code> のハブが未応答なら、インストール済みの本 exe を <code>BRIDGE_HUB_PORT=8511</code> で自動起動します（旧ブラウザ WebGIS 用に 8512 で常駐していたハブは全て旧版のため、本ハブのインストール時・および新版アプリの起動時に自動で停止されます）。</p>
         <div class="url-box">
-          <h3>エージェント連携は双方向</h3>
-          <p>このハブは「ブラウザ → エージェント」方向だけを担います。逆方向は別経路です:</p>
+          <h3>ハブの役割（エージェント連携＋ベクトルサービス）</h3>
+          <p>AI 連携は「ブラウザ → エージェント」方向を担い、逆方向は別経路です。さらにローカルベクトル配信サービス（<code>/vector</code>）も内蔵します:</p>
           <ul>
             <li><strong>ブラウザ → エージェント</strong>（チャットから AI を使う）… 本ハブ（<code>/agent</code>・<code>/models</code>）</li>
             <li><strong>エージェント → ブラウザ</strong>（外から地図を操る）… アプリ本体（<code>127.0.0.1:8510</code>）の <code>/api/command</code>。Devin Desktop・Copilot CLI・任意スクリプトが <code>{"name":"flyTo","args":{...}}</code> を投入すると、ブラウザがロングポーリングで受信して <code>executeChatTool</code> で実行します</li>
+            <li><strong>ベクトルサービス</strong>（ローカル永続 DuckDB → GeoJSON 配信）… 本ハブ（<code>/vector/*</code>。<a href="#hub-vector">7. /vector</a> 参照）</li>
           </ul>
         </div>
       </section>
@@ -82,6 +83,10 @@ Unblock-File "$env:TEMP\bridge-hub.exe"
             <tr><td><code>GET /setup</code></td><td>各プロバイダ用 CLI の検出状況と自動化可否（<code>cli_found</code>/<code>cli_path</code>/<code>auto_install</code>/<code>methods</code>）</td></tr>
             <tr><td><code>POST /setup</code></td><td><code>{provider, action:"install", confirm:true}</code> で公式手順の自動インストールをジョブ開始（<code>{"job": "&lt;id&gt;"}</code> を返す）</td></tr>
             <tr><td><code>GET /setup/job/&lt;id&gt;</code></td><td>ジョブの状態（<code>running</code>/<code>done</code>/<code>failed</code>）・ログ・結果</td></tr>
+            <tr><td><code>GET /vector/status</code></td><td>ベクトルサービスの状態（duckdb CLI 検出・ストア・登録ソース）<a href="#hub-vector">→ 7.</a></td></tr>
+            <tr><td><code>GET|POST /vector/sources</code><br><code>DELETE /vector/sources/&lt;name&gt;</code></td><td>ベクトルソースの一覧・登録・解除（parquet/gpkg/fgb/geojson/csv/shp → 永続 DuckDB）<a href="#hub-vector">→ 7.</a></td></tr>
+            <tr><td><code>GET /vector/geojson/&lt;name&gt;</code></td><td>登録ソースを GeoJSON 配信（gzip・<code>?where=&bbox=&limit=&simplify=&columns=</code>）<a href="#hub-vector">→ 7.</a></td></tr>
+            <tr><td><code>POST /vector/query</code></td><td><code>{sql:"SELECT ..."}</code> → GeoJSON（geom 列を含む SELECT・永続 DB 対象）<a href="#hub-vector">→ 7.</a></td></tr>
           </tbody>
         </table>
         <p><small><code>POST /setup</code> はブラウザ経由の踏み台を防ぐため、<code>Origin</code> が loopback または Canvas の既知デプロイホスト（<code>*.github.io</code>/<code>*.run.app</code>/<code>*.pages.dev</code>、<code>BRIDGE_SETUP_ORIGINS</code> で追加可）の場合のみ受け付けます。</small></p>
@@ -96,6 +101,7 @@ Unblock-File "$env:TEMP\bridge-hub.exe"
             <tr><td>copilot</td><td><code>winget install GitHub.Copilot</code> → <code>npm i -g @github/copilot</code> → GitHub Releases から <code>copilot-win32-*.zip</code> を直接DL（ハブ管理ディレクトリ <code>%LOCALAPPDATA%\kasugai\bridge-cli\copilot\</code> へ配置）</td></tr>
             <tr><td>devin</td><td>公式 <code>irm https://static.devin.ai/cli/setup.ps1 | iex</code>（unix は <code>install.sh</code>）</td></tr>
             <tr><td>antigravity</td><td>自動化不可（IDE インストーラ＋対話 Google ログインのため案内のみ）</td></tr>
+            <tr><td>duckdb</td><td>GitHub Releases から <code>duckdb-cli-*.tar.gz</code> を直接DL（ハブ管理ディレクトリ <code>%LOCALAPPDATA%\kasugai\bridge-cli\duckdb\</code> へ配置）。<code>/vector</code> のバックエンドで AI プロバイダではないが、導入経路は共通（<code>DUCKDB_CLI_PATH</code>・PATH の既存 duckdb も検出）</td></tr>
           </tbody>
         </table>
         <ul>
@@ -132,13 +138,42 @@ Unblock-File "$env:TEMP\bridge-hub.exe"
             <tr><td><code>KASUGAI_NO_COPILOT_BRIDGE</code></td><td>なし</td><td>copilot プロバイダを無効化</td></tr>
             <tr><td><code>KASUGAI_NO_DEVIN_BRIDGE</code></td><td>なし</td><td>devin プロバイダを無効化</td></tr>
             <tr><td><code>KASUGAI_NO_ANTIGRAVITY_BRIDGE</code></td><td>なし</td><td>antigravity プロバイダを無効化</td></tr>
+            <tr><td><code>DUCKDB_CLI_PATH</code></td><td>なし</td><td><code>/vector</code> バックエンドの duckdb CLI を任意パスで指定（未指定時はハブ管理パス → PATH の順で検出）</td></tr>
           </tbody>
         </table>
         <p><small>各プロバイダ固有の環境変数（<code>DEVIN_API_KEY</code>・<code>COPILOT_CLI_PATH</code>・<code>DEVIN_CLI_PATH</code>・<code>AGY_CLI_PATH</code>・<code>*_BRIDGE_TOKEN</code> 等）はアプリ版と同じものがそのまま使えます。</small></p>
       </section>
 
+      <section>
+        <h2 id="hub-vector">7. /vector — ローカルベクトルサービス</h2>
+        <p>ネイティブの <strong>duckdb CLI</strong> をバックエンドに、parquet / gpkg / fgb / geojson / csv / shp を永続 <code>.duckdb</code>（<code>%LOCALAPPDATA%\kasugai\vector\vector.duckdb</code>）へ取り込み、<strong>GeoJSON として HTTP 配信</strong>します。ブラウザ側は設定テキストに <code>geojson: http://127.0.0.1:8511/vector/geojson/&lt;name&gt;</code> の1行を書くだけでレイヤー化でき、KASUGAI Canvas・Re:Earth geo_suite 等から共用できます。</p>
+        <p>ブラウザ内の DuckDB-Wasm デコードと違い、セッション毎の ~15s 初期化・opaque origin のキャッシュ不可・拡張コンテキスト 4MB 制約を全て回避できます。DB は永続化されるため複数クライアント・複数セッションで共有されます。</p>
+        <table>
+          <thead><tr><th>エンドポイント</th><th>内容</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /vector/status</code></td><td>duckdb CLI 検出・ストアパス・DB サイズ・登録ソース一覧</td></tr>
+            <tr><td><code>GET /vector/sources</code></td><td>登録ソース一覧</td></tr>
+            <tr><td><code>POST /vector/sources</code></td><td><code>{name, src|sql, kind?, layer?, lon?, lat?, geom_col?, where?, limit?, materialize?}</code> で登録。<code>name</code> は <code>[A-Za-z0-9_]</code> 1〜64文字。<code>kind</code> は拡張子から自動判定（parquet/gpkg/fgb/geojson/csv/shp。任意 SQL は <code>kind:"sql"</code>+<code>sql:</code>）。既定は TABLE への実体化取込みで、<code>materialize:false</code> なら VIEW 登録。geometry 列は GEOMETRY 型 → 既知名（geometry/geom/wkb_geometry/the_geom）→ BLOB の順に自動検出し、見つからなければ <code>geom_col</code> か <code>lon</code>/<code>lat</code>（ST_Point 生成）を指定</td></tr>
+            <tr><td><code>DELETE /vector/sources/&lt;name&gt;</code></td><td>登録解除（テーブル/ビューを DROP）</td></tr>
+            <tr><td><code>GET /vector/geojson/&lt;name&gt;</code></td><td>GeoJSON 配信（<code>application/geo+json</code>・gzip）。<code>?where=</code>（SQL 条件）・<code>?bbox=w,s,e,n</code>・<code>?limit=</code>・<code>?simplify=&lt;deg&gt;</code>（ST_Simplify 許容差）・<code>?columns=a,b</code></td></tr>
+            <tr><td><code>POST /vector/query</code></td><td><code>{sql:"SELECT ..."}</code> → GeoJSON。<code>geom</code> 列を含む SELECT / WITH の単一ステートメントのみ。永続 DB のテーブル（<code>v_&lt;name&gt;</code>）や spatial 関数が使えます</td></tr>
+          </tbody>
+        </table>
+        <pre><code>curl -X POST http://127.0.0.1:8511/vector/sources ^
+  -H "Content-Type: application/json" ^
+  -d "{\"name\":\"rivers\",\"src\":\"C:/data/rivers.parquet\"}"
+# → {"ok":true,"name":"rivers","geojson_url":"/vector/geojson/rivers",...}
+
+curl "http://127.0.0.1:8511/vector/geojson/rivers?bbox=139.5,35.5,140.0,35.9&limit=1000"</code></pre>
+        <ul>
+          <li><strong>duckdb CLI の導入</strong> — <code>bridge-hub.exe --setup duckdb</code> または <code>POST /setup {"provider":"duckdb","action":"install","confirm":true}</code> で GitHub Releases から自動導入されます（<code>%LOCALAPPDATA%\kasugai\bridge-cli\duckdb\</code>）。<code>DUCKDB_CLI_PATH</code>・PATH 上の既存 duckdb も検出します</li>
+          <li><strong>信頼境界は /agent と同じ</strong> — 127.0.0.1 専用のローカルエージェント経路ですが、到達者は登録ソースの内容を読め、<code>/vector/query</code>・<code>kind:"sql"</code> 経由では httpfs で参照可能なローカルファイルも読めます</li>
+          <li>取込みテーブル名は <code>v_&lt;name&gt;</code>、レジストリは <code>%LOCALAPPDATA%\kasugai\vector\sources.json</code> です。duckdb 呼出しはプロセス内で直列化されます（永続 DB の書込みロック対策）</li>
+        </ul>
+      </section>
+
       <section class="card">
-        <h2>7. 関連リンク</h2>
+        <h2>8. 関連リンク</h2>
         <ul>
           <li><a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a> — 利用者向けの導入・接続手順と規約判断</li>
           <li><a href="ai-tools.html">AI ツール仕様</a> — 内蔵AIが制御できるツールの定義（<code>bridgeSetup</code> 等）</li>
