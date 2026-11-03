@@ -6,6 +6,9 @@
   <title>【ブリッジ】外部エージェント連携 — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="style.css">
   <script src="nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -26,6 +29,44 @@
         <h2 id="ai-bridge">1. 概要 — 【ブリッジ】とは</h2>
         <p>【ブリッジ】系統は、チャットの <code>POST /agent</code> をローカルのブリッジハブ（常駐の bridge-hub.exe :8511 — アプリ版・ブラウザ WebGIS 共通の1本）が受けて外部 CLI（copilot / devin / agy）へ中継する方式です。ブラウザからモデルへ直接接続する代わりに、公式 SDK / CLI をローカルブリッジ経由で利用するため、<strong>ブラウザに API キーは不要</strong>で、既存の Copilot 契約や自作エージェントをそのまま繋げます。専用プロバイダの選択肢はハブを検出できる環境でのみ表示されます。</p>
         <p>内蔵AI（Gemini・OpenAI互換）による公式 API 直通は <a href="ai-api.html">【API】内蔵AI</a>、接続方式ごとの規約判断は「<a href="#ai-connection-policy">5. 注意点・制限</a>」を参照してください。</p>
+        <div class="url-box">
+          <h3>全体構成</h3>
+          <pre class="mermaid" aria-label="ブリッジ系統の全体構成図">
+flowchart TB
+  subgraph BR["ブラウザ（通常版 / アプリ版共通）"]
+    CHAT["<b>AI チャット</b><br/>callExternalAgent()"]
+  end
+  subgraph LO["ローカル常駐（ブラウザと同一 PC）"]
+    direction TB
+    HUB["<b>bridge-hub.exe</b><br/>127.0.0.1:8511<br/>provider で振り分け"]
+    P1["copilot CLI<br/>github-copilot-sdk<br/>JSON-RPC（stdio）"]
+    P2["devin CLI<br/>devin acp（ACP）"]
+    P3["agy CLI<br/>headless stream-json<br/>＋ MCP で地図ツール登録"]
+    HUB -- "copilot" --> P1
+    HUB -- "devin" --> P2
+    HUB -- "antigravity" --> P3
+  end
+  subgraph EXT["外部エージェント（汎用・ハブ不要）"]
+    AG["/agent 互換サーバ<br/>（設定エンドポイントへ直接 POST）"]
+  end
+  subgraph SVC["AI サービス（CLI 側の本人ログイン・quota）"]
+    direction TB
+    S1["GitHub Copilot"]
+    S2["Devin"]
+    S3["Google（Antigravity）"]
+  end
+  CHAT <-->|"POST /agent ⇄ {reply, actions[]}"| HUB
+  CHAT <-->|"POST /agent ⇄ {reply, actions[]}"| AG
+  P1 --> S1
+  P2 --> S2
+  P3 --> S3
+  style BR fill:#fff3cd
+  style LO fill:#e8f0fe
+  style EXT fill:#f3e8fd
+  style SVC fill:#e6f4ea
+          </pre>
+          <p><small>ハブ側は各プロバイダの CLI を<strong>実際に使われた時点で子プロセス起動</strong>します（未使用時はゼロコスト）。認証・クォータは CLI 側の本人ログインに委ねられ、ブラウザは API キーを持ちません。外部エージェント（<code>provider:"agent"</code>）はハブの振り分け対象ではなく、設定したエンドポイントへ直接 POST されます。</small></p>
+        </div>
       </section>
 
       <section>
@@ -83,7 +124,7 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
         <div class="features">
           <div class="feature-card">
             <h3>🤝 外部エージェント（汎用 /agent）</h3>
-            <p>「AI プロバイダ」を「外部エージェント (ブリッジ)」にし、ブリッジ欄にエンドポイントURL・Bearerトークン（任意）を設定して保存すると、チャット入力がそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history, tools}</code>（<code>tools</code> は現在公開中のツール宣言・functionDeclarations 形式）、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
+            <p>「AI プロバイダ」を「外部エージェント (ブリッジ)」にし、ブリッジ欄にエンドポイントURL・Bearerトークン（任意）を設定して保存すると、チャット入力がそのエンドポイントへ POST されます。要求JSONは <code>{message, project, camera, layers, history, tools}</code>（<code>tools</code> は現在公開中のツール宣言・functionDeclarations 形式）、応答JSONは <code>{reply, actions:[{name,args}]}</code> で、actions はAIチャットと同名のツール（flyTo・setLayerVisible 等）として順次実行されます。実行結果は <code>toolResults</code> として返送され、追加 actions が無くなるまで最大5往復で継続します（シーケンス図参照）。エンドポイント側ではこのオリジンからの CORS 許可が必要です</p>
           </div>
           <div class="feature-card">
             <h3>🐙 GitHub Copilot</h3>
@@ -99,6 +140,32 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
           </div>
         </div>
         <p><small>逆方向の「外部 → ブラウザを操る」はアプリ本体（<code>127.0.0.1:8510</code>）の <code>/api/command</code> 経路です。</small></p>
+        <div class="url-box">
+          <h3>通信シーケンス（queued-action 往復）</h3>
+          <p>チャット送信は <code>POST {endpoint}</code> に JSON を投げ、応答の <code>actions</code> をブラウザ側で実行して結果を <code>toolResults</code> で返送する往復です。<strong>ハブはツールを実行せずキュー返しのみ</strong>行い、実実行は常にブラウザ側です。直前アクションで地図状態が変わり得るため、毎往復で camera/layers/basemaps を取り直して送信します（ハブ側のローカル状態参照ツールが実値を返せるようにするため）。</p>
+          <pre class="mermaid" aria-label="ブリッジ経由の通信シーケンス図">
+sequenceDiagram
+  autonumber
+  participant C as AI チャット<br/>（ブラウザ）
+  participant T as executeChatTool<br/>（地図操作・52ツール）
+  participant H as bridge-hub :8511<br/>または /agent 互換
+  participant CLI as プロバイダ CLI + AI
+
+  C->>H: GET /health（ハブ検出 → 専用プロバイダ選択肢を表示）
+  loop actions が空になるまで（最大5往復）
+    C->>H: POST /agent<br/>（message・systemInstruction・camera/layers/basemaps・<br/>history・tools・provider・model＋toolResults）
+    H->>CLI: provider で振り分け → AI 推論
+    CLI-->>C: {reply, actions[]}（ハブ転送）
+    C->>T: actions を順次実行
+    Note over C: 実行結果は toolResults として次回 POST へ。<br/>actions が空なら reply を表示して完了
+  end
+  Note over C,H: report フィールドがあれば showReport モーダルを表示
+          </pre>
+          <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+          </script>
+        </div>
       </section>
 
       <section>

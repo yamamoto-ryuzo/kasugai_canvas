@@ -6,6 +6,9 @@
   <title>【API】内蔵AI（Google 連携・AI）— KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="style.css">
   <script src="nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+  </style>
 </head>
 <body>
   <div class="container">
@@ -48,18 +51,69 @@
         <div class="url-box">
           <h3>AI プロバイダの2系統（【API】と【ブリッジ】）</h3>
           <p>「AI プロバイダ」の選択肢は名前の先頭の接頭辞で2系統に分かれます。入力方法も動作モデルも異なるため、目的に応じて選びます。</p>
+          <pre class="mermaid" aria-label="AI プロバイダ2系統の全体構成図">
+flowchart TB
+  subgraph BR["KASUGAI Canvas（ブラウザ）"]
+    CHAT["<b>AI チャット</b><br/>web/shared/ai-chat.js"]
+  end
+  subgraph API["【API】公式 API へ直接 fetch（BYOキー / サーバーキー）"]
+    direction LR
+    G["Gemini<br/>generativelanguage.googleapis.com<br/>※または /api/gemini プロキシ（サーバーキー）"]
+    O["OpenAI互換 / Anthropic /<br/>Azure OpenAI / さくらAIEngine<br/>（設定エンドポイント）"]
+  end
+  subgraph LO["【ブリッジ】/agent へ POST（ブラウザにキー不要）"]
+    direction LR
+    HUB["bridge-hub.exe :8511<br/>copilot / devin / antigravity"]
+    AG["外部エージェント<br/>（任意の /agent 互換）"]
+  end
+  CHAT <-->|"直接 fetch（function calling ループ）"| G
+  CHAT <-->|"直接 fetch（function calling ループ）"| O
+  CHAT <-->|"POST /agent ⇄ {reply, actions[]}"| HUB
+  CHAT <-->|"POST /agent ⇄ {reply, actions[]}"| AG
+  style BR fill:#fff3cd
+  style API fill:#e6f4ea
+  style LO fill:#e8f0fe
+          </pre>
           <table>
             <thead><tr><th></th><th>【API】Gemini / OpenAI互換</th><th>【ブリッジ】GitHub Copilot / Devin / Antigravity / 外部エージェント</th></tr></thead>
             <tbody>
               <tr><td>接続先</td><td>プロバイダの公式 API へブラウザから直接接続（HTTPS）</td><td>ローカル等のエンドポイント（<code>/agent</code>）へ POST</td></tr>
               <tr><td>設定するもの</td><td>APIキー＋モデル（OpenAI互換はベースURLも）</td><td>エンドポイントURL＋トークン（任意）＋BYOキー送信（任意）</td></tr>
               <tr><td>AI 側の資格</td><td>BYO キー、またはサーバーキー（<code>/api/gemini</code>）</td><td>ブリッジ側が持つ（Copilot CLI ログイン等）。ブラウザにキーは不要</td></tr>
-              <tr><td>ツール実行方式</td><td>function calling ループ — ツール結果を見て複数往復で判断するため多段操作に強い</td><td>単発キュー — 応答の <code>actions</code> を一括実行。ツール結果を見た往復はしない</td></tr>
+              <tr><td>ツール実行方式</td><td>function calling ループ — ツール結果を見て複数往復で判断するため多段操作に強い</td><td>キュー往復 — 応答の <code>actions</code> を実行し結果を <code>toolResults</code> で返送（最大5往復）。シーケンスは <a href="ai-bridge.html">【ブリッジ】</a> 参照</td></tr>
               <tr><td>向いている用途</td><td>高精度な地図操作・プラグイン生成・資料生成などの本体 AI</td><td>既存の Copilot 契約や自作エージェント（外部実装）を繋いで使う</td></tr>
               <tr><td>提供形態</td><td>通常版</td><td>外部エージェントは両形態。GitHub Copilot / Devin / Antigravity の専用選択肢は <strong>ブリッジハブ検出環境</strong>（同一PCの常駐 bridge-hub :8511 — アプリ版・ブラウザ WebGIS 共通）で表示</td></tr>
             </tbody>
           </table>
           <p>どちらを選んでもチャット UI・地図操作・<code>runCode</code>・破壊的操作の確認ダイアログは共通です。ブリッジ系を選んだ場合のみ「エンドポイントURL・トークン・BYOキー送信」のブリッジ欄が表示され、GitHub Copilot / Devin / Antigravity ではさらにモデル選択と疎通ステータスが表示されます。</p>
+        </div>
+        <div class="url-box">
+          <h3>【API】の通信シーケンス（function calling ループ）</h3>
+          <p>【API】系統（Gemini・OpenAI互換・Anthropic・Azure OpenAI・さくらAIEngine）はブリッジを介さず、ブラウザから設定エンドポイントへ <strong>API キーを同梱して直接 fetch</strong> します。ツール呼出しは各 API ネイティブの形式（<code>functionCall</code> / <code>tool_calls</code> / <code>tool_use</code>）で返り、実行結果をプロバイダ固有の履歴フォーマットで次リクエストへ積む往復ループです。</p>
+          <pre class="mermaid" aria-label="【API】系統の通信シーケンス図">
+sequenceDiagram
+  autonumber
+  participant U as ユーザー
+  participant C as AI チャット<br/>（ブラウザ）
+  participant T as executeChatTool<br/>（地図操作・52ツール）
+  participant API as AI API<br/>（設定エンドポイント）
+
+  U->>C: メッセージ送信
+  Note over C,API: 送信先はプロバイダ別。Gemini は BYO キーなら<br/>Google へ直接、サーバーキー環境では /api/gemini プロキシ
+  loop ツール呼出しが空になるまで
+    C->>API: 直接 fetch（APIキー同梱）<br/>contents/messages + tools 宣言
+    API-->>C: テキスト + functionCall / tool_calls / tool_use
+    C->>T: executeChatTool(name, args)
+    T-->>C: 実行結果
+    Note over C: 結果を functionResponse / tool メッセージ /<br/>tool_result として履歴へ積み次回 fetch へ同梱
+  end
+  C-->>U: reply 表示
+  Note over C,API: 往復上限 = ツール実行の上限往復数（既定10・1-20）<br/>到達時は「あとn往復続けますか」の確認ダイアログ
+          </pre>
+          <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+          </script>
         </div>
       </section>
 
