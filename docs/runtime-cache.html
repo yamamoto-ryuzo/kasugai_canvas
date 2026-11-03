@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ランタイム永続キャッシュ — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.16.0</span></h1>
+      <p>ランタイム永続キャッシュ — Service Worker による CDN 資産の保持</p>
+    </header>
+    <main>
+      <section>
+        <h2 id="cache-overview">1. 概要 — 何を解決するか</h2>
+        <p>KASUGAI Canvas は描画ライブラリや WASM ランタイムを CDN（jsdelivr 等）から読み込む構成のため、なにもしなければ <strong>セッションごとに重い資産を再ダウンロード</strong>します。とりわけ DuckDB-WASM は本体・拡張あわせて約60MBあり、ブラウザ任せの HTTP キャッシュでは失効のタイミングを制御できません。</p>
+        <p>そこで <strong>Service Worker が CDN への GET を横取りし、CacheStorage へ永続保存</strong>します。一度取得した資産はブラウザのキャッシュ失効ポリシーに左右されず、再読み込み・ブラウザ再起動後もキャッシュから即座に供給されます。</p>
+        <div class="url-box">
+          <h3>2本の Service Worker</h3>
+          <p>本ドキュメントではこの2本を <strong>「DuckDB-WASM 永続キャッシュ」（sw-duckdb.js）</strong> と <strong>「vendor 同一オリジン中継」（vendor-proxy-sw.js）</strong> と呼びます。</p>
+          <table>
+            <thead><tr><th>SW（呼称）</th><th>ファイル</th><th>役割</th><th>CacheStorage</th></tr></thead>
+            <tbody>
+              <tr><td><strong>DuckDB-WASM 永続キャッシュ</strong></td><td><code>web/sw-duckdb.js</code></td><td>DuckDB-WASM の CDN 資産（約60MB）を永続キャッシュ</td><td><code>kasugai-duckdb-wasm</code></td></tr>
+              <tr><td><strong>vendor 同一オリジン中継</strong></td><td><code>web/vendor-proxy-sw.js</code></td><td><code>vendor/*</code> を上流オリジナルへ中継し同一オリジンとして供給。成功応答は保険としてキャッシュ</td><td><code>kasugai-vendor-v1</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="url-box" id="cache-diagram">
+          <h3>ブラウザから見た構成図</h3>
+          <pre class="mermaid" aria-label="ブラウザから見た Service Worker 構成図">
+flowchart TB
+  subgraph BR["ブラウザ（ページ＝web/ スコープ配下）"]
+    ENG["エンジンページ<br/>cesium / gsimaps / navara 等"]
+    PROBE["duckDbAssetsCached()<br/>キャッシュ済みなら非表示の<br/>クエリ系レイヤー分も DuckDB を<br/>先行初期化"]
+  end
+
+  subgraph SW["Service Worker（スコープ web/ ・常に1本のみ active）"]
+    DSW["sw-duckdb.js<br/>＝「DuckDB-WASM 永続キャッシュ」"]
+    VSW["vendor-proxy-sw.js<br/>＝「vendor 同一オリジン中継」"]
+  end
+
+  ENG -->|"cesium 起動時 register"| DSW
+  ENG -->|"vendor-guard.js 経由 register<br/>（gsimaps / navara）"| VSW
+  DSW <-.->|"エンジン切替で制御交代<br/>controllerchange 待機＋1回リロード"| VSW
+
+  ENG -->|"ページ・Worker 内の全 fetch"| ACTIVE{"active SW の<br/>fetch ハンドラ"}
+  SW --- ACTIVE
+
+  ACTIVE -->|"@duckdb/duckdb-wasm@*<br/>extensions.duckdb.org"| HITQ{"kasugai-duckdb-wasm<br/>ヒット？"}
+  HITQ -->|"hit"| RESP1["キャッシュから即応答<br/>（ネットワーク不使用）"]
+  HITQ -->|"miss → 取得後 cache.put"| EXT1[("jsdelivr /<br/>extensions.duckdb.org")]
+  PROBE -.->|"keys() で本体 wasm の有無を確認"| HITQ
+
+  ACTIVE -->|"vendor/*（同一オリジン）"| PINQ["vendor.json のピンへ解決<br/>npm/gh → jsdelivr<br/>失敗時 raw.githubusercontent<br/>（?u= でミラーモード）"]
+  PINQ --> EXT2[("上流オリジナル /<br/>?u= ミラー")]
+  EXT2 -->|"Content-Type 包み直し<br/>＋kasugai-vendor-v1 に保険保存"| RESP2["同一オリジンとして応答"]
+  EXT2 -.->|"上流不通時"| VCACHE[("kasugai-vendor-v1")]
+  VCACHE -.-> RESP2
+
+  ACTIVE -->|"対象外のリクエスト"| PASS["ネットワークへ素通し<br/>（タイル・レイヤーデータ等）"]
+
+  classDef duckdb fill:#eef0ff,stroke:#667eea,color:#1a2230
+  classDef vendor fill:#e9f7ee,stroke:#2e9e56,color:#1a2230
+  classDef neutral fill:#f6f8fa,stroke:#9aa5b1,color:#5a6577
+  class DSW,HITQ,RESP1,EXT1,PROBE duckdb
+  class VSW,PINQ,EXT2,VCACHE,RESP2 vendor
+  class ENG,ACTIVE,PASS neutral
+          </pre>
+          <script type="module">
+            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+            mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+          </script>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="cache-duckdb">2. sw-duckdb.js — DuckDB-WASM 永続キャッシュ</h2>
+        <p><code>web/cesium/index.html</code> が起動時に <code>navigator.serviceWorker.register("../sw-duckdb.js")</code> で登録します（スコープは <code>web/</code> ルート）。登録は Cesium エンジンのみが行います。</p>
+        <div class="url-box">
+          <h3>対象資産（約60MB）</h3>
+          <ul>
+            <li><code>cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@*</code> — WASM 本体（約33MB）・ワーカースクリプト・+esm/dist 配下すべて</li>
+            <li><code>extensions.duckdb.org</code> — <code>INSTALL spatial</code>（約22MB）・<code>httpfs</code>・<code>parquet</code> 拡張の内部取得</li>
+          </ul>
+          <p><strong>Worker 内部のフェッチも対象</strong>です。DuckDB が内部で行う <code>importScripts</code> や拡張 INSTALL の取得も SW スコープ配下の fetch として横取りされるため、利用者側で意識する必要はありません。</p>
+        </div>
+        <div class="url-box">
+          <h3>キャッシュ戦略</h3>
+          <ul>
+            <li><strong>キャッシュキーは URL そのまま</strong>。<code>@duckdb/duckdb-wasm@1.32.0</code>・拡張 <code>v1.4.3</code> のようにバージョンが URL に含まれるため、キーの衝突は起きません</li>
+            <li><strong>cache-first</strong>：キャッシュにあればネットワークに行かず返す。無ければ取得して <code>cache.put</code>（成功応答のみ・GET 要求のみ対象）</li>
+            <li><strong>activate 時に旧バージョンを掃除</strong>：<code>CURRENT_ASSET_MARKERS</code>（現行は <code>/npm/@duckdb/duckdb-wasm@1.32.0</code> と <code>/v1.4.3/</code>）に一致しないエントリだけを削除します。DuckDB のバージョンを上げると新資産が自動的にダウンロードされ、旧資産は次回起動時に消えます</li>
+          </ul>
+          <p><strong>キャッシュ有無で起動動作が変わります</strong>。ページ側も <code>duckDbAssetsCached()</code>（<code>app.js</code>）で同じ CacheStorage を読み、本体 wasm の存在を確認します。キャッシュ済みなら非表示のクエリ系レイヤーぶんまで含めて DuckDB を先行初期化します（ディスク読み込みで実質無料のため選択をほぼ即応答にできる）。未キャッシュ＝実質初回は ~60MB の実コストがかかるため、表示対象のクエリ系レイヤーがあるときだけ先行します。</p>
+          <p><small>バージョンを上げるときは <code>sw-duckdb.js</code> の <code>CURRENT_ASSET_MARKERS</code> と <code>web/cesium/app.js</code> の <code>DUCKDB_WASM_VERSION</code> を同時に更新してください（片方だけだと掃除対象がずれます）。</small></p>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="cache-vendor">3. vendor-proxy-sw.js — vendor 同一オリジン中継</h2>
+        <p>gsimaps・navara エンジンが <code>web/shared/vendor-guard.js</code> 経由で登録します。主目的はキャッシュではなく<strong>同一オリジン中継</strong>です：<code>web/vendor/</code> は配布物・CDN どこにも実体を置かず、この SW が <code>vendor/&lt;name&gt;/*</code> への GET/HEAD を拾い、各エンジンの <code>vendor.json</code> がピン留めする上流オリジナルから供給します。</p>
+        <div class="url-box">
+          <h3>上流解決（vendor.json のピン）</h3>
+          <ul>
+            <li><strong>npm ピン</strong>（navara）: <code>https://cdn.jsdelivr.net/npm/&lt;pkg&gt;@&lt;ver&gt;/&lt;tail&gt;</code></li>
+            <li><strong>github ピン</strong>（gsimaps）: <code>https://cdn.jsdelivr.net/gh/&lt;repo&gt;@&lt;sha&gt;/&lt;rest&gt;</code> → 失敗時 <code>raw.githubusercontent.com</code> へ再試行</li>
+            <li>SW スクリプト URL の <code>?u=&lt;base&gt;</code> で自前ミラーモード（<code>?hosted=</code> / localStorage <code>kasugai_hosted_base</code> で指定。ミラー失敗時はオリジナルピンへフォールバック）</li>
+          </ul>
+        </div>
+        <div class="url-box">
+          <h3>応答の包み直しとキャッシュ</h3>
+          <ul>
+            <li>上流応答は <code>new Response</code> で包み直し、Content-Type を拡張子から決め打ちします（jsdelivr/gh は text/plain を返すため、module script・Worker・iframe の MIME 厳格判定で拒否されるのを回避）</li>
+            <li>成功応答は <code>kasugai-vendor-v1</code> に保存し、<strong>上流不通時の保険</strong>として使います。転送は <code>cache: "no-store"</code> で毎回上流を見るため、ピン更新後の陳腐化は起きません</li>
+            <li>Range / 条件付きヘッダ（if-none-match 等）は上流へ転送します</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="cache-scope">4. スコープ共有と制御の交代（重要）</h2>
+        <p><strong>同一スコープで active になれる Service Worker は1つだけ</strong>です。<code>web/</code> スコープを sw-duckdb.js と vendor-proxy-sw.js が共用するため、Cesium ↔ vendor エンジン（gsimaps・navara）の切替では制御の取り合いが起きます。</p>
+        <div class="url-box">
+          <h3>制御交代の流れ</h3>
+          <ol>
+            <li>vendor エンジンのページを開く → <code>vendor-guard.js</code> が <code>vendor-proxy-sw.js</code> を register → SW 更新が走り install→activate→<code>clients.claim</code> で制御を取る</li>
+            <li>ガードは <code>controllerchange</code> と <code>controller.scriptURL</code> の一致で<strong>制御確定を待ってから</strong>エンジンを起動します（確定前に進むと <code>vendor/*</code> が中継されず 404 で起動不能）</li>
+            <li>制御が確定できない場合は <strong>sessionStorage フラグで1回だけリロード</strong>して SW 制御下で読み直します（無限リロード防止）</li>
+            <li>Cesium に戻ると <code>sw-duckdb.js</code> 側が register され、再び制御が交代します</li>
+          </ol>
+          <p>sw-duckdb.js の fetch ハンドラは対象外 URL を無視するだけで、制御中に vendor/* を中継することはありません。そのため vendor エンジンでは必ずガード経由で vendor-proxy-sw.js への交代を待つ必要があります。</p>
+        </div>
+      </section>
+
+      <section>
+        <h2 id="cache-excluded">5. キャッシュ対象外の資産</h2>
+        <p>永続キャッシュの対象は上記2系統だけです。以下は通常の HTTP キャッシュ（ブラウザ任せ・失効あり）に留まります。</p>
+        <table>
+          <thead><tr><th>資産</th><th>扱い</th></tr></thead>
+          <tbody>
+            <tr><td>sql.js（GPKG 読込用 SQLite WASM、<code>gpkg-worker.js</code>）</td><td>jsdelivr から都度取得。Worker 内でモジュールは1回だけ初期化（セッション内再利用）されるが、<strong>CacheStorage 永続化の対象外</strong>のためブラウザ再起動後は再取得され得る</td></tr>
+            <tr><td>CesiumJS / MapLibre / OpenLayers / Leaflet 等の描画ライブラリ</td><td>HTTP キャッシュのみ（navara は vendor-proxy-sw.js 経由で永続化される）</td></tr>
+            <tr><td>hyparquet / flatgeobuf / fflate 等のデコーダ</td><td>HTTP キャッシュのみ</td></tr>
+            <tr><td>レイヤーデータ本体（.gpkg / .parquet / .geojson 等）</td><td>永続キャッシュしない。DuckDB/GPKG は開いた DB を Worker が保持するためセッション内の再クエリは速いが、ファイルの再ダウンロードはセッションごとに発生する</td></tr>
+          </tbody>
+        </table>
+        <p><small>DuckDB 系の拡張 INSTALL は初回利用時（duckdb:/sql: レイヤーが表示ON・属性・検索で選択された時点）に発生します。起動直後に 60MB を取得するわけではありません。</small></p>
+      </section>
+
+      <section>
+        <h2 id="cache-limits">6. 前提条件・制限</h2>
+        <ul>
+          <li><strong>セキュアコンテキスト必須</strong>：Service Worker は HTTPS または localhost でのみ有効。静的ホスティング（GitHub Pages 等）でも動作します</li>
+          <li><strong>サイトデータの削除でキャッシュも消えます</strong>。ブラウザの「閲覧データ削除」やストレージ枯渇時の強制 eviction 後は、次回利用時に再ダウンロードが発生します</li>
+          <li><strong>GET のみ対象</strong>（vendor-proxy は HEAD も）。POST 等は素通りです</li>
+          <li><strong>sw-duckdb.js は対象資産以外の通信に介入しません</strong>。タイル・GeoJSON 等の地図データ取得は通常経路のままです（vendor-proxy-sw.js は <code>vendor/*</code> のみを対象とします）</li>
+          <li>オフライン化は目的としていません。永続キャッシュは「再ダウンロード削減」であって、オフライン動作を保証するものではありません</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2 id="cache-verify">7. 動作確認方法</h2>
+        <div class="install-steps">
+          <h3>ブラウザ DevTools での確認</h3>
+          <ol>
+            <li>DevTools → <strong>Application → Service Workers</strong>：現在有効な SW（<code>sw-duckdb.js</code> または <code>vendor-proxy-sw.js</code>）とスコープを確認</li>
+            <li><strong>Application → Cache Storage</strong>：<code>kasugai-duckdb-wasm</code>・<code>kasugai-vendor-v1</code> のエントリを確認</li>
+            <li>2回目の起動で Network パネルの duckdb 資産が <code>(ServiceWorker)</code> またはディスク/メモリキャッシュ扱いで即座に返れば永続キャッシュが効いています</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>8. 関連リンク</h2>
+        <ul>
+          <li><a href="inspector.html">.kasc 設定仕様</a> — duckdb:/sql:/gpkg: レイヤーの設定とランタイム読み込み動作</li>
+          <li><a href="data.html">データ形式</a> — DuckDB-WASM・sql.js 等のデコード経路</li>
+          <li><a href="features/v6.html">V6: マルチエンジン</a> — vendor 依存エンジン（gsimaps・navara）の構成</li>
+          <li><a href="architecture.html">システム構成</a> — Web Worker によるロード・変換層の位置づけ</li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

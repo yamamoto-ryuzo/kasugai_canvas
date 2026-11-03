@@ -51,7 +51,7 @@
       </div>
 
       <h3>ベクター：クエリ系（DuckDB SQL）</h3>
-      <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路です。DuckDB-WASM（CDN から遅延ロード）が SQL で絞り込んでから GeoJSON へ正規化して描画します。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です。ランタイム資産（約60MB）は Service Worker がブラウザ内に永続キャッシュするため、重いダウンロードはバージョンごとの初回のみで、以後はキャッシュから読み込まれます（詳細は <a href="inspector.html">.kasc 設定仕様</a> の「ランタイムの永続キャッシュ」）。対応するファイル形式は以下のとおりです。</p>
+      <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路です。DuckDB-WASM（CDN から遅延ロード）が SQL で絞り込んでから GeoJSON へ正規化して描画します。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です。ランタイム資産（約60MB）は Service Worker がブラウザ内に永続キャッシュするため、重いダウンロードはバージョンごとの初回のみで、以後はキャッシュから読み込まれます（詳細は <a href="runtime-cache.html">ランタイム永続キャッシュ</a>）。対応するファイル形式は以下のとおりです。</p>
       <div class="features">
         <div class="feature-card">
           <h3>📦 Parquet / GeoParquet <span class="badge">対応</span></h3>

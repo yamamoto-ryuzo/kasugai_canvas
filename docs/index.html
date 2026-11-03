@@ -123,7 +123,7 @@ flowchart TB
           mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
         </script>
         <h3>実行時の供給元 — 何をどこから読むか</h3>
-        <p><code>web/</code> 一式は <code>publish_cdn.py</code> が CDN へ丸ごとミラーするため、<code>shared/</code> 等の同じファイルが CDN と配布物（ZIP・インストーラー）の両方に存在します。どちらを読むかは<strong>開いているページのオリジンで決まります</strong>（エンジンコードは全て相対パス参照）。外部を参照するのは <code>/vendor/*</code>（gsimaps・navara）のみで、実体はどこにも置かず <strong>Service Worker（<code>vendor-proxy-sw.js</code>・SW 制御）</strong>が <code>vendor.json</code> のピン先（jsdelivr・raw.githubusercontent）からどのオリジンでも同一オリジン供給します（Service Worker 前提）。</p>
+        <p><code>web/</code> 一式は <code>publish_cdn.py</code> が CDN へ丸ごとミラーするため、<code>shared/</code> 等の同じファイルが CDN と配布物（ZIP・インストーラー）の両方に存在します。どちらを読むかは<strong>開いているページのオリジンで決まります</strong>（エンジンコードは全て相対パス参照）。外部を参照するのは <code>/vendor/*</code>（gsimaps・navara）のみで、実体はどこにも置かず <strong>Service Worker（<code>vendor-proxy-sw.js</code>＝vendor 同一オリジン中継・SW 制御）</strong>が <code>vendor.json</code> のピン先（jsdelivr・raw.githubusercontent）からどのオリジンでも同一オリジン供給します（Service Worker 前提）。</p>
         <table>
           <tr><th>取得物</th><th>ローカルアプリ（:8510）</th><th>ブラウザ WebGIS（CDN エンジン）</th></tr>
           <tr>
@@ -133,7 +133,7 @@ flowchart TB
           </tr>
           <tr>
             <td>vendored ライブラリ<br/>（<code>vendor/gsimaps/</code>・<code>vendor/navara/</code>）</td>
-            <td>同梱せず → <code>vendor-proxy-sw.js</code>（SW 制御）が vendor.json のピン先 CDN から同一オリジン中継<br/>（Service Worker 前提）</td>
+            <td>同梱せず → <code>vendor-proxy-sw.js</code>（vendor 同一オリジン中継・SW 制御）が vendor.json のピン先 CDN から同一オリジン中継<br/>（Service Worker 前提）</td>
             <td>同左</td>
           </tr>
           <tr>
@@ -188,6 +188,10 @@ flowchart TB
           <a class="feature-card" href="inspector.html">
             <h3>📝 .kasc 設定仕様</h3>
             <p>エンジン非依存のプロジェクト形式。行タイプ・オプション・グループ化ルール</p>
+          </a>
+          <a class="feature-card" href="runtime-cache.html">
+            <h3>💾 ランタイム永続キャッシュ</h3>
+            <p>Service Worker が CDN 資産（DuckDB-WASM 約60MB・vendor）を CacheStorage に保持。再ダウンロード削減の仕組みと対象範囲</p>
           </a>
         </div>
         <h3>AI — API / ブリッジ</h3>

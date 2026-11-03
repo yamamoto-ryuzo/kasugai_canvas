@@ -20,23 +20,24 @@
         { href: 'datahost.html', text: '2. 【WebGIS】ブラウザ WebGIS（外部ホスト配信）' },
         { href: 'guide.html', text: '3. 【アプリ】ローカルアプリ（kasugai_canvas.exe）' },
         { href: 'features/v6.html', text: '4. マルチエンジン（6エンジン）' },
-        { href: 'inspector.html', text: '5. .kasc 設定仕様' }
+        { href: 'inspector.html', text: '5. .kasc 設定仕様' },
+        { href: 'runtime-cache.html', text: '6. ランタイム永続キャッシュ' }
       ]
     },
     {
       label: 'AI — API / ブリッジ',
       items: [
-        { href: 'ai-api.html', text: '6. 【API】内蔵AI（Google 連携・AI）' },
-        { href: 'ai-bridge.html', text: '7. 【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）' },
-        { href: 'ai-tools.html', text: '8. AI ツール仕様' },
-        { href: 'bridge-hub.html', text: '9. ブリッジハブ（bridge-hub.exe）' }
+        { href: 'ai-api.html', text: '7. 【API】内蔵AI（Google 連携・AI）' },
+        { href: 'ai-bridge.html', text: '8. 【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）' },
+        { href: 'ai-tools.html', text: '9. AI ツール仕様' },
+        { href: 'bridge-hub.html', text: '10. ブリッジハブ（bridge-hub.exe）' }
       ]
     },
     {
       label: '仕様',
       items: [
         {
-          href: 'features.html', text: '10. 機能と実装',
+          href: 'features.html', text: '11. 機能と実装',
           children: [
             { href: 'features/v0.html', text: 'V0: システム基本構成' },
             { href: 'features/v1.html', text: 'V1: GIS 基本機能' },
@@ -52,17 +53,17 @@
     {
       label: '技術選定',
       items: [
-        { href: 'data.html', text: '11. データ形式' },
-        { href: 'library.html', text: '12. ライブラリ' },
-        { href: 'architecture.html', text: '13. システム構成' },
-        { href: 'security.html', text: '14. セキュリティ対策' }
+        { href: 'data.html', text: '12. データ形式' },
+        { href: 'library.html', text: '13. ライブラリ' },
+        { href: 'architecture.html', text: '14. システム構成' },
+        { href: 'security.html', text: '15. セキュリティ対策' }
       ]
     },
     {
       label: '拡張・連携',
       items: [
         {
-          href: 'auth/', text: '15. 認証とプラグイン',
+          href: 'auth/', text: '16. 認証とプラグイン',
           children: [
             { href: 'auth/none.html', text: '0. 認証なし（none）' },
             { href: 'auth/local.html', text: '1. ローカル認証' },
@@ -72,7 +73,7 @@
             { href: 'auth/cloudrun.html', text: '5-7. Cloud Run' }
           ]
         },
-        { href: 'qgis.html', text: '16. QGIS・GDAL連携' }
+        { href: 'qgis.html', text: '17. QGIS・GDAL連携' }
       ]
     },
     {
