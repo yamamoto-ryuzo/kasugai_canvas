@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.17.0] - 2026-11-03
+
+### Fixed
+
+- **bridge-hub が Gemini 形式の `tools` を 0 件に正規化していた問題を修正** — `/agent` ボディの `tools` に `[{functionDeclarations:[...]}]`（Gemini generateContent の tools フィールドをそのまま送った形）が来ると、従来は `name` を持たないラッパーとして全件棄却され、エージェントが「地図操作ツールが利用できない」と応答して一切の地図操作が実行されなかった。`normalize_tool_decls` がラッパーを展開するようにし、フラット宣言配列・OpenAI `{type:"function"}`・Gemini ラッパーの3形式を受理（ReEarth geo_suite の AI チャット等、外部クライアントからの連携を回復）
+
 ## [6.16.0] - 2026-11-03
 
 ### Added

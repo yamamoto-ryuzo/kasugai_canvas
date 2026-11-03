@@ -56,12 +56,18 @@ fn to_json_schema(node: &Value) -> Value {
 }
 
 // アプリが送る tools（functionDeclarations 形式）を正規化する。
-// OpenAI tools 形式 [{type:"function",function:{...}}] も一応受け付ける
+// OpenAI tools 形式 [{type:"function",function:{...}}] や、Gemini の
+// tools フィールドをそのまま送った [{functionDeclarations:[...]}] の
+// ラッパー形式も受け付ける（ReEarth geo_suite の AI チャット等）
 pub fn normalize_tool_decls(tools: &Value) -> Vec<ToolDecl> {
     let Some(arr) = tools.as_array() else {
         return Vec::new();
     };
     arr.iter()
+        .flat_map(|t| match t.get("functionDeclarations").and_then(|v| v.as_array()) {
+            Some(inner) => inner.iter().collect::<Vec<_>>(),
+            None => vec![t],
+        })
         .map(|t| {
             if t.get("function").is_some_and(|f| f.is_object()) {
                 t.get("function").cloned().unwrap_or(Value::Null)
