@@ -376,6 +376,7 @@ strong {
 .form-nav a.app { border-left-color: #2e9e56; }
 .form-nav a.api { border-left-color: #8a4fff; }
 .form-nav a.bridge { border-left-color: #e06c00; }
+.form-nav a.cache { border-left-color: #0e8a9e; }
 
 .form-nav a:hover {
   transform: translateY(-2px);

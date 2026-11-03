@@ -14,6 +14,14 @@
       <p>ランタイム永続キャッシュ — Service Worker による CDN 資産の保持</p>
     </header>
     <main>
+      <nav class="form-nav" aria-label="利用形態の切替">
+        <a href="datahost.html" class="webgis">🌐 【WebGIS】ブラウザ WebGIS</a>
+        <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
+        <a href="runtime-cache.html" class="cache current">💾 【キャッシュ】ランタイム永続キャッシュ</a>
+        <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
+        <a href="ai-bridge.html" class="bridge">� 【ブリッジ】外部エージェント連携</a>
+      </nav>
+
       <section>
         <h2 id="cache-overview">1. 概要 — 何を解決するか</h2>
         <p>KASUGAI Canvas は描画ライブラリや WASM ランタイムを CDN（jsdelivr 等）から読み込む構成のため、なにもしなければ <strong>セッションごとに重い資産を再ダウンロード</strong>します。とりわけ DuckDB-WASM は本体・拡張あわせて約60MBあり、ブラウザ任せの HTTP キャッシュでは失効のタイミングを制御できません。</p>
