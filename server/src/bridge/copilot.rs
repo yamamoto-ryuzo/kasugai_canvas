@@ -311,8 +311,10 @@ impl CopilotBridge {
         Err(last_err)
     }
 
-    // プロジェクトごとのセッションを保持する。ツール構成・モデルが変われば
-    // setTools/setModel を試み、ダメなら作り直す（旧 server.mjs と同じ流儀）
+    // プロジェクトごとのセッションを保持する。モデルが変われば setModel を
+    // 試み、ツール構成が変わればセッションを作り直す
+    // （カスタムエージェントの許可ツールリストは session.create 時に固定され
+    //   set_tools では更新されないため、差し替えは不可）
     async fn get_session(
         &self,
         inner: &mut CopilotInner,
@@ -341,19 +343,13 @@ impl CopilotBridge {
         {
             return Ok(());
         }
-        if let Some(entry) = inner.sessions.get_mut(project) {
-            // ツール構成が変わった場合は差し替えを試み、ダメならセッションを作り直す
-            let defs = build_tool_defs(decls, entry.ctx.clone());
-            match entry.session.set_tools(defs).await {
-                Ok(()) => {
-                    entry.tools_sig = sig;
-                    return Ok(());
-                }
-                Err(_) => {
-                    let _ = entry.session.disconnect().await;
-                    inner.sessions.remove(project);
-                }
-            }
+        if let Some(entry) = inner.sessions.remove(project) {
+            // set_tools はセッションのツール定義しか更新せず、session.create 時に
+            // 固定されたカスタムエージェント(kasugai-map)の許可ツールリストは変わ
+            // らない。空ツールで作られたセッションは以後ずっとツール 0 のまま
+            // 「ツールを呼び出せません」を返し続けるため、構成が変わったら必ず
+            // 作り直す（会話履歴は失われるが、ツール構成の変化は稀）。
+            let _ = entry.session.disconnect().await;
         }
         let ctx = Arc::new(StdMutex::new(QueueCtx {
             pending: Vec::new(),
