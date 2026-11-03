@@ -629,7 +629,10 @@ function compileRenderer(rendererEl, warnings) {
         ...ctx,
       };
     }
-    case "RuleBased": {
+    // QGIS writes the type as "RuleRenderer"; "RuleBased" is kept for
+    // hand-authored/renamed files that already use it.
+    case "RuleBased":
+    case "RuleRenderer": {
       const rulesEl = [...rendererEl.children].find(c => c.tagName === "rules");
       const rootRules = [];
       const parseRule = (ruleEl) => {
