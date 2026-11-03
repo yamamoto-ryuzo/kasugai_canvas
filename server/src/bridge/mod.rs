@@ -19,6 +19,7 @@ pub mod common;
 pub mod copilot;
 pub mod devin;
 pub mod setup;
+pub mod vector;
 
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -29,6 +30,7 @@ use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex as StdMutex};
 use tokio::sync::Mutex;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::CorsLayer;
 
 use common::McpShared;
@@ -117,6 +119,7 @@ async fn health(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "active": active,
         "providers": providers,
+        "vector": { "duckdb": vector::duckdb_cli().is_some() },
         "model": Value::Null,
         "sessions": state.copilot.session_count(),
     }))
@@ -311,10 +314,10 @@ async fn setup_run(
                     Json(json!({ "error": format!("unknown provider: {provider}") })),
                 );
             }
-            if provider == "antigravity" {
+            if provider != "copilot" && provider != "devin" {
                 return (
                     StatusCode::BAD_REQUEST,
-                    Json(json!({ "error": "antigravity は Antigravity(IDE) の GUI から Google ログインしてください" })),
+                    Json(json!({ "error": format!("{provider} は対話ログインの対象外です") })),
                 );
             }
             match setup::spawn_login(provider) {
@@ -449,6 +452,18 @@ fn router(state: Arc<BridgeState>) -> Router {
     // HTTPS の公開デプロイ（Cloud Run/Pages等）から localhost ブリッジを呼ぶ
     // public→private の Private Network Access プリフライトに応答する
     let cors = CorsLayer::very_permissive().allow_private_network(true);
+    // /vector: GeoJSON 本文は大きくなり得るためこのサブルーターだけ gzip 圧縮
+    // を掛ける（SSE/agent 等の他経路には影響させない）
+    let vector_routes = Router::<Arc<BridgeState>>::new()
+        .route("/vector/status", get(vector::status))
+        .route("/vector/sources", get(vector::list_sources).post(vector::register_source))
+        .route(
+            "/vector/sources/{name}",
+            axum::routing::delete(vector::remove_source),
+        )
+        .route("/vector/geojson/{name}", get(vector::geojson))
+        .route("/vector/query", post(vector::query))
+        .layer(CompressionLayer::new());
     Router::new()
         .route("/", get(status_page))
         .route("/health", get(health))
@@ -458,6 +473,7 @@ fn router(state: Arc<BridgeState>) -> Router {
         .route("/setup/job/{id}", get(setup_job))
         .route("/mcp", post(mcp_root).delete(mcp_root_delete))
         .route("/mcp/{project}", post(mcp_project).delete(mcp_project_delete))
+        .merge(vector_routes)
         .layer(cors)
         .with_state(state)
 }

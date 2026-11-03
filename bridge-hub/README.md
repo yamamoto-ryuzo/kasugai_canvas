@@ -7,6 +7,7 @@
 
 - **ブラウザ → エージェント**（チャットから AI を使う）… 本ハブ（`/agent`・`/models`）
 - **エージェント → ブラウザ**（外から地図を操る）… アプリ本体（`127.0.0.1:8510`）の `/api/command`
+- **ベクトルサービス**（ローカル永続 DuckDB → GeoJSON 配信）… 本ハブ（`/vector/*`）
 
 ## 使い方（概略）
 
@@ -35,6 +36,29 @@ bridge-hub.exe --setup all  # copilot/devin CLI を自動導入
 使うプロバイダの CLI と本人の認証が別途必要です
 （Copilot なら `copilot` CLI＋Copilot 契約、Devin なら `devin` CLI、
 Antigravity なら `agy` CLI＋Google ログイン）。
+
+## /vector — ローカルベクトルサービス
+
+ネイティブ DuckDB CLI をバックエンドに、parquet / gpkg / fgb / geojson / csv を
+永続 `.duckdb`（`%LOCALAPPDATA%\kasugai\vector\`）へ取り込み、GeoJSON として
+HTTP 配信します。ブラウザ側は `geojson: http://127.0.0.1:8511/vector/geojson/<name>`
+の1行でレイヤー化でき、KASUGAI Canvas・Re:Earth geo_suite 等から共用できます。
+
+```
+GET    /vector/status            duckdb 検出・ストア・登録ソース
+GET    /vector/sources           登録ソース一覧
+POST   /vector/sources           {name, src, kind?, layer?, lon?, lat?,
+                                  geom_col?, where?, limit?, materialize?}
+DELETE /vector/sources/{name}    登録解除
+GET    /vector/geojson/{name}    GeoJSON 配信（gzip 対応）
+                                 ?where=&bbox=w,s,e,n&limit=&simplify=&columns=
+POST   /vector/query             {sql:"SELECT ..."} → GeoJSON（geom 列を含むSELECT）
+```
+
+duckdb CLI は `bridge-hub.exe --setup duckdb` または
+`POST /setup {"provider":"duckdb","action":"install","confirm":true}` で
+GitHub Releases から自動導入されます（`%LOCALAPPDATA%\kasugai\bridge-cli\duckdb\`）。
+`DUCKDB_CLI_PATH` 環境変数で任意パスも指定可能です。
 
 ## 詳細
 

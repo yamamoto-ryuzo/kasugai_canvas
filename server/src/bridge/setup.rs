@@ -26,7 +26,9 @@ use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
-pub const SETUP_PROVIDERS: &[&str] = &["copilot", "devin", "antigravity"];
+// "duckdb" は AI プロバイダではなく /vector サービスのバックエンド CLI。
+// /setup の検出・自動インストールの枠組みは共通なのでここで管理する
+pub const SETUP_PROVIDERS: &[&str] = &["copilot", "devin", "antigravity", "duckdb"];
 
 // /setup の追加 Bearer トークン(任意・未設定なら Origin チェックのみ)
 pub fn token() -> String {
@@ -80,6 +82,7 @@ pub fn detect(provider: &str) -> Option<String> {
         "copilot" => "COPILOT_CLI_PATH",
         "devin" => "DEVIN_CLI_PATH",
         "antigravity" => "AGY_CLI_PATH",
+        "duckdb" => "DUCKDB_CLI_PATH",
         _ => return None,
     };
     if let Ok(p) = std::env::var(env_key) {
@@ -179,6 +182,17 @@ pub fn detect(provider: &str) -> Option<String> {
                 }
             }
         }
+        "duckdb" => {
+            if let Some(p) = found("duckdb") {
+                return Some(p.to_string_lossy().to_string());
+            }
+            #[cfg(not(windows))]
+            for p in unix_bin_candidates("duckdb") {
+                if p.is_file() {
+                    return Some(p.to_string_lossy().to_string());
+                }
+            }
+        }
         _ => {}
     }
     None
@@ -224,6 +238,7 @@ fn provider_methods(provider: &str) -> Vec<&'static str> {
                 vec!["install.sh"]
             }
         }
+        "duckdb" => vec!["download"],
         _ => Vec::new(),
     }
 }
@@ -235,6 +250,7 @@ fn provider_status(provider: &str) -> Value {
         "copilot" => "認証: gh CLI ログイン済みなら自動（login --with-token で資格登録）。未導入なら `copilot` を一度起動して /login",
         "devin" => "認証: 初回接続時のブラウザ PKCE ログイン、または DEVIN_API_KEY(cog_...) を設定",
         "antigravity" => "自動インストール非対応。Antigravity(IDE) を導入し agy で Google ログイン",
+        "duckdb" => "/vector サービスのバックエンド（ベクトル→GeoJSON 変換）。未導入でもハブ自体は動作",
         _ => "",
     };
     json!({
@@ -315,6 +331,7 @@ fn done_result(provider: &str, path: &str, method: &str) -> Value {
     let next = match provider {
         "copilot" => "あと1ステップ: gh CLI ログイン済みなら自動で資格登録されます。未導入なら `copilot` を一度起動して /login してください",
         "devin" => "認証: 初回接続時にブラウザ PKCE ログインが開きます(DEVIN_API_KEY=cog_... でも可)",
+        "duckdb" => "GET /vector/status で利用準備を確認できます",
         _ => "設定画面でプロバイダを選び直してください",
     };
     json!({
@@ -337,6 +354,7 @@ pub async fn install_provider(
             "antigravity は自動インストール非対応です。Antigravity(IDE) を導入し、agy で Google ログインしてください"
                 .to_string(),
         ),
+        "duckdb" => install_duckdb(log).await,
         _ => Err(format!("unknown provider: {provider}")),
     }
 }
@@ -567,6 +585,105 @@ async fn install_devin(log: &StdMutex<Vec<String>>) -> Result<Value, String> {
     }
 }
 
+// duckdb CLI を GitHub Releases から直接 DL してハブ管理ディレクトリへ置く。
+// /vector サービスのバックエンド（AI プロバイダではないが導入経路は共通）
+async fn install_duckdb(log: &StdMutex<Vec<String>>) -> Result<Value, String> {
+    if let Some(p) = detect("duckdb") {
+        push_log(log, format!("duckdb CLI は検出済みです: {p}"));
+        return Ok(done_result("duckdb", &p, "already"));
+    }
+    // v2.0.0〜 資産は tar.gz（旧 duckdb_cli-*.zip 命名は廃止）。
+    // 展開は OS 標準の tar（Win10+ の bsdtar / unix tar）に任せる
+    let asset = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => "duckdb-cli-windows-amd64.tar.gz",
+        ("windows", "aarch64") => "duckdb-cli-windows-arm64.tar.gz",
+        ("linux", "x86_64") => "duckdb-cli-linux-amd64.tar.gz",
+        ("linux", "aarch64") => "duckdb-cli-linux-arm64.tar.gz",
+        ("macos", _) => "duckdb-cli-osx-universal.tar.gz",
+        (os, arch) => return Err(format!("未対応のプラットフォーム: {os}/{arch}")),
+    };
+    let exe_name = if cfg!(windows) { "duckdb.exe" } else { "duckdb" };
+    let client = reqwest::Client::new();
+    let rel: Value = client
+        .get("https://api.github.com/repos/duckdb/duckdb/releases/latest")
+        .header("User-Agent", "kasugai-canvas-bridge-hub")
+        .timeout(Duration::from_secs(30))
+        .send()
+        .await
+        .map_err(|e| format!("リリース情報の取得に失敗: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("リリース情報の解析に失敗: {e}"))?;
+    let url = rel
+        .get("assets")
+        .and_then(|a| a.as_array())
+        .and_then(|arr| {
+            arr.iter().find(|a| {
+                a.get("name").and_then(|n| n.as_str()) == Some(asset)
+            })
+        })
+        .and_then(|a| a.get("browser_download_url"))
+        .and_then(|u| u.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("最新リリースに {asset} が見つかりません"))?;
+    push_log(log, format!("downloading: {url}"));
+    let mut resp = client
+        .get(&url)
+        .header("User-Agent", "kasugai-canvas-bridge-hub")
+        .send()
+        .await
+        .map_err(|e| format!("ダウンロードに失敗: {e}"))?;
+    let tmp = std::env::temp_dir().join(format!("kasugai-{asset}"));
+    {
+        let mut file = tokio::fs::File::create(&tmp)
+            .await
+            .map_err(|e| format!("一時ファイルを作れません: {e}"))?;
+        while let Some(chunk) = resp
+            .chunk()
+            .await
+            .map_err(|e| format!("ダウンロード中断: {e}"))?
+        {
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| format!("書き込みに失敗: {e}"))?;
+        }
+    }
+    let dest = common::managed_cli("duckdb");
+    let dest_dir = dest
+        .parent()
+        .ok_or_else(|| "配置ディレクトリを解決できません".to_string())?;
+    std::fs::create_dir_all(dest_dir).map_err(|e| format!("配置ディレクトリを作れません: {e}"))?;
+    let code = run_capture(
+        "tar",
+        &[
+            "-xzf",
+            &tmp.to_string_lossy(),
+            "-C",
+            &dest_dir.to_string_lossy(),
+        ],
+        120,
+        log,
+    )
+    .await?;
+    let _ = std::fs::remove_file(&tmp);
+    if code != 0 {
+        return Err(format!("tar の展開がコード {code} で失敗しました"));
+    }
+    if !dest.is_file() {
+        return Err(format!("{asset} 内に {exe_name} が見つかりません"));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
+    }
+    push_log(log, format!("配置しました: {}", dest.to_string_lossy()));
+    match detect("duckdb") {
+        Some(p) => Ok(done_result("duckdb", &p, "download")),
+        None => Err("配置しましたが duckdb CLI を検出できません".to_string()),
+    }
+}
+
 // ---- ジョブ管理 ----
 
 struct JobState {
@@ -712,7 +829,7 @@ pub async fn cli_main(target: &str) -> std::process::ExitCode {
     } else if SETUP_PROVIDERS.contains(&target) {
         vec![target]
     } else {
-        eprintln!("usage: bridge-hub.exe --setup [status|all|copilot|devin|antigravity]");
+        eprintln!("usage: bridge-hub.exe --setup [status|all|copilot|devin|antigravity|duckdb]");
         return std::process::ExitCode::FAILURE;
     };
     let mut failed = false;
