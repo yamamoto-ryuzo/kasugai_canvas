@@ -39,10 +39,11 @@ Antigravity なら `agy` CLI＋Google ログイン）。
 
 ## /vector — ローカルベクトルサービス
 
-ネイティブ DuckDB CLI をバックエンドに、parquet / gpkg / fgb / geojson / csv を
+ネイティブ DuckDB CLI をバックエンドに、parquet / gpkg / fgb / geojson / csv / shp を
 永続 `.duckdb`（`%LOCALAPPDATA%\kasugai\vector\`）へ取り込み、GeoJSON として
 HTTP 配信します。ブラウザ側は `geojson: http://127.0.0.1:8511/vector/geojson/<name>`
-の1行でレイヤー化でき、KASUGAI Canvas・Re:Earth geo_suite 等から共用できます。
+の1行でレイヤー化でき、KASUGAI Canvas・Re:Earth geo_suite 等から共用できます
+（CORS・PNA 対応済みのため公開 HTTPS ページからも fetch 可能）。
 
 ```
 GET    /vector/status            duckdb 検出・ストア・登録ソース
@@ -59,6 +60,11 @@ duckdb CLI は `bridge-hub.exe --setup duckdb` または
 `POST /setup {"provider":"duckdb","action":"install","confirm":true}` で
 GitHub Releases から自動導入されます（`%LOCALAPPDATA%\kasugai\bridge-cli\duckdb\`）。
 `DUCKDB_CLI_PATH` 環境変数で任意パスも指定可能です。
+
+なお、直前の duckdb プロセスが残っている間（クライアント側タイムアウトや
+ハブ異常終了後）は永続 DB のロックにより 502「File is already open in
+duckdb.exe」が返ります。処理完了を待つか、残った `duckdb.exe` を終了して
+再試行してください。
 
 ## 詳細
 

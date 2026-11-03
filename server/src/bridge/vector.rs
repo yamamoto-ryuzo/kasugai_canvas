@@ -111,7 +111,10 @@ async fn run_duckdb(sql: &str, persistent: bool, timeout_secs: u64) -> Result<St
     cmd.args(["-json", "-no-agent", "-c", sql])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
+        .stderr(std::process::Stdio::piped())
+        // タイムアウト時に子プロセスが孤児化して vector.duckdb のロックを
+        // 保持し続けるのを防ぐ（output() future drop で Child も kill される）
+        .kill_on_drop(true);
     let out = match tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output()).await {
         Ok(Ok(o)) => o,
         Ok(Err(e)) => return Err(format!("duckdb の起動に失敗: {e}")),
@@ -507,8 +510,29 @@ pub async fn remove_source(Path(name): Path<String>) -> Response {
     if source_entry(&name).is_none() {
         return err(StatusCode::NOT_FOUND, "source not found");
     }
-    let table = ident(&table_name(&name));
-    let drop = format!("DROP VIEW IF EXISTS {table}; DROP TABLE IF EXISTS {table};");
+    // DuckDB v2 は DROP VIEW IF EXISTS が Table に対して型不一致エラーになる
+    // （逆も同じ）ため、カタログで実際のオブジェクト種別を確認してから落とす
+    let tname = table_name(&name);
+    let ty_sql = format!(
+        "SELECT table_type FROM information_schema.tables WHERE table_name = '{}';",
+        lit(&tname)
+    );
+    let is_view = match run_duckdb(&ty_sql, true, 60).await {
+        Ok(out) => parse_rows(&out)
+            .ok()
+            .and_then(|r| r.first().cloned())
+            .and_then(|v| v.get("table_type").cloned())
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .map(|s| s.eq_ignore_ascii_case("view"))
+            .unwrap_or(false),
+        Err(e) => return err(StatusCode::BAD_GATEWAY, format!("drop 前の型確認に失敗: {e}")),
+    };
+    let table = ident(&tname);
+    let drop = if is_view {
+        format!("DROP VIEW IF EXISTS {table};")
+    } else {
+        format!("DROP TABLE IF EXISTS {table};")
+    };
     if let Err(e) = run_duckdb(&drop, true, 60).await {
         return err(StatusCode::BAD_GATEWAY, format!("drop に失敗: {e}"));
     }
