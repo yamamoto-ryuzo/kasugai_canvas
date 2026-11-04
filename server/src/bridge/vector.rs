@@ -592,6 +592,13 @@ fn geojson_response(body: String) -> Response {
         .into_response()
 }
 
+// 空の FeatureCollection を返す軽量プローブ。ブラウザのホスト（トップレベル）
+// コンテキストから loopback への fetch を発生させ、Chrome の Local Network
+// Access 許可プロンプトを出す用途（サイト許可後は iframe からのハブ接続も通る）
+pub async fn probe_geojson() -> Response {
+    geojson_response(r#"{"type":"FeatureCollection","features":[]}"#.to_string())
+}
+
 pub async fn geojson(
     Path(name): Path<String>,
     Query(q): Query<HashMap<String, String>>,

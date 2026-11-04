@@ -462,6 +462,7 @@ fn router(state: Arc<BridgeState>) -> Router {
             axum::routing::delete(vector::remove_source),
         )
         .route("/vector/geojson/{name}", get(vector::geojson))
+        .route("/vector/probe.geojson", get(vector::probe_geojson))
         .route("/vector/query", post(vector::query))
         .layer(CompressionLayer::new());
     Router::new()
