@@ -149,6 +149,22 @@ fn notify(msg: &str, is_error: bool) {
     {
         return;
     }
+    show_message_box(msg, is_error);
+}
+
+// GUI 起動（プロトコルハンドラ等・引数あり）でもエラーを見せたい経路用。
+// コンソールに接続できた場合は箱を出さず stderr だけにする
+#[cfg(windows)]
+fn notify_gui(msg: &str, is_error: bool) {
+    eprintln!("{msg}");
+    if CONSOLE_ATTACHED.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    show_message_box(msg, is_error);
+}
+
+#[cfg(windows)]
+fn show_message_box(msg: &str, is_error: bool) {
     use windows::Win32::UI::WindowsAndMessaging::{
         MessageBoxW, MB_ICONERROR, MB_ICONINFORMATION, MB_OK, MB_TOPMOST,
     };
@@ -614,7 +630,7 @@ async fn main() -> std::process::ExitCode {
         return match kasugai_canvas::bridge::viewer::open(target) {
             Ok(()) => std::process::ExitCode::SUCCESS,
             Err(e) => {
-                notify(&format!("bridge-hub: {e}"), true);
+                notify_gui(&format!("bridge-hub: {e}"), true);
                 std::process::ExitCode::FAILURE
             }
         };

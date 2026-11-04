@@ -56,11 +56,16 @@ fn parse_target(arg: &str) -> Result<String, String> {
     }
     let url = if let Some(rest) = arg.strip_prefix("kasugai-hub://") {
         let query = rest.split_once('?').map(|(_, q)| q).unwrap_or("");
-        query
+        let u = query
             .split('&')
             .find_map(|kv| kv.strip_prefix("url="))
             .map(percent_decode)
-            .ok_or_else(|| "kasugai-hub:// に url= パラメータがありません".to_string())?
+            .unwrap_or_default();
+        if u.is_empty() {
+            DEFAULT_URL.to_string()
+        } else {
+            u
+        }
     } else {
         arg.to_string()
     };
