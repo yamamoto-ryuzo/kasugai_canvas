@@ -60,7 +60,9 @@ bridge-hub.exe --uninstall  # 自動起動解除＋停止＋インストール�
 bridge-hub.exe --setup status        # 全プロバイダの検出状況を表示
 bridge-hub.exe --setup copilot       # copilot CLI を自動インストール
 bridge-hub.exe --setup devin         # devin CLI を自動インストール
-bridge-hub.exe --setup all           # 自動化可能な未導入CLIをまとめて導入</code></pre>
+bridge-hub.exe --setup all           # 自動化可能な未導入CLIをまとめて導入
+bridge-hub.exe --view &lt;url&gt;          # KASUGAI viewer（LNA 無効化済み WebView2）でシーンを開く</code></pre>
+          <p><strong>KASUGAI viewer（<code>--view</code>・<code>kasugai-hub://</code>）</strong>: Re:Earth 公開シーン（*.visualizer.reearth.io）ではサイトの Service Worker が全 fetch を仲介するため、Chrome 142+ の LNA 制約でブラウザから <code>127.0.0.1:8511</code> へ到達できません。<code>--view</code> は <code>--disable-features=LocalNetworkAccessChecks</code> を付けた専用 WebView2（user-data-folder は <code>%LOCALAPPDATA%\kasugai\bridge-hub-webview</code>・ユーザーの通常ブラウザには影響なし）でシーンを開き、その中ではハブが既定のまま全機能使えます。<code>http(s)://</code> のみ許可。インストール時に <code>kasugai-hub://</code> カスタムプロトコルを HKCU に登録するため、geo_suite 等の「KASUGAI viewer で開く」リンク（<code>kasugai-hub://open?url=&lt;シーンURL&gt;</code>）からブラウザ確認ダイアログ経由で遷移できます。<code>KASUGAI_VIEW_DEBUG_PORT=&lt;port&gt;</code> で CDP ポートを有効化。</p>
           <p><small>停止だけしたい場合は、実行中の <code>bridge-hub.exe</code> プロセスをタスクマネージャー等で終了してください（<code>--uninstall</code> は自動起動解除＋停止＋削除を行います）。</small></p>
         </div>
         <div class="install-steps">

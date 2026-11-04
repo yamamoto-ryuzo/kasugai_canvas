@@ -308,6 +308,38 @@ fn unregister_autostart() {
     }
 }
 
+// kasugai-hub:// カスタムプロトコルの登録（ブラウザの Ext 導線から
+// --view のシーンビューアを起動するための受け口）。
+// kasugai-hub://open?url=<pct> → "<exe>" --view "<uri>" で起動される。
+// fetch を経ない OS レベルの起動なので LNA / Service Worker / CORS の
+// 影響を受けない。登録はユーザー単位（HKCU）で管理者権限は不要
+#[cfg(windows)]
+fn register_protocol(exe: &std::path::Path) {
+    let base = r"HKCU\Software\Classes\kasugai-hub";
+    let cmd = format!("\"{}\" --view \"%1\"", exe.display());
+    for args in [
+        vec!["add", base, "/ve", "/d", "URL:KASUGAI Scene Viewer", "/f"],
+        vec!["add", base, "/v", "URL Protocol", "/d", "", "/f"],
+        vec![
+            "add",
+            &format!("{base}\\shell\\open\\command"),
+            "/ve",
+            "/d",
+            &cmd,
+            "/f",
+        ],
+    ] {
+        let _ = std::process::Command::new("reg").args(&args).output();
+    }
+}
+
+#[cfg(windows)]
+fn unregister_protocol() {
+    let _ = std::process::Command::new("reg")
+        .args(["delete", r"HKCU\Software\Classes\kasugai-hub", "/f"])
+        .output();
+}
+
 // 自己インストール: インストール先へ自己コピー → 旧方式の残骸掃除 →
 // ログイン時自動起動登録 → 8511 で起動 → ブリッジ用 CLI 導入。
 // 管理者権限は不要（%LOCALAPPDATA%・ユーザー自身の登録のみ触る）。
@@ -367,6 +399,8 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
         );
         return std::process::ExitCode::FAILURE;
     };
+    // kasugai-hub:// のプロトコル登録（失敗しても止めない）
+    register_protocol(&dst);
     // 旧ブラウザ WebGIS 用ハブ（8512 常駐）が残っていれば掃除する。
     // 8511 への一本化で 8512 のハブは全て旧版なので問答無用で停止する
     if occupied_by_hub(LEGACY_WEBGIS_PORT).await || port_owner_image_is_hub(LEGACY_WEBGIS_PORT) {
@@ -463,6 +497,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
 #[cfg(windows)]
 fn self_uninstall() -> std::process::ExitCode {
     unregister_autostart();
+    unregister_protocol();
     if let Some(dir) = install_dir() {
         kill_installed_hub(&dir);
         if std::env::current_exe()
@@ -566,6 +601,23 @@ async fn main() -> std::process::ExitCode {
     if let Some(pos) = argv.iter().position(|a| a == "--setup") {
         let target = argv.get(pos + 1).map(|s| s.as_str()).unwrap_or("status");
         return kasugai_canvas::bridge::setup::cli_main(target).await;
+    }
+    // シーンビューア（--view <url|kasugai-hub://open?url=…>）。
+    // LNA 無効化済み WebView2 で公開シーンを開き、127.0.0.1 のハブに
+    // そのまま到達できるようにする
+    #[cfg(windows)]
+    if let Some(pos) = argv
+        .iter()
+        .position(|a| a == "--view" || a == "--open-scene")
+    {
+        let target = argv.get(pos + 1).map(String::as_str).unwrap_or("");
+        return match kasugai_canvas::bridge::viewer::open(target) {
+            Ok(()) => std::process::ExitCode::SUCCESS,
+            Err(e) => {
+                notify(&format!("bridge-hub: {e}"), true);
+                std::process::ExitCode::FAILURE
+            }
+        };
     }
     // インストール系（Windows 専用。それ以外の OS では --serve として扱う）
     #[cfg(windows)]

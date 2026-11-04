@@ -24,7 +24,9 @@ zip = { version = "9.1.2", default-features = false, features = ["deflate"] }
 # bridge-hub.exe のスクリプトレス化用（プロセス停止・コンソール接続・MessageBox）
 [target.'cfg(windows)'.dependencies]
 sysinfo = "0.40.1"
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Console", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_Console", "Win32_System_LibraryLoader", "Win32_UI_WindowsAndMessaging"] }
+# bridge-hub --view: LNA 無効化済み WebView2 シーンビューア
+webview2-com = "0.39.1"
 
 [build-dependencies]
 winres = "0.1.12"
