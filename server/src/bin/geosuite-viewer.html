@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><title>GeoSuite Viewer</title>
+<style>html,body{margin:0;height:100%;font-family:sans-serif}iframe{border:0;width:100%;height:100vh;display:block}#empty{padding:3em 2em;color:#444;max-width:640px}#u{width:22em;padding:4px}</style>
+</head><body><div id="app"></div>
+<script>
+var p=new URLSearchParams(location.search),u=p.get('url'),a=document.getElementById('app');
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function show(v){var f=document.createElement('iframe');f.src=v;f.allow='clipboard-write; fullscreen; geolocation';document.body.appendChild(f);}
+function home(last){a.innerHTML='<div id="empty"><h2>GeoSuite Viewer</h2><p><code>geosuite-hub://open?url=&lt;scene URL&gt;</code> でシーンを開いてください。</p><p><input id="u" placeholder="https://…"><button onclick="var v=document.getElementById(\'u\').value.trim();if(v)location=\'?url=\'+encodeURIComponent(v)">開く</button></p>'+(last?'<p>前回のシーン: <a href="?url='+encodeURIComponent(last)+'">'+esc(last)+'</a></p>':'')+'<p>hub: <a href="http://127.0.0.1:8514/">127.0.0.1:8514 (status)</a></p></div>';}
+function last(cb){fetch('/scene').then(function(r){return r.text()}).then(function(t){cb(t.trim())}).catch(function(){cb('')});}
+if(u){try{fetch('/scene?set='+encodeURIComponent(u)).catch(function(){});}catch(e){}show(u);}
+else if(p.has('home')){last(home);}
+else{last(function(v){v?show(v):home('')});}
+</script></body></html>

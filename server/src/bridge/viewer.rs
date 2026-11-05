@@ -43,6 +43,19 @@ thread_local! {
         const { RefCell::new(None) };
 }
 
+// geosuite-hub.exe として動く GeoSuite 専用モードでは既定の開き先は
+// 8515 のビューアシェル（bridge-hub 側の判定と同じ exe 名チェック）
+fn default_url() -> &'static str {
+    let gs = std::env::current_exe()
+        .ok()
+        .and_then(|p| {
+            p.file_stem()
+                .map(|s| s.to_string_lossy().eq_ignore_ascii_case("geosuite-hub"))
+        })
+        .unwrap_or(false);
+    if gs { "http://127.0.0.1:8515/" } else { DEFAULT_URL }
+}
+
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -52,7 +65,7 @@ fn wide(s: &str) -> Vec<u16> {
 fn parse_target(arg: &str) -> Result<String, String> {
     let arg = arg.trim().trim_matches('"');
     if arg.is_empty() {
-        return Ok(DEFAULT_URL.to_string());
+        return Ok(default_url().to_string());
     }
     let url = if let Some(rest) = arg.strip_prefix("kasugai-hub://") {
         let query = rest.split_once('?').map(|(_, q)| q).unwrap_or("");
@@ -62,7 +75,7 @@ fn parse_target(arg: &str) -> Result<String, String> {
             .map(percent_decode)
             .unwrap_or_default();
         if u.is_empty() {
-            DEFAULT_URL.to_string()
+            default_url().to_string()
         } else {
             u
         }

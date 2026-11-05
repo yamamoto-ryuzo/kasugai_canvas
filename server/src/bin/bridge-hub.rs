@@ -37,6 +37,39 @@ use tokio::net::TcpListener;
 const DEFAULT_PORT: u16 = 8511;
 #[cfg(windows)]
 const WEBGIS_PORT: u16 = 8511;
+
+// geosuite-hub.exe にリネーム配置された場合の GeoSuite 専用モード。
+// Re:Earth GeoSuite 向けに %LOCALAPPDATA%\geosuite-hub・8514・
+// geosuite-hub:// プロトコル・8515 ビューアシェルを自己インストールする。
+// KASUGAI 側（8511・kasugai-hub://）には一切触れない。
+fn is_geosuite() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| {
+            p.file_stem().map(|s| {
+                s.to_string_lossy().eq_ignore_ascii_case("geosuite-hub")
+            })
+        })
+        .unwrap_or(false)
+}
+
+// 自己インストール対象の exe 名・ポート kill 対象のイメージ名
+#[cfg(windows)]
+fn exe_name() -> &'static str {
+    if is_geosuite() { "geosuite-hub.exe" } else { "bridge-hub.exe" }
+}
+
+// 自動起動の登録名（タスク名・Run キー値名・旧 vbs ファイル名に共用）
+#[cfg(windows)]
+fn task_name() -> &'static str {
+    if is_geosuite() { "geosuite-hub" } else { TASK_NAME }
+}
+
+// 自己インストール時に整理・起動するポート
+#[cfg(windows)]
+fn install_port() -> u16 {
+    if is_geosuite() { 8514 } else { WEBGIS_PORT }
+}
 // 旧ブラウザ WebGIS 用ハブの常駐ポート。移行時に残存していれば掃除する
 #[cfg(windows)]
 const LEGACY_WEBGIS_PORT: u16 = 8512;
@@ -62,15 +95,22 @@ fn hub_port() -> u16 {
     std::env::var("BRIDGE_HUB_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PORT)
+        .unwrap_or(if is_geosuite() { 8514 } else { DEFAULT_PORT })
 }
 
-// インストール先（%LOCALAPPDATA%\kasugai\bridge-hub）
+// インストール先（%LOCALAPPDATA%\kasugai\bridge-hub、
+// geosuite モードでは %LOCALAPPDATA%\geosuite-hub）
 #[cfg(windows)]
 fn install_dir() -> Option<std::path::PathBuf> {
     std::env::var_os("LOCALAPPDATA")
         .map(std::path::PathBuf::from)
-        .map(|p| p.join("kasugai").join("bridge-hub"))
+        .map(|p| {
+            if is_geosuite() {
+                p.join("geosuite-hub")
+            } else {
+                p.join("kasugai").join("bridge-hub")
+            }
+        })
 }
 
 // 裸実行（引数なし）を自己インストールとみなすか。
@@ -198,7 +238,7 @@ fn kill_hub_processes(exe: Option<&std::path::Path>) {
         if p.pid().as_u32() == self_pid {
             continue;
         }
-        if !p.name().to_string_lossy().eq_ignore_ascii_case("bridge-hub.exe") {
+        if !p.name().to_string_lossy().eq_ignore_ascii_case(exe_name()) {
             continue;
         }
         if let Some(exe) = exe {
@@ -216,7 +256,7 @@ fn kill_hub_processes(exe: Option<&std::path::Path>) {
 //   殺さないよう、自 PID は kill_hub_processes 内で除外する）
 #[cfg(windows)]
 fn kill_installed_hub(dir: &std::path::Path) {
-    kill_hub_processes(Some(&dir.join("bridge-hub.exe")));
+    kill_hub_processes(Some(&dir.join(exe_name())));
 }
 
 // bridge-hub.exe プロセス全般を停止する（ポート占有の旧ハブ置き換え用。
@@ -239,7 +279,7 @@ fn legacy_startup_vbs() -> Option<std::path::PathBuf> {
                 .join("Start Menu")
                 .join("Programs")
                 .join("Startup")
-                .join(format!("{TASK_NAME}.vbs"))
+                .join(format!("{}.vbs", task_name()))
         })
 }
 
@@ -254,10 +294,15 @@ fn task_xml(exe: &std::path::Path, user: &str) -> String {
             .replace('<', "&lt;")
             .replace('>', "&gt;")
     };
+    let desc = if is_geosuite() {
+        "GeoSuite hub (http://127.0.0.1:8514/agent)".to_string()
+    } else {
+        "KASUGAI Canvas AI bridge hub (http://127.0.0.1:8511/agent)".to_string()
+    };
     format!(
         "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\n\
          <Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\n\
-         \x20 <RegistrationInfo><Description>KASUGAI Canvas AI bridge hub (http://127.0.0.1:8511/agent)</Description></RegistrationInfo>\n\
+         \x20 <RegistrationInfo><Description>{desc}</Description></RegistrationInfo>\n\
          \x20 <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>{}</UserId></LogonTrigger></Triggers>\n\
          \x20 <Principals><Principal id=\"Author\"><UserId>{}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>\n\
          \x20 <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Enabled>true</Enabled></Settings>\n\
@@ -291,7 +336,7 @@ fn register_autostart(exe: &std::path::Path) -> Option<&'static str> {
     }
     let task_ok = std::fs::write(&xml_path, &bytes).is_ok()
         && std::process::Command::new("schtasks")
-            .args(["/Create", "/TN", TASK_NAME, "/XML"])
+            .args(["/Create", "/TN", task_name(), "/XML"])
             .arg(&xml_path)
             .arg("/F")
             .output()
@@ -303,7 +348,7 @@ fn register_autostart(exe: &std::path::Path) -> Option<&'static str> {
     }
     let tr = format!("\"{}\" --serve", exe.display());
     let reg_ok = std::process::Command::new("reg")
-        .args(["add", RUN_KEY, "/v", TASK_NAME, "/t", "REG_SZ", "/d", &tr, "/f"])
+        .args(["add", RUN_KEY, "/v", task_name(), "/t", "REG_SZ", "/d", &tr, "/f"])
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
@@ -314,27 +359,40 @@ fn register_autostart(exe: &std::path::Path) -> Option<&'static str> {
 #[cfg(windows)]
 fn unregister_autostart() {
     let _ = std::process::Command::new("schtasks")
-        .args(["/Delete", "/TN", TASK_NAME, "/F"])
+        .args(["/Delete", "/TN", task_name(), "/F"])
         .output();
     let _ = std::process::Command::new("reg")
-        .args(["delete", RUN_KEY, "/v", TASK_NAME, "/f"])
+        .args(["delete", RUN_KEY, "/v", task_name(), "/f"])
         .output();
     if let Some(vbs) = legacy_startup_vbs() {
         let _ = std::fs::remove_file(vbs);
     }
 }
 
-// kasugai-hub:// カスタムプロトコルの登録（ブラウザの Ext 導線から
+// カスタムプロトコルの登録（ブラウザの Ext 導線から
 // --view のシーンビューアを起動するための受け口）。
 // kasugai-hub://open?url=<pct> → "<exe>" --view "<uri>" で起動される。
+// geosuite モードでは geosuite-hub:// を固定 URL（8515 ビューアシェル）へ
+// --view で登録する — 起動 URI は参照しないので %1 も shim も不要。
 // fetch を経ない OS レベルの起動なので LNA / Service Worker / CORS の
 // 影響を受けない。登録はユーザー単位（HKCU）で管理者権限は不要
 #[cfg(windows)]
 fn register_protocol(exe: &std::path::Path) {
-    let base = r"HKCU\Software\Classes\kasugai-hub";
-    let cmd = format!("\"{}\" --view \"%1\"", exe.display());
+    let (base, desc, cmd) = if is_geosuite() {
+        (
+            r"HKCU\Software\Classes\geosuite-hub",
+            "URL:GeoSuite Hub Protocol",
+            format!("\"{}\" --view \"http://127.0.0.1:8515/\"", exe.display()),
+        )
+    } else {
+        (
+            r"HKCU\Software\Classes\kasugai-hub",
+            "URL:KASUGAI Scene Viewer",
+            format!("\"{}\" --view \"%1\"", exe.display()),
+        )
+    };
     for args in [
-        vec!["add", base, "/ve", "/d", "URL:KASUGAI Scene Viewer", "/f"],
+        vec!["add", base, "/ve", "/d", desc, "/f"],
         vec!["add", base, "/v", "URL Protocol", "/d", "", "/f"],
         vec![
             "add",
@@ -351,8 +409,13 @@ fn register_protocol(exe: &std::path::Path) {
 
 #[cfg(windows)]
 fn unregister_protocol() {
+    let class = if is_geosuite() {
+        r"HKCU\Software\Classes\geosuite-hub"
+    } else {
+        r"HKCU\Software\Classes\kasugai-hub"
+    };
     let _ = std::process::Command::new("reg")
-        .args(["delete", r"HKCU\Software\Classes\kasugai-hub", "/f"])
+        .args(["delete", class, "/f"])
         .output();
 }
 
@@ -378,7 +441,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
         notify(&format!("bridge-hub: インストール先を作成できません: {e}"), true);
         return std::process::ExitCode::FAILURE;
     }
-    let dst = dir.join("bridge-hub.exe");
+    let dst = dir.join(exe_name());
     if src != dst {
         // 実行中でロックされている場合は旧ハブを停止してから再試行する。
         // イメージ名一致の kill_all_hub_processes を使う（kill_installed_hub より
@@ -403,8 +466,16 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
         }
     }
     // 旧方式（run-hidden.vbs 起動）の残骸を掃除する。
-    // 新方式は GUI subsystem の exe をタスクから直接実行するため vbs は不要
+    // 新方式は GUI subsystem の exe をタスクから直接実行するため vbs は不要。
+    // geosuite モードでは 8515 ビューアシェルも exe 内蔵に統合したため、
+    // .cmd インストーラが生成していた serve-viewer.ps1 / viewer.html /
+    // run-hidden.vbs / geosuite-hub.cmd（旧プロトコル shim）も掃除する
     let _ = std::fs::remove_file(dir.join("run-hidden.vbs"));
+    if is_geosuite() {
+        for f in ["serve-viewer.ps1", "viewer.html", "geosuite-hub.cmd", "run-hidden.vbs"] {
+            let _ = std::fs::remove_file(dir.join(f));
+        }
+    }
     if let Some(vbs) = legacy_startup_vbs() {
         let _ = std::fs::remove_file(vbs);
     }
@@ -418,33 +489,37 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
     // kasugai-hub:// のプロトコル登録（失敗しても止めない）
     register_protocol(&dst);
     // 旧ブラウザ WebGIS 用ハブ（8512 常駐）が残っていれば掃除する。
-    // 8511 への一本化で 8512 のハブは全て旧版なので問答無用で停止する
-    if occupied_by_hub(LEGACY_WEBGIS_PORT).await || port_owner_image_is_hub(LEGACY_WEBGIS_PORT) {
+    // 8511 への一本化で 8512 のハブは全て旧版なので問答無用で停止する。
+    // geosuite モードでは KASUGAI 側ポートには触れないためスキップ
+    let install_port = install_port();
+    if !is_geosuite()
+        && (occupied_by_hub(LEGACY_WEBGIS_PORT).await || port_owner_image_is_hub(LEGACY_WEBGIS_PORT))
+    {
         eprintln!("bridge-hub: 旧ポート 8512 のハブを停止します（8511 へ一本化）");
         kill_all_hub_processes();
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     }
-    // {WEBGIS_PORT} の占有者を整理してから起動する:
+    // install_port の占有者を整理してから起動する:
     // - 占有者がハブ（/health が hub:true）なら旧版とみなして停止し新版へ置き換える
     // - 無関係な別プロセスなら kill せず警告だけ出す（アプリ本体の更新ポリシーと同じ）
-    if occupied_by_hub(WEBGIS_PORT).await {
-        eprintln!("bridge-hub: {WEBGIS_PORT} の既存ハブを停止して新版へ置き換えます");
+    if occupied_by_hub(install_port).await {
+        eprintln!("bridge-hub: {install_port} の既存ハブを停止して新版へ置き換えます");
         kill_all_hub_processes();
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     } else {
         // ポートがハブ以外に占有されているかを bind で確かめる
-        match TcpListener::bind(("127.0.0.1", WEBGIS_PORT)).await {
+        match TcpListener::bind(("127.0.0.1", install_port)).await {
             Ok(l) => drop(l),
             Err(_) => {
                 // /health が応答しない = ハング中の旧ハブ等。占有者のイメージ名が
-                // bridge-hub.exe なら本製品のハブとみなして停止・置き換える。
+                // 自 exe 名なら本製品のハブとみなして停止・置き換える。
                 // それ以外のプロセスは kill しない（アプリ本体の更新ポリシーと同じ）
-                if port_owner_image_is_hub(WEBGIS_PORT) {
+                if port_owner_image_is_hub(install_port) {
                     eprintln!("bridge-hub: 応答しない既存ハブを停止して新版へ置き換えます");
                     kill_all_hub_processes();
                     tokio::time::sleep(std::time::Duration::from_millis(800)).await;
                 } else {
-                    eprintln!("bridge-hub: 警告: 127.0.0.1:{WEBGIS_PORT} は別プロセスが使用中です。起動は次回以降に再試行されます");
+                    eprintln!("bridge-hub: 警告: 127.0.0.1:{install_port} は別プロセスが使用中です。起動は次回以降に再試行されます");
                 }
             }
         }
@@ -455,7 +530,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
     // 常駐プロセスなので待つとここで止まる）
     let spawned = std::process::Command::new(&dst)
         .arg("--serve")
-        .env("BRIDGE_HUB_PORT", WEBGIS_PORT.to_string())
+        .env("BRIDGE_HUB_PORT", install_port.to_string())
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -471,7 +546,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
     // 起動確認（常駐ハブの待受開始を /health で最大5秒ポーリング）
     let mut started = false;
     for _ in 0..5 {
-        if occupied_by_hub(WEBGIS_PORT).await {
+        if occupied_by_hub(install_port).await {
             started = true;
             break;
         }
@@ -492,7 +567,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
     if started {
         notify(
             &format!(
-                "bridge-hub: インストールしました -> {}\n自動起動: {autostart_via}・http://127.0.0.1:{WEBGIS_PORT}/health で起動中\n解除は bridge-hub.exe --uninstall",
+                "bridge-hub: インストールしました -> {}\n自動起動: {autostart_via}・http://127.0.0.1:{install_port}/health で起動中\n解除は bridge-hub.exe --uninstall",
                 dir.display()
             ),
             false,
@@ -503,7 +578,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
             true,
         );
     }
-    eprintln!("bridge-hub: http://127.0.0.1:{WEBGIS_PORT}/health で起動中（ログイン時に自動起動）");
+    eprintln!("bridge-hub: http://127.0.0.1:{install_port}/health で起動中（ログイン時に自動起動）");
     eprintln!("bridge-hub: 解除は bridge-hub.exe --uninstall");
     // ハブ自体は起動済みなので、CLI 失敗があっても SUCCESS は維持する
     std::process::ExitCode::SUCCESS
@@ -527,7 +602,7 @@ fn self_uninstall() -> std::process::ExitCode {
             if let Ok(entries) = std::fs::read_dir(&dir) {
                 for e in entries.flatten() {
                     let p = e.path();
-                    if p.file_name().map(|n| n != "bridge-hub.exe").unwrap_or(true) {
+                    if p.file_name().map(|n| n != exe_name()).unwrap_or(true) {
                         let _ = if p.is_dir() { std::fs::remove_dir_all(&p) } else { std::fs::remove_file(&p) };
                     }
                 }
@@ -574,9 +649,39 @@ fn port_owner_image_is_hub(port: u16) -> bool {
     sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
     pids.iter().any(|pid| {
         sys.process(sysinfo::Pid::from_u32(*pid))
-            .map(|p| p.name().to_string_lossy().eq_ignore_ascii_case("bridge-hub.exe"))
+            .map(|p| p.name().to_string_lossy().eq_ignore_ascii_case(exe_name()))
             .unwrap_or(false)
     })
+}
+
+// GeoSuite 専用: 8515 のビューアシェル（旧 serve-viewer.ps1 相当を内蔵）。
+// viewer.html は同じく旧インストーラが配置していたものを include する。
+// ルート: GET /scene → scene.txt の内容、GET /scene?set=<url> → 保存、
+// それ以外 → viewer.html（?url= はページ側 JS が解釈する）
+#[cfg(windows)]
+const GEOSUITE_VIEWER_HTML: &str = include_str!("geosuite-viewer.html");
+
+#[cfg(windows)]
+async fn geosuite_viewer_serve(dir: std::path::PathBuf) {
+    use axum::{extract::Query, response::Html, routing::get, Router};
+    let scene = dir.join("scene.txt");
+    let scene_handler = move |Query(q): Query<std::collections::HashMap<String, String>>| {
+        let scene = scene.clone();
+        async move {
+            if let Some(v) = q.get("set") {
+                let _ = std::fs::write(&scene, v);
+            }
+            std::fs::read_to_string(&scene).unwrap_or_default()
+        }
+    };
+    let app = Router::new()
+        .route("/scene", get(scene_handler))
+        .fallback(get(|| async { Html(GEOSUITE_VIEWER_HTML) }));
+    let Ok(l) = TcpListener::bind(("127.0.0.1", 8515)).await else {
+        eprintln!("bridge-hub: 8515 (GeoSuite viewer) は別プロセスが使用中です");
+        return;
+    };
+    let _ = axum::serve(l, app).await;
 }
 
 // 指定ポートの占有者がブリッジハブかを /health で確認する
@@ -662,6 +767,13 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    // geosuite モードでは 8515 のビューアシェルも同一プロセスで提供する
+    // （旧 serve-viewer.ps1 + viewer.html + run-hidden.vbs の内蔵化）
+    #[cfg(windows)]
+    if is_geosuite() {
+        let dir = install_dir().unwrap_or_else(std::env::temp_dir);
+        tokio::spawn(geosuite_viewer_serve(dir));
+    }
     let state = Arc::new(BridgeState::new(port));
     eprintln!("bridge-hub: listening http://127.0.0.1:{port}/agent");
     eprintln!("bridge-hub: providers: copilot / devin / antigravity（使用時に各 CLI を起動）");
