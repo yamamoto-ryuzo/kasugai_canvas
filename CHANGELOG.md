@@ -4,6 +4,28 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.19.0] - 2026-11-06
+
+### Added
+
+- **bridge-hub `/vector` サービス** — 永続 DuckDB を HTTP 経由で GeoJSON 化するローカルベクターサービスを追加（`POST /vector`）。Re:Earth 等の外部クライアントが大容量ベクターを 4MB 拡張コンテキスト上限を回避して高速に利用できる
+- **`/vector/probe.geojson` プローブエンドポイント** — Chrome のローカルネットワークアクセス（LNA）許可を促すための軽量プローブ
+- **bridge-hub `--view` WebView2 シーンビューア + `kasugai-hub://` プロトコル登録** — LNA 無効化済み WebView2 で公開シーンを開き、127.0.0.1 のハブへ到達可能に。`kasugai-hub://open?url=<pct>` を HKCU に登録し、ブラウザの Ext 導線から fetch を経ない OS レベル起動を可能に（url 省略・裸呼び出し時はハブ状態ページへフォールバック）
+- **geosuite-hub モード（GeoSuite 専用ハブ）** — `geosuite-hub.exe` 名で実行すると GeoSuite 専用に自己インストール（`%LOCALAPPDATA%\geosuite-hub`・8514・`geosuite-hub://`・8515 ビューアシェル内蔵）。KASUGAI 側（8511・kasugai-hub://）には一切触れない。CDN stable の `download/geosuite-hub.zip` として配布（Re:Earth geo_suite の「拡張」導線）
+- **`tools/build_bridge_zip.py` が `geosuite-hub.zip` も生成** — CDN ミラー同期で消えないよう `web/download/` から配布する恒久経路を追加
+
+### Fixed
+
+- **bridge-hub 自己インストールが os error 5（アクセス拒否）で永久に失敗する問題を修正** — ZIP 展開物の exe に付く読み取り専用属性が `fs::copy` でインストール先へ伝播し、以後の上書き・削除が `アクセスが拒否されました` で失敗していた。コピー前後およびアンインストール時に R 属性を明示解除（プロセスロック起因と区別して対処）
+- **`--view` のエラーがプロトコル起動（GUI）で見えない問題を修正** — MessageBox 通知を追加
+- **vector: duckdb 孤児プロセスによる永続 DB ロックと DELETE の型不一致を修正**
+- **Copilot セッションをツール設定変更時に再構築** — ツール構成が変わっても旧セッションを使い回さない
+- **QGIS `RuleRenderer` 型名を shared qml-style コンパイラで受理**
+
+### Docs
+
+- bridge-hub `/vector` ローカルベクターサービスのドキュメント、ai-api/ai-bridge ページの mermaid 図、runtime-cache（Service Worker 永続キャッシュ）ページを追加
+
 ## [6.17.0] - 2026-11-03
 
 ### Fixed

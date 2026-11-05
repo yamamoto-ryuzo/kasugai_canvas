@@ -267,6 +267,22 @@ fn kill_all_hub_processes() {
     kill_hub_processes(None);
 }
 
+// 既存ファイルの読み取り専用属性を外す。
+// ZIP をブラウザ経由で展開した exe に R が付くことがあり、fs::copy
+// （CopyFileEx 系）は属性を dst へ伝播させるため、一度 R 付きで配置されると
+// 以後の上書きが ACCESS_DENIED（os error 5）で永久に失敗する。
+// 上書き・削除の前に R を落とす用途と、コピー後に伝播した R を外す用途で使う
+#[cfg(windows)]
+fn clear_readonly(path: &std::path::Path) {
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mut perm = meta.permissions();
+        if perm.readonly() {
+            perm.set_readonly(false);
+            let _ = std::fs::set_permissions(path, perm);
+        }
+    }
+}
+
 // スタートアップフォルダの旧 run-hidden.vbs 登録（KasugaiCanvasBridgeHub.vbs）
 // のパス。旧方式の残骸を掃除するために使う
 #[cfg(windows)]
@@ -446,6 +462,9 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
         // 実行中でロックされている場合は旧ハブを停止してから再試行する。
         // イメージ名一致の kill_all_hub_processes を使う（kill_installed_hub より
         // 確実 — 自 PID は関数内で除外済み。旧ハブのロック解放待ちも取る）
+        // R 属性付きの既存 exe も上書き失敗（ACCESS_DENIED）の原因になるため
+        // 事前に外す（プロセスロックでは解消しない別要因）
+        clear_readonly(&dst);
         let mut copied = false;
         for _ in 0..4 {
             if std::fs::copy(&src, &dst).is_ok() {
@@ -453,6 +472,7 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
                 break;
             }
             kill_all_hub_processes();
+            clear_readonly(&dst);
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
         if !copied {
@@ -464,6 +484,9 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
                 return std::process::ExitCode::FAILURE;
             }
         }
+        // コピー元が R 付きだと属性が dst にも伝播し、次回以降の上書きが
+        // ACCESS_DENIED で永久に失敗するため、コピー後に必ず外す
+        clear_readonly(&dst);
     }
     // 旧方式（run-hidden.vbs 起動）の残骸を掃除する。
     // 新方式は GUI subsystem の exe をタスクから直接実行するため vbs は不要。
@@ -591,6 +614,8 @@ fn self_uninstall() -> std::process::ExitCode {
     unregister_protocol();
     if let Some(dir) = install_dir() {
         kill_installed_hub(&dir);
+        // R 属性付きの exe は remove_file/remove_dir_all が失敗するため外す
+        clear_readonly(&dir.join(exe_name()));
         if std::env::current_exe()
             .map(|e| !e.starts_with(&dir))
             .unwrap_or(true)
