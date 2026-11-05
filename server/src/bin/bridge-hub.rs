@@ -388,8 +388,10 @@ fn unregister_autostart() {
 // カスタムプロトコルの登録（ブラウザの Ext 導線から
 // --view のシーンビューアを起動するための受け口）。
 // kasugai-hub://open?url=<pct> → "<exe>" --view "<uri>" で起動される。
-// geosuite モードでは geosuite-hub:// を固定 URL（8515 ビューアシェル）へ
-// --view で登録する — 起動 URI は参照しないので %1 も shim も不要。
+// geosuite モードでは geosuite-hub:// を --view "%1" で登録する。
+// 起動 URI（geosuite-hub://open?url=<pct>）をそのまま --view へ渡し、
+// viewer.rs が url= を 8515 ビューアシェルへ転送する（固定 URL だと
+// 呼び出し元シーンを捨てて前回の scene.txt を開いてしまう）。
 // fetch を経ない OS レベルの起動なので LNA / Service Worker / CORS の
 // 影響を受けない。登録はユーザー単位（HKCU）で管理者権限は不要
 #[cfg(windows)]
@@ -398,7 +400,7 @@ fn register_protocol(exe: &std::path::Path) {
         (
             r"HKCU\Software\Classes\geosuite-hub",
             "URL:GeoSuite Hub Protocol",
-            format!("\"{}\" --view \"http://127.0.0.1:8515/\"", exe.display()),
+            format!("\"{}\" --view \"%1\"", exe.display()),
         )
     } else {
         (

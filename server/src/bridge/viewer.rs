@@ -60,7 +60,11 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-// kasugai-hub://open?url=<pct> 形式と生 URL の両方を受け取る。
+// kasugai-hub://open?url=<pct>・geosuite-hub://open?url=<pct> 形式と
+// 生 URL の両方を受け取る。
+// geosuite-hub:// の url= は 8515 ビューアシェルの ?url= へそのまま転送する
+// （シェル側で scene.txt にも保存される。直接 scene URL へ飛ばすと
+// シェルの保存・ホーム画面経路がバイパスされるため）。
 // セキュリティのため http(s):// のみ許可（file: や javascript: は拒否）
 fn parse_target(arg: &str) -> Result<String, String> {
     let arg = arg.trim().trim_matches('"');
@@ -78,6 +82,19 @@ fn parse_target(arg: &str) -> Result<String, String> {
             default_url().to_string()
         } else {
             u
+        }
+    } else if let Some(rest) = arg.strip_prefix("geosuite-hub://") {
+        let query = rest.split_once('?').map(|(_, q)| q).unwrap_or("");
+        // url= の値は呼び出し側で pct-encoded 済み — デコードせず
+        // そのままシェルのクエリへ転送する
+        let raw = query
+            .split('&')
+            .find_map(|kv| kv.strip_prefix("url="))
+            .unwrap_or_default();
+        if raw.is_empty() {
+            default_url().to_string()
+        } else {
+            format!("http://127.0.0.1:8515/?url={raw}")
         }
     } else {
         arg.to_string()

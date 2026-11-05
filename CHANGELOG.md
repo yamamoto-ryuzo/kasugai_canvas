@@ -4,6 +4,12 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.19.1] - 2026-11-06
+
+### Fixed
+
+- **`geosuite-hub://` 起動時に呼び出し元シーンではなく前回のシーン（scene.txt）が開く重大な欠陥を修正** — プロトコル登録が `--view "http://127.0.0.1:8515/"` の固定 URL で起動 URI を破棄しており、`geosuite-hub://open?url=<scene>` で渡されたシーン URL が到達しなかった。`--view "%1"` へ変更し、`viewer.rs` が `geosuite-hub://` 形式の `url=` を 8515 ビューアシェルへ転送するようにした（シェル側で scene.txt にも記録される既存経路を利用）
+
 ## [6.19.0] - 2026-11-06
 
 ### Added
