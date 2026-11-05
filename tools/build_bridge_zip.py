@@ -58,15 +58,6 @@ def build(out=DEFAULT_OUT, cargo=True):
     exe_out = os.path.join(os.path.dirname(out), 'bridge-hub.exe')
     shutil.copyfile(EXE, exe_out)
     print('built: {0}'.format(exe_out))
-    # GeoSuite 専用配布物: 同一 exe を geosuite-hub.exe 名で ZIP 化。
-    # exe 名が geosuite-hub なら GeoSuite モードで自己インストールされる
-    # （%LOCALAPPDATA%\geosuite-hub・8514・geosuite-hub://・8515 ビューア）。
-    # Re:Earth geo_suite の「拡張」ボタンが stable/download/geosuite-hub.zip
-    # を直接 DL するため、web/download/ に置いて CDN 同期に含める
-    geo_zip = os.path.join(os.path.dirname(out), 'geosuite-hub.zip')
-    with zipfile.ZipFile(geo_zip, 'w', zipfile.ZIP_DEFLATED) as z:
-        z.write(EXE, 'geosuite-hub.exe')
-    print('built: {0}'.format(geo_zip))
     return out
 
 
