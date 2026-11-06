@@ -1,4 +1,0 @@
-title: import test
-base: OSM | https://tile.openstreetmap.org/{z}/{x}/{y}.png
-geojson: sample | https://example.com/DATA/a.geojson
-cam:test|35.1|136.9|h=5000|p=-30
