@@ -19,7 +19,7 @@
         <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
         <a href="runtime-cache.html" class="cache current">💾 【キャッシュ】ランタイム永続キャッシュ</a>
         <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
-        <a href="ai-bridge.html" class="bridge">� 【ブリッジ】外部エージェント連携</a>
+        <a href="ai-bridge.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
       </nav>
 
       <section>
@@ -104,7 +104,7 @@ flowchart TB
             <li><strong>activate 時に旧バージョンを掃除</strong>：<code>CURRENT_ASSET_MARKERS</code>（現行は <code>/npm/@duckdb/duckdb-wasm@1.32.0</code> と <code>/v1.4.3/</code>）に一致しないエントリだけを削除します。DuckDB のバージョンを上げると新資産が自動的にダウンロードされ、旧資産は次回起動時に消えます</li>
           </ul>
           <p><strong>キャッシュ有無で起動動作が変わります</strong>。ページ側も <code>duckDbAssetsCached()</code>（<code>app.js</code>）で同じ CacheStorage を読み、本体 wasm の存在を確認します。キャッシュ済みなら非表示のクエリ系レイヤーぶんまで含めて DuckDB を先行初期化します（ディスク読み込みで実質無料のため選択をほぼ即応答にできる）。未キャッシュ＝実質初回は ~60MB の実コストがかかるため、表示対象のクエリ系レイヤーがあるときだけ先行します。</p>
-          <p><small>バージョンを上げるときは <code>sw-duckdb.js</code> の <code>CURRENT_ASSET_MARKERS</code> と <code>web/cesium/app.js</code> の <code>DUCKDB_WASM_VERSION</code> を同時に更新してください（片方だけだと掃除対象がずれます）。</small></p>
+          <p><small>バージョンを上げるときは <code>sw-duckdb.js</code> の <code>CURRENT_ASSET_MARKERS</code> と、<code>web/cesium/app.js</code>・<code>web/shared/kasc_loader.js</code> の <code>DUCKDB_WASM_VERSION</code> を同時に更新してください（片方だけだと掃除対象がずれます）。</small></p>
         </div>
       </section>
 

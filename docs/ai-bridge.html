@@ -22,7 +22,7 @@
         <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
         <a href="runtime-cache.html" class="cache">💾 【キャッシュ】ランタイム永続キャッシュ</a>
         <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
-        <a href="ai-bridge.html" class="bridge current">� 【ブリッジ】外部エージェント連携</a>
+        <a href="ai-bridge.html" class="bridge current">🔌 【ブリッジ】外部エージェント連携</a>
       </nav>
 
       <section>
@@ -147,7 +147,7 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
 sequenceDiagram
   autonumber
   participant C as AI チャット<br/>（ブラウザ）
-  participant T as executeChatTool<br/>（地図操作・52ツール）
+  participant T as executeChatTool<br/>（地図操作・81ツール宣言）
   participant H as bridge-hub :8511<br/>または /agent 互換
   participant CLI as プロバイダ CLI + AI
 
@@ -220,7 +220,7 @@ sequenceDiagram
         <h2>6. 関連リンク</h2>
         <ul>
           <li><a href="ai-api.html">【API】内蔵AI（Gemini・OpenAI互換）</a></li>
-          <li><a href="ai-tools.html">AI ツール仕様（全52ツールの定義）</a></li>
+          <li><a href="ai-tools.html">AI ツール仕様（全81ツールの定義）</a></li>
           <li><a href="bridge-hub.html">ブリッジハブ（bridge-hub.exe）— 常駐ハブの詳細仕様</a></li>
           <li><a href="features/v3.html#bridge-hub-design">V3: 設計判断 — ブリッジハブ</a></li>
           <li><a href="guide.html">【アプリ】ローカルアプリ（ハブ内蔵のフル機能版）</a></li>

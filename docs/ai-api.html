@@ -22,7 +22,7 @@
         <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
         <a href="runtime-cache.html" class="cache">💾 【キャッシュ】ランタイム永続キャッシュ</a>
         <a href="ai-api.html" class="api current">🤖 【API】内蔵AI</a>
-        <a href="ai-bridge.html" class="bridge">� 【ブリッジ】外部エージェント連携</a>
+        <a href="ai-bridge.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
       </nav>
 
       <section>
@@ -95,7 +95,7 @@ sequenceDiagram
   autonumber
   participant U as ユーザー
   participant C as AI チャット<br/>（ブラウザ）
-  participant T as executeChatTool<br/>（地図操作・52ツール）
+  participant T as executeChatTool<br/>（地図操作・81ツール宣言）
   participant API as AI API<br/>（設定エンドポイント）
 
   U->>C: メッセージ送信
@@ -143,7 +143,7 @@ sequenceDiagram
         <div class="features">
           <div class="feature-card" id="ai-api">
             <h3>🤖 AIチャット（Gemini / OpenAI互換）</h3>
-            <p>右下の Chat パネルから AI の function calling で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。<strong>52ツール</strong>でカメラ・レイヤ・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替・データ取得/加工・プラグイン生成・資料生成（showReport＋パーマリンク）まで網羅（一覧は <a href="features/v3.html">V3: AI 連携</a>）。AI移動はドローン視点（対象地上+200m・-30°）が既定。管理（⚙）→ AI → チャット で API キー・モデルを設定。Cloudflare/Cloud Run にサーバーキー（<code>/api/gemini</code>）があればキー未設定でも動作</p>
+            <p>右下の Chat パネルから AI の function calling で地図を操作。「◯◯へ飛んで」「レイヤを消して」等をAIが実行。<strong>81ツール宣言</strong>でカメラ・レイヤ・ベースマップ・検索・地形/効果・地下表示・断面クリップ・Flyパス・プロジェクト切替・データ取得/加工・プラグイン生成・資料生成（showReport＋パーマリンク）まで網羅（一覧は <a href="features/v3.html">V3: AI 連携</a>）。AI移動はドローン視点（対象地上+200m・-30°）が既定。管理（⚙）→ AI → チャット で API キー・モデルを設定。Cloudflare/Cloud Run にサーバーキー（<code>/api/gemini</code>）があればキー未設定でも動作</p>
           </div>
           <div class="feature-card">
             <h3>🗺️ Photorealistic 3D Tiles</h3>
@@ -218,7 +218,7 @@ DELETE /api/files/{project}/{path} → DATA/ 内のファイルを削除</code><
       <section class="card">
         <h2>5. 関連リンク</h2>
         <ul>
-          <li><a href="ai-tools.html">AI ツール仕様（全52ツールの定義）</a></li>
+          <li><a href="ai-tools.html">AI ツール仕様（全81ツールの定義）</a></li>
           <li><a href="ai-bridge.html">【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）</a></li>
           <li><a href="features/v3.html">V3: AI 連携</a></li>
           <li><a href="security.html">セキュリティ対策</a></li>

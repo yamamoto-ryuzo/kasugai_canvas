@@ -17,7 +17,7 @@
       <section>
         <h2>1. 📋 概要</h2>
         <p>KASUGAI Canvas は、<strong>AI とマルチエンジンで拓く 2D/3D GIS</strong> です。CesiumJS + Three.js（メイン・3D）を核に、MapLibre / OpenLayers / Leaflet / GSI Maps の互換プレイヤーと試験的エンジン Navara が同じ <code>.kasc</code> プロジェクトを再生するマルチエンジン構成を採り、AI チャット（Gemini / OpenAI互換 の内蔵AI、GitHub Copilot・Devin・Antigravity のブリッジ連携）で地図を操作できます。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能を備えています。</p>
-        <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得は CesiumJS が直接行い、Rust サーバーはバージョン管理・シャットダウン・ヘルスチェック API のみ提供します。</small></p>
+        <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得はブラウザ側（CesiumJS 等）が直接行い、Rust サーバーは静的配信に加えてローカル環境限定の高権限 API（<code>/api/files</code>・<code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/command</code>・更新・シャットダウン等。提供可否は <code>/api/capabilities</code> で判定）を提供します。</small></p>
         <figure>
         <img src="images/KASUGAI_Canvas_概要.png" alt="KASUGAI Canvas 概要：AI連携・FLYプレゼンテーション・マルチエンジン・.kasc+DATA 納品構造" />
         <figcaption aria-hidden="true">概要（AI 連携・FLY プレゼン・マルチエンジン・納品構造）</figcaption>
@@ -79,7 +79,7 @@
           </tr>
         </table>
         <p>どちらの系統でもチャット UI・地図操作・<code>runCode</code> サンドボックス・MCP データソース（Box 等）・AI プラグイン生成は共通です。ハブはアプリ版・ブラウザ WebGIS 共通の <code>bridge-hub.exe</code> 1本（<code>127.0.0.1:8511</code>）に集約しており、フロントは <code>/health</code> で検出して接続するため、CDN 経由のブラウザ WebGIS からもブリッジ系プロバイダが選べます。逆方向の「外部 → ブラウザを操る」はローカルアプリ本体 <code>:8510</code> の <code>/api/command</code> 経路です。</p>
-        <p>設定手順は <a href="ai-api.html">【API】内蔵AI</a>・<a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a>（接続方式ごとの規約判断もこちら）、52ツールの引数・提供条件は <a href="ai-tools.html">AI ツール仕様</a> を参照してください。</p>
+        <p>設定手順は <a href="ai-api.html">【API】内蔵AI</a>・<a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a>（接続方式ごとの規約判断もこちら）、81ツール宣言（環境・エンジンで絞り込み）の引数・提供条件は <a href="ai-tools.html">AI ツール仕様</a> を参照してください。</p>
       </section>
 
       <section>
@@ -166,7 +166,7 @@ flowchart TB
             <td>DATA/ 等の相対参照は .kasc のある URL 基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> は同じフォルダに置く</td>
           </tr>
         </table>
-        <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・ブリッジハブの自動起動）を持ちます。AI の接続系統とブリッジハブの構成（<code>:8511</code> に一本化・<code>bridge-hub.zip</code>）は「<a href="#ai-2keito">3. AI — API 直通とブリッジ経由</a>」にまとめています。CDN 経由はブラウザ閲覧中心です。なおローカルアプリも vendored 地理院地図（gsimaps vendor・約75MB）は同梱せず、<code>/vendor/*</code> のミスを Service Worker が上流オリジナル（<code>vendor.json</code> のピン先 CDN）へ中継して同一オリジン供給します。さらに描画ライブラリ（CesiumJS・Leaflet・MapLibre・OpenLayers・DuckDB-WASM 等）は jsdelivr/unpkg から読み込むため、配布形態に関わらずブラウザ実行は常にオンライン前提です（試験的エンジン Navara は Worker の同一オリジン要件から <code>vendor/navara/</code> 同梱 dist を使用）。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布 ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（127.0.0.1:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
+        <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・ブリッジハブの自動起動）を持ちます。AI の接続系統とブリッジハブの構成（<code>:8511</code> に一本化・<code>bridge-hub.zip</code>）は「<a href="#ai-2keito">3. AI — API 直通とブリッジ経由</a>」にまとめています。CDN 経由はブラウザ閲覧中心です。なおローカルアプリも vendored 地理院地図（gsimaps vendor・約75MB）は同梱せず、<code>/vendor/*</code> のミスを Service Worker が上流オリジナル（<code>vendor.json</code> のピン先 CDN）へ中継して同一オリジン供給します。さらに描画ライブラリ（CesiumJS・Leaflet・MapLibre・OpenLayers・DuckDB-WASM 等）は jsdelivr/unpkg から読み込むため、配布形態に関わらずブラウザ実行は常にオンライン前提です（試験的エンジン Navara も Worker の同一オリジン要件のため <code>vendor/navara/</code> パス経由だが、実体の供給は同じく SW 中継）。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布 ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（127.0.0.1:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
       </section>
 
       <section>
@@ -206,7 +206,7 @@ flowchart TB
           </a>
           <a class="feature-card" href="ai-tools.html">
             <h3>🛠️ AI ツール仕様</h3>
-            <p>内蔵AIが制御できる全52ツールの定義。引数・提供条件・実行モデル</p>
+            <p>内蔵AIが制御できる全81ツールの定義。引数・提供条件・実行モデル</p>
           </a>
           <a class="feature-card" href="bridge-hub.html">
             <h3>🔧 ブリッジハブ（bridge-hub.exe）</h3>

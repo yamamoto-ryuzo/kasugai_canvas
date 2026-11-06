@@ -42,6 +42,11 @@
 
       <h3>🔎 住所検索</h3>
       <p>国土地理院の住所検索 API（既定）と Yahoo Local Search API（<code>yahooAppId</code> 設定で有効化）を使い、住所・施設名で検索してクリックで FlyTo します。Google Maps Platform の Geocoding / Places を使うハイブリッド検索は V4 の Google 連携側の機能です。</p>
+      <p>検索窓は<strong>座標の直接入力</strong>にも対応しており、「<code>35.681,139.767</code>」「<code>139.767,35.681</code>」（経度・緯度順も可）、「<code>N35°41' E139°46'</code>」「<code>35度41分 139度46分</code>」のような度・度分秒表記を入力すると、ジオコーディングを介さずその地点へ直接 FlyTo します。</p>
+      <figure>
+      <img src="../images/issue-05-coord-search.png" alt="住所検索窓への座標直入力：35.681,139.767 を入力してその地点へ FlyTo" />
+      <figcaption aria-hidden="true">検索窓への座標直入力（入力した座標がそのまま検索結果として表示され FlyTo）</figcaption>
+      </figure>
 
       <h3>🧬 ベクトル検索</h3>
       <p>読み込み済みベクター（GeoJSON/GeoParquet/FlatGeobuf 等の全件読み込み系）の属性値を「レイヤー → 属性 → 値」の三段階またはテキスト検索で絞り込み、行クリックで FlyTo します。対象範囲は「全選択（非表示・未読込レイヤーも検索時に読み込んで対象化）」「表示レイヤ」「個別レイヤー」から選べます。クエリ系レイヤー（duckdb:/sql:/gpkg:）は索引ではなく SQL フィルター側で検索する設計のため対象外です。</p>
@@ -68,7 +73,40 @@
       <p>地形表示と影表示をワンクリックで ON/OFF します。地形ソースは Re:Earth Terrain（楕円体高 / 標高）と国土地理院 DEM（5m+10m / 1m、TP基準）から選択可能で、CesiumWorldTerrain は Ion アクセスが必要なため同梱していません。高さ基準の違い（楕円体高 / 標高）は数十 m のずれになるため、3D Tiles の高さ基準に合わせた選択が必要です（<a href="v0.html#terrain">詳細</a>）。</p>
 
       <h3>🧭 ナビゲーション</h3>
-      <p>ナビゲーションツールバーに方位コンパス・2D/3D 切替・Orbit/Fly モード切替・北リセットを配置しています。Orbit は通常の地球閲覧、Fly はプレゼン用の飛行モード（V2）です。</p>
+      <p>ナビゲーションツールバー（地図右端・折りたたみ可）には、方位コンパス・2D/3D 切替・Orbit/Fly モード切替・北リセットに加え、表示系の便利ツールを2列グリッドで配置しています。Orbit は通常の地球閲覧、Fly はプレゼン用の飛行モード（V2）です。これらのツールは全エンジン共通で、Cesium 以外のエンジンでは共有モジュール（<code>web/shared/nav-tools.js</code>）が同一 UI・同一操作を提供します。</p>
+      <figure>
+      <img src="../images/toolbar-all.png" alt="ナビゲーションツールバー：コンパス・3D・オービット・履歴・矩形ズーム・地点座標・現在地・フルスクリーン" style="max-width:130px;" />
+      <figcaption aria-hidden="true">ナビゲーションツールバー（上から：コンパス・3D・オービット・履歴◀▶・矩形ズーム▭・地点座標⌖・現在地📍・フルスクリーン⛶）</figcaption>
+      </figure>
+      <ul>
+        <li><strong>表示履歴 ◀ / ▶</strong> — シングルクリックで1つ前/次の視点へ戻る・進む（最大100件）。ダブルクリックで番号付きの履歴一覧を開き、任意の時点へ直接ジャンプできます。一覧は新しい順で現在位置は ● 印、各行には国土地理院の逆ジオコーディングで取得した概算地名を併記します。キーボードショートカットは Alt+← / Alt+→。</li>
+        <li><strong>矩形ズーム ▭</strong> — ボタンでモード切替、または Shift+ドラッグで即時起動。右下方向へドラッグした矩形が画面全体に拡大され、左上方向へドラッグするとその逆変換で縮小します（ドラッグ中は枠線の色で縮小を予告）。傾斜視点では矩形中心を軸にした倍率ズームに切り替わります。Esc でドラッグをキャンセル。</li>
+        <li><strong>地点座標取得 ⌖</strong> — ボタンで十字カーソルの座標取得モードになり、地図をクリックするとその地点の座標ポップアップを表示します。座標は「座標表示形式」設定（度/DMS/UTM/平面直角座標系）に従い、国土地理院逆ジオコーダーの行政区画名・muniCd を併記します。「コピー」でクリップボードへ、「ピン」で共有 GeoJSON レイヤーとして地図にピンを蓄積（属性を持つため後から属性検査可能・全エンジン共通レイヤー）、「クリア」で全ピンを削除します。</li>
+        <li><strong>現在地 📍</strong> — クリックで位置追従の ON/OFF。ON の間は watchPosition で青い現在地マーカー（精度円付き）を表示し、3秒以上経過した更新でカメラも追従します。</li>
+        <li><strong>フルスクリーン ⛶</strong> — ドキュメント全体をフルスクリーン化 / 解除します。</li>
+        <li><strong>スクリーンショット 📷</strong> — プロジェクトセレクタ横の 📷 ボタンで表示中の地図を PNG 保存します（ファイル名は <code>kasugai_canvas_YYYY-MM-DD-HH-MM-SS.png</code>）。</li>
+      </ul>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../images/issue-17-history.png" alt="表示履歴一覧：新しい順に番号付きで視点を列挙し、現在位置は ● 印" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../images/issue-16-rectzoom-drag.png" alt="矩形ズーム：ドラッグ中の矩形を破線枠で表示" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">表示履歴一覧（左：ダブルクリックで開く番号付きリスト）と矩形ズーム（右：ドラッグ中の矩形）</figcaption>
+      </figure>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../images/issue-04-coordpick.png" alt="地点座標ポップアップ：座標・行政区画名・muniCd とコピー/ピン/クリアボタン" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../images/issue-07-gps.png" alt="現在地追従：青い現在地マーカーと精度円" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">地点座標取得（左）と現在地追従（右）</figcaption>
+      </figure>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../images/issue-20-fullscreen.png" alt="フルスクリーンボタン（ナビゲーションツールバー最下段）" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../images/issue-16-rectzoom-after.png" alt="矩形ズーム後：選択した矩形範囲へズームイン" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">フルスクリーン（左）と矩形ズームの結果（右）</figcaption>
+      </figure>
 
       <h3>📊 属性（Attr）表示</h3>
       <p>地物をクリックすると属性を Attr パネルに一覧表示します。重なった地物（ポリゴン等の面重なり）は <code>scene.drillPick</code> で最大16件を手前から順に拾い、件数付きヘッダー一覧として表示し、行クリックで個別属性を展開します。3D Tiles（構造化メタデータ <code>Cesium3DTileFeature</code>）・ベクター（entity/primitive）の各描画経路を同じ形式に正規化して扱います。</p>
@@ -82,6 +120,14 @@
 
       <h3>📐 座標表示形式・測地系</h3>
       <p>表示 → 一般タブの「座標表示形式」（度(10進) / 度分秒(DMS) / UTM / 平面直角座標系 I〜XIX系）と「測地系」（JGD2024・JGD2011 / JGD2000 / 日本測地系）のセレクトで、カーソル座標・地点座標ポップアップ・座標コピーの形式を切り替えられます。平面直角の系番号は最近傍原点から自動選択します。<strong>内部の座標はすべて WGS84 で一元管理</strong>しており、WGS84 ネイティブの緯度経度（度・度分秒・既定測地系）以外の表示には <strong>（参考値）</strong> が付きます。JGD2000・日本測地系など他測地系の座標は国土地理院の公式変換パラメータ（TKY2JGD / PatchJGD）で変換した参考値であり、現在位置の WGS84 と固定時点の測地成果とは地殻変動分の差が累積するため、測量成果としての利用は想定していません（詳細は <a href="v0.html#coords-datum">V0 の座標・測地系の扱い節</a>）。</p>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../images/issue-06-coords-dms.png" alt="座標表示形式：度分秒(DMS) 表示" style="max-width:32%; flex:1 1 200px;" />
+      <img src="../images/issue-06-coords-utm.png" alt="座標表示形式：UTM 座標表示" style="max-width:32%; flex:1 1 200px;" />
+      <img src="../images/issue-06-coords-jpx.png" alt="座標表示形式：平面直角座標系の表示" style="max-width:32%; flex:1 1 200px;" />
+      </div>
+      <figcaption aria-hidden="true">座標表示形式（左から：度分秒・UTM・平面直角座標系）</figcaption>
+      </figure>
 
       <h3>🌐 多言語対応（8言語）</h3>
       <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の8言語に対応しています。管理（⚙）→ その他 の言語セレクタで即時切替でき、初回はブラウザ言語から自動判定します（未対応言語は英語）。選択は localStorage に保存され、AIチャットの回答言語も UI 言語に追随します。翻訳の基準言語は英語（<code>en.json</code> がフォールバック辞書）です。</p>

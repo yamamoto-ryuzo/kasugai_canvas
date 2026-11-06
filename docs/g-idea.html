@@ -166,7 +166,7 @@ flowchart TB
       <table>
         <thead><tr><th>候補</th><th>応答形式</th><th>地域カバー</th><th>利用条件</th><th>キー管理</th><th>基準日</th><th>出典表記</th></tr></thead>
         <tbody>
-          <tr><td>Gemini API（現行採用）</td><td>JSON。function calling 対応（Canvas の55ツール実行に使用中）</td><td>全世界・日本語可</td><td>無料枠あり。無料枠では入力内容がサービス改善に使われ得るため、課金枠または取り扱いに注意。従量課金あり</td><td>BYOキーはブラウザから直接呼出し可（localStorage 保管）。サーバーキーは Workers の <code>/api/gemini</code> で隠蔽（実装済）</td><td>モデル世代ごと</td><td>義務なし。生成物は元データとの照合・未確認事項の明記で担保</td></tr>
+          <tr><td>Gemini API（現行採用）</td><td>JSON。function calling 対応（Canvas の81ツール宣言実行に使用中）</td><td>全世界・日本語可</td><td>無料枠あり。無料枠では入力内容がサービス改善に使われ得るため、課金枠または取り扱いに注意。従量課金あり</td><td>BYOキーはブラウザから直接呼出し可（localStorage 保管）。サーバーキーは Workers の <code>/api/gemini</code> で隠蔽（実装済）</td><td>モデル世代ごと</td><td>義務なし。生成物は元データとの照合・未確認事項の明記で担保</td></tr>
           <tr><td>OpenAI 互換 API（OpenRouter・Groq 等）</td><td>JSON（OpenAI chat 形式）</td><td>全世界</td><td>プロバイダごとの料金・規約。ブラウザ直接呼出しを非推奨とするプロバイダあり</td><td>BYOキーのみ（ブラウザ直接可）</td><td>モデル依存</td><td>不要</td></tr>
           <tr><td>Cloudflare Workers AI</td><td>JSON（OpenAI 互換エンドポイントあり）</td><td>全世界。日本語品質はモデル依存</td><td>無料枠あり・従量課金</td><td>アカウントトークンを Workers 側に秘匿できるため、キー露出ゼロで公開環境に適する。既存の Workers 基盤に載せられる</td><td>モデル依存</td><td>不要</td></tr>
         </tbody>
