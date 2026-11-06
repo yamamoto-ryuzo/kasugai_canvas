@@ -56,7 +56,7 @@
               <select id="project-select" aria-label="プロジェクト" data-i18n-attr="aria-label:settings.project.label"></select>
               <button id="share-copy" class="panel-manage" type="button" title="現在位置URLをコピー" data-i18n-attr="title:share.copy;aria-label:share.copy">🔗</button>
               <button id="screenshot-button" class="panel-manage" type="button" title="画面をPNG画像で保存" data-i18n-attr="title:share.screenshot;aria-label:share.screenshot">📷</button>
-              <button id="print-open" class="panel-manage" type="button" title="印刷" data-i18n-attr="title:print.open;aria-label:print.open"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1"/><path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1"/></svg></button>
+              <button id="tools-open" class="panel-manage" type="button" title="ツール" data-i18n-attr="title:tools.open;aria-label:tools.open">🧰</button>
             </div>
             <nav class="panel-tabs" aria-label="Plugin panels">
               <button class="panel-tab active" type="button" data-panel="layers-panel" data-i18n="tab.layers">レイヤ</button>
@@ -66,7 +66,6 @@
               <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">カメラ</button>
               <button class="panel-tab" type="button" data-panel="display-panel" data-i18n="tab.display">表示</button>
               <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
-              <button class="panel-tab" type="button" data-panel="tools-panel" data-i18n="tab.tools">ツール</button>
             </nav>
             <section id="layers-panel" class="plugin-panel active">
               <select id="theme-select" hidden></select>
@@ -296,17 +295,21 @@
               <button id="attr-vector-attr-list-btn" type="button" style="width:100%;font-size:0.9em;margin-bottom:3px;" data-i18n="vector.attrList">選択中のレイヤ属性一覧</button>
               <div id="attr-content" class="attr-content" data-i18n="attr.empty">地物を選択すると属性を表示します。</div>
             </section>
-            <section id="tools-panel" class="plugin-panel">
-              <nav class="settings-tabs" aria-label="Tools">
-                <button class="settings-tab active" type="button" data-settings-panel="tools-measure-panel" data-i18n="tools.measure">計測</button>
-                <button class="settings-tab" type="button" data-settings-panel="tools-spatial-panel" data-i18n="tools.spatial">選択・集計</button>
-                <button class="settings-tab" type="button" data-settings-panel="tools-draw-panel" data-i18n="tools.draw">作図</button>
-                <button class="settings-tab" type="button" data-settings-panel="tools-profile-panel" data-i18n="tools.profile">標高断面</button>
-                <button class="settings-tab" type="button" data-settings-panel="tools-los-panel" data-i18n="tools.los">見通し判定</button>
-                <button class="settings-tab" type="button" data-settings-panel="tools-export-panel" data-i18n="tools.export">エクスポート</button>
-                <button class="settings-tab" type="button" data-settings-panel="tools-time-panel" data-i18n="tools.time">時系列</button>
-              </nav>
-              <section id="tools-measure-panel" class="settings-subpanel active">
+            <div id="engines"></div>
+          </aside>
+          <div id="tools-dock" class="collapsed">
+            <nav id="tools-bar" class="settings-tabs" aria-label="Tools">
+              <button class="settings-tab" type="button" data-settings-panel="tools-measure-panel" data-i18n="tools.measure">計測</button>
+              <button class="settings-tab" type="button" data-settings-panel="tools-spatial-panel" data-i18n="tools.spatial">選択・集計</button>
+              <button class="settings-tab" type="button" data-settings-panel="tools-draw-panel" data-i18n="tools.draw">作図</button>
+              <button class="settings-tab" type="button" data-settings-panel="tools-profile-panel" data-i18n="tools.profile">標高断面</button>
+              <button class="settings-tab" type="button" data-settings-panel="tools-los-panel" data-i18n="tools.los">見通し判定</button>
+              <button class="settings-tab" type="button" data-settings-panel="tools-export-panel" data-i18n="tools.export">エクスポート</button>
+              <button class="settings-tab" type="button" data-settings-panel="tools-print-panel" data-i18n="print.open">印刷</button>
+              <button class="settings-tab" type="button" data-settings-panel="tools-time-panel" data-i18n="tools.time">時系列</button>
+            </nav>
+            <div id="tools-panel" hidden>
+              <section id="tools-measure-panel" class="settings-subpanel">
                 <div class="tool-btnrow">
                   <button id="tool-m-distance" type="button" data-i18n="tools.distance">距離</button>
                   <button id="tool-m-area" type="button" data-i18n="tools.area">面積</button>
@@ -402,6 +405,12 @@
                 <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
                 <p class="hint" data-i18n="tools.exportHintFormats">CSV/TSV は WKT 列付き、Shapefile はジオメトリ種別ごとに分割して ZIP にまとめます。</p>
               </section>
+              <section id="tools-print-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="print.panelHint">地図画像にタイトル・凡例・縮尺バー等を合成して印刷/PNG出力します。</p>
+                <div class="tool-btnrow">
+                  <button id="print-open" type="button" data-i18n="print.open">印刷</button>
+                </div>
+              </section>
               <section id="tools-time-panel" class="settings-subpanel">
                 <p class="hint" data-i18n="time.hint">レイヤーと時刻プロパティを選ぶと時系列化します。設定後は地図下部にスライダーが表示されます。</p>
                 <div class="tool-btnrow">
@@ -422,9 +431,8 @@
                 </div>
                 <p id="time-config-hint" class="hint"></p>
               </section>
-            </section>
-            <div id="engines"></div>
-          </aside>
+            </div>
+          </div>
           <aside id="manage-window" class="manage-window" aria-label="管理" data-i18n-attr="aria-label:manage.title" hidden>
             <div class="manage-titlebar">
               <span class="manage-title" data-i18n="manage.title">管理</span>
@@ -836,6 +844,7 @@
           </aside>
           <div class="basemap-control">
             <button id="basemap-toggle" class="basemap-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button>
+            <button id="open-in-app" class="basemap-globe" type="button" title="アプリで開く" data-i18n-attr="title:app.openInApp;aria-label:app.openInApp">🖥</button>
             <button id="basemap-globe" class="basemap-globe" type="button" title="Google Earth で現在の表示を開く" aria-label="Google Earth で現在の表示を開く" data-i18n-attr="title:basemap.googleEarth;aria-label:basemap.googleEarth">🌐</button>
             <select id="basemap-select"></select>
           </div>

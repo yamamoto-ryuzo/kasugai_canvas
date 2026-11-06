@@ -648,6 +648,7 @@
   "display.graticule": "Gradnetz",
   "display.minimap": " Minikarte anzeigen",
   "print.open": "Drucken",
+  "print.panelHint": "Kartenbild mit Titel, Legende, Maßstabsbalken usw. zusammenstellen und drucken oder als PNG speichern.",
   "print.dialogTitle": "Drucken",
   "print.fieldTitle": "Titel",
   "print.fieldPaper": "Papier",
@@ -678,11 +679,14 @@
   "coordpick": {
     "clear": "Löschen"
   },
+  "tools.open": "Werkzeuge",
   "tools.measure": "Messen",
   "tools.distance": "Distanz",
   "tools.area": "Fläche",
   "tools.bearing": "Richtung",
   "tools.clear": "Löschen",
+  "tools.chipOpen": "Werkzeug-Panel öffnen",
+  "tools.chipClose": "Schließen",
   "tools.measureHint": "Linksklick fügt Punkte hinzu, Doppelklick beendet.",
   "tools.distanceTotal": "Gesamt {value}",
   "tools.points": "{count} Pkt.",
@@ -850,5 +854,7 @@
   "instr.badKind": "kind must be \"agents\" or \"skills\"",
   "instr.notFound": "Instruction not found: {id}",
   "instr.confirmDelete": "Delete instruction \"{id}\"?",
-  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?"
+  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?",
+  "app.openInApp": "In Canvas-App öffnen",
+  "app.importRemote": "In Canvas-App importieren"
 }

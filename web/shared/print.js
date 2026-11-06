@@ -302,7 +302,7 @@ export function initPrint(opts) {
     $("#print-qgis-status").textContent = "";
     const bases = location.port === "8089"
       ? [location.origin]
-      : QGIS_PORTS.map(p => `http://localhost:${p}`);
+      : QGIS_PORTS.map(p => `http://127.0.0.1:${p}`);
     for (const base of bases) {
       try {
         const res = await fetch(`${base}/layouts`, { cache: "no-store", signal: AbortSignal.timeout(2500) });

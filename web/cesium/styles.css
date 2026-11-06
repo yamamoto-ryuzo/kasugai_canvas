@@ -77,6 +77,8 @@ body.globe-hidden .viewport { background: transparent; }
 .panel-manage { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 1px 4px !important; border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important; color: #31564f !important; font-size: 14px !important; line-height: 1; cursor: pointer; }
 a.panel-manage { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; text-decoration: none; }
 .panel-manage.active { background: rgba(49,86,79,.36) !important; }
+/* ツール起動ボタン(🧰): 絵文字をボタンいっぱいに表示 */
+#tools-open.panel-manage { padding: 0 !important; font-size: 22px !important; display: inline-flex; align-items: center; justify-content: center; }
 /* 管理ウィンドウ: モードレスのフローティングパネル。ドラッグ移動・最小化可 */
 .manage-window { position: absolute; z-index: 4; top: 64px; left: 370px; width: 640px; max-width: calc(100% - 40px); max-height: calc(100% - 170px); display: flex; flex-direction: column; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.94); box-shadow: 0 12px 36px rgba(10,20,40,.25); pointer-events: auto; touch-action: auto; user-select: text; }
 .manage-window[hidden] { display: none; }
@@ -371,8 +373,8 @@ footer { padding: 0 28px 22px; }
 .mcp-server-row .hint { margin: 0; }
 .mcp-server-row button { padding: 3px 8px; }
 
-/* 地図上部の読込進捗ピル(レイヤの段階読み込み状況) */
-#load-progress { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+/* 地図下部の読込進捗ピル(レイヤの段階読み込み状況) — スケールバー(bottom:32px)の直上 */
+#load-progress { position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
   z-index: 1005; display: flex; align-items: center; gap: 8px; padding: 5px 12px;
   background: rgba(255,255,255,.95); border-radius: 14px; font-size: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 70vw; }
@@ -419,9 +421,7 @@ footer { padding: 0 28px 22px; }
 #attr-popup .attr-popup-title { font-weight: 600; margin-bottom: 3px; }
 #attr-popup table { width: 100%; border-collapse: collapse; font-size: 11px; }
 #attr-popup th, #attr-popup td { padding: 1px 4px; border-bottom: 1px solid #e4ecef; text-align: left; }
-#print-open { padding: 3px !important; }
 #screenshot-button { font-size: 20px !important; line-height: 1; padding: 0 !important; }
-#print-open > svg { width: 100%; height: 100%; display: block; }
 /* 矩形ズームのドラッグ範囲表示 */
 .rect-zoom-box { position: absolute; z-index: 1009; border: 2px dashed #31564f; background: rgba(49,86,79,.12); pointer-events: none; box-sizing: border-box; }
 .rect-zoom-box.rect-zoom-out { border-color: #b04020; background: rgba(176,64,32,.10); }
@@ -437,6 +437,31 @@ footer { padding: 0 28px 22px; }
 #coords-format { width: 100%; min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; font-size: var(--basemap-select-font-size); box-sizing: border-box; }
 .secret { -webkit-text-security: disc; }
 /* ツールパネル（計測・断面・見通し・エクスポート） */
+/* ツールドック: 画面上部中央の横並びツールバー + ドロップダウン式パネル。
+   左パネル(.control-panel, 幅336px+左14px)を避けて空き領域の中央に置く */
+#tools-dock { position: absolute; z-index: 3; top: 14px; left: calc(50% + 175px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; max-width: calc(100% - 380px); pointer-events: auto; touch-action: auto; user-select: text; }
+#cesium-container:has(.control-panel.collapsed) #tools-dock { left: 50%; }
+#tools-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin: 0; padding: 6px 8px; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.6); box-shadow: 0 8px 18px rgba(10,20,40,.16); }
+#tools-bar .settings-tab { border-radius: 4px !important; }
+#tools-panel { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px; width: min(400px, 92vw); max-height: min(60vh, 520px); overflow-y: auto; overflow-x: hidden; padding: 10px; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.92); box-shadow: 0 12px 30px rgba(10,20,40,.24); box-sizing: border-box; }
+#tools-panel[hidden] { display: none; }
+#tools-panel button { min-height: 30px; padding: 5px 8px; border: 1px solid #31564f; border-radius: 4px; background: #31564f; color: #fff; cursor: pointer; font-size: var(--basemap-select-font-size); }
+#tools-panel .danger-button { border-color: #a82020; background: #a82020; }
+#tools-panel select, #tools-panel input { min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; }
+#tools-dock .hint { font-size: var(--basemap-select-font-size); }
+@media (max-width: 700px) { #tools-dock { left: 50%; max-width: calc(100% - 28px); } }
+/* 対話モード中の1行チップ: テキスト部分はクリックスルー、ボタンのみ操作可 */
+#tools-chip { margin-top: 6px; display: flex; align-items: center; gap: 6px; max-width: min(420px, 92vw); padding: 4px 6px 4px 10px; border: 1px solid #d9e4e9; border-radius: 999px; background: rgba(255,255,255,.85); box-shadow: 0 8px 18px rgba(10,20,40,.16); pointer-events: none; box-sizing: border-box; }
+#tools-chip[hidden] { display: none; }
+#tools-chip .chip-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #31564f; }
+#tools-chip.running .chip-dot { background: #e07b00; animation: tools-chip-pulse 1.2s ease-in-out infinite; }
+@keyframes tools-chip-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+#tools-chip-label { flex: 0 0 auto; font-weight: 700; font-size: 12px; color: #31564f; white-space: nowrap; }
+#tools-chip-result { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #1d2b35; }
+#tools-chip button { pointer-events: auto; flex: 0 0 24px; min-width: 24px; min-height: 24px; padding: 0; border: 1px solid rgba(49,86,79,.35); border-radius: 50%; background: rgba(255,255,255,.8); color: #31564f; font-size: 12px; line-height: 1; cursor: pointer; }
+#tools-chip button:hover { background: rgba(49,86,79,.14); }
+/* collapsed 状態: バーごと非表示（再表示はレイヤパネルの #tools-open） */
+#tools-dock.collapsed #tools-bar { display: none; }
 #tools-panel .tool-btnrow { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 3px; }
 #tools-panel .tool-btnrow button { flex: 0 0 auto; }
 #tools-panel .tool-btnrow button.tool-on { border-color: #31564f; background: #31564f; color: #fff; }

@@ -4,6 +4,13 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.20.0] - 2026-11-11
+
+### Added
+
+- **CDN/ホスト版 → アプリ版ハンドオフ（🖥「アプリで開く」ボタン）** — ベースマップバー（🌐 Google Earth の左）に追加。geosuite-hub(8514) 到達時は `POST /canvas/open` で `.kasc` を書き出してアプリへ渡す（起動中は `register`+`switchProject`・未起動は exe 起動・未導入はインストーラ案内 — GeoSuite CV ボタンと同一経路）。hub 未導入でアプリ起動中は `?kasc=`/`?project=`+ビューハッシュの URL 引き渡しにフォールバック。リモート `.kasc` の相対参照（`DATA/`・ベアファイル名）は配信元 URL 基準の絶対参照へ書き換えてから送出
+- **`POST /api/projects/import`＋アプリ版の「アプリへ取り込み」** — アプリで `?kasc=`（または外部 URL 記憶）のリモートプロジェクト表示中、🖥 が「取り込み」モードに変わり、絶対参照化した `.kasc` を `projects/imported/<slug>/` へ書き出し外部プロジェクト登録して `?project=<id>` へ切替。DATA/ は取り込まずリモート URL を参照する軽い取り込み（i18n `app.openInApp`/`app.importRemote` 8言語）
+
 ## [6.19.1] - 2026-11-06
 
 ### Fixed

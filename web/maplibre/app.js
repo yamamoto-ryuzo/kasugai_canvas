@@ -1014,7 +1014,7 @@ function findInsertBeforeId(index) {
   return undefined;
 }
 
-// 地図上部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
+// 地図下部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
 const progressEl = document.querySelector("#load-progress");
 const progressBar = document.querySelector("#load-progress-bar");
 const progressText = document.querySelector("#load-progress-text");
@@ -1478,7 +1478,6 @@ const toolOverlayOf = srcId => ({
 });
 
 const geoTools = initGeoTools2d({
-  panel: "#pane-tools",
   overlay: toolOverlayOf(TOOL_SRC),
   graticuleOverlay: toolOverlayOf(GRAT_SRC),
   getBounds: () => {

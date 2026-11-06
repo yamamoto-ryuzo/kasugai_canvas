@@ -15,7 +15,7 @@ import {
   startRemoteCommandLoop, isFetchProxyTarget, refreshCliSetupStates,
 } from "../shared/ai-chat.js";
 import {
-  detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature,
+  detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature, backendBaseUrl,
 } from "../shared/backend.js";
 import { buildViewUrl } from "../shared/kasc.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
@@ -29,11 +29,13 @@ import { initGeoTools } from "./geo-tools.js";
 import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
+import { initToolsDockUX } from "../shared/tools-dock-ux.js";
 import { initPrint } from "../shared/print.js";
 import { formatLatLng, parseCoordinateQuery } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
 import { computeGroupStats } from "../shared/attr-stats.js";
 import { loadScriptOnce } from "../shared/lazy-lib.js";
+import { isGeoTiffType, resolveGeoTiffItem, buildGeoTiffOverlayDataSource, createGeoTiffImageryProvider } from "./geotiff-layer.js";
 import { installViewHistory } from "../shared/nav-tools.js";
 import { coordPins as coordPinStore } from "../shared/coord-pins.js";
 
@@ -1068,7 +1070,7 @@ function updateInspectorFromLayerOrder() {
     const separator = line.indexOf(":");
     if (separator < 0) return;
     const layerType = line.slice(0, separator).toLowerCase().trim();
-    if (["xyz", "3dtiles", "geojson", "layer", "image", "model"].includes(layerType) || vectorDecoders.has(layerType)) layerLineIndices.push(index);
+    if (["xyz", "3dtiles", "geojson", "layer", "image", "model"].includes(layerType) || isGeoTiffType(layerType) || vectorDecoders.has(layerType)) layerLineIndices.push(index);
   });
   const orderedSourceLines = layerOrder.map(id => layerState.get(id)?.sourceLine).filter(Boolean);
   if (layerLineIndices.length !== orderedSourceLines.length) return;
@@ -2135,6 +2137,8 @@ function collectDrapeProviders() {
       url: selectedBasemap.url,
       attribution: selectedBasemap.attribution,
       maximumLevel: selectedBasemap.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
+      minimumLevel: selectedBasemap.minimumLevel,
+      bbox: selectedBasemap.bbox,
       tileSize: selectedBasemap.tileSize || 256,
       opacity: selectedBasemap.opacity ?? 1.0,
       proxy: selectedBasemap.proxy,
@@ -2147,6 +2151,8 @@ function collectDrapeProviders() {
         url: item.url,
         attribution: item.attribution,
         maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
+        minimumLevel: item.minimumLevel,
+        bbox: item.bbox,
         tileSize: item.tileSize || 256,
         opacity: item.opacity ?? 0.8,
         proxy: item.proxy,
@@ -2241,7 +2247,7 @@ async function buildDrapeCoverCanvas(provider, cov) {
 }
 
 function getDrapeCoverProvider(opts) {
-  const key = `${opts.url}|${opts.tileSize}|${opts.maximumLevel}`;
+  const key = `${opts.url}|${opts.tileSize}|${opts.maximumLevel}|${opts.minimumLevel}|${opts.bbox}`;
   let provider = drapeCoverProviders.get(key);
   if (!provider) {
     provider = createUrlTemplateProvider(opts);
@@ -3316,7 +3322,7 @@ function syncLayerStatusDom(item) {
   el.title = item._loadStatus === "failed" ? (item._loadError || "") : deferred ? t("layer.notLoadedHint") : "";
 }
 
-// 地図上部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
+// 地図下部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
 const progressEl = document.querySelector("#load-progress");
 const progressBar = document.querySelector("#load-progress-bar");
 const progressText = document.querySelector("#load-progress-text");
@@ -3395,8 +3401,7 @@ async function refreshLayersImpl() {
   }
 
   const orderedItems = getOrderedLayerItems();
-  const orderedTileLayers = orderedItems.filter(layer => layer.type === "tile").slice().reverse();
-  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "image" || layer.type === "model" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities" || vectorDecoders.has(layer.type)).slice().reverse();
+  const orderedOtherLayers = orderedItems.filter(layer => layer.type === "3dtiles" || layer.type === "image" || layer.type === "model" || layer.type === "geojson" || layer.type === "layer" || layer.type === "entities" || isGeoTiffType(layer.type) || vectorDecoders.has(layer.type)).slice().reverse();
 
   // 読込対象(表示中・データ取得が発生するレイヤー)。entities はプラグイン所有で
   // ここでは読み込まないため除外する。進捗ピルと行ステータスの母数
@@ -3451,6 +3456,8 @@ async function refreshLayersImpl() {
         url: selectedBasemap.url,
         attribution: selectedBasemap.attribution,
         maximumLevel: selectedBasemap.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
+        minimumLevel: selectedBasemap.minimumLevel,
+        bbox: selectedBasemap.bbox,
         tileSize: selectedBasemap.tileSize || 256,
       });
       basemapImageryLayer = new Cesium.ImageryLayer(provider, { alpha: (selectedBasemap.opacity ?? 1.0) * basemapOpacityFactor });
@@ -3461,11 +3468,45 @@ async function refreshLayersImpl() {
     }
   }
 
-  // Globe 表面の XYZ
-  for (const item of orderedTileLayers) {
+  // geotiff: 系レイヤーの TIFF ヘッダを先行して開く（描画経路 mode の判定に
+  // CRS が必要なため。表示中のもののみ・Range Request で数リクエストの軽い処理）
+  const geotiffHeaderItems = orderedOtherLayers.filter(item => item.visible && isGeoTiffType(item.type));
+  if (geotiffHeaderItems.length) {
+    await Promise.all(geotiffHeaderItems.map(async item => {
+      item._gtError = null;
+      try {
+        await resolveGeoTiffItem(item, proxyFetchUrl(item.url, item.proxy));
+      } catch (error) {
+        item._gtError = error;
+      }
+    }));
+  }
+
+  // Globe 表面の XYZ（geotiff の mode=tiles は ImageryLayer として同じスタックに混ぜ、
+  // .kasc の記述順を再現する）
+  const orderedImageryLayers = orderedItems
+    .filter(layer => layer.type === "tile" || (isGeoTiffType(layer.type) && layer._gt?.mode === "tiles"))
+    .slice().reverse();
+  for (const item of orderedImageryLayers) {
     if (!item.visible) continue;
     // XYZ→DEM が OFF なら globe の imagery には載せない(3D Tiles へのドレープだけ残る)
     if (!drapeLayers.dem.xyz) continue;
+    if (isGeoTiffType(item.type)) {
+      // geotiff mode=tiles: COG の部分読みタイルプロバイダ
+      try {
+        const provider = createGeoTiffImageryProvider(Cesium, item, item._gt);
+        const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: (item.opacity ?? 1) * layerOpacityFactor });
+        imageryLayer._baseAlpha = item.opacity ?? 1;
+        viewer.imageryLayers.add(imageryLayer);
+        layerRuntimeTargets.set(item.id, imageryLayer);
+        item._loaded = true;
+        if (loadTargets.has(item)) layerOk(item);
+      } catch (error) {
+        console.warn("geotiff タイルレイヤーの作成に失敗しました:", item.url, error);
+        if (loadTargets.has(item)) layerFail(item, error);
+      }
+      continue;
+    }
     try {
       const provider = createUrlTemplateProvider({
         url: item.url,
@@ -3492,7 +3533,7 @@ async function refreshLayersImpl() {
     // 読込対象の行にスピナーを出す(非表示・entities は対象外)
     const loadTarget = loadTargets.has(item);
     if (loadTarget) { item._loadStatus = "loading"; item._loadError = ""; syncLayerStatusDom(item); }
-    if (!item.visible && (item.type === "3dtiles" || item.type === "image" || item.type === "model")) continue;
+    if (!item.visible && (item.type === "3dtiles" || item.type === "image" || item.type === "model" || isGeoTiffType(item.type))) continue;
     if (item.type === "3dtiles") {
       try {
         const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(withGoogleTileKey(item.url), item.proxy), getCesiumTilesetOptions());
@@ -3516,10 +3557,18 @@ async function refreshLayersImpl() {
       // ロード済みレイヤーから順に検索索引・選択肢を更新する
       buildVectorSearchIndex();
       updateVectorSearchUI();
-    } else if (item.type === "image" || item.type === "model") {
-      // 画像オーバーレイ / 単体3Dモデル。いずれも1 entity の CustomDataSource
-      try {
-        const ds = item.type === "image" ? buildImageOverlayDataSource(item) : buildModelDataSource(item);
+    } else if (item.type === "image" || item.type === "model" || isGeoTiffType(item.type)) {
+      // 画像オーバーレイ / 単体3Dモデル / geotiff(mode=overlay)。
+      // geotiff の mode=tiles は ImageryLayer として XYZ のループで載せ済み
+      if (isGeoTiffType(item.type) && item._gt?.mode === "tiles") {
+        if (loadTarget && item._loadStatus === "loading") layerOk(item);
+      } else try {
+        if (isGeoTiffType(item.type) && item._gtError) throw item._gtError;
+        const ds = item.type === "image"
+          ? buildImageOverlayDataSource(item)
+          : (item.type === "model"
+              ? buildModelDataSource(item)
+              : await buildGeoTiffOverlayDataSource(Cesium, item, proxyFetchUrl(item.url, item.proxy)));
         ds.show = item.visible;
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
@@ -5140,7 +5189,7 @@ function applyInspector(text) {
         // parts[2] は出典スロットだが、出典無しで maxZoom= 等の
         // オプションキーが来る行もあるため、認識できる key=value は
         // 出典ではなくオプションとして解釈する
-        const baseOptKeyRe = /^(tileSize|maximumLevel|maxZoom|opacity|proxy)\s*=/i;
+        const baseOptKeyRe = /^(tileSize|maximumLevel|maxZoom|minimumLevel|minZoom|opacity|proxy|bbox|bounds|extent)\s*=/i;
         let attribution = "";
         for (const part of parts.slice(2)) {
           if (/^(on|off|true|false)$/i.test(part)) continue;
@@ -5151,8 +5200,13 @@ function applyInspector(text) {
           const number = Number(raw);
           if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
           if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
+          if ((key === "minimumLevel" || key === "minZoom") && Number.isInteger(number) && number >= 0) options.minimumLevel = number;
           if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
           if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
+          if (key === "bbox" || key === "bounds" || key === "extent") {
+            const nums = raw.split(",").map(v => Number(v.trim()));
+            if (nums.length === 4 && nums.every(Number.isFinite)) options.bbox = nums;
+          }
         }
         parsedBasemaps.push({
           id: `inspector-base-${parsedBasemaps.length}`,
@@ -5163,6 +5217,8 @@ function applyInspector(text) {
           opacity: options.opacity ?? 1.0,
           proxy: options.proxy !== false,
           ...(options.maximumLevel === undefined ? {} : { maximumLevel: options.maximumLevel }),
+          ...(options.minimumLevel === undefined ? {} : { minimumLevel: options.minimumLevel }),
+          ...(options.bbox === undefined ? {} : { bbox: options.bbox }),
         });
       }
     }
@@ -5513,6 +5569,56 @@ function applyInspector(text) {
           const pts = raw.split(";").map(p => p.split(",").map(v => Number(v.trim())));
           if (pts.length >= 3 && pts.every(p => p.length === 2 && p.every(Number.isFinite))) item.imageCorners = pts;
         } else if (key === "opacity" && Number.isFinite(number)) item.opacity = Math.max(0, Math.min(1, number));
+        else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
+      });
+      layers.push(item);
+      layerState.set(id, item);
+      layerOrder.push(id);
+    }
+
+    // geotiff:(cog:/tiff:) タイトル | GeoTIFF/COG URL | 出典 | off / opacity=0-1 /
+    //   mode=auto|tiles|overlay / maxsize=px(overlay出力上限・既定2048) /
+    //   band=n|bands=r,g,b(1始まり) / resample=nearest|bilinear / proxy=on /
+    //   bbox=W,S,E,N または corners=（ジオリファレンス無し画像の配置指定）
+    // geotiff.js でクライアント側デコードする。mode=tiles は EPSG:4326/3857 の
+    // 軸平行ラスタをタイル分割描画（COG のオーバービュー+Range Request で
+    // ズーム連動の部分読み）。mode=overlay は単一キャンバスの地表クランプ
+    // （image: 行と同じ経路・地形/3D Tiles ドレープ可・任意座標系対応）。
+    // 既定 auto はタイル可能なラスタなら tiles、それ以外は overlay
+    if (isGeoTiffType(type)) {
+      const parts = value.split("|").map(part => part.trim());
+      const title = parts[0];
+      const url = resolveProjectUrl(parts[1]);
+      const off = parts.some(part => /^(off|false)$/i.test(part));
+      if (!title || !url) return;
+      const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parseAttributionField(parts[2]), group, exclusiveGroup, opacity: 1, proxy: false };
+      parts.slice(2).forEach(part => {
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        const key = part.slice(0, eq).trim().toLowerCase();
+        const raw = part.slice(eq + 1).trim();
+        const number = Number(raw);
+        if (key === "opacity" && Number.isFinite(number)) item.opacity = Math.max(0, Math.min(1, number));
+        else if (key === "mode" && /^(auto|tiles|tile|overlay|drape)$/i.test(raw)) {
+          item.gtMode = /^(overlay|drape)$/i.test(raw) ? "overlay" : (/^tile/i.test(raw) ? "tiles" : "auto");
+        }
+        else if ((key === "maxsize" || key === "maxpixels" || key === "size") && Number.isInteger(number) && number > 0) item.maxSize = number;
+        else if ((key === "band" || key === "bands") && raw) {
+          const list = raw.split(",").map(v => Number(v.trim())).filter(v => Number.isInteger(v) && v > 0);
+          if (list.length) item.bands = list;
+        }
+        else if (key === "resample" && /^(nearest|bilinear)$/i.test(raw)) item.resample = raw.toLowerCase();
+        else if (key === "proxy") item.proxy = /^(on|true|auto)$/i.test(raw);
+        else if ((key === "bbox" || key === "bounds" || key === "extent") && raw) {
+          const nums = raw.split(",").map(v => Number(v.trim()));
+          if (nums.length === 4 && nums.every(Number.isFinite)) item.imageBbox = nums;
+        }
+        else if ((key === "corners" || key === "quad") && raw) {
+          const pts = raw.split(";").map(p => p.split(",").map(v => Number(v.trim())));
+          if (pts.length >= 3 && pts.every(p => p.length === 2 && p.every(Number.isFinite))) item.imageCorners = pts;
+        }
         else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
       });
       layers.push(item);
@@ -7973,7 +8079,7 @@ function setupEvents() {
       try {
         await saveToDataDir(file.name, file);
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv", tif: "geotiff", tiff: "geotiff", gtif: "geotiff" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           window.kasugaiApi.addLayer(title, `DATA/${file.name}`, { type });
@@ -8029,6 +8135,99 @@ function setupEvents() {
     await navigator.clipboard?.writeText(window.location.href);
     shareCopyBtn.textContent = "✓";
     setTimeout(() => { shareCopyBtn.textContent = "🔗"; }, 1500);
+  });
+
+  // .kasc 行の相対参照(DATA/・./・../・ベアファイル名)を baseUrl 基準の
+  // 絶対 URL へ書き換える。CDN→アプリの hub 書き出し用（参照解決基準が
+  // 配信元 URL からローカル保存先へ変わるため）。URL スロットは `type:`
+  // 直後の先頭2パートのみ対象とし、key=value・scheme 付きは触らない
+  const absolutizeKascRefs = (text, baseUrl) => {
+    const fileExt = "(geojson|json|fgb|flatgeobuf|parquet|gpkg|zip|kml|kmz|csv|tsv|tif|tiff|png|jpe?g|webp|duckdb|qml|xml|html?|glb|gltf|b3dm|3tz|xyz|mvt|pbf|bin)";
+    const refRe = new RegExp("^(\\.{1,2}/|DATA/|[^|\\s<>\"']+\\." + fileExt.slice(1, -1) + ")$", "i");
+    const isRef = (p) => !!p && !/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[a-z0-9_-]+=/i.test(p) && refRe.test(p);
+    return String(text).split(/\r?\n/).map((line) => {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) return line;
+      const ci = t.indexOf(":");
+      if (ci < 0) return line;
+      const parts = t.slice(ci + 1).split("|");
+      for (let i = 0; i < Math.min(parts.length, 2); i++) {
+        const p = parts[i].trim();
+        if (isRef(p)) {
+          parts[i] = parts[i].replace(p, new URL(p, baseUrl).href);
+          break;
+        }
+      }
+      return t.slice(0, ci + 1) + parts.join("|");
+    }).join("\n");
+  };
+
+  // CDN ホスト版 → アプリ版ハンドオフ（geosuite-hub /canvas/open 経由・
+  // GeoSuite CV ボタンと同一経路）。hub 到達時は .kasc を書き出して
+  // アプリへ渡す（起動中は register+switchProject・未起動は exe 起動・
+  // 未導入は not_installed+インストーラURL）。hub 未導入時は起動中
+  // アプリへの ?kasc=/?project= + ビューハッシュ引き渡しにフォールバック
+  const openInAppBtn = document.querySelector("#open-in-app");
+  openInAppBtn?.addEventListener("click", async () => {
+    const setGlyph = (g) => { openInAppBtn.textContent = g; setTimeout(() => { openInAppBtn.textContent = "🖥"; }, 1500); };
+    const SETUP_URL = "https://raw.githubusercontent.com/yamamoto-ryuzo/kasugai_canvas/main/download/kasugai_canvas_setup.exe";
+    // アプリ版自身: リモートプロジェクト(?kasc=/外部登録)をローカルへ軽い取り込み。
+    // .kasc を絶対参照化して /api/projects/import → projects/imported/<slug>/ +
+    // 外部プロジェクト登録 → プロジェクト一覧へ永続化して切替える
+    if (openInAppBtn.dataset.mode === "import") {
+      try {
+        const share = new URL(window.kasugaiApi.buildShareUrl());
+        const src = share.searchParams.get("kasc")
+          || rememberedKascUrl(share.searchParams.get("project") || "");
+        if (!src) return;
+        const res = await fetch(src, { cache: "no-store" });
+        if (!res.ok) throw new Error(`kasc fetch ${res.status}`);
+        const name = decodeURIComponent(new URL(src).pathname.split("/").pop() || "scene").replace(/\.kasc$/i, "") || "scene";
+        const kasc = absolutizeKascRefs(await res.text(), new URL("./", src).href);
+        const out = await fetch(backendUrl("/api/projects/import"), {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, kasc }),
+        }).then(r => r.json().catch(() => null));
+        if (!out || !out.ok || !out.id) throw new Error((out && out.error) || "import failed");
+        window.location.href = `?project=${encodeURIComponent(out.id)}${location.hash}`;
+      } catch (e) { setGlyph("⚠"); }
+      return;
+    }
+    const hubBase = "http://127.0.0.1:8514";
+    let hubOk = false;
+    try {
+      hubOk = await fetch(`${hubBase}/health`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
+        .then(r => (r.ok ? r.json() : null)).then(d => !!(d && d.hub)).catch(() => false);
+    } catch (e) {}
+    if (hubOk) {
+      try {
+        const share = new URL(window.kasugaiApi.buildShareUrl());
+        const kascUrl = share.searchParams.get("kasc")
+          || `${projectsBaseUrl(share.searchParams.get("project") || "default")}kasugai_canvas.kasc`;
+        const res = await fetch(kascUrl, { cache: "no-store" });
+        if (!res.ok) throw new Error(`kasc fetch ${res.status}`);
+        const name = decodeURIComponent(new URL(kascUrl).pathname.split("/").pop() || "scene").replace(/\.kasc$/i, "") || "scene";
+        const kasc = absolutizeKascRefs(await res.text(), new URL("./", kascUrl).href);
+        const out = await fetch(`${hubBase}/canvas/open`, {
+          method: "POST", headers: { "Content-Type": "text/plain" },
+          body: JSON.stringify({ name, kasc }),
+        }).then(r => r.json().catch(() => null));
+        if (out && out.status === "opened") { setGlyph("✓"); return; }
+        if (out && out.status === "not_installed") {
+          window.open(out.download || SETUP_URL, "_blank");
+          setGlyph("⬇"); return;
+        }
+      } catch (e) { /* hub 旧版・失敗時は下のフォールバックへ */ }
+    }
+    const local = backendBaseUrl();
+    if (local) {
+      const share = new URL(window.kasugaiApi.buildShareUrl());
+      window.open(`${local}/cesium/${share.search}${share.hash}`, "_blank");
+      setGlyph("✓");
+    } else {
+      window.open(SETUP_URL, "_blank");
+      setGlyph("⬇");
+    }
   });
 
   // スクリーンショット: 地表タイルの読み込みを待ってから render→toBlob で PNG 保存
@@ -8160,13 +8359,37 @@ function setupEvents() {
 
   document.querySelectorAll(".settings-tab").forEach(tab => {
     tab.addEventListener("click", () => {
-      const scope = tab.closest(".plugin-panel") || document;
+      const scope = tab.closest(".plugin-panel, #tools-dock") || document;
       scope.querySelectorAll(".settings-tab").forEach(item => item.classList.toggle("active", item === tab));
       scope.querySelectorAll(".settings-subpanel").forEach(panel => panel.classList.toggle("active", panel.id === tab.dataset.settingsPanel));
       if (["settings-cloud-panel", "settings-rclone-panel", "settings-drive-panel", "settings-save-panel"].includes(tab.dataset.settingsPanel)) void refreshCloudStatus();
       if (tab.dataset.settingsPanel === "settings-save-panel") void refreshSaveStatus();
     });
   });
+
+  // ---- ツールドック（画面上部中央の横並びバー + ドロップダウン） ----
+  // バーのボタンは .settings-tab なので汎用ハンドラが active 付け替えを先に行う。
+  // ここではドロップダウンの開閉だけを制御し、開いている同じタブの再クリックで畳む
+  const toolsDock = document.querySelector("#tools-dock");
+  if (toolsDock) {
+    const toolsDrop = toolsDock.querySelector("#tools-panel");
+    const toolsBarTabs = [...toolsDock.querySelectorAll("#tools-bar .settings-tab")];
+    const closeToolsDrop = () => {
+      if (toolsDrop) toolsDrop.hidden = true;
+      toolsBarTabs.forEach(item => item.classList.remove("active"));
+    };
+    toolsBarTabs.forEach(tab => {
+      tab.addEventListener("click", () => {
+        if (!toolsDrop) return;
+        if (!toolsDrop.hidden && toolsDrop.dataset.openTab === tab.dataset.settingsPanel) closeToolsDrop();
+        else { toolsDrop.hidden = false; toolsDrop.dataset.openTab = tab.dataset.settingsPanel; }
+      });
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && toolsDrop && !toolsDrop.hidden) closeToolsDrop();
+    });
+    initToolsDockUX(toolsDock);
+  }
 
   // ---- 管理ウィンドウ（⚙ボタンで開くモードレス・フローティングパネル） ----
   const manageWindow = document.querySelector("#manage-window");
@@ -9846,7 +10069,7 @@ async function saveFetchSettings() {
   document.querySelector("#fetch-allow-status").textContent = t("update.settingsSaved");
 }
 
-const defaultConfig = `base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院
+const defaultConfig = `base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47
 3dtiles: 東京都/千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json
 cam:東京駅|35.653108|139.761449|height=2200.6|pitch=-30|heading=348.5`;
 
@@ -10605,7 +10828,7 @@ window.kasugaiApi = {
   // type: geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb(target は URL) / sql(target は SELECT 文)
   addLayer(title, target, { type = "geojson", options = "" } = {}) {
     const input = document.querySelector("#inspector-input");
-    const urlTypes = new Set(["geojson", "layer", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "image", "model"]);
+    const urlTypes = new Set(["geojson", "layer", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "image", "model", "geotiff", "cog", "tiff"]);
     const clean = value => String(value || "").replace(/[\r\n]+/g, " ").trim();
     title = clean(title); target = clean(target); options = clean(options);
     if (!title || !target || !input) return false;
@@ -10990,6 +11213,23 @@ window.addEventListener("pagehide", () => {
   // コマンドをロングポーリングで受信し、チャットツールと同じ経路(executeChatTool)で実行する。
   // 実行結果は /api/command/results へ返す。破壊的操作はチャット同様確認ダイアログが出る
   startRemoteCommandLoop();
+  // アプリ版自身（同一オリジン＋remoteCommand 経路あり）では「アプリで開く」の
+  // 意味がないため、リモートプロジェクト(?kasc=/外部URL記憶)を開いている時だけ
+  // 「アプリへ取り込み」ボタンへ振り替える。ローカルプロジェクトでは非表示
+  {
+    const openInAppBtn = document.querySelector("#open-in-app");
+    if (openInAppBtn && backendBaseUrl() === "" && hasBackendFeature("remoteCommand")) {
+      const cur = new URLSearchParams(location.search);
+      const remote = cur.get("kasc") || rememberedKascUrl(cur.get("project") || "");
+      if (remote) {
+        openInAppBtn.dataset.mode = "import";
+        openInAppBtn.title = t("app.importRemote");
+        openInAppBtn.setAttribute("aria-label", t("app.importRemote"));
+      } else {
+        openInAppBtn.style.display = "none";
+      }
+    }
+  }
   const initialCamera = await resolveInitialCamera();
   // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
   if (hasLastCamera && lastCameraSearch !== initialCameraSource) {

@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.19.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.20.0</span></h1>
       <p>AI ツール仕様 — 内蔵AIが制御できる全92ツールの定義</p>
     </header>
     <main>
@@ -61,7 +61,7 @@
             <tr><td><code>setLayerVisible</code></td><td>name*, visible*</td><td>レイヤー名指定で表示/非表示を切替</td></tr>
             <tr><td><code>setLayerLegendVisible</code></td><td>name*, label*, visible*</td><td>style=(QML) の分類・段階・ルールレンダラを持つレイヤーで、凡例の条件別シンボル単位に表示/非表示を切替。レイヤー行の凡例チェックボックスと同じ操作。label は listLayers の legend で確認</td></tr>
             <tr><td><code>focusLayer</code></td><td>name*</td><td>レイヤー名または ID 指定で全体が収まるようカメラ移動。非表示レイヤーは自動表示してから移動</td></tr>
-            <tr><td><code>addLayer</code></td><td>title*, target*, type, options</td><td>ベクターレイヤーを追加して即適用。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は URL または DATA/ 相対パス（sql は SELECT 文）。options は <code>where=</code>/<code>limit=</code>/<code>format=</code>/<code>bbox=auto</code>/<code>proxy=on</code>/<code>render=primitive</code>/<code>attr=出典</code> 等を | 区切りで指定。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。インスペクター設定に反映されるためユーザー明示時のみ</td></tr>
+            <tr><td><code>addLayer</code></td><td>title*, target*, type, options</td><td>ベクターレイヤーを追加して即適用。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff(cog/tiff)。target は URL または DATA/ 相対パス（sql は SELECT 文）。options は <code>where=</code>/<code>limit=</code>/<code>format=</code>/<code>bbox=auto</code>/<code>proxy=on</code>/<code>render=primitive</code>/<code>attr=出典</code> 等を | 区切りで指定（geotiff 系は <code>mode=</code>/<code>opacity=</code>/<code>maxsize=</code>/<code>bands=</code> も可）。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。インスペクター設定に反映されるためユーザー明示時のみ</td></tr>
             <tr><td><code>addGeoJsonLayer</code></td><td>title*, url*</td><td>GeoJSON レイヤーを URL 指定（DATA/ 相対パスまたは外部 URL）で追加して即適用。http(s) URL は実行前に実在確認され、到達不能なものは拒否される。他形式は <code>addLayer</code></td></tr>
             <tr><td><code>applyInspector</code></td><td>text*</td><td>インスペクターの設定テキスト（.kasc 形式）を登録・適用。新規追加されるデータレイヤー行の http(s) URL は適用前に実在確認され、到達不能なものがあると拒否される。設定全体が上書きされるためユーザー明示時のみ。書式は <a href="inspector.html">.kasc 設定仕様</a></td></tr>
             <tr><td><code>exportInspector</code></td><td>なし</td><td>現在の設定を .kasc ファイルとしてエクスポート（ダウンロード）</td></tr>
@@ -113,7 +113,7 @@
 
       <section>
         <h2>📏 計測・解析（5）</h2>
-        <p>ツールタブの計測・標高断面・見通し判定を座標指定で実行します。いずれも結果を地図上へ描画し、計算値を返します（ブラウザ完結・静的配信でも可）。座標は <code>[経度, 緯度]</code>（度）の配列です。</p>
+        <p>画面上部中央のツールバー（ツールドック・レイヤパネルの🧰ボタンで開閉）の計測・標高断面・見通し判定を座標指定で実行します。いずれも結果を地図上へ描画し、計算値を返します（ブラウザ完結・静的配信でも可）。座標は <code>[経度, 緯度]</code>（度）の配列です。</p>
         <table>
           <thead><tr><th>ツール</th><th>引数（＊=必須）</th><th>説明</th></tr></thead>
           <tbody>

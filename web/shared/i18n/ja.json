@@ -704,6 +704,7 @@
   "display.graticule": "緯度経度グリッド",
   "display.minimap": " ミニマップを表示",
   "print.open": "印刷",
+  "print.panelHint": "地図画像にタイトル・凡例・縮尺バー等を合成して印刷/PNG出力します。",
   "print.dialogTitle": "印刷",
   "print.fieldTitle": "タイトル",
   "print.fieldPaper": "用紙",
@@ -734,11 +735,14 @@
   "coordpick": {
     "clear": "クリア"
   },
+  "tools.open": "ツール",
   "tools.measure": "計測",
   "tools.distance": "距離",
   "tools.area": "面積",
   "tools.bearing": "方位",
   "tools.clear": "クリア",
+  "tools.chipOpen": "ツールパネルを開く",
+  "tools.chipClose": "閉じる",
   "tools.measureHint": "左クリックで頂点を追加、ダブルクリックで確定します。",
   "tools.distanceTotal": "総延長 {value}",
   "tools.points": "{count} 点",
@@ -850,5 +854,7 @@
   "tools.drawLayerTitle": "注記",
   "tools.exportFail": "エクスポートに失敗しました。",
   "tools.exportSkipped": "{count} 件スキップ",
-  "tools.exportHintFormats": "CSV/TSV は WKT 列付き、Shapefile はジオメトリ種別ごとに分割して ZIP にまとめます。"
+  "tools.exportHintFormats": "CSV/TSV は WKT 列付き、Shapefile はジオメトリ種別ごとに分割して ZIP にまとめます。",
+  "app.openInApp": "アプリで開く",
+  "app.importRemote": "アプリへ取り込み"
 }

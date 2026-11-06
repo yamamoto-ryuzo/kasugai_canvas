@@ -565,7 +565,22 @@ export function createPlayerApi(hooks) {
     async switchProject(projectId) {
       const sel = document.querySelector("#project-select");
       const exists = [...(sel?.options || [])].some(o => o.value === projectId);
-      if (!exists) return false;
+      if (!exists) {
+        // /api/projects/register 等で起動後に登録された外部プロジェクトは
+        // 選択肢未反映のため、直接ロードを試みてから選択肢へ追加する
+        try { await hooks.loadProject(projectId); } catch (_) { return false; }
+        if (sel) {
+          if (![...sel.options].some(o => o.value === projectId)) {
+            const opt = document.createElement("option");
+            opt.value = projectId;
+            opt.textContent = projectId;
+            sel.append(opt);
+          }
+          sel.value = projectId;
+        }
+        this.emit("project-changed", { projectId });
+        return true;
+      }
       await hooks.loadProject(projectId);
       if (sel) sel.value = projectId;
       this.emit("project-changed", { projectId });

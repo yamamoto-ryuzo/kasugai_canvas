@@ -704,6 +704,7 @@
   "display.graticule": "Lat/Lon grid",
   "display.minimap": " Show minimap",
   "print.open": "Print",
+  "print.panelHint": "Compose the map image with title, legend, scale bar, etc., then print or save as PNG.",
   "print.dialogTitle": "Print",
   "print.fieldTitle": "Title",
   "print.fieldPaper": "Paper",
@@ -734,11 +735,14 @@
   "coordpick": {
     "clear": "Clear"
   },
+  "tools.open": "Tools",
   "tools.measure": "Measure",
   "tools.distance": "Distance",
   "tools.area": "Area",
   "tools.bearing": "Bearing",
   "tools.clear": "Clear",
+  "tools.chipOpen": "Open tool panel",
+  "tools.chipClose": "Close",
   "tools.measureHint": "Left-click to add vertices, double-click to finish.",
   "tools.distanceTotal": "Total {value}",
   "tools.points": "{count} pts",
@@ -850,5 +854,7 @@
   "tools.drawLayerTitle": "Annotations",
   "tools.exportFail": "Export failed.",
   "tools.exportSkipped": "{count} skipped",
-  "tools.exportHintFormats": "CSV/TSV include a WKT column; Shapefile is split per geometry type into a ZIP."
+  "tools.exportHintFormats": "CSV/TSV include a WKT column; Shapefile is split per geometry type into a ZIP.",
+  "app.openInApp": "Open in Canvas app",
+  "app.importRemote": "Import into Canvas app"
 }

@@ -188,7 +188,7 @@
   #basemap-toggle { width: 24px; min-width: 24px; min-height: 24px; padding: 1px 4px;
     border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f;
     cursor: pointer; font-size: 17px; line-height: 1; }
-  #load-progress { position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  #load-progress { position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
     z-index: 1005; display: flex; align-items: center; gap: 8px; padding: 5px 12px;
     background: rgba(255,255,255,.95); border-radius: 14px; font-size: 12px;
     box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 70vw; }
@@ -225,6 +225,7 @@
   <div class="project-row">
     <select id="project-select"></select>
     <button id="share-copy" type="button" title="現在位置URLをコピー">🔗</button>
+    <button id="tools-open" type="button" title="ツール" aria-label="ツール">🧰</button>
   </div>
   <button id="globe-back" type="button" hidden>← 2D地図に戻る（Globe表示中）</button>
   <div id="tabs">
@@ -232,7 +233,6 @@
     <button class="tab" data-tab="legend">凡例</button>
     <button class="tab" data-tab="search">検索</button>
     <button class="tab" data-tab="attr">属性</button>
-    <button class="tab" data-tab="tools">ツール</button>
     <button class="tab" data-tab="camera">カメラ</button>
     <button class="tab" data-tab="info">情報</button>
   </div>
@@ -252,7 +252,6 @@
     <button id="attr-widget-open" type="button" style="width:100%;margin-bottom:3px;padding:4px;border:1px solid #ccc;border-radius:4px;background:#f4f6f8;cursor:pointer;">選択中のレイヤ属性一覧</button>
     <div id="attr-content">地物を選択すると属性を表示します。</div>
   </div>
-  <div class="tab-pane" id="pane-tools" hidden></div>
   <div class="tab-pane" id="pane-camera" hidden>
     <div id="cams"></div>
     <div class="cams-io" style="margin-top:3px;display:flex;gap:6px;">

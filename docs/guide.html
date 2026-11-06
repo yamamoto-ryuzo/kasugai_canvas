@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.19.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.20.0</span></h1>
       <p>【アプリ】ローカルアプリ（kasugai_canvas.exe）— フル機能版のインストールと使い方</p>
     </header>
     <main>
@@ -138,7 +138,7 @@ python run.py --release  # リリース版を起動</code></pre>
         <div class="url-box">
           <h3>インスペクター設定</h3>
           <pre><code>xyz: OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png
-base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | max=18
+base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47
 cam: 東京駅 | 35.653108 | 139.761449 | h=2200.6 | p=-30
 info: https://example.com/project-info.html</code></pre>
           <p>1 行 <code>種類: 値</code> 形式でレイヤー、ベースマップ、カメラ、Info、凡例等を記述します。完全な書式・オプション・ローカルファイル追加手順は <a href="inspector.html">.kasc 設定仕様</a> を参照してください。</p>

@@ -648,6 +648,7 @@
   "display.graticule": "Grade lat/lon",
   "display.minimap": " Mostrar minimapa",
   "print.open": "Imprimir",
+  "print.panelHint": "Componha a imagem do mapa com título, legenda, barra de escala, etc., e imprima ou salve como PNG.",
   "print.dialogTitle": "Imprimir",
   "print.fieldTitle": "Título",
   "print.fieldPaper": "Papel",
@@ -678,11 +679,14 @@
   "coordpick": {
     "clear": "Limpar"
   },
+  "tools.open": "Ferramentas",
   "tools.measure": "Medição",
   "tools.distance": "Distância",
   "tools.area": "Área",
   "tools.bearing": "Rumo",
   "tools.clear": "Limpar",
+  "tools.chipOpen": "Abrir painel de ferramentas",
+  "tools.chipClose": "Fechar",
   "tools.measureHint": "Clique esquerdo para adicionar vértices, duplo clique para concluir.",
   "tools.distanceTotal": "Total {value}",
   "tools.points": "{count} pts",
@@ -850,5 +854,7 @@
   "instr.badKind": "kind must be \"agents\" or \"skills\"",
   "instr.notFound": "Instruction not found: {id}",
   "instr.confirmDelete": "Delete instruction \"{id}\"?",
-  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?"
+  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?",
+  "app.openInApp": "Abrir no app Canvas",
+  "app.importRemote": "Importar para o app Canvas"
 }

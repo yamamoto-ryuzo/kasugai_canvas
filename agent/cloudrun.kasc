@@ -1,7 +1,7 @@
 base: ベースマップ透明 | transparent
 base: OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png | <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | maxZoom=19
 base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
-base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18
+base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47
 3dtiles: Google Photorealistic 3D Tiles | https://tile.googleapis.com/v1/3dtiles/root.json | on
 3dtiles: 東京都/千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json | off
 geojson: ローカルサンプル | DATA/sample.geojson | off

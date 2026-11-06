@@ -1253,7 +1253,6 @@ function navaraToolUpdate(fc) {
   }
 }
 const geoTools = initGeoTools2d({
-  panel: "#pane-tools",
   sections: { measure: false, spatial: false, draw: false, profile: false, los: false, export: true, general: false },
   overlay: { update: navaraToolUpdate },
   graticuleOverlay: { update: () => {} },

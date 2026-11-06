@@ -283,6 +283,7 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
 ### 経路の分類
 
 - **ネイティブ経路**: `3dtiles:` / `geojson:` / `xyz:` など CesiumJS が直接読める形式
+- **ラスタ経路**: `geotiff:` / `cog:` / `tiff:`（実装済み・Cesium のみ。**`web/cesium/geotiff-layer.js`** に集約。geotiff.js を CDN から遅延ロードしてブラウザ内デコード。`mode=auto`（既定）は EPSG:4326/3857 の軸平行ラスタをカスタム ImageryProvider でタイル分割描画（COG オーバービュー+Range Request のズーム連動部分読み・XYZ と同一 imagery スタックに .kasc 順で挿入）、それ以外は単一キャンバスの地表クランプ entity（`image:` と同じ経路・地形/3D Tiles ドレープ可・回転画像は4隅再投影 quad）。非4326/3857 の CRS は proj4+epsg.io 定義で四隅を再投影。`band=`/`bands=`・`maxsize=`・`resample=`・`proxy=on`・`opacity=`、ジオリファレンス無しは `bbox=`/`corners=` で配置。非uint8 ラスタは min-max 正規化、GDAL nodata は透明化。他エンジンでは未対応表示）
 - **GeoJSON 正規化経路**: 非対応形式をデコーダーで GeoJSON 化して同じ DataSource 経路に乗せる。デコーダーは `web/cesium/app.js` の **`vectorDecoders` レジストリ**（type→`async (item) => GeoJSON` の Map）に登録する
   - 実装済み: `geoparquet:`（`loadGeoParquetAsGeoJson()`。hyparquet を CDN から遅延ロード、WKB/ネイティブ GEOMETRY 型の両方を GeoJSON ジオメトリに変換。**常に全件読み込み**で絞り込みは持たない。「Parquet をそのまま置くだけで表示」の利便性重視の経路で、中規模までが目安）
   - 実装済み: `flatgeobuf:`（`loadFlatGeobufAsGeoJson()`。flatgeobuf 公式 JS リーダーの geojson サブモジュールを CDN から遅延ロードし、レスポンスボディを ReadableStream のまま `deserialize` で逐次 GeoJSON Feature 化。空間インデックスによる範囲読みは持たず**全件読み込み**だが、全件バッファリングはしない）

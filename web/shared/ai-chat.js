@@ -1941,14 +1941,14 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addLayer",
-      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv。target は duckdb・sql 以外はURLまたは DATA/相対パス、sql は SELECT 文。wfs は options に typename= が必須(version=/maxfeatures=/cql_filter= も指定可)、shp は .zip 一式または .shp+sidecar のURL。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff(cog/tiff)。target は duckdb・sql 以外はURLまたは DATA/相対パス、sql は SELECT 文。wfs は options に typename= が必須(version=/maxfeatures=/cql_filter= も指定可)、shp は .zip 一式または .shp+sidecar のURL。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。geotiff/cog/tiff は GeoTIFF・COG ラスタをオーバーレイ表示する(Cesium エンジンのみ・options で mode=auto|tiles|overlay・opacity=・maxsize= 等)。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
           title: { type: "STRING", description: "レイヤ名" },
           target: { type: "STRING", description: "データのURLまたは DATA/ファイル名(sql: の場合は SELECT 文)" },
-          type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv (省略時 geojson)" },
-          options: { type: "STRING", description: "省略可。wfs: の typename=/version=/maxfeatures=/cql_filter=、duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、attr=出典 等(|区切り)" },
+          type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff/cog/tiff (省略時 geojson)" },
+          options: { type: "STRING", description: "省略可。wfs: の typename=/version=/maxfeatures=/cql_filter=、duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、geotiff: の mode=/opacity=/maxsize=/bands=、attr=出典 等(|区切り)" },
         },
         required: ["title", "target"],
       },
@@ -5189,6 +5189,11 @@ export function startRemoteCommandLoop() {
         const res = await fetch(backendUrl(`/api/command?since=${remoteCommandSince}&wait=25`), { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json().catch(() => ({}));
+        // サーバー再起動でコマンド id が振り直された場合は since を巻き戻す
+        // (巻き戻さないと新 id が常に since 以下となり全コマンドを取りこぼす)
+        if (remoteCommandInitialized && (Number(data?.latest) || 0) < remoteCommandSince) {
+          remoteCommandSince = 0;
+        }
         if (!remoteCommandInitialized) {
           // ページ読込前に滞留したコマンドは実行せず、以降の新規分のみ処理する
           remoteCommandSince = Number(data?.latest) || 0;

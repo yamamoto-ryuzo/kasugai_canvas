@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.19.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.20.0</span></h1>
       <p>V1: GIS 基本機能 — 各機能カードの詳細説明</p>
     </header>
     <main>
@@ -133,7 +133,7 @@
       <p>表示 → 一般タブの「ミニマップを表示」で、画面左下に小さな2Dオーバービュー地図を表示します。現在の表示範囲が赤い矩形で示され、ミニマップ上をクリックするとその地点へ現在の高度・姿勢のまま移動します。タイルは選択中のベースマップ（XYZ テンプレート）を追従し、テンプレートでない場合は地理院淡色地図を表示します。Leaflet は ON にした時点で CDN から遅延ロードするため、未使用時のコストはありません。</p>
 
       <h3>🛠️ ツール（計測・断面・見通し・グリッド・エクスポート）</h3>
-      <p>サイドパネルの「ツール」タブに集約された GIS 解析ツール群です。すべてブラウザ完結・静的配信のみで動作し、オンデマンド動作のため未使用時の描画コストはありません。</p>
+      <p>画面上部中央のツールバー（ツールドック）に集約された GIS 解析ツール群です。レイヤパネルの🧰ボタンで開閉し、未使用時は画面上部に何も表示されません。バーのボタンで各ツールのパネルをドロップダウン表示し、計測・作図などの地図対話モード開始時は自動で畳まれます。すべてブラウザ完結・静的配信のみで動作し、オンデマンド動作のため未使用時の描画コストはありません。</p>
       <p><strong>対応エンジン:</strong> Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps（iframe 内 Leaflet へ描画）で全機能、Navara はエクスポートのみ（地物ピック非対応のため計測・断面・見通しは未提供）。2D エンジンでは共有モジュール（<code>web/shared/geo-tools-2d.js</code>）が同一 UI・同一 API を提供し、標高サンプリングは MapLibre の DEM タイルまたは地理院標高APIを使います。</p>
       <ul>
         <li><strong>計測（距離・面積・方位）</strong> — 左クリックで頂点を追加、ダブルクリックで確定（Esc で中断・クリアボタンで消去）。距離は測地線（EllipsoidGeodesic）で区間ラベルと総延長を表示、面積は接平面シューレース近似＋周囲長、方位は2点の初方位・逆方位・距離を表示します。地形追従クリックのため 3D 表示時も地表値です。</li>
@@ -142,7 +142,7 @@
         <li><strong>作図・注記</strong> — ポイント・ライン・ポリゴン・注記（文字付きマーカー）を描いて名称を付けて保持。「レイヤーへ追加」で一時レイヤー化（表示切替・属性一覧・エクスポート対象）または GeoJSON ファイルへ保存できます。</li>
         <li><strong>見通し判定（LOS）</strong> — 観測点・対象点（各地表からの高さオフセット指定可）を指定すると、160点の地形サンプリングと視線を比較して「可 / 不可（遮蔽点の距離つき）」を判定。視線は可視部=緑・遮蔽部=赤で描画され遮蔽点がマークされます。</li>
         <li><strong>緯度経度グリッド</strong> — 表示 → 一般タブのトグルで緯線・経線と度ラベルをオーバーレイ表示。カメラ範囲に応じた nice-step 間隔で moveEnd 追従します。</li>
-        <li><strong>エクスポート</strong> — ツールタブでベクターレイヤを選び、形式を指定してダウンロード（クエリ系=bbox=auto 等は読み込み済み範囲のみになるため <code>*</code> 印で明示）。形式は <strong>GeoJSON / CSV / TSV / KML / FlatGeobuf / Shapefile</strong>（.zip 同梱）。CSV・TSV はジオメトリを <code>WKT</code> 列として出力する QGIS の CSV エクスポート（GEOMETRY=AS_WKT）互換で、UTF-8 BOM 付き・3D 座標は <code>Z</code> 修飾付きです。Shapefile はジオメトリ種別ごとに分割した .shp/.shx/.dbf/.prj/.cpg を ZIP にまとめます。すべてブラウザ内で生成するため CDN ホスト版でも動作します。属性・値一覧にも CSV / TSV ボタンがあり、検索フィルタ・ソート適用後の全行を UTF-8 BOM 付き（Excel 文字化け対策）・代表点 lon/lat 列付きで出力します。</li>
+        <li><strong>エクスポート</strong> — ツールバーの「エクスポート」でベクターレイヤを選び、形式を指定してダウンロード（クエリ系=bbox=auto 等は読み込み済み範囲のみになるため <code>*</code> 印で明示）。形式は <strong>GeoJSON / CSV / TSV / KML / FlatGeobuf / Shapefile</strong>（.zip 同梱）。CSV・TSV はジオメトリを <code>WKT</code> 列として出力する QGIS の CSV エクスポート（GEOMETRY=AS_WKT）互換で、UTF-8 BOM 付き・3D 座標は <code>Z</code> 修飾付きです。Shapefile はジオメトリ種別ごとに分割した .shp/.shx/.dbf/.prj/.cpg を ZIP にまとめます。すべてブラウザ内で生成するため CDN ホスト版でも動作します。属性・値一覧にも CSV / TSV ボタンがあり、検索フィルタ・ソート適用後の全行を UTF-8 BOM 付き（Excel 文字化け対策）・代表点 lon/lat 列付きで出力します。</li>
       </ul>
       <p>これらは AI からも操作できます。ボタン類は安定 id を持つため <code>controlUi</code> で自動列挙され、地図操作を伴う処理は <code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code>・<code>elevationProfile</code>・<code>lineOfSight</code>・<code>setGraticule</code>・<code>exportLayer</code>・<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code> の専用 API（CHAT_TOOLS 宣言・<code>executeChatTool</code> 配線済み、<a href="../ai-tools.html">AI ツール仕様</a>）で実行できます。</p>
       <figure style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
@@ -156,7 +156,7 @@
       <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の8言語に対応しています。管理（⚙）→ その他 の言語セレクタで即時切替でき、初回はブラウザ言語から自動判定します（未対応言語は英語）。選択は localStorage に保存され、AIチャットの回答言語も UI 言語に追随します。翻訳の基準言語は英語（<code>en.json</code> がフォールバック辞書）です。</p>
 
       <h3>🖨️ 印刷・帳票出力</h3>
-      <p>パネル右上の <strong>🖨 ボタン</strong>で印刷ダイアログを開き、表示中の地図にタイトル・凡例・縮尺バー・方位記号・出典・日付を付けた帳票（A4/A3・縦横・150/300dpi）を生成します。「印刷」はブラウザの印刷ダイアログへ（PDF 保存も可能）、「PNG保存」は合成画像をダウンロードします。QGIS(geo_webview)の HTTP サーバーが検出できた場合のみ「QGIS レイアウトPDF」セクションが表示され、QGIS の印刷レイアウトをそのまま PDF 出力できます（QGIS 側の <code>/layouts</code>・<code>/layout-pdf</code> エンドポイントを利用）。タイルが CORS 未対応で地図画像を取得できない場合は、地図なしの帳票にフォールバックします。</p>
+      <p>ツールドック（レイヤパネルの🧰ボタンで開く）の「エクスポート」にある <strong>印刷 ボタン</strong>で印刷ダイアログを開き、表示中の地図にタイトル・凡例・縮尺バー・方位記号・出典・日付を付けた帳票（A4/A3・縦横・150/300dpi）を生成します。「印刷」はブラウザの印刷ダイアログへ（PDF 保存も可能）、「PNG保存」は合成画像をダウンロードします。QGIS(geo_webview)の HTTP サーバーが検出できた場合のみ「QGIS レイアウトPDF」セクションが表示され、QGIS の印刷レイアウトをそのまま PDF 出力できます（QGIS 側の <code>/layouts</code>・<code>/layout-pdf</code> エンドポイントを利用）。タイルが CORS 未対応で地図画像を取得できない場合は、地図なしの帳票にフォールバックします。</p>
 
     </main>
   </div>

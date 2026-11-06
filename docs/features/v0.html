@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.19.1</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.20.0</span></h1>
       <p>V0: システム基本構成 — バージョン横断の実装詳細</p>
     </header>
     <main>
@@ -515,7 +515,10 @@
       <code>maxZoom</code>）で個別に最大ズームを指定できます。未指定時はデフォルトで
       25 まで取得します。<code>minimumLevel</code>（<code>minZoom</code>）で最小ズーム、
       <code>bbox=西経,南緯,東経,北緯</code> でタイルの存在範囲も指定でき、範囲外への
-      リクエストは発生しません（ローカル配置タイルの範囲限定に有効）。CesiumJS の
+      リクエストは発生しません（ローカル配置タイルの範囲限定に有効）。
+      これらのオプションは <code>xyz:</code>/<code>wms:</code>/<code>wmts:</code>
+      行に加えて <code>base:</code> 行でも有効です（例:
+      <code>minZoom=2 | bbox=122,19,155,47</code>）。CesiumJS の
       <code>UrlTemplateImageryProvider</code> を使って表示します。</p>
       <h3>高さ基準</h3>
       <p>Terrain と 3D Tiles は、高さ基準を揃えなければ数十 m

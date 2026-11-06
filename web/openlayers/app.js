@@ -936,7 +936,7 @@ function maybeLoadEntry(entry) {
   if (entry.item.visible !== false && entry.deferred) void ensureEntryLoaded(entry);
 }
 
-// 地図上部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
+// 地図下部の読込進捗ピル。完了時は「読込完了」を短時間表示して消える
 const progressEl = document.querySelector("#load-progress");
 const progressBar = document.querySelector("#load-progress-bar");
 const progressText = document.querySelector("#load-progress-text");
@@ -1425,7 +1425,6 @@ const viewBounds4326 = () => {
 };
 
 const geoTools = initGeoTools2d({
-  panel: "#pane-tools",
   overlay: olOverlayOf(toolSrc),
   graticuleOverlay: olOverlayOf(gratSrc),
   getBounds: viewBounds4326,

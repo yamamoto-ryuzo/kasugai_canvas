@@ -567,8 +567,7 @@ const toolOverlayDelegate = {
 };
 // gsimaps には表示タブが無いため、ミニマップ/グリッドのトグルはツールパネル内へ注入する
 const geoTools = initGeoTools2d({
-  panel: "#pane-tools",
-  sections: { general: true },
+  sections: { general: true, print: false },
   overlay: toolOverlayDelegate,
   graticuleOverlay: toolOverlayDelegate,
   getBounds: () => viewBounds(),

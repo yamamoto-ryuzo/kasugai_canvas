@@ -648,6 +648,7 @@
   "display.graticule": "经纬网格",
   "display.minimap": " 显示小地图",
   "print.open": "打印",
+  "print.panelHint": "将地图图像与标题、图例、比例尺等合成，然后打印或保存为 PNG。",
   "print.dialogTitle": "打印",
   "print.fieldTitle": "标题",
   "print.fieldPaper": "纸张",
@@ -678,11 +679,14 @@
   "coordpick": {
     "clear": "清除"
   },
+  "tools.open": "工具",
   "tools.measure": "测量",
   "tools.distance": "距离",
   "tools.area": "面积",
   "tools.bearing": "方位角",
   "tools.clear": "清除",
+  "tools.chipOpen": "打开工具面板",
+  "tools.chipClose": "关闭",
   "tools.measureHint": "左键单击添加顶点，双击完成。",
   "tools.distanceTotal": "总长 {value}",
   "tools.points": "{count} 点",
@@ -850,5 +854,7 @@
   "instr.badKind": "kind must be \"agents\" or \"skills\"",
   "instr.notFound": "Instruction not found: {id}",
   "instr.confirmDelete": "Delete instruction \"{id}\"?",
-  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?"
+  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?",
+  "app.openInApp": "在 Canvas 应用中打开",
+  "app.importRemote": "导入到 Canvas 应用"
 }

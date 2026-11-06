@@ -4741,6 +4741,46 @@ async fn register_project(
     })))
 }
 
+// POST /api/projects/import {name?, kasc} — リモートプロジェクトの軽い取り込み。
+// .kasc 本文を projects/imported/<slug>/ へ書き出し外部プロジェクトとして登録。
+// DATA/ 等の参照は取り込まず .kasc 内の URL をそのまま参照する（呼び出し側で
+// 相対参照は絶対 URL 化して送る前提）。id を返す
+#[derive(Deserialize)]
+struct ImportProjectRequest {
+    name: Option<String>,
+    kasc: String,
+}
+
+async fn import_project(
+    State(state): State<AppState>,
+    Json(request): Json<ImportProjectRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    let err = |code: StatusCode, msg: &str| (code, msg.to_string());
+    let kasc = request.kasc;
+    if kasc.trim().is_empty() {
+        return Err(err(StatusCode::BAD_REQUEST, "kasc が空です"));
+    }
+    if kasc.len() > 16 * 1024 * 1024 {
+        return Err(err(StatusCode::PAYLOAD_TOO_LARGE, "kasc が大きすぎます (>16MB)"));
+    }
+    let slug = sanitize_project_id(request.name.as_deref().unwrap_or("imported"));
+    let dir = state.projects_dir.join("imported").join(&slug);
+    let kasc_path = dir.join(format!("{slug}.kasc"));
+    tokio::fs::create_dir_all(dir.join("DATA"))
+        .await
+        .map_err(internal_error)?;
+    tokio::fs::write(&kasc_path, &kasc)
+        .await
+        .map_err(internal_error)?;
+    let (primary, _members) = register_external_project(&state, &kasc_path)?;
+    Ok(Json(json!({
+        "ok": true,
+        "id": primary.id,
+        "title": primary.title,
+        "path": kasc_path.display().to_string(),
+    })))
+}
+
 // DELETE /api/projects/{id} → 外部プロジェクトの登録解除。
 // レジストリから外すだけでファイル・フォルダは削除しない
 async fn unregister_project(
@@ -5489,6 +5529,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 get(get_fetch_settings).put(put_fetch_settings),
             )
             .route("/api/projects/register", post(register_project))
+            .route(
+                "/api/projects/import",
+                post(import_project).layer(DefaultBodyLimit::max(17 * 1024 * 1024)),
+            )
             .route("/api/projects/{id}", delete(unregister_project))
             .route("/api/cloud/status", get(cloud_status))
             .route("/api/cloud/path", post(cloud_set_path))

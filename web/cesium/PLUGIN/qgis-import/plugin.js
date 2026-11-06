@@ -46,7 +46,7 @@ export async function init(api, manifest) {
     btn.disabled = true;
     setStatus(`QGIS(geo_webview :${port})へエクスポートを要求中…`);
     try {
-      const res = await fetch(`http://localhost:${port}/kasugai`, { cache: "no-store" });
+      const res = await fetch(`http://127.0.0.1:${port}/kasugai`, { cache: "no-store" });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
         setStatus(`取り込み失敗: ${data?.error || res.status}`, true);

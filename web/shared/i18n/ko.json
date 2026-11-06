@@ -648,6 +648,7 @@
   "display.graticule": "위경도 그리드",
   "display.minimap": " 미니맵 표시",
   "print.open": "인쇄",
+  "print.panelHint": "지도 이미지에 제목·범례·축척 막대 등을 합성하여 인쇄하거나 PNG로 저장합니다.",
   "print.dialogTitle": "인쇄",
   "print.fieldTitle": "제목",
   "print.fieldPaper": "용지",
@@ -678,11 +679,14 @@
   "coordpick": {
     "clear": "지우기"
   },
+  "tools.open": "도구",
   "tools.measure": "측정",
   "tools.distance": "거리",
   "tools.area": "면적",
   "tools.bearing": "방위",
   "tools.clear": "지우기",
+  "tools.chipOpen": "도구 패널 열기",
+  "tools.chipClose": "닫기",
   "tools.measureHint": "왼쪽 클릭으로 꼭짓점 추가, 더블 클릭으로 확정합니다.",
   "tools.distanceTotal": "총 연장 {value}",
   "tools.points": "{count}점",
@@ -850,5 +854,7 @@
   "instr.badKind": "kind must be \"agents\" or \"skills\"",
   "instr.notFound": "Instruction not found: {id}",
   "instr.confirmDelete": "Delete instruction \"{id}\"?",
-  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?"
+  "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?",
+  "app.openInApp": "Canvas 앱에서 열기",
+  "app.importRemote": "Canvas 앱으로 가져오기"
 }

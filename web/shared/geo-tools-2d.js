@@ -21,6 +21,7 @@
 // api.handleClick({lng,lat}) / handleDoubleClick() / handleMouseMove({lng,lat}) は
 // エンジンのイベントから呼び、処理したら true を返す（属性ピックを抑止するため）
 import { initI18n, applyI18n, t } from "./i18n.js";
+import { initToolsDockUX, notifyToolMode } from "./tools-dock-ux.js";
 import { exportFeatureCollection } from "./export-formats.js";
 import { collectFields } from "./attr-stats.js";
 import {
@@ -51,10 +52,32 @@ function downloadBlob(text, filename, type) {
 }
 
 const CSS = `
-#tools-panel .settings-tabs { display: flex; flex-wrap: wrap; gap: 3px; margin: 3px 0; padding-bottom: 4px; }
-#tools-panel .settings-tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px 4px 0 0;
-  background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
-#tools-panel .settings-tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
+/* ツールドック: 画面上部中央の横並びツールバー + ドロップダウン式パネル。
+   左パネル(#panel, 幅336px+左14px)を避けて空き領域の中央に置く */
+#tools-dock { position: fixed; z-index: 2000; top: 14px; left: calc(50% + 175px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 380px); user-select: text; }
+body:has(#panel.collapsed) #tools-dock { left: 50%; }
+#tools-bar { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; padding: 6px 8px; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.6); box-shadow: 0 8px 18px rgba(10,20,40,.16); }
+#tools-bar .settings-tab { min-height: 26px; padding: 4px 7px; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
+#tools-bar .settings-tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
+#tools-panel { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px; width: min(400px, 92vw); max-height: min(60vh, 520px); overflow-y: auto; overflow-x: hidden; padding: 10px; border: 1px solid #d9e4e9; border-radius: 8px; background: rgba(255,255,255,.92); box-shadow: 0 12px 30px rgba(10,20,40,.24); box-sizing: border-box; font-size: 16px; }
+#tools-panel button { min-height: 30px; padding: 5px 8px; border: 1px solid #31564f; border-radius: 4px; background: #31564f; color: #fff; cursor: pointer; font-size: 16px; }
+#tools-panel .danger-button { border-color: #a82020; background: #a82020; }
+#tools-panel select, #tools-panel input[type="text"], #tools-panel input[type="number"] { min-height: 30px; padding: 5px 7px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #1d2b35; box-sizing: border-box; }
+@media (max-width: 700px) { #tools-dock { left: 50%; max-width: calc(100vw - 28px); } }
+/* 対話モード中の1行チップ: テキスト部分はクリックスルー、ボタンのみ操作可 */
+#tools-chip { margin-top: 6px; display: flex; align-items: center; gap: 6px; max-width: min(420px, 92vw); padding: 4px 6px 4px 10px; border: 1px solid #d9e4e9; border-radius: 999px; background: rgba(255,255,255,.85); box-shadow: 0 8px 18px rgba(10,20,40,.16); pointer-events: none; box-sizing: border-box; font-size: 13px; }
+#tools-chip[hidden] { display: none; }
+#tools-chip .chip-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #31564f; }
+#tools-chip.running .chip-dot { background: #e07b00; animation: tools-chip-pulse 1.2s ease-in-out infinite; }
+@keyframes tools-chip-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+#tools-chip-label { flex: 0 0 auto; font-weight: 700; font-size: 12px; color: #31564f; white-space: nowrap; }
+#tools-chip-result { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #1d2b35; }
+#tools-chip button { pointer-events: auto; flex: 0 0 24px; min-width: 24px; min-height: 24px; padding: 0; border: 1px solid rgba(49,86,79,.35); border-radius: 50%; background: rgba(255,255,255,.8); color: #31564f; font-size: 12px; line-height: 1; cursor: pointer; }
+#tools-chip button:hover { background: rgba(49,86,79,.14); }
+/* collapsed 状態: バーごと非表示（再表示はレイヤパネルの #tools-open） */
+#tools-dock.collapsed #tools-bar { display: none; }
+#tools-open { padding: 0; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; }
+#tools-open.active { background: rgba(49,86,79,.42) !important; }
 #tools-panel .tool-btnrow { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 3px; }
 #tools-panel .tool-btnrow button { flex: 0 0 auto; }
 #tools-panel .tool-btnrow button.tool-on { border-color: #31564f; background: #31564f; color: #fff; }
@@ -88,8 +111,9 @@ function ensureStyle() {
   document.head.append(el);
 }
 
-// ツールパネルの DOM（cesium/index.html と同じ id 体系・data-i18n キー）
-function injectPanel(panel, sections) {
+// ツールドックの DOM（cesium/index.html と同じ id 体系・data-i18n キー）。
+// 画面上部中央の横並びバー(#tools-bar) + ドロップダウン(#tools-panel) を body に生成する
+function injectDock(sections) {
   const parts = [];
   const nav = [];
   if (sections.measure) nav.push(['tools-measure-panel', 'tools.measure', '計測']);
@@ -98,13 +122,11 @@ function injectPanel(panel, sections) {
   if (sections.profile) nav.push(['tools-profile-panel', 'tools.profile', '標高断面']);
   if (sections.los) nav.push(['tools-los-panel', 'tools.los', '見通し判定']);
   if (sections.export) nav.push(['tools-export-panel', 'tools.export', 'エクスポート']);
+  if (sections.print) nav.push(['tools-print-panel', 'print.open', '印刷']);
   if (sections.general) nav.push(['tools-general-panel', 'display.ariaLabel', '表示']);
-  const firstId = nav.length ? nav[0][0] : null;
-  if (nav.length > 1) {
-    parts.push(`<nav class="settings-tabs" aria-label="Tools">` + nav.map(([id, key, ja], i) =>
-      `<button class="settings-tab${i === 0 ? " active" : ""}" type="button" data-settings-panel="${id}" data-i18n="${key}">${ja}</button>`).join("") + `</nav>`);
-  }
-  const hideAttr = id => id === firstId ? "" : " hidden";
+  const bar = nav.map(([id, key, ja]) =>
+    `<button class="settings-tab" type="button" data-settings-panel="${id}" data-i18n="${key}">${ja}</button>`).join("");
+  const hideAttr = () => " hidden";
   if (sections.measure) parts.push(`
     <section id="tools-measure-panel" class="settings-subpanel"${hideAttr("tools-measure-panel")}>
       <div class="tool-btnrow">
@@ -207,24 +229,45 @@ function injectPanel(panel, sections) {
       <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
       <p class="hint" data-i18n="tools.exportHintFormats">CSV/TSV は WKT 列付き、Shapefile はジオメトリ種別ごとに分割して ZIP にまとめます。</p>
     </section>`);
+  if (sections.print) parts.push(`
+    <section id="tools-print-panel" class="settings-subpanel"${hideAttr("tools-print-panel")}>
+      <p class="hint" data-i18n="print.panelHint">地図画像にタイトル・凡例・縮尺バー等を合成して印刷/PNG出力します。</p>
+      <div class="tool-btnrow">
+        <button id="print-open" type="button" data-i18n="print.open">印刷</button>
+      </div>
+    </section>`);
   if (sections.general) parts.push(`
     <section id="tools-general-panel" class="settings-subpanel"${hideAttr("tools-general-panel")}>
       <label class="set-row"><input id="display-minimap" type="checkbox" /><span data-i18n="display.minimap"> ミニマップを表示</span></label>
       <label class="set-row"><input id="display-graticule" type="checkbox" /><span data-i18n="display.graticule"> 緯度経度グリッド</span></label>
     </section>`);
-  const root = document.createElement("div");
-  root.id = "tools-panel";
-  root.innerHTML = parts.join("");
-  panel.append(root);
-  // サブタブ切替
-  root.querySelector(".settings-tabs")?.addEventListener("click", e => {
+  const dock = document.createElement("div");
+  dock.id = "tools-dock";
+  dock.className = "collapsed"; // 初期は非表示。レイヤパネルの #tools-open で開く
+  dock.innerHTML = `<nav id="tools-bar" class="settings-tabs" aria-label="Tools">${bar}</nav><div id="tools-panel" hidden>${parts.join("")}</div>`;
+  document.body.append(dock);
+  // バーのボタンで対応サブパネルのドロップダウンを開閉。開いている同じボタンの再クリックで畳む
+  const drop = dock.querySelector("#tools-panel");
+  const closeDrop = () => {
+    if (drop) drop.hidden = true;
+    dock.querySelectorAll("[data-settings-panel]").forEach(x => x.classList.remove("active"));
+  };
+  dock.querySelector("#tools-bar")?.addEventListener("click", e => {
     const b = e.target.closest("[data-settings-panel]");
-    if (!b) return;
-    root.querySelectorAll("[data-settings-panel]").forEach(x => x.classList.toggle("active", x === b));
-    root.querySelectorAll(".settings-subpanel").forEach(p => { p.hidden = p.id !== b.dataset.settingsPanel; });
+    if (!b || !drop) return;
+    const id = b.dataset.settingsPanel;
+    const reopen = !drop.hidden && dock.dataset.openTab === id;
+    dock.querySelectorAll("[data-settings-panel]").forEach(x => x.classList.toggle("active", x === b));
+    drop.querySelectorAll(".settings-subpanel").forEach(p => { p.hidden = p.id !== id; });
+    if (reopen) closeDrop();
+    else { drop.hidden = false; dock.dataset.openTab = id; }
   });
-  void initI18n().then(() => applyI18n(root));
-  return root;
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && drop && !drop.hidden) closeDrop();
+  });
+  initToolsDockUX(dock);
+  void initI18n().then(() => applyI18n(dock));
+  return dock;
 }
 
 // Leaflet オーバーレイアダプタ（leaflet エンジン / gsimaps の iframe 地図で共用）。
@@ -279,14 +322,11 @@ export function initGeoTools2d(hooks = {}) {
   const addDataLayer = (title, gj) => hooks.addDataLayer
     ? hooks.addDataLayer(title, gj)
     : (window.kasugaiApi?.addDataLayer ? window.kasugaiApi.addDataLayer(title, gj) : Promise.resolve(null));
-  const DEFAULT_SECTIONS = { measure: true, spatial: true, draw: true, profile: true, los: true, export: true, general: false };
+  const DEFAULT_SECTIONS = { measure: true, spatial: true, draw: true, profile: true, los: true, export: true, print: true, general: false };
   const sections = { ...DEFAULT_SECTIONS, ...(hooks.sections || {}) };
 
-  let panelRoot = null;
-  if (hooks.panel) {
-    const panel = typeof hooks.panel === "string" ? document.querySelector(hooks.panel) : hooks.panel;
-    if (panel) panelRoot = injectPanel(panel, sections);
-  }
+  // ツールドック（画面上部中央の横並びバー + ドロップダウン）を body に生成
+  const panelRoot = injectDock(sections);
 
   // ---------- 対話モード ----------
   // mode: null | "distance" | "area" | "bearing" | "profile" | "los"
@@ -327,6 +367,8 @@ export function initGeoTools2d(hooks = {}) {
     }
     setCursor(mode ? "crosshair" : "");
     setInteractive(!!mode);
+    // ツールドック: 対話モード中はドロップダウンを畳み1行チップへ縮退する
+    notifyToolMode(mode);
   }
 
   // 現在状態 → オーバーレイ FC
@@ -395,7 +437,7 @@ export function initGeoTools2d(hooks = {}) {
   function setMode(next) {
     clearAll();
     mode = next;
-    if (resultEl() && !String(next).startsWith("sel-") && !String(next).startsWith("draw-")) {
+    if (next && resultEl() && !String(next).startsWith("sel-") && !String(next).startsWith("draw-")) {
       resultEl().textContent = t(next === "los" ? "tools.losHint" : "tools.measureHint");
     }
     updateModeButtons();
@@ -1229,7 +1271,10 @@ export function initGeoTools2d(hooks = {}) {
     // radiusMeters のバッファを生成し一時レイヤーとして追加する
     async createBuffer(opts = {}) {
       let geom = null;
-      if (opts.geometry) geom = opts.geometry.type === "Feature" ? opts.geometry.geometry : opts.geometry;
+      const g = opts.geometry?.type === "Feature" ? opts.geometry.geometry : opts.geometry;
+      // GeoJSON geometry でない範囲指定形（{center:[lng,lat]}・{bbox:[w,s,e,n]}）は region として正規化する
+      if (g && !g.type) geom = normalizeRegion({ ...g, radiusMeters: g.radiusMeters ?? opts.radiusMeters });
+      else if (g) geom = g;
       else geom = normalizeRegion(opts.region ?? opts.polygon ?? opts.bbox ?? (opts.center ? opts : null));
       const r = Number(opts.radiusMeters ?? opts.radius ?? 0);
       if (!geom) return { ok: false, reason: "no geometry" };
