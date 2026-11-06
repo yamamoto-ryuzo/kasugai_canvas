@@ -15,6 +15,7 @@ import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
 import { formatLatLng } from "../shared/coords-format.js";
+import { installLocalCrsUI } from "../shared/coords-local.js";
 import { initPrint } from "../shared/print.js";
 import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import { mountSunControls } from "../shared/sun-time.js";
@@ -1212,6 +1213,8 @@ window.addEventListener("popstate", applyUrlView);
 window.addEventListener("hashchange", applyUrlView);
 
 // ---- ナビゲーション共通ツール（shared/nav-tools.js）----
+installLocalCrsUI({ anchor: document.querySelector("#coords-datum") });
+
 initNavTools({
   el: document.getElementById("map"),
   getView: () => ({ lat: lastCam.lat, lng: lastCam.lng, height: lastCam.height, heading: lastCam.heading, pitch: lastCam.pitch }),

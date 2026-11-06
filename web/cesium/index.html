@@ -259,6 +259,7 @@
                     <option value="dms" data-i18n="display.coordsDms">度分秒 (DMS)</option>
                     <option value="utm" data-i18n="display.coordsUtm">UTM</option>
                     <option value="jpx" data-i18n="display.coordsJpx">平面直角座標系</option>
+                    <option value="local" data-i18n="display.coordsLocal">ローカル座標</option>
                   </select>
                   <label class="field-label" for="coords-datum" data-i18n="display.coordsDatum">測地系</label>
                   <select id="coords-datum">
@@ -323,10 +324,19 @@
               <section id="tools-export-panel" class="settings-subpanel">
                 <div class="tool-btnrow">
                   <select id="tool-export-layer"></select>
-                  <button id="tool-export-geojson" type="button">GeoJSON</button>
+                  <select id="tool-export-format">
+                    <option value="geojson">GeoJSON</option>
+                    <option value="csv">CSV (WKT)</option>
+                    <option value="tsv">TSV (WKT)</option>
+                    <option value="kml">KML</option>
+                    <option value="fgb">FlatGeobuf</option>
+                    <option value="shp">Shapefile (.zip)</option>
+                  </select>
+                  <button id="tool-export-run" type="button" data-i18n="tools.export">出力</button>
                 </div>
                 <div id="tool-export-status" class="tool-result" aria-live="polite"></div>
                 <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
+                <p class="hint" data-i18n="tools.exportHintFormats">CSV/TSV は WKT 列付き、Shapefile はジオメトリ種別ごとに分割して ZIP にまとめます。</p>
               </section>
             </section>
             <div id="engines"></div>
@@ -897,6 +907,9 @@
           <input id="vector-attr-widget-search" type="text" placeholder="属性または値で検索" data-i18n-attr="placeholder:vattr.search" />
           <button id="vector-attr-export-csv" type="button" title="表示中の行をCSVで出力" data-i18n-attr="title:vattr.exportCsv">CSV</button>
           <button id="vector-attr-export-tsv" type="button" title="表示中の行をTSVで出力" data-i18n-attr="title:vattr.exportTsv">TSV</button>
+          <button id="vector-attr-widget-stats" type="button" title="属性を集計（GROUP BY）" data-i18n-attr="title:vattr.statsTitle">Σ</button>
+          <select id="vector-attr-widget-group" title="集計キー" data-i18n-attr="title:vattr.statsGroup" hidden></select>
+          <select id="vector-attr-widget-value" title="集計する数値属性" data-i18n-attr="title:vattr.statsValue" hidden></select>
         </div>
         <div class="vector-attr-widget-table-wrap">
           <table class="vector-attr-widget-table">

@@ -339,7 +339,7 @@
     <div class="display-subpane" id="display-effects-panel" hidden>
       <label class="set-row"><input id="nv-photoreal" type="checkbox" checked /> 写実シーン（大気・太陽・空）</label>
       <label class="set-row"><input id="nv-shadow" type="checkbox" /> 影（高負荷）</label>
-      <label class="set-row">座標表示形式 <select id="coords-format"><option value="deg" selected>度 (10進)</option><option value="dms">度分秒 (DMS)</option><option value="utm">UTM</option><option value="jpx">平面直角座標系</option></select></label>
+      <label class="set-row">座標表示形式 <select id="coords-format"><option value="deg" selected>度 (10進)</option><option value="dms">度分秒 (DMS)</option><option value="utm">UTM</option><option value="jpx">平面直角座標系</option><option value="local">ローカル座標</option></select></label>
       <label class="set-row"><span data-i18n="display.coordsDatum">測地系</span> <select id="coords-datum"><option value="jgd2024" selected>JGD2024 / JGD2011</option><option value="jgd2000">JGD2000</option><option value="tokyo" data-i18n="display.datumTokyo">日本測地系</option></select></label>
       <label class="set-row">時刻 <select id="nv-tz" style="width:auto;"></select><input id="nv-datetime" type="datetime-local" step="300" /><input id="nv-hour" type="range" min="0" max="24" step="0.5" value="10" /></label>
       <label class="set-row fx"><span class="fx-name">太陽の強さ</span><input id="nv-sun-int" type="range" min="0" max="4" step="0.05" value="1" /><span class="fx-val" id="nv-sun-int-val">1.00</span></label>

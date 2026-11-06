@@ -1,6 +1,7 @@
 // ---- 座標表示形式（度 / 度分秒 / UTM / 平面直角座標系）全エンジン共通 ----
 // カーソル座標・地点座標ポップアップで共用する。表示形式は #coords-format の値
 import { t } from "./i18n.js";
+import { localCoordsString } from "./coords-local.js";
 
 // i18n 辞書未初期化時はフォールバック文字列を返す
 function _tr(key, fallback) {
@@ -74,8 +75,15 @@ const JPX_ZONES = [
 ];
 const JPX_ZONE_NAMES = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX"];
 
-export function jpxString(latDeg, lonDeg, ell = ELL_GRS80) {
-  // 最も近い原点の系を選ぶ（日本域外では単なる最近傍になる点に注意）
+// 系番号(0-18) → 系の原点・名称
+export function jpxZoneOrigin(zoneIndex) {
+  const i = Math.max(0, Math.min(JPX_ZONES.length - 1, zoneIndex | 0));
+  const [lat0, lon0] = JPX_ZONES[i];
+  return { index: i, name: JPX_ZONE_NAMES[i], lat0, lon0 };
+}
+
+// 最も近い原点の平面直角座標系を返す（日本域外では単なる最近傍になる点に注意）
+export function jpxZoneAt(latDeg, lonDeg) {
   let zone = 0;
   let best = Infinity;
   const cosLat = Math.cos(latDeg * Math.PI / 180);
@@ -83,9 +91,14 @@ export function jpxString(latDeg, lonDeg, ell = ELL_GRS80) {
     const d = (latDeg - la) ** 2 + ((lonDeg - lo) * cosLat) ** 2;
     if (d < best) { best = d; zone = i; }
   });
-  const [la, lo] = JPX_ZONES[zone];
-  const { x, y } = gaussKruger(latDeg, lonDeg, la, lo, 0.9999, ell);
-  return `${JPX_ZONE_NAMES[zone]}系 X=${x.toFixed(3)} Y=${y.toFixed(3)}`;
+  const [lat0, lon0] = JPX_ZONES[zone];
+  return { index: zone, name: JPX_ZONE_NAMES[zone], lat0, lon0 };
+}
+
+export function jpxString(latDeg, lonDeg, ell = ELL_GRS80) {
+  const zone = jpxZoneAt(latDeg, lonDeg);
+  const { x, y } = gaussKruger(latDeg, lonDeg, zone.lat0, zone.lon0, 0.9999, ell);
+  return `${zone.name}系 X=${x.toFixed(3)} Y=${y.toFixed(3)}`;
 }
 
 // ---- 測地系変換（国土地理院 TKY2JGD.par / PatchJGD パラメータ由来）----
@@ -210,6 +223,11 @@ function _toDatum(latDeg, lonDeg, datum) {
 export function formatLatLng(latDeg, lonDeg) {
   const format = document.querySelector("#coords-format")?.value || "deg";
   const datum = document.querySelector("#coords-datum")?.value || "jgd2024";
+  // ローカル座標は対応点定義側が平面直角(JGD)基準で保持するため、
+  // 測地系変換を通さず WGS84≒JGD の生座標から直接計算する
+  if (format === "local") {
+    return `${localCoordsString(latDeg, lonDeg)} ${_tr("coords.refValue", "（参考値）")}`;
+  }
   const conv = _toDatum(latDeg, lonDeg, datum);
   if (conv === "loading") return _tr("coords.datumLoading", "測地系データ読込中…");
   if (conv === "fetcherror") return _tr("coords.datumFetchError", "測地系データなし");

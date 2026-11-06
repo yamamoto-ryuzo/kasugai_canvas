@@ -346,7 +346,7 @@
         var stitle = firstSep < 0 ? '' : value.slice(0, firstSep).trim();
         var query = firstSep < 0 ? '' : value.slice(firstSep + 1).trim();
         var svisible = true;
-        var tailRe = /\|\s*(off|false|attr(?:ibution)?\s*=[^|]*)\s*$/i;
+        var tailRe = /\|\s*(off|false|attr(?:ibution)?\s*=[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+)\s*$/i;
         var tail;
         while ((tail = tailRe.exec(query))) {
           var seg = tail[1].trim();

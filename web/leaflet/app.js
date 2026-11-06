@@ -1,9 +1,13 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay } from "../shared/kasc.js";
+import { loadScriptOnce, loadCssOnce } from "../shared/lazy-lib.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { diagnoseHubLayerError } from "../shared/hub-diag.js";
+import { createMinimap } from "../shared/minimap.js";
+import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -12,6 +16,7 @@ import { matchSessionState, bindSessionState, applySessionState, sessionBootView
 import { initNavTools } from "../shared/nav-tools.js";
 import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
+import { installLocalCrsUI } from "../shared/coords-local.js";
 import { initPrint, compositeDomMap } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
@@ -476,6 +481,23 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     };
   }
   const pane = paneName || newKascPane();
+  if (item.type === "image") {
+    // ジオリファレンス画像オーバーレイ(現場写真・紙図面)。corners= は外接矩形へ正規化
+    const ov = parseImageOverlay(item);
+    let env = ov.bbox;
+    if (!env && ov.corners) {
+      const lons = ov.corners.map(c => c[0]), lats = ov.corners.map(c => c[1]);
+      env = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+    }
+    if (!env) throw new Error("image: bbox= または corners= の指定が必要です");
+    const layer = L.imageOverlay(resolveKascUrl(item.url, baseUrl), [[env[1], env[0]], [env[3], env[2]]], {
+      pane,
+      opacity: Number(item.opts?.opacity ?? 1),
+      attribution: layerAttribution(item) || undefined,
+    });
+    item._env = { west: env[0], south: env[1], east: env[2], north: env[3] };
+    return { layer, styleFn: null, viewportQuery: false, zoomRange: null };
+  }
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = preloaded || await loadVectorItem(item, baseUrl, getViewBounds());
     const geojson = loaded.geojson;
@@ -486,6 +508,56 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
     const styleFn = makeVectorStyleFn(item);
+    // cluster=on / heat=on: 点レイヤーのクラスタ表示・ヒートマップ表示。
+    // どちらも点地物のみを対象とし、点以外のジオメトリは通常の geoJSON で描画する
+    const pointFeatures = geojson.features?.filter(f => /point/i.test(f?.geometry?.type || "")) || [];
+    const otherFeatures = (geojson.features || []).filter(f => !/point/i.test(f?.geometry?.type || ""));
+    const wantCluster = pointFeatures.length && kascOptOn(item.opts?.cluster);
+    const wantHeat = pointFeatures.length && kascOptOn(item.opts?.heat ?? item.opts?.heatmap);
+    if (wantCluster || wantHeat) {
+      const sub = [];
+      if (wantCluster) {
+        try {
+          await Promise.all([
+            loadCssOnce("https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"),
+            loadCssOnce("https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"),
+            loadScriptOnce("https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"),
+          ]);
+          if (L.markerClusterGroup) {
+            const group = L.markerClusterGroup({ pane });
+            for (const f of pointFeatures) {
+              const [lon, lat] = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0];
+              group.addLayer(L.circleMarker([lat, lon], { radius: 5, pane }));
+            }
+            sub.push(group);
+          }
+        } catch (e) { console.warn("markercluster の読み込みに失敗しました:", e); }
+      } else if (wantHeat) {
+        try {
+          await loadScriptOnce("https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js");
+          if (L.heatLayer) {
+            const pts = pointFeatures.map(f => {
+              const c = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0];
+              return [c[1], c[0], 1];
+            });
+            sub.push(L.heatLayer(pts, { radius: 25, blur: 15, maxZoom: 17, pane }));
+          }
+        } catch (e) { console.warn("leaflet.heat の読み込みに失敗しました:", e); }
+      }
+      // プラグイン未ロード時は通常描画へフォールバック、点以外は常に通常描画
+      if (!sub.length || otherFeatures.length) {
+        sub.push(L.geoJSON({ type: "FeatureCollection", features: sub.length ? otherFeatures : geojson.features }, {
+          pane, style: styleFn,
+          pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, pane }),
+        }));
+      }
+      const layer = L.layerGroup(sub, { pane });
+      const env = geojsonExtent(geojson);
+      if (env) item._env = env;
+      item._geojson = geojson;
+      syncDeckLayers();
+      return { layer, styleFn, viewportQuery, zoomRange: null };
+    }
     const layer = L.geoJSON(geojson, {
       pane,
       style: styleFn,
@@ -493,6 +565,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       onEachFeature: (f, l) => {
         if (item._qml?.labelFor) { l._kascLabel = { item, feature: f }; syncLeafletLabel(l); }
         l.on("click", e => {
+          if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
           // 属性タブ(Cesium 版 attr-panel 相当)を自動で開き、クリックした地物の属性を表示
           window.switchPanelTab?.("attr");
           const entry = layerEntries.find(en => en.item === item);
@@ -944,8 +1017,10 @@ async function ensureEntryLoaded(entry) {
   } catch (err) {
     if (seq !== renderSeq) return false;
     entry.failed = true;
-    entry.error = err?.message || err;
-    currentUnsupported.push({ ...entry.item, type: `${entry.item.type}(読込失敗)` });
+    entry.error = (await diagnoseHubLayerError(entry.item, err))?.message || err?.message || err;
+    if (!currentUnsupported.some(u => u._idx != null && u._idx === entry.item._idx && /\(読込失敗\)$/.test(u.type))) {
+      currentUnsupported.push({ ...entry.item, type: `${entry.item.type}(読込失敗)` });
+    }
   }
   entry.pending = false;
   entry._loading = false;
@@ -1245,7 +1320,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     } catch (err) {
       if (seq !== renderSeq) return;
       entry.failed = true;
-      entry.error = err?.message || err;
+      entry.error = (await diagnoseHubLayerError(item, err))?.message || err?.message || err;
       unsupported.push({ ...item, type: `${item.type}(読込失敗)` });
     }
     entry.pending = false;
@@ -1395,16 +1470,62 @@ function requeryViewportLayers(entries) {
   }
 }
 
+// ---- ツール（計測・標高断面・見通し・緯度経度グリッド・エクスポート）----
+const toolOverlay = makeLeafletOverlay(L, map);
+const geoTools = initGeoTools2d({
+  panel: "#pane-tools",
+  overlay: toolOverlay,
+  graticuleOverlay: { update: fc => toolOverlay.updateGraticule(fc) },
+  getBounds: () => {
+    const b = map.getBounds();
+    return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+  },
+  setCursor: c => { map.getContainer().style.cursor = c; },
+  setInteractive: on => { try { on ? map.doubleClickZoom.disable() : map.doubleClickZoom.enable(); } catch (_) {} },
+  getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
+  isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
+  isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),
+  getLayerGeoJson: id => layerEntries.find(e => e.item.id === id)?.item._geojson || null,
+});
+
+// ミニマップ（表示>一般トグル。範囲矩形+クリック移動）
+const minimap = createMinimap({
+  container: "#minimap",
+  checkbox: "#display-minimap",
+  tileUrl: () => currentBaseEntries[Number(panel.basemapSelect?.value ?? 0)]?.item?.url || "",
+  getBounds: () => {
+    const b = map.getBounds();
+    return [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]];
+  },
+  flyTo: ({ lng, lat }) => map.flyTo([lat, lng], map.getZoom()),
+});
+map.on("move", minimap.scheduleUpdate);
+
 // 表示範囲の移動に追従して URL 反映 + 再クエリする
 let requeryTimer = null;
 map.on("moveend", () => {
   // 初期URLを読み取る前の初回moveendでパーマリンクを上書きしないよう消費済みを待つ
   if (urlViewConsumed) writeUrlView(mapViewToUrl(), lastKascUrl ? undefined : currentProjectId);
+  minimap.scheduleUpdate();
+  geoTools.scheduleGraticule();
   const targets = layerEntries.filter(e => e.item._viewportQuery && e.item.visible !== false);
-  if (!targets.length) return;
+  // bbox=auto / :bbox の初回読込に失敗したレイヤーは、移動後の表示範囲で自動リトライする
+  const retry = layerEntries.filter(e => e.item.visible !== false && e.failed && !e.pending && !e._loading && isViewportQueryItem(e.item));
+  if (!targets.length && !retry.length) return;
   clearTimeout(requeryTimer);
-  requeryTimer = setTimeout(() => requeryViewportLayers(targets), 400);
+  requeryTimer = setTimeout(() => {
+    if (targets.length) requeryViewportLayers(targets);
+    for (const entry of retry) {
+      entry.deferred = true;
+      entry.failed = false;
+      void ensureEntryLoaded(entry);
+    }
+  }, 400);
 });
+
+// ツールモード: ダブルクリック確定とラバーバンドプレビュー
+map.on("dblclick", () => { geoTools.handleDoubleClick(); });
+map.on("mousemove", e => { geoTools.handleMouseMove(e.latlng); });
 
 // 3D Tiles ドレープ品質: ズーム確定で terrain カバー FBO を現在解像度へ作り直す
 map.on("zoomend", () => invalidateDeckTerrainCovers(deckInst));
@@ -1419,6 +1540,8 @@ map.on("zoomend", () => {
 // 属性タブを更新済みのため、二重表示・クリアをしない。
 // (map の click には propagatedFrom が乗らないため DOM ターゲットで判定)
 map.on("click", e => {
+  // 計測・断面・見通しツールのモードがアクティブなら頂点拾いに使う
+  if (geoTools.handleClick(e.latlng)) return;
   const target = e.originalEvent?.target;
   if (target && target.closest && target.closest(".leaflet-interactive")) return;
   window.switchPanelTab?.("attr");
@@ -1529,6 +1652,10 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
   map.on("mousemove", e => {
     if (!coordsEl || !document.querySelector("#display-coords")?.checked) return;
     coordsEl.textContent = formatLatLng(e.latlng.lat, e.latlng.lng);
+  });
+  installLocalCrsUI({
+    anchor: document.querySelector("#coords-datum"),
+    pickLatLng: cb => map.once("click", e => cb(e.latlng)),
   });
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (coordsEl) coordsEl.style.display = e.target.checked ? "" : "none";
@@ -1753,6 +1880,7 @@ window.kasugaiApi = createPlayerApi({
   },
   reloadEntryData,
   getEntryGeoJson: entry => entry.item._geojson || null,
+  geoTools: () => geoTools,
   setBaseEntryVisible: (entry, on) => {
     if (entry.layer && !entry.layer._isDeck) {
       if (on && !map.hasLayer(entry.layer)) map.addLayer(entry.layer);
@@ -1836,6 +1964,7 @@ function syncCoordPinLayer(fc) {
     }),
     onEachFeature: (f, l) => {
       l.on("click", () => {
+        if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
         // 属性タブ(Cesium 版 attr-panel 相当)へ通常地物と同じ内容を表示する
         window.switchPanelTab?.("attr");
         renderAttrContent(panel.attrContent, [{

@@ -302,7 +302,7 @@ export function isViewportQueryItem(item) {
 }
 
 // sql: 行のクエリ末尾に付く "| off" / "| attr=..." を除去する(kasc_loader.js と同じ規則)
-const SQL_TAIL_RE = /\|\s*(off|false|attr(?:ibution)?\s*=[^|]*)\s*$/i;
+const SQL_TAIL_RE = /\|\s*(off|false|attr(?:ibution)?\s*=[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+)\s*$/i;
 function stripSqlTail(query) {
   let q = String(query || "");
   for (;;) {

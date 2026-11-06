@@ -4,12 +4,16 @@ import Map from "https://cdn.jsdelivr.net/npm/ol@10.11.0/Map.js";
 import View from "https://cdn.jsdelivr.net/npm/ol@10.11.0/View.js";
 import TileLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Tile.js";
 import VectorLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Vector.js";
+import HeatmapLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Heatmap.js";
+import ImageLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Image.js";
 import XYZ from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/XYZ.js";
 import TileWMS from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/TileWMS.js";
 import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Vector.js";
+import ClusterSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Cluster.js";
+import StaticSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/ImageStatic.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
@@ -22,6 +26,7 @@ import { initPrint, compositeCanvases } from "../shared/print.js";
 import { initNavTools } from "../shared/nav-tools.js";
 import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
+import { installLocalCrsUI } from "../shared/coords-local.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
@@ -383,43 +388,88 @@ async function buildLayer(item, baseUrl, preloaded) {
     };
   }
   if (item.type === "wms" || item.type === "wmts") return buildOgcRasterLayer(item, baseUrl);
+  if (item.type === "image") {
+    // ジオリファレンス画像オーバーレイ(現場写真・紙図面)。corners= は外接矩形へ正規化
+    const ov = parseImageOverlay(item);
+    let env = ov.bbox;
+    if (!env && ov.corners) {
+      const lons = ov.corners.map(c => c[0]), lats = ov.corners.map(c => c[1]);
+      env = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+    }
+    if (!env) throw new Error("image: bbox= または corners= の指定が必要です");
+    const layer = new ImageLayer({
+      source: new StaticSource({
+        url: resolveKascUrl(item.url, baseUrl),
+        imageExtent: [...fromLonLat([env[0], env[1]]), ...fromLonLat([env[2], env[3]])],
+        attributions: layerAttribution(item) || undefined,
+        crossOrigin: "anonymous",
+      }),
+      opacity: Number(item.opts?.opacity ?? 1),
+    });
+    layer.set("kascEnv", { west: env[0], south: env[1], east: env[2], north: env[3] });
+    return layer;
+  }
   const source = xyzSource(item, baseUrl);
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = preloaded || await loadVectorItem(item, baseUrl, getViewBounds());
     const geojson = loaded.geojson;
     item._geojson = geojson; // 3D Tiles ドレープコピー・属性テーブルの描画ソースとして保持
     item._viewportQuery = !!loaded.viewportQuery;
-    const layer = new VectorLayer({
-      source: new VectorSource({
-        attributions: layerAttribution(item) || undefined,
-        features: new GeoJSON().readFeatures(geojson, {
-          featureProjection: "EPSG:3857",
-          dataProjection: "EPSG:4326",
-        }),
-      }),
+    const features = new GeoJSON().readFeatures(geojson, {
+      featureProjection: "EPSG:3857",
+      dataProjection: "EPSG:4326",
     });
+    const vectorSource = new VectorSource({
+      attributions: layerAttribution(item) || undefined,
+      features,
+    });
+    const hasPoints = geojson.features?.some(f => /point/i.test(f?.geometry?.type || ""));
+    const wantCluster = hasPoints && kascOptOn(item.opts?.cluster);
+    const wantHeat = hasPoints && kascOptOn(item.opts?.heat ?? item.opts?.heatmap);
+    const layer = wantHeat
+      ? new HeatmapLayer({ source: vectorSource, blur: 15, radius: 10 })
+      : new VectorLayer({
+          source: wantCluster ? new ClusterSource({ source: vectorSource, distance: 40 }) : vectorSource,
+        });
     const env = geojsonExtent(geojson);
     if (env) layer.set("kascEnv", env);
+    // クラスタスタイル: 複数地物は件数バッジ、単体は素のスタイル関数へ委譲する
+    const clusterStyleFn = baseFn => feature => {
+      const inner = feature.get("features");
+      if (inner && inner.length > 1) {
+        const n = inner.length;
+        const color = n < 10 ? "#3a7bd5" : n < 100 ? "#e67e22" : "#c0392b";
+        return new Style({
+          image: new CircleStyle({
+            radius: Math.min(16 + Math.floor(Math.log10(n) * 4), 26),
+            fill: new Fill({ color: color + "dd" }),
+            stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+          }),
+          text: new Text({ text: String(n), fill: new Fill({ color: "#ffffff" }), scale: 1.1 }),
+        });
+      }
+      return baseFn(inner ? inner[0] : feature);
+    };
+    let baseStyleFn = makeDefaultVectorStyle();
     if (item.opts?.style) {
       try {
         const compiled = await loadCompiledQml(item.opts.style, baseUrl);
         item._qml = compiled;
         const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text });
         // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない
-        layer.setStyle(f => {
+        baseStyleFn = f => {
           const names = compiled.namesFor?.(f.getProperties() || {});
           if (names?.length && item._legendHidden?.has(names[0])) return null;
           return base(f);
-        });
+        };
         const range = compiledScaleToResRange(compiled);
         if (range) {
           layer.setMinResolution(range.minRes);
           if (Number.isFinite(range.maxRes)) layer.setMaxResolution(range.maxRes);
         }
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
-    } else {
-      layer.setStyle(makeDefaultVectorStyle());
     }
+    if (!wantHeat) layer.setStyle(wantCluster ? clusterStyleFn(baseStyleFn) : baseStyleFn);
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
     return layer;
   }
@@ -1478,6 +1528,13 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
   document.querySelector("#display-scalebar")?.addEventListener("change", e => {
     if (e.target.checked) map.addControl(scaleCtl);
     else map.removeControl(scaleCtl);
+  });
+  installLocalCrsUI({
+    anchor: document.querySelector("#coords-datum"),
+    pickLatLng: cb => map.once("click", e => {
+      const ll = toLonLat(e.coordinate);
+      cb({ lat: ll[1], lon: ll[0] });
+    }),
   });
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (e.target.checked) map.addControl(coordsCtl);

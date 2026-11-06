@@ -10,6 +10,8 @@
 // }) → { open(layerId?), close(), refresh(), isOpen() }
 // window.vectorAttrWidget = { open, close } も公開する(Cesium 版と同じ公開面)
 
+import { computeGroupStats } from "./attr-stats.js";
+
 const LABELS = {
   title: "属性・値一覧",
   resizer: "上下にドラッグして高さを変更",
@@ -23,8 +25,15 @@ const LABELS = {
   loading: "読み込み中…",
   clickToMove: "クリックで移動",
   viewportOnly: "（表示範囲内のみ）",
+  exportCsv: "表示中の行をCSVで出力",
+  exportTsv: "表示中の行をTSVで出力",
   count: (matched, attrs) => `${matched} 件 / ${attrs} 属性`,
   limitSuffix: count => ` （表示上限 ${count} 件）`,
+  stats: "属性を集計（GROUP BY）",
+  statsGroup: "集計キー",
+  statsValue: "集計する数値属性",
+  statsCountOnly: "（件数のみ）",
+  statsGroups: (groups, rows) => `${groups} グループ / ${rows} 件`,
 };
 
 const MAX_ROWS = 1000;
@@ -60,7 +69,10 @@ const CSS = `
 #vector-attr-widget-list tr:hover { background: #f6f9fb; }
 #vector-attr-widget-list td { padding: 7px 14px; vertical-align: top; }
 .vector-attr-widget-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
-.vector-attr-widget-footer { padding: 8px 14px; border-top: 1px solid #e4ecef; color: #71818d; font-size: 12px; text-align: right; }
+.vector-attr-widget-footer { padding: 8px 14px; border-top: 1px solid #e4ecef; color: #71818d; font-size: 12px; text-align: right; display: flex; align-items: center; gap: 6px; }
+.vector-attr-widget-footer .vector-attr-widget-export { flex: 0 0 auto; min-height: 26px; padding: 2px 8px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #31564f; font-size: 12px; cursor: pointer; }
+.vector-attr-widget-footer .vector-attr-widget-export:hover { background: #eef5f7; }
+.vector-attr-widget-footer #vector-attr-widget-count { margin-left: auto; }
 `;
 
 let styleInjected = false;
@@ -201,6 +213,9 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
       <div class="vector-attr-widget-filter">
         <select id="vector-attr-widget-layer" class="vector-attr-widget-layer" title="${escapeHtml(LABELS.layerTitle)}"></select>
         <input id="vector-attr-widget-search" type="text" placeholder="${escapeHtml(LABELS.search)}" />
+        <button id="vector-attr-widget-stats" type="button" title="${escapeHtml(LABELS.stats)}" style="flex:0 0 auto;min-height:34px;padding:0 10px;border:1px solid #cbd9de;border-radius:4px;background:#fff;cursor:pointer;">Σ</button>
+        <select id="vector-attr-widget-group" title="${escapeHtml(LABELS.statsGroup)}" hidden style="flex:0 0 120px;min-height:34px;padding:4px 6px;border:1px solid #cbd9de;border-radius:4px;font-size:13px;background:#fff;"></select>
+        <select id="vector-attr-widget-value" title="${escapeHtml(LABELS.statsValue)}" hidden style="flex:0 0 120px;min-height:34px;padding:4px 6px;border:1px solid #cbd9de;border-radius:4px;font-size:13px;background:#fff;"></select>
       </div>
       <div class="vector-attr-widget-table-wrap">
         <table class="vector-attr-widget-table">
@@ -209,6 +224,8 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
         </table>
       </div>
       <div class="vector-attr-widget-footer">
+        <button id="vector-attr-export-csv" class="vector-attr-widget-export" type="button" title="${escapeHtml(LABELS.exportCsv)}">CSV</button>
+        <button id="vector-attr-export-tsv" class="vector-attr-widget-export" type="button" title="${escapeHtml(LABELS.exportTsv)}">TSV</button>
         <span id="vector-attr-widget-count"></span>
       </div>
     </div>`;
@@ -229,6 +246,28 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
   let loading = false;
   let loadError = false;
   let partial = false;
+  // Σ 集計モード: 集計キー/数値列の選択状態
+  const statsBtn = widget.querySelector("#vector-attr-widget-stats");
+  const statsGroup = widget.querySelector("#vector-attr-widget-group");
+  const statsValue = widget.querySelector("#vector-attr-widget-value");
+  let statsMode = false;
+  function syncStatsControls() {
+    if (statsGroup) statsGroup.hidden = !statsMode;
+    if (statsValue) statsValue.hidden = !statsMode;
+    if (statsBtn) statsBtn.classList.toggle("active", statsMode);
+    if (!statsMode) return;
+    if (statsGroup) {
+      const prev = statsGroup.value;
+      statsGroup.innerHTML = attributes.map(a => '<option>' + escapeHtml(a) + '</option>').join("");
+      if (attributes.includes(prev)) statsGroup.value = prev;
+    }
+    if (statsValue) {
+      const prev = statsValue.value;
+      statsValue.innerHTML = '<option value="">' + escapeHtml(LABELS.statsCountOnly) + '</option>'
+        + attributes.map(a => '<option>' + escapeHtml(a) + '</option>').join("");
+      if (attributes.includes(prev)) statsValue.value = prev;
+    }
+  }
   // 非同期の行構築が遅れて解決したときに新しい選択の結果を上書きしないための世代番号
   let requestSeq = 0;
 
@@ -297,6 +336,25 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
         });
       }
       const displayRows = matched.slice(0, MAX_ROWS);
+      // Σ 集計モード: 集計キーで GROUP BY した行に差し替える(通常表は作らない)
+      if (statsMode) {
+        syncStatsControls();
+        const groupField = statsGroup?.value || "";
+        const valueField = statsValue?.value || "";
+        const features = rows.map(row => ({
+          properties: Object.fromEntries(attributes.map((a, i) => [a, row.values[i]])),
+        }));
+        const stats = groupField ? computeGroupStats(features, groupField, valueField) : [];
+        const cols = [groupField || "?", "count", ...(valueField ? ["sum", "avg", "min", "max"] : [])];
+        if (head) head.innerHTML = '<tr>' + cols.map(c => '<th>' + escapeHtml(c) + '</th>').join("") + '</tr>';
+        const fmt = v => v == null ? "" : String(Math.round(v * 1000) / 1000);
+        list.innerHTML = stats.length
+          ? stats.map(g => '<tr>' + [g.key, g.count, ...(valueField ? [fmt(g.sum), fmt(g.avg), fmt(g.min), fmt(g.max)] : [])]
+              .map(v => '<td class="vector-attr-widget-cell">' + escapeHtml(String(v)) + '</td>').join("") + '</tr>').join("")
+          : '<tr><td style="padding:12px 14px;color:#71818d;">' + escapeHtml(LABELS.noFeatures) + '</td></tr>';
+        countEl.textContent = LABELS.statsGroups(stats.length, rows.length);
+        return;
+      }
       const layer = findLayer(currentLayerId());
       titleEl.textContent = LABELS.title + (layer?.title ? " — " + layer.title : "");
       if (!attributes.length) {
@@ -328,6 +386,65 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
       const suffix = (matched.length > displayRows.length) ? LABELS.limitSuffix(displayRows.length) : "";
       countEl.textContent = LABELS.count(matched.length, attributes.length) + suffix + (partial ? LABELS.viewportOnly : "");
     } catch (e) { console.error("vector attr widget render error", e); }
+  }
+
+  // 地物の代表点（属性一覧のエクスポート用。ジオメトリ包絡の中心）
+  function featureCenter(f) {
+    let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;
+    const walk = c => {
+      if (!Array.isArray(c)) return;
+      if (typeof c[0] === "number" && typeof c[1] === "number") {
+        if (c[0] < west) west = c[0];
+        if (c[0] > east) east = c[0];
+        if (c[1] < south) south = c[1];
+        if (c[1] > north) north = c[1];
+        return;
+      }
+      for (const p of c) walk(p);
+    };
+    walk(f?.geometry?.coordinates);
+    if (!Number.isFinite(west)) return { lng: null, lat: null };
+    return { lng: (west + east) / 2, lat: (south + north) / 2 };
+  }
+
+  // 表示中の行セット（検索フィルタ＋ソート適用後・全件。表示上限では切らない）を返す
+  function matchedRows() {
+    const query = String(searchInput ? searchInput.value : "").toLowerCase().trim();
+    let matched = query ? rows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : [...rows];
+    if (sort.column >= 0 && sort.column < attributes.length) {
+      const col = sort.column;
+      const order = sort.order;
+      matched.sort((a, b) => {
+        const cmp = String(a.values[col] || "").localeCompare(String(b.values[col] || ""), undefined, { numeric: true, sensitivity: "base" });
+        return cmp * order;
+      });
+    }
+    return matched;
+  }
+
+  // 属性一覧のエクスポート（CSV/TSV・UTF-8 BOM 付きで Excel 文字化け対策）
+  function exportTable(delim) {
+    const matched = matchedRows();
+    if (!attributes.length || !matched.length) return;
+    const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+    // 位置が取れる行は代表点の lon/lat 列を末尾に付ける（行クリック移動と同じ座標系）
+    const header = [...attributes, "lon", "lat"];
+    const lines = [header.map(esc).join(delim)];
+    for (const row of matched) {
+      const c = featureCenter(row.feature);
+      lines.push([...row.values, c.lng ?? "", c.lat ?? ""].map(esc).join(delim));
+    }
+    const layer = findLayer(currentLayerId());
+    const base = String(layer?.title || "attributes").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+    const ext = delim === "\t" ? "tsv" : "csv";
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: `text/${ext};charset=utf-8` });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${base}.${ext}`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   function updateLayerOptions(selectedId) {
@@ -366,12 +483,22 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
     void buildRows().then(() => render(searchInput ? searchInput.value : ""));
   }
 
+  widget.querySelector("#vector-attr-export-csv")?.addEventListener("click", () => exportTable(","));
+  widget.querySelector("#vector-attr-export-tsv")?.addEventListener("click", () => exportTable("\t"));
+
   closeBtn.addEventListener("click", close);
   searchInput.addEventListener("input", () => render(searchInput.value));
   searchInput.addEventListener("keydown", ev => { if (ev.key === "Enter") render(searchInput.value); });
   layerSelect.addEventListener("change", () => {
     try { void open(layerSelect.value); } catch (e) { console.error("vector attr layer change error", e); }
   });
+  statsBtn?.addEventListener("click", () => {
+    statsMode = !statsMode;
+    syncStatsControls();
+    render(searchInput ? searchInput.value : "");
+  });
+  statsGroup?.addEventListener("change", () => render(searchInput ? searchInput.value : ""));
+  statsValue?.addEventListener("change", () => render(searchInput ? searchInput.value : ""));
 
   list.addEventListener("click", ev => {
     try {

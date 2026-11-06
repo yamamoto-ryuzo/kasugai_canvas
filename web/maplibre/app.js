@@ -1,10 +1,13 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { diagnoseHubLayerError } from "../shared/hub-diag.js";
+import { createMinimap } from "../shared/minimap.js";
+import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -14,6 +17,7 @@ import { matchSessionState, bindSessionState, applySessionState, sessionBootView
 import { initNavTools } from "../shared/nav-tools.js";
 import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
+import { installLocalCrsUI } from "../shared/coords-local.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
@@ -399,6 +403,24 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     syncDeckLayers();
     return { lids, sid: lid, viewportQuery, filters, opas };
   }
+  if (item.type === "image") {
+    // ジオリファレンス画像オーバーレイ。corners= は TL,TR,BR,BL 順。
+    // bbox= は矩形(北西・北東・南東・南西に展開)
+    const ov = parseImageOverlay(item);
+    let coords = ov.corners;
+    if (!coords && ov.bbox) {
+      const [w, s, e, n] = ov.bbox;
+      coords = [[w, n], [e, n], [e, s], [w, s]];
+    }
+    if (!coords || coords.length < 4) throw new Error("image: bbox= または corners= の指定が必要です");
+    map.addSource(sid, { type: "image", url: resolveKascUrl(item.url, baseUrl), coordinates: coords.slice(0, 4) });
+    map.addLayer({ id: sid, type: "raster", source: sid, paint: { "raster-opacity": Number(item.opts?.opacity ?? 1) }, layout: { visibility: item.visible ? "visible" : "none" } }, beforeId());
+    lids.push(sid);
+    opas.set(sid, { prop: "raster-opacity", base: Number(item.opts?.opacity ?? 1) });
+    managedSources.push(sid);
+    managedLayers.push(...lids);
+    return { lids, sid, viewportQuery, filters, opas };
+  }
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = preloaded || await loadVectorItem(item, baseUrl, getViewBounds());
     const geojson = loaded.geojson;
@@ -461,7 +483,23 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     if (env) item._env = env;
     item._geojson = geojson;
     const before = beforeId();
-    map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined });
+    const hasPoints = geojson.features?.some(f => /point/i.test(f?.geometry?.type || ""));
+    const wantCluster = hasPoints && kascOptOn(item.opts?.cluster);
+    const wantHeat = hasPoints && kascOptOn(item.opts?.heat ?? item.opts?.heatmap);
+    // circle 種はクラスタ/ヒートマップ指定時に専用レイヤへ差し替える
+    const circleKind = kinds.find(k => k[0] === "circle");
+    if (wantCluster) {
+      kinds = kinds.filter(([kind]) => kind !== "circle");
+    } else if (wantHeat && circleKind) {
+      kinds = kinds.map(([kind, filter, paint]) => kind === "circle"
+        ? ["heatmap", filter, {
+            "heatmap-weight": 1,
+            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 15, 3],
+            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 2, 15, 22],
+            "heatmap-opacity": ["case", ["has", "marker-color"], 0.75, 0.7],
+          }] : [kind, filter, paint]);
+    }
+    map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: 50, clusterMaxZoom: 16 } : {}) });
     for (const [kind, filter, paint, layout] of kinds) {
       const lid = `${sid}-${kind}`;
       const def = { id: lid, type: kind, source: sid, filter, paint, layout: { ...layout, visibility: item.visible ? "visible" : "none" } };
@@ -473,6 +511,29 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
       // symbol レイヤに symbol-opacity は無いため text-opacity を使う
       const opaProp = kind === "symbol" ? "text-opacity" : `${kind}-opacity`;
       opas.set(lid, { prop: opaProp, base: typeof paint?.[opaProp] === "number" ? paint[opaProp] : 1 });
+    }
+    // cluster=on: 件数バッジのクラスタ円 + 件数テキスト + 非クラスタ点
+    if (wantCluster) {
+      const vis = item.visible ? "visible" : "none";
+      const circlePaint = circleKind ? circleKind[2] : { "circle-color": pointColor, "circle-radius": pointRadius };
+      const defs = [
+        [`${sid}-clusters`, "circle", ["has", "point_count"], {
+          "circle-color": ["step", ["get", "point_count"], "#3a7bd5", 10, "#e67e22", 100, "#c0392b"],
+          "circle-radius": ["step", ["get", "point_count"], 16, 10, 20, 100, 26],
+          "circle-opacity": 0.85, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1.5,
+        }, "circle-opacity"],
+        [`${sid}-cluster-count`, "symbol", ["has", "point_count"], {
+          "text-color": "#ffffff", "text-opacity": 1,
+        }, "text-opacity", { "text-field": ["get", "point_count_abbreviated"], "text-size": 12, "text-allow-overlap": true }],
+        [`${sid}-unclustered`, "circle", ["!", ["has", "point_count"]], circlePaint, "circle-opacity"],
+      ];
+      for (const [lid, kind, filter, paint, opaProp, layout0] of defs) {
+        map.addLayer({ id: lid, type: kind, source: sid, filter, paint, layout: { ...(layout0 || {}), visibility: vis } }, before);
+        lids.push(lid);
+        if (!filters) filters = new Map();
+        filters.set(lid, filter);
+        opas.set(lid, { prop: opaProp, base: typeof paint?.[opaProp] === "number" ? paint[opaProp] : 1 });
+      }
     }
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
   } else {
@@ -853,8 +914,10 @@ async function ensureEntryLoaded(entry) {
   } catch (err) {
     if (seq !== renderSeq) return false;
     entry.failed = true;
-    entry.error = err?.message || err;
-    currentUnsupported.push({ ...entry.item, type: `${entry.item.type}(読込失敗)` });
+    entry.error = (await diagnoseHubLayerError(entry.item, err))?.message || err?.message || err;
+    if (!currentUnsupported.some(u => u._idx != null && u._idx === entry.item._idx && /\(読込失敗\)$/.test(u.type))) {
+      currentUnsupported.push({ ...entry.item, type: `${entry.item.type}(読込失敗)` });
+    }
   }
   entry.pending = false;
   entry._loading = false;
@@ -1156,7 +1219,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     } catch (err) {
       if (seq !== renderSeq) return;
       entry.failed = true;
-      entry.error = err?.message || err;
+      entry.error = (await diagnoseHubLayerError(item, err))?.message || err?.message || err;
       unsupported.push({ ...item, type: `${item.type}(読込失敗)` });
     }
     entry.pending = false;
@@ -1305,6 +1368,87 @@ function requeryViewportLayers(entries) {
   }
 }
 
+// ---- ツール（計測・標高断面・見通し・緯度経度グリッド・エクスポート）----
+// オーバーレイは geojson ソースへ FC を流し、kind プロパティでスタイル分岐する
+const TOOL_SRC = "kasc-tools-src";
+const GRAT_SRC = "kasc-grat-src";
+let toolLayersReady = false;
+function ensureToolLayers() {
+  if (toolLayersReady || !map.isStyleLoaded?.()) return;
+  try {
+    if (!map.getSource(TOOL_SRC)) {
+      map.addSource(TOOL_SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({ id: "kasc-tools-poly", type: "fill", source: TOOL_SRC,
+        filter: ["==", ["get", "kind"], "poly"],
+        paint: { "fill-color": "#ffff00", "fill-opacity": 0.25 } });
+      map.addLayer({ id: "kasc-tools-line", type: "line", source: TOOL_SRC,
+        filter: ["in", ["get", "kind"], ["literal", ["line", "los-line", "los-ok", "los-bad"]]],
+        paint: { "line-color": ["match", ["get", "kind"], "los-ok", "#32cd32", "los-bad", "#ff0000", "los-line", "#ffa500", "#ffff00"], "line-width": 3 } });
+      map.addLayer({ id: "kasc-tools-circle", type: "circle", source: TOOL_SRC,
+        filter: ["in", ["get", "kind"], ["literal", ["point", "los-block", "hover"]]],
+        paint: { "circle-radius": 5, "circle-color": ["match", ["get", "kind"], "los-block", "#ff0000", "hover", "#00bfff", "#ffff00"], "circle-stroke-color": "#000", "circle-stroke-width": 1.5 } });
+      map.addLayer({ id: "kasc-tools-label", type: "symbol", source: TOOL_SRC,
+        filter: ["has", "text"],
+        layout: { "text-field": ["get", "text"], "text-size": 11, "text-offset": [0, -0.8], "text-anchor": "bottom" },
+        paint: { "text-color": "#fff", "text-halo-color": "#000", "text-halo-width": 1.5 } });
+    }
+    if (!map.getSource(GRAT_SRC)) {
+      map.addSource(GRAT_SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({ id: "kasc-grat-line", type: "line", source: GRAT_SRC,
+        filter: ["==", ["get", "kind"], "grat"],
+        paint: { "line-color": "#888888", "line-opacity": 0.55, "line-width": 1 } });
+      map.addLayer({ id: "kasc-grat-label", type: "symbol", source: GRAT_SRC,
+        filter: ["==", ["get", "kind"], "grat-label"],
+        layout: { "text-field": ["get", "text"], "text-size": 11 },
+        paint: { "text-color": "#fff", "text-halo-color": "#000", "text-halo-width": 1.5 } });
+    }
+    toolLayersReady = true;
+  } catch (_) { /* スタイル再構築中は次回 */ }
+}
+const toolOverlayOf = srcId => ({
+  update: fc => { ensureToolLayers(); try { map.getSource(srcId)?.setData(fc); } catch (_) {} },
+});
+
+const geoTools = initGeoTools2d({
+  panel: "#pane-tools",
+  overlay: toolOverlayOf(TOOL_SRC),
+  graticuleOverlay: toolOverlayOf(GRAT_SRC),
+  getBounds: () => {
+    try {
+      const b = map.getBounds();
+      const norm = d => { const x = ((d + 180) % 360 + 360) % 360 - 180; return x === -180 ? 180 : x; };
+      return { west: norm(b.getWest()), south: b.getSouth(), east: norm(b.getEast()), north: b.getNorth() };
+    } catch (_) { return null; }
+  },
+  setCursor: c => { map.getCanvas().style.cursor = c; },
+  setInteractive: on => { try { on ? map.doubleClickZoom.disable() : map.doubleClickZoom.enable(); } catch (_) {} },
+  // テレイン ON 時は DEM タイルから標高を取る（取れなければ地理院標高APIへフォールバック）
+  sampleTerrain: async lnglats => {
+    if (!terrainEnabled || !map.getTerrain?.()) return null;
+    return lnglats.map(p => {
+      try { const h = map.queryTerrainElevation([p.lng, p.lat]); return Number.isFinite(h) ? h : null; }
+      catch (_) { return null; }
+    });
+  },
+  getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
+  isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
+  isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),
+  getLayerGeoJson: id => layerEntries.find(e => e.item.id === id)?.item._geojson || null,
+});
+
+// ミニマップ（表示>一般トグル。Leaflet 遅延ロード・範囲矩形+クリック移動）
+const minimap = createMinimap({
+  container: "#minimap",
+  checkbox: "#display-minimap",
+  tileUrl: () => currentBaseEntries[Number(panel.basemapSelect?.value ?? 0)]?.item?.url || "",
+  getBounds: () => {
+    const b = map.getBounds();
+    return [[b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]];
+  },
+  flyTo: ({ lng, lat }) => map.easeTo({ center: [lng, lat], duration: 400 }),
+});
+map.on("move", minimap.scheduleUpdate);
+
 // 3D Tiles ドレープ品質: ズーム確定で terrain カバー FBO を現在解像度へ作り直す
 map.on("zoomend", () => invalidateDeckTerrainCovers(deckOverlay?._deck));
 
@@ -1313,14 +1457,28 @@ let requeryTimer = null;
 map.on("moveend", () => {
   // 初期URLを読み取る前の初回moveendでパーマリンクを上書きしないよう消費済みを待つ
   if (urlViewConsumed) writeUrlView(mapViewToUrl(), lastKascUrl ? undefined : currentProjectId);
+  minimap.scheduleUpdate();
+  geoTools.scheduleGraticule();
   const targets = layerEntries.filter(e => e.item._viewportQuery && e.item.visible !== false);
-  if (!targets.length) return;
+  // bbox=auto / :bbox の初回読込に失敗したレイヤーは、移動後の表示範囲で自動リトライする
+  // （Cesium 版 reloadFailedVectorLayer 相当。失敗 spec は entry.failed が担う）
+  const retry = layerEntries.filter(e => e.item.visible !== false && e.failed && !e.pending && !e._loading && isViewportQueryItem(e.item));
+  if (!targets.length && !retry.length) return;
   clearTimeout(requeryTimer);
-  requeryTimer = setTimeout(() => requeryViewportLayers(targets), 400);
+  requeryTimer = setTimeout(() => {
+    if (targets.length) requeryViewportLayers(targets);
+    for (const entry of retry) {
+      entry.deferred = true; // ensureEntryLoaded 経路で再マウントする
+      entry.failed = false;
+      void ensureEntryLoaded(entry);
+    }
+  }, 400);
 });
 
 // 地物クリック → 属性タブを自動で開いて属性を表示(Cesium 版 attr-panel と同様)
 map.on("click", e => {
+  // 計測・断面・見通しツールのモードがアクティブなら属性ピックより優先して頂点拾いに使う
+  if (geoTools.handleClick(e.lngLat)) return;
   const features = map.queryRenderedFeatures(e.point, { layers: managedLayers });
   // 重なった地物を全件拾う。同一地物が fill/line/symbol の複数スタイルレイヤに
   // またがってヒットするため、ソース+属性で重複を除外する
@@ -1342,6 +1500,10 @@ map.on("click", e => {
   window.switchPanelTab?.("attr");
   renderAttrContent(panel.attrContent, records, { onRecordClick: rec => focusFeatureExtent(rec.feature) });
 });
+
+// ツールモード: ダブルクリック確定とラバーバンドプレビュー
+map.on("dblclick", e => { if (geoTools.handleDoubleClick()) e.preventDefault(); });
+map.on("mousemove", e => { geoTools.handleMouseMove(e.lngLat); });
 
 map.on("load", () => {
   loadProject().catch(err => {
@@ -1539,6 +1701,10 @@ map.on("sourcedata", e => {
   map.on("mousemove", e => {
     if (!coordsEl || !document.querySelector("#display-coords")?.checked) return;
     coordsEl.textContent = formatLatLng(e.lngLat.lat, e.lngLat.lng);
+  });
+  installLocalCrsUI({
+    anchor: document.querySelector("#coords-datum"),
+    pickLatLng: cb => map.once("click", e => cb(e.lngLat)),
   });
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (coordsEl) coordsEl.style.display = e.target.checked ? "" : "none";
@@ -1831,6 +1997,7 @@ window.kasugaiApi = createPlayerApi({
   },
   reloadEntryData,
   getEntryGeoJson: entry => entry.item._geojson || null,
+  geoTools: () => geoTools,
   getFlyPaths: kascFlyPaths.getFlyPaths,
   persistFlyPath: kascFlyPaths.persistFlyPath,
   syncFlyPathLine: kascFlyPaths.syncFlyPathLine,

@@ -112,7 +112,7 @@ export function parseKasc(text) {
     }
     if (["xyz", "tile", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
          "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "wms", "wmts",
-         "kml", "kmz", "wfs", "shp", "shapefile"].includes(type)) {
+         "kml", "kmz", "wfs", "shp", "shapefile", "image"].includes(type)) {
       doc.layers.push(item);
       continue;
     }
@@ -136,6 +136,32 @@ export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
 ]);
+
+// オプションフラグ判定: cluster=on / heat=on 等の「on/off 系オプション」で共用。
+// on/true/1/yes/auto または key のみ(=なし・空値でも true)を ON とみなす
+export function kascOptOn(value) {
+  if (value === undefined || value === null) return false;
+  const v = String(value).trim();
+  return v === "" || !/^(off|none|false|0|no)$/i.test(v);
+}
+
+// image: 行の bbox=/corners= をパースして描画用の範囲を返す。
+// 戻り値: { bbox: [w,s,e,n]|null, corners: [[lon,lat],...]|null }
+// corners は左上・右上・右下・左下の順(maplibre の image source coordinates と同順)
+export function parseImageOverlay(item) {
+  const opts = item?.opts || {};
+  const out = { bbox: null, corners: null };
+  if (opts.bbox || opts.bounds || opts.extent) {
+    const nums = String(opts.bbox || opts.bounds || opts.extent).split(",").map(v => Number(v.trim()));
+    if (nums.length === 4 && nums.every(Number.isFinite)) out.bbox = nums;
+  }
+  const rawCorners = opts.corners || opts.quad;
+  if (rawCorners) {
+    const pts = String(rawCorners).split(";").map(p => p.split(",").map(v => Number(v.trim())));
+    if (pts.length >= 3 && pts.every(p => p.length === 2 && p.every(Number.isFinite))) out.corners = pts;
+  }
+  return out;
+}
 
 // .kasc 1行の可視性フラグを書き換えて返す。
 // show は「表示するタイトル」の Set、null/undefined なら全表示(`*` 相当)。
