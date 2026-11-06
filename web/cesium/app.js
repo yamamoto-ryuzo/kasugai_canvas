@@ -26,7 +26,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
 import { initPrint } from "../shared/print.js";
@@ -1657,6 +1657,9 @@ function renderLayerList() {
           const filterButton = isQueryDecoder(vectorDecoders.get(layer.type), layer)
             ? `<button class="layer-filter" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.filter"))}" aria-label="${escapeHtml(t("layer.filter"))}">⏷</button>`
             : "";
+          const timeButton = VECTOR_TIME_TYPES.has(layer.type)
+            ? `<button class="layer-time${layer.timeField ? " active" : ""}" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.time"))}" aria-label="${escapeHtml(t("layer.time"))}">⏱</button>`
+            : "";
           const limitBadge = layer.entityLimited
             ? `<small class="entity-limit-badge" title="${escapeHtml(t("layer.entityLimited", { shown: layer.entityLimited.shown, total: layer.entityLimited.total }))}">${layer.entityLimited.shown}/${layer.entityLimited.total}</small>`
             : "";
@@ -1690,6 +1693,7 @@ function renderLayerList() {
           <span>${escapeHtml(layer.title)}</span>
           <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}${deferred ? " deferred" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadStatus === "failed" ? (layer._loadError || "") : deferred ? t("layer.notLoadedHint") : "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : deferred ? escapeHtml(t("layer.notLoaded")) : ""}</span>
           ${filterButton}
+          ${timeButton}
           ${limitBadge}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>
@@ -1776,6 +1780,15 @@ function renderLayerList() {
       event.preventDefault();
       event.stopPropagation();
       void editLayerQueryFilter(layerState.get(button.dataset.layerId));
+    });
+  });
+
+  list.querySelectorAll(".layer-time").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const item = layerState.get(button.dataset.layerId);
+      if (item) openTimeConfig(item);
     });
   });
 
@@ -3992,6 +4005,8 @@ async function buildHeatmapDataSource(item, source) {
 const timeLayers = new Map(); // layerId → { item, items, starts, ends, si, ei }
 let timePrevMs = null;
 let timePlaying = false;
+// entity 描画経路(time= が有効な)ベクター行タイプ。⏱ ボタンの表示対象
+const VECTOR_TIME_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "duckdb", "sql"]);
 
 function parseTimeValueMs(v) {
   if (v == null || v === "") return null;
@@ -4175,6 +4190,123 @@ viewer.clock.onTick.addEventListener(() => {
   document.getElementById("time-play")?.addEventListener("click", () => setTimePlaying(!timePlaying));
   document.getElementById("time-speed")?.addEventListener("change", () => { viewer.clock.multiplier = timeSpeed(); });
 }
+
+// ---- ⏱ ボタンから開く時系列設定ポップオーバー ----------------------------
+// 行に time= を書かなくても、レイヤ行から手動で時系列化できる。
+// 適用時は item.timeField 等を設定して .kasc 行へ書き戻し、該当レイヤーを再読み込みする
+let timeConfigItem = null;
+
+// レイヤーのプロパティ名候補を集め、時刻値として解釈できるものを先頭に並べる
+function layerTimeFieldCandidates(item) {
+  const gj = getLayerGeoJson(item.id);
+  const seen = new Map();
+  for (const f of gj?.features?.slice(0, 300) || []) {
+    for (const [k, v] of Object.entries(f?.properties || {})) {
+      if (!seen.has(k)) seen.set(k, { key: k, timeLike: false });
+      const s = seen.get(k);
+      if (!s.timeLike && parseTimeValueMs(v) != null) s.timeLike = true;
+    }
+  }
+  return [...seen.values()].sort((a, b) => (b.timeLike - a.timeLike) || a.key.localeCompare(b.key));
+}
+
+function fillTimeFieldSelect(sel, fields, current, allowNone) {
+  sel.innerHTML = "";
+  if (allowNone) {
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = t("time.none");
+    sel.append(o);
+  }
+  for (const f of fields) {
+    const o = document.createElement("option");
+    o.value = f.key;
+    o.textContent = f.timeLike ? `${f.key} 🕒` : f.key;
+    sel.append(o);
+  }
+  if (current && !fields.some(f => f.key === current)) {
+    const o = document.createElement("option");
+    o.value = current; o.textContent = current;
+    sel.append(o);
+  }
+  if (current) sel.value = current;
+}
+
+function openTimeConfig(item) {
+  timeConfigItem = item;
+  const box = document.getElementById("time-config");
+  if (!box) return;
+  document.getElementById("time-config-layer").textContent = item.title;
+  const fields = layerTimeFieldCandidates(item);
+  fillTimeFieldSelect(document.getElementById("time-config-start"), fields, item.timeField, false);
+  fillTimeFieldSelect(document.getElementById("time-config-end"), fields, item.timeEndField, true);
+  const span = document.getElementById("time-config-span");
+  if (span) span.value = item.timeSpan != null ? String(item.timeSpan / 1000) : "";
+  const hint = document.getElementById("time-config-hint");
+  if (hint) hint.textContent = fields.length ? "" : t("time.noFields");
+  box.hidden = false;
+}
+
+function closeTimeConfig() {
+  const box = document.getElementById("time-config");
+  if (box) box.hidden = true;
+}
+
+// time= / time_end= / time_span= を .kasc 行へ書き戻す(他フィールドは保持)。
+// sql: 行の末尾オプション・duckdb: 系の kv オプションとも末尾追加で正しく解釈される
+function syncTimeSourceLine(item) {
+  if (!item.sourceLine) return;
+  let line = rewriteKascLineOpt(item.sourceLine, "time", item.timeField || null);
+  line = rewriteKascLineOpt(line, "timeend", null);
+  line = rewriteKascLineOpt(line, "time_end", item.timeEndField || null);
+  line = rewriteKascLineOpt(line, "timespan", null);
+  line = rewriteKascLineOpt(line, "time_span", item.timeSpan != null && !item.timeEndField ? String(item.timeSpan / 1000) : null);
+  if (line === item.sourceLine) return;
+  const input = document.querySelector("#inspector-input");
+  if (input) input.value = input.value.split(/\r?\n/).map(l => (l === item.sourceLine ? line : l)).join("\n");
+  item.sourceLine = line;
+}
+
+async function applyTimeConfig() {
+  const item = timeConfigItem;
+  if (!item) return;
+  const start = document.getElementById("time-config-start")?.value || "";
+  if (!start) return;
+  const end = document.getElementById("time-config-end")?.value || "";
+  const spanMs = end ? null : parseTimeSpanMs(document.getElementById("time-config-span")?.value || "");
+  item.timeField = start;
+  item.timeEndField = end || undefined;
+  item.timeSpan = spanMs;
+  syncTimeSourceLine(item);
+  closeTimeConfig();
+  try {
+    if (vectorDecoders.has(item.type)) await reloadVectorLayer(item);
+    else await refreshLayers();
+  } catch (error) {
+    console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+  }
+  renderLayerList();
+}
+
+async function clearTimeConfig() {
+  const item = timeConfigItem;
+  if (!item) return;
+  item.timeField = undefined;
+  item.timeEndField = undefined;
+  item.timeSpan = undefined;
+  syncTimeSourceLine(item);
+  closeTimeConfig();
+  try {
+    if (vectorDecoders.has(item.type)) await reloadVectorLayer(item);
+    else await refreshLayers();
+  } catch (error) {
+    console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+  }
+  renderLayerList();
+}
+
+document.getElementById("time-config-apply")?.addEventListener("click", () => void applyTimeConfig());
+document.getElementById("time-config-clear")?.addEventListener("click", () => void clearTimeConfig());
+document.getElementById("time-config-close")?.addEventListener("click", closeTimeConfig);
 
 // drape: getVectorDrapeFlags() の戻り値(null または {dem, tiles3d})
 async function buildStyledGeoJsonDataSource(source, drape, item = null) {
@@ -4453,6 +4585,9 @@ function syncLayerSourceLine(item) {
     if (item.renderSpecified) parts.push(item.renderPrimitive ? "render=primitive" : "render=entity");
     if (item.proxy) parts.push("proxy=on");
     if (item.styleUrl) parts.push(`style=${item.styleUrl}`);
+    if (item.timeField) parts.push(`time=${item.timeField}`);
+    if (item.timeEndField) parts.push(`time_end=${item.timeEndField}`);
+    if (item.timeSpan != null) parts.push(`time_span=${item.timeSpan / 1000}`);
     line = `duckdb: ${parts.join(" | ")}`;
   } else if (item.type === "gpkg" || item.type === "geopackage") {
     const parts = [item.sourceTitle, item.url || "", item.attribution || ""];
@@ -4466,9 +4601,12 @@ function syncLayerSourceLine(item) {
     if (item.renderSpecified) parts.push(item.renderPrimitive ? "render=primitive" : "render=entity");
     if (item.proxy === false) parts.push("proxy=off");
     if (item.styleUrl) parts.push(`style=${item.styleUrl}`);
+    if (item.timeField) parts.push(`time=${item.timeField}`);
+    if (item.timeEndField) parts.push(`time_end=${item.timeEndField}`);
+    if (item.timeSpan != null) parts.push(`time_span=${item.timeSpan / 1000}`);
     line = `${item.type}: ${parts.join(" | ")}`;
   } else if (item.type === "sql") {
-    line = `sql: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}${item.attribution ? ` | attr=${item.attribution}` : ""}${item.styleUrl ? ` | style=${item.styleUrl}` : ""}`;
+    line = `sql: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}${item.attribution ? ` | attr=${item.attribution}` : ""}${item.styleUrl ? ` | style=${item.styleUrl}` : ""}${item.timeField ? ` | time=${item.timeField}` : ""}${item.timeEndField ? ` | time_end=${item.timeEndField}` : ""}${item.timeSpan != null ? ` | time_span=${item.timeSpan / 1000}` : ""}`;
   }
   if (!line || line === item.sourceLine) return;
   const input = document.querySelector("#inspector-input");
