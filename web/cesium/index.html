@@ -54,6 +54,7 @@
               <button class="panel-tab" type="button" data-panel="camera-panel" data-i18n="tab.camera">カメラ</button>
               <button class="panel-tab" type="button" data-panel="display-panel" data-i18n="tab.display">表示</button>
               <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
+              <button class="panel-tab" type="button" data-panel="tools-panel" data-i18n="tab.tools">ツール</button>
             </nav>
             <section id="layers-panel" class="plugin-panel active">
               <select id="theme-select" hidden></select>
@@ -266,6 +267,7 @@
                     <option value="tokyo" data-i18n="display.datumTokyo">日本測地系</option>
                   </select>
                   <label><input id="display-popup" type="checkbox" /><span data-i18n="display.popup"> 地物クリックで属性ポップアップ</span></label>
+                  <label><input id="display-graticule" type="checkbox" /><span data-i18n="display.graticule"> 緯度経度グリッド</span></label>
                 </div>
               </section>
             </section>
@@ -279,6 +281,42 @@
               <div class="section-title" data-i18n="attr.title">属性</div>
               <button id="attr-vector-attr-list-btn" type="button" style="width:100%;font-size:0.9em;margin-bottom:3px;" data-i18n="vector.attrList">選択中のレイヤ属性一覧</button>
               <div id="attr-content" class="attr-content" data-i18n="attr.empty">地物を選択すると属性を表示します。</div>
+            </section>
+            <section id="tools-panel" class="plugin-panel">
+              <div class="section-title" data-i18n="tools.measure">計測</div>
+              <div class="tool-btnrow">
+                <button id="tool-m-distance" type="button" data-i18n="tools.distance">距離</button>
+                <button id="tool-m-area" type="button" data-i18n="tools.area">面積</button>
+                <button id="tool-m-bearing" type="button" data-i18n="tools.bearing">方位</button>
+                <button id="tool-clear" type="button" class="danger-button" data-i18n="tools.clear">クリア</button>
+              </div>
+              <p class="hint" data-i18n="tools.measureHint">左クリックで頂点を追加、ダブルクリックで確定します。</p>
+              <div id="tools-measure-result" class="tool-result" aria-live="polite"></div>
+              <div class="section-title" data-i18n="tools.profile">標高断面</div>
+              <div class="tool-btnrow">
+                <button id="tool-profile-draw" type="button" data-i18n="tools.profileDraw">ラインを描く</button>
+                <label class="tool-inline"><span data-i18n="tools.profileSamples">サンプル数</span><input id="tool-profile-samples" type="number" min="10" max="500" value="100" /></label>
+              </div>
+              <p class="hint" data-i18n="tools.profileHint">断面を取るラインを描き、ダブルクリックで実行します。</p>
+              <div id="profile-box" hidden>
+                <canvas id="profile-chart" width="280" height="150"></canvas>
+                <div id="profile-stats" class="tool-result"></div>
+              </div>
+              <div class="section-title" data-i18n="tools.los">見通し判定</div>
+              <p class="hint" data-i18n="tools.losHint">観測点→対象点の順にクリックします。</p>
+              <div class="tool-btnrow">
+                <button id="tool-los" type="button" data-i18n="tools.losPick">2点を指定</button>
+                <label class="tool-inline"><span data-i18n="tools.losObserverHeight">観測点高(m)</span><input id="los-observer-h" type="number" step="0.5" value="1.5" /></label>
+                <label class="tool-inline"><span data-i18n="tools.losTargetHeight">対象点高(m)</span><input id="los-target-h" type="number" step="0.5" value="0" /></label>
+              </div>
+              <div id="tools-los-result" class="tool-result" aria-live="polite"></div>
+              <div class="section-title" data-i18n="tools.export">エクスポート</div>
+              <div class="tool-btnrow">
+                <select id="tool-export-layer"></select>
+                <button id="tool-export-geojson" type="button">GeoJSON</button>
+              </div>
+              <div id="tool-export-status" class="tool-result" aria-live="polite"></div>
+              <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
             </section>
             <div id="engines"></div>
           </aside>
@@ -845,6 +883,8 @@
         <div class="vector-attr-widget-filter">
           <select id="vector-attr-widget-layer" class="vector-attr-widget-layer" title="レイヤを選択" data-i18n-attr="title:vattr.layerTitle"></select>
           <input id="vector-attr-widget-search" type="text" placeholder="属性または値で検索" data-i18n-attr="placeholder:vattr.search" />
+          <button id="vector-attr-export-csv" type="button" title="表示中の行をCSVで出力" data-i18n-attr="title:vattr.exportCsv">CSV</button>
+          <button id="vector-attr-export-tsv" type="button" title="表示中の行をTSVで出力" data-i18n-attr="title:vattr.exportTsv">TSV</button>
         </div>
         <div class="vector-attr-widget-table-wrap">
           <table class="vector-attr-widget-table">

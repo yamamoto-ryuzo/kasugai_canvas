@@ -2382,6 +2382,66 @@ const CHAT_TOOLS = [{
         required: ["ids"],
       },
     },
+    {
+      name: "measureDistance",
+      description: "折れ線の測地線距離を計算し、結果ラインを地図へ描画する。座標は [[lng,lat],...]（度）",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          coordinates: { type: "ARRAY", items: { type: "ARRAY", items: { type: "NUMBER" } }, description: "[[lng,lat],...] の頂点列（2点以上・度）" },
+        },
+        required: ["coordinates"],
+      },
+    },
+    {
+      name: "measureArea",
+      description: "ポリゴンの面積と周囲長を測地線近似で計算し、結果を地図へ描画する。座標は [[lng,lat],...]（度・3点以上）",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          coordinates: { type: "ARRAY", items: { type: "ARRAY", items: { type: "NUMBER" } }, description: "[[lng,lat],...] の頂点列（3点以上・度）" },
+        },
+        required: ["coordinates"],
+      },
+    },
+    {
+      name: "measureBearing",
+      description: "2点間の測地線方位角（初方位・終方位）と距離を計算し、ラインを地図へ描画する",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          from: { type: "ARRAY", items: { type: "NUMBER" }, description: "始点 [lng,lat]（度）" },
+          to: { type: "ARRAY", items: { type: "NUMBER" }, description: "終点 [lng,lat]（度）" },
+        },
+        required: ["from", "to"],
+      },
+    },
+    {
+      name: "elevationProfile",
+      description: "ラインに沿った地形標高をサンプリングし、距離-標高の断面データを返す。断面グラフとラインも地図上に表示する。地形OFF時は地理院標高API（日本域）へフォールバック",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          coordinates: { type: "ARRAY", items: { type: "ARRAY", items: { type: "NUMBER" } }, description: "[[lng,lat],...] のライン頂点列（2点以上・度）" },
+          samples: { type: "NUMBER", description: "サンプル数（省略時100・10-500）" },
+        },
+        required: ["coordinates"],
+      },
+    },
+    {
+      name: "lineOfSight",
+      description: "観測点から対象点への地形を考慮した見通し（LOS）可否を判定し、視線・遮蔽点を地図へ描画する。高度は地表からのオフセット(m)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          from: { type: "ARRAY", items: { type: "NUMBER" }, description: "観測点 [lng,lat]（度）" },
+          to: { type: "ARRAY", items: { type: "NUMBER" }, description: "対象点 [lng,lat]（度）" },
+          observerHeight: { type: "NUMBER", description: "観測点の地表からの高さ(m・省略時0)" },
+          targetHeight: { type: "NUMBER", description: "対象点の地表からの高さ(m・省略時0)" },
+        },
+        required: ["from", "to"],
+      },
+    },
   ],
 }];
 
@@ -3160,6 +3220,11 @@ export async function executeChatTool(name, args = {}) {
   if (name === "getGsiElevation") return await window.kasugaiApi.getGsiElevation(args.latitude, args.longitude);
   if (name === "getGsiShareUrl") return window.kasugaiApi.getGsiShareUrl();
   if (name === "setGsiGlobe") return window.kasugaiApi.setGsiGlobe(args.on);
+  if (name === "measureDistance") return window.kasugaiApi.measureDistance(args.coordinates);
+  if (name === "measureArea") return window.kasugaiApi.measureArea(args.coordinates);
+  if (name === "measureBearing") return window.kasugaiApi.measureBearing(args.from, args.to);
+  if (name === "elevationProfile") return await window.kasugaiApi.elevationProfile(args.coordinates, args.samples);
+  if (name === "lineOfSight") return await window.kasugaiApi.lineOfSight(args.from, args.to, args);
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 

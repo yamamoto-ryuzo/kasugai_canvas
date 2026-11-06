@@ -23,6 +23,7 @@ import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-rende
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { mountSunControls } from "../shared/sun-time.js";
+import { initGeoTools } from "./geo-tools.js";
 import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
@@ -161,6 +162,8 @@ let flyPathProgress = 0;
 let flyRafId = null;
 let flyLastTime = performance.now();
 let drawModeActive = false;
+// 計測・断面・見通し・グリッドのツール群（setupEvents 内で初期化）
+let geoTools = null;
 let drawnPoints = [];
 let drawnPointHeights = [];
 let drawLineEntity = null;
@@ -7953,6 +7956,8 @@ function setupEvents() {
       }
       return;
     }
+    // 計測・断面・見通しツールのモードがアクティブなら属性ピックより優先して頂点拾いに使う
+    if (geoTools && geoTools.handleClick(movement.position)) return;
     if (walkModeActive) return;
     // 重なった地物も拾えるよう drillPick で手前から順に全件取得する
     const pickedList = viewer.scene.drillPick(movement.position, DRILL_PICK_LIMIT) || [];
@@ -8037,6 +8042,26 @@ function setupEvents() {
       attr.append(block);
     });
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+  // ツールモード: ダブルクリック確定とラバーバンドプレビュー
+  clickHandler.setInputAction(movement => {
+    if (geoTools) geoTools.handleDoubleClick(movement.position);
+  }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
+  clickHandler.setInputAction(movement => {
+    if (geoTools) geoTools.handleMouseMove(movement.endPosition);
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+  // 計測・断面・見通し・グリッド・エクスポートのツール群。
+  // 全てオンデマンド動作のため常時の描画コストは発生しない
+  geoTools = initGeoTools({
+    viewer,
+    requestRender,
+    sampleRouteTerrain,
+    getOrderedLayerItems,
+    getLayerGeoJson,
+    isVectorLayerItem: item => item && (item.type === "geojson" || item.type === "layer" || item.type === "entities" || vectorDecoders.has(item.type)),
+    isQueryLayerItem: item => isQueryDecoder(item && vectorDecoders.get(item.type), item),
+  });
 
   let lastRightClick = 0;
   viewer.canvas.addEventListener("contextmenu", event => {
@@ -8658,6 +8683,49 @@ function setupVectorSearch() {
   function closeVectorAttrWidget() {
     if (vectorAttrWidget) vectorAttrWidget.classList.remove("visible");
   }
+
+  // 表示中の行セット（検索フィルタ＋ソート適用後・全件。表示上限の1000件では切らない）を返す。
+  // renderVectorAttrWidget の絞り込み・並び替えと同じルール
+  function getAttrWidgetMatchedRows() {
+    const query = String(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "").toLowerCase().trim();
+    let matched = query ? vectorAttrWidgetRows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : [...vectorAttrWidgetRows];
+    if (vectorAttrWidgetSort.column >= 0 && vectorAttrWidgetSort.column < vectorAttrWidgetAttributes.length) {
+      const col = vectorAttrWidgetSort.column;
+      const order = vectorAttrWidgetSort.order;
+      matched.sort((a, b) => {
+        const cmp = String(a.values[col] || "").localeCompare(String(b.values[col] || ""), undefined, { numeric: true, sensitivity: "base" });
+        return cmp * order;
+      });
+    }
+    return matched;
+  }
+
+  // 属性一覧のエクスポート（CSV/TSV・UTF-8 BOM 付きで Excel 文字化け対策）
+  function exportAttrWidgetTable(delim) {
+    const rows = getAttrWidgetMatchedRows();
+    if (!vectorAttrWidgetAttributes.length || !rows.length) return;
+    const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+    // 位置が取れる行は代表点の lon/lat 列を末尾に付ける（行クリック移動と同じ座標）
+    const header = [...vectorAttrWidgetAttributes, "lon", "lat"];
+    const lines = [header.map(esc).join(delim)];
+    for (const row of rows) {
+      lines.push([...row.values, Number.isFinite(row.lng) ? row.lng : "", Number.isFinite(row.lat) ? row.lat : ""].map(esc).join(delim));
+    }
+    const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
+    const item = layerState.get(layerId);
+    const base = String((item && item.title) || "attributes").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+    const ext = delim === "\t" ? "tsv" : "csv";
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: `text/${ext};charset=utf-8` });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${base}.${ext}`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  document.querySelector("#vector-attr-export-csv")?.addEventListener("click", () => exportAttrWidgetTable(","));
+  document.querySelector("#vector-attr-export-tsv")?.addEventListener("click", () => exportAttrWidgetTable("\t"));
 
   if (vectorAttrListBtn) vectorAttrListBtn.addEventListener("click", () => openVectorAttrWidget(vectorLayer ? vectorLayer.value : null));
   const attrVectorAttrListBtn = document.querySelector("#attr-vector-attr-list-btn");
@@ -9847,6 +9915,26 @@ window.kasugaiApi = {
   // 読み込み済みレイヤーの地物を GeoJSON で返す（データ加工の入力用）
   getLayerGeoJson(idOrTitle) {
     return getLayerGeoJson(idOrTitle);
+  },
+  // ---- 計測・断面・見通しツール（geo-tools.js。座標は [[lng,lat],...] 形式）----
+  measureDistance(coords) {
+    return geoTools ? geoTools.measureDistance(coords) : { ok: false };
+  },
+  measureArea(coords) {
+    return geoTools ? geoTools.measureArea(coords) : { ok: false };
+  },
+  measureBearing(from, to) {
+    return geoTools ? geoTools.measureBearing(from, to) : { ok: false };
+  },
+  async elevationProfile(coords, samples) {
+    return geoTools ? await geoTools.elevationProfile(coords, samples) : { ok: false };
+  },
+  async lineOfSight(from, to, opts) {
+    return geoTools ? await geoTools.lineOfSight(from, to, opts) : { ok: false };
+  },
+  setGraticule(on) {
+    if (geoTools) geoTools.setGraticule(on);
+    return true;
   },
   // GeoJSONオブジェクトを一時レイヤーとして直接表示する
   async addDataLayer(title, geojson) {
