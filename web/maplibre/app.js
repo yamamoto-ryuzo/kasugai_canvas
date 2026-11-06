@@ -371,6 +371,57 @@ function rasterSource(item, baseUrl) {
   return source;
 }
 
+// スタイル未指定地物の既定値(simplestyle > default_style: > 既定色)を
+// データ駆動 paint 式で表現する kind 定義(fill/line/circle)
+function defaultVectorKinds() {
+  const ds = currentDefaultStyles || {};
+  const lineColor = ds.line?.color ?? "#2c5ea8";
+  const lineWidth = ds.line?.width ?? 1.5;
+  const lineOpacity = ds.line?.opacity ?? 1;
+  const polyStroke = ds.polygon?.stroke ?? lineColor;
+  const polyStrokeW = ds.polygon?.strokeWidth ?? lineWidth;
+  const polyStrokeO = ds.polygon?.strokeOpacity ?? lineOpacity;
+  const polyFill = ds.polygon?.fill ?? "#3a7bd5";
+  const polyFillOpacity = ds.polygon?.fillOpacity ?? (ds.polygon?.fill && cssColorAlpha(ds.polygon.fill) < 1 ? 1 : 0.4);
+  const pointColor = ds.point?.color ?? "#2c5ea8";
+  const pointRadius = ds.point?.size ? defaultPointRadius(ds.point.size) : 5;
+  const pointOpacity = ds.point?.opacity ?? 1;
+  return [
+    ["fill", ["==", ["geometry-type"], "Polygon"], {
+      "fill-color": ["case", ["has", "fill"], ["to-color", ["get", "fill"]], polyFill],
+      "fill-opacity": ["case", ["has", "fill-opacity"], ["to-number", ["get", "fill-opacity"]], polyFillOpacity],
+    }],
+    ["line", ["!=", ["geometry-type"], "Point"], {
+      "line-color": ["case", ["has", "stroke"], ["to-color", ["get", "stroke"]],
+        ["case", ["==", ["geometry-type"], "Polygon"], polyStroke, lineColor]],
+      "line-width": ["case", ["has", "stroke-width"], ["to-number", ["get", "stroke-width"]],
+        ["case", ["==", ["geometry-type"], "Polygon"], polyStrokeW, lineWidth]],
+      "line-opacity": ["case", ["has", "stroke-opacity"], ["to-number", ["get", "stroke-opacity"]],
+        ["case", ["==", ["geometry-type"], "Polygon"], polyStrokeO, lineOpacity]],
+    }],
+    ["circle", ["==", ["geometry-type"], "Point"], {
+      "circle-radius": ["match", ["to-string", ["get", "marker-size"]],
+        "small", defaultPointRadius(24), "medium", defaultPointRadius(48), "large", defaultPointRadius(64), pointRadius],
+      "circle-color": ["case", ["has", "marker-color"], ["to-color", ["get", "marker-color"]], pointColor],
+      "circle-opacity": pointOpacity,
+      "circle-stroke-color": ["case", ["has", "stroke"], ["to-color", ["get", "stroke"]], "#ffffff"],
+      "circle-stroke-width": ["case", ["has", "stroke-width"], ["to-number", ["get", "stroke-width"]], 1],
+    }],
+  ];
+}
+
+// pmtiles プロトコルは使う行がある時だけ CDN から遅延ロードして登録する
+let pmtilesModuleP = null;
+let pmtilesProtocol = null;
+function ensurePmtiles() {
+  pmtilesModuleP ||= import("https://cdn.jsdelivr.net/npm/pmtiles@4.4.1/+esm").then(m => {
+    pmtilesProtocol = new m.Protocol();
+    maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile);
+    return m;
+  });
+  return pmtilesModuleP;
+}
+
 // .kasc 1行 → レイヤ登録。戻り値は { lids: レイヤ id 配列(表示切替用), sid: ソース id,
 // viewportQuery: 表示範囲連動クエリの有無 }
 // beforeIdFn は「追加時点で評価する挿入先レイヤ id」を返す関数(読込完了順が
@@ -421,46 +472,63 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     managedLayers.push(...lids);
     return { lids, sid, viewportQuery, filters, opas };
   }
+  if (item.type === "mvt" || item.type === "pmtiles") {
+    // MVT ベクトルタイル / PMTiles(単一ファイル・Range リクエスト)。
+    // ソースレイヤ名は layers= 指定 > PMTiles/TileJSON メタデータの vector_layers で決まる
+    const url = resolveKascUrl(item.url, baseUrl);
+    const opts = item.opts || {};
+    const sourceDef = { type: "vector", attribution: layerAttribution(item) || undefined };
+    let srcLayers = null;
+    if (item.type === "pmtiles") {
+      const m = await ensurePmtiles();
+      const pm = new m.PMTiles(url);
+      pmtilesProtocol.add(pm);
+      sourceDef.url = `pmtiles://${url}`;
+      try {
+        const meta = await pm.getMetadata();
+        srcLayers = (meta?.vector_layers || []).map(l => l.id).filter(Boolean);
+      } catch (_) {}
+    } else if (/\.json($|\?)/i.test(url)) {
+      // TileJSON 参照(メタデータに vector_layers があればソースレイヤ自動判別)
+      sourceDef.url = url;
+      try {
+        const tj = await fetch(url).then(r => (r.ok ? r.json() : null));
+        srcLayers = (tj?.vector_layers || []).map(l => l.id).filter(Boolean);
+      } catch (_) {}
+    } else {
+      sourceDef.tiles = [url];
+    }
+    const optLayers = String(opts.srclayers ?? opts.sourcelayers ?? opts.layers ?? "").split(",").map(s => s.trim()).filter(Boolean);
+    if (optLayers.length) srcLayers = optLayers;
+    if (!srcLayers?.length) {
+      throw new Error(`${item.type}: ソースレイヤ名が不明です。layers=<名前[,…]> で指定するか TileJSON/PMTiles メタデータが必要です`);
+    }
+    if (opts.minzoom ?? opts.minimumlevel) sourceDef.minzoom = Number(opts.minzoom ?? opts.minimumlevel);
+    if (opts.maxzoom ?? opts.maximumlevel) sourceDef.maxzoom = Number(opts.maxzoom ?? opts.maximumlevel);
+    map.addSource(sid, sourceDef);
+    const vis = item.visible ? "visible" : "none";
+    const before = beforeId();
+    for (const sl of srcLayers) {
+      for (const [kind, filter, paint] of defaultVectorKinds()) {
+        const lid = `${sid}-${sl}-${kind}`;
+        map.addLayer({ id: lid, type: kind, source: sid, "source-layer": sl, filter, paint, layout: { visibility: vis } }, before);
+        lids.push(lid);
+        if (!filters) filters = new Map();
+        filters.set(lid, filter);
+        opas.set(lid, { prop: `${kind}-opacity`, base: typeof paint?.[`${kind}-opacity`] === "number" ? paint[`${kind}-opacity`] : 1 });
+      }
+    }
+    managedSources.push(sid);
+    managedLayers.push(...lids);
+    return { lids, sid, viewportQuery, filters, opas };
+  }
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = preloaded || await loadVectorItem(item, baseUrl, getViewBounds());
     const geojson = loaded.geojson;
     viewportQuery = !!loaded.viewportQuery;
-    // スタイル未指定地物の既定値(simplestyle > default_style: > 既定色)を
-    // データ駆動 paint 式で表現する
-    const ds = currentDefaultStyles || {};
-    const lineColor = ds.line?.color ?? "#2c5ea8";
-    const lineWidth = ds.line?.width ?? 1.5;
-    const lineOpacity = ds.line?.opacity ?? 1;
-    const polyStroke = ds.polygon?.stroke ?? lineColor;
-    const polyStrokeW = ds.polygon?.strokeWidth ?? lineWidth;
-    const polyStrokeO = ds.polygon?.strokeOpacity ?? lineOpacity;
-    const polyFill = ds.polygon?.fill ?? "#3a7bd5";
-    const polyFillOpacity = ds.polygon?.fillOpacity ?? (ds.polygon?.fill && cssColorAlpha(ds.polygon.fill) < 1 ? 1 : 0.4);
-    const pointColor = ds.point?.color ?? "#2c5ea8";
-    const pointRadius = ds.point?.size ? defaultPointRadius(ds.point.size) : 5;
-    const pointOpacity = ds.point?.opacity ?? 1;
-    let kinds = [
-      ["fill", ["==", ["geometry-type"], "Polygon"], {
-        "fill-color": ["case", ["has", "fill"], ["to-color", ["get", "fill"]], polyFill],
-        "fill-opacity": ["case", ["has", "fill-opacity"], ["to-number", ["get", "fill-opacity"]], polyFillOpacity],
-      }],
-      ["line", ["!=", ["geometry-type"], "Point"], {
-        "line-color": ["case", ["has", "stroke"], ["to-color", ["get", "stroke"]],
-          ["case", ["==", ["geometry-type"], "Polygon"], polyStroke, lineColor]],
-        "line-width": ["case", ["has", "stroke-width"], ["to-number", ["get", "stroke-width"]],
-          ["case", ["==", ["geometry-type"], "Polygon"], polyStrokeW, lineWidth]],
-        "line-opacity": ["case", ["has", "stroke-opacity"], ["to-number", ["get", "stroke-opacity"]],
-          ["case", ["==", ["geometry-type"], "Polygon"], polyStrokeO, lineOpacity]],
-      }],
-      ["circle", ["==", ["geometry-type"], "Point"], {
-        "circle-radius": ["match", ["to-string", ["get", "marker-size"]],
-          "small", defaultPointRadius(24), "medium", defaultPointRadius(48), "large", defaultPointRadius(64), pointRadius],
-        "circle-color": ["case", ["has", "marker-color"], ["to-color", ["get", "marker-color"]], pointColor],
-        "circle-opacity": pointOpacity,
-        "circle-stroke-color": ["case", ["has", "stroke"], ["to-color", ["get", "stroke"]], "#ffffff"],
-        "circle-stroke-width": ["case", ["has", "stroke-width"], ["to-number", ["get", "stroke-width"]], 1],
-      }],
-    ];
+    let kinds = defaultVectorKinds();
+    const pointColor = (currentDefaultStyles || {}).point?.color ?? "#2c5ea8";
+    const pointRadius = (currentDefaultStyles || {}).point?.size ? defaultPointRadius((currentDefaultStyles || {}).point.size) : 5;
     let zoomRange = null;
     if (item.opts?.style) {
       try {
@@ -1111,7 +1179,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // 未対応通知から外す。3dtiles は _idx（.kasc 上の行順）で doc.layers と
   // 混ぜてレイヤツリー順を再現する
   kascFlyPaths.setItems(doc.unsupported);
-  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type));
+  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson" && i.type !== "mvt" && i.type !== "pmtiles" && !NON_LAYER_TYPES.has(i.type));
 
   currentBaseEntries = [];
   const baseEntries = currentBaseEntries;
@@ -1174,7 +1242,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   const orderedItems = [...doc.layers, ...doc.unsupported.filter(i => i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type))]
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
   const entries = orderedItems.map(item =>
-    ({ item, lids: [], sid: null, filters: null, opas: null, pending: true, unsupported: doc.unsupported.includes(item) && item.type !== "3dtiles" }));
+    ({ item, lids: [], sid: null, filters: null, opas: null, pending: true, unsupported: doc.unsupported.includes(item) && !["3dtiles", "mvt", "pmtiles"].includes(item.type) }));
   layerEntries = entries;
   lastBaseUrl = baseUrl;
   renderLayerRows(entries, unsupported);

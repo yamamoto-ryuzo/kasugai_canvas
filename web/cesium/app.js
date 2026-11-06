@@ -3351,6 +3351,9 @@ async function refreshLayersImpl() {
   viewer.imageryLayers.removeAll(false);
   vectorDataSources.forEach(({ ds, plugin }) => { if (!plugin) try { viewer.dataSources.remove(ds, false); } catch (error) { /* ignore */ } });
   vectorDataSources.length = 0;
+  timeLayers.clear();
+  timePrevMs = null;
+  refreshTimeBar();
   vectorAttrLoadCache.clear();
   activeDataSources.length = 0;
   activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
@@ -3980,6 +3983,199 @@ async function buildHeatmapDataSource(item, source) {
   return ds;
 }
 
+// ---- 時系列レイヤー(time=) ----------------------------------------------
+// ベクター行オプション time=<プロパティ名> で時系列化。地物ごとの有効区間を
+// [time, time_end] / [time, time+time_span] / [time, ∞)(累積) で求め、
+// entity.availability 設定に加えて entity.show を時刻フィルタする
+// (地形ドレープの GroundPrimitive は availability を見ない経路があるため
+// 手動フィルタで全経路を統一)。画面下部のタイムスライダーで scrub/再生する。
+const timeLayers = new Map(); // layerId → { item, items, starts, ends, si, ei }
+let timePrevMs = null;
+let timePlaying = false;
+
+function parseTimeValueMs(v) {
+  if (v == null || v === "") return null;
+  if (v instanceof Date) { const ms = v.getTime(); return Number.isFinite(ms) ? ms : null; }
+  if (typeof v === "number" && Number.isFinite(v)) {
+    if (v >= 1e12) return v;                                        // epoch ms
+    if (v >= 1e9) return v * 1000;                                  // epoch s
+    if (Number.isInteger(v) && v >= 1000 && v <= 9999) return Date.UTC(v, 0, 1); // 年のみ
+    return null;
+  }
+  const ms = Date.parse(String(v).trim());
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// 保持時間: 秒数 / ISO8601 duration(PT1H,P1D 等) / 1d,2h,30m,45s,500ms 形式 → ms
+function parseTimeSpanMs(raw) {
+  const s = String(raw || "").trim();
+  const num = Number(s);
+  if (Number.isFinite(num) && num > 0) return num * 1000;
+  const iso = /^P(?:(\d+(?:\.\d+)?)D)?(?:T(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?)?$/i.exec(s);
+  if (iso) {
+    const ms = (((+iso[1] || 0) * 24 + (+iso[2] || 0)) * 60 + (+iso[3] || 0)) * 60 * 1000 + (+iso[4] || 0) * 1000;
+    return ms > 0 ? ms : null;
+  }
+  const u = /^(\d+(?:\.\d+)?)\s*(ms|d|h|m|s)$/i.exec(s);
+  if (u) {
+    const ms = +u[1] * { ms: 1, s: 1e3, m: 6e4, h: 36e5, d: 864e5 }[u[2].toLowerCase()];
+    return ms > 0 ? ms : null;
+  }
+  return null;
+}
+
+function timeProp(entity, name) {
+  const p = entity.properties?.[name];
+  const v = p && typeof p.getValue === "function" ? p.getValue() : p;
+  return parseTimeValueMs(v);
+}
+
+function setTimeEntityShow(it, on) {
+  if (it.entity._timeOn === on) return;
+  it.entity._timeOn = on;
+  try { it.entity.show = on; } catch (_) {}
+}
+
+function registerTimeLayer(item, ds) {
+  const items = [];
+  for (const e of ds.entities.values) {
+    const start = timeProp(e, item.timeField);
+    if (start == null) continue;
+    let end = item.timeEndField ? timeProp(e, item.timeEndField) : null;
+    if (end == null) end = item.timeSpan != null ? start + item.timeSpan : Infinity;
+    if (end <= start) end = start + 1; // 0幅指定でも見えるよう最小区間を保証
+    try {
+      e.availability = new Cesium.TimeIntervalCollection([
+        new Cesium.TimeInterval({
+          start: Cesium.JulianDate.fromDate(new Date(start)),
+          stop: Cesium.JulianDate.fromDate(new Date(end === Infinity ? Date.UTC(9999, 0, 1) : end)),
+        }),
+      ]);
+    } catch (_) {}
+    e._timeOn = true; // entity.show の既定は true。初期値を合わせて初回の非表示適用を有効化
+    items.push({ entity: e, start, end });
+  }
+  if (!items.length) { timeLayers.delete(item.id); refreshTimeBar(); return; }
+  const starts = items.slice().sort((a, b) => a.start - b.start);
+  const ends = items.slice().sort((a, b) => a.end - b.end);
+  timeLayers.set(item.id, { item, items, starts, ends, si: 0, ei: 0 });
+  refreshTimeBar();
+}
+
+function timeRange() {
+  let min = Infinity, max = -Infinity;
+  for (const t of timeLayers.values()) for (const it of t.items) {
+    if (it.start < min) min = it.start;
+    const e = it.end === Infinity ? it.start : it.end;
+    if (e > max) max = e;
+    if (it.start > max) max = it.start;
+  }
+  return min <= max ? [min, max] : null;
+}
+
+// 時刻 nowMs での表示状態を地物へ反映する。
+// 前進 tick では区間境界を跨いだ地物だけ O(k) で更新、ジャンプ/巻き戻しは全件再評価
+function applyTimeAt(nowMs, jumped) {
+  for (const track of timeLayers.values()) {
+    if (jumped || timePrevMs == null || nowMs < timePrevMs) {
+      let si = 0, ei = 0;
+      for (const it of track.items) setTimeEntityShow(it, it.start <= nowMs && nowMs < it.end);
+      while (si < track.starts.length && track.starts[si].start <= nowMs) si++;
+      while (ei < track.ends.length && track.ends[ei].end <= nowMs) ei++;
+      track.si = si; track.ei = ei;
+    } else {
+      while (track.si < track.starts.length && track.starts[track.si].start <= nowMs) {
+        const it = track.starts[track.si++];
+        setTimeEntityShow(it, nowMs < it.end);
+      }
+      while (track.ei < track.ends.length && track.ends[track.ei].end <= nowMs) {
+        setTimeEntityShow(track.ends[track.ei++], false);
+      }
+    }
+  }
+}
+
+function fmtTimeLabel(ms, range) {
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, "0");
+  const date = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  // 全体スパンが2日超なら日付のみ、以内なら時刻まで出す
+  return (range[1] - range[0] > 2 * 864e5) ? date : `${date} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+function syncTimeBarUi() {
+  const range = timeRange(); if (!range) return;
+  const now = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+  const slider = document.getElementById("time-slider");
+  if (slider) slider.value = Math.round((now - range[0]) / Math.max(1, range[1] - range[0]) * 1000);
+  const label = document.getElementById("time-label");
+  if (label) label.textContent = fmtTimeLabel(now, range);
+}
+
+function timeSpeed() { return Number(document.getElementById("time-speed")?.value) || 60; }
+
+function setTimePlaying(on) {
+  const range = timeRange();
+  timePlaying = !!on && !!range;
+  const btn = document.getElementById("time-play");
+  if (btn) btn.textContent = timePlaying ? "⏸" : "▶";
+  if (timePlaying) {
+    // 再生中だけ常時描画へ切替(停止時は requestRenderMode を維持して無駄描画を防ぐ)
+    viewer.scene.requestRenderMode = false;
+    viewer.clock.shouldAnimate = true;
+    viewer.clock.clockRange = Cesium.ClockRange.LOOP_STOP;
+    viewer.clock.clockStep = Cesium.ClockStep.TICK_DEPENDENT;
+    viewer.clock.multiplier = timeSpeed();
+    const now = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+    if (now >= range[1]) viewer.clock.currentTime = viewer.clock.startTime.clone();
+  } else {
+    viewer.clock.shouldAnimate = false;
+    viewer.scene.requestRenderMode = true;
+    viewer.scene.requestRender();
+  }
+}
+
+// 時系列レイヤーの有無に合わせてバーの表示/時計範囲を更新する
+function refreshTimeBar() {
+  const bar = document.getElementById("time-bar");
+  if (!bar) return;
+  const range = timeRange();
+  if (!range) { setTimePlaying(false); bar.hidden = true; return; }
+  viewer.clock.startTime = Cesium.JulianDate.fromDate(new Date(range[0]));
+  viewer.clock.stopTime = Cesium.JulianDate.fromDate(new Date(range[1]));
+  const now = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+  const ms = (now >= range[0] && now <= range[1]) ? now : range[0];
+  viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ms));
+  timePrevMs = null;
+  applyTimeAt(ms, true);
+  syncTimeBarUi();
+  bar.hidden = false;
+  viewer.scene.requestRender();
+}
+
+viewer.clock.onTick.addEventListener(() => {
+  if (!timeLayers.size) return;
+  const now = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+  applyTimeAt(now, false);
+  timePrevMs = now;
+  if (timePlaying) syncTimeBarUi();
+});
+
+{
+  const slider = document.getElementById("time-slider");
+  slider?.addEventListener("input", ev => {
+    const range = timeRange(); if (!range) return;
+    const ms = range[0] + (range[1] - range[0]) * (Number(ev.target.value) / 1000);
+    viewer.clock.currentTime = Cesium.JulianDate.fromDate(new Date(ms));
+    applyTimeAt(ms, true);
+    timePrevMs = ms;
+    syncTimeBarUi();
+    viewer.scene.requestRender();
+  });
+  document.getElementById("time-play")?.addEventListener("click", () => setTimePlaying(!timePlaying));
+  document.getElementById("time-speed")?.addEventListener("change", () => { viewer.clock.multiplier = timeSpeed(); });
+}
+
 // drape: getVectorDrapeFlags() の戻り値(null または {dem, tiles3d})
 async function buildStyledGeoJsonDataSource(source, drape, item = null) {
   const clamp = !!drape;
@@ -4024,6 +4220,8 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
   }
   // cluster=on: 点を含むレイヤーのみクラスタを有効化する
   if (item?.cluster && geoJsonHasPoints(source)) enableLayerClustering(ds);
+  // time=<プロパティ>: 時系列レイヤー登録(タイムスライダー連動)
+  if (item?.timeField) registerTimeLayer(item, ds);
   return ds;
 }
 
@@ -4976,6 +5174,14 @@ function applyInspector(text) {
         if (clusterOpt) item.cluster = !/=\s*(off|none|false|0)\s*$/i.test(clusterOpt);
         const heatOpt = parts.find(part => /^(?:heat|heatmap)\s*=\s*\S/i.test(part));
         if (heatOpt) item.heat = !/=\s*(off|none|false|0)\s*$/i.test(heatOpt);
+        // time=時刻プロパティ: 時系列レイヤー化(タイムスライダー連動)。
+        // time_end=<プロパティ> で区間終端、time_span=<秒|PT1H|1d 等> で保持時間
+        const timeOpt = parts.find(part => /^time\s*=\s*\S/i.test(part));
+        if (timeOpt) item.timeField = timeOpt.slice(timeOpt.indexOf("=") + 1).trim();
+        const timeEndOpt = parts.find(part => /^(?:time_?end|timeend)\s*=\s*\S/i.test(part));
+        if (timeEndOpt) item.timeEndField = timeEndOpt.slice(timeEndOpt.indexOf("=") + 1).trim();
+        const timeSpanOpt = parts.find(part => /^(?:time_?span|timespan)\s*=\s*\S/i.test(part));
+        if (timeSpanOpt) item.timeSpan = parseTimeSpanMs(timeSpanOpt.slice(timeSpanOpt.indexOf("=") + 1).trim());
         // wfs: 等の key=value オプション(typename=/version=/maxfeatures=/cql_filter= 等)を
         // 汎用に opts マップへ保持する。render=/attr=/style=/table= は既に専用フィールドへ
         if (["wfs", "kml", "kmz", "shp", "shapefile", "csv", "tsv"].includes(type)) {
@@ -5060,6 +5266,9 @@ function applyInspector(text) {
         else if (key === "table" && raw) item.gpkgTable = raw;
         else if (key === "cluster") item.cluster = !/^(off|none|false|0)$/i.test(raw);
         else if (key === "heat" || key === "heatmap") item.heat = !/^(off|none|false|0)$/i.test(raw);
+        else if (key === "time" && raw) item.timeField = raw;
+        else if ((key === "timeend" || key === "time_end") && raw) item.timeEndField = raw;
+        else if ((key === "timespan" || key === "time_span") && raw) item.timeSpan = parseTimeSpanMs(raw);
         // style=QML URL: QGIS レイヤースタイル(.qml)を取得して描画に適用する
         else if ((key === "style" || key === "qml") && raw) item.styleUrl = resolveProjectUrl(raw);
       });
@@ -5085,7 +5294,8 @@ function applyInspector(text) {
       let styleUrl = "";
       let cluster = false;
       let heat = false;
-      const tailRe = /\|\s*(off|false|render\s*=\s*[a-z]+|attr(?:ibution)?\s*=[^|]*|style\s*=\s*[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+)\s*$/i;
+      let timeField = null, timeEndField = null, timeSpan = null;
+      const tailRe = /\|\s*(off|false|render\s*=\s*[a-z]+|attr(?:ibution)?\s*=[^|]*|style\s*=\s*[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+|time(?:_end|_span)?\s*=\s*[^|]*)\s*$/i;
       let tail;
       while ((tail = tailRe.exec(query))) {
         const seg = tail[1].trim();
@@ -5093,10 +5303,16 @@ function applyInspector(text) {
         const styleMatch = /^style\s*=\s*(.*)$/i.exec(seg);
         const clusterMatch = /^cluster\s*=\s*(.*)$/i.exec(seg);
         const heatMatch = /^heat(?:map)?\s*=\s*(.*)$/i.exec(seg);
+        const timeMatch = /^time\s*=\s*(.*)$/i.exec(seg);
+        const timeEndMatch = /^time_end\s*=\s*(.*)$/i.exec(seg);
+        const timeSpanMatch = /^time_span\s*=\s*(.*)$/i.exec(seg);
         if (attrMatch) attribution = attrMatch[1].trim();
         else if (styleMatch) styleUrl = styleMatch[1].trim();
         else if (clusterMatch) cluster = !/^(off|none|false|0)$/i.test(clusterMatch[1].trim());
         else if (heatMatch) heat = !/^(off|none|false|0)$/i.test(heatMatch[1].trim());
+        else if (timeEndMatch) timeEndField = timeEndMatch[1].trim();
+        else if (timeSpanMatch) timeSpan = parseTimeSpanMs(timeSpanMatch[1].trim());
+        else if (timeMatch) timeField = timeMatch[1].trim();
         else {
           const opt = seg.replace(/\s+/g, "").toLowerCase();
           if (opt === "off" || opt === "false") visible = false;
@@ -5111,6 +5327,9 @@ function applyInspector(text) {
       const id = `inspector-layer-${inspectorLayerIndex++}`;
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, query, visible, sourceVisible: visible, attribution, group, exclusiveGroup, renderPrimitive, renderSpecified, cluster, heat };
       if (styleUrl) item.styleUrl = resolveProjectUrl(styleUrl);
+      if (timeField) item.timeField = timeField;
+      if (timeEndField) item.timeEndField = timeEndField;
+      if (timeSpan != null) item.timeSpan = timeSpan;
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);

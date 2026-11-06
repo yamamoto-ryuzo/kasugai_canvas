@@ -382,6 +382,18 @@ footer { padding: 0 28px 22px; }
   overflow: hidden; flex: none; }
 #load-progress-bar { display: block; height: 100%; width: 0; background: #2c5ea8;
   transition: width .25s; }
+/* 時系列レイヤー(time=)のタイムスライダー */
+#time-bar { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 1005; display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  background: rgba(255,255,255,.95); border-radius: 14px; font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25); width: min(560px, 70vw); }
+#time-bar[hidden] { display: none; }
+#time-play { flex: none; width: 28px; height: 28px; padding: 0; border: 1px solid #cbd9de;
+  border-radius: 50%; background: #fff; cursor: pointer; font-size: 12px; line-height: 1; }
+#time-slider { flex: 1; min-width: 0; }
+#time-label { flex: none; font-variant-numeric: tabular-nums; color: #1d2b35; white-space: nowrap; }
+#time-speed { flex: none; border: 1px solid #cbd9de; border-radius: 4px; padding: 3px 4px;
+  font-size: 11px; background: #fff; }
 /* レイヤ行の読込ステータス(スピナー/失敗) */
 .layer-row > .layer-status { flex: none; font-size: 10px; color: #8a97a3; }
 .layer-status.loading { width: 11px; height: 11px; border: 2px solid #d5dde4;

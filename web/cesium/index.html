@@ -35,6 +35,18 @@
       <section class="panel deck-panel">
         <div id="cesium-container" class="viewport">
           <div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div>
+          <div id="time-bar" hidden>
+            <button id="time-play" type="button" data-i18n-attr="title:time.play;aria-label:time.play" aria-label="再生">▶</button>
+            <input id="time-slider" type="range" min="0" max="1000" step="1" value="0" data-i18n-attr="aria-label:time.slider" aria-label="時刻" />
+            <span id="time-label"></span>
+            <select id="time-speed" data-i18n-attr="title:time.speed;aria-label:time.speed" title="再生速度" aria-label="再生速度">
+              <option value="10">10x</option>
+              <option value="60" selected>60x</option>
+              <option value="600">600x</option>
+              <option value="3600">3600x</option>
+              <option value="86400">86400x</option>
+            </select>
+          </div>
           <aside class="control-panel">
             <h1 class="panel-title"><button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button><span class="panel-title-text">KASUGAI Canvas <small>Cesium</small></span><span class="panel-title-tools">
               <button id="manage-open" class="panel-manage" type="button" title="管理" data-i18n-attr="title:manage.open;aria-label:manage.open">⚙</button>
