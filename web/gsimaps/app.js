@@ -23,6 +23,9 @@ import {
   defaultPointRadius, buildWmsTileTemplate, buildWmtsTileTemplate,
 } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { diagnoseHubLayerError } from "../shared/hub-diag.js";
+import { createMinimap } from "../shared/minimap.js";
+import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../shared/attr-widget.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -553,10 +556,54 @@ function addGlobeImagery(item) {
   return viewer.imageryLayers.addImageryProvider(new C.UrlTemplateImageryProvider({ url }));
 }
 
+// ---- ツール（計測・標高断面・見通し・緯度経度グリッド・エクスポート）----
+// オーバーレイは iframe 内の Leaflet(gmap)へ w.L 経由で描く。reboot で gmap が
+// 差し替わるため overlay 実体は wireMapEvents で張り直し、geoTools には委譲器を渡す
+let toolOverlayRef = null;
+let toolOverlayBoundMap = null;
+const toolOverlayDelegate = {
+  update: fc => toolOverlayRef?.update(fc),
+  updateGraticule: fc => toolOverlayRef?.updateGraticule(fc),
+};
+// gsimaps には表示タブが無いため、ミニマップ/グリッドのトグルはツールパネル内へ注入する
+const geoTools = initGeoTools2d({
+  panel: "#pane-tools",
+  sections: { general: true },
+  overlay: toolOverlayDelegate,
+  graticuleOverlay: toolOverlayDelegate,
+  getBounds: () => viewBounds(),
+  setInteractive: on => { try { on ? gmap?.doubleClickZoom.disable() : gmap?.doubleClickZoom.enable(); } catch (_) {} },
+  getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
+  isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
+  isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),
+  getLayerGeoJson: id => layerEntries.find(e => e.item.id === id)?.item._geojson || null,
+});
+
+// ミニマップ（ツールパネルの表示セクション内トグル。範囲矩形+クリック移動）
+const minimap = createMinimap({
+  container: "#minimap",
+  checkbox: "#display-minimap",
+  getBounds: () => {
+    const b = viewBounds();
+    return b ? [[b.south, b.west], [b.north, b.east]] : null;
+  },
+  flyTo: ({ lng, lat }) => { if (gmap) gmap.setView([lat, lng], gmap.getZoom()); },
+});
+
 // 新しい iframe 地図へのイベント配線(reboot 時にも呼ぶ)
 function wireMapEvents() {
   bindViewSync();
   gmap?.on("moveend", scheduleViewportReload);
+  if (gmap && toolOverlayBoundMap !== gmap) {
+    toolOverlayBoundMap = gmap;
+    const w = frame.contentWindow;
+    if (w?.L) toolOverlayRef = makeLeafletOverlay(w.L, gmap);
+    gmap.on("click", e => { geoTools.handleClick(e.latlng); });
+    gmap.on("dblclick", () => { geoTools.handleDoubleClick(); });
+    gmap.on("mousemove", e => { geoTools.handleMouseMove(e.latlng); });
+    gmap.on("moveend", () => { geoTools.scheduleGraticule(); minimap.scheduleUpdate(); });
+    gmap.on("move", minimap.scheduleUpdate);
+  }
 }
 
 // iframe 地図移動 → 親ページ URL ハッシュ(#latitude=…&zoom=…)へ同期
@@ -768,6 +815,12 @@ function scheduleViewportReload() {
   viewportReloadTimer = setTimeout(() => {
     for (const e of layerEntries) {
       if (e.item._viewportQuery && effectiveVisible(e)) reloadEntryData(e).catch(console.error);
+      // bbox=auto / :bbox の初回読込に失敗したレイヤーは移動後の表示範囲で自動リトライする
+      else if (e.failed && effectiveVisible(e) && isViewportQueryItem(e.item)) {
+        e.failed = false; e.error = "";
+        mountEntry(e).then(() => renderLayerRows())
+          .catch(async err => { e.failed = true; e.error = (await diagnoseHubLayerError(e.item, err))?.message || String(err); renderLayerRows(); });
+      }
     }
   }, 400);
 }
@@ -777,6 +830,7 @@ const attrContentEl = () => document.getElementById("attr-content");
 
 // iframe 内地物クリック → 属性タブへ表示。`_`-props(中間層の内部スタイル値)は除く
 function showFeatureAttrs(props, title) {
+  if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
   const el = attrContentEl();
   if (!el) return;
   const clean = {};
@@ -1349,7 +1403,7 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
     } catch (err) {
       console.warn(e.item.title, err);
       e.pending = false; e.failed = true;
-      e.error = err?.message || err;
+      e.error = (await diagnoseHubLayerError(e.item, err))?.message || err?.message || err;
       currentUnsupported.push({ type: `${e.item.type}(読込失敗)` });
     }
     updateLoadProgress(++done, total, e.item.title);
@@ -2001,7 +2055,7 @@ function maybeLoadEntry(entry) {
   if (entry.pending || entry.sakuzu || entry.tileLayer) return;
   entry.pending = true;
   mountEntry(entry).then(() => { entry.pending = false; renderLayerRows(); })
-    .catch(err => { entry.pending = false; entry.failed = true; renderLayerRows(); console.warn(err); });
+    .catch(async err => { entry.pending = false; entry.failed = true; entry.error = (await diagnoseHubLayerError(entry.item, err))?.message || String(err); renderLayerRows(); console.warn(err); });
 }
 
 window.kasugaiApi = createPlayerApi({
@@ -2069,6 +2123,7 @@ window.kasugaiApi = createPlayerApi({
     applyEntryVisibility(entry);
   },
   getEntryGeoJson: entry => entry.item._geojson || null,
+  geoTools: () => geoTools,
   setBaseEntryVisible: (entry, on) => {
     if (globeMode) {
       // globe 側のベース表示切替は現在選択行として扱い applyGlobeBaseSelection へ委譲

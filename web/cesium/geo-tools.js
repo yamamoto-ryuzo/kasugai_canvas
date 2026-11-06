@@ -7,6 +7,7 @@
 // api.handleClick(pos)/handleDoubleClick(pos)/handleMouseMove(pos) は app.js の
 // クリックハンドラから呼び、処理したら true を返す（属性ピックを抑止するため）
 import { t } from "../shared/i18n.js";
+import { exportFeatureCollection } from "../shared/export-formats.js";
 
 const DEG = 180 / Math.PI;
 const MIN_POINT_SPACING_M = 2; // ダブルクリック終了時に同一点が二重追加されるのを防ぐ間隔
@@ -630,20 +631,37 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
     if (cur && items.some(i => i.id === cur)) sel.value = cur;
   }
 
+  // レイヤー → ファイル出力の共通処理。UI ボタンと外部 API（exportLayer）で共用。
+  // idOrTitle はレイヤー id またはタイトルを受け付ける
+  async function doExport(idOrTitle, format) {
+    const item = idOrTitle && (getOrderedLayerItems() || []).find(i => i.id === idOrTitle || i.title === idOrTitle);
+    const gj = item && getLayerGeoJson && getLayerGeoJson(item.id);
+    const res = gj && await exportFeatureCollection(gj, format, fileSafe(item.title || item.id));
+    if (!res) return { ok: false };
+    const file = `${fileSafe(item.title || item.id)}.${res.ext}`;
+    downloadBlob(res.data, file, res.mime);
+    return { ok: true, file, count: res.count, skipped: res.skipped || 0 };
+  }
+
   $("#tool-export-layer")?.addEventListener("focus", refreshExportOptions);
-  $("#tool-export-geojson")?.addEventListener("click", () => {
-    const sel = $("#tool-export-layer");
+  $("#tool-export-run")?.addEventListener("click", async () => {
     const st = $("#tool-export-status");
-    const id = sel && sel.value;
-    const item = id && (getOrderedLayerItems() || []).find(i => i.id === id);
-    const gj = id && getLayerGeoJson && getLayerGeoJson(id);
-    if (!gj) {
-      if (st) st.textContent = t("tools.exportNoData");
-      return;
+    const id = $("#tool-export-layer")?.value;
+    const format = $("#tool-export-format")?.value || "geojson";
+    try {
+      const res = await doExport(id, format);
+      if (!res.ok) {
+        if (st) st.textContent = t("tools.exportNoData");
+        return;
+      }
+      if (st) {
+        st.textContent = t("tools.exportDone", { count: res.count })
+          + (res.skipped ? `（${t("tools.exportSkipped", { count: res.skipped })}）` : "");
+      }
+    } catch (e) {
+      console.warn("layer export failed", e);
+      if (st) st.textContent = t("tools.exportFail");
     }
-    const count = Array.isArray(gj.features) ? gj.features.length : 0;
-    downloadBlob(JSON.stringify(gj), `${fileSafe(item && item.title || id)}.geojson`, "application/geo+json");
-    if (st) st.textContent = t("tools.exportDone", { count });
   });
 
   // ---------- モードボタン ----------
@@ -675,6 +693,7 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
     isGraticule: () => graticuleOn,
     clearAll,
     refreshExportOptions,
+    exportLayer: (idOrTitle, format = "geojson") => doExport(idOrTitle, format),
 
     measureDistance(coords) {
       const cartes = toCartesians(coords);

@@ -17,6 +17,9 @@ import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom,
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { diagnoseHubLayerError } from "../shared/hub-diag.js";
+import { createMinimap } from "../shared/minimap.js";
+import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -913,8 +916,10 @@ async function ensureEntryLoaded(entry) {
   } catch (err) {
     if (seq !== renderSeq) return false;
     entry.failed = true;
-    entry.error = err?.message || err;
-    currentUnsupported.push({ ...entry.item, type: `${entry.item.type}(読込失敗)` });
+    entry.error = (await diagnoseHubLayerError(entry.item, err))?.message || err?.message || err;
+    if (!currentUnsupported.some(u => u._idx != null && u._idx === entry.item._idx && /\(読込失敗\)$/.test(u.type))) {
+      currentUnsupported.push({ ...entry.item, type: `${entry.item.type}(読込失敗)` });
+    }
   }
   entry.pending = false;
   entry._loading = false;
@@ -1212,7 +1217,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     } catch (err) {
       if (seq !== renderSeq) return;
       entry.failed = true;
-      entry.error = err?.message || err;
+      entry.error = (await diagnoseHubLayerError(item, err))?.message || err?.message || err;
       unsupported.push({ ...item, type: `${item.type}(読込失敗)` });
     }
     entry.pending = false;
@@ -1369,6 +1374,83 @@ function requeryViewportLayers(entries) {
   }
 }
 
+// ---- ツール（計測・標高断面・見通し・緯度経度グリッド・エクスポート）----
+const toolFmt = new GeoJSON();
+const toolSrc = new VectorSource();
+const gratSrc = new VectorSource();
+const TOOL_LINE_COLORS = { line: "#ffff00", "los-line": "#ffa500", "los-ok": "#32cd32", "los-bad": "#ff0000", grat: "#888888" };
+function toolStyleFn(feature) {
+  const kind = feature.get("kind") || "line";
+  const gt = feature.getGeometry().getType();
+  const styles = [];
+  if (kind === "poly" || /Polygon/.test(gt)) {
+    styles.push(new Style({ fill: new Fill({ color: "rgba(255,255,0,.25)" }), stroke: new Stroke({ color: "#ffff00", width: 2 }) }));
+  } else if (/LineString|MultiLineString/.test(gt)) {
+    styles.push(new Style({ stroke: new Stroke({ color: TOOL_LINE_COLORS[kind] || "#ffff00", width: kind === "grat" ? 1 : 3, opacity: kind === "grat" ? 0.55 : 1 }) }));
+  } else {
+    if (kind !== "label" && kind !== "grat-label") {
+      const colors = { "los-block": "#ff0000", hover: "#00bfff" };
+      styles.push(new Style({ image: new CircleStyle({ radius: 5, fill: new Fill({ color: feature.get("color") || colors[kind] || "#ffff00" }), stroke: new Stroke({ color: "#000", width: 1.5 }) }) }));
+    }
+    if (feature.get("text")) {
+      styles.push(new Style({ text: new Text({ text: String(feature.get("text")), font: "11px sans-serif", fill: new Fill({ color: "#fff" }), stroke: new Stroke({ color: "#000", width: 3 }), offsetY: -12 }) }));
+    }
+  }
+  return styles;
+}
+map.addLayer(new VectorLayer({ source: gratSrc, style: toolStyleFn, zIndex: 900 }));
+map.addLayer(new VectorLayer({ source: toolSrc, style: toolStyleFn, zIndex: 950 }));
+const olOverlayOf = src => ({
+  update: fc => {
+    src.clear();
+    if (fc?.features?.length) {
+      src.addFeatures(toolFmt.readFeatures(fc, { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" }));
+    }
+  },
+});
+const viewBounds4326 = () => {
+  try {
+    if (!map.getSize()) return null;
+    const e = transformExtent(map.getView().calculateExtent(map.getSize()), map.getView().getProjection(), "EPSG:4326");
+    return { west: e[0], south: e[1], east: e[2], north: e[3] };
+  } catch (_) { return null; }
+};
+
+const geoTools = initGeoTools2d({
+  panel: "#pane-tools",
+  overlay: olOverlayOf(toolSrc),
+  graticuleOverlay: olOverlayOf(gratSrc),
+  getBounds: viewBounds4326,
+  setCursor: c => { map.getViewport().style.cursor = c; },
+  setInteractive: on => {
+    map.getInteractions().forEach(i => { if (i.constructor?.name === "DoubleClickZoom") i.setActive(!on); });
+  },
+  getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
+  isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
+  isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),
+  getLayerGeoJson: id => {
+    const e = layerEntries.find(en => en.item.id === id);
+    if (!e) return null;
+    const src = e.layer?.getSource?.();
+    if (!src?.getFeatures) return e.item._geojson || null;
+    return toolFmt.writeFeaturesObject(src.getFeatures(), { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" });
+  },
+});
+
+// ミニマップ（表示>一般トグル。範囲矩形+クリック移動）
+const minimap = createMinimap({
+  container: "#minimap",
+  checkbox: "#display-minimap",
+  tileUrl: () => currentBaseEntries[Number(panel.basemapSelect?.value ?? 0)]?.item?.url || "",
+  getBounds: () => {
+    const b = viewBounds4326();
+    return b ? [[b.south, b.west], [b.north, b.east]] : null;
+  },
+  flyTo: ({ lng, lat }) => map.getView().animate({ center: fromLonLat([lng, lat]), duration: 400 }),
+});
+map.on("movestart", minimap.scheduleUpdate);
+map.on("postrender", minimap.scheduleUpdate);
+
 // 3D Tiles ドレープ品質: ズーム変化で terrain カバー FBO を現在解像度へ作り直す
 let deckCoverZoom = -1;
 map.on("moveend", () => {
@@ -1383,14 +1465,39 @@ let requeryTimer = null;
 map.on("moveend", () => {
   // 初期URLを読み取る前の初回moveendでパーマリンクを上書きしないよう消費済みを待つ
   if (urlViewConsumed) writeUrlView(mapViewToUrl(), lastKascUrl ? undefined : currentProjectId);
+  minimap.scheduleUpdate();
+  geoTools.scheduleGraticule();
   const targets = layerEntries.filter(e => e.item._viewportQuery && e.item.visible !== false);
-  if (!targets.length) return;
+  // bbox=auto / :bbox の初回読込に失敗したレイヤーは、移動後の表示範囲で自動リトライする
+  // （Cesium 版 reloadFailedVectorLayer 相当。失敗 spec は entry.failed が担う）
+  const retry = layerEntries.filter(e => e.item.visible !== false && e.failed && !e.pending && !e._loading && isViewportQueryItem(e.item));
+  if (!targets.length && !retry.length) return;
   clearTimeout(requeryTimer);
-  requeryTimer = setTimeout(() => requeryViewportLayers(targets), 400);
+  requeryTimer = setTimeout(() => {
+    if (targets.length) requeryViewportLayers(targets);
+    for (const entry of retry) {
+      entry.deferred = true; // ensureEntryLoaded 経路で再マウントする
+      entry.failed = false;
+      void ensureEntryLoaded(entry);
+    }
+  }, 400);
+});
+
+// ツールモード: ダブルクリック確定とラバーバンドプレビュー
+map.on("dblclick", e => { if (geoTools.handleDoubleClick()) e.preventDefault(); });
+map.on("pointermove", e => {
+  if (e.dragging) return;
+  const ll = toLonLat(e.coordinate);
+  geoTools.handleMouseMove({ lng: ll[0], lat: ll[1] });
 });
 
 // 地物クリック → 属性タブを自動で開いて属性を表示(Cesium 版 attr-panel と同様)
 map.on("singleclick", e => {
+  // 計測・断面・見通しツールのモードがアクティブなら属性ピックより優先して頂点拾いに使う
+  {
+    const ll = toLonLat(e.coordinate);
+    if (geoTools.handleClick({ lng: ll[0], lat: ll[1] })) return;
+  }
   // 重なった地物を全件拾い、属性タブへ表示する
   const picked = [];
   map.forEachFeatureAtPixel(e.pixel, (f, l) => { picked.push({ f, l }); }, { hitTolerance: 5 });
@@ -1771,6 +1878,7 @@ window.kasugaiApi = createPlayerApi({
     if (!src?.getFeatures) return entry.item._geojson || null;
     return new GeoJSON().writeFeaturesObject(src.getFeatures(), { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" });
   },
+  geoTools: () => geoTools,
   setBaseEntryVisible: (entry, on) => { entry.layer?.setVisible?.(on); updateMapAttribution(); },
   getFlyPaths: kascFlyPaths.getFlyPaths,
   persistFlyPath: kascFlyPaths.persistFlyPath,

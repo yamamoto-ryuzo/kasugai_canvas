@@ -310,6 +310,14 @@ export function hostedProjectsBaseUrl(id = "default") {
 // `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる
 export function resolveKascUrl(url, projectBaseUrl) {
   if (!url) return url;
+  // cloud:パス はローカルサーバーの rclone 連携(/api/cloud/file)へ解決する。
+  // レイヤーURLに「cloud:フォルダ/ファイル.geojson」と書くだけで接続中の
+  // クラウドストレージから読める
+  if (/^cloud:/i.test(url)) {
+    const base = backendBaseUrl();
+    const path = url.slice(6).replace(/^\/+/, "");
+    return base ? `${base}/api/cloud/file?path=${encodeURIComponent(path)}` : url;
+  }
   if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url; // http/data/blob/localfs 等は素通し
   const base = /^[a-z][a-z0-9+.-]*:\/\//i.test(String(projectBaseUrl || ""))
     ? projectBaseUrl
@@ -369,6 +377,36 @@ async function loadKascUrl(kascParam) {
     const res2 = await fetch(projectsManifestUrl(), { cache: "no-store" });
     if (res2.ok) manifest = await res2.json();
   } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
+  // ?kasc= モードでは .kasc の祖先 projects.json(群マニフェスト)を
+  // データホスト側から読み、同一ホスト上の他プロジェクトも選択肢にする。
+  // カタログはデータ側に置き、エンジンはデータを持たない構成のままにする。
+  // 兄弟プロジェクトの .kasc URL は rememberedKascUrl 経由で
+  // ?project=<id> 選択 → ?kasc= 読み込みへ解決される
+  siblingKascUrls.clear();
+  if (/^https?:/i.test(kascUrl)) {
+    try {
+      const manifestUrl = new URL("../projects.json", baseUrl).href;
+      const res3 = await fetch(manifestUrl, { cache: "no-store" });
+      if (res3.ok) {
+        const manifestBase = new URL("./", manifestUrl).href;
+        for (const e of await res3.json()) {
+          const id = e.id || e;
+          const dir = e.dir || id;
+          const kascFile = e.kasc || "kasugai_canvas.kasc";
+          const url = new URL(`${String(dir).replace(/\/+$/, "")}/${kascFile}`, manifestBase).href;
+          siblingKascUrls.set(id, url);
+          try { localStorage.setItem(`kasc:lastProjectUrl:${id}`, url); } catch (_) {}
+          if (!manifest.some(m => (m.id || m) === id)) {
+            manifest.push({
+              id, title: e.title || id,
+              dir: new URL(`${String(dir).replace(/\/+$/, "")}/`, manifestBase).href,
+              external: true,
+            });
+          }
+        }
+      }
+    } catch (_) { /* データホストに群マニフェストが無ければ従来通り */ }
+  }
   // 選択中プロジェクトとして一覧へ表示できるよう先頭に仮エントリを足す
   if (!manifest.some(e => (e.id || e) === name)) {
     manifest.unshift({ id: name, title: title || name, external: true });
@@ -387,8 +425,12 @@ async function loadKascUrl(kascParam) {
 // ?project=<name> 形式のURL（共有・仮エントリ再選択）を ?kasc= へ復元する
 let lastKascUrl = null;
 let lastKascName = null;
+// ?kasc= 祖先 projects.json(群マニフェスト)由来の兄弟プロジェクト
+// id → 解決済み .kasc URL。loadKascUrl のたびに読み替わる
+const siblingKascUrls = new Map();
 export function rememberedKascUrl(name) {
   if (lastKascName === name && lastKascUrl) return lastKascUrl;
+  if (siblingKascUrls.has(name)) return siblingKascUrls.get(name);
   try { return localStorage.getItem(`kasc:lastProjectUrl:${name}`); } catch (e) { return null; }
 }
 

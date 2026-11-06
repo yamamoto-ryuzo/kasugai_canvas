@@ -232,6 +232,7 @@
     <button class="tab" data-tab="legend">凡例</button>
     <button class="tab" data-tab="search">検索</button>
     <button class="tab" data-tab="attr">属性</button>
+    <button class="tab" data-tab="tools">ツール</button>
     <button class="tab" data-tab="camera">カメラ</button>
     <button class="tab" data-tab="info">情報</button>
   </div>
@@ -251,6 +252,7 @@
     <button id="attr-widget-open" type="button" style="width:100%;margin-bottom:3px;padding:4px;border:1px solid #ccc;border-radius:4px;background:#f4f6f8;cursor:pointer;">選択中のレイヤ属性一覧</button>
     <div id="attr-content">地物を選択すると属性を表示します。</div>
   </div>
+  <div class="tab-pane" id="pane-tools" hidden></div>
   <div class="tab-pane" id="pane-camera" hidden>
     <div id="cams"></div>
     <div class="cams-io" style="margin-top:3px;display:flex;gap:6px;">
@@ -277,6 +279,7 @@
 </div>
 <div id="map-wrap">
 <iframe id="gsi-frame" title="地理院地図" allow="geolocation" data-ui-bridge></iframe>
+<div id="minimap" hidden></div>
 <div id="gsi-missing" hidden>
   <div>地理院地図を初期化できませんでした。<br>
   通常は Service Worker 経由で CDN(kasugai-canvas-web) から供給されるか、

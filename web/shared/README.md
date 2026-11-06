@@ -41,9 +41,15 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 | `vector-load.js` / `vector-decode.js` | ベクター系行タイプ → GeoJSON 正規化ローダー／WKB・プロパティ変換ユーティリティ |
 | `gpkg-worker.js` | GeoPackage 読み込み Worker（sql.js で別スレッド処理） |
 | `qml-style.js` / `qml-2d.js` | QGIS .qml スタイルのコンパイルと 2D エンジンへの適用アダプタ |
-| `attr-widget.js` | 画面下部ドッキングの属性テーブル |
+| `attr-widget.js` / `attr-stats.js` | 画面下部ドッキングの属性テーブル（Σ 集計・CSV/TSV 出力）と集計計算 |
 | `player-api.js` | 2D プレイヤー向け `window.kasugaiApi` アダプタ（AI ツール公開の土台） |
 | `fly-kasc.js` | `fly_geojson:` 行 → フライパス定義＋player-api フック（全プレイヤーエンジン共通） |
+| `geo-tools-2d.js` / `export-formats.js` | ツールタブ（計測・標高断面・見通し・緯度経度グリッド・レイヤーエクスポート GeoJSON/CSV/TSV/KML/FGB/SHP）。描画は `{update(fc)}` オーバーレイへ委譲（`makeLeafletOverlay` は Leaflet 系向け共通実装） |
+| `minimap.js` | 左下オーバービュー地図（Leaflet 遅延ロード・範囲矩形または中心マーカー・クリック移動） |
+| `nav-tools.js` / `sun-time.js` / `coord-pins.js` | ナビツールバー（表示履歴・矩形ズーム等）・時刻/太陽コントロール・座標ピン |
+| `coords-format.js` / `coords-local.js` | 座標書式（度/DMS/UTM/平面直角/ローカル座標）とローカル座標系の対応点 UI |
+| `hub-diag.js` / `lazy-lib.js` | bridge-hub 由来レイヤーの失敗原因診断・CDN ライブラリ遅延ロード |
+| `session-state.js` | カレント状態ファイル（localStorage `kasugai:session-state`）の読み書き・適用 |
 | `ai-chat.js` / `mcp.js` / `box.js` | エンジン横断 AI チャット基盤（プロバイダ接続・ツール実行・MCP・Box OAuth） |
 | `engine-switch.js` | エンジン切替 UI とレイヤ状態引継ぎ |
 | `print.js` | 印刷・帳票出力 |

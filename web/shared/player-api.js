@@ -859,5 +859,19 @@ export function createPlayerApi(hooks) {
     },
     getAuth() { return window.kasugaiAuth || null; },
   };
+
+  // ---- 計測・断面・見通し・グリッド（geo-tools フック。エンジンが
+  // shared/geo-tools-2d.js（または Cesium geo-tools.js）の api を渡す。
+  // ツール公開可否は api メソッドの有無で決まるため、フック無しでは追加しない）----
+  if (hooks.geoTools) {
+    const gt = () => (typeof hooks.geoTools === "function" ? hooks.geoTools() : hooks.geoTools);
+    api.measureDistance = coords => (gt()?.measureDistance(coords) ?? { ok: false });
+    api.measureArea = coords => (gt()?.measureArea(coords) ?? { ok: false });
+    api.measureBearing = (from, to) => (gt()?.measureBearing(from, to) ?? { ok: false });
+    api.elevationProfile = async (coords, samples) => (gt() ? await gt().elevationProfile(coords, samples) : { ok: false });
+    api.lineOfSight = async (from, to, opts) => (gt() ? await gt().lineOfSight(from, to, opts) : { ok: false });
+    api.setGraticule = on => { gt()?.setGraticule(on); return true; };
+    api.exportLayer = (name, format) => (gt() ? gt().exportLayer(name, format || "geojson") : Promise.resolve({ ok: false }));
+  }
   return api;
 }

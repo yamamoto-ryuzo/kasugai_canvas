@@ -2040,6 +2040,18 @@ const CHAT_TOOLS = [{
       },
     },
     {
+      name: "exportLayer",
+      description: "レイヤーをファイルとしてダウンロード出力する（ブラウザのダウンロードに保存）。format: geojson(既定)/csv/tsv/kml/fgb/shp。csv・tsv はジオメトリを WKT 列として出力（QGIS の CSV エクスポート互換）、kml は GoogleEarth 向け、fgb は FlatGeobuf バイナリ、shp はジオメトリ種別ごとの Shapefile を .zip に同梱",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名またはID(listLayersで確認)" },
+          format: { type: "STRING", description: "出力形式 geojson/csv/tsv/kml/fgb/shp（省略時 geojson）" },
+        },
+        required: ["name"],
+      },
+    },
+    {
       name: "addDataLayer",
       description: "GeoJSONオブジェクトを新規レイヤーとして直接表示する(URL不要の一時レイヤー・.kascには含まれない)。Point/LineString/Polygon/Multi* いずれのジオメトリも描画できる。座標は必ず[経度,緯度]の順(緯度経度ではない)。featureのpropertiesに simplestyle 属性(marker-color/marker-size/stroke/fill/fill-opacity/description等)を入れると色分け・ポップアップを制御できる",
       parameters: {
@@ -3204,6 +3216,14 @@ export async function executeChatTool(name, args = {}) {
       return { ok: false, message: t("tool.dataTooLarge", { size, count: geojson.features?.length ?? 0 }) };
     }
     return { geojson };
+  }
+  if (name === "exportLayer") {
+    try {
+      const r = await window.kasugaiApi.exportLayer(args.name, args.format || "geojson");
+      return r && r.ok ? r : { ok: false, message: t("tool.layerDataNotFound", { name: args.name }) };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message || error) };
+    }
   }
   if (name === "addDataLayer") {
     const item = await window.kasugaiApi.addDataLayer(args.title, args.geojson);
