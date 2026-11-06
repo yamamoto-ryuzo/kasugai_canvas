@@ -20,8 +20,6 @@ pub mod copilot;
 pub mod devin;
 pub mod setup;
 pub mod vector;
-#[cfg(windows)]
-pub mod viewer;
 
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};

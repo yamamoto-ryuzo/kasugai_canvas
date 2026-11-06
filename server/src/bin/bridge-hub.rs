@@ -40,7 +40,7 @@ const WEBGIS_PORT: u16 = 8511;
 
 // GeoSuite 専用ハブ（geosuite-hub.exe・8514/8515・geosuite-hub://）は
 // ReEarth_GeoSuite リポジトリの hub/ クレートへ完全移行済み。
-// 本 exe は KASUGAI 側共有ハブ（8511・kasugai-hub://）専用。
+// 本 exe は KASUGAI 側共有ハブ（8511）専用。
 
 // 自己インストール対象の exe 名・ポート kill 対象のイメージ名
 #[cfg(windows)]
@@ -169,17 +169,6 @@ fn notify(msg: &str, is_error: bool) {
     if !INTERACTIVE.load(std::sync::atomic::Ordering::Relaxed)
         || CONSOLE_ATTACHED.load(std::sync::atomic::Ordering::Relaxed)
     {
-        return;
-    }
-    show_message_box(msg, is_error);
-}
-
-// GUI 起動（プロトコルハンドラ等・引数あり）でもエラーを見せたい経路用。
-// コンソールに接続できた場合は箱を出さず stderr だけにする
-#[cfg(windows)]
-fn notify_gui(msg: &str, is_error: bool) {
-    eprintln!("{msg}");
-    if CONSOLE_ATTACHED.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
     show_message_box(msg, is_error);
@@ -363,35 +352,11 @@ fn unregister_autostart() {
     }
 }
 
-// カスタムプロトコルの登録（ブラウザの Ext 導線から
-// --view のシーンビューアを起動するための受け口）。
-// kasugai-hub://open?url=<pct> → "<exe>" --view "<uri>" で起動される。
-// kasugai-hub://open?url=<pct> → "<exe>" --view "<uri>" で起動される。
-// fetch を経ない OS レベルの起動なので LNA / Service Worker / CORS の
-// 影響を受けない。登録はユーザー単位（HKCU）で管理者権限は不要
-#[cfg(windows)]
-fn register_protocol(exe: &std::path::Path) {
-    let (base, desc, cmd) = (
-        r"HKCU\Software\Classes\kasugai-hub",
-        "URL:KASUGAI Scene Viewer",
-        format!("\"{}\" --view \"%1\"", exe.display()),
-    );
-    for args in [
-        vec!["add", base, "/ve", "/d", desc, "/f"],
-        vec!["add", base, "/v", "URL Protocol", "/d", "", "/f"],
-        vec![
-            "add",
-            &format!("{base}\\shell\\open\\command"),
-            "/ve",
-            "/d",
-            &cmd,
-            "/f",
-        ],
-    ] {
-        let _ = std::process::Command::new("reg").args(&args).output();
-    }
-}
-
+// 旧 kasugai-hub:// カスタムプロトコル登録の削除。
+// KASUGAI viewer（--view・kasugai-hub://）は geo_suite が自前の
+// geosuite-hub://（8515 シェル）へ移行したため廃止。旧版ハブの
+// 自己インストールで登録された HKCU エントリが残っている場合があるため、
+// install/uninstall の両方で掃除する
 #[cfg(windows)]
 fn unregister_protocol() {
     let class = r"HKCU\Software\Classes\kasugai-hub";
@@ -466,8 +431,8 @@ async fn self_install(install_cli: bool) -> std::process::ExitCode {
         );
         return std::process::ExitCode::FAILURE;
     };
-    // kasugai-hub:// のプロトコル登録（失敗しても止めない）
-    register_protocol(&dst);
+    // 旧 kasugai-hub:// プロトコル登録が残っていれば掃除する（廃止済み）
+    unregister_protocol();
     // 旧ブラウザ WebGIS 用ハブ（8512 常駐）が残っていれば掃除する。
     // 8511 への一本化で 8512 のハブは全て旧版なので問答無用で停止する。
     let install_port = install_port();
@@ -674,23 +639,6 @@ async fn main() -> std::process::ExitCode {
     if let Some(pos) = argv.iter().position(|a| a == "--setup") {
         let target = argv.get(pos + 1).map(|s| s.as_str()).unwrap_or("status");
         return kasugai_canvas::bridge::setup::cli_main(target).await;
-    }
-    // シーンビューア（--view <url|kasugai-hub://open?url=…>）。
-    // LNA 無効化済み WebView2 で公開シーンを開き、127.0.0.1 のハブに
-    // そのまま到達できるようにする
-    #[cfg(windows)]
-    if let Some(pos) = argv
-        .iter()
-        .position(|a| a == "--view" || a == "--open-scene")
-    {
-        let target = argv.get(pos + 1).map(String::as_str).unwrap_or("");
-        return match kasugai_canvas::bridge::viewer::open(target) {
-            Ok(()) => std::process::ExitCode::SUCCESS,
-            Err(e) => {
-                notify_gui(&format!("bridge-hub: {e}"), true);
-                std::process::ExitCode::FAILURE
-            }
-        };
     }
     // インストール系（Windows 専用。それ以外の OS では --serve として扱う）
     #[cfg(windows)]
