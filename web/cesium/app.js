@@ -10123,6 +10123,14 @@ window.kasugaiApi = {
     if (geoTools) geoTools.setGraticule(on);
     return true;
   },
+  // ミニマップ表示の切替(表示>一般のチェックボックスと同じ経路)
+  setMinimap(on) {
+    const cb = document.querySelector("#display-minimap");
+    if (!cb) return false;
+    cb.checked = !!on;
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  },
   // GeoJSONオブジェクトを一時レイヤーとして直接表示する
   async addDataLayer(title, geojson) {
     const item = await registerDataLayer(title, geojson);

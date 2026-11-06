@@ -1923,14 +1923,14 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addLayer",
-      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql。target は duckdb 以外はURLまたは DATA/相対パス、sql は SELECT 文。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv。target は duckdb・sql 以外はURLまたは DATA/相対パス、sql は SELECT 文。wfs は options に typename= が必須(version=/maxfeatures=/cql_filter= も指定可)、shp は .zip 一式または .shp+sidecar のURL。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
           title: { type: "STRING", description: "レイヤ名" },
           target: { type: "STRING", description: "データのURLまたは DATA/ファイル名(sql: の場合は SELECT 文)" },
-          type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql (省略時 geojson)" },
-          options: { type: "STRING", description: "省略可。duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、attr=出典 等(|区切り)" },
+          type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv (省略時 geojson)" },
+          options: { type: "STRING", description: "省略可。wfs: の typename=/version=/maxfeatures=/cql_filter=、duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、attr=出典 等(|区切り)" },
         },
         required: ["title", "target"],
       },
@@ -2440,6 +2440,28 @@ const CHAT_TOOLS = [{
           targetHeight: { type: "NUMBER", description: "対象点の地表からの高さ(m・省略時0)" },
         },
         required: ["from", "to"],
+      },
+    },
+    {
+      name: "setGraticule",
+      description: "緯度経度グリッド（緯線・経線と度ラベル）の表示をON/OFFする",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          on: { type: "BOOLEAN", description: "true で表示・false で非表示" },
+        },
+        required: ["on"],
+      },
+    },
+    {
+      name: "setMinimap",
+      description: "画面左下のミニマップ（現在の表示範囲を示すオーバービュー地図）の表示をON/OFFする",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          on: { type: "BOOLEAN", description: "true で表示・false で非表示" },
+        },
+        required: ["on"],
       },
     },
   ],
@@ -3225,6 +3247,8 @@ export async function executeChatTool(name, args = {}) {
   if (name === "measureBearing") return window.kasugaiApi.measureBearing(args.from, args.to);
   if (name === "elevationProfile") return await window.kasugaiApi.elevationProfile(args.coordinates, args.samples);
   if (name === "lineOfSight") return await window.kasugaiApi.lineOfSight(args.from, args.to, args);
+  if (name === "setGraticule") { window.kasugaiApi.setGraticule(!!args.on); return { ok: true }; }
+  if (name === "setMinimap") { window.kasugaiApi.setMinimap(!!args.on); return { ok: true }; }
   return { ok: false, message: t("tool.unknown", { name }) };
 }
 

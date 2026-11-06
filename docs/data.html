@@ -48,6 +48,22 @@
           <h3>🧭 FlatGeobuf <span class="badge">対応</span></h3>
           <p><code>flatgeobuf:</code> で指定。空間インデックス内蔵のバイナリ形式を公式 JS リーダー（CDN・遅延ロード）でストリームデコードし GeoJSON へ正規化。全件読み込み系の経路だが、全件バッファリングせず逐次変換する（SQL 絞り込み経路は下のクエリ系カードを参照）</p>
         </div>
+        <div class="feature-card">
+          <h3>🗺️ KML / KMZ <span class="badge">対応</span></h3>
+          <p><code>kml:</code> / <code>kmz:</code> で指定。@tmcw/togeojson で GeoJSON へ正規化（CDN・遅延ロード）。KMZ（ZIP）は先頭の .kml エントリを展開して読み込み。SimpleData 属性や KML Style の simplestyle 系プロパティも引き継ぐ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌐 WFS <span class="badge">対応</span></h3>
+          <p><code>wfs:</code> で指定。OGC WFS の GetFeature（GET）を発行し、GeoJSON 応答をレイヤーとして描画。<code>typename=</code> が必須で、<code>version=</code>/<code>maxfeatures=</code>/<code>cql_filter=</code>/<code>srsname=</code> 等をオプション指定できる。CORS 非対応サーバーは直接接続不可</p>
+        </div>
+        <div class="feature-card">
+          <h3>📐 Shapefile <span class="badge">対応</span></h3>
+          <p><code>shp:</code> / <code>shapefile:</code> で指定。shpjs（CDN・遅延ロード）が .zip 一式・<code>.shp</code>+sidecar（.dbf/.prj/.cpg 自動取得）・ベース名 URL を処理し、<code>.prj</code> があれば WGS84 へ再投影。zip 内の複数レイヤーは1レイヤーへ統合。CP932 系 dbf は .cpg 非対応のため文字化けする場合がある</p>
+        </div>
+        <div class="feature-card">
+          <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
+          <p><code>csv:</code> / <code>tsv:</code> で指定。lon/lat・経度/緯度・x/y 等の列名を自動判定してポイント化する簡易経路（表データとしての SQL 絞り込みは下のクエリ系カードを参照）</p>
+        </div>
       </div>
 
       <h3>ベクター：クエリ系（DuckDB SQL）</h3>
@@ -71,7 +87,7 @@
         </div>
         <div class="feature-card">
           <h3>🧭 FlatGeobuf / 📐 Shapefile <span class="badge" style="background:#fd7e14;">対応中</span></h3>
-          <p><code>duckdb:</code>/<code>sql:</code> の <code>ST_Read</code>（<code>format=read</code>・spatial 拡張必須）で読み込み可能。<code>.fgb</code> は拡張子からも自動判別されます。ただし ST_Read は非 COI 環境（通常の静的ホスティング・ローカルサーバー）でスレッド生成に失敗しリモート URL も読めないため、現状の実行環境では実質利用できません。FlatGeobuf は全件読み込みの <code>flatgeobuf:</code> 経路（実装済み）を推奨</p>
+          <p><code>duckdb:</code>/<code>sql:</code> の <code>ST_Read</code>（<code>format=read</code>・spatial 拡張必須）で読み込み可能。<code>.fgb</code> は拡張子からも自動判別されます。ただし ST_Read は非 COI 環境（通常の静的ホスティング・ローカルサーバー）でスレッド生成に失敗しリモート URL も読めないため、現状の実行環境では実質利用できません。FlatGeobuf は全件読み込みの <code>flatgeobuf:</code>、Shapefile は <code>shp:</code> 経路（いずれも実装済み）を推奨</p>
         </div>
       </div>
       <p><small>方針の詳細（経路分類・新形式の追加手順）はリポジトリの <code>AGENTS.md</code>「データ形式方針」を参照してください。</small></p>
