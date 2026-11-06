@@ -82,7 +82,7 @@ POST /api/cloud/stop      … 停止（ドライブ割当も解除）
 POST /api/cloud/drive     … ドライブ割当・解除（Windows）
 GET  /api/cloud/list      … フォルダ一覧（rclone lsjson）
 GET/PUT/DELETE /api/cloud/file … ファイルの読み書き・削除（Range 転送対応）
-POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既定。<dir>_local/ ワークスペースを生成し、複製 .kasc を相対参照に書換え（納品用）</code></pre>
+POST /api/cloud/localize  … {project, scope:"shared"|"project"}。共有が既定。&lt;dir&gt;_local/ ワークスペースを生成し、複製 .kasc を相対参照に書換え（納品用）</code></pre>
         <h3>制約・注意点</h3>
         <ul>
           <li>ドライブ経由の読み書きは Windows WebClient の既定上限（約 50MB）を受けます。<code>cloud:</code> スキーム（アプリ内プロキシ）はこの制限を受けません</li>
