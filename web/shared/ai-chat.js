@@ -185,6 +185,10 @@ async function probeWebgisHub() {
         webgisHub = {
           endpoint: `http://127.0.0.1:${port}/agent`,
           providers: d.providers || {},
+          // version は 6.5.5〜、vector フィールドは /vector 追加ビルド（6.19〜）のみ。
+          // 無い＝旧ハブとして更新導線へ回す判定材料に使う
+          version: typeof d.version === "string" ? d.version : null,
+          hasVector: "vector" in d,
         };
         return webgisHub;
       }
@@ -194,12 +198,15 @@ async function probeWebgisHub() {
   return null;
 }
 // /health をポーリングしてハブの立ち上がりを待つ（自己インストール exe の
-// 実行待ち用。TTL を無視して都度疎通する）
-async function waitForWebgisHub(timeoutMs) {
+// 実行待ち用。TTL を無視して都度疎通する）。
+// until を渡すとそれを満たすハブだけを返す — 旧ハブの更新待ちでは、
+// 更新前にすでに応答している旧ハブで即完了しないよう条件を絞る
+async function waitForWebgisHub(timeoutMs, until) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     webgisHub = undefined;
-    if (await probeWebgisHub()) return webgisHub;
+    const hub = await probeWebgisHub();
+    if (hub && (!until || until(hub))) return hub;
     await new Promise(r => setTimeout(r, 2000));
   }
   return null;
@@ -211,12 +218,19 @@ async function waitForWebgisHub(timeoutMs) {
 // ブラウザから exe を直接起動することはできないため、ユーザー操作は
 // 「DL した exe を実行」の1回のみ（以後はログイン時自動起動）
 let hubInstallWait = null; // 重複実行ガード
-async function offerHubInstall(provider, auto) {
+// prev = 更新元の旧ハブ情報 {version}（旧ハブ検出からの更新導線で渡す。
+// 未定義なら新規インストール待ち＝最初に応答したハブを返す）
+async function offerHubInstall(provider, auto, prev) {
   const note = document.querySelector("#bridge-hub-note");
   const btn = document.querySelector("#bridge-hub-install");
   const status = document.querySelector("#bridge-hub-status");
   if (!note || !btn) return;
   note.hidden = false;
+  // 更新待ち: 旧ハブは実行前から応答しているため「応答した」だけでは完了と
+  // みなせない。/vector 対応フィールドの出現（新ビルドの標識）か、
+  // version の変化をもって新版へ置き換わったと判定する
+  const until = prev === undefined ? null
+    : (h) => h.hasVector || (h.version !== null && h.version !== prev.version);
   const start = async () => {
     // exe のダウンロードは常に発火する（待機中の再クリック＝再DL・再案内
     // のリトライ導線。ポーリング自体は1本に保つ）
@@ -229,7 +243,7 @@ async function offerHubInstall(provider, auto) {
     if (status) status.textContent = t("chat.bridge.hubWaitExe");
     if (hubInstallWait) return hubInstallWait;
     hubInstallWait = (async () => {
-      const hub = await waitForWebgisHub(180000);
+      const hub = await waitForWebgisHub(180000, until);
       if (hub) {
         const input = document.querySelector("#agent-endpoint");
         if (input && !input.value.trim()) input.value = hub.endpoint;
@@ -873,13 +887,17 @@ export function setupAiSettings() {
     const fallback = configured || bridgeCandidates(provider)[0];
     setBridgeStatus(ui, t(`chat.${provider}.endpoint`, { endpoint: fallback }), true);
     const found = configured ? await pingBridge(configured, provider) : await detectBridge(provider);
-    // /health に version が無いハブは旧版（fallback 判定等に非対応）なので
+    // /health に version が無いハブ（fallback 判定等に非対応）や
+    // /vector フィールドの無いハブ（新機能が使えない）は旧版なので
     // 接続OK扱いせず「要更新」として明示し接続状態も NG にする
-    const outdatedHub = found && found.hub === true && typeof found.version !== "string";
+    const outdatedHub = found && found.hub === true && (!found.version || !found.hasVector);
     if (outdatedHub) {
       providerConnDetail[provider] = t("chat.bridge.hubOld", { endpoint: found.endpoint });
       providerConnState = { provider, state: "ng", detail: providerConnDetail[provider] };
       setBridgeStatus(ui, providerConnDetail[provider], false);
+      // 更新導線を開く（ボタン → bridge-hub.zip 再DL → 実行で自己インストールが
+      // 旧ハブを停止して新版へ置き換える。待機は更新後の応答まで絞る）
+      void offerHubInstall(provider, false, { version: found.version });
     } else {
       setBridgeStatus(ui,
         found
@@ -3101,7 +3119,7 @@ export async function executeChatTool(name, args = {}) {
   if (name === "showReport") return window.kasugaiApi.showReport(args);
   if (name === "listProjects") return { projects: window.kasugaiApi.listProjects() };
   if (name === "switchProject") {
-    const ok = window.kasugaiApi.switchProject(args.projectId);
+    const ok = await window.kasugaiApi.switchProject(args.projectId);
     return { ok, message: ok ? undefined : t("tool.projectNotFound", { name: args.projectId }) };
   }
   if (name === "toggleDrawMode") return window.kasugaiApi.toggleDrawMode();
@@ -3397,7 +3415,13 @@ async function pingBridge(endpoint, expect) {
     if (r.ok && d?.ok) {
       // ブリッジハブ（hub:true）は全プロバイダを統合して受けるため expect に適合
       if (expect && d?.bridge && d.bridge !== expect && !d?.hub) return null;
-      return { endpoint, model: d?.model || "?", bridge: d?.bridge || "", providers: d?.providers || null };
+      return {
+        endpoint, model: d?.model || "?", bridge: d?.bridge || "", providers: d?.providers || null,
+        // 旧ハブ判定用（version 無し=6.5.5 より前、vector 無し=/vector 追加前）
+        hub: d?.hub === true,
+        version: typeof d?.version === "string" ? d.version : null,
+        hasVector: "vector" in d,
+      };
     }
   } catch (e) {}
   return null;
@@ -3701,8 +3725,16 @@ async function verifyBridgeProviderConnection(v, token) {
   // 疎通するエンドポイントを決める。保存済みが死んでいても他候補が生きていれば
   // そちらへ自己修復する（healBridgeEndpoint と同じ効果）
   let endpoint = "";
+  let staleHub = null;
   for (const candidate of bridgeCandidates(v)) {
-    if (await pingBridge(candidate, v)) { endpoint = candidate; break; }
+    const found = await pingBridge(candidate, v);
+    if (found) {
+      endpoint = candidate;
+      // /vector 未対応の旧ハブは接続自体は生きているため ok 扱いとしつつ、
+      // 詳細メッセージ（ホバー表示）へ「要更新」を残す
+      if (found.hub === true && (!found.version || !found.hasVector)) staleHub = found;
+      break;
+    }
     if (providerVerifyToken !== token || getChatProvider() !== v) return false;
   }
   if (!endpoint) return false;
@@ -3726,7 +3758,10 @@ async function verifyBridgeProviderConnection(v, token) {
       const d = await r.json().catch(() => ({}));
       if (d?.model) detectedBridgeModels[v] = d.model;
       if (d?.error) providerConnDetail[v] = String(d.error);
-      if (r.ok && !d?.error && !d?.pending) { providerConnDetail[v] = ""; return true; }
+      if (r.ok && !d?.error && !d?.pending) {
+        providerConnDetail[v] = staleHub ? t("chat.bridge.hubOld", { endpoint }) : "";
+        return true;
+      }
     } catch (e) { /* リトライ */ }
     if (attempt < 5) await new Promise(resolve => setTimeout(resolve, 8000));
   }

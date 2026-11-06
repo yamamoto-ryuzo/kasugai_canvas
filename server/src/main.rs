@@ -5130,24 +5130,47 @@ async fn kill_bridge_on_port(port: u16, ancestor_pid: Option<u32>, kill_hub: boo
     true
 }
 
+// ハブの /health を取得する。応答しない・JSON でない場合は None
+async fn hub_health(port: u16) -> Option<serde_json::Value> {
+    let r = reqwest::Client::new()
+        .get(format!("http://127.0.0.1:{port}/health"))
+        .timeout(std::time::Duration::from_secs(2))
+        .send()
+        .await
+        .ok()?;
+    r.json::<serde_json::Value>().await.ok()
+}
+
 // 8511 のハブが応答しなければ、インストール済みの bridge-hub.exe を起動する。
 // ハブはアプリ・ブラウザ WebGIS 共通の常駐プロセスに一本化したため、アプリは
 // 内蔵せず「インストール済みなら起動しておく」だけを担う（未インストールなら
 // フロントの自己インストール導線が案内する）。占有者がハブ以外なら警告のみ
-async fn ensure_standalone_hub(hub_port: u16, ancestor_pid: Option<u32>) {
-    let hub_ok = async {
-        let r = reqwest::Client::new()
-            .get(format!("http://127.0.0.1:{hub_port}/health"))
-            .timeout(std::time::Duration::from_secs(2))
-            .send()
-            .await
-            .ok()?;
-        let v: serde_json::Value = r.json().await.ok()?;
-        v.get("hub").and_then(|h| h.as_bool())
-    }
-    .await
-    .unwrap_or(false);
+//
+// 応答するハブの version がアプリより古い（または version フィールド自体が
+// 無い＝6.5.5 より前）場合は旧版とみなし、同梱の web/download/bridge-hub.exe
+// でインストール済みハブを更新して起動し直す。旧ハブは自動更新の経路を
+// 持たず滞留すると /vector 等の新機能が恒久的に 404 になるため（#35）。
+// 更新できない環境（未インストール・同梱 exe なし・非Windows）では旧ハブの
+// まま継続し、更新案内はフロント側の検出（hubOld 表示）に委ねる
+async fn ensure_standalone_hub(hub_port: u16, ancestor_pid: Option<u32>, hub_bundle: &std::path::Path) {
+    let health = hub_health(hub_port).await;
+    let hub_ok = health
+        .as_ref()
+        .and_then(|v| v.get("hub"))
+        .and_then(|h| h.as_bool())
+        .unwrap_or(false);
     if hub_ok {
+        let stale = match health
+            .as_ref()
+            .and_then(|v| v.get("version"))
+            .and_then(|v| v.as_str())
+        {
+            Some(v) => compare_versions(v, env!("CARGO_PKG_VERSION")) == std::cmp::Ordering::Less,
+            None => true,
+        };
+        if stale {
+            update_installed_hub(hub_port, ancestor_pid, hub_bundle).await;
+        }
         return;
     }
     // 占有者が応答しない旧ハブなら停止してから起動する
@@ -5195,6 +5218,125 @@ fn launch_installed_hub(hub_port: u16) {
 
 #[cfg(not(windows))]
 fn launch_installed_hub(_hub_port: u16) {}
+
+// 既存ファイルの読み取り専用属性を外す。
+// ZIP 経由で展開・配置された exe に R 属性が残ると上書きが ACCESS_DENIED
+// （os error 5）で永久に失敗するため、コピー前後に外す（bridge-hub.rs の
+// 自己インストールと同じ対策）
+#[cfg(windows)]
+fn clear_readonly(path: &std::path::Path) {
+    if let Ok(meta) = std::fs::metadata(path) {
+        let mut perm = meta.permissions();
+        if perm.readonly() {
+            perm.set_readonly(false);
+            let _ = std::fs::set_permissions(path, perm);
+        }
+    }
+}
+
+// 応答中の旧ハブを同梱の bridge-hub.exe（web/download/）で更新する。
+// %LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe を同梱版へ差し替えて
+// 起動し直す。コピーに失敗した場合も旧ハブを殺したままにしないよう
+// インストール済み exe の再始動は必ず試みる。
+// Windows 専用（他 OS はインストーラーが無いため何もしない）
+#[cfg(windows)]
+async fn update_installed_hub(hub_port: u16, ancestor_pid: Option<u32>, bundle: &std::path::Path) {
+    if !bundle.exists() {
+        eprintln!("bridge-hub: 旧版ハブですが同梱の更新用 exe がないため更新をスキップします ({})", bundle.display());
+        return;
+    }
+    let Some(dir) = std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .map(|p| p.join("kasugai").join("bridge-hub"))
+    else {
+        return;
+    };
+    let installed = dir.join("bridge-hub.exe");
+    if !installed.exists() {
+        // 実行中ハブがインストール版でない（手動起動等）場合は差し替え先が
+        // 無いため旧ハブを維持する（kill するとブリッジ自体が失われる）
+        eprintln!("bridge-hub: 旧版ハブですがインストール済み exe がないため更新をスキップします");
+        return;
+    }
+    // 同梱 exe と同一ビルド（同サイズ）なら再起動しても更新にならない。
+    // Cargo.toml だけ先行する開発ビルドで毎起動ごとにハブを落とさないための
+    // ガード（リリース版では同梱 exe＝アプリ自身と同バージョン）
+    if std::fs::metadata(&installed).map(|m| m.len()).ok()
+        == std::fs::metadata(bundle).map(|m| m.len()).ok()
+    {
+        eprintln!("bridge-hub: ハブの version が古いがインストール済み exe は同梱版と同一のため更新をスキップします");
+        return;
+    }
+    let old_version = hub_health(hub_port)
+        .await
+        .and_then(|v| v.get("version").and_then(|s| s.as_str()).map(String::from))
+        .unwrap_or_else(|| "unknown".to_string());
+    eprintln!("bridge-hub: 旧版ハブ (version {old_version}) を検出 — 同梱の bridge-hub.exe で更新します");
+    // 占有者がハブと確認できた場合のみ kill する（無関係プロセスの巻き添え防止）
+    if !kill_bridge_on_port(hub_port, ancestor_pid, true).await {
+        // netstat が LISTENING 行の占有 PID を返さない環境向けフォールバック:
+        // /health が hub:true を返した時点で応答者は本製品のハブと確定している
+        // ため、bridge-hub.exe のイメージ名一致 kill に切り替える
+        // （bridge-hub.rs の kill_all_hub_processes と同じ安全根拠）
+        for pid in hub_process_pids_by_name() {
+            eprintln!("bridge-hub: ポート占有 PID を特定できないためイメージ名で旧ハブ (pid {pid}) を停止します");
+            kill_process_forced(pid, ancestor_pid).await;
+        }
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    // 実行中でロックが残る場合に備えてリトライしつつ上書きする
+    clear_readonly(&installed);
+    let mut copied = false;
+    for _ in 0..4 {
+        if std::fs::copy(bundle, &installed).is_ok() {
+            copied = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    if !copied {
+        eprintln!("bridge-hub: 更新ファイルのコピーに失敗しました（旧ハブを再始動します）");
+    } else {
+        // コピー元の R 属性が伝播すると以後の上書きが失敗するため外す
+        clear_readonly(&installed);
+    }
+    launch_installed_hub(hub_port);
+    // 起動確認（/health が新版を返すまで最大5秒ポーリング）
+    for _ in 0..5 {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        if let Some(v) = hub_health(hub_port).await {
+            if v.get("hub").and_then(|h| h.as_bool()) == Some(true) {
+                let ver = v.get("version").and_then(|s| s.as_str()).unwrap_or("?");
+                eprintln!("bridge-hub: ハブを更新しました ({old_version} -> {ver})");
+                return;
+            }
+        }
+    }
+    eprintln!("bridge-hub: 更新後のハブ起動を確認できませんでした（次回ログイン時の自動起動で再試行されます）");
+}
+
+#[cfg(not(windows))]
+async fn update_installed_hub(_hub_port: u16, _ancestor_pid: Option<u32>, _bundle: &std::path::Path) {}
+
+// bridge-hub.exe のイメージ名に一致するプロセスの PID 一覧。
+// /health が hub:true を確認済みの文脈でのみ使うこと —
+// hub:true を返すのは本製品のハブだけなので名前一致の kill は安全。
+// netstat で占有 PID を特定できない環境向けのフォールバック
+// （bridge-hub.rs の kill_hub_processes と同じ方式。自 PID は除外）
+#[cfg(windows)]
+fn hub_process_pids_by_name() -> Vec<u32> {
+    let Ok(mut sys) = sysinfo::System::new() else {
+        return Vec::new();
+    };
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    let self_pid = std::process::id();
+    sys.processes()
+        .values()
+        .filter(|p| p.pid().as_u32() != self_pid)
+        .filter(|p| p.name().to_string_lossy().eq_ignore_ascii_case("bridge-hub.exe"))
+        .map(|p| p.pid().as_u32())
+        .collect()
+}
 
 // Windows は taskkill /T で子孫(Copilot/Devin CLI 等)まで落とす。
 // 他OSは直接の子のみ kill（孫プロセスは孤児になりうるが CLI 側で短命に終わる想定）
@@ -5430,8 +5572,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ブリッジハブは常駐の bridge-hub.exe（127.0.0.1:8511）に一本化し、
     // アプリ内蔵は廃止。旧版の常駐ポート（8512/8513）に残ったブリッジは掃除し、
     // 8511 のハブが未応答ならインストール済みの bridge-hub.exe を自動起動する。
+    // 応答するハブが旧版なら同梱の web/download/bridge-hub.exe で更新する。
     // 疎通確認・kill・起動は axum::serve を遅延させないよう spawn 内で行う
     if is_local {
+        let hub_bundle = web_dir.join("download").join("bridge-hub.exe");
         tokio::spawn(async move {
             for legacy_port in LEGACY_BRIDGE_PORTS {
                 if TcpListener::bind(("127.0.0.1", legacy_port)).await.is_err()
@@ -5440,7 +5584,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     eprintln!("bridge-hub: 旧版ブリッジ (port {legacy_port}) を停止しました");
                 }
             }
-            ensure_standalone_hub(BRIDGE_HUB_PORT, finish_update_pid).await;
+            ensure_standalone_hub(BRIDGE_HUB_PORT, finish_update_pid, &hub_bundle).await;
         });
     }
 

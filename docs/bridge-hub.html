@@ -74,6 +74,11 @@ Unblock-File "$env:TEMP\bridge-hub.exe"
 1..15 | % { try { Invoke-RestMethod http://127.0.0.1:8511/health -TimeoutSec 2; break } catch { Start-Sleep 1 } }</code></pre>
           <p><small><code>download/bridge-hub.zip</code> には <code>bridge-hub/bridge-hub.exe</code> と README のみが入っています（スクリプト同梱は廃止。exe は GUI subsystem ビルドでコンソールを持たないため、非表示起動用の vbs/ps1 は不要です）。展開して実行すれば同じ自己インストールが行われ、<code>--install</code> / <code>--serve</code> / <code>--uninstall</code> / <code>--setup</code> もそのまま使えます。</small></p>
         </div>
+        <div class="install-steps">
+          <h3>更新（自動・手動）</h3>
+          <p>ハブ自身には self-update はありませんが、<strong>アプリ版（kasugai_canvas.exe）は起動時に旧ハブを自動更新します</strong>。8511 の <code>/health</code> が返す <code>version</code> がアプリ自身より古い（または version フィールド自体が無い＝6.5.5 より前）場合、同梱の <code>web/download/bridge-hub.exe</code> で <code>%LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe</code> を上書き → 旧ハブ停止 → 新版の起動まで行います。これにより旧ハブが滞留して <code>/vector</code> 等の新機能が使えない状態（issue #35）を防ぎます。同梱 exe と同一ビルドなら再起動しません。</p>
+          <p>ブラウザ WebGIS 単独利用（アプリ未起動）では、AI 設定画面のブリッジ接続確認が <code>version</code>・<code>vector</code> フィールドの無いハブを「旧版」と表示します。「ハブを自動インストール」ボタンから新しい <code>bridge-hub.zip</code> をダウンロードして実行すれば、自己インストールが旧ハブを停止して新版へ置き換えます（ブラウザ側は更新後の応答まで検出を待ちます）。</p>
+        </div>
       </section>
 
       <section>

@@ -38,7 +38,7 @@
   - **最初から kill しない理由**: 応答を返す前に親を殺すとブラウザ側が更新失敗表示になるため。Windows では子プロセス停止がどの経路でも強制 kill 相当のため、待機が長いことの利点はほぼ無い
   - **kasugai_canvas 以外の占有者は絶対に kill しない**(無関係プロセスの巻き添え防止)。占有者が kasugai_canvas でない・PID 特定に失敗した場合は従来通り AddrInUse で終了(ファイルは適用済みなので次回起動で新版になる)
   - **残骸掃除のタイミング(重要)**: 旧 exe の退避 `*.update-old` や旧 web 退避 `web.update-old` は旧プロセスが握っているため起動直後の掃除では消せず、かつては残骸が残った。`bind_for_update` はポート確保(=旧プロセス終了)後の `apply_update_files` 直後に `cleanup_update_leftovers` を必ず実行し、**更新直後に残骸を残さない**。通常起動時にも同じ掃除を行い前回分の保険とする
-  - この占有者 kill と同じ考えで、通常起動時は `is_existing_instance` で既存インスタンスのブラウザを開き二重起動しない。ブリッジハブは常駐の `bridge-hub.exe`（8511・アプリ・CDN 共通の1本）に集約済みでアプリは内蔵しない — 起動時に 8512/8513 の旧ブリッジを掃除し、8511 のハブ未応答ならインストール済みハブを自動起動する（`ensure_standalone_hub`）
+  - この占有者 kill と同じ考えで、通常起動時は `is_existing_instance` で既存インスタンスのブラウザを開き二重起動しない。ブリッジハブは常駐の `bridge-hub.exe`（8511・アプリ・CDN 共通の1本）に集約済みでアプリは内蔵しない — 起動時に 8512/8513 の旧ブリッジを掃除し、8511 のハブ未応答ならインストール済みハブを自動起動する（`ensure_standalone_hub`）。**応答中ハブの `/health` `version` がアプリ版より古い（または version 無し＝6.5.5 より前）場合は旧版滞留とみなし、同梱の `web/download/bridge-hub.exe` で `%LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe` を上書きして再起動するハブ自動更新**も `ensure_standalone_hub` 経路で行う（`update_installed_hub`。同梱 exe と同一サイズなら再起動しないガード付き・netstat で占有 PID を拾えない環境ではイメージ名一致 kill にフォールバック。ハブ自身に self-update は無いためアプリ側が更新を担う設計。ブラウザ WebGIS 単独利用時はフロントの旧ハブ検出→再インストール導線で更新）
 
 ## CDN ホスト版（kasugai-canvas-web）の同期
 
