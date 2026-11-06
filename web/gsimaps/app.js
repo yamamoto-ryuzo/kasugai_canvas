@@ -573,6 +573,7 @@ const geoTools = initGeoTools2d({
   graticuleOverlay: toolOverlayDelegate,
   getBounds: () => viewBounds(),
   setInteractive: on => { try { on ? gmap?.doubleClickZoom.disable() : gmap?.doubleClickZoom.enable(); } catch (_) {} },
+  fitBounds: box => { try { gmap?.fitBounds([[box[1], box[0]], [box[3], box[2]]], { padding: [30, 30] }); } catch (_) {} },
   getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
   isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
   isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),

@@ -8425,6 +8425,15 @@ function setupEvents() {
     getLayerGeoJson,
     isVectorLayerItem: item => item && (item.type === "geojson" || item.type === "layer" || item.type === "entities" || vectorDecoders.has(item.type)),
     isQueryLayerItem: item => isQueryDecoder(item && vectorDecoders.get(item.type), item),
+    addDataLayer: registerDataLayer,
+    fitBounds: box => {
+      try {
+        viewer.camera.flyTo({
+          destination: Cesium.Rectangle.fromDegrees(box[0], box[1], box[2], box[3]),
+          duration: 1.0,
+        });
+      } catch (e) { /* bounds invalid */ }
+    },
   });
 
   let lastRightClick = 0;
@@ -10353,6 +10362,17 @@ window.kasugaiApi = {
   setGraticule(on) {
     if (geoTools) geoTools.setGraticule(on);
     return true;
+  },
+  // 空間選択・ポリゴン内集計・バッファ（geo-tools.js。region は GeoJSON Polygon
+  // /{bbox:[w,s,e,n]}/{center,radiusMeters}。省略時は直近の描画範囲）
+  spatialSelect(opts) {
+    return geoTools ? geoTools.spatialSelect(opts || {}) : { ok: false };
+  },
+  aggregateWithin(opts) {
+    return geoTools ? geoTools.aggregateWithin(opts || {}) : { ok: false };
+  },
+  async createBuffer(opts) {
+    return geoTools ? await geoTools.createBuffer(opts || {}) : { ok: false };
   },
   // ミニマップ表示の切替(表示>一般のチェックボックスと同じ経路)
   setMinimap(on) {

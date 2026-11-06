@@ -1229,18 +1229,20 @@ installLocalCrsUI({ anchor: document.querySelector("#coords-datum") });
 // lineOfSight)の結果は色別の geojson ベクターレイヤーとして重ねる
 const navaraToolLayers = new Map(); // color → {src, layer}
 function navaraToolUpdate(fc) {
-  const groups = { "#ffff00": [], "#32cd32": [], "#ff0000": [] };
+  const groups = {};
   for (const f of fc?.features || []) {
     const k = f.properties?.kind;
-    if (k === "los-ok") groups["#32cd32"].push(f);
-    else if (k === "los-bad" || k === "los-block") groups["#ff0000"].push(f);
-    else if (k !== "grat" && k !== "grat-label") groups["#ffff00"].push(f);
+    if (k === "grat" || k === "grat-label") continue;
+    const color = f.properties?.color
+      || (k === "los-ok" ? "#32cd32" : (k === "los-bad" || k === "los-block") ? "#ff0000" : "#ffff00");
+    (groups[color] ||= []).push(f);
   }
-  for (const [color, feats] of Object.entries(groups)) {
-    const cur = navaraToolLayers.get(color);
+  for (const [, cur] of navaraToolLayers) {
     try { cur?.layer?.delete(); } catch (_) {}
     try { cur?.src?.delete(); } catch (_) {}
-    navaraToolLayers.delete(color);
+  }
+  navaraToolLayers.clear();
+  for (const [color, feats] of Object.entries(groups)) {
     if (!feats.length) continue;
     const src = view.addSource({ type: "geojson", data: { type: "FeatureCollection", features: feats }, tiled: false });
     const layer = view.addLayer({ type: "vector", source: src,
@@ -1252,7 +1254,7 @@ function navaraToolUpdate(fc) {
 }
 const geoTools = initGeoTools2d({
   panel: "#pane-tools",
-  sections: { measure: false, profile: false, los: false, export: true, general: false },
+  sections: { measure: false, spatial: false, draw: false, profile: false, los: false, export: true, general: false },
   overlay: { update: navaraToolUpdate },
   graticuleOverlay: { update: () => {} },
   getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),

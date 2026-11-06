@@ -2052,6 +2052,43 @@ const CHAT_TOOLS = [{
       },
     },
     {
+      name: "spatialSelect",
+      description: "範囲（ポリゴン/矩形/円）内にある読込済みベクター地物を選択する。region は GeoJSON Polygon/MultiPolygon/Feature、{bbox:[西,南,東,北]}、{center:[lng,lat],radiusMeters} のいずれか。省略時はユーザーが最後に描いた範囲を使う。結果は地図上でハイライトされる",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          layer: { type: "STRING", description: "対象レイヤ名またはID（省略時は全ベクターレイヤ）" },
+          region: { type: "STRING", description: "範囲指定（GeoJSON polygon / {\"bbox\":[w,s,e,n]} / {\"center\":[lng,lat],\"radiusMeters\":m}）" },
+        },
+      },
+    },
+    {
+      name: "aggregateWithin",
+      description: "範囲内の地物を属性で集計（ポリゴン内集計・空間結合）。件数だけでなく groupField 指定でカテゴリ別、valueField 指定で sum/avg/min/max も取れる。region 指定は spatialSelect と同じ",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          layer: { type: "STRING", description: "対象レイヤ名またはID（省略時は全ベクターレイヤ）" },
+          region: { type: "STRING", description: "範囲指定（GeoJSON polygon / {\"bbox\":[w,s,e,n]} / {\"center\":[lng,lat],\"radiusMeters\":m}）" },
+          groupField: { type: "STRING", description: "グループ化する属性名（省略時は全体集計）" },
+          valueField: { type: "STRING", description: "合計/平均/最小/最大を取る数値属性名" },
+        },
+      },
+    },
+    {
+      name: "createBuffer",
+      description: "地物・描画範囲に一定距離のバッファ（帯）を生成し新規レイヤーとして追加する。geometry は GeoJSON geometry/Feature。範囲指定（bbox/center+radiusMeters）も可。省略時は最後の選択範囲をバッファする。生成物は spatialSelect/aggregateWithin の region として続けて使える",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          geometry: { type: "STRING", description: "対象ジオメトリ（GeoJSON geometry/Feature、または {\"center\":[lng,lat]}・{\"bbox\":[w,s,e,n]} 形式）" },
+          radiusMeters: { type: "NUMBER", description: "バッファ距離(m)" },
+          title: { type: "STRING", description: "生成レイヤー名" },
+        },
+        required: ["radiusMeters"],
+      },
+    },
+    {
       name: "addDataLayer",
       description: "GeoJSONオブジェクトを新規レイヤーとして直接表示する(URL不要の一時レイヤー・.kascには含まれない)。Point/LineString/Polygon/Multi* いずれのジオメトリも描画できる。座標は必ず[経度,緯度]の順(緯度経度ではない)。featureのpropertiesに simplestyle 属性(marker-color/marker-size/stroke/fill/fill-opacity/description等)を入れると色分け・ポップアップを制御できる",
       parameters: {
@@ -3221,6 +3258,33 @@ export async function executeChatTool(name, args = {}) {
     try {
       const r = await window.kasugaiApi.exportLayer(args.name, args.format || "geojson");
       return r && r.ok ? r : { ok: false, message: t("tool.layerDataNotFound", { name: args.name }) };
+    } catch (error) {
+      return { ok: false, message: String(error && error.message || error) };
+    }
+  }
+  if (name === "spatialSelect" || name === "aggregateWithin" || name === "createBuffer") {
+    try {
+      const parseRegion = v => {
+        if (v == null) return undefined;
+        if (typeof v === "string") { try { return JSON.parse(v); } catch { return undefined; } }
+        return v;
+      };
+      const opts = {
+        layer: args.layer,
+        region: parseRegion(args.region),
+        geometry: parseRegion(args.geometry),
+        polygon: parseRegion(args.polygon),
+        bbox: args.bbox,
+        center: args.center,
+        radiusMeters: args.radiusMeters ?? args.radius,
+        groupField: args.groupField,
+        valueField: args.valueField,
+        title: args.title,
+      };
+      const api = window.kasugaiApi;
+      if (!api?.[name]) return { ok: false, message: t("tool.unsupported") };
+      const r = await api[name](opts);
+      return r && typeof r === "object" ? r : { ok: !!r };
     } catch (error) {
       return { ok: false, message: String(error && error.message || error) };
     }

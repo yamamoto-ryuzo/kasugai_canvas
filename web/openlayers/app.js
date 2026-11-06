@@ -1379,18 +1379,26 @@ const toolFmt = new GeoJSON();
 const toolSrc = new VectorSource();
 const gratSrc = new VectorSource();
 const TOOL_LINE_COLORS = { line: "#ffff00", "los-line": "#ffa500", "los-ok": "#32cd32", "los-bad": "#ff0000", grat: "#888888" };
+function toolWithAlpha(hex, alpha) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex || ""));
+  if (!m) return hex || "#ffff00";
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
 function toolStyleFn(feature) {
   const kind = feature.get("kind") || "line";
+  const customColor = feature.get("color");
   const gt = feature.getGeometry().getType();
   const styles = [];
   if (kind === "poly" || /Polygon/.test(gt)) {
-    styles.push(new Style({ fill: new Fill({ color: "rgba(255,255,0,.25)" }), stroke: new Stroke({ color: "#ffff00", width: 2 }) }));
+    const c = customColor || "#ffff00";
+    styles.push(new Style({ fill: new Fill({ color: toolWithAlpha(c, 0.25) }), stroke: new Stroke({ color: c, width: 2 }) }));
   } else if (/LineString|MultiLineString/.test(gt)) {
-    styles.push(new Style({ stroke: new Stroke({ color: TOOL_LINE_COLORS[kind] || "#ffff00", width: kind === "grat" ? 1 : 3, opacity: kind === "grat" ? 0.55 : 1 }) }));
+    styles.push(new Style({ stroke: new Stroke({ color: customColor || TOOL_LINE_COLORS[kind] || "#ffff00", width: kind === "grat" ? 1 : 3, opacity: kind === "grat" ? 0.55 : 1 }) }));
   } else {
     if (kind !== "label" && kind !== "grat-label") {
       const colors = { "los-block": "#ff0000", hover: "#00bfff" };
-      styles.push(new Style({ image: new CircleStyle({ radius: 5, fill: new Fill({ color: feature.get("color") || colors[kind] || "#ffff00" }), stroke: new Stroke({ color: "#000", width: 1.5 }) }) }));
+      styles.push(new Style({ image: new CircleStyle({ radius: 5, fill: new Fill({ color: customColor || colors[kind] || "#ffff00" }), stroke: new Stroke({ color: "#000", width: 1.5 }) }) }));
     }
     if (feature.get("text")) {
       styles.push(new Style({ text: new Text({ text: String(feature.get("text")), font: "11px sans-serif", fill: new Fill({ color: "#fff" }), stroke: new Stroke({ color: "#000", width: 3 }), offsetY: -12 }) }));
@@ -1425,6 +1433,7 @@ const geoTools = initGeoTools2d({
   setInteractive: on => {
     map.getInteractions().forEach(i => { if (i.constructor?.name === "DoubleClickZoom") i.setActive(!on); });
   },
+  fitBounds: box => { try { map.getView().fit(transformExtent(box, "EPSG:4326", map.getView().getProjection()), { padding: [30, 30, 30, 30], duration: 400 }); } catch (_) {} },
   getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
   isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
   isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),

@@ -287,6 +287,8 @@
             <section id="tools-panel" class="plugin-panel">
               <nav class="settings-tabs" aria-label="Tools">
                 <button class="settings-tab active" type="button" data-settings-panel="tools-measure-panel" data-i18n="tools.measure">計測</button>
+                <button class="settings-tab" type="button" data-settings-panel="tools-spatial-panel" data-i18n="tools.spatial">選択・集計</button>
+                <button class="settings-tab" type="button" data-settings-panel="tools-draw-panel" data-i18n="tools.draw">作図</button>
                 <button class="settings-tab" type="button" data-settings-panel="tools-profile-panel" data-i18n="tools.profile">標高断面</button>
                 <button class="settings-tab" type="button" data-settings-panel="tools-los-panel" data-i18n="tools.los">見通し判定</button>
                 <button class="settings-tab" type="button" data-settings-panel="tools-export-panel" data-i18n="tools.export">エクスポート</button>
@@ -300,6 +302,55 @@
                 </div>
                 <p class="hint" data-i18n="tools.measureHint">左クリックで頂点を追加、ダブルクリックで確定します。</p>
                 <div id="tools-measure-result" class="tool-result" aria-live="polite"></div>
+              </section>
+              <section id="tools-spatial-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="tools.selHint">矩形・ポリゴン・円で範囲を描き、範囲内の地物を選択・集計します。</p>
+                <div class="tool-btnrow">
+                  <button id="tool-sel-rect" type="button" data-i18n="tools.selRect">矩形</button>
+                  <button id="tool-sel-poly" type="button" data-i18n="tools.selPoly">ポリゴン</button>
+                  <button id="tool-sel-circle" type="button" data-i18n="tools.selCircle">円</button>
+                  <label class="tool-inline"><span data-i18n="tools.selRadius">半径m</span><input id="tool-sel-radius" type="number" min="1" value="500" /></label>
+                </div>
+                <div class="tool-btnrow">
+                  <select id="tool-sel-layer"></select>
+                  <button id="tool-sel-run" type="button" data-i18n="tools.selRun">選択</button>
+                </div>
+                <div id="tools-sel-result" class="tool-result" aria-live="polite"></div>
+                <div class="tool-btnrow">
+                  <button id="tool-sel-tolayer" type="button" data-i18n="tools.selToLayer">選択をレイヤー化</button>
+                  <button id="tool-sel-zoom" type="button" data-i18n="tools.selZoom">範囲へ移動</button>
+                  <button id="tool-sel-clear" type="button" class="danger-button" data-i18n="tools.selClear">解除</button>
+                </div>
+                <p class="hint" data-i18n="tools.aggHint">直近の選択範囲内の地物を集計します。</p>
+                <div class="tool-btnrow">
+                  <select id="tool-agg-group"></select>
+                  <select id="tool-agg-value"></select>
+                  <button id="tool-agg-run" type="button" data-i18n="tools.aggRun">集計</button>
+                </div>
+                <div id="tools-agg-result" class="tool-result"></div>
+                <p class="hint" data-i18n="tools.bufHint">直近の範囲・地物にバッファを生成し新規レイヤーにします。</p>
+                <div class="tool-btnrow">
+                  <label class="tool-inline"><span data-i18n="tools.bufRadius">距離m</span><input id="tool-buf-radius" type="number" value="100" /></label>
+                  <button id="tool-buf-run" type="button" data-i18n="tools.bufRun">バッファ生成</button>
+                </div>
+              </section>
+              <section id="tools-draw-panel" class="settings-subpanel">
+                <div class="tool-btnrow">
+                  <button id="tool-draw-point" type="button" data-i18n="tools.drawPoint">ポイント</button>
+                  <button id="tool-draw-line" type="button" data-i18n="tools.drawLine">ライン</button>
+                  <button id="tool-draw-poly" type="button" data-i18n="tools.drawPoly">ポリゴン</button>
+                  <button id="tool-draw-label" type="button" data-i18n="tools.drawLabel">注記</button>
+                </div>
+                <div class="tool-btnrow">
+                  <input id="tool-draw-name" type="text" data-i18n-attr="placeholder:tools.drawName" placeholder="名称" />
+                  <button id="tool-draw-clear" type="button" class="danger-button" data-i18n="tools.drawClear">全削除</button>
+                </div>
+                <ul id="tools-draw-list"></ul>
+                <div class="tool-btnrow">
+                  <button id="tool-draw-tolayer" type="button" data-i18n="tools.drawToLayer">レイヤーへ追加</button>
+                  <button id="tool-draw-export" type="button" data-i18n="tools.drawExport">GeoJSON保存</button>
+                </div>
+                <p class="hint" data-i18n="tools.drawHint">描いた図形に名称を付けて残せます。「レイヤーへ追加」で一覧・表示切替対象の一時レイヤーにします。</p>
               </section>
               <section id="tools-profile-panel" class="settings-subpanel">
                 <div class="tool-btnrow">

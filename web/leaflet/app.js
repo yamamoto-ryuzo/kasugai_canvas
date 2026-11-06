@@ -1485,6 +1485,7 @@ const geoTools = initGeoTools2d({
   },
   setCursor: c => { map.getContainer().style.cursor = c; },
   setInteractive: on => { try { on ? map.doubleClickZoom.disable() : map.doubleClickZoom.enable(); } catch (_) {} },
+  fitBounds: box => { try { map.fitBounds([[box[1], box[0]], [box[3], box[2]]], { padding: [30, 30] }); } catch (_) {} },
   getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
   isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
   isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),

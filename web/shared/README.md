@@ -45,6 +45,7 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 | `player-api.js` | 2D プレイヤー向け `window.kasugaiApi` アダプタ（AI ツール公開の土台） |
 | `fly-kasc.js` | `fly_geojson:` 行 → フライパス定義＋player-api フック（全プレイヤーエンジン共通） |
 | `geo-tools-2d.js` / `export-formats.js` | ツールタブ（計測・標高断面・見通し・緯度経度グリッド・レイヤーエクスポート GeoJSON/CSV/TSV/KML/FGB/SHP）。描画は `{update(fc)}` オーバーレイへ委譲（`makeLeafletOverlay` は Leaflet 系向け共通実装） |
+| `spatial-ops.js` | GeoJSON 空間演算 — 包含/交差判定・範囲生成（矩形・測地線円）・ポリゴン内集計・バッファ（点は測地線円、ライン/面は turf.js 遅延ロード） |
 | `minimap.js` | 左下オーバービュー地図（Leaflet 遅延ロード・範囲矩形または中心マーカー・クリック移動） |
 | `nav-tools.js` / `sun-time.js` / `coord-pins.js` | ナビツールバー（表示履歴・矩形ズーム等）・時刻/太陽コントロール・座標ピン |
 | `coords-format.js` / `coords-local.js` | 座標書式（度/DMS/UTM/平面直角/ローカル座標）とローカル座標系の対応点 UI |

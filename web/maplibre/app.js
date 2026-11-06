@@ -1380,13 +1380,13 @@ function ensureToolLayers() {
       map.addSource(TOOL_SRC, { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({ id: "kasc-tools-poly", type: "fill", source: TOOL_SRC,
         filter: ["==", ["get", "kind"], "poly"],
-        paint: { "fill-color": "#ffff00", "fill-opacity": 0.25 } });
+        paint: { "fill-color": ["coalesce", ["get", "color"], "#ffff00"], "fill-opacity": 0.25 } });
       map.addLayer({ id: "kasc-tools-line", type: "line", source: TOOL_SRC,
         filter: ["in", ["get", "kind"], ["literal", ["line", "los-line", "los-ok", "los-bad"]]],
-        paint: { "line-color": ["match", ["get", "kind"], "los-ok", "#32cd32", "los-bad", "#ff0000", "los-line", "#ffa500", "#ffff00"], "line-width": 3 } });
+        paint: { "line-color": ["coalesce", ["get", "color"], ["match", ["get", "kind"], "los-ok", "#32cd32", "los-bad", "#ff0000", "los-line", "#ffa500", "#ffff00"]], "line-width": 3 } });
       map.addLayer({ id: "kasc-tools-circle", type: "circle", source: TOOL_SRC,
         filter: ["in", ["get", "kind"], ["literal", ["point", "los-block", "hover"]]],
-        paint: { "circle-radius": 5, "circle-color": ["match", ["get", "kind"], "los-block", "#ff0000", "hover", "#00bfff", "#ffff00"], "circle-stroke-color": "#000", "circle-stroke-width": 1.5 } });
+        paint: { "circle-radius": 5, "circle-color": ["coalesce", ["get", "color"], ["match", ["get", "kind"], "los-block", "#ff0000", "hover", "#00bfff", "#ffff00"]], "circle-stroke-color": "#000", "circle-stroke-width": 1.5 } });
       map.addLayer({ id: "kasc-tools-label", type: "symbol", source: TOOL_SRC,
         filter: ["has", "text"],
         layout: { "text-field": ["get", "text"], "text-size": 11, "text-offset": [0, -0.8], "text-anchor": "bottom" },
@@ -1430,6 +1430,7 @@ const geoTools = initGeoTools2d({
       catch (_) { return null; }
     });
   },
+  fitBounds: box => { try { map.fitBounds([[box[0], box[1]], [box[2], box[3]]], { padding: 30, duration: 400 }); } catch (_) {} },
   getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
   isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
   isQueryLayerItem: item => !!item && (item._viewportQuery || isViewportQueryItem(item)),

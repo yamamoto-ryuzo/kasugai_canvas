@@ -872,6 +872,9 @@ export function createPlayerApi(hooks) {
     api.lineOfSight = async (from, to, opts) => (gt() ? await gt().lineOfSight(from, to, opts) : { ok: false });
     api.setGraticule = on => { gt()?.setGraticule(on); return true; };
     api.exportLayer = (name, format) => (gt() ? gt().exportLayer(name, format || "geojson") : Promise.resolve({ ok: false }));
+    api.spatialSelect = opts => (gt()?.spatialSelect ? gt().spatialSelect(opts || {}) : { ok: false });
+    api.aggregateWithin = opts => (gt()?.aggregateWithin ? gt().aggregateWithin(opts || {}) : { ok: false });
+    api.createBuffer = async opts => (gt()?.createBuffer ? await gt().createBuffer(opts || {}) : { ok: false });
   }
   return api;
 }

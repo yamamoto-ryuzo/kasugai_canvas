@@ -22,78 +22,14 @@
 // エンジンのイベントから呼び、処理したら true を返す（属性ピックを抑止するため）
 import { initI18n, applyI18n, t } from "./i18n.js";
 import { exportFeatureCollection } from "./export-formats.js";
+import { collectFields } from "./attr-stats.js";
+import {
+  geodesicInverse, segDistance, polygonArea, slerp, WGS84_A,
+  selectFeatures, aggregateWithin as aggregateInRegion, bufferGeometry,
+  circlePolygon, rectPolygon, normalizeRegion, geomBbox,
+} from "./spatial-ops.js";
 
-const DEG = 180 / Math.PI;
-const RAD = Math.PI / 180;
 const MIN_POINT_SPACING_M = 2; // ダブルクリック終了時に同一点が二重追加されるのを防ぐ間隔
-const WGS84_A = 6378137.0;
-const WGS84_F = 1 / 298.257223563;
-
-// ---- 測地線（WGS84 Vincenty 逆問題。非収束時は球面にフォールバック） ----
-function geodesicInverse(a, b) {
-  const f1 = a.lat * RAD, f2 = b.lat * RAD;
-  const L = (b.lng - a.lng) * RAD;
-  const U1 = Math.atan((1 - WGS84_F) * Math.tan(f1));
-  const U2 = Math.atan((1 - WGS84_F) * Math.tan(f2));
-  const sinU1 = Math.sin(U1), cosU1 = Math.cos(U1);
-  const sinU2 = Math.sin(U2), cosU2 = Math.cos(U2);
-  let lam = L;
-  for (let i = 0; i < 100; i++) {
-    const sinL = Math.sin(lam), cosL = Math.cos(lam);
-    const sinSig = Math.sqrt((cosU2 * sinL) ** 2 + (cosU1 * sinU2 - sinU1 * cosU2 * cosL) ** 2);
-    if (sinSig === 0) return { dist: 0, az1: 0, az2: 0 };
-    const cosSig = sinU1 * sinU2 + cosU1 * cosU2 * cosL;
-    const sig = Math.atan2(sinSig, cosSig);
-    const sinA = cosU1 * cosU2 * sinL / sinSig;
-    const cos2A = 1 - sinA * sinA;
-    const cos2Sm = cos2A !== 0 ? cosSig - 2 * sinU1 * sinU2 / cos2A : 0;
-    const C = WGS84_F / 16 * cos2A * (4 + WGS84_F * (4 - 3 * cos2A));
-    const prev = lam;
-    lam = L + (1 - C) * WGS84_F * sinA * (sig + C * sinSig * (cos2Sm + C * cosSig * (-1 + 2 * cos2Sm ** 2)));
-    if (Math.abs(lam - prev) < 1e-12) {
-      const u2 = cos2A * (WGS84_A ** 2 - (WGS84_A * (1 - WGS84_F)) ** 2) / (WGS84_A * (1 - WGS84_F)) ** 2;
-      const A = 1 + u2 / 16384 * (4096 + u2 * (-768 + u2 * (320 - 175 * u2)));
-      const B = u2 / 1024 * (256 + u2 * (-128 + u2 * (74 - 47 * u2)));
-      const dSig = B * sinSig * (cos2Sm + B / 4 * (cosSig * (-1 + 2 * cos2Sm ** 2)
-        - B / 6 * cos2Sm * (-3 + 4 * sinSig ** 2) * (-3 + 4 * cos2Sm ** 2)));
-      const az1 = Math.atan2(cosU2 * Math.sin(lam), cosU1 * sinU2 - sinU1 * cosU2 * Math.cos(lam));
-      const az2 = Math.atan2(cosU1 * Math.sin(lam), -sinU1 * cosU2 + cosU1 * sinU2 * Math.cos(lam));
-      return { dist: WGS84_A * (1 - WGS84_F) * A * (sig - dSig), az1: az1 * DEG, az2: az2 * DEG };
-    }
-  }
-  // 非収束（ほぼ対蹠点）: 球面ハバーシンにフォールバック
-  const dLat = f2 - f1, dLng = L;
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dLng / 2) ** 2;
-  const dist = 2 * WGS84_A * Math.asin(Math.min(1, Math.sqrt(s)));
-  const az = (x, y) => Math.atan2(
-    Math.sin((y.lng - x.lng) * RAD) * Math.cos(y.lat * RAD),
-    Math.cos(x.lat * RAD) * Math.sin(y.lat * RAD) - Math.sin(x.lat * RAD) * Math.cos(y.lat * RAD) * Math.cos((y.lng - x.lng) * RAD)) * DEG;
-  return { dist, az1: az(a, b), az2: az(a, b) };
-}
-const segDistance = (a, b) => geodesicInverse(a, b).dist;
-
-// 球面多角形面積（Chamberlain–Duquette。実務サイズなら十分な精度）
-function polygonArea(pts) {
-  if (pts.length < 3) return 0;
-  let s = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const p = pts[i], q = pts[(i + 1) % pts.length];
-    s += (q.lng - p.lng) * RAD * (2 + Math.sin(p.lat * RAD) + Math.sin(q.lat * RAD));
-  }
-  return Math.abs(s * WGS84_A * WGS84_A / 2);
-}
-
-// 2点間の球面補間（fraction 0..1）
-function slerp(a, b, f) {
-  const toVec = p => [Math.cos(p.lat * RAD) * Math.cos(p.lng * RAD), Math.cos(p.lat * RAD) * Math.sin(p.lng * RAD), Math.sin(p.lat * RAD)];
-  const A = toVec(a), B = toVec(b);
-  const dot = Math.max(-1, Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2]));
-  const th = Math.acos(dot);
-  if (th < 1e-9) return { lat: a.lat, lng: a.lng };
-  const sA = Math.sin((1 - f) * th) / Math.sin(th), sB = Math.sin(f * th) / Math.sin(th);
-  const v = [A[0] * sA + B[0] * sB, A[1] * sA + B[1] * sB, A[2] * sA + B[2] * sB];
-  return { lat: Math.atan2(v[2], Math.hypot(v[0], v[1])) * DEG, lng: Math.atan2(v[1], v[0]) * DEG };
-}
 
 const fmtDist = m => !Number.isFinite(m) ? "-" : m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
 const fmtArea = m2 => !Number.isFinite(m2) ? "-" : m2 < 1e6 ? `${Math.round(m2).toLocaleString()} m²` : `${(m2 / 1e6).toFixed(2)} km²`;
@@ -125,6 +61,14 @@ const CSS = `
 #tools-panel .tool-inline { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85em; color: #52636d; }
 #tools-panel .tool-inline input[type="number"] { width: 64px; min-height: 28px; padding: 3px 5px; border: 1px solid #cbd9de; border-radius: 4px; box-sizing: border-box; }
 #tools-panel .tool-result { min-height: 18px; margin: 3px 0 6px; font-size: 0.9em; color: #1d2b35; overflow-wrap: anywhere; }
+#tools-panel .tool-btnrow select, #tools-panel .tool-btnrow input[type="text"] { flex: 1; min-width: 0; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; font-size: 0.9em; box-sizing: border-box; }
+#tools-panel #tools-draw-list { margin: 3px 0; padding: 0; list-style: none; max-height: 150px; overflow-y: auto; overflow-x: hidden; font-size: 0.85em; }
+#tools-panel #tools-draw-list li { display: flex; align-items: center; gap: 4px; padding: 2px 0; border-bottom: 1px solid #e4ecef; }
+#tools-panel #tools-draw-list li .draw-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tools-panel #tools-draw-list li button { flex: 0 0 auto; }
+#tools-panel .tool-result table { border-collapse: collapse; font-size: 0.85em; width: 100%; }
+#tools-panel .tool-result th, #tools-panel .tool-result td { border: 1px solid #d5e2e6; padding: 2px 5px; text-align: right; overflow-wrap: anywhere; }
+#tools-panel .tool-result th { background: #f0f5f7; text-align: left; }
 #tools-panel #tool-export-layer { flex: 1; min-width: 0; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; font-size: 0.9em; }
 #tools-panel #profile-chart { display: block; width: 100%; max-width: 100%; height: 150px; margin-top: 3px; border: 1px solid #e4ecef; border-radius: 4px; box-sizing: border-box; }
 #tools-panel .hint { margin: 2px 0 4px; color: #71818d; font-size: 0.8em; }
@@ -149,6 +93,8 @@ function injectPanel(panel, sections) {
   const parts = [];
   const nav = [];
   if (sections.measure) nav.push(['tools-measure-panel', 'tools.measure', '計測']);
+  if (sections.spatial) nav.push(['tools-spatial-panel', 'tools.spatial', '選択・集計']);
+  if (sections.draw) nav.push(['tools-draw-panel', 'tools.draw', '作図']);
   if (sections.profile) nav.push(['tools-profile-panel', 'tools.profile', '標高断面']);
   if (sections.los) nav.push(['tools-los-panel', 'tools.los', '見通し判定']);
   if (sections.export) nav.push(['tools-export-panel', 'tools.export', 'エクスポート']);
@@ -191,6 +137,57 @@ function injectPanel(panel, sections) {
         <label class="tool-inline"><span data-i18n="tools.losTargetHeight">対象点高(m)</span><input id="los-target-h" type="number" step="0.5" value="0" /></label>
       </div>
       <div id="tools-los-result" class="tool-result" aria-live="polite"></div>
+    </section>`);
+  if (sections.spatial) parts.push(`
+    <section id="tools-spatial-panel" class="settings-subpanel"${hideAttr("tools-spatial-panel")}>
+      <p class="hint" data-i18n="tools.selHint">矩形・ポリゴン・円で範囲を描き、範囲内の地物を選択・集計します。</p>
+      <div class="tool-btnrow">
+        <button id="tool-sel-rect" type="button" data-i18n="tools.selRect">矩形</button>
+        <button id="tool-sel-poly" type="button" data-i18n="tools.selPoly">ポリゴン</button>
+        <button id="tool-sel-circle" type="button" data-i18n="tools.selCircle">円</button>
+        <label class="tool-inline"><span data-i18n="tools.selRadius">半径m</span><input id="tool-sel-radius" type="number" min="1" value="500" /></label>
+      </div>
+      <div class="tool-btnrow">
+        <select id="tool-sel-layer"></select>
+        <button id="tool-sel-run" type="button" data-i18n="tools.selRun">選択</button>
+      </div>
+      <div id="tools-sel-result" class="tool-result" aria-live="polite"></div>
+      <div class="tool-btnrow">
+        <button id="tool-sel-tolayer" type="button" data-i18n="tools.selToLayer">選択をレイヤー化</button>
+        <button id="tool-sel-zoom" type="button" data-i18n="tools.selZoom">範囲へ移動</button>
+        <button id="tool-sel-clear" type="button" class="danger-button" data-i18n="tools.selClear">解除</button>
+      </div>
+      <p class="hint" data-i18n="tools.aggHint">直近の選択範囲内の地物を集計します。</p>
+      <div class="tool-btnrow">
+        <select id="tool-agg-group"></select>
+        <select id="tool-agg-value"></select>
+        <button id="tool-agg-run" type="button" data-i18n="tools.aggRun">集計</button>
+      </div>
+      <div id="tools-agg-result" class="tool-result"></div>
+      <p class="hint" data-i18n="tools.bufHint">直近の範囲・地物にバッファを生成し新規レイヤーにします。</p>
+      <div class="tool-btnrow">
+        <label class="tool-inline"><span data-i18n="tools.bufRadius">距離m</span><input id="tool-buf-radius" type="number" value="100" /></label>
+        <button id="tool-buf-run" type="button" data-i18n="tools.bufRun">バッファ生成</button>
+      </div>
+    </section>`);
+  if (sections.draw) parts.push(`
+    <section id="tools-draw-panel" class="settings-subpanel"${hideAttr("tools-draw-panel")}>
+      <div class="tool-btnrow">
+        <button id="tool-draw-point" type="button" data-i18n="tools.drawPoint">ポイント</button>
+        <button id="tool-draw-line" type="button" data-i18n="tools.drawLine">ライン</button>
+        <button id="tool-draw-poly" type="button" data-i18n="tools.drawPoly">ポリゴン</button>
+        <button id="tool-draw-label" type="button" data-i18n="tools.drawLabel">注記</button>
+      </div>
+      <div class="tool-btnrow">
+        <input id="tool-draw-name" type="text" data-i18n-attr="placeholder:tools.drawName" placeholder="名称" />
+        <button id="tool-draw-clear" type="button" class="danger-button" data-i18n="tools.drawClear">全削除</button>
+      </div>
+      <ul id="tools-draw-list"></ul>
+      <div class="tool-btnrow">
+        <button id="tool-draw-tolayer" type="button" data-i18n="tools.drawToLayer">レイヤーへ追加</button>
+        <button id="tool-draw-export" type="button" data-i18n="tools.drawExport">GeoJSON保存</button>
+      </div>
+      <p class="hint" data-i18n="tools.drawHint">描いた図形に名称を付けて残せます。「レイヤーへ追加」で一覧・表示切替対象の一時レイヤーにします。</p>
     </section>`);
   if (sections.export) parts.push(`
     <section id="tools-export-panel" class="settings-subpanel"${hideAttr("tools-export-panel")}>
@@ -245,7 +242,12 @@ export function makeLeafletOverlay(L, map) {
   function render(fc, group) {
     group.clearLayers();
     L.geoJSON(fc, {
-      style: f => LINE_STYLE[f.properties?.kind] || { color: "#ffff00", weight: 2, fillColor: "#ffff00", fillOpacity: 0.25 },
+      style: f => {
+        const p = f.properties || {};
+        const base = LINE_STYLE[p.kind] || { color: "#ffff00", weight: 2 };
+        const c = p.color || base.color;
+        return { ...base, color: c, fillColor: c, fillOpacity: base.fillOpacity ?? 0.25 };
+      },
       pointToLayer: (f, latlng) => {
         const p = f.properties || {};
         const colors = { point: p.color || "#ffff00", "los-block": "#ff0000", hover: "#00bfff" };
@@ -274,7 +276,10 @@ export function initGeoTools2d(hooks = {}) {
   const gratOverlay = hooks.graticuleOverlay || overlay;
   const setCursor = hooks.setCursor || (() => {});
   const setInteractive = hooks.setInteractive || (() => {});
-  const DEFAULT_SECTIONS = { measure: true, profile: true, los: true, export: true, general: false };
+  const addDataLayer = (title, gj) => hooks.addDataLayer
+    ? hooks.addDataLayer(title, gj)
+    : (window.kasugaiApi?.addDataLayer ? window.kasugaiApi.addDataLayer(title, gj) : Promise.resolve(null));
+  const DEFAULT_SECTIONS = { measure: true, spatial: true, draw: true, profile: true, los: true, export: true, general: false };
   const sections = { ...DEFAULT_SECTIONS, ...(hooks.sections || {}) };
 
   let panelRoot = null;
@@ -283,21 +288,39 @@ export function initGeoTools2d(hooks = {}) {
     if (panel) panelRoot = injectPanel(panel, sections);
   }
 
-  // ---------- 計測モード ----------
+  // ---------- 対話モード ----------
   // mode: null | "distance" | "area" | "bearing" | "profile" | "los"
+  //       | "sel-rect" | "sel-poly" | "sel-circle"
+  //       | "draw-point" | "draw-line" | "draw-poly" | "draw-label"
   let mode = null;
   let pts = [];        // 確定頂点 [{lng,lat}]
   let hoverPt = null;  // カーソル位置のプレビュー点
   let losRunning = false;
   let profileRunning = false;
   let profileHover = null;
+  // 空間選択・集計・バッファの状態
+  let regionGeom = null;       // 直近に確定した選択範囲（Polygon|MultiPolygon）
+  let regionSourceGeom = null; // バッファ対象の元ジオメトリ（円選択なら中心点）
+  let selFeatures = [];        // 直近の選択結果 Feature[]
+  let selLayerLabel = "";
+  const annotations = [];      // 作図確定分 [{name, geometry}]
+  const SEL_COLOR = "#ff00ff";   // 選択ハイライト
+  const REGION_COLOR = "#00bfff";// 範囲
+  const DRAW_COLOR = "#ff9100";  // 作図
 
   const resultEl = () => $("#tools-measure-result");
   const losResultEl = () => $("#tools-los-result");
+  const selResultEl = () => $("#tools-sel-result");
+  const aggResultEl = () => $("#tools-agg-result");
   const currentPositions = () => (hoverPt ? [...pts, hoverPt] : pts.slice());
 
   function updateModeButtons() {
-    const map = { distance: "#tool-m-distance", area: "#tool-m-area", bearing: "#tool-m-bearing", profile: "#tool-profile-draw", los: "#tool-los" };
+    const map = {
+      distance: "#tool-m-distance", area: "#tool-m-area", bearing: "#tool-m-bearing",
+      profile: "#tool-profile-draw", los: "#tool-los",
+      "sel-rect": "#tool-sel-rect", "sel-poly": "#tool-sel-poly", "sel-circle": "#tool-sel-circle",
+      "draw-point": "#tool-draw-point", "draw-line": "#tool-draw-line", "draw-poly": "#tool-draw-poly", "draw-label": "#tool-draw-label",
+    };
     for (const [m, sel] of Object.entries(map)) {
       const btn = $(sel);
       if (btn) btn.classList.toggle("tool-on", mode === m);
@@ -310,14 +333,21 @@ export function initGeoTools2d(hooks = {}) {
   function buildOverlayFc() {
     const features = [];
     const positions = currentPositions();
+    const isPick = mode && (mode.startsWith("sel-") || mode.startsWith("draw-"));
     const lineColor = mode === "los" ? "los-line" : "line";
+    const lineProp = { kind: lineColor };
+    if (isPick) lineProp.color = DRAW_COLOR;
     if (positions.length >= 2) {
-      features.push({ type: "Feature", properties: { kind: lineColor }, geometry: { type: "LineString", coordinates: positions.map(p => [p.lng, p.lat]) } });
+      features.push({ type: "Feature", properties: lineProp, geometry: { type: "LineString", coordinates: positions.map(p => [p.lng, p.lat]) } });
     }
-    if (mode === "area" && positions.length >= 3) {
-      features.push({ type: "Feature", properties: { kind: "poly" }, geometry: { type: "Polygon", coordinates: [[...positions, positions[0]].map(p => [p.lng, p.lat])] } });
+    if ((mode === "area" || mode === "sel-poly" || mode === "draw-poly") && positions.length >= 3) {
+      features.push({ type: "Feature", properties: isPick ? { kind: "poly", color: DRAW_COLOR } : { kind: "poly" }, geometry: { type: "Polygon", coordinates: [[...positions, positions[0]].map(p => [p.lng, p.lat])] } });
     }
-    for (const p of pts) features.push({ type: "Feature", properties: { kind: "point" }, geometry: { type: "Point", coordinates: [p.lng, p.lat] } });
+    if (mode === "sel-rect" && pts.length === 1 && positions.length >= 2) {
+      const a = pts[0], b = positions[positions.length - 1];
+      features.push({ type: "Feature", properties: { kind: "poly", color: DRAW_COLOR }, geometry: rectPolygon(Math.min(a.lng, b.lng), Math.min(a.lat, b.lat), Math.max(a.lng, b.lng), Math.max(a.lat, b.lat)) });
+    }
+    for (const p of pts) features.push({ type: "Feature", properties: isPick ? { kind: "point", color: DRAW_COLOR } : { kind: "point" }, geometry: { type: "Point", coordinates: [p.lng, p.lat] } });
     // 区間ラベル（距離・面積モードのみ）
     if (mode === "distance" || mode === "area") {
       for (let i = 1; i < positions.length; i++) {
@@ -330,6 +360,16 @@ export function initGeoTools2d(hooks = {}) {
       }
     }
     if (profileHover) features.push({ type: "Feature", properties: { kind: "hover" }, geometry: { type: "Point", coordinates: [profileHover.lng, profileHover.lat] } });
+    // 確定済みの選択範囲・選択ハイライト・作図
+    if (regionGeom) features.push({ type: "Feature", properties: { kind: "poly", color: REGION_COLOR }, geometry: regionGeom });
+    for (const f of selFeatures.slice(0, 500)) {
+      features.push({ type: "Feature", properties: { kind: f?.geometry?.type === "Point" ? "point" : (/Polygon/.test(f?.geometry?.type || "") ? "poly" : "line"), color: SEL_COLOR }, geometry: f.geometry });
+    }
+    for (const a of annotations) {
+      const props = { kind: a.geometry.type === "Point" ? "point" : (/Polygon/.test(a.geometry.type) ? "poly" : "line"), color: DRAW_COLOR };
+      if (a.name && a.geometry.type === "Point") props.text = a.name;
+      features.push({ type: "Feature", properties: props, geometry: a.geometry });
+    }
     return { type: "FeatureCollection", features };
   }
 
@@ -344,7 +384,7 @@ export function initGeoTools2d(hooks = {}) {
     pts = [];
     hoverPt = null;
     profileHover = null;
-    overlay.update({ type: "FeatureCollection", features: [] });
+    pushOverlay(); // 確定済みの範囲・選択・作図は残したまま描画だけ再構成
     if (resultEl()) resultEl().textContent = "";
     if (losResultEl()) losResultEl().textContent = "";
     const box = $("#profile-box");
@@ -355,8 +395,11 @@ export function initGeoTools2d(hooks = {}) {
   function setMode(next) {
     clearAll();
     mode = next;
-    if (resultEl()) resultEl().textContent = t(next === "los" ? "tools.losHint" : "tools.measureHint");
+    if (resultEl() && !String(next).startsWith("sel-") && !String(next).startsWith("draw-")) {
+      resultEl().textContent = t(next === "los" ? "tools.losHint" : "tools.measureHint");
+    }
     updateModeButtons();
+    updateSelHint();
   }
 
   function updateReadout() {
@@ -393,6 +436,15 @@ export function initGeoTools2d(hooks = {}) {
       if (losRunning) lel.textContent = t("tools.profileRunning");
       else lel.textContent = t(pts.length ? "tools.losTargetStep" : "tools.losHint");
     }
+  }
+
+  // 選択・作図モードのヒント（sel-result 側に出す）
+  function updateSelHint() {
+    const el = selResultEl();
+    if (!el || !mode) return;
+    if (mode === "sel-rect") el.textContent = t(pts.length ? "tools.selRectSecond" : "tools.selRectHint");
+    else if (mode === "sel-poly") el.textContent = t("tools.selPolyHint");
+    else if (mode === "sel-circle") el.textContent = t("tools.selCircleHint");
   }
 
   function addPoint(lngLat) {
@@ -627,10 +679,227 @@ export function initGeoTools2d(hooks = {}) {
     }
   }
 
+  // ---------- 空間選択・集計・バッファ ----------
+  const escapeHtml = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function setRegion(geom, sourceGeom) {
+    regionGeom = geom;
+    regionSourceGeom = sourceGeom || geom;
+    mode = null;
+    pts = [];
+    hoverPt = null;
+    updateModeButtons();
+    pushOverlay();
+    if (geom && selResultEl()) selResultEl().textContent = t("tools.selRegionSet");
+    refreshAggFieldOptions();
+  }
+
+  function clearSelection() {
+    regionGeom = null;
+    regionSourceGeom = null;
+    selFeatures = [];
+    selLayerLabel = "";
+    if (selResultEl()) selResultEl().textContent = "";
+    if (aggResultEl()) aggResultEl().textContent = "";
+    pushOverlay();
+  }
+
+  function vectorLayers() {
+    return (hooks.getOrderedLayerItems?.() || []).filter(item => hooks.isVectorLayerItem && hooks.isVectorLayerItem(item));
+  }
+
+  function refreshSelLayerOptions() {
+    const sel = $("#tool-sel-layer");
+    if (!sel) return;
+    const cur = sel.value;
+    sel.replaceChildren();
+    const all = document.createElement("option");
+    all.value = "__all__";
+    all.textContent = t("tools.selLayerAll");
+    sel.append(all);
+    for (const item of vectorLayers()) {
+      const o = document.createElement("option");
+      o.value = item.id;
+      o.textContent = item.title || item.id;
+      sel.append(o);
+    }
+    if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+  }
+
+  function targetLayerItems() {
+    const sel = $("#tool-sel-layer");
+    const items = vectorLayers();
+    if (!sel || sel.value === "__all__" || !sel.value) return items;
+    return items.filter(i => i.id === sel.value || i.title === sel.value);
+  }
+
+  function mergedTargetFc() {
+    const features = [];
+    for (const item of targetLayerItems()) {
+      const gj = hooks.getLayerGeoJson && hooks.getLayerGeoJson(item.id);
+      if (gj?.features) features.push(...gj.features);
+    }
+    return { type: "FeatureCollection", features };
+  }
+
+  function refreshAggFieldOptions() {
+    const group = $("#tool-agg-group"), value = $("#tool-agg-value");
+    if (!group || !value) return;
+    const { all, numeric } = collectFields(mergedTargetFc().features);
+    const fill = (el, fields, phKey) => {
+      const cur = el.value;
+      el.replaceChildren();
+      const ph = document.createElement("option");
+      ph.value = "";
+      ph.textContent = t(phKey);
+      el.append(ph);
+      for (const f of fields) { const o = document.createElement("option"); o.value = f; o.textContent = f; el.append(o); }
+      if (cur && fields.includes(cur)) el.value = cur;
+    };
+    fill(group, all, "tools.aggGroupPh");
+    fill(value, numeric, "tools.aggValuePh");
+  }
+
+  function doSpatialSelect(regionOverride) {
+    const region = regionOverride || regionGeom;
+    if (!region) { if (selResultEl()) selResultEl().textContent = t("tools.selNoRegion"); return null; }
+    const feats = selectFeatures(mergedTargetFc(), region);
+    if (!regionOverride) {
+      selFeatures = feats;
+      selLayerLabel = targetLayerItems().map(i => i.title || i.id).join(", ");
+      pushOverlay();
+    }
+    refreshAggFieldOptions();
+    const el = selResultEl();
+    if (el && !regionOverride) {
+      if (!feats.length) el.textContent = t("tools.selNoFeatures");
+      else {
+        const names = feats.slice(0, 12).map(f => f.properties?.name ?? f.properties?.Name ?? f.properties?.名称 ?? f.properties?.id ?? "").filter(v => v !== "");
+        el.textContent = t("tools.selResult", { count: feats.length, layer: selLayerLabel })
+          + (names.length ? ` — ${names.join(", ")}${feats.length > names.length ? "…" : ""}` : "");
+      }
+    }
+    return feats;
+  }
+
+  function doAggregate(regionOverride) {
+    const region = regionOverride || regionGeom;
+    if (!region) { if (aggResultEl()) aggResultEl().textContent = t("tools.selNoRegion"); return null; }
+    const groupField = $("#tool-agg-group")?.value || null;
+    const valueField = $("#tool-agg-value")?.value || null;
+    const { rows } = aggregateInRegion(mergedTargetFc(), region, { groupField, valueField });
+    const el = aggResultEl();
+    if (el && !regionOverride) {
+      if (!rows.length || (rows.length === 1 && !rows[0].count)) {
+        el.textContent = t("tools.selNoFeatures");
+      } else {
+        const fmtN = v => v == null ? "-" : (Math.abs(v) >= 100 ? Math.round(v).toLocaleString() : Math.round(v * 100) / 100).toLocaleString();
+        const head = `<tr><th>${escapeHtml(groupField || t("tools.aggAll"))}</th><th>count</th>${valueField ? "<th>sum</th><th>avg</th><th>min</th><th>max</th>" : ""}</tr>`;
+        el.innerHTML = `<table>${head}${rows.slice(0, 50).map(r =>
+          `<tr><td>${escapeHtml(r.key ?? "")}</td><td>${r.count}</td>${valueField ? `<td>${fmtN(r.sum)}</td><td>${fmtN(r.avg)}</td><td>${fmtN(r.min)}</td><td>${fmtN(r.max)}</td>` : ""}</tr>`).join("")}</table>`
+          + (rows.length > 50 ? `<div class="hint">${t("tools.aggTruncated", { count: rows.length })}</div>` : "");
+      }
+    }
+    return rows;
+  }
+
+  async function doBuffer() {
+    const radius = num($("#tool-buf-radius"), 0);
+    if (!radius) { if (selResultEl()) selResultEl().textContent = t("tools.bufNoRadius"); return null; }
+    // バッファ対象: 直近の選択地物（あれば各々・上限200件）→ なければ描画範囲
+    const targets = selFeatures.length
+      ? selFeatures.map(f => f.geometry).filter(Boolean).slice(0, 200)
+      : (regionSourceGeom ? [regionSourceGeom] : []);
+    if (!targets.length) { if (selResultEl()) selResultEl().textContent = t("tools.bufNoTarget"); return null; }
+    if (selResultEl()) selResultEl().textContent = t("tools.profileRunning");
+    try {
+      const geoms = [];
+      for (const g of targets) {
+        const bg = await bufferGeometry(g, radius);
+        if (bg) geoms.push(bg);
+      }
+      if (!geoms.length) throw new Error("empty");
+      const title = `buffer ${radius}m`;
+      const fc = {
+        type: "FeatureCollection",
+        features: geoms.map(g => ({ type: "Feature", properties: { name: title }, geometry: g })),
+      };
+      const added = await addDataLayer(title, fc);
+      // 生成したバッファは新しい選択範囲としても使えるよう保持
+      regionGeom = geoms.length === 1 ? geoms[0]
+        : { type: "MultiPolygon", coordinates: geoms.flatMap(g => g.type === "Polygon" ? [g.coordinates] : g.coordinates) };
+      regionSourceGeom = regionGeom;
+      selFeatures = [];
+      pushOverlay();
+      if (selResultEl()) selResultEl().textContent = t("tools.bufDone", { count: geoms.length });
+      return { ok: !!added, title };
+    } catch (e) {
+      console.warn("buffer failed", e);
+      if (selResultEl()) selResultEl().textContent = t("tools.bufFail");
+      return null;
+    }
+  }
+
+  // ---------- 作図・注記 ----------
+  function addAnnotation(geometry) {
+    const name = ($("#tool-draw-name")?.value || "").trim() || `${annotations.length + 1}`;
+    annotations.push({ name, geometry });
+    renderDrawList();
+    pushOverlay();
+  }
+
+  function renderDrawList() {
+    const ul = $("#tools-draw-list");
+    if (!ul) return;
+    ul.replaceChildren();
+    annotations.forEach((a, i) => {
+      const li = document.createElement("li");
+      const span = document.createElement("span");
+      span.className = "draw-name";
+      span.textContent = `${a.name}（${a.geometry.type.replace(/^Multi/, "M")}）`;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "×";
+      del.addEventListener("click", () => { annotations.splice(i, 1); renderDrawList(); pushOverlay(); });
+      li.append(span, del);
+      ul.append(li);
+    });
+  }
+
+  const annotationsFc = () => ({
+    type: "FeatureCollection",
+    features: annotations.map(a => ({ type: "Feature", properties: { name: a.name }, geometry: a.geometry })),
+  });
+
   // ---------- 入力ハンドラ（エンジンのイベントから呼ばれる） ----------
   function handleClick(lngLat) {
     if (!mode) return false;
+    // 円選択は中心1クリックで確定（半径はパネル入力）
+    if (mode === "sel-circle") {
+      const c = { lng: Number(lngLat.lng ?? lngLat[0]), lat: Number(lngLat.lat ?? lngLat[1]) };
+      if (Number.isFinite(c.lng) && Number.isFinite(c.lat)) {
+        const r = Math.max(1, num($("#tool-sel-radius"), 500));
+        setRegion(circlePolygon(c, r), { type: "Point", coordinates: [c.lng, c.lat] });
+      }
+      return true;
+    }
     addPoint(lngLat);
+    updateSelHint();
+    // 矩形選択は2点確定
+    if (mode === "sel-rect" && pts.length >= 2) {
+      const a = pts[0], b = pts[1];
+      setRegion(rectPolygon(Math.min(a.lng, b.lng), Math.min(a.lat, b.lat), Math.max(a.lng, b.lng), Math.max(a.lat, b.lat)));
+      return true;
+    }
+    // ポイント作図・注記はクリックごとに確定（連続配置できるようモード維持）
+    if ((mode === "draw-point" || mode === "draw-label") && pts.length) {
+      const p = pts[pts.length - 1];
+      addAnnotation({ type: "Point", coordinates: [p.lng, p.lat] });
+      pts = [];
+      hoverPt = null;
+      pushOverlay();
+      return true;
+    }
     if (mode === "los" && pts.length >= 2) void executeLos();
     else if (mode === "bearing" && pts.length >= 2) {
       const g = geodesicInverse(pts[0], pts[1]);
@@ -650,6 +919,34 @@ export function initGeoTools2d(hooks = {}) {
 
   function handleDoubleClick() {
     if (!mode) return false;
+    if (mode === "sel-poly") {
+      if (pts.length >= 3) {
+        const ring = pts.map(p => [p.lng, p.lat]);
+        ring.push([...ring[0]]);
+        setRegion({ type: "Polygon", coordinates: [ring] });
+      }
+      return true;
+    }
+    if (mode === "draw-line") {
+      if (pts.length >= 2) {
+        addAnnotation({ type: "LineString", coordinates: pts.map(p => [p.lng, p.lat]) });
+        pts = [];
+        hoverPt = null;
+        pushOverlay();
+      }
+      return true;
+    }
+    if (mode === "draw-poly") {
+      if (pts.length >= 3) {
+        const ring = pts.map(p => [p.lng, p.lat]);
+        ring.push([...ring[0]]);
+        addAnnotation({ type: "Polygon", coordinates: [ring] });
+        pts = [];
+        hoverPt = null;
+        pushOverlay();
+      }
+      return true;
+    }
     if (mode === "distance" || mode === "bearing") {
       if (pts.length >= 2) finishInteractive();
       return true;
@@ -812,8 +1109,48 @@ export function initGeoTools2d(hooks = {}) {
     panelRoot.querySelector("#tool-profile-draw")?.addEventListener("click", () => setMode(mode === "profile" ? null : "profile"));
     panelRoot.querySelector("#tool-los")?.addEventListener("click", () => setMode(mode === "los" ? null : "los"));
     panelRoot.querySelector("#tool-clear")?.addEventListener("click", clearAll);
+
+    // 空間選択・集計・バッファ
+    panelRoot.querySelector("#tool-sel-rect")?.addEventListener("click", () => setMode(mode === "sel-rect" ? null : "sel-rect"));
+    panelRoot.querySelector("#tool-sel-poly")?.addEventListener("click", () => setMode(mode === "sel-poly" ? null : "sel-poly"));
+    panelRoot.querySelector("#tool-sel-circle")?.addEventListener("click", () => setMode(mode === "sel-circle" ? null : "sel-circle"));
+    panelRoot.querySelector("#tool-sel-layer")?.addEventListener("focus", refreshSelLayerOptions);
+    panelRoot.querySelector("#tool-sel-layer")?.addEventListener("change", refreshAggFieldOptions);
+    panelRoot.querySelector("#tool-sel-run")?.addEventListener("click", () => doSpatialSelect());
+    panelRoot.querySelector("#tool-sel-clear")?.addEventListener("click", clearSelection);
+    panelRoot.querySelector("#tool-sel-zoom")?.addEventListener("click", () => {
+      const box = geomBbox(regionGeom);
+      if (box) hooks.fitBounds?.(box);
+    });
+    panelRoot.querySelector("#tool-sel-tolayer")?.addEventListener("click", async () => {
+      if (!selFeatures.length) { if (selResultEl()) selResultEl().textContent = t("tools.selNoFeatures"); return; }
+      const fc = { type: "FeatureCollection", features: selFeatures.map(f => ({ type: "Feature", properties: { ...(f.properties || {}) }, geometry: f.geometry })) };
+      await addDataLayer(`${t("tools.selLayerName")}（${selFeatures.length}）`, fc);
+      if (selResultEl()) selResultEl().textContent = t("tools.selToLayerDone", { count: selFeatures.length });
+    });
+    panelRoot.querySelector("#tool-agg-run")?.addEventListener("click", () => doAggregate());
+    panelRoot.querySelector("#tool-buf-run")?.addEventListener("click", () => void doBuffer());
+
+    // 作図・注記
+    panelRoot.querySelector("#tool-draw-point")?.addEventListener("click", () => setMode(mode === "draw-point" ? null : "draw-point"));
+    panelRoot.querySelector("#tool-draw-line")?.addEventListener("click", () => setMode(mode === "draw-line" ? null : "draw-line"));
+    panelRoot.querySelector("#tool-draw-poly")?.addEventListener("click", () => setMode(mode === "draw-poly" ? null : "draw-poly"));
+    panelRoot.querySelector("#tool-draw-label")?.addEventListener("click", () => setMode(mode === "draw-label" ? null : "draw-label"));
+    panelRoot.querySelector("#tool-draw-clear")?.addEventListener("click", () => { annotations.length = 0; renderDrawList(); pushOverlay(); });
+    panelRoot.querySelector("#tool-draw-export")?.addEventListener("click", () => {
+      if (!annotations.length) return;
+      downloadBlob(JSON.stringify(annotationsFc()), `${fileSafe(t("tools.drawLayerTitle"))}.geojson`, "application/geo+json");
+    });
+    panelRoot.querySelector("#tool-draw-tolayer")?.addEventListener("click", async () => {
+      if (!annotations.length) return;
+      await addDataLayer(t("tools.drawLayerTitle"), annotationsFc());
+      annotations.length = 0;
+      renderDrawList();
+      pushOverlay();
+    });
   }
   refreshExportOptions();
+  refreshSelLayerOptions();
 
   // ---------- 外部 API（kasugaiApi / AI ツール向け） ----------
   const toLngLats = coords => (coords || [])
@@ -838,6 +1175,81 @@ export function initGeoTools2d(hooks = {}) {
     clearAll,
     refreshExportOptions,
     exportLayer: (idOrTitle, format = "geojson") => doExport(idOrTitle, format),
+
+    // 空間選択（#23）: region は GeoJSON Polygon/MultiPolygon/Feature、
+    // {bbox:[w,s,e,n]}、{center:[lng,lat]|{lng,lat}, radiusMeters} を受け付ける
+    spatialSelect(opts = {}) {
+      // 範囲指定が無ければ直近に描画/生成した範囲を使う
+      const raw = opts.region ?? opts.geometry ?? opts.polygon ?? opts.bbox ?? (opts.center ? opts : null);
+      const region = raw ? normalizeRegion(raw) : regionGeom;
+      if (!region) return { ok: false, reason: "invalid region" };
+      const items = opts.layer
+        ? vectorLayers().filter(i => i.id === opts.layer || i.title === opts.layer)
+        : vectorLayers();
+      const hits = [];
+      for (const item of items) {
+        const gj = hooks.getLayerGeoJson && hooks.getLayerGeoJson(item.id);
+        for (const f of selectFeatures(gj, region)) hits.push({ layer: item.title || item.id, feature: f });
+      }
+      regionGeom = region;
+      regionSourceGeom = region;
+      selFeatures = hits.map(h => h.feature);
+      selLayerLabel = items.map(i => i.title || i.id).join(", ");
+      pushOverlay();
+      const el = selResultEl();
+      if (el) el.textContent = hits.length ? t("tools.selResult", { count: hits.length, layer: selLayerLabel }) : t("tools.selNoFeatures");
+      return {
+        ok: true, count: hits.length, layer: selLayerLabel,
+        features: hits.slice(0, 200).map(h => ({ layer: h.layer, properties: h.feature.properties || {} })),
+      };
+    },
+
+    // ポリゴン内集計（#30）
+    aggregateWithin(opts = {}) {
+      const raw = opts.region ?? opts.geometry ?? opts.polygon ?? opts.bbox ?? (opts.center ? opts : null);
+      const region = raw ? normalizeRegion(raw) : regionGeom;
+      if (!region) return { ok: false, reason: "invalid region" };
+      const items = opts.layer
+        ? vectorLayers().filter(i => i.id === opts.layer || i.title === opts.layer)
+        : vectorLayers();
+      const features = [];
+      for (const item of items) {
+        const gj = hooks.getLayerGeoJson && hooks.getLayerGeoJson(item.id);
+        if (gj?.features) features.push(...gj.features);
+      }
+      regionGeom = region;
+      regionSourceGeom = region;
+      pushOverlay();
+      const { rows } = aggregateInRegion({ type: "FeatureCollection", features }, region,
+        { groupField: opts.groupField || null, valueField: opts.valueField || null });
+      return { ok: true, count: rows.reduce((s, r) => s + r.count, 0), rows };
+    },
+
+    // バッファ生成（#34）: geometry（GeoJSON geometry/Feature または範囲指定形）に
+    // radiusMeters のバッファを生成し一時レイヤーとして追加する
+    async createBuffer(opts = {}) {
+      let geom = null;
+      if (opts.geometry) geom = opts.geometry.type === "Feature" ? opts.geometry.geometry : opts.geometry;
+      else geom = normalizeRegion(opts.region ?? opts.polygon ?? opts.bbox ?? (opts.center ? opts : null));
+      const r = Number(opts.radiusMeters ?? opts.radius ?? 0);
+      if (!geom) return { ok: false, reason: "no geometry" };
+      if (!Number.isFinite(r) || r === 0) return { ok: false, reason: "radiusMeters required" };
+      try {
+        const bg = await bufferGeometry(geom, r);
+        if (!bg) return { ok: false, reason: "buffer failed" };
+        const title = opts.title || `buffer ${r}m`;
+        const added = await addDataLayer(title, {
+          type: "FeatureCollection",
+          features: [{ type: "Feature", properties: { name: title }, geometry: bg }],
+        });
+        regionGeom = bg;
+        regionSourceGeom = bg;
+        pushOverlay();
+        return { ok: !!added, title, id: added?.id };
+      } catch (e) {
+        return { ok: false, reason: String(e?.message || e) };
+      }
+    },
 
     measureDistance(coords) {
       const line = toLngLats(coords);
