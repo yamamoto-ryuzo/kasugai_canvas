@@ -43,7 +43,7 @@
       <p><strong>Devin の APIキー</strong>（v5.23〜）：Devin プロバイダの設定画面に「Devin APIキー」欄があります。app.devin.ai → Settings → Devin API → <strong>Service users</strong> タブで発行した <code>cog_</code> キーを入れると <code>devin acp</code> の認証を APIキーで完了でき、ブラウザの PKCE ログイン画面を省略できます（<strong>PAT は acp 認証で拒否される</strong>ためサービスユーザーキーが必要。サービスユーザーはチームプラン向けの機能で、<strong>個人プランでは発行できません</strong>）。空欄なら従来どおりブラウザログイン。v6.5.17〜 はキー認証が失敗しても<strong>ブラウザ PKCE へ自動フォールバック</strong>するため、無効・期限切れ・個人プランのキーが残っていてもログインに進めます。キーはブラウザの localStorage に保存され、ローカルのブリッジへ <code>X-Devin-Api-Key</code> ヘッダでのみ送信されます（外部・平文HTTPには送信しません）。</p>
       <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="../ai-bridge.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>
       <p><strong>M365 / Microsoft Copilot を見送った理由</strong>：消費者向け Copilot はボット等によるアクセスを明示禁止しているため、Web UI 自動化を提供しません。この消費者向け規約は職場・学校アカウントには適用されず、M365 全体の禁止を意味しません。M365 の公式 Chat API は存在しますが、ライセンス・アプリ登録・必要権限への管理者同意等を要するため、本人のログインだけで使う標準連携としては見送り・未実装です。M365 の Web UI 自動化も、正規のプログラム接続としての許諾を確認できていないため採用しません。<a href="../ai-bridge.html#m365-connection-policy">規約上の禁止と導入条件の違い・再検討条件</a>を参照してください。</p>
-      <p>AI の実行経路は function calling によるツール呼び出しで、<strong>81個のツール宣言</strong>（<code>activeChatTools</code> が環境・エンジン・キー設定で絞り込み）がアプリの全主要機能を網羅します。全仕様は <a href="../ai-tools.html">AI ツール仕様</a> を参照：</p>
+      <p>AI の実行経路は function calling によるツール呼び出しで、<strong>92個のツール宣言</strong>（<code>activeChatTools</code> が環境・エンジン・キー設定で絞り込み）がアプリの全主要機能を網羅します。全仕様は <a href="../ai-tools.html">AI ツール仕様</a> を参照：</p>
       <table>
         <thead><tr><th>カテゴリ</th><th>ツール</th></tr></thead>
         <tbody>
@@ -57,6 +57,7 @@
           <tr><td>データ取得・加工</td><td><code>fetchData</code>（CORS 範囲の URL 取得）・<code>getLayerGeoJson</code>・<code>addDataLayer</code>・<code>removeDataLayer</code></td></tr>
           <tr><td>データファイル</td><td><code>listDataFiles</code>*・<code>saveDataFile</code>*・<code>deleteDataFile</code>*（* ローカル版のみ）</td></tr>
           <tr><td>コード実行・プラグイン</td><td><code>runCode</code>（サンドボックス）・<code>savePlugin</code>・<code>listPlugins</code>・<code>getPluginCode</code>・<code>removePlugin</code>・<code>setPluginEnabled</code>・<code>publishPlugin</code>*（* ローカル版のみ）</td></tr>
+          <tr><td>計測・空間解析・出力</td><td><code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code>・<code>elevationProfile</code>・<code>lineOfSight</code>・<code>setGraticule</code>・<code>setMinimap</code>・<code>exportLayer</code>・<code>spatialSelect</code>（範囲内の地物選択）・<code>aggregateWithin</code>（ポリゴン内集計）・<code>createBuffer</code>（バッファ生成）</td></tr>
           <tr><td>UI 操作</td><td><code>listUiControls</code>・<code>controlUi</code>（専用ツールを持たない UI 項目を列挙・操作する汎用ブリッジ）</td></tr>
           <tr><td>GSI Maps エンジン（17・調整中）</td><td><code>listGsiLayers</code>・<code>importGsiLayers</code>・<code>setGsiBasemap</code>・<code>setGsiGlobe</code> 等の <code>Gsi</code> 系ツール群（<code>?engine=gsimaps</code> のみ）</td></tr>
           <tr><td>音声・指示書</td><td><code>speak</code>（TTS 読み上げ）・<code>listInstructions</code>・<code>readInstruction</code>・<code>saveInstruction</code>・<code>deleteInstruction</code>・<code>selectAgents</code>（agents/skills 指示書の管理）</td></tr>

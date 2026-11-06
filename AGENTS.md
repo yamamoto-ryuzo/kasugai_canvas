@@ -13,7 +13,7 @@
 - リリースは 4.x〜5.x 系（4.0.0, 4.1.0, ...）で進める
 - ハッカソン提出は「**V3（AI 連携）の強化**」として位置づける（詳細は `hackathon.html`）。提出可能状態の条件:
   - Cloud Run 上に KASUGAI Canvas（静的配信）＋GIS 保存 API＋`/api/gemini`（内蔵AI向けキー隠蔽プロキシ）が稼働し、`GEMINI_API_KEY` で審査員キーレスの AI 利用ができる
-  - ブラウザ内蔵AI（Gemini function calling・81ツール宣言を環境で絞り込み）によるサンプルデータ生成・資料生成＋パーマリンク（`showReport`/`buildShareUrl`）が動作する
+  - ブラウザ内蔵AI（Gemini function calling・92ツール宣言を環境で絞り込み）によるサンプルデータ生成・資料生成＋パーマリンク（`showReport`/`buildShareUrl`）が動作する
   - 審査用公開URLが維持され、「○○の資料を作って」→ レイヤー自動構成 → FlyTo → 資料出力のデモが通しで動く
 
 ## バージョン管理手順

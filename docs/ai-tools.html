@@ -11,12 +11,12 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v6.19.1</span></h1>
-      <p>AI ツール仕様 — 内蔵AIが制御できる全81ツールの定義</p>
+      <p>AI ツール仕様 — 内蔵AIが制御できる全92ツールの定義</p>
     </header>
     <main>
       <section>
         <h2>🤖 概要</h2>
-        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/shared/ai-chat.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>89 種</strong>（実行時に <code>activeChatTools</code> が環境・エンジン・キー設定で絞り込みます）です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="ai-api.html">【API】内蔵AI（Google 連携・AI）</a> を参照。</p>
+        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/shared/ai-chat.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>92 種</strong>（実行時に <code>activeChatTools</code> が環境・エンジン・キー設定で絞り込みます）です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="ai-api.html">【API】内蔵AI（Google 連携・AI）</a> を参照。</p>
         <p>実行モデル：ユーザーの発言 → AI がツール呼び出しを返す → ブラウザが <code>kasugaiApi</code> 経由で実行 → 結果を AI に返す、の function calling ループ（OpenAI互換選択時は宣言を OpenAI tools 形式へ変換し、往復結果は tool メッセージとして返送）。ツール実行の上限往復数は既定10（管理 → AI → チャット の「ツール実行の上限往復数」または AI への指示で <code>setToolMaxSteps</code> により 1〜20 で変更可）。上限到達時はユーザーに継続確認が出て、承認なら同じ往復数を1枠追加して続行、拒否なら中断します。推論はすべてブラウザ側。破壊的ツールは実行前に確認ダイアログを挟み、最終判断はユーザーにあります。</p>
 
         <h3>提供条件（activeChatTools で絞り込み）</h3>
@@ -188,6 +188,9 @@
             <tr><td><code>fetchData</code></td><td>url*</td><td>外部 URL からテキスト/JSON/CSV 等を取得（CORS 許可サイトのみ・約400KB で打切り）。取得データは <code>runCode</code> で加工し <code>addDataLayer</code> で表示</td></tr>
             <tr><td><code>getLayerGeoJson</code></td><td>name*</td><td>読み込み済みレイヤーの地物を GeoJSON で取得。属性検索より前にデータ全体が必要な時・変換加工の入力に</td></tr>
             <tr><td><code>exportLayer</code></td><td>name*, format</td><td>レイヤーをファイルとしてダウンロード出力（ブラウザのダウンロードに保存）。format: geojson(既定)/csv/tsv/kml/fgb/shp。csv・tsv はジオメトリを WKT 列として出力（QGIS 互換）、shp はジオメトリ種別ごとの Shapefile を .zip に同梱。戻り値: ok・file・count・skipped（ツール配線済みエンジン全般: cesium/maplibre/openlayers/leaflet/gsimaps。クエリ系は読み込み済み範囲のみ）</td></tr>
+            <tr><td><code>spatialSelect</code></td><td>layer, region</td><td>範囲内のベクター地物を空間選択。region は GeoJSON Polygon/<code>{"bbox":[w,s,e,n]}</code>/<code>{"center":[lng,lat],"radiusMeters":m}</code>。省略時は直近の描画範囲。結果は地図上でハイライト。戻り値: ok・count・layer・features（属性のみ・上限200件）</td></tr>
+            <tr><td><code>aggregateWithin</code></td><td>layer, region, groupField, valueField</td><td>範囲内の地物を属性で集計（ポリゴン内集計・空間結合）。groupField でカテゴリ別、valueField で sum/avg/min/max。region 指定は spatialSelect と同じ。戻り値: ok・count・rows</td></tr>
+            <tr><td><code>createBuffer</code></td><td>radiusMeters*, geometry, title</td><td>地物・範囲にバッファ（帯）を生成し新規レイヤーとして追加。geometry は GeoJSON geometry/Feature または範囲指定。省略時は直近の選択範囲。生成物は続けて region として使える</td></tr>
             <tr><td><code>addDataLayer</code></td><td>title*, geojson*</td><td>GeoJSON オブジェクトを新規レイヤーとして直接表示（URL 不要の一時レイヤー・.kasc には含まれない）。feature の properties に simplestyle 属性（marker-color/marker-size/stroke/fill/fill-opacity/description 等）で色分け・ポップアップ制御</td></tr>
             <tr><td><code>removeDataLayer</code></td><td>name*</td><td><code>addDataLayer</code> で追加した一時レイヤーを削除</td></tr>
           </tbody>
