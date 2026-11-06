@@ -47,20 +47,6 @@
               <option value="86400">86400x</option>
             </select>
           </div>
-          <div id="time-config" hidden>
-            <div class="time-config-head">
-              <span id="time-config-layer" class="time-config-title"></span>
-              <button id="time-config-close" type="button" aria-label="閉じる">✕</button>
-            </div>
-            <label class="time-config-row"><span data-i18n="time.startField">開始時刻プロパティ</span><select id="time-config-start"></select></label>
-            <label class="time-config-row"><span data-i18n="time.endField">終了時刻プロパティ</span><select id="time-config-end"></select></label>
-            <label class="time-config-row"><span data-i18n="time.span">保持時間</span><input id="time-config-span" type="text" placeholder="3600 / PT1H / 1d"></label>
-            <div class="time-config-actions">
-              <button id="time-config-apply" type="button" data-i18n="time.apply">適用</button>
-              <button id="time-config-clear" type="button" class="danger-button" data-i18n="time.clear">解除</button>
-            </div>
-            <p id="time-config-hint" class="hint"></p>
-          </div>
           <aside class="control-panel">
             <h1 class="panel-title"><button id="layer-panel-toggle" class="panel-toggle" type="button" aria-label="最小化" data-i18n-attr="aria-label:common.minimize">−</button><span class="panel-title-text">KASUGAI Canvas <small>Cesium</small></span><span class="panel-title-tools">
               <button id="manage-open" class="panel-manage" type="button" title="管理" data-i18n-attr="title:manage.open;aria-label:manage.open">⚙</button>
@@ -318,6 +304,7 @@
                 <button class="settings-tab" type="button" data-settings-panel="tools-profile-panel" data-i18n="tools.profile">標高断面</button>
                 <button class="settings-tab" type="button" data-settings-panel="tools-los-panel" data-i18n="tools.los">見通し判定</button>
                 <button class="settings-tab" type="button" data-settings-panel="tools-export-panel" data-i18n="tools.export">エクスポート</button>
+                <button class="settings-tab" type="button" data-settings-panel="tools-time-panel" data-i18n="tools.time">時系列</button>
               </nav>
               <section id="tools-measure-panel" class="settings-subpanel active">
                 <div class="tool-btnrow">
@@ -414,6 +401,26 @@
                 <div id="tool-export-status" class="tool-result" aria-live="polite"></div>
                 <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
                 <p class="hint" data-i18n="tools.exportHintFormats">CSV/TSV は WKT 列付き、Shapefile はジオメトリ種別ごとに分割して ZIP にまとめます。</p>
+              </section>
+              <section id="tools-time-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="time.hint">レイヤーと時刻プロパティを選ぶと時系列化します。設定後は地図下部にスライダーが表示されます。</p>
+                <div class="tool-btnrow">
+                  <select id="tool-time-layer"></select>
+                </div>
+                <div class="tool-btnrow">
+                  <label class="tool-inline"><span data-i18n="time.startField">開始時刻プロパティ</span><select id="time-config-start"></select></label>
+                </div>
+                <div class="tool-btnrow">
+                  <label class="tool-inline"><span data-i18n="time.endField">終了時刻プロパティ</span><select id="time-config-end"></select></label>
+                </div>
+                <div class="tool-btnrow">
+                  <label class="tool-inline"><span data-i18n="time.span">保持時間</span><input id="time-config-span" type="text" placeholder="3600 / PT1H / 1d" /></label>
+                </div>
+                <div class="tool-btnrow">
+                  <button id="time-config-apply" type="button" data-i18n="time.apply">適用</button>
+                  <button id="time-config-clear" type="button" class="danger-button" data-i18n="time.clear">解除</button>
+                </div>
+                <p id="time-config-hint" class="hint"></p>
               </section>
             </section>
             <div id="engines"></div>

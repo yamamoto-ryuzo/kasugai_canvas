@@ -1657,9 +1657,6 @@ function renderLayerList() {
           const filterButton = isQueryDecoder(vectorDecoders.get(layer.type), layer)
             ? `<button class="layer-filter" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.filter"))}" aria-label="${escapeHtml(t("layer.filter"))}">⏷</button>`
             : "";
-          const timeButton = VECTOR_TIME_TYPES.has(layer.type)
-            ? `<button class="layer-time${layer.timeField ? " active" : ""}" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.time"))}" aria-label="${escapeHtml(t("layer.time"))}">⏱</button>`
-            : "";
           const limitBadge = layer.entityLimited
             ? `<small class="entity-limit-badge" title="${escapeHtml(t("layer.entityLimited", { shown: layer.entityLimited.shown, total: layer.entityLimited.total }))}">${layer.entityLimited.shown}/${layer.entityLimited.total}</small>`
             : "";
@@ -1693,7 +1690,6 @@ function renderLayerList() {
           <span>${escapeHtml(layer.title)}</span>
           <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}${deferred ? " deferred" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadStatus === "failed" ? (layer._loadError || "") : deferred ? t("layer.notLoadedHint") : "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : deferred ? escapeHtml(t("layer.notLoaded")) : ""}</span>
           ${filterButton}
-          ${timeButton}
           ${limitBadge}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>
@@ -1780,15 +1776,6 @@ function renderLayerList() {
       event.preventDefault();
       event.stopPropagation();
       void editLayerQueryFilter(layerState.get(button.dataset.layerId));
-    });
-  });
-
-  list.querySelectorAll(".layer-time").forEach(button => {
-    button.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      const item = layerState.get(button.dataset.layerId);
-      if (item) openTimeConfig(item);
     });
   });
 
@@ -1904,6 +1891,8 @@ function renderLayerList() {
     const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
     if (group && !group.exclusive) input.indeterminate = group.layers.some(layer => layer.visible) && group.layers.some(layer => !layer.visible);
   });
+
+  refreshTimeConfigLayers();
 }
 
 function renderFlyPathSelect() {
@@ -4191,10 +4180,46 @@ viewer.clock.onTick.addEventListener(() => {
   document.getElementById("time-speed")?.addEventListener("change", () => { viewer.clock.multiplier = timeSpeed(); });
 }
 
-// ---- ⏱ ボタンから開く時系列設定ポップオーバー ----------------------------
-// 行に time= を書かなくても、レイヤ行から手動で時系列化できる。
-// 適用時は item.timeField 等を設定して .kasc 行へ書き戻し、該当レイヤーを再読み込みする
+// ---- ツールタブ「時系列」のレイヤー選択式設定 ------------------------------
+// 行に time= を書かなくても、ツールパネルからレイヤーと時刻プロパティを選んで
+// 時系列化できる。適用時は item.timeField 等を設定して .kasc 行へ書き戻し、
+// 該当レイヤーを再読み込みする
 let timeConfigItem = null;
+
+function timeCapableLayers() {
+  return getOrderedLayerItems().filter(item => VECTOR_TIME_TYPES.has(item.type));
+}
+
+// レイヤー選択セレクトを現在のレイヤー一覧で更新(時系列設定済みは⏱印)。
+// renderLayerList 都度呼ばれるため、一覧が変わった時だけDOM再構築する
+function refreshTimeConfigLayers() {
+  const sel = document.getElementById("tool-time-layer");
+  if (!sel) return;
+  const items = timeCapableLayers();
+  const sig = items.map(i => i.id + (i.timeField ? "*" : "")).join(",");
+  const keep = sel.value;
+  if (sel._sig !== sig) {
+    sel._sig = sig;
+    sel.innerHTML = "";
+    for (const item of items) {
+      const o = document.createElement("option");
+      o.value = item.id;
+      o.textContent = (item.timeField ? "⏱ " : "") + item.title;
+      sel.append(o);
+    }
+    if (keep && [...sel.options].some(o => o.value === keep)) sel.value = keep;
+    loadTimeConfigFields(layerState.get(sel.value) || null);
+    return;
+  }
+  const selItem = layerState.get(sel.value) || null;
+  // 初期表示時に未読み込みで候補が空だったレイヤーが後から読み込まれた場合も候補を入れ直す
+  const startEmpty = !document.getElementById("time-config-start")?.options.length;
+  const dataReady = !!(selItem?.geojsonSource?.features?.length
+    || vectorDataSources.find(e => e.id === selItem?.id)?.ds?.entities?.values?.length);
+  if (selItem && (timeConfigItem?.id !== sel.value || (startEmpty && dataReady))) {
+    loadTimeConfigFields(selItem);
+  }
+}
 
 // レイヤーのプロパティ名候補を集め、時刻値として解釈できるものを先頭に並べる
 function layerTimeFieldCandidates(item) {
@@ -4231,24 +4256,16 @@ function fillTimeFieldSelect(sel, fields, current, allowNone) {
   if (current) sel.value = current;
 }
 
-function openTimeConfig(item) {
+// 選択レイヤーのプロパティ候補と現在の設定値をフィールドセレクトへ反映する
+function loadTimeConfigFields(item) {
   timeConfigItem = item;
-  const box = document.getElementById("time-config");
-  if (!box) return;
-  document.getElementById("time-config-layer").textContent = item.title;
-  const fields = layerTimeFieldCandidates(item);
-  fillTimeFieldSelect(document.getElementById("time-config-start"), fields, item.timeField, false);
-  fillTimeFieldSelect(document.getElementById("time-config-end"), fields, item.timeEndField, true);
+  const fields = item ? layerTimeFieldCandidates(item) : [];
+  fillTimeFieldSelect(document.getElementById("time-config-start"), fields, item?.timeField, false);
+  fillTimeFieldSelect(document.getElementById("time-config-end"), fields, item?.timeEndField, true);
   const span = document.getElementById("time-config-span");
-  if (span) span.value = item.timeSpan != null ? String(item.timeSpan / 1000) : "";
+  if (span) span.value = item?.timeSpan != null ? String(item.timeSpan / 1000) : "";
   const hint = document.getElementById("time-config-hint");
-  if (hint) hint.textContent = fields.length ? "" : t("time.noFields");
-  box.hidden = false;
-}
-
-function closeTimeConfig() {
-  const box = document.getElementById("time-config");
-  if (box) box.hidden = true;
+  if (hint) hint.textContent = !item || fields.length ? "" : t("time.noFields");
 }
 
 // time= / time_end= / time_span= を .kasc 行へ書き戻す(他フィールドは保持)。
@@ -4277,7 +4294,6 @@ async function applyTimeConfig() {
   item.timeEndField = end || undefined;
   item.timeSpan = spanMs;
   syncTimeSourceLine(item);
-  closeTimeConfig();
   try {
     if (vectorDecoders.has(item.type)) await reloadVectorLayer(item);
     else await refreshLayers();
@@ -4294,7 +4310,6 @@ async function clearTimeConfig() {
   item.timeEndField = undefined;
   item.timeSpan = undefined;
   syncTimeSourceLine(item);
-  closeTimeConfig();
   try {
     if (vectorDecoders.has(item.type)) await reloadVectorLayer(item);
     else await refreshLayers();
@@ -4306,7 +4321,7 @@ async function clearTimeConfig() {
 
 document.getElementById("time-config-apply")?.addEventListener("click", () => void applyTimeConfig());
 document.getElementById("time-config-clear")?.addEventListener("click", () => void clearTimeConfig());
-document.getElementById("time-config-close")?.addEventListener("click", closeTimeConfig);
+document.getElementById("tool-time-layer")?.addEventListener("change", ev => loadTimeConfigFields(layerState.get(ev.target.value) || null));
 
 // drape: getVectorDrapeFlags() の戻り値(null または {dem, tiles3d})
 async function buildStyledGeoJsonDataSource(source, drape, item = null) {
