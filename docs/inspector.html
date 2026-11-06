@@ -53,6 +53,10 @@ wms: WMSレイヤ | WMSエンドポイント | off / layers=名前,名前 / styl
 wmts: WMTSレイヤ | タイルテンプレート or KVPエンドポイント | off / layer= / style= / tilematrixset=EPSG:3857 / format= / matrixprefix= / opacity= （{z}/{x}/{y} または {TileMatrix}/{TileRow}/{TileCol} テンプレートはそのまま利用。それ以外は GetTile KVP クエリを自動構築）
 3dtiles: レイヤ | off / proxy=off / ground=off / zoffset=&lt;m&gt;  （URL が tile.googleapis.com なら Maps API キーを自動付与。key= は .kasc に書かない。テレインのない2Dエンジンではバウンディングボリューム最小高を推定して z=0 平面へ自動接地。ground=off で無効化、zoffset= で高さを手動補正）
 geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / render=primitive|entity / style=QMLファイルURL / attr=出典(3番目のフィールドに出典を直接書くことも可)
+kml:(kmz:) KMLレイヤ | off / render=primitive|entity / style=QMLファイルURL / attr=出典 （KMZ は先頭の .kml エントリを展開。Placemark/GroundOverlay の範囲矩形を描画）
+wfs: WFSレイヤ | WFSエンドポイント | typename=型名(必須) / version=2.0.0 / maxfeatures=件数 / cql_filter=条件 / srsname=EPSG:4326 / outputformat= / off （GetFeature を GET し GeoJSON 応答を描画。CORS 対応サーバーのみ）
+shp:(shapefile:) Shapefileレイヤ | .zip一式 or .shp or ベース名URL | off / render=primitive|entity / style=QMLファイルURL / attr=出典 （.shp 指定時は同名の .dbf/.prj/.cpg を自動取得。.prj があれば WGS84 へ再投影）
+csv:(tsv:) CSVレイヤ | off / render=primitive|entity / attr=出典 （lon/lat・経度/緯度・x/y の列名を自動判定して点化）
 gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / where=条件(SQLite式) / limit=件数 / columns=列,列 / bbox=auto(表示範囲連動・既定ON) / bbox=off(常時全件描画) / render=primitive|entity / style=QMLファイルURL / attr=出典 (layer_styles のQGIS埋め込みスタイルを自動適用)
 duckdb: SQL絞り込みレイヤ | where=条件 / limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / table=地物テーブル名(gpkg) / bbox=auto(表示範囲連動・既定ON)|bbox=off(常時全件描画) / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / style=QMLファイルURL / attr=出典
 sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・| style=QML で QGIS スタイル適用・:bbox で表示範囲連動)
@@ -74,7 +78,7 @@ cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(�
         </div>
         <div class="url-box">
           <h3>ベクターデータ形式の使い分け</h3>
-          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>）はファイル全件を読み込んで描画し、ベクター検索パネルで属性検索できます（描画件数の上限を超える場合は表示範囲内の地物のみ描画し、カメラ移動で追随）。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。<code>gpkg:</code> も既定で <code>bbox=auto</code> のクエリ系（表示は範囲のみ・検索は ⏷ フィルターや属性一覧で全件対象）として動作します。常時全件を描画したい場合は <code>bbox=off</code> を付けると全件読み込み系（検索パネル対象）に戻ります。</p>
+          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>wfs:</code>/<code>shp:</code>/<code>csv:</code> 等）はファイル全件を読み込んで描画し、ベクター検索パネルで属性検索できます（描画件数の上限を超える場合は表示範囲内の地物のみ描画し、カメラ移動で追随）。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。<code>gpkg:</code> も既定で <code>bbox=auto</code> のクエリ系（表示は範囲のみ・検索は ⏷ フィルターや属性一覧で全件対象）として動作します。常時全件を描画したい場合は <code>bbox=off</code> を付けると全件読み込み系（検索パネル対象）に戻ります。</p>
           <pre><code>【全件読み込み系】全件読み込み・ベクター検索パネル対象
   小〜中規模・全件表示        → geojson:（事前変換が最速・最単純）
   中規模・Parquet をそのまま  → geoparquet:（利便性重視・変換不要で置くだけ）

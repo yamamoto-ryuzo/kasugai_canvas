@@ -268,6 +268,7 @@
                   </select>
                   <label><input id="display-popup" type="checkbox" /><span data-i18n="display.popup"> 地物クリックで属性ポップアップ</span></label>
                   <label><input id="display-graticule" type="checkbox" /><span data-i18n="display.graticule"> 緯度経度グリッド</span></label>
+                  <label><input id="display-minimap" type="checkbox" /><span data-i18n="display.minimap"> ミニマップを表示</span></label>
                 </div>
               </section>
             </section>
@@ -283,40 +284,50 @@
               <div id="attr-content" class="attr-content" data-i18n="attr.empty">地物を選択すると属性を表示します。</div>
             </section>
             <section id="tools-panel" class="plugin-panel">
-              <div class="section-title" data-i18n="tools.measure">計測</div>
-              <div class="tool-btnrow">
-                <button id="tool-m-distance" type="button" data-i18n="tools.distance">距離</button>
-                <button id="tool-m-area" type="button" data-i18n="tools.area">面積</button>
-                <button id="tool-m-bearing" type="button" data-i18n="tools.bearing">方位</button>
-                <button id="tool-clear" type="button" class="danger-button" data-i18n="tools.clear">クリア</button>
-              </div>
-              <p class="hint" data-i18n="tools.measureHint">左クリックで頂点を追加、ダブルクリックで確定します。</p>
-              <div id="tools-measure-result" class="tool-result" aria-live="polite"></div>
-              <div class="section-title" data-i18n="tools.profile">標高断面</div>
-              <div class="tool-btnrow">
-                <button id="tool-profile-draw" type="button" data-i18n="tools.profileDraw">ラインを描く</button>
-                <label class="tool-inline"><span data-i18n="tools.profileSamples">サンプル数</span><input id="tool-profile-samples" type="number" min="10" max="500" value="100" /></label>
-              </div>
-              <p class="hint" data-i18n="tools.profileHint">断面を取るラインを描き、ダブルクリックで実行します。</p>
-              <div id="profile-box" hidden>
-                <canvas id="profile-chart" width="280" height="150"></canvas>
-                <div id="profile-stats" class="tool-result"></div>
-              </div>
-              <div class="section-title" data-i18n="tools.los">見通し判定</div>
-              <p class="hint" data-i18n="tools.losHint">観測点→対象点の順にクリックします。</p>
-              <div class="tool-btnrow">
-                <button id="tool-los" type="button" data-i18n="tools.losPick">2点を指定</button>
-                <label class="tool-inline"><span data-i18n="tools.losObserverHeight">観測点高(m)</span><input id="los-observer-h" type="number" step="0.5" value="1.5" /></label>
-                <label class="tool-inline"><span data-i18n="tools.losTargetHeight">対象点高(m)</span><input id="los-target-h" type="number" step="0.5" value="0" /></label>
-              </div>
-              <div id="tools-los-result" class="tool-result" aria-live="polite"></div>
-              <div class="section-title" data-i18n="tools.export">エクスポート</div>
-              <div class="tool-btnrow">
-                <select id="tool-export-layer"></select>
-                <button id="tool-export-geojson" type="button">GeoJSON</button>
-              </div>
-              <div id="tool-export-status" class="tool-result" aria-live="polite"></div>
-              <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
+              <nav class="settings-tabs" aria-label="Tools">
+                <button class="settings-tab active" type="button" data-settings-panel="tools-measure-panel" data-i18n="tools.measure">計測</button>
+                <button class="settings-tab" type="button" data-settings-panel="tools-profile-panel" data-i18n="tools.profile">標高断面</button>
+                <button class="settings-tab" type="button" data-settings-panel="tools-los-panel" data-i18n="tools.los">見通し判定</button>
+                <button class="settings-tab" type="button" data-settings-panel="tools-export-panel" data-i18n="tools.export">エクスポート</button>
+              </nav>
+              <section id="tools-measure-panel" class="settings-subpanel active">
+                <div class="tool-btnrow">
+                  <button id="tool-m-distance" type="button" data-i18n="tools.distance">距離</button>
+                  <button id="tool-m-area" type="button" data-i18n="tools.area">面積</button>
+                  <button id="tool-m-bearing" type="button" data-i18n="tools.bearing">方位</button>
+                  <button id="tool-clear" type="button" class="danger-button" data-i18n="tools.clear">クリア</button>
+                </div>
+                <p class="hint" data-i18n="tools.measureHint">左クリックで頂点を追加、ダブルクリックで確定します。</p>
+                <div id="tools-measure-result" class="tool-result" aria-live="polite"></div>
+              </section>
+              <section id="tools-profile-panel" class="settings-subpanel">
+                <div class="tool-btnrow">
+                  <button id="tool-profile-draw" type="button" data-i18n="tools.profileDraw">ラインを描く</button>
+                  <label class="tool-inline"><span data-i18n="tools.profileSamples">サンプル数</span><input id="tool-profile-samples" type="number" min="10" max="500" value="100" /></label>
+                </div>
+                <p class="hint" data-i18n="tools.profileHint">断面を取るラインを描き、ダブルクリックで実行します。</p>
+                <div id="profile-box" hidden>
+                  <canvas id="profile-chart" width="280" height="150"></canvas>
+                  <div id="profile-stats" class="tool-result"></div>
+                </div>
+              </section>
+              <section id="tools-los-panel" class="settings-subpanel">
+                <p class="hint" data-i18n="tools.losHint">観測点→対象点の順にクリックします。</p>
+                <div class="tool-btnrow">
+                  <button id="tool-los" type="button" data-i18n="tools.losPick">2点を指定</button>
+                  <label class="tool-inline"><span data-i18n="tools.losObserverHeight">観測点高(m)</span><input id="los-observer-h" type="number" step="0.5" value="1.5" /></label>
+                  <label class="tool-inline"><span data-i18n="tools.losTargetHeight">対象点高(m)</span><input id="los-target-h" type="number" step="0.5" value="0" /></label>
+                </div>
+                <div id="tools-los-result" class="tool-result" aria-live="polite"></div>
+              </section>
+              <section id="tools-export-panel" class="settings-subpanel">
+                <div class="tool-btnrow">
+                  <select id="tool-export-layer"></select>
+                  <button id="tool-export-geojson" type="button">GeoJSON</button>
+                </div>
+                <div id="tool-export-status" class="tool-result" aria-live="polite"></div>
+                <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
+              </section>
             </section>
             <div id="engines"></div>
           </aside>
@@ -856,6 +867,7 @@
               <button type="submit" data-i18n="chat.send">送信</button>
             </form>
           </aside>
+          <div id="minimap" hidden></div>
           <div id="cesium-scalebar" hidden></div>
           <div id="cesium-coords" hidden></div>
           <div id="attr-popup" hidden></div>

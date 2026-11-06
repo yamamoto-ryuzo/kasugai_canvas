@@ -9,6 +9,9 @@ import { resolveKascUrl } from "./kasc.js";
 const FGB_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson.js/+esm";
 const HYPARQUET_URL = "https://cdn.jsdelivr.net/npm/hyparquet@1.31.5/+esm";
 const HYPARQUET_COMPRESSORS_URL = "https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.2/+esm";
+const TOGEOJSON_URL = "https://cdn.jsdelivr.net/npm/@tmcw/togeojson@7.1.3/+esm";
+const JSZIP_URL = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
+const SHP_URL = "https://cdn.jsdelivr.net/npm/shpjs@6.1.0/+esm";
 
 let gpkgWorker = null;
 let gpkgReqId = 0;
@@ -190,6 +193,101 @@ function loadCsvLike(text, delim) {
   return { type: "FeatureCollection", features };
 }
 
+// FeatureCollection の属性値を一括で正規化する
+function sanitizeFeatureCollection(fc) {
+  if (!fc || fc.type !== "FeatureCollection" || !Array.isArray(fc.features)) {
+    throw new Error("GeoJSON FeatureCollection ではありません");
+  }
+  for (const feature of fc.features) {
+    if (!feature || !feature.geometry) continue;
+    const props = feature.properties;
+    if (props) for (const key of Object.keys(props)) props[key] = sanitizeVectorPropertyValue(props[key]);
+  }
+  fc.features = fc.features.filter(f => f && f.geometry);
+  return fc;
+}
+
+// KML / KMZ → GeoJSON。KMZ(ZIP)は先頭の .kml エントリを展開する。
+// @tmcw/togeojson は SimpleData/Style/simplestyle も properties へ写す
+async function loadKml(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`kml 取得失敗: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  const head = new Uint8Array(buf, 0, 2);
+  let xmlText;
+  if (head[0] === 0x50 && head[1] === 0x4b) {
+    const { default: JSZip } = await import(JSZIP_URL);
+    const zip = await JSZip.loadAsync(buf);
+    const kmlFile = Object.values(zip.files).find(f => !f.dir && /\.kml$/i.test(f.name));
+    if (!kmlFile) throw new Error("KMZ 内に .kml がありません");
+    xmlText = await kmlFile.async("text");
+  } else {
+    xmlText = new TextDecoder().decode(buf);
+  }
+  const dom = new DOMParser().parseFromString(xmlText, "application/xml");
+  if (dom.getElementsByTagName("parsererror").length) throw new Error("KML のパースに失敗しました");
+  const { kml } = await import(TOGEOJSON_URL);
+  return sanitizeFeatureCollection(kml(dom));
+}
+
+// Shapefile(.zip 一式 / .shp+sidecar / ベース名URL) → GeoJSON。
+// shpjs は URL 文字列を受けると .zip 判定・拡張子補完(sidecar 自動取得)・
+// .prj に基づく WGS84 への再投影まで内部で行う
+async function loadShp(url) {
+  const mod = await import(SHP_URL);
+  const shp = mod.default || mod.getShapefile;
+  const out = await shp(url);
+  // zip に複数レイヤーがある場合は FeatureCollection の配列が返るため統合する
+  const fc = Array.isArray(out)
+    ? { type: "FeatureCollection", features: out.flatMap(x => (x && x.features) || []) }
+    : out;
+  return sanitizeFeatureCollection(fc);
+}
+
+// OGC WFS → GeoJSON。wfs:タイトル|エンドポイント|typename=名|version=|maxfeatures=|
+// cql_filter=|srsname=|outputformat= 。GET の GetFeature(outputFormat=json 系)のみ
+async function loadWfs(item, url) {
+  const opts = item.opts || {};
+  const typeNames = opts.typename || opts.typenames || opts.layer || opts.name;
+  if (!typeNames) throw new Error("wfs: typename= の指定が必要です");
+  const version = /^\d/.test(opts.version || "") ? opts.version : "2.0.0";
+  const build = outputFormat => {
+    const params = new URLSearchParams();
+    params.set("service", "WFS");
+    params.set("request", "GetFeature");
+    params.set("version", version);
+    params.set(version.startsWith("2") ? "typeNames" : "typeName", typeNames);
+    params.set("outputFormat", outputFormat);
+    params.set("srsName", opts.srsname || "EPSG:4326");
+    const limit = opts.count || opts.maxfeatures;
+    if (limit) params.set(version.startsWith("2") ? "count" : "maxFeatures", limit);
+    const cql = opts.cql_filter || opts.cqlfilter;
+    if (cql) params.set("cql_filter", cql);
+    const sep = url.includes("?") ? "&" : "?";
+    return `${url}${sep}${params.toString()}`;
+  };
+  const formats = opts.outputformat
+    ? [opts.outputformat]
+    : ["application/json", "application/json; subtype=geojson", "geojson", "json"];
+  let lastError = null;
+  for (const fmt of formats) {
+    const res = await fetch(build(fmt));
+    if (!res.ok) { lastError = new Error(`WFS GetFeature 失敗: ${res.status}`); continue; }
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text);
+      if (json && (json.type === "FeatureCollection" || json.type === "Feature")) {
+        return sanitizeFeatureCollection(
+          json.type === "Feature" ? { type: "FeatureCollection", features: [json] } : json);
+      }
+      lastError = new Error("WFS 応答が GeoJSON ではありません");
+    } catch {
+      lastError = new Error("WFS 応答が GeoJSON ではありません");
+    }
+  }
+  throw lastError || new Error("WFS GetFeature 失敗");
+}
+
 const BBOX_OFF_RE = /^(off|none|false|static|manual)$/i;
 
 // 表示範囲連動クエリ(bbox=auto / :bbox プレースホルダ)が有効な行か。
@@ -277,6 +375,15 @@ export async function loadVectorItem(item, baseUrl, bounds = null) {
       wantStyle: !!opts.style,
     });
     return { ...result, viewportQuery };
+  }
+  if (type === "kml" || type === "kmz") {
+    return { geojson: await loadKml(url) };
+  }
+  if (type === "wfs") {
+    return { geojson: await loadWfs(item, url) };
+  }
+  if (type === "shp" || type === "shapefile") {
+    return { geojson: await loadShp(url) };
   }
   if (type === "csv" || type === "tsv") {
     const res = await fetch(url);

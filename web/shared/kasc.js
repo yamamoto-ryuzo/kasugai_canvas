@@ -111,7 +111,8 @@ export function parseKasc(text) {
       continue;
     }
     if (["xyz", "tile", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
-         "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "wms", "wmts"].includes(type)) {
+         "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "wms", "wmts",
+         "kml", "kmz", "wfs", "shp", "shapefile"].includes(type)) {
       doc.layers.push(item);
       continue;
     }

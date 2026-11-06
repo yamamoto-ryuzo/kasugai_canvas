@@ -112,6 +112,7 @@ const GSI_BASE_ID_BY_TILE = {
 const VECTOR_TYPES = new Set([
   "geojson", "layer", "flatgeobuf", "fgb", "geoparquet", "parquet",
   "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql",
+  "kml", "kmz", "wfs", "shp", "shapefile",
 ]);
 const TILE_TYPES = new Set(["xyz", "tile", "wms", "wmts"]);
 const DEFAULT_CENTER = { lat: 36.104611, lng: 140.084556 };

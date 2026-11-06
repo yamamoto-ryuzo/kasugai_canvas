@@ -381,7 +381,7 @@ const LEGEND_SWATCH_H = 16;
 // 条件別に分岐する凡例の折りたたみ状態(レイヤーid の Set)。既定は展開
 const collapsedLayerLegends = new Set();
 // 凡例スウォッチを出しうるレイヤー種別(ベクター系)
-const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "sql"]);
+const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "sql", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv"]);
 
 // 描画指示内の canvas/画像をサイズ+src に正規化してキャッシュキーを作る
 function legendDescKey(desc) {
@@ -3271,6 +3271,14 @@ const vectorDecoders = new Map([
   ["geopackage", { load: item => loadGeoPackageAsGeoJson(item), query: item => !!(item.where || item.limit || item.columns?.length || item.bboxAuto) }],
   ["duckdb", { load: item => loadDuckDbLayerAsGeoJson(item), query: true }],
   ["sql", { load: item => loadDuckDbQueryAsGeoJson(item), query: true }],
+  // kml/kmz/wfs/shp は全件読み込み系。デコードは shared/vector-load.js へ一本化
+  ["kml", { load: item => loadVectorItem({ type: "kml", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["kmz", { load: item => loadVectorItem({ type: "kmz", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["wfs", { load: item => loadVectorItem({ type: "wfs", title: item.title, url: item.url, opts: item.opts }, "").then(r => r.geojson) }],
+  ["shp", { load: item => loadVectorItem({ type: "shp", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["shapefile", { load: item => loadVectorItem({ type: "shapefile", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["csv", { load: item => loadVectorItem({ type: "csv", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["tsv", { load: item => loadVectorItem({ type: "tsv", title: item.title, url: item.url }, "").then(r => r.geojson) }],
 ]);
 
 // 非同期ロード中の再入で vectorDataSources/primitives が二重登録されるのを防ぐ。
@@ -3578,7 +3586,7 @@ async function refreshLayersImpl() {
         if (loadTarget) layerOk(item);
       } catch (error) {
         console.warn(`${decoder ? item.type.toUpperCase() : "GeoJSON"} の読み込みに失敗しました:`, item.url || item.query || "", error);
-        if (loadTarget) layerFail(item, error);
+        if (loadTarget) layerFail(item, await diagnoseHubLayerError(item, error));
       }
     }
   }
@@ -3879,6 +3887,66 @@ async function reloadVectorLayer(item) {
   requestRender();
 }
 
+// ベクターレイヤーの URL が bridge-hub(127.0.0.1:8511)の /vector を指して失敗した場合、
+// ハブの状態を疎通して原因(未起動/旧版/duckdb なし/ソース未登録)をエラーメッセージへ付記する
+async function diagnoseHubLayerError(item, error) {
+  const url = item && item.url;
+  if (!/^https?:\/\/(127\.0\.0\.1|localhost):8511\//i.test(url || "")) return error;
+  let hint = null;
+  let health = null;
+  try {
+    const res = await fetch("http://127.0.0.1:8511/health", { signal: AbortSignal.timeout(1500) });
+    if (res.ok) health = await res.json().catch(() => null);
+  } catch { /* unreachable */ }
+  if (!health) {
+    hint = t("layer.hubDown");
+  } else if (health.hub !== true) {
+    hint = t("layer.hubNotHub");
+  } else if (!("vector" in health)) {
+    hint = t("layer.hubOld");
+  } else if (health.vector && health.vector.duckdb === false) {
+    hint = t("layer.hubNoDuckdb");
+  } else {
+    const name = /\/vector\/(?:geojson|tilejson)\/([^/?#]+)/i.exec(url)?.[1];
+    if (name) {
+      try {
+        const res = await fetch("http://127.0.0.1:8511/vector/sources", { signal: AbortSignal.timeout(2000) });
+        const body = res.ok ? await res.json().catch(() => null) : null;
+        const sources = body && (body.sources || body);
+        if (sources && typeof sources === "object" && !(decodeURIComponent(name) in sources)) {
+          hint = t("layer.hubNoSource", { name: decodeURIComponent(name) });
+        }
+      } catch { /* ソース確認は付加情報なので失敗しても握りつぶす */ }
+    }
+  }
+  if (!hint) return error;
+  const base = String(error?.message || error || "");
+  const err = new Error(base ? `${base} — ${hint}` : hint);
+  return err;
+}
+
+// 初回ロードに失敗したベクターレイヤーを単独でロードする(bbox=auto リトライ用)。
+// DataSource 未登録のため reloadVectorLayer は使えず、refreshLayers の
+// entity/primitive 分岐と同じ構造を1レイヤー分だけ実行する
+async function reloadFailedVectorLayer(item) {
+  const decoder = vectorDecoders.get(item.type);
+  if (!decoder) throw new Error("decoder がありません");
+  if (isViewportQueryLayer(item)) updateViewportFilter(item);
+  if (item.styleUrl) await ensureQmlStyle(item);
+  const source = await decoder.load(item);
+  if (item.renderPrimitive && Cesium.GeoJsonPrimitive) {
+    await addGeoJsonPrimitiveLayer(item, source);
+    return;
+  }
+  item.geojsonSource = source;
+  const limited = limitGeoJsonFeatures(source, getVectorEntityLimit(), item);
+  const ds = await buildStyledGeoJsonDataSource(limited.source, getVectorDrapeFlags(), item);
+  try { ds.show = item.visible; } catch (e) {}
+  await viewer.dataSources.add(ds);
+  vectorDataSources.push({ ds, id: item.id, title: item.title });
+  layerRuntimeTargets.set(item.id, ds);
+}
+
 // カメラ停止後に表示範囲連動レイヤーを再クエリする(camera.moveEnd / camera.changed から
 // デバウンスして呼ばれる)。非クエリ系で件数上限を超えたレイヤー(viewportSliced)は
 // メモリ上のフルソースから表示範囲内の地物を選び直して再描画する(再ダウンロード・再デコードは無し)
@@ -3899,6 +3967,29 @@ async function refreshViewportLayers() {
           await reloadVectorLayer(item);
         } catch (error) {
           console.warn(`${item.type.toUpperCase()} レイヤーの再読み込みに失敗しました:`, item.url || item.query || "", error);
+        }
+      }
+      // bbox=auto / :bbox の初回読込に失敗したレイヤーは、縮小した表示範囲で
+      // 自動リトライする(geo_suite _ddbFailedAdds 相当。失敗 spec は行の
+      // _loadStatus=failed が担うため別管理は不要)
+      const failedViewport = layers.filter(item =>
+        item.visible && item._loadStatus === "failed" && isViewportQueryLayer(item));
+      for (const item of failedViewport) {
+        item._loadStatus = "loading";
+        syncLayerStatusDom(item);
+        try {
+          await reloadFailedVectorLayer(item);
+          item._loaded = true;
+          item._loadStatus = "";
+          item._loadError = "";
+          syncLayerStatusDom(item);
+          buildVectorSearchIndex();
+          updateVectorSearchUI();
+        } catch (error) {
+          console.warn(`${item.type.toUpperCase()} レイヤーのリトライに失敗しました:`, item.url || item.query || "", error);
+          item._loadStatus = "failed";
+          item._loadError = String(error?.message || error || "");
+          syncLayerStatusDom(item);
         }
       }
       if (targets.length) {
@@ -4705,7 +4796,10 @@ function applyInspector(text) {
       layerOrder.push(id);
     }
 
-    if (type === "3dtiles" || type === "geojson" || type === "geoparquet" || type === "flatgeobuf" || type === "layer" || type === "gpkg" || type === "geopackage") {
+    // kml:/kmz:タイトル|KML URL・wfs:タイトル|WFS エンドポイント|typename=…・
+    // shp:/shapefile:タイトル|.zip または .shp 系URL も同じ書式(タイトル|URL|出典|オプション)
+    if (type === "3dtiles" || type === "geojson" || type === "geoparquet" || type === "flatgeobuf" || type === "layer" || type === "gpkg" || type === "geopackage"
+      || type === "kml" || type === "kmz" || type === "wfs" || type === "shp" || type === "shapefile" || type === "csv" || type === "tsv") {
       const parts = value.split("|").map(part => part.trim());
       const title = parts[0];
       const url = resolveProjectUrl(parts[1]);
@@ -4732,6 +4826,16 @@ function applyInspector(text) {
         // table=地物テーブル名: 複数レイヤーを持つ GPKG の読み取り対象を指定
         const tableOpt = parts.find(part => /^table\s*=\s*\S/i.test(part));
         if (tableOpt) item.gpkgTable = tableOpt.slice(tableOpt.indexOf("=") + 1).trim();
+        // wfs: 等の key=value オプション(typename=/version=/maxfeatures=/cql_filter= 等)を
+        // 汎用に opts マップへ保持する。render=/attr=/style=/table= は既に専用フィールドへ
+        if (["wfs", "kml", "kmz", "shp", "shapefile", "csv", "tsv"].includes(type)) {
+          for (const part of parts) {
+            const kv = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
+            if (kv && !["render", "attr", "attribution", "style", "table"].includes(kv[1].toLowerCase())) {
+              (item.opts ||= {})[kv[1].toLowerCase()] = kv[2].trim();
+            }
+          }
+        }
         // GPKG の絞り込みオプション(sql.js に渡す SQLite 式)。
         // where= の値に | は含められない(行の区切り文字)。
         // bbox=auto は既定 ON(表示範囲連動のクエリ系)。常時全件描画にしたい場合は bbox=off で明示解除する
@@ -5370,6 +5474,89 @@ function setupEvents() {
   document.querySelector("#display-coords")?.addEventListener("change", e => {
     if (coordsEl && !e.target.checked) coordsEl.hidden = true;
   });
+
+  // ミニマップ: 左下の小地図に現在の表示範囲矩形を重ねる。
+  // Leaflet(UMD)は module import でグローバルに展開されないため script タグで遅延ロードする
+  const minimapEl = document.querySelector("#minimap");
+  const MINIMAP_LEAFLET = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4";
+  const MINIMAP_FALLBACK_TILE = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png";
+  let minimapState = null;
+  let minimapLibPromise = null;
+  let minimapTimer = null;
+  function loadMinimapLeaflet() {
+    if (window.L) return Promise.resolve(window.L);
+    if (!minimapLibPromise) {
+      if (!document.querySelector('link[href*="leaflet.css"]')) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = `${MINIMAP_LEAFLET}/dist/leaflet.css`;
+        document.head.append(link);
+      }
+      minimapLibPromise = new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = `${MINIMAP_LEAFLET}/dist/leaflet.js`;
+        s.onload = () => window.L ? resolve(window.L) : reject(new Error("leaflet load failed"));
+        s.onerror = () => reject(new Error("leaflet load failed"));
+        document.head.append(s);
+      });
+      minimapLibPromise.catch(() => { minimapLibPromise = null; });
+    }
+    return minimapLibPromise;
+  }
+  function minimapTileUrl() {
+    const url = selectedBasemap?.url || "";
+    return /\{z\}.*\{x\}.*\{y\}|\{z\}.*\{y\}.*\{x\}/.test(url) ? url : MINIMAP_FALLBACK_TILE;
+  }
+  function minimapViewBounds() {
+    const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
+    if (!rect) return null;
+    const deg = r => Cesium.Math.toDegrees(r);
+    return [[deg(rect.south), deg(rect.west)], [deg(rect.north), deg(rect.east)]];
+  }
+  async function updateMinimap() {
+    if (!minimapEl) return;
+    if (!document.querySelector("#display-minimap")?.checked) { minimapEl.hidden = true; return; }
+    minimapEl.hidden = false;
+    const L = await loadMinimapLeaflet().catch(() => null);
+    if (!L || !document.querySelector("#display-minimap")?.checked) { minimapEl.hidden = !L ? true : minimapEl.hidden; return; }
+    if (!minimapState) {
+      const map = L.map(minimapEl, {
+        zoomControl: false, attributionControl: false, dragging: false,
+        scrollWheelZoom: false, doubleClickZoom: false, boxZoom: false,
+        keyboard: false, touchZoom: false, zoomSnap: 0.25,
+      });
+      const tile = L.tileLayer(minimapTileUrl(), { opacity: 0.9 }).addTo(map);
+      const rect = L.rectangle([[0, 0], [0, 0]], { color: "#e33d3d", weight: 1.5, fill: false, interactive: false }).addTo(map);
+      // クリックした地点へ現在の高さ・姿勢のまま移動
+      map.on("click", e => {
+        const carto = viewer.camera.positionCartographic;
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(e.latlng.lng, e.latlng.lat, carto.height),
+          orientation: { heading: viewer.camera.heading, pitch: viewer.camera.pitch, roll: 0 },
+          duration: 0.6,
+        });
+      });
+      minimapState = { map, tile, rect };
+    } else {
+      // ベースマップ変更に追従してタイルを差し替える
+      const want = minimapTileUrl();
+      if (minimapState.tile._url !== want) minimapState.tile.setUrl(want);
+      minimapState.map.invalidateSize();
+    }
+    const b = minimapViewBounds();
+    if (b) {
+      minimapState.rect.setBounds(b);
+      minimapState.map.fitBounds(b, { animate: false, padding: [24, 24] });
+    }
+  }
+  function scheduleMinimapUpdate() {
+    if (!document.querySelector("#display-minimap")?.checked) return;
+    clearTimeout(minimapTimer);
+    minimapTimer = setTimeout(() => { void updateMinimap(); }, 250);
+  }
+  viewer.camera.changed.addEventListener(scheduleMinimapUpdate);
+  viewer.camera.moveEnd.addEventListener(scheduleMinimapUpdate);
+  document.querySelector("#display-minimap")?.addEventListener("change", () => { void updateMinimap(); });
 
   // 地物クリックの属性ポップアップ(オプション)。既存の属性パネル表示はそのまま併用する
   viewer.canvas.addEventListener("click", e => {
@@ -7237,7 +7424,7 @@ function setupEvents() {
       try {
         await saveToDataDir(file.name, file);
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           window.kasugaiApi.addLayer(title, `DATA/${file.name}`, { type });
@@ -9811,7 +9998,7 @@ window.kasugaiApi = {
   // type: geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb(target は URL) / sql(target は SELECT 文)
   addLayer(title, target, { type = "geojson", options = "" } = {}) {
     const input = document.querySelector("#inspector-input");
-    const urlTypes = new Set(["geojson", "layer", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb"]);
+    const urlTypes = new Set(["geojson", "layer", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv"]);
     const clean = value => String(value || "").replace(/[\r\n]+/g, " ").trim();
     title = clean(title); target = clean(target); options = clean(options);
     if (!title || !target || !input) return false;
