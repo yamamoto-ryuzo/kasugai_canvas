@@ -53,7 +53,8 @@ HTTP 配信します。ブラウザ側は `geojson: http://127.0.0.1:8511/vector
 GET    /vector/status            duckdb 検出・ストア・登録ソース
 GET    /vector/sources           登録ソース一覧
 POST   /vector/sources           {name, src, kind?, layer?, lon?, lat?,
-                                  geom_col?, where?, limit?, materialize?}
+                                  geom_col?, where?, limit?, materialize?,
+                                  force?}
 DELETE /vector/sources/{name}    登録解除
 GET    /vector/geojson/{name}    GeoJSON 配信（gzip 対応）
                                  ?where=&bbox=w,s,e,n&limit=&simplify=&columns=
@@ -65,11 +66,21 @@ duckdb CLI は `bridge-hub.exe --setup duckdb` または
 GitHub Releases から自動導入されます（`%LOCALAPPDATA%\kasugai\bridge-cli\duckdb\`）。
 `DUCKDB_CLI_PATH` 環境変数で任意パスも指定可能です。
 
-なお、直前の duckdb プロセスが残っている間（クライアント側が先に切断
-した場合やハブ異常終了後）は永続 DB のロックにより 502「File is already
-open in duckdb.exe」が返ります。サーバー側のタイムアウトでは子プロセスを
-kill するため孤児は残りませんが、クライアント側の切断でハブの処理は止まり
-ません。処理完了を待つか、残った `duckdb.exe` を終了して再試行してください。
+登録（`POST /vector/sources`）は冪等です。同一 spec の再 POST は
+`"cached":true` で即応答し、登録中の重複 POST は先の完了を共有します
+（materialize の二重走行なし）。リモートファイル更新の反映には
+`"force":true` で再取込みしてください。登録中のソースは
+`/vector/sources` で `"materializing":true` と表示され、マニフェストに
+残るが実テーブルが欠落したエントリは `"missing":true` と自動検出され
+ます（再 POST で自己修復）。
+
+読み取り系（geojson/query/status）は duckdb を `-readonly`（共有ロック）
+で実行するため取込み中でも待たずに応答します。書込みが集中した場合は
+タイムアウト付きで直列化され、「duckdb が混み合っています」エラーを返し
+ます（無制限待ちにはなりません）。ハブ異常終了で孤児 `duckdb.exe` が
+永続 DB のロックを握った場合のみ、従来どおり 502「File is already open
+in duckdb.exe」が返ることがあります — 残ったプロセスを終了して再試行
+してください。
 
 ## 詳細
 

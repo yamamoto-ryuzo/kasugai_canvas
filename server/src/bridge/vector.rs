@@ -12,7 +12,12 @@
 //   GET    /vector/status          duckdb 検出・ストア・登録ソース
 //   GET    /vector/sources         登録ソース一覧
 //   POST   /vector/sources         {name, src|sql, kind?, layer?, lon?, lat?,
-//                                   geom_col?, where?, limit?, materialize?}
+//                                   geom_col?, where?, limit?, materialize?,
+//                                   force?}
+//                                  冪等: 同一 spec の再 POST は cached 応答、
+//                                  force:true で強制再取込み。登録中は manifest
+//                                  に materializing:true、テーブル欠落は
+//                                  missing:true として /sources で見える
 //   DELETE /vector/sources/{name}  登録解除（テーブル/ビュー drop）
 //   GET    /vector/geojson/{name}  GeoJSON 配信
 //                                  ?where=&bbox=w,s,e,n&limit=&simplify=<deg>&columns=a,b
@@ -39,11 +44,28 @@ use std::time::Duration;
 // no-op になる（拡張は ~/.duckdb/extensions に永続化される）
 const PRELUDE: &str = "INSTALL spatial; LOAD spatial; INSTALL httpfs; LOAD httpfs;";
 
-// duckdb 実行の直列化。永続 .duckdb はプロセス横断の書込みロックを取るため、
-// 全呼び出しを1本に絞る（ローカルエージェント用途では十分なスループット）
+// duckdb 書き込み実行の直列化。永続 .duckdb はプロセス横断の書込みロックを
+// 取るため、書き込み呼び出しは1本に絞る。:memory: / -readonly は排他ロックを
+// 取らないため直列化しない（取込み中でも DESCRIBE・geojson 参照が待たない）
 fn duckdb_lock() -> &'static tokio::sync::Mutex<()> {
     static L: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
     L.get_or_init(|| tokio::sync::Mutex::new(()))
+}
+
+// 直列化しない duckdb 実行（:memory:/-readonly）の同時起動数上限。
+// リモート読込みを伴う DESCRIBE 等が重なっても暴走しないよう絞る
+fn spawn_sem() -> &'static tokio::sync::Semaphore {
+    static S: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+    S.get_or_init(|| tokio::sync::Semaphore::new(4))
+}
+
+async fn acquire_spawn(
+    deadline: tokio::time::Instant,
+) -> Result<tokio::sync::SemaphorePermit<'static>, String> {
+    tokio::time::timeout_at(deadline, spawn_sem().acquire())
+        .await
+        .map_err(|_| "duckdb 実行スロットの取得がタイムアウト".to_string())?
+        .map_err(|_| "duckdb 実行スロットが閉じています".to_string())
 }
 
 // ベクトルストア: 永続 .duckdb とソースレジストリ(sources.json)の置き場。
@@ -92,14 +114,99 @@ fn missing_cli() -> String {
 }
 
 // duckdb <db> -json -c "<sql>" を実行し stdout を返す。
-// persistent=true で永続 vector.duckdb、false で :memory:（DESCRIBE 等）
+// persistent=true で永続 vector.duckdb（書込み・直列化）、false で :memory:
+// （DESCRIBE 等。ファイル競合がないため直列化しない）。
+// timeout_secs はロック取得待ちを含む総デッドライン。
 async fn run_duckdb(sql: &str, persistent: bool, timeout_secs: u64) -> Result<String, String> {
     let cli = duckdb_cli().ok_or_else(missing_cli)?;
-    let _guard = duckdb_lock().lock().await;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
+    if !persistent {
+        let _permit = acquire_spawn(deadline).await?;
+        return duckdb_once(&cli, sql, false, false, deadline).await;
+    }
+    // 書込みパス: グローバル直列化。先行処理のハングで無制限待ちにならない
+    // ようロック取得にも残り時間でタイムアウトを掛ける
+    duckdb_write(&cli, sql, deadline).await
+}
+
+async fn lock_write(
+    deadline: tokio::time::Instant,
+) -> Result<tokio::sync::MutexGuard<'static, ()>, String> {
+    tokio::time::timeout_at(deadline, duckdb_lock().lock())
+        .await
+        .map_err(|_| "duckdb が混み合っています（前の処理がデッドライン内に終わらない）".to_string())
+}
+
+// ロック取得済みの書込み実行。-readonly 子プロセスの共有ロックと競合した
+// 場合（"File is already open"）は読み取り完了を想定してデッドラインまで
+// 短い間隔で再試行する
+async fn duckdb_write(
+    cli: &std::path::Path,
+    sql: &str,
+    deadline: tokio::time::Instant,
+) -> Result<String, String> {
+    let _guard = lock_write(deadline).await?;
+    loop {
+        match duckdb_once(cli, sql, true, false, deadline).await {
+            Err(e) if is_lock_error(&e) => {
+                let remain =
+                    deadline.saturating_duration_since(tokio::time::Instant::now());
+                if remain < Duration::from_millis(500) {
+                    return Err(e);
+                }
+                tokio::time::sleep(Duration::from_millis(250).min(remain)).await;
+            }
+            r => return r,
+        }
+    }
+}
+
+// 永続 DB への読み取り専用実行。-readonly（共有ロック）で開くため読み取り
+// 同士は並行でき、書込みプロセス占有中・WAL 回復待ち・未作成時のみ即時
+// エラーとなる。その場合は書込み直列化パスにフォールバックして待ち合わせる
+async fn run_duckdb_read(sql: &str, timeout_secs: u64) -> Result<String, String> {
+    let cli = duckdb_cli().ok_or_else(missing_cli)?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
+    if db_path().is_file() {
+        let _permit = acquire_spawn(deadline).await?;
+        match duckdb_once(&cli, sql, true, true, deadline).await {
+            Ok(o) => return Ok(o),
+            Err(e) if is_lock_error(&e) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    duckdb_write(&cli, sql, deadline).await
+}
+
+// -readonly での単発実行（フォールバック無し）。書込み占有中・WAL 回復待ち
+// 等で開けない場合は None。reconcile のような任意の健全性チェック用
+async fn try_duckdb_readonly(sql: &str, timeout_secs: u64) -> Option<String> {
+    let cli = duckdb_cli()?;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout_secs);
+    let _permit = acquire_spawn(deadline).await.ok()?;
+    duckdb_once(&cli, sql, true, true, deadline).await.ok()
+}
+
+// 読み取り専用オープンの失敗が「DB の排他占有・未回復」由来か判定。
+// SQL エラー等はフォールバックせずそのまま返す
+fn is_lock_error(msg: &str) -> bool {
+    let m = msg.to_lowercase();
+    m.contains("cannot open") || m.contains("already open") || m.contains("lock")
+}
+
+async fn duckdb_once(
+    cli: &std::path::Path,
+    sql: &str,
+    persistent: bool,
+    readonly: bool,
+    deadline: tokio::time::Instant,
+) -> Result<String, String> {
     let mut cmd = common::new_command(&cli.to_string_lossy());
     if persistent {
         let db = db_path();
-        if let Some(parent) = db.parent() {
+        if readonly {
+            cmd.arg("-readonly");
+        } else if let Some(parent) = db.parent() {
             let _ = std::fs::create_dir_all(parent);
         }
         cmd.arg(&db);
@@ -115,10 +222,10 @@ async fn run_duckdb(sql: &str, persistent: bool, timeout_secs: u64) -> Result<St
         // タイムアウト時に子プロセスが孤児化して vector.duckdb のロックを
         // 保持し続けるのを防ぐ（output() future drop で Child も kill される）
         .kill_on_drop(true);
-    let out = match tokio::time::timeout(Duration::from_secs(timeout_secs), cmd.output()).await {
+    let out = match tokio::time::timeout_at(deadline, cmd.output()).await {
         Ok(Ok(o)) => o,
         Ok(Err(e)) => return Err(format!("duckdb の起動に失敗: {e}")),
-        Err(_) => return Err(format!("duckdb がタイムアウト ({timeout_secs}s)")),
+        Err(_) => return Err("duckdb がタイムアウト".to_string()),
     };
     if !out.status.success() {
         let stderr: String = String::from_utf8_lossy(&out.stderr).chars().take(2000).collect();
@@ -191,6 +298,82 @@ fn source_entry(name: &str) -> Option<Value> {
     load_manifest()
         .pointer(&format!("/sources/{name}"))
         .cloned()
+}
+
+// ソース名ごとの登録直列化。同一 name の POST/DELETE を1本に絞り、
+// 重複登録による materialize の二重走行を防ぐ。ガードは future drop で
+// 解放されるため、リクエスト切断・タイムアウトでも後続が詰まらない
+fn name_lock(name: &str) -> std::sync::Arc<tokio::sync::Mutex<()>> {
+    static M: OnceLock<std::sync::Mutex<HashMap<String, std::sync::Arc<tokio::sync::Mutex<()>>>>> =
+        OnceLock::new();
+    let m = M.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
+    let mut map = m.lock().unwrap_or_else(|e| e.into_inner());
+    map.entry(name.to_string())
+        .or_insert_with(|| std::sync::Arc::new(tokio::sync::Mutex::new(())))
+        .clone()
+}
+
+// manifest(sources.json) と永続 DB の実テーブルを照合し、テーブルが
+// 存在しないエントリへ missing:true を付ける（復旧したら消す）。
+// 「登録済みだが配信できない」状態をクライアントから識別可能にする。
+// 60秒に1回まで・失敗時は現状維持（書込み占有中は次回に持ち越し）
+async fn reconcile() {
+    static LAST: OnceLock<tokio::sync::Mutex<std::time::Instant>> = OnceLock::new();
+    let last = LAST.get_or_init(|| {
+        tokio::sync::Mutex::new(std::time::Instant::now() - Duration::from_secs(3600))
+    });
+    {
+        let mut g = last.lock().await;
+        if g.elapsed() < Duration::from_secs(60) {
+            return;
+        }
+        *g = std::time::Instant::now();
+    }
+    let tables: Option<std::collections::HashSet<String>> = if !db_path().is_file() {
+        Some(Default::default())
+    } else {
+        // フォールバック無しの readonly 単発 — 書込み占有中は確認を
+        // 持ち越して status/sources の応答をブロックしない
+        try_duckdb_readonly(
+            "SELECT table_name FROM information_schema.tables WHERE starts_with(table_name, 'v_');",
+            30,
+        )
+        .await
+        .map(|out| {
+            parse_rows(&out)
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|r| {
+                    r.get("table_name")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+    };
+    let Some(tables) = tables else { return };
+    let mut m = load_manifest();
+    let mut changed = false;
+    if let Some(sources) = m.get_mut("sources").and_then(|v| v.as_object_mut()) {
+        for e in sources.values_mut() {
+            if e.get("materializing").and_then(|v| v.as_bool()) == Some(true) {
+                continue;
+            }
+            let t = e.get("table").and_then(|v| v.as_str()).unwrap_or("");
+            if t.is_empty() {
+                continue;
+            }
+            let missing = !tables.contains(t);
+            let cur = e.get("missing").and_then(|v| v.as_bool()).unwrap_or(false);
+            if missing != cur {
+                e["missing"] = json!(missing);
+                changed = true;
+            }
+        }
+    }
+    if changed {
+        let _ = save_manifest(&m);
+    }
 }
 
 // ---- 入力形式 → duckdb リーダ ----
@@ -308,6 +491,7 @@ fn parse_body(body: &Bytes, max: usize) -> Result<Value, Response> {
 }
 
 pub async fn status() -> Response {
+    reconcile().await;
     let cli = duckdb_cli();
     let mut version = Value::Null;
     if let Some(p) = &cli {
@@ -347,6 +531,7 @@ pub async fn status() -> Response {
 }
 
 pub async fn list_sources() -> Response {
+    reconcile().await;
     let m = load_manifest();
     (
         StatusCode::OK,
@@ -394,10 +579,127 @@ pub async fn register_source(body: Bytes) -> Response {
         Err(e) => return err(StatusCode::BAD_REQUEST, e),
     };
 
+    // 冪等化用の登録 spec。同一内容の再 POST を「登録済み」として高速応答
+    // するための比較キー（manifest の spec フィールドに保存される）
+    let materialize = body
+        .get("materialize")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    // force: true で spec 一致でも再取込み（リモートファイルの更新反映用）
+    let force = body
+        .get("force")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let spec = json!({
+        "src": src,
+        "kind": kind,
+        "sql": inline_sql,
+        "layer": body.get("layer").cloned().unwrap_or(Value::Null),
+        "lon": body.get("lon").cloned().unwrap_or(Value::Null),
+        "lat": body.get("lat").cloned().unwrap_or(Value::Null),
+        "geom_col": body.get("geom_col").cloned().unwrap_or(Value::Null),
+        "where": body.get("where").cloned().unwrap_or(Value::Null),
+        "limit": body.get("limit").cloned().unwrap_or(Value::Null),
+        "materialize": materialize,
+    });
+
+    // 同名ソースの登録を直列化。登録中の重複 POST は完了を待ち、
+    // manifest 上の一致エントリをそのまま返す（materialize の二重走行を防ぐ）
+    let lock = name_lock(name);
+    let _name_guard = match tokio::time::timeout(Duration::from_secs(660), lock.lock()).await {
+        Ok(g) => g,
+        Err(_) => {
+            return err(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "同名ソースの登録処理が継続中です。完了後に再試行してください",
+            )
+        }
+    };
+    if !force {
+        if let Some(e) = source_entry(name) {
+            let busy = e.get("materializing").and_then(|v| v.as_bool()) == Some(true)
+                || e.get("missing").and_then(|v| v.as_bool()) == Some(true);
+            if !busy && e.get("spec") == Some(&spec) {
+                // マニフェストと実テーブルの不整合（テーブル欠落）に備えて
+                // 実在確認する。欠落していればキャッシュ返却せず再取込みへ
+                let t = table_name(name);
+                let exists_sql = format!(
+                    "SELECT 1 AS ok FROM information_schema.tables WHERE table_name = '{}';",
+                    lit(&t)
+                );
+                let exists = run_duckdb_read(&exists_sql, 30)
+                    .await
+                    .ok()
+                    .and_then(|o| parse_rows(&o).ok())
+                    .map(|r| !r.is_empty())
+                    // 確認不能（書込み占有中等）は「ある」扱いで誤再取込みを防ぐ
+                    .unwrap_or(true);
+                if exists {
+                    return (
+                        StatusCode::OK,
+                        Json(json!({
+                            "ok": true,
+                            "name": name,
+                            "kind": e.get("kind").cloned().unwrap_or(json!(kind)),
+                            "materialized": e
+                                .get("materialized")
+                                .cloned()
+                                .unwrap_or(json!(materialize)),
+                            "features": e.get("features").cloned().unwrap_or(Value::Null),
+                            "geojson_url": format!("/vector/geojson/{name}"),
+                            "cached": true,
+                        })),
+                    )
+                        .into_response();
+                }
+            }
+        }
+    }
+
+    // 進行中フラグを manifest へ記録（クライアント切断・ハブ停止後も状態を
+    // 追跡可能に。残存した materializing:true は次回 POST で再取込みされる）
+    let mut m = load_manifest();
+    let prev_entry = m.pointer(&format!("/sources/{name}")).cloned();
+    if let Some(sources) = m.get_mut("sources").and_then(|v| v.as_object_mut()) {
+        sources.insert(
+            name.to_string(),
+            json!({
+                "materializing": true,
+                "spec": spec,
+                "src": src,
+                "kind": kind,
+                "table": table_name(name),
+                "geojson_url": format!("/vector/geojson/{name}"),
+            }),
+        );
+        let _ = save_manifest(&m);
+    }
+    // 失敗時は登録前のエントリ状態へ戻す
+    let restore = |prev: &Option<Value>| {
+        let mut m = load_manifest();
+        if let Some(s) = m.get_mut("sources").and_then(|v| v.as_object_mut()) {
+            match prev {
+                Some(e) => {
+                    s.insert(name.to_string(), e.clone());
+                }
+                None => {
+                    s.remove(name);
+                }
+            }
+            let _ = save_manifest(&m);
+        }
+    };
+
     // スキーマ確認 → geometry 列の特定
     let cols = match describe_cols(&reader).await {
         Ok(c) => c,
-        Err(e) => return err(StatusCode::BAD_GATEWAY, format!("ソースのスキーマ取得に失敗: {e}")),
+        Err(e) => {
+            restore(&prev_entry);
+            return err(
+                StatusCode::BAD_GATEWAY,
+                format!("ソースのスキーマ取得に失敗: {e}"),
+            );
+        }
     };
     let declared_geom = body
         .get("geom_col")
@@ -427,6 +729,7 @@ pub async fn register_source(body: Bytes) -> Response {
             ident(lat)
         ),
         _ => {
+            restore(&prev_entry);
             return err(
                 StatusCode::BAD_REQUEST,
                 "geometry 列を特定できません。geom_col= か lon=/lat= を指定してください",
@@ -437,7 +740,6 @@ pub async fn register_source(body: Bytes) -> Response {
         Some(g) => format!("* EXCLUDE({})", ident(g)),
         None => "*".to_string(),
     };
-    let materialize = body.get("materialize").and_then(|v| v.as_bool()).unwrap_or(true);
     let verb = if materialize { "TABLE" } else { "VIEW" };
     let limit = body
         .get("limit")
@@ -457,10 +759,11 @@ pub async fn register_source(body: Bytes) -> Response {
         t = ident(&table),
     );
     if let Err(e) = run_duckdb(&create, true, 600).await {
+        restore(&prev_entry);
         return err(StatusCode::BAD_GATEWAY, format!("取込みに失敗: {e}"));
     }
     let count_sql = format!("SELECT COUNT(*) AS n FROM {};", ident(&table));
-    let features = match run_duckdb(&count_sql, true, 120).await {
+    let features = match run_duckdb_read(&count_sql, 120).await {
         Ok(out) => parse_rows(&out)
             .ok()
             .and_then(|r| r.first().and_then(|x| x.get("n")).and_then(|v| v.as_u64()))
@@ -477,6 +780,7 @@ pub async fn register_source(body: Bytes) -> Response {
         "materialized": materialize,
         "features": features.clone().unwrap_or(Value::Null),
         "where": body.get("where").cloned().unwrap_or(Value::Null),
+        "spec": spec,
         "created_at": std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -510,6 +814,17 @@ pub async fn remove_source(Path(name): Path<String>) -> Response {
     if source_entry(&name).is_none() {
         return err(StatusCode::NOT_FOUND, "source not found");
     }
+    // 登録処理と競合しないよう同名ロックを取る（登録中なら完了を待つ）
+    let lock = name_lock(&name);
+    let _name_guard = match tokio::time::timeout(Duration::from_secs(90), lock.lock()).await {
+        Ok(g) => g,
+        Err(_) => {
+            return err(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "このソースの登録処理が継続中です。完了後に再試行してください",
+            )
+        }
+    };
     // DuckDB v2 は DROP VIEW IF EXISTS が Table に対して型不一致エラーになる
     // （逆も同じ）ため、カタログで実際のオブジェクト種別を確認してから落とす
     let tname = table_name(&name);
@@ -517,7 +832,7 @@ pub async fn remove_source(Path(name): Path<String>) -> Response {
         "SELECT table_type FROM information_schema.tables WHERE table_name = '{}';",
         lit(&tname)
     );
-    let is_view = match run_duckdb(&ty_sql, true, 60).await {
+    let is_view = match run_duckdb_read(&ty_sql, 60).await {
         Ok(out) => parse_rows(&out)
             .ok()
             .and_then(|r| r.first().cloned())
@@ -561,7 +876,7 @@ fn parse_bbox(s: &str) -> Option<String> {
 // SELECT ... から GeoJSON 行を取り FeatureCollection テキストを組み立てる
 async fn geojson_from_select(select: &str, timeout_secs: u64) -> Result<String, String> {
     let sql = format!("{PRELUDE} SELECT ST_AsGeoJSON(t.geom) AS g, * EXCLUDE(geom) FROM ({select}) t;");
-    let out = run_duckdb(&sql, true, timeout_secs).await?;
+    let out = run_duckdb_read(&sql, timeout_secs).await?;
     let rows = parse_rows(&out)?;
     let mut feats = Vec::with_capacity(rows.len());
     for mut r in rows {
@@ -658,6 +973,11 @@ pub async fn geojson(
     };
     match geojson_from_select(&select, 120).await {
         Ok(body) => geojson_response(body),
+        // manifest に残るがテーブルが消えている場合は 404（再登録で自己修復可能）
+        Err(e) if e.contains("does not exist") => err(
+            StatusCode::NOT_FOUND,
+            format!("テーブルが見つかりません。再登録してください: {e}"),
+        ),
         Err(e) => err(StatusCode::BAD_GATEWAY, e),
     }
 }
