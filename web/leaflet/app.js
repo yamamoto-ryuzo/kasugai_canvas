@@ -524,6 +524,9 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
             loadScriptOnce("https://cdn.jsdelivr.net/npm/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"),
           ]);
           if (L.markerClusterGroup) {
+            // KASUGAI の地図は maxZoom 未設定で、markercluster が内部で
+            // map.getMaxZoom() を呼んで例外になるため、未設定時のみ仮の上限を置く
+            if (map.options.maxZoom == null) map.options.maxZoom = 22;
             const group = L.markerClusterGroup({ pane });
             for (const f of pointFeatures) {
               const [lon, lat] = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0];

@@ -496,7 +496,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
             "heatmap-weight": 1,
             "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 15, 3],
             "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 2, 15, 22],
-            "heatmap-opacity": ["case", ["has", "marker-color"], 0.75, 0.7],
+            "heatmap-opacity": 0.7,
           }] : [kind, filter, paint]);
     }
     map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: 50, clusterMaxZoom: 16 } : {}) });
