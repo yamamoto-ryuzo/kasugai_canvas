@@ -1451,6 +1451,10 @@ function parseLabelRendering(rd, warnings) {
     zIndex: Number(g("zIndex")) || 0,
     displayAll: String(g("displayAll") ?? "0") === "1",
     allowDegraded: String(g("allowDegradedPlacement") ?? "0") === "1",
+    // QGIS 3.44+ の「重なったラベル」モード:
+    // 0=重なりを禁止, 1=無条件で許可, 2=ペナルティなしで許可, 3=必要なら許可。
+    // ペナルティ段階は近似として 1・2→displayAll、3→allowDegraded に写像する
+    overlapMode: Number(g("overlapMode") ?? -1),
     unplacedVisibility: String(g("unplacedVisibility") ?? "0") === "1",
     wrapChar: g("multiLineWrapChar") || g("wrapChar") || "",
     autoWrapLength: Number(g("autoWrapLength")) || 0,
@@ -1478,6 +1482,9 @@ function parseLabelRendering(rd, warnings) {
       plusSign: String(g("plussign") ?? "0") === "1",
     };
   }
+  // overlapMode を displayAll/allowDegraded へ写像(ペナルティ段階は近似)
+  if (out.overlapMode === 1 || out.overlapMode === 2) out.displayAll = true;
+  else if (out.overlapMode === 3) out.allowDegraded = true;
   if (out.mergeLines) warnOnce(warnings, "ラベルのライン結合(mergeLines)は未対応です");
   if (out.unplacedVisibility) warnOnce(warnings, "未配置ラベルの表示(unplacedVisibility)は未対応です");
   if (out.obstacleType !== 0) warnOnce(warnings, "ラベル障害物タイプ(obstacleType)は外周内側のみ近似です");
