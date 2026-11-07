@@ -679,6 +679,11 @@ const inspectorThemes = [];
 // インスペクタの bookmark: 行で宣言された QGIS ブックマーク XML 参照
 // {title, url}[]。applyInspector で収集し、非同期ロードでカメラプリセットへ展開する
 const inspectorBookmarkSpecs = [];
+// インスペクタの scene3d: 行で宣言された QGIS 3Dシーン設定(#60)。
+// {background: Color, skybox: bool, atmosphere: bool, shadows: bool}。
+// applyInspector で再構築し、updateUndergroundView が skyBox/backgroundColor
+// を上書きする際にも参照される(アプリ独自の地下表示制御と共存させるため)
+let inspectorScene3dSpec = null;
 let bookmarkLoadSeq = 0;
 let dataLayerSeq = 0;
 let vectorSearchData = null;
@@ -1151,9 +1156,10 @@ async function applyKascThemeStyles(theme, items) {
   for (const item of items) {
     const key = normKascTitle(item.sourceTitle || item.title);
     const rel = styles[key] ?? styles[key.split("/").pop()] ?? null;
-    const url = rel
-      ? new URL(rel, kascBaseUrl() || document.baseURI).href
-      : item.styleUrl;
+    // resolveProjectUrl は ?kasc=(kasczip 含む)・?project=・外部登録の
+    // 全経路をカバーする(kascBaseUrl() は ?project= では null になり、
+    // document.baseURI へ落ちるとページ基準の誤パスになる)
+    const url = rel ? resolveProjectUrl(rel) : item.styleUrl;
     if (!url || item._themeStyleUrl === url) continue;
     item._themeStyleUrl = url;
     jobs.push((async () => {
@@ -2539,9 +2545,10 @@ function updateUndergroundView() {
   viewer.scene.globe.translucency.backFaceAlpha = alpha;
   viewer.scene.globe.undergroundColor = undergroundBackgroundColor;
   viewer.scene.globe.undergroundColorAlphaByDistance = undefined;
-  viewer.scene.backgroundColor = globeHidden ? Cesium.Color.TRANSPARENT : undergroundBackgroundColor;
+  // scene3d: 行の background/skybox 指定があればアプリ既定より優先する(#60)
+  viewer.scene.backgroundColor = globeHidden ? Cesium.Color.TRANSPARENT : (inspectorScene3dSpec?.background ?? undergroundBackgroundColor);
   if (viewer.scene.skyBox) {
-    viewer.scene.skyBox.show = !globeHidden && undergroundTransparency === 0 && !undergroundDiveEnabled;
+    viewer.scene.skyBox.show = (inspectorScene3dSpec?.skybox ?? (undergroundTransparency === 0 && !undergroundDiveEnabled)) && !globeHidden;
   }
   if (undergroundDiveEnabled) {
     viewer.scene.screenSpaceCameraController.enableCollisionDetection = false;
@@ -2570,6 +2577,36 @@ function updateEffectSettings() {
   viewer.scene.globe.translucency.enabled = (translucencyInput?.checked ?? false) || globeHidden;
   if (viewer.scene.fog) viewer.scene.fog.enabled = fogInput?.checked ?? true;
   if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = (skyAtmosphereInput?.checked ?? true) && !globeHidden;
+}
+
+// QGIS 3D の平行光源(光源へ向かう方位 az/仰角 el)を DirectionalLight へ適用する(#60)。
+// 参照点は先頭のカメラプリセット(なければ既定視点)で ENU→ECEF 変換する。
+// light.direction は光の進行方向のため光源方向ベクトルを反転して渡す
+function applyQgisDirectionalLight(spec) {
+  const ref = cameraPresets[0] || {};
+  const lon = Number.isFinite(ref.longitude) ? ref.longitude : DEFAULT_VIEW.longitude;
+  const lat = Number.isFinite(ref.latitude) ? ref.latitude : DEFAULT_VIEW.latitude;
+  const lam = Cesium.Math.toRadians(lon), phi = Cesium.Math.toRadians(lat);
+  const az = Cesium.Math.toRadians(spec.az), el = Cesium.Math.toRadians(spec.el);
+  const ce = Math.cos(el);
+  const de = Math.sin(az) * ce, dn = Math.cos(az) * ce, du = Math.sin(el);
+  const ex = -Math.sin(lam), ey = Math.cos(lam);
+  const nx = -Math.sin(phi) * Math.cos(lam), ny = -Math.sin(phi) * Math.sin(lam), nz = Math.cos(phi);
+  const ux = Math.cos(phi) * Math.cos(lam), uy = Math.cos(phi) * Math.sin(lam), uz = Math.sin(phi);
+  const sx = de * ex + dn * nx + du * ux;
+  const sy = de * ey + dn * ny + du * uy;
+  const sz = dn * nz + du * uz;
+  try {
+    viewer.scene.light = new Cesium.DirectionalLight({
+      direction: new Cesium.Cartesian3(-sx, -sy, -sz),
+      ...(spec.color ? { color: Cesium.Color.fromCssColorString(spec.color) } : {}),
+      ...(Number.isFinite(spec.intensity) ? { intensity: spec.intensity } : {}),
+    });
+    viewer.scene.globe.enableLighting = true;
+    const inp = document.querySelector("#effect-terrain-lighting");
+    if (inp) inp.checked = true;
+    requestRender();
+  } catch (error) { console.warn("light: DirectionalLight の適用に失敗しました", error); }
 }
 
 function getCesiumTilesetOptions() {
@@ -4548,7 +4585,15 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
     if (entity.polygon) {
       entity.polygon.outline = new Cesium.ConstantProperty(false);
       entity.polygon.arcType = geodesic;
-      if (clamp) entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
+      // extrude=/z= : QGIS 3Dベクターレンダラの立ち上げ → 押出し体積(#60)。
+      // 高さを持つポリゴンは地表クランプと両立しないため classificationType は付けない
+      if (item?.extrude > 0) {
+        const z = Number.isFinite(item.z) ? item.z : 0;
+        entity.polygon.height = new Cesium.ConstantProperty(z);
+        entity.polygon.extrudedHeight = new Cesium.ConstantProperty(z + item.extrude);
+      } else if (clamp) {
+        entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
+      }
       if (polygonOutlineDefault) applyDefaultPolygonOutline(entity, polygonDflt, clamp, styleTime);
     }
     if (entity.polyline) {
@@ -5239,6 +5284,8 @@ function applyInspector(text) {
   let inspectorLayerIndex = 0;
   // cloud: 行(複数ある場合は最後の行を採用)。null=行なし、{stop:true}=停止
   let inspectorCloudSpec = null;
+  // scene3d: 行(複数ある場合は同じ spec へ後勝ちでマージ)。null=行なし
+  inspectorScene3dSpec = null;
   // title: 行(複数ある場合は最後の行を採用)。null=行なし=既定表示に戻す
   let parsedPanelTitle = null;
   nextLines.forEach(line => {
@@ -5281,10 +5328,27 @@ function applyInspector(text) {
     }
 
     // theme: 名前 | 表示するレイヤタイトル[|タイトル…]（`*` で全表示）。
-    // QGIS マップテーマ相当の可視性プリセット（スタイルは含まない）
+    // QGIS マップテーマ相当の可視性プリセット。タイトルに `;style=DATA/x.qml`
+    // が付く場合はテーマ適用時にそのレイヤーの .qml を差し替える
+    // (geo_webview がテーマの名前付きスタイルを出力。
+    // shared/kasc.js parseKasc と同じく ;style= を分離して保持)
     if (type === "theme") {
       const parts = value.split("|").map(part => part.trim());
-      inspectorThemes.push({ name: parts[0] || "", layers: parts.slice(1).filter(Boolean), line });
+      const layers = [];
+      const styles = {};
+      for (const tok of parts.slice(1)) {
+        if (!tok) continue;
+        const semi = tok.indexOf(";style=");
+        if (semi >= 0) {
+          const title = tok.slice(0, semi);
+          const rel = tok.slice(semi + ";style=".length).trim();
+          layers.push(title);
+          if (title && rel) styles[normKascTitle(title)] = rel;
+        } else {
+          layers.push(tok);
+        }
+      }
+      inspectorThemes.push({ name: parts[0] || "", layers, styles, line });
     }
 
     // group: グループパス( / 区切り) | expanded|collapsed —
@@ -5302,19 +5366,80 @@ function applyInspector(text) {
       }
     }
 
-    // terrain: 名前 | exaggeration=N — 地形/3D Tiles の垂直誇張(#60)
+    // terrain: 名前 | exaggeration=N | offset=N | shading=on | generator=種別
+    // — 地形/3D Tiles の垂直誇張と QGIS 地形ジェネレータの近似反映(#60)
     if (type === "terrain") {
       value.split("|").map(part => part.trim()).forEach(part => {
-        const m = /^exaggeration\s*=\s*(.+)$/i.exec(part);
+        const m = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
         if (!m) return;
-        const v = Number(m[1]);
-        if (!Number.isFinite(v) || v < 0) return;
-        try {
-          viewer.scene.verticalExaggeration = v;
-          const inp = document.querySelector("#terrain-exaggeration");
-          if (inp) inp.value = String(v);
-        } catch (_) { /* 古い Cesium では未対応 */ }
+        const key = m[1].toLowerCase();
+        const raw = m[2].trim();
+        if (key === "exaggeration") {
+          const v = Number(raw);
+          if (!Number.isFinite(v) || v < 0) return;
+          try {
+            viewer.scene.verticalExaggeration = v;
+            const inp = document.querySelector("#terrain-exaggeration");
+            if (inp) inp.value = String(v);
+          } catch (_) { /* 古い Cesium では未対応 */ }
+        } else if (key === "generator" && /^(flat|none|off)$/i.test(raw)) {
+          // QGIS フラット地形 → 地形プロバイダを楕円体へ(地形トグルと同期。
+          // プロバイダ反映は applyInspector 末尾の refreshLayers() で行う)
+          terrainEnabled = false;
+          const toggle = document.querySelector("#terrain-toggle");
+          if (toggle) toggle.checked = false;
+        } else if (key === "shading" && /^(on|true|1)$/i.test(raw)) {
+          // 地形の陰影(フォン) → 光源による地形ライティングで近似
+          try {
+            viewer.scene.globe.enableLighting = true;
+            const inp = document.querySelector("#effect-terrain-lighting");
+            if (inp) inp.checked = true;
+          } catch (_) { /* 対応なし */ }
+        }
+        // offset=(地形オフセット) は Cesium の直接相当が無いため保持のみ
       });
+    }
+
+    // scene3d: 名前 | background=#RRGGBB | skybox=on|off | shadows=on|off | ao=on|off | edl=on|off
+    // — QGIS 3Dシーンの画面設定を近似反映(#60)。ここでは spec を集め、
+    //   反映は updateUndergroundView(背景色・SkyBox)と applyInspector 末尾(影)で行う
+    if (type === "scene3d") {
+      const spec = inspectorScene3dSpec ||= {};
+      value.split("|").map(part => part.trim()).forEach(part => {
+        const m = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
+        if (!m) return;
+        const key = m[1].toLowerCase();
+        const raw = m[2].trim();
+        if (key === "background" && /^#[0-9a-f]{6,8}$/i.test(raw)) {
+          try { spec.background = Cesium.Color.fromCssColorString(raw); } catch (_) {}
+        } else if (key === "skybox") spec.skybox = /^(on|true|1)$/i.test(raw);
+        else if (key === "shadows") spec.shadows = /^(on|true|1)$/i.test(raw);
+        // ao/edl は Cesium の直接相当が無いため保持のみ
+      });
+      // QGIS の単色背景は空より優先されるため、skybox 未指定なら空を隠す
+      if (spec.background && spec.skybox === undefined) {
+        spec.skybox = false;
+        spec.atmosphere = false;
+      }
+    }
+
+    // light: 名前 | az=方位度 | el=仰角度 | intensity=N | color=#RRGGBB
+    // — QGIS 3Dの平行光源(光源へ向かう方位/仰角)→ DirectionalLight(#60)
+    if (type === "light") {
+      const spec = { az: 0, el: 45 };
+      let hasDir = false;
+      value.split("|").map(part => part.trim()).forEach(part => {
+        const m = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
+        if (!m) return;
+        const key = m[1].toLowerCase();
+        const raw = m[2].trim();
+        const n = Number(raw);
+        if (key === "az" && Number.isFinite(n)) { spec.az = n; hasDir = true; }
+        else if (key === "el" && Number.isFinite(n)) { spec.el = n; hasDir = true; }
+        else if (key === "intensity" && Number.isFinite(n)) spec.intensity = n;
+        else if (key === "color" && /^#[0-9a-f]{6,8}$/i.test(raw)) spec.color = raw;
+      });
+      if (hasDir) applyQgisDirectionalLight(spec);
     }
 
     // cloud: リモート名 | ルートフォルダ(パス or フォルダURL・省略可) | perm=write | drive=K | off
@@ -5399,7 +5524,7 @@ function applyInspector(text) {
           const key = part.slice(0, eq).trim();
           const raw = part.slice(eq + 1).trim();
           const number = Number(raw);
-          if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
+          if (key.toLowerCase() === "tilesize" && [256, 512].includes(number)) options.tileSize = number;
           if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
           if ((key === "minimumLevel" || key === "minZoom") && Number.isInteger(number) && number >= 0) options.minimumLevel = number;
           if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
@@ -5488,7 +5613,7 @@ function applyInspector(text) {
         if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
         if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
         if ((key === "minimumLevel" || key === "minZoom") && Number.isInteger(number) && number >= 0) options.minimumLevel = number;
-        if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
+        if (key.toLowerCase() === "tilesize" && [256, 512].includes(number)) options.tileSize = number;
         if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
         // bbox=西経,南緯,東経,北緯: タイルの存在範囲(rectangle)。未指定は全世界
         if (key === "bbox" || key === "bounds" || key === "extent") {
@@ -5531,7 +5656,7 @@ function applyInspector(text) {
         if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
         if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
         if ((key === "minimumLevel" || key === "minZoom") && Number.isInteger(number) && number >= 0) options.minimumLevel = number;
-        if (key === "tileSize" && [256, 512].includes(number)) options.tileSize = number;
+        if (key.toLowerCase() === "tilesize" && [256, 512].includes(number)) options.tileSize = number;
         if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
         if (key === "bbox" || key === "bounds" || key === "extent") {
           const nums = raw.split(",").map(v => Number(v.trim()));
@@ -5601,6 +5726,18 @@ function applyInspector(text) {
         if (opacityOpt) {
           const n = Number(opacityOpt.slice(opacityOpt.indexOf("=") + 1).trim());
           if (Number.isFinite(n)) item.opacity = Math.max(0, Math.min(1, n));
+        }
+        // extrude=<m>/z=<m>: QGIS 3Dベクターレンダラの立ち上げ高さと基準高さ
+        // → polygon の height/extrudedHeight(#60。primitive 描画経路では無効)
+        const extrudeOpt = parts.find(part => /^extrude\s*=\s*\S/i.test(part));
+        if (extrudeOpt) {
+          const n = Number(extrudeOpt.slice(extrudeOpt.indexOf("=") + 1).trim());
+          if (Number.isFinite(n) && n > 0) item.extrude = n;
+        }
+        const zOpt = parts.find(part => /^z\s*=\s*\S/i.test(part));
+        if (zOpt) {
+          const n = Number(zOpt.slice(zOpt.indexOf("=") + 1).trim());
+          if (Number.isFinite(n)) item.z = n;
         }
         // wfs: 等の key=value オプション(typename=/version=/maxfeatures=/cql_filter= 等)を
         // 汎用に opts マップへ保持する。render=/attr=/style=/table= は既に専用フィールドへ
@@ -5691,6 +5828,9 @@ function applyInspector(text) {
         else if ((key === "timeend" || key === "time_end") && raw) item.timeEndField = raw;
         else if ((key === "timespan" || key === "time_span") && raw) item.timeSpan = parseTimeSpanMs(raw);
         else if (key === "opacity" && Number.isFinite(number)) item.opacity = Math.max(0, Math.min(1, number));
+        // extrude=/z=: QGIS 3Dベクターレンダラの立ち上げ(#60)
+        else if (key === "extrude" && Number.isFinite(number) && number > 0) item.extrude = number;
+        else if (key === "z" && Number.isFinite(number)) item.z = number;
         // style=QML URL: QGIS レイヤースタイル(.qml)を取得して描画に適用する
         else if ((key === "style" || key === "qml") && raw) item.styleUrl = resolveProjectUrl(raw);
       });
@@ -5786,6 +5926,7 @@ function applyInspector(text) {
         } else if (key === "opacity" && Number.isFinite(number)) item.opacity = Math.max(0, Math.min(1, number));
         else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
       });
+      parseScaleVisOpts(parts, item);
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -5914,6 +6055,23 @@ function applyInspector(text) {
   void ensureDrawnRouteFlyPath();
   refreshLayers();
   updateSearchProvider();
+  // scene3d: 行の反映(#60)。背景色/SkyBox は updateUndergroundView が
+  // spec を参照して再計算する。影・大気はここで適用する
+  if (inspectorScene3dSpec) {
+    try {
+      if (inspectorScene3dSpec.shadows) {
+        viewer.scene.shadowMap.enabled = true;
+        const inp = document.querySelector("#effect-shadows");
+        if (inp) inp.checked = true;
+      }
+      if (inspectorScene3dSpec.atmosphere === false && viewer.scene.skyAtmosphere) {
+        viewer.scene.skyAtmosphere.show = false;
+        const atm = document.querySelector("#effect-sky-atmosphere");
+        if (atm) atm.checked = false;
+      }
+      updateUndergroundView();
+    } catch (_) { /* 対応なし */ }
+  }
   void applyInspectorCloud(inspectorCloudSpec);
   if (flyResume) {
     // 描画ルートは IndexedDB から非同期（直列キュー）で再登録される。

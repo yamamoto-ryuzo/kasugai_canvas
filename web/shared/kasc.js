@@ -47,7 +47,7 @@ function parseCamLine(parts) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, title: null, defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -109,8 +109,18 @@ export function parseKasc(text) {
       continue;
     }
     if (type === "terrain") {
-      // terrain: 名前 | exaggeration=N — 地形/3D Tiles の垂直誇張(#60)
+      // terrain: 名前 | exaggeration=N | offset=N | shading=on | generator=種別 — 地形設定(#60)
       doc.terrain = classifyParts(parts.slice(1), { type, title: parts[0] || "", url: "", line });
+      continue;
+    }
+    if (type === "scene3d") {
+      // scene3d: 名前 | background=#RRGGBB | skybox=on|off | shadows=on|off | ao=on|off | edl=on|off — QGIS 3Dシーン設定(#60)
+      doc.scene3d = classifyParts(parts.slice(1), { type, title: parts[0] || "", url: "", line });
+      continue;
+    }
+    if (type === "light") {
+      // light: 名前 | az=方位度 | el=仰角度 | intensity=N | color=#RRGGBB — 平行光源(#60)
+      doc.lights.push(classifyParts(parts.slice(1), { type, title: parts[0] || "", url: "", line }));
       continue;
     }
     if (type === "title") {
@@ -162,7 +172,7 @@ export function parseKasc(text) {
 export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
-  "group", "terrain",
+  "group", "terrain", "scene3d", "light",
 ]);
 
 // group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。

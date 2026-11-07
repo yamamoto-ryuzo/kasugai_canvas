@@ -32,6 +32,26 @@
   切り替える。Cesium はカメラ高→疑似縮尺、2D エンジンは解像度/ズーム換算。
   QML ルール由来の縮尺範囲（scalemindenom/scalemaxdenom）とは積集合で併存
 
+- QGIS 3D シーンの再現(#60・Cesium):
+  - `scene3d:` 行: `background=#RRGGBB`/`skybox=`/`shadows=` をシーン
+    背景・skyBox 表示・shadowMap へ反映(`ao=`/`edl=` は保持のみ)
+  - `light:` 行: `az=`/`el=`/`intensity=`/`color=` を DirectionalLight
+    ＋地形ライティングへ適用(光源方向ベクトルを ENU→ECEF で変換)
+  - ベクター行の `extrude=`/`z=` をポリゴンの height/extrudedHeight へ
+    (QGIS 3Dベクターレンダラの立ち上げ相当。render=primitive 経路では無効)
+- テーマ `;style=` の URL 解決を `resolveProjectUrl` へ統一し、
+  `?project=`・外部登録プロジェクトで .qml 差替が基準パスを誤る不具合を修正
+- QML ラベル再現の精度向上（実QML出力との整合検証に基づく一括修正）:
+  - `overlapHandling`/`multipartBehavior`/`fitInPolygonOnly`/`allowDegraded`
+    の実属性名に対応し、declutter 発動経路を全データソース+postRender 再判定へ強化
+  - `fitInPolygonOnly` を画面投影ベースの厳密・動的判定へ（ズーム連動）
+  - ラベル初期表示のちらつき防止（declutter 対象は生成直後に非表示）
+  - ラベル衝突判定の幅見積もりを全角対応・非表示ラベル再表示バグ・
+    シャドウ変数参照順(TDZ)を修正
+  - fontWeight/namedStyle/角丸背景/MapUnitScale/HTML/置換スイッチの
+    読み取り漏れ対応(#62)、overlapMode(QGIS 3.44+)の displayAll/allowDegraded 写像
+  - 地物オプション(multipart 最大パート・地物内収まりラベル)対応
+
 ## [6.21.0] - 2026-11-07
 
 ### Added
