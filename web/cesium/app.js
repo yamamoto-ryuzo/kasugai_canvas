@@ -193,6 +193,9 @@ const vectorSourceCache = new Map();
 // style= で指定された QGIS レイヤースタイル(.qml)の取得・コンパイル結果キャッシュ。
 // URL キーで loadQmlStyle の Promise を保持し、applyInspector で破棄する
 const qmlStyleCache = new Map();
+// QML 警告は URL 単位で一度だけ出す(item は refresh ごとに作り直されるため
+// item 単位で warn すると同じ警告が何度もコンソールに出る)
+const qmlStyleWarnedUrls = new Set();
 // QML 式の is_layer_visible('名前') を KASUGAI のレイヤー表示状態に解決する。
 // QGIS ではレイヤーツリーのチェック状態を参照するため、ここでは item.visible を返す。
 // レイヤー名は QGIS 側のレイヤー名(= .kasc のタイトル末端)と照合し、
@@ -373,7 +376,8 @@ async function ensureQmlStyle(item) {
     qmlStyleCache.set(item.styleUrl, promise);
   }
   item.qmlStyle = await promise;
-  if (item.qmlStyle?.warnings?.length) {
+  if (item.qmlStyle?.warnings?.length && !qmlStyleWarnedUrls.has(item.styleUrl)) {
+    qmlStyleWarnedUrls.add(item.styleUrl);
     console.warn(`QML スタイル ${item.styleUrl}:`, item.qmlStyle.warnings.join(" / "));
   }
   return item.qmlStyle;
@@ -388,6 +392,20 @@ const LEGEND_SWATCH_W = 26;
 const LEGEND_SWATCH_H = 16;
 // 条件別に分岐する凡例の折りたたみ状態(レイヤーid の Set)。既定は展開
 const collapsedLayerLegends = new Set();
+// エントリ数がこの数以上の条件別凡例は既定で折りたたむ(大量スウォッチ描画を避ける)
+const LEGEND_AUTO_COLLAPSE_MIN = 24;
+// 既定で折りたたまれる大きい凡例をユーザーが展開した記憶(レイヤーid の Set)
+const expandedLayerLegends = new Set();
+// スタイル解決ごとの一覧再描画をマイクロタスクで束ねる(レイヤー数分の連発を防ぐ)
+let layerListRenderScheduled = false;
+function scheduleLayerListRender() {
+  if (layerListRenderScheduled) return;
+  layerListRenderScheduled = true;
+  queueMicrotask(() => {
+    layerListRenderScheduled = false;
+    renderLayerList();
+  });
+}
 // 凡例スウォッチを出しうるレイヤー種別(ベクター系)
 const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "sql", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv"]);
 
@@ -531,7 +549,7 @@ function getLayerLegend(item) {
   if (!item) return null;
   if (item.styleUrl) {
     if (item.qmlStyle === undefined) {
-      ensureQmlStyle(item).then(() => { if (layerState.has(item.id)) renderLayerList(); });
+      ensureQmlStyle(item).then(() => { if (layerState.has(item.id)) scheduleLayerListRender(); });
       return null;
     }
     const legend = item.qmlStyle?.legend;
@@ -1665,15 +1683,18 @@ function renderLayerList() {
             : "";
           const legendEntries = getLayerLegend(layer)?.entries || null;
           const legendMulti = !!legendEntries && legendEntries.length > 1;
-          const legendCollapsed = legendMulti && collapsedLayerLegends.has(layer.id);
+          const legendCollapsed = legendMulti && (collapsedLayerLegends.has(layer.id)
+            || (legendEntries.length >= LEGEND_AUTO_COLLAPSE_MIN && !expandedLayerLegends.has(layer.id)));
           const legendToggle = legendMulti
             ? `<button class="layer-legend-toggle" type="button" data-layer-id="${escapeHtml(layer.id)}" aria-label="${escapeHtml(t("layer.legendToggle"))}" aria-expanded="${!legendCollapsed}">${legendCollapsed ? "▸" : "▾"}</button>`
             : "";
           const inlineSwatch = legendEntries && !legendMulti && legendEntries[0].desc
             ? `<img class="legend-swatch" src="${buildLegendSwatchDataUrl(legendEntries[0].desc)}" alt="">`
             : "";
+          // 折りたたみ中は行を生成しない(大量エントリのスウォッチ描画・DOM 構築を遅延)。
+          // 展開時はトグル側で renderLayerList を呼んで構築する
           const legendItems = legendMulti
-            ? `<div class="layer-legend-items" data-layer-id="${escapeHtml(layer.id)}"${legendCollapsed ? " hidden" : ""}>${legendEntries.map((entry, entryIndex) => {
+            ? `<div class="layer-legend-items" data-layer-id="${escapeHtml(layer.id)}"${legendCollapsed ? " hidden" : ""}>${legendCollapsed ? "" : legendEntries.map((entry, entryIndex) => {
                 const entryInputId = `${inputId}-legend-${entryIndex}`;
                 const hidden = !!entry.symbolName && !!layer.legendHidden?.has(entry.symbolName);
                 return `<label class="legend-row" for="${entryInputId}">
@@ -1789,11 +1810,27 @@ function renderLayerList() {
       const id = toggle.dataset.layerId;
       const items = toggle.closest(".layer-item")?.querySelector(".layer-legend-items");
       const expanded = toggle.getAttribute("aria-expanded") === "true";
-      toggle.setAttribute("aria-expanded", String(!expanded));
-      toggle.textContent = expanded ? "▸" : "▾";
-      if (items) items.hidden = expanded;
-      if (expanded) collapsedLayerLegends.add(id);
-      else collapsedLayerLegends.delete(id);
+      if (expanded) {
+        collapsedLayerLegends.add(id);
+        expandedLayerLegends.delete(id);
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.textContent = "▸";
+        // 行は残したまま隠すだけ(再展開は DOM 切替で即応答)
+        if (items) items.hidden = true;
+      } else {
+        collapsedLayerLegends.delete(id);
+        expandedLayerLegends.add(id);
+        if (items && items.childElementCount) {
+          toggle.setAttribute("aria-expanded", "true");
+          toggle.textContent = "▾";
+          items.hidden = false;
+        } else {
+          // 折りたたみ中は行未生成のため再描画して構築する(スクロール位置は維持)
+          const scrollTop = list.scrollTop;
+          renderLayerList();
+          list.scrollTop = scrollTop;
+        }
+      }
     });
   });
 
@@ -5038,6 +5075,8 @@ function applyInspector(text) {
   // gpkg Worker が url キーで開いたままの DB も破棄する(メモリ解放・再取得)
   resetGpkgWorkerDbs();
   qmlStyleCache.clear();
+  qmlStyleWarnedUrls.clear();
+  expandedLayerLegends.clear();
   vectorSearchLoadedSources.clear();
   vectorSearchLoadFailed.clear();
   tileLayers.splice(0, tileLayers.length);
@@ -8295,7 +8334,7 @@ function setupEvents() {
     }
   });
 
-  // アプリ版 → ブラウザ版ハンドオフ（🖥 の逆方向）。表示中の .kasc を
+  // アプリ版 → CDN ホスト版ハンドオフ（🖥 の逆方向）。表示中の .kasc を
   // ローカルサーバー配信のまま CDN ホスト版エンジンで開く
   // （エンジンはCDN・データはローカル）。localfs:// 等 URL 化できない
   // プロジェクトでは非表示（初期化ブロック側で制御）
@@ -11310,7 +11349,7 @@ window.addEventListener("pagehide", () => {
       }
     }
   }
-  // 「ブラウザ版で開く」はアプリ版(同一オリジン＋remoteCommand)かつ
+  // 「CDN版で開く」はアプリ版(同一オリジン＋remoteCommand)かつ
   // URL 化できるプロジェクトのみ表示。CDN 上では自分自身への遷移なので不要
   {
     const openInWebBtn = document.querySelector("#open-in-web");

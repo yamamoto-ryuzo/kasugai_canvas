@@ -864,7 +864,7 @@
   "app.localNetReload": "Recharger",
   "app.localNetDownload": "Télécharger l’installateur",
   "app.localNetClose": "Fermer",
-  "app.openInWeb": "Ouvrir dans la version navigateur",
+  "app.openInWeb": "Ouvrir dans la version CDN",
   "browser.linkTitle": "Intégration navigateur",
   "browser.linkHint": "Préenregistre l’autorisation « Accès au réseau local » dans les politiques Chrome/Edge afin que les pages hébergées (CDN) puissent joindre cette app (127.0.0.1) sans invite. Redémarrez le navigateur pour appliquer.",
   "browser.lnaStatus": "État : ",

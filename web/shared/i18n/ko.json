@@ -864,7 +864,7 @@
   "app.localNetReload": "새로고침",
   "app.localNetDownload": "설치 프로그램 다운로드",
   "app.localNetClose": "닫기",
-  "app.openInWeb": "브라우저 버전으로 열기",
+  "app.openInWeb": "CDN 버전으로 열기",
   "browser.linkTitle": "브라우저 연동",
   "browser.linkHint": "호스트 버전(CDN) 페이지가 이 앱(127.0.0.1)에 접속할 수 있도록 Chrome/Edge의 \"로컬 네트워크 액세스\" 허용을 정책으로 미리 등록합니다. 적용하려면 브라우저를 다시 시작하세요.",
   "browser.lnaStatus": "상태: ",

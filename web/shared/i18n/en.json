@@ -864,7 +864,7 @@
   "app.localNetReload": "Reload",
   "app.localNetDownload": "Download installer",
   "app.localNetClose": "Close",
-  "app.openInWeb": "Open in browser version",
+  "app.openInWeb": "Open in CDN version",
   "browser.linkTitle": "Browser integration",
   "browser.linkHint": "Pre-registers Local Network Access permission in Chrome/Edge policy so hosted (CDN) pages can reach this app (127.0.0.1) without prompts. Restart your browser to apply.",
   "browser.lnaStatus": "Status: ",
