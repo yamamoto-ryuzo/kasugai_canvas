@@ -348,6 +348,12 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
           } else if (ddc) {
             entity.label.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
           }
+          // declutter 対象(重なり禁止系)は初期非表示にし、declutter が
+          // 画面投影ベースで空き/収まりを判定したうえで復帰する
+          // (初期に全表示してから消すちらつきを防ぐ)
+          if (!(labelSpec.displayAll || labelSpec.allowOverlap)) {
+            entity.label.show = new Cesium.ConstantProperty(false);
+          }
           // ドロップシャドウ: 同色ラベルをオフセット重複で近似
           if (labelSpec.shadow) pendingShadows.push({ entity, labelSpec, oxPx, oyPx: oyPx + bump, hOrigin, vOrigin });
         }
@@ -517,9 +523,6 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
       }
     }
     if (c.spec.allowOverlap || c.spec.displayAll) { e.label.show = new Cesium.ConstantProperty(true); continue; }
-    // 既に非表示(縮尺ゲート等)のラベルは衝突判定・再表示の対象外
-    const shown = e.label.show?.getValue?.(t);
-    if (shown === false) continue;
     const quads = pl.predefinedOrder?.length ? orderToQuads(pl.predefinedOrder, pl.quad) : [pl.quad || { h: 0, v: 0 }];
     let done = false;
     for (const q of quads) {
