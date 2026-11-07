@@ -44,7 +44,7 @@
       <p>国土地理院の住所検索 API（既定）と Yahoo Local Search API（<code>yahooAppId</code> 設定で有効化）を使い、住所・施設名で検索してクリックで FlyTo します。Google Maps Platform の Geocoding / Places を使うハイブリッド検索は V4 の Google 連携側の機能です。</p>
       <p>検索窓は<strong>座標の直接入力</strong>にも対応しており、「<code>35.681,139.767</code>」「<code>139.767,35.681</code>」（経度・緯度順も可）、「<code>N35°41' E139°46'</code>」「<code>35度41分 139度46分</code>」のような度・度分秒表記を入力すると、ジオコーディングを介さずその地点へ直接 FlyTo します。</p>
       <figure>
-      <img src="../images/issue-05-coord-search.png" alt="住所検索窓への座標直入力：35.681,139.767 を入力してその地点へ FlyTo" />
+      <img src="../../issues/05/coord-search.png" alt="住所検索窓への座標直入力：35.681,139.767 を入力してその地点へ FlyTo" />
       <figcaption aria-hidden="true">検索窓への座標直入力（入力した座標がそのまま検索結果として表示され FlyTo）</figcaption>
       </figure>
 
@@ -88,22 +88,22 @@
       </ul>
       <figure>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../images/issue-17-history.png" alt="表示履歴一覧：新しい順に番号付きで視点を列挙し、現在位置は ● 印" style="max-width:48%; flex:1 1 260px;" />
-      <img src="../images/issue-16-rectzoom-drag.png" alt="矩形ズーム：ドラッグ中の矩形を破線枠で表示" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/17/history.png" alt="表示履歴一覧：新しい順に番号付きで視点を列挙し、現在位置は ● 印" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/16/rectzoom-drag.png" alt="矩形ズーム：ドラッグ中の矩形を破線枠で表示" style="max-width:48%; flex:1 1 260px;" />
       </div>
       <figcaption aria-hidden="true">表示履歴一覧（左：ダブルクリックで開く番号付きリスト）と矩形ズーム（右：ドラッグ中の矩形）</figcaption>
       </figure>
       <figure>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../images/issue-04-coordpick.png" alt="地点座標ポップアップ：座標・行政区画名・muniCd とコピー/ピン/クリアボタン" style="max-width:48%; flex:1 1 260px;" />
-      <img src="../images/issue-07-gps.png" alt="現在地追従：青い現在地マーカーと精度円" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/04/coordpick.png" alt="地点座標ポップアップ：座標・行政区画名・muniCd とコピー/ピン/クリアボタン" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/07/gps.png" alt="現在地追従：青い現在地マーカーと精度円" style="max-width:48%; flex:1 1 260px;" />
       </div>
       <figcaption aria-hidden="true">地点座標取得（左）と現在地追従（右）</figcaption>
       </figure>
       <figure>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../images/issue-20-fullscreen.png" alt="フルスクリーンボタン（ナビゲーションツールバー最下段）" style="max-width:48%; flex:1 1 260px;" />
-      <img src="../images/issue-16-rectzoom-after.png" alt="矩形ズーム後：選択した矩形範囲へズームイン" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/20/fullscreen.png" alt="フルスクリーンボタン（ナビゲーションツールバー最下段）" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/16/rectzoom-after.png" alt="矩形ズーム後：選択した矩形範囲へズームイン" style="max-width:48%; flex:1 1 260px;" />
       </div>
       <figcaption aria-hidden="true">フルスクリーン（左）と矩形ズームの結果（右）</figcaption>
       </figure>
@@ -122,9 +122,9 @@
       <p>表示 → 一般タブの「座標表示形式」（度(10進) / 度分秒(DMS) / UTM / 平面直角座標系 I〜XIX系）と「測地系」（JGD2024・JGD2011 / JGD2000 / 日本測地系）のセレクトで、カーソル座標・地点座標ポップアップ・座標コピーの形式を切り替えられます。平面直角の系番号は最近傍原点から自動選択します。<strong>内部の座標はすべて WGS84 で一元管理</strong>しており、WGS84 ネイティブの緯度経度（度・度分秒・既定測地系）以外の表示には <strong>（参考値）</strong> が付きます。JGD2000・日本測地系など他測地系の座標は国土地理院の公式変換パラメータ（TKY2JGD / PatchJGD）で変換した参考値であり、現在位置の WGS84 と固定時点の測地成果とは地殻変動分の差が累積するため、測量成果としての利用は想定していません（詳細は <a href="v0.html#coords-datum">V0 の座標・測地系の扱い節</a>）。</p>
       <figure>
       <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../images/issue-06-coords-dms.png" alt="座標表示形式：度分秒(DMS) 表示" style="max-width:32%; flex:1 1 200px;" />
-      <img src="../images/issue-06-coords-utm.png" alt="座標表示形式：UTM 座標表示" style="max-width:32%; flex:1 1 200px;" />
-      <img src="../images/issue-06-coords-jpx.png" alt="座標表示形式：平面直角座標系の表示" style="max-width:32%; flex:1 1 200px;" />
+      <img src="../../issues/06/coords-dms.png" alt="座標表示形式：度分秒(DMS) 表示" style="max-width:32%; flex:1 1 200px;" />
+      <img src="../../issues/06/coords-utm.png" alt="座標表示形式：UTM 座標表示" style="max-width:32%; flex:1 1 200px;" />
+      <img src="../../issues/06/coords-jpx.png" alt="座標表示形式：平面直角座標系の表示" style="max-width:32%; flex:1 1 200px;" />
       </div>
       <figcaption aria-hidden="true">座標表示形式（左から：度分秒・UTM・平面直角座標系）</figcaption>
       </figure>
@@ -146,9 +146,9 @@
       </ul>
       <p>これらは AI からも操作できます。ボタン類は安定 id を持つため <code>controlUi</code> で自動列挙され、地図操作を伴う処理は <code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code>・<code>elevationProfile</code>・<code>lineOfSight</code>・<code>setGraticule</code>・<code>exportLayer</code>・<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code> の専用 API（CHAT_TOOLS 宣言・<code>executeChatTool</code> 配線済み、<a href="../ai-tools.html">AI ツール仕様</a>）で実行できます。</p>
       <figure style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
-        <img src="../images/issue-28-measure-distance.png" alt="距離計測：区間ラベルと総延長" style="max-width:32%; flex:1 1 200px;" />
-        <img src="../images/issue-29-profile.png" alt="標高断面：距離-標高グラフ" style="max-width:32%; flex:1 1 200px;" />
-        <img src="../images/issue-33-los.png" alt="見通し判定：遮蔽点マーク" style="max-width:32%; flex:1 1 200px;" />
+        <img src="../../issues/28/measure-distance.png" alt="距離計測：区間ラベルと総延長" style="max-width:32%; flex:1 1 200px;" />
+        <img src="../../issues/29/profile.png" alt="標高断面：距離-標高グラフ" style="max-width:32%; flex:1 1 200px;" />
+        <img src="../../issues/33/los.png" alt="見通し判定：遮蔽点マーク" style="max-width:32%; flex:1 1 200px;" />
         <figcaption aria-hidden="true">ツール（左から：距離計測・標高断面・見通し判定）</figcaption>
       </figure>
 
