@@ -99,9 +99,20 @@ function propText(raw) {
 
 // ---- 属性タブ(クリックした地物の属性表示。Cesium 版 attr-panel 相当) ----
 
-// 地物 properties → 属性テーブル行 [key, value] の配列。__kasc_* 内部値は除外
-export function attrEntriesFromProps(props) {
-  return Object.entries(props || {}).filter(([key]) => !INTERNAL_PROP_RE.test(key));
+// 地物 properties → 属性テーブル行 [key, value] の配列。__kasc_* 内部値は除外。
+// fieldMeta(.qml の <aliases>/<attributetableconfig>)があれば、非表示フィールド
+// の除外・QML 定義順・別名表示を適用する(#56)
+export function attrEntriesFromProps(props, fieldMeta = null) {
+  let entries = Object.entries(props || {}).filter(([key]) => !INTERNAL_PROP_RE.test(key));
+  if (!fieldMeta) return entries;
+  if (fieldMeta.hidden?.size) entries = entries.filter(([k]) => !fieldMeta.hidden.has(k));
+  if (fieldMeta.order?.length) {
+    const idx = new Map(fieldMeta.order.map((n, i) => [n, i]));
+    entries = entries.slice().sort((a, b) =>
+      (idx.get(a[0]) ?? fieldMeta.order.length) - (idx.get(b[0]) ?? fieldMeta.order.length));
+  }
+  if (fieldMeta.alias) entries = entries.map(([k, v]) => [fieldMeta.alias[k] || k, v]);
+  return entries;
 }
 
 function buildAttrTable(entries) {
@@ -242,6 +253,7 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
 
   let rows = [];
   let attributes = [];
+  let attrKeys = [];
   let sort = { column: -1, order: 1 };
   let loading = false;
   let loadError = false;
@@ -288,6 +300,7 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
     sort = { column: -1, order: 1 };
     loading = false;
     loadError = false;
+    attrKeys = [];
     const layer = findLayer(currentLayerId());
     if (!layer) return;
     loading = true;
@@ -297,17 +310,28 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
       if (!isCurrent()) return;
       const features = Array.isArray(result) ? result : (result?.features || []);
       partial = !Array.isArray(result) && !!result?.partial;
+      // .qml の属性表示メタ(fieldMeta): 非表示列の除外・定義順・別名表示(#56)
+      const meta = layer.entry?.fieldMeta || null;
+      const metaOrder = meta?.order || [];
+      const metaOrderIdx = new Map(metaOrder.map((n, i) => [n, i]));
       const attrSet = new Set();
       for (const f of features) {
         for (const key of Object.keys(f?.properties || {})) {
-          if (!INTERNAL_PROP_RE.test(key)) attrSet.add(key);
+          if (!INTERNAL_PROP_RE.test(key) && !meta?.hidden?.has(key)) attrSet.add(key);
         }
       }
-      attributes = [...attrSet].sort((a, b) => a.localeCompare(b));
+      const rawAttrs = [...attrSet].sort((a, b) => {
+        const ia = metaOrderIdx.get(a), ib = metaOrderIdx.get(b);
+        if (ia != null || ib != null) return (ia ?? metaOrder.length) - (ib ?? metaOrder.length);
+        return a.localeCompare(b);
+      });
+      // 表示名(別名)と実名を対応付けて保持する
+      attrKeys = rawAttrs;
+      attributes = rawAttrs.map(a => meta?.alias?.[a] || a);
       const seenRows = new Set();
       for (const f of features) {
         const props = f?.properties || {};
-        const values = attributes.map(attr => propText(props[attr]));
+        const values = rawAttrs.map(attr => propText(props[attr]));
         const rowKey = JSON.stringify(values);
         if (seenRows.has(rowKey)) continue;
         seenRows.add(rowKey);

@@ -802,17 +802,22 @@ function starPath(ctx, points, innerRatio) {
 // 線のみの形状(塗りつぶさずストロークのみ)
 const STROKE_ONLY_SHAPES = new Set(["cross2", "x", "diagonal_cross", "line", "arrow", "arrowhead"]);
 
+import { kascZipLogicalUrl, resolveKascUrl } from "./kasc.js";
+
 // 画像の遅延ロード管理(コンパイル時に収集した URL を一括ロードする)
 function resolveResourceUrl(path, baseUrl) {
   const s = String(path || "").trim();
   if (!s) return null;
   if (/^(https?:|data:|blob:)/i.test(s)) return s;
+  // baseUrl が ZIP メンバ由来の blob: なら論理 kasczip:// 基点へ戻して
+  // 相対解決し、結果は resolveKascUrl で blob: へ変換する
+  const base = (typeof kascZipLogicalUrl === "function" && kascZipLogicalUrl(baseUrl)) || baseUrl;
   // Windows/Unix の絶対パスはブラウザから読めないためベース名で相対解決を試みる
   if (/^([a-z]:[\\/]|\\\\|\/)/i.test(s)) {
-    const base = s.split(/[\\/]/).pop();
-    try { return new URL(base, baseUrl).href; } catch (e) { return null; }
+    const b = s.split(/[\\/]/).pop();
+    try { return resolveKascUrl(new URL(b, base).href); } catch (e) { return null; }
   }
-  try { return new URL(s, baseUrl).href; } catch (e) { return s; }
+  try { return resolveKascUrl(new URL(s, base).href); } catch (e) { return s; }
 }
 
 function loadImage(url) {
@@ -1151,7 +1156,7 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
 // ラベル(<labeling>)
 // ---------------------------------------------------------------------------
 
-function parseTextStyle(textStyleEl) {
+function parseTextStyle(textStyleEl, settingsEl = null) {
   const a = name => textStyleEl?.getAttribute(name);
   const isExpr = String(a("isExpression") ?? "0") === "1" || String(a("isExpression")).toLowerCase() === "true";
   const fieldName = a("fieldName") || "";
@@ -1160,18 +1165,52 @@ function parseTextStyle(textStyleEl) {
   const sizePx = sizeUnit === "MM" ? fontSize * MM_TO_PX : fontSize * PT_TO_PX;
   const textColor = parseQgisColor(a("textColor") || a("namedColor"), [0, 0, 0, 1]);
   const textOpacity = Number(a("textOpacity") ?? "1");
-  const bufferDraw = String(a("bufferDraw") ?? "0") === "1" || String(a("bufferDraw")).toLowerCase() === "true";
-  const bufferColor = parseQgisColor(a("bufferColor"), [1, 1, 1, 1]);
-  const bufferSize = sizeToPx(a("bufferSize") ?? 1, a("bufferSizeUnit") || "MM");
+  // バッファ(ハロー)は <text-style> の子要素 <text-buffer> に持つ。
+  // 属性として残る旧形式もフォールバックで拾う(#55)
+  const bufEl = textStyleEl?.querySelector?.("text-buffer") || null;
+  const b = name => bufEl?.getAttribute(name) ?? a(name);
+  const bufferDraw = String(b("bufferDraw") ?? "0") === "1" || String(b("bufferDraw")).toLowerCase() === "true";
+  const bufferOpacity = Number(b("bufferOpacity") ?? "1");
+  const bufferColor = withAlpha(
+    parseQgisColor(b("bufferColor"), [1, 1, 1, 1]),
+    Number.isFinite(bufferOpacity) ? bufferOpacity : 1);
+  const bufferSize = sizeToPx(b("bufferSize") ?? 1, b("bufferSizeUnit") || b("bufferSizeUnits") || "MM");
   const bold = String(a("fontBold") ?? "0") === "1" || String(a("fontBold")).toLowerCase() === "true";
   const italic = String(a("fontItalic") ?? "0") === "1" || String(a("fontItalic")).toLowerCase() === "true";
   const family = a("fontFamily") || "sans-serif";
+  const underline = String(a("fontUnderline") ?? "0") === "1";
+  const strikeout = String(a("fontStrikeout") ?? "0") === "1";
+  // <placement>/<rendering> は <text-style> の親 <settings> の子。
+  // 呼び出し側から settingsEl が渡されなければ親要素から辿る
+  const setEl = settingsEl || textStyleEl?.parentElement || null;
+  // <placement>: オフセット・回転(#55)。dist/xOffset/yOffset は distUnits/
+  // offsetUnits の単位で px 換算する
+  const pl = setEl?.querySelector?.("placement") || null;
+  let offsetXPx = 0, offsetYPx = 0, rotationDeg = 0;
+  if (pl) {
+    const p = name => pl.getAttribute(name);
+    const distPx = sizeToPx(p("dist") ?? 0, p("distUnits") || "MM");
+    offsetXPx = sizeToPx(p("xOffset") ?? 0, p("offsetUnits") || "MM") + distPx;
+    offsetYPx = sizeToPx(p("yOffset") ?? 0, p("offsetUnits") || "MM");
+    rotationDeg = Number(p("rotationAngle")) || 0;
+  }
+  // <rendering>: 縮尺依存表示(#55)
+  const rd = setEl?.querySelector?.("rendering") || null;
+  let labelScale = null;
+  if (rd && String(rd.getAttribute("scaleVisibility") ?? "0") === "1") {
+    const lo = Number(rd.getAttribute("scaleMin")) || 0;
+    const hi = Number(rd.getAttribute("scaleMax")) || 0;
+    if (lo > 0 || hi > 0) labelScale = { minScale: lo || null, maxScale: hi || null };
+  }
   return {
     getText: isExpr ? compileExpr(fieldName) : (props => props?.[fieldName]),
     sizePx,
     fontCss: `${italic ? "italic " : ""}${bold ? "bold " : ""}${Math.max(Math.round(sizePx), 6)}px ${family}`,
     fill: withAlpha(textColor, Number.isFinite(textOpacity) ? textOpacity : 1),
     halo: bufferDraw ? { color: bufferColor, widthPx: Math.max(bufferSize, 1) } : null,
+    underline, strikeout,
+    offsetXPx, offsetYPx, rotationDeg,
+    labelScale,
   };
 }
 
@@ -1268,6 +1307,26 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
     return { label: e.label, symbolName: e.symbolName, spec };
   });
 
+  // ---- 属性表示メタデータ(#56) ----
+  // <aliases><alias field= name=>、<attributetableconfig><column name= hidden=>、
+  // <previewExpression>(表示式)、<mapTip> を属性パネル/ポップアップ向けに抽出する
+  const fields = { alias: {}, hidden: new Set(), order: [], displayExpr: "", mapTip: "" };
+  for (const al of doc.querySelectorAll("aliases > alias")) {
+    const f = al.getAttribute("field"), n = al.getAttribute("name");
+    if (f && n) fields.alias[f] = n;
+  }
+  const atc = doc.querySelector("attributetableconfig");
+  for (const col of atc?.querySelectorAll("columns > column") || []) {
+    const nm = col.getAttribute("name");
+    if (!nm || col.getAttribute("type") === "actions") continue;
+    fields.order.push(nm);
+    if (col.getAttribute("hidden") === "1") fields.hidden.add(nm);
+  }
+  fields.displayExpr = doc.querySelector("previewExpression")?.textContent?.trim() || "";
+  fields.mapTip = doc.querySelector("mapTip")?.textContent?.trim() || "";
+  const displayFn = fields.displayExpr ? compileExpr(fields.displayExpr) : null;
+  const hasFieldMeta = Object.keys(fields.alias).length > 0 || fields.hidden.size > 0 || fields.order.length > 0 || !!fields.displayExpr;
+
   return {
     evaluate,
     namesFor,
@@ -1277,6 +1336,10 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
     unsupported: !!renderer.unsupported,
     symbols: renderer.symbols,
     images,
+    // 属性表示メタ。displayFor(props) は displayExpression を評価して
+    // 地物の表示名を返す(未設定なら null)
+    fields: hasFieldMeta ? fields : null,
+    displayFor: displayFn ? (props => displayFn(props)) : null,
   };
 }
 

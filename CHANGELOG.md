@@ -4,7 +4,27 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
-## [Unreleased]
+## [6.22.0] - 2026-11-07
+
+- QGIS連携: `?kasc=<zip のURL>` で .kasc+DATA/ の ZIP をブラウザ内で解凍して
+  直読可能に(Cesium)。`kasczip://<id>/<path>` メンバ参照を `blob:` URL
+  (resolveKascUrl 経由)または fetch シムで解決。geo_suite の `qgis:` と同構造
+- マップテーマのスタイル再現(geo_webview 4.6.0 と対): `theme:` 行の
+  タイトルに付く `;style=DATA/x.qml` をパースし、テーマ適用時に
+  対象レイヤーの .qml を差し替えて再適用(Cesium エンジン。
+  `theme.styles` = 正規化タイトル→相対パスのマップ)
+- QGIS 連携エクスポートの受け側を強化(geo_webview 4.5.0 と対・Issues #49-61):
+  - `group:` 行を追加: レイヤ一覧のグループ折りたたみ初期状態を再現(#59)
+  - `terrain:` 行を追加: `exaggeration=` で地形/3D Tiles の垂直誇張(#60)
+  - `cam:QGIS3D` 行(保存済み3Dビューのカメラ姿勢)をカメラプリセットとして扱う(#60)
+  - ベクター行(geojson/gpkg/duckdb 等)の `opacity=` を QML/既定スタイルの
+    色アルファへ乗算してレイヤ透過度を再現(#58)
+  - `time=`/`time_end=` は既存機構で受領(#57)、`heat=`/`cluster=` も既存経路(#54)
+  - .qml の属性表示メタ(<aliases>/<attributetableconfig>/<previewExpression>)
+    を解析し、属性一覧の別名表示・非表示列・列順へ反映(#56)
+  - .qml ラベルの <text-buffer>(ハロー)を子要素から読むよう修正し、
+    <placement> のオフセット/回転・<rendering> の縮尺依存を解析(#55)
+  - ラスタ焼き付け `image:` 行(bbox=)・`geotiff:` の `bands=` 既存経路で受領(#52/#53)
 
 - `.kasc` 全レイヤ行に `minScale=`/`maxScale=`（縮尺表示）を追加。
   geo_webview が出力する QGIS レイヤの縮尺表示設定（minimumScale=引き側

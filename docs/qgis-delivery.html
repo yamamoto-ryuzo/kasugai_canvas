@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QGIS連携の利用方法 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.21.0</span></h1>
+      <p>QGIS連携の利用方法 — <code>qgis:</code> 行による ZIP 取り込みが中核</p>
+    </header>
+    <main>
+      <p>本ページは <code>geo_webview</code> のエクスポート物を <strong>どう指定して再現するか</strong>をまとめる。
+      連携方針は <a href="qgis-policy.html">QGIS・GDAL連携（方針・構想）</a>、実装済みの再現範囲は <a href="qgis.html">実装済みの再現範囲</a> を参照。</p>
+
+      <h2 id="中核">中核：<code>qgis:</code> 行で ZIP を指定して QGIS を再現</h2>
+      <div class="note">
+        <p><strong>QGIS連携の最も重要な利用形態は「エクスポート ZIP を <code>qgis:</code> インスペクタ行で指定する」こと</strong>です。</p>
+        <p>geo_webview のエクスポート出力（<code>.kasc + DATA/</code>）を、Re:Earth geo_suite のインスペクタに
+        <code>qgis:</code> 行として貼るだけで、ブラウザ内で <code>.kasc</code> 解釈・<code>DATA/</code> 参照解決により
+        <strong>QGIS プロジェクトが再現されます</strong>。指定は <strong>解凍済み / 未解凍の2形態</strong>です：</p>
+        <table>
+        <thead>
+        <tr><th>指定</th><th>内容</th><th>用途</th></tr>
+        </thead>
+        <tbody>
+        <tr>
+          <td><code>qgis: &lt;解凍済み out_dir のURL&gt;</code></td>
+          <td>フォルダURL（末尾 <code>/</code> または拡張子なし）→ <code>&lt;url&gt;/kasugai_canvas.kasc</code> を自動解決 → <code>DATA/</code> はフォルダ基準</td>
+          <td><strong>生フォルダ参照</strong>（geo_webview :8089 が out_dir をそのまま配信＝常に最新）</td>
+        </tr>
+        <tr>
+          <td><code>qgis: &lt;…/xxx.zip&gt;</code></td>
+          <td>未解凍 ZIP のURL → ブラウザ内で解凍 → <code>.kasc</code> 解釈 → <code>DATA/…</code> を <code>kasczip://</code> メンバ参照で読み込み</td>
+          <td>搬送・配布用（1ファイルのスナップショット。外部ホストへ置く運用）</td>
+        </tr>
+        </tbody>
+        </table>
+      </div>
+
+      <h3>ZIP の生成経路（geo_webview 側）</h3>
+      <table>
+      <thead>
+      <tr><th>経路</th><th>動作</th><th>out_dir に残るか</th></tr>
+      </thead>
+      <tbody>
+      <tr><td><strong>パネル ZIP ボタン / index.html の DL</strong></td><td><code>/export-data/kasugai_canvas_&lt;ch&gt;.zip</code> が<strong>その場で固めて返す</strong>（常に直近エクスポートの最新内容）</td><td>残らない（オンデマンド）</td></tr>
+      <tr><td><strong>emit_zip=True</strong>（bridge/API）</td><td>エクスポートと同時に ZIP を out_dir に書き出す</td><td>残る</td></tr>
+      </tbody>
+      </table>
+
+      <p>どちらの形態も最終的に「<code>kasugai_canvas.kasc</code>（固定名の目次）」を起点に <code>DATA/</code> を解決する。
+      フォルダ/ZIP の中身は「<code>.kasc</code> ＋ <code>DATA/</code>（実体・.qml・シンボル画像）＋ <code>bookmarks.xml</code>（ある場合）」で、
+      テーマ別スタイル（<code>&lt;slug&gt;__&lt;theme&gt;.qml</code>）も <code>theme:</code> 行の <code>;style=</code> 経由で参照される。</p>
+
+      <h2 id="canvas側">Canvas（kasugai_canvas）への指定方法 — フォルダ参照</h2>
+      <p>Canvas 本体は <code>qgis:</code> ではなく <strong>.kasc の URL を <code>?kasc=</code> で受け取る</strong>。
+      「解凍済みの .kasc + DATA/ が HTTP で参照できる」ことを前提とする（geo_webview の :8089、アプリの :8510、外部ホストなど）。</p>
+      <table>
+      <thead>
+      <tr><th>方法</th><th>記法</th><th>用途</th></tr>
+      </thead>
+      <tbody>
+      <tr><td><strong>.kasc URL 直指定</strong></td><td><code>&lt;engine&gt;/?kasc=&lt;URL&gt;/kasugai_canvas.kasc</code></td><td>HTTP 参照できる任意の場所（CDN 版も同じ）</td></tr>
+      <tr><td><strong>ローカルフォルダ選択</strong></td><td><code>?kasc=local</code></td><td>file:// で解凍済みフォルダをブラウザが選択して読む</td></tr>
+      <tr><td><strong>登録プロジェクト</strong></td><td><code>?project=&lt;slug&gt;</code></td><td><code>QGIS_projects/&lt;slug&gt;/</code>（<code>project.json</code> マニフェスト）</td></tr>
+      <tr><td><strong>geo_webview 自動起動</strong></td><td>route <code>local / auto / hosted</code></td><td>QGIS が :8089 / :8510 経由で <code>?kasc=</code> URL を自動オープン</td></tr>
+      </tbody>
+      </table>
+      <p><code>?kasc=</code> で読んだ <code>.kasc</code> は、その URL を基準に <code>DATA/…</code> 相対参照を解決して逐次 fetch する。
+      エクスポート時の <code>&lt;engine&gt;.html</code> / <code>index.html</code>（ランチャー）はこの <code>?kasc=&lt;絶対URL&gt;</code> へ転送するだけの起動ページ。</p>
+
+      <h2 id="zipをcanvasで">ZIP を Canvas で直接読む</h2>
+      <p><code>?kasc=&lt;zip のURL&gt;</code> — ブラウザ内で解凍（JSZip）→ 内側の <code>kasugai_canvas.kasc</code> を解釈 →
+      <code>DATA/…</code> は <code>kasczip://&lt;id&gt;/&lt;path&gt;</code> として保持され、<code>resolveKascUrl</code> 経由で
+      メンバの <code>blob:</code> URL へ変換される（fetch 経由の参照は fetch シムがメンバを応答）。geo_suite の
+      <code>qgis:</code> と同じ構造で、「ZIP ファイル1個を指すだけ」が Canvas 側でも動作します。</p>
+      <p>対応状況：Cesium エンジンで実装済み。他エンジン（MapLibre/OpenLayers/Leaflet 等）の配線は
+      <code>readKascSource</code> + <code>resolveKascUrl</code> を同様に使うだけで対応可能（残件）。</p>
+    </main>
+  </div>
+</body>
+</html>

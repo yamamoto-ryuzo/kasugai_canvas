@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>描画性能とデータ形式の整備方針 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.21.0</span></h1>
+      <p>描画性能とデータ形式の整備方針 — QGIS との速度比較・実行環境別の特性・規模別の既定形式と整備課題</p>
+    </header>
+    <main>
+      <h2 id="概要">概要</h2>
+      <p>QGIS と KASUGAI Canvas の連携において「大量データを高速に処理できるか」は
+      データ形式と読み出し方式で決まる。本ページは、QGIS 本体と WebGL ベースの Canvas
+      をシステムとして速度比較した結果と、それに基づく<strong>データ形式の既定方針・整備課題</strong>をまとめる。
+      形式の一覧・詳細仕様は <a href="data.html">データ形式</a>、QGIS 側の連携仕様は
+      <a href="qgis.html">QGIS・GDAL連携</a> を参照。</p>
+      <h2 id="システム速度比較">システムとしての速度比較（QGIS vs Canvas）</h2>
+      <p>QGIS 本体の描画と WebGL ベースの Canvas
+      を比較すると、ボトルネックの位置が異なる。比較は「同じデータを同じ忠実度で描く」条件で行う必要がある。</p>
+      <table>
+      <thead>
+      <tr>
+      <th>ステージ</th>
+      <th>QGIS 本体</th>
+      <th>Canvas（WebGL 系）</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>データ読み出し</td>
+      <td>GDAL/OGR が C++ で直接。GPKG 空間インデックス等で<strong>表示範囲だけ読む</strong></td>
+      <td>HTTP フェッチ。形式依存（GeoJSON=全件、FlatGeobuf/PMTiles=Range
+      リクエスト＋空間インデックス）</td>
+      </tr>
+      <tr>
+      <td>デコード</td>
+      <td>C++ ネイティブ</td>
+      <td>JS でパース。<strong>GeoJSON の全件パースが最大の壁</strong>。バイナリ系は軽い</td>
+      </tr>
+      <tr>
+      <td>描画対象の選別</td>
+      <td>空間インデックス＋縮尺抑制＋ジオメトリ簡略化が標準装備</td>
+      <td>実装依存。MVT/PMTiles は「見えるタイルだけ読む」が構造上強制される</td>
+      </tr>
+      <tr>
+      <td>描画本体</td>
+      <td><strong>QPainter = CPU ラスタライズ</strong>（並列化あり・CPU
+      限界）</td>
+      <td><strong>WebGL = GPU</strong>。GPU バッファに乗れば数十万〜百万級でも
+      60fps 級</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="比較の結論">比較の結論</h3>
+      <ul>
+      <li>描画エンジン単体では Canvas（GPU）が QGIS（CPU
+      ラスタライズ）に対して構造的に速い</li>
+      <li>QGIS が大規模データで粘れるのは描画が速いからではなく「読まない」から。全件
+      GeoJSON ロードではこの「読まない」に負ける</li>
+      <li>両者に「範囲外を読まない」仕組み（QGIS=空間インデックス、Canvas=FGB
+      の bbox 参照またはタイル）を持たせれば、同規模で Canvas が常に上回る見通し</li>
+      <li>ラスタ（COG/XYZ）は互角、3D・点群は Canvas
+      優位、編集・属性表の全件操作は QGIS の守備範囲</li>
+      </ul>
+      <h2 id="実行環境の描画性能">実行環境（CDN版・アプリ版・QGIS経由）の描画性能</h2>
+      <p>CDN版（kasugai-canvas-web）もアプリ版（Rust/Axum が <code>web/</code> を
+      localhost で配信しシステムブラウザを開く）も、描画に使うのは同じ Chromium
+      系ブラウザ＋同一の <code>web/</code> 資産であり、<strong>描画性能は等しい</strong>。
+      QGIS からの起動（geo_webview）も <code>QDesktopServices.openUrl</code>
+      で既定ブラウザを開くだけであり、<strong>QGIS 内に WebView を埋め込んで描画する形態は存在しない</strong>。
+      差が出るのはデータの到達経路のみ。</p>
+      <table>
+      <thead>
+      <tr>
+      <th></th>
+      <th>アプリ版 / QGIS経由（:8089）</th>
+      <th>CDN版</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>データ経路</td>
+      <td>localhost サーバがローカルファイルを Range 対応で配信。GB
+      級の FGB/PMTiles/COG をディスク直結で扱える。QGIS 経由時は
+      geo_webview 内蔵HTTP（:8089）がエンジン＋ <code>/export-data/</code> を配信</td>
+      <td>データは HTTPS で到達可能な場所のみ（Pages ホストの DATA/、または
+      LNA 経由の localhost）</td>
+      </tr>
+      <tr>
+      <td>制約</td>
+      <td>特になし（QGIS の :8089 / Canvas の :8510 と直結）</td>
+      <td>GitHub Pages は 1 ファイル 100MB 上限・帯域制限。HTTPS ページから
+      localhost 参照には Local Network Access 許可が必要（アプリ側が
+      /api/browser/lna で登録支援済み）</td>
+      </tr>
+      <tr>
+      <td>向く用途</td>
+      <td>重い業務データ・QGIS 直結の編集・確認</td>
+      <td>Canvas 未インストール環境への配布・公開（小〜中規模またはタイル化済みデータ）</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>共通の注意点：リモートデスクトップ等で GPU がソフトウェア描画（SwiftShader
+      相当）にフォールバックした環境では WebGL が急激に遅くなる。WebGL
+      レンダラの確認を検証手順に含める。</p>
+      <h3 id="qtwebengineとwebview2の速度比較">参考：QtWebEngine と WebView2 の速度比較</h3>
+      <p>WebView を埋め込む形態（kasugai の WebView2、将来 geo_webview
+      に QtWebEngine ドックを持たせる場合等）を選ぶ際の比較。いずれも
+      Chromium 系で、<strong>WebGL 描画性能は実用上同等</strong>。差はレンダリングではなくランタイムの鮮度にある。</p>
+      <table>
+      <thead>
+      <tr>
+      <th></th>
+      <th>QtWebEngine</th>
+      <th>WebView2（kasugai）</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>エンジン</td>
+      <td>Chromium を Qt に組み込んだフォーク。<strong>Qt
+      リリースにバージョン固定</strong>され、最新 Chrome より数世代遅れるのが常態</td>
+      <td>Edge ランタイム（エバーグリーン）。<strong>自動更新でほぼ最新
+      Chromium</strong></td>
+      </tr>
+      <tr>
+      <td>WebGL 描画</td>
+      <td>ANGLE 経由で GPU 加速。描画速度は実用上 WebView2 と同等</td>
+      <td>同じく ANGLE 経由で GPU 加速</td>
+      </tr>
+      <tr>
+      <td>差が出る点</td>
+      <td>V8/ANGLE が古い分、JS 実行・シェーダ最適化の新しさで劣る。WebGPU
+      等の新 API・一部コーデックが使えない場合がある</td>
+      <td>最新最適化が早く降りる。OS 標準ランタイムのため配布物に同梱不要</td>
+      </tr>
+      <tr>
+      <td>結論</td>
+      <td colspan="2">本用途（CesiumJS/MapLibre の WebGL
+      描画）では<strong>体感差は小さい</strong>。選択基準は速度ではなく、Qt
+      側に UI を統合したいか（QtWebEngine）・OS 標準の最新ランタイムを使いたいか（WebView2）で決める</td>
+      </tr>
+      </tbody>
+      </table>
+      <h2 id="データ形式のデフォルト方針">データ形式のデフォルト方針</h2>
+      <p>ベクター出力の既定形式をデータ規模で階層化する。</p>
+      <table>
+      <thead>
+      <tr>
+      <th>規模（目安）</th>
+      <th>既定形式・経路</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>小規模（〜5万地物 / 〜30MB）</td>
+      <td><code>geojson:</code>（全件）</td>
+      <td>全エンジン対応・QML 再現が最も確実。互換性フォールバックとしても維持</td>
+      </tr>
+      <tr>
+      <td>中規模（5万〜30万地物）</td>
+      <td><code>flatgeobuf:</code>（既定に昇格）</td>
+      <td>空間インデックス付き単一ファイル。bbox
+      ストリーミング実装を切替の前提条件とする（後述）</td>
+      </tr>
+      <tr>
+      <td>大規模（30万〜数百万地物）</td>
+      <td><code>pmtiles:</code> / <code>mvt:</code> ＋ MapLibre</td>
+      <td>俯瞰=タイル、詳細ズーム・属性参照=FGB/<code>duckdb:</code>
+      の範囲クエリというハイブリッド。QML の地物単位スタイル再現度は落ちるため属性駆動スタイルで近似</td>
+      </tr>
+      <tr>
+      <td>属性集計・フィルタ主体</td>
+      <td><code>duckdb:</code> / <code>sql:</code>（<code>bbox=auto</code>
+      等）</td>
+      <td>クエリは DuckDB-WASM で高速。描画は別途タイル化との併用を検討</td>
+      </tr>
+      <tr>
+      <td>3D 建物・点群</td>
+      <td><code>3dtiles:</code></td>
+      <td>既存経路で可</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="デフォルト決定">デフォルト決定</h3>
+      <ul>
+      <li><strong>変換を要するベクターの出力先は GeoJSON → FlatGeobuf
+      への切替を既定とする</strong>。FGB は ogr2ogr / QgsVectorFileWriter
+      が直接出力でき、ブラウザ側の GeoJSON 正規化で属性が欠落しないため QML
+      再現度は GeoJSON と同等。ただし現行はブラウザ側で全件 GeoJSON
+      デコードしており効果が限定的なため、<strong>bbox ストリーミング実装を切替の前提条件</strong>とする</li>
+      <li>大規模は <strong>PMTiles（単一ファイル・Range
+      対応・静的ホストにそのまま置ける）を第一候補</strong>とし、MVT
+      エンドポイント運用も選択肢に残す。CDN 版の 100MB/ファイル制約内では分割を検討</li>
+      <li>正データ（GPKG/Parquet/FGB/GeoJSON ソース）のネイティブ参照は現行どおり変換しない方針を維持する。上記の既定は「変換を要するベクター」の出力先に適用する</li>
+      </ul>
+      <h2 id="性能面の整備課題">性能面の整備課題（優先順）</h2>
+      <ol>
+      <li><code>flatgeobuf:</code> の bbox/Range ストリーミング化 — 現行
+      <code>shared/kasc_loader.js</code> は FGB を全件 GeoJSON
+      デコードしており空間インデックスを未活用（最大の課題）。表示範囲の
+      deserialize ＋パン追従に改める</li>
+      <li>geo_webview 側の <code>pmtiles:</code>/<code>mvt:</code>
+      行出力と、kasuga_converter での PMTiles/MVT 生成経路（QGIS→タイル自動化）</li>
+      <li>大きなベクターデコードの Worker 退避（<code>shared/vector-load.js</code>）でメインスレッドブロックを回避</li>
+      <li>実データベンチマーク：同一レイヤを geojson / fgb / pmtiles
+      で出力し、初回描画・パン/ズーム応答・属性参照を計測して階層の閾値を実測で確定</li>
+      </ol>
+    </main>
+  </div>
+</body>
+</html>

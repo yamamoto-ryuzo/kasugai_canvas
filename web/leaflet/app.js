@@ -1,6 +1,7 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay, kascScaleZoomRange, mergeZoomRange } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay, kascScaleZoomRange, mergeZoomRange, applyKascGroupStates } from "../shared/kasc.js";
+import { kascTimeSpec, collectTimeValues, featureInTime, buildKascTimeControl } from "../shared/kasc-time.js";
 import { loadScriptOnce, loadCssOnce } from "../shared/lazy-lib.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
@@ -517,6 +518,11 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         item._qml = await loadCompiledQml(item.opts.style, baseUrl);
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
+    // opacity=(0-1): レイヤ透過度。スタイル関数のアルファ乗算に引き継ぐ(#58)
+    if (item.opts?.opacity !== undefined && item._opacityFactor === undefined) {
+      const _o = Number(item.opts.opacity);
+      if (Number.isFinite(_o)) item._opacityFactor = _o;
+    }
     const styleFn = makeVectorStyleFn(item);
     // cluster=on / heat=on: 点レイヤーのクラスタ表示・ヒートマップ表示。
     // どちらも点地物のみを対象とし、点以外のジオメトリは通常の geoJSON で描画する
@@ -891,6 +897,37 @@ function buildLayerRow(entry, exclusive, radioName) {
 }
 
 const expandedLayerGroups = new Set();
+let timeCtl = null;
+
+// time=/time_end= オプション付きレイヤを収集して時刻スライダーを構築する(#57)。
+// setStyle で時刻外の地物を HIDDEN_STYLE にする(クラスタ/heat は対象外)。
+function refreshKascTime() {
+  const specs = [];
+  for (const e of layerEntries || []) {
+    const spec = kascTimeSpec(e.item);
+    if (!spec || !e.layer || typeof e.layer.eachLayer !== "function"
+        || typeof e.styleFn !== "function") continue;
+    const values = collectTimeValues(e.item._geojson, spec);
+    if (!values.length) continue;
+    specs.push({
+      label: e.item.title, spec, values,
+      apply: t => {
+        try {
+          e.layer.eachLayer(sub => {
+            if (typeof sub.setStyle !== "function" || !sub.feature) return;
+            const ok = t == null
+              || featureInTime(sub.feature.properties, spec, t);
+            sub.setStyle(ok ? e.styleFn(sub.feature) : HIDDEN_STYLE);
+          });
+        } catch (_) {}
+      },
+    });
+  }
+  if (!timeCtl) {
+    const host = document.getElementById("map")?.parentElement || document.body;
+    timeCtl = buildKascTimeControl(host, specs);
+  } else timeCtl.setLayers(specs);
+}
 
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
@@ -1022,6 +1059,7 @@ async function ensureEntryLoaded(entry) {
     if (seq !== renderSeq) return false;
     entry.layer = r.layer;
     entry.styleFn = r.styleFn;
+    refreshKascTime();
     entry.zoomRange = r.zoomRange;
     entry.baseOpacity = r.baseOpacity;
     entry.item._viewportQuery = r.viewportQuery;
@@ -1293,6 +1331,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   for (let i = entries.length - 1; i >= 0; i--) if (entries[i].item.type !== "3dtiles") entries[i].paneName = newKascPane();
   layerEntries = entries;
   lastBaseUrl = baseUrl;
+  // group: 行の折りたたみ初期状態(#59)。QGIS レイヤーツリーの展開状態を再現
+  applyKascGroupStates(doc.groups, expandedLayerGroups);
   renderLayerRows(entries, unsupported);
   currentUnsupported = unsupported;
   updateThemeSelect(doc.themes || []);
@@ -1326,6 +1366,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
       if (seq !== renderSeq) return;
       entry.layer = r.layer;
       entry.styleFn = r.styleFn;
+      refreshKascTime();
       entry.zoomRange = r.zoomRange;
       entry.baseOpacity = r.baseOpacity;
       item._viewportQuery = r.viewportQuery;
@@ -1883,6 +1924,7 @@ window.kasugaiApi = createPlayerApi({
     }
     const r = await addKascLayer(entry.item, lastBaseUrl, preloaded || entry.item._preloaded, entry.paneName);
     entry.layer = r.layer; entry.styleFn = r.styleFn; entry.zoomRange = r.zoomRange;
+    refreshKascTime();
     entry.baseOpacity = r.baseOpacity; entry.item._viewportQuery = r.viewportQuery;
     applyEntryVisibility(entry);
     updateMapAttribution();

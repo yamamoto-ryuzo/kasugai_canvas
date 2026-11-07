@@ -48,10 +48,16 @@ function dashMaterialProperty(color, dash) {
   return new Cesium.PolylineDashMaterialProperty({ color: toCesiumColor(color), dashPattern: pattern, dashLength: total });
 }
 
+// rgba 配列のアルファへ係数を乗算する(レイヤ透過度 opacity= 用)
+function mulAlpha(rgba, f) {
+  if (!rgba || f >= 1) return rgba;
+  return [rgba[0], rgba[1], rgba[2], (rgba.length > 3 ? rgba[3] : 1) * f];
+}
+
 // エンティティ(entity 描画経路)にコンパイル済みスタイルを適用する。
 // clamp: 地形ドレープ中か(ドレープ時はポリゴンのアウトラインが描かれないため
-// 周線を別途 polyline で引く)
-export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = null, hiddenSymbols = null } = {}) {
+// 周線を別途 polyline で引く)。opacity: レイヤ透過度(色アルファへ乗算)
+export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
   if (!style) return;
   const t = time || Cesium.JulianDate.now();
   const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
@@ -84,6 +90,8 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
         entity.billboard.scale = new Cesium.ConstantProperty(1);
         entity.billboard.verticalOrigin = new Cesium.ConstantProperty(Cesium.VerticalOrigin.CENTER);
         entity.billboard.horizontalOrigin = new Cesium.ConstantProperty(Cesium.HorizontalOrigin.CENTER);
+        // レイヤ透過度: 焼き付け済みキャンバス全体へ乗算する
+        entity.billboard.color = new Cesium.ConstantProperty(Cesium.Color.WHITE.withAlpha(opacity));
         const rot = spec.markers[0]?.rotationDeg || 0;
         if (rot) entity.billboard.rotation = new Cesium.ConstantProperty(-rot * Math.PI / 180);
         if (ddc) entity.billboard.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
@@ -96,7 +104,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
     if (hasLine) {
       if (spec.line) {
         entity.polyline.show = new Cesium.ConstantProperty(true);
-        entity.polyline.material = dashMaterialProperty(spec.line.color, spec.line.dash);
+        entity.polyline.material = dashMaterialProperty(mulAlpha(spec.line.color, opacity), spec.line.dash);
         entity.polyline.width = new Cesium.ConstantProperty(spec.line.widthPx);
         if (ddc) entity.polyline.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
       } else {
@@ -108,7 +116,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
     if (hasFill) {
       if (spec.fillParts?.length) {
         entity.polygon.show = new Cesium.ConstantProperty(true);
-        const { solidBase, tile, tileMeters } = fillPartsToTile(spec.fillParts);
+        const { solidBase, tile, tileMeters } = fillPartsToTile(spec.fillParts.map(pt => pt.solid ? { ...pt, solid: mulAlpha(pt.solid, opacity) } : pt));
         if (tile) {
           const repeat = computeFillRepeat(entity, t, tileMeters);
           entity.polygon.material = new Cesium.ImageMaterialProperty({ image: tile, repeat, transparent: true });
@@ -127,13 +135,13 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
         const ring = outlinePositions(entity, t);
         if (hasLine) {
           entity.polygon.outline = new Cesium.ConstantProperty(true);
-          entity.polygon.outlineColor = new Cesium.ConstantProperty(toCesiumColor(spec.outline.color));
+          entity.polygon.outlineColor = new Cesium.ConstantProperty(toCesiumColor(mulAlpha(spec.outline.color, opacity)));
         } else if (ring?.length) {
           if (!entity.polyline) entity.polyline = new Cesium.PolylineGraphics();
           entity.polyline.show = new Cesium.ConstantProperty(true);
           entity.polyline.positions = new Cesium.ConstantProperty(ring.concat([ring[0]]));
           entity.polyline.width = new Cesium.ConstantProperty(spec.outline.widthPx);
-          entity.polyline.material = dashMaterialProperty(spec.outline.color, spec.outline.dash);
+          entity.polyline.material = dashMaterialProperty(mulAlpha(spec.outline.color, opacity), spec.outline.dash);
           entity.polyline.clampToGround = new Cesium.ConstantProperty(clamp);
           entity.polyline.arcType = new Cesium.ConstantProperty(Cesium.ArcType.GEODESIC);
           if (clamp) {
@@ -142,7 +150,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
           if (ddc) entity.polyline.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
         } else {
           entity.polygon.outline = new Cesium.ConstantProperty(true);
-          entity.polygon.outlineColor = new Cesium.ConstantProperty(toCesiumColor(spec.outline.color));
+          entity.polygon.outlineColor = new Cesium.ConstantProperty(toCesiumColor(mulAlpha(spec.outline.color, opacity)));
         }
       } else if (spec.fillParts?.length) {
         entity.polygon.outline = new Cesium.ConstantProperty(false);
@@ -173,12 +181,14 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
         entity.label = new Cesium.LabelGraphics({
           text,
           font: labelSpec.fontCss,
-          fillColor: toCesiumColor(labelSpec.fill),
-          outlineColor: labelSpec.halo ? toCesiumColor(labelSpec.halo.color) : Cesium.Color.BLACK,
+          fillColor: toCesiumColor(mulAlpha(labelSpec.fill, opacity)),
+          outlineColor: labelSpec.halo ? toCesiumColor(mulAlpha(labelSpec.halo.color, opacity)) : Cesium.Color.BLACK,
           outlineWidth: labelSpec.halo ? labelSpec.halo.widthPx : 0,
           style: labelSpec.halo ? Cesium.LabelStyle.FILL_AND_OUTLINE : Cesium.LabelStyle.FILL,
           verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          pixelOffset: hasPoint ? new Cesium.Cartesian2(0, -12) : new Cesium.Cartesian2(0, 0),
+          pixelOffset: hasPoint
+            ? new Cesium.Cartesian2(labelSpec.offsetXPx || 0, -12 - (labelSpec.offsetYPx || 0))
+            : new Cesium.Cartesian2(labelSpec.offsetXPx || 0, -(labelSpec.offsetYPx || 0)),
         });
         if (ddc) entity.label.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
       }
@@ -226,33 +236,33 @@ function computeFillRepeat(entity, time, tileMeters) {
 // GeoJsonPrimitive(バッチ描画経路)にスタイルを適用する。
 // Buffer 系は featureId 単位で setMaterial できる。シェイプ・破線・パターンは
 // 表現できないため色・サイズ・線幅の対応のみ(フォールバック)
-export function applyQmlStyleToPrimitive(primitive, style, hiddenSymbols = null) {
+export function applyQmlStyleToPrimitive(primitive, style, hiddenSymbols = null, opacity = 1) {
   if (!style || !primitive) return;
   const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
   const materialCache = new Map();
   const matFor = (kind, spec) => {
-    const key = kind + JSON.stringify(spec);
+    const key = kind + JSON.stringify(spec) + "@" + opacity;
     let m = materialCache.get(key);
     if (!m) {
       if (kind === "point") {
         const mk = spec.markers?.[0];
         m = new Cesium.BufferPointMaterial({
-          color: toCesiumColor(mk?.fill || [0.2, 0.4, 0.9, 1]),
+          color: toCesiumColor(mulAlpha(mk?.fill || [0.2, 0.4, 0.9, 1], opacity)),
           size: Math.max(mk?.sizePx || 6, 2),
-          outlineColor: toCesiumColor(mk?.stroke || [0, 0, 0, 1]),
+          outlineColor: toCesiumColor(mulAlpha(mk?.stroke || [0, 0, 0, 1], opacity)),
           outlineWidth: mk?.stroke ? Math.max(mk.strokeWidthPx || 1, 1) : 0,
         });
       } else if (kind === "line") {
         m = new Cesium.BufferPolylineMaterial({
-          color: toCesiumColor(spec.line?.color || [0, 0, 0, 1]),
+          color: toCesiumColor(mulAlpha(spec.line?.color || [0, 0, 0, 1], opacity)),
           width: Math.max(spec.line?.widthPx || 1, 1),
         });
       } else {
         const solids = (spec.fillParts || []).filter(pt => pt.solid);
         const base = solids.length ? solids[solids.length - 1].solid : [0.5, 0.5, 0.5, 0.7];
         m = new Cesium.BufferPolygonMaterial({
-          color: toCesiumColor(base),
-          outlineColor: toCesiumColor(spec.outline?.color || base),
+          color: toCesiumColor(mulAlpha(base, opacity)),
+          outlineColor: toCesiumColor(mulAlpha(spec.outline?.color || base, opacity)),
           outlineWidth: spec.outline ? Math.max(spec.outline.widthPx || 1, 1) : 0,
         });
       }

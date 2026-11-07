@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.21.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.22.0</span></h1>
       <p><strong>AIとマルチエンジンが拓く 2D/3D GIS</strong> — ローカルPC・ブラウザ完結で動作するデータ可視化システムのドキュメント</p>
     </header>
     <main>
@@ -215,13 +215,17 @@ flowchart TB
         </div>
         <h3>QGIS連携 — エクスポート / プロジェクト再現</h3>
         <div class="features">
-          <a class="feature-card" href="qgis.html">
-            <h3>🔗 QGIS・GDAL連携</h3>
-            <p>geo_webview がプロジェクトを .kasc+DATA/（スタイル .qml 同梱）へ出力し Canvas へ登録。実装済みの再現範囲と未対応課題（Issue）</p>
+          <a class="feature-card" href="qgis-delivery.html">
+            <h3>📦 QGIS連携の利用方法</h3>
+            <p>?kasc= / ?kasc=local / project= でのエクスポート物の指定方法と、on-demand ZIP 配信（qgis: 行で Re:Earth へ直取込み）の整理 — QGIS連携の入口</p>
           </a>
-          <a class="feature-card" href="features/v7.html">
-            <h3>🧭 V7: QGIS連携</h3>
-            <p>「QGIS プロジェクトをそのまま再現する Canvas」が今後のメインテーマ。連携の流れ・エンジン別再現度・ロードマップ</p>
+          <a class="feature-card" href="qgis-policy.html">
+            <h3>🧭 QGIS・GDAL連携 — 方針・構想</h3>
+            <p>連携の基本方針・役割分担・データ3層構造・ベクター/ラスタ連携の考え方と実装ロードマップ</p>
+          </a>
+          <a class="feature-card" href="qgis.html">
+            <h3>🔗 実装済みの再現範囲</h3>
+            <p>geo_webview がプロジェクトを .kasc+DATA/（スタイル .qml 同梱）へ出力し Canvas へ登録。実装済みの再現範囲と未対応課題（Issue）</p>
           </a>
         </div>
         <h3>仕様・技術選定</h3>
@@ -233,6 +237,10 @@ flowchart TB
           <a class="feature-card" href="data.html">
             <h3>🗂️ データ形式</h3>
             <p>対応データ形式と 2D/3D データの最適フォーマット、配信・管理の考え方</p>
+          </a>
+          <a class="feature-card" href="performance.html">
+            <h3>⚡ 描画性能とデータ形式方針</h3>
+            <p>QGIS との速度比較・実行環境別の特性、規模別の既定形式（GeoJSON→FlatGeobuf→PMTiles）と整備課題</p>
           </a>
           <a class="feature-card" href="library.html">
             <h3>🧰 ライブラリ</h3>

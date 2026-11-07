@@ -47,7 +47,7 @@ function parseCamLine(parts) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], title: null, defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, title: null, defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -82,8 +82,35 @@ export function parseKasc(text) {
     }
     if (type === "theme") {
       // theme:名前 | 表示するレイヤタイトル[|タイトル…]（`*` で全表示）
-      // QGIS のマップテーマ相当の可視性プリセット。スタイルは含まない
-      doc.themes.push({ name: parts[0] || "", layers: parts.slice(1).filter(Boolean), line });
+      // QGIS のマップテーマ相当の可視性プリセット。タイトルに
+      // `;style=DATA/x.qml` が付く場合はテーマ適用時にそのレイヤーの
+      // .qml を差し替える(geo_webview がテーマの名前付きスタイルを出力)
+      const layers = [];
+      const styles = {};
+      for (const tok of parts.slice(1)) {
+        if (!tok) continue;
+        const semi = tok.indexOf(";style=");
+        if (semi >= 0) {
+          const title = tok.slice(0, semi);
+          const rel = tok.slice(semi + ";style=".length).trim();
+          layers.push(title);
+          if (title && rel) styles[normKascTitle(title)] = rel;
+        } else {
+          layers.push(tok);
+        }
+      }
+      doc.themes.push({ name: parts[0] || "", layers, styles, line });
+      continue;
+    }
+    if (type === "group") {
+      // group: パス | expanded|collapsed — レイヤ一覧の折りたたみ初期状態。
+      // geo_webview が QGIS のレイヤーツリー展開状態をそのまま出す
+      doc.groups.push({ path: parts[0] || "", collapsed: /^(collapsed|off|false)$/i.test(parts[1] || ""), line });
+      continue;
+    }
+    if (type === "terrain") {
+      // terrain: 名前 | exaggeration=N — 地形/3D Tiles の垂直誇張(#60)
+      doc.terrain = classifyParts(parts.slice(1), { type, title: parts[0] || "", url: "", line });
       continue;
     }
     if (type === "title") {
@@ -135,7 +162,24 @@ export function parseKasc(text) {
 export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
+  "group", "terrain",
 ]);
+
+// group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。
+// キー形式はエンジン側のグループセクションと同じ `<path " / " 区切り>|<regular|exclusive>`。
+// 既定は折りたたみ(Set 空)のため expanded 指定だけ add すればよいが、
+// プロジェクト再読込で前回状態が残らないよう両方向を処理する
+export function applyKascGroupStates(groups, expandedSet) {
+  for (const g of groups || []) {
+    const path = String(g.path || "").split("/").map(s => s.trim()).filter(Boolean).join(" / ");
+    if (!path) continue;
+    for (const suffix of ["regular", "exclusive"]) {
+      const key = `${path}|${suffix}`;
+      if (g.collapsed) expandedSet.delete(key);
+      else expandedSet.add(key);
+    }
+  }
+}
 
 // 縮尺表示オプション(minScale=/maxScale=) → 256px タイル系ズーム範囲。
 // geo_webview が出力する QGIS レイヤの縮尺表示(QgsMapLayer::minimumScale/
@@ -347,9 +391,114 @@ export function hostedProjectsBaseUrl(id = "default") {
   return new URL(`../projects/${encodeURIComponent(id || "default")}/`, location.href).href;
 }
 
+// ---- .zip 直読（?kasc=<zip URL>）のメンバストア ---------------------------
+// geo_webview の .kasc+DATA/ ZIP をブラウザ内で解凍し、kasczip://<id>/<path>
+// 参照を blob: URL へ変換する（geo_suite の kasczip:// と同構造）。
+const __kascZipStores = new Map();   // zipId -> Map<relPath, Blob>
+const __kascZipBlobUrls = new Map(); // "<id>/<path>" -> blob: URL（使い回し）
+const __kascZipBlobRev = new Map();  // blob: URL -> "kasczip://<id>/<path>"（相対解決用の論理URL復元）
+const JSZIP_URL = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
+
+function __fnv(s) {
+  let h = 0x811c9dc5 >>> 0;
+  for (const c of String(s)) { h ^= c.charCodeAt(0); h = (h * 0x01000193) >>> 0; }
+  return h.toString(36);
+}
+
+// kasczip:// 参照 → blob: URL。メンバ未存在時はそのまま返す（fetch が失敗する）
+function resolveKascZipRef(u) {
+  const m = /^kasczip:\/\/([A-Za-z0-9_-]+)\/(.+)$/i.exec(u || "");
+  if (!m) return u;
+  const path = decodeURIComponent(m[2]);
+  const key = m[1] + "/" + path;
+  let blobUrl = __kascZipBlobUrls.get(key);
+  if (blobUrl) return blobUrl;
+  const store = __kascZipStores.get(m[1]);
+  const blob = store ? store.get(path) : null;
+  if (!blob) return u;
+  blobUrl = URL.createObjectURL(blob);
+  __kascZipBlobUrls.set(key, blobUrl);
+  __kascZipBlobRev.set(blobUrl, `kasczip://${m[1]}/${m[2]}`);
+  return blobUrl;
+}
+
+// blob: URL が ZIP メンバ由来なら論理 kasczip:// URL を返す（無ければ null）。
+// .qml 等の「自分を基点に相対参照を解決する」リソースが blob: に変換されても
+// この論理URLを基点に子リソースのパスを組み立てられる
+export function kascZipLogicalUrl(url) {
+  return __kascZipBlobRev.get(url) || null;
+}
+
+// fetch シム: kasczip:// 参照をメンバ Blob で応答する。
+// resolveKascUrl の blob: 変換で覆い切れない消費者
+// (XYZ の {z}/{x}/{y} テンプレ、3D Tiles の相対参照など fetch 経由のもの)用。
+// ZIP が1度でも読み込まれた時点で自動的に有効になる
+let __kascZipShimInstalled = false;
+function installKascZipFetchShim() {
+  if (__kascZipShimInstalled || typeof window === "undefined" || !window.fetch) return;
+  __kascZipShimInstalled = true;
+  const origFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    const u = typeof input === "string" ? input : input?.url;
+    if (typeof u === "string" && /^kasczip:/i.test(u)) {
+      const m = /^kasczip:\/\/([A-Za-z0-9_-]+)\/(.+)$/i.exec(u);
+      const store = m && __kascZipStores.get(m[1]);
+      const blob = store && store.get(decodeURIComponent(m[2]));
+      if (blob) return Promise.resolve(new Response(blob));
+      return Promise.reject(new TypeError(`kasczip member not found: ${u}`));
+    }
+    return origFetch(input, init);
+  };
+}
+
+// .kasc+DATA/ ZIP バッファを解凍し {text, baseUrl, name} を返す。
+// メンバは __kascZipStores[zipId] に Blob で保持され、DATA/ 等の参照は
+// kasczip://<zipId>/<path> → blob: URL(resolveKascZipRef) または
+// fetch シム経由で解決される
+async function unpackKascZip(u8, kascUrl) {
+  installKascZipFetchShim();
+  const { default: JSZip } = await import(/* @vite-ignore */ JSZIP_URL);
+  const zip = await JSZip.loadAsync(u8);
+  const files = Object.values(zip.files).filter(f => !f.dir);
+  const entry = files.find(f => /(^|\/)kasugai_canvas\.kasc$/i.test(f.name))
+             || files.find(f => /\.kasc$/i.test(f.name));
+  if (!entry) throw new Error(`ZIP 内に .kasc が見つかりません: ${kascUrl}`);
+  const zipId = "z" + __fnv(kascUrl);
+  const store = new Map();
+  for (const f of files) {
+    const p = f.name.replace(/^\/+/, "");
+    if (p) store.set(p, await f.async("blob"));
+  }
+  __kascZipStores.set(zipId, store);
+  return {
+    text: await entry.async("text"),
+    baseUrl: `kasczip://${zipId}/`,
+    name: decodeURIComponent(entry.name.split("/").pop() || ""),
+  };
+}
+
+// .kasc の実体を読み込む共通入口。.zip(PK シグネチャ)ならブラウザ内で解凍し
+// kasczip:// 基準のメンバ参照へ変換する。{text, baseUrl, name} を返す。
+// エンジン側が独自に ?kasc= URL を fetch する経路はこの関数を使うと
+// ZIP 直読も透過的にサポートされる
+export async function readKascSource(kascUrl) {
+  const res = await fetch(kascUrl, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const u8 = new Uint8Array(await res.arrayBuffer());
+  if (u8.length > 4 && u8[0] === 0x50 && u8[1] === 0x4b) {
+    return unpackKascZip(u8, kascUrl);
+  }
+  return {
+    text: new TextDecoder().decode(u8),
+    baseUrl: new URL("./", kascUrl).href,
+    name: decodeURIComponent(new URL(kascUrl).pathname.split("/").pop() || ""),
+  };
+}
+
 // .kasc 内の参照を絶対 URL へ解決する。
 // 相対パスは projectBaseUrl(/projects/<id>/ または ?kasc= 用の絶対URL) 基準。
-// `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる
+// `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる。
+// projectBaseUrl が kasczip://（ZIP 直読）ならメンバを blob: URL へ変換する
 export function resolveKascUrl(url, projectBaseUrl) {
   if (!url) return url;
   // cloud:パス はローカルサーバーの rclone 連携(/api/cloud/file)へ解決する。
@@ -360,11 +509,12 @@ export function resolveKascUrl(url, projectBaseUrl) {
     const path = url.slice(6).replace(/^\/+/, "");
     return base ? `${base}/api/cloud/file?path=${encodeURIComponent(path)}` : url;
   }
+  if (/^kasczip:/i.test(url)) return resolveKascZipRef(url);
   if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url; // http/data/blob/localfs 等は素通し
   const base = /^[a-z][a-z0-9+.-]*:\/\//i.test(String(projectBaseUrl || ""))
     ? projectBaseUrl
     : new URL(String(projectBaseUrl || "./"), location.href).href;
-  return new URL(url, base).href;
+  return resolveKascZipRef(new URL(url, base).href);
 }
 
 // .kasc と同じフォルダの project.json から表示タイトルを取る。
@@ -372,7 +522,7 @@ export function resolveKascUrl(url, projectBaseUrl) {
 // 無ければ null（呼び出し側は .kasc ファイル名へフォールバックする）
 export async function fetchKascProjectTitle(baseUrl) {
   try {
-    const res = await fetch(new URL("project.json", baseUrl).href, { cache: "no-store" });
+    const res = await fetch(resolveKascUrl("project.json", baseUrl), { cache: "no-store" });
     if (!res.ok) return null;
     const title = (await res.json())?.title;
     return typeof title === "string" && title.trim() ? title.trim() : null;
@@ -408,12 +558,25 @@ async function loadKascUrl(kascParam) {
     throw e;
   }
   if (!res.ok) throw new Error(`.kasc を読み込めません: ${kascUrl} (${res.status})`);
-  const text = await res.text();
-  const baseUrl = new URL("./", kascUrl).href;
+  const u8 = new Uint8Array(await res.arrayBuffer());
+  let text;
+  let baseUrl;
+  let kascName;
+  if (u8.length > 4 && u8[0] === 0x50 && u8[1] === 0x4b) {
+    // ZIP: .kasc+DATA/ アーカイブをブラウザ内で解凍する。
+    // DATA/ 等の参照は kasczip://<id>/<path> → blob: URL で解決される
+    const src = await unpackKascZip(u8, kascUrl);
+    text = src.text;
+    baseUrl = src.baseUrl;
+    kascName = src.name;
+  } else {
+    text = new TextDecoder().decode(u8);
+    baseUrl = new URL("./", kascUrl).href;
+    kascName = decodeURIComponent(
+      new URL(kascUrl).pathname.split("/").pop() || "");
+  }
   const title = await fetchKascProjectTitle(baseUrl);
-  const name = decodeURIComponent(
-    new URL(kascUrl).pathname.split("/").pop() || "")
-    .replace(/\.kasc$/i, "") || "kasc";
+  const name = kascName.replace(/\.kasc$/i, "") || "kasc";
   let manifest = [];
   try {
     const res2 = await fetch(projectsManifestUrl(), { cache: "no-store" });

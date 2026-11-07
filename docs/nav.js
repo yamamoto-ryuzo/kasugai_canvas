@@ -5,7 +5,7 @@
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v6.21.0';
+  const VERSION = 'v6.22.0';
 
   const GROUPS = [
     {
@@ -36,15 +36,16 @@
     {
       label: 'QGIS連携 — エクスポート / プロジェクト再現',
       items: [
-        { href: 'qgis.html', text: '11. QGIS・GDAL連携（実装済みの再現範囲）' },
-        { href: 'features/v7.html', text: '12. V7: QGIS連携（テーマ）' }
+        { href: 'qgis-delivery.html', text: '11. QGIS連携の利用方法' },
+        { href: 'qgis-policy.html', text: '12. QGIS・GDAL連携（方針・構想）' },
+        { href: 'qgis.html', text: '13. 実装済みの再現範囲' }
       ]
     },
     {
       label: '仕様',
       items: [
         {
-          href: 'features.html', text: '13. 機能と実装',
+          href: 'features.html', text: '14. 機能と実装',
           children: [
             { href: 'features/v0.html', text: 'V0: システム基本構成' },
             { href: 'features/v1.html', text: 'V1: GIS 基本機能' },
@@ -61,17 +62,18 @@
     {
       label: '技術選定',
       items: [
-        { href: 'data.html', text: '14. データ形式' },
-        { href: 'library.html', text: '15. ライブラリ' },
-        { href: 'architecture.html', text: '16. システム構成' },
-        { href: 'security.html', text: '17. セキュリティ対策' }
+        { href: 'data.html', text: '15. データ形式' },
+        { href: 'performance.html', text: '16. 描画性能とデータ形式方針' },
+        { href: 'library.html', text: '17. ライブラリ' },
+        { href: 'architecture.html', text: '18. システム構成' },
+        { href: 'security.html', text: '19. セキュリティ対策' }
       ]
     },
     {
       label: '拡張・連携',
       items: [
         {
-          href: 'auth/', text: '18. 認証とプラグイン',
+          href: 'auth/', text: '20. 認証とプラグイン',
           children: [
             { href: 'auth/none.html', text: '0. 認証なし（none）' },
             { href: 'auth/local.html', text: '1. ローカル認証' },

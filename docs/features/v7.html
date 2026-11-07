@@ -15,6 +15,9 @@
     </header>
     <main>
       <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+      <p>QGIS連携の正本ドキュメントは以下に集約されています（本ページは V7 テーマの位置付け紹介）：
+      <a href="../qgis-delivery.html">QGIS連携の利用方法</a>（<code>qgis:</code> ZIP 取り込み・フォルダ参照）／
+      <a href="../qgis-policy.html">方針・構想</a>／<a href="../qgis.html">実装済みの再現範囲</a>。</p>
 
       <h2 id="v7">V7: QGIS連携</h2>
       <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現できるようにする</strong>のが V7 のテーマです。QGIS プラグイン <code>geo_webview</code>（<a href="https://github.com/yamamoto-ryuzo/qgis_live_harness" target="_blank" rel="noopener noreferrer">qgis_live_harness</a>）がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替（または静的ホスト経由で <code>?kasc=</code> 再生）します。QGIS は多様な GIS データの正本・編集・解析基盤、Canvas は最終 2D/3D 表示エンジンという役割分担です。</p>

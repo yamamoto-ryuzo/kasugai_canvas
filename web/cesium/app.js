@@ -27,7 +27,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
 import { initToolsDockUX } from "../shared/tools-dock-ux.js";
@@ -124,7 +124,8 @@ let currentKascUrl = (() => {
   try { return new URL(raw, window.location.href).href; }
   catch { return null; }
 })();
-const kascBaseUrl = () => currentKascUrl ? new URL("./", currentKascUrl).href : null;
+let kascBaseOverride = null;  // ?kasc=<zip URL> 読込時の kasczip:// 基準
+const kascBaseUrl = () => kascBaseOverride || (currentKascUrl ? new URL("./", currentKascUrl).href : null);
 let currentProjectId = currentKascUrl
   ? (decodeURIComponent(new URL(currentKascUrl).pathname.split("/").pop() || "")
       .replace(/\.kasc$/i, "") || "kasc")
@@ -376,6 +377,8 @@ async function ensureQmlStyle(item) {
     qmlStyleCache.set(item.styleUrl, promise);
   }
   item.qmlStyle = await promise;
+  // .qml の属性表示メタ(別名/非表示/列順)を属性パネルへ引き渡す(#56)
+  item.fieldMeta = item.qmlStyle?.fields || null;
   if (item.qmlStyle?.warnings?.length && !qmlStyleWarnedUrls.has(item.styleUrl)) {
     qmlStyleWarnedUrls.add(item.styleUrl);
     console.warn(`QML スタイル ${item.styleUrl}:`, item.qmlStyle.warnings.join(" / "));
@@ -576,12 +579,12 @@ function setLegendSymbolVisible(item, symbolName, visible) {
   if (style) {
     const entry = vectorDataSources.find(e => e.id === item.id);
     if (entry) {
-      try { applyQmlStyleToDataSource(entry.ds, style, { clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden }); }
+      try { applyQmlStyleToDataSource(entry.ds, style, { clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden, opacity: item.opacity ?? 1 }); }
       catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
     } else {
       const target = layerRuntimeTargets.get(item.id);
       if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
-        try { applyQmlStyleToPrimitive(target, style, item.legendHidden); }
+        try { applyQmlStyleToPrimitive(target, style, item.legendHidden, item.opacity ?? 1); }
         catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
       }
     }
@@ -925,7 +928,9 @@ function resolveProjectUrl(url) {
   if (trimmed.startsWith("/")) return trimmed;
   // ?kasc= モード: DATA/ 等の相対参照は .kasc のある URL を基準に解決する。
   // ../ 共有参照もブラウザの URL 正規化でそのまま祖先フォルダへ解決される
-  if (currentKascUrl) return new URL(trimmed, kascBaseUrl()).href;
+  // ?kasc= モード: DATA/ 等の相対参照は .kasc のある URL を基準に解決する。
+  // ZIP 直読(kasczip:// 基準)ではメンバの blob: URL へ変換される
+  if (currentKascUrl) return resolveKascUrl(trimmed, kascBaseUrl());
   let path = trimmed;
   if (path.startsWith("./")) path = path.slice(2);
   const segments = path.split("/").filter(Boolean);
@@ -1013,8 +1018,11 @@ async function loadInspectorConfig() {
       || `${projectsBaseUrl(projectId)}kasugai_canvas.kasc`;
     let text = "";
     try {
-      const response = await fetch(staticUrl, { cache: "no-store" });
-      if (response.ok) text = await response.text();
+      const src = await readKascSource(staticUrl);
+      text = src.text;
+      // ZIP 直読なら baseUrl=kasczip://<id>/ が返り、DATA/ 参照はメンバの
+      // blob: URL(resolveKascUrl 経由)または fetch シムで解決される
+      kascBaseOverride = /^kasczip:/i.test(src.baseUrl || "") ? src.baseUrl : null;
     } catch {}
     if (!text && !currentKascUrl) {
       // ?project=<.kascファイル名> は projects/ 直下に存在しない仮ID
@@ -1029,13 +1037,12 @@ async function loadInspectorConfig() {
             await lf.pickProjectDir();
             lf.installFetchShim();
           }
-          const res2 = await fetch(remembered, { cache: "no-store" });
-          if (res2.ok) {
-            text = await res2.text();
-            currentKascUrl = remembered;
-            // 仮エントリをプロジェクト一覧へ再掲する
-            void loadProjects();
-          }
+          const src2 = await readKascSource(remembered);
+          text = src2.text;
+          currentKascUrl = remembered;
+          kascBaseOverride = /^kasczip:/i.test(src2.baseUrl || "") ? src2.baseUrl : null;
+          // 仮エントリをプロジェクト一覧へ再掲する
+          void loadProjects();
         } catch {}
       }
     }
@@ -1126,6 +1133,53 @@ function applyKascTheme(theme) {
       item.sourceLine = newLine;
     }
     input.value = lines.join("\n");
+  }
+  // ;style= 付きテーマ: 対象レイヤーの .qml を差し替えて再適用
+  applyKascThemeStyles(theme, items);
+}
+
+// theme 行の `;style=` 指定でレイヤーの .qml を差し替え、描画中の
+// DataSource/Primitive へ即時再適用する。指定が無いレイヤーは
+// 元の style= 指定(item.styleUrl)へ戻す。QGIS マップテーマが記録する
+// 名前付きスタイルの再現(#63)
+async function applyKascThemeStyles(theme, items) {
+  const styles = theme?.styles || {};
+  const jobs = [];
+  for (const item of items) {
+    const key = normKascTitle(item.sourceTitle || item.title);
+    const rel = styles[key] ?? styles[key.split("/").pop()] ?? null;
+    const url = rel
+      ? new URL(rel, kascBaseUrl() || document.baseURI).href
+      : item.styleUrl;
+    if (!url || item._themeStyleUrl === url) continue;
+    item._themeStyleUrl = url;
+    jobs.push((async () => {
+      let promise = qmlStyleCache.get(url);
+      if (!promise) {
+        promise = loadQmlStyle(url, fetchStyleText).catch(() => null);
+        qmlStyleCache.set(url, promise);
+      }
+      const style = await promise;
+      if (!style || !layerState.has(item.id)) return;
+      item.qmlStyle = style;
+      const entry = vectorDataSources.find(e => e.id === item.id);
+      try {
+        if (entry) {
+          applyQmlStyleToDataSource(entry.ds, style, {
+            clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden,
+            opacity: item.opacity ?? 1 });
+        } else {
+          const target = layerRuntimeTargets.get(item.id);
+          if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive)
+            applyQmlStyleToPrimitive(target, style, item.legendHidden, item.opacity ?? 1);
+        }
+      } catch (e) { console.warn("テーマスタイルの適用に失敗:", e); }
+    })());
+  }
+  if (jobs.length) {
+    await Promise.all(jobs);
+    requestRender();
+    renderLayerList();
   }
 }
 
@@ -2904,6 +2958,7 @@ async function loadGeoPackageAsGeoJson(item) {
   if (res.qml) {
     const style = compileQmlStyle(res.qml, item.url);
     item.qmlStyle = style;
+    item.fieldMeta = style?.fields || null;
     if (style?.warnings?.length) console.warn(`GPKG 埋め込みスタイル (${item.url}):`, style.warnings.join(" / "));
   }
   return res.geojson;
@@ -3806,18 +3861,19 @@ function primitiveDrapeHeightReference(dem, tiles3d) {
 // なければ default_style: 行の既定値(地物側 simplestyle がさらに優先)を適用する
 function applyPrimitiveVectorStyle(primitive, item) {
   if (item?.qmlStyle) {
-    applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden);
+    applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden, item.opacity ?? 1);
     return;
   }
-  applyVectorDefaultStyleToPrimitive(primitive);
+  applyVectorDefaultStyleToPrimitive(primitive, item?.opacity ?? 1);
 }
 
 // default_style: 行の既定を GeoJsonPrimitive(バッチ描画)へ適用する。
 // 地物ごとに simplestyle → default_style → Cesium 既定(entity 経路と同じ既定値)の
 // 順で値を決めて Buffer マテリアルを設定する。行が1つも無ければ何もしない
-function applyVectorDefaultStyleToPrimitive(primitive) {
+function applyVectorDefaultStyleToPrimitive(primitive, layerOpacity = 1) {
   const dflt = vectorDefaultStyles;
   if (!primitive || (!dflt.point && !dflt.line && !dflt.polygon)) return;
+  const opMul = c => { if (!c || layerOpacity >= 1) return c; const cl = c.clone(); cl.alpha *= layerOpacity; return cl; };
   const markerSizes = { small: 24, medium: 48, large: 64 };
   const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
   const materialCache = new Map();
@@ -3847,7 +3903,7 @@ function applyVectorDefaultStyleToPrimitive(primitive) {
       const pinSize = markerSizes[String(p["marker-size"] || "").toLowerCase()] ?? num(p["marker-size"]) ?? (dflt.point && dflt.point.size) ?? Cesium.GeoJsonDataSource.markerSize;
       return { color, size: Math.max(Math.round(pinSize / 6), 2) };
     },
-    s => new Cesium.BufferPointMaterial({ color: s.color, size: s.size }));
+    s => new Cesium.BufferPointMaterial({ color: opMul(s.color), size: s.size }));
   applyTo(primitive.polylines, Cesium.BufferPolyline, "line",
     p => {
       const own = parseCssColor(p.stroke);
@@ -3857,7 +3913,7 @@ function applyVectorDefaultStyleToPrimitive(primitive) {
       const width = num(p["stroke-width"]) ?? (dflt.line && dflt.line.width) ?? Cesium.GeoJsonDataSource.strokeWidth;
       return { color, width: Math.max(width, 1) };
     },
-    s => new Cesium.BufferPolylineMaterial({ color: s.color, width: s.width }));
+    s => new Cesium.BufferPolylineMaterial({ color: opMul(s.color), width: s.width }));
   applyTo(primitive.polygons, Cesium.BufferPolygon, "fill",
     p => {
       const own = parseCssColor(p.fill);
@@ -3873,7 +3929,7 @@ function applyVectorDefaultStyleToPrimitive(primitive) {
         : 0;
       return { color, outline, outlineWidth };
     },
-    s => new Cesium.BufferPolygonMaterial({ color: s.color, outlineColor: s.outline, outlineWidth: s.outlineWidth }));
+    s => new Cesium.BufferPolygonMaterial({ color: opMul(s.color), outlineColor: opMul(s.outline), outlineWidth: s.outlineWidth }));
 }
 
 // GeoJSON を GeoJsonPrimitive(entity を介さないバッチ描画)として scene に追加する。
@@ -5210,6 +5266,36 @@ function applyInspector(text) {
       inspectorThemes.push({ name: parts[0] || "", layers: parts.slice(1).filter(Boolean), line });
     }
 
+    // group: グループパス( / 区切り) | expanded|collapsed —
+    // QGIS レイヤーツリーの折りたたみ初期状態(geo_webview 出力)。#59
+    if (type === "group") {
+      const parts = value.split("|").map(part => part.trim());
+      const gpath = String(parts[0] || "").split("/").map(s => s.trim()).filter(Boolean).join(" / ");
+      if (gpath) {
+        const collapsed = /^(collapsed|off|false)$/i.test(parts[1] || "");
+        for (const suffix of ["regular", "exclusive"]) {
+          const key = `${gpath}|${suffix}`;
+          if (collapsed) expandedLayerGroups.delete(key);
+          else expandedLayerGroups.add(key);
+        }
+      }
+    }
+
+    // terrain: 名前 | exaggeration=N — 地形/3D Tiles の垂直誇張(#60)
+    if (type === "terrain") {
+      value.split("|").map(part => part.trim()).forEach(part => {
+        const m = /^exaggeration\s*=\s*(.+)$/i.exec(part);
+        if (!m) return;
+        const v = Number(m[1]);
+        if (!Number.isFinite(v) || v < 0) return;
+        try {
+          viewer.scene.verticalExaggeration = v;
+          const inp = document.querySelector("#terrain-exaggeration");
+          if (inp) inp.value = String(v);
+        } catch (_) { /* 古い Cesium では未対応 */ }
+      });
+    }
+
     // cloud: リモート名 | ルートフォルダ(パス or フォルダURL・省略可) | perm=write | drive=K | off
     // → ローカルサーバー版では /api/cloud/serve を呼び rclone 接続を自動実行する。
     // .kasc に書いておけば起動時(プロジェクト読み込み)に自動接続される。
@@ -5489,6 +5575,12 @@ function applyInspector(text) {
         if (timeEndOpt) item.timeEndField = timeEndOpt.slice(timeEndOpt.indexOf("=") + 1).trim();
         const timeSpanOpt = parts.find(part => /^(?:time_?span|timespan)\s*=\s*\S/i.test(part));
         if (timeSpanOpt) item.timeSpan = parseTimeSpanMs(timeSpanOpt.slice(timeSpanOpt.indexOf("=") + 1).trim());
+        // opacity=0-1: レイヤ透過度。QML/既定スタイルのアルファへ乗算する(#58)
+        const opacityOpt = parts.find(part => /^opacity\s*=\s*\S/i.test(part));
+        if (opacityOpt) {
+          const n = Number(opacityOpt.slice(opacityOpt.indexOf("=") + 1).trim());
+          if (Number.isFinite(n)) item.opacity = Math.max(0, Math.min(1, n));
+        }
         // wfs: 等の key=value オプション(typename=/version=/maxfeatures=/cql_filter= 等)を
         // 汎用に opts マップへ保持する。render=/attr=/style=/table= は既に専用フィールドへ
         if (["wfs", "kml", "kmz", "shp", "shapefile", "csv", "tsv"].includes(type)) {
@@ -5577,6 +5669,7 @@ function applyInspector(text) {
         else if (key === "time" && raw) item.timeField = raw;
         else if ((key === "timeend" || key === "time_end") && raw) item.timeEndField = raw;
         else if ((key === "timespan" || key === "time_span") && raw) item.timeSpan = parseTimeSpanMs(raw);
+        else if (key === "opacity" && Number.isFinite(number)) item.opacity = Math.max(0, Math.min(1, number));
         // style=QML URL: QGIS レイヤースタイル(.qml)を取得して描画に適用する
         else if ((key === "style" || key === "qml") && raw) item.styleUrl = resolveProjectUrl(raw);
       });
@@ -8212,6 +8305,7 @@ function setupEvents() {
     } else {
       // 実プロジェクトの選択は ?kasc= 直読みモードを抜ける
       currentKascUrl = null;
+      kascBaseOverride = null;
       if (currentProjectId) params.set("project", currentProjectId);
       else params.delete("project");
       params.delete("kasc");

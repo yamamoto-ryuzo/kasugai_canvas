@@ -13,7 +13,8 @@ import ClusterSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Cluste
 import StaticSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/ImageStatic.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay, kascScaleResRange } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates } from "../shared/kasc.js";
+import { kascTimeSpec, collectTimeValues, featureInTime, buildKascTimeControl } from "../shared/kasc-time.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
@@ -479,6 +480,8 @@ async function buildLayer(item, baseUrl, preloaded) {
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
     if (!wantHeat) layer.setStyle(wantCluster ? clusterStyleFn(baseStyleFn) : baseStyleFn);
+    // opacity=(0-1): レイヤ透過度。ベクター描画にも適用する(#58)
+    if (item.opts?.opacity !== undefined) layer.setOpacity(Number(item.opts.opacity));
     applyScaleRes(layer, item);
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
     return layer;
@@ -801,6 +804,40 @@ function buildLayerRow(entry, exclusive, radioName) {
 }
 
 const expandedLayerGroups = new Set();
+let timeCtl = null;
+
+// time=/time_end= オプション付きレイヤを収集して時刻スライダーを構築する(#57)。
+// スタイル関数をラップし、時刻外の地物へ null を返して非表示にする。
+function refreshKascTime() {
+  const specs = [];
+  for (const e of layerEntries || []) {
+    const spec = kascTimeSpec(e.item);
+    if (!spec || !e.layer || typeof e.layer.setStyle !== "function"
+        || typeof e.layer.getStyle !== "function") continue;
+    const values = collectTimeValues(e.item._geojson, spec);
+    if (!values.length) continue;
+    specs.push({
+      label: e.item.title, spec, values,
+      apply: t => {
+        try {
+          if (!e._timeBaseStyle) e._timeBaseStyle = e.layer.getStyle();
+          const base = e._timeBaseStyle;
+          e.layer.setStyle(t == null ? base : f => {
+            const inner = f.get?.("features");
+            const ok = (inner && inner.length ? inner : [f]).some(x =>
+              featureInTime(x.getProperties ? x.getProperties()
+                : (x.properties || {}), spec, t));
+            return ok ? (typeof base === "function" ? base(f) : base) : null;
+          });
+        } catch (_) {}
+      },
+    });
+  }
+  if (!timeCtl) {
+    const host = document.getElementById("map")?.parentElement || document.body;
+    timeCtl = buildKascTimeControl(host, specs);
+  } else timeCtl.setLayers(specs);
+}
 
 function renderLayerRows(entries, unsupported) {
   panel.layers.innerHTML = "";
@@ -925,6 +962,7 @@ function syncRowStatus(entry) {
 // 該当なしなら最前面(末尾)へ追加
 function insertEntryLayer(entry, index) {
   const layer = entry.layer;
+  refreshKascTime();
   const z = entry.item.type === "xyz" || entry.item.type === "tile" ? 1 : 2;
   layer.setZIndex(z);
   layer.setVisible(entry.item.visible);
@@ -1221,6 +1259,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }));
   layerEntries = entries;
   lastBaseUrl = baseUrl;
+  // group: 行の折りたたみ初期状態(#59)。QGIS レイヤーツリーの展開状態を再現
+  applyKascGroupStates(doc.groups, expandedLayerGroups);
   renderLayerRows(entries, unsupported);
   currentUnsupported = unsupported;
   updateThemeSelect(doc.themes || []);
