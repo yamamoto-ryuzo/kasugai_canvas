@@ -281,6 +281,11 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
         if (labelSpec.minFeatureSizePx && (hasLine || hasFill)) {
           if (entityExtentDiagMeters(entity, t) < labelSpec.minFeatureSizePx * LABEL_M_PER_PX) showLabel = false;
         }
+        // fitInsidePolygon: ラベルが地物内に収まらない場合は描画しない(近似)
+        if (showLabel && pl.fitInsidePolygon && hasFill) {
+          const textW = String(text).length * (labelSpec.sizePx || 12) * 0.62 * LABEL_M_PER_PX;
+          if (entityExtentDiagMeters(entity, t) < textW) showLabel = false;
+        }
         if (showLabel) {
           const anchorPos = entity.position ? entity.position.getValue(t) : null;
           // 位置決定: DD PositionX/Y > ライン中点 > ポリゴン内部点 > 重心
@@ -291,6 +296,9 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
             labelPos = polylineMidpoint(entity, t)?.position || entityCentroid(entity, t);
           } else if (hasFill && (pl.centroidInside || pl.fitInsidePolygon)) {
             labelPos = pointInsidePolygon(entity, t) || entityCentroid(entity, t);
+          } else if (hasFill && labelSpec.largestPartOnly) {
+            // マルチパート最大パートのみ: 最大面積パートの重心を選ぶ
+            labelPos = largestPartCentroid(entity, t) || entityCentroid(entity, t);
           } else if (!entity.position && (hasLine || hasFill)) {
             labelPos = entityCentroid(entity, t);
           }
@@ -381,6 +389,30 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
   }
   // declutter 用にラベル spec を退避
   ds._qmlLabels = [...labelCandidates.values()];
+}
+
+// マルチポリゴン entity の最大面積パートの重心を返す(labelPerPart=0 近似)
+function largestPartCentroid(entity, t) {
+  try {
+    const h = entity.polygon?.hierarchy?.getValue?.(t);
+    const parts = Array.isArray(h) ? h : (h ? [h] : []);
+    if (parts.length < 2) return null;
+    let best = null, bestArea = -1;
+    for (const p of parts) {
+      const pos = p.positions || p;
+      if (!pos?.length) continue;
+      // 面積近似: 経度×緯度のシューレース
+      let area = 0, cx = 0, cy = 0, n = 0;
+      for (let i = 0; i < pos.length; i++) {
+        const c1 = Cesium.Cartographic.fromCartesian(pos[i]);
+        const c2 = Cesium.Cartographic.fromCartesian(pos[(i + 1) % pos.length]);
+        area += c1.longitude * c2.latitude - c2.longitude * c1.latitude;
+        cx += c1.longitude; cy += c1.latitude; n++;
+      }
+      if (Math.abs(area) > bestArea && n) { bestArea = Math.abs(area); best = Cesium.Cartesian3.fromRadians(cx / n, cy / n); }
+    }
+    return best;
+  } catch (e) { return null; }
 }
 
 // ---------------------------------------------------------------------------

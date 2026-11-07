@@ -334,7 +334,7 @@ export function olQmlStyleFunction(compiled, OL) {
             stroke: labelSpec.halo
               ? new Stroke({ color: rgbaToCss(labelSpec.halo.color), width: Math.max(Number(labelSpec.halo.widthPx) || 1, 1) })
               : undefined,
-            overflow: true,
+            overflow: !pl.fitInsidePolygon,
             placement: isLine ? "line" : "point",
             repeat: isLine && pl.repeatDistancePx ? pl.repeatDistancePx : undefined,
             rotation: pl.rotationDeg ? -pl.rotationDeg * Math.PI / 180 : 0,

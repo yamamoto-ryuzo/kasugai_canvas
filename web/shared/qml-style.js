@@ -1457,6 +1457,10 @@ function parseLabelRendering(rd, warnings) {
     zIndex: Number(g("zIndex")) || 0,
     displayAll: String(g("displayAll") ?? "0") === "1",
     allowDegraded: String(g("allowDegradedPlacement") ?? "0") === "1",
+    // 新形式(QGIS 3.4x): 地物オプション側にも書かれる属性をここでも拾う
+    fitInsidePolygon: String(g("fitInsidePolygon") ?? "0") === "1",
+    labelPerPartFlag: String(g("labelPerPart") ?? "1") !== "0",
+    multipartMode: String(g("multipartMode") || "").toLowerCase() || null,
     // QGIS 3.44+ の「重なったラベル」モード:
     // 0=重なりを禁止, 1=無条件で許可, 2=ペナルティなしで許可, 3=必要なら許可。
     // ペナルティ段階は近似として 1・2→displayAll、3→allowDegraded に写像する
@@ -1768,6 +1772,11 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   if (spec.textOrientation === "rotation-based") {
     warnOnce(warnings, "回転ベースの縦書きは水平で代替します");
   }
+  // 地物オプション側(rendering)にも書かれる属性を placement へ正規化する
+  spec.placement.fitInsidePolygon = !!(spec.placement.fitInsidePolygon || r.fitInsidePolygon);
+  // マルチパート: multipartMode または labelPerPart=0 → 最大パートのみ
+  spec.largestPartOnly = (r.multipartMode || "").includes("largest")
+    || (rd && String(rd.getAttribute("labelPerPart")) === "0") || false;
   if (qgisBool(a("allowHtml"))) warnOnce(warnings, "HTML 書式ラベルは未対応です(テキスト表示に限定)");
   if (a("tabStops")) warnOnce(warnings, "タブストップ付きラベルは未対応です");
   if (a("fontSizeMapUnitScale") && String(a("fontSizeMapUnitScale")) !== "3x:0,0,0,0,0,0") {
