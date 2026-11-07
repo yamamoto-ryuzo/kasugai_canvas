@@ -961,6 +961,8 @@ function resolveLineLayer(layer, props, warnings) {
       return { color, widthPx: Math.max(widthPx, 1), dash };
     }
     case "MarkerLine":
+    // QGIS のハッシュ線(崖線・鉄道等の刻み)は "HashLine"、"HashedLine" は手書き・改名済みファイル用
+    case "HashLine":
     case "HashedLine":
     case "InterpolatedLine":
     case "Lineburst":
@@ -973,9 +975,16 @@ function resolveLineLayer(layer, props, warnings) {
         const sub = resolveMarkerLayerForLine(layer.subSymbol, props);
         color = sub;
       }
-      const widthPx = Math.max(sizeToPx(p.line_width ?? p.width ?? 0.26, widthUnit), 1);
+      let widthPx = sizeToPx(p.line_width ?? p.width ?? 0, widthUnit);
+      if (!widthPx && layer.subSymbol) {
+        // HashLine 等は刻みストロークがサブシンボル(SimpleLine)側にある
+        for (const l of layer.subSymbol.layers || []) {
+          const w = sizeToPx(l.props?.line_width ?? 0, l.props?.line_width_unit || "MM");
+          if (w > 0) { widthPx = w; break; }
+        }
+      }
       warnOnce(warnings, `ラインシンボル ${layer.cls} は単色ラインに近似しています`);
-      return { color: color || [0, 0, 0, 1], widthPx, dash: null };
+      return { color: color || [0, 0, 0, 1], widthPx: Math.max(widthPx || sizeToPx(0.26, "MM"), 1), dash: null };
     }
     case "GeometryGenerator":
       warnOnce(warnings, "GeometryGenerator ラインは未対応です(スキップ)");
@@ -988,7 +997,7 @@ function resolveLineLayer(layer, props, warnings) {
 
 function resolveMarkerLayerForLine(symbol, props) {
   for (const l of symbol?.layers || []) {
-    const c = parseQgisColor(l.props?.color, null);
+    const c = parseQgisColor(l.props?.color ?? l.props?.line_color, null);
     if (c) return c;
   }
   return null;
