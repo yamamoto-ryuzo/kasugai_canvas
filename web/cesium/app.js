@@ -20,7 +20,7 @@ import {
 } from "../shared/backend.js";
 import { buildViewUrl } from "../shared/kasc.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
-import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive } from "./qml-render.js";
+import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive, declutterAllLabels, installLabelDeclutter } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
@@ -379,6 +379,9 @@ async function ensureQmlStyle(item) {
   item.qmlStyle = await promise;
   // .qml の属性表示メタ(別名/非表示/列順)を属性パネルへ引き渡す(#56)
   item.fieldMeta = item.qmlStyle?.fields || null;
+  // QML レンダラ由来のクラスタ/ヒートマップを既存描画経路へ配線
+  if (!item.cluster && item.qmlStyle?.cluster?.kind === "cluster") item.cluster = true;
+  if (!item.heat && item.qmlStyle?.heatmap) item.heat = true;
   if (item.qmlStyle?.warnings?.length && !qmlStyleWarnedUrls.has(item.styleUrl)) {
     qmlStyleWarnedUrls.add(item.styleUrl);
     console.warn(`QML スタイル ${item.styleUrl}:`, item.qmlStyle.warnings.join(" / "));
@@ -4038,11 +4041,11 @@ function applyDefaultPolygonOutline(entity, polygonDflt, clamp, time) {
 // cluster=on: 点 entity を件数バッジのピンでクラスタ表示する。
 // 点以外の entity(billboard なし)はクラスタ対象外としてそのまま残る
 let vectorPinBuilder = null;
-function enableLayerClustering(ds) {
+function enableLayerClustering(ds, pixelRange = 56) {
   if (!vectorPinBuilder) vectorPinBuilder = new Cesium.PinBuilder();
   const pinBuilder = vectorPinBuilder;
   ds.clustering.enabled = true;
-  ds.clustering.pixelRange = 56;
+  ds.clustering.pixelRange = Math.max(pixelRange || 56, 5);
   ds.clustering.minimumClusterSize = 2;
   ds.clustering.clusterEvent.addEventListener((clusteredEntities, cluster) => {
     const n = clusteredEntities.length;
@@ -4559,11 +4562,20 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
   // style= の QML スタイルがあれば entity 単位で適用する(失敗しても通常描画は維持)
   if (item?.qmlStyle) {
     item._qmlClamp = clamp;
-    try { applyQmlStyleToDataSource(ds, item.qmlStyle, { clamp, hiddenSymbols: item.legendHidden }); }
+    try {
+      applyQmlStyleToDataSource(ds, item.qmlStyle, { clamp, hiddenSymbols: item.legendHidden });
+      // QGIS の「重なったラベルを隠す」相当の衝突回避。カメラ停止時に再計算する
+      if (ds._qmlLabels?.length) {
+        installLabelDeclutter(viewer.scene, () => vectorDataSources.map(e => e.ds).filter(Boolean));
+        setTimeout(() => { try { declutterAllLabels(viewer.scene, vectorDataSources.map(e => e.ds).filter(Boolean)); } catch (_) {} }, 700);
+      }
+    }
     catch (error) { console.warn(`QML スタイルの適用に失敗しました: ${item.styleUrl || ""}`, error); }
   }
-  // cluster=on: 点を含むレイヤーのみクラスタを有効化する
-  if (item?.cluster && geoJsonHasPoints(source)) enableLayerClustering(ds);
+  // cluster=on または QML pointCluster: 点を含むレイヤーのみクラスタを有効化する
+  if ((item?.cluster || item?.qmlStyle?.cluster?.kind === "cluster") && geoJsonHasPoints(source)) {
+    enableLayerClustering(ds, item?.qmlStyle?.cluster?.distancePx);
+  }
   // time=<プロパティ>: 時系列レイヤー登録(タイムスライダー連動)
   if (item?.timeField) registerTimeLayer(item, ds);
   return ds;

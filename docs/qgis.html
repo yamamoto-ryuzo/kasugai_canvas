@@ -160,10 +160,35 @@
       <code>style=DATA/&lt;slug&gt;.qml</code> で参照。<code>&lt;renderer-v2&gt;</code>
       の単一・分類（categorizedSymbol）・段階（graduatedSymbol）・ルール（RuleBased・
       式サブセット評価）レンダラをコンパイルして適用。シンボルレイヤ
-      （マーカー/SVG・フォント/ラスタ・ライン実線破線・塗りつぶし・
-      ハッチ/ドット/画像パターン）・データ定義プロパティ・
+      （マーカー/SVG・フォント/ラスタ・ライン実線破線＋結合部/端部/オフセット・
+      塗りつぶし・ハッチ/ドット/画像パターン）・データ定義プロパティ・
+      シンボルレイヤのブレンドモード/ペイントエフェクト
+      （blur/dropShadow/glow/innerGlow/colourize/transform の近似）・
+      heatmapRenderer（OpenLayers/MapLibre/Cesium でネイティブまたは
+      heatmap.js 近似）・pointCluster（OL/MapLibre/Cesium のクラスタ）・
       <code>&lt;labeling&gt;</code> ラベル・縮尺依存ルール・
       <code>is_layer_visible()</code> に対応</td>
+      </tr>
+      <tr>
+      <td>ラベル（<code>&lt;labeling&gt;</code>）</td>
+      <td>テキスト（フィールド/式）・フォント（サイズ/太字/斜体/下線/取り消し線/
+      字間・単語間・大文字化・縦書き※DOM 系）・色・透明度・バッファ（ハロー）・
+      配置（モード/quadOffset/距離/オフセット/回転/リピート距離/centroidInside・
+      fitInsidePolygon/ライン追従・曲線は中点回転で近似）・<code>&lt;rendering&gt;</code>
+      （縮尺表示/上限数＋優先度・zIndex/最小地物サイズ/障害物係数/
+      displayAll→重なり許容/upsidedownLabels/折返し文字・行長/方向記号/
+      数値フォーマット）・<code>&lt;dd_properties&gt;</code> ラベル DD
+      （Show/Size/Color/Bold/回転/OffsetXY/PositionX,Y 等）・ラベル背景（矩形/楕円・
+      塗り/枠線）・コールアウト（Cesium で引き出し線）。<br>
+      <strong>重なり禁止</strong>: MapLibre=<code>text-allow-overlap:false</code>
+      （displayAll/allowDegraded 時は true）、OpenLayers=<code>declutter:true</code>、
+      Cesium=画面投影ベースの自前 declutter（priority/zIndex 順＋
+      predefinedPositionOrder 順位付き位置への自動移動。カメラ停止時に再計算）、
+      Leaflet=DOM 矩形衝突判定で非表示。<br>
+      未対応/近似: ジオメトリジェネレータ・ラベルマスクは不透明背景近似・
+      ドロップシャドウは Cesium/Leaflet でオフセット近似・
+      MarkerLine/HashLine/ArrowLine の形状は OpenLayers のみ形状再現
+      （他エンジンは単色近似）・シンボルレベルの地物横断描画順は近似</td>
       </tr>
       <tr>
       <td>シンボルが参照する画像（SVG/ラスタ）</td>
@@ -190,10 +215,14 @@
       </tbody>
       </table>
       <p>エンジン別の QML 再現度:
-      <strong>Cesium</strong>=完全対応（entity/primitive 両経路・ドレープ・ラベル）、
-      <strong>MapLibre</strong>=スタイルレイヤ化＋ラベルベイク、
-      <strong>OpenLayers</strong>=styleFunction、
-      <strong>Leaflet</strong>=Path options＋tooltip ラベル、
+      <strong>Cesium</strong>=完全対応（entity/primitive 両経路・ドレープ・ラベル。
+      ラベル衝突回避はエンジンに機能がなく未再現）、
+      <strong>MapLibre</strong>=スタイルレイヤ化＋ラベルベイク＋衝突回避
+      （text-allow-overlap/keep-upright/sort-key/spacing/配置モード別 symbol レイヤ）、
+      <strong>OpenLayers</strong>=styleFunction＋declutter 衝突回避＋ライン配置/
+      ラベル背景/縮尺・最小地物サイズゲート、
+      <strong>Leaflet</strong>=Path options＋tooltip ラベル（DOM 装飾: 下線・
+      字間・行間・背景・縦書き・回転・縮尺連動）、
       <strong>Navara</strong>=代表地物のスタイルをレイヤー単位マテリアルへ、
       <strong>GSI Maps</strong>=未対応（凡例スウォッチのみ）。</p>
       <h3 id="連携の起動経路">連携の起動経路</h3>

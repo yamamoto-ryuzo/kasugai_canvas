@@ -136,16 +136,71 @@ function syncLeafletLabel(sub) {
   if (!st) return;
   const el = qmlLabelElement(st.item._qml, st.feature.properties || {});
   if (el) {
-    if (sub.getTooltip()) sub.setTooltipContent(el);
-    else sub.bindTooltip(el, { permanent: true, direction: "center", className: "kasc-label", interactive: false });
-  } else if (sub.getTooltip()) {
-    sub.unbindTooltip();
+    const spec = el._kascLabelSpec || {};
+    const [ox, oy] = spec.pixelOffsetOf ? spec.pixelOffsetOf() : [0, 0];
+    // 縮尺表示 → zoom 範囲へ変換して保持(zoomend で表示切替)
+    st.zoomRange = spec.labelScale ? labelScaleToZoomRange(spec.labelScale) : null;
+    st.spec = spec;
+    const opts = {
+      permanent: true, direction: "center", className: "kasc-label",
+      interactive: false, offset: [ox, oy],
+    };
+    if (sub.getTooltip()) {
+      const cur = sub.getTooltip();
+      if (Math.abs((cur.options.offset?.[0] || 0) - ox) > 0.5 || Math.abs((cur.options.offset?.[1] || 0) - oy) > 0.5) {
+        sub.unbindTooltip(); sub.bindTooltip(el, opts);
+      } else sub.setTooltipContent(el);
+    } else sub.bindTooltip(el, opts);
+  } else {
+    st.zoomRange = null;
+    if (sub.getTooltip()) sub.unbindTooltip();
   }
 }
+// ラベル縮尺分母 → Leaflet zoom 範囲
+function labelScaleToZoomRange(ls) {
+  const lat = map.getCenter()?.lat || 0;
+  return {
+    minZoom: ls.maxScale ? resToZoom(ls.maxScale * 0.00028, lat) : 0,
+    maxZoom: ls.minScale ? resToZoom(ls.minScale * 0.00028, lat) : 99,
+  };
+}
+// 縮尺表示範囲外のラベルは DOM クラスで隠す。あわせて DOM 矩形の重なりを
+// 検出して衝突したラベルを隠す(QGIS の「重なったラベルを隠す」近似。
+// displayAll/allowOverlap は対象外)
+function syncLabelZoomVisibility() {
+  const z = map.getZoom();
+  const candidates = [];
+  for (const entry of layerEntries) {
+    entry.layer?.eachLayer?.(sub => {
+      const st = sub._kascLabel;
+      const tipEl = sub.getTooltip?.()?.getElement?.();
+      if (!st || !tipEl) return;
+      const r = st.zoomRange;
+      const outOfRange = !!r && (z < r.minZoom || z > r.maxZoom);
+      tipEl.classList.toggle("kasc-label-hidden", outOfRange);
+      const spec = st.spec || {};
+      if (!outOfRange && !(spec.allowOverlap || spec.displayAll)) {
+        candidates.push({ tipEl, prio: (spec.zIndex || 0) * 100 + (spec.priority || 0) });
+      }
+    });
+  }
+  // 衝突回避: 優先度順に矩形を確保し、重なったものを隠す
+  candidates.sort((a, b) => b.prio - a.prio);
+  const placed = [];
+  for (const c of candidates) {
+    const r = c.tipEl.getBoundingClientRect();
+    const hit = placed.some(b => r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top);
+    c.tipEl.classList.toggle("kasc-label-hidden", hit);
+    if (!hit) placed.push(r);
+  }
+}
+map.on("zoomend", syncLabelZoomVisibility);
+map.on("moveend", syncLabelZoomVisibility);
 function refreshQmlLabels() {
   for (const entry of layerEntries) {
     entry.layer?.eachLayer?.(sub => { if (sub._kascLabel) syncLeafletLabel(sub); });
   }
+  syncLabelZoomVisibility();
 }
 let currentBaseEntries = [];
 let lastBaseUrl = "";

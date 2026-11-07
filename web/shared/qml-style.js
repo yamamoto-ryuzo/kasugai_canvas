@@ -114,10 +114,86 @@ function optionMap(containerEl) {
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 
-// <data_defined_properties> → { propName: {active, expression, field, type} }
+// QGIS ブレンドモード(QgsPainting::BlendingMode) → canvas の
+// globalCompositeOperation。近似できないものは null(通常合成)
+const BLEND_TO_COMPOSITE = {
+  0: null, 1: "lighter", 2: "screen", 3: "lighter", 4: "lighter",
+  5: "darken", 6: "multiply", 7: "color-burn", 8: "overlay",
+  9: "soft-light", 10: "hard-light", 11: "difference", 12: "lighter",
+  13: "source-over", 14: "destination-over", 15: "destination-out",
+  16: "source-in", 17: "destination-in", 18: "destination-out",
+  19: "source-atop", 20: "destination-atop", 21: "xor", 22: "lighter",
+};
+
+function qgisBlendToComposite(v) {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return BLEND_TO_COMPOSITE[n] ?? null;
+}
+
+// <Option name="effects"> のペイントエフェクトスタックを正規化する。
+// 実装可能なもの: drawSource/blur/dropShadow/glow/innerGlow/innerShadow/
+// colourize/transform。それ以外は呼び出し側で警告する
+function parsePaintEffects(props) {
+  const raw = props?.effects ?? props?.paintEffect ?? null;
+  if (!raw || typeof raw !== "object") return null;
+  const list = Array.isArray(raw) ? raw : Object.values(raw);
+  const out = [];
+  for (const e of list) {
+    if (!e || typeof e !== "object") continue;
+    if (String(e.enabled ?? "1") === "0") continue;
+    out.push(e);
+  }
+  return out.length ? out : null;
+}
+
+// <colorramp type="gradient|random|preset|cpt-city"> → [{offset, rgba}]
+// gradient は color1/color2 + "stops"("0.25;r,g,b,a;0.75;r,g,b,a")、
+// それ以外はランプ内の <Option type="List"> を順に拾う
+function parseColorRamp(rampEl) {
+  const stops = [];
+  if (!rampEl) return null;
+  const add = (offset, v) => {
+    const c = parseQgisColor(v, null);
+    if (c) stops.push({ offset: Math.min(Math.max(offset, 0), 1), color: c });
+  };
+  if (rampEl.tagName === "colorramp") {
+    const props = optionMap(rampEl);
+    if (props.color1) add(0, props.color1);
+    if (props.color2) add(1, props.color2);
+    // "0.25;r,g,b,a;0.75;r,g,b,a" 形式(カンマ入り色のため2要素ずつ結合)
+    const rawStops = String(props.stops || "").split(";");
+    for (let i = 0; i + 1 < rawStops.length; i += 2) {
+      const off = Number(rawStops[i]);
+      if (Number.isFinite(off)) add(off, rawStops[i + 1]);
+    }
+    for (const [k, v] of Object.entries(props)) {
+      const m = /^stop_(\d+)$/.exec(k) || /^color_(\d+)$/.exec(k);
+      if (m && typeof v === "string" && v.includes(",")) {
+        const [r, g, b, a] = v.split(",");
+        add(Number(m[1]) / 100, `${r},${g},${b}${a ? "," + a : ""}`);
+      }
+    }
+  } else {
+    // <Option> ツリー直接渡し or リスト内ランプ
+    for (const o of rampEl.querySelectorAll?.("Option") || []) {
+      const n = o.getAttribute("name") || "";
+      if (/^stop_/.test(n)) add(Number(n.slice(5)) / 100, o.getAttribute("value") || o.textContent);
+    }
+  }
+  stops.sort((a, b) => a.offset - b.offset);
+  return stops.length ? stops : null;
+}
+
+// <data_defined_properties>/<dd_properties> → { propName: {active, expression, field, type} }
+// QML は <Option name="properties" type="Map"> 内に各プロパティを持つため
+// その層へも潜る
 function parseDataDefined(symbolOrLayerEl) {
-  const container = [...(symbolOrLayerEl?.children || [])].find(c => c.tagName === "data_defined_properties");
-  const map = optionMap(container);
+  const container = [...(symbolOrLayerEl?.children || [])].find(c =>
+    c.tagName === "data_defined_properties" || c.tagName === "dd_properties");
+  let map = optionMap(container);
+  if (map.properties && typeof map.properties === "object") map = map.properties;
   const out = {};
   for (const [name, def] of Object.entries(map)) {
     if (!def || typeof def !== "object") continue;
@@ -533,6 +609,9 @@ function parseSymbolEl(symbolEl) {
       props,
       dd: parseDataDefined(layerEl),
       subSymbol,
+      // シンボルレイヤの合成モードとペイントエフェクト(#58)
+      blend: qgisBlendToComposite(layerEl.getAttribute("blend_mode") ?? props.blend_mode ?? props.blendMode),
+      effects: parsePaintEffects(props),
     });
   }
   layers.sort((a, b) => a.pass - b.pass);
@@ -701,12 +780,52 @@ function compileRenderer(rendererEl, warnings) {
       warnOnce(warnings, "invertedPolygonRenderer は近似描画です(外側シンボルを全面適用)");
       return { evaluate: () => (name ? [name] : []), ...ctx };
     }
-    case "heatmapRenderer":
+    case "heatmapRenderer": {
+      // ヒートマップ: 半径・重み式・カラーランプを spec として保持し、
+      // 対応エンジン(OpenLayers/MapLibre)ではネイティブヒートマップを使う
+      const ramp = parseColorRamp([...rendererEl.children].find(c => c.tagName === "colorramp"));
+      const heatmap = {
+        radiusPx: Math.max(sizeToPx(rendererEl.getAttribute("radius") ?? 10, rendererEl.getAttribute("radius_unit") || "MM"), 1),
+        weightFn: rendererEl.getAttribute("weight_expression") ? compileExpr(rendererEl.getAttribute("weight_expression")) : null,
+        maxValue: Number(rendererEl.getAttribute("maximum_value")) || 0,
+        ramp,
+        quality: Number(rendererEl.getAttribute("quality")) || 0,
+      };
+      warnOnce(warnings, "heatmapRenderer は対応エンジンのみネイティブ描画です(未対応エンジンは点シンボルで近似)");
+      // ヒートマップ非対応エンジン用のフォールバック点シンボル
+      const fbName = "__kasc_heatmap_default__";
+      if (!symbols.has(fbName)) {
+        symbols.set(fbName, {
+          name: fbName, geomType: "marker", alpha: 1, dd: {},
+          layers: [{
+            cls: "SimpleMarker", enabled: true, locked: false, pass: 0, dd: {}, subSymbol: null,
+            props: { name: "circle", size: "2", size_unit: "MM", color: "58,123,213,178", outline_color: "44,94,168,255" },
+          }],
+        });
+      }
+      return { evaluate: () => [fbName], ...ctx, unsupported: true, heatmap };
+    }
+    case "pointCluster":
+    case "pointDisplacement": {
+      // クラスタ/変位: 内側レンダラのシンボルを引き継ぎ、対応エンジンは
+      // ネイティブのクラスタ表示を使う(OpenLayers/MapLibre)
+      const inner = [...rendererEl.children].find(c => c.tagName === "renderer-v2");
+      const compiledInner = inner ? compileRenderer(inner, warnings) : null;
+      const cluster = {
+        kind: type === "pointCluster" ? "cluster" : "displacement",
+        distancePx: sizeToPx(rendererEl.getAttribute("distance") ?? 2, rendererEl.getAttribute("distance_unit") || "MM") || 30,
+        ringStyle: String(rendererEl.getAttribute("point_displacement_renderer") ?? ""),
+        renderer: rendererEl.getAttribute("renderer") || rendererEl.getAttribute("centerSymbol") || "",
+      };
+      if (type === "pointDisplacement") {
+        warnOnce(warnings, "pointDisplacement は点群の放射配置を再現しません(中心点シンボルで近似)");
+      }
+      if (compiledInner) return { ...compiledInner, cluster };
       warnOnce(warnings, `レンダラ ${type} には未対応です(既定スタイルで描画)`);
-      return { evaluate: () => [], ...ctx, unsupported: true };
+      return { evaluate: () => [], ...ctx, unsupported: true, cluster };
+    }
     default: {
-      // mergedFeatureRenderer / pointCluster / pointDisplacement / embedded 等の
-      // ラッパー系は内側の renderer-v2 に委譲する
+      // mergedFeatureRenderer / embedded 等のラッパー系は内側の renderer-v2 に委譲する
       const inner = [...rendererEl.children].find(c => c.tagName === "renderer-v2");
       if (inner) return compileRenderer(inner, warnings);
       warnOnce(warnings, `レンダラ ${type} には未対応です(既定スタイルで描画)`);
@@ -952,7 +1071,7 @@ function resolveMarkerLayer(layer, props, images, warnings) {
   }
 }
 
-function resolveLineLayer(layer, props, warnings) {
+function resolveLineLayer(layer, props, warnings, images = null) {
   const p = layer.props;
   const dd = layer.dd;
   const widthUnit = p.line_width_unit || "MM";
@@ -963,7 +1082,13 @@ function resolveLineLayer(layer, props, warnings) {
       const custom = p.use_custom_dash === "1" || p.use_custom_dash === "true" ? p.customdash : null;
       const dash = dashPattern(ddValue(dd, ["lineStyle", "line_style"], props, p.line_style), custom, widthPx);
       if (dash === "none") return null;
-      return { color, widthPx: Math.max(widthPx, 1), dash };
+      return {
+        color, widthPx: Math.max(widthPx, 1), dash,
+        // 結合部・端部・オフセット(2D エンジンで反映)
+        join: { bevel: "bevel", miter: "miter", miter2: "miter", round: "round" }[String(p.joinstyle || "bevel").toLowerCase()] || "bevel",
+        cap: { square: "square", flat: "butt", round: "round" }[String(p.capstyle || "square").toLowerCase()] || "butt",
+        offsetPx: sizeToPx(p.offset ?? 0, p.offset_unit || "MM") || 0,
+      };
     }
     case "MarkerLine":
     // QGIS のハッシュ線(崖線・鉄道等の刻み)は "HashLine"、"HashedLine" は手書き・改名済みファイル用
@@ -988,8 +1113,10 @@ function resolveLineLayer(layer, props, warnings) {
           if (w > 0) { widthPx = w; break; }
         }
       }
-      warnOnce(warnings, `ラインシンボル ${layer.cls} は単色ラインに近似しています`);
-      return { color: color || [0, 0, 0, 1], widthPx: Math.max(widthPx || sizeToPx(0.26, "MM"), 1), dash: null };
+      // 装飾内容を保持し、対応エンジンで形状描画する(#54)
+      const decor = buildLineDecor(layer, p, props, images, color, widthUnit);
+      warnOnce(warnings, `ラインシンボル ${layer.cls} は一部エンジンで単色近似です`);
+      return { color: color || [0, 0, 0, 1], widthPx: Math.max(widthPx || sizeToPx(0.26, "MM"), 1), dash: null, decor };
     }
     case "GeometryGenerator":
       warnOnce(warnings, "GeometryGenerator ラインは未対応です(スキップ)");
@@ -1004,6 +1131,38 @@ function resolveMarkerLayerForLine(symbol, props) {
   for (const l of symbol?.layers || []) {
     const c = parseQgisColor(l.props?.color ?? l.props?.line_color, null);
     if (c) return c;
+  }
+  return null;
+}
+
+// MarkerLine/HashLine/ArrowLine 等の装飾内容を正規化して返す。
+// 幾何学的に描けるエンジン(OpenLayers 等)で形状再現し、それ以外は単色近似
+function buildLineDecor(layer, p, props, images, color, widthUnit) {
+  const cls = layer.cls;
+  const intervalPx = sizeToPx(p.interval ?? p.repeat_distance ?? 3, p.interval_unit || p.repeat_distance_unit || "MM") || 0;
+  const placement = String(p.placement || "interval").toLowerCase(); // interval|centralpoint|vertex|firstvertex|lastvertex|curvepoint
+  if (cls === "MarkerLine") {
+    const markers = layer.subSymbol
+      ? layer.subSymbol.layers.flatMap(l => l.enabled ? resolveMarkerLayer(l, props, images, new Set()) : [])
+      : [];
+    return { kind: "markerline", intervalPx: intervalPx || sizeToPx(4, "MM"), placement, markers,
+      rotateMarker: String(p.rotate_marker ?? "1") !== "0" };
+  }
+  if (cls === "HashLine" || cls === "HashedLine") {
+    // 刻みの長さ・間隔・角度。QGIS 既定: 斜め 45 度の刻み
+    const tick = layer.subSymbol?.layers?.find(l => l.enabled && l.props) || null;
+    const tickLenPx = sizeToPx(p.hash_length ?? p.length ?? 1, p.hash_length_unit || "MM") || sizeToPx(1, "MM");
+    const tickColor = parseQgisColor(tick?.props?.line_color ?? tick?.props?.color ?? color, [0, 0, 0, 1]);
+    const tickWidthPx = sizeToPx(tick?.props?.line_width ?? p.line_width ?? 0.26, "MM") || 1;
+    const hashAngle = Number(p.hash_angle ?? p.angle ?? 90);
+    return { kind: "hashline", intervalPx: intervalPx || sizeToPx(2, "MM"),
+      tick: { color: tickColor, widthPx: Math.max(tickWidthPx, 0.5), lengthPx: tickLenPx, angleDeg: hashAngle } };
+  }
+  if (cls === "ArrowLine") {
+    return { kind: "arrowline", color: parseQgisColor(color, [0, 0, 0, 1]),
+      headLenPx: sizeToPx(p.arrow_head_length ?? 2.5, "MM") || 9,
+      headWidthPx: sizeToPx(p.arrow_head_width ?? 2.5, "MM") || 9,
+      curved: String(p.curved_arrow ?? "0") === "1" };
   }
   return null;
 }
@@ -1048,7 +1207,7 @@ function resolveFillLayer(layer, props, images, warnings, tileCache) {
       let lineColor = color, lineWidth = widthPx;
       if (layer.subSymbol) {
         for (const l of layer.subSymbol.layers || []) {
-          const r = resolveLineLayer(l, props, warnings);
+          const r = resolveLineLayer(l, props, warnings, images);
           if (r) { lineColor = r.color; lineWidth = r.widthPx; }
         }
       }
@@ -1111,7 +1270,12 @@ function resolveOutline(layer, props, warnings) {
 
 // <symbol> を feature 属性で正規化する
 function resolveSymbolLayers(symbol, props, images, warnings) {
-  const out = { markers: null, line: null, fillParts: null, outline: null, centroid: null, alpha: symbol.alpha };
+  const out = {
+    markers: null, line: null, fillParts: null, outline: null, centroid: null,
+    // シンボル単位の透明度は DD でも上書きできる
+    alpha: Number.isFinite(Number(ddValue(symbol.dd, ["alpha", "transparency"], props, NaN)))
+      ? Number(ddValue(symbol.dd, ["alpha", "transparency"], props, NaN)) : symbol.alpha,
+  };
   const markerLayers = [];
   const fillParts = [];
   let outline = null;
@@ -1122,11 +1286,16 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
     if (!layer.enabled) continue;
     switch (symbol.geomType) {
       case "marker":
-        markerLayers.push(...resolveMarkerLayer(layer, props, images, warnings));
+        markerLayers.push(...resolveMarkerLayer(layer, props, images, warnings).map(m => ({
+          ...m,
+          blend: m.blend ?? layer.blend,
+          effects: m.effects ?? layer.effects,
+        })));
         break;
       case "line": {
-        const r = resolveLineLayer(layer, props, warnings);
-        if (r) lineCandidate = r; // 最後の有効レイヤ(最上位)を採用
+        const r = resolveLineLayer(layer, props, warnings, images);
+        // 最後の有効レイヤ(最上位)を採用
+        if (r) lineCandidate = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
         break;
       }
       case "fill": {
@@ -1135,9 +1304,10 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
         if (r.centroid) { centroid = r.centroid; break; }
         const o = resolveOutline(layer, props, warnings);
         if (o) outline = o;
-        if (r.solid !== undefined && r.solid !== null) fillParts.push(r);
-        else if (r.solid === null) fillParts.push({ solid: null });
-        else fillParts.push(r);
+        const part = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
+        if (r.solid !== undefined && r.solid !== null) fillParts.push(part);
+        else if (r.solid === null) fillParts.push({ solid: null, blend: part.blend });
+        else fillParts.push(part);
         break;
       }
     }
@@ -1156,62 +1326,438 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
 // ラベル(<labeling>)
 // ---------------------------------------------------------------------------
 
-function parseTextStyle(textStyleEl, settingsEl = null) {
+// QgsPalLayerSettings::QuadrantPosition → ラベル矩形のアンカー
+// {h: -1..1(左..右), v: -1..1(下..上)}。QGIS の配置方位を
+// 「地物に接する側の角」を示すアンカーへ変換する
+const QUAD_ANCHORS = {
+  0: { h: -1, v: 1 },   // AboveLeft: 地物の左上
+  1: { h: 0,  v: 1 },   // Above
+  2: { h: 1,  v: 1 },   // AboveRight
+  3: { h: -1, v: 0 },   // Left
+  4: { h: 0,  v: 0 },   // Over
+  5: { h: 1,  v: 0 },   // Right
+  6: { h: -1, v: -1 },  // BelowLeft
+  7: { h: 0,  v: -1 },  // Below
+  8: { h: 1,  v: -1 },  // BelowRight
+};
+
+// QgsPalLayerSettings::Placement → 正規化配置モード
+const PLACEMENT_MODES = {
+  0: "around",   // AroundPoint (点) / OffsetPoint (ポリゴン)
+  1: "over",     // OverPoint
+  2: "line",     // Line (ライン追従) / ポリゴンでは外周
+  3: "curved",   // Curved (曲線追従)
+  4: "horizontal",
+  5: "free",
+  6: "ordered",  // OrderedPositionsAroundPoint
+  7: "perimeter",// PerimeterCurved
+  8: "outside",  // OutsidePolygons
+};
+
+function parseLabelBackground(bgEl, warnings) {
+  if (!bgEl) return null;
+  const g = name => bgEl.getAttribute(name);
+  const draw = String(g("shapeDraw") ?? "0") === "1";
+  if (!draw) return null;
+  const typeNum = Number(g("shapeType") ?? 0); // 0 rect,1 square,2 ellipse,3 circle,4 svg,5 marker
+  const type = { 0: "rect", 1: "square", 2: "ellipse", 3: "circle", 4: "image", 5: "image" }[typeNum] || "rect";
+  if (type === "image") warnOnce(warnings, "ラベル背景の画像(SVG/マーカー)は未対応です(矩形で代替)");
+  const opacity = Number(g("shapeOpacity") ?? 1);
+  const fill = withAlpha(parseQgisColor(g("shapeFillColor"), [1, 1, 1, 1]), Number.isFinite(opacity) ? opacity : 1);
+  const stroke = parseQgisColor(g("shapeBorderColor"), null);
+  const strokeWidthPx = sizeToPx(g("shapeBorderWidth") ?? 0, g("shapeBorderWidthUnit") || "MM");
+  const padXPx = sizeToPx(g("shapeSizeX") ?? 0, g("shapeSizeUnit") || "MM");
+  const padYPx = sizeToPx(g("shapeSizeY") ?? 0, g("shapeSizeUnit") || "MM");
+  return {
+    type,
+    fill, stroke, strokeWidthPx: Math.max(strokeWidthPx, 0),
+    padPx: [padXPx, padYPx],
+    offsetPx: [
+      sizeToPx(g("shapeOffsetX") ?? 0, g("shapeOffsetUnit") || "MM"),
+      sizeToPx(g("shapeOffsetY") ?? 0, g("shapeOffsetUnit") || "MM")],
+    rotationDeg: Number(g("shapeRotation")) || 0,
+  };
+}
+
+function parseLabelShadow(shEl, warnings) {
+  if (!shEl) return null;
+  const g = name => shEl.getAttribute(name);
+  if (String(g("shadowDraw") ?? "0") !== "1") return null;
+  const dist = sizeToPx(g("shadowOffsetDist") ?? 0, g("shadowOffsetUnit") || "MM");
+  const ang = (Number(g("shadowOffsetAngle")) || 0) * Math.PI / 180;
+  return {
+    offsetPx: [Math.cos(ang) * dist, Math.sin(ang) * dist],
+    radiusPx: sizeToPx(g("shadowRadius") ?? 0, g("shadowRadiusUnit") || "MM"),
+    color: withAlpha(parseQgisColor(g("shadowColor"), [0, 0, 0, 1]), Number(g("shadowOpacity") ?? 0.7) || 0.7),
+  };
+}
+
+// コールアウト(引き出し線)。ネストした Option ツリーからライン色/幅を掘る
+function parseLabelCallout(coEl) {
+  if (!coEl) return null;
+  const props = optionMap(coEl) || {};
+  if (String(props.enabled ?? "0") !== "1" && String(props.enabled ?? "").toLowerCase() !== "true") return null;
+  let color = null, widthPx = null;
+  const dig = o => {
+    if (!o || typeof o !== "object") return;
+    const c = parseQgisColor(o.line_color ?? o.color, null);
+    if (c && !color) color = c;
+    const w = sizeToPx(o.line_width ?? o.width ?? 0, o.line_width_unit || o.width_unit || "MM");
+    if (w && !widthPx) widthPx = w;
+    for (const v of Object.values(o)) {
+      if (Array.isArray(v)) v.forEach(dig); else if (v && typeof v === "object") dig(v);
+    }
+  };
+  dig(props.lineSymbol ?? props.symbol ?? props);
+  return {
+    type: coEl.getAttribute("type") || "simple",
+    line: { color: color || [0, 0, 0, 1], widthPx: Math.max(widthPx || 1, 0.5) },
+  };
+}
+
+function parseLabelSubstitutions(subEl) {
+  const out = {};
+  if (!subEl) return out;
+  const map = optionMap(subEl);
+  for (const [k, v] of Object.entries(map)) {
+    if (typeof v === "string" && v) out[k] = v;
+  }
+  for (const c of subEl.querySelectorAll?.("Option[name]") || []) {
+    const n = c.getAttribute("name");
+    const v = c.getAttribute("value") || c.textContent;
+    if (n && v && !out[n]) out[n] = v;
+  }
+  return out;
+}
+
+// <rendering> の属性を読む。settings 直下の <rendering> 要素
+function parseLabelRendering(rd, warnings) {
+  const g = name => rd?.getAttribute(name);
+  const out = {
+    drawLabels: String(g("drawLabels") ?? "1") === "1",
+    upsidedown: String(g("upsidedownLabels") ?? "0") === "0" ? "upright" : "show",
+    labelPerPart: String(g("labelPerPart") ?? "0") === "1",
+    mergeLines: String(g("mergeLines") ?? "0") === "1",
+    maxNumLabels: Number(g("maxNumLabels")) || 0,
+    limitNumLabels: String(g("limitNumLabels") ?? "0") === "1",
+    minFeatureSizePx: sizeToPx(g("minFeatureSize") ?? 0, "MM"),
+    fontMinPixelSize: Number(g("fontMinPixelSize")) || 0,
+    fontMaxPixelSize: Number(g("fontMaxPixelSize")) || 0,
+    fontLimitPixelSize: String(g("fontLimitPixelSize") ?? "0") === "1",
+    obstacle: String(g("obstacle") ?? "1") === "1",
+    obstacleFactor: Number(g("obstacleFactor") ?? 1) || 1,
+    obstacleType: Number(g("obstacleType")) || 0,
+    priority: Number(g("priority") ?? g("priorityLabel") ?? 5) || 0,
+    zIndex: Number(g("zIndex")) || 0,
+    displayAll: String(g("displayAll") ?? "0") === "1",
+    allowDegraded: String(g("allowDegradedPlacement") ?? "0") === "1",
+    unplacedVisibility: String(g("unplacedVisibility") ?? "0") === "1",
+    wrapChar: g("multiLineWrapChar") || g("wrapChar") || "",
+    autoWrapLength: Number(g("autoWrapLength")) || 0,
+    useMaxLineLengthForAutoWrap: String(g("useMaxLineLengthForAutoWrap") ?? "1") === "1",
+    labelScale: null,
+  };
+  if (String(g("scaleVisibility") ?? "0") === "1") {
+    const lo = Number(g("scaleMin")) || 0;
+    const hi = Number(g("scaleMax")) || 0;
+    if (lo > 0 || hi > 0) out.labelScale = { minScale: lo || null, maxScale: hi || null };
+  }
+  // 方向記号(NSEW)
+  if (String(g("addDirectionSymbol") ?? "0") === "1") {
+    out.dirSymbol = {
+      placement: Number(g("placeDirectionSymbol")) || 0, // 0=AboveLeft? QGIS: 0=SymbolLeftRight,1=SymbolAbove,2=SymbolBelow
+      left: g("leftDirectionSymbol") || "<",
+      right: g("rightDirectionSymbol") || ">",
+      reverse: String(g("reverseDirectionSymbol") ?? "0") === "1",
+    };
+  }
+  // 数値フォーマット
+  if (String(g("formatNumbers") ?? "0") === "1") {
+    out.numFormat = {
+      decimals: Number(g("decimals")) || 0,
+      plusSign: String(g("plussign") ?? "0") === "1",
+    };
+  }
+  if (out.mergeLines) warnOnce(warnings, "ラベルのライン結合(mergeLines)は未対応です");
+  if (out.unplacedVisibility) warnOnce(warnings, "未配置ラベルの表示(unplacedVisibility)は未対応です");
+  if (out.obstacleType !== 0) warnOnce(warnings, "ラベル障害物タイプ(obstacleType)は外周内側のみ近似です");
+  return out;
+}
+
+// QGIS 式の isExpression 値を bool 化
+function qgisBool(v, def = false) {
+  if (v == null) return def;
+  const s = String(v).toLowerCase();
+  return s === "1" || s === "true";
+}
+
+// ラベルデータ定義プロパティ(<dd_properties> または text-style の
+// data_defined_properties)を地物プロパティで評価して spec へ適用する
+function applyLabelDD(spec, dd, props) {
+  if (!dd || !Object.keys(dd).length) return spec;
+  const get = names => ddValue(dd, names, props, undefined);
+  const spec1 = { ...spec };
+  if (get(["Show"]) !== undefined && !qgisBool(get(["Show"]), true)) return null;
+  if (qgisBool(get(["AlwaysShow"]), false)) spec1.allowOverlap = true;
+  const num = (names, cur) => {
+    const v = Number(get(names));
+    return Number.isFinite(v) ? v : cur;
+  };
+  const bool = (names, cur) => {
+    const v = get(names);
+    return v === undefined ? cur : qgisBool(v, cur);
+  };
+  const sizePx = num(["Size"], null);
+  const family = get(["Family"]);
+  const bold = bool(["Bold"], spec.bold);
+  const italic = bool(["Italic"], spec.italic);
+  const fontStyle = String(get(["FontStyle"]) || "").toLowerCase();
+  const effBold = fontStyle ? (fontStyle.includes("bold") || fontStyle.includes("太")) : bold;
+  const effItalic = fontStyle ? (fontStyle.includes("italic") || fontStyle.includes("oblique") || fontStyle.includes("斜")) : italic;
+  if (sizePx != null || family || effBold !== spec.bold || effItalic !== spec.italic) {
+    const px = Math.max(Math.round(sizePx ?? spec.sizePx), 6);
+    const fam = family || spec.family;
+    spec1.sizePx = sizeToPx(sizePx ?? (spec.sizePx / PT_TO_PX), "Point") || spec.sizePx;
+    spec1.family = fam;
+    spec1.bold = effBold; spec1.italic = effItalic;
+    spec1.fontCss = `${effItalic ? "italic " : ""}${effBold ? "bold " : ""}${Math.max(Math.round(spec1.sizePx), 6)}px ${fam}`;
+  }
+  const color = parseQgisColor(get(["Color"]), null);
+  if (color) spec1.fill = color;
+  spec1.underline = bool(["Underline"], spec.underline);
+  spec1.strikeout = bool(["Strikeout"], spec.strikeout);
+  spec1.letterSpacingPx = num(["LetterSpacing"], spec.letterSpacingPx);
+  spec1.wordSpacingPx = num(["WordSpacing"], spec.wordSpacingPx);
+  const hali = String(get(["Hali"]) || "").toLowerCase();
+  if (["left", "center", "right", "justify"].includes(hali)) spec1.align = hali;
+  const wrapChar = get(["MultiLineWrapChar"]);
+  if (wrapChar !== undefined && wrapChar !== "") spec1.wrapChar = String(wrapChar);
+  const mlh = Number(get(["MultiLineHeight"]));
+  if (Number.isFinite(mlh) && mlh > 0) spec1.lineHeightFactor = mlh;
+  const rot = Number(get(["Rotation", "RotationAngle"]));
+  if (Number.isFinite(rot)) spec1.placement = { ...spec.placement, rotationDeg: rot };
+  const off = get(["OffsetXY"]);
+  if (off != null) {
+    const [ox, oy] = String(off).split(",").map(Number);
+    if (Number.isFinite(ox) || Number.isFinite(oy)) {
+      spec1.placement = {
+        ...spec.placement,
+        offsetXPx: Number.isFinite(ox) ? ox * MM_TO_PX : spec.placement.offsetXPx,
+        offsetYPx: Number.isFinite(oy) ? oy * MM_TO_PX : spec.placement.offsetYPx,
+      };
+    }
+  }
+  const quad = get(["OffsetQuad"]);
+  if (quad !== undefined && Number.isFinite(Number(quad))) {
+    spec1.placement = { ...spec.placement, quad: QUAD_ANCHORS[Number(quad)] || spec.placement.quad };
+  }
+  // バッファの DD
+  const bDraw = bool(["BufferDraw"], undefined);
+  const bSize = num(["BufferSize"], null);
+  const bColor = parseQgisColor(get(["BufferColor"]), null);
+  const bOp = num(["BufferOpacity"], null);
+  if (bDraw !== undefined || bSize != null || bColor || bOp != null) {
+    const cur = spec.halo;
+    const draw = bDraw !== undefined ? bDraw : !!cur;
+    spec1.halo = draw ? {
+      color: bColor || cur?.color || [1, 1, 1, 1],
+      widthPx: Math.max(sizeToPx(bSize ?? (cur?.widthPx || 1) / MM_TO_PX, "MM"), 0),
+    } : null;
+    if (spec1.halo && bOp != null) spec1.halo.color = withAlpha(spec1.halo.color, bOp);
+  }
+  // 位置の DD(地図単位 lon/lat として解釈)
+  const px = Number(get(["PositionX"])), py = Number(get(["PositionY"]));
+  if (Number.isFinite(px) && Number.isFinite(py)) spec1.position = { x: px, y: py };
+  spec1.priority = num(["Priority"], spec.priority);
+  spec1.obstacle = bool(["IsObstacle"], spec.obstacle);
+  spec1.obstacleFactor = num(["ObstacleFactor"], spec.obstacleFactor);
+  spec1.labelPerPart = bool(["LabelAllParts"], spec.labelPerPart);
+  const mn = Number(get(["MinScale"])), mx = Number(get(["MaxScale"]));
+  if (Number.isFinite(mn) || Number.isFinite(mx)) {
+    spec1.labelScale = { minScale: Number.isFinite(mn) && mn > 0 ? mn : null, maxScale: Number.isFinite(mx) && mx > 0 ? mx : null };
+  }
+  // 数値フォーマットの DD
+  if (qgisBool(get(["NumFormat"]), !!spec.numFormat)) {
+    spec1.numFormat = {
+      decimals: num(["Decimals"], spec.numFormat?.decimals ?? 0),
+      plusSign: bool(["PlusSign"], spec.numFormat?.plusSign ?? false),
+    };
+  }
+  if (qgisBool(get(["DirSymbDraw"]), !!spec.dirSymbol)) {
+    spec1.dirSymbol = {
+      placement: Number(get(["DirSymbPlacement"])) || spec.dirSymbol?.placement || 0,
+      left: String(get(["DirSymbLeft"]) ?? spec.dirSymbol?.left ?? "<"),
+      right: String(get(["DirSymbRight"]) ?? spec.dirSymbol?.right ?? ">"),
+      reverse: qgisBool(get(["DirSymbReverse"]), spec.dirSymbol?.reverse ?? false),
+    };
+  }
+  return spec1;
+}
+
+// テキスト変換(数値フォーマット・方向記号・折返し文字・大文字化)
+export function formatLabelText(spec, rawText, props) {
+  let text = rawText;
+  if (text == null) return "";
+  if (spec.numFormat && typeof text === "number" || (spec.numFormat && /^-?\d+(\.\d+)?$/.test(String(text).trim()))) {
+    const n = Number(text);
+    let s = n.toFixed(spec.numFormat.decimals);
+    if (spec.numFormat.plusSign && n > 0) s = "+" + s;
+    text = s;
+  }
+  text = String(text);
+  if (spec.dirSymbol) {
+    const { placement, left, right } = spec.dirSymbol;
+    if (placement === 0) text = `${left}${text}${right}`;        // SymbolLeftRight
+    else if (placement === 1) text = `${left}\n${text}\n${right}`; // Above(近似)
+    else text = `${left}${text}${right}`;
+  }
+  if (spec.wrapChar) text = text.split(spec.wrapChar).join("\n");
+  switch (Number(spec.capitalization)) {
+    case 1: text = text.toUpperCase(); break;
+    case 2: text = text.toLowerCase(); break;
+    case 3: text = text.charAt(0).toUpperCase() + text.slice(1); break;
+    case 5: text = text.replace(/(^|\s)(\S)/g, (m, sp, c) => sp + c.toUpperCase()); break;
+    case 4: case 6: text = text.toUpperCase(); break; // SmallCaps は全大写で近似
+  }
+  return text;
+}
+
+function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   const a = name => textStyleEl?.getAttribute(name);
-  const isExpr = String(a("isExpression") ?? "0") === "1" || String(a("isExpression")).toLowerCase() === "true";
+  const isExpr = qgisBool(a("isExpression"));
   const fieldName = a("fieldName") || "";
   const sizeUnit = a("fontSizeUnit") || "Point";
   const fontSize = Number(a("fontSize")) || 10;
-  const sizePx = sizeUnit === "MM" ? fontSize * MM_TO_PX : fontSize * PT_TO_PX;
+  const sizePx = sizeToPx(fontSize, sizeUnit) || fontSize * PT_TO_PX;
   const textColor = parseQgisColor(a("textColor") || a("namedColor"), [0, 0, 0, 1]);
   const textOpacity = Number(a("textOpacity") ?? "1");
-  // バッファ(ハロー)は <text-style> の子要素 <text-buffer> に持つ。
-  // 属性として残る旧形式もフォールバックで拾う(#55)
-  const bufEl = textStyleEl?.querySelector?.("text-buffer") || null;
+  // バッファ(ハロー)は <text-style> または親 <settings> の子要素
+  // <text-buffer> に持つ。属性として残る旧形式もフォールバックで拾う(#55)
+  const setElForBuf = settingsEl || textStyleEl?.parentElement || null;
+  const bufEl = textStyleEl?.querySelector?.("text-buffer")
+    || setElForBuf?.querySelector?.("text-buffer") || null;
   const b = name => bufEl?.getAttribute(name) ?? a(name);
-  const bufferDraw = String(b("bufferDraw") ?? "0") === "1" || String(b("bufferDraw")).toLowerCase() === "true";
+  const bufferDraw = qgisBool(b("bufferDraw"));
   const bufferOpacity = Number(b("bufferOpacity") ?? "1");
   const bufferColor = withAlpha(
     parseQgisColor(b("bufferColor"), [1, 1, 1, 1]),
     Number.isFinite(bufferOpacity) ? bufferOpacity : 1);
   const bufferSize = sizeToPx(b("bufferSize") ?? 1, b("bufferSizeUnit") || b("bufferSizeUnits") || "MM");
-  const bold = String(a("fontBold") ?? "0") === "1" || String(a("fontBold")).toLowerCase() === "true";
-  const italic = String(a("fontItalic") ?? "0") === "1" || String(a("fontItalic")).toLowerCase() === "true";
+  const bold = qgisBool(a("fontBold"));
+  const italic = qgisBool(a("fontItalic"));
   const family = a("fontFamily") || "sans-serif";
-  const underline = String(a("fontUnderline") ?? "0") === "1";
-  const strikeout = String(a("fontStrikeout") ?? "0") === "1";
+  const underline = qgisBool(a("fontUnderline"));
+  const strikeout = qgisBool(a("fontStrikeout"));
   // <placement>/<rendering> は <text-style> の親 <settings> の子。
   // 呼び出し側から settingsEl が渡されなければ親要素から辿る
   const setEl = settingsEl || textStyleEl?.parentElement || null;
-  // <placement>: オフセット・回転(#55)。dist/xOffset/yOffset は distUnits/
-  // offsetUnits の単位で px 換算する
-  const pl = setEl?.querySelector?.("placement") || null;
-  let offsetXPx = 0, offsetYPx = 0, rotationDeg = 0;
-  if (pl) {
-    const p = name => pl.getAttribute(name);
-    const distPx = sizeToPx(p("dist") ?? 0, p("distUnits") || "MM");
-    offsetXPx = sizeToPx(p("xOffset") ?? 0, p("offsetUnits") || "MM") + distPx;
-    offsetYPx = sizeToPx(p("yOffset") ?? 0, p("offsetUnits") || "MM");
-    rotationDeg = Number(p("rotationAngle")) || 0;
+  const find = tag => setEl?.querySelector?.(tag) || null;
+
+  // <placement>: 配置モード・オフセット・回転(#55)
+  const pl = find("placement");
+  const plA = name => pl?.getAttribute(name);
+  const placementMode = PLACEMENT_MODES[Number(plA("placement") ?? -1)] || "around";
+  const quadOffset = Number(plA("quadOffset") ?? 4);
+  const flags = Number(plA("placementFlags")) || 0;
+  const linePlacement = flags & 2 ? "above" : flags & 4 ? "below" : flags & 1 ? "on" : null;
+  const distPx = sizeToPx(plA("dist") ?? 0, plA("distUnits") || "MM");
+  const placement = {
+    mode: placementMode,
+    quad: QUAD_ANCHORS[quadOffset] || QUAD_ANCHORS[8],
+    distPx,
+    offsetXPx: sizeToPx(plA("xOffset") ?? 0, plA("offsetUnits") || "MM"),
+    offsetYPx: sizeToPx(plA("yOffset") ?? 0, plA("offsetUnits") || "MM"),
+    rotationDeg: Number(plA("rotationAngle")) || 0,
+    linePlacement,
+    mapOrientation: (flags & 8) !== 0,
+    repeatDistancePx: sizeToPx(plA("repeatDistance") ?? 0, plA("repeatDistanceUnits") || "MM"),
+    overrunDistancePx: sizeToPx(plA("overrunDistance") ?? 0, plA("overrunDistanceUnit") || "MM"),
+    centroidWhole: qgisBool(plA("centroidWhole")),
+    centroidInside: qgisBool(plA("centroidInside")),
+    fitInsidePolygon: qgisBool(plA("fitInsidePolygon")),
+    preserveRotation: qgisBool(plA("preserveRotation"), true),
+    maxCurvedCharAngleIn: Number(plA("maxCurvedCharAngleIn")) || 25,
+    maxCurvedCharAngleOut: Number(plA("maxCurvedCharAngleOut")) || -25,
+    polygonFlags: Number(plA("polygonPlacementFlags")) || 0,
+    predefinedOrder: String(plA("predefinedPositionOrder") || "").split(",").filter(Boolean),
+  };
+  if (["ordered", "outside"].includes(placementMode)) {
+    warnOnce(warnings, `ラベル配置モード ${placementMode} は近似実装です(重心/周囲配置で代替)`);
   }
-  // <rendering>: 縮尺依存表示(#55)
-  const rd = setEl?.querySelector?.("rendering") || null;
-  let labelScale = null;
-  if (rd && String(rd.getAttribute("scaleVisibility") ?? "0") === "1") {
-    const lo = Number(rd.getAttribute("scaleMin")) || 0;
-    const hi = Number(rd.getAttribute("scaleMax")) || 0;
-    if (lo > 0 || hi > 0) labelScale = { minScale: lo || null, maxScale: hi || null };
+  if (plA("geometryGeneratorEnabled") === "1") {
+    warnOnce(warnings, "ラベルのジオメトリジェネレータは未対応です(地物ジオメトリで代替)");
   }
-  return {
+
+  const rd = find("rendering");
+  const r = parseLabelRendering(rd, warnings);
+
+  // テキストマスク: 背景近似(マスク色=下層を覆う不透明色で再現)で対応。
+  // 真のマスク(地物との抜き差し)はエンジン上できないため最も近い表現
+  const maskEl = find("text-mask") || find("mask");
+  let maskBg = null;
+  if (maskEl && qgisBool(maskEl.getAttribute("maskEnabled") ?? maskEl.getAttribute("enabled"))) {
+    const maskSize = sizeToPx(maskEl.getAttribute("maskSize") ?? maskEl.getAttribute("bufferSize") ?? 1, maskEl.getAttribute("maskSizeUnit") || "MM");
+    const maskOpacity = Number(maskEl.getAttribute("maskOpacity") ?? 1);
+    warnOnce(warnings, "ラベルマスクは不透明背景での近似です");
+    maskBg = { type: "rect", fill: withAlpha(parseQgisColor(maskEl.getAttribute("maskColor") ?? "255,255,255,255", [1,1,1,1]), maskOpacity), stroke: null, strokeWidthPx: 0, padPx: [Math.max(maskSize, 1), Math.max(maskSize, 1)], offsetPx: [0,0], rotationDeg: 0 };
+  }
+
+  const spec = {
     getText: isExpr ? compileExpr(fieldName) : (props => props?.[fieldName]),
     sizePx,
+    family,
+    bold, italic,
     fontCss: `${italic ? "italic " : ""}${bold ? "bold " : ""}${Math.max(Math.round(sizePx), 6)}px ${family}`,
     fill: withAlpha(textColor, Number.isFinite(textOpacity) ? textOpacity : 1),
     halo: bufferDraw ? { color: bufferColor, widthPx: Math.max(bufferSize, 1) } : null,
     underline, strikeout,
-    offsetXPx, offsetYPx, rotationDeg,
-    labelScale,
+    letterSpacingPx: sizeToPx(a("fontLetterSpacing") ?? 0, "Point") || Number(a("fontLetterSpacing")) || 0,
+    wordSpacingPx: sizeToPx(a("fontWordSpacing") ?? 0, "Point") || Number(a("fontWordSpacing")) || 0,
+    kerning: qgisBool(a("fontKerning"), true),
+    capitalization: Number(a("capitalization")) || 0,
+    textOrientation: String(a("textOrientation") || "horizontal"),
+    lineHeightFactor: Number(a("multilineHeight")) || 1,
+    align: { 0: "left", 1: "center", 2: "right", 3: "justify" }[Number(a("multilineAlignment"))] || "left",
+    placement,
+    ...r,
+    // 後方互換のトップレベルエイリアス(正本は placement.* / labelScale)
+    offsetXPx: placement.offsetXPx,
+    offsetYPx: placement.offsetYPx,
+    rotationDeg: placement.rotationDeg,
+    // quad 方向を含む実効オフセット(px。+x=右, +y=下)
+    pixelOffsetOf() {
+      const pl = this.placement || {};
+      const q = pl.quad || { h: 0, v: 0 };
+      return [
+        (pl.offsetXPx || 0) + (q.h || 0) * (pl.distPx || 0),
+        -((pl.offsetYPx || 0) + (q.v || 0) * (pl.distPx || 0)),
+      ];
+    },
+    background: parseLabelBackground(find("background"), warnings) || maskBg,
+    shadow: parseLabelShadow(find("shadow"), warnings),
+    callout: parseLabelCallout(find("callout")),
+    substitutions: parseLabelSubstitutions(find("substitutions")),
+    dd: parseDataDefined(setEl) || {},
+    position: null,
   };
+  if (a("blendMode") && String(a("blendMode")) !== "0") {
+    warnOnce(warnings, "ラベルのブレンドモードは未対応です");
+  }
+  if (spec.textOrientation === "rotation-based") {
+    warnOnce(warnings, "回転ベースの縦書きは水平で代替します");
+  }
+  return spec;
+}
+
+// パース済み spec にテキスト変換を適用した最終 spec を返す。
+// エンジン側は spec.text / spec.fontCss / spec.fill 等をそのまま使う
+function finalizeLabelSpec(spec, props) {
+  const s = spec.dd ? applyLabelDD(spec, spec.dd, props) : spec;
+  if (!s || !s.drawLabels) return null;
+  const raw = s.getText ? s.getText(props) : null;
+  const text = formatLabelText(s, raw, props);
+  if (!String(text).trim()) return null;
+  return { ...s, text: String(text), show: true };
 }
 
 function compileLabeling(labelingEl, warnings) {
@@ -1224,26 +1770,37 @@ function compileLabeling(labelingEl, warnings) {
       || labelingEl.querySelector("rules");
     for (const ruleEl of rulesEl?.querySelectorAll?.(":scope > rule") || []) {
       const filter = ruleEl.getAttribute("filter");
-      const settings = ruleEl.querySelector("settings text-style") || ruleEl.querySelector("text-style");
-      if (!settings) continue;
-      rules.push({ fn: filter && !/^ELSE$/i.test(filter) ? compileExpr(filter) : null, isElse: /^ELSE$/i.test(String(filter || "")), style: parseTextStyle(settings) });
+      const settingsEl = ruleEl.querySelector("settings") || ruleEl.parentElement;
+      const textStyle = ruleEl.querySelector("settings text-style")
+        || ruleEl.querySelector("text-style")
+        || ruleEl.querySelector("settings text-format")
+        || ruleEl.querySelector("text-format");
+      if (!textStyle) continue;
+      rules.push({
+        fn: filter && !/^ELSE$/i.test(filter) ? compileExpr(filter) : null,
+        isElse: /^ELSE$/i.test(String(filter || "")),
+        style: parseTextStyle(textStyle, settingsEl, warnings),
+      });
     }
     if (!rules.length) return null;
     return props => {
       let elseStyle = null;
       for (const r of rules) {
         if (r.isElse) { elseStyle = r.style; continue; }
-        if (!r.fn || r.fn(props)) return r.style;
+        if (!r.fn || r.fn(props)) return finalizeLabelSpec(r.style, props);
       }
-      return elseStyle;
+      return elseStyle ? finalizeLabelSpec(elseStyle, props) : null;
     };
   }
   // simple / perimeter 等は text-style をそのまま使う
-  const textStyle = labelingEl.querySelector("text-style");
+  const settingsEl = labelingEl.querySelector("settings") || null;
+  const textStyle = labelingEl.querySelector("settings text-style")
+    || labelingEl.querySelector("text-style")
+    || labelingEl.querySelector("settings text-format")
+    || labelingEl.querySelector("text-format");
   if (!textStyle) return null;
-  const style = parseTextStyle(textStyle);
-  if (!style.getText) return null;
-  return () => style;
+  const style = parseTextStyle(textStyle, settingsEl, warnings);
+  return props => finalizeLabelSpec(style, props);
 }
 
 // ---------------------------------------------------------------------------
@@ -1334,6 +1891,8 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
     legend,
     warnings: [...warnings],
     unsupported: !!renderer.unsupported,
+    heatmap: renderer.heatmap || null,
+    cluster: renderer.cluster || null,
     symbols: renderer.symbols,
     images,
     // 属性表示メタ。displayFor(props) は displayExpression を評価して
@@ -1416,6 +1975,141 @@ function getCanvas(key, size, draw) {
   return canvas;
 }
 
+// マーカーレイヤ1枚を ctx の原点(中心)へ描く
+function drawMarkerLayerTo(ctx, layer) {
+  ctx.save();
+  ctx.translate(layer.offsetPx?.[0] || 0, layer.offsetPx?.[1] || 0);
+  ctx.rotate((layer.rotationDeg || 0) * Math.PI / 180);
+  ctx.globalAlpha = layer.alpha ?? 1;
+  const half = (layer.sizePx || 8) / 2;
+  if (layer.kind === "shape") {
+    const shapeFn = MARKER_SHAPES[layer.shape] || MARKER_SHAPES.circle;
+    ctx.beginPath();
+    ctx.save();
+    ctx.scale(half, half);
+    shapeFn(ctx);
+    ctx.restore();
+    if (STROKE_ONLY_SHAPES.has(layer.shape)) {
+      ctx.strokeStyle = rgbaToCss(layer.stroke || layer.fill || [0, 0, 0, 1]);
+      ctx.lineWidth = layer.strokeWidthPx || Math.max(half * 0.3, 1.5);
+      ctx.stroke();
+    } else {
+      if (layer.fill) {
+        ctx.fillStyle = rgbaToCss(layer.fill);
+        ctx.fill();
+      }
+      if (layer.stroke && layer.strokeWidthPx > 0) {
+        ctx.strokeStyle = rgbaToCss(layer.stroke);
+        ctx.lineWidth = layer.strokeWidthPx;
+        ctx.stroke();
+      }
+    }
+  } else if (layer.kind === "ellipse") {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, (layer.widthPx || 8) / 2, (layer.heightPx || 8) / 2, 0, 0, Math.PI * 2);
+    if (layer.fill) { ctx.fillStyle = rgbaToCss(layer.fill); ctx.fill(); }
+    if (layer.stroke) { ctx.strokeStyle = rgbaToCss(layer.stroke); ctx.lineWidth = layer.strokeWidthPx || 1; ctx.stroke(); }
+  } else if (layer.kind === "image" && layer.image) {
+    const img = layer.image;
+    const ratio = img.height / (img.width || 1);
+    const w = layer.sizePx, h = layer.sizePx * (Number.isFinite(ratio) ? ratio : 1);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  } else if (layer.kind === "text") {
+    ctx.font = `${Math.round(layer.sizePx || 10)}px ${layer.fontFamily || "sans-serif"}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (layer.stroke) {
+      ctx.strokeStyle = rgbaToCss(layer.stroke);
+      ctx.lineWidth = layer.strokeWidthPx || 1;
+      ctx.strokeText(layer.text, 0, 0);
+    }
+    ctx.fillStyle = rgbaToCss(layer.fill || [0, 0, 0, 1]);
+    ctx.fillText(layer.text, 0, 0);
+  }
+  ctx.restore();
+}
+
+// ペイントエフェクト1段を canvas へ適用する(canvas 全体を変換)
+function applyEffectToCanvas(cur, fx) {
+  const type = String(fx.type || "drawSource").toLowerCase();
+  if (type === "drawsource" || type === "source") return cur;
+  const out = document.createElement("canvas");
+  out.width = cur.width; out.height = cur.height;
+  const ctx = out.getContext("2d");
+  const W = cur.width, H = cur.height;
+  const col = parseQgisColor(fx.color ?? fx.fill_color ?? fx.glow_color, [1, 0.8, 0, 1]);
+  const css = rgbaToCss(withAlpha(col, Number(fx.opacity ?? 1) || 1));
+  const blurPx = sizeToPx(fx.blur_level ?? fx.blur_radius ?? 0, fx.blur_unit || "MM");
+  const distPx = sizeToPx(fx.offset_distance ?? fx.offset ?? 0, fx.offset_unit || "MM");
+  const ang = (Number(fx.offset_angle) || 0) * Math.PI / 180;
+  switch (type) {
+    case "blur":
+      ctx.filter = `blur(${Math.max(blurPx, 0.5)}px)`;
+      ctx.drawImage(cur, 0, 0);
+      break;
+    case "dropshadow":
+      ctx.shadowColor = css;
+      ctx.shadowOffsetX = Math.cos(ang) * distPx;
+      ctx.shadowOffsetY = Math.sin(ang) * distPx;
+      ctx.shadowBlur = Math.max(blurPx, 0);
+      ctx.drawImage(cur, 0, 0);
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+      ctx.drawImage(cur, 0, 0);
+      break;
+    case "glow":
+    case "outerglow": {
+      ctx.shadowColor = css;
+      ctx.shadowBlur = Math.max(blurPx || Number(fx.spread) * MM_TO_PX || 4, 1);
+      ctx.drawImage(cur, 0, 0);
+      ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
+      ctx.drawImage(cur, 0, 0);
+      break;
+    }
+    case "innerglow":
+    case "innershadow": {
+      // source-in で形状内部へ色を滲ませる近似
+      if (type === "innershadow") {
+        ctx.shadowOffsetX = Math.cos(ang) * distPx;
+        ctx.shadowOffsetY = Math.sin(ang) * distPx;
+      }
+      ctx.shadowColor = css;
+      ctx.shadowBlur = Math.max(blurPx, 1);
+      ctx.globalCompositeOperation = "source-in";
+      ctx.drawImage(cur, 0, 0);
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.drawImage(cur, 0, 0);
+      break;
+    }
+    case "colourize":
+    case "colorize": {
+      ctx.drawImage(cur, 0, 0);
+      ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = css;
+      ctx.fillRect(0, 0, W, H);
+      break;
+    }
+    case "transform": {
+      const sx = Number(fx.scale_x ?? 1) || 1;
+      const sy = Number(fx.scale_y ?? 1) || 1;
+      const rx = Number(fx.reflect_x ?? 0) ? -1 : 1;
+      const ry = Number(fx.reflect_y ?? 0) ? -1 : 1;
+      const tx = sizeToPx(fx.translate_x ?? 0, fx.translate_unit || "MM");
+      const ty = sizeToPx(fx.translate_y ?? 0, fx.translate_unit || "MM");
+      const rot = (Number(fx.rotation) || 0) * Math.PI / 180;
+      ctx.translate(W / 2 + tx, H / 2 + ty);
+      ctx.rotate(rot);
+      ctx.scale(sx * rx, sy * ry);
+      ctx.drawImage(cur, -W / 2, -H / 2);
+      break;
+    }
+    default:
+      ctx.drawImage(cur, 0, 0);
+      break;
+  }
+  return out;
+}
+
 // マーカーレイヤ群を1枚の canvas に合成する。返り値 {canvas, anchorY}
 export function markerLayersToCanvas(markerLayers) {
   const maxSize = Math.max(...markerLayers.map(m => m.sizePx || m.widthPx || 8), 4);
@@ -1425,53 +2119,19 @@ export function markerLayersToCanvas(markerLayers) {
   const canvas = getCanvas(key, size, (ctx, W) => {
     for (const layer of markerLayers) {
       ctx.save();
-      ctx.translate(W / 2 + (layer.offsetPx?.[0] || 0), W / 2 + (layer.offsetPx?.[1] || 0));
-      ctx.rotate((layer.rotationDeg || 0) * Math.PI / 180);
-      ctx.globalAlpha = layer.alpha ?? 1;
-      const half = (layer.sizePx || 8) / 2;
-      if (layer.kind === "shape") {
-        const shapeFn = MARKER_SHAPES[layer.shape] || MARKER_SHAPES.circle;
-        ctx.beginPath();
-        ctx.save();
-        ctx.scale(half, half);
-        shapeFn(ctx);
-        ctx.restore();
-        if (STROKE_ONLY_SHAPES.has(layer.shape)) {
-          ctx.strokeStyle = rgbaToCss(layer.stroke || layer.fill || [0, 0, 0, 1]);
-          ctx.lineWidth = layer.strokeWidthPx || Math.max(half * 0.3, 1.5);
-          ctx.stroke();
-        } else {
-          if (layer.fill) {
-            ctx.fillStyle = rgbaToCss(layer.fill);
-            ctx.fill();
-          }
-          if (layer.stroke && layer.strokeWidthPx > 0) {
-            ctx.strokeStyle = rgbaToCss(layer.stroke);
-            ctx.lineWidth = layer.strokeWidthPx;
-            ctx.stroke();
-          }
-        }
-      } else if (layer.kind === "ellipse") {
-        ctx.beginPath();
-        ctx.ellipse(0, 0, (layer.widthPx || 8) / 2, (layer.heightPx || 8) / 2, 0, 0, Math.PI * 2);
-        if (layer.fill) { ctx.fillStyle = rgbaToCss(layer.fill); ctx.fill(); }
-        if (layer.stroke) { ctx.strokeStyle = rgbaToCss(layer.stroke); ctx.lineWidth = layer.strokeWidthPx || 1; ctx.stroke(); }
-      } else if (layer.kind === "image" && layer.image) {
-        const img = layer.image;
-        const ratio = img.height / (img.width || 1);
-        const w = layer.sizePx, h = layer.sizePx * (Number.isFinite(ratio) ? ratio : 1);
-        ctx.drawImage(img, -w / 2, -h / 2, w, h);
-      } else if (layer.kind === "text") {
-        ctx.font = `${Math.round(layer.sizePx || 10)}px ${layer.fontFamily || "sans-serif"}`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        if (layer.stroke) {
-          ctx.strokeStyle = rgbaToCss(layer.stroke);
-          ctx.lineWidth = layer.strokeWidthPx || 1;
-          ctx.strokeText(layer.text, 0, 0);
-        }
-        ctx.fillStyle = rgbaToCss(layer.fill || [0, 0, 0, 1]);
-        ctx.fillText(layer.text, 0, 0);
+      if (layer.blend) ctx.globalCompositeOperation = layer.blend;
+      if (layer.effects?.length) {
+        // エフェクト付きレイヤは単独 canvas に描いてからエフェクトを通す
+        const tmp = document.createElement("canvas");
+        tmp.width = tmp.height = size;
+        const tctx = tmp.getContext("2d");
+        tctx.translate(size / 2, size / 2);
+        drawMarkerLayerTo(tctx, layer);
+        const fxCanvas = layer.effects.reduce((c, fx) => applyEffectToCanvas(c, fx), tmp);
+        ctx.drawImage(fxCanvas, 0, 0);
+      } else {
+        ctx.translate(W / 2, W / 2);
+        drawMarkerLayerTo(ctx, layer);
       }
       ctx.restore();
     }
@@ -1497,6 +2157,8 @@ export function fillPartsToTile(fillParts) {
       ctx.fillRect(0, 0, W, W);
     }
     for (const pt of patterns) {
+      ctx.save();
+      if (pt.blend) ctx.globalCompositeOperation = pt.blend;
       if (pt.hatch) {
         drawHatch(ctx, W, pt.hatch.angles, pt.hatch.spacingPx, pt.hatch.color);
       } else if (pt.linePattern) {
@@ -1527,6 +2189,7 @@ export function fillPartsToTile(fillParts) {
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, W, W);
       }
+      ctx.restore();
     }
   });
   return { solidBase, tile: canvas, tileMeters: tilePx * METERS_PER_PX };

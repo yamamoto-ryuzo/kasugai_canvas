@@ -41,6 +41,10 @@ import Stroke from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Stroke.js";
 import CircleStyle from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Circle.js";
 import Icon from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Icon.js";
 import Text from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Text.js";
+import Point from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/Point.js";
+import MultiPoint from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiPoint.js";
+import MultiLineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiLineString.js";
+import Polygon from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/Polygon.js";
 import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver } from "../shared/qml-2d.js";
 import { defaults as defaultControls } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/defaults.js";
 import ScaleLine from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/ScaleLine.js";
@@ -434,12 +438,41 @@ async function buildLayer(item, baseUrl, preloaded) {
       features,
     });
     const hasPoints = geojson.features?.some(f => /point/i.test(f?.geometry?.type || ""));
-    const wantCluster = hasPoints && kascOptOn(item.opts?.cluster);
-    const wantHeat = hasPoints && kascOptOn(item.opts?.heat ?? item.opts?.heatmap);
+    // QML はレイヤ生成より先に読み、heatmap/cluster/ラベル declutter を
+    // 生成時オプションへ反映する
+    let compiled = null;
+    let qmlStyleFn = null;
+    if (item.opts?.style) {
+      try {
+        compiled = await loadCompiledQml(item.opts.style, baseUrl);
+        item._qml = compiled;
+        const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text, Point, MultiPoint, MultiLineString, Polygon });
+        // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない
+        qmlStyleFn = (f, res) => {
+          const names = compiled.namesFor?.(f.getProperties() || {});
+          if (names?.length && item._legendHidden?.has(names[0])) return null;
+          return base(f, res);
+        };
+      } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
+    }
+    const wantCluster = hasPoints && (kascOptOn(item.opts?.cluster) || compiled?.cluster?.kind === "cluster");
+    const wantHeat = hasPoints && (kascOptOn(item.opts?.heat ?? item.opts?.heatmap) || !!compiled?.heatmap);
     const layer = wantHeat
-      ? new HeatmapLayer({ source: vectorSource, blur: 15, radius: 10 })
+      ? new HeatmapLayer({
+          source: vectorSource, blur: 15,
+          radius: Math.max(compiled?.heatmap?.radiusPx || 10, 1),
+          weight: compiled?.heatmap?.weightFn ? f => {
+            const w = Number(compiled.heatmap.weightFn(f.getProperties() || {}));
+            const mv = compiled.heatmap.maxValue || 1;
+            return Math.min(Math.max((Number.isFinite(w) ? w : 1) / mv, 0), 1);
+          } : undefined,
+        })
       : new VectorLayer({
-          source: wantCluster ? new ClusterSource({ source: vectorSource, distance: 40 }) : vectorSource,
+          source: wantCluster
+            ? new ClusterSource({ source: vectorSource, distance: Math.max(compiled?.cluster?.distancePx || 40, 5) })
+            : vectorSource,
+          // QML <labeling> があるレイヤは declutter を有効化(=QGIS の重なり禁止相当)
+          declutter: !!compiled?.labelFor,
         });
     const env = geojsonExtent(geojson);
     if (env) layer.set("kascEnv", env);
@@ -460,24 +493,13 @@ async function buildLayer(item, baseUrl, preloaded) {
       }
       return baseFn(inner ? inner[0] : feature);
     };
-    let baseStyleFn = makeDefaultVectorStyle();
-    if (item.opts?.style) {
-      try {
-        const compiled = await loadCompiledQml(item.opts.style, baseUrl);
-        item._qml = compiled;
-        const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text });
-        // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない
-        baseStyleFn = f => {
-          const names = compiled.namesFor?.(f.getProperties() || {});
-          if (names?.length && item._legendHidden?.has(names[0])) return null;
-          return base(f);
-        };
-        const range = compiledScaleToResRange(compiled);
-        if (range) {
-          layer.setMinResolution(range.minRes);
-          if (Number.isFinite(range.maxRes)) layer.setMaxResolution(range.maxRes);
-        }
-      } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
+    const baseStyleFn = qmlStyleFn || makeDefaultVectorStyle();
+    if (compiled) {
+      const range = compiledScaleToResRange(compiled);
+      if (range) {
+        layer.setMinResolution(range.minRes);
+        if (Number.isFinite(range.maxRes)) layer.setMaxResolution(range.maxRes);
+      }
     }
     if (!wantHeat) layer.setStyle(wantCluster ? clusterStyleFn(baseStyleFn) : baseStyleFn);
     // opacity=(0-1): レイヤ透過度。ベクター描画にも適用する(#58)

@@ -551,12 +551,15 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     const pointColor = (currentDefaultStyles || {}).point?.color ?? "#2c5ea8";
     const pointRadius = (currentDefaultStyles || {}).point?.size ? defaultPointRadius((currentDefaultStyles || {}).point.size) : 5;
     let zoomRange = null;
+    let qmlExtra = null;
     if (item.opts?.style) {
       try {
         const { loadCompiledQml, maplibreApplyQml, compiledScaleToResRange, resToZoom } = await import("../shared/qml-2d.js");
         const compiled = await loadCompiledQml(item.opts.style, baseUrl);
         item._qml = compiled;
-        kinds = maplibreApplyQml(geojson, compiled).kinds;
+        const applied = maplibreApplyQml(geojson, compiled);
+        kinds = applied.kinds;
+        qmlExtra = applied;
         const range = compiledScaleToResRange(compiled);
         if (range) {
           const lat = map.getCenter().lat;
@@ -566,6 +569,15 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
             maxzoom: Math.min(24, resToZoom(Math.max(range.minRes, 0.01), lat) - 1),
           };
         }
+        // ラベルの縮尺表示(rendering scaleVisibility) → symbol レイヤの zoom 範囲
+        const ls = applied.labelScaleRange;
+        if (ls && (ls.minScale || ls.maxScale)) {
+          const lat = map.getCenter().lat;
+          qmlExtra.labelZoom = {
+            minzoom: ls.maxScale ? Math.max(0, resToZoom(ls.maxScale * 0.00028, lat) - 1) : 0,
+            maxzoom: ls.minScale ? Math.min(24, resToZoom(ls.minScale * 0.00028, lat) - 1) : 24,
+          };
+        }
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
     const env = geojsonExtent(geojson);
@@ -573,26 +585,41 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     item._geojson = geojson;
     const before = beforeId();
     const hasPoints = geojson.features?.some(f => /point/i.test(f?.geometry?.type || ""));
-    const wantCluster = hasPoints && kascOptOn(item.opts?.cluster);
-    const wantHeat = hasPoints && kascOptOn(item.opts?.heat ?? item.opts?.heatmap);
+    const wantCluster = hasPoints && (kascOptOn(item.opts?.cluster) || item._qml?.cluster?.kind === "cluster");
+    const wantHeat = hasPoints && (kascOptOn(item.opts?.heat ?? item.opts?.heatmap) || !!item._qml?.heatmap);
     // circle 種はクラスタ/ヒートマップ指定時に専用レイヤへ差し替える
     const circleKind = kinds.find(k => k[0] === "circle");
     if (wantCluster) {
       kinds = kinds.filter(([kind]) => kind !== "circle");
     } else if (wantHeat && circleKind) {
+      const hm = item._qml?.heatmap;
+      const ramp = hm?.ramp;
       kinds = kinds.map(([kind, filter, paint]) => kind === "circle"
         ? ["heatmap", filter, {
-            "heatmap-weight": 1,
+            "heatmap-weight": hm ? ["coalesce", ["get", "__kasc_heat"], 1] : 1,
             "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 15, 3],
-            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 2, 15, 22],
+            "heatmap-radius": hm
+              ? Math.max(hm.radiusPx || 10, 1)
+              : ["interpolate", ["linear"], ["zoom"], 0, 2, 15, 22],
+            ...(ramp?.length ? {
+              "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"],
+                0, "rgba(0,0,0,0)",
+                ...ramp.flatMap(s => [s.offset, `rgba(${s.color.map(v => Math.round(v * 255)).join(",")})`])],
+            } : {}),
             "heatmap-opacity": 0.7,
           }] : [kind, filter, paint]);
     }
-    map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: 50, clusterMaxZoom: 16 } : {}) });
+    map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: Math.max(item._qml?.cluster?.distancePx || 50, 5), clusterMaxZoom: 16 } : {}) });
     for (const [kind, filter, paint, layout] of kinds) {
-      const lid = `${sid}-${kind}`;
+      const lid = kind === "symbol" && kinds.filter(k => k[0] === "symbol").length > 1
+        ? `${sid}-${kind}-${layout?.["symbol-placement"] || "point"}` : `${sid}-${kind}`;
       const def = { id: lid, type: kind, source: sid, filter, paint, layout: { ...layout, visibility: item.visible ? "visible" : "none" } };
       if (zoomRange) { def.minzoom = zoomRange.minzoom; def.maxzoom = zoomRange.maxzoom; }
+      // ラベル縮尺表示は symbol レイヤへだけ適用(地物描画には影響させない)
+      if (kind === "symbol" && qmlExtra?.labelZoom) {
+        def.minzoom = Math.max(def.minzoom ?? 0, qmlExtra.labelZoom.minzoom);
+        def.maxzoom = Math.min(def.maxzoom ?? 24, qmlExtra.labelZoom.maxzoom);
+      }
       map.addLayer(applyVisZoom(def, item), before);
       lids.push(lid);
       if (!filters) filters = new Map();

@@ -180,6 +180,10 @@
   /* QML <labeling> の地物ラベル(永久 tooltip を透明化してテキストのみ表示) */
   .kasc-label.leaflet-tooltip { background: transparent; border: none; box-shadow: none; padding: 0; }
   .kasc-label.leaflet-tooltip:before { display: none; }
+  /* ラベル縮尺表示の範囲外は非表示 */
+  .kasc-label.leaflet-tooltip.kasc-label-hidden { display: none; }
+  /* QML ラベル内 span は中央寄せ・改行対応 */
+  .kasc-label span { display: inline-block; text-align: center; }
   /* ナビゲーションツールバー（OpenLayers/Cesium 版と同型の右上配置） */
   .navigation-toolbar { position: absolute; z-index: 1004; top: 14px; right: 14px;
     display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7px 5px;
