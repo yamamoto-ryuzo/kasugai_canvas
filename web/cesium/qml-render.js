@@ -124,6 +124,21 @@ function pointInsidePolygon(entity, time) {
 // 周線を別途 polyline で引く)。opacity: レイヤ透過度(色アルファへ乗算)
 export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
   if (!style) return;
+  // 補助エンティティの生成/削除とラベル更新を1回の変更通知に束ねる。
+  // 逐次変更だと実行中のプリミティブ構築と競合し(属性リスト不整合など)
+  // レンダリングクラッシュを起こすことがある
+  if (ds._qmlApplying) return;
+  ds._qmlApplying = true;
+  try { ds.entities.suspendEvents?.(); } catch (_) {}
+  try {
+  _applyQmlStyleToDataSourceInner(ds, style, { clamp, time, hiddenSymbols, opacity });
+  } finally {
+    ds._qmlApplying = false;
+    try { ds.entities.resumeEvents?.(); } catch (_) {}
+  }
+}
+
+function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
   const t = time || Cesium.JulianDate.now();
   const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
   // 前回適用時に生成した補助エンティティ(装飾線・積層線)を掃除する

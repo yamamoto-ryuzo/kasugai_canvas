@@ -1750,7 +1750,7 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   const bufferSize = sizeToPx(b("bufferSize") ?? 1, b("bufferSizeUnit") || b("bufferSizeUnits") || "MM");
   if (bufEl) {
     if (b("bufferBlendMode") && String(b("bufferBlendMode")) !== "0") warnOnce(warnings, "バッファのブレンドモードは未対応です");
-    if (qgisBool(b("bufferNoFill"))) warnOnce(warnings, "bufferNoFill(内側を塗らない)は未対応です");
+    if (bufferDraw && qgisBool(b("bufferNoFill"))) warnOnce(warnings, "bufferNoFill(内側を塗らない)は未対応です");
   }
   // QFont weight(0-99, >=50 が太字相当)・namedStyle も太字/斜体の決定に使う
   const namedStyle = String(a("namedStyle") || "").toLowerCase();
