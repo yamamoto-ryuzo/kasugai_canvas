@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.22.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
       <p>V7: QGIS連携 — QGIS プロジェクトをそのまま再現する Canvas</p>
     </header>
     <main>
@@ -100,7 +100,17 @@
       <li><strong>ホスト版（route=hosted）</strong>— CDN ホスト版エンジン＋QGIS 側配信で、Canvas 未インストール環境でも開ける</li>
       <li><strong>静的出力（emit_launchers / emit_zip）</strong>— 起動 HTML 同梱・ZIP 化でそのまま配布。納品用ローカル化（<code>DATA/http</code> へのダウンロード書換え）も <code>style=/qml=</code> を対象に含む</li>
       <li><strong>Re:Earth 連携</strong>— <code>reearth.txt</code> 出力で geo_suite の <code>qgis:</code> インスペクタ行から取り込み</li>
+      <li><strong>AI オーケストレーション（QGIS Live Driver の MCP 接続）</strong>— 管理 → AI → データソースの「起動中の QGIS に接続」が <code>/api/qgis-live/discover</code> で稼働セッション（<code>~/.qgis-live/</code> レジストリ）を自動検出し、QGIS の <code>/mcp</code> を AI チャットの MCP サーバーとして登録。<code>qgis_pyeval</code>/<code>qgis_bridge_call</code> 等がチャットツールへ合成され、「この QGIS プロジェクトを Canvas で開いて」のような指示で AI がエクスポート〜表示まで一気通貫で駆動できる。実行系ツール（pyeval/eval/reload 系）は「書き込み系ツールも AI に公開する」のゲート＋実行ごとの確認対象</li>
       </ul>
+
+      <h3>⚡ ライブ双方向連携（live sync）</h3>
+      <p>geo_webview 4.9.0 以降で利用できる <strong>QGIS ↔ Canvas のライブ連動</strong>です。<code>liveSyncStart</code> bridge（または QSettings <code>kasugai_live_sync</code>）で有効化すると:</p>
+      <ul>
+      <li><strong>QGIS → Canvas</strong>：レイヤ編集（地物追加/削除・ジオメトリ/属性変更）・スタイル変更・レイヤ追加/削除・ツリー可視性変更を 1.2 秒デバウンスで検出し、最後のエクスポート先へ<strong>差分エクスポート</strong>（未変更レイヤのデータ/スタイル書き出しを省略）。エクスポート時に <code>.kasc</code> へ <code>live: &lt;QGIS HTTPサーバ base URL&gt;</code> 行と <code>live.json</code> マニフェストを出力。Canvas は live.json ポーリング（1.5 秒）または <code>/api/command</code> の <code>liveSync</code> プッシュで検出し、<strong>.kasc テキストが変わっていなければ変更レイヤのみ再読込</strong>（cesium=DataSource差替 / maplibre=source.setData）。構造変化時は全体再適用（カメラ位置は維持）</li>
+      <li><strong>Canvas → QGIS</strong>：カメラ停止時に <code>POST /live/camera</code> で QGIS キャンバスへ中心/縮尺/回転を逆通知、地物クリックで <code>POST /live/selection</code> で QGIS レイヤ選択を逆通知（ids 優先・無ければ座標+buffer選択）。<code>GET /live/state</code> で連携状態を照会可能</li>
+      <li><strong>対応エンジン</strong>：cesium/maplibre は差分適用＋カメラ/選択逆通知、openlayers/leaflet/navara は全適用＋カメラ逆通知（選択通知は未実装）、gsimaps は未対応</li>
+      </ul>
+      <p>既存の保存時自動再エクスポート（<code>kasugai_auto_export</code>）はそのまま共存します。ライブ連携は保存を待たず編集操作をほぼ即時反映する上位経路で、<code>/present</code> の画面共有と併用すると「QGIS で編集中の画面を Canvas でライブ共有」が可能です。</p>
 
       <h3>🚧 未対応・ロードマップ（Issue）</h3>
       <p>「QGIS プロジェクトをそのまま再現する」ための残課題は GitHub Issue で管理しています。詳細は <a href="../qgis.html#qgis連携未対応issue">QGIS・GDAL連携 — 未対応・検討中</a> も参照。</p>

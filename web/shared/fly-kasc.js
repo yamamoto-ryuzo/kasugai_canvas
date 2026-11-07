@@ -21,6 +21,7 @@ export function createKascFlyPaths({ resolveUrl, getInspectorText, setInspectorT
       title: item.title || item.url,
       url: resolveUrl ? resolveUrl(item.url) : item.url,
       speed: num(o.speed), height: num(o.height), pitch: num(o.pitch),
+      step: num(o.step),
       loop: /^(true|1|on|yes)$/i.test(o.loop || ""), view: o.view,
       _item: item,
     };

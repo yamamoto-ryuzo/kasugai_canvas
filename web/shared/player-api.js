@@ -268,14 +268,24 @@ export function createPlayerApi(hooks) {
     lastFlyPath = path;
     const view = hooks.getViewInfo?.() || {};
     const height = Number.isFinite(+path.height) ? +path.height : undefined;
-    const zoom = Number.isFinite(+path.zoom) ? +path.zoom
+    const fallbackZoom = Number.isFinite(+path.zoom) ? +path.zoom
       : (Number.isFinite(height) ? camToZoom({ latitude: coords[0][1], height }) : view.zoom);
     const pitch = Number.isFinite(+path.pitch) ? +path.pitch : -10;
-    const moveTo = at => hooks.flyToView({
-      latitude: at.pos[1], longitude: at.pos[0], zoom,
-      height: Number.isFinite(at.alt) ? at.alt + (height || 0) : height,
-      heading: at.heading, pitch, instant: true,
-    });
+    // 正典 zoom の明示指定(path.zoom)がある時だけ zoom 固定。
+    // それ以外は点ごとの高度(at.alt)を height で渡し、エンジン側が
+    // 高度→ズームを都度換算する(アトラス巡回等の可変縮尺ルートを許す)。
+    // 高度情報が無ければ従来どおり起算した固定 zoom へフォールバック
+    const moveTo = at => {
+      const h = Number.isFinite(at.alt) ? at.alt + (height || 0) : height;
+      const v = {
+        latitude: at.pos[1], longitude: at.pos[0],
+        heading: at.heading, pitch, instant: true,
+      };
+      if (Number.isFinite(+path.zoom)) v.zoom = +path.zoom;
+      else if (Number.isFinite(h)) v.height = h;
+      else v.zoom = fallbackZoom;
+      hooks.flyToView(v);
+    };
     moveTo({ pos: coords[0], heading: flyBearing(coords[0], coords[1]), alt: Number(coords[0][2]) || undefined });
     if (!autoplay) return true;
     const speed = Number(path.speed) > 0 ? Number(path.speed) : 30; // m/s
@@ -590,6 +600,11 @@ export function createPlayerApi(hooks) {
     async applyInspector(text) {
       await hooks.applyInspectorText(String(text ?? ""));
       return true;
+    },
+    // QGIS ライブ連携: /api/command の liveSync プッシュで即時反映(#62)
+    async liveSync(args = {}) {
+      if (!hooks.liveSync) return { ok: false, reason: "unsupported" };
+      return hooks.liveSync(args);
     },
     exportInspector() {
       document.querySelector("#export-inspector")?.click();

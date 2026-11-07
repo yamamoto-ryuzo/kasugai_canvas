@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.22.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
       <p>QGIS・GDAL連携 — geo_webview によるエクスポート連携：実装済みの再現範囲と未対応課題</p>
     </header>
     <main>
@@ -140,6 +140,15 @@
       <code>;style=</code> で付与（テーマ別スタイル切替を再現・v4.6.0〜）</td>
       </tr>
       <tr>
+      <td>アトラス有効な印刷レイアウト</td>
+      <td><code>fly_geojson:</code> 行＋<code>DATA/atlas_*.geojson</code> →
+      Fly パネルのプレゼン巡回ルート。各ページ表示範囲を巡回し、
+      座標 Z にページを収めるカメラ高を焼き込む（点ごとの可変縮尺に対応・
+      geo_webview v4.8.0〜）。印刷レイアウト本体の PDF 出力は
+      印刷ダイアログの「QGIS レイアウトPDF」から（<code>/layouts</code>・
+      <code>/layout-pdf</code>、アトラスは全ページ出力）</td>
+      </tr>
+      <tr>
       <td>破損レイヤー（ソース未達）</td>
       <td><code>readLayerXml</code> で再生成してエクスポートを試行</td>
       </tr>
@@ -255,6 +264,18 @@
       <td>エンジン起動 HTML を同梱 / 一式を
       <code>kasugai_canvas_*.zip</code> 化（Re:Earth geo_suite の
       <code>qgis:</code> 行が直接取り込み可・<code>/export-data/</code> でも取得可）</td>
+      </tr>
+      <tr>
+      <td>AI チャット「起動中の QGIS に接続」（管理 → AI → データソース）</td>
+      <td><code>/api/qgis-live/discover</code> が稼働中の QGIS Live Driver
+      セッションを <code>~/.qgis-live/</code> レジストリから検出し、
+      <code>/api/qgis-live/mcp</code> リレー経由で QGIS の <code>/mcp</code>
+      （Streamable HTTP・トークンはリレーが付与）を AI チャットの MCP
+      サーバーとして登録。<code>qgis_describe_plugins</code> で各プラグインの
+      機能を自己発見し <code>qgis_bridge_call</code> で
+      <code>kasugaiExport</code> 等を実行できる（AI オーケストレーション。
+      <code>qgis_pyeval</code>/<code>qgis_eval</code>/reload 系は
+      「書き込み系ツールも AI に公開する」ゲート対象）</td>
       </tr>
       </tbody>
       </table>

@@ -12,6 +12,7 @@ import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
+import { configureLive, liveUpdate, liveNotifyCamera } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
@@ -23,6 +24,8 @@ import { initPrint, compositeDomMap } from "../shared/print.js";
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement } from "../shared/qml-2d.js";
+import { markerLayersToCanvas, fillPartsToTile } from "../shared/qml-style.js";
+import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "kml", "kmz", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
@@ -293,6 +296,7 @@ function makeVectorStyleFn(item) {
           return {
             color: s.stroke || "#2c5ea8", weight: s.strokeWidth ?? 1.5,
             dashArray: s.dash || undefined, dashOffset: undefined,
+            lineJoin: s.join || undefined, lineCap: s.cap || undefined,
             fillColor: s.fill || "#3a7bd5", fillOpacity: 0.5 * o,
             opacity: o, fill: true, interactive: true,
           };
@@ -573,6 +577,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     if (item.opts?.style) {
       try {
         item._qml = await loadCompiledQml(item.opts.style, baseUrl);
+        if (item._qml?.inverted) applyInvertedMaskGeojson(geojson);
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
     // opacity=(0-1): レイヤ透過度。スタイル関数のアルファ乗算に引き継ぐ(#58)
@@ -634,10 +639,25 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       syncDeckLayers();
       return { layer, styleFn, viewportQuery, zoomRange: itemVisZoom };
     }
+    // QML マーカー canvas → Leaflet Icon のキャッシュ(markerCanvas→dataURL)
+    const iconUrlCache = new WeakMap();
+    const pointIcon = f => {
+      try {
+        const spec = item._qml?.evaluate?.(f?.properties || {});
+        if (!spec?.markers?.length) return null;
+        const cv = markerLayersToCanvas(spec.markers);
+        let url = iconUrlCache.get(cv);
+        if (!url) { url = cv.toDataURL(); iconUrlCache.set(cv, url); }
+        return L.icon({ iconUrl: url, iconSize: [cv.width, cv.height], iconAnchor: [cv.width / 2, cv.height / 2] });
+      } catch (_) { return null; }
+    };
     const layer = L.geoJSON(geojson, {
       pane,
       style: styleFn,
-      pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, pane }),
+      pointToLayer: (f, latlng) => {
+        const ic = item._qml ? pointIcon(f) : null;
+        return ic ? L.marker(latlng, { icon: ic, pane }) : L.circleMarker(latlng, { radius: 5, pane });
+      },
       onEachFeature: (f, l) => {
         if (item._qml?.labelFor) { l._kascLabel = { item, feature: f }; syncLeafletLabel(l); }
         l.on("click", e => {
@@ -655,6 +675,47 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         });
       },
     });
+    // パターン塗り(hatch/pointPattern等)を SVG <pattern> で近似する。
+    // Leaflet は fillColor のみ対応のため、path の fill 属性を
+    // url(#id) へ直接書き換える(setStyle で消えたら再適用)
+    const patUrls = new WeakMap();
+    const applyPatternFills = () => {
+      if (!item._qml) return;
+      const renderer = map.getRenderer(layer);
+      const svgRoot = renderer?._root || renderer?._container;
+      if (!svgRoot) return;
+      let defs = svgRoot.querySelector("defs");
+      layer.eachLayer(sub => {
+        try {
+          const f = sub.feature;
+          if (!f || !/Polygon/.test(f.geometry?.type || "")) return;
+          const spec = item._qml.evaluate(f.properties || {});
+          if (!spec?.fillParts?.length) return;
+          const { tile } = fillPartsToTile(spec.fillParts);
+          if (!tile) return;
+          let pid = patUrls.get(tile);
+          if (!pid) {
+            pid = `kp_${patUrls.size}`;
+            if (!defs) { defs = document.createElementNS("http://www.w3.org/2000/svg", "defs"); svgRoot.prepend(defs); }
+            const pat = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
+            pat.setAttribute("id", pid);
+            pat.setAttribute("patternUnits", "userSpaceOnUse");
+            pat.setAttribute("width", tile.width); pat.setAttribute("height", tile.height);
+            const im = document.createElementNS("http://www.w3.org/2000/svg", "image");
+            im.setAttribute("href", tile.toDataURL());
+            im.setAttribute("width", tile.width); im.setAttribute("height", tile.height);
+            pat.append(im); defs.append(pat);
+            patUrls.set(tile, pid);
+          }
+          const path = sub._path || sub.getElement?.();
+          if (path) path.setAttribute("fill", `url(#${pid})`);
+          sub._kascPat = pid;
+        } catch (_) {}
+      });
+    };
+    layer.on("add", applyPatternFills);
+    map.whenReady(() => setTimeout(applyPatternFills, 0));
+
     let zoomRange = null;
     if (item._qml) {
       const range = compiledScaleToResRange(item._qml);
@@ -1226,6 +1287,14 @@ async function loadProject(id) {
 
 // インスペクターの「登録」: 編集済み .kasc テキストを現在プロジェクトの
 // baseUrl で再描画する。プロジェクトファイル自体は書き換えない
+// QGIS ライブ連携(#62): 更新検出 → 全体再適用(レイヤ単位差分は
+// cesium/maplibre が対応。本エンジンは互換ビューとして全適用)
+async function liveApplyText(text) {
+  const inp = document.querySelector("#inspector-input");
+  if (inp) inp.value = text;
+  await applyInspectorText(text);
+}
+
 async function applyInspectorText(text) {
   const baseUrl = lastBaseUrl || projectsBaseUrl(currentProjectId);
   await renderProject(currentProjectId || "default", baseUrl, parseKasc(text));
@@ -1388,6 +1457,13 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   for (let i = entries.length - 1; i >= 0; i--) if (entries[i].item.type !== "3dtiles") entries[i].paneName = newKascPane();
   layerEntries = entries;
   lastBaseUrl = baseUrl;
+  // QGIS ライブ双方向連携(#62): live: 行があれば live.json ポーリング開始
+  configureLive(doc, {
+    baseUrl,
+    kascUrl: lastKascUrl || null,
+    applyKascText: liveApplyText,
+    getView: () => mapViewToUrl(),
+  });
   // group: 行の折りたたみ初期状態(#59)。QGIS レイヤーツリーの展開状態を再現
   applyKascGroupStates(doc.groups, expandedLayerGroups);
   renderLayerRows(entries, unsupported);
@@ -1617,6 +1693,8 @@ let requeryTimer = null;
 map.on("moveend", () => {
   // 初期URLを読み取る前の初回moveendでパーマリンクを上書きしないよう消費済みを待つ
   if (urlViewConsumed) writeUrlView(mapViewToUrl(), lastKascUrl ? undefined : currentProjectId);
+  // QGIS ライブ連携: カメラ停止で QGIS キャンバスへ逆通知(#62)
+  liveNotifyCamera();
   minimap.scheduleUpdate();
   geoTools.scheduleGraticule();
   const targets = layerEntries.filter(e => e.item._viewportQuery && e.item.visible !== false);
@@ -1978,6 +2056,7 @@ window.kasugaiApi = createPlayerApi({
   getBaseUrl: () => lastBaseUrl,
   loadProject,
   applyInspectorText,
+  liveSync: async args => liveUpdate(args),
   getInspectorText: () => inspectorInput.value,
   setInspectorText: v => { inspectorInput.value = v; },
   applyEntryVisibility, focusEntry, maybeLoadEntry,

@@ -4,6 +4,58 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.23.0] - 2026-11-07
+
+- QGIS ライブ双方向連携(geo_webview 4.9.0 と対・#62):
+  - `.kasc` の `live: <QGIS HTTPサーバ base URL>` 行を新規パース
+    (shared/kasc.js)。同じ場所の `live.json` マニフェストを 1.5 秒
+    ポーリング、またはローカルアプリの `/api/command` へ届く
+    `liveSync` プッシュで差分を即時検出(shared/live.js 新規)
+  - `.kasc` テキストが変わっていなければ変更レイヤのみ再読込
+    (cesium=DataSource 差替・maplibre=source.setData)。構造変化時は
+    全体再適用(カメラ位置は維持)。openlayers/leaflet/navara は
+    全体再適用のみ
+  - **逆方向(Canvas → QGIS)**: カメラ停止時に `POST /live/camera` で
+    QGIS キャンバスへ中心/縮尺/回転を逆通知、地物クリックで
+    `POST /live/selection` で QGIS レイヤ選択を逆通知
+    (選択通知は cesium/maplibre のみ)
+
+- AI オーケストレーション「起動中の QGIS に接続」(管理 → AI →
+  データソース・Cesium): `/api/qgis-live/discover` が稼働中の
+  QGIS Live Driver セッションを `~/.qgis-live/` レジストリから
+  自動検出し、`/api/qgis-live/mcp` 専用リレー(QGIS 側は CORS 非対応+
+  Bearer 必須のため、検出セッション宛て限定でトークンをリレー付与)
+  経由で QGIS の `/mcp` を AI チャットの MCP サーバーとして
+  ワンクリック登録。`qgis_describe_plugins` でプラグイン機能を
+  自己発見し `qgis_bridge_call` で `kasugaiExport` 等を実行できる。
+  QGIS 再起動でポート・トークンが変わってもセッション再解決で追随
+
+- FLY ルート(geo_webview 4.8.0 アトラス出力・4.10.0 3Dアニメ出力と対):
+  - `fly_geojson` を NON_LAYER_TYPES に追加(テーマ適用でルート行が
+    `| off` になる既存不具合の修正)
+  - プレイヤー(shared/player-api.js)が点ごとの高度を zoom ではなく
+    height として渡すよう変更。`path.zoom` 明示時のみ固定 zoom、
+    高度が無ければ従来の換算 zoom へフォールバック(アトラス巡回等の
+    可変縮尺ルートに対応)
+
+- QML 2D レンダリング強化(qml-2d.js/qml-style.js):
+  - `invertedPolygonRenderer`(地物の外側を塗るマスク)を
+    「世界矩形 − 地物リング(穴)」ポリゴンで再現
+    (Cesium/MapLibre/Leaflet/OpenLayers)
+  - パターン系塗りつぶし(hatch/linePattern/pointPattern/imagePattern/
+    gradient)をタイル canvas の CanvasPattern で再現
+  - 複数ラインシンボルレイヤ(ケーシング)の描画順・CentroidFill・
+    マーカーオフセット+アンカー点のピクセル正規化
+  - 装飾ライン(MarkerLine/HashLine/ArrowLine)を補助エンティティで
+    近似描画(Cesium)
+
+- MCP 書き込み系ツールの推定に `eval`/`reload` を追加:
+  `qgis_pyeval` 等の実行系ツールを「書き込み系ツールも AI に公開
+  する」ゲート＋実行ごとの確認ダイアログ対象へ
+
+- bridge-hub(Rust 製 `bridge-hub.exe`)更新 — `web/download/` の
+  配布物を同梱版へ再ビルド
+
 ## [6.22.0] - 2026-11-07
 
 - QGIS連携: `?kasc=<zip のURL>` で .kasc+DATA/ の ZIP をブラウザ内で解凍して

@@ -27,7 +27,8 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom } from "../shared/kasc.js";
+import { configureLive, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
 import { initToolsDockUX } from "../shared/tools-dock-ux.js";
@@ -679,6 +680,8 @@ const inspectorThemes = [];
 // インスペクタの bookmark: 行で宣言された QGIS ブックマーク XML 参照
 // {title, url}[]。applyInspector で収集し、非同期ロードでカメラプリセットへ展開する
 const inspectorBookmarkSpecs = [];
+// live: 行(QGIS ライブ双方向連携)。applyInspector で再評価し shared/live.js へ渡す
+let inspectorLiveSpec = null;
 // インスペクタの scene3d: 行で宣言された QGIS 3Dシーン設定(#60)。
 // {background: Color, skybox: bool, atmosphere: bool, shadows: bool}。
 // applyInspector で再構築し、updateUndergroundView が skyBox/backgroundColor
@@ -5244,6 +5247,7 @@ function applyInspector(text) {
   inspectorPluginSpecs.splice(0, inspectorPluginSpecs.length);
   inspectorThemes.splice(0, inspectorThemes.length);
   inspectorBookmarkSpecs.splice(0, inspectorBookmarkSpecs.length);
+  inspectorLiveSpec = null;
   vectorDefaultStyles.point = null;
   vectorDefaultStyles.line = null;
   vectorDefaultStyles.polygon = null;
@@ -5296,6 +5300,12 @@ function applyInspector(text) {
 
     if (type === "title") {
       parsedPanelTitle = value || null;
+    }
+    // live: <geo_webview HTTPサーバ base URL> — QGIS ライブ双方向連携(#62)。
+    // 値は保持のみで、反映は applyInspector 末尾の liveConfigureFromSpec が行う
+    if (type === "live") {
+      const parts = value.split("|").map(part => part.trim());
+      inspectorLiveSpec = { url: parts[0] || "", line };
     }
     if (type === "background") {
       document.body.style.background = value;
@@ -6073,6 +6083,7 @@ function applyInspector(text) {
     } catch (_) { /* 対応なし */ }
   }
   void applyInspectorCloud(inspectorCloudSpec);
+  liveConfigureFromSpec();
   if (flyResume) {
     // 描画ルートは IndexedDB から非同期（直列キュー）で再登録される。
     // まず手動ウォークへ即座にフォールバックして入力を解放しつつ、同一タイトルの
@@ -6086,6 +6097,99 @@ function applyInspector(text) {
       }
     })();
   }
+}
+
+// ---- QGIS ライブ双方向連携(#62) ----
+// applyInspector で拾った live: 行を shared/live.js へ反映し、
+// live.json ポーリング・/api/command liveSync・カメラ/選択逆通知を制御する
+function liveConfigureFromSpec() {
+  configureLive({ live: inspectorLiveSpec }, {
+    baseUrl: kascBaseUrl() || (currentProjectId ? projectsBaseUrl(currentProjectId) : null),
+    kascUrl: currentKascUrl || null,
+    applyKascText: liveApplyKascText,
+    getView: () => {
+      const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+      if (!c) return {};
+      const lat = c.latitude * 180 / Math.PI;
+      const height = c.height;
+      return {
+        latitude: lat,
+        longitude: c.longitude * 180 / Math.PI,
+        height,
+        pitch: viewer.camera.pitch * 180 / Math.PI,
+        heading: viewer.camera.heading * 180 / Math.PI,
+        zoom: Number.isFinite(height)
+          ? heightToViewZoom(lat, height, viewer.canvas.clientHeight || 0) : undefined,
+      };
+    },
+  });
+}
+
+// live.json rev 検出後の適用本体。.kasc テキストが現行と同じなら
+// 変更レイヤのデータ/スタイルだけ再読込(カメラ・他レイヤは維持)、
+// テキストが変わっていれば applyInspector で全体適用(カメラは維持される)
+async function liveApplyKascText(text, { changed = [], full = false } = {}) {
+  const input = document.querySelector("#inspector-input");
+  const current = (input?.value || "").trim();
+  if (full || String(text || "").trim() !== current) {
+    if (input) input.value = text;
+    applyInspector(text);
+    liveConfigureFromSpec();
+    return;
+  }
+  const targets = new Set(
+    changed.map(t => normKascTitle(t))
+      .flatMap(t => [t, t.split("/").pop()]));
+  const items = [...layers, ...tileLayers].filter(it =>
+    !changed.length
+    || targets.has(normKascTitle(it.sourceTitle || ""))
+    || targets.has(normKascTitle(it.title || "")));
+  for (const item of items) {
+    try { await liveReloadItem(item); }
+    catch (e) { console.warn("live reload failed:", item.title, e); }
+  }
+  buildVectorSearchIndex();
+  updateVectorSearchUI();
+  renderLayerList();
+}
+
+// 1レイヤーだけ再取得して DataSource を差し替える。
+// デコーダ系(gpkg/duckdb/sql/geoparquet/flatgeobuf 等)は reloadVectorLayer、
+// 生 geojson/layer は fetch し直して entity を作り直す。
+// それ以外の型は全体再適用(applyInspector)にフォールバックする
+async function liveReloadItem(item) {
+  if (item.styleUrl) {
+    qmlStyleCache.delete(item.styleUrl);
+    item.qmlStyle = undefined;
+  }
+  const decoder = vectorDecoders.get(item.type);
+  if (decoder) {
+    await reloadVectorLayer(item);
+    requestRender();
+    return;
+  }
+  if ((item.type === "geojson" || item.type === "layer")
+      && !item.renderPrimitive && !item.heat && item.url) {
+    const entry = vectorDataSources.find(e => e.id === item.id);
+    if (!entry) { applyInspector(document.querySelector("#inspector-input")?.value || ""); return; }
+    vectorSourceCache.delete(`${item.id}|${item.url || ""}`);
+    if (item.styleUrl) await ensureQmlStyle(item);
+    const response = await fetch(item.url, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const geojson = normalizeGeoJsonCrs(await response.json());
+    const limited = limitGeoJsonFeatures(geojson, getVectorEntityLimit(), item);
+    const ds = await buildStyledGeoJsonDataSource(limited.source, getVectorDrapeFlags(), item);
+    try { ds.show = item.visible; } catch (e) {}
+    viewer.dataSources.remove(entry.ds, false);
+    await viewer.dataSources.add(ds);
+    entry.ds = ds;
+    layerRuntimeTargets.set(item.id, ds);
+    item.geojsonSource = geojson;
+    requestRender();
+    return;
+  }
+  // タイル/3dtiles/image/geotiff 等は全体再適用で反映
+  applyInspector(document.querySelector("#inspector-input")?.value || "");
 }
 
 // inspector の cloud: 行を実行する。/api/cloud/* はローカルサーバー版のみ
@@ -6587,6 +6691,8 @@ function setupEvents() {
   });
   viewer.camera.changed.addEventListener(minimap.scheduleUpdate);
   viewer.camera.moveEnd.addEventListener(minimap.scheduleUpdate);
+  // QGIS ライブ連携: カメラ停止で QGIS キャンバスへ逆通知(live: 行がある時のみ送る)
+  viewer.camera.moveEnd.addEventListener(() => liveNotifyCamera());
 
   // 地物クリックの属性ポップアップ(オプション)。既存の属性パネル表示はそのまま併用する
   viewer.canvas.addEventListener("click", e => {
@@ -9433,6 +9539,22 @@ function setupEvents() {
       // 位置が取れる entity 由来のレコードのみ対象
       const flyCartesian = record.entity ? getEntityPosition(record.entity) : null;
       const flyDeg = flyCartesian ? cartesianToDegrees(flyCartesian) : null;
+      // QGIS ライブ連携: 最前面の地物を QGIS 側の選択へ逆通知(#62)
+      if (index === 0) {
+        try {
+          let ids;
+          try {
+            const v = record.entity?.properties?.id?.getValue?.()
+              ?? record.entity?.properties?.id;
+            if (Number.isFinite(Number(v))) ids = [Number(v)];
+          } catch (_) { /* id 無しは座標選択へ */ }
+          liveNotifySelection({
+            layer: record.item?.sourceTitle || record.item?.title || "",
+            longitude: flyDeg?.lng, latitude: flyDeg?.lat,
+            ...(ids ? { ids } : {}),
+          });
+        } catch (_) { /* 逆通知失敗は無視 */ }
+      }
       if (flyDeg && Number.isFinite(flyDeg.lat) && Number.isFinite(flyDeg.lng)) {
         table.querySelectorAll("tr").forEach(tr => {
           tr.style.cursor = "pointer";
@@ -11188,6 +11310,13 @@ window.kasugaiApi = {
     input.value = text;
     document.querySelector("#apply-inspector")?.click();
     return true;
+  },
+  // QGIS ライブ連携: /api/command の liveSync プッシュで即時反映(#62)
+  liveSync(args = {}) {
+    return liveUpdate(args);
+  },
+  liveSyncStatus() {
+    return liveStatus();
   },
   exportInspector() {
     const button = document.querySelector("#export-inspector");

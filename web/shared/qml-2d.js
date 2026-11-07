@@ -2,7 +2,7 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, setLayerVisibilityResolver } from "./qml-style.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, setLayerVisibilityResolver } from "./qml-style.js";
 import { resolveKascUrl } from "./kasc.js";
 
 // QML 式の is_layer_visible('名前') を各エンジンのレイヤー表示状態へ解決する。
@@ -278,9 +278,41 @@ function decorToOlStyles(decor, geom, resolution, OL) {
   return [];
 }
 
+// CanvasPattern 生成用の共有 2D コンテキスト
+let _patternCtx = null;
+function makePattern(canvas) {
+  if (!canvas) return null;
+  if (!_patternCtx) {
+    _patternCtx = document.createElement("canvas").getContext("2d");
+    _patternCtx.canvas.width = _patternCtx.canvas.height = 1;
+  }
+  return _patternCtx.createPattern(canvas, "repeat");
+}
+
+// invertedPolygonRenderer 用: 地物ジオメトリを「世界矩形 − 地物リング(穴)」へ
+// 変換する GeoJSON 変換(MapLibre/Leaflet は焼き込み時に適用)
+const _KASC_WORLD_RING = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+export function applyInvertedMaskGeojson(geojson) {
+  for (const f of geojson?.features || []) {
+    const g = f?.geometry;
+    if (!g) continue;
+    if (g.type === "Polygon") {
+      g.coordinates = [_KASC_WORLD_RING, ...g.coordinates];
+    } else if (g.type === "MultiPolygon") {
+      g.coordinates = [[_KASC_WORLD_RING, ...g.coordinates.flat()]];
+    }
+  }
+}
+
 // --- OpenLayers: feature → ol.style.Style のスタイル関数を生成
 export function olQmlStyleFunction(compiled, OL) {
-  const { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text } = OL;
+  const { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text, Point, Polygon } = OL;
+  const strokeOf = (line) => new Stroke({
+    color: rgbaToCss(line.color), width: line.widthPx ?? 1.5,
+    lineDash: line.dash || undefined,
+    lineJoin: line.join || undefined, lineCap: line.cap || undefined,
+    miterLimit: 10,
+  });
   return (feature, resolution) => {
     const props = feature.getProperties() || {};
     const spec = compiled.evaluate(props);
@@ -288,7 +320,32 @@ export function olQmlStyleFunction(compiled, OL) {
     const s = specToStyle(spec);
     const geomType = feature.getGeometry()?.getType() || "";
     const styleOpts = {};
-    if (s.fill && /Polygon/.test(geomType)) styleOpts.fill = new Fill({ color: s.fill });
+    // invertedPolygonRenderer: 地物を穴とした世界矩形ポリゴンを描く(マスク効果)
+    if (compiled.inverted && /Polygon/.test(geomType) && feature.getGeometry) {
+      styleOpts.geometry = f => {
+        const g = f.getGeometry();
+        if (!g) return null;
+        const rings = g.getType() === "Polygon" ? g.getCoordinates()
+          : g.getCoordinates().flat(1);
+        const W = [[-2e7, -1e7], [2e7, -1e7], [2e7, 1e7], [-2e7, 1e7], [-2e7, -1e7]];
+        return new Polygon([W, ...rings.map(r => [...r].reverse())]);
+      };
+    }
+    // 塗りつぶし: パターン系(hatch/linePattern/pointPattern/imagePattern/gradient)は
+    // タイル canvas の CanvasPattern で再現。単色のみなら従来通り色
+    if (/Polygon/.test(geomType) && spec.fillParts?.length) {
+      const { solidBase, tile } = fillPartsToTile(spec.fillParts);
+      const pat = tile ? makePattern(tile) : null;
+      if (pat) {
+        styleOpts.fill = new Fill({ color: pat });
+      } else if (solidBase) {
+        styleOpts.fill = new Fill({ color: rgbaToCss(solidBase) });
+      } else if (s.fill) {
+        styleOpts.fill = new Fill({ color: s.fill });
+      }
+    } else if (s.fill && /Polygon/.test(geomType)) {
+      styleOpts.fill = new Fill({ color: s.fill });
+    }
     if (s.stroke) {
       styleOpts.stroke = new Stroke({
         color: s.stroke, width: s.strokeWidth, lineDash: s.dash || undefined,
@@ -356,12 +413,28 @@ export function olQmlStyleFunction(compiled, OL) {
         }
       }
     }
+    const geom = feature.getGeometry();
+    const extra = [];
+    // 複数ラインシンボルレイヤ(ケーシング等): spec.lines は描画順(先=下)。
+    // styleOpts.stroke が最上位レイヤを担うため、下層を先に描く Style を前に並べる
+    if (spec.lines?.length > 1 && /LineString/.test(geomType)) {
+      for (let i = spec.lines.length - 2; i >= 0; i--) {
+        extra.unshift(new Style({ stroke: strokeOf(spec.lines[i]) }));
+      }
+    }
+    // CentroidFill: ポリゴン内部点へマーカーを描く
+    if (spec.centroid?.length && /Polygon/.test(geomType) && geom?.getInteriorPoint && Point) {
+      extra.push(new Style({
+        geometry: geom.getInteriorPoint(),
+        image: new Icon({ img: markerLayersToCanvas(spec.centroid), anchor: [0.5, 0.5] }),
+      }));
+    }
     // MarkerLine/HashLine/ArrowLine の装飾を geometry 関数で追加描画する
     const decor = spec.line?.decor;
     if (decor && /LineString/.test(geomType)) {
-      const extra = decorToOlStyles(decor, feature.getGeometry(), resolution, OL);
-      if (extra.length) return [new Style(styleOpts), ...extra];
+      extra.push(...decorToOlStyles(decor, geom, resolution, OL));
     }
+    if (extra.length) return [...extra, new Style(styleOpts)];
     return new Style(styleOpts);
   };
 }
@@ -424,9 +497,42 @@ export function defaultVectorLegendSpec(geomType, { fill = [58 / 255, 123 / 255,
 }
 
 // --- MapLibre: GeoJSON の各 feature に __kasc_* を焼き込み、データ駆動 paint 式で適用
-const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color", "__kasc_symbol"];
+const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color", "__kasc_symbol",
+  "__kasc_icon", "__kasc_fillpat", "__kasc_dash", "__kasc_fopa", "__kasc_lopa", "__kasc_copa",
+  "__kasc_cr", "__kasc_csw", "__kasc_csc", "__kasc_cicon"];
+
+let _qmlUid = 0;
+const alphaOf = rgba => (rgba && rgba.length > 3) ? Math.max(0, Math.min(1, rgba[3])) : 1;
 
 export function maplibreApplyQml(geojson, compiled) {
+  if (compiled.inverted) applyInvertedMaskGeojson(geojson);
+  // このQMLで使う画像レジストリ(map.addImage する canvas/dataURL → id)
+  const icons = new Map();  // id → canvas (点シンボル・centroid)
+  const fills = new Map();  // id → canvas (fill-pattern タイル)
+  const uid = ++_qmlUid;
+  const iconId = spec => {
+    const cv = spec.markers?.length ? markerLayersToCanvas(spec.markers) : null;
+    if (!cv) return null;
+    const key = `qi${uid}_${icons.size}`;
+    icons.set(key, cv);
+    return key;
+  };
+  const centroidIconId = spec => {
+    const cv = spec.centroid?.length ? markerLayersToCanvas(spec.centroid) : null;
+    if (!cv) return null;
+    const key = `qc${uid}_${icons.size}`;
+    icons.set(key, cv);
+    return key;
+  };
+  const fillPatId = spec => {
+    const { tile } = fillPartsToTile(spec.fillParts || []);
+    if (!tile) return null;
+    const key = `qf${uid}_${fills.size}`;
+    fills.set(key, tile);
+    return key;
+  };
+  const dashKey = dash => (dash && dash.length) ? JSON.stringify(dash) : null;
+
   for (const feature of geojson.features || []) {
     const spec = compiled.evaluate(feature.properties || {});
     if (!spec) continue;
@@ -439,6 +545,28 @@ export function maplibreApplyQml(geojson, compiled) {
     if (s.join) feature.properties.__kasc_join = s.join;
     if (s.cap) feature.properties.__kasc_cap = s.cap;
     if (s.lineOffsetPx) feature.properties.__kasc_loff = s.lineOffsetPx;
+    // 不透明度(色アルファから分離。データ駆動 *-opacity 用)
+    const fSrc = spec.fillParts?.find(pt => pt.solid)?.solid;
+    feature.properties.__kasc_fopa = fSrc ? alphaOf(fSrc) : 0.5;
+    feature.properties.__kasc_lopa = (spec.outline || spec.line) ? alphaOf((spec.outline || spec.line).color) : 1;
+    const mk = spec.markers?.[0];
+    if (mk) {
+      feature.properties.__kasc_cr = Math.max((mk.sizePx || 8) / 2, 1);
+      feature.properties.__kasc_copa = alphaOf(mk.fill);
+      if (mk.stroke) feature.properties.__kasc_csc = rgbaToCss(mk.stroke);
+      if (mk.strokeWidthPx) feature.properties.__kasc_csw = mk.strokeWidthPx;
+      const id = iconId(spec);
+      if (id) feature.properties.__kasc_icon = id;
+    }
+    // CentroidFill: ポリゴン中心へのアイコン
+    const cid = spec.centroid?.length ? centroidIconId(spec) : null;
+    if (cid) feature.properties.__kasc_cicon = cid;
+    // 塗りパターン(ハッチ・ラインパターン・点パターン・画像・グラデーション)
+    const fid = spec.fillParts?.length ? fillPatId(spec) : null;
+    if (fid) feature.properties.__kasc_fillpat = fid;
+    // 破線: line-dasharray はデータ駆動不可のためパターンIDでグルーピング
+    const dk = dashKey(spec.line?.dash ?? spec.outline?.dash);
+    if (dk) feature.properties.__kasc_dash = dk;
     // 凡例シンボル単位の表示切替フィルタ用（規則ベースで複数ヒットし得るため先頭名を採用）
     const names = typeof compiled.namesFor === "function" ? compiled.namesFor(feature.properties) : null;
     if (names?.length) feature.properties.__kasc_symbol = names[0];
@@ -449,26 +577,77 @@ export function maplibreApplyQml(geojson, compiled) {
       feature.properties.__kasc_heat = Math.min(Math.max((Number.isFinite(w) ? w : 1) / mv, 0), 1);
     }
   }
+  // 破線パターンごとの line レイヤ(データ駆動不可のためパターン別)
+  const dashKinds = [];
+  const dashSet = new Set();
+  for (const f of geojson.features || []) {
+    const d = f.properties?.__kasc_dash;
+    if (d && !dashSet.has(d)) dashSet.add(d);
+  }
+  const nonPoint = ["!=", ["geometry-type"], "Point"];
   const kinds = [
-      ["fill", ["==", ["geometry-type"], "Polygon"], {
-        "fill-color": ["coalesce", ["get", "__kasc_fill"], "#3a7bd5"],
-        "fill-opacity": 0.5,
+      // パターン塗り(fill-pattern は画像IDのデータ駆動)。先に敷いてから単色ベース/枠線
+      ["fill", ["all", nonPoint, ["has", "__kasc_fillpat"]], {
+        "fill-pattern": ["get", "__kasc_fillpat"],
+        "fill-opacity": ["coalesce", ["get", "__kasc_fopa"], 0.5],
       }],
-      ["line", ["!=", ["geometry-type"], "Point"], {
+      ["fill", ["all", nonPoint, ["!", ["has", "__kasc_fillpat"]], ["has", "__kasc_fill"]], {
+        "fill-color": ["coalesce", ["get", "__kasc_fill"], "#3a7bd5"],
+        "fill-opacity": ["coalesce", ["get", "__kasc_fopa"], 0.5],
+      }],
+  ];
+  if (dashSet.size) {
+    // 実線レイヤ(非破線地物のみ)+ パターン別破線レイヤ
+    kinds.push(["line", ["all", nonPoint, ["!", ["has", "__kasc_dash"]]], {
+      "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
+      "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
+      "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
+      "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
+    }, {
+      "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
+      "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
+    }]);
+    for (const d of dashSet) {
+      kinds.push(["line", ["all", nonPoint, ["==", ["get", "__kasc_dash"], d]], {
         "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
         "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
         "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
+        "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
+        "line-dasharray": JSON.parse(d),
       }, {
         "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
         "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
-      }],
-      ["circle", ["==", ["geometry-type"], "Point"], {
-        "circle-radius": 5,
-        "circle-color": ["coalesce", ["get", "__kasc_color"], "#2c5ea8"],
-        "circle-stroke-color": ["coalesce", ["get", "__kasc_stroke"], "#ffffff"],
-        "circle-stroke-width": 1,
-      }],
-  ];
+      }]);
+    }
+  } else {
+    kinds.push(["line", nonPoint, {
+      "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
+      "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
+      "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
+      "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
+    }, {
+      "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
+      "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
+    }]);
+  }
+  // CentroidFill アイコン(ポリゴン中心点へ)
+  kinds.push(["symbol", ["all", nonPoint, ["has", "__kasc_cicon"]], {}, {
+    "icon-image": ["get", "__kasc_cicon"],
+    "icon-size": 1, "icon-allow-overlap": true, "icon-ignore-placement": true,
+  }]);
+  // 点シンボル: markerCanvas アイコンがあれば icon-image、無ければ circle フォールバック
+  const pointOnly = ["==", ["geometry-type"], "Point"];
+  kinds.push(["symbol", ["all", pointOnly, ["has", "__kasc_icon"]], {}, {
+    "icon-image": ["get", "__kasc_icon"],
+    "icon-size": 1, "icon-allow-overlap": true, "icon-ignore-placement": true,
+  }]);
+  kinds.push(["circle", ["all", pointOnly, ["!", ["has", "__kasc_icon"]]], {
+    "circle-radius": ["coalesce", ["get", "__kasc_cr"], 5],
+    "circle-color": ["coalesce", ["get", "__kasc_color"], "#2c5ea8"],
+    "circle-opacity": ["coalesce", ["get", "__kasc_copa"], 1],
+    "circle-stroke-color": ["coalesce", ["get", "__kasc_csc"], ["get", "__kasc_stroke"], "#ffffff"],
+    "circle-stroke-width": ["coalesce", ["get", "__kasc_csw"], 1],
+  }]);
   // <labeling>: 焼き込んだ __kasc_label 系プロパティを参照する symbol レイヤを追加。
   // symbol-placement 等の非データ駆動 layout は配置モード別にレイヤを分ける
   const baked = bakeQmlLabels(geojson, compiled);
@@ -519,5 +698,7 @@ export function maplibreApplyQml(geojson, compiled) {
     props: KASC_PROPS,
     labelScaleRange,
     heatmap: compiled.heatmap || null,
+    icons,
+    fills,
   };
 }

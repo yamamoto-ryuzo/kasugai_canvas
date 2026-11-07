@@ -95,8 +95,10 @@ export function setMcpAllowWrite(value) {
   try { localStorage.setItem(MCP_ALLOW_WRITE_KEY, value ? "1" : "0"); } catch (e) {}
 }
 
-// ツール名から書き込み系を推定する（snake_case でも動くよう部分一致）
-const WRITE_TOOL_RE = /(creat|upload|delet|remov|updat|edit|move|copy|renam|write|trash|shar|invit|modif)/i;
+// ツール名から書き込み系を推定する（snake_case でも動くよう部分一致）。
+// eval/reload も含める: qgis_pyeval（QGIS 内の任意コード実行）等の
+// 実行系ツールを「読み取り」として無確認で AI へ公開しないため
+const WRITE_TOOL_RE = /(creat|upload|delet|remov|updat|edit|move|copy|renam|write|trash|shar|invit|modif|eval|reload)/i;
 export function isMcpWriteTool(name) {
   return WRITE_TOOL_RE.test(String(name || ""));
 }

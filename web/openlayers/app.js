@@ -24,6 +24,7 @@ import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
+import { configureLive, liveUpdate, liveNotifyCamera } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
@@ -1118,6 +1119,14 @@ async function loadProject(id) {
 
 // インスペクターの「登録」: 編集済み .kasc テキストを現在プロジェクトの
 // baseUrl で再描画する。プロジェクトファイル自体は書き換えない
+// QGIS ライブ連携(#62): 更新検出 → 全体再適用(レイヤ単位差分は
+// cesium/maplibre が対応。本エンジンは互換ビューとして全適用)
+async function liveApplyText(text) {
+  const inp = document.querySelector("#inspector-input");
+  if (inp) inp.value = text;
+  await applyInspectorText(text);
+}
+
 async function applyInspectorText(text) {
   const baseUrl = lastBaseUrl || projectsBaseUrl(currentProjectId);
   await renderProject(currentProjectId || "default", baseUrl, parseKasc(text));
@@ -1281,6 +1290,13 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }));
   layerEntries = entries;
   lastBaseUrl = baseUrl;
+  // QGIS ライブ双方向連携(#62): live: 行があれば live.json ポーリング開始
+  configureLive(doc, {
+    baseUrl,
+    kascUrl: lastKascUrl || null,
+    applyKascText: liveApplyText,
+    getView: () => mapViewToUrl(),
+  });
   // group: 行の折りたたみ初期状態(#59)。QGIS レイヤーツリーの展開状態を再現
   applyKascGroupStates(doc.groups, expandedLayerGroups);
   renderLayerRows(entries, unsupported);
@@ -1575,6 +1591,8 @@ let requeryTimer = null;
 map.on("moveend", () => {
   // 初期URLを読み取る前の初回moveendでパーマリンクを上書きしないよう消費済みを待つ
   if (urlViewConsumed) writeUrlView(mapViewToUrl(), lastKascUrl ? undefined : currentProjectId);
+  // QGIS ライブ連携: カメラ停止で QGIS キャンバスへ逆通知(#62)
+  liveNotifyCamera();
   minimap.scheduleUpdate();
   geoTools.scheduleGraticule();
   const targets = layerEntries.filter(e => e.item._viewportQuery && e.item.visible !== false);
@@ -1964,6 +1982,7 @@ window.kasugaiApi = createPlayerApi({
   getBaseUrl: () => lastBaseUrl,
   loadProject,
   applyInspectorText,
+  liveSync: async args => liveUpdate(args),
   getInspectorText: () => inspectorInput.value,
   setInspectorText: v => { inspectorInput.value = v; },
   applyEntryVisibility, focusEntry, maybeLoadEntry,

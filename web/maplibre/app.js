@@ -13,6 +13,7 @@ import { mountSunControls } from "../shared/sun-time.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
+import { configureLive, liveUpdate, liveNotifyCamera, liveNotifySelection } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
@@ -560,6 +561,21 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
         const applied = maplibreApplyQml(geojson, compiled);
         kinds = applied.kinds;
         qmlExtra = applied;
+        // markerCanvas/fill tile の画像を map.addImage で登録してからレイヤ追加
+        for (const reg of [applied.icons, applied.fills]) {
+          if (!reg) continue;
+          for (const [id, cv] of reg) {
+            try {
+              if (map.hasImage(id)) continue;
+              // MapLibre 系は HTMLCanvasElement 非対応の版があるため
+              // ImageData({width,height,data}) 形式で登録する
+              const c2d = cv.getContext?.("2d");
+              const img = c2d ? c2d.getImageData(0, 0, cv.width, cv.height)
+                : { width: cv.width, height: cv.height, data: cv };
+              map.addImage(id, img);
+            } catch (e) { console.warn("addImage 失敗:", id, e); }
+          }
+        }
         const range = compiledScaleToResRange(compiled);
         if (range) {
           const lat = map.getCenter().lat;
@@ -604,7 +620,9 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
             ...(ramp?.length ? {
               "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"],
                 0, "rgba(0,0,0,0)",
-                ...ramp.flatMap(s => [s.offset, `rgba(${s.color.map(v => Math.round(v * 255)).join(",")})`])],
+                // offset 昇順かつ 0 重複を除く(0 は透過停止として1回のみ)
+                ...ramp.filter(s => s.offset > 0).sort((a, b) => a.offset - b.offset)
+                  .flatMap(s => [s.offset, `rgba(${s.color.map(v => Math.round(v * 255)).join(",")})`])],
             } : {}),
             "heatmap-opacity": 0.7,
           }] : [kind, filter, paint]);
@@ -1204,6 +1222,37 @@ async function applyInspectorText(text) {
   await renderProject(currentProjectId || "default", baseUrl, parseKasc(text));
 }
 
+// QGIS ライブ連携(#62): live.json rev 検出後の適用本体。
+// .kasc テキスト不変 かつ data 変更のみ → geojson 系 source.setData で
+// 差分更新。style 変更・テキスト変化・それ以外の型は全適用へ。
+async function liveApplyText(text, { changed = [], full = false, manifest = null } = {}) {
+  const current = (inspectorInput.value || "").trim();
+  const styleChanged = (manifest?.changed || [])
+    .some(c => c && typeof c === "object" && c.style);
+  if (full || styleChanged || String(text || "").trim() !== current) {
+    inspectorInput.value = text;
+    await applyInspectorText(text);
+    return;
+  }
+  const targets = new Set(
+    changed.map(t => normKascTitle(t)).flatMap(t => [t, t.split("/").pop()]));
+  const entries = layerEntries.filter(e =>
+    !changed.length || targets.has(normKascTitle(e.item?.title || "")));
+  const canFast = entries.length > 0 && entries.every(e =>
+    ["geojson", "layer"].includes(e.item.type)
+    && e.sid && typeof map.getSource(e.sid)?.setData === "function");
+  if (!canFast) {
+    inspectorInput.value = text;
+    await applyInspectorText(text);
+    return;
+  }
+  for (const e of entries) {
+    try {
+      map.getSource(e.sid).setData(resolveKascUrl(e.item.url, lastBaseUrl));
+    } catch (err) { console.warn("live setData failed:", e.item.title, err); }
+  }
+}
+
 // 他エンジンからの切替時、同一プロジェクトなら引き継がれたレイヤ状態
 // (インスペクタ内容・テーマ選択・各レイヤの可視性)を適用する。
 // 状態はモジュール評価時に即消費して保持し(データ読込完了を待たない)、
@@ -1348,6 +1397,13 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     ({ item, lids: [], sid: null, filters: null, opas: null, pending: true, unsupported: doc.unsupported.includes(item) && !["3dtiles", "mvt", "pmtiles"].includes(item.type) }));
   layerEntries = entries;
   lastBaseUrl = baseUrl;
+  // QGIS ライブ双方向連携(#62): live: 行があれば live.json ポーリング開始
+  configureLive(doc, {
+    baseUrl,
+    kascUrl: lastKascUrl || null,
+    applyKascText: liveApplyText,
+    getView: () => mapViewToUrl(),
+  });
   // group: 行の折りたたみ初期状態(#59)。QGIS レイヤーツリーの展開状態を再現
   applyKascGroupStates(doc.groups, expandedLayerGroups);
   renderLayerRows(entries, unsupported);
@@ -1655,6 +1711,8 @@ map.on("zoomend", () => {
 // 表示範囲の移動に追従して URL 反映 + 再クエリする
 let requeryTimer = null;
 map.on("moveend", () => {
+  // QGIS ライブ連携: カメラ停止で QGIS キャンバスへ逆通知(#62)
+  liveNotifyCamera();
   // 初期URLを読み取る前の初回moveendでパーマリンクを上書きしないよう消費済みを待つ
   if (urlViewConsumed) writeUrlView(mapViewToUrl(), lastKascUrl ? undefined : currentProjectId);
   minimap.scheduleUpdate();
@@ -1696,6 +1754,17 @@ map.on("click", e => {
       feature: f,
       flyable: !!f.geometry,
     });
+  }
+  // QGIS ライブ連携: 最前面の地物を QGIS 側の選択へ逆通知(#62)
+  if (records[0]?.title) {
+    try {
+      const fid = records[0].feature?.id ?? records[0].feature?.properties?.id;
+      liveNotifySelection({
+        layer: records[0].title,
+        longitude: e.lngLat.lng, latitude: e.lngLat.lat,
+        ...(Number.isFinite(Number(fid)) ? { ids: [Number(fid)] } : {}),
+      });
+    } catch (_) { /* 逆通知失敗は無視 */ }
   }
   window.switchPanelTab?.("attr");
   renderAttrContent(panel.attrContent, records, { onRecordClick: rec => focusFeatureExtent(rec.feature) });
@@ -2236,6 +2305,7 @@ window.kasugaiApi = createPlayerApi({
   getFlyPaths: kascFlyPaths.getFlyPaths,
   persistFlyPath: kascFlyPaths.persistFlyPath,
   syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
+  liveSync: async args => liveUpdate(args),
   setBaseEntryVisible: (entry, on) => {
     for (const lid of entry.lids || []) {
       if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", on ? "visible" : "none");

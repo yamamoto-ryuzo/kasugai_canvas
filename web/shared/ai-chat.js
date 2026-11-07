@@ -94,6 +94,7 @@ const CHAT_TOOL_API = {
   vectorSearch: "vectorSearch", getShareUrl: "getShareUrl", buildShareUrl: "buildShareUrl",
   showReport: "showReport", listProjects: "listProjects", switchProject: "switchProject",
   toggleDrawMode: "toggleDrawMode", applyInspector: "applyInspector", exportInspector: "exportInspector",
+  liveSync: "liveSync",
   checkUpdate: "checkUpdate", installUpdate: "installUpdate",
   bridgeSetup: "local:bridgeSetup",
   runCode: "local:runCode",
@@ -346,6 +347,30 @@ function setupDataSources() {
   document.querySelector("#box-disconnect")?.addEventListener("click", () => {
     disconnectBox();
     refreshBoxStatus();
+  });
+
+  // QGIS Live Driver のセッションを自動検出して MCP 接続する。
+  // 検出はローカルアプリの /api/qgis-live/discover（~/.qgis-live レジストリ
+  // 走査）が行う。実接続は /api/qgis-live/mcp リレー経由（QGIS 側は CORS
+  // 非対応＋Bearer 必須のためブラウザ直叩き不可、汎用 /api/mcp プロキシは
+  // loopback を拒否）。トークンはリレーが付与するためブラウザは持たず、
+  // QGIS 再起動でポート・トークンが変わっても自動で追随する。
+  const qgisStatus = document.querySelector("#qgis-status");
+  const setQgisStatus = message => { if (qgisStatus) qgisStatus.textContent = message || ""; };
+  document.querySelector("#qgis-connect")?.addEventListener("click", async () => {
+    setQgisStatus(t("mcp.qgis.searching"));
+    let info = null;
+    try {
+      const res = await fetch(backendUrl("/api/qgis-live/discover"), { cache: "no-store" });
+      if (res.ok) info = await res.json();
+    } catch (e) { /* バックエンド未到達 */ }
+    if (!info || !info.ok) {
+      setQgisStatus(t("mcp.qgis.notFound"));
+      return;
+    }
+    upsertMcpServer({ key: "qgis-live", name: "QGIS Live", url: backendUrl("/api/qgis-live/mcp"), enabled: true });
+    const result = await connectMcpServer("qgis-live");
+    setQgisStatus(result.ok ? t("mcp.addOk", { count: result.tools.length }) : t("mcp.addNg", { error: result.error }));
   });
 
   document.querySelector("#mcp-add")?.addEventListener("click", async () => {

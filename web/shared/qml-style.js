@@ -775,10 +775,28 @@ function compileRenderer(rendererEl, warnings) {
     case "nullSymbol":
       return { evaluate: () => [], ...ctx };
     case "invertedPolygonRenderer": {
-      // マスク描画は再現できないため、外側シンボルで全地物を描く近似
+      // 「地物の外側を塗る」マスク。内側の renderer-v2 を評価したうえで
+      // spec に inverted フラグを立て、エンジン側が
+      // 世界矩形 − 地物リング(穴)のポリゴンで描画する
+      const inner = [...rendererEl.children].find(c => c.tagName === "renderer-v2");
+      const compiledInner = inner ? compileRenderer(inner, warnings) : null;
+      if (compiledInner) {
+        const innerEval = compiledInner.evaluate;
+        return {
+          evaluate(props) {
+            const r = innerEval(props);
+            if (r == null) return r;
+            if (Array.isArray(r)) return r;
+            return r; // ルール形は {names, scale}
+          },
+          ...compiledInner,
+          inverted: true,
+        };
+      }
+      // 内側 renderer 無し: 最初のシンボルで近似
       const name = [...symbols.keys()][0];
       warnOnce(warnings, "invertedPolygonRenderer は近似描画です(外側シンボルを全面適用)");
-      return { evaluate: () => (name ? [name] : []), ...ctx };
+      return { evaluate: () => (name ? [name] : []), ...ctx, inverted: true };
     }
     case "heatmapRenderer": {
       // ヒートマップ: 半径・重み式・カラーランプを spec として保持し、
@@ -978,14 +996,31 @@ export function rgbaToCss(rgba) {
 // マーカー/ライン/塗りつぶしレイヤの正規化(DD 適用済みの「描ける形」)
 // ---------------------------------------------------------------------------
 
+// マーカーのオフセット("x,y" + offset_unit)とアンカー点
+// (horizontal_anchor_point/vertical_anchor_point または anchor_x/anchor_y: 0..1)を
+// ピクセルオフセットへ正規化する。アンカーはシンボル内の基準点(0.5=中央)で、
+// (0.5-anchor)*sizePx だけ描画位置がずれる
+function markerOffsetPx(p, dd, props, sizePx) {
+  const raw = String(ddValue(dd, ["offset"], props, p.offset ?? "0,0"));
+  const [ox0, oy0] = raw.split(",").map(Number);
+  const unit = p.offset_unit || "MM";
+  let ox = sizeToPx(ox0 || 0, unit);
+  let oy = -sizeToPx(oy0 || 0, unit);
+  const ax = Number(p.horizontal_anchor_point ?? p.anchor_x);
+  const ay = Number(p.vertical_anchor_point ?? p.anchor_y);
+  if (Number.isFinite(ax) && ax !== 0.5) ox += (ax - 0.5) * (sizePx || 0);
+  if (Number.isFinite(ay) && ay !== 0.5) oy += (ay - 0.5) * (sizePx || 0);
+  return [ox || 0, oy || 0];
+}
+
 function resolveMarkerLayer(layer, props, images, warnings) {
   const p = layer.props;
   const dd = layer.dd;
   const sizeUnit = p.size_unit || "MM";
   const sizePx = sizeToPx(ddValue(dd, ["size"], props, p.size ?? 2), sizeUnit);
   const angle = Number(ddValue(dd, ["angle"], props, p.angle ?? 0)) || 0;
-  const offset = String(ddValue(dd, ["offset"], props, p.offset ?? "0,0")).split(",").map(Number);
   const alpha = 1;
+  const offsetPx = markerOffsetPx(p, dd, props, sizePx);
 
   switch (layer.cls) {
     case "SimpleMarker": {
@@ -1001,7 +1036,7 @@ function resolveMarkerLayer(layer, props, images, warnings) {
         stroke: outlineStyle === "no" ? null : stroke,
         strokeWidthPx: strokeWidth,
         rotationDeg: angle,
-        offsetPx: [offset[0] * MM_TO_PX || 0, -(offset[1] * MM_TO_PX || 0)],
+        offsetPx,
         alpha,
       }];
     }
@@ -1015,7 +1050,7 @@ function resolveMarkerLayer(layer, props, images, warnings) {
         kind: "ellipse", widthPx: w, heightPx: h, fill,
         stroke: String(p.outline_style) === "no" ? null : stroke,
         strokeWidthPx: strokeWidth,
-        rotationDeg: angle, offsetPx: [0, 0], alpha,
+        rotationDeg: angle, offsetPx, alpha,
       }];
     }
     case "SvgMarker":
@@ -1025,9 +1060,9 @@ function resolveMarkerLayer(layer, props, images, warnings) {
       if (!image) {
         warnOnce(warnings, `${layer.cls} の画像を読めませんでした: ${pathKey}(円で代替)`);
         const fill = parseQgisColor(p.color, [0.2, 0.4, 0.9, 1]);
-        return [{ kind: "shape", shape: "circle", sizePx, fill, stroke: null, strokeWidthPx: 0, rotationDeg: angle, offsetPx: [0, 0], alpha }];
+        return [{ kind: "shape", shape: "circle", sizePx, fill, stroke: null, strokeWidthPx: 0, rotationDeg: angle, offsetPx, alpha }];
       }
-      return [{ kind: "image", image, sizePx, rotationDeg: angle, offsetPx: [0, 0], alpha }];
+      return [{ kind: "image", image, sizePx, rotationDeg: angle, offsetPx, alpha }];
     }
     case "FontMarker":
     case "MdiFontMarker": {
@@ -1039,7 +1074,7 @@ function resolveMarkerLayer(layer, props, images, warnings) {
       return [{
         kind: "text", text: chr, fontFamily: font, sizePx, fill,
         stroke, strokeWidthPx: strokeWidth,
-        rotationDeg: angle, offsetPx: [0, 0], alpha,
+        rotationDeg: angle, offsetPx, alpha,
       }];
     }
     case "FilledMarker": {
@@ -1055,7 +1090,7 @@ function resolveMarkerLayer(layer, props, images, warnings) {
       const strokeWidth = sizeToPx(ddValue(dd, ["outlineWidth", "outline_width"], props, p.outline_width ?? 0), "MM");
       return [{
         kind: "shape", shape: MARKER_SHAPES[name] ? name : "circle", sizePx, fill,
-        stroke, strokeWidthPx: strokeWidth, rotationDeg: angle, offsetPx: [0, 0], alpha,
+        stroke, strokeWidthPx: strokeWidth, rotationDeg: angle, offsetPx, alpha,
       }];
     }
     case "GeometryGenerator":
@@ -1066,7 +1101,7 @@ function resolveMarkerLayer(layer, props, images, warnings) {
       return [{
         kind: "shape", shape: "circle", sizePx,
         fill: parseQgisColor(p.color, [0.2, 0.4, 0.9, 1]),
-        stroke: null, strokeWidthPx: 0, rotationDeg: angle, offsetPx: [0, 0], alpha,
+        stroke: null, strokeWidthPx: 0, rotationDeg: angle, offsetPx, alpha,
       }];
   }
 }
@@ -1220,11 +1255,23 @@ function resolveFillLayer(layer, props, images, warnings, tileCache) {
       const markers = layer.subSymbol
         ? layer.subSymbol.layers.flatMap(l => l.enabled ? resolveMarkerLayer(l, props, images, warnings) : [])
         : [{ kind: "shape", shape: "circle", sizePx: 2.5, fill: parseQgisColor(p.color, [0, 0, 0, 1]), stroke: null, strokeWidthPx: 0, rotationDeg: 0, offsetPx: [0, 0], alpha: 1 }];
-      return { pointPattern: { markers, spacingX: dx, spacingY: dy } };
+      return { pointPattern: {
+        markers, spacingX: dx, spacingY: dy,
+        // 奇数列ごとのずらし(千鳥配置)と全体オフセット
+        dispX: sizeToPx(p.displacement_x ?? 0, "MM"), dispY: sizeToPx(p.displacement_y ?? 0, "MM"),
+        offX: sizeToPx(p.offset_x ?? 0, "MM"), offY: sizeToPx(p.offset_y ?? 0, "MM"),
+        random: layer.cls === "RandomMarkerFill" && String(p.count_method ?? "0") !== "0",
+      } };
     }
     case "SVGFill":
     case "RasterFill": {
-      const pathKey = String(p.svgfile ?? p.imageFile ?? p.file ?? "");
+      // QGIS4 は svgfile の代わりに name(参照名)/data(埋込内容)を使う
+      const pathKey = String(p.svgfile ?? p.imageFile ?? p.file ?? p.name ?? "") ||
+        (p.data && /^\s*(?:<\?xml|<svg|iVBOR|data:|base64,)/i.test(String(p.data))
+          ? (String(p.data).trim().startsWith("<")
+              ? "data:image/svg+xml;charset=utf-8," + encodeURIComponent(String(p.data))
+              : /^iVBOR/.test(String(p.data).trim()) ? "data:image/png;base64," + String(p.data).trim() : String(p.data))
+          : "");
       const image = images.get(pathKey) || null;
       if (!image) {
         warnOnce(warnings, `${layer.cls} の画像を読めませんでした: ${pathKey}(単色で代替)`);
@@ -1247,9 +1294,24 @@ function resolveFillLayer(layer, props, images, warnings, tileCache) {
         : [];
       return { centroid: markers };
     }
-    case "GeometryGenerator":
-      warnOnce(warnings, "GeometryGenerator 塗りつぶしは未対応です(スキップ)");
+    case "GeometryGenerator": {
+      const mod = String(p.geometryModifier ?? p.geometry_modifier ?? "");
+      const subType = String(p.symbolType ?? p.symbol_type ?? p.type ?? "").toLowerCase()
+        || (layer.subSymbol?.geomType || "");
+      const isCentroid = /centroid|point_on_surface|pole_of_inaccessibility/i.test(mod);
+      if (isCentroid && /marker|point/i.test(subType) && layer.subSymbol) {
+        // 重心マーカー: エンジン側の centroid 描画経路をそのまま使う
+        const markers = layer.subSymbol.layers.flatMap(l =>
+          l.enabled ? resolveMarkerLayer(l, props, images, warnings) : []);
+        return { centroid: markers };
+      }
+      if (/exterior_ring/i.test(mod)) {
+        warnOnce(warnings, "GeometryGenerator exterior_ring は外周描画で近似します");
+        return { solid: null, outlineViaGenerator: true };
+      }
+      warnOnce(warnings, `GeometryGenerator(${mod.slice(0, 40) || "?"}) 塗りつぶしは未対応です(スキップ)`);
       return {};
+    }
     default:
       warnOnce(warnings, `塗りつぶしシンボル ${layer.cls} は未対応です(単色で代替)`);
       return { solid: parseQgisColor(p.color, [0.5, 0.5, 0.5, 0.7]) };
@@ -1281,6 +1343,7 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
   let outline = null;
   let centroid = null;
   let lineCandidate = null;
+  const lineLayers = [];
 
   for (const layer of symbol.layers) {
     if (!layer.enabled) continue;
@@ -1295,7 +1358,11 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
       case "line": {
         const r = resolveLineLayer(layer, props, warnings, images);
         // 最後の有効レイヤ(最上位)を採用
-        if (r) lineCandidate = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
+        if (r) {
+          lineCandidate = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
+          // 複数シンボルレイヤ積層(ケーシング等)の描画順リスト(QGISは先が下)
+          lineLayers.push(lineCandidate);
+        }
         break;
       }
       case "fill": {
@@ -1313,7 +1380,11 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
     }
   }
   if (symbol.geomType === "marker" && markerLayers.length) out.markers = markerLayers;
-  if (symbol.geomType === "line" && lineCandidate) out.line = lineCandidate;
+  if (symbol.geomType === "line" && lineCandidate) {
+    out.line = lineCandidate;
+    // 全ラインシンボルレイヤ(積層順=描画順)。out.line は最上位(=最後)
+    if (lineLayers.length > 1) out.lines = lineLayers;
+  }
   if (symbol.geomType === "fill") {
     if (fillParts.length) out.fillParts = fillParts;
     if (outline) out.outline = outline;
@@ -1939,6 +2010,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
       }
       if (resolved.markers && !out.markers) out.markers = resolved.markers;
       if (resolved.line && !out.line) out.line = resolved.line;
+      if (resolved.lines && !out.lines) out.lines = resolved.lines;
       if (resolved.fillParts && !out.fillParts) out.fillParts = resolved.fillParts;
       if (resolved.outline && !out.outline) out.outline = resolved.outline;
       if (resolved.centroid && !out.centroid) out.centroid = resolved.centroid;
@@ -1990,6 +2062,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
     unsupported: !!renderer.unsupported,
     heatmap: renderer.heatmap || null,
     cluster: renderer.cluster || null,
+    inverted: !!renderer.inverted,
     symbols: renderer.symbols,
     images,
     // 属性表示メタ。displayFor(props) は displayExpression を評価して
@@ -2005,7 +2078,8 @@ function collectImagePaths(el, acc) {
   const cls = el.getAttribute?.("class");
   if (cls === "SvgMarker" || cls === "RasterMarker" || cls === "SVGFill" || cls === "RasterFill") {
     const props = optionMap(el);
-    const key = String(props.name ?? props.imageFile ?? props.svgfile ?? props.file ?? "");
+    const key = String(props.name ?? props.imageFile ?? props.svgfile ?? props.file ?? "") ||
+      (props.data ? "__inline__" : "");
     if (key) acc.add(key);
   }
   for (const c of el.children || []) collectImagePaths(c, acc);
@@ -2261,11 +2335,13 @@ export function fillPartsToTile(fillParts) {
       } else if (pt.linePattern) {
         drawHatch(ctx, W, [pt.linePattern.angleDeg], pt.linePattern.spacingPx, pt.linePattern.color, pt.linePattern.widthPx);
       } else if (pt.pointPattern) {
-        const { markers, spacingX, spacingY } = pt.pointPattern;
+        const { markers, spacingX, spacingY, dispX = 0, dispY = 0, offX = 0, offY = 0 } = pt.pointPattern;
         const stamp = markerLayersToCanvas(markers);
         const stepX = Math.max(spacingX, 4), stepY = Math.max(spacingY, 4);
-        for (let y = 0; y < W + stepY; y += stepY) {
-          for (let x = 0; x < W + stepX; x += stepX) {
+        let row = 0;
+        for (let y = offY; y < W + stepY; y += stepY, row++) {
+          const shift = row % 2 ? (dispX || 0) : 0;
+          for (let x = offX + shift; x < W + stepX; x += stepX) {
             ctx.drawImage(stamp, x - stamp.width / 2, y - stamp.height / 2);
           }
         }

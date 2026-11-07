@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.22.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
       <p><strong>AIとマルチエンジンが拓く 2D/3D GIS</strong> — ローカルPC・ブラウザ完結で動作するデータ可視化システムのドキュメント</p>
     </header>
     <main>
@@ -78,7 +78,7 @@
             <td>単発キュー — 応答の <code>actions</code> を一括実行</td>
           </tr>
         </table>
-        <p>どちらの系統でもチャット UI・地図操作・<code>runCode</code> サンドボックス・MCP データソース（Box 等）・AI プラグイン生成は共通です。ハブはアプリ版・ブラウザ WebGIS 共通の <code>bridge-hub.exe</code> 1本（<code>127.0.0.1:8511</code>）に集約しており、フロントは <code>/health</code> で検出して接続するため、CDN 経由のブラウザ WebGIS からもブリッジ系プロバイダが選べます。逆方向の「外部 → ブラウザを操る」はローカルアプリ本体 <code>:8510</code> の <code>/api/command</code> 経路です。</p>
+        <p>どちらの系統でもチャット UI・地図操作・<code>runCode</code> サンドボックス・MCP データソース（Box・QGIS 等）・AI プラグイン生成は共通です。ハブはアプリ版・ブラウザ WebGIS 共通の <code>bridge-hub.exe</code> 1本（<code>127.0.0.1:8511</code>）に集約しており、フロントは <code>/health</code> で検出して接続するため、CDN 経由のブラウザ WebGIS からもブリッジ系プロバイダが選べます。逆方向の「外部 → ブラウザを操る」はローカルアプリ本体 <code>:8510</code> の <code>/api/command</code> 経路です。</p>
         <p>設定手順は <a href="ai-api.html">【API】内蔵AI</a>・<a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a>（接続方式ごとの規約判断もこちら）、81ツール宣言（環境・エンジンで絞り込み）の引数・提供条件は <a href="ai-tools.html">AI ツール仕様</a> を参照してください。</p>
       </section>
 

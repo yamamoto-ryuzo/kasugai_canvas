@@ -855,6 +855,150 @@ async fn mcp_proxy(
         .map_err(internal_error)
 }
 
+// QGIS Live Driver セッションの検出（discover / mcp リレー共通）。
+// qgis_live_driver はリモート制御 ON 時に ~/.qgis-live/<pid>-<plugin>.json
+// （QGIS_LIVE_REGISTRY で変更可）へ {mcp_url, token, pid, plugin_id, started}
+// を書き出す。ここを走査して候補を新しい順に返す。
+fn qgis_live_sessions() -> Vec<Value> {
+    let reg_dir = std::env::var("QGIS_LIVE_REGISTRY").map(PathBuf::from).ok()
+        .or_else(|| {
+            (std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).ok())
+                .map(|home| PathBuf::from(home).join(".qgis-live"))
+        });
+    let Some(reg_dir) = reg_dir.filter(|d| d.is_dir()) else {
+        return vec![];
+    };
+    let mut candidates: Vec<Value> = std::fs::read_dir(&reg_dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+                .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+                .filter_map(|s| serde_json::from_str::<Value>(&s).ok())
+                .filter(|e| {
+                    e.get("mcp_url").and_then(Value::as_str).is_some()
+                        && e.get("token").and_then(Value::as_str).is_some()
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    // qgis_live_driver 優先・起動時刻の新しい順
+    candidates.sort_by_key(|e| {
+        (
+            e.get("plugin_id").and_then(Value::as_str) != Some("qgis_live_driver"),
+            std::cmp::Reverse(e.get("started").and_then(Value::as_f64).unwrap_or(0.0) as i64),
+        )
+    });
+    candidates
+}
+
+// 生存確認できた最初のセッションを返す。(base_url, token, entry)
+async fn qgis_live_pick() -> Option<(String, String, Value)> {
+    let candidates = qgis_live_sessions();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    for entry in &candidates {
+        let url = entry["mcp_url"].as_str().unwrap_or_default();
+        let Some(base) = url.strip_suffix("/mcp") else { continue };
+        let alive = client
+            .get(format!("{base}/api/health"))
+            .send()
+            .await
+            .map(|r| r.status().is_success())
+            .unwrap_or(false);
+        if alive {
+            return Some((
+                base.to_string(),
+                entry["token"].as_str().unwrap_or_default().to_string(),
+                entry.clone(),
+            ));
+        }
+    }
+    None
+}
+
+// GET /api/qgis-live/discover — 稼働中の QGIS Live Driver セッションを検出する。
+// MCP パネルの「QGIS に接続」ボタンがこれを呼び、戻りの mcp url（実際には
+// 下記 /api/qgis-live/mcp リレー経由で利用）でワンクリック登録する。
+// トークンは localhost 専用の資格情報で、本機のブラウザへ返すだけ。
+// QGIS 未検出時は ok:false + reason を返す。
+async fn qgis_live_discover() -> Json<Value> {
+    match qgis_live_pick().await {
+        Some((base, token, entry)) => Json(json!({
+            "ok": true,
+            "url": format!("{base}/mcp"),
+            "token": token,
+            "pid": entry["pid"],
+            "plugin_id": entry["plugin_id"],
+            "sessions": qgis_live_sessions().len(),
+        })),
+        None => Json(json!({
+            "ok": false,
+            "reason": "no_live_session",
+            "sessions": qgis_live_sessions().len(),
+        })),
+    }
+}
+
+// POST /api/qgis-live/mcp — 検出した QGIS Live Driver の /mcp への専用リレー。
+// QGIS 側は CORS 非対応＋Bearer 必須のためブラウザ直叩きはできず、汎用の
+// /api/mcp プロキシは SSRF 対策で loopback を拒否する。ここは「検出した
+// QGIS セッション宛てのみ」に限定した転送として、レジストリのトークンを
+// サーバー側で付与する（ブラウザはトークンを持たなくてよい）。
+// セッション解決は毎回行うため、QGIS 再起動でポート・トークンが変わっても
+// 自動で追随する。
+async fn qgis_live_mcp(
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let Some((base, token, _entry)) = qgis_live_pick().await else {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "稼働中の QGIS Live Driver セッションが見つかりません".to_string(),
+        ));
+    };
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(MCP_TIMEOUT_SECS))
+        .build()
+        .map_err(internal_error)?;
+    let mut request = client
+        .post(format!("{base}/mcp"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(body);
+    for key in [
+        header::CONTENT_TYPE,
+        header::ACCEPT,
+        axum::http::HeaderName::from_static("mcp-session-id"),
+        axum::http::HeaderName::from_static("mcp-protocol-version"),
+    ] {
+        if let Some(value) = headers.get(&key) {
+            request = request.header(key, value.clone());
+        }
+    }
+    let response = request.send().await.map_err(internal_error)?;
+    let mut builder = axum::response::Response::builder().status(response.status());
+    for key in [
+        header::CONTENT_TYPE,
+        axum::http::HeaderName::from_static("mcp-session-id"),
+    ] {
+        if let Some(value) = response.headers().get(&key) {
+            builder = builder.header(key, value.clone());
+        }
+    }
+    let bytes = response.bytes().await.map_err(internal_error)?;
+    if bytes.len() > MCP_MAX_RESPONSE_BYTES {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "応答が上限を超えています".to_string(),
+        ));
+    }
+    builder
+        .body(axum::body::Body::from(bytes))
+        .map_err(internal_error)
+}
+
 // GET|HEAD /api/reinfolib?url=<target> — 不動産情報ライブラリ API への中継プロキシ。
 // 公式案内は CORS 回避のためブラウザからの直接リクエストを禁じているため、
 // Ocp-Apim-Subscription-Key をサーバー側で付与して転送する。
@@ -5660,6 +5804,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/api/mcp",
             post(mcp_proxy).layer(DefaultBodyLimit::max(MCP_MAX_BODY_BYTES)),
+        )
+        .route("/api/qgis-live/discover", get(qgis_live_discover))
+        .route(
+            "/api/qgis-live/mcp",
+            post(qgis_live_mcp).layer(DefaultBodyLimit::max(MCP_MAX_BODY_BYTES)),
         )
         .route("/api/plugins", post(save_plugin))
         .route("/api/plugins/{id}", delete(delete_plugin))

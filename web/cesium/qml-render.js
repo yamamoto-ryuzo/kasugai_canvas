@@ -126,6 +126,28 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
   if (!style) return;
   const t = time || Cesium.JulianDate.now();
   const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
+  // 前回適用時に生成した補助エンティティ(装飾線・積層線)を掃除する
+  for (const e of ds._qmlAux || []) { try { ds.entities.remove(e); } catch (_) {} }
+  ds._qmlAux = [];
+  const addAux = ent => {
+    try {
+      // 位置を持つ補助エンティティは座標の NaN を除外する(描画クラッシュ防止)
+      const okPos = p => p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
+      if (ent.polyline?.positions) {
+        ent.polyline.positions = ent.polyline.positions.filter(okPos);
+        if (ent.polyline.positions.length < 2) return null;
+      }
+      if (ent.position && !okPos(ent.position)) return null;
+      if (ent.polygon?.hierarchy?.positions) {
+        ent.polygon.hierarchy = new Cesium.PolygonHierarchy(ent.polygon.hierarchy.positions.filter(okPos));
+        if (ent.polygon.hierarchy.positions.length < 3) return null;
+      }
+      const e = ds.entities.add(ent);
+      e._kascAux = true;
+      ds._qmlAux.push(e);
+      return e;
+    } catch (_) { return null; }
+  };
   // ラベル: 全地物の spec を先に確定し、maxNumLabels 制限(優先度・zIndex 順)と
   // コールアウト生成を後段へ回せるようにする
   const labelCandidates = new Map();
@@ -143,7 +165,9 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
       : null;
     for (const c of list) if (!kept || kept.has(c)) labelCandidates.set(c.entity, c);
   }
-  for (const entity of ds.entities.values) {
+  const allEnts = [...ds.entities.values];
+  for (const entity of allEnts) {
+    if (entity._kascAux) continue;
     const props = entityFeatureProps(entity, t);
     // 凡例の条件別チェックで非表示化されたシンボルにだけ該当する地物は隠す
     const hiddenByLegend = hasHidden && style.namesFor
@@ -189,6 +213,30 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
         entity.polyline.material = dashMaterialProperty(mulAlpha(spec.line.color, opacity), spec.line.dash);
         entity.polyline.width = new Cesium.ConstantProperty(spec.line.widthPx);
         if (ddc) entity.polyline.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
+        // 複数ラインシンボル(ケーシング)と装飾線は補助エンティティで近似描画。
+        // 補助描画の失敗で本体レンダリングを止めないよう try/catch で囲む
+        try {
+          if (spec.lines?.length > 1) {
+            const pos = entity.polyline.positions?.getValue?.(t);
+            if (pos?.length > 1) {
+              for (let i = spec.lines.length - 2; i >= 0; i--) {
+                const l = spec.lines[i];
+                addAux({
+                  polyline: {
+                    positions: pos,
+                    width: new Cesium.ConstantProperty(l.widthPx),
+                    material: dashMaterialProperty(mulAlpha(l.color, opacity), l.dash),
+                    clampToGround: entity.polyline.clampToGround?.getValue?.(t) ?? clamp,
+                    arcType: entity.polyline.arcType?.getValue?.(t) ?? Cesium.ArcType.GEODESIC,
+                  },
+                });
+              }
+            }
+          }
+          if (spec.line.decor) {
+            renderLineDecor(entity, spec.line.decor, t, { addAux, clamp, opacity });
+          }
+        } catch (_) { /* 補助描画のみ失敗 */ }
       } else {
         entity.polyline.show = new Cesium.ConstantProperty(false);
       }
@@ -196,6 +244,23 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
 
     // ポリゴン
     if (hasFill) {
+      // invertedPolygonRenderer: 世界矩形 − 地物リング(穴)のマスクへ差し替える
+      if (style.inverted && spec.fillParts?.length) {
+        try {
+          const h = entity.polygon?.hierarchy?.getValue?.(t);
+          const parts = Array.isArray(h) ? h : (h ? [h] : []);
+          const holes = parts.map(p =>
+            new Cesium.PolygonHierarchy((p.positions || p).slice().reverse()));
+          entity.polygon.hierarchy = new Cesium.ConstantProperty(
+            new Cesium.PolygonHierarchy(
+              Cesium.Cartesian3.fromDegreesArray(
+                [-180, -85, 180, -85, 180, 85, -180, 85]), holes));
+          // GroundPrimitive は穴付きポリゴン非対応のため、
+          // height=0 指定で通常 Primitive(穴対応)へ切り替える
+          entity.polygon.height = new Cesium.ConstantProperty(0);
+          entity.polygon.perPositionHeight = new Cesium.ConstantProperty(false);
+        } catch (_) { /* マスク生成失敗時は元地物のまま */ }
+      }
       if (spec.fillParts?.length) {
         entity.polygon.show = new Cesium.ConstantProperty(true);
         const { solidBase, tile, tileMeters } = fillPartsToTile(spec.fillParts.map(pt => pt.solid ? { ...pt, solid: mulAlpha(pt.solid, opacity) } : pt));
@@ -446,6 +511,92 @@ function polyScreenBox(scene, entity, t) {
     }
     return Number.isFinite(x1) ? { x1, y1, x2, y2 } : null;
   } catch (e) { return null; }
+}
+
+// --- 装飾ライン(MarkerLine/HashLine/ArrowLine)の補助エンティティ生成 ---
+// px → m の近似換算は qml-render のラベル用と同じ 1px≒2.8m(参照縮尺 1:10000)
+function samplePolylinePositions(entity, t, stepM) {
+  const pos = entity.polyline?.positions?.getValue?.(t);
+  if (!pos || pos.length < 2) return [];
+  const out = [];
+  let acc = 0;
+  for (let i = 0; i + 1 < pos.length; i++) {
+    const a = pos[i], b = pos[i + 1];
+    const len = Cesium.Cartesian3.distance(a, b);
+    if (!len) continue;
+    const ca = Cesium.Cartographic.fromCartesian(a), cb = Cesium.Cartographic.fromCartesian(b);
+    const ang = Math.atan2(cb.longitude - ca.longitude, cb.latitude - ca.latitude);
+    while (acc < len) {
+      const p = Cesium.Cartesian3.lerp(a, b, acc / len, new Cesium.Cartesian3());
+      out.push({ position: p, angle: ang });
+      acc += stepM;
+    }
+    acc -= len;
+  }
+  return out;
+}
+
+// 画面上方向(線分方位 rad)から hash_angle 度の刻みを地図上に作る
+function offsetPos(pos, azimuthRad, distM) {
+  const c = Cesium.Cartographic.fromCartesian(pos);
+  const dLon = (distM * Math.sin(azimuthRad)) / (111320 * Math.cos(c.latitude));
+  const dLat = (distM * Math.cos(azimuthRad)) / 110540;
+  return Cesium.Cartesian3.fromRadians(c.longitude + dLon, c.latitude + dLat, c.height);
+}
+
+function renderLineDecor(entity, decor, t, { addAux, clamp, opacity }) {
+  const pos = entity.polyline?.positions?.getValue?.(t);
+  if (!pos || pos.length < 2) return;
+  if (decor.kind === "markerline" && decor.markers?.length) {
+    const cv = markerLayersToCanvas(decor.markers);
+    let pts = [];
+    if (decor.placement === "vertex") pts = pos.map(p => ({ position: p }));
+    else if (decor.placement === "firstvertex") pts = [{ position: pos[0] }];
+    else if (decor.placement === "lastvertex") pts = [{ position: pos[pos.length - 1] }];
+    else if (decor.placement === "centralpoint") {
+      const samples = samplePolylinePositions(entity, t, Number.MAX_VALUE);
+      pts = samples.length ? [samples[Math.floor(samples.length / 2)]] : [];
+    } else {
+      pts = samplePolylinePositions(entity, t, Math.max(decor.intervalPx || 30, 5) * LABEL_M_PER_PX);
+    }
+    for (const s of pts) {
+      const bb = { position: s.position, billboard: { image: cv, verticalOrigin: Cesium.VerticalOrigin.CENTER, horizontalOrigin: Cesium.HorizontalOrigin.CENTER } };
+      if (decor.rotateMarker !== false && s.angle !== undefined) bb.billboard.rotation = -(s.angle - Math.PI / 2);
+      addAux(bb);
+    }
+  } else if (decor.kind === "hashline" && decor.tick) {
+    const tick = decor.tick;
+    const half = (tick.lengthPx || 4) * LABEL_M_PER_PX / 2;
+    const tickAng = (tick.angleDeg ?? 90) * Math.PI / 180;
+    for (const s of samplePolylinePositions(entity, t, Math.max(decor.intervalPx || 10, 3) * LABEL_M_PER_PX)) {
+      const a = s.angle + tickAng - Math.PI / 2;
+      // 刻みごとに独立した polyline を作る(繋げるとジグザグになる)。
+      // GroundPolyline は arcType GEODESIC のみ対応するため指定しない
+      addAux({
+        polyline: {
+          positions: [offsetPos(s.position, a, -half), offsetPos(s.position, a, half)],
+          width: new Cesium.ConstantProperty(Math.max(tick.widthPx || 1, 0.5)),
+          material: new Cesium.ColorMaterialProperty(toCesiumColor(mulAlpha(tick.color, opacity))),
+          clampToGround: new Cesium.ConstantProperty(clamp),
+        },
+      });
+    }
+  } else if (decor.kind === "arrowline") {
+    const [a, b] = [pos[pos.length - 2], pos[pos.length - 1]];
+    const ca = Cesium.Cartographic.fromCartesian(a), cb = Cesium.Cartographic.fromCartesian(b);
+    const az = Math.atan2(cb.longitude - ca.longitude, cb.latitude - ca.latitude);
+    const headLen = (decor.headLenPx || 9) * LABEL_M_PER_PX;
+    const headWid = (decor.headWidthPx || 9) * LABEL_M_PER_PX / 2;
+    const base = offsetPos(b, az, -headLen);
+    const l = offsetPos(base, az + Math.PI / 2, headWid);
+    const r = offsetPos(base, az - Math.PI / 2, headWid);
+    addAux({
+      polygon: {
+        hierarchy: new Cesium.PolygonHierarchy([b, l, r]),
+        material: new Cesium.ColorMaterialProperty(toCesiumColor(mulAlpha(decor.color, opacity))),
+      },
+    });
+  }
 }
 
 // ポリライン entity の画面投影長(px)。minFeatureSize 判定用

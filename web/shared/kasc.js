@@ -47,7 +47,7 @@ function parseCamLine(parts) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -123,6 +123,13 @@ export function parseKasc(text) {
       doc.lights.push(classifyParts(parts.slice(1), { type, title: parts[0] || "", url: "", line }));
       continue;
     }
+    if (type === "live") {
+      // live: <geo_webview HTTP サーバ base URL> — QGIS ライブ双方向連携。
+      // 同じ場所の live.json をポーリングし、/live/camera・/live/selection
+      // へカメラ/選択を逆通知する(shared/live.js)
+      doc.live = { url: parts[0] || "", line };
+      continue;
+    }
     if (type === "title") {
       // title: アプリ表示名 — パネルタイトルとブラウザタブのタイトルを差し替える。
       // 複数行ある場合は最後の行を採用。空値・行なしは既定表示に戻す
@@ -172,7 +179,7 @@ export function parseKasc(text) {
 export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
-  "group", "terrain", "scene3d", "light",
+  "group", "terrain", "scene3d", "light", "fly_geojson", "live",
 ]);
 
 // group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。
