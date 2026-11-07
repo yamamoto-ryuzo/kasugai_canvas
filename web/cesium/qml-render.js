@@ -300,8 +300,7 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
           if (labelSpec.callout && labelPos && anchor && !Cesium.Cartesian3.equals(anchor, labelPos)) {
             pendingCallouts.push({ from: anchor, to: labelPos, line: labelSpec.callout.line });
           }
-          // ドロップシャドウ: 同色ラベルをオフセット重複で近似
-          if (labelSpec.shadow) pendingShadows.push({ entity, labelSpec, oxPx, oyPx, hOrigin, vOrigin });
+          // (ドロップシャドウは oxPx/hOrigin 確定後に登録する)
           const [oxPx, oyPx] = labelSpec.pixelOffsetOf ? labelSpec.pixelOffsetOf() : [0, 0];
           const overMode = pl.mode === "over" || (q.h === 0 && q.v === 0);
           const hOrigin = overMode ? Cesium.HorizontalOrigin.CENTER
@@ -344,6 +343,8 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
           } else if (ddc) {
             entity.label.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
           }
+          // ドロップシャドウ: 同色ラベルをオフセット重複で近似
+          if (labelSpec.shadow) pendingShadows.push({ entity, labelSpec, oxPx, oyPx: oyPx + bump, hOrigin, vOrigin });
         }
       }
     }
