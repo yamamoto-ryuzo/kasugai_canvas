@@ -1700,7 +1700,14 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
     overrunDistancePx: sizeToPx(plA("overrunDistance") ?? 0, plA("overrunDistanceUnit") || "MM"),
     centroidWhole: qgisBool(plA("centroidWhole")),
     centroidInside: qgisBool(plA("centroidInside")),
-    fitInsidePolygon: qgisBool(plA("fitInsidePolygon")),
+    // QML 実出力は fitInPolygonOnly(placement 属性)。旧名 fitInsidePolygon も拾う
+    fitInsidePolygon: qgisBool(plA("fitInsidePolygon")) || qgisBool(plA("fitInPolygonOnly")),
+    // QGIS 3.4x の重なり制御: overlapHandling="Prevent|AllowOverlapAtNoCost|
+    // AllowOverlapWithoutPenalty|AllowOverlapIfNecessary"(実出力は文字列)
+    overlapHandling: String(plA("overlapHandling") || ""),
+    multipartBehavior: String(plA("multipartBehavior") || ""),
+    allowDegraded: qgisBool(plA("allowDegraded")),
+    maximumDistancePx: sizeToPx(plA("maximumDistance") ?? 0, plA("maximumDistanceUnit") || "MM"),
     preserveRotation: qgisBool(plA("preserveRotation"), true),
     maxCurvedCharAngleIn: Number(plA("maxCurvedCharAngleIn")) || 25,
     maxCurvedCharAngleOut: Number(plA("maxCurvedCharAngleOut")) || -25,
@@ -1774,9 +1781,15 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   }
   // 地物オプション側(rendering)にも書かれる属性を placement へ正規化する
   spec.placement.fitInsidePolygon = !!(spec.placement.fitInsidePolygon || r.fitInsidePolygon);
-  // マルチパート: multipartMode または labelPerPart=0 → 最大パートのみ
-  spec.largestPartOnly = (r.multipartMode || "").includes("largest")
+  // マルチパート: multipartBehavior=LabelLargestPartOnly(実出力) / multipartMode / labelPerPart=0
+  spec.largestPartOnly = /largest/i.test(spec.placement.multipartBehavior)
+    || (r.multipartMode || "").includes("largest")
     || (rd && String(rd.getAttribute("labelPerPart")) === "0") || false;
+  // 重なり制御: overlapHandling(実出力文字列) を displayAll/allowDegraded へ写像
+  const oh = spec.placement.overlapHandling;
+  if (/AllowOverlapAtNoCost|AllowOverlapWithoutPenalty|AllowOverlap/i.test(oh) && !/IfNecessar|IfNeeded/i.test(oh)) spec.displayAll = true;
+  if (/IfNecessar|IfNeeded/i.test(oh)) spec.allowDegraded = true;
+  if (spec.placement.allowDegraded) spec.allowDegraded = true;
   if (qgisBool(a("allowHtml"))) warnOnce(warnings, "HTML 書式ラベルは未対応です(テキスト表示に限定)");
   if (a("tabStops")) warnOnce(warnings, "タブストップ付きラベルは未対応です");
   if (a("fontSizeMapUnitScale") && String(a("fontSizeMapUnitScale")) !== "3x:0,0,0,0,0,0") {
