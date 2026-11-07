@@ -1573,7 +1573,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "setLayerLegendVisible",
-      description: "レイヤーの凡例(条件別シンボル)単位で表示/非表示を切り替える。style=(QML)の分類・段階・ルールレンダラを持つレイヤーで有効。凡例ラベルは listLayers の legend で確認できる",
+      description: "レイヤーの凡例(条件別シンボル)単位で表示/非表示を切り替える。style=(QML)の単一・分類・段階・ルールベースレンダラを持つレイヤーで有効(ヒートマップ/クラスタ表示は対象外)。凡例ラベルは listLayers の legend で確認できる。QML ラベル(配置/縮尺/背景/衝突回避等)は各エンジンが自動適用する",
       parameters: {
         type: "OBJECT",
         properties: {
