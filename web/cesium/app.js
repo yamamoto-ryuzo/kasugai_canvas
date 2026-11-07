@@ -4566,8 +4566,17 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
       applyQmlStyleToDataSource(ds, item.qmlStyle, { clamp, hiddenSymbols: item.legendHidden });
       // QGIS の「重なったラベルを隠す」相当の衝突回避。カメラ停止時に再計算する
       if (ds._qmlLabels?.length) {
-        installLabelDeclutter(viewer.scene, () => vectorDataSources.map(e => e.ds).filter(Boolean));
-        setTimeout(() => { try { declutterAllLabels(viewer.scene, vectorDataSources.map(e => e.ds).filter(Boolean)); } catch (_) {} }, 700);
+        const qmlSources = () => {
+          const seen = new Set();
+          const out = [];
+          for (const d of [...vectorDataSources.map(e => e.ds), ...layerRuntimeTargets.values()]) {
+            if (d && !seen.has(d)) { seen.add(d); out.push(d); }
+          }
+          return out;
+        };
+        installLabelDeclutter(viewer.scene, qmlSources);
+        setTimeout(() => { try { declutterAllLabels(viewer.scene, qmlSources()); } catch (_) {} }, 700);
+        setTimeout(() => { try { declutterAllLabels(viewer.scene, qmlSources()); } catch (_) {} }, 2500);
       }
     }
     catch (error) { console.warn(`QML スタイルの適用に失敗しました: ${item.styleUrl || ""}`, error); }

@@ -497,7 +497,8 @@ export function declutterAllLabels(scene, sources) {
 
 let _declutterInstalled = false;
 let _declutterTimer = null;
-// viewer.scene へカメラ停止時の自動 declutter を一度だけ仕掛ける
+let _declutterLastRun = 0;
+// viewer.scene へカメラ停止時・描画後の自動 declutter を一度だけ仕掛ける
 export function installLabelDeclutter(scene, getSources) {
   if (_declutterInstalled || !scene) return;
   _declutterInstalled = true;
@@ -505,12 +506,18 @@ export function installLabelDeclutter(scene, getSources) {
     if (_declutterTimer) return;
     _declutterTimer = setTimeout(() => {
       _declutterTimer = null;
+      _declutterLastRun = Date.now();
       declutterAllLabels(scene, getSources?.() || []);
     }, 150);
   };
   try { scene.camera.moveEnd.addEventListener(run); } catch (e) {}
   try { scene.camera.changed.addEventListener(() => {
     if (scene.camera.changed.percentageChanged > 0.5) run();
+  }); } catch (e) {}
+  // moveEnd が来ない経路や初回描画の取りこぼしに備え、postRender で
+  // 一定間隔(800ms)ごとの再判定も行う
+  try { scene.postRender.addEventListener(() => {
+    if (Date.now() - _declutterLastRun > 800) run();
   }); } catch (e) {}
   // 初回は描画が安定してから
   setTimeout(run, 800);
