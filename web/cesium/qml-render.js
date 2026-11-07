@@ -424,9 +424,14 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
     const pos = e.position?.getValue?.(t);
     const win = pos ? toWindow(scene, pos) : null;
     if (!win || !Number.isFinite(win.x)) { e.label.show = new Cesium.ConstantProperty(false); continue; }
+    // 既に非表示(縮尺ゲート等)のラベルは衝突判定・再表示の対象外
+    const shown = e.label.show?.getValue?.(t);
+    if (shown === false) continue;
     const size = c.spec.sizePx || 12;
     const lines = String(c.spec.text).split("\n");
-    const w = Math.max(...lines.map(l => l.length)) * size * 0.62 + (c.spec.halo ? c.spec.halo.widthPx * 2 : 0) + 4;
+    // 全角は 1em・半角は 0.55em で幅を見積もる(日本語ラベル対応)
+    const textW = (s) => [...s].reduce((a, ch) => a + (ch.charCodeAt(0) > 0xff ? 1.0 : 0.55), 0);
+    const w = Math.max(...lines.map(l => textW(l))) * size + (c.spec.halo ? c.spec.halo.widthPx * 2 : 0) + 4;
     const h = lines.length * size * (c.spec.lineHeightFactor || 1) + 2;
     const pl = c.spec.placement || {};
     const quads = pl.predefinedOrder?.length ? orderToQuads(pl.predefinedOrder, pl.quad) : [pl.quad || { h: 0, v: 0 }];

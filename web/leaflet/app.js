@@ -189,6 +189,8 @@ function syncLabelZoomVisibility() {
   const placed = [];
   for (const c of candidates) {
     const r = c.tipEl.getBoundingClientRect();
+    // 0幅/高さの tooltip は判定対象外
+    if (!r.width || !r.height) { c.tipEl.classList.toggle("kasc-label-hidden", true); continue; }
     const hit = placed.some(b => r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top);
     c.tipEl.classList.toggle("kasc-label-hidden", hit);
     if (!hit) placed.push(r);
