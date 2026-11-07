@@ -244,21 +244,35 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
 
     // ポリゴン
     if (hasFill) {
-      // invertedPolygonRenderer: 世界矩形 − 地物リング(穴)のマスクへ差し替える
+      // invertedPolygonRenderer: 地物 bbox を大きく広げた外枠 − 地物リング(穴)の
+      // マスクへ差し替える(±180跨ぎの世界矩形はプリミティブ分割で壊れるため
+      // データ周辺の矩形に留める)
       if (style.inverted && spec.fillParts?.length) {
         try {
           const h = entity.polygon?.hierarchy?.getValue?.(t);
           const parts = Array.isArray(h) ? h : (h ? [h] : []);
-          const holes = parts.map(p =>
-            new Cesium.PolygonHierarchy((p.positions || p).slice().reverse()));
-          entity.polygon.hierarchy = new Cesium.ConstantProperty(
-            new Cesium.PolygonHierarchy(
-              Cesium.Cartesian3.fromDegreesArray(
-                [-180, -85, 180, -85, 180, 85, -180, 85]), holes));
-          // GroundPrimitive は穴付きポリゴン非対応のため、
-          // height=0 指定で通常 Primitive(穴対応)へ切り替える
-          entity.polygon.height = new Cesium.ConstantProperty(0);
-          entity.polygon.perPositionHeight = new Cesium.ConstantProperty(false);
+          let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+          for (const p of parts) {
+            for (const pos of p.positions || []) {
+              const c = Cesium.Cartographic.fromCartesian(pos);
+              w = Math.min(w, c.longitude); e = Math.max(e, c.longitude);
+              s = Math.min(s, c.latitude); n = Math.max(n, c.latitude);
+            }
+          }
+          if (Number.isFinite(w)) {
+            const dw = Math.max((e - w) * 4, 0.5), dh = Math.max((n - s) * 4, 0.5);
+            const wc = w - dw, ec = e + dw, sc = s - dh, nc = n + dh;
+            const holes = parts.map(p =>
+              new Cesium.PolygonHierarchy((p.positions || p).slice().reverse()));
+            entity.polygon.hierarchy = new Cesium.ConstantProperty(
+              new Cesium.PolygonHierarchy(
+                Cesium.Cartesian3.fromRadiansArray(
+                  [wc, sc, ec, sc, ec, nc, wc, nc]), holes));
+            // GroundPrimitive は穴付きポリゴン非対応のため、
+            // height=0 指定で通常 Primitive(穴対応)へ切り替える
+            entity.polygon.height = new Cesium.ConstantProperty(0);
+            entity.polygon.perPositionHeight = new Cesium.ConstantProperty(false);
+          }
         } catch (_) { /* マスク生成失敗時は元地物のまま */ }
       }
       if (spec.fillParts?.length) {
@@ -590,12 +604,18 @@ function renderLineDecor(entity, decor, t, { addAux, clamp, opacity }) {
     const base = offsetPos(b, az, -headLen);
     const l = offsetPos(base, az + Math.PI / 2, headWid);
     const r = offsetPos(base, az - Math.PI / 2, headWid);
-    addAux({
-      polygon: {
-        hierarchy: new Cesium.PolygonHierarchy([b, l, r]),
-        material: new Cesium.ColorMaterialProperty(toCesiumColor(mulAlpha(decor.color, opacity))),
-      },
-    });
+    // 矢羽はポリゴンではなく2本の折れ線で近似(補助ポリゴンの
+    // プリミティブ混在による属性不整合を避ける)
+    for (const tip of [l, r]) {
+      addAux({
+        polyline: {
+          positions: [tip, b],
+          width: new Cesium.ConstantProperty(Math.max(decor.widthPx || 2, 1)),
+          material: new Cesium.ColorMaterialProperty(toCesiumColor(mulAlpha(decor.color, opacity))),
+          clampToGround: new Cesium.ConstantProperty(clamp),
+        },
+      });
+    }
   }
 }
 

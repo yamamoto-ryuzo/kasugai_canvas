@@ -628,9 +628,13 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
           }] : [kind, filter, paint]);
     }
     map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: Math.max(item._qml?.cluster?.distancePx || 50, 5), clusterMaxZoom: 16 } : {}) });
+    const kindCount = {};
+    for (const [k] of kinds) kindCount[k] = (kindCount[k] || 0) + 1;
+    const kindSeen = {};
     for (const [kind, filter, paint, layout] of kinds) {
-      const lid = kind === "symbol" && kinds.filter(k => k[0] === "symbol").length > 1
-        ? `${sid}-${kind}-${layout?.["symbol-placement"] || "point"}` : `${sid}-${kind}`;
+      kindSeen[kind] = (kindSeen[kind] || 0) + 1;
+      const lid = kindCount[kind] > 1
+        ? `${sid}-${kind}-${kindSeen[kind]}` : `${sid}-${kind}`;
       const def = { id: lid, type: kind, source: sid, filter, paint, layout: { ...layout, visibility: item.visible ? "visible" : "none" } };
       if (zoomRange) { def.minzoom = zoomRange.minzoom; def.maxzoom = zoomRange.maxzoom; }
       // ラベル縮尺表示は symbol レイヤへだけ適用(地物描画には影響させない)
