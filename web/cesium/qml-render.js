@@ -281,17 +281,8 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
         if (labelSpec.minFeatureSizePx && (hasLine || hasFill)) {
           if (entityExtentDiagMeters(entity, t) < labelSpec.minFeatureSizePx * LABEL_M_PER_PX) showLabel = false;
         }
-        // fitInsidePolygon(地物の中に全て収まるラベルのみ): ポリゴンの縦横実寸と
-        // ラベル矩形(幅・高さ)を比較し、収まらないラベルは描画しない
-        if (showLabel && pl.fitInsidePolygon && hasFill) {
-          const sz = labelSpec.sizePx || 12;
-          const lines = String(text).split("\n");
-          const textW = (s) => [...s].reduce((a, ch) => a + (ch.charCodeAt(0) > 0xff ? 1.0 : 0.55), 0);
-          const wPx = Math.max(...lines.map(l => textW(l))) * sz;
-          const hPx = lines.length * sz * (labelSpec.lineHeightFactor || 1);
-          const ext = entityExtentMeters(entity, t);
-          if (ext && (wPx * LABEL_M_PER_PX > ext.w || hPx * LABEL_M_PER_PX > ext.h)) showLabel = false;
-        }
+        // fitInsidePolygon の収まり判定は画面投影ベースの declutter で
+        // ズーム連動して行う(ここで固定係数で隠すとズームイン時に復活しない)
         if (showLabel) {
           const anchorPos = entity.position ? entity.position.getValue(t) : null;
           // 位置決定: DD PositionX/Y > ライン中点 > ポリゴン内部点 > 重心
@@ -472,6 +463,28 @@ function toWindow(scene, pos) {
 
 const overlapBox = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
 
+// ポリゴン entity の画面投影バウンディングボックス(fitInsidePolygon 判定用)。
+// 頂点を間引いて投影コストを抑える
+function polyScreenBox(scene, entity, t) {
+  try {
+    const h = entity.polygon?.hierarchy?.getValue?.(t);
+    const parts = Array.isArray(h) ? h : (h ? [h] : []);
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const p of parts) {
+      const pos = p.positions || p;
+      if (!pos?.length) continue;
+      const step = Math.max(1, Math.floor(pos.length / 120));
+      for (let i = 0; i < pos.length; i += step) {
+        const win = toWindow(scene, pos[i]);
+        if (!win || !Number.isFinite(win.x)) continue;
+        if (win.x < x1) x1 = win.x; if (win.x > x2) x2 = win.x;
+        if (win.y < y1) y1 = win.y; if (win.y > y2) y2 = win.y;
+      }
+    }
+    return Number.isFinite(x1) ? { x1, y1, x2, y2 } : null;
+  } catch (e) { return null; }
+}
+
 // 1データソース分の declutter を実行する。複数 ds 間の衝突も見るため
 // 共有の placed 配列を受け取る
 export function declutterDataSourceLabels(scene, ds, placed = []) {
@@ -483,13 +496,9 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
   for (const c of sorted) {
     const e = c.entity;
     if (!e?.label) continue;
-    if (c.spec.allowOverlap || c.spec.displayAll) { e.label.show = new Cesium.ConstantProperty(true); continue; }
     const pos = e.position?.getValue?.(t);
     const win = pos ? toWindow(scene, pos) : null;
     if (!win || !Number.isFinite(win.x)) { e.label.show = new Cesium.ConstantProperty(false); continue; }
-    // 既に非表示(縮尺ゲート等)のラベルは衝突判定・再表示の対象外
-    const shown = e.label.show?.getValue?.(t);
-    if (shown === false) continue;
     const size = c.spec.sizePx || 12;
     const lines = String(c.spec.text).split("\n");
     // 全角は 1em・半角は 0.55em で幅を見積もる(日本語ラベル対応)
@@ -497,6 +506,20 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
     const w = Math.max(...lines.map(l => textW(l))) * size + (c.spec.halo ? c.spec.halo.widthPx * 2 : 0) + 4;
     const h = lines.length * size * (c.spec.lineHeightFactor || 1) + 2;
     const pl = c.spec.placement || {};
+    // fitInsidePolygon(地物内に全て収まるラベルのみ): 現在の画面縮尺で
+    // ポリゴン投影BBoxにラベル矩形が収まらなければ隠す。overlap 許容とは独立の判定
+    if (pl.fitInsidePolygon && e.polygon) {
+      const pb = polyScreenBox(scene, e, t);
+      const fits = pb && w <= (pb.x2 - pb.x1) && h <= (pb.y2 - pb.y1);
+      if (!fits) {
+        e.label.show = new Cesium.ConstantProperty(false);
+        continue;
+      }
+    }
+    if (c.spec.allowOverlap || c.spec.displayAll) { e.label.show = new Cesium.ConstantProperty(true); continue; }
+    // 既に非表示(縮尺ゲート等)のラベルは衝突判定・再表示の対象外
+    const shown = e.label.show?.getValue?.(t);
+    if (shown === false) continue;
     const quads = pl.predefinedOrder?.length ? orderToQuads(pl.predefinedOrder, pl.quad) : [pl.quad || { h: 0, v: 0 }];
     let done = false;
     for (const q of quads) {
