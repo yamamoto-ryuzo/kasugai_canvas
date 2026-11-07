@@ -88,24 +88,6 @@ function polylineMidpoint(entity, time) {
   } catch (e) { return null; }
 }
 
-// entity ジオメトリの bbox 対角長(概算メートル)
-function entityExtentDiagMeters(entity, time) {
-  try {
-    const hierarchy = entity.polygon?.hierarchy?.getValue?.(time);
-    const positions = hierarchy?.positions || entity.polyline?.positions?.getValue?.(time);
-    if (!positions?.length) return Infinity;
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const p of positions) {
-      const c = Cesium.Cartographic.fromCartesian(p);
-      minX = Math.min(minX, c.longitude); maxX = Math.max(maxX, c.longitude);
-      minY = Math.min(minY, c.latitude); maxY = Math.max(maxY, c.latitude);
-    }
-    const midLat = (minY + maxY) / 2;
-    const dx = (maxX - minX) * 111320 * Math.cos(midLat);
-    const dy = (maxY - minY) * 110540;
-    return Math.hypot(dx, dy);
-  } catch (e) { return Infinity; }
-}
 
 // ポリゴン内部に収まる点を探す(centroidInside/fitInsidePolygon 用)。
 // 重心が内部なら重心、外なら最長辺の中点を内部側へ寄せた近似点を返す
@@ -276,11 +258,9 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
       if (labelSpec && text) {
         const pl = labelSpec.placement || {};
         const q = pl.quad || { h: 0, v: 0 };
-        // minFeatureSize: 小さい地物はラベルを付けない(実寸近似)
+        // minFeatureSize/fitInsidePolygon は画面投影ベースの declutter で
+        // ズーム連動して判定する(ここで固定係数で隠すとズームイン時に復活しない)
         let showLabel = true;
-        if (labelSpec.minFeatureSizePx && (hasLine || hasFill)) {
-          if (entityExtentDiagMeters(entity, t) < labelSpec.minFeatureSizePx * LABEL_M_PER_PX) showLabel = false;
-        }
         // fitInsidePolygon の収まり判定は画面投影ベースの declutter で
         // ズーム連動して行う(ここで固定係数で隠すとズームイン時に復活しない)
         if (showLabel) {
@@ -394,29 +374,6 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
   ds._qmlLabels = [...labelCandidates.values()];
 }
 
-// ポリゴン entity の外接矩形の実寸(m)を返す。fitInsidePolygon 判定用
-function entityExtentMeters(entity, t) {
-  try {
-    const h = entity.polygon?.hierarchy?.getValue?.(t);
-    const parts = Array.isArray(h) ? h : (h ? [h] : []);
-    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
-    for (const p of parts) {
-      const pos = p.positions || p;
-      for (const c of pos || []) {
-        const cg = Cesium.Cartographic.fromCartesian(c);
-        const lon = Cesium.Math.toDegrees(cg.longitude), lat = Cesium.Math.toDegrees(cg.latitude);
-        if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
-        if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
-      }
-    }
-    if (!Number.isFinite(minLon)) return null;
-    const midLat = (minLat + maxLat) / 2;
-    return {
-      w: (maxLon - minLon) * 111320 * Math.cos(midLat * Math.PI / 180),
-      h: (maxLat - minLat) * 110540,
-    };
-  } catch (e) { return null; }
-}
 
 // マルチポリゴン entity の最大面積パートの重心を返す(labelPerPart=0 近似)
 function largestPartCentroid(entity, t) {
@@ -491,6 +448,23 @@ function polyScreenBox(scene, entity, t) {
   } catch (e) { return null; }
 }
 
+// ポリライン entity の画面投影長(px)。minFeatureSize 判定用
+function lineScreenLen(scene, entity, t) {
+  try {
+    const pos = entity.polyline?.positions?.getValue?.(t);
+    if (!pos?.length) return 0;
+    const step = Math.max(1, Math.floor(pos.length / 60));
+    let len = 0, px0 = null;
+    for (let i = 0; i < pos.length; i += step) {
+      const win = toWindow(scene, pos[i]);
+      if (!win || !Number.isFinite(win.x)) { px0 = null; continue; }
+      if (px0) len += Math.hypot(win.x - px0.x, win.y - px0.y);
+      px0 = win;
+    }
+    return len;
+  } catch (e) { return 0; }
+}
+
 // 1データソース分の declutter を実行する。複数 ds 間の衝突も見るため
 // 共有の placed 配列を受け取る
 export function declutterDataSourceLabels(scene, ds, placed = []) {
@@ -521,6 +495,18 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
         e.label.show = new Cesium.ConstantProperty(false);
         continue;
       }
+    }
+    // minFeatureSize: 画面投影した地物サイズが閾値未満なら隠す(ズーム連動)
+    if (c.spec.minFeatureSizePx && (e.polygon || e.polyline)) {
+      const need = c.spec.minFeatureSizePx;
+      let tooSmall = false;
+      if (e.polygon) {
+        const pb = polyScreenBox(scene, e, t);
+        tooSmall = pb && Math.max(pb.x2 - pb.x1, pb.y2 - pb.y1) < need;
+      } else {
+        tooSmall = lineScreenLen(scene, e, t) < need;
+      }
+      if (tooSmall) { e.label.show = new Cesium.ConstantProperty(false); continue; }
     }
     if (c.spec.allowOverlap || c.spec.displayAll) { e.label.show = new Cesium.ConstantProperty(true); continue; }
     const quads = pl.predefinedOrder?.length ? orderToQuads(pl.predefinedOrder, pl.quad) : [pl.quad || { h: 0, v: 0 }];

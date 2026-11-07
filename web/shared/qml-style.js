@@ -1342,17 +1342,34 @@ const QUAD_ANCHORS = {
 };
 
 // QgsPalLayerSettings::Placement → 正規化配置モード
-const PLACEMENT_MODES = {
-  0: "around",   // AroundPoint (点) / OffsetPoint (ポリゴン)
+// placement 番号は layerType で enum が異なる(QgsPalLayerSettings::Placement)
+const PLACEMENT_MODES_POINT = {
+  0: "around",   // AroundPoint
   1: "over",     // OverPoint
-  2: "line",     // Line (ライン追従) / ポリゴンでは外周
-  3: "curved",   // Curved (曲線追従)
+  2: "line",     // Line (ライン追従)
+  3: "curved",   // Curved
   4: "horizontal",
   5: "free",
   6: "ordered",  // OrderedPositionsAroundPoint
   7: "perimeter",// PerimeterCurved
-  8: "outside",  // OutsidePolygons
+  8: "outside",
 };
+const PLACEMENT_MODES_POLY = {
+  0: "around",   // OffsetAroundCentroid
+  1: "horizontal", // Horizontal (重心水平)
+  2: "over",     // AroundCentroid (重心直上)
+  3: "free",     // Free (外周優先)
+  4: "horizontal", // Long (長軸沿い→水平近似)
+  5: "ordered",  // OrderedPositionsAroundPoint
+  6: "perimeter",// Perimeter (外周)
+  7: "outside",  // OutsidePosition
+  8: "curved",
+};
+const PLACEMENT_MODES_LINE = {
+  0: "line", 1: "curved", 2: "line", 3: "curved",
+  4: "horizontal", 5: "free", 6: "ordered", 7: "perimeter", 8: "outside",
+};
+const PLACEMENT_MODES = PLACEMENT_MODES_POINT;
 
 function parseLabelBackground(bgEl, warnings) {
   if (!bgEl) return null;
@@ -1543,15 +1560,15 @@ function applyLabelDD(spec, dd, props) {
   if (color) spec1.fill = color;
   spec1.underline = bool(["Underline"], spec.underline);
   spec1.strikeout = bool(["Strikeout"], spec.strikeout);
-  spec1.letterSpacingPx = num(["LetterSpacing"], spec.letterSpacingPx);
-  spec1.wordSpacingPx = num(["WordSpacing"], spec.wordSpacingPx);
+  spec1.letterSpacingPx = num(["LetterSpacing", "FontLetterSpacing"], spec.letterSpacingPx);
+  spec1.wordSpacingPx = num(["WordSpacing", "FontWordSpacing"], spec.wordSpacingPx);
   const hali = String(get(["Hali"]) || "").toLowerCase();
   if (["left", "center", "right", "justify"].includes(hali)) spec1.align = hali;
   const wrapChar = get(["MultiLineWrapChar"]);
   if (wrapChar !== undefined && wrapChar !== "") spec1.wrapChar = String(wrapChar);
   const mlh = Number(get(["MultiLineHeight"]));
   if (Number.isFinite(mlh) && mlh > 0) spec1.lineHeightFactor = mlh;
-  const rot = Number(get(["Rotation", "RotationAngle"]));
+  const rot = Number(get(["Rotation", "RotationAngle", "LabelRotation"]));
   if (Number.isFinite(rot)) spec1.placement = { ...spec.placement, rotationDeg: rot };
   const off = get(["OffsetXY"]);
   if (off != null) {
@@ -1667,9 +1684,9 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   // QFont weight(0-99, >=50 が太字相当)・namedStyle も太字/斜体の決定に使う
   const namedStyle = String(a("namedStyle") || "").toLowerCase();
   const fontWeight = Number(a("fontWeight"));
-  const bold = qgisBool(a("fontBold")) || fontWeight >= 50
+  const bold = qgisBool(a("fontBold")) || qgisBool(a("forcedBold")) || fontWeight >= 50
     || (namedStyle.includes("bold") || namedStyle.includes("太"));
-  const italic = qgisBool(a("fontItalic"))
+  const italic = qgisBool(a("fontItalic")) || qgisBool(a("forcedItalic"))
     || (namedStyle.includes("italic") || namedStyle.includes("oblique") || namedStyle.includes("斜"));
   const family = a("fontFamily") || "sans-serif";
   const underline = qgisBool(a("fontUnderline"));
@@ -1682,7 +1699,10 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   // <placement>: 配置モード・オフセット・回転(#55)
   const pl = find("placement");
   const plA = name => pl?.getAttribute(name);
-  const placementMode = PLACEMENT_MODES[Number(plA("placement") ?? -1)] || "around";
+  const layerType = String(plA("layerType") || "");
+  const modeTable = layerType === "PolygonGeometry" ? PLACEMENT_MODES_POLY
+    : layerType === "LineGeometry" ? PLACEMENT_MODES_LINE : PLACEMENT_MODES;
+  const placementMode = modeTable[Number(plA("placement") ?? -1)] || "around";
   const quadOffset = Number(plA("quadOffset") ?? 4);
   const flags = Number(plA("placementFlags")) || 0;
   const linePlacement = flags & 2 ? "above" : flags & 4 ? "below" : flags & 1 ? "on" : null;
@@ -1749,7 +1769,9 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
     kerning: qgisBool(a("fontKerning"), true),
     capitalization: Number(a("capitalization")) || 0,
     textOrientation: String(a("textOrientation") || "horizontal"),
+    stretchFactor: Number(a("stretchFactor")) || null,
     lineHeightFactor: Number(a("multilineHeight")) || 1,
+    lineHeightUnit: String(a("multilineHeightUnit") || "Percentage"),
     align: { 0: "left", 1: "center", 2: "right", 3: "justify" }[Number(a("multilineAlignment"))] || "left",
     placement,
     ...r,
@@ -1791,7 +1813,18 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   if (/IfNecessar|IfNeeded/i.test(oh)) spec.allowDegraded = true;
   if (spec.placement.allowDegraded) spec.allowDegraded = true;
   if (qgisBool(a("allowHtml"))) warnOnce(warnings, "HTML 書式ラベルは未対応です(テキスト表示に限定)");
+  // tabStopDistance は既定値が常時出力されるため、明示的な tabStops のみ警告する
   if (a("tabStops")) warnOnce(warnings, "タブストップ付きラベルは未対応です");
+  if (spec.lineHeightUnit && spec.lineHeightUnit !== "Percentage") {
+    warnOnce(warnings, "行高さの絶対指定(MM/Point)は割合値で近似します");
+  }
+  const anchorPct = Number(plA("lineAnchorPercent") ?? 0.5);
+  const anchorType = String(plA("lineAnchorType") ?? "0");
+  const anchorClip = String(plA("lineAnchorClipping") ?? "0");
+  if ((anchorPct !== 0.5 || anchorType !== "0" || anchorClip !== "0")
+      && ["line", "curved"].includes(placementMode)) {
+    warnOnce(warnings, "ラインアンカー(lineAnchor*)は中点近似です");
+  }
   if (a("fontSizeMapUnitScale") && String(a("fontSizeMapUnitScale")) !== "3x:0,0,0,0,0,0") {
     warnOnce(warnings, "縮尺連動フォントサイズ(fontSizeMapUnitScale)は固定値近似です");
   }
