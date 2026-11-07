@@ -1368,9 +1368,15 @@ function parseLabelBackground(bgEl, warnings) {
   const strokeWidthPx = sizeToPx(g("shapeBorderWidth") ?? 0, g("shapeBorderWidthUnit") || "MM");
   const padXPx = sizeToPx(g("shapeSizeX") ?? 0, g("shapeSizeUnit") || "MM");
   const padYPx = sizeToPx(g("shapeSizeY") ?? 0, g("shapeSizeUnit") || "MM");
+  const radiusPx = Math.max(
+    sizeToPx(g("shapeRadiiX") ?? 0, g("shapeRadiiUnit") || "MM"),
+    sizeToPx(g("shapeRadiiY") ?? 0, g("shapeRadiiUnit") || "MM"));
   return {
     type,
     fill, stroke, strokeWidthPx: Math.max(strokeWidthPx, 0),
+    // shapeSizeType 0=Buffer(テキストの周囲バッファ) / 1=Fixed(絶対サイズ)
+    sizeType: String(g("shapeSizeType") ?? "0"),
+    radiusPx,
     padPx: [padXPx, padYPx],
     offsetPx: [
       sizeToPx(g("shapeOffsetX") ?? 0, g("shapeOffsetUnit") || "MM"),
@@ -1650,8 +1656,17 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
     parseQgisColor(b("bufferColor"), [1, 1, 1, 1]),
     Number.isFinite(bufferOpacity) ? bufferOpacity : 1);
   const bufferSize = sizeToPx(b("bufferSize") ?? 1, b("bufferSizeUnit") || b("bufferSizeUnits") || "MM");
-  const bold = qgisBool(a("fontBold"));
-  const italic = qgisBool(a("fontItalic"));
+  if (bufEl) {
+    if (b("bufferBlendMode") && String(b("bufferBlendMode")) !== "0") warnOnce(warnings, "バッファのブレンドモードは未対応です");
+    if (qgisBool(b("bufferNoFill"))) warnOnce(warnings, "bufferNoFill(内側を塗らない)は未対応です");
+  }
+  // QFont weight(0-99, >=50 が太字相当)・namedStyle も太字/斜体の決定に使う
+  const namedStyle = String(a("namedStyle") || "").toLowerCase();
+  const fontWeight = Number(a("fontWeight"));
+  const bold = qgisBool(a("fontBold")) || fontWeight >= 50
+    || (namedStyle.includes("bold") || namedStyle.includes("太"));
+  const italic = qgisBool(a("fontItalic"))
+    || (namedStyle.includes("italic") || namedStyle.includes("oblique") || namedStyle.includes("斜"));
   const family = a("fontFamily") || "sans-serif";
   const underline = qgisBool(a("fontUnderline"));
   const strikeout = qgisBool(a("fontStrikeout"));
@@ -1752,6 +1767,26 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
   }
   if (spec.textOrientation === "rotation-based") {
     warnOnce(warnings, "回転ベースの縦書きは水平で代替します");
+  }
+  if (qgisBool(a("allowHtml"))) warnOnce(warnings, "HTML 書式ラベルは未対応です(テキスト表示に限定)");
+  if (a("tabStops")) warnOnce(warnings, "タブストップ付きラベルは未対応です");
+  if (a("fontSizeMapUnitScale") && String(a("fontSizeMapUnitScale")) !== "3x:0,0,0,0,0,0") {
+    warnOnce(warnings, "縮尺連動フォントサイズ(fontSizeMapUnitScale)は固定値近似です");
+  }
+  for (const [k, msg] of [
+    ["repeatDistanceMapUnitScale", "縮尺連動リピート距離"],
+    ["distMapUnitScale", "縮尺連動ラベル距離"],
+    ["overrunDistanceMapUnitScale", "縮尺連動オーバーラン距離"],
+    ["labelOffsetMapUnitScale", "縮尺連動オフセット"],
+  ]) {
+    const v = pl?.getAttribute(k);
+    if (v && String(v) !== "3x:0,0,0,0,0,0") warnOnce(warnings, `${msg}は固定値近似です`);
+  }
+  if (Number(pl?.getAttribute("offsetType") ?? 0) !== 0) {
+    warnOnce(warnings, "offsetType(シンボル外接/左上基準)は点基準で近似します");
+  }
+  if (a("useSubstitutions") && !qgisBool(a("useSubstitutions"))) {
+    spec.substitutions = {}; // 置換を明示的に無効化
   }
   return spec;
 }

@@ -137,6 +137,7 @@ export function qmlLabelElement(compiled, props) {
     span.style.background = rgbaToCss(bg.fill);
     span.style.padding = `${Math.max(bg.padPx[1], 1)}px ${Math.max(bg.padPx[0], 1)}px`;
     if (bg.type === "ellipse" || bg.type === "circle") span.style.borderRadius = "50%";
+    else if (bg.radiusPx) span.style.borderRadius = `${bg.radiusPx}px`;
     if (bg.stroke) span.style.border = `${Math.max(bg.strokeWidthPx, 1)}px solid ${rgbaToCss(bg.stroke)}`;
     if (bg.rotationDeg) span.style.transform = `rotate(${bg.rotationDeg}deg)`;
   }
