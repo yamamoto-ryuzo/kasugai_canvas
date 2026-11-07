@@ -219,6 +219,23 @@
         </div>
       </div>
 
+      <h2 id="analysis"><a href="features/v8.html">V8: 解析（予定）</a></h2>
+      <p>AI チャット経由で空間解析を駆動するテーマ（計画段階）。解析エンジンは自前で実装せず QGIS Processing をバックエンドとして借り、Canvas は AI による操縦面と結果表示を担います。<a href="features/v8.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🟢 QGIS Live Driver 経由（接続済み）</h3>
+          <p>「QGIS に接続」（<code>/api/qgis-live/mcp</code> リレー）で <code>qgis_pyeval</code> が合成済み。AI が <code>processing.run</code> を呼べばプロジェクトレイヤへの解析が既に実行可能。長時間解析の非同期化・結果受け渡しの定型化が今後の課題</p>
+        </div>
+        <div class="feature-card">
+          <h3>🟡 qgis_process サイドカー（構想）</h3>
+          <p>headless QGIS の公式 CLI を Axum サイドカー化して無人・繰り返し・重い解析の受け皿にする方向（QGIS インストールごと必要）</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔵 ブラウザ内解析（一部実装済）</h3>
+          <p>計測・spatialSelect・aggregateWithin・createBuffer・DuckDB-WASM 空間述語・runCode サンドボックス等の軽量解析は既存ツールで提供中</p>
+        </div>
+      </div>
+
 
     </main>
   </div>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V8: 解析 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.22.0</span></h1>
+      <p>V8: 解析 — AI 駆動の空間解析（計画中テーマ）</p>
+    </header>
+    <main>
+      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+
+      <h2 id="v8">V8: 解析（予定）</h2>
+      <p>V7 が「QGIS プロジェクトの<strong>表示</strong>を再現する」テーマなら、V8 はその延長の「<strong>解析</strong>を Canvas から駆動する」テーマです。方針は、<strong>解析エンジンは自前で実装せず QGIS Processing をバックエンドとして借りる</strong>こと。Canvas 側は AI チャットによる解析の操縦面と、結果レイヤーの 2D/3D 表示を担います。</p>
+      <p><strong>本ページは計画段階のテーマページです。</strong>「QGIS に接続」経路（MCP リレー）は実装済みで、その上で <code>processing.run()</code> を呼ぶ解析も技術的には今日動きますが、定型化した解析機能としての整備はこれからです。headless QGIS を使うサーバサイド化は構想段階です。</p>
+
+      <h3>🧭 役割分担</h3>
+      <pre class="text"><code>QGIS   = 解析エンジンの正本（Processing アルゴリズム数百種 + データ正本・編集）
+Canvas = AI チャットによる解析の駆動 + 結果の 2D/3D 表示
+  「このレイヤに500mバッファを掛けて」「AとBの交差を集計して」→ AI が解析を組み立てて実行</code></pre>
+
+      <h3>🔗 解析の3経路</h3>
+      <table>
+      <colgroup>
+      <col style="width: 24%" />
+      <col style="width: 24%" />
+      <col style="width: 18%" />
+      <col style="width: 34%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>経路</th>
+      <th>実行場所</th>
+      <th>状態</th>
+      <th>適する解析</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>QGIS Live Driver（MCP）</strong></td>
+      <td>起動中の QGIS GUI プロセス</td>
+      <td>接続基盤 実装済<br />解析運用は計画</td>
+      <td>プロジェクトのレイヤーへの ad-hoc 解析（AI 副操縦）</td>
+      </tr>
+      <tr>
+      <td><strong>qgis_process サイドカー</strong></td>
+      <td>headless QGIS（ローカル or サーバ）</td>
+      <td>構想</td>
+      <td>無人・繰り返し・重い解析、複数クライアント共有</td>
+      </tr>
+      <tr>
+      <td><strong>ブラウザ内解析</strong></td>
+      <td>ブラウザ（WASM / JS）</td>
+      <td>一部実装済</td>
+      <td>軽い集計・空間選択・計測など即時フィードバック系</td>
+      </tr>
+      </tbody>
+      </table>
+
+      <h3>🟢 経路1: 起動中 QGIS への AI 副操縦</h3>
+      <p>管理 → AI → データソース の「QGIS に接続」は、ローカルアプリの <code>/api/qgis-live/mcp</code> リレー経由で QGIS Live Driver の <code>/mcp</code> へ接続し、<code>qgis_pyeval</code>・<code>qgis_bridge_call</code>・<code>qgis_screenshot</code> 等がチャットツールへ合成されます（セッション検出は <code>/api/qgis-live/discover</code> が <code>~/.qgis-live/</code> レジストリを走査し、ポート・トークンは QGIS 再起動ごとに自動追随）。<code>pyeval</code> は QGIS 内の任意 Python を実行するため、AI が <code>processing.run("native:buffer", {...})</code> を呼べば解析は追加実装なしで動きます。</p>
+      <ul>
+        <li><strong>強み</strong>: 初期化済みのフルランタイム。native / gdal / スクリプトの全アルゴリズムが使え、開いているプロジェクトのレイヤーを名前で直接参照できる。アルゴリズムとパラメータは <code>processingRegistry()</code> 経由で AI が自己発見し、結果は <code>kasugaiExport</code>（bridge）で Canvas へ持ち出せる</li>
+        <li><strong>制約</strong>: pyeval は GUI スレッドの同期実行（長時間解析で QGIS UI がブロック）・実行は直列・QGIS が起動している間だけ有効・pyeval は「書き込み系ツール」ゲート＋実行ごとの確認対象・大きな結果は JSON では返せないためファイル出力＋ kasugaiExport で受け渡す設計が必要</li>
+      </ul>
+
+      <h3>🟡 経路2: qgis_process 解析サイドカー（構想）</h3>
+      <p>QGIS 同梱の公式 headless CLI <code>qgis_process</code>（<code>qgis_process run native:buffer --INPUT=… --OUTPUT=…</code>・<code>--json</code> パラメータ対応）を、kasuga_converter と同型の Axum サイドカーとしてラップする構想です。QGIS 本体をサーバ・端末へインストールして headless 実行するため、無人解析・繰り返し実行・複数クライアントからの共有が可能になります。<strong>QGIS の Processing .py ファイルをサーバに配置するだけでは動きません</strong> — native 系アルゴリズムの大半は C++ 実装で、Python 系も PyQGIS ランタイム（Qt + GDAL/PROJ/GEOS + <code>QgsApplication</code> 初期化）が必須のため、QGIS インストールごと必要です。起動コストを避けたい場合は常駐 PyQGIS サービス（<code>QgsApplication([], False)</code> + <code>initQgis()</code> を1回で HTTP 化）や、pygeoapi（OGC API - Processes）経由の公開も選択肢です。</p>
+
+      <h3>🔵 経路3: ブラウザ内解析（一部実装済）</h3>
+      <p>QGIS を介さない軽量解析は既存ツールで部分的に提供済みです — 計測系（<code>measureDistance</code> / <code>measureArea</code> / <code>measureBearing</code> / <code>elevationProfile</code> / <code>lineOfSight</code>）、<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code>、<code>duckdb:</code> / <code>sql:</code> レイヤーの DuckDB-WASM 空間述語、<code>runCode</code> サンドボックスによる任意 JS 解析。V8 ではこれらを「QGIS に依存しない第1段の解析」として位置づけ、重い処理・正確性重視の処理を経路1/2へ逃がす使い分けを想定します。</p>
+
+      <h3>🚧 ロードマップ（予定）</h3>
+      <table>
+      <colgroup>
+      <col style="width: 26%" />
+      <col style="width: 58%" />
+      <col style="width: 16%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>領域</th>
+      <th>内容</th>
+      <th>状態</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>MCP リレー</td>
+      <td><code>/api/qgis-live/mcp</code> — Canvas チャット → Live Driver <code>/mcp</code> への専用転送（トークンはサーバ側付与・QGIS 再起動に自動追随）</td>
+      <td>実装済</td>
+      </tr>
+      <tr>
+      <td>解析指示書</td>
+      <td><code>~/.qgis-live/agents</code>・<code>skills</code> に解析手順書（registry で alg 確認 → run → 結果をファイル出力 → kasugaiExport）を整備し、AI が定型手順で解析を組み立てられるようにする</td>
+      <td>未着手</td>
+      </tr>
+      <tr>
+      <td>非同期実行</td>
+      <td><code>QgsProcessingAlgRunnerTask</code> + <code>taskManager()</code> で GUI ブロックを回避し、外側ポーリングで完了待ちする経路（Harness の「待機は外側」原則に一致）</td>
+      <td>未着手</td>
+      </tr>
+      <tr>
+      <td>解析 bridge</td>
+      <td><code>process_run(alg, params)</code> やアルゴリズム一覧・パラメータ記述を bridge メソッド化し、<code>describe_plugins</code> カタログから自己発見可能にする（pyeval 生コード生成のミスを減らす）</td>
+      <td>未着手</td>
+      </tr>
+      <tr>
+      <td>結果受け渡し</td>
+      <td>出力を GPKG / GeoJSON ファイルに固定 → プロジェクトへ addLayer → kasugaiExport で Canvas へ表示、の定型化</td>
+      <td>未着手</td>
+      </tr>
+      <tr>
+      <td>qgis_process サイドカー</td>
+      <td>アプリ（V5 系のローカル能力）として headless QGIS をラップし、無人・重い解析の受け皿にする</td>
+      <td>構想</td>
+      </tr>
+      <tr>
+      <td>ブラウザ内解析の拡充</td>
+      <td>DuckDB-WASM spatial・ジオメトリ演算系の解析ツール追加（軽量ジョブの第1段）</td>
+      <td>構想</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>個別課題は V7 と同様に GitHub Issue に起票して管理する方針です。</p>
+    </main>
+  </div>
+</body>
+</html>

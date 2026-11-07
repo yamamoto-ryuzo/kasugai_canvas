@@ -10,6 +10,7 @@
   - **V5**: アプリ化（ローカル連携）— ローカル Rust サーバーと一体で動く「アプリ」だから実現できる機能群（rclone クラウドストレージ連携・ドライブ割当・ローカルファイル保存・納品用ローカル化など）。ブラウザのみ・コンテナ実行では提供されない
   - **V6**: マルチエンジン — `web/` をエンジン別フロント（Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps※調整中・Navara）に分割し、`.kasc` をエンジン非依存のプロジェクト形式として各エンジンで再生する構成。`?engine=` 選択・エンジン切替 UI・状態引継ぎ・`web/shared/` へのエンジン非依存コアの集約・CDN ホスト版（`kasugai-canvas-web` でエンジン一式を静的配信）を含む。メインエンジンは CesiumJS で、他エンジンは `.kasc` プレイヤーとしての互換実装
   - **V7**: QGIS連携（今後のメインテーマ）— **QGIS で作成したプロジェクトをそのまま再現する Canvas** を目指す。QGIS プラグイン `geo_webview` がレイヤーツリー・スタイル（.qml）・表示状態・テーマ・ブックマークを `.kasc + DATA/` へエクスポートし、起動中アプリへの登録・切替または静的ホスト経由（`?kasc=`）で再生。未対応課題は GitHub Issues と `docs/qgis.html`・`features/v7.html` で管理
+  - **V8**: 解析（計画）— AI チャット経由で空間解析を駆動するテーマ。解析エンジンは自前実装せず **QGIS Processing をバックエンドとして借りる**方針で、経路は3層: (1) 起動中 QGIS の Live Driver MCP（`/api/qgis-live/mcp` リレー）→ `pyeval` で `processing.run`（接続基盤は実装済・長時間解析の非同期化と結果受け渡し定型化が課題）、(2) `qgis_process` の headless サイドカー化（構想・無人/重い解析用）、(3) ブラウザ内の軽量解析（DuckDB-WASM spatial・spatialSelect/aggregateWithin/createBuffer・runCode＝一部実装済）。詳細は `docs/features/v8.html`
 - ドキュメント（`features/` 配下）はこのテーマごとにページを分ける。バージョン横断の実装詳細は **V0: システム基本構成**（`features/v0.html`）に集約する
 - リリースは 4.x〜5.x 系（4.0.0, 4.1.0, ...）で進める
 - ハッカソン提出は「**V3（AI 連携）の強化**」として位置づける（詳細は `hackathon.html`）。提出可能状態の条件:
