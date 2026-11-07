@@ -281,10 +281,16 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
         if (labelSpec.minFeatureSizePx && (hasLine || hasFill)) {
           if (entityExtentDiagMeters(entity, t) < labelSpec.minFeatureSizePx * LABEL_M_PER_PX) showLabel = false;
         }
-        // fitInsidePolygon: ラベルが地物内に収まらない場合は描画しない(近似)
+        // fitInsidePolygon(地物の中に全て収まるラベルのみ): ポリゴンの縦横実寸と
+        // ラベル矩形(幅・高さ)を比較し、収まらないラベルは描画しない
         if (showLabel && pl.fitInsidePolygon && hasFill) {
-          const textW = String(text).length * (labelSpec.sizePx || 12) * 0.62 * LABEL_M_PER_PX;
-          if (entityExtentDiagMeters(entity, t) < textW) showLabel = false;
+          const sz = labelSpec.sizePx || 12;
+          const lines = String(text).split("\n");
+          const textW = (s) => [...s].reduce((a, ch) => a + (ch.charCodeAt(0) > 0xff ? 1.0 : 0.55), 0);
+          const wPx = Math.max(...lines.map(l => textW(l))) * sz;
+          const hPx = lines.length * sz * (labelSpec.lineHeightFactor || 1);
+          const ext = entityExtentMeters(entity, t);
+          if (ext && (wPx * LABEL_M_PER_PX > ext.w || hPx * LABEL_M_PER_PX > ext.h)) showLabel = false;
         }
         if (showLabel) {
           const anchorPos = entity.position ? entity.position.getValue(t) : null;
@@ -389,6 +395,30 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
   }
   // declutter 用にラベル spec を退避
   ds._qmlLabels = [...labelCandidates.values()];
+}
+
+// ポリゴン entity の外接矩形の実寸(m)を返す。fitInsidePolygon 判定用
+function entityExtentMeters(entity, t) {
+  try {
+    const h = entity.polygon?.hierarchy?.getValue?.(t);
+    const parts = Array.isArray(h) ? h : (h ? [h] : []);
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    for (const p of parts) {
+      const pos = p.positions || p;
+      for (const c of pos || []) {
+        const cg = Cesium.Cartographic.fromCartesian(c);
+        const lon = Cesium.Math.toDegrees(cg.longitude), lat = Cesium.Math.toDegrees(cg.latitude);
+        if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+        if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+      }
+    }
+    if (!Number.isFinite(minLon)) return null;
+    const midLat = (minLat + maxLat) / 2;
+    return {
+      w: (maxLon - minLon) * 111320 * Math.cos(midLat * Math.PI / 180),
+      h: (maxLat - minLat) * 110540,
+    };
+  } catch (e) { return null; }
 }
 
 // マルチポリゴン entity の最大面積パートの重心を返す(labelPerPart=0 近似)
