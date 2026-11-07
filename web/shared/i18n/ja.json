@@ -863,5 +863,15 @@
   "app.localNetInstaller": "アプリをまだ導入していない場合は、インストーラをダウンロードしてください。",
   "app.localNetReload": "再読み込み",
   "app.localNetDownload": "インストーラをダウンロード",
-  "app.localNetClose": "閉じる"
+  "app.localNetClose": "閉じる",
+  "app.openInWeb": "ブラウザ版で開く",
+  "browser.linkTitle": "ブラウザ連携",
+  "browser.linkHint": "ホスト版（CDN）のページからこのアプリ（127.0.0.1）へ接続できるよう、Chrome/Edge の「ローカルネットワークアクセス」許可をポリシーで事前登録します。反映にはブラウザの再起動が必要です。",
+  "browser.lnaStatus": "状態: ",
+  "browser.lnaGranted": "許可済み",
+  "browser.lnaNotGranted": "未許可",
+  "browser.lnaNotInstalled": "未導入",
+  "browser.lnaApply": "許可を登録",
+  "browser.lnaRemove": "登録を解除",
+  "browser.lnaRestart": "ブラウザを再起動すると反映されます。"
 }

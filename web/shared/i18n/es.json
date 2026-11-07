@@ -863,5 +863,15 @@
   "app.localNetInstaller": "Si la app aún no está instalada, descarga el instalador.",
   "app.localNetReload": "Recargar",
   "app.localNetDownload": "Descargar instalador",
-  "app.localNetClose": "Cerrar"
+  "app.localNetClose": "Cerrar",
+  "app.openInWeb": "Abrir en la versión web",
+  "browser.linkTitle": "Integración con el navegador",
+  "browser.linkHint": "Registra previamente el permiso «Acceso a la red local» en las políticas de Chrome/Edge para que las páginas alojadas (CDN) puedan conectar con esta app (127.0.0.1) sin avisos. Reinicia el navegador para aplicar.",
+  "browser.lnaStatus": "Estado: ",
+  "browser.lnaGranted": "permitido",
+  "browser.lnaNotGranted": "no permitido",
+  "browser.lnaNotInstalled": "no instalado",
+  "browser.lnaApply": "Registrar permiso",
+  "browser.lnaRemove": "Revocar",
+  "browser.lnaRestart": "Reinicia el navegador para aplicar."
 }

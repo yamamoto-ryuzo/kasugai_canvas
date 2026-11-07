@@ -863,5 +863,15 @@
   "app.localNetInstaller": "앱이 아직 설치되어 있지 않다면 설치 프로그램을 다운로드하세요.",
   "app.localNetReload": "새로고침",
   "app.localNetDownload": "설치 프로그램 다운로드",
-  "app.localNetClose": "닫기"
+  "app.localNetClose": "닫기",
+  "app.openInWeb": "브라우저 버전으로 열기",
+  "browser.linkTitle": "브라우저 연동",
+  "browser.linkHint": "호스트 버전(CDN) 페이지가 이 앱(127.0.0.1)에 접속할 수 있도록 Chrome/Edge의 \"로컬 네트워크 액세스\" 허용을 정책으로 미리 등록합니다. 적용하려면 브라우저를 다시 시작하세요.",
+  "browser.lnaStatus": "상태: ",
+  "browser.lnaGranted": "허용됨",
+  "browser.lnaNotGranted": "허용 안 됨",
+  "browser.lnaNotInstalled": "미설치",
+  "browser.lnaApply": "허용 등록",
+  "browser.lnaRemove": "등록 해제",
+  "browser.lnaRestart": "브라우저를 다시 시작하면 적용됩니다."
 }

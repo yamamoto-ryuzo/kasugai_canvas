@@ -863,5 +863,15 @@
   "app.localNetInstaller": "Falls die App noch nicht installiert ist, laden Sie stattdessen das Installationsprogramm herunter.",
   "app.localNetReload": "Neu laden",
   "app.localNetDownload": "Installationsprogramm herunterladen",
-  "app.localNetClose": "Schließen"
+  "app.localNetClose": "Schließen",
+  "app.openInWeb": "In Browser-Version öffnen",
+  "browser.linkTitle": "Browser-Integration",
+  "browser.linkHint": "Registriert die Berechtigung „Zugriff auf das lokale Netzwerk“ vorab in den Chrome/Edge-Richtlinien, damit gehostete (CDN-)Seiten diese App (127.0.0.1) ohne Abfrage erreichen. Zum Anwenden Browser neu starten.",
+  "browser.lnaStatus": "Status: ",
+  "browser.lnaGranted": "erlaubt",
+  "browser.lnaNotGranted": "nicht erlaubt",
+  "browser.lnaNotInstalled": "nicht installiert",
+  "browser.lnaApply": "Zugriff registrieren",
+  "browser.lnaRemove": "Registrierung entfernen",
+  "browser.lnaRestart": "Zum Anwenden Browser neu starten."
 }

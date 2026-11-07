@@ -863,5 +863,15 @@
   "app.localNetInstaller": "If the app is not installed yet, download the installer instead.",
   "app.localNetReload": "Reload",
   "app.localNetDownload": "Download installer",
-  "app.localNetClose": "Close"
+  "app.localNetClose": "Close",
+  "app.openInWeb": "Open in browser version",
+  "browser.linkTitle": "Browser integration",
+  "browser.linkHint": "Pre-registers Local Network Access permission in Chrome/Edge policy so hosted (CDN) pages can reach this app (127.0.0.1) without prompts. Restart your browser to apply.",
+  "browser.lnaStatus": "Status: ",
+  "browser.lnaGranted": "allowed",
+  "browser.lnaNotGranted": "not allowed",
+  "browser.lnaNotInstalled": "not installed",
+  "browser.lnaApply": "Grant access",
+  "browser.lnaRemove": "Revoke",
+  "browser.lnaRestart": "Restart your browser to apply."
 }

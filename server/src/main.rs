@@ -247,6 +247,172 @@ async fn capabilities(State(state): State<AppState>) -> Json<Value> {
     }))
 }
 
+// ---- ブラウザ連携: Local Network Access のポリシー事前許可 ----
+// ホスト版(CDN・github.io)から 127.0.0.1 へ接続する際に必要なブラウザの
+// 「ローカルネットワークアクセス」権限を、Chrome/Edge のエンタープライズ
+// ポリシー LocalNetworkAccessAllowedForUrls へ HKCU 書き込みで事前許可する。
+// アプリをブラウザ環境のブートストラップとして使うための設定 API。
+//   GET    /api/browser/lna → 状態(installed/granted)
+//   POST   /api/browser/lna → 許可を登録(既存エントリは温存・空きスロットへ)
+//   DELETE /api/browser/lna → 登録を解除(自前エントリのみ削除)
+#[cfg(windows)]
+const LNA_ALLOWED_ORIGIN: &str = "https://yamamoto-ryuzo.github.io";
+
+#[cfg(windows)]
+fn lna_browser_defs() -> Vec<(&'static str, &'static str, Vec<PathBuf>)> {
+    let local = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    vec![
+        (
+            "chrome",
+            r"Software\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls",
+            vec![
+                PathBuf::from(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+                PathBuf::from(r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"),
+                Path::new(&local).join(r"Google\Chrome\Application\chrome.exe"),
+            ],
+        ),
+        (
+            "edge",
+            r"Software\Policies\Microsoft\Edge\LocalNetworkAccessAllowedForUrls",
+            vec![
+                PathBuf::from(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+                PathBuf::from(r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"),
+            ],
+        ),
+    ]
+}
+
+#[cfg(windows)]
+async fn reg_values(key: &str) -> Vec<(String, String)> {
+    let out = tokio::process::Command::new("reg")
+        .args(["query", &format!("HKCU\\{key}")])
+        .output()
+        .await;
+    let Ok(out) = out else { return vec![] };
+    if !out.status.success() {
+        return vec![];
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut values = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        // "    1    REG_SZ    https://..."
+        if let Some(pos) = line.find("REG_SZ") {
+            values.push((
+                line[..pos].trim().to_string(),
+                line[pos + 6..].trim().to_string(),
+            ));
+        }
+    }
+    values
+}
+
+#[cfg(windows)]
+async fn reg_run(args: &[&str]) -> bool {
+    tokio::process::Command::new("reg")
+        .args(args)
+        .output()
+        .await
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(windows)]
+async fn browser_lna_state() -> Value {
+    let mut browsers = serde_json::Map::new();
+    for (id, key, exes) in lna_browser_defs() {
+        let installed = exes.iter().any(|p| p.is_file());
+        let granted = reg_values(key)
+            .await
+            .iter()
+            .any(|(_, v)| v.eq_ignore_ascii_case(LNA_ALLOWED_ORIGIN));
+        browsers.insert(
+            id.to_string(),
+            json!({ "installed": installed, "granted": granted }),
+        );
+    }
+    json!({ "ok": true, "origin": LNA_ALLOWED_ORIGIN, "browsers": browsers })
+}
+
+async fn browser_lna_status() -> Json<Value> {
+    Json(browser_lna_state().await)
+}
+
+#[cfg(windows)]
+async fn browser_lna_apply() -> Json<Value> {
+    let mut changed = false;
+    for (_, key, _) in lna_browser_defs() {
+        let values = reg_values(key).await;
+        if values
+            .iter()
+            .any(|(_, v)| v.eq_ignore_ascii_case(LNA_ALLOWED_ORIGIN))
+        {
+            continue;
+        }
+        // 既存ポリシーを壊さないよう、空いている最も小さい番号スロットへ書く
+        for i in 1..=99u32 {
+            if !values.iter().any(|(n, _)| n == &i.to_string()) {
+                if reg_run(&[
+                    "add",
+                    &format!("HKCU\\{key}"),
+                    "/v",
+                    &i.to_string(),
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    LNA_ALLOWED_ORIGIN,
+                    "/f",
+                ])
+                .await
+                {
+                    changed = true;
+                }
+                break;
+            }
+        }
+    }
+    let mut out = browser_lna_state().await;
+    out["changed"] = json!(changed);
+    Json(out)
+}
+
+#[cfg(windows)]
+async fn browser_lna_remove() -> Json<Value> {
+    let mut changed = false;
+    for (_, key, _) in lna_browser_defs() {
+        for (name, value) in reg_values(key).await {
+            if value.eq_ignore_ascii_case(LNA_ALLOWED_ORIGIN) {
+                changed |= reg_run(&[
+                    "delete",
+                    &format!("HKCU\\{key}"),
+                    "/v",
+                    &name,
+                    "/f",
+                ])
+                .await;
+            }
+        }
+    }
+    let mut out = browser_lna_state().await;
+    out["changed"] = json!(changed);
+    Json(out)
+}
+
+#[cfg(not(windows))]
+async fn browser_lna_state() -> Value {
+    json!({ "ok": false, "error": "windows only" })
+}
+
+#[cfg(not(windows))]
+async fn browser_lna_apply() -> Json<Value> {
+    Json(browser_lna_state().await)
+}
+
+#[cfg(not(windows))]
+async fn browser_lna_remove() -> Json<Value> {
+    Json(browser_lna_state().await)
+}
+
 // ---- リモートコマンド中継（ローカル実行時のみルート公開） ----
 // 外部プロセス(ローカルエージェント等)がコマンドを POST で投入し、ブラウザが
 // ロングポーリングで受信してチャットツールと同じ経路(executeChatTool)で実行する。
@@ -5543,6 +5709,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .route("/api/cloud/drive", post(cloud_drive))
             .route("/api/cloud/list", get(cloud_list))
             .route("/api/cloud/localize", post(cloud_localize))
+            .route(
+                "/api/browser/lna",
+                get(browser_lna_status)
+                    .post(browser_lna_apply)
+                    .delete(browser_lna_remove),
+            )
             .route(
                 "/api/cloud/file",
                 get(cloud_get_file)

@@ -8259,7 +8259,16 @@ function setupEvents() {
           method: "POST", headers: { "Content-Type": "text/plain" },
           body: JSON.stringify({ name, kasc }),
         }).then(r => r.json().catch(() => null));
-        if (out && out.status === "opened") { setGlyph("✓"); return; }
+        if (out && out.status === "opened") {
+          // mode:"running"（起動中アプリ）は既存タブ内で切り替わるだけで、
+          // アプリのタブが無ければハンドオフが見えない。確実に見えるよう
+          // アプリのURLも新規タブで開く（launched は exe 側が開くので不要）
+          if (out.mode !== "launched") {
+            const appBase = backendBaseUrl() || "http://127.0.0.1:8510";
+            window.open(`${appBase}/cesium/?project=${encodeURIComponent(out.id || name)}${share.hash}`, "_blank");
+          }
+          setGlyph("✓"); return;
+        }
         if (out && out.status === "not_installed") {
           window.open(out.download || SETUP_URL, "_blank");
           setGlyph("⬇"); return;
@@ -8284,6 +8293,21 @@ function setupEvents() {
         setGlyph("⬇");
       }
     }
+  });
+
+  // アプリ版 → ブラウザ版ハンドオフ（🖥 の逆方向）。表示中の .kasc を
+  // ローカルサーバー配信のまま CDN ホスト版エンジンで開く
+  // （エンジンはCDN・データはローカル）。localfs:// 等 URL 化できない
+  // プロジェクトでは非表示（初期化ブロック側で制御）
+  const openInWebBtn = document.querySelector("#open-in-web");
+  openInWebBtn?.addEventListener("click", () => {
+    const HOSTED_BASE = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable";
+    const share = new URL(window.kasugaiApi.buildShareUrl());
+    const remoteKasc = share.searchParams.get("kasc");
+    const kascUrl = remoteKasc && /^https?:/i.test(remoteKasc)
+      ? remoteKasc
+      : `${projectsBaseUrl(share.searchParams.get("project") || "default")}kasugai_canvas.kasc`;
+    window.open(`${HOSTED_BASE}/cesium/?kasc=${encodeURIComponent(kascUrl)}${share.hash}`, "_blank");
   });
 
   // スクリーンショット: 地表タイルの読み込みを待ってから render→toBlob で PNG 保存
@@ -11284,6 +11308,49 @@ window.addEventListener("pagehide", () => {
       } else {
         openInAppBtn.style.display = "none";
       }
+    }
+  }
+  // 「ブラウザ版で開く」はアプリ版(同一オリジン＋remoteCommand)かつ
+  // URL 化できるプロジェクトのみ表示。CDN 上では自分自身への遷移なので不要
+  {
+    const openInWebBtn = document.querySelector("#open-in-web");
+    if (openInWebBtn) {
+      const cur = new URLSearchParams(location.search);
+      const localfs = /^localfs:/i.test(currentKascUrl || "")
+        || /^(local|localfs)/i.test(cur.get("kasc") || "");
+      if (backendBaseUrl() !== "" || !hasBackendFeature("remoteCommand") || localfs) {
+        openInWebBtn.style.display = "none";
+      }
+    }
+  }
+  // ブラウザ連携（管理→その他）: Chrome/Edge の LNA ポリシー事前許可を
+  // /api/browser/lna で適用・解除する。アプリ版のみ表示
+  {
+    const section = document.querySelector("#browser-link-section");
+    if (section && backendBaseUrl() === "" && hasBackendFeature("remoteCommand")) {
+      section.hidden = false;
+      const statusEl = document.querySelector("#browser-lna-status");
+      const msgEl = document.querySelector("#browser-lna-msg");
+      const render = (d) => {
+        if (!d || !d.ok) { if (statusEl) statusEl.textContent = "-"; return; }
+        const b = d.browsers || {};
+        const fmt = (x) => !x?.installed ? t("browser.lnaNotInstalled")
+          : (x.granted ? t("browser.lnaGranted") : t("browser.lnaNotGranted"));
+        if (statusEl) statusEl.textContent = `Chrome: ${fmt(b.chrome)} / Edge: ${fmt(b.edge)}`;
+      };
+      const call = async (method) => {
+        if (msgEl) msgEl.textContent = "";
+        try {
+          const d = await fetch("/api/browser/lna", { method }).then(r => r.json());
+          render(d);
+          if (d?.changed && msgEl) msgEl.textContent = t("browser.lnaRestart");
+        } catch (e) {
+          if (msgEl) msgEl.textContent = String(e?.message || e);
+        }
+      };
+      document.querySelector("#browser-lna-apply")?.addEventListener("click", () => void call("POST"));
+      document.querySelector("#browser-lna-remove")?.addEventListener("click", () => void call("DELETE"));
+      void fetch("/api/browser/lna").then(r => r.json()).then(render).catch(() => {});
     }
   }
   const initialCamera = await resolveInitialCamera();

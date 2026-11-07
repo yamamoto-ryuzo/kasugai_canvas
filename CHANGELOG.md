@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.21.0] - 2026-11-07
+
+### Added
+
+- **☁「ブラウザ版で開く」（アプリ版 → CDN 逆ハンドオフ）** — 🖥 の左に追加（アプリ版のみ表示・localfs プロジェクトは非表示）。表示中の .kasc をローカルサーバー配信（`127.0.0.1:8510/projects/…`）のまま CDN ホスト版エンジンで開く — エンジンはCDN・データはローカルの逆方向で、ビューハッシュの視点も引き継ぐ
+- **`/api/browser/lna`＋管理パネル「ブラウザ連携」セクション** — Chrome/Edge の `LocalNetworkAccessAllowedForUrls` ポリシーへ `yamamoto-ryuzo.github.io` の LNA 事前許可を GET/POST/DELETE で管理（HKCU・既存エントリ温存・ブラウザ再起動で反映）。CDN→ローカル接続の権限プロンプトを不要化するブートストラップとしてアプリがブラウザ環境を整える
+- **インストーラで LNA ポリシー事前登録** — 既存エントリを壊さない空きスロット走査で Chrome/Edge 両方へ書込み、新規導入は権限プロンプト自体が出ない。アンインストールで自前エントリのみ除去
+
+### Fixed
+
+- **🖥「アプリで開く」が起動中アプリで見えない問題を修正** — `mode:"running"`（register+switchProject）は既存タブ内で切り替わるだけで、アプリのブラウザタブが無いとハンドオフが不可視だった。`window.open` でアプリ URL を新規タブでも開くよう変更（launched は exe 側が開くため除外）
+
 ## [6.20.1] - 2026-11-07
 
 ### Fixed

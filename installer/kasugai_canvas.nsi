@@ -34,10 +34,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "6.20.1.0"
+VIProductVersion "6.21.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "6.20.1"
+VIAddVersionKey "FileVersion" "6.21.0"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -110,7 +110,31 @@ Section "Install"
   WriteRegStr HKCU "Software\Classes\KASUGAI.Canvas\shell\open\command" "" '"$INSTDIR\${APP_EXE}" "--open-browser" "%1"'
   ; Windows 8+ ファイルの関連付け反映
   System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, i 0, i 0)r'
+
+  ; ブラウザ連携: ホスト版(CDN)ページ→127.0.0.1 の Local Network Access を
+  ; Chrome/Edge のポリシーで事前許可（HKCU・管理者権限不要）。
+  ; アプリをブラウザ環境のブートストラップとして使うための初期設定。
+  ; ブラウザ再起動後に有効
+  StrCpy $0 "Software\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls"
+  Call WriteLnaAllow
+  StrCpy $0 "Software\Policies\Microsoft\Edge\LocalNetworkAccessAllowedForUrls"
+  Call WriteLnaAllow
 SectionEnd
+
+; $0=レジストリキー → ホスト版 origin を未登録なら空きスロットへ追加。
+; 既存ポリシーエントリは温存する
+Function WriteLnaAllow
+  StrCpy $1 1
+lna_scan:
+  ReadRegStr $2 HKCU "$0" "$1"
+  StrCmp $2 "https://yamamoto-ryuzo.github.io" lna_done
+  StrCmp $2 "" lna_write
+  IntOp $1 $1 + 1
+  IntCmp $1 99 lna_done lna_scan
+lna_write:
+  WriteRegStr HKCU "$0" "$1" "https://yamamoto-ryuzo.github.io"
+lna_done:
+FunctionEnd
 
 Function CreateDesktopShortcut
   CreateShortcut "$DESKTOP\kasugai_canvas.lnk" "$INSTDIR\${APP_EXE}" "--open-browser"
@@ -132,4 +156,23 @@ Section "Uninstall"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\KASUGAI Canvas"
   DeleteRegKey HKCU "Software\Classes\KASUGAI.Canvas"
   DeleteRegKey HKCU "Software\Classes\.kasc"
+  ; インストール時に書いた LNA 許可（自前の origin 値のみ）を除去
+  StrCpy $0 "Software\Policies\Google\Chrome\LocalNetworkAccessAllowedForUrls"
+  Call un.RemoveLnaAllow
+  StrCpy $0 "Software\Policies\Microsoft\Edge\LocalNetworkAccessAllowedForUrls"
+  Call un.RemoveLnaAllow
 SectionEnd
+
+; $0=レジストリキー → 値がホスト版 origin と一致するエントリだけ削除
+Function un.RemoveLnaAllow
+  StrCpy $1 1
+un_lna_scan:
+  ReadRegStr $2 HKCU "$0" "$1"
+  StrCmp $2 "" un_lna_done
+  StrCmp $2 "https://yamamoto-ryuzo.github.io" 0 un_lna_next
+    DeleteRegValue HKCU "$0" "$1"
+  un_lna_next:
+  IntOp $1 $1 + 1
+  IntCmp $1 99 un_lna_done un_lna_scan
+un_lna_done:
+FunctionEnd
