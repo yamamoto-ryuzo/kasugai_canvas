@@ -26,6 +26,234 @@
       <img src="images/canvas_QGIS.png" alt="QGIS連携構想" />
       <figcaption aria-hidden="true">QGIS連携構想</figcaption>
       </figure>
+      <h2 id="qgis連携実装状況">QGIS連携：実装済みの再現範囲</h2>
+      <p>QGIS プラグイン <code>geo_webview</code> の <code>kasugaiExport</code>
+      （パネル「KASUGAI」ボタン / <code>GET :8089/kasugai</code> / bridge
+      <code>kasugaiExport</code> / Canvas 側「QGISから取り込み」ボタン）は、
+      プロジェクトのレイヤーツリーを走査して <code>.kasc + DATA/</code> を出力し、
+      起動中の Canvas へ登録・切替（または静的ホスト経由で
+      <code>?kasc=</code> 再生）する。以下は現在「そのまま」再現される項目。</p>
+      <h3 id="レイヤー行の対応表">レイヤー → .kasc 行の対応</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>QGIS レイヤー</th>
+      <th>出力</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>ベクター（GPKG/GeoJSON/Parquet/FGB ソース）</td>
+      <td><code>gpkg:</code> / <code>geojson:</code> / <code>geoparquet:</code> /
+      <code>flatgeobuf:</code> のネイティブ参照</td>
+      <td>変換せずそのまま。ローカルは <code>DATA/</code> へ複製、URL は直参照。
+      GPKG は <code>table=</code> 対応</td>
+      </tr>
+      <tr>
+      <td>ベクター（上記以外のソース・再投影必要）</td>
+      <td><code>geojson:</code></td>
+      <td>EPSG:4326 の GeoJSON へ変換して <code>DATA/</code> へ出力</td>
+      </tr>
+      <tr>
+      <td>CSV/TSV（delimitedtext / ogr）</td>
+      <td><code>duckdb:</code></td>
+      <td><code>lon=</code>/<code>lat=</code>/<code>geom=</code> 付き</td>
+      </tr>
+      <tr>
+      <td>プロバイダフィルタ（subsetString）</td>
+      <td><code>where=</code>（gpkg/duckdb）・
+      <code>duckdb:+format=parquet</code>（parquet）・GeoJSON 変換</td>
+      <td>フィルタに <code>|</code> を含む場合は GeoJSON 変換で反映</td>
+      </tr>
+      <tr>
+      <td>3D Tiles（QgsTiledSceneLayer）</td>
+      <td><code>3dtiles:</code></td>
+      <td>ローカル tileset は DATA/ へ複製（サイズ上限あり）</td>
+      </tr>
+      <tr>
+      <td>XYZ タイル</td>
+      <td><code>xyz:</code> / <code>base:</code></td>
+      <td>最下段の表示中 XYZ または「背景図」「ベースマップ」グループ内は
+      <code>base:</code> 行。<code>minZoom=</code>/<code>maxZoom=</code> 反映。
+      ローカルタイルツリーは DATA/ へ複製</td>
+      </tr>
+      <tr>
+      <td>WMS</td>
+      <td><code>wms:</code></td>
+      <td><code>layers=</code>/<code>styles=</code>/<code>format=</code> を引継ぎ。
+      WMTS は未対応（<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/51">#51</a>）</td>
+      </tr>
+      <tr>
+      <td>GeoTIFF/COG（GDAL ラスタ）</td>
+      <td><code>geotiff:</code></td>
+      <td>ローカル .tif 系は DATA/ へ複製、URL/vsicurl は直参照。
+      それ以外のラスタ形式はスキップ（<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/53">#53</a>）。
+      ラスタレンダラ設定は未反映（<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/52">#52</a>）</td>
+      </tr>
+      <tr>
+      <td>属性テーブル（ジオメトリなし）・メッシュ・ベクタータイル・点群・注記・プラグインレイヤ</td>
+      <td>スキップ</td>
+      <td>エクスポート結果の <code>skipped</code> に理由付きで記録
+      （<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/50">#50</a>）</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="表示設定の引継ぎ">表示設定の引継ぎ</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>QGIS 側の設定</th>
+      <th>Canvas 側</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>レイヤー表示チェック</td>
+      <td><code>| off</code>。<code>hidden_as_off=True</code>
+      またはテーマ出力時は非表示レイヤーも <code>| off</code> 付きで出力</td>
+      </tr>
+      <tr>
+      <td>グループ階層</td>
+      <td>タイトルを <code>group/layer</code> パンくず形式に。排他グループは
+      <code>group//layer</code>（Canvas 側で排他切替）</td>
+      </tr>
+      <tr>
+      <td>レイヤー不透明度</td>
+      <td><code>opacity=</code>（XYZ/WMS/GeoTIFF 系。ベクターは
+      <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/58">#58</a>）</td>
+      </tr>
+      <tr>
+      <td>縮尺表示（minimumScale/maximumScale）</td>
+      <td><code>minScale=</code>/<code>maxScale=</code>（引き側/寄り側限界。
+      QML ルールの縮尺範囲と積集合で併存）</td>
+      </tr>
+      <tr>
+      <td>出典・利用条件（layer attribution）</td>
+      <td><code>attr=</code></td>
+      </tr>
+      <tr>
+      <td>現在のキャンバス範囲</td>
+      <td><code>cam:</code> 行（中心座標＋高さ換算）</td>
+      </tr>
+      <tr>
+      <td>ブックマーク（プロジェクト＋アプリケーション）</td>
+      <td><code>bookmarks.xml</code>（qgis_bookmarks 形式・EPSG:4326 正規化）＋
+      <code>bookmark:</code> 行 → カメラプリセット</td>
+      </tr>
+      <tr>
+      <td>マップテーマ</td>
+      <td><code>theme:</code> 行 → 表示状態プリセット（テーマの可視レイヤ名を
+      タイトル一致で記述）</td>
+      </tr>
+      <tr>
+      <td>破損レイヤー（ソース未達）</td>
+      <td><code>readLayerXml</code> で再生成してエクスポートを試行</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="スタイル再現">スタイル（.qml）の再現</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>QGIS 側の設定</th>
+      <th>Canvas 側</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>ベクターの現在スタイル</td>
+      <td><code>DATA/&lt;slug&gt;.qml</code> として保存し
+      <code>style=DATA/&lt;slug&gt;.qml</code> で参照。<code>&lt;renderer-v2&gt;</code>
+      の単一・分類（categorizedSymbol）・段階（graduatedSymbol）・ルール（RuleBased・
+      式サブセット評価）レンダラをコンパイルして適用。シンボルレイヤ
+      （マーカー/SVG・フォント/ラスタ・ライン実線破線・塗りつぶし・
+      ハッチ/ドット/画像パターン）・データ定義プロパティ・
+      <code>&lt;labeling&gt;</code> ラベル・縮尺依存ルール・
+      <code>is_layer_visible()</code> に対応</td>
+      </tr>
+      <tr>
+      <td>シンボルが参照する画像（SVG/ラスタ）</td>
+      <td><code>DATA/</code> へ複製し .qml 内の参照を書き換え
+      （QGIS 内蔵 SVG や絶対パスも拾う）</td>
+      </tr>
+      <tr>
+      <td>GPKG への「スタイルをデータベースに保存」</td>
+      <td><code>embed_gpkg_style=True</code> で <code>layer_styles</code>
+      （useAsDefault）へも保存 → Canvas が style= 未指定時に自動適用</td>
+      </tr>
+      <tr>
+      <td>QML 凡例</td>
+      <td>レイヤ一覧に条件別スウォッチ表示＋凡例単位の表示/非表示
+      （<code>legendHidden</code> → 再描画反映。AI ツール
+      <code>setLayerLegendVisible</code>/<code>listLayers</code> からも操作可）</td>
+      </tr>
+      <tr>
+      <td>未対応レンダラ/シンボル要素</td>
+      <td>最も近い表現にフォールバックし <code>warnings</code> に記録
+      （<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/54">#54</a>、
+      <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/55">#55</a>）</td>
+      </tr>
+      </tbody>
+      </table>
+      <p>エンジン別の QML 再現度:
+      <strong>Cesium</strong>=完全対応（entity/primitive 両経路・ドレープ・ラベル）、
+      <strong>MapLibre</strong>=スタイルレイヤ化＋ラベルベイク、
+      <strong>OpenLayers</strong>=styleFunction、
+      <strong>Leaflet</strong>=Path options＋tooltip ラベル、
+      <strong>Navara</strong>=代表地物のスタイルをレイヤー単位マテリアルへ、
+      <strong>GSI Maps</strong>=未対応（凡例スウォッチのみ）。</p>
+      <h3 id="連携の起動経路">連携の起動経路</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>経路</th>
+      <th>動作</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>パネル「KASUGAI」/ <code>GET :8089/kasugai</code> /
+      bridge <code>kasugaiExport</code> / Canvas「QGISから取り込み」</td>
+      <td>エクスポート → 起動中 Canvas（127.0.0.1:8510）へ
+      <code>/api/projects/register</code> 登録 → <code>switchProject</code> 切替</td>
+      </tr>
+      <tr>
+      <td><code>route=local|qgis-http</code>（フォールバック）</td>
+      <td>Canvas 未起動時は geo_webview 内蔵 HTTP がエンジン HTML と
+      <code>/export-data/</code> でデータを配信してブラウザ起動</td>
+      </tr>
+      <tr>
+      <td><code>route=hosted</code></td>
+      <td>CDN ホスト版エンジン（kasugai-canvas-web）＋
+      <code>/export-data/</code> でサーバレス再生</td>
+      </tr>
+      <tr>
+      <td><code>emit_launchers</code> / <code>emit_zip</code></td>
+      <td>エンジン起動 HTML を同梱 / 一式を
+      <code>kasugai_canvas_*.zip</code> 化（Re:Earth geo_suite の
+      <code>qgis:</code> 行が直接取り込み可・<code>/export-data/</code> でも取得可）</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3 id="qgis連携未対応issue">未対応・検討中（Issue）</h3>
+      <p>「QGIS プロジェクトをそのまま再現する Canvas」に向けた残課題は
+      以下の Issue で管理する。</p>
+      <ul>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/49">#49</a> .qgz/.qgs プロジェクトファイルの直接読み込み</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/50">#50</a> 未対応レイヤ種別（メッシュ/ベクタータイル/点群/アノテーション/プラグイン）の出力方針</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/51">#51</a> WMTS レイヤのエクスポート対応</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/52">#52</a> ラスタレンダラ設定（バンド選択/疑似カラー/ヒルシェード/ストレッチ）の再現</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/53">#53</a> 非GeoTIFFラスタ（JPEG/PNG/VRT/SDAT/GRIB等）の出力対応</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/54">#54</a> ベクターレンダラ未対応要素の完全再現（geometryGenerator/ヒートマップ/ポイント変位/2.5D等）</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/55">#55</a> ラベル詳細設定の再現（配置/バッファ/回転/優先度/複数ルール）</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/56">#56</a> 属性表示設定の引継ぎ（フィールドエイリアス/非表示/displayExpression/マップヒント）</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/57">#57</a> 時間対応レイヤ（QgsTemporal）→ time= オプションの自動出力</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/58">#58</a> レイヤー透過度・ブレンドモード・描画モードの引継ぎ</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/59">#59</a> レイヤーツリー詳細状態の再現（グループ折りたたみ・カスタム順・凡例順序）</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/60">#60</a> QGIS 3Dビュー設定の反映（3Dシーン → Canvas カメラ/描画）</li>
+      <li><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/61">#61</a> プロジェクト保存時の自動再エクスポート／Canvas への即時反映</li>
+      </ul>
       <h2 id="基本方針">基本方針</h2>
       <p>QGISの画面や<code>QgsMapCanvas</code>をKASUGAIへそのまま埋め込むのではない。QGIS・GDALが扱える多様な入力形式を、KASUGAI Canvas（CesiumJS）が描画できる形式へ変換・配信する。</p>
       <pre class="text"><code>各種GISデータ

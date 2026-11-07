@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QGIS連携 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.21.0</span></h1>
+      <p>V7: QGIS連携 — QGIS プロジェクトをそのまま再現する Canvas</p>
+    </header>
+    <main>
+      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+
+      <h2 id="v7">V7: QGIS連携</h2>
+      <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現できるようにする</strong>のが V7 のテーマです。QGIS プラグイン <code>geo_webview</code>（<a href="https://github.com/yamamoto-ryuzo/qgis_live_harness" target="_blank" rel="noopener noreferrer">qgis_live_harness</a>）がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替（または静的ホスト経由で <code>?kasc=</code> 再生）します。QGIS は多様な GIS データの正本・編集・解析基盤、Canvas は最終 2D/3D 表示エンジンという役割分担です。</p>
+      <p>「どの QGIS 要素がどの .kasc 行・オプションへ写るか」の対応表と、エンジン別の再現度は <a href="../qgis.html">QGIS・GDAL連携</a> にまとめています。本ページはテーマ全体の構成と今後の方向です。</p>
+
+      <h3>🔄 連携の流れ</h3>
+      <pre class="text"><code>QGIS プロジェクト（レイヤーツリー・スタイル・表示状態・テーマ・ブックマーク）
+        ↓ geo_webview kasugaiExport（パネル「KASUGAI」/ GET :8089/kasugai / bridge / Canvas「QGISから取り込み」）
+.kasc + DATA/（GeoJSON・ネイティブ参照・.qml・シンボル画像・bookmarks.xml）
+        ↓
+├─ ローカルアプリ: /api/projects/register 登録 → switchProject
+├─ qgis-http フォールバック: geo_webview 内蔵サーバがエンジン+データを配信
+├─ hosted: CDN ホスト版エンジン + /export-data/ 配信（サーバレス）
+└─ emit_zip: Re:Earth geo_suite の qgis: 行が ZIP を直接取り込み</code></pre>
+
+      <h3>🧩 再現の仕組み</h3>
+      <div class="features">
+        <div class="feature-card">
+          <h3>📄 .kasc 行変換</h3>
+          <p>ベクターはネイティブ参照（<code>gpkg:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>geojson:</code>/<code>duckdb:</code>）または GeoJSON 変換、3D Tiles・XYZ（<code>xyz:</code>/<code>base:</code>）・WMS・GeoTIFF も行化。フィルタは <code>where=</code>、CSV/TSV は <code>duckdb:</code> へ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎨 QML スタイル再現</h3>
+          <p>レイヤースタイルを <code>DATA/*.qml</code> として出力し <code>style=</code> で参照。<code>&lt;renderer-v2&gt;</code>（単一・分類・段階・ルール）・シンボルレイヤ・データ定義・ラベル・縮尺ルールをコンパイルして全エンジンで描画。凡例スウォッチ＋条件別表示切替も QML 由来</p>
+        </div>
+        <div class="feature-card">
+          <h3>👁️ 表示状態の引継ぎ</h3>
+          <p>表示チェック→<code>| off</code>、グループ→パンくずタイトル、排他グループ→<code>//</code>、不透明度→<code>opacity=</code>、縮尺表示→<code>minScale=/maxScale=</code>、出典→<code>attr=</code>、カメラ→<code>cam:</code>、ブックマーク→<code>bookmark:</code>、マップテーマ→<code>theme:</code></p>
+        </div>
+        <div class="feature-card">
+          <h3>🗂️ ベースマップ連携</h3>
+          <p>「背景図」「ベースマップ」グループ（<code>kasugai_basemap_groups</code> で追加可）の XYZ は <code>base:</code> 候補行へ。最下段の表示中 XYZ は既定ベースマップとして先頭に配置</p>
+        </div>
+      </div>
+
+      <h3>🗺️ エンジン別の QGIS 再現度</h3>
+      <table>
+      <colgroup>
+      <col style="width: 18%" />
+      <col style="width: 82%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>エンジン</th>
+      <th>QML 再現度</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>Cesium</strong>（メイン）</td>
+      <td>完全対応。entity / primitive 両経路・ドレープ（deck-drape・地形）・ラベル・凡例スウォッチ＋条件別表示切替</td>
+      </tr>
+      <tr>
+      <td><strong>MapLibre</strong></td>
+      <td>QML → MapLibre スタイルレイヤ化＋ラベルベイク（<code>bakeQmlLabels</code>）</td>
+      </tr>
+      <tr>
+      <td><strong>OpenLayers</strong></td>
+      <td>QML → styleFunction。OGC 準拠最良</td>
+      </tr>
+      <tr>
+      <td><strong>Leaflet</strong></td>
+      <td>QML → Path options＋永久 tooltip ラベル</td>
+      </tr>
+      <tr>
+      <td><strong>Navara</strong>（試験的）</td>
+      <td>代表地物のスタイルをレイヤー単位マテリアルへ（地物単位は未対応）</td>
+      </tr>
+      <tr>
+      <td><strong>GSI Maps</strong>（調整中）</td>
+      <td>QML 描画は未対応（凡例スウォッチのみ）</td>
+      </tr>
+      </tbody>
+      </table>
+
+      <h3>🔗 配信・連携のバリエーション</h3>
+      <ul>
+      <li><strong>ローカルアプリ（kasugai_canvas.exe:8510）</strong>— <code>/api/projects/register</code> で外部プロジェクト登録 → <code>switchProject</code> で即切替。登録先 <code>projects/</code> へ直接出力も可</li>
+      <li><strong>QGIS 内蔵サーバ経路（route=local / qgis-http）</strong>— Canvas 未起動でも geo_webview の内蔵 HTTP（:8089）がエンジン HTML と <code>/export-data/</code> を配信してブラウザ起動</li>
+      <li><strong>ホスト版（route=hosted）</strong>— CDN ホスト版エンジン＋QGIS 側配信で、Canvas 未インストール環境でも開ける</li>
+      <li><strong>静的出力（emit_launchers / emit_zip）</strong>— 起動 HTML 同梱・ZIP 化でそのまま配布。納品用ローカル化（<code>DATA/http</code> へのダウンロード書換え）も <code>style=/qml=</code> を対象に含む</li>
+      <li><strong>Re:Earth 連携</strong>— <code>reearth.txt</code> 出力で geo_suite の <code>qgis:</code> インスペクタ行から取り込み</li>
+      </ul>
+
+      <h3>🚧 未対応・ロードマップ（Issue）</h3>
+      <p>「QGIS プロジェクトをそのまま再現する」ための残課題は GitHub Issue で管理しています。詳細は <a href="../qgis.html#qgis連携未対応issue">QGIS・GDAL連携 — 未対応・検討中</a> も参照。</p>
+      <table>
+      <colgroup>
+      <col style="width: 30%" />
+      <col style="width: 55%" />
+      <col style="width: 15%" />
+      </colgroup>
+      <thead>
+      <tr>
+      <th>領域</th>
+      <th>内容</th>
+      <th>Issue</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>プロジェクト直接読込</td>
+      <td>.qgz/.qgs を Canvas が直接パースして再現（エクスポート不要化）</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/49">#49</a></td>
+      </tr>
+      <tr>
+      <td>レイヤー種別</td>
+      <td>メッシュ・ベクタータイル・点群・アノテーション等（現在スキップ）</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/50">#50</a></td>
+      </tr>
+      <tr>
+      <td>サービス系</td>
+      <td>WMTS の tilematrixset 系 URI 解釈</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/51">#51</a></td>
+      </tr>
+      <tr>
+      <td>ラスタ</td>
+      <td>レンダラ設定（バンド/疑似カラー/ヒルシェード）・非GeoTIFF 形式</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/52">#52</a> <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/53">#53</a></td>
+      </tr>
+      <tr>
+      <td>ベクタースタイル</td>
+      <td>未対応レンダラ（geometryGenerator/ヒートマップ/変位等）・ラベル詳細</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/54">#54</a> <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/55">#55</a></td>
+      </tr>
+      <tr>
+      <td>属性・時系列</td>
+      <td>フィールド別名/displayExpression・temporal → time=</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/56">#56</a> <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/57">#57</a></td>
+      </tr>
+      <tr>
+      <td>描画設定</td>
+      <td>ベクター不透明度・ブレンドモード・描画効果</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/58">#58</a></td>
+      </tr>
+      <tr>
+      <td>ツリー詳細</td>
+      <td>グループ折りたたみ・カスタム順・凡例カスタマイズ</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/59">#59</a></td>
+      </tr>
+      <tr>
+      <td>3Dビュー</td>
+      <td>QGIS 3D シーン設定 → Canvas カメラ/地形/立ち上げ</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/60">#60</a></td>
+      </tr>
+      <tr>
+      <td>自動反映</td>
+      <td>プロジェクト保存フックで再エクスポート＋即時切替</td>
+      <td><a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/61">#61</a></td>
+      </tr>
+      </tbody>
+      </table>
+    </main>
+  </div>
+</body>
+</html>

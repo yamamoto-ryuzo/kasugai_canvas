@@ -198,6 +198,27 @@
         </div>
       </div>
 
+      <h2 id="qgis"><a href="features/v7.html">V7: QGIS連携</a></h2>
+      <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現する</strong>のが今後のメインテーマです。QGIS プラグイン <code>geo_webview</code> がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替します。<a href="features/v7.html">詳細 →</a>（実装済みの再現範囲と未対応課題の一覧は <a href="qgis.html">QGIS・GDAL連携</a>）</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>📄 .kasc 行変換</h3>
+          <p>ベクターはネイティブ参照（gpkg/geoparquet/flatgeobuf/geojson/duckdb）または GeoJSON 変換、3D Tiles・XYZ・WMS・GeoTIFF も行化。フィルタは <code>where=</code>、CSV/TSV は <code>duckdb:</code> へ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎨 QML スタイル再現</h3>
+          <p><code>&lt;renderer-v2&gt;</code>（単一・分類・段階・ルール）・シンボルレイヤ・データ定義・ラベル・縮尺ルールをコンパイルして全エンジンで描画。凡例スウォッチ＋条件別表示切替も QML 由来</p>
+        </div>
+        <div class="feature-card">
+          <h3>👁️ 表示状態の引継ぎ</h3>
+          <p>表示→<code>| off</code>、グループ→パンくずタイトル、排他→<code>//</code>、不透明度→<code>opacity=</code>、縮尺→<code>minScale=/maxScale=</code>、出典→<code>attr=</code>、カメラ→<code>cam:</code>、ブックマーク→<code>bookmark:</code>、テーマ→<code>theme:</code></p>
+        </div>
+        <div class="feature-card">
+          <h3>🔗 4つの起動経路</h3>
+          <p>ローカルアプリ登録（:8510）・QGIS 内蔵サーバ配信・CDN ホスト版・ZIP/Re:Earth 取り込み。Canvas 未インストール環境でも再生可</p>
+        </div>
+      </div>
+
 
     </main>
   </div>

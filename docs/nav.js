@@ -34,10 +34,17 @@
       ]
     },
     {
+      label: 'QGIS連携 — エクスポート / プロジェクト再現',
+      items: [
+        { href: 'qgis.html', text: '11. QGIS・GDAL連携（実装済みの再現範囲）' },
+        { href: 'features/v7.html', text: '12. V7: QGIS連携（テーマ）' }
+      ]
+    },
+    {
       label: '仕様',
       items: [
         {
-          href: 'features.html', text: '11. 機能と実装',
+          href: 'features.html', text: '13. 機能と実装',
           children: [
             { href: 'features/v0.html', text: 'V0: システム基本構成' },
             { href: 'features/v1.html', text: 'V1: GIS 基本機能' },
@@ -45,7 +52,8 @@
             { href: 'features/v3.html', text: 'V3: AI 連携' },
             { href: 'features/v4.html', text: 'V4: プラグイン・外部連携' },
             { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' },
-            { href: 'features/v6.html', text: 'V6: マルチエンジン' }
+            { href: 'features/v6.html', text: 'V6: マルチエンジン' },
+            { href: 'features/v7.html', text: 'V7: QGIS連携' }
           ]
         }
       ]
@@ -53,17 +61,17 @@
     {
       label: '技術選定',
       items: [
-        { href: 'data.html', text: '12. データ形式' },
-        { href: 'library.html', text: '13. ライブラリ' },
-        { href: 'architecture.html', text: '14. システム構成' },
-        { href: 'security.html', text: '15. セキュリティ対策' }
+        { href: 'data.html', text: '14. データ形式' },
+        { href: 'library.html', text: '15. ライブラリ' },
+        { href: 'architecture.html', text: '16. システム構成' },
+        { href: 'security.html', text: '17. セキュリティ対策' }
       ]
     },
     {
       label: '拡張・連携',
       items: [
         {
-          href: 'auth/', text: '16. 認証とプラグイン',
+          href: 'auth/', text: '18. 認証とプラグイン',
           children: [
             { href: 'auth/none.html', text: '0. 認証なし（none）' },
             { href: 'auth/local.html', text: '1. ローカル認証' },
@@ -72,8 +80,7 @@
             { href: 'auth/workers.html', text: '4. Cloudflare Workers' },
             { href: 'auth/cloudrun.html', text: '5-7. Cloud Run' }
           ]
-        },
-        { href: 'qgis.html', text: '17. QGIS・GDAL連携' }
+        }
       ]
     },
     {
