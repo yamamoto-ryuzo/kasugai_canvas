@@ -856,5 +856,12 @@
   "instr.confirmDelete": "Delete instruction \"{id}\"?",
   "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?",
   "app.openInApp": "Canvas 앱에서 열기",
-  "app.importRemote": "Canvas 앱으로 가져오기"
+  "app.importRemote": "Canvas 앱으로 가져오기",
+  "app.localNetTitle": "로컬 앱에 연결할 수 없습니다",
+  "app.localNetDenied": "브라우저가 이 사이트의 로컬 네트워크 연결을 차단하고 있습니다. 주소창 왼쪽의 사이트 설정에서 \"로컬 네트워크 액세스\"를 \"허용\"으로 변경한 뒤 페이지를 새로고침하세요.",
+  "app.localNetPrompt": "로컬 앱에 연결하려면 브라우저의 \"로컬 네트워크 액세스\" 권한이 필요합니다. 권한 프롬프트가 표시되면 \"허용\"을 선택하고, 표시되지 않으면 페이지를 새로고침하면 다시 표시됩니다.",
+  "app.localNetInstaller": "앱이 아직 설치되어 있지 않다면 설치 프로그램을 다운로드하세요.",
+  "app.localNetReload": "새로고침",
+  "app.localNetDownload": "설치 프로그램 다운로드",
+  "app.localNetClose": "닫기"
 }

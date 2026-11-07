@@ -53,8 +53,9 @@ async function fetchCapabilities(origin) {
 
 // Chrome の Local Network Access 権限状態。公開サイト→ローカルアプリの
 // fetch はこの権限が必要で、未対応ブラウザ（権限名を知らない）は null を
-// 返して通常経路で試す
-async function localNetworkPermission() {
+// 返して通常経路で試す。クリック時の失敗原因案内（🖥ボタン等）からも
+// PermissionStatus を参照できるよう export する
+export async function localNetworkPermission() {
   try {
     return await navigator.permissions?.query?.({ name: "local-network-access" }) ?? null;
   } catch (e) {

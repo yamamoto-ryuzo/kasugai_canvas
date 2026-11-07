@@ -856,5 +856,12 @@
   "tools.exportSkipped": "{count} 件スキップ",
   "tools.exportHintFormats": "CSV/TSV は WKT 列付き、Shapefile はジオメトリ種別ごとに分割して ZIP にまとめます。",
   "app.openInApp": "アプリで開く",
-  "app.importRemote": "アプリへ取り込み"
+  "app.importRemote": "アプリへ取り込み",
+  "app.localNetTitle": "ローカルアプリに接続できません",
+  "app.localNetDenied": "ブラウザがこのサイトからローカルネットワークへの接続をブロックしています。アドレスバー左のサイト設定で「ローカルネットワークアクセス」を「許可」に変更し、ページを再読み込みしてください。",
+  "app.localNetPrompt": "ローカルアプリへの接続にはブラウザの「ローカルネットワークアクセス」権限が必要です。権限プロンプトが表示されている場合は「許可」を選択し、表示されない場合はページを再読み込みすると再表示されます。",
+  "app.localNetInstaller": "アプリをまだ導入していない場合は、インストーラをダウンロードしてください。",
+  "app.localNetReload": "再読み込み",
+  "app.localNetDownload": "インストーラをダウンロード",
+  "app.localNetClose": "閉じる"
 }

@@ -856,5 +856,12 @@
   "instr.confirmDelete": "Delete instruction \"{id}\"?",
   "instr.confirmOverwrite": "Overwrite instruction \"{id}\"?",
   "app.openInApp": "Abrir no app Canvas",
-  "app.importRemote": "Importar para o app Canvas"
+  "app.importRemote": "Importar para o app Canvas",
+  "app.localNetTitle": "Não foi possível conectar ao app local",
+  "app.localNetDenied": "O navegador está bloqueando a conexão deste site à sua rede local. Nas configurações do site (à esquerda da barra de endereço), defina \"Acesso à rede local\" como \"Permitir\" e recarregue a página.",
+  "app.localNetPrompt": "Conectar ao app local requer a permissão \"Acesso à rede local\" do navegador. Se o aviso aparecer, escolha \"Permitir\"; caso contrário, recarregue a página para exibi-lo novamente.",
+  "app.localNetInstaller": "Se o app ainda não estiver instalado, baixe o instalador.",
+  "app.localNetReload": "Recarregar",
+  "app.localNetDownload": "Baixar instalador",
+  "app.localNetClose": "Fechar"
 }

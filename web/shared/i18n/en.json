@@ -856,5 +856,12 @@
   "tools.exportSkipped": "{count} skipped",
   "tools.exportHintFormats": "CSV/TSV include a WKT column; Shapefile is split per geometry type into a ZIP.",
   "app.openInApp": "Open in Canvas app",
-  "app.importRemote": "Import into Canvas app"
+  "app.importRemote": "Import into Canvas app",
+  "app.localNetTitle": "Cannot reach the local app",
+  "app.localNetDenied": "Your browser is blocking this site from connecting to your local network. In the site settings (left of the address bar), set \"Local network access\" to \"Allow\", then reload the page.",
+  "app.localNetPrompt": "Connecting to the local app requires the browser's \"Local network access\" permission. If a permission prompt is shown, choose \"Allow\"; if not, reload the page to show it again.",
+  "app.localNetInstaller": "If the app is not installed yet, download the installer instead.",
+  "app.localNetReload": "Reload",
+  "app.localNetDownload": "Download installer",
+  "app.localNetClose": "Close"
 }

@@ -16,6 +16,7 @@ import {
 } from "../shared/ai-chat.js";
 import {
   detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature, backendBaseUrl,
+  localNetworkPermission,
 } from "../shared/backend.js";
 import { buildViewUrl } from "../shared/kasc.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
@@ -8167,6 +8168,44 @@ function setupEvents() {
   // アプリへ渡す（起動中は register+switchProject・未起動は exe 起動・
   // 未導入は not_installed+インストーラURL）。hub 未導入時は起動中
   // アプリへの ?kasc=/?project= + ビューハッシュ引き渡しにフォールバック
+  //
+  // 公開 https サイトからの 127.0.0.1 接続はブラウザの「ローカルネット
+  // ワークアクセス」権限が前提。未許可(prompt/denied)では hub・アプリの
+  // 疎通が全て失敗してインストーラDLへ流れ、見た目「押しても無反応」に
+  // なるため、その場合は許可方法を案内するモーダルを出す
+  const showLocalNetworkDialog = (state, setupUrl) => {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;";
+    const panel = document.createElement("div");
+    panel.style.cssText = "background:#fff;color:#1d2b35;max-width:520px;width:92%;border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 30px rgba(0,0,0,0.3);";
+    const titleEl = document.createElement("strong");
+    titleEl.textContent = t("app.localNetTitle");
+    const body = document.createElement("div");
+    body.style.cssText = "font-size:0.9em;line-height:1.6;";
+    body.textContent = `${t(state === "denied" ? "app.localNetDenied" : "app.localNetPrompt")} ${t("app.localNetInstaller")}`;
+    const buttons = document.createElement("div");
+    buttons.style.cssText = "display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;";
+    const reload = document.createElement("button");
+    reload.type = "button";
+    reload.textContent = t("app.localNetReload");
+    reload.style.cssText = "background:#2f7d8c;color:#fff;border:0;border-radius:4px;padding:6px 14px;";
+    const download = document.createElement("button");
+    download.type = "button";
+    download.textContent = t("app.localNetDownload");
+    download.style.cssText = "border:1px solid #2f7d8c;color:#2f7d8c;background:#fff;border-radius:4px;padding:6px 14px;";
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = t("app.localNetClose");
+    const done = () => overlay.remove();
+    reload.addEventListener("click", () => window.location.reload());
+    download.addEventListener("click", () => { window.open(setupUrl, "_blank"); done(); });
+    close.addEventListener("click", done);
+    overlay.addEventListener("click", event => { if (event.target === overlay) done(); });
+    buttons.append(reload, download, close);
+    panel.append(titleEl, body, buttons);
+    overlay.append(panel);
+    document.body.append(overlay);
+  };
   const openInAppBtn = document.querySelector("#open-in-app");
   openInAppBtn?.addEventListener("click", async () => {
     const setGlyph = (g) => { openInAppBtn.textContent = g; setTimeout(() => { openInAppBtn.textContent = "🖥"; }, 1500); };
@@ -8199,15 +8238,23 @@ function setupEvents() {
       hubOk = await fetch(`${hubBase}/health`, { signal: AbortSignal.timeout(1500), cache: "no-store" })
         .then(r => (r.ok ? r.json() : null)).then(d => !!(d && d.hub)).catch(() => false);
     } catch (e) {}
-    if (hubOk) {
+    // ?kasc= リモートプロジェクトは .kasc の到達可否を先に確認する。
+    // 配信元（QGIS geo_webview :8089 等の一時サーバー）が死んでいると
+    // アプリ側でも同じく取得に失敗するため、死んだ ?kasc= URL を開かず警告する
+    const share = new URL(window.kasugaiApi.buildShareUrl());
+    const remoteKasc = share.searchParams.get("kasc");
+    const kascUrl = remoteKasc
+      || `${projectsBaseUrl(share.searchParams.get("project") || "default")}kasugai_canvas.kasc`;
+    let kascText = null;
+    try {
+      const res = await fetch(kascUrl, { cache: "no-store" });
+      if (res.ok) kascText = await res.text();
+    } catch (e) {}
+    if (remoteKasc && !kascText) { setGlyph("⚠"); return; }
+    if (hubOk && kascText) {
       try {
-        const share = new URL(window.kasugaiApi.buildShareUrl());
-        const kascUrl = share.searchParams.get("kasc")
-          || `${projectsBaseUrl(share.searchParams.get("project") || "default")}kasugai_canvas.kasc`;
-        const res = await fetch(kascUrl, { cache: "no-store" });
-        if (!res.ok) throw new Error(`kasc fetch ${res.status}`);
         const name = decodeURIComponent(new URL(kascUrl).pathname.split("/").pop() || "scene").replace(/\.kasc$/i, "") || "scene";
-        const kasc = absolutizeKascRefs(await res.text(), new URL("./", kascUrl).href);
+        const kasc = absolutizeKascRefs(kascText, new URL("./", kascUrl).href);
         const out = await fetch(`${hubBase}/canvas/open`, {
           method: "POST", headers: { "Content-Type": "text/plain" },
           body: JSON.stringify({ name, kasc }),
@@ -8225,8 +8272,17 @@ function setupEvents() {
       window.open(`${local}/cesium/${share.search}${share.hash}`, "_blank");
       setGlyph("✓");
     } else {
-      window.open(SETUP_URL, "_blank");
-      setGlyph("⬇");
+      // ローカル疎通が全て失敗。LNA 権限が未許可ならインストーラDLではなく
+      // 許可方法の案内を出す（アプリ導入済みでも権限が無いと同じ症状になる。
+      // 権限 API 非対応ブラウザでは null が返り、従来通りインストーラへ）
+      const perm = await localNetworkPermission();
+      if (perm?.state === "denied" || perm?.state === "prompt") {
+        showLocalNetworkDialog(perm.state, SETUP_URL);
+        setGlyph("⚠");
+      } else {
+        window.open(SETUP_URL, "_blank");
+        setGlyph("⬇");
+      }
     }
   });
 
