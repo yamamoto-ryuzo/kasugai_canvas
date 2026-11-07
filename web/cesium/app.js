@@ -721,6 +721,55 @@ function parseAttributionField(field) {
   return value;
 }
 
+// 縮尺表示(minScale=/maxScale=) → カメラ高[m]範囲。
+// QML ルールの縮尺分母 → 距離変換(qml-style.js toDist)と同じ係数を使う:
+// 分母 × 0.00028m/px × 900px ÷ (2·tan(fov/2=30°))
+const SCALE_VIS_DIST_K = 0.00028 * 900 / (2 * Math.tan(Math.PI / 6));
+// .kasc 行のパーツから minScale=/maxScale= を item.minScaleDenom/maxScaleDenom
+// へ取り込む。minScale=引き側限界(分母が大きい方)、maxScale=寄り側限界
+// (分母が小さい方・0 は無制限)。QGIS の縮尺表示(minimumScale/maximumScale)と同方向
+function parseScaleVisOpts(parts, item) {
+  for (const part of parts) {
+    const m = /^(min|max)scale\s*=\s*(.+)$/i.exec(String(part || ""));
+    if (!m) continue;
+    const n = Number(m[2]);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    if (m[1].toLowerCase() === "min") item.minScaleDenom = n;
+    else item.maxScaleDenom = n;
+  }
+}
+// 縮尺表示指定レイヤーのカメラ高表示範囲 {near, far}[m]。指定無しは null
+function itemScaleVisRange(item) {
+  const lo = Number(item?.minScaleDenom), hi = Number(item?.maxScaleDenom);
+  if (!(lo > 0) && !(hi > 0)) return null;
+  return { near: hi > 0 ? hi * SCALE_VIS_DIST_K : 0, far: lo > 0 ? lo * SCALE_VIS_DIST_K : Infinity };
+}
+function currentCameraHeight() {
+  try { return viewer.camera.positionCartographic?.height ?? Infinity; } catch (_) { return Infinity; }
+}
+// item.visible と縮尺範囲の両方を見る実効表示状態。
+// base: 行アイテムは visible フィールドを持たないため undefined は表示扱い
+function effectiveLayerShow(item) {
+  if (item?.visible === false) return false;
+  const r = itemScaleVisRange(item);
+  if (!r) return true;
+  const h = currentCameraHeight();
+  return h >= r.near && h <= r.far;
+}
+// 縮尺表示指定レイヤーの show を現在のカメラ高へ同期する
+// (imagery/tileset/datasource/primitive 共通。camera.changed から呼ぶ)
+function applyScaleVisibility() {
+  for (const item of getOrderedLayerItems()) {
+    if (!itemScaleVisRange(item)) continue;
+    const t = layerRuntimeTargets.get(item.id);
+    if (t) { try { t.show = effectiveLayerShow(item); } catch (_) {} }
+  }
+  // ベースマップは layerRuntimeTargets 対象外のため個別に同期する
+  if (basemapImageryLayer && itemScaleVisRange(selectedBasemap)) {
+    try { basemapImageryLayer.show = effectiveLayerShow(selectedBasemap); } catch (_) {}
+  }
+}
+
 function parseLayerTitle(title) {
   const parts = title.split(/[\\/]/).map(part => part.trim()).filter(Boolean);
   return {
@@ -3500,6 +3549,7 @@ async function refreshLayersImpl() {
       });
       basemapImageryLayer = new Cesium.ImageryLayer(provider, { alpha: (selectedBasemap.opacity ?? 1.0) * basemapOpacityFactor });
       basemapImageryLayer._baseAlpha = selectedBasemap.opacity ?? 1.0;
+      basemapImageryLayer.show = effectiveLayerShow(selectedBasemap);
       viewer.imageryLayers.add(basemapImageryLayer);
     } catch (error) {
       console.warn("ベースマップの作成に失敗しました:", error);
@@ -3535,6 +3585,7 @@ async function refreshLayersImpl() {
         const provider = createGeoTiffImageryProvider(Cesium, item, item._gt);
         const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: (item.opacity ?? 1) * layerOpacityFactor });
         imageryLayer._baseAlpha = item.opacity ?? 1;
+        imageryLayer.show = effectiveLayerShow(item);
         viewer.imageryLayers.add(imageryLayer);
         layerRuntimeTargets.set(item.id, imageryLayer);
         item._loaded = true;
@@ -3556,6 +3607,7 @@ async function refreshLayersImpl() {
       });
       const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: (item.opacity ?? 0.8) * layerOpacityFactor });
       imageryLayer._baseAlpha = item.opacity ?? 0.8;
+      imageryLayer.show = effectiveLayerShow(item);
       viewer.imageryLayers.add(imageryLayer);
       layerRuntimeTargets.set(item.id, imageryLayer);
       item._loaded = true;
@@ -3576,6 +3628,7 @@ async function refreshLayersImpl() {
       try {
         const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(withGoogleTileKey(item.url), item.proxy), getCesiumTilesetOptions());
         tileset._kascGoogle3d = isGoogle3dTilesUrl(item.url);
+        tileset.show = effectiveLayerShow(item);
         applyClippingPlanes(tileset);
         viewer.scene.primitives.add(tileset);
         activePrimitives.push(tileset);
@@ -3589,7 +3642,7 @@ async function refreshLayersImpl() {
       // プラグイン宣言レイヤー: DataSource は本体で所有・refresh をまたいで存続し、
       // ここでは表示状態の反映と属性検索インデックスへの登録だけを行う
       if (!item.dataSource) continue;
-      try { item.dataSource.show = item.visible; } catch (e) {}
+      try { item.dataSource.show = effectiveLayerShow(item); } catch (e) {}
       vectorDataSources.push({ ds: item.dataSource, id: item.id, title: item.title, plugin: true });
       layerRuntimeTargets.set(item.id, item.dataSource);
       // ロード済みレイヤーから順に検索索引・選択肢を更新する
@@ -3607,7 +3660,7 @@ async function refreshLayersImpl() {
           : (item.type === "model"
               ? buildModelDataSource(item)
               : await buildGeoTiffOverlayDataSource(Cesium, item, proxyFetchUrl(item.url, item.proxy)));
-        ds.show = item.visible;
+        ds.show = effectiveLayerShow(item);
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
         layerRuntimeTargets.set(item.id, ds);
@@ -3668,7 +3721,7 @@ async function refreshLayersImpl() {
         // entity は作らず検索索引・属性一覧はフルソース側に残る(描画は密度表示のみ)
         if (item.heat) {
           const heatDs = await buildHeatmapDataSource(item, source);
-          heatDs.show = item.visible;
+          heatDs.show = effectiveLayerShow(item);
           await viewer.dataSources.add(heatDs);
           vectorDataSources.push({ ds: heatDs, id: item.id, title: item.title });
           layerRuntimeTargets.set(item.id, heatDs);
@@ -3698,7 +3751,7 @@ async function refreshLayersImpl() {
           item._slicedUsed = limited.used;
         }
         const ds = await buildStyledGeoJsonDataSource(limited.source, vectorDrape, item);
-        try { ds.show = item.visible; } catch (e) {}
+        try { ds.show = effectiveLayerShow(item); } catch (e) {}
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
         layerRuntimeTargets.set(item.id, ds);
@@ -3726,6 +3779,7 @@ async function refreshLayersImpl() {
   renderLayerList();
   entityLimitBadgeVisible = layers.some(item => item.entityLimited);
   scheduleDrapeCoverRefresh();
+  applyScaleVisibility();
 }
 
 // 描画した primitive を scene/管理リストへ登録する。
@@ -3733,7 +3787,7 @@ async function refreshLayersImpl() {
 // getLayerGeoJson 用に描画に使った GeoJSON を item に保持する
 // (参照を1本増やすだけで追加のデコード・ダウンロードは発生しない)
 function registerPrimitiveLayer(item, primitive, geojson = null) {
-  primitive.show = item.visible;
+  primitive.show = effectiveLayerShow(item);
   viewer.scene.primitives.add(primitive);
   activePrimitives.push(primitive);
   layerRuntimeTargets.set(item.id, primitive);
@@ -5248,7 +5302,7 @@ function applyInspector(text) {
             if (nums.length === 4 && nums.every(Number.isFinite)) options.bbox = nums;
           }
         }
-        parsedBasemaps.push({
+        const baseItem = {
           id: `inspector-base-${parsedBasemaps.length}`,
           title: parts[0],
           url: resolveProjectUrl(parts[1]),
@@ -5259,7 +5313,9 @@ function applyInspector(text) {
           ...(options.maximumLevel === undefined ? {} : { maximumLevel: options.maximumLevel }),
           ...(options.minimumLevel === undefined ? {} : { minimumLevel: options.minimumLevel }),
           ...(options.bbox === undefined ? {} : { bbox: options.bbox }),
-        });
+        };
+        parseScaleVisOpts(parts, baseItem);
+        parsedBasemaps.push(baseItem);
       }
     }
 
@@ -5339,6 +5395,7 @@ function applyInspector(text) {
       if (options.minimumLevel !== undefined) item.minimumLevel = options.minimumLevel;
       if (options.bbox) item.bbox = options.bbox;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
+      parseScaleVisOpts(parts, item);
       tileLayers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -5383,6 +5440,7 @@ function applyInspector(text) {
       if (options.minimumLevel !== undefined) item.minimumLevel = options.minimumLevel;
       if (options.bbox) item.bbox = options.bbox;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
+      parseScaleVisOpts(parts, item);
       tileLayers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -5464,6 +5522,7 @@ function applyInspector(text) {
           item.sourceVisible = !off;
         }
       }
+      parseScaleVisOpts(parts, item);
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -5523,6 +5582,7 @@ function applyInspector(text) {
       });
       // 表示範囲連動を既定にする(常時全件描画にしたい場合は bbox=off で明示解除)
       if (item.bboxAuto === undefined) item.bboxAuto = true;
+      parseScaleVisOpts(parts, item);
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -5575,6 +5635,7 @@ function applyInspector(text) {
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, query, visible, sourceVisible: visible, attribution, group, exclusiveGroup, renderPrimitive, renderSpecified, cluster, heat };
+      parseScaleVisOpts(query.split("|"), item);
       if (styleUrl) item.styleUrl = resolveProjectUrl(styleUrl);
       if (timeField) item.timeField = timeField;
       if (timeEndField) item.timeEndField = timeEndField;
@@ -5661,6 +5722,7 @@ function applyInspector(text) {
         }
         else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
       });
+      parseScaleVisOpts(parts, item);
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -5693,6 +5755,7 @@ function applyInspector(text) {
         else if ((key === "roll" || key === "r") && Number.isFinite(number)) item.roll = number;
         else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
       });
+      parseScaleVisOpts(parts, item);
       layers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
@@ -10220,6 +10283,8 @@ viewer.camera.moveEnd.addEventListener(scheduleViewportRefresh);
 // setView 等の即時ジャンプは moveEnd が発火しないことがあるため changed も併用する
 // (移動中は連続発火するが、タイマー再セットで実質停止時の1回にデバウンスされる)
 viewer.camera.changed.addEventListener(scheduleViewportRefresh);
+// 縮尺表示(minScale=/maxScale=)指定レイヤーの show をカメラ高へ追従させる
+viewer.camera.changed.addEventListener(applyScaleVisibility);
 
 setupThreeJs();
 // サーバー .kasc 対応の認証時はサーバー側の .kasc のみ使い、内蔵デフォルトは適用しない

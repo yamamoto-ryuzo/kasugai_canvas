@@ -13,7 +13,7 @@ import ClusterSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Cluste
 import StaticSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/ImageStatic.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay, kascScaleResRange } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
@@ -289,8 +289,8 @@ function syncDeckLayers() {
     const opts = {
       id: lid,
       // 非表示レイヤーは tileset.json 自体を取得しない（Cesium 版の遅延方針に合わせる）
-      data: def.item.visible !== false ? def.url : null,
-      visible: def.item.visible !== false,
+      data: def.item.visible !== false && !def.zoomHidden ? def.url : null,
+      visible: def.item.visible !== false && !def.zoomHidden,
       opacity: def.opacity,
       // ドレープ有効時は 3D Tiles を地形ソース化する（drape レイヤーの貼り付け先）
       operation: drapeOn && (drapeTiles3d.google || !isGoogle3dTilesUrl(def.url)) ? "terrain+draw" : "draw",
@@ -384,13 +384,18 @@ async function buildLayer(item, baseUrl, preloaded) {
     }
     return {
       _isDeck: true,
-      setVisible() { void syncDeckLayersAsync(); },
+      // on=false は縮尺範囲外も含むため zoomHidden として保持する
+      setVisible(on) { def.zoomHidden = on === false; if ((def.item.visible !== false && !def.zoomHidden) || deckInst) void syncDeckLayersAsync(); },
       setOpacity(v) { def.opacity = v; syncDeckLayers(); },
       get() { return undefined; },
       changed() {},
     };
   }
-  if (item.type === "wms" || item.type === "wmts") return buildOgcRasterLayer(item, baseUrl);
+  if (item.type === "wms" || item.type === "wmts") {
+    const ogc = buildOgcRasterLayer(item, baseUrl);
+    applyScaleRes(ogc, item);
+    return ogc;
+  }
   if (item.type === "image") {
     // ジオリファレンス画像オーバーレイ(現場写真・紙図面)。corners= は外接矩形へ正規化
     const ov = parseImageOverlay(item);
@@ -410,6 +415,7 @@ async function buildLayer(item, baseUrl, preloaded) {
       opacity: Number(item.opts?.opacity ?? 1),
     });
     layer.set("kascEnv", { west: env[0], south: env[1], east: env[2], north: env[3] });
+    applyScaleRes(layer, item);
     return layer;
   }
   const source = xyzSource(item, baseUrl);
@@ -473,6 +479,7 @@ async function buildLayer(item, baseUrl, preloaded) {
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
     if (!wantHeat) layer.setStyle(wantCluster ? clusterStyleFn(baseStyleFn) : baseStyleFn);
+    applyScaleRes(layer, item);
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
     return layer;
   }
@@ -481,6 +488,7 @@ async function buildLayer(item, baseUrl, preloaded) {
   if (item.opts?.opacity !== undefined) layer.setOpacity(Number(item.opts.opacity));
   const extent = bboxExtent(item);
   if (extent) layer.setExtent(extent);
+  applyScaleRes(layer, item);
   return layer;
 }
 
@@ -514,12 +522,44 @@ function buildOgcRasterLayer(item, baseUrl) {
   return layer;
 }
 
+// 縮尺表示(minScale=/maxScale=) → 解像度範囲でレイヤ可視条件へ反映する。
+// OL レイヤは min/maxResolution を持ちレンダラが自動で隠すため、
+// deck(3dtiles)スタブの zoomHidden 判定用に effectiveVisible 側でも使う
+function applyScaleRes(layer, item) {
+  const r = kascScaleResRange(item?.opts || {});
+  if (!r) return;
+  if (r.minRes > 0) layer.setMinResolution(Math.max(layer.getMinResolution() || 0, r.minRes));
+  if (Number.isFinite(r.maxRes)) {
+    const cur = layer.getMaxResolution();
+    layer.setMaxResolution(Math.min(Number.isFinite(cur) ? cur : Infinity, r.maxRes));
+  }
+}
+
+function effectiveVisible(entry) {
+  if (!entry.item.visible) return false;
+  const r = kascScaleResRange(entry.item.opts || {});
+  if (r) {
+    const res = map.getView().getResolution() ?? Infinity;
+    if (res < r.minRes || res > r.maxRes) return false;
+  }
+  return true;
+}
+
 function applyEntryVisibility(entry) {
-  // 未読込(遅延ロード)エントリは layer が無いのでスキップする
-  entry.layer?.setVisible?.(!!entry.item.visible);
+  // 未読込(遅延ロード)エントリは layer が無いのでスキップする。
+  // OL レイヤ本体は min/maxResolution が自動適用されるため、ここでの
+  // effectiveVisible 評価は主に deck(3dtiles)スタブの zoomHidden 同期用
+  entry.layer?.setVisible?.(effectiveVisible(entry));
   syncDeckLayers(); // ドレープコピーの表示追従（deck 未初期化なら no-op）
   updateMapAttribution();
 }
+
+// deck(3dtiles)スタブは解像度範囲を持たないため、解像度変化で表示を再評価する
+map.getView().on("change:resolution", () => {
+  for (const e of layerEntries) {
+    if (e.layer?._isDeck && kascScaleResRange(e.item.opts || {})) e.layer.setVisible(effectiveVisible(e));
+  }
+});
 
 // 右下オーバーレイ: 選択中ベースマップ + 表示中レイヤーの出典を重ねて表示（Cesium 版と同規則）
 function updateMapAttribution() {

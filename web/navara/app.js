@@ -146,12 +146,30 @@ function navaraSetShow(entry, on) {
   }
   try { layer.update(next); } catch (e) { console.warn("layer visibility", e); }
 }
+// 縮尺表示(minScale=/maxScale=) → カメラ高[m]範囲。
+// QML ルールの縮尺分母→距離変換と同じ係数(分母×0.00028×900÷(2·tan30°))
+const SCALE_VIS_DIST_K = 0.00028 * 900 / (2 * Math.tan(Math.PI / 6));
+function scaleVisOk(item) {
+  const lo = Number(item?.opts?.minscale), hi = Number(item?.opts?.maxscale);
+  if (!(lo > 0) && !(hi > 0)) return true;
+  const h = lastCam.height;
+  if (hi > 0 && h < hi * SCALE_VIS_DIST_K) return false;
+  if (lo > 0 && h > lo * SCALE_VIS_DIST_K) return false;
+  return true;
+}
+// カメラ移動時に縮尺範囲と item.visible の両方を見て show を同期する
+function applyScaleVis() {
+  for (const e of layerEntries) {
+    if (!e.layer) continue;
+    navaraSetShow(e, e.item.visible !== false && scaleVisOk(e.item));
+  }
+}
 function setEntryVisible(entry, on) {
   // applyEntryVisibility(entry) は引数1つで呼ばれ item.visible 前提のため、
   // 未指定時は item.visible を正とする
   if (on === undefined) on = entry.item.visible !== false;
   entry.item.visible = on;
-  navaraSetShow(entry, on);
+  navaraSetShow(entry, on && scaleVisOk(entry.item));
 }
 function progress(n, total, label) {
   if (!total) { panel.progress.hidden = true; return; }
@@ -191,7 +209,7 @@ async function maybeLoadEntry(entry) {
       entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc;
       // 読込中に表示状態が変わっている可能性があるため、追加後に現在値を再適用する
       // （OFF→ON→OFF 等の競合で、非表示のはずのレイヤが残るのを防ぐ）
-      navaraSetShow(entry, entry.item.visible !== false);
+      navaraSetShow(entry, entry.item.visible !== false && scaleVisOk(entry.item));
     }
   } catch (e) {
     entry.failed = true;
@@ -1104,7 +1122,7 @@ async function saveToDataDir(name, content) {
   // (Navara の view.camera は move/moveend を emit する。他エンジンとの
   // 座標引継ぎは URL ハッシュ経由のため moveend で書き込む)
   try {
-    view.camera.on("move", () => { syncCamFromView(); window.kasugaiApi?.emit("camera-changed", window.kasugaiApi.getCamera()); });
+    view.camera.on("move", () => { syncCamFromView(); applyScaleVis(); window.kasugaiApi?.emit("camera-changed", window.kasugaiApi.getCamera()); });
     view.camera.on("moveend", () => { syncCamFromView(); if (urlViewConsumed) writeUrlView(urlViewFromCam(), lastKascUrl ? undefined : currentProjectId); });
   } catch (_) {}
 

@@ -1,7 +1,7 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange } from "../shared/kasc.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
@@ -291,8 +291,8 @@ function syncDeckLayers() {
     const opts = {
       id: lid,
       // 非表示レイヤーは tileset.json 自体を取得しない（Cesium 版の遅延方針に合わせる）
-      data: def.item.visible !== false ? def.url : null,
-      visible: def.item.visible !== false,
+      data: def.item.visible !== false && !def.zoomHidden ? def.url : null,
+      visible: def.item.visible !== false && !def.zoomHidden,
       opacity: def.opacity,
       // ドレープ有効時は 3D Tiles を地形ソース化する（drape レイヤーの貼り付け先）
       operation: drapeOn && (drapeTiles3d.google || !isGoogle3dTilesUrl(def.url)) ? "terrain+draw" : "draw",
@@ -422,6 +422,26 @@ function ensurePmtiles() {
   return pmtilesModuleP;
 }
 
+// 縮尺表示(minScale=/maxScale=) → レイヤ def の minzoom/maxzoom。
+// kascScaleZoomRange は 256px 基準のため MapLibre レイヤ指定では -1。
+// 範囲指定が無ければ null を返す
+function itemVisZoom(item) {
+  const sv = kascScaleZoomRange(item.opts || {}, map.getCenter().lat);
+  if (!sv) return null;
+  return {
+    minzoom: sv.minZoom != null ? Math.max(0, sv.minZoom - 1) : null,
+    maxzoom: sv.maxZoom != null ? Math.min(24, sv.maxZoom - 1) : null,
+  };
+}
+// レイヤ def へ縮尺範囲を積集合で適用する(QML ルール範囲と併存可)
+function applyVisZoom(def, item) {
+  const v = itemVisZoom(item);
+  if (!v) return def;
+  if (v.minzoom != null) def.minzoom = Math.max(def.minzoom ?? 0, v.minzoom);
+  if (v.maxzoom != null) def.maxzoom = Math.min(def.maxzoom ?? 24, v.maxzoom);
+  return def;
+}
+
 // .kasc 1行 → レイヤ登録。戻り値は { lids: レイヤ id 配列(表示切替用), sid: ソース id,
 // viewportQuery: 表示範囲連動クエリの有無 }
 // beforeIdFn は「追加時点で評価する挿入先レイヤ id」を返す関数(読込完了順が
@@ -465,7 +485,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     }
     if (!coords || coords.length < 4) throw new Error("image: bbox= または corners= の指定が必要です");
     map.addSource(sid, { type: "image", url: resolveKascUrl(item.url, baseUrl), coordinates: coords.slice(0, 4) });
-    map.addLayer({ id: sid, type: "raster", source: sid, paint: { "raster-opacity": Number(item.opts?.opacity ?? 1) }, layout: { visibility: item.visible ? "visible" : "none" } }, beforeId());
+    map.addLayer(applyVisZoom({ id: sid, type: "raster", source: sid, paint: { "raster-opacity": Number(item.opts?.opacity ?? 1) }, layout: { visibility: item.visible ? "visible" : "none" } }, item), beforeId());
     lids.push(sid);
     opas.set(sid, { prop: "raster-opacity", base: Number(item.opts?.opacity ?? 1) });
     managedSources.push(sid);
@@ -511,7 +531,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     for (const sl of srcLayers) {
       for (const [kind, filter, paint] of defaultVectorKinds()) {
         const lid = `${sid}-${sl}-${kind}`;
-        map.addLayer({ id: lid, type: kind, source: sid, "source-layer": sl, filter, paint, layout: { visibility: vis } }, before);
+        map.addLayer(applyVisZoom({ id: lid, type: kind, source: sid, "source-layer": sl, filter, paint, layout: { visibility: vis } }, item), before);
         lids.push(lid);
         if (!filters) filters = new Map();
         filters.set(lid, filter);
@@ -572,7 +592,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
       const lid = `${sid}-${kind}`;
       const def = { id: lid, type: kind, source: sid, filter, paint, layout: { ...layout, visibility: item.visible ? "visible" : "none" } };
       if (zoomRange) { def.minzoom = zoomRange.minzoom; def.maxzoom = zoomRange.maxzoom; }
-      map.addLayer(def, before);
+      map.addLayer(applyVisZoom(def, item), before);
       lids.push(lid);
       if (!filters) filters = new Map();
       filters.set(lid, filter);
@@ -596,7 +616,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
         [`${sid}-unclustered`, "circle", ["!", ["has", "point_count"]], circlePaint, "circle-opacity"],
       ];
       for (const [lid, kind, filter, paint, opaProp, layout0] of defs) {
-        map.addLayer({ id: lid, type: kind, source: sid, filter, paint, layout: { ...(layout0 || {}), visibility: vis } }, before);
+        map.addLayer(applyVisZoom({ id: lid, type: kind, source: sid, filter, paint, layout: { ...(layout0 || {}), visibility: vis } }, item), before);
         lids.push(lid);
         if (!filters) filters = new Map();
         filters.set(lid, filter);
@@ -608,7 +628,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     map.addSource(sid, rasterSource(item, baseUrl));
     const paint = {};
     if (item.opts?.opacity !== undefined) paint["raster-opacity"] = Number(item.opts.opacity);
-    map.addLayer({ id: sid, type: "raster", source: sid, paint, layout: { visibility: item.visible ? "visible" : "none" } }, beforeId());
+    map.addLayer(applyVisZoom({ id: sid, type: "raster", source: sid, paint, layout: { visibility: item.visible ? "visible" : "none" } }, item), beforeId());
     lids.push(sid);
     opas.set(sid, { prop: "raster-opacity", base: paint["raster-opacity"] ?? 1 });
   }
@@ -1519,6 +1539,20 @@ map.on("move", minimap.scheduleUpdate);
 
 // 3D Tiles ドレープ品質: ズーム確定で terrain カバー FBO を現在解像度へ作り直す
 map.on("zoomend", () => invalidateDeckTerrainCovers(deckOverlay?._deck));
+
+// deck(3dtiles)は MapLibre レイヤではないため minzoom/maxzoom が効かない。
+// 縮尺表示(minScale=/maxScale=)指定の deck def はズームに応じて zoomHidden を更新する
+map.on("zoomend", () => {
+  let dirty = false;
+  for (const def of deckDefs.values()) {
+    const v = itemVisZoom(def.item);
+    if (!v) { if (def.zoomHidden) { def.zoomHidden = false; dirty = true; } continue; }
+    const z = map.getZoom();
+    const zh = (v.minzoom != null && z < v.minzoom) || (v.maxzoom != null && z > v.maxzoom);
+    if (zh !== !!def.zoomHidden) { def.zoomHidden = zh; dirty = true; }
+  }
+  if (dirty) syncDeckLayers();
+});
 
 // 表示範囲の移動に追従して URL 反映 + 再クエリする
 let requeryTimer = null;

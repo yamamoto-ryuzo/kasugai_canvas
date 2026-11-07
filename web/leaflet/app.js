@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay, kascScaleZoomRange, mergeZoomRange } from "../shared/kasc.js";
 import { loadScriptOnce, loadCssOnce } from "../shared/lazy-lib.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
@@ -384,8 +384,8 @@ function syncDeckLayers() {
     const opts = {
       id: lid,
       // 非表示レイヤーは tileset.json 自体を取得しない（Cesium 版の遅延方針に合わせる）
-      data: def.item.visible !== false ? def.url : null,
-      visible: def.item.visible !== false,
+      data: def.item.visible !== false && !def.zoomHidden ? def.url : null,
+      visible: def.item.visible !== false && !def.zoomHidden,
       opacity: def.opacity,
       // ドレープ有効時は 3D Tiles を地形ソース化する（drape レイヤーの貼り付け先）
       operation: drapeOn && (drapeTiles3d.google || !isGoogle3dTilesUrl(def.url)) ? "terrain+draw" : "draw",
@@ -451,6 +451,15 @@ map.on("move zoomanim resize", e => {
 // .kasc 1行 → Leaflet レイヤ。戻り値は { layer, styleFn, viewportQuery, zoomRange }
 // paneName 指定時は新規 pane を作らずその pane に配置する（ベースマップ用）
 async function addKascLayer(item, baseUrl, preloaded, paneName) {
+  // 縮尺表示(minScale=/maxScale=) → ズーム範囲。全レイヤ種で zoomRange と
+  // 積集合を取り、effectiveVisible/applyEntryVisibility が表示を切り替える
+  const _sv = kascScaleZoomRange(item.opts || {}, map.getCenter().lat);
+  const itemVisZoom = _sv ? { minzoom: _sv.minZoom ?? -Infinity, maxzoom: _sv.maxZoom ?? Infinity } : null;
+  const mergeVisZoom = zr => {
+    const m = mergeZoomRange(
+      zr ? { minZoom: zr.minzoom, maxZoom: zr.maxzoom } : null, itemVisZoom);
+    return m ? { minzoom: m.minZoom ?? -Infinity, maxzoom: m.maxZoom ?? Infinity } : null;
+  };
   if (item.type === "3dtiles") {
     // deck.gl Tile3DLayer で描画。deck は Leaflet レイヤではないため地図へは addLayer
     // せず、レイヤー行の表示/不透明度操作を deckDefs へ委譲するスタブを返す
@@ -474,10 +483,11 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       layer: {
         _isDeck: true,
         // 非表示エントリへの初期適用では deckInst 未初期化なら CDN ロード自体を発生させない
-        setVisible() { if (def.item.visible !== false || deckInst) void syncDeckLayersAsync(); },
+        // on=false は縮尺範囲外も含むため zoomHidden として保持する
+        setVisible(on) { def.zoomHidden = on === false; if ((def.item.visible !== false && !def.zoomHidden) || deckInst) void syncDeckLayersAsync(); },
         setOpacity(v) { def.opacity = v; syncDeckLayers(); },
       },
-      styleFn: null, viewportQuery: false, zoomRange: null, baseOpacity: def.opacity,
+      styleFn: null, viewportQuery: false, zoomRange: itemVisZoom, baseOpacity: def.opacity,
     };
   }
   const pane = paneName || newKascPane();
@@ -496,7 +506,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       attribution: layerAttribution(item) || undefined,
     });
     item._env = { west: env[0], south: env[1], east: env[2], north: env[3] };
-    return { layer, styleFn: null, viewportQuery: false, zoomRange: null };
+    return { layer, styleFn: null, viewportQuery: false, zoomRange: itemVisZoom };
   }
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = preloaded || await loadVectorItem(item, baseUrl, getViewBounds());
@@ -559,7 +569,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       if (env) item._env = env;
       item._geojson = geojson;
       syncDeckLayers();
-      return { layer, styleFn, viewportQuery, zoomRange: null };
+      return { layer, styleFn, viewportQuery, zoomRange: itemVisZoom };
     }
     const layer = L.geoJSON(geojson, {
       pane,
@@ -597,7 +607,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     if (env) item._env = env;
     item._geojson = geojson;
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
-    return { layer, styleFn, viewportQuery, zoomRange };
+    return { layer, styleFn, viewportQuery, zoomRange: mergeVisZoom(zoomRange) };
   }
   // ラスタ系（xyz / wms / wmts / base）
   const opts = item.opts || {};
@@ -652,7 +662,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     });
   }
   const baseOpacity = common.opacity;
-  return { layer, styleFn: null, viewportQuery: false, zoomRange: null, baseOpacity };
+  return { layer, styleFn: null, viewportQuery: false, zoomRange: itemVisZoom, baseOpacity };
 }
 
 // 表示状態 + QML スケール範囲(zoomRange)の両方を見て add/remove を判定する
@@ -668,9 +678,9 @@ function effectiveVisible(entry) {
 function applyEntryVisibility(entry) {
   // 未読込(遅延ロード)エントリは layer が無いのでスキップする
   if (!entry.layer) { updateMapAttribution(); return; }
-  // deck(3dtiles)スタブは Leaflet レイヤではないため専用の同期経路へ回す
-  if (entry.layer._isDeck) { entry.layer.setVisible(); updateMapAttribution(); return; }
   const on = effectiveVisible(entry);
+  // deck(3dtiles)スタブは Leaflet レイヤではないため専用の同期経路へ回す
+  if (entry.layer._isDeck) { entry.layer.setVisible(on); updateMapAttribution(); return; }
   if (on && !map.hasLayer(entry.layer)) map.addLayer(entry.layer);
   else if (!on && map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
   syncDeckLayers(); // ドレープコピーの表示追従（deck 未初期化なら no-op）

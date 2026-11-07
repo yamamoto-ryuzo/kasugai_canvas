@@ -394,6 +394,11 @@
             else if (/^(off|none|false|static|manual)$/i.test(rawv)) item.bboxAuto = false;
           }
           else if ((key === 'attr' || key === 'attribution') && rawv) item.attribution = rawv;
+          // 縮尺表示(QGIS minimumScale/maximumScale): minScale=引き側限界
+          // (分母大)、maxScale=寄り側限界(分母小)
+          else if ((key === 'minscale' || key === 'maxscale') && Number.isFinite(num) && num > 0) {
+            item[key === 'minscale' ? 'minScale' : 'maxScale'] = num;
+          }
         });
         if (vtype === 'gpkg' || vtype === 'duckdb') {
           if (item.bboxAuto === undefined) item.bboxAuto = true;

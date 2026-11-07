@@ -48,11 +48,11 @@ legend: 凡例|https://example.com/legend.png</code></pre>
           <pre><code>base: ベースマップ(先頭が既定・| off で非初期選択) | maxZoom= / minZoom= / bbox=西経,南緯,東経,北緯 / tileSize= / opacity= / proxy=off （タイトルの "グループ/名前" はベースマップ選択で折りたたみ可能なグループとして表示）
 base: 表示名 | transparent | （ベースマップ透明=地表透明を初期選択。レイヤーリストには加えず表示モードのみ指定）
 base: 表示名 | none | （ベースマップなしを初期選択）
-xyz: タイルレイヤ | 同上+off / minZoom=(minimumLevel=) / bbox=西経,南緯,東経,北緯 (URL は DATA/.../{z}/{x}/{y}.png のローカルテンプレートも可)
+xyz: タイルレイヤ | 同上+off / minZoom=(minimumLevel=) / bbox=西経,南緯,東経,北緯 / minScale= / maxScale=(縮尺表示) (URL は DATA/.../{z}/{x}/{y}.png のローカルテンプレートも可)
 wms: WMSレイヤ | WMSエンドポイント | off / layers=名前,名前 / styles= / format=image/png / transparent=true / version=1.1.1 / opacity= / maxZoom= / bbox= （GetMap を256pxタイルへ分解してEPSG:3857で要求。追加パラメータはURL側へ ?key=value で記述可）
 wmts: WMTSレイヤ | タイルテンプレート or KVPエンドポイント | off / layer= / style= / tilematrixset=EPSG:3857 / format= / matrixprefix= / opacity= （{z}/{x}/{y} または {TileMatrix}/{TileRow}/{TileCol} テンプレートはそのまま利用。それ以外は GetTile KVP クエリを自動構築）
 3dtiles: レイヤ | off / proxy=off / ground=off / zoffset=&lt;m&gt;  （URL が tile.googleapis.com なら Maps API キーを自動付与。key= は .kasc に書かない。テレインのない2Dエンジンではバウンディングボリューム最小高を推定して z=0 平面へ自動接地。ground=off で無効化、zoffset= で高さを手動補正）
-geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / render=primitive|entity / style=QMLファイルURL / attr=出典(3番目のフィールドに出典を直接書くことも可)
+geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / proxy=off / render=primitive|entity / style=QMLファイルURL / attr=出典(3番目のフィールドに出典を直接書くことも可) / minScale= / maxScale=(縮尺表示: QGIS minimumScale=引き側限界, maximumScale=寄り側限界)
 kml:(kmz:) KMLレイヤ | off / render=primitive|entity / style=QMLファイルURL / attr=出典 （KMZ は先頭の .kml エントリを展開。Placemark/GroundOverlay の範囲矩形を描画）
 wfs: WFSレイヤ | WFSエンドポイント | typename=型名(必須) / version=2.0.0 / maxfeatures=件数 / cql_filter=条件 / srsname=EPSG:4326 / outputformat= / off （GetFeature を GET し GeoJSON 応答を描画。CORS 対応サーバーのみ）
 shp:(shapefile:) Shapefileレイヤ | .zip一式 or .shp or ベース名URL | off / render=primitive|entity / style=QMLファイルURL / attr=出典 （.shp 指定時は同名の .dbf/.prj/.cpg を自動取得。.prj があれば WGS84 へ再投影）
@@ -77,6 +77,7 @@ plugin: プラグインID | key=value | off (plugins.json カタログ・スト�
 cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
           <ul>
             <li><code>option</code> には <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換 alias <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code> などが使えます。<code>xyz:</code> 行ではさらに <code>minimumLevel=</code>（<code>minZoom</code>）と <code>bbox=西経,南緯,東経,北緯</code> が使え、bbox を指定すると範囲外へのタイル要求が発生せず flyTo もその範囲を向きます（ローカルタイル配置時の範囲限定に有効）。</li>
+            <li><strong>縮尺表示</strong>：全レイヤ行で <code>minScale=</code>・<code>maxScale=</code>（QGIS の縮尺表示と同じ意味：minScale=引き側限界・大きい分母、maxScale=寄り側限界・小さい分母、0 は無制限）が使えます。指定縮尺範囲外ではレイヤが自動的に非表示になります。geo_webview が QGIS レイヤの「縮尺による表示」設定をそのまま出力します。QML のルール縮尺範囲（scalemindenom/scalemaxdenom）とは積集合で併存します。</li>
             <li>プロジェクトは <code>projects/&lt;project&gt;</code> 単位で切り替えます。設定ファイル内に <code>project</code> 項目はありません。</li>
             <li><code>plugin:</code> は <code>web/plugins.json</code> カタログまたは管理タブのストレージプラグインの ID を指定し、そのプロジェクトでのみプラグインを起動します（例: <code>plugin: reinfolib | datasets=price,shelter</code>）。<code>key=value</code> はプラグインの <code>manifest.options</code> にマージして渡され、真偽値・数値・カンマ区切り（配列）を解釈します。起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替や行の削除・<code>| off</code> 指定でレイヤー除去＋停止（<code>dispose</code> 呼出し）されます。指定できるのはカタログ/ストレージの ID のみで、外部 URL の直接指定はできません。</li>
             <li><code>attr=出典</code>・行の3番目フィールドの出典は、<code>&lt;</code> で始めると HTML として描画できます（例: <code>&lt;a href="https://example.jp"&gt;国土地理院&lt;/a&gt;</code>）。描画時に許可リストでサニタイズされ、<code>a</code>/<code>img</code>/装飾タグ（b・i・em・u・br・span・small・sub・sup）と <code>http(s):</code>/相対 URL のみが有効になります（スクリプト・イベント属性・その他タグは除去）。詳細は <a href="security.html">セキュリティ対策</a> を参照してください。</li>

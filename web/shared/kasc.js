@@ -137,6 +137,48 @@ export const NON_LAYER_TYPES = new Set([
   "bookmark", "cloud", "plugin", "yahooappid", "title",
 ]);
 
+// 縮尺表示オプション(minScale=/maxScale=) → 256px タイル系ズーム範囲。
+// geo_webview が出力する QGIS レイヤの縮尺表示(QgsMapLayer::minimumScale/
+// maximumScale)に合わせた意味付け:
+//   minScale = 引き側限界(分母が大きい方) → ズーム下限 minZoom
+//   maxScale = 寄り側限界(分母が小さい方・0 は無制限) → ズーム上限 maxZoom
+// 表示範囲は maxScale ≤ 縮尺分母 ≤ minScale。
+// 解像度 res = 分母 * 0.00028 (OGC 標準 0.28mm/px) を 256px 基準ズームへ換算。
+// MapLibre のレイヤ minzoom/maxzoom に渡す時はこの値から -1 すること。
+// 戻り値は { minZoom, maxZoom }(片側のみも可)、指定無しなら null
+export function kascScaleZoomRange(opts, lat = 0) {
+  const num = k => {
+    const n = Number(opts?.[k]);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const lo = num("minscale"), hi = num("maxscale");
+  if (!lo && !hi) return null;
+  const z = denom => Math.log2((156543.03392 * Math.cos(lat * Math.PI / 180)) / (denom * 0.00028));
+  return { minZoom: lo ? z(lo) : null, maxZoom: hi ? z(hi) : null };
+}
+
+// 同じく縮尺表示を OpenLayers 等の解像度(m/px)範囲へ変換する版。
+// maxScale(寄り側限界) → minResolution、minScale(引き側限界) → maxResolution
+export function kascScaleResRange(opts) {
+  const num = k => {
+    const n = Number(opts?.[k]);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const lo = num("minscale"), hi = num("maxscale");
+  if (!lo && !hi) return null;
+  return { minRes: hi ? hi * 0.00028 : 0, maxRes: lo ? lo * 0.00028 : Infinity };
+}
+
+// ズーム範囲 {minZoom,maxZoom} の積集合。片方が null ならもう片方を返す。
+// キー名は minzoom/maxzoom 表記のものにも対応する
+export function mergeZoomRange(a, b) {
+  const lo1 = a?.minZoom ?? a?.minzoom, hi1 = a?.maxZoom ?? a?.maxzoom;
+  const lo2 = b?.minZoom ?? b?.minzoom, hi2 = b?.maxZoom ?? b?.maxzoom;
+  const lo = lo1 != null && lo2 != null ? Math.max(lo1, lo2) : (lo1 ?? lo2 ?? null);
+  const hi = hi1 != null && hi2 != null ? Math.min(hi1, hi2) : (hi1 ?? hi2 ?? null);
+  return lo == null && hi == null ? null : { minZoom: lo, maxZoom: hi };
+}
+
 // オプションフラグ判定: cluster=on / heat=on 等の「on/off 系オプション」で共用。
 // on/true/1/yes/auto または key のみ(=なし・空値でも true)を ON とみなす
 export function kascOptOn(value) {

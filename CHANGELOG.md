@@ -4,6 +4,14 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [Unreleased]
+
+- `.kasc` 全レイヤ行に `minScale=`/`maxScale=`（縮尺表示）を追加。
+  geo_webview が出力する QGIS レイヤの縮尺表示設定（minimumScale=引き側
+  限界・maximumScale=寄り側限界）を受け取り、各エンジンで表示/非表示を
+  切り替える。Cesium はカメラ高→疑似縮尺、2D エンジンは解像度/ズーム換算。
+  QML ルール由来の縮尺範囲（scalemindenom/scalemaxdenom）とは積集合で併存
+
 ## [6.21.0] - 2026-11-07
 
 ### Added

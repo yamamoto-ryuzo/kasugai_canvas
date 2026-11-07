@@ -21,6 +21,7 @@ import {
   layerAttribution, loadKascInfoContent,
   resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle,
   defaultPointRadius, buildWmsTileTemplate, buildWmtsTileTemplate,
+  kascScaleZoomRange,
 } from "../shared/kasc.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
@@ -594,6 +595,8 @@ const minimap = createMinimap({
 function wireMapEvents() {
   bindViewSync();
   gmap?.on("moveend", scheduleViewportReload);
+  // 縮尺表示(minScale=/maxScale=)指定レイヤーはズームに応じて出し分ける
+  gmap?.on("zoomend", () => { for (const e of layerEntries) applyEntryVisibility(e); });
   if (gmap && toolOverlayBoundMap !== gmap) {
     toolOverlayBoundMap = gmap;
     const w = frame.contentWindow;
@@ -712,8 +715,18 @@ function createTileLayer(item) {
 }
 
 // ---- レイヤー行 ----
+// 縮尺表示(minScale=/maxScale=) → ズーム範囲(Leaflet 系 gmap.getZoom と同じ
+// 256px 基準)。範囲外は effectiveVisible=false として出し分ける
+function scaleZoomOk(item) {
+  const r = kascScaleZoomRange(item.opts || {}, gmap?.getCenter?.().lat ?? 0);
+  if (!r || !gmap) return true;
+  const z = gmap.getZoom();
+  if (r.minZoom != null && z < r.minZoom) return false;
+  if (r.maxZoom != null && z > r.maxZoom) return false;
+  return true;
+}
 function effectiveVisible(entry) {
-  return entry.item.visible !== false;
+  return entry.item.visible !== false && scaleZoomOk(entry.item);
 }
 
 function applyEntryVisibility(entry) {
