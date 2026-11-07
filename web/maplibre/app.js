@@ -1,7 +1,7 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates } from "../shared/kasc.js";
 import { kascTimeSpec, collectTimeValues, featureInTime, timeKey, buildKascTimeControl } from "../shared/kasc-time.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
@@ -2026,6 +2026,41 @@ function applyKascTheme(theme) {
   }
   renderLayerRows(layerEntries, currentUnsupported);
   inspectorInput.value = rewriteKascVisibility(inspectorInput.value, show);
+  void applyKascThemeStyles(theme);
+}
+
+// theme 行の `;style=` 指定でレイヤーの .qml を差し替えて再マウントする。
+// 指定が無いレイヤーは元の style= 指定(_themeBaseStyle に保存)へ戻す。
+// QGIS マップテーマが記録する名前付きスタイルの再現(Cesium と同規則)
+async function applyKascThemeStyles(theme) {
+  const styles = theme?.styles || {};
+  for (const e of layerEntries) {
+    const item = e.item;
+    if (!VECTOR_TYPES.has(item.type)) continue;
+    const key = normKascTitle(item.title || "");
+    const rel = styles[key] ?? styles[key.split("/").pop()] ?? null;
+    if (item._themeBaseStyle === undefined) item._themeBaseStyle = item.opts?.style || null;
+    const target = rel ? resolveKascUrl(rel, lastBaseUrl) : item._themeBaseStyle;
+    if ((item.opts?.style || null) === target) continue;
+    item.opts ||= {};
+    if (target) item.opts.style = target; else delete item.opts.style;
+    item._qml = null;
+    try {
+      for (const lid of e.lids || []) { if (deckDefs.has(lid)) deckDefs.delete(lid); else if (map.getLayer(lid)) map.removeLayer(lid); }
+      if (e.sid && map.getSource(e.sid)) map.removeSource(e.sid);
+      e.lids = []; e.sid = null;
+      syncDeckLayers();
+      if (item.visible !== false && !e.unsupported) {
+        const idx = layerEntries.indexOf(e);
+        const r = await addKascLayer(item, lastBaseUrl, item._preloaded,
+          () => findInsertBeforeId(idx < 0 ? layerEntries.length : idx));
+        e.lids = r.lids; e.sid = r.sid; e.filters = r.filters; e.opas = r.opas;
+        item._viewportQuery = r.viewportQuery;
+        applyEntryVisibility(e);
+      }
+    } catch (err) { console.warn("テーマスタイルの適用に失敗:", err); }
+  }
+  updateMapAttribution();
 }
 
 themeSelect?.addEventListener("change", () => {
