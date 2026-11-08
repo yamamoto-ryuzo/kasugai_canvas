@@ -5595,6 +5595,28 @@ fn bundled_hub_version(bundle: &std::path::Path) -> Option<String> {
     json.get("version")?.as_str().map(String::from)
 }
 
+#[cfg(all(test, windows))]
+mod hub_version_tests {
+    use super::bundled_hub_version;
+
+    #[test]
+    fn reads_sidecar_and_none_when_absent() {
+        let dir = std::env::temp_dir().join(format!("hubver-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let exe = dir.join("bridge-hub.exe");
+        std::fs::write(&exe, b"x").unwrap();
+        std::fs::write(
+            dir.join("bridge-hub.version.json"),
+            "{\"version\":\"9.9.9\"}",
+        )
+        .unwrap();
+        assert_eq!(bundled_hub_version(&exe).as_deref(), Some("9.9.9"));
+        std::fs::remove_file(dir.join("bridge-hub.version.json")).unwrap();
+        assert_eq!(bundled_hub_version(&exe), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 // 応答中の旧ハブを同梱の bridge-hub.exe（web/download/）で更新する。
 // %LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe を同梱版へ差し替えて
 // 起動し直す。コピーに失敗した場合も旧ハブを殺したままにしないよう

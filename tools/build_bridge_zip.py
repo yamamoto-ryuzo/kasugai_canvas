@@ -79,6 +79,9 @@ def build(out=DEFAULT_OUT, cargo=True):
         raise FileNotFoundError(
             'bridge-hub.exe not found: {0} '
             '(cargo build --release --bin bridge-hub)'.format(EXE))
+    # 同梱 exe の実測バージョンは出力物の書き換え前に取得する。照会が
+    # 失敗したとき「新バイナリ + 旧サイドカー」の不整合が残るのを防ぐ
+    version = _query_exe_version(EXE)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     count = 0
     with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -97,10 +100,9 @@ def build(out=DEFAULT_OUT, cargo=True):
     exe_out = os.path.join(os.path.dirname(out), 'bridge-hub.exe')
     shutil.copyfile(EXE, exe_out)
     print('built: {0}'.format(exe_out))
-    # 同梱 exe の実測バージョンをサイドカーに記録する。アプリ側の
-    # update_installed_hub とブラウザ側の更新導線が「配布物 < 実行中ハブ」の
-    # ダウングレード検出に使う判定材料（server/src/main.rs・web/shared/ai-chat.js）
-    version = _query_exe_version(exe_out)
+    # 実測バージョンをサイドカーに記録する。アプリ側の update_installed_hub
+    # とブラウザ側の更新導線が「配布物 < 実行中ハブ」のダウングレード検出に
+    # 使う判定材料（server/src/main.rs・web/shared/ai-chat.js）
     sidecar = os.path.join(os.path.dirname(out), 'bridge-hub.version.json')
     with open(sidecar, 'w', encoding='utf-8') as f:
         json.dump({'version': version}, f)
