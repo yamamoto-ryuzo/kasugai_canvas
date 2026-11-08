@@ -3684,7 +3684,7 @@ async function bridgeSetupRun(provider, action) {
   if (!hub) {
     return { ok: false, message: webgisHubBlocked ? t("chat.bridge.hubLnaBlocked") : t("chat.bridge.hubNotFound") };
   }
-  if (action !== "install") {
+  if (action === "status") {
     try {
       const r = await fetch(`${hub}/setup`, { signal: AbortSignal.timeout(15000) });
       const d = await r.json().catch(() => ({}));
@@ -3707,6 +3707,9 @@ async function bridgeSetupRun(provider, action) {
     } catch (e) {
       return { ok: false, message: String(e?.message || e) };
     }
+  }
+  if (action !== "install") {
+    return { ok: false, message: `unknown action: ${action}` };
   }
   try {
     const r = await fetch(`${hub}/setup`, {
