@@ -16,6 +16,7 @@ import {
 import {
   backendUrl, detectBackend, getBackendCapabilities, hasBackendFeature,
   isBackendCapabilitiesResolved, setBackendCapabilities as setBackendCaps,
+  localNetworkPermission,
 } from "./backend.js";
 
 // ---- バックエンド capabilities（エンジン横断で共有する状態） ----
@@ -173,14 +174,62 @@ const SAKURA_BASE_URL = "https://api.ai.sakura.ad.jp/v1";
 let webgisHub = undefined; // {endpoint, providers:{...}} = 検出 / null = 未検出
 let webgisHubAt = 0;
 const WEBGIS_HUB_TTL_MS = 15000;
+// Chrome LNA でローカル疎通がブロック確定した場合 true（denied は再プロンプト
+// されないため、ハブ未検出ではなくブロック診断へ回す判定材料）
+let webgisHubBlocked = false;
+// prompt 状態の疎通は権限プロンプト応答待ちで fetch が保留されるため、
+// 応答を待てる長めの窓を使う。許可されれば保留中の fetch がそのまま完了する
+const WEBGIS_HUB_LNA_TIMEOUT_MS = 60000;
+// prompt→granted/denied の変化をイベントで拾う監視（PermissionStatus 毎に1回）
+let webgisHubPermWatch = null;
+// ハブ検出を妨げている LNA 状態。"denied"=ブロック / "prompt"=許可待ち / null=妨げなし
+function webgisHubLnaState() {
+  if (webgisHubBlocked) return "denied";
+  if (webgisHubPermWatch) return "prompt";
+  return null;
+}
+function watchWebgisHubPermission(perm) {
+  if (!perm || webgisHubPermWatch === perm) return;
+  webgisHubPermWatch = perm;
+  perm.addEventListener?.("change", () => {
+    webgisHubPermWatch = null;
+    webgisHubBlocked = perm.state === "denied";
+    webgisHub = undefined; // TTL を捨てて新しい権限状態で即再プローブ
+    void (async () => {
+      const hub = await probeWebgisHub();
+      // 許可 → ハブ検出 → ブリッジ系プロバイダ選択肢まで同一セッションで更新する
+      updateBridgeProviderOptions();
+      updateChatPanelVisibility();
+      const status = document.querySelector("#bridge-hub-status");
+      if (status && status.textContent) {
+        if (hub) status.textContent = t("chat.bridge.hubDetected");
+        else if (webgisHubBlocked) status.textContent = t("chat.bridge.hubLnaBlocked");
+      }
+    })();
+  }, { once: true });
+}
 async function probeWebgisHub() {
   if (webgisHub !== undefined
     && Date.now() - webgisHubAt < WEBGIS_HUB_TTL_MS) return webgisHub;
   webgisHubAt = Date.now();
+  // 公開HTTPSから loopback への fetch は Chrome LNA 権限が前提。denied は
+  // 再プロンプトされず常に失敗するため疎通せずブロック扱いとする。
+  // prompt は fetch 自体が権限プロンプトを発火させ応答待ちで保留されるため、
+  // 2s の通常タイムアウトで切ると稼働中のハブも「未検出」になる（issue #88）。
+  // 許可待ちの間は長めの窓で投げ、権限変化はイベントで拾って再プローブに繋ぐ
+  const perm = await localNetworkPermission();
+  webgisHubBlocked = perm?.state === "denied";
+  if (webgisHubBlocked) {
+    webgisHub = null;
+    return null;
+  }
+  const awaitingPrompt = perm?.state === "prompt";
+  if (awaitingPrompt) watchWebgisHubPermission(perm);
+  const timeoutMs = awaitingPrompt ? WEBGIS_HUB_LNA_TIMEOUT_MS : 2000;
   for (const port of WEBGIS_HUB_PORTS) {
     try {
       const r = await fetch(`http://127.0.0.1:${port}/health`,
-        { signal: AbortSignal.timeout(2000), cache: "no-store" });
+        { signal: AbortSignal.timeout(timeoutMs), cache: "no-store" });
       const d = await r.json().catch(() => ({}));
       if (r.ok && d?.hub) {
         webgisHub = {
@@ -208,6 +257,7 @@ async function waitForWebgisHub(timeoutMs, until) {
     webgisHub = undefined;
     const hub = await probeWebgisHub();
     if (hub && (!until || until(hub))) return hub;
+    if (webgisHubBlocked) return null; // denied は再プロンプトされないため打ち切り
     await new Promise(r => setTimeout(r, 2000));
   }
   return null;
@@ -227,6 +277,16 @@ async function offerHubInstall(provider, auto, prev) {
   const status = document.querySelector("#bridge-hub-status");
   if (!note || !btn) return;
   note.hidden = false;
+  // LNA 未許可が検出不能の原因なら、インストール案内より先に許可を促す。
+  // prompt は疎通 fetch がプロンプトを発火させるので許可待ちを明示し、
+  // denied は再プロンプトされないためブロック診断を出す
+  if (status) {
+    const lnaState = webgisHubLnaState();
+    if (lnaState) {
+      status.textContent = t(lnaState === "denied"
+        ? "chat.bridge.hubLnaBlocked" : "chat.bridge.hubLnaPrompt");
+    }
+  }
   // 更新待ち: 旧ハブは実行前から応答しているため「応答した」だけでは完了と
   // みなせない。/vector 対応フィールドの出現（新ビルドの標識）か、
   // version の変化をもって新版へ置き換わったと判定する
@@ -251,7 +311,8 @@ async function offerHubInstall(provider, auto, prev) {
         if (status) status.textContent = t("chat.bridge.hubDetected");
         void refreshBridgeStatus(provider);
       } else if (status) {
-        status.textContent = t("chat.bridge.hubNotFound");
+        status.textContent = webgisHubBlocked
+          ? t("chat.bridge.hubLnaBlocked") : t("chat.bridge.hubNotFound");
       }
     })().finally(() => { hubInstallWait = null; });
     return hubInstallWait;
@@ -755,7 +816,17 @@ export async function refreshCliSetupStates() {
   };
   const hub = await probeWebgisHub();
   setChip("hub", hub ? "installed" : "missing");
-  if (!hub) { for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown"); return; }
+  if (!hub) {
+    // ハブ未検出が LNA 未許可起因なら「未導入」ではなく許可案内/ブロック診断を出す
+    const hubStatus = document.querySelector("#bridge-hub-status");
+    const lnaState = webgisHubLnaState();
+    if (hubStatus && lnaState) {
+      hubStatus.textContent = t(lnaState === "denied"
+        ? "chat.bridge.hubLnaBlocked" : "chat.bridge.hubLnaPrompt");
+    }
+    for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
+    return;
+  }
   try {
     const r = await fetch(hub.endpoint.replace(/\/agent$/, "") + "/setup",
       { signal: AbortSignal.timeout(5000), cache: "no-store" });
@@ -3566,7 +3637,9 @@ function bridgeSetupHubMaybe() {
 // 完了(またはタイムアウト)までポーリングする。戻り値はツール結果向けの要約
 async function bridgeSetupRun(provider, action) {
   const hub = await detectBridgeHubBase();
-  if (!hub) return { ok: false, message: t("chat.bridge.hubNotFound") };
+  if (!hub) {
+    return { ok: false, message: webgisHubBlocked ? t("chat.bridge.hubLnaBlocked") : t("chat.bridge.hubNotFound") };
+  }
   if (action !== "install") {
     try {
       const r = await fetch(`${hub}/setup`, { signal: AbortSignal.timeout(15000) });
