@@ -1,0 +1,6 @@
+{
+  "id": "ckan-catalog",
+  "name": "CKAN カタログ検索",
+  "version": "1.0.0",
+  "description": "data.go.jp・G空間・東京OD等の CKAN カタログからデータセットを検索し対応形式のリソースをレイヤ追加する（geo_import 相当）"
+}
