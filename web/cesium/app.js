@@ -11813,6 +11813,11 @@ window.kasugaiApi = {
   async lineOfSight(from, to, opts) {
     return geoTools ? await geoTools.lineOfSight(from, to, opts) : { ok: false };
   },
+  // 観測点 from からの可視範囲（viewshed）。opts: radiusMeters/azimuths/
+  // samples/observerHeight/targetHeight/include3d（Cesium のみ実装）
+  async viewshed(from, opts) {
+    return geoTools?.viewshed ? await geoTools.viewshed(from, opts) : { ok: false, reason: "unsupported" };
+  },
   setGraticule(on) {
     if (geoTools) geoTools.setGraticule(on);
     return true;

@@ -900,6 +900,7 @@ export function createPlayerApi(hooks) {
     api.measureBearing = (from, to) => (gt()?.measureBearing(from, to) ?? { ok: false });
     api.elevationProfile = async (coords, samples) => (gt() ? await gt().elevationProfile(coords, samples) : { ok: false });
     api.lineOfSight = async (from, to, opts) => (gt() ? await gt().lineOfSight(from, to, opts) : { ok: false });
+    api.viewshed = async (from, opts) => (gt()?.viewshed ? await gt().viewshed(from, opts) : { ok: false, reason: "unsupported" });
     api.setGraticule = on => { gt()?.setGraticule(on); return true; };
     api.exportLayer = (name, format) => (gt() ? gt().exportLayer(name, format || "geojson") : Promise.resolve({ ok: false }));
     api.spatialSelect = opts => (gt()?.spatialSelect ? gt().spatialSelect(opts || {}) : { ok: false });

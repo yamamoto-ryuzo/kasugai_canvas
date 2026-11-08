@@ -132,24 +132,26 @@
       <h3>🗺️ ミニマップ（オーバービュー）</h3>
       <p>表示 → 一般タブの「ミニマップを表示」で、画面左下に小さな2Dオーバービュー地図を表示します。現在の表示範囲が赤い矩形で示され、ミニマップ上をクリックするとその地点へ現在の高度・姿勢のまま移動します。タイルは選択中のベースマップ（XYZ テンプレート）を追従し、テンプレートでない場合は地理院淡色地図を表示します。Leaflet は ON にした時点で CDN から遅延ロードするため、未使用時のコストはありません。</p>
 
-      <h3>🛠️ ツール（計測・断面・見通し・グリッド・エクスポート）</h3>
+      <h3>🛠️ ツール（計測・断面・見通し・可視範囲・グリッド・エクスポート）</h3>
       <p>画面上部中央のツールバー（ツールドック）に集約された GIS 解析ツール群です。レイヤパネルの🧰ボタンで開閉し、未使用時は画面上部に何も表示されません。バーのボタンで各ツールのパネルをドロップダウン表示し、計測・作図などの地図対話モード開始時は自動で畳まれます。すべてブラウザ完結・静的配信のみで動作し、オンデマンド動作のため未使用時の描画コストはありません。</p>
-      <p><strong>対応エンジン:</strong> Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps（iframe 内 Leaflet へ描画）で全機能、Navara はエクスポートのみ（地物ピック非対応のため計測・断面・見通しは未提供）。2D エンジンでは共有モジュール（<code>web/shared/geo-tools-2d.js</code>）が同一 UI・同一 API を提供し、標高サンプリングは MapLibre の DEM タイルまたは地理院標高APIを使います。</p>
+      <p><strong>対応エンジン:</strong> Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps（iframe 内 Leaflet へ描画）で全機能（可視範囲は Cesium のみ）、Navara はエクスポートのみ（地物ピック非対応のため計測・断面・見通しは未提供）。2D エンジンでは共有モジュール（<code>web/shared/geo-tools-2d.js</code>）が同一 UI・同一 API を提供し、標高サンプリングは MapLibre の DEM タイルまたは地理院標高APIを使います。</p>
       <ul>
         <li><strong>計測（距離・面積・方位）</strong> — 左クリックで頂点を追加、ダブルクリックで確定（Esc で中断・クリアボタンで消去）。距離は測地線（EllipsoidGeodesic）で区間ラベルと総延長を表示、面積は接平面シューレース近似＋周囲長、方位は2点の初方位・逆方位・距離を表示します。地形追従クリックのため 3D 表示時も地表値です。</li>
         <li><strong>標高断面</strong> — 「ラインを描く」で折れ線を入力すると距離-標高の断面グラフを表示（サンプル数 10〜500・既定100）。地形 ON 時は TerrainProvider、OFF 時や未対象域は地理院標高APIへフォールバックします。グラフ上のホバー位置は地図上のマーカーと連動し、最高/最低/累積上り・下りの統計も表示します。</li>
         <li><strong>選択・集計</strong> — 矩形（2点）・ポリゴン（頂点クリック＋ダブルクリック）・円（中心＋半径入力）で範囲を描き、対象レイヤ（全ベクター可）内の地物を空間選択。包含・辺交差まで判定し、結果はハイライト＋件数＋代表名表示。「選択をレイヤー化」で選択地物を新規一時レイヤーにできます。続けて<strong>ポリゴン内集計</strong>（集計キー＋数値列で count/sum/avg/min/max）と<strong>バッファ生成</strong>（描画範囲または選択地物に距離 m のバッファを新規レイヤー化。点は測地線円、ライン/ポリゴンは turf.js を遅延ロード）も行え、生成したバッファはそのまま次の選択範囲として使えます。</li>
         <li><strong>作図・注記</strong> — ポイント・ライン・ポリゴン・注記（文字付きマーカー）を描いて名称を付けて保持。「レイヤーへ追加」で一時レイヤー化（表示切替・属性一覧・エクスポート対象）または GeoJSON ファイルへ保存できます。</li>
         <li><strong>見通し判定（LOS）</strong> — 観測点・対象点（各地表からの高さオフセット指定可）を指定すると、160点の地形サンプリングと視線を比較して「可 / 不可（遮蔽点の距離つき）」を判定。視線は可視部=緑・遮蔽部=赤で描画され遮蔽点がマークされます。</li>
+        <li><strong>可視範囲（viewshed・Cesium のみ）</strong> — 観測点を1クリックで、放射状レイ（方位数×距離サンプル）上の地形標高を一括サンプリングして可視/不可視域を判定し、可視=緑・不可視=赤・標高不明=灰の可視性マップを地表へドレープ表示します。半径（100〜50000m）・方位数（16〜360）・レイあたりサンプル数（16〜256）に上限付きで指定でき、総サンプル数は自動で上限（地形ON時12000点・地理院APIフォールバック時1024点）に丸めます。「建物等も遮蔽(近似)」を ON にすると drillPickFromRay で描画済み3D Tiles等の遮蔽物を追加判定します（キャスト数上限384・計算コストのため近似）。地球曲率は直線視線モデルで考慮されます。</li>
         <li><strong>緯度経度グリッド</strong> — 表示 → 一般タブのトグルで緯線・経線と度ラベルをオーバーレイ表示。カメラ範囲に応じた nice-step 間隔で moveEnd 追従します。</li>
         <li><strong>エクスポート</strong> — ツールバーの「エクスポート」でベクターレイヤを選び、形式を指定してダウンロード（クエリ系=bbox=auto 等は読み込み済み範囲のみになるため <code>*</code> 印で明示）。形式は <strong>GeoJSON / CSV / TSV / KML / FlatGeobuf / Shapefile</strong>（.zip 同梱）。CSV・TSV はジオメトリを <code>WKT</code> 列として出力する QGIS の CSV エクスポート（GEOMETRY=AS_WKT）互換で、UTF-8 BOM 付き・3D 座標は <code>Z</code> 修飾付きです。Shapefile はジオメトリ種別ごとに分割した .shp/.shx/.dbf/.prj/.cpg を ZIP にまとめます。すべてブラウザ内で生成するため CDN ホスト版でも動作します。属性・値一覧にも CSV / TSV ボタンがあり、検索フィルタ・ソート適用後の全行を UTF-8 BOM 付き（Excel 文字化け対策）・代表点 lon/lat 列付きで出力します。</li>
       </ul>
-      <p>これらは AI からも操作できます。ボタン類は安定 id を持つため <code>controlUi</code> で自動列挙され、地図操作を伴う処理は <code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code>・<code>elevationProfile</code>・<code>lineOfSight</code>・<code>setGraticule</code>・<code>exportLayer</code>・<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code> の専用 API（CHAT_TOOLS 宣言・<code>executeChatTool</code> 配線済み、<a href="../ai-tools.html">AI ツール仕様</a>）で実行できます。</p>
+      <p>これらは AI からも操作できます。ボタン類は安定 id を持つため <code>controlUi</code> で自動列挙され、地図操作を伴う処理は <code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code>・<code>elevationProfile</code>・<code>lineOfSight</code>・<code>viewshed</code>・<code>setGraticule</code>・<code>exportLayer</code>・<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code> の専用 API（CHAT_TOOLS 宣言・<code>executeChatTool</code> 配線済み、<a href="../ai-tools.html">AI ツール仕様</a>）で実行できます。</p>
       <figure style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
         <img src="../../issues/28/measure-distance.png" alt="距離計測：区間ラベルと総延長" style="max-width:32%; flex:1 1 200px;" />
         <img src="../../issues/29/profile.png" alt="標高断面：距離-標高グラフ" style="max-width:32%; flex:1 1 200px;" />
         <img src="../../issues/33/los.png" alt="見通し判定：遮蔽点マーク" style="max-width:32%; flex:1 1 200px;" />
-        <figcaption aria-hidden="true">ツール（左から：距離計測・標高断面・見通し判定）</figcaption>
+        <img src="../../issues/66/viewshed.png" alt="可視範囲：可視=緑/不可視=赤のドレープ表示" style="max-width:32%; flex:1 1 200px;" />
+        <figcaption aria-hidden="true">ツール（左から：距離計測・標高断面・見通し判定・可視範囲）</figcaption>
       </figure>
 
       <h3>🌐 多言語対応（8言語）</h3>

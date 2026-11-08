@@ -19,6 +19,7 @@ const MODE_INFO = {
   bearing: { label: "tools.bearing", result: "#tools-measure-result" },
   profile: { label: "tools.profile", result: "#tools-measure-result" },
   los: { label: "tools.los", result: "#tools-los-result" },
+  vs: { label: "tools.viewshed", result: "#tools-los-result" },
   "sel-rect": { label: "tools.selRect", result: "#tools-sel-result" },
   "sel-poly": { label: "tools.selPoly", result: "#tools-sel-result" },
   "sel-circle": { label: "tools.selCircle", result: "#tools-sel-result" },

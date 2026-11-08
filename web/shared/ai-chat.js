@@ -2566,6 +2566,23 @@ const CHAT_TOOLS = [{
       },
     },
     {
+      name: "viewshed",
+      description: "観測点からの可視範囲（viewshed）を放射状の地形サンプリングで計算し、可視=緑/不可視=赤/不明=灰として地図の地表へ色分け表示する。半径・方位数・サンプル数に上限あり（計算コストが高いため大きな範囲は分割して実行する）",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          from: { type: "ARRAY", items: { type: "NUMBER" }, description: "観測点 [lng,lat]（度）" },
+          observerHeight: { type: "NUMBER", description: "観測点の地表からの高さ(m・省略時0)" },
+          targetHeight: { type: "NUMBER", description: "対象となる地表面からの高さ(m・省略時0)" },
+          radiusMeters: { type: "NUMBER", description: "可視範囲の半径(m・省略時3000・100-50000)" },
+          azimuths: { type: "NUMBER", description: "方位分割数（省略時72・16-360）" },
+          samples: { type: "NUMBER", description: "1方位あたりの距離サンプル数（省略時64・16-256）" },
+          include3d: { type: "BOOLEAN", description: "3D Tiles（建物等）も遮蔽判定に含める近似モード（省略時false・遅い）" },
+        },
+        required: ["from"],
+      },
+    },
+    {
       name: "setGraticule",
       description: "緯度経度グリッド（緯線・経線と度ラベル）の表示をON/OFFする",
       parameters: {
@@ -3405,6 +3422,7 @@ export async function executeChatTool(name, args = {}) {
   if (name === "measureBearing") return window.kasugaiApi.measureBearing(args.from, args.to);
   if (name === "elevationProfile") return await window.kasugaiApi.elevationProfile(args.coordinates, args.samples);
   if (name === "lineOfSight") return await window.kasugaiApi.lineOfSight(args.from, args.to, args);
+  if (name === "viewshed") return await window.kasugaiApi.viewshed(args.from, args);
   if (name === "setGraticule") { window.kasugaiApi.setGraticule(!!args.on); return { ok: true }; }
   if (name === "setMinimap") { window.kasugaiApi.setMinimap(!!args.on); return { ok: true }; }
   return { ok: false, message: t("tool.unknown", { name }) };
