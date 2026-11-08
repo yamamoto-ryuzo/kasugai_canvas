@@ -44,6 +44,8 @@ const JA = {
   "print.pdfExporting": "QGISでPDF出力中…",
   "print.pdfFailed": "PDF出力に失敗しました",
   "print.scalePrefix": "縮尺 1:",
+  "print.optPreview": "範囲プレビュー",
+  "print.previewHint": "枠=用紙サイズ。ドラッグで範囲移動・縮尺入力で拡大/縮小",
 };
 
 // 用紙サイズ[mm]
@@ -260,6 +262,8 @@ export function initPrint(opts) {
       <div style="display:flex;flex-wrap:wrap;gap:4px 12px;">
         <label><input id="print-opt-legend" type="checkbox" checked> ${tr("print.optLegend")}</label>
         <label><input id="print-opt-scale" type="checkbox" checked> ${tr("print.optScale")}</label>
+        <label id="print-preview-row" hidden><input id="print-opt-preview" type="checkbox"> ${tr("print.optPreview")}</label>
+        <span id="print-denom-row" style="display:none;align-items:center;gap:2px;">1:<input id="print-denom" type="number" min="100" step="100" style="width:80px;padding:2px;border:1px solid #cbd9de;border-radius:4px;" title="${tr("print.previewHint")}"></span>
         <label><input id="print-opt-north" type="checkbox" checked> ${tr("print.optNorth")}</label>
         <label><input id="print-opt-attr" type="checkbox" checked> ${tr("print.optAttr")}</label>
         <label><input id="print-opt-date" type="checkbox" checked> ${tr("print.optDate")}</label>
@@ -364,6 +368,17 @@ export function initPrint(opts) {
     status(tr("print.capturing"));
     let mapImg = null;
     try {
+      // 範囲プレビューON時はプレビュー枠(用紙サイズ・現在縮尺)の範囲へ
+      // ビューをフィットさせてからキャプチャする(geo_report の範囲指定相当)
+      if ($("#print-opt-preview")?.checked && opts.fitExtent && opts.getCenterLonLat) {
+        const c = opts.getCenterLonLat();
+        const d = Number($("#print-denom")?.value) || opts.getScaleDenominator?.() || 0;
+        if (c && d > 0) {
+          const hw = (d * paper.w / 2000) / (111320 * Math.cos(c.lat * Math.PI / 180));
+          const hh = (d * paper.h / 2000) / 111320;
+          await opts.fitExtent(c.lon - hw, c.lat - hh, c.lon + hw, c.lat + hh);
+        }
+      }
       const dataUrl = await opts.captureMap?.();
       mapImg = dataUrl ? await loadImage(dataUrl) : null;
     } catch { mapImg = null; }
@@ -550,5 +565,58 @@ export function initPrint(opts) {
     }
   });
 
+  // ---- 印刷範囲プレビュー(geo_report 相当): 用紙サイズの枠を地図中央に表示 ----
+  // 枠の CSS サイズは用紙 mm そのまま → 画面上 mpp(=denom*0.00028)を掛けると
+  // denom*用紙mm/1000 m = 目標縮尺での印刷範囲と一致する
+  const previewOk = opts.mapEl && opts.panByPx && opts.zoomToDenom &&
+    opts.getCenterLonLat && opts.fitExtent;
+  const frame = previewOk ? document.createElement("div") : null;
+  if (previewOk) {
+    frame.style.cssText = "position:fixed;display:none;box-sizing:border-box;" +
+      "border:2px dashed #d63f3f;background:rgba(214,63,63,.08);z-index:9000;" +
+      "cursor:move;touch-action:none;transform:translate(-50%,-50%);";
+    document.body.appendChild(frame);
+    $("#print-preview-row").hidden = false;
+    $("#print-denom-row").style.display = "inline-flex";
+    const place = () => {
+      const r = opts.mapEl().getBoundingClientRect();
+      frame.style.left = (r.left + r.width / 2) + "px";
+      frame.style.top = (r.top + r.height / 2) + "px";
+      const p = PAPERS[$("#print-paper").value] || PAPERS.a4l;
+      frame.style.width = p.w + "mm"; frame.style.height = p.h + "mm";
+    };
+    let drag = null;
+    frame.addEventListener("pointerdown", (e) => {
+      drag = { x: e.clientX, y: e.clientY };
+      frame.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    frame.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      opts.panByPx(e.clientX - drag.x, e.clientY - drag.y);
+      drag = { x: e.clientX, y: e.clientY };
+    });
+    frame.addEventListener("pointerup", () => { drag = null; });
+    $("#print-opt-preview").addEventListener("change", (e) => {
+      if (e.target.checked) {
+        const d = opts.getScaleDenominator?.();
+        if (d) $("#print-denom").value = Math.round(d);
+        place();
+        frame.style.display = "block";
+      } else {
+        frame.style.display = "none";
+      }
+    });
+    $("#print-paper").addEventListener("change", () => {
+      if (frame.style.display !== "none") place();
+    });
+    $("#print-denom").addEventListener("change", (e) => {
+      const d = Number(e.target.value);
+      if (d > 0) opts.zoomToDenom(d);
+    });
+    window.addEventListener("resize", () => {
+      if (frame.style.display !== "none") place();
+    });
+  }
   return { dialog: dlg };
 }

@@ -2116,6 +2116,24 @@ initPrint({
     return res > 0 ? res / 0.00028 : null;
   },
   getNorthAngleDeg: () => map.getView().getRotation() * 180 / Math.PI,
+  // 印刷範囲プレビュー用アダプタ
+  mapEl: () => map.getTargetElement(),
+  getCenterLonLat: () => { const c = toLonLat(map.getView().getCenter()); return { lon: c[0], lat: c[1] }; },
+  panByPx: (dx, dy) => {
+    const v = map.getView(), c = v.getCenter(), r = v.getResolution();
+    const rot = v.getRotation(), cos = Math.cos(rot), sin = Math.sin(rot);
+    const rx = dx * cos - dy * sin, ry = dx * sin + dy * cos;
+    v.setCenter([c[0] + rx * r, c[1] - ry * r]);
+  },
+  zoomToDenom: (d) => {
+    const v = map.getView(), lat = toLonLat(v.getCenter())[1];
+    v.setResolution((d * 0.00028) / Math.cos(lat * Math.PI / 180));
+  },
+  fitExtent: async (w, s, e, n) => {
+    const mx = (lon) => lon * 20037508.34 / 180;
+    const my = (lat) => Math.log(Math.tan((90 + lat) * Math.PI / 360)) * 6378137;
+    map.getView().fit([mx(w), my(s), mx(e), my(n)]);
+  },
 });
 
 // ---- ナビゲーション共通ツール（shared/nav-tools.js）----

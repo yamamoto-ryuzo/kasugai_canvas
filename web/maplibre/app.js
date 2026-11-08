@@ -2445,6 +2445,16 @@ initPrint({
     return mpp / 0.00028;
   },
   getNorthAngleDeg: () => -map.getBearing(),
+  // 印刷範囲プレビュー用アダプタ
+  mapEl: () => map.getContainer(),
+  getCenterLonLat: () => { const c = map.getCenter(); return { lon: c.lng, lat: c.lat }; },
+  panByPx: (dx, dy) => map.panBy([-dx, -dy], { duration: 0 }),
+  zoomToDenom: (d) => {
+    const lat = map.getCenter().lat;
+    const z = Math.log2(156543.03392 * Math.cos(lat * Math.PI / 180) / (d * 0.00028));
+    map.jumpTo({ zoom: z });
+  },
+  fitExtent: async (w, s, e, n) => { map.fitBounds([[w, s], [e, n]], { duration: 0 }); },
 });
 
 // ---- ナビゲーション共通ツール（shared/nav-tools.js）----
