@@ -903,5 +903,5 @@
   "live.added": "Layer added",
   "live.addFailed": "Failed to add layer",
   "layer.hubSourceMissing": "Hub source '{name}' is missing — re-register (re-POST) the source to restore it",
-  "layer.hubSourceLoading": "Hub source '{name}' is importing — reload after it completes"
+  "layer.hubSourceLoading": "Hub source '{name}' is importing — reload after it completes. If it never completes, the import may have been interrupted by a hub restart — re-register (re-POST) the source"
 }
