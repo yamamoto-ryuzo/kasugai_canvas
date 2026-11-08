@@ -11,19 +11,19 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
-      <p>AI ツール仕様 — 内蔵AIが制御できる全92ツールの定義</p>
+      <p>AI ツール仕様 — 内蔵AIが制御できる全93ツールの定義</p>
     </header>
     <main>
       <section>
         <h2>🤖 概要</h2>
-        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/shared/ai-chat.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>92 種</strong>（実行時に <code>activeChatTools</code> が環境・エンジン・キー設定で絞り込みます）です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="ai-api.html">【API】内蔵AI（Google 連携・AI）</a> を参照。</p>
+        <p>内蔵AI（Gemini または OpenAI互換プロバイダの function/tool calling）が呼び出せるツールは <code>web/shared/ai-chat.js</code> の <code>CHAT_TOOLS</code> に宣言された <strong>93 種</strong>（実行時に <code>activeChatTools</code> が環境・エンジン・キー設定で絞り込みます）です。このページはその宣言の仕様ミラーであり、<code>CHAT_TOOLS</code> を変更したらここも更新してください。概要・体験説明は <a href="features/v3.html">V3: AI 連携</a>、キー供給経路は <a href="ai-api.html">【API】内蔵AI（Google 連携・AI）</a> を参照。</p>
         <p>実行モデル：ユーザーの発言 → AI がツール呼び出しを返す → ブラウザが <code>kasugaiApi</code> 経由で実行 → 結果を AI に返す、の function calling ループ（OpenAI互換選択時は宣言を OpenAI tools 形式へ変換し、往復結果は tool メッセージとして返送）。ツール実行の上限往復数は既定10（管理 → AI → チャット の「ツール実行の上限往復数」または AI への指示で <code>setToolMaxSteps</code> により 1〜20 で変更可）。上限到達時はユーザーに継続確認が出て、承認なら同じ往復数を1枠追加して続行、拒否なら中断します。推論はすべてブラウザ側。破壊的ツールは実行前に確認ダイアログを挟み、最終判断はユーザーにあります。</p>
 
         <h3>提供条件（activeChatTools で絞り込み）</h3>
         <table>
           <thead><tr><th>条件</th><th>対象ツール</th></tr></thead>
           <tbody>
-            <tr><td>常時（59ツール）</td><td>下記以外のすべて</td></tr>
+            <tr><td>常時（60ツール）</td><td>下記以外のすべて</td></tr>
             <tr><td>Google Maps API キー設定時</td><td><code>searchPlaces</code>・<code>openStreetView</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>fileWrite</code>）</td><td><code>listDataFiles</code>・<code>saveDataFile</code>・<code>deleteDataFile</code></td></tr>
             <tr><td>ローカルサーバー版（capabilities の <code>pluginWrite</code>）</td><td><code>publishPlugin</code></td></tr>
@@ -112,7 +112,7 @@
       </section>
 
       <section>
-        <h2>📏 計測・解析（5）</h2>
+        <h2>📏 計測・解析（6）</h2>
         <p>画面上部中央のツールバー（ツールドック・レイヤパネルの🧰ボタンで開閉）の計測・標高断面・見通し判定を座標指定で実行します。いずれも結果を地図上へ描画し、計算値を返します（ブラウザ完結・静的配信でも可）。座標は <code>[経度, 緯度]</code>（度）の配列です。</p>
         <table>
           <thead><tr><th>ツール</th><th>引数（＊=必須）</th><th>説明</th></tr></thead>
@@ -122,6 +122,7 @@
             <tr><td><code>measureBearing</code></td><td>from*, to*</td><td>2点間の測地線方位（初方位・終方位）と距離を計算しラインを描画。戻り値: startHeadingDeg・endHeadingDeg・distanceMeters</td></tr>
             <tr><td><code>elevationProfile</code></td><td>coordinates*, samples</td><td>ラインに沿って地形標高をサンプリング（既定100・10-500点）し、距離-標高の点列・最高/最低/累積高低差を返す。断面グラフとラインを地図に表示。地形 OFF 時は地理院標高API（日本域）へフォールバック</td></tr>
             <tr><td><code>lineOfSight</code></td><td>from*, to*, observerHeight, targetHeight</td><td>観測点→対象点の見通し（LOS）可否を地形考慮で判定し、視線（可視部=緑・遮蔽部=赤）と遮蔽点を描画。高さは地表からのオフセット(m)。戻り値: visible・distanceMeters・blockedAt</td></tr>
+            <tr><td><code>viewshed</code></td><td>from*, observerHeight, targetHeight, radiusMeters, azimuths, samples, include3d</td><td>観測点からの可視範囲を放射状の地形サンプリングで計算し、可視=緑/不可視=赤/不明=灰の可視性マップを地表へドレープ表示（Cesium のみ）。radiusMeters 100-50000・azimuths 16-360・samples 16-256 で総サンプル数は自動丸め。include3d で描画済み 3D Tiles 等を遮蔽判定に含める近似モード（遅い）。戻り値: counts(visible/blocked/unknown)・visibleRatio・実効パラメータ</td></tr>
           </tbody>
         </table>
       </section>

@@ -74,7 +74,7 @@ Canvas = AI チャットによる解析の駆動 + 結果の 2D/3D 表示
       <p>QGIS 同梱の公式 headless CLI <code>qgis_process</code>（<code>qgis_process run native:buffer --INPUT=… --OUTPUT=…</code>・<code>--json</code> パラメータ対応）を、kasuga_converter と同型の Axum サイドカーとしてラップする構想です。QGIS 本体をサーバ・端末へインストールして headless 実行するため、無人解析・繰り返し実行・複数クライアントからの共有が可能になります。<strong>QGIS の Processing .py ファイルをサーバに配置するだけでは動きません</strong> — native 系アルゴリズムの大半は C++ 実装で、Python 系も PyQGIS ランタイム（Qt + GDAL/PROJ/GEOS + <code>QgsApplication</code> 初期化）が必須のため、QGIS インストールごと必要です。起動コストを避けたい場合は常駐 PyQGIS サービス（<code>QgsApplication([], False)</code> + <code>initQgis()</code> を1回で HTTP 化）や、pygeoapi（OGC API - Processes）経由の公開も選択肢です。</p>
 
       <h3>🔵 経路3: ブラウザ内解析（一部実装済）</h3>
-      <p>QGIS を介さない軽量解析は既存ツールで部分的に提供済みです — 計測系（<code>measureDistance</code> / <code>measureArea</code> / <code>measureBearing</code> / <code>elevationProfile</code> / <code>lineOfSight</code>）、<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code>、<code>duckdb:</code> / <code>sql:</code> レイヤーの DuckDB-WASM 空間述語、<code>runCode</code> サンドボックスによる任意 JS 解析。V8 ではこれらを「QGIS に依存しない第1段の解析」として位置づけ、重い処理・正確性重視の処理を経路1/2へ逃がす使い分けを想定します。</p>
+      <p>QGIS を介さない軽量解析は既存ツールで部分的に提供済みです — 計測系（<code>measureDistance</code> / <code>measureArea</code> / <code>measureBearing</code> / <code>elevationProfile</code> / <code>lineOfSight</code> / <code>viewshed</code>）、<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code>、<code>duckdb:</code> / <code>sql:</code> レイヤーの DuckDB-WASM 空間述語、<code>runCode</code> サンドボックスによる任意 JS 解析。V8 ではこれらを「QGIS に依存しない第1段の解析」として位置づけ、重い処理・正確性重視の処理を経路1/2へ逃がす使い分けを想定します。</p>
 
       <h3>🚧 ロードマップ（予定）</h3>
       <table>
