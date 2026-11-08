@@ -5584,6 +5584,17 @@ fn clear_readonly(path: &std::path::Path) {
     }
 }
 
+// 同梱 bridge-hub.exe の版を隣接の bridge-hub.version.json から読む。
+// サイドカーは tools/build_bridge_zip.py が /health 実測値で出力する。
+// 無い旧配布物・手動配置では None（従来どおりサイズガードのみで扱う）
+#[cfg(windows)]
+fn bundled_hub_version(bundle: &std::path::Path) -> Option<String> {
+    let sidecar = bundle.with_file_name("bridge-hub.version.json");
+    let json: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(sidecar).ok()?).ok()?;
+    json.get("version")?.as_str().map(String::from)
+}
+
 // 応答中の旧ハブを同梱の bridge-hub.exe（web/download/）で更新する。
 // %LOCALAPPDATA%\kasugai\bridge-hub\bridge-hub.exe を同梱版へ差し替えて
 // 起動し直す。コピーに失敗した場合も旧ハブを殺したままにしないよう
@@ -5621,6 +5632,17 @@ async fn update_installed_hub(hub_port: u16, ancestor_pid: Option<u32>, bundle: 
         .await
         .and_then(|v| v.get("version").and_then(|s| s.as_str()).map(String::from))
         .unwrap_or_else(|| "unknown".to_string());
+    // 同梱版が実行中ハブより古いと置換がダウングレードになり、以後は
+    // サイズ一致ガードで旧版に固定される（issue #86）。実行中版が不明な
+    // 場合は比較できないため従来判定のまま進める
+    if let Some(bundled) = bundled_hub_version(bundle) {
+        if old_version != "unknown"
+            && compare_versions(&bundled, &old_version) == std::cmp::Ordering::Less
+        {
+            eprintln!("bridge-hub: 同梱版 ({bundled}) が実行中ハブ ({old_version}) より古いためダウングレード更新をスキップします");
+            return;
+        }
+    }
     eprintln!("bridge-hub: 旧版ハブ (version {old_version}) を検出 — 同梱の bridge-hub.exe で更新します");
     // 占有者がハブと確認できた場合のみ kill する（無関係プロセスの巻き添え防止）
     if !kill_bridge_on_port(hub_port, ancestor_pid, true).await {
