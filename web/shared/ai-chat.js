@@ -814,11 +814,25 @@ export async function refreshCliSetupStates() {
       c.style.fontWeight = "bold";
     });
   };
+  // LNA がブロック/許可待ちのときは権限案内をプローブ完了を待たず先に出す。
+  // prompt 中の疎通は許可待ちで最大 60s 保留され、案内表示が遅れるため。
+  // 権限未許可では疎通自体を省略するため、導入有無は「未導入」ではなく
+  // 「不明」とする（実疎通で不在を確認した場合だけ missing にする）
+  const hubStatus = document.querySelector("#bridge-hub-status");
+  const prePerm = await localNetworkPermission();
+  if (prePerm?.state === "denied") {
+    if (hubStatus) hubStatus.textContent = t("chat.bridge.hubLnaBlocked");
+    setChip("hub", "unknown");
+    for (const p of BRIDGE_PROVIDERS) setChip(p, "unknown");
+    return;
+  }
+  if (prePerm?.state === "prompt" && hubStatus) {
+    hubStatus.textContent = t("chat.bridge.hubLnaPrompt");
+  }
   const hub = await probeWebgisHub();
-  setChip("hub", hub ? "installed" : "missing");
+  setChip("hub", hub ? "installed" : (webgisHubLnaState() ? "unknown" : "missing"));
   if (!hub) {
     // ハブ未検出が LNA 未許可起因なら「未導入」ではなく許可案内/ブロック診断を出す
-    const hubStatus = document.querySelector("#bridge-hub-status");
     const lnaState = webgisHubLnaState();
     if (hubStatus && lnaState) {
       hubStatus.textContent = t(lnaState === "denied"
