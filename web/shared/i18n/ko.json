@@ -901,5 +901,7 @@
   "live.addLayer": "추가",
   "live.loading": "불러오는 중…",
   "live.added": "레이어 추가됨",
-  "live.addFailed": "추가 실패"
+  "live.addFailed": "추가 실패",
+  "layer.hubSourceMissing": "허브 소스 '{name}'이 누락되었습니다 — 소스를 다시 등록(re-POST)하면 복구됩니다",
+  "layer.hubSourceLoading": "허브 소스 '{name}' 가져오는 중 — 완료 후 다시 로드하세요"
 }
