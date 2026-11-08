@@ -105,7 +105,8 @@ export function parseKasc(text) {
     if (type === "group") {
       // group: パス | expanded|collapsed — レイヤ一覧の折りたたみ初期状態。
       // geo_webview が QGIS のレイヤーツリー展開状態をそのまま出す
-      doc.groups.push({ path: parts[0] || "", collapsed: /^(collapsed|off|false)$/i.test(parts[1] || ""), line });
+      const check = parts.slice(2).map(p => /^checked\s*=\s*(.+)$/i.exec(p)?.[1]?.trim().toLowerCase()).find(Boolean) || null;
+      doc.groups.push({ path: parts[0] || "", collapsed: /^(collapsed|off|false)$/i.test(parts[1] || ""), check, line });
       continue;
     }
     if (type === "terrain") {

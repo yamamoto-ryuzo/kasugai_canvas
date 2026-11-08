@@ -117,6 +117,8 @@ const tileLayers = [];
 const layerState = new Map();
 let layerOrder = [];
 const expandedLayerGroups = new Set();
+// group: 行の checked= から復元するグループ中間状態(path|suffix → state)。#63
+const groupCheckStates = new Map();
 // ?kasc=<url>: 任意URLの .kasc を直接読むモード(サーバレス配信用)。
 // DATA/ 等の相対参照は .kasc のある URL 基準で解決する。
 // ?project= の標準プロジェクトモードと排他で、プロジェクト選択で解除される
@@ -1799,7 +1801,17 @@ function renderLayerList() {
           const limitBadge = layer.entityLimited
             ? `<small class="entity-limit-badge" title="${escapeHtml(t("layer.entityLimited", { shown: layer.entityLimited.shown, total: layer.entityLimited.total }))}">${layer.entityLimited.shown}/${layer.entityLimited.total}</small>`
             : "";
-          const legendEntries = getLayerLegend(layer)?.entries || null;
+          let legendEntries = getLayerLegend(layer)?.entries || null;
+          // legendnode: メタ — ユーザーラベル(元インデックス基準)を先に
+          // 適用し、その後で凡例ノード順へ並べ替える(#63)
+          if (legendEntries && layer.legendLabels) {
+            legendEntries = legendEntries.map((e, i) => layer.legendLabels[i] != null ? { ...e, label: layer.legendLabels[i] } : e);
+          }
+          if (legendEntries && layer.legendOrder?.length) {
+            const usedIdx = new Set(layer.legendOrder);
+            legendEntries = layer.legendOrder.map(i => legendEntries[i]).filter(Boolean)
+              .concat(legendEntries.filter((_, i) => !usedIdx.has(i)));
+          }
           const legendMulti = !!legendEntries && legendEntries.length > 1;
           const legendCollapsed = legendMulti && (collapsedLayerLegends.has(layer.id)
             || (legendEntries.length >= LEGEND_AUTO_COLLAPSE_MIN && !expandedLayerLegends.has(layer.id)));
@@ -2049,7 +2061,11 @@ function renderLayerList() {
 
   list.querySelectorAll(".layer-group-checkbox").forEach(input => {
     const group = [...groupedLayers.values()].find(item => `${item.group}|${item.exclusive ? "exclusive" : "regular"}` === input.dataset.groupKey);
-    if (group && !group.exclusive) input.indeterminate = group.layers.some(layer => layer.visible) && group.layers.some(layer => !layer.visible);
+    // group: メタの checked=partial を優先し、未指定時のみ子レイヤの
+    // 表示状態から中間状態を推測する(#63)
+    const gcs = groupCheckStates.get(input.dataset.groupKey);
+    if (group && !group.exclusive) input.indeterminate = gcs === "partial" ||
+      (gcs == null && group.layers.some(layer => layer.visible) && group.layers.some(layer => !layer.visible));
   });
 
   refreshTimeConfigLayers();
@@ -5408,6 +5424,32 @@ function applyInspector(text) {
           if (collapsed) expandedLayerGroups.delete(key);
           else expandedLayerGroups.add(key);
         }
+        // checked=partial|unchecked|checked: 非表示子レイヤを出力しない
+        // 設定でも中間状態を正確に復元するための明示メタ(#63)
+        const cstate = parts.slice(2)
+          .map(part => /^checked\s*=\s*(.+)$/i.exec(part)?.[1]?.trim().toLowerCase())
+          .find(Boolean);
+        if (cstate) for (const suffix of ["regular", "exclusive"]) groupCheckStates.set(`${gpath}|${suffix}`, cstate);
+      }
+    }
+
+    // legendnode: タイトル | order=idx,.. | labelN=テキスト | title=表示名 —
+    // 直前のレイヤ行の凡例エントリ順・ラベル・凡例表示名を上書き(#63)。
+    // geo_webview が QGIS レイヤツリーの legend/* カスタムプロパティを出す
+    if (type === "legendnode") {
+      const parts = value.split("|").map(part => part.trim());
+      const last = layerOrder.length ? layerState.get(layerOrder[layerOrder.length - 1]) : null;
+      if (last) {
+        parts.slice(1).forEach(part => {
+          const eq = part.indexOf("=");
+          if (eq < 0) return;
+          const k = part.slice(0, eq).trim().toLowerCase();
+          const v = part.slice(eq + 1).trim();
+          if (k === "order") last.legendOrder = v.split(",").map(s2 => Number(s2)).filter(Number.isInteger);
+          else if (k === "title") last.legendTitle = v;
+          else if (/^label\d+$/.test(k)) (last.legendLabels ||= {})[Number(k.slice(5))] = v;
+        });
+        if (last.legendTitle) last.title = last.legendTitle;
       }
     }
 
