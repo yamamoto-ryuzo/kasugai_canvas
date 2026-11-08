@@ -649,6 +649,14 @@ function compileRenderer(rendererEl, warnings) {
       if (name) legend.push({ label: "", symbolName: name });
       return { evaluate: () => (name ? [name] : []), ...ctx };
     }
+    case "25d": {
+      // QGIS 2.5D レンダラ: 屋根色(面シンボル)+立体表示。高さは QML に
+      // 保持されず固定値のため、Cesium polygon.extrudedHeight で簡易近似(#64)
+      const name = [...symbols.keys()][0];
+      if (name) legend.push({ label: "", symbolName: name });
+      warnOnce(warnings, "25dRenderer は固定高さの簡易 2.5D 近似です(ドレープ時は無効)");
+      return { evaluate: () => (name ? [name] : []), ...ctx, d25: { height: 10 } };
+    }
     case "categorizedSymbol": {
       const attr = rendererEl.getAttribute("attr") || "";
       const getAttr = compileExpr(attr);

@@ -300,6 +300,8 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
           entity.polygon.material = new Cesium.ImageMaterialProperty({ image: tile, repeat, transparent: true });
         } else if (solidBase) {
           entity.polygon.material = new Cesium.ColorMaterialProperty(toCesiumColor(solidBase));
+          // 2.5D レンダラ近似: 非ドレープ時のみ立体押出し(クランプと両立しない)(#64)
+          if (style?.d25 && !clamp) entity.polygon.extrudedHeight = new Cesium.ConstantProperty(style.d25.height ?? 10);
         } else {
           entity.polygon.material = new Cesium.ColorMaterialProperty(Cesium.Color.TRANSPARENT);
         }

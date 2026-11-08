@@ -1845,6 +1845,7 @@ function renderLayerList() {
           <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}${deferred ? " deferred" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadStatus === "failed" ? (layer._loadError || "") : deferred ? t("layer.notLoadedHint") : "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : deferred ? escapeHtml(t("layer.notLoaded")) : ""}</span>
           ${filterButton}
           ${limitBadge}
+          ${layer.qmlStyle?.warnings?.length ? `<small class="entity-limit-badge style-warn-badge" title="${escapeHtml(layer.qmlStyle.warnings.join(" / "))}">⚠${layer.qmlStyle.warnings.length}</small>` : ""}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>
         ${legendItems}
