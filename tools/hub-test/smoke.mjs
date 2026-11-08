@@ -21,7 +21,8 @@ const child = spawn(exe, ["--serve"], {
   stdio: "ignore",
 });
 
-const get = (path) => fetch(`http://127.0.0.1:${freePort}${path}`).then((r) => r.json());
+const get = (path) => fetch(`http://127.0.0.1:${freePort}${path}`)
+  .then(async (r) => ({ status: r.status, body: await r.json().catch(() => null) }));
 let failed = false;
 const check = (name, cond, detail = "") => {
   if (!cond) failed = true;
@@ -32,13 +33,18 @@ try {
   let health = null;
   const deadline = Date.now() + 15000;
   while (Date.now() < deadline) {
-    try { health = await get("/health"); break; } catch { await new Promise(r => setTimeout(r, 300)); }
+    try {
+      const res = await get("/health");
+      if (res.status === 200 && res.body) { health = res.body; break; }
+    } catch { await new Promise(r => setTimeout(r, 300)); }
   }
   check("/health 応答", !!health, JSON.stringify(health));
   check("/health hub:true", health?.hub === true, `hub=${health?.hub}`);
   check("/health version あり", typeof health?.version === "string" && health.version.length > 0, `version=${health?.version}`);
   const status = await get("/vector/status").catch(() => null);
-  check("/vector/status 応答", status !== null && typeof status === "object", JSON.stringify(status)?.slice(0, 120));
+  check("/vector/status 200+ok+duckdb",
+    status?.status === 200 && status.body?.ok === true && "duckdb" in (status.body || {}),
+    JSON.stringify(status)?.slice(0, 140));
 } finally {
   child.kill();
   await new Promise(r => setTimeout(r, 500));

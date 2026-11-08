@@ -9,7 +9,7 @@
 // 実行: node verify.mjs
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
 import { chromium } from "playwright-core";
@@ -25,7 +25,9 @@ const srv = createServer(async (req, res) => {
   try {
     let p = decodeURIComponent(new URL(req.url, "http://x").pathname);
     if (p.endsWith("/")) p += "index.html";
-    const data = await readFile(join(WEB, p));
+    const fp = resolve(join(WEB, p));
+    if (!fp.startsWith(WEB)) { res.writeHead(403); res.end("forbidden"); return; }
+    const data = await readFile(fp);
     res.writeHead(200, { "content-type": MIME[extname(p)] || "application/octet-stream" });
     res.end(data);
   } catch {
@@ -56,6 +58,13 @@ async function evalRetry(page, fn, mkDom = "") {
   }
 }
 
+// アプリの初期遷移（?project=…）とコンテキスト close が競合した際の
+// playwright 内部ナビゲーション待機 rejection を握りつぶす
+// （検証対象の失敗ではない。それ以外の rejection はそのまま落とす）
+process.on("unhandledRejection", (e) => {
+  if (!/TargetClosed|has been closed|was destroyed/i.test(String(e))) throw e;
+});
+
 const browser = await chromium
   .launch({ channel: "msedge", headless: true })
   .catch(() => chromium.launch({ channel: "chrome", headless: true }));
@@ -65,12 +74,13 @@ async function runCase(name, healthJson, shot, fn, lna = null) {
   // detectLocalBackend の検出成功 → 1回限りの reload がナビゲーションと
   // 競合して落ちることがあるため、ケースごと1回だけ作り直してリトライする
   for (let attempt = 0; attempt < 2; attempt++) {
-    const ctx = await browser.newContext();
+    const ctx = await browser.newContext({ locale: "ja-JP" });
     // detectLocalBackend の検出成功 → reload 経路は sessionStorage フラグで
     // 1回限り。初回からフラグを立てて reload 自体を抑止する（疎通は 8510
     // 遮断で既に失敗するが、念のため二重に防ぐ）
     await ctx.addInitScript(() => {
       try { sessionStorage.setItem("kasugai_backend_reloaded", "1"); } catch {}
+      try { localStorage.setItem("kasugaiLanguage", "ja"); } catch {}
     });
     // LNA 権限状態を固定する。prompt の環境では未許可起因の「不明」になる
     // ため、疎通結果（未検出=未導入）を検証するケースでは granted にする
@@ -146,25 +156,32 @@ await runCase("old-hub",
   "hubtest-old.png", async (page) => {
     const dl = page.waitForEvent("download", { timeout: 15000 }).catch(() => null);
     const r = await evalRetry(page, async () => {
-      const ja = await (await fetch("/shared/i18n/ja.json")).json();
       const m = await import("/shared/ai-chat.js");
-      // ハブ検出 → プロバイダ選択 → 接続検証（detectBridge→旧ハブ判定→hubOld）まで実経路で駆動
+      // #bridge-hub-note はマークアップ上 hidden 無し（初期 false）のため、
+      // 先に隠しておき「導線が開かれた（hidden=false へ遷移）」を確認する
+      const note = document.querySelector("#bridge-hub-note");
+      if (note) note.hidden = true;
+      // 設定側のブリッジ疎通（refreshBridgeStatus→旧ハブ検出→offerHubInstall）
+      // を含む設定画面配線を実経路で起動し、プロバイダ選択も併用する
+      await m.setupAiSettings();
       await m.updateBridgeProviderOptions();
       m.selectChatProvider("copilot");
+      // 設定画面のプロバイダ選択を copilot に変更（change イベントで
+      // refreshBridgeStatus → 旧ハブ検出 → offerHubInstall が走る実経路）
+      const sel = [...document.querySelectorAll("select")]
+        .find((s) => [...s.options].some((o) => o.value === "copilot"));
+      if (sel) { sel.value = "copilot"; sel.dispatchEvent(new Event("change", { bubbles: true })); }
       await new Promise((r2) => setTimeout(r2, 6000));
-      const note = document.querySelector("#bridge-hub-note");
       const status = document.querySelector("#bridge-hub-status");
       return {
-        hubOld: ja["chat.bridge.hubOld"] || "旧",
-        bodyHit: document.body.innerText.includes("旧"),
-        noteHidden: note ? note.hidden : "no-el",
+        noteRevealed: note ? note.hidden === false : null,
         status: status?.textContent || "",
       };
     });
     const dlEv = await dl;
-    check("旧ハブ→hubOld 診断または DL 導線表示",
-      r.bodyHit === true || r.noteHidden === false || !!dlEv,
-      JSON.stringify({ bodyHit: r.bodyHit, noteHidden: r.noteHidden, status: r.status, dl: dlEv?.suggestedFilename() || null }));
+    check("旧ハブ→DL 導線（note 再表示または自動DL）",
+      r.noteRevealed === true || !!dlEv,
+      JSON.stringify({ noteRevealed: r.noteRevealed, status: r.status, dl: dlEv?.suggestedFilename() || null }));
   });
 
 // ---- Case 3: ハブ未起動（接続拒否）→ 「未導入」 ----
