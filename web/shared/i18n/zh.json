@@ -396,6 +396,8 @@
   "chat.bridge.installDone": "安装完成: {path}",
   "chat.bridge.installFailed": "安装失败: {error}",
   "chat.bridge.hubNotFound": "未找到桥接中心（请启动应用或 bridge-hub）",
+  "chat.bridge.hubLnaPrompt": "请允许访问本地网络（允许后将自动重新检测）",
+  "chat.bridge.hubLnaBlocked": "本地网络访问已被阻止（请在浏览器站点设置中允许）",
   "chat.bridge.cliDetected": "已检测到 CLI: {path}",
   "chat.copilot.hint": "使用 GitHub Copilot 时，桥接中心将连接 <code>copilot</code> CLI（自动检测 :8511，可留空）。需要 GitHub Copilot 订阅以及已登录的 <code>copilot</code> CLI — 安装步骤请参阅 <a href=\"https://github.com/github/copilot-cli\" target=\"_blank\" rel=\"noopener\">github/copilot-cli</a>（npm 安装方式还需要 <a href=\"https://nodejs.org/\" target=\"_blank\" rel=\"noopener\">Node.js</a>）。",
   "chat.copilot.endpoint": "连接目标: {endpoint}",

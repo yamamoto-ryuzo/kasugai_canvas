@@ -403,6 +403,8 @@
   "chat.bridge.installDone": "インストール完了: {path}",
   "chat.bridge.installFailed": "インストールに失敗: {error}",
   "chat.bridge.hubNotFound": "ブリッジハブが見つかりません（アプリまたは bridge-hub を起動してください）",
+  "chat.bridge.hubLnaPrompt": "ローカルネットワークへのアクセスを許可してください（許可後に自動で再検出します）",
+  "chat.bridge.hubLnaBlocked": "ローカルネットワークへのアクセスがブロックされています（ブラウザのサイト設定で許可してください）",
   "chat.bridge.cliDetected": "CLI 検出済み: {path}",
   "chat.copilot.hint": "GitHub Copilot の場合はブリッジハブ経由で <code>copilot</code> CLI へ接続します（:8511 自動検出・空欄可）。GitHub Copilot 契約と <code>copilot</code> CLI の導入・ログインが必要です。",
   "chat.copilot.endpoint": "接続先: {endpoint}",

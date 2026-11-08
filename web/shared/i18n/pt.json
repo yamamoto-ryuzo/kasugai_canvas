@@ -396,6 +396,8 @@
   "chat.bridge.installDone": "Instalado: {path}",
   "chat.bridge.installFailed": "Falha na instalação: {error}",
   "chat.bridge.hubNotFound": "Hub de ponte não encontrado (inicie o app ou o bridge-hub)",
+  "chat.bridge.hubLnaPrompt": "Permita o acesso à rede local (o hub será detectado novamente automaticamente)",
+  "chat.bridge.hubLnaBlocked": "O acesso à rede local está bloqueado (permita nas configurações do site do navegador)",
   "chat.bridge.cliDetected": "CLI detectada: {path}",
   "chat.copilot.hint": "Para o GitHub Copilot, o hub de pontes conecta-se à CLI <code>copilot</code> (detectada automaticamente em :8511, pode ficar em branco). É necessário um plano GitHub Copilot e a CLI <code>copilot</code> com sessão iniciada — instale-a conforme <a href=\"https://github.com/github/copilot-cli\" target=\"_blank\" rel=\"noopener\">github/copilot-cli</a> (o pacote npm também requer <a href=\"https://nodejs.org/\" target=\"_blank\" rel=\"noopener\">Node.js</a>).",
   "chat.copilot.endpoint": "Endpoint: {endpoint}",

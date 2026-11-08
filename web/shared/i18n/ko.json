@@ -396,6 +396,8 @@
   "chat.bridge.installDone": "설치 완료: {path}",
   "chat.bridge.installFailed": "설치 실패: {error}",
   "chat.bridge.hubNotFound": "브리지 허브를 찾을 수 없습니다(앱 또는 bridge-hub를 시작하세요)",
+  "chat.bridge.hubLnaPrompt": "로컬 네트워크 접근을 허용해 주세요(허용 후 자동으로 다시 감지합니다)",
+  "chat.bridge.hubLnaBlocked": "로컬 네트워크 접근이 차단되어 있습니다(브라우저 사이트 설정에서 허용하세요)",
   "chat.bridge.cliDetected": "CLI 감지됨: {path}",
   "chat.copilot.hint": "GitHub Copilot의 경우 브리지 허브가 <code>copilot</code> CLI에 연결합니다 (:8511 자동 감지·비워둘 수 있음). GitHub Copilot 구독과 로그인된 <code>copilot</code> CLI가 필요합니다 — 설치는 <a href=\"https://github.com/github/copilot-cli\" target=\"_blank\" rel=\"noopener\">github/copilot-cli</a> 절차를 참고하세요 (npm 패키지는 <a href=\"https://nodejs.org/\" target=\"_blank\" rel=\"noopener\">Node.js</a>도 필요).",
   "chat.copilot.endpoint": "접속 대상: {endpoint}",
