@@ -564,10 +564,18 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
   function resolveVsParams(o = {}) {
     const clamp = (v, d, [lo, hi]) => Math.min(Math.max(Number.isFinite(Number(v)) ? Number(v) : d, lo), hi);
     const radius = clamp(o.radiusMeters ?? num($("#vs-radius"), 3000), 3000, VS_LIMITS.radius);
-    const azimuths = Math.round(clamp(o.azimuths ?? num($("#vs-azimuths"), 72), 72, VS_LIMITS.azimuths));
+    let azimuths = Math.round(clamp(o.azimuths ?? num($("#vs-azimuths"), 72), 72, VS_LIMITS.azimuths));
     let samples = Math.round(clamp(o.samples ?? num($("#vs-samples"), 64), 64, VS_LIMITS.samples));
     const cap = vsTerrainOn() ? VS_MAX_POINTS_TERRAIN : VS_MAX_POINTS_GSI;
-    if (azimuths * samples > cap) samples = Math.max(VS_LIMITS.samples[0], Math.floor(cap / azimuths));
+    if (azimuths * samples > cap) {
+      samples = Math.floor(cap / azimuths);
+      // GSI フォールバック(1024点)では既定72方位だと下限16点にも届かないため、
+      // サンプル数を下限で維持しつつ方位数を下げて総点数を cap 以内に収める
+      if (samples < VS_LIMITS.samples[0]) {
+        samples = VS_LIMITS.samples[0];
+        azimuths = Math.max(VS_LIMITS.azimuths[0], Math.floor(cap / samples));
+      }
+    }
     return {
       radius, azimuths, samples,
       observerH: Number.isFinite(Number(o.observerHeight)) ? Number(o.observerHeight) : num($("#vs-observer-h"), 0),
@@ -608,9 +616,11 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
     const east = col(0), north = col(1), up = col(2);
     const cells = [], angles = [];
     const scratch = new Cesium.Cartesian3();
-    const angleAt = (idx, h) => {
+    // 対象高は「判定される地点の対象」だけに適用し、遮蔽物(地形)の仰角には含めない。
+    // 全サンプルに一律で加算すると近傍の対象点自体が遮蔽物化して遠方を潰すため
+    const angleAt = (idx, h, withTarget) => {
       const g = grid[idx];
-      Cesium.Cartesian3.fromDegrees(g.lng, g.lat, h + p.targetH, Cesium.Ellipsoid.WGS84, scratch);
+      Cesium.Cartesian3.fromDegrees(g.lng, g.lat, h + (withTarget ? p.targetH : 0), Cesium.Ellipsoid.WGS84, scratch);
       const dE = Cesium.Cartesian3.dot(scratch, east) - eye.x * east.x - eye.y * east.y - eye.z * east.z;
       const dN = Cesium.Cartesian3.dot(scratch, north) - eye.x * north.x - eye.y * north.y - eye.z * north.z;
       const dU = Cesium.Cartesian3.dot(scratch, up) - eye.x * up.x - eye.y * up.y - eye.z * up.z;
@@ -623,10 +633,12 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
       for (let j = 0; j < M; j++) {
         const idx = 1 + i * M + j;
         if (!Number.isFinite(terr[idx])) { row[j] = null; angRow[j] = -Infinity; counts.unknown++; continue; }
-        const ang = angleAt(idx, terr[idx]);
+        const ang = angleAt(idx, terr[idx], true);
+        const angOcc = angleAt(idx, terr[idx], false);
         angRow[j] = ang;
         row[j] = ang > maxAngle + 1e-7;
-        if (row[j]) { maxAngle = ang; counts.visible++; } else counts.blocked++;
+        if (row[j]) counts.visible++; else counts.blocked++;
+        if (angOcc > maxAngle) maxAngle = angOcc;
       }
       cells[i] = row; angles[i] = angRow;
     }
