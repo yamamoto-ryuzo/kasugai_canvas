@@ -209,7 +209,7 @@ function watchWebgisHubPermission(perm) {
     })();
   }, { once: true });
 }
-async function probeWebgisHub() {
+export async function probeWebgisHub() {
   if (webgisHub !== undefined
     && Date.now() - webgisHubAt < WEBGIS_HUB_TTL_MS) return webgisHub;
   webgisHubAt = Date.now();
