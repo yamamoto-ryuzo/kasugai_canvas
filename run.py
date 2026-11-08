@@ -286,11 +286,18 @@ def _wait_for_health(port: int, expected_version: str, timeout: float = 30.0) ->
     raise SystemExit(f"起動確認が {timeout} 秒以内に完了しませんでした: {url}")
 
 
-def _start_exe_and_verify(exe_path: Path, expected_version: str) -> None:
+def _start_exe_and_verify(
+    exe_path: Path,
+    expected_version: str,
+    port_env: str = "KASUGAI_CANVAS_PORT",
+    args: list | None = None,
+) -> None:
     """EXE を一時ポートで起動し、/health の version を検証する。"""
     port = _find_free_port()
-    env = {**os.environ, "KASUGAI_CANVAS_PORT": str(port)}
-    process = subprocess.Popen([str(exe_path), "--no-browser"], env=env)
+    env = {**os.environ, port_env: str(port)}
+    process = subprocess.Popen(
+        [str(exe_path), *(["--no-browser"] if args is None else args)], env=env
+    )
     try:
         _wait_for_health(port, expected_version)
     finally:
@@ -308,6 +315,40 @@ def _verify_zip_version(zip_path: Path, expected_version: str) -> None:
         if not exe.exists():
             raise FileNotFoundError(f"ZIP内に実行ファイルが見つかりません: {zip_path}")
         _start_exe_and_verify(exe, expected_version)
+
+
+def _regenerate_bridge_bundle(cargo_version: str) -> None:
+    """web/download/bridge-hub.{exe,zip} を再生成し、同梱 exe の version を検証する。
+
+    呼び出し前に cargo build --release（全 bin 対象）が完了している前提で、
+    再パッケージのみ --no-build で行う。再生成失敗・バージョン不一致は
+    例外/SystemExit で配布ビルドをブロックする。
+    """
+    subprocess.run(
+        [sys.executable, str(ROOT / "tools" / "build_bridge_zip.py"), "--no-build"],
+        cwd=ROOT,
+        check=True,
+    )
+    download_exe = WEB_DIR / "download" / "bridge-hub.exe"
+    download_zip = WEB_DIR / "download" / "bridge-hub.zip"
+    for artifact in (download_exe, download_zip):
+        if not artifact.exists():
+            raise FileNotFoundError(
+                f"bridge-hub 配布物が再生成されませんでした: {artifact}"
+            )
+    # 配布 exe 自体の /health version を検証（bridge-hub は BRIDGE_HUB_PORT
+    # で待受ポートを指定し、--serve で自己インストールを抑止する）
+    _start_exe_and_verify(
+        download_exe, cargo_version, port_env="BRIDGE_HUB_PORT", args=["--serve"]
+    )
+    # ZIP 同梱の exe は配布 exe と同一バイト列であること（別ビルド混入をブロック）
+    with zipfile.ZipFile(download_zip) as archive:
+        zipped = archive.read("bridge-hub/bridge-hub.exe")
+    if zipped != download_exe.read_bytes():
+        raise SystemExit(
+            f"{download_zip} 内の bridge-hub.exe が {download_exe} と一致しません。"
+        )
+    print(f"bridge-hub 配布物のバージョン確認完了: {cargo_version}", flush=True)
 
 
 def run_dev() -> None:
@@ -399,6 +440,11 @@ def build_release() -> None:
 
     print("ビルド済み EXE のバージョンを確認します...")
     _start_exe_and_verify(TARGET_EXE, cargo_version)
+
+    # web/download/bridge-hub.{exe,zip} を最新ビルドへ再生成してから
+    # 配布 ZIP（web/ ごと同梱）を作る。検証失敗時はここでブロックする
+    print("bridge-hub 配布物を再生成します...")
+    _regenerate_bridge_bundle(cargo_version)
 
     if not SAMPLE_PROJECTS.exists():
         raise FileNotFoundError(f"初期サンプルプロジェクトがみつかりません: {SAMPLE_PROJECTS}")
