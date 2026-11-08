@@ -14,6 +14,12 @@ import { backendUrl } from "./backend.js";
 
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const MCP_SERVERS_KEY = "mcpServers";
+// 内蔵 MCP サーバー。ユーザー定義（localStorage mcpServers）と同 key で
+// 上書き・無効化できる。接続は connectEnabledMcpServers 経由（起動時自動）
+const BUILTIN_MCP_SERVERS = [
+  // Devin Agent Dispatcher (C:\devin\agent) の管理 API。HTTP MCP を喋る
+  { key: "agent", name: "Devin dispatcher", url: "http://127.0.0.1:8585/mcp", enabled: true },
+];
 const MCP_ALLOW_WRITE_KEY = "mcpAllowWrite";
 const MCP_PROXY_PATH = "/api/mcp";
 
@@ -54,12 +60,14 @@ export function mcpRuntime(key) {
 // ---- サーバーレジストリ（localStorage。トークンは BYO として同じ場所に保持） ----
 
 export function listMcpServers() {
+  let list = [];
   try {
-    const list = JSON.parse(localStorage.getItem(MCP_SERVERS_KEY) || "[]");
-    return Array.isArray(list) ? list.filter(s => s && typeof s.key === "string" && typeof s.url === "string") : [];
-  } catch (e) {
-    return [];
-  }
+    const raw = JSON.parse(localStorage.getItem(MCP_SERVERS_KEY) || "[]");
+    list = Array.isArray(raw) ? raw.filter(s => s && typeof s.key === "string" && typeof s.url === "string") : [];
+  } catch (e) {}
+  // ユーザー定義と同 key の内蔵サーバーはユーザー定義を優先（無効化・URL変更に対応）
+  const userKeys = new Set(list.map((s) => s.key));
+  return [...BUILTIN_MCP_SERVERS.filter((b) => !userKeys.has(b.key)), ...list];
 }
 
 function saveMcpServers(list) {
@@ -99,8 +107,19 @@ export function setMcpAllowWrite(value) {
 // eval/reload も含める: qgis_pyeval（QGIS 内の任意コード実行）等の
 // 実行系ツールを「読み取り」として無確認で AI へ公開しないため
 const WRITE_TOOL_RE = /(creat|upload|delet|remov|updat|edit|move|copy|renam|write|trash|shar|invit|modif|eval|reload)/i;
-export function isMcpWriteTool(name) {
-  return WRITE_TOOL_RE.test(String(name || ""));
+// 書き込み系判定。MCP tool annotations（readOnlyHint/destructiveHint）を
+// 優先し、注釈が無いツールは名前の部分一致にフォールバックする。
+// ツールオブジェクトまたはツール名のどちらでも呼べる
+export function isMcpWriteTool(tool) {
+  if (tool && typeof tool === "object") {
+    const a = tool.annotations;
+    if (a && typeof a === "object") {
+      if (a.readOnlyHint === true) return false;
+      if (a.readOnlyHint === false || a.destructiveHint === true) return true;
+    }
+    return WRITE_TOOL_RE.test(String(tool.name || ""));
+  }
+  return WRITE_TOOL_RE.test(String(tool || ""));
 }
 
 // ---- 低レベル通信 ----
@@ -310,7 +329,7 @@ export function mcpDeclarations() {
     if (!state.connected) continue;
     for (const tool of state.tools) {
       if (!tool?.name) continue;
-      const write = isMcpWriteTool(tool.name);
+      const write = isMcpWriteTool(tool);
       if (write && !allowWrite) continue;
       declarations.push({
         name: sanitizeDeclName(server.key, tool.name),
@@ -328,7 +347,7 @@ export function mcpToolTarget(declName) {
     const state = serverRuntime(server.key);
     for (const tool of state.tools) {
       if (sanitizeDeclName(server.key, tool.name) === declName) {
-        return { serverKey: server.key, serverName: server.name || server.key, toolName: tool.name, write: isMcpWriteTool(tool.name) };
+        return { serverKey: server.key, serverName: server.name || server.key, toolName: tool.name, write: isMcpWriteTool(tool) };
       }
     }
   }
