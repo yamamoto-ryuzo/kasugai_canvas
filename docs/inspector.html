@@ -76,7 +76,7 @@ cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方
 bookmark: QGISブックマーク | bookmark:XMLファイルURL （QGIS のブックマークエクスポート XML・qgis_bookmarks 形式を読み込み、各ブックマークをカメラプリセットへ展開。geo_webview の /kasugai エクスポートでは bookmarks.xml として自動出力。カメラパネルの「XML保存」「XML読込」ボタンでも同形式でプリセットを出し入れできる）
 theme: テーマ名 | 表示するレイヤタイトル[|タイトル…] （QGIS マップテーマ相当の可視性プリセット。`*` で全表示。レイヤーパネル上部のテーマ選択から適用すると各レイヤ行の on/off が書き換わる。タイトルに `;style=DATA/x.qml` を付けるとテーマ適用時にそのレイヤーの .qml を差し替える = QGIS テーマ記録の名前付きスタイルの再現。geo_webview が出力）
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
-info: InfoパネルHTML / legend: 凡例画像 / legendnode: 凡例ノード順・ラベル・表示名(直前行に適用) / background: 背景色 / title: アプリ表示名 / yahooAppId: Yahoo検索ID
+info: InfoパネルHTML / legend: 凡例画像 / searchtab: 定型検索タブ(geo_search相当) / legendnode: 凡例ノード順・ラベル・表示名(直前行に適用) / background: 背景色 / title: アプリ表示名 / yahooAppId: Yahoo検索ID
 plugin: プラグインID | key=value | off (plugins.json カタログ・ストレージプラグインをこのプロジェクトで有効化。レイヤーはプロジェクトスコープ)
 cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
           <ul>

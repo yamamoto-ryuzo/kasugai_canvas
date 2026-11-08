@@ -220,6 +220,8 @@ setLayerVisibilityResolver(name => {
 const vectorSearchLoadedSources = new Map();
 // 検索用オンデマンド読み込みに失敗したレイヤー。選択肢変更のたびに再試行しない
 const vectorSearchLoadFailed = new Set();
+// searchtab: 行で定義する定型検索タブ(geo_search 相当)。#68
+let searchTabs = [];
 // inspector の default_style: 行で設定するベクター地物の既定スタイル。
 // 地物側の simplestyle(marker-color/stroke/fill 等)や style= の QML がある
 // 地物には適用しない(未設定項目だけのフォールバック)。applyInspector で再構築する
@@ -5311,6 +5313,7 @@ function applyInspector(text) {
   vectorSearchLoadedSources.clear();
   vectorSearchLoadFailed.clear();
   tileLayers.splice(0, tileLayers.length);
+  searchTabs = [];
   layers.splice(0, layers.length);
   basemaps.splice(0, basemaps.length);
   layerOrder = [];
@@ -5719,6 +5722,29 @@ function applyInspector(text) {
       tileLayers.push(item);
       layerState.set(id, item);
       layerOrder.push(id);
+    }
+
+    if (type === "searchtab") {
+      // searchtab: タイトル | layers=レイヤ[,..] | fields=検索属性[,..] |
+      //   view=表示属性[,..] | theme=テーマ名 | additive=on | norm=kana —
+      // geo_search の定型検索タブ相当(#68)。レイヤを生成せず検索パネルへ定義だけ出す
+      const parts = value.split("|").map(part => part.trim());
+      const kv = {};
+      parts.slice(1).forEach(part => {
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        kv[part.slice(0, eq).trim().toLowerCase()] = part.slice(eq + 1).trim();
+      });
+      const csv = v => v ? v.split(",").map(x => x.trim()).filter(Boolean) : [];
+      searchTabs.push({
+        title: parts[0] || "",
+        layers: csv(kv.layers), fields: csv(kv.fields), viewFields: csv(kv.view),
+        theme: kv.theme || "", additive: /^(on|true|1|yes)$/i.test(kv.additive || ""),
+        norm: (kv.norm || "").toLowerCase(),
+        pageSize: Math.max(1, Number(kv.pagesize) || 50),
+        group: kv.group || "",
+      });
+      try { renderSearchTabs(); } catch (e) {}
     }
 
     if (type === "wms" || type === "wmts") {
@@ -10165,6 +10191,149 @@ function setupVectorSearch() {
       ).join("");
       vectorSearchResults._resultData = res;
     } catch (e) { console.error("vector text search error", e); }
+  }
+
+  // ---- searchtab: 定型検索タブ(geo_search 相当 #68) ----
+  // 半角カナ→全角・空白除去の所有者名系正規化(NFKC)。norm=kana 指定タブのみ適用
+  const normKana = s => String(s ?? "").normalize("NFKC").replace(/\s+/g, "").toLowerCase();
+  let activeSearchTab = -1;
+  let searchTabState = { results: [], page: 0 };
+
+  function renderSearchTabs() {
+    const host = document.querySelector("#vector-search");
+    if (!host) return;
+    let bar = document.querySelector("#searchtab-bar");
+    if (!searchTabs.length) { if (bar) bar.remove(); document.querySelector("#searchtab-panel")?.remove(); return; }
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "searchtab-bar";
+      bar.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;";
+      host.prepend(bar);
+    }
+    bar.innerHTML = searchTabs.map((tb, i) =>
+      `<button type="button" class="searchtab-btn" data-idx="${i}" style="flex:0 0 auto;padding:3px 9px;border:1px solid ${i === activeSearchTab ? "#4a90a4" : "#cbd9de"};border-radius:12px;background:${i === activeSearchTab ? "#e7f3f0" : "#fff"};font-size:0.85em;cursor:pointer;">${escapeHtml(tb.title)}</button>`).join("");
+    bar.querySelectorAll(".searchtab-btn").forEach(btn => {
+      btn.addEventListener("click", () => activateSearchTab(Number(btn.dataset.idx)));
+    });
+  }
+
+  async function activateSearchTab(idx) {
+    activeSearchTab = idx;
+    const tb = searchTabs[idx];
+    renderSearchTabs();
+    const host = document.querySelector("#vector-search");
+    if (!host || !tb) return;
+    let panel = document.querySelector("#searchtab-panel");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "searchtab-panel";
+      panel.style.cssText = "margin:4px 0 8px;padding:6px;border:1px solid #e4ecef;border-radius:6px;background:#fafcfd;";
+      panel.innerHTML = [
+        '<div style="display:flex;gap:6px;align-items:center;">',
+        '<input id="searchtab-query" type="text" placeholder="検索文字" style="flex:1;min-width:0;border:1px solid #cbd9de;border-radius:4px;padding:5px 7px;font-size:0.9em;" />',
+        '<button id="searchtab-run" type="button" style="flex:0 0 auto;">検索</button>',
+        '</div>',
+        '<label style="display:flex;align-items:center;gap:4px;margin-top:4px;font-size:0.8em;color:#52636d;">',
+        '<input id="searchtab-additive" type="checkbox" ' + (tb.additive ? "checked" : "") + '> テーマ適用時に現在の表示を保持',
+        '</label>',
+        '<ul id="searchtab-results" style="list-style:none;padding:0;margin:6px 0 0;max-height:160px;overflow:auto;font-size:0.85em;"></ul>',
+        '<div id="searchtab-pager" style="display:flex;gap:6px;align-items:center;font-size:0.8em;color:#52636d;margin-top:4px;"></div>'
+      ].join("");
+      host.appendChild(panel);
+      panel.querySelector("#searchtab-run").addEventListener("click", () => runSearchTab());
+      panel.querySelector("#searchtab-query").addEventListener("keydown", ev => { if (ev.key === "Enter") runSearchTab(); });
+      panel.querySelector("#searchtab-results").addEventListener("click", ev => {
+        const li = ev.target.closest("li[data-idx]");
+        if (!li) return;
+        const r = searchTabState.results[Number(li.dataset.idx)];
+        if (!r) return;
+        if (r.layerId) showVectorFlyLayer(r.layerId);
+        if (r.lat != null && r.lng != null) void flyToFeature(r.lat, r.lng);
+      });
+      panel.querySelector("#searchtab-pager").addEventListener("click", ev => {
+        const b = ev.target.closest("button[data-pg]");
+        if (!b) return;
+        searchTabState.page = Math.max(0, searchTabState.page + Number(b.dataset.pg));
+        renderSearchTabResults();
+      });
+    }
+    panel.querySelector("#searchtab-additive").checked = tb.additive;
+    // selectTheme: 検索タブ指定のテーマを適用。additive=ON は現表示を保持してテーマレイヤを追加
+    if (tb.theme) {
+      const prevVisible = new Set(getOrderedLayerItems().filter(i => i.visible).map(i => i.id));
+      try { window.kasugaiApi?.applyTheme?.(tb.theme); } catch (e) { console.warn("[searchtab] theme apply failed:", e); }
+      if (panel.querySelector("#searchtab-additive").checked) {
+        getOrderedLayerItems().forEach(i => { if (prevVisible.has(i.id)) i.visible = true; });
+        renderLayerList();
+        void refreshLayers();
+      }
+    }
+    searchTabState = { results: [], page: 0 };
+    renderSearchTabResults();
+  }
+
+  async function runSearchTab() {
+    const tb = searchTabs[activeSearchTab];
+    const panel = document.querySelector("#searchtab-panel");
+    if (!tb || !panel || !vectorSearchData) return;
+    const qraw = String(panel.querySelector("#searchtab-query").value || "").trim();
+    if (!qraw) return;
+    // 対象レイヤの索引を確保(未ロード分もまとめて読み込む既存経路)
+    await ensureAllVectorSourcesIndexed();
+    const norm = tb.norm === "kana" ? normKana : (x => String(x).toLowerCase());
+    const q = norm(qraw);
+    const data = vectorSearchData;
+    // layers= はタイトル一致で id 解決(未指定は全索引レイヤ)
+    const titleToId = {};
+    for (const [id, info] of Object.entries(data.layers || {})) {
+      titleToId[info.title] = id;
+      const it = layerState.get(id);
+      if (it?.title) titleToId[it.title] = id;
+    }
+    const layerIds = tb.layers.length ? tb.layers.map(n => titleToId[n]).filter(Boolean) : Object.keys(data.layers || {});
+    const res = [];
+    for (const layerId of layerIds) {
+      const source = data.layers && data.layers[layerId];
+      if (!source) continue;
+      const attrs = tb.fields.length ? tb.fields : (source.attributes || []);
+      for (const attr of attrs) {
+        const values = (source.valuesByAttr && source.valuesByAttr[attr]) || [];
+        for (const val of values) {
+          if (!norm(val).includes(q)) continue;
+          const pos = source.featureByAttr?.[attr]?.[val] || null;
+          let view = "";
+          if (tb.viewFields.length && pos) {
+            try {
+              const gj = getLayerGeoJson(pos.layerId || layerId);
+              const f = (gj?.features || []).find(f2 => String(f2?.properties?.[attr]) === String(val));
+              if (f) view = tb.viewFields.map(v2 => f.properties?.[v2]).filter(v2 => v2 != null).join(" / ");
+            } catch (e) {}
+          }
+          res.push({ layerId: pos?.layerId || layerId, layerTitle: (data.layers[pos?.layerId || layerId]?.title) || layerId, attr, value: val, view, lat: pos?.lat ?? null, lng: pos?.lng ?? null });
+        }
+      }
+    }
+    searchTabState = { results: res, page: 0 };
+    renderSearchTabResults();
+  }
+
+  function renderSearchTabResults() {
+    const ul = document.querySelector("#searchtab-results");
+    const pager = document.querySelector("#searchtab-pager");
+    if (!ul || !pager) return;
+    const tb = searchTabs[activeSearchTab];
+    const ps = tb?.pageSize || 50;
+    const res = searchTabState.results;
+    const totalPages = Math.max(1, Math.ceil(res.length / ps));
+    searchTabState.page = Math.min(searchTabState.page, totalPages - 1);
+    const start = searchTabState.page * ps;
+    const page = res.slice(start, start + ps);
+    ul.innerHTML = res.length
+      ? page.map((r, i) => `<li class="searchtab-result" data-idx="${start + i}" style="padding:4px;border-bottom:1px solid #e4ecef;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="クリックで移動">${escapeHtml(r.layerTitle)} / ${escapeHtml(r.attr)} / ${escapeHtml(r.value)}${r.view ? " — " + escapeHtml(r.view) : ""}</li>`).join("")
+      : '<li style="padding:4px;color:#71818d;">該当する地物がありません</li>';
+    pager.innerHTML = res.length > ps
+      ? `<button type="button" data-pg="-1" ${searchTabState.page === 0 ? "disabled" : ""}>◀</button><span>${searchTabState.page + 1}/${totalPages} ページ（${res.length} 件）</span><button type="button" data-pg="1" ${searchTabState.page >= totalPages - 1 ? "disabled" : ""}>▶</button>`
+      : (res.length ? `<span>${res.length} 件</span>` : "");
   }
 
   if (vectorSearchResults) {
