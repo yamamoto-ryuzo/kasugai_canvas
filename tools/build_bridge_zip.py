@@ -15,10 +15,14 @@ usage:
     python tools/build_bridge_zip.py [出力zipパス] [--no-build]
 """
 
+import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import time
+import urllib.request
 import zipfile
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +35,41 @@ BUNDLE_FILES = (
 )
 
 
+def _query_exe_version(exe):
+    """exe を一時ポートで --serve 起動し、/health の version を取得する。
+
+    サイドカーは同梱 exe の実測バージョンを記録するため、Cargo.toml ではなく
+    実行結果から取る（古いビルドの混入を検出できるようにするため）。
+    """
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    env = dict(os.environ, BRIDGE_HUB_PORT=str(port))
+    proc = subprocess.Popen(
+        [exe, "--serve"], env=env,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            try:
+                with urllib.request.urlopen(
+                        'http://127.0.0.1:{0}/health'.format(port), timeout=1) as r:
+                    version = json.loads(r.read().decode('utf-8')).get('version')
+                    if version:
+                        return version
+            except Exception:
+                time.sleep(0.3)
+        raise RuntimeError(
+            'bridge-hub.exe の /health から version を取得できませんでした: {0}'.format(exe))
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+
+
 def build(out=DEFAULT_OUT, cargo=True):
     if cargo:
         subprocess.run(
@@ -40,6 +79,9 @@ def build(out=DEFAULT_OUT, cargo=True):
         raise FileNotFoundError(
             'bridge-hub.exe not found: {0} '
             '(cargo build --release --bin bridge-hub)'.format(EXE))
+    # 同梱 exe の実測バージョンは出力物の書き換え前に取得する。照会が
+    # 失敗したとき「新バイナリ + 旧サイドカー」の不整合が残るのを防ぐ
+    version = _query_exe_version(EXE)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     count = 0
     with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -58,6 +100,14 @@ def build(out=DEFAULT_OUT, cargo=True):
     exe_out = os.path.join(os.path.dirname(out), 'bridge-hub.exe')
     shutil.copyfile(EXE, exe_out)
     print('built: {0}'.format(exe_out))
+    # 実測バージョンをサイドカーに記録する。アプリ側の update_installed_hub
+    # とブラウザ側の更新導線が「配布物 < 実行中ハブ」のダウングレード検出に
+    # 使う判定材料（server/src/main.rs・web/shared/ai-chat.js）
+    sidecar = os.path.join(os.path.dirname(out), 'bridge-hub.version.json')
+    with open(sidecar, 'w', encoding='utf-8') as f:
+        json.dump({'version': version}, f)
+        f.write('\n')
+    print('built: {0} (version {1})'.format(sidecar, version))
     return out
 
 

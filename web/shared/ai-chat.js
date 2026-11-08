@@ -218,6 +218,29 @@ async function waitForWebgisHub(timeoutMs, until) {
 // こちらは /health ポーリングで検出して接続まで自動完了する。
 // ブラウザから exe を直接起動することはできないため、ユーザー操作は
 // 「DL した exe を実行」の1回のみ（以後はログイン時自動起動）
+// "4.20.0" 形式のバージョンを比較する（欠けた要素は 0 扱い）。a<b なら負
+function compareVersions(a, b) {
+  const pa = String(a).split(".").map(p => parseInt(p, 10) || 0);
+  const pb = String(b).split(".").map(p => parseInt(p, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d < 0 ? -1 : 1;
+  }
+  return 0;
+}
+// 配布中 bridge-hub のバージョン。web/download/bridge-hub.version.json は
+// tools/build_bridge_zip.py が /health 実測値で出力する。取得失敗・未配置
+// （旧配布物）では null を返し、従来どおりの扱いとする
+let hubBundleVersionPromise = null;
+function fetchHubBundleVersion() {
+  if (!hubBundleVersionPromise) {
+    hubBundleVersionPromise = fetch(new URL("../download/bridge-hub.version.json", location.href), { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => (j && typeof j.version === "string" ? j.version : null))
+      .catch(() => null);
+  }
+  return hubBundleVersionPromise;
+}
 let hubInstallWait = null; // 重複実行ガード
 // prev = 更新元の旧ハブ情報 {version}（旧ハブ検出からの更新導線で渡す。
 // 未定義なら新規インストール待ち＝最初に応答したハブを返す）
@@ -952,8 +975,15 @@ export function setupAiSettings() {
       providerConnState = { provider, state: "ng", detail: providerConnDetail[provider] };
       setBridgeStatus(ui, providerConnDetail[provider], false);
       // 更新導線を開く（ボタン → bridge-hub.zip 再DL → 実行で自己インストールが
-      // 旧ハブを停止して新版へ置き換える。待機は更新後の応答まで絞る）
-      void offerHubInstall(provider, false, { version: found.version });
+      // 旧ハブを停止して新版へ置き換える。待機は更新後の応答まで絞る）。
+      // ただし配布物が実行中ハブ以下なら DL しても更新にならないため開かない
+      // （配布物陳腐化時のダウングレード抑止・issue #86）
+      const bundledVersion = await fetchHubBundleVersion();
+      if (bundledVersion && found.version && compareVersions(bundledVersion, found.version) <= 0) {
+        console.warn(`[bridge] 配布中 bridge-hub ${bundledVersion} は実行中ハブ ${found.version} 以下のため更新導線をスキップします`);
+      } else {
+        void offerHubInstall(provider, false, { version: found.version });
+      }
     } else {
       setBridgeStatus(ui,
         found
