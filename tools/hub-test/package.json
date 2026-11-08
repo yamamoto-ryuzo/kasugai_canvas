@@ -1,0 +1,14 @@
+{
+  "name": "kasugai-hub-test",
+  "private": true,
+  "type": "module",
+  "description": "bridge-hub 依存パスの回帰検証（モック hub + Playwright + 実ハブスモーク）",
+  "scripts": {
+    "mock": "node mock-hub.mjs",
+    "verify": "node verify.mjs",
+    "smoke": "node smoke.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "1.49.1"
+  }
+}
