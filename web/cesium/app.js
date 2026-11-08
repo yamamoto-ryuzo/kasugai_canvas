@@ -9100,6 +9100,48 @@ function setupEvents() {
       }
     },
     getNorthAngleDeg: () => -(viewer.camera.heading * 180 / Math.PI),
+    // 印刷範囲プレビュー用アダプタ
+    mapEl: () => viewer.scene.canvas,
+    getCenterLonLat: () => {
+      try {
+        const c = viewer.scene.canvas;
+        const px = c.clientWidth ? c.width / c.clientWidth : 1;
+        const ray = viewer.camera.getPickRay(
+          new Cesium.Cartesian2(c.clientWidth / 2 * px, c.clientHeight / 2 * px));
+        const p = ray && viewer.scene.globe.pick(ray, viewer.scene);
+        if (!p) return null;
+        const cg = Cesium.Cartographic.fromCartesian(p);
+        return { lon: cg.longitude * 180 / Math.PI, lat: cg.latitude * 180 / Math.PI };
+      } catch { return null; }
+    },
+    panByPx: (dx, dy) => {
+      // 中央地表点と (dx,dy) 先の地表点の差分だけカメラを平行移動
+      try {
+        const c = viewer.scene.canvas;
+        const px = c.clientWidth ? c.width / c.clientWidth : 1;
+        const pick = (x, y) => {
+          const ray = viewer.camera.getPickRay(new Cesium.Cartesian2(x * px, y * px));
+          return ray ? viewer.scene.globe.pick(ray, viewer.scene) : null;
+        };
+        const p0 = pick(c.clientWidth / 2, c.clientHeight / 2);
+        const p1 = pick(c.clientWidth / 2 + dx, c.clientHeight / 2 + dy);
+        if (!p0 || !p1) return;
+        const delta = Cesium.Cartesian3.subtract(p0, p1, new Cesium.Cartesian3());
+        viewer.camera.position = Cesium.Cartesian3.add(
+          viewer.camera.position, delta, viewer.camera.position);
+      } catch { /* noop */ }
+    },
+    zoomToDenom: (d) => {
+      // kasc.js の zoom↔camera height 換算では mpp=denom*0.00028=h
+      const cg = viewer.camera.positionCartographic;
+      viewer.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(
+          cg.longitude * 180 / Math.PI, cg.latitude * 180 / Math.PI, d * 0.00028) });
+    },
+    fitExtent: async (w, s, e, n) => {
+      await viewer.camera.flyTo({
+        destination: Cesium.Rectangle.fromDegrees(w, s, e, n) });
+    },
   });
 
   document.querySelector("#shutdown-app").addEventListener("click", async () => {
