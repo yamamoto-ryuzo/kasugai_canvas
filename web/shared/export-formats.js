@@ -471,6 +471,47 @@ function toShapefileZip(fc, baseName) {
   return { data: zipStore(entries), skipped };
 }
 
+// ---------- XLSX（SheetJS 遅延ロード、#73）----------
+// xlsx.js(SheetJS CE) は Apache-2.0。未使用時にページ重量へ影響しないよう
+// 初回エクスポート時のみ CDN から script 注入する
+let _xlsxPromise = null;
+function loadXlsx() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (!_xlsxPromise) {
+    _xlsxPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js";
+      s.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error("XLSX init failed"));
+      s.onerror = () => reject(new Error("xlsx.js の読み込みに失敗しました"));
+      document.head.append(s);
+    });
+    _xlsxPromise.catch(() => { _xlsxPromise = null; }); // 失敗時は再試行可能に
+  }
+  return _xlsxPromise;
+}
+
+// xlsx 行上限（UI ブロック防止のための安全側。xlsx 仕様上限は 1,048,575）
+const XLSX_MAX_ROWS = 200000;
+
+// 複数シート一括 xlsx。sheets: [{ name, rows: [[v,...],...] }]（先頭行=ヘッダ）。
+// → { data: Uint8Array, sheets: N, skipped: 上限超過で切り捨てた行数 }
+export async function rowsToXlsx(sheets) {
+  const XLSX = await loadXlsx();
+  const wb = XLSX.utils.book_new();
+  let skipped = 0;
+  for (const { name, rows } of sheets) {
+    const src = Array.isArray(rows) ? rows : [];
+    const safe = src.slice(0, XLSX_MAX_ROWS);
+    skipped += src.length - safe.length;
+    const ws = XLSX.utils.aoa_to_sheet(safe);
+    XLSX.utils.book_append_sheet(
+      wb, ws,
+      String(name || "Sheet").replace(/[\\/?*\[\]:]/g, "_").slice(0, 31));
+  }
+  const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  return { data: new Uint8Array(out), sheets: sheets.length, skipped };
+}
+
 // ---------- エクスポート入口 ----------
 // fc: GeoJSON FeatureCollection, format: 下記 id, baseName: 出力ファイル名（拡張子なし）
 // → { data: string|Uint8Array, ext, mime, count, skipped } または null
@@ -487,6 +528,16 @@ export async function exportFeatureCollection(fc, format, baseName = "layer") {
       return { data: toDelimited(fc, "\t"), ext: "tsv", mime: "text/tab-separated-values;charset=utf-8", count };
     case "kml":
       return { data: toKml(fc, baseName), ext: "kml", mime: "application/vnd.google-earth.kml+xml", count };
+    case "xlsx": {
+      // 属性キーの和集合を列にして型を保持（number/boolean はセル値のまま）
+      const keys = [...new Set(features.flatMap(f => Object.keys(f.properties || {})))];
+      const rows = [keys, ...features.map(f => keys.map(k => {
+        const v = f.properties?.[k];
+        return v == null ? "" : (typeof v === "object" ? JSON.stringify(v) : v);
+      }))];
+      const r = await rowsToXlsx([{ name: baseName, rows }]);
+      return { data: r.data, ext: "xlsx", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", count, skipped: r.skipped };
+    }
     case "fgb": {
       const noGeom = features.length - features.filter(f => f.geometry).length;
       const data = await toFlatGeobuf(fc);

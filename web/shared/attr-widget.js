@@ -12,6 +12,7 @@
 // window.vectorAttrWidget = { open, close } も公開する(Cesium 版と同じ公開面)
 
 import { computeGroupStats } from "./attr-stats.js";
+import { rowsToXlsx } from "./export-formats.js";
 
 const LABELS = {
   title: "属性・値一覧",
@@ -28,6 +29,7 @@ const LABELS = {
   viewportOnly: "（表示範囲内のみ）",
   exportCsv: "表示中の行をCSVで出力",
   exportTsv: "表示中の行をTSVで出力",
+  exportXlsx: "表示中の行をExcel(xlsx)で出力",
   editHint: "セルをダブルクリックで編集（メモリ内のみ・再読込で元に戻ります）",
   count: (matched, attrs) => `${matched} 件 / ${attrs} 属性`,
   limitSuffix: count => ` （表示上限 ${count} 件）`,
@@ -243,6 +245,7 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
       <div class="vector-attr-widget-footer">
         <button id="vector-attr-export-csv" class="vector-attr-widget-export" type="button" title="${escapeHtml(LABELS.exportCsv)}">CSV</button>
         <button id="vector-attr-export-tsv" class="vector-attr-widget-export" type="button" title="${escapeHtml(LABELS.exportTsv)}">TSV</button>
+        <button id="vector-attr-export-xlsx" class="vector-attr-widget-export" type="button" title="${escapeHtml(LABELS.exportXlsx)}">XLSX</button>
         <span class="vector-attr-widget-edit-hint">${escapeHtml(LABELS.editHint)}</span>
         <span id="vector-attr-widget-count"></span>
       </div>
@@ -522,6 +525,40 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
+  // 表示中の行を xlsx で出力（SheetJS は初回のみ CDN 遅延ロード #73）。
+  // 生成中は件数表示を進行表示に流用して UI ブロックを可視化する
+  async function exportXlsx() {
+    const matched = matchedRows();
+    if (!attributes.length || !matched.length) return;
+    const cnt = widget.querySelector("#vector-attr-widget-count");
+    const prevText = cnt ? cnt.textContent : "";
+    try {
+      if (cnt) cnt.textContent = "xlsx 生成中…";
+      const header = [...attributes, "lon", "lat"];
+      const rows = [header];
+      for (const row of matched) {
+        const c = featureCenter(row.feature);
+        rows.push([...row.values, c.lng ?? "", c.lat ?? ""]);
+      }
+      const layer = findLayer(currentLayerId());
+      const base = String(layer?.title || "attributes").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+      const { data, skipped } = await rowsToXlsx([{ name: base || "attributes", rows }]);
+      const blob = new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${base}.xlsx`;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      if (skipped) alert(`${skipped} 行は上限超過のため出力されませんでした`);
+    } catch (e) {
+      alert("xlsx の生成に失敗しました: " + (e?.message || e));
+    } finally {
+      if (cnt) cnt.textContent = prevText;
+    }
+  }
+
   function updateLayerOptions(selectedId) {
     if (!layerSelect) return;
     const opts = listLayers() || [];
@@ -560,6 +597,7 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
 
   widget.querySelector("#vector-attr-export-csv")?.addEventListener("click", () => exportTable(","));
   widget.querySelector("#vector-attr-export-tsv")?.addEventListener("click", () => exportTable("\t"));
+  widget.querySelector("#vector-attr-export-xlsx")?.addEventListener("click", () => { void exportXlsx(); });
 
   closeBtn.addEventListener("click", close);
   searchInput.addEventListener("input", () => render(searchInput.value));
