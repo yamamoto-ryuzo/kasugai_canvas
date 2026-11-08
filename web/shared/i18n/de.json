@@ -901,5 +901,7 @@
   "live.addLayer": "Hinzufügen",
   "live.loading": "Laden…",
   "live.added": "Layer hinzugefügt",
-  "live.addFailed": "Hinzufügen fehlgeschlagen"
+  "live.addFailed": "Hinzufügen fehlgeschlagen",
+  "layer.hubSourceMissing": "Hub-Quelle '{name}' fehlt — durch erneutes Registrieren (re-POST) wiederherstellbar",
+  "layer.hubSourceLoading": "Hub-Quelle '{name}' wird importiert — nach Abschluss neu laden. Wird der Import nicht fertig, wurde er möglicherweise durch einen Hub-Neustart unterbrochen — Quelle erneut registrieren (re-POST)"
 }

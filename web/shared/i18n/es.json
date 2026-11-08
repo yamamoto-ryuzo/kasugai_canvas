@@ -901,5 +901,7 @@
   "live.addLayer": "Añadir",
   "live.loading": "Cargando…",
   "live.added": "Capa añadida",
-  "live.addFailed": "Error al añadir"
+  "live.addFailed": "Error al añadir",
+  "layer.hubSourceMissing": "La fuente '{name}' del hub falta — regístrela de nuevo (re-POST) para restaurarla",
+  "layer.hubSourceLoading": "La fuente '{name}' del hub se está importando — recargue cuando termine. Si nunca termina, la importación pudo interrumpirse por un reinicio del hub — regístrela de nuevo (re-POST)"
 }

@@ -901,5 +901,7 @@
   "live.addLayer": "追加",
   "live.loading": "読み込み中…",
   "live.added": "レイヤーを追加しました",
-  "live.addFailed": "レイヤー追加に失敗"
+  "live.addFailed": "レイヤー追加に失敗",
+  "layer.hubSourceMissing": "ハブのソース '{name}' が欠落しています — 再登録（再 POST）で修復されます",
+  "layer.hubSourceLoading": "ハブのソース '{name}' は取込中です — 完了後に再読み込みしてください。長時間完了しない場合はハブ再起動で取込が中断されている可能性があります — 再登録（再 POST）してください"
 }

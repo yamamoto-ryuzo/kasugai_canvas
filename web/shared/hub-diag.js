@@ -30,8 +30,15 @@ export async function diagnoseHubLayerError(item, error) {
         const res = await fetch("http://127.0.0.1:8511/vector/sources", { signal: AbortSignal.timeout(2000) });
         const body = res.ok ? await res.json().catch(() => null) : null;
         const sources = body && (body.sources || body);
-        if (sources && typeof sources === "object" && !(decodeURIComponent(name) in sources)) {
-          hint = t("layer.hubNoSource", { name: decodeURIComponent(name) });
+        if (sources && typeof sources === "object") {
+          const entry = sources[decodeURIComponent(name)];
+          if (!entry) {
+            hint = t("layer.hubNoSource", { name: decodeURIComponent(name) });
+          } else if (entry.missing === true) {
+            hint = t("layer.hubSourceMissing", { name: decodeURIComponent(name) });
+          } else if (entry.materializing === true) {
+            hint = t("layer.hubSourceLoading", { name: decodeURIComponent(name) });
+          }
         }
       } catch { /* ソース確認は付加情報なので失敗しても握りつぶす */ }
     }

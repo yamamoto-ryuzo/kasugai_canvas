@@ -901,5 +901,7 @@
   "live.addLayer": "Ajouter",
   "live.loading": "Chargement…",
   "live.added": "Couche ajoutée",
-  "live.addFailed": "Échec de l'ajout"
+  "live.addFailed": "Échec de l'ajout",
+  "layer.hubSourceMissing": "La source '{name}' du hub est manquante — réenregistrez-la (re-POST) pour la restaurer",
+  "layer.hubSourceLoading": "La source '{name}' du hub est en cours d'import — rechargez une fois terminé. S'il ne se termine jamais, l'import a peut-être été interrompu par un redémarrage du hub — réenregistrez-la (re-POST)"
 }

@@ -901,5 +901,7 @@
   "live.addLayer": "添加",
   "live.loading": "加载中…",
   "live.added": "已添加图层",
-  "live.addFailed": "添加失败"
+  "live.addFailed": "添加失败",
+  "layer.hubSourceMissing": "Hub 源 '{name}' 缺失 — 重新注册（re-POST）即可恢复",
+  "layer.hubSourceLoading": "Hub 源 '{name}' 正在导入 — 完成后请重新加载。若始终未完成，导入可能因 hub 重启而中断 — 请重新注册（re-POST）该源"
 }
