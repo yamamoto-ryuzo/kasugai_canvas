@@ -153,7 +153,7 @@ const BRIDGE_HUB_ENDPOINT = "http://127.0.0.1:8511/agent";
 //  起動時掃除で停止されるためフロントは探さない）
 const WEBGIS_HUB_PORTS = [8511];
 // ブリッジ経由のプロバイダ（capabilities の同名キーがエンドポイントを通知する）
-const BRIDGE_PROVIDERS = ["copilot", "devin", "antigravity"];
+const BRIDGE_PROVIDERS = ["copilot", "devin", "antigravity", "acp"];
 // ブリッジ系プロバイダ（copilot/devin/antigravity/agent）のエンドポイント記憶キー。
 // 入力欄は1つだが、切替時に前プロバイダの値を各キーへ退避し、
 // 別ブリッジのURLを引き継いで送信先・モデル一覧が混線しないようにする
@@ -161,9 +161,10 @@ const PROVIDER_ENDPOINT_KEYS = {
   copilot: "agentEndpoint.copilot",
   devin: "agentEndpoint.devin",
   antigravity: "agentEndpoint.antigravity",
+  acp: "agentEndpoint.acp",
   agent: "agentEndpoint.agent",
 };
-const PROVIDER_ORDER = ["gemini", "openai", "sakura", "anthropic", "azure", "copilot", "devin", "antigravity", "agent"];
+const PROVIDER_ORDER = ["gemini", "openai", "sakura", "anthropic", "azure", "copilot", "devin", "antigravity", "acp", "agent"];
 // さくらのAI Engine（専用プロバイダ）の固定エンドポイント。OpenAI互換API
 const SAKURA_BASE_URL = "https://api.ai.sakura.ad.jp/v1";
 // ---- bridge-hub 検出 ----
@@ -5143,6 +5144,7 @@ const AI_SETTINGS_HTML = `
     <option value="anthropic" data-i18n="chat.provider.anthropic">【API】Anthropic (Claude)</option>
     <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
     <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
+    <option value="acp" data-i18n="chat.provider.acp">【ブリッジ】ACP エージェント</option>
     <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
     <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
     <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>

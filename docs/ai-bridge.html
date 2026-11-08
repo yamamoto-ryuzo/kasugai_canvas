@@ -105,6 +105,8 @@ Get-ChildItem -Recurse "$dst\bridge-hub" -File | Unblock-File
         <div class="url-box">
           <h3>プロバイダ別 CLI の導入</h3>
           <p>各プロバイダは実際に使われた時点で対応する外部 CLI を子プロセス起動します。ハブの <code>/setup</code> API で公式手順の自動導入もできます（Canvas の AI 設定画面の「CLI を自動インストール」ボタン、または <code>bridge-hub.exe --setup copilot|devin|all</code>）。</p>
+          <h3>汎用 ACP プロバイダ（<code>provider:"acp"</code>）</h3>
+          <p>ACP（Agent Client Protocol）に対応した任意のエージェント CLI を共通プロトコルとして利用できます。ハブの環境変数 <code>KASUGAI_ACP_COMMAND</code> に起動コマンドを指定すると（例: <code>KASUGAI_ACP_COMMAND="my-agent acp"</code>）、ハブがそのプロセスを子プロセス起動し NDJSON/stdio の ACP で initialize・session/new・session/prompt を駆動します。応答の会話テキストと kasugai ツール呼出は Devin プロバイダと同じ経路（セッション共有の MCP /mcp/&lt;project&gt;・session/request_permission の kasugai ツール限定許可）で処理されます。プロバイダ名は <code>acp</code> で、設定時のみ <code>/health</code> の providers に列挙・チャットのプロバイダ選択肢にも表示されます。<code>KASUGAI_NO_ACP_BRIDGE</code> で無効化できます。</p>
           <table>
             <thead><tr><th>プロバイダ</th><th>必要なもの</th><th>認証</th></tr></thead>
             <tbody>

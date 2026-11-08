@@ -71,6 +71,8 @@ struct AcpInner {
     auth_error: Mutex<Option<String>>,
     // 権限要求が kasugai MCP ツールかを判定するための登録済みツール名
     tool_names: StdMutex<HashSet<String>>,
+    // ログ・エラーメッセージ用のプロバイダ識別子（"devin" / "acp"）
+    label: String,
 }
 
 struct Acp {
@@ -79,32 +81,30 @@ struct Acp {
 }
 
 impl Acp {
-    // devin acp を起動し stdout リーダータスクを回す。失敗時 Err
-    async fn start(bin: &str) -> Result<Self, String> {
-        let mut args = vec!["acp".to_string()];
-        let model = model_default();
-        if !model.is_empty() {
-            args.push("--model".to_string());
-            args.push(model);
-        }
+    // ACP エージェントを起動し stdout リーダータスクを回す。失敗時 Err。
+    // argv[0]=実行ファイル、argv[1..]=引数（devin は `devin acp --model ...`、
+    // 汎用 acp プロバイダは KASUGAI_ACP_COMMAND で渡したコマンドそのまま）
+    async fn start(argv: &[String], tag: &'static str) -> Result<Self, String> {
+        let bin = &argv[0];
+        let args = &argv[1..];
         let mut cmd = common::new_command(bin);
-        cmd.args(&args)
-            .current_dir(workdir("devin"))
+        cmd.args(args)
+            .current_dir(workdir(tag))
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
         let mut child = cmd
             .spawn()
-            .map_err(|e| format!("devin acp spawn failed ({bin}): {e}"))?;
+            .map_err(|e| format!("{tag} acp spawn failed ({bin}): {e}"))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| "devin acp stdout が取れません".to_string())?;
+            .ok_or_else(|| format!("{tag} acp stdout が取れません"))?;
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| "devin acp stdin が取れません".to_string())?;
+            .ok_or_else(|| format!("{tag} acp stdin が取れません"))?;
         if let Some(stderr) = child.stderr.take() {
             tokio::spawn(async move {
                 let mut lines = BufReader::new(stderr).lines();
@@ -136,6 +136,7 @@ impl Acp {
             last_usage: Mutex::new(None),
             auth_error: Mutex::new(None),
             tool_names: StdMutex::new(HashSet::new()),
+            label: tag.to_string(),
         });
         // stdout リーダー: 行ごとの NDJSON をディスパッチ。EOF で dead にし
         // 保留中の全 RPC を失敗させる
@@ -157,9 +158,9 @@ impl Acp {
             reader_inner.dead.store(true, Ordering::SeqCst);
             let mut pending = reader_inner.pending.lock().await;
             for (_, tx) in pending.drain() {
-                let _ = tx.send(Err("devin acp process exited".to_string()));
+                let _ = tx.send(Err(format!("{tag} acp process exited")));
             }
-            eprintln!("[bridge] devin acp exited; 次の要求で再起動します");
+            eprintln!("[bridge] {tag} acp exited; 次の要求で再起動します");
         });
         Ok(Self {
             inner,
@@ -321,7 +322,7 @@ impl Acp {
 
     async fn rpc(inner: &Arc<AcpInner>, method: &str, params: Value, timeout_ms: u64) -> Result<Value, String> {
         if inner.dead.load(Ordering::SeqCst) {
-            return Err("devin acp is not running".to_string());
+            return Err(format!("{} acp is not running", inner.label));
         }
         let id = inner.next_id.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
@@ -333,7 +334,7 @@ impl Acp {
         .await;
         match tokio::time::timeout(Duration::from_millis(timeout_ms), rx).await {
             Ok(Ok(r)) => r,
-            Ok(Err(_)) => Err("devin acp channel closed".to_string()),
+            Ok(Err(_)) => Err(format!("{} acp channel closed", inner.label)),
             Err(_) => {
                 inner.pending.lock().await.remove(&id);
                 Err(format!("{method} timed out"))
@@ -555,6 +556,11 @@ pub struct DevinBridge {
     // /models 応答の authRequired フラグ。ウォームアップが「要認証」で
     // 止まったとき true。フロントはリトライせず設定導線を表示する
     auth_required: StdMutex<bool>,
+    // 汎用 ACP プロバイダの起動コマンド（Some=KASUGAI_ACP_COMMAND 指定。
+    // None=devin 固定のバイナリ探索＋`acp --model` 引数を使う）
+    cmd: Option<Vec<String>>,
+    // ログ・workdir 用の識別子（"devin" / "acp"）
+    tag: &'static str,
 }
 
 impl DevinBridge {
@@ -568,6 +574,19 @@ impl DevinBridge {
             models_warmup: Mutex::new(false),
             last_warmup_error: StdMutex::new(String::new()),
             auth_required: StdMutex::new(false),
+            cmd: None,
+            tag: "devin",
+        }
+    }
+
+    /// 汎用 ACP プロバイダ（`KASUGAI_ACP_COMMAND` で指定した任意の ACP 対応
+    /// エージェント CLI）。devin 固有のバイナリ探索と `--model` 既定は適用せず、
+    /// 指定コマンドをそのまま spawn する
+    pub fn for_command(argv: Vec<String>, hub_port: u16) -> Self {
+        Self {
+            cmd: Some(argv),
+            tag: "acp",
+            ..Self::new(hub_port)
         }
     }
 
@@ -666,13 +685,31 @@ impl DevinBridge {
         // 候補の失敗（認証エラー等）があればそちらを優先して報告する
         let mut last_err = String::new();
         let mut real_err: Option<String> = None;
-        for bin in devin_bin_candidates() {
-            match Acp::start(&bin).await {
+        // devin: 候補バイナリ × `acp --model` / 汎用 acp: 指定コマンド1本
+        let cmds: Vec<Vec<String>> = match &self.cmd {
+            Some(argv) => vec![argv.clone()],
+            None => devin_bin_candidates()
+                .into_iter()
+                .map(|bin| {
+                    let mut v = vec![bin, "acp".to_string()];
+                    let model = model_default();
+                    if !model.is_empty() {
+                        v.push("--model".to_string());
+                        v.push(model);
+                    }
+                    v
+                })
+                .collect(),
+        };
+        for argv in cmds {
+            match Acp::start(&argv, self.tag).await {
                 Ok(acp) => {
                     match acp.ensure_ready(&api_key, interactive).await {
                         Ok(()) => {
-                            remember_bin(&bin);
-                            eprintln!("[bridge] devin acp connected: {bin}");
+                            if self.cmd.is_none() {
+                                remember_bin(&argv[0]);
+                            }
+                            eprintln!("[bridge] {} acp connected: {}", self.tag, argv[0]);
                             let acp = Arc::new(acp);
                             // acp プロセスが差し替わると旧 sessionId は無効になる
                             // （旧 server.mjs はプロセス終了時に sessions.clear() していた）
@@ -686,7 +723,9 @@ impl DevinBridge {
                             if acp.inner.auth_blocked.load(Ordering::SeqCst) {
                                 // 未認証の acp を保持し、/models ごとの
                                 // 再 spawn＋initialize を防ぐ
-                                remember_bin(&bin);
+                                if self.cmd.is_none() {
+                                    remember_bin(&argv[0]);
+                                }
                                 *self.acp.lock().await = Some(Arc::new(acp));
                                 return Err(e);
                             }
@@ -703,12 +742,12 @@ impl DevinBridge {
         }
         let has_real = real_err.is_some();
         let err = real_err.unwrap_or(last_err);
-        let hint = if !has_real {
+        let hint = if !has_real && self.cmd.is_none() {
             "。devin CLI が見つかりません（DEVIN_CLI_PATH でインストール先を指定してください）"
         } else {
             ""
         };
-        Err(format!("devin acp への接続に失敗しました: {err}{hint}"))
+        Err(format!("{} acp への接続に失敗しました: {err}{hint}", self.tag))
     }
 
     async fn get_session(

@@ -44,6 +44,9 @@ const PROVIDERS: &[(&str, &str)] = &[
 pub struct BridgeState {
     copilot: copilot::CopilotBridge,
     devin: Arc<devin::DevinBridge>,
+    // 汎用 ACP プロバイダ（KASUGAI_ACP_COMMAND 設定時のみ登録。
+    // devin.rs の ACP クライアントを共有し provider:"acp" で振り分ける）
+    acp: Option<Arc<devin::DevinBridge>>,
     antigravity: antigravity::AntiBridge,
     pub mcp: Arc<McpShared>,
     pub setup: setup::SetupJobs,
@@ -59,6 +62,7 @@ impl BridgeState {
         Self {
             copilot: copilot::CopilotBridge::new(),
             devin: Arc::new(devin::DevinBridge::new(hub_port)),
+            acp: acp_command().map(|a| Arc::new(devin::DevinBridge::for_command(a, hub_port))),
             antigravity: antigravity::AntiBridge::new(hub_port),
             mcp: Arc::new(McpShared::default()),
             setup: setup::SetupJobs::default(),
@@ -79,6 +83,7 @@ impl BridgeState {
             "copilot" => self.copilot.running(),
             "devin" => self.devin.running(),
             "antigravity" => self.antigravity.running(),
+            "acp" => self.acp.as_ref().is_some_and(|b| b.running()),
             _ => false,
         }
     }
@@ -87,8 +92,25 @@ impl BridgeState {
     pub async fn shutdown(&self) {
         self.copilot.shutdown().await;
         self.devin.shutdown().await;
+        if let Some(b) = &self.acp {
+            b.shutdown().await;
+        }
         // antigravity はターン毎の子プロセスのみ（kill_on_drop で随時終了）
     }
+}
+
+// 汎用 ACP プロバイダの起動コマンド。`KASUGAI_ACP_COMMAND="bin arg..."` で
+// 任意の ACP 対応エージェント CLI を登録（KASUGAI_NO_ACP_BRIDGE で無効化）
+fn acp_command() -> Option<Vec<String>> {
+    if std::env::var_os("KASUGAI_NO_ACP_BRIDGE").is_some() {
+        return None;
+    }
+    let argv: Vec<String> = std::env::var("KASUGAI_ACP_COMMAND")
+        .ok()?
+        .split_whitespace()
+        .map(|s| s.to_string())
+        .collect();
+    if argv.is_empty() { None } else { Some(argv) }
 }
 
 fn provider_disabled(name: &str) -> Option<String> {
@@ -108,6 +130,13 @@ async fn health(State(state): State<Arc<BridgeState>>) -> impl IntoResponse {
                 "available": state.enabled(name),
                 "running": state.provider_running(name),
             }),
+        );
+    }
+    // 汎用 ACP はコマンド設定時のみ列挙（未設定の無効な選択肢を出さない）
+    if state.acp.is_some() {
+        providers.insert(
+            "acp".to_string(),
+            json!({ "available": true, "running": state.provider_running("acp") }),
         );
     }
     Json(json!({
@@ -148,7 +177,7 @@ async fn models(
     if provider.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "provider を指定してください（copilot / devin / antigravity）", "models": [] })),
+            Json(json!({ "error": "provider を指定してください（copilot / devin / antigravity / acp）", "models": [] })),
         );
     }
     if let Some(env) = provider_disabled(&provider) {
@@ -162,6 +191,10 @@ async fn models(
         "copilot" => state.copilot.models().await,
         "devin" => state.devin.clone().models(&headers, &state.mcp).await,
         "antigravity" => state.antigravity.models().await,
+        "acp" => match &state.acp {
+            Some(b) => b.clone().models(&headers, &state.mcp).await,
+            None => json!({ "error": "acp プロバイダは未設定です（KASUGAI_ACP_COMMAND で起動コマンドを指定）", "models": [] }),
+        },
         _ => {
             return (
                 StatusCode::BAD_GATEWAY,
@@ -201,7 +234,7 @@ async fn agent(
     if provider.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "provider を指定してください（copilot / devin / antigravity）" })),
+            Json(json!({ "error": "provider を指定してください（copilot / devin / antigravity / acp）" })),
         );
     }
     if let Some(env) = provider_disabled(&provider) {
@@ -215,6 +248,7 @@ async fn agent(
         "copilot" => state.copilot.check_auth(&headers),
         "devin" => state.devin.check_auth(&headers),
         "antigravity" => state.antigravity.check_auth(&headers),
+        "acp" => state.acp.as_ref().is_some_and(|b| b.check_auth(&headers)),
         _ => false,
     };
     if !auth_ok {
@@ -228,6 +262,10 @@ async fn agent(
         "copilot" => state.copilot.agent(&body).await,
         "devin" => state.devin.agent(&body, &headers, &state.mcp).await,
         "antigravity" => state.antigravity.agent(&body, &state.mcp).await,
+        "acp" => match &state.acp {
+            Some(b) => b.agent(&body, &headers, &state.mcp).await,
+            None => Err("acp プロバイダは未設定です（KASUGAI_ACP_COMMAND で起動コマンドを指定）".to_string()),
+        },
         _ => Err(format!("プロバイダ \"{provider}\" は利用できません")),
     };
     match result {
