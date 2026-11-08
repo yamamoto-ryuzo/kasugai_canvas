@@ -300,6 +300,83 @@ fn source_entry(name: &str) -> Option<Value> {
         .cloned()
 }
 
+// 鮮度情報の採取(#65): リモート src は HEAD の ETag/Last-Modified/
+// Content-Length、ローカルファイルは mtime+size を記録する。
+// 取得不能は None（判定不能として現状維持・誤 stale 化を防ぐ）
+async fn source_freshness(src: &str) -> Option<Value> {
+    if src.starts_with("http://") || src.starts_with("https://") {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build()
+            .ok()?;
+        let r = client.head(src).send().await.ok()?;
+        let h = r.headers();
+        let gs = |k: &str| {
+            h.get(k).and_then(|v| v.to_str().ok()).map(|s| s.to_string())
+        };
+        Some(json!({
+            "type": "remote",
+            "etag": gs("etag"),
+            "lastModified": gs("last-modified"),
+            "length": gs("content-length").and_then(|s| s.parse::<u64>().ok()),
+        }))
+    } else {
+        let meta = std::fs::metadata(src).ok()?;
+        let mtime = meta
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+        Some(json!({ "type": "local", "mtime": mtime, "size": meta.len() }))
+    }
+}
+
+// 記録済み fresh と最新 probe の比較。Some(true)=stale / Some(false)=同一 /
+// None=判定不能。stored が Null(旧エントリ)は基線なし→Some(false)で記録のみ
+fn freshness_changed(stored: &Value, probe: Value) -> Option<bool> {
+    if stored.is_null() {
+        return Some(false);
+    }
+    match stored.get("type").and_then(|v| v.as_str()) {
+        Some("remote") => {
+            let mut comparable = false;
+            for k in ["etag", "lastModified", "length"] {
+                let a = stored.get(k).cloned().unwrap_or(Value::Null);
+                let b = probe.get(k).cloned().unwrap_or(Value::Null);
+                if !a.is_null() && !b.is_null() {
+                    comparable = true;
+                    if a != b {
+                        return Some(true);
+                    }
+                }
+            }
+            if comparable {
+                Some(false)
+            } else {
+                None
+            }
+        }
+        Some("local") => {
+            let a = stored.get("mtime").and_then(|v| v.as_u64());
+            let b = probe.get("mtime").and_then(|v| v.as_u64());
+            let sa = stored.get("size").and_then(|v| v.as_u64());
+            let sb = probe.get("size").and_then(|v| v.as_u64());
+            if (a.is_some() && b.is_some() && a != b)
+                || (sa.is_some() && sb.is_some() && sa != sb)
+            {
+                return Some(true);
+            }
+            if (a.is_some() && b.is_some()) || (sa.is_some() && sb.is_some()) {
+                Some(false)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 // ソース名ごとの登録直列化。同一 name の POST/DELETE を1本に絞り、
 // 重複登録による materialize の二重走行を防ぐ。ガードは future drop で
 // 解放されるため、リクエスト切断・タイムアウトでも後続が詰まらない
@@ -354,6 +431,31 @@ async fn reconcile() {
     let Some(tables) = tables else { return };
     let mut m = load_manifest();
     let mut changed = false;
+    // ---- 鮮度チェック(#65): 登録時に記録した fresh と現在値を比較し、
+    // 変化があれば stale:true を付与する。probe 失敗は判定不能として扱わない
+    let probes: Vec<(String, String, Value)> = m
+        .get("sources")
+        .and_then(|v| v.as_object())
+        .map(|o| {
+            o.iter()
+                .filter_map(|(n, e)| {
+                    if e.get("materializing").and_then(|v| v.as_bool()) == Some(true) {
+                        return None;
+                    }
+                    let src = e.get("src").and_then(|v| v.as_str())?.to_string();
+                    let fresh = e.get("fresh").cloned().unwrap_or(Value::Null);
+                    Some((n.clone(), src, fresh))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut fresh_results: std::collections::HashMap<String, (Option<bool>, Value)> =
+        Default::default();
+    for (n, src, stored) in probes {
+        if let Some(pr) = source_freshness(&src).await {
+            fresh_results.insert(n, (freshness_changed(&stored, pr.clone()), pr));
+        }
+    }
     if let Some(sources) = m.get_mut("sources").and_then(|v| v.as_object_mut()) {
         for e in sources.values_mut() {
             if e.get("materializing").and_then(|v| v.as_bool()) == Some(true) {
@@ -368,6 +470,30 @@ async fn reconcile() {
             if missing != cur {
                 e["missing"] = json!(missing);
                 changed = true;
+            }
+        }
+        // 鮮度比較結果の反映: fresh 基線の更新と stale フラグの付与/解除
+        for (n, e) in sources.iter_mut() {
+            if let Some((st, pr)) = fresh_results.remove(n.as_str()) {
+                if e.get("fresh") != Some(&pr) {
+                    e["fresh"] = pr;
+                    changed = true;
+                }
+                match st {
+                    Some(true) => {
+                        if e.get("stale").and_then(|v| v.as_bool()) != Some(true) {
+                            e["stale"] = json!(true);
+                            changed = true;
+                        }
+                    }
+                    Some(false) => {
+                        if e.get("stale").and_then(|v| v.as_bool()) == Some(true) {
+                            e["stale"] = json!(false);
+                            changed = true;
+                        }
+                    }
+                    None => {}
+                }
             }
         }
     }
@@ -618,7 +744,9 @@ pub async fn register_source(body: Bytes) -> Response {
     if !force {
         if let Some(e) = source_entry(name) {
             let busy = e.get("materializing").and_then(|v| v.as_bool()) == Some(true)
-                || e.get("missing").and_then(|v| v.as_bool()) == Some(true);
+                || e.get("missing").and_then(|v| v.as_bool()) == Some(true)
+                // stale なら spec 一致でも再取込み（reconcile の鮮度検出と連動 #65）
+                || e.get("stale").and_then(|v| v.as_bool()) == Some(true);
             if !busy && e.get("spec") == Some(&spec) {
                 // マニフェストと実テーブルの不整合（テーブル欠落）に備えて
                 // 実在確認する。欠落していればキャッシュ返却せず再取込みへ
@@ -770,9 +898,12 @@ pub async fn register_source(body: Bytes) -> Response {
             .map(|n| json!(n)),
         Err(_) => None,
     };
-    // レジストリへ記録
+    // レジストリへ記録。登録時点の鮮度情報(fresh)を併記し、reconcile の
+    // stale 検出用基線とする（#65）
+    let fresh = source_freshness(&src).await.unwrap_or(Value::Null);
     let mut m = load_manifest();
     let entry = json!({
+        "fresh": fresh,
         "src": src,
         "kind": kind,
         "table": table,
