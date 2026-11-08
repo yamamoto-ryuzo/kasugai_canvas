@@ -7,6 +7,7 @@
 //   listLayers:   () => [{ id, title, entry }]   // 属性対象レイヤ(未読込含む・表示順)
 //   getFeatures:  async (entry) => Feature[] | { features, partial? }
 //   focusFeature: (feature) => void              // 行クリック時の地物移動
+//   onCellEdit?:  ({ layer, feature, attr, value }) => void // セル編集時の任意フック
 // }) → { open(layerId?), close(), refresh(), isOpen() }
 // window.vectorAttrWidget = { open, close } も公開する(Cesium 版と同じ公開面)
 
@@ -27,6 +28,7 @@ const LABELS = {
   viewportOnly: "（表示範囲内のみ）",
   exportCsv: "表示中の行をCSVで出力",
   exportTsv: "表示中の行をTSVで出力",
+  editHint: "セルをダブルクリックで編集（メモリ内のみ・再読込で元に戻ります）",
   count: (matched, attrs) => `${matched} 件 / ${attrs} 属性`,
   limitSuffix: count => ` （表示上限 ${count} 件）`,
   stats: "属性を集計（GROUP BY）",
@@ -69,6 +71,10 @@ const CSS = `
 #vector-attr-widget-list tr:hover { background: #f6f9fb; }
 #vector-attr-widget-list td { padding: 7px 14px; vertical-align: top; }
 .vector-attr-widget-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+#vector-attr-widget-list td.editing { padding: 2px 6px; }
+.vector-attr-widget-edit { width: 100%; min-width: 80px; font: inherit; padding: 4px 6px; border: 1px solid #4a90a4; border-radius: 3px; box-sizing: border-box; }
+#vector-attr-widget-list td.edited { background: #fff4d6; }
+.vector-attr-widget-edit-hint { color: #9aabb5; font-size: 11px; margin-left: 4px; }
 .vector-attr-widget-footer { padding: 8px 14px; border-top: 1px solid #e4ecef; color: #71818d; font-size: 12px; text-align: right; display: flex; align-items: center; gap: 6px; }
 .vector-attr-widget-footer .vector-attr-widget-export { flex: 0 0 auto; min-height: 26px; padding: 2px 8px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #31564f; font-size: 12px; cursor: pointer; }
 .vector-attr-widget-footer .vector-attr-widget-export:hover { background: #eef5f7; }
@@ -209,7 +215,7 @@ export function renderAttrContent(el, records, opts = {}) {
   });
 }
 
-export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
+export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCellEdit }) {
   ensureStyle();
   const widget = document.createElement("div");
   widget.id = "vector-attr-widget";
@@ -237,6 +243,7 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
       <div class="vector-attr-widget-footer">
         <button id="vector-attr-export-csv" class="vector-attr-widget-export" type="button" title="${escapeHtml(LABELS.exportCsv)}">CSV</button>
         <button id="vector-attr-export-tsv" class="vector-attr-widget-export" type="button" title="${escapeHtml(LABELS.exportTsv)}">TSV</button>
+        <span class="vector-attr-widget-edit-hint">${escapeHtml(LABELS.editHint)}</span>
         <span id="vector-attr-widget-count"></span>
       </div>
     </div>`;
@@ -401,7 +408,8 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
         return;
       }
       list.innerHTML = displayRows.map(row => {
-        const dataAttrs = row.flyable ? 'data-row="' + rows.indexOf(row) + '"' : '';
+        const ri = rows.indexOf(row);
+      const dataAttrs = 'data-ri="' + ri + '"' + (row.flyable ? ' data-row="' + ri + '"' : '');
         const style = row.flyable ? 'style="cursor:pointer;"' : '';
         return '<tr class="vector-attr-widget-row" ' + dataAttrs + ' ' + style + ' title="' + (row.flyable ? escapeHtml(LABELS.clickToMove) : '') + '">' +
           row.values.map(val => '<td class="vector-attr-widget-cell" title="' + escapeHtml(val) + '">' + escapeHtml(val) + '</td>').join("") +
@@ -410,6 +418,49 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
       const suffix = (matched.length > displayRows.length) ? LABELS.limitSuffix(displayRows.length) : "";
       countEl.textContent = LABELS.count(matched.length, attributes.length) + suffix + (partial ? LABELS.viewportOnly : "");
     } catch (e) { console.error("vector attr widget render error", e); }
+  }
+
+  // セル編集: ダブルクリックで input に差し替え、Enter/blur で確定・Esc で取消。
+  // 書き込み先は feature.properties（全件読み込み系レイヤーはメモリ GeoJSON の
+  // 実参照なので地物クリックの属性タブ等にも反映）と行キャッシュ values
+  // （表の再描画と CSV/TSV 出力に反映）。クエリ系レイヤーの feature は実体
+  // コピーのため編集はこの表と出力にのみ残る。ファイルへの書き戻しは行わない
+  // （Canvas は .kasc 再生プレイヤー。編集・保存は QGIS 側の役割）。
+  function beginCellEdit(td, row, ci, attr, feature) {
+    const oldText = row.values[ci] == null ? "" : String(row.values[ci]);
+    td.classList.add("editing");
+    td.textContent = "";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "vector-attr-widget-edit";
+    input.value = oldText;
+    td.append(input);
+    input.focus();
+    input.select();
+    let settled = false;
+    const settle = commit => {
+      if (settled) return;
+      settled = true;
+      td.classList.remove("editing");
+      const text = commit ? input.value : oldText;
+      td.textContent = text;
+      td.title = text;
+      if (!commit || text === oldText) return;
+      row.values[ci] = text;
+      // 数値だった属性は数値のまま書き戻す（型を壊さない最小限の変換）
+      const prev = feature.properties[attr];
+      feature.properties[attr] =
+        typeof prev === "number" && text !== "" && !Number.isNaN(Number(text)) ? Number(text) : text;
+      td.classList.add("edited");
+      try { onCellEdit?.({ layer: findLayer(currentLayerId()), feature, attr, value: feature.properties[attr] }); }
+      catch (e) { console.warn("vector attr onCellEdit hook failed", e); }
+    };
+    input.addEventListener("keydown", ev => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") settle(true);
+      else if (ev.key === "Escape") settle(false);
+    });
+    input.addEventListener("blur", () => settle(true));
   }
 
   // 地物の代表点（属性一覧のエクスポート用。ジオメトリ包絡の中心）
@@ -526,11 +577,26 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature }) {
 
   list.addEventListener("click", ev => {
     try {
+      if (ev.detail > 1) return; // ダブルクリック(セル編集)の2回目クリックで移動しない
       const tr = ev.target.closest("tr");
       if (!tr || !tr.hasAttribute("data-row")) return;
       const row = rows[Number(tr.getAttribute("data-row"))];
       if (row?.feature) focusFeature(row.feature);
     } catch (e) { console.error("vector attr row click error", e); }
+  });
+
+  list.addEventListener("dblclick", ev => {
+    try {
+      const td = ev.target.closest("td.vector-attr-widget-cell");
+      if (!td || statsMode || td.querySelector("input")) return;
+      const tr = td.closest("tr");
+      const row = rows[Number(tr?.getAttribute("data-ri"))];
+      const ci = td.cellIndex;
+      const attr = attrKeys[ci] ?? attributes[ci];
+      const feature = row?.feature;
+      if (attr == null || !feature?.properties || INTERNAL_PROP_RE.test(attr)) return;
+      beginCellEdit(td, row, ci, attr, feature);
+    } catch (e) { console.error("vector attr cell edit error", e); }
   });
 
   head.addEventListener("click", ev => {
