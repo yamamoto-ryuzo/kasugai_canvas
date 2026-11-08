@@ -263,7 +263,7 @@ export function initPrint(opts) {
         <label><input id="print-opt-legend" type="checkbox" checked> ${tr("print.optLegend")}</label>
         <label><input id="print-opt-scale" type="checkbox" checked> ${tr("print.optScale")}</label>
         <label id="print-preview-row" hidden><input id="print-opt-preview" type="checkbox"> ${tr("print.optPreview")}</label>
-        <span id="print-denom-row" hidden style="display:inline-flex;align-items:center;gap:2px;">1:<input id="print-denom" type="number" min="100" step="100" style="width:80px;padding:2px;border:1px solid #cbd9de;border-radius:4px;" title="${tr("print.previewHint")}"></span>
+        <span id="print-denom-row" style="display:none;align-items:center;gap:2px;">1:<input id="print-denom" type="number" min="100" step="100" style="width:80px;padding:2px;border:1px solid #cbd9de;border-radius:4px;" title="${tr("print.previewHint")}"></span>
         <label><input id="print-opt-north" type="checkbox" checked> ${tr("print.optNorth")}</label>
         <label><input id="print-opt-attr" type="checkbox" checked> ${tr("print.optAttr")}</label>
         <label><input id="print-opt-date" type="checkbox" checked> ${tr("print.optDate")}</label>
@@ -577,7 +577,7 @@ export function initPrint(opts) {
       "cursor:move;touch-action:none;transform:translate(-50%,-50%);";
     document.body.appendChild(frame);
     $("#print-preview-row").hidden = false;
-    $("#print-denom-row").hidden = false;
+    $("#print-denom-row").style.display = "inline-flex";
     const place = () => {
       const r = opts.mapEl().getBoundingClientRect();
       frame.style.left = (r.left + r.width / 2) + "px";
