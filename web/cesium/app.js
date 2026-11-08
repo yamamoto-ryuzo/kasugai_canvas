@@ -39,6 +39,8 @@ import { installLocalCrsUI } from "../shared/coords-local.js";
 import { computeGroupStats } from "../shared/attr-stats.js";
 import { loadScriptOnce } from "../shared/lazy-lib.js";
 import { isGeoTiffType, resolveGeoTiffItem, buildGeoTiffOverlayDataSource, createGeoTiffImageryProvider } from "./geotiff-layer.js";
+
+import { createReportTool } from "../shared/report.js";
 import { installViewHistory } from "../shared/nav-tools.js";
 import { coordPins as coordPinStore } from "../shared/coord-pins.js";
 
@@ -10121,6 +10123,19 @@ function setupVectorSearch() {
   const vectorSearchText = document.querySelector("#vector-search-text");
   const vectorTextSearchBtn = document.querySelector("#vector-text-search-btn");
   const vectorSearchResults = document.querySelector("#vector-search-results");
+
+  // 帳票テンプレート出力(geo_report 相当 #72)。テンプレートJSONの
+  // 保存/一覧は localStorage、地図画像は出力時のみキャプチャする
+  try {
+    window.reportTool = createReportTool({
+      host: document.querySelector("#vector-search") || document.querySelector("#search-panel"),
+      captureMap: async () => viewer.scene.canvas.toDataURL("image/png"),
+      listLayers: () => getOrderedLayerItems()
+        .filter(i => i.type === "geojson" || i.type === "layer" || vectorDecoders.has(i.type))
+        .map(i => ({ id: i.id, title: i.title })),
+      getFeatures: id => (getLayerGeoJson(id)?.features) || [],
+    });
+  } catch (e) { console.warn("report tool init failed:", e); }
 
   // 検索結果へのFLY時に、対象地物が属するレイヤーが非表示なら表示してから飛ぶ
   // (レイヤー一覧の📍フォーカスと同じ扱い。「全選択」検索は非表示レイヤーも対象のため必要)
