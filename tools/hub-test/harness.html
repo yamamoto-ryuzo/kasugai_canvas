@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<style id="kasc-ai-chat-style"></style>
+<div id="root"></div>
+<script type="module">
+// setupAiSettings が参照する DOM の最小構成 + 検証 API 公開
+const SEL=new Set(["chat-provider","chat-provider-switch","openai-preset","copilot-model","devin-model","antigravity-model","chat-session-select","google-gemini-model"]);
+const CHK=new Set(["mcp-allow-write","agent-send-key"]);
+const FILE=new Set(["chat-attach-file","agent-import-file"]);
+const AREA=new Set(["chat-input","chat-custom-instructions"]);
+const BTN=new Set(["bridge-hub-install","google-settings-save","chat-instructions-save","openai-fetch-models","sakura-fetch-models","mcp-add","box-connect","box-disconnect","agent-refresh","agent-import","chat-session-new","chat-session-export","chat-session-delete","chat-clear","chat-attach","chat-panel-toggle","qgis-connect"]);
+const INPUT=new Set(["google-api-key","google-tool-max-steps","openai-base-url","openai-api-key","openai-model","anthropic-base-url","anthropic-api-key","anthropic-model","azure-base-url","azure-api-key","azure-deployment","azure-api-version","sakura-api-key","sakura-model","devin-api-key","agent-endpoint","agent-token","box-client-id","mcp-add-name","mcp-add-url","mcp-add-token","inspector-input"]);
+const IDS="agent-backend-status agent-endpoint agent-import agent-import-file agent-plugin-list agent-refresh agent-send-key agent-status agent-token ai-instr-root anthropic-api-key anthropic-base-url anthropic-fields anthropic-model antigravity-endpoint-status antigravity-model azure-api-key azure-api-version azure-base-url azure-deployment azure-fields box-client-id box-connect box-disconnect box-status bridge-fields bridge-hub-install bridge-hub-note bridge-hub-status bridge-install-hint chat-attach chat-attach-file chat-attachments chat-clear chat-custom-instructions chat-form chat-input chat-instructions-save chat-instructions-status chat-messages chat-panel chat-panel-toggle chat-provider chat-provider-label chat-provider-switch chat-session-delete chat-session-export chat-session-new chat-session-select chat-usage copilot-endpoint-status copilot-model datasource-panel devin-api-key devin-endpoint-status devin-model gemini-fields google-api-key google-gemini-model google-proxy-status google-settings-save google-settings-status google-tool-max-steps inspector-input mcp-add mcp-add-name mcp-add-token mcp-add-url mcp-allow-write mcp-server-list mcp-status openai-api-key openai-base-url openai-fetch-models openai-fields openai-model openai-models-status openai-preset qgis-connect qgis-status sakura-api-key sakura-fetch-models sakura-fields sakura-model sakura-models-status setpane-ai".split(" ");
+const root=document.getElementById("root");
+for(const id of IDS){let el;
+ if(SEL.has(id))el=document.createElement("select");
+ else if(CHK.has(id)){el=document.createElement("input");el.type="checkbox";}
+ else if(FILE.has(id)){el=document.createElement("input");el.type="file";}
+ else if(AREA.has(id))el=document.createElement("textarea");
+ else if(id==="chat-form")el=document.createElement("form");
+ else if(BTN.has(id))el=document.createElement("button");
+ else if(INPUT.has(id))el=document.createElement("input");
+ else el=document.createElement("div");
+ el.id=id;root.appendChild(el);}
+const cp=document.getElementById("chat-provider");
+for(const v of ["gemini","openai","anthropic","azure","sakura","copilot","devin","antigravity","agent"]){const o=document.createElement("option");o.value=v;o.textContent=v;cp.appendChild(o);}
+document.getElementById("bridge-hub-note").hidden=true;
+import{initI18n,t}from"/web/shared/i18n.js";
+import{diagnoseHubLayerError}from"/web/shared/hub-diag.js";
+await initI18n();
+window.__t=t;
+window.__hubDiag=diagnoseHubLayerError;
+window.__aiChat=(n)=>import(`/web/shared/ai-chat.js?tc=${n}`);
+window.__ready=true;
+</script>
