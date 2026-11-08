@@ -25,6 +25,7 @@
 - `CHANGELOG.md` に日付付きセクションを追加（Keep a Changelog 形式）
 - **リリース時は必ずマニュアル（ドキュメントサイトの HTML ページ）を整備する**。そのリリースで追加・変更された機能・設定・UI が `guide.html`・`features.html` 等の該当ページに反映されていることを、バージョンアップの完了条件に含める。新機能がドキュメントに載っていない状態でリリースしない
 - 配布物は `python run.py -B` で `download/` に作成し、コミットしてプッシュ
+- `run.py -B`（および `--publish`）は `web/download/bridge-hub.{exe,zip}` も自動再生成する（`tools/build_bridge_zip.py --no-build` 相当を `cargo build --release` 直後に実行）。再生成された `bridge-hub.exe` は一時ポート起動で `/health` の `version` を `Cargo.toml` と照合し、ZIP 同梱 exe とのバイト列一致も検証する。再生成失敗・バージョン不一致はビルドをブロックするため、手動での `tools/build_bridge_zip.py` 後追い実行は不要
 - **重要（無限ループ事故の再発防止）**: `download/latest*.json` のバージョン更新と配布 ZIP の再ビルドは**必ず同じコミットで行う**。`latest.json` だけを先に上げると、全ユーザーの自動更新が「適用 → 再起動 → 依然古い → 再適用」の**無限ループ**に陥る（4.20.0 リリースで実際に発生し 4.20.1 で修正）。`latest.json`/`latest-dev.json` を手編集でだけ更新するリリースは禁止。必ず `python run.py -B`（または `--publish`）を通し、スクリプトによる ZIP 内 exe の `/health` バージョン検証を通過させること（`--sync` 実行時も同検証を行い、ズレた ZIP はブロックされる）。フロント側にも試行済みバージョンの記録によるループガードはあるが、配布物の整合はリリース手順で担保する
 
 ## ブランチと自動更新チャンネル
