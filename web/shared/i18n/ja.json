@@ -855,6 +855,11 @@
   "tools.drawClear": "全削除",
   "tools.drawToLayer": "レイヤーへ追加",
   "tools.drawExport": "GeoJSON保存",
+  "tools.drawToQgis": "QGISへ送信",
+  "tools.exportToQgis": "QGISへ送信",
+  "tools.qgisInactive": "QGISライブ連携が有効ではありません。",
+  "tools.qgisSent": "QGISへ{count}地物を送信しました。",
+  "tools.qgisSendFail": "QGISへの送信に失敗: {error}",
   "tools.drawHint": "描いた図形に名称を付けて残せます。「レイヤーへ追加」で一覧・表示切替対象の一時レイヤーにします。",
   "tools.drawLayerTitle": "注記",
   "tools.exportFail": "エクスポートに失敗しました。",
@@ -878,5 +883,12 @@
   "browser.lnaNotInstalled": "未導入",
   "browser.lnaApply": "許可を登録",
   "browser.lnaRemove": "登録を解除",
-  "browser.lnaRestart": "ブラウザを再起動すると反映されます。"
+  "browser.lnaRestart": "ブラウザを再起動すると反映されます。",
+  "live.follow": "QGISキャンバスへ追従",
+  "live.showSelection": "QGISの選択を表示",
+  "live.qgisRender": "QGIS描画で表示",
+  "live.addLayer": "追加",
+  "live.loading": "読み込み中…",
+  "live.added": "レイヤーを追加しました",
+  "live.addFailed": "レイヤー追加に失敗"
 }

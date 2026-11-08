@@ -64,7 +64,7 @@ Canvas = AI チャットによる解析の駆動 + 結果の 2D/3D 表示
       </table>
 
       <h3>🟢 経路1: 起動中 QGIS への AI 副操縦</h3>
-      <p>管理 → AI → データソース の「QGIS に接続」は、ローカルアプリの <code>/api/qgis-live/mcp</code> リレー経由で QGIS Live Driver の <code>/mcp</code> へ接続し、<code>qgis_pyeval</code>・<code>qgis_bridge_call</code>・<code>qgis_screenshot</code> 等がチャットツールへ合成されます（セッション検出は <code>/api/qgis-live/discover</code> が <code>~/.qgis-live/</code> レジストリを走査し、ポート・トークンは QGIS 再起動ごとに自動追随）。<code>pyeval</code> は QGIS 内の任意 Python を実行するため、AI が <code>processing.run("native:buffer", {...})</code> を呼べば解析は追加実装なしで動きます。</p>
+      <p>管理 → AI → データソース の「QGIS に接続」は、QGIS Live Driver の <code>/mcp</code> へリレー接続し、<code>qgis_pyeval</code>・<code>qgis_bridge_call</code>・<code>qgis_screenshot</code> 等がチャットツールへ合成されます。リレーは2経路で、ローカルアプリ版は <code>/api/qgis-live/discover</code> → <code>/api/qgis-live/mcp</code>、<strong>CDN ホスト版（ローカルアプリ不在）</strong>は geo_webview 内蔵サーバ（:8089-, CORS+PNA 対応済み）の <code>/live/mcp-discover</code> → <code>/live/mcp</code> を自動プローブします（どちらも <code>~/.qgis-live/</code> レジストリを走査し、トークンはリレー側で付与・ポート・トークンは QGIS 再起動ごとに自動追随。geo_webview 側のリレーは pyeval=任意コード実行のため loopback 接続のみ）。<code>pyeval</code> は QGIS 内の任意 Python を実行するため、AI が <code>processing.run("native:buffer", {...})</code> を呼べば解析は追加実装なしで動きます。</p>
       <ul>
         <li><strong>強み</strong>: 初期化済みのフルランタイム。native / gdal / スクリプトの全アルゴリズムが使え、開いているプロジェクトのレイヤーを名前で直接参照できる。アルゴリズムとパラメータは <code>processingRegistry()</code> 経由で AI が自己発見し、結果は <code>kasugaiExport</code>（bridge）で Canvas へ持ち出せる</li>
         <li><strong>制約</strong>: pyeval は GUI スレッドの同期実行（長時間解析で QGIS UI がブロック）・実行は直列・QGIS が起動している間だけ有効・pyeval は「書き込み系ツール」ゲート＋実行ごとの確認対象・大きな結果は JSON では返せないためファイル出力＋ kasugaiExport で受け渡す設計が必要</li>
@@ -93,7 +93,7 @@ Canvas = AI チャットによる解析の駆動 + 結果の 2D/3D 表示
       <tbody>
       <tr>
       <td>MCP リレー</td>
-      <td><code>/api/qgis-live/mcp</code> — Canvas チャット → Live Driver <code>/mcp</code> への専用転送（トークンはサーバ側付与・QGIS 再起動に自動追随）</td>
+      <td><code>/api/qgis-live/mcp</code>（ローカルアプリ）および geo_webview <code>:8089/live/mcp</code>（CDN ホスト版フォールバック・loopback 限定）— Canvas チャット → Live Driver <code>/mcp</code> への専用転送（トークンはサーバ側付与・QGIS 再起動に自動追随）</td>
       <td>実装済</td>
       </tr>
       <tr>

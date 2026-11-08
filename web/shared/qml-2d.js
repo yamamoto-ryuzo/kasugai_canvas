@@ -2,7 +2,7 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, setLayerVisibilityResolver } from "./qml-style.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver } from "./qml-style.js";
 import { resolveKascUrl } from "./kasc.js";
 
 // QML 式の is_layer_visible('名前') を各エンジンのレイヤー表示状態へ解決する。
@@ -106,6 +106,16 @@ export function qmlLabelElement(compiled, props) {
   const spec = compiled?.labelFor ? compiled.labelFor(props) : null;
   const text = spec?.text != null ? String(spec.text) : "";
   if (!spec || !text.trim()) return null;
+  // bufferNoFill(中空ハロー)は CSS text-shadow では再現できないため
+  // canvas ラスタライザへ切り替える(tooltip 内に canvas を埋め込む)
+  if (spec.halo?.noFill) {
+    const r = qmlLabelCanvas(spec);
+    if (!r) return null;
+    const rot = spec.placement?.rotationDeg;
+    if (rot) r.canvas.style.transform = `rotate(${rot}deg)`;
+    r.canvas._kascLabelSpec = spec;
+    return r.canvas;
+  }
   const span = document.createElement("span");
   span.textContent = text;
   span.style.color = rgbaToCss(spec.fill || [0, 0, 0, 1]);
@@ -318,8 +328,10 @@ export function olQmlStyleFunction(compiled, OL) {
     const spec = compiled.evaluate(props);
     if (!spec) return null;
     const s = specToStyle(spec);
-    const geomType = feature.getGeometry()?.getType() || "";
+    const geom = feature.getGeometry();
+    const geomType = geom?.getType() || "";
     const styleOpts = {};
+    const extra = [];
     // invertedPolygonRenderer: 地物を穴とした世界矩形ポリゴンを描く(マスク効果)
     if (compiled.inverted && /Polygon/.test(geomType) && feature.getGeometry) {
       styleOpts.geometry = f => {
@@ -384,6 +396,25 @@ export function olQmlStyleFunction(compiled, OL) {
             || (/Polygon/.test(geomType) && ["line", "curved", "perimeter"].includes(pl.mode));
           const [ox, oy] = labelSpec.pixelOffsetOf ? labelSpec.pixelOffsetOf() : [0, 0];
           const bg = labelSpec.background;
+          // bufferNoFill(中空ハロー): ol/style/Text では中空を表せないため
+          // canvas ラスタライズ済みラベルを Icon で描画する(点/ポリゴン内部点/線中点)
+          if (labelSpec.halo?.noFill) {
+            const r = qmlLabelCanvas(labelSpec);
+            const g = feature.getGeometry?.();
+            const pt = r && g ? (
+              /Point/.test(geomType) ? g
+                : (/Polygon/.test(geomType) && g.getInteriorPoint) ? g.getInteriorPoint()
+                : (/LineString/.test(geomType) && g.getCoordinateAt) ? new Point(g.getCoordinateAt(0.5))
+                : null) : null;
+            if (pt) extra.push(new Style({
+              geometry: pt,
+              image: new Icon({
+                img: r.canvas, anchor: [0.5, 0.5],
+                displacement: [ox, oy],
+                rotation: pl.rotationDeg ? -pl.rotationDeg * Math.PI / 180 : 0,
+              }),
+            }));
+          } else {
           styleOpts.text = new Text({
             text: labelText,
             font: labelSpec.fontCss || "12px sans-serif",
@@ -410,11 +441,10 @@ export function olQmlStyleFunction(compiled, OL) {
               ? Math.abs((pl.maxCurvedCharAngleIn || 25) * Math.PI / 180)
               : undefined,
           });
+          }
         }
       }
     }
-    const geom = feature.getGeometry();
-    const extra = [];
     // 複数ラインシンボルレイヤ(ケーシング等): spec.lines は描画順(先=下)。
     // styleOpts.stroke が最上位レイヤを担うため、下層を先に描く Style を前に並べる
     if (spec.lines?.length > 1 && /LineString/.test(geomType)) {

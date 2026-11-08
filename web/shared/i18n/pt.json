@@ -799,6 +799,11 @@
   "tools.drawClear": "Apagar tudo",
   "tools.drawToLayer": "Adicionar como camada",
   "tools.drawExport": "Salvar GeoJSON",
+  "tools.drawToQgis": "Enviar para QGIS",
+  "tools.exportToQgis": "Enviar para QGIS",
+  "tools.qgisInactive": "A ligação em tempo real com o QGIS não está ativa.",
+  "tools.qgisSent": "{count} feições enviadas para o QGIS.",
+  "tools.qgisSendFail": "Falha ao enviar para o QGIS: {error}",
   "tools.drawHint": "As formas desenhadas podem ser nomeadas. 'Adicionar como camada' mantém como camada temporária.",
   "tools.drawLayerTitle": "Anotações",
   "tools.exportFail": "Falha na exportação.",
@@ -878,5 +883,12 @@
   "browser.lnaNotInstalled": "não instalado",
   "browser.lnaApply": "Registrar permissão",
   "browser.lnaRemove": "Revogar",
-  "browser.lnaRestart": "Reinicie o navegador para aplicar."
+  "browser.lnaRestart": "Reinicie o navegador para aplicar.",
+  "live.follow": "Seguir tela do QGIS",
+  "live.showSelection": "Mostrar seleção do QGIS",
+  "live.qgisRender": "Renderizar com QGIS",
+  "live.addLayer": "Adicionar",
+  "live.loading": "Carregando…",
+  "live.added": "Camada adicionada",
+  "live.addFailed": "Falha ao adicionar"
 }

@@ -365,7 +365,9 @@
                 <div class="tool-btnrow">
                   <button id="tool-draw-tolayer" type="button" data-i18n="tools.drawToLayer">レイヤーへ追加</button>
                   <button id="tool-draw-export" type="button" data-i18n="tools.drawExport">GeoJSON保存</button>
+                  <button id="tool-draw-toqgis" type="button" data-i18n="tools.drawToQgis">QGISへ送信</button>
                 </div>
+                <div id="tool-draw-status" class="tool-result" aria-live="polite"></div>
                 <p class="hint" data-i18n="tools.drawHint">描いた図形に名称を付けて残せます。「レイヤーへ追加」で一覧・表示切替対象の一時レイヤーにします。</p>
               </section>
               <section id="tools-profile-panel" class="settings-subpanel">
@@ -400,6 +402,7 @@
                     <option value="shp">Shapefile (.zip)</option>
                   </select>
                   <button id="tool-export-run" type="button" data-i18n="tools.export">出力</button>
+                  <button id="tool-export-toqgis" type="button" data-i18n="tools.exportToQgis">QGISへ送信</button>
                 </div>
                 <div id="tool-export-status" class="tool-result" aria-live="polite"></div>
                 <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>

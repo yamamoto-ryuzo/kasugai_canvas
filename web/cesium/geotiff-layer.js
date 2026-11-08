@@ -121,6 +121,105 @@ async function applyNodataMask(image, rgba, width, height, window, nodata) {
   }
 }
 
+// ---- ラスタレンダラ（疑似カラー・ヒルシェード・ストレッチ） ---------------
+// QGIS のラスタレンダラ（単バンド疑似カラー/パレット・ヒルシェード・
+// コントラストストレッチ）を Canvas 側で再現するための .kasc オプション系。
+// geotiff: 行の colormap= / hillshade= / min= / max= / stretch= / nodata= を
+// app.js が item に解釈し、resolveGeoTiffItem が gt.render へ束ねる。
+// 描画自体は readGeoTiffToCanvas の解析経路で行い、タイル/オーバーレイ両経路に効く。
+
+// 組込みカラーランプ。stop は [位置0-1, r, g, b]（256 エントリ LUT へ展開する）
+const COLOR_RAMPS = {
+  viridis: [[0, 68, 1, 84], [0.25, 59, 82, 139], [0.5, 33, 145, 140], [0.75, 94, 201, 98], [1, 253, 231, 37]],
+  magma: [[0, 0, 0, 4], [0.25, 81, 18, 124], [0.5, 182, 54, 121], [0.75, 251, 136, 97], [1, 252, 253, 191]],
+  inferno: [[0, 0, 0, 4], [0.25, 87, 16, 110], [0.5, 188, 55, 84], [0.75, 249, 142, 9], [1, 252, 255, 164]],
+  plasma: [[0, 13, 8, 135], [0.25, 126, 3, 168], [0.5, 204, 71, 120], [0.75, 248, 149, 64], [1, 240, 249, 33]],
+  cividis: [[0, 0, 32, 76], [0.25, 59, 77, 107], [0.5, 120, 124, 126], [0.75, 188, 175, 111], [1, 255, 233, 70]],
+  turbo: [[0, 48, 18, 59], [0.25, 50, 136, 229], [0.5, 26, 200, 167], [0.75, 249, 164, 39], [1, 122, 4, 3]],
+  terrain: [[0, 51, 102, 204], [0.15, 42, 153, 84], [0.4, 190, 200, 120], [0.65, 150, 105, 74], [0.85, 160, 160, 160], [1, 255, 255, 255]],
+  spectral: [[0, 158, 1, 66], [0.25, 213, 62, 79], [0.5, 255, 255, 191], [0.75, 102, 194, 165], [1, 94, 79, 162]],
+  rdbu: [[0, 103, 0, 31], [0.5, 247, 247, 247], [1, 5, 48, 97]],
+  gray: [[0, 0, 0, 0], [1, 255, 255, 255]],
+};
+COLOR_RAMPS.grays = COLOR_RAMPS.gray;
+COLOR_RAMPS.greys = COLOR_RAMPS.gray;
+
+function hexToRgbStop(s) {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})?$/i.exec(String(s || "").trim());
+  return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16), m[4] ? parseInt(m[4], 16) : 255] : null;
+}
+
+// colormap= 指定を 256 エントリの RGBA LUT（Uint8ClampedArray(256*4)）へ展開。
+// 形式: 組込み名（viridis 等）/ "#hex,#hex,..." の等間隔 stop /
+// "値:#hex,値:#hex" の位置指定（値は stretch 範囲へ正規化されるため
+// resolveGeoTiffItem 側で range を渡す）。失敗時は null
+export function compileColorRamp(spec, { min = 0, max = 1, invert = false } = {}) {
+  const raw = String(spec || "").trim();
+  if (!raw) return null;
+  let stops = null;
+  const named = COLOR_RAMPS[raw.toLowerCase()];
+  if (named) {
+    stops = named.map(([p, r, g, b]) => [p, r, g, b, 255]);
+  } else {
+    // "pos:#hex" または "#hex" のカンマ区切り
+    stops = [];
+    const entries = raw.split(",").map(s => s.trim()).filter(Boolean);
+    entries.forEach((entry, idx) => {
+      const colon = entry.indexOf(":");
+      let pos = null, col = entry;
+      if (colon > 0 && !entry.startsWith("#")) {
+        pos = Number(entry.slice(0, colon));
+        col = entry.slice(colon + 1);
+      }
+      const rgba = hexToRgbStop(col);
+      if (!rgba) return;
+      if (pos == null || !Number.isFinite(pos)) pos = entries.length > 1 ? idx / (entries.length - 1) : 0;
+      else if (Math.abs(pos) > 1) pos = (pos - min) / ((max - min) || 1); // 値域→0-1
+      stops.push([Math.max(0, Math.min(1, pos)), rgba[0], rgba[1], rgba[2], rgba[3]]);
+    });
+    if (!stops.length) return null;
+    stops.sort((a, b) => a[0] - b[0]);
+  }
+  const lut = new Uint8ClampedArray(256 * 4);
+  let j = 0;
+  for (let i = 0; i < 256; i++) {
+    let t = i / 255;
+    if (invert) t = 1 - t;
+    while (j < stops.length - 2 && t > stops[j + 1][0]) j++;
+    const a = stops[j], b = stops[Math.min(j + 1, stops.length - 1)];
+    const f = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 0;
+    for (let c = 0; c < 4; c++) lut[i * 4 + c] = a[1 + c] + (b[1 + c] - a[1 + c]) * f;
+  }
+  return lut;
+}
+
+// Hillshade 係数（Horn の方法）。vals は標高値の typed array（w*h）、
+// csx/csy は m/px、az/el は度、z は誇張係数。戻り値 Float32Array(w*h) ∈[0,1]
+function hillshadeFactors(vals, w, h, csx, csy, azDeg, elDeg, z, nodata) {
+  const az = (360 - azDeg + 90) * Math.PI / 180; // 方位→数値角
+  const zen = (90 - elDeg) * Math.PI / 180;
+  const out = new Float32Array(w * h);
+  const ok = i => Number.isFinite(vals[i]) && (nodata == null || vals[i] !== nodata);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!ok(i)) { out[i] = 0; continue; }
+      const xl = x > 0 ? i - 1 : i, xr = x < w - 1 ? i + 1 : i;
+      const yu = y > 0 ? i - w : i, yd = y < h - 1 ? i + w : i;
+      const vl = ok(xl) ? vals[xl] : vals[i], vr = ok(xr) ? vals[xr] : vals[i];
+      const vu = ok(yu) ? vals[yu] : vals[i], vd = ok(yd) ? vals[yd] : vals[i];
+      const dzdx = (vr - vl) * z / (2 * csx);
+      const dzdy = (vd - vu) * z / (2 * csy);
+      const slope = Math.atan(Math.hypot(dzdx, dzdy));
+      const aspect = Math.atan2(dzdx, -dzdy);
+      const hs = Math.cos(zen) * Math.cos(slope)
+        + Math.sin(zen) * Math.sin(slope) * Math.cos(az - aspect);
+      out[i] = Math.max(0, Math.min(1, hs));
+    }
+  }
+  return out;
+}
+
 // typed array → 0-255 正規化（uint8 はそのまま out へ複写）。戻り値は out
 function normalizeBand(arr, out) {
   const uint8 = arr instanceof Uint8Array || arr instanceof Uint8ClampedArray;
@@ -146,16 +245,19 @@ function normalizeBand(arr, out) {
 }
 
 // 画像（または窓）を読み込んで RGBA キャンバスへ描く。
-// options: { window, outW, outH, bands:[1始まり], nodata, resample, signal }
-export async function readGeoTiffToCanvas(image, { window = null, outW, outH, bands = null, nodata = null, resample = "bilinear", signal } = {}) {
+// options: { window, outW, outH, bands:[1始まり], nodata, resample, signal,
+//   render:{ lut, min, max, stats:{min,max}, nodata, hillshade:{az,el,z}, cellsize:[x,y] } }
+// render 指定時は単バンド解析経路へ強制し、ストレッチ→疑似カラー→陰影の順で着色する
+export async function readGeoTiffToCanvas(image, { window = null, outW, outH, bands = null, nodata = null, resample = "bilinear", signal, render = null } = {}) {
   const fd = image.fileDirectory || {};
   // fileDirectory の数値タグは TypedArray で来るため Array.isArray は使わない
   const bits = fd.BitsPerSample?.length != null ? Array.from(fd.BitsPerSample) : [fd.BitsPerSample || 8];
   const formats = fd.SampleFormat?.length != null ? Array.from(fd.SampleFormat) : [];
   const allUint8 = bits.every(b => b === 8) && formats.every(f => f === undefined || f === 1);
   const photo = fd.PhotometricInterpretation;
+  const effNodata = render?.nodata ?? nodata;
 
-  if (!bands?.length && allUint8 && photo != null) {
+  if (!render && !bands?.length && allUint8 && photo != null) {
     // 視覚データ経路: readRGB が photometric 変換（パレット・CMYK・YCbCr 等）を吸収する
     let data;
     try {
@@ -178,7 +280,7 @@ export async function readGeoTiffToCanvas(image, { window = null, outW, outH, ba
           px[i * 4 + 3] = 255;
         }
       }
-      await applyNodataMask(image, px, w, h, window, nodata);
+      await applyNodataMask(image, px, w, h, window, effNodata);
       const canvas = rasterCanvas(w, h);
       canvas.getContext("2d").putImageData(new ImageData(px, w, h), 0, 0);
       return canvas;
@@ -189,22 +291,70 @@ export async function readGeoTiffToCanvas(image, { window = null, outW, outH, ba
   // 解析経路: 指定バンド（または先頭バンド群）を読み min-max 正規化する。
   // 単バンドはグレースケール、3バンド以上は先頭3バンドを RGB 割当
   const count = image.getSamplesPerPixel();
-  const sel = bands?.length
-    ? bands.map(b => Math.min(Math.max(Math.trunc(b), 1), count) - 1)
-    : (count >= 3 ? [0, 1, 2] : [0]);
+  const sel = render
+    ? [Math.min(Math.max(Math.trunc(render.band || 1), 1), count) - 1]
+    : (bands?.length
+      ? bands.map(b => Math.min(Math.max(Math.trunc(b), 1), count) - 1)
+      : (count >= 3 ? [0, 1, 2] : [0]));
   const read = await image.readRasters({ window, samples: sel.slice(0, 4), width: outW, height: outH, resampleMethod: resample, signal });
   const w = read.width, h = read.height;
   const px = new Uint8ClampedArray(w * h * 4);
-  const tmp = new Uint8ClampedArray(w * h);
-  const norm = read.map(arr => normalizeBand(arr, tmp.slice()));
-  const src0 = read[0];
-  for (let i = 0; i < w * h; i++) {
-    if (sel.length >= 3) {
-      px[i * 4] = norm[0][i]; px[i * 4 + 1] = norm[1][i]; px[i * 4 + 2] = norm[2][i];
-    } else {
-      px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = norm[0][i];
+
+  if (render) {
+    // レンダラ経路: 値域ストレッチ → 疑似カラー(LUT) → 陰影
+    const src = read[0];
+    let lo = render.min, hi = render.max;
+    if ((lo == null || hi == null) && render.stats) {
+      if (lo == null) lo = render.stats.min;
+      if (hi == null) hi = render.stats.max;
     }
-    px[i * 4 + 3] = (nodata != null && Number.isFinite(nodata) && src0[i] === nodata) ? 0 : 255;
+    if (lo == null || hi == null) {
+      // 統計が取れない場合は窓内 min-max へフォールバック
+      let mn = Infinity, mx = -Infinity;
+      for (let i = 0; i < src.length; i++) {
+        const v = src[i];
+        if (!Number.isFinite(v) || (effNodata != null && v === effNodata)) continue;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+      if (lo == null) lo = mn;
+      if (hi == null) hi = mx;
+    }
+    const span = hi - lo;
+    const lut = render.lut;
+    const shade = render.hillshade
+      ? hillshadeFactors(src, w, h,
+          render.cellsize?.[0] || 1, render.cellsize?.[1] || 1,
+          render.hillshade.az ?? 315, render.hillshade.el ?? 45,
+          render.hillshade.z ?? 1, effNodata)
+      : null;
+    for (let i = 0; i < w * h; i++) {
+      const v = src[i];
+      const isNodata = !Number.isFinite(v) || (effNodata != null && Number.isFinite(effNodata) && v === effNodata);
+      if (isNodata) { px[i * 4 + 3] = 0; continue; }
+      const t = span > 0 ? Math.max(0, Math.min(255, Math.round((v - lo) * 255 / span))) : 0;
+      let r, g, b;
+      if (lut) {
+        r = lut[t * 4]; g = lut[t * 4 + 1]; b = lut[t * 4 + 2];
+      } else {
+        r = g = b = shade ? 255 : t; // 陰影のみの場合は白下地を乗算
+      }
+      if (shade) { const s = shade[i]; r *= s; g *= s; b *= s; }
+      px[i * 4] = r; px[i * 4 + 1] = g; px[i * 4 + 2] = b;
+      px[i * 4 + 3] = lut ? lut[t * 4 + 3] : 255;
+    }
+  } else {
+    const tmp = new Uint8ClampedArray(w * h);
+    const norm = read.map(arr => normalizeBand(arr, tmp.slice()));
+    const src0 = read[0];
+    for (let i = 0; i < w * h; i++) {
+      if (sel.length >= 3) {
+        px[i * 4] = norm[0][i]; px[i * 4 + 1] = norm[1][i]; px[i * 4 + 2] = norm[2][i];
+      } else {
+        px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = norm[0][i];
+      }
+      px[i * 4 + 3] = (effNodata != null && Number.isFinite(effNodata) && src0[i] === effNodata) ? 0 : 255;
+    }
   }
   const canvas = rasterCanvas(w, h);
   canvas.getContext("2d").putImageData(new ImageData(px, w, h), 0, 0);
@@ -257,7 +407,69 @@ export async function resolveGeoTiffItem(item, fetchUrl) {
     throw new Error("geotiff: ジオリファレンス情報がありません（bbox= または corners= で配置範囲を指定してください）");
   }
   item._gt = { tiff, images, base, crs, bboxNative, nodata, mode };
+  item._gt.render = await buildRenderOpts(item, item._gt);
   return item._gt;
+}
+
+// レンダラオプション（colormap=/hillshade=/min=/max=/stretch=/nodata=）を
+// 実行時設定へ束ねる。値域が未指定で必要な場合は最も粗い IFD から統計を推定し
+// タイル間で見え方がブレないようにする（範囲がタイルごとの窓内 min-max だと
+// タイル境界で色が不連続になる）
+async function buildRenderOpts(item, gt) {
+  const wants = item.colormap || item.hillshade || item.stretch
+    || item.gtMin != null || item.gtMax != null || item.nodata != null;
+  if (!wants) return null;
+  const band = item.bands?.[0] || 1;
+  let stats = null;
+  if (item.stretch === "minmax" || item.gtMin == null || item.gtMax == null
+      || item.colormap || item.hillshade) {
+    try {
+      // 最も粗いオーバービュー（images は解像度昇順ソート済み）から推定
+      const coarse = gt.images[gt.images.length - 1].image;
+      const sw = Math.min(coarse.getWidth(), 512), sh = Math.min(coarse.getHeight(), 512);
+      const bidx = Math.min(Math.max(band - 1, 0), coarse.getSamplesPerPixel() - 1);
+      const r = await coarse.readRasters({ samples: [bidx], width: sw, height: sh, resampleMethod: "nearest" });
+      let mn = Infinity, mx = -Infinity;
+      const arr = r[0], nd = item.nodata ?? gt.nodata;
+      for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        if (!Number.isFinite(v) || (nd != null && v === nd)) continue;
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+      if (Number.isFinite(mn)) stats = { min: mn, max: mx };
+    } catch (e) { /* 統計推定失敗時は窓内 min-max フォールバック */ }
+  }
+  return {
+    band,
+    lut: item.colormap ? compileColorRamp(item.colormap, {
+      min: item.gtMin ?? stats?.min ?? 0, max: item.gtMax ?? stats?.max ?? 1,
+      invert: item.colormapInvert }) : null,
+    min: item.gtMin ?? null,
+    max: item.gtMax ?? null,
+    stats,
+    nodata: item.nodata ?? gt.nodata,
+    hillshade: item.hillshade || null,
+  };
+}
+
+// 陰影計算に使う画素サイズ [x,y] をメートル/px で返す。
+// 度単位(4326/不明の地理座標)は中心緯度でメートルへ換算（標高の m との整合用）
+function cellsizeMeters(image, gt) {
+  let res = null;
+  try { res = image.getResolution(gt.base); } catch (e) { /* affine 無し */ }
+  if (!res) { try { res = gt.base.getResolution(); } catch (e) { res = null; } }
+  if (!res) return [1, 1];
+  let csx = Math.abs(res[0]) || 1, csy = Math.abs(res[1]) || 1;
+  const code = gt.crs.code;
+  const geographic = code === 4326
+    || (!code && gt.bboxNative && Math.abs(gt.bboxNative[0]) <= 360 && Math.abs(gt.bboxNative[1]) <= 90);
+  if (geographic && gt.bboxNative) {
+    const latC = (gt.bboxNative[1] + gt.bboxNative[3]) / 2;
+    csx *= 111320 * Math.cos(latC * Math.PI / 180);
+    csy *= 110540;
+  }
+  return [csx, csy];
 }
 
 // ---- オーバーレイ（entity ドレープ）経路 -----------------------------------
@@ -303,8 +515,10 @@ export async function buildGeoTiffOverlayDataSource(Cesium, item, fetchUrl) {
   const scale = Math.min(1, maxSize / ovr.w, maxSize / ovr.h);
   const outW = Math.max(1, Math.round(ovr.w * scale));
   const outH = Math.max(1, Math.round(ovr.h * scale));
+  const render = gt.render ? { ...gt.render, cellsize: cellsizeMeters(ovr.image, gt) } : null;
   const canvas = await readGeoTiffToCanvas(ovr.image, {
     outW, outH, bands: item.bands, nodata: gt.nodata, resample: item.resample || "bilinear",
+    render,
   });
   const material = new Cesium.ImageMaterialProperty({
     image: canvas,
@@ -423,9 +637,11 @@ export function createGeoTiffImageryProvider(Cesium, item, gt) {
       const outW = Math.max(1, Math.round(256 * (cx1 - cx0) / (wx1 - wx0)));
       const outH = Math.max(1, Math.round(256 * (cy1 - cy0) / (wy1 - wy0)));
       try {
+        const render = gt.render ? { ...gt.render, cellsize: cellsizeMeters(ovr.image, gt) } : null;
         const tile = await readGeoTiffToCanvas(ovr.image, {
           window: oWin, outW, outH,
           bands: item.bands, nodata: gt.nodata, resample: item.resample || "bilinear",
+          render,
         });
         const dx = Math.round(256 * (cx0 - wx0) / (wx1 - wx0));
         const dy = Math.round(256 * (cy0 - wy0) / (wy1 - wy0));

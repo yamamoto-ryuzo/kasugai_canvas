@@ -799,6 +799,11 @@
   "tools.drawClear": "Tout effacer",
   "tools.drawToLayer": "Ajouter en couche",
   "tools.drawExport": "Enregistrer GeoJSON",
+  "tools.drawToQgis": "Envoyer vers QGIS",
+  "tools.exportToQgis": "Envoyer vers QGIS",
+  "tools.qgisInactive": "La liaison en direct avec QGIS n'est pas active.",
+  "tools.qgisSent": "{count} entités envoyées vers QGIS.",
+  "tools.qgisSendFail": "Échec de l'envoi vers QGIS : {error}",
   "tools.drawHint": "Les formes dessinées peuvent être nommées. 'Ajouter en couche' les conserve comme couche temporaire.",
   "tools.drawLayerTitle": "Annotations",
   "tools.exportFail": "Échec de l'export.",
@@ -878,5 +883,12 @@
   "browser.lnaNotInstalled": "non installé",
   "browser.lnaApply": "Enregistrer l’autorisation",
   "browser.lnaRemove": "Révoquer",
-  "browser.lnaRestart": "Redémarrez le navigateur pour appliquer."
+  "browser.lnaRestart": "Redémarrez le navigateur pour appliquer.",
+  "live.follow": "Suivre le canevas QGIS",
+  "live.showSelection": "Afficher la sélection QGIS",
+  "live.qgisRender": "Rendu par QGIS",
+  "live.addLayer": "Ajouter",
+  "live.loading": "Chargement…",
+  "live.added": "Couche ajoutée",
+  "live.addFailed": "Échec de l'ajout"
 }

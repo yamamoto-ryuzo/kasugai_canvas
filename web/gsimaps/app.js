@@ -34,6 +34,7 @@ import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initAiChat } from "../shared/ai-chat.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection } from "../shared/live.js";
 
 // 診断: この中間エンジンが iframe 内で読み込まれた場合(ネスト)、
 // パネルに赤枠+バッジを付けて二重表示の切り分けに使う
@@ -394,10 +395,12 @@ function wireGlobeHandlers(viewer, C) {
       if (!owner) return;
       let props = {};
       try { props = ent.properties.getValue(C.JulianDate.now()) || {}; } catch (_) {}
-      showFeatureAttrs(props, splitKascTitle(owner.item.title).title || owner.item.title);
+      showFeatureAttrs(props, splitKascTitle(owner.item.title).title || owner.item.title, { feature: { id: props.id } });
     }, C.ScreenSpaceEventType.LEFT_CLICK);
   } catch (_) { /* クリック配線失敗は表示自体を妨げない */ }
   try { viewer.camera.moveEnd.addEventListener(scheduleViewportReload); } catch (_) {}
+  // QGIS ライブ連携: Globe カメラ停止も QGIS 側へ逆通知(#62)
+  try { viewer.camera.moveEnd.addEventListener(() => liveNotifyCamera()); } catch (_) {}
 }
 
 async function injectGlobeLayers() {
@@ -616,6 +619,8 @@ function bindViewSync() {
   if (!gmap || boundViewMap === gmap) return;
   boundViewMap = gmap;
   gmap.on("moveend", () => {
+    // QGIS ライブ連携: カメラ停止で QGIS キャンバスへ逆通知(#62)
+    liveNotifyCamera();
     // 親 replaceState と iframe 側 L.Hash の hash 書込が連鎖すると
     // joint session history で iframe が親URLを拾うケースがあるため、
     // 親への書き込みはデバウンスして頻度を下げる
@@ -662,8 +667,8 @@ function injectSakuzuLayer(item, geojson) {
   try {
     const inner = layer.layer || layer;
     if (typeof inner.eachLayer === "function") {
-      inner.eachLayer(l => l.on?.("click", () =>
-        showFeatureAttrs(l.feature?.properties || {}, splitKascTitle(item.title).title || item.title)));
+      inner.eachLayer(l => l.on?.("click", ev =>
+        showFeatureAttrs(l.feature?.properties || {}, splitKascTitle(item.title).title || item.title, ev)));
     }
   } catch (_) { /* クリック付与失敗は表示自体を妨げない */ }
   const title = item.title || "layer";
@@ -842,13 +847,53 @@ function scheduleViewportReload() {
 const attrContentEl = () => document.getElementById("attr-content");
 
 // iframe 内地物クリック → 属性タブへ表示。`_`-props(中間層の内部スタイル値)は除く
-function showFeatureAttrs(props, title) {
+function showFeatureAttrs(props, title, ev) {
   if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
   const el = attrContentEl();
   if (!el) return;
   const clean = {};
   for (const [k, v] of Object.entries(props || {})) if (!k.startsWith("_")) clean[k] = v;
+  // QGIS ライブ連携: クリック地物を QGIS 側の選択へ逆通知(#62)
+  try {
+    const fid = ev?.latlng == null ? props?.id : (ev?.feature?.id ?? props?.id);
+    liveNotifySelection({
+      layer: title || "",
+      longitude: ev?.latlng?.lng, latitude: ev?.latlng?.lat,
+      ...(Number.isFinite(Number(fid)) ? { ids: [Number(fid)] } : {}),
+    });
+  } catch (_) { /* 逆通知失敗は無視 */ }
   renderAttrContent(el, [{ title: title || null, entries: attrEntriesFromProps(clean) }]);
+}
+
+// QGIS 側選択 → 地物ハイライト(#62 双方向)。iframe内 Leaflet へ黄色オーバーレイ
+let qgisSelOverlay = null;
+function applyQgisSelection(sel) {
+  const w = frame.contentWindow;
+  try { if (qgisSelOverlay) { gmap?.removeLayer(qgisSelOverlay); } } catch (_) {}
+  qgisSelOverlay = null;
+  try {
+    if (!w?.L || !gmap || globeMode) return;
+    const specs = Array.isArray(sel?.layers) ? sel.layers
+      : (sel?.layer || Array.isArray(sel?.ids) ? [sel] : []);
+    const features = [...(Array.isArray(sel?.features) ? sel.features : [])];
+    for (const spec of specs) {
+      const title = String(spec.layer || spec.title || "").trim();
+      const leaf = title.split("/").pop();
+      const ids = new Set((spec.ids || []).map(v => String(v)));
+      const entry = layerEntries.find(e => String(e.item?.title || "") === title)
+        || layerEntries.find(e => String(e.item?.title || "").split("/").pop() === leaf);
+      for (const f of entry?.item?._geojson?.features || []) {
+        const fid = f?.id ?? f?.properties?.id ?? f?.properties?.fid;
+        if (fid != null && ids.has(String(fid))) features.push(f);
+      }
+    }
+    if (!features.length) return;
+    qgisSelOverlay = w.L.geoJSON({ type: "FeatureCollection", features }, {
+      interactive: false,
+      style: { color: "#ffff00", weight: 3, fillColor: "#ffff00", fillOpacity: 0.28 },
+      pointToLayer: (f, ll) => w.L.circleMarker(ll, { radius: 7, color: "#111", weight: 1.5, fillColor: "#ffff00", fillOpacity: 1 }),
+    }).addTo(gmap);
+  } catch (_) { /* ハイライト失敗は無視 */ }
 }
 
 function focusFeatureExtent(feature) {
@@ -1399,6 +1444,21 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0))
     .map(item => ({ item, pending: true, unsupported: doc.unsupported.includes(item) || !(VECTOR_TYPES.has(item.type) || TILE_TYPES.has(item.type)) }));
   renderLayerRows();
+  // QGIS ライブ双方向連携(#62): live: 行があれば live.json ポーリング開始。
+  // 低速な mountEntry(大容量デコード等)で開始が遅れないようループ前に配置
+  configureLive(doc, {
+    baseUrl,
+    kascUrl: lastKascUrl || null,
+    applyKascText: async text => { inspectorInput.value = text; await applyInspectorText(text); },
+    getView: () => {
+      if (globeMode) return globeHashView() || {};
+      if (!gmap) return {};
+      const c = gmap.getCenter();
+      return { latitude: c.lat, longitude: c.lng, zoom: gmap.getZoom(),
+        height: viewZoomToHeight(c.lat, gmap.getZoom(), gmapH()), pitch: -90, heading: 0 };
+    },
+    applySelection: sel => applyQgisSelection(sel),
+  });
   // 引継ぎセッションの可視性を mount 前に item.visible へ畳み込む。
   // doc の |off は実行時トグルを反映しない(正典は vis マップ)ため、
   // mount 後に隠すと非表示レイヤが一瞬地図へ出る(他エンジンは mount 前適用)
@@ -1430,6 +1490,7 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
   fillCamPanel(currentCams);
   updateThemeSelect(doc.themes);
   applyPanelTitle(doc.title || null);
+
   // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
   void loadKascInfoContent(document.getElementById("info-link"), doc.info, baseUrl);
   // 凡例（URL 重複はまとめる）→ 凡例タブ。他エンジン(Leaflet等)と同じ処理
@@ -2160,6 +2221,8 @@ window.kasugaiApi = createPlayerApi({
   persistFlyPath: kascFlyPaths.persistFlyPath,
   // setFlySettings で書き換えた item.opts をインスペクタの fly_geojson: 行へ反映
   syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
+  // QGIS ライブ連携: /api/command の liveSync プッシュで即時反映(#62)
+  liveSync: async args => liveUpdate(args),
 });
 // gsimaps 専用: 地理院地図の表示中レイヤ取得・取り込み・操作・カタログ追加・
 // 作図取り込み（他エンジンではメソッドが無いため各ツールは自動的に非公開になる）
@@ -2213,6 +2276,17 @@ document.getElementById("gsi-import-layers")?.addEventListener("click", async ()
   setInspectorStatus(r.message || "", !r.ok);
 });
 mountEngineSwitcher(document.querySelector("#engines"), "gsimaps");
+// ?follow[=<base>] → geo_webview の /live/state をポーリングして表示を追従(#62)
+configureFollow({
+  apply: s => {
+    if (globeMode || !gmap) return;
+    if (typeof s.lon === "number" && typeof s.lat === "number") {
+      gmap.setView([s.lat, s.lon], typeof s.zoom === "number" ? s.zoom : gmap.getZoom());
+    } else if (typeof s.zoom === "number") {
+      gmap.setZoom(s.zoom);
+    }
+  },
+});
 // カレント状態ファイル(Cesium規約)へ現在値を反映する(変化イベント駆動)
 bindSessionState("gsimaps");
 void initAiChat({ engine: "gsimaps", manageBackend: true });

@@ -171,7 +171,7 @@ sequenceDiagram
           </div>
           <div class="feature-card">
             <h3>🗂️ データソース（MCP 接続）</h3>
-            <p>管理（⚙）→ AI → データソース でリモート MCP サーバー（Model Context Protocol・Streamable HTTP）を登録すると、そのサーバーのツールが AI チャットへ合成され、「Box の資料を検索して」等の指示で外部データを参照できます。<strong>Box</strong> は公式リモート MCP（mcp.box.com）専用ボタンがあり、Client ID を入れて OAuth 2.0 + PKCE でブラウザ内認証が完結します（Box Developer Console で Custom App 作成＋このアプリの URL をリダイレクト URI に登録が必要。Enterprise は Admin Console での MCP 有効化が前提）。その他の MCP サーバーは URL・Bearer トークン（任意）で追加できます。トークンは BYO として localStorage にのみ保存。読み取り系ツールのみ既定公開で、書き込み系（任意コード実行の eval/pyeval・reload 系を含む）は設定を ON にしても実行ごとに確認ダイアログが出ます。CORS 非対応のサーバーは <code>POST /api/mcp</code> 中継（ローカル版・Workers・Cloud Run で提供・BYO トークン転送のみ）に自動フォールバックします。<strong>QGIS</strong> は「起動中の QGIS に接続」ボタンがあり、<code>/api/qgis-live/discover</code> が稼働中の QGIS Live Driver セッション（<code>~/.qgis-live/</code> レジストリ）を自動検出して <code>/api/qgis-live/mcp</code> リレー経由で接続します（QGIS 側の <code>/mcp</code> は CORS 非対応＋Bearer 必須のためブラウザ直叩き不可・汎用プロキシは loopback 拒否のため専用リレー。トークンはリレーがサーバー側で付与しブラウザは保持しない。QGIS 再起動でポート・トークンが変わっても自動追随）。接続すると <code>qgis_describe_plugins</code>・<code>qgis_bridge_call</code>・<code>qgis_pyeval</code> 等が AI チャットへ合成され、「この QGIS プロジェクトを Canvas で開いて」等の指示で AI が geo_webview の <code>kasugaiExport</code> まで駆動できます</p>
+            <p>管理（⚙）→ AI → データソース でリモート MCP サーバー（Model Context Protocol・Streamable HTTP）を登録すると、そのサーバーのツールが AI チャットへ合成され、「Box の資料を検索して」等の指示で外部データを参照できます。<strong>Box</strong> は公式リモート MCP（mcp.box.com）専用ボタンがあり、Client ID を入れて OAuth 2.0 + PKCE でブラウザ内認証が完結します（Box Developer Console で Custom App 作成＋このアプリの URL をリダイレクト URI に登録が必要。Enterprise は Admin Console での MCP 有効化が前提）。その他の MCP サーバーは URL・Bearer トークン（任意）で追加できます。トークンは BYO として localStorage にのみ保存。読み取り系ツールのみ既定公開で、書き込み系（任意コード実行の eval/pyeval・reload 系を含む）は設定を ON にしても実行ごとに確認ダイアログが出ます。CORS 非対応のサーバーは <code>POST /api/mcp</code> 中継（ローカル版・Workers・Cloud Run で提供・BYO トークン転送のみ）に自動フォールバックします。<strong>QGIS</strong> は「起動中の QGIS に接続」ボタンがあり、<code>/api/qgis-live/discover</code> が稼働中の QGIS Live Driver セッション（<code>~/.qgis-live/</code> レジストリ）を自動検出して <code>/api/qgis-live/mcp</code> リレー経由で接続します（QGIS 側の <code>/mcp</code> は CORS 非対応＋Bearer 必須のためブラウザ直叩き不可・汎用プロキシは loopback 拒否のため専用リレー。トークンはリレーがサーバー側で付与しブラウザは保持しない。QGIS 再起動でポート・トークンが変わっても自動追随）。ローカルアプリ不在の CDN ホスト版では QGIS プラグイン geo_webview の内蔵サーバ（:8089-）に自動フォールバックし、その CORS 対応済み経路の <code>/live/mcp-discover</code> → <code>/live/mcp</code> リレー（loopback 接続限定）で同じツール群へ接続します。接続すると <code>qgis_describe_plugins</code>・<code>qgis_bridge_call</code>・<code>qgis_pyeval</code> 等が AI チャットへ合成され、「この QGIS プロジェクトを Canvas で開いて」等の指示で AI が geo_webview の <code>kasugaiExport</code> まで駆動できます</p>
           </div>
           <div class="feature-card">
             <h3>🧩 AIプラグイン生成（自己拡張）</h3>
@@ -198,6 +198,9 @@ GET  /api/qgis-live/discover → 稼働中 QGIS Live Driver セッションの�
                            （~/.qgis-live/ レジストリ走査＋/api/health 生存確認）
 POST /api/qgis-live/mcp  → 検出した QGIS /mcp への専用リレー
                            （トークンはサーバー側で付与・セッションは毎回再解決）
+                           ※CDN ホスト版では geo_webview :8089- の
+                           GET /live/mcp-discover / POST /live/mcp が同等の
+                           リレーを提供（QGIS プラグイン側・loopback 限定）
 POST /api/plugins        → {"id","name","version","description","layer","code"}
                            PLUGIN/&lt;id&gt;/plugin.js・manifest.json を作成し plugins.json に登録
 DELETE /api/plugins/{id} → プラグインの公開取り消し（PLUGIN/&lt;id&gt;/ と plugins.json 登録を削除）

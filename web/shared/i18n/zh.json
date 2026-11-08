@@ -799,6 +799,11 @@
   "tools.drawClear": "全部删除",
   "tools.drawToLayer": "添加为图层",
   "tools.drawExport": "保存GeoJSON",
+  "tools.drawToQgis": "发送到QGIS",
+  "tools.exportToQgis": "发送到QGIS",
+  "tools.qgisInactive": "QGIS实时联动未激活。",
+  "tools.qgisSent": "已向QGIS发送{count}个要素。",
+  "tools.qgisSendFail": "发送到QGIS失败: {error}",
   "tools.drawHint": "可为绘制的图形命名。「添加为图层」将其保留为临时图层。",
   "tools.drawLayerTitle": "注记",
   "tools.exportFail": "导出失败。",
@@ -878,5 +883,12 @@
   "browser.lnaNotInstalled": "未安装",
   "browser.lnaApply": "注册许可",
   "browser.lnaRemove": "取消注册",
-  "browser.lnaRestart": "重启浏览器后生效。"
+  "browser.lnaRestart": "重启浏览器后生效。",
+  "live.follow": "跟随 QGIS 画布",
+  "live.showSelection": "显示 QGIS 选择",
+  "live.qgisRender": "用 QGIS 渲染",
+  "live.addLayer": "添加",
+  "live.loading": "加载中…",
+  "live.added": "已添加图层",
+  "live.addFailed": "添加失败"
 }

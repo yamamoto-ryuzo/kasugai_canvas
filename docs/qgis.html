@@ -80,7 +80,10 @@
       <td><code>geotiff:</code></td>
       <td>ローカル .tif 系は DATA/ へ複製、URL/vsicurl は直参照。
       それ以外のラスタ形式はスキップ（<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/53">#53</a>）。
-      ラスタレンダラ設定は未反映（<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/52">#52</a>）</td>
+      ラスタレンダラは Canvas 側オプションで再現可（<code>colormap=</code>疑似カラー/
+      <code>hillshade=</code>陰影/<code>stretch=minmax</code>・<code>min=/max=</code>値域/
+      <code>nodata=</code>透過値。geo_webview 側のオプション出力は残課題
+      <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/52">#52</a>）</td>
       </tr>
       <tr>
       <td>属性テーブル（ジオメトリなし）・メッシュ・ベクタータイル・点群・注記・プラグインレイヤ</td>
@@ -111,7 +114,8 @@
       </tr>
       <tr>
       <td>レイヤー不透明度</td>
-      <td><code>opacity=</code>（XYZ/WMS/GeoTIFF 系。ベクターは
+      <td><code>opacity=</code>（XYZ/WMS/GeoTIFF/ベクター。QML・既定両経路で
+      アルファ乗算。geo_webview 側のベクター出力は残課題
       <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/58">#58</a>）</td>
       </tr>
       <tr>
@@ -271,7 +275,9 @@
       セッションを <code>~/.qgis-live/</code> レジストリから検出し、
       <code>/api/qgis-live/mcp</code> リレー経由で QGIS の <code>/mcp</code>
       （Streamable HTTP・トークンはリレーが付与）を AI チャットの MCP
-      サーバーとして登録。<code>qgis_describe_plugins</code> で各プラグインの
+      サーバーとして登録。ローカルアプリ不在の CDN ホスト版では
+      geo_webview の <code>:8089/live/mcp-discover</code> をプローブし
+      <code>/live/mcp</code> リレー（loopback 限定）へ自動フォールバック。<code>qgis_describe_plugins</code> で各プラグインの
       機能を自己発見し <code>qgis_bridge_call</code> で
       <code>kasugaiExport</code> 等を実行できる（AI オーケストレーション。
       <code>qgis_pyeval</code>/<code>qgis_eval</code>/reload 系は

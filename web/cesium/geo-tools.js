@@ -7,6 +7,7 @@
 // api.handleClick(pos)/handleDoubleClick(pos)/handleMouseMove(pos) は app.js の
 // クリックハンドラから呼び、処理したら true を返す（属性ピックを抑止するため）
 import { t } from "../shared/i18n.js";
+import { liveSendFeatures, liveIsActive } from "../shared/live.js";
 import { notifyToolMode } from "../shared/tools-dock-ux.js";
 import { exportFeatureCollection } from "../shared/export-formats.js";
 import { collectFields } from "../shared/attr-stats.js";
@@ -996,6 +997,32 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
     return { ok: true, file, count: res.count, skipped: res.skipped || 0 };
   }
 
+  // ---------- QGIS ライブ連携: 地物投入(Canvas → QGIS) ----------
+  // ライブ未接続時は status に理由を出して終わる(POST /live/features)
+  async function sendGeoJsonToQgis(name, gj, statusEl) {
+    const st = statusEl;
+    if (!liveIsActive()) {
+      if (st) st.textContent = t("tools.qgisInactive");
+      return { ok: false, reason: "inactive" };
+    }
+    if (!gj?.features?.length) {
+      if (st) st.textContent = t("tools.exportNoData");
+      return { ok: false, reason: "noData" };
+    }
+    const res = await liveSendFeatures(String(name || "Canvas"), gj);
+    if (st) {
+      st.textContent = res.ok
+        ? t("tools.qgisSent", { count: res.added ?? gj.features.length })
+        : t("tools.qgisSendFail", { error: res.reason || "?" });
+    }
+    return res;
+  }
+
+  // 作図アノテーションを QGIS スクラッチレイヤへ送る(API/ボタン共通)
+  function sendAnnotationsToQgis(name) {
+    return sendGeoJsonToQgis(name || t("tools.drawLayerTitle"), annotationsFc(), $("#tool-draw-status"));
+  }
+
   $("#tool-export-layer")?.addEventListener("focus", refreshExportOptions);
   $("#tool-export-run")?.addEventListener("click", async () => {
     const st = $("#tool-export-status");
@@ -1015,6 +1042,14 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
       console.warn("layer export failed", e);
       if (st) st.textContent = t("tools.exportFail");
     }
+  });
+  // 選択中レイヤーを QGIS スクラッチレイヤへ送る(GeoJSONエクスポートと同じ収集経路)
+  $("#tool-export-toqgis")?.addEventListener("click", async () => {
+    const st = $("#tool-export-status");
+    const id = $("#tool-export-layer")?.value;
+    const item = id && (getOrderedLayerItems() || []).find(i => i.id === id || i.title === id);
+    const gj = item && getLayerGeoJson && getLayerGeoJson(item.id);
+    await sendGeoJsonToQgis(item ? (item.title || item.id) : "", gj, st);
   });
 
   // ---------- モードボタン ----------
@@ -1063,6 +1098,10 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
     await addDataLayer(t("tools.drawLayerTitle"), annotationsFc());
     while (annotations.length) removeAnnotation(0);
   });
+  $("#tool-draw-toqgis")?.addEventListener("click", async () => {
+    if (!annotations.length) return;
+    await sendAnnotationsToQgis();
+  });
   refreshExportOptions();
   refreshSelLayerOptions();
 
@@ -1087,6 +1126,13 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
     clearAll,
     refreshExportOptions,
     exportLayer: (idOrTitle, format = "geojson") => doExport(idOrTitle, format),
+    // QGIS ライブ連携: 作図アノテーション/任意レイヤーを QGIS へ投入
+    sendAnnotationsToQgis,
+    sendLayerToQgis: (idOrTitle) => {
+      const item = idOrTitle && (getOrderedLayerItems() || []).find(i => i.id === idOrTitle || i.title === idOrTitle);
+      const gj = item && getLayerGeoJson && getLayerGeoJson(item.id);
+      return sendGeoJsonToQgis(item ? (item.title || item.id) : "", gj, $("#tool-export-status"));
+    },
 
     // 空間選択（#23）: region は GeoJSON Polygon/MultiPolygon/Feature、
     // {bbox:[w,s,e,n]}、{center:[lng,lat]|{lng,lat}, radiusMeters} を受け付ける。

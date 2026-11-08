@@ -44,12 +44,24 @@ fn debug() -> bool {
 
 // ---- ACP クライアント（devin acp 子プロセスを NDJSON で駆動） ----
 
+// 非対話経路（/models ウォームアップ等）で認証が必要になった場合のエラー。
+// ブラウザ PKCE 認証は実利用（/agent）のときだけ開くため、非対話起動では
+// このエラーを返して「要認証」を通知するだけに留める
+const ERR_AUTH_REQUIRED: &str =
+    "Devin の認証が必要です（設定画面で API キーを保存するか、チャット送信時のブラウザ認証を完了してください）";
+
 struct AcpInner {
     stdin: Mutex<ChildStdin>,
     next_id: AtomicU64,
     pending: Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>,
     ready: AtomicBool,
     dead: AtomicBool,
+    // initialize 済みか（auth_blocked 状態の acp に対話認証を再試行するとき
+    // initialize を二度送らないようにする）
+    initialized: AtomicBool,
+    // 認証が必要だが未認証のまま保持されている状態。
+    // 非対話の /models ごとの acp 再 spawn を防ぐためプロセスを残す
+    auth_blocked: AtomicBool,
     auth_methods: Mutex<Vec<Value>>,
     model_options: Mutex<Vec<Value>>,
     turn_text: Mutex<HashMap<String, Vec<String>>>,
@@ -114,6 +126,8 @@ impl Acp {
             pending: Mutex::new(HashMap::new()),
             ready: AtomicBool::new(false),
             dead: AtomicBool::new(false),
+            initialized: AtomicBool::new(false),
+            auth_blocked: AtomicBool::new(false),
             auth_methods: Mutex::new(Vec::new()),
             model_options: Mutex::new(Vec::new()),
             turn_text: Mutex::new(HashMap::new()),
@@ -327,33 +341,47 @@ impl Acp {
         }
     }
 
-    // initialize + 必要なら authenticate（api_key 優先・なければブラウザ PKCE）
-    async fn ensure_ready(&self, api_key: &str) -> Result<(), String> {
+    // initialize + 必要なら authenticate（api_key 優先・なければブラウザ PKCE）。
+    // interactive=false（/models 等の非対話経路）ではブラウザ認証を開かず、
+    // 認証が必要なら auth_blocked を立てて ERR_AUTH_REQUIRED を返す
+    async fn ensure_ready(&self, api_key: &str, interactive: bool) -> Result<(), String> {
         if self.inner.ready.load(Ordering::SeqCst) {
             return Ok(());
         }
-        let init = Self::rpc(
-            &self.inner,
-            "initialize",
-            json!({
-                "protocolVersion": 1,
-                "clientCapabilities": {
-                    "fs": { "readTextFile": false, "writeTextFile": false },
-                    "terminal": false,
-                },
-                "clientInfo": { "name": "kasugai-devin-bridge", "version": "1.0.0" },
-            }),
-            30000,
-        )
-        .await?;
-        let auth_methods = init
-            .get("authMethods")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-        *self.inner.auth_methods.lock().await = auth_methods.clone();
+        // auth_blocked の acp への対話リトライでは initialize を二度送らない
+        // （失敗時はフラグを立てず次回リトライできるようにする）
+        if !self.inner.initialized.load(Ordering::SeqCst) {
+            let init = Self::rpc(
+                &self.inner,
+                "initialize",
+                json!({
+                    "protocolVersion": 1,
+                    "clientCapabilities": {
+                        "fs": { "readTextFile": false, "writeTextFile": false },
+                        "terminal": false,
+                    },
+                    "clientInfo": { "name": "kasugai-devin-bridge", "version": "1.0.0" },
+                }),
+                30000,
+            )
+            .await?;
+            let auth_methods = init
+                .get("authMethods")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            *self.inner.auth_methods.lock().await = auth_methods;
+            self.inner.initialized.store(true, Ordering::SeqCst);
+        }
+        let auth_methods = self.inner.auth_methods.lock().await.clone();
         if !auth_methods.is_empty() {
             let method_id = auth_methods[0].get("id").cloned().unwrap_or(Value::Null);
+            if api_key.is_empty() && !interactive {
+                // 非対話起動ではブラウザ PKCE を開かない。
+                // 要認証のまま acp を保持して次回の再 spawn を防ぐ
+                self.inner.auth_blocked.store(true, Ordering::SeqCst);
+                return Err(ERR_AUTH_REQUIRED.to_string());
+            }
             let mut result = if !api_key.is_empty() {
                 Self::rpc(
                     &self.inner,
@@ -377,6 +405,11 @@ impl Acp {
             // 発行できない等）はブラウザ PKCE へフォールバックする。
             // 設定画面に古いキーが残っていてもログインに進めるようにする
             if result.is_err() && !api_key.is_empty() {
+                if !interactive {
+                    // 非対話起動ではフォールバックのブラウザ認証も開かない
+                    self.inner.auth_blocked.store(true, Ordering::SeqCst);
+                    return Err(ERR_AUTH_REQUIRED.to_string());
+                }
                 eprintln!("[bridge] APIキー認証に失敗したためブラウザ認証にフォールバックします");
                 result = Self::rpc(
                     &self.inner,
@@ -393,6 +426,8 @@ impl Acp {
             if let Err(e) = result {
                 *self.inner.auth_error.lock().await = Some(e.clone());
                 eprintln!("[bridge] authenticate に失敗しましたが継続します: {e}");
+            } else {
+                self.inner.auth_blocked.store(false, Ordering::SeqCst);
             }
         }
         self.inner.ready.store(true, Ordering::SeqCst);
@@ -517,6 +552,9 @@ pub struct DevinBridge {
     models_warmup: Mutex<bool>,
     // 直近の起動・認証失敗理由（アプリ側の「未接続」表示の詳細に使う）
     last_warmup_error: StdMutex<String>,
+    // /models 応答の authRequired フラグ。ウォームアップが「要認証」で
+    // 止まったとき true。フロントはリトライせず設定導線を表示する
+    auth_required: StdMutex<bool>,
 }
 
 impl DevinBridge {
@@ -529,6 +567,7 @@ impl DevinBridge {
             queue: Mutex::new(()),
             models_warmup: Mutex::new(false),
             last_warmup_error: StdMutex::new(String::new()),
+            auth_required: StdMutex::new(false),
         }
     }
 
@@ -558,6 +597,10 @@ impl DevinBridge {
                 "[bridge] Devin APIキーを{}しました。次の要求で devin acp を再認証します",
                 if key.is_empty() { "クリア" } else { "更新" }
             );
+            // 新しいキーで再評価させるため要認証フラグを戻す
+            if let Ok(mut ar) = self.auth_required.lock() {
+                *ar = false;
+            }
             let old = self.acp.lock().await.take();
             if let Some(acp) = old {
                 if let Ok(mut child) = acp.child.try_lock() {
@@ -574,12 +617,43 @@ impl DevinBridge {
             .unwrap_or(true)
     }
 
-    async fn get_acp(&self) -> Result<Arc<Acp>, String> {
+    // interactive=false では認証が必要でもブラウザ PKCE を開かない
+    // （/models 等の受動的な疎通確認用）。interactive=true（/agent の
+    // 実利用）のみブラウザ認証を許可する
+    async fn get_acp(&self, interactive: bool) -> Result<Arc<Acp>, String> {
         {
-            let guard = self.acp.lock().await;
+            let mut guard = self.acp.lock().await;
             if let Some(a) = guard.as_ref() {
-                if a.inner.ready.load(Ordering::SeqCst) && !a.inner.dead.load(Ordering::SeqCst) {
+                if a.inner.dead.load(Ordering::SeqCst) {
+                    // 終了済みプロセスを取り除いて再起動へ回す
+                    drop(guard.take());
+                } else if a.inner.ready.load(Ordering::SeqCst) {
                     return Ok(a.clone());
+                } else if a.inner.auth_blocked.load(Ordering::SeqCst) {
+                    // 未認証で保持中の acp。非対話なら再 spawn せず即失敗、
+                    // 対話（/agent の実利用）ならブラウザ認証を試みる
+                    if !interactive {
+                        return Err(ERR_AUTH_REQUIRED.to_string());
+                    }
+                    let api_key = self
+                        .api_key
+                        .lock()
+                        .map(|k| k.clone())
+                        .unwrap_or_default();
+                    let a = a.clone();
+                    match a.ensure_ready(&api_key, true).await {
+                        Ok(()) => return Ok(a),
+                        Err(e) => {
+                            let taken = guard.take();
+                            drop(guard);
+                            if let Some(taken) = taken {
+                                if let Ok(mut child) = taken.child.try_lock() {
+                                    let _ = child.kill().await;
+                                }
+                            }
+                            return Err(e);
+                        }
+                    }
                 }
             }
         }
@@ -595,7 +669,7 @@ impl DevinBridge {
         for bin in devin_bin_candidates() {
             match Acp::start(&bin).await {
                 Ok(acp) => {
-                    match acp.ensure_ready(&api_key).await {
+                    match acp.ensure_ready(&api_key, interactive).await {
                         Ok(()) => {
                             remember_bin(&bin);
                             eprintln!("[bridge] devin acp connected: {bin}");
@@ -609,6 +683,13 @@ impl DevinBridge {
                             return Ok(acp);
                         }
                         Err(e) => {
+                            if acp.inner.auth_blocked.load(Ordering::SeqCst) {
+                                // 未認証の acp を保持し、/models ごとの
+                                // 再 spawn＋initialize を防ぐ
+                                remember_bin(&bin);
+                                *self.acp.lock().await = Some(Arc::new(acp));
+                                return Err(e);
+                            }
                             last_err = e.clone();
                             real_err = real_err.or(Some(e));
                             if let Ok(mut child) = acp.child.try_lock() {
@@ -808,7 +889,7 @@ impl DevinBridge {
         let decls = normalize_tool_decls(body.get("tools").unwrap_or(&Value::Null));
         let project = request_project(body);
         prepare_mcp_state(shared, &project, decls.clone(), body);
-        let acp = self.get_acp().await?;
+        let acp = self.get_acp(true).await?;
         // 権限判定用にツール名を登録
         if let Ok(mut names) = acp.inner.tool_names.lock() {
             for d in &decls {
@@ -890,7 +971,9 @@ impl DevinBridge {
                 let this = self.clone();
                 tokio::spawn(async move {
                     let result = async {
-                        let acp = this.get_acp().await?;
+                        // 非対話起動: 認証が必要でもブラウザ PKCE を開かない
+                        // （ブラウザ認証は /agent の実利用時のみ許可）
+                        let acp = this.get_acp(false).await?;
                         let empty: Vec<ToolDecl> = Vec::new();
                         let has = acp.inner.model_options.lock().await.is_empty();
                         if has {
@@ -905,10 +988,16 @@ impl DevinBridge {
                             if let Ok(mut e) = this.last_warmup_error.lock() {
                                 *e = String::new();
                             }
+                            if let Ok(mut ar) = this.auth_required.lock() {
+                                *ar = false;
+                            }
                         }
                         Err(e) => {
                             if let Ok(mut le) = this.last_warmup_error.lock() {
                                 *le = e.clone();
+                            }
+                            if let Ok(mut ar) = this.auth_required.lock() {
+                                *ar = e == ERR_AUTH_REQUIRED;
                             }
                             eprintln!("[bridge] models warmup failed: {e}");
                         }
@@ -963,12 +1052,14 @@ impl DevinBridge {
             .lock()
             .map(|e| e.clone())
             .unwrap_or_default();
+        let auth_required = self.auth_required.lock().map(|v| *v).unwrap_or(false);
         json!({
             "models": models,
             "pending": options.is_empty(),
             "model": current_model,
             "usage": last_usage,
             "error": if error.is_empty() { Value::Null } else { Value::String(error) },
+            "authRequired": auth_required,
         })
     }
 

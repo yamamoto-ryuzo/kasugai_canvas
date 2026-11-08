@@ -1,0 +1,6 @@
+<script type="module">
+for (const f of ["./openlayers/app.js","./cesium/app.js","./maplibre/app.js","./leaflet/app.js","./shared/qml-style.js","./shared/qml-2d.js","./cesium/qml-render.js","./shared/kasc.js"]) {
+  try { await import(f); console.log("OK " + f); }
+  catch (e) { console.log("ERR " + f + " :: " + String(e).slice(0,200)); }
+}
+</script>

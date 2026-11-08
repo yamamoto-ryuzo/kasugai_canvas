@@ -799,6 +799,11 @@
   "tools.drawClear": "Borrar todo",
   "tools.drawToLayer": "Añadir como capa",
   "tools.drawExport": "Guardar GeoJSON",
+  "tools.drawToQgis": "Enviar a QGIS",
+  "tools.exportToQgis": "Enviar a QGIS",
+  "tools.qgisInactive": "El enlace en vivo con QGIS no está activo.",
+  "tools.qgisSent": "{count} entidades enviadas a QGIS.",
+  "tools.qgisSendFail": "Error al enviar a QGIS: {error}",
   "tools.drawHint": "Las formas dibujadas pueden nombrarse. 'Añadir como capa' las conserva como capa temporal.",
   "tools.drawLayerTitle": "Anotaciones",
   "tools.exportFail": "Error de exportación.",
@@ -878,5 +883,12 @@
   "browser.lnaNotInstalled": "no instalado",
   "browser.lnaApply": "Registrar permiso",
   "browser.lnaRemove": "Revocar",
-  "browser.lnaRestart": "Reinicia el navegador para aplicar."
+  "browser.lnaRestart": "Reinicia el navegador para aplicar.",
+  "live.follow": "Seguir lienzo de QGIS",
+  "live.showSelection": "Mostrar selección de QGIS",
+  "live.qgisRender": "Renderizar con QGIS",
+  "live.addLayer": "Añadir",
+  "live.loading": "Cargando…",
+  "live.added": "Capa añadida",
+  "live.addFailed": "Error al añadir"
 }

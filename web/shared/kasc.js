@@ -124,10 +124,12 @@ export function parseKasc(text) {
       continue;
     }
     if (type === "live") {
-      // live: <geo_webview HTTP サーバ base URL> — QGIS ライブ双方向連携。
+      // live: <geo_webview HTTP サーバ base URL> [| follow] — QGIS ライブ双方向連携。
       // 同じ場所の live.json をポーリングし、/live/camera・/live/selection
-      // へカメラ/選択を逆通知する(shared/live.js)
-      doc.live = { url: parts[0] || "", line };
+      // へカメラ/選択を逆通知する(shared/live.js)。follow オプションで
+      // QGIS キャンバスの移動に Canvas カメラを追従させる
+      doc.live = { url: parts[0] || "", line,
+        follow: parts.slice(1).some(p => /^follow$/i.test(String(p).trim())) };
       continue;
     }
     if (type === "title") {

@@ -4,6 +4,27 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [6.24.0] - 2026-11-08
+
+- QGIS ライブ連携 逆方向オーサリング・データ投入(geo_webview 4.11.0
+  と対):
+  - `.kasc → QGIS` 書き戻し: インスペクタでの表示トグル・テーマ適用・
+    ⏷フィルタ変更・インスペクタ適用を 0.8 秒デバウンスで
+    `POST /live/writeback` へ構造化状態
+    ({title,visible,where}+theme 名)として送信。QGIS 側で
+    レイヤツリーのチェック・subsetString・同名マップテーマへ反映
+    される(shared/live.js `liveWritebackEntries`。cesium/maplibre/
+    openlayers/leaflet/navara 対応)
+  - Canvas → QGIS 地物投入: ツール「作図」パネルの「QGISへ送信」で
+    スケッチを、「エクスポート」パネルの「QGISへ送信」で選択
+    レイヤーの GeoJSON を `POST /live/features` で QGIS へ投入。
+    QGIS 側ではスクラッチ(memory)レイヤとして「Canvas」グループへ
+    追加され、同名再送は置換。投入された地物は live sync の差分
+    エクスポートで Canvas へ往復する
+  - kasugaiApi(cesium)に `sendLayerToQgis(idOrTitle)`/
+    `sendDrawingsToQgis()` を追加。geo-tools API にも
+    `sendAnnotationsToQgis`/`sendLayerToQgis` を公開
+
 ## [6.23.0] - 2026-11-07
 
 - QGIS ライブ双方向連携(geo_webview 4.9.0 と対・#62):

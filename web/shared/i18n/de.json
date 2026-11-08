@@ -799,6 +799,11 @@
   "tools.drawClear": "Alle löschen",
   "tools.drawToLayer": "Als Ebene hinzufügen",
   "tools.drawExport": "GeoJSON speichern",
+  "tools.drawToQgis": "An QGIS senden",
+  "tools.exportToQgis": "An QGIS senden",
+  "tools.qgisInactive": "QGIS-Live-Verknüpfung ist nicht aktiv.",
+  "tools.qgisSent": "{count} Features an QGIS gesendet.",
+  "tools.qgisSendFail": "Senden an QGIS fehlgeschlagen: {error}",
   "tools.drawHint": "Gezeichnete Formen können benannt werden. 'Als Ebene hinzufügen' legt sie als temporäre Ebene ab.",
   "tools.drawLayerTitle": "Anmerkungen",
   "tools.exportFail": "Export fehlgeschlagen.",
@@ -878,5 +883,12 @@
   "browser.lnaNotInstalled": "nicht installiert",
   "browser.lnaApply": "Zugriff registrieren",
   "browser.lnaRemove": "Registrierung entfernen",
-  "browser.lnaRestart": "Zum Anwenden Browser neu starten."
+  "browser.lnaRestart": "Zum Anwenden Browser neu starten.",
+  "live.follow": "QGIS-Karte folgen",
+  "live.showSelection": "QGIS-Auswahl anzeigen",
+  "live.qgisRender": "Mit QGIS rendern",
+  "live.addLayer": "Hinzufügen",
+  "live.loading": "Laden…",
+  "live.added": "Layer hinzugefügt",
+  "live.addFailed": "Hinzufügen fehlgeschlagen"
 }

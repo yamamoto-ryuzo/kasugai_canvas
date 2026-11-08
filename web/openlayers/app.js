@@ -24,7 +24,7 @@ import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { configureLive, liveUpdate, liveNotifyCamera } from "../shared/live.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
@@ -738,6 +738,7 @@ function buildLayerRow(entry, exclusive, radioName) {
     // 非表示で読み込みが遅延されていた viewport クエリ系は ON 時に即時再クエリ
     if (cb.checked && item._viewportQuery) requeryViewportLayers([entry]);
     entry._groupCtl?.sync();
+    liveWritebackEntries(layerEntries);
   });
   row.append(cb);
 
@@ -952,6 +953,7 @@ function renderLayerRows(entries, unsupported) {
         if (vq.length) requeryViewportLayers(vq);
       }
       ctl.sync();
+      liveWritebackEntries(layerEntries);
     });
   }
 
@@ -1296,6 +1298,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     kascUrl: lastKascUrl || null,
     applyKascText: liveApplyText,
     getView: () => mapViewToUrl(),
+    applySelection: sel => applyQgisSelection(sel),
   });
   // group: 行の折りたたみ初期状態(#59)。QGIS レイヤーツリーの展開状態を再現
   applyKascGroupStates(doc.groups, expandedLayerGroups);
@@ -1463,6 +1466,8 @@ async function editEntryQueryFilter(entry) {
     inspectorInput.value = inspectorInput.value
       .split(/\r?\n/).map(l => (l.trim() === oldLine ? item.line : l)).join("\n");
   }
+  // QGIS ライブ連携: フィルタ変更をプロジェクトへ書き戻す
+  liveWritebackEntries(layerEntries);
   if (entry.deferred) { renderLayerRows(layerEntries, currentUnsupported); return; }
   try {
     await reloadEntryData(entry);
@@ -1651,6 +1656,19 @@ map.on("singleclick", e => {
       }
     } catch (_) {}
   }
+  // QGIS ライブ連携: 最前面の地物を QGIS 側の選択へ逆通知(#62)
+  if (records[0]?.title) {
+    try {
+      const f = records[0].feature;
+      const fid = f?.getId?.() ?? f?.get?.("id");
+      const ll = toLonLat(e.coordinate);
+      liveNotifySelection({
+        layer: records[0].title,
+        longitude: ll[0], latitude: ll[1],
+        ...(Number.isFinite(Number(fid)) ? { ids: [Number(fid)] } : {}),
+      });
+    } catch (_) { /* 逆通知失敗は無視 */ }
+  }
   window.switchPanelTab?.("attr");
   renderAttrContent(panel.attrContent, records, { onRecordClick: rec => focusFeatureExtent(rec.feature) });
 });
@@ -1659,24 +1677,53 @@ loadProject().catch(err => {
   panel.unsupported.textContent = String(err.message || err);
 });
 
-// ?follow[=<base>] → geo_webview の /present/state をポーリングして表示を追従
-{
-  const params = new URLSearchParams(location.search);
-  if (params.has("follow") || params.has("present")) {
-    const base = params.get("follow") || params.get("present") || "";
-    const tick = async () => {
-      try {
-        const s = await (await fetch(`${base}/present/state`)).json();
-        const view = map.getView();
-        if (typeof s.x3857 === "number" && typeof s.y3857 === "number") view.setCenter([s.x3857, s.y3857]);
-        else if (typeof s.lon === "number" && typeof s.lat === "number") view.setCenter(fromLonLat([s.lon, s.lat]));
-        if (typeof s.zoom === "number") view.setZoom(s.zoom);
-        if (typeof s.rotation === "number") view.setRotation(-s.rotation * Math.PI / 180);
-      } catch (_) { /* 接続不可時は前回状態を維持 */ }
-    };
-    setInterval(tick, 1500);
-    tick();
-  }
+// ?follow[=<base>] → geo_webview の /live/state をポーリングして表示を追従
+// (shared/live.js の live セッションへ統合)
+configureFollow({
+  apply: s => {
+    const view = map.getView();
+    if (typeof s.x3857 === "number" && typeof s.y3857 === "number") view.setCenter([s.x3857, s.y3857]);
+    else if (typeof s.lon === "number" && typeof s.lat === "number") view.setCenter(fromLonLat([s.lon, s.lat]));
+    if (typeof s.zoom === "number") view.setZoom(s.zoom);
+    if (typeof s.rotation === "number") view.setRotation(-s.rotation * Math.PI / 180);
+  },
+});
+
+// QGIS 側選択 → 地物ハイライト(#62 双方向)
+const qgisSelSrc = new VectorSource();
+const qgisSelStyle = new Style({
+  stroke: new Stroke({ color: "#ffff00", width: 3 }),
+  fill: new Fill({ color: "rgba(255,255,0,0.28)" }),
+  image: new CircleStyle({ radius: 7, fill: new Fill({ color: "#ffff00" }), stroke: new Stroke({ color: "#111", width: 1.5 }) }),
+});
+map.addLayer(new VectorLayer({ source: qgisSelSrc, style: qgisSelStyle, zIndex: 940 }));
+function qgisSelFeatureId(f) {
+  return f?.id ?? f?.properties?.id ?? f?.properties?.fid ?? f?.properties?.FID;
+}
+function applyQgisSelection(sel) {
+  try {
+    qgisSelSrc.clear();
+    const specs = Array.isArray(sel?.layers) ? sel.layers
+      : (sel?.layer || Array.isArray(sel?.ids) ? [sel] : []);
+    const features = [...(Array.isArray(sel?.features) ? sel.features : [])];
+    for (const spec of specs) {
+      const title = normKascTitle(String(spec.layer || spec.title || ""));
+      if (!title) continue;
+      const leaf = title.split("/").pop();
+      const entry = layerEntries.find(e => normKascTitle(e.item?.title || "") === title)
+        || layerEntries.find(e => normKascTitle(e.item?.title || "").split("/").pop() === leaf);
+      const ids = new Set((spec.ids || []).map(v => String(v)));
+      for (const f of entry?.item?._geojson?.features || []) {
+        const fid = qgisSelFeatureId(f);
+        if (fid != null && ids.has(String(fid))) features.push(f);
+      }
+    }
+    if (features.length) {
+      qgisSelSrc.addFeatures(toolFmt.readFeatures(
+        { type: "FeatureCollection", features },
+        { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" }));
+    }
+  } catch (_) { /* ハイライト失敗は無視 */ }
 }
 
 // ベースマップコントロールの最小化トグル
@@ -1832,6 +1879,8 @@ function applyKascTheme(theme) {
   renderLayerRows(layerEntries, currentUnsupported);
   inspectorInput.value = rewriteKascVisibility(inspectorInput.value, show);
   void applyKascThemeStyles(theme);
+  // QGIS ライブ連携: テーマ適用を QGIS プロジェクトへ書き戻す
+  liveWritebackEntries(layerEntries, { theme: theme?.name });
 }
 
 // theme 行の `;style=` 指定でレイヤーの .qml を差し替えて再マウントする。
@@ -1883,6 +1932,8 @@ document.querySelector("#apply-inspector")?.addEventListener("click", async () =
     setInspectorStatus("適用中…");
     await applyInspectorText(inspectorInput.value);
     setInspectorStatus("適用しました");
+    // QGIS ライブ連携: インスペクタ適用をプロジェクトへ書き戻す
+    liveWritebackEntries(layerEntries);
   } catch (e) {
     setInspectorStatus(`適用失敗: ${e?.message || e}`, true);
   }

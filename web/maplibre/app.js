@@ -13,7 +13,8 @@ import { mountSunControls } from "../shared/sun-time.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { configureLive, liveUpdate, liveNotifyCamera, liveNotifySelection } from "../shared/live.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries, liveIsActive, liveRenderUrl } from "../shared/live.js";
+import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
@@ -51,6 +52,9 @@ const map = new maplibregl.Map({
   // glyphs は QML <labeling> の symbol レイヤが必要とするフォント PBF。
   // openmaptiles の Noto Sans は日本語を含む(demotiles.maplibre.org は非CJK)
   style: { version: 8, glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf", sources: {}, layers: [] },
+  // CJK 文字はリモート glyph PBF を参照せずローカルフォントで描く
+  // (glyph サーバの非対応コードポイントで描画エラーになるのを防ぐ)
+  localIdeographFontFamily: "sans-serif",
   center: [139.767, 35.681],
   zoom: 10,
   attributionControl: false, // 出典は Cesium 版と同型の右下オーバーレイで表示
@@ -833,6 +837,7 @@ function buildLayerRow(entry, exclusive, radioName) {
     // 非表示で読み込みが遅延されていた viewport クエリ系は ON 時に即時再クエリ
     if (cb.checked && item._viewportQuery) requeryViewportLayers([entry]);
     entry._groupCtl?.sync();
+    liveWritebackEntries(layerEntries);
   });
   row.append(cb);
 
@@ -1056,6 +1061,7 @@ function renderLayerRows(entries, unsupported) {
         if (vq.length) requeryViewportLayers(vq);
       }
       ctl.sync();
+      liveWritebackEntries(layerEntries);
     });
   }
 
@@ -1257,6 +1263,44 @@ async function liveApplyText(text, { changed = [], full = false, manifest = null
   }
 }
 
+// QGIS 側選択 → 地物ハイライト(#62 双方向)。
+// qgis-sel ソースに一致地物だけ流し、黄色オーバーレイで表示する
+let qgisSelReady = false;
+function qgisSelFeatureId(f) {
+  return f?.id ?? f?.properties?.id ?? f?.properties?.fid ?? f?.properties?.FID;
+}
+function collectQgisSelectedFeatures(sel) {
+  if (Array.isArray(sel?.features)) return sel;
+  const specs = Array.isArray(sel?.layers) ? sel.layers
+    : (sel?.layer || Array.isArray(sel?.ids) ? [sel] : []);
+  const features = [];
+  for (const spec of specs) {
+    const title = normKascTitle(String(spec.layer || spec.title || ""));
+    if (!title) continue;
+    const leaf = title.split("/").pop();
+    const entry = layerEntries.find(e => normKascTitle(e.item?.title || "") === title)
+      || layerEntries.find(e => normKascTitle(e.item?.title || "").split("/").pop() === leaf);
+    const ids = new Set((spec.ids || []).map(v => String(v)));
+    for (const f of entry?.item?._geojson?.features || []) {
+      const fid = qgisSelFeatureId(f);
+      if (fid != null && ids.has(String(fid))) features.push(f);
+    }
+  }
+  return { type: "FeatureCollection", features };
+}
+function applyQgisSelection(sel) {
+  try {
+    if (!qgisSelReady) {
+      map.addSource("qgis-sel", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({ id: "qgis-sel-fill", type: "fill", source: "qgis-sel", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": "#ff0", "fill-opacity": 0.28 } });
+      map.addLayer({ id: "qgis-sel-line", type: "line", source: "qgis-sel", layout: { "line-cap": "round" }, paint: { "line-color": "#ff0", "line-width": 3 } });
+      map.addLayer({ id: "qgis-sel-circle", type: "circle", source: "qgis-sel", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-color": "#ff0", "circle-radius": 7, "circle-stroke-color": "#111", "circle-stroke-width": 1.5 } });
+      qgisSelReady = true;
+    }
+    map.getSource("qgis-sel")?.setData(collectQgisSelectedFeatures(sel));
+  } catch (_) { /* ハイライト失敗は無視 */ }
+}
+
 // 他エンジンからの切替時、同一プロジェクトなら引き継がれたレイヤ状態
 // (インスペクタ内容・テーマ選択・各レイヤの可視性)を適用する。
 // 状態はモジュール評価時に即消費して保持し(データ読込完了を待たない)、
@@ -1407,7 +1451,9 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     kascUrl: lastKascUrl || null,
     applyKascText: liveApplyText,
     getView: () => mapViewToUrl(),
+    applySelection: sel => applyQgisSelection(sel),
   });
+  syncLivePanel();
   // group: 行の折りたたみ初期状態(#59)。QGIS レイヤーツリーの展開状態を再現
   applyKascGroupStates(doc.groups, expandedLayerGroups);
   renderLayerRows(entries, unsupported);
@@ -1589,6 +1635,8 @@ async function editEntryQueryFilter(entry) {
     inspectorInput.value = inspectorInput.value
       .split(/\r?\n/).map(l => (l.trim() === oldLine ? item.line : l)).join("\n");
   }
+  // QGIS ライブ連携: フィルタ変更をプロジェクトへ書き戻す
+  liveWritebackEntries(layerEntries);
   if (entry.deferred) { renderLayerRows(layerEntries, currentUnsupported); return; }
   try {
     await reloadEntryData(entry);
@@ -1784,26 +1832,78 @@ map.on("load", () => {
   });
 });
 
-// ?follow[=<base>] → geo_webview の /present/state をポーリングして表示を追従
-{
-  const params = new URLSearchParams(location.search);
-  if (params.has("follow") || params.has("present")) {
-    const base = params.get("follow") || params.get("present") || "";
-    const tick = async () => {
-      try {
-        const s = await (await fetch(`${base}/present/state`)).json();
-        const opt = {};
-        if (typeof s.lon === "number" && typeof s.lat === "number") opt.center = [s.lon, s.lat];
-        // /present/state の zoom は OL 規約(256px基準)のため -1
-        if (typeof s.zoom === "number") opt.zoom = s.zoom - 1;
-        if (typeof s.rotation === "number") opt.bearing = s.rotation;
-        map.jumpTo(opt);
-      } catch (_) { /* 接続不可時は前回状態を維持 */ }
-    };
-    setInterval(tick, 1500);
-    tick();
+// ---- QGIS 描画フォールバック・オーバーレイ(#62) ----
+// /live/render の透過PNGを image source として重ねる
+// (Canvas で描けないレイヤーを QGIS レンダリングで表示)
+let qgisRenderOn = false;
+let qgisRenderTimer = null;
+function setQgisRender(on) {
+  qgisRenderOn = !!on;
+  if (!qgisRenderOn) {
+    try { if (map.getLayer("qgis-render")) map.removeLayer("qgis-render"); } catch (_) {}
+    try { if (map.getSource("qgis-render")) map.removeSource("qgis-render"); } catch (_) {}
+    return;
   }
+  refreshQgisRender();
 }
+function qgisViewBbox() {
+  const b = map.getBounds();
+  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+}
+function adjustBboxAspect(bbox, w, h) {
+  const [x0, y0, x1, y1] = bbox;
+  const cur = (x1 - x0) / (y1 - y0);
+  const tgt = w / h;
+  if (!(cur > 0) || !(tgt > 0) || Math.abs(cur - tgt) < 1e-9) return bbox;
+  if (cur > tgt) {
+    const dh = (x1 - x0) / tgt - (y1 - y0);
+    return [x0, y0 - dh / 2, x1, y1 + dh / 2];
+  }
+  const dw = (y1 - y0) * tgt - (x1 - x0);
+  return [x0 - dw / 2, y0, x1 + dw / 2, y1];
+}
+function refreshQgisRender() {
+  if (!qgisRenderOn || !liveIsActive()) return;
+  const bbox = qgisViewBbox();
+  if (!bbox) return;
+  const w = Math.max(1, map.getContainer().clientWidth || 800);
+  const h = Math.max(1, map.getContainer().clientHeight || 600);
+  const adj = adjustBboxAspect(bbox, w, h);
+  const url = liveRenderUrl({ bbox: adj, w, h });
+  if (!url) return;
+  const coordinates = [
+    [adj[0], adj[3]], [adj[2], adj[3]], [adj[2], adj[1]], [adj[0], adj[1]],
+  ];
+  const src = map.getSource("qgis-render");
+  if (src) {
+    src.updateImage({ url, coordinates });
+    return;
+  }
+  map.addSource("qgis-render", { type: "image", url, coordinates });
+  map.addLayer({ id: "qgis-render", type: "raster", source: "qgis-render",
+    paint: { "raster-opacity": 0.9 } });
+}
+map.on("moveend", () => {
+  if (!qgisRenderOn) return;
+  clearTimeout(qgisRenderTimer);
+  qgisRenderTimer = setTimeout(refreshQgisRender, 700);
+});
+// QGIS Live 操縦パネル(live: 行検出時にパネル先頭へ表示)
+mountLivePanel(document.querySelector("#panel"), { setRender: setQgisRender });
+
+// ?follow[=<base>] → geo_webview の /live/state をポーリングして表示を追従
+// (shared/live.js の live セッションへ統合。pitch は保持される)
+configureFollow({
+  apply: (s, { topdown }) => {
+    const opt = {};
+    if (typeof s.lon === "number" && typeof s.lat === "number") opt.center = [s.lon, s.lat];
+    // /live/state の zoom は OL 規約(256px基準)のため -1
+    if (typeof s.zoom === "number") opt.zoom = s.zoom - 1;
+    if (typeof s.rotation === "number") opt.bearing = s.rotation;
+    if (topdown) opt.pitch = 0;
+    map.jumpTo(opt);
+  },
+});
 
 // ベースマップコントロールの最小化トグル
 document.querySelector("#basemap-toggle").addEventListener("click", e => {
@@ -2100,6 +2200,8 @@ function applyKascTheme(theme) {
   renderLayerRows(layerEntries, currentUnsupported);
   inspectorInput.value = rewriteKascVisibility(inspectorInput.value, show);
   void applyKascThemeStyles(theme);
+  // QGIS ライブ連携: テーマ適用を QGIS プロジェクトへ書き戻す
+  liveWritebackEntries(layerEntries, { theme: theme?.name });
 }
 
 // theme 行の `;style=` 指定でレイヤーの .qml を差し替えて再マウントする。
@@ -2155,6 +2257,8 @@ document.querySelector("#apply-inspector")?.addEventListener("click", async () =
     setInspectorStatus("適用中…");
     await applyInspectorText(inspectorInput.value);
     setInspectorStatus("適用しました");
+    // QGIS ライブ連携: インスペクタ適用をプロジェクトへ書き戻す
+    liveWritebackEntries(layerEntries);
   } catch (e) {
     setInspectorStatus(`適用失敗: ${e?.message || e}`, true);
   }

@@ -11,7 +11,7 @@ import { loadVectorItem } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { configureLive, liveUpdate, liveNotifyCamera } from "../shared/live.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
@@ -282,6 +282,7 @@ function buildLayerRow(entry, exclusive, radioName) {
     if (cb.checked) void maybeLoadEntry(entry);
     syncAttribution();
     entry._groupCtl?.sync();
+    liveWritebackEntries(layerEntries);
   });
   row.append(cb);
 
@@ -455,6 +456,7 @@ function buildLayerList() {
       }
       syncAttribution();
       ctl.sync();
+      liveWritebackEntries(layerEntries);
     });
   }
 }
@@ -924,7 +926,39 @@ async function renderDoc(doc, baseUrl, presetBase) {
         pitch: lastCam.pitch, heading: lastCam.heading,
       };
     },
+    applySelection: sel => applyQgisSelection(sel),
   });
+}
+
+// QGIS 側選択 → 地物ハイライト(#62 双方向)。
+// ツールオーバーレイと同じ addSource/addLayer で黄色ベクターを重ねる
+let qgisSelSrc = null, qgisSelLayer = null;
+function applyQgisSelection(sel) {
+  try { qgisSelLayer?.delete?.(); } catch (_) {}
+  try { qgisSelSrc?.delete?.(); } catch (_) {}
+  qgisSelLayer = qgisSelSrc = null;
+  try {
+    const specs = Array.isArray(sel?.layers) ? sel.layers
+      : (sel?.layer || Array.isArray(sel?.ids) ? [sel] : []);
+    const features = [...(Array.isArray(sel?.features) ? sel.features : [])];
+    for (const spec of specs) {
+      const title = String(spec.layer || spec.title || "").trim();
+      const leaf = title.split("/").pop();
+      const ids = new Set((spec.ids || []).map(v => String(v)));
+      const entry = layerEntries.find(e => e.item?.title === title)
+        || layerEntries.find(e => String(e.item?.title || "").split("/").pop() === leaf);
+      for (const f of entry?.item?._geojson?.features || []) {
+        const fid = f?.id ?? f?.properties?.id ?? f?.properties?.fid;
+        if (fid != null && ids.has(String(fid))) features.push(f);
+      }
+    }
+    if (!features.length || !view) return;
+    qgisSelSrc = view.addSource({ type: "geojson", data: { type: "FeatureCollection", features }, tiled: false });
+    qgisSelLayer = view.addLayer({ type: "vector", source: qgisSelSrc,
+      polygon: { color: 0xffff00, clampToGround: true, opacity: 0.3, transparent: true },
+      polyline: { color: 0xffff00, width: 3, clampToGround: true, opacity: 1 },
+      point: { color: 0xffff00, clampToGround: true, opacity: 1 } });
+  } catch (_) { /* ハイライト失敗は無視 */ }
 }
 
 // session-state の可視性を描画前の doc アイテムへ先適用する。
@@ -1045,6 +1079,8 @@ async function editEntryQueryFilter(entry) {
     panel.inspector.value = panel.inspector.value
       .split(/\r?\n/).map(l => (l.trim() === oldLine ? item.line : l)).join("\n");
   }
+  // QGIS ライブ連携: フィルタ変更をプロジェクトへ書き戻す
+  liveWritebackEntries(layerEntries);
   try {
     await reloadEntryData(entry);
     attrWidget.refresh();
@@ -1124,6 +1160,21 @@ async function saveToDataDir(name, content) {
   });
 }
 
+// ?follow[=<base>] → geo_webview の /live/state をポーリングして QGIS キャンバスに追従
+// (shared/live.js の live セッションへ統合。pitch は現在値を保持するリンクビュー)
+configureFollow({
+  apply: (s, { topdown }) => {
+    const height = typeof s.zoom === "number"
+      ? viewZoomToHeight(s.lat, s.zoom, viewMetrics().vh)
+      : lastCam.height;
+    setCamera({
+      longitude: s.lon, latitude: s.lat, height,
+      heading: -(s.rotation || 0),
+      pitch: topdown ? -90 : lastCam.pitch,
+    });
+  },
+});
+
 // ---- boot ----
 (async () => {
   try { await view.init(); }
@@ -1174,8 +1225,14 @@ async function saveToDataDir(name, content) {
     buildLayerList(); syncAttribution();
     // 可視性をインスペクタの .kasc テキストへも書き戻して整合を保つ（他エンジンと同じ）
     if (panel.inspector) panel.inspector.value = rewriteKascVisibility(panel.inspector.value, show);
+    // QGIS ライブ連携: テーマ適用を QGIS プロジェクトへ書き戻す
+    liveWritebackEntries(layerEntries, { theme: theme?.name });
   });
-  $("#apply-inspector")?.addEventListener("click", () => applyInspectorText(panel.inspector.value));
+  $("#apply-inspector")?.addEventListener("click", () => {
+    applyInspectorText(panel.inspector.value);
+    // QGIS ライブ連携: インスペクタ適用をプロジェクトへ書き戻す
+    liveWritebackEntries(layerEntries);
+  });
   $("#export-inspector")?.addEventListener("click", () => {
     const blob = new Blob([panel.inspector.value || lastKascRaw], { type: "text/plain" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "project.kasc"; a.click(); URL.revokeObjectURL(a.href);

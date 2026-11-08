@@ -19,9 +19,14 @@
       <a href="../qgis-delivery.html">QGIS連携の利用方法</a>（<code>qgis:</code> ZIP 取り込み・フォルダ参照）／
       <a href="../qgis-policy.html">方針・構想</a>／<a href="../qgis.html">実装済みの再現範囲</a>。</p>
 
+      <div style="margin: 15px 0;">
+        <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fsample_qgis%2Fkasugai_canvas.kasc" class="demo-link" target="_blank" rel="noopener noreferrer">▶ QGIS プロジェクトデモ（sample_qgis）</a>
+      </div>
+
       <h2 id="v7">V7: QGIS連携</h2>
       <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現できるようにする</strong>のが V7 のテーマです。QGIS プラグイン <code>geo_webview</code>（<a href="https://github.com/yamamoto-ryuzo/qgis_live_harness" target="_blank" rel="noopener noreferrer">qgis_live_harness</a>）がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替（または静的ホスト経由で <code>?kasc=</code> 再生）します。QGIS は多様な GIS データの正本・編集・解析基盤、Canvas は最終 2D/3D 表示エンジンという役割分担です。</p>
       <p>「どの QGIS 要素がどの .kasc 行・オプションへ写るか」の対応表と、エンジン別の再現度は <a href="../qgis.html">QGIS・GDAL連携</a> にまとめています。本ページはテーマ全体の構成と今後の方向です。</p>
+      <p>📎 公開サンプル: <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fsample_qgis%2Fkasugai_canvas.kasc" target="_blank" rel="noopener noreferrer">QGIS プロジェクトのサンプル（SampleProjectFile）を CDN ホスト版 Cesium で再生</a> — <code>geo_webview</code> のエクスポート物（<code>.kasc + DATA/</code>）を <a href="https://yamamoto-ryuzo.github.io/kasugai_canvas_webGIS/" target="_blank" rel="noopener noreferrer">kasugai_canvas_webGIS</a> で配信し、<code>?kasc=</code> で再生しています（他エンジンでの再生リンクは同サイトのプロジェクト一覧にあります）。</p>
 
       <h3>🔄 連携の流れ</h3>
       <pre class="text"><code>QGIS プロジェクト（レイヤーツリー・スタイル・表示状態・テーマ・ブックマーク）
@@ -100,7 +105,7 @@
       <li><strong>ホスト版（route=hosted）</strong>— CDN ホスト版エンジン＋QGIS 側配信で、Canvas 未インストール環境でも開ける</li>
       <li><strong>静的出力（emit_launchers / emit_zip）</strong>— 起動 HTML 同梱・ZIP 化でそのまま配布。納品用ローカル化（<code>DATA/http</code> へのダウンロード書換え）も <code>style=/qml=</code> を対象に含む</li>
       <li><strong>Re:Earth 連携</strong>— <code>reearth.txt</code> 出力で geo_suite の <code>qgis:</code> インスペクタ行から取り込み</li>
-      <li><strong>AI オーケストレーション（QGIS Live Driver の MCP 接続）</strong>— 管理 → AI → データソースの「起動中の QGIS に接続」が <code>/api/qgis-live/discover</code> で稼働セッション（<code>~/.qgis-live/</code> レジストリ）を自動検出し、QGIS の <code>/mcp</code> を AI チャットの MCP サーバーとして登録。<code>qgis_pyeval</code>/<code>qgis_bridge_call</code> 等がチャットツールへ合成され、「この QGIS プロジェクトを Canvas で開いて」のような指示で AI がエクスポート〜表示まで一気通貫で駆動できる。実行系ツール（pyeval/eval/reload 系）は「書き込み系ツールも AI に公開する」のゲート＋実行ごとの確認対象</li>
+      <li><strong>AI オーケストレーション（QGIS Live Driver の MCP 接続）</strong>— 管理 → AI → データソースの「起動中の QGIS に接続」が稼働セッション（<code>~/.qgis-live/</code> レジストリ）を自動検出し（ローカルアプリは <code>/api/qgis-live/discover</code>、CDN ホスト版は geo_webview <code>:8089/live/mcp-discover</code>）、QGIS の <code>/mcp</code> を AI チャットの MCP サーバーとして登録。<code>qgis_pyeval</code>/<code>qgis_bridge_call</code> 等がチャットツールへ合成され、「この QGIS プロジェクトを Canvas で開いて」のような指示で AI がエクスポート〜表示まで一気通貫で駆動できる。実行系ツール（pyeval/eval/reload 系）は「書き込み系ツールも AI に公開する」のゲート＋実行ごとの確認対象</li>
       </ul>
 
       <h3>⚡ ライブ双方向連携（live sync）</h3>
@@ -108,7 +113,12 @@
       <ul>
       <li><strong>QGIS → Canvas</strong>：レイヤ編集（地物追加/削除・ジオメトリ/属性変更）・スタイル変更・レイヤ追加/削除・ツリー可視性変更を 1.2 秒デバウンスで検出し、最後のエクスポート先へ<strong>差分エクスポート</strong>（未変更レイヤのデータ/スタイル書き出しを省略）。エクスポート時に <code>.kasc</code> へ <code>live: &lt;QGIS HTTPサーバ base URL&gt;</code> 行と <code>live.json</code> マニフェストを出力。Canvas は live.json ポーリング（1.5 秒）または <code>/api/command</code> の <code>liveSync</code> プッシュで検出し、<strong>.kasc テキストが変わっていなければ変更レイヤのみ再読込</strong>（cesium=DataSource差替 / maplibre=source.setData）。構造変化時は全体再適用（カメラ位置は維持）</li>
       <li><strong>Canvas → QGIS</strong>：カメラ停止時に <code>POST /live/camera</code> で QGIS キャンバスへ中心/縮尺/回転を逆通知、地物クリックで <code>POST /live/selection</code> で QGIS レイヤ選択を逆通知（ids 優先・無ければ座標+buffer選択）。<code>GET /live/state</code> で連携状態を照会可能</li>
-      <li><strong>対応エンジン</strong>：cesium/maplibre は差分適用＋カメラ/選択逆通知、openlayers/leaflet/navara は全適用＋カメラ逆通知（選択通知は未実装）、gsimaps は未対応</li>
+      <li><strong>逆方向オーサリング（.kasc → QGIS 書き戻し、geo_webview 4.11.0〜）</strong>：インスペクタでの表示トグル・テーマ適用・⏷フィルタ変更を <code>POST /live/writeback</code> で QGIS プロジェクトへ書き戻し（{title,visible,where} + theme 名。レイヤツリーのチェック・subsetString・同名マップテーマへ反映。適用中は QGIS 側の再エクスポートを抑止して往復を防ぐ）</li>
+      <li><strong>地物投入（Canvas → QGIS、同4.11.0〜）</strong>：ツール「作図」パネルの「QGISへ送信」で描いたスケッチを、「エクスポート」パネルの「QGISへ送信」で選択レイヤーの GeoJSON を <code>POST /live/features</code> で QGIS へ投入。スクラッチ(memory)レイヤとしてレイヤツリー先頭の「Canvas」グループへ追加され、同名再送は置換。AI からは kasugaiApi の <code>sendLayerToQgis</code>/<code>sendDrawingsToQgis</code>（cesium）でも実行可</li>
+      <li><strong>QGIS → Canvas 選択同期</strong>：QGIS 側の地物選択は <code>/live/state</code> の選択署名で検出し、<code>GET /live/selection</code> で選択地物(GeoJSON)を取得して<strong>黄色ハイライト</strong>を全エンジンへ表示</li>
+      <li><strong>オンデマンド配信 API</strong>：<code>GET /live/layers</code>（kasc タイトル付きカタログ）・<code>GET /live/features?layer=&bbox=</code>（範囲指定地物 GeoJSON）・<code>GET /live/render?bbox=&w=&h=&bg=transparent</code>（EPSG:4326 範囲の描画 PNG）。ライブ連携中はレイヤ一覧上部の「QGIS Live」パネルから、カタログのレイヤーを表示範囲追従の逐次読み込みで追加（「QGISからレイヤー追加」）、または「QGIS描画で表示」オーバーレイでメッシュ・未対応レンダラ等も QGIS エンジンの描画結果として表示できる（cesium/maplibre）</li>
+      <li><strong>対応エンジン</strong>：cesium/maplibre は差分適用＋カメラ/選択逆通知＋QGIS描画オーバーレイ、openlayers/leaflet/navara は全適用＋カメラ/選択逆通知、gsimaps は全適用＋カメラ/選択逆通知対応（調整中）。書き戻し・地物投入・QGIS選択ハイライトは cesium/maplibre/openlayers/leaflet/navara/gsimaps で対応</li>
+      <li><strong>follow↔live 統合</strong>：<code>?follow</code> カメラ追従は live セッションへ統合され <code>/live/state</code> で取得。Cesium/Navara では <strong>pitch を保持</strong>した「2D QGIS ↔ 3D リンクビュー」として追従（<code>?follow=top</code> で従来の真俯瞰固定）</li>
       </ul>
       <p>既存の保存時自動再エクスポート（<code>kasugai_auto_export</code>）はそのまま共存します。ライブ連携は保存を待たず編集操作をほぼ即時反映する上位経路で、<code>/present</code> の画面共有と併用すると「QGIS で編集中の画面を Canvas でライブ共有」が可能です。</p>
 

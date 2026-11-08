@@ -21,6 +21,7 @@
 // api.handleClick({lng,lat}) / handleDoubleClick() / handleMouseMove({lng,lat}) は
 // エンジンのイベントから呼び、処理したら true を返す（属性ピックを抑止するため）
 import { initI18n, applyI18n, t } from "./i18n.js";
+import { liveSendFeatures, liveIsActive } from "./live.js";
 import { initToolsDockUX, notifyToolMode } from "./tools-dock-ux.js";
 import { exportFeatureCollection } from "./export-formats.js";
 import { collectFields } from "./attr-stats.js";
@@ -208,7 +209,9 @@ function injectDock(sections) {
       <div class="tool-btnrow">
         <button id="tool-draw-tolayer" type="button" data-i18n="tools.drawToLayer">レイヤーへ追加</button>
         <button id="tool-draw-export" type="button" data-i18n="tools.drawExport">GeoJSON保存</button>
+        <button id="tool-draw-toqgis" type="button" data-i18n="tools.drawToQgis">QGISへ送信</button>
       </div>
+      <div id="tool-draw-status" class="tool-result" aria-live="polite"></div>
       <p class="hint" data-i18n="tools.drawHint">描いた図形に名称を付けて残せます。「レイヤーへ追加」で一覧・表示切替対象の一時レイヤーにします。</p>
     </section>`);
   if (sections.export) parts.push(`
@@ -224,6 +227,7 @@ function injectDock(sections) {
           <option value="shp">Shapefile (.zip)</option>
         </select>
         <button id="tool-export-run" type="button" data-i18n="tools.export">出力</button>
+        <button id="tool-export-toqgis" type="button" data-i18n="tools.exportToQgis">QGISへ送信</button>
       </div>
       <div id="tool-export-status" class="tool-result" aria-live="polite"></div>
       <p class="hint" data-i18n="tools.exportHint">* 付きのレイヤーは読み込み済み（表示範囲）のデータのみ出力されます。</p>
@@ -1122,6 +1126,32 @@ export function initGeoTools2d(hooks = {}) {
     return { ok: true, file, count: res.count, skipped: res.skipped || 0 };
   }
 
+  // ---------- QGIS ライブ連携: 地物投入(Canvas → QGIS) ----------
+  // POST /live/features。ライブ未接続時は status に理由を出して終わる
+  async function sendGeoJsonToQgis(name, gj, statusEl) {
+    const st = statusEl;
+    if (!liveIsActive()) {
+      if (st) st.textContent = t("tools.qgisInactive");
+      return { ok: false, reason: "inactive" };
+    }
+    if (!gj?.features?.length) {
+      if (st) st.textContent = t("tools.exportNoData");
+      return { ok: false, reason: "noData" };
+    }
+    const res = await liveSendFeatures(String(name || "Canvas"), gj);
+    if (st) {
+      st.textContent = res.ok
+        ? t("tools.qgisSent", { count: res.added ?? gj.features.length })
+        : t("tools.qgisSendFail", { error: res.reason || "?" });
+    }
+    return res;
+  }
+
+  // 作図アノテーションを QGIS スクラッチレイヤへ送る(API/ボタン共通)
+  function sendAnnotationsToQgis(name) {
+    return sendGeoJsonToQgis(name || t("tools.drawLayerTitle"), annotationsFc(), $("#tool-draw-status"));
+  }
+
   if (panelRoot) {
     panelRoot.querySelector("#tool-export-layer")?.addEventListener("focus", refreshExportOptions);
     panelRoot.querySelector("#tool-export-run")?.addEventListener("click", async () => {
@@ -1142,6 +1172,14 @@ export function initGeoTools2d(hooks = {}) {
         console.warn("layer export failed", e);
         if (st) st.textContent = t("tools.exportFail");
       }
+    });
+    // 選択中レイヤーを QGIS スクラッチレイヤへ送る(GeoJSONエクスポートと同じ収集経路)
+    panelRoot.querySelector("#tool-export-toqgis")?.addEventListener("click", async () => {
+      const st = $("#tool-export-status");
+      const id = $("#tool-export-layer")?.value;
+      const item = id && (hooks.getOrderedLayerItems?.() || []).find(i => i.id === id || i.title === id);
+      const gj = item && hooks.getLayerGeoJson && hooks.getLayerGeoJson(item.id);
+      await sendGeoJsonToQgis(item ? (item.title || item.id) : "", gj, st);
     });
 
     // ---------- モードボタン ----------
@@ -1190,6 +1228,10 @@ export function initGeoTools2d(hooks = {}) {
       renderDrawList();
       pushOverlay();
     });
+    panelRoot.querySelector("#tool-draw-toqgis")?.addEventListener("click", async () => {
+      if (!annotations.length) return;
+      await sendAnnotationsToQgis();
+    });
   }
   refreshExportOptions();
   refreshSelLayerOptions();
@@ -1217,6 +1259,13 @@ export function initGeoTools2d(hooks = {}) {
     clearAll,
     refreshExportOptions,
     exportLayer: (idOrTitle, format = "geojson") => doExport(idOrTitle, format),
+    // QGIS ライブ連携: 作図アノテーション/任意レイヤーを QGIS へ投入
+    sendAnnotationsToQgis,
+    sendLayerToQgis: (idOrTitle) => {
+      const item = idOrTitle && (hooks.getOrderedLayerItems?.() || []).find(i => i.id === idOrTitle || i.title === idOrTitle);
+      const gj = item && hooks.getLayerGeoJson && hooks.getLayerGeoJson(item.id);
+      return sendGeoJsonToQgis(item ? (item.title || item.id) : "", gj, $("#tool-export-status"));
+    },
 
     // 空間選択（#23）: region は GeoJSON Polygon/MultiPolygon/Feature、
     // {bbox:[w,s,e,n]}、{center:[lng,lat]|{lng,lat}, radiusMeters} を受け付ける

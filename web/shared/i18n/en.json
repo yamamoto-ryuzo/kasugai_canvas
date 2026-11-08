@@ -855,6 +855,11 @@
   "tools.drawClear": "Clear all",
   "tools.drawToLayer": "Add as layer",
   "tools.drawExport": "Save GeoJSON",
+  "tools.drawToQgis": "Send to QGIS",
+  "tools.exportToQgis": "Send to QGIS",
+  "tools.qgisInactive": "QGIS live link is not active.",
+  "tools.qgisSent": "Sent {count} features to QGIS.",
+  "tools.qgisSendFail": "Failed to send to QGIS: {error}",
   "tools.drawHint": "Drawn shapes can be named. Use Add as layer to keep them as a temporary layer.",
   "tools.drawLayerTitle": "Annotations",
   "tools.exportFail": "Export failed.",
@@ -878,5 +883,12 @@
   "browser.lnaNotInstalled": "not installed",
   "browser.lnaApply": "Grant access",
   "browser.lnaRemove": "Revoke",
-  "browser.lnaRestart": "Restart your browser to apply."
+  "browser.lnaRestart": "Restart your browser to apply.",
+  "live.follow": "Follow QGIS canvas",
+  "live.showSelection": "Show QGIS selection",
+  "live.qgisRender": "Render with QGIS",
+  "live.addLayer": "Add",
+  "live.loading": "Loading…",
+  "live.added": "Layer added",
+  "live.addFailed": "Failed to add layer"
 }

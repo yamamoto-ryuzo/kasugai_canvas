@@ -1585,7 +1585,7 @@ function parseLabelRendering(rd, warnings) {
   else if (out.overlapMode === 3) out.allowDegraded = true;
   if (out.mergeLines) warnOnce(warnings, "ラベルのライン結合(mergeLines)は未対応です");
   if (out.unplacedVisibility) warnOnce(warnings, "未配置ラベルの表示(unplacedVisibility)は未対応です");
-  if (out.obstacleType !== 0) warnOnce(warnings, "ラベル障害物タイプ(obstacleType)は外周内側のみ近似です");
+  if (out.obstacleType !== 0) warnOnce(warnings, "ラベル障害物タイプ(obstacleType)は地物bboxで近似です(衝突判定のあるエンジンのみ適用)");
   return out;
 }
 
@@ -1833,7 +1833,7 @@ function parseTextStyle(textStyleEl, settingsEl = null, warnings = new Set()) {
     bold, italic,
     fontCss: `${italic ? "italic " : ""}${bold ? "bold " : ""}${Math.max(Math.round(sizePx), 6)}px ${family}`,
     fill: withAlpha(textColor, Number.isFinite(textOpacity) ? textOpacity : 1),
-    halo: bufferDraw ? { color: bufferColor, widthPx: Math.max(bufferSize, 1) } : null,
+    halo: bufferDraw ? { color: bufferColor, widthPx: Math.max(bufferSize, 1), noFill: qgisBool(b("bufferNoFill")) } : null,
     underline, strikeout,
     letterSpacingPx: sizeToPx(a("fontLetterSpacing") ?? 0, "Point") || Number(a("fontLetterSpacing")) || 0,
     wordSpacingPx: sizeToPx(a("fontWordSpacing") ?? 0, "Point") || Number(a("fontWordSpacing")) || 0,
@@ -2366,6 +2366,102 @@ export function fillPartsToTile(fillParts) {
     }
   });
   return { solidBase, tile: canvas, tileMeters: tilePx * METERS_PER_PX };
+}
+
+// --- ラベル spec → canvas ラスタライザ ---
+// bufferNoFill(中空ハロー)・背景・影を含む実描画が必要な経路用。
+// 返り値: {canvas, anchorX, anchorY}(0..1)。中心アンカー基準で offset は消費側が扱う
+export function qmlLabelCanvas(spec) {
+  const text = String(spec?.text ?? "");
+  if (!text.trim()) return null;
+  const font = spec.fontCss || `${Math.max(spec.sizePx || 12, 6)}px sans-serif`;
+  const halo = spec.halo;
+  const haloW = halo ? Math.max(Number(halo.widthPx) || 1, 1) : 0;
+  const bg = spec.background;
+  const padX = (bg ? (bg.padPx?.[0] ?? 2) : 0) + 2;
+  const padY = (bg ? (bg.padPx?.[1] ?? 2) : 0) + 2;
+  const lines = text.split("\n");
+  const lineH = (spec.sizePx || 12) * (spec.lineHeightFactor || 1) * 1.15;
+  const meas = document.createElement("canvas").getContext("2d");
+  meas.font = font;
+  let textW = 0;
+  for (const ln of lines) textW = Math.max(textW, meas.measureText(ln).width);
+  if (spec.letterSpacingPx) textW += spec.letterSpacingPx * Math.max(...lines.map(l => [...l].length - 1), 0);
+  const W = Math.ceil(textW + haloW * 2 + padX * 2) | 0;
+  const H = Math.ceil(lines.length * lineH + haloW * 2 + padY * 2) | 0;
+  const cv = document.createElement("canvas");
+  cv.width = Math.max(W, 2); cv.height = Math.max(H, 2);
+  const ctx = cv.getContext("2d");
+  const cx = cv.width / 2;
+  const y0 = haloW + padY + lineH / 2;
+
+  // 背景(rect/ellipse)。回転は近似で無視(消費側の回転で代替)
+  if (bg?.fill) {
+    ctx.save();
+    ctx.fillStyle = rgbaToCss(bg.fill);
+    if (bg.type === "ellipse" || bg.type === "circle") {
+      ctx.beginPath();
+      ctx.ellipse(cx, cv.height / 2, (cv.width - haloW * 2) / 2, (cv.height - haloW * 2) / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      const r = bg.radiusPx || 0;
+      ctx.beginPath();
+      if (r && ctx.roundRect) ctx.roundRect(1, 1, cv.width - 2, cv.height - 2, r);
+      else ctx.rect(0, 0, cv.width, cv.height);
+      ctx.fill();
+      if (bg.stroke) { ctx.strokeStyle = rgbaToCss(bg.stroke); ctx.lineWidth = Math.max(bg.strokeWidthPx || 1, 1); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+
+  ctx.font = font;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const each = fn => lines.forEach((ln, i) => fn(ln, cx, y0 + i * lineH, i));
+
+  // ドロップシャドウ(先に描く)
+  if (spec.shadow) {
+    ctx.save();
+    ctx.fillStyle = rgbaToCss(spec.shadow.color);
+    each((ln, x, y) => ctx.fillText(ln, x + spec.shadow.offsetPx[0], y + spec.shadow.offsetPx[1]));
+    ctx.restore();
+  }
+
+  // ハロー。noFill(中空)は別canvasに描いてからグリフ内側をくり抜く
+  if (halo) {
+    ctx.lineWidth = haloW * 2;
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = rgbaToCss(halo.color);
+    if (halo.noFill) {
+      const oc = document.createElement("canvas");
+      oc.width = cv.width; oc.height = cv.height;
+      const oc2 = oc.getContext("2d");
+      oc2.font = font; oc2.textAlign = "center"; oc2.textBaseline = "middle";
+      oc2.lineWidth = haloW * 2; oc2.lineJoin = "round"; oc2.strokeStyle = rgbaToCss(halo.color);
+      each((ln, x, y) => oc2.strokeText(ln, x, y));
+      oc2.globalCompositeOperation = "destination-out";
+      oc2.fillStyle = "#000";
+      each((ln, x, y) => oc2.fillText(ln, x, y));
+      ctx.drawImage(oc, 0, 0);
+    } else {
+      each((ln, x, y) => ctx.strokeText(ln, x, y));
+    }
+  }
+
+  // 本文(下線・取り消し線込み)
+  ctx.fillStyle = rgbaToCss(spec.fill);
+  each((ln, x, y) => ctx.fillText(ln, x, y));
+  if (spec.underline || spec.strikeout) {
+    ctx.strokeStyle = rgbaToCss(spec.fill);
+    ctx.lineWidth = Math.max((spec.sizePx || 12) / 12, 1);
+    const uw = textW / 2;
+    each((ln, x, y) => {
+      ctx.beginPath();
+      const yy = y + (spec.underline ? lineH * 0.42 : lineH * 0.05);
+      ctx.moveTo(x - uw, yy); ctx.lineTo(x + uw, yy); ctx.stroke();
+    });
+  }
+  return { canvas: cv, anchorX: 0.5, anchorY: 0.5 };
 }
 
 function drawHatch(ctx, W, anglesDeg, spacingPx, color, widthPx = 1) {

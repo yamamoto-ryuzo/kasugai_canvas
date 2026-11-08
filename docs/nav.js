@@ -101,6 +101,7 @@
 
   const DEMOS = [
     { href: 'https://yamamoto-ryuzo.github.io/kasugai-canvas-web/', text: '▶ デモ（CDN ホスト版）' },
+    { href: 'https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fsample_qgis%2Fkasugai_canvas.kasc', text: '▶ QGIS プロジェクトデモ（sample_qgis）' },
     { href: 'https://github.com/yamamoto-ryuzo/kasugai_canvas/issues', text: '🐛 問い合わせ（GitHub Issues）' }
   ];
 
