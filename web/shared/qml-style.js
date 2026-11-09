@@ -978,7 +978,8 @@ function loadImage(url) {
 // SVG を param(fill)/param(outline) で再着色して data URL 化する
 async function loadSvgRecolored(url, fillColor, strokeColor, fetchText) {
   try {
-    const text = await fetchText(url);
+    const text = await fetchText(url)
+  // GeometryGenerator を含む QML は式評価の turf.js を先読みする(#64)
     let svg = String(text);
     if (fillColor) {
       const c = rgbaToCss(fillColor);
@@ -1101,9 +1102,20 @@ function resolveMarkerLayer(layer, props, images, warnings) {
         stroke, strokeWidthPx: strokeWidth, rotationDeg: angle, offsetPx, alpha,
       }];
     }
-    case "GeometryGenerator":
+    case "GeometryGenerator": {
+      // 一般形(#64): 式を spec へ持ち出し、描画側が地物ジオメトリへ評価する。
+      // サブシンボルは通常のマーカー解決を再利用
+      const expr = String(p.geometryModifier ?? p.geometry_modifier ?? "") || "$geometry";
+      if (layer.subSymbol) {
+        const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
+        if (sub.markers?.length) {
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          return [{ gg: { expr, markers: sub.markers } }];
+        }
+      }
       warnOnce(warnings, "GeometryGenerator マーカーは未対応です(スキップ)");
       return [];
+    }
     default:
       warnOnce(warnings, `マーカーシンボル ${layer.cls} は未対応です(円で代替)`);
       return [{
@@ -1161,9 +1173,19 @@ function resolveLineLayer(layer, props, warnings, images = null) {
       warnOnce(warnings, `ラインシンボル ${layer.cls} は一部エンジンで単色近似です`);
       return { color: color || [0, 0, 0, 1], widthPx: Math.max(widthPx || sizeToPx(0.26, "MM"), 1), dash: null, decor };
     }
-    case "GeometryGenerator":
+    case "GeometryGenerator": {
+      const expr = String(p.geometryModifier ?? p.geometry_modifier ?? "") || "$geometry";
+      if (layer.subSymbol) {
+        const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
+        const line = sub.line;
+        if (line) {
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          return { gg: { expr, line } };
+        }
+      }
       warnOnce(warnings, "GeometryGenerator ラインは未対応です(スキップ)");
       return null;
+    }
     default:
       warnOnce(warnings, `ラインシンボル ${layer.cls} は未対応です`);
       return { color: parseQgisColor(p.line_color ?? p.color, [0, 0, 0, 1]), widthPx: 1, dash: null };
@@ -1317,6 +1339,24 @@ function resolveFillLayer(layer, props, images, warnings, tileCache) {
         warnOnce(warnings, "GeometryGenerator exterior_ring は外周描画で近似します");
         return { solid: null, outlineViaGenerator: true };
       }
+      // 一般形(#64): symbolType に応じたサブシンボルを解決し、式は
+      // 描画側が地物ジオメトリへ評価する。生成物の種別=symbolType
+      if (layer.subSymbol) {
+        const expr = mod || "$geometry";
+        const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
+        if (/marker|point/i.test(subType) && sub.markers?.length) {
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          return { gg: { expr, markers: sub.markers } };
+        }
+        if (/line/i.test(subType) && sub.line) {
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          return { gg: { expr, line: sub.line } };
+        }
+        if (sub.fillParts?.length || sub.outline) {
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          return { gg: { expr, fillParts: sub.fillParts || [{ solid: null }], outline: sub.outline || null } };
+        }
+      }
       warnOnce(warnings, `GeometryGenerator(${mod.slice(0, 40) || "?"}) 塗りつぶしは未対応です(スキップ)`);
       return {};
     }
@@ -1339,6 +1379,124 @@ function resolveOutline(layer, props, warnings) {
 }
 
 // <symbol> を feature 属性で正規化する
+// ---------------------------------------------------------------------------
+// GeometryGenerator 一般形: $geometry + 常用ジオメトリ関数を GeoJSON 上で評価
+// (#64)。turf.js は loadQmlStyle で GG 検出時に先行読込済み(turfSync で同期取得)。
+// 距離系(buffer/translate)はメートルとして測地計算する。
+// ---------------------------------------------------------------------------
+import { geomCentroid, geomBbox, destinationPoint, turfSync, ensureTurf } from "./spatial-ops.js";
+
+// トップレベルのカンマで式引数を分割(ネスト括弧・クォート対応)
+function splitExprArgs(s) {
+  const out = [];
+  let depth = 0, q = null, cur = "";
+  for (const ch of String(s)) {
+    if (q) { cur += ch; if (ch === q) q = null; continue; }
+    if (ch === "'" || ch === '"') { q = ch; cur += ch; continue; }
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) { out.push(cur); cur = ""; continue; }
+    cur += ch;
+  }
+  if (cur.trim() !== "") out.push(cur);
+  return out;
+}
+
+function mapGeomCoords(geom, fn) {
+  const map = c => typeof c[0] === "number" ? fn(c) : c.map(map);
+  return { type: geom.type, coordinates: map(geom.coordinates) };
+}
+
+function flatPoints(geom, acc = []) {
+  const walk = c => { if (typeof c[0] === "number") acc.push(c); else c.forEach(walk); };
+  if (geom?.coordinates) walk(geom.coordinates);
+  return acc;
+}
+
+// Andrew の単調チェーン法で凸包リング
+function convexHullRing(pts) {
+  const u = [...new Map(pts.map(p => [p.join(","), p])).values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (u.length < 3) return u.length ? [...u, u[0]] : null;
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [];
+  for (const p of u) { while (lower.length >= 2 && cross(lower.at(-2), lower.at(-1), p) <= 0) lower.pop(); lower.push(p); }
+  const upper = [];
+  for (const p of [...u].reverse()) { while (upper.length >= 2 && cross(upper.at(-2), upper.at(-1), p) <= 0) upper.pop(); upper.push(p); }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1), lower[0]];
+}
+
+function translateGeom(geom, dx, dy) {
+  const dist = Math.hypot(dx, dy);
+  const brg = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+  return mapGeomCoords(geom, c => destinationPoint(c, brg, dist));
+}
+
+function boundaryGeom(geom) {
+  if (!geom) return null;
+  if (geom.type === "Polygon") return { type: "MultiLineString", coordinates: geom.coordinates };
+  if (geom.type === "MultiPolygon") return { type: "MultiLineString", coordinates: geom.coordinates.flat(1) };
+  if (geom.type === "LineString") {
+    const c = geom.coordinates;
+    return c.length >= 2 ? { type: "MultiPoint", coordinates: [c[0], c[c.length - 1]] } : null;
+  }
+  if (geom.type === "MultiLineString") {
+    const pts = geom.coordinates.flatMap(c => (c.length >= 2 ? [c[0], c[c.length - 1]] : []));
+    return pts.length ? { type: "MultiPoint", coordinates: pts } : null;
+  }
+  return null;
+}
+
+// QGIS ジオメトリ生成式を GeoJSON(4326) 上で評価する。未対応式は null。
+// 再帰的に fn(g,数値..) 形を処理する
+export function evalGeomExpr(expr, geom) {
+  if (!geom) return null;
+  const s = String(expr || "").trim();
+  if (!s || /^\$geometry$/i.test(s)) return geom;
+  const m = /^([A-Za-z_][\w]*)\s*\((.*)\)$/s.exec(s);
+  if (!m) return null;
+  const fn = m[1].toLowerCase();
+  const args = splitExprArgs(m[2]);
+  const g = i => evalGeomExpr(args[i] ?? "", geom);
+  const num = i => Number(String(args[i] ?? "").trim());
+  const T = turfSync();
+  switch (fn) {
+    case "buffer": {
+      const d = num(1); const sub = g(0);
+      if (!T?.buffer || !sub || !Number.isFinite(d)) return null;
+      return T.buffer({ type: "Feature", properties: {}, geometry: sub }, d / 1000, { units: "kilometers" })?.geometry ?? null;
+    }
+    case "translate": {
+      const dx = num(1), dy = num(2), sub = g(0);
+      return sub && Number.isFinite(dx) && Number.isFinite(dy) ? translateGeom(sub, dx, dy) : null;
+    }
+    case "centroid": case "point_on_surface": case "pointonsurface": case "pole_of_inaccessibility": {
+      const c = geomCentroid(g(0));
+      return c ? { type: "Point", coordinates: c } : null;
+    }
+    case "exterior_ring": {
+      const p = g(0);
+      const ring = p?.type === "Polygon" ? p.coordinates[0] : p?.type === "MultiPolygon" ? p.coordinates[0]?.[0] : null;
+      return ring ? { type: "LineString", coordinates: ring } : null;
+    }
+    case "boundary": return boundaryGeom(g(0));
+    case "convex_hull": case "convexhull": {
+      const ring = convexHullRing(flatPoints(g(0)));
+      return ring ? { type: "Polygon", coordinates: [ring] } : null;
+    }
+    case "envelope": case "bounds": {
+      const b = geomBbox(g(0));
+      return b ? { type: "Polygon", coordinates: [[[b.west, b.south], [b.east, b.south], [b.east, b.north], [b.west, b.north], [b.west, b.south]]] } : null;
+    }
+    case "simplify": {
+      const sub = g(0);
+      return (T?.simplify && sub)
+        ? (T.simplify({ type: "Feature", properties: {}, geometry: sub }, { tolerance: num(1) || 0.0001 })?.geometry ?? sub)
+        : sub;
+    }
+    default: return null;
+  }
+}
+
 function resolveSymbolLayers(symbol, props, images, warnings) {
   const out = {
     markers: null, line: null, fillParts: null, outline: null, centroid: null,
@@ -1357,14 +1515,14 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
     if (!layer.enabled) continue;
     switch (symbol.geomType) {
       case "marker":
-        markerLayers.push(...resolveMarkerLayer(layer, props, images, warnings).map(m => ({
-          ...m,
-          blend: m.blend ?? layer.blend,
-          effects: m.effects ?? layer.effects,
-        })));
+        markerLayers.push(...resolveMarkerLayer(layer, props, images, warnings).map(m => {
+          if (m.gg) { (out.gg ||= []).push({ kind: "marker", ...m.gg }); return null; }
+          return { ...m, blend: m.blend ?? layer.blend, effects: m.effects ?? layer.effects };
+        }).filter(Boolean));
         break;
       case "line": {
         const r = resolveLineLayer(layer, props, warnings, images);
+        if (r?.gg) { (out.gg ||= []).push({ kind: "line", ...r.gg }); break; }
         // 最後の有効レイヤ(最上位)を採用
         if (r) {
           lineCandidate = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
@@ -1377,6 +1535,7 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
         const r = resolveFillLayer(layer, props, images, warnings);
         if (!r) break;
         if (r.centroid) { centroid = r.centroid; break; }
+        if (r.gg) { (out.gg ||= []).push({ kind: "fill", ...r.gg }); break; }
         const o = resolveOutline(layer, props, warnings);
         if (o) outline = o;
         const part = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
@@ -2022,6 +2181,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
       if (resolved.fillParts && !out.fillParts) out.fillParts = resolved.fillParts;
       if (resolved.outline && !out.outline) out.outline = resolved.outline;
       if (resolved.centroid && !out.centroid) out.centroid = resolved.centroid;
+      if (resolved.gg) (out.gg ||= []).push(...resolved.gg);
     }
     return out;
   };
@@ -2095,6 +2255,8 @@ function collectImagePaths(el, acc) {
 
 export async function loadQmlStyle(url, fetchText) {
   const text = await fetchText(url);
+  // GeometryGenerator を含む QML は式評価の turf.js を先読みする(#64)
+  if (/GeometryGenerator|geometryModifier/i.test(String(text))) await ensureTurf();
   const doc = new DOMParser().parseFromString(String(text), "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("QML の XML パースに失敗しました");
 

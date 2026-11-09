@@ -1,13 +1,129 @@
 // QML スタイル(.qml)の Cesium への適用（描画側バインディング）
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
-import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, rgbaToCss, qmlLabelCanvas } from "../shared/qml-style.js";
+import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, rgbaToCss, qmlLabelCanvas, evalGeomExpr } from "../shared/qml-style.js";
 
 const Cesium = window.Cesium;
 
 // ---------------------------------------------------------------------------
 // Cesium への適用
 // ---------------------------------------------------------------------------
+
+// ---- GeometryGenerator 一般形(#64) ----
+// entity の描画ジオメトリを GeoJSON(4326) へ戻す
+const _cartoDeg = c => {
+  const g = Cesium.Cartographic.fromCartesian(c);
+  return [g.longitude * 180 / Math.PI, g.latitude * 180 / Math.PI];
+};
+const _degToCart = c => Cesium.Cartesian3.fromDegrees(c[0], c[1]);
+
+function entityGeoJsonGeom(entity, t) {
+  try {
+    if (entity.polygon?.hierarchy) {
+      const h = entity.polygon.hierarchy.getValue?.(t);
+      const polys = (Array.isArray(h) ? h : (h ? [h] : [])).filter(Boolean)
+        .map(p => [(p.positions || p).map(_cartoDeg),
+                   ...(p.holes || []).map(r => (r.positions || r).map(_cartoDeg))]);
+      if (!polys.length || !polys[0][0]?.length) return null;
+      return polys.length === 1
+        ? { type: "Polygon", coordinates: polys[0] }
+        : { type: "MultiPolygon", coordinates: polys };
+    }
+    if (entity.polyline?.positions) {
+      const pos = entity.polyline.positions.getValue?.(t) || [];
+      return pos.length ? { type: "LineString", coordinates: pos.map(_cartoDeg) } : null;
+    }
+    if (entity.position) {
+      const c = entity.position.getValue?.(t);
+      return c ? { type: "Point", coordinates: _cartoDeg(c) } : null;
+    }
+  } catch (_) { /* ジオメトリ逆変換失敗時は GG 適用なし */ }
+  return null;
+}
+
+// GeoJSON(4326) → 描画片の列挙(polygon hierarchy / line positions / point position)
+function* geomToParts(geom) {
+  if (!geom) return;
+  const t = geom.type;
+  if (t === "Polygon" || t === "MultiPolygon") {
+    const polys = t === "Polygon" ? [geom.coordinates] : geom.coordinates;
+    for (const poly of polys) {
+      if (!poly[0]?.length) continue;
+      yield {
+        kind: "polygon",
+        hierarchy: new Cesium.PolygonHierarchy(
+          poly[0].map(_degToCart),
+          (poly.slice(1) || []).map(r => new Cesium.PolygonHierarchy(r.map(_degToCart)))),
+      };
+    }
+    return;
+  }
+  if (t === "LineString" || t === "MultiLineString") {
+    const lines = t === "LineString" ? [geom.coordinates] : geom.coordinates;
+    for (const line of lines) if (line?.length >= 2) yield { kind: "line", positions: line.map(_degToCart) };
+    return;
+  }
+  if (t === "Point" || t === "MultiPoint") {
+    const pts = t === "Point" ? [geom.coordinates] : geom.coordinates;
+    for (const p of pts) if (p?.length >= 2) yield { kind: "point", position: _degToCart(p) };
+    return;
+  }
+  for (const sub of geom.geometries || []) yield* geomToParts(sub); // GeometryCollection
+}
+
+// spec.gg の各パートを評価し、生成ジオメトリを補助エンティティとして描く。
+// fill=生成ポリゴン / line=生成ライン / marker=生成点へのマーカー描画
+function applyGeometryGenerators(entity, ggList, t, ctx) {
+  const { addAux, clamp, opacity } = ctx;
+  (window.__qmlGg ||= { parts: 0, calls: 0 }).calls++;
+  const base = entityGeoJsonGeom(entity, t);
+  if (!base) return;
+  for (const part of ggList) {
+    const gen = evalGeomExpr(part.expr, base);
+    if (!gen) continue;
+    for (const piece of geomToParts(gen)) {
+      if (part.kind === "fill" && piece.kind === "polygon") {
+        const { solidBase, tile } = fillPartsToTile((part.fillParts || []).map(pt => pt.solid ? { ...pt, solid: mulAlpha(pt.solid, opacity) } : pt));
+        const polyDesc = {
+          hierarchy: piece.hierarchy,
+          material: tile
+            ? new Cesium.ImageMaterialProperty({ image: tile, transparent: true })
+            : new Cesium.ColorMaterialProperty(toCesiumColor(solidBase || [0, 0, 0, 0.4])),
+        };
+        if (part.outline) {
+          polyDesc.outline = true;
+          polyDesc.outlineColor = toCesiumColor(mulAlpha(part.outline.color, opacity));
+          polyDesc.outlineWidth = part.outline.widthPx || 1;
+        }
+        if (addAux({ polygon: polyDesc })) (window.__qmlGg ||= { parts: 0 }).parts++;
+      } else if (part.kind === "line" && (piece.kind === "line" || piece.kind === "polygon")) {
+        const positions = piece.kind === "line" ? piece.positions : piece.hierarchy.positions;
+        if (addAux({
+          polyline: {
+            positions,
+            width: new Cesium.ConstantProperty(part.line.widthPx || 1),
+            material: dashMaterialProperty(mulAlpha(part.line.color, opacity), part.line.dash),
+            clampToGround: clamp,
+            arcType: Cesium.ArcType.GEODESIC,
+          },
+        })) (window.__qmlGg ||= { parts: 0 }).parts++;
+      } else if (part.kind === "marker" && piece.kind !== "line") {
+        const cart = piece.kind === "point" ? piece.position
+          : Cesium.BoundingSphere.fromPoints(piece.positions || piece.hierarchy.positions).center;
+        if (addAux({
+          position: cart,
+          billboard: {
+            image: new Cesium.ConstantProperty(markerLayersToCanvas(part.markers)),
+            scale: 1,
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            color: Cesium.Color.WHITE.withAlpha(opacity),
+          },
+        })) (window.__qmlGg ||= { parts: 0 }).parts++;
+      }
+    }
+  }
+}
 
 function entityFeatureProps(entity, time) {
   try {
@@ -200,6 +316,13 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
       if (entity.polygon) entity.polygon.show = new Cesium.ConstantProperty(false);
       if (entity.label) entity.label.show = new Cesium.ConstantProperty(false);
       continue;
+    }
+
+    // GeometryGenerator 一般形(#64): $geometry+常用関数を地物ジオメトリへ
+    // 評価し、生成ジオメトリを補助エンティティとして描く
+    if (spec.gg?.length) {
+      try { applyGeometryGenerators(entity, spec.gg, t, { addAux, clamp, opacity }); }
+      catch (e) { console.warn("GeometryGenerator 描画に失敗しました:", e); }
     }
 
     const ddc = spec.scale ? new Cesium.DistanceDisplayCondition(spec.scale.near, spec.scale.far) : null;

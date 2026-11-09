@@ -253,8 +253,12 @@ export function aggregateWithin(fc, regionGeom, { groupField = null, valueField 
 // Point/MultiPoint は測地線円を直接生成（turf 不要）。
 // Line/Polygon は turf.js を遅延ロードして生成する。
 let turfPromise = null;
-function ensureTurf() {
-  turfPromise ||= import(TURF_URL).then(m => (m.default && m.default.buffer ? m.default : m));
+let _turfMod = null;
+// 解決済み turf を同期取得(evalGeomExpr 等の同期経路から使う)。
+// 未ロード時は null — 呼び出し側は ensureTurf() で先行読込する
+export function turfSync() { return _turfMod; }
+export function ensureTurf() {
+  turfPromise ||= import(TURF_URL).then(m => (_turfMod = (m.default && m.default.buffer ? m.default : m)));
   return turfPromise;
 }
 
