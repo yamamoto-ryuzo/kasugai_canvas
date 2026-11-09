@@ -1075,22 +1075,19 @@ async function loadInspectorConfig() {
       }
     }
     if (!text) {
-      // 明示指定されたプロジェクト/?kasc= の .kasc が無いときに内蔵デフォルトへ
-      // 逃げると、別プロジェクト(東京都/千代田区サンプル)が表示されて誤解を招く
-      // (プレイヤー系エンジンは空表示)。フォールバックは既定プロジェクトのみ
+      // プロジェクト/?kasc= の .kasc が読めないときは空表示にする
+      // （内蔵デフォルトへのフォールバックは廃止。既定プロジェクトの正本は
+      // projects/default/ で全エンジン・全配布形態に同梱される）
       if (window.kasugaiAuth?.serverKasc) {
         document.querySelector("#inspector-input").value = "";
         applyInspector("");
         setInspectorStatus(t("inspector.status.noKasc"), true);
         return;
       }
-      if (currentKascUrl || currentProjectId !== "default") {
-        document.querySelector("#inspector-input").value = "";
-        applyInspector("");
-        setInspectorStatus(t("inspector.status.notFound"), true);
-        return;
-      }
-      text = defaultConfig;
+      document.querySelector("#inspector-input").value = "";
+      applyInspector("");
+      setInspectorStatus(t("inspector.status.notFound"), true);
+      return;
     }
     // ?kasc= で読んだ .kasc URL を仮ID(ファイル名)と紐付けて記憶する。
     // ?project=<仮ID> 形式のURLからの復元に使う（プレイヤーエンジンの
@@ -11188,10 +11185,6 @@ async function saveFetchSettings() {
   document.querySelector("#fetch-allow-status").textContent = t("update.settingsSaved");
 }
 
-const defaultConfig = `base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47
-3dtiles: 東京都/千代田区（建築物LOD1） | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json
-cam:東京駅|35.653108|139.761449|height=2200.6|pitch=-30|heading=348.5`;
-
 document.querySelector("#current-port").value = window.location.port || (window.location.protocol === "https:" ? "443" : "8510");
 setupEvents();
 
@@ -11224,8 +11217,9 @@ viewer.camera.changed.addEventListener(scheduleViewportRefresh);
 viewer.camera.changed.addEventListener(applyScaleVisibility);
 
 setupThreeJs();
-// サーバー .kasc 対応の認証時はサーバー側の .kasc のみ使い、内蔵デフォルトは適用しない
-applyInspector(window.kasugaiAuth?.serverKasc ? "" : defaultConfig);
+// 初期表示は空。既定プロジェクトは projects/default/ の実ファイルから読む
+// （内蔵デフォルト .kasc は廃止。以後のプロジェクト読込で内容が入る）
+applyInspector("");
 updateEffectSettings();
 const urlCamera = parseUrlCamera(initialCameraSource);
 

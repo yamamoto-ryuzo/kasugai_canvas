@@ -118,6 +118,31 @@ def _commit_and_push(cdn_dir, message, push):
         print('pushed')
 
 
+def _sync_default_project(stage):
+    # CDN へは既定プロジェクト(default)のみ複写する。
+    # 正本は web/projects/default/（Cesium エンジンで作成・保守）。他エンジンも
+    # ../projects/default/ を読むためステージルートの projects/ へ置く。
+    # projects.json も default エントリのみに絞って出す（reinfolib 等の
+    # 試験プロジェクトは CDN へ出さない方針のため、一覧に残さない）
+    src_projects = os.path.join(WEB_DIR, 'projects')
+    dst_projects = os.path.join(stage, 'projects')
+    if os.path.isdir(dst_projects):
+        shutil.rmtree(dst_projects)
+    src_default = os.path.join(src_projects, 'default')
+    if not os.path.isdir(src_default):
+        return
+    shutil.copytree(src_default, os.path.join(dst_projects, 'default'))
+    manifest = _read_version_json(os.path.join(src_projects, 'projects.json'))
+    entries = [e for e in (manifest if isinstance(manifest, list) else [])
+               if (e.get('id') if isinstance(e, dict) else e) == 'default']
+    if not entries:
+        entries = [{'id': 'default'}]
+    with open(os.path.join(dst_projects, 'projects.json'), 'w',
+              encoding='utf-8', newline='') as f:
+        json.dump(entries, f, ensure_ascii=False, indent=2)
+        f.write('\n')
+
+
 def sync_channel(cdn_dir, channel):
     """web/ を指定ステージへ直接同期する。"""
     stage = os.path.join(cdn_dir, channel)
@@ -128,8 +153,10 @@ def sync_channel(cdn_dir, channel):
     build_bridge_zip.build()
     # vendor は CDN へ配置しない(SW が vendor.json のピン先オリジナルへ
     # 直接解決する方式)。ローカルに web/vendor/ があっても誤って
-    # ミラーしないよう除外する
+    # ミラーしないよう除外する。projects/ は既定プロジェクト(default)のみ
+    # _sync_default_project で別途複写する
     _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))
+    _sync_default_project(stage)
     version = _cargo_version()
     _write_version_json(stage, {
         'version': version,
