@@ -47,18 +47,16 @@
 
 - **配信先**: `yamamoto-ryuzo/kasugai-canvas-web`（GitHub Pages）。`stable/`（既定・リリース版）/ `unstable/`（main の最新 `web/` 追従）/ `channels.json`（各ステージのバージョン表）
 - **正本は本リポジトリの `web/`**。CDN リポジトリ側は発行物のみで直接編集しない。`web/` は相対パス構成済みのため同期は単純コピーでよい
-- **同期は `python tools/publish_cdn.py` で行う**（手コピー・CDN 側の手編集はしない）。`--channel` はコピー先ステージを選ぶだけで、どちらも `web/` を直接同期する（stable への格上げに unstable 同期は不要）:
-  - `python tools/publish_cdn.py --channel unstable` — `web/` → `unstable/` へ同期し `version.json`・`channels.json` を更新。`--commit` / `--push` でコミット・push まで実行
-  - `python tools/publish_cdn.py --channel stable` — `web/` → `stable/` へ直接同期（unstable を経由しない）
-  - CDN リポジトリのパスは省略時 `<kasugai_canvas>/../kasugai-canvas-web`（`C:\devin` ワークスペースなら省略可）
-- **運用**: `web/` に配信したい変更が入ったら unstable 同期、リリース時（`-B` で配布物を作るタイミング）に stable 同期。ルート `index.html` はリダイレクト固定で触らない
+- **CDN への配信は `C:\devin\cdn-publish.html` のボタンによる人力のみで行う**。ボタンは `kasugai-canvas-web/.github/workflows/cdn-sync.yml`（`workflow_dispatch`・`channel` 入力で stable/unstable を選択）を開き、人が GitHub 上で Run workflow を実行する。エージェント・自動経路は CDN 同期を実行しない
+- ローカル実行用の `python tools/publish_cdn.py --channel <unstable|stable> --commit --push` は残置するが、通常運用はボタン経由とする（手コピー・CDN 側の手編集はしない）
+- **運用**: `web/` に配信したい変更が入ったら unstable 反映、リリース時（`-B` で配布物を作るタイミング）に stable 反映。ルート `index.html` はリダイレクト固定で触らない
 
 ## 動作テストの2系統（CDN を忘れない）
 
 今後の動作確認は以下の2系統を対象に行う:
 
 1. **ブラウザ WebGIS（CDN × 外部データホスト）— メインの利用形態**
-   - エンジン: `kasugai-canvas-web`（GitHub Pages CDN。エンジン本体のみ配信し `projects/` は同梱しない）。`stable/`=リリース版・`unstable/`=最新 `web/` 追従。`web/` の変更は `python tools/publish_cdn.py --channel unstable --commit --push` で同期してから検証する
+   - エンジン: `kasugai-canvas-web`（GitHub Pages CDN。エンジン本体のみ配信し `projects/` は同梱しない）。`stable/`=リリース版・`unstable/`=最新 `web/` 追従。`web/` の変更の CDN 反映は `C:\devin\cdn-publish.html` ボタン → Actions（`cdn-sync.yml`）による人の手動実行のみで行い、エージェントは同期せず未反映の旨を報告する
    - テストデータホスト: `yamamoto-ryuzo/kasugai_canvas_webGIS`（GitHub Pages。`.kasc + DATA/` + 群マニフェスト `projects.json`）— エンジン以外のテストデータの置き場
    - 再生: `…/kasugai-canvas-web/<stage>/<engine>/?kasc=<.kasc URL>`。開いた .kasc の祖先 `projects.json`（群マニフェスト）をエンジンが読み、同一ホストの他プロジェクトをドロップボックスに並べる（cesium 実装済み）
    - 検証例: `https://yamamoto-ryuzo.github.io/kasugai-canvas-web/unstable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fdefault%2Fkasugai_canvas.kasc`
