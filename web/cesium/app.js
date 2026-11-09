@@ -411,6 +411,8 @@ const collapsedLayerLegends = new Set();
 const LEGEND_AUTO_COLLAPSE_MIN = 24;
 // 既定で折りたたまれる大きい凡例をユーザーが展開した記憶(レイヤーid の Set)
 const expandedLayerLegends = new Set();
+// #107: ⚠バッジのクリックで展開する「未再現要素一覧」の開閉状態
+const expandedStyleWarnings = new Set();
 // スタイル解決ごとの一覧再描画をマイクロタスクで束ねる(レイヤー数分の連発を防ぐ)
 let layerListRenderScheduled = false;
 function scheduleLayerListRender() {
@@ -1857,10 +1859,11 @@ function renderLayerList() {
           <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}${deferred ? " deferred" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadStatus === "failed" ? (layer._loadError || "") : deferred ? t("layer.notLoadedHint") : "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : deferred ? escapeHtml(t("layer.notLoaded")) : ""}</span>
           ${filterButton}
           ${limitBadge}
-          ${layer.qmlStyle?.warnings?.length ? `<small class="entity-limit-badge style-warn-badge" title="${escapeHtml(layer.qmlStyle.warnings.join(" / "))}">⚠${layer.qmlStyle.warnings.length}</small>` : ""}
+          ${layer.qmlStyle?.warnings?.length ? `<button class="entity-limit-badge style-warn-badge" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer.qmlStyle.warnings.join(" / "))}">⚠${layer.qmlStyle.warnings.length}</button>` : ""}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>
         ${legendItems}
+        ${layer.qmlStyle?.warnings?.length && expandedStyleWarnings.has(layer.id) ? `<div class="style-warn-list" data-layer-id="${escapeHtml(layer.id)}">${layer.qmlStyle.warnings.map(w => `<div class="style-warn-item">${escapeHtml(w)}</div>`).join("")}</div>` : ""}
         </div>`;
         }).join("")}
       </div>
@@ -1945,6 +1948,18 @@ function renderLayerList() {
       event.preventDefault();
       event.stopPropagation();
       void editLayerQueryFilter(layerState.get(button.dataset.layerId));
+    });
+  });
+
+  // #107: ⚠バッジクリックで QML 未再現要素の警告一覧を展開/収納
+  list.querySelectorAll(".style-warn-badge").forEach(button => {
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = button.dataset.layerId;
+      if (expandedStyleWarnings.has(id)) expandedStyleWarnings.delete(id);
+      else expandedStyleWarnings.add(id);
+      renderLayerList();
     });
   });
 
