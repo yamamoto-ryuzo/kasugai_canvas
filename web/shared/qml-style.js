@@ -978,8 +978,7 @@ function loadImage(url) {
 // SVG を param(fill)/param(outline) で再着色して data URL 化する
 async function loadSvgRecolored(url, fillColor, strokeColor, fetchText) {
   try {
-    const text = await fetchText(url)
-  // GeometryGenerator を含む QML は式評価の turf.js を先読みする(#64)
+    const text = await fetchText(url);
     let svg = String(text);
     if (fillColor) {
       const c = rgbaToCss(fillColor);
