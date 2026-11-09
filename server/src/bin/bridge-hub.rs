@@ -327,6 +327,13 @@ fn register_autostart(exe: &std::path::Path) -> Option<&'static str> {
             .unwrap_or(false);
     let _ = std::fs::remove_file(&xml_path);
     if task_ok {
+        // タスク登録が成功したので Run キー側は掃除する。
+        // 旧インストーラが残した wscript/run-hidden.vbs 起動や
+        // 過去の registry フォールバック登録が残ると、ログイン時に
+        // 存在しない vbs を実行して WSH エラー（または二重起動）になる
+        let _ = std::process::Command::new("reg")
+            .args(["delete", RUN_KEY, "/v", task_name(), "/f"])
+            .output();
         return Some("task");
     }
     let tr = format!("\"{}\" --serve", exe.display());
