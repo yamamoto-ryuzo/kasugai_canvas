@@ -35,6 +35,17 @@ export function setBackendCapabilities(caps, done = true, baseUrl = base) {
   base = typeof baseUrl === "string" ? baseUrl : base;
 }
 
+// 検出済みバックエンドへの疎通がネットワークエラー（接続拒否等）で失敗した
+// とき、以後の URL 解決が死んだオリジンを指し続けないよう検出状態を
+// リセットする。HTTP 応答が得られた場合（404 等＝バックエンド自体は生存）
+// は呼ばない。ローカルアプリ停止中の CDN ホスト版で、配信元の静的
+// projects/ へフォールバックさせるために使う
+export function markBackendUnreachable() {
+  capabilities = null;
+  alive = false;
+  base = "";
+}
+
 // サーバー提供の Maps API キーは未保存時のみ自動登録（BYO キー優先）
 function adoptServerMapsKey(caps) {
   try {

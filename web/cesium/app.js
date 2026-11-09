@@ -16,7 +16,7 @@ import {
 } from "../shared/ai-chat.js";
 import {
   detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature, backendBaseUrl,
-  localNetworkPermission,
+  localNetworkPermission, markBackendUnreachable,
 } from "../shared/backend.js";
 import { buildViewUrl } from "../shared/kasc.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
@@ -978,7 +978,17 @@ async function loadProjects() {
   try {
     const response = await fetch(projectsManifestUrl(), { cache: "no-store" });
     if (response.ok) definitions = await response.json();
-  } catch {}
+  } catch {
+    // 検出済みローカルアプリが停止・遮断されている場合は配信元側の
+    // マニフェストへ切り替える（以後の URL 解決は hosted 側を指す）
+    if (backendBaseUrl()) {
+      markBackendUnreachable();
+      try {
+        const res = await fetch(projectsManifestUrl(), { cache: "no-store" });
+        if (res.ok) definitions = await res.json();
+      } catch { /* 静的配信で一覧が無い場合もあり得る */ }
+    }
+  }
   if (!definitions.length) definitions = [{ id: "default", title: t("project.default") }];
   // ?kasc= で直接読んだ .kasc はマニフェストに無いため、選択中として
   // 一覧へ表示できるよう先頭に仮エントリを足す

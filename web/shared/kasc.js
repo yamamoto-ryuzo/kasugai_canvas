@@ -1,7 +1,7 @@
 // .kasc 行パーサー + プロジェクトローダー（エンジン非依存コア）
 // 行形式: 種類:タイトル|URL|出典|オプション名=値|on/off   （docs/inspector.html 参照）
 // 対象: /projects/<id>/ の標準プロジェクト（外部登録プロジェクトの @parent 解決は未対応）
-import { backendBaseUrl, detectBackend } from "./backend.js";
+import { backendBaseUrl, detectBackend, markBackendUnreachable } from "./backend.js";
 
 const BOOL_RE = /^(on|off|true|false)$/i;
 const KV_RE = /^([A-Za-z_][\w-]*)\s*=\s*(.*)$/;
@@ -673,29 +673,42 @@ export async function loadKascProject(projectId) {
   try {
     const res = await fetch(projectsManifestUrl(), { cache: "no-store" });
     if (res.ok) manifest = await res.json();
-  } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
+  } catch (_) {
+    // 検出済みローカルアプリが停止・遮断されている場合は配信元側の
+    // マニフェストへ切り替える（以後の projectsBaseUrl 等も hosted 側を指す）
+    if (backendBaseUrl()) {
+      markBackendUnreachable();
+      try {
+        const res = await fetch(projectsManifestUrl(), { cache: "no-store" });
+        if (res.ok) manifest = await res.json();
+      } catch (_) { /* 静的配信で一覧が無い場合もあり得る */ }
+    }
+  }
 
   const requested = projectId || params.get("project");
   const id = requested || (manifest[0] && (manifest[0].id || manifest[0])) || "default";
   let baseUrl = projectsBaseUrl(id);
-  let res = await fetch(`${baseUrl}kasugai_canvas.kasc`, { cache: "no-store" });
-  if (!res.ok && backendBaseUrl()) {
+  let res = await fetch(`${baseUrl}kasugai_canvas.kasc`, { cache: "no-store" }).catch(() => null);
+  if ((!res || !res.ok) && backendBaseUrl()) {
     // 配信元にのみ存在するプロジェクトをローカルアプリへ向けて失敗した
-    // 場合は、配信元側でも探す（CDN 専用プロジェクトの直リンク対策）
+    // 場合や、検出時は応答したローカルアプリが取得時点で停止・遮断されて
+    // いる場合（ネットワークエラー）は、配信元側でも探す
+    // （CDN 専用プロジェクトの直リンク対策＋死んだバックエンドの救済）
+    if (!res) markBackendUnreachable();
     const fallback = hostedProjectsBaseUrl(id);
-    const res2 = await fetch(`${fallback}kasugai_canvas.kasc`, { cache: "no-store" }).catch(() => res);
-    if (res2.ok) {
+    const res2 = await fetch(`${fallback}kasugai_canvas.kasc`, { cache: "no-store" }).catch(() => null);
+    if (res2?.ok) {
       baseUrl = fallback;
       res = res2;
     }
   }
-  if (!res.ok && requested) {
+  if ((!res || !res.ok) && requested) {
     // id が .kasc ファイル名由来の仮名（?project=<ファイル名> の共有URLや
     // ?kasc= 仮エントリの再選択）だった場合、記憶した .kasc URL から復元する
     const saved = rememberedKascUrl(requested);
     if (saved) return loadKascUrl(saved);
   }
-  if (!res.ok) throw new Error(`.kasc を読み込めません: ${baseUrl}kasugai_canvas.kasc (${res.status})`);
+  if (!res || !res.ok) throw new Error(`.kasc を読み込めません: ${baseUrl}kasugai_canvas.kasc (${res ? res.status : "ネットワークエラー"})`);
   const text = await res.text();
   return { id, manifest, baseUrl, doc: parseKasc(text), raw: text };
 }
