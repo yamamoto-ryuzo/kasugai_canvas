@@ -198,10 +198,12 @@
       Cesium=画面投影ベースの自前 declutter（priority/zIndex 順＋
       predefinedPositionOrder 順位付き位置への自動移動。カメラ停止時に再計算）、
       Leaflet=DOM 矩形衝突判定で非表示。<br>
-      未対応/近似: ジオメトリジェネレータ・ラベルマスクは不透明背景近似・
+      未対応/近似: ジオメトリジェネレータ・ダイアグラム(Pie/Histogram)は簡易canvas描画・InterpolatedLineはセグメント分割近似・AnimatedMarkerは先頭フレーム静止表示・ラベルマスクは不透明背景近似・
       ドロップシャドウは Cesium/Leaflet でオフセット近似・
       MarkerLine/HashLine/ArrowLine の形状は OpenLayers のみ形状再現
-      （他エンジンは単色近似）・シンボルレベルの地物横断描画順は近似</td>
+      （他エンジンは単色近似）・InterpolatedLine は Cesium で幅/色の
+      線形補間を再現（ドレープ時は色のみ。他エンジンは単色近似）・
+      シンボルレベルの地物横断描画順は近似</td>
       </tr>
       <tr>
       <td>シンボルが参照する画像（SVG/ラスタ）</td>

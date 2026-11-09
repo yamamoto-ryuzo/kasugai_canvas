@@ -1101,6 +1101,18 @@ function resolveMarkerLayer(layer, props, images, warnings) {
         stroke, strokeWidthPx: strokeWidth, rotationDeg: angle, offsetPx, alpha,
       }];
     }
+    case "AnimatedMarker": {
+      // アニメーションマーカー(#108): 動画再生は未対応のため先頭フレーム(file)を静止表示
+      const pathKey = String(p.name ?? p.file ?? "");
+      const image = pathKey ? images.get(pathKey) || null : null;
+      if (image) {
+        warnOnce(warnings, "AnimatedMarker は先頭フレームのみ静止表示です(アニメーション未対応)");
+        return [{ kind: "image", image, sizePx, rotationDeg: angle, offsetPx, alpha }];
+      }
+      warnOnce(warnings, `AnimatedMarker の画像を読めませんでした: ${pathKey || "?"}(円で代替)`);
+      const fill = parseQgisColor(p.color, [0.2, 0.4, 0.9, 1]);
+      return [{ kind: "shape", shape: "circle", sizePx, fill, stroke: null, strokeWidthPx: 0, rotationDeg: angle, offsetPx, alpha }];
+    }
     case "GeometryGenerator": {
       // 一般形(#64): 式を spec へ持ち出し、描画側が地物ジオメトリへ評価する。
       // サブシンボルは通常のマーカー解決を再利用
@@ -1144,11 +1156,32 @@ function resolveLineLayer(layer, props, warnings, images = null) {
         offsetPx: sizeToPx(p.offset ?? 0, p.offset_unit || "MM") || 0,
       };
     }
+    case "InterpolatedLine": {
+      // QGIS の補間ライン: 始点→終点で幅・色を線形補間する。spec.interp を
+      // 持ち、対応エンジン(Cesium)では線分細分化で再現する(#108)
+      const colorStart = parseQgisColor(ddValue(dd, ["startColor", "start_color"], props,
+        p.start_color ?? p.color_start ?? p.single_color ?? p.line_color ?? p.color), [0, 0, 0, 1]);
+      const colorEnd = parseQgisColor(ddValue(dd, ["endColor", "end_color"], props,
+        p.end_color ?? p.color_end ?? p.start_color ?? p.color_start ?? p.line_color ?? p.color), colorStart);
+      const wUnit = p.width_unit || widthUnit;
+      const widthStartPx = Math.max(sizeToPx(ddValue(dd, ["widthStart", "width_start"], props,
+        p.width_start ?? p.start_width ?? p.line_width_start ?? p.line_width ?? p.width ?? 0.26),
+        p.width_start_unit || wUnit) || 0, 0.5);
+      const widthEndPx = Math.max(sizeToPx(ddValue(dd, ["widthEnd", "width_end"], props,
+        p.width_end ?? p.end_width ?? p.line_width_end ?? p.width_start ?? p.start_width ?? p.line_width ?? p.width ?? 0.26),
+        p.width_end_unit || wUnit) || 0, 0.5);
+      warnOnce(warnings, "InterpolatedLine は始点→終点の線形補間で近似です(未対応エンジンは単色)");
+      // decor {kind:"interpolated"} は対応エンジン(Cesium)が弧長分割で
+      // 幅・色補間を再現する契約。非対応エンジンは color/widthPx の単色線
+      return {
+        color: colorStart, widthPx: Math.max(widthStartPx, widthEndPx, 1), dash: null,
+        decor: { kind: "interpolated", c1: colorStart, c2: colorEnd, w1: widthStartPx, w2: widthEndPx },
+      };
+    }
     case "MarkerLine":
     // QGIS のハッシュ線(崖線・鉄道等の刻み)は "HashLine"、"HashedLine" は手書き・改名済みファイル用
     case "HashLine":
     case "HashedLine":
-    case "InterpolatedLine":
     case "Lineburst":
     case "ArrowLine":
     case "RasterLine":
@@ -1169,7 +1202,7 @@ function resolveLineLayer(layer, props, warnings, images = null) {
       }
       // 装飾内容を保持し、対応エンジンで形状描画する(#54)
       const decor = buildLineDecor(layer, p, props, images, color, widthUnit);
-      warnOnce(warnings, `ラインシンボル ${layer.cls} は一部エンジンで単色近似です`);
+      warnOnce(warnings, cls === "InterpolatedLine" ? "InterpolatedLine はセグメント分割で色・幅を補間した近似描画です" : `ラインシンボル ${layer.cls} は一部エンジンで単色近似です`);
       return { color: color || [0, 0, 0, 1], widthPx: Math.max(widthPx || sizeToPx(0.26, "MM"), 1), dash: null, decor };
     }
     case "GeometryGenerator": {
@@ -1221,6 +1254,16 @@ function buildLineDecor(layer, p, props, images, color, widthUnit) {
     const hashAngle = Number(p.hash_angle ?? p.angle ?? 90);
     return { kind: "hashline", intervalPx: intervalPx || sizeToPx(2, "MM"),
       tick: { color: tickColor, widthPx: Math.max(tickWidthPx, 0.5), lengthPx: tickLenPx, angleDeg: hashAngle } };
+  }
+  if (cls === "InterpolatedLine") {
+    // 始端→終端の色・幅補間(#108)。dd 指定も拾い、描画側がセグメント分割で近似する
+    const dd = layer.dd || {};
+    const wu = p.width_start_unit || p.line_width_unit || widthUnit;
+    const c1 = parseQgisColor(ddValue(dd, ["color_start", "line_color"], props, p.start_color ?? p.line_color ?? p.color), [0, 0, 0, 1]);
+    const c2 = parseQgisColor(ddValue(dd, ["color_end"], props, p.end_color ?? p.line_color_2 ?? p.color_2 ?? p.line_color ?? p.color), c1);
+    const w1 = Math.max(sizeToPx(ddValue(dd, ["width_start"], props, p.width_start ?? p.line_width ?? 0.26), wu) || 1, 0.5);
+    const w2 = Math.max(sizeToPx(ddValue(dd, ["width_end"], props, p.width_end ?? p.width_start ?? p.line_width ?? 0.26), p.width_end_unit || wu) || 1, 0.5);
+    return { kind: "interpolated", c1, c2, w1, w2 };
   }
   if (cls === "ArrowLine") {
     return { kind: "arrowline", color: parseQgisColor(color, [0, 0, 0, 1]),
@@ -2148,6 +2191,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
   const rendererEl = doc.querySelector("renderer-v2");
   if (!rendererEl) throw new Error("QML に renderer-v2 がありません(シンボロジが含まれていません)");
   const renderer = compileRenderer(rendererEl, warnings);
+  const diagram = parseDiagram(doc.documentElement, warnings);
   const labelingEl = doc.querySelector("labeling");
   const labelFn = compileLabeling(labelingEl, warnings);
   const images = preloadedImages;
@@ -2230,6 +2274,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
     heatmap: renderer.heatmap || null,
     cluster: renderer.cluster || null,
     inverted: !!renderer.inverted,
+    diagram,
     symbols: renderer.symbols,
     images,
     // 属性表示メタ。displayFor(props) は displayExpression を評価して
@@ -2239,11 +2284,65 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
   };
 }
 
+// <SingleCategoryDiagramRenderer>/<LinearlyInterpolatedDiagramRenderer> +
+// <DiagramLayerSettings> → ダイアグラム spec(#108)。renderer-v2 とは独立した
+// レイヤ設定として記録される。enabled=0 や属性フィールド無しは未使用とみなす
+function parseDiagram(rootEl, warnings) {
+  let dr = null;
+  const walk = el => {
+    if (!el?.children) return;
+    for (const c of el.children) {
+      if (String(c.tagName).endsWith("DiagramRenderer")) dr = dr || c;
+      walk(c);
+    }
+  };
+  walk(rootEl);
+  if (!dr) return null;
+  const cat = [...dr.children].find(c => c.tagName === "DiagramCategory");
+  if (cat && !qgisBool(cat.getAttribute("enabled") ?? "1")) return null;
+  const attrs = [...(cat?.children || [])].filter(c => c.tagName === "attribute")
+    .map(a => ({
+      field: a.getAttribute("field") || "",
+      label: a.getAttribute("label") || a.getAttribute("field") || "",
+      color: parseQgisColor(a.getAttribute("color"), [0.3, 0.5, 0.8, 1]),
+    }))
+    .filter(a => a.field);
+  if (!attrs.length) return null;
+  const sizeUnit = cat?.getAttribute("sizeType") || "MM";
+  const bg = parseQgisColor(cat?.getAttribute("backgroundColor"), null);
+  if (bg) bg[3] *= Number(cat?.getAttribute("backgroundAlpha") ?? 255) / 255;
+  const pen = parseQgisColor(cat?.getAttribute("penColor"), null);
+  if (pen) pen[3] *= Number(cat?.getAttribute("penAlpha") ?? 255) / 255;
+  const diagram = {
+    type: dr.getAttribute("diagramType") || "Pie",
+    orientation: cat?.getAttribute("diagramOrientation") || "Up",
+    widthPx: sizeToPx(cat?.getAttribute("width") ?? 15, sizeUnit) || 40,
+    heightPx: sizeToPx(cat?.getAttribute("height") ?? 15, sizeUnit) || 40,
+    barWidthPx: sizeToPx(cat?.getAttribute("barWidth") ?? 5, sizeUnit) || 12,
+    bg, pen,
+    penWidthPx: sizeToPx(cat?.getAttribute("penWidth") ?? 0, "MM") || 0,
+    opacity: Number(cat?.getAttribute("opacity") ?? 1) || 1,
+    attrs,
+    // LinearlyInterpolatedDiagramRenderer: 分類属性値でサイズを線形変化(近似)
+    scale: dr.tagName === "LinearlyInterpolatedDiagramRenderer" ? {
+      attr: cat?.getAttribute("classificationAttributeExpression") || dr.getAttribute("classificationAttributeExpression") || "",
+      lo: Number(cat?.getAttribute("lowerValue") ?? dr.getAttribute("lowerValue")) || 0,
+      hi: Number(cat?.getAttribute("upperValue") ?? dr.getAttribute("upperValue")) || 0,
+      loW: sizeToPx(cat?.getAttribute("lowerWidth") ?? 0, sizeUnit) || 0,
+      hiW: sizeToPx(cat?.getAttribute("upperWidth") ?? 0, sizeUnit) || 0,
+      loH: sizeToPx(cat?.getAttribute("lowerHeight") ?? 0, sizeUnit) || 0,
+      hiH: sizeToPx(cat?.getAttribute("upperHeight") ?? 0, sizeUnit) || 0,
+    } : null,
+  };
+  warnOnce(warnings, `ダイアグラム(${diagram.type})は Canvas 簡易描画です(軸・ラベル・優先度制御は未対応)`);
+  return diagram;
+}
+
 // QML 内で参照される画像 URL を収集して事前ロードする
 function collectImagePaths(el, acc) {
   if (!el) return;
   const cls = el.getAttribute?.("class");
-  if (cls === "SvgMarker" || cls === "RasterMarker" || cls === "SVGFill" || cls === "RasterFill") {
+  if (cls === "SvgMarker" || cls === "RasterMarker" || cls === "SVGFill" || cls === "RasterFill" || cls === "AnimatedMarker") {
     const props = optionMap(el);
     const key = String(props.name ?? props.imageFile ?? props.svgfile ?? props.file ?? "") ||
       (props.data ? "__inline__" : "");
@@ -2451,6 +2550,62 @@ function applyEffectToCanvas(cur, fx) {
 }
 
 // マーカーレイヤ群を1枚の canvas に合成する。返り値 {canvas, anchorY}
+// ダイアグラム(#108): 地物属性値から円グラフ/棒グラフの canvas を生成する。
+// 値が全て 0/欠損の地物は null(=ダイアグラム非表示)
+export function diagramCanvas(diagram, props) {
+  const vals = diagram.attrs.map(a => ({ v: Math.max(0, Number(props?.[a.field]) || 0), color: a.color }));
+  const total = vals.reduce((s, x) => s + x.v, 0);
+  if (!(total > 0)) return null;
+  let w = diagram.widthPx, h = diagram.heightPx;
+  if (diagram.scale?.attr) {
+    const sv = Number(props?.[diagram.scale.attr]);
+    if (Number.isFinite(sv) && diagram.scale.hi > diagram.scale.lo) {
+      const f = Math.min(1, Math.max(0, (sv - diagram.scale.lo) / (diagram.scale.hi - diagram.scale.lo)));
+      w = (diagram.scale.loW || w) + ((diagram.scale.hiW || w) - (diagram.scale.loW || w)) * f;
+      h = (diagram.scale.loH || h) + ((diagram.scale.hiH || h) - (diagram.scale.loH || h)) * f;
+    }
+  }
+  const pad = Math.max(diagram.penWidthPx + 2, 3);
+  const S = Math.max(Math.ceil(Math.max(w, h)) + pad * 2, 8);
+  const key = `dg:${diagram.type}:${Math.round(w)}x${Math.round(h)}:${vals.map(x => x.v).join(",")}:${JSON.stringify(diagram.attrs.map(a => a.color))}`;
+  return getCanvas(key, S, (ctx) => {
+    ctx.globalAlpha = diagram.opacity;
+    if (diagram.type === "Histogram") {
+      const max = Math.max(...vals.map(x => x.v), 1e-9);
+      const bw = diagram.barWidthPx;
+      const totalW = vals.length * bw;
+      const x0 = (S - totalW) / 2, yBase = S - pad;
+      if (diagram.bg && diagram.bg[3] > 0) { ctx.fillStyle = rgbaToCss(diagram.bg); ctx.fillRect(x0, pad, totalW, h); }
+      vals.forEach((x, i) => {
+        const bh = Math.max((x.v / max) * h, x.v > 0 ? 1 : 0);
+        ctx.fillStyle = rgbaToCss(x.color);
+        ctx.fillRect(x0 + i * bw, yBase - bh, Math.max(bw - 0.5, 1), bh);
+      });
+      return;
+    }
+    // Pie(既定): 北(12時)から時計回りに各スライス
+    const r = Math.max((Math.min(w, h) || S - pad * 2) / 2, 1);
+    const cx = S / 2, cy = S / 2;
+    if (diagram.bg && diagram.bg[3] > 0) {
+      ctx.fillStyle = rgbaToCss(diagram.bg);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    }
+    let a0 = -Math.PI / 2;
+    for (const x of vals) {
+      if (!(x.v > 0)) continue;
+      const a1 = a0 + (x.v / total) * Math.PI * 2;
+      ctx.fillStyle = rgbaToCss(x.color);
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a0, a1); ctx.closePath(); ctx.fill();
+      a0 = a1;
+    }
+    if (diagram.pen && diagram.penWidthPx > 0) {
+      ctx.strokeStyle = rgbaToCss(diagram.pen);
+      ctx.lineWidth = diagram.penWidthPx;
+      ctx.beginPath(); ctx.arc(cx, cy, r - diagram.penWidthPx / 2, 0, Math.PI * 2); ctx.stroke();
+    }
+  });
+}
+
 export function markerLayersToCanvas(markerLayers) {
   const maxSize = Math.max(...markerLayers.map(m => m.sizePx || m.widthPx || 8), 4);
   const pad = Math.max(...markerLayers.map(m => (m.strokeWidthPx || 0) + 2), 2);
