@@ -49,7 +49,7 @@
 - **正本は本リポジトリの `web/`**。CDN リポジトリ側は発行物のみで直接編集しない。`web/` は相対パス構成済みのため同期は単純コピーでよい
 - **CDN への配信は `python tools/publish_cdn.py --channel <unstable|stable> --commit --push` で行う**（ローカル `../kasugai-canvas-web` へ `web/` をコピーしてコミット＆push するだけ。GitHub Pages が push 時に自動デプロイ）。CDN 側の手編集・手コピーはしない
 - 代替経路として `kasugai-canvas-web` の `cdn-sync.yml`（workflow_dispatch）も残置するが、通常運用は `publish_cdn.py` とする
-- **既定プロジェクトの複写ルール**: 既定プロジェクトの正本は `web/projects/default/` で、**Cesium エンジン（メインエンジン）で作成・保守する**。他エンジンへの提供はコード内の内蔵デフォルトではなくファイル複写で行う — `publish_cdn.py` が `projects/default/` と default エントリのみに絞った `projects.json` をステージ直下 `projects/` へ複写するため、全エンジンが `../projects/default/` を同じ手順（`projectsBaseUrl("default")`）で読める。**エンジンコードに内蔵デフォルト .kasc やフォールバックを持たせない**（旧 cesium の `defaultConfig` は廃止済み）。`default` 以外のプロジェクト（reinfolib 等の試験用）は CDN へ出さない
+- **既定プロジェクトの複写ルール**: 既定プロジェクトの正本は `web/projects/default/` で、**Cesium エンジン（メインエンジン）で作成・保守する**。他エンジンへの提供はコード内の内蔵デフォルトではなくファイル複写で行う — `publish_cdn.py` が `CDN_PROJECTS`（`default`・`sample_qgis`）に列挙したプロジェクトのみをステージ直下 `projects/` へ複写し、`projects.json` も同じ ID に絞って出すため、全エンジンが `../projects/<id>/` を同じ手順（`projectsBaseUrl("<id>")`）で読める。**エンジンコードに内蔵デフォルト .kasc やフォールバックを持たせない**（旧 cesium の `defaultConfig` は廃止済み）。`CDN_PROJECTS` 以外のプロジェクト（試験用など）は CDN へ出さない
 - **運用**: stable/unstable ともに任意のタイミングでボタン反映してよい（リリース時期との連動はしない。同期は `web/` の直接コピーのみ）。ルート `index.html` はリダイレクト固定で触らない
 
 ## 動作テストの2系統（CDN を忘れない）
@@ -57,7 +57,7 @@
 今後の動作確認は以下の2系統を対象に行う:
 
 1. **ブラウザ WebGIS（CDN × 外部データホスト）— メインの利用形態**
-   - エンジン: `kasugai-canvas-web`（GitHub Pages CDN。エンジン本体＋既定プロジェクト `projects/default/` のみ配信し、それ以外の `projects/` は同梱しない）。`stable/`=安定版（既定）・`unstable/`=開発版で、どちらも `web/` を直接同期・随時反映可。`web/` の変更の CDN 反映は `python tools/publish_cdn.py --channel <stage> --commit --push` で行う
+   - エンジン: `kasugai-canvas-web`（GitHub Pages CDN。エンジン本体＋`CDN_PROJECTS` に列挙したプロジェクト（`projects/default/`・`projects/sample_qgis/`）のみ配信し、それ以外の `projects/` は同梱しない）。`stable/`=安定版（既定）・`unstable/`=開発版で、どちらも `web/` を直接同期・随時反映可。`web/` の変更の CDN 反映は `python tools/publish_cdn.py --channel <stage> --commit --push` で行う
    - テストデータホスト: `yamamoto-ryuzo/kasugai_canvas_webGIS`（GitHub Pages。`.kasc + DATA/` + 群マニフェスト `projects.json`）— エンジン以外のテストデータの置き場
    - 再生: `…/kasugai-canvas-web/<stage>/<engine>/?kasc=<.kasc URL>`。開いた .kasc の祖先 `projects.json`（群マニフェスト）をエンジンが読み、同一ホストの他プロジェクトをドロップボックスに並べる（cesium 実装済み）
    - 検証例: `https://yamamoto-ryuzo.github.io/kasugai-canvas-web/unstable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fdefault%2Fkasugai_canvas.kasc`

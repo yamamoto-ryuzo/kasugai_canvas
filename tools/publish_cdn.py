@@ -39,6 +39,11 @@ SOURCE_REPO = 'yamamoto-ryuzo/kasugai_canvas'
 
 CHANNELS = ('unstable', 'stable')
 
+# CDN へ複写するプロジェクト。default=既定プロジェクト（正本は
+# web/projects/default/・Cesium エンジンで作成・保守）、
+# sample_qgis=QGIS 連携デモ用。それ以外の試験プロジェクトは CDN へ出さない
+CDN_PROJECTS = ('default', 'sample_qgis')
+
 
 def _cargo_version():
     try:
@@ -118,25 +123,26 @@ def _commit_and_push(cdn_dir, message, push):
         print('pushed')
 
 
-def _sync_default_project(stage):
-    # CDN へは既定プロジェクト(default)のみ複写する。
-    # 正本は web/projects/default/（Cesium エンジンで作成・保守）。他エンジンも
-    # ../projects/default/ を読むためステージルートの projects/ へ置く。
-    # projects.json も default エントリのみに絞って出す（reinfolib 等の
-    # 試験プロジェクトは CDN へ出さない方針のため、一覧に残さない）
+def _sync_projects(stage):
+    # CDN へは CDN_PROJECTS に列挙したプロジェクトのみ複写し、
+    # projects.json も実際に複写した ID のエントリのみに絞って出す
+    # （他の試験プロジェクトは CDN へ出さない方針のため、一覧に残さない）
     src_projects = os.path.join(WEB_DIR, 'projects')
     dst_projects = os.path.join(stage, 'projects')
     if os.path.isdir(dst_projects):
         shutil.rmtree(dst_projects)
-    src_default = os.path.join(src_projects, 'default')
-    if not os.path.isdir(src_default):
-        return
-    shutil.copytree(src_default, os.path.join(dst_projects, 'default'))
+    copied = []
+    for pid in CDN_PROJECTS:
+        src = os.path.join(src_projects, pid)
+        if os.path.isdir(src):
+            shutil.copytree(src, os.path.join(dst_projects, pid))
+            copied.append(pid)
     manifest = _read_version_json(os.path.join(src_projects, 'projects.json'))
     entries = [e for e in (manifest if isinstance(manifest, list) else [])
-               if (e.get('id') if isinstance(e, dict) else e) == 'default']
+               if (e.get('id') if isinstance(e, dict) else e) in copied]
     if not entries:
-        entries = [{'id': 'default'}]
+        entries = [{'id': pid} for pid in copied] or [{'id': 'default'}]
+    os.makedirs(dst_projects, exist_ok=True)
     with open(os.path.join(dst_projects, 'projects.json'), 'w',
               encoding='utf-8', newline='') as f:
         json.dump(entries, f, ensure_ascii=False, indent=2)
@@ -153,10 +159,10 @@ def sync_channel(cdn_dir, channel):
     build_bridge_zip.build()
     # vendor は CDN へ配置しない(SW が vendor.json のピン先オリジナルへ
     # 直接解決する方式)。ローカルに web/vendor/ があっても誤って
-    # ミラーしないよう除外する。projects/ は既定プロジェクト(default)のみ
-    # _sync_default_project で別途複写する
+    # ミラーしないよう除外する。projects/ は CDN_PROJECTS に列挙した
+    # プロジェクトのみ _sync_projects で別途複写する
     _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))
-    _sync_default_project(stage)
+    _sync_projects(stage)
     version = _cargo_version()
     _write_version_json(stage, {
         'version': version,
