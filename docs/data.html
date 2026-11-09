@@ -29,7 +29,7 @@
         </div>
         <div class="feature-card">
           <h3>🧩 MVT / PMTiles <span class="badge">対応</span></h3>
-          <p>ベクタータイル。<code>mvt:</code>/<code>pmtiles:</code> で指定（MapLibre エンジン・<code>layers=</code> でソースレイヤ指定）。数十万地物級の大規模データ向け経路。詳細は<a href="performance.html">描画性能とデータ形式方針</a></p>
+          <p>ベクタータイル。<code>mvt:</code>/<code>pmtiles:</code> で指定（MapLibre=ネイティブ / Cesium=ラスタライズ・<code>layers=</code> でソースレイヤ指定）。数十万地物級の大規模データ向け経路。詳細は<a href="performance.html">描画性能とデータ形式方針</a></p>
         </div>
       </div>
 
@@ -126,7 +126,7 @@
       <td>XYZ / WMTS / TMS</td>
       <td><code>CesiumJS ImageryLayer</code>（地形・3D Tiles
       にドレープ）</td>
-      <td>広域地図・航空写真。MVT は現行未実装（将来候補）</td>
+      <td>広域地図・航空写真。MVT は mvt: 行で対応</td>
       </tr>
       <tr>
       <td>3D モデル</td>
@@ -315,10 +315,10 @@
       </tr>
       <tr>
       <td>広域・大量の全国地図・航空写真</td>
-      <td><strong>XYZ / WMTS</strong>（MVT は将来候補）</td>
+      <td><strong>XYZ / WMTS / MVT</strong>（mvt: 行・ラスタライズ）</td>
       <td>🥈</td>
       <td>GIS/Web 標準。<code>ImageryLayer</code> で地形ドレープ可</td>
-      <td>MVT ベクタータイルは現行未実装</td>
+      <td>MVT/PMTiles は mvt:/pmtiles: 行で対応済み</td>
       </tr>
       <tr>
       <td>管理・連携用の正データ</td>

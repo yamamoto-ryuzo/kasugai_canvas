@@ -20,6 +20,7 @@
  *   gpkg:/geopackage:  GeoPackage (sql.js Worker。table=/where=/limit=/columns=/bbox=auto)
  *   duckdb:            DuckDB-Wasm SQL 絞り込み (where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto/table=)
  *   sql:               任意 SELECT 文 (:bbox プレースホルダ対応)
+ *   mvt:/pmtiles:      ベクトルタイル(カタログ化のみ・描画はエンジン個別対応)
  * 3dtiles:/fly_geojson:/cam: 等はパースして skipped に振り分ける(呼び出し側で表示)。
  */
 (function () {
@@ -337,6 +338,15 @@
       if (type === '3dtiles' || type === '3d-tiles' || type === 'tiles3d') {
         var tp = value.split('|').map(function (p) { return p.trim(); });
         items.push({ id: id, kind: 'unsupported', type: '3dtiles', title: tp[0] || '3D Tiles', url: tp[1] || '', visible: true, sourceLine: line });
+        return;
+      }
+
+      // ---- mvt:/pmtiles: ベクトルタイル ----
+      // 描画はエンジン個別対応(MapLibre=ネイティブ / Cesium=ラスタライズ)。
+      // この共通ローダーでは unsupported としてカタログ化する
+      if (type === 'mvt' || type === 'pmtiles' || type === 'vectortile') {
+        var mp = value.split('|').map(function (p) { return p.trim(); });
+        items.push({ id: id, kind: 'unsupported', type: type, title: mp[0] || 'Vector tiles', url: mp[1] || '', visible: true, sourceLine: line });
         return;
       }
 

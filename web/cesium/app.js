@@ -28,6 +28,7 @@ import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
 import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom } from "../shared/kasc.js";
+import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
@@ -1761,7 +1762,7 @@ async function focusLayer(layer) {
   let target = layerRuntimeTargets.get(layer.id) || layer.dataSource || null;
   // XYZタイルは範囲情報を持たないため、ImageryLayer未生成時は全世界表示にフォールバックする
   // (bbox= 指定時はその範囲へ flyTo する)
-  if (!target && layer.type === "tile") {
+  if (!target && (layer.type === "tile" || layer.type === "mvt" || layer.type === "pmtiles")) {
     target = layer.bbox
       ? Cesium.Rectangle.fromDegrees(...layer.bbox)
       : Cesium.Rectangle.clone(Cesium.Rectangle.MAX_VALUE);
@@ -3704,7 +3705,7 @@ async function refreshLayersImpl() {
   // Globe 表面の XYZ（geotiff の mode=tiles は ImageryLayer として同じスタックに混ぜ、
   // .kasc の記述順を再現する）
   const orderedImageryLayers = orderedItems
-    .filter(layer => layer.type === "tile" || (isGeoTiffType(layer.type) && layer._gt?.mode === "tiles"))
+    .filter(layer => layer.type === "tile" || layer.type === "mvt" || layer.type === "pmtiles" || (isGeoTiffType(layer.type) && layer._gt?.mode === "tiles"))
     .slice().reverse();
   for (const item of orderedImageryLayers) {
     if (!item.visible) continue;
@@ -3723,6 +3724,32 @@ async function refreshLayersImpl() {
         if (loadTargets.has(item)) layerOk(item);
       } catch (error) {
         console.warn("geotiff タイルレイヤーの作成に失敗しました:", item.url, error);
+        if (loadTargets.has(item)) layerFail(item, error);
+      }
+      continue;
+    }
+    if (item.type === "mvt" || item.type === "pmtiles") {
+      // ベクトルタイル: デコード→canvas ラスタライズの ImageryProvider(#24)
+      try {
+        const provider = await createMvtImageryProvider(Cesium, {
+          type: item.type,
+          url: proxyTileUrl(item.url, item.proxy),
+          tileSize: item.tileSize || 256,
+          minimumLevel: item.minimumLevel,
+          maximumLevel: item.maximumLevel || DEFAULT_MAXIMUM_LEVEL,
+          rectangle: Array.isArray(item.bbox) && item.bbox.length === 4 ? Cesium.Rectangle.fromDegrees(...item.bbox) : undefined,
+          credit: new Cesium.Credit(sanitizedAttributionHtml(item.attribution || "")),
+          opts: item.mvtOpts || {},
+        });
+        const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: (item.opacity ?? 0.8) * layerOpacityFactor });
+        imageryLayer._baseAlpha = item.opacity ?? 0.8;
+        imageryLayer.show = effectiveLayerShow(item);
+        viewer.imageryLayers.add(imageryLayer);
+        layerRuntimeTargets.set(item.id, imageryLayer);
+        item._loaded = true;
+        if (loadTargets.has(item)) layerOk(item);
+      } catch (error) {
+        console.warn("ベクトルタイルの作成に失敗しました:", item.url, error);
         if (loadTargets.has(item)) layerFail(item, error);
       }
       continue;
@@ -5727,6 +5754,49 @@ function applyInspector(text) {
       if (options.minimumLevel !== undefined) item.minimumLevel = options.minimumLevel;
       if (options.bbox) item.bbox = options.bbox;
       if (options.tileSize !== undefined) item.tileSize = options.tileSize;
+      parseScaleVisOpts(parts, item);
+      tileLayers.push(item);
+      layerState.set(id, item);
+      layerOrder.push(id);
+    }
+
+    if (type === "mvt" || type === "pmtiles") {
+      // MVT ベクトルタイル / PMTiles(#24)。Cesium はネイティブ非対応のため
+      // shared/mvt.js がデコード→canvas ラスタライズする ImageryProvider を返し、
+      // XYZ と同じ imagery スタックへ載せる。url は {z}/{x}/{y} テンプレート、
+      // TileJSON(.json)、または .pmtiles アーカイブを取る
+      const parts = value.split("|").map(part => part.trim());
+      const title = parts[0];
+      const url = resolveProjectUrl(parts[1]);
+      const off = parts.some(part => /^(off|false)$/i.test(part));
+      if (!title || !url) return;
+      const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
+      const options = {};
+      const kv = {};
+      parts.slice(2).forEach(part => {
+        const eq = part.indexOf("=");
+        if (eq < 0) return;
+        const key = part.slice(0, eq).trim();
+        const raw = part.slice(eq + 1).trim();
+        kv[key.toLowerCase()] = raw;
+        const number = Number(raw);
+        if (key === "opacity" && Number.isFinite(number)) options.opacity = Math.max(0, Math.min(1, number));
+        if ((key === "maximumLevel" || key === "maxZoom") && Number.isInteger(number) && number >= 0) options.maximumLevel = number;
+        if ((key === "minimumLevel" || key === "minZoom") && Number.isInteger(number) && number >= 0) options.minimumLevel = number;
+        if (key.toLowerCase() === "tilesize" && [256, 512].includes(number)) options.tileSize = number;
+        if (key === "proxy" && /^(off|false|direct)$/i.test(raw)) options.proxy = false;
+        if (key === "bbox" || key === "bounds" || key === "extent") {
+          const nums = raw.split(",").map(v => Number(v.trim()));
+          if (nums.length === 4 && nums.every(Number.isFinite)) options.bbox = nums;
+        }
+      });
+      const id = `inspector-layer-${inspectorLayerIndex++}`;
+      const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, url, visible: !off, type, opacity: options.opacity ?? 0.8, attribution: parseAttributionField(parts[2]) || kv.attr || null, proxy: options.proxy !== false, group, exclusiveGroup };
+      if (options.maximumLevel !== undefined) item.maximumLevel = options.maximumLevel;
+      if (options.minimumLevel !== undefined) item.minimumLevel = options.minimumLevel;
+      if (options.bbox) item.bbox = options.bbox;
+      if (options.tileSize) item.tileSize = options.tileSize;
+      item.mvtOpts = kv;
       parseScaleVisOpts(parts, item);
       tileLayers.push(item);
       layerState.set(id, item);
