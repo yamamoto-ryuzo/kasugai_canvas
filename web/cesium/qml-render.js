@@ -1,7 +1,7 @@
 // QML スタイル(.qml)の Cesium への適用（描画側バインディング）
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
-import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, rgbaToCss, qmlLabelCanvas, evalGeomExpr } from "../shared/qml-style.js";
+import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas } from "../shared/qml-style.js";
 
 const Cesium = window.Cesium;
 
@@ -344,6 +344,19 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
       } else {
         entity.billboard.show = new Cesium.ConstantProperty(false);
       }
+    }
+
+    // ダイアグラム(#108): 地物属性から円グラフ/棒グラフ canvas を生成して billboard 追加
+    if (style.diagram) {
+      try {
+        const cv = diagramCanvas(style.diagram, props);
+        if (cv) {
+          const dpos = entity.position?.getValue?.(t)
+            || (hasLine ? polylineMidpoint(entity, t) : null)
+            || entityCentroid(entity, t);
+          if (dpos) addAux({ position: dpos, billboard: { image: cv, verticalOrigin: Cesium.VerticalOrigin.CENTER, horizontalOrigin: Cesium.HorizontalOrigin.CENTER } });
+        }
+      } catch (_) { /* ダイアグラム描画失敗は本体描画を止めない */ }
     }
 
     // ライン
@@ -725,7 +738,47 @@ function offsetPos(pos, azimuthRad, distM) {
   return Cesium.Cartesian3.fromRadians(c.longitude + dLon, c.latitude + dLat, c.height);
 }
 
+// InterpolatedLine(#108): 始端→終端で色・幅を補間する線。頂点単位補間は
+// entity polyline では表せないため、弧長 N 分割のセグメント群で近似する
+function renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity }) {
+  const pos = entity.polyline?.positions?.getValue?.(t);
+  if (!pos || pos.length < 2) return;
+  const cum = [0];
+  for (let i = 1; i < pos.length; i++) cum.push(cum[i - 1] + Cesium.Cartesian3.distance(pos[i - 1], pos[i]));
+  const total = cum[cum.length - 1];
+  if (!(total > 0)) return;
+  // 本体の単色ラインは補間セグメントで置き換える
+  entity.polyline.show = new Cesium.ConstantProperty(false);
+  const N = Math.min(32, Math.max(8, Math.round(total / 500)));
+  const lerpC = f => decor.c1.map((v, i) => v + (decor.c2[i] - v) * f);
+  const clampToGround = entity.polyline.clampToGround?.getValue?.(t) ?? clamp;
+  const arcType = entity.polyline.arcType?.getValue?.(t) ?? Cesium.ArcType.GEODESIC;
+  let prev = pos[0];
+  for (let i = 1; i <= N; i++) {
+    const d = total * i / N;
+    let j = 1;
+    while (j < cum.length - 1 && cum[j] < d) j++;
+    const f = Math.min(1, (d - cum[j - 1]) / Math.max(cum[j] - cum[j - 1], 1e-9));
+    const pt = Cesium.Cartesian3.lerp(pos[j - 1], pos[j], f, new Cesium.Cartesian3());
+    const f0 = (i - 0.5) / N;
+    addAux({
+      polyline: {
+        positions: [prev, pt],
+        width: new Cesium.ConstantProperty(decor.w1 + (decor.w2 - decor.w1) * f0),
+        material: new Cesium.ColorMaterialProperty(toCesiumColor(mulAlpha(lerpC(f0), opacity))),
+        clampToGround,
+        arcType,
+      },
+    });
+    prev = pt;
+  }
+}
+
 function renderLineDecor(entity, decor, t, { addAux, clamp, opacity }) {
+  if (decor.kind === "interpolated") {
+    renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity });
+    return;
+  }
   const pos = entity.polyline?.positions?.getValue?.(t);
   if (!pos || pos.length < 2) return;
   if (decor.kind === "markerline" && decor.markers?.length) {
