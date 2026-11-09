@@ -551,7 +551,7 @@ async function applyBasemap(idx) {
   if (basemapSrc) { try { basemapSrc.delete(); } catch (_) {} basemapSrc = null; }
   const b = baseDocs[idx];
   if (!b) return;
-  basemapSrc = view.addSource({ type: "raster-tile", url: resolveKascUrl(b.url, lastBaseUrl), maxZoom: Number(b.opts?.maxzoom) || 18 });
+  basemapSrc = view.addSource({ type: "raster-tile", url: resolveKascUrl(b.url, lastBaseUrl), maxZoom: Number(b.opts?.maxzoom) || 18, ...(b.opts?.minzoom ? { minZoom: Number(b.opts.minzoom) } : {}) });
   const desc = { type: "raster", source: basemapSrc };
   basemapLayer = view.addLayer(desc);
   baseEntries.length = 0;

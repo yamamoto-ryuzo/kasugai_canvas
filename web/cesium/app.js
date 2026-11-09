@@ -10976,6 +10976,33 @@ function compareVersions(left, right) {
   return 0;
 }
 
+// 現在版の表示用に、配信形態ごとのバージョン情報を順に探す。
+// version.json は CDN ステージ(kasugai-canvas-web/<stage>/)でのみ付与され、
+// 本リポジトリ GitHub Pages の /<repo>/web/ 配信には存在しない。後者では
+// Pages がリポジトリ全ファイルを配信するため server/Cargo.toml を直接読む。
+// 存在しない方を先に probe すると 404 がコンソールに残るため、パスの親ディレ
+// クトリ名(web=ソース配信 / stable・unstable=CDN ステージ)で試行順を分ける
+async function fetchDeployedVersion() {
+  const inSourceWeb = location.pathname.split("/").filter(Boolean).at(-2) === "web";
+  const urls = inSourceWeb
+    ? ["../../server/Cargo.toml", "../version.json"]
+    : ["../version.json", "../../server/Cargo.toml"];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      if (!r.ok) continue;
+      if (url.endsWith(".json")) {
+        const d = await r.json().catch(() => ({}));
+        if (d?.version) return d.version;
+      } else {
+        const m = /^\s*version\s*=\s*"([^"]+)"/m.exec(await r.text());
+        if (m) return m[1];
+      }
+    } catch (e) {}
+  }
+  return "-";
+}
+
 async function loadUpdateInfo() {
   const current = document.querySelector("#current-version");
   // 動作環境の明示（アプリ=ローカル exe / CDN=静的配信）
@@ -10984,11 +11011,7 @@ async function loadUpdateInfo() {
   if (!isBackendAlive()) {
     // CDN/静的配信（バックエンド無し）はステージの version.json を表示。
     // ローカル exe が無いため自己更新 UI は出さない（更新は配信側同期）
-    try {
-      const r = await fetch("../version.json", { cache: "no-store" });
-      const d = await r.json().catch(() => ({}));
-      if (current) current.textContent = (r.ok && d?.version) || "-";
-    } catch (e) { if (current) current.textContent = "-"; }
+    if (current) current.textContent = await fetchDeployedVersion();
     // 最新版はメインリポジトリの latest.json から取得
     const latest = document.querySelector("#latest-version");
     try {
@@ -11018,12 +11041,8 @@ async function loadUpdateInfo() {
     void loadFetchSettings();
     await checkForUpdate(health.version);
   } catch (error) {
-    // バックエンド応答が取れない場合も CDN/静的配信の version.json で現在版を表示
-    try {
-      const r = await fetch("../version.json", { cache: "no-store" });
-      const d = await r.json().catch(() => ({}));
-      current.textContent = (r.ok && d?.version) || "-";
-    } catch (_) { current.textContent = "-"; }
+    // バックエンド応答が取れない場合も CDN/静的配信の版情報で現在版を表示
+    current.textContent = await fetchDeployedVersion();
     document.querySelector("#version-status").textContent = t("update.fetchFailedError", { error: error.message });
   }
 }

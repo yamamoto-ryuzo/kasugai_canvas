@@ -27,9 +27,15 @@ export async function showLoginForm({ onSubmit }) {
     passLabel.style.cssText = "display:block;margin-bottom:4px;font-size:0.9em;color:#4a5a65;";
 
     const passInput = document.createElement("input");
-    passInput.type = "password";
-    passInput.autocomplete = "current-password";
-    passInput.style.cssText = "width:100%;padding:8px;margin-bottom:16px;border:1px solid #cbd9de;border-radius:4px;box-sizing:border-box;";
+    // type="password" だと Chrome が資格情報フォームと判定して
+    // 「パスワードを保存/更新しますか?」を出すため、text 入力＋CSS マスクにする
+    passInput.type = "text";
+    passInput.className = "secret";
+    passInput.autocomplete = "off";
+    passInput.setAttribute("data-1p-ignore", "");
+    passInput.setAttribute("data-lpignore", "true");
+    passInput.setAttribute("data-bwignore", "");
+    passInput.style.cssText = "width:100%;padding:8px;margin-bottom:16px;border:1px solid #cbd9de;border-radius:4px;box-sizing:border-box;-webkit-text-security:disc;";
 
     const error = document.createElement("div");
     error.style.cssText = "color:#a82020;font-size:0.85em;margin-bottom:12px;min-height:1.2em;";

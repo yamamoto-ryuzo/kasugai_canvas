@@ -128,8 +128,11 @@ async function detectLocalBackend() {
 export function detectBackend() {
   if (detectPromise) return detectPromise;
   detectPromise = (async () => {
-    // file:// 等では同一オリジンにバックエンドが存在し得ないため即フォールバック
-    if (location.protocol !== "http:" && location.protocol !== "https:") {
+    // file:// 等では同一オリジンにバックエンドが存在し得ないため即フォールバック。
+    // GitHub Pages(*.github.io) も常に静的配信なので同一オリジン probe は
+    // 404 になるだけで省ける（custom domain の Pages は区別できないため対象外）
+    if ((location.protocol !== "http:" && location.protocol !== "https:")
+        || location.hostname.endsWith(".github.io")) {
       await detectLocalBackend();
       resolved = true;
       return capabilities;

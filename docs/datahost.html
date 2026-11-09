@@ -72,8 +72,8 @@ flowchart LR
         <table>
           <tr><th>要素</th><th>内容</th></tr>
           <tr><td>ベース URL</td><td><code>https://yamamoto-ryuzo.github.io/kasugai-canvas-web/</code>（ルートは <code>stable/</code> へリダイレクト）</td></tr>
-          <tr><td><code>stable/</code></td><td>安定版・既定チャンネル（リリースに合わせて同期）</td></tr>
-          <tr><td><code>unstable/</code></td><td>開発版チャンネル（<code>kasugai_canvas</code> 最新の <code>web/</code> を追従）</td></tr>
+          <tr><td><code>stable/</code></td><td>安定版・既定チャンネル（任意タイミングで同期）</td></tr>
+          <tr><td><code>unstable/</code></td><td>開発版チャンネル（同じく任意タイミングで同期）</td></tr>
           <tr><td>エンジン</td><td><code>cesium</code>（メイン・フル機能）/ <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code>（.kasc プレイヤーとして互換）/ <code>navara</code>（試験的・写実3D）</td></tr>
           <tr><td>正本・同期</td><td>正本は <code>kasugai_canvas</code> の <code>web/</code>。<code>python tools/publish_cdn.py --channel stable|unstable</code> で同期（CDN 側の直接編集はしない）</td></tr>
         </table>

@@ -5086,6 +5086,7 @@ const AI_CHAT_CSS = `
 #setpane-ai .hint { color: #666; font-size: 11px; margin: 6px 0; }
 #setpane-ai .hint code { background: #eef2f4; padding: 0 3px; border-radius: 3px; }
 #setpane-ai input[type="text"], #setpane-ai input[type="password"], #setpane-ai input[type="number"], #setpane-ai select, #setpane-ai textarea { box-sizing: border-box; max-width: 100%; }
+#setpane-ai .secret { -webkit-text-security: disc; }
 #setpane-ai .ai-subnav { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
 #setpane-ai .ai-subnav button { flex: 1; min-width: 60px; padding: 4px 2px; font-size: 12px; border: 1px solid #ccc; border-radius: 4px; background: #f4f6f8; cursor: pointer; }
 #setpane-ai .ai-subnav button.active { background: #2c5ea8; color: #fff; border-color: #2c5ea8; }
@@ -5152,7 +5153,7 @@ const AI_SETTINGS_HTML = `
   <div id="gemini-fields">
     <p class="hint" data-i18n-html="google.gemini.hint">Gemini API（AIチャット用）の設定です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a> で発行したキーを入力してください。</p>
     <label class="field-label" for="google-api-key" data-i18n="google.gemini.keyLabel">Gemini API キー</label>
-    <input id="google-api-key" type="password" placeholder="Gemini APIキーを入力" autocomplete="off" size="28" />
+    <input id="google-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Gemini APIキーを入力" autocomplete="off" size="28" />
     <label class="field-label" for="google-gemini-model" data-i18n="google.gemini.modelLabel">Gemini モデル</label>
     <select id="google-gemini-model">
       <option value="gemini-3.1-flash-lite" selected>gemini-3.1-flash-lite (標準・低コスト)</option>
@@ -5174,7 +5175,7 @@ const AI_SETTINGS_HTML = `
     <label class="field-label" for="openai-base-url" data-i18n="chat.openai.baseUrlLabel">エンドポイント ベースURL</label>
     <input id="openai-base-url" type="text" placeholder="https://models.github.ai/inference" autocomplete="off" size="28" />
     <label class="field-label" for="openai-api-key" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
-    <input id="openai-api-key" type="password" placeholder="GitHub PAT 等" autocomplete="off" size="28" />
+    <input id="openai-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="GitHub PAT 等" autocomplete="off" size="28" />
     <label class="field-label" for="openai-model" data-i18n="chat.openai.modelLabel">モデル</label>
     <select id="openai-model"></select>
     <div style="display:flex;gap:6px;margin-top:6px;">
@@ -5186,7 +5187,7 @@ const AI_SETTINGS_HTML = `
     <p class="hint" data-i18n-html="chat.sakura.hint"></p>
     <p class="hint" data-i18n-html="chat.openai.security"></p>
     <label class="field-label" for="sakura-api-key" data-i18n="chat.openai.keyLabel">APIキー / トークン</label>
-    <input id="sakura-api-key" type="password" placeholder="アカウントトークン" autocomplete="off" size="28" />
+    <input id="sakura-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="アカウントトークン" autocomplete="off" size="28" />
     <label class="field-label" for="sakura-model" data-i18n="chat.openai.modelLabel">モデル</label>
     <select id="sakura-model"></select>
     <div style="display:flex;gap:6px;margin-top:6px;">
@@ -5197,7 +5198,7 @@ const AI_SETTINGS_HTML = `
   <div id="anthropic-fields" hidden>
     <p class="hint" data-i18n-html="chat.anthropic.hint"></p>
     <label class="field-label" for="anthropic-api-key" data-i18n="chat.anthropic.keyLabel">APIキー</label>
-    <input id="anthropic-api-key" type="password" placeholder="sk-ant-..." autocomplete="off" size="28" />
+    <input id="anthropic-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="sk-ant-..." autocomplete="off" size="28" />
     <label class="field-label" for="anthropic-model" data-i18n="chat.anthropic.modelLabel">モデル</label>
     <input id="anthropic-model" type="text" placeholder="claude-sonnet-4-5" autocomplete="off" size="28" />
     <label class="field-label" for="anthropic-base-url" data-i18n="chat.anthropic.baseUrlLabel">エンドポイント ベースURL（省略可）</label>
@@ -5208,7 +5209,7 @@ const AI_SETTINGS_HTML = `
     <label class="field-label" for="azure-base-url" data-i18n="chat.azure.baseUrlLabel">リソース エンドポイントURL</label>
     <input id="azure-base-url" type="text" placeholder="https://<resource>.openai.azure.com" autocomplete="off" size="28" />
     <label class="field-label" for="azure-api-key" data-i18n="chat.azure.keyLabel">APIキー</label>
-    <input id="azure-api-key" type="password" autocomplete="off" size="28" />
+    <input id="azure-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore autocomplete="off" size="28" />
     <label class="field-label" for="azure-deployment" data-i18n="chat.azure.deploymentLabel">デプロイ名</label>
     <input id="azure-deployment" type="text" placeholder="my-deployment" autocomplete="off" size="28" />
     <label class="field-label" for="azure-api-version" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
@@ -5224,7 +5225,7 @@ const AI_SETTINGS_HTML = `
     <p class="hint" id="bridge-install-hint" data-i18n-html="chat.bridge.installTabHint" hidden></p>
     <div class="provider-only" data-for="agent" hidden>
       <label class="field-label" for="agent-token" data-i18n="agent.tokenLabel">トークン（任意）</label>
-      <input id="agent-token" type="password" placeholder="Bearer トークン（省略可）" autocomplete="off" size="28" />
+      <input id="agent-token" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Bearer トークン（省略可）" autocomplete="off" size="28" />
       <label><input id="agent-send-key" type="checkbox" /> <span data-i18n="agent.sendKeyLabel">自分の Gemini API キーをエージェントへ送信（BYO）</span></label>
       <p class="hint" id="agent-backend-status" aria-live="polite"></p>
     </div>
@@ -5235,7 +5236,7 @@ const AI_SETTINGS_HTML = `
     </div>
     <div id="devin-fields" class="provider-only" data-for="devin" hidden>
       <label class="field-label" for="devin-api-key" data-i18n="chat.devin.apiKeyLabel">Devin APIキー（任意）</label>
-      <input id="devin-api-key" type="password" placeholder="cog_..." autocomplete="off" size="28" />
+      <input id="devin-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="cog_..." autocomplete="off" size="28" />
       <label class="field-label" for="devin-model" data-i18n="chat.devin.modelLabel">モデル</label>
       <select id="devin-model"></select>
       <p class="hint" id="devin-endpoint-status" aria-live="polite"></p>
@@ -5307,7 +5308,7 @@ const AI_SETTINGS_HTML = `
   <label class="field-label" for="mcp-add-url" data-i18n="mcp.add.urlLabel">エンドポイント URL</label>
   <input id="mcp-add-url" type="text" placeholder="https://example.com/mcp" autocomplete="off" size="28" />
   <label class="field-label" for="mcp-add-token" data-i18n="mcp.add.tokenLabel">Bearer トークン（任意）</label>
-  <input id="mcp-add-token" type="password" placeholder="省略可" autocomplete="off" size="28" />
+  <input id="mcp-add-token" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="省略可" autocomplete="off" size="28" />
   <div style="display:flex;gap:6px;margin-top:6px;">
     <button id="mcp-add" type="button" data-i18n="mcp.add.add">追加して接続</button>
   </div>

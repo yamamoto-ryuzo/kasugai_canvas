@@ -256,7 +256,7 @@
 <div class="set-pane" id="setpane-gmaps" hidden>
     <p class="note">Google Maps Platform の API キーです。<a href="https://console.cloud.google.com/google/maps-apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a> で発行したキーを入力してください。Photorealistic 3D Tiles で使用します。</p>
     <label class="set-row">Maps API キー
-      <input id="gmaps-api-key" type="password" placeholder="Maps APIキーを入力" autocomplete="off" style="width:100%;box-sizing:border-box;" /></label>
+      <input id="gmaps-api-key" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="Maps APIキーを入力" autocomplete="off" style="width:100%;box-sizing:border-box;-webkit-text-security:disc;" /></label>
     <label class="set-row"><input id="gmaps-3dtiles-toggle" type="checkbox" /> Google Photorealistic 3D Tiles を表示</label>
     <button id="gmaps-save" type="button" style="width:100%;margin-top:4px;">保存</button>
     <p id="gmaps-status" class="note" aria-live="polite"></p>
