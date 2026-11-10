@@ -74,15 +74,15 @@ const CSS = `
 .vector-attr-widget-title { font-weight: 700; font-size: 15px; }
 .vector-attr-widget-close { min-width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 20px; line-height: 1; }
 .vector-attr-widget-close:hover { background: #e4ecef; }
-.vector-attr-widget-filter { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e4ecef; }
-.vector-attr-widget-colfilter { display: flex; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #e4ecef; }
-#vector-attr-widget-colfilter-field { flex: 0 0 180px; min-width: 110px; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; background: #fff; }
-#vector-attr-widget-colfilter-op { flex: 0 0 70px; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; background: #fff; }
-#vector-attr-widget-colfilter-value { flex: 1; min-width: 0; min-height: 30px; padding: 4px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; }
-#vector-attr-widget-colfilter-clear { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; cursor: pointer; font-size: 14px; color: #52636d; }
+.vector-attr-widget-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 14px; border-bottom: 1px solid #e4ecef; }
+#vector-attr-widget-layer { flex: 0 1 140px; min-width: 110px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
+#vector-attr-widget-search { flex: 2 1 160px; min-width: 100px; min-height: 26px; padding: 2px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; }
+#vector-attr-widget-colfilter-field { flex: 0 1 150px; min-width: 100px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
+#vector-attr-widget-colfilter-op { flex: 0 0 64px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
+#vector-attr-widget-colfilter-value { flex: 1 1 100px; min-width: 70px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; }
+#vector-attr-widget-colfilter-clear { flex: 0 0 auto; min-height: 26px; padding: 0 8px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; cursor: pointer; font-size: 13px; color: #52636d; }
 #vector-attr-widget-colfilter-clear:hover { background: #eef5f7; }
-#vector-attr-widget-layer { flex: 0 0 160px; min-width: 120px; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; background: #fff; }
-#vector-attr-widget-search { flex: 1; min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; }
+#vector-attr-widget-group, #vector-attr-widget-value { flex: 0 1 120px; min-width: 90px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
 .vector-attr-widget-table-wrap { flex: 1; overflow: auto; }
 .vector-attr-widget-table { width: auto; min-width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto; white-space: nowrap; }
 .vector-attr-widget-thead th { position: sticky; top: 0; padding: 8px 14px; text-align: left; border-bottom: 1px solid #e4ecef; background: #f6f9fb; color: #52636d; font-weight: 700; font-size: 12px; cursor: pointer; user-select: none; white-space: nowrap; }
@@ -274,11 +274,6 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
       <div class="vector-attr-widget-filter">
         <select id="vector-attr-widget-layer" class="vector-attr-widget-layer" title="${escapeHtml(LABELS.layerTitle)}"></select>
         <input id="vector-attr-widget-search" type="text" placeholder="${escapeHtml(LABELS.search)}" />
-        <button id="vector-attr-widget-stats" type="button" title="${escapeHtml(LABELS.stats)}" style="flex:0 0 auto;min-height:34px;padding:0 10px;border:1px solid #cbd9de;border-radius:4px;background:#fff;cursor:pointer;">Σ</button>
-        <select id="vector-attr-widget-group" title="${escapeHtml(LABELS.statsGroup)}" hidden style="flex:0 0 120px;min-height:34px;padding:4px 6px;border:1px solid #cbd9de;border-radius:4px;font-size:13px;background:#fff;"></select>
-        <select id="vector-attr-widget-value" title="${escapeHtml(LABELS.statsValue)}" hidden style="flex:0 0 120px;min-height:34px;padding:4px 6px;border:1px solid #cbd9de;border-radius:4px;font-size:13px;background:#fff;"></select>
-      </div>
-      <div class="vector-attr-widget-colfilter">
         <select id="vector-attr-widget-colfilter-field" title="${escapeHtml(tr("vattr.colFilterField", LABELS.colFilterField))}">
           <option value="">${escapeHtml(tr("vattr.colFilterNone", LABELS.colFilterNone))}</option>
         </select>
@@ -293,6 +288,9 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
         </select>
         <input id="vector-attr-widget-colfilter-value" type="text" placeholder="${escapeHtml(tr("vattr.colFilterValue", LABELS.colFilterValue))}" />
         <button id="vector-attr-widget-colfilter-clear" type="button" title="${escapeHtml(tr("vattr.colFilterClear", LABELS.colFilterClear))}">×</button>
+        <button id="vector-attr-widget-stats" type="button" title="${escapeHtml(LABELS.stats)}" style="flex:0 0 auto;min-height:26px;padding:0 8px;border:1px solid #cbd9de;border-radius:4px;background:#fff;cursor:pointer;font-size:13px;">Σ</button>
+        <select id="vector-attr-widget-group" title="${escapeHtml(LABELS.statsGroup)}" hidden></select>
+        <select id="vector-attr-widget-value" title="${escapeHtml(LABELS.statsValue)}" hidden></select>
       </div>
       <div class="vector-attr-widget-table-wrap">
         <table class="vector-attr-widget-table">
