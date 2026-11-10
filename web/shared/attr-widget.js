@@ -13,6 +13,7 @@
 
 import { computeGroupStats } from "./attr-stats.js";
 import { rowsToXlsx } from "./export-formats.js";
+import { t } from "./i18n.js";
 
 const LABELS = {
   title: "属性・値一覧",
@@ -38,6 +39,18 @@ const LABELS = {
   statsValue: "集計する数値属性",
   statsCountOnly: "（件数のみ）",
   statsGroups: (groups, rows) => `${groups} グループ / ${rows} 件`,
+  colFilterField: "絞り込む属性",
+  colFilterNone: "（属性フィルタなし）",
+  colFilterValue: "条件値",
+  colFilterContains: "含む",
+  colFilterClear: "フィルタを解除",
+};
+
+// i18n 辞書が初期化済みなら訳文を使い、未初期化(キーがそのまま返る)場合は
+// LABELS の既定文を使う。i18n を持たないエンジンでも壊れないための二段構え
+const tr = (key, fallback) => {
+  const v = t(key);
+  return v === key ? fallback : v;
 };
 
 const MAX_ROWS = 1000;
@@ -62,6 +75,12 @@ const CSS = `
 .vector-attr-widget-close { min-width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 20px; line-height: 1; }
 .vector-attr-widget-close:hover { background: #e4ecef; }
 .vector-attr-widget-filter { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e4ecef; }
+.vector-attr-widget-colfilter { display: flex; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #e4ecef; }
+#vector-attr-widget-colfilter-field { flex: 0 0 180px; min-width: 110px; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; background: #fff; }
+#vector-attr-widget-colfilter-op { flex: 0 0 70px; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; background: #fff; }
+#vector-attr-widget-colfilter-value { flex: 1; min-width: 0; min-height: 30px; padding: 4px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; }
+#vector-attr-widget-colfilter-clear { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; cursor: pointer; font-size: 14px; color: #52636d; }
+#vector-attr-widget-colfilter-clear:hover { background: #eef5f7; }
 #vector-attr-widget-layer { flex: 0 0 160px; min-width: 120px; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; background: #fff; }
 #vector-attr-widget-search { flex: 1; min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; }
 .vector-attr-widget-table-wrap { flex: 1; overflow: auto; }
@@ -103,6 +122,29 @@ function propText(raw) {
     try { return JSON.stringify(raw); } catch (_) { return String(raw); }
   }
   return String(raw);
+}
+
+// 列フィルタの1セル判定(#110)。contains は大小文字を無視した部分一致。
+// =/≠/</≦/>/≧ は両辺が数値に解釈できる時は数値比較、それ以外は文字列比較。
+// Cesium 版(app.js 内蔵ウィジェット)もこの関数を共有する
+export function matchAttrCellFilter(cellText, op, input) {
+  const needle = String(input ?? "").trim();
+  if (!needle) return true;
+  const text = String(cellText ?? "");
+  if (!op || op === "contains") return text.toLowerCase().includes(needle.toLowerCase());
+  const num = Number(needle);
+  const val = Number(text.trim());
+  const numeric = text.trim() !== "" && !Number.isNaN(num) && !Number.isNaN(val);
+  const cmp = numeric ? Math.sign(val - num) : text.localeCompare(needle, undefined, { numeric: true, sensitivity: "base" });
+  switch (op) {
+    case "eq": return cmp === 0;
+    case "ne": return cmp !== 0;
+    case "lt": return cmp < 0;
+    case "le": return cmp <= 0;
+    case "gt": return cmp > 0;
+    case "ge": return cmp >= 0;
+    default: return true;
+  }
 }
 
 // ---- 属性タブ(クリックした地物の属性表示。Cesium 版 attr-panel 相当) ----
@@ -236,6 +278,22 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
         <select id="vector-attr-widget-group" title="${escapeHtml(LABELS.statsGroup)}" hidden style="flex:0 0 120px;min-height:34px;padding:4px 6px;border:1px solid #cbd9de;border-radius:4px;font-size:13px;background:#fff;"></select>
         <select id="vector-attr-widget-value" title="${escapeHtml(LABELS.statsValue)}" hidden style="flex:0 0 120px;min-height:34px;padding:4px 6px;border:1px solid #cbd9de;border-radius:4px;font-size:13px;background:#fff;"></select>
       </div>
+      <div class="vector-attr-widget-colfilter">
+        <select id="vector-attr-widget-colfilter-field" title="${escapeHtml(tr("vattr.colFilterField", LABELS.colFilterField))}">
+          <option value="">${escapeHtml(tr("vattr.colFilterNone", LABELS.colFilterNone))}</option>
+        </select>
+        <select id="vector-attr-widget-colfilter-op">
+          <option value="contains">${escapeHtml(tr("vattr.colFilterContains", LABELS.colFilterContains))}</option>
+          <option value="eq">=</option>
+          <option value="ne">≠</option>
+          <option value="lt">&lt;</option>
+          <option value="le">≦</option>
+          <option value="gt">&gt;</option>
+          <option value="ge">≧</option>
+        </select>
+        <input id="vector-attr-widget-colfilter-value" type="text" placeholder="${escapeHtml(tr("vattr.colFilterValue", LABELS.colFilterValue))}" />
+        <button id="vector-attr-widget-colfilter-clear" type="button" title="${escapeHtml(tr("vattr.colFilterClear", LABELS.colFilterClear))}">×</button>
+      </div>
       <div class="vector-attr-widget-table-wrap">
         <table class="vector-attr-widget-table">
           <thead id="vector-attr-widget-head" class="vector-attr-widget-thead"></thead>
@@ -260,6 +318,14 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
   const list = widget.querySelector("#vector-attr-widget-list");
   const countEl = widget.querySelector("#vector-attr-widget-count");
   const titleEl = widget.querySelector(".vector-attr-widget-title");
+  const colFilterField = widget.querySelector("#vector-attr-widget-colfilter-field");
+  const colFilterOp = widget.querySelector("#vector-attr-widget-colfilter-op");
+  const colFilterValue = widget.querySelector("#vector-attr-widget-colfilter-value");
+  const colFilterClear = widget.querySelector("#vector-attr-widget-colfilter-clear");
+  // 列フィルタで選択中の属性表示名。レイヤ切替で同名属性が残れば条件を維持し、
+  // 消えた場合は自動解除する(インデックスは列構成で変わるため名前で保持)
+  let colFilterAttr = "";
+  let colFilterAttrSig = null;
 
   let rows = [];
   let attributes = [];
@@ -356,11 +422,43 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
     }
   }
 
+  // 列フィルタの属性選択肢を現在の列構成に合わせて再構築する。
+  // 選択中の属性が新しい列に無い場合はフィルタを自動解除する
+  function syncColFilterOptions() {
+    if (!colFilterField) return;
+    // 再構築前の選択状態を引き継ぐ(change 未発火のプログラム的選択も拾う)
+    const cur = (colFilterField.value !== "" && colFilterField.selectedOptions[0]?.textContent) || colFilterAttr;
+    colFilterField.innerHTML = '<option value="">' + escapeHtml(tr("vattr.colFilterNone", LABELS.colFilterNone)) + '</option>'
+      + attributes.map((a, i) => '<option value="' + i + '">' + escapeHtml(a) + '</option>').join("");
+    const idx = cur ? attributes.indexOf(cur) : -1;
+    if (idx >= 0) {
+      colFilterField.value = String(idx);
+      colFilterAttr = cur;
+    } else {
+      colFilterField.value = "";
+      // 行再構築中(loading)は列が一時的に空になるだけなので選択を保持し、
+      // 列構成が確定した時点で対象属性が無い場合のみ解除する
+      if (attributes.length || !loading) colFilterAttr = "";
+    }
+  }
+
+  // 列フィルタ適用時の行判定。属性未選択または値空なら無条件通過
+  function rowPassesColFilter(row) {
+    if (!colFilterField || colFilterField.value === "" || !colFilterValue || !colFilterValue.value.trim()) return true;
+    return matchAttrCellFilter(row.values[Number(colFilterField.value)], colFilterOp ? colFilterOp.value : "contains", colFilterValue.value);
+  }
+
   function render(filter = "") {
     try {
       if (!list || !countEl || !titleEl) return;
       const query = String(filter).toLowerCase().trim();
-      let matched = query ? rows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : [...rows];
+      // 列構成が変わった時だけ列フィルタの選択肢を再構築する
+      // (毎回再構築すると描画と選択変更の競合で選択が失われ得る)
+      const attrSig = attributes.join("");
+      if (attrSig !== colFilterAttrSig) { colFilterAttrSig = attrSig; syncColFilterOptions(); }
+      // 列フィルタ適用後に全文検索を AND でかける
+      let matched = rows.filter(rowPassesColFilter);
+      if (query) matched = matched.filter(row => row.values.some(val => String(val).toLowerCase().includes(query)));
       if (sort.column >= 0 && sort.column < attributes.length) {
         const col = sort.column;
         const order = sort.order;
@@ -407,7 +505,7 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
       }
       if (!displayRows.length) {
         list.innerHTML = '<tr><td colspan="' + attributes.length + '" style="padding:12px 14px;color:#71818d;">' + escapeHtml(loading ? LABELS.loading : LABELS.noFeatures) + '</td></tr>';
-        countEl.textContent = LABELS.count(query ? 0 : rows.length, attributes.length) + (partial ? LABELS.viewportOnly : "");
+        countEl.textContent = LABELS.count(matched.length, attributes.length) + (partial ? LABELS.viewportOnly : "");
         return;
       }
       list.innerHTML = displayRows.map(row => {
@@ -488,7 +586,8 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
   // 表示中の行セット（検索フィルタ＋ソート適用後・全件。表示上限では切らない）を返す
   function matchedRows() {
     const query = String(searchInput ? searchInput.value : "").toLowerCase().trim();
-    let matched = query ? rows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : [...rows];
+    let matched = rows.filter(rowPassesColFilter);
+    if (query) matched = matched.filter(row => row.values.some(val => String(val).toLowerCase().includes(query)));
     if (sort.column >= 0 && sort.column < attributes.length) {
       const col = sort.column;
       const order = sort.order;
@@ -612,6 +711,20 @@ export function createAttrWidget({ listLayers, getFeatures, focusFeature, onCell
   });
   statsGroup?.addEventListener("change", () => render(searchInput ? searchInput.value : ""));
   statsValue?.addEventListener("change", () => render(searchInput ? searchInput.value : ""));
+
+  const rerender = () => render(searchInput ? searchInput.value : "");
+  colFilterField?.addEventListener("change", () => {
+    colFilterAttr = colFilterField.value === "" ? "" : (colFilterField.selectedOptions[0]?.textContent || "");
+    rerender();
+  });
+  colFilterOp?.addEventListener("change", rerender);
+  colFilterValue?.addEventListener("input", rerender);
+  colFilterClear?.addEventListener("click", () => {
+    if (colFilterField) colFilterField.value = "";
+    colFilterAttr = "";
+    if (colFilterValue) colFilterValue.value = "";
+    rerender();
+  });
 
   list.addEventListener("click", ev => {
     try {

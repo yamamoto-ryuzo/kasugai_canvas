@@ -38,6 +38,7 @@ import { initPrint } from "../shared/print.js";
 import { formatLatLng, parseCoordinateQuery } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
 import { computeGroupStats } from "../shared/attr-stats.js";
+import { matchAttrCellFilter } from "../shared/attr-widget.js";
 import { loadScriptOnce } from "../shared/lazy-lib.js";
 import { isGeoTiffType, resolveGeoTiffItem, buildGeoTiffOverlayDataSource, createGeoTiffImageryProvider } from "./geotiff-layer.js";
 
@@ -10573,6 +10574,14 @@ function setupVectorSearch() {
   const vectorAttrWidgetList = document.querySelector("#vector-attr-widget-list");
   const vectorAttrWidgetCount = document.querySelector("#vector-attr-widget-count");
   const vectorAttrWidgetTitle = document.querySelector(".vector-attr-widget-title");
+  const vectorAttrColFilterField = document.querySelector("#vector-attr-widget-colfilter-field");
+  const vectorAttrColFilterOp = document.querySelector("#vector-attr-widget-colfilter-op");
+  const vectorAttrColFilterValue = document.querySelector("#vector-attr-widget-colfilter-value");
+  const vectorAttrColFilterClear = document.querySelector("#vector-attr-widget-colfilter-clear");
+  // 列フィルタで選択中の属性名。レイヤ切替で同名属性が残れば条件を維持し、
+  // 消えた場合は自動解除する(インデックスは列構成で変わるため名前で保持)
+  let vectorAttrColFilterAttr = "";
+  let vectorAttrColFilterAttrSig = null;
   let vectorAttrWidgetRows = [];
   let vectorAttrWidgetAttributes = [];
   let vectorAttrWidgetSort = { column: -1, order: 1 };
@@ -10602,6 +10611,29 @@ function setupVectorSearch() {
         + vectorAttrWidgetAttributes.map(a => '<option>' + escapeHtml(a) + '</option>').join("");
       if (vectorAttrWidgetAttributes.includes(prev)) vectorAttrStatsValue.value = prev;
     }
+  }
+
+  // 列フィルタ(#110): 属性・条件・値で行を絞り込む。全文検索とは AND で併用
+  function syncVectorAttrColFilterOptions() {
+    if (!vectorAttrColFilterField) return;
+    // 再構築前の選択状態を引き継ぐ(change 未発火のプログラム的選択も拾う)
+    const cur = (vectorAttrColFilterField.value !== "" && vectorAttrColFilterField.selectedOptions[0]?.textContent) || vectorAttrColFilterAttr;
+    vectorAttrColFilterField.innerHTML = '<option value="">' + escapeHtml(t("vattr.colFilterNone")) + '</option>'
+      + vectorAttrWidgetAttributes.map((a, i) => '<option value="' + i + '">' + escapeHtml(a) + '</option>').join("");
+    const idx = cur ? vectorAttrWidgetAttributes.indexOf(cur) : -1;
+    if (idx >= 0) {
+      vectorAttrColFilterField.value = String(idx);
+      vectorAttrColFilterAttr = cur;
+    } else {
+      vectorAttrColFilterField.value = "";
+      // 行再構築中(loading)は列が一時的に空になるだけなので選択を保持し、
+      // 列構成が確定した時点で対象属性が無い場合のみ解除する
+      if (vectorAttrWidgetAttributes.length || !vectorAttrWidgetLoading) vectorAttrColFilterAttr = "";
+    }
+  }
+  function vectorAttrRowPassesColFilter(row) {
+    if (!vectorAttrColFilterField || vectorAttrColFilterField.value === "" || !vectorAttrColFilterValue || !vectorAttrColFilterValue.value.trim()) return true;
+    return matchAttrCellFilter(row.values[Number(vectorAttrColFilterField.value)], vectorAttrColFilterOp ? vectorAttrColFilterOp.value : "contains", vectorAttrColFilterValue.value);
   }
 
   function getVectorDataSourceById(layerId) {
@@ -10754,7 +10786,13 @@ function setupVectorSearch() {
     try {
       if (!vectorAttrWidgetList || !vectorAttrWidgetCount || !vectorAttrWidgetTitle) return;
       const query = String(filter).toLowerCase().trim();
-      let matched = query ? vectorAttrWidgetRows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : [...vectorAttrWidgetRows];
+      // 列構成が変わった時だけ列フィルタの選択肢を再構築する
+      // (毎回再構築すると描画と選択変更の競合で選択が失われ得る)
+      const attrSig = vectorAttrWidgetAttributes.join("");
+      if (attrSig !== vectorAttrColFilterAttrSig) { vectorAttrColFilterAttrSig = attrSig; syncVectorAttrColFilterOptions(); }
+      // 列フィルタ適用後に全文検索を AND でかける
+      let matched = vectorAttrWidgetRows.filter(vectorAttrRowPassesColFilter);
+      if (query) matched = matched.filter(row => row.values.some(val => String(val).toLowerCase().includes(query)));
       if (vectorAttrWidgetSort.column >= 0 && vectorAttrWidgetSort.column < vectorAttrWidgetAttributes.length) {
         const col = vectorAttrWidgetSort.column;
         const order = vectorAttrWidgetSort.order;
@@ -10805,7 +10843,7 @@ function setupVectorSearch() {
       }
       if (!displayRows.length) {
         vectorAttrWidgetList.innerHTML = '<tr><td colspan="' + vectorAttrWidgetAttributes.length + '" style="padding:12px 14px;color:#71818d;">' + escapeHtml(t("vattr.noFeatures")) + '</td></tr>';
-        vectorAttrWidgetCount.textContent = t("vattr.count", { matched: query ? 0 : vectorAttrWidgetRows.length, attrs: vectorAttrWidgetAttributes.length });
+        vectorAttrWidgetCount.textContent = t("vattr.count", { matched: matched.length, attrs: vectorAttrWidgetAttributes.length });
         return;
       }
       vectorAttrWidgetList.innerHTML = displayRows.map(row => {
@@ -10880,7 +10918,8 @@ function setupVectorSearch() {
   // renderVectorAttrWidget の絞り込み・並び替えと同じルール
   function getAttrWidgetMatchedRows() {
     const query = String(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "").toLowerCase().trim();
-    let matched = query ? vectorAttrWidgetRows.filter(row => row.values.some(val => String(val).toLowerCase().includes(query))) : [...vectorAttrWidgetRows];
+    let matched = vectorAttrWidgetRows.filter(vectorAttrRowPassesColFilter);
+    if (query) matched = matched.filter(row => row.values.some(val => String(val).toLowerCase().includes(query)));
     if (vectorAttrWidgetSort.column >= 0 && vectorAttrWidgetSort.column < vectorAttrWidgetAttributes.length) {
       const col = vectorAttrWidgetSort.column;
       const order = vectorAttrWidgetSort.order;
@@ -10925,6 +10964,20 @@ function setupVectorSearch() {
   });
   vectorAttrStatsGroup?.addEventListener("change", () => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : ""));
   vectorAttrStatsValue?.addEventListener("change", () => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : ""));
+
+  const onVectorAttrColFilter = () => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+  vectorAttrColFilterField?.addEventListener("change", () => {
+    vectorAttrColFilterAttr = vectorAttrColFilterField.value === "" ? "" : (vectorAttrColFilterField.selectedOptions[0]?.textContent || "");
+    onVectorAttrColFilter();
+  });
+  vectorAttrColFilterOp?.addEventListener("change", onVectorAttrColFilter);
+  vectorAttrColFilterValue?.addEventListener("input", onVectorAttrColFilter);
+  vectorAttrColFilterClear?.addEventListener("click", () => {
+    if (vectorAttrColFilterField) vectorAttrColFilterField.value = "";
+    vectorAttrColFilterAttr = "";
+    if (vectorAttrColFilterValue) vectorAttrColFilterValue.value = "";
+    onVectorAttrColFilter();
+  });
 
   if (vectorAttrListBtn) vectorAttrListBtn.addEventListener("click", () => openVectorAttrWidget(vectorLayer ? vectorLayer.value : null));
   const attrVectorAttrListBtn = document.querySelector("#attr-vector-attr-list-btn");

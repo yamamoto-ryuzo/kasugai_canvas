@@ -1036,6 +1036,20 @@
           <select id="vector-attr-widget-group" title="集計キー" data-i18n-attr="title:vattr.statsGroup" hidden></select>
           <select id="vector-attr-widget-value" title="集計する数値属性" data-i18n-attr="title:vattr.statsValue" hidden></select>
         </div>
+        <div class="vector-attr-widget-colfilter">
+          <select id="vector-attr-widget-colfilter-field" title="絞り込む属性" data-i18n-attr="title:vattr.colFilterField"></select>
+          <select id="vector-attr-widget-colfilter-op">
+            <option value="contains" data-i18n="vattr.colFilterContains">含む</option>
+            <option value="eq">=</option>
+            <option value="ne">≠</option>
+            <option value="lt">&lt;</option>
+            <option value="le">≦</option>
+            <option value="gt">&gt;</option>
+            <option value="ge">≧</option>
+          </select>
+          <input id="vector-attr-widget-colfilter-value" type="text" placeholder="条件値" data-i18n-attr="placeholder:vattr.colFilterValue" />
+          <button id="vector-attr-widget-colfilter-clear" type="button" title="フィルタを解除" data-i18n-attr="title:vattr.colFilterClear">×</button>
+        </div>
         <div class="vector-attr-widget-table-wrap">
           <table class="vector-attr-widget-table">
             <thead id="vector-attr-widget-head" class="vector-attr-widget-thead"></thead>

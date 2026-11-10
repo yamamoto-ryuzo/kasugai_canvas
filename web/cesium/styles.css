@@ -270,6 +270,12 @@ footer { padding: 0 28px 22px; }
 .vector-attr-widget-title { font-weight: 700; font-size: 15px; }
 .vector-attr-widget-close { min-width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 20px; line-height: 1; }
 .vector-attr-widget-filter { display: flex; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e4ecef; }
+.vector-attr-widget-colfilter { display: flex; gap: 8px; padding: 8px 14px; border-bottom: 1px solid #e4ecef; }
+#vector-attr-widget-colfilter-field { flex: 0 0 180px; min-width: 110px; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; background: #fff; }
+#vector-attr-widget-colfilter-op { flex: 0 0 70px; min-height: 30px; padding: 4px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; background: #fff; }
+#vector-attr-widget-colfilter-value { flex: 1; min-width: 0; min-height: 30px; padding: 4px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; }
+#vector-attr-widget-colfilter-clear { flex: 0 0 auto; min-height: 30px; padding: 0 10px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; cursor: pointer; font-size: 14px; color: #52636d; }
+#vector-attr-widget-colfilter-clear:hover { background: #eef5f7; }
 #vector-attr-widget-layer { flex: 0 0 160px; min-width: 120px; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; background: #fff; }
 #vector-attr-widget-search { flex: 1; min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 14px; }
 .vector-attr-widget-table-wrap { flex: 1; overflow: auto; }
