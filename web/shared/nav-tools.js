@@ -336,7 +336,9 @@ export function initNavTools(a) {
     };
     a.el.addEventListener("pointerdown", e => {
       if (e.button !== 0 || onUiControl(e)) return;
-      const useRect = mode || (!a.nativeBoxZoom && e.shiftKey);
+      // 矩形ズームの即時起動は「Shift単体」のみ。Ctrl/Alt/Meta 同時押しは
+      // 回転系ジェスチャ(OL: Alt+Shiftで回転等)へ素通しにする
+      const useRect = mode || (!a.nativeBoxZoom && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey);
       if (!useRect) return;
       e.preventDefault(); e.stopPropagation();
       const [x, y] = rel(e);
