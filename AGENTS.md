@@ -282,6 +282,17 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
 
 CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコード → GeoJSON へ正規化 → 既存のベクター描画経路（`GeoJsonDataSource`）に流す」**を基本ルールとする。これによりレイヤ一覧・表示切替・フォーカス・ベクトル検索・属性パネルが新形式でも自動的に機能する。
 
+### QGIS 側との仕様同期（必須）
+
+`.kasc` 行形式・オプション(`opts`)、`NON_LAYER_TYPES`、エンジン別対応、QML 再現スコープを本リポジトリで拡張・変更した場合は、**QGIS 側の対応物にも連携して反映する**。対象は `C:\devin\qgis_live_harness\qgis-plugin\geo_webview\` の:
+
+- `kasc_import.py` — `.kasc` パース(`_LAYER_TYPES`/`_META_TYPES`/オプション解釈)と QGIS 取り込み。新しい行タイプ・opts はここにも実装するか、未対応として明示警告する
+- `kasugai_export.py` — `.kasc` 行生成(送出側)。Canvas が新オプションを読めるなら送出も検討
+- `skills/webgis-convert.md` / `skills/webgis-import.md` — AI 手順書の形式選定表・オプション・エンジン別対応の記述を更新
+- `CHANGELOG.md` + `metadata.txt` + `verify/features.json` — 変更記録と検証結果の同期
+
+逆方向(geo_webview 側の .kasc 解釈変更)も同様に `shared/kasc.js` との整合を確認すること。
+
 ### 経路の分類
 
 - **ネイティブ経路**: `3dtiles:` / `geojson:` / `xyz:` など CesiumJS が直接読める形式
