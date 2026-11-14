@@ -85,19 +85,53 @@ async function googlePlacesSearch(query, key) {
   }));
 }
 
+// GSI AddressSearch の生順はデータセット順で関連度ではない。
+// 「東京」等では「〜町東」の町字候補が先頭に大量に並ぶため、
+// 完全一致>前方一致>部分一致>その他 の関連度順にクライアント側で並べ替える
+function rankSearchResults(items, query) {
+  const q = String(query || "");
+  return items.map((it, idx) => {
+    const t = String(it.title || "");
+    let g = 3;
+    if (q && t === q) g = 0;
+    else if (q && t.startsWith(q)) g = 1;
+    else if (q && t.includes(q)) g = 2;
+    return { g, len: t.length, idx, it };
+  }).sort((a, b) => a.g - b.g || a.len - b.len || a.idx - b.idx)
+    .map(x => x.it);
+}
+
+const GSI_ADMIN_SUFFIXES = "都道府県市区町村郡";
+
+async function gsiAddressFetch(query) {
+  const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors", signal: AbortSignal.timeout(15000) });
+  if (!response.ok) throw new Error(await response.text() || t("search.failedStatus", { status: response.status }));
+  const data = await response.json().catch(() => []);
+  return (Array.isArray(data) ? data : []).map(item => ({
+    title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
+    address: item.properties?.address || item.properties?.Address || item.properties?.title || "",
+    latitude: Number(item.geometry?.coordinates?.[1]),
+    longitude: Number(item.geometry?.coordinates?.[0]),
+  }));
+}
+
 // 地名検索プロバイダ。いずれも {title,address,latitude,longitude}[] を返す。
 // 既定は gsi（地理院・キー不要）。google/places は Maps API キー必須
 const searchProviders = {
   async gsi(query) {
-    const response = await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(query)}`, { mode: "cors", signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error(await response.text() || t("search.failedStatus", { status: response.status }));
-    const data = await response.json().catch(() => []);
-    return (Array.isArray(data) ? data : []).map(item => ({
-      title: item.properties?.title || item.properties?.name || item.properties?.Name || "",
-      address: item.properties?.address || item.properties?.Address || item.properties?.title || "",
-      latitude: Number(item.geometry?.coordinates?.[1]),
-      longitude: Number(item.geometry?.coordinates?.[0]),
-    }));
+    const q = String(query || "").trim();
+    const items = await gsiAddressFetch(q);
+    // 行政区画接尾辞を持たない短い入力は "<q>都" の補完リクエストで
+    // 「東京都」「札幌市」「東京都台東区秋葉原」のような行政区画レベルの
+    // 候補を拾い、クエリを含むものだけ先頭へマージする
+    if (q.length >= 2 && q.length <= 10 && !GSI_ADMIN_SUFFIXES.includes(q.slice(-1)) && !/[0-9０-９]/.test(q)) {
+      try {
+        const extra = (await gsiAddressFetch(q + "都")).filter(it => String(it.title || "").includes(q));
+        const seen = new Set(items.map(it => `${it.title},${it.latitude},${it.longitude}`));
+        items.unshift(...extra.filter(it => !seen.has(`${it.title},${it.latitude},${it.longitude}`)));
+      } catch { /* 補完失敗時は本体の結果だけを使う */ }
+    }
+    return rankSearchResults(items, q);
   },
   // ハイブリッド検索: Geocoding（住所向け）と Places（施設向け）を並列で呼んでマージ
   async google(query) {
