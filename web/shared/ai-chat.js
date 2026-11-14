@@ -98,6 +98,7 @@ const CHAT_TOOL_API = {
   liveSync: "liveSync",
   checkUpdate: "checkUpdate", installUpdate: "installUpdate",
   bridgeSetup: "local:bridgeSetup",
+  delegateTask: "local:delegateTask",
   runCode: "local:runCode",
   speak: "local:speak",
   addLayer: "addLayer", addGeoJsonLayer: "addGeoJsonLayer",
@@ -164,9 +165,34 @@ const PROVIDER_ENDPOINT_KEYS = {
   acp: "agentEndpoint.acp",
   agent: "agentEndpoint.agent",
 };
-const PROVIDER_ORDER = ["gemini", "openai", "sakura", "anthropic", "azure", "copilot", "devin", "antigravity", "acp", "agent"];
+// 表示順は【API】→【ACP】→【ブリッジ】の分類順（qgis_live_harness と同じ規則）
+const PROVIDER_ORDER = ["gemini", "copilotapi", "azure", "sakura", "anthropic", "openai", "copilot", "devin", "acp", "antigravity", "agent"];
 // さくらのAI Engine（専用プロバイダ）の固定エンドポイント。OpenAI互換API
 const SAKURA_BASE_URL = "https://api.ai.sakura.ad.jp/v1";
+// GitHub Copilot API（api.githubcopilot.com）を GitHub トークンで直接使う
+// API プロバイダ。CLI・ブリッジ不要で、GitHub トークンを copilot_internal/
+// v2/token で短期トークンへ交換して OpenAI 互換 API を叩く（Copilot 契約が必要。
+// QGIS geo_driver の copilot プロバイダと同じ経路）
+const COPILOT_API_DEFAULT_BASE = "https://api.githubcopilot.com";
+const COPILOT_API_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
+// v2/token が応答しない環境でのフォールバック: 契約情報(endpoints.api)を返す
+// @github/copilot CLI が使う公式経路
+const COPILOT_API_USER_URL = "https://api.github.com/copilot_internal/user";
+// api.githubcopilot.com が要求するクライアント識別ヘッダ。
+// 任意の Editor-Version では拒否されうるため VS Code の Copilot Chat が送る
+// 値（copilot-api 等と同じデファクト）を使う
+const COPILOT_API_HEADERS = {
+  "Editor-Version": "vscode/1.99.3",
+  "Editor-Plugin-Version": "copilot-chat/0.26.7",
+  "Copilot-Integration-Id": "vscode-chat",
+  "Openai-Intent": "conversation-panel",
+};
+// GitHub OAuth デバイスフロー。copilot_internal 系は PAT (ghp_/
+// github_pat_) を拒否するため OAuth トークンが必要。client_id は
+// VS Code の公開 OAuth App（QGIS geo_driver / copilot-api と同じデファクト）
+const GITHUB_DEVICE_CLIENT_ID = "Iv1.b507a08c87ecfe98";
+const GITHUB_DEVICE_CODE_URL = "https://github.com/login/device/code";
+const GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 // ---- bridge-hub 検出 ----
 // 常駐の bridge-hub（bridge-hub.exe）が起動していれば /health が hub:true を返す。
 // ハブはアプリ版・ブラウザ WebGIS 共通で 8511 に一本化（アプリはハブを内蔵せず、
@@ -730,10 +756,11 @@ function isSecureAgentEndpoint(endpoint) {
 }
 
 // HTTP ヘッダ値は ISO-8859-1 のみ。トークンのコピー時に混入しやすい
-// 空白系文字（改行・タブ・全角スペース・NBSP 等）を取り除く。
-// 非Latin-1文字が残ると fetch が "non ISO-8859-1 code point" で落ちる
+// 空白系文字・制御文字・全角文字など印字可能 ASCII 以外を全て取り除く
+// （トークン類は常に印字可能 ASCII）。非Latin-1文字が残ると fetch が
+// "non ISO-8859-1 code point" で落ちる
 function sanitizeHeaderToken(s) {
-  return String(s || "").replace(/[\s  -​　]+/g, "");
+  return String(s || "").replace(/[^!-~]/g, "");
 }
 // 設定画面で保存した Devin APIキー。ブリッジへは X-Devin-Api-Key ヘッダで
 // 渡し、Devin ブリッジが devin acp の authenticate（meta.api_key）に使う。
@@ -788,7 +815,8 @@ export function updateChatPanelVisibility() {
       hasKey = !!localStorage.getItem("googleApiKey") || !!localStorage.getItem("openaiApiKey")
         || !!localStorage.getItem("sakuraApiKey")
         || !!localStorage.getItem("anthropicApiKey")
-        || !!(localStorage.getItem("azureApiKey") && localStorage.getItem("azureBaseUrl"));
+        || !!(localStorage.getItem("azureApiKey") && localStorage.getItem("azureBaseUrl"))
+        || !!localStorage.getItem("copilotApiToken");
     } catch (e) {}
     // アプリ管理ブリッジが使える環境ではキー未設定でもチャットを開ける
     // （ヘッダーのドロップダウンに有効なプロバイダだけが出る）
@@ -940,6 +968,14 @@ export function setupAiSettings() {
   const sakuraModelInput = document.querySelector("#sakura-model");
   const sakuraFetchButton = document.querySelector("#sakura-fetch-models");
   const sakuraModelsStatus = document.querySelector("#sakura-models-status");
+  const copilotApiFields = document.querySelector("#copilotapi-fields");
+  const copilotApiTokenInput = document.querySelector("#copilotapi-token");
+  const copilotApiBaseInput = document.querySelector("#copilotapi-base");
+  const copilotApiModelInput = document.querySelector("#copilotapi-model");
+  const copilotApiFetchButton = document.querySelector("#copilotapi-fetch-models");
+  const copilotApiModelsStatus = document.querySelector("#copilotapi-models-status");
+  const copilotApiSigninButton = document.querySelector("#copilotapi-signin");
+  const copilotApiSigninStatus = document.querySelector("#copilotapi-signin-status");
   const bridgeFields = document.querySelector("#bridge-fields");
   const endpointInput = document.querySelector("#agent-endpoint");
   const tokenInput = document.querySelector("#agent-token");
@@ -951,12 +987,15 @@ export function setupAiSettings() {
   const devinModelSelect = document.querySelector("#devin-model");
   const antigravityStatus = document.querySelector("#antigravity-endpoint-status");
   const antigravityModelSelect = document.querySelector("#antigravity-model");
+  const acpStatus = document.querySelector("#acp-endpoint-status");
+  const acpModelSelect = document.querySelector("#acp-model");
   if (!keyInput || !saveButton) return;
   // ブリッジ系プロバイダの UI 要素（ステータス行・モデル選択）を provider 名で引く
   const bridgeUi = {
     copilot: { status: copilotStatus, modelSelect: copilotModelSelect },
     devin: { status: devinStatus, modelSelect: devinModelSelect },
     antigravity: { status: antigravityStatus, modelSelect: antigravityModelSelect },
+    acp: { status: acpStatus, modelSelect: acpModelSelect },
   };
   // ブリッジの /models から利用可能なモデル一覧を取り込む。
   // 保存済みの選択が一覧に無ければ先頭に残す。空値はブリッジ既定モデル。
@@ -1120,7 +1159,8 @@ export function setupAiSettings() {
     if (sakuraFields) sakuraFields.hidden = v !== "sakura";
     if (anthropicFields) anthropicFields.hidden = v !== "anthropic";
     if (azureFields) azureFields.hidden = v !== "azure";
-    const isBridge = v === "copilot" || v === "devin" || v === "antigravity" || v === "agent";
+    if (copilotApiFields) copilotApiFields.hidden = v !== "copilotapi";
+    const isBridge = v === "copilot" || v === "devin" || v === "antigravity" || v === "acp" || v === "agent";
     if (bridgeFields) {
       bridgeFields.hidden = !isBridge;
       // 選択中プロバイダ専用の項目だけを表示（他プロバイダの案内は出さない）
@@ -1214,6 +1254,9 @@ export function setupAiSettings() {
     if (azureKeyInput) azureKeyInput.value = localStorage.getItem("azureApiKey") || "";
     if (azureDeploymentInput) azureDeploymentInput.value = localStorage.getItem("azureDeployment") || "";
     if (azureApiVersionInput) azureApiVersionInput.value = localStorage.getItem("azureApiVersion") || "";
+    if (copilotApiTokenInput) copilotApiTokenInput.value = localStorage.getItem("copilotApiToken") || "";
+    if (copilotApiBaseInput) copilotApiBaseInput.value = localStorage.getItem("copilotApiBase") || "";
+    seedModelSelect(copilotApiModelInput, localStorage.getItem("copilotApiModel"), "gpt-4o");
     if (endpointInput) endpointInput.value = localStorage.getItem("agentEndpoint") || "";
     if (tokenInput) tokenInput.value = localStorage.getItem("agentToken") || "";
     if (sendKeyInput) sendKeyInput.checked = localStorage.getItem("agentSendKey") === "1";
@@ -1306,6 +1349,75 @@ export function setupAiSettings() {
       statusEl: sakuraModelsStatus, modelInput: sakuraModelInput,
     });
   });
+  // Copilot API のモデル一覧取得。GET {api}/models の応答は capabilities/
+  // supported_endpoints を持つため copilotApiFetchModels で解釈する
+  // （トークン交換→chat対応モデル抽出→/responses 専用モデル学習まで行う）
+  // GitHubでサインイン（OAuth デバイスフロー）。PAT は copilot_internal で
+  // 拒否されるため OAuth トークンの取得が必須。github.com は CORS 非対応
+  // なので /api/mcp プロキシ経由。フロー中の再クリックでキャンセル
+  let copilotSigninFlow = null;
+  copilotApiSigninButton?.addEventListener("click", async () => {
+    const statusEl = copilotApiSigninStatus || copilotApiModelsStatus;
+    if (!statusEl) return;
+    if (copilotSigninFlow) {
+      copilotSigninFlow.cancelled = true;
+      return;
+    }
+    const flow = copilotSigninFlow = { cancelled: false };
+    copilotApiSigninButton.textContent = t("common.cancel");
+    statusEl.style.color = "";
+    statusEl.textContent = "";
+    try {
+      await copilotDeviceSignin(
+        (html) => { statusEl.innerHTML = html; },
+        () => flow.cancelled);
+      statusEl.innerHTML = "";
+      statusEl.textContent = t("chat.copilotapi.signinOk");
+    } catch (e) {
+      statusEl.style.color = flow.cancelled ? "" : "#c0392b";
+      statusEl.innerHTML = "";
+      statusEl.textContent = flow.cancelled
+        ? t("agent.cancelled")
+        : t("chat.copilotapi.signinFailed", { error: e.message });
+    } finally {
+      if (copilotSigninFlow === flow) {
+        copilotSigninFlow = null;
+        copilotApiSigninButton.textContent = t("chat.copilotapi.signin");
+      }
+    }
+  });
+  copilotApiFetchButton?.addEventListener("click", async () => {
+    const statusEl = copilotApiModelsStatus;
+    if (!statusEl) return;
+    statusEl.style.color = "";
+    statusEl.textContent = t("chat.openai.modelsFetching");
+    try {
+      const models = await copilotApiFetchModels(
+        sanitizeHeaderToken(copilotApiTokenInput?.value || ""),
+        (copilotApiBaseInput?.value || "").trim());
+      const ids = models.map(m => m.id);
+      if (copilotApiModelInput) {
+        const cur = copilotApiModelInput.value.trim();
+        copilotApiModelInput.textContent = "";
+        const seen = new Set();
+        const add = (m) => {
+          if (!m?.id || seen.has(m.id)) return;
+          seen.add(m.id);
+          const o = document.createElement("option");
+          o.value = m.id;
+          o.textContent = modelOptionLabel(m);
+          copilotApiModelInput.appendChild(o);
+        };
+        if (cur && !ids.includes(cur)) add({ id: cur });
+        for (const m of models) add(m);
+        copilotApiModelInput.value = seen.has(cur) ? cur : (ids[0] || "");
+      }
+      statusEl.textContent = t("chat.openai.modelsFetched", { count: ids.length });
+    } catch (e) {
+      statusEl.style.color = "#c0392b";
+      statusEl.textContent = t("chat.openai.modelsFetchError", { error: e.message });
+    }
+  });
   saveButton.addEventListener("click", () => {
     try {
       localStorage.setItem("googleApiKey", keyInput.value.trim());
@@ -1323,9 +1435,13 @@ export function setupAiSettings() {
       if (azureKeyInput) localStorage.setItem("azureApiKey", azureKeyInput.value.trim());
       if (azureDeploymentInput) localStorage.setItem("azureDeployment", azureDeploymentInput.value.trim());
       if (azureApiVersionInput) localStorage.setItem("azureApiVersion", azureApiVersionInput.value.trim());
+      if (copilotApiTokenInput) localStorage.setItem("copilotApiToken", sanitizeHeaderToken(copilotApiTokenInput.value));
+      if (copilotApiBaseInput) localStorage.setItem("copilotApiBase", copilotApiBaseInput.value.trim());
+      if (copilotApiModelInput) localStorage.setItem("copilotApiModel", copilotApiModelInput.value.trim());
       if (copilotModelSelect) localStorage.setItem("copilotModel", copilotModelSelect.value);
       if (devinModelSelect) localStorage.setItem("devinModel", devinModelSelect.value);
       if (antigravityModelSelect) localStorage.setItem("antigravityModel", antigravityModelSelect.value);
+      if (acpModelSelect) localStorage.setItem("acpModel", acpModelSelect.value);
       // ブリッジ系プロバイダ（copilot/devin/antigravity/agent）はエージェント接続を有効化し、
       // API系（gemini/openai）は無効化する。プロバイダ選択が唯一の切替源
       const pv = providerSelect?.value || "gemini";
@@ -1354,7 +1470,7 @@ export function setupAiSettings() {
         devinApiKeyInput.value = dk;
         localStorage.setItem("devinApiKey", dk);
       }
-      localStorage.setItem("agentEnabled", (pv === "copilot" || pv === "devin" || pv === "antigravity" || pv === "agent") ? "1" : "0");
+      localStorage.setItem("agentEnabled", (pv === "copilot" || pv === "devin" || pv === "antigravity" || pv === "acp" || pv === "agent") ? "1" : "0");
       // 旧自動設定マーカーは廃止（エンドポイント欄が明示されるため不要）
       localStorage.removeItem("agentAutoConfig");
       if (BRIDGE_PROVIDERS.includes(pv)) void refreshBridgeStatus(pv);
@@ -2086,6 +2202,19 @@ const CHAT_TOOLS = [{
           action: { type: "STRING", description: "status(既定) / install" },
         },
         required: ["provider"],
+      },
+    },
+    {
+      name: "delegateTask",
+      description: "作業を外部エージェントへ委譲し結果を受け取る。bridge-hub(127.0.0.1:8511)経由で ACP 系エージェント(copilot/devin/acp)や antigravity を駆動する。ファイル編集・コード生成・調査等の重いエージェント作業向け。地図操作は自分で行うこと(委譲先が actions を返した場合は結果に含まれるので自分で実行する)",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          provider: { type: "STRING", description: "委譲先: copilot / devin / acp / antigravity(bridge-hub が advertise しているもの)" },
+          task: { type: "STRING", description: "エージェントへ依頼する作業内容。目的・対象・期待する成果を具体的に記述する" },
+          model: { type: "STRING", description: "省略可。委譲先エージェントで使うモデルID(省略時はエージェント既定)" },
+        },
+        required: ["provider", "task"],
       },
     },
     {
@@ -2977,8 +3106,8 @@ function activeChatTools() {
     // 更新・停止はローカルサーバー版のみ（静的配信では非公開）
     .filter(d => !["checkUpdate", "installUpdate"].includes(d.name) || hasBackendFeature("update"))
     .filter(d => d.name !== "shutdownApp" || hasBackendFeature("shutdown"))
-    // ブリッジCLI導入ツールはハブが検出できる環境のみ（内蔵AIからも使える導線）
-    .filter(d => d.name !== "bridgeSetup" || bridgeSetupHubMaybe())
+    // ブリッジCLI導入・エージェント委譲ツールはハブが検出できる環境のみ
+    .filter(d => !["bridgeSetup", "delegateTask"].includes(d.name) || bridgeSetupHubMaybe())
     .filter(d => chatToolAvailable(d.name))
     // MCP サーバー（Box 等）のツールを末尾へ合成する
     .concat(mcpDeclarations());
@@ -3337,6 +3466,9 @@ export async function executeChatTool(name, args = {}) {
       return { ok: false, message: String(error && error.message || error) };
     }
   }
+  if (name === "delegateTask") {
+    return await delegateAgentTask(args);
+  }
   if (name === "speak") {
     const text = String(args.text || "").trim();
     if (!text) return { ok: false, message: "text is empty" };
@@ -3672,6 +3804,62 @@ async function detectBridgeHubBase() {
   return null;
 }
 
+// delegateTask ツールの実体。bridge-hub の /agent に {provider,message} を
+// POST し、返答をツール結果として返す。委譲先が actions を返した場合は
+// そのまま結果に含め、呼び出し元の LLM が次のステップで実行できるようにする
+// （QGIS geo_driver の【ブリッジ】委譲プロバイダに相当する機能。
+// チャット LLM は選択中の【API】プロバイダのまま、作業だけエージェントへ渡す）
+async function delegateAgentTask(args) {
+  const provider = String(args?.provider || "").trim().toLowerCase();
+  const task = String(args?.task || "").trim();
+  if (!provider || !task) {
+    return { ok: false, message: "provider と task が必要です" };
+  }
+  const endpoints = bridgeCandidates(provider);
+  const headers = { "Content-Type": "application/json" };
+  // ハブは設定画面のエージェントトークンを Bearer 認証に使う
+  // （callExternalAgent と同じ）。未設定なら付けない
+  const agentToken = sanitizeHeaderToken(localStorage.getItem("agentToken"));
+  if (agentToken) headers["Authorization"] = `Bearer ${agentToken}`;
+  // Devin はハブ側の acp 認証に APIキーを使う（https/localhost 宛のみ付与）
+  if (provider === "devin") {
+    Object.assign(headers, devinAuthHeaders(endpoints[0] || ""));
+  }
+  const model = String(args?.model || "").trim() || getBridgeModel(provider);
+  const body = JSON.stringify({
+    provider,
+    message: task,
+    project: chatProjectId(),
+    engine: aiEngine,
+    ...(model ? { model } : {}),
+  });
+  let lastErr = null;
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(ep, {
+        method: "POST", headers, body,
+        signal: AbortSignal.timeout(300000),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok) {
+        lastErr = new Error(d?.error || `HTTP ${r.status}`);
+        continue;
+      }
+      return {
+        ok: true,
+        reply: typeof d?.reply === "string" ? d.reply : "",
+        actions: Array.isArray(d?.actions) ? d.actions : [],
+      };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  return {
+    ok: false,
+    message: `bridge-hub に接続できませんでした（${endpoints.join(", ")}）: ${lastErr?.message || lastErr}`,
+  };
+}
+
 // bridgeSetup ツールを公開する目安（正確な可否は実行時に detectBridgeHubBase で確認）
 function bridgeSetupHubMaybe() {
   return BRIDGE_PROVIDERS.some(p => hasBackendFeature(p + "Bridge"))
@@ -3757,6 +3945,8 @@ async function usableChatProviders() {
     // Azure はキーとリソースURL・デプロイ名の3点が揃っているときだけ有効
     if (localStorage.getItem("azureApiKey") && localStorage.getItem("azureBaseUrl")
       && localStorage.getItem("azureDeployment")) set.add("azure");
+    // GitHub Copilot（API直接）は GitHub トークンが保存済みのときだけ有効
+    if (localStorage.getItem("copilotApiToken")) set.add("copilotapi");
   } catch (e) {}
   await Promise.all(BRIDGE_PROVIDERS.map(async (v) => {
     if (!bridgeFeatureAvailable(v)) return;
@@ -4017,7 +4207,9 @@ function updateChatProviderLabel() {
     model = getAnthropicConfig().model;
   } else if (provider === "azure") {
     model = getAzureConfig().deployment;
-  } else if (provider === "copilot" || provider === "devin" || provider === "antigravity") {
+  } else if (provider === "copilotapi") {
+    model = getCopilotApiConfig().model;
+  } else if (provider === "copilot" || provider === "devin" || provider === "antigravity" || provider === "acp") {
     const selected = getBridgeModel(provider);
     model = selected || detectedBridgeModels[provider] || "";
     if (model === "?") model = "";
@@ -4110,7 +4302,7 @@ function modelOptionLabel(m) {
 export function getChatProvider() {
   try {
     const p = localStorage.getItem("chatProvider");
-    if (["gemini", "openai", "sakura", "anthropic", "azure", "copilot", "devin", "antigravity", "agent"].includes(p)) return p;
+    if (["gemini", "openai", "sakura", "anthropic", "azure", "copilotapi", "copilot", "devin", "antigravity", "acp", "agent"].includes(p)) return p;
     // 移行前の利用形態を推定（プロバイダ未保存＋エージェント有効 → agent 相当）
     if (!p) {
       const enabledFlag = localStorage.getItem("agentEnabled");
@@ -4179,6 +4371,303 @@ function getAzureConfig() {
   } catch (e) {
     return { apiKey: "", baseUrl: "", deployment: "", apiVersion: "2024-10-21" };
   }
+}
+
+// GitHub Copilot API（直接利用）プロバイダの接続情報。
+// GitHub トークンを copilotSession で短期トークンへ交換して使う。
+// baseUrl は既定の api.githubcopilot.com。変更時は copilot-api 互換
+// プロキシ等とみなし、交換せず GitHub トークンをそのまま Bearer に使う
+function getCopilotApiConfig() {
+  try {
+    return {
+      token: sanitizeHeaderToken(localStorage.getItem("copilotApiToken")),
+      baseUrl: ((localStorage.getItem("copilotApiBase") || "").trim() || COPILOT_API_DEFAULT_BASE).replace(/\/+$/, ""),
+      model: (localStorage.getItem("copilotApiModel") || "").trim() || "gpt-4o",
+    };
+  } catch (e) {
+    return { token: "", baseUrl: COPILOT_API_DEFAULT_BASE, model: "gpt-4o" };
+  }
+}
+
+// github.com の OAuth 系エンドポイントは CORS を許可しないため、
+// 本体サーバの /api/mcp プロキシ（公開ホスト限定・POST 中継）経由で送る。
+// api.github.com / api.githubcopilot.com は CORS 対応なので直叩きのまま
+async function githubOAuthPost(url, params) {
+  const via = `/api/mcp?url=${encodeURIComponent(url)}`;
+  let r;
+  try {
+    r = await fetch(via, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams(params).toString(),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch (e) {
+    throw new Error(t("chat.copilotapi.signinProxyFailed", { error: e.message }));
+  }
+  const raw = await r.text();
+  let data = null;
+  try { data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
+  if (!r.ok) {
+    throw new Error(data?.error_description || data?.error || `HTTP ${r.status}: ${raw.slice(0, 200)}`);
+  }
+  return data || {};
+}
+
+// OAuth デバイスフローで GitHub サインインし、取得した OAuth トークンを
+// copilotApiToken として保存する。copilot_internal は PAT を拒否するため
+// OAuth 経路が必須。onStatus(html, isErr) で進捗を設定画面へ表示する
+async function copilotDeviceSignin(onStatus, isCancelled) {
+  const req = await githubOAuthPost(GITHUB_DEVICE_CODE_URL, {
+    client_id: GITHUB_DEVICE_CLIENT_ID,
+    scope: "read:user",
+  });
+  if (!req.device_code || !req.user_code) {
+    throw new Error(`invalid device code response: ${JSON.stringify(req).slice(0, 200)}`);
+  }
+  const verifyUri = req.verification_uri || "https://github.com/login/device";
+  try { window.open(verifyUri, "_blank", "noopener"); } catch (e) { /* popup blocked */ }
+  onStatus(t("chat.copilotapi.signinPrompt", {
+    code: req.user_code,
+    url: verifyUri,
+  }));
+  let interval = Math.max(5, Number(req.interval) || 5);
+  const deadline = Date.now() + (Number(req.expires_in) || 900) * 1000;
+  while (Date.now() < deadline) {
+    if (isCancelled?.()) throw new Error(t("common.cancel"));
+    await new Promise(r => setTimeout(r, interval * 1000));
+    const d = await githubOAuthPost(GITHUB_ACCESS_TOKEN_URL, {
+      client_id: GITHUB_DEVICE_CLIENT_ID,
+      device_code: req.device_code,
+      grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+    });
+    if (d.access_token) {
+      const tok = sanitizeHeaderToken(d.access_token);
+      localStorage.setItem("copilotApiToken", tok);
+      const input = document.querySelector("#copilotapi-token");
+      if (input) input.value = tok;
+      // 別トークンの交換キャッシュは無効化しておく
+      for (const k of Object.keys(copilotApiSessionCache)) delete copilotApiSessionCache[k];
+      return tok;
+    }
+    if (d.error === "authorization_pending") continue;
+    if (d.error === "slow_down") { interval += 5; continue; }
+    throw new Error(d.error_description || d.error || "authorization failed");
+  }
+  throw new Error(t("chat.copilotapi.signinExpired"));
+}
+
+// GitHub トークン → {token, expiresAt, api} のキャッシュ
+const copilotApiSessionCache = {};
+// /chat/completions を受け付けない /responses 専用と学習したモデル id。
+// GET /models の supported_endpoints と送信時の model_not_supported
+// エラーの両方から学習する
+const copilotResponsesOnly = new Set();
+
+// GitHub トークン → (Copilot API の Bearer トークン, API base) に解決する。
+// base が既定(COPILOT_API_DEFAULT_BASE)の場合のみ v2/token で短期トークンに
+// 交換し、応答の endpoints.api（individual/business/enterprise）をAPI先に使う。
+// トークンは期限切れ60秒前までキャッシュする。v2/token が応答しない環境では
+// copilot_internal/user で API先だけを解決し GitHub トークンをそのまま
+// Bearer に使う（@github/copilot CLI と同じ動作）
+async function copilotApiSession(githubToken, base) {
+  const u = String(base || "").trim().replace(/\/+$/, "") || COPILOT_API_DEFAULT_BASE;
+  if (!githubToken) throw new Error(t("chat.copilotapi.noToken"));
+  if (u !== COPILOT_API_DEFAULT_BASE) return { token: githubToken, api: u };
+  const now = Date.now() / 1000;
+  const ent = copilotApiSessionCache[githubToken];
+  if (ent && ent.expiresAt - now >= 60) return { token: ent.token, api: ent.api };
+  // api.github.com の CORS プリフライトは Authorization 等の限られた
+  // ヘッダしか許可しないため、トークン交換系は Authorization のみ送る
+  // （Editor-* は api.githubcopilot.com 側でのみ有効・許可）
+  const ghHeaders = { Authorization: `token ${githubToken}` };
+  try {
+    const r = await fetch(COPILOT_API_TOKEN_URL, {
+      headers: ghHeaders, signal: AbortSignal.timeout(30000),
+    });
+    const raw = await r.text();
+    let data = null;
+    try { data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
+    if (!r.ok) throw new Error(data?.message || `HTTP ${r.status}: ${raw.slice(0, 200)}`);
+    if (!data?.token) throw new Error(`no token: ${raw.slice(0, 200)}`);
+    copilotApiSessionCache[githubToken] = {
+      token: data.token,
+      expiresAt: Number(data.expires_at) || now + Number(data.refresh_in || 1500),
+      api: data?.endpoints?.api || COPILOT_API_DEFAULT_BASE,
+    };
+  } catch (e1) {
+    try {
+      const r = await fetch(COPILOT_API_USER_URL, {
+        headers: ghHeaders, signal: AbortSignal.timeout(30000),
+      });
+      const raw = await r.text();
+      let user = null;
+      try { user = raw ? JSON.parse(raw) : null; } catch (e) { user = null; }
+      if (!r.ok) throw new Error(user?.message || `HTTP ${r.status}: ${raw.slice(0, 200)}`);
+      copilotApiSessionCache[githubToken] = {
+        token: githubToken,
+        expiresAt: now + 1500,
+        api: user?.endpoints?.api || COPILOT_API_DEFAULT_BASE,
+      };
+    } catch (e2) {
+      throw new Error(t("chat.copilotapi.tokenFailed", { error: `${e1.message} / ${e2.message}` }));
+    }
+  }
+  const cached = copilotApiSessionCache[githubToken];
+  return { token: cached.token, api: cached.api };
+}
+
+// GET {api}/models → chat 対応モデル一覧。
+// Copilot API の応答は capabilities.type / policy.state /
+// capabilities.limits.max_context_window_tokens / supported_endpoints を
+// 持つため、種別とコンテキスト長の判定に使う。capabilities を持たない
+// 応答（互換プロキシ等）は全件採用する
+async function copilotApiFetchModels(token, base) {
+  const sess = await copilotApiSession(token, base);
+  const r = await fetch(`${sess.api}/models`, {
+    headers: { Authorization: `Bearer ${sess.token}`, ...COPILOT_API_HEADERS },
+    signal: AbortSignal.timeout(30000),
+  });
+  const raw = await r.text();
+  let d = null;
+  try { d = raw ? JSON.parse(raw) : null; } catch (e) { d = null; }
+  if (!r.ok) throw new Error(d?.error?.message || d?.message || `HTTP ${r.status}: ${raw.slice(0, 200)}`);
+  const items = Array.isArray(d?.data) ? d.data : [];
+  const out = [];
+  for (const m of items) {
+    if (!m?.id) continue;
+    const caps = m.capabilities;
+    if (!caps || typeof caps !== "object") { out.push({ id: m.id }); continue; }
+    if (caps.type != null && caps.type !== "chat") continue;
+    if (m.policy?.state === "disabled") continue;
+    // /responses 専用モデルを記録（GPT-6系等。supported_endpoints が無い
+    // 応答は不明=chat送り）
+    const eps = m.supported_endpoints;
+    if (Array.isArray(eps)) {
+      if (!eps.includes("/chat/completions") && eps.includes("/responses")) copilotResponsesOnly.add(m.id);
+      else if (eps.includes("/chat/completions")) copilotResponsesOnly.delete(m.id);
+    }
+    const e = { id: m.id };
+    const lim = caps.limits || {};
+    if (lim.max_context_window_tokens) e.context = lim.max_context_window_tokens;
+    out.push(e);
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+// ---- OpenAI Responses API (POST {base}/responses) ----
+// Copilot の GPT-6 系等、/chat/completions を受け付けず /responses 専用の
+// モデル向け。ワイヤ形式は異なるが、callOpenAICompat の messages を
+// 送信時にだけ Responses 形式へ変換する
+
+// OpenAI tools → Responses API の tools 形式（function をフラット化）
+function responsesTools(tools) {
+  return (tools || []).map(tl => {
+    if (tl?.type === "function" && tl.function && typeof tl.function === "object") {
+      return { type: "function", ...tl.function };
+    }
+    return tl;
+  });
+}
+
+// chat 形式の content → Responses の content parts
+// （user=input_text/input_image、assistant=output_text）
+function responsesContentParts(content, role) {
+  const textType = role === "assistant" ? "output_text" : "input_text";
+  if (typeof content === "string") return [{ type: textType, text: content }];
+  const parts = [];
+  for (const p of content || []) {
+    if (!p || typeof p !== "object") continue;
+    const tpe = p.type;
+    if (tpe === "text") parts.push({ type: textType, text: p.text || "" });
+    else if (tpe === "image_url") parts.push({ type: "input_image", image_url: p.image_url?.url || "" });
+    else if (tpe === "input_text" || tpe === "input_image") parts.push(p);
+  }
+  return parts;
+}
+
+// chat 形式の tool 結果 content → function_call_output.output。
+// 文字列はそのまま、画像を含む parts 列は input_* 形式にする
+function toolResultOutput(content) {
+  if (typeof content === "string") return content;
+  const parts = [];
+  for (const p of content || []) {
+    if (!p || typeof p !== "object") continue;
+    if (p.type === "text") parts.push({ type: "input_text", text: p.text || "" });
+    else if (p.type === "image_url") parts.push({ type: "input_image", image_url: p.image_url?.url || "" });
+  }
+  return parts.length ? parts : JSON.stringify(content ?? null);
+}
+
+// OpenAI chat 形式 messages → {instructions, Responses API の input items}
+function openaiMsgsToResponsesInput(messages) {
+  const instr = [];
+  const items = [];
+  for (const m of messages || []) {
+    const role = m.role;
+    if (role === "system") {
+      const c = m.content;
+      instr.push(typeof c === "string"
+        ? c
+        : (Array.isArray(c) ? c.filter(p => p?.type === "text").map(p => p.text || "").join("\n") : ""));
+      continue;
+    }
+    if (role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length) {
+      if (m.content) {
+        items.push({ type: "message", role: "assistant",
+          content: responsesContentParts(m.content, "assistant") });
+      }
+      for (const tc of m.tool_calls) {
+        const fn = tc.function || {};
+        items.push({
+          type: "function_call",
+          call_id: tc.id || "",
+          name: fn.name || "",
+          arguments: typeof fn.arguments === "string" ? fn.arguments : JSON.stringify(fn.arguments || {}),
+        });
+      }
+      continue;
+    }
+    if (role === "tool") {
+      items.push({ type: "function_call_output",
+        call_id: m.tool_call_id || "", output: toolResultOutput(m.content) });
+      continue;
+    }
+    items.push({ type: "message", role,
+      content: responsesContentParts(m.content, role) });
+  }
+  return { instructions: instr.filter(Boolean).join("\n"), input: items };
+}
+
+// Responses API 応答 → chat 形式の assistant メッセージ
+// （callOpenAICompat の msg と同じ形: {content, tool_calls?}）
+function responsesOutputToMessage(data) {
+  const text = [];
+  const toolCalls = [];
+  for (const item of data?.output || []) {
+    if (!item || typeof item !== "object") continue;
+    if (item.type === "message") {
+      for (const c of item.content || []) {
+        if (c?.type === "output_text") text.push(c.text || "");
+      }
+    } else if (item.type === "function_call") {
+      toolCalls.push({
+        id: item.call_id || item.id || "",
+        type: "function",
+        function: {
+          name: item.name || "",
+          arguments: typeof item.arguments === "string"
+            ? item.arguments : JSON.stringify(item.arguments || {}),
+        },
+      });
+    }
+  }
+  const msg = { role: "assistant", content: text.join("") || null };
+  if (toolCalls.length) msg.tool_calls = toolCalls;
+  return msg;
 }
 
 // Gemini形式スキーマ（type が大文字）を OpenAI tools が要求する JSON Schema（小文字）へ変換する
@@ -4306,7 +4795,12 @@ function chatToolsAnthropic() {
 // プロバイダを切り替えても会話が破綻しないようにする
 async function callOpenAICompat(history, request = null) {
   const { apiKey, baseUrl, model } = request || getOpenAIConfig();
-  const url = request?.url || `${baseUrl}/chat/completions`;
+  // request.responses=true で OpenAI Responses API（POST {base}/responses。
+  // Copilot の /chat/completions 非対応モデル向け）に切り替える
+  const responsesMode = !!request?.responses;
+  const url = responsesMode
+    ? (request.responsesUrl || `${baseUrl}/responses`)
+    : (request?.url || `${baseUrl}/chat/completions`);
   const headers = request?.headers || { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
   const executed = [];
   const usage = { input: 0, output: 0, model };
@@ -4325,17 +4819,34 @@ async function callOpenAICompat(history, request = null) {
       }
       maxSteps += increment;
     }
+    let body;
+    if (responsesMode) {
+      const { instructions, input } = openaiMsgsToResponsesInput(messages);
+      body = { model, input, store: false };
+      if (instructions) body.instructions = instructions;
+      if (tools.length) { body.tools = responsesTools(tools); body.tool_choice = "auto"; }
+    } else {
+      body = { model, messages, tools, tool_choice: "auto" };
+    }
     const response = await fetch(url, {
       method: "POST",
       headers,
       signal: AbortSignal.timeout(CHAT_LLM_TIMEOUT_MS),
-      body: JSON.stringify({ model, messages, tools, tool_choice: "auto" }),
+      body: JSON.stringify(body),
     });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-    usage.input += Number(data?.usage?.prompt_tokens) || 0;
-    usage.output += Number(data?.usage?.completion_tokens) || 0;
-    const msg = data?.choices?.[0]?.message;
+    // 応答は JSON 前提だが、Copilot API 等は認証/契約系エラーを
+    // プレーンテキスト（"checking token..." 等）で返すことがあるため、
+    // まず text で受けてからパースし、非 JSON でも本文をエラーに残す
+    const rawText = await response.text();
+    let data = null;
+    try { data = rawText ? JSON.parse(rawText) : null; } catch (e) { data = null; }
+    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}: ${rawText.slice(0, 300)}`);
+    if (!data) throw new Error(`non-JSON response: ${rawText.slice(0, 300)}`);
+    usage.input += Number(responsesMode ? data?.usage?.input_tokens : data?.usage?.prompt_tokens) || 0;
+    usage.output += Number(responsesMode ? data?.usage?.output_tokens : data?.usage?.completion_tokens) || 0;
+    const msg = responsesMode
+      ? (Array.isArray(data?.output) ? responsesOutputToMessage(data) : null)
+      : data?.choices?.[0]?.message;
     if (!msg) throw new Error(t("chat.noResponse"));
     messages.push(msg);
     const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
@@ -4442,6 +4953,47 @@ async function callAzureOpenAI(history) {
 // 固定エンドポイント・専用キー/モデルで呼ぶ
 async function callSakura(history) {
   return callOpenAICompat(history, getSakuraConfig());
+}
+
+// GitHub Copilot API の chat/completions。GitHub トークンを copilotApiSession
+// で短期トークン＋契約別API先へ解決して OpenAI 互換で送る。
+// /responses 専用モデル（GPT-6系）は copilotResponsesOnly で学習済みなら
+// 直接 /responses へ、未学習で model_not_supported 系エラーが返った場合は
+// 学習して /responses で再試行する
+async function callCopilotApi(history) {
+  const c = getCopilotApiConfig();
+  const sess = await copilotApiSession(c.token, c.baseUrl);
+  const request = {
+    url: `${sess.api}/chat/completions`,
+    // api.*githubcopilot.com の /responses は CORS 非対応（OPTIONS が 405 で
+    // プリフライト不可）のため /api/mcp プロキシ経由で中継する。
+    // /chat/completions は CORS 対応済みなので直叩きのまま
+    responsesUrl: `/api/mcp?url=${encodeURIComponent(`${sess.api}/responses`)}`,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${sess.token}`,
+      ...COPILOT_API_HEADERS,
+    },
+    model: c.model,
+    responses: copilotResponsesOnly.has(c.model),
+  };
+  if (!request.responses) {
+    const hlen = history.length;
+    try {
+      return await callOpenAICompat(history, request);
+    } catch (e) {
+      const s = String(e?.message || e).toLowerCase();
+      // "The requested model is not supported." 等の文言揺れも拾う。
+      // 誤判定でも /responses 側が同様に失敗してそのエラーが返るだけ
+      if (!s.includes("not accessible via the /chat/completions")
+          && !s.includes("model_not_supported")
+          && !s.includes("not supported")) throw e;
+      // /responses 専用モデルだった。学習して切替（1回目の往復は巻き戻す）
+      copilotResponsesOnly.add(c.model);
+      history.length = hlen;
+    }
+  }
+  return callOpenAICompat(history, { ...request, responses: true });
 }
 
 // Anthropic Messages API を呼び、tool_use の往復を処理する。
@@ -4979,19 +5531,23 @@ export function setupChatPanel() {
         ? !!getAnthropicConfig().apiKey
         : provider === "azure"
           ? !!(getAzureConfig().apiKey && getAzureConfig().baseUrl && getAzureConfig().deployment)
-          : (provider === "copilot" || provider === "devin" || provider === "antigravity" || provider === "agent")
-            ? isAgentEnabled()
-            : (!!chatGoogleApiKey() || !!aiProxyEndpoint());
+          : provider === "copilotapi"
+            ? !!getCopilotApiConfig().token
+            : (provider === "copilot" || provider === "devin" || provider === "antigravity" || provider === "acp" || provider === "agent")
+              ? isAgentEnabled()
+              : (!!chatGoogleApiKey() || !!aiProxyEndpoint());
     if (!hasKey) {
       const local = await handleLocalChatCommand(text);
       const key = provider === "openai" ? "chat.noApiKeyOpenai"
         : provider === "sakura" ? "chat.noApiKeySakura"
         : provider === "anthropic" ? "chat.noApiKeyAnthropic"
           : provider === "azure" ? "chat.noApiKeyAzure"
+            : provider === "copilotapi" ? "chat.copilotapi.noToken"
             : provider === "copilot" ? "chat.noApiKeyCopilot"
               : provider === "devin" ? "chat.noApiKeyDevin"
                 : provider === "antigravity" ? "chat.noApiKeyAntigravity"
-                  : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
+                  : provider === "acp" ? "chat.noApiKeyAcp"
+                    : provider === "agent" ? "chat.noBridge" : "chat.noApiKey";
       say("assistant", local || t(key));
       thinking.remove();
       return;
@@ -5008,9 +5564,11 @@ export function setupChatPanel() {
           ? await callSakura(history)
           : provider === "azure"
           ? await callAzureOpenAI(history)
-          : provider === "anthropic"
-            ? await callAnthropic(history)
-            : await callGemini(history);
+          : provider === "copilotapi"
+            ? await callCopilotApi(history)
+            : provider === "anthropic"
+              ? await callAnthropic(history)
+              : await callGemini(history);
       executed.forEach(call => say("system", t("chat.executed", { call })));
       say("assistant", reply, { meta: addUsage(usage) });
     } catch (error) {
@@ -5140,13 +5698,14 @@ const AI_SETTINGS_HTML = `
   <label class="field-label" for="chat-provider" data-i18n="chat.provider.label">AI プロバイダ</label>
   <select id="chat-provider">
     <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
-    <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+    <option value="copilotapi" data-i18n="chat.provider.copilotapi">【API】GitHub Copilot</option>
+    <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
     <option value="sakura" data-i18n="chat.provider.sakura">【API】さくらAIEngine</option>
     <option value="anthropic" data-i18n="chat.provider.anthropic">【API】Anthropic (Claude)</option>
-    <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
-    <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
-    <option value="acp" data-i18n="chat.provider.acp">【ブリッジ】ACP エージェント</option>
-    <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
+    <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+    <option value="copilot" data-i18n="chat.provider.copilot">【ACP】GitHub Copilot</option>
+    <option value="devin" data-i18n="chat.provider.devin">【ACP】Devin</option>
+    <option value="acp" data-i18n="chat.provider.acp">【ACP】カスタムエージェント</option>
     <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
     <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
   </select>
@@ -5215,11 +5774,30 @@ const AI_SETTINGS_HTML = `
     <label class="field-label" for="azure-api-version" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
     <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
   </div>
+  <div id="copilotapi-fields" hidden>
+    <p class="hint" data-i18n-html="chat.copilotapi.hint"></p>
+    <p class="hint" data-i18n-html="chat.openai.security"></p>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <button id="copilotapi-signin" type="button" data-i18n="chat.copilotapi.signin">GitHubでサインイン</button>
+    </div>
+    <p id="copilotapi-signin-status" class="hint" aria-live="polite"></p>
+    <label class="field-label" for="copilotapi-token" data-i18n="chat.copilotapi.tokenLabel">GitHub トークン</label>
+    <input id="copilotapi-token" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="OAuth トークン" autocomplete="off" size="28" />
+    <label class="field-label" for="copilotapi-base" data-i18n="chat.copilotapi.baseLabel">エンドポイント ベースURL（省略可）</label>
+    <input id="copilotapi-base" type="text" placeholder="https://api.githubcopilot.com" autocomplete="off" size="28" />
+    <label class="field-label" for="copilotapi-model" data-i18n="chat.openai.modelLabel">モデル</label>
+    <select id="copilotapi-model"></select>
+    <div style="display:flex;gap:6px;margin-top:6px;">
+      <button id="copilotapi-fetch-models" type="button" data-i18n="chat.openai.fetchModels">モデル一覧を取得</button>
+    </div>
+    <p id="copilotapi-models-status" class="hint" aria-live="polite"></p>
+  </div>
   <div id="bridge-fields" hidden>
     <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden></p>
     <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden></p>
     <p class="hint provider-only" data-for="devin" data-i18n-html="chat.devin.hint" hidden></p>
     <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden></p>
+    <p class="hint provider-only" data-for="acp" data-i18n-html="chat.acp.hint" hidden></p>
     <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
     <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" autocomplete="off" size="28" />
     <p class="hint" id="bridge-install-hint" data-i18n-html="chat.bridge.installTabHint" hidden></p>
@@ -5245,6 +5823,11 @@ const AI_SETTINGS_HTML = `
       <label class="field-label" for="antigravity-model" data-i18n="chat.antigravity.modelLabel">モデル</label>
       <select id="antigravity-model"></select>
       <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
+    </div>
+    <div id="acp-fields" class="provider-only" data-for="acp" hidden>
+      <label class="field-label" for="acp-model" data-i18n="chat.acp.modelLabel">モデル</label>
+      <select id="acp-model"></select>
+      <p class="hint" id="acp-endpoint-status" aria-live="polite"></p>
     </div>
   </div>
   <label class="field-label" for="google-tool-max-steps" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>

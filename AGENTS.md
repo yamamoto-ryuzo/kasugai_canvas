@@ -252,6 +252,11 @@ AI機能は「操作の影響範囲」でティアを分ける。**誰でも使�
 
 - **外向き（エージェント→ブラウザ）**: `/api/command`（local ティアのみ・capabilities feature `remoteCommand`）はエージェント中立の中継キュー。エージェント識別フィールドは持たず、Devin・Copilot・任意スクリプトが同一エンドポイント・同一形式 `{name,args}`・同一実行経路（`executeChatTool`）・同一結果回収（`/api/command/results`）を使う。新たなエージェントの接続に追加実装は不要
 - **内向き（ブラウザ→エージェント）**: プロトコルは共通（POST /agent → `{reply,actions:[{name,args}]}`）だが、エージェント固有の呼び出し部は `server/src/bridge/` のプロバイダ別実装（copilot.rs・devin.rs・antigravity.rs）。ハブは `bridge-hub.exe`（`server/src/bin/bridge-hub.rs`・bridge-hub.zip 配布・アプリ・CDN 共通の1本・8511）がプロバイダを振り分ける。新規エージェントはこのプロトコルに合うプロバイダ実装を `bridge/` に1本追加し、mod.rs の `PROVIDERS` に登録する形で接続する
+- **チャットプロバイダのタグ分類は3系統で統一**（qgis_live_harness geo_driver と同じ規則。新規プロバイダはいずれかに合わせる）:
+  - `【API】` — ブラウザが LLM API を直叩きしツールループを Canvas 側で回す（gemini/openai互換/sakura/anthropic/azure/copilotapi=GitHub Copilot 直接API）
+  - `【ACP】` — ハブがエージェント CLI を持続セッションで駆動しツールはエージェント側が持つ（copilot=Copilot SDK stdio セッション、devin=`devin acp`、acp=`KASUGAI_ACP_COMMAND` で指定する任意の ACP CLI＝カスタムエージェント）
+  - `【ブリッジ】` — 仲介・委譲層を挟む経路（antigravity=agy 単発起動、agent=任意 HTTP エンドポイントへの委譲）
+  - 委譲は【API】プロバイダのツールからも可能: `delegateTask`（local: ツール）が hub `/agent` に `{provider,message}` を投げて結果を返す。QGIS geo_driver の【ブリッジ】委譲プロバイダに相当
 - 両方向ともブラウザ側の実行は `executeChatTool` 一本に集約され、ツール正本は `activeChatTools`（宣言）+ `executeChatTool`（実装）。Gemini function calling・外部エージェント actions・リモートコマンドは全て同じツール群を共有する（**ツール追加・変更時は宣言と実装をセットで更新すること**）
 
 プラグインの昇格ルート: AI生成プラグインはまず IndexedDB（ブラウザローカル草稿）に保存 → `.kasp` でエクスポート可 → レビュー後にローカル版で `PLUGIN/` へ公開。これにより開発と公開、公開と非公開を分離する。

@@ -504,12 +504,14 @@
                     <label class="field-label" for="chat-provider" data-i18n="chat.provider.label">AI プロバイダ</label>
                     <select id="chat-provider">
                       <option value="gemini" selected data-i18n="chat.provider.gemini">【API】Gemini (Google)</option>
-                      <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+                      <option value="copilotapi" data-i18n="chat.provider.copilotapi">【API】GitHub Copilot</option>
+                      <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
                       <option value="sakura" data-i18n="chat.provider.sakura">【API】さくらAIEngine</option>
                       <option value="anthropic" data-i18n="chat.provider.anthropic">【API】Anthropic (Claude)</option>
-                      <option value="azure" data-i18n="chat.provider.azure">【API】Azure OpenAI</option>
-                      <option value="copilot" data-i18n="chat.provider.copilot">【ブリッジ】GitHub Copilot</option>
-                      <option value="devin" data-i18n="chat.provider.devin">【ブリッジ】Devin</option>
+                      <option value="openai" data-i18n="chat.provider.openai">【API】OpenAI互換 (GitHub Models 等)</option>
+                      <option value="copilot" data-i18n="chat.provider.copilot">【ACP】GitHub Copilot</option>
+                      <option value="devin" data-i18n="chat.provider.devin">【ACP】Devin</option>
+                      <option value="acp" data-i18n="chat.provider.acp">【ACP】カスタムエージェント</option>
                       <option value="antigravity" data-i18n="chat.provider.antigravity">【ブリッジ】Antigravity</option>
                       <option value="agent" data-i18n="chat.provider.agent">【ブリッジ】外部エージェント</option>
                     </select>
@@ -580,11 +582,30 @@
                       <label class="field-label" for="azure-api-version" style="margin-top:3px;" data-i18n="chat.azure.apiVersionLabel">API バージョン（省略可）</label>
                       <input id="azure-api-version" type="text" placeholder="2024-10-21" autocomplete="off" size="28" />
                     </div>
+                    <div id="copilotapi-fields" hidden>
+                      <p class="hint" data-i18n-html="chat.copilotapi.hint">GitHub Copilot を CLI・ブリッジなしで直接利用します。GitHub トークン（PAT）を短期トークンへ交換して api.githubcopilot.com（OpenAI互換）を呼びます。<strong>GitHub Copilot 契約が必要です</strong>。</p>
+                      <p class="hint" data-i18n-html="chat.openai.security"></p>
+                      <div style="display:flex;gap:6px;align-items:center;">
+                        <button id="copilotapi-signin" type="button" data-i18n="chat.copilotapi.signin">GitHubでサインイン</button>
+                      </div>
+                      <p id="copilotapi-signin-status" class="hint" aria-live="polite"></p>
+                      <label class="field-label" for="copilotapi-token" data-i18n="chat.copilotapi.tokenLabel">GitHub トークン</label>
+                      <input id="copilotapi-token" type="text" class="secret" data-1p-ignore data-lpignore="true" data-bwignore placeholder="OAuth トークン" data-i18n-attr="placeholder:chat.copilotapi.tokenPlaceholder" autocomplete="off" size="28" />
+                      <label class="field-label" for="copilotapi-base" style="margin-top:3px;" data-i18n="chat.copilotapi.baseLabel">エンドポイント ベースURL（省略可）</label>
+                      <input id="copilotapi-base" type="text" placeholder="https://api.githubcopilot.com" autocomplete="off" size="28" />
+                      <label class="field-label" for="copilotapi-model" style="margin-top:3px;" data-i18n="chat.openai.modelLabel">モデル</label>
+                      <select id="copilotapi-model"></select>
+                      <div style="display:flex;gap:6px;margin-top:6px;">
+                        <button id="copilotapi-fetch-models" type="button" data-i18n="chat.openai.fetchModels">モデル一覧を取得</button>
+                      </div>
+                      <p id="copilotapi-models-status" class="hint" aria-live="polite"></p>
+                    </div>
                     <div id="bridge-fields" hidden>
                       <p class="hint provider-only" data-for="agent" data-i18n-html="agent.externalHint" hidden>チャット入力を外部エージェントのHTTPエンドポイントへ POST します（Antigravity等で構築したエージェントを接続可能）。応答JSONの <code>actions</code> はチャットツールと同名で実行されます。</p>
                       <p class="hint provider-only" data-for="copilot" data-i18n-html="chat.copilot.hint" hidden>GitHub Copilot の場合はブリッジハブ経由で <code>copilot</code> CLI へ接続します（:8511 自動検出・空欄可）。GitHub Copilot 契約と <code>copilot</code> CLI の導入・ログインが必要です — 導入手順は <a href="https://github.com/github/copilot-cli" target="_blank" rel="noopener">github/copilot-cli</a> を参照（npm 版は <a href="https://nodejs.org/" target="_blank" rel="noopener">Node.js</a> も必要）。</p>
                       <p class="hint provider-only" data-for="devin" data-i18n-html="chat.devin.hint" hidden>Devin の場合はブリッジハブ経由で <code>devin acp</code>（Devin CLI）へ接続します（:8511 自動検出・空欄可）。Devin CLI と利用者自身の Devin プラン・本人の ACP 認証が必要です（Node.js 不要・ローカル・本人利用限定） — 手順と利用条件は bridge-hub/README.md。</p>
                       <p class="hint provider-only" data-for="antigravity" data-i18n-html="chat.antigravity.hint" hidden>Antigravity の場合はブリッジハブ経由で <code>agy</code> CLI へ接続します（:8511 自動検出・空欄可）。Antigravity CLI と利用者自身の Google アカウントでのログインが必要です（Node.js 不要・ローカル・本人利用限定） — 手順と利用条件は bridge-hub/README.md。</p>
+                      <p class="hint provider-only" data-for="acp" data-i18n-html="chat.acp.hint" hidden></p>
                       <label class="field-label" for="agent-endpoint" data-i18n="agent.endpointLabel">エンドポイントURL</label>
                       <input id="agent-endpoint" type="text" placeholder="http://127.0.0.1:9000/agent" data-i18n-attr="placeholder:agent.endpointPlaceholder" autocomplete="off" size="28" />
                       <p class="hint" id="bridge-install-hint" data-i18n-html="chat.bridge.installTabHint" hidden></p>
@@ -615,6 +636,12 @@
                         <select id="antigravity-model"></select>
                         <p class="hint" data-i18n="chat.antigravity.modelHint">ブリッジから取得した Antigravity のモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
                         <p class="hint" id="antigravity-endpoint-status" aria-live="polite"></p>
+                      </div>
+                      <div id="acp-fields" class="provider-only" data-for="acp" hidden>
+                        <label class="field-label" for="acp-model" data-i18n="chat.acp.modelLabel">モデル</label>
+                        <select id="acp-model"></select>
+                        <p class="hint" data-i18n="chat.acp.modelHint">ブリッジから取得した ACP エージェントのモデル一覧です。未取得時はブリッジの既定モデルが使われます。</p>
+                        <p class="hint" id="acp-endpoint-status" aria-live="polite"></p>
                       </div>
                     </div>
                     <label class="field-label" for="google-tool-max-steps" style="margin-top:3px;" data-i18n="google.gemini.toolStepsLabel">ツール実行の上限往復数</label>

@@ -828,6 +828,14 @@ async fn mcp_proxy(
         axum::http::header::AUTHORIZATION,
         axum::http::HeaderName::from_static("mcp-session-id"),
         axum::http::HeaderName::from_static("mcp-protocol-version"),
+        // GitHub Copilot API 系（api.githubcopilot.com の /responses 等は
+        // CORS 非対応のためブラウザからはこの中継が必要）
+        axum::http::HeaderName::from_static("editor-version"),
+        axum::http::HeaderName::from_static("editor-plugin-version"),
+        axum::http::HeaderName::from_static("copilot-integration-id"),
+        axum::http::HeaderName::from_static("openai-intent"),
+        axum::http::HeaderName::from_static("openai-beta"),
+        axum::http::HeaderName::from_static("x-github-api-version"),
     ] {
         if let Some(value) = headers.get(&key) {
             request = request.header(key, value.clone());
