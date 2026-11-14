@@ -27,10 +27,32 @@ import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLege
 import { mountSunControls } from "../shared/sun-time.js";
 
 const TERRAIN_URL = "https://terrain.reearth.land/cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain";
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "kml", "kmz", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile"]);
 const RASTER_TYPES = new Set(["xyz", "tile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
-const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql"]);
+const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
+// ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
+// 照合するフック。タイトル(正規化・最終セグメント)一致で返し、
+// 無ければ null → vector-load 側のファイルパス/QGIS 解決へフォールバック
+const vectorHooks = {
+  resolveLayer: async name => {
+    const n = normKascTitle(name || "");
+    for (const e of layerEntries) {
+      const it = e?.item;
+      if (!it) continue;
+      const t = normKascTitle(it.title || "");
+      if (t !== n && t.split("/").pop() !== n) continue;
+      if (it._geojson) return it._geojson;
+      // タイトル一致したが読み込み未完了の場合はソース URL を直接再デコード
+      // (sql/ogrsql の item.url はクエリ本文なので対象外)
+      if (it.url && it.type !== "sql" && it.type !== "ogrsql") {
+        return (await loadVectorItem(it, lastBaseUrl, null)).geojson;
+      }
+    }
+    return null;
+  },
+};
+
 const $ = s => document.querySelector(s);
 
 const panel = {
@@ -345,7 +367,7 @@ function buildLayerRow(entry, exclusive, radioName) {
     qb.type = "button";
     qb.className = "layer-filter";
     qb.textContent = "⏷";
-    qb.title = item.type === "sql" ? "クエリを編集" : "絞り込み条件（WHERE式）を編集";
+    qb.title = (item.type === "sql" || item.type === "ogrsql") ? "クエリを編集" : "絞り込み条件（WHERE式）を編集";
     qb.addEventListener("click", ev => {
       ev.preventDefault(); ev.stopPropagation();
       void editEntryQueryFilter(entry);
@@ -776,7 +798,7 @@ async function addKascLayer(item, baseUrl) {
     return { src, layer, desc };
   }
   if (VECTOR_TYPES.has(item.type)) {
-    const loaded = item._geojson ? { geojson: item._geojson } : await loadVectorItem(item, baseUrl, null);
+    const loaded = item._geojson ? { geojson: item._geojson } : await loadVectorItem(item, baseUrl, null, vectorHooks);
     item._geojson = loaded.geojson;
     // default_style: 行の既定値（地物側指定 > style=QML > default_style: > エンジン既定。
     // Navara はレイヤ単位マテリアルのため地物ごとの解決はできずレイヤ既定へ畳み込む）
@@ -1200,7 +1222,7 @@ async function applyKascView(view) {
     if (member) {
       const where = viewSpecFor(view, "wheres", item);
       const style = viewSpecFor(view, "styles", item);
-      if (item.type === "sql") {
+      if (item.type === "sql" || item.type === "ogrsql") {
         if (where) console.warn(`view:${view.name}: sql: レイヤーへの ;where= は未対応です`, item.title);
       } else {
         item.opts ||= {};
@@ -1230,7 +1252,7 @@ async function applyKascView(view) {
       if (!item.line) continue;
       const idx = lines.findIndex(l => l.trim() === item.line);
       let newLine = rewriteKascLineVisibility(item.line, show);
-      if (item.type !== "sql") newLine = rewriteKascLineOpt(newLine, "where", item.opts?.where ?? null);
+      if (item.type !== "sql" && item.type !== "ogrsql") newLine = rewriteKascLineOpt(newLine, "where", item.opts?.where ?? null);
       if (idx >= 0) lines[idx] = newLine;
       item.line = newLine;
     }
@@ -1308,7 +1330,7 @@ async function clearKascView() {
       if (!item.line) continue;
       const idx = lines.findIndex(l => l.trim() === item.line);
       let newLine = rewriteKascLineVisibility(item.line, showSet);
-      if (item.type !== "sql") newLine = rewriteKascLineOpt(newLine, "where", item.opts?.where ?? null);
+      if (item.type !== "sql" && item.type !== "ogrsql") newLine = rewriteKascLineOpt(newLine, "where", item.opts?.where ?? null);
       if (idx >= 0) lines[idx] = newLine;
       item.line = newLine;
     }
@@ -1359,7 +1381,7 @@ const closePortal = () => kascPortal().close();
 // player-api の reloadEntryData フックと ⏷ フィルタ編集の共通経路。
 // Navara の geojson ソースは差し替え API が無いためレイヤーを作り直す
 async function reloadEntryData(entry) {
-  const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, null);
+  const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, null, vectorHooks);
   entry.item._geojson = geojson;
   if (!entry.layer) return;
   try { entry.layer.delete(); } catch (_) {}
@@ -1372,7 +1394,7 @@ async function reloadEntryData(entry) {
 // 同期して再読み込みする（Cesium 版 editLayerQueryFilter 相当）
 async function editEntryQueryFilter(entry) {
   const item = entry.item;
-  const isSql = item.type === "sql";
+  const isSql = item.type === "sql" || item.type === "ogrsql";
   const current = isSql ? (item.url || "") : (item.opts?.where || "");
   const input = window.prompt(isSql ? "SQLクエリを入力" : "WHERE式を入力（空欄で解除）", current);
   if (input === null) return;
@@ -1381,7 +1403,7 @@ async function editEntryQueryFilter(entry) {
   if (isSql) {
     if (!value) return;
     item.url = value;
-    item.line = `sql:${item.title} | ${value}${item.visible === false ? " | off" : ""}`;
+    item.line = `${item.type}:${item.title} | ${value}${item.visible === false ? " | off" : ""}`;
   } else {
     item.opts ||= {};
     item.opts.where = value || undefined;

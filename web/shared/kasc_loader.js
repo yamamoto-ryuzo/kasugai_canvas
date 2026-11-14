@@ -20,6 +20,7 @@
  *   gpkg:/geopackage:  GeoPackage (sql.js Worker。table=/where=/limit=/columns=/bbox=auto)
  *   duckdb:            DuckDB-Wasm SQL 絞り込み (where=/limit=/geom=/lon=/lat=/format=/columns=/covering=/bbox=auto/table=)
  *   sql:               任意 SELECT 文 (:bbox プレースホルダ対応)
+ *   ogrsql:            OGR SQL SELECT 文 (shared/ogr-sql.js 動的import)
  *   mvt:/pmtiles:      ベクトルタイル(カタログ化のみ・描画はエンジン個別対応)
  * 3dtiles:/fly_geojson:/cam: 等はパースして skipped に振り分ける(呼び出し側で表示)。
  */
@@ -350,8 +351,8 @@
         return;
       }
 
-      // ---- sql: 任意クエリ ----
-      if (type === 'sql') {
+      // ---- sql:/ogrsql: 任意クエリ ----
+      if (type === 'sql' || type === 'ogrsql') {
         var firstSep = value.indexOf('|');
         var stitle = firstSep < 0 ? '' : value.slice(0, firstSep).trim();
         var query = firstSep < 0 ? '' : value.slice(firstSep + 1).trim();
@@ -366,8 +367,8 @@
           else break;
           query = query.slice(0, tail.index).trim();
         }
-        if (!stitle || !query) { skipped.push({ line: line, reason: 'sql: title|query required' }); return; }
-        items.push({ id: id, kind: 'vector', type: 'sql', title: stitle, query: query, visible: svisible, sourceLine: line });
+        if (!stitle || !query) { skipped.push({ line: line, reason: type + ': title|query required' }); return; }
+        items.push({ id: id, kind: 'vector', type: type, title: stitle, query: query, visible: svisible, sourceLine: line });
         return;
       }
 
@@ -1139,20 +1140,98 @@
   KascLoader.csvToGeoJson = csvToGeoJson;
 
   // ---------------------------------------------------------------
+  // ogrsql: OGR SQL クエリ (shared/ogr-sql.js の動的 import)
+  // このファイルは生成ビューアへインライン埋め込みされるため、
+  // モジュールは配布一式内の既知パスから順に試す
+  // ---------------------------------------------------------------
+  var ogrSqlModulePromise = null;
+  function loadOgrSqlModule() {
+    if (!ogrSqlModulePromise) {
+      var candidates = [
+        'shared/ogr-sql.js', './shared/ogr-sql.js',
+        '../shared/ogr-sql.js', '/shared/ogr-sql.js',
+      ];
+      ogrSqlModulePromise = (async function () {
+        var lastErr = null;
+        for (var i = 0; i < candidates.length; i++) {
+          try { return await import(candidates[i]); } catch (e) { lastErr = e; }
+        }
+        throw lastErr || new Error('ogr-sql.js が見つかりません(配布一式に shared/ が含まれているか確認してください)');
+      })();
+      ogrSqlModulePromise.catch(function () { ogrSqlModulePromise = null; });
+    }
+    return ogrSqlModulePromise;
+  }
+
+  // 読み込み済みレイヤーのタイトル → FeatureCollection (ogrsql: の FROM 照合用)
+  var ogrLoadedLayers = {};
+  function ogrFileType(path) {
+    var clean = String(path || '').split(/[?#]/)[0];
+    if (/\.(fgb|flatgeobuf)$/i.test(clean)) return 'flatgeobuf';
+    if (/\.(parquet|geoparquet)$/i.test(clean)) return 'geoparquet';
+    if (/\.gpkg$/i.test(clean)) return 'gpkg';
+    if (/\.tsv$/i.test(clean)) return 'csv';
+    if (/\.csv$/i.test(clean)) return 'csv';
+    return 'geojson';
+  }
+  function ogrDecodePath(path, table) {
+    var it = { type: ogrFileType(path), title: table || path, url: path, visible: true };
+    if (table) it.table = table;
+    return KascLoader.load(it);
+  }
+  function loadOgrSql(item) {
+    return loadOgrSqlModule().then(function (m) {
+      var resolver = function (ref) {
+        if (ref.source) return ogrDecodePath(ref.source, ref.name);
+        var key = String(ref.name || '').trim().toLowerCase();
+        var leaf = key.split('/').pop();
+        if (ogrLoadedLayers[key]) return Promise.resolve(ogrLoadedLayers[key]);
+        if (ogrLoadedLayers[leaf]) return Promise.resolve(ogrLoadedLayers[leaf]);
+        var looksPath = /[/\]/.test(key) || /^[a-z][a-z0-9+.-]*:/i.test(key)
+          || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|csv|tsv)$/i.test(key);
+        var candidates = looksPath ? [ref.name]
+          : ['DATA/' + ref.name + '.geojson', 'DATA/' + ref.name + '.fgb',
+             'DATA/' + ref.name + '.parquet', 'DATA/' + ref.name + '.gpkg',
+             'DATA/' + ref.name + '.csv', ref.name];
+        var lastErr = null;
+        var tryNext = function (i) {
+          if (i >= candidates.length) throw lastErr || new Error('ogrsql: テーブル "' + ref.name + '" を解決できません');
+          return ogrDecodePath(candidates[i]).catch(function (e) { lastErr = e; return tryNext(i + 1); });
+        };
+        return tryNext(0);
+      };
+      return m.executeOgrSelect(item.query, resolver);
+    });
+  }
+
+  // ---------------------------------------------------------------
   // 統合ローダー
   // ---------------------------------------------------------------
   // item.bboxBounds は呼び出し側が bbox=auto のクエリ範囲として設定する
   // ({ ranges:[{west,east}], south, north })
   KascLoader.load = function (item) {
+    var inner;
     switch (item.type) {
-      case 'geojson': return loadGeoJson(item);
-      case 'flatgeobuf': return loadFlatGeobufAsGeoJson(item);
-      case 'geoparquet': return loadGeoParquetAsGeoJson(item);
-      case 'gpkg': return loadGeoPackageAsGeoJson(item);
-      case 'duckdb': return loadDuckDbLayerAsGeoJson(item);
-      case 'sql': return loadDuckDbQueryAsGeoJson(item);
+      case 'geojson': inner = loadGeoJson(item); break;
+      case 'flatgeobuf': inner = loadFlatGeobufAsGeoJson(item); break;
+      case 'geoparquet': inner = loadGeoParquetAsGeoJson(item); break;
+      case 'gpkg': inner = loadGeoPackageAsGeoJson(item); break;
+      case 'duckdb': inner = loadDuckDbLayerAsGeoJson(item); break;
+      case 'sql': inner = loadDuckDbQueryAsGeoJson(item); break;
+      case 'csv': case 'tsv':
+        inner = fetch(item.url, { mode: 'cors' }).then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        }).then(function (t) { return csvToGeoJson(t, item.title); });
+        break;
+      case 'ogrsql': inner = loadOgrSql(item); break;
       default: return Promise.reject(new Error('unsupported type: ' + item.type));
     }
+    return inner.then(function (geojson) {
+      // ogrsql: の FROM 照合用に読み込み済みレイヤーをタイトルで登録する
+      if (item && item.title && geojson) ogrLoadedLayers[String(item.title).trim().toLowerCase()] = geojson;
+      return geojson;
+    });
   };
 
   // ファイル入力用。File オブジェクトから type を判定して GeoJSON まで読む

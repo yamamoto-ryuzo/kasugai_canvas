@@ -27,8 +27,9 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, splitKascTail } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, splitKascTail, geojsonExtent } from "../shared/kasc.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
+import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
@@ -448,7 +449,7 @@ function scheduleLayerListRender() {
   });
 }
 // 凡例スウォッチを出しうるレイヤー種別(ベクター系)
-const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "sql", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv"]);
+const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv"]);
 
 // 描画指示内の canvas/画像をサイズ+src に正規化してキャッシュキーを作る
 function legendDescKey(desc) {
@@ -1303,8 +1304,8 @@ async function applyKascView(view) {
     // ビュー外のレイヤーのフィルタは触らない
     if (viewHasLayer(view, item, show)) {
       const where = viewSpecFor(view, "wheres", item);
-      if (item.type === "sql") {
-        if (where) console.warn(`view:${view.name}: sql: レイヤーへの ;where= は未対応です`, item.title);
+      if (item.type === "sql" || item.type === "ogrsql") {
+        if (where) console.warn(`view:${view.name}: sql:/ogrsql: レイヤーへの ;where= は未対応です`, item.title);
       } else {
         item.where = where || undefined;
       }
@@ -1322,7 +1323,7 @@ async function applyKascView(view) {
     for (const item of items) {
       const idx = lines.indexOf(item.sourceLine);
       let newLine = rewriteKascLineVisibility(item.sourceLine, show);
-      if (item.type !== "sql") newLine = rewriteKascLineOpt(newLine, "where", item.where ?? null);
+      if (item.type !== "sql" && item.type !== "ogrsql") newLine = rewriteKascLineOpt(newLine, "where", item.where ?? null);
       if (idx >= 0) lines[idx] = newLine;
       item.sourceLine = newLine;
     }
@@ -1394,7 +1395,7 @@ async function clearKascView() {
     for (const item of items) {
       const idx = lines.indexOf(item.sourceLine);
       let newLine = rewriteKascLineVisibility(item.sourceLine, showSet);
-      if (item.type !== "sql") newLine = rewriteKascLineOpt(newLine, "where", item.where ?? null);
+      if (item.type !== "sql" && item.type !== "ogrsql") newLine = rewriteKascLineOpt(newLine, "where", item.where ?? null);
       if (idx >= 0) lines[idx] = newLine;
       item.sourceLine = newLine;
     }
@@ -3729,6 +3730,121 @@ async function queryDuckDbAttributeRows(item, searchText) {
   return { attributes, rows };
 }
 
+// ---- ogrsql: OGR SQL SELECT 文(shared/ogr-sql.js) ----
+// FROM の解決: 'ds'.layer 形式 → 読み込み済みレイヤータイトル照合 →
+// ファイルパス/DATA/ 推測。デコードは shared/vector-load.js へ委譲する
+function ogrFileTypeByPath(path) {
+  const clean = String(path || "").split(/[?#]/)[0];
+  if (/\.(fgb|flatgeobuf)$/i.test(clean)) return "flatgeobuf";
+  if (/\.(parquet|geoparquet)$/i.test(clean)) return "geoparquet";
+  if (/\.gpkg$/i.test(clean)) return "gpkg";
+  if (/\.kml$/i.test(clean)) return "kml";
+  if (/\.kmz$/i.test(clean)) return "kmz";
+  if (/\.(zip|shp|dbf)$/i.test(clean)) return "shp";
+  if (/\.tsv$/i.test(clean)) return "tsv";
+  if (/\.csv$/i.test(clean)) return "csv";
+  return "geojson";
+}
+
+async function decodeOgrFile(path, table) {
+  const synthetic = {
+    type: ogrFileTypeByPath(path), title: table || path,
+    url: resolveProjectUrl(path), opts: table ? { table } : {},
+  };
+  return (await loadVectorItem(synthetic, "", null)).geojson;
+}
+
+// FROM 名(レイヤータイトル/ファイルパス/'ds'.layer) → GeoJSON。
+// 未解決なら null(呼び出し側がファイル推測へ進む)
+async function resolveOgrSqlSource(ref) {
+  if (ref.source) return decodeOgrFile(ref.source, ref.name);
+  const name = String(ref.name || "");
+  const leafOf = t => String(t || "").split("/").pop().trim();
+  const match = getOrderedLayerItems().find(layer =>
+    layer.title === name || layer.sourceTitle === name
+    || leafOf(layer.title) === name || leafOf(layer.sourceTitle) === name);
+  if (!match) return null;
+  if (match.geojsonSource) return match.geojsonSource;
+  if (match.data && typeof match.data === "object") return match.data;
+  const dec = vectorDecoders.get(match.type);
+  if (dec) return dec.load(match);
+  const gj = getLayerGeoJson(match.id);
+  if (gj) return gj;
+  // 参照先レイヤーがまだ読み込み中で GeoJSON 未保持の場合は、
+  // そのソース URL を直接再デコードする(読み込み順の非決定性を吸収)
+  if (match.url) {
+    const it = { type: match.type === "layer" ? "geojson" : match.type, title: match.title, url: match.url, opts: match.opts || {} };
+    return (await loadVectorItem(it, "", null)).geojson;
+  }
+  return null;
+}
+
+// ogrsql: の属性一覧は再クエリ結果(GeoJSON)から組み立てる。
+// 検索文字は全属性値の部分一致(大文字小文字無視)で絞る
+async function queryOgrSqlAttributeRows(item, searchText) {
+  const fc = await loadOgrSqlLayerAsGeoJson(item);
+  const attributes = [];
+  for (const f of fc?.features || []) {
+    for (const k of Object.keys(f.properties || {})) {
+      if (!attributes.includes(k)) attributes.push(k);
+    }
+  }
+  const needle = String(searchText || "").trim().toLowerCase();
+  const rows = [];
+  for (const f of fc?.features || []) {
+    const p = f.properties || {};
+    const values = attributes.map(name => {
+      const v = sanitizeVectorPropertyValue(p[name]);
+      return v == null ? "" : String(v);
+    });
+    if (needle && !values.some(v => v.toLowerCase().includes(needle))) continue;
+    let lat = null, lng = null;
+    if (f.geometry?.type === "Point" && Array.isArray(f.geometry.coordinates)) {
+      [lng, lat] = f.geometry.coordinates;
+    } else if (f.geometry) {
+      const env = geojsonExtent({ type: "FeatureCollection", features: [f] });
+      if (env) { lng = (env.west + env.east) / 2; lat = (env.south + env.north) / 2; }
+    }
+    rows.push({ values, lat, lng });
+  }
+  return { attributes, rows };
+}
+
+async function loadOgrSqlLayerAsGeoJson(item) {
+  const query = String(item.query || "").replace(/;+\s*$/, "");
+  // 主経路はブラウザ内 JS 実装(shared/ogr-sql.js)。QGIS Live が検出
+  // できても GDAL 実行へは切り替えず、JS で解決できない FROM(QGIS
+  // プロジェクトレイヤー・ローカル SHP 等)や JS 未対応構文だけ
+  // QGIS 側の ogr.ExecuteSQL(dialect="OGRSQL") へフォールバックする
+  let jsErr = null;
+  try {
+    return await executeOgrSelect(query, async ref => {
+      if (ref.source) return resolveOgrSqlSource(ref);
+      const layer = await resolveOgrSqlSource(ref);
+      if (layer) return layer;
+      const name = String(ref.name || "");
+      const looksPath = /[/\\]/.test(name) || /^[a-z][a-z0-9+.-]*:/i.test(name)
+        || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(name);
+      const candidates = looksPath ? [name]
+        : [`DATA/${name}.geojson`, `DATA/${name}.fgb`, `DATA/${name}.parquet`,
+           `DATA/${name}.gpkg`, `DATA/${name}.kml`, `DATA/${name}.csv`, name];
+      let lastError = null;
+      for (const path of candidates) {
+        try { return await decodeOgrFile(path); }
+        catch (e) { lastError = e; }
+      }
+      throw lastError || new Error(`ogrsql: テーブル "${name}" を解決できません`);
+    });
+  } catch (e) {
+    jsErr = e;
+  }
+  const { runOgrSqlViaQgis } = await import("../shared/qgis-ogr.js");
+  const viaQgis = await runOgrSqlViaQgis(query, ref => (ref.source ? null : resolveOgrSqlSource(ref)),
+    path => resolveProjectUrl(path));
+  if (viaQgis) return viaQgis;
+  throw jsErr;
+}
+
 // GeoJSON 正規化経路のデコーダー一覧。新しい形式はここに type→loader を登録し、
 // applyInspector の行パースを追加すれば既存のベクター描画経路に乗る。
 // query:true は条件変更・再クエリ(フィルターUI/表示範囲連動)に対応した形式
@@ -3743,6 +3859,7 @@ const vectorDecoders = new Map([
   ["geopackage", { load: item => loadGeoPackageAsGeoJson(item), query: item => !!(item.where || item.limit || item.columns?.length || item.bboxAuto) }],
   ["duckdb", { load: item => loadDuckDbLayerAsGeoJson(item), query: true }],
   ["sql", { load: item => loadDuckDbQueryAsGeoJson(item), query: true }],
+  ["ogrsql", { load: item => loadOgrSqlLayerAsGeoJson(item), query: true }],
   // kml/kmz/wfs/shp は全件読み込み系。デコードは shared/vector-load.js へ一本化
   ["kml", { load: item => loadVectorItem({ type: "kml", title: item.title, url: item.url }, "").then(r => r.geojson) }],
   ["kmz", { load: item => loadVectorItem({ type: "kmz", title: item.title, url: item.url }, "").then(r => r.geojson) }],
@@ -4537,7 +4654,7 @@ const timeLayers = new Map(); // layerId → { item, items, starts, ends, si, ei
 let timePrevMs = null;
 let timePlaying = false;
 // entity 描画経路(time= が有効な)ベクター行タイプ。⏱ ボタンの表示対象
-const VECTOR_TIME_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "duckdb", "sql"]);
+const VECTOR_TIME_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "duckdb", "sql", "ogrsql"]);
 
 function parseTimeValueMs(v) {
   if (v == null || v === "") return null;
@@ -5145,7 +5262,7 @@ async function resliceViewportLayer(item, remaining) {
 // 変更は .kasc 行(sourceLine)にも反映して inspector テキストとの整合を保つ
 async function editLayerQueryFilter(item) {
   if (!item) return;
-  const isSql = item.type === "sql";
+  const isSql = item.type === "sql" || item.type === "ogrsql";
   const current = isSql ? (item.query || "") : (item.where || "");
   const input = window.prompt(t(isSql ? "layer.filter.promptSql" : "layer.filter.promptWhere"), current);
   if (input === null) return;
@@ -5154,7 +5271,7 @@ async function editLayerQueryFilter(item) {
 
 // クエリ系レイヤーのフィルター適用本体。⏷ボタンの prompt と AI ツール(setLayerFilter)の共通経路
 async function applyLayerQueryFilter(item, value) {
-  const isSql = item.type === "sql";
+  const isSql = item.type === "sql" || item.type === "ogrsql";
   if (isSql) {
     if (!value) return false;
     item.query = value;
@@ -5219,8 +5336,8 @@ function syncLayerSourceLine(item) {
     // where= は行の最終オプション(値は行末まで。`||` 連結等の | を含んでよい)
     if (item.where) parts.push(`where=${item.where}`);
     line = `${item.type}: ${parts.join(" | ")}`;
-  } else if (item.type === "sql") {
-    line = `sql: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}${item.attribution ? ` | attr=${item.attribution}` : ""}${item.styleUrl ? ` | style=${item.styleUrl}` : ""}${item.timeField ? ` | time=${item.timeField}` : ""}${item.timeEndField ? ` | time_end=${item.timeEndField}` : ""}${item.timeSpan != null ? ` | time_span=${item.timeSpan / 1000}` : ""}`;
+  } else if (item.type === "sql" || item.type === "ogrsql") {
+    line = `${item.type}: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}${item.attribution ? ` | attr=${item.attribution}` : ""}${item.styleUrl ? ` | style=${item.styleUrl}` : ""}${item.timeField ? ` | time=${item.timeField}` : ""}${item.timeEndField ? ` | time_end=${item.timeEndField}` : ""}${item.timeSpan != null ? ` | time_span=${item.timeSpan / 1000}` : ""}`;
   } else if (item.type === "geojson" || item.type === "layer" || item.type === "entities" || vectorDecoders.has(item.type)) {
     // 全件読み込み系ベクターの where=(クライアント評価フィルタ)を行へ反映する。
     // duckdb:/gpkg:/sql: は上の専用分岐で再構築済み。それ以外は where= フィールド
@@ -6370,11 +6487,13 @@ function applyInspector(text) {
       layerOrder.push(id);
     }
 
-    // sql: タイトル | SELECT文(先頭の | 以降はすべてクエリ文字列として扱い | も使用可)。
+    // sql:/ogrsql: タイトル | SELECT文(先頭の | 以降はすべてクエリ文字列として扱い | も使用可)。
     // 末尾の "| off" は非表示指定、"| render=entity" / "| render=primitive" は描画方式、
     // "| attr=出典" は出典表示(値に | は含められない)として末尾から順に解釈する。
-    // 描画は既定で entity(地形ドレープ可)
-    if (type === "sql") {
+    // 描画は既定で entity(地形ドレープ可)。
+    // sql: は DuckDB-WASM(SQLite方言)、ogrsql: は shared/ogr-sql.js の OGR SQL 方言
+    // (FROM=レイヤータイトル/'DATA/ファイル'/'ds'.layer 形式)で評価系が異なる
+    if (type === "sql" || type === "ogrsql") {
       const firstSep = value.indexOf("|");
       const title = firstSep < 0 ? "" : value.slice(0, firstSep).trim();
       let query = firstSep < 0 ? "" : value.slice(firstSep + 1).trim();
@@ -11033,7 +11152,9 @@ function setupVectorSearch() {
         const searchText = vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "";
         const result = isGpkgBackedItem(layerItem)
           ? await queryGpkgAttributeRows(layerItem, searchText)
-          : await queryDuckDbAttributeRows(layerItem, searchText);
+          : layerItem.type === "ogrsql"
+            ? await queryOgrSqlAttributeRows(layerItem, searchText)
+            : await queryDuckDbAttributeRows(layerItem, searchText);
         if (!isCurrent()) return;
         vectorAttrWidgetAttributes = result.attributes;
         vectorAttrWidgetRows = result.rows;
@@ -11934,9 +12055,15 @@ window.kasugaiApi = {
       pitch: Cesium.Math.toDegrees(viewer.camera.pitch),
     };
   },
+  // ogrsql: 行と同じ実行経路で OGR SQL SELECT を実行し GeoJSON を返す
+  // (AI ツール queryOgrSql 用。FROM は読み込み済みレイヤー名/DATA パス。
+  // 主経路は JS 実装で、解決不能時のみ QGIS Live の GDAL へフォールバック)
+  async runOgrSql(query) {
+    return loadOgrSqlLayerAsGeoJson({ title: "queryOgrSql", query: String(query || "") });
+  },
   listLayers() {
     return getOrderedLayerItems().map(layer => {
-      const entry = { id: layer.id, title: layer.title, sourceTitle: layer.sourceTitle || null, exclusiveGroup: !!layer.exclusiveGroup, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: layer.type === "sql" ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced };
+      const entry = { id: layer.id, title: layer.title, sourceTitle: layer.sourceTitle || null, exclusiveGroup: !!layer.exclusiveGroup, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: (layer.type === "sql" || layer.type === "ogrsql") ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced };
       const legend = layer.qmlStyle?.legend;
       if (legend?.length > 1) entry.legend = legend.map(e => ({ label: e.label || e.symbolName, visible: !layer.legendHidden?.has(e.symbolName) }));
       return entry;
@@ -12463,14 +12590,14 @@ window.kasugaiApi = {
     return { ok: true };
   },
   // ベクター系レイヤーを .kasc 行として末尾へ追記し即時適用する。
-  // type: geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb(target は URL) / sql(target は SELECT 文)
+  // type: geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb(target は URL) / sql・ogrsql(target は SELECT 文)
   addLayer(title, target, { type = "geojson", options = "" } = {}) {
     const input = document.querySelector("#inspector-input");
     const urlTypes = new Set(["geojson", "layer", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "image", "model", "geotiff", "cog", "tiff"]);
     const clean = value => String(value || "").replace(/[\r\n]+/g, " ").trim();
     title = clean(title); target = clean(target); options = clean(options);
     if (!title || !target || !input) return false;
-    if (!urlTypes.has(type) && type !== "sql") return false;
+    if (!urlTypes.has(type) && type !== "sql" && type !== "ogrsql") return false;
     // URL系は「タイトル|URL|出典|オプション」の形式のため、options 指定時は
     // 出典スロットを空で埋める(出典は options 側の attr= で指定できる)
     const line = `${type}:${title}|${target}${urlTypes.has(type) && options ? "|" : ""}${options ? `|${options}` : ""}`;

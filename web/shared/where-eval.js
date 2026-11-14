@@ -35,26 +35,26 @@
 // properties のみを渡した場合は疑似フィールドは FID=index・geometry 系=未定義。
 // 空文字列は全地物を通す述語。パース失敗は Error を投げる。
 
-const KEYWORDS = new Set([
+export const KEYWORDS = new Set([
   "AND", "OR", "NOT", "IN", "LIKE", "ILIKE", "IS", "NULL",
   "TRUE", "FALSE", "BETWEEN", "AS", "ESCAPE",
 ]);
 
 // OGR SQL の疑似フィールド(同名の実フィールドより優先)
-const PSEUDO_FIELDS = new Set([
+export const PSEUDO_FIELDS = new Set([
   "FID", "_OGR_GEOMETRY_", "OGR_GEOMETRY", "OGR_GEOM_WKT", "OGR_GEOM_AREA", "OGR_STYLE",
 ]);
 
-const FUNCTION_NAMES = new Set(["SUBSTR", "CAST", "CONCAT", "HSTORE_GET_VALUE"]);
+export const FUNCTION_NAMES = new Set(["SUBSTR", "CAST", "CONCAT", "HSTORE_GET_VALUE"]);
 
-function tokenize(text) {
+export function tokenize(text) {
   const tokens = [];
   let i = 0;
   const src = String(text || "");
   while (i < src.length) {
     const ch = src[i];
     if (/\s/.test(ch)) { i++; continue; }
-    if (ch === "(" || ch === ")" || ch === ",") { tokens.push({ t: ch }); i++; continue; }
+    if (ch === "(" || ch === ")" || ch === "," || ch === ".") { tokens.push({ t: ch }); i++; continue; }
     if (ch === "'") {
       let j = i + 1, buf = "";
       while (j < src.length) {
@@ -93,9 +93,9 @@ function tokenize(text) {
     // 数値(符号は単項演算子としてパーサで処理)
     const numMatch = /^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(src.slice(i));
     if (numMatch) { tokens.push({ t: "num", v: Number(numMatch[0]) }); i += numMatch[0].length; continue; }
-    // 裸の識別子/キーワード(OGR SQL と同じく ASCII 識別子のみ。
-    // 日本語名等は "…" 引用識別子で書く)
-    const identMatch = /^[A-Za-z_][A-Za-z0-9_]*/.exec(src.slice(i));
+    // 裸の識別子/キーワード(Unicode 文字クラスで受理。
+    // GDAL は UTF-8 識別子を許容するため日本語名もクォート不要)
+    const identMatch = /^[\p{L}_][\p{L}\p{N}_]*/u.exec(src.slice(i));
     if (identMatch) {
       const word = identMatch[0];
       const upper = word.toUpperCase();
@@ -112,16 +112,16 @@ function tokenize(text) {
 
 // ---- 値の正規化・比較 ----
 
-function isNullish(v) { return v === null || v === undefined || v !== v; }
+export function isNullish(v) { return v === null || v === undefined || v !== v; }
 
 // OGR の比較では bool は整数(1/0)として扱う
-function normalize(v) {
+export function normalize(v) {
   if (typeof v === "boolean") return v ? 1 : 0;
   if (v instanceof Date) return v.getTime();
   return v;
 }
 
-function toNumeric(v) {
+export function toNumeric(v) {
   if (typeof v === "number") return v;
   if (typeof v !== "string" || v.trim() === "") return NaN;
   return Number(v);
@@ -130,7 +130,7 @@ function toNumeric(v) {
 // OGR SQL: = != <> は文字列等価で大文字小文字を区別しない。
 // < <= > >= は大小区別あり。両辺が数値解釈可能なら数値比較。
 // NULL を含む比較は NULL (= フィルタ上不成立) を返す
-function compareValues(a, b, op) {
+export function compareValues(a, b, op) {
   const av = normalize(a), bv = normalize(b);
   if (isNullish(av) || isNullish(bv)) return false;
   const an = toNumeric(av), bn = toNumeric(bv);
@@ -186,7 +186,7 @@ function fmtCoord(c) {
   return c.slice(0, 2).map(n => String(Number(n))).join(" ");
 }
 
-function geomToWkt(g) {
+export function geomToWkt(g) {
   if (!g || !g.type) return null;
   const t = g.type, c = g.coordinates;
   switch (t) {
@@ -226,7 +226,7 @@ function geomArea(g) {
 }
 
 // 疑似フィールドの解決。同名の実フィールドより優先(仕様準拠)
-function resolvePseudoField(name, ctx) {
+export function resolvePseudoField(name, ctx) {
   const upper = String(name).toUpperCase();
   if (!PSEUDO_FIELDS.has(upper)) return { found: false };
   switch (upper) {
@@ -241,7 +241,7 @@ function resolvePseudoField(name, ctx) {
 }
 
 // 属性名 → 値の取得。疑似フィールド優先(仕様)、次に完全一致→大小文字を無視して探す
-function lookup(ctx, name) {
+export function lookup(ctx, name) {
   const pseudo = resolvePseudoField(name, ctx);
   if (pseudo.found) return pseudo.v;
   const props = ctx.props;
@@ -327,7 +327,7 @@ function ogrCast(v, type, params) {
 }
 
 // ---- パーサ(再帰下降) ----
-class Parser {
+export class Parser {
   constructor(tokens) { this.tokens = tokens; this.pos = 0; }
   peek() { return this.tokens[this.pos]; }
   next() { return this.tokens[this.pos++]; }
@@ -494,6 +494,16 @@ class Parser {
         } else this.next();
         return { k: "func", name: fname, args };
       }
+      // 修飾名 <テーブル>.<フィールド> (JOIN 参照。where= の単一レイヤーでは
+      // 該当テーブルが無いため "a.b" リテラル属性名として引くフォールバック)
+      if (this.peek().t === ".") {
+        this.next();
+        const f = this.next();
+        if (f.t !== "ident" && f.t !== "kw") {
+          throw new Error("where= の式が不正です: . の後に属性名が必要です");
+        }
+        return { k: "qident", table: tok.v, name: f.v };
+      }
       return { k: "ident", name: tok.v };
     }
     if (tok.t === "str" || tok.t === "num") return { k: "lit", v: tok.v };
@@ -508,7 +518,7 @@ class Parser {
 // ---- 評価 ----
 
 // OGR の真偽評価: NULL→false、数値→非0、文字列→数値化して非0('abc'→0→false)
-function ogrToBool(v) {
+export function ogrToBool(v) {
   const n = normalize(v);
   if (isNullish(n)) return false;
   if (typeof n === "number") return n !== 0;
@@ -516,7 +526,7 @@ function ogrToBool(v) {
   return Number.isFinite(f) && f !== 0;
 }
 
-function evalNode(node, ctx) {
+export function evalNode(node, ctx) {
   switch (node.k) {
     case "and": return ogrToBool(evalNode(node.a, ctx)) && ogrToBool(evalNode(node.b, ctx));
     case "or": return ogrToBool(evalNode(node.a, ctx)) || ogrToBool(evalNode(node.b, ctx));
@@ -543,6 +553,13 @@ function evalNode(node, ctx) {
     // 値ノード
     case "lit": return node.v;
     case "ident": return lookup(ctx, node.name);
+    case "qident": {
+      // 修飾名: ctx.tables[<alias>] の行から引く(JOIN 評価)。
+      // 該当テーブルが無いときは "a.b" 名のリテラル属性として引く
+      const t = ctx.tables?.[node.table];
+      if (t) return lookup(t, node.name);
+      return lookup(ctx, `${node.table}.${node.name}`);
+    }
     case "group": return evalNode(node.a, ctx);
     case "neg": {
       const v = toNumeric(normalize(evalNode(node.a, ctx)));
@@ -583,7 +600,7 @@ function evalNode(node, ctx) {
 
 // 述語の評価コンテキストを構築。feature({properties,geometry,id}) または
 // properties オブジェクトのどちらも受け付ける
-function makeCtx(arg, index) {
+export function makeCtx(arg, index) {
   if (arg != null && typeof arg === "object"
     && (Object.prototype.hasOwnProperty.call(arg, "properties") || arg.type === "Feature")) {
     return {

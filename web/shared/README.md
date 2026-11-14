@@ -40,6 +40,8 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 | `kasc.js` | .kasc 行パーサー＋プロジェクトローダー（cam↔zoom・URL ビュー・テーマ・ブックマーク・`?kasc=` 直読み。`portal:`/`view:`/`link:`/`html:` 行のパースもここ） |
 | `portal.js` | ポータルUI共有モジュール — 全画面オーバーレイ・view/link カード・html セクション・既定ガイド・`data-view/link/cam/base/clear/close` 委譲クリック。`createKascPortal(cfg)` で全エンジンが利用 |
 | `where-eval.js` | SQL WHERE サブセット評価器（`compileWhereExpression`/`filterGeoJsonByWhere`）。非クエリ系ベクター行の `where=` をクライアント側で評価 |
+| `ogr-sql.js` | OGR SQL の SELECT 文パーサ＋ブラウザ内実行（`parseOgrSelect`/`executeOgrSelect`）。`ogrsql:` 行・AI ツール `queryOgrSql` の JS 実行経路。SELECT 式/AS・DISTINCT・集計・JOIN・WHERE・ORDER BY・LIMIT/OFFSET・疑似フィールド対応 |
+| `qgis-ogr.js` | `ogrsql:` の QGIS ランタイム実行経路。JS 実装が主経路で、FROM 解決不能・未対応構文の場合のみローカル QGIS（Live relay :8089-8091 またはアプリ `/api/qgis-live/*`）の `ogr.ExecuteSQL(dialect="OGRSQL")` へフォールバック（QGIS3/4 両対応）。GDAL をゴールデンオラクルとした差分検証でも使用 |
 | `vector-load.js` / `vector-decode.js` | ベクター系行タイプ → GeoJSON 正規化ローダー／WKB・プロパティ変換ユーティリティ |
 | `gpkg-worker.js` | GeoPackage 読み込み Worker（sql.js で別スレッド処理） |
 | `qml-style.js` / `qml-2d.js` | QGIS .qml スタイルのコンパイルと 2D エンジンへの適用アダプタ |

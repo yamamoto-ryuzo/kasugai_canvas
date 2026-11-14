@@ -110,7 +110,8 @@ const CHAT_TOOL_API = {
   fetchData: "fetchData", getLayerGeoJson: "getLayerGeoJson",
   addDataLayer: "addDataLayer", removeDataLayer: "removeDataLayer",
   setToolMaxSteps: "local:setToolMaxSteps",
-  setLayerFilter: "setLayerFilter", listUiControls: "listUiControls", controlUi: "controlUi",
+  setLayerFilter: "setLayerFilter", queryOgrSql: "queryOgrSql",
+  listUiControls: "listUiControls", controlUi: "controlUi",
   listGsiLayers: "listGsiLayers", importGsiLayers: "importGsiLayers",
   listGsiCatalog: "listGsiCatalog", addGsiLayer: "addGsiLayer",
   setGsiLayerOpacity: "setGsiLayerOpacity", moveGsiLayer: "moveGsiLayer", removeGsiLayer: "removeGsiLayer",
@@ -2243,13 +2244,13 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addLayer",
-      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff(cog/tiff)。target は duckdb・sql 以外はURLまたは DATA/相対パス、sql は SELECT 文。wfs は options に typename= が必須(version=/maxfeatures=/cql_filter= も指定可)、shp は .zip 一式または .shp+sidecar のURL。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。geotiff/cog/tiff は GeoTIFF・COG ラスタをオーバーレイ表示する(Cesium エンジンのみ・options で mode=auto|tiles|overlay・opacity=・maxsize= 等)。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/ogrsql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff(cog/tiff)。target は duckdb・sql・ogrsql 以外はURLまたは DATA/相対パス、sql・ogrsql は SELECT 文(ogrsql は OGR SQL 方言で FROM=レイヤー名/DATA パス)。wfs は options に typename= が必須(version=/maxfeatures=/cql_filter= も指定可)、shp は .zip 一式または .shp+sidecar のURL。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。geotiff/cog/tiff は GeoTIFF・COG ラスタをオーバーレイ表示する(Cesium エンジンのみ・options で mode=auto|tiles|overlay・opacity=・maxsize= 等)。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
           title: { type: "STRING", description: "レイヤ名" },
-          target: { type: "STRING", description: "データのURLまたは DATA/ファイル名(sql: の場合は SELECT 文)" },
-          type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff/cog/tiff (省略時 geojson)" },
+          target: { type: "STRING", description: "データのURLまたは DATA/ファイル名(sql:/ogrsql: の場合は SELECT 文)" },
+          type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/ogrsql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff/cog/tiff (省略時 geojson)" },
           options: { type: "STRING", description: "省略可。wfs: の typename=/version=/maxfeatures=/cql_filter=、duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、geotiff: の mode=/opacity=/maxsize=/bands=、attr=出典 等(|区切り。where= は必ず最後に指定=以降は行末までが式)" },
         },
         required: ["title", "target"],
@@ -2495,7 +2496,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "setLayerFilter",
-      description: "クエリ系レイヤー(duckdb/sql/gpkg等)の絞り込み条件を変更する。レイヤー行の⏷ボタンと同じ操作。sql型はクエリ全文、それ以外はWHERE式をfilterに指定(空文字で解除・sql型は空文字不可)。現在の条件はlistLayersのfilter欄で確認できる",
+      description: "クエリ系レイヤー(duckdb/sql/ogrsql/gpkg等)の絞り込み条件を変更する。レイヤー行の⏷ボタンと同じ操作。sql/ogrsql型はクエリ全文、それ以外はWHERE式をfilterに指定(空文字で解除・sql/ogrsql型は空文字不可)。現在の条件はlistLayersのfilter欄で確認できる",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -2503,6 +2504,17 @@ const CHAT_TOOLS = [{
           filter: { type: "STRING", description: "WHERE式またはSQLクエリ全文" },
         },
         required: ["name", "filter"],
+      },
+    },
+    {
+      name: "queryOgrSql",
+      description: "OGR SQL 方言の SELECT 文を実行し、結果を GeoJSON として返す。FROM には読み込み済みレイヤー名・DATA/ 相対パス・ファイルURLが使える('ds'.layer 形式も可)。JOIN・集計・DISTINCT・ORDER BY・LIMIT/OFFSET・OGR疑似フィールド(FID/OGR_GEOMETRY/OGR_GEOM_WKT/OGR_GEOM_AREA)に対応。ブラウザ内 JS 実装で実行され、FROM の解決に失敗した場合のみローカル QGIS の GDAL ExecuteSQL へフォールバックする。結果をレイヤーとして追加したい場合は addLayer(type=ogrsql) を使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          query: { type: "STRING", description: "OGR SQL の SELECT 文" },
+        },
+        required: ["query"],
       },
     },
     {
@@ -3640,6 +3652,23 @@ export async function executeChatTool(name, args = {}) {
   }
   if (name === "setToolMaxSteps") {
     return { ok: true, steps: setChatMaxToolSteps(args.steps) };
+  }
+  if (name === "queryOgrSql") {
+    if (typeof window.kasugaiApi?.runOgrSql !== "function") {
+      return { ok: false, message: "このエンジンでは ogrsql: が未対応です" };
+    }
+    try {
+      const fc = await window.kasugaiApi.runOgrSql(args.query);
+      const features = fc?.features || [];
+      return {
+        ok: true,
+        featureCount: features.length,
+        truncated: features.length > 500,
+        features: features.slice(0, 500),
+      };
+    } catch (e) {
+      return { ok: false, message: String(e?.message || e) };
+    }
   }
   if (name === "setLayerFilter") {
     const result = await window.kasugaiApi.setLayerFilter(args.name, args.filter);

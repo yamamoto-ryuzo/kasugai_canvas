@@ -3,7 +3,8 @@
 // エンジン別の描画フック）を持つため、エンジン差分は hooks として注入し、
 // kasugaiApi 互換の API 面をここで構成する。AI チャット（shared/ai-chat.js）の
 // ツールはこの api メソッドの有無で公開可否が決まる。
-import { camToZoom, viewZoomToHeight, geojsonExtent, splitKascTitle, buildViewUrl } from "./kasc.js";
+import { camToZoom, viewZoomToHeight, geojsonExtent, splitKascTitle, buildViewUrl, normKascTitle } from "./kasc.js";
+import { loadVectorItem } from "./vector-load.js";
 import { backendUrl } from "./backend.js";
 import { hasBackendFeature, isFetchProxyTarget, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
 import { getLanguage, t } from "./i18n.js";
@@ -487,6 +488,19 @@ export function createPlayerApi(hooks) {
       if (!e) return { ok: false, reason: "notFound" };
       if (!hooks.reloadEntryData) return { ok: false, reason: "unsupported" };
       const t = e.item.type;
+      // sql:/ogrsql: はクエリ全文の差し替え(空文字は不可)。行の ⏷ 編集と同じ規則
+      if (t === "sql" || t === "ogrsql") {
+        const value = String(filter ?? "").trim();
+        if (!value) return { ok: false, reason: "empty" };
+        e.item.url = value;
+        e.item.line = `${t}:${e.item.title} | ${value}${e.item.visible === false ? " | off" : ""}`;
+        try {
+          await hooks.reloadEntryData(e);
+          return { ok: true };
+        } catch {
+          return { ok: false, reason: "failed" };
+        }
+      }
       if (!new Set(["gpkg", "geopackage", "duckdb", "flatgeobuf", "fgb", "geoparquet", "parquet"]).has(t)) {
         return { ok: false, reason: "unsupported" };
       }
@@ -696,6 +710,28 @@ export function createPlayerApi(hooks) {
       const e = findEntry(name);
       if (!e) return null;
       return hooks.getEntryGeoJson ? hooks.getEntryGeoJson(e) : (e.item._geojson || null);
+    },
+    // ogrsql: 行と同じ実行経路で OGR SQL SELECT を実行し GeoJSON を返す
+    // (AI ツール queryOgrSql 用。FROM は読み込み済みレイヤー名/DATA パス。
+    // 主経路は JS 実装で、解決不能時のみ QGIS Live の GDAL へフォールバック)
+    async runOgrSql(query) {
+      const resolveLayer = async name => {
+        const n = normKascTitle(name || "");
+        for (const e of hooks.getEntries()) {
+          const it = e?.item;
+          if (!it) continue;
+          const t = normKascTitle(it.title || "");
+          if (t === n || t.split("/").pop() === n) {
+            const gj = hooks.getEntryGeoJson ? hooks.getEntryGeoJson(e) : (it._geojson || null);
+            if (gj) return gj;
+          }
+        }
+        return null;
+      };
+      const { geojson } = await loadVectorItem(
+        { type: "ogrsql", title: "queryOgrSql", url: String(query || ""), opts: {} },
+        hooks.getBaseUrl?.() || "", null, { resolveLayer });
+      return geojson;
     },
 
     // ---- フライパス（flyToView hook 経由のカメラ巡回）----

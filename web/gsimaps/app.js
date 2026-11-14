@@ -119,10 +119,32 @@ const GSI_BASE_ID_BY_TILE = {
 };
 const VECTOR_TYPES = new Set([
   "geojson", "layer", "flatgeobuf", "fgb", "geoparquet", "parquet",
-  "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql",
+  "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql",
   "kml", "kmz", "wfs", "shp", "shapefile",
 ]);
 const TILE_TYPES = new Set(["xyz", "tile", "wms", "wmts"]);
+// ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
+// 照合するフック。タイトル(正規化・最終セグメント)一致で返し、
+// 無ければ null → vector-load 側のファイルパス/QGIS 解決へフォールバック
+const vectorHooks = {
+  resolveLayer: async name => {
+    const n = normKascTitle(name || "");
+    for (const e of layerEntries) {
+      const it = e?.item;
+      if (!it) continue;
+      const t = normKascTitle(it.title || "");
+      if (t !== n && t.split("/").pop() !== n) continue;
+      if (it._geojson) return it._geojson;
+      // タイトル一致したが読み込み未完了の場合はソース URL を直接再デコード
+      // (sql/ogrsql の item.url はクエリ本文なので対象外)
+      if (it.url && it.type !== "sql" && it.type !== "ogrsql") {
+        return (await loadVectorItem(it, lastBaseUrl, null)).geojson;
+      }
+    }
+    return null;
+  },
+};
+
 const DEFAULT_CENTER = { lat: 36.104611, lng: 140.084556 };
 const DEFAULT_ZOOM = 5;
 
@@ -460,7 +482,7 @@ async function mountGlobeEntry(e, preloaded) {
   const on = item.visible !== false;
   if (VECTOR_TYPES.has(item.type)) {
     if (!item._geojson) {
-      const result = preloaded?.geojson ? { geojson: preloaded.geojson } : await loadVectorItem(item, lastBaseUrl);
+      const result = preloaded?.geojson ? { geojson: preloaded.geojson } : await loadVectorItem(item, lastBaseUrl, null, vectorHooks);
       item._geojson = result.geojson;
       item._env = geojsonExtent(result.geojson) || null;
       if (result.viewportQuery) item._viewportQuery = true;
@@ -845,7 +867,7 @@ async function mountEntry(entry, preloaded) {
   const item = entry.item;
   if (globeMode) { await mountGlobeEntry(entry, preloaded); return; }
   if (VECTOR_TYPES.has(item.type)) {
-    const result = preloaded?.geojson ? { geojson: preloaded.geojson } : await loadVectorItem(item, lastBaseUrl);
+    const result = preloaded?.geojson ? { geojson: preloaded.geojson } : await loadVectorItem(item, lastBaseUrl, null, vectorHooks);
     item._geojson = result.geojson;
     item._env = geojsonExtent(result.geojson) || null;
     if (result.viewportQuery) item._viewportQuery = true;
@@ -873,7 +895,7 @@ async function reloadEntryData(entry) {
   const wasVisible = effectiveVisible(entry);
   removeSakuzuItem(entry.sakuzu);
   entry.sakuzu = null;
-  const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds());
+  const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds(), vectorHooks);
   entry.item._geojson = result.geojson;
   entry.item._env = geojsonExtent(result.geojson) || null;
   if (globeMode) {
@@ -994,7 +1016,7 @@ const attrWidget = createAttrWidget({
     const item = entry.item;
     // bbox 連動クエリ系は表示範囲分しか持たないため、属性一覧は全件読込にする
     if (isViewportQueryItem(item)) {
-      const { geojson } = await loadVectorItem(item, lastBaseUrl, null);
+      const { geojson } = await loadVectorItem(item, lastBaseUrl, null, vectorHooks);
       return { features: geojson?.features || [] };
     }
     if (!item._geojson && !entry.failed) await mountEntry(entry);
@@ -1299,7 +1321,7 @@ async function applyKascView(view) {
     if (!item.line) continue;
     const idx = lines.indexOf(item.line);
     let newLine = rewriteKascLineVisibility(item.line, show);
-    if (item.type !== "sql" && viewHasLayer(view, item, show)) {
+    if (item.type !== "sql" && item.type !== "ogrsql" && viewHasLayer(view, item, show)) {
       newLine = rewriteKascLineOpt(newLine, "where", item.where ?? null);
     }
     if (idx >= 0) lines[idx] = newLine;
@@ -1367,7 +1389,7 @@ async function clearKascView() {
     const s = snap.items.get(item);
     const idx = lines.indexOf(item.line);
     let newLine = rewriteKascLineVisibility(item.line, showSet);
-    if (item.type !== "sql" && s) newLine = rewriteKascLineOpt(newLine, "where", item.where ?? null);
+    if (item.type !== "sql" && item.type !== "ogrsql" && s) newLine = rewriteKascLineOpt(newLine, "where", item.where ?? null);
     if (idx >= 0) lines[idx] = newLine;
     item.line = newLine;
   }
@@ -2493,7 +2515,7 @@ window.kasugaiApi = createPlayerApi({
   },
   unmountEntry,
   reloadEntryData: async entry => {
-    const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds());
+    const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds(), vectorHooks);
     entry.item._geojson = result.geojson;
     entry.item._env = geojsonExtent(result.geojson) || null;
     removeSakuzuItem(entry.sakuzu);

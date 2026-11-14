@@ -302,7 +302,7 @@ export function isViewportQueryItem(item) {
 }
 
 // sql: 行のクエリ末尾に付く "| off" / "| attr=..." を除去する(kasc_loader.js と同じ規則)
-const SQL_TAIL_RE = /\|\s*(off|false|attr(?:ibution)?\s*=[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+)\s*$/i;
+const SQL_TAIL_RE = /\|\s*(off|false|attr(?:ibution)?\s*=[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+|render\s*=\s*[a-z]+|style\s*=\s*[^|]*|time(?:_end|_span)?\s*=\s*[^|]*)\s*$/i;
 function stripSqlTail(query) {
   let q = String(query || "");
   for (;;) {
@@ -310,6 +310,69 @@ function stripSqlTail(query) {
     if (!m) return q;
     q = q.slice(0, m.index).trim();
   }
+}
+
+// ---- ogrsql: OGR SQL SELECT 文のクライアント実行(shared/ogr-sql.js) ----
+
+// ファイルパス → loadVectorItem の行タイプ(拡張子判定)
+function ogrFileType(path) {
+  const clean = String(path || "").split(/[?#]/)[0];
+  if (/\.(fgb|flatgeobuf)$/i.test(clean)) return "flatgeobuf";
+  if (/\.(parquet|geoparquet)$/i.test(clean)) return "geoparquet";
+  if (/\.gpkg$/i.test(clean)) return "gpkg";
+  if (/\.(kml)$/i.test(clean)) return "kml";
+  if (/\.(kmz)$/i.test(clean)) return "kmz";
+  if (/\.(zip|shp|dbf)$/i.test(clean)) return "shp";
+  if (/\.tsv$/i.test(clean)) return "tsv";
+  if (/\.csv$/i.test(clean)) return "csv";
+  return "geojson";
+}
+
+// FROM 名 → 候補パス。パスらしい名前(/・拡張子・scheme あり)はそのまま。
+// 裸のレイヤー名は DATA/<名>.<形式> を順に試す
+function ogrSourceCandidates(name) {
+  const n = String(name || "").trim();
+  if (!n) return [];
+  const looksPath = /[/\\]/.test(n) || /^[a-z][a-z0-9+.-]*:/i.test(n)
+    || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(n);
+  if (looksPath) return [n];
+  return [
+    `DATA/${n}.geojson`, `DATA/${n}.fgb`, `DATA/${n}.parquet`,
+    `DATA/${n}.gpkg`, `DATA/${n}.kml`, `DATA/${n}.csv`, n,
+  ];
+}
+
+// ogrsql: の FROM 解決リゾルバを作る。戻り値は resolveSource(ref) 関数。
+// ref = {name, alias?, source?('ds'.layer 形式のデータソース)}。
+// 解決順: resolveLayer フック(読み込み済みレイヤータイトル照合・QGIS 等)
+// → 'ds'.layer はファイル+レイヤー名(gpkg table= 等)としてデコード
+// → パス/拡張子推測でファイルをデコード
+export function createOgrSourceResolver({ baseUrl, bounds = null, resolveLayer = null } = {}) {
+  const decodePath = async (path, table) => {
+    const it = {
+      type: ogrFileType(path),
+      title: table || path,
+      url: path,
+      opts: table ? { table } : {},
+    };
+    return (await loadVectorItem(it, baseUrl, bounds)).geojson;
+  };
+  return async ref => {
+    if (ref.source) {
+      // 'ds'.layer 形式: ファイル + レイヤー名(gpkg の table= 等)
+      return decodePath(ref.source, ref.name);
+    }
+    if (resolveLayer) {
+      const fc = await resolveLayer(ref.name);
+      if (fc) return fc;
+    }
+    let lastError = null;
+    for (const path of ogrSourceCandidates(ref.name)) {
+      try { return await decodePath(path); }
+      catch (e) { lastError = e; }
+    }
+    throw lastError || new Error(`ogrsql: テーブル "${ref.name}" を解決できません`);
+  };
 }
 
 // parseKasc の item → KascLoader.load 用アイテム（相対参照は絶対URLへ解決済み）
@@ -347,7 +410,9 @@ function toKascLoaderItem(item, baseUrl, bounds) {
 // item(.kasc 行) → GeoJSON FeatureCollection
 // 戻り値: { geojson, qml?, viewportQuery? } （gpkg は埋め込み QML があれば返す。
 // viewportQuery=true の行は表示範囲の移動に合わせて再読込が必要）
-export async function loadVectorItem(item, baseUrl, bounds = null) {
+// hooks.resolveLayer(name) = ogrsql: の FROM 名を読み込み済みレイヤーの
+// FeatureCollection へ解決する任意フック(エンジン側のレイヤー照合)
+export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null) {
   const url = resolveKascUrl(item.url, baseUrl);
   const type = item.type;
   if (type === "geojson" || type === "layer") {
@@ -395,6 +460,30 @@ export async function loadVectorItem(item, baseUrl, bounds = null) {
     const it = toKascLoaderItem(item, baseUrl, bounds);
     const geojson = await window.KascLoader.load(it);
     return { geojson, viewportQuery: it.bboxAuto };
+  }
+  if (type === "ogrsql") {
+    // OGR SQL SELECT 文。主経路はブラウザ内 JS 実装(shared/ogr-sql.js)で、
+    // CDN 単体利用でも QGIS 有無で挙動が変わらないよう常に先に実行する。
+    // JS で解決できない FROM(QGIS プロジェクトレイヤー・ローカル SHP 等)
+    // や JS パーサ未対応の構文だけ、ローカル QGIS Live の GDAL 本体
+    // ExecuteSQL(dialect="OGRSQL") へフォールバックする。
+    // FROM はレイヤータイトル照合(resolveLayer フック)→ 'ds'.layer 形式
+    // → ファイルパス推測の順に解決する
+    const query = stripSqlTail(item.url);
+    const { executeOgrSelect } = await import("./ogr-sql.js");
+    const resolve = createOgrSourceResolver({
+      baseUrl, bounds, resolveLayer: hooks?.resolveLayer || null,
+    });
+    try {
+      return { geojson: await executeOgrSelect(query, resolve) };
+    } catch (jsErr) {
+      const { runOgrSqlViaQgis } = await import("./qgis-ogr.js");
+      const viaQgis = await runOgrSqlViaQgis(query, async ref =>
+        (!ref.source && hooks?.resolveLayer ? hooks.resolveLayer(ref.name) : null),
+        path => resolveKascUrl(path, baseUrl));
+      if (viaQgis) return { geojson: viaQgis };
+      throw jsErr;
+    }
   }
   throw new Error(`未対応のベクター形式: ${type}`);
 }

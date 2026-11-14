@@ -71,9 +71,9 @@ export function parseKasc(text) {
     const sep = line.indexOf(":");
     if (sep < 0) continue;
     const type = line.slice(0, sep).trim().toLowerCase();
-    // sql: はクエリ全体が行末までの値なので where= マージを適用しない
+    // sql:/ogrsql: はクエリ全体が行末までの値なので where= マージを適用しない
     // (クエリ内の `| where=` は式ではなくクエリ本文の一部として残す)
-    const parts = type === "sql"
+    const parts = (type === "sql" || type === "ogrsql")
       ? line.slice(sep + 1).split("|").map(part => part.trim())
       : splitKascTail(line.slice(sep + 1));
 
@@ -186,16 +186,17 @@ export function parseKasc(text) {
       continue;
     }
 
-    const item = classifyParts(type === "sql" ? parts.slice(1) : parts.slice(2), {
+    const isQueryLine = type === "sql" || type === "ogrsql";
+    const item = classifyParts(isQueryLine ? parts.slice(1) : parts.slice(2), {
       type,
       title: parts[0] || "",
-      url: type === "sql" ? parts.slice(1).join("|") : (parts[1] || ""),
+      url: isQueryLine ? parts.slice(1).join("|") : (parts[1] || ""),
       line,
     });
     // 行の出現順（doc.layers と doc.unsupported に分かれても元の並びを復元できる）
     item._idx = order++;
-    // sql: には出典スロットが無い（クエリ断片を attr へ誤記録しないよう必ず空にする）
-    if (type === "sql") item.attr = "";
+    // sql:/ogrsql: には出典スロットが無い（クエリ断片を attr へ誤記録しないよう必ず空にする）
+    if (isQueryLine) item.attr = "";
     if (type === "base") {
       // base: 表示名 | transparent | none は URL ではなくモード指定
       const mode = parts[1] && parts[1].toLowerCase();
@@ -204,7 +205,7 @@ export function parseKasc(text) {
       continue;
     }
     if (["xyz", "tile", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
-         "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "wms", "wmts",
+         "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "wms", "wmts",
          "kml", "kmz", "wfs", "shp", "shapefile", "image"].includes(type)) {
       doc.layers.push(item);
       continue;
