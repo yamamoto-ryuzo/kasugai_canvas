@@ -25,9 +25,9 @@
         "standalone": "モックenvでfetch呼出(verifyToken経由)",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.fetch.public_paths",
@@ -43,9 +43,9 @@
         "standalone": "モジュール評価で直接検証",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.auth",
@@ -61,9 +61,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.kasc",
@@ -79,9 +79,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.health",
@@ -97,9 +97,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.capabilities",
@@ -115,9 +115,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.gemini",
@@ -133,9 +133,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.mcp",
@@ -151,9 +151,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.reinfolib",
@@ -169,9 +169,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "workers.route.data",
@@ -187,9 +187,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     }
   ],
   "updated": "2026-11-14T00:00:00+09:00"

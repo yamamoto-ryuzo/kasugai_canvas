@@ -25,9 +25,9 @@
         "standalone": "",
         "integrated": "GET /?engine=maplibre → maplibre/index.html へ遷移"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "?engine=leaflet→/leaflet/へクエリ引継ぎ"
     },
     {
       "id": "web.cesium.app",
@@ -46,9 +46,9 @@
         "standalone": "",
         "integrated": "ブラウザで /cesium/ を開き kasugaiApi.listLayers() 実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "default project・10レイヤー・カメラ正常"
     },
     {
       "id": "web.maplibre.app",
@@ -67,8 +67,8 @@
         "standalone": "",
         "integrated": "ブラウザで /maplibre/ を開き kasugaiApi.listLayers() 実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -88,8 +88,8 @@
         "standalone": "",
         "integrated": "ブラウザで /openlayers/ を開き kasugaiApi.listLayers() 実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -109,8 +109,8 @@
         "standalone": "",
         "integrated": "ブラウザで /leaflet/ を開き kasugaiApi.listLayers() 実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -130,9 +130,9 @@
         "standalone": "",
         "integrated": "ブラウザで /gsimaps/ を開き kasugaiApi.listLayers() 実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "vendor SW経由で起動・10レイヤー/basemaps正常(要~15s)"
     },
     {
       "id": "web.navara.app",
@@ -151,8 +151,8 @@
         "standalone": "",
         "integrated": "ブラウザで /navara/ を開き kasugaiApi.listLayers() 実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -169,9 +169,9 @@
         "standalone": "",
         "integrated": "ブラウザで機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK"
     },
     {
       "id": "web.cesium.mod.geotiff-layer",
@@ -187,9 +187,9 @@
         "standalone": "node --check / 静的import検証",
         "integrated": "ページ経由で機能確認"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK"
     },
     {
       "id": "web.cesium.mod.geo-tools",
@@ -205,9 +205,9 @@
         "standalone": "node --check / 静的import検証",
         "integrated": "ページ経由で機能確認"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK"
     },
     {
       "id": "web.cesium.mod.plugin-loader",
@@ -223,9 +223,9 @@
         "standalone": "node --check / 静的import検証",
         "integrated": "ページ経由で機能確認"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK"
     },
     {
       "id": "web.cesium.mod.qml-render",
@@ -241,9 +241,9 @@
         "standalone": "node --check / 静的import検証",
         "integrated": "ページ経由で機能確認"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK"
     },
     {
       "id": "web.cesium.mod.auth-login-form",
@@ -259,9 +259,9 @@
         "standalone": "node --check / 静的import検証",
         "integrated": "ページ経由で機能確認"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK"
     },
     {
       "id": "web.cesium.mod.auth-selector",
@@ -277,9 +277,9 @@
         "standalone": "node --check / 静的import検証",
         "integrated": "ページ経由で機能確認"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK"
     },
     {
       "id": "web.shared.ai-chat",
@@ -295,9 +295,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.attr-stats",
@@ -313,9 +313,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.attr-widget",
@@ -331,9 +331,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.backend",
@@ -349,9 +349,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.box",
@@ -367,9 +367,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.coord-pins",
@@ -385,9 +385,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.coords-format",
@@ -403,9 +403,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.coords-local",
@@ -421,9 +421,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.deck-drape",
@@ -439,9 +439,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.deck-ground",
@@ -457,9 +457,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.engine-switch",
@@ -475,9 +475,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.export-formats",
@@ -493,9 +493,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.fly-kasc",
@@ -511,9 +511,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.geo-tools-2d",
@@ -529,9 +529,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.gpkg-worker",
@@ -547,9 +547,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.hub-diag",
@@ -565,9 +565,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.i18n",
@@ -583,9 +583,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.kasc",
@@ -601,9 +601,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.kasc_loader",
@@ -619,9 +619,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.kasc-time",
@@ -637,9 +637,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.lazy-lib",
@@ -655,9 +655,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.live",
@@ -673,9 +673,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.live-panel",
@@ -691,9 +691,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.localfs",
@@ -709,9 +709,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.mcp",
@@ -727,9 +727,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.minimap",
@@ -745,9 +745,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.mvt",
@@ -763,9 +763,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.nav-tools",
@@ -781,9 +781,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.player-api",
@@ -799,9 +799,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.print",
@@ -817,9 +817,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.qml-2d",
@@ -835,9 +835,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.qml-style",
@@ -853,9 +853,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.report",
@@ -871,9 +871,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.session-state",
@@ -889,9 +889,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.spatial-ops",
@@ -907,9 +907,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.sun-time",
@@ -925,9 +925,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.tools-dock-ux",
@@ -943,9 +943,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.vector-decode",
@@ -961,9 +961,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.vector-load",
@@ -979,9 +979,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.shared.vendor-guard",
@@ -997,9 +997,9 @@
         "standalone": "node --check + export存在確認",
         "integrated": "エンジン経由で機能実行"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + エンジン経由で利用"
     },
     {
       "id": "web.sw.vendor_proxy",
@@ -1015,8 +1015,8 @@
         "standalone": "",
         "integrated": "SW登録後 /cesium/vendor/... 要求が上流解決される"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1033,8 +1033,8 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1051,8 +1051,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getProjectId(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1069,8 +1069,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getCamera(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1087,8 +1087,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.listLayers(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1105,8 +1105,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setLayerVisible(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1123,8 +1123,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setLayerLegendVisible(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1141,8 +1141,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.listThemes(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1159,9 +1159,9 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.applyTheme(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "テーマ無し環境で正常応答"
     },
     {
       "id": "web.cesium.api.listBasemaps",
@@ -1177,8 +1177,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.listBasemaps(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1195,8 +1195,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setBasemap(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1213,8 +1213,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.zoomToExtent(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1231,8 +1231,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.listCameraPresets(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1249,8 +1249,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.flyToPreset(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1267,8 +1267,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.flyTo(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1285,8 +1285,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setTerrain(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1303,8 +1303,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setEffect(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1321,8 +1321,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setUnderground(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1339,8 +1339,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setClip(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1357,8 +1357,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.listFlyPaths(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1375,8 +1375,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.playFlyPath(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1393,8 +1393,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.stopFly(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1411,8 +1411,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.listProjects(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1429,9 +1429,9 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.switchProject(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "同上"
     },
     {
       "id": "web.cesium.api.applyInspector",
@@ -1447,8 +1447,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.applyInspector(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1465,8 +1465,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.liveSync(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1483,8 +1483,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.liveSyncStatus(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1501,8 +1501,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.liveSetFollow(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1519,8 +1519,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.liveIsFollowing(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1537,8 +1537,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.liveSetQgisRender(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1555,8 +1555,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.exportInspector(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1573,8 +1573,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.checkUpdate(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1591,9 +1591,9 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.installUpdate(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的操作:呼出禁止・存在確認のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的操作:呼出禁止・存在確認のみ | 呼出禁止(存在確認のみ)"
     },
     {
       "id": "web.cesium.api.shutdownApp",
@@ -1609,9 +1609,9 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.shutdownApp(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的操作:呼出禁止・存在確認のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的操作:呼出禁止・存在確認のみ | 呼出禁止(存在確認のみ)"
     },
     {
       "id": "web.cesium.api.toggleDrawMode",
@@ -1627,8 +1627,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.toggleDrawMode(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1645,8 +1645,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.vectorSearch(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1663,8 +1663,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getShareUrl(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1681,8 +1681,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.buildShareUrl(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1699,8 +1699,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.showReport(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1717,8 +1717,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.addLayer(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1735,8 +1735,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.addGeoJsonLayer(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1753,8 +1753,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getGoogleApiKey(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1771,8 +1771,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getGoogleMapsApiKey(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1789,8 +1789,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getGoogleMapsWsApiKey(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1807,8 +1807,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getGeminiModel(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1825,8 +1825,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getViewer(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1843,8 +1843,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getCesium(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1861,8 +1861,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.on(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1879,8 +1879,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.off(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1897,8 +1897,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.emit(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1915,8 +1915,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.registerPlugin(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1933,8 +1933,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.unregisterPlugin(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1951,8 +1951,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getPlugins(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1969,8 +1969,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getInspectorPlugins(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1987,9 +1987,9 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getPluginDataSource(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "プラグインレイヤー非存在で未検証"
     },
     {
       "id": "web.cesium.api.getLayerGeoJson",
@@ -2005,8 +2005,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getLayerGeoJson(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2023,8 +2023,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.exportLayer(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2041,8 +2041,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.measureDistance(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2059,8 +2059,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.measureArea(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2077,8 +2077,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.measureBearing(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2095,8 +2095,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setGraticule(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2113,8 +2113,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.spatialSelect(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2131,8 +2131,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.aggregateWithin(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2149,8 +2149,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.setMinimap(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2167,8 +2167,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getCapabilities(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2185,8 +2185,8 @@
         "standalone": "",
         "integrated": "page.evaluate(kasugaiApi.getAuth(...))"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2203,8 +2203,8 @@
         "standalone": "",
         "integrated": "executeChatTool('flyTo',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2221,8 +2221,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setLayerVisible',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2239,8 +2239,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setLayerLegendVisible',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2257,8 +2257,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listLayers',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2275,9 +2275,9 @@
         "standalone": "",
         "integrated": "executeChatTool('focusLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "ロード完了レイヤーはtrue。ロード中はfalse(再試行で成功)"
     },
     {
       "id": "web.tool.getCamera",
@@ -2293,8 +2293,8 @@
         "standalone": "",
         "integrated": "executeChatTool('getCamera',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2311,8 +2311,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listBasemaps',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2329,8 +2329,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setBasemap',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2347,9 +2347,9 @@
         "standalone": "",
         "integrated": "executeChatTool('searchLocation',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "地名検索実結果返却"
     },
     {
       "id": "web.tool.flyToFeature",
@@ -2365,8 +2365,8 @@
         "standalone": "",
         "integrated": "executeChatTool('flyToFeature',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2383,8 +2383,8 @@
         "standalone": "",
         "integrated": "executeChatTool('zoomToExtent',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2401,8 +2401,8 @@
         "standalone": "",
         "integrated": "executeChatTool('flyToPreset',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2419,8 +2419,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listCameraPresets',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2437,8 +2437,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setTerrain',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2455,8 +2455,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setEffect',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2473,8 +2473,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setUnderground',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2491,8 +2491,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setClip',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2509,8 +2509,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listFlyPaths',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2527,8 +2527,8 @@
         "standalone": "",
         "integrated": "executeChatTool('playFlyPath',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2545,8 +2545,8 @@
         "standalone": "",
         "integrated": "executeChatTool('stopFly',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2563,8 +2563,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setFlySettings',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2581,8 +2581,8 @@
         "standalone": "",
         "integrated": "executeChatTool('addFlyPath',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2599,8 +2599,8 @@
         "standalone": "",
         "integrated": "executeChatTool('flyRoute',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2617,8 +2617,8 @@
         "standalone": "",
         "integrated": "executeChatTool('vectorSearch',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2635,8 +2635,8 @@
         "standalone": "",
         "integrated": "executeChatTool('getShareUrl',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2653,8 +2653,8 @@
         "standalone": "",
         "integrated": "executeChatTool('buildShareUrl',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2671,8 +2671,8 @@
         "standalone": "",
         "integrated": "executeChatTool('showReport',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2689,8 +2689,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listProjects',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2707,9 +2707,9 @@
         "standalone": "",
         "integrated": "executeChatTool('switchProject',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "default→sample_qgis→default 往復成功"
     },
     {
       "id": "web.tool.toggleDrawMode",
@@ -2725,8 +2725,8 @@
         "standalone": "",
         "integrated": "executeChatTool('toggleDrawMode',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2743,8 +2743,8 @@
         "standalone": "",
         "integrated": "executeChatTool('applyInspector',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2761,8 +2761,8 @@
         "standalone": "",
         "integrated": "executeChatTool('exportInspector',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2779,8 +2779,8 @@
         "standalone": "",
         "integrated": "executeChatTool('checkUpdate',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2797,9 +2797,9 @@
         "standalone": "",
         "integrated": "executeChatTool('installUpdate',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ | 呼出禁止(存在確認のみ)"
     },
     {
       "id": "web.tool.bridgeSetup",
@@ -2815,9 +2815,9 @@
         "standalone": "",
         "integrated": "executeChatTool('bridgeSetup',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "セットアップ副作用。存在確認のみ"
     },
     {
       "id": "web.tool.delegateTask",
@@ -2833,9 +2833,9 @@
         "standalone": "",
         "integrated": "executeChatTool('delegateTask',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ | 外部エージェント起動。存在確認のみ"
     },
     {
       "id": "web.tool.runCode",
@@ -2851,8 +2851,8 @@
         "standalone": "",
         "integrated": "executeChatTool('runCode',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2869,8 +2869,8 @@
         "standalone": "",
         "integrated": "executeChatTool('speak',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2887,8 +2887,8 @@
         "standalone": "",
         "integrated": "executeChatTool('addLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2905,8 +2905,8 @@
         "standalone": "",
         "integrated": "executeChatTool('addGeoJsonLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2923,9 +2923,9 @@
         "standalone": "",
         "integrated": "executeChatTool('shutdownApp',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ | 呼出禁止(存在確認のみ)"
     },
     {
       "id": "web.tool.savePlugin",
@@ -2941,8 +2941,8 @@
         "standalone": "",
         "integrated": "executeChatTool('savePlugin',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2959,8 +2959,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listPlugins',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2977,8 +2977,8 @@
         "standalone": "",
         "integrated": "executeChatTool('getPluginCode',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -2995,9 +2995,9 @@
         "standalone": "",
         "integrated": "executeChatTool('removePlugin',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ | 存在確認のみ(savePlugin側はUI経由で確認)"
     },
     {
       "id": "web.tool.setPluginEnabled",
@@ -3013,8 +3013,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setPluginEnabled',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3031,9 +3031,9 @@
         "standalone": "",
         "integrated": "executeChatTool('publishPlugin',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ | 外部公開副作用。存在確認のみ"
     },
     {
       "id": "web.tool.fetchData",
@@ -3049,8 +3049,8 @@
         "standalone": "",
         "integrated": "executeChatTool('fetchData',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3067,8 +3067,8 @@
         "standalone": "",
         "integrated": "executeChatTool('getLayerGeoJson',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3085,8 +3085,8 @@
         "standalone": "",
         "integrated": "executeChatTool('exportLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3103,8 +3103,8 @@
         "standalone": "",
         "integrated": "executeChatTool('spatialSelect',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3121,8 +3121,8 @@
         "standalone": "",
         "integrated": "executeChatTool('aggregateWithin',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3139,8 +3139,8 @@
         "standalone": "",
         "integrated": "executeChatTool('createBuffer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3157,8 +3157,8 @@
         "standalone": "",
         "integrated": "executeChatTool('addDataLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3175,8 +3175,8 @@
         "standalone": "",
         "integrated": "executeChatTool('removeDataLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3193,9 +3193,9 @@
         "standalone": "",
         "integrated": "executeChatTool('searchPlaces',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "Mapsキー未設定→適切なガイドメッセージ"
     },
     {
       "id": "web.tool.openStreetView",
@@ -3211,9 +3211,9 @@
         "standalone": "",
         "integrated": "executeChatTool('openStreetView',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "同上"
     },
     {
       "id": "web.tool.listDataFiles",
@@ -3229,8 +3229,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listDataFiles',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3247,8 +3247,8 @@
         "standalone": "",
         "integrated": "executeChatTool('saveDataFile',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "confirm挟む(自動化時はダイアログモック必要)"
     },
     {
@@ -3265,8 +3265,8 @@
         "standalone": "",
         "integrated": "executeChatTool('deleteDataFile',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "破壊的/外部副作用:実呼出は安全範囲のみ confirm挟む(自動化時はダイアログモック必要)"
     },
     {
@@ -3283,8 +3283,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setToolMaxSteps',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3301,8 +3301,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setLayerFilter',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3319,8 +3319,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listUiControls',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3337,8 +3337,8 @@
         "standalone": "",
         "integrated": "executeChatTool('controlUi',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3355,8 +3355,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listGsiLayers',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3373,8 +3373,8 @@
         "standalone": "",
         "integrated": "executeChatTool('importGsiLayers',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3391,8 +3391,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setGsiLayerOpacity',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3409,8 +3409,8 @@
         "standalone": "",
         "integrated": "executeChatTool('moveGsiLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3427,8 +3427,8 @@
         "standalone": "",
         "integrated": "executeChatTool('removeGsiLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3445,8 +3445,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listGsiCatalog',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3463,8 +3463,8 @@
         "standalone": "",
         "integrated": "executeChatTool('addGsiLayer',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3481,8 +3481,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listGsiSakuzu',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3499,8 +3499,8 @@
         "standalone": "",
         "integrated": "executeChatTool('importGsiSakuzu',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3517,8 +3517,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listGsiBasemaps',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3535,8 +3535,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setGsiBasemap',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3553,8 +3553,8 @@
         "standalone": "",
         "integrated": "executeChatTool('importGsiCatalog',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3571,8 +3571,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setGsiLayerHidden',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3589,8 +3589,8 @@
         "standalone": "",
         "integrated": "executeChatTool('removeGsiSakuzu',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3607,8 +3607,8 @@
         "standalone": "",
         "integrated": "executeChatTool('getGsiElevation',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3625,8 +3625,8 @@
         "standalone": "",
         "integrated": "executeChatTool('getGsiShareUrl',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3643,8 +3643,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setGsiGlobe',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "gsimapsエンジン専用"
     },
     {
@@ -3661,8 +3661,8 @@
         "standalone": "",
         "integrated": "executeChatTool('listInstructions',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3679,8 +3679,8 @@
         "standalone": "",
         "integrated": "executeChatTool('readInstruction',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3697,8 +3697,8 @@
         "standalone": "",
         "integrated": "executeChatTool('saveInstruction',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "confirm挟む(自動化時はダイアログモック必要)"
     },
     {
@@ -3715,8 +3715,8 @@
         "standalone": "",
         "integrated": "executeChatTool('deleteInstruction',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "破壊的/外部副作用:実呼出は安全範囲のみ confirm挟む(自動化時はダイアログモック必要)"
     },
     {
@@ -3733,8 +3733,8 @@
         "standalone": "",
         "integrated": "executeChatTool('selectAgents',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3751,8 +3751,8 @@
         "standalone": "",
         "integrated": "executeChatTool('measureDistance',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3769,8 +3769,8 @@
         "standalone": "",
         "integrated": "executeChatTool('measureArea',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3787,8 +3787,8 @@
         "standalone": "",
         "integrated": "executeChatTool('measureBearing',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3805,8 +3805,8 @@
         "standalone": "",
         "integrated": "executeChatTool('elevationProfile',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3823,9 +3823,9 @@
         "standalone": "",
         "integrated": "executeChatTool('lineOfSight',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "repaired: toCartesians非配列引数のTypeError修正(geo-tools.js)"
     },
     {
       "id": "web.tool.viewshed",
@@ -3841,9 +3841,9 @@
         "standalone": "",
         "integrated": "executeChatTool('viewshed',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "repaired: 同上"
     },
     {
       "id": "web.tool.setGraticule",
@@ -3859,8 +3859,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setGraticule',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3877,8 +3877,8 @@
         "standalone": "",
         "integrated": "executeChatTool('setMinimap',...) → ok/assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3895,8 +3895,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3913,8 +3913,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3931,8 +3931,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3949,8 +3949,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3967,8 +3967,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3985,8 +3985,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4003,8 +4003,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4021,8 +4021,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4039,8 +4039,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4057,8 +4057,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4075,8 +4075,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4093,8 +4093,8 @@
         "standalone": "",
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4111,8 +4111,8 @@
         "standalone": "",
         "integrated": "GET /cesium/plugins.json + PLUGIN/*/plugin.js 実在"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -4129,9 +4129,9 @@
         "standalone": "全言語jsonのキー数一致をスクリプトで照合",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "en=932キー・8言語キー数完全一致"
     },
     {
       "id": "web.projects.bundled",
@@ -4147,9 +4147,9 @@
         "standalone": "",
         "integrated": "GET /projects/projects.json → 各idの.kasc取得可"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "全kasc実ファイル200。stale登録import-test除去済"
     },
     {
       "id": "web.live.qgis",
@@ -4167,9 +4167,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "QGIS Liveセッション無し"
     },
     {
       "id": "web.int.box",
@@ -4187,9 +4187,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "kasugai_boxサイドカー+OAuth必要"
     },
     {
       "id": "web.int.rclone_cloud",
@@ -4207,9 +4207,279 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "/api/cloud/statusで基盤確認。serve/drive実操作は副作用大"
+    },
+    {
+      "id": "web.shared.portal",
+      "kind": "logic_fn",
+      "name": "createKascPortal",
+      "source": "web/shared/portal.js",
+      "signature": "createKascPortal(cfg)",
+      "summary": "ポータルUI共有モジュール。オーバーレイ生成・カード/セクション描画・委譲クリック(data-view/link/cam/base/clear/close)・updateButton・既定コンテンツを全エンジンへ提供",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check web/shared/portal.js",
+        "integrated": "Playwright: auto-open/カード/data-*/既定コンテンツ"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node --check OK + Playwright全経路で使用"
+    },
+    {
+      "id": "web.shared.where-eval",
+      "kind": "logic_fn",
+      "name": "where-eval",
+      "source": "web/shared/where-eval.js",
+      "signature": "evaluateKascWhere(expr, properties)",
+      "summary": "SQL WHEREサブセット評価器(=,!=,<>,比較,AND/OR/NOT,IN,BETWEEN,LIKE/ILIKE,IS NULL,日本語属性名)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node単体15ケース",
+        "integrated": "Playwright: 3地物→1地物フィルタ"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "node単体15/15 PASS + 3地物→1地物絞込確認"
+    },
+    {
+      "id": "web.cesium.ui.portal",
+      "kind": "ui_control",
+      "name": "portal_overlay",
+      "source": "web/cesium/index.html+styles.css+app.js+shared/portal.js",
+      "signature": "#portal-open/#portal-overlay",
+      "summary": "🏠ボタン(枠いっぱい・アクティブ強調)+全画面ポータルオーバーレイ。portal:on|title|open=auto|manual|off / html=フルカスタム対応",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: auto-open・タイトル・🏠・open=off抑止"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "auto-open/タイトル/🏠/manual抑止 PASS"
+    },
+    {
+      "id": "web.portal.view_cards",
+      "kind": "ui_control",
+      "name": "view_cards",
+      "source": "view:行 → applyKascView/clearKascView",
+      "signature": "view:名|desc|img|cam|base|レイヤ[;style][;where]|*",
+      "summary": "ビューカード。表示レイヤ集合+スタイル+where=フィルタ+cam=+base=を一括適用しポータル閉鎖。解除は適用前スナップショット復元",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: カード押下→適用+where=行同期+解除復元"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "適用→閉・where=行同期・解除復元 PASS"
+    },
+    {
+      "id": "web.portal.link_cards",
+      "kind": "ui_control",
+      "name": "link_cards",
+      "source": "link:行 → portal.js openExternal",
+      "signature": "link:名|url=|desc=|img=",
+      "summary": "外部リンクカード(↗バッジ・ホバーURL)。http(s)/mailtoのみ新規タブnoopener。view:と宣言順で混在",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: window.openスタブでURL assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "↗カード→新規タブURL assert PASS"
+    },
+    {
+      "id": "web.portal.html_sections",
+      "kind": "ui_control",
+      "name": "html_sections",
+      "source": "html:行 → loadKascInfoContent",
+      "signature": "html:タイトル|<HTML>|DATA/x.html|URL",
+      "summary": "ポータル内HTMLセクション。インライン/ファイル/URL。サニタイズ(script/on*除去)経由",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: セクション描画assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "セクション描画 PASS"
+    },
+    {
+      "id": "web.portal.fullhtml",
+      "kind": "ui_control",
+      "name": "portal_fullhtml",
+      "source": "portal:…|html= → portal.js",
+      "signature": "portal:on|title=|open=auto|html=DATA/x.html",
+      "summary": "ポータルボディ全体を1HTMLで構成。見出し/地図を開く/🏠/解除フッタは共通。カード自動生成なし",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: カスタムbody描画assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "カスタムbody描画 PASS"
+    },
+    {
+      "id": "web.portal.dataattrs",
+      "kind": "logic_fn",
+      "name": "data_attrs",
+      "source": "web/shared/portal.js delegate click",
+      "signature": "data-view|data-link|data-cam|data-base|data-clear|data-close",
+      "summary": "カスタムHTML内の宣言的GIS制御。view=適用+閉、link=外部URL、cam/base=ポータル開いたまま地図操作、clear=解除、close=閉",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: 7ボタン全属性assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "7属性全PASS(cam/base開維持・view閉・clear復元・close閉)"
+    },
+    {
+      "id": "web.portal.default_content",
+      "kind": "ui_control",
+      "name": "portal_default",
+      "source": "shared/portal.js default sections",
+      "signature": "portal宣言なし時",
+      "summary": "宣言なしでも🏠表示→お知らせ/ビュー/機能説明のガイド表示。タイトルはtitle:行→プロジェクトタイトル→ポータル",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: minimal.kascで3セクションassert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "minimal:3セクション+タイトルフォールバック PASS"
+    },
+    {
+      "id": "web.layer.where_client",
+      "kind": "logic_fn",
+      "name": "client_where",
+      "source": "app.js clientFilter+where-eval",
+      "signature": "geojson等;where=式",
+      "summary": "非クエリ系ベクター(geojson/geoparquet/flatgeobuf等)のwhere=クライアントフィルタ。描画のみ絞込・属性は全件",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: inspector行同期+絞込assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "where=行同期+絞込 PASS"
+    },
+    {
+      "id": "web.cesium.api.listViews",
+      "kind": "ai_integration",
+      "name": "listViews",
+      "source": "kasugaiApi",
+      "signature": "kasugaiApi.listViews()",
+      "summary": "ビュー一覧を返す",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright evaluate"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "3ビュー返却 PASS"
+    },
+    {
+      "id": "web.cesium.api.applyView",
+      "kind": "ai_integration",
+      "name": "applyView",
+      "source": "kasugaiApi",
+      "signature": "kasugaiApi.applyView(name)",
+      "summary": "名前でビュー適用",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright evaluate"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "名前適用 PASS"
+    },
+    {
+      "id": "web.cesium.api.clearView",
+      "kind": "ai_integration",
+      "name": "clearView",
+      "source": "kasugaiApi",
+      "signature": "kasugaiApi.clearView()",
+      "summary": "ビュー解除(スナップショット復元)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright evaluate"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "復元 PASS"
+    },
+    {
+      "id": "web.cesium.api.openPortal",
+      "kind": "ai_integration",
+      "name": "openPortal",
+      "source": "kasugaiApi",
+      "signature": "kasugaiApi.openPortal()",
+      "summary": "ポータル表示",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright evaluate"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "表示 PASS"
+    },
+    {
+      "id": "web.cesium.api.closePortal",
+      "kind": "ai_integration",
+      "name": "closePortal",
+      "source": "kasugaiApi",
+      "signature": "kasugaiApi.closePortal()",
+      "summary": "ポータル閉鎖",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright evaluate"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "閉鎖 PASS"
     }
   ],
   "updated": "2026-11-14T00:00:00+09:00"

@@ -1,0 +1,118 @@
+{
+  "ts": "2026-11-14T08:04:29.934Z",
+  "results": {
+    "cesium": [
+      {
+        "name": "auto-open",
+        "pass": true
+      },
+      {
+        "name": "title",
+        "pass": true
+      },
+      {
+        "name": "html section",
+        "pass": true
+      },
+      {
+        "name": "cards x4",
+        "pass": true
+      },
+      {
+        "name": "link card",
+        "pass": true
+      },
+      {
+        "name": "data-link via card",
+        "pass": true
+      },
+      {
+        "name": "view apply closes",
+        "pass": true
+      },
+      {
+        "name": "where= applied",
+        "pass": true
+      },
+      {
+        "name": "api.listViews",
+        "pass": true
+      },
+      {
+        "name": "api.clearView restores",
+        "pass": true
+      },
+      {
+        "name": "api.openPortal",
+        "pass": true
+      },
+      {
+        "name": "api.applyView",
+        "pass": true
+      },
+      {
+        "name": "api.closePortal",
+        "pass": true
+      }
+    ],
+    "fullhtml": [
+      {
+        "name": "auto-open",
+        "pass": true
+      },
+      {
+        "name": "custom body",
+        "pass": true
+      },
+      {
+        "name": "data-* x7",
+        "pass": true
+      },
+      {
+        "name": "data-cam keeps open",
+        "pass": true
+      },
+      {
+        "name": "data-view applies+closes",
+        "pass": true
+      },
+      {
+        "name": "data-view where=",
+        "pass": true
+      },
+      {
+        "name": "data-clear restores",
+        "pass": true
+      },
+      {
+        "name": "data-close closes",
+        "pass": true
+      }
+    ],
+    "default": [
+      {
+        "name": "no auto-open",
+        "pass": true
+      },
+      {
+        "name": "btn visible",
+        "pass": true
+      },
+      {
+        "name": "sections",
+        "pass": true
+      },
+      {
+        "name": "title",
+        "pass": true
+      }
+    ],
+    "all": [
+      {
+        "name": "pageerrors==0",
+        "pass": true
+      }
+    ]
+  },
+  "errors": []
+}

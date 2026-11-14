@@ -1,0 +1,26 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>srv.update_install — server</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← server 一覧</a>
+<h1>⏭ <code>srv.update_install</code></h1>
+<table>
+<tr><th>name</th><td>install_update</td></tr>
+<tr><th>kind</th><td>api_route</td></tr>
+<tr><th>source</th><td><code>server/src/main.rs</code></td></tr>
+<tr><th>signature</th><td><code>POST /api/update/install -&gt; install_update</code></td></tr>
+<tr><th>summary</th><td>配布ZIPの適用→--finish-update再起動</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td>kasugai_canvas.exe :8510</td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  client[クライアント] -->|POST /api/update/install -&gt; install_u| h[install_update]
+  h --> l[ハンドラ server/src/main.rs]
+  l --> out[レスポンス/副作用]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>curl http://127.0.0.1:8510/api/update/install</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="skip"><b>⏭ skip</b> — 2026-11-14T00:00:00+09:00</p>
+<p>破壊的操作:実呼出は行わずコード検証のみ | 破壊的操作。コード検証のみ(--finish-update再起動フロー)</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

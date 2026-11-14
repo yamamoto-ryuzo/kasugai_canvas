@@ -25,9 +25,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.capabilities",
@@ -43,9 +43,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.auth_gate",
@@ -61,9 +61,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mode6で全面401・self-auth経路正しく免除"
     },
     {
       "id": "agent.rate_limit",
@@ -79,9 +79,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.auth",
@@ -97,9 +97,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "user+pass認証→token+cookie発行"
     },
     {
       "id": "agent.auth_session",
@@ -115,9 +115,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.kasc",
@@ -133,9 +133,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.data_get",
@@ -151,9 +151,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "Range:bytes=0-0→206部分応答"
     },
     {
       "id": "agent.data_put",
@@ -169,9 +169,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.auth_methods",
@@ -187,9 +187,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.gemini",
@@ -205,9 +205,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.mcp",
@@ -223,9 +223,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.storage",
@@ -241,9 +241,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.config",
@@ -259,9 +259,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "agent.authmod",
@@ -277,9 +277,9 @@
         "standalone": "uvicorn起動+TestClientで確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     }
   ],
   "updated": "2026-11-14T00:00:00+09:00"

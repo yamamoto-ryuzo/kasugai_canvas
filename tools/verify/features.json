@@ -25,9 +25,9 @@
         "standalone": "--help + 静的確認(実実行は副作用大)",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "実実行は配布物・リモートへ副作用"
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "実実行は配布物・リモートへ副作用 | --help確認+verify除外追加(自己修復)"
     },
     {
       "id": "tools.build_bridge_zip",
@@ -43,9 +43,9 @@
         "standalone": "--help + 静的確認(実実行は副作用大)",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "実実行は配布物・リモートへ副作用"
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "実実行は配布物・リモートへ副作用 | 実ビルド成功: bridge-hub.{exe,zip}+version.json 6.24.0・/health照合通過"
     },
     {
       "id": "tools.fetch_vendor",
@@ -61,9 +61,9 @@
         "standalone": "--help/静的確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "tools.convert_coords",
@@ -79,9 +79,9 @@
         "standalone": "--help/静的確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "tools.security_audit",
@@ -97,9 +97,9 @@
         "standalone": "--help/静的確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "tools.hub_test",
@@ -115,9 +115,9 @@
         "standalone": "--help/静的確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "smoke.mjs 4PASS + verify.mjs Playwright 4ケース ALL PASS"
     },
     {
       "id": "tools.region_compare",
@@ -133,9 +133,9 @@
         "standalone": "--help/静的確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "tools.nsis",
@@ -151,9 +151,9 @@
         "standalone": "--help + 静的確認(実実行は副作用大)",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "実実行は配布物・リモートへ副作用"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "実実行は配布物・リモートへ副作用 | makensis未実行。スクリプト構造のみ確認"
     }
   ],
   "updated": "2026-11-14T00:00:00+09:00"

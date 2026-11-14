@@ -27,8 +27,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/health"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -47,8 +47,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/capabilities"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -67,9 +67,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/fetch"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "プライベートアドレス拒否(403)=SSRF防御が正常動作"
     },
     {
       "id": "srv.reinfolib",
@@ -87,8 +87,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/reinfolib"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -107,9 +107,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/mcp"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "url必須バリデーション(400)でルート疎通確認"
     },
     {
       "id": "srv.qgis_discover",
@@ -127,9 +127,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/qgis-live/discover"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "200 no_live_session(13セッション走査26s)"
     },
     {
       "id": "srv.qgis_mcp",
@@ -147,9 +147,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/qgis-live/mcp"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "QGISライブセッション無し(discover=200 no_live_session確認)"
     },
     {
       "id": "srv.plugin_save",
@@ -167,8 +167,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/plugins"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -187,8 +187,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/plugins/{id}"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -207,8 +207,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/files"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -227,8 +227,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/files/{project}/{*path}"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -247,8 +247,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/update/settings"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -267,8 +267,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/update/latest"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -287,9 +287,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/update/install"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的操作:実呼出は行わずコード検証のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的操作:実呼出は行わずコード検証のみ | 破壊的操作。コード検証のみ(--finish-update再起動フロー)"
     },
     {
       "id": "srv.shutdown",
@@ -307,9 +307,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/shutdown"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的操作:実呼出は行わずコード検証のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的操作:実呼出は行わずコード検証のみ | 破壊的操作。コード検証のみ"
     },
     {
       "id": "srv.cmd_push_poll",
@@ -328,9 +328,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/command"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "push→poll往復確認(キュー内に旧liveSyncコマンド残存=設計通り)"
     },
     {
       "id": "srv.cmd_results",
@@ -349,8 +349,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/command/results"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -370,8 +370,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/fetch/settings"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -391,9 +391,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/projects/register"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "スキーマ={path}のみ(id派生は.kasc/親dirから)。register+unregister実施"
     },
     {
       "id": "srv.proj_import",
@@ -412,8 +412,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/projects/import"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -433,8 +433,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/projects/{id}"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -454,8 +454,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/status"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -475,9 +475,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/path"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "パス変更は副作用大"
     },
     {
       "id": "srv.cloud_install",
@@ -496,9 +496,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/install"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "rclone 導入済みのため対象外"
     },
     {
       "id": "srv.cloud_config",
@@ -517,9 +517,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/config"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "リモート設定変更は副作用大"
     },
     {
       "id": "srv.cloud_serve",
@@ -538,9 +538,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/serve"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "状態変更大。/api/cloud/status で rclone v1.75.2 + remotes(box,drive) 確認"
     },
     {
       "id": "srv.cloud_stop",
@@ -559,9 +559,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/stop"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "同上"
     },
     {
       "id": "srv.cloud_drive",
@@ -580,9 +580,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/drive"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "ドライブ割当は副作用大"
     },
     {
       "id": "srv.cloud_list",
@@ -601,8 +601,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/list"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -622,9 +622,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/localize"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "納品ローカル化は副作用大"
     },
     {
       "id": "srv.cloud_file",
@@ -643,9 +643,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/cloud/file"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "クラウド側ファイル操作は副作用大(status/list で経路確認)"
     },
     {
       "id": "srv.browser_lna",
@@ -664,8 +664,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/api/browser/lna"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -684,8 +684,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8510/projects/{*path}"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -702,9 +702,9 @@
         "standalone": "",
         "integrated": "GET /cesium/index.html が200で最新内容"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "/cesium/index.html 200・最新内容配信"
     },
     {
       "id": "srv.cli.no_browser",
@@ -720,9 +720,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "現インスタンスの起動経路で確認"
     },
     {
       "id": "srv.cli.open_browser",
@@ -738,9 +738,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "既定と同じ挙動。コード確認"
     },
     {
       "id": "srv.cli.finish_update",
@@ -756,9 +756,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "実実行は更新フローでのみ発生"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "実実行は更新フローでのみ発生 | 更新フロー内でのみ発生。コード確認"
     },
     {
       "id": "srv.cli.kasc_arg",
@@ -774,9 +774,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "ファイル関連付け起動。コード確認(installer nsi と整合)"
     },
     {
       "id": "srv.env.port",
@@ -792,9 +792,9 @@
         "standalone": "main.rs コード確認",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "8510で稼働中・コード確認"
     },
     {
       "id": "srv.job.auto_update",
@@ -810,9 +810,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "開発ビルドは Cargo.toml>latest.json で発火しない設計"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "開発ビルドは Cargo.toml>latest.json で発火しない設計 | 安全に発火不可。/api/update/latest=200・更新設計コード確認"
     },
     {
       "id": "srv.job.instance_single",
@@ -828,9 +828,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "二重起動経路はコード確認(現インスタンス稼働中)"
     },
     {
       "id": "srv.job.cleanup_leftovers",
@@ -846,9 +846,9 @@
         "standalone": "コード確認/一時ファイルでの挙動",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "コード確認(起動時+更新適用後の2箇所で呼出)"
     },
     {
       "id": "srv.int.rclone",
@@ -866,9 +866,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "cloud/status: installed+remotes(box,drive)確認"
     },
     {
       "id": "srv.int.bridge_hub",
@@ -884,9 +884,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "8511応答+ensure_standalone_hub設計確認"
     },
     {
       "id": "srv.int.kasc_assoc",
@@ -902,9 +902,9 @@
         "standalone": "",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "インストーラ未実行。nsi の open コマンド定義を確認"
     },
     {
       "id": "hub.status_page",
@@ -922,8 +922,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -942,8 +942,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/health"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -962,8 +962,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/models"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -982,9 +982,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/agent"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的/認可要:コード検証のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的/認可要:コード検証のみ | プロバイダCLI実行は副作用大。/health providers running=true で基盤確認"
     },
     {
       "id": "hub.setup",
@@ -1002,9 +1002,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/setup"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": "破壊的/認可要:コード検証のみ"
+      "last_result": "skip",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "破壊的/認可要:コード検証のみ | セットアップ実行は副作用大。GET /setup 到達性のみ"
     },
     {
       "id": "hub.setup_job",
@@ -1022,8 +1022,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/setup/job/{id}"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1042,8 +1042,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/mcp"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1062,8 +1062,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/mcp/{project}"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1082,8 +1082,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/vector/status"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1102,8 +1102,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/vector/sources"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1122,8 +1122,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/vector/sources/{name}"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1142,9 +1142,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/vector/geojson/{name}"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "1.1MB GeoJSON 実取得"
     },
     {
       "id": "hub.vector_probe",
@@ -1162,8 +1162,8 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/vector/probe.geojson"
       },
-      "last_result": "untested",
-      "last_verified": "",
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1182,9 +1182,9 @@
         "standalone": "",
         "integrated": "curl http://127.0.0.1:8511/vector/query"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "select ... as geom で FeatureCollection 応答"
     },
     {
       "id": "hub.provider.copilot",
@@ -1202,9 +1202,9 @@
         "standalone": "",
         "integrated": "/health providers.<p>.running"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "/health providers.<name>.running=true"
     },
     {
       "id": "hub.provider.devin",
@@ -1222,9 +1222,9 @@
         "standalone": "",
         "integrated": "/health providers.<p>.running"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "/health providers.<name>.running=true"
     },
     {
       "id": "hub.provider.antigravity",
@@ -1242,9 +1242,9 @@
         "standalone": "",
         "integrated": "/health providers.<p>.running"
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "/health providers.<name>.running=true"
     }
   ],
   "updated": "2026-11-14T00:00:00+09:00"

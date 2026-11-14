@@ -1,0 +1,532 @@
+[
+  {
+    "id": "web.cesium.app",
+    "ok": false,
+    "detail": "{\"project\":\"default\",\"layers\":0,\"cam\":{\"latitude\":35.16263605118378,\"longitude\":-82.50000000000001,\"height\":23212982.415134512,\"heading\":360,\"pitch\":-89.8771713534135}}"
+  },
+  {
+    "id": "web.cesium.api.getProjectId",
+    "ok": true,
+    "detail": "\"default\""
+  },
+  {
+    "id": "web.cesium.api.getCamera",
+    "ok": true,
+    "detail": "{\"latitude\":35.16263605118378,\"longitude\":-82.50000000000001,\"height\":23212982.415134512,\"heading\":360,\"pitch\":-89.8771713534135}"
+  },
+  {
+    "id": "web.cesium.api.listLayers",
+    "ok": true,
+    "detail": "[{\"id\":\"inspector-layer-0\",\"title\":\"千代田区（建築物LOD1）\",\"sourceTitle\":\"東京都/千代田区（建築物LOD1）\",\"exclusiveGroup\":false,\"group\":\"東京都\",\"visible\":true,\"type\":\"3dtiles\",\"filter\":\"\",\"bboxAuto\":null,\"entityLimited\":nu"
+  },
+  {
+    "id": "web.cesium.api.listThemes",
+    "ok": true,
+    "detail": "[]"
+  },
+  {
+    "id": "web.cesium.api.listBasemaps",
+    "ok": true,
+    "detail": "[{\"id\":\"none\",\"title\":\"ベースマップなし\",\"selected\":false,\"note\":\"地表は通常描画・背景地図タイルのみ非表示\"},{\"id\":\"transparent\",\"title\":\"ベースマップ透明\",\"selected\":false,\"note\":\"地表・大気・背景をすべて透明にし、ドレープ画像だけを残す\"},{\"id\":\"inspector-base-0\""
+  },
+  {
+    "id": "web.cesium.api.listCameraPresets",
+    "ok": true,
+    "detail": "[\"東京駅\",\"富士山\",\"大阪城\"]"
+  },
+  {
+    "id": "web.cesium.api.listFlyPaths",
+    "ok": true,
+    "detail": "[{\"index\":0,\"title\":\"sample\"}]"
+  },
+  {
+    "id": "web.cesium.api.listProjects",
+    "ok": true,
+    "detail": "[{\"id\":\"default\",\"title\":\"デフォルトプロジェクト\",\"selected\":true},{\"id\":\"reinfolib\",\"title\":\"不動産情報ライブラリ試験\",\"selected\":false},{\"id\":\"extproj\",\"title\":\"extproj\",\"selected\":false},{\"id\":\"SampleProjectFile\",\"title\""
+  },
+  {
+    "id": "web.cesium.api.getPlugins",
+    "ok": true,
+    "detail": "[]"
+  },
+  {
+    "id": "web.cesium.api.getInspectorPlugins",
+    "ok": true,
+    "detail": "[]"
+  },
+  {
+    "id": "web.cesium.api.getCapabilities",
+    "ok": true,
+    "detail": "{\"tier\":\"local\",\"name\":\"kasugai_canvas\",\"version\":\"6.24.0\",\"features\":[\"fetchProxy\",\"fetchRange\",\"pluginWrite\",\"fileWrite\",\"update\",\"shutdown\",\"mcpProxy\",\"reinfolibProxy\",\"cloudRclone\",\"remoteCommand\""
+  },
+  {
+    "id": "web.cesium.api.getAuth",
+    "ok": true,
+    "detail": "null"
+  },
+  {
+    "id": "web.cesium.api.getGeminiModel",
+    "ok": true,
+    "detail": "\"gemini-3.1-flash-lite\""
+  },
+  {
+    "id": "web.cesium.api.getGoogleApiKey",
+    "ok": true,
+    "detail": "\"\""
+  },
+  {
+    "id": "web.cesium.api.getShareUrl",
+    "ok": true,
+    "detail": "\"http://127.0.0.1:8510/cesium/?project=default#latitude=35.162636&longitude=-82.500000&height=23212982.4&pitch=-89.88&heading=0.00\""
+  },
+  {
+    "id": "web.cesium.api.buildShareUrl",
+    "ok": true,
+    "detail": "\"http://127.0.0.1:8510/cesium/?project=default#latitude=35.600000&longitude=139.700000&height=23212982.4&pitch=-89.88&heading=0.00\""
+  },
+  {
+    "id": "web.cesium.api.measureDistance",
+    "ok": true,
+    "detail": "{\"ok\":true,\"totalMeters\":14321.886773363412,\"segmentsMeters\":[14321.886773363412]}"
+  },
+  {
+    "id": "web.cesium.api.measureArea",
+    "ok": true,
+    "detail": "{\"ok\":true,\"squareMeters\":1005346.2617628932,\"perimeterMeters\":4031.2572340887505}"
+  },
+  {
+    "id": "web.cesium.api.measureBearing",
+    "ok": true,
+    "detail": "{\"ok\":true,\"startHeadingDeg\":39.192487935655535,\"endHeadingDeg\":39.25077119899267,\"distanceMeters\":14321.886773363412}"
+  },
+  {
+    "id": "web.cesium.api.listUiControls",
+    "ok": true,
+    "detail": "[{\"target\":\"#time-play\",\"kind\":\"button\",\"label\":\"再生\",\"hidden\":true,\"text\":\"▶\"},{\"target\":\"#time-slider\",\"kind\":\"range\",\"label\":\"時刻\",\"hidden\":true,\"value\":\"0\"},{\"target\":\"#time-speed\",\"kind\":\"select\",\""
+  },
+  {
+    "id": "web.cesium.api.vectorSearch",
+    "ok": true,
+    "detail": "[]"
+  },
+  {
+    "id": "web.cesium.api.listDataFiles",
+    "ok": true,
+    "detail": "[{\"name\":\"sample.geojson\",\"size\":248,\"modified\":1788615997612}]"
+  },
+  {
+    "id": "web.cesium.api.liveSyncStatus",
+    "ok": true,
+    "detail": "{\"active\":false}"
+  },
+  {
+    "id": "web.cesium.api.liveIsFollowing",
+    "ok": true,
+    "detail": "false"
+  },
+  {
+    "id": "web.cesium.api.setLayerVisible",
+    "ok": true,
+    "detail": "off=true on=true"
+  },
+  {
+    "id": "web.cesium.api.setBasemap",
+    "ok": true,
+    "detail": "set->true"
+  },
+  {
+    "id": "web.cesium.api.applyTheme",
+    "ok": false,
+    "detail": "no-themes"
+  },
+  {
+    "id": "web.cesium.api.flyTo",
+    "ok": true,
+    "detail": "lat=35.45 lon=-159.93"
+  },
+  {
+    "id": "web.cesium.api.zoomToExtent",
+    "ok": true,
+    "detail": "true"
+  },
+  {
+    "id": "web.cesium.api.setTerrain",
+    "ok": true,
+    "detail": "true true"
+  },
+  {
+    "id": "web.cesium.api.setGraticule",
+    "ok": true,
+    "detail": "true true"
+  },
+  {
+    "id": "web.cesium.api.setMinimap",
+    "ok": true,
+    "detail": "true true"
+  },
+  {
+    "id": "web.cesium.api.setUnderground",
+    "ok": true,
+    "detail": "true"
+  },
+  {
+    "id": "web.cesium.api.setClip",
+    "ok": true,
+    "detail": "true"
+  },
+  {
+    "id": "web.cesium.api.toggleDrawMode",
+    "ok": true,
+    "detail": "[object Object] [object Object]"
+  },
+  {
+    "id": "web.cesium.api.applyInspector",
+    "ok": true,
+    "detail": "true"
+  },
+  {
+    "id": "web.cesium.api.exportInspector",
+    "ok": true,
+    "detail": "true"
+  },
+  {
+    "id": "web.cesium.api.setEffect",
+    "ok": true,
+    "detail": "false"
+  },
+  {
+    "id": "web.cesium.api.on_off_emit",
+    "ok": true,
+    "detail": "got:{\"x\":1}"
+  },
+  {
+    "id": "web.cesium.api.controlUi",
+    "ok": true,
+    "detail": "n=367 target=#time-play get={\"ok\":false,\"message\":\"UI要素が見つかりません: [object Object]\"}"
+  },
+  {
+    "id": "web.cesium.api.registerPlugin+unregister",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "id": "web.tool.getCamera",
+    "ok": true,
+    "detail": "{\"camera\":{\"latitude\":35.612839077516895,\"longitude\":151.15435708595444,\"height\":1935873.5771686244,\"heading\":5.088887490341627e-14,\"pitch\":-75.95870037361718}}"
+  },
+  {
+    "id": "web.tool.listLayers",
+    "ok": true,
+    "detail": "{\"layers\":[]}"
+  },
+  {
+    "id": "web.tool.listBasemaps",
+    "ok": true,
+    "detail": "{\"basemaps\":[{\"id\":\"none\",\"title\":\"ベースマップなし\",\"selected\":true,\"note\":\"地表は通常描画・背景地図タイルのみ非表示\"},{\"id\":\"transparent\",\"title\":\"ベースマップ透明\",\"selected\":false,\"note\":\"地表・大"
+  },
+  {
+    "id": "web.tool.listCameraPresets",
+    "ok": true,
+    "detail": "{\"presets\":[]}"
+  },
+  {
+    "id": "web.tool.listFlyPaths",
+    "ok": true,
+    "detail": "{\"flyPaths\":[{\"index\":0,\"title\":\"sample\"}]}"
+  },
+  {
+    "id": "web.tool.listProjects",
+    "ok": true,
+    "detail": "{\"projects\":[{\"id\":\"default\",\"title\":\"デフォルトプロジェクト\",\"selected\":true},{\"id\":\"reinfolib\",\"title\":\"不動産情報ライブラリ試験\",\"selected\":false},{\"id\":\"extproj\",\"title\":\"extproj\""
+  },
+  {
+    "id": "web.tool.flyTo",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.setLayerVisible",
+    "ok": true,
+    "detail": "{\"ok\":false,\"message\":\"「」というレイヤが見つかりません\"}"
+  },
+  {
+    "id": "web.tool.zoomToExtent",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.getShareUrl",
+    "ok": true,
+    "detail": "{\"url\":\"http://127.0.0.1:8510/cesium/?project=default#latitude=35.620251&longitude=147.863878&height=1385396.2&pitch=-78.18&heading=360.00\"}"
+  },
+  {
+    "id": "web.tool.buildShareUrl",
+    "ok": true,
+    "detail": "{\"url\":\"http://127.0.0.1:8510/cesium/?project=default#latitude=35.600000&longitude=139.700000&height=1368634.9&pitch=-78.26&heading=0.00\"}"
+  },
+  {
+    "id": "web.tool.toggleDrawMode",
+    "ok": true,
+    "detail": "{\"ok\":true,\"drawModeActive\":true}"
+  },
+  {
+    "id": "web.tool.applyInspector",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.measureDistance",
+    "ok": true,
+    "detail": "{\"ok\":false,\"reason\":\"need >= 2 points\"}"
+  },
+  {
+    "id": "web.tool.measureArea",
+    "ok": true,
+    "detail": "{\"ok\":false,\"reason\":\"need >= 3 points\"}"
+  },
+  {
+    "id": "web.tool.measureBearing",
+    "ok": true,
+    "detail": "{\"ok\":true,\"startHeadingDeg\":39.192487935655535,\"endHeadingDeg\":39.25077119899267,\"distanceMeters\":14321.886773363412}"
+  },
+  {
+    "id": "web.tool.setTerrain",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.setGraticule",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.setMinimap",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.setEffect",
+    "ok": true,
+    "detail": "{\"ok\":false,\"message\":\"未知の効果名: none\"}"
+  },
+  {
+    "id": "web.tool.setUnderground",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.setClip",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.vectorSearch",
+    "ok": true,
+    "detail": "{\"results\":[]}"
+  },
+  {
+    "id": "web.tool.listDataFiles",
+    "ok": true,
+    "detail": "{\"files\":[{\"name\":\"sample.geojson\",\"size\":248,\"modified\":1788615997612}]}"
+  },
+  {
+    "id": "web.tool.listUiControls",
+    "ok": true,
+    "detail": "{\"controls\":[{\"target\":\"#time-play\",\"kind\":\"button\",\"label\":\"再生\",\"hidden\":true,\"text\":\"▶\"},{\"target\":\"#time-slider\",\"kind\":\"range\",\"label\":\"時刻\",\"hidden\":true,\"v"
+  },
+  {
+    "id": "web.tool.listInstructions",
+    "ok": true,
+    "detail": "{\"items\":[]}"
+  },
+  {
+    "id": "web.tool.selectAgents",
+    "ok": true,
+    "detail": "{\"ok\":true,\"enabled\":[]}"
+  },
+  {
+    "id": "web.tool.setToolMaxSteps",
+    "ok": true,
+    "detail": "{\"ok\":true,\"steps\":10}"
+  },
+  {
+    "id": "web.tool.runCode",
+    "ok": true,
+    "detail": "{\"result\":2,\"logs\":[]}"
+  },
+  {
+    "id": "web.tool.liveSync",
+    "ok": true,
+    "detail": "{\"ok\":false,\"message\":\"未知のツール: liveSync\"}"
+  },
+  {
+    "id": "web.tool.exportInspector",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.checkUpdate",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.spatialSelect",
+    "ok": true,
+    "detail": "{\"ok\":false,\"reason\":\"invalid region\"}"
+  },
+  {
+    "id": "web.tool.aggregateWithin",
+    "ok": true,
+    "detail": "{\"ok\":false,\"reason\":\"invalid region\"}"
+  },
+  {
+    "id": "web.tool.createBuffer",
+    "ok": true,
+    "detail": "{\"ok\":false,\"reason\":\"no geometry\"}"
+  },
+  {
+    "id": "web.tool.addGeoJsonLayer",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.listPlugins",
+    "ok": true,
+    "detail": "{\"plugins\":[],\"catalog\":[{\"id\":\"sample-hello\",\"name\":\"Hello Plugin\",\"version\":\"1.0.0\",\"auto\":false},{\"id\":\"reinfolib\",\"name\":\"不動産情報ライブラリ\",\"version\":\"0.1.0\",\"aut"
+  },
+  {
+    "id": "web.tool.showReport",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.elevationProfile",
+    "ok": true,
+    "detail": "{\"ok\":false,\"reason\":\"need >= 2 points\"}"
+  },
+  {
+    "id": "web.tool.lineOfSight",
+    "ok": false,
+    "detail": "TypeError: Cannot read properties of undefined (reading 'lng')"
+  },
+  {
+    "id": "web.tool.viewshed",
+    "ok": false,
+    "detail": "TypeError: Cannot read properties of undefined (reading 'lng')"
+  },
+  {
+    "id": "web.tool.flyToPreset",
+    "ok": true,
+    "detail": "{\"ok\":false,\"message\":\"「__nonexist__」というプリセットが見つかりません\"}"
+  },
+  {
+    "id": "web.tool.playFlyPath",
+    "ok": true,
+    "detail": "{\"ok\":false,\"message\":\"「__nonexist__」というフライパスが見つかりません\"}"
+  },
+  {
+    "id": "web.tool.stopFly",
+    "ok": true,
+    "detail": "{\"ok\":true}"
+  },
+  {
+    "id": "web.tool.setFlySettings",
+    "ok": true,
+    "detail": "{\"ok\":false,\"message\":\"「(none)」というフライパスが見つかりません\"}"
+  },
+  {
+    "id": "web.tool.focusLayer",
+    "ok": true,
+    "detail": "{\"ok\":false,\"message\":\"「__nonexist__」というレイヤが見つかりません\"}"
+  },
+  {
+    "id": "web.tool.instruction_cycle",
+    "ok": true,
+    "detail": "{\"w\":{\"ok\":true,\"id\":\"verify-tmp\"},\"r\":{\"id\":\"verify-tmp\",\"text\":\"test instr\"},\"d\":{\"ok\":true,\"id\":\"verify-tmp\"}}"
+  },
+  {
+    "id": "web.tool.danger_presence",
+    "ok": true,
+    "detail": "shutdownApp:true,installUpdate:true,publishPlugin:true,delegateTask:true,bridgeSetup:true,removePlugin:true,deleteDataFile:true"
+  },
+  {
+    "id": "web.shared.session-state",
+    "ok": true,
+    "detail": "{\"v\":1,\"at\":1794622696548,\"engine\":\"cesium\",\"project\":\"default\",\"kasc\":null,\"vis\":{},\"inspector\":\"検証テスト\",\"theme\":null,\"b"
+  },
+  {
+    "id": "web.cesium.i18n_dicts",
+    "ok": false,
+    "detail": "{\"enKeys\":-1,\"diffs\":[\"en\",\"ja\",\"zh\",\"ko\",\"es\",\"fr\",\"de\",\"pt\"]}"
+  },
+  {
+    "id": "web.cesium.plugin_registry",
+    "ok": true,
+    "detail": "{\"count\":3,\"missing\":[]}"
+  },
+  {
+    "id": "web.projects.bundled",
+    "ok": false,
+    "detail": "{\"count\":8,\"bad\":[\"extproj\",\"SampleProjectFile\",\"import-test\",\"kasugai_canvas\",\"qgis-export\",\"sample_qgis\"]}"
+  },
+  {
+    "id": "web.maplibre.app",
+    "ok": true,
+    "detail": "{\"layers\":10,\"cam\":true,\"basemaps\":10}"
+  },
+  {
+    "id": "web.maplibre.tool.getCamera",
+    "ok": true,
+    "detail": "{\"camera\":{\"latitude\":35.68669761975624,\"longitude\":139.75303508129974,\"zoom\":15.966785499863688,\"height\":2200.599999999"
+  },
+  {
+    "id": "web.openlayers.app",
+    "ok": true,
+    "detail": "{\"layers\":10,\"cam\":true,\"basemaps\":10}"
+  },
+  {
+    "id": "web.openlayers.tool.getCamera",
+    "ok": true,
+    "detail": "{\"camera\":{\"latitude\":35.686697619756245,\"longitude\":139.75303508129974,\"zoom\":15.96678549986369,\"height\":2200.599999999"
+  },
+  {
+    "id": "web.leaflet.app",
+    "ok": true,
+    "detail": "{\"layers\":10,\"cam\":true,\"basemaps\":10}"
+  },
+  {
+    "id": "web.leaflet.tool.getCamera",
+    "ok": true,
+    "detail": "{\"camera\":{\"latitude\":35.68669761975624,\"longitude\":139.75303508129974,\"zoom\":16,\"height\":2150.5181734357507,\"heading\":0"
+  },
+  {
+    "id": "web.navara.app",
+    "ok": true,
+    "detail": "{\"layers\":10,\"cam\":true,\"basemaps\":10}"
+  },
+  {
+    "id": "web.navara.tool.getCamera",
+    "ok": true,
+    "detail": "{\"camera\":{\"latitude\":35.65310800000033,\"longitude\":139.761449,\"zoom\":14.645464485569264,\"height\":2200.599999998938,\"hea"
+  },
+  {
+    "id": "web.gsimaps.app",
+    "ok": false,
+    "detail": "{\"layers\":0,\"cam\":false,\"basemaps\":1}"
+  },
+  {
+    "id": "web.gsimaps.tool.getCamera",
+    "ok": true,
+    "detail": "{\"camera\":null}"
+  },
+  {
+    "id": "web.gsimaps.gsi_tools",
+    "ok": true,
+    "detail": "{\"listGsiLayers\":\"{\\\"layers\\\":[]}\",\"listGsiCatalog\":\"{\\\"total\\\":0,\\\"truncated\\\":false,\\\"layers\\\":[]}\",\"listGsiBasemaps\":\"{\\\"basemaps\\\":[]}\",\"listGsiSakuzu\":\"{\\\"items\\\":[]}\",\"getGsiShareUrl\":\"{\\\"ok\\\":false,\\\"reason\\\":\\\"unavailable\\\"}\"}"
+  },
+  {
+    "id": "web.index.engine_redirect",
+    "ok": true,
+    "detail": "http://127.0.0.1:8510/leaflet/?foo=bar&project=default#latitude=35.686698&longitude=139.753035&height=2150.5&pitch=-90.00&heading=0.00"
+  }
+]

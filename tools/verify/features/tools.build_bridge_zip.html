@@ -1,0 +1,25 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>tools.build_bridge_zip — tools</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← tools 一覧</a>
+<h1>✅ <code>tools.build_bridge_zip</code></h1>
+<table>
+<tr><th>name</th><td>build_bridge_zip.py</td></tr>
+<tr><th>kind</th><td>cli_cmd</td></tr>
+<tr><th>source</th><td><code>tools/build_bridge_zip.py</code></td></tr>
+<tr><th>signature</th><td><code>build_bridge_zip.py</code></td></tr>
+<tr><th>summary</th><td>bridge-hub.exe/zip生成。/health version照合+ZIPバイト一致検証(run.py -Bから自動呼出)</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>False / True</td></tr>
+<tr><th>depends</th><td></td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  cli[コマンド実行] --> p[build_bridge_zip.py]
+  p --> out[出力/生成物]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code>--help + 静的確認(実実行は副作用大)</code></td></tr>
+<tr><th>integrated</th><td><code></code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-14T00:00:00+09:00</p>
+<p>実実行は配布物・リモートへ副作用 | 実ビルド成功: bridge-hub.{exe,zip}+version.json 6.24.0・/health照合通過</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

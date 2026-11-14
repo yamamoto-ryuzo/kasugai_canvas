@@ -1,0 +1,25 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>agent.auth_gate — agent</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← agent 一覧</a>
+<h1>✅ <code>agent.auth_gate</code></h1>
+<table>
+<tr><th>name</th><td>auth_gate middleware</td></tr>
+<tr><th>kind</th><td>logic_fn</td></tr>
+<tr><th>source</th><td><code>agent/app/main.py:84</code></td></tr>
+<tr><th>signature</th><td><code>auth_gate middleware</code></td></tr>
+<tr><th>summary</th><td>全リクエスト認証ゲート+公開パス判定</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / True</td></tr>
+<tr><th>depends</th><td></td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  call[呼出] --> fn[auth_gate middleware agent/app/main.py]
+  fn --> ret[戻り値/副作用]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code>uvicorn起動+TestClientで確認</code></td></tr>
+<tr><th>integrated</th><td><code></code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-14T00:00:00+09:00</p>
+<p>mode6で全面401・self-auth経路正しく免除</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

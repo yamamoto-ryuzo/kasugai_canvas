@@ -1,0 +1,25 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.int.box — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>⏭ <code>web.int.box</code></h1>
+<table>
+<tr><th>name</th><td>Box連携</td></tr>
+<tr><th>kind</th><td>integration</td></tr>
+<tr><th>source</th><td><code>web/shared/box.js</code></td></tr>
+<tr><th>signature</th><td><code>Box連携</code></td></tr>
+<tr><th>summary</th><td>kasugai_boxサイドカー経由のBox画像取込(OAuthは別タブ=AI例外)</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td>kasugai_box</td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  ftr[Box連携] --> ext[外部システム/プロセス]
+  ext --> res[連携結果]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code></code></td></tr></table>
+<h2>最新結果</h2>
+<p class="skip"><b>⏭ skip</b> — 2026-11-14T00:00:00+09:00</p>
+<p>kasugai_boxサイドカー+OAuth必要</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

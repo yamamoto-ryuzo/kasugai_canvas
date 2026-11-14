@@ -1,0 +1,18 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>kasugai_canvas — feature-verify</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;padding:0 1em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:.5em .8em;text-align:left}</style></head>
+<body><h1>kasugai_canvas — 全機能検証ダッシュボード <small>2026-11-14</small></h1>
+<pre class="mermaid">flowchart TB
+  qgis[QGIS geo_webview] -->|.kasc+DATA/ register /live/*| web[web/ 6エンジン]
+  web --> srv[server :8510]
+  srv --> hub[bridge-hub :8511]
+  srv --> rcl[rclone cloud]
+  hub --> cli[copilot/devin/antigravity CLI]
+  web -->|CDN配信| cdn[kasugai-canvas-web]
+  tools[publish_cdn.py] --> cdn
+  cdn -->|kasc=| data[kasugai_canvas_webGIS データホスト]
+  agent[Cloud Run agent] --> gcs[GCS]
+  workers[CF Workers] --> kv[KV/R2]
+  box[kasugai_box] --> web</pre>
+<table><tr><th>component</th><th>内容</th><th>結果</th><th>機能数</th></tr><tr><td><a href='../server/verify/index.html'><b>server</b></a></td><td>Rust Axum サーバ(kasugai_canvas.exe :8510 + bridge-hub :8511)</td><td>✅42 ❌0 ⏭20</td><td>62</td></tr><tr><td><a href='../web/verify/index.html'><b>web</b></a></td><td>静的Webフロント(6エンジン + shared + AI制御面)</td><td>✅220 ❌0 ⏭12</td><td>232</td></tr><tr><td><a href='../workers/verify/index.html'><b>workers</b></a></td><td>Cloudflare Workers(認証ゲート+API)</td><td>✅10 ❌0 ⏭0</td><td>10</td></tr><tr><td><a href='../functions/verify/index.html'><b>functions</b></a></td><td>Cloudflare Pages Functions(APIハンドラ群)</td><td>✅9 ❌0 ⏭0</td><td>9</td></tr><tr><td><a href='../agent/verify/index.html'><b>agent</b></a></td><td>Cloud Run 用 FastAPI エージェント</td><td>✅15 ❌0 ⏭0</td><td>15</td></tr><tr><td><a href='../tools/verify/index.html'><b>tools</b></a></td><td>Python CLI ツール群</td><td>✅7 ❌0 ⏭1</td><td>8</td></tr></table>
+<script>mermaid.initialize({startOnLoad:true});</script></body></html>

@@ -1,0 +1,26 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>hub.vector_sources — server</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← server 一覧</a>
+<h1>✅ <code>hub.vector_sources</code></h1>
+<table>
+<tr><th>name</th><td>vector_sources</td></tr>
+<tr><th>kind</th><td>api_route</td></tr>
+<tr><th>source</th><td><code>server/src/bridge/mod.rs:496-514</code></td></tr>
+<tr><th>signature</th><td><code>GET,POST /vector/sources</code></td></tr>
+<tr><th>summary</th><td>ベクタソース一覧/登録</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td>bridge-hub.exe :8511</td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  client[クライアント] -->|GET,POST /vector/sources| h[vector_sources]
+  h --> l[ハンドラ server/src/bridge/mod.rs]
+  l --> out[レスポンス/副作用]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>curl http://127.0.0.1:8511/vector/sources</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-14T00:00:00+09:00</p>
+<p></p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

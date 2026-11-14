@@ -1,0 +1,26 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.tool.saveInstruction — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>✅ <code>web.tool.saveInstruction</code></h1>
+<table>
+<tr><th>name</th><td>tool:saveInstruction</td></tr>
+<tr><th>kind</th><td>ai_integration</td></tr>
+<tr><th>source</th><td><code>web/shared/ai-chat.js:1833</code></td></tr>
+<tr><th>signature</th><td><code>tool:saveInstruction</code></td></tr>
+<tr><th>summary</th><td>CHAT_TOOLS宣言ツール saveInstruction(executeChatTool経由・UI/APIと同一経路)</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td></td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  ai[AI/外部エージェント] -->|tool:saveInstruction| d[executeChatTool/bridge]
+  d --> api[kasugaiApi実装 web/shared/ai-chat.js]
+  api --> st[状態変化/応答]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>executeChatTool(&#x27;saveInstruction&#x27;,...) → ok/assert</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-14T00:00:00+09:00</p>
+<p>confirm挟む(自動化時はダイアログモック必要)</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

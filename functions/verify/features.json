@@ -25,9 +25,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.capabilities",
@@ -43,9 +43,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.auth",
@@ -61,9 +61,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.token",
@@ -79,9 +79,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.kasc",
@@ -97,9 +97,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.data",
@@ -115,9 +115,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.gemini",
@@ -133,9 +133,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.mcp",
@@ -151,9 +151,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     },
     {
       "id": "fn.reinfolib",
@@ -169,9 +169,9 @@
         "standalone": "nodeでcontextモック呼出",
         "integrated": ""
       },
-      "last_result": "untested",
-      "last_verified": "",
-      "note": ""
+      "last_result": "pass",
+      "last_verified": "2026-11-14T00:00:00+09:00",
+      "note": "mock/TestClient実呼出で確認"
     }
   ],
   "updated": "2026-11-14T00:00:00+09:00"
