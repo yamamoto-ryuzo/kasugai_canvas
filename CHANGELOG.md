@@ -4,6 +4,18 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
+## [Unreleased]
+
+- タスク指向ポータル（全6エンジン）: `.kasc` に `portal:`/`view:`/`link:`/`html:` の4行形式を追加し、レイヤー管理ではなく目的別の大きなカード/ボタンで GIS 業務を完結させるポータル画面を実装（`shared/portal.js` が cesium/maplibre/openlayers/leaflet/gsimaps/navara へ同一UIを提供）
+  - `view: 名前 | desc= | img= | cam= | base= | レイヤ[;style=][;where=] | *`: 可視性・スタイル差替・フィルタ・カメラ・背景を束ねた目的別プリセット（`theme:` の発展形）。カード押下で一括適用しポータルを閉じる。解除は適用前スナップショット（表示・フィルタ・スタイル・カメラ・ベースマップ）へ完全復元
+  - `link: 名前 | url= | desc= | img=`: 外部サイト/データへのリンクカード（↗ バッジ・新規タブ・http(s)/mailto のみ）。`view:` カードと宣言順で混在
+  - `portal: on|off | title= | open=auto|manual | html=`: 起動時自動表示・🏠ボタン常駐（宣言なしでも既定ガイドを表示）・`html=` でボディ全体をカスタムHTML化
+  - `html: タイトル | <HTML>|ファイル|URL`: ポータル内HTMLセクション（サニタイズ済み・宣言順）
+  - カスタムHTML内の `data-view`/`data-link`/`data-cam`/`data-base`/`data-clear`/`data-close` 属性で宣言的にGIS操作（cam/base/clear はポータルを開いたまま）
+  - 🏠ボタンはアイコンのみ。適用中ビューはハイライト＋ツールチップ表示
+  - bridge API: `listViews()`/`applyView(name)`/`clearView()`/`openPortal()`/`closePortal()`
+- `where=` を全ベクター行で使用可能に: `shared/where-eval.js` 新設（SQL WHERE サブセット評価器。`= != <> < <= > >=`・`AND/OR/NOT`・括弧・`IN`・`BETWEEN`・`LIKE/ILIKE`・`IS NULL`・`"識別子"`/`'文字列'`/日本語裸属性名）。クエリ系（duckdb/sql/gpkg）は従来通り SQL、非クエリ系（geojson/geoparquet/flatgeobuf/kml/shp 等）はクライアント評価で描画のみ絞り込み（属性一覧・検索は全件対象を維持）。`where=` はインスペクタ行へも同期
+
 ## [6.24.0] - 2026-11-08
 
 - QGIS ライブ連携 逆方向オーサリング・データ投入(geo_webview 4.11.0

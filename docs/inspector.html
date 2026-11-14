@@ -76,6 +76,10 @@ cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方
 bookmark: QGISブックマーク | bookmark:XMLファイルURL （QGIS のブックマークエクスポート XML・qgis_bookmarks 形式を読み込み、各ブックマークをカメラプリセットへ展開。geo_webview の /kasugai エクスポートでは bookmarks.xml として自動出力。カメラパネルの「XML保存」「XML読込」ボタンでも同形式でプリセットを出し入れできる）
 theme: テーマ名 | 表示するレイヤタイトル[|タイトル…] （QGIS マップテーマ相当の可視性プリセット。`*` で全表示。レイヤーパネル上部のテーマ選択から適用すると各レイヤ行の on/off が書き換わる。タイトルに `;style=DATA/x.qml` を付けるとテーマ適用時にそのレイヤーの .qml を差し替える = QGIS テーマ記録の名前付きスタイルの再現。geo_webview が出力）
 fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
+portal: on|off | title=見出し | open=auto|manual | html=HTMLファイル/URL （タスク指向ポータル画面。open=auto で起動時に全画面オーバーレイ表示、manual は 🏠 ボタンから手動、off でポータル自体を無効化。html= を指定するとポータル本体全体を1つのHTMLで構成(カード自動生成なし・見出し/🏠/解除フッタは共通)。宣言が無くても 🏠 は常時表示され既定のガイドが開く）
+view: ビュー名 | desc=説明 | img=画像URL | cam=カメラプリセット名 | base=ベースマップ名 | レイヤタイトル[;style=QML][;where=条件][|タイトル…] | * （ポータル/カードから一括適用する目的別プリセット。theme: の発展形で可視性+スタイル+フィルタ+カメラ+背景を束ねる。適用でポータルを閉じ、解除は適用前スナップショットへ復元）
+link: 名前 | url=https://… | desc=説明 | img=画像URL （ポータル内の外部リンクカード。↗ バッジ付きで新規タブを開く。http(s)/mailto のみ許可。view: カードと宣言順で混在）
+html: タイトル | インラインHTML または HTMLファイル/URL （ポータル内のHTMLセクション。info: と同じサニタイズ経路で script/on*属性は除去。宣言順に表示）
 info: InfoパネルHTML / legend: 凡例画像 / searchtab: 定型検索タブ(geo_search相当) / legendnode: 凡例ノード順・ラベル・表示名(直前行に適用) / background: 背景色 / title: アプリ表示名 / yahooAppId: Yahoo検索ID
 plugin: プラグインID | key=value | off (plugins.json カタログ・ストレージプラグインをこのプロジェクトで有効化。レイヤーはプロジェクトスコープ)
 cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
@@ -86,6 +90,8 @@ cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(�
             <li><code>plugin:</code> は <code>web/plugins.json</code> カタログまたは管理タブのストレージプラグインの ID を指定し、そのプロジェクトでのみプラグインを起動します（例: <code>plugin: reinfolib | datasets=price,shelter</code>）。<code>key=value</code> はプラグインの <code>manifest.options</code> にマージして渡され、真偽値・数値・カンマ区切り（配列）を解釈します。起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替や行の削除・<code>| off</code> 指定でレイヤー除去＋停止（<code>dispose</code> 呼出し）されます。指定できるのはカタログ/ストレージの ID のみで、外部 URL の直接指定はできません。</li>
             <li><code>attr=出典</code>・行の3番目フィールドの出典は、<code>&lt;</code> で始めると HTML として描画できます（例: <code>&lt;a href="https://example.jp"&gt;国土地理院&lt;/a&gt;</code>）。描画時に許可リストでサニタイズされ、<code>a</code>/<code>img</code>/装飾タグ（b・i・em・u・br・span・small・sub・sup）と <code>http(s):</code>/相対 URL のみが有効になります（スクリプト・イベント属性・その他タグは除去）。詳細は <a href="security.html">セキュリティ対策</a> を参照してください。</li>
             <li><code>title: 表示名</code> はレイヤーパネル左上のタイトル（既定「KASUGAI Canvas」の部分）とブラウザタブのタイトルを差し替えます。プロジェクト名や納品先名を表示する用途を想定しています。エンジン名の小表記（Cesium 等）は残り、行が無い・空値なら既定表示に戻ります。複数行ある場合は最後の行が採用されます。</li>
+            <li><strong><code>where=条件</code> は全ベクター行で使えます</strong>：<code>duckdb:</code>/<code>sql:</code>/<code>gpkg:</code> 等のクエリ系は従来通り SQL で評価し、<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>shp:</code> 等の全件読み込み系は <code>shared/where-eval.js</code>（SQL WHERE サブセット：<code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・<code>"識別子"</code>/<code>'文字列'</code>/日本語裸属性名）でクライアント評価します。絞り込まれるのは描画のみで、属性一覧・ベクター検索は引き続き全件対象です。</li>
+            <li><strong><code>html:</code> セクションと <code>portal:…|html=</code> のカスタムHTML内では <code>data-*</code> 属性でGIS側を宣言的に操作できます</strong>：<code>data-view="ビュー名"</code>（view: 適用＋ポータルを閉じる）・<code>data-link="URL"</code>（外部URLを新規タブ）・<code>data-cam="カメラ名"</code>/<code>data-base="背景名"</code>（ポータルを開いたままカメラ/背景だけ変更）・<code>data-clear</code>（ビュー解除＝適用前スナップショット復元）・<code>data-close</code>（ポータルを閉じる）。<code>&lt;script&gt;</code>/<code>&lt;iframe&gt;</code>/<code>on*</code>属性はサニタイズで除去されます。</li>
           </ul>
         </div>
         <div class="url-box">

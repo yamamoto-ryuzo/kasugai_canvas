@@ -55,7 +55,8 @@
             { href: 'features/v5.html', text: 'V5: アプリ化（ローカル連携）' },
             { href: 'features/v6.html', text: 'V6: マルチエンジン' },
             { href: 'features/v7.html', text: 'V7: QGIS連携' },
-            { href: 'features/v8.html', text: 'V8: 解析（予定）' }
+            { href: 'features/v8.html', text: 'V8: ポータル' },
+            { href: 'features/v9.html', text: 'V9: 解析（予定）' }
           ]
         }
       ]

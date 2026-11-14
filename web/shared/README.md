@@ -37,7 +37,9 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 
 | ファイル | 役割 |
 |---|---|
-| `kasc.js` | .kasc 行パーサー＋プロジェクトローダー（cam↔zoom・URL ビュー・テーマ・ブックマーク・`?kasc=` 直読み） |
+| `kasc.js` | .kasc 行パーサー＋プロジェクトローダー（cam↔zoom・URL ビュー・テーマ・ブックマーク・`?kasc=` 直読み。`portal:`/`view:`/`link:`/`html:` 行のパースもここ） |
+| `portal.js` | ポータルUI共有モジュール — 全画面オーバーレイ・view/link カード・html セクション・既定ガイド・`data-view/link/cam/base/clear/close` 委譲クリック。`createKascPortal(cfg)` で全エンジンが利用 |
+| `where-eval.js` | SQL WHERE サブセット評価器（`compileWhereExpression`/`filterGeoJsonByWhere`）。非クエリ系ベクター行の `where=` をクライアント側で評価 |
 | `vector-load.js` / `vector-decode.js` | ベクター系行タイプ → GeoJSON 正規化ローダー／WKB・プロパティ変換ユーティリティ |
 | `gpkg-worker.js` | GeoPackage 読み込み Worker（sql.js で別スレッド処理） |
 | `qml-style.js` / `qml-2d.js` | QGIS .qml スタイルのコンパイルと 2D エンジンへの適用アダプタ |

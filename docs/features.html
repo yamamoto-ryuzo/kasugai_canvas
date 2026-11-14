@@ -211,7 +211,7 @@
         </div>
         <div class="feature-card">
           <h3>👁️ 表示状態の引継ぎ</h3>
-          <p>表示→<code>| off</code>、グループ→パンくずタイトル、排他→<code>//</code>、不透明度→<code>opacity=</code>、縮尺→<code>minScale=/maxScale=</code>、出典→<code>attr=</code>、カメラ→<code>cam:</code>、ブックマーク→<code>bookmark:</code>、テーマ→<code>theme:</code></p>
+          <p>表示→<code>| off</code>、グループ→パンくずタイトル、排他→<code>//</code>、不透明度→<code>opacity=</code>、縮尺→<code>minScale=/maxScale=</code>、出典→<code>attr=</code>、カメラ→<code>cam:</code>、ブックマーク→<code>bookmark:</code>、テーマ→<code>theme:</code>、ポータル→<code>portal:</code>・<code>view:</code>・<code>link:</code>・<code>html:</code></p>
         </div>
         <div class="feature-card">
           <h3>🔗 4つの起動経路</h3>
@@ -219,8 +219,25 @@
         </div>
       </div>
 
-      <h2 id="analysis"><a href="features/v8.html">V8: 解析（予定）</a></h2>
-      <p>AI チャット経由で空間解析を駆動するテーマ（計画段階）。解析エンジンは自前で実装せず QGIS Processing をバックエンドとして借り、Canvas は AI による操縦面と結果表示を担います。<a href="features/v8.html">詳細 →</a></p>
+      <h2 id="portal"><a href="features/v8.html">V8: ポータル</a></h2>
+      <p>レイヤー管理ではなく目的別の大きなカード/ボタンで GIS 業務を完結させるタスク指向ポータル。<code>.kasc</code> に <code>portal:</code>/<code>view:</code>/<code>link:</code>/<code>html:</code> の4行形式を追加し、表示レイヤー・スタイル・フィルタ・カメラ・背景を束ねたビューをカード押下で一括適用します。全6エンジン対応。<a href="features/v8.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🗂️ view: 目的別プリセット</h3>
+          <p>可視性＋スタイル差替＋<code>;where=</code> フィルタ＋<code>cam=</code> カメラ＋<code>base=</code> 背景を1行に束ねた <code>theme:</code> の発展形。適用でポータルを閉じ、解除は適用前スナップショットへ完全復元</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔗 link:/html: カスタムポータル</h3>
+          <p><code>link:</code> で外部サイト/データへのリンクカード（↗）。<code>html:</code> でお知らせ等のHTMLセクション、<code>portal:…|html=</code> でボディ全体をカスタムHTML化。<code>data-view/link/cam/base/clear/close</code> 属性で宣言的にGIS操作</p>
+        </div>
+        <div class="feature-card">
+          <h3>🏠 常時ポータル＋where= 全形式</h3>
+          <p>宣言なしでも 🏠 ボタンから既定ガイドを表示。<code>where=条件</code> は全ベクター行で使用可（クエリ系は SQL、geojson 等はクライアント評価）</p>
+        </div>
+      </div>
+
+      <h2 id="analysis"><a href="features/v9.html">V9: 解析（予定）</a></h2>
+      <p>AI チャット経由で空間解析を駆動するテーマ（計画段階）。解析エンジンは自前で実装せず QGIS Processing をバックエンドとして借り、Canvas は AI による操縦面と結果表示を担います。<a href="features/v9.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">
           <h3>🟢 QGIS Live Driver 経由（接続済み）</h3>
