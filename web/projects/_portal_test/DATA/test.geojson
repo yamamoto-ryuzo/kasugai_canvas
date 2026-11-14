@@ -1,0 +1,5 @@
+{"type":"FeatureCollection","features":[
+ {"type":"Feature","properties":{"name":"A","状況":"工事中"},"geometry":{"type":"Point","coordinates":[139.0,36.0]}},
+ {"type":"Feature","properties":{"name":"B","状況":"未発注"},"geometry":{"type":"Point","coordinates":[139.1,36.0]}},
+ {"type":"Feature","properties":{"name":"C","状況":"完了"},"geometry":{"type":"Point","coordinates":[139.2,36.0]}}
+]}

@@ -203,6 +203,38 @@
     border: 1px solid #31564f; border-radius: 6px; background: #31564f;
     color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
   #globe-back[hidden] { display: none; }
+  /* ポータル(portal:/html:/view:/link: 行の開始画面)。Cesium 版 styles.css と同型 */
+  .portal-open { flex: 0 0 auto; width: 32px; min-height: 28px !important; padding: 2px !important; border: 1px solid rgba(49,86,79,.35) !important; border-radius: 4px !important; background: rgba(49,86,79,.08) !important; color: #31564f !important; cursor: pointer; font-size: 20px !important; line-height: 1; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.portal-open span { line-height: 1; }
+.portal-open:hover { background: rgba(49,86,79,.18) !important; }
+.portal-open.active { background: rgba(49,86,79,.28) !important; border-color: #31564f !important; }
+  .portal-overlay { position: fixed; inset: 0; z-index: 9500; display: flex; align-items: center; justify-content: center; background: rgba(20,32,40,.45); }
+  .portal-overlay[hidden] { display: none; }
+  .portal-dialog { width: min(720px, 92vw); max-height: 86vh; display: flex; flex-direction: column; background: rgba(255,255,255,.97); border: 1px solid #cbd9de; border-radius: 10px; box-shadow: 0 16px 48px rgba(10,20,40,.35); overflow: hidden; }
+  .portal-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #e4ecef; background: #f5f9fa; }
+  .portal-title { flex: 1 1 auto; margin: 0; font-size: 18px; color: #1d2b35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .portal-close { flex: 0 0 auto; min-height: 30px; padding: 4px 14px; border: 1px solid #31564f; border-radius: 5px; background: #31564f; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .portal-close:hover { background: #264a44; }
+  .portal-body { flex: 1 1 auto; overflow-y: auto; padding: 12px 14px; }
+  .portal-section { margin-bottom: 14px; }
+  .portal-section > h3 { margin: 0 0 6px; font-size: 14px; color: #31564f; border-left: 4px solid #31564f; padding-left: 8px; }
+  .portal-section-body { font-size: 13px; color: #1d2b35; line-height: 1.6; }
+  .portal-section-body img { max-width: 100%; }
+  .portal-views-head { margin: 10px 0 8px; font-size: 13px; font-weight: 700; color: #52636d; }
+  .portal-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .portal-card { display: flex; flex-direction: column; align-items: stretch; padding: 0; border: 2px solid #d5e2e6; border-radius: 8px; background: #fff; cursor: pointer; text-align: left; overflow: hidden; transition: border-color .12s, box-shadow .12s; }
+  .portal-card:hover { border-color: #31564f; box-shadow: 0 4px 14px rgba(49,86,79,.22); }
+  .portal-card.active { border-color: #31564f; background: #eef5f3; }
+  .portal-card-img { display: flex; align-items: center; justify-content: center; height: 92px; background: #e8eff2; color: #31564f; font-size: 34px; font-weight: 800; }
+  .portal-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .portal-card-img-empty { letter-spacing: .05em; }
+  .portal-card-name { padding: 8px 10px 2px; font-size: 15px; font-weight: 700; color: #1d2b35; }
+  .portal-card-desc { padding: 0 10px 10px; font-size: 12px; color: #52636d; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .portal-card-link .portal-card-name::after { content: "↗"; margin-left: 5px; font-weight: 400; color: #31564f; }
+  .portal-footer { padding: 10px 14px; border-top: 1px solid #e4ecef; display: flex; justify-content: flex-end; }
+  .portal-footer[hidden] { display: none; }
+  .portal-footer button { min-height: 30px; padding: 4px 14px; border: 1px solid #cbd9de; border-radius: 5px; background: #fff; color: #31564f; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .portal-footer button:hover { background: #e7f3f0; }
 </style>
 </head>
 <body>
@@ -229,6 +261,7 @@
   </div>
   <button id="globe-back" type="button" hidden>← 2D地図に戻る（Globe表示中）</button>
   <div id="tabs">
+    <button id="portal-open" class="portal-open" type="button" hidden title="ポータルを開く"><span>🏠</span></button>
     <button class="tab active" data-tab="layers">レイヤ</button>
     <button class="tab" data-tab="legend">凡例</button>
     <button class="tab" data-tab="search">検索</button>
@@ -285,6 +318,20 @@
   ホスト版へ自動転送されます。オフライン環境では利用できません。</div>
 </div>
 <div id="load-progress" hidden><span id="load-progress-text"></span><span id="load-progress-track"><i id="load-progress-bar"></i></span></div>
+<!-- portal:/html:/view:/link: 行で構成する開始画面(ポータル)。
+     起動時自動表示と 🏠 ボタンでの再表示に対応 -->
+<div id="portal-overlay" class="portal-overlay" hidden>
+  <div class="portal-dialog" role="dialog" aria-modal="true">
+    <div class="portal-head">
+      <h2 id="portal-title" class="portal-title"></h2>
+      <button id="portal-close" class="portal-close" type="button">地図を開く</button>
+    </div>
+    <div id="portal-body" class="portal-body"></div>
+    <div id="portal-footer" class="portal-footer" hidden>
+      <button id="portal-clear" type="button">ビュー解除</button>
+    </div>
+  </div>
+</div>
 </div>
 </div>
 <script>

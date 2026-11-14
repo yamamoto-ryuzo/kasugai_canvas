@@ -160,8 +160,9 @@ def sync_channel(cdn_dir, channel):
     # vendor は CDN へ配置しない(SW が vendor.json のピン先オリジナルへ
     # 直接解決する方式)。ローカルに web/vendor/ があっても誤って
     # ミラーしないよう除外する。projects/ は CDN_PROJECTS に列挙した
-    # プロジェクトのみ _sync_projects で別途複写する
-    _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects'))
+    # プロジェクトのみ _sync_projects で別途複写する。
+    # verify/ は検証資産(feature-verify 成果物)で配信対象外
+    _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects', 'verify'))
     _sync_projects(stage)
     version = _cargo_version()
     _write_version_json(stage, {

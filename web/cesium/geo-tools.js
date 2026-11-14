@@ -1330,7 +1330,7 @@ export function initGeoTools({ viewer, requestRender, sampleRouteTerrain, getOrd
 
   // ---------- 外部 API（kasugaiApi / AI ツール向け） ----------
   const toCartesians = coords => (coords || [])
-    .map(c => Array.isArray(c) ? Cesium.Cartesian3.fromDegrees(Number(c[0]), Number(c[1])) : Cesium.Cartesian3.fromDegrees(Number(c.lng ?? c.longitude), Number(c.lat ?? c.latitude)))
+    .map(c => Array.isArray(c) ? Cesium.Cartesian3.fromDegrees(Number(c[0]), Number(c[1])) : (c ? Cesium.Cartesian3.fromDegrees(Number(c.lng ?? c.longitude), Number(c.lat ?? c.latitude)) : null))
     .filter(c => c && Number.isFinite(c.x));
 
   function drawApiLine(cartes, color = Cesium.Color.YELLOW) {

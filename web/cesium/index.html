@@ -59,6 +59,7 @@
               <button id="tools-open" class="panel-manage" type="button" title="ツール" data-i18n-attr="title:tools.open;aria-label:tools.open">🧰</button>
             </div>
             <nav class="panel-tabs" aria-label="Plugin panels">
+              <button id="portal-open" class="portal-open" type="button" hidden title="ポータルを開く" data-i18n-attr="title:portal.openTitle"><span>🏠</span></button>
               <button class="panel-tab active" type="button" data-panel="layers-panel" data-i18n="tab.layers">レイヤ</button>
               <button class="panel-tab" type="button" data-panel="legend-panel" data-i18n="tab.legend">凡例</button>
               <button class="panel-tab" type="button" data-panel="search-panel" data-i18n="tab.search">検索</button>
@@ -1083,6 +1084,20 @@
         </div>
         <div class="vector-attr-widget-footer">
           <span id="vector-attr-widget-count"></span>
+        </div>
+      </div>
+    </div>
+    <!-- portal:/html:/view: 行で構成する開始画面(ポータル)。
+         起動時自動表示と 🏠 ボタンでの再表示に対応 -->
+    <div id="portal-overlay" class="portal-overlay" hidden>
+      <div class="portal-dialog" role="dialog" aria-modal="true">
+        <div class="portal-head">
+          <h2 id="portal-title" class="portal-title"></h2>
+          <button id="portal-close" class="portal-close" type="button" data-i18n="portal.close">地図を開く</button>
+        </div>
+        <div id="portal-body" class="portal-body"></div>
+        <div id="portal-footer" class="portal-footer" hidden>
+          <button id="portal-clear" type="button" data-i18n="portal.clearView">ビュー解除</button>
         </div>
       </div>
     </div>

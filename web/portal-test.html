@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>portal test redirect</title>
+<script>
+  // ブラウザプレビュー等のプロキシ経由でも ?kasc= 直読みURLへ誘導する
+  const base = "http://localhost:8799";
+  location.replace(base + "/cesium/?kasc=" + encodeURIComponent(base + "/projects/_portal_test/kasugai_canvas.kasc"));
+</script>
+<p>redirecting…</p>

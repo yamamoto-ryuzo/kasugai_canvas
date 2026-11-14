@@ -47,7 +47,7 @@ function parseCamLine(parts) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -100,6 +100,32 @@ export function parseKasc(text) {
         }
       }
       doc.themes.push({ name: parts[0] || "", layers, styles, line });
+      continue;
+    }
+    if (type === "view") {
+      // view:名前 | desc=説明 | img=画像 | cam=カメラ名 | base=背景名 |
+      //   レイヤタイトル[;style=DATA/x.qml][;where=式] [|タイトル…]（`*` で全表示）
+      // ポータル画面の目的別カード。表示＋スタイル＋フィルタ(+カメラ/背景)を
+      // まとめて適用する theme: の発展形
+      doc.views.push(parseKascViewValue(parts, line));
+      continue;
+    }
+    if (type === "html") {
+      // html:タイトル | インラインHTML または HTMLファイル/URL —
+      // ポータル画面へ描画するセクション。記述順に並ぶ
+      doc.htmlSections.push({ title: parts[0] || "", spec: line.slice(sep + 1).trim(), line });
+      continue;
+    }
+    if (type === "link") {
+      // link:名前 | url=https://… | desc=説明 | img=画像 —
+      // ポータル画面の外部リンクカード。view: カードと宣言順で同じグリッドに並ぶ
+      doc.links.push(parseKascLinkValue(parts, line));
+      continue;
+    }
+    if (type === "portal") {
+      // portal:on|off | title=ポータル見出し | open=auto|manual —
+      // 起動時・🏠ボタンで開くポータル画面の宣言。open=manual は自動表示しない
+      doc.portal = parseKascPortalValue(parts);
       continue;
     }
     if (type === "group") {
@@ -183,6 +209,7 @@ export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base", "legendnode",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
   "group", "terrain", "scene3d", "light", "fly_geojson", "live",
+  "view", "html", "portal", "link",
 ]);
 
 // group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。
@@ -340,6 +367,73 @@ export function themeShowSet(theme) {
 export function kascTitleInTheme(title, show) {
   const n = normKascTitle(title);
   return show.has(n) || show.has(n.split("/").pop());
+}
+
+// ---- view:/portal: 行（ポータル画面の目的別カード・開始画面宣言） ----
+
+// view: 行の値(| 区切り配列)をパースする。parseKasc と cesium/app.js の
+// 両方から使うため shared 側に置く。parts[0]=ビュー名、以降は
+// desc=/img=/cam=/base= ディレクティブかレイヤタイトル
+// (タイトルに ;style=DATA/x.qml / ;where=式 を `;` 区切りで付記可)
+export function parseKascViewValue(parts, line = null) {
+  const view = { name: parts[0] || "", desc: "", img: "", cam: "", base: "", layers: [], styles: {}, wheres: {}, line };
+  for (const tok of parts.slice(1)) {
+    if (!tok) continue;
+    const kv = /^(desc|img|cam|base)\s*=\s*(.+)$/i.exec(tok);
+    if (kv) {
+      view[kv[1].toLowerCase()] = kv[2].trim();
+      continue;
+    }
+    if (tok === "*") { view.layers.push("*"); continue; }
+    // レイヤ指定: `タイトル;style=…;where=…` の `;` 区切り修飾を分離
+    const segs = tok.split(";").map(s => s.trim()).filter(Boolean);
+    const title = segs[0];
+    if (!title) continue;
+    view.layers.push(title);
+    const key = normKascTitle(title);
+    for (const seg of segs.slice(1)) {
+      const eq = seg.indexOf("=");
+      if (eq < 0) continue;
+      const k = seg.slice(0, eq).trim().toLowerCase();
+      const v = seg.slice(eq + 1).trim();
+      if (k === "style" && v) view.styles[key] = v;
+      else if (k === "where" && v) view.wheres[key] = v;
+    }
+  }
+  return view;
+}
+
+// link: 行の値をパースする。`link:名前 | url=… | desc=… | img=…`
+// (URL は url=/href= または裸の http(s):/mailto: トークンでも可)
+export function parseKascLinkValue(parts, line = null) {
+  const link = { name: parts[0] || "", url: "", desc: "", img: "", line };
+  for (const tok of parts.slice(1)) {
+    if (!tok) continue;
+    const kv = /^(url|href|desc|img)\s*=\s*(.+)$/i.exec(tok);
+    if (kv) {
+      const key = kv[1].toLowerCase() === "href" ? "url" : kv[1].toLowerCase();
+      link[key] = kv[2].trim();
+      continue;
+    }
+    if (/^(https?:\/\/|mailto:)/i.test(tok)) link.url = tok;
+  }
+  return link;
+}
+
+// portal: 行の値をパースする。`portal:on|off | title=… | open=auto|manual | html=…`
+// html= はボディ全体を1つのHTML(ファイル/URL)で構成するフルカスタムモード
+export function parseKascPortalValue(parts) {
+  const first = String(parts[0] || "").toLowerCase();
+  const portal = { enabled: !/^(off|0|false|no)$/i.test(first), title: "", open: "auto", html: "" };
+  for (const tok of parts) {
+    const m = /^(title|open|html|body)\s*=\s*(.+)$/i.exec(tok);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    if (key === "title") portal.title = m[2].trim();
+    else if (key === "open") portal.open = /^(manual|off|noauto)$/i.test(m[2].trim()) ? "manual" : "auto";
+    else portal.html = m[2].trim();
+  }
+  return portal;
 }
 
 // #theme-select の中身を構築する。themes が空なら非表示化

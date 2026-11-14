@@ -1,7 +1,10 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates } from "../shared/kasc.js";
+import { initI18n, t, applyI18n } from "../shared/i18n.js";
+import { createKascPortal } from "../shared/portal.js";
+import { compileWhereExpression } from "../shared/where-eval.js";
 import { kascTimeSpec, collectTimeValues, featureInTime, timeKey, buildKascTimeControl } from "../shared/kasc-time.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
@@ -26,6 +29,9 @@ import { initPrint, compositeCanvases } from "../shared/print.js";
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, installLayerVisibilityResolver, bakeQmlLabels } from "../shared/qml-2d.js";
+
+await initI18n();
+applyI18n();
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "kml", "kmz", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
@@ -126,7 +132,7 @@ function refreshQmlLabels() {
     const item = entry.item;
     if (!item?._qml?.labelFor || !entry.sid || !item._geojson) continue;
     bakeQmlLabels(item._geojson, item._qml);
-    map.getSource(entry.sid)?.setData?.(item._geojson);
+    map.getSource(entry.sid)?.setData?.(applyClientWhere(item, item._geojson));
   }
 }
 let lastBaseUrl = "";
@@ -134,6 +140,27 @@ let lastBaseUrl = "";
 // project= を書かず ?kasc= を維持する(実プロジェクト選択で空に戻る)
 let lastKascUrl = "";
 let currentProjectId = "";
+// .kasc の view: 行で宣言された目的別プリセット
+// {name, desc, img, cam, base, layers[], styles{}, wheres{}, line}[]。
+// ポータル画面のカードへ展開する(theme: の発展形。フィルタ・カメラ・背景を含む)
+const inspectorViews = [];
+// .kasc の html: 行で宣言されたポータル HTML セクション {title, spec, line}[]
+const inspectorHtmlSections = [];
+// .kasc の link: 行で宣言された外部リンクカード {name, url, desc, img, line}[]
+const inspectorLinks = [];
+// ポータルのカード宣言順リスト {kind:"view"|"link", entry}[]
+const inspectorPortalCards = [];
+// portal: 行の宣言 {enabled, title, open}。null=行なし
+let inspectorPortalSpec = null;
+// title: 行のパネルタイトル(ポータル見出しのフォールバックに使う)。null=行なし
+let inspectorPanelTitle = null;
+// 適用中のビュー名と、適用前スナップショット(ビュー解除で復元)
+let activeViewName = null;
+let viewSnapshot = null;
+// 起動時ポータル自動表示の管理(プロジェクト読込ごとに1回)
+let portalAutoOpened = false;
+// DATA/ 等の .kasc 相対参照 → URL(Cesium 版 resolveProjectUrl 相当)
+const resolveProjectUrl = url => resolveKascUrl(url, lastBaseUrl);
 // URL ハッシュの初期ビューは最初の loadProject で一度だけ適用する
 // （プロジェクト切替時はそのプロジェクトの cam/範囲へ移動する既存挙動を維持）
 let urlViewConsumed = false;
@@ -448,6 +475,27 @@ function applyVisZoom(def, item) {
   return def;
 }
 
+// 非クエリ系ベクター(geojson: 等の全件読み込み系)の where= を
+// クライアント評価(shared/where-eval.js)で描画用 GeoJSON へ適用する。
+// item._geojson は常に全件を保持する(検索・属性一覧は全件対象の方針)ため、
+// ここでは描画対象だけを絞る。クエリ系(gpkg/duckdb/sql)はローダ側で
+// SQL へ適用済みのため対象外(Cesium 版 applyClientWhere と同規則)
+function applyClientWhere(item, geojson) {
+  const where = item?.opts?.where;
+  if (!where || !geojson?.features?.length || QUERY_TYPES.has(item.type)) return geojson;
+  if (item._whereExpr !== where) {
+    item._whereExpr = where;
+    try { item._wherePred = compileWhereExpression(where); }
+    catch (e) {
+      item._wherePred = null;
+      console.warn(`${item.title}: where= の式を解釈できません`, e.message);
+    }
+  }
+  if (!item._wherePred) return geojson;
+  const kept = geojson.features.filter(f => item._wherePred(f?.properties || {}));
+  return kept.length === geojson.features.length ? geojson : { ...geojson, features: kept };
+}
+
 // .kasc 1行 → レイヤ登録。戻り値は { lids: レイヤ id 配列(表示切替用), sid: ソース id,
 // viewportQuery: 表示範囲連動クエリの有無 }
 // beforeIdFn は「追加時点で評価する挿入先レイヤ id」を返す関数(読込完了順が
@@ -631,7 +679,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
             "heatmap-opacity": 0.7,
           }] : [kind, filter, paint]);
     }
-    map.addSource(sid, { type: "geojson", data: geojson, attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: Math.max(item._qml?.cluster?.distancePx || 50, 5), clusterMaxZoom: 16 } : {}) });
+    map.addSource(sid, { type: "geojson", data: applyClientWhere(item, geojson), attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: Math.max(item._qml?.cluster?.distancePx || 50, 5), clusterMaxZoom: 16 } : {}) });
     const kindCount = {};
     for (const [k] of kinds) kindCount[k] = (kindCount[k] || 0) + 1;
     const kindSeen = {};
@@ -1216,6 +1264,8 @@ function fillCamPanel(cams) {
 let currentUnsupported = [];
 
 async function loadProject(id) {
+  // プロジェクト読込ごとの起動時ポータル自動表示を1回に戻す
+  portalAutoOpened = false;
   const { id: loadedId, baseUrl, doc, manifest, raw, kascUrl } = await loadKascProject(id);
   switchRestore = pendingSwitchState;
   pendingSwitchState = null;
@@ -1258,7 +1308,17 @@ async function liveApplyText(text, { changed = [], full = false, manifest = null
   }
   for (const e of entries) {
     try {
-      map.getSource(e.sid).setData(resolveKascUrl(e.item.url, lastBaseUrl));
+      // where= クライアントフィルタ中は URL 直指定(setData は未加工データを
+      // 読む)を避け、fetch してフィルタ済み FC を流す
+      if (e.item.opts?.where && !QUERY_TYPES.has(e.item.type)) {
+        const res = await fetch(resolveKascUrl(e.item.url, lastBaseUrl));
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const gj = await res.json();
+        e.item._geojson = gj;
+        map.getSource(e.sid).setData(applyClientWhere(e.item, gj));
+      } else {
+        map.getSource(e.sid).setData(resolveKascUrl(e.item.url, lastBaseUrl));
+      }
     } catch (err) { console.warn("live setData failed:", e.item.title, err); }
   }
 }
@@ -1363,6 +1423,36 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   currentProjectId = loadedId;
   applyPanelTitle(doc.title);
   currentDefaultStyles = doc.defaultStyles || null;
+
+  // ポータル(portal:/html:/view:/link: 行)の状態を doc から再構築する
+  inspectorViews.splice(0, inspectorViews.length);
+  inspectorHtmlSections.splice(0, inspectorHtmlSections.length);
+  inspectorLinks.splice(0, inspectorLinks.length);
+  inspectorPortalCards.splice(0, inspectorPortalCards.length);
+  inspectorPortalSpec = doc.portal || null;
+  inspectorPanelTitle = doc.title || null;
+  activeViewName = null;
+  viewSnapshot = null;
+  for (const view of doc.views || []) {
+    inspectorViews.push(view);
+    inspectorPortalCards.push({ kind: "view", entry: view });
+  }
+  for (const sec of doc.htmlSections || []) {
+    // parseKasc の htmlSections[].spec は「タイトル | 本文」のまま残るため、
+    // Cesium 版と同じく先頭フィールドをタイトル・残りを本文として分離する
+    const parts = String(sec.spec || "").split("|").map(s => s.trim());
+    const body = (parts.length > 1 ? parts.slice(1).join("|") : parts[0]) || "";
+    inspectorHtmlSections.push({
+      title: parts.length > 1 ? parts[0] : "",
+      // lastBaseUrl はこの後で代入されるため、ここでは引数の baseUrl で解決する
+      spec: body.startsWith("<") ? body : resolveKascUrl(body, baseUrl),
+      line: sec.line,
+    });
+  }
+  for (const link of doc.links || []) {
+    inspectorLinks.push(link);
+    inspectorPortalCards.push({ kind: "link", entry: link });
+  }
 
   if (panel.project.options.length === 0 && Array.isArray(manifest)) {
     for (const entry of manifest) {
@@ -1542,6 +1632,15 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
   void loadKascInfoContent(panel.infoLink, doc.info, baseUrl);
 
+  // ポータルのカード/ボタンを最新の宣言へ同期する。
+  // portal: 行があり open=manual でなければ起動時(プロジェクト読込後の初回)に
+  // ポータルを自動表示する。インスペクタ再適用では再表示しない
+  updatePortalUI();
+  if (!portalAutoOpened && inspectorPortalSpec?.enabled && inspectorPortalSpec.open !== "manual") {
+    portalAutoOpened = true;
+    openPortal();
+  }
+
   // cam: プリセット + bookmark: 行(QGISブックマークXML) → カメラタブ
   const cams = doc.cams.concat(await loadKascBookmarks(doc.bookmarks, baseUrl));
   currentCams = cams;
@@ -1609,7 +1708,7 @@ async function reloadEntryData(entry) {
   const env = geojsonExtent(geojson);
   if (env) entry.item._env = env;
   const src = map.getSource(entry.sid);
-  if (src?.setData) src.setData(geojson);
+  if (src?.setData) src.setData(applyClientWhere(entry.item, geojson));
 }
 
 // クエリ系レイヤーの絞り込み条件を対話的に変更し、item とインスペクタ行を
@@ -1655,7 +1754,7 @@ function requeryViewportLayers(entries) {
       const env = geojsonExtent(geojson);
       if (env) entry.item._env = env;
       const src = map.getSource(entry.sid);
-      if (src?.setData) src.setData(geojson);
+      if (src?.setData) src.setData(applyClientWhere(entry.item, geojson));
       syncDeckLayers(); // ドレープコピーのデータ更新
       attrWidget.refresh(); // 表示範囲分の行が差し替わった場合に追従
     }).catch(err => console.warn("viewport requery 失敗:", entry.item.title, err));
@@ -2243,6 +2342,214 @@ themeSelect?.addEventListener("change", () => {
   if (theme) applyKascTheme(theme);
 });
 
+// ---- ビュー(view: 行。表示+スタイル+フィルタ+カメラ+背景を束ねた目的別プリセット) ----
+
+// ビュー適用前の状態を記録する。ビュー解除でこの状態へ戻す
+function captureViewSnapshot() {
+  const items = new Map();
+  for (const e of layerEntries) {
+    if (!e.item?.line) continue;
+    items.set(e, { visible: e.item.visible !== false, where: e.item.opts?.where });
+  }
+  return {
+    items,
+    camera: { center: map.getCenter(), zoom: map.getZoom(), bearing: map.getBearing(), pitch: map.getPitch() },
+  };
+}
+
+// ビューのメンバレイヤーか( `*` は全レイヤー)。where/style 適用対象の判定に使う
+function viewHasLayer(view, item, show) {
+  if (show == null) return true;
+  return kascTitleInTheme(item.title, show);
+}
+
+// レイヤーに対応するビュー側指定(styles/wheres マップ。フルパス→葉名の順で照合)
+function viewSpecFor(view, mapName, item) {
+  const mapObj = view?.[mapName] || {};
+  const key = normKascTitle(item.title || "");
+  return mapObj[key] ?? mapObj[key.split("/").pop()];
+}
+
+// エントリの where= 変更を地図へ反映する。
+// クエリ系/表示範囲連動系は where= を反映した再読み込み、
+// それ以外の全件読み込み系はクライアント評価で source.setData だけ更新する
+async function applyEntryWhere(entry) {
+  const item = entry.item;
+  if (!item || !VECTOR_TYPES.has(item.type) || entry.deferred || entry.unsupported) return;
+  if (QUERY_TYPES.has(item.type) || item._viewportQuery) {
+    await reloadEntryData(entry);
+    return;
+  }
+  if (item._geojson) {
+    map.getSource(entry.sid)?.setData?.(applyClientWhere(item, item._geojson));
+    syncDeckLayers(); // ドレープコピーのデータ更新
+  }
+}
+
+// ビュー適用: 表示+フィルタを反映し、スタイル差替・背景・カメラを後続適用する。
+// 初回適用時はスナップショットを取る(Cesium 版 applyKascView と同規則)
+async function applyKascView(view) {
+  if (!view) return;
+  if (!viewSnapshot) viewSnapshot = captureViewSnapshot();
+  activeViewName = view.name || null;
+  const show = themeShowSet(view);
+  const items = layerEntries.filter(e => e.item?.line);
+  for (const e of items) {
+    const item = e.item;
+    item.visible = show == null || kascTitleInTheme(item.title, show);
+    // ビューのメンバレイヤーは ;where= がなくてもフィルタ解除まで含めて
+    // ビュー指定を正とする(スナップショットで解除時に復元される)。
+    // ビュー外のレイヤーのフィルタは触らない
+    if (viewHasLayer(view, item, show)) {
+      const where = viewSpecFor(view, "wheres", item);
+      item.opts ||= {};
+      if (item.type === "sql") {
+        if (where) console.warn(`view:${view.name}: sql: レイヤーへの ;where= は未対応です`, item.title);
+      } else {
+        item.opts.where = where || undefined;
+      }
+    }
+    applyEntryVisibility(e);
+    maybeLoadEntry(e);
+  }
+  // インスペクターの .kasc 行へ on/off と where= を書き戻す
+  // (テーマ適用と同じ規則。sql: 行はクエリ文字列が本文のため where= を書かない)
+  {
+    const lines = inspectorInput.value.split(/\r?\n/);
+    for (const e of items) {
+      const item = e.item;
+      const idx = lines.findIndex(l => l.trim() === item.line);
+      let newLine = rewriteKascLineVisibility(item.line, show);
+      if (item.type !== "sql") newLine = rewriteKascLineOpt(newLine, "where", item.opts?.where ?? null);
+      if (idx >= 0) lines[idx] = newLine;
+      item.line = newLine;
+    }
+    inspectorInput.value = lines.join("\n");
+  }
+  // where= 変更を地図へ反映(クエリ系は再読み込み、全件系はクライアントフィルタ)
+  await Promise.allSettled(items.map(e => applyEntryWhere(e)));
+  renderLayerRows(layerEntries, currentUnsupported);
+  // ;style= 指定レイヤーの .qml 差替(テーマと同じ機構)
+  void applyKascThemeStyles(view);
+  // 背景地図(base=)・カメラ(cam=)は view:/portal data-* 共通ヘルパーへ
+  if (view.base) applyViewBase(view.base);
+  if (view.cam) applyViewCam(view.cam, `view:${view.name}`);
+  // QGIS ライブ連携: ビュー適用を QGIS プロジェクトへ書き戻す
+  liveWritebackEntries(layerEntries, { theme: view?.name });
+  updatePortalButton();
+}
+
+// view base=/portal data-base= 共通: 背景地図をタイトル/葉名で照合して切替。
+// none=ベースマップなし、transparent=地表透明(このエンジンでは全 base を消す)
+function applyViewBase(rawName) {
+  const name = String(rawName || "").trim();
+  if (/^(none|off|なし|ベースマップなし|transparent|hide|透明)$/i.test(name)) {
+    for (const e of currentBaseEntries) {
+      e.lids.forEach(lid => map.getLayer(lid) && map.setLayoutProperty(lid, "visibility", "none"));
+    }
+    if (panel.basemapSelect) panel.basemapSelect.value = "";
+  } else {
+    const idx = currentBaseEntries.findIndex(e => {
+      const title = e.item.title || "";
+      return title === name || splitKascTitle(title).title === name;
+    });
+    if (idx >= 0 && panel.basemapSelect) {
+      panel.basemapSelect.value = String(idx);
+      panel.basemapSelect.dispatchEvent(new Event("change"));
+      syncBasemapList(panel.basemapSelect);
+    }
+  }
+  syncDeckLayers();
+  updateMapAttribution();
+}
+
+// view cam=/portal data-cam= 共通: カメラプリセット名で移動
+// (カメラタブのボタンと同じ移動規則)
+function applyViewCam(name, logPrefix = "data-cam") {
+  const preset = currentCams.find(c => c.name === name || c.title === name);
+  if (preset) {
+    const e = preset._extent;
+    if (e) map.fitBounds([[e.west, e.south], [e.east, e.north]], { padding: 40, duration: 800, maxZoom: 20 });
+    else { const gc = groundCenterFromCam(preset); map.flyTo({ center: [gc.longitude, gc.latitude], zoom: heightToViewZoom(gc.latitude, preset.height, mapCanvasH()) - 1 }); }
+  } else console.warn(`${logPrefix}: cam= のカメラプリセットが見つかりません`, name);
+}
+
+// ビュー解除: 適用前スナップショットへ復元する
+async function clearKascView() {
+  const snap = viewSnapshot;
+  activeViewName = null;
+  viewSnapshot = null;
+  if (!snap) { updatePortalButton(); return; }
+  const items = layerEntries.filter(e => e.item?.line);
+  for (const e of items) {
+    const s = snap.items.get(e);
+    if (!s) continue;
+    e.item.visible = s.visible;
+    e.item.opts ||= {};
+    if (e.item.type !== "sql") e.item.opts.where = s.where;
+    applyEntryVisibility(e);
+    maybeLoadEntry(e);
+  }
+  // 表示状態を行へ戻す。復元後の可視レイヤータイトルをセットにして
+  // rewriteKascLineVisibility で on/off を書き戻す
+  const showSet = new Set();
+  for (const e of items) {
+    if (e.item.visible === false) continue;
+    const n = normKascTitle(e.item.title || "");
+    if (!n) continue;
+    showSet.add(n); showSet.add(n.split("/").pop());
+  }
+  {
+    const lines = inspectorInput.value.split(/\r?\n/);
+    for (const e of items) {
+      const item = e.item;
+      const idx = lines.findIndex(l => l.trim() === item.line);
+      let newLine = rewriteKascLineVisibility(item.line, showSet);
+      if (item.type !== "sql") newLine = rewriteKascLineOpt(newLine, "where", item.opts?.where ?? null);
+      if (idx >= 0) lines[idx] = newLine;
+      item.line = newLine;
+    }
+    inspectorInput.value = lines.join("\n");
+  }
+  await Promise.allSettled(items.map(e => applyEntryWhere(e)));
+  renderLayerRows(layerEntries, currentUnsupported);
+  // テーマ/ビュー差替スタイルを元の style= 指定へ戻す
+  void applyKascThemeStyles({ styles: {} });
+  if (snap.camera) map.jumpTo(snap.camera);
+  liveWritebackEntries(layerEntries);
+  updatePortalButton();
+}
+
+// ---- ポータル(portal:/html:/view:/link: 行で構成する開始画面) ----
+// UI 構築は shared/portal.js へ共通化。ここでは状態getterと
+// applyView/clearView を束ねた遅延インスタンスを提供する
+
+let _kascPortal = null;
+function kascPortal() {
+  if (!_kascPortal) {
+    _kascPortal = createKascPortal({
+      t,
+      resolveProjectUrl,
+      loadInfoContent: loadKascInfoContent,
+      applyView: view => applyKascView(view),
+      clearView: () => clearKascView(),
+      applyCam: name => applyViewCam(name),
+      applyBase: name => applyViewBase(name),
+      getActiveViewName: () => activeViewName,
+      getPortalSpec: () => inspectorPortalSpec,
+      getPanelTitle: () => inspectorPanelTitle,
+      getHtmlSections: () => inspectorHtmlSections,
+      getCards: () => inspectorPortalCards,
+    });
+  }
+  return _kascPortal;
+}
+const portalAvailable = () => kascPortal().available();
+const updatePortalButton = () => kascPortal().updateButton();
+const updatePortalUI = () => kascPortal().update();
+const openPortal = () => kascPortal().open();
+const closePortal = () => kascPortal().close();
+
 // ---- 設定: インスペクター（.kasc テキストの表示・編集・適用） ----
 // textarea には loadProject 時に現在プロジェクトの .kasc 全文が入る。
 // 「登録」はテキスト全体で地図を再構築する（追加型ではなく全置換）
@@ -2421,7 +2728,32 @@ window.kasugaiApi = createPlayerApi({
     updateMapAttribution();
   },
 });
+// view: 行の目的別プリセット一覧/適用/解除とポータル画面の開閉。
+// 表示＋スタイル＋フィルタ(＋カメラ/背景)をまとめて適用するテーマの発展形
+Object.assign(window.kasugaiApi, {
+  listViews() {
+    return inspectorViews.map(view => ({
+      name: view.name, desc: view.desc, img: view.img, cam: view.cam, base: view.base,
+      layers: [...view.layers], active: view.name === activeViewName,
+    }));
+  },
+  async applyView(name) {
+    const view = inspectorViews.find(entry => entry.name === name);
+    if (!view) return false;
+    await applyKascView(view);
+    return true;
+  },
+  async clearView() {
+    await clearKascView();
+    return true;
+  },
+  openPortal() { openPortal(); return portalAvailable(); },
+  closePortal() { closePortal(); return true; },
+});
 mountEngineSwitcher(document.querySelector("#engines"), "maplibre");
+// ポータル: 🏠ボタンで開始画面を開く / 「地図を開く」・Esc で閉じる / 「ビュー解除」で復元
+kascPortal().bindEvents();
+window.addEventListener("kasugai:language-changed", () => updatePortalUI());
 // カレント状態ファイル(Cesium規約)へ現在値を反映する(変化イベント駆動)
 bindSessionState("maplibre");
 void initAiChat({ engine: "maplibre", manageBackend: true });

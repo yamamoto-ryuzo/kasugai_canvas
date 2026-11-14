@@ -1,0 +1,7 @@
+title:フルHTMLポータル
+portal:on | title=フルHTMLポータル | open=auto | html=DATA/portal.html
+cam:全体 | 36.0 | 139.0 | h=80000
+view:工事中 | desc=工事中の地物のみ表示 | テスト地物;where="状況"='工事中' | cam=全体
+view:未発注 | desc=未発注の地物のみ表示 | テスト地物;where="状況"='未発注'
+view:全体 | *
+geojson:テスト地物 | DATA/test.geojson
