@@ -1,0 +1,286 @@
+{
+  "component": "agent",
+  "component_type": "python_fastapi",
+  "version": "6.24.0",
+  "driver": {
+    "type": "dev_server",
+    "detect": "GET /health",
+    "launch": "python -m uvicorn agent.app.main:app --port <test-port>",
+    "ready": "/health 200",
+    "control": "HTTP",
+    "detected_from": "agent/requirements.txt(fastapi/uvicorn)・Dockerfile"
+  },
+  "features": [
+    {
+      "id": "agent.health",
+      "kind": "api_route",
+      "name": "GET /health",
+      "source": "agent/app/main.py:119",
+      "signature": "GET /health",
+      "summary": "到達確認",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.capabilities",
+      "kind": "api_route",
+      "name": "GET /api/capabilities",
+      "source": "agent/app/main.py:124",
+      "signature": "GET /api/capabilities",
+      "summary": "能力応答(tier=cloudrun)",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.auth_gate",
+      "kind": "logic_fn",
+      "name": "auth_gate middleware",
+      "source": "agent/app/main.py:84",
+      "signature": "auth_gate middleware",
+      "summary": "全リクエスト認証ゲート+公開パス判定",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.rate_limit",
+      "kind": "logic_fn",
+      "name": "_rate_limited",
+      "source": "agent/app/main.py:105",
+      "signature": "_rate_limited",
+      "summary": "認証試行レート制限",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.auth",
+      "kind": "api_route",
+      "name": "POST /api/auth",
+      "source": "agent/app/main.py:216",
+      "signature": "POST /api/auth",
+      "summary": "パス認証→セッション",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.auth_session",
+      "kind": "api_route",
+      "name": "GET /api/auth",
+      "source": "agent/app/main.py:235",
+      "signature": "GET /api/auth",
+      "summary": "セッション有効確認",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.kasc",
+      "kind": "api_route",
+      "name": "POST /api/kasc",
+      "source": "agent/app/main.py:246",
+      "signature": "POST /api/kasc",
+      "summary": ".kasc保存(GCS or ローカルstorage)",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.data_get",
+      "kind": "api_route",
+      "name": "GET /api/data/{key}",
+      "source": "agent/app/main.py:263",
+      "signature": "GET /api/data/{key}",
+      "summary": "DATA取得(Range対応)",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.data_put",
+      "kind": "api_route",
+      "name": "PUT /api/data/{key}",
+      "source": "agent/app/main.py:295",
+      "signature": "PUT /api/data/{key}",
+      "summary": "DATA書込",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.auth_methods",
+      "kind": "api_route",
+      "name": "GET /auth-methods.json",
+      "source": "agent/app/main.py:314",
+      "signature": "GET /auth-methods.json",
+      "summary": "認証方式一覧(公開)",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.gemini",
+      "kind": "api_route",
+      "name": "POST /api/gemini",
+      "source": "agent/app/main.py:336",
+      "signature": "POST /api/gemini",
+      "summary": "Geminiプロキシ(GEMINI_API_KEY隠蔽)",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.mcp",
+      "kind": "api_route",
+      "name": "POST /api/mcp",
+      "source": "agent/app/main.py:431",
+      "signature": "POST /api/mcp",
+      "summary": "MCP中継(_mcp_target_allowed+SSRf防止_ip判定)",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.storage",
+      "kind": "logic_fn",
+      "name": "storage.py",
+      "source": "agent/app/storage.py",
+      "signature": "storage.py",
+      "summary": "GCS/ローカルDATA永続化抽象",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.config",
+      "kind": "logic_fn",
+      "name": "config.py",
+      "source": "agent/app/config.py",
+      "signature": "config.py",
+      "summary": "環境変数設定",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "agent.authmod",
+      "kind": "logic_fn",
+      "name": "auth.py",
+      "source": "agent/app/auth.py",
+      "signature": "auth.py",
+      "summary": "認証モード(local/password/iap等)",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "uvicorn起動+TestClientで確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    }
+  ],
+  "updated": "2026-11-14T00:00:00+09:00"
+}

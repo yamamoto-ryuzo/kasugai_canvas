@@ -1,0 +1,4216 @@
+{
+  "component": "web",
+  "component_type": "static_web",
+  "version": "6.24.0",
+  "driver": {
+    "type": "dev_server",
+    "detect": "GET http://127.0.0.1:8510/health",
+    "launch": "kasugai_canvas.exe(8510でweb/を静的配信)。静的のみなら python -m http.server でも可",
+    "ready": "GET /cesium/index.html == 200",
+    "control": "Playwright page.evaluate → window.kasugaiApi / executeChatTool / listUiControls",
+    "detected_from": "AGENTS.md(動作確認=Playwright必須・Chrome→Edge→installの順)"
+  },
+  "features": [
+    {
+      "id": "web.index.engine_redirect",
+      "kind": "entry_point",
+      "name": "engine選択リダイレクト",
+      "source": "web/index.html",
+      "signature": "engine選択リダイレクト",
+      "summary": "?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara へ転送(既定cesium)。engine以外のクエリ/ハッシュ引継ぎ",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "GET /?engine=maplibre → maplibre/index.html へ遷移"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.app",
+      "kind": "entry_point",
+      "name": "cesiumエンジン boot/.kasc再生",
+      "source": "web/cesium/app.js",
+      "signature": "cesiumエンジン boot/.kasc再生",
+      "summary": "メインエンジン(CesiumJS)。全機能・AI制御・プラグイン・フライ・3D。createPlayerApi+session-state+engine-switcherを組込み",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "HTTPサーバ(8510または静的配信)",
+        "SW(vendor依存時)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "ブラウザで /cesium/ を開き kasugaiApi.listLayers() 実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.maplibre.app",
+      "kind": "entry_point",
+      "name": "maplibreエンジン boot/.kasc再生",
+      "source": "web/maplibre/app.js",
+      "signature": "maplibreエンジン boot/.kasc再生",
+      "summary": "MapLibre .kascプレイヤー(全ベクター行・QML・duckdb/sql・属性UI・6タブ)。createPlayerApi+session-state+engine-switcherを組込み",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "HTTPサーバ(8510または静的配信)",
+        "SW(vendor依存時)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "ブラウザで /maplibre/ を開き kasugaiApi.listLayers() 実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.openlayers.app",
+      "kind": "entry_point",
+      "name": "openlayersエンジン boot/.kasc再生",
+      "source": "web/openlayers/app.js",
+      "signature": "openlayersエンジン boot/.kasc再生",
+      "summary": "OpenLayers .kascプレイヤー(同上互換実装)。createPlayerApi+session-state+engine-switcherを組込み",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "HTTPサーバ(8510または静的配信)",
+        "SW(vendor依存時)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "ブラウザで /openlayers/ を開き kasugaiApi.listLayers() 実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.leaflet.app",
+      "kind": "entry_point",
+      "name": "leafletエンジン boot/.kasc再生",
+      "source": "web/leaflet/app.js",
+      "signature": "leafletエンジン boot/.kasc再生",
+      "summary": "Leaflet .kascプレイヤー(専用paneで.kasc積み順再現)。createPlayerApi+session-state+engine-switcherを組込み",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "HTTPサーバ(8510または静的配信)",
+        "SW(vendor依存時)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "ブラウザで /leaflet/ を開き kasugaiApi.listLayers() 実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.gsimaps.app",
+      "kind": "entry_point",
+      "name": "gsimapsエンジン boot/.kasc再生",
+      "source": "web/gsimaps/app.js",
+      "signature": "gsimapsエンジン boot/.kasc再生",
+      "summary": "GSI Maps中間エンジン(vendored地理院地図をiframe組込・GSI.GLOBALS内部API)。createPlayerApi+session-state+engine-switcherを組込み",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "HTTPサーバ(8510または静的配信)",
+        "SW(vendor依存時)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "ブラウザで /gsimaps/ を開き kasugaiApi.listLayers() 実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.navara.app",
+      "kind": "entry_point",
+      "name": "navaraエンジン boot/.kasc再生",
+      "source": "web/navara/app.js",
+      "signature": "navaraエンジン boot/.kasc再生",
+      "summary": "Navara写実3Dプレゼンエンジン(@navaramap/three WASM+Three.js)。createPlayerApi+session-state+engine-switcherを組込み",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "HTTPサーバ(8510または静的配信)",
+        "SW(vendor依存時)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "ブラウザで /navara/ を開き kasugaiApi.listLayers() 実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.mod.app",
+      "kind": "logic_fn",
+      "name": "app",
+      "source": "web/cesium/app.js",
+      "signature": "app",
+      "summary": "Cesiumアプリ本体(初期化・レイヤ管理・パネル・kasugaiApi・全機能配線)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "ブラウザで機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.mod.geotiff-layer",
+      "kind": "logic_fn",
+      "name": "geotiff-layer",
+      "source": "web/cesium/geotiff-layer.js",
+      "signature": "geotiff-layer",
+      "summary": "GeoTIFFレイヤ(COG/terrain)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check / 静的import検証",
+        "integrated": "ページ経由で機能確認"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.mod.geo-tools",
+      "kind": "logic_fn",
+      "name": "geo-tools",
+      "source": "web/cesium/geo-tools.js",
+      "signature": "geo-tools",
+      "summary": "3D/2D計測・空間演算ツール群",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check / 静的import検証",
+        "integrated": "ページ経由で機能確認"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.mod.plugin-loader",
+      "kind": "logic_fn",
+      "name": "plugin-loader",
+      "source": "web/cesium/plugin-loader.js",
+      "signature": "plugin-loader",
+      "summary": "プラグイン動的ロード(plugins.json+PLUGIN/*/plugin.js)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check / 静的import検証",
+        "integrated": "ページ経由で機能確認"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.mod.qml-render",
+      "kind": "logic_fn",
+      "name": "qml-render",
+      "source": "web/cesium/qml-render.js",
+      "signature": "qml-render",
+      "summary": "QMLスタイル→Cesiumエンティティレンダラ変換",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check / 静的import検証",
+        "integrated": "ページ経由で機能確認"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.mod.auth-login-form",
+      "kind": "logic_fn",
+      "name": "auth-login-form",
+      "source": "web/cesium/auth-login-form.js",
+      "signature": "auth-login-form",
+      "summary": "認証ログインフォームUI",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check / 静的import検証",
+        "integrated": "ページ経由で機能確認"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.mod.auth-selector",
+      "kind": "logic_fn",
+      "name": "auth-selector",
+      "source": "web/cesium/auth-selector.js",
+      "signature": "auth-selector",
+      "summary": "認証方式選択(auth-methods.json)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check / 静的import検証",
+        "integrated": "ページ経由で機能確認"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.ai-chat",
+      "kind": "logic_fn",
+      "name": "ai-chat",
+      "source": "web/shared/ai-chat.js",
+      "signature": "ai-chat",
+      "summary": "AIチャット(Gemini function calling・CHAT_TOOLS宣言・executeChatTool・リモートコマンドループ)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.attr-stats",
+      "kind": "logic_fn",
+      "name": "attr-stats",
+      "source": "web/shared/attr-stats.js",
+      "signature": "attr-stats",
+      "summary": "属性統計・集計",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.attr-widget",
+      "kind": "logic_fn",
+      "name": "attr-widget",
+      "source": "web/shared/attr-widget.js",
+      "signature": "attr-widget",
+      "summary": "属性テーブル/フィルタウィジェット",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.backend",
+      "kind": "logic_fn",
+      "name": "backend",
+      "source": "web/shared/backend.js",
+      "signature": "backend",
+      "summary": "バックエンド検出(detectBackend)・tier判定・APIラッパ",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.box",
+      "kind": "logic_fn",
+      "name": "box",
+      "source": "web/shared/box.js",
+      "signature": "box",
+      "summary": "Box連携(kasugai_boxサイドカー)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.coord-pins",
+      "kind": "logic_fn",
+      "name": "coord-pins",
+      "source": "web/shared/coord-pins.js",
+      "signature": "coord-pins",
+      "summary": "座標ピン管理",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.coords-format",
+      "kind": "logic_fn",
+      "name": "coords-format",
+      "source": "web/shared/coords-format.js",
+      "signature": "coords-format",
+      "summary": "座標フォーマット変換",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.coords-local",
+      "kind": "logic_fn",
+      "name": "coords-local",
+      "source": "web/shared/coords-local.js",
+      "signature": "coords-local",
+      "summary": "ローカル平面直角座標系変換(JGD2000/TKYバイナリ)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.deck-drape",
+      "kind": "logic_fn",
+      "name": "deck-drape",
+      "source": "web/shared/deck-drape.js",
+      "signature": "deck-drape",
+      "summary": "deck.glドレープ描画",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.deck-ground",
+      "kind": "logic_fn",
+      "name": "deck-ground",
+      "source": "web/shared/deck-ground.js",
+      "signature": "deck-ground",
+      "summary": "deck.gl地面描画",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.engine-switch",
+      "kind": "logic_fn",
+      "name": "engine-switch",
+      "source": "web/shared/engine-switch.js",
+      "signature": "engine-switch",
+      "summary": "エンジン切替UI+session-state引継ぎ",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.export-formats",
+      "kind": "logic_fn",
+      "name": "export-formats",
+      "source": "web/shared/export-formats.js",
+      "signature": "export-formats",
+      "summary": "エクスポート形式変換(GeoJSON等)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.fly-kasc",
+      "kind": "logic_fn",
+      "name": "fly-kasc",
+      "source": "web/shared/fly-kasc.js",
+      "signature": "fly-kasc",
+      "summary": "fly_geojson行のフライパス解釈・再生",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.geo-tools-2d",
+      "kind": "logic_fn",
+      "name": "geo-tools-2d",
+      "source": "web/shared/geo-tools-2d.js",
+      "signature": "geo-tools-2d",
+      "summary": "2D計測ツール",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.gpkg-worker",
+      "kind": "logic_fn",
+      "name": "gpkg-worker",
+      "source": "web/shared/gpkg-worker.js",
+      "signature": "gpkg-worker",
+      "summary": "GeoPackage読み込みWorker",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.hub-diag",
+      "kind": "logic_fn",
+      "name": "hub-diag",
+      "source": "web/shared/hub-diag.js",
+      "signature": "hub-diag",
+      "summary": "ブリッジハブ診断UI",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.i18n",
+      "kind": "logic_fn",
+      "name": "i18n",
+      "source": "web/shared/i18n.js",
+      "signature": "i18n",
+      "summary": "多言語辞書(SUPPORTED_LANGUAGES=en,ja,zh,ko,es,fr,de,pt)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.kasc",
+      "kind": "logic_fn",
+      "name": "kasc",
+      "source": "web/shared/kasc.js",
+      "signature": "kasc",
+      "summary": ".kascパーサ(NON_LAYER_TYPES正典・行型解析)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.kasc_loader",
+      "kind": "logic_fn",
+      "name": "kasc_loader",
+      "source": "web/shared/kasc_loader.js",
+      "signature": "kasc_loader",
+      "summary": ".kasc+DATA/ローダ(プロジェクト展開)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.kasc-time",
+      "kind": "logic_fn",
+      "name": "kasc-time",
+      "source": "web/shared/kasc-time.js",
+      "signature": "kasc-time",
+      "summary": ".kasc時系列再生",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.lazy-lib",
+      "kind": "logic_fn",
+      "name": "lazy-lib",
+      "source": "web/shared/lazy-lib.js",
+      "signature": "lazy-lib",
+      "summary": "遅延ライブラリロード",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.live",
+      "kind": "logic_fn",
+      "name": "live",
+      "source": "web/shared/live.js",
+      "signature": "live",
+      "summary": "QGIS Live連携(編集差分同期・camera/selection通知)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.live-panel",
+      "kind": "logic_fn",
+      "name": "live-panel",
+      "source": "web/shared/live-panel.js",
+      "signature": "live-panel",
+      "summary": "Live連携パネルUI",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.localfs",
+      "kind": "logic_fn",
+      "name": "localfs",
+      "source": "web/shared/localfs.js",
+      "signature": "localfs",
+      "summary": "ローカルFS保存(File System Access API)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.mcp",
+      "kind": "logic_fn",
+      "name": "mcp",
+      "source": "web/shared/mcp.js",
+      "signature": "mcp",
+      "summary": "MCPクライアント(外部MCPサーバ接続・ツール呼出)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.minimap",
+      "kind": "logic_fn",
+      "name": "minimap",
+      "source": "web/shared/minimap.js",
+      "signature": "minimap",
+      "summary": "ミニマップ表示",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.mvt",
+      "kind": "logic_fn",
+      "name": "mvt",
+      "source": "web/shared/mvt.js",
+      "signature": "mvt",
+      "summary": "MVTベクタタイルデコード",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.nav-tools",
+      "kind": "logic_fn",
+      "name": "nav-tools",
+      "source": "web/shared/nav-tools.js",
+      "signature": "nav-tools",
+      "summary": "ナビゲーションツール",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.player-api",
+      "kind": "logic_fn",
+      "name": "player-api",
+      "source": "web/shared/player-api.js",
+      "signature": "player-api",
+      "summary": "2Dプレイヤー用kasugaiApiアダプタ生成(createPlayerApi)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.print",
+      "kind": "logic_fn",
+      "name": "print",
+      "source": "web/shared/print.js",
+      "signature": "print",
+      "summary": "印刷出力",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.qml-2d",
+      "kind": "logic_fn",
+      "name": "qml-2d",
+      "source": "web/shared/qml-2d.js",
+      "signature": "qml-2d",
+      "summary": "QMLスタイル→2Dエンジン変換",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.qml-style",
+      "kind": "logic_fn",
+      "name": "qml-style",
+      "source": "web/shared/qml-style.js",
+      "signature": "qml-style",
+      "summary": "QMLスタイルコンパイラ(エンジン非依存コア)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.report",
+      "kind": "logic_fn",
+      "name": "report",
+      "source": "web/shared/report.js",
+      "signature": "report",
+      "summary": "資料生成(showReport・帳票HTML/PDF)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.session-state",
+      "kind": "logic_fn",
+      "name": "session-state",
+      "source": "web/shared/session-state.js",
+      "signature": "session-state",
+      "summary": "カレント状態ファイル正典(bindSessionState/applySessionState/matchSessionState)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.spatial-ops",
+      "kind": "logic_fn",
+      "name": "spatial-ops",
+      "source": "web/shared/spatial-ops.js",
+      "signature": "spatial-ops",
+      "summary": "ブラウザ内空間演算(spatialSelect/aggregateWithin/createBuffer/DuckDB-WASM)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.sun-time",
+      "kind": "logic_fn",
+      "name": "sun-time",
+      "source": "web/shared/sun-time.js",
+      "signature": "sun-time",
+      "summary": "日照・時刻シミュレーション",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.tools-dock-ux",
+      "kind": "logic_fn",
+      "name": "tools-dock-ux",
+      "source": "web/shared/tools-dock-ux.js",
+      "signature": "tools-dock-ux",
+      "summary": "ツールドックUX配置",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.vector-decode",
+      "kind": "logic_fn",
+      "name": "vector-decode",
+      "source": "web/shared/vector-decode.js",
+      "signature": "vector-decode",
+      "summary": "ベクタ形式デコード(GeoParquet/FlatGeobuf/WKB等)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.vector-load",
+      "kind": "logic_fn",
+      "name": "vector-load",
+      "source": "web/shared/vector-load.js",
+      "signature": "vector-load",
+      "summary": "ベクタデータ読込統括",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.shared.vendor-guard",
+      "kind": "logic_fn",
+      "name": "vendor-guard",
+      "source": "web/shared/vendor-guard.js",
+      "signature": "vendor-guard",
+      "summary": "vendor SWプローブ・未制御時フォールバック",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check + export存在確認",
+        "integrated": "エンジン経由で機能実行"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.sw.vendor_proxy",
+      "kind": "entry_point",
+      "name": "vendor-proxy-sw.js",
+      "source": "web/vendor-proxy-sw.js",
+      "signature": "vendor-proxy-sw.js",
+      "summary": "vendor/*を上流(npm→jsdelivr, github→jsdelivr/gh→raw)へ同一オリジン中継するSW。vendor.jsonピン駆動・?hosted=で自前ミラー",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "SW登録後 /cesium/vendor/... 要求が上流解決される"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.sw.duckdb",
+      "kind": "entry_point",
+      "name": "sw-duckdb.js",
+      "source": "web/sw-duckdb.js",
+      "signature": "sw-duckdb.js",
+      "summary": "DuckDB-WASM用Service Worker(スコープ=登録元dir、エンジン毎に登録)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getProjectId",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getProjectId",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getProjectId",
+      "summary": "AI/外部制御面メソッド getProjectId()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getProjectId(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getCamera",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getCamera",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getCamera",
+      "summary": "AI/外部制御面メソッド getCamera()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getCamera(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.listLayers",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.listLayers",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.listLayers",
+      "summary": "AI/外部制御面メソッド listLayers()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.listLayers(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setLayerVisible",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setLayerVisible",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setLayerVisible",
+      "summary": "AI/外部制御面メソッド setLayerVisible()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setLayerVisible(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setLayerLegendVisible",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setLayerLegendVisible",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setLayerLegendVisible",
+      "summary": "AI/外部制御面メソッド setLayerLegendVisible()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setLayerLegendVisible(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.listThemes",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.listThemes",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.listThemes",
+      "summary": "AI/外部制御面メソッド listThemes()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.listThemes(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.applyTheme",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.applyTheme",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.applyTheme",
+      "summary": "AI/外部制御面メソッド applyTheme()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.applyTheme(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.listBasemaps",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.listBasemaps",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.listBasemaps",
+      "summary": "AI/外部制御面メソッド listBasemaps()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.listBasemaps(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setBasemap",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setBasemap",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setBasemap",
+      "summary": "AI/外部制御面メソッド setBasemap()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setBasemap(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.zoomToExtent",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.zoomToExtent",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.zoomToExtent",
+      "summary": "AI/外部制御面メソッド zoomToExtent()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.zoomToExtent(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.listCameraPresets",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.listCameraPresets",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.listCameraPresets",
+      "summary": "AI/外部制御面メソッド listCameraPresets()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.listCameraPresets(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.flyToPreset",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.flyToPreset",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.flyToPreset",
+      "summary": "AI/外部制御面メソッド flyToPreset()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.flyToPreset(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.flyTo",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.flyTo",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.flyTo",
+      "summary": "AI/外部制御面メソッド flyTo()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.flyTo(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setTerrain",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setTerrain",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setTerrain",
+      "summary": "AI/外部制御面メソッド setTerrain()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setTerrain(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setEffect",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setEffect",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setEffect",
+      "summary": "AI/外部制御面メソッド setEffect()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setEffect(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setUnderground",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setUnderground",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setUnderground",
+      "summary": "AI/外部制御面メソッド setUnderground()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setUnderground(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setClip",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setClip",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setClip",
+      "summary": "AI/外部制御面メソッド setClip()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setClip(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.listFlyPaths",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.listFlyPaths",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.listFlyPaths",
+      "summary": "AI/外部制御面メソッド listFlyPaths()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.listFlyPaths(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.playFlyPath",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.playFlyPath",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.playFlyPath",
+      "summary": "AI/外部制御面メソッド playFlyPath()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.playFlyPath(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.stopFly",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.stopFly",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.stopFly",
+      "summary": "AI/外部制御面メソッド stopFly()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.stopFly(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.listProjects",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.listProjects",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.listProjects",
+      "summary": "AI/外部制御面メソッド listProjects()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.listProjects(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.switchProject",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.switchProject",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.switchProject",
+      "summary": "AI/外部制御面メソッド switchProject()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.switchProject(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.applyInspector",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.applyInspector",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.applyInspector",
+      "summary": "AI/外部制御面メソッド applyInspector()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.applyInspector(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.liveSync",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.liveSync",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.liveSync",
+      "summary": "AI/外部制御面メソッド liveSync()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.liveSync(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.liveSyncStatus",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.liveSyncStatus",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.liveSyncStatus",
+      "summary": "AI/外部制御面メソッド liveSyncStatus()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.liveSyncStatus(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.liveSetFollow",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.liveSetFollow",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.liveSetFollow",
+      "summary": "AI/外部制御面メソッド liveSetFollow()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.liveSetFollow(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.liveIsFollowing",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.liveIsFollowing",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.liveIsFollowing",
+      "summary": "AI/外部制御面メソッド liveIsFollowing()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.liveIsFollowing(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.liveSetQgisRender",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.liveSetQgisRender",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.liveSetQgisRender",
+      "summary": "AI/外部制御面メソッド liveSetQgisRender()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.liveSetQgisRender(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.exportInspector",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.exportInspector",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.exportInspector",
+      "summary": "AI/外部制御面メソッド exportInspector()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.exportInspector(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.checkUpdate",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.checkUpdate",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.checkUpdate",
+      "summary": "AI/外部制御面メソッド checkUpdate()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.checkUpdate(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.installUpdate",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.installUpdate",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.installUpdate",
+      "summary": "AI/外部制御面メソッド installUpdate()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.installUpdate(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的操作:呼出禁止・存在確認のみ"
+    },
+    {
+      "id": "web.cesium.api.shutdownApp",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.shutdownApp",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.shutdownApp",
+      "summary": "AI/外部制御面メソッド shutdownApp()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.shutdownApp(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的操作:呼出禁止・存在確認のみ"
+    },
+    {
+      "id": "web.cesium.api.toggleDrawMode",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.toggleDrawMode",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.toggleDrawMode",
+      "summary": "AI/外部制御面メソッド toggleDrawMode()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.toggleDrawMode(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.vectorSearch",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.vectorSearch",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.vectorSearch",
+      "summary": "AI/外部制御面メソッド vectorSearch()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.vectorSearch(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getShareUrl",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getShareUrl",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getShareUrl",
+      "summary": "AI/外部制御面メソッド getShareUrl()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getShareUrl(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.buildShareUrl",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.buildShareUrl",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.buildShareUrl",
+      "summary": "AI/外部制御面メソッド buildShareUrl()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.buildShareUrl(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.showReport",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.showReport",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.showReport",
+      "summary": "AI/外部制御面メソッド showReport()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.showReport(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.addLayer",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.addLayer",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.addLayer",
+      "summary": "AI/外部制御面メソッド addLayer()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.addLayer(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.addGeoJsonLayer",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.addGeoJsonLayer",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.addGeoJsonLayer",
+      "summary": "AI/外部制御面メソッド addGeoJsonLayer()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.addGeoJsonLayer(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getGoogleApiKey",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getGoogleApiKey",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getGoogleApiKey",
+      "summary": "AI/外部制御面メソッド getGoogleApiKey()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getGoogleApiKey(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getGoogleMapsApiKey",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getGoogleMapsApiKey",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getGoogleMapsApiKey",
+      "summary": "AI/外部制御面メソッド getGoogleMapsApiKey()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getGoogleMapsApiKey(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getGoogleMapsWsApiKey",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getGoogleMapsWsApiKey",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getGoogleMapsWsApiKey",
+      "summary": "AI/外部制御面メソッド getGoogleMapsWsApiKey()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getGoogleMapsWsApiKey(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getGeminiModel",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getGeminiModel",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getGeminiModel",
+      "summary": "AI/外部制御面メソッド getGeminiModel()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getGeminiModel(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getViewer",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getViewer",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getViewer",
+      "summary": "AI/外部制御面メソッド getViewer()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getViewer(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getCesium",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getCesium",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getCesium",
+      "summary": "AI/外部制御面メソッド getCesium()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getCesium(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.on",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.on",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.on",
+      "summary": "AI/外部制御面メソッド on()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.on(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.off",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.off",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.off",
+      "summary": "AI/外部制御面メソッド off()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.off(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.emit",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.emit",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.emit",
+      "summary": "AI/外部制御面メソッド emit()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.emit(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.registerPlugin",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.registerPlugin",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.registerPlugin",
+      "summary": "AI/外部制御面メソッド registerPlugin()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.registerPlugin(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.unregisterPlugin",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.unregisterPlugin",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.unregisterPlugin",
+      "summary": "AI/外部制御面メソッド unregisterPlugin()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.unregisterPlugin(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getPlugins",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getPlugins",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getPlugins",
+      "summary": "AI/外部制御面メソッド getPlugins()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getPlugins(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getInspectorPlugins",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getInspectorPlugins",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getInspectorPlugins",
+      "summary": "AI/外部制御面メソッド getInspectorPlugins()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getInspectorPlugins(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getPluginDataSource",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getPluginDataSource",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getPluginDataSource",
+      "summary": "AI/外部制御面メソッド getPluginDataSource()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getPluginDataSource(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getLayerGeoJson",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getLayerGeoJson",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getLayerGeoJson",
+      "summary": "AI/外部制御面メソッド getLayerGeoJson()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getLayerGeoJson(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.exportLayer",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.exportLayer",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.exportLayer",
+      "summary": "AI/外部制御面メソッド exportLayer()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.exportLayer(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.measureDistance",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.measureDistance",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.measureDistance",
+      "summary": "AI/外部制御面メソッド measureDistance()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.measureDistance(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.measureArea",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.measureArea",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.measureArea",
+      "summary": "AI/外部制御面メソッド measureArea()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.measureArea(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.measureBearing",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.measureBearing",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.measureBearing",
+      "summary": "AI/外部制御面メソッド measureBearing()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.measureBearing(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setGraticule",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setGraticule",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setGraticule",
+      "summary": "AI/外部制御面メソッド setGraticule()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setGraticule(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.spatialSelect",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.spatialSelect",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.spatialSelect",
+      "summary": "AI/外部制御面メソッド spatialSelect()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.spatialSelect(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.aggregateWithin",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.aggregateWithin",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.aggregateWithin",
+      "summary": "AI/外部制御面メソッド aggregateWithin()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.aggregateWithin(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.setMinimap",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.setMinimap",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.setMinimap",
+      "summary": "AI/外部制御面メソッド setMinimap()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.setMinimap(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getCapabilities",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getCapabilities",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getCapabilities",
+      "summary": "AI/外部制御面メソッド getCapabilities()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getCapabilities(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.api.getAuth",
+      "kind": "ai_integration",
+      "name": "kasugaiApi.getAuth",
+      "source": "web/cesium/app.js:11623",
+      "signature": "kasugaiApi.getAuth",
+      "summary": "AI/外部制御面メソッド getAuth()",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "page.evaluate(kasugaiApi.getAuth(...))"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.flyTo",
+      "kind": "ai_integration",
+      "name": "tool:flyTo",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:flyTo",
+      "summary": "CHAT_TOOLS宣言ツール flyTo(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('flyTo',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setLayerVisible",
+      "kind": "ai_integration",
+      "name": "tool:setLayerVisible",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setLayerVisible",
+      "summary": "CHAT_TOOLS宣言ツール setLayerVisible(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setLayerVisible',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setLayerLegendVisible",
+      "kind": "ai_integration",
+      "name": "tool:setLayerLegendVisible",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setLayerLegendVisible",
+      "summary": "CHAT_TOOLS宣言ツール setLayerLegendVisible(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setLayerLegendVisible',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listLayers",
+      "kind": "ai_integration",
+      "name": "tool:listLayers",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listLayers",
+      "summary": "CHAT_TOOLS宣言ツール listLayers(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listLayers',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.focusLayer",
+      "kind": "ai_integration",
+      "name": "tool:focusLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:focusLayer",
+      "summary": "CHAT_TOOLS宣言ツール focusLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('focusLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.getCamera",
+      "kind": "ai_integration",
+      "name": "tool:getCamera",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:getCamera",
+      "summary": "CHAT_TOOLS宣言ツール getCamera(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('getCamera',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listBasemaps",
+      "kind": "ai_integration",
+      "name": "tool:listBasemaps",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listBasemaps",
+      "summary": "CHAT_TOOLS宣言ツール listBasemaps(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listBasemaps',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setBasemap",
+      "kind": "ai_integration",
+      "name": "tool:setBasemap",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setBasemap",
+      "summary": "CHAT_TOOLS宣言ツール setBasemap(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setBasemap',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.searchLocation",
+      "kind": "ai_integration",
+      "name": "tool:searchLocation",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:searchLocation",
+      "summary": "CHAT_TOOLS宣言ツール searchLocation(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('searchLocation',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.flyToFeature",
+      "kind": "ai_integration",
+      "name": "tool:flyToFeature",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:flyToFeature",
+      "summary": "CHAT_TOOLS宣言ツール flyToFeature(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('flyToFeature',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.zoomToExtent",
+      "kind": "ai_integration",
+      "name": "tool:zoomToExtent",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:zoomToExtent",
+      "summary": "CHAT_TOOLS宣言ツール zoomToExtent(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('zoomToExtent',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.flyToPreset",
+      "kind": "ai_integration",
+      "name": "tool:flyToPreset",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:flyToPreset",
+      "summary": "CHAT_TOOLS宣言ツール flyToPreset(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('flyToPreset',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listCameraPresets",
+      "kind": "ai_integration",
+      "name": "tool:listCameraPresets",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listCameraPresets",
+      "summary": "CHAT_TOOLS宣言ツール listCameraPresets(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listCameraPresets',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setTerrain",
+      "kind": "ai_integration",
+      "name": "tool:setTerrain",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setTerrain",
+      "summary": "CHAT_TOOLS宣言ツール setTerrain(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setTerrain',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setEffect",
+      "kind": "ai_integration",
+      "name": "tool:setEffect",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setEffect",
+      "summary": "CHAT_TOOLS宣言ツール setEffect(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setEffect',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setUnderground",
+      "kind": "ai_integration",
+      "name": "tool:setUnderground",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setUnderground",
+      "summary": "CHAT_TOOLS宣言ツール setUnderground(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setUnderground',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setClip",
+      "kind": "ai_integration",
+      "name": "tool:setClip",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setClip",
+      "summary": "CHAT_TOOLS宣言ツール setClip(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setClip',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listFlyPaths",
+      "kind": "ai_integration",
+      "name": "tool:listFlyPaths",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listFlyPaths",
+      "summary": "CHAT_TOOLS宣言ツール listFlyPaths(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listFlyPaths',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.playFlyPath",
+      "kind": "ai_integration",
+      "name": "tool:playFlyPath",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:playFlyPath",
+      "summary": "CHAT_TOOLS宣言ツール playFlyPath(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('playFlyPath',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.stopFly",
+      "kind": "ai_integration",
+      "name": "tool:stopFly",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:stopFly",
+      "summary": "CHAT_TOOLS宣言ツール stopFly(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('stopFly',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setFlySettings",
+      "kind": "ai_integration",
+      "name": "tool:setFlySettings",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setFlySettings",
+      "summary": "CHAT_TOOLS宣言ツール setFlySettings(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setFlySettings',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.addFlyPath",
+      "kind": "ai_integration",
+      "name": "tool:addFlyPath",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:addFlyPath",
+      "summary": "CHAT_TOOLS宣言ツール addFlyPath(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('addFlyPath',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.flyRoute",
+      "kind": "ai_integration",
+      "name": "tool:flyRoute",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:flyRoute",
+      "summary": "CHAT_TOOLS宣言ツール flyRoute(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('flyRoute',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.vectorSearch",
+      "kind": "ai_integration",
+      "name": "tool:vectorSearch",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:vectorSearch",
+      "summary": "CHAT_TOOLS宣言ツール vectorSearch(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('vectorSearch',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.getShareUrl",
+      "kind": "ai_integration",
+      "name": "tool:getShareUrl",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:getShareUrl",
+      "summary": "CHAT_TOOLS宣言ツール getShareUrl(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('getShareUrl',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.buildShareUrl",
+      "kind": "ai_integration",
+      "name": "tool:buildShareUrl",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:buildShareUrl",
+      "summary": "CHAT_TOOLS宣言ツール buildShareUrl(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('buildShareUrl',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.showReport",
+      "kind": "ai_integration",
+      "name": "tool:showReport",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:showReport",
+      "summary": "CHAT_TOOLS宣言ツール showReport(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('showReport',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listProjects",
+      "kind": "ai_integration",
+      "name": "tool:listProjects",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listProjects",
+      "summary": "CHAT_TOOLS宣言ツール listProjects(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listProjects',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.switchProject",
+      "kind": "ai_integration",
+      "name": "tool:switchProject",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:switchProject",
+      "summary": "CHAT_TOOLS宣言ツール switchProject(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('switchProject',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.toggleDrawMode",
+      "kind": "ai_integration",
+      "name": "tool:toggleDrawMode",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:toggleDrawMode",
+      "summary": "CHAT_TOOLS宣言ツール toggleDrawMode(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('toggleDrawMode',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.applyInspector",
+      "kind": "ai_integration",
+      "name": "tool:applyInspector",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:applyInspector",
+      "summary": "CHAT_TOOLS宣言ツール applyInspector(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('applyInspector',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.exportInspector",
+      "kind": "ai_integration",
+      "name": "tool:exportInspector",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:exportInspector",
+      "summary": "CHAT_TOOLS宣言ツール exportInspector(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('exportInspector',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.checkUpdate",
+      "kind": "ai_integration",
+      "name": "tool:checkUpdate",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:checkUpdate",
+      "summary": "CHAT_TOOLS宣言ツール checkUpdate(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('checkUpdate',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.installUpdate",
+      "kind": "ai_integration",
+      "name": "tool:installUpdate",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:installUpdate",
+      "summary": "CHAT_TOOLS宣言ツール installUpdate(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('installUpdate',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+    },
+    {
+      "id": "web.tool.bridgeSetup",
+      "kind": "ai_integration",
+      "name": "tool:bridgeSetup",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:bridgeSetup",
+      "summary": "CHAT_TOOLS宣言ツール bridgeSetup(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('bridgeSetup',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.delegateTask",
+      "kind": "ai_integration",
+      "name": "tool:delegateTask",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:delegateTask",
+      "summary": "CHAT_TOOLS宣言ツール delegateTask(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('delegateTask',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+    },
+    {
+      "id": "web.tool.runCode",
+      "kind": "ai_integration",
+      "name": "tool:runCode",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:runCode",
+      "summary": "CHAT_TOOLS宣言ツール runCode(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('runCode',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.speak",
+      "kind": "ai_integration",
+      "name": "tool:speak",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:speak",
+      "summary": "CHAT_TOOLS宣言ツール speak(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('speak',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.addLayer",
+      "kind": "ai_integration",
+      "name": "tool:addLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:addLayer",
+      "summary": "CHAT_TOOLS宣言ツール addLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('addLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.addGeoJsonLayer",
+      "kind": "ai_integration",
+      "name": "tool:addGeoJsonLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:addGeoJsonLayer",
+      "summary": "CHAT_TOOLS宣言ツール addGeoJsonLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('addGeoJsonLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.shutdownApp",
+      "kind": "ai_integration",
+      "name": "tool:shutdownApp",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:shutdownApp",
+      "summary": "CHAT_TOOLS宣言ツール shutdownApp(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('shutdownApp',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+    },
+    {
+      "id": "web.tool.savePlugin",
+      "kind": "ai_integration",
+      "name": "tool:savePlugin",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:savePlugin",
+      "summary": "CHAT_TOOLS宣言ツール savePlugin(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('savePlugin',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listPlugins",
+      "kind": "ai_integration",
+      "name": "tool:listPlugins",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listPlugins",
+      "summary": "CHAT_TOOLS宣言ツール listPlugins(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listPlugins',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.getPluginCode",
+      "kind": "ai_integration",
+      "name": "tool:getPluginCode",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:getPluginCode",
+      "summary": "CHAT_TOOLS宣言ツール getPluginCode(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('getPluginCode',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.removePlugin",
+      "kind": "ai_integration",
+      "name": "tool:removePlugin",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:removePlugin",
+      "summary": "CHAT_TOOLS宣言ツール removePlugin(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('removePlugin',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+    },
+    {
+      "id": "web.tool.setPluginEnabled",
+      "kind": "ai_integration",
+      "name": "tool:setPluginEnabled",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setPluginEnabled",
+      "summary": "CHAT_TOOLS宣言ツール setPluginEnabled(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setPluginEnabled',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.publishPlugin",
+      "kind": "ai_integration",
+      "name": "tool:publishPlugin",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:publishPlugin",
+      "summary": "CHAT_TOOLS宣言ツール publishPlugin(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('publishPlugin',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ"
+    },
+    {
+      "id": "web.tool.fetchData",
+      "kind": "ai_integration",
+      "name": "tool:fetchData",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:fetchData",
+      "summary": "CHAT_TOOLS宣言ツール fetchData(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('fetchData',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.getLayerGeoJson",
+      "kind": "ai_integration",
+      "name": "tool:getLayerGeoJson",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:getLayerGeoJson",
+      "summary": "CHAT_TOOLS宣言ツール getLayerGeoJson(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('getLayerGeoJson',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.exportLayer",
+      "kind": "ai_integration",
+      "name": "tool:exportLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:exportLayer",
+      "summary": "CHAT_TOOLS宣言ツール exportLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('exportLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.spatialSelect",
+      "kind": "ai_integration",
+      "name": "tool:spatialSelect",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:spatialSelect",
+      "summary": "CHAT_TOOLS宣言ツール spatialSelect(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('spatialSelect',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.aggregateWithin",
+      "kind": "ai_integration",
+      "name": "tool:aggregateWithin",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:aggregateWithin",
+      "summary": "CHAT_TOOLS宣言ツール aggregateWithin(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('aggregateWithin',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.createBuffer",
+      "kind": "ai_integration",
+      "name": "tool:createBuffer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:createBuffer",
+      "summary": "CHAT_TOOLS宣言ツール createBuffer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('createBuffer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.addDataLayer",
+      "kind": "ai_integration",
+      "name": "tool:addDataLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:addDataLayer",
+      "summary": "CHAT_TOOLS宣言ツール addDataLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('addDataLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.removeDataLayer",
+      "kind": "ai_integration",
+      "name": "tool:removeDataLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:removeDataLayer",
+      "summary": "CHAT_TOOLS宣言ツール removeDataLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('removeDataLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.searchPlaces",
+      "kind": "ai_integration",
+      "name": "tool:searchPlaces",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:searchPlaces",
+      "summary": "CHAT_TOOLS宣言ツール searchPlaces(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('searchPlaces',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.openStreetView",
+      "kind": "ai_integration",
+      "name": "tool:openStreetView",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:openStreetView",
+      "summary": "CHAT_TOOLS宣言ツール openStreetView(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('openStreetView',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listDataFiles",
+      "kind": "ai_integration",
+      "name": "tool:listDataFiles",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listDataFiles",
+      "summary": "CHAT_TOOLS宣言ツール listDataFiles(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listDataFiles',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.saveDataFile",
+      "kind": "ai_integration",
+      "name": "tool:saveDataFile",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:saveDataFile",
+      "summary": "CHAT_TOOLS宣言ツール saveDataFile(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('saveDataFile',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "confirm挟む(自動化時はダイアログモック必要)"
+    },
+    {
+      "id": "web.tool.deleteDataFile",
+      "kind": "ai_integration",
+      "name": "tool:deleteDataFile",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:deleteDataFile",
+      "summary": "CHAT_TOOLS宣言ツール deleteDataFile(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('deleteDataFile',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ confirm挟む(自動化時はダイアログモック必要)"
+    },
+    {
+      "id": "web.tool.setToolMaxSteps",
+      "kind": "ai_integration",
+      "name": "tool:setToolMaxSteps",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setToolMaxSteps",
+      "summary": "CHAT_TOOLS宣言ツール setToolMaxSteps(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setToolMaxSteps',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setLayerFilter",
+      "kind": "ai_integration",
+      "name": "tool:setLayerFilter",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setLayerFilter",
+      "summary": "CHAT_TOOLS宣言ツール setLayerFilter(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setLayerFilter',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listUiControls",
+      "kind": "ai_integration",
+      "name": "tool:listUiControls",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listUiControls",
+      "summary": "CHAT_TOOLS宣言ツール listUiControls(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listUiControls',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.controlUi",
+      "kind": "ai_integration",
+      "name": "tool:controlUi",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:controlUi",
+      "summary": "CHAT_TOOLS宣言ツール controlUi(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('controlUi',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.listGsiLayers",
+      "kind": "ai_integration",
+      "name": "tool:listGsiLayers",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listGsiLayers",
+      "summary": "CHAT_TOOLS宣言ツール listGsiLayers(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listGsiLayers',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.importGsiLayers",
+      "kind": "ai_integration",
+      "name": "tool:importGsiLayers",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:importGsiLayers",
+      "summary": "CHAT_TOOLS宣言ツール importGsiLayers(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('importGsiLayers',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.setGsiLayerOpacity",
+      "kind": "ai_integration",
+      "name": "tool:setGsiLayerOpacity",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setGsiLayerOpacity",
+      "summary": "CHAT_TOOLS宣言ツール setGsiLayerOpacity(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setGsiLayerOpacity',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.moveGsiLayer",
+      "kind": "ai_integration",
+      "name": "tool:moveGsiLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:moveGsiLayer",
+      "summary": "CHAT_TOOLS宣言ツール moveGsiLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('moveGsiLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.removeGsiLayer",
+      "kind": "ai_integration",
+      "name": "tool:removeGsiLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:removeGsiLayer",
+      "summary": "CHAT_TOOLS宣言ツール removeGsiLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('removeGsiLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.listGsiCatalog",
+      "kind": "ai_integration",
+      "name": "tool:listGsiCatalog",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listGsiCatalog",
+      "summary": "CHAT_TOOLS宣言ツール listGsiCatalog(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listGsiCatalog',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.addGsiLayer",
+      "kind": "ai_integration",
+      "name": "tool:addGsiLayer",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:addGsiLayer",
+      "summary": "CHAT_TOOLS宣言ツール addGsiLayer(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('addGsiLayer',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.listGsiSakuzu",
+      "kind": "ai_integration",
+      "name": "tool:listGsiSakuzu",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listGsiSakuzu",
+      "summary": "CHAT_TOOLS宣言ツール listGsiSakuzu(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listGsiSakuzu',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.importGsiSakuzu",
+      "kind": "ai_integration",
+      "name": "tool:importGsiSakuzu",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:importGsiSakuzu",
+      "summary": "CHAT_TOOLS宣言ツール importGsiSakuzu(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('importGsiSakuzu',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.listGsiBasemaps",
+      "kind": "ai_integration",
+      "name": "tool:listGsiBasemaps",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listGsiBasemaps",
+      "summary": "CHAT_TOOLS宣言ツール listGsiBasemaps(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listGsiBasemaps',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.setGsiBasemap",
+      "kind": "ai_integration",
+      "name": "tool:setGsiBasemap",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setGsiBasemap",
+      "summary": "CHAT_TOOLS宣言ツール setGsiBasemap(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setGsiBasemap',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.importGsiCatalog",
+      "kind": "ai_integration",
+      "name": "tool:importGsiCatalog",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:importGsiCatalog",
+      "summary": "CHAT_TOOLS宣言ツール importGsiCatalog(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('importGsiCatalog',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.setGsiLayerHidden",
+      "kind": "ai_integration",
+      "name": "tool:setGsiLayerHidden",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setGsiLayerHidden",
+      "summary": "CHAT_TOOLS宣言ツール setGsiLayerHidden(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setGsiLayerHidden',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.removeGsiSakuzu",
+      "kind": "ai_integration",
+      "name": "tool:removeGsiSakuzu",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:removeGsiSakuzu",
+      "summary": "CHAT_TOOLS宣言ツール removeGsiSakuzu(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('removeGsiSakuzu',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.getGsiElevation",
+      "kind": "ai_integration",
+      "name": "tool:getGsiElevation",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:getGsiElevation",
+      "summary": "CHAT_TOOLS宣言ツール getGsiElevation(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('getGsiElevation',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.getGsiShareUrl",
+      "kind": "ai_integration",
+      "name": "tool:getGsiShareUrl",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:getGsiShareUrl",
+      "summary": "CHAT_TOOLS宣言ツール getGsiShareUrl(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('getGsiShareUrl',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.setGsiGlobe",
+      "kind": "ai_integration",
+      "name": "tool:setGsiGlobe",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setGsiGlobe",
+      "summary": "CHAT_TOOLS宣言ツール setGsiGlobe(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setGsiGlobe',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "gsimapsエンジン専用"
+    },
+    {
+      "id": "web.tool.listInstructions",
+      "kind": "ai_integration",
+      "name": "tool:listInstructions",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:listInstructions",
+      "summary": "CHAT_TOOLS宣言ツール listInstructions(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('listInstructions',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.readInstruction",
+      "kind": "ai_integration",
+      "name": "tool:readInstruction",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:readInstruction",
+      "summary": "CHAT_TOOLS宣言ツール readInstruction(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('readInstruction',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.saveInstruction",
+      "kind": "ai_integration",
+      "name": "tool:saveInstruction",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:saveInstruction",
+      "summary": "CHAT_TOOLS宣言ツール saveInstruction(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('saveInstruction',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "confirm挟む(自動化時はダイアログモック必要)"
+    },
+    {
+      "id": "web.tool.deleteInstruction",
+      "kind": "ai_integration",
+      "name": "tool:deleteInstruction",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:deleteInstruction",
+      "summary": "CHAT_TOOLS宣言ツール deleteInstruction(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('deleteInstruction',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/外部副作用:実呼出は安全範囲のみ confirm挟む(自動化時はダイアログモック必要)"
+    },
+    {
+      "id": "web.tool.selectAgents",
+      "kind": "ai_integration",
+      "name": "tool:selectAgents",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:selectAgents",
+      "summary": "CHAT_TOOLS宣言ツール selectAgents(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('selectAgents',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.measureDistance",
+      "kind": "ai_integration",
+      "name": "tool:measureDistance",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:measureDistance",
+      "summary": "CHAT_TOOLS宣言ツール measureDistance(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('measureDistance',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.measureArea",
+      "kind": "ai_integration",
+      "name": "tool:measureArea",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:measureArea",
+      "summary": "CHAT_TOOLS宣言ツール measureArea(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('measureArea',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.measureBearing",
+      "kind": "ai_integration",
+      "name": "tool:measureBearing",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:measureBearing",
+      "summary": "CHAT_TOOLS宣言ツール measureBearing(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('measureBearing',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.elevationProfile",
+      "kind": "ai_integration",
+      "name": "tool:elevationProfile",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:elevationProfile",
+      "summary": "CHAT_TOOLS宣言ツール elevationProfile(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('elevationProfile',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.lineOfSight",
+      "kind": "ai_integration",
+      "name": "tool:lineOfSight",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:lineOfSight",
+      "summary": "CHAT_TOOLS宣言ツール lineOfSight(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('lineOfSight',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.viewshed",
+      "kind": "ai_integration",
+      "name": "tool:viewshed",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:viewshed",
+      "summary": "CHAT_TOOLS宣言ツール viewshed(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('viewshed',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setGraticule",
+      "kind": "ai_integration",
+      "name": "tool:setGraticule",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setGraticule",
+      "summary": "CHAT_TOOLS宣言ツール setGraticule(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setGraticule',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.tool.setMinimap",
+      "kind": "ai_integration",
+      "name": "tool:setMinimap",
+      "source": "web/shared/ai-chat.js:1833",
+      "signature": "tool:setMinimap",
+      "summary": "CHAT_TOOLS宣言ツール setMinimap(executeChatTool経由・UI/APIと同一経路)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "executeChatTool('setMinimap',...) → ok/assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.layers_panel",
+      "kind": "ui_control",
+      "name": "layers_panel",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "layers_panel",
+      "summary": "レイヤ一覧パネル(.kasc行の行化・表示トグル・凡例・フィルタ⏷)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.settings_window",
+      "kind": "ui_control",
+      "name": "settings_window",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "settings_window",
+      "summary": "設定ウィンドウ(タブ式・data-settings-panel)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.manage_panels",
+      "kind": "ui_control",
+      "name": "manage_panels",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "manage_panels",
+      "summary": "管理パネル群(data-manage-pane/sub)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.chat_panel",
+      "kind": "ui_control",
+      "name": "chat_panel",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "chat_panel",
+      "summary": "AIチャットパネル(プロバイダ選択・ティア絞込)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.inspector",
+      "kind": "ui_control",
+      "name": "inspector",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "inspector",
+      "summary": "属性インスペクタ(#inspector-input・applyInspector)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.report_modal",
+      "kind": "ui_control",
+      "name": "report_modal",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "report_modal",
+      "summary": "資料出力モーダル(showReportModal)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.fly_panel",
+      "kind": "ui_control",
+      "name": "fly_panel",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "fly_panel",
+      "summary": "フライパスパネル(経路一覧・再生)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.live_panel",
+      "kind": "ui_control",
+      "name": "live_panel",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "live_panel",
+      "summary": "QGIS Live連携パネル(#live-panel・mountLivePanel)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.engine_switcher",
+      "kind": "ui_control",
+      "name": "engine_switcher",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "engine_switcher",
+      "summary": "エンジン切替UI(#engines・mountEngineSwitcher)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.theme_select",
+      "kind": "ui_control",
+      "name": "theme_select",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "theme_select",
+      "summary": "テーマ選択(#theme-select)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.basemap_select",
+      "kind": "ui_control",
+      "name": "basemap_select",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "basemap_select",
+      "summary": "ベースマップ選択(#basemap-select)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.ui.tools_dock",
+      "kind": "ui_control",
+      "name": "tools_dock",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "tools_dock",
+      "summary": "ツールドック(計測/表示ツール群)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "listUiControls列挙+controlUi操作/DOM assert"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.plugin_registry",
+      "kind": "registry",
+      "name": "plugins.json+PLUGIN/",
+      "source": "web/cesium/plugins.json",
+      "signature": "plugins.json+PLUGIN/",
+      "summary": "同梱プラグイン(auth-*5・ckan-catalog・qgis-import・reinfolib・sample-hello)。/api/pluginsで追加保存",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "GET /cesium/plugins.json + PLUGIN/*/plugin.js 実在"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.cesium.i18n_dicts",
+      "kind": "registry",
+      "name": "i18n辞書",
+      "source": "web/cesium/i18n/*.json",
+      "signature": "i18n辞書",
+      "summary": "en正本+7言語。キー数一致が規約",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "全言語jsonのキー数一致をスクリプトで照合",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.projects.bundled",
+      "kind": "registry",
+      "name": "同梱プロジェクト",
+      "source": "web/projects/projects.json",
+      "signature": "同梱プロジェクト",
+      "summary": "default・sample_qgis等の同梱.kascプロジェクト群",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "GET /projects/projects.json → 各idの.kasc取得可"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.live.qgis",
+      "kind": "integration",
+      "name": "QGIS Live連携",
+      "source": "web/shared/live.js+live-panel.js",
+      "signature": "QGIS Live連携",
+      "summary": "geo_webview /live/* との編集差分同期・camera/selection逆通知・MCPリレー(/api/qgis-live/mcp)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "QGIS+geo_webview"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.int.box",
+      "kind": "integration",
+      "name": "Box連携",
+      "source": "web/shared/box.js",
+      "signature": "Box連携",
+      "summary": "kasugai_boxサイドカー経由のBox画像取込(OAuthは別タブ=AI例外)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_box"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "web.int.rclone_cloud",
+      "kind": "integration",
+      "name": "rcloneクラウドストレージ",
+      "source": "web/shared/backend.js+server /api/cloud/*",
+      "signature": "rcloneクラウドストレージ",
+      "summary": "V5ローカルアプリ専用:クラウドドライブ参照・保存・納品ローカル化",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "rclone"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    }
+  ],
+  "updated": "2026-11-14T00:00:00+09:00"
+}

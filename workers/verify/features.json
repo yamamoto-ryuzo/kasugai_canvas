@@ -1,0 +1,196 @@
+{
+  "component": "workers",
+  "component_type": "cf_worker",
+  "version": "6.24.0",
+  "driver": {
+    "type": "manual",
+    "detect": "Cloudflare環境のみ(ローカル実行はwrangler必要・未導入)",
+    "launch": "npx wrangler dev (未導入時はモック検証)",
+    "ready": "wrangler dev の listen",
+    "control": "HTTP",
+    "detected_from": "wrangler.toml"
+  },
+  "features": [
+    {
+      "id": "workers.fetch.auth_gate",
+      "kind": "api_route",
+      "name": "認証ゲート",
+      "source": "workers/worker.js:44",
+      "signature": "認証ゲート",
+      "summary": "kasugai_session Cookie(HMAC token)で全静的/APIをゲート。未認可は公開パスのみ許可",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "モックenvでfetch呼出(verifyToken経由)",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.fetch.public_paths",
+      "kind": "logic_fn",
+      "name": "isPublic",
+      "source": "workers/worker.js:32",
+      "signature": "isPublic",
+      "summary": "PUBLIC_PATHS+PREFIXES(ログインUI最小限)の判定",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "モジュール評価で直接検証",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.auth",
+      "kind": "api_route",
+      "name": "POST /api/auth",
+      "source": "workers/worker.js:56",
+      "signature": "POST /api/auth",
+      "summary": "認証→Set-Cookie(kasugai_session,HttpOnly,Secure,SameSite=Strict,12h)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.kasc",
+      "kind": "api_route",
+      "name": "POST /api/kasc",
+      "source": "workers/worker.js:66",
+      "signature": "POST /api/kasc",
+      "summary": "kasc保存(functions/api/kascへ委譲)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.health",
+      "kind": "api_route",
+      "name": "GET /health",
+      "source": "workers/worker.js:71",
+      "signature": "GET /health",
+      "summary": "到達確認(detectBackend用)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.capabilities",
+      "kind": "api_route",
+      "name": "GET /api/capabilities",
+      "source": "workers/worker.js:78",
+      "signature": "GET /api/capabilities",
+      "summary": "tier=workers能力応答",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.gemini",
+      "kind": "api_route",
+      "name": "POST /api/gemini",
+      "source": "workers/worker.js:84",
+      "signature": "POST /api/gemini",
+      "summary": "内蔵AIキー隠蔽プロキシ(GEMINI_API_KEY)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.mcp",
+      "kind": "api_route",
+      "name": "POST /api/mcp",
+      "source": "workers/worker.js:90",
+      "signature": "POST /api/mcp",
+      "summary": "リモートMCP中継",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.reinfolib",
+      "kind": "api_route",
+      "name": "GET,HEAD /api/reinfolib",
+      "source": "workers/worker.js:95",
+      "signature": "GET,HEAD /api/reinfolib",
+      "summary": "reinfolibプロキシ",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "workers.route.data",
+      "kind": "api_route",
+      "name": "GET,PUT /api/data/*",
+      "source": "workers/worker.js:100",
+      "signature": "GET,PUT /api/data/*",
+      "summary": "DATA永続化(R2/KV等binding)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    }
+  ],
+  "updated": "2026-11-14T00:00:00+09:00"
+}

@@ -1,0 +1,1251 @@
+{
+  "component": "server",
+  "component_type": "rust_app",
+  "version": "6.24.0",
+  "driver": {
+    "type": "http",
+    "detect": "GET http://127.0.0.1:8510/health -> {status:ok,name:kasugai_canvas} / 8511も同様",
+    "launch": "server/target/debug/kasugai_canvas.exe --no-browser または cargo run -p kasugai_canvas",
+    "ready": "/health が200を返すまでポーリング",
+    "control": "HTTP http://127.0.0.1:8510/api/* (ローカル実行はAPIが全開放)",
+    "detected_from": "AGENTS.md(開発モード8510優先) / Cargo.toml"
+  },
+  "features": [
+    {
+      "id": "srv.health",
+      "kind": "api_route",
+      "name": "health",
+      "source": "server/src/main.rs",
+      "signature": "GET /health -> health",
+      "summary": "サーバ稼働・バージョン応答",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/health"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.capabilities",
+      "kind": "api_route",
+      "name": "capabilities",
+      "source": "server/src/main.rs",
+      "signature": "GET /api/capabilities -> capabilities",
+      "summary": "バックエンド能力(tier/features)応答",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/capabilities"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.fetch",
+      "kind": "api_route",
+      "name": "fetch_proxy",
+      "source": "server/src/main.rs",
+      "signature": "GET,HEAD /api/fetch -> fetch_proxy",
+      "summary": "外部URL取得プロキシ(CORS回避)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/fetch"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.reinfolib",
+      "kind": "api_route",
+      "name": "reinfolib_proxy",
+      "source": "server/src/main.rs",
+      "signature": "GET,HEAD /api/reinfolib -> reinfolib_proxy",
+      "summary": "不動産情報ライブラリAPIプロキシ(REINFOLIB_API_KEY)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/reinfolib"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.mcp",
+      "kind": "api_route",
+      "name": "mcp_proxy",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/mcp -> mcp_proxy",
+      "summary": "リモートMCPサーバ中継プロキシ",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/mcp"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.qgis_discover",
+      "kind": "api_route",
+      "name": "qgis_live_discover",
+      "source": "server/src/main.rs",
+      "signature": "GET /api/qgis-live/discover -> qgis_live_discover",
+      "summary": "稼働中QGIS Live Driver検出",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/qgis-live/discover"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.qgis_mcp",
+      "kind": "api_route",
+      "name": "qgis_live_mcp",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/qgis-live/mcp -> qgis_live_mcp",
+      "summary": "QGIS Live Driver /mcp リレー(loopback限定)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/qgis-live/mcp"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.plugin_save",
+      "kind": "api_route",
+      "name": "save_plugin",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/plugins -> save_plugin",
+      "summary": "プラグイン保存(web/cesium/PLUGIN+plugins.json)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/plugins"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.plugin_delete",
+      "kind": "api_route",
+      "name": "delete_plugin",
+      "source": "server/src/main.rs",
+      "signature": "DELETE /api/plugins/{id} -> delete_plugin",
+      "summary": "プラグイン削除",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/plugins/{id}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.files_list",
+      "kind": "api_route",
+      "name": "list_data_files",
+      "source": "server/src/main.rs",
+      "signature": "GET /api/files -> list_data_files",
+      "summary": "プロジェクトDATAファイル一覧",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/files"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.files_write",
+      "kind": "api_route",
+      "name": "write_data_file",
+      "source": "server/src/main.rs",
+      "signature": "PUT,DELETE /api/files/{project}/{*path} -> write_data_file/delete_data_file",
+      "summary": "プロジェクトDATAファイル書込/削除(上限17MB)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/files/{project}/{*path}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.update_settings",
+      "kind": "api_route",
+      "name": "update_settings",
+      "source": "server/src/main.rs",
+      "signature": "GET,PUT /api/update/settings -> get/put_update_settings",
+      "summary": "自動更新設定の取得・変更",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/update/settings"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.update_latest",
+      "kind": "api_route",
+      "name": "update_latest",
+      "source": "server/src/main.rs",
+      "signature": "GET /api/update/latest -> update_latest",
+      "summary": "latest.json の最新版情報取得",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/update/latest"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.update_install",
+      "kind": "api_route",
+      "name": "install_update",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/update/install -> install_update",
+      "summary": "配布ZIPの適用→--finish-update再起動",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/update/install"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的操作:実呼出は行わずコード検証のみ"
+    },
+    {
+      "id": "srv.shutdown",
+      "kind": "api_route",
+      "name": "request_shutdown",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/shutdown -> request_shutdown",
+      "summary": "サーバ停止",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/shutdown"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的操作:実呼出は行わずコード検証のみ"
+    },
+    {
+      "id": "srv.cmd_push_poll",
+      "kind": "api_route",
+      "name": "remote_command",
+      "source": "server/src/main.rs",
+      "signature": "POST,GET /api/command -> push/poll_remote_command",
+      "summary": "外部→ブラウザへのリモートコマンド送受(ロングポーリング)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/command"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cmd_results",
+      "kind": "api_route",
+      "name": "remote_results",
+      "source": "server/src/main.rs",
+      "signature": "POST,GET /api/command/results -> push/poll_remote_results",
+      "summary": "コマンド実行結果の返送・回収",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/command/results"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.fetch_settings",
+      "kind": "api_route",
+      "name": "fetch_settings",
+      "source": "server/src/main.rs",
+      "signature": "GET,PUT /api/fetch/settings -> get/put_fetch_settings",
+      "summary": "fetchプロキシ設定(許可ホスト等)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/fetch/settings"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.proj_register",
+      "kind": "api_route",
+      "name": "register_project",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/projects/register -> register_project",
+      "summary": "外部.kascプロジェクト登録(geo_webview連携)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/projects/register"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.proj_import",
+      "kind": "api_route",
+      "name": "import_project",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/projects/import -> import_project",
+      "summary": "プロジェクト一式インポート(上限17MB)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/projects/import"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.proj_unregister",
+      "kind": "api_route",
+      "name": "unregister_project",
+      "source": "server/src/main.rs",
+      "signature": "DELETE /api/projects/{id} -> unregister_project",
+      "summary": "登録プロジェクト解除",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/projects/{id}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_status",
+      "kind": "api_route",
+      "name": "cloud_status",
+      "source": "server/src/main.rs",
+      "signature": "GET /api/cloud/status -> cloud_status",
+      "summary": "rclone連携状態(パス/serve/drive稼働)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/status"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_path",
+      "kind": "api_route",
+      "name": "cloud_set_path",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/cloud/path -> cloud_set_path",
+      "summary": "rclone.exe パス設定",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/path"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_install",
+      "kind": "api_route",
+      "name": "cloud_install",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/cloud/install -> cloud_install",
+      "summary": "rclone自動インストール",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/install"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_config",
+      "kind": "api_route",
+      "name": "cloud_config",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/cloud/config -> cloud_config",
+      "summary": "rcloneリモート設定",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/config"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_serve",
+      "kind": "api_route",
+      "name": "cloud_serve",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/cloud/serve -> cloud_serve",
+      "summary": "rclone serve(webdav)起動",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/serve"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_stop",
+      "kind": "api_route",
+      "name": "cloud_stop",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/cloud/stop -> cloud_stop",
+      "summary": "rclone serve停止",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/stop"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_drive",
+      "kind": "api_route",
+      "name": "cloud_drive",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/cloud/drive -> cloud_drive",
+      "summary": "クラウドをドライブ割当",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/drive"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_list",
+      "kind": "api_route",
+      "name": "cloud_list",
+      "source": "server/src/main.rs",
+      "signature": "GET /api/cloud/list -> cloud_list",
+      "summary": "クラウド上ファイル一覧",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/list"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_localize",
+      "kind": "api_route",
+      "name": "cloud_localize",
+      "source": "server/src/main.rs",
+      "signature": "POST /api/cloud/localize -> cloud_localize",
+      "summary": "プロジェクト納品用ローカル化",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/localize"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cloud_file",
+      "kind": "api_route",
+      "name": "cloud_file",
+      "source": "server/src/main.rs",
+      "signature": "GET,PUT,DELETE /api/cloud/file -> cloud_*_file",
+      "summary": "クラウドファイル読書き削除",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/cloud/file"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.browser_lna",
+      "kind": "api_route",
+      "name": "browser_lna",
+      "source": "server/src/main.rs",
+      "signature": "GET,POST,DELETE /api/browser/lna -> browser_lna_*",
+      "summary": "ブラウザLNA(Private Network Access)許可状態管理",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510",
+        "is_local(ローカル実行)"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/api/browser/lna"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.static_projects",
+      "kind": "api_route",
+      "name": "serve_project_files",
+      "source": "server/src/main.rs",
+      "signature": "GET /projects/{*path} -> serve_project_files",
+      "summary": "projects/静的配信(外部登録分マージ)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasugai_canvas.exe :8510"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8510/projects/{*path}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.static_web",
+      "kind": "api_route",
+      "name": "ServeDir fallback",
+      "source": "server/src/main.rs:5932",
+      "signature": "fallback ServeDir(web_dir)",
+      "summary": "web/ 静的配信+no-cache middleware+local_api_cors",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "GET /cesium/index.html が200で最新内容"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cli.no_browser",
+      "kind": "cli_cmd",
+      "name": "--no-browser",
+      "source": "server/src/main.rs:5773",
+      "signature": "kasugai_canvas.exe --no-browser",
+      "summary": "ブラウザ自動起動の抑止(自動更新・run.py用)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cli.open_browser",
+      "kind": "cli_cmd",
+      "name": "--open-browser",
+      "source": "server/src/main.rs:5784",
+      "signature": "--open-browser",
+      "summary": "後方互換オプション(既定と同じくブラウザ起動)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.cli.finish_update",
+      "kind": "cli_cmd",
+      "name": "--finish-update <pid>",
+      "source": "server/src/main.rs:5953",
+      "signature": "--finish-update <pid>",
+      "summary": "自動更新後続プロセス:旧プロセス終了待機→ファイル適用→ポート奪取(bind_for_update)→掃除",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "実実行は更新フローでのみ発生"
+    },
+    {
+      "id": "srv.cli.kasc_arg",
+      "kind": "cli_cmd",
+      "name": "<file>.kasc 引数",
+      "source": "server/src/main.rs:5786",
+      "signature": "<file>.kasc 引数",
+      "summary": ".kascファイル関連付け起動引数",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.env.port",
+      "kind": "cli_cmd",
+      "name": "PORT / KASUGAI_CANVAS_PORT",
+      "source": "server/src/main.rs:5751",
+      "signature": "PORT / KASUGAI_CANVAS_PORT",
+      "summary": "待受ポート決定。PORT設定時はコンテナ扱いで0.0.0.0 bind・ブラウザ非起動",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "main.rs コード確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.job.auto_update",
+      "kind": "job",
+      "name": "自動更新",
+      "source": "server/src/main.rs",
+      "signature": "自動更新",
+      "summary": "起動時latest.json照合→ZIP適用→再起動。無限ループ防止(版比較+試行記録)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "開発ビルドは Cargo.toml>latest.json で発火しない設計"
+    },
+    {
+      "id": "srv.job.instance_single",
+      "kind": "job",
+      "name": "is_existing_instance",
+      "source": "server/src/main.rs",
+      "signature": "is_existing_instance",
+      "summary": "二重起動防止:既存インスタンス検出時はそのブラウザを開いて終了",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.job.cleanup_leftovers",
+      "kind": "logic_fn",
+      "name": "cleanup_update_leftovers",
+      "source": "server/src/main.rs",
+      "signature": "cleanup_update_leftovers",
+      "summary": "*.update-old / web.update-old 残骸掃除(起動時+更新適用後)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "コード確認/一時ファイルでの挙動",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.int.rclone",
+      "kind": "integration",
+      "name": "rclone連携",
+      "source": "server/src/main.rs:~2000",
+      "signature": "rclone連携",
+      "summary": "rclone serve(webdav)・drive割当・自動インストール。tools/rclone を既定探索",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "rclone.exe"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.int.bridge_hub",
+      "kind": "integration",
+      "name": "ensure_standalone_hub",
+      "source": "server/src/main.rs",
+      "signature": "ensure_standalone_hub",
+      "summary": "常駐bridge-hub(8511)の未起動時自動起動・旧版検出時の自動更新(update_installed_hub)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "srv.int.kasc_assoc",
+      "kind": "integration",
+      "name": ".kasc関連付け",
+      "source": "installer/kasugai_canvas.nsi",
+      "signature": ".kasc関連付け",
+      "summary": "インストーラによる .kasc→exe 関連付け・--open-browser %1 起動",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.status_page",
+      "kind": "api_route",
+      "name": "status_page",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET /",
+      "summary": "ハブ状態ページ(hub_status.html)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.health",
+      "kind": "api_route",
+      "name": "health",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET /health",
+      "summary": "稼働・プロバイダ状態応答",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/health"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.models",
+      "kind": "api_route",
+      "name": "models",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET /models",
+      "summary": "利用可能モデル一覧",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/models"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.agent",
+      "kind": "api_route",
+      "name": "agent",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "POST /agent",
+      "summary": "エージェント実行要求(プロバイダCLIへ中継)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/agent"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/認可要:コード検証のみ"
+    },
+    {
+      "id": "hub.setup",
+      "kind": "api_route",
+      "name": "setup",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET,POST /setup",
+      "summary": "ブリッジセットアップ状態/実行",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/setup"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "破壊的/認可要:コード検証のみ"
+    },
+    {
+      "id": "hub.setup_job",
+      "kind": "api_route",
+      "name": "setup_job",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET /setup/job/{id}",
+      "summary": "セットアップジョブ状態",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/setup/job/{id}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.mcp_root",
+      "kind": "api_route",
+      "name": "mcp_root",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "POST,DELETE /mcp",
+      "summary": "MCPルート(セッション)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/mcp"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.mcp_project",
+      "kind": "api_route",
+      "name": "mcp_project",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "POST,DELETE /mcp/{project}",
+      "summary": "プロジェクト別MCP(ツールdecls注入)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/mcp/{project}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.vector_status",
+      "kind": "api_route",
+      "name": "vector_status",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET /vector/status",
+      "summary": "DuckDB空間基盤状態",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/vector/status"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.vector_sources",
+      "kind": "api_route",
+      "name": "vector_sources",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET,POST /vector/sources",
+      "summary": "ベクタソース一覧/登録",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/vector/sources"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.vector_source",
+      "kind": "api_route",
+      "name": "vector_source",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET,DELETE /vector/sources/{name}",
+      "summary": "ソース取得/削除",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/vector/sources/{name}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.vector_geojson",
+      "kind": "api_route",
+      "name": "vector_geojson",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET /vector/geojson/{name}",
+      "summary": "ソースをGeoJSON出力",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/vector/geojson/{name}"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.vector_probe",
+      "kind": "api_route",
+      "name": "probe_geojson",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "GET /vector/probe.geojson",
+      "summary": "プローブGeoJSON",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/vector/probe.geojson"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.vector_query",
+      "kind": "api_route",
+      "name": "vector_query",
+      "source": "server/src/bridge/mod.rs:496-514",
+      "signature": "POST /vector/query",
+      "summary": "DuckDB SQLクエリ実行",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "bridge-hub.exe :8511"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "curl http://127.0.0.1:8511/vector/query"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.provider.copilot",
+      "kind": "ai_integration",
+      "name": "copilotブリッジ",
+      "source": "server/src/bridge/copilot.rs",
+      "signature": "copilotブリッジ",
+      "summary": "copilot CLI を子プロセス起動しstdio接続するAIブリッジプロバイダ",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "copilot CLI"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "/health providers.<p>.running"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.provider.devin",
+      "kind": "ai_integration",
+      "name": "devinブリッジ",
+      "source": "server/src/bridge/devin.rs",
+      "signature": "devinブリッジ",
+      "summary": "devin CLI を子プロセス起動しstdio接続するAIブリッジプロバイダ",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "devin CLI"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "/health providers.<p>.running"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "hub.provider.antigravity",
+      "kind": "ai_integration",
+      "name": "antigravityブリッジ",
+      "source": "server/src/bridge/antigravity.rs",
+      "signature": "antigravityブリッジ",
+      "summary": "antigravity CLI を子プロセス起動しstdio接続するAIブリッジプロバイダ",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "antigravity CLI"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "/health providers.<p>.running"
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    }
+  ],
+  "updated": "2026-11-14T00:00:00+09:00"
+}

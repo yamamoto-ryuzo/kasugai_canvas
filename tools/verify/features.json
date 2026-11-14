@@ -1,0 +1,160 @@
+{
+  "component": "tools",
+  "component_type": "python_cli",
+  "version": "6.24.0",
+  "driver": {
+    "type": "cli",
+    "detect": "python tools/<name>.py --help",
+    "launch": "python",
+    "ready": "即時",
+    "control": "subprocess",
+    "detected_from": "tools/ 配置・AGENTS.md(run.py -B / publish_cdn.py運用)"
+  },
+  "features": [
+    {
+      "id": "tools.publish_cdn",
+      "kind": "cli_cmd",
+      "name": "publish_cdn.py",
+      "source": "tools/publish_cdn.py",
+      "signature": "publish_cdn.py",
+      "summary": "web/→kasugai-canvas-web同期(--channel stable|unstable --commit --push)。CDN_PROJECTS複写+projects.json生成",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help + 静的確認(実実行は副作用大)",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "実実行は配布物・リモートへ副作用"
+    },
+    {
+      "id": "tools.build_bridge_zip",
+      "kind": "cli_cmd",
+      "name": "build_bridge_zip.py",
+      "source": "tools/build_bridge_zip.py",
+      "signature": "build_bridge_zip.py",
+      "summary": "bridge-hub.exe/zip生成。/health version照合+ZIPバイト一致検証(run.py -Bから自動呼出)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help + 静的確認(実実行は副作用大)",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "実実行は配布物・リモートへ副作用"
+    },
+    {
+      "id": "tools.fetch_vendor",
+      "kind": "cli_cmd",
+      "name": "fetch_vendor.py",
+      "source": "tools/fetch_vendor.py",
+      "signature": "fetch_vendor.py",
+      "summary": "vendor上流資産の自前ミラー取得(オフライン開発・?hosted=用)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help/静的確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "tools.convert_coords",
+      "kind": "cli_cmd",
+      "name": "convert_coords_datum.py",
+      "source": "tools/convert_coords_datum.py",
+      "signature": "convert_coords_datum.py",
+      "summary": "座標変換バイナリ(coords-datum-*.bin)生成",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help/静的確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "tools.security_audit",
+      "kind": "cli_cmd",
+      "name": "security_audit.py",
+      "source": "tools/security_audit.py",
+      "signature": "security_audit.py",
+      "summary": "cargo/npm audit呼出(pre-commitフックから発火)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help/静的確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "tools.hub_test",
+      "kind": "cli_cmd",
+      "name": "hub-test/",
+      "source": "tools/hub-test",
+      "signature": "hub-test/",
+      "summary": "ブリッジハブ検証用資産",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help/静的確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "tools.region_compare",
+      "kind": "cli_cmd",
+      "name": "region-compare/",
+      "source": "tools/region-compare",
+      "signature": "region-compare/",
+      "summary": "リージョン比較ツール",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help/静的確認",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "tools.nsis",
+      "kind": "cli_cmd",
+      "name": "kasugai_canvas.nsi",
+      "source": "installer/kasugai_canvas.nsi",
+      "signature": "kasugai_canvas.nsi",
+      "summary": "NSISインストーラ(setup.exe・.kasc関連付け・ショートカット)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "--help + 静的確認(実実行は副作用大)",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": "実実行は配布物・リモートへ副作用"
+    }
+  ],
+  "updated": "2026-11-14T00:00:00+09:00"
+}

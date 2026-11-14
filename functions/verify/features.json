@@ -1,0 +1,178 @@
+{
+  "component": "functions",
+  "component_type": "cf_pages_functions",
+  "version": "6.24.0",
+  "driver": {
+    "type": "manual",
+    "detect": "Cloudflare Pages環境。ローカルはwrangler pages dev or モック",
+    "launch": "(Workersと共用コード。worker.jsから直接importも可能)",
+    "ready": "-",
+    "control": "HTTP",
+    "detected_from": "functions/配置規約"
+  },
+  "features": [
+    {
+      "id": "fn.health",
+      "kind": "api_route",
+      "name": "GET /health",
+      "source": "functions/health.js",
+      "signature": "GET /health",
+      "summary": "到達確認{ok:true}",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.capabilities",
+      "kind": "api_route",
+      "name": "GET /api/capabilities",
+      "source": "functions/api/capabilities.js",
+      "signature": "GET /api/capabilities",
+      "summary": "能力応答(tier=pages/workers)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.auth",
+      "kind": "api_route",
+      "name": "POST /api/auth",
+      "source": "functions/api/auth.js",
+      "signature": "POST /api/auth",
+      "summary": "パス認証→HMACトークン発行(_lib/token)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.token",
+      "kind": "api_route",
+      "name": "verifyToken/issueToken",
+      "source": "functions/_lib/token.js",
+      "signature": "verifyToken/issueToken",
+      "summary": "HMACセッショントークン発行・検証(WebCrypto)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.kasc",
+      "kind": "api_route",
+      "name": "POST /api/kasc",
+      "source": "functions/api/kasc.js",
+      "signature": "POST /api/kasc",
+      "summary": ".kascプロジェクト保存(bindingへ)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.data",
+      "kind": "api_route",
+      "name": "GET,PUT /api/data/{path}",
+      "source": "functions/api/data/[[path]].js",
+      "signature": "GET,PUT /api/data/{path}",
+      "summary": "DATAファイル読書き",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.gemini",
+      "kind": "api_route",
+      "name": "POST /api/gemini",
+      "source": "functions/api/gemini.js",
+      "signature": "POST /api/gemini",
+      "summary": "Gemini APIプロキシ(キー隠蔽・認可判定)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.mcp",
+      "kind": "api_route",
+      "name": "POST /api/mcp",
+      "source": "functions/api/mcp.js",
+      "signature": "POST /api/mcp",
+      "summary": "MCP中継(対象ホスト許可判定)",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    },
+    {
+      "id": "fn.reinfolib",
+      "kind": "api_route",
+      "name": "GET,HEAD /api/reinfolib",
+      "source": "functions/api/reinfolib.js",
+      "signature": "GET,HEAD /api/reinfolib",
+      "summary": "reinfolibプロキシ",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "nodeでcontextモック呼出",
+        "integrated": ""
+      },
+      "last_result": "untested",
+      "last_verified": "",
+      "note": ""
+    }
+  ],
+  "updated": "2026-11-14T00:00:00+09:00"
+}
