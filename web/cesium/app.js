@@ -27,7 +27,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, splitKascTail } from "../shared/kasc.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
@@ -308,7 +308,7 @@ function applyClientWhere(item, source) {
     }
   }
   if (!item._wherePred) return source;
-  const kept = source.features.filter(f => item._wherePred(f?.properties || {}));
+  const kept = source.features.filter((f, i) => item._wherePred(f, i));
   return kept.length === source.features.length ? source : { ...source, features: kept };
 }
 
@@ -5183,7 +5183,6 @@ function syncLayerSourceLine(item) {
   if (item.type === "duckdb") {
     const parts = [item.sourceTitle, item.url || "", item.attribution || ""];
     if (item.sourceVisible === false) parts.push("off");
-    if (item.where) parts.push(`where=${item.where}`);
     if (item.limit) parts.push(`limit=${item.limit}`);
     if (item.geom) parts.push(`geom=${item.geom}`);
     if (item.lon) parts.push(`lon=${item.lon}`);
@@ -5200,11 +5199,12 @@ function syncLayerSourceLine(item) {
     if (item.timeField) parts.push(`time=${item.timeField}`);
     if (item.timeEndField) parts.push(`time_end=${item.timeEndField}`);
     if (item.timeSpan != null) parts.push(`time_span=${item.timeSpan / 1000}`);
+    // where= は行の最終オプション(値は行末まで。`||` 連結等の | を含んでよい)
+    if (item.where) parts.push(`where=${item.where}`);
     line = `duckdb: ${parts.join(" | ")}`;
   } else if (item.type === "gpkg" || item.type === "geopackage") {
     const parts = [item.sourceTitle, item.url || "", item.attribution || ""];
     if (item.sourceVisible === false) parts.push("off");
-    if (item.where) parts.push(`where=${item.where}`);
     if (item.limit) parts.push(`limit=${item.limit}`);
     if (item.columns?.length) parts.push(`columns=${item.columns.join(",")}`);
     if (item.gpkgTable) parts.push(`table=${item.gpkgTable}`);
@@ -5216,6 +5216,8 @@ function syncLayerSourceLine(item) {
     if (item.timeField) parts.push(`time=${item.timeField}`);
     if (item.timeEndField) parts.push(`time_end=${item.timeEndField}`);
     if (item.timeSpan != null) parts.push(`time_span=${item.timeSpan / 1000}`);
+    // where= は行の最終オプション(値は行末まで。`||` 連結等の | を含んでよい)
+    if (item.where) parts.push(`where=${item.where}`);
     line = `${item.type}: ${parts.join(" | ")}`;
   } else if (item.type === "sql") {
     line = `sql: ${item.sourceTitle} | ${item.query}${item.renderSpecified ? (item.renderPrimitive ? " | render=primitive" : " | render=entity") : ""}${item.sourceVisible === false ? " | off" : ""}${item.attribution ? ` | attr=${item.attribution}` : ""}${item.styleUrl ? ` | style=${item.styleUrl}` : ""}${item.timeField ? ` | time=${item.timeField}` : ""}${item.timeEndField ? ` | time_end=${item.timeEndField}` : ""}${item.timeSpan != null ? ` | time_span=${item.timeSpan / 1000}` : ""}`;
@@ -6201,7 +6203,7 @@ function applyInspector(text) {
     // shp:/shapefile:タイトル|.zip または .shp 系URL も同じ書式(タイトル|URL|出典|オプション)
     if (type === "3dtiles" || type === "geojson" || type === "geoparquet" || type === "flatgeobuf" || type === "layer" || type === "gpkg" || type === "geopackage"
       || type === "kml" || type === "kmz" || type === "wfs" || type === "shp" || type === "shapefile" || type === "csv" || type === "tsv") {
-      const parts = value.split("|").map(part => part.trim());
+      const parts = splitKascTail(value);
       const title = parts[0];
       const url = resolveProjectUrl(parts[1]);
       const off = parts.some(part => /^(off|false)$/i.test(part));
@@ -6269,7 +6271,7 @@ function applyInspector(text) {
           }
         }
         // GPKG の絞り込みオプション(sql.js に渡す SQLite 式)。
-        // where= の値に | は含められない(行の区切り文字)。
+        // where= は行の最終オプションで値は行末まで(| を含んでよい)
         // bbox=auto は既定 ON(表示範囲連動のクエリ系)。常時全件描画にしたい場合は bbox=off で明示解除する
         if (type === "gpkg" || type === "geopackage") {
           const whereOpt = parts.find(part => /^where\s*=\s*\S/i.test(part));
@@ -6312,7 +6314,7 @@ function applyInspector(text) {
     // 描画は既定で entity(GeoJsonDataSource・地形ドレープ可)。render=primitive で
     // GeoJsonPrimitive バッチ(entity 非経由・ドレープ不可だが大量地物向け)に切替可
     if (type === "duckdb") {
-      const parts = value.split("|").map(part => part.trim());
+      const parts = splitKascTail(value);
       const title = parts[0];
       const url = resolveProjectUrl(parts[1]);
       const off = parts.some(part => /^(off|false)$/i.test(part));

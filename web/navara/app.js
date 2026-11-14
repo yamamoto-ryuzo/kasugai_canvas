@@ -749,7 +749,7 @@ function whereFilteredGeojson(item) {
   if (!where || QUERY_TYPES.has(item?.type) || !geojson?.features?.length) return geojson;
   try {
     const pred = compileWhereExpression(where);
-    const kept = geojson.features.filter(f => pred(f?.properties || {}));
+    const kept = geojson.features.filter((f, i) => pred(f, i));
     return kept.length === geojson.features.length ? geojson : { ...geojson, features: kept };
   } catch (e) {
     console.warn(`where= の式を適用できません (${item?.title}):`, e?.message || e);

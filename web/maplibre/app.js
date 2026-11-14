@@ -492,7 +492,7 @@ function applyClientWhere(item, geojson) {
     }
   }
   if (!item._wherePred) return geojson;
-  const kept = geojson.features.filter(f => item._wherePred(f?.properties || {}));
+  const kept = geojson.features.filter((f, i) => item._wherePred(f, i));
   return kept.length === geojson.features.length ? geojson : { ...geojson, features: kept };
 }
 

@@ -144,16 +144,13 @@ geojson:テスト地物 | DATA/test.geojson
 &lt;/div&gt;</code></pre>
       <p>実際に動くサンプルは <code>web/projects/_portal_test/portal_full.kasc</code> + <code>DATA/portal.html</code> です。<code>html:</code> セクション内でも同じ <code>data-*</code> 属性が使えるため、お知らせ文中に「工事中を表示」ボタンを埋め込む使い方もできます。</p>
 
-      <h3>🔍 where= の全ベクター行対応</h3>
-      <p><code>view:</code> のレイヤ指定に付ける <code>;where=</code> だけでなく、ベクター行のオプションとしても全形式で <code>where=条件</code> が使えます。<code>duckdb:</code>/<code>sql:</code>/<code>gpkg:</code> 等のクエリ系は従来通り SQL で評価し、<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>shp:</code> 等の全件読み込み系は <code>shared/where-eval.js</code> の SQL WHERE サブセット評価器（<code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・<code>"識別子"</code>/<code>'文字列'</code>/日本語裸属性名）でクライアント側評価します。絞り込まれるのは描画のみで、属性一覧・ベクター検索は引き続き全件対象です。</p>
-
       <h3>🏗️ 実装構成</h3>
       <table>
       <thead><tr><th>層</th><th>担当</th></tr></thead>
       <tbody>
       <tr><td><code>shared/portal.js</code></td><td>ポータルUI全体（オーバーレイ生成・カード/セクション描画・既定コンテンツ・外部リンク・data-* 委譲クリック・🏠ボタン更新）を <code>createKascPortal(cfg)</code> として共通化</td></tr>
       <tr><td><code>shared/kasc.js</code></td><td><code>portal:</code>/<code>view:</code>/<code>link:</code>/<code>html:</code> 行のパース（<code>NON_LAYER_TYPES</code> 登録済み）</td></tr>
-      <tr><td><code>shared/where-eval.js</code></td><td>非クエリ系ベクターの <code>where=</code> クライアント評価</td></tr>
+      <tr><td><code>shared/where-eval.js</code></td><td><code>view:</code> の <code>;where=</code> を非クエリ系レイヤーへ適用するクライアント評価器（<code>where=</code> 自体の仕様は V7 側）</td></tr>
       <tr><td>各エンジン app.js</td><td><code>applyView</code>/<code>clearView</code>/<code>applyCam</code>/<code>applyBase</code> の実装とスナップショット復元。DOM配置のみエンジン固有</td></tr>
       <tr><td>bridge API</td><td><code>listViews()</code>/<code>applyView(name)</code>/<code>clearView()</code>/<code>openPortal()</code>/<code>closePortal()</code>（AI チャットからも操作可）</td></tr>
       </tbody>

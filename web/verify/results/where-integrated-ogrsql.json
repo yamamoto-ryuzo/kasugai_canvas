@@ -1,0 +1,85 @@
+{
+ "date": "2026-11-14T20:45:19+09:00",
+ "driver": "Playwright(chrome headless) → http://127.0.0.1:8510/ cesium",
+ "method": "geojson: 行 + render=entity + where=<OGR SQL> を applyInspector で投入し '状況' 属性を持つ entity 数をassert",
+ "cases": [
+  {
+   "expr": "\"状況\" = '工事中'",
+   "want": 1,
+   "got": 1
+  },
+  {
+   "expr": "name = 'alpha'",
+   "want": 1,
+   "got": 1,
+   "note": "等価大小区別なし"
+  },
+  {
+   "expr": "num + 1 = 4",
+   "want": 1,
+   "got": 1,
+   "note": "算術"
+  },
+  {
+   "expr": "SUBSTR(name,1,1) = 'a'",
+   "want": 1,
+   "got": 1,
+   "note": "関数"
+  },
+  {
+   "expr": "CAST(num AS character) = '3'",
+   "want": 1,
+   "got": 1
+  },
+  {
+   "expr": "CONCAT(name,'!') = 'Beta!'",
+   "want": 1,
+   "got": 1
+  },
+  {
+   "expr": "name IN ('ALPHA','gamma')",
+   "want": 2,
+   "got": 2
+  },
+  {
+   "expr": "name ILIKE 'a%'",
+   "want": 1,
+   "got": 1
+  },
+  {
+   "expr": "num BETWEEN 4 AND 10",
+   "want": 2,
+   "got": 2
+  },
+  {
+   "expr": "OGR_GEOMETRY = 'polygon'",
+   "want": 1,
+   "got": 1,
+   "note": "疑似フィールド"
+  },
+  {
+   "expr": "FID = 10",
+   "want": 1,
+   "got": 1,
+   "note": "疑似フィールド feature.id"
+  },
+  {
+   "expr": "OGR_GEOM_WKT LIKE 'POINT%'",
+   "want": 1,
+   "got": 1
+  },
+  {
+   "expr": "OGR_GEOM_AREA > 0",
+   "want": 1,
+   "got": 1
+  },
+  {
+   "expr": "name = \"name\"",
+   "want": 3,
+   "got": 3,
+   "note": "フィールド同士比較"
+  }
+ ],
+ "pass": 14,
+ "fail": 0
+}

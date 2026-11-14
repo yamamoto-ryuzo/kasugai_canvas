@@ -373,7 +373,19 @@
 
       // ---- ベクター系 (geojson/geoparquet/flatgeobuf/gpkg/duckdb) ----
       if (LAYER_LINE_TYPES[type]) {
-        var vparts = value.split('|').map(function (p) { return p.trim(); });
+        // where= は行の最終オプション: 先頭が where= のフィールド以降は
+        // 行末まで値として1フィールドに結合する(式中に | を含んでよい)
+        var vraw = value.split('|');
+        var vparts = null;
+        for (var wi = 0; wi < vraw.length; wi++) {
+          if (/^\s*where\s*=/i.test(vraw[wi])) {
+            vparts = vraw.slice(0, wi);
+            vparts.push(vraw.slice(wi).join('|'));
+            break;
+          }
+        }
+        if (!vparts) vparts = vraw;
+        vparts = vparts.map(function (p) { return p.trim(); });
         var vtitle = vparts[0];
         var vurl = vparts[1];
         var vvisible = !vparts.some(function (p) { return /^(off|false)$/i.test(p); });

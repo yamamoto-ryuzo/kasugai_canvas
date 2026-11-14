@@ -45,6 +45,10 @@
           <p>ベクターはネイティブ参照（<code>gpkg:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>geojson:</code>/<code>duckdb:</code>）または GeoJSON 変換、3D Tiles・XYZ（<code>xyz:</code>/<code>base:</code>）・WMS・GeoTIFF も行化。フィルタは <code>where=</code>、CSV/TSV は <code>duckdb:</code> へ</p>
         </div>
         <div class="feature-card">
+          <h3>🔍 where= フィルタ引継ぎ</h3>
+          <p>QGIS のレイヤーフィルタ（subsetString）を <code>where=条件</code> として引き継ぎ。<code>where=</code> は全ベクター行で使用可（クエリ系は SQL 評価、geojson/fgb/parquet 等の全件読み込み系は <code>shared/where-eval.js</code> でクライアント評価）</p>
+        </div>
+        <div class="feature-card">
           <h3>🎨 QML スタイル再現</h3>
           <p>レイヤースタイルを <code>DATA/*.qml</code> として出力し <code>style=</code> で参照。<code>&lt;renderer-v2&gt;</code>（単一・分類・段階・ルール）・シンボルレイヤ・データ定義・ラベル・縮尺ルールをコンパイルして全エンジンで描画。凡例スウォッチ＋条件別表示切替も QML 由来</p>
         </div>
@@ -57,6 +61,43 @@
           <p>「背景図」「ベースマップ」グループ（<code>kasugai_basemap_groups</code> で追加可）の XYZ は <code>base:</code> 候補行へ。最下段の表示中 XYZ は既定ベースマップとして先頭に配置</p>
         </div>
       </div>
+
+      <h3>🔍 where= の全ベクター行対応</h3>
+      <p><code>where=条件</code> はベクター行のオプションとして全形式で使えます。QGIS のレイヤーフィルタ（プロバイダ <code>subsetString</code>）はエクスポート時にこの <code>where=</code> へ写され、Canvas 側は同じ SQL WHERE サブセット文法で解釈します。<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code> 等のクエリ系は SQL エンジンで評価し、<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>shp:</code> 等の全件読み込み系は <code>shared/where-eval.js</code> の評価器（<code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・<code>"識別子"</code>/<code>'文字列'</code>/裸のASCII属性名）でクライアント側評価します。絞り込まれるのは描画のみで、属性一覧・ベクター検索は引き続き全件対象です。V8 の <code>view:</code> 行のレイヤ指定に付ける <code>;where=</code> も同じ評価系を利用します。</p>
+      <h4>🔄 QGIS フィルタ式との互換性</h4>
+      <p>対象となるファイル系ソース（GeoJSON/FlatGeobuf/GeoParquet/GPKG/CSV）のレイヤーフィルタは、QGIS 式（QgsExpression）ではなく<strong>プロバイダ SQL</strong>です。クエリビルダで設定した式もプロバイダへ渡る形で保存され、<strong>OGR プロバイダは受理できない式を拒否する</strong>ため、<code>subsetString</code> に残っている式は必ずプロバイダが受理済みの文法です（未知フィールド参照も拒否されるため、式中の識別子は必ず実フィールドか <code>FID</code> 等の疑似フィールドです）。QGIS 式の全構文（<code>~</code> 正規表現・<code>@変数</code>・<code>$geometry</code>）が使えるのは memory プロバイダ等だけで、それらはファイル参照にならないレイヤなので本機能の対象外（常に GeoJSON 変換）です。</p>
+      <p><strong>プロバイダ別の式の方言</strong>（出典: QGIS <code>subsetStringDialect()</code>/<code>subsetStringHelpUrl()</code>）:</p>
+      <table>
+      <thead><tr><th>レイヤソース</th><th>プロバイダ</th><th><code>subsetString</code> の方言</th><th>where= 経路</th></tr></thead>
+      <tbody>
+      <tr><td>GeoJSON / FlatGeobuf / GeoParquet / SHP</td><td>ogr</td><td><strong>OGR SQL</strong>（<strong>QGIS クエリビルダ表示名「OGR SQL query」</strong>。<code>subsetStringDialect()</code> が GDAL ドライバの既定方言 <code>OGRSQL</code> を返し、ヘルプは <code>gdal.org/user/ogr_sql_dialect.html</code> を指す。文法 = OGR SQL SELECT の WHERE 句 = <code>SetAttributeFilter</code> と同文法。比較・論理・IN/BETWEEN/LIKE に加えて <code>SUBSTR</code>/<code>CAST</code> 等の関数・算術・<code>ESCAPE</code> 句・<code>FID</code>/<code>OGR_GEOMETRY</code>/<code>OGR_STYLE</code> 等の疑似フィールドも受理。<code>=</code>/<code>IN</code> の文字列等価は大文字小文字を区別しない）</td><td>where-eval 判定 → <code>where=</code> または GeoJSON 焼き込み</td></tr>
+      <tr><td>GPKG</td><td>ogr（GPKG ドライバ）</td><td><strong>SQLite SQL</strong>（GPKG ドライバの既定方言は <code>NATIVE</code> = SQLite へ直通。QGIS 表示名は「GeoPackage query」。<code>CASE</code>/<code>CAST</code>/<code>||</code>/サブクエリも受理）</td><td><code>gpkg:</code> 行 → Canvas 側 SQL エンジン評価（where-eval 経由なし）</td></tr>
+      <tr><td>CSV / TSV</td><td>delimitedtext</td><td><strong>delimitedtext 固有 SQL 方言</strong></td><td><code>duckdb:</code> 行 → Canvas 側 SQL エンジン評価</td></tr>
+      <tr><td>memory</td><td>memory</td><td><strong>QgsExpression</strong>（QGIS 式フル構文。<code>~</code>/<code>@変数</code>/<code>$geometry</code>/<code>CASE</code> 等）</td><td>対象外（ファイル参照不可 → 常に GeoJSON 焼き込み）</td></tr>
+      <tr><td>PostGIS 等 DB / WFS</td><td>postgres 等</td><td>PostgreSQL 等サーバ SQL / OGC フィルタ</td><td>対象外（同上）</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="4"><strong>出典</strong>: QGIS <code>QgsDataProvider::subsetStringDialect()</code> / <code>subsetStringHelpUrl()</code>（QGIS 3.40 以降・QGIS 4.x でも同一実装を確認。<code>qgsogrprovider.cpp</code> が GDAL ≥3.6 の <code>GDAL_DMD_SUPPORTED_SQL_DIALECTS</code> 先頭を「QGIS が使う既定方言」として採用し、<code>NATIVE</code>→「&lt;ドライバ名&gt; query」・<code>OGRSQL</code>→「OGR SQL query」・<code>SQLITE</code>→「SQLite query」を返す）</td></tr></tfoot>
+      </table>
+      <p>対して <code>shared/where-eval.js</code> は <strong>OGR SQL WHERE 句準拠のクライアント側評価器</strong>です。下表の「式の定義」に列挙した構文（再帰的な式・算術・関数・疑似フィールド・ESCAPE句を含む）をそのまま解釈し、QGIS の subsetString（OGR SQL 方言）を等価評価できます。OGR SQL 仕様に無い構文（<code>==</code>/<code>TRUE</code>/<code>FALSE</code>/<code>NULL</code>リテラル・中置<code>NOT</code>・<code>%</code>・未対応関数）は受理せずパースエラーにします。</p>
+      <p><strong>📋 OGR SQL対応表</strong>（WHERE句構文 = subsetString の範囲。SELECT文構文は対象外）:</p>
+      <table>
+      <thead><tr><th>式の定義（OGR SQL WHERE句構文）</th><th>例</th><th>where= 対応</th><th>備考</th></tr></thead>
+      <tbody>
+      <tr><td><code>&lt;式&gt; =|!=|&lt;&gt;|&lt;|&lt;=|&gt;|&gt;= &lt;式&gt;</code>（両辺とも任意の式）</td><td><code>"状況" = '工事中'</code> ・ <code>"a" = "b"</code></td><td>✅</td><td><code>!=</code> と <code>&lt;&gt;</code> は等価。<code>=</code>/<code>!=</code>/<code>&lt;&gt;</code> の文字列等価は<strong>大文字小文字を区別しない</strong>、<code>&lt; &lt;= &gt; &gt;=</code> は区別あり。両辺が数値解釈可能なら数値比較</td></tr>
+      <tr><td><code>&lt;式&gt; AND|OR &lt;式&gt;</code> ・ <code>NOT &lt;式&gt;</code> ・ <code>(&lt;式&gt;)</code></td><td><code>(num = 1 OR num = 2) AND "状況" = '工事中'</code></td><td>✅</td><td>—</td></tr>
+      <tr><td><code>&lt;式&gt; IN ( &lt;値&gt;, … )</code></td><td><code>種別 IN ('A','B')</code></td><td>✅</td><td>値リストのみ（サブクエリは仕様外）。照合は <code>=</code> 準拠の大小区別なし。否定は単項 <code>NOT (…)</code> で記述</td></tr>
+      <tr><td><code>&lt;式&gt; BETWEEN &lt;式&gt; AND &lt;式&gt;</code></td><td><code>年度 BETWEEN 2020 AND 2024</code></td><td>✅</td><td><code>x BETWEEN a AND b</code> は <code>x &gt;= a AND x &lt;= b</code> と等価。否定は単項 <code>NOT (…)</code> で記述</td></tr>
+      <tr><td><code>&lt;式&gt; LIKE|ILIKE '&lt;パターン&gt;' [ESCAPE '&lt;文字&gt;']</code></td><td><code>名称 LIKE '春日井%'</code></td><td>✅</td><td><code>%</code>=任意文字列・<code>_</code>=任意1文字。LIKE=大小文字区別・ILIKE=区別なし（GDAL≥3.9 は UTF-8 文字を考慮。ILIKE の非区別は ASCII・Latin-1・Latin Extended-A/B・ギリシャ・キリル範囲）。否定は単項 <code>NOT (…)</code> で記述</td></tr>
+      <tr><td><code>&lt;式&gt; IS [NOT] NULL</code></td><td><code>備考 IS NULL</code></td><td>✅</td><td><code>NULL</code> 判定はこの専用構文のみ（<code>NULL</code> リテラルは文法に存在しない）</td></tr>
+      <tr><td><code>&lt;式&gt; = &lt;リテラル&gt; | &lt;識別子&gt; | &lt;疑似フィールド&gt; | &lt;関数&gt;() | &lt;式&gt; &lt;算術&gt; &lt;式&gt; | ( &lt;式&gt; )</code>（再帰的な式構造）</td><td><code>num + 1 &gt;= FID</code> ・ <code>CAST(x AS integer) = 1</code></td><td>✅</td><td><strong>式の再帰定義</strong>: 各演算子のオペランドは任意の式（フィールド同士の比較・関数呼出・算術式も可）。<code>&lt;リテラル&gt;</code>=<code>'文字列'</code>(<code>''</code>エスケープ)・数値、<code>&lt;識別子&gt;</code>=裸ASCII または <code>"…"</code>引用（日本語名は引用必須）。<code>NULL</code> リテラルは文法に存在しない</td></tr>
+      <tr><td><code>&lt;関数&gt;( &lt;引数&gt;, … )</code> を含む式</td><td><code>substr("name",1,1) = 'A'</code></td><td>✅</td><td>WHERE でも SELECT 句のフィールド式と同じ関数が使える — <code>SUBSTR</code>/<code>CAST</code>/<code>CONCAT</code>/<code>hstore_get_value</code> に対応。集計演算子（<code>COUNT</code>/<code>SUM</code>/<code>MIN</code>/<code>MAX</code>/<code>AVG</code>/<code>STDDEV_*</code>/<code>DISTINCT</code>）はフィールドリスト専用のため WHERE には現れない</td></tr>
+      <tr><td><code>&lt;式&gt; +|-|*|/ &lt;式&gt;</code>（算術）</td><td><code>num + 1 = 2</code></td><td>✅</td><td>WHERE でも算術演算可。<code>+ - * /</code>・単項 <code>-</code>・括弧による優先順位に対応（<code>%</code> は仕様書に無いため非対応）</td></tr>
+      <tr><td><code>FID</code>・<code>"_ogr_geometry_"</code>・<code>OGR_GEOMETRY</code>・<code>OGR_GEOM_WKT</code>・<code>OGR_GEOM_AREA</code>・<code>OGR_STYLE</code>（疑似フィールド参照）</td><td><code>FID = 1</code> / <code>OGR_GEOMETRY = 'Point'</code></td><td>○</td><td>WHERE でも使える特殊フィールド。レイヤが命名 FID 列を持つ場合はその列名も使える。<strong>同名の実フィールドより疑似フィールドが優先</strong>される</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="4"><strong>出典</strong>: GDAL「OGR SQL dialect」仕様書 <code>gdal.org/en/stable/user/ogr_sql_dialect.html</code>（QGIS <code>subsetStringHelpUrl()</code> が指す正式仕様。属性フィルタ <code>SetAttributeFilter</code> の文法は SELECT の WHERE 句と同一）・GDAL「SQL SQLite dialect」仕様書 <code>gdal.org/en/stable/user/sql_sqlite_dialect.html</code>・<code>web/shared/where-eval.js</code></td></tr></tfoot>
+      </table>
+      <p><strong>where= での疑似フィールド解決</strong>（where-eval 実装挙動）: <code>FID</code>=<code>feature.id</code>（無ければ配列 index）・<code>_ogr_geometry_</code>=geometry オブジェクト・<code>OGR_GEOMETRY</code>=型名（Point→POINT 等）・<code>OGR_GEOM_WKT</code>=WKT 化・<code>OGR_GEOM_AREA</code>=ポリゴン面積（度単位・穴控除）・<code>OGR_STYLE</code>=NULL（GeoJSON にスタイル情報なし）。解決順は仕様通り疑似フィールド優先。<strong>注意</strong>: <code>FID</code> の起点はドライバ/エクスポート時の連番と一致する保証がないため、<code>FID</code> 参照式の <code>where=</code> 出力は index ベースの近似となる</p>
+      <p><strong>判定方針</strong>: where-eval は OGR SQL WHERE 句の構文（上表の式の定義）を網羅実装しているため、OGR SQL 方言の subsetString は<strong>原則そのまま <code>where=</code> へ出力可能</strong>です。残る非互換は「where-eval が受理しない式（仕様外構文・未対応関数・<code>%</code>）」のみで、その場合は従来通り GeoJSON 変換（フィルタをデータへ焼き込み。焼き込み側は <code>QgsVectorFileWriter</code> が subsetString を反映するため常に正確）にフォールバックします — 式を <code>where=</code> に書いたまま Canvas が解釈できず全件表示になる、というフィルタ喪失の回帰を防ぐ設計です。現行のエクスポートは <code>gpkg:</code>/<code>duckdb:</code> 系で <code>where=</code> を出力し、フィルタ付き GeoJSON/FlatGeobuf/Parquet 等のソースは GeoJSON 変換で正確に反映します。全ネイティブ形式で <code>where=</code> を出力する geo_webview 側の対応を進めています。</p>
 
       <h3>🗺️ エンジン別の QGIS 再現度</h3>
       <table>

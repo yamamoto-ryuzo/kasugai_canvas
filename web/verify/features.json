@@ -4234,18 +4234,18 @@
       "kind": "logic_fn",
       "name": "where-eval",
       "source": "web/shared/where-eval.js",
-      "signature": "evaluateKascWhere(expr, properties)",
-      "summary": "SQL WHEREサブセット評価器(=,!=,<>,比較,AND/OR/NOT,IN,BETWEEN,LIKE/ILIKE,IS NULL,日本語属性名)",
+      "signature": "compileWhereExpression(text) → (feature|props, index?) => boolean / filterGeoJsonByWhere(source, whereText)",
+      "summary": "OGR SQL WHERE句準拠評価器(比較・AND/OR/NOT・IN・BETWEEN・LIKE/ILIKE+ESCAPE・IS NULL・算術+-*/・SUBSTR/CAST/CONCAT/hstore_get_value・疑似フィールドFID/OGR_GEOMETRY/OGR_GEOM_WKT/OGR_GEOM_AREA/OGR_STYLE・引用識別子)",
       "needs_runtime": false,
       "standalone_ok": true,
       "depends": [],
       "verify": {
-        "standalone": "node単体15ケース",
-        "integrated": "Playwright: 3地物→1地物フィルタ"
+        "standalone": "node 46ケース(構文全網羅+仕様外拒否)",
+        "integrated": "Playwright: OGR SQL 14ケース絞込assert"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "node単体15/15 PASS + 3地物→1地物絞込確認"
+      "last_verified": "2026-11-14T20:45:19+09:00",
+      "note": "node単体46/46 PASS(results/where-eval-ogrsql.json) + engine連携14/14 PASS(results/where-integrated-ogrsql.json)"
     },
     {
       "id": "web.cesium.ui.portal",
@@ -4379,17 +4379,17 @@
       "name": "client_where",
       "source": "app.js clientFilter+where-eval",
       "signature": "geojson等;where=式",
-      "summary": "非クエリ系ベクター(geojson/geoparquet/flatgeobuf等)のwhere=クライアントフィルタ。描画のみ絞込・属性は全件",
+      "summary": "非クエリ系ベクター(geojson/geoparquet/flatgeobuf等)のwhere=クライアントフィルタ。OGR SQL WHERE句を where-eval で評価・描画のみ絞込・属性は全件",
       "needs_runtime": true,
       "standalone_ok": false,
       "depends": [],
       "verify": {
         "standalone": "",
-        "integrated": "Playwright: inspector行同期+絞込assert"
+        "integrated": "Playwright: entity化レイヤで絞込assert(OGR SQL全構文)"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "where=行同期+絞込 PASS"
+      "last_verified": "2026-11-14T20:45:19+09:00",
+      "note": "OGR SQL 14/14 PASS(等価非区別・算術・関数・疑似フィールド・ESCAPE含む)"
     },
     {
       "id": "web.cesium.api.listViews",
@@ -4482,5 +4482,5 @@
       "note": "閉鎖 PASS"
     }
   ],
-  "updated": "2026-11-14T00:00:00+09:00"
+  "updated": "2026-11-14T20:45:19+09:00"
 }

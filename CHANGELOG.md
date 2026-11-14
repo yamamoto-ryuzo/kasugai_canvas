@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- `where=` を「行の最終オプション・値は改行まで」の厳格規約へ変更: 式中の `|`（`||` 連結・`'a|b'` リテラル等）をそのまま書けるようになった。`off` や他の `key=value` は `where=` より前に置く（`view:` の `;where=` は行内トークンのため対象外・値に `|` は書けない）。`shared/kasc.js` の `splitKascTail` でパースを統一し、インスペクタ/テーマ/ビュー書き戻しも `where=` を行末へ出力
+- `where-eval.js` に `||` 文字列連結演算子を追加（左結合・NULL 伝播）。`"市区町村" || ' ' || "大字" = 'x'` のような OGR SQL 式が geojson: 等のクライアント評価系でもそのまま絞り込める。geo_webview 側も `||` 含有 subsetString を `where=` へ送出するようになった（単独 `|` のビット演算・`%` は引き続き非対応で GeoJSON 焼き込み）
 - タスク指向ポータル（全6エンジン）: `.kasc` に `portal:`/`view:`/`link:`/`html:` の4行形式を追加し、レイヤー管理ではなく目的別の大きなカード/ボタンで GIS 業務を完結させるポータル画面を実装（`shared/portal.js` が cesium/maplibre/openlayers/leaflet/gsimaps/navara へ同一UIを提供）
   - `view: 名前 | desc= | img= | cam= | base= | レイヤ[;style=][;where=] | *`: 可視性・スタイル差替・フィルタ・カメラ・背景を束ねた目的別プリセット（`theme:` の発展形）。カード押下で一括適用しポータルを閉じる。解除は適用前スナップショット（表示・フィルタ・スタイル・カメラ・ベースマップ）へ完全復元
   - `link: 名前 | url= | desc= | img=`: 外部サイト/データへのリンクカード（↗ バッジ・新規タブ・http(s)/mailto のみ）。`view:` カードと宣言順で混在

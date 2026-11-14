@@ -1,0 +1,330 @@
+{
+ "date": "2026-11-14T11:30:25.754Z",
+ "total": 46,
+ "pass": 46,
+ "fail": 0,
+ "results": [
+  {
+   "expr": "\"状況\" = '工事中'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "比較/引用識別子"
+  },
+  {
+   "expr": "name = 'alpha'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "等価大小区別なし"
+  },
+  {
+   "expr": "name = 'ALPHA'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "等価大小区別なし2"
+  },
+  {
+   "expr": "name < 'beta'",
+   "want": 3,
+   "got": 3,
+   "result": "pass",
+   "note": "大小比較は区別あり(A,B,G<b)"
+  },
+  {
+   "expr": "name < 'Beta'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "Alpha<Beta"
+  },
+  {
+   "expr": "num IN (3, 8)",
+   "want": 2,
+   "got": 2,
+   "result": "pass",
+   "note": "IN"
+  },
+  {
+   "expr": "name IN ('alpha','GAMMA')",
+   "want": 2,
+   "got": 2,
+   "result": "pass",
+   "note": "IN非区別"
+  },
+  {
+   "expr": "num BETWEEN 4 AND 10",
+   "want": 2,
+   "got": 2,
+   "result": "pass",
+   "note": "BETWEEN"
+  },
+  {
+   "expr": "NOT (num BETWEEN 4 AND 10)",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "単項NOT"
+  },
+  {
+   "expr": "name LIKE 'a%'",
+   "want": 0,
+   "got": 0,
+   "result": "pass",
+   "note": "LIKE区別"
+  },
+  {
+   "expr": "name ILIKE 'a%'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "ILIKE非区別"
+  },
+  {
+   "expr": "name LIKE '%a%'",
+   "want": 3,
+   "got": 3,
+   "result": "pass",
+   "note": "LIKE含む"
+  },
+  {
+   "expr": "name LIKE 'A!_%' ESCAPE '!'",
+   "want": 0,
+   "got": 0,
+   "result": "pass",
+   "note": "ESCAPE句"
+  },
+  {
+   "expr": "x IS NULL",
+   "want": 2,
+   "got": 2,
+   "result": "pass",
+   "note": "IS NULL(キー不在もNULL)"
+  },
+  {
+   "expr": "x IS NOT NULL",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "IS NOT NULL"
+  },
+  {
+   "expr": "num + 1 = 4",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "算術+"
+  },
+  {
+   "expr": "num * 2 = 10",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "算術*"
+  },
+  {
+   "expr": "num / 2 = 4",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "算術/"
+  },
+  {
+   "expr": "num - 3 = 0",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "算術-"
+  },
+  {
+   "expr": "1 + num * 2 = 7",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "優先順位"
+  },
+  {
+   "expr": "(num + 1) * 2 = 8",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "括弧算術"
+  },
+  {
+   "expr": "SUBSTR(name,1,1) = 'a'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "SUBSTR"
+  },
+  {
+   "expr": "SUBSTR(name,-2) = 'ta'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "SUBSTR負"
+  },
+  {
+   "expr": "CAST(num AS character) = '3'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "CAST"
+  },
+  {
+   "expr": "CAST('7' AS integer) = 7",
+   "want": 3,
+   "got": 3,
+   "result": "pass",
+   "note": "CASTリテラル"
+  },
+  {
+   "expr": "CONCAT(name,'!') = 'Alpha!'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "CONCAT"
+  },
+  {
+   "expr": "hstore_get_value('a=>b,c=>d','c') = 'd'",
+   "want": 3,
+   "got": 3,
+   "result": "pass",
+   "note": "hstore_get_value"
+  },
+  {
+   "expr": "FID = 10",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "FID(feature.id)"
+  },
+  {
+   "expr": "FID = 2",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "FID(index)"
+  },
+  {
+   "expr": "OGR_GEOMETRY = 'polygon'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "OGR_GEOMETRY"
+  },
+  {
+   "expr": "OGR_GEOM_WKT = 'POINT (137 35)'",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "OGR_GEOM_WKT"
+  },
+  {
+   "expr": "OGR_GEOM_AREA = 16",
+   "want": 1,
+   "got": 1,
+   "result": "pass",
+   "note": "OGR_GEOM_AREA"
+  },
+  {
+   "expr": "OGR_STYLE IS NULL",
+   "want": 3,
+   "got": 3,
+   "result": "pass",
+   "note": "OGR_STYLE"
+  },
+  {
+   "expr": "\"a\" = \"b\"",
+   "want": 0,
+   "got": 0,
+   "result": "pass",
+   "note": "フィールド同士"
+  },
+  {
+   "expr": "name = \"name\"",
+   "want": 3,
+   "got": 3,
+   "result": "pass",
+   "note": "フィールド=自身"
+  },
+  {
+   "expr": "num",
+   "want": 3,
+   "got": 3,
+   "result": "pass",
+   "note": "裸式 OGR真偽(非0)"
+  },
+  {
+   "expr": "name",
+   "want": 0,
+   "got": 0,
+   "result": "pass",
+   "note": "裸式 OGR真偽('Alpha'→0)"
+  },
+  {
+   "expr": "NOT num",
+   "want": 0,
+   "got": 0,
+   "result": "pass",
+   "note": "NOT裸式"
+  },
+  {
+   "expr": "SUBSTR(name,1,2) IN ('al','be')",
+   "want": 2,
+   "got": 2,
+   "result": "pass",
+   "note": "式IN(非区別)"
+  },
+  {
+   "expr": "num == 1",
+   "want": "reject",
+   "got": "reject",
+   "result": "pass",
+   "note": "仕様外拒否"
+  },
+  {
+   "expr": "flag = TRUE",
+   "want": "reject",
+   "got": "reject",
+   "result": "pass",
+   "note": "仕様外拒否"
+  },
+  {
+   "expr": "x NOT IN (1,2)",
+   "want": "reject",
+   "got": "reject",
+   "result": "pass",
+   "note": "仕様外拒否"
+  },
+  {
+   "expr": "num NOT BETWEEN 1 AND 5",
+   "want": "reject",
+   "got": "reject",
+   "result": "pass",
+   "note": "仕様外拒否"
+  },
+  {
+   "expr": "num % 2 = 0",
+   "want": "reject",
+   "got": "reject",
+   "result": "pass",
+   "note": "仕様外拒否"
+  },
+  {
+   "expr": "状況 = '工事中'",
+   "want": "reject",
+   "got": "reject",
+   "result": "pass",
+   "note": "仕様外拒否"
+  },
+  {
+   "expr": "x = NULL",
+   "want": "reject",
+   "got": "reject",
+   "result": "pass",
+   "note": "仕様外拒否"
+  }
+ ]
+}

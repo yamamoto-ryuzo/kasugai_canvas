@@ -552,7 +552,7 @@ function applyClientWhere(item, source) {
     }
   }
   if (!item._wherePred) return source;
-  const kept = source.features.filter(f => item._wherePred(f?.properties || {}));
+  const kept = source.features.filter((f, i) => item._wherePred(f, i));
   return kept.length === source.features.length ? source : { ...source, features: kept };
 }
 
@@ -2146,14 +2146,16 @@ function rewriteInspectorWhereLine(item, where) {
   }
   if (idx < 0) return;
   const cur = lines[idx].trim();
-  // 末尾の表示フラグ(on/off)を先に退避し、where= をその手前へ挿入する。
-  // (key=value が末尾に来ると rewriteKascLineVisibility がフラグを
-  //   末尾bool として認識できず `off` が残ってしまうため)
+  // where= は行の最終オプション(値は行末まで=式中の | も値)。先に | で分割した
+  // フィールドから where= 以降を値として取り出し、off 等のフラグは where= の
+  // 手前へ置く(where= より後ろのトークンは式の一部として扱われる)
   const fields = cur.split("|").map(f => f.trim());
+  const wIdx = fields.findIndex((f, i) => i > 0 && /^where\s*=/i.test(f));
+  if (wIdx >= 0) fields.splice(wIdx);
   const tailBool = /^(on|off|true|false)$/i.test(fields.at(-1) || "") ? fields.pop() : null;
-  const rest = fields.filter((f, i) => !(i > 0 && /^where\s*=/i.test(f)));
-  if (where !== null && where !== undefined && where !== "") rest.push(`where=${where}`);
+  const rest = fields;
   if (tailBool) rest.push(tailBool);
+  if (where !== null && where !== undefined && where !== "") rest.push(`where=${where}`);
   const newLine = rest.join(" | ");
   if (newLine === cur) return;
   lines[idx] = newLine;

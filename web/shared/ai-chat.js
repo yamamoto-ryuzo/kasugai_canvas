@@ -18,6 +18,7 @@ import {
   isBackendCapabilitiesResolved, setBackendCapabilities as setBackendCaps,
   localNetworkPermission,
 } from "./backend.js";
+import { splitKascTail } from "./kasc.js";
 
 // ---- バックエンド capabilities（エンジン横断で共有する状態） ----
 // 状態の正本は shared/backend.js。検出は detectBackend が同一オリジン優先・
@@ -2249,7 +2250,7 @@ const CHAT_TOOLS = [{
           title: { type: "STRING", description: "レイヤ名" },
           target: { type: "STRING", description: "データのURLまたは DATA/ファイル名(sql: の場合は SELECT 文)" },
           type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff/cog/tiff (省略時 geojson)" },
-          options: { type: "STRING", description: "省略可。wfs: の typename=/version=/maxfeatures=/cql_filter=、duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、geotiff: の mode=/opacity=/maxsize=/bands=、attr=出典 等(|区切り)" },
+          options: { type: "STRING", description: "省略可。wfs: の typename=/version=/maxfeatures=/cql_filter=、duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、geotiff: の mode=/opacity=/maxsize=/bands=、attr=出典 等(|区切り。where= は必ず最後に指定=以降は行末までが式)" },
         },
         required: ["title", "target"],
       },
@@ -3266,7 +3267,8 @@ async function findUnreachableInspectorUrls(text) {
     const sep = line.indexOf(":");
     if (sep < 0) continue;
     if (!INSPECTOR_URL_LAYER_TYPES.has(line.slice(0, sep).toLowerCase())) continue;
-    const parts = line.slice(sep + 1).split("|").map(part => part.trim());
+    // where= は行末までが式(値中の | proxy= 等を誤検出しないよう共有規約で分割)
+    const parts = splitKascTail(line.slice(sep + 1));
     const target = parts[1] || "";
     if (!/^https?:\/\//i.test(target) || target.includes("{")) continue;
     if (parts.slice(2).some(part => /^proxy\s*=\s*(on|true|1)$/i.test(part))) continue;

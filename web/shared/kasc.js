@@ -45,6 +45,22 @@ function parseCamLine(parts) {
   return cam;
 }
 
+// .kasc 行の残りを `|` で分割する。`where=` は行の最終オプションという
+// 規約で、先頭が `where=` のフィールド以降は行末まで値として1フィールド
+// に結合する(式中に `|` を自由に含められる)。`view:` の `;where=` には
+// 適用されない(フィールド先頭が where= の場合のみ)
+export function splitKascTail(tail) {
+  const raw = String(tail ?? "").split("|");
+  for (let i = 0; i < raw.length; i++) {
+    if (/^\s*where\s*=/i.test(raw[i])) {
+      const fields = raw.slice(0, i).map(part => part.trim());
+      fields.push(raw.slice(i).join("|").trim());
+      return fields;
+    }
+  }
+  return raw.map(part => part.trim());
+}
+
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
   const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, defaultStyles: { point: null, line: null, polygon: null } };
@@ -55,7 +71,11 @@ export function parseKasc(text) {
     const sep = line.indexOf(":");
     if (sep < 0) continue;
     const type = line.slice(0, sep).trim().toLowerCase();
-    const parts = line.slice(sep + 1).split("|").map(part => part.trim());
+    // sql: はクエリ全体が行末までの値なので where= マージを適用しない
+    // (クエリ内の `| where=` は式ではなくクエリ本文の一部として残す)
+    const parts = type === "sql"
+      ? line.slice(sep + 1).split("|").map(part => part.trim())
+      : splitKascTail(line.slice(sep + 1));
 
     if (type === "cam") {
       doc.cams.push(parseCamLine(parts));
@@ -300,6 +320,7 @@ export function parseImageOverlay(item) {
 // show は「表示するタイトル」の Set、null/undefined なら全表示(`*` 相当)。
 // レイヤ行は末尾の既存 on/off/true/false トークンを除去した上で、
 // 非表示なら `| off` を付与、表示ならフラグなし(既定=on)に戻す。
+// `where=` は行の最終オプションなので off は where= の手前へ置く。
 // 非レイヤ行・コメント・空行はそのまま返す。
 export function rewriteKascLineVisibility(line, show) {
   const trimmed = String(line || "").trim();
@@ -308,15 +329,17 @@ export function rewriteKascLineVisibility(line, show) {
   if (sep < 0) return line;
   const type = trimmed.slice(0, sep).trim().toLowerCase();
   if (NON_LAYER_TYPES.has(type)) return line;
-  const fields = trimmed.split("|").map(f => f.trim());
+  const fields = splitKascTail(trimmed);
   // タイトルは / 区切りの空白揺れを正規化して照合する。
   // show は正規化済みキー(フルパス+葉名)を含む前提
   const rawTitle = (fields[0].slice(fields[0].indexOf(":") + 1) || "").trim();
   const title = rawTitle.split("/").map(s => s.trim()).join("/");
   const leaf = title.split("/").pop();
   const visible = show == null ? true : (show.has(title) || show.has(leaf));
+  const whereField = /^where\s*=/i.test(fields[fields.length - 1] || "") ? fields.pop() : null;
   if (BOOL_RE.test(fields[fields.length - 1] || "")) fields.pop();
   if (!visible) fields.push("off");
+  if (whereField) fields.push(whereField);
   return fields.join(" | ");
 }
 
@@ -332,13 +355,32 @@ export function rewriteKascVisibility(text, show) {
 // レイヤ行の key=value オプションを1つ書き換えた行文字列を返す。
 // 同じ key の既存フィールドは除去し、value が空(null/undefined/"")なら
 // 追加しない(=key 除去)。タイトル/URL/出典・on/off・他の key=value は保持する。
-// （sql: 行のように | を値に含む形式には使わないこと）
+// `where=` は行の最終オプションなので、key="where" の書き込みは必ず行末へ
+// 置き、他キーの書き換えは `| where=` 以降(値中の | を含む)をそのまま保持する。
 export function rewriteKascLineOpt(line, key, value) {
+  const isWhere = /^where$/i.test(String(key));
+  let head = String(line || "");
+  let tail = "";
+  const wm = /\|\s*where\s*=/i.exec(head);
+  if (wm) {
+    head = head.slice(0, wm.index);
+    tail = String(line).slice(wm.index);
+  }
+  if (isWhere) tail = "";
   const re = new RegExp(`^${String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=`, "i");
-  const fields = String(line || "").split("|").map(f => f.trim());
+  const fields = head.split("|").map(f => f.trim());
   const rest = fields.filter((f, i) => !(i > 0 && re.test(f)));
-  if (value !== null && value !== undefined && value !== "") rest.push(`${key}=${value}`);
-  return rest.join(" | ");
+  const hasValue = value !== null && value !== undefined && value !== "";
+  if (isWhere) {
+    if (hasValue) tail = ` | where=${value}`;
+    else tail = "";
+  } else if (hasValue) {
+    rest.push(`${key}=${value}`);
+    if (tail) tail = ` ${tail}`;
+  } else if (tail) {
+    tail = ` ${tail}`;
+  }
+  return rest.join(" | ") + tail;
 }
 
 // ---- theme: 行（QGIS マップテーマ相当の可視性プリセット）の共通処理 ----
