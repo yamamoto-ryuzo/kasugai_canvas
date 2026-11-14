@@ -109,9 +109,9 @@
       </ul>
 
       <p><code>.kasc</code>（プロジェクトの<strong>初期値</strong>）と <code>session-state</code>（稼働中の<strong>現在値</strong>）は役割が異なります。起動したエンジンは <code>.kasc</code> を一度読んで <code>session-state</code>（現在値）を構築し、<strong>以後はすべてのエンジンが <code>session-state</code> を正典として常時参照・更新</strong>します — 切替先エンジンも別ドキュメントではなく同じこの正典を引き継ぎます：</p>
-      <pre class="mermaid" aria-label=".kasc と session-state の時系列">
+      <figure class="mermaid-fig"><figcaption>.kasc と session-state の時系列</figcaption>
+<pre class="mermaid" aria-label=".kasc と session-state の時系列">
 sequenceDiagram
-    title .kasc と session-state の時系列
     autonumber
     participant K as .kasc<br/>初期値（プロジェクトファイル・不変）
     participant A as エンジンA<br/>(起動)
@@ -131,6 +131,7 @@ sequenceDiagram
     end
     Note over K: .kasc は初期値のまま不変。<br/>稼働中の正典は常に session-state
       </pre>
+</figure>
       <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
         mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });

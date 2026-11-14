@@ -46,10 +46,8 @@
           データは<strong>任意の静的ホスト</strong>に置くだけで、<code>?kasc=&lt;URL&gt;</code> で再生できます（サーバーレス・インストール不要）。
           CDN はエンジン本体のみを配信し、プロジェクトのカタログは持ちません — 変動するプロジェクト一覧は各データホスト側が持つ設計です。
         </p>
-        <pre class="mermaid" aria-label="QGIS → データホスト → ブラウザの構成">---
-title: QGIS → データホスト → ブラウザの構成
----
-
+        <figure class="mermaid-fig"><figcaption>QGIS → データホスト → ブラウザの構成</figcaption>
+<pre class="mermaid" aria-label="QGIS → データホスト → ブラウザの構成">
 flowchart LR
   QGIS["QGIS + geo_webview<br/>エクスポート"]
   subgraph HOST["データホスト（静的ホスト）"]
@@ -63,6 +61,7 @@ flowchart LR
   CDN ==&gt;|"エンジンを配信"| WEB
   DATA -.->|"?kasc= で指定"| WEB
         </pre>
+</figure>
         <script type="module">
           import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
           mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });

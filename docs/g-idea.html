@@ -64,10 +64,8 @@
 
       <h3>システム構成</h3>
         <p>試作システムの構成です。課題の聞き取り・整理は LimeSurvey CE と Excalidraw が担い、地図比較と根拠付き資料化は KASUGAI Canvas が担います。不動産情報ライブラリ API は公式案内に従いブラウザーから直接リクエストせず、キー保護のためのサーバー側中継（<code>/api/reinfolib</code>。BYO キー転送またはサーバーキー注入、<code>/ex-api/external/</code> 配下限定）を実装済みです。AI は内蔵 AI チャットが BYO API キーで Gemini を呼び、地図・レイヤー操作と比較シート作成を支援します。</p>
-        <pre class="mermaid" aria-label="地域比較システム構成">---
-title: 地域比較システム構成
----
-
+        <figure class="mermaid-fig"><figcaption>地域比較システム構成</figcaption>
+<pre class="mermaid" aria-label="地域比較システム構成">
 flowchart TB
   User[利用者] --> Chat
 
@@ -95,6 +93,7 @@ flowchart TB
   Classify -->|課題・優先度を反映| Sheet
 
         </pre>
+</figure>
         <script type="module">
           import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
           mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });

@@ -37,11 +37,9 @@
       <p><strong>SQL ダイアログ</strong>（QGIS の「条件式フィルタ」相当）は一覧の「SQL」ボタンかレイヤ行の ⏷ で開きます。入力は WHERE 式または SELECT 文（OGR SQL）を自動判別し、<strong>テスト</strong>で実行件数を事前確認できます。ダイアログは現在の <code>where=</code>/クエリを初期値として開くため、<code>.kasc</code> に初期記述されたフィルタもそのまま引き継がれます。Ctrl+Enter は「一覧を絞る」、入力を空にして「レイヤフィルタ」を押すとフィルタ解除です。<code>FID</code> 疑似フィールドは0始まりの地物インデックスを指します。⏷ は Cesium では全ベクター型に表示され、他エンジンはクエリ系（<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）のみです。</p>
       <p><strong>地図表示フィルタ</strong>（「フィルター反映」ボタン）は、一覧上部の絞り込み条件（列フィルタ AND 文字列検索）を地図上の該当レイヤーにだけ適用し、条件に合わない地物を非表示にします。トグル式で、ON の間は条件を変えるたびに地図へ即時再適用されます。OFF にすると元の表示へ復帰します。表示だけを切り替えるため <code>.kasc</code> やレイヤーデータ・<code>where=</code> は変わらず、<code>where=</code> で絞り込まれたレイヤーにさらに重ねることもできます。対象は一覧で選択中の1レイヤーのみです。</p>
       <p><strong>where= の効果範囲</strong>：絞り込まれるのはレイヤ表示と属性一覧です（一覧の行は描画済み地物から構築され、クエリ系は条件付きで再クエリ）。全件読み込み系のベクター検索索引は引き続き全件対象のため、フィルタで見えなくなった地物も名称検索で見つけられます。未読み込みのレイヤーを一覧で選択した場合も <code>where=</code> 適用済みのソースから行を構築します。WHERE 式の文法は <code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・算術・<code>||</code> 連結（評価はクエリ系が SQL エンジン、全件読み込み系が <code>shared/where-eval.js</code>）。</p>
-      <pre class="mermaid" aria-label="where= フィルタとレイヤ表示・属性一覧・.kasc の関係">---
-title: where= フィルタとレイヤ表示・属性一覧・.kasc の関係
----
-
-flowchart LR
+      <figure class="mermaid-fig"><figcaption>where= フィルタとレイヤ表示・属性一覧・.kasc の関係</figcaption>
+<pre class="mermaid" aria-label="where= フィルタとレイヤ表示・属性一覧・.kasc の関係">
+flowchart TB
   subgraph IN["where= の入力経路（どれでも同じ状態へ）"]
     K1[".kasc 行に初期記述<br/>（QGIS subsetString のエクスポート含む）"]
     K2["⏷ ボタン / 属性一覧「SQL」→「レイヤフィルタ」"]
@@ -62,6 +60,7 @@ flowchart LR
   EVAL -.->|"索引はフルソースから構築"| IDX["ベクター検索<br/>（全件対象のまま）"]
   LST["属性一覧「一覧を絞る」"] -.->|"表示のみ（地図・.kasc 不変）"| ATTR
       </pre>
+</figure>
       <script type="module">
         import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
         mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });

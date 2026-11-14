@@ -598,3 +598,5 @@ strong {
     display: block;
   }
 }
+.mermaid-fig { margin: 0; }
+.mermaid-fig figcaption { text-align: left; font-weight: 700; color: #31564f; margin: 0 0 .4em; }

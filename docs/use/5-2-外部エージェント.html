@@ -48,10 +48,8 @@
 <div class="url-box">          
 <h3>全体構成
 </h3>          
-<pre class="mermaid" aria-label="ブリッジ系統の全体構成図">---
-title: ブリッジ系統の全体構成図
----
-flowchart TB
+<figure class="mermaid-fig"><figcaption>ブリッジ系統の全体構成図</figcaption>
+<pre class="mermaid" aria-label="ブリッジ系統の全体構成図">flowchart TB
 subgraph BR["ブラウザ（通常版 / アプリ版共通）"]
 CHAT["<b>AI チャット</b><br/><br/>callExternalAgent()"]
 end
@@ -84,6 +82,7 @@ style LO fill:#e8f0fe
 style EXT fill:#f3e8fd
 style SVC fill:#e6f4ea
 </pre>
+</figure>
 <p>
 <small>ハブ側は各プロバイダの CLI を
 <strong>実際に使われた時点で子プロセス起動
@@ -172,8 +171,8 @@ style SVC fill:#e6f4ea
 <strong>ハブはツールを実行せずキュー返しのみ
 </strong>行い、実実行は常にブラウザ側です。直前アクションで地図状態が変わり得るため、毎往復で camera/layers/basemaps を取り直して送信します（ハブ側のローカル状態参照ツールが実値を返せるようにするため）。
 </p>          
+<figure class="mermaid-fig"><figcaption>ブリッジ経由の通信シーケンス図</figcaption>
 <pre class="mermaid" aria-label="ブリッジ経由の通信シーケンス図">sequenceDiagram
-    title ブリッジ経由の通信シーケンス図
 autonumber
 participant C as AI チャット（ブラウザ）
 participant T as executeChatTool（地図操作・81ツール宣言）
@@ -189,6 +188,7 @@ Note over C: 実行結果は toolResults として次回 POST へ。actions が�
 end
 Note over C,H: report フィールドがあれば showReport モーダルを表示
 </pre>
+</figure>
 <script type="module">            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';            mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });          
 </script>
 </div>      

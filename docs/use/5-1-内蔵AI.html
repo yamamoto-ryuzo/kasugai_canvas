@@ -160,10 +160,8 @@
 </h3>          
 <p>「AI プロバイダ」の選択肢は名前の先頭の接頭辞で2系統に分かれます。入力方法も動作モデルも異なるため、目的に応じて選びます。
 </p>          
-<pre class="mermaid" aria-label="AI プロバイダ2系統の全体構成図">---
-title: AI プロバイダ2系統の全体構成図
----
-flowchart TB
+<figure class="mermaid-fig"><figcaption>AI プロバイダ2系統の全体構成図</figcaption>
+<pre class="mermaid" aria-label="AI プロバイダ2系統の全体構成図">flowchart TB
 subgraph BR["KASUGAI Canvas（ブラウザ）"]
 CHAT["<b>AI チャット</b><br/><br/>web/shared/ai-chat.js"]
 end
@@ -184,6 +182,7 @@ CHAT <-->|"POST /agent ⇄ {reply, actions[]}"| AG
 style BR fill:#fff3cd
 style API fill:#e6f4ea
 style LO fill:#e8f0fe</pre>
+</figure>
 
           
 <table>            
@@ -278,8 +277,8 @@ style LO fill:#e8f0fe</pre>
 <code>tool_use
 </code>）で返り、実行結果をプロバイダ固有の履歴フォーマットで次リクエストへ積む往復ループです。
 </p>          
+<figure class="mermaid-fig"><figcaption>【API】系統の通信シーケンス図</figcaption>
 <pre class="mermaid" aria-label="【API】系統の通信シーケンス図">sequenceDiagram
-    title 【API】系統の通信シーケンス図
 autonumber
 participant U as ユーザー
 participant C as AI チャット（ブラウザ）
@@ -297,6 +296,7 @@ end
 C-->>U: reply 表示
 Note over C,API: 往復上限 = ツール実行の上限往復数（既定10・1-20）到達時は「あとn往復続けますか」の確認ダイアログ
 </pre>
+</figure>
 <script type="module">            import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';            mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });          
 </script>
 </div>      
