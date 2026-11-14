@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-7 印刷 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-7 印刷 — ツールドックの印刷・帳票出力</p>
+    </header>
+    <main>
+      <h2>使い方</h2>
+      <h3>🖨️ 印刷・帳票出力</h3>
+      <p>ツールドック（レイヤパネルの🧰ボタンで開く）の「エクスポート」にある <strong>印刷 ボタン</strong>で印刷ダイアログを開き、表示中の地図にタイトル・凡例・縮尺バー・方位記号・出典・日付を付けた帳票（A4/A3・縦横・150/300dpi）を生成します。「印刷」はブラウザの印刷ダイアログへ（PDF 保存も可能）、「PNG保存」は合成画像をダウンロードします。</p>
+      <p>「範囲プレビュー」を有効にすると用紙サイズの枠が地図上に表示され、ドラッグで範囲移動・縮尺入力で出力範囲を事前調整できます（Cesium/MapLibre/OpenLayers/Leaflet 共通）。</p>
+      <p>QGIS(geo_webview)の HTTP サーバーが検出できた場合のみ「QGIS レイアウトPDF」セクションが表示され、QGIS の印刷レイアウトをそのまま PDF 出力できます（QGIS 側の <code>/layouts</code>・<code>/layout-pdf</code> エンドポイントを利用）。タイルが CORS 未対応で地図画像を取得できない場合は、地図なしの帳票にフォールバックします。</p>
+
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません（UI 操作のみです）。関連するレイヤー設定は <a href="6-2-インスペクター.html">6-2 インスペクター</a> を参照してください。</p>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="2-6-エクスポート.html">2-6 エクスポート</a> — ベクターのファイル出力</li>
+        <li><a href="3-5-現在地.html">3-5 現在地・フルスクリーン</a> — 画面 PNG スクリーンショット</li>
+        <li><a href="../tech/1-1-QGIS連携.html">技術資料 1-1 QGIS連携</a> — geo_webview との連携</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

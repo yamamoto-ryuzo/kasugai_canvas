@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-3 作図 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-3 作図 — ツールドックの作図・注記ツール</p>
+    </header>
+    <main>
+      <p>レイヤパネルの🧰ボタンで開くツールドックの「作図」パネルです。すべてブラウザ完結・静的配信のみで動作します。</p>
+
+      <h2>使い方</h2>
+      <h3>✏️ 作図・注記</h3>
+      <p>ポイント・ライン・ポリゴン・注記（文字付きマーカー）を描いて名称を付けて保持します。「レイヤーへ追加」で一時レイヤー化（表示切替・属性一覧・エクスポート対象）または GeoJSON ファイルへ保存できます。</p>
+
+      <h3>対応エンジン</h3>
+      <p>Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps。Navara は未提供です。</p>
+      <p>関連: Fly ルートの描画は <a href="1-8-FLY.html">1-8 FLY</a> の Draw タブ（Orbit モードで右クリック描画）を使います。</p>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません。「レイヤーへ追加」で作った一時レイヤーはプロジェクト保存時にレイヤー行として .kasc に反映され、「GeoJSON 保存」したファイルは <code>geojson:</code> 行で再読み込みできます。</p>
+
+    </main>
+  </div>
+</body>
+</html>

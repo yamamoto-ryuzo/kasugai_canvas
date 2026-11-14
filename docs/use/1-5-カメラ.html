@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1-5 カメラ — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>1-5 カメラ — レイヤパネルの「カメラ」タブと視点共有</p>
+    </header>
+    <main>
+      <h2>使い方</h2>
+      <h3>🎥 カメラプリセット</h3>
+      <p><code>cam: 名前 | 緯度 | 経度 | 高さ | pitch | heading</code> 形式で登録した位置へ、Camera パネルのボタンでワンクリック FlyTo します。プレゼンの導線（Chapter 的な視点遷移）として使えます。</p>
+      <pre class="text"><code>cam: 東京駅 | 35.653108 | 139.761449 | h=2200.6 | p=-30
+cam: 全体俯瞰 | 35.24 | 136.97 | h=8000 | p=-90</code></pre>
+      <p><code>bookmark:</code> 行で QGIS のブックマークエクスポート XML（qgis_bookmarks 形式）を読み込み、各ブックマークをカメラプリセットへ展開できます。カメラパネルの「XML保存」「XML読込」ボタンでも同形式でプリセットを出し入れできます（geo_webview の <code>/kasugai</code> エクスポートでは bookmarks.xml として自動出力）。</p>
+
+      <h3>📤 Share（位置情報共有）</h3>
+      <p>カメラ位置（緯度・経度・高さ・heading・pitch）を URL ハッシュに保持し、タブバー右端の <strong>🔗 ボタン</strong>で同じ視点を再現するリンクをクリップボードへコピーします。ハッシュ形式のためカメラ移動で URL が自動更新され、開いた側はアニメーション付きでその視点へ FlyTo します。プロジェクト指定はクエリ（<code>?project=</code>）に保持されます。この形式は全エンジン共通で、同じ URL を <code>?engine=</code> 指定で別エンジンへ渡すと同じ地点が復元されます（詳細は <a href="../features/v0.html">V0 の URL パーマリンク節</a>）。</p>
+
+      <h2>設定方法（.kasc・URL）</h2>
+      <pre class="text"><code>cam: 名前 | 緯度 | 経度 | h=高さ | p=ピッチ | d=方位
+cam: 東京駅 | 35.653108 | 139.761449 | h=2200.6 | p=-30
+bookmark: bookmarks.xml        （QGISブックマークエクスポート XML・qgis_bookmarks 形式）</code></pre>
+      <ul>
+        <li>視点共有リンクの URL ハッシュ形式は全エンジン共通で、<code>?engine=</code> 指定で別エンジンへも同じ地点が復元されます（<a href="../features/v0.html">V0 の URL パーマリンク節</a>）</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="1-8-FLY.html">1-8 FLY（プレゼンテーション）</a> — カメラワークの自動再生</li>
+        <li><a href="1-9-ポータル.html">1-9 ポータル</a> — <code>view:</code> の <code>cam=</code> でプリセットをビューへ束ねる</li>
+        <li><a href="6-2-インスペクター.html">6-2 インスペクター</a> — <code>cam:</code>・<code>bookmark:</code> 行の書式</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

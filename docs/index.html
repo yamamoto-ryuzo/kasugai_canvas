@@ -17,13 +17,13 @@
       <section>
         <h2>1. 📋 概要 — Canvas UI の説明</h2>
         <p>KASUGAI Canvas は、<strong>AI とマルチエンジンで拓く 2D/3D GIS</strong> です。CesiumJS + Three.js（メイン・3D）を核に、MapLibre / OpenLayers / Leaflet / GSI Maps の互換プレイヤーと試験的エンジン Navara が同じ <code>.kasc</code> プロジェクトを再生するマルチエンジン構成を採り、AI チャット（Gemini / OpenAI互換 の内蔵AI、GitHub Copilot・Devin・Antigravity のブリッジ連携）で地図を操作できます。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能を備えています。</p>
-        <p>画面は左パネルの<strong>タブ</strong>＋<strong>🧰ツールバー</strong>が操作の中心で、このドキュメントのナビゲーションも同じ分類（テーマ軸）で整理しています。各タブ・ツールの実装は「<a href="features/v1.html">画面機能</a>」、機能追加の履歴は「<a href="features.html">バージョン履歴</a>」を参照してください。</p>
+        <p>画面は左パネルの<strong>タブ</strong>＋<strong>🧰ツールバー</strong>が操作の中心で、このドキュメントのナビゲーションも同じ分類（テーマ軸）で整理しています。各タブ・ツールの実装は「<a href="features/v1.html">画面機能</a>」、機能追加の履歴は「<a href="tech/2-1-バージョン履歴.html">バージョン履歴</a>」を参照してください。</p>
         <table>
           <tr><th>UI 領域</th><th>内容</th></tr>
           <tr><td><a href="panel.html">レイヤパネル</a></td><td>タブ：<strong>レイヤ・凡例・検索・属性・カメラ・表示・情報</strong>＋パネル下部のマルチエンジン切替</td></tr>
           <tr><td><a href="panel.html#tools-cards">ツール</a></td><td>🧰ボタンで開くドック：計測・選択・集計・作図・標高断面・見通し判定・エクスポート・印刷・時系列</td></tr>
-          <tr><td><a href="features/v1.html#nav">ナビゲーション</a></td><td>地図右上の操作群：コンパス・3D・オービット・表示履歴◀▶・矩形ズーム▭・地点座標⌖・現在地📍・フルスクリーン⛶</td></tr>
-          <tr><td><a href="features/v1.html#basemap">ベースマップ</a></td><td>地図左下のベースマップ選択＋別アプリで開く（CDN・アプリ・Google Earth）</td></tr>
+          <tr><td><a href="use/3-1-コンパス.html">ナビゲーション</a></td><td>地図右上の操作群：コンパス・3D・オービット・表示履歴◀▶・矩形ズーム▭・地点座標⌖・現在地📍・フルスクリーン⛶</td></tr>
+          <tr><td><a href="use/4-1-ベースマップ.html">ベースマップ</a></td><td>地図左下のベースマップ選択＋別アプリで開く（CDN・アプリ・Google Earth）</td></tr>
           <tr><td><a href="ai-chat.html">AIチャット</a></td><td>内蔵AI（【API】）または外部エージェント（【ブリッジ】）で地図を操作</td></tr>
           <tr><td><a href="manage.html">管理</a></td><td>⚙ボタンで開く管理ウィンドウ：プロジェクト・AI・Google Maps・アプリ・その他</td></tr>
           <tr><td><a href="plugins.html">プラグイン</a></td><td><code>PLUGIN/</code> に置いた拡張パネルがレイヤパネルのタブへ追加される</td></tr>
@@ -54,7 +54,7 @@
             <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip" class="demo-link" target="_blank">DOWNLOAD: インストーラー ZIP（推奨）</a>
             <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas.zip" class="demo-link" target="_blank">DOWNLOAD: ポータブル ZIP</a>
           </div>
-          <p>詳しい手順は <a href="guide.html">ローカルアプリのガイド</a> を参照してください。</p>
+          <p>詳しい手順は <a href="use/6-1-プロジェクト.html">ローカルアプリのガイド</a> を参照してください。</p>
         </div>
       </section>
 
@@ -90,13 +90,16 @@
           </tr>
         </table>
         <p>どちらの系統でもチャット UI・地図操作・<code>runCode</code> サンドボックス・MCP データソース（Box・QGIS 等）・AI プラグイン生成は共通です。ハブはアプリ版・ブラウザ WebGIS 共通の <code>bridge-hub.exe</code> 1本（<code>127.0.0.1:8511</code>）に集約しており、フロントは <code>/health</code> で検出して接続するため、CDN 経由のブラウザ WebGIS からもブリッジ系プロバイダが選べます。逆方向の「外部 → ブラウザを操る」はローカルアプリ本体 <code>:8510</code> の <code>/api/command</code> 経路です。</p>
-        <p>設定手順は <a href="ai-api.html">【API】内蔵AI</a>・<a href="ai-bridge.html">【ブリッジ】外部エージェント連携</a>（接続方式ごとの規約判断もこちら）、81ツール宣言（環境・エンジンで絞り込み）の引数・提供条件は <a href="ai-tools.html">AI ツール仕様</a> を参照してください。</p>
+        <p>設定手順は <a href="use/5-1-内蔵AI.html">【API】内蔵AI</a>・<a href="use/5-2-外部エージェント.html">【ブリッジ】外部エージェント連携</a>（接続方式ごとの規約判断もこちら）、81ツール宣言（環境・エンジンで絞り込み）の引数・提供条件は <a href="use/5-3-AIツール.html">AI ツール仕様</a> を参照してください。</p>
       </section>
 
       <section>
         <h2>4. 🔗 連携構成図 — どこで動くか</h2>
         <p>KASUGAI Canvas は <strong>エンジン（プレイヤー本体）とデータ（.kasc + DATA/）が分離</strong>した設計です。開発の起点は <code>kasugai_canvas</code> リポジトリの <code>web/</code>（エンジン正本）で、そこから <strong>GitHub Pages CDN（kasugai-canvas-web）</strong> と <strong>配布 ZIP（ローカルアプリ）</strong> の2経路で発行されます。メインの使い方は、CDN が配信するエンジンに静的ホスト上の <code>.kasc</code> を <code>?kasc=</code> で指定して開く <strong>サーバレスな WebGIS</strong> です（インストール不要）。</p>
-        <pre class="mermaid" aria-label="KASUGAI Canvas 連携構成図">
+        <pre class="mermaid" aria-label="KASUGAI Canvas 連携構成図">---
+title: KASUGAI Canvas 連携構成図
+---
+
 flowchart TB
   REPO["kasugai_canvas リポジトリ（開発の起点）<br/>web/ = エンジン正本 ＋ server/ = Rust アプリ"]
 
@@ -189,11 +192,11 @@ flowchart TB
             <h3>🖥️ 1. レイヤパネル・2. ツール</h3>
             <p>レイヤ・凡例・検索・属性・カメラ・表示・情報タブ、ツールドック、FLY・ポータル・マルチエンジン切替 — 画面機能のカード索引</p>
           </a>
-          <a class="feature-card" href="features/v1.html#nav">
+          <a class="feature-card" href="use/3-1-コンパス.html">
             <h3>🧭 3. ナビゲーション</h3>
             <p>地図右上の操作群 — コンパス・3D/オービット・表示履歴◀▶・矩形ズーム・地点座標・現在地・フルスクリーン</p>
           </a>
-          <a class="feature-card" href="features/v1.html#basemap">
+          <a class="feature-card" href="use/4-1-ベースマップ.html">
             <h3>🗺️ 4. ベースマップ</h3>
             <p>地図左下のベースマップ選択＋別アプリで開く（CDN・アプリ・Google Earth）</p>
           </a>
@@ -212,19 +215,19 @@ flowchart TB
         </div>
         <h3>技術資料（章1〜2）</h3>
         <div class="features">
-          <a class="feature-card" href="ref-qgis.html">
+          <a class="feature-card" href="tech/1-1-QGIS連携.html">
             <h3>📦 1-1 QGIS連携</h3>
             <p>エクスポートの利用方法・連携方針（V7）・実装済み再現範囲のカード索引</p>
           </a>
-          <a class="feature-card" href="ref-runtime.html">
+          <a class="feature-card" href="tech/1-2-配信実行形態.html">
             <h3>🌐 1-2 配信・実行形態</h3>
             <p>ブラウザ WebGIS・永続キャッシュのカード索引</p>
           </a>
-          <a class="feature-card" href="ref-spec.html">
+          <a class="feature-card" href="tech/1-3-設定内部仕様.html">
             <h3>📝 1-3 設定・内部仕様</h3>
             <p>データ形式・描画性能・ライブラリ・システム構成・実装詳細（V0）・セキュリティのカード索引</p>
           </a>
-          <a class="feature-card" href="features.html">
+          <a class="feature-card" href="tech/2-1-バージョン履歴.html">
             <h3>🗺️ 2-1 バージョン履歴（機能カード索引）</h3>
             <p>V0〜V9 のテーマごとの機能追加履歴。GIS 基本機能・Fly プレゼン機能の一覧と、現行実装の仕組み・ドレープ・制限事項</p>
           </a>

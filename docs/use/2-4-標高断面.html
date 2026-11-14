@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-4 標高断面 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-4 標高断面 — ツールドックの標高断面ツール</p>
+    </header>
+    <main>
+      <p>レイヤパネルの🧰ボタンで開くツールドックの「標高断面」パネルです。すべてブラウザ完結・静的配信のみで動作します。</p>
+
+      <h2>使い方</h2>
+      <h3>📈 標高断面</h3>
+      <p>「ラインを描く」で折れ線を入力すると距離-標高の断面グラフを表示します（サンプル数 10〜500・既定100）。地形 ON 時は TerrainProvider、OFF 時や未対象域は地理院標高APIへフォールバックします。グラフ上のホバー位置は地図上のマーカーと連動し、最高/最低/累積上り・下りの統計も表示します。</p>
+      <figure>
+      <img src="../../issues/29/profile.png" alt="標高断面：距離-標高グラフ" />
+      <figcaption aria-hidden="true">標高断面（距離-標高グラフ）</figcaption>
+      </figure>
+
+      <h3>対応エンジン</h3>
+      <p>Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps（2D エンジンは MapLibre の DEM タイルまたは地理院標高APIで標高サンプリング）。Navara は未提供です。AI からは <code>elevationProfile</code> で実行できます（<a href="5-3-AIツール.html">5-3 AI ツール仕様</a>）。</p>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません（UI 操作のみです）。関連するレイヤー設定は <a href="6-2-インスペクター.html">6-2 インスペクター</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>

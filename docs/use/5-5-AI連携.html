@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V3: AI 連携 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>V3: AI 連携 — 各機能カードの詳細説明</p>
+    </header>
+    <main>
+      <p><a href="../tech/2-1-バージョン履歴.html">← バージョン履歴へ戻る</a></p>
+
+      <h2 id="ai">使い方</h2>
+      <p>Gemini・OpenAI互換 API（GitHub Models・OpenAI・Ollama 等）・GitHub Copilot・Devin・Antigravity（ブリッジ経由）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。詳細・設定手順は <a href="5-1-内蔵AI.html">【API】内蔵AI（Google 連携・AI）</a> を参照してください（経路ごとの通常版/アプリ版対応は同ページの「AI の利用形態」表を参照）。</p>
+      <p><strong>通常版とアプリ版の違い</strong>：AI チャット本体・地図操作・コード実行・プラグイン生成は両方で使えます。アプリ版（ローカル exe）だけが持つのは <code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/files</code> などの高権限ツール群です。<strong>GitHub Copilot / Devin / Antigravity プロバイダ</strong>は常駐のブリッジハブ（bridge-hub.exe・127.0.0.1:8511 — アプリ・ブラウザ WebGIS 共通の1本）を検出した環境で表示され、各プロバイダはハブが必要時に外部 CLI を子プロセス起動します（要各 CLI・本人の認証・Node.js 不要）。</p>
+
+      <h3>🗨️ AI チャット（Gemini / OpenAI互換）</h3>
+      <p>管理（⚙）→ AI → チャット で Gemini API キーを登録すると、右下のチャットパネルから自然言語で地図を操作できます。ブラウザから Gemini API を直接呼び出す構成（BYO = Bring Your Own キー方式：各ユーザーが自分の API キーを登録して使う）で、静的配信のまま利用可能です。<strong>キーの供給経路は2つ</strong>あり、BYO キーが無い環境でも、バックエンド（Cloudflare Pages/Workers・Cloud Run）が <code>POST /api/gemini</code>（<code>aiProxy</code> 機能）を通知していればサーバー側のキーでキーレス利用できます。</p>
+      <figure>
+      <img src="../images/manage-ai.png" alt="管理（⚙）→ AI → チャット：Gemini API キーとモデル選択" />
+      <figcaption aria-hidden="true">管理（⚙）→ AI → チャット：API キー・モデルの設定</figcaption>
+      </figure>
+      <p><strong>AI プロバイダは切替式</strong>で、選択肢は名前の接頭辞どおり【API】系と【ブリッジ】系の2系統に分かれます。接続先・設定項目・ツール実行方式が系統ごとに異なり、function calling ループ（ツール結果を見て複数往復で判断する本体AIの動作）は【API】系のみが持ちます。</p>
+      <p><strong>モデル共通の追加指示</strong>：管理 → AI → チャット →「追加指示」タブで、Gemini や OpenAI 互換モデルに共通する指示を保存できます。通常はブラウザに保存されます。Cloud Run で <code>KASUGAI_AI_INSTRUCTIONS</code> を設定すると、サーバー側の指示を優先し、内蔵 AI の <code>/api/gemini</code> 経由のリクエストへ適用します。指示文の例は <a href="../hackathon.html">ハッカソン</a> を参照してください。</p>
+      <ul>
+        <li><strong>【API】 Gemini（既定）／ OpenAI互換</strong>（通常版）— 公式APIへブラウザから直接接続する BYO キー方式。OpenAI互換は<a href="https://models.github.ai">GitHub Models</a>（GitHub PAT）・OpenAI・Azure OpenAI・Ollama・LM Studio など chat/completions 互換エンドポイントにベースURL・キー・モデル名を指定して接続します。ツール定義・実行ループは Gemini と共通で、宣言を OpenAI 形式へ変換して送信します</li>
+        <li><strong>【ブリッジ】 GitHub Copilot</strong>（V5 アプリ版の機能）— アプリ内実装（GitHub Copilot CLI の stdio サーバーを github-copilot-sdk 経由で駆動・要 Copilot 契約）経由。常駐のブリッジハブ（127.0.0.1:8511）を検出した環境で接続するため、<strong>プロバイダ選択肢はハブ検出環境で表示</strong>されます（要 copilot CLI・Node.js 不要）。選んで保存するだけで疎通したブリッジへ自動接続されます。<strong>GitHub CLI（gh）でログイン済みなら <code>copilot login --with-token</code> で資格を自動登録</strong>し、対話ログインも省略できます（v6.5.17〜）。モデル一覧はアカウント広告分に CLI 内蔵カタログを併合したものが出ます。公式 SDK / CLI によるプログラム接続を利用します</li>
+        <li><strong>【ブリッジ】 Devin</strong>（V5 アプリ版の機能）— アプリ内の Devin ブリッジが公式の <code>devin acp</code> を駆動します。常駐のブリッジハブ（<code>127.0.0.1:8511</code>）が Devin 選択時にのみ起動し、本人の ACP 認証（ブラウザ認証または API キー）と利用枠でモデルを利用します。専用プロバイダはハブ検出環境で表示され</li>
+        <li><strong>【ブリッジ】 Antigravity</strong>（V5 アプリ版の機能）— アプリ内の Antigravity ブリッジが Antigravity CLI（<code>agy</code>）の headless 実行（stream-json）を駆動します。常駐のブリッジハブ（<code>127.0.0.1:8511</code>）が Antigravity 選択時にのみ起動し、ブリッジが <code>agy mcp add</code> で地図ツールを登録・<code>permissions.allow</code> に <code>mcp(kasugai/*)</code> を追加します。本人の Google アカウントでの agy ログインと利用枠が前提で、専用プロバイダはハブ検出環境で表示され</li>
+        <li><strong>【ブリッジ】 外部エージェント</strong>（通常版）— 汎用エンドポイント（<code>/agent</code> 契約）へチャット入力を POST する方式。ブラウザから届くURLであれば接続でき、エンドポイントURL・トークン（任意）・BYOキー送信（任意）を設定します。自作エージェントの接続に使います</li>
+      </ul>
+      <figure>
+      <img src="../images/manage-agent.png" alt="管理（⚙）→ AI → エージェント：AI 生成プラグインの管理と外部エージェント接続設定" />
+      <figcaption aria-hidden="true">管理（⚙）→ AI → エージェント：外部エージェント接続と AI 生成プラグインの管理</figcaption>
+      </figure>
+      <p><strong>設定と利用の分離（v5.23〜）</strong>：設定画面（管理 → AI → チャット）はプロバイダ別の専用項目のみを表示し（Copilot/Devin/Antigravity/外部エージェントで案内文・モデル欄・トークン欄が混在しない）、選択・保存時に実接続テスト（ブリッジ系は <code>/models</code> でモデル一覧まで取得、外部エージェントは <code>/agent</code> プローブ）を行います。一方、チャットパネルのヘッダーにあるプロバイダ切替ドロップダウンは「設定済みで使えるものだけ」を選択肢に出す利用側で、選択時は軽い疎通確認（<code>/health</code>）のみを行います — Devin の <code>acp</code> 起動やブラウザ認証がチャットの切替だけで発火することはありません。モデル選択・APIキー・エンドポイントの編集は設定画面のみです。チャット側の状態表示は「接続中…」（赤・確認待ち）→ モデル名表示（確認済み）、失敗時は赤のまま「未接続」（失敗理由はツールチップまたは設定画面のステータス欄に表示）。</p>
+      <p><strong>Devin の APIキー</strong>（v5.23〜）：Devin プロバイダの設定画面に「Devin APIキー」欄があります。app.devin.ai → Settings → Devin API → <strong>Service users</strong> タブで発行した <code>cog_</code> キーを入れると <code>devin acp</code> の認証を APIキーで完了でき、ブラウザの PKCE ログイン画面を省略できます（<strong>PAT は acp 認証で拒否される</strong>ためサービスユーザーキーが必要。サービスユーザーはチームプラン向けの機能で、<strong>個人プランでは発行できません</strong>）。空欄なら従来どおりブラウザログイン。v6.5.17〜 はキー認証が失敗しても<strong>ブラウザ PKCE へ自動フォールバック</strong>するため、無効・期限切れ・個人プランのキーが残っていてもログインに進めます。キーはブラウザの localStorage に保存され、ローカルのブリッジへ <code>X-Devin-Api-Key</code> ヘッダでのみ送信されます（外部・平文HTTPには送信しません）。</p>
+      <p><strong>接続方式と利用規約</strong>：本人が正規認証し、契約の利用枠内でモデルを利用する GitHub Copilot SDK / Devin ACP 接続は、公式資料が想定する外部接続機構を用いており、この方式を禁止する規定は確認されていません。<a href="5-2-外部エージェント.html#ai-connection-policy">接続方式ごとの判断・条件・公式出典</a>を参照してください。</p>
+      <p><strong>M365 / Microsoft Copilot を見送った理由</strong>：消費者向け Copilot はボット等によるアクセスを明示禁止しているため、Web UI 自動化を提供しません。この消費者向け規約は職場・学校アカウントには適用されず、M365 全体の禁止を意味しません。M365 の公式 Chat API は存在しますが、ライセンス・アプリ登録・必要権限への管理者同意等を要するため、本人のログインだけで使う標準連携としては見送り・未実装です。M365 の Web UI 自動化も、正規のプログラム接続としての許諾を確認できていないため採用しません。<a href="5-2-外部エージェント.html#m365-connection-policy">規約上の禁止と導入条件の違い・再検討条件</a>を参照してください。</p>
+      <p>AI の実行経路は function calling によるツール呼び出しで、<strong>92個のツール宣言</strong>（<code>activeChatTools</code> が環境・エンジン・キー設定で絞り込み）がアプリの全主要機能を網羅します。全仕様は <a href="5-3-AIツール.html">AI ツール仕様</a> を参照：</p>
+      <table>
+        <thead><tr><th>カテゴリ</th><th>ツール</th></tr></thead>
+        <tbody>
+          <tr><td>カメラ・視点</td><td><code>flyTo</code>・<code>getCamera</code>・<code>flyToFeature</code>・<code>flyToPreset</code>・<code>listCameraPresets</code>・<code>zoomToExtent</code></td></tr>
+          <tr><td>レイヤー</td><td><code>listLayers</code>・<code>setLayerVisible</code>・<code>setLayerLegendVisible</code>・<code>setLayerFilter</code>・<code>focusLayer</code>・<code>addLayer</code>（geojson/geoparquet/duckdb/sql 等）・<code>addGeoJsonLayer</code>・<code>applyInspector</code>・<code>exportInspector</code></td></tr>
+          <tr><td>ベースマップ・地形・効果</td><td><code>listBasemaps</code>・<code>setBasemap</code>・<code>setTerrain</code>・<code>setEffect</code>・<code>setUnderground</code>・<code>setClip</code></td></tr>
+          <tr><td>Fly・プレゼン</td><td><code>listFlyPaths</code>・<code>playFlyPath</code>・<code>stopFly</code>・<code>toggleDrawMode</code>・<code>addFlyPath</code>・<code>flyRoute</code>（「AからBまで」「C経由で」のルート自動生成）・<code>setFlySettings</code>（速度・地上高の変更）</td></tr>
+          <tr><td>検索</td><td><code>searchLocation</code>・<code>vectorSearch</code>・<code>searchPlaces</code>*・<code>openStreetView</code>*（* Maps キー設定時のみ）</td></tr>
+          <tr><td>共有・資料生成</td><td><code>getShareUrl</code>・<code>buildShareUrl</code>（視点パーマリンク）・<code>showReport</code>（Markdown 資料をモーダル表示）</td></tr>
+          <tr><td>プロジェクト</td><td><code>listProjects</code>・<code>switchProject</code></td></tr>
+          <tr><td>データ取得・加工</td><td><code>fetchData</code>（CORS 範囲の URL 取得）・<code>getLayerGeoJson</code>・<code>addDataLayer</code>・<code>removeDataLayer</code></td></tr>
+          <tr><td>データファイル</td><td><code>listDataFiles</code>*・<code>saveDataFile</code>*・<code>deleteDataFile</code>*（* ローカル版のみ）</td></tr>
+          <tr><td>コード実行・プラグイン</td><td><code>runCode</code>（サンドボックス）・<code>savePlugin</code>・<code>listPlugins</code>・<code>getPluginCode</code>・<code>removePlugin</code>・<code>setPluginEnabled</code>・<code>publishPlugin</code>*（* ローカル版のみ）</td></tr>
+          <tr><td>計測・空間解析・出力</td><td><code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code>・<code>elevationProfile</code>・<code>lineOfSight</code>・<code>viewshed</code>・<code>setGraticule</code>・<code>setMinimap</code>・<code>exportLayer</code>・<code>spatialSelect</code>（範囲内の地物選択）・<code>aggregateWithin</code>（ポリゴン内集計）・<code>createBuffer</code>（バッファ生成）</td></tr>
+          <tr><td>UI 操作</td><td><code>listUiControls</code>・<code>controlUi</code>（専用ツールを持たない UI 項目を列挙・操作する汎用ブリッジ）</td></tr>
+          <tr><td>GSI Maps エンジン（17・調整中）</td><td><code>listGsiLayers</code>・<code>importGsiLayers</code>・<code>setGsiBasemap</code>・<code>setGsiGlobe</code> 等の <code>Gsi</code> 系ツール群（<code>?engine=gsimaps</code> のみ）</td></tr>
+          <tr><td>音声・指示書</td><td><code>speak</code>（TTS 読み上げ）・<code>listInstructions</code>・<code>readInstruction</code>・<code>saveInstruction</code>・<code>deleteInstruction</code>・<code>selectAgents</code>（agents/skills 指示書の管理）</td></tr>
+          <tr><td>システム</td><td><code>checkUpdate</code>・<code>installUpdate</code>・<code>shutdownApp</code>・<code>setToolMaxSteps</code>・<code>bridgeSetup</code>（ハブ検出時のみ）</td></tr>
+        </tbody>
+      </table>
+      <p><strong>資料生成のフロー</strong>：「◯◯の資料を作って」と頼むと、レイヤー自動構成 → FlyTo → 結果を Markdown にまとめ <code>showReport</code> でモーダル表示（ダウンロード可）、<code>buildShareUrl</code> で発行した視点パーマリンクを資料に埋め込みます。架空・サンプル GeoJSON を生成する場合は <code>dataSource</code>・<code>generatedAt</code>・<code>aiGenerated:true</code> の出典スタンプが必須付与されます。</p>
+      <p>チャット履歴はプロジェクト単位で永続化されます。AI の回答言語は UI 言語に追随します。API キー未設定時はローカルコマンド（<code>/fly</code> 等）が使えます。</p>
+      <p>実行されるツール群は <code>/api/capabilities</code> で取得したバックエンド能力に応じて出し分けられます（ティア分け。公開環境ではセッション内に閉じる安全な機能のみ）。</p>
+
+      <h3 id="ai-data-access">🔍 AI と読み込みデータの関係（検索モデル）</h3>
+      <p>内蔵 AI が地図上のデータを「認識」する方式は、埋め込みベクトル DB を使う RAG ではなく、<strong>AI が必要に応じてツールでデータを読みに行くエージェント的検索</strong>です。GIS データはコンテキストへ事前注入されず、モデルが「一覧 → 当たり → 詳細」の多段検索を自分で組み立てます。</p>
+      <h4>実装済み：ツールによる多段検索</h4>
+      <table>
+        <thead><tr><th>段階</th><th>ツール</th><th>届く範囲</th></tr></thead>
+        <tbody>
+          <tr><td>一覧</td><td><code>listLayers</code></td><td>レイヤーのメタ情報のみ（名前・type・filter・bboxAuto 等）。地物の中身は含まない</td></tr>
+          <tr><td>当たり</td><td><code>vectorSearch</code></td><td>読み込み済みレイヤーの属性索引（属性名・値・代表点座標）を部分一致検索。クエリ系レイヤー（duckdb/sql）は対象外 — SQL が索引の役割を担うため</td></tr>
+          <tr><td>詳細（小〜中規模）</td><td><code>getLayerGeoJson</code></td><td>レイヤー全地物を GeoJSON でコンテキストへ返す。約 400KB 上限で、超過時は vectorSearch / runCode / プラグインでの絞り込みを促すエラーを返す</td></tr>
+          <tr><td>詳細（大規模）</td><td><code>runCode</code>・<code>setLayerFilter</code></td><td>サンドボックス内で <code>api.getLayerGeoJson()</code> 等を呼び、集計・絞り込みした小さい結果だけをモデルへ返す。クエリ系レイヤーは WHERE/SQL で必要行のみ取得</td></tr>
+          <tr><td>外部</td><td><code>fetchData</code>・MCP ツール</td><td>外部 URL からの取得（約 400KB）。MCP サーバー登録で外部検索基盤のツールをチャットへ合成できる</td></tr>
+        </tbody>
+      </table>
+      <p><strong>実装済み機能の制約</strong>：<code>vectorSearch</code> の索引は<strong>読み込みが完了したレイヤーから順に構築</strong>されるため、起動直後や大きいリモートレイヤーのデコード中はヒットしないことがあります。非表示（未読込）レイヤーは索引対象外で、中身を検索するには先に <code>setLayerVisible</code> で読み込ませる必要があります（UI の検索パネルでは「（未読込）」として選択肢に出て、選択時にオンデマンドで読み込まれる）。検索は属性名・値の<strong>文字列部分一致</strong>で最大 20 件を返し、意味的な類似検索ではありません。</p>
+      <h4>未実装：意味検索・高度な条件検索</h4>
+      <table>
+        <thead><tr><th>機能</th><th>状態</th><th>代替・接続点</th></tr></thead>
+        <tbody>
+          <tr><td>意味検索（埋め込み RAG）</td><td>未実装</td><td>接続点は3つ：(a) プラグインとして実装（地物属性を埋め込み API でベクトル化 → IndexedDB に保存 → 類似検索を API 公開）、(b) sql 型レイヤー化（DuckDB の SQL を知識ベースへの問い合わせとして使う）、(c) MCP サーバー経由で外部 RAG 基盤（pgvector 等）のツールを合成。いずれも既存経路を変えずに追加できる</td></tr>
+          <tr><td>空間条件による直接検索（円内・ポリゴン内・近傍の専用ツール）</td><td>専用ツールなし</td><td><code>runCode</code> で座標計算・<code>setLayerFilter</code> の SQL（DuckDB spatial 拡張の空間述語）で代替可能</td></tr>
+          <tr><td>未読込レイヤーへの横断検索</td><td>索引対象外</td><td><code>setLayerVisible</code> で読み込んでから <code>vectorSearch</code>。非表示レイヤーは起動時にダウンロードしない設計のため</td></tr>
+        </tbody>
+      </table>
+
+      <h2>設定方法・構成</h2>
+
+      <h3>🖥️ リモートコマンド経路（外部エージェント → ブラウザ）</h3>
+      <p>上記のプロバイダ／ブリッジは「ブラウザのチャット → エージェント」方向ですが、アプリ版（local ティア）には逆方向の<strong>「外部エージェント → ブラウザ」を操る共通経路</strong>もあります。ローカルサーバーが <code>remoteCommand</code> 機能を通知している環境では、Devin Desktop・GitHub Copilot CLI・任意のスクリプトなど、HTTP を話せるローカルプロセスが開いている地図をリアルタイムに操作できます（エージェント識別は持たず、どのプロセスからでも同一エンドポイント・同一形式で利用）。</p>
+      <pre>
+【エージェント → ブラウザ】（外から操る）…… 共通・1本（アプリ本体 :8510）
+  Devin Desktop ─┐
+  Copilot CLI  ──┼─ POST /api/command ─→ ブラウザが long-poll 受信
+  任意のcurl  ───┘      ↓ executeChatTool（確認ダイアログ保護も共通）
+                   POST /api/command/results ← 実行結果を回収
+
+【ブラウザ → エージェント】（チャットから使う）…… I/F共通・実装3本
+  Canvas チャット ─POST /agent {provider,message,tools,...}→ bridge-hub (8511)
+       ├─ copilot     → copilot CLI (stdio・github-copilot-sdk) → Copilot
+       ├─ devin       → devin acp (ACP)                        → Devin
+       └─ antigravity → agy (stream-json +MCP)                 → Antigravity
+      </pre>
+      <ul>
+        <li><code>POST /api/command</code> — <code>{"name":"flyTo","args":{...}}</code> または <code>{"commands":[...]}</code>（最大50件/回）を投入すると採番 id を返します。コマンド名・引数はチャットツールと同一です</li>
+        <li><code>GET /api/command?since=&lt;id&gt;&amp;wait=&lt;秒&gt;</code> — since より新しいコマンドを返すロングポーリング（既定20秒・上限60秒）。応答の <code>latest</code> は初回同期用の最新コマンド id です。ブラウザは起動時に <code>latest</code> へ同期するため、ページ読込前に滞留したコマンドは実行されません</li>
+        <li><code>POST /api/command/results</code> — ブラウザが実行結果を <code>{"id":&lt;commandId&gt;,"ok":true,"result":{...}}</code>（または <code>{"results":[...]}</code>）で返却します</li>
+        <li><code>GET /api/command/results?since=&lt;id&gt;&amp;wait=&lt;秒&gt;</code> — 外部プロセスが実行結果を回収するロングポーリングです</li>
+      </ul>
+      <p>実行は AI チャットと同じ <code>executeChatTool</code> 経路のため、利用可能なコマンド・確認ダイアログ（savePlugin・publishPlugin・deleteDataFile 等の破壊的操作）は全て共通です。ツールの正本は <code>activeChatTools</code>（宣言）＋ <code>executeChatTool</code>（実装）で、Gemini function calling・外部エージェント actions・本経路は同じツール群を共有します。<strong>複数タブを開いている場合は全タブがコマンドを実行します</strong>（結果は重複して返ります）。キューはサーバーメモリ上の直近200件で、再起動で消えます。</p>
+      <p>例：<code>curl -X POST http://127.0.0.1:8510/api/command -H "Content-Type: application/json" -d '{"name":"flyTo","args":{"latitude":35.658,"longitude":139.7454,"height":1200,"pitch":-40}}'</code></p>
+
+      <h3 id="bridge-hub-design">🧭 設計判断：ブリッジハブ（1ポート集約）</h3>
+      <p><strong>エージェント連携は双方向です</strong>。ハブ（8511）が担うのは「ブラウザのチャット → エージェント」方向のみで、逆方向の「外部エージェント → ブラウザを操る」は別経路としてアプリ本体（8510）の <code>/api/command</code> 上にあります。どちらも最終的にはブラウザ側の <code>executeChatTool</code> に集約されます。</p>
+      <p>v5.20 まではアプリ版が Copilot・Devin・Antigravity の3ブリッジを起動時にすべて常駐させていました（8511/8512/8513）。v5.21 で常駐を <code>bridge-hub/</code>（127.0.0.1:8511）1本に集約し、選択中プロバイダのブリッジだけを内部ポート（8521/8522/8523）で遅延起動する構成に変更しています。この判断は次の2つを分離して考えると整理できます。</p>
+      <table>
+        <thead><tr><th></th><th>3ポート分離（旧）</th><th>ハブ集約（現行）</th></tr></thead>
+        <tbody>
+          <tr><td><strong>単純さ・独立性</strong></td><td>◎ 1プロセス=1ポートで中継層なし。障害が波及しない</td><td>△ ハブが単一障害点になり、中継層固有の故障モードを持つ</td></tr>
+          <tr><td><strong>資源効率</strong></td><td>× 使わないブリッジ＋CLI 子プロセスが常駐</td><td>◎ 要求駆動の遅延起動。待機時は Node 1プロセスのみ</td></tr>
+          <tr><td><strong>インターフェース</strong></td><td>× ポート知識がフロント・設定・ドキュメントに分散</td><td>◎ ブラウザが知るのは 8511 の1点のみ（ファサード）</td></tr>
+          <tr><td><strong>拡張性</strong></td><td>× プロバイダ追加のたびにポート採番・サーバー・フロント変更</td><td>◎ ハブの <code>PROVIDERS</code> への1エントリ追加</td></tr>
+        </tbody>
+      </table>
+      <p><strong>トポロジーとポリシーの分離</strong>：現行構成は「単一エンドポイント＋provider ルーティング」という<em>トポロジー</em>と、「常時最大1子・切替時に前の子を停止」という<em>ポリシー</em>の合成です。ローカルアプリ・利用者1人・一度に1プロバイダという実態では、このポリシーが省資源に最適です。</p>
+      <p><strong>マルチエージェント観点</strong>：将来複数プロバイダを同時に使う（並行実行・合議・ファンアウト等の）マルチエージェント化を考えた場合も、見直すべきは「常時1本」のポリシーだけで、ハブというトポロジー自体はオーケストレーター型マルチエージェントの自然な土台になります（稼働中の子を単数→複数管理にし、停止契機を「切替時」から「アイドルタイムアウト」に変えればハブ内の変更だけで移行可能）。逆に3ポート分離はエージェント数をポート採番にハードコードするため、エージェントが増えるほど破綻します。同時実行数の制御・レート制限・監査のような横断的関心事も、一点で面倒を見るハブの方が実装しやすく、MCP ゲートウェイや LLM ルーターが業界的に収斂している構図と同じです。</p>
+
+      <h3>🗂️ データソース（MCP 接続）</h3>
+      <p>管理（⚙）→ AI → データソース で、外部データソースの MCP サーバー（Model Context Protocol・Streamable HTTP 対応）を登録し、そのサーバーの公開ツールを AI チャットのチャットツールへ合成できます。ツール名は <code>&lt;サーバーキー&gt;__&lt;ツール名&gt;</code> の形で functionDeclarations に追加され、実行はブラウザ側の既存経路（<code>executeChatTool</code>）で振り分けられます。内蔵 AI（Gemini / OpenAI互換）に加え、プロバイダ「外部エージェント」へ渡す <code>tools</code> 宣言にも含まれます。</p>
+      <ul>
+        <li><strong>Box</strong> — 公式リモート MCP（<code>https://mcp.box.com</code>）専用の接続ボタンを用意。<a href="https://developer.box.com/guides/box-mcp" target="_blank" rel="noopener noreferrer">Box Developer Console</a> で Custom App（OAuth 2.0）を作成し、リダイレクト URI にこのアプリの URL を登録して Client ID を入力すると、OAuth 2.0 + PKCE でブラウザ内認証が完結します（client secret 不要）。Enterprise 契約では Admin Console での MCP 有効化が前提です。Box 上のファイル検索・Box AI 問い合わせ等のツールが「Box の資料を検索して」といった指示で使えます（Box AI ツールは対象プラン限定）</li>
+        <li><strong>任意の MCP サーバー</strong> — 名前・エンドポイント URL・固定 Bearer トークン（任意）を登録して接続できます。サーバー定義とトークンは localStorage の BYO 保存で、共有 .kasc には含まれません</li>
+      </ul>
+      <p><strong>権限の扱い</strong>：読み取り系ツールのみ既定で AI に公開し、ファイル作成・更新・削除などの書き込み系ツールは「書き込み系ツールも AI に公開する」を ON にした場合のみ合成されます。ON でも各実行の前に確認ダイアログが出ます（プラグイン公開と同じポリシー）。トークンは BYO（自分のアカウント権限）のため、AI 経由でも本人の権限を超える操作はできません。</p>
+      <p><strong>通信経路</strong>：ブラウザから MCP サーバーへ直接接続し、CORS 非対応のサーバー（<code>mcp.box.com</code> が該当する場合）はバックエンドが <code>POST /api/mcp?url=...</code> を通知している環境（<code>mcpProxy</code> 機能 — ローカルサーバー版・Cloudflare Pages/Workers・Cloud Run で提供）では同パス経由で中継します。プロキシは Authorization・MCP セッションヘッダ・ボディをそのまま転送する薄い中継で、キー隠蔽は行いません。接続先は SSRF ポリシー（private/loopback 拒否、ローカル版は <code>kasugai_canvas.fetch.json</code> の allow で LAN 許可可・workers 側は https 限定＋<code>MCP_ALLOWED_HOSTS</code> 環境変数で接続先制限可）に従います。</p>
+
+      <h3>🧪 runCode サンドボックス</h3>
+      <p>AI が生成した JavaScript を opaque origin の iframe + postMessage ブリッジで実行するブラウザ内コード実行基盤です。メイン画面とは DOM・ストレージが分離された状態で <code>kasugaiApi</code> 経由のみ地図を操作できるため、生成コードが誤動作しても本体状態や他ユーザーの共有資源を汚染しません。ブラウザローカルの IndexedDB プラグイン生成もこの基盤の上にあります。</p>
+
+      <h3>🔌 kasugaiApi</h3>
+      <p><code>window.kasugaiApi</code> は viewer・カメラ・レイヤー・イベントへ外部からアクセスする操作 API です。AI チャットの function calling、runCode サンドボックス内コード、プラグイン、外部エージェントの actions 実行がすべてこの API を通る共通経路になっています。イベント購読（<code>camera-changed</code> 等）もここから行えます。</p>
+
+      <p>この V3（AI 連携）の強化がハッカソン提出の中核です — Cloud Run へのデプロイ構成・<code>/api/gemini</code> キー隠蔽プロキシ・提出物については <a href="../hackathon.html">ハッカソン</a> を参照してください。81ツール宣言の引数・提供条件の詳細仕様は <a href="5-3-AIツール.html">AI ツール仕様</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>

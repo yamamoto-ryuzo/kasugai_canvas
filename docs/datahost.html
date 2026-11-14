@@ -32,10 +32,10 @@
     <main>
       <nav class="form-nav" aria-label="利用形態の切替">
         <a href="datahost.html" class="webgis current">🌐 【WebGIS】ブラウザ WebGIS</a>
-        <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
+        <a href="use/6-1-プロジェクト.html" class="app">💻 【アプリ】ローカルアプリ</a>
         <a href="runtime-cache.html" class="cache">💾 【キャッシュ】ランタイム永続キャッシュ</a>
-        <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
-        <a href="ai-bridge.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
+        <a href="use/5-1-内蔵AI.html" class="api">🤖 【API】内蔵AI</a>
+        <a href="use/5-2-外部エージェント.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
       </nav>
 
       <section>
@@ -46,7 +46,10 @@
           データは<strong>任意の静的ホスト</strong>に置くだけで、<code>?kasc=&lt;URL&gt;</code> で再生できます（サーバーレス・インストール不要）。
           CDN はエンジン本体のみを配信し、プロジェクトのカタログは持ちません — 変動するプロジェクト一覧は各データホスト側が持つ設計です。
         </p>
-        <pre class="mermaid">
+        <pre class="mermaid" aria-label="QGIS → データホスト → ブラウザの構成">---
+title: QGIS → データホスト → ブラウザの構成
+---
+
 flowchart LR
   QGIS["QGIS + geo_webview<br/>エクスポート"]
   subgraph HOST["データホスト（静的ホスト）"]
@@ -96,7 +99,7 @@ flowchart LR
               <div class="ft-row"><code>&lt;id&gt;/</code><span class="ft-tag req">必須</span><span class="ft-note">フォルダ名 = プロジェクトID。<code>?kasc=</code> URL は <code>&lt;id&gt;/kasugai_canvas.kasc</code> を前提</span></div>
               <ul>
                 <li>
-                  <div class="ft-row"><code>kasugai_canvas.kasc</code><span class="ft-tag req">必須</span><span class="ft-note">CDN エンジンの <code>?kasc=</code> に指定する URL（これだけで動く）。書式は <a href="inspector.html">.kasc 設定仕様</a></span></div>
+                  <div class="ft-row"><code>kasugai_canvas.kasc</code><span class="ft-tag req">必須</span><span class="ft-note">CDN エンジンの <code>?kasc=</code> に指定する URL（これだけで動く）。書式は <a href="use/6-2-インスペクター.html">.kasc 設定仕様</a></span></div>
                 </li>
                 <li>
                   <div class="ft-row"><code>project.json</code><span class="ft-tag opt">任意</span><span class="ft-note">プロジェクト名の表示に使用</span></div>
@@ -113,7 +116,7 @@ flowchart LR
           <tr>
             <td><code>&lt;id&gt;/kasugai_canvas.kasc</code></td>
             <td><strong>必須</strong></td>
-            <td><code>?kasc=</code> に渡す URL は <strong>この .kasc ファイルの URL そのもの</strong>。<code>DATA/</code> 等の相対参照はこの URL のフォルダ基準で解決されます。全レイヤーが URL 直参照ならこれだけで動きます。書式の詳細は <a href="inspector.html">.kasc 設定仕様</a> を参照</td>
+            <td><code>?kasc=</code> に渡す URL は <strong>この .kasc ファイルの URL そのもの</strong>。<code>DATA/</code> 等の相対参照はこの URL のフォルダ基準で解決されます。全レイヤーが URL 直参照ならこれだけで動きます。書式の詳細は <a href="use/6-2-インスペクター.html">.kasc 設定仕様</a> を参照</td>
           </tr>
           <tr>
             <td><code>&lt;id&gt;/DATA/</code></td>
@@ -199,7 +202,7 @@ flowchart LR
           <li><strong>CORS</strong> — エンジンは別オリジンからデータを fetch するため、ホスト側は <code>Access-Control-Allow-Origin</code> が必要です（GitHub Pages は <code>*</code> が既定でそのまま使えます）。</li>
           <li><strong>スナップショット方式</strong> — .kasc はエクスポート時点の状態です。QGIS 側の編集は再エクスポートで反映してください。</li>
           <li><strong>大きなファイル</strong> — GitHub Pages の1ファイル上限は 100MB です。大容量データはオブジェクトストレージ等を URL 直参照で使い分けてください。</li>
-          <li><strong>ローカル機能は無効</strong> — 設定のサーバー保存・ファイル書き込み・rclone 連携・AI ブリッジハブ内蔵などは <a href="guide.html">【アプリ】ローカルアプリ</a> 側の機能です（ブリッジは <a href="ai-bridge.html">別途 bridge-hub を導入</a>すれば WebGIS でも使えます）。</li>
+          <li><strong>ローカル機能は無効</strong> — 設定のサーバー保存・ファイル書き込み・rclone 連携・AI ブリッジハブ内蔵などは <a href="use/6-1-プロジェクト.html">【アプリ】ローカルアプリ</a> 側の機能です（ブリッジは <a href="use/5-2-外部エージェント.html">別途 bridge-hub を導入</a>すれば WebGIS でも使えます）。</li>
         </ul>
       </section>
 
@@ -208,9 +211,9 @@ flowchart LR
         <ul>
           <li><a href="https://yamamoto-ryuzo.github.io/kasugai_canvas_webGIS/">kasugai_canvas_webGIS（この構成の実例サイト）</a></li>
           <li><a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/">kasugai-canvas-web ガイド（エンジン側）</a></li>
-          <li><a href="guide.html">【アプリ】ローカルアプリ（フル機能版）</a></li>
-          <li><a href="ai-bridge.html">【ブリッジ】外部エージェント連携（bridge-hub 導入）</a></li>
-          <li><a href="inspector.html">.kasc 設定仕様</a></li>
+          <li><a href="use/6-1-プロジェクト.html">【アプリ】ローカルアプリ（フル機能版）</a></li>
+          <li><a href="use/5-2-外部エージェント.html">【ブリッジ】外部エージェント連携（bridge-hub 導入）</a></li>
+          <li><a href="use/6-2-インスペクター.html">.kasc 設定仕様</a></li>
           <li><a href="index.html">← ドキュメントトップへ</a></li>
         </ul>
       </section>

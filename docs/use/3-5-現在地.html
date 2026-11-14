@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3-5 現在地へ移動・フルスクリーン — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>3-5 現在地へ移動・フルスクリーン — ナビゲーションツールバーの位置関連ボタン</p>
+    </header>
+    <main>
+      <p><a href="3-1-コンパス.html">ナビゲーションツールバー</a>（画面右下）の「現在地」「フルスクリーン」「スクリーンショット」ボタンです。</p>
+
+      <h2>使い方</h2>
+      <h3>📍 現在地へ移動</h3>
+      <p>ブラウザの位置情報 API で現在地へ移動し、位置精度に応じて適切な高度を選択します。現在地マーカーを表示し、移動後に再クリックで追従モードを切り替えられます。</p>
+
+      <h3>⛶ フルスクリーン</h3>
+      <p>トグルで全画面表示と切り替えます。プレゼンや資料投影に便利です。</p>
+
+      <h3>📷 スクリーンショット</h3>
+      <p>プロジェクトセレクタ横の 📷 ボタンで、表示中の地図を PNG 保存します（ファイル名は <code>kasugai_canvas_YYYY-MM-DD-HH-MM-SS.png</code>）。</p>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../../issues/07/gps.png" alt="現在地追従：青い現在地マーカーと精度円" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/20/fullscreen.png" alt="フルスクリーンボタン（ナビゲーションツールバー最下段）" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">現在地追従（左）とフルスクリーン（右）</figcaption>
+      </figure>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません（UI 操作のみです）。関連するレイヤー設定は <a href="6-2-インスペクター.html">6-2 インスペクター</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>

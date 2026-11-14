@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-2 選択・集計 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-2 選択・集計 — ツールドックの空間選択・ポリゴン内集計・バッファ生成</p>
+    </header>
+    <main>
+      <p>レイヤパネルの🧰ボタンで開くツールドックの「選択・集計」パネルです。すべてブラウザ完結・静的配信のみで動作します。</p>
+
+      <h2>使い方</h2>
+      <h3>🔲 選択・集計</h3>
+      <p>矩形（2点）・ポリゴン（頂点クリック＋ダブルクリック）・円（中心＋半径入力）で範囲を描き、対象レイヤ（全ベクター可）内の地物を空間選択します。包含・辺交差まで判定し、結果はハイライト＋件数＋代表名表示。「選択をレイヤー化」で選択地物を新規一時レイヤーにできます。</p>
+      <p>続けて<strong>ポリゴン内集計</strong>（集計キー＋数値列で count/sum/avg/min/max）と<strong>バッファ生成</strong>（描画範囲または選択地物に距離 m のバッファを新規レイヤー化。点は測地線円、ライン/ポリゴンは turf.js を遅延ロード）も行え、生成したバッファはそのまま次の選択範囲として使えます。</p>
+
+      <h3>対応エンジン</h3>
+      <p>Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps。Navara は未提供です。AI からは <code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code> の専用ツールで実行できます（<a href="5-3-AIツール.html">5-3 AI ツール仕様</a>）。</p>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません。「選択をレイヤー化」・バッファ生成で作った一時レイヤーは、プロジェクト保存時にレイヤー行（<code>geojson:</code> 等）として .kasc に反映されます。</p>
+
+    </main>
+  </div>
+</body>
+</html>

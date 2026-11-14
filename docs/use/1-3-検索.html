@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1-3 検索 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>1-3 検索 — レイヤパネルの「検索」タブと検索窓</p>
+    </header>
+    <main>
+      <h2>使い方</h2>
+      <h3>🔎 住所検索</h3>
+      <p>国土地理院の住所検索 API（既定）と Yahoo Local Search API（<code>yahooAppId</code> 設定で有効化）を使い、住所・施設名で検索してクリックで FlyTo します。Google Maps Platform の Geocoding / Places を使うハイブリッド検索は <a href="6-4-GoogleMaps.html">管理 → Google Maps</a> で API キーを登録すると利用できます。</p>
+      <p>検索窓は<strong>座標の直接入力</strong>にも対応しており、「<code>35.681,139.767</code>」「<code>139.767,35.681</code>」（経度・緯度順も可）、「<code>N35°41' E139°46'</code>」「<code>35度41分 139度46分</code>」のような度・度分秒表記を入力すると、ジオコーディングを介さずその地点へ直接 FlyTo します。</p>
+      <figure>
+      <img src="../../issues/05/coord-search.png" alt="住所検索窓への座標直入力：35.681,139.767 を入力してその地点へ FlyTo" />
+      <figcaption aria-hidden="true">検索窓への座標直入力（入力した座標がそのまま検索結果として表示され FlyTo）</figcaption>
+      </figure>
+
+      <h3>🧬 ベクトル検索</h3>
+      <p>読み込み済みベクター（GeoJSON/GeoParquet/FlatGeobuf 等の全件読み込み系）の属性値を「レイヤー → 属性 → 値」の三段階またはテキスト検索で絞り込み、行クリックで FlyTo します。対象範囲は「全選択（非表示・未読込レイヤーも検索時に読み込んで対象化）」「表示レイヤ」「個別レイヤー」から選べます。クエリ系レイヤー（duckdb:/sql:/gpkg:）は索引ではなく SQL フィルター側で検索する設計のため対象外です。</p>
+
+      <h2>設定方法（.kasc 等）</h2>
+      <pre class="text"><code>yahooAppId: Yahoo Local Search のアプリケーションID（住所検索に Yahoo を併用）
+searchtab: 定型検索タブ（geo_search 相当の検索タブを追加）</code></pre>
+      <ul>
+        <li>Google Maps Platform の Geocoding / Places によるハイブリッド検索は、管理 ⚙ → Google Maps で API キーを登録します（<a href="6-4-GoogleMaps.html">6-4 Google Maps</a>）</li>
+        <li>住所検索の既定プロバイダは国土地理院の住所検索 API で、設定なしで動作します</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="1-4-属性.html">1-4 属性</a> — 属性テーブルの文字列検索・SQL フィルタ</li>
+        <li><a href="6-4-GoogleMaps.html">6-4 Google Maps</a> — Geocoding / Places のハイブリッド検索設定</li>
+        <li><a href="5-3-AIツール.html">5-3 AI ツール仕様</a> — <code>searchLocation</code>・<code>vectorSearch</code>・<code>searchPlaces</code></li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

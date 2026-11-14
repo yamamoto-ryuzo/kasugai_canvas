@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1-2 凡例 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>1-2 凡例 — レイヤパネルの「凡例」タブ</p>
+    </header>
+    <main>
+      <h2>使い方</h2>
+      <h3>🖼️ 凡例表示</h3>
+      <p><code>legend:</code> 行で凡例画像の URL を指定すると Legend タブに一覧表示します。複数行で複数の凡例を登録できます。凡例画像は静的ファイル・外部 URL・ローカル <code>DATA/</code> 内ファイルのいずれも使えます。</p>
+      <pre class="text"><code>legend: 凡例 | https://example.com/legend.png
+legend: 凡例2 | DATA/legend2.png</code></pre>
+      <p>QGIS スタイル（<code>style=</code> の .qml や GPKG 埋め込みスタイル）が適用されたベクターレイヤーは、QML 由来の凡例スウォッチと条件別の表示切替も凡例タブに表示されます。</p>
+
+      <h2>設定方法（.kasc）</h2>
+      <pre class="text"><code>legend: 凡例 | https://example.com/legend.png
+legend: 凡例2 | DATA/legend2.png
+legendnode: 凡例ノード順・ラベル・表示名（直前のレイヤー行に適用）</code></pre>
+      <ul>
+        <li>ベクター行の <code>style=QMLファイルURL</code> で QGIS スタイルを適用すると、QML 由来の凡例スウォッチと条件別の表示切替が凡例タブに出ます</li>
+        <li>geo_webview（QGIS プラグイン）のエクスポートでは凡例画像・凡例ノードが自動出力されます</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="6-2-インスペクター.html">6-2 インスペクター（.kasc 設定仕様）</a> — <code>legend:</code>・<code>legendnode:</code> 行の書式</li>
+        <li><a href="../features/v7.html">V7: QGIS連携</a> — QML スタイル再現と凡例スウォッチ</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

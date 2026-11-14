@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-1 計測 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-1 計測 — ツールドックの計測ツール（距離・面積・方位）</p>
+    </header>
+    <main>
+      <p>レイヤパネルの🧰ボタンで開くツールドック（画面上部のバー）の「計測」パネルです。地図対話モードの開始時はバーが自動で畳まれます。すべてブラウザ完結・静的配信のみで動作します。</p>
+
+      <h2>使い方</h2>
+      <h3>📏 計測（距離・面積・方位）</h3>
+      <p>左クリックで頂点を追加、ダブルクリックで確定（Esc で中断・クリアボタンで消去）。距離は測地線（EllipsoidGeodesic）で区間ラベルと総延長を表示、面積は接平面シューレース近似＋周囲長、方位は2点の初方位・逆方位・距離を表示します。地形追従クリックのため 3D 表示時も地表値です。</p>
+      <figure>
+      <img src="../../issues/28/measure-distance.png" alt="距離計測：区間ラベルと総延長" />
+      <figcaption aria-hidden="true">距離計測（区間ラベルと総延長）</figcaption>
+      </figure>
+
+      <h3>対応エンジン</h3>
+      <p>Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps（iframe 内 Leaflet へ描画）。2D エンジンでは共有モジュール（<code>web/shared/geo-tools-2d.js</code>）が同一 UI・同一 API を提供します。Navara は地物ピック非対応のため未提供です。</p>
+      <p>AI からも操作できます — <code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code> の専用ツール（<a href="5-3-AIツール.html">5-3 AI ツール仕様</a>）。</p>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません（UI 操作のみです）。関連するレイヤー設定は <a href="6-2-インスペクター.html">6-2 インスペクター</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>

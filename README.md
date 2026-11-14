@@ -51,7 +51,7 @@ python run-workers.py    # Workers（control: 4・全ファイル認証ゲート
 
 Cloud Run へのデプロイ（control: 5/6/7）は `agent/Dockerfile` と `agent/README.md` を参照してください。
 
-設定手順の詳細は [認証とプラグイン](docs/auth/index.html) を参照してください。
+設定手順の詳細は [認証とプラグイン](docs/use/7-1-認証.html) を参照してください。
 
 ## ローカルサーバー API（オプション）
 
@@ -97,7 +97,7 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 
 ## 拡張機能（Plugin）と認証
 
-認証方式は `web/auth-methods.json` の `control` で 0〜7 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](docs/auth/index.html) を参照してください。
+認証方式は `web/auth-methods.json` の `control` で 0〜7 の番号で 1 つだけ選択されます。選択された方式のみが `web/auth-selector.js` により起動時に実行され、認証成功後に `app.js` と `plugin-loader.js` が読み込まれます。ユーザー向けの詳細な設定手順は [認証とプラグイン](docs/use/7-1-認証.html) を参照してください。
 
 ### 起動後通常プラグイン
 `web/plugins.json` は利用可能な同梱プラグインの**カタログ**です。既定では自動ロードせず、プロジェクトの `.kasc`（インスペクタ）に `plugin:` 行で宣言したものだけを `web/plugin-loader.js` が `import()` します。`"auto": true` を付けたエントリのみ全プロジェクトで常駐ロードします。

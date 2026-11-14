@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3-2 表示履歴 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>3-2 表示履歴 ◀ ▶ — ナビゲーションツールバーの履歴移動</p>
+    </header>
+    <main>
+      <p><a href="3-1-コンパス.html">ナビゲーションツールバー</a>（画面右下）の「◀/▶」ボタンで、表示位置の履歴を行き来できます。</p>
+
+      <h2>使い方</h2>
+      <h3>📜 表示履歴（◀ ▶）</h3>
+      <p>カメラ移動をスタックとして履歴化し、戻る/進むボタンで移動履歴を行き来します。カメラ操作のたびに履歴が積まれるため、どの位置からでも任意の過去表示へ戻れます。</p>
+      <figure>
+      <img src="../../issues/17/history.png" alt="表示履歴一覧：新しい順に番号付きで視点を列挙し、現在位置は ● 印" />
+      <figcaption aria-hidden="true">表示履歴一覧（ダブルクリックで開く番号付きリスト）</figcaption>
+      </figure>
+      <p>AI の <code>undoView</code> ツールで「一つ前の表示に戻す」指示も履歴スタックで実現します（<a href="5-3-AIツール.html">5-3 AI ツール仕様</a>）。エンジン切替時も履歴は引き継がれます（<a href="1-10-マルチエンジン.html">1-10 マルチエンジン</a>）。</p>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません（UI 操作のみです）。関連するレイヤー設定は <a href="6-2-インスペクター.html">6-2 インスペクター</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>

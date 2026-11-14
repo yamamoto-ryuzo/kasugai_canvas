@@ -1007,7 +1007,7 @@ function focusFeatureExtent(feature) {
   if (env) gmap.fitBounds([[env.south, env.west], [env.north, env.east]], { padding: [50, 50] });
 }
 
-// 「属性・値一覧」ボトムシート(Leaflet 版と同じ共有ウィジェット)
+// 「属性テーブル」ボトムシート(Leaflet 版と同じ共有ウィジェット)
 const attrWidget = createAttrWidget({
   listLayers: () => layerEntries
     .map((entry, i) => ({ id: String(i), title: splitKascTitle(entry.item.title).title || entry.item.title || entry.item.url, entry }))
@@ -1111,7 +1111,7 @@ function buildLayerRow(entry, exclusive, radioName) {
   const name = document.createElement("span");
   name.textContent = entry._leaf || item.url;
   if (item.title && item.title !== entry._leaf) name.title = item.title;
-  // ベクターレイヤは名前クリックで「属性・値一覧」ウィジェットを開く
+  // ベクターレイヤは名前クリックで「属性テーブル」ウィジェットを開く
   if (VECTOR_TYPES.has(item.type)) {
     name.style.cursor = "pointer";
     name.title = "属性一覧を表示";

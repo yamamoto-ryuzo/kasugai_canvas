@@ -6,160 +6,85 @@
   <title>V1: GIS 基本機能 — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="../style.css">
   <script src="../nav.js" defer></script>
+  <script>
+    // 旧アンカー（#tab-* / #tool-* / #nav / #basemap）を分割後のページへ転送
+    (function () {
+      var map = {
+        'tab-layer':   '../use/1-1-レイヤ.html',
+        'tab-legend':  '../use/1-2-凡例.html',
+        'tab-search':  '../use/1-3-検索.html',
+        'tab-attr':    '../use/1-4-属性.html',
+        'tab-camera':  '../use/1-5-カメラ.html',
+        'tab-display': '../use/1-6-表示.html',
+        'tab-info':    '../use/1-7-情報.html',
+        'tool-measure':'../use/2-1-計測.html',
+        'tool-select': '../use/2-2-選択集計.html',
+        'tool-draw':   '../use/2-3-作図.html',
+        'tool-profile':'../use/2-4-標高断面.html',
+        'tool-los':    '../use/2-5-見通し.html',
+        'tool-export': '../use/2-6-エクスポート.html',
+        'tool-print':  '../use/2-7-印刷.html',
+        'tool-time':   '../use/2-8-時系列.html',
+        'nav':         '../use/3-1-コンパス.html',
+        'basemap':     '../use/4-1-ベースマップ.html'
+      };
+      var id = location.hash.replace(/^#/, '');
+      if (map[id]) location.replace(map[id]);
+    })();
+  </script>
 </head>
 <body>
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
-      <p>V1: GIS 基本機能 — 各機能カードの詳細説明</p>
+      <p>V1: GIS 基本機能 — バージョンテーマの説明</p>
     </header>
     <main>
-      <p><a href="../features.html">← バージョン履歴へ戻る</a></p>
+      <p><a href="../tech/2-1-バージョン履歴.html">← バージョン履歴へ戻る</a></p>
 
-      <h2 id="gis">V1: GIS 基本機能（Re:Earth GeoSuite 上位互換）</h2>
-      <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。各機能の設定書式は <a href="../inspector.html">.kasc 設定仕様</a>、バージョン横断の実装詳細（描画順・ドレープ・高さ基準・制限）は <a href="v0.html">V0: システム基本構成</a> を参照してください。</p>
+      <h2>V1: GIS 基本機能（Re:Earth GeoSuite 上位互換）</h2>
+      <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。V1 で導入された UI 機能の説明は、Canvas の画面構成に合わせて <strong>使い方</strong> セクションの各ページへ分割しました。</p>
 
-      <h3 id="tool-time">📝 インスペクター一括設定</h3>
-      <p>プロジェクトの設定は <code>projects/&lt;id&gt;/kasugai_canvas.kasc</code> に行単位のテキストとして記述します。管理（⚙）→ プロジェクト → インスペクター でテキスト全体を確認・編集でき、「適用」で即時反映されます。レイヤー行は <code>種類: 名前 | URL | オプション</code> の形式で、<code>xyz:</code> / <code>3dtiles:</code> / <code>geojson:</code> / <code>geoparquet:</code> / <code>flatgeobuf:</code> / <code>gpkg:</code> / <code>duckdb:</code> / <code>sql:</code> / <code>kml:</code> / <code>wfs:</code> / <code>shp:</code> / <code>csv:</code> / <code>cloud:</code> 参照 / <code>base:</code> / <code>info:</code> / <code>cam:</code> / <code>legend:</code> / <code>fly_geojson:</code> 等を扱えます。テキストベースなので .kasc ファイルをそのまま共有・版管理できます。</p>
+      <h3>レイヤパネル（画面左パネルのタブ）</h3>
+      <div class="features">
+        <a class="feature-card" href="../use/1-1-レイヤ.html"><h3>1-1 レイヤ</h3><p>レイヤー追加・一覧・並べ替え・グループ化・システムレイヤ制御</p></a>
+        <a class="feature-card" href="../use/1-2-凡例.html"><h3>1-2 凡例</h3><p>legend: 行の凡例画像と QML スタイル由来の凡例スウォッチ</p></a>
+        <a class="feature-card" href="../use/1-3-検索.html"><h3>1-3 検索</h3><p>住所検索・座標直入力・ベクトル検索</p></a>
+        <a class="feature-card" href="../use/1-4-属性.html"><h3>1-4 属性</h3><p>地物クリックの属性表示・属性テーブル・SQL フィルタ</p></a>
+        <a class="feature-card" href="../use/1-5-カメラ.html"><h3>1-5 カメラ</h3><p>cam: プリセット FlyTo・視点共有リンク</p></a>
+        <a class="feature-card" href="../use/1-6-表示.html"><h3>1-6 表示</h3><p>地形・ドレープ・座標表示形式・ミニマップ・グリッド</p></a>
+        <a class="feature-card" href="../use/1-7-情報.html"><h3>1-7 情報</h3><p>info: 行で外部 HTML を情報タブへ表示</p></a>
+      </div>
 
-      <h3 id="basemap">🗺️ ベースマップ</h3>
-      <p><code>base:</code> または <code>xyz:</code> 行で定義した XYZ/TMS タイルをベースマップとして扱い、ツールバーの Basemap セレクタで1つだけアクティブにします。「ベースマップなし」は背景を透過し、「ベースマップ透明」は地表色と背景を透過しつつ XYZ ドレープと地形の高さを維持します。セレクタ横の 🌐 アイコンは、現在の視点（位置・高度・方位・傾き）を Google Earth 形式に変換して新しいウィンドウで開きます。</p>
+      <h3>ツール（🧰 ツールドック）</h3>
+      <div class="features">
+        <a class="feature-card" href="../use/2-1-計測.html"><h3>2-1 計測</h3><p>距離・面積・方位の測地線計測</p></a>
+        <a class="feature-card" href="../use/2-2-選択集計.html"><h3>2-2 選択・集計</h3><p>矩形・ポリゴン・円での空間選択と集計・バッファ</p></a>
+        <a class="feature-card" href="../use/2-3-作図.html"><h3>2-3 作図</h3><p>ポイント・ライン・ポリゴン・注記の描画</p></a>
+        <a class="feature-card" href="../use/2-4-標高断面.html"><h3>2-4 標高断面</h3><p>折れ線に沿った距離-標高グラフ</p></a>
+        <a class="feature-card" href="../use/2-5-見通し.html"><h3>2-5 見通し判定</h3><p>LOS 判定と可視範囲（viewshed）</p></a>
+        <a class="feature-card" href="../use/2-6-エクスポート.html"><h3>2-6 エクスポート</h3><p>GeoJSON/CSV/KML/FlatGeobuf/Shapefile 出力</p></a>
+        <a class="feature-card" href="../use/2-7-印刷.html"><h3>2-7 印刷</h3><p>帳票生成・PNG 保存・QGIS レイアウト PDF</p></a>
+        <a class="feature-card" href="../use/2-8-時系列.html"><h3>2-8 時系列</h3><p>time= オプションとタイムスライダー</p></a>
+      </div>
 
-      <h3>🔧 システムレイヤ制御</h3>
-      <p><code>layer:</code> 行で既存レイヤー名を指定し、表示/非表示を初期状態として制御します。プロジェクトを開いた時点で特定レイヤーだけを見せたい場合に使います。非表示にされたベクターレイヤーはロード自体もスキップされ、表示ON・検索・フィルター変更のタイミングで初めて取得されます。</p>
+      <h3>ナビゲーション・ベースマップ</h3>
+      <div class="features">
+        <a class="feature-card" href="../use/3-1-コンパス.html"><h3>3-1 コンパス・3D・オービット</h3><p>右下ツールバーの視点操作</p></a>
+        <a class="feature-card" href="../use/3-2-表示履歴.html"><h3>3-2 表示履歴</h3><p>◀ ▶ でカメラ履歴を行き来</p></a>
+        <a class="feature-card" href="../use/3-3-矩形ズーム.html"><h3>3-3 矩形ズーム</h3><p>ドラッグ矩形で範囲ズーム</p></a>
+        <a class="feature-card" href="../use/3-4-地点座標.html"><h3>3-4 地点座標の取得</h3><p>クリック地点の座標表示・コピー</p></a>
+        <a class="feature-card" href="../use/3-5-現在地.html"><h3>3-5 現在地・フルスクリーン</h3><p>位置情報・全画面・スクリーンショット</p></a>
+        <a class="feature-card" href="../use/4-1-ベースマップ.html"><h3>4-1 ベースマップ選択</h3><p>OSM・地理院・Google Maps の切替</p></a>
+        <a class="feature-card" href="../use/4-2-別アプリ.html"><h3>4-2 別アプリで開く</h3><p>Google Earth・ローカルアプリ・CDN 版</p></a>
+      </div>
 
-      <h3 id="tab-layer">➕ レイヤー追加・管理</h3>
-      <p>XYZ タイル・3D Tiles・GeoJSON などを URL 指定で追加できます。ローカルサーバー版では <code>DATA/</code> 内ファイルや <code>cloud:</code> スキームのクラウド上ファイルもレイヤーとして読み込めます。追加したレイヤーは Layers パネルで表示切替・並べ替えでき、設定（.kasc）に永続化されます。</p>
-
-      <h3>📑 レイヤー一覧UI</h3>
-      <p>読み込んだレイヤーを一覧し、チェックで表示切替、ドラッグ＆ドロップで並び替えができます。各行の 📍 ボタンでレイヤー全体の範囲へフォーカス（FlyTo）します。並べ替えた順序は <code>ImageryLayerCollection</code> の lower/raise や DataSource の index に反映され、表示切替や排他グループ動作は並べ替え後も維持されます。</p>
-
-      <h3>📂 レイヤーグループ化</h3>
-      <p>レイヤー名に <code>/</code> を含めるとフォルダのようなグループに、<code>//</code> を含めると排他グループ（同時に1つだけ表示・ラジオボタン的動作）になります。地物カテゴリの切替や対比表示に使えます。</p>
-
-      <h3 id="tab-legend">🖼️ 凡例表示</h3>
-      <p><code>legend:</code> 行で凡例画像の URL を指定すると Legend タブに一覧表示します。複数行で複数の凡例を登録できます。凡例画像は静的ファイル・外部 URL・ローカル <code>DATA/</code> 内ファイルのいずれも使えます。</p>
-
-      <h3 id="tab-search">🔎 住所検索</h3>
-      <p>国土地理院の住所検索 API（既定）と Yahoo Local Search API（<code>yahooAppId</code> 設定で有効化）を使い、住所・施設名で検索してクリックで FlyTo します。Google Maps Platform の Geocoding / Places を使うハイブリッド検索は V4 の Google 連携側の機能です。</p>
-      <p>検索窓は<strong>座標の直接入力</strong>にも対応しており、「<code>35.681,139.767</code>」「<code>139.767,35.681</code>」（経度・緯度順も可）、「<code>N35°41' E139°46'</code>」「<code>35度41分 139度46分</code>」のような度・度分秒表記を入力すると、ジオコーディングを介さずその地点へ直接 FlyTo します。</p>
-      <figure>
-      <img src="../../issues/05/coord-search.png" alt="住所検索窓への座標直入力：35.681,139.767 を入力してその地点へ FlyTo" />
-      <figcaption aria-hidden="true">検索窓への座標直入力（入力した座標がそのまま検索結果として表示され FlyTo）</figcaption>
-      </figure>
-
-      <h3>🧬 ベクトル検索</h3>
-      <p>読み込み済みベクター（GeoJSON/GeoParquet/FlatGeobuf 等の全件読み込み系）の属性値を「レイヤー → 属性 → 値」の三段階またはテキスト検索で絞り込み、行クリックで FlyTo します。対象範囲は「全選択（非表示・未読込レイヤーも検索時に読み込んで対象化）」「表示レイヤ」「個別レイヤー」から選べます。クエリ系レイヤー（duckdb:/sql:/gpkg:）は索引ではなく SQL フィルター側で検索する設計のため対象外です。</p>
-
-      <h3 id="tab-attr">📊 属性・値一覧</h3>
-      <p>選択中または全ベクターレイヤーの属性・値を表形式で一覧し、文字列検索・列ソート・行クリック FlyTo に対応します。クエリ系レイヤーも選択肢に出し、内容は DB に対して直接クエリして取得します（検索索引ではなく全件対象）。</p>
-
-      <h3 id="tab-camera">🎥 カメラプリセット</h3>
-      <p><code>cam: 名前 | 緯度 | 経度 | 高さ | pitch | heading</code> 形式で登録した位置へ、Camera パネルのボタンでワンクリック FlyTo します。プレゼンの導線（Chapter 的な視点遷移）として使えます。</p>
-
-      <h3 id="tab-info">ℹ️ Info 表示</h3>
-      <p><code>info:</code> 行で指定した外部 HTML を Info タブに表示します。スクリプト等はサニタイズされ、プロジェクト説明・参考資料・凡例ドキュメントの埋め込みに使えます。</p>
-
-      <h3>📤 Share（位置情報共有）</h3>
-      <p>カメラ位置（緯度・経度・高さ・heading・pitch）を URL ハッシュに保持し、タブバー右端の <strong>🔗 ボタン</strong>で同じ視点を再現するリンクをクリップボードへコピーします。ハッシュ形式のためカメラ移動で URL が自動更新され、開いた側はアニメーション付きでその視点へ FlyTo します。プロジェクト指定はクエリ（<code>?project=</code>）に保持されます。この形式は MapLibre / OpenLayers の .kasc プレイヤーとも共通で、同じ URL を <code>?engine=</code> 指定で別エンジンへ渡すと同じ地点が復元されます（詳細は <a href="v0.html">V0 の URL パーマリンク節</a>）。</p>
-
-      <h3>🗺️ GeoJSON 3D ドレープ制御</h3>
-      <p>ベクターレイヤーが「地面 / Terrain（DEM）/ 3D Tiles」のどの面に追従するかを、インスペクター行のオプションまたは表示 → ドレープ パネルで切り替えます。地形ありの現地調査資料では張り付き先の選択が見え方を左右します。詳細な仕組みは <a href="v0.html#terrain">V0 の地形・ドレープ節</a> を参照してください。</p>
-
-      <h3>🛡️ ベクター描画件数の上限</h3>
-      <p>表示 → ドレープ タブで entity 描画ベクターの合計件数バジェットを制限します（既定 20000・0/空欄=無制限）。上限超過時は「ファイル先頭 N 件」ではなく<strong>表示範囲内の地物を優先</strong>して描画し、カメラ移動で追従します。切り捨ては描画のみで、検索索引・属性一覧は常に全件対象です。一覧には <code>shown/total</code> バッジが出ます。</p>
-
-      <h3 id="tab-display">⛰️ Terrain / Shadow</h3>
-      <p>地形表示と影表示をワンクリックで ON/OFF します。地形ソースは Re:Earth Terrain（楕円体高 / 標高）と国土地理院 DEM（5m+10m / 1m、TP基準）から選択可能で、CesiumWorldTerrain は Ion アクセスが必要なため同梱していません。高さ基準の違い（楕円体高 / 標高）は数十 m のずれになるため、3D Tiles の高さ基準に合わせた選択が必要です（<a href="v0.html#terrain">詳細</a>）。</p>
-
-      <h3 id="nav">🧭 ナビゲーション</h3>
-      <p>ナビゲーションツールバー（地図右端・折りたたみ可）には、方位コンパス・2D/3D 切替・Orbit/Fly モード切替・北リセットに加え、表示系の便利ツールを2列グリッドで配置しています。Orbit は通常の地球閲覧、Fly はプレゼン用の飛行モード（V2）です。これらのツールは全エンジン共通で、Cesium 以外のエンジンでは共有モジュール（<code>web/shared/nav-tools.js</code>）が同一 UI・同一操作を提供します。</p>
-      <figure>
-      <img src="../images/toolbar-all.png" alt="ナビゲーションツールバー：コンパス・3D・オービット・履歴・矩形ズーム・地点座標・現在地・フルスクリーン" style="max-width:130px;" />
-      <figcaption aria-hidden="true">ナビゲーションツールバー（上から：コンパス・3D・オービット・履歴◀▶・矩形ズーム▭・地点座標⌖・現在地📍・フルスクリーン⛶）</figcaption>
-      </figure>
+      <h3>関連ページ</h3>
       <ul>
-        <li><strong>表示履歴 ◀ / ▶</strong> — シングルクリックで1つ前/次の視点へ戻る・進む（最大100件）。ダブルクリックで番号付きの履歴一覧を開き、任意の時点へ直接ジャンプできます。一覧は新しい順で現在位置は ● 印、各行には国土地理院の逆ジオコーディングで取得した概算地名を併記します。キーボードショートカットは Alt+← / Alt+→。</li>
-        <li><strong>矩形ズーム ▭</strong> — ボタンでモード切替、または Shift+ドラッグで即時起動。右下方向へドラッグした矩形が画面全体に拡大され、左上方向へドラッグするとその逆変換で縮小します（ドラッグ中は枠線の色で縮小を予告）。傾斜視点では矩形中心を軸にした倍率ズームに切り替わります。Esc でドラッグをキャンセル。</li>
-        <li><strong>地点座標取得 ⌖</strong> — ボタンで十字カーソルの座標取得モードになり、地図をクリックするとその地点の座標ポップアップを表示します。座標は「座標表示形式」設定（度/DMS/UTM/平面直角座標系）に従い、国土地理院逆ジオコーダーの行政区画名・muniCd を併記します。「コピー」でクリップボードへ、「ピン」で共有 GeoJSON レイヤーとして地図にピンを蓄積（属性を持つため後から属性検査可能・全エンジン共通レイヤー）、「クリア」で全ピンを削除します。</li>
-        <li><strong>現在地 📍</strong> — クリックで位置追従の ON/OFF。ON の間は watchPosition で青い現在地マーカー（精度円付き）を表示し、3秒以上経過した更新でカメラも追従します。</li>
-        <li><strong>フルスクリーン ⛶</strong> — ドキュメント全体をフルスクリーン化 / 解除します。</li>
-        <li><strong>スクリーンショット 📷</strong> — プロジェクトセレクタ横の 📷 ボタンで表示中の地図を PNG 保存します（ファイル名は <code>kasugai_canvas_YYYY-MM-DD-HH-MM-SS.png</code>）。</li>
+        <li><a href="../use/6-2-インスペクター.html">6-2 インスペクター（.kasc 設定仕様）</a> — 各機能の行書式</li>
+        <li><a href="v0.html">V0: システム基本構成</a> — バージョン横断の実装詳細（描画順・ドレープ・高さ基準・制限）</li>
+        <li><a href="../tech/2-1-バージョン履歴.html">バージョン履歴（機能カード索引）</a></li>
       </ul>
-      <figure>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../../issues/17/history.png" alt="表示履歴一覧：新しい順に番号付きで視点を列挙し、現在位置は ● 印" style="max-width:48%; flex:1 1 260px;" />
-      <img src="../../issues/16/rectzoom-drag.png" alt="矩形ズーム：ドラッグ中の矩形を破線枠で表示" style="max-width:48%; flex:1 1 260px;" />
-      </div>
-      <figcaption aria-hidden="true">表示履歴一覧（左：ダブルクリックで開く番号付きリスト）と矩形ズーム（右：ドラッグ中の矩形）</figcaption>
-      </figure>
-      <figure>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../../issues/04/coordpick.png" alt="地点座標ポップアップ：座標・行政区画名・muniCd とコピー/ピン/クリアボタン" style="max-width:48%; flex:1 1 260px;" />
-      <img src="../../issues/07/gps.png" alt="現在地追従：青い現在地マーカーと精度円" style="max-width:48%; flex:1 1 260px;" />
-      </div>
-      <figcaption aria-hidden="true">地点座標取得（左）と現在地追従（右）</figcaption>
-      </figure>
-      <figure>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../../issues/20/fullscreen.png" alt="フルスクリーンボタン（ナビゲーションツールバー最下段）" style="max-width:48%; flex:1 1 260px;" />
-      <img src="../../issues/16/rectzoom-after.png" alt="矩形ズーム後：選択した矩形範囲へズームイン" style="max-width:48%; flex:1 1 260px;" />
-      </div>
-      <figcaption aria-hidden="true">フルスクリーン（左）と矩形ズームの結果（右）</figcaption>
-      </figure>
-
-      <h3>📊 属性（Attr）表示</h3>
-      <p>地物をクリックすると属性を Attr パネルに一覧表示します。重なった地物（ポリゴン等の面重なり）は <code>scene.drillPick</code> で最大16件を手前から順に拾い、件数付きヘッダー一覧として表示し、行クリックで個別属性を展開します。3D Tiles（構造化メタデータ <code>Cesium3DTileFeature</code>）・ベクター（entity/primitive）の各描画経路を同じ形式に正規化して扱います。</p>
-      <figure>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../images/attr-panel.png" alt="属性タブ：クリックした建築物（3D Tiles）の属性一覧" style="max-width:48%; flex:1 1 260px;" />
-      <img src="../images/attr-panel-overlap.png" alt="属性タブ：重なった地物 3 件のドリルピック一覧" style="max-width:48%; flex:1 1 260px;" />
-      </div>
-      <figcaption aria-hidden="true">属性タブ（左：選択地物の属性、右：重なった地物のドリルピック一覧）</figcaption>
-      </figure>
-
-      <h3>📐 座標表示形式・測地系</h3>
-      <p>表示 → 一般タブの「座標表示形式」（度(10進) / 度分秒(DMS) / UTM / 平面直角座標系 I〜XIX系）と「測地系」（JGD2024・JGD2011 / JGD2000 / 日本測地系）のセレクトで、カーソル座標・地点座標ポップアップ・座標コピーの形式を切り替えられます。平面直角の系番号は最近傍原点から自動選択します。<strong>内部の座標はすべて WGS84 で一元管理</strong>しており、WGS84 ネイティブの緯度経度（度・度分秒・既定測地系）以外の表示には <strong>（参考値）</strong> が付きます。JGD2000・日本測地系など他測地系の座標は国土地理院の公式変換パラメータ（TKY2JGD / PatchJGD）で変換した参考値であり、現在位置の WGS84 と固定時点の測地成果とは地殻変動分の差が累積するため、測量成果としての利用は想定していません（詳細は <a href="v0.html#coords-datum">V0 の座標・測地系の扱い節</a>）。</p>
-      <figure>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
-      <img src="../../issues/06/coords-dms.png" alt="座標表示形式：度分秒(DMS) 表示" style="max-width:32%; flex:1 1 200px;" />
-      <img src="../../issues/06/coords-utm.png" alt="座標表示形式：UTM 座標表示" style="max-width:32%; flex:1 1 200px;" />
-      <img src="../../issues/06/coords-jpx.png" alt="座標表示形式：平面直角座標系の表示" style="max-width:32%; flex:1 1 200px;" />
-      </div>
-      <figcaption aria-hidden="true">座標表示形式（左から：度分秒・UTM・平面直角座標系）</figcaption>
-      </figure>
-
-      <h3>🗺️ ミニマップ（オーバービュー）</h3>
-      <p>表示 → 一般タブの「ミニマップを表示」で、画面左下に小さな2Dオーバービュー地図を表示します。現在の表示範囲が赤い矩形で示され、ミニマップ上をクリックするとその地点へ現在の高度・姿勢のまま移動します。タイルは選択中のベースマップ（XYZ テンプレート）を追従し、テンプレートでない場合は地理院淡色地図を表示します。Leaflet は ON にした時点で CDN から遅延ロードするため、未使用時のコストはありません。</p>
-
-      <h3 id="tools">🛠️ ツール（計測・断面・見通し・可視範囲・グリッド・エクスポート）</h3>
-      <p>画面上部中央のツールバー（ツールドック）に集約された GIS 解析ツール群です。レイヤパネルの🧰ボタンで開閉し、未使用時は画面上部に何も表示されません。バーのボタンで各ツールのパネルをドロップダウン表示し、計測・作図などの地図対話モード開始時は自動で畳まれます。すべてブラウザ完結・静的配信のみで動作し、オンデマンド動作のため未使用時の描画コストはありません。</p>
-      <p><strong>対応エンジン:</strong> Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps（iframe 内 Leaflet へ描画）で全機能（可視範囲は Cesium のみ）、Navara はエクスポートのみ（地物ピック非対応のため計測・断面・見通しは未提供）。2D エンジンでは共有モジュール（<code>web/shared/geo-tools-2d.js</code>）が同一 UI・同一 API を提供し、標高サンプリングは MapLibre の DEM タイルまたは地理院標高APIを使います。</p>
-      <ul>
-        <li id="tool-measure"><strong>計測（距離・面積・方位）</strong> — 左クリックで頂点を追加、ダブルクリックで確定（Esc で中断・クリアボタンで消去）。距離は測地線（EllipsoidGeodesic）で区間ラベルと総延長を表示、面積は接平面シューレース近似＋周囲長、方位は2点の初方位・逆方位・距離を表示します。地形追従クリックのため 3D 表示時も地表値です。</li>
-        <li id="tool-profile"><strong>標高断面</strong> — 「ラインを描く」で折れ線を入力すると距離-標高の断面グラフを表示（サンプル数 10〜500・既定100）。地形 ON 時は TerrainProvider、OFF 時や未対象域は地理院標高APIへフォールバックします。グラフ上のホバー位置は地図上のマーカーと連動し、最高/最低/累積上り・下りの統計も表示します。</li>
-        <li id="tool-select"><strong>選択・集計</strong> — 矩形（2点）・ポリゴン（頂点クリック＋ダブルクリック）・円（中心＋半径入力）で範囲を描き、対象レイヤ（全ベクター可）内の地物を空間選択。包含・辺交差まで判定し、結果はハイライト＋件数＋代表名表示。「選択をレイヤー化」で選択地物を新規一時レイヤーにできます。続けて<strong>ポリゴン内集計</strong>（集計キー＋数値列で count/sum/avg/min/max）と<strong>バッファ生成</strong>（描画範囲または選択地物に距離 m のバッファを新規レイヤー化。点は測地線円、ライン/ポリゴンは turf.js を遅延ロード）も行え、生成したバッファはそのまま次の選択範囲として使えます。</li>
-        <li id="tool-draw"><strong>作図・注記</strong> — ポイント・ライン・ポリゴン・注記（文字付きマーカー）を描いて名称を付けて保持。「レイヤーへ追加」で一時レイヤー化（表示切替・属性一覧・エクスポート対象）または GeoJSON ファイルへ保存できます。</li>
-        <li id="tool-los"><strong>見通し判定（LOS）</strong> — 観測点・対象点（各地表からの高さオフセット指定可）を指定すると、160点の地形サンプリングと視線を比較して「可 / 不可（遮蔽点の距離つき）」を判定。視線は可視部=緑・遮蔽部=赤で描画され遮蔽点がマークされます。</li>
-        <li><strong>可視範囲（viewshed・Cesium のみ）</strong> — 観測点を1クリックで、放射状レイ（方位数×距離サンプル）上の地形標高を一括サンプリングして可視/不可視域を判定し、可視=緑・不可視=赤・標高不明=灰の可視性マップを地表へドレープ表示します。半径（100〜50000m）・方位数（16〜360）・レイあたりサンプル数（16〜256）に上限付きで指定でき、総サンプル数は自動で上限（地形ON時12000点・地理院APIフォールバック時1024点）に丸めます。「建物等も遮蔽(近似)」を ON にすると drillPickFromRay で描画済み3D Tiles等の遮蔽物を追加判定します（キャスト数上限384・計算コストのため近似）。地球曲率は直線視線モデルで考慮されます。</li>
-        <li><strong>緯度経度グリッド</strong> — 表示 → 一般タブのトグルで緯線・経線と度ラベルをオーバーレイ表示。カメラ範囲に応じた nice-step 間隔で moveEnd 追従します。</li>
-        <li id="tool-export"><strong>エクスポート</strong> — ツールバーの「エクスポート」でベクターレイヤを選び、形式を指定してダウンロード（クエリ系=bbox=auto 等は読み込み済み範囲のみになるため <code>*</code> 印で明示）。形式は <strong>GeoJSON / CSV / TSV / KML / FlatGeobuf / Shapefile</strong>（.zip 同梱）。CSV・TSV はジオメトリを <code>WKT</code> 列として出力する QGIS の CSV エクスポート（GEOMETRY=AS_WKT）互換で、UTF-8 BOM 付き・3D 座標は <code>Z</code> 修飾付きです。Shapefile はジオメトリ種別ごとに分割した .shp/.shx/.dbf/.prj/.cpg を ZIP にまとめます。すべてブラウザ内で生成するため CDN ホスト版でも動作します。属性・値一覧にも CSV / TSV ボタンがあり、検索フィルタ・ソート適用後の全行を UTF-8 BOM 付き（Excel 文字化け対策）・代表点 lon/lat 列付きで出力します。</li>
-      </ul>
-      <p>これらは AI からも操作できます。ボタン類は安定 id を持つため <code>controlUi</code> で自動列挙され、地図操作を伴う処理は <code>measureDistance</code>・<code>measureArea</code>・<code>measureBearing</code>・<code>elevationProfile</code>・<code>lineOfSight</code>・<code>viewshed</code>・<code>setGraticule</code>・<code>exportLayer</code>・<code>spatialSelect</code>・<code>aggregateWithin</code>・<code>createBuffer</code> の専用 API（CHAT_TOOLS 宣言・<code>executeChatTool</code> 配線済み、<a href="../ai-tools.html">AI ツール仕様</a>）で実行できます。</p>
-      <figure style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0;">
-        <img src="../../issues/28/measure-distance.png" alt="距離計測：区間ラベルと総延長" style="max-width:32%; flex:1 1 200px;" />
-        <img src="../../issues/29/profile.png" alt="標高断面：距離-標高グラフ" style="max-width:32%; flex:1 1 200px;" />
-        <img src="../../issues/33/los.png" alt="見通し判定：遮蔽点マーク" style="max-width:32%; flex:1 1 200px;" />
-        <img src="../../issues/66/viewshed.png" alt="可視範囲：可視=緑/不可視=赤のドレープ表示" style="max-width:32%; flex:1 1 200px;" />
-        <figcaption aria-hidden="true">ツール（左から：距離計測・標高断面・見通し判定・可視範囲）</figcaption>
-      </figure>
-
-      <h3>🌐 多言語対応（8言語）</h3>
-      <p>UI は英語・日本語・中国語・韓国語・スペイン語・フランス語・ドイツ語・ポルトガル語の8言語に対応しています。管理（⚙）→ その他 の言語セレクタで即時切替でき、初回はブラウザ言語から自動判定します（未対応言語は英語）。選択は localStorage に保存され、AIチャットの回答言語も UI 言語に追随します。翻訳の基準言語は英語（<code>en.json</code> がフォールバック辞書）です。</p>
-
-      <h3 id="tool-print">🖨️ 印刷・帳票出力</h3>
-      <p>ツールドック（レイヤパネルの🧰ボタンで開く）の「エクスポート」にある <strong>印刷 ボタン</strong>で印刷ダイアログを開き、表示中の地図にタイトル・凡例・縮尺バー・方位記号・出典・日付を付けた帳票（A4/A3・縦横・150/300dpi）を生成します。「印刷」はブラウザの印刷ダイアログへ（PDF 保存も可能）、「PNG保存」は合成画像をダウンロードします。QGIS(geo_webview)の HTTP サーバーが検出できた場合のみ「QGIS レイアウトPDF」セクションが表示され、QGIS の印刷レイアウトをそのまま PDF 出力できます（QGIS 側の <code>/layouts</code>・<code>/layout-pdf</code> エンドポイントを利用）。タイルが CORS 未対応で地図画像を取得できない場合は、地図なしの帳票にフォールバックします。</p>
-
     </main>
   </div>
 </body>

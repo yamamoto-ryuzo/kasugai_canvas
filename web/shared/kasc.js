@@ -1,5 +1,5 @@
 // .kasc 行パーサー + プロジェクトローダー（エンジン非依存コア）
-// 行形式: 種類:タイトル|URL|出典|オプション名=値|on/off   （docs/inspector.html 参照）
+// 行形式: 種類:タイトル|URL|出典|オプション名=値|on/off   （docs/use/6-2-インスペクター.html 参照）
 // 対象: /projects/<id>/ の標準プロジェクト（外部登録プロジェクトの @parent 解決は未対応）
 import { backendBaseUrl, detectBackend, markBackendUnreachable } from "./backend.js";
 

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1-1 レイヤ — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>1-1 レイヤ — レイヤパネルの「レイヤ」タブ</p>
+    </header>
+    <main>
+      <p>画面左パネルの「レイヤ」タブは、読み込んだレイヤーの一覧・表示切替・並べ替え・グループ化を行う操作面です。レイヤーの定義自体は <code>.kasc</code>（インスペクター）に行単位で記述します。</p>
+
+      <h2>使い方</h2>
+      <h3>➕ レイヤー追加・管理</h3>
+      <p>XYZ タイル・3D Tiles・GeoJSON などを URL 指定で追加できます。ローカルサーバー版では <code>DATA/</code> 内ファイルや <code>cloud:</code> スキームのクラウド上ファイルもレイヤーとして読み込めます。追加したレイヤーは Layers パネルで表示切替・並べ替えでき、設定（.kasc）に永続化されます。</p>
+
+      <h3>📑 レイヤー一覧UI</h3>
+      <p>読み込んだレイヤーを一覧し、チェックで表示切替、ドラッグ＆ドロップで並び替えができます。各行の 📍 ボタンでレイヤー全体の範囲へフォーカス（FlyTo）します。並べ替えた順序は <code>ImageryLayerCollection</code> の lower/raise や DataSource の index に反映され、表示切替や排他グループ動作は並べ替え後も維持されます。</p>
+      <p>ベクターレイヤーは行の ⏷ ボタンで絞り込み条件を対話的に変更できます。Cesium では全ベクター型が対象で、属性一覧の「SQL」ボタンと同じダイアログが開きます（<code>sql:</code>/<code>ogrsql:</code> はクエリ全文、それ以外は WHERE 式を <code>where=</code> として適用。変更は <code>.kasc</code> 行へ書き戻され、描画と属性一覧に反映されます）。他エンジンはクエリ系（<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）のみ対象です。エンジンで再現できないレイヤ型の行は、一覧から消さず<strong>グレーアウト行</strong>（チェック無効・半透明・ツールチップ「このエンジン未対応の形式」）として残ります。</p>
+
+      <h3>📂 レイヤーグループ化</h3>
+      <p>レイヤー名に <code>/</code> を含めるとフォルダのようなグループに、<code>//</code> を含めると排他グループ（同時に1つだけ表示・ラジオボタン的動作）になります。地物カテゴリの切替や対比表示に使えます。排他グループのメンバー行はラジオで、<strong>選択済みを再クリックすると OFF</strong> にできます。</p>
+
+      <h3>🔧 システムレイヤ制御（<code>layer:</code> 行）</h3>
+      <p><code>layer:</code> 行で既存レイヤー名を指定し、表示/非表示を初期状態として制御します。プロジェクトを開いた時点で特定レイヤーだけを見せたい場合に使います。非表示にされたベクターレイヤーはロード自体もスキップされ、表示ON・検索・フィルター変更のタイミングで初めて取得されます。</p>
+
+      <h2>設定方法（.kasc）</h2>
+      <p>レイヤーの定義・初期表示・絞り込みは <code>.kasc</code>（管理 ⚙ → プロジェクト → インスペクター）の行で設定します。</p>
+      <pre class="text"><code>種類:タイトル|URL|出典|オプション名=値|on/off</code></pre>
+      <ul>
+        <li><code>xyz:</code> XYZ/TMS タイル / <code>wms:</code>・<code>wmts:</code> OGC タイル / <code>3dtiles:</code> 3D Tiles</li>
+        <li><code>geojson:</code>・<code>geoparquet:</code>・<code>flatgeobuf:</code>・<code>kml:</code>・<code>wfs:</code>・<code>shp:</code>・<code>csv:</code> 全件読み込みベクター</li>
+        <li><code>gpkg:</code> GeoPackage / <code>duckdb:</code>・<code>sql:</code>・<code>ogrsql:</code> SQL 絞り込み（既定で表示範囲連動 <code>bbox=auto</code>）</li>
+        <li><code>image:</code> 画像オーバーレイ / <code>geotiff:</code> COG ラスタ / <code>model:</code> 3D モデル / <code>mvt:</code>・<code>pmtiles:</code> ベクトルタイル</li>
+      </ul>
+      <pre class="text"><code>geojson: 東京都/行政区域 | DATA/kuiki.geojson | on
+3dtiles: 建築物（LOD1） | https://example.com/tileset.json | off
+gpkg: 河川 | DATA/rivers.gpkg | table=rivers | where=延長 &gt; 100
+duckdb: 施設 | https://example.com/facilities.parquet | limit=1000</code></pre>
+      <ul>
+        <li>タイトルの <code>/</code> = グループ、<code>//</code> = 排他グループ（ラジオ動作）。<code>on</code>/<code>off</code> で初期表示を指定</li>
+        <li>共通オプション: <code>where=</code>（行の最終オプション・描画を絞り込み）・<code>opacity=</code>・<code>render=primitive|entity</code>・<code>style=QML</code>・<code>cluster=on</code>・<code>heat=on</code>・<code>minScale=/maxScale=</code>（縮尺表示）・<code>attr=出典</code></li>
+        <li><code>layer: レイヤー名 | off</code> — 既存レイヤーの初期表示を制御</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="6-2-インスペクター.html">6-2 インスペクター（.kasc 設定仕様）</a> — レイヤー行の全書式（xyz:/3dtiles:/geojson:/geoparquet:/flatgeobuf:/gpkg:/duckdb:/sql:/kml:/wfs:/shp:/csv:/image:/model:/mvt:/pmtiles: 等）と <code>cluster=on</code>・<code>heat=on</code>・<code>where=</code> オプション</li>
+        <li><a href="6-1-プロジェクト.html">6-1 プロジェクト</a> — .kasc の保存・エクスポートとプロジェクト管理</li>
+        <li><a href="7-2-プラグイン.html">7-2 プラグイン・外部連携（V4）</a> — クエリ系・大規模ベクターのデコード方式</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

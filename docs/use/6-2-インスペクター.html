@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>.kasc 設定仕様 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>.kasc 設定仕様 — インスペクター設定の完全な書式</p>
+    </header>
+    <main>
+      <section>
+        <h2>使い方</h2>
+        <p>管理（⚙）→ プロジェクト → インスペクター で <code>.kasc</code> 形式を編集・適用します。このページが設定仕様の正本です。ユーザーがテキストエリアに入力したレイヤー・ベースマップ・カメラプリセットを読み込み、CesiumJS Viewer へ反映します。設定の読み込みはブラウザ内で完結し、HTTP 通信は行いません。</p>
+        <div class="url-box">
+          <h3>設定方法</h3>
+          <p>管理（⚙）→ プロジェクト → インスペクター のテキスト欄に、以下の形式で行ごとに入力し「登録」を押してください。設定行は順不同です。</p>
+          <pre><code>xyz: OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png
+base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47
+base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
+3dtiles: 東京都/千代田区（建築物LOD1） | https://example.com/tileset.json | off
+geojson: 東京都/行政区域 | https://example.com/行政区域.geojson | on
+geoparquet: 全国/施設ポイント | https://example.com/facilities.parquet | on
+flatgeobuf: 全国/国ポリゴン | https://example.com/countries.fgb | on
+duckdb: 全国/河川(上位100件) | https://example.com/rivers.parquet | on | limit=100
+sql: 圏内の施設 | SELECT * FROM 'https://example.com/facilities.parquet' WHERE ST_Intersects(geometry, ST_MakeEnvelope(139.7, 35.6, 139.9, 35.8))
+background: #ffffff
+title: 春日井市 防災マップ
+info: https://example.com/project-info.html
+cam: 東京駅|35.653108|139.761449|h=2200.6|p=-30
+bookmark: bookmarks.xml
+legend: 凡例|https://example.com/legend.png</code></pre>
+        </div>
+        <div class="url-box">
+          <h3>ローカルファイルの追加（デモ用データ・Chromium系）</h3>
+          <ol>
+            <li>Inspectorタブ「フォルダを選択」で <code>DATA/</code> を指定（File System Access API・変更可・IndexedDB保持）</li>
+            <li>ファイル選択 → <strong>「DATA/ に保存して追加」</strong> で書き込み＋設定追記＋登録まで一括</li>
+            <li>「設定行のみ追加」は追記のみ（手動コピー用）、「今すぐプレビュー」は一時表示</li>
+            <li>保存したDATA/ファイルは .kasc と共に配布すればデモサイト化できます</li>
+          </ol>
+        </div>
+
+        <h2>設定方法（.kasc 行書式）</h2>
+
+        <div class="url-box">
+          <h3>基本書式</h3>
+          <pre><code>種類:タイトル|URL|出典|オプション名=値|on/off</code></pre>
+          <p>URLが <code>DATA/...</code> 等の相対パスなら <code>projects/&lt;project&gt;/</code> 直下（DATA/ は慣例のサブフォルダ）に解決。ローカルサーバーでクラウド接続中は <code>cloud:&lt;パス&gt;</code> で接続中ストレージ（ルートフォルダ基準）のファイルを参照できます（Range 対応）。任意位置の <code>on</code>/<code>off</code>（<code>false</code> 可・大文字小文字不問）で初期表示を指定。</p>
+          <p><code>..</code> はプロジェクトフォルダの1つ上への参照です。例: <code>../DATA/x.geojson</code> は、通常プロジェクトでは全プロジェクト共有の <code>projects/DATA/</code>、外部プロジェクト（.kasc をダブルクリック登録したもの）では .kasc のあるフォルダと並列の <code>DATA/</code> に解決されます。プロジェクト群フォルダに <code>projects.json</code>（群マニフェスト）を置くとその上もスコープになり、<code>../../DATA/x</code> でワークスペースルート（複数のプロジェクト群が共有する DATA/）まで参照できます（マニフェストが無い構造では1階層上まで・それより上は拒否）。</p>
+        </div>
+        <div class="url-box">
+          <h3>設定種類</h3>
+          <p>納品用ローカル化は <code>&lt;プロジェクト名&gt;_local/</code> ワークスペースを生成します（共有選択が既定）。HTTP(S) データは共有選択時に <code>_local/DATA/http/</code>（複製 .kasc からは <code>../DATA/http/</code> 参照）、専用選択時に複製内 <code>DATA/http/</code> へ出力され、既存のローカル参照は <code>DATA/local/</code>・<code>../DATA/local/</code> へ書き換えられます。<code>3dtiles:</code> 行のリモート URL は tileset.json から参照ツリーごと <code>DATA/http/3dtiles/</code> に取得します（ベースマップ相当の Google Photorealistic 等は対象外）。<code>xyz:</code> 行のリモート <code>{z}/{x}/{y}</code> テンプレートはタイル本体を取得せず、ユーザーがタイルを配置する受け皿 <code>DATA/http/xyz/&lt;name&gt;/</code> を生成して参照を書き換えます（元 URL は <code>http/_sources.json</code> に記録。受け皿内の <code>_README.txt</code> に配置手順を同梱）。ローカルの <code>DATA/.../{z}/{x}/{y}.png</code> 参照はディレクトリごと <code>DATA/local/</code> へ複製されます。<code>sql: 例 | SELECT * FROM read_csv_auto('../DATA/http/x.csv')</code> のように SQL のファイル参照も相対パスで保存できます。<code>FROM</code>/<code>JOIN</code> 直後や対応する <code>read_csv</code>/<code>read_parquet</code>/<code>read_json</code>/<code>ST_Read</code> 系の第1引数にある DATA/ 相対参照を、描画・属性検索時に現在のプロジェクトから解決します。通常の文字列値は変更しません。</p>
+          <pre><code>base: ベースマップ(先頭が既定・| off で非初期選択) | maxZoom= / minZoom= / bbox=西経,南緯,東経,北緯 / tileSize= / opacity= / proxy=off （タイトルの "グループ/名前" はベースマップ選択で折りたたみ可能なグループとして表示）
+base: 表示名 | transparent | （ベースマップ透明=地表透明を初期選択。レイヤーリストには加えず表示モードのみ指定）
+base: 表示名 | none | （ベースマップなしを初期選択）
+xyz: タイルレイヤ | 同上+off / minZoom=(minimumLevel=) / bbox=西経,南緯,東経,北緯 / minScale= / maxScale=(縮尺表示) (URL は DATA/.../{z}/{x}/{y}.png のローカルテンプレートも可)
+wms: WMSレイヤ | WMSエンドポイント | off / layers=名前,名前 / styles= / format=image/png / transparent=true / version=1.1.1 / opacity= / maxZoom= / bbox= （GetMap を256pxタイルへ分解してEPSG:3857で要求。追加パラメータはURL側へ ?key=value で記述可）
+wmts: WMTSレイヤ | タイルテンプレート or KVPエンドポイント | off / layer= / style= / tilematrixset=EPSG:3857 / format= / matrixprefix= / opacity= （{z}/{x}/{y} または {TileMatrix}/{TileRow}/{TileCol} テンプレートはそのまま利用。それ以外は GetTile KVP クエリを自動構築）
+3dtiles: レイヤ | off / proxy=off / ground=off / zoffset=&lt;m&gt;  （URL が tile.googleapis.com なら Maps API キーを自動付与。key= は .kasc に書かない。テレインのない2Dエンジンではバウンディングボリューム最小高を推定して z=0 平面へ自動接地。ground=off で無効化、zoffset= で高さを手動補正）
+geojson:(layer:) / geoparquet: / flatgeobuf: レイヤ | off / opacity=0-1(レイヤー透過度・塗り/輪郭/線/点/ラベルへアルファ乗算) / proxy=off / render=primitive|entity / style=QMLファイルURL / attr=出典(3番目のフィールドに出典を直接書くことも可) / minScale= / maxScale=(縮尺表示: QGIS minimumScale=引き側限界, maximumScale=寄り側限界)
+kml:(kmz:) KMLレイヤ | off / render=primitive|entity / style=QMLファイルURL / attr=出典 （KMZ は先頭の .kml エントリを展開。Placemark/GroundOverlay の範囲矩形を描画）
+wfs: WFSレイヤ | WFSエンドポイント | typename=型名(必須) / version=2.0.0 / maxfeatures=件数 / cql_filter=条件 / srsname=EPSG:4326 / outputformat= / off （GetFeature を GET し GeoJSON 応答を描画。CORS 対応サーバーのみ）
+shp:(shapefile:) Shapefileレイヤ | .zip一式 or .shp or ベース名URL | off / render=primitive|entity / style=QMLファイルURL / attr=出典 （.shp 指定時は同名の .dbf/.prj/.cpg を自動取得。.prj があれば WGS84 へ再投影）
+csv:(tsv:) CSVレイヤ | off / render=primitive|entity / attr=出典 （lon/lat・経度/緯度・x/y の列名を自動判定して点化）
+image: 画像オーバーレイ | 画像URL | off / bbox=西経,南緯,東経,北緯 または corners=lon,lat;lon,lat;lon,lat;lon,lat(左上・右上・右下・左下順) / opacity=0-1 / attr=出典 （ジオリファレンス画像の重ね合わせ。2Dエンジンは外接矩形化）
+geotiff:(cog:/tiff:) GeoTIFF・COGラスタ | GeoTIFF/COG URL | off / opacity=0-1 / mode=auto(既定)|tiles|overlay / maxsize=px(overlay時の出力上限・既定2048) / band=n または bands=r,g,b(1始まり) / resample=nearest|bilinear / proxy=on / bbox=・corners=(ジオリファレンス無し画像の配置指定) / colormap=ランプ名(viridis/magma/inferno/plasma/cividis/turbo/terrain/spectral/rdbu/gray) または #hex,#hex,…(等間隔)・値:#hex,値:#hex,…(位置指定) / colormap-invert=on(ランプ反転) / hillshade=on または hillshade=方位角,仰角,誇張(既定315,45,1。colormap併用で段彩陰影) / stretch=minmax(全体統計ストレッチ) / min=値・max=値(明示値域) / nodata=値(透過値上書き) / attr=出典 （Cesium のみ。geotiff.js でブラウザ内デコード。mode=tiles は EPSG:4326/3857 の軸平行ラスタをタイル分割描画し COG のオーバービュー+Range Request でズーム連動読み込み、mode=overlay は単一キャンバスを地表クランプして地形・3D Tiles にドレープ。auto はタイル可能なら tiles、それ以外は overlay。非4326/3857 の座標系は proj4(epsg.io) で四隅を再投影して quad 描画。float/16bit 等の非uint8ラスタは min-max 正規化、nodata は透明化。colormap=/hillshade=/stretch= は QGIS ラスタレンダラの疑似カラー・陰影・ストレッチを Canvas 側で再現（値域は最粗オーバービューから統計推定しタイル間で一致）。他エンジンでは未対応表示）
+model: 3Dモデル | glTF/GLB URL | off / lon=経度(必須) / lat=緯度(必須) / h=楕円体高m / scale= / heading= / pitch= / roll= / attr=出典 （Cesium のみ・他エンジンでは未対応表示）
+mvt: MVTベクトルタイル | タイルURLテンプレート({z}/{x}/{y}) または TileJSON(.json) | off / layers=ソースレイヤ名[,…] / minzoom= / maxzoom= / attr=出典 （MapLibre=ネイティブ vector ソース / Cesium=デコード→canvas ラスタライズ。layers= 省略時は TileJSON の vector_layers または全ソースレイヤを描画。fill=/stroke=/color=/width=/radius= で色・幅を指定可）
+pmtiles: PMTilesベクトルタイル | .pmtiles URL | off / layers=ソースレイヤ名[,…] / attr=出典 （MapLibre=ネイティブ / Cesium=ラスタライズ。単一ファイルを Range リクエストで読む。layers= 省略時はメタデータの vector_layers で自動判別）
+gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / limit=件数 / columns=列,列 / bbox=auto(表示範囲連動・既定ON) / bbox=off(常時全件描画) / render=primitive|entity / style=QMLファイルURL / attr=出典 / where=条件(SQLite式・行の最後=値は行末まで) (layer_styles のQGIS埋め込みスタイルを自動適用)
+duckdb: SQL絞り込みレイヤ | limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / table=地物テーブル名(gpkg) / bbox=auto(表示範囲連動・既定ON)|bbox=off(常時全件描画) / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / style=QMLファイルURL / attr=出典 / where=条件(行の最後=値は行末まで)
+sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・| style=QML で QGIS スタイル適用・:bbox で表示範囲連動)
+ogrsql: OGR SQL SELECTレイヤ | ogrsql:タイトル|SELECT ... (行規則は sql: と同じ。GDAL の OGR SQL 方言で実行。FROM には読み込み済みレイヤータイトル・'ds'.layer 形式・DATA/ 相対パス・GeoJSON/GPKG/FGB/Parquet 等のURLを指定可。ブラウザ内 JS 実装(shared/ogr-sql.js)が主経路で、解決不能時のみローカル QGIS(geo_webview/geo_driver の Live relay)の GDAL ogr.ExecuteSQL へフォールバック。SELECT 式・AS・DISTINCT・集計・JOIN・WHERE・ORDER BY・LIMIT/OFFSET・OGR疑似フィールドに対応)
+[ベクター系共通] cluster=on: 点レイヤを件数バッジでクラスタ表示 / heat=on: 点レイヤをヒートマップ表示 （点以外のジオメトリは通常描画。sql: は末尾 | cluster=on | heat=on で指定。対象: geojson/gpkg/duckdb/sql 等の全ベクター行・Cesium/MapLibre/OpenLayers/Leaflet）
+[ベクター系共通・Cesium のみ] time=時刻プロパティ名: 地物の時刻属性で時系列レイヤー化（画面下にタイムスライダーが出現し scrub/再生で地物を時刻フィルタ。時刻値は ISO文字列・epoch秒/ミリ秒・年の整数を解釈）。time_end=プロパティ名 で区間終端、time_span=秒|PT1H|P1D|1d 等 で保持時間（両方なしは出現時刻以降ずっと表示の累積モード。sql: は末尾 | time=名 で指定）。ツールバーの「時系列」からレイヤーとプロパティを選択して手動でも設定可能（.kasc 行へ自動書き戻し）
+default_style: point|line|polygon | スタイル未指定地物の既定スタイル(下記参照。地物側の simplestyle や style=QML が優先)
+cam: カメラプリセット | cam:名|緯度|経度|h=高さ|p=ピッチ|d=方位
+[QGIS 3D連携・Cesium のみ] terrain: 名 | exaggeration=垂直誇張 / offset=m / shading=on / generator=flat|dem|online|mesh （QGIS 3Dビューの地形設定。exaggeration→scene.verticalExaggeration、generator=flat→地形OFF、shading→地形ライティング。offset= は保持のみ）
+[QGIS 3D連携・Cesium のみ] scene3d: 名 | background=#RRGGBB / skybox=on|off / shadows=on|off / ao=on|off / edl=on|off （QGIS 3Dシーンの画面設定。background→シーン背景色+空を隠す(skybox=on で星空復帰)、shadows→shadowMap 有効化。ao/edl は保持のみ）
+[QGIS 3D連携・Cesium のみ] light: 名 | az=方位度 / el=仰角度 / intensity=N / color=#RRGGBB （QGIS 3Dの平行光源→DirectionalLight+地形ライティング。az/el は光源へ向かう方位・仰角）
+[QGIS 3D連携・Cesium のみ・ベクター系共通] extrude=m / z=m: geojson:/gpkg:/duckdb: 等のベクター行に付く立ち上げ高さと基準高さ → polygon の height/extrudedHeight（QGIS 3Dベクターレンダラの押出し相当。render=primitive 経路では無効）
+bookmark: QGISブックマーク | bookmark:XMLファイルURL （QGIS のブックマークエクスポート XML・qgis_bookmarks 形式を読み込み、各ブックマークをカメラプリセットへ展開。geo_webview の /kasugai エクスポートでは bookmarks.xml として自動出力。カメラパネルの「XML保存」「XML読込」ボタンでも同形式でプリセットを出し入れできる）
+theme: テーマ名 | 表示するレイヤタイトル[|タイトル…] （QGIS マップテーマ相当の可視性プリセット。`*` で全表示。レイヤーパネル上部のテーマ選択から適用すると各レイヤ行の on/off が書き換わる。タイトルに `;style=DATA/x.qml` を付けるとテーマ適用時にそのレイヤーの .qml を差し替える = QGIS テーマ記録の名前付きスタイルの再現。geo_webview が出力）
+fly_geojson: Flyパス | s=速度 h=高さ p=ピッチ step= loop=true v=基準(camera/center)
+portal: on|off | title=見出し | open=auto|manual | html=HTMLファイル/URL （タスク指向ポータル画面。open=auto で起動時に全画面オーバーレイ表示、manual は 🏠 ボタンから手動、off でポータル自体を無効化。html= を指定するとポータル本体全体を1つのHTMLで構成(カード自動生成なし・見出し/🏠/解除フッタは共通)。宣言が無くても 🏠 は常時表示され既定のガイドが開く）
+view: ビュー名 | desc=説明 | img=画像URL | cam=カメラプリセット名 | base=ベースマップ名 | レイヤタイトル[;style=QML][;where=条件][|タイトル…] | * （ポータル/カードから一括適用する目的別プリセット。theme: の発展形で可視性+スタイル+フィルタ+カメラ+背景を束ねる。適用でポータルを閉じ、解除は適用前スナップショットへ復元）
+link: 名前 | url=https://… | desc=説明 | img=画像URL （ポータル内の外部リンクカード。↗ バッジ付きで新規タブを開く。http(s)/mailto のみ許可。view: カードと宣言順で混在）
+html: タイトル | インラインHTML または HTMLファイル/URL （ポータル内のHTMLセクション。info: と同じサニタイズ経路で script/on*属性は除去。宣言順に表示）
+info: InfoパネルHTML / legend: 凡例画像 / searchtab: 定型検索タブ(geo_search相当) / legendnode: 凡例ノード順・ラベル・表示名(直前行に適用) / background: 背景色 / title: アプリ表示名 / yahooAppId: Yahoo検索ID
+plugin: プラグインID | key=value | off (plugins.json カタログ・ストレージプラグインをこのプロジェクトで有効化。レイヤーはプロジェクトスコープ)
+cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(パスorフォルダURL・省略可)|perm=write|drive=K|install=off (ローカルサーバー版のみ・読み込み時に /api/cloud/serve を自動実行・rclone 未導入なら自動インストール・cloud:stop で停止・末尾 | off は接続しない)</code></pre>
+          <ul>
+            <li><code>option</code> には <code>opacity=0.8</code>、<code>maximumLevel=18</code>（または互換 alias <code>maxZoom</code>）、<code>tileSize=256</code>、<code>proxy=off</code> などが使えます。<code>xyz:</code> 行ではさらに <code>minimumLevel=</code>（<code>minZoom</code>）と <code>bbox=西経,南緯,東経,北緯</code> が使え、bbox を指定すると範囲外へのタイル要求が発生せず flyTo もその範囲を向きます（ローカルタイル配置時の範囲限定に有効）。</li>
+            <li><strong>縮尺表示</strong>：全レイヤ行で <code>minScale=</code>・<code>maxScale=</code>（QGIS の縮尺表示と同じ意味：minScale=引き側限界・大きい分母、maxScale=寄り側限界・小さい分母、0 は無制限）が使えます。指定縮尺範囲外ではレイヤが自動的に非表示になります。geo_webview が QGIS レイヤの「縮尺による表示」設定をそのまま出力します。QML のルール縮尺範囲（scalemindenom/scalemaxdenom）とは積集合で併存します。</li>
+            <li>プロジェクトは <code>projects/&lt;project&gt;</code> 単位で切り替えます。設定ファイル内に <code>project</code> 項目はありません。</li>
+            <li><code>plugin:</code> は <code>web/plugins.json</code> カタログまたは管理タブのストレージプラグインの ID を指定し、そのプロジェクトでのみプラグインを起動します（例: <code>plugin: reinfolib | datasets=price,shelter</code>）。<code>key=value</code> はプラグインの <code>manifest.options</code> にマージして渡され、真偽値・数値・カンマ区切り（配列）を解釈します。起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替や行の削除・<code>| off</code> 指定でレイヤー除去＋停止（<code>dispose</code> 呼出し）されます。指定できるのはカタログ/ストレージの ID のみで、外部 URL の直接指定はできません。</li>
+            <li><code>attr=出典</code>・行の3番目フィールドの出典は、<code>&lt;</code> で始めると HTML として描画できます（例: <code>&lt;a href="https://example.jp"&gt;国土地理院&lt;/a&gt;</code>）。描画時に許可リストでサニタイズされ、<code>a</code>/<code>img</code>/装飾タグ（b・i・em・u・br・span・small・sub・sup）と <code>http(s):</code>/相対 URL のみが有効になります（スクリプト・イベント属性・その他タグは除去）。詳細は <a href="../security.html">セキュリティ対策</a> を参照してください。</li>
+            <li><code>title: 表示名</code> はレイヤーパネル左上のタイトル（既定「KASUGAI Canvas」の部分）とブラウザタブのタイトルを差し替えます。プロジェクト名や納品先名を表示する用途を想定しています。エンジン名の小表記（Cesium 等）は残り、行が無い・空値なら既定表示に戻ります。複数行ある場合は最後の行が採用されます。</li>
+            <li><strong><code>where=条件</code> は全ベクター行で使えます</strong>：<code>duckdb:</code>/<code>sql:</code>/<code>gpkg:</code> 等のクエリ系は従来通り SQL で評価し、<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>shp:</code> 等の全件読み込み系は <code>shared/where-eval.js</code>（SQL WHERE サブセット：<code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・<code>+ - * /</code>・<code>||</code> 連結・<code>"識別子"</code>/<code>'文字列'</code>/日本語裸属性名）でクライアント評価します。絞り込まれるのは描画と属性一覧で、全件読み込み系のベクター検索索引は引き続き全件対象です。<code>where=</code> は<strong>行の最終オプション</strong>で、値は改行までが式です（<code>||</code> 連結や <code>'a|b'</code> リテラルなど式中の <code>|</code> はそのまま書けます。<code>off</code> や他の <code>key=value</code> は where= より前に置いてください）。<code>view:</code> の <code>;where=</code> は行内トークンのためこの規約の対象外で、値に <code>|</code> は含められません。</li>
+            <li><strong><code>html:</code> セクションと <code>portal:…|html=</code> のカスタムHTML内では <code>data-*</code> 属性でGIS側を宣言的に操作できます</strong>：<code>data-view="ビュー名"</code>（view: 適用＋ポータルを閉じる）・<code>data-link="URL"</code>（外部URLを新規タブ）・<code>data-cam="カメラ名"</code>/<code>data-base="背景名"</code>（ポータルを開いたままカメラ/背景だけ変更）・<code>data-clear</code>（ビュー解除＝適用前スナップショット復元）・<code>data-close</code>（ポータルを閉じる）。<code>&lt;script&gt;</code>/<code>&lt;iframe&gt;</code>/<code>&lt;object&gt;</code>/<code>&lt;embed&gt;</code>/<code>&lt;form&gt;</code>/<code>&lt;link&gt;</code>/<code>&lt;style&gt;</code> は要素ごと、<code>on*</code>属性と <code>javascript:</code> URL は属性ごと除去されます（装飾は各要素の <code>style=</code> 属性で記述。詳細は <a href="1-9-ポータル.html">V8: ポータル</a> の「フルカスタムHTML」節）。</li>
+          </ul>
+        </div>
+        <div class="url-box">
+          <h3>ベクターデータ形式の使い分け</h3>
+          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>wfs:</code>/<code>shp:</code>/<code>csv:</code> 等）はファイル全件を読み込んで描画し、ベクター検索パネルで属性検索できます（描画件数の上限を超える場合は表示範囲内の地物のみ描画し、カメラ移動で追随）。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。<code>gpkg:</code> も既定で <code>bbox=auto</code> のクエリ系（表示は範囲のみ・検索は ⏷／SQL ダイアログのフィルターや属性一覧でデータ全件対象）として動作します。常時全件を描画したい場合は <code>bbox=off</code> を付けると全件読み込み系（検索パネル対象）に戻ります。</p>
+          <pre><code>【全件読み込み系】全件読み込み・ベクター検索パネル対象
+  小〜中規模・全件表示        → geojson:（事前変換が最速・最単純）
+  中規模・Parquet をそのまま  → geoparquet:（利便性重視・変換不要で置くだけ）
+  中規模・FlatGeobuf をそのまま → flatgeobuf:（変換不要・ストリームで逐次デコード）
+  中規模・QGIS 成果物          → gpkg:（GeoPackage。layer_styles の QGIS スタイルも自動適用）
+
+【クエリ系】SQL 絞り込み・表示範囲のみ描画・検索は常に全件
+  大規模・広範囲・絞り込み    → duckdb:/sql:（Parquet の利点が発揮される）
+  大規模・QGIS 成果物          → gpkg:（bbox=auto が既定。where= でさらに絞り込み可）
+
+超大規模・全件表示            → タイル化（MVT/PMTiles = mvt:/pmtiles: 行で対応）</code></pre>
+          <p>Parquet の利点（圧縮・述語プッシュダウン・row group スキップ・列プルーニング・Range Request）は「読まない部分を作れる」ときにだけ効きます。全件を読んで表示するだけなら、変換済み GeoJSON の方が速くて単純です。<code>geoparquet:</code> は絞り込みを持たず常に全件読み込みなので、広範囲データや条件絞り込みが必要な場合は <code>duckdb:</code>/<code>sql:</code> を使ってください。</p>
+          <p><strong>読み込みタイミング</strong>：全件読み込み系レイヤーは、必要となった初回（表示ON、属性テーブルやベクター検索パネルでレイヤーを選択した時点）にダウンロード＋デコードします。ベクター検索パネルのレイヤー選択肢には未読み込みのレイヤーも「(未読込)」付きで表示され、選択すると読み込み後に索引されて検索できるようになります。「全選択」で文字検索を実行すると、非表示・未読み込みのレイヤーもその時点でまとめて読み込んで検索対象にします。表示中のレイヤーだけを対象にしたい場合は「表示レイヤ」を選択してください。<code>off</code> のレイヤーは起動時に読み込まれません。取得結果はメモリに保持されるため、2回目以降の表示切替・ドレープ変更・属性一覧では再取得せず即座に反映されます（キャッシュはインスペクター/プロジェクト変更で破棄）。クエリ系は条件ごとに結果が変わるため毎回クエリします。</p>
+          <p><strong>QGIS スタイル（<code>style=</code>）</strong>：ベクター系レイヤー全般に <code>style=QMLファイルのURL</code> を付けると、QGIS のレイヤースタイルファイル（.qml）を取得して描画に適用します。単一シンボル・属性値による分類（categorizedSymbol）・数値段階（graduatedSymbol）・ルールベース（RuleBased・QGIS 式のサブセットを評価）の各レンダラに対応し、シンプルマーカー/SVG・ラスタ/フォントマーカー、実線・破線、単色塗り・ハッチ/ドット/画像パターン塗り、ラベル（<code>&lt;labeling&gt;</code> のシンプル/ルールベース）を再現します。データ定義プロパティ（式による色・サイズの上書き）や縮尺依存ルール（概算のカメラ距離へ変換）も反映します。式関数 <code>is_layer_visible('レイヤー名')</code> にも対応し、別レイヤーの表示状態を参照した条件付きスタイルが使えます（レイヤー名はタイトル・ID・グループパスで照合、見つからないレイヤーは非表示として扱います）。QGIS で再現困難な要素（ジオメトリジェネレータ・ヒートマップ等）は最も近い表現にフォールバックし、コンソールに警告を出します。<code>render=primitive</code> 経路では色・サイズ・線幅のみ適用（形状・破線・パターンは簡略化）。<code>.kasc</code> プロジェクトと同じ場所に .qml を置けば相対パスでも解決します。</p>
+          <p><strong>GeoPackage の埋め込みスタイル</strong>：<code>gpkg:</code>（または <code>duckdb:</code> で <code>.gpkg</code> ファイル・<code>format=gpkg</code> を指定した場合）は、QGIS の「スタイルを保存 → データベースに保存」で GPKG 内の <code>layer_styles</code> テーブルに書き込まれる QML を自動的に読み取り、<code>useAsDefault</code> のスタイルを描画に適用します。データとスタイルを1ファイルで配布できます。<code>style=</code> を明示した場合はそちらが優先されます。複数の地物テーブルを持つ GPKG は <code>table=テーブル名</code> で対象を指定できます。GPKG は SQLite として読み込みます。sql.js（SQLite WASM）を <strong>Web Worker 内で遅延ロード・実行</strong>するため、デコード中も地図の操作をブロックしません。ファイル全体の初回ダウンロードは必要ですが、開いた DB は Worker が保持するため、<code>bbox=auto</code> の表示範囲再クエリ・⏷フィルター変更・属性一覧のクエリは再ダウンロード無しで実行されます。なお sql.js の WASM 本体は<a href="../runtime-cache.html">ランタイム永続キャッシュ</a>の対象外（通常のHTTPキャッシュのみ）です。</p>
+          <p><strong>GeoPackage の埋め込みスタイル</strong>：なお <code>default_style:</code> 行で地物の既定スタイルを指定できます（後述の専用節を参照）。</p>
+        </div>
+        <div class="url-box">
+          <h3>地物の既定スタイル（default_style:）</h3>
+          <p>ベクター系レイヤー（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）の地物で、<strong>スタイル指定を持たない項目</strong>に適用する既定値を、ジオメトリ種別ごとに1行ずつ設定します。配色をプロジェクト単位で調整したいときに使います。地物ごとの優先順位は次のとおりです。</p>
+          <pre><code>地物の simplestyle プロパティ(marker-color / stroke / fill 等)
+    &gt; style= の QML スタイル(レイヤー全体)
+    &gt; default_style: 行(この設定)
+    &gt; エンジン既定色</code></pre>
+          <p>地物側にその項目の指定があれば地物側が優先され、<code>default_style:</code> はあくまで「未指定項目の穴埋め」です。<code>style=</code> の QML が適用されたレイヤーには適用されません。設定はプロジェクト（.kasc）スコープで、同じ種別の行を複数書いた場合は<strong>後の行</strong>が採用されます。</p>
+          <pre><code>default_style: point   | color=#3388ff | size=48 | symbol= | opacity=1
+default_style: line    | color=#ff0000 | width=2 | opacity=0.8
+default_style: polygon | fill=#3388ff | fill_opacity=0.3 | stroke=#000000 | stroke_width=1 | stroke_opacity=1</code></pre>
+          <table>
+            <thead>
+              <tr><th>種別</th><th>キー</th><th>意味</th><th>既定</th></tr>
+            </thead>
+            <tbody>
+              <tr><td rowspan="4"><code>point</code></td>
+                <td><code>color=</code>（<code>marker-color=</code>・<code>fill=</code> も可）</td>
+                <td>ポイントの色（Cesium: ピンの色 / 2D: ドットの塗り色）</td><td>エンジン既定</td></tr>
+              <tr><td><code>size=</code>（<code>marker-size=</code> も可）</td>
+                <td>ピンのピクセルサイズ。<code>small</code>(24)/<code>medium</code>(48)/<code>large</code>(64) の名前または数値。2D エンジンでは約1/6のドット半径で描画（48 → 半径8px）</td><td>48 / 2D は半径5px</td></tr>
+              <tr><td><code>symbol=</code>（<code>marker-symbol=</code> も可）</td>
+                <td>Cesium ピンに描く Maki アイコン ID または1文字。2D エンジン・primitive 経路では無視</td><td>なし（通常のピン）</td></tr>
+              <tr><td><code>opacity=</code></td><td>不透明度 0〜1</td><td>1</td></tr>
+              <tr><td rowspan="3"><code>line</code></td>
+                <td><code>color=</code>（<code>stroke=</code> も可）</td><td>線色</td><td>エンジン既定（Cesium: 黄）</td></tr>
+              <tr><td><code>width=</code>（<code>stroke-width=</code> も可）</td><td>線幅（ピクセル）</td><td>2 / 2D は 1.5</td></tr>
+              <tr><td><code>opacity=</code>（<code>stroke-opacity=</code> も可）</td><td>不透明度 0〜1</td><td>1</td></tr>
+              <tr><td rowspan="5"><code>polygon</code></td>
+                <td><code>fill=</code>（<code>color=</code> も可）</td><td>塗り色</td><td>エンジン既定（Cesium: 黄α0.39）</td></tr>
+              <tr><td><code>fill_opacity=</code>（<code>opacity=</code> も可）</td><td>塗り不透明度 0〜1。省略時はエンジン既定の半透明を維持（アルファ付き色でも指定可）</td><td>約0.4</td></tr>
+              <tr><td><code>stroke=</code>（<code>outline=</code>・<code>line=</code> も可）</td><td>輪郭色</td><td>—</td></tr>
+              <tr><td><code>stroke_width=</code>（<code>width=</code>・<code>outline_width=</code> も可）</td><td>輪郭幅（ピクセル）</td><td>—</td></tr>
+              <tr><td><code>stroke_opacity=</code>（<code>outline_opacity=</code> も可）</td><td>輪郭不透明度 0〜1</td><td>1</td></tr>
+            </tbody>
+          </table>
+          <ul>
+            <li>色は <code>#rgb</code>・<code>#rrggbb</code>・<code>#rrggbbaa</code>・<code>rgba(...)</code>・色名など CSS 色指定が使えます。<strong>不透明度は「色のアルファ × opacity 値」</strong>で決まります。ポリゴン塗りだけは不透明色を指定しても既定の半透明を維持します（<code>fill_opacity=1</code> で不透明にできます）。</li>
+            <li><strong>ポリゴンの輪郭</strong>：Cesium 版では <code>stroke=</code>・<code>stroke_width=</code>・<code>stroke_opacity=</code> のいずれかを指定した場合のみ輪郭を描きます（通常は輪郭なし。地物側の <code>stroke</code> プロパティがあればその色が優先）。ドレープ（地形/3D Tiles へのクランプ）時は周線をポリラインで描きます。2D エンジンではポリゴンに常に輪郭があるため、未指定時はエンジン既定の輪郭色が使われます。</li>
+            <li><strong>ポイントの描画差</strong>：Cesium（entity 経路）はピン形状で描画し <code>size=</code> はピンの高さ(px)。<code>render=primitive</code>（バッチ描画）と 2D エンジンはドット描画のため約1/6の径に換算します。</li>
+            <li><strong>地物側の指定との併用</strong>：GeoJSON プロパティの <code>marker-color</code>/<code>marker-size</code>/<code>marker-symbol</code>/<code>stroke</code>/<code>stroke-width</code>/<code>stroke-opacity</code>/<code>fill</code>/<code>fill-opacity</code>（simplestyle）が各項目に優先します。例えば <code>default_style: line | color=#ff0000</code> でも <code>stroke</code> プロパティを持つラインはその色で描かれます。</li>
+            <li><strong>適用対象</strong>：entity・primitive（render=primitive）の両描画経路、および全エンジン（Cesium / MapLibre / OpenLayers / Leaflet）に適用されます。エンジン切替でも同じ .kasc がそのまま使えます。</li>
+            <li>種別は <code>point</code>/<code>p</code>/<code>marker</code>/<code>dot</code>、<code>line</code>/<code>l</code>/<code>polyline</code>、<code>polygon</code>/<code>poly</code>/<code>area</code>/<code>fill</code> の別名を受け付けます。解釈できない種別の行は無視されます。</li>
+          </ul>
+          <p><strong>使用例</strong>：属性を持たない公共測量データを区別したい場合：</p>
+          <pre><code>default_style: point   | color=#e34a33 | size=32
+default_style: line    | color=#636363 | width=1.5
+default_style: polygon | fill=#fef0d9 | fill_opacity=0.6 | stroke=#b30000 | stroke_width=1.5
+geojson: 公共測量 | DATA/public_survey.geojson</code></pre>
+        </div>
+        <div class="url-box">
+          <h3>duckdb: / sql:（SQL絞り込みレイヤ）</h3>
+          <p>初回利用時に DuckDB-WASM を CDN から遅延ロードします（Worker 内で実行）。<code>duckdb:</code> は単一ファイルを読み込み、<code>where=</code>/<code>limit=</code> を適用して描画します。<code>sql:</code> はタイトル後の <code>|</code> 以降をすべて SELECT 文として実行します（クエリ内で <code>|</code> 使用可・<code>||</code> 演算子も可）。末尾オプションとして <code>| off</code>（非表示）・<code>| render=entity|primitive</code>（描画方式）・<code>| attr=出典</code>（右下の出典表示。値に <code>|</code> は含められません）を付けられます。クエリ内の URL は絶対指定が必要です。なおクエリ系レイヤーが非表示の場合は、表示ONまたは属性テーブルで選択されるまで WASM 自体をロードしません。</p>
+          <p><strong>ランタイムの永続キャッシュ</strong>：DuckDB-WASM のランタイム資産（WASM 本体約33MB・Worker スクリプト・spatial 拡張約22MB・parquet/httpfs 拡張、計約60MB）は <code>cdn.jsdelivr.net</code> と <code>extensions.duckdb.org</code> から取得しますが、Service Worker（<code>sw-duckdb.js</code>＝<strong>DuckDB-WASM 永続キャッシュ</strong>）がこれらの取得を横取りしてブラウザの <strong>CacheStorage</strong> に永続保存します。そのため<strong>実際のダウンロードはバージョンごとに最初の1回だけ</strong>で、2回目以降の起動・再読み込み・ブラウザ再起動後もキャッシュから即座に読み込まれます（通常のHTTPキャッシュと違い、ブラウザ任せの失効がありません）。キャッシュキーは URL そのまま（<code>@duckdb/duckdb-wasm@1.32.0</code>・拡張 <code>v1.4.3</code> のようにバージョン入り）のため、DuckDB のバージョンが上がると新しい資産が自動的にダウンロードされ、起動時に旧バージョンのエントリだけが削除されます。Worker 内部のフェッチ（Worker スクリプトの読み込み・拡張 INSTALL の内部取得）も対象で、DuckDB 以外の通信には一切介入しません。Service Worker は HTTPS または localhost でのみ有効で、静的ホスティングでも動作します。ブラウザのサイトデータ削除でキャッシュも消えるため、その場合は次回利用時に再ダウンロードが発生します。詳細は <a href="../runtime-cache.html">ランタイム永続キャッシュ</a> を参照してください。</p>
+          <p><strong>対応ファイル形式</strong>（<code>format=</code> 指定または拡張子から自動判別）：</p>
+          <pre><code>format=省略        → 拡張子自動判別（.parquet / .csv / .tsv / .json / .fgb 等）
+format=parquet     → Parquet / GeoParquet（read_parquet）
+format=csv | tsv   → CSV / TSV（read_csv_auto。lon=/lat= 列でポイント化、WKT/WKB 列も可）
+format=json|geojson→ JSON / GeoJSON テキスト（read_json_auto。FeatureCollection は format=read 推奨）
+format=read        → Shapefile / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡張必須・非 COI 環境・リモート URL では動作しません。*.fgb は拡張子からも自動判別されます。GeoPackage は gpkg:/sql.js 経路へ自動振り分け）</code></pre>
+          <p>Parquet では述語プッシュダウン・row group スキップ・列プルーニングが効くため本機能の本来の対象です。それ以外の形式は全件読み込みになりますが、「絞り込んだ分だけ描画オブジェクトを作る」「事前変換不要」「SQL で加工できる」利点は共通です。</p>
+          <p>ジオメトリ列は GEOMETRY 型 → <code>geometry</code>/<code>geom</code>/<code>wkb</code> 等の慣用名 → BLOB 列の順に自動検出し、<code>geom=</code> で明示も可能です（WKB・WKT・GeoJSON テキストを受理）。緯度経度列のみのデータは <code>lon=</code>/<code>lat=</code> でポイント化できます。<code>format=read</code> は spatial 拡張の <code>ST_Read</code>（Shapefile・FlatGeobuf 等）を使いますが、非 COI 環境ではスレッド生成に失敗しリモート URL も読めないため、通常の配信環境では利用できません。なお <code>where=</code> は行の最終オプションで値は改行までが式のため、<code>||</code> 連結や <code>|</code> を含むリテラルもそのまま書けます（<code>where=</code> より後ろに他のオプションは置けません）。</p>
+          <p><strong>取得プロキシ（<code>proxy=on</code>・ローカルサーバー版のみ）</strong>：<code>duckdb:</code> に <code>proxy=on</code> を付けると、ファイルの取得をローカルサーバーの <code>/api/fetch</code> 経由に切り替えます。CORS 非対応の外部サーバーにあるデータを読めます。<code>/api/fetch</code> は Range/HEAD リクエストを転送するため、Parquet の部分読み（メタデータ・row group スキップ）はプロキシ経由でも有効です。既定は直接接続で、静的配信環境やバックエンド非対応時は指定しても直接接続になります。<code>sql:</code> のクエリ内 URL には適用されません。Range 非対応のサーバーへ全件 GET が必要な形式（CSV/JSON 等）では 20MB 上限があります。</p>
+          <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> と <code>gpkg:</code> は既定で <code>bbox=auto</code> が有効で、カメラ停止ごとに表示範囲で再クエリします（<code>duckdb:</code> は <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> または covering bbox 列への範囲述語、<code>gpkg:</code> は各行の GPkgBinary エンベロープで判定）。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用が標準動作です。常時全件描画にしたいレイヤーは <code>bbox=off</code> を付けます（範囲外に出ても地物が消えません）。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
+          <p><strong>失敗時の自動リトライ</strong>：<code>bbox=auto</code>/<code>:bbox</code> レイヤーの初回読み込みが失敗（ペイロード上限・タイムアウト等）した場合、失敗状態を保持したまま次のカメラ移動で縮小した表示範囲による再クエリを自動的に行います。ズームインして条件を満たせばユーザー操作なしでレイヤーが表示されます。<code>geojson:</code> 等が bridge-hub（127.0.0.1:8511）の <code>/vector/</code> を指して失敗した場合は、ハブの <code>/health</code>・<code>/vector/sources</code> を疎通して原因（ハブ未起動／旧版ハブ・/vector 未搭載／duckdb CLI 未導入／ソース未登録）をエラーメッセージへ付記します。</p>
+          <p><strong>ベクター描画件数の上限（描画は表示範囲・索引は全件）</strong>：表示 → ドレープ の「ベクター描画件数の上限」（既定 20000、0・空欄=無制限）で、entity 描画するベクターレイヤーの<strong>合計</strong>描画件数を制限します。大量の entity 生成によるブラウザのフリーズを防ぐ安全弁で、上限を超えたレイヤーはレイヤー一覧に <code>描画数/全件数</code> のバッジが付きます。上限を超えた全件読み込み系レイヤーは「ファイル先頭から」ではなく<strong>表示範囲内の地物を優先</strong>して描画し、カメラを動かすたびにメモリ上の全件データから範囲内の地物を選び直します（再ダウンロード無し）。検索結果や属性一覧から未描画の地物へ飛んでも、その場所で描画が復活します。表示範囲外にデータがある間は <code>0/全件数</code> のバッジでデータが残っていることが分かります。切り捨ては描画だけの制限で、ベクター検索・プラグイン API の <code>getLayerGeoJson</code> は常にファイル全件を対象にします（属性一覧は描画済み地物から行を作るため、スライス適用中は描画分が表示されます）。<code>render=primitive</code> のバッチ描画は entity コストを支払わないため上限の対象外です。</p>
+          <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンと属性テーブルの「SQL」ボタンは同じダイアログを開きます。<code>sql:</code>/<code>ogrsql:</code> はクエリ全文、それ以外は WHERE 式（<code>where=</code>）を入力し、テスト件数の確認・「一覧を絞る」（表示のみ）・「レイヤフィルタ」・「新規レイヤ」（<code>ogrsql:</code> 追加）を選べます。レイヤフィルタの変更は inspector の <code>.kasc</code> テキストへ書き戻され（空入力で削除）、描画と属性一覧に反映されます。</p>
+          <p><strong>描画方式（既定は entity 描画）</strong>：ベクター系レイヤー（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。<code>render=primitive</code>（<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>、その他はオプション欄）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。レイヤー行の <code>render=</code> 指定は表示 → ドレープ の「ベクター高速ドレープ」より優先され、<code>render=entity</code> を書くと高速ドレープが有効でもそのレイヤーだけ entity 描画に戻せます。違いは以下のとおりです。</p>
+          <pre><code>【entity(既定)】1地物ごとに Cesium Entity を生成
+  ・地形/3D Tiles にドレープ可能(clampToGround)
+  ・フォーカス・属性パネル等の entity 機能がすべて使える
+  ・地物数が多いと生成コストが重い
+
+【primitive(render=primitive)】GeoJsonPrimitive バッチ描画
+  ・entity を作らずジオメトリだけをまとめて描画するため大量地物でも軽い
+  ・地形ドレープ非対応(高さ0の楕円体面に描画。起伏のある地形では地表に埋まる)
+  ・属性はクリック時に picked.properties から表示。ベクター検索の索引対象(描画に使った GeoJSON から索引を構築)</code></pre>
+          <p><strong>検索は常に全件対象</strong>：<code>duckdb:</code>/<code>sql:</code> の検索・絞り込みは ⏷／SQL ダイアログのフィルターに一本化しており、常にファイル全件を対象に評価します（読み込み済み地物を対象にするベクター検索パネルには登録されません）。<code>bbox=auto</code> と <code>where=</code> を併用した場合、表示は「検索条件 ∩ 表示範囲」になりますが、検索自体は全件に対して行われ、コンソールに「検索ヒット全 N 件 / 表示範囲内 M 件」と併記されます。</p>
+          <p><strong>属性値一覧</strong>：属性値一覧ウィジェットのレイヤー選択には <code>duckdb:</code>/<code>sql:</code> を含む全ベクターレイヤーが表示されます。選択肢はレイヤー定義から即座に作られるため、データの読み込み完了を待たず起動直後から選択可能です。一覧は読み込み済み地物ではなく DuckDB へ直接クエリして作られ、<code>where=</code> は適用する一方 <code>bbox</code>/<code>limit=</code> は適用せず LIMIT 無しの全件を取得します。ウィジェット内の検索文字は全属性列への <code>ILIKE</code> 述語として SQL に変換されるため、常にファイル全件が検索対象です（表への描画は先頭1000行まで）。</p>
+          <p><strong>Parquet 最適化</strong>：クエリ結果のジオメトリは WKB バイナリで受け取ります（テキスト変換を省き転送量・パース時間・ピークメモリを削減）。<code>columns=列名,列名</code> で読み込む属性列を絞る列プルーニングが可能です。<code>bbox=auto</code> 時は GeoParquet 1.1 の <code>covering</code> bbox 列（または慣用名の xmin/xmax/ymin/ymax 列、<code>covering=</code> で明示指定も可）への範囲述語を優先的に使うため、Parquet の row group 統計スキップが効き、表示範囲外のデータは読み込み自体を省略できます。</p>
+        </div>
+        <div class="url-box">
+          <h3>ogrsql:（OGR SQL SELECTレイヤ）</h3>
+          <p><code>sql:</code> と同じ行規則で、<code>|</code> 以降を OGR SQL（GDAL の SQL 方言）の SELECT 文として実行します。DuckDB ではなく OGR 系フィルター・式評価の再現が目的で、QGIS が出力するクエリ・プロバイダフィルタをそのまま記述できます。</p>
+          <pre><code>ogrsql: 河川(上位100件) | SELECT * FROM 'rivers' ORDER BY 延長 DESC LIMIT 100
+ogrsql: 市区町村JOIN    | SELECT a.*, b.人口 FROM '行政区域' a LEFT JOIN '人口表' b ON a.コード = b.コード
+ogrsql: ファイル直接    | SELECT * FROM 'DATA/points.geojson' WHERE 区分 = 'A'</code></pre>
+          <p><strong>FROM の解決順</strong>：① 読み込み済みレイヤーのタイトル（他行の <code>geojson:</code> 等を参照可）→ ② <code>'データソース'.'レイヤー'</code> 形式（GPKG の特定テーブル等）→ ③ プロジェクト相対パス（<code>DATA/…</code>）・絶対 URL（GeoJSON/GPKG/FGB/Parquet/KML/SHP zip/CSV 等を自動判別）。</p>
+          <p><strong>実行エンジン（JS 主経路）</strong>：ブラウザ内 JS 実装（<code>shared/ogr-sql.js</code>）で実行します — CDN 単体利用でも QGIS の有無で挙動が変わりません。JS で FROM を解決できない場合（QGIS プロジェクトレイヤー名・ローカルパスの SHP・PostGIS 等）や JS パーサ未対応の構文だけ、ローカル QGIS（geo_webview/geo_driver の Live relay・127.0.0.1:8089-8091）検出時に <code>ogr.ExecuteSQL(dialect="OGRSQL")</code> へフォールバックします。JS 実装はSELECT 式・AS 別名・DISTINCT・集計（COUNT/SUM/AVG/MIN/MAX）・JOIN/LEFT JOIN・WHERE・ORDER BY・LIMIT/OFFSET・OGR 疑似フィールド（FID/OGR_GEOMETRY/OGR_GEOM_WKT/OGR_GEOM_AREA/OGR_STYLE）に対応します。QGIS 側でも解決・実行できなかった場合は JS 側のエラーとして報告されます。</p>
+          <p><strong>GDAL との方言差</strong>：GDAL 本体では <code>ORDER BY</code> に SELECT 別名を使えませんが、JS 実装は受理します（GDAL より寛容）。その他の方言差は QGIS Live 連携をゴールデンオラクルとした差分検証で随時洗い出して JS 実装へ反映しています。</p>
+        </div>
+        <div class="url-box">
+          <h3>Fly モードの経路設定（fly_geojson:）</h3>
+          <p><code>fly_geojson:</code> では、GeoJSON の <code>LineString</code> / <code>MultiLineString</code> を読み込み、Fly モードで自動飛行する経路として使えます。複数定義すれば Fly パネルのドロップダウンから選択でき、<code>手動</code> を選ぶと従来の WASD / マウス操作に戻ります。</p>
+          <pre><code>fly_geojson: ルートA | https://example.com/route.geojson | speed=60 | height=100 | pitch=-15 | loop=true
+fly_geojson: ルートB | https://example.com/routeB.geojson | speed=30 | height=50</code></pre>
+          <p>URL には外部 URL・プロジェクト相対パスのほか、<code>route:&lt;ルート名&gt;</code> でブラウザ IndexedDB に保存した描画ルートも指定できます（例：<code>fly_geojson: 描いたルート | route:drawn_route_20260918_153000</code>）。IndexedDB はブラウザごとの領域のため、他環境と共有したい場合は GeoJSON を実ファイル化して URL で参照してください。</p>
+          <table>
+            <thead>
+              <tr>
+                <th>オプション</th>
+                <th>意味</th>
+                <th>デフォルト</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>speed</code>（<code>s</code>）</td>
+                <td>地上速度（km/h）</td>
+                <td>30</td>
+              </tr>
+              <tr>
+                <td><code>height</code>（<code>h</code>）</td>
+                <td>操作中の高さ補正（m）</td>
+                <td>0</td>
+              </tr>
+              <tr>
+                <td><code>pitch</code>（<code>p</code>）</td>
+                <td>カメラピッチ（度）</td>
+                <td>-10</td>
+              </tr>
+              <tr>
+                <td><code>step</code></td>
+                <td>互換性のため受け付けるが、現在は頂点間を直接移行するため無視</td>
+                <td>（不使用）</td>
+              </tr>
+              <tr>
+                <td><code>loop</code>（<code>l</code>）</td>
+                <td>終点で最初に戻してループ</td>
+                <td>false</td>
+              </tr>
+              <tr>
+                <td><code>view</code>（<code>v</code>）</td>
+                <td>ルート座標の基準。<code>camera</code>=カメラ位置（カメラがルート上を飛行）、<code>center</code>=画面中心（ルート点が画面中心に来るよう後方・上空から追従）</td>
+                <td>camera</td>
+              </tr>
+              <tr>
+                <td><code>off</code></td>
+                <td>選択肢に表示しない</td>
+                <td>-</td>
+              </tr>
+            </tbody>
+          </table>
+          <p><code>fly_geojson:</code> の GeoJSON ルートは <code>LineString</code> / <code>MultiLineString</code> のオリジナル頂点をそのまま使用します。各頂点の <code>z</code> はその点の <strong>AGL（地形からの高さ）</strong> として解釈します。飛行時の実際の高さは <code>GeoJSON z + 地形高 + flyHeight</code> として計算します。<code>flyHeight</code> は操作中の補正値であり、GeoJSON には含まれません。セグメント内では始点・終点の 3D 位置と地形高を距離に応じて補間します。</p>
+        </div>
+        <div class="url-box">
+          <h3>グループ化ルール</h3>
+          <p><code>/</code>・<code>\</code>＝通常グループ（一括ON/OFF）、<code>//</code>・<code>\\</code>＝排他グループ（同時に1つだけ表示・ラジオ動作）。<strong>全グループの初期表示は折りたたみ</strong>です。</p>
+        </div>
+        <div class="url-box">
+          <h3>未対応の記法（注意）</h3>
+          <p>Re:Earth GeoSuite 由来の以下の記法は本アプリでは未実装です：<code>layer:</code> によるシステムレイヤ制御、<code>max=</code>/<code>zoom=</code>（<code>maxZoom=</code> を使用）、行単位ドレープ（<code>| terrain</code> 等→表示 → ドレープ のグローバル設定を使用）、<code>attrUrlOpen:</code>、<code>\</code> による初期展開。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

@@ -22,23 +22,22 @@
       ]
     },
     {
-      // ==== 使い方（UI パネル単位の章立て） ====
+      // ==== 使い方（UI パネル単位の章立て・use/ 配下に項目ごと1ファイル） ====
       section: '使い方',
       // 画面左パネル（レイヤパネル）のタブ＋パネル下部の engine: 切替リンク。
-      // 詳細は v1（画面機能）の各節
       label: '1. レイヤパネル',
       href: 'panel.html',
       items: [
-        { href: 'features/v1.html#tab-layer', text: '1-1 レイヤ' },
-        { href: 'features/v1.html#tab-legend', text: '1-2 凡例' },
-        { href: 'features/v1.html#tab-search', text: '1-3 検索' },
-        { href: 'features/v1.html#tab-attr', text: '1-4 属性' },
-        { href: 'features/v1.html#tab-camera', text: '1-5 カメラ' },
-        { href: 'features/v1.html#tab-display', text: '1-6 表示' },
-        { href: 'features/v1.html#tab-info', text: '1-7 情報' },
-        { href: 'features/v2.html', text: '1-8 FLY（プレゼンテーション）' },
-        { href: 'features/v8.html', text: '1-9 ポータル' },
-        { href: 'features/v6.html', text: '1-10 マルチエンジン（engine: 切替）' },
+        { href: 'use/1-1-レイヤ.html', text: '1-1 レイヤ' },
+        { href: 'use/1-2-凡例.html', text: '1-2 凡例' },
+        { href: 'use/1-3-検索.html', text: '1-3 検索' },
+        { href: 'use/1-4-属性.html', text: '1-4 属性' },
+        { href: 'use/1-5-カメラ.html', text: '1-5 カメラ' },
+        { href: 'use/1-6-表示.html', text: '1-6 表示' },
+        { href: 'use/1-7-情報.html', text: '1-7 情報' },
+        { href: 'use/1-8-FLY.html', text: '1-8 FLY（プレゼンテーション）' },
+        { href: 'use/1-9-ポータル.html', text: '1-9 ポータル' },
+        { href: 'use/1-10-マルチエンジン.html', text: '1-10 マルチエンジン（engine: 切替）' },
       ]
     },
     {
@@ -46,47 +45,47 @@
       label: '2. ツール',
       href: 'panel.html#tools-cards',
       items: [
-        { href: 'features/v1.html#tool-measure', text: '2-1 計測' },
-        { href: 'features/v1.html#tool-select', text: '2-2 選択・集計' },
-        { href: 'features/v1.html#tool-draw', text: '2-3 作図' },
-        { href: 'features/v1.html#tool-profile', text: '2-4 標高断面' },
-        { href: 'features/v1.html#tool-los', text: '2-5 見通し判定' },
-        { href: 'features/v1.html#tool-export', text: '2-6 エクスポート' },
-        { href: 'features/v1.html#tool-print', text: '2-7 印刷' },
-        { href: 'features/v1.html#tool-time', text: '2-8 時系列' },
+        { href: 'use/2-1-計測.html', text: '2-1 計測' },
+        { href: 'use/2-2-選択集計.html', text: '2-2 選択・集計' },
+        { href: 'use/2-3-作図.html', text: '2-3 作図' },
+        { href: 'use/2-4-標高断面.html', text: '2-4 標高断面' },
+        { href: 'use/2-5-見通し.html', text: '2-5 見通し判定' },
+        { href: 'use/2-6-エクスポート.html', text: '2-6 エクスポート' },
+        { href: 'use/2-7-印刷.html', text: '2-7 印刷' },
+        { href: 'use/2-8-時系列.html', text: '2-8 時系列' },
       ]
     },
     {
-      // 地図右上のナビゲーション操作群
+      // 地図右下のナビゲーションツールバー操作群
       label: '3. ナビゲーション',
-      href: 'features/v1.html#nav',
+      href: 'use/3-1-コンパス.html',
       items: [
-        { href: 'features/v1.html#nav', text: '3-1 コンパス・3D・オービット' },
-        { href: 'features/v1.html#nav', text: '3-2 表示履歴 ◀ ▶' },
-        { href: 'features/v1.html#nav', text: '3-3 矩形ズーム' },
-        { href: 'features/v1.html#nav', text: '3-4 地点座標の取得' },
-        { href: 'features/v1.html#nav', text: '3-5 現在地へ移動・フルスクリーン' },
+        { href: 'use/3-1-コンパス.html', text: '3-1 コンパス・3D・オービット' },
+        { href: 'use/3-2-表示履歴.html', text: '3-2 表示履歴 ◀ ▶' },
+        { href: 'use/3-3-矩形ズーム.html', text: '3-3 矩形ズーム' },
+        { href: 'use/3-4-地点座標.html', text: '3-4 地点座標の取得' },
+        { href: 'use/3-5-現在地.html', text: '3-5 現在地へ移動・フルスクリーン' },
       ]
     },
     {
-      // 地図左下のベースマップセレクタ
+      // 地図右上のベースマップセレクト＋別アプリで開くボタン群
       label: '4. ベースマップ',
-      href: 'features/v1.html#basemap',
+      href: 'use/4-1-ベースマップ.html',
       items: [
-        { href: 'features/v1.html#basemap', text: '4-1 ベースマップ選択' },
-        { href: 'features/v1.html#basemap', text: '4-2 別アプリで開く（CDN・アプリ・Google Earth）' },
+        { href: 'use/4-1-ベースマップ.html', text: '4-1 ベースマップ選択' },
+        { href: 'use/4-2-別アプリ.html', text: '4-2 別アプリで開く（CDN・アプリ・Google Earth）' },
       ]
     },
     {
       label: '5. AIチャット',
       href: 'ai-chat.html',
       items: [
-        { href: 'ai-api.html', text: '5-1 【API】内蔵AI（Google 連携・AI）' },
-        { href: 'ai-bridge.html', text: '5-2 【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）' },
-        { href: 'ai-tools.html', text: '5-3 AI ツール仕様' },
-        { href: 'bridge-hub.html', text: '5-4 ブリッジハブ（bridge-hub.exe）' },
-        { href: 'features/v3.html', text: '5-5 AI 連携の構成（V3）' },
-        { href: 'features/v9.html', text: '5-6 解析（予定・V9）' },
+        { href: 'use/5-1-内蔵AI.html', text: '5-1 【API】内蔵AI（Google 連携・AI）' },
+        { href: 'use/5-2-外部エージェント.html', text: '5-2 【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）' },
+        { href: 'use/5-3-AIツール.html', text: '5-3 AI ツール仕様' },
+        { href: 'use/5-4-ブリッジハブ.html', text: '5-4 ブリッジハブ（bridge-hub.exe）' },
+        { href: 'use/5-5-AI連携.html', text: '5-5 AI 連携の構成（V3）' },
+        { href: 'use/5-6-解析.html', text: '5-6 解析（予定・V9）' },
       ]
     },
     {
@@ -94,12 +93,12 @@
       label: '6. 管理',
       href: 'manage.html',
       items: [
-        { href: 'guide.html', text: '6-1 プロジェクト' },
-        { href: 'inspector.html', text: '6-2 インスペクター' },
-        { href: 'ai-api.html', text: '6-3 AI' },
-        { href: 'ai-api.html', text: '6-4 Google Maps' },
-        { href: 'features/v5.html', text: '6-5 アプリ' },
-        { href: 'features/v1.html', text: '6-6 その他' },
+        { href: 'use/6-1-プロジェクト.html', text: '6-1 プロジェクト' },
+        { href: 'use/6-2-インスペクター.html', text: '6-2 インスペクター' },
+        { href: 'use/6-3-AI.html', text: '6-3 AI' },
+        { href: 'use/6-4-GoogleMaps.html', text: '6-4 Google Maps' },
+        { href: 'use/6-5-アプリ.html', text: '6-5 アプリ' },
+        { href: 'use/6-6-その他.html', text: '6-6 その他' },
       ]
     },
     {
@@ -108,7 +107,7 @@
       href: 'plugins.html',
       items: [
         {
-          href: 'auth/', text: '7-1 認証とプラグイン',
+          href: 'use/7-1-認証.html', text: '7-1 認証とプラグイン',
           children: [
             { href: 'auth/none.html', text: '認証なし（none）' },
             { href: 'auth/local.html', text: 'ローカル認証' },
@@ -118,16 +117,16 @@
             { href: 'auth/cloudrun.html', text: 'Cloud Run' }
           ]
         },
-        { href: 'features/v4.html', text: '7-2 プラグイン・外部連携（V4）' },
+        { href: 'use/7-2-プラグイン.html', text: '7-2 プラグイン・外部連携（V4）' },
       ]
     },
     {
-      // ==== 技術資料（UI パネルに対応しない技術系ドキュメント） ====
+      // ==== 技術資料（UI パネルに対応しない技術系ドキュメント・tech/ 配下） ====
       section: '技術資料',
       label: '1. 設定・システム構成',
       items: [
         {
-          href: 'ref-qgis.html', text: '1-1 QGIS連携',
+          href: 'tech/1-1-QGIS連携.html', text: '1-1 QGIS連携',
           children: [
             { href: 'qgis-delivery.html', text: 'QGIS連携の利用方法' },
             { href: 'features/v7.html', text: 'QGIS連携 — 方針・構想・再現（V7）' },
@@ -135,14 +134,14 @@
           ]
         },
         {
-          href: 'ref-runtime.html', text: '1-2 配信・実行形態',
+          href: 'tech/1-2-配信実行形態.html', text: '1-2 配信・実行形態',
           children: [
             { href: 'datahost.html', text: 'ブラウザ WebGIS（外部ホスト配信）' },
             { href: 'runtime-cache.html', text: 'ランタイム永続キャッシュ' },
           ]
         },
         {
-          href: 'ref-spec.html', text: '1-3 設定・内部仕様',
+          href: 'tech/1-3-設定内部仕様.html', text: '1-3 設定・内部仕様',
           children: [
             { href: 'data.html', text: 'データ形式' },
             { href: 'performance.html', text: '描画性能とデータ形式方針' },
@@ -155,11 +154,11 @@
       ]
     },
     {
-      // バージョン別の機能追加履歴は features.html のカード索引へ集約。
+      // バージョン別の機能追加履歴は tech/2-1（旧 features.html）のカード索引へ集約。
       // NAV には挑戦中のイベントのみ掲載。終了したイベントは records.html へ
       label: '2. 履歴・記録',
       items: [
-        { href: 'features.html', text: '2-1 バージョン履歴（機能カード索引）' },
+        { href: 'tech/2-1-バージョン履歴.html', text: '2-1 バージョン履歴（機能カード索引）' },
         { href: 'g-idea.html', text: '2026/09-12 イチBizアワード2026 提案書' },
         { href: 'zennfes.html', text: '2026/11-12 Zennfes Autumn 2026 さくらのAIチャレンジ祭り' },
         { href: 'records.html', text: '📁 終了したイベントの記録' }
@@ -176,8 +175,10 @@
   ];
 
   function norm(path) {
-    // 末尾の index.html / / を正規化して比較できる形にする
-    return path.replace(/index\.html$/, '').replace(/\/$/, '');
+    // 末尾の index.html / / を正規化し、日本語ファイル名用にデコードして比較できる形にする
+    let p = path.replace(/index\.html$/, '').replace(/\/$/, '');
+    try { p = decodeURIComponent(p); } catch (e) { /* 不正な%列はそのまま */ }
+    return p;
   }
   const current = norm(location.pathname);
 

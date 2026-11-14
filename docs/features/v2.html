@@ -2,43 +2,12 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>V2: プレゼンテーション機能 — KASUGAI Canvas ドキュメント</title>
-  <link rel="stylesheet" href="../style.css">
-  <script src="../nav.js" defer></script>
+  <meta http-equiv="refresh" content="0; url=../use/1-8-FLY.html">
+  <link rel="canonical" href="../use/1-8-FLY.html">
+  <title>ページが移動しました — KASUGAI Canvas ドキュメント</title>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
-      <p>V2: プレゼンテーション機能 — 各機能カードの詳細説明</p>
-    </header>
-    <main>
-      <p><a href="../features.html">← バージョン履歴へ戻る</a></p>
-
-      <h2 id="presentation">V2: プレゼンテーション機能</h2>
-      <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。</p>
-
-      <h3>🛩️ Fly モード</h3>
-      <p>ナビゲーションツールバーで Orbit / Fly を切り替えます。Fly モードでは手動操縦か <code>fly_geojson:</code> で定義した経路の自動追従を選択できます。インスペクターに <code>fly_geojson: ルート名 | URL | speed=... | height=...</code> と記述すると Fly パネルのドロップダウンにルートが追加され、ルートを選び直すと読み込みとルート状態をリセットして最初から再開します。</p>
-      <p>操作はマウスホイール（速度 ±1 km/h）、キー +/-（速度増減）、キー Q/E（高さ補正増減）、walk-help の入力欄（<code>flySpeed</code> km/h・<code>flyHeight</code> m の直接上書き）に対応します。速度は 0 で停止、負でバック（手動はカメラ逆方向、自動はルート逆方向）します。手動・自動で <code>flySpeed</code>/<code>flyHeight</code> を共有するためモード切替時も値が継続します。高さ表示は手動時に「地形高」と「補正」、ルート追従時に「地上高（AGL）」（<code>z + flyHeight</code>）と「補正」を別行で表示します。</p>
-      <p>ルート座標の基準は「カメラ位置／画面中心」を切り替えられます。自動追従ではカメラは折れ点に到達する前から次の線分方向へ滑らかに旋回します（最後の 100m、または線分長の 30% 以内で旋回開始）。</p>
-
-      <h3>✏️ ルート描画</h3>
-      <p>Fly パネルの <strong>Draw</strong> タブを選択すると Orbit モードに切り替わり、描画準備が整います。Draw ボタンで描画を開始し、右クリックで点を追加、右ダブルクリックで終了します。描画したルートは：</p>
-      <ol type="1">
-      <li>ブラウザの IndexedDB に <code>drawn_route_YYYYMMDD_HHMMSS</code> という名前で GeoJSON テキストとして保存（プロジェクト単位）。静的 WEB 公開でも保存でき、フォルダ選択や権限確認は不要です</li>
-      <li>インスペクターの「保存先フォルダ」を設定している場合は、フォルダ内の <code>.geojson</code> も Fly パス一覧へ読み込みます（File System Access API、Chromium系のみ・読み取り専用）</li>
-      <li>保存・読み込んだルートは Fly パネルのルート選択に追加されます。「取込」ボタンで任意の .geojson を IndexedDB へインポートでき、描画ルート選択時は「出力」（.geojson ダウンロード）「削除」ボタンが表示されます</li>
-      </ol>
-      <p>描画ルートの GeoJSON には各点の高さ <code>z</code> を <code>heightReference: "Terrain"</code> として保存し、<code>z</code> はその点の地形からの高さ（AGL）を表します。飛行時の実際のカメラ高さは <code>z + 地形高 + flyHeight</code> で計算します（<code>flyHeight</code> は操作中の補正値で GeoJSON には含まれません）。セグメント内では始点・終点の 3D 位置と地形高を距離に応じて補間し、滑らかな高度変化にします。点を選択して <code>z</code>（AGL）を編集し、保存ボタンで GeoJSON へ書き戻せます。</p>
-      <p>AI が生成するルート（<code>flyRoute</code> ツール）は <code>heightReference: "MSL"</code> として各点に絶対標高（地形標高＋地上高）を焼き込み、飛行時は地形加算を行いません。飛行設定（速度・高度オフセット・ピッチ・ループ・視点）は <code>properties.fly</code> に保存され、リロード後の復元時にも維持されます。速度未指定のルートは総距離から自動プロファイル（80〜2000km/h・地上高50m〜10km）が適用されます。</p>
-      <p>QGIS のアトラス（印刷レイアウトの自動ページめくり）も同じ仕組みで再生できます。geo_webview の <code>.kasc</code> エクスポートはアトラス有効なレイアウトごとに各ページ表示範囲を巡回する <code>fly_geojson:</code> ルート（<code>DATA/atlas_*.geojson</code>）を出力します。座標 Z に各ページを収めるカメラ高を焼き込んでいるため、ページごとに縮尺の違う帳票もその範囲に合わせた高さで巡ります（点ごとの高度→ズーム換算は 2D プレイヤー側でも有効）。ルート名は <code>Atlas: &lt;レイアウト名&gt;</code>、ページ名一覧は GeoJSON の <code>properties.pages</code> に入ります（geo_webview v4.8.0〜）。</p>
-
-      <h3>🎬 Google Earth 風 FlyTo</h3>
-      <p>カメラ移動は Google Earth と同じく「距離に応じた飛行時間＋一度ズームアウトしてから降下する弧」を描いて移動します。カメラプリセット・検索結果・属性行クリック・URL ハッシュの座標変更など、あらゆる移動がこの FlyTo 経路を通ります。</p>
-
-    </main>
-  </div>
+  <p>このページは <a href="../use/1-8-FLY.html">use/1-8-FLY.html</a> へ移動しました。</p>
+  <script>location.replace('../use/1-8-FLY.html' + location.hash);</script>
 </body>
 </html>

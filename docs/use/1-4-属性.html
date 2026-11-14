@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>1-4 属性 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>1-4 属性 — レイヤパネルの「属性」タブ・属性テーブル・フィルター</p>
+    </header>
+    <main>
+      <h2>使い方</h2>
+      <h3>📊 属性テーブル</h3>
+      <p>「属性」タブまたはベクトル検索パネルの「選択中のレイヤ属性テーブル」ボタンで開く、画面下部の表形式パネルです。選択中または全ベクターレイヤーの属性・値を一覧し、文字列検索・列フィルタ・列ソート・行クリック FlyTo・Σ集計（GROUP BY）に対応します。クエリ系レイヤーも選択肢に出し、内容は DB に対して直接クエリして取得します（描画範囲ではなくデータ全体が対象）。「フィルター反映」ボタンで現在の絞り込み条件を地図表示へ適用・解除でき、CSV / TSV ボタンで、検索フィルタ・ソート適用後の全行を UTF-8 BOM 付き（Excel 文字化け対策）・代表点 lon/lat 列付きで出力できます。</p>
+
+      <h3>🔍 フィルター</h3>
+      <p>属性テーブルまわりの絞り込みは用途別に5段階あり、QGIS の属性テーブル →「条件式でフィルタ」→ プロバイダフィルタ（subsetString）の流れと同じ関係になっています。</p>
+      <table>
+      <thead><tr><th>手段</th><th>入口</th><th>効く範囲</th><th>永続性</th></tr></thead>
+      <tbody>
+      <tr><td>文字列検索</td><td>一覧上部の検索ボックス</td><td>一覧の行のみ</td><td>なし（表示のみ）</td></tr>
+      <tr><td>列フィルタ</td><td>一覧上部の属性・演算子・条件値</td><td>一覧の行のみ</td><td>なし（表示のみ）</td></tr>
+      <tr><td>SQL「一覧を絞る」</td><td>一覧の「SQL」ボタン → ダイアログ</td><td>一覧の行のみ（WHERE 式 or SELECT）</td><td>なし（表示のみ・地図は変わらない）</td></tr>
+      <tr><td><strong>地図表示フィルタ</strong></td><td>一覧の「フィルター反映」ボタン（トグル）</td><td><strong>地図上の該当レイヤー</strong>（条件に合わない地物を非表示）</td><td>なし（セッション内の表示のみ・<code>.kasc</code>/データ不変）</td></tr>
+      <tr><td><strong>レイヤフィルタ（where=）</strong></td><td>SQL ダイアログ「レイヤフィルタ」/ レイヤ行の ⏷ / <code>.kasc</code> 初期記述 / AI <code>setLayerFilter</code></td><td><strong>レイヤ表示＋属性一覧</strong>（ベクター検索索引は全件のまま）</td><td><code>.kasc</code> 行へ書戻し・QGIS Live 連携</td></tr>
+      <tr><td>新規レイヤ（SQL）</td><td>SQL ダイアログ「新規レイヤ」</td><td>SELECT 結果を <code>ogrsql:</code> レイヤーとして追加</td><td><code>.kasc</code> に <code>ogrsql:</code> 行追加</td></tr>
+      </tbody>
+      </table>
+      <p><strong>SQL ダイアログ</strong>（QGIS の「条件式フィルタ」相当）は一覧の「SQL」ボタンかレイヤ行の ⏷ で開きます。入力は WHERE 式または SELECT 文（OGR SQL）を自動判別し、<strong>テスト</strong>で実行件数を事前確認できます。ダイアログは現在の <code>where=</code>/クエリを初期値として開くため、<code>.kasc</code> に初期記述されたフィルタもそのまま引き継がれます。Ctrl+Enter は「一覧を絞る」、入力を空にして「レイヤフィルタ」を押すとフィルタ解除です。<code>FID</code> 疑似フィールドは0始まりの地物インデックスを指します。⏷ は Cesium では全ベクター型に表示され、他エンジンはクエリ系（<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）のみです。</p>
+      <p><strong>地図表示フィルタ</strong>（「フィルター反映」ボタン）は、一覧上部の絞り込み条件（列フィルタ AND 文字列検索）を地図上の該当レイヤーにだけ適用し、条件に合わない地物を非表示にします。トグル式で、ON の間は条件を変えるたびに地図へ即時再適用されます。OFF にすると元の表示へ復帰します。表示だけを切り替えるため <code>.kasc</code> やレイヤーデータ・<code>where=</code> は変わらず、<code>where=</code> で絞り込まれたレイヤーにさらに重ねることもできます。対象は一覧で選択中の1レイヤーのみです。</p>
+      <p><strong>where= の効果範囲</strong>：絞り込まれるのはレイヤ表示と属性一覧です（一覧の行は描画済み地物から構築され、クエリ系は条件付きで再クエリ）。全件読み込み系のベクター検索索引は引き続き全件対象のため、フィルタで見えなくなった地物も名称検索で見つけられます。未読み込みのレイヤーを一覧で選択した場合も <code>where=</code> 適用済みのソースから行を構築します。WHERE 式の文法は <code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・算術・<code>||</code> 連結（評価はクエリ系が SQL エンジン、全件読み込み系が <code>shared/where-eval.js</code>）。</p>
+      <pre class="mermaid" aria-label="where= フィルタとレイヤ表示・属性一覧・.kasc の関係">---
+title: where= フィルタとレイヤ表示・属性一覧・.kasc の関係
+---
+
+flowchart LR
+  subgraph IN["where= の入力経路（どれでも同じ状態へ）"]
+    K1[".kasc 行に初期記述<br/>（QGIS subsetString のエクスポート含む）"]
+    K2["⏷ ボタン / 属性一覧「SQL」→「レイヤフィルタ」"]
+    K3["AI ツール setLayerFilter"]
+  end
+  K1 -->|applyInspector| W["item.where<br/>（レイヤフィルタ状態）"]
+  K2 -->|applyLayerQueryFilter| W
+  K3 -->|applyLayerQueryFilter| W
+  W -->|syncLayerSourceLine| KOUT[".kasc 行へ書戻し<br/>where=（行末・空で削除）"]
+  W -->|liveWritebackEntries| QGIS["QGIS Live<br/>プロジェクトへ反映"]
+  W --> Q{"クエリ系？"}
+  Q -->|"gpkg / duckdb / sql / ogrsql"| SQL["SQLエンジンで WHERE 絞込<br/>（再クエリ）"]
+  Q -->|"geojson / parquet / fgb / kml / shp / csv"| EVAL["shared/where-eval.js<br/>クライアント評価"]
+  SQL --> MAP["レイヤ表示<br/>（フィルタ済み地物のみ）"]
+  EVAL --> MAP
+  SQL --> ATTR["属性一覧<br/>（描画地物 or SQL 再クエリで同条件）"]
+  MAP --> ATTR
+  EVAL -.->|"索引はフルソースから構築"| IDX["ベクター検索<br/>（全件対象のまま）"]
+  LST["属性一覧「一覧を絞る」"] -.->|"表示のみ（地図・.kasc 不変）"| ATTR
+      </pre>
+      <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+      </script>
+
+      <h3>📊 属性（Attr）表示</h3>
+      <p>地物をクリックすると属性を Attr パネルに一覧表示します。重なった地物（ポリゴン等の面重なり）は <code>scene.drillPick</code> で最大16件を手前から順に拾い、件数付きヘッダー一覧として表示し、行クリックで個別属性を展開します。3D Tiles（構造化メタデータ <code>Cesium3DTileFeature</code>）・ベクター（entity/primitive）の各描画経路を同じ形式に正規化して扱います。</p>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../images/attr-panel.png" alt="属性タブ：クリックした建築物（3D Tiles）の属性一覧" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../images/attr-panel-overlap.png" alt="属性タブ：重なった地物 3 件のドリルピック一覧" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">属性タブ（左：選択地物の属性、右：重なった地物のドリルピック一覧）</figcaption>
+      </figure>
+
+      <h2>設定方法（.kasc）</h2>
+      <p>属性テーブルの「SQL」ボタンやレイヤ行の ⏷ から適用したレイヤフィルタは、以下の行として .kasc へ書き戻されます。逆に .kasc へ直接記述した <code>where=</code> も読み込み時にレイヤ・属性一覧・ダイアログ初期値へ反映されます。</p>
+      <pre class="text"><code>geojson: レイヤー名 | URL | where=都道府県 = '愛知県'   （行の最終オプション・値は改行までが式）
+ogrsql: 河川(上位100件) | SELECT * FROM 'rivers' ORDER BY 延長 DESC LIMIT 100
+ogrsql: 市区町村JOIN    | SELECT a.*, b.人口 FROM '行政区域' a LEFT JOIN '人口表' b ON a.コード = b.コード</code></pre>
+      <ul>
+        <li><code>where=</code> は全ベクター行で使用可。クエリ系は SQL 評価、全件読み込み系は <code>shared/where-eval.js</code> でクライアント評価します</li>
+        <li><code>ogrsql:</code> の FROM には読み込み済みレイヤータイトル・<code>'ds'.layer</code> 形式・<code>DATA/</code> 相対パス・URL を指定できます</li>
+        <li>QGIS 側のフィルタ式（subsetString）との方言対応は <a href="../features/v7.html">V7: QGIS連携</a> の「QGIS フィルタ式との互換性」を参照してください</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="1-3-検索.html">1-3 検索</a> — ベクトル検索（レイヤー → 属性 → 値）</li>
+        <li><a href="2-6-エクスポート.html">2-6 エクスポート</a> — レイヤー全体のファイル出力</li>
+        <li><a href="6-2-インスペクター.html">6-2 インスペクター</a> — <code>ogrsql:</code>・<code>where=</code> の書式</li>
+        <li><a href="../features/v7.html">V7: QGIS連携</a> — <code>where=</code> の仕様・QGIS フィルタ式との互換性</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

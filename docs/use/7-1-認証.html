@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>  
+<meta charset="UTF-8">  
+<meta name="viewport" content="width=device-width, initial-scale=1.0">  
+<title>認証とプラグイン — KASUGAI Canvas ドキュメント
+</title>  
+<link rel="stylesheet" href="../style.css">  
+<script src="../nav.js" defer>
+</script>
+</head>
+<body>  
+<div class="container">    
+<header>      
+<h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span>
+</h1>      
+<p>認証とプラグイン — 認証方式の比較と拡張機能
+</p>    
+</header>    
+<main>      
+<section>        
+<h2 id="v4-auth">使い方
+</h2>        
+<p>認証方式は 
+<code>web/auth-methods.json
+</code> の 
+<code>control
+</code> で 0〜7 の番号で指定します。デフォルトは 0（認証なし）で起動します。認証後、
+<code>window.kasugaiAuth
+</code> に認証情報がセットされ、その後 
+<code>app.js
+</code> と通常プラグインが起動します。
+<code>.kasc
+</code> は全方式で読み取り可能ですが、
+<strong>サーバーへの書き込み（KV/GCS への保存）ができるのは 3・4（cloudflare 系）と 5・6・7（cloudrun 系）のみ
+</strong>です。0〜2 では「適用」はブラウザ内への反映のみで、「エクスポート(.kasc)」でのファイル運用になります。
+</p>        
+<div class="url-box">          
+<h3>⚠️ セキュリティ上の注意
+</h3>          
+<p>「認証のみ」系の方式（3 Pages・5 cloudrun）は
+<strong>最低限の起動制御 + .kasc 設定情報の保護
+</strong>です。アプリの起動を制御し、
+<code>.kasc
+</code> の内容は ID/PASS 認証後に KV（Cloudflare）または GCS（Cloud Run）から取得されます。ただし、HTML/JS/CSS などの静的ファイル自体は公開されており、
+<code>DATA/
+</code> 内の画像・GeoJSON 等は保護対象外です。
+<code>auth-selector.js
+</code> は 
+<code>auth-methods.json
+</code> で選択された方式のみを読み込みます。完全なファイルアクセス制御が必要な場合は、4 Workers・6 cloudrun-gate・7 cloudrun-iap、または Cloudflare Access（Zero Trust）等でファイル配信を制御してください。
+</p>        
+</div>        
+<div class="features">        
+<div class="url-box">          
+<h3>認証用ログインUI
+</h3>          
+<p>ローカル認証（1）、パスワード認証（2）、Cloudflare 認証（3・4）、Cloud Run 認証（5・6）は、同じログインUIコンポーネント 
+<code>web/auth-login-form.js
+</code> を使用します。画面の見た目・入力チェック・ローディング表示・エラー表示を共通化し、認証方式ごとの判定処理だけを 
+<code>web/PLUGIN/auth-*/auth.js
+</code> に閉じ込めています。
+</p>          
+<p>新しい認証方式を追加する場合は、
+<code>web/PLUGIN/&lt;id&gt;/auth.js
+</code> から 
+<code>showLoginForm({ onSubmit })
+</code> を呼び出し、
+<code>onSubmit
+</code> コールバック内で独自の認証処理を記述してください。詳細は README.md を参照してください。
+</p>        
+</div>        
+<div class="url-box">          
+<h3>起動後通常プラグイン
+</h3>          
+<p>機能拡張プラグインは 
+<code>web/PLUGIN/&lt;plugin-id&gt;/plugin.js
+</code> に配置し、
+<code>web/plugins.json
+</code> に登録します。plugins.json は利用可能なプラグインの
+<strong>カタログ
+</strong>で、既定では自動ロードされません。実際に起動するのは、プロジェクトの .kasc（インスペクタ）に 
+<code>plugin: &lt;id&gt; | key=value ...
+</code> と宣言されたプラグイン、
+<code>"auto": true
+</code> を付けたエントリ、管理タブで有効化したストレージプラグインです。
+</p>          
+<pre>
+<code>web/PLUGIN/sample-hello/plugin.jsweb/PLUGIN/auth-local/auth.js
+</code>
+</pre>          
+<p>
+<code>plugin:
+</code> 行で起動したプラグインはプロジェクトスコープとして扱われ、
+<code>registerPluginLayer
+</code> の 
+<code>scope
+</code> は強制的に 
+<code>"project"
+</code> になります（プロジェクト切替・行削除でレイヤー除去＋
+<code>registerPlugin
+</code> の 
+<code>meta.dispose()
+</code> が呼ばれ停止）。
+<code>plugin: &lt;id&gt; | off
+</code> は宣言解除や auto エントリ・有効なストレージプラグインのそのプロジェクトでの抑制に使えます。宣言できるのはカタログ/ストレージの ID のみで、外部 URL の直接指定はできません（共有 .kasc による任意コード読み込み防止）。
+</p>          
+<p>通常プラグインは 
+<code>window.kasugaiApi
+</code> 経由で Cesium viewer やカメラ、レイヤー情報にアクセスできます。詳細は README.md を参照してください。
+</p>          
+<p>
+<code>plugins.json
+</code> に 
+<code>layer
+</code> を宣言すると、本体がプラグイン専用レイヤーを自動登録し、レイヤ一覧・表示切替・属性検索・属性パネルの対象になります。
+<code>format: "entities"
+</code> は本体生成の DataSource に動的 entity を追加する方式、
+<code>format: "geojson"
+</code> は 
+<code>api.setPluginLayerData()
+</code> で GeoJSON を渡して内蔵レイヤーと同じ描画経路で表示する方式です。
+<code>scope: "project"
+</code> でプロジェクト切替時に自動削除もできます。
+<code>style: "QMLファイルのURL"
+</code> を指定すると geojson 形式レイヤーに QGIS スタイル（単一・分類・ルールベース・ラベル）を適用できます（
+<code>api.registerPluginLayer
+</code> の 
+<code>style
+</code> オプションと同じ）。
+</p>        
+</div>      
+</section>        
+<h2>設定方法（認証方式の選択）
+</h2>        
+<p>認証方式は 
+<code>web/auth-methods.json
+</code> の 
+<code>control
+</code> で 0〜7 の番号を 1 つ選択します。選択された方式のみが起動時に実行され、認証成功後にアプリ本体が読み込まれます。各方式の詳細な設定手順は 
+<code>auth/
+</code> 配下の個別ページを参照してください。
+</p>        
+<ul>          
+<li>
+<a href="../auth/none.html">0. 認証なし
+</a> / 
+<a href="../auth/local.html">1. ローカル認証
+</a> / 
+<a href="../auth/password.html">2. 簡易パスワード
+</a>
+</li>          
+<li>
+<a href="../auth/pages.html">3. Cloudflare Pages
+</a> / 
+<a href="../auth/workers.html">4. Cloudflare Workers
+</a>
+</li>          
+<li>
+<a href="../auth/cloudrun.html">5-7. Cloud Run（認証のみ・全ゲート・IAP）
+</a>
+</li>        
+</ul>          
+<a class="feature-card" href="../auth/none.html">            
+<h3>0. 認証なし（none）
+</h3>            
+<p>ID/PASS 不要。誰でも起動可能。ローカル開発や非公開の信頼環境向け。
+</p>          
+</a>          
+<a class="feature-card" href="../auth/local.html">            
+<h3>1. ローカル認証（local）
+</h3>            
+<p>最小限のローカル向け認証。ID/PASS を平文で照合するテスト・実験用。
+</p>          
+</a>          
+<a class="feature-card" href="../auth/password.html">            
+<h3>2. 簡易パスワード認証（password）
+</h3>            
+<p>クラウド不要の JS 内ハッシュ比較。閉じた環境・テスト用途向け。
+</p>          
+</a>          
+<a class="feature-card" href="../auth/pages.html">            
+<h3>3. Cloudflare 認証（cloudflare）— Pages
+</h3>            
+<p>サーバーレス ID/PASS 認証。.kasc は Cloudflare KV、秘匿データは r2:// で R2 認証ゲート経由。安全な本番運用に推奨。
+</p>          
+</a>          
+<a class="feature-card" href="../auth/workers.html">            
+<h3>4. Cloudflare 認証（cloudflare）— Workers
+</h3>            
+<p>3 の機能に加え、静的ファイル自体も含めて全リクエストを認証ゲート。最も強い保護。
+</p>          
+</a>          
+<a class="feature-card" href="../auth/cloudrun.html">            
+<h3>5. Cloud Run 認証（cloudrun）— 認証のみ
+</h3>            
+<p>Cloud Run 版の ID/PASS 認証。.kasc は GCS、秘匿データは gs:// で署名付き URL 経由。静的は公開のまま。
+</p>          
+</a>          
+<a class="feature-card" href="../auth/cloudrun.html">            
+<h3>6. Cloud Run 認証（cloudrun-gate）— 全ゲート
+</h3>            
+<p>5 に加え、静的ファイルを含む全リクエストを kasugai_session Cookie でゲート。
+</p>          
+</a>          
+<a class="feature-card" href="../auth/cloudrun.html">            
+<h3>7. Cloud Run 認証（cloudrun-iap）— IAP 委譲
+</h3>            
+<p>Cloud IAP に認証を完全委譲。Google アカウントで全ファイルを保護。アプリ側コードほぼゼロ。
+</p>          
+</a>        
+</div>        
+<div class="url-box">          
+<h3>2つのサーバーレス基盤（Cloudflare 系 / Cloud Run 系）
+</h3>          
+<p>サーバー側機能は 
+<strong>Cloudflare（Pages Functions / Workers）と Google Cloud（Cloud Run）の2系統に対応
+</strong>しています。提供する API 契約（
+<code>/api/auth
+</code>・
+<code>/api/kasc
+</code>・
+<code>/api/data/*
+</code>・
+<code>/api/gemini
+</code>・
+<code>/api/capabilities
+</code>）は同一で、フロント側は 
+<code>/api/capabilities
+</code> の応答（
+<code>tier
+</code>・
+<code>features
+</code>）だけを見て出し分けるため、どちらの基盤でも同じ 
+<code>web/
+</code> がそのまま動きます。違いは実行基盤・永続化・設定方法だけです。
+</p>          
+<table>            
+<thead>              
+<tr>
+<th>項目
+</th>
+<th>Cloudflare 系（3 Pages / 4 Workers）
+</th>
+<th>Cloud Run 系（5/6/7）
+</th>
+</tr>            
+</thead>            
+<tbody>              
+<tr>
+<td>実行基盤
+</td>
+<td>Pages Functions / Workers（エッジ・JS）
+</td>
+<td>Cloud Run（コンテナ・FastAPI/Python）
+</td>
+</tr>              
+<tr>
+<td>実装
+</td>
+<td>
+<code>functions/
+</code>＋
+<code>workers/worker.js
+</code>（JS）
+</td>
+<td>
+<code>agent/
+</code>（FastAPI）
+</td>
+</tr>              
+<tr>
+<td>.kasc 保存先
+</td>
+<td>KV（
+<code>kasc:&lt;id&gt;
+</code>）
+</td>
+<td>GCS（
+<code>kasc/&lt;id&gt;
+</code>）
+</td>
+</tr>              
+<tr>
+<td>秘匿データ
+</td>
+<td>R2（
+<code>r2://
+</code>）
+</td>
+<td>GCS（
+<code>gs://
+</code>・署名付き URL 302）
+</td>
+</tr>              
+<tr>
+<td>AI プロキシ
+<br>
+<small>POST /api/gemini
+</small>
+</td>
+<td>
+<code>functions/api/gemini.js
+</code>（サーバーキー注入・転送のみ）
+</td>
+<td>
+<code>agent/app/main.py
+</code>（同一実装）
+</td>
+</tr>              
+<tr>
+<td>外部エージェント
+<br>
+<small>POST /agent/chat
+</small>
+</td>
+<td colspan="2">両基盤ともサーバー側実装はなし（廃止）。外部実装を繋ぐ窓口はフロントの「エージェント」設定に常備
+</td>
+</tr>              
+<tr>
+<td>capabilities
+</td>
+<td>
+<code>{tier:"workers"}
+</code>
+</td>
+<td>
+<code>{tier:"cloudrun"}
+</code>
+</td>
+</tr>              
+<tr>
+<td>認証ゲート
+</td>
+<td>3=APIのみ / 4=全リクエスト（Cookie）
+</td>
+<td>5=APIのみ / 6=全リクエスト（Cookie）/ 7=IAP 委譲
+</td>
+</tr>              
+<tr>
+<td>設定・秘密情報
+</td>
+<td>
+<code>wrangler.toml
+</code>＋
+<code>wrangler secret put
+</code>
+</td>
+<td>環境変数＋Secret Manager
+</td>
+</tr>              
+<tr>
+<td>Gemini キー保管
+</td>
+<td>サーバーキー: 
+<code>wrangler secret put GEMINI_API_KEY
+</code>（暗号化・読み出し不可）
+</td>
+<td>サーバーキー: 環境変数 or Secret Manager
+</td>
+</tr>              
+<tr>
+<td>デプロイ
+</td>
+<td>
+<code>python run-workers.py
+</code>（または 
+<code>wrangler deploy
+</code>）
+</td>
+<td>
+<code>docker build
+</code>＋
+<code>gcloud run deploy
+</code>（
+<code>agent/README.md
+</code>）
+</td>
+</tr>            
+</tbody>          
+</table>          
+<p>
+<small>
+<code>POST /api/gemini
+</code> は内蔵AI（ブラウザ）向けの薄いキー隠蔽プロキシです。ブラウザの generateContent リクエストにサーバーキー（
+<code>GEMINI_API_KEY
+</code>）を注入して転送するだけで、推論ループと地図操作はブラウザ側に留まります — BYO（Bring Your Own：各ユーザーがブラウザ localStorage に登録した自分の Gemini キー。サーバーには送られない）があればブラウザから直接 Gemini を呼び、無ければこのプロキシ経由でキーレス利用します。外部エージェントプロトコル（
+<code>{message,project,camera,layers,history,apiKey?}
+</code> → 
+<code>{reply,actions,report}
+</code>）の送信窓口はフロントに常備しており、外部のエージェント実装があればエンドポイントURL設定で接続できます（サーバー側実装は廃止しました — 内蔵AIが本体のため）。レート制限は Cloud Run 側はプロセス内管理、Cloudflare 側は KV バインド時のみ有効です（
+<code>ANTIGRAVITY_RATE_LIMIT
+</code>）。
+</small>
+</p>        
+</div>        
+<div class="url-box">          
+<h3>資産ごとの秘匿状況（認証方式別）
+</h3>          
+<p>「ID/PASS」「設定ファイル（.kasc）」「実ファイル（アプリ本体・GISデータ）」が、方式ごとにどこまで秘匿されるかの一覧です。
+</p>          
+<table>            
+<thead>              
+<tr>                
+<th>資産
+</th>                
+<th>0 none
+</th>                
+<th>1 local
+</th>                
+<th>2 password
+</th>                
+<th>3 Pages
+</th>                
+<th>4 Workers
+</th>                
+<th>5 cloudrun
+</th>                
+<th>6 gate
+</th>                
+<th>7 iap
+</th>              
+</tr>            
+</thead>            
+<tbody>              
+<tr>                
+<td>ID/PASS
+</td>                
+<td>−（認証なし）
+</td>                
+<td>❌ JS内に平文
+</td>                
+<td>△ JS内ハッシュ
+<br>
+<small>弱いPASSは解析可
+</small>
+</td>                
+<td>✅ 環境変数のみ
+<br>
+<small>ブラウザへ送信されない
+</small>
+</td>                
+<td>✅ 同左
+</td>                
+<td>✅ Secret Manager
+<br>
+<small>ブラウザへ送信されない
+</small>
+</td>                
+<td>✅ 同左
+</td>                
+<td>✅ Google アカウント
+<br>
+<small>アプリは資格情報を持たない
+</small>
+</td>              
+</tr>              
+<tr>                
+<td>.kasc 設定
+</td>                
+<td>❌ 全公開
+</td>                
+<td>❌ 全公開
+</td>                
+<td>❌ 全公開
+</td>                
+<td>◐ KV 内で秘匿
+<br>
+<small>ログイン後は全量がブラウザへ配信
+</small>
+</td>                
+<td>◐ 同左
+</td>                
+<td>◐ GCS 内で秘匿
+<br>
+<small>ログイン後は全量がブラウザへ配信
+</small>
+</td>                
+<td>◐ 同左
+</td>                
+<td>◐ IAP 内側
+<br>
+<small>GCS 利用時は同左
+</small>
+</td>              
+</tr>              
+<tr>                
+<td>HTML/JS/CSS
+<br>
+<small>（アプリ本体）
+</small>
+</td>                
+<td>❌ 全公開
+</td>                
+<td>❌ 全公開
+</td>                
+<td>❌ 全公開
+</td>                
+<td>❌ 全公開
+</td>                
+<td>✅ 未ログインは 401
+<br>
+<small>ログイン画面系のみ公開
+</small>
+</td>                
+<td>❌ 全公開
+</td>                
+<td>✅ 未ログインは 401
+<br>
+<small>ログイン画面系のみ公開
+</small>
+</td>                
+<td>✅ IAP がリダイレクト
+</td>              
+</tr>              
+<tr>                
+<td>データ（web/）
+<br>
+<small>URL が公開情報から分かる
+</small>
+</td>                
+<td>❌ 列挙容易
+</td>                
+<td>❌ 列挙容易
+</td>                
+<td>❌ 列挙容易
+</td>                
+<td>◐ 対象は限定的
+<br>
+<small>.kasc は KV で非公開のため、projects.json・HTML/JS・残置 .kasc 由来のみ
+</small>
+</td>                
+<td>✅ 未ログインは 401
+</td>                
+<td>◐ 対象は限定的
+<br>
+<small>.kasc は GCS で非公開のため、projects.json・HTML/JS・残置 .kasc 由来のみ
+</small>
+</td>                
+<td>✅ 未ログインは 401
+</td>                
+<td>✅ IAP 内側
+</td>              
+</tr>              
+<tr>                
+<td>データ（web/）
+<br>
+<small>URL が非公開・推測困難
+</small>
+</td>                
+<td>△ obscurity
+</td>                
+<td>△ obscurity
+</td>                
+<td>△ obscurity
+</td>                
+<td>△ obscurity
+</td>                
+<td>✅ 未ログインは 401
+</td>                
+<td>△ obscurity
+</td>                
+<td>✅ 未ログインは 401
+</td>                
+<td>✅ IAP 内側
+</td>              
+</tr>              
+<tr>                
+<td>データ
+<br>
+<small>（R2・r2:// / GCS・gs:// 経由）
+</small>
+</td>                
+<td>−
+</td>                
+<td>−
+</td>                
+<td>−
+</td>                
+<td>✅ トークン必須
+<br>
+<small>未ログインは取得不可
+</small>
+</td>                
+<td>✅ 同左
+</td>                
+<td>✅ トークン必須
+<br>
+<small>署名 URL は期限付きベアラ
+</small>
+</td>                
+<td>✅ 同左
+<br>
+<small>Cookie でも可
+</small>
+</td>                
+<td>✅ IAP JWT / 署名 URL
+</td>              
+</tr>            
+</tbody>          
+</table>          
+<p>
+<small>✅ 秘匿される　◐ 条件付きで秘匿　△ 弱い保護　❌ 公開　− 該当なし
+</small>
+</p>          
+<p>
+<small>
+<strong>「web/ 静的配信」の2区分について
+</strong>：静的ファイルに認証チェックはなく、URL が分かれば誰でも取得できる点は同じです。違いは 
+<strong>URL の発見可能性
+</strong>だけです。「URL が公開情報から分かる」とは、公開の 
+<code>.kasc
+</code>・
+<code>projects.json
+</code>・HTML/JS 内にパスが書かれている、または 
+<code>projects/default/DATA/...
+</code> のような推測しやすい固定パスのケース — 実質的に一覧・総当たりで列挙可能です。「URL が非公開・推測困難」はどこにもパスが書かれていないケースで、URL そのものが秘匿情報として機能します（ obscurity による弱い隠蔽で、URL が一度漏れれば防御はゼロです）。方式3 で 
+<code>.kasc
+</code> を KV に移せば、そこに書かれたデータ URL は未ログイン者には発見できなくなります。
+</small>
+</p>          
+<p>
+<small>
+<strong>共通の前提
+</strong>：「ログインした人」からは .kasc・データは見えます（ブラウザへ配信されるため）。秘匿が効くのは「未ログインの第三者」に対してです。方式3〜6 の署名トークンは 
+<code>/api/data/...?token=…
+</code> の URL に現れるため、ログイン済みブラウザから読み取れば有効期間中（12時間）は KV/GCS にアクセス可能です。方式5/6 の署名付き URL も同様に期限付き（既定15分）のベアラ URL です。各方式の詳細はそれぞれのページを参照してください。
+</small>
+</p>        
+</div>    
+</main>  
+</div>
+</body>
+</html>

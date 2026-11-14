@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>  
+<meta charset="UTF-8">  
+<meta name="viewport" content="width=device-width, initial-scale=1.0">  
+<title>【アプリ】ローカルアプリ（kasugai_canvas.exe）— KASUGAI Canvas ドキュメント
+</title>  
+<link rel="stylesheet" href="../style.css">  
+<script src="../nav.js" defer>
+</script>
+</head>
+<body>  
+<div class="container">    
+<header>      
+<h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span>
+</h1>      
+<p>【アプリ】ローカルアプリ（kasugai_canvas.exe）— フル機能版のインストールと使い方
+</p>    
+</header>    
+<main>      <nav class="form-nav" aria-label="利用形態の切替">        
+<a href="../datahost.html" class="webgis">🌐 【WebGIS】ブラウザ WebGIS
+</a>        
+<a href="6-1-プロジェクト.html" class="app current">💻 【アプリ】ローカルアプリ
+</a>        
+<a href="../runtime-cache.html" class="cache">💾 【キャッシュ】ランタイム永続キャッシュ
+</a>        
+<a href="5-1-内蔵AI.html" class="api">🤖 【API】内蔵AI
+</a>        
+<a href="5-2-外部エージェント.html" class="bridge">🔌 【ブリッジ】外部エージェント連携
+</a>      </nav>      
+<section>        
+<h2>使い方
+</h2>        
+<h3>概要 — ローカルアプリとは
+</h3>        
+<p>ローカルにインストールして 
+<code>localhost:8510
+</code> で動く
+<strong>フル機能版
+</strong>です。
+<a href="../datahost.html">【WebGIS】ブラウザ WebGIS
+</a> と同じ 
+<code>.kasc
+</code> プロジェクトを再生しつつ、ローカルだからこその以下の機能が使えます。
+</p>        
+<ul>          
+<li>
+<code>.kasc
+</code> のダブルクリック起動・外部プロジェクト登録（インストーラー版のみ）
+</li>          
+<li>設定のサーバー保存・
+<code>DATA/
+</code> へのファイル書き込み（
+<code>/api/files
+</code>）
+</li>          
+<li>rclone クラウドストレージ連携・仮想ドライブ割当（V5）
+</li>          
+<li>AI ブリッジハブの自動起動（
+<code>:8511
+</code> 常駐の bridge-hub.exe。GitHub Copilot / Devin / Antigravity。未インストール時はチャットのプロバイダ選択が導入導線）
+</li>          
+<li>
+<code>/api/fetch
+</code>（CORS 回避プロキシ）・
+<code>/api/plugins
+</code> などの高権限 API
+</li>          
+<li>QGIS geo_webview からの「▶ Canvas で登録」（127.0.0.1:8510 固定で検出）
+</li>        
+</ul>      
+</section>      
+<section>        
+<h3>使い方 — 主な機能
+</h3>        
+<div class="url-box">          
+<h3>基本の流れ
+</h3>          
+<figure>          <img src="../images/app-overview.png" alt="KASUGAI Canvas の画面：左にレイヤーパネル、地図上に OpenStreetMap" />          
+<figcaption aria-hidden="true">起動直後の画面（レイヤーパネル＋地図）
+</figcaption>          
+</figure>          
+<ul>            
+<li>設定は 
+<code>projects/&lt;project&gt;/kasugai_canvas.kasc
+</code> に記述します。
+</li>            
+<li>ローカルデータは 
+<code>projects/&lt;project&gt;/DATA/
+</code> 以下に置き、設定から相対パスで参照できます。
+</li>            
+<li>「エクスポート(.kasc)」ボタンで変更をダウンロードし、設定ファイルと差し替えて保存してください。
+</li>            
+<li>
+<code>web/
+</code> ディレクトリは通常の HTTP サーバーにそのまま配置できます。
+</li>          
+</ul>        
+</div>        
+<div class="url-box">          
+<h3>プロジェクト構成
+</h3>          
+<pre>
+<code>web/                    # フロントエンド資産(静的配信のみで動作)├─ index.html / app.js / styles.css└─ projects/   ├─ projects.json      # プロジェクト一覧 [{"id":"...","title":"..."}]   └─ &lt;project_id&gt;/      ├─ project.json     # 表示名等      ├─ kasugai_canvas.kasc  # インスペクター設定      └─ DATA/            # ローカルGeoJSON・3D Tiles・画像等
+</code>
+</pre>          
+<p>設定内の相対パス（例: 
+<code>DATA/sample.geojson
+</code>）は 
+<code>projects/&lt;project_id&gt;/
+</code> 直下に解決されます。
+<code>../DATA/x
+</code> のように 
+<code>..
+</code> で1階層上を指すと、プロジェクト群と並列の共有 DATA/（通常プロジェクトは 
+<code>projects/DATA/
+</code>）を参照でき、複数プロジェクトで同じデータを使い回せます。Rustサーバー使用時は同構成の 
+<code>projects/
+</code> をサーバーと同階層に配置します。
+</p>        
+</div>        
+<div class="url-box">          
+<h3>納品用ローカル化の出力先（_local ワークスペース）
+</h3>          
+<p>管理（⚙）→ アプリ → 保存 で「共有（既定）」または「専用」を選んで「納品パッケージを生成」を実行すると、元のプロジェクトを変更せず、プロジェクトフォルダの隣に 
+<code>&lt;プロジェクト名&gt;_local/
+</code> を生成します。共有の取り込み先は 
+<code>_local/DATA/
+</code>、専用は 
+<code>_local/&lt;name&gt;/DATA/
+</code> です。HTTP・HTTPS データは 
+<code>http/
+</code>、
+<code>3dtiles:
+</code> レイヤーの HTTP タイルセットは一式を 
+<code>http/3dtiles/
+</code>（クラウド・ローカル由来はそれぞれ 
+<code>cloud/
+</code>・
+<code>local/
+</code>）、クラウドは 
+<code>cloud/取得元ハッシュ/
+</code> に保存します。
+<code>xyz:
+</code> 行のリモートタイルは 
+<code>http/xyz/&lt;name&gt;/
+</code> に受け皿フォルダのみ生成して参照を書き換えます（タイル本体はユーザーが配置）。ベースマップ相当の 3D Tiles（Google Photorealistic 等）と 
+<code>base:
+</code> 行は対象外です。
+</p>          
+<p>
+<code>_local/
+</code> は群マニフェスト 
+<code>projects.json
+</code> とプロジェクトの複製（書き換え済み .kasc＋ローカル DATA/）を含む自己完結パッケージで、フォルダごと ZIP にして渡せば受け取り側は複製内の .kasc を開くだけで使えます。参照は 
+<code>../DATA/http/x.csv
+</code>（共有）または 
+<code>DATA/http/x.csv
+</code>（専用）の相対パスで、登録IDが変わっても維持されます。元からあったローカルデータは 
+<code>DATA/local/
+</code> に集約して複製され、取得したデータ（http/・cloud/）とは別フォルダに分かれます。再実行は 
+<code>_local/
+</code> を作り直します。詳細は 
+<a href="6-5-アプリ.html">V5: アプリ化
+</a> を参照してください。
+</p>        
+</div>        
+<div class="url-box">          
+<h3>設定の保存
+</h3>          
+<p>静的サーバーでは設定をサーバーに保存しません。インスペクターの
+<strong>「エクスポート(.kasc)」
+</strong>でダウンロードし、対象プロジェクトの 
+<code>kasugai_canvas.kasc
+</code> と差し替えてください。
+</p>        
+</div>        
+<div class="url-box">          
+<h3>インスペクター設定
+</h3>          
+<pre>
+<code>xyz: OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.pngbase: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47cam: 東京駅 | 35.653108 | 139.761449 | h=2200.6 | p=-30info: https://example.com/project-info.html
+</code>
+</pre>          
+<p>1 行 
+<code>種類: 値
+</code> 形式でレイヤー、ベースマップ、カメラ、Info、凡例等を記述します。完全な書式・オプション・ローカルファイル追加手順は 
+<a href="6-2-インスペクター.html">.kasc 設定仕様
+</a> を参照してください。
+</p>        
+</div>        
+<div class="install-steps">          
+<h3>FLY 機能（KASUGAI 独自追加機能）
+</h3>          
+<ol>            
+<li>
+<code>kasugai_canvas.kasc
+</code> に 
+<code>fly_geojson: ルート名 | URL | speed=10 | height=100 | pitch=-30
+</code> を追加
+</li>            
+<li>ナビゲーションツールバーから 
+<strong>Fly
+</strong> モードに切り替え、ドロップダウンでルートを選択
+</li>            
+<li>マウスホイール / キー 
+<code>+
+</code> / 
+<code>-
+</code> で速度、キー 
+<code>Q
+</code> / 
+<code>E
+</code> で高さ補正を調整
+</li>            
+<li>Orbit モードで 
+<strong>Draw
+</strong> タブから右クリックで点を追加、右ダブルクリックでルート描画終了→ブラウザ IndexedDB に自動保存されドロップダウンに追加
+</li>            
+<li>「取込」で .geojson ファイルを IndexedDB へインポート、描画ルートを選択中は「出力」（.geojson ダウンロード）「削除」ボタンが表示。インスペクタで 
+<code>route:&lt;ルート名&gt;
+</code> を参照することも可（例：
+<code>fly_geojson: 名 | route:drawn_route_...
+</code>）
+</li>          
+</ol>        
+</div>        
+<div class="install-steps">          
+<h3>クラウドストレージ連携（rclone・ローカルサーバーのみ）
+</h3>          
+<ol>            
+<li>管理（⚙）→ アプリ → 
+<strong>rclone
+</strong> を開き、rclone の検出状態を確認。未導入なら「インストール先フォルダ」（既定 
+<code>C:\kasugai\rclone
+</code>）を指定して「ダウンロードして配置」
+</li>            
+<li>「リモート追加」で種別（Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3）を選んで「追加」。ブラウザで OAuth 認証画面が開くので、許可後はクラウド サブタブでリモートを選択してください
+</li>            
+<li>「ルートフォルダ」に接続の起点を指定します（省略可）。フォルダパスのほか、Box の 
+<code>https://app.box.com/folder/…
+</code>・共有リンク 
+<code>…/s/…
+</code>、Google Drive の 
+<code>…/folders/…
+</code>、OneDrive の 
+<code>?id=…
+</code> といったフォルダURLも指定できます。URL指定はフォルダID起点で接続されるため、権限や共有経路によってリモート内の見える位置が異なる環境間でも、全員が同じフォルダをルートとして参照できます
+</li>            
+<li>「読み取り専用 / 読み書き」を選んで「接続開始」。ドライブ サブタブで「割り当て」（既定 K:）を選ぶとエクスプローラーからも使える仮想ドライブになります（Windows のみ）
+</li>            
+<li>レイヤーURLには 
+<code>cloud:
+</code> スキームが使えます。
+<code>geojson: 名 | cloud:フォルダ/file.geojson
+</code> のように接続中ストレージのファイルを直接参照でき、HTTP Range にも対応しています
+</li>            
+<li>読み書きで接続中は管理 → アプリ → 保存 の「.kascをクラウドへ保存」で現在の設定をクラウド上に保存できます
+</li>            
+<li>管理 → アプリ → 保存 の「現在の設定をインスペクタに追記して接続」を押すと 
+<code>cloud: リモート | ルートフォルダ | perm=write | drive=K
+</code> 形式の設定行がインスペクタに追加されます。この行を 
+<code>.kasc
+</code> に残すと、起動時・プロジェクト読み込み時に自動接続されます（
+<code>cloud: stop
+</code> で停止）
+</li>          
+</ol>          
+<figure>          <img src="../images/manage-rclone.png" alt="管理（⚙）→ アプリ → rclone：rclone の検出状態・インストール先フォルダ・リモート追加" />          
+<figcaption aria-hidden="true">管理（⚙）→ アプリ → rclone：導入とリモート追加
+</figcaption>          
+</figure>          
+<p>ドライブ経由の読み書きは Windows WebClient の制約で約 50MB 超のファイルを扱えません（
+<code>cloud:
+</code> スキーム経由はこの制限を受けません）。この機能はローカルサーバー（local ティア）のみで有効です。
+</p>        
+</div>      
+</section>      
+<section>        
+<h2>設定方法（インストール・保存先）
+</h2>        
+<h3>導入・セットアップ — インストールと起動
+</h3>        
+<div class="install-steps">          
+<h3>配布 ZIP / インストーラー
+</h3>          
+<p>最新のビルドは 
+<code>download/
+</code> フォルダから直接ダウンロードできます。
+<strong>インストーラー版を推奨
+</strong>します — 
+<code>.kasc
+</code> ファイルのダブルクリック起動（拡張子の関連付け＝外部プロジェクト登録）はインストーラー版でのみ利用できます。
+</p>          
+<div style="display:flex; gap:10px; flex-wrap:wrap; margin: 15px 0;">            
+<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip" class="demo-link" target="_blank">DOWNLOAD: インストーラー ZIP（推奨）
+</a>            
+<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas.zip" class="demo-link" target="_blank">DOWNLOAD: ポータブル ZIP
+</a>          
+</div>          
+<ol>            
+<li>
+<strong>インストーラー版（推奨）
+</strong>: 
+<strong>kasugai_canvas_setup.zip
+</strong> を展開して 
+<code>kasugai_canvas_setup.exe
+</code> を実行。ポータブル版の場合は 
+<strong>kasugai_canvas.zip
+</strong> を任意のフォルダに展開
+</li>            
+<li>インストーラーのウィザードに従って 
+<code>C:\kasugai\kasugai_canvas
+</code> へインストール（ポータブル版は展開先がそのまま実行フォルダ）
+</li>            
+<li>
+<code>kasugai_canvas.exe
+</code> を実行するか、ショートカットから起動。インストーラー版では 
+<code>.kasc
+</code> ファイルのダブルクリック起動も使えます
+</li>            
+<li>既定でブラウザが開き、KASUGAI Canvas が起動します
+</li>          
+</ol>          
+<p>
+<small>GitHub Releases からも同じファイルを取得できます。
+</small>
+</p>        
+</div>        
+<div class="url-box">          
+<h3>リリースビルド
+</h3>          
+<pre>
+<code>python run.py -B
+</code>
+</pre>          
+<p>配布用 ZIP（
+<code>kasugai_canvas.exe
+</code> + 
+<code>web/
+</code> + 
+<code>projects/
+</code>）と、NSIS が利用可能な場合はインストーラーを 
+<code>download\
+</code> に作成します。既定のインストール先は 
+<code>C:\kasugai\kasugai_canvas
+</code> です。
+</p>        
+</div>        
+<div class="url-box">          
+<h3>自動更新
+</h3>          
+<p>Rust サーバー起動時は、管理（⚙）→ その他 から最新リリースの確認・自動更新が行えます。更新時は EXE を自動的に差し替えて再起動します。
+</p>          
+<figure>          <img src="../images/manage-others.png" alt="管理（⚙）→ その他：言語・ポート番号・バージョン更新・データ取得プロキシ許可リスト" />          
+<figcaption aria-hidden="true">管理（⚙）→ その他：バージョン・自動更新とデータ取得プロキシ許可リスト
+</figcaption>          
+</figure>        
+</div>        
+<h3>起動方法
+</h3>        
+<div class="url-box">          
+<h3>起動方法（通常のHTTPサーバー）
+</h3>          
+<pre>
+<code>cd webpython -m http.server 8520
+</code>
+</pre>          
+<p>
+<code>web/
+</code> をドキュメントルートに置くだけです。ブラウザで 
+<code>http://127.0.0.1:8520/
+</code> を開いてください。
+</p>        
+</div>        
+<div class="url-box">          
+<h3>起動方法（Rustサーバー / 開発）
+</h3>          
+<pre>
+<code>cargo run --manifest-path server\Cargo.toml# またはpython run.py            # 開発起動python run.py --release  # リリース版を起動
+</code>
+</pre>          
+<p>ブラウザで 
+<code>http://127.0.0.1:8510/
+</code> を開いてください。ポートは 
+<code>KASUGAI_CANVAS_PORT
+</code> 環境変数で変更できます。インスペクター設定は 
+<code>projects/&lt;project&gt;/kasugai_canvas.kasc
+</code> に保存されます。
+</p>        
+</div>        
+<div class="url-box">          
+<h3>起動方法（.kasc ファイルから起動・インストーラー版）
+</h3>          
+<p>インストーラー版は 
+<code>.kasc
+</code> 拡張子を関連付けます。任意のフォルダにある 
+<code>.kasc
+</code> をダブルクリックすると、そのファイルを
+<strong>外部プロジェクト
+</strong>として登録して開きます。
+<code>.kasc
+</code> のあるフォルダがそのままプロジェクトルートになり、
+<code>DATA/
+</code> などの相対参照はそのフォルダ基準で解決されるため、
+<code>.kasc
+</code> と 
+<code>DATA/
+</code> をまとめたフォルダを渡すだけで納品できます。登録はプロジェクト一覧に残り、システムとは別の場所に複数プロジェクトを管理できます（ファイル名は 
+<code>kasugai_canvas.kasc
+</code> 以外でも可）。管理（⚙）→ プロジェクト の「プロジェクトルート」で、現在のプロジェクトが実際にどのフォルダを基準にしているか確認できます。詳細は 
+<a href="6-5-アプリ.html">V5: アプリ化
+</a> を参照してください。
+</p>          
+<h4>納品パッケージの推奨構造（プロジェクト群＋共有 DATA/）
+</h4>          
+<pre>
+<code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡す├─ DATA/                  … 全プロジェクト群で共有（../../DATA/x で参照）├─ ProjectsA/│  ├─ projects.json       … 群マニフェスト [{"dir":"ProjectA","kasc":"xxx.kasc","title":"計画A"}, ...]│  ├─ DATA/               … （任意）群内共有（../DATA/x で参照）│  ├─ ProjectA/{xxx.kasc, project.json, DATA/}│  └─ ProjectB/{yyy.kasc}└─ ProjectsB/   ├─ projects.json   └─ ProjectC/{zzz.kasc}   … ProjectsA と同じ ../../DATA/ を共有
+</code>
+</pre>          
+<p>相対参照の規則: 
+<code>DATA/x
+</code> は .kasc のあるフォルダ内、
+<code>../x
+</code> は1つ上（群フォルダ＝群内共有）、
+<code>../../x
+</code> は2つ上（ワークスペースルート＝全群共有）を指します。
+<code>projects.json
+</code> を持たないフラット構造（
+<code>{P1, DATA}
+</code>）は従来通り 
+<code>../
+</code> が1つ上を指します。この構造を ZIP にすれば受け取り側は群内の .kasc を1つダブルクリックするだけで、マニフェストの一覧に従って群の全プロジェクトが登録され、全参照が解決します。
+</p>        
+</div>      
+</section>      
+<section>        
+<h3>注意点・制限 — 配布と公開の形態
+</h3>        
+<p>KASUGAI Canvas は、ブラウザ完結の CesiumJS フロントエンドに整理されています。Rust/Axum サーバーはあくまで 
+<strong>最小限の静的ファイル配信
+</strong>で、
+<code>web/
+</code> ディレクトリそのものを nginx / Apache / IIS / GitHub Pages などに置くだけで一般公開もできます。
+</p>        
+<div class="features">          
+<div class="feature-card">            
+<h3>📦 ローカル・納品
+</h3>            
+<p>
+<code>kasugai_canvas.zip
+</code> または NSIS インストーラーで配布。
+<code>kasugai_canvas.exe
+</code> と同じ場所に 
+<code>web/
+</code>・
+<code>projects/
+</code> を配置します。
+</p>          
+</div>          
+<div class="feature-card">            
+<h3>🌐 WEB 公開
+</h3>            
+<p>
+<code>web/
+</code> を静的サーバーにアップロード。同一オリジン内の 
+<code>projects/&lt;id&gt;/DATA/
+</code> を相対パスで参照できます。
+</p>          
+</div>          
+<div class="feature-card">            
+<h3>📡 単独WEB配信（サーバレス）
+</h3>            
+<p>QGIS geo_webview の KASUGAI エクスポートが出力する 
+<code>.kasc
+</code>・
+<code>DATA/
+</code>・
+<code>&lt;engine&gt;.html
+</code>・
+<code>index.html
+</code> を含むフォルダを、エンジン（
+<code>web/
+</code> の中身）と一緒に同じ静的サーバーへ置くだけで公開できます。各 
+<code>&lt;engine&gt;.html
+</code> はエンジンを自動探索して 
+<code>?kasc=&lt;URL&gt;
+</code> 付きで起動します（配置が特殊なら HTML 内の 
+<code>CANVAS_BASE
+</code> を設定）。プロジェクト登録・ローカルサーバー不要です。
+</p>            
+<p>
+<strong>注意事項
+</strong>：エンジンはルートパス前提（
+<code>/shared/
+</code> 等）のため 
+<code>web/
+</code> の中身をホストルートに置き、プロジェクトフォルダは配下の任意の場所へ配置してください。
+<code>file://
+</code> で開いた場合は起動中のローカル Canvas（127.0.0.1:8510）へ 
+<code>/api/projects/register
+</code> で自動登録して開きます（CORS 対応ビルドが必要。未対応・未起動時は案内が表示されます）。受け取り側は「ローカル Canvas を入れてダブルクリック」または「フォルダごと静的ホスティングへ」の2択で開けます。
+</p>          
+</div>          
+<div class="feature-card">            
+<h3>🔒 読み取り専用
+</h3>            
+<p>プロジェクトファイルは Web サーバー側の権限で書き込み禁止にできます。変更は「エクスポート(.kasc)」でローカルに落として差し替えます。
+</p>          
+</div>          
+<div class="feature-card">            
+<h3>⚠️ 公開時の注意
+</h3>            
+<p>外部 3D Tiles / GeoJSON は CORS が必要。Yahoo AppID 等の認証情報を 
+<code>.kasc
+</code> に書くと公開サイトで漏洩します。
+</p>          
+</div>        
+</div>      
+</section>      
+<section class="card">        
+<h2>関連リンク
+</h2>        
+<ul>          
+<li>
+<a href="../datahost.html">【WebGIS】ブラウザ WebGIS（インストール不要の利用形態）
+</a>
+</li>          
+<li>
+<a href="6-5-アプリ.html">V5: アプリ化（ローカル連携）
+</a>
+</li>          
+<li>
+<a href="6-2-インスペクター.html">.kasc 設定仕様
+</a>
+</li>          
+<li>
+<a href="../index.html">← ドキュメントトップへ
+</a>
+</li>        
+</ul>      
+</section>    
+</main>  
+</div>
+</body>
+</html>

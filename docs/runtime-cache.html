@@ -16,10 +16,10 @@
     <main>
       <nav class="form-nav" aria-label="利用形態の切替">
         <a href="datahost.html" class="webgis">🌐 【WebGIS】ブラウザ WebGIS</a>
-        <a href="guide.html" class="app">💻 【アプリ】ローカルアプリ</a>
+        <a href="use/6-1-プロジェクト.html" class="app">💻 【アプリ】ローカルアプリ</a>
         <a href="runtime-cache.html" class="cache current">💾 【キャッシュ】ランタイム永続キャッシュ</a>
-        <a href="ai-api.html" class="api">🤖 【API】内蔵AI</a>
-        <a href="ai-bridge.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
+        <a href="use/5-1-内蔵AI.html" class="api">🤖 【API】内蔵AI</a>
+        <a href="use/5-2-外部エージェント.html" class="bridge">🔌 【ブリッジ】外部エージェント連携</a>
       </nav>
 
       <section>
@@ -39,7 +39,10 @@
         </div>
         <div class="url-box" id="cache-diagram">
           <h3>ブラウザから見た構成図</h3>
-          <pre class="mermaid" aria-label="ブラウザから見た Service Worker 構成図">
+          <pre class="mermaid" aria-label="ブラウザから見た Service Worker 構成図">---
+title: ブラウザから見た Service Worker 構成図
+---
+
 flowchart TB
   subgraph BR["ブラウザ（ページ＝web/ スコープ配下）"]
     ENG["エンジンページ<br/>cesium / gsimaps / navara 等"]
@@ -185,9 +188,9 @@ flowchart TB
       <section class="card">
         <h2>8. 関連リンク</h2>
         <ul>
-          <li><a href="inspector.html">.kasc 設定仕様</a> — duckdb:/sql:/gpkg: レイヤーの設定とランタイム読み込み動作</li>
+          <li><a href="use/6-2-インスペクター.html">.kasc 設定仕様</a> — duckdb:/sql:/gpkg: レイヤーの設定とランタイム読み込み動作</li>
           <li><a href="data.html">データ形式</a> — DuckDB-WASM・sql.js 等のデコード経路</li>
-          <li><a href="features/v6.html">V6: マルチエンジン</a> — vendor 依存エンジン（gsimaps・navara）の構成</li>
+          <li><a href="use/1-10-マルチエンジン.html">V6: マルチエンジン</a> — vendor 依存エンジン（gsimaps・navara）の構成</li>
           <li><a href="architecture.html">システム構成</a> — Web Worker によるロード・変換層の位置づけ</li>
           <li><a href="index.html">← ドキュメントトップへ</a></li>
         </ul>

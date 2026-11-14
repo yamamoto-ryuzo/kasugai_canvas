@@ -72,7 +72,10 @@
         <li><strong>認証・保存：</strong>Cloud Run の FastAPI が静的配信、ID/PASS 認証、HMAC トークン発行、<code>.kasc</code>・データの保存 API を提供します。データ本体は Cloud Storage に置き、ブラウザが V4 署名付き URL で直接転送します。キーや認証情報は Secret Manager で管理します。</li>
         <li><strong>地図表示：</strong>Maps キーはブラウザへ渡し、GCP 側の HTTP リファラと利用 API 制限で保護します。</li>
       </ul>
-      <pre class="mermaid" aria-label="KASUGAI Canvas システムアーキテクチャ">
+      <pre class="mermaid" aria-label="KASUGAI Canvas システムアーキテクチャ">---
+title: KASUGAI Canvas システムアーキテクチャ
+---
+
 flowchart TB
   User[利用者] --> Agent
 

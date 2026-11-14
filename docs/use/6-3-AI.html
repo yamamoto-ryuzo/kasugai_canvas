@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6-3 AI — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>6-3 AI — 管理画面の AI 設定カテゴリ</p>
+    </header>
+    <main>
+      <p>「AI」カテゴリは KASUGAI Canvas の AI 連携の統括設定です。内蔵 AI（ブラウザ内 function calling）と外部エージェント（ChatGPT / Claude / MCP 経由）の両方をここから設定します。</p>
+
+      <h2>使い方</h2>
+      <h3>設定項目</h3>
+      <ul>
+        <li><strong>内蔵 AI</strong> — 使用する AI バックエンド（Gemini / OpenAI / Azure OpenAI / GitHub Models など）と API キーの登録。<a href="5-1-内蔵AI.html">5-1 内蔵 AI（AiPanel）</a> の設定をここで行います</li>
+        <li><strong>外部エージェント</strong> — Claude Desktop / ChatGPT との接続設定（MCP・カスタムGPT・アクションURL）。<a href="5-2-外部エージェント.html">5-2 外部エージェント連携</a></li>
+        <li><strong>AI ツール宣言</strong> — AI へ公開するツール数・カテゴリの絞り込み。<a href="5-3-AIツール.html">5-3 AI ツール仕様</a></li>
+        <li><strong>ブリッジハブ</strong> — 外部エージェントとの常駐接続ハブ。<a href="5-4-ブリッジハブ.html">5-4 ブリッジハブ</a></li>
+      </ul>
+
+      <h2>設定方法</h2>
+      <p>各設定は管理 ⚙ → AI カテゴリ内のフォームから行い、API キーやプロバイダ選択はブラウザ（localStorage）へ保存されます（.kasc には含まれません）。</p>
+      <ul>
+        <li>内蔵 AI のプロバイダ・API キー・カスタム指示・AI プラグイン → <a href="5-1-内蔵AI.html">5-1 内蔵 AI</a></li>
+        <li>外部エージェント（MCP・カスタムGPT）の接続先 → <a href="5-2-外部エージェント.html">5-2 外部エージェント</a>・<a href="5-4-ブリッジハブ.html">5-4 ブリッジハブ</a></li>
+        <li>AI へ公開するツールの絞り込み・ステップ上限 → <a href="5-3-AIツール.html">5-3 AI ツール仕様</a></li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="5-1-内蔵AI.html">5-1 内蔵 AI</a> / <a href="5-2-外部エージェント.html">5-2 外部エージェント</a> / <a href="5-3-AIツール.html">5-3 AI ツール</a> / <a href="5-4-ブリッジハブ.html">5-4 ブリッジハブ</a> / <a href="5-5-AI連携.html">5-5 AI 連携の仕組み</a></li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

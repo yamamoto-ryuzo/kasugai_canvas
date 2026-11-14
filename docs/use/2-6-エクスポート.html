@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-6 エクスポート — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-6 エクスポート — ツールドックのレイヤーエクスポート</p>
+    </header>
+    <main>
+      <p>レイヤパネルの🧰ボタンで開くツールドックの「エクスポート」パネルです。すべてブラウザ内で生成するため CDN ホスト版でも動作します。</p>
+
+      <h2>使い方</h2>
+      <h3>📤 エクスポート</h3>
+      <p>「エクスポート」でベクターレイヤを選び、形式を指定してダウンロードします（クエリ系=bbox=auto 等は読み込み済み範囲のみになるため <code>*</code> 印で明示）。形式は <strong>GeoJSON / CSV / TSV / KML / FlatGeobuf / Shapefile</strong>（.zip 同梱）。CSV・TSV はジオメトリを <code>WKT</code> 列として出力する QGIS の CSV エクスポート（GEOMETRY=AS_WKT）互換で、UTF-8 BOM 付き・3D 座標は <code>Z</code> 修飾付きです。Shapefile はジオメトリ種別ごとに分割した .shp/.shx/.dbf/.prj/.cpg を ZIP にまとめます。</p>
+      <p><a href="1-4-属性.html">属性テーブル</a> にも CSV / TSV ボタンがあり、検索フィルタ・ソート適用後の全行を UTF-8 BOM 付き・代表点 lon/lat 列付きで出力します。</p>
+
+      <h3>対応エンジン</h3>
+      <p>Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps・Navara（Navara はエクスポートのみ対応）。AI からは <code>exportLayer</code> で実行できます（<a href="5-3-AIツール.html">5-3 AI ツール仕様</a>）。</p>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません。出力したファイルをレイヤーとして再利用する場合は <code>geojson:</code>/<code>csv:</code>/<code>kml:</code>/<code>shp:</code>/<code>flatgeobuf:</code> 行で読み込みます（<a href="6-2-インスペクター.html">6-2 インスペクター</a>）。</p>
+
+    </main>
+  </div>
+</body>
+</html>

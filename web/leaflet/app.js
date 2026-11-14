@@ -103,7 +103,7 @@ function fitDataExtent({ padding = [40, 40], maxZoom = 17, animate = false } = {
   return true;
 }
 
-// 「属性・値一覧」ボトムシート（Cesium 版 vector-attr-widget と同等）。
+// 「属性テーブル」ボトムシート（Cesium 版 vector-attr-widget と同等）。
 // レイヤ id は layerEntries のインデックス
 const attrWidget = createAttrWidget({
   listLayers: () => layerEntries
@@ -1027,7 +1027,7 @@ function buildLayerRow(entry, exclusive, radioName) {
   const name = document.createElement("span");
   name.textContent = entry._leaf || item.url;
   if (item.title && item.title !== entry._leaf) name.title = item.title;
-  // ベクターレイヤは名前クリックで「属性・値一覧」ウィジェットを開く
+  // ベクターレイヤは名前クリックで「属性テーブル」ウィジェットを開く
   if (VECTOR_TYPES.has(item.type)) {
     name.style.cursor = "pointer";
     name.title = "属性一覧を表示";

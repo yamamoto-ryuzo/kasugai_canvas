@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3-4 地点座標の取得 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>3-4 地点座標の取得 — ナビゲーションツールバーの座標クリップボード</p>
+    </header>
+    <main>
+      <p><a href="3-1-コンパス.html">ナビゲーションツールバー</a>（画面右下）の「地点座標」ボタンで起動する座標取得ツールです。</p>
+
+      <h2>使い方</h2>
+      <h3>📌 地点座標の取得</h3>
+      <p>起動すると十字カーソルで地図上をクリックし、ポップアップに選択中形式の座標を表示します（コピーボタン付き。度・度分秒・UTM・平面直角系は <a href="1-6-表示.html">1-6 表示</a> の「座標表示形式・測地系」セレクトで切替）。カメラ位置の読み上げもでき、<strong>ポップアップ上で表示形式をその場で変更</strong>して再表示・再コピーできます。Esc で終了します。</p>
+      <figure>
+      <img src="../../issues/04/coordpick.png" alt="地点座標ポップアップ：座標・行政区画名・muniCd とコピー/ピン/クリアボタン" />
+      <figcaption aria-hidden="true">地点座標ポップアップ（座標・行政区画名とコピーボタン）</figcaption>
+      </figure>
+      <p>検索窓へ座標を直接入力してその地点へ FlyTo することもできます（<a href="1-3-検索.html">1-3 検索</a>）。</p>
+      <h2>設定方法</h2>
+      <p>.kasc の設定行はありません。表示形式（度・度分秒・UTM・平面直角系）と測地系は <a href="1-6-表示.html">1-6 表示</a> の「座標表示形式・測地系」セレクトで切り替えます（ブラウザに保持）。</p>
+
+    </main>
+  </div>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4-1 ベースマップ選択 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>4-1 ベースマップ選択 — 画面右上の背景地図セレクト</p>
+    </header>
+    <main>
+      <h2>使い方</h2>
+      <h3>🗺️ ベースマップ選択</h3>
+      <p>画面右上のセレクトボックスで OpenStreetMap / 地理院地図（淡色・標準・写真・陰影）/ Google Maps（API キー設定時のみ表示）の背景地図を切り替えます。選択はプロジェクトとブラウザ（localStorage）に保存され、エンジン切替時も引き継がれます。</p>
+      <p><code>base:</code> 行（<code>base: osm</code>・<code>base: gsi_std</code>・<code>base: google</code> 等）で初期ベースマップを指定でき、<code>base: none</code> で背景地図なし（単色背景）にもできます。<code>basemap: 名前 | XYZ URL</code> 行でカスタムタイルをセレクトへ追加も可能です。レイヤー行の <code>xyz:</code>・<code>base:</code> で指定したタイルはこのセレクトと独立して読み込まれます。</p>
+      <p><a href="6-4-GoogleMaps.html">管理 → Google Maps</a> で Maps JavaScript API キーを登録すると Google Maps が選択肢に現れ、同キーで Geocoding / Places も使えます。タイルは Google の規約上 <code>MapTypeId</code> 直接指定ではなく、Maps API の表示レイヤ（vector/raster）を背景に使います。Google はセレクトに残してあり、未登録時に選ぶと「API キーが必要」と案内します。</p>
+
+      <h2>設定方法（.kasc）</h2>
+      <pre class="text"><code>base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
+base: 写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | off
+base: 表示名 | transparent |   （ベースマップ透明＝地表透明を初期選択）
+base: 表示名 | none |          （ベースマップなしを初期選択）
+xyz: 重ねるタイル | https://example.com/{z}/{x}/{y}.png | opacity=0.7</code></pre>
+      <ul>
+        <li><code>base:</code> 行がベースマップセレクトの選択肢になります（先頭が既定・<code>| off</code> で非初期選択）。タイトルの「グループ/名前」はセレクト内の折りたたみグループになります</li>
+        <li><code>xyz:</code> 行はベースマップとは独立したタイルレイヤーとして重なります</li>
+        <li>Google Maps を使うには管理 ⚙ → Google Maps で API キーを登録します（<a href="6-4-GoogleMaps.html">6-4 Google Maps</a>）</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="6-4-GoogleMaps.html">6-4 Google Maps</a> — Maps API キーの登録とハイブリッド検索</li>
+        <li><a href="6-2-インスペクター.html">6-2 インスペクター</a> — <code>base:</code>・<code>basemap:</code> 行の書式</li>
+        <li><a href="1-9-ポータル.html">1-9 ポータル</a> — <code>view:</code> プリセットで背景地図を切替</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

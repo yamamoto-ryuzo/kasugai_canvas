@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>6-6 その他 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>6-6 その他 — 言語・自動更新・データ取得プロキシ・ブラウザ連携</p>
+    </header>
+    <main>
+      <h2>使い方</h2>
+      <h3>🌐 言語</h3>
+      <p>UI の言語を日本語 / English から切り替えます。選択はブラウザに保存され、対応している文字列は翻訳テーブル経由で表示されます。</p>
+
+      <h3>🔄 自動更新</h3>
+      <p>ローカルアプリ版では起動時に <code>download/latest.json</code> を参照して新版を検出し、自動更新を行います（既定 ON）。開発中や意図的に旧版を使いたい場合は OFF にできます。</p>
+
+      <h3>🔀 データ取得プロキシ</h3>
+      <p>ローカルアプリ版では <code>/api/fetch?url=</code> 経由で外部 URL をプロキシ取得し、CORS で取れないリソース（外部タイル・GeoJSON 等）を読み込めるようにします。静的ホスト版（CDN）では直接 URL 指定のみです。</p>
+
+      <h3>🔌 ブラウザ連携</h3>
+      <p>ローカルアプリ版では <code>kasugai:</code> プロトコルハンドラで外部アプリ・リンクからプロジェクトを起動し、別アプリで開くボタン等と連携します。ブラウザ WebGIS（静的ホスト版）ではこの連携はありません。</p>
+
+      <h2>設定方法</h2>
+      <ul>
+        <li><strong>言語</strong> — 管理 ⚙ → その他 の言語セレクト（日本語/English 等8言語）。選択はブラウザに保存</li>
+        <li><strong>自動更新</strong> — 管理 ⚙ → その他 のトグル（ローカルアプリ版のみ。起動時に <code>download/latest.json</code> を参照）</li>
+        <li><strong>データ取得プロキシ</strong> — ローカルサーバーの <code>/api/fetch?url=</code>。レイヤー行の <code>proxy=on</code>/<code>proxy=off</code> で経路を指定（<a href="6-2-インスペクター.html">6-2 インスペクター</a>）</li>
+        <li><strong>ブラウザ連携</strong> — <code>kasugai:</code> プロトコルハンドラはアプリインストーラーが OS へ登録（<a href="4-2-別アプリ.html">4-2 別アプリで開く</a>）</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="6-5-アプリ.html">6-5 アプリ</a> / <a href="4-2-別アプリ.html">4-2 別アプリで開く</a></li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

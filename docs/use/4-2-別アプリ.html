@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4-2 別アプリで開く — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>4-2 別アプリで開く — Google Earth / ローカルアプリ / CDN 版</p>
+    </header>
+    <main>
+      <p>ベースマップセレクトの下にある「🌐」「🖥」「☁」ボタン群で、現在のビュー・プロジェクトを外部アプリや別環境へ持ち出します。</p>
+
+      <h2>使い方</h2>
+      <h3>🌐 Google Earth で開く</h3>
+      <p>現在のカメラ位置（緯度・経度・高さ・heading・pitch）から Google Earth の URL を生成し、新しいタブで開きます。<code>https://earth.google.com/web/search/&lt;lat&gt;,&lt;lon&gt;,.../&lt;h&gt;d,&lt;pitch&gt;p,&lt;heading&gt;h</code> 形式で、ブラウザ版 Google Earth が直接その視点で起動します。ローカル Google Earth Pro への移行導線としても使えます。</p>
+
+      <h3>🖥 ローカルアプリで開く</h3>
+      <p><code>kasugai_canvas.exe</code>（ローカルアプリ）が起動しているとき、<code>kasugai:</code> プロトコルハンドラ経由で現在のプロジェクトとカメラをアプリへ受け渡します。アプリ未起動ならダウンロードページへ案内します。</p>
+
+      <h3>☁ CDN 版で開く</h3>
+      <p>ローカルアプリ上で開いているときだけ表示され、現在のプロジェクトを GitHub Pages 上の <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/">kasugai-canvas-web</a>（CDN ホスト版）で同じ視点・プロジェクトを開きます。配布用・検証用として、ローカル起動と CDN の間を行き来するための導線です。</p>
+
+      <h2>設定方法（URL パラメータ）</h2>
+      <pre class="text"><code>?kasc=https://example.com/project/kasugai_canvas.kasc   （プロジェクト直読み・サーバレス配信）
+?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara   （起動エンジン指定）
+#lat=…&amp;lon=…&amp;h=…&amp;heading=…&amp;pitch=…                  （カメラ位置の共有ハッシュ）</code></pre>
+      <ul>
+        <li>ローカルアプリ連携は <code>kasugai:</code> プロトコルハンドラを使います（アプリのインストーラーがOSへ登録）</li>
+        <li>「☁ CDN 版で開く」はローカルアプリ上でのみ表示され、<code>?kasc=</code> で現在のプロジェクトを CDN ホストへ受け渡します</li>
+      </ul>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="4-1-ベースマップ.html">4-1 ベースマップ選択</a> — 同じセレクトボックス行にある操作</li>
+        <li><a href="6-5-アプリ.html">6-5 アプリ</a> — ローカルアプリの起動とプロジェクト同期</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

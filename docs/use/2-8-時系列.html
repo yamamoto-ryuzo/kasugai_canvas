@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-8 時系列 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-8 時系列 — ツールドックの時系列レイヤー設定（Cesium）</p>
+    </header>
+    <main>
+      <p>ベクター行の <code>time=</code> オプションで地物を時系列化し、画面下のタイムスライダーで scrub/再生による時刻フィルタを行う機能です（Cesium のみ）。行に <code>time=</code> を書かなくても、ツールドックの「時系列」パネルからレイヤーと時刻プロパティを選んで設定でき、適用時は <code>.kasc</code> 行へ自動書き戻しされます。</p>
+
+      <h2>使い方</h2>
+      <h3>⏱️ .kasc 行オプション</h3>
+      <pre class="text"><code>geojson: 避難所の推移 | DATA/shelters.geojson | time=開設日
+geojson: イベント     | DATA/events.geojson  | time=開始 | time_end=終了 | time_span=PT1H</code></pre>
+      <table>
+        <thead><tr><th>オプション</th><th>意味</th></tr></thead>
+        <tbody>
+          <tr><td><code>time=プロパティ名</code></td><td>地物の時刻属性で時系列レイヤー化。時刻値は ISO文字列・epoch秒/ミリ秒・年の整数を解釈</td></tr>
+          <tr><td><code>time_end=プロパティ名</code></td><td>区間終端のプロパティ（time= と併用で区間表示）</td></tr>
+          <tr><td><code>time_span=秒|PT1H|P1D|1d 等</code></td><td>各時刻の保持時間。両方なしは出現時刻以降ずっと表示の累積モード</td></tr>
+        </tbody>
+      </table>
+      <p><code>sql:</code> は末尾 <code>| time=名</code> で指定します。対象は entity 描画経路のベクター行タイプです。</p>
+
+      <h2>設定方法（.kasc）</h2>
+      <pre class="text"><code>geojson: 避難所の推移 | DATA/shelters.geojson | time=開設日
+geojson: イベント     | DATA/events.geojson  | time=開始 | time_end=終了 | time_span=PT1H
+sql: 推移 | SELECT ... | time=発生日</code></pre>
+      <p>ツールドックの設定は「適用」時に <code>.kasc</code> 行へ自動書き戻しされるため、手書きと UI 設定のどちらでも同じ結果になります。</p>
+
+      <h3>関連ページ</h3>
+      <ul>
+        <li><a href="6-2-インスペクター.html">6-2 インスペクター</a> — <code>time=</code>/<code>time_end=</code>/<code>time_span=</code> の書式</li>
+        <li><a href="1-1-レイヤ.html">1-1 レイヤ</a> — 時系列化するベクターレイヤーの追加</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

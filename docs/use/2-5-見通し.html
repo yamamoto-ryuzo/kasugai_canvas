@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-5 見通し判定 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>2-5 見通し判定 — ツールドックの LOS・可視範囲ツール</p>
+    </header>
+    <main>
+      <p>レイヤパネルの🧰ボタンで開くツールドックの「見通し判定」パネルです。すべてブラウザ完結・静的配信のみで動作します。</p>
+
+      <h2>使い方</h2>
+      <h3>👁️ 見通し判定（LOS）</h3>
+      <p>観測点・対象点（各地表からの高さオフセット指定可）を指定すると、160点の地形サンプリングと視線を比較して「可 / 不可（遮蔽点の距離つき）」を判定します。視線は可視部=緑・遮蔽部=赤で描画され遮蔽点がマークされます。</p>
+
+      <h3>🗼 可視範囲（viewshed・Cesium のみ）</h3>
+      <p>観測点を1クリックで、放射状レイ（方位数×距離サンプル）上の地形標高を一括サンプリングして可視/不可視域を判定し、可視=緑・不可視=赤・標高不明=灰の可視性マップを地表へドレープ表示します。半径（100〜50000m）・方位数（16〜360）・レイあたりサンプル数（16〜256）に上限付きで指定でき、総サンプル数は自動で上限（地形ON時12000点・地理院APIフォールバック時1024点）に丸めます。「建物等も遮蔽(近似)」を ON にすると drillPickFromRay で描画済み3D Tiles等の遮蔽物を追加判定します（キャスト数上限384・計算コストのため近似）。地球曲率は直線視線モデルで考慮されます。</p>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../../issues/33/los.png" alt="見通し判定：遮蔽点マーク" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/66/viewshed.png" alt="可視範囲：可視=緑/不可視=赤のドレープ表示" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">見通し判定（左：遮蔽点マーク）と可視範囲（右：可視=緑/不可視=赤）</figcaption>
+      </figure>
+
+      <h3>対応エンジン</h3>
+      <p>見通し判定: Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps。可視範囲: Cesium のみ。Navara は未提供です。AI からは <code>lineOfSight</code>・<code>viewshed</code> で実行できます（<a href="5-3-AIツール.html">5-3 AI ツール仕様</a>）。</p>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません（UI 操作のみです）。関連するレイヤー設定は <a href="6-2-インスペクター.html">6-2 インスペクター</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>

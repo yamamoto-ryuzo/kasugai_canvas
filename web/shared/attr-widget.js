@@ -1,4 +1,4 @@
-// Cesium 版「属性・値一覧」(#vector-attr-widget) のエンジン非依存版。
+// Cesium 版属性テーブル(#vector-attr-widget) のエンジン非依存版。
 // 画面下部へドッキングする属性テーブル: レイヤ選択・全文検索・列ソート・
 // 行クリックでの地物移動を提供する。DOM/CSS は本モジュールが注入するため、
 // 各エンジンの app.js はアダプタを渡すだけで利用できる。
@@ -16,7 +16,7 @@ import { rowsToXlsx } from "./export-formats.js";
 import { t } from "./i18n.js";
 
 const LABELS = {
-  title: "属性・値一覧",
+  title: "属性テーブル",
   resizer: "上下にドラッグして高さを変更",
   close: "閉じる",
   layerTitle: "レイヤを選択",
@@ -232,7 +232,7 @@ export function renderAttrContent(el, records, opts = {}) {
     labelEl.textContent = label;
     header.append(marker, labelEl);
     const table = buildAttrTable(rec.entries);
-    // 属性行クリックでその地物へ移動(属性・値一覧の行クリックと同じ挙動)
+    // 属性行クリックでその地物へ移動(属性テーブルの行クリックと同じ挙動)
     if (rec.flyable && opts.onRecordClick) {
       table.querySelectorAll("tr").forEach(tr => {
         tr.style.cursor = "pointer";

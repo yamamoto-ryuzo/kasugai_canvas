@@ -14,7 +14,7 @@
       <p>QGIS連携 — QGIS プロジェクトをそのまま再現する Canvas</p>
     </header>
     <main>
-      <p><a href="../features.html">← バージョン履歴へ戻る</a></p>
+      <p><a href="../tech/2-1-バージョン履歴.html">← バージョン履歴へ戻る</a></p>
       <p>QGIS連携の正本ドキュメントは以下に集約されています（本ページは V7 テーマの位置付け紹介）：
       <a href="../qgis-delivery.html">QGIS連携の利用方法</a>（<code>qgis:</code> ZIP 取り込み・フォルダ参照）／
       方針・構想は本ページ下部「連携アーキテクチャ」に集約／<a href="../qgis.html">実装済みの再現範囲</a>。</p>
@@ -63,7 +63,8 @@
       </div>
 
       <h3>🔍 where= の全ベクター行対応</h3>
-      <p><code>where=条件</code> はベクター行のオプションとして全形式で使えます。QGIS のレイヤーフィルタ（プロバイダ <code>subsetString</code>）はエクスポート時にこの <code>where=</code> へ写され、Canvas 側は同じ SQL WHERE サブセット文法で解釈します。<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code> 等のクエリ系は SQL エンジンで評価し、<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>shp:</code> 等の全件読み込み系は <code>shared/where-eval.js</code> の評価器（<code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・<code>"識別子"</code>/<code>'文字列'</code>/裸のASCII属性名）でクライアント側評価します。絞り込まれるのは描画のみで、属性一覧・ベクター検索は引き続き全件対象です。V8 の <code>view:</code> 行のレイヤ指定に付ける <code>;where=</code> も同じ評価系を利用します。</p>
+      <p><code>where=条件</code> はベクター行のオプションとして全形式で使えます。QGIS のレイヤーフィルタ（プロバイダ <code>subsetString</code>）はエクスポート時にこの <code>where=</code> へ写され、Canvas 側は同じ SQL WHERE サブセット文法で解釈します。<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code> 等のクエリ系は SQL エンジンで評価し、<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>shp:</code> 等の全件読み込み系は <code>shared/where-eval.js</code> の評価器（<code>= != &lt;&gt; &lt; &lt;= &gt; &gt;=</code>・<code>AND/OR/NOT</code>・括弧・<code>IN</code>・<code>BETWEEN</code>・<code>LIKE/ILIKE</code>・<code>IS NULL</code>・<code>"識別子"</code>/<code>'文字列'</code>/裸のASCII属性名）でクライアント側評価します。絞り込まれるのは描画と属性一覧（一覧の行は描画済み地物から作られ、クエリ系は SQL 側で条件を付けて再取得）で、全件読み込み系のベクター検索索引は引き続き全件対象です。V8 の <code>view:</code> 行のレイヤ指定に付ける <code>;where=</code> も同じ評価系を利用します。</p>
+      <p>フィルタ・レイヤ表示・属性一覧・<code>.kasc</code> の適用関係（mermaid 図）は <a href="../use/1-4-属性.html">1-4 属性 — フィルター</a> を参照してください。</p>
       <h4>🔄 QGIS フィルタ式との互換性</h4>
       <p>対象となるファイル系ソース（GeoJSON/FlatGeobuf/GeoParquet/GPKG/CSV）のレイヤーフィルタは、QGIS 式（QgsExpression）ではなく<strong>プロバイダ SQL</strong>です。クエリビルダで設定した式もプロバイダへ渡る形で保存され、<strong>OGR プロバイダは受理できない式を拒否する</strong>ため、<code>subsetString</code> に残っている式は必ずプロバイダが受理済みの文法です（未知フィールド参照も拒否されるため、式中の識別子は必ず実フィールドか <code>FID</code> 等の疑似フィールドです）。QGIS 式の全構文（<code>~</code> 正規表現・<code>@変数</code>・<code>$geometry</code>）が使えるのは memory プロバイダ等だけで、それらはファイル参照にならないレイヤなので本機能の対象外（常に GeoJSON 変換）です。</p>
       <p><strong>プロバイダ別の式の方言</strong>（出典: QGIS <code>subsetStringDialect()</code>/<code>subsetStringHelpUrl()</code>）:</p>

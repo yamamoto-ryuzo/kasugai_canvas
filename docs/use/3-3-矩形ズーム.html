@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3-3 矩形ズーム — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>3-3 矩形ズーム — ナビゲーションツールバーの範囲指定ズーム</p>
+    </header>
+    <main>
+      <p><a href="3-1-コンパス.html">ナビゲーションツールバー</a>（画面右下）の矩形ズームボタンで起動する範囲指定ズームです。</p>
+
+      <h2>使い方</h2>
+      <h3>🔍 矩形ズーム</h3>
+      <p>起動すると左ボタンのドラッグ矩形でズームイン、矩形の頂点をクリックで選択範囲ズームになります。ダブルクリックで解除します。</p>
+      <figure>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+      <img src="../../issues/16/rectzoom-drag.png" alt="矩形ズーム：ドラッグ中の矩形を破線枠で表示" style="max-width:48%; flex:1 1 260px;" />
+      <img src="../../issues/16/rectzoom-after.png" alt="矩形ズーム後：選択した矩形範囲へズームイン" style="max-width:48%; flex:1 1 260px;" />
+      </div>
+      <figcaption aria-hidden="true">矩形ズーム（左：ドラッグでズーム範囲を指定、右：指定範囲へズーム）</figcaption>
+      </figure>
+      <h2>設定方法</h2>
+      <p>このツールは .kasc の設定行を持ちません（UI 操作のみです）。関連するレイヤー設定は <a href="6-2-インスペクター.html">6-2 インスペクター</a> を参照してください。</p>
+
+    </main>
+  </div>
+</body>
+</html>
