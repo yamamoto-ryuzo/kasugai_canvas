@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI チャット — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>AI チャット — 【API】内蔵AI と【ブリッジ】外部エージェントの2系統</p>
+    </header>
+    <main>
+      <p>AI チャットは <strong>【API】内蔵AI</strong>（Gemini・OpenAI互換へブラウザから直接接続）と <strong>【ブリッジ】外部エージェント</strong>（ブリッジハブ経由で Copilot・Devin・Antigravity・ACP 対応 CLI）の2系統で地図を操作します。</p>
+      <div class="features">
+        <a class="feature-card" href="ai-api.html">
+          <h3>🤖 【API】内蔵AI（Google 連携・AI）</h3>
+          <p>内蔵AI チャット（Gemini・OpenAI互換）の設定と機能、Maps Platform・AIプラグイン生成</p>
+        </a>
+        <a class="feature-card" href="ai-bridge.html">
+          <h3>🔌 【ブリッジ】外部エージェント連携</h3>
+          <p>ブリッジハブ経由で GitHub Copilot・Devin・Antigravity・汎用 ACP・外部エージェントを内蔵AIとして利用。接続方式ごとの規約判断</p>
+        </a>
+        <a class="feature-card" href="ai-tools.html">
+          <h3>🛠️ AI ツール仕様</h3>
+          <p>内蔵AIが制御できる全81ツールの定義。引数・提供条件・実行モデル</p>
+        </a>
+        <a class="feature-card" href="bridge-hub.html">
+          <h3>🔧 ブリッジハブ（bridge-hub.exe）</h3>
+          <p>常駐ハブの詳細仕様。導入・CLI 自動導入・HTTP API・プロバイダ前提条件・/vector ベクトルサービス・環境変数</p>
+        </a>
+        <a class="feature-card" href="features/v3.html">
+          <h3>🤝 AI 連携の構成（V3）</h3>
+          <p>AI 連携の全体構成 — 内蔵AI・ブリッジ・MCP データソースの接続形態</p>
+        </a>
+        <a class="feature-card" href="features/v9.html">
+          <h3>📐 解析（予定・V9）</h3>
+          <p>AI チャット経由で空間解析を駆動。QGIS Processing をバックエンドに借りる3層構想</p>
+        </a>
+      </div>
+      <p><a href="index.html">← 概要へ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>

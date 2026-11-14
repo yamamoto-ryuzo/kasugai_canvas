@@ -11,19 +11,19 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
-      <p>V7: QGIS連携 — QGIS プロジェクトをそのまま再現する Canvas</p>
+      <p>QGIS連携 — QGIS プロジェクトをそのまま再現する Canvas</p>
     </header>
     <main>
-      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+      <p><a href="../features.html">← バージョン履歴へ戻る</a></p>
       <p>QGIS連携の正本ドキュメントは以下に集約されています（本ページは V7 テーマの位置付け紹介）：
       <a href="../qgis-delivery.html">QGIS連携の利用方法</a>（<code>qgis:</code> ZIP 取り込み・フォルダ参照）／
-      <a href="../qgis-policy.html">方針・構想</a>／<a href="../qgis.html">実装済みの再現範囲</a>。</p>
+      方針・構想は本ページ下部「連携アーキテクチャ」に集約／<a href="../qgis.html">実装済みの再現範囲</a>。</p>
 
       <div style="margin: 15px 0;">
         <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fsample_qgis%2Fkasugai_canvas.kasc" class="demo-link" target="_blank" rel="noopener noreferrer">▶ QGIS プロジェクトデモ（sample_qgis）</a>
       </div>
 
-      <h2 id="v7">V7: QGIS連携</h2>
+      <h2 id="v7">QGIS連携</h2>
       <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現できるようにする</strong>のが V7 のテーマです。QGIS プラグイン <code>geo_webview</code>（<a href="https://github.com/yamamoto-ryuzo/qgis_live_harness" target="_blank" rel="noopener noreferrer">qgis_live_harness</a>）がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替（または静的ホスト経由で <code>?kasc=</code> 再生）します。QGIS は多様な GIS データの正本・編集・解析基盤、Canvas は最終 2D/3D 表示エンジンという役割分担です。</p>
       <p>「どの QGIS 要素がどの .kasc 行・オプションへ写るか」の対応表と、エンジン別の再現度は <a href="../qgis.html">QGIS・GDAL連携</a> にまとめています。本ページはテーマ全体の構成と今後の方向です。</p>
       <p>📎 公開サンプル: <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?kasc=https%3A%2F%2Fyamamoto-ryuzo.github.io%2Fkasugai_canvas_webGIS%2Fsample_qgis%2Fkasugai_canvas.kasc" target="_blank" rel="noopener noreferrer">QGIS プロジェクトのサンプル（SampleProjectFile）を CDN ホスト版 Cesium で再生</a> — <code>geo_webview</code> のエクスポート物（<code>.kasc + DATA/</code>）を <a href="https://yamamoto-ryuzo.github.io/kasugai_canvas_webGIS/" target="_blank" rel="noopener noreferrer">kasugai_canvas_webGIS</a> で配信し、<code>?kasc=</code> で再生しています（他エンジンでの再生リンクは同サイトのプロジェクト一覧にあります）。</p>
@@ -96,8 +96,61 @@
       </tbody>
       <tfoot><tr><td colspan="4"><strong>出典</strong>: GDAL「OGR SQL dialect」仕様書 <code>gdal.org/en/stable/user/ogr_sql_dialect.html</code>（QGIS <code>subsetStringHelpUrl()</code> が指す正式仕様。属性フィルタ <code>SetAttributeFilter</code> の文法は SELECT の WHERE 句と同一）・GDAL「SQL SQLite dialect」仕様書 <code>gdal.org/en/stable/user/sql_sqlite_dialect.html</code>・<code>web/shared/where-eval.js</code></td></tr></tfoot>
       </table>
+
+      <h4>📋 OGR SQL SELECT文対応表（<code>ogrsql:</code> 行・AIツール <code>queryOgrSql</code>）</h4>
+      <p>上表の WHERE 句に対し、<code>ogrsql:</code> 行は SELECT 文全体を受理します。実行エンジンは <strong>ブラウザ内 JS 実装（<code>shared/ogr-sql.js</code>）が主経路</strong>で、CDN 単体利用でも QGIS の有無で挙動が変わりません。JS で FROM を解決できない・構文未対応の場合のみ、ローカル QGIS 検出時に <strong>GDAL 本体</strong>（<code>ogr.ExecuteSQL(dialect="OGRSQL")</code>・QGIS3/4 両対応）へフォールバックします。QGIS 経路は JS 実装の差分検証（ゴールデンオラクル）としても使えます。</p>
+      <table>
+      <thead><tr><th>式の定義（OGR SQL SELECT文構文）</th><th>例</th><th>JS実装</th><th>GDAL実行<br>（QGIS経路）</th><th>備考</th></tr></thead>
+      <tbody>
+      <tr><td><code>SELECT * | &lt;テーブル&gt;.*</code></td><td><code>SELECT * FROM 'rivers'</code> ・ <code>SELECT a.* FROM 'x' a</code></td><td>✅</td><td>✅</td><td>全フィールド/指定テーブルの全フィールドを展開</td></tr>
+      <tr><td><code>&lt;式&gt; [AS &lt;別名&gt;]</code>（フィールド・算術・関数・連結を含む列式）</td><td><code>SELECT name AS n, pop*2 AS p2 FROM 'cities'</code></td><td>✅</td><td>✅</td><td>出力列名は別名またはフィールド名。WHERE と同じ式構文（比較・AND/OR/NOT・IN・BETWEEN・LIKE/ILIKE・IS NULL・<code>+ - * /</code>・<code>||</code> 連結・SUBSTR/CAST/CONCAT/hstore_get_value）</td></tr>
+      <tr><td><code>SELECT DISTINCT &lt;項目&gt;,…</code></td><td><code>SELECT DISTINCT kind FROM 'cities'</code></td><td>✅</td><td>✅</td><td>射影タプルの重複除去。GDAL は DISTINCT 時にジオメトリを返さないが JS は保持する（地図レイヤ用途では保持が都合がよい既知の差分）</td></tr>
+      <tr><td><code>&lt;集計&gt;([DISTINCT] &lt;式&gt;) | COUNT(*)</code>：COUNT・SUM・AVG・MIN・MAX・STDDEV_POP・STDDEV_SAMP・STDDEV</td><td><code>SELECT COUNT(*) AS c, AVG(pop) FROM 'cities'</code></td><td>✅</td><td>✅</td><td>OGR SQL に <code>GROUP BY</code> は無く、集計のみの SELECT は結果全体を1行に集約。<strong>通常列と集計の混在は GDAL が拒否</strong>（"mixture of recordset mode"）するが、JS は全行集計＋先頭行の列値で受理する（寛容な上位互換）</td></tr>
+      <tr><td><code>FROM 'name' | "name" | name</code>（テーブル参照・<code>[AS] 別名</code>）</td><td><code>FROM 'rivers' r</code></td><td>✅</td><td>✅</td><td>FROM の解決は Canvas 側の仕組み: 読み込み済みレイヤータイトル → <code>'ds'.'layer'</code> 形式 → DATA/ 相対パス・ファイルURL の順。QGIS 経路ではさらに QGIS プロジェクトレイヤー名/ID・SHP/PostGIS 等 GDAL が開けるソースも可。<code>'ds'.'layer'</code> は GPKG 特定テーブル等の参照に使う</td></tr>
+      <tr><td><code>[[LEFT] JOIN &lt;テーブル&gt; [別名] ON &lt;式&gt;]</code></td><td><code>FROM 'a' x JOIN 'b' y ON x.id = y.id</code></td><td>✅</td><td>✅</td><td>OGR SQL の JOIN は LEFT JOIN 意味で、<strong>各プライマリ行には最初に一致した副テーブル行のみが結合される</strong>（直積ではない・GDAL実測で確認）。<code>INNER JOIN</code> は仕様外（JS はキーワードとして受理しない）。修飾名 <code>a.b</code> 参照に対応</td></tr>
+      <tr><td><code>WHERE &lt;式&gt;</code></td><td><code>WHERE pop &gt;= 100 AND kind IN ('A','B')</code></td><td>✅</td><td>✅</td><td>上の対応表の全構文を where-eval 経由で評価</td></tr>
+      <tr><td><code>ORDER BY &lt;式&gt; [ASC|DESC][,…]</code></td><td><code>ORDER BY pop DESC, name</code></td><td>✅</td><td>✅</td><td>複数キー・式・出力列別名の参照が可能。<strong>方言差</strong>: GDAL 本体は ORDER BY に SELECT 別名を使えない（<code>ORDER BY num</code> 等の元フィールド名が必要）ため、QGIS 経路で拒否されるためこのケースは常に JS 実装で処理される（GDAL より寛容）。ほかに GDAL が拒否し JS のみ受理するもの： 裸の非 ASCII 識別子（<code>WHERE 状況 = '工事中'</code>。GDAL は <code>"状況"</code> クォート必須）・<code>||</code> 文字列連結（OGR SQL には無く SQLite 方言の機能）・通常列と集計の混在（<code>GROUP BY</code> 非対応のため GDAL は "mixture of recordset mode" エラー）・副テーブル列の <code>ORDER BY</code></td></tr>
+      <tr><td><code>LIMIT &lt;n&gt; [OFFSET &lt;m&gt;]</code></td><td><code>LIMIT 100 OFFSET 50</code></td><td>✅</td><td>✅</td><td>—</td></tr>
+      <tr><td>疑似フィールド（<code>FID</code>・<code>_ogr_geometry_</code>・<code>OGR_GEOMETRY</code>・<code>OGR_GEOM_WKT</code>・<code>OGR_GEOM_AREA</code>・<code>OGR_STYLE</code>）を SELECT 列式/WHERE/ORDER BY で参照</td><td><code>SELECT FID, OGR_GEOM_WKT FROM 'x'</code></td><td>✅</td><td>✅</td><td>JS 側は FID=feature.id→index・OGR_GEOMETRY=型名・OGR_GEOM_WKT=WKT化・OGR_GEOM_AREA=面積（度単位）・OGR_STYLE=NULL</td></tr>
+      <tr><td>サブクエリ・<code>UNION</code>・<code>GROUP BY</code>・<code>HAVING</code>・<code>CASE</code>・空間関数（<code>ST_*</code>）</td><td>—</td><td>❌</td><td>❌</td><td><strong>OGR SQL 仕様自体に存在しない</strong>構文（SQLITE 方言・DuckDB では使えるが OGRSQL 方言外）。JS 実装もパース拒否するため、混入したクエリはどちらの経路でも構文エラーになる</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="5"><strong>実装</strong>: <code>web/shared/ogr-sql.js</code>（SELECT パーサ＋実行。WHERE 式は <code>where-eval.js</code> を再利用）・<code>web/shared/qgis-ogr.js</code>（QGIS Live relay → <code>ogr.ExecuteSQL</code>。FROM 参照は QGIS プロジェクトレイヤー名/ID・<code>/vsicurl/</code> URL・ローカルパスを解決し Memory データソースで実行）</td></tr></tfoot>
+      </table>
+
+      <h4>🗺️ エンジン別の ogrsql: 利用形態</h4>
+      <table>
+      <thead><tr><th>エンジン</th><th>ogrsql: ロード</th><th>⏷クエリ編集</th><th>属性一覧</th><th>AI/API（addLayer・setLayerFilter・queryOgrSql）</th></tr></thead>
+      <tbody>
+      <tr><td>Cesium（メイン）</td><td>✅</td><td>✅ クエリ全文編集</td><td>✅ クエリ系ディスパッチで全件取得</td><td>✅</td></tr>
+      <tr><td>MapLibre</td><td>✅</td><td>✅ クエリ全文編集</td><td>✅ 実行結果 GeoJSON を一覧</td><td>✅（player-api 共通）</td></tr>
+      <tr><td>OpenLayers</td><td>✅</td><td>✅ クエリ全文編集</td><td>✅ 実行結果 GeoJSON を一覧</td><td>✅（player-api 共通）</td></tr>
+      <tr><td>Leaflet</td><td>✅</td><td>✅ クエリ全文編集</td><td>✅ 実行結果 GeoJSON を一覧</td><td>✅（player-api 共通）</td></tr>
+      <tr><td>Navara</td><td>✅</td><td>✅ クエリ全文編集</td><td>✅ 実行結果 GeoJSON を一覧</td><td>✅（player-api 共通）</td></tr>
+      <tr><td>GSI Maps（調整中）</td><td>✅</td><td>—（⏷ ボタン未実装）</td><td>✅ 実行結果 GeoJSON を一覧</td><td>✅（player-api 共通）</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="5">ロード経路は全エンジン共通（<code>shared/vector-load.js</code> → <code>ogr-sql.js</code> の JS 実行が主経路で、解決不能時のみ <code>qgis-ogr.js</code> 経由の GDAL 実行へフォールバック）。FROM のレイヤータイトル照合だけがエンジン別フック（<code>resolveLayer</code>）で、いずれも読み込み済みレイヤーの GeoJSON・またはそのソースURLへフォールバック解決する。<code>queryOgrSql</code>・<code>setLayerFilter</code>・<code>addLayer(type=ogrsql)</code> は <code>shared/player-api.js</code>/<code>ai-chat.js</code> 経由で全エンジン共通</td></tr></tfoot>
+      </table>
       <p><strong>where= での疑似フィールド解決</strong>（where-eval 実装挙動）: <code>FID</code>=<code>feature.id</code>（無ければ配列 index）・<code>_ogr_geometry_</code>=geometry オブジェクト・<code>OGR_GEOMETRY</code>=型名（Point→POINT 等）・<code>OGR_GEOM_WKT</code>=WKT 化・<code>OGR_GEOM_AREA</code>=ポリゴン面積（度単位・穴控除）・<code>OGR_STYLE</code>=NULL（GeoJSON にスタイル情報なし）。解決順は仕様通り疑似フィールド優先。<strong>注意</strong>: <code>FID</code> の起点はドライバ/エクスポート時の連番と一致する保証がないため、<code>FID</code> 参照式の <code>where=</code> 出力は index ベースの近似となる</p>
       <p><strong>判定方針</strong>: where-eval は OGR SQL WHERE 句の構文（上表の式の定義）を網羅実装しているため、OGR SQL 方言の subsetString は<strong>原則そのまま <code>where=</code> へ出力可能</strong>です。残る非互換は「where-eval が受理しない式（仕様外構文・未対応関数・<code>%</code>）」のみで、その場合は従来通り GeoJSON 変換（フィルタをデータへ焼き込み。焼き込み側は <code>QgsVectorFileWriter</code> が subsetString を反映するため常に正確）にフォールバックします — 式を <code>where=</code> に書いたまま Canvas が解釈できず全件表示になる、というフィルタ喪失の回帰を防ぐ設計です。現行のエクスポートは <code>gpkg:</code>/<code>duckdb:</code> 系で <code>where=</code> を出力し、フィルタ付き GeoJSON/FlatGeobuf/Parquet 等のソースは GeoJSON 変換で正確に反映します。全ネイティブ形式で <code>where=</code> を出力する geo_webview 側の対応を進めています。</p>
+      <p><strong><code>ogrsql:</code> 行（OGR SQL の SELECT 全文）</strong>: WHERE 句だけでなく OGR SQL の SELECT 文をそのまま実行する行タイプです。<code>ogrsql:タイトル|SELECT ...</code> と書き、FROM には読み込み済みレイヤータイトル・<code>'ds'.'layer'</code> 形式・<code>DATA/</code> 相対パス・ファイルURLを指定できます。主経路はブラウザ内 JS 実装（<code>shared/ogr-sql.js</code>）で SELECT 式・AS・DISTINCT・集計・JOIN/LEFT JOIN・WHERE・ORDER BY・LIMIT/OFFSET・疑似フィールドを処理し、JS で解決できない FROM（QGIS プロジェクトレイヤー名参照・ローカル SHP/PostGIS 等）や未対応構文だけ、ローカル QGIS（geo_webview/geo_driver の Live relay）検出時に <code>ogr.ExecuteSQL(dialect="OGRSQL")</code> で GDAL 本体へフォールバックします（QGIS 4 系でも動作確認済）。AI ツール <code>queryOgrSql</code>・<code>addLayer(type=ogrsql)</code>・⏷ のクエリ編集・<code>setLayerFilter</code> のクエリ全文置換からも利用できます。</p>
+
+      <h3 id="実行エンジン方針">⚙️ 実行エンジン方針：JSファースト・QGIS=フォールバック＋検証・WASM不採用</h3>
+      <p><strong>前提: QGIS 未導入のCDN利用者がメイン。</strong>OGR SQL の実行はブラウザ内 JS 実装（<code>shared/ogr-sql.js</code>）が常に主経路で、ローカル QGIS の有無で結果が変わらない構成です。ローカル QGIS（geo_webview/geo_driver の Live relay）は (a) JS が開けないソース（QGIS プロジェクトレイヤー名参照・ローカル SHP/PostGIS 等）や JS 未対応構文のフォールバック、(b) GDAL 本体をゴールデンオラクルとした JS 実装の差分検証、の2役に限定します（実測で確認済み: JS 解決可能なクエリは MCP 呼出 0 回、QGIS 専用ソースでのみ fallback 発動）。</p>
+      <h4>WASM（gdal3.js）を採用しない理由（検討記録）</h4>
+      <table>
+      <thead><tr><th>側面</th><th>JS（現行）</th><th>gdal3.js（WASM）</th></tr></thead>
+      <tbody>
+      <tr><td>初期ロード</td><td>数百行・DLゼロ</td><td>20-40MB＋wasmコンパイル</td></tr>
+      <tr><td>OGR SQL セマンティクス</td><td>GDAL オラクルで差分検証済み（<code>.testtmp/verify-ogrsql-diff.mjs</code>・38/38 一致）</td><td>ネイティブ同一</td></tr>
+      <tr><td>変換パイプライン</td><td>バイナリ→JSオブジェクトを直接構築（GPKG は sql.js=SQLite WASM を Worker 内で使用済み）</td><td>解析後に GeoJSON <strong>テキスト</strong>を生成→JSへコピー→<code>JSON.parse</code> の二重シリアライズがあり、<strong>永続化・キャッシュ済みでもトータル速度は JS 劣後</strong></td></tr>
+      <tr><td>開けない形式（gdal3.js 側）</td><td>—</td><td><strong>GeoParquet（Arrow 未同梱=我々の形式）</strong>・PostGIS/Oracle 等DB系・WFS・プロプライエタリSDK（FileGDB 本家・ECW/MrSID）・任意ローカルパス（ブラウザ sandbox）</td></tr>
+      <tr><td>QGIS プロジェクトレイヤー参照</td><td>relay 経由で可能</td><td>不可（ブラウザ内では QGIS 内部が見えない）</td></tr>
+      </tbody>
+      </table>
+      <p>WASM が速度面で勝てるのは「変換」ではなく GEOS による重量級ジオメトリ演算（数十万頂点の再投影・トポロジー演算）だけです。未整備形式（TAB/DXF/GML 等）のブラウザ内デコード需要が実際に出た場合は、SQL エンジンの置き換えではなく「<strong>FROM が開けない時だけ遅延ロードする形式パーサー</strong>」としての追加が正しい形です。</p>
+      <h4>GDAL の役割は QGIS 側の事前変換に集約</h4>
+      <p>「QGIS/GDAL が開ける任意のソース → CDN で表示」は、ブラウザで GDAL を動かすのではなく <strong>geo_webview のエクスポート（kasugai_export.py）が GDAL/QGIS 側で正規形式へ事前変換</strong>することで実現します：ネイティブ形式（GPKG/GeoJSON/GeoParquet/FGB）は参照、それ以外のベクター（SHP・PostGIS 等）は GeoJSON(EPSG:4326) へ変換、CSV/TSV は <code>duckdb:</code> 行へ、スタイルは .qml。これにより CDN 側はブラウザ向け形式の JS ローダーだけで完結し、ブラウザへの GDAL 導入の動機は消えています。</p>
+      <p><strong>GDALオラクル差分検証で見つかった JS 実装の修正（検証ハーネスの実績）</strong>: 非ASCII裸識別子のトークナイズ・修飾名 <code>a.name</code> の出力列名・JOIN の「プライマリ行ごと最初の1件のみ結合」セマンティクスの3件を GDAL 実測に合わせて修正済み。残る差分は全て JS が寛容な上位互換（ORDER BY 別名・副テーブル列・<code>||</code>・裸の日本語識別子・通常列+集計混在・DISTINCT のジオメトリ保持）として上表に記録。</p>
 
       <h3>🗺️ エンジン別の QGIS 再現度</h3>
       <table>
@@ -162,6 +215,118 @@
       <li><strong>follow↔live 統合</strong>：<code>?follow</code> カメラ追従は live セッションへ統合され <code>/live/state</code> で取得。Cesium/Navara では <strong>pitch を保持</strong>した「2D QGIS ↔ 3D リンクビュー」として追従（<code>?follow=top</code> で従来の真俯瞰固定）</li>
       </ul>
       <p>既存の保存時自動再エクスポート（<code>kasugai_auto_export</code>）はそのまま共存します。ライブ連携は保存を待たず編集操作をほぼ即時反映する上位経路で、<code>/present</code> の画面共有と併用すると「QGIS で編集中の画面を Canvas でライブ共有」が可能です。</p>
+
+      <h3 id="連携アーキテクチャ">🏗️ 連携アーキテクチャ（基本方針・構想 — 旧 docs/qgis-policy.html 集約）</h3>
+      <p><strong>基本方針</strong>: QGIS の画面や <code>QgsMapCanvas</code> を Canvas へ埋め込むのではなく、QGIS・GDAL が扱える多様な入力形式を、CesiumJS が描画できる形式へ<strong>QGIS 側で変換・配信</strong>する。QGIS は正データ・編集・解析の基盤、Canvas は最終 2D/3D 表示エンジン。</p>
+      <figure>
+      <img src="../images/canvas_QGIS.png" alt="QGIS連携構想" />
+      <figcaption aria-hidden="true">QGIS連携構想</figcaption>
+      </figure>
+      <pre class="text"><code>QGIS 側（デスクトッププロセス）
+  データソース: GeoPackage / Shapefile / FileGDB / PostGIS / GeoTIFF / LAS / 3D都市モデル
+        ↓
+  QGIS プロジェクト（レイヤーツリー・表示設定・スタイル・テーマ・ブックマーク・縮尺範囲）
+        ↓ geo_webview（QgsProject / layerTreeRoot を API 走査 — .qgs ファイルは直接パースしない）
+.kasc + DATA/（レイヤー行 + .qml + データ + シンボル画像 + bookmarks.xml）
+        ↓
+├─ CDN版（通常ブラウザ github.io + 外部ホストの .kasc+DATA/）
+└─ アプリ版（kasugai_canvas.exe :8510 + ローカル .kasc+DATA/）</code></pre>
+      <h4>エクスポート出力物（out_dir）の構成</h4>
+      <pre class="text"><code>out_dir/   優先順: 設定 kasugai_output_path ＞ &lt;Canvasインストール&gt;/QGIS_projects/&lt;project-slug&gt;/ ＞ &lt;ドキュメント&gt;/kasugai_canvas_qgis
+├─ kasugai_canvas.kasc      固定名。レイヤー行＋cam:/theme:/bookmark: 行
+├─ bookmarks.xml            qgis_bookmarks 形式（0件時は出力しない）
+├─ [opt] &lt;engine&gt;.html + index.html   emit_launchers 時の起動ページ＋案内
+└─ DATA/
+   ├─ &lt;slug&gt;.qml              レイヤースタイル（saveNamedStyle）
+   ├─ &lt;slug&gt;__&lt;theme&gt;.qml     テーマ別スタイル（theme: 行の ;style= が参照）
+   ├─ &lt;slug&gt;.&lt;ext&gt;           ローカルデータ複製（.gpkg/.geojson/.fgb/.parquet）＋変換GeoJSON(EPSG:4326)
+   ├─ &lt;slug&gt;/                XYZ タイルツリー / 3D Tiles tileset（サイズ上限 1GiB）
+   └─ &lt;slug&gt;_&lt;asset&gt;.svg/png  .qml が参照するシンボル画像</code></pre>
+      <p><strong>命名ルール（slug で .kasc 行・データ・スタイルが紐付く）</strong>：レイヤー名 → <code>_slugify()</code> で英数・<code>_-</code> 以外を <code>_</code> へ置換（日本語名は <code>layer</code>＋連番にフォールバック、衝突時 <code>_2</code>…）。レイヤー行は <code>geojson: タイトル | DATA/&lt;slug&gt;.geojson | on | style=DATA/&lt;slug&gt;.qml</code> の形で同じ slug を参照するため、行・データ・.qml の3者はファイル名で対応する。</p>
+      <p><strong>ZIP（kasugai_canvas_&lt;ch&gt;.zip）は別枠</strong>：パネルの ZIP ボタン・<code>index.html</code> のDLリンクは <code>/export-data/kasugai_canvas_&lt;ch&gt;.zip</code> がその場で固めて返す方式（out_dir に残さず常に最新）。<code>emit_zip=True</code> 指定時のみ out_dir に出力。Re:Earth geo_suite の <code>qgis:</code> 行が URL で直接取り込める。</p>
+      <h4>役割分担</h4>
+      <table>
+      <thead><tr><th>役割</th><th>担当</th></tr></thead>
+      <tbody>
+      <tr><td>メインUI、レイヤー管理、カメラ、最終表示</td><td>KASUGAI Canvas</td></tr>
+      <tr><td>ベクター、タイル、Terrain、3D Tilesの描画</td><td>CesiumJS（GeoJsonDataSource / GeoJsonPrimitive / ImageryLayer / TerrainProvider / Cesium3DTileset）</td></tr>
+      <tr><td>GLB、点群、3DGS等の補助3D描画</td><td>Three.js</td></tr>
+      <tr><td>多様な形式の読み込み・変換（<strong>事前変換はここで完結</strong>）</td><td>GDAL・OGR / QGIS（geo_webview エクスポート）</td></tr>
+      <tr><td>編集・属性・高度な空間解析</td><td>PyQGIS / QGIS Processing</td></tr>
+      <tr><td>正データの保存</td><td>GeoPackage / PostGIS / FileGDB等</td></tr>
+      </tbody>
+      </table>
+      <h4>データの3層構造</h4>
+      <p>編集用データと描画用データを同じ形式に統一しない。正データ、配信用データ、描画データを分離する。</p>
+      <table>
+      <thead><tr><th>層</th><th>目的</th><th>主な形式</th></tr></thead>
+      <tbody>
+      <tr><td>正データ</td><td>編集、属性、解析、保存</td><td>GeoPackage、PostGIS、FileGDB、GeoTIFF</td></tr>
+      <tr><td>配信用データ</td><td>範囲・ズーム単位の取得</td><td>GeoJSON、GeoParquet、FlatGeobuf、XYZ、WMTS、3D Tiles、MVT/PMTiles（MapLibre）</td></tr>
+      <tr><td>描画データ</td><td>GPUへ効率よく渡す</td><td>GeoJSON → GeoJsonDataSource（entity）/ GeoJsonPrimitive（バッチ描画）</td></tr>
+      </tbody>
+      </table>
+      <h4>ベクター形式の使い分け（QGIS→Canvas）</h4>
+      <pre class="text"><code>GeoPackage / FileGDB / PostGIS
+        ↓ QGIS Processing / GDAL・OGR（geo_webview エクスポート時の変換）
+┌────────────────────────────────────┐
+│ 小規模・編集結果       → GeoJSON    │  geojson: → GeoJsonDataSource
+│ 中規模・置くだけ       → GeoParquet │  geoparquet: / flatgeobuf:
+│                        / FlatGeobuf│  （hyparquet / flatgeobuf でブラウザ内デコード）
+│ 大規模・絞り込み       → duckdb:/sql:│  SQL絞り込み・bbox=auto で表示範囲だけ読む
+│ 広域・範囲配信         → MVT(将来)  │  MapLibre は mvt:/pmtiles: 実装済み
+└────────────────────────────────────┘</code></pre>
+      <h4>ラスタ連携</h4>
+      <pre class="text"><code>公開XYZ / WMTS ──→ QGIS と KASUGAI が同じ配信元をそれぞれ直接利用（再配信不要）
+QGIS管理ラスタ ──→ QGIS Server→WMS/WMTS ・ 事前タイル化→XYZ ・ COG/独自配信 ・ ローカルファイル直接取得
+                   （WMTS は TileMatrixSet・座標系・原点・Y軸方向の一致確認が必要。不一致時は XYZ→WMTS アダプター）</code></pre>
+      <h4>DEM・3D データ：Canvas が直接描画</h4>
+      <pre class="text"><code>DEM標高タイル → TerrainProvider（地理院標高PNGデコード実装済み）
+3D Tiles      → 3dtiles: → Cesium3DTileset
+QGISベクター   → GeoJSON等 → GeoJsonDataSource → CLAMP_TO_GROUND → DEM/3D Tiles 表面へドレープ</code></pre>
+      <p>高さ基準はデータごとに管理する。標高と WGS84 楕円体高が異なるデータを重ねる場合は QGIS 処理層または Canvas 側で補正する。</p>
+      <h4>QGIS・GDAL 機能層（Canvas から呼び出す処理の使い分け）</h4>
+      <pre class="text"><code>KASUGAI Canvas
+    ↓ HTTP / IPC
+連携API
+    ├─ GDAL・OGR：入出力、形式変換、CRS、タイル化
+    └─ PyQGIS / QGIS Processing：編集、属性、高度な空間解析</code></pre>
+      <table>
+      <thead><tr><th>処理</th><th>推奨実装</th></tr></thead>
+      <tbody>
+      <tr><td>GeoPackage・GeoTIFFの読み書き</td><td>GDAL・OGR</td></tr>
+      <tr><td>Shapefile・FileGDBの変換</td><td>GDAL・OGR / PyQGIS</td></tr>
+      <tr><td>CRS変換</td><td>GDAL・OGR / QGIS</td></tr>
+      <tr><td>GeoJSON・MVTの生成</td><td>GDAL・OGR / QGIS Server / 専用タイル処理</td></tr>
+      <tr><td>バッファ・交差・クリップ</td><td>QGIS Processing</td></tr>
+      <tr><td>属性検索・編集</td><td>PyQGIS / GDAL・OGR / データベースAPI</td></tr>
+      <tr><td>3D Tiles・点群生成</td><td>専用変換処理、必要に応じてQGISと連携</td></tr>
+      </tbody>
+      </table>
+      <h4>選択・編集・再描画（構想）</h4>
+      <pre class="text"><code>選択: KASUGAI picking → layerId/featureId → 連携API → 属性・ジオメトリ取得 → 属性パネル
+編集: KASUGAI編集UI → GeoJSON/JSON Patch → PyQGIS/GDAL/DB → GeoPackage/PostGIS/FileGDB
+再描画: 変更地物またはタイルだけ再取得（正データを直接描画形式に置き換えず、配信用データを更新）</code></pre>
+      <h4>カメラ・CRS</h4>
+      <pre class="text"><code>KASUGAI cameraState（正本=Canvas）: longitude/latitude/zoom/bearing/pitch
+  pitch = Cesium camera.pitch と同符号（水平0°・真上+90°・真下−90°）
+  → 必要に応じて QGIS 処理層へ中心座標・範囲を通知
+CRS: Web表示は WGS84 経度緯度を基本、編集・解析時は元レイヤーの CRS を維持</code></pre>
+      <h4>実装ロードマップ（方針としての工程表）</h4>
+      <table>
+      <thead><tr><th>Phase</th><th>内容</th><th>状態</th></tr></thead>
+      <tbody>
+      <tr><td>1</td><td>GeoJSON連携と属性・選択API</td><td>✅ 実装済み</td></tr>
+      <tr><td>2</td><td>GDAL・OGRでGeoPackage/FileGDB/GeoTIFF 読み書き</td><td>✅ エクスポート側で対応</td></tr>
+      <tr><td>3</td><td>KASUGAI向け変換API</td><td>✅ kasugaiExport として実装済み</td></tr>
+      <tr><td>4</td><td>QGIS→PMTiles/MVT 生成経路</td><td>○ MapLibre 側読み込み実装済み・生成経路は未実装</td></tr>
+      <tr><td>5</td><td>QGIS Processing / PyQGIS 連携API</td><td>未実装（qgis_pyeval で部分的に代替可）</td></tr>
+      <tr><td>6</td><td>GeoArrow / Arrow の直接読み込み</td><td>未実装（GeoParquet/FlatGeobuf は実装済み）</td></tr>
+      <tr><td>7</td><td>QGIS管理ラスタの WMTS・事前XYZ・COG 配信</td><td>未実装</td></tr>
+      <tr><td>8</td><td>Terrain・3D Tiles・点群とのドレープ連携</td><td>✅ 実装済み</td></tr>
+      </tbody>
+      </table>
+      <p><strong>設計上の結論</strong>: KASUGAI Canvas をメイン画面および最終 2D/3D 表示エンジンとし、QGIS・GDAL を多様な GIS データを CesiumJS が描画できる形式へ<strong>変換・配信する基盤</strong>として利用する。QGIS の画面を埋め込まず、正データを維持したまま用途に応じて GeoJSON/GeoParquet/FlatGeobuf/XYZ/WMTS/3D Tiles 等へ変換する。小規模=GeoJSON、中規模=FlatGeobuf、大規模・広域=PMTiles/MVT（MapLibre 実装済み）と duckdb:/sql: の併用が基本。</p>
 
       <h3>🚧 未対応・ロードマップ（Issue）</h3>
       <p>「QGIS プロジェクトをそのまま再現する」ための残課題は GitHub Issue で管理しています。詳細は <a href="../qgis.html#qgis連携未対応issue">QGIS・GDAL連携 — 未対応・検討中</a> も参照。</p>

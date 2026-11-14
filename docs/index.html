@@ -15,8 +15,19 @@
     </header>
     <main>
       <section>
-        <h2>1. 📋 概要</h2>
+        <h2>1. 📋 概要 — Canvas UI の説明</h2>
         <p>KASUGAI Canvas は、<strong>AI とマルチエンジンで拓く 2D/3D GIS</strong> です。CesiumJS + Three.js（メイン・3D）を核に、MapLibre / OpenLayers / Leaflet / GSI Maps の互換プレイヤーと試験的エンジン Navara が同じ <code>.kasc</code> プロジェクトを再生するマルチエンジン構成を採り、AI チャット（Gemini / OpenAI互換 の内蔵AI、GitHub Copilot・Devin・Antigravity のブリッジ連携）で地図を操作できます。Re:Earth GeoSuite と上位互換の GIS 基本機能に加え、KASUGAI 独自の FLY 機能を備えています。</p>
+        <p>画面は左パネルの<strong>タブ</strong>＋<strong>🧰ツールバー</strong>が操作の中心で、このドキュメントのナビゲーションも同じ分類（テーマ軸）で整理しています。各タブ・ツールの実装は「<a href="features/v1.html">画面機能</a>」、機能追加の履歴は「<a href="features.html">バージョン履歴</a>」を参照してください。</p>
+        <table>
+          <tr><th>UI 領域</th><th>内容</th></tr>
+          <tr><td><a href="panel.html">レイヤパネル</a></td><td>タブ：<strong>レイヤ・凡例・検索・属性・カメラ・表示・情報</strong>＋パネル下部のマルチエンジン切替</td></tr>
+          <tr><td><a href="panel.html#tools-cards">ツール</a></td><td>🧰ボタンで開くドック：計測・選択・集計・作図・標高断面・見通し判定・エクスポート・印刷・時系列</td></tr>
+          <tr><td><a href="features/v1.html#nav">ナビゲーション</a></td><td>地図右上の操作群：コンパス・3D・オービット・表示履歴◀▶・矩形ズーム▭・地点座標⌖・現在地📍・フルスクリーン⛶</td></tr>
+          <tr><td><a href="features/v1.html#basemap">ベースマップ</a></td><td>地図左下のベースマップ選択＋別アプリで開く（CDN・アプリ・Google Earth）</td></tr>
+          <tr><td><a href="ai-chat.html">AIチャット</a></td><td>内蔵AI（【API】）または外部エージェント（【ブリッジ】）で地図を操作</td></tr>
+          <tr><td><a href="manage.html">管理</a></td><td>⚙ボタンで開く管理ウィンドウ：プロジェクト・AI・Google Maps・アプリ・その他</td></tr>
+          <tr><td><a href="plugins.html">プラグイン</a></td><td><code>PLUGIN/</code> に置いた拡張パネルがレイヤパネルのタブへ追加される</td></tr>
+        </table>
         <p><small>v3.4.2 以降、地図タイル・検索・レイヤー取得はブラウザ側（CesiumJS 等）が直接行い、Rust サーバーは静的配信に加えてローカル環境限定の高権限 API（<code>/api/files</code>・<code>/api/fetch</code>・<code>/api/plugins</code>・<code>/api/command</code>・更新・シャットダウン等。提供可否は <code>/api/capabilities</code> で判定）を提供します。</small></p>
         <figure>
         <img src="images/KASUGAI_Canvas_概要.png" alt="KASUGAI Canvas 概要：AI連携・FLYプレゼンテーション・マルチエンジン・.kasc+DATA 納品構造" />
@@ -55,12 +66,12 @@
           <tr>
             <td>プロバイダ</td>
             <td>Gemini・OpenAI互換（GitHub Models・OpenAI・Azure OpenAI・Ollama 等）</td>
-            <td>GitHub Copilot・Devin・Antigravity・外部エージェント（汎用 <code>/agent</code> エンドポイント）</td>
+            <td>GitHub Copilot・Devin（<code>devin acp</code>）・Antigravity・汎用 ACP プロバイダ（<code>provider:"acp"</code>、ACP 対応の任意エージェント CLI）・外部エージェント（汎用 <code>/agent</code> エンドポイント）</td>
           </tr>
           <tr>
             <td>接続経路</td>
             <td>ブラウザ → 公式 API へ直接（BYO キー）。Cloudflare/Cloud Run では <code>/api/gemini</code> キー隠蔽プロキシでキーレス利用も可</td>
-            <td>チャット → <code>POST /agent</code> → ブリッジハブ → 各 CLI（copilot / devin / agy）。要各 CLI・本人認証</td>
+            <td>チャット → <code>POST /agent</code> → ブリッジハブ → 各 CLI（copilot / devin acp / agy / ACP 対応 CLI）。要各 CLI・本人認証（ACP はブラウザ認証または API キー）</td>
           </tr>
           <tr>
             <td>【WebGIS】ブラウザ WebGIS</td>
@@ -101,7 +112,7 @@ flowchart TB
   DATA -.->|"?kasc= で指定"| WEB
   QGIS -.->|"▶ Canvas で登録"| APP
 
-  AGENTS["外部エージェント<br/>GitHub Copilot / Devin / Antigravity<br/>要各CLI・本人認証"] ==>|"AI が地図を制御<br/>（reply/actions を返す）"| BRIDGE["AIブリッジハブ bridge-hub.exe<br/>アプリ・WebGIS 共通 =8511<br/>チャット ─POST /agent {provider,...}→<br/>選択中プロバイダのみ内部起動"]
+  AGENTS["外部エージェント<br/>GitHub Copilot / Devin(acp) / Antigravity / ACP対応CLI<br/>要各CLI・本人認証"] ==>|"AI が地図を制御<br/>（reply/actions を返す）"| BRIDGE["AIブリッジハブ bridge-hub.exe<br/>アプリ・WebGIS 共通 =8511<br/>チャット ─POST /agent {provider,...}→<br/>選択中プロバイダのみ内部起動"]
   APP ---|"起動時に未起動なら自動起動（内蔵なし）"| BRIDGE
   CDN -.->|"download/bridge-hub.exe(.zip) を配信"| BRIDGE
   BRIDGE -.->|"同一PCなら /health 検出（:8511）で接続"| WEB
@@ -171,95 +182,51 @@ flowchart TB
 
       <section>
         <h2>5. 📚 ドキュメント</h2>
-        <h3>マルチエンジン — WebGIS / ローカルアプリ</h3>
+        <p><small>ドキュメントは左のナビゲーションと同じ「セクション→章→節」構成です。<strong>使い方</strong>は UI パネル別の操作説明（章1〜7）、<strong>技術資料</strong>は UI に対応しない技術系ドキュメント（章1〜2）で、各章ページはカード索引になっています。</small></p>
+        <h3>使い方 — UI パネル別（章1〜7）</h3>
         <div class="features">
-          <a class="feature-card" href="datahost.html">
-            <h3>🌐 【WebGIS】ブラウザ WebGIS（外部ホスト配信）</h3>
-            <p>CDN エンジン × 外部ホストの .kasc で動くサーバレス WebGIS。必須ファイル・?kasc= 仕様・公開デモ</p>
+          <a class="feature-card" href="panel.html">
+            <h3>🖥️ 1. レイヤパネル・2. ツール</h3>
+            <p>レイヤ・凡例・検索・属性・カメラ・表示・情報タブ、ツールドック、FLY・ポータル・マルチエンジン切替 — 画面機能のカード索引</p>
           </a>
-          <a class="feature-card" href="guide.html">
-            <h3>💻 【アプリ】ローカルアプリ（kasugai_canvas.exe）</h3>
-            <p>インストール・起動方法・プロジェクト構成・設定の保存・FLY 機能の操作・配布と公開の形態</p>
+          <a class="feature-card" href="features/v1.html#nav">
+            <h3>🧭 3. ナビゲーション</h3>
+            <p>地図右上の操作群 — コンパス・3D/オービット・表示履歴◀▶・矩形ズーム・地点座標・現在地・フルスクリーン</p>
           </a>
-          <a class="feature-card" href="features/v6.html">
-            <h3>🔀 マルチエンジン</h3>
-            <p>Cesium（メイン）＋ MapLibre / OpenLayers / Leaflet / GSI Maps ＋ Navara（試験的）— 同じ .kasc を6エンジンで再生。エンジン切替・状態引継ぎ・CDN ホスト版</p>
+          <a class="feature-card" href="features/v1.html#basemap">
+            <h3>🗺️ 4. ベースマップ</h3>
+            <p>地図左下のベースマップ選択＋別アプリで開く（CDN・アプリ・Google Earth）</p>
           </a>
-          <a class="feature-card" href="inspector.html">
-            <h3>📝 .kasc 設定仕様</h3>
-            <p>エンジン非依存のプロジェクト形式。行タイプ・オプション・グループ化ルール</p>
+          <a class="feature-card" href="ai-chat.html">
+            <h3>🤖 5. AIチャット</h3>
+            <p>【API】内蔵AI・【ブリッジ】外部エージェント・ツール仕様・ブリッジハブ・AI連携構成・解析（予定）のカード索引</p>
           </a>
-          <a class="feature-card" href="runtime-cache.html">
-            <h3>💾 ランタイム永続キャッシュ</h3>
-            <p>Service Worker が CDN 資産（DuckDB-WASM 約60MB・vendor）を CacheStorage に保持。再ダウンロード削減の仕組みと対象範囲</p>
+          <a class="feature-card" href="manage.html">
+            <h3>⚙️ 6. 管理</h3>
+            <p>管理ウィンドウの各カテゴリ — プロジェクト・インスペクター（.kasc）・AI・Google Maps・アプリのカード索引</p>
+          </a>
+          <a class="feature-card" href="plugins.html">
+            <h3>🧩 7. プラグイン</h3>
+            <p>PLUGIN/ 拡張パネル・認証方式・外部連携のカード索引</p>
           </a>
         </div>
-        <h3>AI — API / ブリッジ</h3>
+        <h3>技術資料（章1〜2）</h3>
         <div class="features">
-          <a class="feature-card" href="ai-api.html">
-            <h3>🤖 【API】内蔵AI（Google 連携・AI）</h3>
-            <p>内蔵AI チャット（Gemini・OpenAI互換）の設定と機能、Maps Platform・AIプラグイン生成</p>
+          <a class="feature-card" href="ref-qgis.html">
+            <h3>📦 1-1 QGIS連携</h3>
+            <p>エクスポートの利用方法・連携方針（V7）・実装済み再現範囲のカード索引</p>
           </a>
-          <a class="feature-card" href="ai-bridge.html">
-            <h3>🔌 【ブリッジ】外部エージェント連携</h3>
-            <p>ブリッジハブ経由で GitHub Copilot・Devin・Antigravity・外部エージェントを内蔵AIとして利用。接続方式ごとの規約判断</p>
+          <a class="feature-card" href="ref-runtime.html">
+            <h3>🌐 1-2 配信・実行形態</h3>
+            <p>ブラウザ WebGIS・永続キャッシュのカード索引</p>
           </a>
-          <a class="feature-card" href="ai-tools.html">
-            <h3>🛠️ AI ツール仕様</h3>
-            <p>内蔵AIが制御できる全81ツールの定義。引数・提供条件・実行モデル</p>
+          <a class="feature-card" href="ref-spec.html">
+            <h3>📝 1-3 設定・内部仕様</h3>
+            <p>データ形式・描画性能・ライブラリ・システム構成・実装詳細（V0）・セキュリティのカード索引</p>
           </a>
-          <a class="feature-card" href="bridge-hub.html">
-            <h3>🔧 ブリッジハブ（bridge-hub.exe）</h3>
-            <p>常駐ハブの詳細仕様。導入・CLI 自動導入・HTTP API・プロバイダ前提条件・/vector ベクトルサービス・環境変数</p>
-          </a>
-        </div>
-        <h3>QGIS連携 — エクスポート / プロジェクト再現</h3>
-        <div class="features">
-          <a class="feature-card" href="qgis-delivery.html">
-            <h3>📦 QGIS連携の利用方法</h3>
-            <p>?kasc= / ?kasc=local / project= でのエクスポート物の指定方法と、on-demand ZIP 配信（qgis: 行で Re:Earth へ直取込み）の整理 — QGIS連携の入口</p>
-          </a>
-          <a class="feature-card" href="qgis-policy.html">
-            <h3>🧭 QGIS・GDAL連携 — 方針・構想</h3>
-            <p>連携の基本方針・役割分担・データ3層構造・ベクター/ラスタ連携の考え方と実装ロードマップ</p>
-          </a>
-          <a class="feature-card" href="qgis.html">
-            <h3>🔗 実装済みの再現範囲</h3>
-            <p>geo_webview がプロジェクトを .kasc+DATA/（スタイル .qml 同梱）へ出力し Canvas へ登録。実装済みの再現範囲と未対応課題（Issue）</p>
-          </a>
-        </div>
-        <h3>仕様・技術選定</h3>
-        <div class="features">
           <a class="feature-card" href="features.html">
-            <h3>🗺️ 機能と実装</h3>
-            <p>GIS 基本機能・Fly プレゼン機能の一覧と、現行実装の仕組み・ドレープ・制限事項</p>
-          </a>
-          <a class="feature-card" href="data.html">
-            <h3>🗂️ データ形式</h3>
-            <p>対応データ形式と 2D/3D データの最適フォーマット、配信・管理の考え方</p>
-          </a>
-          <a class="feature-card" href="performance.html">
-            <h3>⚡ 描画性能とデータ形式方針</h3>
-            <p>QGIS との速度比較・実行環境別の特性、規模別の既定形式（GeoJSON→FlatGeobuf→PMTiles）と整備課題</p>
-          </a>
-          <a class="feature-card" href="library.html">
-            <h3>🧰 ライブラリ</h3>
-            <p>CesiumJS・Three.js を中心とした描画基盤と補完ライブラリの選定</p>
-          </a>
-          <a class="feature-card" href="architecture.html">
-            <h3>🏗️ システム構成</h3>
-            <p>ローカルPC・サーバーレス・国内対応・組み込みの構成方針</p>
-          </a>
-          <a class="feature-card" href="security.html">
-            <h3>🛡️ セキュリティ対策</h3>
-            <p>認証トークン・データ配信・fetch 許可リストなど実装済みの保護機構と既知の制限</p>
-          </a>
-        </div>
-        <h3>拡張・連携</h3>
-        <div class="features">
-          <a class="feature-card" href="auth/">
-            <h3>🔐 認証とプラグイン</h3>
-            <p>認証方式 0〜7 の比較と設定手順、プラグインによる機能拡張</p>
+            <h3>🗺️ 2-1 バージョン履歴（機能カード索引）</h3>
+            <p>V0〜V9 のテーマごとの機能追加履歴。GIS 基本機能・Fly プレゼン機能の一覧と、現行実装の仕組み・ドレープ・制限事項</p>
           </a>
         </div>
         <h3>記録（挑戦中）</h3>

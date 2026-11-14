@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>レイヤパネル・ツール — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>レイヤパネル・🧰ツール — 画面の操作面（タブ・ツール単位）</p>
+    </header>
+    <main>
+      <p>画面左のレイヤパネルのタブ（<strong>レイヤ・凡例・検索・属性・カメラ・表示・情報</strong>）＋パネル下部のマルチエンジン切替、および🧰ボタンで開くツールドックに対応する機能のドキュメントです。各機能の詳細は <a href="features/v1.html">画面機能（V1）</a> の該当節を参照してください。</p>
+      <div class="features">
+        <a class="feature-card" href="features/v1.html#tab-layer">
+          <h3>🗺️ レイヤ</h3>
+          <p>レイヤー追加・管理・一覧UI・グループ化・ベースマップ・システムレイヤ制御</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tab-legend">
+          <h3>🖼️ 凡例</h3>
+          <p>legend: 行で凡例画像を登録・一覧表示</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tab-search">
+          <h3>🔎 検索</h3>
+          <p>住所検索・座標直入力・ベクトル検索（レイヤー→属性→値）</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tab-attr">
+          <h3>📊 属性</h3>
+          <p>地物クリックで属性一覧・ドリルピック・属性・値一覧（ソート・FlyTo・CSV出力）</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tab-camera">
+          <h3>🎥 カメラ</h3>
+          <p>cam: プリセットへワンクリック FlyTo</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tab-display">
+          <h3>⛰️ 表示</h3>
+          <p>地形・ドレープ・3D Tiles・効果・一般（座標形式・ミニマップ・グリッド）</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tab-info">
+          <h3>ℹ️ 情報</h3>
+          <p>info: 行で外部 HTML を情報タブへ表示</p>
+        </a>
+        <a class="feature-card" href="features/v2.html">
+          <h3>🎬 FLY（プレゼンテーション）</h3>
+          <p>カメラワーク自動再生の FLY モード。描画ルート・シーン遷移</p>
+        </a>
+        <a class="feature-card" href="features/v8.html">
+          <h3>🧭 ポータル</h3>
+          <p>portal:/view:/link:/html: 行で業務目的別のカード画面を構成。全エンジン共通 UI</p>
+        </a>
+        <a class="feature-card" href="features/v6.html">
+          <h3>🔀 マルチエンジン（engine: 切替）</h3>
+          <p>パネル下部の <code>engine:</code> リンクで切替 — Cesium＋5互換プレイヤーで同じ .kasc を再生</p>
+        </a>
+      </div>
+      <h2 id="tools-cards">🧰 ツール</h2>
+      <p>レイヤパネルの🧰ボタンで開くツールドックの各サブタブです。</p>
+      <div class="features">
+        <a class="feature-card" href="features/v1.html#tool-measure">
+          <h3>📏 計測</h3>
+          <p>距離（測地線）・面積・方位。地形追従で3D表示時も地表値</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tool-select">
+          <h3>🔲 選択・集計</h3>
+          <p>矩形・ポリゴン・円で空間選択 → ポリゴン内集計・バッファ生成</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tool-draw">
+          <h3>✏️ 作図</h3>
+          <p>ポイント・ライン・ポリゴン・注記を描いて一時レイヤー化・GeoJSON保存</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tool-profile">
+          <h3>📈 標高断面</h3>
+          <p>折れ線の距離-標高グラフ。地形/地理院標高API</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tool-los">
+          <h3>👁️ 見通し判定</h3>
+          <p>観測点-対象点の可視判定と遮蔽点。可視範囲（viewshed）は Cesium のみ</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tool-export">
+          <h3>📤 エクスポート</h3>
+          <p>ベクターを GeoJSON/CSV/TSV/KML/FlatGeobuf/Shapefile でダウンロード</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tool-print">
+          <h3>🖨️ 印刷</h3>
+          <p>印刷・帳票出力</p>
+        </a>
+        <a class="feature-card" href="features/v1.html#tool-time">
+          <h3>⏱️ 時系列</h3>
+          <p>time=プロパティ指定の時系列レイヤー（Cesium）</p>
+        </a>
+      </div>
+      <p><a href="index.html">← 概要へ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>

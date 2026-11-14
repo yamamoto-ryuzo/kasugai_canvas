@@ -14,7 +14,7 @@
       <p>V0: システム基本構成 — バージョン横断の実装詳細</p>
     </header>
     <main>
-      <p><a href="../features.html">← 機能と実装へ戻る</a></p>
+      <p><a href="../features.html">← バージョン履歴へ戻る</a></p>
 
       <h2 id="implementation">現行実装の構成</h2>
       <p>KASUGAI Canvas の現行実装は、<strong>純粋な CesiumJS フロントエンド</strong>を <code>web/</code> ディレクトリに配置し、通常の HTTP サーバーから配信する構成です。オプションとして、Rust/Axum で最小限の静的ファイルサーバー（<code>kasugai_canvas.exe</code>）を同梱しています。Three.js は Cesium のビュー行列を共有する簡易な 3D 描画の枠組みとして組み込まれています。点群・3DGS・GLB 表示は未対応です。</p>

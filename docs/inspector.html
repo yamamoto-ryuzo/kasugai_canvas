@@ -65,6 +65,7 @@ pmtiles: PMTilesベクトルタイル | .pmtiles URL | off / layers=ソースレ
 gpkg:(geopackage:) GeoPackageレイヤ | off / table=地物テーブル名 / limit=件数 / columns=列,列 / bbox=auto(表示範囲連動・既定ON) / bbox=off(常時全件描画) / render=primitive|entity / style=QMLファイルURL / attr=出典 / where=条件(SQLite式・行の最後=値は行末まで) (layer_styles のQGIS埋め込みスタイルを自動適用)
 duckdb: SQL絞り込みレイヤ | limit=件数 / geom=列 / lon=・lat=列 / format=parquet|csv|json|read / columns=列,列 / covering=xmin,xmax,ymin,ymax / table=地物テーブル名(gpkg) / bbox=auto(表示範囲連動・既定ON)|bbox=off(常時全件描画) / render=primitive|entity(既定entity) / proxy=on(ローカルサーバー経由で取得) / style=QMLファイルURL / attr=出典 / where=条件(行の最後=値は行末まで)
 sql: 任意SELECT文レイヤ | sql:タイトル|SELECT ... (タイトル後の | 以降はすべてSQL・| 使用可・末尾 | off で非表示・| render=entity で entity 描画・| attr=出典 で出典表示・| style=QML で QGIS スタイル適用・:bbox で表示範囲連動)
+ogrsql: OGR SQL SELECTレイヤ | ogrsql:タイトル|SELECT ... (行規則は sql: と同じ。GDAL の OGR SQL 方言で実行。FROM には読み込み済みレイヤータイトル・'ds'.layer 形式・DATA/ 相対パス・GeoJSON/GPKG/FGB/Parquet 等のURLを指定可。ブラウザ内 JS 実装(shared/ogr-sql.js)が主経路で、解決不能時のみローカル QGIS(geo_webview/geo_driver の Live relay)の GDAL ogr.ExecuteSQL へフォールバック。SELECT 式・AS・DISTINCT・集計・JOIN・WHERE・ORDER BY・LIMIT/OFFSET・OGR疑似フィールドに対応)
 [ベクター系共通] cluster=on: 点レイヤを件数バッジでクラスタ表示 / heat=on: 点レイヤをヒートマップ表示 （点以外のジオメトリは通常描画。sql: は末尾 | cluster=on | heat=on で指定。対象: geojson/gpkg/duckdb/sql 等の全ベクター行・Cesium/MapLibre/OpenLayers/Leaflet）
 [ベクター系共通・Cesium のみ] time=時刻プロパティ名: 地物の時刻属性で時系列レイヤー化（画面下にタイムスライダーが出現し scrub/再生で地物を時刻フィルタ。時刻値は ISO文字列・epoch秒/ミリ秒・年の整数を解釈）。time_end=プロパティ名 で区間終端、time_span=秒|PT1H|P1D|1d 等 で保持時間（両方なしは出現時刻以降ずっと表示の累積モード。sql: は末尾 | time=名 で指定）。ツールバーの「時系列」からレイヤーとプロパティを選択して手動でも設定可能（.kasc 行へ自動書き戻し）
 default_style: point|line|polygon | スタイル未指定地物の既定スタイル(下記参照。地物側の simplestyle や style=QML が優先)
@@ -96,7 +97,7 @@ cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(�
         </div>
         <div class="url-box">
           <h3>ベクターデータ形式の使い分け</h3>
-          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>wfs:</code>/<code>shp:</code>/<code>csv:</code> 等）はファイル全件を読み込んで描画し、ベクター検索パネルで属性検索できます（描画件数の上限を超える場合は表示範囲内の地物のみ描画し、カメラ移動で追随）。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。<code>gpkg:</code> も既定で <code>bbox=auto</code> のクエリ系（表示は範囲のみ・検索は ⏷ フィルターや属性一覧で全件対象）として動作します。常時全件を描画したい場合は <code>bbox=off</code> を付けると全件読み込み系（検索パネル対象）に戻ります。</p>
+          <p>ベクター系の行タイプは大きく2系統に分かれます。<strong>全件読み込み系</strong>（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>kml:</code>/<code>wfs:</code>/<code>shp:</code>/<code>csv:</code> 等）はファイル全件を読み込んで描画し、ベクター検索パネルで属性検索できます（描画件数の上限を超える場合は表示範囲内の地物のみ描画し、カメラ移動で追随）。<strong>クエリ系</strong>（<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）は SQL で絞り込み、表示は見えている範囲だけ・検索は常にファイル全件を対象にします。<code>gpkg:</code> も既定で <code>bbox=auto</code> のクエリ系（表示は範囲のみ・検索は ⏷ フィルターや属性一覧で全件対象）として動作します。常時全件を描画したい場合は <code>bbox=off</code> を付けると全件読み込み系（検索パネル対象）に戻ります。</p>
           <pre><code>【全件読み込み系】全件読み込み・ベクター検索パネル対象
   小〜中規模・全件表示        → geojson:（事前変換が最速・最単純）
   中規模・Parquet をそのまま  → geoparquet:（利便性重視・変換不要で置くだけ）
@@ -116,7 +117,7 @@ cloud: クラウド自動接続 | cloud:リモート名|ルートフォルダ(�
         </div>
         <div class="url-box">
           <h3>地物の既定スタイル（default_style:）</h3>
-          <p>ベクター系レイヤー（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>）の地物で、<strong>スタイル指定を持たない項目</strong>に適用する既定値を、ジオメトリ種別ごとに1行ずつ設定します。配色をプロジェクト単位で調整したいときに使います。地物ごとの優先順位は次のとおりです。</p>
+          <p>ベクター系レイヤー（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）の地物で、<strong>スタイル指定を持たない項目</strong>に適用する既定値を、ジオメトリ種別ごとに1行ずつ設定します。配色をプロジェクト単位で調整したいときに使います。地物ごとの優先順位は次のとおりです。</p>
           <pre><code>地物の simplestyle プロパティ(marker-color / stroke / fill 等)
     &gt; style= の QML スタイル(レイヤー全体)
     &gt; default_style: 行(この設定)
@@ -180,8 +181,8 @@ format=read        → Shapefile / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡�
           <p><strong>表示範囲連動フィルター</strong>：<code>duckdb:</code> と <code>gpkg:</code> は既定で <code>bbox=auto</code> が有効で、カメラ停止ごとに表示範囲で再クエリします（<code>duckdb:</code> は <code>ST_Intersects(geometry, ST_MakeEnvelope(...))</code> または covering bbox 列への範囲述語、<code>gpkg:</code> は各行の GPkgBinary エンベロープで判定）。<code>sql:</code> はクエリ内に <code>:bbox</code> プレースホルダを書くと同様に範囲連動します（例：<code>WHERE ST_Intersects(geometry, :bbox)</code>。WKB(BLOB)列の場合は <code>ST_GeomFromWKB(geometry)</code> でキャスト）。巨大データを「見ている範囲だけ読む」運用が標準動作です。常時全件描画にしたいレイヤーは <code>bbox=off</code> を付けます（範囲外に出ても地物が消えません）。<code>ST_Intersects</code> の精密判定には spatial 拡張が必要ですが、covering bbox 列があるデータは拡張無しでも近似フィルターとして動作します。</p>
           <p><strong>失敗時の自動リトライ</strong>：<code>bbox=auto</code>/<code>:bbox</code> レイヤーの初回読み込みが失敗（ペイロード上限・タイムアウト等）した場合、失敗状態を保持したまま次のカメラ移動で縮小した表示範囲による再クエリを自動的に行います。ズームインして条件を満たせばユーザー操作なしでレイヤーが表示されます。<code>geojson:</code> 等が bridge-hub（127.0.0.1:8511）の <code>/vector/</code> を指して失敗した場合は、ハブの <code>/health</code>・<code>/vector/sources</code> を疎通して原因（ハブ未起動／旧版ハブ・/vector 未搭載／duckdb CLI 未導入／ソース未登録）をエラーメッセージへ付記します。</p>
           <p><strong>ベクター描画件数の上限（描画は表示範囲・属性は全件）</strong>：表示 → ドレープ の「ベクター描画件数の上限」（既定 20000、0・空欄=無制限）で、entity 描画するベクターレイヤーの<strong>合計</strong>描画件数を制限します。大量の entity 生成によるブラウザのフリーズを防ぐ安全弁で、上限を超えたレイヤーはレイヤー一覧に <code>描画数/全件数</code> のバッジが付きます。上限を超えた全件読み込み系レイヤーは「ファイル先頭から」ではなく<strong>表示範囲内の地物を優先</strong>して描画し、カメラを動かすたびにメモリ上の全件データから範囲内の地物を選び直します（再ダウンロード無し）。検索結果や属性一覧から未描画の地物へ飛んでも、その場所で描画が復活します。表示範囲外にデータがある間は <code>0/全件数</code> のバッジでデータが残っていることが分かります。切り捨ては描画だけの制限で、ベクター検索・属性一覧・プラグイン API の <code>getLayerGeoJson</code> は常にファイル全件を対象にします。<code>render=primitive</code> のバッチ描画は entity コストを支払わないため上限の対象外です。</p>
-          <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
-          <p><strong>描画方式（既定は entity 描画）</strong>：ベクター系レイヤー（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>）は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。<code>render=primitive</code>（<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>、その他はオプション欄）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。レイヤー行の <code>render=</code> 指定は表示 → ドレープ の「ベクター高速ドレープ」より優先され、<code>render=entity</code> を書くと高速ドレープが有効でもそのレイヤーだけ entity 描画に戻せます。違いは以下のとおりです。</p>
+          <p><strong>フィルター UI</strong>：レイヤー一覧の ⏷ ボタンから、<code>duckdb:</code> は WHERE 条件式、<code>sql:</code>/<code>ogrsql:</code> はクエリ全文を対話的に変更して再読み込みできます。変更は inspector の <code>.kasc</code> テキストにも反映されます。</p>
+          <p><strong>描画方式（既定は entity 描画）</strong>：ベクター系レイヤー（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>）は既定で <code>GeoJsonDataSource</code> の entity 描画を使い、地形・3D Tiles へのドレープ（クランプ）に対応します。<code>render=primitive</code>（<code>sql:</code> はクエリ末尾 <code>| render=primitive</code>、その他はオプション欄）を付けると CesiumJS の <code>GeoJsonPrimitive</code> バッチ描画に切り替わります。レイヤー行の <code>render=</code> 指定は表示 → ドレープ の「ベクター高速ドレープ」より優先され、<code>render=entity</code> を書くと高速ドレープが有効でもそのレイヤーだけ entity 描画に戻せます。違いは以下のとおりです。</p>
           <pre><code>【entity(既定)】1地物ごとに Cesium Entity を生成
   ・地形/3D Tiles にドレープ可能(clampToGround)
   ・フォーカス・属性パネル等の entity 機能がすべて使える
@@ -194,6 +195,16 @@ format=read        → Shapefile / FlatGeobuf(.fgb) 等（ST_Read。spatial 拡�
           <p><strong>検索は常に全件対象</strong>：<code>duckdb:</code>/<code>sql:</code> の検索・絞り込みは ⏷ の SQL フィルターに一本化しており、常にファイル全件を対象に評価します（読み込み済み地物を対象にするベクター検索パネルには登録されません）。<code>bbox=auto</code> と <code>where=</code> を併用した場合、表示は「検索条件 ∩ 表示範囲」になりますが、検索自体は全件に対して行われ、コンソールに「検索ヒット全 N 件 / 表示範囲内 M 件」と併記されます。</p>
           <p><strong>属性値一覧</strong>：属性値一覧ウィジェットのレイヤー選択には <code>duckdb:</code>/<code>sql:</code> を含む全ベクターレイヤーが表示されます。選択肢はレイヤー定義から即座に作られるため、データの読み込み完了を待たず起動直後から選択可能です。一覧は読み込み済み地物ではなく DuckDB へ直接クエリして作られ、<code>where=</code> は適用する一方 <code>bbox</code>/<code>limit=</code> は適用せず LIMIT 無しの全件を取得します。ウィジェット内の検索文字は全属性列への <code>ILIKE</code> 述語として SQL に変換されるため、常にファイル全件が検索対象です（表への描画は先頭1000行まで）。</p>
           <p><strong>Parquet 最適化</strong>：クエリ結果のジオメトリは WKB バイナリで受け取ります（テキスト変換を省き転送量・パース時間・ピークメモリを削減）。<code>columns=列名,列名</code> で読み込む属性列を絞る列プルーニングが可能です。<code>bbox=auto</code> 時は GeoParquet 1.1 の <code>covering</code> bbox 列（または慣用名の xmin/xmax/ymin/ymax 列、<code>covering=</code> で明示指定も可）への範囲述語を優先的に使うため、Parquet の row group 統計スキップが効き、表示範囲外のデータは読み込み自体を省略できます。</p>
+        </div>
+        <div class="url-box">
+          <h3>ogrsql:（OGR SQL SELECTレイヤ）</h3>
+          <p><code>sql:</code> と同じ行規則で、<code>|</code> 以降を OGR SQL（GDAL の SQL 方言）の SELECT 文として実行します。DuckDB ではなく OGR 系フィルター・式評価の再現が目的で、QGIS が出力するクエリ・プロバイダフィルタをそのまま記述できます。</p>
+          <pre><code>ogrsql: 河川(上位100件) | SELECT * FROM 'rivers' ORDER BY 延長 DESC LIMIT 100
+ogrsql: 市区町村JOIN    | SELECT a.*, b.人口 FROM '行政区域' a LEFT JOIN '人口表' b ON a.コード = b.コード
+ogrsql: ファイル直接    | SELECT * FROM 'DATA/points.geojson' WHERE 区分 = 'A'</code></pre>
+          <p><strong>FROM の解決順</strong>：① 読み込み済みレイヤーのタイトル（他行の <code>geojson:</code> 等を参照可）→ ② <code>'データソース'.'レイヤー'</code> 形式（GPKG の特定テーブル等）→ ③ プロジェクト相対パス（<code>DATA/…</code>）・絶対 URL（GeoJSON/GPKG/FGB/Parquet/KML/SHP zip/CSV 等を自動判別）。</p>
+          <p><strong>実行エンジン（JS 主経路）</strong>：ブラウザ内 JS 実装（<code>shared/ogr-sql.js</code>）で実行します — CDN 単体利用でも QGIS の有無で挙動が変わりません。JS で FROM を解決できない場合（QGIS プロジェクトレイヤー名・ローカルパスの SHP・PostGIS 等）や JS パーサ未対応の構文だけ、ローカル QGIS（geo_webview/geo_driver の Live relay・127.0.0.1:8089-8091）検出時に <code>ogr.ExecuteSQL(dialect="OGRSQL")</code> へフォールバックします。JS 実装はSELECT 式・AS 別名・DISTINCT・集計（COUNT/SUM/AVG/MIN/MAX）・JOIN/LEFT JOIN・WHERE・ORDER BY・LIMIT/OFFSET・OGR 疑似フィールド（FID/OGR_GEOMETRY/OGR_GEOM_WKT/OGR_GEOM_AREA/OGR_STYLE）に対応します。QGIS 側でも解決・実行できなかった場合は JS 側のエラーとして報告されます。</p>
+          <p><strong>GDAL との方言差</strong>：GDAL 本体では <code>ORDER BY</code> に SELECT 別名を使えませんが、JS 実装は受理します（GDAL より寛容）。その他の方言差は QGIS Live 連携をゴールデンオラクルとした差分検証で随時洗い出して JS 実装へ反映しています。</p>
         </div>
         <div class="url-box">
           <h3>Fly モードの経路設定（fly_geojson:）</h3>

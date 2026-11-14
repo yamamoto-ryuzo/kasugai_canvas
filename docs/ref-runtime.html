@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>配信・実行形態 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
+      <p>配信・実行形態 — WebGIS / ローカルアプリ / キャッシュ</p>
+    </header>
+    <main>
+      <p>エンジンとデータをどこから供給するか — CDN 配信のサーバレス WebGIS、インストール型ローカルアプリ、ランタイム永続キャッシュのドキュメントです。</p>
+      <div class="features">
+        <a class="feature-card" href="datahost.html">
+          <h3>🌐 【WebGIS】ブラウザ WebGIS（外部ホスト配信）</h3>
+          <p>CDN エンジン × 外部ホストの .kasc で動くサーバレス WebGIS。必須ファイル・?kasc= 仕様・公開デモ</p>
+        </a>
+        <a class="feature-card" href="runtime-cache.html">
+          <h3>💾 ランタイム永続キャッシュ</h3>
+          <p>Service Worker が CDN 資産（DuckDB-WASM 約60MB・vendor）を CacheStorage に保持。再ダウンロード削減の仕組みと対象範囲</p>
+        </a>
+      </div>
+      <p><a href="index.html">← 概要へ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>
