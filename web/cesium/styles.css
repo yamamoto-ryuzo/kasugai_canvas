@@ -489,6 +489,24 @@ footer { padding: 0 28px 22px; }
 #profile-chart { display: block; width: 100%; max-width: 100%; height: 150px; margin-top: 3px; border: 1px solid #e4ecef; border-radius: 4px; box-sizing: border-box; }
 .vector-attr-widget-filter button { flex: 0 0 auto; min-height: 26px; padding: 2px 8px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #31564f; cursor: pointer; font-size: 12px; font-weight: 600; }
 .vector-attr-widget-filter button:hover { background: #e7f3f0; }
+#vector-attr-sql.active { background: #d9ecf3; border-color: #7fb7cc; }
+#vector-attr-map-filter.active { background: #d9f0df; border-color: #6fb887; }
+/* SQL ダイアログ(属性一覧の高度なフィルター) */
+.sql-dialog { position: fixed; inset: 0; z-index: 9600; display: flex; align-items: center; justify-content: center; background: rgba(20,32,40,.35); }
+.sql-dialog[hidden] { display: none; }
+.sql-dialog-inner { width: min(560px, 92vw); display: flex; flex-direction: column; background: #fff; border: 1px solid #cbd9de; border-radius: 10px; box-shadow: 0 16px 48px rgba(10,20,40,.35); overflow: hidden; }
+.sql-dialog-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #e4ecef; background: #f6f9fb; font-weight: 700; font-size: 14px; }
+#sql-dialog-layer { flex: 1; min-width: 0; margin-left: auto; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
+#sql-dialog-close { min-width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 20px; line-height: 1; }
+#sql-dialog-input { margin: 10px 14px 0; min-height: 72px; padding: 8px; border: 1px solid #cbd9de; border-radius: 6px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; resize: vertical; }
+.sql-dialog-hint { padding: 6px 14px 0; font-size: 11px; color: #71818d; }
+.sql-dialog-status { min-height: 1.2em; padding: 4px 14px 0; font-size: 12px; color: #31564f; }
+.sql-dialog-status.error { color: #b03030; }
+.sql-dialog-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 12px; }
+.sql-dialog-actions-spacer { flex: 1; }
+.sql-dialog-actions button { min-height: 28px; padding: 4px 12px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #31564f; cursor: pointer; font-size: 12px; font-weight: 600; }
+.sql-dialog-actions button:hover:not(:disabled) { background: #e7f3f0; }
+.sql-dialog-actions button:disabled { opacity: .45; cursor: default; }
 
 /* ---- ポータル(portal:/html:/view: 行の開始画面) ---- */
 .portal-open { flex: 0 0 auto; width: 32px; min-height: 28px !important; padding: 2px !important; border: 1px solid rgba(49,86,79,.35) !important; border-radius: 4px !important; background: rgba(49,86,79,.08) !important; color: #31564f !important; cursor: pointer; font-size: 20px !important; line-height: 1; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }

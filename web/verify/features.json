@@ -3900,6 +3900,27 @@
       "note": ""
     },
     {
+      "id": "web.cesium.ui.sql_dialog",
+      "kind": "ui_control",
+      "name": "sql_dialog",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "sql_dialog",
+      "summary": "SQLダイアログ(属性一覧の高度なフィルター)。WHERE式/SELECT文(OGR SQL)を「一覧を絞る(表示のみ)」「レイヤフィルタ(where=/クエリ書換え)」「新規レイヤ(ogrsql:)」の3経路で適用。⏷ボタンは全ベクター型に拡張し本ダイアログを開く",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "web.shared.ogr-sql",
+        "web.shared.where-eval"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "SQLボタン/⏷→dialog open→テスト/適用の DOM assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "Playwright統合検証 13/13 (.testtmp/verify-sqldialog.mjs)"
+    },
+    {
       "id": "web.cesium.ui.settings_window",
       "kind": "ui_control",
       "name": "settings_window",

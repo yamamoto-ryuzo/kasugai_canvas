@@ -28,7 +28,7 @@ import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
 import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, splitKascTail, geojsonExtent } from "../shared/kasc.js";
-import { compileWhereExpression } from "../shared/where-eval.js";
+import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-eval.js";
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
@@ -2035,7 +2035,9 @@ function renderLayerList() {
       <div class="layer-group-children" id="${groupId}"${group && !expandedLayerGroups.has(groupKey) ? " hidden" : ""}>
         ${layers.map((layer, index) => {
           const inputId = `${groupId}-layer-${index}`;
-          const filterButton = isQueryDecoder(vectorDecoders.get(layer.type), layer)
+          // ⏷ は where= を評価できるベクター全型に出す(クエリ系は SQL 再クエリ、
+          // geojson: 等は where-eval のクライアント評価)。entities(プラグイン所有)は対象外
+          const filterButton = (layer.type === "geojson" || layer.type === "layer" || vectorDecoders.has(layer.type))
             ? `<button class="layer-filter" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.filter"))}" aria-label="${escapeHtml(t("layer.filter"))}">⏷</button>`
             : "";
           const limitBadge = layer.entityLimited
@@ -3779,10 +3781,9 @@ async function resolveOgrSqlSource(ref) {
   return null;
 }
 
-// ogrsql: の属性一覧は再クエリ結果(GeoJSON)から組み立てる。
-// 検索文字は全属性値の部分一致(大文字小文字無視)で絞る
-async function queryOgrSqlAttributeRows(item, searchText) {
-  const fc = await loadOgrSqlLayerAsGeoJson(item);
+// FeatureCollection → 属性一覧の {attributes, rows}。検索文字は全属性値の
+// 部分一致(大文字小文字無視)。SQL ダイアログの一覧絞り込みとも共用する
+function attrRowsFromFeatureCollection(fc, searchText = "") {
   const attributes = [];
   for (const f of fc?.features || []) {
     for (const k of Object.keys(f.properties || {})) {
@@ -3810,6 +3811,32 @@ async function queryOgrSqlAttributeRows(item, searchText) {
   return { attributes, rows };
 }
 
+// ogrsql: の属性一覧は再クエリ結果(GeoJSON)から組み立てる。
+// 検索文字は全属性値の部分一致(大文字小文字無視)で絞る
+async function queryOgrSqlAttributeRows(item, searchText) {
+  return attrRowsFromFeatureCollection(await loadOgrSqlLayerAsGeoJson(item), searchText);
+}
+
+// executeOgrSelect の FROM 参照リゾルバ。ogrsql: デコードと
+// SQL ダイアログの SELECT 実行で共用する
+async function resolveOgrSqlFromRef(ref) {
+  if (ref.source) return resolveOgrSqlSource(ref);
+  const layer = await resolveOgrSqlSource(ref);
+  if (layer) return layer;
+  const name = String(ref.name || "");
+  const looksPath = /[/\\]/.test(name) || /^[a-z][a-z0-9+.-]*:/i.test(name)
+    || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(name);
+  const candidates = looksPath ? [name]
+    : [`DATA/${name}.geojson`, `DATA/${name}.fgb`, `DATA/${name}.parquet`,
+       `DATA/${name}.gpkg`, `DATA/${name}.kml`, `DATA/${name}.csv`, name];
+  let lastError = null;
+  for (const path of candidates) {
+    try { return await decodeOgrFile(path); }
+    catch (e) { lastError = e; }
+  }
+  throw lastError || new Error(`ogrsql: テーブル "${name}" を解決できません`);
+}
+
 async function loadOgrSqlLayerAsGeoJson(item) {
   const query = String(item.query || "").replace(/;+\s*$/, "");
   // 主経路はブラウザ内 JS 実装(shared/ogr-sql.js)。QGIS Live が検出
@@ -3818,23 +3845,7 @@ async function loadOgrSqlLayerAsGeoJson(item) {
   // QGIS 側の ogr.ExecuteSQL(dialect="OGRSQL") へフォールバックする
   let jsErr = null;
   try {
-    return await executeOgrSelect(query, async ref => {
-      if (ref.source) return resolveOgrSqlSource(ref);
-      const layer = await resolveOgrSqlSource(ref);
-      if (layer) return layer;
-      const name = String(ref.name || "");
-      const looksPath = /[/\\]/.test(name) || /^[a-z][a-z0-9+.-]*:/i.test(name)
-        || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(name);
-      const candidates = looksPath ? [name]
-        : [`DATA/${name}.geojson`, `DATA/${name}.fgb`, `DATA/${name}.parquet`,
-           `DATA/${name}.gpkg`, `DATA/${name}.kml`, `DATA/${name}.csv`, name];
-      let lastError = null;
-      for (const path of candidates) {
-        try { return await decodeOgrFile(path); }
-        catch (e) { lastError = e; }
-      }
-      throw lastError || new Error(`ogrsql: テーブル "${name}" を解決できません`);
-    });
+    return await executeOgrSelect(query, resolveOgrSqlFromRef);
   } catch (e) {
     jsErr = e;
   }
@@ -4236,8 +4247,10 @@ async function refreshLayersImpl() {
         // entity は作らず検索索引・属性一覧はフルソース側に残る(描画は密度表示のみ)
         if (item.heat) {
           const heatDs = await buildHeatmapDataSource(item, applyClientWhere(item, source));
+          heatDs._kasugaiLayerId = item.id;
           heatDs.show = effectiveLayerShow(item);
           await viewer.dataSources.add(heatDs);
+          removeOtherLayerDataSources(item, heatDs);
           vectorDataSources.push({ ds: heatDs, id: item.id, title: item.title });
           layerRuntimeTargets.set(item.id, heatDs);
           buildVectorSearchIndex();
@@ -4268,6 +4281,7 @@ async function refreshLayersImpl() {
         const ds = await buildStyledGeoJsonDataSource(limited.source, vectorDrape, item);
         try { ds.show = effectiveLayerShow(item); } catch (e) {}
         await viewer.dataSources.add(ds);
+        removeOtherLayerDataSources(item, ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
         layerRuntimeTargets.set(item.id, ds);
         // ロード済みのレイヤーから順に検索索引・選択肢を更新する。
@@ -4992,6 +5006,9 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
     else if (drape.dem) classification = Cesium.ClassificationType.TERRAIN;
   }
   const ds = await Cesium.GeoJsonDataSource.load(source, { clampToGround: clamp, ...vectorDefaultStyleLoadOptions() });
+  // 並走する再構築(refreshLayers / reloadVectorLayer / live 再取得)で
+  // 同レイヤの ds が二重登録されないよう、掃除用にレイヤIDをタグ付けする
+  if (item?.id) ds._kasugaiLayerId = item.id;
   // GeoJsonDataSource は polygon/polyline に arcType=RHUMB を設定するが、
   // 極域(南極)・日付変更線跨ぎ・重複点を含むデータで rhumb 細分化が暴走し
   // レンダリング全体が停止する既知バグがある(Cesium #7550/#7864/#8599)。
@@ -5083,6 +5100,20 @@ function applyLayerOpacityToEntities(ds, opacity) {
 
 // クエリ系レイヤー(duckdb:/sql:)の描画物を条件変更後に差し替えて再読み込みする
 // render=primitive のレイヤーは vectorDataSources に載らないため scene.primitives 側を差し替える
+// レイヤIDでタグ付けされた ds のうち keep 以外を viewer から除去する。
+// refreshLayers の走行中に reloadVectorLayer(または逆)が同レイヤの ds を
+// 追加すると、古い参照経由の除去が no-op になって二重描画になるため、
+// ds 追加直後に必ず呼んで孤児を掃除する(最後に終わった再構築が勝つ)
+function removeOtherLayerDataSources(item, keep) {
+  if (!item?.id) return;
+  for (let i = viewer.dataSources.length - 1; i >= 0; i--) {
+    const other = viewer.dataSources.get(i);
+    if (other !== keep && other._kasugaiLayerId === item.id) {
+      try { viewer.dataSources.remove(other, false); } catch (error) { /* ignore */ }
+    }
+  }
+}
+
 async function reloadVectorLayer(item) {
   const decoder = vectorDecoders.get(item.type);
   if (!decoder) return;
@@ -5114,7 +5145,12 @@ async function reloadVectorLayer(item) {
   if (hadLimited || item.entityLimited) renderLayerList();
   viewer.dataSources.remove(entry.ds, false);
   await viewer.dataSources.add(ds);
-  entry.ds = ds;
+  removeOtherLayerDataSources(item, ds);
+  // 並走した refreshLayers が vectorDataSources を再構築している場合があるため
+  // エントリを取り直す(見つからなければ push して孤児参照を防ぐ)
+  const latestEntry = vectorDataSources.find(e => e.id === item.id);
+  if (latestEntry) latestEntry.ds = ds;
+  else vectorDataSources.push({ ds, id: item.id, title: item.title });
   layerRuntimeTargets.set(item.id, ds);
   // entity 描画でもフルソースを保持する(件数上限の切り捨て分も検索・属性の対象にするため)
   item.geojsonSource = geojson;
@@ -5142,6 +5178,7 @@ async function reloadFailedVectorLayer(item) {
   const ds = await buildStyledGeoJsonDataSource(limited.source, getVectorDrapeFlags(), item);
   try { ds.show = item.visible; } catch (e) {}
   await viewer.dataSources.add(ds);
+  removeOtherLayerDataSources(item, ds);
   vectorDataSources.push({ ds, id: item.id, title: item.title });
   layerRuntimeTargets.set(item.id, ds);
 }
@@ -5246,7 +5283,10 @@ async function resliceViewportLayer(item, remaining) {
   try { ds.show = item.visible; } catch (e) {}
   await viewer.dataSources.add(ds);
   viewer.dataSources.remove(entry.ds, false);
-  entry.ds = ds;
+  removeOtherLayerDataSources(item, ds);
+  const resliceEntry = vectorDataSources.find(e => e.id === item.id);
+  if (resliceEntry) resliceEntry.ds = ds;
+  else vectorDataSources.push({ ds, id: item.id, title: item.title });
   layerRuntimeTargets.set(item.id, ds);
   // バッジはフルソース基準(範囲外で0件でも「0/N」でデータ残存を示す)
   item.entityLimited = limited.used < item.geojsonSource.features.length
@@ -5258,18 +5298,18 @@ async function resliceViewportLayer(item, remaining) {
   return limited.used;
 }
 
-// クエリ系レイヤーの条件を対話的に変更する。duckdb: は WHERE 式、sql: はクエリ全文を編集し、
+// レイヤーの条件を対話的に変更する。duckdb: 等は WHERE 式、sql:/ogrsql: はクエリ
+// 全文を編集。⏷ボタンからは SQL ダイアログ(uiHooks.openSqlDialog)を開き、
+// 「レイヤフィルタ」ボタンでの適用が本関数(applyLayerQueryFilter)へ繋がる。
 // 変更は .kasc 行(sourceLine)にも反映して inspector テキストとの整合を保つ
-async function editLayerQueryFilter(item) {
+function editLayerQueryFilter(item) {
   if (!item) return;
-  const isSql = item.type === "sql" || item.type === "ogrsql";
-  const current = isSql ? (item.query || "") : (item.where || "");
-  const input = window.prompt(t(isSql ? "layer.filter.promptSql" : "layer.filter.promptWhere"), current);
-  if (input === null) return;
-  await applyLayerQueryFilter(item, input.trim());
+  if (uiHooks.openSqlDialog) uiHooks.openSqlDialog(item.id);
 }
 
-// クエリ系レイヤーのフィルター適用本体。⏷ボタンの prompt と AI ツール(setLayerFilter)の共通経路
+// フィルター適用本体。⏷ボタン(=SQL ダイアログ)と AI ツール(setLayerFilter)の
+// 共通経路。クエリ系は SQL 側で絞り込み、非クエリ系(geojson: 等)は
+// where= をクライアント評価(where-eval)して描画に適用する
 async function applyLayerQueryFilter(item, value) {
   const isSql = item.type === "sql" || item.type === "ogrsql";
   if (isSql) {
@@ -5280,7 +5320,12 @@ async function applyLayerQueryFilter(item, value) {
   }
   syncLayerSourceLine(item);
   try {
-    await reloadVectorLayer(item);
+    // デコーダ系は再クエリで差し替え。geojson:/layer: 等のデコーダ無し型は
+    // refreshLayers で再描画する(applyClientWhere が where= を再評価)
+    if (vectorDecoders.has(item.type)) await reloadVectorLayer(item);
+    else await refreshLayers();
+    // 属性一覧のオンデマンド読み込みキャッシュに旧フィルタの行が残るのを防ぐ
+    vectorAttrLoadCache.delete(item.id);
     buildVectorSearchIndex();
     updateVectorSearchUI();
     // 条件変更で一覧内容が変わるため、クエリ系も含めて属性一覧の行を再取得する
@@ -6964,6 +7009,7 @@ async function reloadLiveLayer(item) {
   const ds = await buildStyledGeoJsonDataSource(limited.source, getVectorDrapeFlags(), item);
   try { ds.show = item.visible; } catch (_) {}
   await viewer.dataSources.add(ds);
+  removeOtherLayerDataSources(item, ds);
   if (entry) {
     viewer.dataSources.remove(entry.ds, false);
     entry.ds = ds;
@@ -7033,7 +7079,11 @@ async function liveReloadItem(item) {
     try { ds.show = item.visible; } catch (e) {}
     viewer.dataSources.remove(entry.ds, false);
     await viewer.dataSources.add(ds);
-    entry.ds = ds;
+    removeOtherLayerDataSources(item, ds);
+    // refreshLayers との並走でエントリが入れ替わっている場合に備え取り直す
+    const liveEntry = vectorDataSources.find(e => e.id === item.id);
+    if (liveEntry) liveEntry.ds = ds;
+    else vectorDataSources.push({ ds, id: item.id, title: item.title });
     layerRuntimeTargets.set(item.id, ds);
     item.geojsonSource = geojson;
     requestRender();
@@ -8005,7 +8055,9 @@ function setupEvents() {
     try { ds.show = coordPinLayerItem.visible; } catch (e) {}
     await viewer.dataSources.add(ds);
     viewer.dataSources.remove(entry.ds, false);
-    entry.ds = ds;
+    removeOtherLayerDataSources(coordPinLayerItem, ds);
+    const pinEntry = vectorDataSources.find(e => e.id === coordPinLayerItem.id);
+    if (pinEntry) pinEntry.ds = ds;
     layerRuntimeTargets.set(coordPinLayerItem.id, ds);
     buildVectorSearchIndex();
     updateVectorSearchUI();
@@ -10433,7 +10485,7 @@ function setupEvents() {
       labelEl.textContent = label;
       header.append(marker, labelEl);
       const table = buildAttrTable(record.entries);
-      // 属性行クリックでその地物へ飛ぶ(属性・値一覧の行クリックと同じ挙動)。
+      // 属性行クリックでその地物へ飛ぶ(属性テーブルの行クリックと同じ挙動)。
       // 位置が取れる entity 由来のレコードのみ対象
       const flyCartesian = record.entity ? getEntityPosition(record.entity) : null;
       const flyDeg = flyCartesian ? cartesianToDegrees(flyCartesian) : null;
@@ -11026,6 +11078,7 @@ function setupVectorSearch() {
   const vectorAttrColFilterOp = document.querySelector("#vector-attr-widget-colfilter-op");
   const vectorAttrColFilterValue = document.querySelector("#vector-attr-widget-colfilter-value");
   const vectorAttrColFilterClear = document.querySelector("#vector-attr-widget-colfilter-clear");
+  const vectorAttrMapFilterBtn = document.querySelector("#vector-attr-map-filter");
   // 列フィルタで選択中の属性名。レイヤ切替で同名属性が残れば条件を維持し、
   // 消えた場合は自動解除する(インデックスは列構成で変わるため名前で保持)
   let vectorAttrColFilterAttr = "";
@@ -11084,6 +11137,60 @@ function setupVectorSearch() {
     return matchAttrCellFilter(row.values[Number(vectorAttrColFilterField.value)], vectorAttrColFilterOp ? vectorAttrColFilterOp.value : "contains", vectorAttrColFilterValue.value);
   }
 
+  // 一覧の現在の絞り込み条件(列フィルタ AND 全文検索)を1行分に適用する共通述語
+  function vectorAttrRowPassesViewFilter(row) {
+    if (!vectorAttrRowPassesColFilter(row)) return false;
+    const query = String(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "").toLowerCase().trim();
+    return !query || row.values.some(val => String(val).toLowerCase().includes(query));
+  }
+
+  // 地図表示フィルタ: 一覧の絞り込み条件を地図上の entity.show にだけ適用する
+  // 表示限定フィルタ。where= とは別物で .kasc・データを書き換えず、解除/再適用で
+  // 即座に戻せる。ON の間は renderVectorAttrWidget 経由で条件変更のたびに再適用される
+  let vectorAttrMapFilterOn = false;
+  const vectorAttrMapFilteredEntities = new Map();
+
+  function restoreVectorAttrMapFilter() {
+    for (const [entity, prevShow] of vectorAttrMapFilteredEntities) {
+      try { entity.show = prevShow; } catch (_) {}
+    }
+    vectorAttrMapFilteredEntities.clear();
+  }
+
+  function applyVectorAttrMapFilter() {
+    restoreVectorAttrMapFilter();
+    const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
+    const layerItem = layerId && layerId !== "__all__" ? layerState.get(layerId) : null;
+    const ds = layerItem && (((getVectorDataSourceById(layerId) || {}).ds) || layerItem.dataSource || null);
+    if (!ds || !vectorAttrWidgetAttributes.length) return;
+    const time = viewer.clock && viewer.clock.currentTime;
+    for (const entity of ds.entities.values) {
+      const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
+      const values = vectorAttrWidgetAttributes.map(attr => {
+        const raw = props ? props[attr] : undefined;
+        return raw == null ? "" : (typeof raw === "object" ? JSON.stringify(raw) : String(raw));
+      });
+      if (!vectorAttrRowPassesViewFilter({ values })) {
+        vectorAttrMapFilteredEntities.set(entity, entity.show);
+        try { entity.show = false; } catch (_) {}
+      }
+    }
+  }
+
+  function setVectorAttrMapFilter(on) {
+    vectorAttrMapFilterOn = !!on;
+    if (vectorAttrMapFilterOn) applyVectorAttrMapFilter(); else restoreVectorAttrMapFilter();
+    syncVectorAttrMapFilterButton();
+  }
+
+  function syncVectorAttrMapFilterButton() {
+    if (!vectorAttrMapFilterBtn) return;
+    const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
+    const item = layerId && layerId !== "__all__" ? layerState.get(layerId) : null;
+    vectorAttrMapFilterBtn.disabled = !item || !vectorAttrWidgetAttributes.length;
+    vectorAttrMapFilterBtn.classList.toggle("active", vectorAttrMapFilterOn && !vectorAttrMapFilterBtn.disabled);
+  }
+
   function getVectorDataSourceById(layerId) {
     if (layerId === "__all__") return null;
     return vectorDataSources.find(item => item.id === layerId) || null;
@@ -11096,7 +11203,9 @@ function setupVectorSearch() {
     if (!promise) {
       promise = (async () => {
         const src = await loadVectorSourceCached(layerItem, layerDecoder);
-        return src ? Cesium.GeoJsonDataSource.load(src) : null;
+        // 未ロードレイヤーの一覧も where= 適用後と同じ行になるよう絞り込む
+        const filtered = applyClientWhere(layerItem, src);
+        return filtered ? Cesium.GeoJsonDataSource.load(filtered) : null;
       })();
       promise.catch(() => { if (vectorAttrLoadCache.get(layerItem.id) === promise) vectorAttrLoadCache.delete(layerItem.id); });
       vectorAttrLoadCache.set(layerItem.id, promise);
@@ -11137,6 +11246,8 @@ function setupVectorSearch() {
     vectorAttrWidgetSort = { column: -1, order: 1 };
     vectorAttrWidgetLoading = false;
     vectorAttrWidgetLoadError = false;
+    // SQL ダイアログの「一覧を絞る」で置き換えた行は再構築で解除される
+    vectorAttrSqlView = null;
     // ウィジェット側の選択を優先(クエリ系レイヤーは検索パネルの #vector-layer に存在しないため)
     const layerId = (vectorAttrWidgetLayerSelect && vectorAttrWidgetLayerSelect.value) || (vectorLayer && vectorLayer.value) || "__all__";
     // クエリ系レイヤー(duckdb:/sql:)は読み込み済み entity ではなく DuckDB に直接クエリして全件対象で一覧を作る
@@ -11257,6 +11368,10 @@ function setupVectorSearch() {
       const widgetLayerId = (vectorAttrWidgetLayerSelect && vectorAttrWidgetLayerSelect.value) || (vectorLayer ? vectorLayer.value : "__all__");
       const layerTitle = (widgetLayerId !== "__all__" && ((vectorSearchData && vectorSearchData.layers && vectorSearchData.layers[widgetLayerId] && vectorSearchData.layers[widgetLayerId].title) || (layerState.get(widgetLayerId) && layerState.get(widgetLayerId).title))) || t("common.all");
       vectorAttrWidgetTitle.textContent = t("vattr.title") + (layerTitle ? " — " + layerTitle : "");
+      syncVectorAttrSqlButton();
+      syncVectorAttrMapFilterButton();
+      // 地図表示フィルタが ON の間は、検索・列フィルタの変更をそのつど地図へ再適用する
+      if (vectorAttrMapFilterOn) applyVectorAttrMapFilter();
       if (!vectorAttrWidgetAttributes.length) {
         if (vectorAttrWidgetHead) vectorAttrWidgetHead.innerHTML = "";
         const msgKey = vectorAttrWidgetLoading ? "common.loading" : vectorAttrWidgetLoadError ? "vattr.loadFailed" : "vattr.selectLayer";
@@ -11405,6 +11520,7 @@ function setupVectorSearch() {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
+  vectorAttrMapFilterBtn?.addEventListener("click", () => setVectorAttrMapFilter(!vectorAttrMapFilterOn));
   document.querySelector("#vector-attr-export-csv")?.addEventListener("click", () => exportAttrWidgetTable(","));
   document.querySelector("#vector-attr-export-tsv")?.addEventListener("click", () => exportAttrWidgetTable("\t"));
   vectorAttrStatsBtn?.addEventListener("click", () => {
@@ -11414,6 +11530,168 @@ function setupVectorSearch() {
   });
   vectorAttrStatsGroup?.addEventListener("change", () => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : ""));
   vectorAttrStatsValue?.addEventListener("change", () => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : ""));
+
+  // ---- SQL ダイアログ: 属性一覧の高度なフィルター ----
+  // QGIS 属性テーブルの「条件式でフィルタ」相当。WHERE 式(OGR SQL)または
+  // SELECT 文を受け付け、3経路で適用する:
+  //   一覧を絞る     … この一覧の行だけを絞る(表示のみ・地図は変えない)
+  //   レイヤフィルタ … where= / クエリ書換え(描画も絞る・QGIS writeback 対象)
+  //   新規レイヤ     … ogrsql: レイヤーとして追加
+  const sqlDialog = document.querySelector("#sql-dialog");
+  const sqlDialogLayer = document.querySelector("#sql-dialog-layer");
+  const sqlDialogInput = document.querySelector("#sql-dialog-input");
+  const sqlDialogStatus = document.querySelector("#sql-dialog-status");
+  const sqlDialogTestBtn = document.querySelector("#sql-dialog-test");
+  const sqlDialogClearBtn = document.querySelector("#sql-dialog-clear");
+  const sqlDialogViewBtn = document.querySelector("#sql-dialog-view");
+  const sqlDialogLayerFilterBtn = document.querySelector("#sql-dialog-layerfilter");
+  const sqlDialogAddLayerBtn = document.querySelector("#sql-dialog-addlayer");
+  const vectorAttrSqlBtn = document.querySelector("#vector-attr-sql");
+  // 「一覧を絞る」の適用状態。{layerId} — 別レイヤー選択・行再構築で解除
+  let vectorAttrSqlView = null;
+  const isSqlDialogVectorItem = item => item && (item.type === "geojson" || item.type === "layer" || vectorDecoders.has(item.type));
+  const isSqlDialogQueryEditor = item => item && (item.type === "sql" || item.type === "ogrsql");
+  const sqlDialogItem = () => layerState.get(sqlDialogLayer ? sqlDialogLayer.value : "");
+  function sqlDialogParsed() {
+    const text = sqlDialogInput ? sqlDialogInput.value.trim().replace(/;+\s*$/, "") : "";
+    if (!text) return { mode: "empty" };
+    return /^\(?\s*select\b/i.test(text) ? { mode: "select", query: text } : { mode: "where", where: text };
+  }
+  function setSqlDialogStatus(text, isError = false) {
+    if (!sqlDialogStatus) return;
+    sqlDialogStatus.textContent = text || "";
+    sqlDialogStatus.classList.toggle("error", !!isError);
+  }
+  function syncSqlDialogButtons() {
+    const item = sqlDialogItem();
+    const parsed = sqlDialogParsed();
+    if (sqlDialogLayerFilterBtn) {
+      // sql:/ogrsql: は SELECT 文のみ可(クエリ全文の置き換え)。それ以外は
+      // WHERE 式を where= へ書く(空=フィルタ解除可)。SELECT 文は where= にできない
+      sqlDialogLayerFilterBtn.disabled = !item
+        || (isSqlDialogQueryEditor(item) ? parsed.mode !== "select" : parsed.mode === "select");
+    }
+    if (sqlDialogViewBtn) sqlDialogViewBtn.disabled = parsed.mode === "empty";
+    if (sqlDialogAddLayerBtn) sqlDialogAddLayerBtn.disabled = parsed.mode === "empty";
+    if (sqlDialogClearBtn) sqlDialogClearBtn.disabled = !vectorAttrSqlView;
+  }
+  function syncVectorAttrSqlButton() {
+    if (vectorAttrSqlBtn) {
+      vectorAttrSqlBtn.classList.toggle("active", !!(vectorAttrSqlView
+        && vectorAttrSqlView.layerId === (vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "")));
+    }
+  }
+  function prefillSqlDialogInput() {
+    const item = sqlDialogItem();
+    const isSqlLayer = isSqlDialogQueryEditor(item);
+    if (sqlDialogInput) {
+      sqlDialogInput.value = isSqlLayer ? (item.query || "") : (item.where || "");
+      sqlDialogInput.placeholder = t(isSqlLayer ? "sqldlg.phQuery" : "sqldlg.phWhere");
+    }
+    setSqlDialogStatus("");
+    syncSqlDialogButtons();
+  }
+  function openSqlDialog(layerId) {
+    if (!sqlDialog) return;
+    const opts = getOrderedLayerItems().filter(isSqlDialogVectorItem);
+    if (sqlDialogLayer) {
+      sqlDialogLayer.innerHTML = opts.map(o => '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.title || o.id) + '</option>').join("");
+      sqlDialogLayer.value = opts.some(o => o.id === layerId) ? layerId : (opts[0] ? opts[0].id : "");
+    }
+    prefillSqlDialogInput();
+    sqlDialog.hidden = false;
+    if (sqlDialogInput) sqlDialogInput.focus();
+  }
+  function closeSqlDialog() { if (sqlDialog) sqlDialog.hidden = true; }
+  uiHooks.openSqlDialog = openSqlDialog;
+  // 「一覧を絞る」用の評価ソース。描画用の保持データがあればそれを使い、
+  // 無ければローダ経由(クエリ系は再クエリ、geojson: 等は fetch+キャッシュ)で取得
+  async function sqlDialogSourceFc(item) {
+    if (item.geojsonSource?.features) return item.geojsonSource;
+    return loadVectorSourceCached(item, vectorDecoders.get(item.type));
+  }
+  async function runSqlDialogQuery(item, parsed) {
+    if (parsed.mode === "select") return executeOgrSelect(parsed.query, resolveOgrSqlFromRef);
+    const src = await sqlDialogSourceFc(item);
+    if (!src) throw new Error(t("sqldlg.noSource"));
+    return filterGeoJsonByWhere(src, parsed.where);
+  }
+  sqlDialogTestBtn?.addEventListener("click", async () => {
+    const item = sqlDialogItem();
+    const parsed = sqlDialogParsed();
+    if (!item || parsed.mode === "empty") return;
+    setSqlDialogStatus(t("sqldlg.testing"));
+    try {
+      const fc = await runSqlDialogQuery(item, parsed);
+      setSqlDialogStatus(t("sqldlg.count", { count: fc?.features?.length ?? 0 }));
+    } catch (e) {
+      setSqlDialogStatus(String(e?.message || e), true);
+    }
+  });
+  sqlDialogViewBtn?.addEventListener("click", async () => {
+    const item = sqlDialogItem();
+    const parsed = sqlDialogParsed();
+    if (!item || parsed.mode === "empty") return;
+    setSqlDialogStatus(t("sqldlg.testing"));
+    try {
+      const built = attrRowsFromFeatureCollection(await runSqlDialogQuery(item, parsed));
+      vectorAttrWidgetAttributes = built.attributes;
+      vectorAttrWidgetRows = built.rows;
+      vectorAttrWidgetSort = { column: -1, order: 1 };
+      vectorAttrSqlView = { layerId: item.id };
+      if (vectorAttrWidgetLayerSelect) vectorAttrWidgetLayerSelect.value = item.id;
+      // ⏷ から開いた場合は一覧が閉じているので、結果を見せるため表示する
+      vectorAttrWidget?.classList.add("visible");
+      renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+      closeSqlDialog();
+    } catch (e) {
+      setSqlDialogStatus(String(e?.message || e), true);
+    }
+  });
+  sqlDialogLayerFilterBtn?.addEventListener("click", async () => {
+    const item = sqlDialogItem();
+    const parsed = sqlDialogParsed();
+    if (!item) return;
+    if (isSqlDialogQueryEditor(item)) {
+      if (parsed.mode === "where") { setSqlDialogStatus(t("sqldlg.needSelect"), true); return; }
+      if (parsed.mode === "empty") return;
+    } else if (parsed.mode === "select") {
+      setSqlDialogStatus(t("sqldlg.selectNeedsLayer"), true);
+      return;
+    }
+    const value = isSqlDialogQueryEditor(item) ? parsed.query : (parsed.where || "");
+    if (await applyLayerQueryFilter(item, value)) closeSqlDialog();
+    else setSqlDialogStatus(t("sqldlg.failed", { error: "" }), true);
+  });
+  sqlDialogAddLayerBtn?.addEventListener("click", () => {
+    const item = sqlDialogItem();
+    const parsed = sqlDialogParsed();
+    if (!item || parsed.mode === "empty") return;
+    // WHERE 式のみの場合は選択中レイヤーを FROM にした SELECT 文を組み立てる
+    const query = parsed.mode === "select" ? parsed.query
+      : `SELECT * FROM "${String(item.title || "").replace(/"/g, '""')}" WHERE ${parsed.where}`;
+    const title = `${String(item.title || "query").replace(/[|\r\n]+/g, "/")} (SQL)`;
+    if (window.kasugaiApi?.addLayer?.(title, query, { type: "ogrsql" })) closeSqlDialog();
+    else setSqlDialogStatus(t("sqldlg.failed", { error: "" }), true);
+  });
+  sqlDialogClearBtn?.addEventListener("click", async () => {
+    vectorAttrSqlView = null;
+    syncVectorAttrSqlButton();
+    await buildVectorAttrWidgetRows();
+    renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
+    syncSqlDialogButtons();
+  });
+  sqlDialogLayer?.addEventListener("change", prefillSqlDialogInput);
+  sqlDialogInput?.addEventListener("input", syncSqlDialogButtons);
+  sqlDialogInput?.addEventListener("keydown", ev => {
+    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); sqlDialogViewBtn?.click(); }
+  });
+  document.querySelector("#sql-dialog-close")?.addEventListener("click", closeSqlDialog);
+  sqlDialog?.addEventListener("click", ev => { if (ev.target === sqlDialog) closeSqlDialog(); });
+  vectorAttrSqlBtn?.addEventListener("click", () => {
+    openSqlDialog(vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : (vectorLayer ? vectorLayer.value : null));
+  });
+  window.addEventListener("kasugai:language-changed", () => { if (sqlDialog && !sqlDialog.hidden) prefillSqlDialogInput(); });
 
   const onVectorAttrColFilter = () => renderVectorAttrWidget(vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "");
   vectorAttrColFilterField?.addEventListener("change", () => {
@@ -12146,12 +12424,12 @@ window.kasugaiApi = {
     if (!layer) return false;
     return focusLayer(layer);
   },
-  // クエリ系レイヤー(duckdb/sql/gpkg等)の絞り込み条件を変更する。
-  // レイヤー行の ⏷ ボタン（window.prompt ベースで AI から直接操作できない）の API 版
+  // ベクターレイヤーの絞り込み条件を変更する。
+  // レイヤー行の ⏷ ボタン(SQL ダイアログ)と同じ適用経路の API 版
   async setLayerFilter(idOrTitle, filter) {
     const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
     if (!layer) return { ok: false, reason: "notFound" };
-    if (layer.type !== "sql" && !isQueryDecoder(vectorDecoders.get(layer.type), layer)) return { ok: false, reason: "unsupported" };
+    if (layer.type !== "geojson" && layer.type !== "layer" && !vectorDecoders.has(layer.type)) return { ok: false, reason: "unsupported" };
     const ok = await applyLayerQueryFilter(layer, String(filter ?? "").trim());
     return ok ? { ok: true } : { ok: false, reason: "failed" };
   },

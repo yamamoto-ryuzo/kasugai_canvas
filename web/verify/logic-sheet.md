@@ -3032,6 +3032,23 @@ flowchart LR
   h --> st[DOM/地図状態]
 ```
 
+### `web.cesium.ui.sql_dialog` ✅ sql_dialog
+- kind=ui_control / source=`web/cesium/index.html+app.js` / needs_runtime=True standalone_ok=False
+- SQLダイアログ(属性一覧の高度なフィルター)。WHERE式/SELECT文(OGR SQL)を「一覧を絞る(表示のみ)」「レイヤフィルタ(where=/クエリ書換え)」「新規レイヤ(ogrsql:)」の3経路で適用。⏷ボタンは全ベクター型に拡張し本ダイアログを開く
+- signature: `sql_dialog`
+- depends: `web.shared.ogr-sql` / `web.shared.where-eval`
+- 連携検証: `SQLボタン/⏷→dialog open→テスト/適用の DOM assert`
+- 結果: **pass** (2026-11-15T00:00:00+09:00)
+
+```mermaid
+flowchart LR
+  user[ユーザー] -->|SQLボタン/⏷| ui[sql_dialog]
+  ui -->|WHERE| we[where-eval.js]
+  ui -->|SELECT| os[ogr-sql.js]
+  we --> rows[一覧行差替/where=適用]
+  os --> layer[ogrsql: レイヤ追加]
+```
+
 ### `web.cesium.ui.settings_window` ✅ settings_window
 - kind=ui_control / source=`web/cesium/index.html+app.js` / needs_runtime=True standalone_ok=False
 - 設定ウィンドウ(タブ式・data-settings-panel)
