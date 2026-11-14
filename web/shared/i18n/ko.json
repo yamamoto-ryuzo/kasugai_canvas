@@ -465,6 +465,8 @@
   "vattr.limitSuffix": " (처음 {count}개 표시)",
   "vattr.exportCsv": "표시 중인 행을 CSV로 출력",
   "vattr.exportTsv": "표시 중인 행을 TSV로 출력",
+  "vattr.exportWkt": "지오메트리를 WKT 열로 출력 (QGIS GEOMETRY=AS_WKT)",
+  "vattr.exportXlsx": "표시된 행을 XLSX로 내보내기 (최초 사용 시 CDN에서 로드)",
   "layer.groupToggle": "그룹 펼치기 / 접기",
   "layer.legendToggle": "범례 펼치기 / 접기",
   "info.loadFailed": "INFO를 로드할 수 없습니다: {error}",

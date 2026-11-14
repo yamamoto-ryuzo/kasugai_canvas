@@ -269,7 +269,12 @@ footer { padding: 0 28px 22px; }
 .vector-attr-widget-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid #e4ecef; background: #f6f9fb; }
 .vector-attr-widget-title { font-weight: 700; font-size: 15px; }
 .vector-attr-widget-close { min-width: 28px; min-height: 28px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #52636d; cursor: pointer; font-size: 20px; line-height: 1; }
-.vector-attr-widget-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 14px; border-bottom: 1px solid #e4ecef; }
+.vector-attr-widget-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 14px; border-bottom: 1px solid #e4ecef; }
+/* 検索・フィルター・出力の3群を薄い背景で区別 */
+.vector-attr-group { display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; border-radius: 6px; }
+.vector-attr-group.group-search { background: #a9d0f5; flex: 1 1 240px; min-width: 200px; }
+.vector-attr-group.group-filter { background: #f1d083; }
+.vector-attr-group.group-export { background: #a5dca5; }
 #vector-attr-widget-layer { flex: 0 1 140px; min-width: 110px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
 #vector-attr-widget-search { flex: 2 1 160px; min-width: 100px; min-height: 26px; padding: 2px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; }
 #vector-attr-widget-colfilter-field { flex: 0 1 150px; min-width: 100px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
@@ -491,6 +496,7 @@ footer { padding: 0 28px 22px; }
 .vector-attr-widget-filter button:hover { background: #e7f3f0; }
 #vector-attr-sql.active { background: #d9ecf3; border-color: #7fb7cc; }
 #vector-attr-map-filter.active { background: #d9f0df; border-color: #6fb887; }
+.vector-attr-widget-wkt { display: inline-flex; align-items: center; gap: 3px; flex: 0 0 auto; font-size: 12px; color: #31564f; white-space: nowrap; }
 /* SQL ダイアログ(属性一覧の高度なフィルター) */
 .sql-dialog { position: fixed; inset: 0; z-index: 9600; display: flex; align-items: center; justify-content: center; background: rgba(20,32,40,.35); }
 .sql-dialog[hidden] { display: none; }

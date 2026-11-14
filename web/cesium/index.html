@@ -1056,27 +1056,35 @@
           <button class="vector-attr-widget-close" type="button" aria-label="閉じる" data-i18n-attr="aria-label:vattr.close">×</button>
         </div>
         <div class="vector-attr-widget-filter">
-          <select id="vector-attr-widget-layer" class="vector-attr-widget-layer" title="レイヤを選択" data-i18n-attr="title:vattr.layerTitle"></select>
-          <input id="vector-attr-widget-search" type="text" placeholder="属性または値で検索" data-i18n-attr="placeholder:vattr.search" />
-          <button id="vector-attr-map-filter" type="button" title="絞り込み条件を地図表示に適用/解除" data-i18n="vattr.mapFilterBtn" data-i18n-attr="title:vattr.mapFilter">フィルター反映</button>
-          <select id="vector-attr-widget-colfilter-field" title="絞り込む属性" data-i18n-attr="title:vattr.colFilterField"></select>
-          <select id="vector-attr-widget-colfilter-op">
-            <option value="contains" data-i18n="vattr.colFilterContains">含む</option>
-            <option value="eq">=</option>
-            <option value="ne">≠</option>
-            <option value="lt">&lt;</option>
-            <option value="le">≦</option>
-            <option value="gt">&gt;</option>
-            <option value="ge">≧</option>
-          </select>
-          <input id="vector-attr-widget-colfilter-value" type="text" placeholder="条件値" data-i18n-attr="placeholder:vattr.colFilterValue" />
-          <button id="vector-attr-widget-colfilter-clear" type="button" title="フィルタを解除" data-i18n-attr="title:vattr.colFilterClear">×</button>
-          <button id="vector-attr-widget-stats" type="button" title="属性を集計（GROUP BY）" data-i18n-attr="title:vattr.statsTitle">Σ</button>
-          <select id="vector-attr-widget-group" title="集計キー" data-i18n-attr="title:vattr.statsGroup" hidden></select>
-          <select id="vector-attr-widget-value" title="集計する数値属性" data-i18n-attr="title:vattr.statsValue" hidden></select>
-          <button id="vector-attr-sql" type="button" title="SQL で絞り込み・レイヤフィルタ・新規レイヤ" data-i18n-attr="title:vattr.sqlTitle">SQL</button>
-          <button id="vector-attr-export-csv" type="button" title="表示中の行をCSVで出力" data-i18n-attr="title:vattr.exportCsv">CSV</button>
-          <button id="vector-attr-export-tsv" type="button" title="表示中の行をTSVで出力" data-i18n-attr="title:vattr.exportTsv">TSV</button>
+          <span class="vector-attr-group group-search">
+            <select id="vector-attr-widget-layer" class="vector-attr-widget-layer" title="レイヤを選択" data-i18n-attr="title:vattr.layerTitle"></select>
+            <input id="vector-attr-widget-search" type="text" placeholder="属性または値で検索" data-i18n-attr="placeholder:vattr.search" />
+          </span>
+          <span class="vector-attr-group group-filter">
+            <button id="vector-attr-map-filter" type="button" title="絞り込み条件を地図表示に適用/解除" data-i18n="vattr.mapFilterBtn" data-i18n-attr="title:vattr.mapFilter">フィルター反映</button>
+            <select id="vector-attr-widget-colfilter-field" title="絞り込む属性" data-i18n-attr="title:vattr.colFilterField"></select>
+            <select id="vector-attr-widget-colfilter-op">
+              <option value="contains" data-i18n="vattr.colFilterContains">含む</option>
+              <option value="eq">=</option>
+              <option value="ne">≠</option>
+              <option value="lt">&lt;</option>
+              <option value="le">≦</option>
+              <option value="gt">&gt;</option>
+              <option value="ge">≧</option>
+            </select>
+            <input id="vector-attr-widget-colfilter-value" type="text" placeholder="条件値" data-i18n-attr="placeholder:vattr.colFilterValue" />
+            <button id="vector-attr-widget-colfilter-clear" type="button" title="フィルタを解除" data-i18n-attr="title:vattr.colFilterClear">×</button>
+            <button id="vector-attr-widget-stats" type="button" title="属性を集計（GROUP BY）" data-i18n-attr="title:vattr.statsTitle">Σ</button>
+            <select id="vector-attr-widget-group" title="集計キー" data-i18n-attr="title:vattr.statsGroup" hidden></select>
+            <select id="vector-attr-widget-value" title="集計する数値属性" data-i18n-attr="title:vattr.statsValue" hidden></select>
+            <button id="vector-attr-sql" type="button" title="SQL で絞り込み・レイヤフィルタ・新規レイヤ" data-i18n-attr="title:vattr.sqlTitle">SQL</button>
+          </span>
+          <span class="vector-attr-group group-export">
+            <label class="vector-attr-widget-wkt" title="ジオメトリをWKT列として出力（QGIS GEOMETRY=AS_WKT 相当）" data-i18n-attr="title:vattr.exportWkt"><input id="vector-attr-export-wkt" type="checkbox" />WKT</label>
+            <button id="vector-attr-export-csv" type="button" title="表示中の行をCSVで出力" data-i18n-attr="title:vattr.exportCsv">CSV</button>
+            <button id="vector-attr-export-tsv" type="button" title="表示中の行をTSVで出力" data-i18n-attr="title:vattr.exportTsv">TSV</button>
+            <button id="vector-attr-export-xlsx" type="button" title="表示中の行をXLSXで出力" data-i18n-attr="title:vattr.exportXlsx">XLSX</button>
+          </span>
         </div>
         <div class="vector-attr-widget-table-wrap">
           <table class="vector-attr-widget-table">

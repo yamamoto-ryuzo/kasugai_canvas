@@ -465,6 +465,8 @@
   "vattr.limitSuffix": " (mostrando los primeros {count})",
   "vattr.exportCsv": "Exportar filas visibles como CSV",
   "vattr.exportTsv": "Exportar filas visibles como TSV",
+  "vattr.exportWkt": "Incluir geometría como columna WKT (QGIS GEOMETRY=AS_WKT)",
+  "vattr.exportXlsx": "Exportar filas mostradas como XLSX (se carga de CDN la primera vez)",
   "layer.groupToggle": "Expandir / contraer grupo",
   "layer.legendToggle": "Expandir / contraer la leyenda",
   "info.loadFailed": "No se pudo cargar INFO: {error}",

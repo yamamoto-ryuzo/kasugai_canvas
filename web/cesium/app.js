@@ -41,6 +41,7 @@ import { initPrint } from "../shared/print.js";
 import { formatLatLng, parseCoordinateQuery } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
 import { computeGroupStats } from "../shared/attr-stats.js";
+import { rowsToXlsx, geometryToWKT } from "../shared/export-formats.js";
 import { matchAttrCellFilter } from "../shared/attr-widget.js";
 import { loadScriptOnce } from "../shared/lazy-lib.js";
 import { isGeoTiffType, resolveGeoTiffItem, buildGeoTiffOverlayDataSource, createGeoTiffImageryProvider } from "./geotiff-layer.js";
@@ -3287,13 +3288,14 @@ async function loadGeoPackageAsGeoJson(item) {
 // 属性値一覧ウィジェット用: クエリ系扱いの GPKG レイヤーの属性行を Worker 内の
 // DB に直接クエリして取得する。表示用の絞り込み(bbox/limit)は適用せず、
 // where= の全件を対象にする(検索は常に全件検索の方針)
-async function queryGpkgAttributeRows(item, searchText) {
+async function queryGpkgAttributeRows(item, searchText, wantGeom = false) {
   const res = await gpkgWorkerCall("attrs", {
     url: proxyFetchUrl(item.url, item.proxy),
     table: item.gpkgTable || null,
     where: item.where || null,
     columns: item.columns || null,
     searchText: searchText || "",
+    wantGeom,
   });
   return { attributes: res.attributes, rows: res.rows };
 }
@@ -3669,7 +3671,7 @@ async function loadDuckDbQueryAsGeoJson(item) {
 // (検索は常に全件検索の方針)。searchText は属性列への ILIKE 検索として SQL に
 // 変換する。LIMIT は付けず全件を取得し、表示側(DOM)だけ上限で切る。
 // 位置は spatial の ST_Centroid か lon/lat 列から取る
-async function queryDuckDbAttributeRows(item, searchText) {
+async function queryDuckDbAttributeRows(item, searchText, wantWkt = false) {
   const { conn, spatial } = await loadDuckDb();
   let inner, columns, geomCol, lonlat;
   if (item.type === "sql") {
@@ -3684,8 +3686,11 @@ async function queryDuckDbAttributeRows(item, searchText) {
     lonlat = geomCol ? null : resolveDuckDbLonLat(columns, item.lon, item.lat);
   }
   const geomOperand = geomCol && spatial ? duckDbGeometryCastExpr(geomCol) : null;
+  // __wkt__ は属性テーブルの WKT 出力列(QGIS GEOMETRY=AS_WKT 相当)用。
+  // ST_AsText は全行分の文字列化コストがあるため、wantWkt(出力実行時)のみ取得する
   const posExpr = geomOperand
     ? `, ST_X(ST_Centroid(${geomOperand})) AS "__lng__", ST_Y(ST_Centroid(${geomOperand})) AS "__lat__"`
+      + (wantWkt ? `, ST_AsText(${geomOperand}) AS "__wkt__"` : "")
     : "";
   const predicates = [];
   if (item.type === "duckdb" && item.where) predicates.push(`(${item.where})`);
@@ -3714,7 +3719,7 @@ async function queryDuckDbAttributeRows(item, searchText) {
   console.info(`[duckdb] ${item.title} (属性一覧): ${sql}`);
   const table = await conn.query(sql);
   const fields = table.schema.fields.map(f => f.name);
-  const attributes = fields.filter(name => name !== "__lng__" && name !== "__lat__");
+  const attributes = fields.filter(name => name !== "__lng__" && name !== "__lat__" && name !== "__wkt__");
   const rows = [];
   for (const row of table.toArray()) {
     const values = attributes.map(name => {
@@ -3727,7 +3732,8 @@ async function queryDuckDbAttributeRows(item, searchText) {
       const x = Number(row[lonlat.lon]), y = Number(row[lonlat.lat]);
       if (Number.isFinite(x) && Number.isFinite(y)) { lng = x; lat = y; }
     }
-    rows.push({ values, lat, lng });
+    const wkt = fields.includes("__wkt__") && row.__wkt__ != null ? String(row.__wkt__) : null;
+    rows.push({ values, lat, lng, wkt });
   }
   return { attributes, rows };
 }
@@ -3806,7 +3812,7 @@ function attrRowsFromFeatureCollection(fc, searchText = "") {
       const env = geojsonExtent({ type: "FeatureCollection", features: [f] });
       if (env) { lng = (env.west + env.east) / 2; lat = (env.south + env.north) / 2; }
     }
-    rows.push({ values, lat, lng });
+    rows.push({ values, lat, lng, geometry: f.geometry || null });
   }
   return { attributes, rows };
 }
@@ -11079,6 +11085,7 @@ function setupVectorSearch() {
   const vectorAttrColFilterValue = document.querySelector("#vector-attr-widget-colfilter-value");
   const vectorAttrColFilterClear = document.querySelector("#vector-attr-widget-colfilter-clear");
   const vectorAttrMapFilterBtn = document.querySelector("#vector-attr-map-filter");
+  const vectorAttrExportWkt = document.querySelector("#vector-attr-export-wkt");
   // 列フィルタで選択中の属性名。レイヤ切替で同名属性が残れば条件を維持し、
   // 消えた場合は自動解除する(インデックスは列構成で変わるため名前で保持)
   let vectorAttrColFilterAttr = "";
@@ -11233,6 +11240,7 @@ function setupVectorSearch() {
         }),
         lat: deg && Number.isFinite(deg.lat) ? deg.lat : null,
         lng: deg && Number.isFinite(deg.lng) ? deg.lng : null,
+        geometry: feature.geometry || null,
       };
     });
     return true;
@@ -11320,8 +11328,9 @@ function setupVectorSearch() {
     }
     if (!vectorAttrWidgetAttributes.length) return;
     // GeoJsonDataSource は MultiPolygon 等をパート毎の別 entity に分割する。
-    // 同一フィーチャ由来の entity は properties が一致するので、地物単位で1行にまとめる
-    const seenRows = new Set();
+    // 同一フィーチャ由来の entity は properties が一致するので、地物単位で1行にまとめる。
+    // 行が参照する entity は WKT 出力・地図絞り込みで使うためすべて保持する
+    const rowMap = new Map();
     for (const entity of ds.entities.values) {
       const props = (entity.properties && entity.properties.getValue) ? entity.properties.getValue(time) : (entity.properties || {});
       const row = [];
@@ -11331,15 +11340,18 @@ function setupVectorSearch() {
         row.push(val);
       }
       const rowKey = JSON.stringify(row);
-      if (seenRows.has(rowKey)) continue;
-      seenRows.add(rowKey);
-      const cartesian = getEntityPosition(entity);
-      const deg = cartesian ? cartesianToDegrees(cartesian) : null;
-      vectorAttrWidgetRows.push({
-        values: row,
-        lat: deg && Number.isFinite(deg.lat) ? deg.lat : null,
-        lng: deg && Number.isFinite(deg.lng) ? deg.lng : null,
-      });
+      let rec = rowMap.get(rowKey);
+      if (!rec) {
+        rec = { values: row, lat: null, lng: null, entities: [] };
+        rowMap.set(rowKey, rec);
+        vectorAttrWidgetRows.push(rec);
+      }
+      rec.entities.push(entity);
+      if (rec.lat == null || rec.lng == null) {
+        const cartesian = getEntityPosition(entity);
+        const deg = cartesian ? cartesianToDegrees(cartesian) : null;
+        if (deg && Number.isFinite(deg.lat) && Number.isFinite(deg.lng)) { rec.lat = deg.lat; rec.lng = deg.lng; }
+      }
     }
   }
 
@@ -11496,33 +11508,124 @@ function setupVectorSearch() {
     return matched;
   }
 
-  // 属性一覧のエクスポート（CSV/TSV・UTF-8 BOM 付きで Excel 文字化け対策）
-  function exportAttrWidgetTable(delim) {
-    const rows = getAttrWidgetMatchedRows();
-    if (!vectorAttrWidgetAttributes.length || !rows.length) return;
-    const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
-    // 位置が取れる行は代表点の lon/lat 列を末尾に付ける（行クリック移動と同じ座標）
-    const header = [...vectorAttrWidgetAttributes, "lon", "lat"];
-    const lines = [header.map(esc).join(delim)];
-    for (const row of rows) {
-      lines.push([...row.values, Number.isFinite(row.lng) ? row.lng : "", Number.isFinite(row.lat) ? row.lat : ""].map(esc).join(delim));
+  // 行のジオメトリを WKT 文字列にする(QGIS の CSV エクスポート GEOMETRY=AS_WKT 相当)。
+  // 行の出自によって保持形が違う: entity 参照 / geometry オブジェクト / wkt 文字列
+  function attrRowWkt(row) {
+    if (row.wkt != null) return row.wkt;
+    let geom = row.geometry || null;
+    if (!geom && row.entities) {
+      geom = mergeGeoJsonGeometries(row.entities.map(entity => entityToGeoJsonGeometry(entity)));
     }
+    return geom ? geometryToWKT(geom) : "";
+  }
+
+  // WKT 出力チェックが ON のとき、ジオメトリ参照を持たないクエリ系レイヤーの行へ
+  // 出力直前にだけジオメトリを補完する(行構築時の常時デコード/ST_AsText は重い)。
+  // 再クエリはウィジェット行と同じ条件のため同じ順序で返る前提で位置結合する
+  async function ensureAttrRowsWkt() {
+    if (!vectorAttrWidgetRows.length) return;
+    if (vectorAttrWidgetRows.some(r => r.wkt != null || r.geometry || r.entities)) return;
+    const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
+    const layerItem = layerId && layerId !== "__all__" ? layerState.get(layerId) : null;
+    const layerDecoder = layerItem && vectorDecoders.get(layerItem.type);
+    if (!isQueryDecoder(layerDecoder, layerItem)) return;
+    const searchText = vectorAttrWidgetSearch ? vectorAttrWidgetSearch.value : "";
+    try {
+      const res = isGpkgBackedItem(layerItem)
+        ? await queryGpkgAttributeRows(layerItem, searchText, true)
+        : layerItem.type === "ogrsql"
+          ? await queryOgrSqlAttributeRows(layerItem, searchText)
+          : await queryDuckDbAttributeRows(layerItem, searchText, true);
+      const src = res && res.rows;
+      if (!src || src.length !== vectorAttrWidgetRows.length) {
+        console.warn("属性一覧の WKT 行数が一致しないためジオメトリ列を省略します:", layerItem.title, src && src.length, vectorAttrWidgetRows.length);
+        return;
+      }
+      for (let i = 0; i < src.length; i++) {
+        if (src[i].wkt != null) vectorAttrWidgetRows[i].wkt = src[i].wkt;
+        if (src[i].geometry) vectorAttrWidgetRows[i].geometry = src[i].geometry;
+      }
+    } catch (e) {
+      console.warn("属性一覧のジオメトリ取得に失敗しました:", layerItem && layerItem.title, e);
+    }
+  }
+
+  // エクスポート対象の表を現在の表示モードで返す。通常=検索・列フィルタ・ソート
+  // 適用後の全行＋代表点 lon/lat、Σ 集計=表示中の GROUP BY 表。値は生値のまま
+  async function attrWidgetExportData() {
     const layerId = vectorAttrWidgetLayerSelect ? vectorAttrWidgetLayerSelect.value : "";
     const item = layerState.get(layerId);
     const base = String((item && item.title) || "attributes").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+    if (vectorAttrStatsMode) {
+      const groupField = vectorAttrStatsGroup ? vectorAttrStatsGroup.value : "";
+      const valueField = vectorAttrStatsValue ? vectorAttrStatsValue.value : "";
+      const features = vectorAttrWidgetRows.map(row => ({
+        properties: Object.fromEntries(vectorAttrWidgetAttributes.map((a, i) => [a, row.values[i]])),
+      }));
+      const stats = groupField ? computeGroupStats(features, groupField, valueField) : [];
+      if (!stats.length) return null;
+      const header = [groupField, t("vattr.statsCount"), ...(valueField ? ["sum", "avg", "min", "max"] : [])];
+      const rows = stats.map(g => [g.key, g.count, ...(valueField ? [g.sum, g.avg, g.min, g.max].map(v => v == null ? "" : v) : [])]);
+      return { header, rows, base, suffix: "_stats" };
+    }
+    const matched = getAttrWidgetMatchedRows();
+    if (!vectorAttrWidgetAttributes.length || !matched.length) return null;
+    // WKT チェック ON 時のみ、ジオメトリが取れる行に QGIS 互換の先頭 WKT 列を付ける。
+    // 位置が取れる行は代表点の lon/lat 列を末尾に付ける（行クリック移動と同じ座標）
+    const wantWkt = !!(vectorAttrExportWkt && vectorAttrExportWkt.checked);
+    if (wantWkt) await ensureAttrRowsWkt();
+    const wkts = wantWkt ? matched.map(attrRowWkt) : [];
+    const hasWkt = wkts.some(Boolean);
+    const header = [...(hasWkt ? ["WKT"] : []), ...vectorAttrWidgetAttributes, "lon", "lat"];
+    const rows = matched.map((row, i) => [...(hasWkt ? [wkts[i]] : []), ...row.values, Number.isFinite(row.lng) ? row.lng : "", Number.isFinite(row.lat) ? row.lat : ""]);
+    return { header, rows, base, suffix: "" };
+  }
+
+  // 属性一覧のエクスポート（CSV/TSV・UTF-8 BOM 付きで Excel 文字化け対策）
+  async function exportAttrWidgetTable(delim) {
+    const table = await attrWidgetExportData();
+    if (!table) return;
+    const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
     const ext = delim === "\t" ? "tsv" : "csv";
+    const lines = [table.header.map(esc).join(delim), ...table.rows.map(r => r.map(esc).join(delim))];
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: `text/${ext};charset=utf-8` });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${base}.${ext}`;
+    a.download = `${table.base}${table.suffix}.${ext}`;
     document.body.append(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
+
+  // 表示中の行を xlsx で出力（SheetJS は初回のみ CDN 遅延ロード）
+  async function exportAttrWidgetXlsx() {
+    const table = await attrWidgetExportData();
+    if (!table) return;
+    const prevText = vectorAttrWidgetCount ? vectorAttrWidgetCount.textContent : "";
+    try {
+      if (vectorAttrWidgetCount) vectorAttrWidgetCount.textContent = "xlsx 生成中…";
+      const { data, skipped } = await rowsToXlsx([{ name: table.base || "attributes", rows: [table.header, ...table.rows] }]);
+      const blob = new Blob([data], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${table.base}${table.suffix}.xlsx`;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      if (skipped) alert(`${skipped} 行は上限超過のため出力されませんでした`);
+    } catch (e) {
+      alert("xlsx の生成に失敗しました: " + (e?.message || e));
+    } finally {
+      if (vectorAttrWidgetCount) vectorAttrWidgetCount.textContent = prevText;
+    }
+  }
+
   vectorAttrMapFilterBtn?.addEventListener("click", () => setVectorAttrMapFilter(!vectorAttrMapFilterOn));
   document.querySelector("#vector-attr-export-csv")?.addEventListener("click", () => exportAttrWidgetTable(","));
   document.querySelector("#vector-attr-export-tsv")?.addEventListener("click", () => exportAttrWidgetTable("\t"));
+  document.querySelector("#vector-attr-export-xlsx")?.addEventListener("click", exportAttrWidgetXlsx);
   vectorAttrStatsBtn?.addEventListener("click", () => {
     vectorAttrStatsMode = !vectorAttrStatsMode;
     syncVectorAttrStatsControls();
@@ -12257,37 +12360,58 @@ async function unregisterDataLayer(idOrTitle) {
   return true;
 }
 
-// DataSource の entity を GeoJSON FeatureCollection に戻す。
-// AI が読み込み済みレイヤーのデータを取得・加工するための出口
-function entitiesToGeoJson(ds) {
+// entity → GeoJSON ジオメトリ。entitiesToGeoJson と属性テーブルの WKT 出力で共用
+function entityToGeoJsonGeometry(entity) {
   const time = viewer.clock && viewer.clock.currentTime;
   const toLngLat = position => {
     const c = Cesium.Cartographic.fromCartesian(position);
     const h = Math.round(c.height * 100) / 100;
     return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude), h];
   };
+  try {
+    if (entity.polygon?.hierarchy) {
+      const hierarchy = entity.polygon.hierarchy.getValue(time);
+      const positions = Array.isArray(hierarchy) ? hierarchy : (hierarchy?.positions || []);
+      if (positions.length >= 3) {
+        const ring = positions.map(toLngLat);
+        ring.push([...ring[0]]);
+        return { type: "Polygon", coordinates: [ring] };
+      }
+    }
+    if (entity.polyline?.positions) {
+      const positions = entity.polyline.positions.getValue(time) || [];
+      if (positions.length >= 2) return { type: "LineString", coordinates: positions.map(toLngLat) };
+    }
+    if (entity.position) {
+      const position = entity.position.getValue(time);
+      if (position) return { type: "Point", coordinates: toLngLat(position) };
+    }
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+// 同一属性値でまとめられた複数パート(GeoJsonDataSource が分割する MultiPolygon 等)
+// のジオメトリを1つに束ねる。同型は Multi*、混在は GeometryCollection
+function mergeGeoJsonGeometries(list) {
+  const geoms = (list || []).filter(Boolean);
+  if (!geoms.length) return null;
+  if (geoms.length === 1) return geoms[0];
+  const multiOf = { Point: "MultiPoint", LineString: "MultiLineString", Polygon: "MultiPolygon" };
+  if (geoms.every(g => g.type === geoms[0].type)) {
+    const t = geoms[0].type;
+    if (multiOf[t]) return { type: multiOf[t], coordinates: geoms.map(g => g.coordinates) };
+    if (t.startsWith("Multi")) return { type: t, coordinates: geoms.flatMap(g => g.coordinates) };
+  }
+  return { type: "GeometryCollection", geometries: geoms };
+}
+
+// DataSource の entity を GeoJSON FeatureCollection に戻す。
+// AI が読み込み済みレイヤーのデータを取得・加工するための出口
+function entitiesToGeoJson(ds) {
+  const time = viewer.clock && viewer.clock.currentTime;
   const features = [];
   for (const entity of ds.entities.values) {
-    let geometry = null;
-    try {
-      if (entity.polygon?.hierarchy) {
-        const hierarchy = entity.polygon.hierarchy.getValue(time);
-        const positions = Array.isArray(hierarchy) ? hierarchy : (hierarchy?.positions || []);
-        if (positions.length >= 3) {
-          const ring = positions.map(toLngLat);
-          ring.push([...ring[0]]);
-          geometry = { type: "Polygon", coordinates: [ring] };
-        }
-      }
-      if (!geometry && entity.polyline?.positions) {
-        const positions = entity.polyline.positions.getValue(time) || [];
-        if (positions.length >= 2) geometry = { type: "LineString", coordinates: positions.map(toLngLat) };
-      }
-      if (!geometry && entity.position) {
-        const position = entity.position.getValue(time);
-        if (position) geometry = { type: "Point", coordinates: toLngLat(position) };
-      }
-    } catch (e) { /* ignore */ }
+    const geometry = entityToGeoJsonGeometry(entity);
     if (!geometry) continue;
     let properties = {};
     try {

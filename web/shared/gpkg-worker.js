@@ -158,15 +158,16 @@ async function cmdAttrs(msg) {
     });
     const geomValue = row[attrCols.length];
     let env = gpkgGeometryEnvelope(geomValue);
-    if (!env) {
-      // エンベロープを持たない GPkgBinary(作成ツールによって省略される)は
-      // WKB をデコードして座標の範囲から中心を求める
+    // geometry は行位置のフォールバック or 呼び出し側の wantGeom(属性テーブルの
+    // WKT 出力)でのみデコードする。常時デコードは大きい GPKG で重い
+    let geometry = null;
+    if (!env || msg.wantGeom) {
       const wkb = gpkgGeometryToWkb(geomValue);
-      const geometry = wkb ? wkbToGeoJsonGeometry(wkb) : null;
-      env = geometry ? geoJsonGeometryEnvelope(geometry) : null;
+      geometry = wkb ? wkbToGeoJsonGeometry(wkb) : null;
+      if (!env && geometry) env = geoJsonGeometryEnvelope(geometry);
     }
     const center = env ? { lat: (env.south + env.north) / 2, lng: (env.west + env.east) / 2 } : null;
-    rows.push({ values, lat: center ? center.lat : null, lng: center ? center.lng : null });
+    rows.push({ values, lat: center ? center.lat : null, lng: center ? center.lng : null, geometry });
   }
   stmt.free();
   return { attributes: attrCols, rows };

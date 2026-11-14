@@ -465,6 +465,8 @@
   "vattr.limitSuffix": "（显示前 {count} 条）",
   "vattr.exportCsv": "将显示的行导出为CSV",
   "vattr.exportTsv": "将显示的行导出为TSV",
+  "vattr.exportWkt": "以WKT列输出几何（同QGIS GEOMETRY=AS_WKT）",
+  "vattr.exportXlsx": "将显示的行导出为XLSX（首次使用从CDN加载）",
   "layer.groupToggle": "展开/收起分组",
   "layer.legendToggle": "展开/收起图例",
   "info.loadFailed": "无法加载 INFO：{error}",

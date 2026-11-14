@@ -472,6 +472,8 @@
   "vattr.limitSuffix": " (showing first {count})",
   "vattr.exportCsv": "Export displayed rows as CSV",
   "vattr.exportTsv": "Export displayed rows as TSV",
+  "vattr.exportWkt": "Include geometry as a WKT column (QGIS GEOMETRY=AS_WKT)",
+  "vattr.exportXlsx": "Export displayed rows as XLSX (loaded from CDN on first use)",
   "layer.groupToggle": "Expand / collapse group",
   "layer.legendToggle": "Expand / collapse legend",
   "info.loadFailed": "Could not load INFO: {error}",

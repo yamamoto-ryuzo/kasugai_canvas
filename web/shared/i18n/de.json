@@ -465,6 +465,8 @@
   "vattr.limitSuffix": " (erste {count} werden angezeigt)",
   "vattr.exportCsv": "Angezeigte Zeilen als CSV exportieren",
   "vattr.exportTsv": "Angezeigte Zeilen als TSV exportieren",
+  "vattr.exportWkt": "Geometrie als WKT-Spalte ausgeben (QGIS GEOMETRY=AS_WKT)",
+  "vattr.exportXlsx": "Angezeigte Zeilen als XLSX exportieren (beim ersten Mal von CDN geladen)",
   "layer.groupToggle": "Gruppe ein-/ausklappen",
   "layer.legendToggle": "Legende ein-/ausklappen",
   "info.loadFailed": "INFO konnte nicht geladen werden: {error}",
