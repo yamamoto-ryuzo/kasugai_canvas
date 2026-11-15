@@ -279,7 +279,7 @@ export function parseKasc(text) {
     }
     if (["xyz", "tile", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
          "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "wms", "wmts",
-         "kml", "kmz", "wfs", "shp", "shapefile", "image"].includes(type)) {
+         "kml", "kmz", "wfs", "shp", "shapefile", "image", "cms"].includes(type)) {
       doc.layers.push(item);
       continue;
     }
@@ -753,14 +753,30 @@ export function parseKascNewsArticles(text) {
   const trimmed = String(text || "").trim();
   if (!trimmed) return [];
   const normalize = (raw, defaultFormat = "html") => {
-    const a = raw && typeof raw === "object" ? raw : {};
+    const src = raw && typeof raw === "object" ? raw : {};
+    // Re:Earth CMS アイテム({id,fields:{key:value|[{key,value}]},createdAt,…})は
+    // fields をトップレベルへ展開して記事フィールドとして解釈する。news: の
+    // src に CMS Public API のモデル URL(.json)を指定すれば、CMS 管理画面から
+    // お知らせを更新できる。値が {value:…} 形なら value を取り出す
+    const a = (() => {
+      const f = src.fields;
+      if (!f || typeof f !== "object") return src;
+      const flat = {};
+      const unwrap = v => (v && typeof v === "object" && "value" in v ? v.value : v);
+      if (Array.isArray(f)) {
+        f.forEach(x => { if (x && x.key != null) flat[x.key] = unwrap(x.value); });
+      } else {
+        for (const k of Object.keys(f)) flat[k] = unwrap(f[k]);
+      }
+      return Object.assign({}, flat, src);
+    })();
     const tags = Array.isArray(a.tags)
       ? a.tags.map(s => String(s).trim()).filter(Boolean)
       : String(a.tags || "").split(/[,;]/).map(s => s.trim()).filter(Boolean);
     const fmt = /^(md|markdown)$/i.test(String(a.format || a.bodyFormat || ""))
       ? "md" : defaultFormat;
     return {
-      date: String(a.date || a.published || a.datetime || "").trim(),
+      date: String(a.date || a.published || a.datetime || a.createdAt || a.updatedAt || "").trim(),
       title: String(a.title || a.name || "").trim(),
       body: String(a.body ?? a.description ?? a.desc ?? "").trim(),
       format: fmt,

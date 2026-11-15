@@ -15,6 +15,7 @@
  *   xyz:/tile:/base:   タイルレイヤ (maxZoom=/minZoom=/opacity=/tileSize=/bbox=)
  *   wms:/wmts:         OGCタイル (wms=GetMap タイル化 / wmts=テンプレート or KVP GetTile)
  *   geojson:/layer:    GeoJSON 全件読込
+ *   cms:               Re:Earth CMS Public API ({model} → .geojson 正規化。key= で Bearer 認証)
  *   geoparquet:/parquet:  GeoParquet (hyparquet)
  *   flatgeobuf:/fgb:   FlatGeobuf (公式 JS リーダー)
  *   gpkg:/geopackage:  GeoPackage (sql.js Worker。table=/where=/limit=/columns=/bbox=auto)
@@ -170,7 +171,7 @@
 
   var LAYER_LINE_TYPES = {
     xyz: 1, tile: 1, base: 1,
-    geojson: 1, layer: 1,
+    geojson: 1, layer: 1, cms: 1,
     geoparquet: 1, parquet: 1,
     flatgeobuf: 1, fgb: 1,
     gpkg: 1, geopackage: 1,
@@ -391,11 +392,13 @@
         var vurl = vparts[1];
         var vvisible = !vparts.some(function (p) { return /^(off|false)$/i.test(p); });
         if (!vtitle) { skipped.push({ line: line, reason: 'title required' }); return; }
-        var vtype = type === 'layer' ? 'geojson' : (type === 'parquet' ? 'geoparquet' : (type === 'fgb' ? 'flatgeobuf' : (type === 'geopackage' ? 'gpkg' : type)));
+        var vtype = (type === 'layer' || type === 'cms') ? 'geojson' : (type === 'parquet' ? 'geoparquet' : (type === 'fgb' ? 'flatgeobuf' : (type === 'geopackage' ? 'gpkg' : type)));
         var item = {
           id: id, kind: 'vector', type: vtype, title: vtitle, url: vurl || '',
           visible: vvisible, attribution: parseAttributionField(vparts[2]), sourceLine: line
         };
+        // cms: Re:Earth CMS Public API のモデル URL を {model}.geojson へ正規化
+        if (type === 'cms') item.url = cmsGeoJsonUrl(vurl);
         var optStart = item.attribution ? 3 : 2;
         vparts.slice(optStart).forEach(function (p) {
           var eq = p.indexOf('=');
@@ -417,6 +420,9 @@
             else if (/^(off|none|false|static|manual)$/i.test(rawv)) item.bboxAuto = false;
           }
           else if ((key === 'attr' || key === 'attribution') && rawv) item.attribution = rawv;
+          // key=<api_key>: 非公開 CMS プロジェクト等の Bearer 認証(geojson 系の
+          // fetch 時に Authorization ヘッダとして送る)
+          else if (key === 'key' && rawv) item.headers = { authorization: 'Bearer ' + rawv };
           // 縮尺表示(QGIS minimumScale/maximumScale): minScale=引き側限界
           // (分母大)、maxScale=寄り側限界(分母小)
           else if ((key === 'minscale' || key === 'maxscale') && Number.isFinite(num) && num > 0) {
@@ -425,6 +431,10 @@
         });
         if (vtype === 'gpkg' || vtype === 'duckdb') {
           if (item.bboxAuto === undefined) item.bboxAuto = true;
+        }
+        if (type === 'cms' && !item.url) {
+          skipped.push({ line: line, reason: 'url required' });
+          return;
         }
         if (vtype !== 'geojson' && !vurl && !item.file) {
           skipped.push({ line: line, reason: 'url required' });
@@ -457,9 +467,25 @@
   // ---------------------------------------------------------------
   // GeoJSON
   // ---------------------------------------------------------------
+  // cms: 行の URL 正規化。モデル URL 末尾の拡張子(.json/.csv 含む)は
+  // .geojson へ置換、無ければ付加する。?query(page/limit/offset/
+  // start_cursor 等のページネーション)・#hash はそのまま保持する
+  function cmsGeoJsonUrl(url) {
+    var m = /^([^?#]*)([?#][\s\S]*)?$/.exec(String(url || '').trim());
+    var path = ((m && m[1]) || '').replace(/\/+$/, '');
+    var suffix = (m && m[2]) || '';
+    if (!path) return '';
+    path = /\.(geojson|json|csv)$/i.test(path)
+      ? path.replace(/\.(geojson|json|csv)$/i, '.geojson')
+      : path + '.geojson';
+    return path + suffix;
+  }
+
   function loadGeoJson(item) {
     if (item.data) return Promise.resolve(item.data);
-    return fetch(item.url, { mode: 'cors' }).then(function (res) {
+    var opt = { mode: 'cors' };
+    if (item.headers) opt.headers = item.headers;
+    return fetch(item.url, opt).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
     });
