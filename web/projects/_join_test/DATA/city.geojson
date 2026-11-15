@@ -1,5 +1,0 @@
-{"type":"FeatureCollection","features":[
- {"type":"Feature","properties":{"code":"01100","name":"chuo"},"geometry":{"type":"Polygon","coordinates":[[[141.34,43.05],[141.37,43.05],[141.37,43.08],[141.34,43.08],[141.34,43.05]]]}},
- {"type":"Feature","properties":{"code":"01101","name":"kita"},"geometry":{"type":"Polygon","coordinates":[[[141.34,43.09],[141.37,43.09],[141.37,43.12],[141.34,43.12],[141.34,43.09]]]}},
- {"type":"Feature","properties":{"code":"99999","name":"unmatched"},"geometry":{"type":"Polygon","coordinates":[[[141.34,43.13],[141.37,43.13],[141.37,43.16],[141.34,43.16],[141.34,43.13]]]}}
-]}

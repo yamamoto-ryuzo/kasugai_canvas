@@ -1,2 +1,0 @@
-geojson:結合テスト | DATA/city.geojson | join=DATA/pop.csv | on=code=city_code | joinprefix=pop_
-geojson:結合where | DATA/city.geojson | join=DATA/pop.csv | on=code=city_code | joinprefix=pop_ | where=pop_population>150
