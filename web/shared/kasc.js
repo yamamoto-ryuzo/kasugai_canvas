@@ -88,7 +88,7 @@ export function kascRoleAllowed(required, userRoles) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], projects: [], news: [], defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], projects: [], news: [], searches: [], defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   const userRoles = kascUserRoles();
   for (const rawLine of String(text || "").split(/\r?\n/)) {
@@ -181,6 +181,13 @@ export function parseKasc(text) {
       // news:<DATA/内ファイル|URL> | limit=件数 | title=見出し —
       // ポータルのお知らせフィード(#128)。html: セクションの後に記述順で並ぶ
       doc.news.push(parseKascNewsValue(parts, line));
+      continue;
+    }
+    if (type === "search") {
+      // search:<レイヤー名|all> | attr=属性名 | ph=プレースホルダ | title=見出し —
+      // ポータル埋め込み検索(#125)。ベクター検索索引の値索引から即時絞り込みし、
+      // 候補クリックでポータルを閉じて地物へズーム+選択する
+      doc.searches.push(parseKascSearchValue(parts, line));
       continue;
     }
     if (type === "link") {
@@ -296,7 +303,7 @@ export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base", "legendnode",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
   "group", "terrain", "scene3d", "light", "fly_geojson", "live",
-  "view", "html", "portal", "link", "dash", "form", "news",
+  "view", "html", "portal", "link", "dash", "form", "news", "search",
 ]);
 
 // group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。
@@ -668,6 +675,29 @@ export function parseKascStatValue(parts, line = null) {
   // kind 既定: group= ありなら棒グラフ、無しなら KPI 単発表示
   if (!stat.kind) stat.kind = stat.group ? "bar" : "kpi";
   return stat;
+}
+
+// search: 行の値をパースする(#125)。
+// `search:<レイヤー名|all> | attr=属性名 | ph=プレースホルダ | title=見出し`
+// ポータル画面の検索セクション。ベクター検索索引の値索引から即時絞り込みし、
+// 候補クリックでポータルを閉じて地物へズーム+選択する。all または空指定は
+// 全ベクターレイヤー横断(クエリ系は索引対象外のため SQL フィルター側で検索)
+export function parseKascSearchValue(parts, line = null) {
+  const search = { layer: "", attr: "", ph: "", title: "", line };
+  for (const tok of parts) {
+    if (!tok) continue;
+    const kv = /^(layer|layers|attr|ph|placeholder|title)\s*=\s*(.+)$/i.exec(tok);
+    if (kv) {
+      const key = kv[1].toLowerCase();
+      const value = kv[2].trim();
+      if (key === "ph" || key === "placeholder") search.ph = value;
+      else if (key === "layers") search.layer = value;
+      else search[key] = value;
+      continue;
+    }
+    if (!search.layer) search.layer = tok;
+  }
+  return search;
 }
 
 // Markdown の最小レンダラ(ai-chat.js から移設。news: の本文描画でも使う)。

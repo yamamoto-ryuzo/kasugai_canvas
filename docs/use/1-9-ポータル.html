@@ -222,6 +222,11 @@
 <td><code>stat:レイヤー名 | group=属性 | value=属性|count | kind=kpi|bar|pie | agg=count|sum|avg|min|max | title=見出し | desc=説明</code></td>
 <td>統計カード（#126・<code>dash:</code> のポータル内プリミティブ）。レイヤー属性をクライアント集計して KPI・棒・円グラフを <code>news:</code> の後・宣言順に表示。<code>value=count</code>／省略は件数、属性名は <code>agg=</code>（既定 sum）で集計。<code>group=</code> のセグメント（棒・扇・KPIタイル）クリックで該当値の <code>where=</code> を地図へ適用（再クリックで解除）。<code>group=</code> 省略ならレイヤー全体の単一 KPI</td>
 </tr>
+<tr>
+<td><code>search:</code></td>
+<td><code>search:レイヤー名|all | attr=属性名 | ph=プレースホルダ | title=見出し</code></td>
+<td>ポータル埋め込み検索（#125）。ポータル先頭・宣言順に検索ボックスを表示し、ベクター検索索引の値索引から属性値を即時絞り込み。候補クリックでポータルを閉じて地物へズーム＋選択。<code>all</code>／省略は全ベクターレイヤー横断（未ロード分も検索時に読込。クエリ系レイヤーは索引対象外）。<code>attr=</code> で対象属性を限定、<code>ph=</code> でプレースホルダ文言を変更可</td>
+</tr>
 </tbody>      
 </table>      
 <h3>⚙️ カスタムHTMLからの GIS 制御（data-* 属性）
@@ -270,6 +275,17 @@
 <td>指定レイヤの地物を属性値で検索しズーム＋選択ハイライト（レイヤ省略時は全ベクターレイヤー）
 </td>
 <td>閉じる
+</td>
+</tr>      
+<tr>
+<td>
+<code>data-search="レイヤ|all"
+</code>
+</td>
+<td>
+<code>&lt;input&gt;</code> を属性検索ボックス化（#125）。<code>data-search-attr="属性名"</code> で対象属性を限定。入力中は直下に候補一覧（<code>search:</code> 行と同じ値索引の即時絞り込み）を表示し、候補クリックで地物へズーム＋選択
+</td>
+<td>候補クリックで閉じる
 </td>
 </tr>      
 <tr>

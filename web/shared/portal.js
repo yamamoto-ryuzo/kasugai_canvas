@@ -43,6 +43,12 @@
 //   getPanelTitle()        — title: 行のパネルタイトル or null
 //   getHtmlSections()      — [{title,spec}] (html: 行・記述順)
 //   getNews()              — [{src,limit,title}] (news: 行・記述順。#128)
+//   getSearches()          — [{layer,attr,ph,title}] (search: 行・記述順。#125)
+//   searchIndex(query, spec)? — search: 行/data-search 属性の検索実行。
+//                          spec={layer,attr}。[{layerId,layerTitle,attr,value,lat,lng}]
+//                          を返す(async 可。省略時は検索ボックスを無効表示)
+//   applySearchResult(result)? — 候補クリック時の地物ズーム+選択(async 可。
+//                          省略時は applyFeature("layer/attr=value") 経路を使う)
 //   getStats()             — [{layer,group,value,kind,agg,title,desc}] (stat: 行・記述順。#126)
 //   getStatFeatures(layer) — stat: 集計用。レイヤー名→ロード済み GeoJSON Feature[]
 //   setStatWhere(layer, where|null)? — セグメントクリックの地図フィルタ適用(async 可。
@@ -55,6 +61,9 @@
 //   data-link="URL"      — 外部URLを新規タブで開く
 //   data-cam="カメラ名"  — カメラプリセットへ移動(ポータルは開いたまま)
 //   data-base="背景名"   — 背景地図を切替(none/transparent も可)
+//   data-search="レイヤ|all" — <input> を属性検索ボックス化(#125)。
+//                          data-search-attr="属性名" で対象属性を限定。
+//                          候補クリックでポータルを閉じて地物へズーム+選択
 //   data-form="フォーム名" — フォーム投稿画面を開く(form: 行)
 //   data-project="id"  — プロジェクト切替(project: 行と同等。data-keep=cam,base 併用可)
 //   data-clear           — ビュー解除(適用前状態へ復元)
@@ -128,6 +137,9 @@ export function createKascPortal(cfg) {
     getPanelTitle = () => null,
     getHtmlSections = () => [],
     getNews = () => [],
+    getSearches = () => [],
+    searchIndex = null,
+    applySearchResult = null,
     getStats = () => [],
     getStatFeatures = () => [],
     setStatWhere = null,
@@ -216,6 +228,13 @@ export function createKascPortal(cfg) {
       }
       if (event.target.closest("[data-close]")) close();
     });
+    // <input data-search="レイヤ|all"(data-search-attr="属性名")> の入力を
+    // 属性検索へ接続(#125)。search: 行で生成した検索ボックスも同じ属性を
+    // 持つため、ここの委譲で両方を一括配線する
+    body.addEventListener("input", event => {
+      const input = event.target.closest("input[data-search]");
+      if (input && body.contains(input)) void runPortalSearch(input);
+    });
   }
 
   // ポータル画面の内容を構築する。applyInspector 完了時と表示言語切替時に呼ぶ
@@ -244,6 +263,10 @@ export function createKascPortal(cfg) {
       if (footer0) footer0.hidden = !getActiveViewName();
       return;
     }
+    // search: セクション(記述順・先頭)。ポータル起点の「探す」導線として
+    // 検索ボックス+候補一覧を描く(#125)。候補クリックはポータルを閉じて
+    // 地物へズーム+選択する。フルカスタム時は data-search 属性の入力が同じ経路で動く
+    for (const spec of getSearches()) { body.append(renderSearchSection(spec)); }
     // html: セクション(記述順)。タイトル+内容(インラインHTMLまたはURL/ファイル)
     for (const sec of getHtmlSections()) {
       const wrap = document.createElement("section");
@@ -350,7 +373,7 @@ export function createKascPortal(cfg) {
     // 宣言が一切無いプロジェクト向けの既定コンテンツ。
     // お知らせ→ビュー説明→機能説明(HTML)の順で、html:/view:/link: の
     // 書き方そのものをガイドとして表示する
-    if (!getHtmlSections().length && !getNews().length && !getStats().length && !cards.length) {
+    if (!getHtmlSections().length && !getNews().length && !getStats().length && !getSearches().length && !cards.length) {
       const news = document.createElement("section");
       news.className = "portal-section";
       const newsHead = document.createElement("h3");
@@ -682,6 +705,129 @@ export function createKascPortal(cfg) {
       card.append(box);
     }
     return card;
+  }
+
+  // ---- search: 行 / data-search 属性のポータル埋め込み検索(#125) ----
+  // `search: <レイヤー|all> | attr=属性名 | ph=… | title=…` 行は検索セクションを
+  // 生成し、ポータル内HTMLの <input data-search="レイヤ|all" data-search-attr="属性">
+  // も同じ検索へ接続する。絞り込みはエンジン提供の searchIndex(ベクター検索索引)
+  // へ委譲し、候補クリックでポータルを閉じて地物へズーム+選択する
+  const SEARCH_LABELS = {
+    searchTitle: "検索",
+    searchPlaceholder: "住所・施設名・属性値で検索",
+    searchNoResults: "該当する地物がありません",
+    searchUnsupported: "このエンジンでは埋め込み検索に対応していません",
+  };
+  const searchTr = key => {
+    const text = t ? t(`portal.${key}`) : null;
+    if (text && !text.startsWith("portal.")) return text;
+    return SEARCH_LABELS[key] ?? key;
+  };
+
+  let searchStyleDone = false;
+  function ensureSearchStyle() {
+    if (searchStyleDone) return;
+    searchStyleDone = true;
+    const st = document.createElement("style");
+    st.textContent = `
+.portal-search-input{width:100%;box-sizing:border-box;padding:.45em .6em;font:inherit;border:1px solid #cbd9de;border-radius:6px}
+.portal-search-results{display:flex;flex-direction:column;margin-top:.3em;max-height:16em;overflow:auto}
+.portal-search-results:empty{display:none}
+.portal-search-result{font:inherit;display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;text-align:left;padding:.3em .45em;border:none;border-bottom:1px solid #e4ecef;background:none;cursor:pointer}
+.portal-search-result:hover{background:#eef3f9}
+.portal-search-value{font-size:.95em}
+.portal-search-meta{color:#52636d;font-size:.78em}
+.portal-search-empty{color:#777;font-size:.85em;padding:.3em .45em}
+`;
+    document.head.append(st);
+  }
+
+  // 検索入力ごとの結果表示領域(input 直後の .portal-search-results)を取得。
+  // 無ければ input の直後へ生成する(カスタムHTMLの data-search 入力用)
+  function ensureSearchResultsEl(input) {
+    const next = input.nextElementSibling;
+    if (next && next.classList.contains("portal-search-results")) return next;
+    const box = document.createElement("div");
+    box.className = "portal-search-results";
+    input.after(box);
+    return box;
+  }
+
+  // 候補クリック: ポータルを閉じて地物へズーム+選択。
+  // applySearchResult 未提供のエンジンは data-feature と同じ applyFeature 経路
+  function gotoSearchResult(r) {
+    close();
+    if (applySearchResult) { void applySearchResult(r); return; }
+    if (applyFeature && r?.attr) {
+      const layer = r.layerTitle || r.layer || "";
+      void applyFeature(layer ? `${layer}/${r.attr}=${r.value}` : `${r.attr}=${r.value}`);
+    }
+  }
+
+  // 入力のたびに searchIndex へ問い合わせて候補一覧を描き直す。
+  // searchSeq で古い応答(打鍵中の先行リクエスト)を破棄する
+  let searchSeq = 0;
+  async function runPortalSearch(input) {
+    const box = ensureSearchResultsEl(input);
+    const q = String(input.value || "").trim();
+    if (!q) { box.replaceChildren(); return; }
+    const note = text => {
+      box.replaceChildren();
+      const el = document.createElement("div");
+      el.className = "portal-search-empty";
+      el.textContent = text;
+      box.append(el);
+    };
+    if (!searchIndex) { note(searchTr("searchUnsupported")); return; }
+    const spec = { layer: input.dataset.search || "all", attr: input.dataset.searchAttr || "" };
+    const gen = ++searchSeq;
+    let results;
+    try {
+      results = await Promise.resolve(searchIndex(q, spec));
+    } catch (error) {
+      if (gen === searchSeq) note(String(error?.message || error));
+      return;
+    }
+    if (gen !== searchSeq || !input.isConnected) return;
+    if (!results?.length) { note(searchTr("searchNoResults")); return; }
+    box.replaceChildren();
+    for (const r of results.slice(0, 30)) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "portal-search-result";
+      const value = document.createElement("span");
+      value.className = "portal-search-value";
+      value.textContent = r.value;
+      const meta = document.createElement("span");
+      meta.className = "portal-search-meta";
+      meta.textContent = [r.layerTitle, r.attr].filter(Boolean).join(" / ");
+      btn.append(value, meta);
+      btn.addEventListener("click", () => gotoSearchResult(r));
+      box.append(btn);
+    }
+  }
+
+  function renderSearchSection(spec) {
+    ensureSearchStyle();
+    const wrap = document.createElement("section");
+    wrap.className = "portal-section portal-search-section";
+    const head = document.createElement("h3");
+    head.textContent = spec.title || searchTr("searchTitle");
+    wrap.append(head);
+    const box = document.createElement("div");
+    box.className = "portal-search";
+    const input = document.createElement("input");
+    input.type = "search";
+    input.className = "portal-search-input";
+    input.setAttribute("data-search", spec.layer || "all");
+    if (spec.attr) input.setAttribute("data-search-attr", spec.attr);
+    input.placeholder = spec.ph || searchTr("searchPlaceholder");
+    if (!searchIndex) input.disabled = true;
+    const results = document.createElement("div");
+    results.className = "portal-search-results";
+    box.append(input, results);
+    wrap.append(box);
+    return wrap;
   }
 
   // ---- form: 行のフォーム投稿(#131) ----

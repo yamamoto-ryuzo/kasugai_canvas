@@ -32,7 +32,7 @@ import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-ev
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createKascDashboard, featureCentroid } from "../shared/dashboard.js";
-import { parseKascDashValue, parseKascFormValue, parseKascStatValue } from "../shared/kasc.js";
+import { parseKascDashValue, parseKascFormValue, parseKascStatValue, parseKascSearchValue } from "../shared/kasc.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
@@ -788,6 +788,8 @@ const inspectorHtmlSections = [];
 const inspectorNews = [];
 // stat: 行の統計カード(#126)。parseKascStatValue でパースした宣言配列
 const inspectorStats = [];
+// search: 行のポータル埋め込み検索(#125)。parseKascSearchValue でパースした宣言配列
+const inspectorSearches = [];
 // インスペクタの link: 行で宣言された外部リンクカード {name, url, desc, img, line}[]
 const inspectorLinks = [];
 // インスペクタの project: 行で宣言されたプロジェクト切替カード(#130)
@@ -1649,6 +1651,12 @@ function kascPortal() {
       getPanelTitle: () => inspectorPanelTitle,
       getHtmlSections: () => inspectorHtmlSections,
       getNews: () => inspectorNews,
+      getSearches: () => inspectorSearches,
+      // search: 行/data-search 属性(#125)の検索・結果適用アダプタ。
+      // ベクター検索索引の値索引で絞り込み、候補クリックは feature= と
+      // 同じ地物検索+ズーム+選択ハイライト経路へ渡す
+      searchIndex: (q, spec) => portalAttrSearch(q, spec),
+      applySearchResult: r => applyPortalSearchResult(r),
       getStats: () => inspectorStats,
       // stat: カード(#126)の集計・where= 連動アダプタ。集計はロード済みソース
       // (item.geojsonSource→getLayerGeoJson)を使い、クリックは ⏷フィルタと
@@ -1677,6 +1685,79 @@ function cancelFormPick() {
   const resolve = formPickResolve;
   formPickResolve = null;
   if (resolve) resolve(null);
+}
+
+// ---- ポータル埋め込み検索(#125) ----
+// search: 行 / data-search 属性の検索ボックス。ベクター検索索引
+// (buildVectorSearchIndex)の値索引から即時絞り込み、候補クリックで
+// feature= と同じ地物検索+ズーム+選択ハイライト(applyUrlFeature)へ渡す。
+// クエリ系レイヤーは索引対象外(検索は ⏷フィルタ側に一本化)のため候補に出ない
+const PORTAL_SEARCH_LIMIT = 50;
+async function portalAttrSearch(query, spec) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return [];
+  const targetAll = !spec?.layer || /^all$/i.test(spec.layer);
+  if (targetAll) {
+    // 検索パネルの「全選択」と同じく、未ロードレイヤーも検索実行時に
+    // まとめて読み込んで索引してから絞り込む
+    await ensureAllVectorSourcesIndexed();
+  } else {
+    // 指定レイヤーが未索引ならオンデマンドで読み込んで索引する
+    // (検索パネルで未ロードレイヤーを選んだときと同じ経路)
+    const item = findDeepLinkLayer(spec.layer);
+    if (item && !vectorSearchData?.layers?.[item.id] && !vectorSearchLoadFailed.has(item.id)) {
+      try {
+        const dec = vectorDecoders.get(item.type);
+        const src = await loadVectorSourceCached(item, dec);
+        if (src?.features?.length) {
+          vectorSearchLoadedSources.set(item.id, src);
+          buildVectorSearchIndex();
+        }
+      } catch (e) { vectorSearchLoadFailed.add(item.id); }
+    }
+  }
+  const data = vectorSearchData;
+  if (!data) return [];
+  const layerIds = targetAll
+    ? Object.keys(data.layers || {})
+    : [findDeepLinkLayer(spec.layer)?.id].filter(Boolean);
+  const res = [];
+  for (const layerId of layerIds) {
+    const source = data.layers?.[layerId];
+    if (!source) continue;
+    const attrs = spec?.attr ? [spec.attr] : (source.attributes || []);
+    for (const attr of attrs) {
+      for (const val of source.valuesByAttr?.[attr] || []) {
+        if (!String(val).toLowerCase().includes(q)) continue;
+        const pos = source.featureByAttr?.[attr]?.[val] || null;
+        res.push({ layerId, layerTitle: source.title || layerId, attr, value: val, lat: pos?.lat ?? null, lng: pos?.lng ?? null });
+        if (res.length >= PORTAL_SEARCH_LIMIT) return res;
+      }
+    }
+  }
+  return res;
+}
+
+// 検索パネルの結果クリックと同じく、対象レイヤーが非表示なら表示してから
+// feature= 経路(applyUrlFeature: 地物検索+範囲ズーム+選択ハイライト)へ渡す。
+// 地物を同定できなかった場合は索引の代表点への flyToFeature に留める
+async function applyPortalSearchResult(r) {
+  if (!r) return;
+  const item = (r.layerId && layerState.get(r.layerId)) || findDeepLinkLayer(r.layerTitle || "");
+  if (item && !item.visible) {
+    item.visible = true;
+    if (item.exclusiveGroup) {
+      getOrderedLayerItems().forEach(other => {
+        if (other !== item && other.group === item.group && other.exclusiveGroup) other.visible = false;
+      });
+    }
+    renderLayerList();
+    void refreshLayers();
+  }
+  const layerName = item ? (item.sourceTitle || item.title || item.id) : (r.layerTitle || "");
+  const spec = layerName ? `${layerName}/${r.attr}=${r.value}` : `${r.attr}=${r.value}`;
+  const ok = await applyUrlFeature(spec);
+  if (!ok && Number.isFinite(r.lat) && Number.isFinite(r.lng)) void flyToFeature(r.lat, r.lng);
 }
 
 const portalAvailable = () => kascPortal().available();
@@ -6135,6 +6216,7 @@ function applyInspector(text) {
   inspectorHtmlSections.splice(0, inspectorHtmlSections.length);
   inspectorNews.splice(0, inspectorNews.length);
   inspectorStats.splice(0, inspectorStats.length);
+  inspectorSearches.splice(0, inspectorSearches.length);
   // ディープリンク(feature=/data-feature)のハイライトはプロジェクト単位で破棄する
   if (deepLinkHighlightDs) { viewer.dataSources.remove(deepLinkHighlightDs, true); deepLinkHighlightDs = null; }
   inspectorLinks.splice(0, inspectorLinks.length);
@@ -6304,6 +6386,14 @@ function applyInspector(text) {
     if (type === "stat") {
       const parts = value.split("|").map(part => part.trim());
       inspectorStats.push(parseKascStatValue(parts, line));
+    }
+
+    // search: レイヤー名|all | attr=属性名 | ph=プレースホルダ | title=見出し —
+    // ポータル埋め込み検索(#125)。ベクター検索索引で即時絞り込みし、
+    // 候補クリックで地物へズーム+選択する
+    if (type === "search") {
+      const parts = value.split("|").map(part => part.trim());
+      inspectorSearches.push(parseKascSearchValue(parts, line));
     }
 
     // link: 名前 | url=… | desc=説明 | img=画像 —
