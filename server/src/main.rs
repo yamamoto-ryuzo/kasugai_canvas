@@ -908,30 +908,48 @@ fn qgis_live_sessions() -> Vec<Value> {
 }
 
 // 生存確認できた最初のセッションを返す。(base_url, token, entry)
+// 各候補のヘルスチェックは並列に投げる — 古いセッション残骸が溜まると
+// 逐次確認では「件数 × タイムアウト」だけ待たされるため（実測 17件で 34秒）。
+// 採用は優先順位（並び順）が最小の生存セッションで逐次版と同じ結果になる
 async fn qgis_live_pick() -> Option<(String, String, Value)> {
     let candidates = qgis_live_sessions();
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))
         .build()
         .ok()?;
-    for entry in &candidates {
-        let url = entry["mcp_url"].as_str().unwrap_or_default();
-        let Some(base) = url.strip_suffix("/mcp") else { continue };
-        let alive = client
-            .get(format!("{base}/api/health"))
-            .send()
-            .await
-            .map(|r| r.status().is_success())
-            .unwrap_or(false);
-        if alive {
-            return Some((
-                base.to_string(),
-                entry["token"].as_str().unwrap_or_default().to_string(),
-                entry.clone(),
-            ));
+    let mut set = tokio::task::JoinSet::new();
+    for (idx, entry) in candidates.into_iter().enumerate() {
+        let client = client.clone();
+        set.spawn(async move {
+            let base = entry["mcp_url"]
+                .as_str()
+                .unwrap_or_default()
+                .strip_suffix("/mcp")
+                .map(str::to_string);
+            let Some(base) = base else { return None };
+            let alive = client
+                .get(format!("{base}/api/health"))
+                .send()
+                .await
+                .map(|r| r.status().is_success())
+                .unwrap_or(false);
+            alive.then(|| (idx, base.to_string(), entry))
+        });
+    }
+    let mut best: Option<(usize, String, Value)> = None;
+    while let Some(res) = set.join_next().await {
+        if let Ok(Some((idx, base, entry))) = res {
+            if best.as_ref().is_none_or(|(b, _, _)| idx < *b) {
+                best = Some((idx, base, entry));
+            }
         }
     }
-    None
+    let (_, base, entry) = best?;
+    Some((
+        base,
+        entry["token"].as_str().unwrap_or_default().to_string(),
+        entry,
+    ))
 }
 
 // GET /api/qgis-live/discover — 稼働中の QGIS Live Driver セッションを検出する。

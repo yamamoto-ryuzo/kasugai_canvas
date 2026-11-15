@@ -28,11 +28,17 @@ const tr = (key, fallback) => {
   catch (_) { return fallback; }
 };
 
+// レイヤ一覧の .layer-row と同じ 1 行・省略表示のコンパクト行
 function row(label, input) {
   const el = document.createElement("label");
-  el.style.cssText = "display:flex;gap:6px;align-items:center;margin:4px 0;font-size:0.9em;";
-  input.style.margin = "0";
+  el.style.cssText =
+    "display:flex;gap:5px;align-items:center;margin:2px 0;" +
+    "font-size:0.8em;line-height:1.2;min-height:16px;";
+  // .control-panel input{width:100%;min-height:30px;padding:5px 7px}
+  // の包括ルールがチェックボックスを巨大化させるため個別に打ち消す
+  input.style.cssText = "margin:0;flex:none;width:15px;min-height:15px;padding:0;";
   const span = document.createElement("span");
+  span.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
   span.textContent = label;
   el.append(input, span);
   return el;
@@ -45,11 +51,12 @@ export function mountLivePanel(host, h = {}) {
   box = document.createElement("div");
   box.id = "live-panel";
   box.style.cssText =
-    "margin:4px 0 10px;padding:8px;border:1px solid #9cc3d8;" +
+    "margin:4px 0 6px;padding:5px 6px;border:1px solid #9cc3d8;" +
     "border-radius:6px;display:none;";
 
   const head = document.createElement("div");
-  head.style.cssText = "font-weight:600;font-size:0.9em;margin-bottom:2px;";
+  head.style.cssText =
+    "font-weight:600;font-size:0.8em;margin-bottom:2px;color:#5a7d8f;";
   head.textContent = "QGIS Live";
   box.append(head);
 
@@ -86,15 +93,16 @@ export function mountLivePanel(host, h = {}) {
   // QGIS レイヤーのオンデマンド追加(addLayer フックがある場合のみ)
   if (typeof hooks.addLayer === "function") {
     const wrap = document.createElement("div");
-    wrap.style.cssText = "display:flex;gap:4px;margin-top:6px;";
+    wrap.style.cssText = "display:flex;gap:4px;margin-top:4px;align-items:center;";
     selEl = document.createElement("select");
     selEl.id = "live-layer-select";
-    selEl.style.cssText = "flex:1;min-width:0;font-size:0.85em;";
+    // select も control-panel 包括ルール(min-height:30px)を受けるため打ち消す
+    selEl.style.cssText = "flex:1;min-width:0;font-size:0.8em;height:22px;min-height:22px;padding:1px 4px;";
     const btn = document.createElement("button");
     btn.id = "live-layer-add";
     btn.type = "button";
     btn.textContent = tr("live.addLayer", "追加");
-    btn.style.cssText = "white-space:nowrap;";
+    btn.style.cssText = "white-space:nowrap;font-size:0.8em;padding:2px 8px;";
     btn.addEventListener("click", async () => {
       const title = selEl?.value || "";
       if (!title) return;
@@ -115,7 +123,7 @@ export function mountLivePanel(host, h = {}) {
 
   statusEl = document.createElement("p");
   statusEl.className = "hint";
-  statusEl.style.cssText = "margin:4px 0 0;font-size:0.8em;";
+  statusEl.style.cssText = "margin:2px 0 0;font-size:0.75em;";
   box.append(statusEl);
 
   host.prepend(box);
