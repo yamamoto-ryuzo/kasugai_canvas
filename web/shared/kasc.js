@@ -63,7 +63,7 @@ export function splitKascTail(tail) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -148,6 +148,12 @@ export function parseKasc(text) {
       doc.portal = parseKascPortalValue(parts);
       continue;
     }
+    if (type === "dash") {
+      // dash:名前 | layer=レイヤー名 | kpi=… | chart=列 | matrix=行,列 | filters=列 —
+      // 地図連動ダッシュボード(#123)。属性をクライアント集計して表示する
+      doc.dash.push(parseKascDashValue(parts, line));
+      continue;
+    }
     if (type === "group") {
       // group: パス | expanded|collapsed — レイヤ一覧の折りたたみ初期状態。
       // geo_webview が QGIS のレイヤーツリー展開状態をそのまま出す
@@ -230,7 +236,7 @@ export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base", "legendnode",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
   "group", "terrain", "scene3d", "light", "fly_geojson", "live",
-  "view", "html", "portal", "link",
+  "view", "html", "portal", "link", "dash",
 ]);
 
 // group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。
@@ -477,6 +483,31 @@ export function parseKascPortalValue(parts) {
     else portal.html = m[2].trim();
   }
   return portal;
+}
+
+// dash: 行の値をパースする(#123)。
+// `dash:名前 | layer=レイヤー名 | kpi=count,sum:列,avg:列,distinct:列,pct:列:値 |
+//   chart=列[,列…] | matrix=行,列 | filters=列[,列…] | detail=on|off`
+// layer= の属性をクライアント集計し、KPI・棒グラフ・クロス集計・一覧を表示する。
+// グラフ/セル選択はレイヤーの where= へ反映され地図が絞り込まれる。
+// detail=off は一覧を出さない統計のみ表示(公開用の権限別表示)
+export function parseKascDashValue(parts, line) {
+  const dash = { name: parts[0] || "", layer: "", kpis: [], charts: [], filters: [], matrix: null, detail: true, line };
+  const list = v => v.split(",").map(x => x.trim()).filter(Boolean);
+  for (const part of parts.slice(1)) {
+    const m = /^([^=]+)=(.*)$/.exec(part);
+    if (!m) continue;
+    const key = m[1].trim().toLowerCase(), val = m[2].trim();
+    if (key === "layer") dash.layer = val;
+    else if (key === "kpi") dash.kpis.push(...list(val));
+    else if (key === "chart" || key === "charts") dash.charts.push(...list(val));
+    else if (key === "filter" || key === "filters") dash.filters.push(...list(val));
+    else if (key === "matrix") {
+      const mm = list(val);
+      if (mm[0] && mm[1]) dash.matrix = { row: mm[0], col: mm[1] };
+    } else if (key === "detail") dash.detail = !/^(off|0|false|no)$/i.test(val);
+  }
+  return dash;
 }
 
 // #theme-select の中身を構築する。themes が空なら非表示化

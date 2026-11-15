@@ -31,6 +31,8 @@ import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility,
 import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-eval.js";
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
+import { createKascDashboard, featureCentroid } from "../shared/dashboard.js";
+import { parseKascDashValue } from "../shared/kasc.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
@@ -786,6 +788,8 @@ const inspectorHtmlSections = [];
 const inspectorLinks = [];
 // ポータルのカード宣言順リスト {kind:"view"|"link", entry}[]
 const inspectorPortalCards = [];
+// インスペクタの dash: 行で宣言されたダッシュボード定義(#123)
+const inspectorDashSpecs = [];
 // portal: 行の宣言 {enabled, title, open}。null=行なし
 let inspectorPortalSpec = null;
 // title: 行のパネルタイトル(ポータル見出しのフォールバックに使う)。null=行なし
@@ -1503,6 +1507,39 @@ const updatePortalButton = () => kascPortal().updateButton();
 const updatePortalUI = () => kascPortal().update();
 const openPortal = () => kascPortal().open();
 const closePortal = () => kascPortal().close();
+
+// ---- ダッシュボード(dash: 行の地図連動集計ビュー #123) ----
+// UI 構築は shared/dashboard.js へ共通化。ここでは宣言 getter と
+// レイヤーアダプタ(地物取得・where= 適用・地物フォーカス)を束ねる
+
+let _kascDash = null;
+function kascDash() {
+  if (!_kascDash) {
+    _kascDash = createKascDashboard({
+      t,
+      getDashSpecs: () => inspectorDashSpecs,
+      listLayers: () => getOrderedLayerItems()
+        .filter(i => i.type === "geojson" || i.type === "layer" || vectorDecoders.has(i.type))
+        .map(i => ({ id: i.id, title: i.title })),
+      getFeatures: id => (getLayerGeoJson(id)?.features) || [],
+      getLayerWhere: id => {
+        const it = getOrderedLayerItems().find(i => i.id === id || i.title === id);
+        return it?.where || null;
+      },
+      // グラフ選択 → レイヤーの where= へ反映(⏷フィルタと同じ applyLayerQueryFilter 経路。
+      // 非クエリ系は where-eval のクライアント評価、クエリ系は再クエリで地図が絞り込まれる)
+      setLayerWhere: (id, where) => {
+        const it = getOrderedLayerItems().find(i => i.id === id || i.title === id);
+        return it ? applyLayerQueryFilter(it, where || null) : false;
+      },
+      focusFeature: feature => {
+        const c = featureCentroid(feature);
+        if (c) void flyToFeature(c[1], c[0]);
+      },
+    });
+  }
+  return _kascDash;
+}
 
 function updateInspectorFromLayerOrder() {
   const input = document.querySelector("#inspector-input");
@@ -5861,6 +5898,7 @@ function applyInspector(text) {
   inspectorHtmlSections.splice(0, inspectorHtmlSections.length);
   inspectorLinks.splice(0, inspectorLinks.length);
   inspectorPortalCards.splice(0, inspectorPortalCards.length);
+  inspectorDashSpecs.splice(0, inspectorDashSpecs.length);
   inspectorPortalSpec = null;
   inspectorPanelTitle = null;
   activeViewName = null;
@@ -6022,6 +6060,13 @@ function applyInspector(text) {
     if (type === "portal") {
       const parts = value.split("|").map(part => part.trim());
       inspectorPortalSpec = parseKascPortalValue(parts);
+    }
+
+    // dash: 名前 | layer=レイヤー名 | kpi=… | chart=列 | matrix=行,列 | filters=列 —
+    // 地図連動ダッシュボードの宣言(#123)。属性をクライアント集計して表示する
+    if (type === "dash") {
+      const parts = value.split("|").map(part => part.trim());
+      inspectorDashSpecs.push(parseKascDashValue(parts, line));
     }
 
     // group: グループパス( / 区切り) | expanded|collapsed —
@@ -6850,6 +6895,7 @@ function applyInspector(text) {
   renderLayerList();
   updateThemeSelect();
   updatePortalUI();
+  kascDash().updateButton();
   renderFlyPathSelect();
   void ensureDrawnRouteFlyPath();
   refreshLayers();
@@ -12625,6 +12671,7 @@ window.kasugaiApi = {
     return true;
   },
   openPortal() { openPortal(); return portalAvailable(); },
+  openDashboard() { kascDash().open(); return inspectorDashSpecs.length > 0; },
   closePortal() { closePortal(); return true; },
   async focusLayer(idOrTitle) {
     const layer = getOrderedLayerItems().find(item => item.id === idOrTitle || item.title === idOrTitle);
