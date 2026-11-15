@@ -1603,7 +1603,21 @@ configureFollow({
     for (const { item } of layerEntries) { const e = item._geojson && geojsonExtent(item._geojson); if (!e) continue; env = env ? { west: Math.min(env.west, e.west), south: Math.min(env.south, e.south), east: Math.max(env.east, e.east), north: Math.max(env.north, e.north) } : e; }
     focusExtent(env);
   });
-  $("#navigation-toggle")?.addEventListener("click", () => document.querySelector(".navigation-toolbar")?.classList.toggle("collapsed"));
+  $("#navigation-toggle")?.addEventListener("click", e => {
+    const bar = document.querySelector(".navigation-toolbar");
+    if (!bar) return;
+    if (bar.classList.contains("collapsed")) {
+      bar.classList.remove("collapsed");
+    } else if (bar.classList.contains("compass-only")) {
+      bar.classList.replace("compass-only", "collapsed");
+    } else {
+      bar.classList.add("compass-only");
+    }
+    const collapsed = bar.classList.contains("collapsed");
+    e.currentTarget.textContent = collapsed ? "+" : "−";
+    e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    e.currentTarget.title = collapsed ? "展開" : "最小化";
+  });
   $("#basemap-toggle")?.addEventListener("click", () => panel.basemap?.classList.toggle("collapsed"));
   $("#basemap-globe")?.addEventListener("click", () => open(`https://earth.google.com/web/@${lastCam.lat},${lastCam.lng},${lastCam.height}d`, "_blank"));
 

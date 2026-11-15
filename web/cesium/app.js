@@ -9260,7 +9260,14 @@ function setupEvents() {
 
   document.querySelector("#navigation-toggle").addEventListener("click", event => {
     const toolbar = document.querySelector(".navigation-toolbar");
-    const collapsed = toolbar.classList.toggle("collapsed");
+    if (toolbar.classList.contains("collapsed")) {
+      toolbar.classList.remove("collapsed");
+    } else if (toolbar.classList.contains("compass-only")) {
+      toolbar.classList.replace("compass-only", "collapsed");
+    } else {
+      toolbar.classList.add("compass-only");
+    }
+    const collapsed = toolbar.classList.contains("collapsed");
     event.currentTarget.textContent = collapsed ? "+" : "−";
     event.currentTarget.setAttribute("aria-label", collapsed ? t("common.expand") : t("common.minimize"));
   });

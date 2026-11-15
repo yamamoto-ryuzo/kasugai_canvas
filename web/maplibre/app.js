@@ -2115,9 +2115,17 @@ document.querySelector("#basemap-toggle").addEventListener("click", e => {
   });
   document.querySelector("#navigation-toggle")?.addEventListener("click", e => {
     const bar = e.currentTarget.closest(".navigation-toolbar");
-    const collapsed = bar.classList.toggle("collapsed");
+    if (bar.classList.contains("collapsed")) {
+      bar.classList.remove("collapsed");
+    } else if (bar.classList.contains("compass-only")) {
+      bar.classList.replace("compass-only", "collapsed");
+    } else {
+      bar.classList.add("compass-only");
+    }
+    const collapsed = bar.classList.contains("collapsed");
     e.currentTarget.textContent = collapsed ? "+" : "−";
     e.currentTarget.setAttribute("aria-label", collapsed ? "展開" : "最小化");
+    e.currentTarget.title = collapsed ? "展開" : "最小化";
   });
 }
 
