@@ -45,8 +45,6 @@ group: 国土数値情報 | expanded
 group: 国土数値情報 / 政策区域 | expanded
 group: 国土数値情報 / 政策区域 / 行政地域 | expanded
 group: 国土数値情報 / 政策区域 / 行政地域 / 表示・非表示 | expanded
-group: 図郭 | collapsed
-group: 図郭 / 全国標準地域メッシュ | collapsed
 group: 背景図 | expanded
 group: 背景図 / Google | expanded
 group: 背景図 / 地形図（地理院） | expanded
@@ -62,12 +60,9 @@ geojson: サンプル/DM（スタイルサンプル）/DM_1 | DATA/DM_1.geojson 
 geojson: サンプル/DM（スタイルサンプル）/DM_3 | DATA/DM_3.geojson | on | style=DATA/DM_3.qml
 geojson: サンプル/PSEA(P21)2QGIS/Line | DATA/Line.geojson | off | style=DATA/Line.qml
 geojson: サンプル/PSEA(P21)2QGIS/point(letter) | DATA/point_letter.geojson | off | style=DATA/point_letter.qml
-gpkg: 国土数値情報/政策区域/行政地域/行政区域 | DATA/layer.gpkg | on | table=行政区域 | style=DATA/layer.qml
+gpkg: 国土数値情報/政策区域/行政地域/行政区域 | DATA/layer.gpkg | on | table=行政区域 | style=DATA/layer_cat.qml
 gpkg: 国土数値情報/政策区域/行政地域/表示・非表示/都道府県名 | DATA/layer_2.gpkg | on | table=dummy | style=DATA/layer_2.qml
 gpkg: 国土数値情報/政策区域/行政地域/表示・非表示/市区町村名 | DATA/layer_2.gpkg | on | table=dummy | style=DATA/layer_3.qml
-gpkg: 図郭/全国標準地域メッシュ/2次メッシュ（約10㎞四方） | DATA/2_10.gpkg | off | table=2次メッシュ（約10㎞四方） | style=DATA/2_10.qml
-gpkg: 図郭/全国標準地域メッシュ/5kmメッシュ（約5km四方） | DATA/5km_5km.gpkg | off | table=5kmメッシュ（約5km四方） | style=DATA/5km_5km.qml
-gpkg: 図郭/全国標準地域メッシュ/3次メッシュ（約1km四方） | DATA/3_1km.gpkg | off | table=3次メッシュ（約1km四方） | style=DATA/3_1km.qml
 theme: テーマ
 theme: テーマ2 | サンプル/DM（スタイルサンプル）/DM_C;style=DATA/DM_C__2.qml | サンプル/DM（スタイルサンプル）/DM_1;style=DATA/DM_1__2.qml | サンプル/DM（スタイルサンプル）/DM_3;style=DATA/DM_3__2.qml | 国土数値情報/政策区域/行政地域/行政区域;style=DATA/layer__2.qml | 国土数値情報/政策区域/行政地域/表示・非表示/都道府県名;style=DATA/layer_2__2.qml | 国土数値情報/政策区域/行政地域/表示・非表示/市区町村名;style=DATA/layer_3__2.qml
 theme: 検索前 | 国土数値情報/政策区域/行政地域/行政区域;style=DATA/layer__layer_5.qml | 国土数値情報/政策区域/行政地域/表示・非表示/都道府県名;style=DATA/layer_2__layer_5.qml | 国土数値情報/政策区域/行政地域/表示・非表示/市区町村名;style=DATA/layer_3__layer_5.qml

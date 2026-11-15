@@ -7,7 +7,7 @@
   !define BUILD_BRIDGE_EXE "..\server\target\release\bridge-hub.exe"
 !endif
 !ifndef SAMPLE_PROJECTS
-  !define SAMPLE_PROJECTS "..\installer\projects"
+  !define SAMPLE_PROJECTS "..\web\projects"
 !endif
 !ifndef WEB_DIR
   !define WEB_DIR "..\web"
@@ -81,7 +81,7 @@ Section "Install"
   SetOutPath "$INSTDIR\projects"
   ; /x "default" は相対パスではなく項目名にマッチするため、
   ; default/ と default_local\default/ の両方がここで除外される
-  File /nonfatal /r /x "default" "${SAMPLE_PROJECTS}\*"
+  File /nonfatal /r /x "default" /x "_portal_test" "${SAMPLE_PROJECTS}\*"
 
   CreateDirectory "$INSTDIR\projects\default"
   CreateDirectory "$INSTDIR\data"

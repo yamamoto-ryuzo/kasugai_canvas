@@ -26,7 +26,7 @@ DOWNLOAD_DIR = ROOT / "download"
 DOWNLOAD_ZIP = DOWNLOAD_DIR / "kasugai_canvas.zip"
 DOWNLOAD_INSTALLER = DOWNLOAD_DIR / "kasugai_canvas_setup.exe"
 DOWNLOAD_INSTALLER_ZIP = DOWNLOAD_DIR / "kasugai_canvas_setup.zip"
-SAMPLE_PROJECTS = ROOT / "installer" / "projects"
+SAMPLE_PROJECTS = ROOT / "web" / "projects"
 WEB_DIR = ROOT / "web"
 INSTALLER_SCRIPT = ROOT / "installer" / "kasugai_canvas.nsi"
 # 公開ドキュメントは docs/ 配下（GitHub Pages ソース）。バージョン同期の対象
@@ -355,14 +355,6 @@ def run_dev() -> None:
     """開発モードで起動する。"""
     _kill_existing_kasugai()
     _print_access_url()
-    debug_dir = SERVER_DIR / "target" / "debug"
-    debug_dir.mkdir(parents=True, exist_ok=True)
-    if SAMPLE_PROJECTS.exists():
-        dev_projects = debug_dir / "projects"
-        dev_projects.mkdir(parents=True, exist_ok=True)
-        for project in SAMPLE_PROJECTS.iterdir():
-            if project.is_dir() and not (dev_projects / project.name).exists():
-                shutil.copytree(project, dev_projects / project.name)
     subprocess.run(["cargo", "run", "--bin", "kasugai_canvas", "--", "--no-browser"], cwd=SERVER_DIR, check=True)
 
 
@@ -456,7 +448,11 @@ def build_release() -> None:
         archive.write(TARGET_EXE, arcname=TARGET_EXE.name)
         for project_file in SAMPLE_PROJECTS.rglob("*"):
             if project_file.is_file():
-                archive.write(project_file, arcname=(Path("projects") / project_file.relative_to(SAMPLE_PROJECTS)).as_posix())
+                rel = project_file.relative_to(SAMPLE_PROJECTS)
+                # _始まりのトップレベルは試験専用プロジェクトとして配布物から除外
+                if rel.parts[0].startswith("_"):
+                    continue
+                archive.write(project_file, arcname=(Path("projects") / rel).as_posix())
         if web_dir.exists():
             for web_file in web_dir.rglob("*"):
                 # vendor/ は SW が vendor.json のピン先 CDN へ直接解決するため配布物へ含めない

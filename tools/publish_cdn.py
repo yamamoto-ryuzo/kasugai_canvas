@@ -39,10 +39,11 @@ SOURCE_REPO = 'yamamoto-ryuzo/kasugai_canvas'
 
 CHANNELS = ('unstable', 'stable')
 
-# CDN へ複写するプロジェクト。default=既定プロジェクト（正本は
-# web/projects/default/・Cesium エンジンで作成・保守）、
-# sample_qgis=QGIS 連携デモ用。それ以外の試験プロジェクトは CDN へ出さない
-CDN_PROJECTS = ('default', 'sample_qgis')
+# CDN へ複写するプロジェクト。web/projects/projects.json の公開一覧
+# （default=既定プロジェクト・reinfolib=不動産情報ライブラリ試験・
+# sample_qgis=QGIS 連携デモ用）と一致させる。それ以外の試験プロジェクト
+# （_portal_test 等）は CDN へ出さない
+CDN_PROJECTS = ('default', 'reinfolib', 'sample_qgis')
 
 
 def _cargo_version():
