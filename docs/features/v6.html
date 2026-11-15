@@ -2,12 +2,207 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=../use/1-10-マルチエンジン.html">
-  <link rel="canonical" href="../use/1-10-マルチエンジン.html">
-  <title>ページが移動しました — KASUGAI Canvas ドキュメント</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V6: マルチエンジン — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+  </style>
 </head>
 <body>
-  <p>このページは <a href="../use/1-10-マルチエンジン.html">use/1-10-マルチエンジン.html</a> へ移動しました。</p>
-  <script>location.replace('../use/1-10-マルチエンジン.html' + location.hash);</script>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.0.0</span></h1>
+      <p>V6: マルチエンジン — .kasc を6つの地図エンジンで再生</p>
+    </header>
+    <main>
+      <p><a href="../tech/2-1-バージョン履歴.html">← バージョン履歴へ戻る</a></p>
+      <p>マルチエンジンの正本ドキュメントは以下に集約されています（本ページは V6 テーマの位置付け紹介）：
+      <a href="../use/1-10-マルチエンジン.html">使い方・内部構成</a>／
+      <a href="../datahost.html">ブラウザ WebGIS（外部ホスト配信）</a>／
+      <a href="v0.html">実装詳細（システム基本構成）</a>。</p>
+
+      <div style="margin: 15px 0;">
+        <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/V6/" class="demo-link" target="_blank" rel="noopener noreferrer">▶ V6 デモ（CDN ホスト版・最終版固定）</a>
+      </div>
+
+      <h2 id="v6">マルチエンジン</h2>
+      <p><strong>同じ .kasc プロジェクトを、用途に合った地図エンジンで再生できるようにする</strong>のが V6 のテーマです。<code>web/</code> をエンジン別フロント（Cesium・MapLibre・OpenLayers・Leaflet・GSI Maps※調整中・Navara※試験）に分割し、<code>.kasc</code> をエンジン非依存のプロジェクト形式として各エンジンで再生する構成です。<strong>メインエンジンは CesiumJS</strong>（開発の主対象・既定エンジン）で、他エンジンは .kasc プレイヤーとしての互換実装です。プロジェクトデータ（<code>projects/</code>）はエンジン非依存で、描画に依存しないコードは <code>web/shared/</code> に集約しています。</p>
+      <p><strong>ねらい</strong>: 同じ <code>.kasc</code> を「高機能3D（Cesium）」「軽量2D（Leaflet 等）」「地理院地図の UI（GSI Maps）」など、配布先の環境・用途に合ったエンジンで開けます。納品物は <code>.kasc</code>+<code>DATA/</code>+エンジン一式の静的ファイルだけで成立し、受け取り側がエンジンを選ぶ余地も残せます。エンジン（プレイヤー本体）とデータ（<code>.kasc</code> + <code>DATA/</code>）が分離しているため、CDN が配信するエンジンに外部ホストの <code>.kasc</code> を <code>?kasc=</code> で指定して開く<strong>サーバレスな WebGIS</strong> がメインの利用形態になりました。</p>
+      <figure>
+      <img src="../images/KASUGAI_Canvas_概要.png" alt="KASUGAI Canvas 概要：AI連携・FLYプレゼンテーション・マルチエンジン・.kasc+DATA 納品構造" />
+      <figcaption aria-hidden="true">概要（AI 連携・FLY プレゼン・マルチエンジン・納品構造）</figcaption>
+      </figure>
+      <figure>
+      <video src="../images/ブラウザが最強の3D地図に変わるKASUGAI_Canvasの凄さ.mp4" controls preload="metadata"></video>
+      <figcaption aria-hidden="true">紹介動画：ブラウザが最強の3D地図に変わる KASUGAI Canvas の凄さ</figcaption>
+      </figure>
+
+      <h3>🧭 エンジン構成</h3>
+      <table>
+        <thead><tr><th>エンジン</th><th>位置づけ</th><th>対応範囲</th></tr></thead>
+        <tbody>
+          <tr><td><code>cesium</code></td><td><strong>メイン・既定</strong>（3D）</td><td>全行タイプ・FLY・AI ツール・プラグイン・地形/DEM ドレープ。KASUGAI の全機能が集約される唯一のフル機能エンジン</td></tr>
+          <tr><td><code>maplibre</code></td><td>2D プレイヤー</td><td>WebGL ベース。全ベクター行・QML・duckdb/sql・属性 UI。<code>3dtiles:</code> は deck.gl 遅延ロード＋3D Tiles ドレープ対応。mvt:/pmtiles: も読める</td></tr>
+          <tr><td><code>openlayers</code></td><td>2D プレイヤー</td><td>OGC 準拠最良の 2D エンジン。MapLibre 相当の .kasc 再生（QML・duckdb/sql・属性 UI）</td></tr>
+          <tr><td><code>leaflet</code></td><td>2D プレイヤー</td><td>約40KBの超軽量。WebGL 不要で古いブラウザでも動作。<code>3dtiles:</code> は deck.gl オーバーレイで遅延ロード</td></tr>
+          <tr><td><code>gsimaps</code></td><td>中間エンジン・<strong>調整中</strong></td><td>vendored 地理院地図を iframe で組み込み、.kasc を作図リスト・外部タイルとして再生。上流コード無改変</td></tr>
+          <tr><td><code>navara</code></td><td><strong>試験的</strong>（写実3D）</td><td><code>@navaramap/three</code>（Rust/WASM + Three.js）によるフォトリアルシーン。ベクター・<code>3dtiles:</code>・ベースマップを再生。<code>wms:</code>/<code>wmts:</code> 未対応</td></tr>
+        </tbody>
+      </table>
+      <p>各エンジンの詳細な対応範囲・特性比較は <a href="../use/1-10-マルチエンジン.html">使い方 — マルチエンジン</a>・<a href="../library.html">ライブラリ</a> を参照してください。</p>
+
+      <h3>🧩 V6 の構成要素</h3>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🔀 エンジン選択と切替</h3>
+          <p><code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara</code> で起動エンジンを選択（既定 cesium）。パネルの切替リンクはプロジェクト・カメラ位置・インスペクター編集・レイヤ可視性を引き継ぐ</p>
+        </div>
+        <div class="feature-card">
+          <h3>📄 状態引継ぎ（session-state）</h3>
+          <p><code>.kasc</code>＝初期値に対し、稼働中の現在値（カメラ・可視性・テーマ・ベースマップ・インスペクタ）を localStorage <code>kasugai:session-state</code>（Cesium 規約の正典）へ常時同期。切替先エンジンが同じ正典を引き継ぐ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ 2D プレイヤー（MapLibre / OpenLayers / Leaflet）</h3>
+          <p>全ベクター行・QML・duckdb/sql・属性 UI の .kasc 再生。<code>3dtiles:</code> は deck.gl を遅延ロードして表示・3D Tiles ドレープにも対応</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗾 GSI Maps エンジン（調整中）</h3>
+          <p>vendored 地理院地図を iframe で組み込む中間エンジン。.kasc を作図リスト・外部タイルとして再生し、Globe 上へのレイヤ注入・地理院地図レイヤの .kasc 取り込みも可能</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌍 Navara エンジン（試験的）</h3>
+          <p><code>@navaramap/three</code>（Rust/WASM + Three.js）による写実 3D プレゼンエンジン。ベクター行・<code>3dtiles:</code>・ベースマップをフォトリアルシーン（大気・太陽・地形）で描画</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧩 エンジン非依存コア（shared/）</h3>
+          <p>.kasc ローダー・ベクターデコーダー・QML コンパイラ・属性ウィジェット・AI チャット・印刷を <code>web/shared/</code> に集約。新エンジン追加コストを低減</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌐 CDN ホスト版（kasugai-canvas-web）</h3>
+          <p>エンジン一式を GitHub Pages で <code>stable/</code>・<code>unstable/</code> の2チャンネル配信。<code>?kasc=&lt;url&gt;</code>・<code>?kasc=local</code> で Canvas 未インストール環境でもブラウザ再生。<code>tools/publish_cdn.py</code> で web/ から同期</p>
+        </div>
+      </div>
+
+      <h3>🌐💻 利用形態 — ブラウザ WebGIS とローカルアプリ</h3>
+      <p>マルチエンジン構成（Cesium＋4互換プレイヤー＋試験的 Navara）の利用形態は2系統です。メインはインストール不要の<strong>ブラウザ WebGIS</strong>（CDN エンジン × 外部ホストの .kasc）、フル機能が必要な場合は<strong>ローカルアプリ</strong>を使います。</p>
+      <div class="install-steps webgis">
+        <h3>【WebGIS】ブラウザ WebGIS（メイン・インストール不要）</h3>
+        <p>CDN（<a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web</a>）が配信するエンジンに、外部ホストの <code>.kasc</code> を <code>?kasc=</code> で指定して開くサーバレスな WebGIS です。QGIS の geo_webview でエクスポートした <code>.kasc</code>+<code>DATA/</code> を任意の静的ホストに置くだけで使えます。公開デモもこの形態の実例です。</p>
+        <p>詳細は <a href="../datahost.html">ブラウザ WebGIS ガイド</a>（必須ファイル・?kasc= 仕様・公開デモ）を参照してください。</p>
+      </div>
+      <div class="install-steps app">
+        <h3>【アプリ】ローカルアプリ kasugai_canvas.exe（フル機能）</h3>
+        <p>インストールして使う<strong>フル機能版</strong>です（QGIS連携・ファイル保存・rclone クラウド連携・AIブリッジなど、<code>localhost:8510</code> で動作）。配布物は <code>download/</code> フォルダから直接ダウンロードできます。<strong>インストーラー版を推奨</strong>します — <code>.kasc</code> ファイルのダブルクリック起動（拡張子の関連付け＝外部プロジェクト登録）はインストーラー版でのみ利用できます。</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin: 15px 0;">
+          <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas_setup.zip" class="demo-link" target="_blank">DOWNLOAD: インストーラー ZIP（推奨）</a>
+          <a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/raw/main/download/kasugai_canvas.zip" class="demo-link" target="_blank">DOWNLOAD: ポータブル ZIP</a>
+        </div>
+        <p>詳しい手順は <a href="../use/6-1-プロジェクト.html">ローカルアプリのガイド</a> を参照してください。</p>
+      </div>
+
+      <h3>🔗 連携構成図 — どこで動くか</h3>
+      <p>KASUGAI Canvas は <strong>エンジン（プレイヤー本体）とデータ（.kasc + DATA/）が分離</strong>した設計です。開発の起点は <code>kasugai_canvas</code> リポジトリの <code>web/</code>（エンジン正本）で、そこから <strong>GitHub Pages CDN（kasugai-canvas-web）</strong> と <strong>配布 ZIP（ローカルアプリ）</strong> の2経路で発行されます。メインの使い方は、CDN が配信するエンジンに静的ホスト上の <code>.kasc</code> を <code>?kasc=</code> で指定して開く <strong>サーバレスな WebGIS</strong> です（インストール不要）。</p>
+      <figure class="mermaid-fig"><figcaption>KASUGAI Canvas 連携構成図</figcaption>
+<pre class="mermaid" aria-label="KASUGAI Canvas 連携構成図">
+flowchart TB
+  REPO["kasugai_canvas リポジトリ（開発の起点）<br/>web/ = エンジン正本 ＋ server/ = Rust アプリ"]
+
+  REPO ==>|"tools/publish_cdn.py"| CDN["GitHub Pages CDN（メイン）<br/>kasugai-canvas-web<br/>stable/・unstable/<br/>cesium / maplibre / openlayers / leaflet / gsimaps / navara(試験)"]
+  REPO ==>|"run.py -B → ZIP（自動更新）"| APP["ローカルアプリ<br/>kasugai_canvas.exe :8510<br/>フル機能（QGIS連携・保存・rclone・AIブリッジ）"]
+  UP["vendor 上流オリジナル<br/>jsdelivr / raw.githubusercontent<br/>（各 engine の vendor.json でピン）"]
+  UP -.->|"vendor/*（gsimaps・navara）<br/>SW が同一オリジン中継"| APP
+  UP -.->|"vendor/*（gsimaps・navara）<br/>SW が同一オリジン中継"| WEB
+
+  QGIS["QGIS + geo_webview"] -->|"エクスポート"| DATA[".kasc + DATA/ のみ配置<br/>任意の静的ホスト or :8089<br/>（エンジンは CDN 経由）"]
+
+  CDN ==>|"エンジンを配信"| WEB["ブラウザ WebGIS（メインの利用形態）<br/>…/&amp;lt;engine&amp;gt;/?kasc=&amp;lt;.kascのURL&amp;gt;<br/>CDN 経由ならインストール不要"]
+  DATA -.->|"?kasc= で指定"| WEB
+  QGIS -.->|"▶ Canvas で登録"| APP
+
+  AGENTS["外部エージェント<br/>GitHub Copilot / Devin(acp) / Antigravity / ACP対応CLI<br/>要各CLI・本人認証"] ==>|"AI が地図を制御<br/>（reply/actions を返す）"| BRIDGE["AIブリッジハブ bridge-hub.exe<br/>アプリ・WebGIS 共通 =8511<br/>チャット ─POST /agent {provider,...}→<br/>選択中プロバイダのみ内部起動"]
+  APP ---|"起動時に未起動なら自動起動（内蔵なし）"| BRIDGE
+  CDN -.->|"download/bridge-hub.exe(.zip) を配信"| BRIDGE
+  BRIDGE -.->|"同一PCなら /health 検出（:8511）で接続"| WEB
+  AIAPI["AI API（内蔵AI）<br/>Gemini / OpenAI互換<br/>BYOキー or /api/gemini キー隠蔽プロキシ<br/>（workers・Cloud Run・ローカル）"] ==>|"AI が地図を制御<br/>（function calling）"| WEB
+
+  WEB --- DEMO["公開デモ（WebGIS の実例）<br/>CDNホスト版＝CDN経由<br/>Cloudflare Pages / Workers / Cloud Run<br/>＝web/自前配信＋認証・/api/*"]
+
+  classDef webgis fill:#eef0ff,stroke:#667eea,color:#1a2230
+  classDef localapp fill:#e9f7ee,stroke:#2e9e56,color:#1a2230
+  classDef ai fill:#f4eaff,stroke:#8a4fff,color:#1a2230
+  classDef neutral fill:#f6f8fa,stroke:#9aa5b1,color:#5a6577
+  class WEB,CDN webgis
+  class APP localapp
+  class BRIDGE,AGENTS,AIAPI ai
+  class QGIS,DATA,DEMO neutral
+      </pre>
+</figure>
+      <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+      </script>
+
+      <h4>再生 URL の構成</h4>
+      <p>再生 URL <code>…/&lt;stage&gt;/&lt;engine&gt;/?kasc=&lt;.kascのURL&gt;</code> の意味:</p>
+      <table>
+        <tr><th>要素</th><th>値</th><th>意味</th></tr>
+        <tr>
+          <td><code>&lt;stage&gt;</code></td>
+          <td><code>stable</code>（既定）/ <code>unstable</code></td>
+          <td>CDN の配信チャンネル。stable=安定版・unstable=開発版</td>
+        </tr>
+        <tr>
+          <td><code>&lt;engine&gt;</code></td>
+          <td><code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code> / <code>gsimaps</code> / <code>navara</code></td>
+          <td>再生に使う描画エンジン。<code>cesium</code> がメイン（3D・フル機能）、他は同じ <code>.kasc</code> を読む互換プレイヤー。<code>navara</code> は試験的エンジン（写実3D）</td>
+        </tr>
+        <tr>
+          <td><code>?kasc=</code></td>
+          <td>.kasc ファイルの URL（要 URL エンコード）</td>
+          <td>DATA/ 等の相対参照は .kasc のある URL 基準で解決されるため、<code>.kasc</code> と <code>DATA/</code> は同じフォルダに置く</td>
+        </tr>
+      </table>
+
+      <h4>実行時の供給元 — 何をどこから読むか</h4>
+      <p><code>web/</code> 一式は <code>publish_cdn.py</code> が CDN へ丸ごとミラーするため、<code>shared/</code> 等の同じファイルが CDN と配布物（ZIP・インストーラー）の両方に存在します。どちらを読むかは<strong>開いているページのオリジンで決まります</strong>（エンジンコードは全て相対パス参照）。外部を参照するのは <code>/vendor/*</code>（gsimaps・navara）のみで、実体はどこにも置かず <strong>Service Worker（<code>vendor-proxy-sw.js</code>＝vendor 同一オリジン中継・SW 制御）</strong>が <code>vendor.json</code> のピン先（jsdelivr・raw.githubusercontent）からどのオリジンでも同一オリジン供給します（Service Worker 前提）。</p>
+      <table>
+        <tr><th>取得物</th><th>ローカルアプリ（:8510）</th><th>ブラウザ WebGIS（CDN エンジン）</th></tr>
+        <tr>
+          <td>プレイヤーコード<br/>（<code>web/&lt;engine&gt;/</code>・<code>shared/</code>）</td>
+          <td><code>web/</code> を複写してアプリに同梱<br/>（<code>:8510</code> がローカル配信）</td>
+          <td>CDN から配信</td>
+        </tr>
+        <tr>
+          <td>vendored ライブラリ<br/>（<code>vendor/gsimaps/</code>・<code>vendor/navara/</code>）</td>
+          <td>同梱せず → <code>vendor-proxy-sw.js</code>（vendor 同一オリジン中継・SW 制御）が vendor.json のピン先 CDN から同一オリジン中継<br/>（Service Worker 前提）</td>
+          <td>同左</td>
+        </tr>
+        <tr>
+          <td>描画ライブラリ<br/>（CesiumJS・Leaflet・MapLibre・OpenLayers・DuckDB-WASM 等）</td>
+          <td>jsdelivr / unpkg</td>
+          <td>jsdelivr / unpkg</td>
+        </tr>
+        <tr>
+          <td>地図タイル・データ</td>
+          <td>地理院・OSM 等の外部サーバー</td>
+          <td>同左</td>
+        </tr>
+      </table>
+      <p><small>静的ホストへ <code>.kasc</code>+<code>DATA/</code> だけを置く通常の WebGIS 配信では、エンジンは常に CDN（kasugai-canvas-web）から読み込まれます。機能面ではローカルアプリだけがフル機能（QGIS連携・ファイル保存・rclone・ブリッジハブの自動起動）を持ちます。AI の接続系統とブリッジハブの構成（<code>:8511</code> に一本化・<code>bridge-hub.zip</code>）は「<a href="../index.html#ai-2keito">3. AI — API 直通とブリッジ経由</a>」にまとめています。CDN 経由はブラウザ閲覧中心です。なおローカルアプリも vendored 地理院地図（gsimaps vendor・約75MB）は同梱せず、<code>/vendor/*</code> のミスを Service Worker が上流オリジナル（<code>vendor.json</code> のピン先 CDN）へ中継して同一オリジン供給します。さらに描画ライブラリ（CesiumJS・Leaflet・MapLibre・OpenLayers・DuckDB-WASM 等）は jsdelivr/unpkg から読み込むため、配布形態に関わらずブラウザ実行は常にオンライン前提です（試験的エンジン Navara も Worker の同一オリジン要件のため <code>vendor/navara/</code> パス経由だが、実体の供給は同じく SW 中継）。公開デモはいずれもこの WebGIS の実例で、Cloudflare Pages/Workers・Cloud Run 版は <code>web/</code> を自前配信し認証・<code>/api/*</code> を付加した構成です（基本の配布経路は CDN + 配布 ZIP の2系統）。データの配信元は静的ホストのほか、QGIS 側の geo_webview 内蔵サーバー（127.0.0.1:8089 /export-data/）からも読めます（自分の PC 上のみ有効）。詳細は <a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/guide/" target="_blank" rel="noopener noreferrer">kasugai-canvas-web ガイド</a> を参照してください。</small></p>
+
+      <section class="card">
+        <h2>📚 関連ドキュメント</h2>
+        <ul>
+          <li><a href="../use/1-10-マルチエンジン.html">使い方 — マルチエンジン（エンジン別対応・session-state 仕様・shared/ 一覧）</a></li>
+          <li><a href="../datahost.html">ブラウザ WebGIS（外部ホスト配信）ガイド</a></li>
+          <li><a href="v0.html">V0: システム基本構成（バージョン横断の実装詳細）</a></li>
+          <li><a href="../library.html">ライブラリ — 地図エンジンの選定と追加候補</a></li>
+          <li><a href="../tech/2-1-バージョン履歴.html">← バージョン履歴へ戻る</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
 </body>
 </html>

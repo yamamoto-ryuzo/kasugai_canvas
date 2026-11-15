@@ -384,7 +384,7 @@ Note over C,API: 往復上限 = ツール実行の上限往復数（既定10・1
 <code>POST /api/mcp
 </code> 中継（ローカル版・Workers・Cloud Run で提供・BYO トークン転送のみ）に自動フォールバックします。
 <strong>QGIS
-</strong> は「起動中の QGIS に接続」ボタンがあり、
+</strong> は起動時に稼働中のセッションを自動検出して接続します（起動直後に見つからなくてもしばらく再試行。データソース一覧で QGIS Live を OFF にした場合は自動接続しません）。「起動中の QGIS に接続」ボタンは QGIS 再起動後などの手動での再検出・再接続用で、
 <code>/api/qgis-live/discover
 </code> が稼働中の QGIS Live Driver セッション（
 <code>~/.qgis-live/
