@@ -31,6 +31,7 @@
 //   clearView()            — 適用前状態への復元(async 可)
 //   applyCam(name)?        — data-cam="カメラ名" の移動(省略可)
 //   applyBase(name)?       — data-base="背景名" の背景地図切替(省略可)
+//   applyFeature(spec)?    — data-feature="レイヤ/属性=値" の地物検索+ズーム(省略可)
 //   getActiveViewName()    — 適用中ビュー名 or null
 //   getPortalSpec()        — {enabled,title,open,html?} or null (portal: 行)
 //   getPanelTitle()        — title: 行のパネルタイトル or null
@@ -39,6 +40,7 @@
 //
 // ポータル内HTML(html:/portal html=)で使える data-* 属性:
 //   data-view="ビュー名" — ビュー適用＋ポータルを閉じる
+//   data-feature="レイヤ/属性=値" — 地物検索+ズーム＋ポータルを閉じる
 //   data-link="URL"      — 外部URLを新規タブで開く
 //   data-cam="カメラ名"  — カメラプリセットへ移動(ポータルは開いたまま)
 //   data-base="背景名"   — 背景地図を切替(none/transparent も可)
@@ -47,7 +49,7 @@
 export function createKascPortal(cfg) {
   const {
     t, resolveProjectUrl = u => u, loadInfoContent,
-    applyView, clearView, applyCam, applyBase,
+    applyView, clearView, applyCam, applyBase, applyFeature,
     getActiveViewName = () => null,
     getPortalSpec = () => null,
     getPanelTitle = () => null,
@@ -96,6 +98,11 @@ export function createKascPortal(cfg) {
       if (viewEl && body.contains(viewEl)) {
         const card = getCards().find(c => c.kind === "view" && c.entry.name === viewEl.dataset.view);
         if (card) { void applyView(card.entry); close(); }
+        return;
+      }
+      const featureEl = event.target.closest("[data-feature]");
+      if (featureEl && body.contains(featureEl)) {
+        if (applyFeature) { void applyFeature(featureEl.dataset.feature); close(); }
         return;
       }
       const linkEl = event.target.closest("[data-link]");

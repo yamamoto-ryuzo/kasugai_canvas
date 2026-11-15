@@ -216,6 +216,16 @@
 </tr>      
 <tr>
 <td>
+<code>data-feature="レイヤ/属性=値"
+</code>
+</td>
+<td>指定レイヤの地物を属性値で検索しズーム＋選択ハイライト（レイヤ省略時は全ベクターレイヤー）
+</td>
+<td>閉じる
+</td>
+</tr>      
+<tr>
+<td>
 <code>data-link="URL"
 </code>
 </td>
@@ -270,6 +280,68 @@
 <code>&lt;button data-view="工事中"&gt;工事中を表示&lt;/button&gt;&lt;button data-cam="全体"&gt;全体へ移動&lt;/button&gt;&lt;button data-link="https://www.city.kasugai.lg.jp/"&gt;市役所サイト ↗&lt;/button&gt;
 </code>
 </pre>      
+<h3>🔗 URL ディープリンク（view= / feature= / where=）
+</h3>      
+<p>ポータル記事・外部台帳・お知らせから「この箇所を地図で見る」リンクを発行できます。クエリ側のパラメータで、
+<code>?project=
+</code>/
+<code>?kasc=
+</code>/
+<code>?engine=
+</code>・カメラハッシュと併用します（Cesium エンジン）
+</p>      
+<table>      
+<thead>
+<tr>
+<th>パラメータ
+</th>
+<th>動作
+</th>
+</tr>
+</thead>      
+<tbody>      
+<tr>
+<td>
+<code>&amp;view=ビュー名
+</code>
+</td>
+<td>起動時に該当 
+<code>view:
+</code> を自動適用（ポータルのカード押下と同等。適用後ポータルは閉じる）
+</td>
+</tr>      
+<tr>
+<td>
+<code>&amp;feature=レイヤ/属性=値
+</code>
+</td>
+<td>指定レイヤの地物を属性値で検索し、ズーム＋選択ハイライト。レイヤ省略時は全ベクターレイヤーを検索（クエリ系レイヤーは対象外）
+</td>
+</tr>      
+<tr>
+<td>
+<code>&amp;where=式
+</code>
+</td>
+<td>
+<code>view:
+</code> を通さない即席フィルタ。
+<code>レイヤ名/式
+</code> 形式ならそのレイヤーのみ、裸の式は全ベクターレイヤーへ適用（適用は ⏷フィルタと同じ経路）
+</td>
+</tr>      
+</tbody>      
+</table>      
+<pre class="text">
+<code>例: …/cesium/?project=road_2026&amp;feature=地点/箇所ID=R5-012     …/cesium/?project=road_2026&amp;view=工事中箇所     …/cesium/?kasc=…&amp;where=道路工事/状況='工事中'
+</code>
+</pre>      
+<p>共有URLの生成は 
+<code>shared/kasc.js
+</code> の 
+<code>buildViewUrl(view, {view, feature, where})
+</code> が対応します。
+</p>      
 <h3>🧩 フルカスタムHTML（portal:…|html=）詳細
 </h3>      
 <p>

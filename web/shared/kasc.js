@@ -1604,6 +1604,20 @@ export function hasUrlView(view) {
   return Number.isFinite(view?.latitude) && Number.isFinite(view?.longitude);
 }
 
+// ディープリンク用 URL パラメータ(#124): ビュー適用・地物フォーカス・即席フィルタ。
+// 選択子なのでクエリ側(?view=/&feature=/&where=)に置き、カメラ同様ハッシュ側も
+// フォールバックで読む。各値は未指定時 ""（view= は .kasc の view: 名、
+// feature= は <レイヤ>/<属性>=<値>、where= は <レイヤ名/>?式）
+export function parseUrlDeepLink(source = window.location.search + window.location.hash) {
+  const hashIndex = source.indexOf("#");
+  const searchPart = hashIndex >= 0 ? source.slice(0, hashIndex) : source;
+  const hashPart = hashIndex >= 0 ? source.slice(hashIndex + 1) : "";
+  const searchParams = new URLSearchParams(searchPart.startsWith("?") ? searchPart.slice(1) : searchPart);
+  const hashParams = new URLSearchParams(hashPart);
+  const get = name => (hashParams.get(name) ?? searchParams.get(name) ?? "").trim();
+  return { view: get("view"), feature: get("feature"), where: get("where") };
+}
+
 // 現在のクエリ（project= 等）を保ちつつビュー状態をハッシュへ反映する。
 // パラメータをクエリ側へ置いて来た古い URL 形式もハッシュ側へ寄せる
 export function writeUrlView(view, projectId) {
@@ -1634,13 +1648,18 @@ export function urlViewHash(view = {}) {
 }
 
 // 正典の共有 URL を組み立てる: ビュー状態はハッシュ、選択子はクエリ。
-// opts: { projectId, kascUrl（指定時 projectId より優先）, engine, base }。
+// opts: { projectId, kascUrl（指定時 projectId より優先）, engine, base,
+//         view（view: 名）, feature（<レイヤ>/<属性>=<値>）, where（<レイヤ名/>?式）}。
+// view/feature/where はディープリンク(#124)としてクエリ側へ付加する。
 // base 省略時は現在の origin+pathname（エンジン自身の URL）
-export function buildViewUrl(view = {}, { projectId, kascUrl, engine, base } = {}) {
+export function buildViewUrl(view = {}, { projectId, kascUrl, engine, base, view: viewName, feature, where } = {}) {
   const params = new URLSearchParams();
   if (engine) params.set("engine", engine);
   if (kascUrl) params.set("kasc", kascUrl);
   else if (projectId) params.set("project", projectId);
+  if (viewName) params.set("view", viewName);
+  if (feature) params.set("feature", feature);
+  if (where) params.set("where", where);
   const search = params.toString();
   const hash = urlViewHash(view);
   return `${base || `${window.location.origin}${window.location.pathname}`}${search ? `?${search}` : ""}${hash ? `#${hash}` : ""}`;

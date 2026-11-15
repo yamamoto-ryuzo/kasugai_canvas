@@ -27,7 +27,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, splitKascTail, geojsonExtent } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
 import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-eval.js";
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
@@ -1478,6 +1478,110 @@ async function clearKascView() {
   updatePortalButton();
 }
 
+// ---- URL ディープリンク(?view=/&feature=/&where=) ----
+// ポータル記事・外部台帳から「この箇所を地図で見る」リンクを発行する仕組み(#124)。
+// プロジェクト読込後に applyUrlDeepLink で適用する。view= はポータルの
+// カード押下と同等(適用後ポータルを閉じる)
+
+// feature=/where= のレイヤー指定を id・タイトル(フルパス/葉名)で照合する
+function findDeepLinkLayer(name) {
+  const norm = normKascTitle(name);
+  return getOrderedLayerItems().find(item =>
+    item.id === name || item.title === name || item.sourceTitle === name
+    || normKascTitle(item.sourceTitle || item.title) === norm
+    || normKascTitle(item.sourceTitle || item.title).split("/").pop() === norm) || null;
+}
+
+// feature=/where= の対象となるベクターレイヤー。sql:/ogrsql: は
+// フィルタが where 式ではなく SELECT 文全体のため対象外(view: と同じ規則)
+function deepLinkVectorLayers() {
+  return getOrderedLayerItems().filter(item =>
+    item.type !== "sql" && item.type !== "ogrsql"
+    && (item.type === "geojson" || item.type === "layer" || vectorDecoders.has(item.type)));
+}
+
+// feature=/data-feature の選択ハイライト。一時 GeoJsonDataSource を
+// 貼り替えで管理し、インスペクタ再適用や次の指定で置き換える
+let deepLinkHighlightDs = null;
+async function highlightDeepLinkFeature(feature) {
+  if (deepLinkHighlightDs) { viewer.dataSources.remove(deepLinkHighlightDs, true); deepLinkHighlightDs = null; }
+  if (!feature?.geometry) return;
+  const ds = await Cesium.GeoJsonDataSource.load(
+    { type: "FeatureCollection", features: [feature] },
+    { stroke: Cesium.Color.ORANGE, fill: Cesium.Color.ORANGE.withAlpha(0.2), strokeWidth: 4, markerColor: Cesium.Color.ORANGE, clampToGround: true });
+  deepLinkHighlightDs = ds;
+  await viewer.dataSources.add(ds);
+  requestRender();
+}
+
+// feature=<レイヤ>/<属性>=<値>: 指定レイヤ(省略時は全ベクター)の地物を属性値で
+// 検索し、範囲へズーム＋選択ハイライトする。ベクター検索索引と同じく
+// クエリ系レイヤーは読み込み済み行しか持たないため対象外
+async function applyUrlFeature(spec) {
+  const eq = String(spec || "").indexOf("=");
+  const lhs = eq >= 0 ? spec.slice(0, eq) : "";
+  const slash = lhs.lastIndexOf("/");
+  const layerName = slash >= 0 ? lhs.slice(0, slash).trim() : "";
+  const attr = (slash >= 0 ? lhs.slice(slash + 1) : lhs).trim();
+  const value = eq >= 0 ? spec.slice(eq + 1).trim() : "";
+  if (!attr) { console.warn("feature=: <レイヤ>/<属性>=<値> の形式で指定してください", spec); return false; }
+  const targets = layerName ? [findDeepLinkLayer(layerName)].filter(Boolean) : deepLinkVectorLayers();
+  if (!targets.length) { console.warn("feature=: レイヤーが見つかりません", layerName || spec); return false; }
+  for (const item of targets) {
+    const dec = vectorDecoders.get(item.type);
+    if (isQueryDecoder(dec, item)) continue;
+    let fc = null;
+    try { fc = await loadVectorSourceCached(item, dec); } catch (e) { console.warn(`feature=: ${item.title} の読み込みに失敗`, e); }
+    const hit = (fc?.features || []).find(f => String(f?.properties?.[attr] ?? "") === value);
+    if (!hit) continue;
+    await highlightDeepLinkFeature(hit);
+    const env = geojsonExtent({ type: "FeatureCollection", features: [hit] });
+    if (env && (env.east - env.west > 1e-9 || env.north - env.south > 1e-9)) {
+      flyToRectangle(env.west, env.south, env.east, env.north);
+    } else {
+      const c = featureCentroid(hit);
+      if (c) void flyToFeature(c[1], c[0]);
+      else if (env) void flyToFeature((env.south + env.north) / 2, (env.west + env.east) / 2);
+    }
+    return true;
+  }
+  console.warn("feature=: 地物が見つかりません", spec);
+  return false;
+}
+
+// where=<式>: view: を通さない即席フィルタ。`レイヤ名/式` 形式ならそのレイヤーのみ、
+// 裸の式は全ベクターレイヤーへ適用する。適用経路は ⏷フィルタと同じ
+// applyLayerQueryFilter(クエリ系は SQL・非クエリ系は where-eval のクライアント評価)
+async function applyUrlWhere(spec) {
+  const slash = String(spec || "").indexOf("/");
+  if (slash > 0) {
+    const layer = findDeepLinkLayer(spec.slice(0, slash).trim());
+    if (layer) return applyLayerQueryFilter(layer, spec.slice(slash + 1).trim());
+  }
+  let applied = 0;
+  for (const item of deepLinkVectorLayers()) {
+    if (await applyLayerQueryFilter(item, spec)) applied++;
+  }
+  if (!applied) console.warn("where=: 適用できるベクターレイヤーがありません", spec);
+  return applied > 0;
+}
+
+// 起動時ディープリンク適用。プロジェクト読込(applyInspector)後に呼ぶ。
+// view= → where= → feature= の順で適用し、最終カメラは feature= が優先される
+async function applyUrlDeepLink() {
+  if (!urlDeepLink) return;
+  if (urlDeepLink.view) {
+    const view = inspectorViews.find(entry => entry.name === urlDeepLink.view);
+    if (view) await applyKascView(view);
+    else console.warn("view=: ビューが見つかりません", urlDeepLink.view);
+  }
+  if (urlDeepLink.where) await applyUrlWhere(urlDeepLink.where);
+  if (urlDeepLink.feature) await applyUrlFeature(urlDeepLink.feature);
+  // ディープリンクの目的地は地図側にあるため、起動時ポータル(open=auto)が
+  // 開いていても閉じてリンク先の地物・フィルタを見せる
+  closePortal();
+}
+
 // ---- ポータル(portal:/html:/view:/link: 行で構成する開始画面) ----
 // UI 構築は shared/portal.js へ共通化。ここでは状態getterと
 // applyView/clearView を束ねた遅延インスタンスを提供する
@@ -1493,6 +1597,7 @@ function kascPortal() {
       clearView: () => clearKascView(),
       applyCam: name => applyViewCam(name),
       applyBase: name => applyViewBase(name),
+      applyFeature: spec => applyUrlFeature(spec),
       getActiveViewName: () => activeViewName,
       getPortalSpec: () => inspectorPortalSpec,
       getPanelTitle: () => inspectorPanelTitle,
@@ -5896,6 +6001,8 @@ function applyInspector(text) {
   inspectorThemes.splice(0, inspectorThemes.length);
   inspectorViews.splice(0, inspectorViews.length);
   inspectorHtmlSections.splice(0, inspectorHtmlSections.length);
+  // ディープリンク(feature=/data-feature)のハイライトはプロジェクト単位で破棄する
+  if (deepLinkHighlightDs) { viewer.dataSources.remove(deepLinkHighlightDs, true); deepLinkHighlightDs = null; }
   inspectorLinks.splice(0, inspectorLinks.length);
   inspectorPortalCards.splice(0, inspectorPortalCards.length);
   inspectorDashSpecs.splice(0, inspectorDashSpecs.length);
@@ -12320,6 +12427,7 @@ setupThreeJs();
 applyInspector("");
 updateEffectSettings();
 const urlCamera = parseUrlCamera(initialCameraSource);
+const urlDeepLink = parseUrlDeepLink(initialCameraSource);
 
 function parseUrlCamera(source = window.location.search + window.location.hash) {
   const hashIndex = source.indexOf("#");
@@ -13585,6 +13693,10 @@ window.addEventListener("pagehide", () => {
   } else {
     if (initialCamera) flyTo(initialCamera, 0);   // 履歴がない or 同じURL
   }
+  // URL ディープリンク(view=/feature=/where=)を適用(#124)。初期カメラ位置と
+  // エンジン切替の引継ぎ状態より後に適用し、view= の cam=/feature= のズームと
+  // フィルタが最終状態になるようにする
+  try { await applyUrlDeepLink(); } catch (e) { console.error(e); }
   renderPresets();
   window.kasugaiApi.isReady = true;
   window.kasugaiApi.emit("ready");
