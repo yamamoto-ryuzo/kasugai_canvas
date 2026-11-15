@@ -63,7 +63,7 @@ export function splitKascTail(tail) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -154,6 +154,12 @@ export function parseKasc(text) {
       doc.dash.push(parseKascDashValue(parts, line));
       continue;
     }
+    if (type === "form") {
+      // form:名前 | title=見出し | to=URL|backend:パス | fields=… —
+      // ポータルのフォーム投稿カード(#131)。位置+属性をJSON POSTする
+      doc.forms.push(parseKascFormValue(parts, line));
+      continue;
+    }
     if (type === "group") {
       // group: パス | expanded|collapsed — レイヤ一覧の折りたたみ初期状態。
       // geo_webview が QGIS のレイヤーツリー展開状態をそのまま出す
@@ -236,7 +242,7 @@ export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base", "legendnode",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
   "group", "terrain", "scene3d", "light", "fly_geojson", "live",
-  "view", "html", "portal", "link", "dash",
+  "view", "html", "portal", "link", "dash", "form",
 ]);
 
 // group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。
@@ -508,6 +514,44 @@ export function parseKascDashValue(parts, line) {
     } else if (key === "detail") dash.detail = !/^(off|0|false|no)$/i.test(val);
   }
   return dash;
+}
+
+// form: 行の値をパースする(#131)。
+// `form:名前 | title=見出し | desc=説明 | img=画像 | to=URL|backend:パス |
+//   fields=名前[:型[:ラベル[:選択肢;区切り]]][,…] | cam=カメラ名`
+// ポータルのフォーム投稿カード。地図クリックで位置(loc)＋属性を入力し
+// {geometry:GeoJSON Point, properties:{…}} を to= へ JSON POST する。
+// フィールド型: text(既定)/textarea/select/date/photo/loc。
+// loc は地図クリックの位置指定で geometry に入り properties には含めない。
+// fields の各項は `名前:型:ラベル` (select は `名前:select:ラベル:選択肢;選択肢`)、
+// 型省略時は text、名前が loc で型省略なら loc とする
+export function parseKascFormValue(parts, line = null) {
+  const form = { name: parts[0] || "", title: "", desc: "", img: "", to: "", cam: "", fields: [], line };
+  const parseField = spec => {
+    const seg = spec.split(":").map(s => s.trim());
+    const name = seg[0];
+    if (!name) return null;
+    const type = (seg[1] || (name.toLowerCase() === "loc" ? "loc" : "text")).toLowerCase();
+    const field = { name, type, label: seg[2] || name, options: [] };
+    if (type === "select") {
+      field.options = seg.slice(3).join(":").split(";").map(s => s.trim()).filter(Boolean);
+    }
+    return field;
+  };
+  for (const tok of parts.slice(1)) {
+    if (!tok) continue;
+    const kv = /^(title|desc|img|to|url|fields|field|cam)\s*=\s*(.+)$/i.exec(tok);
+    if (kv) {
+      const key = kv[1].toLowerCase();
+      const value = kv[2].trim();
+      if (key === "fields" || key === "field") form.fields.push(...value.split(",").map(parseField).filter(Boolean));
+      else if (key === "to" || key === "url") form.to = value;
+      else form[key] = value;
+      continue;
+    }
+    if (/^(https?:\/\/|backend:)/i.test(tok)) form.to = tok;
+  }
+  return form;
 }
 
 // #theme-select の中身を構築する。themes が空なら非表示化

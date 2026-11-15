@@ -1,0 +1,3 @@
+title:フォーム投稿テスト
+portal:on | title=フォームテスト | open=manual
+form:通報 | title=通報フォーム | desc=位置+属性POSTテスト | to=http://127.0.0.1:8898/api/reports | fields=name:text:お名前,memo:textarea:備考,kind:select:種別:通報;要望,loc

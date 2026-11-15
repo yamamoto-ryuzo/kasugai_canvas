@@ -1,0 +1,8 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.70,35.70]},"properties":{"箇所名":"箇所1","状態":"完了","担当":"A班","年度":2024,"予算":100}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.71,35.70]},"properties":{"箇所名":"箇所2","状態":"完了","担当":"A班","年度":2025,"予算":200}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.72,35.70]},"properties":{"箇所名":"箇所3","状態":"施工中","担当":"B班","年度":2025,"予算":300}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.73,35.70]},"properties":{"箇所名":"箇所4","状態":"遅延","担当":"B班","年度":2025,"予算":400}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.74,35.70]},"properties":{"箇所名":"箇所5","状態":"未着手","担当":"C班","年度":2026,"予算":500}},
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.75,35.70]},"properties":{"箇所名":"箇所6","状態":"遅延","担当":"C班","年度":2026,"予算":600}}
+]}

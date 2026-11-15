@@ -1,0 +1,42 @@
+[
+ {
+  "id": "navara.boot",
+  "ok": true,
+  "detail": "descs=3 title=probe-scene3d-diff"
+ },
+ {
+  "id": "navara.kasc.terrain_generator_flat",
+  "ok": true,
+  "detail": "nv-terrain=false layers=[]"
+ },
+ {
+  "id": "navara.kasc.scene3d_shadows_ao",
+  "ok": true,
+  "detail": "shadow=true ssao=true"
+ },
+ {
+  "id": "navara.kasc.scene3d_background",
+  "ok": true,
+  "detail": "clearHex=0x123456"
+ },
+ {
+  "id": "navara.kasc.light_sun_direction",
+  "ok": true,
+  "detail": "sun=[-0.753334907736239,0.6374065841232833,-0.16186217378473566] expected=-0.7533,0.6374,-0.1619 cos=1"
+ },
+ {
+  "id": "navara.kasc.light_intensity",
+  "ok": true,
+  "detail": "nv-sun-int=2"
+ },
+ {
+  "id": "navara.polyline.geometryTypes_polygon",
+  "ok": true,
+  "detail": "gtypes=[\"line\",\"polygon\"]"
+ },
+ {
+  "id": "navara.kasc.terrain_shading_off",
+  "ok": true,
+  "detail": "terrain re-add found=true lit=false"
+ }
+]

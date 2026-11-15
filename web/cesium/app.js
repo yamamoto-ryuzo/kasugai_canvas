@@ -32,7 +32,7 @@ import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-ev
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createKascDashboard, featureCentroid } from "../shared/dashboard.js";
-import { parseKascDashValue } from "../shared/kasc.js";
+import { parseKascDashValue, parseKascFormValue } from "../shared/kasc.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
@@ -790,6 +790,8 @@ const inspectorLinks = [];
 const inspectorPortalCards = [];
 // インスペクタの dash: 行で宣言されたダッシュボード定義(#123)
 const inspectorDashSpecs = [];
+// インスペクタの form: 行で宣言されたフォーム投稿定義(#131)
+const inspectorForms = [];
 // portal: 行の宣言 {enabled, title, open}。null=行なし
 let inspectorPortalSpec = null;
 // title: 行のパネルタイトル(ポータル見出しのフォールバックに使う)。null=行なし
@@ -1598,6 +1600,8 @@ function kascPortal() {
       applyCam: name => applyViewCam(name),
       applyBase: name => applyViewBase(name),
       applyFeature: spec => applyUrlFeature(spec),
+      pickLocation: () => pickFormLocation(),
+      cancelPick: () => cancelFormPick(),
       getActiveViewName: () => activeViewName,
       getPortalSpec: () => inspectorPortalSpec,
       getPanelTitle: () => inspectorPanelTitle,
@@ -1607,6 +1611,19 @@ function kascPortal() {
   }
   return _kascPortal;
 }
+// form: 行の loc フィールド用位置拾い。ポータルが閉じた状態での
+// 地図クリック1回を {lon,lat} で resolve する。ポータル再表示時に
+// 呼ばれる cancelFormPick で未確定分を破棄する
+let formPickResolve = null;
+function pickFormLocation() {
+  return new Promise(resolve => { formPickResolve = resolve; });
+}
+function cancelFormPick() {
+  const resolve = formPickResolve;
+  formPickResolve = null;
+  if (resolve) resolve(null);
+}
+
 const portalAvailable = () => kascPortal().available();
 const updatePortalButton = () => kascPortal().updateButton();
 const updatePortalUI = () => kascPortal().update();
@@ -6006,6 +6023,7 @@ function applyInspector(text) {
   inspectorLinks.splice(0, inspectorLinks.length);
   inspectorPortalCards.splice(0, inspectorPortalCards.length);
   inspectorDashSpecs.splice(0, inspectorDashSpecs.length);
+  inspectorForms.splice(0, inspectorForms.length);
   inspectorPortalSpec = null;
   inspectorPanelTitle = null;
   activeViewName = null;
@@ -6174,6 +6192,15 @@ function applyInspector(text) {
     if (type === "dash") {
       const parts = value.split("|").map(part => part.trim());
       inspectorDashSpecs.push(parseKascDashValue(parts, line));
+    }
+
+    // form: 名前 | title=見出し | to=URL|backend:パス | fields=… —
+    // ポータルのフォーム投稿カード(#131)。位置+属性をJSON POSTする
+    if (type === "form") {
+      const parts = value.split("|").map(part => part.trim());
+      const form = parseKascFormValue(parts, line);
+      inspectorForms.push(form);
+      inspectorPortalCards.push({ kind: "form", entry: form });
     }
 
     // group: グループパス( / 区切り) | expanded|collapsed —
@@ -10639,6 +10666,21 @@ function setupEvents() {
 
   const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.canvas);
   clickHandler.setInputAction(movement => {
+    // form: loc フィールドの位置拾いモード: 1クリックで座標をPromiseへ返す
+    if (formPickResolve) {
+      const resolve = formPickResolve;
+      formPickResolve = null;
+      const ray = viewer.camera.getPickRay(movement.position);
+      const cartesian = ray
+        ? ((() => { try { return viewer.scene.globe.pick(ray, viewer.scene); } catch (e) { return null; } })()
+          || viewer.camera.pickEllipsoid(movement.position, viewer.scene.globe.ellipsoid))
+        : null;
+      if (cartesian) {
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        resolve({ lon: carto.longitude * 180 / Math.PI, lat: carto.latitude * 180 / Math.PI });
+      } else resolve(null);
+      return;
+    }
     // Street View 地点拾いモード: クリック位置の地表座標で Street View を開く
     if (streetViewPickMode) {
       streetViewPickMode = false;

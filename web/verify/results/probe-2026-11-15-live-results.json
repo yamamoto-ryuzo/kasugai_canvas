@@ -1,0 +1,32 @@
+{
+ "results": [
+  {
+   "id": "cesium.boot",
+   "ok": true,
+   "detail": "title=KASUGAI Canvas — MapLibre"
+  },
+  {
+   "id": "web.shared.live-panel.compact_rows",
+   "ok": true,
+   "detail": "rows=2 detail={\"display\":\"flex\",\"spanNowrap\":\"nowrap\",\"cbW\":\"15px\",\"cbMinH\":\"15px\"}"
+  },
+  {
+   "id": "web.shared.ai-chat.auto_connect_discover",
+   "ok": true,
+   "detail": "discover=true reqs=6"
+  },
+  {
+   "id": "web.shared.ai-chat.auto_connect_mcp",
+   "ok": true,
+   "detail": "mcp=true"
+  }
+ ],
+ "liveReqs": [
+  "GET http://127.0.0.1:8510/shared/mcp.js",
+  "GET http://127.0.0.1:8510/api/qgis-live/discover",
+  "POST http://127.0.0.1:8585/mcp",
+  "POST http://127.0.0.1:8585/mcp",
+  "POST http://127.0.0.1:8585/mcp",
+  "POST http://127.0.0.1:8510/api/qgis-live/mcp"
+ ]
+}

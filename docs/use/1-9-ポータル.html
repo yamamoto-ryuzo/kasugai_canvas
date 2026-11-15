@@ -162,6 +162,24 @@
 </tr>      
 <tr>        
 <td>
+<code>form:
+</code>
+</td>        
+<td>
+<code>form:名 | title=見出し | to=URL|backend:パス | fields=項目[:型[:ラベル[:選択肢;区切り]]][,…] | desc=説明 | img=画像 | cam=プリセット名
+</code>
+</td>        
+<td>フォーム投稿カード。クリックでポータル内フォームを開き、属性入力＋
+<code>loc
+</code> 型の地図クリック位置指定（cam= 連動）を 
+<code>{form, geometry:GeoJSON Point, properties:{…}}
+</code> として JSON POST する。型は text/textarea/select/date/photo/loc。
+<code>backend:パス
+</code> はローカルバックエンドの相対パス（受信・保存は受け側実装）。投稿結果の地図反映は後続課題
+</td>      
+</tr>      
+<tr>        
+<td>
 <code>html:
 </code>
 </td>        

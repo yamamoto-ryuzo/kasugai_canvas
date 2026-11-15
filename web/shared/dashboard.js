@@ -116,6 +116,7 @@ export function createKascDashboard(cfg) {
     style.textContent = `
 .dash-open{vertical-align:middle}
 .dash-overlay{position:fixed;inset:0;z-index:10000;background:rgba(20,24,30,.55);display:flex;align-items:center;justify-content:center}
+.dash-overlay[hidden]{display:none}
 .dash-dialog{background:#fff;color:#222;width:min(960px,94vw);max-height:88vh;display:flex;flex-direction:column;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.4);overflow:hidden}
 .dash-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #ddd;background:#f5f6f8}
 .dash-title{font-size:1.05rem;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
