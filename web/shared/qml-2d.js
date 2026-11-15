@@ -529,10 +529,15 @@ export function defaultVectorLegendSpec(geomType, { fill = [58 / 255, 123 / 255,
 // --- MapLibre: GeoJSON の各 feature に __kasc_* を焼き込み、データ駆動 paint 式で適用
 const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color", "__kasc_symbol",
   "__kasc_icon", "__kasc_fillpat", "__kasc_dash", "__kasc_fopa", "__kasc_lopa", "__kasc_copa",
-  "__kasc_cr", "__kasc_csw", "__kasc_csc", "__kasc_cicon"];
+  "__kasc_cr", "__kasc_csw", "__kasc_csc", "__kasc_cicon",
+  "__kasc_lgrp", "__kasc_lblend", "__kasc_fblend"];
 
 let _qmlUid = 0;
 const alphaOf = rgba => (rgba && rgba.length > 3) ? Math.max(0, Math.min(1, rgba[3])) : 1;
+// canvas 合成名(qgisBlendToComposite 経由) → MapLibre *-layer-blend 値。
+// MapLibre の enum は normal/multiply/color/luminosity/plus-lighter/screen/
+// overlay のみ。canvas の lighter(加算)は plus-lighter で近似する
+const MLB_MAP = { multiply: "multiply", screen: "screen", overlay: "overlay", lighter: "plus-lighter" };
 
 export function maplibreApplyQml(geojson, compiled) {
   if (compiled.inverted) applyInvertedMaskGeojson(geojson);
@@ -597,6 +602,15 @@ export function maplibreApplyQml(geojson, compiled) {
     // 破線: line-dasharray はデータ駆動不可のためパターンIDでグルーピング
     const dk = dashKey(spec.line?.dash ?? spec.outline?.dash);
     if (dk) feature.properties.__kasc_dash = dk;
+    // ブレンド: *-layer-blend(MapLibre 6.18+)もデータ駆動不可のため値別に
+    // グルーピング。MapLibre 側で表現できるのは multiply/screen/overlay/
+    // plus-lighter のみ（QGIS→canvas 合成名から更に絞る）
+    const lb = MLB_MAP[spec.line?.blend ?? spec.outline?.blend];
+    const fb = MLB_MAP[spec.fillParts?.find(pt => pt.solid)?.blend ?? spec.fillParts?.[0]?.blend];
+    if (fb) feature.properties.__kasc_fblend = fb;
+    if (lb) feature.properties.__kasc_lblend = lb;
+    const lgrp = (lb || "") + "|" + (dk || "");
+    if (lb || dk) feature.properties.__kasc_lgrp = lgrp;
     // 凡例シンボル単位の表示切替フィルタ用（規則ベースで複数ヒットし得るため先頭名を採用）
     const names = typeof compiled.namesFor === "function" ? compiled.namesFor(feature.properties) : null;
     if (names?.length) feature.properties.__kasc_symbol = names[0];
@@ -607,58 +621,61 @@ export function maplibreApplyQml(geojson, compiled) {
       feature.properties.__kasc_heat = Math.min(Math.max((Number.isFinite(w) ? w : 1) / mv, 0), 1);
     }
   }
-  // 破線パターンごとの line レイヤ(データ駆動不可のためパターン別)
-  const dashKinds = [];
-  const dashSet = new Set();
+  // 破線・ブレンドごとの line レイヤ(line-dasharray/*-layer-blend は
+  // データ駆動不可のため __kasc_lgrp = "blend|dashJSON" でグルーピング)
+  const lgrpSet = new Set();
+  const fblendSet = new Set();
   for (const f of geojson.features || []) {
-    const d = f.properties?.__kasc_dash;
-    if (d && !dashSet.has(d)) dashSet.add(d);
+    const g = f.properties?.__kasc_lgrp;
+    if (g && !lgrpSet.has(g)) lgrpSet.add(g);
+    const b = f.properties?.__kasc_fblend;
+    if (b && !fblendSet.has(b)) fblendSet.add(b);
   }
   const nonPoint = ["!=", ["geometry-type"], "Point"];
-  const kinds = [
-      // パターン塗り(fill-pattern は画像IDのデータ駆動)。先に敷いてから単色ベース/枠線
-      ["fill", ["all", nonPoint, ["has", "__kasc_fillpat"]], {
+  // パターン塗り(fill-pattern は画像IDのデータ駆動)。先に敷いてから単色ベース/枠線
+  const fillKindsFor = (extra, blend) => {
+    const bl = blend ? { "fill-layer-blend": blend } : {};
+    return [
+      ["fill", ["all", nonPoint, ...extra, ["has", "__kasc_fillpat"]], {
         "fill-pattern": ["get", "__kasc_fillpat"],
         "fill-opacity": ["coalesce", ["get", "__kasc_fopa"], 0.5],
+        ...bl,
       }],
-      ["fill", ["all", nonPoint, ["!", ["has", "__kasc_fillpat"]], ["has", "__kasc_fill"]], {
+      ["fill", ["all", nonPoint, ...extra, ["!", ["has", "__kasc_fillpat"]], ["has", "__kasc_fill"]], {
         "fill-color": ["coalesce", ["get", "__kasc_fill"], "#3a7bd5"],
         "fill-opacity": ["coalesce", ["get", "__kasc_fopa"], 0.5],
+        ...bl,
       }],
-  ];
-  if (dashSet.size) {
-    // 実線レイヤ(非破線地物のみ)+ パターン別破線レイヤ
-    kinds.push(["line", ["all", nonPoint, ["!", ["has", "__kasc_dash"]]], {
-      "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
-      "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
-      "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
-      "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
-    }, {
-      "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
-      "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
-    }]);
-    for (const d of dashSet) {
-      kinds.push(["line", ["all", nonPoint, ["==", ["get", "__kasc_dash"], d]], {
-        "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
-        "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
-        "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
-        "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
-        "line-dasharray": JSON.parse(d),
-      }, {
-        "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
-        "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
-      }]);
+    ];
+  };
+  const kinds = [];
+  if (fblendSet.size) {
+    kinds.push(...fillKindsFor([["!", ["has", "__kasc_fblend"]]], null));
+    for (const b of fblendSet) kinds.push(...fillKindsFor([["==", ["get", "__kasc_fblend"], b]], b));
+  } else {
+    kinds.push(...fillKindsFor([], null));
+  }
+  const linePaint = blend => ({
+    "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
+    "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
+    "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
+    "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
+    ...(blend ? { "line-layer-blend": blend } : {}),
+  });
+  const lineLayout = {
+    "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
+    "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
+  };
+  if (lgrpSet.size) {
+    // 実線レイヤ(非破線・通常合成の地物のみ)+ グループ別レイヤ
+    kinds.push(["line", ["all", nonPoint, ["!", ["has", "__kasc_lgrp"]]], linePaint(), lineLayout]);
+    for (const g of lgrpSet) {
+      const [blend, dash] = g.split("|");
+      kinds.push(["line", ["all", nonPoint, ["==", ["get", "__kasc_lgrp"], g]],
+        { ...linePaint(blend || null), ...(dash ? { "line-dasharray": JSON.parse(dash) } : {}) }, lineLayout]);
     }
   } else {
-    kinds.push(["line", nonPoint, {
-      "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
-      "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
-      "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
-      "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
-    }, {
-      "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
-      "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
-    }]);
+    kinds.push(["line", nonPoint, linePaint(), lineLayout]);
   }
   // CentroidFill アイコン(ポリゴン中心点へ)
   kinds.push(["symbol", ["all", nonPoint, ["has", "__kasc_cicon"]], {}, {

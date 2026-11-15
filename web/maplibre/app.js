@@ -1,6 +1,6 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
-import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.16.0/dist/maplibre-gl.mjs";
+import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.18.0/dist/maplibre-gl.mjs";
 import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates } from "../shared/kasc.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
 import { createKascPortal } from "../shared/portal.js";

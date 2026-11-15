@@ -3,7 +3,7 @@
   "title": "地理院地図 (gsimaps)",
   "repo": "gsi-cyberjapan/gsimaps",
   "ref": "gh-pages",
-  "sha": "a5ad2a47b81a85b7d6a045da8ca4d47dcdb00203",
+  "sha": "3cc3b492a76e65d173d86f23ecb712a5faa38991",
   "vendorDir": "../vendor/gsimaps",
   "entry": "index_pm.html",
   "license": "BSD-2-Clause",

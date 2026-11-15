@@ -37,6 +37,7 @@
     "@navaramap/engine": "../vendor/navara/@navaramap/engine/navara_wasm.js",
     "@navaramap/engine-api": "../vendor/navara/@navaramap/engine-api/navara_wasm_api.js",
     "@navaramap/engine-worker": "../vendor/navara/@navaramap/engine-worker/navara_wasm_worker.js",
+    "@navaramap/engine-font-worker": "../vendor/navara/@navaramap/engine-font-worker/navara_wasm_font_worker.js",
     "@navaramap/three-default-plugin": "../vendor/navara/@navaramap/three-default-plugin/dist/index.js",
     "@navaramap/three-default-descs": "../vendor/navara/@navaramap/three-default-descs/dist/index.js"
   }
@@ -92,6 +93,11 @@
   .display-subpane .set-row input[type=range] { width: 100%; box-sizing: border-box; margin: 2px 0; }
   /* 効果ペインのスライダー行: 名前＋レンジ＋値の1行レイアウト */
   .display-subpane .set-row.fx { display: flex; align-items: center; gap: 6px; }
+  /* .tab-pane button:not(.tab)（濃緑）に負けないよう !important 付き（maplibre 版と同じ方式） */
+  .exagg-reset { min-height: 24px !important; padding: 1px 8px !important;
+    border: 1px solid rgba(49,86,79,.4) !important; border-radius: 4px !important;
+    background: rgba(255,255,255,.7) !important; color: #31564f !important; font-size: 12px !important;
+    vertical-align: middle; }
   .display-subpane .fx-name { flex: 0 0 auto; white-space: nowrap; }
   .display-subpane .fx-val { flex: 0 0 3.4em; text-align: right; font-size: 12px; color: #52636d; }
   .display-subpane .set-row.fx input[type=range] { flex: 1; min-width: 0; width: auto; }
@@ -372,6 +378,7 @@
     </div>
     <div class="display-subpane" id="display-terrain-panel">
       <label class="set-row"><input id="nv-terrain" type="checkbox" checked /> 地形（Re:Earth Terrain）</label>
+      <label class="set-row">地形の誇張 ×<input id="nv-terrain-exagg" type="number" min="0" step="0.1" value="1" style="width: 90px;" /> <button id="nv-terrain-exagg-reset" class="exagg-reset" type="button" title="リセット">↺</button></label>
     </div>
     <div class="display-subpane" id="display-general-panel" hidden>
       <label class="set-row"><input id="display-minimap" type="checkbox" /><span data-i18n="display.minimap"> ミニマップを表示</span></label>
