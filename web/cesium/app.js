@@ -667,12 +667,12 @@ function applyLegendSymbolHidden(item) {
   if (!style) return;
   const entry = vectorDataSources.find(e => e.id === item.id);
   if (entry) {
-    try { applyQmlStyleToDataSource(entry.ds, style, { clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden, opacity: item.opacity ?? 1 }); }
+    try { applyQmlStyleToDataSource(entry.ds, style, { clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden, opacity: effectiveLayerOpacity(item) }); }
     catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
   } else {
     const target = layerRuntimeTargets.get(item.id);
     if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
-      try { applyQmlStyleToPrimitive(target, style, item.legendHidden, item.opacity ?? 1); }
+      try { applyQmlStyleToPrimitive(target, style, item.legendHidden, effectiveLayerOpacity(item)); }
       catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
     }
   }
@@ -1356,11 +1356,11 @@ async function applyKascThemeStyles(theme, items) {
         if (entry) {
           applyQmlStyleToDataSource(entry.ds, style, {
             clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden,
-            opacity: item.opacity ?? 1 });
+            opacity: effectiveLayerOpacity(item) });
         } else {
           const target = layerRuntimeTargets.get(item.id);
           if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive)
-            applyQmlStyleToPrimitive(target, style, item.legendHidden, item.opacity ?? 1);
+            applyQmlStyleToPrimitive(target, style, item.legendHidden, effectiveLayerOpacity(item));
         }
       } catch (e) { console.warn("テーマスタイルの適用に失敗:", e); }
     })());
@@ -2992,7 +2992,7 @@ function collectDrapeProviders() {
       minimumLevel: selectedBasemap.minimumLevel,
       bbox: selectedBasemap.bbox,
       tileSize: selectedBasemap.tileSize || 256,
-      opacity: selectedBasemap.opacity ?? 1.0,
+      opacity: (selectedBasemap.opacity ?? 1.0) * basemapOpacityFactor,
       proxy: selectedBasemap.proxy,
     });
   }
@@ -3006,7 +3006,7 @@ function collectDrapeProviders() {
         minimumLevel: item.minimumLevel,
         bbox: item.bbox,
         tileSize: item.tileSize || 256,
-        opacity: item.opacity ?? 0.8,
+        opacity: (item.opacity ?? 0.8) * layerOpacityFactor,
         proxy: item.proxy,
       });
     });
@@ -4619,6 +4619,8 @@ async function refreshLayersImpl() {
               ? buildModelDataSource(item)
               : await buildGeoTiffOverlayDataSource(Cesium, item, proxyFetchUrl(item.url, item.proxy)));
         ds.show = effectiveLayerShow(item);
+        // geotiff overlay は item.opacity のみ焼き付くため、実効透過度(係数込み)で上書きする
+        applyLayerOpacityToEntities(ds, effectiveLayerOpacity(item));
         await viewer.dataSources.add(ds);
         vectorDataSources.push({ ds, id: item.id, title: item.title });
         layerRuntimeTargets.set(item.id, ds);
@@ -4763,14 +4765,58 @@ function primitiveDrapeHeightReference(dem, tiles3d) {
   return Cesium.HeightReference.CLAMP_TO_GROUND;
 }
 
+// レイヤー個別の opacity= × 表示>一般タブ「レイヤー透過度」係数。
+// スタイル・マテリアル適用時の実効アルファとして使う(0-1 にクランプ)
+function effectiveLayerOpacity(item) {
+  return Math.max(0, Math.min(1, (item?.opacity ?? 1) * layerOpacityFactor));
+}
+
 // primitive 経路のスタイル適用。style= の QML があればそちら、
 // なければ default_style: 行の既定値(地物側 simplestyle がさらに優先)を適用する
 function applyPrimitiveVectorStyle(primitive, item) {
+  const effOpacity = effectiveLayerOpacity(item);
   if (item?.qmlStyle) {
-    applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden, item.opacity ?? 1);
+    applyQmlStyleToPrimitive(primitive, item.qmlStyle, item.legendHidden, effOpacity);
     return;
   }
-  applyVectorDefaultStyleToPrimitive(primitive, item?.opacity ?? 1);
+  const dflt = vectorDefaultStyles;
+  if (dflt.point || dflt.line || dflt.polygon) {
+    applyVectorDefaultStyleToPrimitive(primitive, effOpacity);
+    return;
+  }
+  // スタイル未指定の primitive は描画済みマテリアルのアルファを直接乗算する
+  applyPrimitiveMaterialOpacity(primitive, effOpacity);
+}
+
+// スタイル未指定 GeoJsonPrimitive の透過度。Buffer コレクションのマテリアル
+// アルファへ係数を乗算する。初回適用時の元アルファを primitive._kascOpacityBases
+// に保持するため、スライダ往復でも元の見た目へ戻る
+function applyPrimitiveMaterialOpacity(primitive, opacity) {
+  if (!primitive) return;
+  if (!(opacity < 1) && !primitive._kascOpacityBases) return;
+  const bases = primitive._kascOpacityBases || (primitive._kascOpacityBases = new Map());
+  const each = (collection, ctor, matCtor, kind) => {
+    if (!collection) return;
+    const scratch = new ctor();
+    const matScratch = new matCtor();
+    for (let i = 0; i < collection.primitiveCount; i++) {
+      collection.get(i, scratch);
+      const mat = scratch.getMaterial(matScratch);
+      if (!mat) continue;
+      const key = kind + i;
+      let b = bases.get(key);
+      if (!b) {
+        b = { color: mat.color?.alpha ?? null, outline: mat.outlineColor?.alpha ?? null };
+        bases.set(key, b);
+      }
+      if (mat.color && b.color != null) mat.color = mat.color.withAlpha(b.color * opacity);
+      if (mat.outlineColor && b.outline != null) mat.outlineColor = mat.outlineColor.withAlpha(b.outline * opacity);
+      scratch.setMaterial(mat);
+    }
+  };
+  each(primitive.points, Cesium.BufferPoint, Cesium.BufferPointMaterial, "p");
+  each(primitive.polylines, Cesium.BufferPolyline, Cesium.BufferPolylineMaterial, "l");
+  each(primitive.polygons, Cesium.BufferPolygon, Cesium.BufferPolygonMaterial, "g");
 }
 
 // default_style: 行の既定を GeoJsonPrimitive(バッチ描画)へ適用する。
@@ -4977,9 +5023,10 @@ function buildImageOverlayDataSource(item) {
   const material = new Cesium.ImageMaterialProperty({
     image: item.url,
     transparent: true,
-    color: Cesium.Color.WHITE.withAlpha(item.opacity ?? 1),
+    color: Cesium.Color.WHITE.withAlpha(effectiveLayerOpacity(item)),
   });
   const ds = new Cesium.CustomDataSource(item.title);
+  ds._kascImageMaterial = material;
   if (item.imageCorners && item.imageCorners.length >= 3) {
     ds.entities.add({
       polygon: {
@@ -5075,15 +5122,17 @@ async function buildHeatmapDataSource(item, source) {
   const inst = h337.create({ container: div, radius: radiusPx, maxOpacity: 0.75, minOpacity: 0.05, blur: 0.85 });
   inst.setData({ max, data });
   const canvas = div.querySelector("canvas");
+  const material = new Cesium.ImageMaterialProperty({
+    image: canvas,
+    transparent: true,
+    color: Cesium.Color.WHITE.withAlpha(effectiveLayerOpacity(item)),
+  });
   const ds = new Cesium.CustomDataSource(item.title);
+  ds._kascImageMaterial = material;
   ds.entities.add({
     rectangle: {
       coordinates: Cesium.Rectangle.fromDegrees(west, south, east, north),
-      material: new Cesium.ImageMaterialProperty({
-        image: canvas,
-        transparent: true,
-        color: Cesium.Color.WHITE.withAlpha(item.opacity ?? 1),
-      }),
+      material,
       classificationType: Cesium.ClassificationType.BOTH,
     },
   });
@@ -5479,7 +5528,7 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
   if (item?.qmlStyle) {
     item._qmlClamp = clamp;
     try {
-      applyQmlStyleToDataSource(ds, item.qmlStyle, { clamp, hiddenSymbols: item.legendHidden, opacity: item.opacity ?? 1 });
+      applyQmlStyleToDataSource(ds, item.qmlStyle, { clamp, hiddenSymbols: item.legendHidden, opacity: effectiveLayerOpacity(item) });
       // QGIS の「重なったラベルを隠す」相当の衝突回避。カメラ停止時に再計算する
       if (ds._qmlLabels?.length) {
         const qmlSources = () => {
@@ -5500,7 +5549,7 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
     // opacity=0-1 : QML を持たないベクターレイヤーのレイヤー透過度(#58)。
     // 既定スタイル色へアルファ乗算して反映する（QML 適用レイヤーは
     // applyQmlStyleToDataSource の opacity 引数が担う）
-    applyLayerOpacityToEntities(ds, item?.opacity ?? 1);
+    applyLayerOpacityToEntities(ds, effectiveLayerOpacity(item));
   }
   // cluster=on または QML pointCluster: 点を含むレイヤーのみクラスタを有効化する
   if ((item?.cluster || item?.qmlStyle?.cluster?.kind === "cluster") && geoJsonHasPoints(source)) {
@@ -5511,15 +5560,26 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
   return ds;
 }
 
-// opacity=0-1 : 非QML ベクターレイヤーのレイヤー透過度(#58)。
-// 地物の塗り・輪郭・線・点・ピン・ラベル色へアルファを乗算する
+// opacity=0-1 : 非QML ベクター/オーバーレイレイヤーの実効透過度(#58)。
+// 地物の塗り・輪郭・線・点・ピン・ラベル色へアルファを乗算する。
+// 初回適用時の元アルファを ds._kascOpacityBases に保持するため、
+// 透過度スライダの往復でも元の色へ戻る(累乗で劣化しない)。
+// 画像オーバーレイ系(ds._kascImageMaterial)はマテリアル色を直接差し替える
 function applyLayerOpacityToEntities(ds, opacity) {
-  if (!ds || !(opacity < 1)) return;
+  if (!ds) return;
+  if (ds._kascImageMaterial) {
+    ds._kascImageMaterial.color = new Cesium.ConstantProperty(Cesium.Color.WHITE.withAlpha(opacity));
+    return;
+  }
+  if (!(opacity < 1) && !ds._kascOpacityBases) return;
   const now = Cesium.JulianDate.now();
+  const bases = ds._kascOpacityBases || (ds._kascOpacityBases = new Map());
   const fade = prop => {
     if (typeof prop?.getValue !== "function" || typeof prop?.setValue !== "function") return;
     const v = prop.getValue(now);
-    if (v instanceof Cesium.Color) prop.setValue(v.withAlpha(v.alpha * opacity));
+    if (!(v instanceof Cesium.Color)) return;
+    if (!bases.has(prop)) bases.set(prop, v.alpha);
+    prop.setValue(v.withAlpha(bases.get(prop) * opacity));
   };
   for (const e of ds.entities.values) {
     if (e.polygon) { fade(e.polygon.material?.color); fade(e.polygon.outlineColor); }
@@ -5527,6 +5587,36 @@ function applyLayerOpacityToEntities(ds, opacity) {
     if (e.point) fade(e.point.color);
     if (e.billboard) fade(e.billboard.color);
     if (e.label) { fade(e.label.fillColor); fade(e.label.outlineColor); }
+  }
+}
+
+// 表示>一般タブ「レイヤー透過度」係数をベクター・オーバーレイ・GeoJsonPrimitive
+// レイヤーへ再適用する(ImageryLayer はスライダ側で alpha を直接更新する)
+function applyLayerOpacityFactorToVectors() {
+  for (const entry of vectorDataSources) {
+    const item = layerState.get(entry.id);
+    const eff = item ? effectiveLayerOpacity(item) : layerOpacityFactor;
+    // スライダドラッグ中の連続 input で同じ値への再適用(全地物再スタイル)を避ける
+    if (entry.ds._kascAppliedOpacity === eff) continue;
+    entry.ds._kascAppliedOpacity = eff;
+    try {
+      if (item?.qmlStyle) {
+        applyQmlStyleToDataSource(entry.ds, item.qmlStyle, {
+          clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden, opacity: eff });
+      } else {
+        applyLayerOpacityToEntities(entry.ds, eff);
+      }
+    } catch (error) { console.warn("レイヤー透過度の再適用に失敗しました:", error); }
+  }
+  for (const [id, target] of layerRuntimeTargets) {
+    if (!(Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive)) continue;
+    const item = layerState.get(id);
+    if (!item) continue;
+    const eff = effectiveLayerOpacity(item);
+    if (target._kascAppliedOpacity === eff) continue;
+    target._kascAppliedOpacity = eff;
+    try { applyPrimitiveVectorStyle(target, item); }
+    catch (error) { console.warn("レイヤー透過度の再適用に失敗しました:", error); }
   }
 }
 
@@ -7997,12 +8087,17 @@ function setupEvents() {
   if (layerOpacityInput) {
     layerOpacityInput.addEventListener("input", event => {
       layerOpacityFactor = Number(event.target.value) || 0;
+      // タイル/ライブ描画などの ImageryLayer は alpha を直接更新する。
+      // _baseAlpha 未設定のレイヤー(/live/render 等)は現在値を初回の基準値にする
       const len = viewer.imageryLayers.length;
       for (let i = 0; i < len; i++) {
         const l = viewer.imageryLayers.get(i);
         if (l === basemapImageryLayer) continue;
-        l.alpha = (l._baseAlpha ?? l.alpha) * layerOpacityFactor;
+        if (!Number.isFinite(l._baseAlpha)) l._baseAlpha = l.alpha;
+        l.alpha = l._baseAlpha * layerOpacityFactor;
       }
+      // ベクター・画像オーバーレイ・GeoJsonPrimitive はスタイル側へ実効透過度を再適用する
+      applyLayerOpacityFactorToVectors();
       requestRender();
     });
   }
@@ -12404,6 +12499,26 @@ function setupVectorSearch() {
       window.addEventListener("mousemove", onMouseMove);
       window.addEventListener("mouseup", onMouseUp);
     });
+  }
+
+  // 属性一覧の表示中はミニマップを一覧の上端まで持ち上げる。
+  // ミニマップの z-index(1004) が一覧(100)より高く、そのままでは一覧を覆い
+  // 隠すため、z-index ではなく位置をずらして両方を見える状態にする。
+  // 開閉(class 変化)と高さ変更(リサイザー/CSS resize)の両方に追従する
+  const minimapEl = document.querySelector("#minimap");
+  if (minimapEl && vectorAttrWidget) {
+    const syncMinimapAboveAttrWidget = () => {
+      if (!vectorAttrWidget.classList.contains("visible")) {
+        minimapEl.style.bottom = "";
+        return;
+      }
+      // 画面高さが足りない場合はミニマップが上にはみ出さないようクランプする
+      const bottom = Math.min(vectorAttrWidget.offsetHeight + 14, window.innerHeight - 160);
+      minimapEl.style.bottom = Math.max(74, bottom) + "px";
+    };
+    new MutationObserver(syncMinimapAboveAttrWidget)
+      .observe(vectorAttrWidget, { attributes: true, attributeFilter: ["class"] });
+    if (window.ResizeObserver) new ResizeObserver(syncMinimapAboveAttrWidget).observe(vectorAttrWidget);
   }
 
   window.vectorAttrWidget = { open: openVectorAttrWidget, close: closeVectorAttrWidget };

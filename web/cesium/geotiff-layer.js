@@ -526,6 +526,8 @@ export async function buildGeoTiffOverlayDataSource(Cesium, item, fetchUrl) {
     color: Cesium.Color.WHITE.withAlpha(item.opacity ?? 1),
   });
   const ds = new Cesium.CustomDataSource(item.title);
+  // 表示>一般タブ「レイヤー透過度」スライダから実効透過度を再適用するための印
+  ds._kascImageMaterial = material;
   if (corners && corners.length >= 3) {
     ds.entities.add({
       polygon: {
