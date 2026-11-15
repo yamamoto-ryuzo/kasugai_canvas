@@ -941,7 +941,7 @@ async function addKascLayer(item, baseUrl) {
     const polyWidth = Number(item.opts?.width) || gd?.strokeWidth || ld?.width || 3;
     const desc = { type: "vector", source: src,
       polygon: { color: css2hex(fillCss || "#3d7dd9"), clampToGround: true, opacity: polyFillO, transparent: polyFillO < 1 },
-      polyline: { color: css2hex(strokeCss || "#2c5ea8"), width: polyWidth, clampToGround: true, opacity: polyLineO, transparent: polyLineO < 1,
+      polyline: { color: css2hex(strokeCss || "#2c5ea8"), width: polyWidth, clampToGround: true, opacity: polyLineO, transparent: polyLineO < 1, geometryTypes: ["line", "polygon"],
         ...(lineCap ? { cap: lineCap } : {}),
         ...(lineDash?.length ? { dashArray: Float32Array.from(lineDash.map(d => d / polyWidth)) } : {}) },
       point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true, opacity: pointO, transparent: pointO < 1 } };
