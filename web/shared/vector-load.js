@@ -412,7 +412,7 @@ function toKascLoaderItem(item, baseUrl, bounds) {
 // viewportQuery=true の行は表示範囲の移動に合わせて再読込が必要）
 // hooks.resolveLayer(name) = ogrsql: の FROM 名を読み込み済みレイヤーの
 // FeatureCollection へ解決する任意フック(エンジン側のレイヤー照合)
-export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null) {
+async function loadVectorItemCore(item, baseUrl, bounds = null, hooks = null) {
   const url = resolveKascUrl(item.url, baseUrl);
   const type = item.type;
   if (type === "geojson" || type === "layer") {
@@ -486,4 +486,115 @@ export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null)
     }
   }
   throw new Error(`未対応のベクター形式: ${type}`);
+}
+
+// ---- join= / on= / joinprefix= : GIS レイヤーとテーブルのリレーション(#133) ----
+// QGIS geo_webview がエクスポートするベクタ結合(QgsVectorLayerJoinInfo)を
+// .kasc ベクター行のオプションとして再生する。GIS 地物と CSV 等の非空間
+// テーブルをキー属性で N:1 結合し、結合列を地物プロパティへ付与する。
+// 属性ポップアップ・属性テーブル・where= 評価から結合列を参照できる。
+//   join=<テーブル参照>    DATA/内の csv/tsv/geojson/json、URL、または
+//                         layer:<タイトル>(読み込み済み他レイヤー,hooks.resolveLayer)
+//   on=<左列>=<右列>       結合キー(=右列省略時は左右同名)
+//   joinprefix=<接頭辞>    結合列名へ付ける接頭辞(QGIS カスタム接頭辞相当)
+// 結合テーブル側に無いキーは地物をそのまま残す(LEFT JOIN)。既存プロパティと
+// 同名の結合列は接頭辞なしでは上書きしない。
+// 例: geojson:市区町村 | DATA/city.geojson | join=DATA/pop.csv | on=code=city_code | joinprefix=pop_
+
+function parseJoinSpec(item) {
+  const opts = item.opts || {};
+  const src = String(opts.join || "").trim();
+  if (!src) return null;
+  const on = String(opts.on || opts.joinon || "").trim();
+  const m = /^([^=]+?)(?:\s*=\s*([^=]+))?$/.exec(on);
+  const left = (m ? m[1] : "").trim();
+  if (!left) {
+    throw new Error(`${item.title}: join= を使うには on=<左列>=<右列> の指定が必要です`);
+  }
+  return {
+    src,
+    left,
+    right: ((m && m[2]) || left).trim(),
+    prefix: String(opts.joinprefix || opts.prefix || ""),
+  };
+}
+
+function joinRowsToLookup(rows, rightKey) {
+  const map = new Map();
+  for (const row of rows) {
+    if (!row || row[rightKey] === undefined || row[rightKey] === null) continue;
+    const key = String(row[rightKey]).trim();
+    if (!map.has(key)) map.set(key, row);
+  }
+  return map;
+}
+
+function joinKeyOf(value) {
+  if (value === undefined || value === null) return null;
+  const s = String(value).trim();
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) && s !== "" ? `n:${n}` : `s:${s}`;
+}
+
+async function loadJoinTableRows(spec, baseUrl, hooks) {
+  const layerRef = /^layer\s*:\s*(.+)$/i.exec(spec.src);
+  if (layerRef) {
+    if (!hooks || typeof hooks.resolveLayer !== "function") {
+      throw new Error(`join=${spec.src}: layer: 参照には hooks.resolveLayer が必要です`);
+    }
+    const fc = await hooks.resolveLayer(layerRef[1].trim());
+    if (!fc) throw new Error(`join=${spec.src}: レイヤー "${layerRef[1].trim()}" が見つかりません`);
+    return ((fc && fc.features) || []).map(f => (f && f.properties) || {});
+  }
+  const url = resolveKascUrl(spec.src, baseUrl);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`join=${spec.src}: ${res.status}`);
+  if (/\.(csv|tsv)(\?|#|$)/i.test(spec.src)) {
+    const delim = /\.tsv(\?|#|$)/i.test(spec.src) ? "\t" : ",";
+    return parseDelimited(await res.text(), delim);
+  }
+  const json = await res.json();
+  return ((json && json.features) || []).map(f => (f && f.properties) || {});
+}
+
+async function applyVectorJoin(item, result, baseUrl, hooks) {
+  const spec = parseJoinSpec(item);
+  if (!spec) return;
+  const fc = result && result.geojson;
+  const features = (fc && fc.features) || [];
+  const rows = await loadJoinTableRows(spec, baseUrl, hooks);
+  const lookup = new Map();
+  for (const row of rows) {
+    const key = joinKeyOf(row ? row[spec.right] : null);
+    if (key !== null && !lookup.has(key)) lookup.set(key, row);
+  }
+  const added = new Set();
+  let matched = 0;
+  for (const feature of features) {
+    if (!feature) continue;
+    const props = feature.properties || (feature.properties = {});
+    const key = joinKeyOf(props[spec.left]);
+    const row = key === null ? null : lookup.get(key);
+    if (!row) continue;
+    matched++;
+    for (const name of Object.keys(row)) {
+      if (name === spec.right) continue;
+      const target = spec.prefix + name;
+      if (!spec.prefix && Object.prototype.hasOwnProperty.call(props, target)) continue;
+      props[target] = row[name];
+      added.add(target);
+    }
+  }
+  // 診断用: 結合列名・マッチ数を結果へ記録(属性テーブル等での表示補助)
+  result.joinInfo = {
+    source: spec.src, left: spec.left, right: spec.right,
+    prefix: spec.prefix, fields: [...added], matched, total: features.length,
+  };
+}
+
+export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null) {
+  const result = await loadVectorItemCore(item, baseUrl, bounds, hooks);
+  await applyVectorJoin(item, result, baseUrl, hooks);
+  return result;
 }

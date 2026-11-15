@@ -46,6 +46,7 @@ duckdb: 施設 | https://example.com/facilities.parquet | limit=1000</code></pre
       <ul>
         <li>タイトルの <code>/</code> = グループ、<code>//</code> = 排他グループ（ラジオ動作）。<code>on</code>/<code>off</code> で初期表示を指定</li>
         <li>共通オプション: <code>where=</code>（行の最終オプション・描画を絞り込み）・<code>opacity=</code>・<code>render=primitive|entity</code>・<code>style=QML</code>・<code>cluster=on</code>・<code>heat=on</code>・<code>minScale=/maxScale=</code>（縮尺表示）・<code>attr=出典</code></li>
+        <li><code>join=</code>（ベクター行）— GIS レイヤーと CSV 等のテーブルをキー属性でリレーション結合（QGIS のベクタ結合相当）。<code>join=DATA/pop.csv | on=左列=右列 | joinprefix=接頭辞</code> で右側テーブルの列を地物プロパティへ N:1 付与し、属性ポップアップ・属性一覧・<code>where=</code> から参照できる。<code>join=layer:タイトル</code> で読み込み済みの他レイヤーも結合元にできる。未一致キーは LEFT JOIN（地物を残す）</li>
         <li><code>layer: レイヤー名 | off</code> — 既存レイヤーの初期表示を制御</li>
       </ul>
 
