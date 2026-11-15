@@ -492,6 +492,10 @@ function loadXlsx() {
 
 // xlsx 行上限（UI ブロック防止のための安全側。xlsx 仕様上限は 1,048,575）
 const XLSX_MAX_ROWS = 200000;
+// xlsx セル文字数上限（Excel 仕様 32,767。WKT 列の大きなジオメトリが
+// 超えて SheetJS が "Text length must not exceed 32767 characters" で
+// 失敗するため、超過分は切り捨てる）
+const XLSX_MAX_CELL_CHARS = 32767;
 
 // 複数シート一括 xlsx。sheets: [{ name, rows: [[v,...],...] }]（先頭行=ヘッダ）。
 // → { data: Uint8Array, sheets: N, skipped: 上限超過で切り捨てた行数 }
@@ -501,7 +505,8 @@ export async function rowsToXlsx(sheets) {
   let skipped = 0;
   for (const { name, rows } of sheets) {
     const src = Array.isArray(rows) ? rows : [];
-    const safe = src.slice(0, XLSX_MAX_ROWS);
+    const safe = src.slice(0, XLSX_MAX_ROWS)
+      .map(row => row.map(v => (typeof v === "string" && v.length > XLSX_MAX_CELL_CHARS ? v.slice(0, XLSX_MAX_CELL_CHARS) : v)));
     skipped += src.length - safe.length;
     const ws = XLSX.utils.aoa_to_sheet(safe);
     XLSX.utils.book_append_sheet(
