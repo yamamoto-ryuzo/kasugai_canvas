@@ -1,7 +1,7 @@
-// ---- ポータル(portal:/html:/view:/link: 行で構成する開始画面) ----
+// ---- ポータル(portal:/html:/view:/link:/project: 行で構成する開始画面) ----
 // 全エンジン共通のポータルUIモジュール。各エンジンは
 //   1) index.html に #portal-open ボタンと #portal-overlay 構造を置き
-//   2) app.js で view:/html:/portal:/link: 行をパースして保持し
+//   2) app.js で view:/html:/portal:/link:/project:/form: 行をパースして保持し
 //   3) この createKascPortal に「状態getter + applyView/clearView」を渡す
 // だけで、カード/セクション/既定コンテンツ/外部リンクの描画と
 // 🏠ボタン・Esc・解除ボタンの配線が共有される。
@@ -32,11 +32,14 @@
 //   applyCam(name)?        — data-cam="カメラ名" の移動(省略可)
 //   applyBase(name)?       — data-base="背景名" の背景地図切替(省略可)
 //   applyFeature(spec)?    — data-feature="レイヤ/属性=値" の地物検索+ズーム(省略可)
+//   resolveProject(entry)? — project: カード/data-project の遷移先解決。
+//                          {title,id,kascUrl} または null(未解決=無効カード)
+//   applyProject(entry)?   — プロジェクト切替の実行(async 可)
 //   getActiveViewName()    — 適用中ビュー名 or null
 //   getPortalSpec()        — {enabled,title,open,html?} or null (portal: 行)
 //   getPanelTitle()        — title: 行のパネルタイトル or null
 //   getHtmlSections()      — [{title,spec}] (html: 行・記述順)
-//   getCards()             — [{kind:"view"|"link"|"form", entry:{name,desc,img,url?,…}}]
+//   getCards()             — [{kind:"view"|"link"|"form"|"project", entry:{name,desc,img,url?,…}}]
 //
 // ポータル内HTML(html:/portal html=)で使える data-* 属性:
 //   data-view="ビュー名" — ビュー適用＋ポータルを閉じる
@@ -45,6 +48,7 @@
 //   data-cam="カメラ名"  — カメラプリセットへ移動(ポータルは開いたまま)
 //   data-base="背景名"   — 背景地図を切替(none/transparent も可)
 //   data-form="フォーム名" — フォーム投稿画面を開く(form: 行)
+//   data-project="id"  — プロジェクト切替(project: 行と同等。data-keep=cam,base 併用可)
 //   data-clear           — ビュー解除(適用前状態へ復元)
 //   data-close           — ポータルを閉じる
 //
@@ -58,6 +62,7 @@ export function createKascPortal(cfg) {
   const {
     t, resolveProjectUrl = u => u, loadInfoContent,
     applyView, clearView, applyCam, applyBase, applyFeature,
+    resolveProject = null, applyProject = null,
     pickLocation = null, cancelPick = null,
     getActiveViewName = () => null,
     getPortalSpec = () => null,
@@ -118,6 +123,11 @@ export function createKascPortal(cfg) {
       if (formEl && body.contains(formEl)) {
         const card = getCards().find(c => c.kind === "form" && (c.entry.name === formEl.dataset.form || c.entry.title === formEl.dataset.form));
         if (card) openForm(card.entry);
+        return;
+      }
+      const projectEl = event.target.closest("[data-project]");
+      if (projectEl && body.contains(projectEl) && applyProject) {
+        void applyProject({ name: projectEl.dataset.project, keep: projectEl.dataset.keep || "" });
         return;
       }
       const linkEl = event.target.closest("[data-link]");
@@ -192,7 +202,10 @@ export function createKascPortal(cfg) {
       const hasView = cards.some(c => c.kind === "view");
       const head = document.createElement("div");
       head.className = "portal-views-head";
-      head.textContent = t(hasView ? "portal.views" : cards.every(c => c.kind === "form") ? "portal.forms" : "portal.links");
+      head.textContent = t(hasView ? "portal.views"
+        : cards.every(c => c.kind === "form") ? "portal.forms"
+        : cards.every(c => c.kind === "project") ? "portal.projects"
+        : "portal.links");
       body.append(head);
       const grid = document.createElement("div");
       grid.className = "portal-cards";
@@ -232,6 +245,20 @@ export function createKascPortal(cfg) {
         } else if (kind === "form") {
           card.classList.add("portal-card-form");
           card.addEventListener("click", () => openForm(entry));
+        } else if (kind === "project") {
+          card.classList.add("portal-card-project");
+          // project: カード(#130)。遷移先は resolveProject で id/名前/URL から
+          // 解決し、未解決なら無効カードとして表示する
+          const resolved = resolveProject ? resolveProject(entry) : null;
+          if (resolved?.title) name.textContent = resolved.title;
+          if (!resolved) {
+            card.disabled = true;
+            card.classList.add("portal-card-unresolved");
+            const msg = t("portal.projectUnresolved", { name: entry.name });
+            card.title = card.title ? `${card.title} — ${msg}` : msg;
+          } else {
+            card.addEventListener("click", () => { void applyProject(entry); });
+          }
         } else {
           card.classList.add("portal-card-link");
           if (entry.url) card.title = card.title ? `${card.title} — ${entry.url}` : entry.url;

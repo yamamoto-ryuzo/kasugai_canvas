@@ -78,6 +78,7 @@
 <td>適用前スナップショットへ完全復元（表示・フィルタ・スタイル・カメラ・ベースマップ）
 </td>
 </tr>      
+<tr><td><code>project:</code></td><td><code>project:id|名前|kasc URL | desc=説明 | img=画像 | keep=cam,base</code></td><td>プロジェクト切替カード。<code>projects.json</code> マニフェスト・?kasc= 群マニフェスト由来の兄弟プロジェクト・記憶済み .kasc を id/名前/URL から解決して遷移。<code>keep=cam,base</code> でカメラ位置・背景を引継ぎ（未指定は移動先の既定）。未解決の指定は無効カードとして表示</td></tr>
 <tr>
 <td>既定コンテンツ
 </td>
@@ -251,7 +252,7 @@
 </td>
 <td>開いたまま
 </td>
-</tr>      
+</tr><tr><td><code>data-project="id"</code></td><td>プロジェクト切替（<code>project:</code> カードと同じ解決。data-keep="cam,base" で引継ぎ指定可）</td><td>開いたまま</td></tr>      
 <tr>
 <td>
 <code>data-cam="カメラ名"

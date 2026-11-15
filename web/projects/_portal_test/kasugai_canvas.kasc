@@ -7,3 +7,6 @@ view:未発注 | desc=未発注の地物のみ表示 | テスト地物;where="�
 view:全体 | *
 link:市役所サイト | url=https://www.city.kasugai.lg.jp/ | desc=春日井市公式サイト
 geojson:テスト地物 | DATA/test.geojson
+project:default | desc=既定プロジェクトへ | keep=cam,base
+project:sample_qgis | desc=QGISサンプルプロジェクトへ
+project:missing-proj | desc=未解決カード(無効表示の確認用)

@@ -666,6 +666,8 @@
   "portal.defaultNews": "Noch keine Mitteilungen. Fügen Sie in der .kasc-Datei eine `html:Titel | <HTML> oder Datei/URL`-Zeile hinzu.",
   "portal.defaultViews": "Noch keine Aufgaben-Karten. `view:`-Zeilen für Karten mit Ebenen/Stilen/Filtern/Kamera, `link:`-Zeilen für externe Link-Karten.",
   "portal.links": "Links",
+  "portal.projects": "Projekte",
+  "portal.projectUnresolved": "Projekt konnte nicht aufgelöst werden: {name}",
   "portal.about": "Über das Portal",
   "portal.aboutHtml": "<p>Mit diesen .kasc-Zeilen lässt sich das Portal aufbauen.</p><ul><li><code>portal:on | title=Titel | open=auto|manual</code> — Portal aktivieren, Titel, Startanzeige</li><li><code>html:Titel | HTML oder Datei/URL</code> — Mitteilungs-Abschnitte (Reihenfolge)</li><li><code>view:Name | desc=… | img=… | cam=… | layer[;style=…][;where=…]</code> — aufgabenorientierte Ansichts-Karten</li><li><code>link:Name | url=URL | desc=… | img=…</code> — externe Link-Karten</li><li><code>portal:… | html=Datei/URL</code> — Portal-Body komplett aus einer HTML-Datei (<code>data-view=Name</code>/<code>data-link=URL</code>/<code>data-cam=Name</code>/<code>data-base=Name</code>/<code>data-clear</code>/<code>data-close</code>/<code>data-feature=layer/attr=value</code> als Kartensteuerung)</li></ul>",
   "settings.tab.general": "Allgemein",

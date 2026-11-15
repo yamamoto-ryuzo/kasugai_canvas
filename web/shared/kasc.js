@@ -63,7 +63,7 @@ export function splitKascTail(tail) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], projects: [], defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -140,6 +140,13 @@ export function parseKasc(text) {
       // link:名前 | url=https://… | desc=説明 | img=画像 —
       // ポータル画面の外部リンクカード。view: カードと宣言順で同じグリッドに並ぶ
       doc.links.push(parseKascLinkValue(parts, line));
+      continue;
+    }
+    if (type === "project") {
+      // project:id|名前|kasc URL | desc=説明 | img=画像 | keep=cam,base —
+      // ポータル画面のプロジェクト切替カード(#130)。view:/link: と宣言順で
+      // 同じグリッドに並び、押下で対象 .kasc へ切り替える
+      doc.projects.push(parseKascProjectValue(parts, line));
       continue;
     }
     if (type === "portal") {
@@ -473,6 +480,21 @@ export function parseKascLinkValue(parts, line = null) {
     if (/^(https?:\/\/|mailto:)/i.test(tok)) link.url = tok;
   }
   return link;
+}
+
+// project: 行の値をパースする(#130)。
+// `project:id|名前|kasc URL | desc=説明 | img=画像 | keep=cam,base`
+// ポータルのプロジェクト切替カード。先頭は遷移先の指定(projects.json の id・
+// ?kasc= 群マニフェストの兄弟id/仮名・.kasc 直URL)。keep= は遷移時に引き継ぐ
+// 状態(cam=カメラ位置, base=背景)。未指定の項目は移動先の既定へ戻る
+export function parseKascProjectValue(parts, line = null) {
+  const project = { name: parts[0] || "", desc: "", img: "", keep: "", line };
+  for (const tok of parts.slice(1)) {
+    if (!tok) continue;
+    const kv = /^(desc|img|keep)\s*=\s*(.+)$/i.exec(tok);
+    if (kv) project[kv[1].toLowerCase()] = kv[2].trim();
+  }
+  return project;
 }
 
 // portal: 行の値をパースする。`portal:on|off | title=… | open=auto|manual | html=…`

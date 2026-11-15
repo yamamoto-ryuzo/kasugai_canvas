@@ -27,7 +27,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, parseKascProjectValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
 import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-eval.js";
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
@@ -786,7 +786,10 @@ const inspectorViews = [];
 const inspectorHtmlSections = [];
 // インスペクタの link: 行で宣言された外部リンクカード {name, url, desc, img, line}[]
 const inspectorLinks = [];
-// ポータルのカード宣言順リスト {kind:"view"|"link", entry}[]
+// インスペクタの project: 行で宣言されたプロジェクト切替カード(#130)
+// {name, desc, img, keep, line}[]
+const inspectorProjects = [];
+// ポータルのカード宣言順リスト {kind:"view"|"link"|"form"|"project", entry}[]
 const inspectorPortalCards = [];
 // インスペクタの dash: 行で宣言されたダッシュボード定義(#123)
 const inspectorDashSpecs = [];
@@ -1155,6 +1158,39 @@ async function loadProjects() {
 // エンジン切替で引き継がれた状態。loadInspectorConfig で初期テキストへ
 // 反映し、残り(可視性・テーマ)は初回適用後に反映する
 let switchRestore = null;
+
+// プロジェクトの in-place 切替。#project-select 変更とポータル project: カード(#130)の
+// 共通経路。linkedKascUrl 指定時は ?kasc= 直読み、null 時は ?project= モードへ移行する
+async function switchProjectInPlace(projectId, linkedKascUrl) {
+  currentProjectId = projectId;
+  const params = new URLSearchParams(window.location.search);
+  if (linkedKascUrl) {
+    // 群マニフェスト由来のエントリは ?kasc= 直読みのまま切り替える
+    currentKascUrl = linkedKascUrl;
+    params.set("kasc", linkedKascUrl);
+    params.delete("project");
+  } else {
+    // 実プロジェクトの選択は ?kasc= 直読みモードを抜ける
+    currentKascUrl = null;
+    kascBaseOverride = null;
+    if (currentProjectId) params.set("project", currentProjectId);
+    else params.delete("project");
+    params.delete("kasc");
+  }
+  window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
+  updateProjectRootPath();
+  // scope:"project" のプラグインレイヤーはプロジェクト単位のデータとして切り離す
+  pluginLayers.filter(item => item.scope === "project").forEach(removePluginLayer);
+  // plugin: 行で起動したプラグインはレイヤーが除去されるため、新 .kasc 適用後に
+  // plugin-loader 側で再起動できるよう切替を通知する
+  window.kasugaiApi?.emit("project-changed", { projectId: currentProjectId });
+  try {
+    setInspectorStatus(t("inspector.status.loadingProject"));
+    await loadInspectorConfig();
+  } catch (error) {
+    setInspectorStatus(t("inspector.status.loadProjectFailed", { error: error instanceof Error ? error.message : error }), true);
+  }
+}
 
 async function loadInspectorConfig() {
   try {
@@ -1600,6 +1636,8 @@ function kascPortal() {
       applyCam: name => applyViewCam(name),
       applyBase: name => applyViewBase(name),
       applyFeature: spec => applyUrlFeature(spec),
+      resolveProject: entry => resolvePortalProject(entry?.name),
+      applyProject: entry => switchPortalProject(entry),
       pickLocation: () => pickFormLocation(),
       cancelPick: () => cancelFormPick(),
       getActiveViewName: () => activeViewName,
@@ -1629,6 +1667,66 @@ const updatePortalButton = () => kascPortal().updateButton();
 const updatePortalUI = () => kascPortal().update();
 const openPortal = () => kascPortal().open();
 const closePortal = () => kascPortal().close();
+
+// 現在のカメラ位置をビュー状態{longitude,latitude,height,pitch,heading}で返す
+function currentCameraView() {
+  const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
+  if (!c) return null;
+  return {
+    longitude: Cesium.Math.toDegrees(c.longitude),
+    latitude: Cesium.Math.toDegrees(c.latitude),
+    height: c.height,
+    pitch: Cesium.Math.toDegrees(viewer.camera.pitch),
+    heading: Cesium.Math.toDegrees(viewer.camera.heading),
+  };
+}
+
+// project: カード/data-project の遷移先解決(#130)。
+// id → 群マニフェスト(kascLinkedUrls) → 記憶済み .kasc(rememberedKascUrl) →
+// プロジェクトマニフェスト(projectDefinitions) の id/タイトルの順で解決する。
+// http(s):/localfs:/kasczip: の .kasc 直URLはそのまま ?kasc= として使う
+function resolvePortalProject(rawTarget) {
+  const target = String(rawTarget || "").trim();
+  if (!target) return null;
+  if (/^(https?:\/\/|localfs:|kasczip:)/i.test(target)) {
+    const name = decodeURIComponent(target.split("/").pop() || target).replace(/\.kasc$/i, "") || target;
+    return { id: name, kascUrl: target, title: name };
+  }
+  const linked = kascLinkedUrls.get(target);
+  if (linked) return { id: target, kascUrl: linked, title: projectDefinitions.get(target)?.title || target };
+  const remembered = rememberedKascUrl(target);
+  if (remembered) return { id: target, kascUrl: remembered, title: projectDefinitions.get(target)?.title || target };
+  const byId = projectDefinitions.get(target);
+  if (byId) return { id: target, kascUrl: null, title: byId.title || target };
+  for (const [id, def] of projectDefinitions) {
+    if (def?.title === target) return { id, kascUrl: kascLinkedUrls.get(id) || null, title: def.title };
+  }
+  return null;
+}
+
+// project: カード/data-project の押下でプロジェクトを切り替える(#130)。
+// keep= に無い項目は移動先の既定へ戻る: cam 未指定なら先頭 cam: プリセットへ
+// 移動(なければ現位置のまま)、base 未指定なら移動先の既定背景。
+// ポータルは開いたままにして移動先のポータルへ連続して遷移できるようにする
+// (移動先が portal:off なら閉じる)
+async function switchPortalProject(entry) {
+  const resolved = resolvePortalProject(entry?.name);
+  if (!resolved) {
+    console.warn(`project: プロジェクトを解決できません: ${entry?.name}`);
+    return false;
+  }
+  const keep = new Set(String(entry?.keep || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean));
+  const savedCamera = keep.has("cam") ? currentCameraView() : null;
+  const savedBase = keep.has("base")
+    ? (globeHidden ? "transparent" : (selectedBasemap?.id || selectedBasemap?.title || "none"))
+    : null;
+  await switchProjectInPlace(resolved.id, resolved.kascUrl);
+  if (savedCamera) flyTo(savedCamera, 0);
+  else if (cameraPresets[0]) cameraPresets[0]._extent ? flyToExtent(cameraPresets[0]) : flyTo(cameraPresets[0]);
+  if (savedBase != null) applyViewBase(savedBase);
+  if (!kascPortal().available()) kascPortal().close();
+  return true;
+}
 
 // ---- ダッシュボード(dash: 行の地図連動集計ビュー #123) ----
 // UI 構築は shared/dashboard.js へ共通化。ここでは宣言 getter と
@@ -6021,6 +6119,7 @@ function applyInspector(text) {
   // ディープリンク(feature=/data-feature)のハイライトはプロジェクト単位で破棄する
   if (deepLinkHighlightDs) { viewer.dataSources.remove(deepLinkHighlightDs, true); deepLinkHighlightDs = null; }
   inspectorLinks.splice(0, inspectorLinks.length);
+  inspectorProjects.splice(0, inspectorProjects.length);
   inspectorPortalCards.splice(0, inspectorPortalCards.length);
   inspectorDashSpecs.splice(0, inspectorDashSpecs.length);
   inspectorForms.splice(0, inspectorForms.length);
@@ -6178,6 +6277,15 @@ function applyInspector(text) {
       const link = parseKascLinkValue(parts, line);
       inspectorLinks.push(link);
       inspectorPortalCards.push({ kind: "link", entry: link });
+    }
+
+    // project: id|名前|kasc URL | desc=説明 | img=画像 | keep=cam,base —
+    // ポータル画面のプロジェクト切替カード(#130)。宣言順で同じグリッドに並ぶ
+    if (type === "project") {
+      const parts = value.split("|").map(part => part.trim());
+      const project = parseKascProjectValue(parts, line);
+      inspectorProjects.push(project);
+      inspectorPortalCards.push({ kind: "project", entry: project });
     }
 
     // portal: on|off | title=見出し | open=auto|manual —
@@ -9756,35 +9864,7 @@ function setupEvents() {
 
 
   document.querySelector("#project-select")?.addEventListener("change", async event => {
-    currentProjectId = event.target.value;
-    const linkedKascUrl = kascLinkedUrls.get(currentProjectId);
-    const params = new URLSearchParams(window.location.search);
-    if (linkedKascUrl) {
-      // 群マニフェスト由来のエントリは ?kasc= 直読みのまま切り替える
-      currentKascUrl = linkedKascUrl;
-      params.set("kasc", linkedKascUrl);
-      params.delete("project");
-    } else {
-      // 実プロジェクトの選択は ?kasc= 直読みモードを抜ける
-      currentKascUrl = null;
-      kascBaseOverride = null;
-      if (currentProjectId) params.set("project", currentProjectId);
-      else params.delete("project");
-      params.delete("kasc");
-    }
-    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}${window.location.hash}`);
-    updateProjectRootPath();
-    // scope:"project" のプラグインレイヤーはプロジェクト単位のデータとして切り離す
-    pluginLayers.filter(item => item.scope === "project").forEach(removePluginLayer);
-    // plugin: 行で起動したプラグインはレイヤーが除去されるため、新 .kasc 適用後に
-    // plugin-loader 側で再起動できるよう切替を通知する
-    window.kasugaiApi?.emit("project-changed", { projectId: currentProjectId });
-    try {
-      setInspectorStatus(t("inspector.status.loadingProject"));
-      await loadInspectorConfig();
-    } catch (error) {
-      setInspectorStatus(t("inspector.status.loadProjectFailed", { error: error instanceof Error ? error.message : error }), true);
-    }
+    await switchProjectInPlace(event.target.value, kascLinkedUrls.get(event.target.value) || null);
   });
 
   const shareCopyBtn = document.querySelector("#share-copy");
