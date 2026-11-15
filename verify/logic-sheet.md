@@ -21,7 +21,7 @@ flowchart TB
 ## コンポーネント
 
 - **server** — Rust Axum サーバ(kasugai_canvas.exe :8510 + bridge-hub :8511): pass=42 fail=0 skip=20 (62機能)
-- **web** — 静的Webフロント(6エンジン + shared + AI制御面): pass=241 fail=0 skip=12 (253機能)
+- **web** — 静的Webフロント(6エンジン + shared + AI制御面): pass=245 fail=0 skip=12 (257機能)
 - **workers** — Cloudflare Workers(認証ゲート+API): pass=10 fail=0 skip=0 (10機能)
 - **functions** — Cloudflare Pages Functions(APIハンドラ群): pass=9 fail=0 skip=0 (9機能)
 - **agent** — Cloud Run 用 FastAPI エージェント: pass=15 fail=0 skip=0 (15機能)

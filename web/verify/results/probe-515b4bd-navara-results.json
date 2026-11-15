@@ -1,0 +1,27 @@
+[
+  {
+    "id": "navara.boot",
+    "ok": true,
+    "detail": "descs=3 title=probe-515b4bd"
+  },
+  {
+    "id": "navara.kasc.exaggeration_read",
+    "ok": true,
+    "detail": "input=2 updates=[2,null,null] terrainDesc.exagg=undefined"
+  },
+  {
+    "id": "navara.ui.terrain_exaggeration",
+    "ok": true,
+    "detail": "update exaggeration after input=3 → [3]"
+  },
+  {
+    "id": "navara.ui.terrain_exagg_reset",
+    "ok": true,
+    "detail": "reset value=1 updates=[1]"
+  },
+  {
+    "id": "navara.qml.dash_cap",
+    "ok": true,
+    "detail": "dashArray=[12.598424911499023,5.039370059967041] cap=round width=3"
+  }
+]

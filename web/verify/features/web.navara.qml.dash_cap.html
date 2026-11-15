@@ -1,0 +1,31 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.navara.qml.dash_cap — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>✅ <code>web.navara.qml.dash_cap</code></h1>
+<table>
+<tr><th>name</th><td>navara_qml_dash_cap</td></tr>
+<tr><th>kind</th><td>logic_fn</td></tr>
+<tr><th>source</th><td><code>web/navara/app.js:850-880</code></td></tr>
+<tr><th>signature</th><td><code>specToStyle → dash/cap → PolylineMaterial dashArray/cap</code></td></tr>
+<tr><th>summary</th><td>QML の破線(customdash px長を線幅倍率へ換算し Float32Array dashArray)と capstyle を Navara PolylineMaterial へ反映</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td>@navaramap/engine 0.3.1, loadCompiledQml</td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  qml[QML customdash + capstyle] --> comp[loadCompiledQml]
+  comp --> st[specToStyle
+s.dash px長 / s.cap]
+  st --> desc[desc.polyline]
+  desc --> da[dashArray=dash/線幅 Float32Array]
+  desc --> cap[cap]
+  desc --> layer[Navara PolylineMaterial]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>Playwright: dash付きQMLレイヤ(sample_qgis Line.qml customdash=5;2)を navara で描画 → layer desc polyline.dashArray 実在 or エラー無し assert</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-15T15:30:00+09:00</p>
+<p>customdash=5;2(MM)+capstyle=round QML → polyline.dashArray=[12.6,5.04](px/width3換算) cap=round 実desc捕捉</p>
+<p>証跡: <code>web/verify/results/probe-515b4bd.mjs</code>・<code>probe-515b4bd-navara.mjs</code>(+ *.json / screenshots)</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

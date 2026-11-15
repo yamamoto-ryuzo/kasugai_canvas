@@ -1,0 +1,33 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.maplibre.qml.layer_blend — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>✅ <code>web.maplibre.qml.layer_blend</code></h1>
+<table>
+<tr><th>name</th><td>maplibre_qml_layer_blend</td></tr>
+<tr><th>kind</th><td>logic_fn</td></tr>
+<tr><th>source</th><td><code>web/shared/qml-2d.js:529-685</code></td></tr>
+<tr><th>signature</th><td><code>maplibreApplyQml(geojson, compiled) → kinds に *-layer-blend</code></td></tr>
+<tr><th>summary</th><td>QMLシンボルレイヤの blend_mode を MapLibre 6.18+ の line-layer-blend/fill-layer-blend で再現。データ駆動不可のため __kasc_lblend/__kasc_fblend/__kasc_lgrp で値別レイヤグルーピング。canvas合成名→MLB_MAP(multiply/screen/overlay/lighter→plus-lighter)。破線グルーピングは __kasc_lgrp=&#x27;blend|dashJSON&#x27; に統合</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / True</td></tr>
+<tr><th>depends</th><td>maplibre-gl&gt;=6.18, compileQmlStyle</td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  qml[.qml symbol layer blend_mode] --> comp[compileQmlStyle
+qgisBlendToComposite canvas名]
+  comp --> spec[spec.line.blend / fillParts.blend]
+  spec --> apply[maplibreApplyQml]
+  apply -->|MLB_MAP| mlb[multiply/screen/overlay/plus-lighter]
+  apply --> props[__kasc_lblend/fblend/lgrp 焼込]
+  props --> grp[値別レイヤグルーピング]
+  grp --> kinds[kinds: line/fill 各グループ
+*-layer-blend paint]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code>node/playwright: compileQmlStyle(blend_mode=6+customdash)→maplibreApplyQml→__kasc_lgrp/&#x27;line-layer-blend&#x27;:&#x27;multiply&#x27; assert</code></td></tr>
+<tr><th>integrated</th><td><code>maplibre engine: blend付きlayerをmap.addLayer→getPaintProperty(&#x27;line-layer-blend&#x27;)==&#x27;multiply&#x27; 且つ検証エラー無し</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-15T15:30:00+09:00</p>
+<p>standalone5/5+integrated: __kasc_lgrp=multiply|dash・plus-lighter・非対応blend除外・fblend=screen・通常dash &quot;|&quot; 全assert OK。MapLibre6.18 addLayer line/fill-layer-blend受理・sample_qgis 43層 errors=0</p>
+<p>証跡: <code>web/verify/results/probe-515b4bd.mjs</code>・<code>probe-515b4bd-navara.mjs</code>(+ *.json / screenshots)</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

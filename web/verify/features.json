@@ -47,8 +47,8 @@
         "integrated": "ブラウザで /cesium/ を開き kasugaiApi.listLayers() 実行"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "default project・10レイヤー・カメラ正常"
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "Cesium 1.147.0 ブート確認(canvas有)"
     },
     {
       "id": "web.maplibre.app",
@@ -68,8 +68,8 @@
         "integrated": "ブラウザで /maplibre/ を開き kasugaiApi.listLayers() 実行"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": ""
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "maplibre-gl 6.18: sample_qgis 43style層 errors=0"
     },
     {
       "id": "web.openlayers.app",
@@ -131,8 +131,8 @@
         "integrated": "ブラウザで /gsimaps/ を開き kasugaiApi.listLayers() 実行"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "vendor SW経由で起動・10レイヤー/basemaps正常(要~15s)"
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "vendor SW経由で起動・新sha(3cc3b49)で canvas/gsi 確認"
     },
     {
       "id": "web.navara.app",
@@ -152,8 +152,8 @@
         "integrated": "ブラウザで /navara/ を開き kasugaiApi.listLayers() 実行"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": ""
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "@navaramap 0.3.1: boot+terrain/vector/raster desc 生成確認(SW reload込み)"
     },
     {
       "id": "web.cesium.mod.app",
@@ -4593,7 +4593,91 @@
       "last_result": "pass",
       "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "#layer-list 全チェックx座標一致(4行=56px)"
+    },
+    {
+      "id": "web.maplibre.qml.layer_blend",
+      "kind": "logic_fn",
+      "name": "maplibre_qml_layer_blend",
+      "source": "web/shared/qml-2d.js:529-685",
+      "signature": "maplibreApplyQml(geojson, compiled) → kinds に *-layer-blend",
+      "summary": "QMLシンボルレイヤの blend_mode を MapLibre 6.18+ の line-layer-blend/fill-layer-blend で再現。データ駆動不可のため __kasc_lblend/__kasc_fblend/__kasc_lgrp で値別レイヤグルーピング。canvas合成名→MLB_MAP(multiply/screen/overlay/lighter→plus-lighter)。破線グルーピングは __kasc_lgrp='blend|dashJSON' に統合",
+      "needs_runtime": true,
+      "standalone_ok": true,
+      "depends": [
+        "maplibre-gl>=6.18",
+        "compileQmlStyle"
+      ],
+      "verify": {
+        "standalone": "node/playwright: compileQmlStyle(blend_mode=6+customdash)→maplibreApplyQml→__kasc_lgrp/'line-layer-blend':'multiply' assert",
+        "integrated": "maplibre engine: blend付きlayerをmap.addLayer→getPaintProperty('line-layer-blend')=='multiply' 且つ検証エラー無し"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "standalone5/5+integrated: __kasc_lgrp=multiply|dash・plus-lighter・非対応blend除外・fblend=screen・通常dash \"|\" 全assert OK。MapLibre6.18 addLayer line/fill-layer-blend受理・sample_qgis 43層 errors=0"
+    },
+    {
+      "id": "web.navara.ui.terrain_exaggeration",
+      "kind": "ui_control",
+      "name": "navara_terrain_exaggeration_ui",
+      "source": "web/navara/app.js:630-656,1601-1609 + index.html:381",
+      "signature": "#nv-terrain-exagg change → applyTerrainExaggeration(v) → terrainLayer.update",
+      "summary": "地形の垂直誇張UI。Navara 0.3.x TerrainMaterial.exaggeration 相当を terrainDesc.terrain.exaggeration へ設定し layer.update で即時反映。↺リセットで1に戻す",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "@navaramap/engine 0.3.1",
+        "applyTerrain ON"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: #nv-terrain-exagg 存在 → value=2 change → window.kascView 側 terrain layer の material.exaggeration==2 or update呼出・エラー無し assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "kascView.addLayer/updateフック: input=3→terrainLayer.update(exaggeration:3)、↺→value=1+update(1) 実検証"
+    },
+    {
+      "id": "web.navara.kasc.terrain_exaggeration",
+      "kind": "logic_fn",
+      "name": "navara_kasc_terrain_exaggeration",
+      "source": "web/navara/app.js:1046-1055",
+      "signature": "renderDoc: doc.terrain.opts.exaggeration → applyTerrainExaggeration",
+      "summary": ".kasc の terrain: 行 exaggeration=N を読取り、terrain ON 時に誇張へ適用・入力欄を常時同期(#60 連携)。Cesium/MapLibre と同じ kasc 属性の Navara 対応",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "kasc.js terrain parse",
+        "applyTerrain"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: terrain: | exaggeration=2 の .kasc を navara で開く → #nv-terrain-exagg.value=='2' assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "terrain:|exaggeration=2 の probe.kasc → #nv-terrain-exagg=2 + update(2) 実検証"
+    },
+    {
+      "id": "web.navara.qml.dash_cap",
+      "kind": "logic_fn",
+      "name": "navara_qml_dash_cap",
+      "source": "web/navara/app.js:850-880",
+      "signature": "specToStyle → dash/cap → PolylineMaterial dashArray/cap",
+      "summary": "QML の破線(customdash px長を線幅倍率へ換算し Float32Array dashArray)と capstyle を Navara PolylineMaterial へ反映",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "@navaramap/engine 0.3.1",
+        "loadCompiledQml"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: dash付きQMLレイヤ(sample_qgis Line.qml customdash=5;2)を navara で描画 → layer desc polyline.dashArray 実在 or エラー無し assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T15:30:00+09:00",
+      "note": "customdash=5;2(MM)+capstyle=round QML → polyline.dashArray=[12.6,5.04](px/width3換算) cap=round 実desc捕捉"
     }
   ],
-  "updated": "2026-11-15T00:00:00+09:00"
+  "updated": "2026-11-15T15:30:00+09:00"
 }

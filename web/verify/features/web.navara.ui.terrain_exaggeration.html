@@ -1,0 +1,29 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.navara.ui.terrain_exaggeration — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>✅ <code>web.navara.ui.terrain_exaggeration</code></h1>
+<table>
+<tr><th>name</th><td>navara_terrain_exaggeration_ui</td></tr>
+<tr><th>kind</th><td>ui_control</td></tr>
+<tr><th>source</th><td><code>web/navara/app.js:630-656,1601-1609 + index.html:381</code></td></tr>
+<tr><th>signature</th><td><code>#nv-terrain-exagg change → applyTerrainExaggeration(v) → terrainLayer.update</code></td></tr>
+<tr><th>summary</th><td>地形の垂直誇張UI。Navara 0.3.x TerrainMaterial.exaggeration 相当を terrainDesc.terrain.exaggeration へ設定し layer.update で即時反映。↺リセットで1に戻す</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td>@navaramap/engine 0.3.1, applyTerrain ON</td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  inp[#nv-terrain-exagg change] --> ex[applyTerrainExaggeration v]
+  rst[#nv-terrain-exagg-reset click] --> ex
+  ex --> td[terrainDesc.terrain.exaggeration=v]
+  td --> upd[terrainLayer.update desc]
+  on[applyTerrain true] --> td</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>Playwright: #nv-terrain-exagg 存在 → value=2 change → window.kascView 側 terrain layer の material.exaggeration==2 or update呼出・エラー無し assert</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-15T15:30:00+09:00</p>
+<p>kascView.addLayer/updateフック: input=3→terrainLayer.update(exaggeration:3)、↺→value=1+update(1) 実検証</p>
+<p>証跡: <code>web/verify/results/probe-515b4bd.mjs</code>・<code>probe-515b4bd-navara.mjs</code>(+ *.json / screenshots)</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>
