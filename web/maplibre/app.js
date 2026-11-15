@@ -169,6 +169,8 @@ let currentProjectId = "";
 const inspectorViews = [];
 // .kasc の html: 行で宣言されたポータル HTML セクション {title, spec, line}[]
 const inspectorHtmlSections = [];
+// .kasc の news: 行で宣言されたお知らせフィード {src, limit, title, line}[](#128)
+const inspectorNews = [];
 // .kasc の link: 行で宣言された外部リンクカード {name, url, desc, img, line}[]
 const inspectorLinks = [];
 // ポータルのカード宣言順リスト {kind:"view"|"link", entry}[]
@@ -1506,6 +1508,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // ポータル(portal:/html:/view:/link: 行)の状態を doc から再構築する
   inspectorViews.splice(0, inspectorViews.length);
   inspectorHtmlSections.splice(0, inspectorHtmlSections.length);
+  inspectorNews.splice(0, inspectorNews.length, ...(doc.news || []));
   inspectorLinks.splice(0, inspectorLinks.length);
   inspectorPortalCards.splice(0, inspectorPortalCards.length);
   inspectorPortalSpec = doc.portal || null;
@@ -2626,6 +2629,7 @@ function kascPortal() {
       getPortalSpec: () => inspectorPortalSpec,
       getPanelTitle: () => inspectorPanelTitle,
       getHtmlSections: () => inspectorHtmlSections,
+      getNews: () => inspectorNews,
       getCards: () => inspectorPortalCards,
     });
   }

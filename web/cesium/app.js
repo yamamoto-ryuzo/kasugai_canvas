@@ -27,7 +27,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, parseKascProjectValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, parseKascProjectValue, parseKascNewsValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
 import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-eval.js";
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
@@ -784,6 +784,8 @@ const inspectorThemes = [];
 const inspectorViews = [];
 // インスペクタの html: 行で宣言されたポータル HTML セクション {title, spec, line}[]
 const inspectorHtmlSections = [];
+// インスペクタの news: 行で宣言されたお知らせフィード {src, limit, title, line}[](#128)
+const inspectorNews = [];
 // インスペクタの link: 行で宣言された外部リンクカード {name, url, desc, img, line}[]
 const inspectorLinks = [];
 // インスペクタの project: 行で宣言されたプロジェクト切替カード(#130)
@@ -1644,6 +1646,7 @@ function kascPortal() {
       getPortalSpec: () => inspectorPortalSpec,
       getPanelTitle: () => inspectorPanelTitle,
       getHtmlSections: () => inspectorHtmlSections,
+      getNews: () => inspectorNews,
       getCards: () => inspectorPortalCards,
     });
   }
@@ -6116,6 +6119,7 @@ function applyInspector(text) {
   inspectorThemes.splice(0, inspectorThemes.length);
   inspectorViews.splice(0, inspectorViews.length);
   inspectorHtmlSections.splice(0, inspectorHtmlSections.length);
+  inspectorNews.splice(0, inspectorNews.length);
   // ディープリンク(feature=/data-feature)のハイライトはプロジェクト単位で破棄する
   if (deepLinkHighlightDs) { viewer.dataSources.remove(deepLinkHighlightDs, true); deepLinkHighlightDs = null; }
   inspectorLinks.splice(0, inspectorLinks.length);
@@ -6268,6 +6272,14 @@ function applyInspector(text) {
       const body = parts.slice(1).join("|") || parts[0];
       const spec = body.startsWith("<") ? body : resolveProjectUrl(body);
       inspectorHtmlSections.push({ title: parts.length > 1 ? parts[0] : "", spec, line });
+    }
+
+    // news: <DATA/内ファイル|URL> | limit=件数 | title=見出し —
+    // ポータルのお知らせフィード(#128)。JSON/FrontMatter Markdown を
+    // 日付降順で描画する。src はポータル描画時に resolveProjectUrl で解決
+    if (type === "news") {
+      const parts = value.split("|").map(part => part.trim());
+      inspectorNews.push(parseKascNewsValue(parts, line));
     }
 
     // link: 名前 | url=… | desc=説明 | img=画像 —

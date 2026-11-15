@@ -1,7 +1,7 @@
-// ---- ポータル(portal:/html:/view:/link:/project: 行で構成する開始画面) ----
+// ---- ポータル(portal:/html:/news:/view:/link:/project: 行で構成する開始画面) ----
 // 全エンジン共通のポータルUIモジュール。各エンジンは
 //   1) index.html に #portal-open ボタンと #portal-overlay 構造を置き
-//   2) app.js で view:/html:/portal:/link:/project:/form: 行をパースして保持し
+//   2) app.js で view:/html:/news:/portal:/link:/project:/form: 行をパースして保持し
 //   3) この createKascPortal に「状態getter + applyView/clearView」を渡す
 // だけで、カード/セクション/既定コンテンツ/外部リンクの描画と
 // 🏠ボタン・Esc・解除ボタンの配線が共有される。
@@ -21,7 +21,10 @@
 //  .portal-section/.portal-section-body/.portal-views-head/.portal-cards/
 //  .portal-card(.active,.portal-card-link)/.portal-card-img
 //  (.portal-card-img-empty)/.portal-card-name/.portal-card-desc/
-//  .portal-footer/.portal-open)
+//  .portal-footer/.portal-open
+//  .portal-news-list/.portal-news-item/.portal-news-date/
+//  .portal-news-importance/.portal-news-title/.portal-news-tag/
+//  .portal-news-body/.portal-news-actions/.portal-news-btn)
 
 // cfg:
 //   t(key, vars?)          — i18n 関数 (portal.* キーを使う)
@@ -39,6 +42,7 @@
 //   getPortalSpec()        — {enabled,title,open,html?} or null (portal: 行)
 //   getPanelTitle()        — title: 行のパネルタイトル or null
 //   getHtmlSections()      — [{title,spec}] (html: 行・記述順)
+//   getNews()              — [{src,limit,title}] (news: 行・記述順。#128)
 //   getCards()             — [{kind:"view"|"link"|"form"|"project", entry:{name,desc,img,url?,…}}]
 //
 // ポータル内HTML(html:/portal html=)で使える data-* 属性:
@@ -57,6 +61,7 @@
 //                          Promise<{lon,lat}|null> で返す(loc フィールド用)
 //   cancelPick()         — 未確定の位置拾いを破棄する(ポータル再表示時に呼ぶ)
 import { backendUrl } from "./backend.js";
+import { embedKascInfoHtml, renderMarkdownLite, parseKascNewsArticles } from "./kasc.js";
 
 export function createKascPortal(cfg) {
   const {
@@ -68,6 +73,7 @@ export function createKascPortal(cfg) {
     getPortalSpec = () => null,
     getPanelTitle = () => null,
     getHtmlSections = () => [],
+    getNews = () => [],
     getCards = () => [],
   } = cfg;
 
@@ -196,6 +202,19 @@ export function createKascPortal(cfg) {
       body.append(wrap);
       void loadInfoContent(content, sec.spec, null, errText);
     }
+    // news: セクション(記述順・html: の後)。JSON/Markdown のお知らせ一覧を
+    // fetch して日付降順で描画する(#128)
+    for (const sec of getNews()) {
+      const wrap = document.createElement("section");
+      wrap.className = "portal-section";
+      const head = document.createElement("h3");
+      head.textContent = sec.title || t("portal.news");
+      const content = document.createElement("div");
+      content.className = "portal-section-body portal-news";
+      wrap.append(head, content);
+      body.append(wrap);
+      void loadNewsSection(content, sec, errText);
+    }
     // view:/link: カード(宣言順で同一グリッド)
     const cards = getCards();
     if (cards.length) {
@@ -271,7 +290,7 @@ export function createKascPortal(cfg) {
     // 宣言が一切無いプロジェクト向けの既定コンテンツ。
     // お知らせ→ビュー説明→機能説明(HTML)の順で、html:/view:/link: の
     // 書き方そのものをガイドとして表示する
-    if (!getHtmlSections().length && !cards.length) {
+    if (!getHtmlSections().length && !getNews().length && !cards.length) {
       const news = document.createElement("section");
       news.className = "portal-section";
       const newsHead = document.createElement("h3");
@@ -300,6 +319,96 @@ export function createKascPortal(cfg) {
     }
     const footer = document.querySelector("#portal-footer");
     if (footer) footer.hidden = !getActiveViewName();
+  }
+
+  // ---- news: 行のお知らせフィード(#128) ----
+  // JSON([{date,title,body,link,view,feature,tags,importance}])または
+  // FrontMatter 付き Markdown 一覧を fetch no-store で取得し、日付降順・
+  // limit 適用で記事カードを描く。本文は info: 行と同じサニタイズ経路
+  // (embedKascInfoHtml)を通し、記事の view/link/feature は data-* 属性ボタン
+  // として ensureDelegated の既存ハンドラで地図・外部サイトへ遷移する
+  async function loadNewsSection(container, sec, errText) {
+    const fail = error => {
+      const message = error instanceof Error ? error.message : String(error);
+      container.textContent = typeof errText?.errorText === "function"
+        ? errText.errorText(message)
+        : `お知らせを読み込めませんでした: ${message}`;
+    };
+    const url = resolveProjectUrl(sec.src);
+    let articles;
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+      articles = parseKascNewsArticles(await response.text());
+    } catch (error) {
+      fail(error);
+      return;
+    }
+    articles.sort((a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0));
+    const shown = sec.limit > 0 ? articles.slice(0, sec.limit) : articles;
+    container.replaceChildren();
+    if (!shown.length) {
+      container.textContent = t("portal.newsEmpty");
+      return;
+    }
+    const list = document.createElement("div");
+    list.className = "portal-news-list";
+    for (const article of shown) {
+      const item = document.createElement("article");
+      item.className = "portal-news-item";
+      const head = document.createElement("div");
+      head.className = "portal-news-head";
+      if (article.date) {
+        const date = document.createElement("time");
+        date.className = "portal-news-date";
+        date.textContent = article.date;
+        head.append(date);
+      }
+      if (article.importance) {
+        const badge = document.createElement("span");
+        badge.className = "portal-news-importance";
+        badge.textContent = article.importance;
+        head.append(badge);
+      }
+      const title = document.createElement("span");
+      title.className = "portal-news-title";
+      title.textContent = article.title || article.date;
+      head.append(title);
+      for (const tag of article.tags) {
+        const el = document.createElement("span");
+        el.className = "portal-news-tag";
+        el.textContent = tag;
+        head.append(el);
+      }
+      item.append(head);
+      if (article.body) {
+        const bodyEl = document.createElement("div");
+        bodyEl.className = "portal-news-body";
+        embedKascInfoHtml(bodyEl,
+          article.format === "md" ? renderMarkdownLite(article.body) : article.body,
+          null);
+        item.append(bodyEl);
+      }
+      const actions = [];
+      if (article.view) actions.push(["data-view", article.view, article.view]);
+      if (article.feature) actions.push(["data-feature", article.feature, t("portal.newsFeature")]);
+      if (article.link) actions.push(["data-link", article.link, t("portal.newsOpen")]);
+      if (actions.length) {
+        const bar = document.createElement("div");
+        bar.className = "portal-news-actions";
+        for (const [attr, value, label] of actions) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "portal-news-btn";
+          button.setAttribute(attr, value);
+          button.textContent = label;
+          bar.append(button);
+        }
+        item.append(bar);
+      }
+      list.append(item);
+    }
+    container.append(list);
   }
 
   // ---- form: 行のフォーム投稿(#131) ----

@@ -89,6 +89,8 @@
 </code>/
 <code>html:
 </code>/
+<code>news:
+</code>/
 <code>link:
 </code> が1行も無い場合は、タイトル（
 <code>title:
@@ -191,6 +193,28 @@
 <td>ポータル内のHTMLセクション（お知らせ・説明文等）。
 <code>info:
 </code> と同じサニタイズ経路。宣言順に表示
+</td>      
+</tr>      
+<tr>        
+<td>
+<code>news:
+</code>
+</td>        
+<td>
+<code>news:ファイル/URL | limit=件数 | title=見出し
+</code>
+</td>        
+<td>お知らせフィード。DATA/ 内ファイルまたは URL を fetch（no-store）し日付降順で一覧表示。
+<code>html:
+</code> セクションの後・記述順。JSON（
+<code>[{date,title,body,link,view,feature,tags,importance}]
+</code>、body は既定 HTML・
+<code>format:"md"
+</code> で Markdown）と FrontMatter 付き Markdown 一覧（
+<code>---
+</code> 区切りでメタ＋本文）の双方を受理。記事の view/link/feature は data-* ボタンとして地図・外部サイトへ遷移、tags/importance はバッジ表示。本文は 
+<code>info:
+</code> と同じサニタイズ経路
 </td>      
 </tr>      
 </tbody>      

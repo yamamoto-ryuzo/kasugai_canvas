@@ -1,0 +1,25 @@
+[
+  {
+    "date": "2026-10-01",
+    "title": "古い記事",
+    "body": "<p>10月のお知らせです。</p>",
+    "tags": ["info"]
+  },
+  {
+    "date": "2026-11-15",
+    "title": "ビュー連動のお知らせ",
+    "body": "<p><b>重要</b>な更新です。<script>alert(1)</script></p>",
+    "view": "全体",
+    "link": "https://example.com/news",
+    "feature": "事業箇所/箇所名=箇所1",
+    "tags": ["update", "重要"],
+    "importance": "high"
+  },
+  {
+    "date": "2026-11-10",
+    "title": "Markdown 本文の記事",
+    "body": "**太字**を含む本文です。\n\n- 項目A\n- 項目B",
+    "format": "md",
+    "tags": "tag1,tag2"
+  }
+]

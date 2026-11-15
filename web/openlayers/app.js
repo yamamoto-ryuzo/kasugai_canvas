@@ -1211,6 +1211,8 @@ let currentCams = [];
 const inspectorViews = [];
 // html: 行のポータル HTML セクション {title, spec, line}[]
 const inspectorHtmlSections = [];
+// news: 行で宣言されたお知らせフィード {src, limit, title, line}[](#128)
+const inspectorNews = [];
 // link: 行の外部リンクカード {name, url, desc, img, line}[]
 const inspectorLinks = [];
 // ポータルのカード宣言順リスト {kind:"view"|"link", entry}[]
@@ -1365,6 +1367,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   inspectorLinks.splice(0, inspectorLinks.length, ...(doc.links || []));
   inspectorPortalCards.splice(0, inspectorPortalCards.length, ...portalCardsFromDoc(inspectorInput.value, doc));
   inspectorHtmlSections.splice(0, inspectorHtmlSections.length, ...htmlSectionsFromDoc(doc));
+  inspectorNews.splice(0, inspectorNews.length, ...(doc.news || []));
   inspectorPortalSpec = doc.portal || null;
   inspectorPanelTitle = doc.title || null;
   activeViewName = null;
@@ -2375,6 +2378,7 @@ function kascPortal() {
       getPortalSpec: () => inspectorPortalSpec,
       getPanelTitle: () => inspectorPanelTitle,
       getHtmlSections: () => inspectorHtmlSections,
+      getNews: () => inspectorNews,
       getCards: () => inspectorPortalCards,
     });
   }

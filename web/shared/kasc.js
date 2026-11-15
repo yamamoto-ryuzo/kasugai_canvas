@@ -88,7 +88,7 @@ export function kascRoleAllowed(required, userRoles) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], projects: [], defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], projects: [], news: [], defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   const userRoles = kascUserRoles();
   for (const rawLine of String(text || "").split(/\r?\n/)) {
@@ -175,6 +175,12 @@ export function parseKasc(text) {
       // html:タイトル | インラインHTML または HTMLファイル/URL —
       // ポータル画面へ描画するセクション。記述順に並ぶ
       doc.htmlSections.push({ title: parts[0] || "", spec: line.slice(sep + 1).trim(), line });
+      continue;
+    }
+    if (type === "news") {
+      // news:<DATA/内ファイル|URL> | limit=件数 | title=見出し —
+      // ポータルのお知らせフィード(#128)。html: セクションの後に記述順で並ぶ
+      doc.news.push(parseKascNewsValue(parts, line));
       continue;
     }
     if (type === "link") {
@@ -290,7 +296,7 @@ export const NON_LAYER_TYPES = new Set([
   "cam", "background", "info", "legend", "theme", "base", "legendnode",
   "bookmark", "cloud", "plugin", "yahooappid", "title",
   "group", "terrain", "scene3d", "light", "fly_geojson", "live",
-  "view", "html", "portal", "link", "dash", "form",
+  "view", "html", "portal", "link", "dash", "form", "news",
 ]);
 
 // group: 行の初期折りたたみ状態をエンジンの expandedLayerGroups(Set) へ反映する。
@@ -615,6 +621,146 @@ export function parseKascFormValue(parts, line = null) {
     if (/^(https?:\/\/|backend:)/i.test(tok)) form.to = tok;
   }
   return form;
+}
+
+// news: 行の値をパースする(#128)。
+// `news: <DATA/内ファイル|URL> | limit=件数 | title=見出し` —
+// ポータルのお知らせフィード。JSON または FrontMatter 付き Markdown 一覧を
+// fetch して日付降順で描画する
+export function parseKascNewsValue(parts, line = null) {
+  const news = { src: "", limit: 0, title: "", line };
+  for (const tok of parts) {
+    if (!tok) continue;
+    const kv = /^(src|url|href|limit|title)\s*=\s*(.+)$/i.exec(tok);
+    if (kv) {
+      const key = kv[1].toLowerCase();
+      const value = kv[2].trim();
+      if (key === "limit") {
+        const n = Number.parseInt(value, 10);
+        if (Number.isFinite(n) && n > 0) news.limit = n;
+      } else if (key === "title") news.title = value;
+      else news.src = value;
+      continue;
+    }
+    if (!news.src) news.src = tok;
+  }
+  return news;
+}
+
+// Markdown の最小レンダラ(ai-chat.js から移設。news: の本文描画でも使う)。
+// XSS 防止のため先にHTMLエスケープしてから
+// 見出し・箇条書き・太字・インラインコード・リンクのみ装飾する
+function escapeHtmlLite(value) {
+  return String(value ?? "").replace(/[&<>"']/g,
+    ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+}
+export function renderMarkdownLite(markdown) {
+  const inline = text => String(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, label, url) => {
+      // javascript: 等のスキームを除外し http(s)・相対パスのみリンク化する
+      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) && !/^https?:/i.test(url)) return label;
+      return `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;
+    });
+  const out = [];
+  let inList = false;
+  for (const raw of escapeHtmlLite(String(markdown ?? "")).split(/\r?\n/)) {
+    const heading = /^(#{1,4})\s+(.*)$/.exec(raw);
+    if (heading) {
+      if (inList) { out.push("</ul>"); inList = false; }
+      const level = Math.min(heading[1].length + 2, 6);
+      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      continue;
+    }
+    const bullet = /^[-*]\s+(.*)$/.exec(raw);
+    if (bullet) {
+      if (!inList) { out.push("<ul>"); inList = true; }
+      out.push(`<li>${inline(bullet[1])}</li>`);
+      continue;
+    }
+    if (inList) { out.push("</ul>"); inList = false; }
+    if (raw.trim()) out.push(`<p>${inline(raw)}</p>`);
+  }
+  if (inList) out.push("</ul>");
+  return out.join("");
+}
+
+// news: ファイル本文(JSON または FrontMatter 付き Markdown 一覧)を記事配列へ
+// 正規化する(#128)。ソート・件数制限は呼び出し側で行う。
+// JSON: `[{date,title,body,link,view,feature,tags,importance,format}]`
+//   (単一オブジェクト・{items|news|articles:[…]} も可。tags は配列 or カンマ区切り。
+//    body は既定 HTML、format:"md" で Markdown として描画)
+// Markdown: `---` 行で区切った FrontMatter ブロック列。
+//   非空行がすべて `key: value` の塊をメタ情報、次の塊を本文(Markdown)とする。
+//   メタのみの塊は本文なし記事、メタ無しの塊は本文のみの記事になる。
+// 戻り値: [{date,title,body,format:"html"|"md",link,view,feature,tags[],importance}]
+// JSON らしき先頭([/{)でパース失敗した場合はエラーを投げて表面化する
+export function parseKascNewsArticles(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) return [];
+  const normalize = (raw, defaultFormat = "html") => {
+    const a = raw && typeof raw === "object" ? raw : {};
+    const tags = Array.isArray(a.tags)
+      ? a.tags.map(s => String(s).trim()).filter(Boolean)
+      : String(a.tags || "").split(/[,;]/).map(s => s.trim()).filter(Boolean);
+    const fmt = /^(md|markdown)$/i.test(String(a.format || a.bodyFormat || ""))
+      ? "md" : defaultFormat;
+    return {
+      date: String(a.date || a.published || a.datetime || "").trim(),
+      title: String(a.title || a.name || "").trim(),
+      body: String(a.body ?? a.description ?? a.desc ?? "").trim(),
+      format: fmt,
+      link: String(a.link || a.url || a.href || "").trim(),
+      view: String(a.view || "").trim(),
+      feature: String(a.feature || "").trim(),
+      tags,
+      importance: String(a.importance || a.severity || "").trim(),
+    };
+  };
+  if (trimmed[0] === "[" || trimmed[0] === "{") {
+    const data = JSON.parse(trimmed);
+    const list = Array.isArray(data) ? data
+      : Array.isArray(data?.items) ? data.items
+      : Array.isArray(data?.news) ? data.news
+      : Array.isArray(data?.articles) ? data.articles
+      : [data];
+    return list.map(a => normalize(a)).filter(a => a.title || a.body);
+  }
+  // FrontMatter 付き Markdown 一覧。`---` 行で分割し、key:value のみの塊を
+  // メタ情報、直後の塊を本文とする
+  const articles = [];
+  let meta = null;
+  const parseMeta = chunk => {
+    const m = {};
+    for (const l of chunk.split(/\r?\n/)) {
+      const kv = /^\s*([A-Za-z_][\w-]*)\s*:\s*(.*)$/.exec(l);
+      if (!kv) continue;
+      const key = kv[1].toLowerCase();
+      let value = kv[2].trim().replace(/^["']|["']$/g, "");
+      if (key === "tags") {
+        value = value.replace(/^\[|\]$/g, "");
+        m.tags = value.split(/[,;]/).map(s => s.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+      } else {
+        m[key] = value;
+      }
+    }
+    return m;
+  };
+  for (const chunk of trimmed.split(/^---\s*$/m)) {
+    const part = chunk.trim();
+    if (!part) continue;
+    const isMeta = part.split(/\r?\n/).every(l => /^\s*[A-Za-z_][\w-]*\s*:/.test(l));
+    if (isMeta) {
+      if (meta) articles.push(meta); // メタ連続は前のを本文なし記事として確定
+      meta = parseMeta(part);
+      continue;
+    }
+    articles.push({ ...(meta || {}), body: part });
+    meta = null;
+  }
+  if (meta) articles.push(meta);
+  return articles.map(a => normalize(a, "md")).filter(a => a.title || a.body);
 }
 
 // #theme-select の中身を構築する。themes が空なら非表示化

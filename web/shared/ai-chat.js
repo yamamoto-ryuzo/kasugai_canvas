@@ -19,7 +19,8 @@ import {
   isBackendCapabilitiesResolved, setBackendCapabilities as setBackendCaps,
   localNetworkPermission,
 } from "./backend.js";
-import { splitKascTail } from "./kasc.js";
+import { splitKascTail, renderMarkdownLite } from "./kasc.js";
+export { renderMarkdownLite };
 
 // ---- バックエンド capabilities（エンジン横断で共有する状態） ----
 // 状態の正本は shared/backend.js。検出は detectBackend が同一オリジン優先・
@@ -73,11 +74,6 @@ function flyToFeatureOrView(lat, lng, opts = {}) {
   const api = window.kasugaiApi;
   if (api?.flyToFeature) return api.flyToFeature(lat, lng, opts);
   return api?.flyTo?.({ latitude: lat, longitude: lng, ...opts });
-}
-
-function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g,
-    ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
 }
 
 // ---- チャットツール名 → 必要な kasugaiApi メソッドの対応表 ----
@@ -1728,39 +1724,8 @@ function confirmPluginApply({ id, name, code }) {
   });
 }
 
-// Markdown の最小レンダラ。XSS 防止のため先にHTMLエスケープしてから
-// 見出し・箇条書き・太字・インラインコード・リンクのみ装飾する
-export function renderMarkdownLite(markdown) {
-  const inline = text => String(text)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (match, label, url) => {
-      // javascript: 等のスキームを除外し http(s)・相対パスのみリンク化する
-      if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url) && !/^https?:/i.test(url)) return label;
-      return `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;
-    });
-  const out = [];
-  let inList = false;
-  for (const raw of escapeHtml(String(markdown ?? "")).split(/\r?\n/)) {
-    const heading = /^(#{1,4})\s+(.*)$/.exec(raw);
-    if (heading) {
-      if (inList) { out.push("</ul>"); inList = false; }
-      const level = Math.min(heading[1].length + 2, 6);
-      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
-      continue;
-    }
-    const bullet = /^[-*]\s+(.*)$/.exec(raw);
-    if (bullet) {
-      if (!inList) { out.push("<ul>"); inList = true; }
-      out.push(`<li>${inline(bullet[1])}</li>`);
-      continue;
-    }
-    if (inList) { out.push("</ul>"); inList = false; }
-    if (raw.trim()) out.push(`<p>${inline(raw)}</p>`);
-  }
-  if (inList) out.push("</ul>");
-  return out.join("");
-}
+// Markdown の最小レンダラ(renderMarkdownLite)は shared/kasc.js へ移設。
+// ここでは同ファイルから import し再 export して公開面を維持する
 
 // 資料モーダル（confirmPluginApply と同じオーバーレイ方式）。
 // format=html は sandbox 属性のみの iframe で隔離して描画する

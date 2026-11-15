@@ -189,6 +189,8 @@ let currentManifest = [];
 // 振り分けた結果を保持し、shared/portal.js の UI へ getter 経由で渡す
 let inspectorViews = [];
 let inspectorHtmlSections = [];
+// news: 行で宣言されたお知らせフィード {src, limit, title, line}[](#128)
+let inspectorNews = [];
 let inspectorLinks = [];
 let inspectorPortalCards = [];
 let inspectorPortalSpec = null;
@@ -208,10 +210,13 @@ const PORTAL_STRINGS = {
   "portal.clearView": "ビュー解除",
   "portal.loadFailed": "読み込みに失敗しました: {error}",
   "portal.news": "お知らせ",
+  "portal.newsEmpty": "記事がありません。",
+  "portal.newsOpen": "開く",
+  "portal.newsFeature": "地図で見る",
   "portal.defaultNews": "まだお知らせはありません。kasc ファイルに `html:タイトル | <HTML>またはファイル/URL` 行を追加するとここに表示されます。",
   "portal.defaultViews": "まだ目的別ボタンはありません。`view:` 行で表示レイヤ・スタイル・フィルタ・カメラをまとめたカード、`link:` 行で外部サイトへのカードを追加できます。",
   "portal.about": "ポータル機能について",
-  "portal.aboutHtml": "<p>.kasc に以下の行を書くとポータルを構成できます。</p><ul><li><code>portal:on | title=見出し | open=auto|manual</code> — ポータルの有効化・タイトル・起動時表示</li><li><code>html:タイトル | HTMLまたはファイル/URL</code> — お知らせ等のセクション(記述順)</li><li><code>view:名前 | desc=説明 | img=画像 | cam=カメラ名 | レイヤ[;style=…][;where=式]</code> — 目的別の表示切替カード</li><li><code>link:名前 | url=URL | desc=説明 | img=画像</code> — 外部サイトへのリンクカード</li></ul>",
+  "portal.aboutHtml": "<p>.kasc に以下の行を書くとポータルを構成できます。</p><ul><li><code>portal:on | title=見出し | open=auto|manual</code> — ポータルの有効化・タイトル・起動時表示</li><li><code>html:タイトル | HTMLまたはファイル/URL</code> — お知らせ等のセクション(記述順)</li><li><code>news:JSONまたはMarkdownファイル/URL | limit=件数 | title=見出し</code> — お知らせフィード(日付降順・記事の view/link/feature で地図遷移)</li><li><code>view:名前 | desc=説明 | img=画像 | cam=カメラ名 | レイヤ[;style=…][;where=式]</code> — 目的別の表示切替カード</li><li><code>link:名前 | url=URL | desc=説明 | img=画像</code> — 外部サイトへのリンクカード</li></ul>",
 };
 function t(key, vars) {
   return String(PORTAL_STRINGS[key] ?? key)
@@ -1485,6 +1490,7 @@ function kascPortal() {
       getPortalSpec: () => inspectorPortalSpec,
       getPanelTitle: () => inspectorPanelTitle,
       getHtmlSections: () => inspectorHtmlSections,
+      getNews: () => inspectorNews,
       getCards: () => inspectorPortalCards,
     });
   }
@@ -1783,6 +1789,7 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
     const spec = body.startsWith("<") ? body : resolveProjectUrl(body);
     return { title: parts.length > 1 ? parts[0] : "", spec, line: sec.line };
   });
+  inspectorNews = doc.news || [];
   // view:/link: カードは宣言順で同一グリッド。doc 側は種別ごとの配列のため
   // インスペクタテキスト内の出現位置でインタリーブ順を復元する
   const kascText = inspectorInput.value;
