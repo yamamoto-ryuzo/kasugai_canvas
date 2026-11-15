@@ -627,6 +627,7 @@ function legendTabEntries(layer) {
     label: e.label || e.symbolName || "",
     spec: e.desc || null,
     hidden: !!e.symbolName && !!layer.legendHidden?.has(e.symbolName),
+    symbolName: e.symbolName || "",
   }));
 }
 function renderLegendPanelPicker() {
@@ -650,32 +651,48 @@ function renderLegendPanelPicker() {
     ariaLabel: t("legend.selectLayer"),
     imageGroupLabel: t("legend.groupImages"),
     layerGroupLabel: t("legend.groupLayers"),
+    onToggleSymbol: (ref, name, vis) => setLegendSymbolVisible(ref, name, vis),
+    onToggleAll: (ref, vis) => setAllLegendSymbolsVisible(ref, vis),
+    showAllLabel: t("legend.showAll"),
+    hideAllLabel: t("legend.hideAll"), verticalLabel: t("legend.viewVertical"), tabsLabel: t("legend.viewTabs"),
   });
 }
 
-// 凡例の条件別チェックの切り替え。該当シンボルにだけ評価される地物を
-// 描画中の DataSource/Primitive へ即時再適用し、未描画なら次回 refreshLayers で反映される
+// 凡例シンボル非表示集合を描画中の DataSource/Primitive へ即時再適用する。
+// 未描画なら次回 refreshLayers で反映される
+function applyLegendSymbolHidden(item) {
+  const style = item.qmlStyle;
+  if (!style) return;
+  const entry = vectorDataSources.find(e => e.id === item.id);
+  if (entry) {
+    try { applyQmlStyleToDataSource(entry.ds, style, { clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden, opacity: item.opacity ?? 1 }); }
+    catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
+  } else {
+    const target = layerRuntimeTargets.get(item.id);
+    if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
+      try { applyQmlStyleToPrimitive(target, style, item.legendHidden, item.opacity ?? 1); }
+      catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
+    }
+  }
+  requestRender();
+}
+// 凡例の条件別チェックの切り替え
 function setLegendSymbolVisible(item, symbolName, visible) {
   if (!item || !symbolName) return;
   if (!item.legendHidden) item.legendHidden = new Set();
   if (visible) item.legendHidden.delete(symbolName);
   else item.legendHidden.add(symbolName);
   if (!item.legendHidden.size) item.legendHidden = null;
-  const style = item.qmlStyle;
-  if (style) {
-    const entry = vectorDataSources.find(e => e.id === item.id);
-    if (entry) {
-      try { applyQmlStyleToDataSource(entry.ds, style, { clamp: !!item._qmlClamp, hiddenSymbols: item.legendHidden, opacity: item.opacity ?? 1 }); }
-      catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
-    } else {
-      const target = layerRuntimeTargets.get(item.id);
-      if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
-        try { applyQmlStyleToPrimitive(target, style, item.legendHidden, item.opacity ?? 1); }
-        catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
-      }
-    }
-    requestRender();
-  }
+  applyLegendSymbolHidden(item);
+  renderLayerList();
+}
+// 凡例タブの全表示/全非表示: 対象レイヤの全シンボルを一括で切り替える
+function setAllLegendSymbolsVisible(layer, visible) {
+  if (!layer) return;
+  const names = legendTabEntries(layer).map(e => e.symbolName).filter(Boolean);
+  if (!names.length) return;
+  layer.legendHidden = visible ? null : new Set(names);
+  applyLegendSymbolHidden(layer);
   renderLayerList();
 }
 // レイヤー行の📍フォーカス用: レイヤーID→実行時オブジェクト(ImageryLayer/Tileset/DataSource/Primitive)。
@@ -2104,9 +2121,10 @@ function renderLayerList() {
           const legendMulti = !!legendEntries && legendEntries.length > 1;
           const legendCollapsed = legendMulti && (collapsedLayerLegends.has(layer.id)
             || (legendEntries.length >= LEGEND_AUTO_COLLAPSE_MIN && !expandedLayerLegends.has(layer.id)));
+          // トグル無し行も同幅のスペーサを置き、チェックボックスの左位置を全行で揃える
           const legendToggle = legendMulti
             ? `<button class="layer-legend-toggle" type="button" data-layer-id="${escapeHtml(layer.id)}" aria-label="${escapeHtml(t("layer.legendToggle"))}" aria-expanded="${!legendCollapsed}">${legendCollapsed ? "▸" : "▾"}</button>`
-            : "";
+            : `<span class="layer-legend-toggle-spacer" aria-hidden="true"></span>`;
           const inlineSwatch = legendEntries && !legendMulti && legendEntries[0].desc
             ? `<img class="legend-swatch" src="${buildLegendSwatchDataUrl(legendEntries[0].desc)}" alt="">`
             : "";

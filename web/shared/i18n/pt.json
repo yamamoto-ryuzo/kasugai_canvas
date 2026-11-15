@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "Conectado. Token do GitHub salvo.",
   "chat.copilotapi.signinFailed": "Falha ao entrar com GitHub: {error}",
   "chat.copilotapi.signinExpired": "O código expirou. Entre novamente.",
-  "chat.copilotapi.signinProxyFailed": "Falha no relay de login (requer o proxy /api/mcp — use a versão de servidor local): {error}"
+  "chat.copilotapi.signinProxyFailed": "Falha no relay de login (requer o proxy /api/mcp — use a versão de servidor local): {error}",
+  "legend.showAll": "Mostrar tudo",
+  "legend.hideAll": "Ocultar tudo",
+  "legend.viewVertical": "Vertical",
+  "legend.viewTabs": "Abas"
 }

@@ -5809,7 +5809,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .cloned()
         .unwrap_or_else(|| repo_dir.to_path_buf());
     let web_dir = resolve_dir(&exe_dir, "web", || repo_dir.join("web"));
-    let projects_dir = resolve_dir(&exe_dir, "projects", || repo_dir.join("installer/projects"));
+    let projects_dir = resolve_dir(&exe_dir, "projects", || repo_dir.join("web/projects"));
 
     // コンテナ実行(PORT 設定時)は高権限APIを公開しない
     let is_local = cloud_port.is_none();

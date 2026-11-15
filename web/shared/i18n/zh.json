@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "已登录。GitHub 令牌已保存。",
   "chat.copilotapi.signinFailed": "GitHub 登录失败：{error}",
   "chat.copilotapi.signinExpired": "代码已过期。请重新登录。",
-  "chat.copilotapi.signinProxyFailed": "登录中继失败（需要 /api/mcp 代理 — 请使用本地服务器版本）：{error}"
+  "chat.copilotapi.signinProxyFailed": "登录中继失败（需要 /api/mcp 代理 — 请使用本地服务器版本）：{error}",
+  "legend.showAll": "全部显示",
+  "legend.hideAll": "全部隐藏",
+  "legend.viewVertical": "纵向",
+  "legend.viewTabs": "标签页"
 }

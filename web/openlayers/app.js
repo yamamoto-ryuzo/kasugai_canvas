@@ -770,10 +770,32 @@ function legendPickerLayers() {
     const title = splitKascTitle(item.title || "").title || item.title || entry._leaf || item.url || "";
     const legend = item._qml?.legend;
     const entries = legend?.length
-      ? legend.map(le => ({ label: le.label || le.symbolName || "", spec: le.spec || null, hidden: !!le.symbolName && !!item._legendHidden?.has(le.symbolName) }))
+      ? legend.map(le => ({ label: le.label || le.symbolName || "", spec: le.spec || null, hidden: !!le.symbolName && !!item._legendHidden?.has(le.symbolName), symbolName: le.symbolName || "" }))
       : (spec => (spec ? [{ label: "", spec }] : []))(defaultLegendSpec(item));
     return { ref: item, title, entries };
   }).filter(l => l.entries.length);
+}
+// _legendHidden の現在値を地図スタイル・ドレープコピー・凡例タブへ反映する
+function applyLegendHidden(entry) {
+  entry.layer?.changed?.(); // スタイル関数の再評価を促す
+  syncDeckLayers(); // ドレープコピーにも凡例非表示を反映
+  renderLegendPicker(); // 凡例タブの非表示反映
+}
+// 凡例タブの行チェック/全表示ボタンからのシンボル表示切替
+function setLegendSymbol(item, symbolName, visible) {
+  item._legendHidden ||= new Set();
+  if (visible) item._legendHidden.delete(symbolName);
+  else item._legendHidden.add(symbolName);
+  if (!item._legendHidden.size) item._legendHidden = null;
+  const entry = (layerEntries || []).find(e => e.item === item);
+  if (entry) applyLegendHidden(entry);
+}
+function setAllLegendSymbols(item, visible) {
+  const names = (item?._qml?.legend || []).map(le => le.symbolName).filter(Boolean);
+  if (!names.length) return;
+  item._legendHidden = visible ? null : new Set(names);
+  const entry = (layerEntries || []).find(e => e.item === item);
+  if (entry) applyLegendHidden(entry);
 }
 function renderLegendPicker() {
   const parent = panel.legends;
@@ -786,7 +808,7 @@ function renderLegendPicker() {
     box.className = "legend-layer-picker";
     parent.append(box);
   }
-  renderLayerLegendPicker(box, { images: legendTabImages, layers }, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: t("legend.selectLayer"), imageGroupLabel: t("legend.groupImages"), layerGroupLabel: t("legend.groupLayers") });
+  renderLayerLegendPicker(box, { images: legendTabImages, layers }, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: t("legend.selectLayer"), imageGroupLabel: t("legend.groupImages"), layerGroupLabel: t("legend.groupLayers"), onToggleSymbol: setLegendSymbol, onToggleAll: setAllLegendSymbols, showAllLabel: t("legend.showAll"), hideAllLabel: t("legend.hideAll"), verticalLabel: t("legend.viewVertical"), tabsLabel: t("legend.viewTabs") });
 }
 
 function buildLayerRow(entry, exclusive, radioName) {
@@ -813,6 +835,12 @@ function buildLayerRow(entry, exclusive, radioName) {
       if (legendBox) legendBox.hidden = item._legendCollapsed;
     });
     row.append(tg);
+  } else {
+    // トグル無し行も同幅のスペーサを置き、チェックボックスの左位置を全行で揃える
+    const sp = document.createElement("span");
+    sp.className = "layer-legend-toggle-spacer";
+    sp.setAttribute("aria-hidden", "true");
+    row.append(sp);
   }
 
   const cb = document.createElement("input");
@@ -913,9 +941,7 @@ function buildLayerRow(entry, exclusive, radioName) {
         if (lcb.checked) item._legendHidden.delete(le.symbolName);
         else item._legendHidden.add(le.symbolName);
         if (!item._legendHidden.size) item._legendHidden = null;
-        entry.layer?.changed?.(); // スタイル関数の再評価を促す
-        syncDeckLayers(); // ドレープコピーにも凡例非表示を反映
-        renderLegendPicker(); // 凡例タブの非表示反映
+        applyLegendHidden(entry);
       });
       const sw = document.createElement("img");
       sw.className = "legend-swatch";

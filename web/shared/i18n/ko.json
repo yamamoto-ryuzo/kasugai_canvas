@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "로그인했습니다. GitHub 토큰을 저장했습니다.",
   "chat.copilotapi.signinFailed": "GitHub 로그인 실패: {error}",
   "chat.copilotapi.signinExpired": "코드가 만료되었습니다. 다시 로그인하세요.",
-  "chat.copilotapi.signinProxyFailed": "로그인 중계 실패(/api/mcp 프록시 필요 — 로컬 서버 버전 사용): {error}"
+  "chat.copilotapi.signinProxyFailed": "로그인 중계 실패(/api/mcp 프록시 필요 — 로컬 서버 버전 사용): {error}",
+  "legend.showAll": "모두 표시",
+  "legend.hideAll": "모두 숨기기",
+  "legend.viewVertical": "세로 표시",
+  "legend.viewTabs": "탭"
 }

@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "Signed in. GitHub token saved.",
   "chat.copilotapi.signinFailed": "GitHub sign-in failed: {error}",
   "chat.copilotapi.signinExpired": "The code expired. Please sign in again.",
-  "chat.copilotapi.signinProxyFailed": "Sign-in relay failed (requires the /api/mcp proxy — use the local server build): {error}"
+  "chat.copilotapi.signinProxyFailed": "Sign-in relay failed (requires the /api/mcp proxy — use the local server build): {error}",
+  "legend.showAll": "Show all",
+  "legend.hideAll": "Hide all",
+  "legend.viewVertical": "Vertical",
+  "legend.viewTabs": "Tabs"
 }

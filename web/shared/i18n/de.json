@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "Angemeldet. GitHub-Token wurde gespeichert.",
   "chat.copilotapi.signinFailed": "GitHub-Anmeldung fehlgeschlagen: {error}",
   "chat.copilotapi.signinExpired": "Der Code ist abgelaufen. Bitte erneut anmelden.",
-  "chat.copilotapi.signinProxyFailed": "Anmelde-Weiterleitung fehlgeschlagen (/api/mcp-Proxy erforderlich — lokale Server-Version verwenden): {error}"
+  "chat.copilotapi.signinProxyFailed": "Anmelde-Weiterleitung fehlgeschlagen (/api/mcp-Proxy erforderlich — lokale Server-Version verwenden): {error}",
+  "legend.showAll": "Alle einblenden",
+  "legend.hideAll": "Alle ausblenden",
+  "legend.viewVertical": "Vertikal",
+  "legend.viewTabs": "Tabs"
 }

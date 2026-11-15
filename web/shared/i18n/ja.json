@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "サインインしました。GitHub トークンを保存しました。",
   "chat.copilotapi.signinFailed": "GitHub サインインに失敗しました: {error}",
   "chat.copilotapi.signinExpired": "コードの有効期限が切れました。もう一度サインインしてください。",
-  "chat.copilotapi.signinProxyFailed": "サインイン中継に失敗しました（/api/mcp プロキシが必要です。ローカルサーバ版で利用してください）: {error}"
+  "chat.copilotapi.signinProxyFailed": "サインイン中継に失敗しました（/api/mcp プロキシが必要です。ローカルサーバ版で利用してください）: {error}",
+  "legend.showAll": "全表示",
+  "legend.hideAll": "全非表示",
+  "legend.viewVertical": "縦表示",
+  "legend.viewTabs": "タブ表示"
 }

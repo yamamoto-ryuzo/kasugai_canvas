@@ -297,6 +297,12 @@ function buildLayerRow(entry, exclusive, radioName) {
     });
     tg.setAttribute("aria-expanded", String(!item._legendCollapsed));
     row.append(tg);
+  } else {
+    // トグル無し行も同幅のスペーサを置き、チェックボックスの左位置を全行で揃える
+    const sp = document.createElement("span");
+    sp.className = "layer-legend-toggle-spacer";
+    sp.setAttribute("aria-hidden", "true");
+    row.append(sp);
   }
 
   const cb = document.createElement("input");
@@ -523,10 +529,26 @@ function legendPickerLayers() {
     const title = splitKascTitle(item.title || "").title || item.title || entry._leaf || item.url || "";
     const legend = item._qml?.legend;
     const entries = legend?.length
-      ? legend.map(le => ({ label: le.label || le.symbolName || "", spec: le.spec || le, hidden: !!le.symbolName && !!item._legendHidden?.has(le.symbolName) }))
+      ? legend.map(le => ({ label: le.label || le.symbolName || "", spec: le.spec || le, hidden: !!le.symbolName && !!item._legendHidden?.has(le.symbolName), symbolName: le.symbolName || "" }))
       : (spec => (spec ? [{ label: "", spec }] : []))(defaultLegendSpec(item));
     return { ref: item, title, entries };
   }).filter(l => l.entries.length);
+}
+// 凡例タブの行チェック/全表示ボタンからのシンボル表示切替
+function setLegendSymbol(item, symbolName, visible) {
+  item._legendHidden ||= new Set();
+  if (visible) item._legendHidden.delete(symbolName);
+  else item._legendHidden.add(symbolName);
+  if (!item._legendHidden.size) item._legendHidden = null;
+  const entry = (layerEntries || []).find(e => e.item === item);
+  if (entry) applyLegendFilter(entry);
+}
+function setAllLegendSymbols(item, visible) {
+  const names = (item?._qml?.legend || []).map(le => le.symbolName).filter(Boolean);
+  if (!names.length) return;
+  item._legendHidden = visible ? null : new Set(names);
+  const entry = (layerEntries || []).find(e => e.item === item);
+  if (entry) applyLegendFilter(entry);
 }
 function renderLegendPicker() {
   const parent = panel.legends;
@@ -540,7 +562,7 @@ function renderLegendPicker() {
     box.className = "legend-layer-picker";
     parent.append(box);
   }
-  renderLayerLegendPicker(box, { images, layers }, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ", imageGroupLabel: "凡例画像", layerGroupLabel: "レイヤ" });
+  renderLayerLegendPicker(box, { images, layers }, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ", imageGroupLabel: "凡例画像", layerGroupLabel: "レイヤ", onToggleSymbol: setLegendSymbol, onToggleAll: setAllLegendSymbols });
   return true;
 }
 

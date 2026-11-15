@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "Connecté. Jeton GitHub enregistré.",
   "chat.copilotapi.signinFailed": "Échec de la connexion GitHub : {error}",
   "chat.copilotapi.signinExpired": "Le code a expiré. Veuillez vous reconnecter.",
-  "chat.copilotapi.signinProxyFailed": "Échec du relais de connexion (le proxy /api/mcp est requis — utilisez la version serveur locale) : {error}"
+  "chat.copilotapi.signinProxyFailed": "Échec du relais de connexion (le proxy /api/mcp est requis — utilisez la version serveur locale) : {error}",
+  "legend.showAll": "Tout afficher",
+  "legend.hideAll": "Tout masquer",
+  "legend.viewVertical": "Vertical",
+  "legend.viewTabs": "Onglets"
 }

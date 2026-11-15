@@ -967,5 +967,9 @@
   "chat.copilotapi.signinOk": "Sesión iniciada. Token de GitHub guardado.",
   "chat.copilotapi.signinFailed": "Error al iniciar sesión con GitHub: {error}",
   "chat.copilotapi.signinExpired": "El código caducó. Inicie sesión de nuevo.",
-  "chat.copilotapi.signinProxyFailed": "Falló la retransmisión de inicio de sesión (se requiere el proxy /api/mcp — use la versión de servidor local): {error}"
+  "chat.copilotapi.signinProxyFailed": "Falló la retransmisión de inicio de sesión (se requiere el proxy /api/mcp — use la versión de servidor local): {error}",
+  "legend.showAll": "Mostrar todo",
+  "legend.hideAll": "Ocultar todo",
+  "legend.viewVertical": "Vertical",
+  "legend.viewTabs": "Pestañas"
 }
