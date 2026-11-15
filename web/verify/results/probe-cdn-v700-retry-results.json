@@ -1,0 +1,32 @@
+[
+  {
+    "id": "cesium.boot",
+    "ok": true,
+    "detail": "{\"ready\":true,\"layers\":10,\"elapsed\":9}"
+  },
+  {
+    "id": "cesium.default_project",
+    "ok": true,
+    "detail": "layers=10 in 9s"
+  },
+  {
+    "id": "cesium.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  },
+  {
+    "id": "navara.boot",
+    "ok": true,
+    "detail": "{\"api\":true,\"view\":true,\"layers\":8}"
+  },
+  {
+    "id": "navara.kasc_layers",
+    "ok": true,
+    "detail": "listLayers=8"
+  },
+  {
+    "id": "navara.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  }
+]

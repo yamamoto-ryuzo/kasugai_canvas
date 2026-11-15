@@ -130,6 +130,8 @@ def check_versions(check_latest: bool = True) -> None:
     for page in documentation_pages:
         page_content = page.read_text(encoding="utf-8")
         badge_match = re.search(r'class="version-badge">v([^<]+)</span>', page_content)
+        if badge_match is None and 'http-equiv="refresh"' in page_content:
+            continue  # 旧URL転送スタブはバッジを持たないため照合対象外
         files[str(page.relative_to(ROOT))] = badge_match.group(1) if badge_match else None
         expected[str(page.relative_to(ROOT))] = cargo_version
 

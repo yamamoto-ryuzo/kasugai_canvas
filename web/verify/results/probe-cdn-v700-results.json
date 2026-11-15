@@ -1,0 +1,137 @@
+[
+  {
+    "id": "http.channels",
+    "ok": true,
+    "detail": "{\"stable\":\"7.0.0\",\"unstable\":\"7.0.0\",\"default\":\"stable\"}"
+  },
+  {
+    "id": "http.version",
+    "ok": true,
+    "detail": "{\"version\":\"7.0.0\",\"channel\":\"stable\",\"source_repo\":\"yamamoto-ryuzo/kasugai_canvas\",\"source_branch\":\"main\"}"
+  },
+  {
+    "id": "http.projects",
+    "ok": true,
+    "detail": "ids=[\"default\",\"reinfolib\",\"sample_qgis\"]"
+  },
+  {
+    "id": "http.index",
+    "ok": true,
+    "detail": "status=200"
+  },
+  {
+    "id": "http.kasc_sample",
+    "ok": true,
+    "detail": "status=200"
+  },
+  {
+    "id": "root.redirect",
+    "ok": true,
+    "detail": "url=https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/"
+  },
+  {
+    "id": "cesium.boot",
+    "ok": false,
+    "detail": "{\"url\":\"https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?project=default#latitude=35.653108&longitude=139.761449&height=2200.6&pitch=-30.00&heading=348.50\",\"cesium\":\"1.147.0\",\"ready\":false,\"layers\":0,\"ver\":\"7.0.0\"}"
+  },
+  {
+    "id": "cesium.redirect_default_engine",
+    "ok": true,
+    "detail": "url=https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?project=default#latitude=35.653108&longitude=139.761449&height=2200.6&pitch=-30.00&heading=348.50"
+  },
+  {
+    "id": "cesium.version_display",
+    "ok": true,
+    "detail": "version.json=7.0.0"
+  },
+  {
+    "id": "cesium.default_project",
+    "ok": false,
+    "detail": "listLayers=0"
+  },
+  {
+    "id": "cesium.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  },
+  {
+    "id": "cesium.ext_kasc",
+    "ok": true,
+    "detail": "layers=10 kasc=https://yamamoto-ryuzo.github.io/kasugai_canvas_webGIS/default/kasugai_canvas.kasc"
+  },
+  {
+    "id": "cesium.ext_kasc_no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  },
+  {
+    "id": "maplibre.boot",
+    "ok": true,
+    "detail": "{\"api\":true,\"layers\":8}"
+  },
+  {
+    "id": "maplibre.kasc_layers",
+    "ok": true,
+    "detail": "listLayers=8"
+  },
+  {
+    "id": "maplibre.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  },
+  {
+    "id": "openlayers.boot",
+    "ok": true,
+    "detail": "{\"api\":true,\"layers\":8}"
+  },
+  {
+    "id": "openlayers.kasc_layers",
+    "ok": true,
+    "detail": "listLayers=8"
+  },
+  {
+    "id": "openlayers.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  },
+  {
+    "id": "leaflet.boot",
+    "ok": true,
+    "detail": "{\"api\":true,\"layers\":8}"
+  },
+  {
+    "id": "leaflet.kasc_layers",
+    "ok": true,
+    "detail": "listLayers=8"
+  },
+  {
+    "id": "leaflet.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  },
+  {
+    "id": "navara.boot",
+    "ok": false,
+    "detail": "{\"api\":false,\"layers\":-1}"
+  },
+  {
+    "id": "navara.kasc_layers",
+    "ok": false,
+    "detail": "listLayers=-1"
+  },
+  {
+    "id": "navara.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  },
+  {
+    "id": "gsimaps.boot",
+    "ok": true,
+    "detail": "{\"canvases\":1,\"gsi\":true}"
+  },
+  {
+    "id": "gsimaps.no_pageerror",
+    "ok": true,
+    "detail": "errors=0"
+  }
+]
