@@ -2,7 +2,7 @@
 // @navaramap/three (Rust/WASM + Three.js) で .kasc を再生する。
 // vendor dist は同一オリジン必須（Worker が import.meta.url 相対で生成される）。
 // UI/共通機構は shared/ を他エンジンと共用する。
-import ThreeView, { Color, fetchFontFamilyFromCss } from "@navaramap/three";
+import ThreeView, { Color } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
 import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, normKascTitle, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
@@ -23,7 +23,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { initPrint } from "../shared/print.js";
-import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec, bakeQmlLabels, QML_LABEL_PROPS } from "../shared/qml-2d.js";
+import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { mountSunControls } from "../shared/sun-time.js";
 
@@ -186,10 +186,6 @@ function navaraSetShow(entry, on) {
   if (!touched) {
     const k = DEFAULT_MATERIAL_KEY[next.type];
     if (k) next[k] = { show: on };
-  }
-  // QML scaleVisibility はレイヤ本体とは別にラベルだけ縮尺で絞る
-  if (on && next.text && !labelScaleVisOk(entry.item)) {
-    next.text = { ...next.text, show: false };
   }
   try { layer.update(next); } catch (e) { console.warn("layer visibility", e); }
 }
@@ -889,104 +885,6 @@ function whereFilteredGeojson(item) {
   }
 }
 
-// QML <labeling> ラベル用フォント。Google Fonts CSS API の @font-face
-// (unicode-range 分割) をそのまま FontFamily へ変換して登録する — CJK は
-// 必要なスライスだけ遅延取得される。font 未設定の TextMaterial は描画
-// されないため、ラベル付きレイヤーの初回追加時に1回だけ登録する
-const LABEL_FONT_FAMILY = "kasc-qml-labels";
-let labelFontPromise = null;
-function ensureLabelFont() {
-  if (!labelFontPromise) {
-    labelFontPromise = fetchFontFamilyFromCss(
-      LABEL_FONT_FAMILY,
-      "https://fonts.googleapis.com/css2?family=Noto+Sans+JP",
-    ).then(fam => { view.addFontFamily(fam); return LABEL_FONT_FAMILY; },
-      e => { labelFontPromise = null; throw e; });
-  }
-  return labelFontPromise;
-}
-
-// 焼き込み済み __kasc_label_* プロパティ → Navara TextMaterial desc。
-// 地物ごとの値（文字列・色・回転等）は feature evaluator で適用するため、
-// ここではレイヤ共通の配置・衝突設定のみ決める。placement/keepUpright/
-// overlap/spacing 等は非地物単位プロパティのため代表値へ畳み込む
-async function buildQmlTextDesc(item, baked) {
-  const labeled = (item._geojson?.features || []).filter(f => f.properties?.__kasc_label);
-  if (!labeled.length) return null;
-  let font;
-  try { font = await ensureLabelFont(); }
-  catch (e) { console.warn(`QML ラベルフォントを登録できません (${item?.title}):`, e?.message || e); return null; }
-  const linePlaced = labeled.some(f => f.properties.__kasc_label_placement === "line");
-  const allowOverlap = labeled.every(f => f.properties.__kasc_label_overlap === true);
-  const keepUpright = labeled.every(f => f.properties.__kasc_label_upright !== false);
-  const spacing = Math.min(...labeled.map(f => f.properties.__kasc_label_spacing || 250));
-  const maxw = Math.min(...labeled.map(f => f.properties.__kasc_label_maxw || 10));
-  const lh = labeled[0].properties.__kasc_label_lh ?? 1;
-  // QML scaleVisibility → カメラ高ゲート（navaraSetShow が text だけ絞る）
-  if (baked.minScale || baked.maxScale) item._labelScale = { minScale: baked.minScale, maxScale: baked.maxScale };
-  else delete item._labelScale;
-  return {
-    font, sizeInMeters: false, size: 12, transparent: true,
-    geometryTypes: ["point", "line", "polygon"],
-    placement: linePlaced ? "line" : "point",
-    ...(linePlaced ? { spreadGlyphs: true } : {}),
-    spacing: Math.max(spacing, 1),
-    keepUpright,
-    overlap: allowOverlap ? "always" : "never",
-    maxWidth: Math.max(maxw, 1),
-    ...(lh && lh !== 1 ? { lineHeight: lh } : {}),
-  };
-}
-
-// __kasc_label_* を地物単位で TextMaterial へ適用する。evaluate の
-// コールバックはメッシュ種別ごとに呼ばれるため text 以外のバッチでは
-// 何も返さない（show:false を他ジオメトリへ掛けないため）。
-// ハロー幅は px → 1/64em 換算、tf（大文字化）はエンジン側に
-// text-transform が無いため文字列へ適用する
-function attachQmlLabelEvaluator(layer) {
-  const apply = ({ evaluator }) => evaluator.evaluate(({ properties: p, meshGeomType }) => {
-    if (meshGeomType !== "text") return {};
-    const raw = p?.__kasc_label;
-    if (!raw) return { show: false };
-    const size = Math.max(Number(p.__kasc_label_size) || 12, 6);
-    const haloW = Math.max(Number(p.__kasc_label_halo_w) || 0, 0);
-    const off = Array.isArray(p.__kasc_label_off) ? p.__kasc_label_off : [0, 0];
-    const tf = p.__kasc_label_tf;
-    return {
-      show: true,
-      text: tf === "uppercase" ? String(raw).toUpperCase() : tf === "lowercase" ? String(raw).toLowerCase() : String(raw),
-      size,
-      color: new Color().setStyle(p.__kasc_label_color || "#222222"),
-      opacity: cssColorAlpha(p.__kasc_label_color),
-      rotation: Number(p.__kasc_label_rot) || 0,
-      anchor: p.__kasc_label_anchor || "center",
-      offset: { x: Number(off[0]) || 0, y: Number(off[1]) || 0 },
-      textAlign: p.__kasc_label_justify || "auto",
-      letterSpacing: Number(p.__kasc_label_letter) || 0,
-      declutterPriority: Number(p.__kasc_label_sort) || 0,
-      ...(haloW > 0 ? {
-        outlineColor: new Color().setStyle(p.__kasc_label_halo || "#ffffff"),
-        outlineOpacity: cssColorAlpha(p.__kasc_label_halo),
-        outlineWidth: Math.max(haloW * 64 / size, 1),
-      } : {}),
-    };
-  }, { filters: QML_LABEL_PROPS });
-  layer.on("featureCreated", apply);
-  layer.on("featureUpdated", apply);
-}
-
-// QML scaleVisibility（bakeQmlLabels が返す縮尺分母範囲）→ カメラ高判定。
-// scaleVisOk と同じ係数・同じ向き: minScale=引き側限界（分母大）、
-// maxScale=寄り側限界（分母小）
-function labelScaleVisOk(item) {
-  const ls = item?._labelScale;
-  if (!ls) return true;
-  const h = lastCam.height;
-  if (ls.maxScale > 0 && h < ls.maxScale * SCALE_VIS_DIST_K) return false;
-  if (ls.minScale > 0 && h > ls.minScale * SCALE_VIS_DIST_K) return false;
-  return true;
-}
-
 // ---- .kasc → Navara ----
 async function addKascLayer(item, baseUrl) {
   const url = item.url ? resolveKascUrl(item.url, baseUrl) : null;
@@ -1037,13 +935,6 @@ async function addKascLayer(item, baseUrl) {
     const polyFillO = oNum(item.opts?.fill_opacity) ?? oNum(item.opts?.opacity) ?? aOf(fillCss) ?? gd?.fillOpacity ?? 0.4;
     const polyLineO = oNum(item.opts?.stroke_opacity) ?? oNum(item.opts?.opacity) ?? aOf(strokeCss) ?? gd?.strokeOpacity ?? ld?.opacity ?? 1;
     const pointO = oNum(item.opts?.opacity) ?? aOf(markerCss) ?? pd?.opacity ?? 1;
-    // <labeling>: __kasc_label_* を地物へ焼き込んでからソースへ渡す
-    // （エンジン非依存の bakeQmlLabels をそのまま使う）
-    let textDesc = null;
-    if (item._qml?.labelFor) {
-      const baked = bakeQmlLabels(item._geojson, item._qml);
-      if (baked) textDesc = await buildQmlTextDesc(item, baked);
-    }
     const src = view.addSource({ type: "geojson", data: whereFilteredGeojson(item), tiled: true });
     // 破線は Navara 0.3.x の PolylineMaterial.dashArray（線幅倍率）で実現。
     // QML の dash は px 長なので線幅で割って倍率へ換算する
@@ -1053,10 +944,8 @@ async function addKascLayer(item, baseUrl) {
       polyline: { color: css2hex(strokeCss || "#2c5ea8"), width: polyWidth, clampToGround: true, opacity: polyLineO, transparent: polyLineO < 1,
         ...(lineCap ? { cap: lineCap } : {}),
         ...(lineDash?.length ? { dashArray: Float32Array.from(lineDash.map(d => d / polyWidth)) } : {}) },
-      point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true, opacity: pointO, transparent: pointO < 1 },
-      ...(textDesc ? { text: textDesc } : {}) };
+      point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true, opacity: pointO, transparent: pointO < 1 } };
     const layer = view.addLayer(desc);
-    if (textDesc) attachQmlLabelEvaluator(layer);
     return { src, layer, desc };
   }
   return null;
