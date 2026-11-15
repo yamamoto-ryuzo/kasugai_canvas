@@ -16,6 +16,8 @@
   "tab.tools": "Herramientas",
   "tab.legend": "Leyenda",
   "legend.selectLayer": "Capa para mostrar la leyenda",
+  "legend.groupImages": "Imágenes de leyenda",
+  "legend.groupLayers": "Capas",
   "tab.attr": "Atrib.",
   "tab.display": "Visualización",
   "camera.presets": "Preajustes de cámara",

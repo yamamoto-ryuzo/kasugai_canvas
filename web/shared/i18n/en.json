@@ -16,6 +16,8 @@
   "tab.tools": "Tools",
   "tab.legend": "Legend",
   "legend.selectLayer": "Layer to show legend for",
+  "legend.groupImages": "Legend images",
+  "legend.groupLayers": "Layers",
   "tab.attr": "Attr",
   "tab.display": "Display",
   "camera.presets": "Camera presets",

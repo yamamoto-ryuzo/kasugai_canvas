@@ -1061,10 +1061,12 @@ function defaultLegendSpec(item) {
   return null;
 }
 
-// ---- 凡例タブ: legend: 画像とは別にレイヤを選択してベクター凡例を表示する ----
-// 選択中レイヤは legendPickerState.selected(レイヤ参照)で保持し、再描画で維持する。
+// ---- 凡例タブ: legend: 画像とレイヤ凡例を1つのセレクタで切替表示する ----
+// 選択中は legendPickerState.selected で保持し、再描画で維持する。
 // 本エンジンは QML 未対応(_qmlPending)のため既定スタイルのスウォッチのみ
 const legendPickerState = {};
+// legend: 行で指定された凡例画像(buildFromDoc で収集)
+let legendTabImages = [];
 function legendPickerLayers() {
   return (layerEntries || []).map(entry => {
     const item = entry.item || {};
@@ -1081,13 +1083,13 @@ function renderLegendPicker() {
   if (!parent) return;
   const layers = legendPickerLayers();
   let box = parent.querySelector(".legend-layer-picker");
-  if (!layers.length) { box?.remove(); return; }
+  if (!layers.length && !legendTabImages.length) { box?.remove(); return; }
   if (!box) {
     box = document.createElement("div");
     box.className = "legend-layer-picker";
     parent.append(box);
   }
-  renderLayerLegendPicker(box, layers, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ" });
+  renderLayerLegendPicker(box, { images: legendTabImages, layers }, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ", imageGroupLabel: "凡例画像", layerGroupLabel: "レイヤ" });
 }
 
 function buildLayerRow(entry, exclusive, radioName) {
@@ -1847,21 +1849,18 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
 
   // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
   void loadKascInfoContent(document.getElementById("info-link"), doc.info, baseUrl);
-  // 凡例（URL 重複はまとめる）→ 凡例タブ。他エンジン(Leaflet等)と同じ処理
+  // 凡例（URL 重複はまとめる）→ 凡例タブのセレクタへ。他エンジン(Leaflet等)と同じ処理
   const legendsBox = document.getElementById("legends");
   legendsBox?.replaceChildren();
   const seenLegend = new Set();
+  legendTabImages = [];
   for (const lg of doc.legends || []) {
     if (!lg.url || seenLegend.has(lg.url)) continue;
     seenLegend.add(lg.url);
-    const img = document.createElement("img");
-    img.src = resolveKascUrl(lg.url, baseUrl);
-    img.alt = lg.title || "凡例";
-    img.style.maxWidth = "100%";
-    legendsBox?.append(img);
+    legendTabImages.push({ title: lg.title || "", url: resolveKascUrl(lg.url, baseUrl) });
   }
-  if (!seenLegend.size && !legendPickerLayers().length && legendsBox) legendsBox.textContent = "（凡例なし）";
-  // legend: 画像の下にレイヤ選択凡例(既定スタイル)を出す
+  if (!legendTabImages.length && !legendPickerLayers().length && legendsBox) legendsBox.textContent = "（凡例なし）";
+  // legend: 画像とレイヤ凡例(既定スタイル)を1つのセレクタで表示
   renderLegendPicker();
 
   // 初回表示: URL/cam 指定が無ければデータ範囲へフィット

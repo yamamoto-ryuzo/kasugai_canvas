@@ -759,9 +759,11 @@ function defaultLegendSpec(item) {
   return null;
 }
 
-// ---- 凡例タブ: legend: 画像とは別にレイヤを選択してベクター凡例を表示する ----
-// 選択中レイヤは legendPickerState.selected(レイヤ参照)で保持し、再描画で維持する
+// ---- 凡例タブ: legend: 画像とレイヤ凡例を1つのセレクタで切替表示する ----
+// 選択中は legendPickerState.selected で保持し、再描画で維持する
 const legendPickerState = {};
+// legend: 行で指定された凡例画像(renderProject で収集)
+let legendTabImages = [];
 function legendPickerLayers() {
   return (layerEntries || []).map(entry => {
     const item = entry.item || {};
@@ -778,13 +780,13 @@ function renderLegendPicker() {
   if (!parent) return;
   const layers = legendPickerLayers();
   let box = parent.querySelector(".legend-layer-picker");
-  if (!layers.length) { box?.remove(); return; }
+  if (!layers.length && !legendTabImages.length) { box?.remove(); return; }
   if (!box) {
     box = document.createElement("div");
     box.className = "legend-layer-picker";
     parent.append(box);
   }
-  renderLayerLegendPicker(box, layers, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: t("legend.selectLayer") });
+  renderLayerLegendPicker(box, { images: legendTabImages, layers }, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: t("legend.selectLayer"), imageGroupLabel: t("legend.groupImages"), layerGroupLabel: t("legend.groupLayers") });
 }
 
 function buildLayerRow(entry, exclusive, radioName) {
@@ -1495,19 +1497,17 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   updateMapAttribution();
   renderLayerRows(entries, unsupported);
 
-  // 凡例（URL 重複はまとめる）→ 凡例タブ
+  // 凡例（URL 重複はまとめる）→ 凡例タブのセレクタへ
   panel.legends.innerHTML = "";
   const seenLegend = new Set();
+  legendTabImages = [];
   for (const leg of doc.legends) {
     if (!leg.url || seenLegend.has(leg.url)) continue;
     seenLegend.add(leg.url);
-    const img = document.createElement("img");
-    img.src = resolveKascUrl(leg.url, baseUrl);
-    img.alt = leg.title || "legend";
-    panel.legends.append(img);
+    legendTabImages.push({ title: leg.title || "", url: resolveKascUrl(leg.url, baseUrl) });
   }
-  if (!seenLegend.size && !legendPickerLayers().length) panel.legends.textContent = "（凡例なし）";
-  // legend: 画像の下にレイヤ選択凡例(QML/既定スタイル)を出す
+  if (!legendTabImages.length && !legendPickerLayers().length) panel.legends.textContent = "（凡例なし）";
+  // legend: 画像とレイヤ凡例(QML/既定スタイル)を1つのセレクタで表示
   renderLegendPicker();
 
   // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）

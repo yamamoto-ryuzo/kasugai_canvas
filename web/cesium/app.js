@@ -607,10 +607,12 @@ function getLayerLegend(item) {
   return null;
 }
 
-// 凡例タブ(legend: 画像パネル)用: レイヤを選択して QML/既定スタイルの凡例を表示する。
-// 選択中レイヤは legendTabState.selected(レイヤ参照)で保持し、再描画で維持する。
+// 凡例タブ用: legend: 画像とレイヤ凡例(QML/既定スタイル)を1つのセレクタで
+// 切替表示する。選択中は legendTabState.selected で保持し、再描画で維持する。
 // legendnode: メタ(ラベル改題・凡例順)はレイヤ一覧と同じ規則でここでも適用する
 const legendTabState = {};
+// legend: 行で指定された凡例画像(applyInspector で収集)
+let inspectorLegendImages = [];
 function legendTabEntries(layer) {
   let entries = getLayerLegend(layer)?.entries || null;
   if (entries && layer.legendLabels) {
@@ -633,18 +635,21 @@ function renderLegendPanelPicker() {
   const layers = getOrderedLayerItems()
     .map(layer => ({ ref: layer, title: layer.title || layer.url || layer.id || "", entries: legendTabEntries(layer) }))
     .filter(l => l.entries.length);
+  const images = inspectorLegendImages;
   let box = panel.querySelector(".legend-layer-picker");
-  if (!layers.length) { box?.remove(); return; }
+  if (!layers.length && !images.length) { box?.remove(); return; }
   if (!box) {
     box = document.createElement("div");
     box.className = "legend-layer-picker";
     panel.append(box);
   }
-  renderLayerLegendPicker(box, layers, {
+  renderLayerLegendPicker(box, { images, layers }, {
     // 凡例タブはレイヤ行より大きめ表示のため、第2引数の表示pxから解像度を換算する
     swatchUrl: (spec, size) => buildLegendSwatchDataUrl(spec, Math.max(2, Math.round(((size || LEGEND_SWATCH_W) / LEGEND_SWATCH_W) * 2))),
     state: legendTabState,
     ariaLabel: t("legend.selectLayer"),
+    imageGroupLabel: t("legend.groupImages"),
+    layerGroupLabel: t("legend.groupLayers"),
   });
 }
 
@@ -5881,6 +5886,7 @@ function applyInspector(text) {
   undergroundBackgroundColor = Cesium.Color.BLACK;
   clearKascInfoContent(document.querySelector("#info-content"));
   document.querySelector("#legend-panel img").removeAttribute("src");
+  inspectorLegendImages = [];
 
   let inspectorLayerIndex = 0;
   // cloud: 行(複数ある場合は最後の行を採用)。null=行なし、{stop:true}=停止
@@ -5924,7 +5930,11 @@ function applyInspector(text) {
     }
     if (type === "legend") {
       const parts = value.split("|").map(part => part.trim());
-      document.querySelector("#legend-panel img").src = resolveProjectUrl(parts[parts.length - 1]);
+      // 凡例画像はセレクタ(legend-tab.js)へ渡して選択式で表示する(URL 重複はまとめる)
+      const url = resolveProjectUrl(parts[parts.length - 1]);
+      if (!inspectorLegendImages.some(l => l.url === url)) {
+        inspectorLegendImages.push({ title: parts.length > 1 ? parts[0] : "", url });
+      }
     }
 
     // default_style: point|line|polygon | color= / size= / width= / opacity= / fill= / stroke=…

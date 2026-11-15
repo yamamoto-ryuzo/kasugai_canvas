@@ -502,30 +502,21 @@ function buildLayerList() {
   }
 }
 
-// ---- 凡例タブ（legend: 行の画像 + QML legend があればスウォッチ表示） ----
+// ---- 凡例タブ: legend: 行の画像とレイヤ凡例を1つのセレクタで切替表示する ----
 function buildLegends() {
   panel.legends.replaceChildren();
-  let any = false;
-  for (const leg of currentLegends) {
-    const img = document.createElement("img");
-    img.src = resolveKascUrl(leg.url, lastBaseUrl);
-    img.alt = leg.title || "legend";
-    img.style.maxWidth = "100%";
-    if (leg.title) {
-      const t = document.createElement("div");
-      t.textContent = leg.title;
-      panel.legends.append(t);
-    }
-    panel.legends.append(img);
-    any = true;
-  }
-  if (renderLegendPicker()) any = true;
-  if (!any) panel.legends.textContent = "（凡例なし）";
+  if (!renderLegendPicker()) panel.legends.textContent = "（凡例なし）";
 }
 
-// ---- 凡例タブ: legend: 画像とは別にレイヤを選択してベクター凡例を表示する ----
-// 選択中レイヤは legendPickerState.selected(レイヤ参照)で保持し、再描画で維持する
+// 選択中は legendPickerState.selected で保持し、再描画で維持する
 const legendPickerState = {};
+// legend: 行で指定された凡例画像(URL 重複はまとめる)
+function legendTabImages() {
+  const seen = new Set();
+  return (currentLegends || [])
+    .filter(leg => leg.url && !seen.has(leg.url) && seen.add(leg.url))
+    .map(leg => ({ title: leg.title || "", url: resolveKascUrl(leg.url, lastBaseUrl) }));
+}
 function legendPickerLayers() {
   return (layerEntries || []).map(entry => {
     const item = entry.item || {};
@@ -541,14 +532,15 @@ function renderLegendPicker() {
   const parent = panel.legends;
   if (!parent) return false;
   const layers = legendPickerLayers();
+  const images = legendTabImages();
   let box = parent.querySelector(".legend-layer-picker");
-  if (!layers.length) { box?.remove(); return false; }
+  if (!layers.length && !images.length) { box?.remove(); return false; }
   if (!box) {
     box = document.createElement("div");
     box.className = "legend-layer-picker";
     parent.append(box);
   }
-  renderLayerLegendPicker(box, layers, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ" });
+  renderLayerLegendPicker(box, { images, layers }, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ", imageGroupLabel: "凡例画像", layerGroupLabel: "レイヤ" });
   return true;
 }
 

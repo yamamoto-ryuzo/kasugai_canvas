@@ -16,6 +16,8 @@
   "tab.tools": "Outils",
   "tab.legend": "Légende",
   "legend.selectLayer": "Couche dont afficher la légende",
+  "legend.groupImages": "Images de légende",
+  "legend.groupLayers": "Couches",
   "tab.attr": "Attributs",
   "tab.display": "Affichage",
   "camera.presets": "Préréglages caméra",

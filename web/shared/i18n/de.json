@@ -16,6 +16,8 @@
   "tab.tools": "Werkzeuge",
   "tab.legend": "Legende",
   "legend.selectLayer": "Ebene für Legende",
+  "legend.groupImages": "Legendenbilder",
+  "legend.groupLayers": "Layer",
   "tab.attr": "Attribute",
   "tab.display": "Anzeige",
   "camera.presets": "Kamera-Voreinstellungen",
