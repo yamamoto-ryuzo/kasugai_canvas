@@ -34,10 +34,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "7.0.0.0"
+VIProductVersion "7.1.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "7.0.0"
+VIAddVersionKey "FileVersion" "7.1.0"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -87,12 +87,10 @@ Section "Install"
   CreateDirectory "$INSTDIR\data"
   ; ユーザーが編集し得るプロジェクト(.kasc・DATA 等)は既存ファイルを
   ; 上書きせず、不足分のみ補充する(SetOverwrite off)。
-  ; /x で抜けた default/ と default_local\default/ の両方が対象
+  ; /x で抜けた default/ が対象（default_local は廃止済み）
   SetOverwrite off
   SetOutPath "$INSTDIR\projects\default"
   File /nonfatal /r "${SAMPLE_PROJECTS}\default\*"
-  SetOutPath "$INSTDIR\projects\default_local\default"
-  File /nonfatal /r "${SAMPLE_PROJECTS}\default_local\default\*"
   SetOverwrite on
 
   WriteUninstaller "$INSTDIR\uninstall.exe"

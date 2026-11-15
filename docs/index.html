@@ -10,7 +10,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v7.0.0</span></h1>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
       <p><strong>AIとマルチエンジンが拓く 2D/3D GIS</strong> — ローカルPC・ブラウザ完結で動作するデータ可視化システムのドキュメント</p>
     </header>
     <main>
@@ -49,8 +49,19 @@
         <p>導入・利用手順は <a href="datahost.html">ブラウザ WebGIS ガイド</a>・<a href="use/6-1-プロジェクト.html">ローカルアプリのガイド</a> を参照してください。</p>
       </section>
 
+      <section>
+        <h2>3. 🗺️ QGIS連携 — プロジェクトをそのまま Web で再現</h2>
+        <p>V7 のメインテーマです。QGIS プラグイン <strong>geo_webview</strong> がレイヤーツリー・スタイル（.qml）・表示状態・テーマ・ブックマークを <code>.kasc + DATA/</code> へエクスポートし、ブラウザ WebGIS（<code>?kasc=</code>）またはローカルアプリでそのまま再生します。レイヤーフィルタ（subsetString）は <code>where=</code> として引き継がれ、同期系統は2系統あります。</p>
+        <table>
+          <tr><th>連携面</th><th>内容</th></tr>
+          <tr><td>Live 双方向同期</td><td><code>live:</code> 行入り .kasc で有効化。カメラ追従・QGIS 選択表示・QGIS 描画オーバーレイ・レイヤーのオンデマンド追加・表示/フィルタ/テーマの書き戻し（レイヤ一覧の QGIS Live パネル）</td></tr>
+          <tr><td>AI / MCP 操作</td><td>起動時に稼働中の QGIS Live Driver セッションを自動検出して MCP 接続し、<code>qgis_pyeval</code>・<code>qgis_bridge_call</code> でレイヤ制御・<code>kasugaiExport</code>・Processing 解析まで AI から実行（書き込み系は公開ゲート対象）</td></tr>
+        </table>
+        <p>詳細は <a href="features/v7.html">V7 概要 — QGIS連携</a>・<a href="qgis.html">QGIS連携（技術詳細・未対応 Issue）</a> を参照してください。</p>
+      </section>
+
       <section id="ai-2keito">
-        <h2>3. 🤖 AI — API 直通とブリッジ経由</h2>
+        <h2>4. 🤖 AI — API 直通とブリッジ経由</h2>
         <p>AI チャットはどちらの利用形態でも使えます。接続系統は2系統で、プロバイダ名の接頭辞<strong>【API】/【ブリッジ】</strong>がそのまま系統を示します。メインは公式 API へブラウザから直接繋ぐ内蔵AI、既存の AI 契約や自作エージェントを繋ぐ場合はブリッジ経由を使います。</p>
         <table>
           <tr><th></th><th>【API】内蔵AI（メイン）</th><th>【ブリッジ】外部エージェント</th></tr>
@@ -87,7 +98,7 @@
       
 
       <section>
-        <h2>4. 📚 ドキュメント</h2>
+        <h2>5. 📚 ドキュメント</h2>
         <p><small>ドキュメントは左のナビゲーションと同じ「セクション→章→節」構成です。<strong>使い方</strong>は UI パネル別の操作説明（章1〜7）、<strong>技術資料</strong>は UI に対応しない技術系ドキュメント（章1〜2）で、各章ページはカード索引になっています。</small></p>
         <h3>使い方 — UI パネル別（章1〜7）</h3>
         <div class="features">

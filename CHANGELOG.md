@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [7.1.0] - 2026-11-15
+
+- AI チャットの QGIS Live MCP 接続を自動化: 起動時に稼働中の QGIS Live Driver セッションを検出して `qgis-live` を自動登録・接続（15 秒間隔で最大 6 回の再試行）。データソース一覧で OFF にした場合は自動接続しない。「起動中の QGIS に接続」ボタンは手動での再検出・再接続用として `shared/qgis-ogr.js` の `ensureQgisMcp()` 経路に統合し、検出ロジックの重複を解消
+- `/api/qgis-live/discover`・`/api/qgis-live/mcp` のセッション生存確認を並列化: 死んだセッション残骸が溜まると逐次確認で「件数 × 2 秒」（実測 17 件で 34 秒）待たされていた問題を約 2 秒へ短縮。採用は優先順位最小の生存セッションで逐次版と同一結果
+- QGIS Live 操縦パネルをレイヤ行と同じ 1 行コンパクト表示に修正: `.control-panel input` の包括ルール（width:100%・min-height:30px）でチェックボックスが巨大化しラベルが潰れていた問題を解消
+- ドキュメント: `features/v6.html` を V6（マルチエンジン）概要ページ化し index.html から分離、index.html に V7 概要画像・概要動画と QGIS連携セクションを追加
+- 参照の無い旧サンプル `web/projects/default_local` を除去
+
 ## [7.0.0] - 2026-11-15
 
 - `where=` を「行の最終オプション・値は改行まで」の厳格規約へ変更: 式中の `|`（`||` 連結・`'a|b'` リテラル等）をそのまま書けるようになった。`off` や他の `key=value` は `where=` より前に置く（`view:` の `;where=` は行内トークンのため対象外・値に `|` は書けない）。`shared/kasc.js` の `splitKascTail` でパースを統一し、インスペクタ/テーマ/ビュー書き戻しも `where=` を行末へ出力
