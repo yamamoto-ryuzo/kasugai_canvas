@@ -633,7 +633,8 @@ async function applyTerrain(on) {
     terrainSrc = view.addSource({ type: "quantized-mesh", url: TERRAIN_URL, maxZoom: 15, requestVertexNormals: true });
     terrainDesc = { type: "terrain", source: terrainSrc,
       terrain: { castShadow: true, receiveShadow: true,
-        ...(terrainExaggeration !== 1 ? { exaggeration: terrainExaggeration } : {}) } };
+        ...(terrainExaggeration !== 1 ? { exaggeration: terrainExaggeration } : {}),
+        ...(terrainLit ? {} : { lit: false }) } };
     terrainLayer = view.addLayer(terrainDesc);
   } catch (e) {
     console.warn("terrain", e);
@@ -652,6 +653,17 @@ function applyTerrainExaggeration(v) {
     terrainDesc = { ...terrainDesc, terrain: { ...terrainDesc.terrain, exaggeration: v } };
     terrainLayer.update(terrainDesc);
   } catch (e) { console.warn("terrain exaggeration", e); }
+}
+// terrain: shading= の陰影は TerrainMaterial.lit（ライティング方程式の適否）で近似。
+// shading=off は単色アルベド表示（QGIS の陰影なし地形と同等）
+let terrainLit = true;
+function applyTerrainShading(on) {
+  terrainLit = on;
+  if (!terrainLayer || !terrainDesc) return;
+  try {
+    terrainDesc = { ...terrainDesc, terrain: { ...terrainDesc.terrain, lit: on } };
+    terrainLayer.update(terrainDesc);
+  } catch (e) { console.warn("terrain shading", e); }
 }
 let manualLights = [], manualSun = null, shadowOn = false;
 // ---- Navara 固有の光・エフェクト設定（表示タブ「効果」ペイン） ----
@@ -797,6 +809,61 @@ function applyPhotoreal(on) {
   syncLights();
   applyFxAll();
   syncFxUi();
+}
+// ---- .kasc の QGIS 3Dシーン系行（light:/scene3d:）→ Navara の太陽・効果設定 ----
+// Navara の太陽方向は atmosphere.date から天文学的に決まり config で
+// 任意方向を持てないため、az/el は参照点（先頭 cam・なければ現在位置）での
+// ENU→ECEF 光源方向を atmosphere.sunDirection へ直接書き込んで近似する。
+// sun/sky/影は全てこの値を毎フレーム参照し、date 変更で天測値へ戻る。
+// intensity/color は sun ハンドルへ適用する（複数 light: 行は最後を採用）
+function applyQgisLights(lights, refCam) {
+  const spec = (lights || [])
+    .map(l => l?.opts || {})
+    .filter(o => Number.isFinite(Number(o.az)) || Number.isFinite(Number(o.el)))
+    .pop();
+  if (!spec) return;
+  const lon = Number(refCam?.longitude ?? refCam?.lng ?? lastCam.lng);
+  const lat = Number(refCam?.latitude ?? refCam?.lat ?? lastCam.lat);
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+  const az = (Number(spec.az) || 0) * Math.PI / 180;
+  const el = (Number.isFinite(Number(spec.el)) ? Number(spec.el) : 45) * Math.PI / 180;
+  const lam = lon * Math.PI / 180, phi = lat * Math.PI / 180;
+  const ce = Math.cos(el);
+  const de = Math.sin(az) * ce, dn = Math.cos(az) * ce, du = Math.sin(el);
+  const sx = -de * Math.sin(lam) - dn * Math.sin(phi) * Math.cos(lam) + du * Math.cos(phi) * Math.cos(lam);
+  const sy = de * Math.cos(lam) - dn * Math.sin(phi) * Math.sin(lam) + du * Math.cos(phi) * Math.sin(lam);
+  const sz = dn * Math.cos(phi) + du * Math.sin(phi);
+  try { view.atmosphere?.sunDirection?.set?.(sx, sy, sz); } catch (_) {}
+  const upd = {};
+  const inten = Number(spec.intensity);
+  if (Number.isFinite(inten)) { upd.intensity = inten; fx.sunInt[photorealScene ? "pr" : "manual"] = inten; }
+  if (/^#[0-9a-f]{6,8}$/i.test(String(spec.color || ""))) { upd.color = new Color().setHex(parseInt(spec.color.slice(1, 7), 16)); upd.applyColor = true; }
+  if (Object.keys(upd).length) { try { sunHandle()?.update?.({ sun: upd }); } catch (_) {} }
+  syncFxUi();
+}
+// scene3d: 行（QGIS 3Dシーン設定）→ 背景色・空表現・影・AO の近似反映。
+// skybox= は写実シーンの空メッシュ表示切替、background= はクリアカラー
+// （skybox 未指定で background 指定時は単色背景を優先＝空を隠す。Cesium 版と同じ優先順位）。
+// edl= は Navara に対応エフェクトが無いため無視する
+function applyQgisScene3d(scene3d) {
+  const opts = scene3d?.opts;
+  if (!opts) return;
+  const onoff = v => /^(on|true|1)$/i.test(String(v));
+  const bg = /^#[0-9a-f]{6,8}$/i.test(String(opts.background || "")) ? String(opts.background) : null;
+  if (bg) { try { view._renderer?.setClearColor?.(parseInt(bg.slice(1, 7), 16)); } catch (_) {} }
+  if (opts.skybox !== undefined || bg) {
+    try { photorealScene?.sky?.update?.({ sky: { visible: opts.skybox !== undefined ? onoff(opts.skybox) : false } }); } catch (_) {}
+  }
+  if (opts.shadows !== undefined) {
+    shadowOn = onoff(opts.shadows);
+    const c = $("#nv-shadow"); if (c) c.checked = shadowOn;
+    applyShadow();
+  }
+  if (opts.ao !== undefined) {
+    fx.ssao = onoff(opts.ao);
+    const c = $("#nv-ssao"); if (c) c.checked = fx.ssao;
+    applyFxSsao();
+  }
 }
 // 太陽日時コントロール（TZ選択＋日時入力＋スライダー）は shared/sun-time.js 共通
 
@@ -1043,15 +1110,28 @@ async function renderDoc(doc, baseUrl, presetBase) {
 
   await renderLayers(doc, baseUrl);
 
-  // terrain: 行の垂直誇張(#60)。テレイン ON 時のみ即時反映、入力欄は常時同期
+  // terrain: 行(#60)。exaggeration に加え shading/generator も Navara へ反映
   try {
-    const ex = Number(doc.terrain?.opts?.exaggeration);
+    const topts = doc.terrain?.opts || {};
+    const ex = Number(topts.exaggeration);
     if (Number.isFinite(ex) && ex >= 0 && ex !== 1) {
       const inp = $("#nv-terrain-exagg");
       if (inp) inp.value = String(ex);
       applyTerrainExaggeration(ex);
     }
+    // generator=flat|none|off は QGIS フラット地形 → 地形レイヤ OFF（トグルも同期）
+    if (/^(flat|none|off)$/i.test(String(topts.generator || ""))) {
+      const c = $("#nv-terrain"); if (c) c.checked = false;
+      await applyTerrain(false);
+    }
+    // shading= → TerrainMaterial.lit（地形レイヤ無しでも次回 ON 時へ持ち越す）
+    if (topts.shading !== undefined) applyTerrainShading(/^(on|true|1)$/i.test(String(topts.shading)));
+    // offset= は Navara の直接相当が無いため保持のみ（Cesium 版と同じ扱い）
   } catch (_) {}
+
+  // scene3d:/light: 行（QGIS 3Dシーン・平行光源）を効果設定へ近似反映
+  try { applyQgisScene3d(doc.scene3d); } catch (_) {}
+  try { applyQgisLights(doc.lights, doc.cams[0]); } catch (_) {}
 
   // テーマ
   currentThemes = doc.themes || [];
