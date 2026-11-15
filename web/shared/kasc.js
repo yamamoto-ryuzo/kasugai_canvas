@@ -61,10 +61,36 @@ export function splitKascTail(tail) {
   return raw.map(part => part.trim());
 }
 
+// ---- role= によるロール別表示制御(#129) ----
+// 認証プラグイン(window.kasugaiAuth)の getRoles() が返すロール一覧と行の
+// `| role=ロール[,…]` 指定を照合する。これはUI制御であり、データ自体の
+// 秘匿が必要なレイヤは配信側で保護すること。
+// 戻り値: null=無制限(getRoles 未実装/認証なし)、配列=ユーザーのロール
+// (実装済みで [](空)ならロール無しユーザー=role= 行を全て隠す)
+export function kascUserRoles() {
+  try {
+    const auth = typeof window !== "undefined" ? window.kasugaiAuth : null;
+    if (!auth || typeof auth.getRoles !== "function") return null;
+    const roles = auth.getRoles();
+    if (!Array.isArray(roles)) return null;
+    return roles.map(r => String(r).trim()).filter(Boolean);
+  } catch {
+    return null;
+  }
+}
+
+// required=null/[] → 誰でも可。userRoles=null → 無制限。配列同士は交差判定
+export function kascRoleAllowed(required, userRoles) {
+  if (!required || !required.length) return true;
+  if (userRoles == null) return true;
+  return required.some(r => userRoles.includes(r));
+}
+
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
   const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], projects: [], defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
+  const userRoles = kascUserRoles();
   for (const rawLine of String(text || "").split(/\r?\n/)) {
     const line = rawLine.trim();
     if (!line || line.startsWith("#") || line.startsWith("//")) continue;
@@ -76,6 +102,21 @@ export function parseKasc(text) {
     const parts = (type === "sql" || type === "ogrsql")
       ? line.slice(sep + 1).split("|").map(part => part.trim())
       : splitKascTail(line.slice(sep + 1));
+
+    // `| role=ロール[,…]` フィールド(#129): 要求ロールとユーザーのロールが
+    // 交差しない行は丸ごとスキップする(レイヤ行は読み込まず、ポータル要素も
+    // 出さない)。許可された行でも role= は各パーサーへ見せないよう parts
+    // から除去する(生行 line は保持)。先頭のタイトル/名前スロットは対象外。
+    // `where=` は行の最終オプションのため role= はその手前へ置く
+    let denied = false;
+    for (let i = parts.length - 1; i >= 1; i--) {
+      const m = /^role\s*=\s*(.+)$/i.exec(parts[i] || "");
+      if (!m) continue;
+      denied = !kascRoleAllowed(m[1].split(",").map(s => s.trim()).filter(Boolean), userRoles);
+      parts.splice(i, 1);
+      break;
+    }
+    if (denied) continue;
 
     if (type === "cam") {
       doc.cams.push(parseCamLine(parts));

@@ -65,6 +65,12 @@ export async function authenticate() {
     token: data.token || "",
     serverKasc: hasStore,
     user: { name: "iap", role: "cloudrun" },
+        // サーバー応答の roles/role/user.roles をロール一覧として返す(#129)。
+        // 応答にロール情報が無ければ [](=ロール無し。role= 行は全て非表示)
+        getRoles: () => {
+          const r = data.roles ?? data.role ?? data.user?.roles;
+          return Array.isArray(r) ? r : (r ? [r] : []);
+        },
     updateKasc: (projectId, text) => {
       if (kasc) kasc[normalizeProjectId(projectId)] = text;
     },

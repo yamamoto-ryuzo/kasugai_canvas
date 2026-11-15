@@ -63,6 +63,13 @@ async function runAuth() {
     }
     const auth = await mod.authenticate();
     window.kasugaiAuth = { method, ...auth };
+    // getRoles() IF(#129): .kasc の role= 行制御で参照するロール一覧。
+    // 未実装プラグインには null を返す既定を足す(null=ロール管理なし・
+    // 無制限で全行表示)。実装済みが [](空)を返すとロール無しとして
+    // role= 指定のある行を全て隠す
+    if (typeof window.kasugaiAuth.getRoles !== "function") {
+      window.kasugaiAuth.getRoles = () => null;
+    }
     console.log(`[auth-selector] 認証成功: ${method}`);
   } catch (error) {
     console.error(`[auth-selector] 認証失敗: ${method}`, error);

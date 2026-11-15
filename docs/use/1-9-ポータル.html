@@ -725,6 +725,10 @@
 <code>web/projects/_portal_test/
 </code>。
 </p>    
+<section>
+<h3>ロール別表示制御（role=）</h3>
+<p><code>portal:</code> / <code>view:</code> / <code>link:</code> / <code>html:</code> / <code>form:</code> / <code>project:</code> / <code>dash:</code> / <code>theme:</code> 行やレイヤ行の末尾に <code>| role=ロール名[,ロール名…]</code> を付けると、認証プラグインの <code>getRoles()</code> が返すロールと1つでも一致したユーザーにだけその行が有効になります（ポータル要素は表示されず、レイヤ行は読み込み自体を行いません）。<code>role=</code> 指定の無い行は従来通り全員に表示されます。<code>getRoles()</code> を実装しないプラグインでは無制限（全行表示）、実装済みで空のロール一覧を返す場合は <code>role=</code> 行が全て非表示になります。これはUI表示の制御であり、データ自体の秘匿が必要なレイヤは配信側で保護してください。<code>where=</code> は行の最終オプションのため、<code>role=</code> はその手前に記述します。</p>
+</section>
 </main>  
 </div>
 </body>
