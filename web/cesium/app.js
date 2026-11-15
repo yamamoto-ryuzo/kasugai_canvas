@@ -12,7 +12,7 @@ import {
   initAiChat, executeChatTool, showReportModal,
   listUiControls as sharedListUiControls, controlUi as sharedControlUi,
   updateChatPanelVisibility, updateBridgeProviderOptions, resyncProviderSelect,
-  startRemoteCommandLoop, isFetchProxyTarget, refreshCliSetupStates,
+  startRemoteCommandLoop, autoConnectQgis, isFetchProxyTarget, refreshCliSetupStates,
 } from "../shared/ai-chat.js";
 import {
   detectBackend, backendUrl, isBackendAlive, getBackendCapabilities, hasBackendFeature, backendBaseUrl,
@@ -13408,6 +13408,9 @@ window.addEventListener("pagehide", () => {
     if (boxResult === "done") console.log("[mcp] Box OAuth 接続が完了しました");
   } catch (e) { console.error(e); }
   void connectEnabledMcpServers();
+  // 起動時の QGIS Live 自動接続（manageBackend:false のため startAiBackend 経由では
+  // 呼ばれないので、ここで同じ順序（connectEnabledMcpServers 直後）で呼ぶ）
+  void autoConnectQgis();
   updateAppPanelVisibility();
   // capabilities 確定後に Copilot/Devin 選択肢の可否を再評価する（アプリ版のみ表示）
   updateBridgeProviderOptions();

@@ -6040,7 +6040,7 @@ export function startAiBackend() {
 // mcpAllowWrite ゲート対象）。ユーザーが MCP パネルで qgis-live を
 // OFF にした場合は自動接続しない。QGIS は後から起動し得るため、
 // 見つからなくても起動直後は数回に分けて再検出する
-async function autoConnectQgis() {
+export async function autoConnectQgis() {
   for (let i = 0; i < 6; i++) {
     const server = getMcpServer("qgis-live");
     if (server && server.enabled === false) return;
