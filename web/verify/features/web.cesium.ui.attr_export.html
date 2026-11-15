@@ -1,0 +1,27 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.cesium.ui.attr_export — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>⬜ <code>web.cesium.ui.attr_export</code></h1>
+<table>
+<tr><th>name</th><td>attr_export</td></tr>
+<tr><th>kind</th><td>ui_control</td></tr>
+<tr><th>source</th><td><code>web/cesium/index.html+app.js</code></td></tr>
+<tr><th>signature</th><td><code>attr_export</code></td></tr>
+<tr><th>summary</th><td>属性テーブル出力拡張。CSV/TSV/XLSX が表示モード一致(Σ集計中はGROUP BY表を _stats 付きで出力)。WKTチェックで先頭WKT列(QGIS GEOMETRY=AS_WKT相当・GPKG WKB/DuckDB ST_AsTextは出力実行時のみデコード)。検索/フィルター/出力の3群を薄色で色分け</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td></td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  tbl[属性テーブル] --> q{表示モード}
+  q -->|通常| exp1[CSV/TSV/XLSX 行出力]
+  q -->|Σ集計中| exp2[GROUP BY表 _stats出力]
+  exp1 --> wkt{WKTチェック} -->|ON| wkts[先頭WKT列: GPKG WKBデコード/DuckDB ST_AsText 実行時]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>Playwright: 属性テーブルでWKT ON→CSV出力内容 assert・集計表XLSX生成</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-15T00:00:00+09:00</p>
+<p>CSV+WKT列(先頭WKT+末尾lon/lat)・XLSX(PK正当)・Σ _stats.csv・3群色分け class 確認</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

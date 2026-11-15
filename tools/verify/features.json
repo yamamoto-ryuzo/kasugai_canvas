@@ -17,7 +17,7 @@
       "name": "publish_cdn.py",
       "source": "tools/publish_cdn.py",
       "signature": "publish_cdn.py",
-      "summary": "web/→kasugai-canvas-web同期(--channel stable|unstable --commit --push)。CDN_PROJECTS複写+projects.json生成",
+      "summary": "web/→kasugai-canvas-web同期(--channel stable|unstable --commit --push)。CDN_PROJECTS=(default,reinfolib,sample_qgis)=web/projects/projects.json 公開一覧と一致(2026-11-15 1446a3c)",
       "needs_runtime": false,
       "standalone_ok": true,
       "depends": [],
@@ -26,8 +26,8 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "実実行は配布物・リモートへ副作用 | --help確認+verify除外追加(自己修復)"
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "--help 応答+CDN_PROJECTS=(default,reinfolib,sample_qgis)が projects.json 公開一覧と一致を確認"
     },
     {
       "id": "tools.build_bridge_zip",
@@ -44,7 +44,7 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "実実行は配布物・リモートへ副作用 | 実ビルド成功: bridge-hub.{exe,zip}+version.json 6.24.0・/health照合通過"
     },
     {
@@ -62,7 +62,7 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "mock/TestClient実呼出で確認"
     },
     {
@@ -80,7 +80,7 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "mock/TestClient実呼出で確認"
     },
     {
@@ -98,7 +98,7 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "mock/TestClient実呼出で確認"
     },
     {
@@ -116,7 +116,7 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "smoke.mjs 4PASS + verify.mjs Playwright 4ケース ALL PASS"
     },
     {
@@ -134,7 +134,7 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "mock/TestClient実呼出で確認"
     },
     {
@@ -156,5 +156,5 @@
       "note": "実実行は配布物・リモートへ副作用 | makensis未実行。スクリプト構造のみ確認"
     }
   ],
-  "updated": "2026-11-14T00:00:00+09:00"
+  "updated": "2026-11-15T00:00:00+09:00"
 }

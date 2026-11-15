@@ -1,0 +1,24 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.ui.layers_check_column — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>⬜ <code>web.ui.layers_check_column</code></h1>
+<table>
+<tr><th>name</th><td>layers_check_column</td></tr>
+<tr><th>kind</th><td>ui_control</td></tr>
+<tr><th>source</th><td><code>各engine app.js</code></td></tr>
+<tr><th>signature</th><td><code>layers_check_column</code></td></tr>
+<tr><th>summary</th><td>レイヤ一覧チェックボックス列の統一。凡例トグル・グループ有無でずれていたチェック列をスペーサ常設+子行インデント調整で全行同一列に揃える(全6エンジン)</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td></td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  rows[レイヤ行: 凡例有無/グループ/子行] --> sp[スペーサ常設+子行インデント] --> col[チェック列全行同一x位置]</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>Playwright: レイヤ一覧のチェック input の x 座標が全行一致することを assert</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-15T00:00:00+09:00</p>
+<p>#layer-list 全チェックx座標一致(4行=56px)</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>

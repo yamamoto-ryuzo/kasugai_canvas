@@ -26,8 +26,8 @@
         "integrated": "GET /?engine=maplibre → maplibre/index.html へ遷移"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "?engine=leaflet→/leaflet/へクエリ引継ぎ"
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "/?engine=leaflet&foo=bar → /leaflet/?foo=bar 引継ぎ確認"
     },
     {
       "id": "web.cesium.app",
@@ -494,8 +494,8 @@
         "integrated": "エンジン経由で機能実行"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "node --check OK + エンジン経由で利用"
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "repaired: XLSXセル32767字超(WKT大ジオメトリ)で全件失敗→XLSX_MAX_CELL_CHARS で切捨て追加。修復後 行政区域.xlsx 11.9MB 生成確認"
     },
     {
       "id": "web.shared.fly-kasc",
@@ -1556,7 +1556,7 @@
         "integrated": "page.evaluate(kasugaiApi.exportInspector(...))"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3896,7 +3896,7 @@
         "integrated": "listUiControls列挙+controlUi操作/DOM assert"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -3918,7 +3918,7 @@
       },
       "last_result": "pass",
       "last_verified": "2026-11-15T00:00:00+09:00",
-      "note": "Playwright統合検証 13/13 (.testtmp/verify-sqldialog.mjs)"
+      "note": "再検証: open/test(OBJECTID<=5→0件応答)/view/close OK。i18n 8言語971キー一致"
     },
     {
       "id": "web.cesium.ui.settings_window",
@@ -4151,8 +4151,8 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "en=932キー・8言語キー数完全一致"
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "8言語971キー一致・legend.showAll/hideAll/viewVertical/viewTabs/selectLayer/groupImages/groupLayers 全言語存在"
     },
     {
       "id": "web.projects.bundled",
@@ -4170,7 +4170,7 @@
       },
       "last_result": "pass",
       "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "全kasc実ファイル200。stale登録import-test除去済"
+      "note": "全kasc実ファイル200。stale登録import-test除去済 正本 web/projects 一本化・reinfolib追加・sample_qgis刷新(2026-11-15 1446a3c)"
     },
     {
       "id": "web.live.qgis",
@@ -4501,7 +4501,99 @@
       "last_result": "pass",
       "last_verified": "2026-11-14T00:00:00+09:00",
       "note": "閉鎖 PASS"
+    },
+    {
+      "id": "web.shared.legend-tab",
+      "kind": "logic_fn",
+      "name": "renderLayerLegendPicker",
+      "source": "web/shared/legend-tab.js",
+      "signature": "renderLayerLegendPicker(container,{images,layers},{swatchUrl,state,onToggleSymbol,onToggleAll,...})",
+      "summary": "凡例ピッカー共有モジュール。画像凡例とレイヤ選択式ベクター凡例(QML/既定スタイルのスウォッチ)を1セレクタへ統合。シンボル単位チェック(onToggleSymbol)・全表示/全非表示(onToggleAll)・縦積み/タブ表示切替・state.selected による選択維持を提供",
+      "needs_runtime": false,
+      "standalone_ok": true,
+      "depends": [],
+      "verify": {
+        "standalone": "node --check web/shared/legend-tab.js",
+        "integrated": "Playwright: 凡例タブでレイヤ選択→スウォッチ描画→チェック/全表示切替の DOM assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "Playwright: cesium/ol/leaflet/navara で rows+縦/タブ+symbol check 実動作。gsimaps も picker 存在"
+    },
+    {
+      "id": "web.ui.legend_picker",
+      "kind": "ui_control",
+      "name": "legend_picker",
+      "source": "web/shared/legend-tab.js + 各engine app.js(legendPickerLayers)",
+      "signature": "legend_picker",
+      "summary": "凡例タブのレイヤ選択式ベクター凡例。legendPickerLayers で {ref,title,entries} 正規化→renderLayerLegendPicker へ委譲。選択レイヤのシンボル単位表示切替・全表示/全非表示・縦積み/タブ切替。全6エンジン(navara は従来羅列を置換)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [
+        "web.shared.legend-tab"
+      ],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: 凡例タブ select 操作→スウォッチ行 DOM assert→onToggleSymbol/All でレイヤ表示変化"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "全6エンジンで検証。cesium=シンボルcheck on/off/restore・他4エンジン=rows+view modes・gsimaps=picker存在"
+    },
+    {
+      "id": "web.ui.nav_minimize_stages",
+      "kind": "ui_control",
+      "name": "nav_minimize_stages",
+      "source": "各engine index.html+app.js+styles.css",
+      "signature": "nav_minimize_stages",
+      "summary": "ナビツールバー縮小の3状態サイクル。−ボタンで 展開→compass-only(方位のみ)→collapsed(40x40)。全5エンジン(Cesium/MapLibre/OpenLayers/Leaflet/Navara)統一。navara はトグル表示更新を他エンジン同型に修正",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: #navigation-toggle 2クリックで classList 遷移 assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "5エンジンで compass-only→collapsed→展開 3状態サイクル実検証"
+    },
+    {
+      "id": "web.cesium.ui.attr_export",
+      "kind": "ui_control",
+      "name": "attr_export",
+      "source": "web/cesium/index.html+app.js",
+      "signature": "attr_export",
+      "summary": "属性テーブル出力拡張。CSV/TSV/XLSX が表示モード一致(Σ集計中はGROUP BY表を _stats 付きで出力)。WKTチェックで先頭WKT列(QGIS GEOMETRY=AS_WKT相当・GPKG WKB/DuckDB ST_AsTextは出力実行時のみデコード)。検索/フィルター/出力の3群を薄色で色分け",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: 属性テーブルでWKT ON→CSV出力内容 assert・集計表XLSX生成"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "CSV+WKT列(先頭WKT+末尾lon/lat)・XLSX(PK正当)・Σ _stats.csv・3群色分け class 確認"
+    },
+    {
+      "id": "web.ui.layers_check_column",
+      "kind": "ui_control",
+      "name": "layers_check_column",
+      "source": "各engine app.js",
+      "signature": "layers_check_column",
+      "summary": "レイヤ一覧チェックボックス列の統一。凡例トグル・グループ有無でずれていたチェック列をスペーサ常設+子行インデント調整で全行同一列に揃える(全6エンジン)",
+      "needs_runtime": true,
+      "standalone_ok": false,
+      "depends": [],
+      "verify": {
+        "standalone": "",
+        "integrated": "Playwright: レイヤ一覧のチェック input の x 座標が全行一致することを assert"
+      },
+      "last_result": "pass",
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "#layer-list 全チェックx座標一致(4行=56px)"
     }
   ],
-  "updated": "2026-11-14T20:45:19+09:00"
+  "updated": "2026-11-15T00:00:00+09:00"
 }

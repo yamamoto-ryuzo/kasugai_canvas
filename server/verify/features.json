@@ -28,7 +28,7 @@
         "integrated": "curl http://127.0.0.1:8510/health"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -48,7 +48,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/capabilities"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -68,8 +68,8 @@
         "integrated": "curl http://127.0.0.1:8510/api/fetch"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "プライベートアドレス拒否(403)=SSRF防御が正常動作"
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "タイムアウト3段階(接続10s/停滞30s/総300s)をコード確認+public 200・SSRF loopback 403 実検証"
     },
     {
       "id": "srv.reinfolib",
@@ -88,7 +88,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/reinfolib"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -108,7 +108,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/mcp"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "url必須バリデーション(400)でルート疎通確認"
     },
     {
@@ -128,8 +128,8 @@
         "integrated": "curl http://127.0.0.1:8510/api/qgis-live/discover"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": "200 no_live_session(13セッション走査26s)"
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "200 {\"ok\":false,\"reason\":\"no_live_session\",\"sessions\":17} (QGIS未起動・仕様通り)"
     },
     {
       "id": "srv.qgis_mcp",
@@ -168,7 +168,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/plugins"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -188,7 +188,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/plugins/{id}"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -208,7 +208,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/files"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -228,7 +228,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/files/{project}/{*path}"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -248,7 +248,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/update/settings"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -268,7 +268,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/update/latest"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -329,7 +329,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/command"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "push→poll往復確認(キュー内に旧liveSyncコマンド残存=設計通り)"
     },
     {
@@ -350,7 +350,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/command/results"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -371,7 +371,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/fetch/settings"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -392,7 +392,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/projects/register"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "スキーマ={path}のみ(id派生は.kasc/親dirから)。register+unregister実施"
     },
     {
@@ -434,7 +434,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/projects/{id}"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -455,7 +455,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/cloud/status"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -602,7 +602,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/cloud/list"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -665,7 +665,7 @@
         "integrated": "curl http://127.0.0.1:8510/api/browser/lna"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -685,8 +685,8 @@
         "integrated": "curl http://127.0.0.1:8510/projects/{*path}"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
-      "note": ""
+      "last_verified": "2026-11-15T00:00:00+09:00",
+      "note": "projects_dir フォールバック installer/projects→web/projects(b7b9d8f)確認: manifest dir=web/projects。debug/projects 残骸削除済み"
     },
     {
       "id": "srv.static_web",
@@ -703,7 +703,7 @@
         "integrated": "GET /cesium/index.html が200で最新内容"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "/cesium/index.html 200・最新内容配信"
     },
     {
@@ -885,7 +885,7 @@
         "integrated": ""
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "8511応答+ensure_standalone_hub設計確認"
     },
     {
@@ -923,7 +923,7 @@
         "integrated": "curl http://127.0.0.1:8511/"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -943,7 +943,7 @@
         "integrated": "curl http://127.0.0.1:8511/health"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -963,7 +963,7 @@
         "integrated": "curl http://127.0.0.1:8511/models"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1023,7 +1023,7 @@
         "integrated": "curl http://127.0.0.1:8511/setup/job/{id}"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1043,7 +1043,7 @@
         "integrated": "curl http://127.0.0.1:8511/mcp"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1063,7 +1063,7 @@
         "integrated": "curl http://127.0.0.1:8511/mcp/{project}"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1083,7 +1083,7 @@
         "integrated": "curl http://127.0.0.1:8511/vector/status"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1103,7 +1103,7 @@
         "integrated": "curl http://127.0.0.1:8511/vector/sources"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": ""
     },
     {
@@ -1143,7 +1143,7 @@
         "integrated": "curl http://127.0.0.1:8511/vector/geojson/{name}"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "1.1MB GeoJSON 実取得"
     },
     {
@@ -1183,7 +1183,7 @@
         "integrated": "curl http://127.0.0.1:8511/vector/query"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "select ... as geom で FeatureCollection 応答"
     },
     {
@@ -1203,7 +1203,7 @@
         "integrated": "/health providers.<p>.running"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "/health providers.<name>.running=true"
     },
     {
@@ -1223,7 +1223,7 @@
         "integrated": "/health providers.<p>.running"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "/health providers.<name>.running=true"
     },
     {
@@ -1243,9 +1243,9 @@
         "integrated": "/health providers.<p>.running"
       },
       "last_result": "pass",
-      "last_verified": "2026-11-14T00:00:00+09:00",
+      "last_verified": "2026-11-15T00:00:00+09:00",
       "note": "/health providers.<name>.running=true"
     }
   ],
-  "updated": "2026-11-14T00:00:00+09:00"
+  "updated": "2026-11-15T00:00:00+09:00"
 }

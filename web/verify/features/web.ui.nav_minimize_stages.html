@@ -1,0 +1,24 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>web.ui.nav_minimize_stages — web</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{font-family:system-ui,sans-serif;max-width:960px;margin:2em auto;padding:0 1em}code,pre{background:#f4f4f4;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow-x:auto}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.4em .8em}.pass{color:#188038}.fail{color:#d93025}.skip{color:#e8710a}</style></head>
+<body><a href="../index.html">← web 一覧</a>
+<h1>⬜ <code>web.ui.nav_minimize_stages</code></h1>
+<table>
+<tr><th>name</th><td>nav_minimize_stages</td></tr>
+<tr><th>kind</th><td>ui_control</td></tr>
+<tr><th>source</th><td><code>各engine index.html+app.js+styles.css</code></td></tr>
+<tr><th>signature</th><td><code>nav_minimize_stages</code></td></tr>
+<tr><th>summary</th><td>ナビツールバー縮小の3状態サイクル。−ボタンで 展開→compass-only(方位のみ)→collapsed(40x40)。全5エンジン(Cesium/MapLibre/OpenLayers/Leaflet/Navara)統一。navara はトグル表示更新を他エンジン同型に修正</td></tr>
+<tr><th>needs_runtime / standalone_ok</th><td>True / False</td></tr>
+<tr><th>depends</th><td></td></tr>
+</table>
+<h2>ロジック</h2><pre class="mermaid">flowchart LR
+  btn[−ボタン #navigation-toggle] --> s1[展開] -->|1回目| s2[compass-only: 方位のみ] -->|2回目| s3[collapsed: 40x40] -->|再度| s1</pre>
+<h2>検証手順</h2>
+<table><tr><th>standalone</th><td><code></code></td></tr>
+<tr><th>integrated</th><td><code>Playwright: #navigation-toggle 2クリックで classList 遷移 assert</code></td></tr></table>
+<h2>最新結果</h2>
+<p class="pass"><b>✅ pass</b> — 2026-11-15T00:00:00+09:00</p>
+<p>5エンジンで compass-only→collapsed→展開 3状態サイクル実検証</p>
+<script>mermaid.initialize({startOnLoad:true});</script>
+</body></html>
