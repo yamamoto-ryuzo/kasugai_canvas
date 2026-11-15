@@ -43,10 +43,6 @@
 //   getPanelTitle()        — title: 行のパネルタイトル or null
 //   getHtmlSections()      — [{title,spec}] (html: 行・記述順)
 //   getNews()              — [{src,limit,title}] (news: 行・記述順。#128)
-//   getTables()            — [{layer,where,cols,sort,title,badges}] (table: 行。#127)
-//   getTableFeatures(spec)?— table: 対象レイヤの地物取得(async・{features,fieldMeta?})
-//   focusTableFeature(f)?  — 行クリックの地物移動(ポータルを閉じる)
-//   highlightTableFeature(f)? — 📍ボタン/長押しの開いたままハイライト
 //   getCards()             — [{kind:"view"|"link"|"form"|"project", entry:{name,desc,img,url?,…}}]
 //
 // ポータル内HTML(html:/portal html=)で使える data-* 属性:
@@ -59,14 +55,12 @@
 //   data-project="id"  — プロジェクト切替(project: 行と同等。data-keep=cam,base 併用可)
 //   data-clear           — ビュー解除(適用前状態へ復元)
 //   data-close           — ポータルを閉じる
-//   data-table="名前"    — table: 行の台帳テーブルをこの要素内へ描画
 //
 // form: 行のフォーム投稿(#131)を使うエンジンはさらに以下を渡す:
 //   pickLocation()       — ポータル非表示中の地図クリック1回を
 //                          Promise<{lon,lat}|null> で返す(loc フィールド用)
 //   cancelPick()         — 未確定の位置拾いを破棄する(ポータル再表示時に呼ぶ)
 import { backendUrl } from "./backend.js";
-import { compileWhereExpression } from "./where-eval.js";
 import { embedKascInfoHtml, renderMarkdownLite, parseKascNewsArticles } from "./kasc.js";
 
 export function createKascPortal(cfg) {
@@ -80,10 +74,6 @@ export function createKascPortal(cfg) {
     getPanelTitle = () => null,
     getHtmlSections = () => [],
     getNews = () => [],
-    getTables = () => [],
-    getTableFeatures = null,
-    focusTableFeature = null,
-    highlightTableFeature = null,
     getCards = () => [],
   } = cfg;
 
@@ -192,7 +182,7 @@ export function createKascPortal(cfg) {
     // data-view="ビュー名"・data-link="URL" がカード操作として動く
     const spec = getPortalSpec();
     if (spec?.html) {
-      void Promise.resolve(loadInfoContent(body, resolveProjectUrl(spec.html), null, errText)).then(() => mountDataTables(body));
+      void loadInfoContent(body, resolveProjectUrl(spec.html), null, errText);
       const footer0 = document.querySelector("#portal-footer");
       if (footer0) footer0.hidden = !getActiveViewName();
       return;
@@ -210,7 +200,7 @@ export function createKascPortal(cfg) {
       content.className = "portal-section-body";
       wrap.append(content);
       body.append(wrap);
-      void Promise.resolve(loadInfoContent(content, sec.spec, null, errText)).then(() => mountDataTables(content));
+      void loadInfoContent(content, sec.spec, null, errText);
     }
     // news: セクション(記述順・html: の後)。JSON/Markdown のお知らせ一覧を
     // fetch して日付降順で描画する(#128)
@@ -224,18 +214,6 @@ export function createKascPortal(cfg) {
       wrap.append(head, content);
       body.append(wrap);
       void loadNewsSection(content, sec, errText);
-    }
-    // table: セクション(記述順・news: の後)。台帳テーブルを埋め込む(#127)
-    for (const spec of getTables()) {
-      const wrap = document.createElement("section");
-      wrap.className = "portal-section";
-      const head = document.createElement("h3");
-      head.textContent = spec.title || spec.layer || t("portal.table");
-      const content = document.createElement("div");
-      content.className = "portal-section-body portal-table-body";
-      wrap.append(head, content);
-      body.append(wrap);
-      void mountTable(content, spec);
     }
     // view:/link: カード(宣言順で同一グリッド)
     const cards = getCards();
@@ -431,209 +409,6 @@ export function createKascPortal(cfg) {
       list.append(item);
     }
     container.append(list);
-  }
-
-
-  // ---- table: 行の台帳テーブル(#127) ----
-  // 属性一覧(attr-widget)と同じ行一覧・検索・列ソート・行クリック地物移動を
-  // ポータル内へ埋め込む。行クリック = ポータルを閉じて地物へ移動、
-  // 行末の📍ボタン/長押し(600ms) = 開いたまま地物ハイライト+位置合わせ
-
-  const TABLE_MAX_ROWS = 1000;
-
-  function tableCellText(raw) {
-    if (raw == null) return "";
-    if (typeof raw === "object") {
-      try { return JSON.stringify(raw); } catch { return String(raw); }
-    }
-    return String(raw);
-  }
-
-  // カスタムHTML(html:/portal html=)内の <div data-table="名前"> へ
-  // 台帳テーブルを差し込む。値は table: 行の title=/レイヤ名/1始まり番号で
-  // 照合し、空値なら先頭の table: を使う
-  function mountDataTables(root) {
-    const specs = getTables();
-    if (!root || !specs.length) return;
-    for (const el of root.querySelectorAll("[data-table]")) {
-      const key = String(el.getAttribute("data-table") || "").trim();
-      const idx = specs.findIndex((spec, i) =>
-        key ? (spec.title === key || spec.layer === key || String(i + 1) === key) : i === 0);
-      if (idx < 0) {
-        el.textContent = t("portal.tableUnresolved", { name: key });
-        continue;
-      }
-      void mountTable(el, specs[idx]);
-    }
-  }
-
-  async function mountTable(container, spec) {
-    container.replaceChildren();
-    if (!getTableFeatures) {
-      container.textContent = t("portal.tableUnsupported");
-      return;
-    }
-    const search = document.createElement("input");
-    search.type = "search";
-    search.className = "portal-table-search";
-    search.placeholder = t("portal.tableSearch");
-    const wrap = document.createElement("div");
-    wrap.className = "portal-table-wrap";
-    const status = document.createElement("div");
-    status.className = "portal-table-status";
-    status.textContent = t("portal.tableLoading");
-    container.append(search, wrap, status);
-
-    let pred = () => true;
-    try {
-      if (spec.where) pred = compileWhereExpression(spec.where);
-    } catch (error) {
-      status.textContent = t("portal.tableLoadFailed", { error: String(error?.message || error) });
-      return;
-    }
-    let result;
-    try {
-      result = await getTableFeatures(spec);
-    } catch (error) {
-      status.textContent = t("portal.tableLoadFailed", { error: String(error?.message || error) });
-      return;
-    }
-    const features = (Array.isArray(result) ? result : result?.features) || [];
-    const fieldMeta = (!Array.isArray(result) && result?.fieldMeta) || null;
-    // 列構成: cols= 指定時はその順。未指定は属性一覧と同じく
-    // __kasc* 内部値と fieldMeta 非表示列を除き、定義順→名前順で並べる
-    const attrSet = new Set();
-    for (const f of features) {
-      for (const key of Object.keys(f?.properties || {})) {
-        if (!/^__kasc/.test(key) && !fieldMeta?.hidden?.has(key)) attrSet.add(key);
-      }
-    }
-    const keys = spec.cols.length
-      ? spec.cols.filter(c => attrSet.has(c))
-      : [...attrSet].sort((a, b) => {
-          const order = fieldMeta?.order || [];
-          const ia = order.indexOf(a), ib = order.indexOf(b);
-          if (ia >= 0 || ib >= 0) return (ia < 0 ? order.length : ia) - (ib < 0 ? order.length : ib);
-          return a.localeCompare(b);
-        });
-    const labels = keys.map(k => fieldMeta?.alias?.[k] || k);
-    // badge= は列の実名・表示名どちらでも指定できるよう両方を引く
-    const badgeRules = ci => spec.badges?.[keys[ci]] || spec.badges?.[labels[ci]] || null;
-    const rows = [];
-    features.forEach((f, i) => {
-      if (!pred(f, i)) return;
-      rows.push({ feature: f, values: keys.map(k => tableCellText(f?.properties?.[k])) });
-    });
-    // sort= で初期ソート(-列名で降順)。実名・表示名どちらでも指定可
-    const sortState = { column: -1, order: 1 };
-    if (spec.sort) {
-      const desc = spec.sort.startsWith("-");
-      const name = desc ? spec.sort.slice(1) : spec.sort;
-      const idx = Math.max(keys.indexOf(name), labels.indexOf(name));
-      if (idx >= 0) { sortState.column = idx; sortState.order = desc ? -1 : 1; }
-    }
-
-    let query = "";
-    function renderTable() {
-      const q = query.trim().toLowerCase();
-      const m = q ? rows.filter(r => r.values.some(v => v.toLowerCase().includes(q))) : rows.slice();
-      if (sortState.column >= 0) {
-        const c = sortState.column, o = sortState.order;
-        m.sort((a, b) => o * String(a.values[c]).localeCompare(String(b.values[c]), undefined, { numeric: true, sensitivity: "base" }));
-      }
-      if (!m.length) {
-        wrap.textContent = t("portal.tableEmpty");
-        status.textContent = t("portal.tableRows", { count: 0 });
-        return;
-      }
-      const table = document.createElement("table");
-      table.className = "portal-table";
-      const thead = document.createElement("thead");
-      const htr = document.createElement("tr");
-      labels.forEach((label, idx) => {
-        const th = document.createElement("th");
-        th.textContent = label + (sortState.column === idx ? (sortState.order > 0 ? " ▲" : " ▼") : "");
-        th.addEventListener("click", () => {
-          if (sortState.column === idx) sortState.order *= -1;
-          else { sortState.column = idx; sortState.order = 1; }
-          renderTable();
-        });
-        htr.append(th);
-      });
-      const thAct = document.createElement("th");
-      thAct.className = "portal-table-act";
-      htr.append(thAct);
-      thead.append(htr);
-      const tbody = document.createElement("tbody");
-      for (const row of m.slice(0, TABLE_MAX_ROWS)) {
-        const tr = document.createElement("tr");
-        row.values.forEach((v, ci) => {
-          const td = document.createElement("td");
-          const rules = badgeRules(ci);
-          const color = rules ? (rules[v] ?? rules["*"]) : null;
-          if (color) {
-            const badge = document.createElement("span");
-            badge.className = "portal-table-badge";
-            badge.style.background = color;
-            badge.textContent = v;
-            td.append(badge);
-          } else {
-            td.textContent = v;
-          }
-          td.title = v;
-          tr.append(td);
-        });
-        const tdAct = document.createElement("td");
-        tdAct.className = "portal-table-act";
-        const flyable = !!row.feature?.geometry;
-        if (flyable && highlightTableFeature) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "portal-table-locate";
-          btn.textContent = "📍";
-          btn.title = t("portal.tableLocate");
-          btn.addEventListener("click", ev => {
-            ev.stopPropagation();
-            void highlightTableFeature(row.feature);
-          });
-          tdAct.append(btn);
-        }
-        tr.append(tdAct);
-        if (flyable && focusTableFeature) {
-          tr.classList.add("portal-table-row");
-          tr.title = t("portal.tableMove");
-          let pressTimer = 0;
-          let longFired = false;
-          tr.addEventListener("click", () => {
-            if (longFired) { longFired = false; return; }
-            void focusTableFeature(row.feature);
-            close();
-          });
-          if (highlightTableFeature) {
-            // 長押しは「開いたままハイライト」
-            tr.addEventListener("pointerdown", () => {
-              longFired = false;
-              pressTimer = setTimeout(() => {
-                pressTimer = 0;
-                longFired = true;
-                void highlightTableFeature(row.feature);
-              }, 600);
-            });
-            const cancel = () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = 0; } };
-            tr.addEventListener("pointerup", cancel);
-            tr.addEventListener("pointerleave", cancel);
-            tr.addEventListener("pointercancel", cancel);
-            tr.addEventListener("contextmenu", ev => { if (longFired) ev.preventDefault(); });
-          }
-        }
-        tbody.append(tr);
-      }
-      wrap.replaceChildren(table);
-      const suffix = m.length > TABLE_MAX_ROWS ? ` / ${t("portal.tableLimit", { count: TABLE_MAX_ROWS })}` : "";
-      status.textContent = t("portal.tableRows", { count: m.length }) + suffix;
-    }
-    search.addEventListener("input", () => { query = search.value; renderTable(); });
-    renderTable();
   }
 
   // ---- form: 行のフォーム投稿(#131) ----

@@ -27,7 +27,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
 import { initGeoTools } from "./geo-tools.js";
-import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, parseKascProjectValue, parseKascNewsValue, parseKascTableValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
+import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, parseKascProjectValue, parseKascNewsValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
 import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-eval.js";
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
@@ -797,8 +797,6 @@ const inspectorPortalCards = [];
 const inspectorDashSpecs = [];
 // インスペクタの form: 行で宣言されたフォーム投稿定義(#131)
 const inspectorForms = [];
-// インスペクタの table: 行で宣言された台帳テーブル定義(#127)
-const inspectorTables = [];
 // portal: 行の宣言 {enabled, title, open}。null=行なし
 let inspectorPortalSpec = null;
 // title: 行のパネルタイトル(ポータル見出しのフォールバックに使う)。null=行なし
@@ -1649,10 +1647,6 @@ function kascPortal() {
       getPanelTitle: () => inspectorPanelTitle,
       getHtmlSections: () => inspectorHtmlSections,
       getNews: () => inspectorNews,
-      getTables: () => inspectorTables,
-      getTableFeatures: spec => loadPortalTableFeatures(spec),
-      focusTableFeature: feature => flyToFeatureExtent(feature),
-      highlightTableFeature: feature => { void highlightPortalTableFeature(feature); },
       getCards: () => inspectorPortalCards,
     });
   }
@@ -1735,41 +1729,6 @@ async function switchPortalProject(entry) {
   if (savedBase != null) applyViewBase(savedBase);
   if (!kascPortal().available()) kascPortal().close();
   return true;
-}
-
-
-// table: 行の台帳テーブル(#127)の地物取得。非クエリ系レイヤーは feature= と
-// 同じく未ロードでも全件読み込み、クエリ系(sql/ogrsql/タイル系)や通常
-// geojson: は読み込み済み行(getLayerGeoJson)を返す
-async function loadPortalTableFeatures(spec) {
-  const item = findDeepLinkLayer(spec.layer);
-  if (!item) throw new Error(`レイヤが見つかりません: ${spec.layer}`);
-  const dec = vectorDecoders.get(item.type);
-  if (dec && !isQueryDecoder(dec, item)) {
-    const fc = await loadVectorSourceCached(item, dec);
-    return { features: fc?.features || [], fieldMeta: item.fieldMeta || null };
-  }
-  return { features: (getLayerGeoJson(item.id)?.features) || [], fieldMeta: item.fieldMeta || null };
-}
-
-// table: 行クリックの地物移動。feature= と同じく範囲フィットを優先し、
-// 点・範囲を持たない地物は代表点へ flyToFeature する
-function flyToFeatureExtent(feature) {
-  const env = geojsonExtent({ type: "FeatureCollection", features: [feature] });
-  if (env && (env.east - env.west > 1e-9 || env.north - env.south > 1e-9)) {
-    flyToRectangle(env.west, env.south, env.east, env.north);
-    return;
-  }
-  const c = featureCentroid(feature);
-  if (c) void flyToFeature(c[1], c[0]);
-  else if (env) void flyToFeature((env.south + env.north) / 2, (env.west + env.east) / 2);
-}
-
-// table: 📍ボタン/長押しの「開いたままハイライト」。feature= と同じ選択
-// ハイライトを付け、ポータルを閉じた後に見えるよう位置合わせも済ませる
-async function highlightPortalTableFeature(feature) {
-  await highlightDeepLinkFeature(feature);
-  flyToFeatureExtent(feature);
 }
 
 // ---- ダッシュボード(dash: 行の地図連動集計ビュー #123) ----
@@ -6168,7 +6127,6 @@ function applyInspector(text) {
   inspectorPortalCards.splice(0, inspectorPortalCards.length);
   inspectorDashSpecs.splice(0, inspectorDashSpecs.length);
   inspectorForms.splice(0, inspectorForms.length);
-  inspectorTables.splice(0, inspectorTables.length);
   inspectorPortalSpec = null;
   inspectorPanelTitle = null;
   activeViewName = null;
@@ -6363,14 +6321,6 @@ function applyInspector(text) {
       const form = parseKascFormValue(parts, line);
       inspectorForms.push(form);
       inspectorPortalCards.push({ kind: "form", entry: form });
-    }
-
-    // table: レイヤ名 | where=式 | cols=列,… | sort=[-]列 | title=見出し |
-    //   badge=列:値=色;… — ポータルの台帳テーブル(#127)。
-    // 属性一覧をポータル内へ埋め込み、行クリックで地物へ移動する
-    if (type === "table") {
-      const parts = value.split("|").map(part => part.trim());
-      inspectorTables.push(parseKascTableValue(parts, line));
     }
 
     // group: グループパス( / 区切り) | expanded|collapsed —

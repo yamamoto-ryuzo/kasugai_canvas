@@ -753,31 +753,6 @@
 <h3>ロール別表示制御（role=）</h3>
 <p><code>portal:</code> / <code>view:</code> / <code>link:</code> / <code>html:</code> / <code>form:</code> / <code>project:</code> / <code>dash:</code> / <code>theme:</code> 行やレイヤ行の末尾に <code>| role=ロール名[,ロール名…]</code> を付けると、認証プラグインの <code>getRoles()</code> が返すロールと1つでも一致したユーザーにだけその行が有効になります（ポータル要素は表示されず、レイヤ行は読み込み自体を行いません）。<code>role=</code> 指定の無い行は従来通り全員に表示されます。<code>getRoles()</code> を実装しないプラグインでは無制限（全行表示）、実装済みで空のロール一覧を返す場合は <code>role=</code> 行が全て非表示になります。これはUI表示の制御であり、データ自体の秘匿が必要なレイヤは配信側で保護してください。<code>where=</code> は行の最終オプションのため、<code>role=</code> はその手前に記述します。</p>
 </section>
-
-<section id="portal-table">
-  <h2>table: — 台帳テーブル（属性一覧の埋め込み・地図連動）</h2>
-  <p><code>table:</code> 行はポータル内にレイヤの属性一覧（台帳テーブル）を埋め込み、
-  行クリックで地図へ連動します。道路台帳・施設台帳・事業箇所一覧など
-  「表から探す」業務導線をポータルに持てます（#127）。</p>
-  <pre>table: レイヤ名 | where=式 | cols=列,列… | sort=[-]列 | title=見出し | badge=列名:値=色;値=色…</pre>
-  <ul>
-    <li><code>レイヤ名</code>: 対象ベクターレイヤ（タイトル・グループパス・id のいずれでも可）。</li>
-    <li><code>where=式</code>: 行を絞り込む where 式（view: の <code>;where=</code> と同じクライアント評価）。</li>
-    <li><code>cols=列,…</code>: 表示する列と順序。省略時は全属性（.qml の非表示・別名設定を反映）。</li>
-    <li><code>sort=列</code>: 初期ソート列。先頭に <code>-</code> で降順。</li>
-    <li><code>title=…</code>: セクション見出し（省略時はレイヤ名）。</li>
-    <li><code>badge=列名:値=色;…</code>: 値を色付きバッジで表示。<code>*=色</code> は不一致時の既定色。</li>
-  </ul>
-  <ul>
-    <li>検索ボックス・列ヘッダのソートは属性テーブルと同じ操作です。</li>
-    <li>行クリック: ポータルを閉じて地物へ移動。行末の 📍 ボタンまたは行の長押し(600ms):
-      ポータルを開いたまま地物をハイライト＋位置合わせします。</li>
-    <li>カスタム HTML（<code>html:</code> / <code>portal html=</code>）内では
-      <code>&lt;div data-table="名前"&gt;</code> で任意位置にテーブルを差し込めます。
-      名前は <code>title=</code>・レイヤ名・1始まりの番号で照合します。</li>
-  </ul>
-  <pre>table: 道路台帳 | where=延長 &gt; 100 | cols=路線名,延長,状態 | sort=-延長 | title=道路台帳 | badge=状態:未着工=#e07b00;施工中=#2a7ae0;完了=#2a9d5c</pre>
-</section>
 </main>  
 </div>
 </body>

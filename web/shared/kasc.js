@@ -88,7 +88,7 @@ export function kascRoleAllowed(required, userRoles) {
 
 // .kasc テキストを構造化する。lines は生の解釈結果、rest は型別の便利マップ
 export function parseKasc(text) {
-  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], tables: [], projects: [], news: [], defaultStyles: { point: null, line: null, polygon: null } };
+  const doc = { layers: [], bases: [], cams: [], bookmarks: [], unsupported: [], background: null, info: null, legends: [], themes: [], groups: [], terrain: null, scene3d: null, lights: [], title: null, live: null, views: [], htmlSections: [], links: [], portal: null, dash: [], forms: [], projects: [], news: [], defaultStyles: { point: null, line: null, polygon: null } };
   let order = 0;
   const userRoles = kascUserRoles();
   for (const rawLine of String(text || "").split(/\r?\n/)) {
@@ -212,13 +212,6 @@ export function parseKasc(text) {
       // form:名前 | title=見出し | to=URL|backend:パス | fields=… —
       // ポータルのフォーム投稿カード(#131)。位置+属性をJSON POSTする
       doc.forms.push(parseKascFormValue(parts, line));
-      continue;
-    }
-    if (type === "table") {
-      // table:レイヤ名 | where=式 | cols=列,… | sort=[-]列 | title=見出し |
-      //   badge=列:値=色;… — ポータルの台帳テーブル(#127)。
-      // 属性一覧をポータル内へ埋め込み、行クリックで地物へ移動する
-      doc.tables.push(parseKascTableValue(parts, line));
       continue;
     }
     if (type === "group") {
@@ -652,48 +645,6 @@ export function parseKascNewsValue(parts, line = null) {
     if (!news.src) news.src = tok;
   }
   return news;
-}
-
-
-// table: 行の値をパースする(#127)。
-// `table:レイヤ名 | where=式 | cols=列,列… | sort=[-]列 | title=見出し |
-//   badge=列名:値=色;値=色…`
-// ポータルの台帳テーブル。対象レイヤの属性一覧を検索・ソート付きで埋め込み、
-// 行クリックで地物へ移動する。badge= は列の値を色付きバッジ表示にする
-// 簡易装飾(`値=色` を `;` 区切り、`*=色` は不一致時の既定色)。
-// sort= の列名先頭に `-` を付けると降順が初期値になる
-export function parseKascTableValue(parts, line = null) {
-  const table = { layer: "", where: "", cols: [], sort: "", title: "", badges: {}, line };
-  const safeColor = v => (/^#[0-9a-fA-F]{3,8}$/.test(v) || /^[a-zA-Z]{3,20}$/.test(v)) ? v : "";
-  for (const tok of parts) {
-    if (!tok) continue;
-    const kv = /^(where|cols?|columns?|sort|title|badge)\s*=\s*(.+)$/i.exec(tok);
-    if (!kv) {
-      if (!table.layer) table.layer = tok;
-      continue;
-    }
-    const key = kv[1].toLowerCase();
-    const value = kv[2].trim();
-    if (key === "where") table.where = value;
-    else if (key === "title") table.title = value;
-    else if (key === "sort") table.sort = value;
-    else if (key === "badge") {
-      const sep = value.indexOf(":");
-      const col = (sep >= 0 ? value.slice(0, sep) : value).trim();
-      const rules = {};
-      for (const rule of (sep >= 0 ? value.slice(sep + 1) : "").split(";")) {
-        const eq = rule.indexOf("=");
-        if (eq < 0) continue;
-        const k = rule.slice(0, eq).trim();
-        const color = safeColor(rule.slice(eq + 1).trim());
-        if (k && color) rules[k] = color;
-      }
-      if (col && Object.keys(rules).length) table.badges[col] = rules;
-    } else {
-      table.cols = value.split(",").map(s => s.trim()).filter(Boolean);
-    }
-  }
-  return table;
 }
 
 // Markdown の最小レンダラ(ai-chat.js から移設。news: の本文描画でも使う)。
