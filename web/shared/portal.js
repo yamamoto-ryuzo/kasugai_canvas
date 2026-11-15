@@ -1,7 +1,7 @@
-// ---- ポータル(portal:/html:/news:/view:/link:/project: 行で構成する開始画面) ----
+// ---- ポータル(portal:/html:/news:/stat:/view:/link:/project: 行で構成する開始画面) ----
 // 全エンジン共通のポータルUIモジュール。各エンジンは
 //   1) index.html に #portal-open ボタンと #portal-overlay 構造を置き
-//   2) app.js で view:/html:/news:/portal:/link:/project:/form: 行をパースして保持し
+//   2) app.js で view:/html:/news:/stat:/portal:/link:/project:/form: 行をパースして保持し
 //   3) この createKascPortal に「状態getter + applyView/clearView」を渡す
 // だけで、カード/セクション/既定コンテンツ/外部リンクの描画と
 // 🏠ボタン・Esc・解除ボタンの配線が共有される。
@@ -43,6 +43,10 @@
 //   getPanelTitle()        — title: 行のパネルタイトル or null
 //   getHtmlSections()      — [{title,spec}] (html: 行・記述順)
 //   getNews()              — [{src,limit,title}] (news: 行・記述順。#128)
+//   getStats()             — [{layer,group,value,kind,agg,title,desc}] (stat: 行・記述順。#126)
+//   getStatFeatures(layer) — stat: 集計用。レイヤー名→ロード済み GeoJSON Feature[]
+//   setStatWhere(layer, where|null)? — セグメントクリックの地図フィルタ適用(async 可。
+//                          省略時は stat: カードは閲覧専用)
 //   getCards()             — [{kind:"view"|"link"|"form"|"project", entry:{name,desc,img,url?,…}}]
 //
 // ポータル内HTML(html:/portal html=)で使える data-* 属性:
@@ -62,6 +66,56 @@
 //   cancelPick()         — 未確定の位置拾いを破棄する(ポータル再表示時に呼ぶ)
 import { backendUrl } from "./backend.js";
 import { embedKascInfoHtml, renderMarkdownLite, parseKascNewsArticles } from "./kasc.js";
+import { computeGroupStats } from "./attr-stats.js";
+
+// ---- stat: 行の統計カード(#126) 共用部品 ----
+// 値のクォート・数値判定・扇形 path は shared/dashboard.js と同規則。
+// グラフ描画は依存追加なしの自前 SVG/CSS(dashboard.js と同方針)
+const STAT_LABELS = {
+  statTitle: "統計",
+  statEmpty: "該当する地物がありません",
+  statFilterHint: "クリックで地図をこの値に絞り込み(再クリックで解除)",
+  statAgg_count: "件数",
+  statAgg_sum: "合計",
+  statAgg_avg: "平均",
+  statAgg_min: "最小",
+  statAgg_max: "最大",
+};
+const STAT_COLORS = ["#4e79a7", "#f28e2b", "#e15759", "#76b7b2", "#59a14f", "#edc948", "#b07aa1", "#ff9da7", "#9c755f", "#bab0ac"];
+const statQuoteIdent = name => `"${String(name).replace(/"/g, '""')}"`;
+const statQuoteStr = value => `'${String(value).replace(/'/g, "''")}'`;
+const statNum = v => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  return null;
+};
+const statFmt = v => (v == null || Number.isNaN(v)) ? "-"
+  : (Number.isInteger(v) ? v.toLocaleString() : (Math.round(v * 100) / 100).toLocaleString());
+// グループ行から表示値を取り出す。value=count(または未指定)は件数、
+// 属性指定時は agg=(既定 sum)の集計値。数値なしグループは null → "-"
+function statMetric(g, spec, valueField) {
+  if (!valueField) return g.count;
+  const agg = spec.agg || "sum";
+  if (agg === "count") return g.count;
+  return g[agg] ?? null;
+}
+// group= 無し KPI 用: 全地物を一括集計する
+function statAggregateAll(features, valueField, agg) {
+  if (!valueField || agg === "count") return features.length;
+  const nums = features.map(f => statNum(f?.properties?.[valueField])).filter(v => v !== null);
+  if (!nums.length) return null;
+  const sum = nums.reduce((a, b) => a + b, 0);
+  if (agg === "avg") return sum / nums.length;
+  if (agg === "min") return Math.min(...nums);
+  if (agg === "max") return Math.max(...nums);
+  return sum;
+}
+// 円グラフの扇形 path(viewBox -1.05..1.05)。角度 -π/2(12時)起点・時計回り
+function statPieSlice(a0, a1) {
+  const pt = a => `${Math.cos(a).toFixed(4)} ${Math.sin(a).toFixed(4)}`;
+  const large = a1 - a0 > Math.PI ? 1 : 0;
+  return `M 0 0 L ${pt(a0)} A 1 1 0 ${large} 1 ${pt(a1)} Z`;
+}
 
 export function createKascPortal(cfg) {
   const {
@@ -74,6 +128,9 @@ export function createKascPortal(cfg) {
     getPanelTitle = () => null,
     getHtmlSections = () => [],
     getNews = () => [],
+    getStats = () => [],
+    getStatFeatures = () => [],
+    setStatWhere = null,
     getCards = () => [],
   } = cfg;
 
@@ -215,6 +272,9 @@ export function createKascPortal(cfg) {
       body.append(wrap);
       void loadNewsSection(content, sec, errText);
     }
+    // stat: セクション(記述順・news: の後)。レイヤー属性をクライアント集計した
+    // KPI/棒/円グラフカード(#126)。セグメントクリックはレイヤーの where= へ反映
+    getStats().forEach((spec, idx) => { body.append(renderStatCard(idx, spec)); });
     // view:/link: カード(宣言順で同一グリッド)
     const cards = getCards();
     if (cards.length) {
@@ -290,7 +350,7 @@ export function createKascPortal(cfg) {
     // 宣言が一切無いプロジェクト向けの既定コンテンツ。
     // お知らせ→ビュー説明→機能説明(HTML)の順で、html:/view:/link: の
     // 書き方そのものをガイドとして表示する
-    if (!getHtmlSections().length && !getNews().length && !cards.length) {
+    if (!getHtmlSections().length && !getNews().length && !getStats().length && !cards.length) {
       const news = document.createElement("section");
       news.className = "portal-section";
       const newsHead = document.createElement("h3");
@@ -409,6 +469,219 @@ export function createKascPortal(cfg) {
       list.append(item);
     }
     container.append(list);
+  }
+
+  // ---- stat: 行の統計カード(#126) ----
+  // dash: 行ダッシュボード(#123)のポータル内プリミティブ。
+  // `stat:レイヤー名 | group=属性 | value=属性|count | kind=kpi|bar|pie |
+  //   agg=count|sum|avg|min|max | title=見出し | desc=説明`
+  // getStatFeatures(レイヤー名) が返すロード済み GeoJSON properties を
+  // attr-stats.js でクライアント集計し KPI/棒/円グラフを描く。
+  // group= のセグメント(棒・扇・KPIタイル)クリックは `"group" = '値'` の
+  // where= を setStatWhere 経由で地図へ適用(再クリックで解除)
+
+  const statTr = key => {
+    const text = t ? t(`portal.${key}`) : null;
+    if (text && !text.startsWith("portal.")) return text;
+    const fallback = STAT_LABELS[key];
+    return typeof fallback === "function" ? fallback() : (fallback ?? key);
+  };
+
+  // セグメント選択状態(stat: 行 index → {layer,key})
+  const statSel = new Map();
+
+  let statStyleDone = false;
+  function ensureStatStyle() {
+    if (statStyleDone) return;
+    statStyleDone = true;
+    const st = document.createElement("style");
+    st.textContent = `
+.portal-stat-card{padding:.6em .9em}
+.portal-stat-title{margin:.1em 0 .4em;font-size:1em}
+.portal-stat-desc{color:#555;font-size:.85em;margin:.2em 0 .4em}
+.portal-stat-empty{color:#777;font-size:.85em}
+.portal-stat-kpis{display:flex;flex-wrap:wrap;gap:.5em}
+.portal-stat-kpi{font:inherit;display:flex;flex-direction:column;align-items:center;min-width:5.5em;padding:.4em .7em;border:1px solid #e0e0e0;border-radius:6px;background:#fafafa}
+.portal-stat-kpi-key{font-size:.8em;color:#555;max-width:10em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.portal-stat-kpi-value{font-size:1.5em;font-weight:700}
+.portal-stat-seg{font:inherit;text-align:left;background:none;border:none;padding:0;cursor:pointer;width:100%}
+.portal-stat-static{cursor:default}
+.portal-stat-bars{display:flex;flex-direction:column;gap:2px}
+.portal-stat-bar-row{display:grid;grid-template-columns:9em 1fr 4em;align-items:center;gap:.5em;padding:1px 2px;border-radius:4px}
+.portal-stat-bar-row:hover,.portal-stat-legend .portal-stat-seg:hover{background:#eef3f9}
+.portal-stat-bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.85em}
+.portal-stat-bar-track{background:#eee;border-radius:3px;height:.9em;overflow:hidden}
+.portal-stat-bar-fill{display:block;height:100%;background:#4e79a7}
+.portal-stat-bar-value{text-align:right;font-size:.85em;font-variant-numeric:tabular-nums}
+.portal-stat-pie-wrap{display:flex;align-items:center;gap:1em;flex-wrap:wrap}
+.portal-stat-pie{width:9em;height:9em;flex:none}
+.portal-stat-pie path{cursor:pointer;stroke:#fff;stroke-width:.02}
+.portal-stat-legend{display:flex;flex-direction:column;gap:2px;min-width:10em}
+.portal-stat-legend .portal-stat-seg{display:flex;align-items:center;gap:.4em;padding:1px 2px;border-radius:4px;font-size:.85em}
+.portal-stat-swatch{width:.8em;height:.8em;border-radius:2px;flex:none}
+.portal-stat-active{outline:2px solid #2f6fbf;outline-offset:1px}
+`;
+    document.head.append(st);
+  }
+
+  // セグメントクリック → `"group" = '値'` の where= をレイヤーへ適用。
+  // 同じセグメントの再クリックで解除。同一レイヤーを集計する他 stat: の
+  // 選択は where= が上書きされるため解除扱いにする
+  function statSegClick(idx, spec, key) {
+    if (!setStatWhere || !spec.group) return;
+    const off = statSel.get(idx)?.key === key;
+    for (const [i, sel] of statSel) {
+      if (i !== idx && sel.layer === spec.layer) statSel.delete(i);
+    }
+    if (off) statSel.delete(idx); else statSel.set(idx, { layer: spec.layer, key });
+    const where = off ? null : `${statQuoteIdent(spec.group)} = ${statQuoteStr(key)}`;
+    void Promise.resolve(setStatWhere(spec.layer, where)).then(() => update());
+  }
+
+  // クリック可能なセグメント要素(button)。setStatWhere 無し・group 無しは静的表示
+  function statSegButton(cls, key, idx, spec) {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = cls;
+    if (spec.group && setStatWhere) {
+      el.title = statTr("statFilterHint");
+      el.addEventListener("click", () => statSegClick(idx, spec, key));
+      if (statSel.get(idx)?.key === key) el.classList.add("portal-stat-active");
+    } else {
+      el.classList.add("portal-stat-static");
+    }
+    return el;
+  }
+
+  function renderStatCard(idx, spec) {
+    ensureStatStyle();
+    const card = document.createElement("section");
+    card.className = `portal-section portal-stat-card portal-stat-${spec.kind || "bar"}`;
+    const head = document.createElement("h3");
+    head.className = "portal-stat-title";
+    head.textContent = spec.title || spec.layer || statTr("statTitle");
+    card.append(head);
+    if (spec.desc) {
+      const desc = document.createElement("div");
+      desc.className = "portal-stat-desc";
+      desc.textContent = spec.desc;
+      card.append(desc);
+    }
+    const features = getStatFeatures(spec.layer) || [];
+    const valueField = spec.value && spec.value !== "count" ? spec.value : null;
+    if (!features.length) {
+      const empty = document.createElement("div");
+      empty.className = "portal-stat-empty";
+      empty.textContent = statTr("statEmpty");
+      card.append(empty);
+      return card;
+    }
+    if (!spec.group) {
+      // group= 無し: レイヤー全体を1つのKPIとして表示(クリック連動なし)
+      const box = document.createElement("div");
+      box.className = "portal-stat-kpis";
+      const tile = document.createElement("div");
+      tile.className = "portal-stat-kpi portal-stat-static";
+      const v = document.createElement("span");
+      v.className = "portal-stat-kpi-value";
+      v.textContent = statFmt(statAggregateAll(features, valueField, spec.agg || "sum"));
+      tile.append(v);
+      if (valueField) {
+        const k = document.createElement("span");
+        k.className = "portal-stat-kpi-key";
+        k.textContent = `${statTr("statAgg_" + (spec.agg || "sum"))}: ${valueField}`;
+        tile.append(k);
+      }
+      box.append(tile);
+      card.append(box);
+      return card;
+    }
+    const rows = computeGroupStats(features, spec.group, valueField);
+    const vals = rows.map(r => statMetric(r, spec, valueField));
+    if (spec.kind === "kpi") {
+      const box = document.createElement("div");
+      box.className = "portal-stat-kpis";
+      rows.forEach((row, i) => {
+        const tile = statSegButton("portal-stat-kpi", row.key, idx, spec);
+        const k = document.createElement("span");
+        k.className = "portal-stat-kpi-key";
+        k.textContent = row.key || "(empty)";
+        const v = document.createElement("span");
+        v.className = "portal-stat-kpi-value";
+        v.textContent = statFmt(vals[i]);
+        tile.append(k, v);
+        box.append(tile);
+      });
+      card.append(box);
+    } else if (spec.kind === "pie") {
+      const wrap = document.createElement("div");
+      wrap.className = "portal-stat-pie-wrap";
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "-1.05 -1.05 2.1 2.1");
+      svg.classList.add("portal-stat-pie");
+      const legend = document.createElement("div");
+      legend.className = "portal-stat-legend";
+      const total = vals.reduce((a, v) => a + (v || 0), 0);
+      let angle = -Math.PI / 2;
+      rows.forEach((row, i) => {
+        const val = vals[i] || 0;
+        const color = STAT_COLORS[i % STAT_COLORS.length];
+        if (val > 0 && total > 0) {
+          const slice = val >= total
+            ? document.createElementNS("http://www.w3.org/2000/svg", "circle")
+            : document.createElementNS("http://www.w3.org/2000/svg", "path");
+          if (val >= total) {
+            slice.setAttribute("r", "1");
+          } else {
+            const a1 = Math.min(angle + (val / total) * Math.PI * 2, Math.PI * 1.5);
+            slice.setAttribute("d", statPieSlice(angle, a1));
+            angle = a1;
+          }
+          slice.setAttribute("fill", color);
+          if (spec.group && setStatWhere) {
+            slice.addEventListener("click", () => statSegClick(idx, spec, row.key));
+            if (statSel.get(idx)?.key === row.key) slice.classList.add("portal-stat-active");
+          }
+          svg.append(slice);
+        }
+        const item = statSegButton("portal-stat-seg", row.key, idx, spec);
+        const sw = document.createElement("span");
+        sw.className = "portal-stat-swatch";
+        sw.style.background = color;
+        const lb = document.createElement("span");
+        const pct = total > 0 ? ` (${Math.round((val / total) * 1000) / 10}%)` : "";
+        lb.textContent = `${row.key || "(empty)"} — ${statFmt(val)}${pct}`;
+        item.append(sw, lb);
+        legend.append(item);
+      });
+      wrap.append(svg, legend);
+      card.append(wrap);
+    } else {
+      // kind=bar(既定): 水平棒グラフ
+      const box = document.createElement("div");
+      box.className = "portal-stat-bars";
+      const max = Math.max(...vals.map(v => v || 0), 0);
+      rows.forEach((row, i) => {
+        const val = vals[i] || 0;
+        const btn = statSegButton("portal-stat-seg portal-stat-bar-row", row.key, idx, spec);
+        const label = document.createElement("span");
+        label.className = "portal-stat-bar-label";
+        label.textContent = row.key || "(empty)";
+        const track = document.createElement("span");
+        track.className = "portal-stat-bar-track";
+        const fill = document.createElement("span");
+        fill.className = "portal-stat-bar-fill";
+        fill.style.width = `${max > 0 ? (val / max) * 100 : 0}%`;
+        track.append(fill);
+        const num = document.createElement("span");
+        num.className = "portal-stat-bar-value";
+        num.textContent = statFmt(val);
+        btn.append(label, track, num);
+        box.append(btn);
+      });
+      card.append(box);
+    }
+    return card;
   }
 
   // ---- form: 行のフォーム投稿(#131) ----

@@ -647,6 +647,29 @@ export function parseKascNewsValue(parts, line = null) {
   return news;
 }
 
+// stat: 行の値をパースする(#126)。
+// `stat:レイヤー名 | group=属性 | value=属性|count | kind=kpi|bar|pie |
+//   agg=count|sum|avg|min|max | title=見出し | desc=説明`
+// ポータルの統計カード(dash: 行ダッシュボード #123 のポータル内プリミティブ)。
+// レイヤーの属性をクライアント集計(attr-stats.js)して KPI/棒/円グラフを描き、
+// group= のセグメントクリックで `"group" = '値'` の where= を地図へ適用する
+export function parseKascStatValue(parts, line = null) {
+  const stat = { layer: parts[0] || "", group: "", value: "count", kind: "", agg: "", title: "", desc: "", line };
+  for (const tok of parts.slice(1)) {
+    if (!tok) continue;
+    const kv = /^(group|value|kind|agg|title|desc)\s*=\s*(.+)$/i.exec(tok);
+    if (!kv) continue;
+    const key = kv[1].toLowerCase();
+    const val = kv[2].trim();
+    if (key === "kind") { if (/^(kpi|bar|pie)$/i.test(val)) stat.kind = val.toLowerCase(); }
+    else if (key === "agg") { if (/^(count|sum|avg|min|max)$/i.test(val)) stat.agg = val.toLowerCase(); }
+    else stat[key] = val;
+  }
+  // kind 既定: group= ありなら棒グラフ、無しなら KPI 単発表示
+  if (!stat.kind) stat.kind = stat.group ? "bar" : "kpi";
+  return stat;
+}
+
 // Markdown の最小レンダラ(ai-chat.js から移設。news: の本文描画でも使う)。
 // XSS 防止のため先にHTMLエスケープしてから
 // 見出し・箇条書き・太字・インラインコード・リンクのみ装飾する

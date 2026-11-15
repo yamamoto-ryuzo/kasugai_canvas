@@ -217,6 +217,11 @@
 </code> と同じサニタイズ経路
 </td>      
 </tr>      
+<tr>
+<td><code>stat:</code></td>
+<td><code>stat:レイヤー名 | group=属性 | value=属性|count | kind=kpi|bar|pie | agg=count|sum|avg|min|max | title=見出し | desc=説明</code></td>
+<td>統計カード（#126・<code>dash:</code> のポータル内プリミティブ）。レイヤー属性をクライアント集計して KPI・棒・円グラフを <code>news:</code> の後・宣言順に表示。<code>value=count</code>／省略は件数、属性名は <code>agg=</code>（既定 sum）で集計。<code>group=</code> のセグメント（棒・扇・KPIタイル）クリックで該当値の <code>where=</code> を地図へ適用（再クリックで解除）。<code>group=</code> 省略ならレイヤー全体の単一 KPI</td>
+</tr>
 </tbody>      
 </table>      
 <h3>⚙️ カスタムHTMLからの GIS 制御（data-* 属性）

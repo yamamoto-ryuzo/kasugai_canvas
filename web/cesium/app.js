@@ -32,7 +32,7 @@ import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-ev
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createKascDashboard, featureCentroid } from "../shared/dashboard.js";
-import { parseKascDashValue, parseKascFormValue } from "../shared/kasc.js";
+import { parseKascDashValue, parseKascFormValue, parseKascStatValue } from "../shared/kasc.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
@@ -786,6 +786,8 @@ const inspectorViews = [];
 const inspectorHtmlSections = [];
 // インスペクタの news: 行で宣言されたお知らせフィード {src, limit, title, line}[](#128)
 const inspectorNews = [];
+// stat: 行の統計カード(#126)。parseKascStatValue でパースした宣言配列
+const inspectorStats = [];
 // インスペクタの link: 行で宣言された外部リンクカード {name, url, desc, img, line}[]
 const inspectorLinks = [];
 // インスペクタの project: 行で宣言されたプロジェクト切替カード(#130)
@@ -1647,6 +1649,18 @@ function kascPortal() {
       getPanelTitle: () => inspectorPanelTitle,
       getHtmlSections: () => inspectorHtmlSections,
       getNews: () => inspectorNews,
+      getStats: () => inspectorStats,
+      // stat: カード(#126)の集計・where= 連動アダプタ。集計はロード済みソース
+      // (item.geojsonSource→getLayerGeoJson)を使い、クリックは ⏷フィルタと
+      // 同じ applyLayerQueryFilter 経路で where= を適用する(dash: と同仕組み)
+      getStatFeatures: name => {
+        const it = findDeepLinkLayer(name);
+        return (it && getLayerGeoJson(it.id)?.features) || [];
+      },
+      setStatWhere: (name, where) => {
+        const it = findDeepLinkLayer(name);
+        return it ? applyLayerQueryFilter(it, where || null) : false;
+      },
       getCards: () => inspectorPortalCards,
     });
   }
@@ -6120,6 +6134,7 @@ function applyInspector(text) {
   inspectorViews.splice(0, inspectorViews.length);
   inspectorHtmlSections.splice(0, inspectorHtmlSections.length);
   inspectorNews.splice(0, inspectorNews.length);
+  inspectorStats.splice(0, inspectorStats.length);
   // ディープリンク(feature=/data-feature)のハイライトはプロジェクト単位で破棄する
   if (deepLinkHighlightDs) { viewer.dataSources.remove(deepLinkHighlightDs, true); deepLinkHighlightDs = null; }
   inspectorLinks.splice(0, inspectorLinks.length);
@@ -6280,6 +6295,15 @@ function applyInspector(text) {
     if (type === "news") {
       const parts = value.split("|").map(part => part.trim());
       inspectorNews.push(parseKascNewsValue(parts, line));
+    }
+
+    // stat: レイヤー名 | group=属性 | value=属性|count | kind=kpi|bar|pie |
+    //   agg=… | title=見出し —
+    // ポータルの統計カード(#126)。属性をクライアント集計して
+    // KPI/棒/円グラフを描き、セグメントクリックで where= を地図へ適用
+    if (type === "stat") {
+      const parts = value.split("|").map(part => part.trim());
+      inspectorStats.push(parseKascStatValue(parts, line));
     }
 
     // link: 名前 | url=… | desc=説明 | img=画像 —
