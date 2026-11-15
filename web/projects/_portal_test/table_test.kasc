@@ -1,0 +1,6 @@
+title:テーブルテスト
+portal:on | title=テーブルテスト | open=auto
+cam:全体 | 36.0 | 139.0 | h=80000
+geojson:テスト地物 | DATA/test.geojson
+table:テスト地物 | cols=name,状況 | sort=name | title=台帳テスト | badge=状況:工事中=#e07b00;未発注=#888888;完了=#2a9d5c
+table:テスト地物 | where="状況"='工事中' | title=工事中のみ

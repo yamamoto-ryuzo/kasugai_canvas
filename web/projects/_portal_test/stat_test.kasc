@@ -1,0 +1,8 @@
+title:テーブルテスト
+portal:on | title=テーブルテスト | open=auto
+cam:全体 | 36.0 | 139.0 | h=80000
+geojson:テスト地物 | DATA/test.geojson
+stat: テスト地物 | group=name | value=count | kind=bar | title=件数棒グラフ
+stat: テスト地物 | group=name | kind=pie | title=構成比
+stat: テスト地物 | group=name | kind=kpi | title=KPIタイル
+stat: テスト地物 | kind=kpi | title=全体KPI

@@ -1,0 +1,48 @@
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+const { chromium } = await import("file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
+const OUT = fileURLToPath(new URL("./", import.meta.url));
+const BASE = "http://127.0.0.1:8899";
+const GJ = process.env.GJ, G = process.env.G;
+const KASC = encodeURIComponent(`${BASE}/projects/_portal_test/stat_test.kasc`);
+const gj = await (await fetch(`${BASE}/projects/_portal_test/${GJ}`)).json();
+const exp = {};
+for (const f of gj.features) { const k = String(f.properties?.[G] ?? ""); exp[k] = (exp[k]||0)+1; }
+console.log("EXPECTED=" + JSON.stringify(exp));
+const browser = await chromium.launch({ executablePath: `${process.env.LOCALAPPDATA}/ms-playwright/chromium-1243/chrome-win64/chrome.exe` });
+const page = await browser.newPage();
+const errs = [];
+page.on("pageerror", e => errs.push(e.message));
+await page.goto(`${BASE}/cesium/?kasc=${KASC}`, { waitUntil: "domcontentloaded" });
+await page.waitForTimeout(30000);
+const hidden = await page.evaluate(() => document.querySelector("#portal-overlay")?.hidden);
+await page.click("#portal-open").catch(()=>{});
+await page.waitForTimeout(1500);
+if (!hidden) { await page.click("#portal-open").catch(()=>{}); await page.waitForTimeout(1500); }
+const cards = await page.$$eval(".portal-stat-card", els => els.map(e => e.className));
+console.log("STAT_CARDS=" + cards.length);
+console.log("KINDS=" + JSON.stringify(cards.map(c => (c.match(/portal-stat-(bar|pie|kpi)/)||[])[1])));
+const bars = await page.$$eval(".portal-stat-card", (els, exp) => {
+  const rows = [...els[0].querySelectorAll(".portal-stat-bar-row")].map(r => ({k: r.children[0].textContent, v: Number(r.children[2].textContent.replace(/,/g,""))}));
+  return { rows, match: rows.length>0 && rows.every(r => exp[r.k] === r.v) };
+}, exp);
+console.log("BAR_ROWS=" + JSON.stringify(bars.rows));
+console.log("VALUES_MATCH=" + bars.match);
+const pies = await page.$$eval(".portal-stat-pie path, .portal-stat-pie circle", els => els.length);
+const kpis = await page.$$eval(".portal-stat-kpi-value", els => els.map(e => e.textContent));
+console.log("PIE_SLICES=" + pies + " KPIS=" + JSON.stringify(kpis));
+await page.screenshot({ path: join(OUT, "probe-issue126-stats.png") });
+await page.click(".portal-stat-bar-row");
+await page.waitForTimeout(1200);
+const act = await page.$$eval(".portal-stat-active", els => els.length);
+console.log("ACTIVE_AFTER_CLICK=" + act);
+await page.screenshot({ path: join(OUT, "probe-issue126-click.png") });
+await page.click(".portal-stat-bar-row");
+await page.waitForTimeout(1200);
+const act2 = await page.$$eval(".portal-stat-active", els => els.length);
+console.log("ACTIVE_AFTER_RECLICK=" + act2);
+console.log("PAGEERRORS=" + JSON.stringify(errs));
+const ok = cards.length >= 4 && bars.match && pies > 0 && kpis.length > 0 && act >= 1 && act2 === 0 && errs.length === 0;
+console.log(ok ? "VERIFY_OK" : "VERIFY_NG");
+await browser.close();
+process.exit(ok ? 0 : 1);
