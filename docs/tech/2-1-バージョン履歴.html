@@ -14,9 +14,133 @@
       <p>バージョン履歴 — 機能追加の履歴と現行実装の仕組み・制限（カード索引）</p>
     </header>
     <main>
-      <p>機能をバージョンごとのテーマに沿ってカード形式で整理した履歴索引です。ドキュメント全体のナビゲーションは Canvas の UI（タブ・機能単位）に準じたテーマ軸を使ってください（このページは履歴としての一覧）。各カードの詳細は各節の「詳細 →」リンク先の個別ページ、バージョン横断の実装詳細は <a href="../features/v0.html">V0: システム基本構成</a> を参照してください。</p>
+      <p>機能をバージョンごとのテーマに沿ってカード形式で整理した履歴索引です。実装済みのテーマ（V7→V1 の新しい順）と、検討中のテーマ（未実装項目が多い V8・V9）に分けています。ドキュメント全体のナビゲーションは Canvas の UI（タブ・機能単位）に準じたテーマ軸を使ってください（このページは履歴としての一覧）。各カードの詳細は各節の「詳細 →」リンク先の個別ページ、バージョン横断の実装詳細は <a href="../features/v0.html">V0: システム基本構成</a> を参照してください。</p>
 
-      <h2 id="gis"><a href="../features/v1.html">V1: GIS 基本機能（Re:Earth GeoSuite 上位互換）</a></h2>
+      <h2>✅ 実装済みのテーマ（V7 → V1）</h2>
+
+      <h3 id="qgis"><a href="../features/v7.html">V7: QGIS連携</a></h3>
+      <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現する</strong>のが今後のメインテーマです。QGIS プラグイン <code>geo_webview</code> がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替します。<a href="../features/v7.html">詳細 →</a>（実装済みの再現範囲と未対応課題の一覧は <a href="../qgis.html">QGIS・GDAL連携</a>）</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>📄 .kasc 行変換</h3>
+          <p>ベクターはネイティブ参照（gpkg/geoparquet/flatgeobuf/geojson/duckdb）または GeoJSON 変換、3D Tiles・XYZ・WMS・GeoTIFF も行化。フィルタは <code>where=</code>、CSV/TSV は <code>duckdb:</code> へ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔍 where= フィルタ引継ぎ</h3>
+          <p>レイヤーフィルタ（subsetString）を <code>where=条件</code> として引き継ぎ。<code>where=</code> は全ベクター行で使用可（クエリ系は SQL 評価、geojson/fgb/parquet 等は <code>shared/where-eval.js</code> でクライアント評価）</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎨 QML スタイル再現</h3>
+          <p><code>&lt;renderer-v2&gt;</code>（単一・分類・段階・ルール）・シンボルレイヤ・データ定義・ラベル・縮尺ルールをコンパイルして全エンジンで描画。凡例スウォッチ＋条件別表示切替も QML 由来</p>
+        </div>
+        <div class="feature-card">
+          <h3>👁️ 表示状態の引継ぎ</h3>
+          <p>表示→<code>| off</code>、グループ→パンくずタイトル、排他→<code>//</code>、不透明度→<code>opacity=</code>、縮尺→<code>minScale=/maxScale=</code>、出典→<code>attr=</code>、カメラ→<code>cam:</code>、ブックマーク→<code>bookmark:</code>、テーマ→<code>theme:</code>、ポータル→<code>portal:</code>・<code>view:</code>・<code>link:</code>・<code>html:</code></p>
+        </div>
+        <div class="feature-card">
+          <h3>🔗 4つの起動経路</h3>
+          <p>ローカルアプリ登録（:8510）・QGIS 内蔵サーバ配信・CDN ホスト版・ZIP/Re:Earth 取り込み。Canvas 未インストール環境でも再生可</p>
+        </div>
+      </div>
+
+      <h3 id="multi"><a href="../use/1-10-マルチエンジン.html">V6: マルチエンジン</a></h3>
+      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> をエンジン非依存のプロジェクト形式として各エンジンで再生する構成です。メインエンジンは CesiumJS、他エンジンは .kasc プレイヤーとしての互換実装です。<a href="../use/1-10-マルチエンジン.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🔀 エンジン選択と切替</h3>
+          <p><code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara</code> で起動エンジンを選択（既定 cesium）。パネルの切替リンクはプロジェクト・カメラ位置・インスペクター編集・レイヤ可視性を引き継ぐ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ 2D プレイヤー（MapLibre / OpenLayers / Leaflet）</h3>
+          <p>全ベクター行・QML・duckdb/sql・属性 UI の .kasc 再生。<code>3dtiles:</code> は deck.gl を遅延ロードして表示・3D Tiles ドレープにも対応</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗾 GSI Maps エンジン（調整中）</h3>
+          <p>vendored 地理院地図を iframe で組み込む中間エンジン。.kasc を作図リスト・外部タイルとして再生し、Globe 上へのレイヤ注入・地理院地図レイヤの .kasc 取り込みも可能。ベースマップ切替・カタログ取込・Globe 進入等の17本の AI ツールで地理院地図を制御（内部 API 依存のため AI 制御は現在調整中）</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌍 Navara エンジン（試験的）</h3>
+          <p><code>@navaramap/three</code>（Rust/WASM + Three.js）による写実 3D プレゼンエンジン。ベクター行・<code>3dtiles:</code>・ベースマップをフォトリアルシーン（大気・太陽・地形）で描画。<code>wms:</code>/<code>wmts:</code> は未対応</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧩 エンジン非依存コア（shared/）</h3>
+          <p>.kasc ローダー・ベクターデコーダー・QML コンパイラ・属性ウィジェット・AI チャット・印刷を <code>web/shared/</code> に集約。新エンジン追加コストを低減</p>
+        </div>
+        <div class="feature-card">
+          <h3>🌐 CDN ホスト版（kasugai-canvas-web）</h3>
+          <p>エンジン一式を GitHub Pages で <code>stable/</code>・<code>unstable/</code> の2チャンネル配信。<code>?kasc=&lt;url&gt;</code>・<code>?kasc=local</code> で Canvas 未インストール環境でもブラウザ再生（アプリはホスト・データはローカル）。<code>tools/publish_cdn.py</code> で web/ から同期</p>
+        </div>
+      </div>
+
+      <h3 id="app"><a href="../use/6-5-アプリ.html">V5: アプリ化（ローカル連携）</a></h3>
+      <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。<a href="../use/6-5-アプリ.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>☁️ クラウドストレージ連携（rclone）</h3>
+          <p>管理（⚙）→ アプリ → クラウド から rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）と <code>cloud:</code> スキームの2形態</p>
+        </div>
+        <div class="feature-card">
+          <h3>💾 ローカルファイル保存</h3>
+          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能</p>
+        </div>
+        <div class="feature-card">
+          <h3>📦 納品用ローカル化</h3>
+          <p>接続中クラウドと HTTP(S) データを取り込んだ自己完結パッケージ <code>&lt;プロジェクト名&gt;_local/</code> を生成。元プロジェクトは変更せず、複製 .kasc の参照は相対パスに書き換え。rclone 不要のローカル完結パッケージとして納品可能</p>
+        </div>
+      </div>
+
+      <h3 id="plugins"><a href="../use/7-2-プラグイン.html">V4: プラグイン（認証機構）・外部連携</a></h3>
+      <p>拡張可能なプラグイン機構と認証方式の導入に加え、データ形式・外部サービス連携を大きく拡充しました。<a href="../use/7-2-プラグイン.html">詳細 →</a></p>
+      <div class="features">
+        <a class="feature-card" href="../use/7-1-認証.html">
+          <h3>🧩 プラグイン機構・認証方式</h3>
+          <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構。認証方式は 0〜7 から選択</p>
+        </a>
+        <div class="feature-card">
+          <h3>🗃️ クエリ系・大規模ベクター</h3>
+          <p><code>duckdb:</code> / <code>sql:</code> / <code>gpkg:</code> 行タイプで DuckDB-WASM・SQLite WASM による SQL 絞り込みレイヤー。GeoParquet・FlatGeobuf・GeoPackage を直接読み込み</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ Google Maps Platform 連携</h3>
+          <p>Geocoding / Places のハイブリッド検索、Street View リンク・候補ラインオーバーレイ。外部エージェント呼出しにも対応</p>
+        </div>
+      </div>
+
+      <h3 id="ai"><a href="../use/5-5-AI連携.html">V3: AI 連携</a></h3>
+      <p>Gemini / OpenAI互換 / GitHub Copilot・Devin・Antigravity（ブリッジ）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。<a href="../use/5-5-AI連携.html">詳細 →</a>（設定手順は <a href="../use/5-1-内蔵AI.html">【API】内蔵AI（Google 連携・AI）</a>。通常版/アプリ版の対応表あり）</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🗨️ AI チャット（Gemini / OpenAI互換 / Copilot / Devin / Antigravity）</h3>
+          <p>管理（⚙）→ AI でプロバイダを選び API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセットなどを実行。Copilot / Devin / Antigravity（アプリ版のみの選択肢）はブリッジ自動起動＋エージェント接続の自動設定</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧪 runCode サンドボックス</h3>
+          <p>AI が生成した JavaScript を opaque origin iframe + postMessage ブリッジで安全に実行し、地図を操作するブラウザ内コード実行基盤</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔌 kasugaiApi</h3>
+          <p><code>window.kasugaiApi</code> で viewer・カメラ・レイヤー・イベントに外部からアクセスする操作 API。プラグイン・外部エージェントの土台</p>
+        </div>
+      </div>
+
+      <h3 id="presentation"><a href="../use/1-8-FLY.html">V2: プレゼンテーション機能</a></h3>
+      <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。<a href="../use/1-8-FLY.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🛩️ Fly モード</h3>
+          <p>GeoJSON ルート自動追従・手動操縦、速度・高さ・ピッチ調整、ルート座標の基準切替（カメラ位置／画面中心）、ルート描画</p>
+        </div>
+        <div class="feature-card">
+          <h3>✏️ ルート描画</h3>
+          <p>Orbit モードで右クリックによるルート作成。高さ編集・保存・Fly 実行まで一連</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎬 Google Earth 風 FlyTo</h3>
+          <p>距離に応じた飛行時間＋ズームアウトから降下する弧を描いて移動</p>
+        </div>
+      </div>
+
+      <h3 id="gis"><a href="../features/v1.html">V1: GIS 基本機能（Re:Earth GeoSuite 上位互換）</a></h3>
       <p>Re:Earth GeoSuite の GIS・デジタルツイン機能を包含し、KASUGAI 独自の拡張を加えた上位互換の実装です。<a href="../features/v1.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">
@@ -101,129 +225,10 @@
         </div>
       </div>
 
-      <h2 id="presentation"><a href="../use/1-8-FLY.html">V2: プレゼンテーション機能</a></h2>
-      <p>KASUGAI Canvas 独自に追加した、視点を動かして周囲に共有するプレゼンテーション機能です。<a href="../use/1-8-FLY.html">詳細 →</a></p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>🛩️ Fly モード</h3>
-          <p>GeoJSON ルート自動追従・手動操縦、速度・高さ・ピッチ調整、ルート座標の基準切替（カメラ位置／画面中心）、ルート描画</p>
-        </div>
-        <div class="feature-card">
-          <h3>✏️ ルート描画</h3>
-          <p>Orbit モードで右クリックによるルート作成。高さ編集・保存・Fly 実行まで一連</p>
-        </div>
-        <div class="feature-card">
-          <h3>🎬 Google Earth 風 FlyTo</h3>
-          <p>距離に応じた飛行時間＋ズームアウトから降下する弧を描いて移動</p>
-        </div>
-      </div>
+      <h2>🔎 検討中のテーマ（未実装項目が多い）</h2>
+      <p>以下は実装が進行中・計画段階のテーマです。項目の多くが未実装または調整中のため、実現範囲は各詳細ページを確認してください。</p>
 
-      <h2 id="ai"><a href="../use/5-5-AI連携.html">V3: AI 連携</a></h2>
-      <p>Gemini / OpenAI互換 / GitHub Copilot・Devin・Antigravity（ブリッジ）を使った AI チャットによる地図操作と、ブラウザ内コード実行の基盤です。<a href="../use/5-5-AI連携.html">詳細 →</a>（設定手順は <a href="../use/5-1-内蔵AI.html">【API】内蔵AI（Google 連携・AI）</a>。通常版/アプリ版の対応表あり）</p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>🗨️ AI チャット（Gemini / OpenAI互換 / Copilot / Devin / Antigravity）</h3>
-          <p>管理（⚙）→ AI でプロバイダを選び API キーを登録し、右下のチャットパネルから自然言語で地図を操作。function calling で flyTo・レイヤー/ベースマップ切替・検索・カメラプリセットなどを実行。Copilot / Devin / Antigravity（アプリ版のみの選択肢）はブリッジ自動起動＋エージェント接続の自動設定</p>
-        </div>
-        <div class="feature-card">
-          <h3>🧪 runCode サンドボックス</h3>
-          <p>AI が生成した JavaScript を opaque origin iframe + postMessage ブリッジで安全に実行し、地図を操作するブラウザ内コード実行基盤</p>
-        </div>
-        <div class="feature-card">
-          <h3>🔌 kasugaiApi</h3>
-          <p><code>window.kasugaiApi</code> で viewer・カメラ・レイヤー・イベントに外部からアクセスする操作 API。プラグイン・外部エージェントの土台</p>
-        </div>
-      </div>
-
-      <h2 id="plugins"><a href="../use/7-2-プラグイン.html">V4: プラグイン（認証機構）・外部連携</a></h2>
-      <p>拡張可能なプラグイン機構と認証方式の導入に加え、データ形式・外部サービス連携を大きく拡充しました。<a href="../use/7-2-プラグイン.html">詳細 →</a></p>
-      <div class="features">
-        <a class="feature-card" href="../use/7-1-認証.html">
-          <h3>🧩 プラグイン機構・認証方式</h3>
-          <p>起動前の認証プラグイン（auth-selector）と起動後の通常プラグイン（plugin-loader）を分離した拡張機構。認証方式は 0〜7 から選択</p>
-        </a>
-        <div class="feature-card">
-          <h3>🗃️ クエリ系・大規模ベクター</h3>
-          <p><code>duckdb:</code> / <code>sql:</code> / <code>gpkg:</code> 行タイプで DuckDB-WASM・SQLite WASM による SQL 絞り込みレイヤー。GeoParquet・FlatGeobuf・GeoPackage を直接読み込み</p>
-        </div>
-        <div class="feature-card">
-          <h3>🗺️ Google Maps Platform 連携</h3>
-          <p>Geocoding / Places のハイブリッド検索、Street View リンク・候補ラインオーバーレイ。外部エージェント呼出しにも対応</p>
-        </div>
-      </div>
-
-      <h2 id="app"><a href="../use/6-5-アプリ.html">V5: アプリ化（ローカル連携）</a></h2>
-      <p>ローカル Rust サーバーと一体で動く「アプリ」だからこそ実現できる機能群です。静的配信やコンテナ実行では提供されず、<code>/api/capabilities</code> で提供可否を判定します。<a href="../use/6-5-アプリ.html">詳細 →</a></p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>☁️ クラウドストレージ連携（rclone）</h3>
-          <p>管理（⚙）→ アプリ → クラウド から rclone 経由で Box / GoogleDrive / OneDrive / Dropbox / pCloud / MEGA / WebDAV / S3 に接続。Windows ドライブ割当（既定 K:）と <code>cloud:</code> スキームの2形態</p>
-        </div>
-        <div class="feature-card">
-          <h3>💾 ローカルファイル保存</h3>
-          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能</p>
-        </div>
-        <div class="feature-card">
-          <h3>📦 納品用ローカル化</h3>
-          <p>接続中クラウドと HTTP(S) データを取り込んだ自己完結パッケージ <code>&lt;プロジェクト名&gt;_local/</code> を生成。元プロジェクトは変更せず、複製 .kasc の参照は相対パスに書き換え。rclone 不要のローカル完結パッケージとして納品可能</p>
-        </div>
-      </div>
-
-      <h2 id="multi"><a href="../use/1-10-マルチエンジン.html">V6: マルチエンジン</a></h2>
-      <p><code>web/</code> をエンジン別フロントに分割し、<code>.kasc</code> をエンジン非依存のプロジェクト形式として各エンジンで再生する構成です。メインエンジンは CesiumJS、他エンジンは .kasc プレイヤーとしての互換実装です。<a href="../use/1-10-マルチエンジン.html">詳細 →</a></p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>🔀 エンジン選択と切替</h3>
-          <p><code>?engine=cesium|maplibre|openlayers|leaflet|gsimaps|navara</code> で起動エンジンを選択（既定 cesium）。パネルの切替リンクはプロジェクト・カメラ位置・インスペクター編集・レイヤ可視性を引き継ぐ</p>
-        </div>
-        <div class="feature-card">
-          <h3>🗺️ 2D プレイヤー（MapLibre / OpenLayers / Leaflet）</h3>
-          <p>全ベクター行・QML・duckdb/sql・属性 UI の .kasc 再生。<code>3dtiles:</code> は deck.gl を遅延ロードして表示・3D Tiles ドレープにも対応</p>
-        </div>
-        <div class="feature-card">
-          <h3>🗾 GSI Maps エンジン（調整中）</h3>
-          <p>vendored 地理院地図を iframe で組み込む中間エンジン。.kasc を作図リスト・外部タイルとして再生し、Globe 上へのレイヤ注入・地理院地図レイヤの .kasc 取り込みも可能。ベースマップ切替・カタログ取込・Globe 進入等の17本の AI ツールで地理院地図を制御（内部 API 依存のため AI 制御は現在調整中）</p>
-        </div>
-        <div class="feature-card">
-          <h3>🌍 Navara エンジン（試験的）</h3>
-          <p><code>@navaramap/three</code>（Rust/WASM + Three.js）による写実 3D プレゼンエンジン。ベクター行・<code>3dtiles:</code>・ベースマップをフォトリアルシーン（大気・太陽・地形）で描画。<code>wms:</code>/<code>wmts:</code> は未対応</p>
-        </div>
-        <div class="feature-card">
-          <h3>🧩 エンジン非依存コア（shared/）</h3>
-          <p>.kasc ローダー・ベクターデコーダー・QML コンパイラ・属性ウィジェット・AI チャット・印刷を <code>web/shared/</code> に集約。新エンジン追加コストを低減</p>
-        </div>
-        <div class="feature-card">
-          <h3>🌐 CDN ホスト版（kasugai-canvas-web）</h3>
-          <p>エンジン一式を GitHub Pages で <code>stable/</code>・<code>unstable/</code> の2チャンネル配信。<code>?kasc=&lt;url&gt;</code>・<code>?kasc=local</code> で Canvas 未インストール環境でもブラウザ再生（アプリはホスト・データはローカル）。<code>tools/publish_cdn.py</code> で web/ から同期</p>
-        </div>
-      </div>
-
-      <h2 id="qgis"><a href="../features/v7.html">V7: QGIS連携</a></h2>
-      <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現する</strong>のが今後のメインテーマです。QGIS プラグイン <code>geo_webview</code> がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替します。<a href="../features/v7.html">詳細 →</a>（実装済みの再現範囲と未対応課題の一覧は <a href="../qgis.html">QGIS・GDAL連携</a>）</p>
-      <div class="features">
-        <div class="feature-card">
-          <h3>📄 .kasc 行変換</h3>
-          <p>ベクターはネイティブ参照（gpkg/geoparquet/flatgeobuf/geojson/duckdb）または GeoJSON 変換、3D Tiles・XYZ・WMS・GeoTIFF も行化。フィルタは <code>where=</code>、CSV/TSV は <code>duckdb:</code> へ</p>
-        </div>
-        <div class="feature-card">
-          <h3>🔍 where= フィルタ引継ぎ</h3>
-          <p>レイヤーフィルタ（subsetString）を <code>where=条件</code> として引き継ぎ。<code>where=</code> は全ベクター行で使用可（クエリ系は SQL 評価、geojson/fgb/parquet 等は <code>shared/where-eval.js</code> でクライアント評価）</p>
-        </div>
-        <div class="feature-card">
-          <h3>🎨 QML スタイル再現</h3>
-          <p><code>&lt;renderer-v2&gt;</code>（単一・分類・段階・ルール）・シンボルレイヤ・データ定義・ラベル・縮尺ルールをコンパイルして全エンジンで描画。凡例スウォッチ＋条件別表示切替も QML 由来</p>
-        </div>
-        <div class="feature-card">
-          <h3>👁️ 表示状態の引継ぎ</h3>
-          <p>表示→<code>| off</code>、グループ→パンくずタイトル、排他→<code>//</code>、不透明度→<code>opacity=</code>、縮尺→<code>minScale=/maxScale=</code>、出典→<code>attr=</code>、カメラ→<code>cam:</code>、ブックマーク→<code>bookmark:</code>、テーマ→<code>theme:</code>、ポータル→<code>portal:</code>・<code>view:</code>・<code>link:</code>・<code>html:</code></p>
-        </div>
-        <div class="feature-card">
-          <h3>🔗 4つの起動経路</h3>
-          <p>ローカルアプリ登録（:8510）・QGIS 内蔵サーバ配信・CDN ホスト版・ZIP/Re:Earth 取り込み。Canvas 未インストール環境でも再生可</p>
-        </div>
-      </div>
-
-      <h2 id="portal"><a href="../use/1-9-ポータル.html">V8: ポータル</a></h2>
+      <h3 id="portal"><a href="../use/1-9-ポータル.html">V8: ポータル（調整中）</a></h3>
       <p>レイヤー管理ではなく目的別の大きなカード/ボタンで GIS 業務を完結させるタスク指向ポータル。<code>.kasc</code> に <code>portal:</code>/<code>view:</code>/<code>link:</code>/<code>html:</code> の4行形式を追加し、表示レイヤー・スタイル・フィルタ・カメラ・背景を束ねたビューをカード押下で一括適用します。全6エンジン対応。<a href="../use/1-9-ポータル.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">
@@ -240,7 +245,7 @@
         </div>
       </div>
 
-      <h2 id="analysis"><a href="../use/5-6-解析.html">V9: 解析（予定）</a></h2>
+      <h3 id="analysis"><a href="../use/5-6-解析.html">V9: 解析（予定）</a></h3>
       <p>AI チャット経由で空間解析を駆動するテーマ（計画段階）。解析エンジンは自前で実装せず QGIS Processing をバックエンドとして借り、Canvas は AI による操縦面と結果表示を担います。<a href="../use/5-6-解析.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">

@@ -22,19 +22,36 @@ legend: 凡例2 | DATA/legend2.png</code></pre>
       <p>QGIS スタイル（<code>style=</code> の .qml や GPKG 埋め込みスタイル）が適用されたベクターレイヤーは、QML 由来の凡例スウォッチと条件別の表示切替も凡例タブに表示されます。</p>
       <p>凡例画像の下には「凡例を表示するレイヤ」セレクタも表示されます。凡例を持つベクターレイヤー（QML スタイル適用レイヤー・既定スタイルのベクターレイヤー）をドロップダウンで切り替えると、そのレイヤーの凡例スウォッチ一覧を確認できます。選択中レイヤは表示のたびに保持され、レイヤ一覧でのシンボル表示/非表示の切替もここに反映されます。</p>
 
+      <h2>🔗 QGIS 連携（geo_webview）— 高度な設定は QGIS に任せる</h2>
+      <p>凡例・スタイル・フィルタといった<strong>高度な設定は QGIS 側に任せる</strong>のがこの連携の考え方です。QGIS のレイヤースタイル（.qml）・凡例ノードの並び・レイヤーフィルタは、QGIS プラグイン <strong>geo_webview</strong> のエクスポート（<code>.kasc</code>＋<code>DATA/</code>）でそのまま Canvas に再現されます — Canvas 側で同等の設定 UI を持つ必要はありません。</p>
+      <ul>
+        <li><strong>geo_webview（QGIS プラグイン）</strong><br>
+          リポジトリ: <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview" target="_blank" rel="noopener noreferrer">https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview</a><br>
+          ドキュメント: <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview/docs" target="_blank" rel="noopener noreferrer">https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview/docs</a></li>
+        <li><strong>QML スタイル（<code>style=</code>）</strong> — 分類・ルールベース・ラベル等の高度なスタイルは QGIS のスタイル設定で作成し、<code>style=</code> の .qml として凡例スウォッチ・条件別表示まで再現:
+          <a href="../qgis.html#スタイル再現">スタイル（.qml）の再現</a>（QGIS連携の実装範囲）・
+          <a href="6-2-インスペクター.html">6-2 インスペクター</a>（<code>style=</code> の書式）</li>
+        <li><strong>フィルター（<code>where=</code>）</strong> — 絞り込み条件は QGIS のクエリビルダ（レイヤーフィルタ / subsetString）で設定し、<code>where=</code> として引き継ぎ。条件別の凡例表示にも反映:
+          <a href="../features/v7.html">V7: QGIS連携 — where= フィルタ引継ぎ</a>・
+          <a href="../qgis.html#レイヤー行の対応表">レイヤー → .kasc 行の対応</a>・
+          <a href="1-4-属性.html">1-4 属性 — フィルター</a></li>
+      </ul>
+
       <h2>設定方法（.kasc）</h2>
       <pre class="text"><code>legend: 凡例 | https://example.com/legend.png
 legend: 凡例2 | DATA/legend2.png
 legendnode: 凡例ノード順・ラベル・表示名（直前のレイヤー行に適用）</code></pre>
       <ul>
-        <li>ベクター行の <code>style=QMLファイルURL</code> で QGIS スタイルを適用すると、QML 由来の凡例スウォッチと条件別の表示切替が凡例タブに出ます</li>
-        <li>geo_webview（QGIS プラグイン）のエクスポートでは凡例画像・凡例ノードが自動出力されます</li>
+        <li>ベクター行の <code>style=QMLファイルURL</code> で QGIS スタイルを適用すると、QML 由来の凡例スウォッチと条件別の表示切替が凡例タブに出ます（再現範囲は <a href="../qgis.html#スタイル再現">スタイル（.qml）の再現</a>）</li>
+        <li><a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview" target="_blank" rel="noopener noreferrer">geo_webview</a>（QGIS プラグイン）のエクスポートでは凡例画像・凡例ノードが自動出力されます（QGIS のレイヤーフィルタは <code>where=</code> へ引き継がれ、フィルタ条件ごとの凡例表示に反映されます）</li>
       </ul>
 
       <h3>関連ページ</h3>
       <ul>
         <li><a href="6-2-インスペクター.html">6-2 インスペクター（.kasc 設定仕様）</a> — <code>legend:</code>・<code>legendnode:</code> 行の書式</li>
-        <li><a href="../features/v7.html">V7: QGIS連携</a> — QML スタイル再現と凡例スウォッチ</li>
+        <li><a href="../features/v7.html">V7: QGIS連携</a> — QML スタイル再現と凡例スウォッチ・<code>where=</code> フィルタ引継ぎ</li>
+        <li><a href="../qgis.html">QGIS連携：実装済みの再現範囲</a> — geo_webview エクスポートの対応表</li>
+        <li><a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview/docs" target="_blank" rel="noopener noreferrer">geo_webview ドキュメント（GitHub）</a> — QGIS 側プラグインの仕様</li>
       </ul>
     </main>
   </div>

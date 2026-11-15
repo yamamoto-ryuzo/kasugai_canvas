@@ -76,6 +76,21 @@ flowchart TB
       <figcaption aria-hidden="true">属性タブ（左：選択地物の属性、右：重なった地物のドリルピック一覧）</figcaption>
       </figure>
 
+      <h2>🔗 QGIS 連携（geo_webview）— 高度な設定は QGIS に任せる</h2>
+      <p>フィルタ・スタイルの<strong>高度な条件設定は QGIS 側に任せる</strong>のがこの連携の考え方です。QGIS プラグイン <strong>geo_webview</strong> は、エクスポート時にレイヤーフィルタ（プロバイダ <code>subsetString</code>）を <code>where=</code> へ、そのまま引き継ぎます — Canvas 側で同等の条件式 UI を再現する必要はありません。逆方向もあり、Canvas で変更したレイヤフィルタは QGIS Live 連携で QGIS プロジェクトへ書き戻されます（geo_webview 4.11.0〜・<code>POST /live/writeback</code>）。</p>
+      <ul>
+        <li><strong>geo_webview（QGIS プラグイン）</strong><br>
+          リポジトリ: <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview" target="_blank" rel="noopener noreferrer">https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview</a><br>
+          ドキュメント: <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview/docs" target="_blank" rel="noopener noreferrer">https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview/docs</a></li>
+        <li><strong>フィルター（<code>where=</code>）</strong> — 絞り込み条件は QGIS のクエリビルダ（レイヤーフィルタ / subsetString）で設定し、<code>where=</code> として引き継ぎ:
+          <a href="../features/v7.html">V7: QGIS連携 — where= フィルタ引継ぎ・QGIS フィルタ式との互換性</a>・
+          <a href="../qgis.html#レイヤー行の対応表">レイヤー → .kasc 行の対応</a>・
+          <a href="6-2-インスペクター.html">6-2 インスペクター</a>（<code>where=</code> の書式）</li>
+        <li><strong>QML スタイル（<code>style=</code>）</strong> — 高度なスタイル設定も QGIS の .qml に任せて描画・凡例へ適用:
+          <a href="../qgis.html#スタイル再現">スタイル（.qml）の再現</a>・
+          <a href="1-2-凡例.html">1-2 凡例</a>（QML 由来の凡例スウォッチ・条件別表示）</li>
+      </ul>
+
       <h2>設定方法（.kasc）</h2>
       <p>属性テーブルの「SQL」ボタンやレイヤ行の ⏷ から適用したレイヤフィルタは、以下の行として .kasc へ書き戻されます。逆に .kasc へ直接記述した <code>where=</code> も読み込み時にレイヤ・属性一覧・ダイアログ初期値へ反映されます。</p>
       <pre class="text"><code>geojson: レイヤー名 | URL | where=都道府県 = '愛知県'   （行の最終オプション・値は改行までが式）
@@ -93,6 +108,8 @@ ogrsql: 市区町村JOIN    | SELECT a.*, b.人口 FROM '行政区域' a LEFT JO
         <li><a href="2-6-エクスポート.html">2-6 エクスポート</a> — レイヤー全体のファイル出力</li>
         <li><a href="6-2-インスペクター.html">6-2 インスペクター</a> — <code>ogrsql:</code>・<code>where=</code> の書式</li>
         <li><a href="../features/v7.html">V7: QGIS連携</a> — <code>where=</code> の仕様・QGIS フィルタ式との互換性</li>
+        <li><a href="../qgis.html">QGIS連携：実装済みの再現範囲</a> — geo_webview エクスポートの対応表</li>
+        <li><a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview/docs" target="_blank" rel="noopener noreferrer">geo_webview ドキュメント（GitHub）</a> — QGIS 側プラグインの仕様</li>
       </ul>
     </main>
   </div>

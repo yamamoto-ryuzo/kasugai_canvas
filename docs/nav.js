@@ -84,8 +84,8 @@
         { href: 'use/5-2-外部エージェント.html', text: '5-2 【ブリッジ】外部エージェント連携（Copilot・Devin・Antigravity）' },
         { href: 'use/5-3-AIツール.html', text: '5-3 AI ツール仕様' },
         { href: 'use/5-4-ブリッジハブ.html', text: '5-4 ブリッジハブ（bridge-hub.exe）' },
-        { href: 'use/5-5-AI連携.html', text: '5-5 AI 連携の構成（V3）' },
-        { href: 'use/5-6-解析.html', text: '5-6 解析（予定・V9）' },
+        { href: 'use/5-5-AI連携.html', text: '5-5 AI 連携の構成' },
+        { href: 'use/5-6-解析.html', text: '5-6 解析（予定）' },
       ]
     },
     {
@@ -117,7 +117,7 @@
             { href: 'auth/cloudrun.html', text: 'Cloud Run' }
           ]
         },
-        { href: 'use/7-2-プラグイン.html', text: '7-2 プラグイン・外部連携（V4）' },
+        { href: 'use/7-2-プラグイン.html', text: '7-2 プラグイン・外部連携' },
       ]
     },
     {
@@ -129,7 +129,7 @@
           href: 'tech/1-1-QGIS連携.html', text: '1-1 QGIS連携',
           children: [
             { href: 'qgis-delivery.html', text: 'QGIS連携の利用方法' },
-            { href: 'features/v7.html', text: 'QGIS連携 — 方針・構想・再現（V7）' },
+            { href: 'features/v7.html', text: 'QGIS連携 — 方針・構想・再現' },
             { href: 'qgis.html', text: '実装済みの再現範囲' },
           ]
         },
@@ -147,7 +147,7 @@
             { href: 'performance.html', text: '描画性能とデータ形式方針' },
             { href: 'library.html', text: 'ライブラリ' },
             { href: 'architecture.html', text: 'システム構成' },
-            { href: 'features/v0.html', text: '実装詳細（V0: システム基本構成）' },
+            { href: 'features/v0.html', text: '実装詳細（システム基本構成）' },
             { href: 'security.html', text: 'セキュリティ対策' },
           ]
         },
