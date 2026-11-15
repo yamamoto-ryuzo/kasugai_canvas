@@ -49,6 +49,7 @@ import { isGeoTiffType, resolveGeoTiffItem, buildGeoTiffOverlayDataSource, creat
 import { createReportTool } from "../shared/report.js";
 import { installViewHistory } from "../shared/nav-tools.js";
 import { coordPins as coordPinStore } from "../shared/coord-pins.js";
+import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 
 await initI18n();
 applyI18n();
@@ -461,11 +462,10 @@ function legendDescKey(desc) {
 // 描画指示 {marker|image|point|line|fill|outline} をスウォッチ dataURL に描く。
 // marker/image は元 canvas・画像。line={css,widthPx,dash}、fill={css|tile}、
 // outline={css,widthPx,dash}、point={css,sizePx,outlineCss}
-function buildLegendSwatchDataUrl(desc) {
-  const key = legendDescKey(desc);
+function buildLegendSwatchDataUrl(desc, scale = 2) {
+  const key = `${legendDescKey(desc)}@${scale}`;
   const cached = legendSwatchCache.get(key);
   if (cached) return cached;
-  const scale = 2;
   const canvas = document.createElement("canvas");
   canvas.width = LEGEND_SWATCH_W * scale;
   canvas.height = LEGEND_SWATCH_H * scale;
@@ -605,6 +605,47 @@ function getLayerLegend(item) {
     return desc ? { entries: [{ label: "", desc }] } : null;
   }
   return null;
+}
+
+// 凡例タブ(legend: 画像パネル)用: レイヤを選択して QML/既定スタイルの凡例を表示する。
+// 選択中レイヤは legendTabState.selected(レイヤ参照)で保持し、再描画で維持する。
+// legendnode: メタ(ラベル改題・凡例順)はレイヤ一覧と同じ規則でここでも適用する
+const legendTabState = {};
+function legendTabEntries(layer) {
+  let entries = getLayerLegend(layer)?.entries || null;
+  if (entries && layer.legendLabels) {
+    entries = entries.map((e, i) => layer.legendLabels[i] != null ? { ...e, label: layer.legendLabels[i] } : e);
+  }
+  if (entries && layer.legendOrder?.length) {
+    const usedIdx = new Set(layer.legendOrder);
+    entries = layer.legendOrder.map(i => entries[i]).filter(Boolean)
+      .concat(entries.filter((_, i) => !usedIdx.has(i)));
+  }
+  return (entries || []).map(e => ({
+    label: e.label || e.symbolName || "",
+    spec: e.desc || null,
+    hidden: !!e.symbolName && !!layer.legendHidden?.has(e.symbolName),
+  }));
+}
+function renderLegendPanelPicker() {
+  const panel = document.querySelector("#legend-panel");
+  if (!panel) return;
+  const layers = getOrderedLayerItems()
+    .map(layer => ({ ref: layer, title: layer.title || layer.url || layer.id || "", entries: legendTabEntries(layer) }))
+    .filter(l => l.entries.length);
+  let box = panel.querySelector(".legend-layer-picker");
+  if (!layers.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "legend-layer-picker";
+    panel.append(box);
+  }
+  renderLayerLegendPicker(box, layers, {
+    // 凡例タブはレイヤ行より大きめ表示のため、第2引数の表示pxから解像度を換算する
+    swatchUrl: (spec, size) => buildLegendSwatchDataUrl(spec, Math.max(2, Math.round(((size || LEGEND_SWATCH_W) / LEGEND_SWATCH_W) * 2))),
+    state: legendTabState,
+    ariaLabel: t("legend.selectLayer"),
+  });
 }
 
 // 凡例の条件別チェックの切り替え。該当シンボルにだけ評価される地物を
@@ -2326,6 +2367,8 @@ function renderLayerList() {
   });
 
   refreshTimeConfigLayers();
+  // 凡例タブのレイヤ選択凡例も最新へ追従させる
+  renderLegendPanelPicker();
 }
 
 function renderFlyPathSelect() {

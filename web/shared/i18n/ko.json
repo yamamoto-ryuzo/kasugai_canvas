@@ -15,6 +15,7 @@
   "tab.info": "정보",
   "tab.tools": "도구",
   "tab.legend": "범례",
+  "legend.selectLayer": "범례를 표시할 레이어",
   "tab.attr": "속성",
   "tab.display": "표시",
   "camera.presets": "카메라 프리셋",

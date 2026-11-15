@@ -15,6 +15,7 @@
   "tab.info": "Info",
   "tab.tools": "Ferramentas",
   "tab.legend": "Legenda",
+  "legend.selectLayer": "Camada para mostrar a legenda",
   "tab.attr": "Atributos",
   "tab.display": "Exibição",
   "camera.presets": "Predefinições de câmera",

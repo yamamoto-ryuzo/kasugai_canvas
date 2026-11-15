@@ -15,6 +15,7 @@
   "tab.info": "信息",
   "tab.tools": "工具",
   "tab.legend": "图例",
+  "legend.selectLayer": "要显示图例的图层",
   "tab.attr": "属性",
   "tab.display": "显示",
   "camera.presets": "相机预设",

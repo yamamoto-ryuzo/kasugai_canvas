@@ -24,6 +24,7 @@ import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { initPrint } from "../shared/print.js";
 import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
+import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { mountSunControls } from "../shared/sun-time.js";
 
 const TERRAIN_URL = "https://terrain.reearth.land/cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain";
@@ -261,7 +262,7 @@ async function maybeLoadEntry(entry) {
 }
 
 // 地物単位の凡例フィルタは Navara 側で未実装（レイヤ単位マテリアルのため）
-function applyLegendFilter(_entry) {}
+function applyLegendFilter(_entry) { renderLegendPicker(); }
 
 function defaultLegendSpec(item) {
   if (item._qml || !VECTOR_TYPES.has(item.type)) return null;
@@ -518,27 +519,37 @@ function buildLegends() {
     panel.legends.append(img);
     any = true;
   }
-  for (const entry of layerEntries) {
-    const specs = entry.item._qml?.legend;
-    if (!specs?.length) continue;
-    const wrap = document.createElement("div");
-    const head = document.createElement("div");
-    head.textContent = splitKascTitle(entry.item.title).title || entry.item.title;
-    head.style.fontWeight = "600";
-    wrap.append(head);
-    for (const le of specs) {
-      const row = document.createElement("div");
-      row.className = "legend-row";
-      const img = document.createElement("img");
-      img.className = "legend-swatch"; img.src = qmlLegendSwatchDataUrl(le.spec || le);
-      const lbl = document.createElement("span");
-      lbl.className = "legend-label"; lbl.textContent = le.label || "";
-      row.append(img, lbl); wrap.append(row);
-    }
-    panel.legends.append(wrap);
-    any = true;
-  }
+  if (renderLegendPicker()) any = true;
   if (!any) panel.legends.textContent = "（凡例なし）";
+}
+
+// ---- 凡例タブ: legend: 画像とは別にレイヤを選択してベクター凡例を表示する ----
+// 選択中レイヤは legendPickerState.selected(レイヤ参照)で保持し、再描画で維持する
+const legendPickerState = {};
+function legendPickerLayers() {
+  return (layerEntries || []).map(entry => {
+    const item = entry.item || {};
+    const title = splitKascTitle(item.title || "").title || item.title || entry._leaf || item.url || "";
+    const legend = item._qml?.legend;
+    const entries = legend?.length
+      ? legend.map(le => ({ label: le.label || le.symbolName || "", spec: le.spec || le, hidden: !!le.symbolName && !!item._legendHidden?.has(le.symbolName) }))
+      : (spec => (spec ? [{ label: "", spec }] : []))(defaultLegendSpec(item));
+    return { ref: item, title, entries };
+  }).filter(l => l.entries.length);
+}
+function renderLegendPicker() {
+  const parent = panel.legends;
+  if (!parent) return false;
+  const layers = legendPickerLayers();
+  let box = parent.querySelector(".legend-layer-picker");
+  if (!layers.length) { box?.remove(); return false; }
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "legend-layer-picker";
+    parent.append(box);
+  }
+  renderLayerLegendPicker(box, layers, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ" });
+  return true;
 }
 
 // ---- 属性一覧 ----

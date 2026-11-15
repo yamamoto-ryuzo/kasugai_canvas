@@ -15,6 +15,7 @@
   "tab.info": "情報",
   "tab.tools": "ツール",
   "tab.legend": "凡例",
+  "legend.selectLayer": "凡例を表示するレイヤ",
   "tab.attr": "属性",
   "tab.display": "表示",
   "camera.presets": "カメラプリセット",

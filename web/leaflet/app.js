@@ -29,6 +29,7 @@ import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, 
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement } from "../shared/qml-2d.js";
 import { markerLayersToCanvas, fillPartsToTile } from "../shared/qml-style.js";
 import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
+import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
@@ -921,6 +922,7 @@ function updateMapAttribution() {
 function applyLegendFilter(entry) {
   if (entry.styleFn && entry.layer?.setStyle) entry.layer.setStyle(entry.styleFn);
   syncDeckLayers(); // ドレープコピーにも凡例非表示を反映
+  renderLegendPicker(); // 凡例タブの非表示反映
 }
 
 // レイヤー行の📍: レイヤー範囲へ移動する。非表示なら表示してからフィットする
@@ -952,6 +954,34 @@ function defaultLegendSpec(item) {
     if (spec) return spec;
   }
   return null;
+}
+
+// ---- 凡例タブ: legend: 画像とは別にレイヤを選択してベクター凡例を表示する ----
+// 選択中レイヤは legendPickerState.selected(レイヤ参照)で保持し、再描画で維持する
+const legendPickerState = {};
+function legendPickerLayers() {
+  return (layerEntries || []).map(entry => {
+    const item = entry.item || {};
+    const title = splitKascTitle(item.title || "").title || item.title || entry._leaf || item.url || "";
+    const legend = item._qml?.legend;
+    const entries = legend?.length
+      ? legend.map(le => ({ label: le.label || le.symbolName || "", spec: le.spec || null, hidden: !!le.symbolName && !!item._legendHidden?.has(le.symbolName) }))
+      : (spec => (spec ? [{ label: "", spec }] : []))(defaultLegendSpec(item));
+    return { ref: item, title, entries };
+  }).filter(l => l.entries.length);
+}
+function renderLegendPicker() {
+  const parent = panel.legends;
+  if (!parent) return;
+  const layers = legendPickerLayers();
+  let box = parent.querySelector(".legend-layer-picker");
+  if (!layers.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "legend-layer-picker";
+    parent.append(box);
+  }
+  renderLayerLegendPicker(box, layers, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: t("legend.selectLayer") });
 }
 
 function buildLayerRow(entry, exclusive, radioName) {
@@ -1226,6 +1256,8 @@ function renderLayerRows(entries, unsupported) {
     : "";
   // 開いている属性一覧ウィジェットの選択肢・行をレイヤ一覧へ追従させる
   attrWidget.refresh();
+  // 凡例タブのレイヤ選択凡例も最新へ追従させる
+  renderLegendPicker();
 }
 
 // ---- 段階読み込み: 行ステータス・進捗・遅延ロード ----
@@ -1670,7 +1702,9 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     img.alt = leg.title || "legend";
     panel.legends.append(img);
   }
-  if (!seenLegend.size) panel.legends.textContent = "（凡例なし）";
+  if (!seenLegend.size && !legendPickerLayers().length) panel.legends.textContent = "（凡例なし）";
+  // legend: 画像の下にレイヤ選択凡例(QML/既定スタイル)を出す
+  renderLegendPicker();
 
   // info: → 外部HTMLを情報タブへ埋め込み（全エンジン共通のローダ）
   void loadKascInfoContent(panel.infoLink, doc.info, baseUrl);

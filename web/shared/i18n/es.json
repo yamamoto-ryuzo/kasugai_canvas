@@ -15,6 +15,7 @@
   "tab.info": "Info",
   "tab.tools": "Herramientas",
   "tab.legend": "Leyenda",
+  "legend.selectLayer": "Capa para mostrar la leyenda",
   "tab.attr": "Atrib.",
   "tab.display": "Visualización",
   "camera.presets": "Preajustes de cámara",

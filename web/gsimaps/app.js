@@ -31,6 +31,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
+import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../shared/attr-widget.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
@@ -1060,6 +1061,35 @@ function defaultLegendSpec(item) {
   return null;
 }
 
+// ---- 凡例タブ: legend: 画像とは別にレイヤを選択してベクター凡例を表示する ----
+// 選択中レイヤは legendPickerState.selected(レイヤ参照)で保持し、再描画で維持する。
+// 本エンジンは QML 未対応(_qmlPending)のため既定スタイルのスウォッチのみ
+const legendPickerState = {};
+function legendPickerLayers() {
+  return (layerEntries || []).map(entry => {
+    const item = entry.item || {};
+    const title = splitKascTitle(item.title || "").title || item.title || entry._leaf || item.url || "";
+    const legend = item._qml?.legend;
+    const entries = legend?.length
+      ? legend.map(le => ({ label: le.label || le.symbolName || "", spec: le.spec || null, hidden: !!le.symbolName && !!item._legendHidden?.has(le.symbolName) }))
+      : (spec => (spec ? [{ label: "", spec }] : []))(defaultLegendSpec(item));
+    return { ref: item, title, entries };
+  }).filter(l => l.entries.length);
+}
+function renderLegendPicker() {
+  const parent = document.getElementById("legends");
+  if (!parent) return;
+  const layers = legendPickerLayers();
+  let box = parent.querySelector(".legend-layer-picker");
+  if (!layers.length) { box?.remove(); return; }
+  if (!box) {
+    box = document.createElement("div");
+    box.className = "legend-layer-picker";
+    parent.append(box);
+  }
+  renderLayerLegendPicker(box, layers, { swatchUrl: qmlLegendSwatchDataUrl, state: legendPickerState, ariaLabel: "凡例を表示するレイヤ" });
+}
+
 function buildLayerRow(entry, exclusive, radioName) {
   const item = entry.item;
   const wrap = document.createElement("div");
@@ -1230,6 +1260,8 @@ function renderLayerRows() {
   unsup.textContent = currentUnsupported.length
     ? `未対応行: ${[...new Set(currentUnsupported.map(i => i.type))].join(", ")}（Cesium 版で対応）`
     : "";
+  // 凡例タブのレイヤ選択凡例も最新へ追従させる
+  renderLegendPicker();
 }
 
 // ---- テーマ ----
@@ -1828,7 +1860,9 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
     img.style.maxWidth = "100%";
     legendsBox?.append(img);
   }
-  if (!seenLegend.size && legendsBox) legendsBox.textContent = "（凡例なし）";
+  if (!seenLegend.size && !legendPickerLayers().length && legendsBox) legendsBox.textContent = "（凡例なし）";
+  // legend: 画像の下にレイヤ選択凡例(既定スタイル)を出す
+  renderLegendPicker();
 
   // 初回表示: URL/cam 指定が無ければデータ範囲へフィット
   if (!noFit) {
