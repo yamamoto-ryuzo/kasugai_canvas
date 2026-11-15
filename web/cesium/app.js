@@ -3307,8 +3307,11 @@ function isGpkgBackedItem(item) {
 // useAsDefault を優先してコンパイルし item.qmlStyle に保持する
 // (style= 明示指定があるときはそちらを優先し埋め込みは使わない)
 async function loadGeoPackageAsGeoJson(item) {
+  const fetchUrl = proxyFetchUrl(item.url, item.proxy);
   const res = await gpkgWorkerCall("load", {
-    url: proxyFetchUrl(item.url, item.proxy),
+    url: fetchUrl,
+    // プロキシ経由が失敗した場合の直接取得用(同一URLなら不要)
+    directUrl: fetchUrl === item.url ? null : item.url,
     table: item.gpkgTable || null,
     where: item.where || null,
     limit: item.limit || null,
@@ -3332,8 +3335,10 @@ async function loadGeoPackageAsGeoJson(item) {
 // DB に直接クエリして取得する。表示用の絞り込み(bbox/limit)は適用せず、
 // where= の全件を対象にする(検索は常に全件検索の方針)
 async function queryGpkgAttributeRows(item, searchText, wantGeom = false) {
+  const fetchUrl = proxyFetchUrl(item.url, item.proxy);
   const res = await gpkgWorkerCall("attrs", {
-    url: proxyFetchUrl(item.url, item.proxy),
+    url: fetchUrl,
+    directUrl: fetchUrl === item.url ? null : item.url,
     table: item.gpkgTable || null,
     where: item.where || null,
     columns: item.columns || null,

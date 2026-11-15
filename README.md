@@ -61,7 +61,7 @@ Rust サーバーは静的配信に加えて、ローカル開発向けの高権
 |---|---|
 | `GET /health` | 起動確認 |
 | `GET /api/capabilities` | ティア（`local`）と利用可能機能（features）を返す |
-| `GET /api/fetch?url=` | CORS 回避の GET プロキシ（http/https のみ・30秒・20MB 上限） |
+| `GET /api/fetch?url=` | CORS 回避の GET プロキシ（http/https のみ・停滞30秒/総300秒・20MB 上限） |
 | `POST /api/plugins` | ストレージプラグインを `PLUGIN/<id>/` + `plugins.json` に書き込み公開 |
 | `DELETE /api/plugins/{id}` | 公開プラグインを削除 |
 | `GET/PUT /api/update/settings`・`GET /api/update/latest`・`POST /api/update/install` | 自動更新 |

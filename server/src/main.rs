@@ -123,7 +123,12 @@ struct RemoteInner {
 
 // /api/fetch の上限とタイムアウト
 const FETCH_MAX_BYTES: usize = 20 * 1024 * 1024;
-const FETCH_TIMEOUT_SECS: u64 = 30;
+// 接続・データ停滞でのみ打ち切り、転送が進んでいる限り継続する
+// (旧来の「全体30s」は低速回線での大きめファイル取得を途中で切っていた)
+const FETCH_CONNECT_TIMEOUT_SECS: u64 = 10;
+const FETCH_READ_TIMEOUT_SECS: u64 = 30;
+// 停滞が無くても打ち切る総上限(上限サイズを遅い回線で取り切れる程度の余裕)
+const FETCH_TOTAL_TIMEOUT_SECS: u64 = 300;
 // プラグインIDはファイル名・plugins.json の双方に使うため厳密に制限する
 fn is_valid_plugin_id(id: &str) -> bool {
     !id.is_empty()
@@ -743,7 +748,9 @@ async fn fetch_proxy(
     }
     fetch_target_allowed(&state, &url).await?;
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
+        .connect_timeout(std::time::Duration::from_secs(FETCH_CONNECT_TIMEOUT_SECS))
+        .read_timeout(std::time::Duration::from_secs(FETCH_READ_TIMEOUT_SECS))
+        .timeout(std::time::Duration::from_secs(FETCH_TOTAL_TIMEOUT_SECS))
         .build()
         .map_err(internal_error)?;
     let is_head = method == Method::HEAD;
@@ -1045,7 +1052,9 @@ async fn reinfolib_proxy(
         ));
     }
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(FETCH_TIMEOUT_SECS))
+        .connect_timeout(std::time::Duration::from_secs(FETCH_CONNECT_TIMEOUT_SECS))
+        .read_timeout(std::time::Duration::from_secs(FETCH_READ_TIMEOUT_SECS))
+        .timeout(std::time::Duration::from_secs(FETCH_TOTAL_TIMEOUT_SECS))
         .build()
         .map_err(internal_error)?;
     let is_head = method == Method::HEAD;

@@ -23,14 +23,27 @@ function loadSqlJs() {
 // 開いた DB のキャッシュ(url → Promise<SQL.Database>)。
 // ファイル全体のダウンロードは初回のみで、再クエリは開いた DB に対して走る
 const dbs = new Map();
-async function openDb(url) {
+// 取得は url → 失敗時のみ fallbackUrl(プロキシ書き換え前の元URL)の順で試す。
+// /api/fetch のタイムアウト・SSRF 拒否・サーバ停止でプロキシ経路が失敗しても、
+// CORS 対応ホストならブラウザ直接取得で読める
+async function fetchBytes(url, fallbackUrl) {
+  try {
+    const response = await fetch(url);
+    if (response.ok) return new Uint8Array(await response.arrayBuffer());
+    if (!fallbackUrl) throw new Error(`HTTP ${response.status}`);
+  } catch (e) {
+    if (!fallbackUrl) throw e;
+  }
+  const response = await fetch(fallbackUrl);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return new Uint8Array(await response.arrayBuffer());
+}
+async function openDb(url, fallbackUrl) {
   let promise = dbs.get(url);
   if (!promise) {
     promise = (async () => {
       const SQL = await loadSqlJs();
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return new SQL.Database(new Uint8Array(await response.arrayBuffer()));
+      return new SQL.Database(await fetchBytes(url, fallbackUrl || null));
     })();
     promise.catch(() => { if (dbs.get(url) === promise) dbs.delete(url); });
     dbs.set(url, promise);
@@ -92,7 +105,7 @@ function buildFeatureSelect({ tableName, geomCol, columns, where, limit }) {
 // 地物テーブル → GeoJSON。where=/limit=/columns= は SQL で絞り込み、
 // bbox は GPkgBinary エンベロープで JS 判定してからデコードする
 async function cmdLoad(msg) {
-  const db = await openDb(msg.url);
+  const db = await openDb(msg.url, msg.directUrl);
   const { tableName, geomCol } = resolveFeatureTable(db, msg.table);
   const sql = buildFeatureSelect({ tableName, geomCol, columns: msg.columns, where: msg.where, limit: msg.limit });
   const stmt = db.prepare(sql);
@@ -132,7 +145,7 @@ async function cmdLoad(msg) {
 // 属性値一覧ウィジェット用: 読み込み済み GeoJSON ではなく DB に直接クエリして
 // 全件対象で行を返す(bbox 非適用・where= 適用)。行位置は GPkgBinary エンベロープの中心
 async function cmdAttrs(msg) {
-  const db = await openDb(msg.url);
+  const db = await openDb(msg.url, msg.directUrl);
   const { tableName, geomCol } = resolveFeatureTable(db, msg.table);
   const allCols = tableColumns(db, tableName);
   const attrCols = (Array.isArray(msg.columns) && msg.columns.length)
