@@ -7,8 +7,9 @@ import {
   initMcp, listMcpServers, upsertMcpServer, removeMcpServer,
   connectMcpServer, disconnectMcpServer, connectEnabledMcpServers,
   mcpRuntime, mcpDeclarations, mcpToolTarget, callMcpTool,
-  getMcpAllowWrite, setMcpAllowWrite,
+  getMcpAllowWrite, setMcpAllowWrite, getMcpServer,
 } from "./mcp.js";
+import { ensureQgisMcp, resetQgisOgrDiscovery } from "./qgis-ogr.js";
 import {
   initBoxAuth, getBoxClientId, setBoxClientId, boxConnected,
   startBoxAuth, disconnectBox, handleBoxRedirect,
@@ -463,56 +464,33 @@ function setupDataSources() {
   });
 
   // QGIS Live Driver のセッションを自動検出して MCP 接続する。
-  // 検出は2段: (1) ローカルアプリ(8510)の /api/qgis-live/discover
-  // （~/.qgis-live レジストリ走査）→ 実接続は /api/qgis-live/mcp リレー。
-  // (2) CDN/静的配信などバックエンドが無い・検出失敗時は、geo_webview の
-  // 内蔵サーバ(:8089-, CORS+PNA対応済み)の /live/mcp-discover をプローブし
-  // その /live/mcp リレーへ接続する。どちらもトークンはリレー側で付与する
-  // ためブラウザは持たず、QGIS 再起動でポート・トークンが変わっても自動で
-  // 追随する。qgis_bridge_call（他プラグインのブリッジ呼出）も同じ
-  // /live/mcp 経路に乗る。
-  // geo_webview の優先ポートは8089。占有時は連番フォールバックするため
-  // print.js と同じ 8089-8091 を順に試す
-  const QGIS_LIVE_PORTS = [8089, 8090, 8091];
-  const qgisLiveRelayBases = () => {
-    // ページ自体が geo_webview 配信(:8089等)なら同一オリジンを優先
-    const bases = QGIS_LIVE_PORTS.includes(Number(location.port)) ? [location.origin] : [];
-    for (const p of QGIS_LIVE_PORTS) {
-      const b = `http://127.0.0.1:${p}`;
-      if (!bases.includes(b)) bases.push(b);
-    }
-    return bases;
-  };
+  // 検出は shared/qgis-ogr.js の ensureQgisMcp と共通の2段経路:
+  // (1) ローカルアプリ(8510)の /api/qgis-live/discover → /api/qgis-live/mcp
+  // リレー、(2) geo_webview 内蔵サーバ(:8089-8091)の /live/mcp-discover →
+  // /live/mcp リレー。どちらもトークンはリレー側で付与するためブラウザは
+  // 持たず、QGIS 再起動でポート・トークンが変わっても自動で追随する。
+  // qgis_bridge_call（他プラグインのブリッジ呼出）も同じ経路に乗る。
+  // 起動時の自動接続は startAiBackend 側の autoConnectQgis() が行い、
+  // ここは手動での再検出・再接続ボタンとして残す
   const qgisStatus = document.querySelector("#qgis-status");
   const setQgisStatus = message => { if (qgisStatus) qgisStatus.textContent = message || ""; };
   document.querySelector("#qgis-connect")?.addEventListener("click", async () => {
     setQgisStatus(t("mcp.qgis.searching"));
-    let mcpUrl = "";
-    try {
-      const res = await fetch(backendUrl("/api/qgis-live/discover"), { cache: "no-store" });
-      if (res.ok && (await res.json())?.ok) mcpUrl = backendUrl("/api/qgis-live/mcp");
-    } catch (e) { /* バックエンド未到達 */ }
-    if (!mcpUrl) {
-      // geo_webview はプラグインリロード等で一瞬無応答になり得るため
-      // 全滅時は1回だけリトライする
-      for (let attempt = 0; attempt < 2 && !mcpUrl; attempt++) {
-        if (attempt) await new Promise(r => setTimeout(r, 1000));
-        for (const base of qgisLiveRelayBases()) {
-          try {
-            const res = await fetch(`${base}/live/mcp-discover`, { cache: "no-store", signal: AbortSignal.timeout(4000) });
-            const info = res.ok ? await res.json() : null;
-            if (info?.ok && info.url) { mcpUrl = info.url; break; }
-          } catch (e) { /* geo_webview未起動 */ }
-        }
-      }
+    // geo_webview はプラグインリロード等で一瞬無応答になり得るため
+    // 全滅時は1回だけリトライする（毎回フル再検出）
+    disconnectMcpServer("qgis-live");
+    // ボタン押下は明示的な接続意思のため、パネルで OFF にしていても ON に戻す
+    if (getMcpServer("qgis-live")?.enabled === false) {
+      upsertMcpServer({ key: "qgis-live", enabled: true });
     }
-    if (!mcpUrl) {
-      setQgisStatus(t("mcp.qgis.notFound"));
-      return;
+    resetQgisOgrDiscovery();
+    let ok = await ensureQgisMcp();
+    if (!ok) {
+      await new Promise(r => setTimeout(r, 1000));
+      resetQgisOgrDiscovery();
+      ok = await ensureQgisMcp();
     }
-    upsertMcpServer({ key: "qgis-live", name: "QGIS Live", url: mcpUrl, enabled: true });
-    const result = await connectMcpServer("qgis-live");
-    setQgisStatus(result.ok ? t("mcp.addOk", { count: result.tools.length }) : t("mcp.addNg", { error: result.error }));
+    setQgisStatus(ok ? t("mcp.addOk", { count: mcpRuntime("qgis-live").tools.length }) : t("mcp.qgis.notFound"));
   });
 
   document.querySelector("#mcp-add")?.addEventListener("click", async () => {
@@ -6052,7 +6030,29 @@ export function startAiBackend() {
     .then(r => { if (r === "done") console.log("[mcp] Box OAuth 接続が完了しました"); })
     .catch(e => console.error(e));
   void connectEnabledMcpServers();
+  void autoConnectQgis();
   startRemoteCommandLoop();
+}
+
+// 起動時の QGIS Live 自動接続。稼働中のセッションを検出できれば
+// qgis-live を MCP サーバーとして登録・接続し、AI が qgis_pyeval /
+// qgis_bridge_call 等のツールを持つ状態にする（書き込み系は従来通り
+// mcpAllowWrite ゲート対象）。ユーザーが MCP パネルで qgis-live を
+// OFF にした場合は自動接続しない。QGIS は後から起動し得るため、
+// 見つからなくても起動直後は数回に分けて再検出する
+async function autoConnectQgis() {
+  for (let i = 0; i < 6; i++) {
+    const server = getMcpServer("qgis-live");
+    if (server && server.enabled === false) return;
+    if (mcpRuntime("qgis-live").connected) return;
+    resetQgisOgrDiscovery();
+    if (await ensureQgisMcp()) {
+      const statusEl = document.querySelector("#qgis-status");
+      if (statusEl) statusEl.textContent = t("mcp.addOk", { count: mcpRuntime("qgis-live").tools.length });
+      return;
+    }
+    await new Promise(r => setTimeout(r, 15000));
+  }
 }
 
 // AI チャットのエントリポイント。各エンジンの app.js が起動時に呼ぶ。

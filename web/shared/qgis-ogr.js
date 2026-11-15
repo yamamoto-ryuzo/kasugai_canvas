@@ -9,7 +9,7 @@
 // 検出・接続・実行のどれかが失敗したら null を返す(呼び出し側は
 // JS 側のエラーをそのまま伝播する)
 import { backendUrl } from "./backend.js";
-import { upsertMcpServer, connectMcpServer, callMcpTool, mcpRuntime } from "./mcp.js";
+import { upsertMcpServer, connectMcpServer, callMcpTool, mcpRuntime, getMcpServer } from "./mcp.js";
 import { parseOgrSelect } from "./ogr-sql.js";
 
 // geo_webview 内蔵サーバの既定ポート帯(ai-chat.js の検出と同じ順序)
@@ -42,6 +42,8 @@ async function discoverMcpUrl() {
 // resetQgisOgrDiscovery() するか再接続ボタン経由で復帰する)
 export function ensureQgisMcp() {
   if (mcpRuntime(SERVER_KEY).connected) return Promise.resolve(true);
+  // MCP パネルで qgis-live を明示 OFF にした場合は自動接続・再有効化しない
+  if (getMcpServer(SERVER_KEY)?.enabled === false) return Promise.resolve(false);
   if (!discoveryPromise) discoveryPromise = (async () => {
     const url = await discoverMcpUrl();
     if (!url) return false;
