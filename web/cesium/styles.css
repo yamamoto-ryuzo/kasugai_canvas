@@ -284,9 +284,9 @@ footer { padding: 0 28px 22px; }
 .vector-attr-widget-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 14px; border-bottom: 1px solid #e4ecef; }
 /* 検索・フィルター・出力の3群を薄い背景で区別 */
 .vector-attr-group { display: inline-flex; align-items: center; gap: 4px; padding: 3px 5px; border-radius: 6px; }
-.vector-attr-group.group-search { background: #a9d0f5; flex: 1 1 240px; min-width: 200px; }
-.vector-attr-group.group-filter { background: #f1d083; }
-.vector-attr-group.group-export { background: #a5dca5; }
+.vector-attr-group.group-search { background: #a9d0f5; flex: 1 1 0; min-width: 200px; }
+.vector-attr-group.group-filter { background: #f1d083; flex: 1 1 0; min-width: 300px; flex-wrap: wrap; }
+/* エクスポートはフッター左(他エンジンの共有ウィジェットと同じ配置) */
 #vector-attr-widget-layer { flex: 0 1 140px; min-width: 110px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
 #vector-attr-widget-search { flex: 2 1 160px; min-width: 100px; min-height: 26px; padding: 2px 8px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 13px; }
 #vector-attr-widget-colfilter-field { flex: 0 1 150px; min-width: 100px; min-height: 26px; padding: 2px 6px; border: 1px solid #cbd9de; border-radius: 4px; font-size: 12px; background: #fff; }
@@ -305,7 +305,10 @@ footer { padding: 0 28px 22px; }
 #vector-attr-widget-list tr:hover { background: #f6f9fb; }
 #vector-attr-widget-list td { padding: 7px 14px; vertical-align: top; }
 .vector-attr-widget-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
-.vector-attr-widget-footer { padding: 8px 14px; border-top: 1px solid #e4ecef; color: #71818d; font-size: 12px; text-align: right; }
+.vector-attr-widget-footer { padding: 8px 14px; border-top: 1px solid #e4ecef; color: #71818d; font-size: 12px; text-align: right; display: flex; align-items: center; gap: 6px; }
+.vector-attr-widget-footer .vector-attr-widget-export { flex: 0 0 auto; min-height: 26px; padding: 2px 8px; border: 1px solid #cbd9de; border-radius: 4px; background: #fff; color: #31564f; font-size: 12px; cursor: pointer; }
+.vector-attr-widget-footer .vector-attr-widget-export:hover { background: #eef5f7; }
+.vector-attr-widget-footer #vector-attr-widget-count { margin-left: auto; }
 
 .help-link {
   display: inline-block;

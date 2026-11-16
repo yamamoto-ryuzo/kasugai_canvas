@@ -8,10 +8,14 @@
 //   tileUrl   : () => "{z}/{x}/{y}" テンプレート（省略時は地理院淡色地図）
 //   getBounds : () => [[south,west],[north,east]] | null   // 表示範囲矩形
 //   getCenter : () => {lat,lng} | null      // bounds が取れない場合のマーカー位置（省略可）
+//   getZoom   : () => number | null         // フォールバック時の主画面相当ズーム（省略可）
 //   flyTo     : ({lng,lat}) => void         // クリック地点への移動（省略可）
 // }) → { scheduleUpdate(), update(), dispose() }
 const LEAFLET_CDN = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4";
 const FALLBACK_TILE = "https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png";
+// 主画面の表示範囲に対するミニマップ表示範囲の面積比（20倍 ≈ 線形4.5倍 ≈ 2.2ズーム引き）
+const CONTEXT_AREA_RATIO = 20;
+const CONTEXT_ZOOM_DELTA = Math.log2(Math.sqrt(CONTEXT_AREA_RATIO));
 
 const CSS = `
 .kasc-minimap { position: absolute; left: 14px; bottom: 74px; z-index: 1004; width: 220px; height: 150px;
@@ -52,7 +56,7 @@ function loadLeaflet() {
   return leafletPromise;
 }
 
-export function createMinimap({ container, checkbox, tileUrl, getBounds, getCenter, flyTo } = {}) {
+export function createMinimap({ container, checkbox, tileUrl, getBounds, getCenter, getZoom, flyTo } = {}) {
   ensureStyle();
   const el = typeof container === "string" ? document.querySelector(container) : (container || (() => {
     const d = document.createElement("div");
@@ -101,14 +105,24 @@ export function createMinimap({ container, checkbox, tileUrl, getBounds, getCent
       if (!state.rect._map) state.rect.addTo(state.map);
       if (state.marker._map) state.marker.remove();
       state.rect.setBounds(b);
-      state.map.fitBounds(b, { animate: false, padding: [24, 24] });
+      // 広域コンテキスト: 主画面範囲を CONTEXT_AREA_RATIO 倍(面積)に拡張して fit
+      let [[s, w], [n, e]] = b;
+      if (e < w) { w = -180; e = 180; }
+      const k = (Math.sqrt(CONTEXT_AREA_RATIO) - 1) / 2;
+      const dLat = Math.max(n - s, 1e-6) * k;
+      const dLng = Math.max(e - w, 1e-6) * k;
+      state.map.fitBounds(
+        [[Math.max(-85.0511, s - dLat), Math.max(-180, w - dLng)],
+         [Math.min(85.0511, n + dLat), Math.min(180, e + dLng)]],
+        { animate: false, padding: [4, 4] });
     } else {
       if (state.rect._map) state.rect.remove();
       const c = getCenter && getCenter();
       if (c && Number.isFinite(c.lat) && Number.isFinite(c.lng)) {
         if (!state.marker._map) state.marker.addTo(state.map);
         state.marker.setLatLng([c.lat, c.lng]);
-        state.map.setView([c.lat, c.lng], Math.max(2, (state.map.getZoom() || 5) - 2), { animate: false });
+        const z = getZoom ? Math.max(2, getZoom() - CONTEXT_ZOOM_DELTA) : (state.map.getZoom() ?? 12);
+        state.map.setView([c.lat, c.lng], z, { animate: false });
       }
     }
   }

@@ -165,6 +165,20 @@ const attrWidget = createAttrWidget({
     return { features: item._geojson?.features || [] };
   },
   focusFeature: focusFeatureExtent,
+  // 「フィルター反映」: 絞り込み行だけを描画ソースへ残す(表示限定)
+  setMapFilter: async (layer, predicate) => {
+    const item = layer.entry.item;
+    item._attrMapFilter = predicate || null;
+    refillEntrySource(layer.entry);
+  },
+  // SQL ダイアログの「レイヤフィルタ」: ⏷ 編集と同じ where=/クエリ書換え経路
+  applyLayerFilter: async (layer, value) => {
+    await applyEntryQueryFilter(layer.entry, value);
+    return true;
+  },
+  // SELECT 実行時の FROM 名解決(ogrsql: 行と同じフック)
+  resolveLayer: vectorHooks.resolveLayer,
+  getBaseUrl: () => lastBaseUrl,
 });
 // 「選択中のレイヤ属性一覧」: 属性タブに記録された地物のレイヤ(または直前の選択)で開く
 document.querySelector("#attr-widget-open")?.addEventListener("click", () => {
@@ -405,20 +419,28 @@ function bboxExtent(item) {
 // ここでは描画対象だけを絞る。クエリ系(gpkg/duckdb/sql)はローダ側で
 // 絞り込み済みのため対象外
 function clientWhereGeojson(item, geojson) {
+  let fc = geojson;
   const where = item?.opts?.where;
-  if (!where || !geojson?.features?.length) return geojson;
-  if (QUERY_TYPES.has(item.type)) return geojson;
-  if (item._whereExpr !== where) {
-    item._whereExpr = where;
-    try { item._wherePred = compileWhereExpression(where); }
-    catch (e) {
-      item._wherePred = null;
-      console.warn(`${item.title}: where= の式を解釈できません`, e.message);
+  if (where && geojson?.features?.length && !QUERY_TYPES.has(item.type)) {
+    if (item._whereExpr !== where) {
+      item._whereExpr = where;
+      try { item._wherePred = compileWhereExpression(where); }
+      catch (e) {
+        item._wherePred = null;
+        console.warn(`${item.title}: where= の式を解釈できません`, e.message);
+      }
+    }
+    if (item._wherePred) {
+      const kept = fc.features.filter((f, i) => item._wherePred(f, i));
+      if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
     }
   }
-  if (!item._wherePred) return geojson;
-  const kept = geojson.features.filter((f, i) => item._wherePred(f, i));
-  return kept.length === geojson.features.length ? geojson : { ...geojson, features: kept };
+  // 属性テーブルの「フィルター反映」(表示限定・where= の後段)を適用する
+  if (item?._attrMapFilter && fc?.features?.length) {
+    const kept = fc.features.filter(f => item._attrMapFilter(f));
+    if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
+  }
+  return fc;
 }
 
 // エントリの描画用ベクターソースを取る。cluster ラップ時は内側の
@@ -1633,7 +1655,14 @@ async function editEntryQueryFilter(entry) {
   const current = isSql ? (item.url || "") : (item.opts?.where || "");
   const input = window.prompt(isSql ? "SQLクエリを入力" : "WHERE式を入力（空欄で解除）", current);
   if (input === null) return;
-  const value = input.trim();
+  await applyEntryQueryFilter(entry, input.trim());
+}
+
+// 絞り込み条件の値適用部。⏷ プロンプトと属性テーブルの SQL ダイアログ
+// 「レイヤフィルタ」の共通経路(value は WHERE 式または SELECT 文)
+async function applyEntryQueryFilter(entry, value) {
+  const item = entry.item;
+  const isSql = item.type === "sql" || item.type === "ogrsql";
   const oldLine = item.line;
   if (isSql) {
     if (!value) return;

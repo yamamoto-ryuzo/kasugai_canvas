@@ -1079,12 +1079,6 @@
             <select id="vector-attr-widget-value" title="集計する数値属性" data-i18n-attr="title:vattr.statsValue" hidden></select>
             <button id="vector-attr-sql" type="button" title="SQL で絞り込み・レイヤフィルタ・新規レイヤ" data-i18n-attr="title:vattr.sqlTitle">SQL</button>
           </span>
-          <span class="vector-attr-group group-export">
-            <label class="vector-attr-widget-wkt" title="ジオメトリをWKT列として出力（QGIS GEOMETRY=AS_WKT 相当）" data-i18n-attr="title:vattr.exportWkt"><input id="vector-attr-export-wkt" type="checkbox" />WKT</label>
-            <button id="vector-attr-export-csv" type="button" title="表示中の行をCSVで出力" data-i18n-attr="title:vattr.exportCsv">CSV</button>
-            <button id="vector-attr-export-tsv" type="button" title="表示中の行をTSVで出力" data-i18n-attr="title:vattr.exportTsv">TSV</button>
-            <button id="vector-attr-export-xlsx" type="button" title="表示中の行をXLSXで出力" data-i18n-attr="title:vattr.exportXlsx">XLSX</button>
-          </span>
         </div>
         <div class="vector-attr-widget-table-wrap">
           <table class="vector-attr-widget-table">
@@ -1093,6 +1087,10 @@
           </table>
         </div>
         <div class="vector-attr-widget-footer">
+          <label class="vector-attr-widget-wkt" title="ジオメトリをWKT列として出力（QGIS GEOMETRY=AS_WKT 相当）" data-i18n-attr="title:vattr.exportWkt"><input id="vector-attr-export-wkt" type="checkbox" />WKT</label>
+          <button id="vector-attr-export-csv" class="vector-attr-widget-export" type="button" title="表示中の行をCSVで出力" data-i18n-attr="title:vattr.exportCsv">CSV</button>
+          <button id="vector-attr-export-tsv" class="vector-attr-widget-export" type="button" title="表示中の行をTSVで出力" data-i18n-attr="title:vattr.exportTsv">TSV</button>
+          <button id="vector-attr-export-xlsx" class="vector-attr-widget-export" type="button" title="表示中の行をXLSXで出力" data-i18n-attr="title:vattr.exportXlsx">XLSX</button>
           <span id="vector-attr-widget-count"></span>
         </div>
       </div>

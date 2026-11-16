@@ -576,8 +576,37 @@ const attrWidget = createAttrWidget({
   listLayers: () => layerEntries
     .map((entry, i) => ({ id: String(i), title: splitKascTitle(entry.item.title).title || entry.item.title || entry.item.url, entry }))
     .filter(o => VECTOR_TYPES.has(o.entry.item.type)),
-  getFeatures: async entry => ({ features: entry.item._geojson?.features || [] }),
+  getFeatures: async entry => {
+    // 未読込のレイヤは選択時にデータだけ読む(表示状態は変えない)
+    if (!entry.item._geojson && !entry.failed) {
+      try { entry.item._geojson = (await loadVectorItem(entry.item, lastBaseUrl, null, vectorHooks)).geojson; }
+      catch (e) { entry.failed = true; entry.error = String(e?.message || e); }
+    }
+    if (entry.failed) throw new Error(entry.error || "load failed");
+    return { features: entry.item._geojson?.features || [] };
+  },
   focusFeature: f => focusExtent(geojsonExtent({ type: "FeatureCollection", features: [f] })),
+  // 「フィルター反映」: 絞り込み行だけを描画へ残す(表示限定)。
+  // Navara の geojson ソースは差し替え API が無いためレイヤーを作り直す
+  setMapFilter: async (layer, predicate) => {
+    const entry = layer.entry;
+    const item = entry.item;
+    item._attrMapFilter = predicate || null;
+    if (!entry.layer) return; // 未構築レイヤーは構築時に whereFilteredGeojson 経由で効く
+    try { entry.layer.delete(); } catch (_) {}
+    try { entry.src?.delete(); } catch (_) {}
+    const r = await addKascLayer(item, lastBaseUrl);
+    if (r) { entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc; }
+    setEntryVisible(entry); // 作り直しで表示状態(item.visible/縮尺)を戻す
+  },
+  // SQL ダイアログの「レイヤフィルタ」: ⏷ 編集と同じ where=/クエリ書換え経路
+  applyLayerFilter: async (layer, value) => {
+    await applyEntryQueryFilter(layer.entry, value);
+    return true;
+  },
+  // SELECT 実行時の FROM 名解決(ogrsql: 行と同じフック)
+  resolveLayer: vectorHooks.resolveLayer,
+  getBaseUrl: () => lastBaseUrl,
 });
 $("#attr-widget-open")?.addEventListener("click", () => {
   attrWidget.open(panel.attrContent?.dataset.layerId || null);
@@ -874,17 +903,23 @@ function applyQgisScene3d(scene3d) {
 // compileWhereExpression で絞り、ソース生成用の FeatureCollection を返す
 // (item._geojson 自体は無絞込のまま保持し、属性一覧・検索は全件対象とする)
 function whereFilteredGeojson(item) {
-  const geojson = item?._geojson;
+  let fc = item?._geojson;
   const where = item?.opts?.where;
-  if (!where || QUERY_TYPES.has(item?.type) || !geojson?.features?.length) return geojson;
-  try {
-    const pred = compileWhereExpression(where);
-    const kept = geojson.features.filter((f, i) => pred(f, i));
-    return kept.length === geojson.features.length ? geojson : { ...geojson, features: kept };
-  } catch (e) {
-    console.warn(`where= の式を適用できません (${item?.title}):`, e?.message || e);
-    return geojson;
+  if (where && !QUERY_TYPES.has(item?.type) && fc?.features?.length) {
+    try {
+      const pred = compileWhereExpression(where);
+      const kept = fc.features.filter((f, i) => pred(f, i));
+      if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
+    } catch (e) {
+      console.warn(`where= の式を適用できません (${item?.title}):`, e?.message || e);
+    }
   }
+  // 属性テーブルの「フィルター反映」(表示限定・where= の後段)を適用する
+  if (item?._attrMapFilter && fc?.features?.length) {
+    const kept = fc.features.filter(f => item._attrMapFilter(f));
+    if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
+  }
+  return fc;
 }
 
 // ---- .kasc → Navara ----
@@ -1540,7 +1575,14 @@ async function editEntryQueryFilter(entry) {
   const current = isSql ? (item.url || "") : (item.opts?.where || "");
   const input = window.prompt(isSql ? "SQLクエリを入力" : "WHERE式を入力（空欄で解除）", current);
   if (input === null) return;
-  const value = input.trim();
+  await applyEntryQueryFilter(entry, input.trim());
+}
+
+// 絞り込み条件の値適用部。⏷ プロンプトと属性テーブルの SQL ダイアログ
+// 「レイヤフィルタ」の共通経路(value は WHERE 式または SELECT 文)
+async function applyEntryQueryFilter(entry, value) {
+  const item = entry.item;
+  const isSql = item.type === "sql" || item.type === "ogrsql";
   const oldLine = item.line;
   if (isSql) {
     if (!value) return;
@@ -1897,7 +1939,20 @@ const minimap = createMinimap({
   container: "#minimap",
   checkbox: "#display-minimap",
   tileUrl: () => baseDocs[currentBasemapIdx]?.url || "",
+  // 直下視近似: 高さ→表示ズーム換算で主画面の footprint を求め、
+  // 共有ミニマップの広域コンテキスト経路に他エンジンと同じく乗せる
+  getBounds: () => {
+    const { lat, lng, height } = lastCam;
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !(height > 0)) return null;
+    const mapEl = document.querySelector("#map");
+    const vw = Math.max(1, mapEl?.clientWidth || 512), vh = Math.max(1, mapEl?.clientHeight || 512);
+    const cosLat = Math.max(0.087, Math.cos(lat * Math.PI / 180));
+    const mpp = 156543.03392 * cosLat / Math.pow(2, heightToViewZoom(lat, height, vw));
+    return [[lat - (vh * mpp / 2) / 111320, lng - (vw * mpp / 2) / (111320 * cosLat)],
+            [lat + (vh * mpp / 2) / 111320, lng + (vw * mpp / 2) / (111320 * cosLat)]];
+  },
   getCenter: () => ({ lat: lastCam.lat, lng: lastCam.lng }),
+  getZoom: () => navaraZoom(),
   // クリックした地点へ現在の高さ・姿勢のまま移動
   flyTo: ({ lng, lat }) => flyTo({ longitude: lng, latitude: lat }),
 });

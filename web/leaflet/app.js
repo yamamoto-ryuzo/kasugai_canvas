@@ -124,6 +124,21 @@ const attrWidget = createAttrWidget({
     return { features: item._geojson?.features || [] };
   },
   focusFeature: focusFeatureExtent,
+  // 「フィルター反映」: 絞り込み行だけを描画へ残す(表示限定)。
+  // applyEntryWhereChange が geojson 直書き・再構築の両経路を処理する
+  setMapFilter: async (layer, predicate) => {
+    const item = layer.entry.item;
+    item._attrMapFilter = predicate || null;
+    await applyEntryWhereChange(layer.entry);
+  },
+  // SQL ダイアログの「レイヤフィルタ」: ⏷ 編集と同じ where=/クエリ書換え経路
+  applyLayerFilter: async (layer, value) => {
+    await applyEntryQueryFilter(layer.entry, value);
+    return true;
+  },
+  // SELECT 実行時の FROM 名解決(ogrsql: 行と同じフック)
+  resolveLayer: vectorHooks.resolveLayer,
+  getBaseUrl: () => lastBaseUrl,
 });
 // 「選択中のレイヤ属性一覧」: 属性タブに記録された地物のレイヤ(または直前の選択)で開く
 document.querySelector("#attr-widget-open")?.addEventListener("click", () => {
@@ -563,20 +578,28 @@ map.on("move zoomanim resize", e => {
 // (検索・属性一覧は全件対象の方針)、ここでは描画対象だけを絞る。
 // クエリ系(gpkg:/duckdb:/sql:)はロード側で絞り込み済みのため対象外
 function applyClientWhere(item, source) {
+  let fc = source;
   const where = item?.opts?.where;
-  if (!where || !source?.features?.length) return source;
-  if (QUERY_TYPES.has(item.type) || item._viewportQuery) return source;
-  if (item._whereExpr !== where) {
-    item._whereExpr = where;
-    try { item._wherePred = compileWhereExpression(where); }
-    catch (e) {
-      item._wherePred = null;
-      console.warn(`${item.title}: where= の式を解釈できません`, e.message);
+  if (where && source?.features?.length && !QUERY_TYPES.has(item.type) && !item._viewportQuery) {
+    if (item._whereExpr !== where) {
+      item._whereExpr = where;
+      try { item._wherePred = compileWhereExpression(where); }
+      catch (e) {
+        item._wherePred = null;
+        console.warn(`${item.title}: where= の式を解釈できません`, e.message);
+      }
+    }
+    if (item._wherePred) {
+      const kept = fc.features.filter((f, i) => item._wherePred(f, i));
+      if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
     }
   }
-  if (!item._wherePred) return source;
-  const kept = source.features.filter((f, i) => item._wherePred(f, i));
-  return kept.length === source.features.length ? source : { ...source, features: kept };
+  // 属性テーブルの「フィルター反映」(表示限定・where= の後段)を適用する
+  if (item?._attrMapFilter && fc?.features?.length) {
+    const kept = fc.features.filter(f => item._attrMapFilter(f));
+    if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
+  }
+  return fc;
 }
 
 // .kasc 1行 → Leaflet レイヤ。戻り値は { layer, styleFn, viewportQuery, zoomRange }
@@ -1809,8 +1832,10 @@ async function reloadEntryData(entry) {
   entry.item._geojson = geojson;
   const env = geojsonExtent(geojson);
   if (env) entry.item._env = env;
+  // クライアント評価フィルタ(where=/属性テーブルの地図フィルタ)も再適用する
+  const fc = applyClientWhere(entry.item, geojson);
   entry.layer?.clearLayers?.();
-  entry.layer?.addData?.(geojson);
+  entry.layer?.addData?.(fc);
   syncDeckLayers(); // ドレープコピーのデータ更新
 }
 
@@ -1822,7 +1847,14 @@ async function editEntryQueryFilter(entry) {
   const current = isSql ? (item.url || "") : (item.opts?.where || "");
   const input = window.prompt(isSql ? "SQLクエリを入力" : "WHERE式を入力（空欄で解除）", current);
   if (input === null) return;
-  const value = input.trim();
+  await applyEntryQueryFilter(entry, input.trim());
+}
+
+// 絞り込み条件の値適用部。⏷ プロンプトと属性テーブルの SQL ダイアログ
+// 「レイヤフィルタ」の共通経路(value は WHERE 式または SELECT 文)
+async function applyEntryQueryFilter(entry, value) {
+  const item = entry.item;
+  const isSql = item.type === "sql" || item.type === "ogrsql";
   const oldLine = item.line;
   if (isSql) {
     if (!value) return;
@@ -1857,7 +1889,7 @@ function requeryViewportLayers(entries) {
       const env = geojsonExtent(geojson);
       if (env) entry.item._env = env;
       entry.layer?.clearLayers?.();
-      entry.layer?.addData?.(geojson);
+      entry.layer?.addData?.(applyClientWhere(entry.item, geojson));
       syncDeckLayers(); // ドレープコピーのデータ更新
       attrWidget.refresh(); // 表示範囲分の行が差し替わった場合に追従
     }).catch(err => console.warn("viewport requery 失敗:", entry.item.title, err));

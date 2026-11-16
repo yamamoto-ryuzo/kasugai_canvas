@@ -730,19 +730,28 @@ function styledFeature(item, feature) {
 // 行の where= では同じ式を再評価しても結果は変わらない(冪等)。
 // view の ;where= はランタイム item.where へ畳み込まれ、ここで効く
 function whereFilteredGeoJson(item, geojson) {
+  let fc = geojson;
   const where = item?.where;
-  if (!where || !geojson?.features?.length) return geojson;
-  if (item._whereExpr !== where) {
-    item._whereExpr = where;
-    try { item._wherePred = compileWhereExpression(where); }
-    catch (e) {
-      item._wherePred = null;
-      console.warn(`${item.title}: where= の式を解釈できません`, e?.message || e);
+  if (where && geojson?.features?.length) {
+    if (item._whereExpr !== where) {
+      item._whereExpr = where;
+      try { item._wherePred = compileWhereExpression(where); }
+      catch (e) {
+        item._wherePred = null;
+        console.warn(`${item.title}: where= の式を解釈できません`, e?.message || e);
+      }
+    }
+    if (item._wherePred) {
+      const kept = fc.features.filter((f, i) => item._wherePred(f, i));
+      if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
     }
   }
-  if (!item._wherePred) return geojson;
-  const kept = geojson.features.filter((f, i) => item._wherePred(f, i));
-  return kept.length === geojson.features.length ? geojson : { ...geojson, features: kept };
+  // 属性テーブルの「フィルター反映」(表示限定・where= の後段)を適用する
+  if (item?._attrMapFilter && fc?.features?.length) {
+    const kept = fc.features.filter(f => item._attrMapFilter(f));
+    if (kept.length !== fc.features.length) fc = { ...fc, features: kept };
+  }
+  return fc;
 }
 
 // where=/;where= 変更を描画へ反映する。作図レイヤは除去→再注入、
@@ -915,6 +924,35 @@ async function reloadEntryData(entry) {
   if (!wasVisible) entry.sakuzu.setVisible(false);
 }
 
+// レイヤーの絞り込み条件を適用する（他エンジンの ⏷ フィルタ編集・属性テーブル
+// SQL ダイアログ「レイヤフィルタ」の共通経路）。非クエリ系は item.where の
+// クライアント評価、sql:/ogrsql:・bbox 連動はクエリ本文の書換えで再読み込み
+async function applyEntryQueryFilter(entry, value) {
+  const item = entry.item;
+  const isSql = item.type === "sql" || item.type === "ogrsql";
+  const oldLine = item.line;
+  if (isSql) {
+    if (!value) return;
+    item.url = value;
+    item.line = `${item.type}:${item.title} | ${value}${item.visible === false ? " | off" : ""}`;
+  } else {
+    item.where = value || undefined;
+    if (oldLine) item.line = rewriteKascLineOpt(oldLine, "where", value);
+  }
+  if (oldLine && item.line && item.line !== oldLine) {
+    inspectorInput.value = inspectorInput.value
+      .split(/\r?\n/).map(l => (l.trim() === oldLine ? item.line : l)).join("\n");
+  }
+  if (entry.pending || entry.unsupported) { renderLayerRows(); return; }
+  try {
+    if (isSql || item._viewportQuery || isViewportQueryItem(item)) await reloadEntryData(entry);
+    else await reinjectEntry(entry);
+    attrWidget.refresh();
+  } catch (e) {
+    console.warn("フィルタ再読み込み失敗:", item.title, e);
+  }
+}
+
 function viewBounds() {
   if (globeMode) {
     const { viewer, C } = globeApis();
@@ -1027,9 +1065,25 @@ const attrWidget = createAttrWidget({
     }
     if (!item._geojson && !entry.failed) await mountEntry(entry);
     if (entry.failed) throw new Error(entry.error || "load failed");
-    return { features: item._geojson?.features || [] };
+    // 表示範囲連動クエリ系は _geojson が表示中範囲分のみの旨をウィジェットへ伝える
+    return { features: item._geojson?.features || [], partial: !!item._viewportQuery };
   },
   focusFeature: focusFeatureExtent,
+  // 「フィルター反映」: 絞り込み行だけを描画へ残す(表示限定)。
+  // reinjectEntry が作図レイヤ・globe の両経路で whereFilteredGeoJson を通す
+  setMapFilter: async (layer, predicate) => {
+    const item = layer.entry.item;
+    item._attrMapFilter = predicate || null;
+    await reinjectEntry(layer.entry);
+  },
+  // SQL ダイアログの「レイヤフィルタ」: where=/クエリ書換え(下記 applyEntryQueryFilter)
+  applyLayerFilter: async (layer, value) => {
+    await applyEntryQueryFilter(layer.entry, value);
+    return true;
+  },
+  // SELECT 実行時の FROM 名解決(ogrsql: 行と同じフック)
+  resolveLayer: vectorHooks.resolveLayer,
+  getBaseUrl: () => lastBaseUrl,
 });
 document.getElementById("attr-widget-open")?.addEventListener("click", () => {
   attrWidget.open(attrContentEl()?.dataset.layerId || null);
