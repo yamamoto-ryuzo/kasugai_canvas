@@ -1,7 +1,7 @@
 // QML スタイル(.qml)の Cesium への適用（描画側バインディング）
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
-import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas } from "../shared/qml-style.js";
+import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas } from "../shared/qml-style.js";
 
 const Cesium = window.Cesium;
 
@@ -83,7 +83,7 @@ function applyGeometryGenerators(entity, ggList, t, ctx) {
     if (!gen) continue;
     for (const piece of geomToParts(gen)) {
       if (part.kind === "fill" && piece.kind === "polygon") {
-        const { solidBase, tile } = fillPartsToTile((part.fillParts || []).map(pt => pt.solid ? { ...pt, solid: mulAlpha(pt.solid, opacity) } : pt));
+        const { solidBase, tile } = fillPartsToTile(scaleFillPartsAlpha(part.fillParts || [], opacity));
         const polyDesc = {
           hierarchy: piece.hierarchy,
           material: tile
@@ -430,7 +430,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
       }
       if (spec.fillParts?.length) {
         entity.polygon.show = new Cesium.ConstantProperty(true);
-        const { solidBase, tile, tileMeters } = fillPartsToTile(spec.fillParts.map(pt => pt.solid ? { ...pt, solid: mulAlpha(pt.solid, opacity) } : pt));
+        const { solidBase, tile, tileMeters } = fillPartsToTile(scaleFillPartsAlpha(spec.fillParts, opacity));
         if (tile) {
           const repeat = computeFillRepeat(entity, t, tileMeters);
           entity.polygon.material = new Cesium.ImageMaterialProperty({ image: tile, repeat, transparent: true });

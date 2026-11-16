@@ -52,6 +52,53 @@ function withAlpha(rgba, alpha) {
   return [rgba[0], rgba[1], rgba[2], rgba[3] * alpha];
 }
 
+// 0-1 係数の属性値パース。"0" も有効値(完全透明)とし、非数・未指定は fallback
+function alphaAttr(v, fallback = 1) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback;
+}
+
+// fillParts 内の全色へ係数を乗算した新パーツ配列を返す。
+// solid だけでなくハッチ/ラインパターン/ポイントパターン/グラデーション/
+// 画像パターン(alphaMul)も対象(レイヤ透過度・シンボル alpha 共通)
+export function scaleFillPartsAlpha(fillParts, f) {
+  if (!Array.isArray(fillParts) || !Number.isFinite(f) || f >= 1) return fillParts;
+  const mul = c => (c ? withAlpha(c, f) : c);
+  return fillParts.map(pt => {
+    if (!pt) return pt;
+    const c = { ...pt };
+    if (c.solid) c.solid = mul(c.solid);
+    if (c.hatch) c.hatch = { ...c.hatch, color: mul(c.hatch.color) };
+    if (c.linePattern) c.linePattern = { ...c.linePattern, color: mul(c.linePattern.color) };
+    if (c.gradient) c.gradient = { ...c.gradient, color1: mul(c.gradient.color1), color2: mul(c.gradient.color2) };
+    if (c.pointPattern) c.pointPattern = { ...c.pointPattern, markers: (c.pointPattern.markers || []).map(m => ({ ...m, alpha: (m.alpha ?? 1) * f })) };
+    if (c.imagePattern) c.alphaMul = (c.alphaMul ?? 1) * f;
+    return c;
+  });
+}
+
+// シンボル単位の透明度(spec.alpha)を解決済み spec の全色へ乗算する(破壊的)。
+// QGIS のシンボル透過度は塗り・枠線・積層ライン・パターン・生成ジオメトリ
+// までシンボル全体に効くため spec 全体を対象にする
+export function applySymbolAlpha(spec) {
+  const a = Math.max(0, Math.min(1, Number(spec?.alpha)));
+  if (!Number.isFinite(a) || a >= 1) return;
+  const mul = c => (c ? withAlpha(c, a) : c);
+  const mulMarkers = ms => { for (const m of ms || []) m.alpha = (m.alpha ?? 1) * a; };
+  if (spec.line) spec.line.color = mul(spec.line.color);
+  for (const l of spec.lines || []) { if (l) l.color = mul(l.color); }
+  if (spec.outline) spec.outline.color = mul(spec.outline.color);
+  mulMarkers(spec.markers);
+  mulMarkers(spec.centroid);
+  if (spec.fillParts) spec.fillParts = scaleFillPartsAlpha(spec.fillParts, a);
+  for (const g of spec.gg || []) {
+    if (g.line) g.line.color = mul(g.line.color);
+    if (g.outline) g.outline.color = mul(g.outline.color);
+    mulMarkers(g.markers);
+    if (g.fillParts) g.fillParts = scaleFillPartsAlpha(g.fillParts, a);
+  }
+}
+
 // QGIS のサイズ単位を px に変換する。MapUnit/MetersInMapUnits は実用上
 // 度単位データでは意味を持たないため、近似として px 相当に丸める
 function sizeToPx(value, unit) {
@@ -618,7 +665,7 @@ function parseSymbolEl(symbolEl) {
   return {
     name: symbolEl.getAttribute("name") || "",
     geomType: symbolEl.getAttribute("type") || "", // marker|line|fill
-    alpha: Number(symbolEl.getAttribute("alpha") ?? "1") || 1,
+    alpha: alphaAttr(symbolEl.getAttribute("alpha")),
     dd: parseDataDefined(symbolEl),
     layers,
   };
@@ -2212,12 +2259,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
       const symbol = renderer.symbols.get(name);
       if (!symbol) continue;
       const resolved = resolveSymbolLayers(symbol, props || {}, images, warnings);
-      if (resolved.alpha !== undefined && resolved.alpha !== 1) {
-        const mul = (c) => c ? withAlpha(c, resolved.alpha) : c;
-        if (resolved.line) resolved.line.color = mul(resolved.line.color);
-        if (resolved.fillParts) for (const pt of resolved.fillParts) { if (pt.solid) pt.solid = mul(pt.solid); }
-        if (resolved.markers) for (const m of resolved.markers) m.alpha = (m.alpha ?? 1) * resolved.alpha;
-      }
+      applySymbolAlpha(resolved);
       if (resolved.markers && !out.markers) out.markers = resolved.markers;
       if (resolved.line && !out.line) out.line = resolved.line;
       if (resolved.lines && !out.lines) out.lines = resolved.lines;
@@ -2239,7 +2281,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map()) {
     const symbol = renderer.symbols.get(e.symbolName);
     let spec = null;
     if (symbol) {
-      try { spec = resolveSymbolLayers(symbol, {}, images, warnings); } catch (err) { spec = null; }
+      try { spec = resolveSymbolLayers(symbol, {}, images, warnings); applySymbolAlpha(spec); } catch (err) { spec = null; }
     }
     return { label: e.label, symbolName: e.symbolName, spec };
   });
@@ -2321,7 +2363,7 @@ function parseDiagram(rootEl, warnings) {
     barWidthPx: sizeToPx(cat?.getAttribute("barWidth") ?? 5, sizeUnit) || 12,
     bg, pen,
     penWidthPx: sizeToPx(cat?.getAttribute("penWidth") ?? 0, "MM") || 0,
-    opacity: Number(cat?.getAttribute("opacity") ?? 1) || 1,
+    opacity: alphaAttr(cat?.getAttribute("opacity")),
     attrs,
     // LinearlyInterpolatedDiagramRenderer: 分類属性値でサイズを線形変化(近似)
     scale: dr.tagName === "LinearlyInterpolatedDiagramRenderer" ? {
@@ -2654,6 +2696,7 @@ export function fillPartsToTile(fillParts) {
     for (const pt of patterns) {
       ctx.save();
       if (pt.blend) ctx.globalCompositeOperation = pt.blend;
+      if (pt.alphaMul != null) ctx.globalAlpha *= pt.alphaMul;
       if (pt.hatch) {
         drawHatch(ctx, W, pt.hatch.angles, pt.hatch.spacingPx, pt.hatch.color);
       } else if (pt.linePattern) {
