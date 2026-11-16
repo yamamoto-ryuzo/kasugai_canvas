@@ -8070,10 +8070,9 @@ function setupEvents() {
     });
   }
 
-  // ---- 表示>一般タブ: 透過度スライダ・スケールバー・カーソル座標・クリックポップアップ ----
+  // ---- 表示>一般タブ: 透過度スライダ・スケールバー・カーソル座標 ----
   const scalebarEl = document.querySelector("#cesium-scalebar");
   const coordsEl = document.querySelector("#cesium-coords");
-  const attrPopupEl = document.querySelector("#attr-popup");
 
   const basemapOpacityInput = document.querySelector("#display-basemap-opacity");
   if (basemapOpacityInput) {
@@ -8185,52 +8184,6 @@ function setupEvents() {
   viewer.camera.moveEnd.addEventListener(minimap.scheduleUpdate);
   // QGIS ライブ連携: カメラ停止で QGIS キャンバスへ逆通知(live: 行がある時のみ送る)
   viewer.camera.moveEnd.addEventListener(() => liveNotifyCamera());
-
-  // 地物クリックの属性ポップアップ(オプション)。既存の属性パネル表示はそのまま併用する
-  viewer.canvas.addEventListener("click", e => {
-    if (!attrPopupEl) return;
-    attrPopupEl.hidden = true;
-    if (!document.querySelector("#display-popup")?.checked) return;
-    if (walkModeActive || streetViewPickMode) return;
-    const rect = viewer.canvas.getBoundingClientRect();
-    const pos = new Cesium.Cartesian2(e.clientX - rect.left, e.clientY - rect.top);
-    const pickedList = viewer.scene.drillPick(pos, 8) || [];
-    const time = Cesium.JulianDate.now();
-    const seen = new Set();
-    const frag = document.createDocumentFragment();
-    let count = 0;
-    for (const picked of pickedList) {
-      const key = picked?.id || picked?.properties || picked;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      let entries = null, label = "";
-      if (picked?.id?.properties) {
-        entries = Object.entries(picked.id.properties.getValue(time) || {});
-        label = typeof picked.id.name === "string" ? picked.id.name : "";
-      } else if (picked?.properties) {
-        entries = Object.entries(picked.properties);
-      } else if (typeof picked?.getPropertyNames === "function") {
-        entries = picked.getPropertyNames().map(n => [n, picked.getProperty(n)]);
-      }
-      if (!entries || !entries.length) continue;
-      if (label) {
-        const t = document.createElement("div");
-        t.className = "attr-popup-title";
-        t.textContent = label;
-        frag.append(t);
-      }
-      frag.append(buildAttrTable(entries.slice(0, 30)));
-      if (++count >= 4) break;
-    }
-    if (!count) return;
-    attrPopupEl.replaceChildren(frag);
-    const vw = viewer.canvas.parentElement.getBoundingClientRect();
-    let px = e.clientX - vw.left + 12, py = e.clientY - vw.top + 8;
-    attrPopupEl.style.left = `${Math.min(px, Math.max(0, vw.width - 310))}px`;
-    attrPopupEl.style.top = `${Math.min(py, Math.max(0, vw.height - 250))}px`;
-    attrPopupEl.hidden = false;
-  });
-  viewer.camera.changed.addEventListener(() => { if (attrPopupEl) attrPopupEl.hidden = true; });
 
   document.querySelector("#dem-source").addEventListener("change", event => {
     selectedDemSource = event.target.value;

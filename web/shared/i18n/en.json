@@ -757,7 +757,6 @@
   "coordpick.copied": "Copied",
   "coordpick.pin": "Pin",
   "coordpick.clear": "Clear",
-  "display.popup": "Attribute popup on feature click",
   "display.graticule": "Lat/Lon grid",
   "display.minimap": " Show minimap",
   "print.open": "Print",
