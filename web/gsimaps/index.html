@@ -25,10 +25,18 @@
       .catch(function () { return null; })
       .then(function () {
         if (window.parent !== window) {
-          // この中間エンジンページはトップレベル専用。iframe 内に読み込まれた
-          // 場合は vendored 地理院地図へ差し替えて自己修復(ネスト二重表示の根絶)
-          location.replace(new URL(VENDOR_URL, location.href).href + location.hash);
-          return;
+          // ui-config-admin のプレビュー iframe では Canvas UI ごと表示したいので
+          // 自己修復を抑止する(同一オリジンのみ判定可・失敗時は従来通り修復)
+          var adminPreview = false;
+          try {
+            adminPreview = /\/ui-config-admin\.html$/.test(window.parent.location.pathname);
+          } catch (e) { /* cross-origin */ }
+          if (!adminPreview) {
+            // この中間エンジンページはトップレベル専用。iframe 内に読み込まれた
+            // 場合は vendored 地理院地図へ差し替えて自己修復(ネスト二重表示の根絶)
+            location.replace(new URL(VENDOR_URL, location.href).href + location.hash);
+            return;
+          }
         }
         // app.js はモジュール評価時点で body 内要素を参照するため
         // DOM 構築完了も待ち合わせる

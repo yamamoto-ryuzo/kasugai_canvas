@@ -47,6 +47,7 @@ import { computeGroupStats } from "../shared/attr-stats.js";
 import { rowsToXlsx, geometryToWKT } from "../shared/export-formats.js";
 import { matchAttrCellFilter } from "../shared/attr-widget.js";
 import { loadScriptOnce } from "../shared/lazy-lib.js";
+import { initUiConfig } from "../shared/ui-config.js";
 import { isGeoTiffType, resolveGeoTiffItem, buildGeoTiffOverlayDataSource, createGeoTiffImageryProvider } from "./geotiff-layer.js";
 
 import { createReportTool } from "../shared/report.js";
@@ -13867,6 +13868,10 @@ window.addEventListener("pagehide", () => {
 });
 
 (async () => {
+  // index.html 同階層の ui.config.json で UI 機能の表示/初期値をカスタマイズ。
+  // setupEvents 済み・プロジェクト読込前のこの位置で適用する(非表示指定が
+  // 初期描画に反映され、defaults の change 発火が各ハンドラへ同期する)
+  try { await initUiConfig(); } catch (e) { console.warn("[ui-config]", e); }
   await detectBackend();
   // MCP 接続基盤の初期化。capabilities 確定後に行い、mcpProxy の有無で
   // 直叩き→プロキシのフォールバック可否を決める。Box の OAuth 戻りがあればここで処理し、

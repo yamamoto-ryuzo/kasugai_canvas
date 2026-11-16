@@ -17,6 +17,7 @@ import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotif
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
+import { initUiConfig } from "../shared/ui-config.js";
 import { formatLatLng } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
@@ -1741,6 +1742,8 @@ configureFollow({
   // 光・エフェクト系の Navara 固有コントロールをバインド＋初期同期
   initFxControls();
   applyFxAll();
+  // ui.config.json の UI カスタマイズ(チェックボックス類のバインド後に適用)
+  try { await initUiConfig(); } catch (e) { console.warn("[ui-config]", e); }
   // 太陽日時コントロールのリスナは mountSunControls 内でバインド済み
 
   panel.project.addEventListener("change", () => loadProject(panel.project.value));

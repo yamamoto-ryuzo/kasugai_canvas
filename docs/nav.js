@@ -19,6 +19,7 @@
       sectionHref: 'index.html',
       items: [
         { href: 'index.html', text: 'Canvas UI の説明' },
+        { href: 'engines.html', text: 'エンジン（特徴と使い分け）' },
       ]
     },
     {
@@ -118,6 +119,15 @@
           ]
         },
         { href: 'use/7-2-プラグイン.html', text: '7-2 プラグイン・外部連携' },
+      ]
+    },
+    {
+      // ==== カスタマイズ（ui.config.json で配備先ごとの UI 調整・V8） ====
+      section: 'カスタマイズ',
+      label: '1. UIカスタマイズ',
+      href: 'ui-config.html',
+      items: [
+        { href: 'ui-config.html', text: '1-1 ui.config.json（表示/初期値/リンク先）' },
       ]
     },
     {

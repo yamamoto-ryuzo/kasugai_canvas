@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI カスタマイズ管理 — KASUGAI Canvas</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --panel: #ffffff; --border: #d4dbe2;
+    --text: #24292f; --muted: #66727e; --accent: #2274e0; --ok: #1e8a4c; --err: #d0342c;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", "Meiryo", sans-serif; }
+  header { padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header select { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; }
+  #status { margin-left: auto; color: var(--muted); font-size: 12px; }
+  #status.ok { color: var(--ok); } #status.err { color: var(--err); }
+  main { display: grid; grid-template-columns: minmax(0,1fr) 380px; height: calc(100vh - 43px); }
+  #preview-wrap { position: relative; background: #dde3e8; }
+  #preview { width: 100%; height: 100%; border: 0; display: block; }
+  #out-col { border-left: 1px solid var(--border); padding: 10px 12px; overflow-y: auto; display: flex; flex-direction: column; }
+  h2 { font-size: 13px; margin: 8px 0 6px; color: var(--muted); font-weight: 600; }
+  .field { margin-bottom: 8px; }
+  .field > span { font-size: 12px; color: var(--muted); display: block; margin-bottom: 2px; }
+  .field select, .field input { width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { background: #fdeceb; border: 1px solid #e5a19c; color: #8a2f28; border-radius: 10px; padding: 1px 8px; font-size: 11px; cursor: pointer; }
+  .chip:hover { background: #f8d7d3; }
+  .ctl-row { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 5px; align-items: center; padding: 2px 0; border-bottom: 1px dashed #e3e7ea; font-size: 11px; }
+  .ctl-row .ctl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #41545f; }
+  .ctl-row input[type="text"], .ctl-row select { width: 92px; font-size: 11px; padding: 1px 3px; }
+  .chip::after { content: " ×"; font-weight: 700; }
+  .ovr { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 0; }
+  .ovr code { flex: 1; }
+  .ovr button { padding: 0 6px; font-size: 11px; }
+  textarea#out { flex: 1; width: 100%; min-height: 160px; background: #fbfcfd; color: #24292f; border: 1px solid var(--border); border-radius: 4px; font: 12px/1.4 Consolas, monospace; padding: 8px; resize: none; }
+  .row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger:hover { border-color: var(--err); color: var(--err); }
+  .hint { color: var(--muted); font-size: 11px; margin: 6px 0; }
+  .empty { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>UI カスタマイズ管理 (ui.config.json)</h1>
+  <label>エンジン <select id="engine"></select></label>
+  <button id="mode-toggle" title="OFF の見え方を切替">モード: グレー表示</button>
+  <span id="engine-file" class="hint"></span>
+  <span id="status"></span>
+</header>
+<main>
+  <div id="preview-wrap">
+    <iframe id="preview" title="エンジンプレビュー"></iframe>
+  </div>
+  <section id="out-col">
+    <p class="hint" style="margin-top:0">プレビュー内の各タブ・パネル右上のチェックで ON/OFF（OFF はグレー表示・再チェックで復帰）。コントロールを操作すると defaults に記録されます。</p>
+    <h2>非表示中の機能 (hide)</h2>
+    <div class="chips" id="hide-chips"><span class="empty">なし</span></div>
+    <h2>初期値の上書き (defaults)</h2>
+    <div id="defaults-list"><span class="empty">なし — プレビュー内のコントロールを操作すると記録されます</span></div>
+    <details id="ctl-list" style="margin-top:6px">
+      <summary class="hint" style="cursor:pointer">コントロール一覧から手動追加（値系のみ・ON/OFF はプレビュー操作で記録）</summary>
+      <div id="ctl-rows" style="max-height:220px;overflow:auto;margin-top:4px"></div>
+    </details>
+    <div class="field" style="margin-top:6px">
+      <span>起動時に開くタブ (open)</span>
+      <div style="display:flex;gap:4px;">
+        <select id="open-tab" style="flex:1;"></select>
+        <button id="open-from-preview" title="プレビューで現在アクティブなタブを採用">現在のタブ</button>
+      </div>
+    </div>
+    <div class="field">
+      <span>ヘルプURL (helpUrl・? ボタンのリンク先)</span>
+      <input type="text" id="help-url" placeholder="未設定 = 既定のヘルプページ">
+    </div>
+    <div class="field">
+      <span>追加の非表示指定（セレクタ / 機能名、カンマ区切り）</span>
+      <input type="text" id="custom-hide" placeholder="#help-open, .some-class">
+    </div>
+    <h2>ui.config.json</h2>
+    <textarea id="out" spellcheck="false"></textarea>
+    <div class="row">
+      <button id="gen">生成して反映</button>
+      <button id="save" class="primary">サーバーに保存</button>
+      <button id="download">ダウンロード</button>
+      <button id="copy">コピー</button>
+      <button id="reapply" title="現在の編集内容をプレビューへ再適用">再適用</button>
+      <button id="delete" class="danger">設定を削除</button>
+    </div>
+    <p class="hint">「サーバーに保存」はローカルサーバー起動時のみ有効です。静的ホスト(CDN)ではダウンロードして &lt;engine&gt;/ フォルダへ配置してください。反映にはページ再読み込みが必要です。</p>
+    <p class="hint"><a href="https://yamamoto-ryuzo.github.io/kasugai_canvas/docs/ui-config.html" target="_blank" style="color:var(--accent)">設定ファイル仕様 (docs/ui-config.html)</a> ／ <a id="engine-link" href="#" target="_blank" style="color:var(--accent)">エンジンを別タブで開く</a></p>
+  </section>
+</main>
+<script>
+"use strict";
+
+const KNOWN_ENGINES = ["cesium", "maplibre", "openlayers", "leaflet", "navara", "gsimaps"];
+// タブに紐付かない独立パネル・部品。sel は先に一致したものを採用
+const PANEL_CANDIDATES = [
+  { sel: "#basemap-ctl, .basemap-control", label: "ベースマップパネル" },
+  { sel: "#minimap",        label: "ミニマップ" },
+  { sel: "#chat-panel, #ai-section", spec: "chat", label: "AIチャットパネル" },
+  { sel: "#time-bar",       label: "時系列バー" },
+  { sel: "#walk-help",      label: "ウォーク/フライ操作" },
+  { sel: "#engines",        spec: "engines", label: "エンジン切替パネル" },
+  { sel: ".navigation-toolbar", label: "ナビゲーション" },
+  { sel: "#cesium-coords, #map-coords", label: "座標表示" },
+  { sel: "#cesium-scalebar, #scalebar", label: "スケールバー" },
+  { sel: "#portal-open",    spec: "portal", label: "ポータル" },
+  { sel: "#tools-dock",     label: "ツールドック" },
+  { sel: "#manage-open, #settings-open", label: "管理画面" },
+];
+// パネルを持たない単独ボタン(バッジを直接載せる)
+const LEAF_PARTS = [
+  { sel: "#help-open",         label: "ヘルプボタン" },
+  { sel: "#share-copy",        label: "共有コピーボタン" },
+  { sel: "#screenshot-button", label: "スクリーンショットボタン" },
+];
+// 親機能の ON/OFF にのみ連動する付属 spec(個別バッジを付けない)
+const SPEC_GROUPS = {
+  "#tools-dock": ["#tools-open"],
+};
+const GROUP_PARENT = {};
+for (const [p, ms] of Object.entries(SPEC_GROUPS)) for (const m of ms) GROUP_PARENT[m] = p;
+const TAB_SEL = "[data-panel],[data-tab],[data-settings-panel],[data-manage-pane],[data-manage-sub],[data-settab]";
+
+const $ = id => document.getElementById(id);
+const status = (msg, cls = "") => { const s = $("status"); s.textContent = msg; s.className = cls; };
+
+let idoc = null;            // プレビュー iframe の document
+let uimod = null;           // iframe 内に読み込んだ shared/ui-config.js
+let grayoutMode = true;     // true=OFF はグレー表示(編集用) / false=実際に隠す(確認用)
+const workingCfg = { hide: new Set(), defaults: {}, open: "", helpUrl: "" };
+let specEls = new Map();    // spec -> プレビュー内の代表要素
+let badgeTimer = null;
+
+function stripJsonComments(text) {
+  let out = "", inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], n = text[i + 1];
+    if (inStr) {
+      out += c;
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; out += c; continue; }
+    if (c === "/" && n === "/") {
+      while (i < text.length && text[i] !== "\n") i++;
+      out += "\n";
+      continue;
+    }
+    if (c === "/" && n === "*") {
+      i += 2;
+      while (i < text.length && !(text[i] === "*" && text[i + 1] === "/")) i++;
+      i++;
+      continue;
+    }
+    out += c;
+  }
+  return out.replace(/,(\s*[}\]])/g, "$1");
+}
+
+function specForTab(el) {
+  const d = el.dataset;
+  if (d.panel) return d.panel.replace(/-panel$/, "");
+  if (d.settingsPanel) {
+    const v = d.settingsPanel.replace(/-panel$/, "");
+    if (v.startsWith("tools-")) return "tools:" + v.slice(6);
+    if (v.startsWith("display-")) return "display:" + v.slice(8);
+    return "settings:" + v;
+  }
+  if (d.managePane) return "manage:" + d.managePane.replace(/^manage-/, "");
+  if (d.manageSub) return "managesub:" + d.manageSub.replace(/-panel$/, "");
+  if (d.settab) return "manage:" + d.settab;
+  if (d.tab) return d.tab;
+  return "";
+}
+
+// ---- プレビュー初期化 ----
+
+async function setupPreview() {
+  const iframe = $("preview");
+  await new Promise(r => { iframe.onload = r; });
+  idoc = iframe.contentDocument;
+  origHelpHref = idoc.getElementById("help-open")?.href ?? null;
+  // エンジンの起動完了を軽く待つ(タブ要素が出るまで)
+  for (let i = 0; i < 60 && !idoc.querySelector(TAB_SEL); i++) {
+    await new Promise(r => setTimeout(r, 250));
+  }
+  try {
+    uimod = await iframe.contentWindow.eval('import("../shared/ui-config.js")');
+  } catch (e) {
+    status("ui-config.js の読み込みに失敗(古い配置?): " + e, "err");
+    return;
+  }
+  // 編集しやすいよう折りたたみ系を展開(プレビュー側のみの見た目変更)
+  idoc.querySelector("#manage-window")?.removeAttribute("hidden");
+  idoc.querySelector("#settings-window")?.removeAttribute("hidden");
+  idoc.querySelector("#tools-dock")?.classList.remove("collapsed");
+  idoc.querySelector("#tools-panel")?.removeAttribute("hidden");
+  idoc.querySelector("#chat-panel")?.removeAttribute("hidden");
+  idoc.querySelector("#walk-help")?.style.removeProperty("display");
+  // overlay + badge CSS
+  const st = idoc.createElement("style");
+  st.textContent = `
+    #uica-ov{position:fixed;inset:0;pointer-events:none;z-index:2147483000}
+    .uica-eye{position:absolute;pointer-events:auto;display:inline-flex;align-items:center;justify-content:center;
+      width:15px;height:15px;background:rgba(255,252,225,.95);border:1px solid #a89a4f;border-radius:3px;
+      cursor:pointer;box-shadow:0 0 2px rgba(0,0,0,.45)}
+    .uica-eye.off{background:rgba(226,90,80,.95);border-color:#8a2f28}
+    .uica-eye input{margin:0;width:11px;height:11px;cursor:pointer}
+    .uica-off{opacity:.22!important;filter:grayscale(.95)!important;pointer-events:none!important}`;
+  idoc.head.appendChild(st);
+  const ov = idoc.createElement("div");
+  ov.id = "uica-ov";
+  idoc.body.appendChild(ov);
+  // defaults 捕捉: 実ユーザー操作(isTrusted)のみ記録。applyUiConfig の
+  // 合成イベントは isTrusted=false で除外される
+  idoc.addEventListener("change", e => {
+    const t = e.target;
+    if (!e.isTrusted || !t.id || !t.matches("input,select")) return;
+    workingCfg.defaults[t.id] = (t.type === "checkbox" || t.type === "radio") ? t.checked : t.value;
+    renderDefaults();
+  }, true);
+  collectSpecs();
+  buildBadges();
+  // ai-chat.js 等が遅延注入する要素(chat-panel等)は定期的に後付けする
+  badgeTimer = setInterval(() => { collectLateSpecs(); positionBadges(); }, 1200);
+}
+
+// プレビュー DOM から spec → 代表要素 を収集
+function collectSpecs() {
+  specEls = new Map();
+  const add = (spec, el) => { if (spec && el && !specEls.has(spec)) specEls.set(spec, el); };
+  for (const t of idoc.querySelectorAll(TAB_SEL)) add(specForTab(t), t);
+  for (const cand of [...PANEL_CANDIDATES, ...LEAF_PARTS]) {
+    for (const s of cand.sel.split(",")) {
+      const el = idoc.querySelector(s.trim());
+      if (el) { add(cand.spec || (el.id ? `#${el.id}` : s.trim()), el); break; }
+    }
+  }
+  collectSubButtons();
+}
+
+// パネル内の個別ボタン/セレクト(ツールバー・ベースマップ行)にバッジを付ける
+// #walk-help(独立spec)・AIパネル内部は除外
+const SUB_BUTTON_SEL = ":is(.navigation-toolbar,.basemap-control,#basemap-ctl) :is(button[id],a[id],select[id])";
+function collectSubButtons(withBadges = false) {
+  for (const el of idoc.querySelectorAll(SUB_BUTTON_SEL)) {
+    if (el.closest("#walk-help, #chat-panel, #ai-section")) continue;
+    const spec = `#${el.id}`;
+    if (!specEls.has(spec)) {
+      specEls.set(spec, el);
+      if (withBadges) addBadge(spec, el);
+    }
+  }
+}
+
+// ---- バッジ(チェックボックス) ----
+
+const badges = new Map(); // spec -> badge el
+
+function addBadge(spec, el) {
+  const b = idoc.createElement("label");
+  b.className = "uica-eye";
+  b.dataset.spec = spec;
+  b.title = `${spec} の表示 ON/OFF`;
+  const cb = idoc.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !workingCfg.hide.has(spec);
+  b.append(cb);
+  cb.addEventListener("change", () => {
+    for (const s of [spec, ...(SPEC_GROUPS[spec] || [])]) {
+      if (cb.checked) workingCfg.hide.delete(s);
+      else workingCfg.hide.add(s);
+    }
+    const g = SPEC_GROUPS[spec];
+    if (g) for (const s of g) {
+      const gb = badges.get(s);
+      if (gb) {
+        gb.badge.querySelector("input").checked = cb.checked;
+        gb.badge.classList.toggle("off", !cb.checked);
+      }
+    }
+    applyPreview();
+  });
+  idoc.getElementById("uica-ov").appendChild(b);
+  badges.set(spec, { el, badge: b });
+}
+
+function buildBadges() {
+  idoc.getElementById("uica-ov").textContent = "";
+  badges.clear();
+  for (const [spec, el] of specEls) addBadge(spec, el);
+  positionBadges();
+}
+
+// 起動後に遅れて生成される要素(AIチャット等)へ後からバッジを付ける
+function collectLateSpecs() {
+  if (!idoc) return;
+  collectSubButtons(true);
+  for (const cand of [...PANEL_CANDIDATES, ...LEAF_PARTS]) {
+    for (const s of cand.sel.split(",")) {
+      const el = idoc.querySelector(s.trim());
+      if (!el) continue;
+      const spec = cand.spec || (el.id ? `#${el.id}` : s.trim());
+      if (!specEls.has(spec)) { specEls.set(spec, el); addBadge(spec, el); }
+      break;
+    }
+  }
+}
+
+function positionBadges() {
+  if (!idoc) return;
+  for (const { el, badge } of badges.values()) {
+    if (!el.isConnected || el.hidden || el.dataset?.uiHidden === "1") {
+      badge.style.display = "none";
+      continue;
+    }
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) { badge.style.display = "none"; continue; }
+    badge.style.display = "";
+    badge.style.left = (r.right - badge.offsetWidth - 1) + "px";
+    badge.style.top = (r.top + 1) + "px";
+  }
+}
+
+// ---- プレビューへ設定を適用 ----
+
+let origHelpHref = null;
+
+function resetPreview() {
+  idoc.querySelectorAll("[data-ui-hidden]").forEach(el => {
+    el.hidden = false;
+    delete el.dataset.uiHidden;
+  });
+  idoc.querySelectorAll(".uica-off").forEach(el => el.classList.remove("uica-off"));
+  const a = idoc.getElementById("help-open");
+  if (a && origHelpHref !== null) a.href = origHelpHref;
+}
+
+// 編集中の hide 全体(バッジ分 + カスタム指定分)
+function hideSpecsAll() {
+  const set = new Set(workingCfg.hide);
+  for (const s of $("custom-hide").value.split(/[,\n]/).map(s => s.trim()).filter(Boolean)) set.add(s);
+  return set;
+}
+
+function applyPreview() {
+  if (!uimod) return;
+  resetPreview();
+  const hideSet = hideSpecsAll();
+  try {
+    const base = { defaults: { ...workingCfg.defaults }, open: workingCfg.open || undefined, helpUrl: workingCfg.helpUrl || undefined };
+    if (grayoutMode) {
+      // 編集モード: 実際には隠さずグレー表示し、再チェックでその場復帰できるようにする
+      uimod.applyUiConfig(base);
+      for (const spec of hideSet) {
+        for (const el of uimod.resolveTargets(spec, idoc)) el.classList.add("uica-off");
+      }
+    } else {
+      // 確認モード: 本番と同じ適用(実際に非表示)
+      uimod.applyUiConfig({ hide: [...hideSet], ...base });
+    }
+  } catch (e) { console.warn(e); }
+  for (const { badge } of badges.values()) {
+    badge.classList.toggle("off", hideSet.has(badgeSpec(badge)));
+  }
+  positionBadges();
+  renderChips();
+}
+
+$("mode-toggle").addEventListener("click", () => {
+  grayoutMode = !grayoutMode;
+  $("mode-toggle").textContent = grayoutMode ? "モード: グレー表示" : "モード: 実際に隠す";
+  applyPreview();
+});
+const badgeSpec = b => b.dataset.spec;
+
+// ---- 右ペイン ----
+
+function renderChips() {
+  const host = $("hide-chips");
+  host.textContent = "";
+  const all = [...workingCfg.hide, ...[...$("custom-hide").value.split(/[,\n]/)].map(s => s.trim()).filter(Boolean)];
+  if (!all.length) { host.innerHTML = '<span class="empty">なし</span>'; return; }
+  for (const spec of all) {
+    if (GROUP_PARENT[spec] && workingCfg.hide.has(GROUP_PARENT[spec])) continue;
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = spec;
+    c.title = "クリックで再表示";
+    c.addEventListener("click", () => {
+      if (workingCfg.hide.has(spec)) {
+        for (const s of [spec, ...(SPEC_GROUPS[spec] || [])]) {
+          workingCfg.hide.delete(s);
+          const b = badges.get(s);
+          if (b) { b.badge.querySelector("input").checked = true; b.badge.classList.remove("off"); }
+        }
+      } else {
+        $("custom-hide").value = $("custom-hide").value.split(/[,\n]/).map(s => s.trim()).filter(s => s && s !== spec).join(", ");
+      }
+      applyPreview();
+    });
+    host.appendChild(c);
+  }
+}
+
+function renderDefaults() {
+  const host = $("defaults-list");
+  host.textContent = "";
+  const keys = Object.keys(workingCfg.defaults);
+  if (!keys.length) { host.innerHTML = '<span class="empty">なし — プレビュー内のコントロールを操作すると記録されます</span>'; return; }
+  for (const id of keys) {
+    const row = document.createElement("div");
+    row.className = "ovr";
+    const code = document.createElement("code");
+    code.textContent = `${id} = ${JSON.stringify(workingCfg.defaults[id])}`;
+    const btn = document.createElement("button");
+    btn.textContent = "✕";
+    btn.title = "上書きを解除";
+    btn.addEventListener("click", () => { delete workingCfg.defaults[id]; renderDefaults(); });
+    row.append(code, btn);
+    host.appendChild(row);
+  }
+  // 開いている一覧は行を再構築せず over チェックの見た目だけ同期する
+  if ($("ctl-list").open) {
+    for (const r of document.querySelectorAll("#ctl-rows .ctl-row")) {
+      const over = r.querySelector("input[data-over]");
+      if (over) over.checked = Object.hasOwn(workingCfg.defaults, r.dataset.cid);
+    }
+  }
+}
+
+// プレビュー内の input/select を列挙して手動の初期値指定を可能にする
+function renderCtlList() {
+  const host = $("ctl-rows");
+  if (!idoc) { host.innerHTML = '<span class="empty">プレビュー未読み込み</span>'; return; }
+  host.textContent = "";
+  // 初期値を持つ値系コントロールのみ(ON/OFF型はプレビュー操作で記録するため除外)
+  const els = [...idoc.querySelectorAll("input[id],select[id]")]
+    .filter(e => !e.closest("#uica-ov") &&
+      !["file", "hidden", "checkbox", "radio", "button", "submit", "reset", "image"].includes(e.type));
+  if (!els.length) { host.innerHTML = '<span class="empty">コントロールが見つかりません</span>'; return; }
+  for (const el of els) {
+    const row = document.createElement("div");
+    row.className = "ctl-row";
+    row.dataset.cid = el.id;
+    const over = document.createElement("input");
+    over.type = "checkbox";
+    over.dataset.over = "1";
+    over.title = "この初期値を defaults に記録する";
+    over.checked = Object.hasOwn(workingCfg.defaults, el.id);
+    const lab = el.closest("label") || (el.id && idoc.querySelector(`label[for="${el.id}"]`));
+    const ltxt = (lab?.textContent || el.title || el.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ");
+    const name = document.createElement("span");
+    name.className = "ctl-name";
+    name.textContent = ltxt ? `${el.id} — ${ltxt.slice(0, 40)}` : el.id;
+    name.title = el.id;
+    const cur = Object.hasOwn(workingCfg.defaults, el.id) ? workingCfg.defaults[el.id] : null;
+    const ed = document.createElement(el.tagName === "SELECT" ? "select" : "input");
+    if (el.tagName === "SELECT") {
+      for (const o of el.options) {
+        const c = document.createElement("option");
+        c.value = c.textContent = o.value;
+        ed.appendChild(c);
+      }
+    } else ed.type = "text";
+    ed.value = cur !== null ? String(cur) : el.value;
+    ed.addEventListener("change", () => { if (over.checked) { workingCfg.defaults[el.id] = ed.value; renderDefaults(); } });
+    over.addEventListener("change", () => {
+      if (over.checked) workingCfg.defaults[el.id] = ed.value;
+      else delete workingCfg.defaults[el.id];
+      renderDefaults();
+    });
+    row.append(over, name, ed);
+    host.appendChild(row);
+  }
+}
+$("ctl-list").addEventListener("toggle", () => { if ($("ctl-list").open && idoc) renderCtlList(); });
+
+function renderOpenOptions() {
+  const sel = $("open-tab");
+  const cur = workingCfg.open;
+  sel.innerHTML = '<option value="">(未設定)</option>';
+  for (const spec of specEls.keys()) {
+    if (spec.startsWith("#") || spec.startsWith(".") || spec === "chat" || spec === "portal" || spec === "engines") continue;
+    const o = document.createElement("option");
+    o.value = o.textContent = spec;
+    sel.appendChild(o);
+  }
+  sel.value = cur;
+}
+
+$("open-tab").addEventListener("change", () => { workingCfg.open = $("open-tab").value; });
+$("open-from-preview").addEventListener("click", () => {
+  const act = idoc?.querySelector("[data-panel].active,[data-tab].active");
+  if (act) {
+    workingCfg.open = specForTab(act);
+    $("open-tab").value = workingCfg.open;
+    status(`open = ${workingCfg.open}`, "ok");
+  } else status("アクティブなタブが見つかりません", "err");
+});
+$("custom-hide").addEventListener("change", () => { renderChips(); applyPreview(); });
+$("help-url").addEventListener("change", () => {
+  workingCfg.helpUrl = $("help-url").value.trim();
+  applyPreview();
+});
+
+// ---- 生成・保存 ----
+
+function buildConfig() {
+  const hide = [...workingCfg.hide];
+  for (const s of $("custom-hide").value.split(/[,\n]/).map(s => s.trim()).filter(Boolean)) {
+    if (!hide.includes(s)) hide.push(s);
+  }
+  const out = {};
+  if (hide.length) out.hide = hide;
+  if (Object.keys(workingCfg.defaults).length) out.defaults = workingCfg.defaults;
+  if (workingCfg.open) out.open = workingCfg.open;
+  if (workingCfg.helpUrl) out.helpUrl = workingCfg.helpUrl;
+  return out;
+}
+
+$("gen").addEventListener("click", () => {
+  $("out").value = JSON.stringify(buildConfig(), null, 2);
+  status("生成しました");
+});
+$("reapply").addEventListener("click", () => { applyPreview(); status("プレビューへ再適用しました", "ok"); });
+
+$("save").addEventListener("click", async () => {
+  if (!$("out").value.trim()) $("gen").click();
+  const engine = $("engine").value;
+  try {
+    const res = await fetch(`../api/ui-config/${engine}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: $("out").value }),
+    });
+    if (!res.ok) throw new Error(await res.text() || res.status);
+    status(`${engine}/ui.config.json に保存しました`, "ok");
+  } catch (e) {
+    status(`保存失敗 (静的ホストではダウンロードして配置): ${e.message || e}`, "err");
+  }
+});
+
+$("delete").addEventListener("click", async () => {
+  const engine = $("engine").value;
+  if (!confirm(`${engine}/ui.config.json を削除しますか？`)) return;
+  try {
+    const res = await fetch(`../api/ui-config/${engine}`, { method: "DELETE" });
+    if (!res.ok) throw new Error(await res.text() || res.status);
+    status("削除しました", "ok");
+    workingCfg.hide.clear();
+    workingCfg.defaults = {};
+    workingCfg.open = "";
+    workingCfg.helpUrl = "";
+    $("help-url").value = "";
+    $("out").value = "";
+    renderChips(); renderDefaults();
+    applyPreview();
+  } catch (e) {
+    status(`削除失敗: ${e.message || e}`, "err");
+  }
+});
+
+$("download").addEventListener("click", () => {
+  if (!$("out").value.trim()) $("gen").click();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([$("out").value], { type: "application/json" }));
+  a.download = "ui.config.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+$("copy").addEventListener("click", async () => {
+  if (!$("out").value.trim()) $("gen").click();
+  await navigator.clipboard.writeText($("out").value);
+  status("コピーしました", "ok");
+});
+
+// ---- エンジン切替 ----
+
+async function loadEngine(engine) {
+  status("プレビュー読み込み中…");
+  $("engine-file").textContent = `${engine}/ui.config.json`;
+  $("engine-link").href = `../${engine}/`;
+  if (badgeTimer) { clearInterval(badgeTimer); badgeTimer = null; }
+  workingCfg.hide.clear();
+  workingCfg.defaults = {};
+  workingCfg.open = "";
+  workingCfg.helpUrl = "";
+  $("help-url").value = "";
+  $("custom-hide").value = "";
+  // 既存設定の読み込み(コメント許容)
+  try {
+    const res = await fetch(`../${engine}/ui.config.json`, { cache: "no-store" });
+    if (res.ok) {
+      const text = await res.text();
+      const cfg = JSON.parse(stripJsonComments(text));
+      $("out").value = text;
+      for (const s of Array.isArray(cfg.hide) ? cfg.hide : cfg.hide ? [cfg.hide] : []) {
+        workingCfg.hide.add(s);
+      }
+      workingCfg.defaults = cfg.defaults || {};
+      workingCfg.open = cfg.open || "";
+      workingCfg.helpUrl = cfg.helpUrl || "";
+      $("help-url").value = workingCfg.helpUrl;
+    } else {
+      $("out").value = "";
+    }
+  } catch { /* 未配置 */ }
+  $("preview").src = `../${engine}/`;
+  try {
+    await setupPreview();
+    // 既存設定にあってバッジ化できない spec はカスタム欄へ
+    const custom = [...workingCfg.hide].filter(s => !specEls.has(s));
+    workingCfg.hide = new Set([...workingCfg.hide].filter(s => specEls.has(s)));
+    $("custom-hide").value = custom.join(", ");
+    applyPreview();
+    renderDefaults();
+    renderOpenOptions();
+    status("プレビュー準備完了", "ok");
+  } catch (e) {
+    status(`プレビュー初期化失敗: ${e.message || e}`, "err");
+  }
+}
+
+(async () => {
+  const sel = $("engine");
+  for (const e of KNOWN_ENGINES) {
+    const o = document.createElement("option");
+    o.value = o.textContent = e;
+    sel.appendChild(o);
+  }
+  sel.addEventListener("change", () => loadEngine(sel.value));
+  await loadEngine(sel.value);
+})();
+</script>
+</body>
+</html>

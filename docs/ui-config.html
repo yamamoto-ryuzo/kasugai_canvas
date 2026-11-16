@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UI カスタマイズ（ui.config.json）— KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>UI カスタマイズ — ui.config.json でパネル機能の表示/非表示・初期値を配布単位で制御</p>
+    </header>
+    <main>
+      <div style="background:#fff7e0;border:2px solid #e6a817;border-radius:8px;padding:14px 18px;margin-bottom:24px;">
+        <strong style="font-size:1.1em;">管理画面（ローカルアプリ専用）</strong><br>
+        <a href="http://127.0.0.1:8510/admin/ui-config-admin.html" target="_blank" style="font-size:1.05em;font-weight:bold;"><code>http://127.0.0.1:8510/admin/ui-config-admin.html</code></a>
+        <p style="margin:.5em 0 0;">ローカルアプリ起動中にブラウザで開くと、実際のエンジン画面をプレビューしながらカスタマイズ設定を作成・保存できます。<strong>CDN 公開版にはこのページは含まれません</strong>（<code>web/admin/</code> はアップロード対象外）。詳細は <a href="#admin">4. 管理画面</a> を参照。</p>
+      </div>
+      <section>
+        <h2>1. 概要</h2>
+        <p>
+          各エンジンの <code>index.html</code> と<strong>同じフォルダ</strong>に <code>ui.config.json</code> を置くと、
+          そのエンジンのパネル機能（タブ・ツール・管理ウィンドウ・各種ボタン）の<strong>表示/非表示</strong>と、
+          チェックボックス・セレクト等の<strong>初期値</strong>を、コードを変更せずにカスタマイズできます。
+        </p>
+        <ul>
+          <li>配布先: <code>web/&lt;engine&gt;/ui.config.json</code>（cesium / maplibre / openlayers / leaflet / gsimaps / navara 共通）</li>
+          <li>ファイルが無い場合（404）は何もしません。既定挙動のまま起動します</li>
+          <li>JSON に <code>//</code>・<code>/* */</code> コメントと末尾カンマを許容します（手編集しやすい形式）</li>
+          <li>書式のひな型は <code>web/cesium/ui.config.sample.json</code> を参照（リネームして使えます）</li>
+        </ul>
+        <p>
+          用途例: 納品用に「検索・属性タブを隠す」「AI チャットを出さない」「地形の初期値を OFF にする」
+          「ミニマップを最初から表示する」などの個別カスタマイズ。
+        </p>
+      </section>
+
+      <section>
+        <h2>2. 設定ファイルの形式</h2>
+        <pre><code>{
+  // 機能の非表示。機能名または CSS セレクタで指定
+  "hide": [
+    "attr",            // 属性タブ（タブとパネルの両方が隠れる）
+    "tools:los",       // ツールドックの「見通し判定」
+    "manage:gmaps",    // 管理ウィンドウの「Google Maps」
+    "chat",            // AI チャットパネル
+    "#help-open"       // セレクタ直指定（ヘルプ ? ボタン）
+  ],
+  // コントロールの初期値（要素 id → 値）
+  "defaults": {
+    "terrain-toggle": false,   // 地形(DEM表示)を初期 OFF
+    "dem-source": "gsi5m",     // DEM ソースの初期選択
+    "display-minimap": true,   // ミニマップを初期 ON
+    "effect-fog": false        // 霧を初期 OFF
+  },
+  // 起動時に開くタブ（省略時は従来の既定タブ）
+  "open": "search"
+}</code></pre>
+
+        <h3>2-1. <code>hide</code> — 機能の非表示</h3>
+        <p>
+          タブ系の機能を隠すと対応パネルもまとめて隠れます。非表示にしたタブがアクティブだった場合は、
+          先頭の表示タブへ自動で繰り上がります。適用は起動時の1回のみで、後から動的に生成される要素は対象外です。
+        </p>
+        <table>
+          <thead><tr><th>指定方法</th><th>対象</th><th>例</th></tr></thead>
+          <tbody>
+            <tr><td>名前のみ</td><td>パネルタブ＋同名のタブ/要素</td><td><code>layers</code> <code>legend</code> <code>search</code> <code>attr</code> <code>camera</code> <code>display</code> <code>info</code></td></tr>
+            <tr><td><code>tools:&lt;名&gt;</code></td><td>ツールドックのツール</td><td><code>measure</code> <code>spatial</code> <code>draw</code> <code>profile</code> <code>los</code> <code>export</code> <code>print</code> <code>time</code></td></tr>
+            <tr><td><code>display:&lt;名&gt;</code></td><td>表示タブ内サブタブ</td><td><code>terrain</code> <code>drape</code> <code>tiles</code> <code>effects</code> <code>general</code></td></tr>
+            <tr><td><code>manage:&lt;名&gt;</code></td><td>管理ウィンドウ大分類</td><td><code>project</code> <code>ai</code> <code>gmaps</code> <code>app</code> <code>other</code></td></tr>
+            <tr><td><code>managesub:&lt;名&gt;</code></td><td>管理内サブタブ</td><td><code>gemini</code> <code>datasource</code> <code>plugin</code> <code>ai-install</code> 等</td></tr>
+            <tr><td>固定名</td><td>タブ規約に載らない部品</td><td><code>chat</code>（AIチャット） <code>portal</code>（ポータル） <code>engines</code>（エンジン切替）</td></tr>
+            <tr><td>要素 id / CSS セレクタ</td><td>任意の UI 要素</td><td><code>time-bar</code> <code>tools-dock</code> <code>share-copy</code> <code>screenshot-button</code> <code>manage-open</code> <code>help-open</code> <code>project-select</code> <code>"#search-provider"</code> <code>".control-panel"</code></td></tr>
+          </tbody>
+        </table>
+        <p>
+          要素 id は開発者ツールや <code>index.html</code> の <code>id="…"</code> で確認できます。
+          セレクタ記法（<code>#</code>・<code>.</code>・<code>[</code>・空白・<code>&gt;</code> で始まる文字列）はそのまま
+          <code>querySelectorAll</code> へ渡されます。
+        </p>
+
+        <h3>2-2. <code>defaults</code> — コントロールの初期値</h3>
+        <p>
+          <code>"要素 id": 値</code> の対で指定します。checkbox は <code>true</code>/<code>false</code>、
+          select・テキスト・数値・スライダーはその値を設定します。
+          設定値は<strong>ユーザー操作と同じイベント（input → change）で適用</strong>されるため、
+          内部状態や再描画へ正しく反映されます。指定できる主な id は
+          <code>web/cesium/ui.config.sample.json</code> のコメント一覧を参照してください。
+        </p>
+        <ul>
+          <li>存在しない id・値のない選択肢は警告を出してスキップします</li>
+        </ul>
+
+        <h3>2-3. <code>open</code> — 起動時に開くタブ</h3>
+        <p>
+          <code>hide</code> と同じ機能名で指定します（例: <code>"open": "search"</code>）。
+          省略時は従来通り先頭タブ（レイヤ）が開きます。
+        </p>
+
+        <h3>2-4. <code>helpUrl</code> — ヘルプボタンのリンク先</h3>
+        <p>
+          パネル右上の <code>?</code>（ヘルプ）ボタンのリンク先 URL を上書きします（例: 社内独自の手順書へ差し替え）。
+          省略時は既定の公式ヘルプのままです。ボタン自体を消したい場合は <code>hide</code> に <code>"#help-open"</code> を指定してください。
+        </p>
+      </section>
+
+      <section>
+        <h2>3. 動作の詳細・注意点</h2>
+        <ul>
+          <li><strong>エンジンごとのファイル</strong>: <code>web/cesium/ui.config.json</code> と <code>web/maplibre/ui.config.json</code> は別物です。各エンジンの index.html 基準で読み込まれます</li>
+          <li><strong>適用タイミング</strong>: 起動時のプロジェクト読込前に1回適用します。あくまで初期状態の設定で、読込後の変更はページ再読み込みで反映されます</li>
+          <li><strong>非表示の確実性</strong>: <code>hide</code> で隠した要素は <code>display:none</code>（important 指定）で隠すため、パネル側の CSS（flex 表示等）に関わらず確実に非表示になります</li>
+          <li><strong>AI 制御との関係</strong>: 非表示にした UI は汎用ブリッジ（listUiControls）の列挙対象からも外れます</li>
+          <li><strong>アプリの自動更新との関係</strong>: 更新時は <code>web/</code> 全体が差し替えられますが、<code>ui.config.json</code> は旧 web から新 web へ自動で引き継がれるため再配置は不要です</li>
+        </ul>
+      </section>
+
+      <section id="admin">
+        <h2>4. 管理画面（ローカルアプリ専用）</h2>
+        <p>
+          ローカルアプリ起動時は
+          <a href="http://127.0.0.1:8510/admin/ui-config-admin.html" target="_blank"><code>http://127.0.0.1:8510/admin/ui-config-admin.html</code></a>
+          をブラウザで開くと、<strong>実際のエンジンをそのまま表示したプレビュー</strong>上でカスタマイズできます。
+        </p>
+        <ul>
+          <li>各タブ・パネル・部品の右上に表示されるチェックボックスで <code>hide</code> を ON/OFF できます。OFF はグレー表示（再チェックでその場復帰）で、ツールバーやベースマップ行のボタン単位まで指定できます。「実際に隠す」モードで本番の見え方も確認できます</li>
+          <li>プレビュー内のコントロール（チェック・選択・数値）を実際に操作すると、その値が <code>defaults</code> の初期値として記録されます。値系コントロールは「コントロール一覧から手動追加」から直接入力もできます</li>
+          <li>「現在のタブ」ボタンでプレビュー表示中のタブを <code>open</code>（起動時タブ）に、「ヘルプURL」入力欄で <code>helpUrl</code>（? ボタンのリンク先）を設定できます</li>
+          <li>「サーバーに保存」で <code>POST /api/ui-config/{engine}</code> 経由の直接書き込み、「設定を削除」で <code>DELETE</code> が実行できます</li>
+          <li><strong>公開範囲について</strong>: この管理画面は <code>web/admin/</code> 配下にあり、CDN 公開（<code>tools/publish_cdn.py</code>）では<strong>アップロードされません</strong>。CDN ホスト版にはページ自体が存在しないため、配布先で管理画面が開かれることはありません。静的ホストで運用する場合はローカルで生成した <code>ui.config.json</code> をダウンロードして各エンジンフォルダへ配置してください</li>
+        </ul>
+      </section>
+      <p><a href="tech/1-3-設定内部仕様.html">← 設定・内部仕様へ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>

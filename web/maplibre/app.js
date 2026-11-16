@@ -26,6 +26,7 @@ import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
+import { initUiConfig } from "../shared/ui-config.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
@@ -2041,9 +2042,13 @@ map.on("dblclick", e => { if (geoTools.handleDoubleClick()) e.preventDefault(); 
 map.on("mousemove", e => { geoTools.handleMouseMove(e.lngLat); });
 
 map.on("load", () => {
-  loadProject().catch(err => {
-    panel.unsupported.textContent = String(err.message || err);
-  });
+  void (async () => {
+    // ui.config.json の UI カスタマイズを初期描画前に適用
+    try { await initUiConfig(); } catch (e) { console.warn("[ui-config]", e); }
+    try { await loadProject(); } catch (err) {
+      panel.unsupported.textContent = String(err.message || err);
+    }
+  })();
 });
 
 // ---- QGIS 描画フォールバック・オーバーレイ(#62) ----

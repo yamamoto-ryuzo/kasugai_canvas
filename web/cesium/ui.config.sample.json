@@ -1,0 +1,85 @@
+{
+  // ================================================================
+  // KASUGAI Canvas — UI カスタマイズ設定 (サンプル)
+  //
+  // このファイルを `ui.config.json` にリネームして index.html と
+  // 同じフォルダに置くと有効になります(エンジンごとに配置)。
+  // // ・/* */ コメント記法が使えます。
+  // ================================================================
+
+  // ---- hide: 機能の非表示 ----
+  // 機能名または CSS セレクタで指定。タブを隠すと対応パネルも隠れ、
+  // 非表示タブがアクティブだった場合は先頭の表示タブへ繰り上がる。
+  //
+  // パネルタブ(名前のみ):  layers legend search attr camera display info
+  // ツールドック:          tools:measure tools:spatial tools:draw
+  //                        tools:profile tools:los tools:export
+  //                        tools:print tools:time
+  // 表示タブ内サブタブ:     display:terrain display:drape display:tiles
+  //                        display:effects display:general
+  // 管理ウィンドウ:         manage:project manage:ai manage:gmaps
+  //                        manage:app manage:other
+  // 管理内サブタブ:         managesub:gemini managesub:datasource
+  //                        managesub:plugin managesub:ai-install 等
+  // 固定名:                chat(AIチャット) portal(ポータル) engines(エンジン切替)
+  // 要素id/CSSセレクタ:    time-bar tools-dock share-copy screenshot-button
+  //                        manage-open help-open project-select
+  //                        "#search-provider" ".control-panel" 等
+  //
+  "hide": [
+    // "attr",
+    // "tools:los",
+    // "manage:gmaps",
+    // "chat",
+    // "#help-open"
+  ],
+
+  // ---- defaults: コントロールの初期値 ----
+  // 要素 id → 値。checkbox は true/false、select・テキスト・数値・
+  // スライダーはその値。設定した値はユーザー操作と同じイベントで
+  // 適用される(内部状態・再描画へ反映される)。
+  //
+  "defaults": {
+    // "terrain-toggle": false,          // 地形(DEM表示)の初期ON/OFF
+    // "dem-source": "gsi5m",            // DEM ソース
+    // "terrain-exaggeration": 1,        // 地形の誇張
+    // "effect-fog": false,              // 霧
+    // "effect-sky-atmosphere": true,    // 大気
+    // "effect-shadows": true,           // 影
+    // "effect-depth-test": true,        // 地形深度テスト
+    // "effect-terrain-lighting": true,  // 地形照明
+    // "effect-translucency": false,     // 地下透過
+    // "underground-dive-toggle": true,  // 地下移動
+    // "cesium-sse": 16,                 // Maximum Screen Space Error
+    // "cesium-max-memory": 2048,        // Maximum Memory Usage (MB)
+    // "cesium-dynamic-sse": true,
+    // "cesium-cull-children": true,
+    // "cesium-prefer-leaves": false,
+    // "cesium-skip-lod": true,
+    // "vector-entity-limit": 20000,     // ベクター描画件数の上限
+    // "basemap-drape-dem": true,        // ドレープ: ベースマップ→DEM
+    // "basemap-drape-3dtiles": true,    // ドレープ: ベースマップ→3D Tiles
+    // "drape-xyz-dem": true,
+    // "drape-xyz-tiles3d": true,
+    // "drape-geojson-dem": true,
+    // "drape-geojson-tiles3d": true,
+    // "drape-geojson-primitive-dem": false,
+    // "drape-geojson-primitive-tiles3d": false,
+    // "display-basemap-opacity": 1,     // ベースマップ透過度 (0-1)
+    // "display-layer-opacity": 1,       // レイヤー透過度 (0-1)
+    // "display-scalebar": true,         // スケールバー
+    // "display-coords": true,           // カーソル座標
+    // "coords-format": "deg",           // 座標形式 deg/dms/utm/jpx/local
+    // "coords-datum": "jgd2024",        // 測地系
+    // "display-graticule": false,       // 緯度経度グリッド
+    // "display-minimap": false,         // ミニマップ
+    // "search-provider": "gsi",         // 住所検索プロバイダ gsi/google/yahoo
+    // "streetview-coverage": false      // Street View 候補ライン
+  },
+
+  // ---- open: 起動時に開くタブ(省略時は従来の既定タブ) ----
+  // "open": "layers",
+
+  // ---- helpUrl: ?(ヘルプ)ボタンのリンク先(省略時は公式ヘルプ) ----
+  // "helpUrl": "https://example.com/help/"
+}

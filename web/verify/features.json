@@ -4782,6 +4782,26 @@
    "last_result": "pass",
    "last_verified": "2026-11-15T23:27:40+09:00",
    "note": "修正 77cff9c 後 probe-2026-11-15-live-results.json で discover=true/mcp=true 確認(cesium)。Issue #121 closed"
+  },
+  {
+   "id": "web.shared.ui-config",
+   "kind": "logic_fn",
+   "name": "ui-config",
+   "source": "web/shared/ui-config.js",
+   "signature": "ui-config",
+   "summary": "ui.config.json(index.html同階層)でUI機能の表示/非表示(hide)・コントロール初期値(defaults)・初期タブ(open)を起動時1回適用。全6エンジン共通。管理画面 web/admin/ui-config-admin.html がエンジンHTMLを解析して機能手動列挙し、POST/DELETE /api/ui-config/{engine} で保存・削除(静的ホストはダウンロード配置)",
+   "needs_runtime": true,
+   "standalone_ok": false,
+   "depends": [
+    "HTTPサーバ(静的配信)"
+   ],
+   "verify": {
+    "standalone": "",
+    "integrated": "ui.config.json設置→ブラウザでタブ非表示・初期値反映を確認"
+   },
+   "last_result": "pass",
+   "last_verified": "2026-11-17T00:00:00+09:00",
+   "note": "Playwright検証: hide/defaults/open 適用を確認"
   }
  ],
  "updated": "2026-11-15T23:27:40+09:00"

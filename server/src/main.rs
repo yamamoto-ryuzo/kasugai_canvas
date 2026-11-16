@@ -1219,6 +1219,67 @@ async fn delete_plugin(
     Ok(Json(json!({ "ok": true, "id": id })))
 }
 
+// -- ui.config.json (UI カスタマイズ) の保存 API --
+// 管理画面(web/admin/ui-config-admin.html)からエンジン別の index.html 同階層へ書き込む。
+// 静的ホスト(CDN)では本 API が無いため、管理画面はダウンロード保存へフォールバックする
+
+const UI_CONFIG_MAX_BYTES: usize = 256 * 1024;
+
+// engine は web_dir 直下のサブディレクトリ名でのみ有効(パストラバーサル防止)
+fn is_valid_ui_config_engine(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+}
+
+#[derive(Deserialize)]
+struct UiConfigSaveRequest {
+    content: String,
+}
+
+async fn save_ui_config(
+    State(state): State<AppState>,
+    axum::extract::Path(engine): axum::extract::Path<String>,
+    Json(request): Json<UiConfigSaveRequest>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if !is_valid_ui_config_engine(&engine) {
+        return Err((StatusCode::BAD_REQUEST, "engine 名が不正です".to_string()));
+    }
+    if request.content.len() > UI_CONFIG_MAX_BYTES {
+        return Err((
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "設定ファイルが大きすぎます".to_string(),
+        ));
+    }
+    let dir = state.web_dir.join(&engine);
+    if !dir.is_dir() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            format!("エンジン {engine} が見つかりません"),
+        ));
+    }
+    tokio::fs::write(dir.join("ui.config.json"), request.content)
+        .await
+        .map_err(internal_error)?;
+    Ok(Json(json!({ "ok": true, "engine": engine })))
+}
+
+async fn delete_ui_config(
+    State(state): State<AppState>,
+    axum::extract::Path(engine): axum::extract::Path<String>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    if !is_valid_ui_config_engine(&engine) {
+        return Err((StatusCode::BAD_REQUEST, "engine 名が不正です".to_string()));
+    }
+    let path = state.web_dir.join(&engine).join("ui.config.json");
+    if path.exists() {
+        tokio::fs::remove_file(&path).await.map_err(internal_error)?;
+    }
+    Ok(Json(json!({ "ok": true, "engine": engine })))
+}
+
 // /api/files のアップロード上限
 const FILE_WRITE_MAX_BYTES: usize = 64 * 1024 * 1024;
 
@@ -4528,6 +4589,18 @@ fn apply_update_files(update_pid: u32, web_dir: &Path, exe_dir: Option<&Path>) {
         if std::fs::rename(web_dir, &backup_web).is_ok() {
             match move_dir_all(&new_web, web_dir) {
                 Ok(()) => {
+                    // ui.config.json(各エンジンの index.html 同階層に置く UI カスタマ
+                    // イズ設定)は配布物に含まれないユーザーファイルのため、web 差し替え
+                    // で失われないよう旧 web から新 web へ引き継ぐ
+                    if let Ok(entries) = std::fs::read_dir(&backup_web) {
+                        for entry in entries.flatten() {
+                            let dir = entry.path();
+                            let src = dir.join("ui.config.json");
+                            if dir.is_dir() && src.is_file() {
+                                let _ = std::fs::copy(&src, web_dir.join(entry.file_name()).join("ui.config.json"));
+                            }
+                        }
+                    }
                     let _ = std::fs::remove_dir_all(&backup_web);
                 }
                 Err(e) => {
@@ -5891,6 +5964,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/api/plugins", post(save_plugin))
         .route("/api/plugins/{id}", delete(delete_plugin))
+        .route(
+            "/api/ui-config/{engine}",
+            post(save_ui_config).delete(delete_ui_config),
+        )
         .route("/api/files", get(list_data_files))
         .route(
             "/api/files/{project}/{*path}",

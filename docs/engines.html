@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>エンジン — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>エンジン — 6つの地図画面の特徴と使い分け</p>
+    </header>
+    <main>
+      <section>
+        <h2>1. 概要</h2>
+        <p>
+          KASUGAI Canvas は、同じプロジェクトを<strong>6種類の地図画面（エンジン）</strong>で開くことができます。
+          画面パネルの下にある「engine:」のリンクから、見ている場所や内容をそのままに別のエンジンへ切り替えられます。
+          それぞれ得意なことが違うので、目的に合わせて使い分けてください。
+        </p>
+      </section>
+
+      <section>
+        <h2>2. エンジン別の特徴</h2>
+        <div class="features">
+          <div class="feature-card">
+            <h3>🌐 Cesium（メイン・既定）</h3>
+            <p><strong>一番いろんな表現で表示できる、全部入りのエンジン</strong>。地図を立体的（3D）に見たり、地形の起伏や建物の立体モデルを表示したり、プレゼンのように視点を動かしたりできます。AI 操作や追加機能にもすべて対応。迷ったらこのエンジンを使ってください。</p>
+          </div>
+          <div class="feature-card">
+            <h3>🗺 MapLibre（サクサク 2D）</h3>
+            <p><strong>データが多くても軽快に動く 2D エンジン</strong>。たくさんの情報を載せた地図でもストレスなく拡大・縮小・移動でき、地図を回転させたり少し傾けて立体的に見せることもできます。</p>
+          </div>
+          <div class="feature-card">
+            <h3>🧭 OpenLayers（表示が多様な 2D）</h3>
+            <p><strong>いろいろな種類の地図・データを幅広く表示できる</strong>堅実な 2D エンジン。外部の地図サービスとの相性が良く、パソコンの性能をあまり選ばずに動作します。</p>
+          </div>
+          <div class="feature-card">
+            <h3>🍃 Leaflet（とにかく軽い 2D）</h3>
+            <p><strong>最も軽いエンジン</strong>。古いパソコンやブラウザでも開けるため、「相手の環境が分からないけど確実に見てほしい」という共有用に向いています。</p>
+          </div>
+          <div class="feature-card">
+            <h3>🇯🇵 GSI Maps（地理院地図・調整中）</h3>
+            <p>国土地理院の<strong>「地理院地図」と同じ画面・同じ操作感</strong>でプロジェクトを開けるエンジン。使い慣れた地理院地図のレイヤー選択をそのまま使えます。現在調整中です。</p>
+          </div>
+          <div class="feature-card">
+            <h3>✨ Navara（きれいな 3D・試験的）</h3>
+            <p><strong>写真のようにリアルな 3D 表示</strong>が特徴のエンジン。空や太陽の光まで再現した美しい見た目で、プレゼンの見せ方を重視したいときに。試験的なため、使えない機能もあります。</p>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. 使い分けの目安</h2>
+        <table>
+          <thead><tr><th>こんなときは</th><th>おすすめ</th></tr></thead>
+          <tbody>
+            <tr><td>立体的に見たい・プレゼンしたい</td><td><code>cesium</code></td></tr>
+            <tr><td>データ量が多い地図をサクサク見たい</td><td><code>maplibre</code></td></tr>
+            <tr><td>様々な種類の地図を幅広く表示したい</td><td><code>openlayers</code></td></tr>
+            <tr><td>古いパソコンでも確実に開けるようにしたい</td><td><code>leaflet</code></td></tr>
+            <tr><td>地理院地図そのままの画面で見たい</td><td><code>gsimaps</code></td></tr>
+            <tr><td>見た目がきれいな 3D を試したい</td><td><code>navara</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>4. 関連ページ</h2>
+        <ul>
+          <li><a href="use/1-10-マルチエンジン.html">使い方 1-10 マルチエンジン（engine: 切替）</a> — 切替方法・エンジン別対応範囲の詳細</li>
+          <li><a href="features/v6.html">V6 — マルチエンジン</a> — バージョンテーマとしての構成</li>
+          <li><a href="library.html#地図エンジンの選定と追加候補">ライブラリ — 地図エンジンの選定と追加候補</a> — 技術的な特性比較（開発者向け）</li>
+          <li><a href="ui-config.html">UI カスタマイズ</a> — エンジンごとの表示/初期値カスタマイズ（ui.config.json）</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

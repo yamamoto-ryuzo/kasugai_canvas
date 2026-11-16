@@ -14,9 +14,26 @@
       <p>バージョン履歴 — 機能追加の履歴と現行実装の仕組み・制限（カード索引）</p>
     </header>
     <main>
-      <p>機能をバージョンごとのテーマに沿ってカード形式で整理した履歴索引です。実装済みのテーマ（V7→V1 の新しい順）と、検討中のテーマ（未実装項目が多い V8・V9）に分けています。ドキュメント全体のナビゲーションは Canvas の UI（タブ・機能単位）に準じたテーマ軸を使ってください（このページは履歴としての一覧）。各カードの詳細は各節の「詳細 →」リンク先の個別ページ、バージョン横断の実装詳細は <a href="../features/v0.html">V0: システム基本構成</a> を参照してください。</p>
+      <p>機能をバージョンごとのテーマに沿ってカード形式で整理した履歴索引です。実装済みのテーマ（V8・V7→V1 の新しい順）と、検討中のテーマ（未実装項目が多い V9・V10）に分けています。ドキュメント全体のナビゲーションは Canvas の UI（タブ・機能単位）に準じたテーマ軸を使ってください（このページは履歴としての一覧）。各カードの詳細は各節の「詳細 →」リンク先の個別ページ、バージョン横断の実装詳細は <a href="../features/v0.html">V0: システム基本構成</a> を参照してください。</p>
 
-      <h2>✅ 実装済みのテーマ（V7 → V1）</h2>
+      <h2>✅ 実装済みのテーマ（V8・V7 → V1）</h2>
+
+      <h3 id="uiconfig"><a href="../ui-config.html">V8: UIカスタマイズ</a></h3>
+      <p>デプロイ先が各エンジンの <code>index.html</code> と同階層に <code>ui.config.json</code> を置くだけで画面構成を調整できる仕組みです。ソースの HTML/JS を編集せず、表示/非表示・初期値・リンク先を配備単位で切り替えられます。<a href="../ui-config.html">詳細 →</a>（内部仕様は <a href="1-3-設定内部仕様.html">設定・内部仕様</a>）</p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🙈 hide — 機能の表示/非表示</h3>
+          <p>機能名（<code>attr</code>・<code>tools:los</code>・<code>manage:gmaps</code>・<code>chat</code>）または CSS セレクタで非表示。タブを隠すと対応パネルも連動し、ツールドック OFF では開くボタン(🧰)も連動。アクティブタブを隠した場合は先頭の表示タブへ繰り上げ</p>
+        </div>
+        <div class="feature-card">
+          <h3>🎚️ defaults / open / helpUrl — 初期状態の指定</h3>
+          <p>コントロール id→初期値を <code>input→change</code> イベント発火で JS 状態に同期。<code>open</code> で起動タブ、<code>helpUrl</code> で ? ボタンのリンク先を上書き。起動時1回のみ適用で動的追従なし</p>
+        </div>
+        <div class="feature-card">
+          <h3>🖥️ 管理画面（ライブプレビュー・ローカル専用）</h3>
+          <p><code>:8510/admin/ui-config-admin.html</code> が実エンジンを iframe で起動し、各機能・ボタンにチェックバッジを重畳。OFF はグレー化（再チェックで復帰）・「実際に隠す」確認モード付き。コントロール操作・一覧入力で defaults 記録、JSON 生成→保存 API まで完結。<code>web/admin/</code> は CDN へアップロードされず一般公開されません</p>
+        </div>
+      </div>
 
       <h3 id="qgis"><a href="../features/v7.html">V7: QGIS連携</a></h3>
       <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現する</strong>のが今後のメインテーマです。QGIS プラグイン <code>geo_webview</code> がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替します。<a href="../features/v7.html">詳細 →</a>（実装済みの再現範囲と未対応課題の一覧は <a href="../qgis.html">QGIS・GDAL連携</a>）</p>
@@ -228,7 +245,7 @@
       <h2>🔎 検討中のテーマ（未実装項目が多い）</h2>
       <p>以下は実装が進行中・計画段階のテーマです。項目の多くが未実装または調整中のため、実現範囲は各詳細ページを確認してください。</p>
 
-      <h3 id="portal"><a href="../use/1-9-ポータル.html">V8: ポータル（調整中）</a></h3>
+      <h3 id="portal"><a href="../use/1-9-ポータル.html">V9: ポータル（調整中）</a></h3>
       <p>レイヤー管理ではなく目的別の大きなカード/ボタンで GIS 業務を完結させるタスク指向ポータル。<code>.kasc</code> に <code>portal:</code>/<code>view:</code>/<code>link:</code>/<code>html:</code> の4行形式を追加し、表示レイヤー・スタイル・フィルタ・カメラ・背景を束ねたビューをカード押下で一括適用します。全6エンジン対応。<a href="../use/1-9-ポータル.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">
@@ -245,7 +262,7 @@
         </div>
       </div>
 
-      <h3 id="analysis"><a href="../use/5-6-解析.html">V9: 解析（予定）</a></h3>
+      <h3 id="analysis"><a href="../use/5-6-解析.html">V10: 解析（予定）</a></h3>
       <p>AI チャット経由で空間解析を駆動するテーマ（計画段階）。解析エンジンは自前で実装せず QGIS Processing をバックエンドとして借り、Canvas は AI による操縦面と結果表示を担います。<a href="../use/5-6-解析.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">

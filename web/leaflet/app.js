@@ -24,6 +24,7 @@ import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
 import { initPrint, compositeDomMap } from "../shared/print.js";
+import { initUiConfig } from "../shared/ui-config.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
@@ -1987,6 +1988,10 @@ map.on("click", e => {
     }
   } catch (_) {}
 });
+
+// ui.config.json の UI カスタマイズ(非同期で適用。fetch 待ちの間に
+// モジュール評価が完了するため、適用時には全ハンドラが登録済み)
+void initUiConfig();
 
 loadProject().catch(err => {
   panel.unsupported.textContent = String(err.message || err);

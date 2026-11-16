@@ -163,7 +163,8 @@ def sync_channel(cdn_dir, channel):
     # ミラーしないよう除外する。projects/ は CDN_PROJECTS に列挙した
     # プロジェクトのみ _sync_projects で別途複写する。
     # verify/ は検証資産(feature-verify 成果物)で配信対象外
-    _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects', 'verify'))
+    # admin/ は ui.config.json 管理画面などローカル運用専用で配信対象外
+    _replace_dir(WEB_DIR, stage, exclude=('vendor', 'projects', 'verify', 'admin'))
     _sync_projects(stage)
     version = _cargo_version()
     _write_version_json(stage, {

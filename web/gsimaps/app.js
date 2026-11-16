@@ -39,6 +39,7 @@ import { matchSessionState, bindSessionState, applySessionState, sessionBootView
 import { initAiChat } from "../shared/ai-chat.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection } from "../shared/live.js";
+import { initUiConfig } from "../shared/ui-config.js";
 
 // 診断: この中間エンジンが iframe 内で読み込まれた場合(ネスト)、
 // パネルに赤枠+バッジを付けて二重表示の切り分けに使う
@@ -2779,6 +2780,7 @@ window._gsimapsDbg = {
 
 // ---- 起動 ----
 (async () => {
+  try { await initUiConfig(); } catch (e) { console.warn("[ui-config]", e); }
   try {
     await loadProject();
   } catch (e) {

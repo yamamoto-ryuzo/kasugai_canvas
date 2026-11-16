@@ -33,6 +33,7 @@ import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
 import { initNavTools } from "../shared/nav-tools.js";
+import { initUiConfig } from "../shared/ui-config.js";
 import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
@@ -1884,6 +1885,10 @@ map.on("singleclick", e => {
   window.switchPanelTab?.("attr");
   renderAttrContent(panel.attrContent, records, { onRecordClick: rec => focusFeatureExtent(rec.feature) });
 });
+
+// ui.config.json の UI カスタマイズ(非同期で適用。fetch 待ちの間に
+// モジュール評価が完了するため、適用時には全ハンドラが登録済み)
+void initUiConfig();
 
 loadProject().catch(err => {
   panel.unsupported.textContent = String(err.message || err);
