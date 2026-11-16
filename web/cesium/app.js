@@ -26,6 +26,7 @@ import { loadVectorItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
+import { scaleNiceCeil } from "../shared/scale-nice.js";
 import { initGeoTools } from "./geo-tools.js";
 import { buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, resolveKascUrl, readKascSource, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, parseKasc, zoomToCamHeightView, appendGroupedTitleOptions, syncBasemapList, fetchKascProjectTitle, projectsBaseUrl, projectsManifestUrl, applyPanelTitle, loadKascInfoContent, clearKascInfoContent, parseDefaultStyleSpec as parseKascDefaultStyleSpec, rememberedKascUrl, heightToViewZoom, parseKascViewValue, parseKascPortalValue, parseKascLinkValue, parseKascProjectValue, parseKascNewsValue, splitKascTail, geojsonExtent, parseUrlDeepLink } from "../shared/kasc.js";
 import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-eval.js";
@@ -8102,7 +8103,8 @@ function setupEvents() {
   }
 
   // スケールバー: 画面中心の地表までの距離からメートル/ピクセルを出し、
-  // 概ね110pxになる丸めた距離(1,2,5系)を表示する。camera.changed で更新
+  // 概ね330pxになる全長を表示する。全長は4分割各区間が偶数になる
+  // 1,2,5系の値のみ (200,1000,2000,5000,…)。camera.changed で更新
   function updateCesiumScalebar() {
     if (!scalebarEl) return;
     if (!document.querySelector("#display-scalebar")?.checked) { scalebarEl.hidden = true; return; }
@@ -8116,10 +8118,7 @@ function setupEvents() {
       const fovy = viewer.camera.frustum.fovy;
       const mpp = (2 * dist * Math.tan(fovy / 2)) / canvas.clientHeight;
       if (!Number.isFinite(mpp) || mpp <= 0) { scalebarEl.hidden = true; return; }
-      const target = mpp * 110;
-      const pow10 = Math.pow(10, Math.floor(Math.log10(target)));
-      let nice = pow10;
-      for (const m of [1, 2, 5, 10]) { if (m * pow10 >= target) { nice = m * pow10; break; } }
+      const nice = scaleNiceCeil(mpp * 330);
       scalebarEl.style.width = `${Math.max(20, nice / mpp)}px`;
       scalebarEl.textContent = nice >= 1000 ? `${nice / 1000} km` : `${nice} m`;
       scalebarEl.hidden = false;

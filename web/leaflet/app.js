@@ -11,6 +11,7 @@ import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
+import { scaleNiceFloor } from "../shared/scale-nice.js";
 import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -2101,7 +2102,14 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
     }
   });
 
-  const scaleCtl = L.control.scale({ imperial: false });
+  const scaleCtl = L.control.scale({ imperial: false, maxWidth: 600 });
+  // 全長は4分割各区間が偶数になる 1,2,5系の値のみ (200,1000,2000,5000,…)。
+  // 内蔵の _getRoundNum は差し替えにくいので _updateMetric ごと置き換える
+  scaleCtl._updateMetric = function (maxMeters) {
+    const meters = scaleNiceFloor(maxMeters);
+    const label = meters < 1000 ? `${meters} m` : `${meters / 1000} km`;
+    this._updateScale(this._mScale, label, Math.min(1, meters / maxMeters));
+  };
   scaleCtl.addTo(map);
   document.querySelector("#display-scalebar")?.addEventListener("change", e => {
     if (e.target.checked) scaleCtl.addTo(map);

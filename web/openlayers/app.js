@@ -23,6 +23,7 @@ import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
+import { scaleNiceCeil } from "../shared/scale-nice.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
@@ -2022,7 +2023,26 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
     for (const e of layerEntries) e.layer?.setOpacity?.((e.opa ?? 1) * v);
   });
 
-  const scaleCtl = new ScaleLine({ units: "metric", className: "ol-scale-line kasc-scale" });
+  const scaleCtl = new ScaleLine({ units: "metric", className: "ol-scale-line kasc-scale", minWidth: 384 });
+  // 全長は4分割各区間が偶数になる 1,2,5系の値のみ (200,1000,2000,5000,…)。
+  // 内蔵の LEADING_DIGITS=[1,2,5] は差し替えられないため updateElement_ を
+  // メートル法専用に置き換える (updateElement_ 内で getPointResolution を使う)
+  const SCALE_DPI = 25.4 / 0.28;
+  scaleCtl.updateElement_ = function () {
+    const element = this.element;
+    const hide = () => { if (element) element.style.display = "none"; this.renderedVisible_ = false; };
+    const viewState = this.viewState_;
+    if (!viewState) { if (this.renderedVisible_) hide(); return; }
+    const mpp = getPointResolution(viewState.projection, viewState.resolution, viewState.center, "m");
+    if (!Number.isFinite(mpp) || mpp <= 0) { hide(); return; }
+    const minWidth = (this.minWidth_ * (this.dpi_ || SCALE_DPI)) / SCALE_DPI;
+    const total = scaleNiceCeil(minWidth * mpp);
+    const width = Math.round(total / mpp);
+    const html = total >= 1000 ? `${total / 1000} km` : `${total} m`;
+    if (this.renderedHTML_ !== html) { this.innerElement_.innerHTML = html; this.renderedHTML_ = html; }
+    if (this.renderedWidth_ !== width) { this.innerElement_.style.width = width + "px"; this.renderedWidth_ = width; }
+    if (!this.renderedVisible_) { if (element) element.style.display = ""; this.renderedVisible_ = true; }
+  };
   const coordsCtl = new MousePosition({ className: "ol-mouse-position map-coords", coordinateFormat: c => formatLatLng(c[1], c[0]), projection: "EPSG:4326" });
   map.addControl(scaleCtl);
   map.addControl(coordsCtl);

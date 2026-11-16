@@ -13,6 +13,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { mountSunControls } from "../shared/sun-time.js";
+import { scaleNiceFloor } from "../shared/scale-nice.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -2284,7 +2285,27 @@ map.on("sourcedata", e => {
 
   // スケールは他エンジンと同じ中央下へ置く（addControl は四隅のみ対応のため
   // bottom-left コンテナを index.html 側の CSS で中央寄せしている）
-  const scaleCtl = new maplibregl.ScaleControl({ unit: "metric" });
+  const scaleCtl = new maplibregl.ScaleControl({ unit: "metric", maxWidth: 600 });
+  // 全長は4分割各区間が偶数になる 1,2,5系の値のみ (200,1000,2000,5000,…)。
+  // 内蔵の丸めはモジュール内関数のため _onMove ごと置き換える
+  // (onAdd で move イベントへ登録されるので addControl 前に代入する)
+  scaleCtl._onMove = () => {
+    const el = scaleCtl._container;
+    if (!el) return;
+    const maxW = scaleCtl.options?.maxWidth || 100;
+    const rect = map.getContainer().getBoundingClientRect();
+    const a = map.unproject([rect.width / 2 - maxW / 2, rect.height / 2]);
+    const b = map.unproject([rect.width / 2 + maxW / 2, rect.height / 2]);
+    if (!a || !b) return;
+    const px = Math.round(map.project(b).x - map.project(a).x);
+    const d = Math.min(maxW, px, rect.width);
+    const f = a.distanceTo(b); // m
+    if (!Number.isFinite(f) || f <= 0) return;
+    const meters = scaleNiceFloor(f);
+    el.style.width = `${Math.round(d * (meters / f))}px`;
+    const text = `${meters >= 1000 ? meters / 1000 : meters} ${meters >= 1000 ? "km" : "m"}`;
+    if (el.textContent !== text) el.textContent = text;
+  };
   map.addControl(scaleCtl, "bottom-left");
   document.querySelector("#display-scalebar")?.addEventListener("change", e => {
     if (e.target.checked) map.addControl(scaleCtl, "bottom-left");
