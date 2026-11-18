@@ -22,7 +22,7 @@ import {
   layerAttribution, loadKascInfoContent,
   resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle,
   defaultPointRadius, buildWmsTileTemplate, buildWmtsTileTemplate,
-  kascScaleZoomRange,
+  kascScaleZoomRange, setAllLayerGroupsExpanded,
 } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
@@ -122,7 +122,8 @@ const GSI_BASE_ID_BY_TILE = {
 const VECTOR_TYPES = new Set([
   "geojson", "layer", "flatgeobuf", "fgb", "geoparquet", "parquet",
   "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql",
-  "kml", "kmz", "wfs", "shp", "shapefile",
+  "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis",
+  "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile",
 ]);
 const TILE_TYPES = new Set(["xyz", "tile", "wms", "wmts"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
@@ -172,6 +173,7 @@ let lastKascUrl = "";
 let layerEntries = [];   // {item, sakuzu, cb, pending, failed, _siblings}
 let baseEntries = [];    // {item, gsiId|null, tileLayer|null}
 let baseHidden = false;
+let docBackgroundCss = null;  // .kasc background: 行。ベースマップなし/透過時の下敷き色
 let currentCams = [];
 let currentThemes = [];
 let currentUnsupported = [];
@@ -655,6 +657,7 @@ const geoTools = initGeoTools2d({
 const minimap = createMinimap({
   container: "#minimap",
   checkbox: "#display-minimap",
+  button: "#basemap-minimap",
   getBounds: () => {
     const b = viewBounds();
     return b ? [[b.south, b.west], [b.north, b.east]] : null;
@@ -1274,6 +1277,7 @@ function renderLayerRows() {
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const section = document.createElement("section");
     section.className = "layer-group" + (exclusive ? " exclusive" : "");
+    section.dataset.groupKey = key;
     const head = document.createElement("div");
     head.className = "layer-group-title";
     const tg = document.createElement("button");
@@ -1368,6 +1372,14 @@ function applyKascTheme(theme) {
 themeSelect?.addEventListener("change", () => {
   const theme = currentThemes.find(t => t.name === themeSelect.value);
   if (theme) applyKascTheme(theme);
+});
+
+// レイヤ一覧: 全グループの一括展開/折りたたみ
+document.getElementById("layer-expand-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(document.getElementById("layers"), expandedLayerGroups, true);
+});
+document.getElementById("layer-collapse-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(document.getElementById("layers"), expandedLayerGroups, false);
 });
 
 // ---- ビュー(view: 行。表示+フィルタ+カメラ+背景を束ねた目的別プリセット) ----
@@ -1635,10 +1647,18 @@ function rebuildBasemapSelect() {
   });
   sel.value = baseHidden ? "-1" : "0";
 }
+let gsiBaseRetryCount = 0;
 function applyBaseSelection() {
   const sel = document.getElementById("basemap-select");
   const idx = Number(sel?.value ?? -1);
   baseHidden = idx < 0;
+  // 「ベースマップなし/透過」は GSI の blank(白地図)ではベージュの地図が出て
+  // 白にならないため、iframe 内のタイルペインごと隠し、コンテナ背景を
+  // 下敷き色(background: 行、既定白)にする
+  const tilePane = gmap?.getPane?.("tilePane");
+  if (tilePane) tilePane.style.visibility = baseHidden ? "hidden" : "";
+  const mapContainer = gmap?.getContainer?.();
+  if (mapContainer) mapContainer.style.background = baseHidden ? (docBackgroundCss || "#fff") : "";
   if (globeMode) { applyGlobeBaseSelection(idx); return; }
   // gsimaps 標準ベースマップ: .kasc の先頭 GSI ベース行が選ばれた時だけ使い、
   // それ以外・なし選択時は blank(白地図)にして外部タイルを実質ベースにする
@@ -1649,9 +1669,12 @@ function applyBaseSelection() {
     const id = (!baseHidden && active?.gsiId) ? active.gsiId
       : (!baseHidden && !active && gsiEntry?.gsiId) ? gsiEntry.gsiId : "blank";
     try { bl.setActiveId(id); } catch (_) {}
+    gsiBaseRetryCount = 0;
   } else {
-    // _baseLayer は gsimaps 内部で遅延生成されるため未到達時は一度だけ再試行
-    setTimeout(applyBaseSelection, 800);
+    // _baseLayer は gsimaps 内部で遅延生成される。iframe 読込が遅い環境で
+    // 「ベースマップなし/透明」が既定背景地図のまま残る事故を防ぐため、
+    // 取得できるまで一定間隔で再試行する
+    if (gsiBaseRetryCount++ < 40) setTimeout(applyBaseSelection, 800);
   }
   baseEntries.forEach((e, i) => {
     if (!e.tileLayer || !gmap) return;
@@ -1857,12 +1880,18 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
     ...inspectorLinks.map(l => ({ kind: "link", entry: l })),
   ].sort((a, b) => cardPos(a.entry) - cardPos(b.entry));
 
-  // base: 行（GSI は select 項目として登録、外部タイルも同様）
+  // base: 行（GSI は select 項目として登録、外部タイルも同様）。
+  // | none / | transparent のモード行は選択肢にせず「ベースマップなし」
+  // (blank 白地図)の初期モードとして解釈する(Cesium 版と同じ規則)
+  const baseModeRow = (doc.bases || []).find(b => b.mode);
+  docBackgroundCss = doc.background || null;
   for (const item of doc.bases) {
+    if (item.mode) continue;
     const gsiId = gsiBaseIdFromUrl(item.url);
     const entry = { item, gsiId, tileLayer: null };
     baseEntries.push(entry);
   }
+  if (baseModeRow) baseHidden = true;
   // base 行の外部タイル分は作成のみ（表示は applyBaseSelection が制御）
   // globe 中は Leaflet が無いため tileLayer は作らず imagery 側へ委ねる
   for (const e of baseEntries) {

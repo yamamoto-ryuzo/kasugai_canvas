@@ -69,7 +69,11 @@
               <button class="panel-tab" type="button" data-panel="info-panel" data-i18n="tab.info">情報</button>
             </nav>
             <section id="layers-panel" class="plugin-panel active">
-              <select id="theme-select" hidden></select>
+              <div class="layer-head-row">
+                <select id="theme-select" hidden></select>
+                <button id="layer-expand-all" class="layer-head-btn" type="button" title="すべて展開" data-i18n-attr="title:layer.expandAll;aria-label:layer.expandAll">🔽</button>
+                <button id="layer-collapse-all" class="layer-head-btn" type="button" title="すべて折りたたみ" data-i18n-attr="title:layer.collapseAll;aria-label:layer.collapseAll">🔼</button>
+              </div>
               <div id="layer-list"></div>
             </section>
             <section id="camera-panel" class="plugin-panel">
@@ -249,6 +253,43 @@
                   <label><input id="effect-shadows" type="checkbox" /><span data-i18n="effects.shadows"> 影</span></label>
                   <label><input id="effect-depth-test" type="checkbox" checked /><span data-i18n="effects.depthTest"> 地形深度テスト</span></label>
                   <label><input id="underground-dive-toggle" type="checkbox" checked /><span data-i18n="effects.undergroundDive"> 地下移動</span></label>
+                  <label><input id="effect-ground-atmosphere" type="checkbox" checked /><span data-i18n="effects.groundAtmosphere"> 地表大気</span></label>
+                </div>
+                <p class="hint" data-i18n="effects.postProcess.hint">後処理(ポストプロセス)の効果です。ハードウェアにより未対応のものがあります。</p>
+                <div class="terrain-options">
+                  <label><input id="effect-fxaa" type="checkbox" /><span data-i18n="effects.fxaa"> FXAA(エイリアス除去)</span></label>
+                  <label><input id="effect-ao" type="checkbox" /><span data-i18n="effects.ao"> 環境光遮蔽(AO)</span></label>
+                  <label><input id="effect-bloom" type="checkbox" /><span data-i18n="effects.bloom"> ブルーム</span></label>
+                  <label><input id="effect-bw" type="checkbox" /><span data-i18n="effects.bw"> モノクロ</span></label>
+                  <label><input id="effect-edge" type="checkbox" /><span data-i18n="effects.edge"> エッジ検出</span></label>
+                  <label><input id="effect-nightvision" type="checkbox" /><span data-i18n="effects.nightvision"> 暗視</span></label>
+                  <label><input id="effect-lensflare" type="checkbox" /><span data-i18n="effects.lensflare"> レンズフレア</span></label>
+                  <label><input id="effect-dof" type="checkbox" /><span data-i18n="effects.dof"> 被写界深度</span></label>
+                  <label class="field-label" for="effect-tonemap" data-i18n="effects.tonemap">トーンマップ</label>
+                  <select id="effect-tonemap">
+                    <option value="PBR_NEUTRAL" selected>PBR Neutral</option>
+                    <option value="ACES">ACES</option>
+                    <option value="FILMIC">Filmic</option>
+                    <option value="REINHARD">Reinhard</option>
+                    <option value="MODIFIED_REINHARD">Modified Reinhard</option>
+                  </select>
+                  <label class="field-label" for="effect-globe-material" data-i18n="effects.globeMaterial">地表マテリアル</label>
+                  <select id="effect-globe-material">
+                    <option value="" selected data-i18n="effects.materialNone">なし</option>
+                    <option value="Water" data-i18n="effects.matWater">水面</option>
+                    <option value="ElevationContour" data-i18n="effects.matContour">等高線</option>
+                    <option value="ElevationRamp" data-i18n="effects.matElevRamp">標高グラデーション</option>
+                    <option value="SlopeRamp" data-i18n="effects.matSlopeRamp">傾斜グラデーション</option>
+                    <option value="AspectRamp" data-i18n="effects.matAspectRamp">方位グラデーション</option>
+                    <option value="ElevationBand" data-i18n="effects.matElevBand">標高帯</option>
+                    <option value="RimLighting" data-i18n="effects.matRim">リムライト</option>
+                    <option value="Grid" data-i18n="effects.matGrid">グリッド</option>
+                    <option value="Checkerboard" data-i18n="effects.matChecker">市松</option>
+                    <option value="Stripe" data-i18n="effects.matStripe">縞模様</option>
+                    <option value="Dot" data-i18n="effects.matDot">ドット</option>
+                    <option value="Fade" data-i18n="effects.matFade">フェード</option>
+                    <option value="WaterMask" data-i18n="effects.matWaterMask">水面マスク</option>
+                  </select>
                 </div>
                 <label class="field-label">時刻 <select id="cesium-tz" style="width:auto;"></select></label>
                 <input id="cesium-datetime" type="datetime-local" step="300" style="width: 100%;" />
@@ -280,7 +321,6 @@
                     <option value="tokyo" data-i18n="display.datumTokyo">日本測地系</option>
                   </select>
                   <label><input id="display-graticule" type="checkbox" /><span data-i18n="display.graticule"> 緯度経度グリッド</span></label>
-                  <label><input id="display-minimap" type="checkbox" /><span data-i18n="display.minimap"> ミニマップを表示</span></label>
                 </div>
               </section>
             </section>
@@ -905,6 +945,8 @@
             <button id="open-in-web" class="basemap-globe" type="button" title="CDN版で開く" data-i18n-attr="title:app.openInWeb;aria-label:app.openInWeb">☁</button>
             <button id="open-in-app" class="basemap-globe" type="button" title="アプリで開く" data-i18n-attr="title:app.openInApp;aria-label:app.openInApp">🖥</button>
             <button id="basemap-globe" class="basemap-globe" type="button" title="Google Earth で現在の表示を開く" aria-label="Google Earth で現在の表示を開く" data-i18n-attr="title:basemap.googleEarth;aria-label:basemap.googleEarth">🌐</button>
+            <input id="display-minimap" type="checkbox" hidden />
+            <button id="basemap-minimap" class="basemap-globe" type="button" title="ミニマップの表示/非表示" aria-label="ミニマップの表示/非表示" aria-pressed="false" data-i18n-attr="title:basemap.minimap;aria-label:basemap.minimap">🗺️</button>
             <select id="basemap-select"></select>
           </div>
           <aside class="navigation-toolbar" aria-label="Navigation toolbar">

@@ -242,7 +242,6 @@ function injectDock(sections) {
     </section>`);
   if (sections.general) parts.push(`
     <section id="tools-general-panel" class="settings-subpanel"${hideAttr("tools-general-panel")}>
-      <label class="set-row"><input id="display-minimap" type="checkbox" /><span data-i18n="display.minimap"> ミニマップを表示</span></label>
       <label class="set-row"><input id="display-graticule" type="checkbox" /><span data-i18n="display.graticule"> 緯度経度グリッド</span></label>
     </section>`);
   const dock = document.createElement("div");

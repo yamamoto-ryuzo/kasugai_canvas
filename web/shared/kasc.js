@@ -279,7 +279,9 @@ export function parseKasc(text) {
     }
     if (["xyz", "tile", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
          "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "wms", "wmts",
-         "kml", "kmz", "wfs", "shp", "shapefile", "image", "cms"].includes(type)) {
+         "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis",
+         "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml",
+         "wfs", "shp", "shapefile", "image", "cms"].includes(type)) {
       doc.layers.push(item);
       continue;
     }
@@ -320,6 +322,29 @@ export function applyKascGroupStates(groups, expandedSet) {
       else expandedSet.add(key);
     }
   }
+}
+
+// レイヤ一覧の全グループセクションを一括で展開/折りたたみする。
+// 各エンジンの個別トグルと同じ表示状態(.layer-group-toggle の ▾/▸ と
+// aria-expanded・.layer-group-children の hidden)へ揃え、expandedSet(Set)も
+// 同期して再描画後も状態が維持されるようにする。expandedSet の同期には
+// セクションの data-group-key(キー形式 `<path>|<regular|exclusive>`)を使い、
+// トグルを持たないグループ無しセクションは対象外とする
+export function setAllLayerGroupsExpanded(listEl, expandedSet, expanded) {
+  if (!listEl) return;
+  listEl.querySelectorAll(".layer-group").forEach(section => {
+    const toggle = section.querySelector(".layer-group-toggle");
+    if (!toggle) return;
+    const children = section.querySelector(".layer-group-children");
+    toggle.setAttribute("aria-expanded", String(expanded));
+    toggle.textContent = expanded ? "▾" : "▸";
+    if (children) children.hidden = !expanded;
+    const key = section.dataset?.groupKey;
+    if (key) {
+      if (expanded) expandedSet.add(key);
+      else expandedSet.delete(key);
+    }
+  });
 }
 
 // 縮尺表示オプション(minScale=/maxScale=) → 256px タイル系ズーム範囲。
@@ -1005,9 +1030,18 @@ export async function readKascSource(kascUrl) {
   };
 }
 
+// projects.json マニフェスト上 external:true のプロジェクトID群。
+// 外部プロジェクトの .kasc は /projects/<id>/ 配下をルートとして配信される
+// が、ルートを上に出る ".." 参照はサーバーへ "@parent" マーカーで渡す必要が
+// ある(ブラウザの URL 正規化で消えてしまうため)。loadKascProject /
+// loadKascUrl がマニフェスト読み込み時に更新する
+const externalProjectIds = new Set();
+
 // .kasc 内の参照を絶対 URL へ解決する。
 // 相対パスは projectBaseUrl(/projects/<id>/ または ?kasc= 用の絶対URL) 基準。
 // `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる。
+// 外部プロジェクトでは `..` を "@parent" マーカーに変換してサーバーへ渡す
+// (サーバーが登録フォルダの親を基点に解決する)。
 // projectBaseUrl が kasczip://（ZIP 直読）ならメンバを blob: URL へ変換する
 export function resolveKascUrl(url, projectBaseUrl) {
   if (!url) return url;
@@ -1024,6 +1058,22 @@ export function resolveKascUrl(url, projectBaseUrl) {
   const base = /^[a-z][a-z0-9+.-]*:\/\//i.test(String(projectBaseUrl || ""))
     ? projectBaseUrl
     : new URL(String(projectBaseUrl || "./"), location.href).href;
+  // 外部プロジェクト(/projects/<external-id>/)ではルートを上に出る ".." を
+  // URL 正規化されないよう "@parent" に置き換えてから連結する
+  const pm = /^https?:/i.test(base) &&
+    new URL(base).pathname.match(/\/projects\/([^/]+)\/?$/);
+  if (pm && externalProjectIds.has(decodeURIComponent(pm[1]))) {
+    const st = [];
+    for (const s of url.split("/")) {
+      if (s === "..") {
+        if (st.length && st[st.length - 1] !== "..") st.pop();
+        else st.push("..");
+      } else if (s !== "." && s !== "") {
+        st.push(s);
+      }
+    }
+    url = st.map(s => (s === ".." ? "@parent" : s)).join("/");
+  }
   return resolveKascZipRef(new URL(url, base).href);
 }
 
@@ -1126,6 +1176,7 @@ async function loadKascUrl(kascParam) {
   if (!manifest.some(e => (e.id || e) === name)) {
     manifest.unshift({ id: name, title: title || name, external: true });
   }
+  for (const e of manifest) if (e && e.external) externalProjectIds.add(e.id || e);
   // id がファイル名由来の仮名のため、?project=<name> へのURL生成・再選択・
   // 共有URLから復帰できるよう .kasc の URL を記憶しておく
   try {
@@ -1175,6 +1226,7 @@ export async function loadKascProject(projectId) {
     }
   }
 
+  for (const e of manifest) if (e && e.external) externalProjectIds.add(e.id || e);
   const requested = projectId || params.get("project");
   const id = requested || (manifest[0] && (manifest[0].id || manifest[0])) || "default";
   let baseUrl = projectsBaseUrl(id);

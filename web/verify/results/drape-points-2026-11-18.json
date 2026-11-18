@@ -1,0 +1,220 @@
+{
+  "results": {
+    "checks": [
+      {
+        "name": "3つのベクターレイヤーがロードされた",
+        "pass": true,
+        "extra": "[null,null,null,null,\"inspector-layer-2\",\"inspector-layer-1\",\"inspector-layer-0\"]"
+      },
+      {
+        "name": "ドレープ参照が決定されている(3D Tiles 非表示なので TERRAIN)",
+        "pass": true,
+        "extra": "clampRef=3 expected=3"
+      },
+      {
+        "name": "z付きポイント含め全 billboard がクランプ対象",
+        "pass": true,
+        "extra": "[[\"z0\",3],[\"z2000\",3],[\"z0multi\",3],[\"z0multi\",3],[\"2d\",3]]"
+      },
+      {
+        "name": "QML マーカー billboard がクランプ対象",
+        "pass": true,
+        "extra": "[[\"本栖湖\",3],[\"精進湖\",3],[\"z付き河口湖\",3]]"
+      },
+      {
+        "name": "QML ラベル label がクランプ対象",
+        "pass": true,
+        "extra": "[[\"本栖湖\",3],[\"精進湖\",3],[\"z付き河口湖\",3]]"
+      },
+      {
+        "name": "cluster=on でクラスタ有効",
+        "pass": true,
+        "extra": ""
+      },
+      {
+        "name": "クラスタバッジがクランプ対象",
+        "pass": true,
+        "extra": "refs=[3,3,3,3]"
+      }
+    ]
+  },
+  "info": {
+    "recs": [
+      {
+        "layerId": null,
+        "clampRef": null,
+        "billboards": [],
+        "labels": [],
+        "points": [],
+        "clustering": false
+      },
+      {
+        "layerId": null,
+        "clampRef": null,
+        "billboards": [],
+        "labels": [],
+        "points": [],
+        "clustering": false
+      },
+      {
+        "layerId": null,
+        "clampRef": null,
+        "billboards": [],
+        "labels": [],
+        "points": [],
+        "clustering": false
+      },
+      {
+        "layerId": null,
+        "clampRef": null,
+        "billboards": [],
+        "labels": [],
+        "points": [],
+        "clustering": false
+      },
+      {
+        "layerId": "inspector-layer-2",
+        "clampRef": 3,
+        "billboards": [
+          {
+            "name": "c0",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c1",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c2",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c3",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c4",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c5",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c6",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c7",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c8",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c9",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c10",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "c11",
+            "ref": 3,
+            "aux": false
+          }
+        ],
+        "labels": [],
+        "points": [],
+        "clustering": true
+      },
+      {
+        "layerId": "inspector-layer-1",
+        "clampRef": 3,
+        "billboards": [
+          {
+            "name": "本栖湖",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "精進湖",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "z付き河口湖",
+            "ref": 3,
+            "aux": false
+          }
+        ],
+        "labels": [
+          {
+            "name": "本栖湖",
+            "ref": 3
+          },
+          {
+            "name": "精進湖",
+            "ref": 3
+          },
+          {
+            "name": "z付き河口湖",
+            "ref": 3
+          }
+        ],
+        "points": [],
+        "clustering": false
+      },
+      {
+        "layerId": "inspector-layer-0",
+        "clampRef": 3,
+        "billboards": [
+          {
+            "name": "z0",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "z2000",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "z0multi",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "z0multi",
+            "ref": 3,
+            "aux": false
+          },
+          {
+            "name": "2d",
+            "ref": 3,
+            "aux": false
+          }
+        ],
+        "labels": [],
+        "points": [],
+        "clustering": false
+      }
+    ],
+    "expected": 3,
+    "clampToGround": 1,
+    "none": 0
+  }
+}

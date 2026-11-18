@@ -1,0 +1,6 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"z0"},"geometry":{"type":"Point","coordinates":[138.700,35.330,0]}},
+{"type":"Feature","properties":{"name":"z2000"},"geometry":{"type":"Point","coordinates":[138.710,35.340,2000]}},
+{"type":"Feature","properties":{"name":"z0multi","marker-color":"#2e8b57"},"geometry":{"type":"MultiPoint","coordinates":[[138.720,35.350,0],[138.725,35.355,50]]}},
+{"type":"Feature","properties":{"name":"2d","marker-color":"#1e90ff"},"geometry":{"type":"Point","coordinates":[138.740,35.350]}}
+]}

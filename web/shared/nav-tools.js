@@ -151,7 +151,7 @@ export function initNavTools(a) {
   const fsBtn = $("#fullscreen-button");
   fsBtn?.addEventListener("click", () => {
     if (document.fullscreenElement) void document.exitFullscreen();
-    else void (a.el || document.documentElement).requestFullscreen?.();
+    else void document.documentElement.requestFullscreen?.();
   });
   document.addEventListener("fullscreenchange", () => {
     fsBtn?.classList.toggle("nav-active", !!document.fullscreenElement);

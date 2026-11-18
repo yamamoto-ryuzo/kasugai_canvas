@@ -1,0 +1,11 @@
+import { chromium } from "file:///C:/devin/kasugai_canvas/.testtmp/node_modules/playwright/index.mjs";
+const BASE = "http://127.0.0.1:8510";
+const KASC = encodeURIComponent(`${BASE}/projects/sample_qgis/kasugai_canvas.kasc`);
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1100, height: 800 } });
+page.on("response", r => { if (!r.ok() && r.status() !== 304) console.log("[HTTP", r.status() + "]", r.url().slice(0, 180)); });
+page.on("console", m => { const t = m.text(); if (/warn|error|失敗/i.test(m.type() + t)) console.log("[c]", t.slice(0, 200)); });
+await page.goto(`${BASE}/maplibre/?kasc=${KASC}`, { waitUntil: "domcontentloaded" });
+await page.waitForFunction(() => window.kasugaiApi && window.kasugaiApi.isReady !== false, { timeout: 90000 });
+await page.waitForTimeout(15000);
+await browser.close();

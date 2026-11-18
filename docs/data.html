@@ -64,6 +64,42 @@
           <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
           <p><code>csv:</code> / <code>tsv:</code> で指定。lon/lat・経度/緯度・x/y 等の列名を自動判定してポイント化する簡易経路（表データとしての SQL 絞り込みは下のクエリ系カードを参照）</p>
         </div>
+        <div class="feature-card">
+          <h3>🥾 GPX <span class="badge">対応</span></h3>
+          <p><code>gpx:</code> で指定。@tmcw/togeojson（KML と同一経路・CDN 遅延ロード）で GeoJSON へ正規化。trk/trkpt は軌跡 LineString、wpt はポイント地物になる</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧩 TopoJSON <span class="badge">対応</span></h3>
+          <p><code>topojson:</code> で指定。topojson-client（CDN・遅延ロード）でトポロジーアークを復元し GeoJSON へ正規化。複数オブジェクトは全件展開</p>
+        </div>
+        <div class="feature-card">
+          <h3>🛰️ CZML <span class="badge">対応</span></h3>
+          <p><code>czml:</code> で指定。CZML パケットを Canvas 側で GeoJSON へ変換（時系列 position は軌跡 LineString、point/polygon は地物として取り込み）</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ EsriJSON / ArcGIS <span class="badge">対応</span></h3>
+          <p><code>esrijson:</code> / <code>arcgis:</code> で指定。ArcGIS REST の JSON（features/geometry・wkid 3857 等）を GeoJSON へ変換。空間参照は 4326 以外も自動補正</p>
+        </div>
+        <div class="feature-card">
+          <h3>📃 GeoJSON Lines <span class="badge">対応</span></h3>
+          <p><code>geojsonl:</code> / <code>ndjson:</code> / <code>jsonl:</code> で指定。行区切り GeoJSON/Feature を逐行パースして FeatureCollection 化（ストリーミング系ログ向け）</p>
+        </div>
+        <div class="feature-card">
+          <h3>✏️ WKT / WKB <span class="badge">対応</span></h3>
+          <p><code>wkt:</code> / <code>wkb:</code> で指定。WKT テキスト（1行1地物 or 全文1地物）と WKB（バイナリ/hex 文字列）を GeoJSON ジオメトリへデコード</p>
+        </div>
+        <div class="feature-card">
+          <h3>🪂 IGC <span class="badge">対応</span></h3>
+          <p><code>igc:</code> で指定。グライダー飛行ログ（IGC 形式）を <code>ol/format/IGC</code>（CDN・遅延ロード）でパースし軌跡 LineString へ。時刻は地物の <code>time</code> プロパティへ保持</p>
+        </div>
+        <div class="feature-card">
+          <h3>〰️ Encoded Polyline <span class="badge">対応</span></h3>
+          <p><code>polyline:</code> で指定。Google Polyline Algorithm のエンコード文字列を <code>ol/format/Polyline</code> でデコード（1行1本）。<code>factor=</code>/<code>geometryLayout=</code> で精度・次元を指定可</p>
+        </div>
+        <div class="feature-card">
+          <h3>📐 GML / WFS(XML) <span class="badge">対応</span></h3>
+          <p><code>gml:</code> で指定。OGC GML / WFS GetFeature の XML 応答を <code>ol/format/{WFS,GML}</code> でパース。<code>wfs:</code> 行も JSON 応答を取れないサーバーでは自動でこの経路へフォールバック。EPSG:4326 は GML 仕様の lat,lon 順で解釈（lon,lat 記述の実ファイルは <code>axisorder=lonlat</code> で入替）</p>
+        </div>
       </div>
 
       <h3>ベクター：クエリ系（DuckDB SQL）</h3>
@@ -120,6 +156,12 @@
       GeoJsonDataSource</code></td>
       <td>大容量時は GeoParquet/FlatGeobuf または
       <code>duckdb:</code>/<code>sql:</code> クエリ経路を推奨</td>
+      </tr>
+      <tr>
+      <td>2D ベクトル</td>
+      <td>KML/KMZ・GPX・TopoJSON・CZML・EsriJSON・GeoJSONL・WKT/WKB・SHP・CSV/TSV</td>
+      <td>各行タイプ → GeoJSON 正規化 → <code>GeoJsonDataSource</code></td>
+      <td>ブラウザ内デコードで変換不要。全エンジン共通経路（<code>shared/vector-load.js</code>）</td>
       </tr>
       <tr>
       <td>2D タイル</td>

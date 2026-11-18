@@ -1,0 +1,17 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "states.1",
+      "geometry": null,
+      "properties": { "STATE_NAME": "Kansas", "STATE_FIPS": "20", "SUB_REGION": "W N Cen", "STATE_ABBR": "KS", "LAND_KM": 213096.7 }
+    },
+    {
+      "type": "Feature",
+      "id": "states.2",
+      "geometry": null,
+      "properties": { "STATE_NAME": "Nebraska", "STATE_FIPS": "31", "SUB_REGION": "W N Cen", "STATE_ABBR": "NE", "LAND_KM": 198974.4 }
+    }
+  ]
+}

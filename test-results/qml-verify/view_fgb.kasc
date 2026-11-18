@@ -1,0 +1,12 @@
+title: QML verify (FlatGeobuf/GPKG)
+base: 地理院タイル 淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | maxZoom=18 | minZoom=5
+fgb: notrim_ref | DATA/trim_line.fgb | on | style=DATA/notrim_line.qml
+fgb: trim_line | DATA/trim_line.fgb | on | style=DATA/trim_line.qml
+fgb: dash_line | DATA/dash_line.fgb | on | style=DATA/dash_line.qml
+fgb: glow_line | DATA/glow_line.fgb | on | style=DATA/glow_line.qml
+fgb: width_test | DATA/width_test.fgb | on | style=DATA/width_test.qml
+fgb: style_test | DATA/style_test.fgb | on | style=DATA/style_test.qml
+fgb: fill_test | DATA/fill_test.fgb | on | style=DATA/fill_test.qml
+fgb: label_test | DATA/label_test.fgb | on | style=DATA/label_test.qml
+gpkg: width_gpkg | DATA/width_test.gpkg | on | table=width_test | style=DATA/width_test.qml
+cam: 東京 | 35.61 | 139.65 | h=25000 | p=-90

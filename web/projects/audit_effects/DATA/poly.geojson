@@ -1,0 +1,6 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "name": "poly-1", "fill": "#2266aa" }, "geometry": { "type": "Polygon", "coordinates": [[[139.74, 35.66], [139.78, 35.66], [139.78, 35.70], [139.74, 35.70], [139.74, 35.66]]] } }
+  ]
+}

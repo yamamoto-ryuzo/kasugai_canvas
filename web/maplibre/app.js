@@ -1,7 +1,7 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を MapLibre GL で再生する
-import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.18.0/dist/maplibre-gl.mjs";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates } from "../shared/kasc.js";
+import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.19.0/dist/maplibre-gl.mjs";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
@@ -30,13 +30,13 @@ import { initUiConfig } from "../shared/ui-config.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, installLayerVisibilityResolver, bakeQmlLabels } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, installLayerVisibilityResolver, bakeQmlLabels, maplibreApplyQml, setMapScaleGetter } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 
 await initI18n();
 applyI18n();
 
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
@@ -164,17 +164,73 @@ let managedSources = [];
 let layerEntries = [];
 // QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
 installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+// QML 式変数 @map_scale → Web メルカトル解像度 ÷ 0.28mm = 縮尺分母。
+// getZoom() は 512px 基準(正典-1)のため +1 して正典(256px 基準)へ換算する
+// (mapViewToUrl の zoom と同規約。生値だと実縮尺の2倍を返してしまう)
+setMapScaleGetter(() => {
+  const lat = map.getCenter().lat;
+  return (156543.03392 * Math.cos(lat * Math.PI / 180)) / Math.pow(2, map.getZoom() + 1) / 0.00028;
+});
 
+// markerCanvas/fill tile の画像を map.addImage で登録する。
+// MapLibre 系は HTMLCanvasElement 非対応の版があるため
+// ImageData({width,height,data}) 形式で登録する
+function registerQmlImages(applied) {
+  for (const reg of [applied?.icons, applied?.fills]) {
+    if (!reg) continue;
+    for (const [id, cv] of reg) {
+      try {
+        if (map.hasImage(id)) continue;
+        const c2d = cv.getContext?.("2d");
+        const img = c2d ? c2d.getImageData(0, 0, cv.width, cv.height)
+          : { width: cv.width, height: cv.height, data: cv };
+        map.addImage(id, img);
+      } catch (e) { console.warn("addImage 失敗:", id, e); }
+    }
+  }
+}
+// ローダ由来の生 GeoJSON へ QML スタイルを焼き直す。
+// viewport 再クエリ・フィルタ再読込などで __kasc_* プロパティを持たない
+// データが _geojson を置き換えた後に必ず通す共通経路
+function bakeEntryQml(item, geojson) {
+  if (!item?._qml || !geojson) return;
+  try { registerQmlImages(maplibreApplyQml(geojson, item._qml)); }
+  catch (e) { console.warn("QML 再適用に失敗:", item.title, e); }
+}
 // QML <labeling> は is_layer_visible で他レイヤーの表示状態を参照し得るため、
 // 表示切替のたびに全ラベル付きエントリの __kasc_label を焼き直してソースを更新する
 function refreshQmlLabels() {
   for (const entry of layerEntries) {
     const item = entry.item;
     if (!item?._qml?.labelFor || !entry.sid || !item._geojson) continue;
-    bakeQmlLabels(item._geojson, item._qml);
+    // bufferNoFill ラベルは canvas ラスタライズされ labelIcons へ入るため、
+    // 再焼き込みごとに map.addImage へ登録する
+    const labelIcons = new Map();
+    bakeQmlLabels(item._geojson, item._qml, labelIcons);
+    registerQmlImages({ icons: labelIcons });
     map.getSource(entry.sid)?.setData?.(applyClientWhere(item, item._geojson));
   }
 }
+// QML の @map_scale 連動: ズーム確定ごとに __kasc_* 焼き込みプロパティと
+// アイコン/パターン画像を現在縮尺で再評価してソースへ反映する。
+// レイヤー定義(kinds)は __kasc_* 参照のデータ駆動のため再生成不要
+function rebakeQmlScaleStyles() {
+  for (const entry of layerEntries) {
+    const item = entry.item;
+    if (!item?._qml?.scaleDependent || !item._geojson || !entry.sid) continue;
+    const gj = item._geojson;
+    for (const f of gj.features || []) {
+      const p = f.properties || (f.properties = {});
+      for (const k of Object.keys(p)) if (k.startsWith("__kasc_")) delete p[k];
+    }
+    let applied;
+    try { applied = maplibreApplyQml(gj, item._qml); }
+    catch (e) { console.warn("@map_scale 再評価に失敗しました:", e); continue; }
+    registerQmlImages(applied);
+    map.getSource(entry.sid)?.setData?.(applyClientWhere(item, gj));
+  }
+}
+map.on("zoomend", rebakeQmlScaleStyles);
 let lastBaseUrl = "";
 // ?kasc= で読み込んだ .kasc の URL。設定中は URL 書き換え時に
 // project= を書かず ?kasc= を維持する(実プロジェクト選択で空に戻る)
@@ -660,26 +716,13 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     if (item.opts?.style) {
       try {
         const { loadCompiledQml, maplibreApplyQml, compiledScaleToResRange, resToZoom } = await import("../shared/qml-2d.js");
-        const compiled = await loadCompiledQml(item.opts.style, baseUrl);
+        const compiled = await loadCompiledQml(item.opts.style, baseUrl, "maplibre");
         item._qml = compiled;
         const applied = maplibreApplyQml(geojson, compiled);
         kinds = applied.kinds;
         qmlExtra = applied;
         // markerCanvas/fill tile の画像を map.addImage で登録してからレイヤ追加
-        for (const reg of [applied.icons, applied.fills]) {
-          if (!reg) continue;
-          for (const [id, cv] of reg) {
-            try {
-              if (map.hasImage(id)) continue;
-              // MapLibre 系は HTMLCanvasElement 非対応の版があるため
-              // ImageData({width,height,data}) 形式で登録する
-              const c2d = cv.getContext?.("2d");
-              const img = c2d ? c2d.getImageData(0, 0, cv.width, cv.height)
-                : { width: cv.width, height: cv.height, data: cv };
-              map.addImage(id, img);
-            } catch (e) { console.warn("addImage 失敗:", id, e); }
-          }
-        }
+        registerQmlImages(applied);
         const range = compiledScaleToResRange(compiled);
         if (range) {
           const lat = map.getCenter().lat;
@@ -731,7 +774,38 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
             "heatmap-opacity": 0.7,
           }] : [kind, filter, paint]);
     }
-    map.addSource(sid, { type: "geojson", data: applyClientWhere(item, geojson), attribution: layerAttribution(item) || undefined, ...(wantCluster ? { cluster: true, clusterRadius: Math.max(item._qml?.cluster?.distancePx || 50, 5), clusterMaxZoom: 16 } : {}) });
+    // extrude=<m>/z=<m>(#60)・QML 2.5D(d25): fill 種を fill-extrusion へ変換。
+    // Cesium の polygon.extrudedHeight と同等の立ち上げを MapLibre 側で実現する
+    const extrudeOpt = Number(item.opts?.extrude);
+    const extrudeH = (Number.isFinite(extrudeOpt) && extrudeOpt > 0)
+      ? extrudeOpt : (item._qml?.d25?.height || 0);
+    const extrudeBase = Number(item.opts?.z) || 0;
+    if (extrudeH > 0) {
+      // fill-extrusion-opacity/base 関連はデータ駆動不可のため、QML 側は
+      // アルファ込みの __kasc_fillx を色へ使い opacity は定数化する
+      kinds = kinds.map(([kind, filter, paint, layout]) => {
+        if (kind !== "fill") return [kind, filter, paint, layout];
+        const usesQmlFill = JSON.stringify(paint?.["fill-color"] ?? "").includes("__kasc_fill");
+        const opa = paint?.["fill-opacity"];
+        const opaConst = typeof opa === "number" ? opa : usesQmlFill ? 1
+          : (Array.isArray(opa) ? opa[opa.length - 1] : 1) ?? 1;
+        return ["fill-extrusion", filter, {
+          // fill-pattern レイヤは fill-color を持たないため色未定義になる。
+          // その場合も QML のアルファ込み塗り色(__kasc_fillx)へ倒す
+          "fill-extrusion-color": (usesQmlFill || paint["fill-color"] === undefined)
+            ? ["coalesce", ["get", "__kasc_fillx"], "rgba(58,123,213,0.5)"]
+            : paint["fill-color"],
+          "fill-extrusion-opacity": opaConst,
+          ...(paint["fill-pattern"] ? { "fill-extrusion-pattern": paint["fill-pattern"] } : {}),
+          ...(paint["fill-layer-blend"] ? { "fill-extrusion-layer-blend": paint["fill-layer-blend"] } : {}),
+          "fill-extrusion-height": extrudeH,
+          "fill-extrusion-base": extrudeBase,
+        }, layout];
+      });
+    }
+    map.addSource(sid, { type: "geojson", data: applyClientWhere(item, geojson), attribution: layerAttribution(item) || undefined,
+      ...(qmlExtra?.lineMetrics ? { lineMetrics: true } : {}),
+      ...(wantCluster ? { cluster: true, clusterRadius: Math.max(item._qml?.cluster?.distancePx || 50, 5), clusterMaxZoom: 16 } : {}) });
     const kindCount = {};
     for (const [k] of kinds) kindCount[k] = (kindCount[k] || 0) + 1;
     const kindSeen = {};
@@ -741,8 +815,9 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
         ? `${sid}-${kind}-${kindSeen[kind]}` : `${sid}-${kind}`;
       const def = { id: lid, type: kind, source: sid, filter, paint, layout: { ...layout, visibility: item.visible ? "visible" : "none" } };
       if (zoomRange) { def.minzoom = zoomRange.minzoom; def.maxzoom = zoomRange.maxzoom; }
-      // ラベル縮尺表示は symbol レイヤへだけ適用(地物描画には影響させない)
-      if (kind === "symbol" && qmlExtra?.labelZoom) {
+      // ラベル縮尺表示はラベル用 symbol レイヤへだけ適用(地物描画や
+      // アイコン/centroid の symbol レイヤには影響させない)
+      if (kind === "symbol" && qmlExtra?.labelZoom && JSON.stringify(filter).includes("__kasc_label")) {
         def.minzoom = Math.max(def.minzoom ?? 0, qmlExtra.labelZoom.minzoom);
         def.maxzoom = Math.min(def.maxzoom ?? 24, qmlExtra.labelZoom.maxzoom);
       }
@@ -1147,6 +1222,7 @@ function renderLayerRows(entries, unsupported) {
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const section = document.createElement("section");
     section.className = "layer-group" + (exclusive ? " exclusive" : "");
+    section.dataset.groupKey = key;
     const head = document.createElement("div");
     head.className = "layer-group-title";
     const tg = document.createElement("button");
@@ -1416,13 +1492,15 @@ async function liveApplyText(text, { changed = [], full = false, manifest = null
   }
   for (const e of entries) {
     try {
-      // where= クライアントフィルタ中は URL 直指定(setData は未加工データを
-      // 読む)を避け、fetch してフィルタ済み FC を流す
-      if (e.item.opts?.where && !QUERY_TYPES.has(e.item.type)) {
+      // where= クライアントフィルタ中・QML 適用中は URL 直指定(setData は
+      // 未加工データを読み __kasc_* が消える)を避け、fetch して焼き直し済み
+      // FC を流す
+      if ((e.item.opts?.where || e.item._qml) && !QUERY_TYPES.has(e.item.type)) {
         const res = await fetch(resolveKascUrl(e.item.url, lastBaseUrl));
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const gj = await res.json();
         e.item._geojson = gj;
+        bakeEntryQml(e.item, gj);
         map.getSource(e.sid).setData(applyClientWhere(e.item, gj));
       } else {
         map.getSource(e.sid).setData(resolveKascUrl(e.item.url, lastBaseUrl));
@@ -1814,6 +1892,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
 async function reloadEntryData(entry) {
   const { geojson } = await loadVectorItem(entry.item, lastBaseUrl, getViewBounds(), vectorHooks);
   entry.item._geojson = geojson;
+  bakeEntryQml(entry.item, geojson); // 生データへ __kasc_* を焼き直す
   const env = geojsonExtent(geojson);
   if (env) entry.item._env = env;
   const src = map.getSource(entry.sid);
@@ -1867,6 +1946,7 @@ function requeryViewportLayers(entries) {
   for (const entry of entries) {
     loadVectorItem(entry.item, lastBaseUrl, bounds, vectorHooks).then(({ geojson }) => {
       entry.item._geojson = geojson;
+      bakeEntryQml(entry.item, geojson); // 生データへ __kasc_* を焼き直す
       const env = geojsonExtent(geojson);
       if (env) entry.item._env = env;
       const src = map.getSource(entry.sid);
@@ -1949,6 +2029,7 @@ const geoTools = initGeoTools2d({
 const minimap = createMinimap({
   container: "#minimap",
   checkbox: "#display-minimap",
+  button: "#basemap-minimap",
   tileUrl: () => currentBaseEntries[Number(panel.basemapSelect?.value ?? 0)]?.item?.url || "",
   getBounds: () => {
     const b = map.getBounds();
@@ -2181,7 +2262,7 @@ function openGoogleEarth() {
     const tilt = Math.max(0, Math.min(90, map.getPitch()));
     const tiltRad = tilt * Math.PI / 180;
     const vh = map.getCanvas().clientHeight || map.getContainer().clientHeight;
-    const height = Math.max(50, zoomToCamHeightView(c.lat, map.getZoom(), vh));
+    const height = Math.max(50, zoomToCamHeightView(c.lat, map.getZoom() + 1, vh));
     const distance = tiltRad > 0.01 ? height / Math.cos(tiltRad) : height;
     const url = `https://earth.google.com/web/@${c.lat.toFixed(6)},${c.lng.toFixed(6)},0a,${distance.toFixed(2)}d,35y,${heading.toFixed(1)}h,${tilt.toFixed(1)}t,0r`;
     window.open(url, "_blank", "noopener");
@@ -2490,6 +2571,14 @@ themeSelect?.addEventListener("change", () => {
   if (theme) applyKascTheme(theme);
 });
 
+// レイヤ一覧: 全グループの一括展開/折りたたみ
+document.getElementById("layer-expand-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, true);
+});
+document.getElementById("layer-collapse-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, false);
+});
+
 // ---- ビュー(view: 行。表示+スタイル+フィルタ+カメラ+背景を束ねた目的別プリセット) ----
 
 // ビュー適用前の状態を記録する。ビュー解除でこの状態へ戻す
@@ -2784,7 +2873,7 @@ async function saveToDataDir(name, content) {
       try {
         await saveToDataDir(file.name, file);
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           inspectorInput.value = inspectorInput.value.replace(/\s*$/, "") + `\n${type}:${title} | DATA/${file.name}\n`;
@@ -2922,7 +3011,8 @@ initPrint({
   },
   getScaleDenominator: () => {
     const lat = map.getCenter().lat;
-    const mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom());
+    // getZoom() は 512px 基準のため +1 で正典(256px 基準)へ(setMapScaleGetter 同規約)
+    const mpp = 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, map.getZoom() + 1);
     return mpp / 0.00028;
   },
   getNorthAngleDeg: () => -map.getBearing(),
@@ -2932,8 +3022,9 @@ initPrint({
   panByPx: (dx, dy) => map.panBy([-dx, -dy], { duration: 0 }),
   zoomToDenom: (d) => {
     const lat = map.getCenter().lat;
+    // z は正典(256px 基準)のためネイティブ(512px 基準) zoom へ -1
     const z = Math.log2(156543.03392 * Math.cos(lat * Math.PI / 180) / (d * 0.00028));
-    map.jumpTo({ zoom: z });
+    map.jumpTo({ zoom: z - 1 });
   },
   fitExtent: async (w, s, e, n) => { map.fitBounds([[w, s], [e, n]], { duration: 0 }); },
 });

@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"街区A"},"geometry":{"type":"Polygon","coordinates":[[[139.785,35.685],[139.795,35.685],[139.795,35.693],[139.785,35.693],[139.785,35.685]]]}},
+{"type":"Feature","properties":{"name":"街区B"},"geometry":{"type":"Polygon","coordinates":[[[139.797,35.685],[139.803,35.685],[139.803,35.690],[139.797,35.690],[139.797,35.685]]]}}
+]}

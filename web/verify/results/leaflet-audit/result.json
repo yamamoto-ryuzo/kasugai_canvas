@@ -1,0 +1,120 @@
+{
+  "checks": {
+    "clusterQml": {
+      "ok": true,
+      "maxClusterRadius": 30.236220472440948,
+      "iconIsDivIcon": true,
+      "iconHtml": "<div style=\"width:42px;height:42px;border-radius:50%;background:rgb(20,160,90);opacity:.92;border:2px solid #fff;box-siz",
+      "childMarkerCount": 40,
+      "coverage": true
+    },
+    "clusterOpts": {
+      "ok": true,
+      "maxClusterRadius": 120,
+      "disableClusteringAtZoom": 15,
+      "showCoverageOnHover": false
+    },
+    "heatOpts": {
+      "ok": true,
+      "radius": 40,
+      "blur": 20,
+      "minOpacity": 0.3,
+      "maxZoom": 18,
+      "gradient": {
+        "0": "#0000ff",
+        "1": "#ff0000",
+        "0.5": "#00ff00"
+      },
+      "intensity1": 1
+    },
+    "heatQml": {
+      "ok": true,
+      "radius": 52.91338582677166,
+      "gradient": {
+        "0": "rgba(0,0,255,0.251)",
+        "1": "rgb(255,0,0)"
+      }
+    },
+    "heatQmlW": {
+      "ok": true,
+      "min": 0.16666666666666666,
+      "max": 0.8333333333333334,
+      "first3": [
+        0.16666666666666666,
+        0.3333333333333333,
+        0.5
+      ]
+    },
+    "pathOpts": {
+      "ok": true,
+      "paths": [
+        {
+          "fillRule": "nonzero",
+          "cls": "my-poly leaflet-interactive"
+        },
+        {
+          "fillRule": null,
+          "cls": "my-poly leaflet-interactive"
+        }
+      ],
+      "count": 2
+    },
+    "pathOptsOptions": [
+      {
+        "smoothFactor": 0,
+        "noClip": true,
+        "fillRule": "nonzero"
+      },
+      {
+        "smoothFactor": 0,
+        "noClip": true,
+        "fillRule": "nonzero"
+      }
+    ],
+    "canvasRenderer": {
+      "canvasPaths": 2,
+      "canvasEls": 1
+    },
+    "tileImageOpts": {
+      "tile": {
+        "tms": true,
+        "zoomOffset": 1,
+        "noWrap": true,
+        "subdomains": [
+          "a",
+          "b",
+          "c"
+        ],
+        "zIndex": 5,
+        "referrerPolicy": "no-referrer"
+      },
+      "image": {
+        "alt": "テスト画像",
+        "interactive": true,
+        "crossOrigin": "anonymous",
+        "zIndex": 9,
+        "elAlt": "テスト画像"
+      }
+    },
+    "mapOpts": {
+      "zoomSnap": 0.5,
+      "zoomDelta": 0.5,
+      "minZoom": 5,
+      "maxZoom": 14,
+      "maxBounds": [
+        [
+          35,
+          139
+        ],
+        [
+          36,
+          140
+        ]
+      ],
+      "worldCopyJump": true,
+      "preferCanvas": true,
+      "wheelPxPerZoomLevel": 60
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,6 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"本所吾妻橋"},"geometry":{"type":"Point","coordinates":[139.788,35.693]}},
+{"type":"Feature","properties":{"name":"錦糸町"},"geometry":{"type":"Point","coordinates":[139.814,35.697]}},
+{"type":"Feature","properties":{"name":"TokyoTest"},"geometry":{"type":"Point","coordinates":[139.760,35.700]}},
+{"type":"Feature","properties":{"name":"両国"},"geometry":{"type":"Point","coordinates":[139.793,35.678]}}
+]}

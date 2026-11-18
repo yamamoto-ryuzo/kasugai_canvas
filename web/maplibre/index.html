@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>KASUGAI Canvas — MapLibre</title>
 <link rel="icon" type="image/x-icon" href="../favicon.ico" />
-<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.18.0/dist/maplibre-gl.css" rel="stylesheet" crossorigin="anonymous" />
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@6.19.0/dist/maplibre-gl.css" rel="stylesheet" crossorigin="anonymous" />
 <style>
   html, body { margin: 0; height: 100%; font-family: Inter, "Yu Gothic UI", sans-serif; }
-  #map { position: absolute; inset: 0; background: #20262b; }
+  #map { position: absolute; inset: 0; background: #fff; }
   /* パネル外観は Cesium 版 .control-panel と同じ値に揃える */
   #panel {
     position: absolute; top: 14px; left: 14px; z-index: 10;
-    width: 336px; max-height: calc(100% - 88px); padding: 14px;
+    width: 336px; max-height: calc(100% - 140px); padding: 14px;
     border: 1px solid #d9e4e9; border-radius: 8px;
     background: rgba(255,255,255,.6); box-shadow: 0 8px 24px rgba(29,43,53,.14);
     display: flex; flex-direction: column; font-size: 16px; user-select: text;
@@ -71,6 +71,16 @@
   .layer-row span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .layer-item { min-width: 0; }
   #layers { font-size: 18px; }
+  /* テーマ選択 + レイヤ全展開/全折りたたみボタン行 */
+  .layer-head-row { display: flex; gap: 4px; align-items: center; margin-bottom: 3px; }
+  .layer-head-row > #theme-select { flex: 1; min-width: 0; width: auto; margin-bottom: 0; }
+  .layer-head-row > #layer-expand-all { margin-left: auto; }
+  /* 小アイコンボタンは .tab-pane button（濃緑）ルールに負けないよう !important 付き（小アイコンボタンと同じ方式） */
+  .layer-head-btn { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 0 !important;
+    border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important;
+    color: #31564f !important; font-size: 14px !important; line-height: 1; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .layer-head-btn:hover { background: rgba(49,86,79,.24) !important; }
   .layer-item, .layer-group, .legend-row { margin: 3px 0; }
   #layers > .layer-item:first-child, #layers > .layer-group:first-child { margin-top: 0; }
   .layer-group-title { display: flex; align-items: center; gap: 5px; min-height: 16px; padding: 1px 7px 1px 4px; line-height: 1; font-weight: 700; color: #31564f; background: rgba(49,86,79,.08); }
@@ -96,14 +106,15 @@
   .legend-swatch { width: 26px; height: 16px; object-fit: contain; flex: none; }
   .legend-row .legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .basemap-control { position: absolute; left: 14px; bottom: 14px; z-index: 1004; display: flex;
-    align-items: center; gap: 6px; width: 285px; padding: 9px 10px; border: 1px solid rgba(14,32,64,.12);
+    align-items: center; gap: 6px; box-sizing: border-box; width: 366px; padding: 9px 10px; border: 1px solid rgba(14,32,64,.12);
     border-radius: 7px; background: rgba(255,255,255,.6); box-shadow: 0 4px 12px rgba(10,20,40,.14); }
   .basemap-control select { flex: 1; width: 0; min-width: 0; min-height: 30px; padding: 5px 7px;
     border: 1px solid #cbd9de; border-radius: 4px; background: rgba(255,255,255,.8); color: #1d2b35; font-size: 16px; }
-  .basemap-control.collapsed { padding: 4px; }
+  .basemap-control.collapsed { width: 40px; height: 40px; padding: 7px; box-sizing: border-box; }
   .basemap-control.collapsed select { display: none; }
   .basemap-control.collapsed .basemap-list { display: none; }
-  .basemap-control.collapsed #basemap-globe { display: none; }
+  .basemap-control.collapsed #basemap-globe,
+  .basemap-control.collapsed #basemap-minimap { display: none; }
   /* ベースマップのグループ化表示(select optgroup を折りたたみ可能なリストへ置き換え) */
   .basemap-control .basemap-list { flex: 1; width: 0; max-height: 45vh; overflow-y: auto; font-size: 16px; }
   .basemap-control .basemap-item { padding: 4px 6px; border-radius: 4px; color: #1d2b35; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -115,9 +126,11 @@
   .basemap-control .basemap-list-tools { display: flex; gap: 4px; padding: 0 0 4px; border-bottom: 1px solid rgba(49,86,79,.18); margin-bottom: 3px; }
   .basemap-control .basemap-tool { padding: 1px 7px; border: 1px solid rgba(49,86,79,.4); border-radius: 4px; background: rgba(255,255,255,.7); color: #31564f; cursor: pointer; font-size: 11px; line-height: 1.6; }
   .basemap-control .basemap-tool:hover { background: rgba(49,86,79,.14); }
-  #basemap-toggle, #basemap-globe { width: 24px; height: 24px; min-width: 24px; min-height: 24px;
-    border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f;
-    cursor: pointer; font-size: 17px; line-height: 1; }
+  #basemap-toggle, #basemap-globe, #basemap-minimap { width: 24px; height: 24px; min-width: 24px; min-height: 24px;
+    padding: 0; border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f;
+    cursor: pointer; font-size: 17px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  #basemap-minimap { font-size: 21px; }
+  #basemap-minimap.active { background: rgba(49,86,79,.36); }
   .map-attribution { position: absolute; right: 8px; bottom: 6px; z-index: 1004; max-width: 60%;
     padding: 3px 5px; color: #52636d; background: rgba(255,255,255,.8); font-size: 10px;
     border-radius: 4px; }
@@ -224,7 +237,7 @@
 .portal-open.active { background: rgba(49,86,79,.28); border-color: #31564f; }
   .portal-overlay { position: fixed; inset: 0; z-index: 9500; display: flex; align-items: center; justify-content: center; background: rgba(20,32,40,.45); }
   .portal-overlay[hidden] { display: none; }
-  .portal-dialog { width: min(720px, 92vw); max-height: 86vh; display: flex; flex-direction: column; background: rgba(255,255,255,.97); border: 1px solid #cbd9de; border-radius: 10px; box-shadow: 0 16px 48px rgba(10,20,40,.35); overflow: hidden; }
+  .portal-dialog { width: fit-content; min-width: min(720px, 92vw); max-width: 95vw; max-height: 95vh; display: flex; flex-direction: column; background: rgba(255,255,255,.97); border: 1px solid #cbd9de; border-radius: 10px; box-shadow: 0 16px 48px rgba(10,20,40,.35); overflow: hidden; }
   .portal-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #e4ecef; background: #f5f9fa; }
   .portal-title { flex: 1 1 auto; margin: 0; font-size: 18px; color: #1d2b35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .portal-close { flex: 0 0 auto; min-height: 30px; padding: 4px 14px; border: 1px solid #31564f; border-radius: 5px; background: #31564f; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
@@ -329,7 +342,11 @@
     <button class="tab" data-tab="info">情報</button>
   </div>
   <div class="tab-pane" id="pane-layers">
-    <select id="theme-select" hidden style="width:100%;margin-bottom:3px;"></select>
+    <div class="layer-head-row">
+      <select id="theme-select" hidden></select>
+      <button id="layer-expand-all" class="layer-head-btn" type="button" title="すべて展開" data-i18n-attr="title:layer.expandAll;aria-label:layer.expandAll">🔽</button>
+      <button id="layer-collapse-all" class="layer-head-btn" type="button" title="すべて折りたたみ" data-i18n-attr="title:layer.collapseAll;aria-label:layer.collapseAll">🔼</button>
+    </div>
     <div id="layers"></div>
   </div>
   <div class="tab-pane" id="pane-legend" hidden>
@@ -393,7 +410,6 @@
       <label class="set-row"><input id="display-scalebar" type="checkbox" checked /> スケールバーを表示</label>
       <label class="set-row"><input id="display-coords" type="checkbox" checked /> カーソル座標を表示</label>
       <label class="set-row"><input id="display-graticule" type="checkbox" /><span data-i18n="display.graticule"> 緯度経度グリッド</span></label>
-      <label class="set-row"><input id="display-minimap" type="checkbox" /><span data-i18n="display.minimap"> ミニマップを表示</span></label>
       <label class="set-row">座標表示形式 <select id="coords-format"><option value="deg" selected>度 (10進)</option><option value="dms">度分秒 (DMS)</option><option value="utm">UTM</option><option value="jpx">平面直角座標系</option><option value="local">ローカル座標</option></select></label>
       <label class="set-row"><span data-i18n="display.coordsDatum">測地系</span> <select id="coords-datum"><option value="jgd2024" selected>JGD2024 / JGD2011</option><option value="jgd2000">JGD2000</option><option value="tokyo" data-i18n="display.datumTokyo">日本測地系</option></select></label>
       <button id="display-general-reset" type="button" style="width:100%;margin-top:6px;">設定をリセット</button>
@@ -448,6 +464,8 @@
 <div id="basemap-ctl" class="basemap-control" hidden>
   <button id="basemap-toggle" type="button" aria-label="最小化">−</button>
   <button id="basemap-globe" type="button" title="Google Earth で現在の表示を開く" aria-label="Google Earth で現在の表示を開く">🌐</button>
+  <input id="display-minimap" type="checkbox" hidden />
+  <button id="basemap-minimap" type="button" title="ミニマップの表示/非表示" aria-label="ミニマップの表示/非表示" aria-pressed="false" data-i18n-attr="title:basemap.minimap;aria-label:basemap.minimap">🗺️</button>
   <select id="basemap-select"></select>
 </div>
 <!-- portal:/html:/view: 行で構成する開始画面(ポータル)。

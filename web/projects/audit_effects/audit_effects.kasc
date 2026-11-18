@@ -1,0 +1,9 @@
+# engine-cesium 監査検証プロジェクト
+title: エンジンAPI監査検証
+cam: 東京|35.688|139.770|h=3000|p=-40
+base: ベースマップなし | none
+scene3d: 監査 | fxaa=on | tonemap=ACES
+3dtiles: 検証/PLATEAU千代田(tilecolor) | https://assets.cms.plateau.reearth.io/assets/0e/e5948a-e95c-4e31-be85-1f8c066ed996/13101_chiyoda-ku_pref_2023_citygml_1_op_bldg_3dtiles_13101_chiyoda-ku_lod1/tileset.json | tilecolor=orange
+geojson: 検証/点(scaledist+subregion) | DATA/pts.geojson | scaledist=1000,200000,1.5,0.2
+geojson: 検証/ポリゴン(strot) | DATA/poly.geojson | strot=45
+wms: 検証/WMS-states | DATA/wms_stub.json | layers=topp:states | transparent=true | opacity=0.5

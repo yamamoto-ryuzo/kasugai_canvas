@@ -1,0 +1,154 @@
+[
+  {
+    "engine": "cesium",
+    "case": "transparent",
+    "pixel": "#f6f9fb",
+    "white": true
+  },
+  {
+    "engine": "cesium",
+    "case": "none",
+    "pixel": "#fafbfc",
+    "white": true
+  },
+  {
+    "engine": "cesium",
+    "case": "opacity0",
+    "pixel": "#fafbfc",
+    "white": true
+  },
+  {
+    "engine": "cesium",
+    "case": "background:red",
+    "pixel": "#ff0000",
+    "white": false,
+    "expectRed": true
+  },
+  {
+    "engine": "maplibre",
+    "case": "transparent",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "maplibre",
+    "case": "none",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "maplibre",
+    "case": "opacity0",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "maplibre",
+    "case": "background:red",
+    "pixel": "#ff0000",
+    "white": false,
+    "expectRed": true
+  },
+  {
+    "engine": "openlayers",
+    "case": "transparent",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "openlayers",
+    "case": "none",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "openlayers",
+    "case": "opacity0",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "openlayers",
+    "case": "background:red",
+    "pixel": "#ff0000",
+    "white": false,
+    "expectRed": true
+  },
+  {
+    "engine": "leaflet",
+    "case": "transparent",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "leaflet",
+    "case": "none",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "leaflet",
+    "case": "opacity0",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "leaflet",
+    "case": "background:red",
+    "pixel": "#ff0000",
+    "white": false,
+    "expectRed": true
+  },
+  {
+    "engine": "navara",
+    "case": "transparent",
+    "pixel": "#f0f0f0",
+    "white": true
+  },
+  {
+    "engine": "navara",
+    "case": "none",
+    "pixel": "#f0f0f0",
+    "white": true
+  },
+  {
+    "engine": "navara",
+    "case": "opacity0",
+    "pixel": null,
+    "white": null,
+    "note": "スライダなし"
+  },
+  {
+    "engine": "navara",
+    "case": "background:red",
+    "pixel": "#f12121",
+    "white": false,
+    "expectRed": true
+  },
+  {
+    "engine": "gsimaps",
+    "case": "transparent",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "gsimaps",
+    "case": "none",
+    "pixel": "#ffffff",
+    "white": true
+  },
+  {
+    "engine": "gsimaps",
+    "case": "opacity0",
+    "pixel": null,
+    "white": null,
+    "note": "スライダなし"
+  },
+  {
+    "engine": "gsimaps",
+    "case": "background:red",
+    "pixel": "#ff0000",
+    "white": false,
+    "expectRed": true
+  }
+]

@@ -1,10 +1,12 @@
-// ミニマップ（表示>一般の #display-minimap トグル）。
+// ミニマップ（ベースマップコントロールの #basemap-minimap アイコンボタンで切替。
+// 状態は #display-minimap チェックボックス(hidden可)が保持し、ui-config defaults・setMinimap 経路も同じ）。
 // 左下の小地図に現在の表示範囲矩形（または中心マーカー）を重ねる。
 // Leaflet(UMD)は module import でグローバルに展開されないため script タグで遅延ロードする。
 //
 // createMinimap({
 //   container : "#minimap" | HTMLElement   // ミニマップの配置先（無ければ document.body 直下に生成）
-//   checkbox  : "#display-minimap" | HTMLElement | null
+//   checkbox  : "#display-minimap" | HTMLElement | null   // 表示状態の保持先
+//   button    : "#basemap-minimap" | HTMLElement | null   // クリックで切替。active クラス/aria-pressed を状態へ同期
 //   tileUrl   : () => "{z}/{x}/{y}" テンプレート（省略時は地理院淡色地図）
 //   getBounds : () => [[south,west],[north,east]] | null   // 表示範囲矩形
 //   getCenter : () => {lat,lng} | null      // bounds が取れない場合のマーカー位置（省略可）
@@ -56,7 +58,7 @@ function loadLeaflet() {
   return leafletPromise;
 }
 
-export function createMinimap({ container, checkbox, tileUrl, getBounds, getCenter, getZoom, flyTo } = {}) {
+export function createMinimap({ container, checkbox, button, tileUrl, getBounds, getCenter, getZoom, flyTo } = {}) {
   ensureStyle();
   const el = typeof container === "string" ? document.querySelector(container) : (container || (() => {
     const d = document.createElement("div");
@@ -65,6 +67,7 @@ export function createMinimap({ container, checkbox, tileUrl, getBounds, getCent
     return d;
   })());
   const cb = typeof checkbox === "string" ? document.querySelector(checkbox) : checkbox;
+  const btn = typeof button === "string" ? document.querySelector(button) : button;
   if (!el) return { scheduleUpdate() {}, update() {}, dispose() {} };
   el.classList.add("kasc-minimap");
   el.hidden = true;
@@ -72,7 +75,14 @@ export function createMinimap({ container, checkbox, tileUrl, getBounds, getCent
   let state = null;   // { map, tile, rect, marker }
   let timer = null;
   let disposed = false;
-  const enabled = () => !disposed && (!cb || cb.checked);
+  let manualOn = !cb;   // checkbox 無し環境では従来どおり初期 ON（ボタン操作で切替）
+  const enabled = () => !disposed && (cb ? cb.checked : manualOn);
+  const syncButton = () => {
+    if (!btn) return;
+    const on = enabled();
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  };
   const wantTile = () => {
     const url = tileUrl && tileUrl();
     return /\{z\}.*\{x\}.*\{y\}|\{z\}.*\{y\}.*\{x\}/.test(url || "") ? url : FALLBACK_TILE;
@@ -133,7 +143,19 @@ export function createMinimap({ container, checkbox, tileUrl, getBounds, getCent
     timer = setTimeout(() => { void update(); }, 250);
   }
 
-  cb?.addEventListener("change", () => { void update(); });
+  cb?.addEventListener("change", () => { void update(); syncButton(); });
+  btn?.addEventListener("click", () => {
+    if (disposed) return;
+    if (cb) {
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event("change"));
+    } else {
+      manualOn = !manualOn;
+      syncButton();
+      void update();
+    }
+  });
+  syncButton();
 
   return {
     scheduleUpdate,

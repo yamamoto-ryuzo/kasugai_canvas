@@ -1,0 +1,3 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"glow"},"geometry":{"type":"LineString","coordinates":[[139.55,35.47],[139.85,35.47]]}}
+]}

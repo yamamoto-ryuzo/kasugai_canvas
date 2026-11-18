@@ -1,0 +1,32 @@
+[
+  {
+    "id": "D-mixed[0]",
+    "ok": true,
+    "detail": "fill=#3a7bd5 closed=true stroke=#2c5ea8 d=M591 472L621 472L621 454L591 454z"
+  },
+  {
+    "id": "D-mixed[1]",
+    "ok": true,
+    "detail": "fill=none closed=false stroke=#2c5ea8 d=M635 472L664 454L693 472"
+  },
+  {
+    "id": "C-qml-line[0]",
+    "ok": true,
+    "detail": "fill=none closed=false stroke=rgb(220,40,40) d=M591 419L635 383L679 419"
+  },
+  {
+    "id": "B-simplestyle-fill[0]",
+    "ok": true,
+    "detail": "fill=none closed=false stroke=#00aa00 d=M591 419L635 383L679 419"
+  },
+  {
+    "id": "A-plain-line[0]",
+    "ok": true,
+    "detail": "fill=none closed=false stroke=#2c5ea8 d=M591 419L635 383L679 419"
+  },
+  {
+    "id": "A-plain-line[1]",
+    "ok": true,
+    "detail": "fill=none closed=false stroke=#2c5ea8 d=M591 445L635 428M635 428L679 445"
+  }
+]

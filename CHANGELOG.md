@@ -6,6 +6,26 @@
 
 ## [Unreleased]
 
+- **ポイント・ラベルの地形/3D Tiles ドレープを修正(Cesium)** — Cesium の `GeoJsonDataSource` は座標が2要素の billboard にしか `CLAMP_TO_GROUND` を付けないため、z 付き座標(PointZ 等)のポイント・QML 由来のラベル/補助 billboard・クラスタバッジがドレープ設定時でも地表へ張り付かなかった問題を修正。entity 経路で billboard/label/point へ `heightReference`(ドレープ先に応じ TERRAIN/3D_TILE/GROUND)を明示付与し、QML レンダラにも `clampRef` を追加してマーカー・ラベル・シャドウ・ダイアグラム・ラインデコレーション・GeometryGenerator マーカー等の全補助エンティティへ伝播。`cluster=on` のクラスタバッジも同様にクランプ。検証: `web/projects/drape_points/` + `web/verify/results/probe-2026-11-18-drape-points.mjs`(7/7 PASS)
+- **QML ラベルの自己障害物衝突を修正** — `obstacle="1"` + `fitInPolygonOnly`/`centroidInside` 系ラベルが全て非表示になっていた問題を修正。ラベル declutter が地物自身のポリゴン bbox を障害物として登録し、自ポリゴン内に置かれる自分のラベルも障害物と衝突判定して全滅させていた。QGIS(PAL) と同じく「地物自身の障害物はその地物のラベルには適用しない」よう、障害物に所有者 entity をタグ付けして衝突判定でスキップ（Cesium `declutterDataSourceLabels`・Leaflet `syncLabelZoomVisibility` の2箇所）。他地物・他レイヤーの障害物は従来どおり有効
+- ベクターデータ形式を8系統追加（`.kasc` 行タイプとして全エンジン共通の `shared/vector-load.js` 全件読み込み系へ統合、GeoJSON 正規化で描画）:
+  - `gpx:` — `@tmcw/togeojson` で trk/wpt を GeoJSON 化
+  - `topojson:` — topojson-client でトポロジー復元（複数オブジェクト展開）
+  - `czml:` — CZML パケット→GeoJSON 変換（時系列 position は軌跡 LineString、point/polygon は地物化）
+  - `esrijson:` / `arcgis:` — ArcGIS REST JSON → GeoJSON（wkid 3857 等の座標系も自動補正）
+  - `geojsonl:` / `ndjson:` / `jsonl:` — 行区切り GeoJSON を逐行パース
+  - `wkt:` — WKT テキスト（1行1地物 or 全文1地物）をパース
+  - `wkb:` — バイナリ/hex WKB を既存 WKB デコーダでデコード
+  - `igc:` — `ol/format/IGC`（CDN 遅延ロード）でグライダー飛行ログを軌跡 LineString 化（XYM の時刻を properties.time へ保持）
+  - `polyline:` — `ol/format/Polyline` でエンコードポリラインをデコード（`factor=`/`geometryLayout=` 指定可）
+  - `gml:` — `ol/format/{WFS,GML}` で OGC GML/WFS XML をパース（`axisorder=lonlat` で座標順入替対応）。`wfs:` の JSON 非対応サーバー応答もこの経路へ自動フォールバック
+  - 対応範囲: `shared/kasc.js` の行分類・全6エンジンの `VECTOR_TYPES`・Cesium `vectorDecoders`/レイヤ行生成/`LEGEND_VECTOR_TYPES`・`ogrFileType`/`ogrFileTypeByPath`/`ogrSourceCandidates`・ファイル取込の拡張子→型マップ（`.gpx`/`.topojson`/`.czml`/`.esrijson`/`.arcgis`/`.geojsonl`/`.ndjson`/`.jsonl`/`.wkt`/`.wkb`/`.igc`/`.polyline`/`.gml`）
+  - ol フォーマット出力の安全弁: GeoJSON 化時に非有限座標(null/NaN)・3要素超を除去（Cesium DeveloperError・Leaflet Invalid LatLng の発生防止）
+  - 検証: `web/projects/format_test/`（10形式のフィクスチャ .kasc）＋ `web/verify/results/probe-formats.mjs` で全6エンジン実描画確認（Cesium 10 ds・MapLibre 10 sources/30 layers・OpenLayers 10 vector layers・Leaflet 22 layers・Navara 10 layers・GSI Maps 10 sakuzu items）
+- Cesium: `kml:`/`kmz:`/`gpx:`/`czml:` 行をネイティブ DataSource で無変換読み込み（プレーン行のみ・`style=`/`heat=`/`where=`/`render=` 指定時は従来の GeoJSON 経路）。KML の &lt;Style&gt;/バルーン・CZML の時系列アニメーション（viewer.clock を ds.clock へ同期）を保持。epoch 未指定の時刻付き CZML は既定 epoch を補完。属性一覧・検索索引用の `item.geojsonSource` は shared 変換で併存し、ネイティブ読み込み失敗時は GeoJSON 経路へフォールバック
+- ドキュメント: `docs/use/1-10-マルチエンジン.html` にエンジン別対応データ形式マトリクスを追加（●＝無変換ネイティブ・〇＝GeoJSON 正規化・△＝変換コスト大・×＝未対応 の段階表示。deck.gl は 3dtiles: 行と 3D Tiles ドレープコピー専用である旨を明記）
+- maplibre-gl 6.18.0 → 6.19.0・leaflet.heat 0.2.0 → 1.0.1 へ更新（`leaflet-heat-global.js` ビルド採用。実ロード検証済み）
+
 ## [7.1.0] - 2026-11-15
 
 - AI チャットの QGIS Live MCP 接続を自動化: 起動時に稼働中の QGIS Live Driver セッションを検出して `qgis-live` を自動登録・接続（15 秒間隔で最大 6 回の再試行）。データソース一覧で OFF にした場合は自動接続しない。「起動中の QGIS に接続」ボタンは手動での再検出・再接続用として `shared/qgis-ogr.js` の `ensureQgisMcp()` 経路に統合し、検出ロジックの重複を解消

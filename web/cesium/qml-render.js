@@ -2,6 +2,7 @@
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
 import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas } from "../shared/qml-style.js";
+import { trimCoordsPlanar, TRIM_PX_TO_M } from "../shared/qml-2d.js";
 
 const Cesium = window.Cesium;
 
@@ -146,6 +147,30 @@ function entityCentroid(entity, time) {
   }
 }
 
+// Cartesian3 位置列を先頭/末尾のメートル指定で切断する
+// (弦距離近似: トリム量は小さいため弧長との差は無視できる)
+function trimCartesianPositions(positions, startM = 0, endM = 0) {
+  if (!positions?.length || positions.length < 2) return positions;
+  if (!(startM > 0 || endM > 0)) return positions;
+  const pts = positions.map(p => [p.x, p.y, p.z]);
+  const out = trimCoordsPlanar(pts, startM, endM);
+  if (out === pts) return positions;
+  return out.map(c => new Cesium.Cartesian3(c[0], c[1], c[2]));
+}
+
+// <effect> glow 系の色(<Option name="color"> 等)を QGIS 色配列で返す
+function parseCesiumFxColor(fx) {
+  const v = fx?.color ?? fx?.fill_color ?? fx?.glow_color;
+  if (typeof v === "string") {
+    const parts = v.split(",").map(Number);
+    if (parts.length >= 3 && parts.every(Number.isFinite)) {
+      return [parts[0] / 255, parts[1] / 255, parts[2] / 255,
+        (parts.length > 3 ? parts[3] : 255) / 255];
+    }
+  }
+  return null;
+}
+
 // polyline 用の破線マテリアル。[on,off]px → 16bit パターン
 function dashMaterialProperty(color, dash) {
   if (!dash?.length) return new Cesium.ColorMaterialProperty(toCesiumColor(color));
@@ -238,7 +263,7 @@ function pointInsidePolygon(entity, time) {
 // エンティティ(entity 描画経路)にコンパイル済みスタイルを適用する。
 // clamp: 地形ドレープ中か(ドレープ時はポリゴンのアウトラインが描かれないため
 // 周線を別途 polyline で引く)。opacity: レイヤ透過度(色アルファへ乗算)
-export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
+export function applyQmlStyleToDataSource(ds, style, { clamp = false, clampRef = null, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
   if (!style) return;
   // 補助エンティティの生成/削除とラベル更新を1回の変更通知に束ねる。
   // 逐次変更だと実行中のプリミティブ構築と競合し(属性リスト不整合など)
@@ -247,15 +272,19 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, time = nul
   ds._qmlApplying = true;
   try { ds.entities.suspendEvents?.(); } catch (_) {}
   try {
-  _applyQmlStyleToDataSourceInner(ds, style, { clamp, time, hiddenSymbols, opacity });
+  _applyQmlStyleToDataSourceInner(ds, style, { clamp, clampRef, time, hiddenSymbols, opacity });
   } finally {
     ds._qmlApplying = false;
     try { ds.entities.resumeEvents?.(); } catch (_) {}
   }
 }
 
-function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
+function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = null, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
   const t = time || Cesium.JulianDate.now();
+  // ドレープ時の点・ラベル高さ基準。billboard/label/point は
+  // classificationType を持たないため heightReference で地形/3D Tiles へ
+  // クランプする。clampRef 未指定の呼び出しは従来通り CLAMP_TO_GROUND とみなす
+  const hRef = clamp ? (clampRef ?? Cesium.HeightReference.CLAMP_TO_GROUND) : null;
   const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
   // 前回適用時に生成した補助エンティティ(装飾線・積層線)を掃除する
   for (const e of ds._qmlAux || []) { try { ds.entities.remove(e); } catch (_) {} }
@@ -274,6 +303,12 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
       if (ent.polygon?.hierarchy?.positions) {
         ent.polygon.hierarchy = new Cesium.PolygonHierarchy(ent.polygon.hierarchy.positions.filter(okPos));
         if (ent.polygon.hierarchy.positions.length < 3) return null;
+      }
+      // ドレープ中は補助エンティティの点・ラベルも地表へクランプする
+      if (hRef != null) {
+        if (ent.billboard) ent.billboard.heightReference = hRef;
+        if (ent.label) ent.label.heightReference = hRef;
+        if (ent.point) ent.point.heightReference = hRef;
       }
       const e = ds.entities.add(ent);
       e._kascAux = true;
@@ -334,10 +369,16 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
         entity.billboard.show = new Cesium.ConstantProperty(true);
         entity.billboard.image = new Cesium.ConstantProperty(canvas);
         entity.billboard.scale = new Cesium.ConstantProperty(1);
+        // MapUnit/MetersInMapUnits: メートル実寸のためカメラ距離で拡縮する
+        // (installMapUnitScaler が _qmlMapUnits を参照して更新)
+        const mu = spec.markers.find(m => m?.sizeMeters);
+        if (mu) (entity._qmlMapUnits ||= {}).billboard = { meters: mu.sizeMeters, refPx: Math.max(canvas.height || 1, 1) };
+        else if (entity._qmlMapUnits) delete entity._qmlMapUnits.billboard;
         entity.billboard.verticalOrigin = new Cesium.ConstantProperty(Cesium.VerticalOrigin.CENTER);
         entity.billboard.horizontalOrigin = new Cesium.ConstantProperty(Cesium.HorizontalOrigin.CENTER);
         // レイヤ透過度: 焼き付け済みキャンバス全体へ乗算する
         entity.billboard.color = new Cesium.ConstantProperty(Cesium.Color.WHITE.withAlpha(opacity));
+        if (hRef != null) entity.billboard.heightReference = new Cesium.ConstantProperty(hRef);
         const rot = spec.markers[0]?.rotationDeg || 0;
         if (rot) entity.billboard.rotation = new Cesium.ConstantProperty(-rot * Math.PI / 180);
         if (ddc) entity.billboard.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
@@ -363,8 +404,36 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
     if (hasLine) {
       if (spec.line) {
         entity.polyline.show = new Cesium.ConstantProperty(true);
-        entity.polyline.material = dashMaterialProperty(mulAlpha(spec.line.color, opacity), spec.line.dash);
+        // <effect> glow/outerglow は PolylineGlowMaterial で近似(破線と両立
+        // しないため破線優先)。glowPower は blur/spread の px から幅比で推定
+        const glowFx = (spec.line.effects || []).find(fx =>
+          /^(outer)?glow$/i.test(String(fx?.type || "")));
+        const glowBlurPx = glowFx
+          ? Math.max(Number(glowFx.blur_level ?? glowFx.blur_radius ?? 0)
+              * ({ Point: 96 / 72, Pixel: 1, MapUnit: 0.3 * 96 / 25.4 }[glowFx.blur_unit] ?? 96 / 25.4), 0)
+          : 0;
+        if (glowFx && !spec.line.dash?.length && Cesium.PolylineGlowMaterialProperty) {
+          const w = Math.max(spec.line.widthPx || 1, 0.5);
+          entity.polyline.material = new Cesium.PolylineGlowMaterialProperty({
+            color: toCesiumColor(mulAlpha(
+              parseCesiumFxColor(glowFx) || spec.line.color, opacity)),
+            glowPower: Math.min(Math.max((glowBlurPx || 4) / (w * 4), 0.03), 0.25),
+          });
+        } else {
+          entity.polyline.material = dashMaterialProperty(mulAlpha(spec.line.color, opacity), spec.line.dash);
+        }
         entity.polyline.width = new Cesium.ConstantProperty(spec.line.widthPx);
+        // 線端トリム(QML trim_distance): 基準縮尺換算のメートル値で
+        // Cartesian3 位置列を弦距離切断する近似
+        const tsU = (spec.line.trimStartPx || 0) * TRIM_PX_TO_M;
+        const teU = (spec.line.trimEndPx || 0) * TRIM_PX_TO_M;
+        if (tsU > 0 || teU > 0) {
+          const pos0 = entity.polyline.positions?.getValue?.(t);
+          if (pos0?.length >= 2) {
+            entity.polyline.positions = new Cesium.ConstantProperty(
+              trimCartesianPositions(pos0, tsU, teU));
+          }
+        }
         if (ddc) entity.polyline.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
         // 複数ラインシンボル(ケーシング)と装飾線は補助エンティティで近似描画。
         // 補助描画の失敗で本体レンダリングを止めないよう try/catch で囲む
@@ -374,9 +443,12 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
             if (pos?.length > 1) {
               for (let i = spec.lines.length - 2; i >= 0; i--) {
                 const l = spec.lines[i];
+                const ltsU = (l.trimStartPx || 0) * TRIM_PX_TO_M;
+                const lteU = (l.trimEndPx || 0) * TRIM_PX_TO_M;
                 addAux({
                   polyline: {
-                    positions: pos,
+                    positions: (ltsU > 0 || lteU > 0)
+                      ? trimCartesianPositions(pos, ltsU, lteU) : pos,
                     width: new Cesium.ConstantProperty(l.widthPx),
                     material: dashMaterialProperty(mulAlpha(l.color, opacity), l.dash),
                     clampToGround: entity.polyline.clampToGround?.getValue?.(t) ?? clamp,
@@ -481,6 +553,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
           entity.billboard.image = new Cesium.ConstantProperty(canvas);
           entity.billboard.verticalOrigin = new Cesium.ConstantProperty(Cesium.VerticalOrigin.CENTER);
           entity.billboard.horizontalOrigin = new Cesium.ConstantProperty(Cesium.HorizontalOrigin.CENTER);
+          if (hRef != null) entity.billboard.heightReference = new Cesium.ConstantProperty(hRef);
         }
       }
     }
@@ -537,14 +610,17 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
           const bg = labelSpec.background;
           // bufferNoFill(中空ハロー): LabelGraphics では中空を表せないため
           // canvas ラスタライズしたラベルを billboard で描く
+          let labelCanvasH = 0;
           const labelGfx = labelSpec.halo?.noFill && (() => {
             const r = qmlLabelCanvas(labelSpec);
+            if (r) labelCanvasH = r.canvas?.height || 0;
             return r ? entity.billboard = new Cesium.BillboardGraphics({
               image: r.canvas,
               verticalOrigin: Cesium.VerticalOrigin.CENTER,
               horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
               pixelOffset: new Cesium.Cartesian2(oxPx, oyPx + bump),
               rotation: labelRot ? -labelRot * Math.PI / 180 : 0,
+              heightReference: hRef ?? undefined,
             }) : null;
           })();
           if (!labelGfx) {
@@ -562,7 +638,13 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
               showBackground: !!bg,
               backgroundColor: bg ? toCesiumColor(mulAlpha(bg.fill, opacity)) : undefined,
               backgroundPadding: bg ? new Cesium.Cartesian2(bg.padPx[0] + 3, bg.padPx[1] + 3) : undefined,
+              heightReference: hRef ?? undefined,
             });
+          }
+          // fontSizeUnit=MapUnit/MetersInMapUnits: 距離連動でラベルを拡縮
+          if (labelSpec.sizeMeters) {
+            const refPx = labelGfx ? (labelCanvasH || labelSpec.sizePx) : labelSpec.sizePx;
+            (entity._qmlMapUnits ||= {})[labelGfx ? "billboard" : "label"] = { meters: labelSpec.sizeMeters, refPx: Math.max(refPx || 1, 1) };
           }
           // ラベル縮尺表示 → 規則縮尺との積集合を DDC として適用
           const gfx = entity.label || entity.billboard;
@@ -585,14 +667,16 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
           }
           // ドロップシャドウ: 同色ラベルをオフセット重複で近似
           if (!labelGfx && labelSpec.shadow) pendingShadows.push({ entity, labelSpec, oxPx, oyPx: oyPx + bump, hOrigin, vOrigin });
-          // ラベル障害物(obstacleType): 地物 geometry が他ラベルの配置を妨げる。
-          // declutter で画面投影 bbox を placed へ事前登録するため収集する
-          if (labelSpec.obstacleType) {
+          // ラベル障害物(obstacle): obstacle="1" かつ obstacleFactor>0 の地物が
+          // 他ラベルの配置を妨げる。declutter で画面投影ジオメトリを placed へ
+          // 事前登録するため収集する(obstacleType はポリゴンの判定モード)
+          if (labelSpec.obstacle && labelSpec.obstacleFactor > 0) {
             const mk = spec.markers?.length ? markerLayersToCanvas(spec.markers) : null;
             ds._qmlObstacles.push({
               entity,
               kind: labelSpec.obstacleType,
               sizePx: mk ? Math.max(mk.width, mk.height) : (spec.line?.widthPx || 8) * 1.5,
+              lineHalfPx: Math.max((spec.line?.widthPx || 1) / 2, 0.5),
             });
           }
         }
@@ -613,6 +697,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, time = null
         style: sh.radiusPx ? Cesium.LabelStyle.FILL_AND_OUTLINE : Cesium.LabelStyle.FILL,
         horizontalOrigin: s.hOrigin, verticalOrigin: s.vOrigin,
         pixelOffset: new Cesium.Cartesian2(s.oxPx + sh.offsetPx[0], s.oyPx + sh.offsetPx[1]),
+        heightReference: hRef ?? undefined,
       });
     } catch (e) { /* シャドウ生成失敗は無視 */ }
   }
@@ -684,6 +769,87 @@ function toWindow(scene, pos) {
 }
 
 const overlapBox = (a, b) => a.x1 < b.x2 && a.x2 > b.x1 && a.y1 < b.y2 && a.y2 > b.y1;
+
+// --- ラベル障害物の実形状判定用 2D 幾何ヘルパー(画面座標系) ---
+// 頂点列の bbox
+function ptsBox(pts) {
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const p of pts) {
+    if (p.x < x1) x1 = p.x; if (p.x > x2) x2 = p.x;
+    if (p.y < y1) y1 = p.y; if (p.y > y2) y2 = p.y;
+  }
+  return { x1, y1, x2, y2 };
+}
+const _ori = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+const _onSeg = (a, b, p) =>
+  p.x >= Math.min(a.x, b.x) - 1e-9 && p.x <= Math.max(a.x, b.x) + 1e-9 &&
+  p.y >= Math.min(a.y, b.y) - 1e-9 && p.y <= Math.max(a.y, b.y) + 1e-9;
+// 線分同士の交差(端点接触を含む)
+function segSeg(a, b, c, d) {
+  const o1 = _ori(a, b, c), o2 = _ori(a, b, d), o3 = _ori(c, d, a), o4 = _ori(c, d, b);
+  if (((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) && ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))) return true;
+  if (Math.abs(o1) < 1e-9 && _onSeg(a, b, c)) return true;
+  if (Math.abs(o2) < 1e-9 && _onSeg(a, b, d)) return true;
+  if (Math.abs(o3) < 1e-9 && _onSeg(c, d, a)) return true;
+  if (Math.abs(o4) < 1e-9 && _onSeg(c, d, b)) return true;
+  return false;
+}
+// 線分と矩形の交差(端点が箱内 or 箱のいずれかの辺と交差)
+function segBoxHit(p, q, box) {
+  const inBox = pt => pt.x >= box.x1 && pt.x <= box.x2 && pt.y >= box.y1 && pt.y <= box.y2;
+  if (inBox(p) || inBox(q)) return true;
+  const c1 = { x: box.x1, y: box.y1 }, c2 = { x: box.x2, y: box.y1 };
+  const c3 = { x: box.x2, y: box.y2 }, c4 = { x: box.x1, y: box.y2 };
+  return segSeg(p, q, c1, c2) || segSeg(p, q, c2, c3)
+    || segSeg(p, q, c3, c4) || segSeg(p, q, c4, c1);
+}
+// 点のポリゴン内判定(射線法)
+function pointInRing(p, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if ((a.y > p.y) !== (b.y > p.y) &&
+      p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+// 投影ポリゴン vs ラベル矩形。obstacleType: 0=内部 1=境界のみ 2=全体。
+// 境界のみはリング線分との交差(線幅ぶん pad)、内部/全体は面との重なりを見る
+function polyBoxHit(obs, box) {
+  const ring = obs.poly;
+  if (obs.kind === 1) {
+    const h = obs.half || 0;
+    const pb = { x1: box.x1 - h, y1: box.y1 - h, x2: box.x2 + h, y2: box.y2 + h };
+    for (let i = 0; i < ring.length; i++) {
+      if (segBoxHit(ring[i], ring[(i + 1) % ring.length], pb)) return true;
+    }
+    return false;
+  }
+  const corners = [
+    { x: box.x1, y: box.y1 }, { x: box.x2, y: box.y1 },
+    { x: box.x2, y: box.y2 }, { x: box.x1, y: box.y2 },
+  ];
+  if (corners.some(c => pointInRing(c, ring))) return true;
+  for (const p of ring) {
+    if (p.x >= box.x1 && p.x <= box.x2 && p.y >= box.y1 && p.y <= box.y2) return true;
+  }
+  for (let i = 0; i < ring.length; i++) {
+    if (segBoxHit(ring[i], ring[(i + 1) % ring.length], box)) return true;
+  }
+  return false;
+}
+// placed エントリとラベル矩形の衝突判定。bbox プリチェック後、
+// 障害物は実形状(poly=ポリゴン/seg=折れ線)で詳細判定する
+function obstacleHit(b, box) {
+  if (!overlapBox(b, box)) return false;
+  if (b.poly) return polyBoxHit(b, box);
+  if (b.seg) {
+    const pb = { x1: box.x1 - b.half, y1: box.y1 - b.half, x2: box.x2 + b.half, y2: box.y2 + b.half };
+    for (let i = 0; i + 1 < b.seg.length; i++) if (segBoxHit(b.seg[i], b.seg[i + 1], pb)) return true;
+    return false;
+  }
+  return true;
+}
 
 // ポリゴン entity の画面投影バウンディングボックス(fitInsidePolygon 判定用)。
 // 頂点を間引いて投影コストを抑える
@@ -856,10 +1022,30 @@ function lineScreenLen(scene, entity, t) {
   } catch (e) { return 0; }
 }
 
+// ポリゴン entity の外周リングを画面座標へ投影する(障害物の実形状判定用)。
+// 頂点は投影コスト抑制のため間引き、穴リングは近似で無視する
+function polyScreenRing(scene, entity, t) {
+  try {
+    const h = entity.polygon?.hierarchy?.getValue?.(t);
+    const parts = Array.isArray(h) ? h : (h ? [h] : []);
+    const pos = parts[0]?.positions || parts[0];
+    if (!pos?.length) return null;
+    const step = Math.max(1, Math.floor(pos.length / 400));
+    const ring = [];
+    for (let i = 0; i < pos.length; i += step) {
+      const w = toWindow(scene, pos[i]);
+      if (w && Number.isFinite(w.x)) ring.push({ x: w.x, y: w.y });
+    }
+    return ring.length >= 3 ? ring : null;
+  } catch (e) { return null; }
+}
+
 // 1データソース分の declutter を実行する。複数 ds 間の衝突も見るため
 // 共有の placed 配列を受け取る
-// obstacleType 地物の画面投影 bbox を placed(障害物)へ事前登録する。
-// ポリゴンは全頂点 bbox、点/線はマーカー/線幅サイズの箱で近似する
+// obstacle 地物の画面投影ジオメトリを placed(障害物)へ事前登録する。
+// ポリゴンは投影リング(obstacleType で内部/境界のみ/全体を切替)、
+// 線は投影折れ線+線幅、点はマーカーサイズの箱で登録する。
+// いずれも bbox を併記してプリチェックに使う
 export function registerLabelObstacles(scene, ds, placed = []) {
   const list = ds._qmlObstacles || [];
   if (!list.length) return;
@@ -867,38 +1053,48 @@ export function registerLabelObstacles(scene, ds, placed = []) {
   for (const ob of list) {
     const e = ob.entity;
     try {
-      let box = null;
       if (e.polygon) {
-        box = polyScreenBox(scene, e, t);
+        const ring = polyScreenRing(scene, e, t);
+        if (ring) {
+          placed.push({ ...ptsBox(ring), entity: e, poly: ring, kind: ob.kind, half: ob.lineHalfPx });
+        }
       } else if (e.polyline) {
         const pos = e.polyline.positions?.getValue?.(t);
+        const pts = [];
         if (pos?.length) {
-          let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
           for (const p of pos) {
             const w = toWindow(scene, p);
-            if (!w || !Number.isFinite(w.x)) continue;
-            if (w.x < x1) x1 = w.x; if (w.x > x2) x2 = w.x;
-            if (w.y < y1) y1 = w.y; if (w.y > y2) y2 = w.y;
+            if (w && Number.isFinite(w.x)) pts.push({ x: w.x, y: w.y });
           }
-          if (Number.isFinite(x1)) box = { x1, y1, x2, y2 };
+        }
+        if (pts.length >= 2) {
+          const half = Math.max(ob.sizePx || 6, 4) / 2;
+          const bb = ptsBox(pts);
+          placed.push({ x1: bb.x1 - half, y1: bb.y1 - half, x2: bb.x2 + half, y2: bb.y2 + half, entity: e, seg: pts, half });
         }
       } else {
         const pos = e.position?.getValue?.(t) || entityCentroid(e, t);
         const w = pos ? toWindow(scene, pos) : null;
         if (w && Number.isFinite(w.x)) {
           const half = Math.max(ob.sizePx || 10, 4) / 2;
-          box = { x1: w.x - half, y1: w.y - half, x2: w.x + half, y2: w.y + half };
+          placed.push({ x1: w.x - half, y1: w.y - half, x2: w.x + half, y2: w.y + half, entity: e });
         }
       }
-      if (box) placed.push(box);
     } catch (_) {}
   }
 }
 
 export function declutterDataSourceLabels(scene, ds, placed = []) {
   const list = (ds._qmlLabels || []).filter(c => c.spec?.text);
-  if (!list.length) return;
+  if (!list.length) return false;
   const t = Cesium.JulianDate.now();
+  // requestRenderMode 下で描画を要求すべき「表示状態の変化」があったかを返す
+  let changed = false;
+  const setShow = (gfx, v) => {
+    if (gfx.show?.getValue?.() === v) return;
+    gfx.show = new Cesium.ConstantProperty(v);
+    changed = true;
+  };
   const sorted = [...list].sort((a, b) =>
     (b.spec.zIndex - a.spec.zIndex) || (b.spec.priority - a.spec.priority));
   for (const c of sorted) {
@@ -908,7 +1104,7 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
     if (!gfx) continue;
     const pos = e.position?.getValue?.(t);
     const win = pos ? toWindow(scene, pos) : null;
-    if (!win || !Number.isFinite(win.x)) { gfx.show = new Cesium.ConstantProperty(false); continue; }
+    if (!win || !Number.isFinite(win.x)) { setShow(gfx, false); continue; }
     const size = c.spec.sizePx || 12;
     const lines = String(c.spec.text).split("\n");
     // 全角は 1em・半角は 0.55em で幅を見積もる(日本語ラベル対応)
@@ -922,7 +1118,7 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
       const pb = polyScreenBox(scene, e, t);
       const fits = pb && w <= (pb.x2 - pb.x1) && h <= (pb.y2 - pb.y1);
       if (!fits) {
-        gfx.show = new Cesium.ConstantProperty(false);
+        setShow(gfx, false);
         continue;
       }
     }
@@ -936,9 +1132,9 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
       } else {
         tooSmall = lineScreenLen(scene, e, t) < need;
       }
-      if (tooSmall) { gfx.show = new Cesium.ConstantProperty(false); continue; }
+      if (tooSmall) { setShow(gfx, false); continue; }
     }
-    if (c.spec.allowOverlap || c.spec.displayAll) { gfx.show = new Cesium.ConstantProperty(true); continue; }
+    if (c.spec.allowOverlap || c.spec.displayAll) { setShow(gfx, true); continue; }
     const quads = pl.predefinedOrder?.length ? orderToQuads(pl.predefinedOrder, pl.quad) : [pl.quad || { h: 0, v: 0 }];
     let done = false;
     for (const q of quads) {
@@ -947,16 +1143,21 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
       const x1 = win.x + dx - (q.h < 0 ? w : q.h === 0 ? w / 2 : 0);
       const y1 = win.y + dy - (q.v > 0 ? h : q.v === 0 ? h / 2 : 0);
       const box = { x1, y1, x2: x1 + w, y2: y1 + h };
-      if (!placed.some(b => overlapBox(b, box))) {
+      // ラベル自身の地物が登録した障害物(b.entity === e)は衝突対象から除く。
+      // 除かないと fitInPolygonOnly/centroidInside 系ラベルは常に自ポリゴンと
+      // 衝突して全滅する(QGIS PAL と同じく自己障害物は適用しない)
+      if (!placed.some(b => b.entity !== e && obstacleHit(b, box))) {
         placed.push(box);
         gfx.pixelOffset = new Cesium.ConstantProperty(new Cesium.Cartesian2(dx, dy));
-        gfx.show = new Cesium.ConstantProperty(true);
+        changed = true;
+        setShow(gfx, true);
         done = true;
         break;
       }
     }
-    if (!done) gfx.show = new Cesium.ConstantProperty(false);
+    if (!done) setShow(gfx, false);
   }
+  return changed;
 }
 
 // データソース群に対して declutter を実行する(全 ds 横断で衝突判定)
@@ -967,9 +1168,12 @@ export function declutterAllLabels(scene, sources) {
   for (const ds of sources || []) {
     try { registerLabelObstacles(scene, ds, placed); } catch (e) { /* ignore */ }
   }
+  let changed = false;
   for (const ds of sources || []) {
-    try { declutterDataSourceLabels(scene, ds, placed); } catch (e) { /* 1件失敗でも継続 */ }
+    try { changed = declutterDataSourceLabels(scene, ds, placed) || changed; } catch (e) { /* 1件失敗でも継続 */ }
   }
+  // requestRenderMode: show/pixelOffset を変えても描画要求しないと表示へ反映されない
+  if (changed) scene.requestRender?.();
 }
 
 let _declutterInstalled = false;
@@ -998,6 +1202,64 @@ export function installLabelDeclutter(scene, getSources) {
   }); } catch (e) {}
   // 初回は描画が安定してから
   setTimeout(run, 800);
+}
+
+// ---------------------------------------------------------------------------
+// MapUnit/MetersInMapUnits の距離連動スケーリング
+// entity._qmlMapUnits = { billboard?: {meters,refPx}, label?: {meters,refPx} }
+// を持つ地物の scale を、地物までのカメラ距離から得た 1px あたりメートルで
+// 逐次更新する(scaleByDistance は線形補間で 1/d 近似が合わないため自前で計算)
+// ---------------------------------------------------------------------------
+let _muInstalled = false;
+let _muTimer = null;
+let _muLast = 0;
+export function installMapUnitScaler(scene, getSources) {
+  if (_muInstalled || !scene) return;
+  _muInstalled = true;
+  const update = () => {
+    try {
+      const canvas = scene.canvas;
+      const frustum = scene.camera?.frustum;
+      const camPos = scene.camera?.positionWC || scene.camera?.position;
+      if (!(canvas && camPos && frustum && frustum.fovy !== undefined)) return;
+      const h = canvas.clientHeight || canvas.height || 1;
+      const tan = Math.tan(frustum.fovy / 2);
+      if (!(tan > 0)) return;
+      const t = Cesium.JulianDate.now();
+      for (const ds of getSources?.() || []) {
+        for (const e of ds.entities?.values || []) {
+          const mu = e._qmlMapUnits;
+          if (!mu) continue;
+          const pos = e.position?.getValue?.(t);
+          if (!pos) continue;
+          const d = Math.max(Cesium.Cartesian3.distance(camPos, pos), 1);
+          const mpp = (2 * d * tan) / h; // 地物地点の 1px あたりメートル
+          if (!(mpp > 0)) continue;
+          const setScale = (gfx, m) => {
+            if (!gfx || !m) return;
+            const scale = Math.min(Math.max((m.meters / mpp) / (m.refPx || 1), 0.01), 100);
+            const cur = gfx.scale?.getValue?.() ?? 1;
+            if (Math.abs(cur - scale) > 0.02) {
+              gfx.scale = new Cesium.ConstantProperty(scale);
+              scene.requestRender?.();
+            }
+          };
+          setScale(e.billboard, mu.billboard);
+          setScale(e.label, mu.label);
+        }
+      }
+    } catch (_) { /* 距離更新失敗は次回へ */ }
+  };
+  const run = () => {
+    if (_muTimer) return;
+    _muTimer = setTimeout(() => { _muTimer = null; _muLast = Date.now(); update(); }, 150);
+  };
+  try { scene.camera.moveEnd.addEventListener(run); } catch (_) {}
+  try { scene.camera.changed.addEventListener(run); } catch (_) {}
+  try { scene.postRender.addEventListener(() => {
+    if (Date.now() - _muLast > 800) run();
+  }); } catch (_) {}
+  setTimeout(update, 800);
 }
 
 function outlinePositions(entity, time) {

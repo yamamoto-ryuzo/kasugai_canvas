@@ -1,6 +1,7 @@
 // ベクター系 .kasc 行 → GeoJSON FeatureCollection（エンジン非依存ローダー）
 // 対象: geojson:/layer: / geoparquet:/parquet: / flatgeobuf:/fgb: / gpkg:/geopackage: /
-//       csv:/tsv: / duckdb: / sql:
+//       csv:/tsv: / duckdb: / sql: / kml:/kmz: / gpx: / czml: / topojson: /
+//       esrijson:/arcgis: / geojsonl:/ndjson:/jsonl: / wkt: / wkb: / wfs: / shp:
 // duckdb:/sql: のクエリ実行は window.KascLoader(shared/kasc_loader.js) へ委譲する。
 // bounds = {ranges:[{west,east}],south,north} は bbox=auto/:bbox 系の表示範囲として使う
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue } from "./vector-decode.js";
@@ -12,6 +13,8 @@ const HYPARQUET_COMPRESSORS_URL = "https://cdn.jsdelivr.net/npm/hyparquet-compre
 const TOGEOJSON_URL = "https://cdn.jsdelivr.net/npm/@tmcw/togeojson@7.1.3/+esm";
 const JSZIP_URL = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
 const SHP_URL = "https://cdn.jsdelivr.net/npm/shpjs@6.1.0/+esm";
+const TOPOJSON_URL = "https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/+esm";
+const ARCGIS_URL = "https://cdn.jsdelivr.net/npm/@terraformer/arcgis@2.1.2/+esm";
 
 let gpkgWorker = null;
 let gpkgReqId = 0;
@@ -230,6 +233,248 @@ async function loadKml(url) {
   return sanitizeFeatureCollection(kml(dom));
 }
 
+// GPX → GeoJSON。KML と同じ @tmcw/togeojson の gpx() を使う。
+// waypoint/trackpoint/routepoint が地物になり、trkseg 結合の Track が入る
+async function loadGpx(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`gpx 取得失敗: ${res.status}`);
+  const dom = new DOMParser().parseFromString(await res.text(), "application/xml");
+  if (dom.getElementsByTagName("parsererror").length) throw new Error("GPX のパースに失敗しました");
+  const { gpx } = await import(TOGEOJSON_URL);
+  return sanitizeFeatureCollection(gpx(dom));
+}
+
+// TopoJSON → GeoJSON。全 objects を1つの FeatureCollection へマージし、
+// object 名を properties.__topoObject へ付ける（属性が無い地物の識別用）
+async function loadTopojson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`topojson 取得失敗: ${res.status}`);
+  const topo = await res.json();
+  if (topo?.type !== "Topology" || !topo.objects) throw new Error("TopoJSON Topology ではありません");
+  const { feature } = await import(TOPOJSON_URL);
+  const features = [];
+  for (const [name, obj] of Object.entries(topo.objects)) {
+    const out = feature(topo, obj);
+    const list = out?.type === "FeatureCollection" ? out.features : out ? [out] : [];
+    for (const f of list) {
+      if (!f?.geometry) continue;
+      f.properties = { __topoObject: name, ...(f.properties || {}) };
+      features.push(f);
+    }
+  }
+  return sanitizeFeatureCollection({ type: "FeatureCollection", features });
+}
+
+// 行区切り GeoJSON（.geojsonl/.ndjson/.jsonl）。各行が Feature または
+// FeatureCollection（ネスト展開）。空行・コメント行(#)は読み飛ばす
+async function loadGeojsonl(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`geojsonl 取得失敗: ${res.status}`);
+  const text = await res.text();
+  const features = [];
+  for (const line of text.split(/\r?\n/)) {
+    const s = line.trim();
+    if (!s || s.startsWith("#")) continue;
+    let obj;
+    try { obj = JSON.parse(s); } catch { continue; }
+    if (obj?.type === "FeatureCollection") features.push(...(obj.features || []));
+    else if (obj?.type === "Feature") features.push(obj);
+    else if (obj?.type && obj?.coordinates) features.push({ type: "Feature", geometry: obj, properties: {} });
+  }
+  return sanitizeFeatureCollection({ type: "FeatureCollection", features });
+}
+
+// EsriJSON（ArcGIS フィーチャ形式）→ GeoJSON。Geometry 単体・FeatureSet・
+// Feature の配列のいずれも受け付ける（attributes/geometry の組で認識）
+async function loadEsriJson(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`esrijson 取得失敗: ${res.status}`);
+  const json = await res.json();
+  const { arcgisToGeoJSON } = await import(ARCGIS_URL);
+  const items = Array.isArray(json) ? json : [json];
+  const features = [];
+  for (const item of items) {
+    if (!item) continue;
+    try {
+      const out = arcgisToGeoJSON(item);
+      if (out?.type === "FeatureCollection") features.push(...out.features);
+      else if (out?.type === "Feature") features.push(out);
+      else if (out?.type) features.push({ type: "Feature", geometry: out, properties: {} });
+    } catch { /* 非地図オブジェクトは読み飛ばす */ }
+  }
+  if (!features.length) throw new Error("EsriJSON から地物を取得できません");
+  return sanitizeFeatureCollection({ type: "FeatureCollection", features });
+}
+
+// CZML → GeoJSON。各 packet の position/polyline/polygon/path/corridor を
+// 静的地物へ変換する。時刻付きサンプル列（[epoch?, t, v, t, v, …]）は
+// 軌跡として LineString に、静的配列はそのまま使う。
+// プロパティには packet の id/name/description/availability を残す
+function czmlPositions(value) {
+  if (!value) return null;
+  const raw = Array.isArray(value) ? value
+    : value.cartographicDegrees || value.cartographicRadians
+      || value.cartesian || value.reference || null;
+  if (!Array.isArray(raw)) return null;
+  const isRadians = Array.isArray(value?.cartographicRadians);
+  const per = value?.cartesian ? 3 : (value?.cartographicDegrees || value?.cartographicRadians) ? 3 : 3;
+  // 時刻サンプル列か判定: 先頭が ISO 日時文字列・数値列の長さが per より大きく 4 で割り切れる
+  let vals = raw;
+  if (typeof raw[0] === "string" && isNaN(Number(raw[0]))) vals = raw.slice(1);
+  const nums = vals.map(Number).filter(v => !isNaN(v));
+  if (nums.length !== vals.length || nums.length < per) return null;
+  const pts = [];
+  const step = nums.length > per ? 4 : per;
+  for (let i = 0; i + per <= nums.length; i += step) {
+    let [x, y, z] = [nums[i], nums[i + 1], nums[i + 2]];
+    if (isRadians) { x = x * 180 / Math.PI; y = y * 180 / Math.PI; }
+    // cartesian はメートル ECEF — 変換は省略し近似値として扱わない（捨てる）
+    if (value?.cartesian) return null;
+    pts.push(z != null ? [x, y, z] : [x, y]);
+  }
+  return pts.length ? pts : null;
+}
+
+async function loadCzml(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`czml 取得失敗: ${res.status}`);
+  const packets = await res.json();
+  if (!Array.isArray(packets)) throw new Error("CZML パケット列ではありません");
+  const features = [];
+  for (const p of packets) {
+    if (!p || p.document) continue; // document パケット(時計/設定)は地物ではない
+    const props = {};
+    for (const k of ["id", "name", "description", "availability"]) {
+      if (p[k] != null) props[k] = typeof p[k] === "object" ? JSON.stringify(p[k]) : p[k];
+    }
+    let geometry = null;
+    if (p.position) {
+      const pts = czmlPositions(p.position);
+      if (pts) geometry = pts.length > 1 ? { type: "LineString", coordinates: pts } : { type: "Point", coordinates: pts[0] };
+    }
+    if (!geometry) for (const key of ["polyline", "path"]) {
+      const pts = czmlPositions(p[key]?.positions);
+      if (pts?.length) { geometry = { type: "LineString", coordinates: pts }; break; }
+    }
+    if (!geometry && p.polygon) {
+      const pts = czmlPositions(p.polygon.positions);
+      if (pts?.length >= 3) {
+        const ring = pts.slice();
+        const [a, b] = [ring[0], ring[ring.length - 1]];
+        if (a[0] !== b[0] || a[1] !== b[1]) ring.push(a);
+        geometry = { type: "Polygon", coordinates: [ring] };
+      }
+    }
+    if (!geometry && p.corridor) {
+      const pts = czmlPositions(p.corridor.positions);
+      if (pts?.length) geometry = { type: "LineString", coordinates: pts };
+    }
+    if (!geometry) for (const key of ["point", "billboard", "label", "ellipse", "ellipsoid", "box", "cylinder", "model", "rectangle", "wall"]) {
+      if (p[key]) { const pts = czmlPositions(p.position ?? p[key]?.position); if (pts) { geometry = { type: "Point", coordinates: pts[0] }; break; } }
+    }
+    if (geometry) features.push({ type: "Feature", geometry, properties: props });
+  }
+  if (!features.length) throw new Error("CZML から地物を取得できません");
+  return sanitizeFeatureCollection({ type: "FeatureCollection", features });
+}
+
+// WKT テキスト → GeoJSON ジオメトリ。POINT/LINESTRING/POLYGON/MULTI*の
+// 2〜4次元(Z/M は 3列目以降を捨てる)・GEOMETRYCOLLECTION に対応する小さなパーサ
+function parseWkt(text) {
+  const s = String(text).trim();
+  let i = 0;
+  const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+  const word = () => { ws(); const m = /^[A-Za-z]+/.exec(s.slice(i)); if (m) i += m[0].length; return m ? m[0].toUpperCase() : null; };
+  const num = () => { ws(); const m = /^[-+0-9.eE]+/.exec(s.slice(i)); if (!m) return null; i += m[0].length; return Number(m[0]); };
+  const lparen = () => { ws(); if (s[i] === "(") { i++; return true; } return false; };
+  const rparen = () => { ws(); if (s[i] === ")") { i++; return true; } return false; };
+  const comma = () => { ws(); if (s[i] === ",") { i++; return true; } return false; };
+  const coord = () => {
+    const x = num(), y = num(), z = num();
+    return x == null || y == null ? null : (z == null ? [x, y] : [x, y, z]);
+  };
+  const coordList = () => {
+    if (!lparen()) return null;
+    const list = [];
+    for (;;) { const c = coord(); if (!c) return null; list.push(c); if (!comma()) break; }
+    return rparen() ? list : null;
+  };
+  const nested = inner => {
+    if (!lparen()) return null;
+    const list = [];
+    for (;;) { const v = inner(); if (v == null) return null; list.push(v); if (!comma()) break; }
+    return rparen() ? list : null;
+  };
+  function geomAny() {
+    const type = word();
+    if (!type) return null;
+    const marker = word(); // Z / M / ZM 次元マーカー（任意）
+    ws();
+    if (/^EMPTY$/i.test(marker || "")) return { type: "GeometryCollection", geometries: [] };
+    switch (type) {
+      case "POINT": {
+        if (!lparen()) return null;
+        const c = coord();
+        return c && rparen() ? { type: "Point", coordinates: c } : null;
+      }
+      case "LINESTRING": { const v = coordList(); return v ? { type: "LineString", coordinates: v } : null; }
+      case "POLYGON": { const v = nested(coordList); return v ? { type: "Polygon", coordinates: v } : null; }
+      case "MULTIPOINT": {
+        // MULTIPOINT((x y),(x y)) と MULTIPOINT(x y, x y) の両形式
+        ws();
+        if (s[i] === "(" && s[i + 1] === "(") { const v = nested(coord); return v ? { type: "MultiPoint", coordinates: v } : null; }
+        const v = coordList(); return v ? { type: "MultiPoint", coordinates: v } : null;
+      }
+      case "MULTILINESTRING": { const v = nested(coordList); return v ? { type: "MultiLineString", coordinates: v } : null; }
+      case "MULTIPOLYGON": { const v = nested(() => nested(coordList)); return v ? { type: "MultiPolygon", coordinates: v } : null; }
+      case "GEOMETRYCOLLECTION": { const v = nested(geomAny); return v ? { type: "GeometryCollection", geometries: v } : null; }
+      default: return null;
+    }
+  }
+  return geomAny();
+}
+
+// .wkt ファイル → GeoJSON。1ファイル=1WKT、または1行=1WKT（#はコメント）。
+// WKT 列のない属性は取らない（シンプル化）
+async function loadWkt(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`wkt 取得失敗: ${res.status}`);
+  const text = await res.text();
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith("#"));
+  const candidates = lines.length > 1 ? lines : [text.trim()];
+  const features = [];
+  for (const line of candidates) {
+    const g = parseWkt(line);
+    if (g) features.push({ type: "Feature", geometry: g, properties: {} });
+  }
+  if (!features.length) throw new Error("WKT から地物を取得できません");
+  return sanitizeFeatureCollection({ type: "FeatureCollection", features });
+}
+
+// .wkb ファイル（バイナリまたは hex テキスト）→ GeoJSON。
+// デコードは shared/vector-decode.js の wkbToGeoJsonGeometry
+async function loadWkb(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`wkb 取得失敗: ${res.status}`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  const head = new TextDecoder().decode(bytes.slice(0, Math.min(64, bytes.length))).trim();
+  let geoms = [];
+  if (/^[0-9a-fA-F\s]+$/.test(head) && head.length > 8) {
+    // hex テキスト（複数行可）。連結して1ジオメトリとして解釈
+    const hex = new TextDecoder().decode(bytes).replace(/[^0-9a-fA-F]/g, "");
+    const raw = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < raw.length; i++) raw[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    geoms = [wkbToGeoJsonGeometry(raw)].filter(Boolean);
+  } else {
+    // バイナリ: 先頭ジオメトリ1件（複数連結 WKB は未対応）
+    const g = wkbToGeoJsonGeometry(bytes);
+    if (g) geoms = [g];
+  }
+  if (!geoms.length) throw new Error("WKB から地物を取得できません");
+  return sanitizeFeatureCollection({ type: "FeatureCollection", features: geoms.map(g => ({ type: "Feature", geometry: g, properties: {} })) });
+}
+
 // Shapefile(.zip 一式 / .shp+sidecar / ベース名URL) → GeoJSON。
 // shpjs は URL 文字列を受けると .zip 判定・拡張子補完(sidecar 自動取得)・
 // .prj に基づく WGS84 への再投影まで内部で行う
@@ -282,10 +527,159 @@ async function loadWfs(item, url) {
       }
       lastError = new Error("WFS 応答が GeoJSON ではありません");
     } catch {
-      lastError = new Error("WFS 応答が GeoJSON ではありません");
+      // JSON 以外（GML/XML）の応答は ol/format/WFS でパースする（JSON 非対応の
+      // WFS サーバーでも読める。出力は GeoJSON 正規化で統一）
+      if (/^\s*</.test(text)) {
+        try {
+          const gj = await loadGmlText(text, opts);
+          if (gj.features?.length) return sanitizeFeatureCollection(gj);
+        } catch (e) { lastError = e; }
+      }
+      lastError = lastError || new Error("WFS 応答が GeoJSON ではありません");
     }
   }
   throw lastError || new Error("WFS GetFeature 失敗");
+}
+
+// ---- ol/format 遅延ロード（CDN ESM・openlayers エンジンと同一バージョン）----
+// IGC/Polyline/GML/WFS(XML) を ol/format でパースし GeoJSON 化する。
+// ol 本体は大きいため、これらの形式が実際に出てきたときだけロードする
+const OL_FORMAT_BASE = "https://cdn.jsdelivr.net/npm/ol@10.11.0/format";
+let _olFmt = null;
+async function loadOlFormats() {
+  if (_olFmt) return _olFmt;
+  const [IGC, Polyline, GML, WFS, GeoJSON, Feature] = await Promise.all([
+    import(`${OL_FORMAT_BASE}/IGC.js`),
+    import(`${OL_FORMAT_BASE}/Polyline.js`),
+    import(`${OL_FORMAT_BASE}/GML.js`),
+    import(`${OL_FORMAT_BASE}/WFS.js`),
+    import(`${OL_FORMAT_BASE}/GeoJSON.js`),
+    import("https://cdn.jsdelivr.net/npm/ol@10.11.0/Feature.js"),
+  ]);
+  _olFmt = { IGC: IGC.default, Polyline: Polyline.default, GML: GML.default, WFS: WFS.default, GeoJSON: GeoJSON.default, Feature: Feature.default };
+  return _olFmt;
+}
+
+// 座標清掃: 位置配列は [x,y,(z)] までの有限数値のみ残す。
+// 非有限要素(null/NaN)を含む位置は丸ごと除去 — エンジン側(Cesium
+// DeveloperError/Leaflet Invalid LatLng)を出さないための安全弁
+function cleanOlPosition(pos) {
+  if (!Array.isArray(pos) || !Number.isFinite(pos[0]) || !Number.isFinite(pos[1])) return null;
+  const out = [pos[0], pos[1]];
+  if (Number.isFinite(pos[2])) out.push(pos[2]);
+  return out;
+}
+function cleanOlCoordList(coords, depth) {
+  if (depth === 0) return cleanOlPosition(coords);
+  const out = [];
+  for (const c of coords || []) {
+    const v = cleanOlCoordList(c, depth - 1);
+    if (v != null && (!Array.isArray(v) || v.length)) out.push(v);
+  }
+  return out;
+}
+const OL_GEOM_DEPTH = { Point: 0, MultiPoint: 1, LineString: 1, MultiLineString: 2, Polygon: 2, MultiPolygon: 3 };
+function cleanOlGeometry(g) {
+  if (!g) return;
+  if (g.type === "GeometryCollection") { (g.geometries || []).forEach(cleanOlGeometry); return; }
+  const d = OL_GEOM_DEPTH[g.type];
+  if (d != null && Array.isArray(g.coordinates)) g.coordinates = cleanOlCoordList(g.coordinates, d);
+}
+// 全座標の x↔y を入れ替える（GML の axisorder=lonlat 救済用）
+function swapOlGeometryXY(g) {
+  if (!g) return;
+  if (g.type === "GeometryCollection") { (g.geometries || []).forEach(swapOlGeometryXY); return; }
+  const walk = c => { if (typeof c[0] === "number") { const t = c[0]; c[0] = c[1]; c[1] = t; } else c.forEach(walk); };
+  if (Array.isArray(g.coordinates)) walk(g.coordinates);
+}
+
+// ol Feature[] → GeoJSON FeatureCollection（readFeatures 時に
+// featureProjection=EPSG:4326 を指定しているため既に WGS84）。
+// 出力は必ず座標清掃を通す
+function olFeaturesToGeoJSON(ol, feats) {
+  const fc = new ol.GeoJSON().writeFeaturesObject(feats || []);
+  for (const f of fc.features || []) cleanOlGeometry(f.geometry);
+  return fc;
+}
+
+// IGC（グライダー飛行ログ）: B レコードの時刻+緯度経度+高度 → LineString(XYZM)。
+// flight metadata（PLT/GTY/DTE 等のヘッダ）は properties に載る
+async function loadIgc(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`IGC ${res.status}`);
+  const ol = await loadOlFormats();
+  const feats = new ol.IGC().readFeatures(await res.text(), {
+    featureProjection: "EPSG:4326", dataProjection: "EPSG:4326",
+  });
+  // IGC ジオメトリは XYM レイアウト（M=時刻 epoch 秒、高度は ol 非保持）。
+  // writeFeaturesObject は M を第3座標へ書いてしまうため、フラット座標から
+  // [x,y] のみ再構成する（時刻は properties.time として付けておく）
+  const gj = { type: "FeatureCollection", features: [] };
+  for (const f of feats || []) {
+    const g = f.getGeometry?.();
+    const props = { ...f.getProperties() };
+    delete props.geometry;
+    if (!g || g.getType?.() !== "LineString") {
+      const fc = olFeaturesToGeoJSON(ol, [f]);
+      gj.features.push(...fc.features);
+      continue;
+    }
+    const flat = g.getFlatCoordinates();
+    const stride = g.getStride?.() || 2; // XYM=3
+    const coords = [];
+    const times = [];
+    for (let i = 0; i + 1 < flat.length; i += stride) {
+      coords.push([flat[i], flat[i + 1]]);
+      if (stride >= 3 && Number.isFinite(flat[i + 2])) times.push(flat[i + 2]);
+    }
+    if (times.length) props.time = times;
+    gj.features.push({ type: "Feature", properties: props, geometry: { type: "LineString", coordinates: coords } });
+  }
+  return gj;
+}
+
+// エンコードドポリライン（Google Polyline Algorithm）。ファイルは1行1本の
+// エンコード文字列を想定（複数行は各地物化）。factor=/geometryLayout= で
+// 精度・座標次元を指定可能（既定 1e5/XY）
+async function loadPolyline(url, opts = {}) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`polyline ${res.status}`);
+  const ol = await loadOlFormats();
+  const fmt = new ol.Polyline({
+    factor: opts.factor ? Number(opts.factor) : undefined,
+    geometryLayout: opts.geometryLayout || opts.layout || undefined,
+  });
+  const lines = (await res.text()).split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const feats = [];
+  for (const line of lines) {
+    try {
+      feats.push(...fmt.readFeatures(line, { dataProjection: "EPSG:4326", featureProjection: "EPSG:4326" }));
+    } catch {}
+  }
+  return olFeaturesToGeoJSON(ol, feats);
+}
+
+// GML（OGC 地物 XML・WFS GetFeature の GML 応答も同様）。srsName は文書宣言を
+// 参照し ol が 4326 へ再投影する。GML 仕様上 EPSG:4326 の座標順は lat,lon だが
+// lon,lat で書く実例も多い — axisorder=lonlat で全座標 x↔y を入れ替えられる
+async function loadGmlText(text, opts = {}) {
+  const ol = await loadOlFormats();
+  // 先に WFS FeatureCollection として試し、駄目なら素の GML として読む
+  const tryRead = fmt => {
+    try { return fmt.readFeatures(text, { featureProjection: "EPSG:4326" }); } catch { return null; }
+  };
+  const feats = tryRead(new ol.WFS()) || tryRead(new ol.GML()) || [];
+  const fc = olFeaturesToGeoJSON(ol, feats);
+  if (/^(lonlat|xy)$/i.test(opts.axisorder || "")) {
+    for (const f of fc.features || []) swapOlGeometryXY(f.geometry);
+  }
+  return fc;
+}
+
+async function loadGml(url, opts = {}) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`GML ${res.status}`);
+  return loadGmlText(await res.text(), opts);
 }
 
 const BBOX_OFF_RE = /^(off|none|false|static|manual)$/i;
@@ -322,6 +716,16 @@ function ogrFileType(path) {
   if (/\.gpkg$/i.test(clean)) return "gpkg";
   if (/\.(kml)$/i.test(clean)) return "kml";
   if (/\.(kmz)$/i.test(clean)) return "kmz";
+  if (/\.(gpx)$/i.test(clean)) return "gpx";
+  if (/\.(czml)$/i.test(clean)) return "czml";
+  if (/\.(topojson)$/i.test(clean)) return "topojson";
+  if (/\.(esrijson|arcgis)$/i.test(clean)) return "esrijson";
+  if (/\.igc$/i.test(clean)) return "igc";
+  if (/\.(polyline|encodedpolyline)$/i.test(clean)) return "polyline";
+  if (/\.gml$/i.test(clean)) return "gml";
+  if (/\.(geojsonl|ndjson|jsonl)$/i.test(clean)) return "geojsonl";
+  if (/\.(wkt)$/i.test(clean)) return "wkt";
+  if (/\.(wkb)$/i.test(clean)) return "wkb";
   if (/\.(zip|shp|dbf)$/i.test(clean)) return "shp";
   if (/\.tsv$/i.test(clean)) return "tsv";
   if (/\.csv$/i.test(clean)) return "csv";
@@ -334,11 +738,11 @@ function ogrSourceCandidates(name) {
   const n = String(name || "").trim();
   if (!n) return [];
   const looksPath = /[/\\]/.test(n) || /^[a-z][a-z0-9+.-]*:/i.test(n)
-    || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(n);
+    || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|gpx|czml|topojson|esrijson|arcgis|geojsonl|ndjson|jsonl|wkt|wkb|igc|polyline|gml|zip|shp|dbf|csv|tsv)$/i.test(n);
   if (looksPath) return [n];
   return [
     `DATA/${n}.geojson`, `DATA/${n}.fgb`, `DATA/${n}.parquet`,
-    `DATA/${n}.gpkg`, `DATA/${n}.kml`, `DATA/${n}.csv`, n,
+    `DATA/${n}.gpkg`, `DATA/${n}.kml`, `DATA/${n}.gpx`, `DATA/${n}.csv`, n,
   ];
 }
 
@@ -443,6 +847,36 @@ export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null)
   }
   if (type === "kml" || type === "kmz") {
     return { geojson: await loadKml(url) };
+  }
+  if (type === "gpx") {
+    return { geojson: await loadGpx(url) };
+  }
+  if (type === "czml") {
+    return { geojson: await loadCzml(url) };
+  }
+  if (type === "topojson") {
+    return { geojson: await loadTopojson(url) };
+  }
+  if (type === "esrijson" || type === "arcgis") {
+    return { geojson: await loadEsriJson(url) };
+  }
+  if (type === "geojsonl" || type === "ndjson" || type === "jsonl") {
+    return { geojson: await loadGeojsonl(url) };
+  }
+  if (type === "wkt") {
+    return { geojson: await loadWkt(url) };
+  }
+  if (type === "wkb") {
+    return { geojson: await loadWkb(url) };
+  }
+  if (type === "igc") {
+    return { geojson: await loadIgc(url) };
+  }
+  if (type === "polyline" || type === "encodedpolyline") {
+    return { geojson: await loadPolyline(url, item.opts) };
+  }
+  if (type === "gml") {
+    return { geojson: await loadGml(url, item.opts) };
   }
   if (type === "wfs") {
     return { geojson: await loadWfs(item, url) };

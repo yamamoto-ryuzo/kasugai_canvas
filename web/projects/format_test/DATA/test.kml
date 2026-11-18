@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Placemark><name>KML点</name><Point><coordinates>139.762,35.678,0</coordinates></Point></Placemark>
+<Placemark><name>KML線</name><LineString><coordinates>139.760,35.690,0 139.780,35.695,0</coordinates></LineString></Placemark>
+</Document></kml>

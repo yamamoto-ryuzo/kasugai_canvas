@@ -1,0 +1,2381 @@
+{
+ "counts": {
+  "attr": 198,
+  "prop": 136,
+  "dd": 111,
+  "unknown_attr": 20,
+  "unknown_prop": 67,
+  "unknown_dd": 69
+ },
+ "unknown_attr": [
+  [
+   "distance",
+   1145
+  ],
+  [
+   "distance_unit",
+   1146
+  ],
+  [
+   "point_displacement_renderer",
+   1150
+  ],
+  [
+   "renderer",
+   1153
+  ],
+  [
+   "centerSymbol",
+   1153
+  ],
+  [
+   "priorityLabel",
+   2181
+  ],
+  [
+   "allowDegradedPlacement",
+   2185
+  ],
+  [
+   "fitInsidePolygon",
+   2187
+  ],
+  [
+   "multipartMode",
+   2189
+  ],
+  [
+   "overlapMode",
+   2194
+  ],
+  [
+   "multiLineWrapChar",
+   2198
+  ],
+  [
+   "namedColor",
+   2379
+  ],
+  [
+   "bufferSizeUnit",
+   2393
+  ],
+  [
+   "fontBold",
+   2401
+  ],
+  [
+   "fitInsidePolygon",
+   2438
+  ],
+  [
+   "maskSizeUnit",
+   2469
+  ],
+  [
+   "maskColor",
+   2472
+  ],
+  [
+   "multilineAlignment",
+   2501
+  ],
+  [
+   "bufferSizeUnit",
+   2506
+  ],
+  [
+   "tabStops",
+   2548
+  ]
+ ],
+ "unknown_prop": [
+  [
+   "effects",
+   197
+  ],
+  [
+   "paintEffect",
+   197
+  ],
+  [
+   "stops",
+   224
+  ],
+  [
+   "getAttribute",
+   239
+  ],
+  [
+   "getAttribute",
+   240
+  ],
+  [
+   "textContent",
+   240
+  ],
+  [
+   "blend_mode",
+   889
+  ],
+  [
+   "blendMode",
+   889
+  ],
+  [
+   "anchor_x",
+   1326
+  ],
+  [
+   "anchor_y",
+   1327
+  ],
+  [
+   "color_border",
+   1361
+  ],
+  [
+   "path",
+   1390
+  ],
+  [
+   "font_family",
+   1408
+  ],
+  [
+   "file",
+   1437
+  ],
+  [
+   "geometry_modifier",
+   1450
+  ],
+  [
+   "start_color",
+   1548
+  ],
+  [
+   "geometry_modifier",
+   1569
+  ],
+  [
+   "repeat_distance",
+   1601
+  ],
+  [
+   "repeat_distance_unit",
+   1602
+  ],
+  [
+   "rotate_marker",
+   1611
+  ],
+  [
+   "length",
+   1616
+  ],
+  [
+   "arrow_head_length",
+   1647
+  ],
+  [
+   "arrow_head_width",
+   1648
+  ],
+  [
+   "curved_arrow",
+   1650
+  ],
+  [
+   "path",
+   1655
+  ],
+  [
+   "file",
+   1655
+  ],
+  [
+   "fill_style",
+   1690
+  ],
+  [
+   "svgFile",
+   1762
+  ],
+  [
+   "svgfile",
+   1762
+  ],
+  [
+   "file",
+   1762
+  ],
+  [
+   "svgFillColor",
+   1767
+  ],
+  [
+   "pattern_width",
+   1769
+  ],
+  [
+   "two_color_second",
+   1775
+  ],
+  [
+   "two_color_second",
+   1776
+  ],
+  [
+   "geometry_modifier",
+   1787
+  ],
+  [
+   "symbolType",
+   1789
+  ],
+  [
+   "symbol_type",
+   1789
+  ],
+  [
+   "join",
+   1878
+  ],
+  [
+   "coordinates",
+   1939
+  ],
+  [
+   "coordinates",
+   1939
+  ],
+  [
+   "enabled",
+   2121
+  ],
+  [
+   "enabled",
+   2121
+  ],
+  [
+   "lineSymbol",
+   2133
+  ],
+  [
+   "symbol",
+   2133
+  ],
+  [
+   "svgFile",
+   2853
+  ],
+  [
+   "svgfile",
+   2853
+  ],
+  [
+   "file",
+   2853
+  ],
+  [
+   "path",
+   2853
+  ],
+  [
+   "svgFile",
+   2895
+  ],
+  [
+   "svgfile",
+   2895
+  ],
+  [
+   "file",
+   2895
+  ],
+  [
+   "fill_color",
+   2985
+  ],
+  [
+   "glow_color",
+   2985
+  ],
+  [
+   "opacity",
+   2986
+  ],
+  [
+   "blur_level",
+   2987
+  ],
+  [
+   "blur_unit",
+   2987
+  ],
+  [
+   "offset_distance",
+   2988
+  ],
+  [
+   "offset_angle",
+   2989
+  ],
+  [
+   "scale_x",
+   3038
+  ],
+  [
+   "scale_y",
+   3039
+  ],
+  [
+   "reflect_x",
+   3040
+  ],
+  [
+   "reflect_y",
+   3041
+  ],
+  [
+   "translate_x",
+   3042
+  ],
+  [
+   "translate_unit",
+   3042
+  ],
+  [
+   "translate_y",
+   3043
+  ],
+  [
+   "translate_unit",
+   3043
+  ],
+  [
+   "rotation",
+   3044
+  ]
+ ],
+ "unknown_dd": [
+  [
+   "color",
+   1360,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_color",
+   1361,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color_border",
+   1361,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1363,
+   "symbol-dd",
+   false
+  ],
+  [
+   "symbol_width",
+   1376,
+   "symbol-dd",
+   false
+  ],
+  [
+   "symbol_height",
+   1377,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color",
+   1378,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_color",
+   1379,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1380,
+   "symbol-dd",
+   false
+  ],
+  [
+   "symbol_width",
+   1393,
+   "symbol-dd",
+   false
+  ],
+  [
+   "symbol_height",
+   1394,
+   "symbol-dd",
+   false
+  ],
+  [
+   "chr",
+   1407,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color",
+   1409,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_color",
+   1410,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1411,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_color",
+   1427,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1428,
+   "symbol-dd",
+   false
+  ],
+  [
+   "lineColor",
+   1479,
+   "symbol-dd",
+   false
+  ],
+  [
+   "line_color",
+   1479,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color",
+   1479,
+   "symbol-dd",
+   false
+  ],
+  [
+   "lineWidth",
+   1480,
+   "symbol-dd",
+   false
+  ],
+  [
+   "line_width",
+   1480,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1480,
+   "symbol-dd",
+   false
+  ],
+  [
+   "lineStyle",
+   1484,
+   "symbol-dd",
+   false
+  ],
+  [
+   "line_style",
+   1484,
+   "symbol-dd",
+   false
+  ],
+  [
+   "trimDistanceStart",
+   1488,
+   "symbol-dd",
+   false
+  ],
+  [
+   "trim_distance_start",
+   1488,
+   "symbol-dd",
+   false
+  ],
+  [
+   "trimDistanceEnd",
+   1490,
+   "symbol-dd",
+   false
+  ],
+  [
+   "trim_distance_end",
+   1490,
+   "symbol-dd",
+   false
+  ],
+  [
+   "dash_pattern_offset",
+   1492,
+   "symbol-dd",
+   false
+  ],
+  [
+   "startColor",
+   1517,
+   "symbol-dd",
+   false
+  ],
+  [
+   "start_color",
+   1517,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color_start",
+   1517,
+   "symbol-dd",
+   false
+  ],
+  [
+   "endColor",
+   1519,
+   "symbol-dd",
+   false
+  ],
+  [
+   "end_color",
+   1519,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color_end",
+   1519,
+   "symbol-dd",
+   false
+  ],
+  [
+   "widthStart",
+   1527,
+   "symbol-dd",
+   false
+  ],
+  [
+   "width_start",
+   1527,
+   "symbol-dd",
+   false
+  ],
+  [
+   "widthEnd",
+   1529,
+   "symbol-dd",
+   false
+  ],
+  [
+   "width_end",
+   1529,
+   "symbol-dd",
+   false
+  ],
+  [
+   "lineWidth",
+   1553,
+   "symbol-dd",
+   false
+  ],
+  [
+   "line_width",
+   1553,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1553,
+   "symbol-dd",
+   false
+  ],
+  [
+   "lineWidth",
+   1558,
+   "symbol-dd",
+   false
+  ],
+  [
+   "line_width",
+   1558,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1558,
+   "symbol-dd",
+   false
+  ],
+  [
+   "lineWidth",
+   1618,
+   "symbol-dd",
+   false
+  ],
+  [
+   "line_width",
+   1618,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1618,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color_start",
+   1631,
+   "symbol-dd",
+   false
+  ],
+  [
+   "start_color",
+   1631,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color_end",
+   1633,
+   "symbol-dd",
+   false
+  ],
+  [
+   "end_color",
+   1633,
+   "symbol-dd",
+   false
+  ],
+  [
+   "width_start",
+   1639,
+   "symbol-dd",
+   false
+  ],
+  [
+   "width_end",
+   1640,
+   "symbol-dd",
+   false
+  ],
+  [
+   "fill_style",
+   1690,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color",
+   1691,
+   "symbol-dd",
+   false
+  ],
+  [
+   "lineColor",
+   1700,
+   "symbol-dd",
+   false
+  ],
+  [
+   "color",
+   1700,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_style",
+   1832,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_color",
+   1834,
+   "symbol-dd",
+   false
+  ],
+  [
+   "outline_width",
+   1836,
+   "symbol-dd",
+   false
+  ],
+  [
+   "transparency",
+   1965,
+   "symbol-dd",
+   false
+  ],
+  [
+   "transparency",
+   1966,
+   "symbol-dd",
+   false
+  ],
+  [
+   "LetterSpacing",
+   2275,
+   "label-dd",
+   false
+  ],
+  [
+   "WordSpacing",
+   2276,
+   "label-dd",
+   false
+  ],
+  [
+   "RotationAngle",
+   2283,
+   "label-dd",
+   false
+  ],
+  [
+   "Decimals",
+   2329,
+   "label-dd",
+   false
+  ],
+  [
+   "PlusSign",
+   2330,
+   "label-dd",
+   false
+  ]
+ ],
+ "attr_keys": {
+  "active": [
+   2601
+  ],
+  "addDirectionSymbol": [
+   2209
+  ],
+  "allowDegraded": [
+   2185,
+   2443
+  ],
+  "allowDegradedPlacement": [
+   2185
+  ],
+  "allowHtml": [
+   2546
+  ],
+  "alpha": [
+   897
+  ],
+  "attr": [
+   938,
+   968
+  ],
+  "autoWrapLength": [
+   2199
+  ],
+  "backgroundAlpha": [
+   2799
+  ],
+  "backgroundColor": [
+   2798
+  ],
+  "barWidth": [
+   2807
+  ],
+  "blendMode": [
+   2529,
+   2529
+  ],
+  "blend_mode": [
+   889
+  ],
+  "bufferBlendMode": [
+   2395,
+   2395
+  ],
+  "bufferColor": [
+   2390
+  ],
+  "bufferDraw": [
+   2387
+  ],
+  "bufferNoFill": [
+   2396,
+   2487
+  ],
+  "bufferOpacity": [
+   2388
+  ],
+  "bufferSize": [
+   2393,
+   2468
+  ],
+  "bufferSizeUnit": [
+   2393,
+   2506
+  ],
+  "bufferSizeUnits": [
+   2393,
+   2506
+  ],
+  "capitalization": [
+   2492
+  ],
+  "centerSymbol": [
+   1153
+  ],
+  "centroidInside": [
+   2436
+  ],
+  "centroidWhole": [
+   2435
+  ],
+  "checkstate": [
+   1004
+  ],
+  "class": [
+   881
+  ],
+  "classificationAttributeExpression": [
+   2814,
+   2814
+  ],
+  "color": [
+   2793
+  ],
+  "decimals": [
+   2220
+  ],
+  "diagramOrientation": [
+   2804
+  ],
+  "diagramType": [
+   2803
+  ],
+  "displayAll": [
+   2183
+  ],
+  "dist": [
+   2423
+  ],
+  "distUnits": [
+   2423
+  ],
+  "distance": [
+   1145
+  ],
+  "distance_unit": [
+   1146
+  ],
+  "drawLabels": [
+   2168
+  ],
+  "enabled": [
+   882,
+   2466,
+   2788
+  ],
+  "field": [
+   2719,
+   2791,
+   2792
+  ],
+  "fieldName": [
+   2375
+  ],
+  "filter": [
+   1005,
+   2602
+  ],
+  "fitInPolygonOnly": [
+   2187,
+   2438
+  ],
+  "fitInsidePolygon": [
+   2187,
+   2438
+  ],
+  "fontBold": [
+   2401
+  ],
+  "fontFamily": [
+   2405
+  ],
+  "fontItalic": [
+   2403
+  ],
+  "fontKerning": [
+   2491
+  ],
+  "fontLetterSpacing": [
+   2489,
+   2489
+  ],
+  "fontLimitPixelSize": [
+   2177
+  ],
+  "fontMaxPixelSize": [
+   2176
+  ],
+  "fontMinPixelSize": [
+   2175
+  ],
+  "fontSize": [
+   2377
+  ],
+  "fontSizeMapUnitScale": [
+   2559,
+   2559
+  ],
+  "fontSizeUnit": [
+   2376
+  ],
+  "fontStrikeout": [
+   2407
+  ],
+  "fontUnderline": [
+   2406
+  ],
+  "fontWeight": [
+   2400
+  ],
+  "fontWordSpacing": [
+   2490,
+   2490
+  ],
+  "forcedBold": [
+   2401
+  ],
+  "forcedItalic": [
+   2403
+  ],
+  "formatNumbers": [
+   2218
+  ],
+  "geometryGeneratorEnabled": [
+   2454
+  ],
+  "hasScaleBasedVisibilityFlag": [
+   2656
+  ],
+  "height": [
+   2806
+  ],
+  "hidden": [
+   2727
+  ],
+  "isExpression": [
+   2374
+  ],
+  "label": [
+   947,
+   981,
+   1008,
+   2792
+  ],
+  "labelPerPart": [
+   2170,
+   2188,
+   2540
+  ],
+  "labelsEnabled": [
+   2650
+  ],
+  "layerType": [
+   2416
+  ],
+  "leftDirectionSymbol": [
+   2212
+  ],
+  "limitNumLabels": [
+   2173
+  ],
+  "lineAnchorClipping": [
+   2554
+  ],
+  "lineAnchorPercent": [
+   2552
+  ],
+  "lineAnchorType": [
+   2553
+  ],
+  "locked": [
+   883
+  ],
+  "lower": [
+   975
+  ],
+  "lowerHeight": [
+   2819
+  ],
+  "lowerValue": [
+   2815,
+   2815
+  ],
+  "lowerWidth": [
+   2817
+  ],
+  "maskColor": [
+   2472
+  ],
+  "maskEnabled": [
+   2466
+  ],
+  "maskOpacity": [
+   2470
+  ],
+  "maskSize": [
+   2468
+  ],
+  "maskSizeUnit": [
+   2469
+  ],
+  "maskSizeUnits": [
+   2469
+  ],
+  "maxCurvedCharAngleIn": [
+   2446
+  ],
+  "maxCurvedCharAngleOut": [
+   2447
+  ],
+  "maxNumLabels": [
+   2172
+  ],
+  "maxScale": [
+   2658
+  ],
+  "maximumDistance": [
+   2444
+  ],
+  "maximumDistanceUnit": [
+   2444
+  ],
+  "maximum_value": [
+   1117
+  ],
+  "mergeLines": [
+   2171
+  ],
+  "minFeatureSize": [
+   2174
+  ],
+  "minScale": [
+   2657
+  ],
+  "multiLineWrapChar": [
+   2198
+  ],
+  "multilineAlign": [
+   2500,
+   2500,
+   2501
+  ],
+  "multilineAlignment": [
+   2501
+  ],
+  "multilineHeight": [
+   2495
+  ],
+  "multilineHeightUnit": [
+   2496
+  ],
+  "multipartBehavior": [
+   2189,
+   2442
+  ],
+  "multipartMode": [
+   2189
+  ],
+  "name": [
+   156,
+   239,
+   895,
+   2148,
+   2719,
+   2724
+  ],
+  "namedColor": [
+   2379
+  ],
+  "namedStyle": [
+   2399
+  ],
+  "obstacle": [
+   2178
+  ],
+  "obstacleFactor": [
+   2179
+  ],
+  "obstacleType": [
+   2180
+  ],
+  "offsetType": [
+   2571
+  ],
+  "offsetUnits": [
+   2428,
+   2429
+  ],
+  "opacity": [
+   2810
+  ],
+  "overlapHandling": [
+   2195,
+   2441
+  ],
+  "overlapMode": [
+   2194
+  ],
+  "overrunDistance": [
+   2434
+  ],
+  "overrunDistanceUnit": [
+   2434
+  ],
+  "pass": [
+   884
+  ],
+  "penAlpha": [
+   2801
+  ],
+  "penColor": [
+   2800
+  ],
+  "penWidth": [
+   2809
+  ],
+  "placeDirectionSymbol": [
+   2211
+  ],
+  "placement": [
+   1149,
+   2419
+  ],
+  "placementFlags": [
+   2421
+  ],
+  "plussign": [
+   2221
+  ],
+  "point_displacement_renderer": [
+   1150
+  ],
+  "polygonPlacementFlags": [
+   2448
+  ],
+  "predefinedPositionOrder": [
+   2449
+  ],
+  "preserveRotation": [
+   2445
+  ],
+  "priority": [
+   2181
+  ],
+  "priorityLabel": [
+   2181
+  ],
+  "quadOffset": [
+   2420
+  ],
+  "quality": [
+   1119
+  ],
+  "radius": [
+   1115
+  ],
+  "radius_unit": [
+   1115
+  ],
+  "render": [
+   948,
+   978
+  ],
+  "renderer": [
+   1153
+  ],
+  "repeatDistance": [
+   2433
+  ],
+  "repeatDistanceUnits": [
+   2433
+  ],
+  "reverseDirectionSymbol": [
+   2214
+  ],
+  "rightDirectionSymbol": [
+   2213
+  ],
+  "rotationAngle": [
+   2430
+  ],
+  "scaleMax": [
+   2205
+  ],
+  "scaleMin": [
+   2204
+  ],
+  "scaleVisibility": [
+   2203
+  ],
+  "scalemaxdenom": [
+   1010
+  ],
+  "scalemindenom": [
+   1009
+  ],
+  "shadowColor": [
+   2113
+  ],
+  "shadowDraw": [
+   2107
+  ],
+  "shadowOffsetAngle": [
+   2109
+  ],
+  "shadowOffsetDist": [
+   2108
+  ],
+  "shadowOffsetUnit": [
+   2108
+  ],
+  "shadowOpacity": [
+   2113
+  ],
+  "shadowRadius": [
+   2112
+  ],
+  "shadowRadiusUnit": [
+   2112
+  ],
+  "shapeBorderColor": [
+   2083
+  ],
+  "shapeBorderWidth": [
+   2084
+  ],
+  "shapeBorderWidthUnit": [
+   2084
+  ],
+  "shapeDraw": [
+   2076
+  ],
+  "shapeFillColor": [
+   2082
+  ],
+  "shapeOffsetUnit": [
+   2098,
+   2099
+  ],
+  "shapeOffsetX": [
+   2098
+  ],
+  "shapeOffsetY": [
+   2099
+  ],
+  "shapeOpacity": [
+   2081
+  ],
+  "shapeRadiiUnit": [
+   2088,
+   2089
+  ],
+  "shapeRadiiX": [
+   2088
+  ],
+  "shapeRadiiY": [
+   2089
+  ],
+  "shapeRotation": [
+   2100
+  ],
+  "shapeSizeType": [
+   2094
+  ],
+  "shapeSizeUnit": [
+   2085,
+   2086
+  ],
+  "shapeSizeX": [
+   2085
+  ],
+  "shapeSizeY": [
+   2086
+  ],
+  "shapeType": [
+   2078
+  ],
+  "sizeType": [
+   2797
+  ],
+  "stretchFactor": [
+   2494
+  ],
+  "symbol": [
+   946,
+   977,
+   1007
+  ],
+  "tabStops": [
+   2548
+  ],
+  "textColor": [
+   2379
+  ],
+  "textOpacity": [
+   2380
+  ],
+  "textOrientation": [
+   2493
+  ],
+  "tolerance": [
+   1145
+  ],
+  "toleranceUnit": [
+   1146
+  ],
+  "type": [
+   151,
+   168,
+   896,
+   917,
+   2135,
+   2593,
+   2725
+  ],
+  "unplacedVisibility": [
+   2196
+  ],
+  "upper": [
+   976
+  ],
+  "upperHeight": [
+   2820
+  ],
+  "upperValue": [
+   2816,
+   2816
+  ],
+  "upperWidth": [
+   2818
+  ],
+  "upsidedownLabels": [
+   2169
+  ],
+  "useMaxLineLengthForAutoWrap": [
+   2200
+  ],
+  "useSubstitutions": [
+   2574,
+   2574
+  ],
+  "value": [
+   162,
+   240,
+   945,
+   2149
+  ],
+  "weight_expression": [
+   1116,
+   1116
+  ],
+  "width": [
+   2805
+  ],
+  "wrapChar": [
+   2198
+  ],
+  "xOffset": [
+   2428
+  ],
+  "yOffset": [
+   2429
+  ],
+  "zIndex": [
+   2182
+  ]
+ },
+ "prop_keys": {
+  "SymbolType": [
+   1789
+  ],
+  "anchor_x": [
+   1326
+  ],
+  "anchor_y": [
+   1327
+  ],
+  "angle": [
+   1353,
+   1620,
+   1701,
+   1778
+  ],
+  "arrow_head_length": [
+   1647
+  ],
+  "arrow_head_width": [
+   1648
+  ],
+  "arrow_width": [
+   1649
+  ],
+  "arrow_width_unit": [
+   1649
+  ],
+  "blendMode": [
+   889
+  ],
+  "blend_mode": [
+   889
+  ],
+  "blur_level": [
+   2987
+  ],
+  "blur_radius": [
+   2987
+  ],
+  "blur_unit": [
+   2987
+  ],
+  "capstyle": [
+   1501
+  ],
+  "chr": [
+   1407
+  ],
+  "clip_points": [
+   1755
+  ],
+  "color": [
+   1360,
+   1378,
+   1400,
+   1409,
+   1421,
+   1444,
+   1465,
+   1518,
+   1520,
+   1548,
+   1583,
+   1589,
+   1617,
+   1632,
+   1634,
+   1691,
+   1700,
+   1719,
+   1746,
+   1767,
+   1775,
+   1825,
+   2125,
+   2985
+  ],
+  "color1": [
+   221,
+   221,
+   1775
+  ],
+  "color2": [
+   222,
+   222,
+   1776
+  ],
+  "color_border": [
+   1361
+  ],
+  "color_ramp_shader": [
+   1513,
+   1513,
+   1513,
+   1628,
+   1628,
+   1628
+  ],
+  "coloring_method": [
+   1516
+  ],
+  "coordinates": [
+   1939,
+   1939
+  ],
+  "count_method": [
+   1734
+  ],
+  "curved_arrow": [
+   1650
+  ],
+  "customdash": [
+   1483
+  ],
+  "customdash_unit": [
+   1484
+  ],
+  "dash_pattern_offset": [
+   1493
+  ],
+  "dash_pattern_offset_unit": [
+   1493
+  ],
+  "density_area": [
+   1740
+  ],
+  "density_area_unit": [
+   1741
+  ],
+  "displacement_x": [
+   1723
+  ],
+  "displacement_x_unit": [
+   1723
+  ],
+  "displacement_y": [
+   1724
+  ],
+  "displacement_y_unit": [
+   1724
+  ],
+  "distance": [
+   1702,
+   1715,
+   1716
+  ],
+  "distance_unit": [
+   1702
+  ],
+  "distance_x": [
+   1715
+  ],
+  "distance_x_unit": [
+   1715
+  ],
+  "distance_y": [
+   1716
+  ],
+  "distance_y_unit": [
+   1716
+  ],
+  "effects": [
+   197
+  ],
+  "enabled": [
+   2121,
+   2121
+  ],
+  "file": [
+   1437,
+   1655,
+   1762,
+   2853,
+   2895
+  ],
+  "fill_color": [
+   2985
+  ],
+  "fill_style": [
+   1690
+  ],
+  "font": [
+   1408,
+   1408
+  ],
+  "font_family": [
+   1408
+  ],
+  "geometryModifier": [
+   1450,
+   1569,
+   1787
+  ],
+  "geometry_modifier": [
+   1450,
+   1569,
+   1787
+  ],
+  "getAttribute": [
+   239,
+   240
+  ],
+  "glow_color": [
+   2985
+  ],
+  "gradient_color2": [
+   1775,
+   1776
+  ],
+  "hash_angle": [
+   1620
+  ],
+  "hash_length": [
+   1616
+  ],
+  "hash_length_unit": [
+   1616
+  ],
+  "head_length": [
+   1647
+  ],
+  "head_length_unit": [
+   1647
+  ],
+  "head_thickness": [
+   1648
+  ],
+  "head_thickness_unit": [
+   1648
+  ],
+  "horizontal_anchor_point": [
+   1326
+  ],
+  "imageFile": [
+   1390,
+   1437,
+   1655,
+   1762,
+   2853,
+   2895
+  ],
+  "interval": [
+   1601
+  ],
+  "interval_unit": [
+   1602
+  ],
+  "is_curved": [
+   1650
+  ],
+  "join": [
+   1878
+  ],
+  "joinstyle": [
+   1500
+  ],
+  "length": [
+   1616
+  ],
+  "lineSymbol": [
+   2133
+  ],
+  "line_color": [
+   1479,
+   1518,
+   1520,
+   1548,
+   1583,
+   1589,
+   1617,
+   1632,
+   1634,
+   2125
+  ],
+  "line_style": [
+   1484
+  ],
+  "line_width": [
+   1480,
+   1525,
+   1525,
+   1554,
+   1559,
+   1619,
+   1619,
+   1637,
+   1637,
+   1703,
+   2127
+  ],
+  "line_width_unit": [
+   1474,
+   1559,
+   1703,
+   2127
+  ],
+  "name": [
+   1359,
+   1390,
+   1420,
+   1437,
+   1762,
+   2853,
+   2895
+  ],
+  "offset": [
+   1321,
+   1502,
+   1659,
+   2988
+  ],
+  "offset_angle": [
+   2989
+  ],
+  "offset_distance": [
+   2988
+  ],
+  "offset_unit": [
+   1323,
+   1502,
+   1659,
+   2988
+  ],
+  "offset_x": [
+   1725
+  ],
+  "offset_x_unit": [
+   1725
+  ],
+  "offset_y": [
+   1726
+  ],
+  "offset_y_unit": [
+   1726
+  ],
+  "opacity": [
+   2986
+  ],
+  "outline_color": [
+   1361,
+   1379,
+   1410,
+   1427,
+   1834
+  ],
+  "outline_style": [
+   1362,
+   1383,
+   1832
+  ],
+  "outline_width": [
+   1363,
+   1380,
+   1411,
+   1428,
+   1703,
+   1836
+  ],
+  "outline_width_unit": [
+   1363,
+   1380,
+   1836
+  ],
+  "paintEffect": [
+   197
+  ],
+  "path": [
+   1390,
+   1655,
+   2853
+  ],
+  "pattern_width": [
+   1769
+  ],
+  "pattern_width_unit": [
+   1769
+  ],
+  "placement": [
+   1604
+  ],
+  "placements": [
+   1604
+  ],
+  "point_count": [
+   1735
+  ],
+  "reflect_x": [
+   3040
+  ],
+  "reflect_y": [
+   3041
+  ],
+  "repeat_distance": [
+   1601
+  ],
+  "repeat_distance_unit": [
+   1602
+  ],
+  "rotate": [
+   1611
+  ],
+  "rotate_marker": [
+   1611
+  ],
+  "rotation": [
+   3044
+  ],
+  "scale_x": [
+   3038
+  ],
+  "scale_y": [
+   3039
+  ],
+  "seed": [
+   1754
+  ],
+  "single_color": [
+   1518,
+   1518,
+   1520,
+   1548,
+   1632,
+   1634
+  ],
+  "size": [
+   1339,
+   1352,
+   1376,
+   1377
+  ],
+  "size_unit": [
+   1337,
+   1351
+  ],
+  "spread": [
+   3008
+  ],
+  "start_color": [
+   1548
+  ],
+  "stops": [
+   224
+  ],
+  "style": [
+   1690
+  ],
+  "svgFile": [
+   1762,
+   2853,
+   2895
+  ],
+  "svgFillColor": [
+   1767
+  ],
+  "svgfile": [
+   1762,
+   2853,
+   2895
+  ],
+  "symbol": [
+   2133
+  ],
+  "symbolType": [
+   1789
+  ],
+  "symbol_height": [
+   1377
+  ],
+  "symbol_type": [
+   1789
+  ],
+  "symbol_width": [
+   1376
+  ],
+  "textContent": [
+   240
+  ],
+  "translate_unit": [
+   3042,
+   3043
+  ],
+  "translate_x": [
+   3042
+  ],
+  "translate_y": [
+   3043
+  ],
+  "trim_distance_end": [
+   1491
+  ],
+  "trim_distance_end_unit": [
+   1491
+  ],
+  "trim_distance_start": [
+   1489
+  ],
+  "trim_distance_start_unit": [
+   1489
+  ],
+  "two_color_second": [
+   1775,
+   1776
+  ],
+  "type": [
+   1789,
+   2979
+  ],
+  "use_custom_dash": [
+   1483,
+   1483
+  ],
+  "vertical_anchor_point": [
+   1327
+  ],
+  "width": [
+   1554,
+   1769,
+   2127
+  ],
+  "width_unit": [
+   2127
+  ],
+  "width_varying_is_variable_width": [
+   1523,
+   1524,
+   1635,
+   1636
+  ],
+  "width_varying_maximum_width": [
+   1526,
+   1638
+  ],
+  "width_varying_minimum_width": [
+   1525,
+   1637
+  ]
+ },
+ "dd_keys": {
+  "AlwaysShow": [
+   2247
+  ],
+  "Bold": [
+   2258
+  ],
+  "BufferColor": [
+   2303
+  ],
+  "BufferDraw": [
+   2301
+  ],
+  "BufferOpacity": [
+   2304
+  ],
+  "BufferSize": [
+   2302
+  ],
+  "Color": [
+   2271
+  ],
+  "Decimals": [
+   2329
+  ],
+  "DirSymbDraw": [
+   2333
+  ],
+  "DirSymbLeft": [
+   2336
+  ],
+  "DirSymbPlacement": [
+   2335
+  ],
+  "DirSymbReverse": [
+   2338
+  ],
+  "DirSymbRight": [
+   2337
+  ],
+  "Family": [
+   2257
+  ],
+  "FontLetterSpacing": [
+   2275
+  ],
+  "FontStyle": [
+   2260
+  ],
+  "FontWordSpacing": [
+   2276
+  ],
+  "Hali": [
+   2277
+  ],
+  "IsObstacle": [
+   2319
+  ],
+  "Italic": [
+   2259
+  ],
+  "LabelAllParts": [
+   2321
+  ],
+  "LabelRotation": [
+   2283
+  ],
+  "LetterSpacing": [
+   2275
+  ],
+  "MaxScale": [
+   2322
+  ],
+  "MinScale": [
+   2322
+  ],
+  "MultiLineHeight": [
+   2281
+  ],
+  "MultiLineWrapChar": [
+   2279
+  ],
+  "NumDecimals": [
+   2329
+  ],
+  "NumFormat": [
+   2327
+  ],
+  "NumPlusSign": [
+   2330
+  ],
+  "ObstacleFactor": [
+   2320
+  ],
+  "OffsetQuad": [
+   2296
+  ],
+  "OffsetXY": [
+   2285
+  ],
+  "PlusSign": [
+   2330
+  ],
+  "PositionX": [
+   2316
+  ],
+  "PositionY": [
+   2316
+  ],
+  "Priority": [
+   2318
+  ],
+  "Rotation": [
+   2283
+  ],
+  "RotationAngle": [
+   2283
+  ],
+  "Show": [
+   2246,
+   2246
+  ],
+  "Size": [
+   2256
+  ],
+  "Strikeout": [
+   2274
+  ],
+  "Underline": [
+   2273
+  ],
+  "WordSpacing": [
+   2276
+  ],
+  "alpha": [
+   1965,
+   1966
+  ],
+  "angle": [
+   1353
+  ],
+  "char": [
+   1407
+  ],
+  "chr": [
+   1407
+  ],
+  "clipPoints": [
+   1755
+  ],
+  "color": [
+   1360,
+   1378,
+   1409,
+   1479,
+   1691,
+   1700
+  ],
+  "color_border": [
+   1361
+  ],
+  "color_end": [
+   1519,
+   1633
+  ],
+  "color_start": [
+   1517,
+   1631
+  ],
+  "customDash": [
+   1481
+  ],
+  "dashPatternOffset": [
+   1492
+  ],
+  "dash_pattern_offset": [
+   1492
+  ],
+  "densityArea": [
+   1740
+  ],
+  "displacementX": [
+   1723
+  ],
+  "displacementY": [
+   1724
+  ],
+  "distanceX": [
+   1715
+  ],
+  "distanceY": [
+   1716
+  ],
+  "endColor": [
+   1519
+  ],
+  "end_color": [
+   1519,
+   1633
+  ],
+  "fillColor": [
+   1360,
+   1378,
+   1409,
+   1691,
+   1700
+  ],
+  "fillStyle": [
+   1690
+  ],
+  "fill_style": [
+   1690
+  ],
+  "fontFamily": [
+   1408
+  ],
+  "height": [
+   1377,
+   1394
+  ],
+  "interval": [
+   1601
+  ],
+  "lineAngle": [
+   1701
+  ],
+  "lineColor": [
+   1479,
+   1700
+  ],
+  "lineDistance": [
+   1702
+  ],
+  "lineEndColorValue": [
+   1519,
+   1633
+  ],
+  "lineEndWidthValue": [
+   1529,
+   1640
+  ],
+  "lineStartColorValue": [
+   1517,
+   1631
+  ],
+  "lineStartWidthValue": [
+   1527,
+   1639
+  ],
+  "lineStyle": [
+   1484
+  ],
+  "lineWidth": [
+   1480,
+   1553,
+   1558,
+   1618
+  ],
+  "line_color": [
+   1479
+  ],
+  "line_style": [
+   1484
+  ],
+  "line_width": [
+   1480,
+   1553,
+   1558,
+   1618
+  ],
+  "name": [
+   1359,
+   1420
+  ],
+  "offset": [
+   1321,
+   1502
+  ],
+  "offsetX": [
+   1725
+  ],
+  "offsetY": [
+   1726
+  ],
+  "outlineColor": [
+   1361,
+   1379,
+   1410,
+   1427,
+   1479,
+   1834
+  ],
+  "outlineStyle": [
+   1484,
+   1832
+  ],
+  "outlineWidth": [
+   1363,
+   1380,
+   1411,
+   1428,
+   1480,
+   1553,
+   1558,
+   1618,
+   1836
+  ],
+  "outline_color": [
+   1361,
+   1379,
+   1410,
+   1427,
+   1834
+  ],
+  "outline_style": [
+   1832
+  ],
+  "outline_width": [
+   1363,
+   1380,
+   1411,
+   1428,
+   1480,
+   1553,
+   1558,
+   1618,
+   1836
+  ],
+  "placement": [
+   1604
+  ],
+  "pointCount": [
+   1735
+  ],
+  "randomSeed": [
+   1754
+  ],
+  "size": [
+   1339,
+   1352
+  ],
+  "startColor": [
+   1517
+  ],
+  "start_color": [
+   1517,
+   1631
+  ],
+  "symbol_height": [
+   1377,
+   1394
+  ],
+  "symbol_width": [
+   1376,
+   1393
+  ],
+  "transparency": [
+   1965,
+   1966
+  ],
+  "trimDistanceEnd": [
+   1490
+  ],
+  "trimDistanceStart": [
+   1488
+  ],
+  "trimEnd": [
+   1490
+  ],
+  "trimStart": [
+   1488
+  ],
+  "trim_distance_end": [
+   1490
+  ],
+  "trim_distance_start": [
+   1488
+  ],
+  "width": [
+   1376,
+   1393,
+   1480,
+   1553,
+   1558,
+   1618
+  ],
+  "widthEnd": [
+   1529
+  ],
+  "widthStart": [
+   1527
+  ],
+  "width_end": [
+   1529,
+   1640
+  ],
+  "width_start": [
+   1527,
+   1639
+  ]
+ },
+ "renderers_seen": [
+  "25dRenderer",
+  "RuleRenderer",
+  "categorizedSymbol",
+  "embeddedSymbol",
+  "graduatedSymbol",
+  "heatmapRenderer",
+  "invertedPolygonRenderer",
+  "mergedFeatureRenderer",
+  "nullSymbol",
+  "pointCluster",
+  "pointDisplacement",
+  "singleSymbol"
+ ]
+}

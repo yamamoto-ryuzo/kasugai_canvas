@@ -2,9 +2,9 @@
 // @navaramap/three (Rust/WASM + Three.js) で .kasc を再生する。
 // vendor dist は同一オリジン必須（Worker が import.meta.url 相対で生成される）。
 // UI/共通機構は shared/ を他エンジンと共用する。
-import ThreeView, { Color } from "@navaramap/three";
+import ThreeView, { Color, fetchFontFamilyFromCss, vector3ToGeodetic } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, normKascTitle, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, normKascTitle, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha, setAllLayerGroupsExpanded } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
@@ -24,12 +24,13 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { initPrint } from "../shared/print.js";
-import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
+import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec, setMapScaleGetter, applyInvertedMaskGeojson, installLayerVisibilityResolver } from "../shared/qml-2d.js";
+import { rgbaToCss, markerLayersToCanvas } from "../shared/qml-style.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { mountSunControls } from "../shared/sun-time.js";
 
 const TERRAIN_URL = "https://terrain.reearth.land/cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain";
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 const RASTER_TYPES = new Set(["xyz", "tile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
@@ -75,7 +76,7 @@ const css2hex = (css, fallback = 0x2c5ea8) => {
 
 // ---- Navara 起動 ----
 const view = new ThreeView({
-  container: document.getElementById("map"), picking: false,
+  container: document.getElementById("map"), picking: true,
   // 既定は描画負荷を抑える（写実品質は設定ペインで戻せる）
   shadow: false, multisampling: 0, halfFloat: false, logarithmicDepthBuffer: false,
 });
@@ -84,6 +85,8 @@ view.addPlugin(defaultPlugin);
 window.kascView = view;
 
 const layerEntries = [];   // {item, sid, src, layer}
+// QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
+installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
 const baseEntries = [];    // 選択中ベースマップ {item, src, layer}
 const themes = [];
 let baseDocs = [], basemapSrc = null, basemapLayer = null;
@@ -191,10 +194,119 @@ function navaraSetShow(entry, on) {
     if (k) next[k] = { show: on };
   }
   try { layer.update(next); } catch (e) { console.warn("layer visibility", e); }
+  if (entry === baseEntries[0]) { basemapShown = !!on; syncEllipsoidLayer(); }
+}
+// 地表透明モード: Cesium 版の globeHidden に合わせ、透過中は
+// ① 地表メッシュを透明化(globe.transparent+opacity0 + globe シーンのメッシュ非表示)
+// ② 宇宙の下地は黒空クアッド/星空が残るため、opaque シーンの大気クアッドの
+//    fragmentShader を下敷き色(既定白、background: 行があればその色)の
+//    単色出力へ差し替え、星空 Points を非表示にする
+//    (renderer の clearColor や clearPass.overrideClearColor は独自
+//    オーケストレータの合成で無視されるため実測では効かない)
+// いずれも解除時に全て元へ戻す。
+let currentClearHex = 0x000000; // 非透過時のクリアカラー(scene3d background= で更新)
+let docBackgroundHex = null;    // .kasc background: 行(css2hex 済)。透過下敷き色の既定は白
+let transparentActive = false;
+let transparentUnderlay = 0xffffff;
+let transparentRetryTimers = [];
+const transparentOrigState = new WeakMap(); // 元 material/visible の退避
+function isSkyQuad(c) {
+  return c?.type === "Mesh" && c.frustumCulled === false &&
+    c.material?.type === "RawShaderMaterial" && c.material?.uniforms?.inverseProjectionMatrix;
+}
+function setSkyUnderlay(obj, hex) {
+  const m = obj.material;
+  if (!transparentOrigState.has(obj)) transparentOrigState.set(obj, m);
+  const clone = m.clone();
+  const r = ((hex >> 16) & 255) / 255, g = ((hex >> 8) & 255) / 255, b = (hex & 255) / 255;
+  clone.fragmentShader =
+    `precision highp float;\nlayout(location = 0) out vec4 navaraBg;\n` +
+    `void main() { navaraBg = vec4(${r.toFixed(4)}, ${g.toFixed(4)}, ${b.toFixed(4)}, 1.0); }\n`;
+  clone.needsUpdate = true;
+  obj.material = clone;
+}
+function restoreSkyObject(obj) {
+  if (!transparentOrigState.has(obj)) return;
+  obj.material = transparentOrigState.get(obj);
+  transparentOrigState.delete(obj);
+}
+// 大気クアッド・星空・globe メッシュは renderDoc 呼出時点では未生成の場合がある
+// (vendor/SW 経由で非同期初期化される)ため、パス追加通知(onPassesChanged)と
+// 一定間隔のリトライで透過状態を再適用する。全て冪等。
+function applyTransparentState(on, underlayHex) {
+  try {
+    const r = view._renderer;
+    if (on) {
+      view.globe.setOptions?.({ transparent: true, opacity: 0 });
+      r?.setClearColor?.(underlayHex ?? 0xffffff);
+      for (const c of view._scenes?.opaque?.children || []) {
+        if (isSkyQuad(c)) setSkyUnderlay(c, underlayHex ?? 0xffffff);
+        else if (c.type === "Points") c.visible = false; // 星空
+      }
+      for (const c of view._scenes?.globe?.children || []) c.visible = false;
+    } else {
+      view.globe.setOptions?.({ transparent: false, opacity: 1 });
+      for (const c of view._scenes?.opaque?.children || []) {
+        restoreSkyObject(c);
+        if (c.type === "Points") c.visible = true;
+      }
+      for (const c of view._scenes?.globe?.children || []) c.visible = true;
+      r?.setClearColor?.(currentClearHex);
+    }
+    // Navara はオンデマンド描画のため、変更を即時反映させる
+    try { view.forceUpdate?.(); } catch (_) {}
+  } catch (_) {}
+}
+function setGlobeTransparent(on, underlayHex) {
+  transparentActive = !!on;
+  transparentUnderlay = underlayHex ?? 0xffffff;
+  for (const t of transparentRetryTimers) clearTimeout(t);
+  transparentRetryTimers = [];
+  applyTransparentState(on, transparentUnderlay);
+  if (on) {
+    // パス追加は後から来るため、通知フックで再無効化する(重複登録防止)
+    const orc = view.renderPassOrchestrator;
+    if (orc && !orc._kascTransparentHook) {
+      orc._kascTransparentHook = true;
+      const orig = orc.onPassesChanged;
+      orc.onPassesChanged = () => {
+        try { orig?.(); } catch (_) {}
+        if (transparentActive) applyTransparentState(true, transparentUnderlay);
+      };
+    }
+    // vendor 取得〜エンジン初期化完了まで数十秒かかることがあるため、
+    // 透過が有効な間は一定間隔で再適用し続ける(上限 60 回)
+    let tries = 0;
+    transparentRetryTimers.push(setInterval(() => {
+      if (!transparentActive || ++tries > 60) {
+        for (const t of transparentRetryTimers) { clearInterval(t); clearTimeout(t); }
+        transparentRetryTimers = [];
+        return;
+      }
+      applyTransparentState(true, transparentUnderlay);
+    }, 1500));
+  }
+}
+// ドレープ面の自動補完: clampToGround 系ベクターはタイル焼き込みのため
+// 面を産むレイヤ(raster/terrain)が無いと描画されない。地形もベースマップも
+// 無い構成ではソースレスの ellipsoid 地形レイヤを張って地表を確保する
+let ellipsoidLayer = null, basemapShown = true;
+function syncEllipsoidLayer() {
+  const need = !terrainLayer && !(basemapLayer && basemapShown);
+  if (need && !ellipsoidLayer) {
+    try { ellipsoidLayer = view.addLayer({ type: "terrain", ellipsoid: {} }); }
+    catch (e) { console.warn("ellipsoid", e); ellipsoidLayer = null; }
+  } else if (!need && ellipsoidLayer) {
+    try { ellipsoidLayer.delete(); } catch (_) {}
+    ellipsoidLayer = null;
+  }
 }
 // 縮尺表示(minScale=/maxScale=) → カメラ高[m]範囲。
 // QML ルールの縮尺分母→距離変換と同じ係数(分母×0.00028×900÷(2·tan30°))
 const SCALE_VIS_DIST_K = 0.00028 * 900 / (2 * Math.tan(Math.PI / 6));
+// QML 式変数 @map_scale → 上記と同じ換算の逆(カメラ高→縮尺分母)。
+// Navara の QML 評価はレイヤ読込時の一回のため現縮尺が供給値になる
+setMapScaleGetter(() => lastCam.height / SCALE_VIS_DIST_K);
 function scaleVisOk(item) {
   const lo = Number(item?.opts?.minscale), hi = Number(item?.opts?.maxscale);
   if (!(lo > 0) && !(hi > 0)) return true;
@@ -226,10 +338,27 @@ function progress(n, total, label) {
 }
 function syncAttribution() {
   const seen = new Set(), html = [];
+  // 表示中ベースマップの出典も併記する（他エンジンと同じ対象範囲）
+  const b = baseDocs[currentBasemapIdx];
+  if (b) {
+    const a = layerAttribution(b);
+    if (a) { seen.add(a); html.push(sanitizeAttributionFragment(a)); }
+  }
   for (const { item } of layerEntries) {
     if (!item.visible) continue;
     const a = layerAttribution(item);
     if (a && !seen.has(a)) { seen.add(a); html.push(sanitizeAttributionFragment(a)); }
+  }
+  // Navara 内蔵の AttributionPlugin（既定有効の帰属 UI）へ流し、
+  // 独自 .map-attribution はフォールバックとして残す
+  const nat = view.attribution;
+  if (nat) {
+    try {
+      nat.clear?.();
+      if (html.length) nat.add(html.map(h => ({ attributionHtml: h })));
+    } catch (_) { /* 内蔵 UI 失敗時は自前 DOM へ */ }
+    panel.attribution.style.display = "none";
+    return;
   }
   panel.attribution.innerHTML = html.join(" / ");
   panel.attribution.style.display = html.length ? "" : "none";
@@ -441,6 +570,7 @@ function buildLayerList() {
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const section = document.createElement("section");
     section.className = "layer-group" + (exclusive ? " exclusive" : "");
+    section.dataset.groupKey = key;
     const head = document.createElement("div");
     head.className = "layer-group-title";
     const tg = document.createElement("button");
@@ -648,14 +778,22 @@ async function applyBasemap(idx) {
   if (basemapLayer) { try { basemapLayer.delete(); } catch (_) {} basemapLayer = null; }
   if (basemapSrc) { try { basemapSrc.delete(); } catch (_) {} basemapSrc = null; }
   const b = baseDocs[idx];
-  if (!b) return;
+  if (!b) { basemapShown = false; syncEllipsoidLayer(); return; }
   basemapSrc = view.addSource({ type: "raster-tile", url: resolveKascUrl(b.url, lastBaseUrl), maxZoom: Number(b.opts?.maxzoom) || 18, ...(b.opts?.minzoom ? { minZoom: Number(b.opts.minzoom) } : {}) });
   const desc = { type: "raster", source: basemapSrc };
   basemapLayer = view.addLayer(desc);
   baseEntries.length = 0;
   baseEntries.push({ item: b, src: basemapSrc, layer: basemapLayer, desc });
+  basemapShown = true;
+  syncEllipsoidLayer();
 }
-panel.basemapSelect?.addEventListener("change", () => applyBasemap(Number(panel.basemapSelect.value)));
+// select からの変更: 「ベースマップなし」は下地が白になるよう地表透明モードへ
+// 入れ(他エンジンの none と見た目を揃える)、通常タイル選択時は解除する
+panel.basemapSelect?.addEventListener("change", () => {
+  const idx = Number(panel.basemapSelect.value);
+  setGlobeTransparent(idx < 0, docBackgroundHex ?? 0xffffff);
+  applyBasemap(idx);
+});
 
 // ---- 地形・写実 ----
 async function applyTerrain(on) {
@@ -675,6 +813,7 @@ async function applyTerrain(on) {
     // 既定 ON のため失敗時はチェック状態も戻して UI と実態を合わせる
     const c = $("#nv-terrain"); if (c) c.checked = false;
   }
+  syncEllipsoidLayer();
 }
 // 垂直誇張は Navara 0.3.x の TerrainMaterial.exaggeration で実現
 // (maplibre の terrain exaggeration・Cesium の verticalExaggeration と同等)
@@ -710,9 +849,14 @@ const FX_DEFAULTS = {
   toneMode: 8,
   clouds: false, cloudCov: 0.25,
   ssao: false,
+  rain: false, snow: false,
 };
 const fx = structuredClone(FX_DEFAULTS);
-let cloudsEffect = null, ssaoEffect = null;
+let cloudsEffect = null, ssaoEffect = null, rainMesh = null, snowMesh = null;
+// 天候・雲はアニメーション描画が必要なため、いずれかが有効な間 view.animation を ON
+function syncFxAnimation() {
+  try { view.animation = !!(fx.clouds || fx.rain || fx.snow); } catch (_) {}
+}
 const sunHandle = () => photorealScene?.sun || manualSun;
 // 影は複数箇所のフラグをまとめて切り替える。
 // view.shadow への代入は効かない（コンストラクタオプションのみで実行時セッター無し）
@@ -770,10 +914,31 @@ function applyFxSsao() {
     ssaoEffect = null;
   }
 }
+// rain/snow は Effect ではなく空間パーティクルのメッシュとして addMesh する
+function applyFxRain() {
+  if (fx.rain && !rainMesh) {
+    try { rainMesh = view.addMesh({ rain: {} }); }
+    catch (e) { console.warn("rain", e); }
+  } else if (!fx.rain && rainMesh) {
+    try { rainMesh.delete(); } catch (_) {}
+    rainMesh = null;
+  }
+}
+function applyFxSnow() {
+  // maxHeight 既定値では高高度カメラから見えない場合があるため大きめに取る
+  if (fx.snow && !snowMesh) {
+    try { snowMesh = view.addMesh({ snow: { maxHeight: 100000 } }); }
+    catch (e) { console.warn("snow", e); }
+  } else if (!fx.snow && snowMesh) {
+    try { snowMesh.delete(); } catch (_) {}
+    snowMesh = null;
+  }
+}
 function applyFxAll() {
   applyFxSun(); applyFxAmbient(); applyFxSkyProbe(); applyFxExposure();
   applyFxShadowInt(); applyFxMoon(); applyFxStars(); applyFxFlare();
-  applyFxToneMode(); applyFxClouds(); applyFxSsao();
+  applyFxToneMode(); applyFxClouds(); applyFxSsao(); applyFxRain(); applyFxSnow();
+  syncFxAnimation();
 }
 // 写実 ON/OFF に応じて .nv-pr 行の有効/無効と太陽スライダーの表示値を同期する
 function syncFxUi() {
@@ -805,8 +970,10 @@ function initFxControls() {
   $("#nv-stars")?.addEventListener("change", e => { fx.stars = e.target.checked; applyFxStars(); });
   $("#nv-flare")?.addEventListener("change", e => { fx.flare = e.target.checked; applyFxFlare(); });
   $("#nv-tonemode")?.addEventListener("change", e => { fx.toneMode = Number(e.target.value); applyFxToneMode(); });
-  $("#nv-clouds")?.addEventListener("change", e => { fx.clouds = e.target.checked; applyFxClouds(); });
+  $("#nv-clouds")?.addEventListener("change", e => { fx.clouds = e.target.checked; applyFxClouds(); syncFxAnimation(); });
   $("#nv-ssao")?.addEventListener("change", e => { fx.ssao = e.target.checked; applyFxSsao(); });
+  $("#nv-rain")?.addEventListener("change", e => { fx.rain = e.target.checked; applyFxRain(); syncFxAnimation(); });
+  $("#nv-snow")?.addEventListener("change", e => { fx.snow = e.target.checked; applyFxSnow(); syncFxAnimation(); });
   $("#nv-fx-reset")?.addEventListener("click", resetFx);
   syncFxUi();
 }
@@ -821,6 +988,7 @@ function resetFx() {
   setC("#nv-shadow", false);
   setC("#nv-moon", fx.moon); setC("#nv-stars", fx.stars); setC("#nv-flare", fx.flare);
   setC("#nv-clouds", false); setC("#nv-ssao", false);
+  setC("#nv-rain", false); setC("#nv-snow", false);
   setV("#nv-amb-int", fx.ambientInt); setV("#nv-sky-int", fx.skyProbeInt);
   setV("#nv-exposure", fx.exposure); setV("#nv-shd-int", fx.shadowInt);
   setV("#nv-moon-int", fx.moonInt); setV("#nv-stars-int", fx.starsInt);
@@ -882,7 +1050,10 @@ function applyQgisScene3d(scene3d) {
   if (!opts) return;
   const onoff = v => /^(on|true|1)$/i.test(String(v));
   const bg = /^#[0-9a-f]{6,8}$/i.test(String(opts.background || "")) ? String(opts.background) : null;
-  if (bg) { try { view._renderer?.setClearColor?.(parseInt(bg.slice(1, 7), 16)); } catch (_) {} }
+  if (bg) {
+    currentClearHex = parseInt(bg.slice(1, 7), 16);
+    try { view._renderer?.setClearColor?.(currentClearHex); } catch (_) {}
+  }
   if (opts.skybox !== undefined || bg) {
     try { photorealScene?.sky?.update?.({ sky: { visible: opts.skybox !== undefined ? onoff(opts.skybox) : false } }); } catch (_) {}
   }
@@ -923,6 +1094,31 @@ function whereFilteredGeojson(item) {
   return fc;
 }
 
+// ---- QML <labeling> → Navara text マテリアル ----
+// フォントは Google Fonts CSS 経由で unicode-range 分割フェッチされる。
+// 未登録 family の text マテリアルは描画されないため、登録失敗時は付けない
+const _qmlFontCache = new Map(); // "fam@weight" → Promise<string|null>
+function qmlLabelFont(family, bold) {
+  const fam = family || "Noto Sans JP";
+  const key = `${fam}@${bold ? 700 : 400}`;
+  if (!_qmlFontCache.has(key)) {
+    _qmlFontCache.set(key, (async () => {
+      const tryFam = async name => {
+        const ff = await fetchFontFamilyFromCss(name,
+          `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name)}:wght@${bold ? 700 : 400}`);
+        view.addFontFamily(ff);
+        return name;
+      };
+      try { return await tryFam(fam); }
+      catch (_) {
+        try { return await tryFam("Noto Sans JP"); }
+        catch (e) { console.warn("QML ラベルフォントを登録できません:", fam, e); return null; }
+      }
+    })());
+  }
+  return _qmlFontCache.get(key);
+}
+
 // ---- .kasc → Navara ----
 async function addKascLayer(item, baseUrl) {
   const url = item.url ? resolveKascUrl(item.url, baseUrl) : null;
@@ -941,6 +1137,22 @@ async function addKascLayer(item, baseUrl) {
     const layer = view.addLayer(desc);
     return { src, layer, desc };
   }
+  if (item.type === "mvt") {
+    // MVT ベクトルタイル → Navara ネイティブの vector-tile ソース。
+    // sourceLayers= は行の layers=/srclayers= 指定から取る(未指定時は全レイヤ描画)
+    const srcLayers = String(item.opts?.srclayers ?? item.opts?.sourcelayers ?? item.opts?.layers ?? "")
+      .split(",").map(s => s.trim()).filter(Boolean);
+    const src = view.addSource({ type: "vector-tile", url,
+      maxZoom: Number(item.opts?.maxzoom ?? item.opts?.maximumlevel) || undefined,
+      minZoom: Number(item.opts?.minzoom ?? item.opts?.minimumlevel) || undefined });
+    const desc = { type: "vector", source: src,
+      ...(srcLayers.length ? { sourceLayers: srcLayers } : {}),
+      polygon: { color: 0x4488cc, clampToGround: true, opacity: 0.5, transparent: true },
+      polyline: { color: 0x2266aa, width: 2, clampToGround: true, opacity: 1 },
+      point: { color: 0x2266aa, clampToGround: true, opacity: 1, sizeInMeters: false } };
+    const layer = view.addLayer(desc);
+    return { src, layer, desc };
+  }
   if (VECTOR_TYPES.has(item.type)) {
     const loaded = item._geojson ? { geojson: item._geojson } : await loadVectorItem(item, baseUrl, null, vectorHooks);
     item._geojson = loaded.geojson;
@@ -955,7 +1167,7 @@ async function addKascLayer(item, baseUrl) {
     let lineDash = null, lineCap = null;
     if (item.opts?.style) {
       try {
-        const compiled = await loadCompiledQml(item.opts.style, baseUrl);
+        const compiled = await loadCompiledQml(item.opts.style, baseUrl, "navara");
         item._qml = compiled;
         const spec = compiled.evaluate?.(item._geojson?.features?.[0]?.properties || {});
         const s = specToStyle(spec);
@@ -973,17 +1185,158 @@ async function addKascLayer(item, baseUrl) {
     const polyFillO = oNum(item.opts?.fill_opacity) ?? oNum(item.opts?.opacity) ?? aOf(fillCss) ?? gd?.fillOpacity ?? 0.4;
     const polyLineO = oNum(item.opts?.stroke_opacity) ?? oNum(item.opts?.opacity) ?? aOf(strokeCss) ?? gd?.strokeOpacity ?? ld?.opacity ?? 1;
     const pointO = oNum(item.opts?.opacity) ?? aOf(markerCss) ?? pd?.opacity ?? 1;
-    const src = view.addSource({ type: "geojson", data: whereFilteredGeojson(item), tiled: true });
+    // extrude=<m>(#60)・QML 2.5D レンダラ → PolygonMaterial.extrudedHeight(m)。
+    // 地物別の上書きは FeatureEvaluator の extrudedHeight で同値を返す
+    const extrudeH = Math.max(Number(item.opts?.extrude) || 0, item._qml?.d25?.height || 0);
+    // QML マーカー: 形状・画像を含むため markerLayersToCanvas で canvas 化し、
+    // billboard の地物別 image(URL/dataURL、atlas 収容)で差し替える
+    let markerImageFor = null;
+    let billboardMat = null;
+    const hasPointGeoms = (item._geojson?.features || []).some(f => /point/i.test(f?.geometry?.type || ""));
+    if (item._qml && hasPointGeoms) {
+      const cache = new Map();
+      markerImageFor = props => {
+        let spec = null;
+        try { spec = item._qml.evaluate?.(props || {}); } catch (_) { return null; }
+        if (!spec?.markers?.length) return null;
+        const key = JSON.stringify(spec.markers.map(m =>
+          [m.kind, m.shape, m.sizePx, m.widthPx, m.heightPx, m.fill, m.stroke,
+           m.strokeWidthPx, m.rotationDeg, m.offsetPx, m.alpha, m.text, m.fontFamily]));
+        let e = cache.get(key);
+        if (e === undefined) {
+          try {
+            const cv = markerLayersToCanvas(spec.markers);
+            e = cv ? { url: cv.toDataURL(), h: cv.height } : null;
+          } catch (_) { e = null; }
+          cache.set(key, e);
+        }
+        return e;
+      };
+      const hasMarkers = (item._geojson.features || []).slice(0, 50)
+        .some(f => markerImageFor(f.properties || {}));
+      // 1x1 透過 PNG を既定 url にし、実画像は FeatureEvaluator.image で供給
+      // (マーカー無し地物は透過プレースホルダ＝非表示)
+      if (hasMarkers) billboardMat = {
+        url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        sizeInMeters: false, size: 1,
+        geometryTypes: ["point"], transparent: true, opacity: pointO,
+        clampToGround: true, billboardFacing: "upright", rotateWithCamera: true,
+      };
+    }
+    // invertedPolygonRenderer: 世界矩形 − 地物リング(穴)マスク(他エンジンと
+    // 同じ近似)。_geojson を破壊しないよう geometry オブジェクトだけ複写する
+    let geoData = whereFilteredGeojson(item);
+    if (item._qml?.inverted && geoData?.features?.length) {
+      geoData = { ...geoData, features: geoData.features.map(f =>
+        f?.geometry ? { ...f, geometry: { ...f.geometry } } : f) };
+      applyInvertedMaskGeojson(geoData);
+    }
+    const src = view.addSource({ type: "geojson", data: geoData, tiled: true });
     // 破線は Navara 0.3.x の PolylineMaterial.dashArray（線幅倍率）で実現。
     // QML の dash は px 長なので線幅で割って倍率へ換算する
     const polyWidth = Number(item.opts?.width) || gd?.strokeWidth || ld?.width || 3;
+    // <labeling>: Navara text マテリアルへ写像。文字列・サイズ・優先度は
+    // FeatureEvaluator で地物ごとに評価する（レイヤ単位マテリアルの制約内）
+    let textMat = null;
+    if (item._qml?.labelFor) {
+      const sample = (item._geojson?.features || []).map(f => {
+        try { return item._qml.labelFor(f.properties || {}); } catch (_) { return null; }
+      }).find(s => s?.text);
+      if (sample) {
+        const fam = await qmlLabelFont(sample.family, sample.bold);
+        if (fam) {
+          const [ox, oy] = sample.pixelOffsetOf?.() || [0, 0];
+          textMat = {
+            font: fam,
+            size: Math.max(sample.sizePx || 12, 1),
+            sizeInMeters: false,
+            color: css2hex(rgbaToCss(sample.fill || [0, 0, 0, 1])),
+            transparent: true,
+            ...(sample.halo ? { outlineColor: css2hex(rgbaToCss(sample.halo.color)), outlineWidth: Math.max(sample.halo.widthPx || 0, 0) } : {}),
+            ...(sample.background?.fill ? { backgroundColor: css2hex(rgbaToCss(sample.background.fill)) } : {}),
+            geometryTypes: ["point", "line", "polygon"],
+            // ベースマップ無しでも見えるようドレープせず直立表示
+            clampToGround: false, textFacing: "upright",
+            declutter: !sample.displayAll,
+            ...(sample.priority ? { declutterPriority: sample.priority } : {}),
+            ...(ox || oy ? { translate: { x: ox, y: oy } } : {}),
+          };
+        }
+      }
+    }
     const desc = { type: "vector", source: src,
-      polygon: { color: css2hex(fillCss || "#3d7dd9"), clampToGround: true, opacity: polyFillO, transparent: polyFillO < 1 },
+      polygon: { color: css2hex(fillCss || "#3d7dd9"), clampToGround: extrudeH <= 0, opacity: polyFillO, transparent: polyFillO < 1,
+        ...(extrudeH > 0 ? { extrudedHeight: extrudeH } : {}) },
       polyline: { color: css2hex(strokeCss || "#2c5ea8"), width: polyWidth, clampToGround: true, opacity: polyLineO, transparent: polyLineO < 1, geometryTypes: ["line", "polygon"],
         ...(lineCap ? { cap: lineCap } : {}),
         ...(lineDash?.length ? { dashArray: Float32Array.from(lineDash.map(d => d / polyWidth)) } : {}) },
-      point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true, opacity: pointO, transparent: pointO < 1 } };
+      // QML マーカーがある場合は billboard(canvas 画像)で描き、point は
+      // 付けない(二重描画防止)。マーカー無しは従来どおりの点マテリアル
+      ...(billboardMat ? { billboard: billboardMat }
+        : { point: { color: css2hex(markerCss || "#d94f3d"), clampToGround: true, opacity: pointO, transparent: pointO < 1 } }),
+      ...(textMat ? { text: textMat } : {}) };
     const layer = view.addLayer(desc);
+    // QML の地物別スタイル・ラベルは FeatureEvaluator で焼き込む。
+    // メッシュ種別(meshGeomType)ごとに適用キーを切り替える:
+    //   polygon → color/opacity/extrudedHeight
+    //   polyline → color/width/opacity
+    //   point/billboard → image(canvas dataURL)+size / color
+    //   text → text/show/size/declutterPriority/rotation
+    // spec 未解決(ルール外)の地物は show:false で非表示にする
+    const compiled = item._qml;
+    if (compiled) {
+      const done = new Set();
+      const applyStyle = ({ evaluator }) => {
+        if (done.has(evaluator.id)) return;
+        done.add(evaluator.id);
+        try {
+          evaluator.evaluate(info => {
+            try {
+            const props = info?.properties || {};
+            const gt = info?.meshGeomType;
+            const v = {};
+            if (textMat) {
+              const s = compiled.labelFor?.(props);
+              if (s?.text) {
+                v.text = s.text; v.show = true;
+                if (gt !== "point" && s.sizePx) v.size = Math.max(s.sizePx, 1);
+                if (s.priority) v.declutterPriority = s.priority;
+                if (s.rotationDeg) v.rotation = s.rotationDeg;
+              }
+            }
+            const spec = compiled.evaluate?.(props);
+            if (!spec) { if (gt !== "text") v.show = false; return v; }
+            if (gt === "polygon") {
+              const solid = spec.fillParts?.find(pt => pt.solid)?.solid || spec.fillParts?.[0]?.hatch?.color || null;
+              if (solid) {
+                v.color = new Color().setStyle(rgbaToCss(solid));
+                if (solid.length > 3 && solid[3] < 1) v.opacity = solid[3];
+              }
+              if (extrudeH > 0) v.extrudedHeight = extrudeH;
+            } else if (gt === "polyline") {
+              const strokeSrc = spec.outline || spec.line;
+              if (strokeSrc) {
+                v.color = new Color().setStyle(rgbaToCss(strokeSrc.color));
+                if (strokeSrc.widthPx) v.width = Math.max(strokeSrc.widthPx, 0.5);
+                if (strokeSrc.color?.length > 3 && strokeSrc.color[3] < 1) v.opacity = strokeSrc.color[3];
+              }
+            } else if (gt !== "text") {
+              // 点: マーカー canvas を billboard.image へ(dataURL は atlas へ収容)
+              const mi = markerImageFor?.(props);
+              if (mi) { v.image = mi.url; v.size = Math.max(mi.h, 1); }
+              else {
+                const mk = spec.markers?.[0];
+                if (mk?.fill) v.color = new Color().setStyle(rgbaToCss(mk.fill));
+              }
+            }
+            return v;
+            } catch (_) { return {}; }
+          });
+        } catch (e) { console.warn("QML 地物スタイル評価に失敗:", e); }
+      };
+      layer.on("featureCreated", applyStyle);
+      layer.on("featureUpdated", applyStyle);
+    }
     return { src, layer, desc };
   }
   return null;
@@ -999,14 +1352,14 @@ async function renderLayers(doc, baseUrl) {
   kascFlyPaths.setItems(doc.unsupported);
   const items = [...doc.layers, ...doc.unsupported.filter(u => u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type))]
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
-  const unsupported = doc.unsupported.filter(u => u.type !== "3dtiles" && u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type));
+  const unsupported = doc.unsupported.filter(u => u.type !== "3dtiles" && u.type !== "mvt" && u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type));
   const visibleCount = items.filter(i => i.visible !== false).length;
   let done = 0;
   progress(0, visibleCount, "");
   for (const item of items) {
-    const mountable = item.type === "3dtiles" || RASTER_TYPES.has(item.type)
+    const mountable = item.type === "3dtiles" || item.type === "mvt" || RASTER_TYPES.has(item.type)
       || item.type === "wms" || item.type === "wmts" || VECTOR_TYPES.has(item.type);
-    const entry = { item, sid: String(item._idx ?? item.url), unsupported: (doc.unsupported.includes(item) && item.type !== "3dtiles") || !mountable };
+    const entry = { item, sid: String(item._idx ?? item.url), unsupported: (doc.unsupported.includes(item) && item.type !== "3dtiles" && item.type !== "mvt") || !mountable };
     layerEntries.push(entry);
     if (entry.unsupported || item.visible === false) { progress(++done, visibleCount); continue; }
     try {
@@ -1126,8 +1479,25 @@ async function renderDoc(doc, baseUrl, presetBase) {
 
   // ベースマップ
   panel.basemap.hidden = false;
+  // base: 行の特殊モード(transparent=地表透明 / none=ベースマップなし)は
+  // 選択肢ではなく初期モードとして解釈する(Cesium 版と同じ)
+  const baseModeRow = (doc.bases || []).find(b => b.mode);
   baseDocs = doc.bases.filter(b => !b.mode);
+  try {
+    docBackgroundHex = doc.background ? css2hex(doc.background, 0xffffff) : null;
+    // transparent/none とも透過後の見た目は白で統一(他エンジンと同じ)
+    setGlobeTransparent(!!baseModeRow?.mode, docBackgroundHex ?? 0xffffff);
+    // 透過時の下敷きは他エンジンと揃えて白(既定)。background: 行で任意色へ変更可
+    const mapEl = document.getElementById("map");
+    if (mapEl) mapEl.style.background = doc.background || "#fff";
+  } catch (_) {}
   panel.basemapSelect.replaceChildren();
+  // 「ベースマップなし」を明示選択できるよう先頭に置く(他エンジンとのパリティ)
+  {
+    const noneOpt = document.createElement("option");
+    noneOpt.value = "-1"; noneOpt.textContent = "ベースマップなし";
+    panel.basemapSelect.append(noneOpt);
+  }
   appendGroupedTitleOptions(panel.basemapSelect, baseDocs, (b, title, i) => {
     const opt = document.createElement("option"); opt.value = String(i); opt.textContent = title; return opt;
   });
@@ -1143,7 +1513,10 @@ async function renderDoc(doc, baseUrl, presetBase) {
     }
   }
   if (!noneSel && initIdx < 0) initIdx = Math.max(0, baseDocs.findIndex(b => b.visible !== false));
-  if (initIdx >= 0) panel.basemapSelect.value = String(initIdx);
+  // base: 行の | none / | transparent モードは初期でベースマップを張らない
+  // (Cesium 版の parsedBaseMode → selectedBasemap=null と同じ規則)
+  if (baseModeRow) initIdx = -1;
+  panel.basemapSelect.value = String(noneSel ? -1 : initIdx);
   syncBasemapList(panel.basemapSelect);
   await applyBasemap(noneSel ? -1 : initIdx);
 
@@ -1443,11 +1816,11 @@ async function applyKascView(view) {
 }
 
 // view base=/portal data-base= 共通: タイトル/葉名で照合。
-// none・transparent 系はベースマップなし
-// (Navara には地表透明モードが無いため transparent も非表示として扱う)
+// none=ベースマップなし、transparent=地表透明(globe.transparent。Cesium 版と同じ)
 async function applyViewBase(rawName, logPrefix = "data-base") {
   const name = String(rawName || "").trim();
-  const isNone = /^(none|off|なし|ベースマップなし|transparent|hide|透明)$/i.test(name);
+  const isTransparent = /^(transparent|hide|透明)$/i.test(name);
+  const isNone = isTransparent || /^(none|off|なし|ベースマップなし)$/i.test(name);
   let idx = -1;
   if (!isNone) {
     const n = normKascTitle(name);
@@ -1459,6 +1832,7 @@ async function applyViewBase(rawName, logPrefix = "data-base") {
     if (idx < 0) console.warn(`${logPrefix}: base= のベースマップが見つかりません`, name);
   }
   if (isNone || idx >= 0) {
+    setGlobeTransparent(isNone, docBackgroundHex ?? 0xffffff);
     if (panel.basemapSelect) panel.basemapSelect.value = String(idx);
     await applyBasemap(idx);
     syncBasemapList(panel.basemapSelect);
@@ -1658,7 +2032,7 @@ async function saveToDataDir(name, content) {
       try {
         await saveToDataDir(file.name, file);
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           panel.inspector.value = panel.inspector.value.replace(/\s*$/, "") + `\n${type}:${title} | DATA/${file.name}\n`;
@@ -1722,6 +2096,29 @@ configureFollow({
   try {
     view.camera.on("move", () => { syncCamFromView(); applyScaleVis(); window.kasugaiApi?.emit("camera-changed", window.kasugaiApi.getCamera()); });
     view.camera.on("moveend", () => { syncCamFromView(); if (urlViewConsumed) writeUrlView(urlViewFromCam(), lastKascUrl ? undefined : currentProjectId); liveNotifyCamera(); });
+    // @map_scale/ルール別縮尺を含む QML レイヤは縮尺でマテリアルが変わるため、
+    // moveend 後に現在縮尺で再評価する(Navara はレイヤ単位マテリアルのため再マウント)
+    let qmlScaleTimer = null;
+    let lastQmlScaleDenom = null;
+    view.camera.on("moveend", () => {
+      if (!layerEntries.some(e => e.item?._qml?.scaleDependent)) return;
+      clearTimeout(qmlScaleTimer);
+      qmlScaleTimer = setTimeout(() => {
+        const denom = lastCam.height / SCALE_VIS_DIST_K;
+        if (!(denom > 0)) return;
+        if (lastQmlScaleDenom && Math.abs(denom / lastQmlScaleDenom - 1) < 0.01) return;
+        const first = lastQmlScaleDenom == null;
+        lastQmlScaleDenom = denom;
+        if (first) return; // 初回はレイヤ読込時に現縮尺で評価済み
+        for (const e of layerEntries) {
+          if (!e.item?._qml?.scaleDependent || !e.layer) continue;
+          try { e.layer.delete(); } catch (_) {}
+          try { e.src?.delete(); } catch (_) {}
+          e.layer = e.src = e.desc = null;
+          void addKascLayer(e.item, lastBaseUrl).then(r => { if (r) { e.src = r.src; e.layer = r.layer; e.desc = r.desc; } });
+        }
+      }, 400);
+    });
   } catch (_) {}
 
   await loadProject();
@@ -1757,6 +2154,14 @@ configureFollow({
     if (panel.inspector) panel.inspector.value = rewriteKascVisibility(panel.inspector.value, show);
     // QGIS ライブ連携: テーマ適用を QGIS プロジェクトへ書き戻す
     liveWritebackEntries(layerEntries, { theme: theme?.name });
+  });
+
+  // レイヤ一覧: 全グループの一括展開/折りたたみ
+  $("#layer-expand-all")?.addEventListener("click", () => {
+    setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, true);
+  });
+  $("#layer-collapse-all")?.addEventListener("click", () => {
+    setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, false);
   });
   $("#apply-inspector")?.addEventListener("click", () => {
     applyInspectorText(panel.inspector.value);
@@ -1877,6 +2282,10 @@ configureFollow({
     },
     openPortal() { openPortal(); return portalAvailable(); },
     closePortal() { closePortal(); return true; },
+    // Navara 診断情報（メモリ/キャッシュ統計）を AI・検証スクリプトから取得可能にする
+    getMemoryStats() {
+      try { return view.memoryStats?.() ?? null; } catch (_) { return null; }
+    },
   });
 
   // 🏠ボタン・「地図を開く」・Esc・「ビュー解除」の配線(DOM は静的マークアップ)
@@ -1900,17 +2309,22 @@ window.addEventListener("hashchange", applyUrlView);
 installLocalCrsUI({ anchor: document.querySelector("#coords-datum") });
 
 // ミニマップ（表示>一般トグル。Navara は表示範囲矩形が取れないため中心マーカー表示）
-// ---- ツール（計測・標高断面・見通しは API 専用、エクスポートはパネル操作）----
-// Navara はピッキング未対応のため対話描画は無し。API(measure*/elevationProfile/
-// lineOfSight)の結果は色別の geojson ベクターレイヤーとして重ねる
+// ---- ツール（計測・選択/集計・作図・標高断面・見通し + エクスポート）----
+// 結果は色別の geojson ベクターレイヤーとして重ねる。text 付き地物
+// (区間ラベル・遮蔽点)は text マテリアルで文字表示する
 const navaraToolLayers = new Map(); // color → {src, layer}
-function navaraToolUpdate(fc) {
+let navaraToolLabelLayer = null;    // {src, layer} ラベル専用レイヤ
+const navaraToolKindColor = k => k === "los-ok" ? "#32cd32"
+  : (k === "los-bad" || k === "los-block") ? "#ff0000"
+  : k === "hover" ? "#2288ff" : "#ffff00";
+async function navaraToolUpdate(fc) {
   const groups = {};
+  const labelFeats = [];
   for (const f of fc?.features || []) {
     const k = f.properties?.kind;
     if (k === "grat" || k === "grat-label") continue;
-    const color = f.properties?.color
-      || (k === "los-ok" ? "#32cd32" : (k === "los-bad" || k === "los-block") ? "#ff0000" : "#ffff00");
+    if (f.properties?.text != null && f.properties?.text !== "") { labelFeats.push(f); continue; }
+    const color = f.properties?.color || navaraToolKindColor(k);
     (groups[color] ||= []).push(f);
   }
   for (const [, cur] of navaraToolLayers) {
@@ -1927,20 +2341,108 @@ function navaraToolUpdate(fc) {
       point: { color: css2hex(color), clampToGround: true, opacity: 1 } });
     navaraToolLayers.set(color, { src, layer });
   }
+  // 計測ラベル・遮蔽点など text 付き地物は text マテリアルで表示
+  try { navaraToolLabelLayer?.layer?.delete(); } catch (_) {}
+  try { navaraToolLabelLayer?.src?.delete(); } catch (_) {}
+  navaraToolLabelLayer = null;
+  if (labelFeats.length) {
+    const fam = await qmlLabelFont("Noto Sans JP", false);
+    if (fam) {
+      const src = view.addSource({ type: "geojson", data: { type: "FeatureCollection", features: labelFeats }, tiled: false });
+      const layer = view.addLayer({ type: "vector", source: src,
+        text: { font: fam, size: 14, sizeInMeters: false, color: 0x222222,
+          outlineColor: 0xffffff, outlineWidth: 42, transparent: true,
+          clampToGround: false, textFacing: "upright", declutter: false } });
+      const applyText = ({ evaluator }) => {
+        try {
+          evaluator.evaluate(info => {
+            const p = info?.properties || {};
+            return p.text != null ? { text: String(p.text), show: true } : { show: false };
+          });
+        } catch (_) {}
+      };
+      layer.on("featureCreated", applyText);
+      layer.on("featureUpdated", applyText);
+      navaraToolLabelLayer = { src, layer };
+    }
+  }
 }
 const geoTools = initGeoTools2d({
-  sections: { measure: false, spatial: false, draw: false, profile: false, los: false, export: true, general: false },
-  overlay: { update: navaraToolUpdate },
+  sections: { measure: true, spatial: true, draw: true, profile: true, los: true, export: true, general: false },
+  overlay: { update: fc => { void navaraToolUpdate(fc); } },
   graticuleOverlay: { update: () => {} },
+  setCursor: c => { try { view.canvas.style.cursor = c; } catch (_) {} },
+  // 地形ソースがある場合は Navara の最詳細タイル標高を使う。
+  // 無い/失敗時は geo-tools 側が地理院標高 API へフォールバックする
+  sampleTerrain: async lnglats => {
+    if (!terrainSrc) return null;
+    try {
+      const r = await view.sampleTerrainMostDetailed(terrainSrc,
+        lnglats.map(p => ({ lng: p.lng, lat: p.lat })));
+      return (r || []).map(s => Number.isFinite(s?.height) ? s.height : null);
+    } catch (_) { return null; }
+  },
   getOrderedLayerItems: () => layerEntries.map((e, i) => (e.item.id ||= String(i), e.item)),
   isVectorLayerItem: item => !!item && VECTOR_TYPES.has(item.type),
   isQueryLayerItem: () => false,
   getLayerGeoJson: id => layerEntries.find(e => e.item.id === id)?.item._geojson || null,
 });
 
+// ポインタ座標(ECEF) → 地理座標。view の MapPointerEvent.map を変換する
+const pointerToLL = ev => {
+  try {
+    const m = ev?.map;
+    if (!m) return null;
+    const g = vector3ToGeodetic({ x: m.x, y: m.y, z: m.z });
+    return Number.isFinite(g?.lng) && Number.isFinite(g?.lat) ? { lng: g.lng, lat: g.lat } : null;
+  } catch (_) { return null; }
+};
+
+// ツールモードがクリックを消費した場合、同じジェスチャの featureClick を
+// 属性ピックに使わないようフラグで抑止する(click→featureClick の順で発火)
+let _toolClickHandled = false;
+try {
+  view.on("click", ev => {
+    const ll = pointerToLL(ev);
+    if (ll && geoTools.handleClick(ll)) _toolClickHandled = true;
+  });
+  view.on("pointermove", ev => {
+    const ll = pointerToLL(ev);
+    if (ll) geoTools.handleMouseMove(ll);
+  });
+  view.canvas?.addEventListener("dblclick", () => { geoTools.handleDoubleClick(); });
+  // 地物クリック → 属性タブを自動で開いて属性を表示(他エンジンと同じ)
+  view.on("featureClick", info => {
+    if (_toolClickHandled || geoTools.isActive()) { _toolClickHandled = false; return; }
+    if (!info) return;
+    const entry = layerEntries.find(e =>
+      e.layer && (e.layer.id === info.layerId || String(e.layer.id) === String(info.layerId)));
+    const records = [{
+      title: entry ? (entry.item.title || entry.item.url) : null,
+      entries: attrEntriesFromProps(info.properties || {}),
+      layerId: entry ? String(layerEntries.indexOf(entry)) : null,
+      feature: null, flyable: false,
+    }];
+    // QGIS ライブ連携: クリック地物を QGIS 側の選択へ逆通知
+    if (records[0]?.title) {
+      try {
+        const fid = info.properties?.id ?? info.properties?.fid;
+        liveNotifySelection({
+          layer: records[0].title,
+          longitude: lastCam.lng, latitude: lastCam.lat,
+          ...(Number.isFinite(Number(fid)) ? { ids: [Number(fid)] } : {}),
+        });
+      } catch (_) { /* 逆通知失敗は無視 */ }
+    }
+    window.switchPanelTab?.("attr");
+    renderAttrContent(panel.attrContent, records);
+  });
+} catch (_) { /* イベント非対応環境ではピック無効 */ }
+
 const minimap = createMinimap({
   container: "#minimap",
   checkbox: "#display-minimap",
+  button: "#basemap-minimap",
   tileUrl: () => baseDocs[currentBasemapIdx]?.url || "",
   // 直下視近似: 高さ→表示ズーム換算で主画面の footprint を求め、
   // 共有ミニマップの広域コンテキスト経路に他エンジンと同じく乗せる

@@ -1,0 +1,23 @@
+import { chromium } from "../../tools/hub-test/node_modules/playwright-core/index.mjs";
+const browser = await chromium.launch({ channel: "chrome", headless: true }).catch(() => chromium.launch({ channel: "msedge", headless: true }));
+const page = await browser.newPage();
+const errors = [];
+page.on("pageerror", e => errors.push(String(e)));
+await page.goto("http://127.0.0.1:8510/maplibre/?project=ProjectFiles", { waitUntil: "domcontentloaded" });
+await page.waitForTimeout(9000);
+const r = await page.evaluate(async () => {
+  const m = await import("/shared/qml-style.js");
+  const out = {};
+  const expr = "if( is_layer_visible('都道府県名'), \"N03_001\" ,'') || \nif( is_layer_visible('市区町村名'),\"N03_004\",'')";
+  const props = { N03_001: "東京都", N03_004: "世田谷区" };
+  out.full = m.evalQgisExpression(expr, props);
+  out.vis1 = m.evalQgisExpression("is_layer_visible('都道府県名')", props);
+  out.vis2 = m.evalQgisExpression("is_layer_visible('市区町村名')", props);
+  out.part1 = m.evalQgisExpression("if( is_layer_visible('都道府県名'), \"N03_001\" ,'')", props);
+  out.part2 = m.evalQgisExpression("if( is_layer_visible('市区町村名'),\"N03_004\",'')", props);
+  const api = window.kasugaiApi;
+  out.layers = api?.listLayers?.().map(l => l.name ?? l.title ?? l);
+  return out;
+});
+console.log(JSON.stringify(r, null, 1), errors.slice(0,3));
+await browser.close();

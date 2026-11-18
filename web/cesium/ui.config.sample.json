@@ -50,6 +50,17 @@
     // "effect-terrain-lighting": true,  // 地形照明
     // "effect-translucency": false,     // 地下透過
     // "underground-dive-toggle": true,  // 地下移動
+    // "effect-ground-atmosphere": true, // 地表大気
+    // "effect-fxaa": true,              // FXAA(エイリアス除去)
+    // "effect-ao": true,                // 環境光遮蔽(AO)
+    // "effect-bloom": true,             // ブルーム
+    // "effect-bw": false,               // モノクロ
+    // "effect-edge": false,             // エッジ検出
+    // "effect-nightvision": false,      // 暗視
+    // "effect-lensflare": false,        // レンズフレア
+    // "effect-dof": false,              // 被写界深度
+    // "effect-tonemap": "ACES",         // トーンマップ(PBR_NEUTRAL/ACES/FILMIC/REINHARD/MODIFIED_REINHARD)
+    // "effect-globe-material": "ElevationContour", // 地表マテリアル(Water/ElevationContour/...)
     // "cesium-sse": 16,                 // Maximum Screen Space Error
     // "cesium-max-memory": 2048,        // Maximum Memory Usage (MB)
     // "cesium-dynamic-sse": true,

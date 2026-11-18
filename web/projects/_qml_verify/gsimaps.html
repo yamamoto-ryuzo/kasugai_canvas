@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KASUGAI Canvas — gsimaps</title>
+<style>
+  body { font-family: system-ui,"Segoe UI","Yu Gothic",sans-serif; margin: 28px; line-height: 1.65; color: #1d2b35; }
+  code { background: #eef2f5; padding: 1px 5px; border-radius: 4px; }
+  #tried a { color: #2c5ea8; }
+  .note { color: #52636d; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<h1 style="font-size:1.15em">KASUGAI Canvas — gsimaps</h1>
+<p id="status">エンジンを探しています…</p>
+<div id="notfound" hidden>
+  <p>エンジン（<code>web/</code> の中身）が見つかりませんでした。<br />
+  このフォルダ（<code>kasugai_canvas.kasc</code>・<code>DATA/</code>）とエンジンを同じ Web サーバーへアップしてください。確認した場所:</p>
+  <ul id="tried"></ul>
+  <p class="note">エンジンを別の場所に置く場合は、この HTML 内の <code>CANVAS_BASE</code> にその URL（末尾 <code>/</code> 付き）を設定してください。</p>
+</div>
+<noscript><p>このページには JavaScript が必要です。</p></noscript>
+<script>
+(function () {
+  "use strict";
+  // Location of the KASUGAI Canvas engine (contents of web/).
+  // Point to the directory containing cesium/ maplibre/ openlayers/
+  // leaflet/ gsimaps/ navara/ shared/ with a trailing /
+  // (e.g. "https://example.com/canvas/").
+  // When left empty, gsimaps/index.html is probed under ./ ../ ../../ /
+  var CANVAS_BASE = "";
+  // URL of the hosted engine (trailing /, e.g. "https://example.com/canvas/").
+  // When set, file:// launches offer an "open in hosted engine" option
+  // (?kasc=local mode where the browser reads a local folder by itself)
+  var HOSTED_BASE = "https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/";
+  var ENGINE = "gsimaps";
+  var KASC = "kasugai_canvas.kasc";
+  var kascUrl = new URL(KASC, location.href).href;
+  var ENGINES = ["cesium", "maplibre", "openlayers", "leaflet", "gsimaps", "navara"];
+  function engineBase(base) {
+    // If the base ends with an engine directory, replace it; otherwise append ENGINE
+    var u = new URL(base, location.href);
+    u.search = ""; u.hash = "";
+    var seg = u.pathname.replace(/[/]+$/, "").split("/").pop().toLowerCase();
+    if (ENGINES.indexOf(seg) >= 0) {
+      u.pathname = u.pathname.replace(/[^/]+[/]?$/, ENGINE + "/");
+      return u.href;
+    }
+    return new URL(ENGINE + "/", u).href;
+  }
+  function target(base) {
+    return engineBase(base) + "?kasc=" + encodeURIComponent(kascUrl);
+  }
+  // On file://, register the .kasc with the local KASUGAI Canvas
+  // (127.0.0.1:8510) as an external project and forward to
+  // /<engine>/?project=<id>. Browsers cannot fetch local files from
+  // file:// pages, so no web probing is done (CANVAS_BASE wins if set)
+  if (!CANVAS_BASE && location.protocol === "file:") {
+    var kascPath = decodeURIComponent(new URL(KASC, location.href).pathname)
+      .replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g, "\\");
+    function localHelp() {
+      document.getElementById("status").innerHTML = "ローカルの KASUGAI Canvas（<a href='http://127.0.0.1:8510/'>127.0.0.1:8510</a>）に接続できません。アプリを起動してからこのページを再読み込みしてください。（外部 WEB で使う場合は、このフォルダとエンジンを同じサーバーへアップしてください）";
+      // "Open in hosted engine": works even without HOSTED_BASE preset.
+      // The input is kept in localStorage (shared by all launchers on file://)
+      var row = document.createElement("div");
+      row.style.cssText = "margin-top:10px";
+      var inp = document.createElement("input");
+      inp.placeholder = "ホスト版URL（例: https://example.com/canvas/）";
+      inp.style.cssText = "width:65%;padding:4px";
+      try {
+        inp.value = HOSTED_BASE || localStorage.getItem("kasugai_hosted_base") || "";
+      } catch (e) { inp.value = HOSTED_BASE; }
+      var go = document.createElement("button");
+      go.textContent = "ホスト版で開く";
+      go.style.cssText = "padding:4px 10px;margin-left:4px";
+      go.onclick = function () {
+        var base = inp.value.trim();
+        if (!base) return;
+        if (!/[\/]$/.test(base)) base += "/";
+        try { localStorage.setItem("kasugai_hosted_base", base); } catch (e) {}
+        // Pass this folder name as dirhint so the hosted UI can guide selection
+        var dirName = "";
+        try {
+          dirName = decodeURIComponent(location.pathname.replace(/[/][^/]*$/, "")
+            .split("/").filter(Boolean).pop() || "");
+        } catch (e) {}
+        location.href = engineBase(base) + "?kasc=local" +
+          (dirName ? "&dirhint=" + encodeURIComponent(dirName) : "");
+      };
+      row.appendChild(inp); row.appendChild(go);
+      var hint = document.createElement("div");
+      hint.style.cssText = "font-size:11px;color:#667;margin-top:4px";
+      hint.textContent = "ブラウザのみで動作します（このフォルダを選択 → ?kasc=local）";
+      row.appendChild(hint);
+      document.getElementById("status").appendChild(row);
+    }
+    fetch("http://127.0.0.1:8510/api/projects/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: kascPath })
+    }).then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (res) {
+        if (res && res.id) {
+          location.replace("http://127.0.0.1:8510/" + ENGINE + "/?project=" + encodeURIComponent(res.id));
+        } else { localHelp(); }
+      }).catch(localHelp);
+    return;
+  }
+  if (CANVAS_BASE) {
+    location.replace(target(new URL(CANVAS_BASE, location.href)));
+    return;
+  }
+  var bases = ["./", "../", "../../", "/"];
+  var i = 0;
+  function next() {
+    if (i >= bases.length) {
+      document.getElementById("status").hidden = true;
+      document.getElementById("notfound").hidden = false;
+      // On http(s) delivery (e.g. geo_webview :8089) the .kasc already
+      // lives on this server, so an absolute URL can forward straight
+      // to the hosted engine
+      if (HOSTED_BASE && location.protocol.indexOf("http") === 0) {
+        var hp = document.createElement("p");
+        var ha = document.createElement("a");
+        ha.href = target(HOSTED_BASE);
+        ha.textContent = "ホスト版で開く";
+        hp.appendChild(ha);
+        document.getElementById("notfound").appendChild(hp);
+      }
+      return;
+    }
+    var base = new URL(bases[i], location.href); i += 1;
+    var probe = new URL(ENGINE + "/index.html", base).href;
+    var li = document.createElement("li");
+    var a = document.createElement("a");
+    a.href = target(base); a.textContent = probe;
+    li.appendChild(a);
+    document.getElementById("tried").appendChild(li);
+    fetch(probe, { method: "HEAD", cache: "no-store" })
+      .then(function (r) { if (r.ok) location.replace(target(base)); else next(); })
+      .catch(function () { next(); });
+  }
+  next();
+})();
+</script>
+</body>
+</html>

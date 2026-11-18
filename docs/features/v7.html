@@ -46,7 +46,7 @@
         </div>
         <div class="feature-card">
           <h3>🎨 QML スタイル再現</h3>
-          <p>レイヤースタイルを <code>DATA/*.qml</code> として出力し <code>style=</code> で参照。<code>&lt;renderer-v2&gt;</code>（単一・分類・段階・ルール）・シンボルレイヤ・データ定義・ラベル・縮尺ルールをコンパイルして全エンジンで描画。凡例スウォッチ＋条件別表示切替も QML 由来</p>
+          <p>レイヤースタイルを <code>DATA/*.qml</code> として出力し <code>style=</code> で参照。<code>&lt;renderer-v2&gt;</code>（単一・分類・段階・ルール）・シンボルレイヤ・データ定義・ラベル・縮尺ルールをコンパイルして全エンジンで描画。式変数 <code>@map_scale</code> を含む縮尺連動データ定義（<code>if(@map_scale&gt;=N,…)</code>）もズームで再評価される。線端トリム（<code>trim_distance_start/end</code>）はジオメトリ切断近似、破線オフセット（<code>dash_pattern_offset</code>）は OpenLayers/Leaflet で再現。凡例スウォッチ＋条件別表示切替も QML 由来</p>
         </div>
         <div class="feature-card">
           <h3>👁️ 表示状態の引継ぎ</h3>
@@ -164,11 +164,11 @@
       <tbody>
       <tr>
       <td><strong>Cesium</strong>（メイン）</td>
-      <td>最も広範に対応。entity / primitive 両経路・ドレープ（deck-drape・地形）・ラベル（配置モード/回転/背景/縮尺/上限数/コールアウト/DD）・クラスタ・heatmap.js 近似・凡例スウォッチ＋条件別表示切替。ラベル衝突回避のみ未再現</td>
+      <td>最も広範に対応。entity / primitive 両経路・ドレープ（deck-drape・地形）・ラベル（配置モード/回転/背景/縮尺/上限数/コールアウト/DD）・ラベル衝突回避（画面投影ベースの自前 declutter）・クラスタ・heatmap.js 近似・MarkerLine/HashLine 補助エンティティ・MapUnit 距離連動スケーリング・25d 押出し・凡例スウォッチ＋条件別表示切替</td>
       </tr>
       <tr>
       <td><strong>MapLibre</strong></td>
-      <td>QML → MapLibre スタイルレイヤ化＋ラベルベイク（<code>bakeQmlLabels</code>）＋ネイティブ衝突回避・配置モード別 symbol レイヤ・ヒートマップ/クラスタ</td>
+      <td>QML → MapLibre スタイルレイヤ化＋ラベルベイク（<code>bakeQmlLabels</code>）＋ネイティブ衝突回避・配置モード別 symbol レイヤ・ヒートマップ/クラスタ・MarkerLine/HashLine（<code>symbol-placement:line</code>＋<code>icon-image</code>）・RasterLine（<code>line-pattern</code>）・25d/extrude → <code>fill-extrusion</code></td>
       </tr>
       <tr>
       <td><strong>OpenLayers</strong></td>
@@ -176,11 +176,11 @@
       </tr>
       <tr>
       <td><strong>Leaflet</strong></td>
-      <td>QML → Path options＋永久 tooltip ラベル（DOM 装飾: 下線/字間/行間/背景/縦書き/回転/縮尺連動）</td>
+      <td>QML → Path options＋永久 tooltip ラベル（DOM 装飾: 下線/字間/行間/背景/縦書き/回転/縮尺連動）・ヒートマップ（leaflet.heat）/クラスタ（markercluster）も QML から自動接続</td>
       </tr>
       <tr>
       <td><strong>Navara</strong>（試験的）</td>
-      <td>代表地物のスタイルをレイヤー単位マテリアルへ（地物単位は未対応）</td>
+      <td>FeatureEvaluator で地物単位のシンボル再現（塗り/線色・線幅・透過度・<code>extrudedHeight</code>）。マーカーは canvas 画像→billboard の地物別 <code>image</code>、inverted マスク・25d 押出しにも対応。<code>&lt;labeling&gt;</code> は text マテリアル＋地物別ラベル評価</td>
       </tr>
       <tr>
       <td><strong>GSI Maps</strong>（調整中）</td>

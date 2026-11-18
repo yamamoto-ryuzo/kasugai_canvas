@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <wpt lat="35.681" lon="139.767"><name>WP1</name></wpt>
+  <wpt lat="35.685" lon="139.772"><name>WP2</name></wpt>
+  <trk><name>test track</name><trkseg>
+    <trkpt lat="35.681" lon="139.767"/><trkpt lat="35.685" lon="139.772"/><trkpt lat="35.689" lon="139.768"/>
+  </trkseg></trk>
+</gpx>

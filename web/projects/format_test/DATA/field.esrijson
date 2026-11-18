@@ -1,0 +1,1 @@
+{"features":[{"attributes":{"name":"esri-pt","val":5},"geometry":{"x":139.765,"y":35.680,"spatialReference":{"wkid":4326}}},{"attributes":{"name":"esri-pt2","val":8},"geometry":{"x":139.770,"y":35.684,"spatialReference":{"wkid":4326}}},{"attributes":{"name":"esri-line"},"geometry":{"paths":[[[139.762,35.676],[139.772,35.686]]]}}]}

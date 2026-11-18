@@ -1,0 +1,5 @@
+# QML ラベル再現の検証用プロジェクト（base=none で背景なし・ラベルのみ浮き出す）
+base: 背景なし | none
+cam:QGIS|35.682|139.762|h=3500|p=-90
+geojson: ポイントラベル | DATA/pts.geojson | on | style=DATA/pts.qml
+geojson: ポリゴンラベル | DATA/poly.geojson | on | style=DATA/poly.qml

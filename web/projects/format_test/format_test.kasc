@@ -1,0 +1,12 @@
+cam:東京|35.688|139.770|h=2500|p=-45
+geojsonl:行区切り|DATA/lines.geojsonl
+gpx:GPX|DATA/track.gpx
+topojson:TopoJSON|DATA/area.topojson
+kml:KML|DATA/test.kml
+czml:CZML|DATA/sat.czml
+esrijson:EsriJSON|DATA/field.esrijson
+wkt:WKT|DATA/shapes.wkt
+wkb:WKB|DATA/pt.wkb
+igc:IGC飛行ログ|DATA/flight.igc
+polyline:エンコードポリライン|DATA/line.polyline
+gml:GML|DATA/area.gml

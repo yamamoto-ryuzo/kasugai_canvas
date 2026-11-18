@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"trim"},"geometry":{"type":"LineString","coordinates":[[139.55,35.62],[139.85,35.62]]}},
+{"type":"Feature","properties":{"name":"trim_v"},"geometry":{"type":"LineString","coordinates":[[139.60,35.56],[139.70,35.60],[139.80,35.56]]}}
+]}

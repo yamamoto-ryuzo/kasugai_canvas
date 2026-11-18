@@ -1,0 +1,5 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"本栖湖"},"geometry":{"type":"Point","coordinates":[138.585,35.465]}},
+{"type":"Feature","properties":{"name":"精進湖"},"geometry":{"type":"Point","coordinates":[138.610,35.494]}},
+{"type":"Feature","properties":{"name":"z付き河口湖"},"geometry":{"type":"Point","coordinates":[138.740,35.517,0]}}
+]}

@@ -1,0 +1,5 @@
+# QML拡張の検証（extrude= → fill-extrusion / InterpolatedLine → line-gradient）
+base: 背景なし | none
+cam:QGIS|35.688|139.792|h=2500|p=-45
+geojson: 立ち上げ街区 | DATA/block.geojson | on | extrude=80
+geojson: 補間ライン | DATA/road.geojson | on | style=DATA/road_igrad.qml

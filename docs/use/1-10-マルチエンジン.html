@@ -8,6 +8,7 @@
   <script src="../nav.js" defer></script>
   <style>
     .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+    .fmt-native { font-size: 2em; line-height: 1; vertical-align: -0.1em; }
   </style>
 </head>
 <body>
@@ -66,11 +67,58 @@
       <tr>
       <td><code>navara/</code></td>
       <td><strong>Navara</strong>（試験的・写実3D）</td>
-      <td><code>@navaramap/three</code>（Rust/WASM GIS コア + Three.js）による写実 3D プレゼンエンジン。ベクター行・ラスタ行・<code>3dtiles:</code>・<code>cam:</code>/<code>theme:</code> を再生し、大気・太陽光のフォトリアルシーンと quantized-mesh 地形を持つ。<code>wms:</code>/<code>wmts:</code>・3D Tiles ドレープは未対応（下記「Navara エンジン」節）</td>
+      <td><code>@navaramap/three</code>（Rust/WASM GIS コア + Three.js）による写実 3D プレゼンエンジン。ベクター行・ラスタ行・<code>3dtiles:</code>・<code>cam:</code>/<code>theme:</code> を再生し、大気・太陽光のフォトリアルシーンと quantized-mesh 地形を持つ。<code>wms:</code>/<code>wmts:</code> は XYZ テンプレート化の raster-tile として描画（3D Tiles ドレープは未対応・下記「Navara エンジン」節）</td>
       </tr>
       </tbody>
       </table>
       <p>各エンジンの特性比較と追加候補の評価は <a href="../library.html#地図エンジンの選定と追加候補">ライブラリ — 地図エンジンの選定と追加候補</a> を参照してください。</p>
+
+      <h3>📊 エンジン別 対応データ形式（.kasc 行タイプ）</h3>
+      <p>評価は<strong>読み込み方式と速度コスト</strong>の段階表示です：
+        <strong><span class="fmt-native">●</span></strong>＝真のネイティブ（エンジン自身の DataSource/フォーマット/ソースで直接読み込み・変換なし・最速）／
+        <strong>◎</strong>＝エンジン正規対応の変換ネイティブ（採用レンダラ連携・XYZ 正規化等、エンジン公式の経路で直接描画。データ変換は発生しない）／
+        <strong>〇</strong>＝ブラウザ内で GeoJSON 正規化して描画（読み込み時に形式デコードが1回乗るが、<strong>読み込み後の描画速度はネイティブと完全同等</strong>。WASM デコーダは初回のみ CDN から DL＋SW 永続キャッシュ）／
+        <strong>△</strong>＝変換で品質・機能が縮退する経路（ラスタライズ等。動くが忠実度が落ちる）／
+        <strong>×</strong>＝未対応（レイヤ一覧にはグレーアウト行として残る）。<br>
+        ベクター系の「〇/△」は全エンジン共通の <code>shared/vector-load.js</code> → GeoJSON パイプラインを通るため<strong>行内の記号は全エンジン同じ値</strong>になります。形式追加はこの1箇所に実装するだけで全エンジンへ自動波及します。</p>
+      <table>
+      <thead>
+      <tr>
+      <th>行タイプ（形式）</th><th>Cesium</th><th>MapLibre</th><th>OpenLayers</th><th>Leaflet</th><th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <!-- 上段: 全セル ●〜〇（どのエンジンでも安全）。下段: △/× を含む行。(DECK)=deck.gl 連携経路 -->
+      <tr><td><code>base:</code> / <code>xyz:</code> / <code>tile:</code></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td>ラスタタイル直接描画</td></tr>
+      <tr><td><code>geojson:</code> / <code>layer:</code></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td>各エンジンがネイティブ読込</td></tr>
+      <tr><td><code>wms:</code></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td>OL=TileWMS・Leaflet=L.tileLayer.wms・ML/Cesium=raster imagery のネイティブ経路（WMS パラメータをエンジンが直接解釈）</td></tr>
+      <tr><td><code>image:</code></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td><span class="fmt-native">●</span></td><td>ジオリファレンス画像オーバーレイ（bbox=/corners=）</td></tr>
+      <tr><td><code>3dtiles:</code></td><td><span class="fmt-native">●</span></td><td>◎<small>(DECK)</small></td><td>◎<small>(DECK)</small></td><td>◎<small>(DECK)</small></td><td>Cesium=ネイティブ Cesium3DTileset。MapLibre/OL/Leaflet=deck.gl Tile3DLayer 連携で無変換の直接描画（loaders.gl デコード→WebGL・LOD 走査・地形ドレープ付き。初回のみ CDN 遅延ロード）</td></tr>
+      <tr><td><code>wmts:</code></td><td>◎</td><td>◎</td><td>◎</td><td>◎</td><td>RESTful WMTS を XYZ タイルテンプレートへ正規化して描画（URL 変換のみ・タイル自体はネイティブ描画。KVP/多次元スタイルは非対応）</td></tr>
+      <!-- 以下は全エンジン共通の GeoJSON 正規化経路（shared/vector-load.js）-->
+      <tr><td><code>geoparquet:</code> / <code>flatgeobuf:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>ブラウザ内バイナリデコード（hyparquet / fgb 公式リーダー・遅延ロード）</td></tr>
+      <tr><td><code>csv:</code> / <code>tsv:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>lon/lat 列自動判定で点化</td></tr>
+      <tr><td><code>kml:</code> / <code>kmz:</code></td><td><span class="fmt-native">●</span></td><td>〇</td><td>〇</td><td>〇</td><td>Ces=KmlDataSource ネイティブ（KML の &lt;Style&gt;/バルーン・KMZ を無変換で保持。style=/heat= 等の指定がある行は GeoJSON 経路）。他は @tmcw/togeojson＋KMZ は jszip 展開</td></tr>
+      <tr><td><code>gpx:</code></td><td><span class="fmt-native">●</span></td><td>〇</td><td>〇</td><td>〇</td><td>Ces=GpxDataSource ネイティブ。他は @tmcw/togeojson（trk→LineString・wpt→Point）</td></tr>
+      <tr><td><code>czml:</code></td><td><span class="fmt-native">●</span></td><td>〇</td><td>〇</td><td>〇</td><td>Ces=CzmlDataSource ネイティブ（<strong>時系列アニメーション対応</strong>・viewer.clock を ds.clock へ同期）。他はパケット→GeoJSON 変換（時系列 position は軌跡 LineString 化）</td></tr>
+      <tr><td><code>topojson:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>topojson-client でトポロジー復元</td></tr>
+      <tr><td><code>esrijson:</code> / <code>arcgis:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>ArcGIS REST JSON→GeoJSON（wkid 自動補正）</td></tr>
+      <tr><td><code>geojsonl:</code> / <code>ndjson:</code> / <code>jsonl:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>行区切り GeoJSON を逐行パース</td></tr>
+      <tr><td><code>wkt:</code> / <code>wkb:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>WKT パーサ＋WKB バイナリ/hex デコーダ</td></tr>
+      <tr><td><code>igc:</code> / <code>polyline:</code> / <code>gml:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td><code>ol/format/{IGC,Polyline,WFS,GML}</code> を CDN 遅延ロードしてパース（ol 本体は使う形式の出現時のみロード）。GML は <code>axisorder=lonlat</code> で座標順入替対応</td></tr>
+      <tr><td><code>wfs:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>GetFeature GET（CORS 要）。JSON 応答優先・XML/GML 応答は ol/format へ自動フォールバック</td></tr>
+      <tr><td><code>shp:</code> / <code>shapefile:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>shpjs（zip 一式・sidecar 自動取得・.prj 再投影）</td></tr>
+      <tr><td><code>gpkg:</code> / <code>geopackage:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>sql.js（SQLite WASM・Worker・~2MB）でデコード。<code>bbox=auto</code> 既定ON で表示範囲連動クエリなら大規模でも実用速</td></tr>
+      <tr><td><code>duckdb:</code> / <code>sql:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>DuckDB-WASM を CDN 遅延ロード＋<code>sw-duckdb.js</code> で永続キャッシュ（初回のみ DL）。初期化後はカラムナ走査＋httpfs の Range 読みで高速。クエリ系＝表示範囲のみ描画・検索は全件</td></tr>
+      <tr><td><code>ogrsql:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>ブラウザ内 OGR SQL 実装（shared/ogr-sql.js）。解決不能時はローカル QGIS Live の GDAL へフォールバック</td></tr>
+      <!-- 以下: × を含む行（エンジンを選ぶ形式）-->
+      <tr><td><code>mvt:</code> / <code>pmtiles:</code></td><td>△</td><td><span class="fmt-native">●</span></td><td>×</td><td>×</td><td>MapLibre=ネイティブ vector ソース＋pmtiles プロトコル。Cesium=デコード→canvas ラスタライズ ImageryLayer（拡大は向かない）</td></tr>
+      <tr><td><code>geotiff:</code></td><td>〇</td><td>×</td><td>×</td><td>×</td><td>Cesium のみ geotiff.js でデコード（タイル分割/オーバーレイ・疑似カラー・陰影対応）</td></tr>
+      <tr><td><code>model:</code></td><td><span class="fmt-native">●</span></td><td>×</td><td>×</td><td>×</td><td>glTF/GLB の配置（lon=/lat=）</td></tr>
+      </tbody>
+      </table>
+      <p><small>補足: 対象は Cesium / MapLibre / OpenLayers / Leaflet の4エンジン（Navara・GSI Maps は試験的/調整中のため対象外 — ともに shared GeoJSON 正規化経路の〇相当でベクター形式を描画）。<code>(DECK)</code> 表記は deck.gl 連携経路で、遅延ロードされるのは <code>3dtiles:</code> 行（Tile3DLayer）と、3D Tiles ドレープ設定が ON のときのベクター/ラスタ地表貼付けコピー（GeoJsonLayer）のみです。ベクターの主描画は全エンジンでネイティブ経路（ML＝geojson ソース・OL＝VectorLayer・Leaflet＝L.geoJSON・Cesium＝GeoJsonDataSource）であり、+DECK にはなりません。<br>
+      「×」の行は起動エンジンでは描画されませんが、レイヤ一覧には未対応グレー行として残るため、Cesium 等へ切替れば同じ .kasc でそのまま表示できます。<code>cluster=on</code>/<code>heat=on</code> と <code>style=QML</code> はベクター行共通オプション（4エンジン全対応）。</small></p>
 
       <h3>🔀 エンジン選択と切替</h3>
       <ul>
@@ -176,10 +224,11 @@ sequenceDiagram
       <h3>🗺️ 2D プレイヤー（MapLibre / OpenLayers / Leaflet）</h3>
       <p>3 エンジンはほぼ同機能の .kasc プレイヤーで、左パネルの 7 タブ（レイヤ・凡例・検索・属性・ツール・カメラ・情報）＋表示・インスペクター・AI の各タブを持ちます。</p>
       <ul>
-        <li><strong>対応行タイプ</strong>: 全ベクター行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>tsv:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>kml:</code>/<code>kmz:</code>/<code>wfs:</code>/<code>shp:</code>）、画像オーバーレイ（<code>image:</code>・2D では外接矩形化）、ラスタ行（<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code>）、<code>cam:</code>/<code>legend:</code>/<code>info:</code>/<code>theme:</code>/<code>3dtiles:</code>/<code>fly_geojson:</code>。ベクター行の <code>cluster=on</code>/<code>heat=on</code>（点クラスタ・ヒートマップ）も対応。MapLibre はさらに <code>mvt:</code>（MVT ベクトルタイル・TileJSON 対応）と <code>pmtiles:</code>（単一ファイルを Range リクエストで読む・<code>pmtiles</code> ライブラリは必要時のみ CDN 遅延ロード）をネイティブの vector ソースとして読め、Cesium 側もデコード→canvas ラスタライズした ImageryLayer として表示できます。<code>3dtiles:</code> は deck.gl Tile3DLayer を<strong>含む .kasc のときだけ CDN から遅延ロード</strong>し、軽量プレイヤーを維持します。<code>fly_geojson:</code> はフライパス（カメラ巡回）として AI ツールから再生でき、レイヤーの絞り込み条件は行の ⏷ ボタンで対話的に変更できます（Cesium は全ベクター型で SQL ダイアログ、他エンジンはクエリ系のみ）</li>
+        <li><strong>対応行タイプ</strong>: 全ベクター行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>tsv:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>/<code>kml:</code>/<code>kmz:</code>/<code>wfs:</code>/<code>shp:</code>/<code>gpx:</code>/<code>czml:</code>/<code>topojson:</code>/<code>esrijson:</code>/<code>arcgis:</code>/<code>geojsonl:</code>/<code>ndjson:</code>/<code>jsonl:</code>/<code>wkt:</code>/<code>wkb:</code>/<code>igc:</code>/<code>polyline:</code>/<code>gml:</code> — 全件読み込み系は共通の <code>shared/vector-load.js</code> で GeoJSON 正規化）、画像オーバーレイ（<code>image:</code>・2D では外接矩形化）、ラスタ行（<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code>）、<code>cam:</code>/<code>legend:</code>/<code>info:</code>/<code>theme:</code>/<code>3dtiles:</code>/<code>fly_geojson:</code>。ベクター行の <code>cluster=on</code>/<code>heat=on</code>（点クラスタ・ヒートマップ）も対応。MapLibre はさらに <code>mvt:</code>（MVT ベクトルタイル・TileJSON 対応）と <code>pmtiles:</code>（単一ファイルを Range リクエストで読む・<code>pmtiles</code> ライブラリは必要時のみ CDN 遅延ロード）をネイティブの vector ソースとして読め、Cesium 側もデコード→canvas ラスタライズした ImageryLayer として表示できます。<code>3dtiles:</code> は deck.gl Tile3DLayer を<strong>含む .kasc のときだけ CDN から遅延ロード</strong>し、軽量プレイヤーを維持します。<code>fly_geojson:</code> はフライパス（カメラ巡回）として AI ツールから再生でき、レイヤーの絞り込み条件は行の ⏷ ボタンで対話的に変更できます（Cesium は全ベクター型で SQL ダイアログ、他エンジンはクエリ系のみ）</li>
         <li><strong>3D Tiles ドレープ</strong>: MapLibre では deck.gl TerrainExtension により 2D データを 3D Tiles 表面へ貼り付け可能（Cesium 版の「ドレープ対象地形=3D Tiles」相当）。<code>deck-ground.js</code> の自動接地で絶対高を持つタイルセットを z≈0 に補正します（<code>ground=off</code> で無効化・<code>zoffset=</code> で手動補正）</li>
         <li><strong>QML スタイル</strong>: <code>style=</code> の .qml をコンパイルして各エンジンのスタイルへ適用（単一/分類/段階/ルールレンダラ・ラベル・凡例スウォッチ）</li>
         <li><strong>属性・検索</strong>: 地物クリックの属性表示、属性値一覧ウィジェット（Σ 集計・CSV/TSV 出力）、ベクター属性検索、カメラタブ（cam: プリセット・QGIS XML 読み書き）</li>
+        <li><strong>Leaflet 固有オプション</strong>: Leaflet エンジンでは <code>.kasc</code> オプションで Leaflet ネイティブの設定を直接渡せます。タイル系（<code>xyz:</code>/<code>wms:</code>/<code>base:</code>）は <code>tms=/detectretina=/zoomoffset=/subdomains=/errortileurl=/nowrap=/bounds=/crossorigin=/referrerpolicy=</code> 等を <code>L.tileLayer</code> へパススルーし、<code>wms:</code> は <code>uppercase=/crs=EPSG4326</code> で1.3.0軸順系にも対応。ベクター系は <code>fillrule=</code>（穴あきポリゴンの厳密制御）・<code>classname=</code>・<code>smoothfactor=</code>・<code>noclip=</code>・<code>renderer=canvas</code>（<code>L.canvas</code> への切替・大量地物向け）・<code>zindexoffset=/riseonhover=/markeropacity=</code>。<code>cluster=on</code>/<code>heat=on</code> は QML の pointCluster(tolerance→maxClusterRadius)・heatmapRenderer(radius/weight_expression/maximum_value/colorramp→gradient)を引き継ぎ、<code>clusterradius=/clusterdisableat=/heatradius=/heatblur=/heatgradient=</code> 等で上書き可。地図初期値は URL パラメータ <code>?zoomsnap=/zoomdelta=/minzoom=/maxzoom=/maxbounds=/worldcopyjump=/prefercanvas=</code> で上書きできます（詳細は <a href="6-2-インスペクター.html">6-2 インスペクター</a> の行形式一覧）</li>
         <li><strong>ツールドック・ミニマップ</strong>: 計測・標高断面・見通し・緯度経度グリッド・レイヤーエクスポートは <code>geo-tools-2d.js</code> が各エンジンのオーバーレイで描画し、AI ツール（<code>measureDistance</code> 等・<code>exportLayer</code>）も共通。地図クリック系モード（計測・範囲選択・作図・断面・見通し）の開始でドロップダウンは自動的に畳まれ、ツール名＋ライブ結果＋パネル再展開/終了ボタンの1行チップだけが残る（結果が残る完了時は「結果チップ」として維持、<code>tools-dock-ux.js</code>）。ツールドックは初期は非表示で、レイヤパネルのプロジェクト行にある🧰ボタン、またはバー右端の − ボタンで開閉する（最小化時は画面上部に何も残らない・実行中ツールのチップのみ残る）。表示 → 一般のミニマップ・グリッドトグルは <code>minimap.js</code> と連携</li>
         <li><strong>AI チャット</strong>: <code>player-api.js</code> が提供する kasugaiApi アダプタ経由で共通の AI チャットを利用（公開ツールはエンジンの実装済み api に応じて絞られる）</li>
         <li><strong>レイヤ一覧の統一（全エンジン共通）</strong>: 行順は .kasc 出現順（<code>_idx</code>）で Cesium と同一。設定系の非レイヤ行（<code>cam:</code>/<code>base:</code>/<code>theme:</code>/<code>bookmark:</code>/<code>cloud:</code>/<code>plugin:</code>/<code>yahooappid:</code> 等の <code>NON_LAYER_TYPES</code>）は一覧に出さず、<code>fly_geojson:</code> はフライパスとして別処理。排他グループ（<code>//</code>）は Cesium と同じ表記 — 見出し input が <code>radio</code> ＋ <code>exclusive</code> クラス＋「排他」バッジ、メンバー行はラジオで<strong>選択済みを再クリックすると OFF</strong> にできます</li>
@@ -204,9 +253,10 @@ sequenceDiagram
       <h3>🌍 Navara エンジン（試験的）</h3>
       <p><code>@navaramap/three</code>（<a href="https://github.com/maplibre/navara" target="_blank" rel="noopener noreferrer">Navara</a> の Rust/WASM GIS コア + Three.js レンダラ）で <code>.kasc</code> を再生する<strong>試験的エンジン</strong>です。Cesium とは別系統の 3D 描画で、大気散乱・太陽・影のフォトリアルシーン（<code>addDefaultPhotorealScene</code>）と Re:Earth Terrain（quantized-mesh）の地形を備え、写実的な 3D プレゼン用途を検証する位置づけです。エンジン切替 UI では <code>[navara]</code> と括弧付きで表示され、試験的エンジンの目印になっています（ENGINE_LABELS の <code>[]</code> 表記）。</p>
       <ul>
-        <li><strong>.kasc → navara の対応</strong>: ベクター系行（<code>geojson:</code>/<code>layer:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>csv:</code>/<code>tsv:</code>/<code>duckdb:</code>/<code>sql:</code>）は shared のローダーで GeoJSON 化して geojson ソースへ流し込み（QML は代表地物のスタイルをレイヤ単位マテリアルへ反映）、<code>base:</code>/<code>xyz:</code> は raster-tile ソース、<code>3dtiles:</code> は 3d-tiles ソースとして追加。<code>cam:</code>・<code>theme:</code>・ブックマーク・<code>legend:</code>・<code>default_style:</code>・<code>fly_geojson:</code>・属性 UI・AI チャット・印刷は shared 共通です。<code>wms:</code>/<code>wmts:</code>・3D Tiles 表面ドレープ・地物単位の凡例フィルタは未対応で、非対応行はレイヤ一覧でグレーアウト表示＋情報タブへ警告します</li>
+        <li><strong>.kasc → navara の対応</strong>: ベクター系行（全ベクター形式・上記対応表の〇/△項目）は shared のローダーで GeoJSON 化して geojson ソースへ流し込み（QML は代表地物のスタイルをレイヤ単位マテリアルへ反映）、<code>mvt:</code> はネイティブの vector-tile ソース（<code>layers=</code>/<code>srclayers=</code> で sourceLayers 指定）、<code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code> は raster-tile ソース（WMS/WMTS は XYZ テンプレートへ正規化）、<code>3dtiles:</code> は 3d-tiles ソースとして追加。<code>base:</code> の <code>| none</code>/<code>| transparent</code> モード（ベースマップなし・地表透明→ <code>view.globe.transparent</code>）にも対応し、ベースマップ選択に「ベースマップなし」があります。<code>cam:</code>・<code>theme:</code>・ブックマーク・<code>legend:</code>・<code>default_style:</code>・<code>fly_geojson:</code>・属性 UI・AI チャット・印刷は shared 共通です。<code>image:</code> オーバーレイ・3D Tiles 表面ドレープ・地物単位の凡例フィルタは未対応で、非対応行はレイヤ一覧でグレーアウト表示＋情報タブへ警告します</li>
+        <li><strong>地物クリック・ツール</strong>: GPU ピッキング（<code>picking:true</code>）で地物クリック→属性タブ表示・QGIS ライブ連携の選択逆通知に対応。ツールドックの計測（距離/面積/方位）・選択/集計・作図・標高断面・見通しも利用でき、標高断面は地形ソースから <code>sampleTerrainMostDetailed</code> で標高を取得します（地形 OFF 時は地理院標高 API へフォールバック）。地形もベースマップも無い構成ではソースレスの <code>ellipsoid</code> 地形レイヤを自動で張り、clampToGround ベクターのドレープ面を確保します</li>
         <li><strong>ベンダー管理</strong>: ライブラリは npm ビルド済み dist のスナップショットを <code>vendor/navara/</code>（<code>navara/vendor.json</code> でピン）から importmap で読み込みます。Worker が <code>import.meta.url</code> 相対で生成されるため<strong>同一オリジン必須</strong>で、外部 CDN 直読みは動きません（地物メッシュ・地形・3D Tiles が停止）。<code>three</code>/<code>postprocessing</code> も peer 参照を同一インスタンスに揃えるため同梱します。vendor 実体は gsimaps と同じくどこにも置かず、<code>vendor-proxy-sw.js</code>（vendor 同一オリジン中継・SW 制御）が <code>vendor.json</code> の npm ピン先（jsdelivr/npm）から同一オリジン中継して供給します — ローカルの <code>web/vendor/</code> は不要です（オフライン開発用に実体が欲しい場合のみ <code>tools/fetch_vendor.py</code> + <code>?hosted=</code> ミラー指定）</li>
-        <li><strong>写実・地形の操作</strong>: 設定ペインの「地形（Re:Earth Terrain）」で quantized-mesh 地形を ON/OFF でき、「写実シーン（大気・太陽・雲）」・影・時刻（UTC）の調整もそこから行います。既定では描画負荷を抑える設定（影 OFF・マルチサンプリングなし）で起動します</li>
+        <li><strong>写実・地形の操作</strong>: 設定ペインの「地形（Re:Earth Terrain）」で quantized-mesh 地形を ON/OFF でき、「写実シーン（大気・太陽・雲）」・影・時刻（UTC）の調整もそこから行います。「効果」ペインでは雲・AO・雨・雪のトグルもあり（雨/雪は Navara の天候パーティクルメッシュ）、天候・雲の有効中のみ <code>view.animation</code> を ON にして連続描画します。既定では描画負荷を抑える設定（影 OFF・マルチサンプリングなし）で起動します。帰属表示は Navara 内蔵の attribution UI（<code>view.attribution</code>）へ各レイヤの <code>attr=</code> を流し込みます</li>
       </ul>
 
       <h3>📄 プロジェクト直読み（<code>?kasc=</code>）とサーバレス配信</h3>

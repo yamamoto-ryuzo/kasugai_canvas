@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+DATA/ を Leaflet で再生する
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay, kascScaleZoomRange, mergeZoomRange, applyKascGroupStates, parseKascViewValue, parseKascPortalValue, parseKascLinkValue } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay, kascScaleZoomRange, mergeZoomRange, applyKascGroupStates, setAllLayerGroupsExpanded, parseKascViewValue, parseKascPortalValue, parseKascLinkValue } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
@@ -28,12 +28,12 @@ import { initUiConfig } from "../shared/ui-config.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement } from "../shared/qml-2d.js";
-import { markerLayersToCanvas, fillPartsToTile } from "../shared/qml-style.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M } from "../shared/qml-2d.js";
+import { markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
 import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
@@ -75,12 +75,38 @@ const panel = {
   attrContent: document.querySelector("#attr-content"),
 };
 
-const map = L.map("map", {
+// URL パラメータで Leaflet Map options を上書きできる。
+// ?zoomsnap=0.5&zoomdelta=0.5&minzoom=3&maxzoom=18&maxbounds=w,s,e,n
+// &maxboundsviscosity=0..1&worldcopyjump=1&wheelpxperzoomlevel=120&prefercanvas=1
+const urlParams = new URLSearchParams(location.search);
+const mapInitOpts = {
   center: [35.681, 139.767],
   zoom: 10,
   attributionControl: false, // 出典は Cesium 版と同型の右下オーバーレイで表示
   zoomControl: false, // 拡縮ボタンは出さない（ホイール/ピンチのみ。右上ツールバーは ⌂ のみ）
-});
+};
+{
+  // 未指定(null/空)は Number(null)=0 にならないよう除外してから数値化する
+  const _num = v => {
+    if (v === null || v === undefined || String(v).trim() === "") return undefined;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  for (const [qk, ok] of [["zoomsnap", "zoomSnap"], ["zoomdelta", "zoomDelta"],
+    ["minzoom", "minZoom"], ["maxzoom", "maxZoom"], ["wheelpxperzoomlevel", "wheelPxPerZoomLevel"]]) {
+    const v = _num(urlParams.get(qk));
+    if (v !== undefined) mapInitOpts[ok] = v;
+  }
+  const mb = String(urlParams.get("maxbounds") || "").split(",").map(v => Number(v.trim()));
+  if (mb.length === 4 && mb.every(Number.isFinite)) mapInitOpts.maxBounds = [[mb[1], mb[0]], [mb[3], mb[2]]];
+  const vis = _num(urlParams.get("maxboundsviscosity"));
+  if (vis !== undefined) mapInitOpts.maxBoundsViscosity = vis;
+  if (kascOptOn(urlParams.get("worldcopyjump"))) mapInitOpts.worldCopyJump = true;
+  // ?prefercanvas=1: 全ベクターを Canvas レンダラで描画(大量地物向け。
+  // SVG <pattern> のパターン塗りは使えなくなる点に注意)
+  if (kascOptOn(urlParams.get("prefercanvas"))) mapInitOpts.preferCanvas = true;
+}
+const map = L.map("map", mapInitOpts);
 window.kascMap = map; // デバッグ/外部連携用参照（他エンジンと同じ公開範囲）
 
 // 地物(GeoJSON Feature)の範囲へ移動。属性一覧・属性タブの行クリックで共通使用
@@ -173,6 +199,14 @@ function removeManagedPanes() {
 let layerEntries = [];
 // QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
 installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+// QGIS 式変数 @map_scale → 現在ズームから縮尺分母を供給。
+// zoomend でのスタイル再適用(qmlRestyle)で縮尺連動の評価が動的に切り替わる
+setMapScaleGetter(() => {
+  const z = map.getZoom?.();
+  if (!Number.isFinite(z)) return null;
+  const lat = map.getCenter()?.lat || 0;
+  return (156543.03392 * Math.cos(lat * Math.PI / 180) / 2 ** z) / 0.00028;
+});
 
 // QML <labeling> のラベルを永久 tooltip として付ける/更新する。
 // is_layer_visible で他レイヤーの表示状態を参照し得るため、
@@ -226,32 +260,33 @@ function syncLabelZoomVisibility() {
       tipEl.classList.toggle("kasc-label-hidden", outOfRange);
       const spec = st.spec || {};
       if (!outOfRange && !(spec.allowOverlap || spec.displayAll)) {
-        candidates.push({ tipEl, prio: (spec.zIndex || 0) * 100 + (spec.priority || 0) });
+        candidates.push({ tipEl, owner: sub, prio: (spec.zIndex || 0) * 100 + (spec.priority || 0) });
       }
     });
   }
   // 衝突回避: 優先度順に矩形を確保し、重なったものを隠す
   candidates.sort((a, b) => b.prio - a.prio);
   const placed = [];
-  // obstacleType: 地物 geometry を他ラベルの障害物として事前登録する
-  // (ポリゴン/線は bounds、点はマーカーサイズの箱で近似)
+  // obstacle: 地物 geometry を他ラベルの障害物として事前登録する
+  // (ポリゴン/線は bounds、点はマーカーサイズの箱で近似。
+  // obstacle="1" かつ obstacleFactor>0 の地物のみ)
   for (const entry of layerEntries) {
     entry.layer?.eachLayer?.(sub => {
       const st = sub._kascLabel;
-      if (!st?.spec?.obstacleType) return;
+      if (!(st?.spec?.obstacle && st?.spec?.obstacleFactor > 0)) return;
       try {
         let b = null;
         if (sub.getBounds) b = sub.getBounds();
         else if (sub.getLatLng) {
           const half = 8;
           const c = map.latLngToContainerPoint(sub.getLatLng());
-          placed.push({ left: c.x - half, top: c.y - half, right: c.x + half, bottom: c.y + half });
+          placed.push({ left: c.x - half, top: c.y - half, right: c.x + half, bottom: c.y + half, owner: sub });
           return;
         }
         if (!b) return;
         const p1 = map.latLngToContainerPoint(b.getNorthWest());
         const p2 = map.latLngToContainerPoint(b.getSouthEast());
-        placed.push({ left: p1.x, top: p1.y, right: p2.x, bottom: p2.y });
+        placed.push({ left: p1.x, top: p1.y, right: p2.x, bottom: p2.y, owner: sub });
       } catch (_) {}
     });
   }
@@ -259,13 +294,28 @@ function syncLabelZoomVisibility() {
     const r = c.tipEl.getBoundingClientRect();
     // 0幅/高さの tooltip は判定対象外
     if (!r.width || !r.height) { c.tipEl.classList.toggle("kasc-label-hidden", true); continue; }
-    const hit = placed.some(b => r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top);
+    // ラベル自身の地物が登録した障害物(b.owner === c.owner)は衝突対象外。
+    // QGIS PAL と同じく自己障害物は適用しない(除くと自ポリゴン内ラベルが全滅する)
+    const hit = placed.some(b => b.owner !== c.owner && r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top);
     c.tipEl.classList.toggle("kasc-label-hidden", hit);
     if (!hit) placed.push(r);
   }
 }
 map.on("zoomend", syncLabelZoomVisibility);
 map.on("moveend", syncLabelZoomVisibility);
+// 縮尺連動(ルールの scalemin/maxdenom・@map_scale データ定義)の再評価。
+// zoomend に QML レイヤーだけスタイルを再適用する
+let _qmlRestyleTimer = null;
+map.on("zoomend", () => {
+  if (_qmlRestyleTimer) return;
+  _qmlRestyleTimer = setTimeout(() => {
+    _qmlRestyleTimer = null;
+    for (const entry of layerEntries) {
+      try { entry.item?._qmlRestyle?.(); } catch (_) {}
+    }
+    refreshQmlLabels();
+  }, 80);
+});
 function refreshQmlLabels() {
   for (const entry of layerEntries) {
     entry.layer?.eachLayer?.(sub => { if (sub._kascLabel) syncLeafletLabel(sub); });
@@ -341,6 +391,21 @@ const HIDDEN_STYLE = { opacity: 0, fillOpacity: 0, weight: 0, interactive: false
 // item._opacityFactor（レイヤー透過度スライダ）をその都度読むため、
 // setStyle(styleFn) の再適用で表示切替・透過度変更がそのまま反映される
 function makeVectorStyleFn(item) {
+  // Path options の追加受け渡し(.kasc opts): fillrule=evenodd/nonzero、
+  // classname=文字列(SVG path 要素へ class 付与)、smoothfactor=、noclip=on、
+  // renderer=canvas(L.canvas 共有レンダラ。setStyle→setOptions で options に入り、
+  // add 前に効くため style 関数経由で到達させられる)
+  const pathExtra = {};
+  if (item.opts?.fillrule) pathExtra.fillRule = String(item.opts.fillrule);
+  if (item.opts?.classname) pathExtra.className = String(item.opts.classname);
+  const _sf = Number(item.opts?.smoothfactor);
+  if (Number.isFinite(_sf)) pathExtra.smoothFactor = _sf;
+  if (kascOptOn(item.opts?.noclip)) pathExtra.noClip = true;
+  // renderer=canvas / render=canvas で L.canvas 共有レンダラへ(大量地物向け。
+  // Cesium の render=primitive/entity は値が違うため誤適用しない)
+  if (/^canvas$/i.test(String(item.opts?.renderer ?? item.opts?.render ?? ""))) {
+    pathExtra.renderer = kascCanvasRenderer(item.opts);
+  }
   return feature => {
     const props = feature.properties || {};
     const gt = feature.geometry?.type || "";
@@ -356,14 +421,19 @@ function makeVectorStyleFn(item) {
           if (isPoint) {
             return { radius: 5, color: s.stroke || "#ffffff", weight: 1,
               fillColor: s.markerColor, fillOpacity: o, opacity: s.stroke ? o : 0.8 * o,
-              interactive: true };
+              interactive: true, ...pathExtra };
           }
+          const isPoly = /Polygon/.test(gt);
           return {
             color: s.stroke || "#2c5ea8", weight: s.strokeWidth ?? 1.5,
-            dashArray: s.dash || undefined, dashOffset: undefined,
+            dashArray: s.dash || undefined, dashOffset: s.dashOffsetPx || undefined,
             lineJoin: s.join || undefined, lineCap: s.cap || undefined,
-            fillColor: s.fill || "#3a7bd5", fillOpacity: 0.5 * o,
-            opacity: o, fill: true, interactive: true,
+            // LineString に fill を掛けると閉合ポリゴンとして誤塗りされるため
+            // ポリゴンのみ fill を適用する
+            ...(isPoly
+              ? { fillColor: s.fill || "#3a7bd5", fillOpacity: 0.5 * o, fill: true }
+              : { fill: false }),
+            opacity: o, interactive: true, ...pathExtra,
           };
         }
       }
@@ -376,15 +446,15 @@ function makeVectorStyleFn(item) {
       return { radius: s.size ? defaultPointRadius(s.size) : 5,
         color: props.stroke ?? "#ffffff", weight: num(props["stroke-width"]) ?? 1,
         fillColor: s.color, fillOpacity: s.opacity * o,
-        opacity: (num(props["stroke-opacity"]) ?? 1) * o, interactive: true };
+        opacity: (num(props["stroke-opacity"]) ?? 1) * o, interactive: true, ...pathExtra };
     }
     if (/Polygon/.test(gt)) {
       const s = resolveDefaultPolygonStyle(props, ds.polygon, ds.line, { fill: "#3a7bd5", fillOpacity: 0.4, stroke: "#2c5ea8", strokeWidth: 1.5, strokeOpacity: 1 });
       return { color: s.stroke, weight: s.strokeWidth, opacity: s.strokeOpacity * o,
-        fillColor: s.fill, fillOpacity: s.fillOpacity * o, fill: true, interactive: true };
+        fillColor: s.fill, fillOpacity: s.fillOpacity * o, fill: true, interactive: true, ...pathExtra };
     }
     const s = resolveDefaultLineStyle(props, ds.line, { color: "#2c5ea8", width: 1.5, opacity: 1 });
-    return { color: s.color, weight: s.width, opacity: s.opacity * o, interactive: true };
+    return { color: s.color, weight: s.width, opacity: s.opacity * o, interactive: true, ...pathExtra };
   };
 }
 
@@ -604,6 +674,16 @@ function applyClientWhere(item, source) {
   return fc;
 }
 
+// renderer=canvas 用の Canvas レンダラ。rendertolerance= 指定時はレイヤ別、
+// 未指定なら共有インスタンス(既定 tolerance=0)を返す。
+// ?prefercanvas=1 と違いレイヤ単位の opt-in で、SVG <pattern> 塗りは使えない
+let _kascCanvasRenderer = null;
+function kascCanvasRenderer(opts) {
+  const tol = Number(opts?.rendertolerance);
+  if (Number.isFinite(tol) && tol > 0) return L.canvas({ padding: 0.1, tolerance: tol });
+  return _kascCanvasRenderer ??= L.canvas({ padding: 0.1 });
+}
+
 // .kasc 1行 → Leaflet レイヤ。戻り値は { layer, styleFn, viewportQuery, zoomRange }
 // paneName 指定時は新規 pane を作らずその pane に配置する（ベースマップ用）
 async function addKascLayer(item, baseUrl, preloaded, paneName) {
@@ -656,11 +736,24 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       env = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
     }
     if (!env) throw new Error("image: bbox= または corners= の指定が必要です");
-    const layer = L.imageOverlay(resolveKascUrl(item.url, baseUrl), [[env[1], env[0]], [env[3], env[2]]], {
+    // ImageOverlay options 受け渡し: alt=/interactive/crossorigin=/
+    // erroroverlayurl=/zindex=/classname=(.kasc opts → Leaflet options)
+    const io = item.opts || {};
+    const ioOpts = {
       pane,
-      opacity: Number(item.opts?.opacity ?? 1),
+      opacity: Number(io.opacity ?? 1),
       attribution: layerAttribution(item) || undefined,
-    });
+    };
+    if (io.alt !== undefined) ioOpts.alt = String(io.alt);
+    if (io.interactive !== undefined) ioOpts.interactive = kascOptOn(io.interactive);
+    if (io.crossorigin !== undefined) {
+      ioOpts.crossOrigin = /^(off|none|false|0)$/i.test(String(io.crossorigin)) ? false
+        : (/^(on|true|1)$/i.test(String(io.crossorigin)) ? "anonymous" : String(io.crossorigin));
+    }
+    if (io.erroroverlayurl) ioOpts.errorOverlayUrl = resolveKascUrl(io.erroroverlayurl, baseUrl);
+    const ioz = Number(io.zindex); if (Number.isFinite(ioz)) ioOpts.zIndex = ioz;
+    if (io.classname) ioOpts.className = String(io.classname);
+    const layer = L.imageOverlay(resolveKascUrl(item.url, baseUrl), [[env[1], env[0]], [env[3], env[2]]], ioOpts);
     item._env = { west: env[0], south: env[1], east: env[2], north: env[3] };
     return { layer, styleFn: null, viewportQuery: false, zoomRange: itemVisZoom };
   }
@@ -672,7 +765,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     const viewportQuery = !!loaded.viewportQuery;
     if (item.opts?.style) {
       try {
-        item._qml = await loadCompiledQml(item.opts.style, baseUrl);
+        item._qml = await loadCompiledQml(item.opts.style, baseUrl, "leaflet");
         if (item._qml?.inverted) applyInvertedMaskGeojson(geojson);
       } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
     }
@@ -682,12 +775,26 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       if (Number.isFinite(_o)) item._opacityFactor = _o;
     }
     const styleFn = makeVectorStyleFn(item);
+    // QML マーカー canvas → Leaflet Icon のキャッシュ(markerCanvas→dataURL)。
+    // クラスタ内マーカーでも共有するため先に定義する
+    const iconUrlCache = new WeakMap();
+    const pointIcon = f => {
+      try {
+        const spec = item._qml?.evaluate?.(f?.properties || {});
+        if (!spec?.markers?.length) return null;
+        const cv = markerLayersToCanvas(spec.markers);
+        let url = iconUrlCache.get(cv);
+        if (!url) { url = cv.toDataURL(); iconUrlCache.set(cv, url); }
+        return L.icon({ iconUrl: url, iconSize: [cv.width, cv.height], iconAnchor: [cv.width / 2, cv.height / 2] });
+      } catch (_) { return null; }
+    };
     // cluster=on / heat=on: 点レイヤーのクラスタ表示・ヒートマップ表示。
     // どちらも点地物のみを対象とし、点以外のジオメトリは通常の geoJSON で描画する
+    const cOpts = item.opts || {};
     const pointFeatures = geojson.features?.filter(f => /point/i.test(f?.geometry?.type || "")) || [];
     const otherFeatures = (geojson.features || []).filter(f => !/point/i.test(f?.geometry?.type || ""));
-    const wantCluster = pointFeatures.length && kascOptOn(item.opts?.cluster);
-    const wantHeat = pointFeatures.length && kascOptOn(item.opts?.heat ?? item.opts?.heatmap);
+    const wantCluster = pointFeatures.length && (kascOptOn(cOpts.cluster) || item._qml?.cluster?.kind === "cluster");
+    const wantHeat = pointFeatures.length && (kascOptOn(cOpts.heat ?? cOpts.heatmap) || !!item._qml?.heatmap);
     if (wantCluster || wantHeat) {
       const sub = [];
       if (wantCluster) {
@@ -701,23 +808,96 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
             // KASUGAI の地図は maxZoom 未設定で、markercluster が内部で
             // map.getMaxZoom() を呼んで例外になるため、未設定時のみ仮の上限を置く
             if (map.options.maxZoom == null) map.options.maxZoom = 22;
-            const group = L.markerClusterGroup({ pane });
+            // クラスタオプション: QML pointCluster(tolerance→distancePx)を既定とし、
+            // .kasc opts で上書き可(clusterradius=/clusterdisableat=/
+            // clustercoverage=off/clusterzoomonclick=off/clusterspiderfy=off/
+            // clustersingle=on/clusterchunked=on)
+            const qmlc = item._qml?.cluster;
+            const mcOpts = { pane };
+            const mcr = Number(cOpts.clusterradius) || Number(qmlc?.distancePx);
+            if (Number.isFinite(mcr) && mcr > 0) mcOpts.maxClusterRadius = mcr;
+            const dcz = Number(cOpts.clusterdisableat);
+            if (Number.isFinite(dcz)) mcOpts.disableClusteringAtZoom = dcz;
+            if (/^(off|none|false|0)$/i.test(String(cOpts.clustercoverage ?? ""))) mcOpts.showCoverageOnHover = false;
+            if (/^(off|none|false|0)$/i.test(String(cOpts.clusterzoomonclick ?? ""))) mcOpts.zoomToBoundsOnClick = false;
+            if (/^(off|none|false|0)$/i.test(String(cOpts.clusterspiderfy ?? ""))) mcOpts.spiderfyOnMaxZoom = false;
+            if (kascOptOn(cOpts.clustersingle)) mcOpts.singleMarkerMode = true;
+            if (kascOptOn(cOpts.clusterchunked)) mcOpts.chunkedLoading = true;
+            // 件数バッジ: QML マーカー色があればその色、無ければ件数階調の divIcon
+            let badgeColor = null;
+            if (item._qml) {
+              try {
+                const mk = item._qml.evaluate(pointFeatures[0]?.properties || {})?.markers?.[0];
+                const c = mk?.fill ?? mk?.color;
+                badgeColor = c ? rgbaToCss(c) : null;
+              } catch (_) {}
+            }
+            mcOpts.iconCreateFunction = c => {
+              const n = c.getChildCount();
+              const color = badgeColor || (n < 10 ? "#3a7bd5" : n < 100 ? "#e67e22" : "#c0392b");
+              const d = Math.min(30 + Math.floor(Math.log10(Math.max(n, 1)) * 8), 52);
+              return L.divIcon({
+                html: `<div style="width:${d}px;height:${d}px;border-radius:50%;background:${color};opacity:.92;border:2px solid #fff;box-sizing:border-box;color:#fff;display:flex;align-items:center;justify-content:center;font:700 ${Math.max(11, d * 0.36)}px/1 sans-serif;text-shadow:0 0 2px rgba(0,0,0,.5)">${n}</div>`,
+                className: "kasc-cluster", iconSize: [d, d],
+              });
+            };
+            const group = L.markerClusterGroup(mcOpts);
             for (const f of pointFeatures) {
               const [lon, lat] = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0];
-              group.addLayer(L.circleMarker([lat, lon], { radius: 5, pane }));
+              // QML アイコンマーカーがあれば marker、無ければスタイル済み circleMarker
+              const ic = item._qml ? pointIcon(f) : null;
+              group.addLayer(ic
+                ? L.marker([lat, lon], { icon: ic, pane })
+                : L.circleMarker([lat, lon], { radius: 5, pane, ...styleFn(f) }));
             }
             sub.push(group);
           }
         } catch (e) { console.warn("markercluster の読み込みに失敗しました:", e); }
       } else if (wantHeat) {
         try {
-          await loadScriptOnce("https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js");
+          await loadScriptOnce("https://cdn.jsdelivr.net/npm/leaflet.heat@1.0.1/dist/leaflet-heat-global.js");
           if (L.heatLayer) {
+            // ヒートマップオプション: QML heatmapRenderer(radius→px/weight_expression/
+            // maximum_value/colorramp)を引き継ぎ、.kasc opts で上書き可
+            // (heatradius=/heatblur=/heatminopacity=/heatmaxzoom=/heatmax=/
+            // heatgradient=0.4:#00f,1:#f00)
+            const hm = item._qml?.heatmap;
+            const hOpts = { pane };
+            const hr = Number(cOpts.heatradius) || Number(hm?.radiusPx);
+            hOpts.radius = Number.isFinite(hr) && hr > 0 ? hr : 25;
+            const hb = Number(cOpts.heatblur);
+            hOpts.blur = Number.isFinite(hb) && hb > 0 ? hb : 15;
+            const hmop = Number(cOpts.heatminopacity);
+            if (Number.isFinite(hmop)) hOpts.minOpacity = hmop;
+            const hmz = Number(cOpts.heatmaxzoom);
+            hOpts.maxZoom = Number.isFinite(hmz) ? hmz : 17;
+            const ramp = hm?.ramp;
+            if (ramp?.length) {
+              const g = {};
+              for (const s of ramp) g[s.offset] = rgbaToCss(s.color);
+              hOpts.gradient = g;
+            } else if (cOpts.heatgradient) {
+              const g = {};
+              for (const tok of String(cOpts.heatgradient).split(",")) {
+                const ci = tok.indexOf(":");
+                const on = Number(tok.slice(0, ci));
+                if (ci > 0 && Number.isFinite(on)) g[on] = tok.slice(ci + 1).trim();
+              }
+              if (Object.keys(g).length) hOpts.gradient = g;
+            }
+            // 重み: weight_expression を maxValue で正規化して強度(0..1)へ
+            const mv = Number(cOpts.heatmax) || hm?.maxValue || 1;
+            const wfn = hm?.weightFn;
             const pts = pointFeatures.map(f => {
               const c = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0];
-              return [c[1], c[0], 1];
+              let w = 1;
+              if (wfn) {
+                const v = Number(wfn(f.properties || {}));
+                w = Math.min(Math.max((Number.isFinite(v) ? v : 1) / mv, 0), 1);
+              }
+              return [c[1], c[0], w];
             });
-            sub.push(L.heatLayer(pts, { radius: 25, blur: 15, maxZoom: 17, pane }));
+            sub.push(L.heatLayer(pts, hOpts));
           }
         } catch (e) { console.warn("leaflet.heat の読み込みに失敗しました:", e); }
       }
@@ -735,26 +915,37 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       syncDeckLayers();
       return { layer, styleFn, viewportQuery, zoomRange: itemVisZoom };
     }
-    // QML マーカー canvas → Leaflet Icon のキャッシュ(markerCanvas→dataURL)
-    const iconUrlCache = new WeakMap();
-    const pointIcon = f => {
-      try {
-        const spec = item._qml?.evaluate?.(f?.properties || {});
-        if (!spec?.markers?.length) return null;
-        const cv = markerLayersToCanvas(spec.markers);
-        let url = iconUrlCache.get(cv);
-        if (!url) { url = cv.toDataURL(); iconUrlCache.set(cv, url); }
-        return L.icon({ iconUrl: url, iconSize: [cv.width, cv.height], iconAnchor: [cv.width / 2, cv.height / 2] });
-      } catch (_) { return null; }
-    };
+    // marker 系オプション(.kasc opts): zindexoffset=/riseonhover=on/markeropacity=
+    const mkExtra = {};
+    {
+      const zo = Number(cOpts.zindexoffset); if (Number.isFinite(zo)) mkExtra.zIndexOffset = zo;
+      if (kascOptOn(cOpts.riseonhover)) mkExtra.riseOnHover = true;
+      const mo = Number(cOpts.markeropacity); if (Number.isFinite(mo)) mkExtra.opacity = mo;
+    }
     const layer = L.geoJSON(geojson, {
       pane,
       style: styleFn,
       pointToLayer: (f, latlng) => {
         const ic = item._qml ? pointIcon(f) : null;
-        return ic ? L.marker(latlng, { icon: ic, pane }) : L.circleMarker(latlng, { radius: 5, pane });
+        return ic ? L.marker(latlng, { icon: ic, pane, ...mkExtra }) : L.circleMarker(latlng, { radius: 5, pane });
       },
       onEachFeature: (f, l) => {
+        // 線端トリム(QML trim_distance): 生成済みポリラインの座標を切断する
+        // (基準縮尺1:1万換算の近似。qml-2d.js TRIM_PX_TO_M)
+        if (item._qml && /LineString/.test(f?.geometry?.type || "") && l.setLatLngs) {
+          try {
+            const _sp = item._qml.evaluate(f.properties || {});
+            const _tr = _sp?.line ?? _sp?.outline;
+            if (_tr && (_tr.trimStartPx || _tr.trimEndPx)) {
+              const _g = JSON.parse(JSON.stringify(f.geometry));
+              trimGeoJsonLine(_g, (_tr.trimStartPx || 0) * TRIM_PX_TO_M,
+                (_tr.trimEndPx || 0) * TRIM_PX_TO_M);
+              const toLL = c => c.map(([x, y]) => [y, x]);
+              l.setLatLngs(_g.type === "LineString"
+                ? toLL(_g.coordinates) : _g.coordinates.map(toLL));
+            }
+          } catch (_) { /* trim 失敗は元座標のまま */ }
+        }
         if (item._qml?.labelFor) { l._kascLabel = { item, feature: f }; syncLeafletLabel(l); }
         l.on("click", e => {
           if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
@@ -835,6 +1026,22 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     const env = geojsonExtent(geojson);
     if (env) item._env = env;
     item._geojson = loaded.geojson;
+    // 縮尺連動の再評価フック(zoomend から呼ばれる):
+    // パスは setStyle、QML アイコンマーカーは setIcon で再生成し、
+    // パターン塗りも再適用する
+    item._qmlRestyle = () => {
+      layer.eachLayer(sub => {
+        try {
+          if (sub instanceof L.Marker) {
+            const ic = pointIcon(sub.feature);
+            if (ic) sub.setIcon(ic);
+          } else if (sub.setStyle) {
+            sub.setStyle(styleFn(sub.feature));
+          }
+        } catch (_) {}
+      });
+      applyPatternFills();
+    };
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
     return { layer, styleFn, viewportQuery, zoomRange: mergeVisZoom(zoomRange) };
   }
@@ -860,10 +1067,37 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
   const minZ = Number(opts.minzoom ?? opts.minimumlevel);
   if (Number.isFinite(minZ)) common.minZoom = minZ;
   if (Number.isFinite(nativeMax)) common.maxNativeZoom = nativeMax;
+  // GridLayer/TileLayer オプションのパススルー(.kasc opts → Leaflet options):
+  // tms=/zoomreverse=/detectretina=/nowrap=/updatewhenidle=/updatewhenzooming=、
+  // zoomoffset=/updateinterval=/keepbuffer=/zindex=、subdomains=/errortileurl=/
+  // referrerpolicy=/classname=/bounds=w,s,e,n/crossorigin=
+  {
+    const boolMap = { tms: "tms", zoomreverse: "zoomReverse", detectretina: "detectRetina",
+      nowrap: "noWrap", updatewhenidle: "updateWhenIdle", updatewhenzooming: "updateWhenZooming" };
+    for (const [k, t] of Object.entries(boolMap)) {
+      if (opts[k] !== undefined) common[t] = kascOptOn(opts[k]);
+    }
+    const numMap = { zoomoffset: "zoomOffset", updateinterval: "updateInterval",
+      keepbuffer: "keepBuffer", zindex: "zIndex" };
+    for (const [k, t] of Object.entries(numMap)) {
+      const v = Number(opts[k]);
+      if (opts[k] !== undefined && Number.isFinite(v)) common[t] = v;
+    }
+    if (opts.subdomains) common.subdomains = String(opts.subdomains);
+    if (opts.errortileurl) common.errorTileUrl = resolveKascUrl(opts.errortileurl, baseUrl);
+    if (opts.referrerpolicy) common.referrerPolicy = String(opts.referrerpolicy);
+    if (opts.classname) common.className = String(opts.classname);
+    if (opts.crossorigin !== undefined) {
+      common.crossOrigin = /^(off|none|false|0)$/i.test(String(opts.crossorigin)) ? false
+        : (/^(on|true|1)$/i.test(String(opts.crossorigin)) ? "anonymous" : String(opts.crossorigin));
+    }
+    const tb = String(opts.bounds || "").split(",").map(v => Number(v.trim()));
+    if (tb.length === 4 && tb.every(Number.isFinite)) common.bounds = [[tb[1], tb[0]], [tb[3], tb[2]]];
+  }
   let layer;
   if (item.type === "wms") {
     // Leaflet 組み込みの WMS 対応（BBOX は Leaflet が計算）
-    layer = L.tileLayer.wms(url, {
+    const wmsOpts = {
       layers: opts.layers ?? "",
       styles: opts.styles ?? "",
       format: opts.format || "image/png",
@@ -872,7 +1106,15 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       tiled: true,
       tileSize: Number(opts.tilesize) || 256,
       ...common,
-    });
+    };
+    // uppercase=on: 1.3.0 系パラメータを大文字で送る。EPSG:4326 等で軸順が
+    // 変わる CRS は crs=EPSG4326|EPSG3857|EPSG3395|Simple で指定可
+    if (kascOptOn(opts.uppercase)) wmsOpts.uppercase = true;
+    if (opts.crs) {
+      const key = String(opts.crs).replace(/[:]/g, "").replace(/^epsg/i, "EPSG");
+      if (L.CRS[key]) wmsOpts.crs = L.CRS[key];
+    }
+    layer = L.tileLayer.wms(url, wmsOpts);
   } else {
     // wmts: は {z}/{x}/{y} テンプレートへ正規化してタイルレイヤ扱い
     const tileUrl = item.type === "wmts" ? buildWmtsTileTemplate(url, opts) : url;
@@ -1228,6 +1470,7 @@ function renderLayerRows(entries, unsupported) {
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const section = document.createElement("section");
     section.className = "layer-group" + (exclusive ? " exclusive" : "");
+    section.dataset.groupKey = key;
     const head = document.createElement("div");
     head.className = "layer-group-title";
     const tg = document.createElement("button");
@@ -1920,6 +2163,7 @@ const geoTools = initGeoTools2d({
 const minimap = createMinimap({
   container: "#minimap",
   checkbox: "#display-minimap",
+  button: "#basemap-minimap",
   tileUrl: () => currentBaseEntries[Number(panel.basemapSelect?.value ?? 0)]?.item?.url || "",
   getBounds: () => {
     const b = map.getBounds();
@@ -2226,6 +2470,14 @@ async function applyKascThemeStyles(theme) {
 themeSelect?.addEventListener("change", () => {
   const theme = currentThemes.find(t => t.name === themeSelect.value);
   if (theme) applyKascTheme(theme);
+});
+
+// レイヤ一覧: 全グループの一括展開/折りたたみ
+document.getElementById("layer-expand-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, true);
+});
+document.getElementById("layer-collapse-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, false);
 });
 
 // ---- ビュー(view: 行。表示+スタイル+フィルタ+カメラ+背景を束ねた目的別プリセット) ----
@@ -2585,7 +2837,7 @@ async function saveToDataDir(name, content) {
       try {
         await saveToDataDir(file.name, file);
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           inspectorInput.value = inspectorInput.value.replace(/\s*$/, "") + `\n${type}:${title} | DATA/${file.name}\n`;

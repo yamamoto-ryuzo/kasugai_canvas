@@ -1,0 +1,957 @@
+{
+ "probes": {},
+ "errors": [],
+ "protos": {
+  "chain": [
+   {
+    "ctor": "UY",
+    "members": [
+     "events",
+     "onceEvents",
+     "_camera",
+     "_renderer",
+     "_globe",
+     "_atmosphere",
+     "skyEnvMap",
+     "mrtPass",
+     "transparentPass",
+     "finalPass",
+     "renderPassOrchestrator",
+     "_scenes",
+     "_core",
+     "_fontManager",
+     "_options",
+     "_stats",
+     "_eventDisposer",
+     "_disposed",
+     "_renderFlag",
+     "_declutter",
+     "_declutterSize",
+     "_declutterRetry",
+     "_declutterRetryDelay",
+     "_isIdle",
+     "_jobsBusyAt",
+     "_jobsInFlight",
+     "_jobsProgressedAt",
+     "_workerPoolSize",
+     "_releaseWorkerPool",
+     "_maxWorkerTasks",
+     "_workerIntakePaused",
+     "_workerExternalLoad",
+     "_workerTaskJobs",
+     "_uniforms",
+     "_pendingFlights",
+     "_terrainHeightRangeObservers",
+     "_hoveredFeature",
+     "_meshes",
+     "_loadedTexs",
+     "_texturizedSceneByTileCoordinates",
+     "_tileTextureCompositor",
+     "_tileMapByHandle",
+     "_textureFragmentIndex",
+     "_tileMeshToFragmentIds",
+     "_hillshadeContext",
+     "_colorMapAtlas",
+     "_initialized",
+     "_inMemoryBufferStore",
+     "_buf",
+     "_texFragment",
+     "_rasterRevision",
+     "_tileHandler",
+     "_globeHandler",
+     "_workerTaskHandler",
+     "_featureHandler",
+     "_meshHandler",
+     "_layerHandler",
+     "_ownedRootElement",
+     "_dispatcher",
+     "_pickHelper",
+     "_terrainPicker",
+     "_defaultTextureOptions",
+     "layersManager",
+     "shadowMapViewers",
+     "eventContext",
+     "registries",
+     "viewContext",
+     "plugins",
+     "_attribution",
+     "_buffers",
+     "_lit",
+     "pixelRatioMatchedMedia",
+     "fixedGpuBytesReportScheduled",
+     "fixedGpuBytesResyncPending",
+     "framesSinceFixedGpuBytesReport",
+     "lastReportedFixedGpuBytes",
+     "forceUpdate",
+     "resize",
+     "_syncGBuffers",
+     "_dispatchTerrainHeightRange",
+     "_handleResize"
+    ]
+   },
+   {
+    "ctor": "UY",
+    "members": [
+     "attribution",
+     "buffers",
+     "lit",
+     "convertToMapEvent",
+     "initializeRenderPass",
+     "renderPass",
+     "camera",
+     "globe",
+     "atmosphere",
+     "toneMappingExposure",
+     "cacheBytes",
+     "lodFog",
+     "dynamicSse",
+     "setSseMultiplierRange",
+     "memoryStats",
+     "workerMemoryStats",
+     "_viewportCenter",
+     "_distanceFromCamera",
+     "globeDepthTexture",
+     "depthTexture",
+     "isMobileOptimized",
+     "init",
+     "_initWithWorkerPool",
+     "dispose",
+     "_reportFixedGpuBytes",
+     "_scheduleFixedGpuBytesReport",
+     "_updateUniforms",
+     "_syncColorMap",
+     "_syncWorkerPool",
+     "_update",
+     "_forceFeatureUpdates",
+     "_scheduleDeclutterFrame",
+     "_render",
+     "_convertColorsToNumbers",
+     "addLayer",
+     "addSource",
+     "_trackAsyncCreate",
+     "addMesh",
+     "addLight",
+     "addEffect",
+     "_assertGBufferCapacity",
+     "_countGBufferAttachments",
+     "_maxDrawBuffers",
+     "findLayerById",
+     "updateLayerById",
+     "updateMeshById",
+     "updateLightById",
+     "updateEffectById",
+     "deleteLayerById",
+     "deleteMeshById",
+     "deleteLightById",
+     "deleteEffectById",
+     "registerBuiltIns",
+     "registerBuiltInEffects",
+     "registerMesh",
+     "registerLight",
+     "registerEffect",
+     "addPlugin",
+     "addFontFamily",
+     "removeFontFamily",
+     "setCamera",
+     "moveCamera",
+     "moveCameraWithDirection",
+     "flyTo",
+     "lookAt",
+     "cameraFollow",
+     "cameraFreeLook",
+     "sampleTerrainHeight",
+     "zoomLevelToCameraDistance",
+     "getZoomLevel",
+     "sampleTerrainMostDetailed",
+     "sampleTerrainHeightRange",
+     "observeTerrainHeightRange",
+     "observeTerrainHeightAt",
+     "rotateAroundAxis",
+     "rotateAround",
+     "_startMainLoop",
+     "_getCanvasSize",
+     "resolvePickedFeature",
+     "onPick",
+     "onHoverPick",
+     "animation",
+     "canvas",
+     "screenSize",
+     "pixelRatio",
+     "shadowMapViewersEnabled",
+     "pickTerrainPosition",
+     "pickDepthPosition"
+    ]
+   },
+   {
+    "ctor": "kr",
+    "members": [
+     "on",
+     "off",
+     "clear",
+     "size",
+     "once",
+     "emit"
+    ]
+   }
+  ],
+  "camChain": [
+   {
+    "ctor": "lD",
+    "members": [
+     "events",
+     "onceEvents",
+     "raw",
+     "_core",
+     "_status"
+    ]
+   },
+   {
+    "ctor": "lD",
+    "members": [
+     "core",
+     "updateStatus",
+     "positionECEF",
+     "positionGeographic",
+     "orientation",
+     "zoom",
+     "fov",
+     "near",
+     "far",
+     "options"
+    ]
+   },
+   {
+    "ctor": "kr",
+    "members": [
+     "on",
+     "off",
+     "clear",
+     "size",
+     "once",
+     "emit"
+    ]
+   }
+  ]
+ },
+ "exports": {
+  "@navaramap/three": [
+   "ATMOSPHERE_HIGHER_ORDER_SCATTERING_URL",
+   "ATMOSPHERE_IRRADIANCE_URL",
+   "ATMOSPHERE_SCATTERING_URL",
+   "ATMOSPHERE_SINGLE_MIE_SCATTERING_URL",
+   "ATMOSPHERE_TEXTURE_URLS",
+   "ATMOSPHERE_TRANSMITTANCE_URL",
+   "AllDepthCopyPass",
+   "Atmosphere",
+   "AttributionPlugin",
+   "BATCHED_ATTRIBUTE_NAMES",
+   "BATCH_SCALAR_KEYS",
+   "BATCH_VEC3_KEYS",
+   "BaseDesc",
+   "BaseHandle",
+   "BatchTextureLayout",
+   "BatchedFeatureMesh",
+   "BatchedSdfTextMesh",
+   "BufferView",
+   "CLICK_PIXEL_TOLERANCE",
+   "CLOUD_LOCAL_WEATHER_URL",
+   "CLOUD_SHAPE_DETAIL_URL",
+   "CLOUD_SHAPE_URL",
+   "CLOUD_TURBULENCE_URL",
+   "CSMHelper",
+   "CameraDirection",
+   "CascadedShadowMaps",
+   "Color",
+   "ColorMap",
+   "ConflictingTransformError",
+   "CopyPass",
+   "CustomEffectPass",
+   "CustomRenderPass",
+   "DEFAULT_EFFECT_OPTIONS",
+   "DEPTH_PACKING_SHADER",
+   "DepthPrePassMesh",
+   "DescRegistry",
+   "DrapedMesh",
+   "Effect",
+   "EffectDesc",
+   "EffectDescRegistry",
+   "EffectHandle",
+   "EllipsoidGeodesic",
+   "EventHandler",
+   "FeatureEvaluator",
+   "FeatureMesh",
+   "FinalCopyEffectDesc",
+   "GBUFFER_ATTACHMENT_NAMES",
+   "GBUFFER_DEFINE_NAMES",
+   "GBUFFER_EFFECT_ID_LOCATION_DEFINE",
+   "GBUFFER_EFFECT_WRITE_BUILTIN",
+   "GBUFFER_EFFECT_WRITE_ID_ONLY",
+   "GBUFFER_EFFECT_WRITE_SHADER_MATERIAL",
+   "GBUFFER_EFFECT_WRITE_ZERO",
+   "GBUFFER_EMISSIVE_LOCATION_DEFINE",
+   "GBUFFER_NORMAL_LOCATION_DEFINE",
+   "GBUFFER_NORMAL_WRITE_BASIC",
+   "GBUFFER_NORMAL_WRITE_PHYSICAL",
+   "GBUFFER_PARS_FRAGMENT",
+   "GBUFFER_PHONG_ROUGHNESS",
+   "GBUFFER_SHADOW_LOCATION_DEFINE",
+   "GBUFFER_TEXTURE_INDEX",
+   "GEOMETRY_TYPES",
+   "GlyphKind",
+   "InstancedMesh",
+   "InstancedMeshDesc",
+   "InstancedSpriteMesh",
+   "JAPAN_GSI_ELEVATION_DECODER",
+   "Layer",
+   "LightDesc",
+   "LightDescRegistry",
+   "LightHandle",
+   "MAPBOX_ELEVATION_DECODER",
+   "MAX_BATCH_TEXTURE_WIDTH",
+   "MB",
+   "MODEL_BATCH_SUPPORT",
+   "MODEL_BATCH_TEXTURE_CONFIG",
+   "MRTPassEffectDesc",
+   "MeshDesc",
+   "MeshDescRegistry",
+   "MeshDescWithSelectiveEffect",
+   "MeshHandle",
+   "ModelMesh",
+   "NORMAL_PACKING_SHADER",
+   "NVR_BLENDED_DEFINE",
+   "NVR_LIT_DEFINE",
+   "NVR_UNLIT_DEFINE",
+   "NVR_UNLIT_SCENE_DEFINE",
+   "NormalCopyPass",
+   "PICK_RADIUS",
+   "POLYGON_BATCH_SUPPORT",
+   "POLYLINE_BATCH_SUPPORT",
+   "Pass",
+   "PickableInstancedMeshWrapper",
+   "PickableMesh",
+   "PickableMeshWrapper",
+   "PickableMultiInstancedMeshWrapper",
+   "Plugin",
+   "PolygonMesh",
+   "PolygonOutlineMesh",
+   "PolylineMesh",
+   "RTE_ONE_UNIFORM",
+   "Registries",
+   "RenderPass",
+   "RenderTargetCopyPass",
+   "SKY_RENDER_ORDER",
+   "SOLID_DASH_ROW",
+   "SPRITE_BATCH_SUPPORT",
+   "STARS_ASSETS_URL",
+   "STARS_RENDER_ORDER",
+   "STBN_URL",
+   "SelectiveEffectDesc",
+   "SelectiveEffectRegistry",
+   "ShaderLib",
+   "SkyEnvMapEffectDesc",
+   "SkyEnvMapPass",
+   "Source",
+   "TAP_PIXEL_TOLERANCE",
+   "TERRARIUM_ELEVATION_DECODER",
+   "TEXT_BATCH_SUPPORT",
+   "TILE_EMISSIVE_EFFECT_BUFFER_REPLACEMENT",
+   "TILE_PICK_FRAGMENT_OVERRIDE",
+   "TILE_VERTEX_INJECTIONS",
+   "TOUCH_PICK_RADIUS",
+   "TileMesh",
+   "TransparentPassEffectDesc",
+   "USE_GBUFFER_EMISSIVE_DEFINE",
+   "USE_GBUFFER_SELECTIVE_EFFECT_DEFINE",
+   "USE_GBUFFER_SHADOW_DEFINE",
+   "UnknownTypeError",
+   "VALID_GEOMETRY_TYPES",
+   "ViewContext",
+   "appendOptionalGBufferAttachments",
+   "applyLitOption",
+   "assertNoTransformConflict",
+   "attachBatchedMaterial",
+   "batchBaseIndex",
+   "blendFunction",
+   "breakLines",
+   "buildLabelLayout",
+   "buildPolygonGeometry",
+   "buildPolylineGeometry",
+   "calcCameraPosition",
+   "calcModelMatrixRTE",
+   "cascadedShadowMaps",
+   "composeWorldMatrixForRTE",
+   "computeGBufferDefines",
+   "computeGBufferTextureIndex",
+   "convertScreenToWorld",
+   "convertWorldToScreen",
+   "createFullscreenQuad",
+   "createGBufferAttachments",
+   "createGltfLoader",
+   "createInstancedSpriteMaterialEnhancer",
+   "createLineSegmentTextureReleasedOnUpload",
+   "createPolygonMaterialEnhancer",
+   "createPolylineMaterialEnhancer",
+   "createReplacer",
+   "createSdfTextMaterialEnhancer",
+   "createShadowDepthMaterial",
+   "createShadowMapDepthEnhancer",
+   "default",
+   "degreeToRadian",
+   "depth",
+   "eastNorthUpToFixedFrame",
+   "enableDefine",
+   "encodePositionRTE",
+   "fetchFontFamilyFromCss",
+   "flushBatchTextureUpdates",
+   "generateTileCommonInjection",
+   "generateTileMapFragment",
+   "generateTileNormalBufferReplacement",
+   "generateTileNormalFragmentMaps",
+   "generateTileOutgoingLight",
+   "generateTileWaterDefines",
+   "generators",
+   "geodeticSurfaceNormal",
+   "geodeticToVector3",
+   "getBatchDataTexture",
+   "getBatchTextureLayout",
+   "getBatchTextureUniform",
+   "getDefaultCacheBytes",
+   "getDefaultDynamicSse",
+   "getDefaultLodFog",
+   "getDefaultMemoryBudgets",
+   "getDefaultSunShadow",
+   "getHeightFromEllipsoid",
+   "getPickRay",
+   "getPlaneFromPointNormal",
+   "getRayPlaneIntersection",
+   "getWGS84Eccentricity",
+   "getWGS84EccentricitySquared",
+   "getWGS84Flattening",
+   "getWGS84SemiMajorAxis",
+   "getWGS84SemiMinorAxis",
+   "hasBatchScalarSlot",
+   "headingPitchRollToFixedFrame",
+   "initBatchedMaterial",
+   "initNavaraApi",
+   "interleavedGradientNoise",
+   "isAttributionHtml",
+   "isFeatureMesh",
+   "isPickableMesh",
+   "lineWidthFu",
+   "math",
+   "mergeGeodetic",
+   "northEastDownToFixedFrame",
+   "northUpEastToFixedFrame",
+   "northWestUpToFixedFrame",
+   "overrideMaterialsForMRT",
+   "packShowOpacity",
+   "packing",
+   "parseCssUnicodeRange",
+   "parseFontFamilyFromCss",
+   "polygonGroundVolume",
+   "polylineGroundVolume",
+   "radianToDegree",
+   "raySphereIntersection",
+   "readBatchScalar",
+   "readBatchShowOpacity",
+   "readBatchVec3",
+   "registerBatchedMaterial",
+   "resolveGBufferOptions",
+   "scaleToGeodeticSurface",
+   "setBatchTextureRenderer",
+   "setDrapeGroundNormals",
+   "setRTCPosition",
+   "setRTEPosition",
+   "setupMaterialForDrape",
+   "setupMaterialForMRT",
+   "setupRTEBeforeRender",
+   "setupRTECallback",
+   "setupSelectiveEffectUniforms",
+   "transform",
+   "turbo",
+   "unionGBufferRequirements",
+   "unpackOrientation",
+   "unpackShowOpacity",
+   "updateBatchAttribute",
+   "vector3ToGeodetic",
+   "vogelDisk",
+   "westUpNorthToFixedFrame"
+  ],
+  "@navaramap/three-default-descs": [
+   "AerialPerspective",
+   "AerialPerspectiveEffectDesc",
+   "AerialPerspectiveLightingEffect",
+   "AmbientLight",
+   "AmbientLightDesc",
+   "ArcLine",
+   "ArclineMeshDesc",
+   "ArrowHelperDesc",
+   "AxesHelperDesc",
+   "BoxMeshDesc",
+   "CloudLayer",
+   "Clouds",
+   "CloudsEffectDesc",
+   "ColorGradingLUT",
+   "ColorGradingLUTEffectDesc",
+   "ConeTracingMaterial",
+   "ConeTracingPass",
+   "CylinderMeshDesc",
+   "DEFAULT_AERIAL_PERSPECTIVE_LIGHTING_OPTIONS",
+   "DEFAULT_AERIAL_PERSPECTIVE_OPTIONS",
+   "DEFAULT_ANTIALIAS_OPTIONS",
+   "DEFAULT_CLOUDS_OPTIONS",
+   "DEFAULT_COLOR_GRADING_LUT_OPTIONS",
+   "DEFAULT_DEPTH_OF_FIELD_OPTIONS",
+   "DEFAULT_FOG_LIGHT_EFFECT_OPTIONS",
+   "DEFAULT_FOG_LIGHT_OPTIONS",
+   "DEFAULT_GLOW_GLOBE_OPTIONS",
+   "DEFAULT_GLTF_MODEL_DESCRIPTION",
+   "DEFAULT_LENS_FLARE_OPTIONS",
+   "DEFAULT_RAIN_DROP_OPTIONS",
+   "DEFAULT_SKY_BOX_OPTIONS",
+   "DEFAULT_SSAO_OPTIONS",
+   "DEFAULT_SSR_OPTIONS",
+   "DEFAULT_STARS_OPTIONS",
+   "DEFAULT_TONE_MAPPING_OPTIONS",
+   "DefaultArcLineConfig",
+   "DefaultRainConfig",
+   "DefaultSmoothLineConfig",
+   "DefaultSnowConfig",
+   "DepthOfField",
+   "DepthOfFieldEffectDesc",
+   "FXAA",
+   "FXAAEffectDesc",
+   "FogLight",
+   "FogLightEffect",
+   "FogLightEffectDesc",
+   "GLTFModelDesc",
+   "GlowGlobeMeshDesc",
+   "InstancedBoxMeshDesc",
+   "InstancedCylinderMeshDesc",
+   "InstancedGltfModelMeshDesc",
+   "InstancedPlaneMeshDesc",
+   "InstancedSphereMeshDesc",
+   "LensFlare",
+   "LensFlareEffectDesc",
+   "LightProbeDesc",
+   "PlaneMeshDesc",
+   "PolygonMeshDesc",
+   "PolylineMeshDesc",
+   "RainDropEffect",
+   "RainDropEffectDesc",
+   "RainMesh",
+   "RainMeshDesc",
+   "SMAA",
+   "SMAAEffectDesc",
+   "SSAO",
+   "SSAOEffectDesc",
+   "SSR",
+   "SSREffect",
+   "SSREffectDesc",
+   "SSRMaterial",
+   "SelectiveBloomEffectDesc",
+   "SelectiveOutlineEffectDesc",
+   "SkyBoxMeshDesc",
+   "SkyLightProbe",
+   "SkyLightProbeDesc",
+   "SkyMesh",
+   "SkyMeshDesc",
+   "SmoothLine",
+   "SmoothLineMeshDesc",
+   "SnowMesh",
+   "SnowMeshDesc",
+   "SphereMeshDesc",
+   "SpherePoints",
+   "SplatMeshDesc",
+   "Stars",
+   "StarsDesc",
+   "SunLight",
+   "SunLightDesc",
+   "ToneMapping",
+   "ToneMappingEffectDesc",
+   "ToneMappingMode",
+   "TubeMeshDesc",
+   "patchLightingTermsShader"
+  ],
+  "@navaramap/three-default-plugin": [
+   "DefaultPlugin"
+  ],
+  "_descKeys": {
+   "effect": {
+    "aerialPerspective": "AerialPerspectiveEffectDesc",
+    "clouds": "CloudsEffectDesc",
+    "colorGradingLUT": "ColorGradingLUTEffectDesc",
+    "depthOfField": "DepthOfFieldEffectDesc",
+    "fxaa": "FXAAEffectDesc",
+    "fogLight": "FogLightEffectDesc",
+    "lensFlare": "LensFlareEffectDesc",
+    "rainDrop": "RainDropEffectDesc",
+    "smaa": "SMAAEffectDesc",
+    "ssao": "SSAOEffectDesc",
+    "ssr": "SSREffectDesc",
+    "selectiveBloom": "SelectiveBloomEffectDesc",
+    "selectiveOutline": "SelectiveOutlineEffectDesc",
+    "toneMapping": "ToneMappingEffectDesc"
+   }
+  }
+ },
+ "sourceTypes": {
+  "geojson": {
+   "ok": true,
+   "id": "70f70e1c36f7eff8c97fe60ee8cc98e1"
+  },
+  "vector-tile": {
+   "ok": true,
+   "id": "359d9f94a5149c61b40c07df23eac4dc"
+  },
+  "raster-tile": {
+   "ok": true,
+   "id": "a7426416a7aeca1fa5efe9d2754e5178"
+  },
+  "raster-dem": {
+   "ok": true,
+   "id": "58531c6533fff8f1350d1ad6cb5fcf15"
+  },
+  "quantized-mesh": {
+   "ok": true,
+   "id": "eca611490195395ceb2ed2dd8d27a32c"
+  },
+  "3d-tiles": {
+   "ok": true,
+   "id": "cd5d7809096c7b5796961830df6ebed0"
+  },
+  "b3dm": {
+   "ok": true,
+   "id": "125ceaab8d3b5544f32b9c3dfb8c81b9"
+  },
+  "pnts": {
+   "ok": true,
+   "id": "3ef28b12cb5feb988e73aa67f9874c29"
+  },
+  "mvt-INVALID": {
+   "ok": true,
+   "id": "f3f83ccc2a91ed476d835d2b62059c39"
+  }
+ },
+ "materials": {
+  "vector/point": {
+   "ok": true,
+   "id": "5ce7e65485f5d72723a564fb2a14ac45"
+  },
+  "vector/polyline": {
+   "ok": true,
+   "id": "8585e07996d6e552a6283aa6549a2ebb"
+  },
+  "vector/polygon": {
+   "ok": true,
+   "id": "e813294d11b37e1b885a9b457b905aad"
+  },
+  "vector/text": {
+   "ok": true,
+   "id": "5497de64e4238ec9814231ce87d2fbc1"
+  },
+  "vector/billboard": {
+   "ok": true,
+   "id": "bea300f4a680023e0336d990ed5fd19a"
+  },
+  "vector/hillshade-BAD": {
+   "ok": true,
+   "id": "b0b42d079af2a9d6ae1dd3c25f08b90c"
+  },
+  "terrain/ellipsoid": {
+   "ok": true,
+   "id": "2d0c63ab3df814b1787c496fd4d19e11"
+  },
+  "terrain/terrain-noSrc-BAD": {
+   "ok": true,
+   "id": "4798c8a0a8fa092c5ea5fb3d0af1992c"
+  },
+  "raster/hillshade": {
+   "ok": true,
+   "id": "580702809402bcdb8f9f261635c643bf"
+  },
+  "raster/elevationHeatmap": {
+   "ok": true,
+   "id": "802bb5d7b9d189ecdb307a3169fa0619"
+  },
+  "raster/raster": {
+   "ok": true,
+   "id": "94c26780c6d47615044f6d7991989f60"
+  }
+ },
+ "descAccept": {
+  "effect": {
+   "aerialPerspective": {
+    "ok": false,
+    "error": "duplicate name: aerialPerspective"
+   },
+   "clouds": {
+    "ok": true
+   },
+   "colorGradingLUT": {
+    "ok": true
+   },
+   "depthOfField": {
+    "ok": true
+   },
+   "fogLight": {
+    "ok": true
+   },
+   "fxaa": {
+    "ok": true
+   },
+   "lensFlare": {
+    "ok": false,
+    "error": "duplicate name: lensFlare"
+   },
+   "rainDrop": {
+    "ok": true
+   },
+   "selectiveBloom": {
+    "ok": true
+   },
+   "selectiveOutline": {
+    "ok": true
+   },
+   "smaa": {
+    "ok": false,
+    "error": "duplicate name: smaa"
+   },
+   "ssao": {
+    "ok": true
+   },
+   "ssr": {
+    "ok": true
+   },
+   "toneMapping": {
+    "ok": false,
+    "error": "duplicate name: toneMapping"
+   },
+   "vignette-BAD": {
+    "ok": false,
+    "error": "Unknown effect type specified in configuration: vignette-BAD"
+   }
+  },
+  "light": {
+   "ambient": {
+    "ok": true
+   },
+   "lightProbe": {
+    "ok": true
+   },
+   "skyLightProbe": {
+    "ok": true
+   },
+   "sun": {
+    "ok": true
+   },
+   "directional-BAD": {
+    "ok": false,
+    "error": "Unknown light type specified in configuration: directional-BAD"
+   }
+  },
+  "mesh": {
+   "arcline": {
+    "ok": false,
+    "error": "Unknown mesh type specified in configuration: arcline"
+   },
+   "arrowHelper": {
+    "ok": false,
+    "error": "ArrowHelper requires a direction"
+   },
+   "axesHelper": {
+    "ok": true
+   },
+   "box": {
+    "ok": true
+   },
+   "cylinder": {
+    "ok": true
+   },
+   "glowGlobe": {
+    "ok": true
+   },
+   "gltfModel": {
+    "ok": true
+   },
+   "instancedBox": {
+    "ok": false,
+    "error": "Unknown mesh type specified in configuration: instancedBox"
+   },
+   "instancedCylinder": {
+    "ok": false,
+    "error": "Unknown mesh type specified in configuration: instancedCylinder"
+   },
+   "instancedGltfModel": {
+    "ok": false,
+    "error": "Unknown mesh type specified in configuration: instancedGltfModel"
+   },
+   "instancedPlane": {
+    "ok": false,
+    "error": "Unknown mesh type specified in configuration: instancedPlane"
+   },
+   "instancedSphere": {
+    "ok": false,
+    "error": "Unknown mesh type specified in configuration: instancedSphere"
+   },
+   "plane": {
+    "ok": true
+   },
+   "polygon": {
+    "ok": false,
+    "error": "Set exactly one of `positions` (geodetic), `points` (cartesian) or `geojson`"
+   },
+   "polyline": {
+    "ok": false,
+    "error": "Set exactly one of `positions` (geodetic), `points` (cartesian) or `geojson`"
+   },
+   "rain": {
+    "ok": true
+   },
+   "sky": {
+    "ok": true
+   },
+   "skyBox": {
+    "ok": true
+   },
+   "smoothLine": {
+    "ok": false,
+    "error": "Unknown mesh type specified in configuration: smoothLine"
+   },
+   "snow": {
+    "ok": true
+   },
+   "sphere": {
+    "ok": true
+   },
+   "splat": {
+    "ok": true
+   },
+   "stars": {
+    "ok": true
+   },
+   "tube": {
+    "ok": false,
+    "error": "TubeMesh requires points array with at least 2 points"
+   }
+  }
+ },
+ "scene": {
+  "hasAttribution": true,
+  "attributionMembers": [
+   "constructor",
+   "displayedItems",
+   "init",
+   "add",
+   "remove",
+   "clear",
+   "apply",
+   "resolveCreditLayers",
+   "show",
+   "hide",
+   "dispose",
+   "setStyle",
+   "applyStyle",
+   "render",
+   "ensureDom",
+   "createItemShell",
+   "populateList",
+   "layerCreditStrings",
+   "requestRender",
+   "populateLogos",
+   "setOpen",
+   "handleKeydown",
+   "handlePreRender",
+   "currentZoomLevel",
+   "teardownDom",
+   "trackLayers"
+  ],
+  "globeMembers": [
+   "constructor",
+   "setOptions",
+   "maxSse",
+   "segments",
+   "color",
+   "hideUnderground",
+   "useNormal",
+   "transparent",
+   "opacity",
+   "wireframe"
+  ],
+  "atmosphereMembers": [
+   "constructor",
+   "initTextures",
+   "loadTexture",
+   "fetchTexture",
+   "_dispose",
+   "onTexturesReady",
+   "getSunDirection",
+   "getMoonDirection",
+   "getRotationMatrix",
+   "_update",
+   "isAtNight",
+   "getSunElevation",
+   "getSolarTime",
+   "setSolarTime",
+   "date",
+   "setDateAt",
+   "setElevationAt",
+   "setDateFromCameraAt",
+   "setElevationFromCameraAt"
+  ],
+  "memoryStats": {
+   "bufferTotalBytes": 42633365,
+   "externalBufferBytes": 0,
+   "bufferCount": 250,
+   "gpuBytesEst": 118454652,
+   "externalCpuBytes": 49761694,
+   "reservedBytes": 160514700,
+   "fixedGpuBytes": 60793320,
+   "budgetBytes": 2147483648,
+   "evictedCount": 0,
+   "sseMultiplier": 1,
+   "retainedVector": 7,
+   "retainedTerrain": 0,
+   "retainedRaster": 76,
+   "retainedTiles3d": 0
+  },
+  "isMobileOptimized": false,
+  "zoom": 14.596210180815813,
+  "lit": true,
+  "animation": false,
+  "buffers": {
+   "normal": true,
+   "selectiveEffect": false,
+   "emissive": false,
+   "shadow": false,
+   "globeNormal": false
+  }
+ },
+ "terrainApi": {
+  "sampleTerrainHeight": "function",
+  "sampleTerrainMostDetailed": "function",
+  "sampleTerrainHeightRange": "function",
+  "observeTerrainHeightAt": "function",
+  "observeTerrainHeightRange": "function",
+  "pickTerrainPosition": "function",
+  "pickDepthPosition": "function",
+  "zoomLevelToCameraDistance": "function",
+  "getZoomLevel": "function",
+  "workerMemoryStats": "function",
+  "setSseMultiplierRange": "function",
+  "lodFog": {
+   "enabled": true,
+   "density": 0.0002,
+   "sseFactor": 2
+  },
+  "dynamicSse": {
+   "enabled": true,
+   "density": 0.0002,
+   "sseFactor": 24,
+   "heightFalloff": 0.25,
+   "minHeight": 0,
+   "maxHeight": 8000
+  },
+  "cacheBytes": 2147483648
+ }
+}

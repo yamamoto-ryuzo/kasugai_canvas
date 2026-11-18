@@ -1,0 +1,74 @@
+{
+  "checks": [
+    {
+      "name": "scene3d fxaa=on → pps.fxaa.enabled",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "name": "scene3d tonemap=ACES → pps.tonemapper",
+      "pass": true,
+      "extra": "ACES"
+    },
+    {
+      "name": "UI #effect-fxaa が scene3d と同期",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "name": "UI #effect-tonemap=ACES 同期",
+      "pass": true,
+      "extra": "ACES"
+    },
+    {
+      "name": "地表大気 既定ON + チェック同期",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "name": "3dtiles レイヤーがマウントされた",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "name": "tilecolor=orange → Cesium3DTileStyle 適用",
+      "pass": true,
+      "extra": "[object Object]"
+    },
+    {
+      "name": "scaledist= → billboard.scaleByDistance(NearFarScalar)",
+      "pass": true,
+      "extra": "[1000,1.5,200000,0.2]"
+    },
+    {
+      "name": "strot=45 → polygon.stRotation=π/4",
+      "pass": true,
+      "extra": "0.7853981633974483"
+    },
+    {
+      "name": "globe.material=ElevationContour",
+      "pass": true,
+      "extra": "ElevationContour"
+    },
+    {
+      "name": "モノクロ(B&W)ステージ追加",
+      "pass": true,
+      "extra": "[\"czm_black_and_white\"]"
+    },
+    {
+      "name": "kasugaiApi.setEffect('edge') → エッジ検出ステージ",
+      "pass": true,
+      "extra": "[\"czm_black_and_white\",\"czm_edge_detection_b9557e47-b5ed-4fbe-9ac2-a8902c3d4da7\"]"
+    },
+    {
+      "name": "kasugaiApi.setEffect('bloom') → composite enabled",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "name": "WMS GetFeatureInfo → 属性パネル追記",
+      "pass": true,
+      "extra": "▾検証 / WMS-states (WMS)STATE_NAMEKansasSTATE_FIPS20SUB_REGIONW N CenSTATE_ABBRKSLAND_KM213096.7▾検証 / WMS-states (WMS)STAT"
+    }
+  ]
+}

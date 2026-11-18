@@ -1,0 +1,1141 @@
+{
+  "leaflet": {
+    "version": "1.9.4",
+    "exportKeys": [
+      "Bounds",
+      "Browser",
+      "CRS",
+      "Canvas",
+      "Circle",
+      "CircleMarker",
+      "Class",
+      "Control",
+      "DivIcon",
+      "DivOverlay",
+      "DomEvent",
+      "DomUtil",
+      "Draggable",
+      "Evented",
+      "FeatureGroup",
+      "GeoJSON",
+      "GridLayer",
+      "Handler",
+      "Icon",
+      "ImageOverlay",
+      "LatLng",
+      "LatLngBounds",
+      "Layer",
+      "LayerGroup",
+      "LineUtil",
+      "Map",
+      "Marker",
+      "Mixin",
+      "Path",
+      "Point",
+      "PolyUtil",
+      "Polygon",
+      "Polyline",
+      "Popup",
+      "PosAnimation",
+      "Projection",
+      "Rectangle",
+      "Renderer",
+      "SVG",
+      "SVGOverlay",
+      "TileLayer",
+      "Tooltip",
+      "Transformation",
+      "Util",
+      "VideoOverlay",
+      "bind",
+      "bounds",
+      "canvas",
+      "circle",
+      "circleMarker",
+      "control",
+      "divIcon",
+      "extend",
+      "featureGroup",
+      "geoJSON",
+      "geoJson",
+      "gridLayer",
+      "icon",
+      "imageOverlay",
+      "latLng",
+      "latLngBounds",
+      "layerGroup",
+      "map",
+      "marker",
+      "point",
+      "polygon",
+      "polyline",
+      "popup",
+      "rectangle",
+      "setOptions",
+      "stamp",
+      "svg",
+      "svgOverlay",
+      "tileLayer",
+      "tooltip",
+      "transformation",
+      "version",
+      "videoOverlay",
+      "noConflict",
+      "MarkerClusterGroup",
+      "markerClusterGroup",
+      "MarkerCluster",
+      "DistanceGrid",
+      "QuickHull",
+      "MarkerClusterNonAnimated",
+      "HeatLayer",
+      "heatLayer"
+    ],
+    "factories": [
+      "bind",
+      "bounds",
+      "canvas",
+      "circle",
+      "circleMarker",
+      "control",
+      "divIcon",
+      "extend",
+      "featureGroup",
+      "geoJSON",
+      "geoJson",
+      "gridLayer",
+      "icon",
+      "imageOverlay",
+      "latLng",
+      "latLngBounds",
+      "layerGroup",
+      "map",
+      "marker",
+      "point",
+      "polygon",
+      "polyline",
+      "popup",
+      "rectangle",
+      "setOptions",
+      "stamp",
+      "svg",
+      "svgOverlay",
+      "tileLayer",
+      "tooltip",
+      "transformation",
+      "videoOverlay",
+      "noConflict",
+      "markerClusterGroup",
+      "heatLayer"
+    ],
+    "controlFactories": [
+      "layers",
+      "zoom",
+      "scale",
+      "attribution"
+    ],
+    "crs": [
+      "latLngToPoint",
+      "pointToLatLng",
+      "project",
+      "unproject",
+      "scale",
+      "zoom",
+      "getProjectedBounds",
+      "infinite",
+      "wrapLatLng",
+      "wrapLatLngBounds",
+      "Earth",
+      "EPSG3395",
+      "EPSG3857",
+      "EPSG900913",
+      "EPSG4326",
+      "Simple"
+    ],
+    "handlers": {
+      "boxZoom": true,
+      "doubleClickZoom": true,
+      "dragging": true,
+      "keyboard": true,
+      "scrollWheelZoom": true,
+      "tapHold": false,
+      "touchZoom": true,
+      "inertia": true
+    },
+    "mapOptions": {
+      "center": [
+        35.681,
+        139.767
+      ],
+      "zoom": 10,
+      "attributionControl": false,
+      "zoomControl": false
+    },
+    "renderer": "e",
+    "classes": {
+      "Bounds": {
+        "methods": [
+          "extend",
+          "getCenter",
+          "getBottomLeft",
+          "getTopRight",
+          "getTopLeft",
+          "getBottomRight",
+          "getSize",
+          "contains",
+          "intersects",
+          "overlaps",
+          "isValid",
+          "pad",
+          "equals"
+        ],
+        "options": {}
+      },
+      "Canvas": {
+        "methods": [
+          "options",
+          "getEvents",
+          "onAdd",
+          "callInitHooks"
+        ],
+        "options": {
+          "tolerance": 0
+        }
+      },
+      "Circle": {
+        "methods": [
+          "initialize",
+          "setRadius",
+          "getRadius",
+          "getBounds",
+          "setStyle",
+          "options",
+          "callInitHooks",
+          "toGeoJSON"
+        ],
+        "options": {}
+      },
+      "CircleMarker": {
+        "methods": [
+          "options",
+          "initialize",
+          "setLatLng",
+          "getLatLng",
+          "setRadius",
+          "getRadius",
+          "setStyle",
+          "callInitHooks",
+          "toGeoJSON"
+        ],
+        "options": {
+          "fill": true,
+          "radius": 10
+        }
+      },
+      "Class": {
+        "methods": [],
+        "options": {}
+      },
+      "Control": {
+        "methods": [
+          "options",
+          "initialize",
+          "getPosition",
+          "setPosition",
+          "getContainer",
+          "addTo",
+          "remove",
+          "callInitHooks"
+        ],
+        "options": {
+          "position": "topright"
+        }
+      },
+      "DivIcon": {
+        "methods": [
+          "options",
+          "createIcon",
+          "createShadow",
+          "callInitHooks"
+        ],
+        "options": {
+          "iconSize": [
+            12,
+            12
+          ],
+          "html": false,
+          "bgPos": null,
+          "className": "leaflet-div-icon"
+        }
+      },
+      "DivOverlay": {
+        "methods": [
+          "options",
+          "initialize",
+          "openOn",
+          "close",
+          "toggle",
+          "onAdd",
+          "onRemove",
+          "getLatLng",
+          "setLatLng",
+          "getContent",
+          "setContent",
+          "getElement",
+          "update",
+          "getEvents",
+          "isOpen",
+          "bringToFront",
+          "bringToBack",
+          "callInitHooks"
+        ],
+        "options": {
+          "interactive": false,
+          "offset": [
+            0,
+            0
+          ],
+          "className": "",
+          "content": ""
+        }
+      },
+      "Draggable": {
+        "methods": [
+          "options",
+          "initialize",
+          "enable",
+          "disable",
+          "finishDrag",
+          "callInitHooks"
+        ],
+        "options": {
+          "clickTolerance": 3
+        }
+      },
+      "Evented": {
+        "methods": [
+          "on",
+          "off",
+          "fire",
+          "listens",
+          "once",
+          "addEventParent",
+          "removeEventParent",
+          "addEventListener",
+          "clearAllEventListeners",
+          "removeEventListener",
+          "addOneTimeEventListener",
+          "fireEvent",
+          "hasEventListeners",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "FeatureGroup": {
+        "methods": [
+          "addLayer",
+          "removeLayer",
+          "setStyle",
+          "bringToFront",
+          "bringToBack",
+          "getBounds",
+          "options",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "GeoJSON": {
+        "methods": [
+          "initialize",
+          "addData",
+          "resetStyle",
+          "setStyle",
+          "options",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "GridLayer": {
+        "methods": [
+          "options",
+          "initialize",
+          "onAdd",
+          "beforeAdd",
+          "onRemove",
+          "bringToFront",
+          "bringToBack",
+          "getContainer",
+          "setOpacity",
+          "setZIndex",
+          "isLoading",
+          "redraw",
+          "getEvents",
+          "createTile",
+          "getTileSize",
+          "callInitHooks"
+        ],
+        "options": {
+          "tileSize": 256,
+          "opacity": 1,
+          "updateWhenIdle": false,
+          "updateWhenZooming": true,
+          "updateInterval": 200,
+          "zIndex": 1,
+          "bounds": null,
+          "minZoom": 0,
+          "noWrap": false,
+          "pane": "tilePane",
+          "className": "",
+          "keepBuffer": 2
+        }
+      },
+      "Handler": {
+        "methods": [
+          "initialize",
+          "enable",
+          "disable",
+          "enabled",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "Icon": {
+        "methods": [
+          "options",
+          "initialize",
+          "createIcon",
+          "createShadow",
+          "callInitHooks"
+        ],
+        "options": {
+          "popupAnchor": [
+            0,
+            0
+          ],
+          "tooltipAnchor": [
+            0,
+            0
+          ],
+          "crossOrigin": false
+        }
+      },
+      "ImageOverlay": {
+        "methods": [
+          "options",
+          "initialize",
+          "onAdd",
+          "onRemove",
+          "setOpacity",
+          "setStyle",
+          "bringToFront",
+          "bringToBack",
+          "setUrl",
+          "setBounds",
+          "getEvents",
+          "setZIndex",
+          "getBounds",
+          "getElement",
+          "getCenter",
+          "callInitHooks"
+        ],
+        "options": {
+          "opacity": 1,
+          "alt": "",
+          "interactive": false,
+          "crossOrigin": false,
+          "errorOverlayUrl": "",
+          "zIndex": 1,
+          "className": ""
+        }
+      },
+      "LatLng": {
+        "methods": [
+          "equals",
+          "toString",
+          "distanceTo",
+          "wrap",
+          "toBounds",
+          "clone"
+        ],
+        "options": {}
+      },
+      "LatLngBounds": {
+        "methods": [
+          "extend",
+          "pad",
+          "getCenter",
+          "getSouthWest",
+          "getNorthEast",
+          "getNorthWest",
+          "getSouthEast",
+          "getWest",
+          "getSouth",
+          "getEast",
+          "getNorth",
+          "contains",
+          "intersects",
+          "overlaps",
+          "toBBoxString",
+          "equals",
+          "isValid"
+        ],
+        "options": {}
+      },
+      "Layer": {
+        "methods": [
+          "options",
+          "addTo",
+          "remove",
+          "removeFrom",
+          "getPane",
+          "addInteractiveTarget",
+          "removeInteractiveTarget",
+          "getAttribution",
+          "callInitHooks",
+          "bindPopup",
+          "unbindPopup",
+          "openPopup",
+          "closePopup",
+          "togglePopup",
+          "isPopupOpen",
+          "setPopupContent",
+          "getPopup",
+          "bindTooltip",
+          "unbindTooltip",
+          "openTooltip",
+          "closeTooltip",
+          "toggleTooltip",
+          "isTooltipOpen",
+          "setTooltipContent",
+          "getTooltip"
+        ],
+        "options": {
+          "pane": "overlayPane",
+          "attribution": null,
+          "bubblingMouseEvents": true
+        }
+      },
+      "LayerGroup": {
+        "methods": [
+          "initialize",
+          "addLayer",
+          "removeLayer",
+          "hasLayer",
+          "clearLayers",
+          "invoke",
+          "onAdd",
+          "onRemove",
+          "eachLayer",
+          "getLayer",
+          "getLayers",
+          "setZIndex",
+          "getLayerId",
+          "options",
+          "callInitHooks",
+          "toMultiPoint",
+          "toGeoJSON"
+        ],
+        "options": {}
+      },
+      "Map": {
+        "methods": [
+          "options",
+          "initialize",
+          "setView",
+          "setZoom",
+          "zoomIn",
+          "zoomOut",
+          "setZoomAround",
+          "fitBounds",
+          "fitWorld",
+          "panTo",
+          "panBy",
+          "flyTo",
+          "flyToBounds",
+          "setMaxBounds",
+          "setMinZoom",
+          "setMaxZoom",
+          "panInsideBounds",
+          "panInside",
+          "invalidateSize",
+          "stop",
+          "locate",
+          "stopLocate",
+          "addHandler",
+          "remove",
+          "createPane",
+          "getCenter",
+          "getZoom",
+          "getBounds",
+          "getMinZoom",
+          "getMaxZoom",
+          "getBoundsZoom",
+          "getSize",
+          "getPixelBounds",
+          "getPixelOrigin",
+          "getPixelWorldBounds",
+          "getPane",
+          "getPanes",
+          "getContainer",
+          "getZoomScale",
+          "getScaleZoom",
+          "project",
+          "unproject",
+          "layerPointToLatLng",
+          "latLngToLayerPoint",
+          "wrapLatLng",
+          "wrapLatLngBounds",
+          "distance",
+          "containerPointToLayerPoint",
+          "layerPointToContainerPoint",
+          "containerPointToLatLng",
+          "latLngToContainerPoint",
+          "mouseEventToContainerPoint",
+          "mouseEventToLayerPoint",
+          "mouseEventToLatLng",
+          "whenReady",
+          "callInitHooks",
+          "addControl",
+          "removeControl",
+          "addLayer",
+          "removeLayer",
+          "hasLayer",
+          "eachLayer",
+          "openPopup",
+          "closePopup",
+          "openTooltip",
+          "closeTooltip",
+          "getRenderer"
+        ],
+        "options": {
+          "crs": {
+            "infinite": false,
+            "wrapLng": [
+              -180,
+              180
+            ],
+            "R": 6371000,
+            "code": "EPSG:3857",
+            "projection": {
+              "R": 6378137,
+              "MAX_LATITUDE": 85.0511287798,
+              "bounds": {
+                "min": {
+                  "x": -20037508.342789244,
+                  "y": -20037508.342789244
+                },
+                "max": {
+                  "x": 20037508.342789244,
+                  "y": 20037508.342789244
+                }
+              }
+            },
+            "transformation": {
+              "_a": 2.495320233665337e-8,
+              "_b": 0.5,
+              "_c": -2.495320233665337e-8,
+              "_d": 0.5
+            }
+          },
+          "layers": [],
+          "zoomAnimation": true,
+          "zoomAnimationThreshold": 4,
+          "fadeAnimation": true,
+          "markerZoomAnimation": true,
+          "transform3DLimit": 8388608,
+          "zoomSnap": 1,
+          "zoomDelta": 1,
+          "trackResize": true,
+          "zoomControl": true,
+          "attributionControl": true,
+          "closePopupOnClick": true,
+          "boxZoom": true,
+          "doubleClickZoom": true,
+          "dragging": true,
+          "inertia": true,
+          "inertiaDeceleration": 3400,
+          "inertiaMaxSpeed": null,
+          "easeLinearity": 0.2,
+          "worldCopyJump": false,
+          "maxBoundsViscosity": 0,
+          "keyboard": true,
+          "keyboardPanDelta": 80,
+          "scrollWheelZoom": true,
+          "wheelDebounceTime": 40,
+          "wheelPxPerZoomLevel": 60,
+          "tapHold": false,
+          "tapTolerance": 15,
+          "touchZoom": true,
+          "bounceAtZoomLimits": true
+        }
+      },
+      "Marker": {
+        "methods": [
+          "options",
+          "initialize",
+          "onAdd",
+          "onRemove",
+          "getEvents",
+          "getLatLng",
+          "setLatLng",
+          "setZIndexOffset",
+          "getIcon",
+          "setIcon",
+          "getElement",
+          "update",
+          "setOpacity",
+          "callInitHooks",
+          "toGeoJSON",
+          "clusterHide",
+          "clusterShow",
+          "refreshIconOptions"
+        ],
+        "options": {
+          "icon": {
+            "options": {},
+            "_initHooksCalled": true
+          },
+          "interactive": true,
+          "keyboard": true,
+          "title": "",
+          "alt": "Marker",
+          "zIndexOffset": 0,
+          "opacity": 1,
+          "riseOnHover": false,
+          "riseOffset": 250,
+          "pane": "markerPane",
+          "shadowPane": "shadowPane",
+          "bubblingMouseEvents": false,
+          "autoPanOnFocus": true,
+          "draggable": false,
+          "autoPan": false,
+          "autoPanPadding": [
+            50,
+            50
+          ],
+          "autoPanSpeed": 10
+        }
+      },
+      "Path": {
+        "methods": [
+          "options",
+          "beforeAdd",
+          "onAdd",
+          "onRemove",
+          "redraw",
+          "setStyle",
+          "bringToFront",
+          "bringToBack",
+          "getElement",
+          "callInitHooks"
+        ],
+        "options": {
+          "stroke": true,
+          "color": "#3388ff",
+          "weight": 3,
+          "opacity": 1,
+          "lineCap": "round",
+          "lineJoin": "round",
+          "dashArray": null,
+          "dashOffset": null,
+          "fill": false,
+          "fillColor": null,
+          "fillOpacity": 0.2,
+          "fillRule": "evenodd",
+          "interactive": true,
+          "bubblingMouseEvents": true
+        }
+      },
+      "Point": {
+        "methods": [
+          "clone",
+          "add",
+          "subtract",
+          "divideBy",
+          "multiplyBy",
+          "scaleBy",
+          "unscaleBy",
+          "round",
+          "floor",
+          "ceil",
+          "trunc",
+          "distanceTo",
+          "equals",
+          "contains",
+          "toString"
+        ],
+        "options": {}
+      },
+      "Polygon": {
+        "methods": [
+          "options",
+          "isEmpty",
+          "getCenter",
+          "callInitHooks",
+          "toGeoJSON"
+        ],
+        "options": {
+          "fill": true
+        }
+      },
+      "Polyline": {
+        "methods": [
+          "options",
+          "initialize",
+          "getLatLngs",
+          "setLatLngs",
+          "isEmpty",
+          "closestLayerPoint",
+          "getCenter",
+          "getBounds",
+          "addLatLng",
+          "callInitHooks",
+          "toGeoJSON"
+        ],
+        "options": {
+          "smoothFactor": 1,
+          "noClip": false
+        }
+      },
+      "Popup": {
+        "methods": [
+          "options",
+          "openOn",
+          "onAdd",
+          "onRemove",
+          "getEvents",
+          "callInitHooks"
+        ],
+        "options": {
+          "pane": "popupPane",
+          "offset": [
+            0,
+            7
+          ],
+          "maxWidth": 300,
+          "minWidth": 50,
+          "maxHeight": null,
+          "autoPan": true,
+          "autoPanPaddingTopLeft": null,
+          "autoPanPaddingBottomRight": null,
+          "autoPanPadding": [
+            5,
+            5
+          ],
+          "keepInView": false,
+          "closeButton": true,
+          "autoClose": true,
+          "closeOnEscapeKey": true,
+          "className": ""
+        }
+      },
+      "PosAnimation": {
+        "methods": [
+          "run",
+          "stop",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "Rectangle": {
+        "methods": [
+          "initialize",
+          "setBounds",
+          "options",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "Renderer": {
+        "methods": [
+          "options",
+          "initialize",
+          "onAdd",
+          "onRemove",
+          "getEvents",
+          "callInitHooks"
+        ],
+        "options": {
+          "padding": 0.1
+        }
+      },
+      "SVG": {
+        "methods": [
+          "options",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "SVGOverlay": {
+        "methods": [
+          "options",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "TileLayer": {
+        "methods": [
+          "options",
+          "initialize",
+          "setUrl",
+          "createTile",
+          "getTileUrl",
+          "callInitHooks"
+        ],
+        "options": {
+          "minZoom": 0,
+          "maxZoom": 18,
+          "subdomains": "abc",
+          "errorTileUrl": "",
+          "zoomOffset": 0,
+          "tms": false,
+          "zoomReverse": false,
+          "detectRetina": false,
+          "crossOrigin": false,
+          "referrerPolicy": false
+        }
+      },
+      "TileLayer.WMS": {
+        "methods": [
+          "defaultWmsParams",
+          "options",
+          "initialize",
+          "onAdd",
+          "getTileUrl",
+          "setParams",
+          "callInitHooks"
+        ],
+        "options": {
+          "crs": null,
+          "uppercase": false
+        }
+      },
+      "Tooltip": {
+        "methods": [
+          "options",
+          "onAdd",
+          "onRemove",
+          "getEvents",
+          "setOpacity",
+          "callInitHooks"
+        ],
+        "options": {
+          "pane": "tooltipPane",
+          "offset": [
+            0,
+            0
+          ],
+          "direction": "auto",
+          "permanent": false,
+          "sticky": false,
+          "opacity": 0.9
+        }
+      },
+      "Transformation": {
+        "methods": [
+          "transform",
+          "untransform"
+        ],
+        "options": {}
+      },
+      "VideoOverlay": {
+        "methods": [
+          "options",
+          "callInitHooks"
+        ],
+        "options": {
+          "autoplay": true,
+          "loop": true,
+          "keepAspectRatio": true,
+          "muted": false,
+          "playsInline": true
+        }
+      },
+      "MarkerClusterGroup": {
+        "methods": [
+          "options",
+          "initialize",
+          "addLayer",
+          "removeLayer",
+          "addLayers",
+          "removeLayers",
+          "clearLayers",
+          "getBounds",
+          "eachLayer",
+          "getLayers",
+          "getLayer",
+          "hasLayer",
+          "zoomToShowLayer",
+          "onAdd",
+          "onRemove",
+          "getVisibleParent",
+          "fire",
+          "listens",
+          "callInitHooks",
+          "unspiderfy",
+          "refreshClusters"
+        ],
+        "options": {
+          "maxClusterRadius": 80,
+          "iconCreateFunction": null,
+          "clusterPane": "markerPane",
+          "spiderfyOnEveryZoom": false,
+          "spiderfyOnMaxZoom": true,
+          "showCoverageOnHover": true,
+          "zoomToBoundsOnClick": true,
+          "singleMarkerMode": false,
+          "disableClusteringAtZoom": null,
+          "removeOutsideVisibleBounds": true,
+          "animate": true,
+          "animateAddingMarkers": false,
+          "spiderfyShapePositions": null,
+          "spiderfyDistanceMultiplier": 1,
+          "spiderLegPolylineOptions": {
+            "weight": 1.5,
+            "color": "#222",
+            "opacity": 0.5
+          },
+          "chunkedLoading": false,
+          "chunkInterval": 200,
+          "chunkDelay": 50,
+          "chunkProgress": null,
+          "polygonOptions": {}
+        }
+      },
+      "MarkerCluster": {
+        "methods": [
+          "options",
+          "initialize",
+          "getAllChildMarkers",
+          "getChildCount",
+          "zoomToBounds",
+          "getBounds",
+          "createIcon",
+          "createShadow",
+          "callInitHooks",
+          "getConvexHull",
+          "spiderfy",
+          "unspiderfy"
+        ],
+        "options": {
+          "popupAnchor": [
+            0,
+            0
+          ],
+          "tooltipAnchor": [
+            0,
+            0
+          ],
+          "crossOrigin": false
+        }
+      },
+      "DistanceGrid": {
+        "methods": [
+          "addObject",
+          "updateObject",
+          "removeObject",
+          "eachObject",
+          "getNearObject"
+        ],
+        "options": {}
+      },
+      "MarkerClusterNonAnimated": {
+        "methods": [
+          "options",
+          "callInitHooks"
+        ],
+        "options": {}
+      },
+      "HeatLayer": {
+        "methods": [
+          "setLatLngs",
+          "addLatLng",
+          "setOptions",
+          "getBounds",
+          "redraw",
+          "getEvents",
+          "onAdd",
+          "onRemove",
+          "options"
+        ],
+        "options": {
+          "radius": 25,
+          "blur": 15,
+          "minOpacity": 0.05,
+          "max": 1
+        }
+      }
+    },
+    "mc": {
+      "methods": [
+        "options",
+        "initialize",
+        "addLayer",
+        "removeLayer",
+        "addLayers",
+        "removeLayers",
+        "clearLayers",
+        "getBounds",
+        "eachLayer",
+        "getLayers",
+        "getLayer",
+        "hasLayer",
+        "zoomToShowLayer",
+        "onAdd",
+        "onRemove",
+        "getVisibleParent",
+        "fire",
+        "listens",
+        "callInitHooks",
+        "unspiderfy",
+        "refreshClusters"
+      ],
+      "options": {
+        "maxClusterRadius": 80,
+        "iconCreateFunction": null,
+        "clusterPane": "markerPane",
+        "spiderfyOnEveryZoom": false,
+        "spiderfyOnMaxZoom": true,
+        "showCoverageOnHover": true,
+        "zoomToBoundsOnClick": true,
+        "singleMarkerMode": false,
+        "disableClusteringAtZoom": null,
+        "removeOutsideVisibleBounds": true,
+        "animate": true,
+        "animateAddingMarkers": false,
+        "spiderfyShapePositions": null,
+        "spiderfyDistanceMultiplier": 1,
+        "spiderLegPolylineOptions": {
+          "weight": 1.5,
+          "color": "#222",
+          "opacity": 0.5
+        },
+        "chunkedLoading": false,
+        "chunkInterval": 200,
+        "chunkDelay": 50,
+        "chunkProgress": null,
+        "polygonOptions": {}
+      }
+    },
+    "heat": {
+      "methods": [
+        "setLatLngs",
+        "addLatLng",
+        "setOptions",
+        "getBounds",
+        "redraw",
+        "getEvents",
+        "onAdd",
+        "onRemove",
+        "options"
+      ],
+      "options": {
+        "radius": 25,
+        "blur": 15,
+        "minOpacity": 0.05,
+        "max": 1
+      }
+    },
+    "mcErr": null,
+    "heatErr": null
+  }
+}

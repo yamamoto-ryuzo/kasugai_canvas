@@ -1,0 +1,1 @@
+{"type":"Topology","transform":{"scale":[0.001,0.001],"translate":[139.76,35.67]},"objects":{"test":{"type":"GeometryCollection","geometries":[{"type":"Polygon","arcs":[[0]],"properties":{"name":"topo-area"}}]}},"arcs":[[[0,0],[20,0],[20,20],[0,20],[0,0]]]}

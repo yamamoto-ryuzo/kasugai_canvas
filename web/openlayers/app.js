@@ -13,7 +13,7 @@ import ClusterSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Cluste
 import StaticSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/ImageStatic.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
@@ -50,8 +50,9 @@ import Text from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Text.js";
 import Point from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/Point.js";
 import MultiPoint from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiPoint.js";
 import MultiLineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiLineString.js";
+import LineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/LineString.js";
 import Polygon from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/Polygon.js";
-import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver } from "../shared/qml-2d.js";
+import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver, setMapScaleGetter } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { defaults as defaultControls } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/defaults.js";
 import ScaleLine from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/ScaleLine.js";
@@ -63,7 +64,7 @@ import { createStringXY } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/coordina
 await initI18n();
 applyI18n();
 
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
@@ -191,6 +192,9 @@ document.querySelector("#attr-widget-open")?.addEventListener("click", () => {
 let layerEntries = [];
 // QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
 installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+// QML 式変数 @map_scale → 現在解像度(m/px) ÷ 0.28mm。スタイル関数は
+// 描画ごとの setEvalScale(resolution) が優先され、こちらはフォールバック
+setMapScaleGetter(() => map.getView().getResolution() / 0.00028);
 let lastBaseUrl = "";
 let currentBaseEntries = [];
 // ?kasc= で読み込んだ .kasc の URL。設定中は URL 書き換え時に
@@ -542,9 +546,9 @@ async function buildLayer(item, baseUrl, preloaded) {
     let qmlStyleFn = null;
     if (item.opts?.style) {
       try {
-        compiled = await loadCompiledQml(item.opts.style, baseUrl);
+        compiled = await loadCompiledQml(item.opts.style, baseUrl, "openlayers");
         item._qml = compiled;
-        const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text, Point, MultiPoint, MultiLineString, Polygon });
+        const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text, Point, MultiPoint, MultiLineString, LineString, Polygon });
         // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない
         qmlStyleFn = (f, res) => {
           const names = compiled.namesFor?.(f.getProperties() || {});
@@ -1039,6 +1043,7 @@ function renderLayerRows(entries, unsupported) {
     const key = `${group}|${exclusive ? "exclusive" : "regular"}`;
     const section = document.createElement("section");
     section.className = "layer-group" + (exclusive ? " exclusive" : "");
+    section.dataset.groupKey = key;
     const head = document.createElement("div");
     head.className = "layer-group-title";
     const tg = document.createElement("button");
@@ -1785,6 +1790,7 @@ const geoTools = initGeoTools2d({
 const minimap = createMinimap({
   container: "#minimap",
   checkbox: "#display-minimap",
+  button: "#basemap-minimap",
   tileUrl: () => currentBaseEntries[Number(panel.basemapSelect?.value ?? 0)]?.item?.url || "",
   getBounds: () => {
     const b = viewBounds4326();
@@ -2162,6 +2168,14 @@ themeSelect?.addEventListener("change", () => {
   if (theme) applyKascTheme(theme);
 });
 
+// レイヤ一覧: 全グループの一括展開/折りたたみ
+document.getElementById("layer-expand-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, true);
+});
+document.getElementById("layer-collapse-all")?.addEventListener("click", () => {
+  setAllLayerGroupsExpanded(panel.layers, expandedLayerGroups, false);
+});
+
 // ---- ポータル(portal:/html:/view:/link: 行で構成する開始画面) ----
 // UI 構築は shared/portal.js へ共通化。ここでは宣言の収集・状態getterと
 // view: の地図状態適用(applyKascView/clearKascView)を担当する
@@ -2529,7 +2543,7 @@ async function saveToDataDir(name, content) {
       try {
         await saveToDataDir(file.name, file);
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           inspectorInput.value = inspectorInput.value.replace(/\s*$/, "") + `\n${type}:${title} | DATA/${file.name}\n`;

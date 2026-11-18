@@ -56,16 +56,16 @@
      オーバーレイにすると gsimaps 左側UI が隠れて操作不能になるため隣接配置にする */
   #layout { display: flex; height: 100%; width: 100%; }
   #map-wrap { flex: 1; position: relative; min-width: 0; }
-  #gsi-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #20262b; }
+  #gsi-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #fff; }
   #gsi-missing {
     position: absolute; inset: 0; z-index: 2000; display: flex; align-items: center; justify-content: center;
     background: #20262b; color: #dde4ea; font-size: 14px; text-align: center; line-height: 1.8; padding: 24px;
   }
   #gsi-missing[hidden] { display: none; }
   #panel {
-    position: relative; z-index: 1000; flex: 0 0 336px; height: 100%;
+    position: relative; z-index: 1000; flex: 0 0 366px; height: 100%;
     background: rgba(255,255,255,.97); padding: 14px; box-sizing: border-box;
-    width: 336px; max-height: none; display: flex; flex-direction: column;
+    width: 366px; max-height: none; display: flex; flex-direction: column;
     box-shadow: 2px 0 8px rgba(0,0,0,.2); font-size: 16px; user-select: text;
     /* 区画高の合計が画面高を超えた場合はパネル自体がスクロールする */
     overflow-y: auto; overflow-x: hidden;
@@ -97,7 +97,16 @@
                background: transparent; color: #52636d; cursor: pointer; font-size: 18px; }
   #tabs .tab.active { background: rgba(49,86,79,.16); color: #31564f; font-weight: 700; }
   .tab-pane { overflow-x: hidden; overflow-y: auto; flex: 1; min-height: 0; }
-  #theme-select { width: 100%; margin-bottom: 3px; }
+  /* テーマ選択 + レイヤ全展開/全折りたたみボタン行 */
+  .layer-head-row { display: flex; gap: 4px; align-items: center; margin-bottom: 3px; }
+  .layer-head-row > #theme-select { flex: 1; min-width: 0; width: auto; margin-bottom: 0; }
+  .layer-head-row > #layer-expand-all { margin-left: auto; }
+  /* 小アイコンボタンは .tab-pane button（濃緑）ルールに負けないよう !important 付き（小アイコンボタンと同じ方式） */
+  .layer-head-btn { flex: 0 0 26px; min-width: 26px !important; min-height: 26px !important; padding: 0 !important;
+    border: 0 !important; border-radius: 4px !important; background: rgba(49,86,79,.16) !important;
+    color: #31564f !important; font-size: 14px !important; line-height: 1; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .layer-head-btn:hover { background: rgba(49,86,79,.24) !important; }
   #panel-toggle { flex: 0 0 26px; min-width: 26px; min-height: 26px; padding: 1px 4px;
     border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f;
     font-size: 18px; line-height: 1; cursor: pointer; }
@@ -197,9 +206,12 @@
   #setpane-ai .field-label { display: block; font-size: 12px; margin: 3px 0; }
   .basemap-control.collapsed { padding: 4px; }
   .basemap-control.collapsed select { display: none; }
-  #basemap-toggle { width: 24px; min-width: 24px; min-height: 24px; padding: 1px 4px;
+  .basemap-control.collapsed #basemap-minimap { display: none; }
+  #basemap-toggle, #basemap-minimap { width: 24px; min-width: 24px; min-height: 24px; padding: 0;
     border: 0; border-radius: 4px; background: rgba(49,86,79,.16); color: #31564f;
-    cursor: pointer; font-size: 17px; line-height: 1; }
+    cursor: pointer; font-size: 17px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  #basemap-minimap { font-size: 21px; padding: 1px 0; }
+  #basemap-minimap.active { background: rgba(49,86,79,.36); }
   #load-progress { position: absolute; bottom: 56px; left: 50%; transform: translateX(-50%);
     z-index: 1005; display: flex; align-items: center; gap: 8px; padding: 5px 12px;
     background: rgba(255,255,255,.95); border-radius: 14px; font-size: 12px;
@@ -222,7 +234,7 @@
 .portal-open.active { background: rgba(49,86,79,.28) !important; border-color: #31564f !important; }
   .portal-overlay { position: fixed; inset: 0; z-index: 9500; display: flex; align-items: center; justify-content: center; background: rgba(20,32,40,.45); }
   .portal-overlay[hidden] { display: none; }
-  .portal-dialog { width: min(720px, 92vw); max-height: 86vh; display: flex; flex-direction: column; background: rgba(255,255,255,.97); border: 1px solid #cbd9de; border-radius: 10px; box-shadow: 0 16px 48px rgba(10,20,40,.35); overflow: hidden; }
+  .portal-dialog { width: fit-content; min-width: min(720px, 92vw); max-width: 95vw; max-height: 95vh; display: flex; flex-direction: column; background: rgba(255,255,255,.97); border: 1px solid #cbd9de; border-radius: 10px; box-shadow: 0 16px 48px rgba(10,20,40,.35); overflow: hidden; }
   .portal-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #e4ecef; background: #f5f9fa; }
   .portal-title { flex: 1 1 auto; margin: 0; font-size: 18px; color: #1d2b35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .portal-close { flex: 0 0 auto; min-height: 30px; padding: 4px 14px; border: 1px solid #31564f; border-radius: 5px; background: #31564f; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
@@ -294,7 +306,11 @@
     <button class="tab" data-tab="info">情報</button>
   </div>
   <div class="tab-pane" id="pane-layers">
-    <select id="theme-select" hidden style="width:100%;margin-bottom:3px;"></select>
+    <div class="layer-head-row">
+      <select id="theme-select" hidden></select>
+      <button id="layer-expand-all" class="layer-head-btn" type="button" title="すべて展開" aria-label="すべて展開">🔽</button>
+      <button id="layer-collapse-all" class="layer-head-btn" type="button" title="すべて折りたたみ" aria-label="すべて折りたたみ">🔼</button>
+    </div>
     <div id="layers"></div>
     <button id="gsi-import-layers" type="button" title="地理院地図で表示中のレイヤをCanvasレイヤ(xyz行)として取り込み、.kascへ追記" style="width:100%;margin-top:3px;">地理院地図の表示レイヤを取り込み</button>
   </div>
@@ -329,6 +345,8 @@
   </div>
   <div id="basemap-ctl" class="basemap-control">
     <button id="basemap-toggle" type="button" aria-label="最小化">−</button>
+    <input id="display-minimap" type="checkbox" hidden />
+    <button id="basemap-minimap" type="button" title="ミニマップの表示/非表示" aria-label="ミニマップの表示/非表示" aria-pressed="false">🗺️</button>
     <select id="basemap-select"></select>
   </div>
   <div id="engines"></div>

@@ -1,0 +1,6 @@
+[
+ {"id":"document","version":"1.0"},
+ {"id":"sattrack","name":"CZML軌跡","position":{"cartographicDegrees":[0,139.762,35.678,0,10,139.772,35.682,0,20,139.778,35.686,0]}},
+ {"id":"pt1","name":"CZML点","position":{"cartographicDegrees":[139.770,35.690,0]}},
+ {"id":"poly1","name":"CZML面","polygon":{"positions":{"cartographicDegrees":[139.760,35.692,0,139.775,35.692,0,139.775,35.698,0,139.760,35.698,0]}}}
+]

@@ -1,0 +1,4 @@
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.768,35.678]},"properties":{"name":"nd-1"}}
+{"type":"Feature","geometry":{"type":"Point","coordinates":[139.773,35.682]},"properties":{"name":"nd-2"}}
+# comment line
+{"type":"Feature","geometry":{"type":"LineString","coordinates":[[139.760,35.700],[139.780,35.700]]},"properties":{"name":"nd-line"}}
