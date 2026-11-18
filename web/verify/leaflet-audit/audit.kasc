@@ -10,3 +10,7 @@ geojson: path-opts | canvas_data/poly.geojson | fillrule=nonzero | classname=my-
 geojson: canvas-renderer | canvas_data/poly.geojson | renderer=canvas | off
 xyz: tile-opts | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | tms=on | zoomoffset=1 | nowrap=on | subdomains=abc | zindex=5 | referrerpolicy=no-referrer | off
 image: image-opts | canvas_data/img.png | bbox=139.7,35.6,139.8,35.7 | alt=テスト画像 | interactive=on | crossorigin=anonymous | zindex=9 | off
+mvt: mvt-gsi | https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/{z}/{x}/{y}.pbf | off
+mvt: mvt-gsi-style | https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/{z}/{x}/{y}.pbf | layers=WA | fill=#ffcc00 | stroke=#ff0000 | width=2 | off
+mvt: mvt-tilejson | canvas_data/mvt_tilejson.json | off
+pmtiles: pmtiles-firenze | https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles | off

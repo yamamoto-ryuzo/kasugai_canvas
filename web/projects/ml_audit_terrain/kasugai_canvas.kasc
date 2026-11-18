@@ -1,0 +1,7 @@
+# engine-maplibre 監査: terrain:/light:/scene3d: 行 + raster 色調整 opts
+base: 地理院写真(明度-0.2) | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | attr=国土地理院 | brightness=-0.2 | resampling=nearest | fade-duration=0
+cam: 富士山 | 35.33 | 138.70 | h=180000 | p=-40 | d=0
+terrain: AWS Terrarium | exaggeration=1.5 | shading=both | url=https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png | encoding=terrarium | maxzoom=15
+light: 主光 | az=210 | el=40 | intensity=0.6 | color=#ffffff
+scene3d: 3D | background=#1a2b4a
+xyz: 彩度-1淡色 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | saturation=-1 | contrast=0.4 | hue=15 | opacity=0.5 | attr=地理院タイル

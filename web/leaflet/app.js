@@ -26,16 +26,20 @@ import { installLocalCrsUI } from "../shared/coords-local.js";
 import { initPrint, compositeDomMap } from "../shared/print.js";
 import { initUiConfig } from "../shared/ui-config.js";
 
+import { mvtStyle, loadMvtDecoder, loadPmtiles } from "../shared/mvt.js";
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M } from "../shared/qml-2d.js";
-import { markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson } from "../shared/qml-2d.js";
+import { markerLayersToCanvas, fillPartsToTile, rgbaToCss, linRefFormatText } from "../shared/qml-style.js";
 import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
+// parseKasc の doc.unsupported に入るが本エンジンで描画経路を持つタイプ
+// (3dtiles=deck.gl / mvt・vectortile・pmtiles=leaflet.vectorgrid)
+const LEAFLET_HANDLED_TYPES = new Set(["3dtiles", "mvt", "pmtiles", "vectortile"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
 // 照合するフック。タイトル(正規化・最終セグメント)一致で返し、
 // 無ければ null → vector-load 側のファイルパス/QGIS 解決へフォールバック
@@ -105,6 +109,32 @@ const mapInitOpts = {
   // ?prefercanvas=1: 全ベクターを Canvas レンダラで描画(大量地物向け。
   // SVG <pattern> のパターン塗りは使えなくなる点に注意)
   if (kascOptOn(urlParams.get("prefercanvas"))) mapInitOpts.preferCanvas = true;
+  // 残りの Map options(bool) も URL パラメータで上書き可:
+  // ?boxzoom=/doubleclickzoom=/dragging=/keyboard=/scrollwheelzoom=/touchzoom=/
+  // inertia=/bounceatzoomlimits=/taphold=/trackresize=/closepopuponclick=/
+  // zoomanimation=/fadeanimation=/markerzoomanimation= (on|off)
+  for (const [qk, ok] of [["zoomanimation", "zoomAnimation"],
+    ["fadeanimation", "fadeAnimation"], ["markerzoomanimation", "markerZoomAnimation"],
+    ["boxzoom", "boxZoom"], ["doubleclickzoom", "doubleClickZoom"],
+    ["dragging", "dragging"], ["keyboard", "keyboard"],
+    ["scrollwheelzoom", "scrollWheelZoom"], ["touchzoom", "touchZoom"],
+    ["inertia", "inertia"], ["bounceatzoomlimits", "bounceAtZoomLimits"],
+    ["taphold", "tapHold"], ["trackresize", "trackResize"],
+    ["closepopuponclick", "closePopupOnClick"]]) {
+    const v = urlParams.get(qk);
+    if (v !== null) mapInitOpts[ok] = kascOptOn(v);
+  }
+  // 残りの Map options(数値) も URL パラメータで上書き可:
+  // ?zoomanimationthreshold=/transform3dlimit=/inertiadeceleration=/
+  // inertiamaxspeed=/easelinearity=/keyboardpandelta=/wheeldebouncetime=/taptolerance=
+  for (const [qk, ok] of [["zoomanimationthreshold", "zoomAnimationThreshold"],
+    ["transform3dlimit", "transform3DLimit"], ["inertiadeceleration", "inertiaDeceleration"],
+    ["inertiamaxspeed", "inertiaMaxSpeed"], ["easelinearity", "easeLinearity"],
+    ["keyboardpandelta", "keyboardPanDelta"], ["wheeldebouncetime", "wheelDebounceTime"],
+    ["taptolerance", "tapTolerance"]]) {
+    const v = _num(urlParams.get(qk));
+    if (v !== undefined) mapInitOpts[ok] = v;
+  }
 }
 const map = L.map("map", mapInitOpts);
 window.kascMap = map; // デバッグ/外部連携用参照（他エンジンと同じ公開範囲）
@@ -424,6 +454,10 @@ function makeVectorStyleFn(item) {
               interactive: true, ...pathExtra };
           }
           const isPoly = /Polygon/.test(gt);
+          // 里程標は基線を描かない(標点ラベルのみ。QGIS 準拠)
+          if (spec.line?.decor?.kind === "linref" && !spec.outline) {
+            return { opacity: 0, weight: 0, fill: false, interactive: true, ...pathExtra };
+          }
           return {
             color: s.stroke || "#2c5ea8", weight: s.strokeWidth ?? 1.5,
             dashArray: s.dash || undefined, dashOffset: s.dashOffsetPx || undefined,
@@ -561,6 +595,8 @@ function collectDrapeItems() {
   for (const e of [...layerEntries].reverse()) {
     const it = e.item;
     if (it.visible === false || it.type === "3dtiles") continue;
+    // mvt/pmtiles は vectorgrid レイヤのため XYZ ドレープ対象から外す
+    if (it.type === "mvt" || it.type === "pmtiles" || it.type === "vectortile") continue;
     if (VECTOR_TYPES.has(it.type)) {
       if (drapeTiles3d.vector && it._geojson?.features?.length) vectorItems.push(it);
     } else if (drapeTiles3d.xyz && it.url) {
@@ -684,6 +720,186 @@ function kascCanvasRenderer(opts) {
   return _kascCanvasRenderer ??= L.canvas({ padding: 0.1 });
 }
 
+// ---- mvt:/vectortile:/pmtiles: 行 → leaflet.vectorgrid ----
+// OL は ol/layer/VectorTile、Cesium は shared/mvt.js の canvas ラスタライズ、
+// MapLibre はネイティブ vector source で描画するのと同等の経路。
+// 利用時に CDN から遅延ロードする:
+//   leaflet.vectorgrid … SVG/Canvas でのベクトルタイル描画 (BSD-2-Clause)
+//   @mapbox/vector-tile + pbf … MVT デコード (shared/mvt.js 経由・pmtiles 用)
+//   pmtiles … PMTiles アーカイブ読み出し (pmtiles: 行のみ)
+const VECTORGRID_URL = "https://cdn.jsdelivr.net/npm/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js";
+let _vgLoadP = null;
+function loadVectorGrid() {
+  _vgLoadP ||= loadScriptOnce(VECTORGRID_URL).then(() => {
+    if (!L.vectorGrid?.protobuf) throw new Error("leaflet.vectorgrid の初期化に失敗しました");
+    return L.vectorGrid;
+  });
+  return _vgLoadP;
+}
+
+// L.VectorGrid.Protobuf サブクラス。_getVectorTilePromise を差し替えて
+// 3経路({z}/{x}/{y} テンプレート/TileJSON展開後・PMTiles アーカイブ)を統一し、
+// 地物の properties へジオメトリ種別(__gtype:1点/2線/3面)とソースレイヤ名
+// (__lname)を非列挙プロパティで注入する(vectorgrid のスタイル関数は
+// (properties, zoom) しか受け取れず地物型を参照できないため)
+function kascVectorGridClass() {
+  return L.VectorGrid.Protobuf.extend({
+    initialize(url, options, fetchTile, dec) {
+      this._fetchTile = fetchTile;
+      this._dec = dec;
+      L.VectorGrid.Protobuf.prototype.initialize.call(this, url, options);
+    },
+    _getVectorTilePromise(coords) {
+      // VectorGrid.Protobuf オリジナルと同じ {s,x,y,z,-y}/tms 展開を踏襲
+      const data = { s: this._getSubdomain(coords), x: coords.x, y: coords.y, z: coords.z };
+      if (this._map && this._globalTileRange && !this._map.options.crs.infinite) {
+        const inv = this._globalTileRange.max.y - coords.y;
+        if (this.options.tms) data.y = inv;
+        data["-y"] = inv;
+      }
+      const tileUrl = this._url ? L.Util.template(this._url, L.extend(data, this.options)) : "";
+      return Promise.resolve(this._fetchTile(coords, tileUrl)).then(buf => {
+        if (!buf || !buf.byteLength) return { layers: [] };
+        const tile = new this._dec.VectorTile(new this._dec.Pbf(new Uint8Array(buf)));
+        // vectorgrid の描画側が期待する形へ正規化(feature.geometry=loadGeometry)
+        for (const name in tile.layers) {
+          const layer = tile.layers[name];
+          const feats = [];
+          for (let i = 0; i < layer.length; i++) {
+            const feat = layer.feature(i);
+            feat.geometry = feat.loadGeometry();
+            try {
+              Object.defineProperty(feat.properties, "__gtype", { value: feat.type, enumerable: false, configurable: true });
+              Object.defineProperty(feat.properties, "__lname", { value: name, enumerable: false, configurable: true });
+            } catch (_) { feat.properties.__gtype = feat.type; feat.properties.__lname = name; }
+            feats.push(feat);
+          }
+          layer.features = feats;
+        }
+        return tile;
+      }).catch(() => ({ layers: [] }));
+    },
+  });
+}
+
+// mvt:/vectortile:/pmtiles: 行 → L.vectorGrid.protobuf 派生レイヤ。
+// URL は {z}/{x}/{y} テンプレート・TileJSON(.json)・.pmtiles アーカイブの
+// いずれか。行オプションは shared/mvt.js の mvtStyle() spec と共通:
+//   fill=/stroke=(or color=)/width=/pointcolor=(or circle=)/radius=/
+//   layers=(ソースレイヤ絞込)/minzoom=/maxzoom=/bbox=/opacity=
+// 追加 opts: tms=on/subdomains=/tilesize=/renderer=canvas/interactive=off
+async function buildMvtGridLayer(item, baseUrl, pane) {
+  const opts = item.opts || {};
+  const url = resolveKascUrl(item.url, baseUrl);
+  const { style, layerNames } = mvtStyle(opts);
+  const [, dec] = await Promise.all([loadVectorGrid(), loadMvtDecoder()]);
+  let attribution = layerAttribution(item) || undefined;
+  let template = url;
+  let fetchTile;
+  let srcMin = Number(opts.minzoom ?? opts.minimumlevel);
+  let srcMax = Number(opts.maxzoom ?? opts.maximumlevel);
+  let env = null;
+  if (item.type === "pmtiles") {
+    // pmtiles: Range リクエストで部分読み出しする単一ファイルアーカイブ。
+    // getZxy(z,x,y) → Pbf デコードを _getVectorTilePromise 経路へ載せる
+    const m = await loadPmtiles();
+    const pm = new m.PMTiles(url);
+    try {
+      const meta = await pm.getMetadata();
+      if (!Number.isFinite(srcMin) && meta?.minzoom != null) srcMin = Number(meta.minzoom);
+      if (!Number.isFinite(srcMax) && meta?.maxzoom != null) srcMax = Number(meta.maxzoom);
+      if (!item.attr && meta?.attribution) item.attr = String(meta.attribution);
+      if (!item.attr && meta?.attribution) attribution = String(meta.attribution);
+      const b = meta?.bounds;
+      if (Array.isArray(b) && b.length === 4 && b.every(Number.isFinite)) {
+        env = { west: b[0], south: b[1], east: b[2], north: b[3] };
+      }
+    } catch (_) { /* メタデータ無しでも描画は試行 */ }
+    template = null;
+    fetchTile = coords => pm.getZxy(coords.z, coords.x, coords.y).then(r => r?.data || null);
+  } else {
+    if (/\.json($|[?#])/i.test(url)) {
+      // TileJSON 参照: tiles[0] へ展開し min/maxzoom/attribution/bounds を補完
+      const tj = await fetch(url).then(r => {
+        if (!r.ok) throw new Error(`TileJSON 取得失敗 ${r.status}: ${url}`);
+        return r.json();
+      });
+      if (!tj || !Array.isArray(tj.tiles) || !tj.tiles.length) {
+        throw new Error(`TileJSON に tiles がありません: ${url}`);
+      }
+      template = tj.tiles[0];
+      if (!Number.isFinite(srcMin) && tj.minzoom != null) srcMin = Number(tj.minzoom);
+      if (!Number.isFinite(srcMax) && tj.maxzoom != null) srcMax = Number(tj.maxzoom);
+      if (!item.attr && tj.attribution) item.attr = String(tj.attribution);
+      const b = tj.bounds;
+      if (Array.isArray(b) && b.length === 4 && b.every(Number.isFinite)) {
+        env = { west: b[0], south: b[1], east: b[2], north: b[3] };
+      }
+    }
+    fetchTile = (coords, tileUrl) => fetch(tileUrl).then(r => r.ok ? r.arrayBuffer() : null);
+  }
+  // ジオメトリ種別(__gtype)で mvtStyle spec を Path options へ分岐。
+  // layers= 指定時は該当ソースレイヤ以外を空配列スタイルで描画対象から外す
+  const styleFor = props => {
+    if (layerNames && !layerNames.has(props.__lname)) return [];
+    const t = props.__gtype;
+    if (t === 1) return { radius: style.pointRadius, color: style.pointStroke, weight: 1,
+      fillColor: style.pointFill, fillOpacity: 1, opacity: 1, fill: true };
+    if (t === 3) return { color: style.stroke, weight: style.lineWidth,
+      fill: true, fillColor: style.fill, fillOpacity: 1, opacity: 1 };
+    return { color: style.stroke, weight: style.lineWidth, fill: false, opacity: 1 };
+  };
+  // ソースレイヤ名が不明でも全レイヤへ同一スタイルを適用するため
+  // vectorTileLayerStyles 辞書引きを Proxy で styleFor へ振る
+  const vgOpts = {
+    pane,
+    interactive: !/^(off|none|false|0)$/i.test(String(opts.interactive ?? "")),
+    vectorTileLayerStyles: new Proxy({}, { get: () => styleFor }),
+    tileSize: Number(opts.tilesize) || 256,
+    maxZoom: 24,
+    opacity: opts.opacity !== undefined ? Number(opts.opacity) : 1,
+  };
+  if (Number.isFinite(srcMin)) vgOpts.minZoom = srcMin;
+  if (Number.isFinite(srcMax)) vgOpts.maxNativeZoom = srcMax;
+  if (kascOptOn(opts.tms)) vgOpts.tms = true;
+  if (opts.subdomains) vgOpts.subdomains = String(opts.subdomains);
+  // renderer=canvas: タイル単位の Canvas レンダラ(L.canvas.tile)へ
+  if (/^canvas$/i.test(String(opts.renderer ?? opts.render ?? ""))) vgOpts.rendererFactory = L.canvas.tile;
+  const bb = String(opts.bbox || "").split(",").map(v => Number(v.trim()));
+  if (bb.length === 4 && bb.every(Number.isFinite)) {
+    vgOpts.bounds = [[bb[1], bb[0]], [bb[3], bb[2]]];
+    env = { west: bb[0], south: bb[1], east: bb[2], north: bb[3] };
+  }
+  const KascVg = kascVectorGridClass();
+  const layer = new KascVg(template, vgOpts, fetchTile, dec);
+  // 地物クリック → 属性タブへ表示(geojson 行と同じ経路)
+  layer.on("click", e => {
+    if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
+    const src = e.propagatedFrom || e.layer;
+    const props = src?.properties || src?.feature?.properties;
+    if (!props) return;
+    try {
+      const fid = props.id;
+      liveNotifySelection({
+        layer: item.title || item.url,
+        longitude: e.latlng?.lng, latitude: e.latlng?.lat,
+        ...(Number.isFinite(Number(fid)) ? { ids: [Number(fid)] } : {}),
+      });
+    } catch (_) { /* 逆通知失敗は無視 */ }
+    window.switchPanelTab?.("attr");
+    const entry = layerEntries.find(en => en.item === item);
+    renderAttrContent(panel.attrContent, [{
+      title: item.title || item.url,
+      entries: attrEntriesFromProps(props),
+      layerId: entry ? String(layerEntries.indexOf(entry)) : null,
+      feature: null,
+      flyable: false,
+    }], {});
+  });
+  if (env) item._env = env;
+  return { layer, baseOpacity: vgOpts.opacity };
+}
+
 // .kasc 1行 → Leaflet レイヤ。戻り値は { layer, styleFn, viewportQuery, zoomRange }
 // paneName 指定時は新規 pane を作らずその pane に配置する（ベースマップ用）
 async function addKascLayer(item, baseUrl, preloaded, paneName) {
@@ -727,6 +943,13 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     };
   }
   const pane = paneName || newKascPane();
+  if (item.type === "mvt" || item.type === "pmtiles" || item.type === "vectortile") {
+    // ベクトルタイル → leaflet.vectorgrid(遅延ロード)。doc.unsupported
+    // 側から来るタイプだが、ここで pane 付きの正規レイヤとして描画する
+    const r = await buildMvtGridLayer(item, baseUrl, pane);
+    return { layer: r.layer, styleFn: null, viewportQuery: false,
+      zoomRange: itemVisZoom, baseOpacity: r.baseOpacity };
+  }
   if (item.type === "image") {
     // ジオリファレンス画像オーバーレイ(現場写真・紙図面)。corners= は外接矩形へ正規化
     const ov = parseImageOverlay(item);
@@ -922,14 +1145,70 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       if (kascOptOn(cOpts.riseonhover)) mkExtra.riseOnHover = true;
       const mo = Number(cOpts.markeropacity); if (Number.isFinite(mo)) mkExtra.opacity = mo;
     }
+    // LinearReferencing(里程標): 線地物の等間隔標点を透明点として追加し、
+    // permanent tooltip で距離ラベルを表示する(生成点は __kasc_lronly で区別)
+    const lrIconUrls = new Map(); // gkey → dataURL (show_marker 用)
+    if (item._qml && geojson?.features?.length) {
+      const lrPts = [];
+      for (const f of geojson.features) {
+        if (!/LineString/.test(f?.geometry?.type || "")) continue;
+        let spec = null;
+        try { spec = item._qml.evaluate(f.properties || {}); } catch (_) {}
+        const dec = spec?.line?.decor;
+        if (dec?.kind !== "linref") continue;
+        const tf = dec.text || {};
+        let mic = "";
+        if (dec.showMarker && dec.markers?.length) {
+          try {
+            const cv = markerLayersToCanvas(dec.markers);
+            if (cv) {
+              mic = `lr${lrIconUrls.size}`;
+              lrIconUrls.set(mic, { url: cv.toDataURL(), size: [cv.width, cv.height] });
+            }
+          } catch (_) {}
+        }
+        for (const smp of linRefSamplesGeojson(f.geometry, dec)) {
+          lrPts.push({ type: "Feature", properties: {
+            __kasc_lronly: 1,
+            __kasc_lrt: linRefFormatText(smp.dist, dec.num),
+            __kasc_lrm: mic,
+          }, geometry: { type: "Point", coordinates: smp.coord } });
+        }
+      }
+      if (lrPts.length) geojson.features = [...geojson.features, ...lrPts];
+    }
+    // symbollevels=1 の近似: pass 順に地物を並べ替え(SVG レンダラは追加順が z 順)
+    if (item._qml?.symbolLevels && geojson?.features?.length) {
+      try {
+        geojson.features = [...geojson.features].sort((a, b) =>
+          (item._qml.evaluate(a.properties || {})?.zRank ?? 0)
+          - (item._qml.evaluate(b.properties || {})?.zRank ?? 0));
+      } catch (_) { /* 並べ替え失敗は元順のまま */ }
+    }
     const layer = L.geoJSON(geojson, {
       pane,
       style: styleFn,
       pointToLayer: (f, latlng) => {
+        // linref 生成点: マーカー指定があれば画像、無ければ透明(ラベルのみ)
+        if (f?.properties?.__kasc_lronly) {
+          const ic = lrIconUrls.get(f.properties.__kasc_lrm);
+          if (ic) return L.marker(latlng, { icon: L.icon({ iconUrl: ic.url, iconSize: ic.size, iconAnchor: [ic.size[0] / 2, ic.size[1] / 2] }), pane, interactive: false });
+          return L.circleMarker(latlng, { radius: 0, pane, interactive: false, opacity: 0, fillOpacity: 0 });
+        }
         const ic = item._qml ? pointIcon(f) : null;
         return ic ? L.marker(latlng, { icon: ic, pane, ...mkExtra }) : L.circleMarker(latlng, { radius: 5, pane });
       },
       onEachFeature: (f, l) => {
+        // linref 生成点: 距離ラベルを permanent tooltip で表示(クリック対象外)
+        if (f?.properties?.__kasc_lrt != null) {
+          try {
+            l.bindTooltip(String(f.properties.__kasc_lrt), {
+              permanent: true, direction: "center",
+              className: "kasc-linref-label", interactive: false,
+            });
+          } catch (_) {}
+          return;
+        }
         // 線端トリム(QML trim_distance): 生成済みポリラインの座標を切断する
         // (基準縮尺1:1万換算の近似。qml-2d.js TRIM_PX_TO_M)
         if (item._qml && /LineString/.test(f?.geometry?.type || "") && l.setLatLngs) {
@@ -1841,11 +2120,11 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   }
   panel.project.value = loadedId;
 
-  // 3dtiles: 行は deck.gl で対応するため未対応通知から外し、
+  // 3dtiles/mvt/pmtiles 等は本エンジンの描画経路(deck.gl/vectorgrid)、
+  // fly_geojson: はフライパスとして対応するため未対応通知から外す。
   // _idx（.kasc 上の行順）で doc.layers と混ぜてレイヤツリー順を再現する
-  // 3dtiles: は deck.gl、fly_geojson: はフライパスとして対応するため未対応通知から外す
   kascFlyPaths.setItems(doc.unsupported);
-  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type));
+  const unsupported = doc.unsupported.filter(i => !LEAFLET_HANDLED_TYPES.has(i.type) && i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type));
 
   currentBaseEntries = [];
   const baseEntries = currentBaseEntries;
@@ -1914,7 +2193,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
   const entries = orderedItems.map(item => ({
     item, layer: null, styleFn: null, zoomRange: null, baseOpacity: 1, pending: true,
-    unsupported: doc.unsupported.includes(item) && item.type !== "3dtiles",
+    unsupported: doc.unsupported.includes(item) && !LEAFLET_HANDLED_TYPES.has(item.type),
   }));
   // 3dtiles は Leaflet pane を持たない(deckDefs 管理)ため割当をスキップする
   for (let i = entries.length - 1; i >= 0; i--) if (entries[i].item.type !== "3dtiles") entries[i].paneName = newKascPane();

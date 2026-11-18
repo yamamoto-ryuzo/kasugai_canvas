@@ -1,0 +1,125 @@
+{
+  "checks": [
+    {
+      "engine": "cesium",
+      "name": "FilledLine→corridor entity",
+      "pass": true,
+      "extra": "corridor=2"
+    },
+    {
+      "engine": "cesium",
+      "name": "VectorField→billboard",
+      "pass": true,
+      "extra": "billboard=25"
+    },
+    {
+      "engine": "cesium",
+      "name": "LinearReferencing→距離ラベル",
+      "pass": true,
+      "extra": "label=6 aux-bb=9"
+    },
+    {
+      "engine": "cesium",
+      "name": "console error なし",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "maplibre",
+      "name": "LinearReferencing→symbol レイヤ(__kasc_lrt)",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "maplibre",
+      "name": "predefinedPositionOrder→text-variable-anchor",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "maplibre",
+      "name": "symbollevels→*-sort-key(__kasc_zkey)",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "maplibre",
+      "name": "linref 生成点の通常点除外",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "maplibre",
+      "name": "linref 標点点地物の描画",
+      "pass": true,
+      "extra": "rendered=12"
+    },
+    {
+      "engine": "maplibre",
+      "name": "console error なし",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "openlayers",
+      "name": "OpenLayers canvas 描画",
+      "pass": true,
+      "extra": "canvases=1 painted=1"
+    },
+    {
+      "engine": "openlayers",
+      "name": "console error なし",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "leaflet",
+      "name": "LinearReferencing→標点 tooltip",
+      "pass": true,
+      "extra": "tips=12"
+    },
+    {
+      "engine": "leaflet",
+      "name": "VectorField/MaskMarker→マーカー",
+      "pass": true,
+      "extra": "markers=16"
+    },
+    {
+      "engine": "leaflet",
+      "name": "console error なし",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "navara",
+      "name": "Navara レイヤ読込",
+      "pass": true,
+      "extra": "layers=5"
+    },
+    {
+      "engine": "navara",
+      "name": "predefinedPositionOrder→variableAnchors",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "navara",
+      "name": "LinearReferencing→text マテリアル",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "engine": "navara",
+      "name": "console error なし",
+      "pass": true,
+      "extra": ""
+    }
+  ],
+  "screenshots": [
+    "C:/devin/kasugai_canvas/web/verify/results/qml-gaps/cesium.png",
+    "C:/devin/kasugai_canvas/web/verify/results/qml-gaps/maplibre.png",
+    "C:/devin/kasugai_canvas/web/verify/results/qml-gaps/openlayers.png",
+    "C:/devin/kasugai_canvas/web/verify/results/qml-gaps/leaflet.png",
+    "C:/devin/kasugai_canvas/web/verify/results/qml-gaps/navara.png"
+  ]
+}

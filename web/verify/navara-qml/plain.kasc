@@ -1,0 +1,4 @@
+title: navara plain verify
+base: ベースマップなし | none
+cam: 初期 | 35.60 | 139.60 | h=8000 | p=-90
+geojson: plain | canvas_data/feats.geojson | on

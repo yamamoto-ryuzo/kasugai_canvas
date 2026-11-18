@@ -266,7 +266,28 @@
       繰り返す（Leaflet/Navara は単色近似）・InterpolatedLine は Cesium で幅/色の
       線形補間を再現（ドレープ時は色のみ。MapLibre は line-gradient
       で色補間。その他は単色近似）・
-      シンボルレベルの地物横断描画順は近似</td>
+      FilledLine（塗りつぶしライン）= ネストした fill サブシンボルを取り込み、
+      Cesium は <code>CorridorGraphics</code> で line_width 幅の帯を塗り
+      （outline は帯両縁ラインで近似）、MapLibre/OpenLayers/Leaflet/Navara は
+      塗り代表色の太線近似・LinearReferencing（里程標）= interval 間隔の
+      標点へ距離ラベル＋任意マーカー（Cesium=補助エンティティ、
+      MapLibre=生成点 symbol レイヤ、OpenLayers=ジオメトリ関数スタイル、
+      Leaflet=permanent tooltip、Navara=生成点 text マテリアル。
+      地図単位=m・QGIS と同じく基線は非表示）・VectorField（ベクトル場）=
+      x_attribute/y_attribute（Cartesian/Polar/HeightOnly）で矢印画像を
+      回転・拡縮して全エンジン表示（ネスト SimpleLine の色・太さを反映。
+      線形描画ではなく画像近似）・MaskMarker=ネストしたマーカー
+      サブシンボルはそのまま描画するが、QGIS のマスク効果（ラベル・他
+      シンボルの遮蔽抜き）は全エンジン未対応（警告のみ）・
+      <code>symbollevels="1"</code> をパースし地物の最小 pass を z 順位近似
+      へ（MapLibre=<code>*-sort-key</code>、OpenLayers=スタイル zIndex、
+      Cesium=ground プリミティブ zIndex、Leaflet=地物追加順ソート。
+      QGIS 本来の「全地物をレイヤ pass 順に一括描画」は Web エンジンでは
+      再現不能のため地物単位の近似）・
+      ラベル配置候補順（<code>predefinedPositionOrder</code>）は
+      Cesium=declutter の候補位置順・MapLibre=<code>text-variable-anchor</code>
+      ＋<code>text-radial-offset</code>・Navara=<code>variableAnchors</code>
+      に写像（OpenLayers/Leaflet は先頭候補の固定アンカー近似）</td>
       </tr>
       <tr>
       <td>シンボルが参照する画像（SVG/ラスタ）</td>
@@ -311,6 +332,11 @@
       <code>text</code> マテリアル＋FeatureEvaluator で地物ごとラベル
       文字列・サイズ・declutter 優先度を評価（フォントは Google Fonts CSS
       から unicode-range 分割で登録し、取得失敗時はラベル非表示）。
+      縮尺連動も対応: <code>@map_scale</code> DD・ルール別縮尺
+      （scalemin/maxdenom）・ラベル縮尺表示（scaleVisibility）は
+      カメラ高→縮尺分母（ルール縮尺→距離換算と同係数）で評価し、
+      カメラ停止（moveend）後に対象レイヤを再マウントして現在縮尺で
+      再評価する（範囲外ラベルは text メッシュのみ show=false）。
       <strong>GSI Maps</strong>=未対応（凡例スウォッチのみ）。</p>
       <p>MapLibre のベクター拡張: <code>extrude=&lt;m&gt;</code>/<code>z=&lt;m&gt;</code>
       オプションと QML 2.5D レンダラは <code>fill-extrusion</code> レイヤへ変換、
@@ -331,8 +357,12 @@
       <code>silhouette</code>（クリック地物の縁取り）/
       <code>material</code>（globe.material 地表ファブリック）/
       <code>matuniforms</code>（ファブリック uniforms を JSON で上書き）/
-      <code>groundatmosphere</code>/<code>specmap</code>/
-      <code>minzoom</code>/<code>maxzoom</code>/<code>tilt</code>
+      <code>groundatmosphere</code>/<code>specmap</code>（URL または
+      <code>off</code>=既定環境マップ復帰）/<code>shcoeffs</code>（拡散 IBL
+      球面調和係数 JSON）/
+      <code>minzoom</code>/<code>maxzoom</code>/<code>tilt</code>/
+      <code>sscc</code>（ScreenSpaceCameraController の残り全フラグを
+      JSON 一括指定）
       （カメラ制約）を追加受理し、QGIS 3D シーン設定を超える
       Cesium 固有の後処理・大気・環境マップ・カメラ制御を
       同一行で指定できる。<code>terrain:</code> 行の <code>url=</code> は

@@ -1,7 +1,7 @@
 // QML スタイル(.qml)の Cesium への適用（描画側バインディング）
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
-import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas } from "../shared/qml-style.js";
+import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas, linRefFormatText } from "../shared/qml-style.js";
 import { trimCoordsPlanar, TRIM_PX_TO_M } from "../shared/qml-2d.js";
 
 const Cesium = window.Cesium;
@@ -447,6 +447,12 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
           entity.polyline.material = dashMaterialProperty(mulAlpha(spec.line.color, opacity), spec.line.dash);
         }
         entity.polyline.width = new Cesium.ConstantProperty(spec.line.widthPx);
+        // symbollevels 近似: 地物最小 pass を ground プリミティブの zIndex へ
+        // (非クランプの 3D 空間では深度ソートが優先されるため無効)
+        if (Number.isFinite(spec.zRank)) {
+          entity.polyline.zIndex = new Cesium.ConstantProperty(spec.zRank);
+          if (entity.polygon) entity.polygon.zIndex = new Cesium.ConstantProperty(spec.zRank);
+        }
         // 線端トリム(QML trim_distance): 基準縮尺換算のメートル値で
         // Cartesian3 位置列を弦距離切断する近似
         const tsU = (spec.line.trimStartPx || 0) * TRIM_PX_TO_M;
@@ -953,11 +959,13 @@ function polyScreenBox(scene, entity, t) {
 
 // --- 装飾ライン(MarkerLine/HashLine/ArrowLine)の補助エンティティ生成 ---
 // px → m の近似換算は qml-render のラベル用と同じ 1px≒2.8m(参照縮尺 1:10000)
-function samplePolylinePositions(entity, t, stepM) {
+function samplePolylinePositions(entity, t, stepM, { skipMultiples = 0 } = {}) {
   const pos = entity.polyline?.positions?.getValue?.(t);
   if (!pos || pos.length < 2) return [];
   const out = [];
-  let acc = 0;
+  let acc = 0, dist = 0;
+  const skip = Math.max(skipMultiples || 0, 0);
+  const eps = stepM * 1e-6;
   for (let i = 0; i + 1 < pos.length; i++) {
     const a = pos[i], b = pos[i + 1];
     const len = Cesium.Cartesian3.distance(a, b);
@@ -965,11 +973,16 @@ function samplePolylinePositions(entity, t, stepM) {
     const ca = Cesium.Cartographic.fromCartesian(a), cb = Cesium.Cartographic.fromCartesian(b);
     const ang = Math.atan2(cb.longitude - ca.longitude, cb.latitude - ca.latitude);
     while (acc < len) {
-      const p = Cesium.Cartesian3.lerp(a, b, acc / len, new Cesium.Cartesian3());
-      out.push({ position: p, angle: ang });
+      const d = dist + acc;
+      // skip_multiples: その倍数地点の標点を除外(里程標用)
+      if (!(skip > 0 && d > 0 && Math.abs(d % skip) < Math.max(eps, skip * 1e-6))) {
+        const p = Cesium.Cartesian3.lerp(a, b, acc / len, new Cesium.Cartesian3());
+        out.push({ position: p, angle: ang, dist: d });
+      }
       acc += stepM;
     }
     acc -= len;
+    dist += len;
   }
   return out;
 }
@@ -1021,6 +1034,106 @@ function renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity }) {
 function renderLineDecor(entity, decor, t, { addAux, clamp, opacity }) {
   if (decor.kind === "interpolated") {
     renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity });
+    return;
+  }
+  if (decor.kind === "filledline") {
+    // FilledLine: 本体の細線を隠し、CorridorGraphics(線幅 m の帯)を
+    // fill サブシンボルで塗る。パターン塗りはタイル、単色は ColorMaterial
+    entity.polyline.show = new Cesium.ConstantProperty(false);
+    const pos = entity.polyline?.positions?.getValue?.(t);
+    if (!pos || pos.length < 2) return;
+    const { solidBase, tile } = fillPartsToTile(scaleFillPartsAlpha(
+      decor.fillParts?.length ? decor.fillParts : [{ solid: [0.5, 0.5, 0.5, 1] }], opacity));
+    const widthM = Math.max((decor.widthPx || 2) * LABEL_M_PER_PX, 0.5);
+    const material = tile
+      ? new Cesium.ImageMaterialProperty({ image: tile, transparent: true })
+      : new Cesium.ColorMaterialProperty(toCesiumColor(solidBase || [0.5, 0.5, 0.5, 1]));
+    addAux({
+      corridor: {
+        positions: pos,
+        width: new Cesium.ConstantProperty(widthM),
+        cornerType: { bevel: Cesium.CornerType.BEVEL, miter: Cesium.CornerType.MITERED, round: Cesium.CornerType.ROUNDED }[decor.join] ?? Cesium.CornerType.ROUNDED,
+        material,
+        // ドレープ時は height=0 で地表クランプへ
+        ...(clamp ? { height: new Cesium.ConstantProperty(0) } : {}),
+      },
+    });
+    // 塗りサブシンボルの outline_style は帯の両側縁ラインで近似
+    if (decor.outline) {
+      const half = widthM / 2;
+      for (const side of [1, -1]) {
+        const edge = pos.map((p, i) => {
+          const b = pos[Math.min(i + 1, pos.length - 1)];
+          const ca = Cesium.Cartographic.fromCartesian(p), cb = Cesium.Cartographic.fromCartesian(b);
+          const az = Math.atan2(cb.longitude - ca.longitude, cb.latitude - ca.latitude);
+          return offsetPos(p, az + Math.PI / 2, half * side);
+        });
+        addAux({
+          polyline: {
+            positions: edge,
+            width: new Cesium.ConstantProperty(decor.outline.widthPx || 1),
+            material: dashMaterialProperty(mulAlpha(decor.outline.color, opacity), decor.outline.dash),
+            clampToGround: new Cesium.ConstantProperty(clamp),
+            arcType: new Cesium.ConstantProperty(Cesium.ArcType.GEODESIC),
+          },
+        });
+      }
+    }
+    return;
+  }
+  if (decor.kind === "linref") {
+    // LinearReferencing(里程標): QGIS は基線を描かないため本体を隠し、
+    // interval 間隔の標点へ距離ラベル(+任意マーカー)を置く
+    entity.polyline.show = new Cesium.ConstantProperty(false);
+    const pos = entity.polyline?.positions?.getValue?.(t);
+    if (!pos || pos.length < 2) return;
+    const tf = decor.text || {};
+    const offM = (decor.labelOffsetPx || [0, 0]).map(v => (v || 0) * LABEL_M_PER_PX);
+    const mkCv = decor.showMarker && decor.markers?.length ? markerLayersToCanvas(decor.markers) : null;
+    for (const s of samplePolylinePositions(entity, t, Math.max(decor.intervalM || 1, 1), decor)) {
+      if (s.dist <= 1e-9) continue; // 先頭(0m)は QGIS 同様ラベル無し
+      let p = s.position;
+      if (offM[0] || offM[1]) {
+        // label_offset: rotate 時は線方向系(北=0 時計回りの方位)、
+        // 非回転時は画面系(x=東, y=南)
+        p = decor.rotate
+          ? offsetPos(offsetPos(p, s.angle, offM[0]), s.angle + Math.PI / 2, offM[1])
+          : offsetPos(offsetPos(p, Math.PI / 2, offM[0]), Math.PI, offM[1]);
+      }
+      if (mkCv) addAux({
+        position: p,
+        billboard: { image: mkCv,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          rotation: decor.rotate ? -(s.angle - Math.PI / 2) : 0 },
+      });
+      const text = linRefFormatText(s.dist + (decor.startMeasure || 0), decor.num);
+      if (decor.rotate) {
+        // LabelGraphics には rotation が無いため canvas ラスタ化して billboard へ
+        const r = qmlLabelCanvas({ text, fontCss: tf.fontCss || "12px sans-serif",
+          sizePx: tf.sizePx || 12, fill: tf.fill || [0, 0, 0, 1], halo: tf.halo || null });
+        if (r) addAux({
+          position: p,
+          billboard: { image: r.canvas,
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            rotation: -(s.angle - Math.PI / 2) },
+        });
+      } else {
+        addAux({
+          position: p,
+          label: { text,
+            font: tf.fontCss || "12px sans-serif",
+            fillColor: toCesiumColor(mulAlpha(tf.fill || [0, 0, 0, 1], opacity)),
+            outlineColor: tf.halo ? toCesiumColor(mulAlpha(tf.halo.color, opacity)) : Cesium.Color.TRANSPARENT,
+            outlineWidth: tf.halo ? Math.max(tf.halo.widthPx || 1, 1) : 0,
+            style: tf.halo ? Cesium.LabelStyle.FILL_AND_OUTLINE : Cesium.LabelStyle.FILL,
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        });
+      }
+    }
     return;
   }
   const pos = entity.polyline?.positions?.getValue?.(t);

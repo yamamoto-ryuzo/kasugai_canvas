@@ -991,7 +991,12 @@ function compileRenderer(rendererEl, warnings) {
   const type = rendererEl.getAttribute("type") || "singleSymbol";
   const symbols = parseSymbols(rendererEl);
   const legend = [];
-  const ctx = { symbols, warnings, legend };
+  // symbollevels="1": シンボルレイヤ pass 番号で地物をまたいだ描画順を制御
+  // する QGIS モード。全レイヤを pass 順に一括描画する本物の再現は Web
+  // エンジンでは不可能なため、各地物の最小 pass を z 順位近似として使う
+  const symbolLevels = String(rendererEl.getAttribute("symbollevels") ?? "0") === "1"
+    || String(rendererEl.getAttribute("symbollevels") ?? "").toLowerCase() === "true";
+  const ctx = { symbols, warnings, legend, symbolLevels };
 
   switch (type) {
     case "singleSymbol": {
@@ -1532,6 +1537,78 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
       warnOnce(warnings, "GeometryGenerator マーカーは未対応です(スキップ)");
       return [];
     }
+    case "VectorField": {
+      // ベクトル場(QGIS4・実機検証済み)。実プロパティ名:
+      //   x_attribute/y_attribute=成分フィールド名
+      //   vector_field_type=0 Cartesian(x,y) / 1 Polar(x=向き,y=大きさ) / 2 HeightOnly
+      //   angle_orientation=0 北基準時計回り / 1 東基準反時計回り(数学角)
+      //   angle_units=0 度 / 1 ラジアン。scale=大きさ乗数、distance_unit=成分単位
+      //   size/size_unit=矢印長のフォールバック(属性欠損・凡例用)
+      // サブシンボルは line シンボル(矢印の線色・太さ)。描画は矢印画像の
+      // 地物別回転/拡縮で近似する(真の線形描画ではない)
+      const xAttr = String(p.x_attribute ?? "");
+      const yAttr = String(p.y_attribute ?? "");
+      const ftype = Number(p.vector_field_type ?? 0);
+      const scale = Number(p.scale ?? 1) || 1;
+      const xv = xAttr ? Number(props?.[xAttr]) : NaN;
+      const yv = yAttr ? Number(props?.[yAttr]) : NaN;
+      let rotDeg = 0, mag = NaN;
+      if (ftype === 1) {
+        // Polar: x=向き y=大きさ
+        if (Number.isFinite(xv) && Number.isFinite(yv)) {
+          let a = xv;
+          if (Number(p.angle_units ?? 0) === 1) a = a * 180 / Math.PI;
+          rotDeg = Number(p.angle_orientation ?? 0) === 1 ? 90 - a : a;
+          mag = yv;
+        }
+      } else if (ftype === 2) {
+        // HeightOnly: 大きさ=y 属性(向きは固定上向き)
+        if (Number.isFinite(yv)) mag = yv;
+      } else {
+        // Cartesian: ベクトル角=atan2(x,y)。北=0 で時計回り
+        if (Number.isFinite(xv) && Number.isFinite(yv)) {
+          rotDeg = Math.atan2(xv, yv) * 180 / Math.PI;
+          mag = Math.hypot(xv, yv);
+        }
+      }
+      if (!Number.isFinite(mag)) {
+        if (!xAttr && !yAttr) mag = Number(p.size ?? 2) || 2; // 属性未設定→固定矢印(凡例)
+        else {
+          warnOnce(warnings, `VectorField の属性(${xAttr || "?"},${yAttr || "?"})が地物に無いか数値ではありません(スキップ)`);
+          return [];
+        }
+      }
+      const lenPx = mag * scale;
+      if (!(lenPx > 0)) return [];
+      const arrowPx = Math.max(sizeToPx(lenPx, p.distance_unit || "MM"), 1);
+      let color = parseQgisColor(p.color ?? p.line_color, [0, 0, 0, 1]);
+      let strokeWidthPx = Math.max(sizeToPx(0.26, "MM"), 0.8);
+      if (layer.subSymbol) {
+        for (const l of layer.subSymbol.layers || []) {
+          if (!l.enabled) continue;
+          const r = resolveLineLayer(l, props, warnings, images);
+          if (r?.color) { color = r.color; strokeWidthPx = r.widthPx || strokeWidthPx; break; }
+        }
+      }
+      warnOnce(warnings, "VectorField は矢印画像の回転/拡縮で近似します(線形描画ではありません)");
+      return [{
+        kind: "arrow", sizePx: arrowPx,
+        // 向きは canvas へ焼き込む(rotationDeg=0 として billboard/Icon 側の
+        // 再回転を抑止。地物別の向きは spec 評価値として保持)
+        rotationDeg: 0,
+        bakeRotationDeg: Number.isFinite(rotDeg) ? rotDeg : 0,
+        color, strokeWidthPx, offsetPx, alpha,
+      }];
+    }
+    case "MaskMarker": {
+      // マスク形状マーカー(QGIS4): サブシンボル(マーカー)をそのまま描画する。
+      // QGIS ではこの形状がラベル/他シンボルレイヤの「マスク」としても登録される
+      // が、Web エンジンでは真のマスク効果(遮蔽抜き)は実現不能なため形状のみ
+      warnOnce(warnings, "MaskMarker のマスク効果(ラベル/シンボル遮蔽)は未対応です(形状のみ描画)");
+      if (!layer.subSymbol) return [];
+      return layer.subSymbol.layers.flatMap(l =>
+        l.enabled ? resolveMarkerLayer(l, props, images, warnings) : []);
+    }
     default:
       warnOnce(warnings, `マーカーシンボル ${layer.cls} は未対応です(円で代替)`);
       return [{
@@ -1540,6 +1617,81 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
         stroke: null, strokeWidthPx: 0, rotationDeg: angle, offsetPx, alpha,
       }];
   }
+}
+
+// LinearReferencing の text_format / numeric_format は Option 値内の
+// エスケープ済み XML 文字列(<text-style>/<numericFormat>)。実機 QGIS4 で確認
+function parseEmbeddedXml(xmlStr) {
+  const s = String(xmlStr || "").trim();
+  if (!s.startsWith("<")) return null;
+  try {
+    const d = new DOMParser().parseFromString(s, "application/xml");
+    if (d.querySelector("parsererror")) return null;
+    return d.documentElement || null;
+  } catch (_) { return null; }
+}
+
+// 里程標ラベルのフォント情報(text_format → <text-style>)。ラベル配置一式は
+// 不要なためフォント・色・バッファのみ抜く
+function parseLinRefTextFormat(xmlStr) {
+  const el = parseEmbeddedXml(xmlStr);
+  if (!el) return null;
+  const a = n => el.getAttribute(n);
+  const sizePx = Math.max(sizeToPx(Number(a("fontSize")) || 10, a("fontSizeUnit") || "Point"), 6);
+  const bufEl = el.querySelector?.("text-buffer") || null;
+  const halo = qgisBool(bufEl?.getAttribute("bufferDraw"))
+    ? { color: withAlpha(parseQgisColor(bufEl.getAttribute("bufferColor"), [1, 1, 1, 1]),
+        Number(bufEl.getAttribute("bufferOpacity") ?? 1)),
+        widthPx: Math.max(sizeToPx(bufEl.getAttribute("bufferSize") ?? 1,
+          bufEl.getAttribute("bufferSizeUnits") || bufEl.getAttribute("bufferSizeUnit") || "MM"), 1) }
+    : null;
+  const namedStyle = String(a("namedStyle") || "").toLowerCase();
+  const bold = qgisBool(a("fontBold")) || qgisBool(a("forcedBold"))
+    || Number(a("fontWeight")) >= 50 || namedStyle.includes("bold") || namedStyle.includes("太");
+  const italic = qgisBool(a("fontItalic")) || qgisBool(a("forcedItalic"))
+    || namedStyle.includes("italic") || namedStyle.includes("oblique");
+  const family = a("fontFamily") || "sans-serif";
+  return {
+    fill: withAlpha(parseQgisColor(a("textColor"), [0, 0, 0, 1]), Number(a("textOpacity") ?? 1)),
+    sizePx, halo, family, bold, italic,
+    fontCss: `${italic ? "italic " : ""}${bold ? "bold " : ""}${Math.round(sizePx)}px ${family}`,
+  };
+}
+
+// 里程標の数値書式(numeric_format → <numericFormat id="basic"><Option>…)。
+// rounding_type=0 小数桁 / 1 有効桁(近似で同桁丸め)。basic 以外(currency 等)も
+// 近似として basic に畳む
+function parseLinRefNumericFormat(xmlStr) {
+  const el = parseEmbeddedXml(xmlStr);
+  if (!el) return null;
+  const m = optionMap(el) || {};
+  return {
+    id: String(el.getAttribute("id") || "basic"),
+    decimals: Number.isFinite(Number(m.decimals)) ? Number(m.decimals) : 0,
+    plus: qgisBool(m.show_plus),
+    thousands: String(m.show_thousand_separator ?? "true").toLowerCase() !== "false"
+      && String(m.show_thousand_separator) !== "0",
+    trailingZeros: qgisBool(m.show_trailing_zeros),
+  };
+}
+
+// 里程標ラベル文字列。distM: 線先端からの累積距離(メートル)
+export function linRefFormatText(distM, num) {
+  const n = num || {};
+  const dec = Number.isFinite(n.decimals) ? n.decimals : 0;
+  let s;
+  if (n.trailingZeros) s = Number(distM).toFixed(Math.max(dec, 0));
+  else {
+    s = dec > 0 ? Number(distM).toFixed(dec).replace(/\.?0+$/, "") : String(Math.round(distM));
+  }
+  if (n.thousands) {
+    const neg = s.startsWith("-");
+    const body = neg ? s.slice(1) : s;
+    const [i, f] = body.split(".");
+    s = (neg ? "-" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? "." + f : "");
+  }
+  if (n.plus && distM > 0) s = "+" + s;
+  return s;
 }
 
 function resolveLineLayer(layer, props, warnings, images = null) {
@@ -1608,6 +1760,80 @@ function resolveLineLayer(layer, props, warnings, images = null) {
       return {
         color: colorStart, widthPx: Math.max(widthStartPx, widthEndPx, 1), dash: null,
         decor: { kind: "interpolated", c1: colorStart, c2: colorEnd, w1: widthStartPx, w2: widthEndPx },
+      };
+    }
+    case "FilledLine": {
+      // 塗りつぶしライン(QGIS4・実機検証済み)。line_width 幅のコリドーを
+      // fill サブシンボルで塗る。全エンジンで「太線」として成立するよう
+      // 塗り色→color・line_width→widthPx へ畳み、Cesium は
+      // decor.filledline で CorridorGraphics によるネイティブ塗りへ振り分ける
+      const widthPx = Math.max(sizeToPx(ddValue(dd, ["outlineWidth", "width", "lineWidth", "line_width", "outline_width"], props,
+        p.line_width ?? 1), widthUnit), 1);
+      let fillParts = null, flOutline = null;
+      if (layer.subSymbol) {
+        const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
+        fillParts = sub.fillParts;
+        flOutline = sub.outline;
+      }
+      // 線描画エンジン用の代表色: 塗り部品から優先度順に拾う
+      const solid = fillParts?.find(pt => pt.solid)?.solid
+        ?? fillParts?.find(pt => pt.hatch)?.color
+        ?? fillParts?.find(pt => pt.linePattern)?.color
+        ?? fillParts?.find(pt => pt.pointPattern)?.markers?.[0]?.fill
+        ?? fillParts?.find(pt => pt.gradient)?.color1
+        ?? parseQgisColor(p.color, [0.5, 0.5, 0.5, 1]);
+      if (fillParts?.some(pt => !pt.solid)) {
+        warnOnce(warnings, "FilledLine のパターン塗りはベース色で近似します");
+      }
+      const flJoin = { bevel: "bevel", miter: "miter", miter2: "miter", round: "round" }[String(p.joinstyle || "bevel").toLowerCase()] || "bevel";
+      return {
+        color: solid, widthPx, dash: null,
+        join: flJoin,
+        cap: { square: "square", flat: "butt", round: "round" }[String(p.capstyle || "square").toLowerCase()] || "butt",
+        offsetPx: sizeToPx(ddValue(dd, ["offset"], props, p.offset ?? 0), p.offset_unit || "MM") || 0,
+        // ネイティブ塗り用の情報(Cesium Corridor)
+        decor: { kind: "filledline", widthPx, fillParts, outline: flOutline, join: flJoin },
+      };
+    }
+    case "LinearReferencing": {
+      // 里程標(QGIS4・実機検証済み)。線上に一定間隔で距離ラベル/マーカーを配置。
+      // 実プロパティ名: interval(地図単位=m)/placement(IntervalCartesian2D等
+      // の enum 文字列)/source(CartesianDistance2D)/rotate/show_marker/
+      // skip_multiples/label_offset("x,y")/average_angle_length/
+      // text_format(エスケープ<text-style>XML)/numeric_format(<numericFormat>XML)
+      const intervalM = Math.max(Number(ddValue(dd, ["interval"], props, p.interval ?? 1000)) || 1000, 1);
+      const loUnit = p.label_offset_unit || "MM";
+      const [lox, loy] = String(p.label_offset ?? "0,0").split(",").map(Number);
+      // QGIS の y+ は上方向 → canvas の y+ (下) と符号反転
+      const labelOffsetPx = [sizeToPx(lox || 0, loUnit), -sizeToPx(loy || 0, loUnit)];
+      const placement = String(p.placement ?? "IntervalCartesian2D").toLowerCase();
+      const source = String(p.source ?? "CartesianDistance2D");
+      if (!/cartesiandistance2d/i.test(source)) {
+        warnOnce(warnings, `LinearReferencing の source=${source} は平面距離で近似します`);
+      }
+      if (!/interval/i.test(placement)) {
+        warnOnce(warnings, `LinearReferencing の placement=${p.placement} は interval 配置で近似します`);
+      }
+      const markers = layer.subSymbol
+        ? layer.subSymbol.layers.flatMap(l => l.enabled ? resolveMarkerLayer(l, props, images, warnings) : [])
+        : [];
+      warnOnce(warnings, "LinearReferencing(里程標)は線上等間隔配置の近似です(地図単位=m 換算)");
+      return {
+        // 本体は基線(ラベルのみでも地物は残す)。QGIS では線自体は描かないため
+        // 描画側で decor.linref を検出して折れ線を隠す
+        color: parseQgisColor(p.line_color ?? p.color, [0, 0, 0, 1]), widthPx: 1, dash: null,
+        decor: {
+          kind: "linref", intervalM, placement,
+          rotate: String(p.rotate ?? "1") !== "0" && String(p.rotate).toLowerCase() !== "false",
+          showMarker: String(p.show_marker ?? "0") === "1" || String(p.show_marker).toLowerCase() === "true",
+          skipMultiples: Math.max(Number(p.skip_multiples) || 0, 0),
+          avgAnglePx: sizeToPx(p.average_angle_length ?? 4, p.average_angle_unit || "MM") || 0,
+          labelOffsetPx,
+          startMeasure: Number(p.start_measure) || 0,
+          text: parseLinRefTextFormat(p.text_format),
+          num: parseLinRefNumericFormat(p.numeric_format),
+          markers,
+        },
       };
     }
     case "MarkerLine":
@@ -2048,11 +2274,13 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
 
   for (const layer of symbol.layers) {
     if (!layer.enabled) continue;
+    // symbollevels=<レンダラ属性> 用に pass(シンボルレイヤ描画順位)を保持
+    if (Number.isFinite(layer.pass)) out.minPass = Math.min(out.minPass ?? Infinity, layer.pass);
     switch (symbol.geomType) {
       case "marker":
         markerLayers.push(...resolveMarkerLayer(layer, props, images, warnings).map(m => {
           if (m.gg) { (out.gg ||= []).push({ kind: "marker", ...m.gg }); return null; }
-          return { ...m, blend: m.blend ?? layer.blend, effects: m.effects ?? layer.effects };
+          return { ...m, blend: m.blend ?? layer.blend, effects: m.effects ?? layer.effects, pass: layer.pass };
         }).filter(Boolean));
         break;
       case "line": {
@@ -2060,7 +2288,7 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
         if (r?.gg) { (out.gg ||= []).push({ kind: "line", ...r.gg }); break; }
         // 最後の有効レイヤ(最上位)を採用
         if (r) {
-          lineCandidate = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
+          lineCandidate = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects, pass: layer.pass };
           // 複数シンボルレイヤ積層(ケーシング等)の描画順リスト(QGISは先が下)
           lineLayers.push(lineCandidate);
         }
@@ -2073,7 +2301,7 @@ function resolveSymbolLayers(symbol, props, images, warnings) {
         if (r.gg) { (out.gg ||= []).push({ kind: "fill", ...r.gg }); break; }
         const o = resolveOutline(layer, props, warnings);
         if (o) outline = o;
-        const part = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects };
+        const part = { ...r, blend: r.blend ?? layer.blend, effects: r.effects ?? layer.effects, pass: layer.pass };
         if (r.solid !== undefined && r.solid !== null) fillParts.push(part);
         else if (r.solid === null) fillParts.push({ solid: null, blend: part.blend });
         else fillParts.push(part);
@@ -2777,6 +3005,10 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map(), e
       if (!symbol) continue;
       const resolved = resolveSymbolLayers(symbol, props || {}, images, warnings);
       applySymbolAlpha(resolved);
+      // symbollevels 近似用の順位(その地物が使うシンボルの最小 pass)
+      if (Number.isFinite(resolved.minPass)) {
+        out.zRank = Math.min(out.zRank ?? Infinity, resolved.minPass);
+      }
       if (resolved.markers && !out.markers) out.markers = resolved.markers;
       if (resolved.line && !out.line) out.line = resolved.line;
       if (resolved.lines && !out.lines) out.lines = resolved.lines;
@@ -2830,6 +3062,10 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map(), e
     legend,
     warnings: [...warnings],
     unsupported: !!renderer.unsupported,
+    // symbollevels=1 か。true のとき evaluate() の spec.zRank に最小 pass が入る
+    // (Web エンジンではレイヤ単位の完全な cross-feature 順序制御は不可能なため
+    //  地物単位の z 順位近似。仕様の限界は qml-coverage 台帳を参照)
+    symbolLevels: !!renderer.symbolLevels,
     heatmap: renderer.heatmap || null,
     cluster: renderer.cluster || null,
     inverted: !!renderer.inverted,
@@ -3016,7 +3252,9 @@ function getCanvas(key, size, draw) {
 function drawMarkerLayerTo(ctx, layer) {
   ctx.save();
   ctx.translate(layer.offsetPx?.[0] || 0, layer.offsetPx?.[1] || 0);
-  ctx.rotate((layer.rotationDeg || 0) * Math.PI / 180);
+  // bakeRotationDeg: canvas へ焼き込む回転(VectorField 等)。billboard/Icon 側の
+  // rotationDeg 適用(地物別再回転)と二重にならないよう分離する
+  ctx.rotate(((layer.bakeRotationDeg ?? layer.rotationDeg) || 0) * Math.PI / 180);
   ctx.globalAlpha = layer.alpha ?? 1;
   const half = (layer.sizePx || 8) / 2;
   if (layer.kind === "shape") {
@@ -3062,6 +3300,24 @@ function drawMarkerLayerTo(ctx, layer) {
     }
     ctx.fillStyle = rgbaToCss(layer.fill || [0, 0, 0, 1]);
     ctx.fillText(layer.text, 0, 0);
+  } else if (layer.kind === "arrow") {
+    // VectorField 用矢印: sizePx の長さで上向き(北)に描き、rotationDeg で回す
+    const len = layer.sizePx || 10;
+    const w = Math.max(layer.strokeWidthPx || 1, 0.8);
+    const head = Math.min(Math.max(len * 0.28, w * 3), len * 0.45);
+    ctx.strokeStyle = rgbaToCss(layer.color || [0, 0, 0, 1]);
+    ctx.lineWidth = w;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    // 軸(下端→先端手前)
+    ctx.moveTo(0, len / 2);
+    ctx.lineTo(0, -len / 2 + head * 0.4);
+    // 矢じり(先端から斜め後方へ2本)
+    ctx.moveTo(-head * 0.5, -len / 2 + head);
+    ctx.lineTo(0, -len / 2);
+    ctx.lineTo(head * 0.5, -len / 2 + head);
+    ctx.stroke();
   }
   ctx.restore();
 }

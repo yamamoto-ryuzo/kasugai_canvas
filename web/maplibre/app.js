@@ -502,6 +502,47 @@ function rasterSource(item, baseUrl) {
   return source;
 }
 
+// ラスタ系レイヤ(xyz:/wms:/wmts:/image:)の色調整 opts → raster paint(engine-maplibre
+// 監査)。.kasc の汎用 key=value opts から直接 paint プロパティへ写像する:
+//   opacity=        → raster-opacity (0..1)
+//   brightness=N    → 明度ショートハンド(-1..1。負=暗く/正=明るく。bmin/bmax 優先)
+//   brightness-min= / bmin=  → raster-brightness-min
+//   brightness-max= / bmax=  → raster-brightness-max
+//   contrast=N      → raster-contrast (-1..1)
+//   hue= / hue-rotate=deg    → raster-hue-rotate (度)
+//   saturation=N    → raster-saturation (-1..1)
+//   resampling=linear|nearest → raster-resampling
+//   fade-duration=ms → raster-fade-duration
+function rasterPaintOpts(opts) {
+  const paint = {};
+  const num = (...ks) => {
+    for (const k of ks) {
+      const v = Number(opts?.[k]);
+      if (Number.isFinite(v)) return v;
+    }
+    return undefined;
+  };
+  const op = num("opacity");
+  if (op !== undefined) paint["raster-opacity"] = op;
+  const bri = num("brightness");
+  const bmin = num("brightness-min", "bmin");
+  const bmax = num("brightness-max", "bmax");
+  if (bri !== undefined && bmin === undefined && bmax === undefined) {
+    // 単一明度: <=0 は上限を下げて暗く、>0 は下限を上げて持ち上げる近似
+    paint["raster-brightness-min"] = bri > 0 ? Math.min(bri, 1) : 0;
+    paint["raster-brightness-max"] = bri > 0 ? 1 : Math.max(1 + bri, 0);
+  }
+  if (bmin !== undefined) paint["raster-brightness-min"] = bmin;
+  if (bmax !== undefined) paint["raster-brightness-max"] = bmax;
+  const con = num("contrast"); if (con !== undefined) paint["raster-contrast"] = con;
+  const hue = num("hue-rotate", "hue"); if (hue !== undefined) paint["raster-hue-rotate"] = hue;
+  const sat = num("saturation"); if (sat !== undefined) paint["raster-saturation"] = sat;
+  const fade = num("fade-duration"); if (fade !== undefined) paint["raster-fade-duration"] = Math.max(0, fade);
+  const res = String(opts?.resampling || "").toLowerCase();
+  if (res === "linear" || res === "nearest") paint["raster-resampling"] = res;
+  return paint;
+}
+
 // スタイル未指定地物の既定値(simplestyle > default_style: > 既定色)を
 // データ駆動 paint 式で表現する kind 定義(fill/line/circle)
 function defaultVectorKinds() {
@@ -647,7 +688,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     }
     if (!coords || coords.length < 4) throw new Error("image: bbox= または corners= の指定が必要です");
     map.addSource(sid, { type: "image", url: resolveKascUrl(item.url, baseUrl), coordinates: coords.slice(0, 4) });
-    map.addLayer(applyVisZoom({ id: sid, type: "raster", source: sid, paint: { "raster-opacity": Number(item.opts?.opacity ?? 1) }, layout: { visibility: item.visible ? "visible" : "none" } }, item), beforeId());
+    map.addLayer(applyVisZoom({ id: sid, type: "raster", source: sid, paint: rasterPaintOpts(item.opts || {}), layout: { visibility: item.visible ? "visible" : "none" } }, item), beforeId());
     lids.push(sid);
     opas.set(sid, { prop: "raster-opacity", base: Number(item.opts?.opacity ?? 1) });
     managedSources.push(sid);
@@ -855,8 +896,7 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
   } else {
     map.addSource(sid, rasterSource(item, baseUrl));
-    const paint = {};
-    if (item.opts?.opacity !== undefined) paint["raster-opacity"] = Number(item.opts.opacity);
+    const paint = rasterPaintOpts(item.opts || {});
     map.addLayer(applyVisZoom({ id: sid, type: "raster", source: sid, paint, layout: { visibility: item.visible ? "visible" : "none" } }, item), beforeId());
     lids.push(sid);
     opas.set(sid, { prop: "raster-opacity", base: paint["raster-opacity"] ?? 1 });
@@ -1748,6 +1788,90 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
       }
     }
   } catch (_) {}
+  // terrain: 行の残りのオプション(engine-maplibre 監査)。
+  //   shading=on|relief|both|off → DEM ソース共有の hillshade/color-relief レイヤ
+  //   url=<TileJSON|{z}/{x}/{y}テンプレート> + encoding=terrarium|mapbox|custom|gsi
+  //     → 任意 DEM を地形・陰影ソースとして使う(engine-cesium と同規約)
+  //   generator=flat|none|off → フラット地形(テレイン OFF と同期)
+  //   offset= は MapLibre に直接相当が無いため保持のみ
+  try {
+    const topts = doc.terrain?.opts || {};
+    if (doc.terrain) {
+      const sh = String(topts.shading || "").trim().toLowerCase();
+      if (sh) {
+        terrainHillshade = /^(on|true|1|hill|hillshade|both)$/.test(sh);
+        terrainRelief = /^(relief|colorrelief|color-relief|both)$/.test(sh);
+        const h = document.querySelector("#display-hillshade");
+        const r = document.querySelector("#display-relief");
+        if (h) h.checked = terrainHillshade;
+        if (r) r.checked = terrainRelief;
+      }
+      const u = String(topts.url || "").trim();
+      if (u) {
+        const resolved = resolveKascUrl(u, baseUrl);
+        const enc = String(topts.encoding || "terrarium").toLowerCase();
+        terrainDemSources.kasc = /\{z\}/.test(resolved)
+          ? {
+              tiles: [resolved], encoding: ["terrarium", "mapbox", "custom"].includes(enc) ? enc : "terrarium",
+              maxzoom: Number(topts.maxzoom) || 15,
+              attribution: doc.terrain.attr || undefined,
+            }
+          : { url: resolved };
+        terrainDemKey = "kasc";
+        terrainEnabled = true;
+        const sel = document.querySelector("#display-terrain-source");
+        if (sel && !sel.querySelector('option[value="kasc"]')) {
+          const o = document.createElement("option");
+          o.value = "kasc";
+          o.textContent = doc.terrain.title ? `terrain: ${doc.terrain.title}` : "terrain: url= 指定";
+          sel.append(o);
+        }
+        if (sel) sel.value = "kasc";
+        const tg = document.querySelector("#display-terrain");
+        if (tg) tg.checked = true;
+      }
+      if (/^(flat|none|off)$/i.test(String(topts.generator || ""))) {
+        terrainEnabled = false;
+        const tg = document.querySelector("#display-terrain");
+        if (tg) tg.checked = false;
+      }
+      // 陰影/段彩だけの指定でも DEM 未選択なら既定ソースへ(テレイン OFF のまま)
+      if ((terrainHillshade || terrainRelief) && !terrainDemSources[terrainDemKey]) {
+        terrainDemKey = "reearth-ellipsoid";
+        const sel = document.querySelector("#display-terrain-source");
+        if (sel) sel.value = terrainDemKey;
+      }
+      if (doc.terrain) applyTerrain();
+    }
+  } catch (_) {}
+  // light: 行(#60): 平行光源を map.setLight へ(hillshade/fill-extrusion の照明)。
+  // az=方位度・el=仰角度・intensity=0..1・color=#RRGGBB(既存行形式のまま解釈)
+  try {
+    const li = doc.lights?.[0]?.opts || {};
+    if (doc.lights?.length) {
+      const spec = { anchor: "map" };
+      const az = Number(li.az), el = Number(li.el);
+      if (Number.isFinite(az) || Number.isFinite(el)) {
+        spec.position = [
+          1.15,
+          Number.isFinite(az) ? az : 0,
+          Number.isFinite(el) ? Math.max(0, Math.min(90 - el, 180)) : 30,
+        ];
+      }
+      const inten = Number(li.intensity);
+      if (Number.isFinite(inten)) spec.intensity = Math.min(Math.max(inten, 0), 1);
+      if (typeof li.color === "string" && /^#[0-9a-f]{6}$/i.test(li.color.trim())) {
+        spec.color = li.color.trim();
+      }
+      map.setLight(spec);
+    }
+  } catch (_) {}
+  // scene3d: 行の background=#RRGGBB → globe 投影時の sky-color へ反映する指定を保持
+  try {
+    const sbg = String(doc.scene3d?.opts?.background || "").trim();
+    scene3dSkyColor = /^#[0-9a-f]{6}$/i.test(sbg) ? sbg : null;
+    if (currentProjection === "globe") applyProjection("globe");
+  } catch (_) {}
 
   // エンジン切替の引継ぎ状態を初期描画へ反映(初回のみ)
   const sw = switchRestore; switchRestore = null;
@@ -2291,13 +2415,65 @@ let terrainEnabled = false;
 let terrainDemKey = "none"; // "none" = DEMなし。初期値は DEMソース選択肢の既定と一致させる
 let terrainExaggeration = 1;
 let appliedTerrainDemKey = null;
+// 陰影・標高段彩レイヤ(テレインと同じ DEM ソースを共有。3D 地形 OFF でも
+// 単独で陰影/段彩だけ敷ける)。terrain: 行の shading= と表示設定が触る
+let terrainHillshade = false;
+let terrainRelief = false;
+const HILLSHADE_LAYER_ID = "kasc-terrain-hillshade";
+const RELIEF_LAYER_ID = "kasc-terrain-relief";
+
+// hillshade/color-relief は全データレイヤの下・ベースマップの上に敷く。
+// 挿入位置は「ベースマップ以外の最初の管理レイヤ」の直下(ベースレイヤの
+// 下に挿すと不透過タイルで隠れて見えない)
+function shadingBeforeId() {
+  const baseLids = new Set((currentBaseEntries || []).flatMap(e => e.lids || []));
+  return managedLayers.find(l =>
+    l !== HILLSHADE_LAYER_ID && l !== RELIEF_LAYER_ID &&
+    !baseLids.has(l) && map.getLayer(l));
+}
+function removeShadingLayers() {
+  for (const lid of [HILLSHADE_LAYER_ID, RELIEF_LAYER_ID]) {
+    if (map.getLayer(lid)) map.removeLayer(lid);
+  }
+}
+function syncShadingLayers() {
+  const hasDem = !!map.getSource(TERRAIN_SOURCE_ID);
+  const before = shadingBeforeId();
+  if (terrainRelief && hasDem && !map.getLayer(RELIEF_LAYER_ID)) {
+    // 標高段彩(color-relief)。低地の緑→高所の白の簡易山地ランプを既定にする
+    map.addLayer({
+      id: RELIEF_LAYER_ID, type: "color-relief", source: TERRAIN_SOURCE_ID,
+      paint: {
+        "color-relief-opacity": 0.8,
+        "color-relief-color": ["interpolate", ["linear"], ["elevation"],
+          -100, "#6baed6", 0, "#3d8c40", 300, "#8fbf5a", 800, "#d9c07a",
+          1500, "#a07850", 2500, "#e8e8e8", 3800, "#ffffff"],
+      },
+    }, before);
+  } else if (!terrainRelief && map.getLayer(RELIEF_LAYER_ID)) {
+    map.removeLayer(RELIEF_LAYER_ID);
+  }
+  if (terrainHillshade && hasDem && !map.getLayer(HILLSHADE_LAYER_ID)) {
+    map.addLayer({
+      id: HILLSHADE_LAYER_ID, type: "hillshade", source: TERRAIN_SOURCE_ID,
+      paint: {
+        "hillshade-exaggeration": 0.5,
+        "hillshade-shadow-color": "#473B24",
+      },
+    }, before);
+  } else if (!terrainHillshade && map.getLayer(HILLSHADE_LAYER_ID)) {
+    map.removeLayer(HILLSHADE_LAYER_ID);
+  }
+}
 
 function applyTerrain() {
   // "load" は初回スタイル読込で一度しか発火しないため、プロジェクト読込等で
   // スタイル再処理中に来た呼び出しはポーリングで再試行する
   if (!map.isStyleLoaded()) { setTimeout(applyTerrain, 250); return; }
-  if (!terrainEnabled) {
+  const shadingNeeded = terrainHillshade || terrainRelief;
+  if (!terrainEnabled && !shadingNeeded) {
     if (map.getTerrain()) map.setTerrain(null);
+    removeShadingLayers();
     // ピッチ緩和は deck.gl overlay 側でも必要なので、overlay 無しの時だけ戻す
     if (!deckOverlay) { try { map.setMaxPitch(60); } catch (_) {} }
     regroundAllDeck();
@@ -2305,9 +2481,10 @@ function applyTerrain() {
   }
   const def = terrainDemSources[terrainDemKey];
   if (!def) return;
-  // DEM ソース変更時は terrain を外してからソースを張り替える
+  // DEM ソース変更時は terrain と陰影レイヤを外してからソースを張り替える
   if (appliedTerrainDemKey !== terrainDemKey && map.getSource(TERRAIN_SOURCE_ID)) {
     map.setTerrain(null);
+    removeShadingLayers();
     map.removeSource(TERRAIN_SOURCE_ID);
     appliedTerrainDemKey = null;
   }
@@ -2318,17 +2495,38 @@ function applyTerrain() {
     } else {
       spec.tiles = def.tiles;
       spec.tileSize = 256;
-      spec.encoding = "terrarium";
+      spec.encoding = def.encoding || "terrarium";
       if (def.maxzoom) spec.maxzoom = def.maxzoom;
       if (def.attribution) spec.attribution = def.attribution;
     }
     map.addSource(TERRAIN_SOURCE_ID, spec);
     appliedTerrainDemKey = terrainDemKey;
   }
-  map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: terrainExaggeration });
-  // 地形を眺められるよう最大ピッチを緩和(deck.gl overlay と同じ措置)
-  try { if (map.getMaxPitch() < 70) map.setMaxPitch(85); } catch (_) {}
+  if (terrainEnabled) {
+    map.setTerrain({ source: TERRAIN_SOURCE_ID, exaggeration: terrainExaggeration });
+    // 地形を眺められるよう最大ピッチを緩和(deck.gl overlay と同じ措置)
+    try { if (map.getMaxPitch() < 70) map.setMaxPitch(85); } catch (_) {}
+  } else if (map.getTerrain()) {
+    map.setTerrain(null);
+  }
+  syncShadingLayers();
   regroundAllDeck();
+}
+
+// 投影(mercator/globe)。globe 選択時は大気(setSky)を既定で付ける。
+// scene3d: 行の background=#RRGGBB があれば sky-color へ反映する
+let scene3dSkyColor = null;
+let currentProjection = "mercator";
+function applyProjection(type) {
+  currentProjection = /globe/i.test(String(type)) ? "globe" : "mercator";
+  try { map.setProjection({ type: currentProjection }); } catch (_) { return; }
+  try {
+    if (currentProjection === "globe") {
+      map.setSky(scene3dSkyColor ? { "sky-color": scene3dSkyColor } : {});
+    } else {
+      map.setSky(undefined);
+    }
+  } catch (_) { /* 古い ML や sky 非対応環境では無視 */ }
 }
 
 // DEM タイルの到着に合わせて 3D Tiles の接地高を再サンプルする。
@@ -2508,6 +2706,28 @@ map.on("sourcedata", e => {
     terrainExaggInput.value = "1";
     terrainExaggInput.dispatchEvent(new Event("input"));
   });
+  // 陰影・標高段彩(3D 地形なしでも DEM ソースを敷いて陰影表示できる)
+  const hillshadeToggle = document.querySelector("#display-hillshade");
+  hillshadeToggle?.addEventListener("change", () => {
+    terrainHillshade = hillshadeToggle.checked;
+    if (terrainHillshade && !terrainDemSources[terrainDemKey]) {
+      terrainDemKey = "reearth-ellipsoid";
+      if (terrainSourceSel) terrainSourceSel.value = terrainDemKey;
+    }
+    applyTerrain();
+  });
+  const reliefToggle = document.querySelector("#display-relief");
+  reliefToggle?.addEventListener("change", () => {
+    terrainRelief = reliefToggle.checked;
+    if (terrainRelief && !terrainDemSources[terrainDemKey]) {
+      terrainDemKey = "reearth-ellipsoid";
+      if (terrainSourceSel) terrainSourceSel.value = terrainDemKey;
+    }
+    applyTerrain();
+  });
+  // 投影切替(mercator/globe)。globe は大気(setSky)を既定で付ける
+  const projSel = document.querySelector("#display-projection");
+  projSel?.addEventListener("change", () => applyProjection(projSel.value));
 }
 
 // ---- テーマ（theme: 行による可視性プリセット。QGIS マップテーマ相当） ----

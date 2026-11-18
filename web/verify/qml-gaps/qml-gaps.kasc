@@ -1,0 +1,8 @@
+title: qml gaps verify
+base: ベースマップなし | none
+cam: 初期 | 35.60 | 139.61 | h=16000 | p=-90
+geojson: filledline | canvas_data/filledline.geojson | style=canvas_data/filledline.qml | on
+geojson: linref | canvas_data/linref.geojson | style=canvas_data/linref.qml | on
+geojson: vectorfield | canvas_data/vectorfield.geojson | style=canvas_data/vectorfield.qml | on
+geojson: maskmarker | canvas_data/maskmarker.geojson | style=canvas_data/maskmarker.qml | on
+geojson: symbollevels | canvas_data/symbollevels.geojson | style=canvas_data/symbollevels.qml | on

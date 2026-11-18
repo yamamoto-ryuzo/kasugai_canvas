@@ -1,0 +1,74 @@
+{
+  "checks": [
+    {
+      "name": "地物が評価された",
+      "pass": true,
+      "extra": "69件"
+    },
+    {
+      "name": "ラベル地物が評価された(city)",
+      "pass": true,
+      "extra": "{\"text\":\"甲府\",\"show\":true,\"size\":18.666666666666664,\"declutterPriority\":5,\"color\":\"#c80000\",\"outlineColor\":\"#ffffff\",\"outlineWidth\":19.43757030371204,\"anchor\":\"bottom-left\",\"textAlign\":\"left\",\"offset\":{\"x\":5.669291338582678,\"y\":-5.669291338582678}}"
+    },
+    {
+      "name": "ラベル地物が評価された(peak)",
+      "pass": true,
+      "extra": "{\"text\":\"富士山\",\"show\":true,\"size\":24,\"declutterPriority\":5,\"color\":\"#ffffff\",\"outlineColor\":\"#000000\",\"outlineWidth\":25.19685039370079,\"anchor\":\"top\",\"textAlign\":\"center\",\"offset\":{\"x\":0,\"y\":9.448818897637796}}"
+    },
+    {
+      "name": "city: anchor=bottom-left (quadOffset=2 AboveRight)",
+      "pass": true,
+      "extra": "bottom-left"
+    },
+    {
+      "name": "city: outlineColor=#ffffff",
+      "pass": true,
+      "extra": "#ffffff"
+    },
+    {
+      "name": "city: outlineWidth が 1/64em 換算値(3〜30)",
+      "pass": true,
+      "extra": 19.43757030371204
+    },
+    {
+      "name": "city: offset が quad+dist を含む",
+      "pass": true,
+      "extra": "{\"x\":5.669291338582678,\"y\":-5.669291338582678}"
+    },
+    {
+      "name": "city: color がルール色(赤系)",
+      "pass": true,
+      "extra": "#c80000"
+    },
+    {
+      "name": "peak: anchor=top (quadOffset=7 Below)",
+      "pass": true,
+      "extra": "top"
+    },
+    {
+      "name": "peak: outlineColor=#000000",
+      "pass": true,
+      "extra": "#000000"
+    },
+    {
+      "name": "peak: color が白",
+      "pass": true,
+      "extra": "#ffffff"
+    },
+    {
+      "name": "road2: dashArray が地物別に返る",
+      "pass": true,
+      "extra": "[4,2]"
+    },
+    {
+      "name": "road2: cap=round",
+      "pass": true,
+      "extra": "round"
+    },
+    {
+      "name": "road(実線): dashArray を返さない",
+      "pass": true,
+      "extra": ""
+    }
+  ]
+}

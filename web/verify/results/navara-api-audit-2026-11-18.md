@@ -20,8 +20,8 @@
 | ツールオーバレイラベル | text 付き地物 → `text` マテリアル専用レイヤ（font=Noto Sans JP・evaluator で text/show） | ✅ 区間ラベル "3919.75 km" 表示（navara-ellipsoid.png） |
 | `ellipsoid` マテリアル | `syncEllipsoidLayer()`: 地形も表示中ベースマップも無い時 `{type:"terrain", ellipsoid:{}}` を自動追加（clampToGround 焼き込み面の確保） | ✅ 「ベースマップなし」選択でも地表描画継続・計測線がドレープ表示（navara-ellipsoid.png） |
 | `view.attribution` | `syncAttribution` が内蔵帰属へ `attributionHtml` を `clear()+add()`（ベースマップ出典含む）。失敗時は独自 DOM フォールバック | ✅ `attribution.items` 存在・ネイティブ UI 表示中 |
-| `view.globe.transparent` | `base: | transparent` 行 → globe.transparent=true + #map 背景透明 | ✅ 配線済 |
-| `base: | none` / 「ベースマップなし」 | モード行で初期非選択 + セレクトへ `value="-1"` 選択肢追加（他エンジンパリティ） | ✅ selOpts=["-1","0","1"...] |
+| `view.globe.transparent` | `base: | transparent` 行 → globe.transparent=true + #map 背景透明。clampToGround 焼き込み地物は地表と一体のテクスチャのため一緒に消える（エンジン制約） | ✅ 配線済（地物消失は制約として文書化） |
+| `base: | none` / 「ベースマップなし」 | モード行で初期非選択 + セレクトへ `value="-1"` 選択肢追加。地表は `globe.color` を下敷き色(既定白/`background:`)の不透明単色へ塗替え、焼き込み地物を残す（Cesium 版の ellipsoid baseColor と同義。旧実装は transparent に統一しており地物も消えていた → 2026-11-19 分離修正） | ✅ navara-plain-verify.png / navara-none-switch-verify.png で地物描画確認 |
 | `mvt:` ベクトルタイル | `addSource({type:"vector-tile"})` + `sourceLayers`（layers=/srclayers= 指定） + 既定マテリアル | ✅ コード経路実装（レイヤリストの unsupported 解除済） |
 | `rain`/`snow` メッシュ | fx トグル → `addMesh({rain:{}})`/`addMesh({snow:{maxHeight:1e5}})` | ✅ トグルで `view.animation=true`・エラー無し（navara-weather.png） |
 | `view.animation` | `syncFxAnimation()`: clouds/rain/snow 有効時のみ ON（省電力既定維持） | ✅ |
@@ -53,5 +53,9 @@
 - `navara-ellipsoid.png` — ベースマップなし + ellipsoid 面 + 区間ラベル
 - `navara-weather.png` — 雨・雪トグル後シーン
 - `navara-verify-main.png` — 通常シーン
+- `navara-plain-verify.png` / `navara-single-verify.png` — `base:|none` で白地表+clamp 地物(線/面)描画(2026-11-19 修正後)
+- `navara-transparent-verify.png` — `base:|transparent`(地表透明・焼込み地物消失は制約)
+- `navara-none-switch-verify.png` — transparent→「ベースマップなし」手動切替で単色地表+地物へ復帰
+- `navara-plain-base-verify.png` — ベースマップ有りで地物描画(無退行)
 
 エラー: 全検証で pageerror/非想定 console.error 0 件（GSI seamlessphoto タイルの一部 404 は上流都合・無害）

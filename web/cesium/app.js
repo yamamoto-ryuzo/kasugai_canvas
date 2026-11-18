@@ -3408,9 +3408,6 @@ const POST_STAGE_DEFS = {
 // kasugaiApi.setEffect(name,on) と scene3d: 行の同名キーから到達する。
 // silhouette は「選択中オブジェクトの縁取り」。有効中は地物クリックで
 // stage.selected へ pick 結果が入る(属性パネル連動の選択ハイライト)。
-// 注: createAutoExposureStage() は PostProcessStage/Composite でない内部型
-// (トーンマップ用 AutoExposure。_isSupported 未実装)のため postProcessStages
-// に直接 add すると描画が停止する — 1.147 では露出手段なしとして除外する
 const postProcessApiStages = new Map(); // name -> PostProcessStage
 const POST_STAGE_API_DEFS = {
   blur: () => Cesium.PostProcessStageLibrary.createBlurStage(),
@@ -3437,6 +3434,40 @@ function applyPostStageApi(name, on) {
   } catch (error) {
     console.warn(`ポストプロセス ${name} の適用に失敗しました:`, error);
     return false;
+  }
+}
+
+// scene3d: sscc=<JSON> の値を ScreenSpaceCameraController へ型検査付きで適用
+// (engine-cesium 監査 — minzoom/maxzoom/tilt で拾い切れない残りフラグの逃がし。
+// modelopts= と同じく「JSON のキー名 = Cesium プロパティ名」方式)。
+// boolean/number は同名プロパティと型一致時のみ代入(現在値 undefined の
+// optional プロパティ=maximumTiltAngle 等も boolean/number を受け入れる)。
+// *EventTypes は CameraEventType 名("LEFT_DRAG" 等)または {eventType,modifier}
+// の配列を受け(modifier は KeyboardEventModifier 名)、配列のまま代入する。
+// 未知キー・関数プロパティ・型不一致は個別に無視する。
+function applySsccSpec(ssec, spec) {
+  for (const [prop, value] of Object.entries(spec)) {
+    try {
+      if (!(prop in ssec) || typeof ssec[prop] === "function") continue;
+      const cur = ssec[prop];
+      if (typeof cur === "boolean" && typeof value === "boolean") { ssec[prop] = value; continue; }
+      if ((typeof cur === "number" || cur === undefined) && Number.isFinite(value)) { ssec[prop] = value; continue; }
+      if (cur === undefined && typeof value === "boolean") { ssec[prop] = value; continue; }
+      if (/eventtypes$/i.test(prop) && Array.isArray(value)) {
+        const types = value.map(v => {
+          if (typeof v === "string") return Cesium.CameraEventType?.[v.toUpperCase()];
+          if (v && typeof v === "object") {
+            const et = Cesium.CameraEventType?.[String(v.eventType ?? "").toUpperCase()];
+            if (et === undefined) return undefined;
+            if (v.modifier === undefined) return et;
+            const mod = Cesium.KeyboardEventModifier?.[String(v.modifier).toUpperCase()];
+            return mod === undefined ? et : { eventType: et, modifier: mod };
+          }
+          return undefined;
+        }).filter(v => v !== undefined);
+        if (types.length) ssec[prop] = types;
+      }
+    } catch (_) { /* 個別プロパティの失敗は無視 */ }
   }
 }
 
@@ -7187,8 +7218,9 @@ function applyInspector(text) {
     //   ao=on|off | edl=on|off | fxaa=on|off | bloom=on|off |
     //   blur=on|off | brightness=on|off | depthview=on|off | silhouette=on|off |
     //   tonemap=aces|filmic|reinhard|modified_reinhard|pbr_neutral |
-    //   material=water|elevationcontour|… | matuniforms=<JSON> | groundatmosphere=on|off | specmap=<KTX2 URL> |
-    //   minzoom=N | maxzoom=N | tilt=on|off
+    //   material=water|elevationcontour|… | matuniforms=<JSON> | groundatmosphere=on|off |
+    //   specmap=<KTX2 URL>|off | shcoeffs=<JSON 9×[r,g,b]> |
+    //   minzoom=N | maxzoom=N | tilt=on|off | sscc=<JSON>
     // — QGIS 3Dシーンの画面設定を近似反映(#60 + engine-cesium 監査)。
     //   ここでは spec を集め、反映は updateUndergroundView(背景色・SkyBox)と
     //   applyInspector 末尾(影・ポストプロセス・マテリアル)・タイルセットマウント(edl)で行う
@@ -7208,7 +7240,7 @@ function applyInspector(text) {
         else if (key === "edl") spec.edl = onoff();                                  // 点群 Eye Dome Lighting
         else if (key === "fxaa") spec.fxaa = onoff();
         else if (key === "bloom") spec.bloom = onoff();
-        else if (POST_STAGE_API_DEFS[key]) (spec.postStages ||= {})[key] = onoff();  // blur/autoexposure/brightness/depthview/silhouette
+        else if (POST_STAGE_API_DEFS[key]) (spec.postStages ||= {})[key] = onoff();  // blur/brightness/depthview/silhouette
         else if (key === "tonemap" || key === "tonemapper") {
           const tm = raw.toUpperCase().replace(/[\s-]+/g, "_");
           if (Cesium.Tonemapper?.[tm]) spec.tonemap = tm;
@@ -7222,13 +7254,25 @@ function applyInspector(text) {
         } else if (key === "matuniforms" || key === "materialuniforms") {
           try { spec.materialUniforms = JSON.parse(raw); } catch (_) {}
         } else if (key === "groundatmosphere") spec.groundAtmosphere = onoff();
-        else if ((key === "specmap" || key === "specularmap" || key === "environmentmap") && /^https?:\/\//i.test(raw)) {
-          spec.specularMaps = resolveProjectUrl(raw);
+        else if (key === "specmap" || key === "specularmap" || key === "environmentmap") {
+          // specmap=off|default → undefined 代入で内蔵既定 KTX2 へ復帰
+          if (/^(off|none|default)$/i.test(raw)) spec.specularMaps = "default";
+          else if (/^https?:\/\//i.test(raw)) spec.specularMaps = resolveProjectUrl(raw);
+        } else if (key === "shcoeffs" || key === "harmoniccoeffs" || key === "shc") {
+          // 拡散 IBL(sphericalHarmonicCoefficients)。JSON 9×[r,g,b]
+          try {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr) && arr.length === 9 && arr.every(c => Array.isArray(c) && c.length >= 3)) spec.shCoeffs = arr;
+          } catch (_) {}
         }
         // ScreenSpaceCameraController の個別フラグ(engine-cesium 監査)
         else if (key === "minzoom") { const n = Number(raw); if (Number.isFinite(n) && n > 0) spec.minZoom = n; }
         else if (key === "maxzoom") { const n = Number(raw); if (Number.isFinite(n) && n > 0) spec.maxZoom = n; }
         else if (key === "tilt") spec.tilt = onoff();
+        else if (key === "sscc" || key === "camctrl" || key === "cameracontrol") {
+          // sscc=<JSON>: SSCC の残り全フラグを一括指定(modelopts= と同型の逃がし)
+          try { spec.sscc = JSON.parse(raw); } catch (_) {}
+        }
       });
       // QGIS の単色背景は空より優先されるため、skybox 未指定なら空を隠す
       if (spec.background && spec.skybox === undefined) {
@@ -8075,9 +8119,17 @@ function applyInspector(text) {
         const matSel = document.querySelector("#effect-globe-material");
         if (matSel) matSel.value = inspectorScene3dSpec.material;
       }
-      // specmap=<url>: 鏡面反射環境マップ(KTX2)。IBL 品質向上用
+      // specmap=<url>|off: 鏡面反射環境マップ(KTX2)。IBL 品質向上用。
+      // "default" は undefined 代入で内蔵既定マップへ復帰
       if (inspectorScene3dSpec.specularMaps) {
-        try { viewer.scene.specularEnvironmentMaps = inspectorScene3dSpec.specularMaps; } catch (_) {}
+        try { viewer.scene.specularEnvironmentMaps = inspectorScene3dSpec.specularMaps === "default" ? undefined : inspectorScene3dSpec.specularMaps; } catch (_) {}
+      }
+      // shcoeffs=<JSON 9×[r,g,b]>: 拡散 IBL 球面調和係数
+      if (Array.isArray(inspectorScene3dSpec.shCoeffs)) {
+        try {
+          const coeffs = inspectorScene3dSpec.shCoeffs.map(c => Cesium.Cartesian3.fromArray(c.map(Number)));
+          if (coeffs.length === 9) viewer.scene.sphericalHarmonicCoefficients = coeffs;
+        } catch (_) {}
       }
       updateUndergroundView();
       updateEffectSettings();
@@ -8094,6 +8146,10 @@ function applyInspector(text) {
       if (Number.isFinite(inspectorScene3dSpec.maxZoom)) ssec.maximumZoomDistance = inspectorScene3dSpec.maxZoom;
       // tilt=on|off は enableTilt。上下視点(2D)トグルの切替時はそちらが優先される
       if (typeof inspectorScene3dSpec.tilt === "boolean") ssec.enableTilt = inspectorScene3dSpec.tilt;
+      // sscc=<JSON>: SSCC の残り全フラグを型検査付きで一括適用
+      if (inspectorScene3dSpec.sscc && typeof inspectorScene3dSpec.sscc === "object") {
+        applySsccSpec(ssec, inspectorScene3dSpec.sscc);
+      }
     } catch (_) { /* 対応なし */ }
   }
   void applyInspectorCloud(inspectorCloudSpec);
@@ -14133,7 +14189,7 @@ window.kasugaiApi = {
       updateEffectSettings();
       return true;
     }
-    // UI を持たないライブラリステージ(blur/autoexposure/brightness/depthview/silhouette)
+    // UI を持たないライブラリステージ(blur/brightness/depthview/silhouette)
     return applyPostStageApi(name, !!enabled);
   },
   setUnderground({ transparency, dive } = {}) {

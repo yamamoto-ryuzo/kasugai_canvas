@@ -1,0 +1,104 @@
+{
+  "checks": [
+    {
+      "name": "sscc inertiaSpin=0.5",
+      "pass": true,
+      "extra": "0.5"
+    },
+    {
+      "name": "sscc inertiaTranslate=0.4",
+      "pass": true,
+      "extra": "0.4"
+    },
+    {
+      "name": "sscc inertiaZoom=0.6",
+      "pass": true,
+      "extra": "0.6"
+    },
+    {
+      "name": "sscc bounceAnimationTime=2.5",
+      "pass": true,
+      "extra": "2.5"
+    },
+    {
+      "name": "sscc enableCollisionDetection=false",
+      "pass": true,
+      "extra": "false"
+    },
+    {
+      "name": "sscc enableLook=false",
+      "pass": true,
+      "extra": "false"
+    },
+    {
+      "name": "sscc maximumTiltAngle=1.0",
+      "pass": true,
+      "extra": "1"
+    },
+    {
+      "name": "sscc zoomFactor=3",
+      "pass": true,
+      "extra": "3"
+    },
+    {
+      "name": "sscc minimumTrackBallHeight=12345",
+      "pass": true,
+      "extra": "12345"
+    },
+    {
+      "name": "minzoom/maxzoom 併用維持",
+      "pass": true,
+      "extra": "50/500000"
+    },
+    {
+      "name": "sscc 未知キー無視",
+      "pass": true,
+      "extra": "undefined"
+    },
+    {
+      "name": "sscc tiltEventTypes=[LEFT_DRAG,WHEEL] 名解決",
+      "pass": true,
+      "extra": "[0,3]"
+    },
+    {
+      "name": "sscc zoomEventTypes=[{WHEEL+CTRL}] 修飾子解決",
+      "pass": true,
+      "extra": "[{\"eventType\":3,\"modifier\":1}]"
+    },
+    {
+      "name": "specmap=off → specularEnvironmentMaps=undefined",
+      "pass": true,
+      "extra": "undefined(既定)"
+    },
+    {
+      "name": "shcoeffs → 9要素 Cartesian3 配列",
+      "pass": true,
+      "extra": "len=9"
+    },
+    {
+      "name": "shcoeffs[0]=[0.5,0.5,0.5] / [8]=[0.8,0.8,0.8]",
+      "pass": true,
+      "extra": "[0.5,0.5,0.5]…[0.8,0.8,0.8]"
+    },
+    {
+      "name": "specmap URL 代入経路(文字列保持)",
+      "pass": true,
+      "extra": "https://example.com/does-not-exist.ktx2"
+    },
+    {
+      "name": "createAutoExposureStage → 依然 非PostProcessStage 内部型(基盤欠如継続)",
+      "pass": true,
+      "extra": "{\"ctor\":\"PZ\",\"isPPS\":false,\"isComposite\":false,\"hasEnabled\":true,\"minLum\":true}"
+    },
+    {
+      "name": "setEffect('autoexposure') → 安全側 false",
+      "pass": true,
+      "extra": "false"
+    },
+    {
+      "name": "viewer 生存・描画継続",
+      "pass": true,
+      "extra": "{\"destroyed\":false,\"canvas\":true}"
+    }
+  ]
+}

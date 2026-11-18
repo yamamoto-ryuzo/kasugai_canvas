@@ -1,0 +1,4 @@
+title: navara plain+base verify
+base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg
+cam: 初期 | 35.60 | 139.60 | h=8000 | p=-90
+geojson: plain | canvas_data/feats.geojson | on

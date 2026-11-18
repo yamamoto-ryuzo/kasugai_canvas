@@ -1,0 +1,11 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "cat": "low",  "name": "L1" }, "geometry": { "type": "Point", "coordinates": [139.582, 35.570] } },
+    { "type": "Feature", "properties": { "cat": "high", "name": "H1" }, "geometry": { "type": "Point", "coordinates": [139.588, 35.570] } },
+    { "type": "Feature", "properties": { "cat": "low",  "name": "L2" }, "geometry": { "type": "Point", "coordinates": [139.594, 35.570] } },
+    { "type": "Feature", "properties": { "cat": "high", "name": "H2" }, "geometry": { "type": "Point", "coordinates": [139.600, 35.570] } },
+    { "type": "Feature", "properties": { "cat": "low",  "name": "L3" }, "geometry": { "type": "Point", "coordinates": [139.606, 35.570] } },
+    { "type": "Feature", "properties": { "cat": "high", "name": "H3" }, "geometry": { "type": "Point", "coordinates": [139.612, 35.570] } }
+  ]
+}

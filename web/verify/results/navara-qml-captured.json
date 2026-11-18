@@ -1,0 +1,904 @@
+[
+  {
+    "gt": "text",
+    "props": {
+      "kind": "city",
+      "name": "甲府"
+    },
+    "v": {
+      "text": "甲府",
+      "show": true,
+      "size": 18.666666666666664,
+      "declutterPriority": 5,
+      "color": "#c80000",
+      "outlineColor": "#ffffff",
+      "outlineWidth": 19.43757030371204,
+      "anchor": "bottom-left",
+      "textAlign": "left",
+      "offset": {
+        "x": 5.669291338582678,
+        "y": -5.669291338582678
+      }
+    }
+  },
+  {
+    "gt": "text",
+    "props": {
+      "kind": "peak",
+      "name": "富士山"
+    },
+    "v": {
+      "text": "富士山",
+      "show": true,
+      "size": 24,
+      "declutterPriority": 5,
+      "color": "#ffffff",
+      "outlineColor": "#000000",
+      "outlineWidth": 25.19685039370079,
+      "anchor": "top",
+      "textAlign": "center",
+      "offset": {
+        "x": 0,
+        "y": 9.448818897637796
+      }
+    }
+  },
+  {
+    "gt": "text",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {}
+  },
+  {
+    "gt": "text",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {}
+  },
+  {
+    "gt": "text",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {}
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "billboard",
+    "props": {
+      "kind": "city",
+      "name": "甲府"
+    },
+    "v": {
+      "text": "甲府",
+      "show": true,
+      "size": 20,
+      "declutterPriority": 5,
+      "color": "#c80000",
+      "outlineColor": "#ffffff",
+      "outlineWidth": 19.43757030371204,
+      "anchor": "bottom-left",
+      "textAlign": "left",
+      "offset": {
+        "x": 5.669291338582678,
+        "y": -5.669291338582678
+      },
+      "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAABRElEQVR4AbyRQU7CQBSG51nu4QaSIuoZ3LkwqReBnS48gQvdwUVs4sKdZ1CRJrDxHjTP/2+mw5SOtRQCeT/Tee//vzLDiTnw57jA1XB4vorjMfRkNWav6VDBX7gcjc4AeDGqnwhPoTurKXuc0YNerWrAZRxfy3r9AWcC/VUJPfRuGypAvlVUX41ItG2s7eGhlxl/VgFKnj8aaQErCfAWmXKP1QHtZTcdE/ZgJTZbDB0Ql31VdLp8qbrsBmjMaReWzbisD7Sz/RYf+LMHymU3QJH3zkAv64D9xeILwBTatVKbLXIOyJ1G0QP+7ZzPraSaFxnPXAEO5vNvFblpBSUMXmY8nqkAORhk2Zv2epd4bjp+Sg+98FWqBuSUb+1n2a0RucB+Aj1bTdjjjB70ahUEli5eNsIz6N5qxl45D62NwFDgv94vAAAA///tx1x7AAAABklEQVQDAD/FeikeLN4iAAAAAElFTkSuQmCC"
+    }
+  },
+  {
+    "gt": "billboard",
+    "props": {
+      "kind": "peak",
+      "name": "富士山"
+    },
+    "v": {
+      "text": "富士山",
+      "show": true,
+      "size": 23,
+      "declutterPriority": 5,
+      "color": "#ffffff",
+      "outlineColor": "#000000",
+      "outlineWidth": 25.19685039370079,
+      "anchor": "top",
+      "textAlign": "center",
+      "offset": {
+        "x": 0,
+        "y": 9.448818897637796
+      },
+      "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABcAAAAXCAYAAADgKtSgAAABLklEQVR4AeyRP27CMBTGP0dVO3dm6YDaKD1ApaquKlWqVKlzFwYm7sAE3Ik7EGBmQOIMTLBiY1sJ+CXGcYBsRHl5/773i/MSocGrFjxJFvd1zlILLh6340bgL5/zDhh+jA98Q/DJmRQjzcy9jqssCB7z6QASbQNT3uQm8T8q4fFX+qTAQ4KRGJo6KZaTSjh20Oso6qKsDt9VHCLaZz75hmRdUswTVTf9PHd4L5zJiK6jAKjqn4THPO0xgBd4JNV9rSNFK3HC27+rB0jmPfWBoXRGfygcAyf8brPWP7F1lHmjVqYviUrwVz5NlKqvrM7dz+bITAku1GcSRWDimiPw+GP2JyH/A3lEpuf0vF0kcAisIdj7+abmLTqBLydv6aVmsUHgduMa8Q3u3GKja9kDAAD//2j49W8AAAAGSURBVAMAYeSEL28t42IAAAAASUVORK5CYII="
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polygon",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#c8a028",
+      "opacity": 0.7058823529411765
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road2",
+      "name": "破線路"
+    },
+    "v": {
+      "color": "#009600",
+      "width": 6.04724409448819,
+      "dashArray": [
+        4,
+        2
+      ],
+      "cap": "round"
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "poly",
+      "name": "区域"
+    },
+    "v": {
+      "color": "#a07814",
+      "width": 1.8897637795275593
+    }
+  },
+  {
+    "gt": "polyline",
+    "props": {
+      "kind": "road",
+      "name": "実線路"
+    },
+    "v": {
+      "color": "#0000ff",
+      "width": 6.04724409448819,
+      "cap": "square"
+    }
+  }
+]

@@ -1,0 +1,4 @@
+title: navara qml single verify
+base: ベースマップなし | none
+cam: 初期 | 35.60 | 139.60 | h=8000 | p=-90
+geojson: qml-single | canvas_data/feats.geojson | style=canvas_data/single.qml | on

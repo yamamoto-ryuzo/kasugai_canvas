@@ -204,6 +204,10 @@
   .kasc-label.leaflet-tooltip.kasc-label-hidden { display: none; }
   /* QML ラベル内 span は中央寄せ・改行対応 */
   .kasc-label span { display: inline-block; text-align: center; }
+  /* LinearReferencing(里程標)の標点ラベル */
+  .kasc-linref-label.leaflet-tooltip { background: transparent; border: none; box-shadow: none;
+    padding: 0; font: 11px sans-serif; color: #222; text-shadow: 0 0 2px #fff, 0 0 3px #fff; }
+  .kasc-linref-label.leaflet-tooltip:before { display: none; }
   /* ナビゲーションツールバー（OpenLayers/Cesium 版と同型の右上配置） */
   .navigation-toolbar { position: absolute; z-index: 1004; top: 14px; right: 14px;
     display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 7px 5px;

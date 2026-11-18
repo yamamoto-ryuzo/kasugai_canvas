@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "route-a" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[139.560, 35.590], [139.585, 35.596], [139.610, 35.592], [139.640, 35.598], [139.665, 35.594]]
+      }
+    }
+  ]
+}

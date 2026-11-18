@@ -1,0 +1,64 @@
+{
+  "checks": [
+    {
+      "name": "初期(広域) 縮尺が 8000 超",
+      "pass": true,
+      "extra": "scale=13746"
+    },
+    {
+      "name": "初期(広域) ポリゴンが青",
+      "pass": true,
+      "extra": "#3c64dc"
+    },
+    {
+      "name": "初期(広域) ラベル非表示",
+      "pass": true,
+      "extra": "[{\"name\":\"本所吾妻橋\",\"show\":false},{\"name\":\"錦糸町\",\"show\":false},{\"name\":\"TokyoTest\",\"show\":false},{\"name\":\"両国\",\"show\":false}]"
+    },
+    {
+      "name": "詳細 縮尺が 5000 未満",
+      "pass": true,
+      "extra": "scale=4582"
+    },
+    {
+      "name": "詳細で再評価が走った",
+      "pass": true,
+      "extra": "cap1=66"
+    },
+    {
+      "name": "詳細 ポリゴンが緑",
+      "pass": true,
+      "extra": "#28b43c"
+    },
+    {
+      "name": "詳細 マーカーが大(>=15px)",
+      "pass": true,
+      "extra": "23"
+    },
+    {
+      "name": "詳細 ラベル表示",
+      "pass": true,
+      "extra": "[{\"name\":\"本所吾妻橋\",\"show\":true,\"text\":\"本所吾妻橋\"},{\"name\":\"錦糸町\",\"show\":true,\"text\":\"錦糸町\"},{\"name\":\"TokyoTest\",\"show\":true,\"text\":\"TokyoTest\"},{\"name\":\"両国\",\"show\":true,\"text\":\"両国\"}]"
+    },
+    {
+      "name": "広域(往復) 縮尺が 8000 超",
+      "pass": true,
+      "extra": "scale=27493"
+    },
+    {
+      "name": "広域(往復) ポリゴンが青へ戻る",
+      "pass": true,
+      "extra": "#3c64dc"
+    },
+    {
+      "name": "広域(往復) マーカーが小(<=14px)",
+      "pass": true,
+      "extra": "9"
+    },
+    {
+      "name": "広域(往復) ラベル非表示",
+      "pass": true,
+      "extra": "[{\"name\":\"本所吾妻橋\",\"show\":false},{\"name\":\"錦糸町\",\"show\":false},{\"name\":\"TokyoTest\",\"show\":false},{\"name\":\"両国\",\"show\":false}]"
+    }
+  ]
+}

@@ -17,6 +17,7 @@
       <h2>使い方</h2>
       <h3>⛰️ Terrain / Shadow</h3>
       <p>地形表示と影表示をワンクリックで ON/OFF します。地形ソースは Re:Earth Terrain（楕円体高 / 標高）と国土地理院 DEM（5m+10m / 1m、TP基準）から選択可能で、CesiumWorldTerrain は Ion アクセスが必要なため同梱していません。高さ基準の違い（楕円体高 / 標高）は数十 m のずれになるため、3D Tiles の高さ基準に合わせた選択が必要です（<a href="../features/v0.html#terrain">詳細</a>）。</p>
+      <p><strong>MapLibre エンジンの地形タブ</strong>では、DEM ソース（Re:Earth Terrain / Mapterhorn / AWS Terrain Tiles / MapLibre デモ）選択・誇張に加えて、<strong>陰影（hillshade）</strong>・<strong>標高段彩（color-relief）</strong>のトグルと <strong>投影（メルカトル / 地球儀 globe）</strong>の切替があります。陰影・段彩は 3D 地形 OFF のまま DEM ソースだけを敷いて表示できるため、2D 地図のまま陰影図・段彩図として使えます。地球儀投影を選ぶと大気（sky）が既定で付き、<code>scene3d:</code> 行の <code>background=#RRGGBB</code> があれば空色へ反映します。<code>terrain:</code> 行の <code>shading=on|relief|both</code>・<code>url=</code>（任意 DEM）でも同じ表示をプロジェクト側から指定できます。</p>
 
       <h3>🗺️ GeoJSON 3D ドレープ制御</h3>
       <p>ベクターレイヤーが「地面 / Terrain（DEM）/ 3D Tiles」のどの面に追従するかを、インスペクター行のオプションまたは表示 → ドレープ パネルで切り替えます。地形ありの現地調査資料では張り付き先の選択が見え方を左右します。詳細な仕組みは <a href="../features/v0.html#terrain">V0 の地形・ドレープ節</a> を参照してください。ポリゴン・ラインだけでなく、ポイント（billboard）・QML ラベル・<code>cluster=on</code> のクラスタバッジも <code>heightReference</code> で同じ張り付き先へクランプされます（z 座標を持つ PointZ データも含む）。</p>
@@ -42,10 +43,12 @@
       <p>表示 → 一般タブのトグルで緯線・経線と度ラベルをオーバーレイ表示します。カメラ範囲に応じた nice-step 間隔で moveEnd 追従します。</p>
 
       <h2>設定方法（.kasc）</h2>
-      <pre class="text"><code>[QGIS 3D連携・Cesium のみ]
-terrain: 名 | exaggeration=垂直誇張 / offset=m / shading=on / generator=flat|dem|online|mesh
+      <pre class="text"><code>[QGIS 3D連携・Cesium/Navara/MapLibre]
+terrain: 名 | exaggeration=垂直誇張 / offset=m / shading=on|relief|both / generator=flat|dem|online|mesh / url=任意地形 URL / encoding=terrarium|mapbox|custom
 scene3d: 名 | background=#RRGGBB / skybox=on|off / shadows=on|off / ao=on|off / edl=on|off
 light:   名 | az=方位度 / el=仰角度 / intensity=N / color=#RRGGBB
+（MapLibre: shading=on|both→hillshade 陰影、relief|both→color-relief 標高段彩、
+ url=→TileJSON/{z}/{x}/{y} DEM ソース、light:→setLight、scene3d background→globe 時の sky-color）
 
 [ベクター行オプション]
 extrude=m / z=m     （QGIS 3D押出し・基準高さ）

@@ -1,0 +1,21 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "filled-1" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[139.560, 35.615], [139.590, 35.625], [139.620, 35.618], [139.650, 35.628]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "filled-2" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[139.565, 35.605], [139.600, 35.600], [139.635, 35.607]]
+      }
+    }
+  ]
+}

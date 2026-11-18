@@ -1,0 +1,87 @@
+{
+  "checks": [
+    {
+      "engine": "cesium",
+      "name": "page-load",
+      "pass": true,
+      "extra": "{\"title\":\"KASUGAI Canvas\",\"layerText\":\"−\",\"status\":\"\"}"
+    },
+    {
+      "engine": "cesium",
+      "name": "no-fatal-error",
+      "pass": true,
+      "extra": "nonfatal=1"
+    },
+    {
+      "engine": "maplibre",
+      "name": "page-load",
+      "pass": true,
+      "extra": "{\"title\":\"KASUGAI Canvas — MapLibre\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）DM_C📍DM_1📍DM_3📍▸サンプル / PSEA(P21)2QGISLine未読込📍point(letter)未読込📍▾"
+    },
+    {
+      "engine": "maplibre",
+      "name": "no-fatal-error",
+      "pass": true,
+      "extra": "nonfatal=1"
+    },
+    {
+      "engine": "openlayers",
+      "name": "page-load",
+      "pass": true,
+      "extra": "{\"title\":\"KASUGAI Canvas — OpenLayers\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）▾DM_C📍市･東京都の区町・村・指定都市の区市町村の飛地大区域 大字・町・丁目 小字・丁目 通りその他の地名（大） その他の地名"
+    },
+    {
+      "engine": "openlayers",
+      "name": "no-fatal-error",
+      "pass": true,
+      "extra": "nonfatal=1"
+    },
+    {
+      "engine": "leaflet",
+      "name": "page-load",
+      "pass": false,
+      "extra": "TimeoutError: page.screenshot: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - taking page screenshot\u001b[22m\n"
+    },
+    {
+      "engine": "navara",
+      "name": "page-load",
+      "pass": true,
+      "extra": "{\"title\":\"KASUGAI Canvas — Navara\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▸サンプル / DM（スタイルサンプル）▾DM_C📍市･東京都の区町・村・指定都市の区市町村の飛地大区域 大字・町・丁目 小字・丁目 通りその他の地名（大） その他の地名（中） "
+    },
+    {
+      "engine": "navara",
+      "name": "no-fatal-error",
+      "pass": true,
+      "extra": "nonfatal=1"
+    },
+    {
+      "engine": "gsimaps",
+      "name": "page-load",
+      "pass": true,
+      "extra": "{\"title\":\"KASUGAI Canvas — GSI Maps\",\"layerText\":\"\\n    \\n      \\n      🔽\\n      🔼\\n    \\n    ▸サンプル / DM（スタイルサンプル）DM_C📍DM_1📍DM_3📍▸サンプル / PSEA(P21)2QGISLine📍point(letter)📍▸国土数値情報 / 政策区域 / 行政地域行政"
+    },
+    {
+      "engine": "gsimaps",
+      "name": "no-fatal-error",
+      "pass": true,
+      "extra": "nonfatal=1"
+    }
+  ],
+  "errors": {
+    "cesium": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "maplibre": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "openlayers": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "navara": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "gsimaps": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ]
+  }
+}

@@ -2,7 +2,7 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setMapScaleGetter, setEvalScale } from "./qml-style.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setMapScaleGetter, setEvalScale, linRefFormatText } from "./qml-style.js";
 import { resolveKascUrl } from "./kasc.js";
 
 // qml-style.js の縮尺注入 API を 2D アダプタ経由で各エンジンへ再公開
@@ -39,7 +39,16 @@ export const QML_LABEL_PROPS = [
   "__kasc_label_sort", "__kasc_label_spacing", "__kasc_label_justify",
   "__kasc_label_letter", "__kasc_label_lh", "__kasc_label_maxw", "__kasc_label_tf",
   "__kasc_label_maxa", "__kasc_label_img", "__kasc_label_off_px",
+  "__kasc_label_vgrp",
 ];
+
+// QGIS predefinedPositionOrder の位置コード → MapLibre/Navara アンカー名。
+// QGIS4 enum は TL/TSL/T/TSR/TR/L/R/BL/BSL/B/BSR/BR(S=Slightly → 基本方位へ畳む)
+export const QML_POS_CODE_TO_ANCHOR = {
+  TL: "top-left", TSL: "top", T: "top", TSR: "top", TR: "top-right",
+  L: "left", R: "right",
+  BL: "bottom-left", BSL: "bottom", B: "bottom", BSR: "bottom", BR: "bottom-right",
+};
 
 // quad {h,v} → MapLibre text-anchor
 export function quadToAnchor(quad) {
@@ -99,6 +108,19 @@ export function bakeQmlLabels(geojson, compiled, labelIcons = null) {
       ];
       props.__kasc_label_anchor = specToSymbolPlacement(spec, geomType) === "point" ? quadToAnchor(pl.quad) : "center";
       props.__kasc_label_placement = specToSymbolPlacement(spec, geomType);
+      // predefinedPositionOrder → MapLibre text-variable-anchor +
+      // text-radial-offset / Navara variableAnchors 共通の候補リスト。
+      // 非データ駆動 layout のため JSON 文字列でグルーピングする
+      delete props.__kasc_label_vgrp;
+      if (pl.predefinedOrder?.length && props.__kasc_label_placement === "point") {
+        const anchors = pl.predefinedOrder
+          .map(c => QML_POS_CODE_TO_ANCHOR[String(c).trim().toUpperCase()])
+          .filter(Boolean);
+        if (anchors.length) {
+          const rad = Math.max(Math.round(((pl.distPx || 0) / sizePx) * 100) / 100, 0);
+          props.__kasc_label_vgrp = JSON.stringify([anchors, rad]);
+        }
+      }
       props.__kasc_label_upright = spec.upsidedown !== "show";
       props.__kasc_label_overlap = !!(spec.displayAll || spec.allowDegraded || spec.allowOverlap);
       props.__kasc_label_sort = (spec.zIndex || 0) * 100 + (spec.priority || 0);
@@ -316,9 +338,62 @@ function sampleLineGeom(geom, stepMap) {
   return out;
 }
 
+// LinearReferencing(里程標): 平面座標列(単位=m)を intervalM 間隔でサンプル。
+// 戻り値 [{x,y,angle,dist}] — angle は進行方向(y-up 空間の atan2 rad)、
+// dist はパート先頭からの累積距離(m)。skip_multiples はその倍数地点を除外
+export function linRefSamplesPlanar(coordsList, intervalM, { skipMultiples = 0, startMeasure = 0, max = 500 } = {}) {
+  const out = [];
+  const step = Math.max(intervalM || 1, 1);
+  const skip = Math.max(skipMultiples || 0, 0);
+  const eps = step * 1e-6;
+  for (const coords of coordsList || []) {
+    if (!coords || coords.length < 2) continue;
+    let acc = 0, next = step;
+    for (let i = 0; i + 1 < coords.length && out.length < max; i++) {
+      const [x1, y1] = coords[i], [x2, y2] = coords[i + 1];
+      const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+      if (!len) continue;
+      const ang = Math.atan2(dy, dx);
+      while (next <= acc + len + eps && out.length < max) {
+        const t = Math.min(Math.max((next - acc) / len, 0), 1);
+        if (!(skip > 0 && Math.abs(next % skip) < Math.max(eps, skip * 1e-6))) {
+          out.push({ x: x1 + dx * t, y: y1 + dy * t, angle: ang, dist: next });
+        }
+        next += step;
+      }
+      acc += len;
+    }
+    if (out.length >= max) break;
+  }
+  if (startMeasure) for (const s of out) s.dist += startMeasure;
+  return out;
+}
+
+// GeoJSON(4326) LineString/MultiLineString → メートル空間で標点サンプルし
+// 4326 座標へ戻す。labelOffsetPx は基準縮尺(TRIM_PX_TO_M=2.8m/px)換算で
+// 座標へ直接焼き込む(回転時は線方向系、非回転時は画面系)
+export function linRefSamplesGeojson(geom, decor) {
+  const parts = geom?.type === "LineString" ? [geom.coordinates]
+    : geom?.type === "MultiLineString" ? geom.coordinates : [];
+  const [lox, loy] = decor?.labelOffsetPx || [0, 0];
+  const dxm = (lox || 0) * TRIM_PX_TO_M, dym = (loy || 0) * TRIM_PX_TO_M;
+  const rot = !!decor?.rotate;
+  const out = [];
+  for (const c of parts) {
+    for (const s of linRefSamplesPlanar([c.map(ll2m)], decor?.intervalM, decor || {})) {
+      const ca = Math.cos(s.angle), sa = Math.sin(s.angle);
+      const x = rot ? s.x + dxm * ca + dym * sa : s.x + dxm;
+      const y = rot ? s.y + dxm * sa - dym * ca : s.y - dym;
+      const [lon, lat] = m2ll([x, y]);
+      out.push({ coord: [lon, lat], angle: s.angle, dist: s.dist });
+    }
+  }
+  return out;
+}
+
 // MarkerLine/HashLine/ArrowLine の spec.line.decor → OL Style 配列
 function decorToOlStyles(decor, geom, resolution, OL) {
-  const { Style, Fill, Stroke, Icon, Point, MultiPoint, MultiLineString, Polygon } = OL;
+  const { Style, Fill, Stroke, Icon, Point, MultiPoint, MultiLineString, Polygon, Text } = OL;
   if (!MultiPoint || !MultiLineString || !Polygon || !geom || !Number.isFinite(resolution)) return [];
   const px = v => v * resolution; // 画面px → マップ単位
   const step = Math.max(px(decor.intervalPx || 30), resolution * 2);
@@ -380,6 +455,46 @@ function decorToOlStyles(decor, geom, resolution, OL) {
       fill: new Fill({ color: rgbaToCss(decor.color || [0, 0, 0, 1]) }),
       stroke: null,
     })];
+  }
+  if (decor.kind === "linref" && Point && Text) {
+    // 里程標: 等間隔の標点へ距離ラベル(+任意マーカー)を置く。
+    // resolution でオフセット px→地図単位を正確換算する
+    const lines = geom.getType() === "LineString" ? [geom.getCoordinates()] : geom.getCoordinates();
+    const samples = linRefSamplesPlanar(lines, decor.intervalM, decor);
+    if (!samples.length) return [];
+    const tf = decor.text || {};
+    const [lox, loy] = decor.labelOffsetPx || [0, 0];
+    const dxm = (lox || 0) * resolution, dym = (loy || 0) * resolution;
+    const mkCv = decor.showMarker && decor.markers?.length
+      ? markerLayersToCanvas(decor.markers) : null;
+    const styles = [];
+    for (const s of samples) {
+      const ca = Math.cos(s.angle), sa = Math.sin(s.angle);
+      // オフセットを線方向系へ回転(rotate 時)または画面系のまま適用(y-up→y-down 反転)
+      const px_ = decor.rotate ? s.x + dxm * ca + dym * sa : s.x + dxm;
+      const py_ = decor.rotate ? s.y + dxm * sa - dym * ca : s.y - dym;
+      if (mkCv) styles.push(new Style({
+        geometry: new Point([px_, py_]),
+        image: new Icon({ img: mkCv, anchor: [0.5, 0.5],
+          rotation: decor.rotate ? -s.angle : 0 }),
+      }));
+      styles.push(new Style({
+        geometry: new Point([px_, py_]),
+        text: new Text({
+          text: linRefFormatText(s.dist + (decor.startMeasure || 0), decor.num),
+          font: tf.fontCss || "12px sans-serif",
+          fill: new Fill({ color: rgbaToCss(tf.fill || [0, 0, 0, 1]) }),
+          stroke: tf.halo
+            ? new Stroke({ color: rgbaToCss(tf.halo.color), width: Math.max(tf.halo.widthPx || 1, 1) })
+            : undefined,
+          rotation: decor.rotate ? -s.angle : 0,
+          placement: "point",
+          overflow: true,
+          textAlign: "center",
+        }),
+      }));
+    }
+    return styles;
   }
   return [];
 }
@@ -458,13 +573,18 @@ export function olQmlStyleFunction(compiled, OL) {
     } else if (s.fill && /Polygon/.test(geomType)) {
       styleOpts.fill = new Fill({ color: s.fill });
     }
-    if (s.stroke) {
+    // LinearReferencing(里程標)は基線を描かず標点ラベル/マーカーのみ。
+    // 実線ストロークを抑える(QGIS 準拠)
+    const linrefOnly = spec.line?.decor?.kind === "linref" && !spec.outline;
+    if (s.stroke && !linrefOnly) {
       styleOpts.stroke = new Stroke({
         color: s.stroke, width: s.strokeWidth, lineDash: s.dash || undefined,
         lineDashOffset: s.dashOffsetPx || undefined,
         lineJoin: s.join || undefined, lineCap: s.cap || undefined,
       });
     }
+    // symbollevels=1 の近似: 地物の最小 pass をスタイル z-index として使う
+    if (Number.isFinite(spec.zRank)) styleOpts.zIndex = spec.zRank;
     // 線端トリム: 描画ごとの resolution で画面px→地図単位へ正確換算し
     // geometry を切断して返す(基準縮尺近似ではなく実縮尺で再現できる)
     const trimGeomOf = (line) => {
@@ -676,7 +796,9 @@ const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_colo
   "__kasc_icon", "__kasc_fillpat", "__kasc_dash", "__kasc_fopa", "__kasc_lopa", "__kasc_copa",
   "__kasc_cr", "__kasc_csw", "__kasc_csc", "__kasc_cicon",
   "__kasc_lgrp", "__kasc_lblend", "__kasc_fblend", "__kasc_lggrp", "__kasc_fillx",
-  "__kasc_lblur", "__kasc_mgrp", "__kasc_hgrp", "__kasc_lpat", "__kasc_lpatw"];
+  "__kasc_lblur", "__kasc_mgrp", "__kasc_hgrp", "__kasc_lpat", "__kasc_lpatw",
+  "__kasc_loff", "__kasc_join", "__kasc_cap", "__kasc_heat", "__kasc_zkey",
+  "__kasc_lronly", "__kasc_lrt", "__kasc_lrr", "__kasc_lrg"];
 
 // HashLine の刻みを icon-image 用 canvas へ。刻み方向は
 // QGIS と同じく「線方向 + hash_angle − 90°」(hash_angle=0 が線直交)
@@ -772,6 +894,9 @@ export function maplibreApplyQml(geojson, compiled) {
     return 0;
   };
 
+  // LinearReferencing: 地物ループ内で生成する標点点地物の退避先
+  const lrPts = [];
+
   for (const feature of geojson.features || []) {
     const spec = compiled.evaluate(feature.properties || {});
     if (!spec) continue;
@@ -788,6 +913,10 @@ export function maplibreApplyQml(geojson, compiled) {
       }
     }
     feature.properties = feature.properties || {};
+    // symbollevels=1: 地物最小 pass を z 順位キーへ焼く(*-sort-key 式用)
+    if (compiled.symbolLevels && Number.isFinite(spec.zRank)) {
+      feature.properties.__kasc_zkey = spec.zRank;
+    }
     if (s.fill) feature.properties.__kasc_fill = s.fill;
     // fill-extrusion-opacity はデータ駆動不可のため、塗り色をアルファ込みで
     // 別プロパティにも焼く（fill-extrusion-color がこの値を拾う）
@@ -878,12 +1007,37 @@ export function maplibreApplyQml(geojson, compiled) {
           feature.properties.__kasc_lpatw = Math.max(l.widthPx || 2, 0.5);
           if (d.offsetPx) feature.properties.__kasc_loff = d.offsetPx;
         }
+      } else if (d.kind === "linref" && /LineString/.test(feature.geometry?.type || "")) {
+        // 里程標: 等間隔標点を別地物として生成。text/icon はレイヤ定数の
+        // ため書式グループ __kasc_lrg でまとめる(サイズ/色/回転/アイコン)
+        const tf = d.text || {};
+        let mic = "";
+        if (d.showMarker && d.markers?.length) {
+          const cv = markerLayersToCanvas(d.markers);
+          if (cv) { mic = `qm${uid}_${icons.size}`; icons.set(mic, cv); }
+        }
+        const gkey = [
+          Math.max(Math.round(tf.sizePx || 12), 6),
+          rgbaToCss(tf.fill || [0, 0, 0, 1]),
+          tf.halo ? rgbaToCss(tf.halo.color) : "",
+          tf.halo?.widthPx || 0,
+          d.rotate ? 1 : 0, mic,
+        ].join("|");
+        for (const smp of linRefSamplesGeojson(feature.geometry, d)) {
+          lrPts.push({ type: "Feature", properties: {
+            __kasc_lronly: 1,
+            __kasc_lrt: linRefFormatText(smp.dist, d.num),
+            __kasc_lrr: d.rotate ? -(smp.angle * 180 / Math.PI) : 0,
+            __kasc_lrg: gkey,
+          }, geometry: { type: "Point", coordinates: smp.coord } });
+        }
       }
     }
-    // 装飾系レイヤ(MarkerLine/HashLine/RasterLine)は QGIS では刻み・
-    // マーカー・画像のみを描き実線は引かない。最上位レイヤが装飾なら
-    // 実線ストロークを抑え、下位に実線レイヤがあればそちらを使う
-    if (spec.line?.decor && /^(markerline|hashline|rasterline)$/.test(spec.line.decor.kind)) {
+    // 装飾系レイヤ(MarkerLine/HashLine/RasterLine/LinearReferencing)は
+    // QGIS では刻み・マーカー・画像・標点のみを描き実線は引かない。
+    // 最上位レイヤが装飾なら実線ストロークを抑え、下位に実線レイヤが
+    // あればそちらを使う
+    if (spec.line?.decor && /^(markerline|hashline|rasterline|linref)$/.test(spec.line.decor.kind)) {
       const lowerSolid = lineStack.slice(0, -1).filter(l => l && !l.decor).pop();
       if (lowerSolid) {
         feature.properties.__kasc_stroke = rgbaToCss(lowerSolid.color);
@@ -901,6 +1055,11 @@ export function maplibreApplyQml(geojson, compiled) {
       feature.properties.__kasc_heat = Math.min(Math.max((Number.isFinite(w) ? w : 1) / mv, 0), 1);
     }
   }
+  // LinearReferencing 生成点をソースへ追加(__kasc_lronly で通常点描画から除外)
+  for (const p of lrPts) geojson.features.push(p);
+  // symbollevels=1 の近似: 地物別 zRank を *-sort-key で層内描画順へ
+  const zlay = compiled.symbolLevels
+    ? k => ({ [k]: ["coalesce", ["get", "__kasc_zkey"], 0] }) : () => ({});
   // 破線・ブレンドごとの line レイヤ(line-dasharray/*-layer-blend は
   // データ駆動不可のため __kasc_lgrp = "blend|dashJSON" でグルーピング)
   const lgrpSet = new Set();
@@ -920,12 +1079,12 @@ export function maplibreApplyQml(geojson, compiled) {
         "fill-pattern": ["get", "__kasc_fillpat"],
         "fill-opacity": ["coalesce", ["get", "__kasc_fopa"], 0.5],
         ...bl,
-      }],
+      }, zlay("fill-sort-key")],
       ["fill", ["all", nonPoint, ...extra, ["!", ["has", "__kasc_fillpat"]], ["has", "__kasc_fill"]], {
         "fill-color": ["coalesce", ["get", "__kasc_fill"], "#3a7bd5"],
         "fill-opacity": ["coalesce", ["get", "__kasc_fopa"], 0.5],
         ...bl,
-      }],
+      }, zlay("fill-sort-key")],
     ];
   };
   const kinds = [];
@@ -945,6 +1104,7 @@ export function maplibreApplyQml(geojson, compiled) {
   const lineLayout = {
     "line-join": ["coalesce", ["get", "__kasc_join"], "bevel"],
     "line-cap": ["coalesce", ["get", "__kasc_cap"], "butt"],
+    ...zlay("line-sort-key"),
   };
   const noGrad = ["!", ["has", "__kasc_lggrp"]];
   if (lgrpSet.size) {
@@ -1020,11 +1180,50 @@ export function maplibreApplyQml(geojson, compiled) {
     "icon-image": ["get", "__kasc_cicon"],
     "icon-size": 1, "icon-allow-overlap": true, "icon-ignore-placement": true,
   }]);
+  // LinearReferencing の標点レイヤ(生成点地物 __kasc_lronly 対象)。
+  // 書式グループ __kasc_lrg ごとにレイヤ定数を固めて出す
+  {
+    const lrGroups = new Set();
+    for (const f of geojson.features || []) {
+      const g = f.properties?.__kasc_lrg;
+      if (g) lrGroups.add(g);
+    }
+    for (const g of lrGroups) {
+      const [size, color, haloC, haloW, rot, mic] = g.split("|");
+      kinds.push(["symbol", ["all", ["has", "__kasc_lrt"], ["==", ["get", "__kasc_lrg"], g]], {
+        "text-color": color || "#000000",
+        "text-halo-color": haloC || "rgba(0,0,0,0)",
+        "text-halo-width": Number(haloW) || 0,
+      }, {
+        "text-field": ["get", "__kasc_lrt"],
+        "text-size": Math.max(Number(size) || 12, 6),
+        "text-font": ["literal", ["Noto Sans Regular"]],
+        "text-rotate": rot === "1" ? ["get", "__kasc_lrr"] : 0,
+        "text-rotation-alignment": "map",
+        "text-anchor": "center",
+        "text-allow-overlap": true,
+        "text-ignore-placement": true,
+        "symbol-placement": "point",
+        ...zlay("symbol-sort-key"),
+      }]);
+      if (mic) {
+        kinds.push(["symbol", ["all", ["has", "__kasc_lrt"], ["==", ["get", "__kasc_lrg"], g]], {}, {
+          "icon-image": mic, "icon-size": 1,
+          "icon-rotate": rot === "1" ? ["get", "__kasc_lrr"] : 0,
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true, "icon-ignore-placement": true,
+          ...zlay("symbol-sort-key"),
+        }]);
+      }
+    }
+  }
   // 点シンボル: markerCanvas アイコンがあれば icon-image、無ければ circle フォールバック
-  const pointOnly = ["==", ["geometry-type"], "Point"];
+  // (linref 生成点は __kasc_lronly で除外)
+  const pointOnly = ["all", ["==", ["geometry-type"], "Point"], ["!", ["has", "__kasc_lronly"]]];
   kinds.push(["symbol", ["all", pointOnly, ["has", "__kasc_icon"]], {}, {
     "icon-image": ["get", "__kasc_icon"],
     "icon-size": 1, "icon-allow-overlap": true, "icon-ignore-placement": true,
+    ...zlay("symbol-sort-key"),
   }]);
   kinds.push(["circle", ["all", pointOnly, ["!", ["has", "__kasc_icon"]]], {
     "circle-radius": ["coalesce", ["get", "__kasc_cr"], 5],
@@ -1032,7 +1231,7 @@ export function maplibreApplyQml(geojson, compiled) {
     "circle-opacity": ["coalesce", ["get", "__kasc_copa"], 1],
     "circle-stroke-color": ["coalesce", ["get", "__kasc_csc"], ["get", "__kasc_stroke"], "#ffffff"],
     "circle-stroke-width": ["coalesce", ["get", "__kasc_csw"], 1],
-  }]);
+  }, zlay("circle-sort-key")]);
   // <labeling>: 焼き込んだ __kasc_label 系プロパティを参照する symbol レイヤを追加。
   // symbol-placement 等の非データ駆動 layout は配置モード別にレイヤを分ける
   const baked = bakeQmlLabels(geojson, compiled, icons);
@@ -1043,16 +1242,27 @@ export function maplibreApplyQml(geojson, compiled) {
     const placements = [...new Set(labeled.map(f => f.properties.__kasc_label_placement || "point"))];
     for (const pm of placements.length ? placements : ["point"]) {
       const group = labeled.filter(f => (f.properties.__kasc_label_placement || "point") === pm);
-      const allowOverlap = group.every(f => f.properties.__kasc_label_overlap === true);
-      const keepUpright = group.every(f => f.properties.__kasc_label_upright !== false);
-      const spacing = Math.min(...group.map(f => f.properties.__kasc_label_spacing || 250));
-      const maxw = Math.min(...group.map(f => f.properties.__kasc_label_maxw || 10));
-      const lh = group[0]?.properties.__kasc_label_lh ?? 1;
-      const letter = group[0]?.properties.__kasc_label_letter ?? 0;
-      const tf = group.every(f => f.properties.__kasc_label_tf === "uppercase") ? "uppercase"
-        : group.every(f => f.properties.__kasc_label_tf === "lowercase") ? "lowercase" : "none";
-      const maxa = Math.max(...group.map(f => Number(f.properties.__kasc_label_maxa) || 0), 0);
-      kinds.push(["symbol", ["all", ["has", "__kasc_label"], ["==", ["get", "__kasc_label_placement"], pm]], {
+      // text-variable-anchor は非データ駆動のため __kasc_label_vgrp
+      // (predefinedPositionOrder の候補+radial em の JSON)でサブグループ化。
+      // 無しは "" の通常レイヤ
+      const vgrps = [...new Set(group.map(f => f.properties.__kasc_label_vgrp || ""))];
+      for (const vg of vgrps) {
+      const sub = group.filter(f => (f.properties.__kasc_label_vgrp || "") === vg);
+      const allowOverlap = sub.every(f => f.properties.__kasc_label_overlap === true);
+      const keepUpright = sub.every(f => f.properties.__kasc_label_upright !== false);
+      const spacing = Math.min(...sub.map(f => f.properties.__kasc_label_spacing || 250));
+      const maxw = Math.min(...sub.map(f => f.properties.__kasc_label_maxw || 10));
+      const lh = sub[0]?.properties.__kasc_label_lh ?? 1;
+      const letter = sub[0]?.properties.__kasc_label_letter ?? 0;
+      const tf = sub.every(f => f.properties.__kasc_label_tf === "uppercase") ? "uppercase"
+        : sub.every(f => f.properties.__kasc_label_tf === "lowercase") ? "lowercase" : "none";
+      const maxa = Math.max(...sub.map(f => Number(f.properties.__kasc_label_maxa) || 0), 0);
+      let vanchors = null, vrad = 0;
+      if (vg) {
+        try { const a = JSON.parse(vg); vanchors = a[0]; vrad = a[1]; } catch (_) { /* JSON 破損は通常配置へ */ }
+      }
+      kinds.push(["symbol", ["all", ["has", "__kasc_label"], ["==", ["get", "__kasc_label_placement"], pm],
+        vg ? ["==", ["get", "__kasc_label_vgrp"], vg] : ["!", ["has", "__kasc_label_vgrp"]]], {
         "text-color": ["coalesce", ["get", "__kasc_label_color"], "#222222"],
         "text-halo-color": ["coalesce", ["get", "__kasc_label_halo"], "rgba(0,0,0,0)"],
         "text-halo-width": ["coalesce", ["get", "__kasc_label_halo_w"], 0],
@@ -1062,9 +1272,17 @@ export function maplibreApplyQml(geojson, compiled) {
         "text-size": ["coalesce", ["get", "__kasc_label_size"], 12],
         "text-font": ["literal", ["Noto Sans Regular"]],
         "text-rotate": ["coalesce", ["get", "__kasc_label_rot"], 0],
-        "text-offset": ["get", "__kasc_label_off"],
-        "text-anchor": ["coalesce", ["get", "__kasc_label_anchor"], "center"],
-        "text-justify": ["coalesce", ["get", "__kasc_label_justify"], "auto"],
+        ...(vanchors?.length ? {
+          // predefinedPositionOrder: 候補位置へ順次試行するネイティブ配置。
+          // text-anchor/text-offset は variable-anchor 系と併用不可のため出さない
+          "text-variable-anchor": vanchors,
+          "text-radial-offset": vrad,
+          "text-justify": "auto",
+        } : {
+          "text-offset": ["get", "__kasc_label_off"],
+          "text-anchor": ["coalesce", ["get", "__kasc_label_anchor"], "center"],
+          "text-justify": ["coalesce", ["get", "__kasc_label_justify"], "auto"],
+        }),
         "symbol-sort-key": ["coalesce", ["get", "__kasc_label_sort"], 0],
         "symbol-spacing": Math.max(spacing, 1),
         "symbol-avoid-edges": false,
@@ -1078,6 +1296,7 @@ export function maplibreApplyQml(geojson, compiled) {
         ...(tf !== "none" ? { "text-transform": tf } : {}),
         ...(pm === "line" && maxa ? { "text-max-angle": maxa } : {}),
       }]);
+      }
     }
     // bufferNoFill(中空ハロー)ラベル: bakeQmlLabels が canvas ラスタライズして
     // __kasc_label_img へ画像キーを焼いた地物を icon-image で表示する。

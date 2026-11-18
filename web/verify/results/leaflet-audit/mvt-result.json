@@ -1,0 +1,204 @@
+{
+  "checks": {
+    "mapOpts": {
+      "ok": true,
+      "dragging": false,
+      "scrollWheelZoom": false,
+      "tapTolerance": 42
+    },
+    "mvtGsi": {
+      "ok": true,
+      "tiles": 24,
+      "renderedTiles": 1,
+      "paths": 1650,
+      "layerNames": [
+        "AdmBdry",
+        "Anno",
+        "RailCL",
+        "RdCL",
+        "RvrCL",
+        "WA"
+      ],
+      "interactive": true,
+      "sample": [
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
+        },
+        {
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
+        }
+      ]
+    },
+    "mvtStyle": {
+      "ok": true,
+      "tiles": 24,
+      "renderedTiles": 1,
+      "paths": 2,
+      "layerNames": [
+        "AdmBdry",
+        "Anno",
+        "RailCL",
+        "RdCL",
+        "WA"
+      ],
+      "interactive": true,
+      "sample": [
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        },
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        }
+      ],
+      "fillCheck": {
+        "ok": true,
+        "fills": [
+          [
+            "#ffcc00",
+            20
+          ]
+        ]
+      }
+    },
+    "mvtTilejson": {
+      "ok": true,
+      "tiles": 24,
+      "renderedTiles": 1,
+      "paths": 1217,
+      "layerNames": [
+        "AdmBdry",
+        "Anno",
+        "RailCL",
+        "RdCL",
+        "WA"
+      ],
+      "interactive": true,
+      "sample": [
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "none",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
+        }
+      ]
+    },
+    "pmtiles": {
+      "ok": true,
+      "tiles": 24,
+      "renderedTiles": 16,
+      "paths": 8113,
+      "layerNames": [
+        "buildings",
+        "earth",
+        "landuse",
+        "natural",
+        "physical_line",
+        "physical_point",
+        "places",
+        "pois",
+        "roads",
+        "water",
+        "transit",
+        "boundaries"
+      ],
+      "interactive": true,
+      "sample": [
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        },
+        {
+          "fill": "rgba(43,140,190,0.30)",
+          "stroke": "#2b8cbe"
+        }
+      ]
+    },
+    "clickAttr": {
+      "ok": true,
+      "snippet": "▾pmtiles-firenzepmap:kindbuildingheight25"
+    },
+    "unsupported": {
+      "ok": true,
+      "text": ""
+    }
+  },
+  "errors": []
+}

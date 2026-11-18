@@ -39,7 +39,9 @@ const DEFAULT_MVT_STYLE = {
   pointRadius: 3,
 };
 
-function mvtStyle(opts = {}) {
+// mvt:/pmtiles: 行オプション → {style, layerNames}。
+// Cesium は canvas ラスタライズ、OpenLayers は ol Style 変換に使う共通 spec
+export function mvtStyle(opts = {}) {
   const s = { ...DEFAULT_MVT_STYLE };
   if (opts.fill) s.fill = opts.fill;
   if (opts.stroke || opts.color) s.stroke = opts.stroke || opts.color;

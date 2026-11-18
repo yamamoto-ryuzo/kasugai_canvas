@@ -1,0 +1,15 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "kind": "city", "name": "甲府" },
+      "geometry": { "type": "Point", "coordinates": [139.58, 35.63] } },
+    { "type": "Feature", "properties": { "kind": "peak", "name": "富士山" },
+      "geometry": { "type": "Point", "coordinates": [139.62, 35.57] } },
+    { "type": "Feature", "properties": { "kind": "road", "name": "実線路" },
+      "geometry": { "type": "LineString", "coordinates": [[139.55, 35.61], [139.65, 35.63]] } },
+    { "type": "Feature", "properties": { "kind": "road2", "name": "破線路" },
+      "geometry": { "type": "LineString", "coordinates": [[139.55, 35.59], [139.65, 35.61]] } },
+    { "type": "Feature", "properties": { "kind": "poly", "name": "区域" },
+      "geometry": { "type": "Polygon", "coordinates": [[[139.56, 35.55], [139.60, 35.55], [139.60, 35.58], [139.56, 35.58], [139.56, 35.55]]] } }
+  ]
+}

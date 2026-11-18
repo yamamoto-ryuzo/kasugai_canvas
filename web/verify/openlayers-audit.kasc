@@ -1,0 +1,5 @@
+cam:firenze|43.7696|11.2558|h=800000|p=-60|d=0
+base:OpenStreetMap|https://tile.openstreetmap.org/{z}/{x}/{y}.png|off
+mvt:countries|https://demotiles.maplibre.org/tiles/tiles.json
+pmtiles:firenze|https://pmtiles.io/protomaps(vector)ODbL_firenze.pmtiles
+geotiff:s2-tci|https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/36/Q/WD/2020/7/S2A_36QWD_20200701_0_L2A/TCI.tif|opacity=0.85

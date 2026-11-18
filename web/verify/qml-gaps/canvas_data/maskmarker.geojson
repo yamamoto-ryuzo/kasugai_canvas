@@ -1,0 +1,8 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "name": "mask-1" }, "geometry": { "type": "Point", "coordinates": [139.580, 35.585] } },
+    { "type": "Feature", "properties": { "name": "mask-2" }, "geometry": { "type": "Point", "coordinates": [139.605, 35.583] } },
+    { "type": "Feature", "properties": { "name": "mask-3" }, "geometry": { "type": "Point", "coordinates": [139.630, 35.586] } }
+  ]
+}

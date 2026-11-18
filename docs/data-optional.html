@@ -82,8 +82,8 @@
       <td>ベクトルタイル</td>
       <td>△ ラスタライズ</td>
       <td>○ ネイティブ</td>
-      <td>×</td>
-      <td>×</td>
+      <td>○ ネイティブ</td>
+      <td>○ vectorgrid</td>
       <td>×</td>
       <td>○ ネイティブ</td>
       <td>オプション</td>
@@ -93,8 +93,8 @@
       <td>単一ファイル・ベクトルタイル</td>
       <td>△ ラスタライズ</td>
       <td>○ ネイティブ</td>
-      <td>×</td>
-      <td>×</td>
+      <td>○ ネイティブ</td>
+      <td>○ vectorgrid</td>
       <td>×</td>
       <td>×</td>
       <td>オプション</td>
@@ -115,7 +115,7 @@
       <td>GeoTIFF / COG ラスタ</td>
       <td>○</td>
       <td>×</td>
-      <td>×</td>
+      <td>○</td>
       <td>×</td>
       <td>×</td>
       <td>×</td>
@@ -125,7 +125,7 @@
       <td><code>terrain:</code></td>
       <td>地形（DEM）指定</td>
       <td>○</td>
-      <td>△ 誇張のみ</td>
+      <td>○ 誇張・陰影・段彩・url・フラット</td>
       <td>×</td>
       <td>×</td>
       <td>×</td>
@@ -141,7 +141,7 @@
       <div class="features">
         <div class="feature-card">
           <h3>🧩 MVT / PMTiles <span class="badge" style="background:#fd7e14;">ネイティブ: MapLibre</span></h3>
-          <p><code>mvt:</code>/<code>pmtiles:</code> で指定するベクトルタイル。ネイティブは <strong>MapLibre</strong>（両形式・<code>pmtiles://</code> プロトコル・全速）で、試験エンジンの Navara も <code>mvt:</code> のみネイティブ対応。<strong>Cesium は変換・低速経路</strong>（タイルをデコード→canvas ラスタライズして imagery として重ねる）のため、表示は可能だがオーバーズームのシャープさ・属性取得・ベクター検索の利点は失われる。<code>layers=</code> でソースレイヤ指定。OpenLayers/Leaflet は未対応</p>
+          <p><code>mvt:</code>/<code>pmtiles:</code> で指定するベクトルタイル。ネイティブは <strong>MapLibre</strong>（両形式・<code>pmtiles://</code> プロトコル・全速）と <strong>OpenLayers</strong>（<code>layer/VectorTile</code>+<code>source/VectorTile</code>+<code>format/MVT</code>。pmtiles は pmtiles.js の Range 読み出しを tileLoadFunction で接続・属性クリックも有効）で、試験エンジンの Navara も <code>mvt:</code> のみネイティブ対応。<strong>Leaflet は leaflet.vectorgrid</strong>（CDN 遅延ロード）で実ベクトル描画し、地物クリックの属性表示・<code>renderer=canvas</code> 切替・<code>tms=/subdomains=/bbox=</code> にも対応（pmtiles は pmtiles.js の Range 読み出しをタイル取得へ接続）。<strong>Cesium は変換・低速経路</strong>（タイルをデコード→canvas ラスタライズして imagery として重ねる）のため、表示は可能だがオーバーズームのシャープさ・属性取得・ベクター検索の利点は失われる。<code>layers=</code> でソースレイヤ指定</p>
         </div>
         <div class="feature-card">
           <h3>🗿 GLB / glTF モデル <span class="badge" style="background:#fd7e14;">ネイティブ: Cesium のみ</span></h3>
@@ -149,14 +149,14 @@
         </div>
         <div class="feature-card">
           <h3>⛰️ 地形（<code>terrain:</code>） <span class="badge" style="background:#fd7e14;">ネイティブ: Cesium 中心</span></h3>
-          <p><code>terrain:</code> 行で地形を制御（<code>url=</code> 任意 CesiumTerrainProvider・<code>exaggeration=</code> 垂直誇張・<code>shading=</code> 陰影・<code>generator=flat</code> フラット地形）。Cesium が全オプションに対応。MapLibre は誇張のみ（raster-dem テレイン）、Navara は誇張・陰影・フラットを反映。2D エンジン（OpenLayers/Leaflet/GSI Maps）では無効</p>
+          <p><code>terrain:</code> 行で地形を制御（<code>url=</code> 任意地形ソース・<code>exaggeration=</code> 垂直誇張・<code>shading=</code> 陰影・<code>generator=flat</code> フラット地形）。Cesium が全オプションに対応。MapLibre も <code>exaggeration=</code>（raster-dem テレイン）・<code>url=</code>+`encoding=`（TileJSON または {z}/{x}/{y} テンプレートの任意 DEM）・<code>shading=on|relief|both</code>（DEM 共有の hillshade/color-relief レイヤ。3D地形OFFでも陰影・段彩だけ表示可）・<code>generator=flat</code> を反映し、表示設定に陰影・段彩トグルとメルカトル/地球儀（globe）投影切替がある。<code>light:</code> 行（az=/el=/intensity=/color=）は setLight へ反映。Navara は誇張・陰影・フラットを反映。2D エンジン（OpenLayers/Leaflet/GSI Maps）では無効</p>
         </div>
       </div>
       <h4>変換・代替経路（低速寄り）</h4>
       <div class="features">
         <div class="feature-card">
-          <h3>🌈 GeoTIFF / COG <span class="badge" style="background:#fd7e14;">変換: Cesium のみ</span></h3>
-          <p><code>geotiff:</code> / <code>cog:</code> / <code>tiff:</code>（または <code>.tif/.tiff</code> ファイルの直接読み込み）でブラウザ内デコードしてラスタ表示。タイルモードと地物ドレープモードに対応。<strong>ドローン測量等の GeoTIFF/COG オルソ画像</strong>はこの経路（タイル化済みオルソは標準の <code>xyz:</code>、単一画像は <code>image:</code> を推奨）。対応は Cesium のみ</p>
+          <h3>🌈 GeoTIFF / COG <span class="badge" style="background:#fd7e14;">対応: Cesium・OpenLayers</span></h3>
+          <p><code>geotiff:</code> / <code>cog:</code> / <code>tiff:</code>（または <code>.tif/.tiff</code> ファイルの直接読み込み）でブラウザ内デコードしてラスタ表示。<strong>ドローン測量等の GeoTIFF/COG オルソ画像</strong>はこの経路（タイル化済みオルソは標準の <code>xyz:</code>、単一画像は <code>image:</code> を推奨）。Cesium は geotiff.js 遅延ロードの独自経路でタイルモードと地物ドレープモードに対応。<strong>OpenLayers は <code>layer/WebGLTile</code>+<code>source/GeoTIFF</code> のネイティブ経路</strong>（ライブラリ内蔵 geotiff.js が COG の Range 読み出し・オーバービュー・任意座標系のリプロジェクトを処理。<code>bands=</code>/<code>nodata=</code>/<code>opacity=</code> 対応）。MapLibre・Leaflet は未対応</p>
         </div>
       </div>
 
@@ -196,7 +196,7 @@
       <tr>
       <td>ベクトルタイル</td>
       <td>MVT / PMTiles</td>
-      <td>MapLibre ネイティブ / Navara(mvt) / Cesium ラスタライズ</td>
+      <td>MapLibre ネイティブ / OpenLayers ネイティブ / Navara(mvt) / Cesium ラスタライズ</td>
       <td>数十万地物級の大規模データ向け。詳細は <a href="performance.html">描画性能とデータ形式方針</a></td>
       </tr>
       <tr>
@@ -209,7 +209,7 @@
       <td>ラスタ</td>
       <td>GeoTIFF / COG</td>
       <td><code>geotiff:</code> / <code>cog:</code> / <code>tiff:</code></td>
-      <td>Cesium のみ</td>
+      <td>Cesium・OpenLayers（<code>WebGLTile</code>+<code>GeoTIFF</code> ソース）</td>
       </tr>
       <tr>
       <td>3DGS</td>

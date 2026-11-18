@@ -385,6 +385,13 @@
           <option value="maplibre">MapLibre デモ地形タイル</option>
         </select></label>
       <label class="set-row">地形の誇張 ×<input id="display-terrain-exagg" type="number" min="0" step="0.1" value="1" style="width: 90px;" /> <button id="display-terrain-exagg-reset" class="exagg-reset" type="button" title="リセット">↺</button></label>
+      <label class="set-row"><input id="display-hillshade" type="checkbox" /> 陰影（hillshade・DEM 共有・3D地形なしでも可）</label>
+      <label class="set-row"><input id="display-relief" type="checkbox" /> 標高段彩（color-relief・DEM 共有）</label>
+      <label class="set-row">投影
+        <select id="display-projection" style="width:100%;box-sizing:border-box;">
+          <option value="mercator">メルカトル（平面・標準）</option>
+          <option value="globe">地球儀（Globe・大気つき）</option>
+        </select></label>
     </div>
     <div class="display-subpane" id="display-drape-panel" hidden>
       <div class="set-row" style="font-weight:600;">3D Tiles ドレープ（deck.gl）</div>

@@ -4,14 +4,19 @@ import Map from "https://cdn.jsdelivr.net/npm/ol@10.11.0/Map.js";
 import View from "https://cdn.jsdelivr.net/npm/ol@10.11.0/View.js";
 import TileLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Tile.js";
 import VectorLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Vector.js";
+import VectorTileLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/VectorTile.js";
 import HeatmapLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Heatmap.js";
 import ImageLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/Image.js";
+import WebGLTileLayer from "https://cdn.jsdelivr.net/npm/ol@10.11.0/layer/WebGLTile.js";
 import XYZ from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/XYZ.js";
 import TileWMS from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/TileWMS.js";
 import VectorSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Vector.js";
+import VectorTileSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/VectorTile.js";
 import ClusterSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/Cluster.js";
 import StaticSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/ImageStatic.js";
+import GeoTIFFSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/GeoTIFF.js";
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
+import MVTFormat from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/MVT.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
 import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
@@ -21,6 +26,7 @@ import { kascTimeSpec, collectTimeValues, featureInTime, buildKascTimeControl } 
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
 import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { loadPmtiles, mvtStyle } from "../shared/mvt.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { scaleNiceCeil } from "../shared/scale-nice.js";
@@ -67,6 +73,9 @@ applyI18n();
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
+// parseKasc では doc.unsupported へ振り分けられるが OL 側で描画する行タイプ
+// (3dtiles=deck.gl スタブ / mvt・pmtiles=VectorTile+MVT / geotiff系=WebGLTile+GeoTIFF)
+const OL_HANDLED_TYPES = new Set(["3dtiles", "mvt", "pmtiles", "vectortile", "geotiff", "cog", "tiff"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
 // 照合するフック。タイトル(正規化・最終セグメント)一致で返し、
 // 無ければ null → vector-load 側のファイルパス/QGIS 解決へフォールバック
@@ -501,6 +510,16 @@ async function buildLayer(item, baseUrl, preloaded) {
     applyScaleRes(ogc, item);
     return ogc;
   }
+  if (item.type === "mvt" || item.type === "pmtiles" || item.type === "vectortile") {
+    const mvt = await buildMvtLayer(item, baseUrl);
+    applyScaleRes(mvt, item);
+    return mvt;
+  }
+  if (item.type === "geotiff" || item.type === "cog" || item.type === "tiff") {
+    const gt = buildGeoTiffLayer(item, baseUrl);
+    applyScaleRes(gt, item);
+    return gt;
+  }
   if (item.type === "image") {
     // ジオリファレンス画像オーバーレイ(現場写真・紙図面)。corners= は外接矩形へ正規化
     const ov = parseImageOverlay(item);
@@ -644,6 +663,144 @@ function buildOgcRasterLayer(item, baseUrl) {
     });
   }
   if (opts.opacity !== undefined) layer.setOpacity(Number(opts.opacity));
+  const extent = bboxExtent(item);
+  if (extent) layer.setExtent(extent);
+  return layer;
+}
+
+// mvt:/pmtiles: 行 → layer/VectorTile + source/VectorTile + format/MVT。
+// OL のネイティブ経路(Cesium は shared/mvt.js でラスタライズ、MapLibre は
+// vector source で描画するのと同等)。URL は {z}/{x}/{y} テンプレート・
+// TileJSON(.json)・.pmtiles アーカイブのいずれか。
+// 行オプションは shared/mvt.js の mvtStyle() spec と共通:
+//   fill=/stroke=(or color=)/width=/pointcolor=(or circle=)/radius=/
+//   layers=(ソースレイヤ絞込)/minzoom=/maxzoom=/bbox=/opacity=
+async function buildMvtLayer(item, baseUrl) {
+  const opts = item.opts || {};
+  const url = resolveKascUrl(item.url, baseUrl);
+  const { style, layerNames } = mvtStyle(opts);
+  let srcLayers = layerNames;
+  let attribution = layerAttribution(item) || undefined;
+  const srcOpts = {};
+  if (opts.minzoom ?? opts.minimumlevel) srcOpts.minZoom = Number(opts.minzoom ?? opts.minimumlevel);
+  if (opts.maxzoom ?? opts.maximumlevel) srcOpts.maxZoom = Number(opts.maxzoom ?? opts.maximumlevel);
+  if (item.type === "pmtiles") {
+    // pmtiles は Range リクエストで部分読み出しする単一ファイルアーカイブ。
+    // shared/mvt.js の遅延ローダで pmtiles パッケージを取得し、
+    // tileLoadFunction で getZxy(z,x,y) → format/MVT デコードする
+    const m = await loadPmtiles();
+    const pm = new m.PMTiles(url);
+    try {
+      const meta = await pm.getMetadata();
+      if (!srcLayers?.size) srcLayers = new Set((meta?.vector_layers || []).map(l => l.id).filter(Boolean));
+      if (srcOpts.minZoom == null && meta?.minzoom != null) srcOpts.minZoom = Number(meta.minzoom);
+      if (srcOpts.maxZoom == null && meta?.maxzoom != null) srcOpts.maxZoom = Number(meta.maxzoom);
+      if (!attribution && meta?.attribution) attribution = String(meta.attribution);
+    } catch (_) { /* メタデータ無しでも描画は試行 */ }
+    srcOpts.tileUrlFunction = c => `pmtiles://${c[0]}/${c[1]}/${c[2]}`;
+    srcOpts.tileLoadFunction = tile => {
+      tile.setLoader(async (extent, resolution, projection) => {
+        if (!projection) return;
+        const [z, x, y] = tile.getTileCoord();
+        try {
+          const r = await pm.getZxy(z, x, y);
+          const data = r?.data;
+          tile.setFeatures(data
+            ? tile.getFormat().readFeatures(data, { extent, featureProjection: projection })
+            : []);
+        } catch (_) {
+          tile.setFeatures([]);
+        }
+      });
+    };
+  } else {
+    let template = url;
+    if (/\.json($|[?#])/i.test(url)) {
+      // TileJSON 参照: tiles[0] へ展開し vector_layers/minzoom/maxzoom/attribution を補完
+      const tj = await fetch(url).then(r => {
+        if (!r.ok) throw new Error(`TileJSON 取得失敗 ${r.status}: ${url}`);
+        return r.json();
+      });
+      if (!tj || !Array.isArray(tj.tiles) || !tj.tiles.length) {
+        throw new Error(`TileJSON に tiles がありません: ${url}`);
+      }
+      template = tj.tiles[0];
+      if (!srcLayers?.size) srcLayers = new Set((tj.vector_layers || []).map(l => l.id).filter(Boolean));
+      if (srcOpts.minZoom == null && tj.minzoom != null) srcOpts.minZoom = Number(tj.minzoom);
+      if (srcOpts.maxZoom == null && tj.maxzoom != null) srcOpts.maxZoom = Number(tj.maxzoom);
+      if (!attribution && tj.attribution) attribution = String(tj.attribution);
+    }
+    srcOpts.url = template;
+  }
+  // format/MVT の layers オプションでソースレイヤ名の絞り込み自体も
+  // デコード時に行う(スタイル関数での二重フィルタは不要)
+  const format = new MVTFormat(srcLayers?.size ? { layers: [...srcLayers] } : {});
+  const source = new VectorTileSource({ format, attributions: attribution, ...srcOpts });
+  // 既定スタイル(mvt spec → ol Style)。地物の geometry type で塗り分ける
+  const polyStyle = new Style({
+    fill: new Fill({ color: style.fill }),
+    stroke: new Stroke({ color: style.stroke, width: style.lineWidth }),
+  });
+  const lineStyle = new Style({ stroke: new Stroke({ color: style.stroke, width: style.lineWidth }) });
+  const pointStyle = new Style({
+    image: new CircleStyle({
+      radius: style.pointRadius,
+      fill: new Fill({ color: style.pointFill }),
+      stroke: new Stroke({ color: style.pointStroke, width: 1 }),
+    }),
+  });
+  const layer = new VectorTileLayer({
+    source,
+    style: feature => {
+      const t = feature.getType ? feature.getType() : (feature.getGeometry()?.getType() || "");
+      if (/Polygon/.test(t)) return polyStyle;
+      if (/Point/.test(t)) return pointStyle;
+      return lineStyle;
+    },
+  });
+  if (item.opts?.opacity !== undefined) layer.setOpacity(Number(item.opts.opacity));
+  const extent = bboxExtent(item);
+  if (extent) layer.setExtent(extent);
+  return layer;
+}
+
+// geotiff:/cog:/tiff: 行 → layer/WebGLTile + source/GeoTIFF。
+// OL 内蔵の geotiff.js が COG の Range リクエスト部分読み・オーバービューを
+// 処理するため外部依存なしで描画できる(Cesium は cesium/geotiff-layer.js が
+// geotiff.js を CDN ロードする独自経路)。
+// 行オプション: bands=(1始まり・RGB順)/nodata=/opacity=/bbox=
+function buildGeoTiffLayer(item, baseUrl) {
+  const opts = item.opts || {};
+  const url = resolveKascUrl(item.url, baseUrl);
+  const srcInfo = { url };
+  // band=n(単バンド指定) または bands=r,g,b(1始まり・RGB順)。Cesium 版と同じキー
+  const bandSpec = opts.bands ?? opts.band;
+  if (bandSpec) {
+    const bands = String(bandSpec).split(",").map(s => Number(s.trim())).filter(n => Number.isInteger(n) && n > 0);
+    if (bands.length) srcInfo.bands = bands;
+  }
+  if (opts.nodata !== undefined) {
+    const nd = Number(opts.nodata);
+    if (Number.isFinite(nd)) srcInfo.nodata = nd;
+  }
+  const source = new GeoTIFFSource({
+    sources: [srcInfo],
+    // 単バンド・パレット付き GeoTIFF は RGB へ自動変換(Cesium 版の疑似カラー相当)
+    convertToRGB: "auto",
+    transition: 0,
+    attributions: layerAttribution(item) || undefined,
+  });
+  const layer = new WebGLTileLayer({
+    source,
+    opacity: opts.opacity !== undefined ? Number(opts.opacity) : 1,
+  });
+  // ラスタ範囲(ソースのネイティブ座標系)を EPSG:4326 の kascEnv へ変換して保持
+  // (📍フォーカス・全レイヤfit の対象範囲。非3857/4326 座標系は ol 内蔵の再投影が処理)
+  source.getView().then(v => {
+    if (!v?.extent || !v.projection) return;
+    const e = transformExtent(v.extent, v.projection, "EPSG:4326");
+    if (e.every(Number.isFinite)) layer.set("kascEnv", { west: e[0], south: e[1], east: e[2], north: e[3] });
+  }).catch(() => {});
   const extent = bboxExtent(item);
   if (extent) layer.setExtent(extent);
   return layer;
@@ -1417,7 +1574,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // 3dtiles: 行は deck.gl で対応するため未対応通知から外す
   // 3dtiles: は deck.gl、fly_geojson: はフライパスとして対応するため未対応通知から外す
   kascFlyPaths.setItems(doc.unsupported);
-  const unsupported = doc.unsupported.filter(i => i.type !== "3dtiles" && i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type));
+  const unsupported = doc.unsupported.filter(i => !OL_HANDLED_TYPES.has(i.type) && i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type));
 
   // base: は先頭が既定のベースマップ。transparent/none はモード指定（レイヤにしない）
   currentBaseEntries = [];
@@ -1489,7 +1646,7 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
   const entries = orderedItems.map(item => ({
     item, layer: null, pending: true,
-    unsupported: doc.unsupported.includes(item) && item.type !== "3dtiles",
+    unsupported: doc.unsupported.includes(item) && !OL_HANDLED_TYPES.has(item.type),
     opa: item.opts?.opacity !== undefined ? Number(item.opts.opacity) : 1,
   }));
   layerEntries = entries;

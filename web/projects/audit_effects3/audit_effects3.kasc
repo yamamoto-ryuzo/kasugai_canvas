@@ -1,0 +1,6 @@
+# engine-cesium 監査検証プロジェクト3(sscc=/specmap=off/shcoeffs= 追加分)
+title: エンジンAPI監査検証3
+cam: 東京|35.688|139.770|h=3000|p=-85
+base: ベースマップなし | none
+scene3d: 監査 | minzoom=50 | maxzoom=500000 | specmap=off | shcoeffs=[[0.5,0.5,0.5],[0.1,0.1,0.1],[0.2,0.2,0.2],[0.3,0.3,0.3],[0.4,0.4,0.4],[0.5,0.5,0.5],[0.6,0.6,0.6],[0.7,0.7,0.7],[0.8,0.8,0.8]] | sscc={"inertiaSpin":0.5,"inertiaTranslate":0.4,"inertiaZoom":0.6,"bounceAnimationTime":2.5,"enableCollisionDetection":false,"enableLook":false,"maximumTiltAngle":1.0,"zoomFactor":3,"minimumTrackBallHeight":12345,"tiltEventTypes":["LEFT_DRAG","WHEEL"],"zoomEventTypes":[{"eventType":"WHEEL","modifier":"CTRL"}],"noSuchProp":999}
+geojson: 検証/点 | canvas_data/pt.geojson

@@ -1,0 +1,18 @@
+{
+  "tilejson": "2.2.0",
+  "name": "gsi optimal_bvmap-v1 (audit tilejson)",
+  "attribution": "国土地理院",
+  "tiles": ["https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/{z}/{x}/{y}.pbf"],
+  "minzoom": 4,
+  "maxzoom": 16,
+  "bounds": [122, 24, 154, 46],
+  "vector_layers": [
+    { "id": "AdmBdry" },
+    { "id": "Anno" },
+    { "id": "RailCL" },
+    { "id": "RdCL" },
+    { "id": "WA" },
+    { "id": "RvrCL" },
+    { "id": "Cntr" }
+  ]
+}

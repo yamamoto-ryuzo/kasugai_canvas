@@ -1,0 +1,12 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "vx": 12.0,  "vy": 0.0,   "name": "E"  }, "geometry": { "type": "Point", "coordinates": [139.575, 35.640] } },
+    { "type": "Feature", "properties": { "vx": 8.5,   "vy": 8.5,   "name": "NE" }, "geometry": { "type": "Point", "coordinates": [139.595, 35.640] } },
+    { "type": "Feature", "properties": { "vx": 0.0,   "vy": 12.0,  "name": "N"  }, "geometry": { "type": "Point", "coordinates": [139.615, 35.640] } },
+    { "type": "Feature", "properties": { "vx": -8.5,  "vy": 8.5,   "name": "NW" }, "geometry": { "type": "Point", "coordinates": [139.635, 35.640] } },
+    { "type": "Feature", "properties": { "vx": -12.0, "vy": 0.0,   "name": "W"  }, "geometry": { "type": "Point", "coordinates": [139.575, 35.632] } },
+    { "type": "Feature", "properties": { "vx": 0.0,   "vy": -12.0, "name": "S"  }, "geometry": { "type": "Point", "coordinates": [139.615, 35.632] } },
+    { "type": "Feature", "properties": { "vx": 20.0,  "vy": 5.0,   "name": "Ex2"}, "geometry": { "type": "Point", "coordinates": [139.635, 35.632] } }
+  ]
+}
