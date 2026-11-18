@@ -1,0 +1,114 @@
+{
+  "checks": [
+    {
+      "name": "scene3d blur=on/brightness=on → API ステージ 2件以上",
+      "pass": true,
+      "extra": "[\"czm_blur\",\"czm_brightness\"]"
+    },
+    {
+      "name": "material=elevationcontour → globe.material",
+      "pass": true,
+      "extra": "{\"type\":\"ElevationContour\",\"spacing\":200,\"width\":3}"
+    },
+    {
+      "name": "matuniforms spacing=200/width=3 → uniforms 上書き",
+      "pass": true,
+      "extra": "spacing=200 width=3"
+    },
+    {
+      "name": "minzoom=50 → minimumZoomDistance",
+      "pass": true,
+      "extra": "50"
+    },
+    {
+      "name": "maxzoom=500000 → maximumZoomDistance",
+      "pass": true,
+      "extra": "500000"
+    },
+    {
+      "name": "tilt=on → enableTilt",
+      "pass": true,
+      "extra": "true"
+    },
+    {
+      "name": "terrain url= → CesiumTerrainProvider(非楕円体)",
+      "pass": true,
+      "extra": "hp"
+    },
+    {
+      "name": "model: エンティティ存在",
+      "pass": true,
+      "extra": "odels/CesiumMan/Cesium_Man.glb"
+    },
+    {
+      "name": "modelopts colorBlendMode=replace",
+      "pass": true,
+      "extra": "1"
+    },
+    {
+      "name": "modelopts color=#00ff00",
+      "pass": true,
+      "extra": "rgb(0,255,0)"
+    },
+    {
+      "name": "modelopts silhouetteColor/Size",
+      "pass": true,
+      "extra": "rgb(255,0,0)/2"
+    },
+    {
+      "name": "modelopts runAnimations=false",
+      "pass": true,
+      "extra": "false"
+    },
+    {
+      "name": "modelopts imageBasedLightingFactor=[2,2]",
+      "pass": true,
+      "extra": "[2,2]"
+    },
+    {
+      "name": "modelopts distanceDisplayCondition=[0,100000]",
+      "pass": true,
+      "extra": "[0,100000]"
+    },
+    {
+      "name": "3dtiles osm → タイルセット生成(ion トークン依存)",
+      "pass": true,
+      "extra": "https://assets.ion.cesium.com/ap-northeast-1/asset_depot/96188/OpenStreetMap/CWT/2026-06-08/tileset.json?v=20"
+    },
+    {
+      "name": "setEffect('depthview',true) → ステージ追加",
+      "pass": true,
+      "extra": "c:2→3"
+    },
+    {
+      "name": "setEffect('silhouette',true) → ステージ追加",
+      "pass": true,
+      "extra": "c:3→4"
+    },
+    {
+      "name": "setEffect('depthview',false) → ステージ除去",
+      "pass": true,
+      "extra": "c:4→3"
+    },
+    {
+      "name": "setEffect('autoexposure') → 未サポートで false",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "name": "setEffect 未知名 → false",
+      "pass": true,
+      "extra": ""
+    },
+    {
+      "name": "silhouette クリック → selected に pick 結果",
+      "pass": true,
+      "extra": "{\"found\":true,\"selected\":1}"
+    },
+    {
+      "name": "TMS 到達({reverseY} テンプレートで構築可)",
+      "pass": true,
+      "extra": ""
+    }
+  ]
+}

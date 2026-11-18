@@ -27,21 +27,22 @@ export function createKascFlyPaths({ resolveUrl, getInspectorText, setInspectorT
     };
   });
 
-  // flyRoute/addFlyPath の永続化: GeoJSON を DATA/ へ保存し fly_geojson: 行を追記
+  // flyRoute/addFlyPath の永続化: GeoJSON を canvas_data/(旧 DATA/)へ保存し fly_geojson: 行を追記
   const persistFlyPath = async (title, geojson, path) => {
     const safe = String(title || "route").replace(/[\\/:*?"<>|\s]+/g, "_").slice(0, 40) || "route";
     const name = `fly_${safe}.geojson`;
     const r = await window.kasugaiApi.saveDataFile(name, JSON.stringify(geojson)).catch(() => null);
     if (!r?.ok) return false;
+    const dir = r.dir || "canvas_data";
     const opts = [`speed=${Math.round(path.speed * 10) / 10}`];
     if (Number.isFinite(path.height)) opts.push(`height=${path.height}`);
     if (Number.isFinite(path.pitch)) opts.push(`pitch=${path.pitch}`);
     if (path.loop) opts.push("loop=true");
-    const line = `fly_geojson:${title}|DATA/${name}|${opts.join("|")}`;
+    const line = `fly_geojson:${title}|${dir}/${name}|${opts.join("|")}`;
     setInspectorText(`${(getInspectorText() || "").replace(/\s*$/, "")}\n${line}\n`);
     // セッション内でも getFlyPaths が拾えるよう item 登録（memoryFlyPaths と同名なら先勝ちで一つに見える）
     items.push({
-      type: "fly_geojson", title, url: `DATA/${name}`, visible: true,
+      type: "fly_geojson", title, url: `${dir}/${name}`, visible: true,
       opts: Object.fromEntries(opts.map(o => o.split("="))), line,
     });
     return true;

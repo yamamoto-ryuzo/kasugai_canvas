@@ -10,7 +10,7 @@ const r = await page.evaluate(async (base) => {
   const out = {};
   for (const [t, f] of [["igc", "flight.igc"], ["polyline", "line.polyline"], ["gml", "area.gml"]]) {
     try {
-      const r = await vl.loadVectorItem({ type: t, title: t, url: `${base}/projects/format_test/DATA/${f}` }, "", null);
+      const r = await vl.loadVectorItem({ type: t, title: t, url: `${base}/projects/format_test/canvas_data/${f}` }, "", null);
       out[t] = r.geojson.features.map(ft => ({ g: ft.geometry.type, c: JSON.stringify(ft.geometry.coordinates).slice(0, 140), p: JSON.stringify(ft.properties).slice(0, 100) }));
     } catch (e) { out[t] = String(e).slice(0, 150); }
   }

@@ -144,7 +144,7 @@ export function parseKasc(text) {
     if (type === "theme") {
       // theme:名前 | 表示するレイヤタイトル[|タイトル…]（`*` で全表示）
       // QGIS のマップテーマ相当の可視性プリセット。タイトルに
-      // `;style=DATA/x.qml` が付く場合はテーマ適用時にそのレイヤーの
+      // `;style=canvas_data/x.qml` が付く場合はテーマ適用時にそのレイヤーの
       // .qml を差し替える(geo_webview がテーマの名前付きスタイルを出力)
       const layers = [];
       const styles = {};
@@ -165,7 +165,7 @@ export function parseKasc(text) {
     }
     if (type === "view") {
       // view:名前 | desc=説明 | img=画像 | cam=カメラ名 | base=背景名 |
-      //   レイヤタイトル[;style=DATA/x.qml][;where=式] [|タイトル…]（`*` で全表示）
+      //   レイヤタイトル[;style=canvas_data/x.qml][;where=式] [|タイトル…]（`*` で全表示）
       // ポータル画面の目的別カード。表示＋スタイル＋フィルタ(+カメラ/背景)を
       // まとめて適用する theme: の発展形
       doc.views.push(parseKascViewValue(parts, line));
@@ -178,7 +178,7 @@ export function parseKasc(text) {
       continue;
     }
     if (type === "news") {
-      // news:<DATA/内ファイル|URL> | limit=件数 | title=見出し —
+      // news:<canvas_data/内ファイル|URL> | limit=件数 | title=見出し —
       // ポータルのお知らせフィード(#128)。html: セクションの後に記述順で並ぶ
       doc.news.push(parseKascNewsValue(parts, line));
       continue;
@@ -515,7 +515,7 @@ export function kascTitleInTheme(title, show) {
 // view: 行の値(| 区切り配列)をパースする。parseKasc と cesium/app.js の
 // 両方から使うため shared 側に置く。parts[0]=ビュー名、以降は
 // desc=/img=/cam=/base= ディレクティブかレイヤタイトル
-// (タイトルに ;style=DATA/x.qml / ;where=式 を `;` 区切りで付記可)
+// (タイトルに ;style=canvas_data/x.qml / ;where=式 を `;` 区切りで付記可)
 export function parseKascViewValue(parts, line = null) {
   const view = { name: parts[0] || "", desc: "", img: "", cam: "", base: "", layers: [], styles: {}, wheres: {}, line };
   for (const tok of parts.slice(1)) {
@@ -656,7 +656,7 @@ export function parseKascFormValue(parts, line = null) {
 }
 
 // news: 行の値をパースする(#128)。
-// `news: <DATA/内ファイル|URL> | limit=件数 | title=見出し` —
+// `news: <canvas_data/内ファイル|URL> | limit=件数 | title=見出し` —
 // ポータルのお知らせフィード。JSON または FrontMatter 付き Markdown 一覧を
 // fetch して日付降順で描画する
 export function parseKascNewsValue(parts, line = null) {
@@ -906,7 +906,7 @@ export function applyPanelTitle(title) {
 // にあるため ../projects でルート配信(localhost)・ステージ配信(CDN)の両方を
 // カバーする。ローカルアプリをバックエンド検出した環境ではそちらの
 // /projects/ へ向ける（静的＋外部登録プロジェクトをマージした一覧が返り、
-// QGIS 出力等のローカル .kasc+DATA/ もホスト版エンジンから読める）。
+// QGIS 出力等のローカル .kasc+canvas_data/ もホスト版エンジンから読める）。
 // baseUrl は絶対 URL で返し、呼び出し側の URL 解決を統一する
 export const PROJECTS_MANIFEST_URL = "../projects/projects.json";
 export function projectsManifestUrl() {
@@ -927,7 +927,7 @@ export function hostedProjectsBaseUrl(id = "default") {
 }
 
 // ---- .zip 直読（?kasc=<zip URL>）のメンバストア ---------------------------
-// geo_webview の .kasc+DATA/ ZIP をブラウザ内で解凍し、kasczip://<id>/<path>
+// geo_webview の .kasc+canvas_data/ ZIP をブラウザ内で解凍し、kasczip://<id>/<path>
 // 参照を blob: URL へ変換する（geo_suite の kasczip:// と同構造）。
 const __kascZipStores = new Map();   // zipId -> Map<relPath, Blob>
 const __kascZipBlobUrls = new Map(); // "<id>/<path>" -> blob: URL（使い回し）
@@ -986,8 +986,8 @@ function installKascZipFetchShim() {
   };
 }
 
-// .kasc+DATA/ ZIP バッファを解凍し {text, baseUrl, name} を返す。
-// メンバは __kascZipStores[zipId] に Blob で保持され、DATA/ 等の参照は
+// .kasc+canvas_data/ ZIP バッファを解凍し {text, baseUrl, name} を返す。
+// メンバは __kascZipStores[zipId] に Blob で保持され、canvas_data/ 等の参照は
 // kasczip://<zipId>/<path> → blob: URL(resolveKascZipRef) または
 // fetch シム経由で解決される
 async function unpackKascZip(u8, kascUrl) {
@@ -1039,7 +1039,7 @@ const externalProjectIds = new Set();
 
 // .kasc 内の参照を絶対 URL へ解決する。
 // 相対パスは projectBaseUrl(/projects/<id>/ または ?kasc= 用の絶対URL) 基準。
-// `..` はブラウザの URL 正規化で1階層上（共有 DATA/ 等）に畳まれる。
+// `..` はブラウザの URL 正規化で1階層上（共有 canvas_data/ 等）に畳まれる。
 // 外部プロジェクトでは `..` を "@parent" マーカーに変換してサーバーへ渡す
 // (サーバーが登録フォルダの親を基点に解決する)。
 // projectBaseUrl が kasczip://（ZIP 直読）ならメンバを blob: URL へ変換する
@@ -1078,7 +1078,7 @@ export function resolveKascUrl(url, projectBaseUrl) {
 }
 
 // .kasc と同じフォルダの project.json から表示タイトルを取る。
-// geo_webview 等が .kasc+DATA/ と一緒に出力する {"title": ...} を使い、
+// geo_webview 等が .kasc+canvas_data/ と一緒に出力する {"title": ...} を使い、
 // 無ければ null（呼び出し側は .kasc ファイル名へフォールバックする）
 export async function fetchKascProjectTitle(baseUrl) {
   try {
@@ -1092,10 +1092,10 @@ export async function fetchKascProjectTitle(baseUrl) {
 }
 
 // .kasc の URL をプロジェクトとして読み込む(?kasc= モード)。
-// DATA/ 等の相対参照は .kasc のある URL を基準に解決されるため、
+// canvas_data/ 等の相対参照は .kasc のある URL を基準に解決されるため、
 // projects/ 構造を持たない任意フォルダを静的配信するだけで動く。
 // ?kasc=local はローカルフォルダ直読み(File System Access API):
-// ホスト版ページが選択フォルハンドル内の .kasc+DATA/ を fetch シムで読む
+// ホスト版ページが選択フォルハンドル内の .kasc+canvas_data/ を fetch シムで読む
 async function loadKascUrl(kascParam) {
   if (kascParam === "local" || kascParam === "localfs") {
     const { openLocalKascUrl } = await import("./localfs.js");
@@ -1123,8 +1123,8 @@ async function loadKascUrl(kascParam) {
   let baseUrl;
   let kascName;
   if (u8.length > 4 && u8[0] === 0x50 && u8[1] === 0x4b) {
-    // ZIP: .kasc+DATA/ アーカイブをブラウザ内で解凍する。
-    // DATA/ 等の参照は kasczip://<id>/<path> → blob: URL で解決される
+    // ZIP: .kasc+canvas_data/ アーカイブをブラウザ内で解凍する。
+    // canvas_data/ 等の参照は kasczip://<id>/<path> → blob: URL で解決される
     const src = await unpackKascZip(u8, kascUrl);
     text = src.text;
     baseUrl = src.baseUrl;

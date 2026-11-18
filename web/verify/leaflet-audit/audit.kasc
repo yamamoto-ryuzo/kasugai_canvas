@@ -1,12 +1,12 @@
 title: leaflet audit
 base: ベースマップなし | none
 cam: 初期 | 35.605 | 139.61 | h=20000 | p=-90
-geojson: cluster-qml | DATA/points.geojson | style=DATA/cluster.qml | on
-geojson: cluster-opts | DATA/points.geojson | cluster=on | clusterradius=120 | clusterdisableat=15 | clustercoverage=off | off
-geojson: heat-opts | DATA/points.geojson | heat=on | heatradius=40 | heatblur=20 | heatminopacity=0.3 | heatmaxzoom=18 | heatgradient=0:#0000ff,0.5:#00ff00,1:#ff0000 | off
-geojson: heat-qml | DATA/points.geojson | style=DATA/heat.qml | off
-geojson: heat-qml-w | DATA/points.geojson | style=DATA/heat_w.qml | off
-geojson: path-opts | DATA/poly.geojson | fillrule=nonzero | classname=my-poly | smoothfactor=0 | noclip=on | off
-geojson: canvas-renderer | DATA/poly.geojson | renderer=canvas | off
+geojson: cluster-qml | canvas_data/points.geojson | style=canvas_data/cluster.qml | on
+geojson: cluster-opts | canvas_data/points.geojson | cluster=on | clusterradius=120 | clusterdisableat=15 | clustercoverage=off | off
+geojson: heat-opts | canvas_data/points.geojson | heat=on | heatradius=40 | heatblur=20 | heatminopacity=0.3 | heatmaxzoom=18 | heatgradient=0:#0000ff,0.5:#00ff00,1:#ff0000 | off
+geojson: heat-qml | canvas_data/points.geojson | style=canvas_data/heat.qml | off
+geojson: heat-qml-w | canvas_data/points.geojson | style=canvas_data/heat_w.qml | off
+geojson: path-opts | canvas_data/poly.geojson | fillrule=nonzero | classname=my-poly | smoothfactor=0 | noclip=on | off
+geojson: canvas-renderer | canvas_data/poly.geojson | renderer=canvas | off
 xyz: tile-opts | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | tms=on | zoomoffset=1 | nowrap=on | subdomains=abc | zindex=5 | referrerpolicy=no-referrer | off
-image: image-opts | DATA/img.png | bbox=139.7,35.6,139.8,35.7 | alt=テスト画像 | interactive=on | crossorigin=anonymous | zindex=9 | off
+image: image-opts | canvas_data/img.png | bbox=139.7,35.6,139.8,35.7 | alt=テスト画像 | interactive=on | crossorigin=anonymous | zindex=9 | off

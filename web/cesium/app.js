@@ -135,7 +135,7 @@ const expandedLayerGroups = new Set();
 // group: 行の checked= から復元するグループ中間状態(path|suffix → state)。#63
 const groupCheckStates = new Map();
 // ?kasc=<url>: 任意URLの .kasc を直接読むモード(サーバレス配信用)。
-// DATA/ 等の相対参照は .kasc のある URL 基準で解決する。
+// canvas_data/ 等の相対参照は .kasc のある URL 基準で解決する。
 // ?project= の標準プロジェクトモードと排他で、プロジェクト選択で解除される
 let currentKascUrl = (() => {
   const raw = urlParams.get("kasc");
@@ -845,6 +845,9 @@ let inspectorLiveSpec = null;
 // applyInspector で再構築し、updateUndergroundView が skyBox/backgroundColor
 // を上書きする際にも参照される(アプリ独自の地下表示制御と共存させるため)
 let inspectorScene3dSpec = null;
+// terrain: url= で宣言された任意 CesiumTerrainProvider エンドポイント。
+// 指定時は demSources 選択より優先する(engine-cesium 監査)
+let inspectorTerrainUrl = "";
 let bookmarkLoadSeq = 0;
 let dataLayerSeq = 0;
 let vectorSearchData = null;
@@ -1170,17 +1173,17 @@ function resolveProjectUrl(url) {
   }
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed) || trimmed.startsWith("//")) return normalizeRemoteUrl(trimmed);
   if (trimmed.startsWith("/")) return trimmed;
-  // ?kasc= モード: DATA/ 等の相対参照は .kasc のある URL を基準に解決する。
+  // ?kasc= モード: canvas_data/ 等の相対参照は .kasc のある URL を基準に解決する。
   // ../ 共有参照もブラウザの URL 正規化でそのまま祖先フォルダへ解決される
-  // ?kasc= モード: DATA/ 等の相対参照は .kasc のある URL を基準に解決する。
+  // ?kasc= モード: canvas_data/ 等の相対参照は .kasc のある URL を基準に解決する。
   // ZIP 直読(kasczip:// 基準)ではメンバの blob: URL へ変換される
   if (currentKascUrl) return resolveKascUrl(trimmed, kascBaseUrl());
   let path = trimmed;
   if (path.startsWith("./")) path = path.slice(2);
   const segments = path.split("/").filter(Boolean);
   // ".." はプロジェクトフォルダの1つ上(ワークスペース)への参照。
-  // 例: ../DATA/x → プロジェクト群と並列の共有 DATA/。通常プロジェクトは
-  // ブラウザのURL正規化で projects/<id>/../DATA/x → projects/DATA/x に解決。
+  // 例: ../canvas_data/x → プロジェクト群と並列の共有 canvas_data/。通常プロジェクトは
+  // ブラウザのURL正規化で projects/<id>/../canvas_data/x → projects/canvas_data/x に解決。
   // 外部プロジェクトは .. を正規化されないマーカー @parent に置き換えて送り、
   // サーバー側で登録フォルダの親を基点に解決する
   const external = externalProjectIds.has(currentProjectId || "default");
@@ -1309,7 +1312,7 @@ async function loadInspectorConfig() {
     try {
       const src = await readKascSource(staticUrl);
       text = src.text;
-      // ZIP 直読なら baseUrl=kasczip://<id>/ が返り、DATA/ 参照はメンバの
+      // ZIP 直読なら baseUrl=kasczip://<id>/ が返り、canvas_data/ 参照はメンバの
       // blob: URL(resolveKascUrl 経由)または fetch シムで解決される
       kascBaseOverride = /^kasczip:/i.test(src.baseUrl || "") ? src.baseUrl : null;
     } catch {}
@@ -3401,6 +3404,42 @@ const POST_STAGE_DEFS = {
   dof: { sel: "#effect-dof", create: () => Cesium.PostProcessStageLibrary.createDepthOfFieldStage() },
 };
 
+// UI を持たないライブラリステージ(engine-cesium 監査 Phase D)。
+// kasugaiApi.setEffect(name,on) と scene3d: 行の同名キーから到達する。
+// silhouette は「選択中オブジェクトの縁取り」。有効中は地物クリックで
+// stage.selected へ pick 結果が入る(属性パネル連動の選択ハイライト)。
+// 注: createAutoExposureStage() は PostProcessStage/Composite でない内部型
+// (トーンマップ用 AutoExposure。_isSupported 未実装)のため postProcessStages
+// に直接 add すると描画が停止する — 1.147 では露出手段なしとして除外する
+const postProcessApiStages = new Map(); // name -> PostProcessStage
+const POST_STAGE_API_DEFS = {
+  blur: () => Cesium.PostProcessStageLibrary.createBlurStage(),
+  brightness: () => Cesium.PostProcessStageLibrary.createBrightnessStage(),
+  depthview: () => Cesium.PostProcessStageLibrary.createDepthViewStage(),
+  silhouette: () => Cesium.PostProcessStageLibrary.createSilhouetteStage(),
+};
+
+function applyPostStageApi(name, on) {
+  const create = POST_STAGE_API_DEFS[name];
+  const pps = viewer?.scene?.postProcessStages;
+  if (!create || !pps) return false;
+  // silhouette は WebGL 深度テクスチャ非対応環境で利用不可(公式は事前チェック推奨)
+  if (on && name === "silhouette" && Cesium.PostProcessStageLibrary.isSilhouetteSupported
+    && !Cesium.PostProcessStageLibrary.isSilhouetteSupported(viewer.scene)) return false;
+  try {
+    if (on && !postProcessApiStages.has(name)) postProcessApiStages.set(name, pps.add(create()));
+    else if (!on && postProcessApiStages.has(name)) {
+      pps.remove(postProcessApiStages.get(name));
+      postProcessApiStages.delete(name);
+    } else if (!on) return true; // 未追加の OFF は成功扱い
+    viewer.scene.requestRender();
+    return true;
+  } catch (error) {
+    console.warn(`ポストプロセス ${name} の適用に失敗しました:`, error);
+    return false;
+  }
+}
+
 function applyPostProcessSettings() {
   const pps = viewer.scene.postProcessStages;
   if (!pps) return;
@@ -3425,10 +3464,33 @@ function applyPostProcessSettings() {
 }
 
 // #effect-globe-material → globe.material(地形面マテリアル: Water/ElevationContour 等)
+// scene3d: matuniforms=<JSON> でファブリックの uniforms を個別上書きできる
+// (色→Color・[x,y]→Cartesian2/3/4・URL 文字列はテクスチャ参照としてそのまま)
+function convertMaterialUniformValue(value) {
+  if (Array.isArray(value) && value.every(n => typeof n === "number")) {
+    if (value.length === 2) return new Cesium.Cartesian2(...value);
+    if (value.length === 3) return new Cesium.Cartesian3(...value);
+    if (value.length === 4) return new Cesium.Cartesian4(...value);
+    return value;
+  }
+  if (typeof value === "string") {
+    if (/^https?:\/\//i.test(value)) return resolveProjectUrl(value); // テクスチャ URL
+    try { return Cesium.Color.fromCssColorString(value); } catch { return value; }
+  }
+  return value;
+}
+
 function applyGlobeMaterialSetting() {
   const type = document.querySelector("#effect-globe-material")?.value || "";
   try {
     viewer.scene.globe.material = type ? Cesium.Material.fromType(type) : undefined;
+    const mat = viewer.scene.globe.material;
+    const uniforms = inspectorScene3dSpec?.materialUniforms;
+    if (mat && uniforms && typeof uniforms === "object") {
+      for (const [key, value] of Object.entries(uniforms)) {
+        try { mat.uniforms[key] = convertMaterialUniformValue(value); } catch (_) { /* uniforms 未定義キーは無視 */ }
+      }
+    }
   } catch (error) { console.warn("地表マテリアルの適用に失敗しました:", error); }
 }
 
@@ -4014,7 +4076,11 @@ function duckDbGeometryExpr(col, spatial) {
 
 // 表示範囲連動フィルター(bbox=auto / :bbox プレースホルダ)が有効なレイヤーか
 function isViewportQueryLayer(item) {
-  return !!item && (((item.type === "duckdb" || isGpkgBackedItem(item)) && item.bboxAuto) || (item.type === "sql" && /:bbox\b/i.test(item.query || "")));
+  return !!item && (((item.type === "duckdb" || isGpkgBackedItem(item)) && item.bboxAuto)
+    || (item.type === "sql" && /:bbox\b/i.test(item.query || ""))
+    // flatgeobuf:/fgb: は Range 読み出しが初回ロードで成功した場合のみ再クエリ対象
+    // (_fgbRanged===false は索引なし・Range 非対応で全件へ落ちた印)
+    || ((item.type === "flatgeobuf" || item.type === "fgb") && item.bboxAuto && item._fgbRanged !== false));
 }
 
 const DUCKDB_WORLD_ENVELOPE = "ST_MakeEnvelope(-180, -90, 180, 90)";
@@ -4236,7 +4302,7 @@ function resolveProjectSql(query) {
     } else if ((value.startsWith("'") || value.startsWith('"')) && (top?.files || /^(from|join)$/i.test(previous))) {
       const quote = value[0];
       const path = value.slice(1, -1).replaceAll(quote + quote, quote);
-      if (/^(?:\.\/)?(?:\.\.\/)*DATA\//i.test(path)) {
+      if (/^(?:\.\/)?(?:\.\.\/)*(?:canvas_data|DATA)\//i.test(path)) {
         out += query.slice(offset, token.index) + quoteSqlLiteral(new URL(resolveProjectUrl(path), window.location.href).href);
         offset = token.index + value.length;
       }
@@ -4345,7 +4411,7 @@ async function queryDuckDbAttributeRows(item, searchText, wantWkt = false) {
 
 // ---- ogrsql: OGR SQL SELECT 文(shared/ogr-sql.js) ----
 // FROM の解決: 'ds'.layer 形式 → 読み込み済みレイヤータイトル照合 →
-// ファイルパス/DATA/ 推測。デコードは shared/vector-load.js へ委譲する
+// ファイルパス/canvas_data/ 推測。デコードは shared/vector-load.js へ委譲する
 function ogrFileTypeByPath(path) {
   const clean = String(path || "").split(/[?#]/)[0];
   if (/\.(fgb|flatgeobuf)$/i.test(clean)) return "flatgeobuf";
@@ -4432,6 +4498,23 @@ function attrRowsFromFeatureCollection(fc, searchText = "") {
   return { attributes, rows };
 }
 
+// flatgeobuf:/fgb: の属性一覧は bbox=off の全件読み込みから組み立てる(検索は常に全件)。
+// where= は描画と同じ where-eval 評価をかけてから絞る
+async function queryFgbAttributeRows(item, searchText) {
+  const { geojson } = await loadVectorItem(
+    { type: "flatgeobuf", title: item.title, url: item.url, opts: { bbox: "off" } }, "");
+  let fc = geojson;
+  if (item.where && fc?.features?.length) {
+    if (item._whereExpr !== item.where) {
+      item._whereExpr = item.where;
+      try { item._wherePred = compileWhereExpression(item.where); }
+      catch (e) { item._wherePred = null; }
+    }
+    if (item._wherePred) fc = { ...fc, features: fc.features.filter((f, i) => item._wherePred(f, i)) };
+  }
+  return attrRowsFromFeatureCollection(fc, searchText);
+}
+
 // ogrsql: の属性一覧は再クエリ結果(GeoJSON)から組み立てる。
 // 検索文字は全属性値の部分一致(大文字小文字無視)で絞る
 async function queryOgrSqlAttributeRows(item, searchText) {
@@ -4448,7 +4531,9 @@ async function resolveOgrSqlFromRef(ref) {
   const looksPath = /[/\\]/.test(name) || /^[a-z][a-z0-9+.-]*:/i.test(name)
     || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(name);
   const candidates = looksPath ? [name]
-    : [`DATA/${name}.geojson`, `DATA/${name}.fgb`, `DATA/${name}.parquet`,
+    : [`canvas_data/${name}.geojson`, `canvas_data/${name}.fgb`, `canvas_data/${name}.parquet`,
+       `canvas_data/${name}.gpkg`, `canvas_data/${name}.kml`, `canvas_data/${name}.csv`,
+       `DATA/${name}.geojson`, `DATA/${name}.fgb`, `DATA/${name}.parquet`,
        `DATA/${name}.gpkg`, `DATA/${name}.kml`, `DATA/${name}.csv`, name];
   let lastError = null;
   for (const path of candidates) {
@@ -4477,6 +4562,32 @@ async function loadOgrSqlLayerAsGeoJson(item) {
   throw jsErr;
 }
 
+// flatgeobuf:/fgb: レイヤー。bbox=auto なら item.bboxBounds の範囲を
+// deserialize の rect へ渡し、空間インデックス+HTTP Range で部分読みする
+// (shared/vector-load.js。索引なし・Range 非対応は全件へフォールバック)。
+// where= は非クエリ系と同じ where-eval のクライアント評価で絞る
+async function loadFlatGeobufLayerAsGeoJson(item) {
+  const bounds = item.bboxAuto ? item.bboxBounds : null;
+  const res = await loadVectorItem(
+    { type: "flatgeobuf", title: item.title, url: item.url, opts: { bbox: item.bboxAuto ? "auto" : "off" } },
+    "", bounds);
+  // viewportQuery=false は範囲読みに失敗した印。以降の再クエリを止める
+  if (item.bboxAuto) item._fgbRanged = !!res.viewportQuery;
+  let geojson = res.geojson;
+  if (item.where && geojson?.features?.length) {
+    if (item._whereExpr !== item.where) {
+      item._whereExpr = item.where;
+      try { item._wherePred = compileWhereExpression(item.where); }
+      catch (e) { item._wherePred = null; console.warn(`${item.title}: where= の式を解釈できません`, e.message); }
+    }
+    if (item._wherePred) {
+      const kept = geojson.features.filter((f, i) => item._wherePred(f, i));
+      if (kept.length !== geojson.features.length) geojson = { ...geojson, features: kept };
+    }
+  }
+  return geojson;
+}
+
 // GeoJSON 正規化経路のデコーダー一覧。新しい形式はここに type→loader を登録し、
 // applyInspector の行パースを追加すれば既存のベクター描画経路に乗る。
 // query:true は条件変更・再クエリ(フィルターUI/表示範囲連動)に対応した形式
@@ -4485,8 +4596,10 @@ const vectorDecoders = new Map([
   // duckdb/sql は Cesium 側の高機能版(proxy=/属性クエリ/covering)を維持する
   ["geoparquet", { load: item => loadVectorItem({ type: "geoparquet", title: item.title, url: item.url }, "").then(r => r.geojson) }],
   ["parquet", { load: item => loadVectorItem({ type: "parquet", title: item.title, url: item.url }, "").then(r => r.geojson) }],
-  ["flatgeobuf", { load: item => loadVectorItem({ type: "flatgeobuf", title: item.title, url: item.url }, "").then(r => r.geojson) }],
-  ["fgb", { load: item => loadVectorItem({ type: "fgb", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  // flatgeobuf:/fgb: は bbox=auto(既定 ON)なら空間インデックス+Range による
+  // 範囲読みのクエリ系、bbox=off 明示時のみ全件読み込み系(キャッシュ・検索索引の対象)
+  ["flatgeobuf", { load: item => loadFlatGeobufLayerAsGeoJson(item), query: item => !!item.bboxAuto }],
+  ["fgb", { load: item => loadFlatGeobufLayerAsGeoJson(item), query: item => !!item.bboxAuto }],
   // gpkg: は bbox=auto が既定 ON のため通常はクエリ系(表示範囲連動)になる。
   // bbox=off を明示した場合だけ全件読み込み系としてキャッシュ・検索索引の対象になる
   ["gpkg", { load: item => loadGeoPackageAsGeoJson(item), query: item => !!(item.where || item.limit || item.columns?.length || item.bboxAuto) }],
@@ -4645,8 +4758,10 @@ async function refreshLayersImpl() {
   layerRuntimeTargets.clear();
 
   const demSource = terrainEnabled ? demSources[selectedDemSource] : null;
-  if (demSource?.url) {
-    const terrainUrl = proxyTileUrl(demSource.url);
+  // terrain: url= の直接指定は demSources 選択より優先する
+  const terrainSourceUrl = terrainEnabled && inspectorTerrainUrl ? inspectorTerrainUrl : demSource?.url;
+  if (terrainSourceUrl) {
+    const terrainUrl = proxyTileUrl(terrainSourceUrl);
     try {
       const metadataResponse = await fetch(terrainUrl.replace(/\/$/, "") + "/layer.json", { cache: "no-store" });
       if (!metadataResponse.ok) throw new Error(`layer.json の取得に失敗しました (HTTP ${metadataResponse.status})`);
@@ -4714,7 +4829,8 @@ async function refreshLayersImpl() {
   // 未キャッシュ(=実質初回)は ~60MB の実コストがかかるため、表示対象の
   // クエリ系があるときだけ先行する(非表示は選択・表示ONの時点で初期化される)
   const queryLayers = orderedOtherLayers.filter(item => isQueryDecoder(vectorDecoders.get(item.type), item));
-  const duckQueryLayers = queryLayers.filter(item => !isGpkgBackedItem(item));
+  // duckdb:/sql:/ogrsql: 以外のクエリ系(gpkg:/flatgeobuf:)は DuckDB-WASM を使わないため温めない
+  const duckQueryLayers = queryLayers.filter(item => !isGpkgBackedItem(item) && item.type !== "flatgeobuf" && item.type !== "fgb");
   if (duckQueryLayers.length) {
     const warmAll = duckQueryLayers.some(item => item.visible) || await duckDbAssetsCached();
     if (warmAll) void loadDuckDb().catch(() => {});
@@ -4844,7 +4960,12 @@ async function refreshLayersImpl() {
         const tilesetOptions = getCesiumTilesetOptions();
         // sse=<n>: レイヤー単位の maximumScreenSpaceError 上書き(未指定はグローバル設定)
         if (Number.isFinite(item.tilesetSse)) tilesetOptions.maximumScreenSpaceError = item.tilesetSse;
-        const tileset = await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(withGoogleTileKey(item.url), item.proxy), tilesetOptions);
+        // ionkey=<トークン>: Cesium ion アセット(osm 建物等)用のアクセストークン
+        if (item.ionKey) { try { Cesium.Ion.defaultAccessToken = item.ionKey; } catch (_) {} }
+        // url=osm 予約トークン → Cesium ion の OSM Buildings(createOsmBuildingsAsync)
+        const tileset = item.osmBuildings
+          ? await Cesium.createOsmBuildingsAsync(tilesetOptions)
+          : await Cesium.Cesium3DTileset.fromUrl(proxyTileUrl(withGoogleTileKey(item.url), item.proxy), tilesetOptions);
         tileset._kascGoogle3d = isGoogle3dTilesUrl(item.url);
         tileset.show = effectiveLayerShow(item);
         applyClippingPlanes(tileset);
@@ -5380,13 +5501,123 @@ function buildModelDataSource(item) {
   ds.entities.add({
     position,
     orientation: Cesium.Transforms.headingPitchRollQuaternion(position, hpr),
-    model: {
+    model: Object.assign({
       uri: item.url,
       scale: item.scale ?? 1,
       minimumPixelSize: item.minimumPixelSize || 0,
-    },
+    }, convertModelOpts(item.modelOpts)),
   });
   return ds;
+}
+
+// modelopts=<JSON> → ModelGraphics への変換(engine-cesium 監査)。
+// 生値(数値/真偽/文字列)はそのまま渡し、Cesium 型が要る引数だけここで変換する:
+//   色("color"|"silhouetteColor"|"lightColor")→Color、
+//   scaleByDistance/translucencyByDistance/pixelOffsetScaleByDistance(4要素)→NearFarScalar、
+//   imageBasedLightingFactor(2要素)→Cartesian2、
+//   distanceDisplayCondition(2要素)→DistanceDisplayCondition、
+//   heightReference(none|clamp|relative)・colorBlendMode(highlight|replace|mix)・
+//   shadows(enabled|disabled|castonly|receiveonly)・splitDirection(left|right|none)→enum、
+//   nodeTransformations/articulations/environmentMapOptions/customShader→対応オブジェクト
+function convertModelOpts(opts) {
+  if (!opts || typeof opts !== "object") return {};
+  const out = {};
+  const COLOR_KEYS = new Set(["color", "silhouettecolor", "lightcolor"]);
+  const NFS_KEYS = new Set(["scalebydistance", "translucencybydistance", "pixeloffsetscalebydistance"]);
+  const ENUM_DEFS = {
+    heightreference: ["HeightReference", { none: "NONE", clamp: "CLAMP_TO_GROUND", clamptoground: "CLAMP_TO_GROUND", relative: "RELATIVE_TO_GROUND", relativetoground: "RELATIVE_TO_GROUND" }],
+    colorblendmode: ["ColorBlendMode", { highlight: "HIGHLIGHT", replace: "REPLACE", mix: "MIX" }],
+    shadows: ["ShadowMode", { enabled: "ENABLED", disabled: "DISABLED", cast: "CAST_ONLY", castonly: "CAST_ONLY", receive: "RECEIVE_ONLY", receiveonly: "RECEIVE_ONLY" }],
+    splitdirection: ["SplitDirection", { left: "LEFT", right: "RIGHT", none: "NONE" }],
+  };
+  for (const [key, value] of Object.entries(opts)) {
+    const k = key.toLowerCase();
+    try {
+      if (COLOR_KEYS.has(k) && typeof value === "string") {
+        out[key] = Cesium.Color.fromCssColorString(value);
+      } else if (NFS_KEYS.has(k) && Array.isArray(value) && value.length === 4) {
+        out[key] = new Cesium.NearFarScalar(...value.map(Number));
+      } else if (k === "imagebasedlightingfactor" && Array.isArray(value) && value.length === 2) {
+        out[key] = new Cesium.Cartesian2(Number(value[0]), Number(value[1]));
+      } else if (k === "distancedisplaycondition" && Array.isArray(value) && value.length === 2) {
+        out[key] = new Cesium.DistanceDisplayCondition(Number(value[0]), Number(value[1]));
+      } else if (ENUM_DEFS[k] && typeof value === "string") {
+        const [typeName, map] = ENUM_DEFS[k];
+        const enumName = map[value.toLowerCase()];
+        if (enumName && Cesium[typeName]?.[enumName] !== undefined) out[key] = Cesium[typeName][enumName];
+      } else if (k === "nodetransformations" && value && typeof value === "object") {
+        const nt = {};
+        for (const [node, spec] of Object.entries(value)) {
+          if (!spec || typeof spec !== "object") continue;
+          nt[node] = new Cesium.NodeTransformationProperty({
+            translation: Array.isArray(spec.translation) ? Cesium.Cartesian3.fromArray(spec.translation.map(Number)) : undefined,
+            rotation: Array.isArray(spec.rotation) ? new Cesium.Quaternion(...spec.rotation.map(Number)) : undefined,
+            scale: Array.isArray(spec.scale) ? Cesium.Cartesian3.fromArray(spec.scale.map(Number)) : undefined,
+          });
+        }
+        out[key] = nt;
+      } else if (k === "articulations" && value && typeof value === "object") {
+        out[key] = value; // {"アーティキュレーション名 ステージ名": 数値} の PropertyBag
+      } else if (k === "environmentmapoptions" && value && typeof value === "object") {
+        const env = {};
+        if (typeof value.specularEnvironmentMaps === "string") env.specularEnvironmentMaps = resolveProjectUrl(value.specularEnvironmentMaps);
+        if (Array.isArray(value.sphericalHarmonicCoefficients)) {
+          env.sphericalHarmonicCoefficients = value.sphericalHarmonicCoefficients
+            .map(c => Array.isArray(c) ? Cesium.Cartesian3.fromArray(c.map(Number)) : c);
+        }
+        if (Number.isFinite(Number(value.luminanceAtZenith))) env.luminanceAtZenith = Number(value.luminanceAtZenith);
+        out[key] = env;
+      } else if (k === "customshader" && value && typeof value === "object") {
+        out[key] = buildModelCustomShader(value);
+      } else {
+        out[key] = value; // show/scale/runAnimations/silhouetteSize/enableVerticalExaggeration 等の生値
+      }
+    } catch (_) { /* 変換不能な個別値は無視 */ }
+  }
+  return out;
+}
+
+// modelopts の customShader 値 → Cesium.CustomShader。
+// {lightingModel:"unlit"|"pbr", translucencyMode:"opaque"|"translucent",
+//  uniforms:{名:{type:"float|vec2|vec3|vec4|int|bool|mat2|mat3|mat4|texture", value}},
+//  varyings:{名:"float|vec2|vec3|vec4|mat2|mat3|mat4"},
+//  vertexShaderText, fragmentShaderText}
+function buildModelCustomShader(spec) {
+  const opts = {};
+  const pick = (obj, map, raw) => {
+    const name = map[String(raw).toLowerCase()];
+    return name && obj?.[name] !== undefined ? obj[name] : undefined;
+  };
+  opts.lightingModel = pick(Cesium.LightingModel, { unlit: "UNLIT", pbr: "PBR" }, spec.lightingModel);
+  opts.translucencyMode = pick(Cesium.CustomShaderTranslucencyMode, { opaque: "OPAQUE", translucent: "TRANSLUCENT" }, spec.translucencyMode);
+  const UNIFORM_TYPES = { float: "FLOAT", vec2: "VEC2", vec3: "VEC3", vec4: "VEC4", int: "INT", ivec2: "INT_VEC2", ivec3: "INT_VEC3", ivec4: "INT_VEC4", bool: "BOOL", bvec2: "BOOL_VEC2", bvec3: "BOOL_VEC3", bvec4: "BOOL_VEC4", mat2: "MAT2", mat3: "MAT3", mat4: "MAT4" };
+  if (spec.uniforms && typeof spec.uniforms === "object") {
+    opts.uniforms = {};
+    for (const [name, u] of Object.entries(spec.uniforms)) {
+      if (u === null || u === undefined) continue;
+      const def = (typeof u === "object" && !Array.isArray(u) && "value" in u) ? u : { value: u };
+      const tname = String(def.type || "").toLowerCase();
+      if (tname === "texture" || tname === "sampler" || tname === "sampler2d") {
+        opts.uniforms[name] = new Cesium.TextureUniform(resolveProjectUrl(String(def.value)));
+      } else {
+        const entry = { value: def.value };
+        const ut = UNIFORM_TYPES[tname];
+        if (ut && Cesium.UniformType?.[ut] !== undefined) entry.type = Cesium.UniformType[ut];
+        opts.uniforms[name] = entry;
+      }
+    }
+  }
+  if (spec.varyings && typeof spec.varyings === "object") {
+    const VARYING_TYPES = { float: "FLOAT", vec2: "VEC2", vec3: "VEC3", vec4: "VEC4", mat2: "MAT2", mat3: "MAT3", mat4: "MAT4" };
+    opts.varyings = {};
+    for (const [name, t] of Object.entries(spec.varyings)) {
+      const vt = VARYING_TYPES[String(t).toLowerCase()];
+      if (vt && Cesium.VaryingType?.[vt] !== undefined) opts.varyings[name] = Cesium.VaryingType[vt];
+    }
+  }
+  if (spec.vertexShaderText) opts.vertexShaderText = String(spec.vertexShaderText);
+  if (spec.fragmentShaderText) opts.fragmentShaderText = String(spec.fragmentShaderText);
+  return new Cesium.CustomShader(opts);
 }
 
 // heat=on: heatmap.js で点密度をキャンバス描画し、画像マテリアル矩形として地表クランプする。
@@ -5938,8 +6169,12 @@ function applyLayerOpacityFactorToVectors() {
     entry.ds._kascAppliedOpacity = eff;
     try {
       if (item?.qmlStyle) {
+        // relayoutLabels=false: 透過度だけの再適用では declutter 再評価しない。
+        // 再配置は投影行列のタイミング差で表示判定が揺れ、スライダ操作のたびに
+        // ラベルが一時的に減って見える原因になる(表示状態は carry で引き継がれる)
         applyQmlStyleToDataSource(entry.ds, item.qmlStyle, {
-          clamp: !!item._qmlClamp, clampRef: item._qmlClampRef, hiddenSymbols: item.legendHidden, opacity: eff });
+          clamp: !!item._qmlClamp, clampRef: item._qmlClampRef, hiddenSymbols: item.legendHidden,
+          opacity: eff, relayoutLabels: false });
       } else {
         applyLayerOpacityToEntities(entry.ds, eff);
       }
@@ -6702,6 +6937,7 @@ function applyInspector(text) {
   let inspectorCloudSpec = null;
   // scene3d: 行(複数ある場合は同じ spec へ後勝ちでマージ)。null=行なし
   inspectorScene3dSpec = null;
+  inspectorTerrainUrl = "";
   // title: 行(複数ある場合は最後の行を採用)。null=行なし=既定表示に戻す
   let parsedPanelTitle = null;
   nextLines.forEach(line => {
@@ -6756,7 +6992,7 @@ function applyInspector(text) {
     }
 
     // theme: 名前 | 表示するレイヤタイトル[|タイトル…]（`*` で全表示）。
-    // QGIS マップテーマ相当の可視性プリセット。タイトルに `;style=DATA/x.qml`
+    // QGIS マップテーマ相当の可視性プリセット。タイトルに `;style=canvas_data/x.qml`
     // が付く場合はテーマ適用時にそのレイヤーの .qml を差し替える
     // (geo_webview がテーマの名前付きスタイルを出力。
     // shared/kasc.js parseKasc と同じく ;style= を分離して保持)
@@ -6799,7 +7035,7 @@ function applyInspector(text) {
       inspectorHtmlSections.push({ title: parts.length > 1 ? parts[0] : "", spec, line });
     }
 
-    // news: <DATA/内ファイル|URL> | limit=件数 | title=見出し —
+    // news: <canvas_data/内ファイル|URL> | limit=件数 | title=見出し —
     // ポータルのお知らせフィード(#128)。JSON/FrontMatter Markdown を
     // 日付降順で描画する。src はポータル描画時に resolveProjectUrl で解決
     if (type === "news") {
@@ -6906,15 +7142,22 @@ function applyInspector(text) {
       }
     }
 
-    // terrain: 名前 | exaggeration=N | offset=N | shading=on | generator=種別
-    // — 地形/3D Tiles の垂直誇張と QGIS 地形ジェネレータの近似反映(#60)
+    // terrain: 名前 | exaggeration=N | offset=N | shading=on | generator=種別 | url=<CesiumTerrainProvider URL>
+    // — 地形/3D Tiles の垂直誇張と QGIS 地形ジェネレータの近似反映(#60)。
+    //   url= は任意地形ソースの直接指定(engine-cesium 監査)。demSources 選択より優先
     if (type === "terrain") {
       value.split("|").map(part => part.trim()).forEach(part => {
         const m = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
         if (!m) return;
         const key = m[1].toLowerCase();
         const raw = m[2].trim();
-        if (key === "exaggeration") {
+        if (key === "url" && /^(https?:\/\/|\.\/|\.\.\/|\/)/i.test(raw)) {
+          inspectorTerrainUrl = resolveProjectUrl(raw);
+          // url= 指定は地形 ON を意味するためトグルも同期する
+          terrainEnabled = true;
+          const toggle = document.querySelector("#terrain-toggle");
+          if (toggle) toggle.checked = true;
+        } else if (key === "exaggeration") {
           const v = Number(raw);
           if (!Number.isFinite(v) || v < 0) return;
           try {
@@ -6942,8 +7185,10 @@ function applyInspector(text) {
 
     // scene3d: 名前 | background=#RRGGBB | skybox=on|off | shadows=on|off |
     //   ao=on|off | edl=on|off | fxaa=on|off | bloom=on|off |
+    //   blur=on|off | brightness=on|off | depthview=on|off | silhouette=on|off |
     //   tonemap=aces|filmic|reinhard|modified_reinhard|pbr_neutral |
-    //   material=water|elevationcontour|… | groundatmosphere=on|off | specmap=<KTX2 URL>
+    //   material=water|elevationcontour|… | matuniforms=<JSON> | groundatmosphere=on|off | specmap=<KTX2 URL> |
+    //   minzoom=N | maxzoom=N | tilt=on|off
     // — QGIS 3Dシーンの画面設定を近似反映(#60 + engine-cesium 監査)。
     //   ここでは spec を集め、反映は updateUndergroundView(背景色・SkyBox)と
     //   applyInspector 末尾(影・ポストプロセス・マテリアル)・タイルセットマウント(edl)で行う
@@ -6963,6 +7208,7 @@ function applyInspector(text) {
         else if (key === "edl") spec.edl = onoff();                                  // 点群 Eye Dome Lighting
         else if (key === "fxaa") spec.fxaa = onoff();
         else if (key === "bloom") spec.bloom = onoff();
+        else if (POST_STAGE_API_DEFS[key]) (spec.postStages ||= {})[key] = onoff();  // blur/autoexposure/brightness/depthview/silhouette
         else if (key === "tonemap" || key === "tonemapper") {
           const tm = raw.toUpperCase().replace(/[\s-]+/g, "_");
           if (Cesium.Tonemapper?.[tm]) spec.tonemap = tm;
@@ -6973,10 +7219,16 @@ function applyInspector(text) {
             const matName = Object.keys(Cesium.Material).find(k => k.toLowerCase() === `${t.toLowerCase()}type`);
             if (matName) spec.material = matName.slice(0, -4);
           }
+        } else if (key === "matuniforms" || key === "materialuniforms") {
+          try { spec.materialUniforms = JSON.parse(raw); } catch (_) {}
         } else if (key === "groundatmosphere") spec.groundAtmosphere = onoff();
         else if ((key === "specmap" || key === "specularmap" || key === "environmentmap") && /^https?:\/\//i.test(raw)) {
           spec.specularMaps = resolveProjectUrl(raw);
         }
+        // ScreenSpaceCameraController の個別フラグ(engine-cesium 監査)
+        else if (key === "minzoom") { const n = Number(raw); if (Number.isFinite(n) && n > 0) spec.minZoom = n; }
+        else if (key === "maxzoom") { const n = Number(raw); if (Number.isFinite(n) && n > 0) spec.maxZoom = n; }
+        else if (key === "tilt") spec.tilt = onoff();
       });
       // QGIS の単色背景は空より優先されるため、skybox 未指定なら空を隠す
       if (spec.background && spec.skybox === undefined) {
@@ -7327,7 +7579,10 @@ function applyInspector(text) {
       || type === "igc" || type === "polyline" || type === "gml") {
       const parts = splitKascTail(value);
       const title = parts[0];
-      const url = resolveProjectUrl(parts[1]);
+      // 3dtiles: の URL スロットは `osm`(=createOsmBuildingsAsync、Cesium ion
+      // アセットの OSM 建物)という予約トークンも受け取る(engine-cesium 監査)
+      const osmBuildings = type === "3dtiles" && /^osm(buildings)?$/i.test(String(parts[1] || "").trim());
+      const url = osmBuildings ? String(parts[1]).trim() : resolveProjectUrl(parts[1]);
       const off = parts.some(part => /^(off|false)$/i.test(part));
       const proxy = !parts.some(part => /^proxy\s*=\s*(off|false|direct)$/i.test(part));
       if (!title) return;
@@ -7336,8 +7591,12 @@ function applyInspector(text) {
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, attribution: parseAttributionField(parts[2]), proxy, group, exclusiveGroup };
       // 3dtiles: のレイヤー別オプション(engine-cesium 監査: Cesium3DTileStyle 経路)。
       // tilestyle=<スタイルJSON URL> / tilecolor=<CSS色 or 3D Tiles 式> /
-      // tileshow=<3D Tiles 式> / tilepointsize=<px> / sse=<最大SSE> / edl=on|off(点群 EDL)
+      // tileshow=<3D Tiles 式> / tilepointsize=<px> / sse=<最大SSE> / edl=on|off(点群 EDL) /
+      // ionkey=<Cesium ion トークン>(osm 等の ion アセット用)
       if (type === "3dtiles") {
+        if (osmBuildings) item.osmBuildings = true;
+        const ikOpt = parts.find(part => /^ionkey\s*=\s*\S/i.test(part));
+        if (ikOpt) item.ionKey = ikOpt.slice(ikOpt.indexOf("=") + 1).trim();
         const tsOpt = parts.find(part => /^tilestyle\s*=\s*\S/i.test(part));
         if (tsOpt) item.tileStyleUrl = resolveProjectUrl(tsOpt.slice(tsOpt.indexOf("=") + 1).trim());
         const tcOpt = parts.find(part => /^tilecolor\s*=\s*\S/i.test(part));
@@ -7437,6 +7696,17 @@ function applyInspector(text) {
           if (item.bboxAuto === undefined) item.bboxAuto = true;
           item.sourceVisible = !off;
         }
+        // flatgeobuf:/fgb: は空間インデックス+HTTP Range で表示範囲のみ読むクエリ系。
+        // bbox=auto が既定 ON(gpkg: と同じ)。bbox=off で全件読み込み系に戻る
+        if (type === "flatgeobuf" || type === "fgb") {
+          const bboxOpt = parts.find(part => /^bbox\s*=\s*\S+/i.test(part));
+          if (bboxOpt) {
+            const v = bboxOpt.slice(bboxOpt.indexOf("=") + 1).trim();
+            if (/^(auto|on|true|view|viewport)$/i.test(v)) item.bboxAuto = true;
+            else if (/^(off|none|false|static|manual)$/i.test(v)) item.bboxAuto = false;
+          }
+          if (item.bboxAuto === undefined) item.bboxAuto = true;
+        }
         // where= は非クエリ系(geojson: 等の全件読み込み系)も受け付ける。
         // SQL 実行ではなくクライアント評価(shared/where-eval.js)で描画地物を
         // 絞る。gpkg:/duckdb: 等のクエリ系は専用ブロックで SQL 側へ適用済み
@@ -7522,7 +7792,7 @@ function applyInspector(text) {
     // "| attr=出典" は出典表示(値に | は含められない)として末尾から順に解釈する。
     // 描画は既定で entity(地形ドレープ可)。
     // sql: は DuckDB-WASM(SQLite方言)、ogrsql: は shared/ogr-sql.js の OGR SQL 方言
-    // (FROM=レイヤータイトル/'DATA/ファイル'/'ds'.layer 形式)で評価系が異なる
+    // (FROM=レイヤータイトル/'canvas_data/ファイル'/'ds'.layer 形式)で評価系が異なる
     if (type === "sql" || type === "ogrsql") {
       const firstSep = value.indexOf("|");
       const title = firstSep < 0 ? "" : value.slice(0, firstSep).trim();
@@ -7715,6 +7985,13 @@ function applyInspector(text) {
         else if ((key === "pitch" || key === "p") && Number.isFinite(number)) item.pitch = number;
         else if ((key === "roll" || key === "r") && Number.isFinite(number)) item.roll = number;
         else if ((key === "attr" || key === "attribution") && raw) item.attribution = raw;
+        // modelopts=<JSON>: ModelGraphics の残り引数を一括指定(engine-cesium 監査)。
+        // 例: modelopts={"colorBlendMode":"mix","colorBlendAmount":0.5,"runAnimations":false,
+        //   "imageBasedLightingFactor":[1,1],"distanceDisplayCondition":[0,5000],
+        //   "nodeTransformations":{"Node":{"translation":[0,0,1]}},"articulations":{"a b":30}}
+        else if (key === "modelopts" || key === "modeloptions") {
+          try { item.modelOpts = JSON.parse(raw); } catch (_) { /* JSON 不正は無視 */ }
+        }
       });
       parseScaleVisOpts(parts, item);
       layers.push(item);
@@ -7804,6 +8081,19 @@ function applyInspector(text) {
       }
       updateUndergroundView();
       updateEffectSettings();
+      // UI を持たないライブラリステージ(blur/silhouette 等)は API 経路で直接付け外し
+      if (inspectorScene3dSpec.postStages) {
+        for (const [stageName, stageOn] of Object.entries(inspectorScene3dSpec.postStages)) {
+          applyPostStageApi(stageName, stageOn);
+        }
+      }
+      // ScreenSpaceCameraController の個別フラグ。updateUndergroundView が
+      // minimumZoomDistance=1 を書き直すため、spec はその後に適用する
+      const ssec = viewer.scene.screenSpaceCameraController;
+      if (Number.isFinite(inspectorScene3dSpec.minZoom)) ssec.minimumZoomDistance = inspectorScene3dSpec.minZoom;
+      if (Number.isFinite(inspectorScene3dSpec.maxZoom)) ssec.maximumZoomDistance = inspectorScene3dSpec.maxZoom;
+      // tilt=on|off は enableTilt。上下視点(2D)トグルの切替時はそちらが優先される
+      if (typeof inspectorScene3dSpec.tilt === "boolean") ssec.enableTilt = inspectorScene3dSpec.tilt;
     } catch (_) { /* 対応なし */ }
   }
   void applyInspectorCloud(inspectorCloudSpec);
@@ -8500,17 +8790,21 @@ function setupEvents() {
   const coordsEl = document.querySelector("#cesium-coords");
 
   const basemapOpacityInput = document.querySelector("#display-basemap-opacity");
+  const basemapOpacityValue = document.querySelector("#display-basemap-opacity-value");
   if (basemapOpacityInput) {
     basemapOpacityInput.addEventListener("input", event => {
       basemapOpacityFactor = Number(event.target.value) || 0;
+      if (basemapOpacityValue) basemapOpacityValue.textContent = `${Math.round(basemapOpacityFactor * 100)}%`;
       if (basemapImageryLayer) basemapImageryLayer.alpha = (basemapImageryLayer._baseAlpha ?? 1) * basemapOpacityFactor;
       requestRender();
     });
   }
   const layerOpacityInput = document.querySelector("#display-layer-opacity");
+  const layerOpacityValue = document.querySelector("#display-layer-opacity-value");
   if (layerOpacityInput) {
     layerOpacityInput.addEventListener("input", event => {
       layerOpacityFactor = Number(event.target.value) || 0;
+      if (layerOpacityValue) layerOpacityValue.textContent = `${Math.round(layerOpacityFactor * 100)}%`;
       // タイル/ライブ描画などの ImageryLayer は alpha を直接更新する。
       // _baseAlpha 未設定のレイヤー(/live/render 等)は現在値を初回の基準値にする
       const len = viewer.imageryLayers.length;
@@ -10223,9 +10517,9 @@ function setupEvents() {
     setInspectorStatus(t("inspector.status.exported"));
   });
 
-  // File System Access API: DATAフォルダへの直接保存(Chromium系のみ)。
+  // File System Access API: canvas_data フォルダへの直接保存(Chromium系のみ)。
   // フォルダハンドルは IndexedDB に保持し、次回以降は権限確認のみで再利用する
-  // File System Access API: DATAフォルダへの直接保存(Chromium系のみ)。
+  // File System Access API: canvas_data フォルダへの直接保存(Chromium系のみ)。
   // フォルダハンドルは IndexedDB に保持し、次回以降は権限確認のみで再利用する
   const dataDirStore = {
     open() {
@@ -10351,15 +10645,17 @@ function setupEvents() {
     return null;
   }
 
-  // DATA/ への保存: ローカルサーバー版は /api/files（ブラウザ非依存）、
-  // それ以外は「フォルダを選択」で選んだ FSA フォルダへ書き込む
+  // canvas_data/(旧 canvas_data/)への保存: ローカルサーバー版は /api/files（ブラウザ非依存）、
+  // それ以外は「フォルダを選択」で選んだ FSA フォルダへ書き込む。
+  // 戻り値は書き込み先のフォルダ名(.kasc 参照用)
   async function saveToDataDir(name, content) {
     if (hasBackendFeature("fileWrite")) {
       const project = currentProjectId || "default";
       const rel = String(name).split("/").filter(Boolean).map(encodeURIComponent).join("/");
       const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
       if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
-      return "server";
+      const result = await response.json().catch(() => ({}));
+      return result?.dataDir || "canvas_data";
     }
     const dir = await getDataDirHandle();
     if (!dir) throw new Error(t("inspector.addFileNoDir"));
@@ -10368,7 +10664,7 @@ function setupEvents() {
     const writable = await fileHandle.createWritable();
     await writable.write(content);
     await writable.close();
-    return "fsa";
+    return dir.name;
   }
 
   // 並行呼び出し（init・Drawタブ・addFlyPath 等）が既存チェックのスナップショットで
@@ -10413,15 +10709,16 @@ function setupEvents() {
         }
       } catch (e) { console.error("ensureDrawnRouteFlyPath failed:", e); }
     }
-    // ローカルサーバー版: projects/<id>/DATA/ を /api/files で列挙して .geojson をルート化
+    // ローカルサーバー版: projects/<id>/canvas_data/(旧 canvas_data/)を /api/files で列挙して .geojson をルート化
     if (hasBackendFeature("fileWrite")) {
       try {
         const entries = await window.kasugaiApi.listDataFiles();
+        const dataDir = entries.dataDir || "canvas_data";
         for (const entry of entries) {
           if (!entry.name?.endsWith(".geojson")) continue;
           const title = entry.name.replace(/\.geojson$/, "");
           if (existing.has(title)) continue;
-          const url = `${projectsBaseUrl(projectId)}DATA/${entry.name.split("/").map(encodeURIComponent).join("/")}`;
+          const url = `${projectsBaseUrl(projectId)}${dataDir}/${entry.name.split("/").map(encodeURIComponent).join("/")}`;
           const path = { title, url, speed: 30, height: 0, pitch: -10, loop: false, step: 100, view: "camera", drawn: { kind: "server", name: entry.name } };
           try { applyFlySettingsFromGeoJson(await (await fetch(url)).text(), path); } catch (e) { /* 既定値のまま */ }
           flyPaths.push(path);
@@ -10451,7 +10748,7 @@ function setupEvents() {
   });
   void updateDataDirLabel();
 
-  // ファイルを DATA/ へ保存し、拡張子に応じた .kasc 行を設定へ追記して即時適用する
+  // ファイルを canvas_data/ へ保存し、拡張子に応じた .kasc 行を設定へ追記して即時適用する
   const addFileInput = document.querySelector("#inspector-add-file");
   document.querySelector("#inspector-add-file-button")?.addEventListener("click", () => addFileInput?.click());
   addFileInput?.addEventListener("change", async () => {
@@ -10459,12 +10756,12 @@ function setupEvents() {
     addFileInput.value = "";
     for (const file of files) {
       try {
-        await saveToDataDir(file.name, file);
+        const dir = (await saveToDataDir(file.name, file)) || "canvas_data";
         const ext = file.name.toLowerCase().split(".").pop() || "";
         const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv", tif: "geotiff", tiff: "geotiff", gtif: "geotiff" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
-          window.kasugaiApi.addLayer(title, `DATA/${file.name}`, { type });
+          window.kasugaiApi.addLayer(title, `${dir}/${file.name}`, { type });
           setInspectorStatus(t("inspector.addFileSaved", { name: file.name }));
         } else {
           setInspectorStatus(t("inspector.addFileSavedOnly", { name: file.name }));
@@ -10492,13 +10789,13 @@ function setupEvents() {
     setTimeout(() => { shareCopyBtn.textContent = "🔗"; }, 1500);
   });
 
-  // .kasc 行の相対参照(DATA/・./・../・ベアファイル名)を baseUrl 基準の
+  // .kasc 行の相対参照(canvas_data/・./・../・ベアファイル名)を baseUrl 基準の
   // 絶対 URL へ書き換える。CDN→アプリの hub 書き出し用（参照解決基準が
   // 配信元 URL からローカル保存先へ変わるため）。URL スロットは `type:`
   // 直後の先頭2パートのみ対象とし、key=value・scheme 付きは触らない
   const absolutizeKascRefs = (text, baseUrl) => {
     const fileExt = "(geojson|json|fgb|flatgeobuf|parquet|gpkg|zip|kml|kmz|csv|tsv|tif|tiff|png|jpe?g|webp|duckdb|qml|xml|html?|glb|gltf|b3dm|3tz|xyz|mvt|pbf|bin)";
-    const refRe = new RegExp("^(\\.{1,2}/|DATA/|[^|\\s<>\"']+\\." + fileExt.slice(1, -1) + ")$", "i");
+    const refRe = new RegExp("^(\\.{1,2}/|(?:canvas_data|DATA)/|[^|\\s<>\"']+\\." + fileExt.slice(1, -1) + ")$", "i");
     const isRef = (p) => !!p && !/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[a-z0-9_-]+=/i.test(p) && refRe.test(p);
     return String(text).split(/\r?\n/).map((line) => {
       const t = line.trim();
@@ -11219,7 +11516,7 @@ function setupEvents() {
 
       cloudEls.localize.addEventListener("click", async () => {
         const scope = cloudEls.localizeScope.value;
-        const path = scope === "project" ? "DATA/" : "../DATA/";
+        const path = scope === "project" ? "canvas_data/" : "../canvas_data/";
         if (!window.confirm(t("cloud.localizeConfirm", { path }))) return;
         cloudEls.localize.disabled = true;
         try {
@@ -11532,6 +11829,16 @@ function setupEvents() {
     if (walkModeActive) return;
     // 重なった地物も拾えるよう drillPick で手前から順に全件取得する
     const pickedList = viewer.scene.drillPick(movement.position, DRILL_PICK_LIMIT) || [];
+    // silhouette ポストプロセス有効中は pick 結果を選択ハイライト対象にする。
+    // selected には Sandcastle 例に倣い pick オブジェクトではなく primitive を渡す
+    // (Cesium3DTileFeature 等 primitive を持たない pick はそのまま入れる)
+    const silhouetteStage = postProcessApiStages.get("silhouette");
+    if (silhouetteStage) {
+      try {
+        silhouetteStage.selected = pickedList.slice(0, DRILL_PICK_LIMIT).map(p => p?.primitive || p).filter(Boolean);
+        viewer.scene.requestRender();
+      } catch (_) {}
+    }
     const attr = document.querySelector("#attr-content");
     attr.replaceChildren();
     document.querySelectorAll(".panel-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.panel === "attr-panel"));
@@ -12372,7 +12679,9 @@ function setupVectorSearch() {
           ? await queryGpkgAttributeRows(layerItem, searchText)
           : layerItem.type === "ogrsql"
             ? await queryOgrSqlAttributeRows(layerItem, searchText)
-            : await queryDuckDbAttributeRows(layerItem, searchText);
+            : layerItem.type === "flatgeobuf" || layerItem.type === "fgb"
+              ? await queryFgbAttributeRows(layerItem, searchText)
+              : await queryDuckDbAttributeRows(layerItem, searchText);
         if (!isCurrent()) return;
         vectorAttrWidgetAttributes = result.attributes;
         vectorAttrWidgetRows = result.rows;
@@ -12634,7 +12943,9 @@ function setupVectorSearch() {
         ? await queryGpkgAttributeRows(layerItem, searchText, true)
         : layerItem.type === "ogrsql"
           ? await queryOgrSqlAttributeRows(layerItem, searchText)
-          : await queryDuckDbAttributeRows(layerItem, searchText, true);
+          : layerItem.type === "flatgeobuf" || layerItem.type === "fgb"
+            ? await queryFgbAttributeRows(layerItem, searchText)
+            : await queryDuckDbAttributeRows(layerItem, searchText, true);
       const src = res && res.rows;
       if (!src || src.length !== vectorAttrWidgetRows.length) {
         console.warn("属性一覧の WKT 行数が一致しないためジオメトリ列を省略します:", layerItem.title, src && src.length, vectorAttrWidgetRows.length);
@@ -13611,7 +13922,7 @@ window.kasugaiApi = {
     };
   },
   // ogrsql: 行と同じ実行経路で OGR SQL SELECT を実行し GeoJSON を返す
-  // (AI ツール queryOgrSql 用。FROM は読み込み済みレイヤー名/DATA パス。
+  // (AI ツール queryOgrSql 用。FROM は読み込み済みレイヤー名/canvas_data パス。
   // 主経路は JS 実装で、解決不能時のみ QGIS Live の GDAL へフォールバック)
   async runOgrSql(query) {
     return loadOgrSqlLayerAsGeoJson({ title: "queryOgrSql", query: String(query || "") });
@@ -13817,10 +14128,13 @@ window.kasugaiApi = {
       dof: "#effect-dof",
     };
     const input = document.querySelector(selectors[name]);
-    if (!input) return false;
-    input.checked = !!enabled;
-    updateEffectSettings();
-    return true;
+    if (input) {
+      input.checked = !!enabled;
+      updateEffectSettings();
+      return true;
+    }
+    // UI を持たないライブラリステージ(blur/autoexposure/brightness/depthview/silhouette)
+    return applyPostStageApi(name, !!enabled);
   },
   setUnderground({ transparency, dive } = {}) {
     if (Number.isFinite(transparency)) {
@@ -14320,17 +14634,20 @@ window.kasugaiApi = {
   async removeDataLayer(idOrTitle) {
     return await unregisterDataLayer(idOrTitle);
   },
-  // ---- DATA/ ファイル（ローカルサーバー版のみ・fileWrite 能力）----
-  // DATA/ 内のファイル一覧を {name,size,modified}[] で返す
+  // ---- canvas_data/(旧 canvas_data/)ファイル（ローカルサーバー版のみ・fileWrite 能力）----
+  // データフォルダ内のファイル一覧を {name,size,modified}[] で返す。
+  // 配列の .dataDir に実際のフォルダ名(canvas_data または旧 DATA)を付ける
   async listDataFiles() {
     if (!hasBackendFeature("fileWrite")) return [];
     const project = currentProjectId || "default";
     const response = await fetch(backendUrl(`/api/files?project=${encodeURIComponent(project)}`), { cache: "no-store" });
     if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
     const data = await response.json().catch(() => ({}));
-    return Array.isArray(data?.files) ? data.files : [];
+    const files = Array.isArray(data?.files) ? data.files : [];
+    files.dataDir = data?.dataDir || "canvas_data";
+    return files;
   },
-  // content: string / Blob / ArrayBuffer を DATA/<name> へ書き込む（サブフォルダ可）
+  // content: string / Blob / ArrayBuffer を canvas_data/<name> へ書き込む（サブフォルダ可）
   async saveDataFile(name, content) {
     if (!hasBackendFeature("fileWrite")) return { ok: false, error: "fileWrite はローカルサーバー版のみで利用できます" };
     const project = currentProjectId || "default";
@@ -14338,7 +14655,8 @@ window.kasugaiApi = {
     if (!rel) return { ok: false, error: "name is required" };
     const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
     if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
-    return { ok: true, name };
+    const data = await response.json().catch(() => ({}));
+    return { ok: true, name, dir: data?.dataDir || "canvas_data" };
   },
   async deleteDataFile(name) {
     if (!hasBackendFeature("fileWrite")) return { ok: false, error: "fileWrite はローカルサーバー版のみで利用できます" };
@@ -14504,7 +14822,7 @@ window.addEventListener("pagehide", () => {
   try { await loadProjects(); } catch (e) { console.error(e); }
   try { switchRestore = matchSessionState(); } catch (e) {}
   // ?kasc=local / localfs:// — File System Access API でローカルフォルダを直読みする
-  // （shared/kasc.js のプレイヤー系と同じ入口。fetch シムで DATA/ 等の相対参照も通す）
+  // （shared/kasc.js のプレイヤー系と同じ入口。fetch シムで canvas_data/ 等の相対参照も通す）
   try {
     const kascParam = urlParams.get("kasc");
     if (kascParam && (kascParam === "local" || kascParam === "localfs" || /^localfs:/i.test(kascParam))) {

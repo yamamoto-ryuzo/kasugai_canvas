@@ -49,7 +49,7 @@
 </code> のダブルクリック起動・外部プロジェクト登録（インストーラー版のみ）
 </li>          
 <li>設定のサーバー保存・
-<code>DATA/
+<code>canvas_data/
 </code> へのファイル書き込み（
 <code>/api/files
 </code>）
@@ -86,7 +86,7 @@
 </code> に記述します。
 </li>            
 <li>ローカルデータは 
-<code>projects/&lt;project&gt;/DATA/
+<code>projects/&lt;project&gt;/canvas_data/
 </code> 以下に置き、設定から相対パスで参照できます。
 </li>            
 <li>「エクスポート(.kasc)」ボタンで変更をダウンロードし、設定ファイルと差し替えて保存してください。
@@ -101,19 +101,19 @@
 <h3>プロジェクト構成
 </h3>          
 <pre>
-<code>web/                    # フロントエンド資産(静的配信のみで動作)├─ index.html / app.js / styles.css└─ projects/   ├─ projects.json      # プロジェクト一覧 [{"id":"...","title":"..."}]   └─ &lt;project_id&gt;/      ├─ project.json     # 表示名等      ├─ kasugai_canvas.kasc  # インスペクター設定      └─ DATA/            # ローカルGeoJSON・3D Tiles・画像等
+<code>web/                    # フロントエンド資産(静的配信のみで動作)├─ index.html / app.js / styles.css└─ projects/   ├─ projects.json      # プロジェクト一覧 [{"id":"...","title":"..."}]   └─ &lt;project_id&gt;/      ├─ project.json     # 表示名等      ├─ kasugai_canvas.kasc  # インスペクター設定      └─ canvas_data/            # ローカルGeoJSON・3D Tiles・画像等
 </code>
 </pre>          
 <p>設定内の相対パス（例: 
-<code>DATA/sample.geojson
+<code>canvas_data/sample.geojson
 </code>）は 
 <code>projects/&lt;project_id&gt;/
 </code> 直下に解決されます。
-<code>../DATA/x
+<code>../canvas_data/x
 </code> のように 
 <code>..
-</code> で1階層上を指すと、プロジェクト群と並列の共有 DATA/（通常プロジェクトは 
-<code>projects/DATA/
+</code> で1階層上を指すと、プロジェクト群と並列の共有 canvas_data/（通常プロジェクトは 
+<code>projects/canvas_data/
 </code>）を参照でき、複数プロジェクトで同じデータを使い回せます。Rustサーバー使用時は同構成の 
 <code>projects/
 </code> をサーバーと同階層に配置します。
@@ -125,9 +125,9 @@
 <p>管理（⚙）→ アプリ → 保存 で「共有（既定）」または「専用」を選んで「納品パッケージを生成」を実行すると、元のプロジェクトを変更せず、プロジェクトフォルダの隣に 
 <code>&lt;プロジェクト名&gt;_local/
 </code> を生成します。共有の取り込み先は 
-<code>_local/DATA/
+<code>_local/canvas_data/
 </code>、専用は 
-<code>_local/&lt;name&gt;/DATA/
+<code>_local/&lt;name&gt;/canvas_data/
 </code> です。HTTP・HTTPS データは 
 <code>http/
 </code>、
@@ -152,12 +152,12 @@
 <code>_local/
 </code> は群マニフェスト 
 <code>projects.json
-</code> とプロジェクトの複製（書き換え済み .kasc＋ローカル DATA/）を含む自己完結パッケージで、フォルダごと ZIP にして渡せば受け取り側は複製内の .kasc を開くだけで使えます。参照は 
-<code>../DATA/http/x.csv
+</code> とプロジェクトの複製（書き換え済み .kasc＋ローカル canvas_data/）を含む自己完結パッケージで、フォルダごと ZIP にして渡せば受け取り側は複製内の .kasc を開くだけで使えます。参照は 
+<code>../canvas_data/http/x.csv
 </code>（共有）または 
-<code>DATA/http/x.csv
+<code>canvas_data/http/x.csv
 </code>（専用）の相対パスで、登録IDが変わっても維持されます。元からあったローカルデータは 
-<code>DATA/local/
+<code>canvas_data/local/
 </code> に集約して複製され、取得したデータ（http/・cloud/）とは別フォルダに分かれます。再実行は 
 <code>_local/
 </code> を作り直します。詳細は 
@@ -401,25 +401,25 @@
 </strong>として登録して開きます。
 <code>.kasc
 </code> のあるフォルダがそのままプロジェクトルートになり、
-<code>DATA/
+<code>canvas_data/
 </code> などの相対参照はそのフォルダ基準で解決されるため、
 <code>.kasc
 </code> と 
-<code>DATA/
+<code>canvas_data/
 </code> をまとめたフォルダを渡すだけで納品できます。登録はプロジェクト一覧に残り、システムとは別の場所に複数プロジェクトを管理できます（ファイル名は 
 <code>kasugai_canvas.kasc
 </code> 以外でも可）。管理（⚙）→ プロジェクト の「プロジェクトルート」で、現在のプロジェクトが実際にどのフォルダを基準にしているか確認できます。詳細は 
 <a href="6-5-アプリ.html">6-5 アプリ
 </a> を参照してください。
 </p>          
-<h4>納品パッケージの推奨構造（プロジェクト群＋共有 DATA/）
+<h4>納品パッケージの推奨構造（プロジェクト群＋共有 canvas_data/）
 </h4>          
 <pre>
-<code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡す├─ DATA/                  … 全プロジェクト群で共有（../../DATA/x で参照）├─ ProjectsA/│  ├─ projects.json       … 群マニフェスト [{"dir":"ProjectA","kasc":"xxx.kasc","title":"計画A"}, ...]│  ├─ DATA/               … （任意）群内共有（../DATA/x で参照）│  ├─ ProjectA/{xxx.kasc, project.json, DATA/}│  └─ ProjectB/{yyy.kasc}└─ ProjectsB/   ├─ projects.json   └─ ProjectC/{zzz.kasc}   … ProjectsA と同じ ../../DATA/ を共有
+<code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡す├─ canvas_data/                  … 全プロジェクト群で共有（../../canvas_data/x で参照）├─ ProjectsA/│  ├─ projects.json       … 群マニフェスト [{"dir":"ProjectA","kasc":"xxx.kasc","title":"計画A"}, ...]│  ├─ canvas_data/               … （任意）群内共有（../canvas_data/x で参照）│  ├─ ProjectA/{xxx.kasc, project.json, canvas_data/}│  └─ ProjectB/{yyy.kasc}└─ ProjectsB/   ├─ projects.json   └─ ProjectC/{zzz.kasc}   … ProjectsA と同じ ../../canvas_data/ を共有
 </code>
 </pre>          
 <p>相対参照の規則: 
-<code>DATA/x
+<code>canvas_data/x
 </code> は .kasc のあるフォルダ内、
 <code>../x
 </code> は1つ上（群フォルダ＝群内共有）、
@@ -427,7 +427,7 @@
 </code> は2つ上（ワークスペースルート＝全群共有）を指します。
 <code>projects.json
 </code> を持たないフラット構造（
-<code>{P1, DATA}
+<code>{P1, canvas_data}
 </code>）は従来通り 
 <code>../
 </code> が1つ上を指します。この構造を ZIP にすれば受け取り側は群内の .kasc を1つダブルクリックするだけで、マニフェストの一覧に従って群の全プロジェクトが登録され、全参照が解決します。
@@ -464,7 +464,7 @@
 <p>
 <code>web/
 </code> を静的サーバーにアップロード。同一オリジン内の 
-<code>projects/&lt;id&gt;/DATA/
+<code>projects/&lt;id&gt;/canvas_data/
 </code> を相対パスで参照できます。
 </p>          
 </div>          
@@ -474,7 +474,7 @@
 <p>QGIS geo_webview の KASUGAI エクスポートが出力する 
 <code>.kasc
 </code>・
-<code>DATA/
+<code>canvas_data/
 </code>・
 <code>&lt;engine&gt;.html
 </code>・

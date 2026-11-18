@@ -1,0 +1,8 @@
+cam:世界|20|10|h=40000000|p=-90
+geojson: 検証/geojson基準 | /verify/rec-formats/points.geojson | on
+geojson: 検証/geojson非表示 | /verify/rec-formats/points.geojson | off
+geojson: 検証/geojson where | /verify/rec-formats/points.geojson | on | where="category"='landmark'
+flatgeobuf: 検証/fgb(bbox=auto) | /verify/fgb-test/countries.fgb | on
+flatgeobuf: 検証/fgb(bbox=off) | /verify/fgb-test/countries.fgb | on | bbox=off
+geoparquet: 検証/geoparquet | /verify/rec-formats/example.parquet | on
+geoparquet: 検証/geoparquet where | /verify/rec-formats/example.parquet | on | where="continent"='Africa'

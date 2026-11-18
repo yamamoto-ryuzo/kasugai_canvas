@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>データ形式（推奨） — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>データ形式（推奨） — WEB 化の変換先と採用ルール</p>
+    </header>
+    <main>
+      <h2>1. 推奨データ形式</h2>
+      <p>既存の GIS データを KASUGAI Canvas 向けに WEB 化する際の<strong>変換先の定石</strong>と、形式を採用する際のルールをまとめたページです。個別形式の仕様は <a href="data.html">データ形式（標準）</a>・<a href="data-optional.html">データ形式（オプション・エンジン別）</a> を参照してください。</p>
+
+      <h3>1.1 2D/3D 追従表示の基本データ形式（方針・未実装）</h3>
+      <p><strong>ズーム追従ルート（方針）のデータ形式切替図</strong> — 広域は XYZ ラスタ、拡大は FlatGeobuf。3D は同じ 2 段に 3D Tiles が並走します。広域ではラスタ化された見た目で軽量に表示し、拡大して地物単位の解像度が必要になったらベクター読み込みへ切り替えます。広域側はベクターの全件・大量読み込みを回避する「負荷逃がし」が目的であり、FGB の <code>bbox=auto</code> だけでも動く現行経路への上乗せです。</p>
+      <div class="note">
+        <strong>これは未実装の方針メモです。</strong>カメラ追従（QGIS ライブ連携の <code>?follow</code>/<code>live:</code> 行のフォロー・Fly 再生等）でズームに応じてデータ経路を切り替える設計の前提として、ここに方針だけを明示します。現行実装では <code>flatgeobuf:</code>（<code>bbox=auto</code>）が全ズームで範囲読みする単一経路であり、以下の 2 段構成の切替機構はまだ存在しません。
+      </div>
+      <figure class="mermaid-fig"><figcaption>広域 = XYZ / 拡大 = FlatGeobuf / 3D = 3D Tiles 並走</figcaption>
+<pre class="mermaid" aria-label="2D/3D 追従表示のデータ形式切替（方針・未実装）">
+flowchart TD
+  A["カメラ追従<br/>follow / Fly 再生 / 通常ナビ"] --> B{表示ズーム}
+  B -->|"広域（低ズーム）"| C["XYZ ラスタ<br/>xyz: / base:<br/>live 時は /live/render 画像系"]
+  B -->|"拡大（高ズーム）"| D["FlatGeobuf<br/>flatgeobuf: bbox=auto<br/>空間インデックス+Range 範囲読み"]
+  D --> D1["ピック・属性・選択ハイライト可<br/>（ベクター地物として存在）"]
+  C --> C1["ラスタ表示のみ<br/>ピック・検索対象外"]
+  B -.->|"3D データ（全ズーム並走）"| E["3D Tiles<br/>3dtiles:<br/>タイル側 LOD で縮尺吸収"]
+
+  classDef rec fill:#667eea,color:#fff,stroke:#4a5dd4;
+  classDef plain fill:#f6f8fa,color:#333,stroke:#999;
+  classDef plan fill:#fff8e1,color:#333,stroke:#d4a017,stroke-dasharray:5 4;
+  class C,D,E rec;
+  class C1,D1 plain;
+  class A,B plan;
+</pre></figure>
+      <ul>
+      <li><strong>切替閾値はズーム帯で設ける</strong> — ハードな境界だとラスタ→ベクターの見た目が飛ぶため、境界±1ズーム程度のオーバーラップ（FGB 読み込み完了まで XYZ を残す）を想定</li>
+      <li><strong>広域側はラスタのみ</strong> — ピック・属性パネル・ベクター検索・選択ハイライトは拡大側（FGB）でのみ有効。追従ミラー用途では許容とする</li>
+      <li><strong>広域ラスタの生成元は未定</strong> — 既存の <code>/live/render</code>（QGIS 描画の透過 PNG・moveend 追従）流用が実装最小、事前タイル化した <code>xyz:</code> ツリーも可。QGIS 側 OGC 配信（WMS/WMTS）は撤去済みのため復活させない</li>
+      <li><strong>3D は同じ 2 段＋ <code>3dtiles:</code></strong> — 広域 XYZ はイメージレイヤー（地球面ドレープ）、拡大 FGB は entity/primitive 描画。3D モデル・点群はタイル自身の LOD が縮尺を吸収するため切替不要</li>
+      <li><strong>追従ポーリングとの整合</strong> — <code>/live/state</code> 1.5s ポーリング → moveend デバウンス（現行 400〜700ms）再クエリで現行機構のまま成立。連続ズーム操作時の追いつき遅延は実装時に実機確認</li>
+      </ul>
+
+      <h3>1.2 WEBVIEW連携（geo_webview エクスポートのベクター出力形式）</h3>
+      <p><strong>WEBVIEW連携（QGIS → Canvas の出力）</strong>：QGIS プラグイン <code>geo_webview</code> の <code>.kasc</code>+<code>canvas_data/</code> エクスポートにはベクター出力形式スイッチがあり、<a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/blob/master/qgis-plugin/geo_webview/SPEC.md#ベクター出力形式native--recommended--geojson" target="_blank" rel="noopener noreferrer">「ネイティブ（そのまま参照）」（<code>native</code>・既定）</a> は読めるソースを <code>gpkg:</code>/<code>geojson:</code>/<code>flatgeobuf:</code>/<code>geoparquet:</code>/<code>duckdb:</code> 等の行でそのまま参照し（ネイティブ参照できないベクターは recommended と同じ FlatGeobuf 変換経路）、<a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/blob/master/qgis-plugin/geo_webview/SPEC.md#ベクター出力形式native--recommended--geojson" target="_blank" rel="noopener noreferrer">「推奨（FlatGeobuf → canvas_data/）」（<code>recommended</code>）</a> は全ベクターを本ページ第一推奨の FlatGeobuf（EPSG:4326・空間インデックス付き）へ変換して canvas_data/ へ <code>flatgeobuf:</code> 行として配置します。ソース別の行タイプ対応は <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/blob/master/qgis-plugin/geo_webview/SPEC.md#kasc-行の生成規則" target="_blank" rel="noopener noreferrer">.kasc 行の生成規則</a>、連携全体は <a href="qgis.html">QGIS・GDAL 連携</a> を参照してください。</p>
+
+      <p>第3のモードとして <strong>「WEB連携（GeoJSON → canvas_data/）」（<code>geojson</code>）</strong> があります。これは FGB/GeoParquet を含む<strong>全ベクターを GeoJSON に変換して canvas_data/ へ <code>geojson:</code> 行として配置</strong>する出力で、生成物がオープン標準の GeoJSON のみになるため、<strong>KASUGAI Canvas 以外の WebGIS や GIS ツールでも canvas_data/ をそのまま読み込めます</strong>。広域配信や読み込み性能は FlatGeobuf に劣るため、Canvas 専用配信では <code>recommended</code>、他 WebGIS との相互運用を優先する場合は <code>geojson</code> を使い分けます。</p>
+
+      <figure class="mermaid-fig"><figcaption>WEBVIEW連携：geo_webview エクスポートのベクター出力形式（native / recommended / geojson）— 変換は FlatGeobuf 優先経路＋WEB連携用 GeoJSON 経路</figcaption>
+<pre class="mermaid" aria-label="geo_webview ベクター出力形式スイッチの出力先">
+flowchart TD
+  A["QGIS プロジェクト<br/>geo_webview エクスポート"] --> B{"ベクター出力形式スイッチ<br/>kasugai_vector_format"}
+  B -->|"native（既定）"| C["ネイティブ（そのまま参照）"]
+  B -->|"recommended"| D["推奨（FlatGeobuf → canvas_data/）"]
+  B -->|"geojson（WEB連携）"| G["WEB連携（全ベクターを GeoJSON → canvas_data/）"]
+  C --> C1["参照できるソースはそのまま<br/>gpkg: / geojson: / flatgeobuf: / geoparquet:<br/>duckdb: / shp: / wfs: / kml: / gpx: 等の行"]
+  C --> C2["ネイティブ参照できない<br/>ベクターのみ変換へ回す"]
+  D --> D1["FGB/GeoParquet 以外の<br/>全ベクターを変換へ回す"]
+  D --> D2["既に FGB/GeoParquet のソースは参照維持<br/>flatgeobuf: / geoparquet: / duckdb:+format=parquet 行"]
+  N["※ fields/where/limit 指定・where-eval 非対応の<br/>subsetString もモードに関わらず変換経路へ<br/>（フィルタ等をデータへ焼き込み）"]
+  C2 --> X["共通変換経路<br/>FlatGeobuf（EPSG:4326・空間インデックス付き）<br/>→ flatgeobuf: 行<br/>※ドライバ非搭載時は Parquet、失敗時は GeoJSON"]
+  D1 --> X
+  N -.-> X
+  G --> X2["GeoJSON 変換経路<br/>canvas_data/ へ全ベクターを GeoJSON で出力<br/>→ geojson: 行<br/>※ラスタ系以外は全て GeoJSON"]
+  C1 --> E[".kasc + canvas_data/"]
+  D2 --> E
+  X --> E
+  X2 --> E
+  E --> F["KASUGAI Canvas で描画<br/>flatgeobuf: は bbox=auto の Range 範囲読み"]
+  X2 -.-> H["canvas_data/ が全て GeoJSON になるため<br/>Canvas 以外の WebGIS・GIS ツールとも連携可"]
+
+  classDef rec fill:#667eea,color:#fff,stroke:#4a5dd4;
+  classDef plain fill:#f6f8fa,color:#333,stroke:#999;
+  class D,D1,X rec;
+  class C,C1,C2,D2,N,G,X2,H plain;
+</pre></figure>
+
+      <div class="note">
+        <strong>結論: ベクター = FlatGeobuf（<code>flatgeobuf:</code>）、大規模な属性・SQL 絞り込み = GeoParquet + <code>duckdb:</code>、ラスタ・オルソ = XYZ タイル（<code>base:</code>/<code>xyz:</code>）、3D = 3D Tiles（<code>3dtiles:</code>）</strong>
+      </div>
+
+      <h3>1.3 採用ルール</h3>
+      <figure class="mermaid-fig"><figcaption>データ種別（2D / 3D / ラスタ）→ 条件 → 採用形式</figcaption>
+<pre class="mermaid" aria-label="推奨データ形式の採用ルール">
+flowchart TD
+  A[GIS データを WEB 化したい] --> B{データ種別}
+  B -->|2D ベクター| C{規模・用途}
+  B -->|ラスタ・オルソ| D{配信形態}
+  B -->|3D データ| E["3D Tiles<br/>3dtiles:"]
+
+  C -->|数千地物以下| F["GeoJSON のまま<br/>geojson:（変換不要）"]
+  C -->|"汎用・広範囲<br/>（第一推奨）"| G["FlatGeobuf<br/>flatgeobuf:<br/>bbox=auto で範囲読み"]
+  C -->|"超大規模<br/>属性・SQL 絞り込み"| H["GeoParquet + duckdb:<br/>述語プッシュダウン"]
+  C -->|"中規模<br/>クエリ不要"| I["GeoParquet<br/>geoparquet:（全件読み込み）"]
+
+  D -->|タイル化可能| J["XYZ タイル<br/>base: / xyz:"]
+  D -->|単一画像| K["ジオリファレンス画像<br/>image: bbox= / corners="]
+
+  classDef rec fill:#667eea,color:#fff,stroke:#4a5dd4;
+  classDef plain fill:#f6f8fa,color:#333,stroke:#999;
+  class E,G,H,J rec;
+  class F,I,K plain;
+</pre></figure>
+      <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+      </script>
+      <p>青のノードが推奨形式（<span class="badge recommended">推奨</span> バッジの形式）、グレーのノードは変換不要でそのまま使える経路です。分岐条件の詳細:</p>
+      <ul>
+      <li><strong>FlatGeobuf は空間インデックス付きで書き出すこと</strong>（GDAL は既定で付与）。<code>bbox=auto</code> 既定 ON で空間インデックス+HTTP Range の範囲読み・重いランタイム不要・全4エンジン対応</li>
+      <li><strong>GeoParquet + <code>duckdb:</code></strong> は述語プッシュダウン・row group スキップ・列プルーニングで「必要な列と範囲だけ」読む。検索は常に全件対象。DuckDB-WASM 約60MB の初期ロードあり（SW 永続キャッシュで初回のみ）</li>
+      <li><strong><code>geoparquet:</code> 直接経路</strong> は全件読み込みだがバイナリで軽量・変換不要で置くだけ。超大規模は <code>duckdb:</code> 経路へ</li>
+      <li><strong>XYZ タイル</strong> はネイティブ・全エンジン・プログレッシブ表示。ドローンオルソ等もタイル化して配信するのが定石</li>
+      </ul>
+
+      <h3>1.4 採用しない方がよい形式（WEB 配信の変換先として）</h3>
+      <ul>
+      <li><strong>GeoPackage → <code>gpkg:</code> 直配信</strong> — sql.js がファイル全件を WASM メモリへ読み込み、大規模では実用速度にならない。管理用マスターとして保持し、配信用は FlatGeobuf/GeoParquet に変換</li>
+      <li><strong>MVT / PMTiles</strong> — ネイティブ動作は MapLibre と Navara のみ。4エンジン共通の変換先にはならない（<a href="data-optional.html">オプション</a>扱い）</li>
+      <li><strong>GeoTIFF / COG 直配信</strong> — Cesium 限定のオプション経路。汎用 WEB 配信では XYZ タイル化を推奨</li>
+      <li><strong>大規模データの GeoJSON 化</strong> — テキスト解析が重く転送量も大きい。数万地物以上はバイナリ形式へ</li>
+      </ul>
+
+      <h3>1.5 推奨形式の詳細</h3>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🧭 FlatGeobuf <span class="badge recommended">推奨</span></h3>
+          <p><code>flatgeobuf:</code> / <code>fgb:</code>。ベクターの第一推奨。<code>bbox=auto</code>（既定 ON）で空間インデックス＋HTTP Range による表示範囲のみの部分読み込み。カメラ移動で自動再クエリ。索引なし・Range 非対応サーバーは全件読み込みへフォールバック。<code>bbox=off</code> で全件読み込み系（ベクター検索対象）に戻る。<code>where=</code> 対応。</p>
+        </div>
+        <div class="feature-card">
+          <h3>📦 GeoParquet + duckdb: <span class="badge recommended">推奨</span></h3>
+          <p><code>duckdb:</code> で GeoParquet/Parquet を指定。超大規模・属性絞り込みの第一推奨。述語プッシュダウン・row group スキップ・列プルーニング・<code>bbox=auto</code> で「見ている範囲だけ読む」。検索は常に全件。DuckDB-WASM は約60MB・SW 永続キャッシュで初回のみ。</p>
+        </div>
+        <div class="feature-card">
+          <h3>📦 GeoParquet <span class="badge recommended">推奨</span></h3>
+          <p><code>geoparquet:</code> / <code>parquet:</code>。中規模ベクターをクエリなしで置くだけ配信する場合の推奨。軽量デコーダー（hyparquet）で全件読み込み → GeoJSON 正規化。範囲読み込みは <code>duckdb:</code> 経路。</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗺️ XYZ タイル <span class="badge recommended">推奨</span></h3>
+          <p><code>base:</code> / <code>xyz:</code> / <code>tile:</code>。ラスタ・オルソの第一推奨。全エンジンでネイティブ描画・プログレッシブ表示。タイル化済みオルソ（地理院 seamlessphoto 等）はそのまま、ドローンオルソ等の GeoTIFF はタイル化して配信。</p>
+        </div>
+        <div class="feature-card">
+          <h3>🏙️ 3D Tiles <span class="badge recommended">推奨</span></h3>
+          <p><code>3dtiles:</code>。3D データの標準変換先。Cesium はネイティブ、MapLibre/OpenLayers/Leaflet は deck.gl 経由で描画。点群（EPT/LAZ 等）・3D モデル・建物データはすべて 3D Tiles 化して配信。</p>
+        </div>
+      </div>
+
+      <h3>1.6 前提条件（採用時の確認事項）</h3>
+      <ul>
+      <li><strong>FlatGeobuf は空間インデックス必須</strong> — <code>ogr2ogr -f FlatGeobuf</code>（GDAL）は既定で空間インデックスを書き込む。索引なしファイルは範囲読み不可で全件転送になる</li>
+      <li><strong>Range リクエスト対応ホストを選ぶ</strong> — FlatGeobuf/PMTiles/COG/<code>duckdb:</code> の効果は HTTP Range 対応（GitHub Pages・S3・CloudFront・ローカル Rust サーバー等）が前提。非対応だと全量ダウンロードにフォールバック</li>
+      <li><strong>空間ソートを推奨</strong> — GeoParquet/FlatGeobuf を書き出す前に地域順・ヒルベルト的な並びにすると、範囲読み込みの局所性が上がる</li>
+      <li><strong>GeoPackage は配信形式ではなく管理形式</strong> — 配信用には必ず変換する</li>
+      </ul>
+
+      <h3>1.7 変換方法の例</h3>
+      <pre class="text"><code># ベクター → FlatGeobuf（空間インデックスは既定で付与）
+ogr2ogr -f FlatGeobuf out.fgb in.gpkg layer_name
+
+# ベクター → GeoParquet
+ogr2ogr -f Parquet out.parquet in.gpkg layer_name
+
+# ラスタ・オルソ → XYZ タイル
+gdal2tiles.py -z 5-18 in.tif tiles/
+
+# 3D → 3D Tiles
+# kasuga_converter（mago-3d-tiler / Py3DTiles / gocesiumtiler / pg2b3dm）を使用</code></pre>
+
+      <p><a href="data.html">データ形式（標準） →</a> ／ <a href="data-optional.html">データ形式（オプション・エンジン別） →</a></p>
+    </main>
+  </div>
+</body>
+</html>

@@ -113,7 +113,7 @@ ok("kasugaiApi.setEffect('edge') → エッジ検出ステージ", api.names.len
 ok("kasugaiApi.setEffect('bloom') → composite enabled", api.bloomOn === true);
 
 // ---- 6. WMS GetFeatureInfo(地図中心をクリック) ----
-// 検証用 wms: 行は DATA/wms_stub.json(同一オリジン JSON スタブ)を指すため
+// 検証用 wms: 行は canvas_data/wms_stub.json(同一オリジン JSON スタブ)を指すため
 // クリック位置に関係なく FeatureCollection が返る(実サーバーは環境依存)
 const box = await page.locator("#cesium-container").boundingBox();
 await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);

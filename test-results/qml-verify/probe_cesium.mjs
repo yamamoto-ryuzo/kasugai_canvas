@@ -10,7 +10,7 @@ const out = await page.evaluate(async () => {
   try {
     const vl = await import("/shared/vector-load.js");
     const r = await vl.loadVectorItem(
-      { type: "flatgeobuf", title: "t", url: "DATA/trim_line.fgb" },
+      { type: "flatgeobuf", title: "t", url: "canvas_data/trim_line.fgb" },
       "http://127.0.0.1:8510/projects/qml-verify-2/", null);
     return { ok: true, feats: r.geojson?.features?.length,
              keys: Object.keys(vl) };

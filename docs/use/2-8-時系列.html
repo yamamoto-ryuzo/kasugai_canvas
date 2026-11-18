@@ -18,8 +18,8 @@
 
       <h2>使い方</h2>
       <h3>⏱️ .kasc 行オプション</h3>
-      <pre class="text"><code>geojson: 避難所の推移 | DATA/shelters.geojson | time=開設日
-geojson: イベント     | DATA/events.geojson  | time=開始 | time_end=終了 | time_span=PT1H</code></pre>
+      <pre class="text"><code>geojson: 避難所の推移 | canvas_data/shelters.geojson | time=開設日
+geojson: イベント     | canvas_data/events.geojson  | time=開始 | time_end=終了 | time_span=PT1H</code></pre>
       <table>
         <thead><tr><th>オプション</th><th>意味</th></tr></thead>
         <tbody>
@@ -31,8 +31,8 @@ geojson: イベント     | DATA/events.geojson  | time=開始 | time_end=終了
       <p><code>sql:</code> は末尾 <code>| time=名</code> で指定します。対象は entity 描画経路のベクター行タイプです。</p>
 
       <h2>設定方法（.kasc）</h2>
-      <pre class="text"><code>geojson: 避難所の推移 | DATA/shelters.geojson | time=開設日
-geojson: イベント     | DATA/events.geojson  | time=開始 | time_end=終了 | time_span=PT1H
+      <pre class="text"><code>geojson: 避難所の推移 | canvas_data/shelters.geojson | time=開設日
+geojson: イベント     | canvas_data/events.geojson  | time=開始 | time_end=終了 | time_span=PT1H
 sql: 推移 | SELECT ... | time=発生日</code></pre>
       <p>ツールドックの設定は「適用」時に <code>.kasc</code> 行へ自動書き戻しされるため、手書きと UI 設定のどちらでも同じ結果になります。</p>
 

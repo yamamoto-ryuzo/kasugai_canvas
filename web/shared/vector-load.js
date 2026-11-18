@@ -80,23 +80,51 @@ function toFeatureCollection(items) {
   return { type: "FeatureCollection", features };
 }
 
-// 属性値の正規化(sanitize)は Cesium 版と共通。BigInt 等 structured-clone 不可な値も潰す
-async function loadFlatGeobuf(url) {
+// bounds({ranges:[{west,east}],south,north}) → FlatGeobuf rect({minX,minY,maxX,maxY})。
+// 日付変更線またぎは ranges が2区間になるため rect も複数返す
+function flatgeobufRects(bounds) {
+  if (!bounds || !Array.isArray(bounds.ranges) || !bounds.ranges.length) return null;
+  return bounds.ranges.map(r => ({ minX: r.west, minY: bounds.south, maxX: r.east, maxY: bounds.north }));
+}
+
+// 属性値の正規化(sanitize)は Cesium 版と共通。BigInt 等 structured-clone 不可な値も潰す。
+// bounds 指定時は URL 文字列＋{rect} を deserialize へ渡し、空間インデックスと
+// HTTP Range リクエストで範囲内の地物だけを読む(真のクエリ系)。
+// 索引なしファイル・Range 非対応サーバーは例外を捕まえて全件読み込みへフォールバック。
+// 戻り値 { geojson, ranged }: ranged=false は再クエリしても同じ全件になる印
+async function loadFlatGeobuf(url, bounds = null) {
   const { deserialize } = await import(FGB_URL);
+  const fc = { type: "FeatureCollection", features: [] };
+  const collect = async (iter, seen) => {
+    for await (const feature of iter) {
+      if (!feature || !feature.geometry) continue;
+      const properties = feature.properties;
+      if (properties) {
+        for (const key of Object.keys(properties)) {
+          properties[key] = sanitizeVectorPropertyValue(properties[key]);
+        }
+      }
+      // 日付変更線またぎの2rect走査で ±180 跨ぎの地物が重複し得るため id で重複排除
+      const id = feature.id;
+      if (seen && id != null) { if (seen.has(id)) continue; seen.add(id); }
+      fc.features.push(feature);
+    }
+  };
+  const rects = flatgeobufRects(bounds);
+  if (rects) {
+    try {
+      const seen = rects.length > 1 ? new Set() : null;
+      for (const rect of rects) await collect(deserialize(url, { rect }), seen);
+      return { geojson: fc, ranged: true };
+    } catch (error) {
+      console.warn(`flatgeobuf 範囲読み失敗(索引なし・Range 非対応等)。全件へフォールバック: ${url}`, error);
+      fc.features.length = 0;
+    }
+  }
   const res = await fetch(url);
   if (!res.ok || !res.body) throw new Error(`flatgeobuf 取得失敗: ${res.status}`);
-  const fc = { type: "FeatureCollection", features: [] };
-  for await (const feature of deserialize(res.body)) {
-    if (!feature || !feature.geometry) continue;
-    const properties = feature.properties;
-    if (properties) {
-      for (const key of Object.keys(properties)) {
-        properties[key] = sanitizeVectorPropertyValue(properties[key]);
-      }
-    }
-    fc.features.push(feature);
-  }
-  return fc;
+  await collect(deserialize(res.body), null);
+  return { geojson: fc, ranged: false };
 }
 
 let hyparquetLoaderPromise = null;
@@ -692,6 +720,11 @@ export function isViewportQueryItem(item) {
   if (item.type === "duckdb" || item.type === "gpkg" || item.type === "geopackage") {
     return !BBOX_OFF_RE.test(String(item.opts?.bbox ?? "auto"));
   }
+  // flatgeobuf:/fgb: も空間インデックス+Range で部分読みできるため既定 ON。
+  // 索引なし・Range 非対応は読み込み時に全件へフォールバックする
+  if (item.type === "flatgeobuf" || item.type === "fgb") {
+    return !BBOX_OFF_RE.test(String(item.opts?.bbox ?? "auto"));
+  }
   return false;
 }
 
@@ -733,7 +766,7 @@ function ogrFileType(path) {
 }
 
 // FROM 名 → 候補パス。パスらしい名前(/・拡張子・scheme あり)はそのまま。
-// 裸のレイヤー名は DATA/<名>.<形式> を順に試す
+// 裸のレイヤー名は canvas_data/<名>.<形式> を順に試す
 function ogrSourceCandidates(name) {
   const n = String(name || "").trim();
   if (!n) return [];
@@ -741,6 +774,8 @@ function ogrSourceCandidates(name) {
     || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|gpx|czml|topojson|esrijson|arcgis|geojsonl|ndjson|jsonl|wkt|wkb|igc|polyline|gml|zip|shp|dbf|csv|tsv)$/i.test(n);
   if (looksPath) return [n];
   return [
+    `canvas_data/${n}.geojson`, `canvas_data/${n}.fgb`, `canvas_data/${n}.parquet`,
+    `canvas_data/${n}.gpkg`, `canvas_data/${n}.kml`, `canvas_data/${n}.gpx`, `canvas_data/${n}.csv`,
     `DATA/${n}.geojson`, `DATA/${n}.fgb`, `DATA/${n}.parquet`,
     `DATA/${n}.gpkg`, `DATA/${n}.kml`, `DATA/${n}.gpx`, `DATA/${n}.csv`, n,
   ];
@@ -804,7 +839,7 @@ function toKascLoaderItem(item, baseUrl, bounds) {
   if (item.type === "sql") {
     // クエリ内の相対ファイル参照をプロジェクト基準の絶対URLへ解決(httpfs経由で読める形に)
     it.query = stripSqlTail(item.url)
-      .replace(/'((?:\.\.?\/|DATA\/)[^']+)'/gi, (_, ref) => `'${resolveKascUrl(ref, baseUrl)}'`);
+      .replace(/'((?:\.\.?\/|(?:canvas_data|DATA)\/)[^']+)'/gi, (_, ref) => `'${resolveKascUrl(ref, baseUrl)}'`);
   } else {
     it.url = resolveKascUrl(item.url, baseUrl);
   }
@@ -825,7 +860,11 @@ export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null)
     return { geojson: await res.json() };
   }
   if (type === "flatgeobuf" || type === "fgb") {
-    return { geojson: await loadFlatGeobuf(url) };
+    const viewportQuery = isViewportQueryItem(item);
+    const result = await loadFlatGeobuf(url, viewportQuery ? bounds : null);
+    // 範囲読みへフォールバックできなかった(索引なし・Range 非対応)場合は
+    // 結果が常に全件なので再クエリしても無駄。viewportQuery=false で通知する
+    return { geojson: result.geojson, viewportQuery: viewportQuery && result.ranged };
   }
   if (type === "geoparquet" || type === "parquet") {
     return { geojson: await loadGeoParquet(url) };

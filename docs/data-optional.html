@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>データ形式（オプション） — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>データ形式（オプション） — エンジン別対応の拡張形式・3D データ</p>
+    </header>
+    <main>
+      <h2>オプションデータ形式（エンジン別対応）</h2>
+      <p>標準形式の判定は <strong>主要4エンジン（Cesium・MapLibre・OpenLayers・Leaflet）</strong> で行います。このページの形式はその4エンジンの一部でしか描画できないもので、未対応エンジンではレイヤ行は一覧に残りますがグレーアウトされ描画されません（情報タブに警告が出ます）。複数エンジンで使い回すプロジェクトでは <a href="data.html">データ形式（標準）</a> の形式を選んでください。</p>
+
+      <h3>エンジン別対応マトリクス</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>行タイプ</th>
+      <th>内容</th>
+      <th>Cesium</th>
+      <th>MapLibre</th>
+      <th>OpenLayers</th>
+      <th>Leaflet</th>
+      <th>GSI Maps*</th>
+      <th>Navara*</th>
+      <th>分類</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><code>xyz:</code> / <code>tile:</code> / <code>base:</code> / <code>wms:</code> / <code>wmts:</code></td>
+      <td>ラスタタイル</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td><strong>標準</strong></td>
+      </tr>
+      <tr>
+      <td>ベクター全般（<code>geojson:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>/<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>csv:</code>/<code>kml:</code>/<code>gpx:</code>/<code>wfs:</code>/<code>shp:</code> 等）</td>
+      <td>GeoJSON 正規化→ベクター描画</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td><strong>標準</strong></td>
+      </tr>
+      <tr>
+      <td><code>3dtiles:</code></td>
+      <td>3D Tiles / 点群</td>
+      <td>○ ネイティブ</td>
+      <td>○ deck.gl</td>
+      <td>○ deck.gl</td>
+      <td>○ deck.gl</td>
+      <td>×</td>
+      <td>○ ネイティブ</td>
+      <td><strong>標準</strong></td>
+      </tr>
+      <tr>
+      <td><code>image:</code></td>
+      <td>ジオリファレンス画像</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>○</td>
+      <td>×</td>
+      <td>×</td>
+      <td><strong>標準</strong></td>
+      </tr>
+      <tr>
+      <td><code>mvt:</code></td>
+      <td>ベクトルタイル</td>
+      <td>△ ラスタライズ</td>
+      <td>○ ネイティブ</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>○ ネイティブ</td>
+      <td>オプション</td>
+      </tr>
+      <tr>
+      <td><code>pmtiles:</code></td>
+      <td>単一ファイル・ベクトルタイル</td>
+      <td>△ ラスタライズ</td>
+      <td>○ ネイティブ</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>オプション</td>
+      </tr>
+      <tr>
+      <td><code>model:</code></td>
+      <td>GLB / glTF モデル</td>
+      <td>○</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>オプション</td>
+      </tr>
+      <tr>
+      <td><code>geotiff:</code> / <code>cog:</code> / <code>tiff:</code></td>
+      <td>GeoTIFF / COG ラスタ</td>
+      <td>○</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>オプション</td>
+      </tr>
+      <tr>
+      <td><code>terrain:</code></td>
+      <td>地形（DEM）指定</td>
+      <td>○</td>
+      <td>△ 誇張のみ</td>
+      <td>×</td>
+      <td>×</td>
+      <td>×</td>
+      <td>△ 誇張・陰影・フラット</td>
+      <td>オプション</td>
+      </tr>
+      </tbody>
+      </table>
+      <p><small>○＝ネイティブまたは同等の描画経路　△＝代替経路または一部オプションのみ　×＝未対応（行は残るがグレーアウト）。*GSI Maps・Navara は試験段階のエンジンのため標準/オプションの判定対象外（参考列）。標準形式の詳細は <a href="data.html">データ形式（標準）</a> 側。</small></p>
+
+      <h3>形式カード</h3>
+      <h4>ネイティブ対応（対応エンジン限定）</h4>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🧩 MVT / PMTiles <span class="badge" style="background:#fd7e14;">ネイティブ: MapLibre</span></h3>
+          <p><code>mvt:</code>/<code>pmtiles:</code> で指定するベクトルタイル。ネイティブは <strong>MapLibre</strong>（両形式・<code>pmtiles://</code> プロトコル・全速）で、試験エンジンの Navara も <code>mvt:</code> のみネイティブ対応。<strong>Cesium は変換・低速経路</strong>（タイルをデコード→canvas ラスタライズして imagery として重ねる）のため、表示は可能だがオーバーズームのシャープさ・属性取得・ベクター検索の利点は失われる。<code>layers=</code> でソースレイヤ指定。OpenLayers/Leaflet は未対応</p>
+        </div>
+        <div class="feature-card">
+          <h3>🗿 GLB / glTF モデル <span class="badge" style="background:#fd7e14;">ネイティブ: Cesium のみ</span></h3>
+          <p><code>model:</code> で単体の 3D モデルを配置。スケール・最小ピクセルサイズ・<code>modelopts=</code>（マテリアル・ノード変換等）を指定可能。対応は Cesium のみ</p>
+        </div>
+        <div class="feature-card">
+          <h3>⛰️ 地形（<code>terrain:</code>） <span class="badge" style="background:#fd7e14;">ネイティブ: Cesium 中心</span></h3>
+          <p><code>terrain:</code> 行で地形を制御（<code>url=</code> 任意 CesiumTerrainProvider・<code>exaggeration=</code> 垂直誇張・<code>shading=</code> 陰影・<code>generator=flat</code> フラット地形）。Cesium が全オプションに対応。MapLibre は誇張のみ（raster-dem テレイン）、Navara は誇張・陰影・フラットを反映。2D エンジン（OpenLayers/Leaflet/GSI Maps）では無効</p>
+        </div>
+      </div>
+      <h4>変換・代替経路（低速寄り）</h4>
+      <div class="features">
+        <div class="feature-card">
+          <h3>🌈 GeoTIFF / COG <span class="badge" style="background:#fd7e14;">変換: Cesium のみ</span></h3>
+          <p><code>geotiff:</code> / <code>cog:</code> / <code>tiff:</code>（または <code>.tif/.tiff</code> ファイルの直接読み込み）でブラウザ内デコードしてラスタ表示。タイルモードと地物ドレープモードに対応。<strong>ドローン測量等の GeoTIFF/COG オルソ画像</strong>はこの経路（タイル化済みオルソは標準の <code>xyz:</code>、単一画像は <code>image:</code> を推奨）。対応は Cesium のみ</p>
+        </div>
+      </div>
+
+      <h2>3D・エンジン別形式の一覧</h2>
+      <h3>直接描画可能なデータ形式（エンジン別）</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>分類</th>
+      <th>形式</th>
+      <th>描画方法</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>3D モデル</td>
+      <td>GLB / glTF 2.0</td>
+      <td><code>model:</code> → <code>CesiumJS Model</code> / Three.js
+      <code>GLTFLoader</code></td>
+      <td>建機・構造物。<code>model:</code> 行は Cesium のみ</td>
+      </tr>
+      <tr>
+      <td>3D タイル</td>
+      <td>3D Tiles 1.1 (GLB 内包)</td>
+      <td><code>3dtiles:</code> → <code>CesiumJS
+      Cesium3DTileset</code> / deck.gl <code>Tile3DLayer</code></td>
+      <td>PLATEAU・Google Photorealistic 等。LOD・ストリーミング対応。<strong>標準形式</strong>（4エンジン対応・GSI Maps のみ未対応）</td>
+      </tr>
+      <tr>
+      <td>点群</td>
+      <td>3D Tiles 点群 (pnts / 1.1 glTF)</td>
+      <td><code>Cesium3DTileset</code> / Three.js
+      <code>Points</code></td>
+      <td>大規模点群向け。LAS/LAZ・EPT は変換が必要</td>
+      </tr>
+      <tr>
+      <td>ベクトルタイル</td>
+      <td>MVT / PMTiles</td>
+      <td>MapLibre ネイティブ / Navara(mvt) / Cesium ラスタライズ</td>
+      <td>数十万地物級の大規模データ向け。詳細は <a href="performance.html">描画性能とデータ形式方針</a></td>
+      </tr>
+      <tr>
+      <td>画像オーバーレイ</td>
+      <td>PNG / JPEG 等 + 座標指定</td>
+      <td><code>image:</code> → bbox=/corners= で地図上へ配置</td>
+      <td><strong>標準形式</strong>（4エンジン対応・GSI Maps/Navara は未対応）</td>
+      </tr>
+      <tr>
+      <td>ラスタ</td>
+      <td>GeoTIFF / COG</td>
+      <td><code>geotiff:</code> / <code>cog:</code> / <code>tiff:</code></td>
+      <td>Cesium のみ</td>
+      </tr>
+      <tr>
+      <td>3DGS</td>
+      <td>PLY / SPZ / .splat / .ksplat / .sog</td>
+      <td>Three.js 系専用レンダラー</td>
+      <td><code>gaussian-splats-3d</code> 等。CesiumJS
+      とカメラ同期（オーバーレイ canvas）。.kasc 行タイプとしては未実装</td>
+      </tr>
+      <tr>
+      <td>DEM / 地形</td>
+      <td>標高PNG (XYZ) / Cesium Terrain</td>
+      <td><code>CesiumJS TerrainProvider</code> / <code>terrain:</code> 行</td>
+      <td>地理院標高PNG は独自デコーダー
+      （<code>GsiDemTerrainProvider</code>）実装済み。MapLibre/Navara は誇張等の一部のみ</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3>パイプライン（変換）が必要なデータ形式</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>分類</th>
+      <th>形式</th>
+      <th>変換先</th>
+      <th>備考</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>点群</td>
+      <td>PLY / LAS / LAZ</td>
+      <td>EPT / 3D Tiles / PointCloud バッファ</td>
+      <td>ブラウザ内 or 事前変換</td>
+      </tr>
+      <tr>
+      <td>DEM / 地形</td>
+      <td>GeoTIFF / CSV 等</td>
+      <td>標高PNG / GLB / 3D Tiles</td>
+      <td>Web Worker またはサーバー側で変換</td>
+      </tr>
+      </tbody>
+      </table>
+      <h2>CesiumJS と Three.js の担当分け</h2>
+      <table>
+      <thead>
+      <tr>
+      <th>データ</th>
+      <th>主担当エンジン</th>
+      <th>補完エンジン</th>
+      <th>用途</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>2D ベクトル (GeoJSON / GeoParquet / FlatGeobuf)</td>
+      <td><strong>CesiumJS</strong>
+      (<code>GeoJsonDataSource</code> /
+      <code>GeoJsonPrimitive</code>)</td>
+      <td><code>duckdb:</code> / <code>sql:</code>（SQL 絞り込み）</td>
+      <td>図面・境界・大容量 2D</td>
+      </tr>
+      <tr>
+      <td>2D タイル (XYZ / WMTS)</td>
+      <td><strong>CesiumJS</strong> (<code>ImageryLayer</code>)</td>
+      <td>–</td>
+      <td>広域地図・航空写真（地形ドレープ可）</td>
+      </tr>
+      <tr>
+      <td>GLB / 3D Tiles</td>
+      <td><strong>CesiumJS</strong> (<code>Model</code> /
+      <code>Cesium3DTileset</code>)</td>
+      <td><strong>Three.js</strong> (<code>GLTFLoader</code>)</td>
+      <td>建機・構造物・都市モデル</td>
+      </tr>
+      <tr>
+      <td>点群 (PLY / LAS / EPT)</td>
+      <td><strong>CesiumJS</strong> (<code>Cesium3DTileset</code>
+      pnts)</td>
+      <td><strong>Three.js</strong> (<code>Points</code> / Potree)</td>
+      <td>測量・LiDAR 点群</td>
+      </tr>
+      <tr>
+      <td>3DGS (PLY / SPZ / Splat)</td>
+      <td><strong>Three.js</strong> 専用レンダラー</td>
+      <td><strong>CesiumJS</strong> (カメラ同期)</td>
+      <td>写真測量・ニューラル表現</td>
+      </tr>
+      <tr>
+      <td>管理データ (GPKG / FGDB)</td>
+      <td>GPKG は <code>gpkg:</code>（sql.js Web Worker）で直接読込、
+      FGDB は変換</td>
+      <td>–</td>
+      <td>正データ保持・変換元</td>
+      </tr>
+      </tbody>
+      </table>
+      <ul>
+      <li><strong>CesiumJS</strong>：グローブ・地形・3D
+      Tiles・ベクター・イメージリを同一 Scene / 深度バッファで描画</li>
+      <li><strong>Three.js</strong>：点群・3DGS・高度な GLB
+      表現を補完。別 canvas を重ね、<code>postRender</code> で
+      CesiumJS のカメラ行列を同期させる</li>
+      </ul>
+      <h2>3D データ</h2>
+      <h3>3D データ整理</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>用途・データ領域</th>
+      <th>最適フォーマット</th>
+      <th>評価</th>
+      <th>強み</th>
+      <th>注意点</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td>単体オブジェクト（建機・構造物）</td>
+      <td><strong>GLB (glTF 2.0)</strong></td>
+      <td>🏆 最推奨</td>
+      <td>3D モデルの「3D 版 JPEG/PNG」。1 ファイルで完結</td>
+      <td>–</td>
+      </tr>
+      <tr>
+      <td>広域・大容量（都市モデル）</td>
+      <td><strong>3D Tiles 1.1（GLB 内包）</strong></td>
+      <td>🏆 最推奨</td>
+      <td>タイル化・LOD 制御でストリーミング</td>
+      <td>1.1 から glTF 2.0 / GLB ペイロードを直接利用可能</td>
+      </tr>
+      <tr>
+      <td>点群（測量・LiDAR 生データ）</td>
+      <td><strong>LAS/LAZ / PLY / EPT</strong></td>
+      <td>🥈</td>
+      <td>測量標準。EPT は大規模点群を階層タイル化</td>
+      <td>そのままの描画には変換・ローダーが必要</td>
+      </tr>
+      <tr>
+      <td>画像からのニューラル表現</td>
+      <td><strong>3DGS (PLY / SPZ / Splat)</strong></td>
+      <td>🥈</td>
+      <td>写真起点の高品質ビジュアル。SPZ は PLY 比 10x 圧縮</td>
+      <td>PLY は未圧縮で大容量。描画には専用レンダラーが必要</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3>KASUGAI Canvas への読み込み方</h3>
+      <table>
+      <thead>
+      <tr>
+      <th>データ</th>
+      <th>描画エンジン</th>
+      <th>ロード方法</th>
+      </tr>
+      </thead>
+      <tbody>
+      <tr>
+      <td><strong>GLB / 3D Tiles</strong></td>
+      <td><code>CesiumJS</code> (<code>Model</code> /
+      <code>Cesium3DTileset</code>) または <code>Three.js</code>
+      (<code>GLTFLoader</code> / <code>3DTilesRenderer</code>)</td>
+      <td><code>3dtiles:</code> 行で URL 指定。LOD・ストリーミングは
+      CesiumJS が管理</td>
+      </tr>
+      <tr>
+      <td><strong>点群 (PLY / LAS)</strong></td>
+      <td><code>CesiumJS</code> (<code>Cesium3DTileset</code>
+      pnts) または
+      <code>Three.js</code> (<code>Points</code> / Potree)</td>
+      <td>PLY/LAZ → 3D Tiles 変換 → <code>3dtiles:</code> で読み込み</td>
+      </tr>
+      <tr>
+      <td><strong>3DGS (PLY / SPZ)</strong></td>
+      <td><strong>Three.js</strong> 専用レンダラー</td>
+      <td><code>gaussian-splats-3d</code> / SuperSplat 等で読み込み</td>
+      </tr>
+      </tbody>
+      </table>
+      <h3>点群の扱い</h3>
+      <ul>
+      <li><strong>LAS/LAZ</strong>：測量・LiDAR での標準。LAZ
+      は圧縮形式</li>
+      <li><strong>PLY</strong>：簡易入出力用。点位置 + RGB
+      のみの軽量点群も可能</li>
+      <li><strong>EPT (Entwine Point Tile)</strong> / <strong>Potree
+      形式</strong>：ブラウザ向け大規模点群配信。八分木階層で LOD
+      制御</li>
+      <li>大量点群は <strong>EPT</strong> や <strong>3D Tiles 点群（pnts
+      / 1.1 glTF）</strong> に変換して <code>Cesium3DTileset</code> /
+      <code>Three.js</code> で描画すると安定</li>
+      </ul>
+      <h3>3D Gaussian Splatting（3DGS）</h3>
+      <ul>
+      <li>3D
+      空間上の多数のガウス分布でシーンを表現するニューラル描画手法</li>
+      <li>主要フォーマット
+      <ul>
+      <li><strong>PLY</strong>：学習済みモデルのデファクト標準。各ガウスに位置・スケール・回転・不透明度・球面調和係数を保持</li>
+      <li><strong>SPZ</strong>：Niantic 公開の圧縮形式。PLY と比べて約
+      10 倍小さく、Web 配信に適している</li>
+      <li><strong>.splat / .ksplat /
+      .sog</strong>：各ビューアー向けの圧縮・最適化形式</li>
+      </ul></li>
+      <li>KASUGAI Canvas では <strong>Three.js</strong>
+      側で専用レンダラーを使い、オーバーレイ canvas +
+      <code>postRender</code> で CesiumJS とカメラ同期を行う</li>
+      </ul>
+      <h2>地形（DEM）の扱い</h2>
+      <ul>
+      <li><strong>CesiumJS <code>TerrainProvider</code></strong>：KASUGAI
+      Canvas は独自実装の
+      <code>GsiDemTerrainProvider</code>（<code>HeightmapTerrainData</code>
+      を返す）で地理院標高PNG (XYZ)
+      を直接地形化する。国土地理院標高タイルは RGB →
+      標高値（x = 2^16R + 2^8G + B、u は標高分解能
+      0.01m）かつ符号付き・条件分岐形式（<code>x &lt; 2^23</code>
+      のとき <code>h = xu</code>、<code>x = 2^23</code> のとき
+      NA、<code>x &gt; 2^23</code> のとき <code>h = (x - 2^24)u</code>）だが、この変換は
+      <code>gsiDecodeHeight</code> として実装済み。表示 → 地形 タブで
+      Re:Earth Terrain（楕円体高 / 標高）・地理院 5m+10m・地理院 1m
+      を切替可能</li>
+      <li><strong>Three.js</strong>：DEM 画像から
+      <code>PlaneGeometry</code> + displacement map / 頂点シェーダーで
+      terrain メッシュを生成する代替経路（オーバーレイ canvas 上）</li>
+      <li><strong>PLATEAU 3D Tiles</strong>：3D
+      都市モデル（建物・地形等）を LOD 付きで配信しているので
+      <code>3dtiles:</code> 行 → <code>Cesium3DTileset</code>
+      でそのまま表示</li>
+      <li>生の DEM（GeoTIFF / CSV 等）は、Web Worker またはサーバー側で
+      <strong>標高PNG / GLB / 3D Tiles</strong> に変換してから描画</li>
+      </ul>
+      <p><a href="data.html">← データ形式（標準）へ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>

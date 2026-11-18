@@ -19,7 +19,7 @@ for (const eng of ["cesium", "maplibre", "openlayers", "leaflet"]) {
       } else window.kasugaiApi?.flyTo({ latitude: 35.678, longitude: 139.793, zoom: z, instant: true });
       await new Promise(r => setTimeout(r, 1800));
       const m = await import("/shared/qml-style.js");
-      const qml = await (await fetch("/projects/scale_test/DATA/pts_scaled.qml")).text();
+      const qml = await (await fetch("/projects/scale_test/canvas_data/pts_scaled.qml")).text();
       const c = m.compileQmlStyle(qml);
       const spec = c.evaluate({ name: "両国" });
       return { scale: Math.round(m.evalQgisExpression("@map_scale")), sizePx: spec?.markers?.[0]?.sizePx ?? null };

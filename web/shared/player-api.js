@@ -712,7 +712,7 @@ export function createPlayerApi(hooks) {
       return hooks.getEntryGeoJson ? hooks.getEntryGeoJson(e) : (e.item._geojson || null);
     },
     // ogrsql: 行と同じ実行経路で OGR SQL SELECT を実行し GeoJSON を返す
-    // (AI ツール queryOgrSql 用。FROM は読み込み済みレイヤー名/DATA パス。
+    // (AI ツール queryOgrSql 用。FROM は読み込み済みレイヤー名/canvas_data パス。
     // 主経路は JS 実装で、解決不能時のみ QGIS Live の GDAL へフォールバック)
     async runOgrSql(query) {
       const resolveLayer = async name => {
@@ -847,14 +847,16 @@ export function createPlayerApi(hooks) {
 
     showReport(args = {}) { showReportModal(args); },
 
-    // ---- DATA/ ファイル（fileWrite 能力 = ローカルサーバー版のみ）----
+    // ---- canvas_data/(旧 canvas_data/)ファイル（fileWrite 能力 = ローカルサーバー版のみ）----
     async listDataFiles() {
       if (!hasBackendFeature("fileWrite")) return [];
       const project = hooks.getProjectId() || "default";
       const response = await fetch(backendUrl(`/api/files?project=${encodeURIComponent(project)}`), { cache: "no-store" });
       if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
       const data = await response.json().catch(() => ({}));
-      return Array.isArray(data?.files) ? data.files : [];
+      const files = Array.isArray(data?.files) ? data.files : [];
+      files.dataDir = data?.dataDir || "canvas_data";
+      return files;
     },
     async saveDataFile(name, content) {
       if (!hasBackendFeature("fileWrite")) return { ok: false, error: "fileWrite はローカルサーバー版のみで利用できます" };
@@ -863,7 +865,8 @@ export function createPlayerApi(hooks) {
       if (!rel) return { ok: false, error: "name is required" };
       const response = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
       if (!response.ok) return { ok: false, error: await response.text() || `HTTP ${response.status}` };
-      return { ok: true, name };
+      const data = await response.json().catch(() => ({}));
+      return { ok: true, name, dir: data?.dataDir || "canvas_data" };
     },
     async deleteDataFile(name) {
       if (!hasBackendFeature("fileWrite")) return { ok: false, error: "fileWrite はローカルサーバー版のみで利用できます" };

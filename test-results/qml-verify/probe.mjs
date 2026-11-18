@@ -6,7 +6,7 @@ await page.goto("http://127.0.0.1:8510/maplibre/?project=qml-verify", { waitUnti
 await page.waitForTimeout(6000);
 const out = await page.evaluate(async () => {
   const m = await import("/shared/qml-2d.js");
-  const compiled = await m.loadCompiledQml("DATA/dash_line.qml", "http://127.0.0.1:8510/projects/qml-verify/");
+  const compiled = await m.loadCompiledQml("canvas_data/dash_line.qml", "http://127.0.0.1:8510/projects/qml-verify/");
   const spec = compiled.evaluate({});
   const gj = { type:"FeatureCollection", features:[{type:"Feature",properties:{},geometry:{type:"LineString",coordinates:[[139.5,35.5],[139.9,35.5]]}}] };
   const applied = m.maplibreApplyQml(gj, compiled);

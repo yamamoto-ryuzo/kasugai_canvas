@@ -37,7 +37,7 @@
         ハッシュ生成コマンド：
           python -c "import base64,secrets,hashlib; s=secrets.token_bytes(16); h=hashlib.pbkdf2_hmac('sha256',b'USER:PASS',s,100000,32); print('SALT:',base64.b64encode(s).decode()); print('HASH:',base64.b64encode(h).decode())"
 
-        この方式では HTML/JS/DATA/ 等のファイルを保護できません。
+        この方式では HTML/JS/canvas_data/ 等のファイルを保護できません。
 
     3 = cloudflare（Cloudflare 認証：Pages）
         Cloudflare Pages + Pages Functions を使ったサーバーレス ID/PASS 認証。
@@ -68,21 +68,21 @@
           r2:// を付けないデータは従来どおり静的配信です（部分秘匿）。
             wrangler r2 bucket create kasugai-data
             Pages → Settings → Bindings → Functions → R2 で KASUGAI_DATA をバインド
-            wrangler r2 object put kasugai-data/secret/area.geojson --path DATA/area.geojson
+            wrangler r2 object put kasugai-data/secret/area.geojson --path canvas_data/area.geojson
 
         .kasc は KV からのみ読み込みます。KV に無いプロジェクトは
         静的ファイルも内蔵デフォルトも使わず空で起動します。
         静的配信の .kasc は直接URLで取得可能なため、
         KV に登録した .kasc はデプロイから削除してください。
         これは「起動制御 + .kasc 設定情報の保護」であり、
-        HTML/JS/CSS/DATA/ 等の静的ファイルまでは保護しません。
+        HTML/JS/CSS/canvas_data/ 等の静的ファイルまでは保護しません。
 
         詳細は auth/pages.html を参照。
 
     4 = cloudflare-workers（cloudflare：Workers・全ファイルゲート）
         3 の機能に加えて、静的ファイル自体も含めて全リクエストを
         Worker が認証ゲートします（run_worker_first）。
-        未認証では app.js や DATA/ も取得できません。
+        未認証では app.js や canvas_data/ も取得できません。
 
         デプロイは Pages ではなく Workers（workers/ ディレクトリ）：
           cd workers

@@ -1725,7 +1725,7 @@ const PORTAL_T = {
 const t = (key, vars) => String(PORTAL_T[key] ?? key)
   .replace(/\{(\w+)\}/g, (m, n) => (vars?.[n] != null ? String(vars[n]) : m));
 
-// DATA/ 等の相対参照 → プロジェクト基準 URL へ解決(Cesium 版 resolveProjectUrl
+// canvas_data/ 等の相対参照 → プロジェクト基準 URL へ解決(Cesium 版 resolveProjectUrl
 // の Navara 版。cloud: 等の特殊スキームは resolveKascUrl 側が処理する)
 const resolveProjectUrl = url => resolveKascUrl(url, lastBaseUrl);
 
@@ -1982,7 +1982,7 @@ async function applyEntryQueryFilter(entry, value) {
   }
 }
 
-// ---- DATA/ へのファイル保存（ローカルサーバー / File System Access API） ----
+// ---- canvas_data/ へのファイル保存（ローカルサーバー / File System Access API） ----
 let dataDirHandle = null;
 const dataDirName = $("#inspector-data-dir-name");
 function updateDataDirLabel() {
@@ -2007,7 +2007,8 @@ async function saveToDataDir(name, content) {
     const rel = String(name).split("/").filter(Boolean).map(encodeURIComponent).join("/");
     const res = await fetch(backendUrl(`/api/files/${encodeURIComponent(project)}/${rel}`), { method: "PUT", body: content });
     if (!res.ok) throw new Error(await res.text() || `HTTP ${res.status}`);
-    return;
+    const data = await res.json().catch(() => ({}));
+    return data?.dataDir || "canvas_data";
   }
   if (!window.showDirectoryPicker) throw new Error("ファイル保存にはローカルサーバー版または対応ブラウザが必要です");
   if (!dataDirHandle) {
@@ -2018,9 +2019,10 @@ async function saveToDataDir(name, content) {
   const w = await fh.createWritable();
   await w.write(content);
   await w.close();
+  return dataDirHandle?.name || "canvas_data";
 }
 
-// ファイルを DATA/ へ保存し、拡張子に応じた .kasc 行を設定へ追記して即時適用する
+// ファイルを canvas_data/ へ保存し、拡張子に応じた .kasc 行を設定へ追記して即時適用する
 {
   const addFileInput = $("#inspector-add-file");
   $("#inspector-add-file-button")?.addEventListener("click", () => addFileInput?.click());
@@ -2030,16 +2032,16 @@ async function saveToDataDir(name, content) {
     let appended = 0;
     for (const file of files) {
       try {
-        await saveToDataDir(file.name, file);
+        const dir = (await saveToDataDir(file.name, file)) || "canvas_data";
         const ext = file.name.toLowerCase().split(".").pop() || "";
         const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
-          panel.inspector.value = panel.inspector.value.replace(/\s*$/, "") + `\n${type}:${title} | DATA/${file.name}\n`;
+          panel.inspector.value = panel.inspector.value.replace(/\s*$/, "") + `\n${type}:${title} | ${dir}/${file.name}\n`;
           appended++;
-          setInspectorStatus(`${file.name} を DATA/ へ保存し設定に追記しました`);
+          setInspectorStatus(`${file.name} を ${dir}/ へ保存し設定に追記しました`);
         } else {
-          setInspectorStatus(`${file.name} を DATA/ へ保存しました（未対応形式のため行は未追記）`);
+          setInspectorStatus(`${file.name} を ${dir}/ へ保存しました（未対応形式のため行は未追記）`);
         }
       } catch (e) {
         if (e?.name === "AbortError") continue;

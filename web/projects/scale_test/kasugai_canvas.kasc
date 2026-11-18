@@ -1,5 +1,5 @@
 # QML スケール連動の検証用プロジェクト（背景なし・ズーム変化で表示が変わるか）
 base: 背景なし | none
 cam:QGIS|35.682|139.762|h=3000|p=-90
-geojson: 縮尺ポイント | DATA/pts.geojson | on | style=DATA/pts_scaled.qml
-geojson: 縮尺ポリゴン | DATA/poly.geojson | on | style=DATA/poly_scaled.qml
+geojson: 縮尺ポイント | canvas_data/pts.geojson | on | style=canvas_data/pts_scaled.qml
+geojson: 縮尺ポリゴン | canvas_data/poly.geojson | on | style=canvas_data/poly_scaled.qml

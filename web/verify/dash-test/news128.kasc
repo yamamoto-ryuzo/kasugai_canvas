@@ -1,6 +1,6 @@
 title: お知らせフィード検証
 portal:on | title=ニューステスト | open=manual
-geojson: 事業箇所 | DATA/jigyo.geojson | on
+geojson: 事業箇所 | canvas_data/jigyo.geojson | on
 view: 全体 | desc=全地物を表示 | *
-news:DATA/news128.json | limit=5
-news:DATA/news128.md | title=お知らせ(md)
+news:canvas_data/news128.json | limit=5
+news:canvas_data/news128.md | title=お知らせ(md)

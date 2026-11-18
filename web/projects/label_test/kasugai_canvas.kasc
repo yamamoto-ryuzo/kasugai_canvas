@@ -1,5 +1,8 @@
 # QML ラベル再現の検証用プロジェクト（base=none で背景なし・ラベルのみ浮き出す）
+# *_nf.geojson は同形状を +0.05°E,+0.03°N へずらしたもの（同一位置だと obstacle/declutter で相殺される）
 base: 背景なし | none
 cam:QGIS|35.682|139.762|h=3500|p=-90
-geojson: ポイントラベル | DATA/pts.geojson | on | style=DATA/pts.qml
-geojson: ポリゴンラベル | DATA/poly.geojson | on | style=DATA/poly.qml
+geojson: ポイントラベル(中空ハロー) | canvas_data/pts_nf.geojson | on | style=canvas_data/pts_nf.qml
+geojson: ポリゴンラベル(中空ハロー) | canvas_data/poly_nf.geojson | on | style=canvas_data/poly_nf.qml
+geojson: ポイントラベル | canvas_data/pts.geojson | on | style=canvas_data/pts.qml
+geojson: ポリゴンラベル | canvas_data/poly.geojson | on | style=canvas_data/poly.qml

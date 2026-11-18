@@ -36,7 +36,7 @@
       </div>
 
       <h3 id="qgis"><a href="../features/v7.html">V7: QGIS連携</a></h3>
-      <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現する</strong>のが今後のメインテーマです。QGIS プラグイン <code>geo_webview</code> がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + DATA/</code> としてエクスポートし、起動中の Canvas へ登録・切替します。<a href="../features/v7.html">詳細 →</a>（実装済みの再現範囲と未対応課題の一覧は <a href="../qgis.html">QGIS・GDAL連携</a>）</p>
+      <p><strong>QGIS で作成したプロジェクトを、そのまま Canvas で再現する</strong>のが今後のメインテーマです。QGIS プラグイン <code>geo_webview</code> がプロジェクトのレイヤーツリー・スタイル（.qml）・表示設定を <code>.kasc + canvas_data/</code> としてエクスポートし、起動中の Canvas へ登録・切替します。<a href="../features/v7.html">詳細 →</a>（実装済みの再現範囲と未対応課題の一覧は <a href="../qgis.html">QGIS・GDAL連携</a>）</p>
       <div class="features">
         <div class="feature-card">
           <h3>📄 .kasc 行変換</h3>
@@ -98,7 +98,7 @@
         </div>
         <div class="feature-card">
           <h3>💾 ローカルファイル保存</h3>
-          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>DATA/</code> への保存・一覧・削除が可能</p>
+          <p>ローカルサーバー版の <code>/api/files</code> と File System Access API により <code>canvas_data/</code> への保存・一覧・削除が可能</p>
         </div>
         <div class="feature-card">
           <h3>📦 納品用ローカル化</h3>

@@ -25,6 +25,13 @@
 - Cesium: `kml:`/`kmz:`/`gpx:`/`czml:` 行をネイティブ DataSource で無変換読み込み（プレーン行のみ・`style=`/`heat=`/`where=`/`render=` 指定時は従来の GeoJSON 経路）。KML の &lt;Style&gt;/バルーン・CZML の時系列アニメーション（viewer.clock を ds.clock へ同期）を保持。epoch 未指定の時刻付き CZML は既定 epoch を補完。属性一覧・検索索引用の `item.geojsonSource` は shared 変換で併存し、ネイティブ読み込み失敗時は GeoJSON 経路へフォールバック
 - ドキュメント: `docs/use/1-10-マルチエンジン.html` にエンジン別対応データ形式マトリクスを追加（●＝無変換ネイティブ・〇＝GeoJSON 正規化・△＝変換コスト大・×＝未対応 の段階表示。deck.gl は 3dtiles: 行と 3D Tiles ドレープコピー専用である旨を明記）
 - maplibre-gl 6.18.0 → 6.19.0・leaflet.heat 0.2.0 → 1.0.1 へ更新（`leaflet-heat-global.js` ビルド採用。実ロード検証済み）
+- ドキュメント: `docs/data-recommend.html` の概要に「WEBVIEW連携」を明示 — geo_webview のベクター出力形式スイッチ（「ネイティブ（そのまま参照）」= `native`・既定 / 「推奨（FlatGeobuf → canvas_data/）」= `recommended`）で出力されるデータの扱い（SPEC.md「ベクター出力形式（native / recommended）」「.kasc 行の生成規則」）へのリンクと、スイッチ→`.kasc`+`canvas_data/`→Canvas 描画の流れの mermaid 図を追加
+- **プロジェクトデータフォルダ名を `DATA/` → `canvas_data/` に統一** — geo_webview 出力先（旧 `link_files` 分岐の `DATA/`/`canvas_data/` 2系統）と Canvas 自身の `projects/<id>/DATA/` を `canvas_data/` に一本化
+  - サーバー: `/api/files`（一覧・書き込み・削除）の基準を `projects/<id>/canvas_data/` へ変更し、レスポンスに `dataDir`（実フォルダ名）を追加。`canvas_data/` が無く `DATA/` のみの旧プロジェクトは `DATA/` を継続利用（後方互換）
+  - 納品用ローカル化（`POST /api/cloud/localize`）: 出力スコープを `_local/canvas_data/`（共有・`../canvas_data` 参照）/ `_local/<dir>/canvas_data/`（専用・`canvas_data` 参照）に変更。複製元が旧 `DATA/` 構成でも `DATA/x`・`../DATA/x` 参照を `canvas_data/local/x`・`../canvas_data/local/x` へ集約して書き換え、新 `canvas_data/` 参照も同様に扱う
+  - web: 裸レイヤー名解決（`vector-load.js`/`kasc_loader.js`/Cesium `resolveOgrSqlFromRef`）は `canvas_data/` 候補を優先し `DATA/` もフォールバック。SQL リテラル・`.kasc` 参照分類（`absolutizeKascRefs`・`resolveProjectSql`）は `canvas_data/` と旧 `DATA/` の両名を受理。`saveDataFile`/`saveToDataDir`/`listDataFiles` は実フォルダ名を返し、`fly_geojson:` 行・ファイル追加の参照生成はそれを使う
+  - `web/projects/*/DATA` フィクスチャ・同梱 .kasc 参照・`test-results/qml-verify` を `canvas_data/` へリネーム。i18n(8言語)・各エンジン index.html の UI 文言・docs/・AGENTS.md を同期
+  - geo_webview 側は出力データフォルダを常時 `canvas_data/` に統一（SPEC.md・docs/・i18n・スキル・verify 資産も同期済み）
 
 ## [7.1.0] - 2026-11-15
 

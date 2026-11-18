@@ -1216,7 +1216,10 @@
         var looksPath = /[/\]/.test(key) || /^[a-z][a-z0-9+.-]*:/i.test(key)
           || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|csv|tsv)$/i.test(key);
         var candidates = looksPath ? [ref.name]
-          : ['DATA/' + ref.name + '.geojson', 'DATA/' + ref.name + '.fgb',
+          : ['canvas_data/' + ref.name + '.geojson', 'canvas_data/' + ref.name + '.fgb',
+             'canvas_data/' + ref.name + '.parquet', 'canvas_data/' + ref.name + '.gpkg',
+             'canvas_data/' + ref.name + '.csv',
+             'DATA/' + ref.name + '.geojson', 'DATA/' + ref.name + '.fgb',
              'DATA/' + ref.name + '.parquet', 'DATA/' + ref.name + '.gpkg',
              'DATA/' + ref.name + '.csv', ref.name];
         var lastErr = null;

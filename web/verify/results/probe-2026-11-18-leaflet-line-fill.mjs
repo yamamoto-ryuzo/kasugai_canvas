@@ -57,22 +57,22 @@ const KASC = [
   "title: leaflet line-fill probe",
   "base: ベースマップなし | none",
   "cam: 初期 | 35.65 | 139.77 | h=9000 | p=-90",
-  "geojson: A-plain-line | DATA/a.geojson",
-  "geojson: B-simplestyle-fill | DATA/b.geojson",
-  "geojson: C-qml-line | DATA/c.geojson | style=DATA/line.qml",
-  "geojson: D-mixed | DATA/d.geojson",
-  "geojson: E-canvas-line | DATA/a.geojson | renderer=canvas",
+  "geojson: A-plain-line | canvas_data/a.geojson",
+  "geojson: B-simplestyle-fill | canvas_data/b.geojson",
+  "geojson: C-qml-line | canvas_data/c.geojson | style=canvas_data/line.qml",
+  "geojson: D-mixed | canvas_data/d.geojson",
+  "geojson: E-canvas-line | canvas_data/a.geojson | renderer=canvas",
 ].join("\n");
 
 const srv = createServer(async (req, res) => {
   const p = decodeURIComponent(new URL(req.url, "http://x").pathname);
   const mem = {
     "/probe/test.kasc": KASC,
-    "/probe/DATA/a.geojson": GEO_A,
-    "/probe/DATA/b.geojson": GEO_B,
-    "/probe/DATA/c.geojson": GEO_C,
-    "/probe/DATA/d.geojson": GEO_D,
-    "/probe/DATA/line.qml": LINE_QML,
+    "/probe/canvas_data/a.geojson": GEO_A,
+    "/probe/canvas_data/b.geojson": GEO_B,
+    "/probe/canvas_data/c.geojson": GEO_C,
+    "/probe/canvas_data/d.geojson": GEO_D,
+    "/probe/canvas_data/line.qml": LINE_QML,
   };
   if (mem[p]) { res.writeHead(200, { "content-type": MIME[extname(p)] || "text/plain" }); res.end(mem[p]); return; }
   try {

@@ -27,7 +27,7 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
-      <p>【WebGIS】ブラウザ WebGIS — 外部ホストの .kasc + DATA/ を CDN エンジンで再生（インストール不要）</p>
+      <p>【WebGIS】ブラウザ WebGIS — 外部ホストの .kasc + canvas_data/ を CDN エンジンで再生（インストール不要）</p>
     </header>
     <main>
       <nav class="form-nav" aria-label="利用形態の切替">
@@ -41,7 +41,7 @@
       <section>
         <h2>1. 概要 — エンジンとデータは分離</h2>
         <p>
-          KASUGAI Canvas は <strong>エンジン（プレイヤー本体）とデータ（.kasc + DATA/）が分離</strong>した設計です。
+          KASUGAI Canvas は <strong>エンジン（プレイヤー本体）とデータ（.kasc + canvas_data/）が分離</strong>した設計です。
           エンジンは CDN（<a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/">kasugai-canvas-web</a>）が配信し、
           データは<strong>任意の静的ホスト</strong>に置くだけで、<code>?kasc=&lt;URL&gt;</code> で再生できます（サーバーレス・インストール不要）。
           CDN はエンジン本体のみを配信し、プロジェクトのカタログは持ちません — 変動するプロジェクト一覧は各データホスト側が持つ設計です。
@@ -51,15 +51,15 @@
 flowchart LR
   QGIS["QGIS + geo_webview<br/>エクスポート"]
   subgraph HOST["データホスト（静的ホスト）"]
-    DATA[".kasc + DATA/<br/>…/&amp;lt;id&amp;gt;/"]
+    CD[".kasc + canvas_data/<br/>…/&amp;lt;id&amp;gt;/"]
     PJ["projects.json【複数指定する場合は必須】<br/>群マニフェスト<br/>→ エンジンの選択肢・一覧に使用"]
   end
   CDN["CDN（kasugai-canvas-web）<br/>GitHub Pages エンジン配信<br/>stable/・unstable/・6エンジン"]
   WEB["ブラウザ WebGIS<br/>?kasc=&amp;lt;.kascのURL&amp;gt;"]
 
-  QGIS --&gt;|"アップロード"| DATA
+  QGIS --&gt;|"アップロード"| CD
   CDN ==&gt;|"エンジンを配信"| WEB
-  DATA -.->|"?kasc= で指定"| WEB
+  CD -.->|"?kasc= で指定"| WEB
         </pre>
 </figure>
         <script type="module">
@@ -84,7 +84,7 @@ flowchart LR
 
       <section>
         <h2>2. 導入・セットアップ — インストール不要、データを置くだけ</h2>
-        <p><strong>ブラウザ WebGIS に「インストール」はありません。</strong>閲覧側は CDN の URL をブラウザで開くだけで動きます。セットアップに相当するのは<strong>データ側（.kasc + DATA/）を静的ホストへ置く作業</strong>で、GitHub Pages など任意の静的ホストを使えます。</p>
+        <p><strong>ブラウザ WebGIS に「インストール」はありません。</strong>閲覧側は CDN の URL をブラウザで開くだけで動きます。セットアップに相当するのは<strong>データ側（.kasc + canvas_data/）を静的ホストへ置く作業</strong>で、GitHub Pages など任意の静的ホストを使えます。</p>
 
         <h3>配置するファイル — 必須3点セット</h3>
         <p>再生に必要な最低限は <strong>.kasc ファイル1つ</strong>、一覧・選択肢に出すには <strong><code>projects.json</code> と <code>&lt;id&gt;/</code> フォルダ</strong>を加えた3点が必須です。</p>
@@ -104,7 +104,7 @@ flowchart LR
                   <div class="ft-row"><code>project.json</code><span class="ft-tag opt">任意</span><span class="ft-note">プロジェクト名の表示に使用</span></div>
                 </li>
                 <li>
-                  <div class="ft-row"><code>DATA/</code><span class="ft-tag cond">条件付き</span><span class="ft-note">相対参照データがある場合のみ</span></div>
+                  <div class="ft-row"><code>canvas_data/</code><span class="ft-tag cond">条件付き</span><span class="ft-note">相対参照データがある場合のみ</span></div>
                 </li>
               </ul>
             </li>
@@ -115,12 +115,12 @@ flowchart LR
           <tr>
             <td><code>&lt;id&gt;/kasugai_canvas.kasc</code></td>
             <td><strong>必須</strong></td>
-            <td><code>?kasc=</code> に渡す URL は <strong>この .kasc ファイルの URL そのもの</strong>。<code>DATA/</code> 等の相対参照はこの URL のフォルダ基準で解決されます。全レイヤーが URL 直参照ならこれだけで動きます。書式の詳細は <a href="use/6-2-インスペクター.html">.kasc 設定仕様</a> を参照</td>
+            <td><code>?kasc=</code> に渡す URL は <strong>この .kasc ファイルの URL そのもの</strong>。<code>canvas_data/</code> 等の相対参照はこの URL のフォルダ基準で解決されます。全レイヤーが URL 直参照ならこれだけで動きます。書式の詳細は <a href="use/6-2-インスペクター.html">.kasc 設定仕様</a> を参照</td>
           </tr>
           <tr>
-            <td><code>&lt;id&gt;/DATA/</code></td>
+            <td><code>&lt;id&gt;/canvas_data/</code></td>
             <td>条件付き</td>
-            <td>.kasc 内で <code>DATA/...</code> 等の相対参照しているローカルデータがある場合のみ（.kasc と同じフォルダに置く）</td>
+            <td>.kasc 内で <code>canvas_data/...</code> 等の相対参照しているローカルデータがある場合のみ（.kasc と同じフォルダに置く）</td>
           </tr>
           <tr>
             <td><code>&lt;id&gt;/project.json</code></td>
@@ -146,8 +146,8 @@ flowchart LR
             QGIS プラグイン <code>geo_webview</code> の <code>Export</code> 出力をそのまま置きます。<strong>このファイルの URL を CDN エンジンの <code>?kasc=</code> に指定する</strong>のが再生の本体で、これだけ置けば動きます。</li>
           <li><strong><code>&lt;id&gt;/project.json</code>（任意）</strong> —
             表示名を付けたい場合に <code>{"title": "&lt;プロジェクト名&gt;"}</code> と書きます。単独プロジェクトではこの名前が優先され、複数・一覧では <code>projects.json</code> の <code>title</code> が優先されます（無ければ <code>&lt;id&gt;</code>・ファイル名で表示）。</li>
-          <li><strong><code>&lt;id&gt;/DATA/</code>（条件付き）</strong> —
-            .kasc が <code>DATA/...</code> 等の相対参照を持つローカルデータがある場合のみ、.kasc と同じフォルダに置きます。</li>
+          <li><strong><code>&lt;id&gt;/canvas_data/</code>（条件付き）</strong> —
+            .kasc が <code>canvas_data/...</code> 等の相対参照を持つローカルデータがある場合のみ、.kasc と同じフォルダに置きます。</li>
           <li><strong>公開</strong> — 静的ホストへアップロードするだけです（GitHub Pages 等）。</li>
         </ol>
 
@@ -197,7 +197,7 @@ flowchart LR
       <section>
         <h2>4. 注意点・制限</h2>
         <ul>
-          <li><strong>.kasc と DATA/ は同じフォルダに置く</strong> — 相対参照は .kasc のある URL を基準に解決されます。</li>
+          <li><strong>.kasc と canvas_data/ は同じフォルダに置く</strong> — 相対参照は .kasc のある URL を基準に解決されます。</li>
           <li><strong>CORS</strong> — エンジンは別オリジンからデータを fetch するため、ホスト側は <code>Access-Control-Allow-Origin</code> が必要です（GitHub Pages は <code>*</code> が既定でそのまま使えます）。</li>
           <li><strong>スナップショット方式</strong> — .kasc はエクスポート時点の状態です。QGIS 側の編集は再エクスポートで反映してください。</li>
           <li><strong>大きなファイル</strong> — GitHub Pages の1ファイル上限は 100MB です。大容量データはオブジェクトストレージ等を URL 直参照で使い分けてください。</li>

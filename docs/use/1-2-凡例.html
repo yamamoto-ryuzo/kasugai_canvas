@@ -16,14 +16,14 @@
     <main>
       <h2>使い方</h2>
       <h3>🖼️ 凡例表示</h3>
-      <p><code>legend:</code> 行で凡例画像の URL を指定すると Legend タブに一覧表示します。複数行で複数の凡例を登録できます。凡例画像は静的ファイル・外部 URL・ローカル <code>DATA/</code> 内ファイルのいずれも使えます。</p>
+      <p><code>legend:</code> 行で凡例画像の URL を指定すると Legend タブに一覧表示します。複数行で複数の凡例を登録できます。凡例画像は静的ファイル・外部 URL・ローカル <code>canvas_data/</code> 内ファイルのいずれも使えます。</p>
       <pre class="text"><code>legend: 凡例 | https://example.com/legend.png
-legend: 凡例2 | DATA/legend2.png</code></pre>
+legend: 凡例2 | canvas_data/legend2.png</code></pre>
       <p>QGIS スタイル（<code>style=</code> の .qml や GPKG 埋め込みスタイル）が適用されたベクターレイヤーは、QML 由来の凡例スウォッチと条件別の表示切替も凡例タブに表示されます。</p>
       <p>凡例画像の下には「凡例を表示するレイヤ」セレクタも表示されます。凡例を持つベクターレイヤー（QML スタイル適用レイヤー・既定スタイルのベクターレイヤー）をドロップダウンで切り替えると、そのレイヤーの凡例スウォッチ一覧を確認できます。選択中レイヤは表示のたびに保持され、レイヤ一覧でのシンボル表示/非表示の切替もここに反映されます。</p>
 
       <h2>🔗 QGIS 連携（geo_webview）— 高度な設定は QGIS に任せる</h2>
-      <p>凡例・スタイル・フィルタといった<strong>高度な設定は QGIS 側に任せる</strong>のがこの連携の考え方です。QGIS のレイヤースタイル（.qml）・凡例ノードの並び・レイヤーフィルタは、QGIS プラグイン <strong>geo_webview</strong> のエクスポート（<code>.kasc</code>＋<code>DATA/</code>）でそのまま Canvas に再現されます — Canvas 側で同等の設定 UI を持つ必要はありません。</p>
+      <p>凡例・スタイル・フィルタといった<strong>高度な設定は QGIS 側に任せる</strong>のがこの連携の考え方です。QGIS のレイヤースタイル（.qml）・凡例ノードの並び・レイヤーフィルタは、QGIS プラグイン <strong>geo_webview</strong> のエクスポート（<code>.kasc</code>＋<code>canvas_data/</code>）でそのまま Canvas に再現されます — Canvas 側で同等の設定 UI を持つ必要はありません。</p>
       <ul>
         <li><strong>geo_webview（QGIS プラグイン）</strong><br>
           リポジトリ: <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview" target="_blank" rel="noopener noreferrer">https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview</a><br>
@@ -39,7 +39,7 @@ legend: 凡例2 | DATA/legend2.png</code></pre>
 
       <h2>設定方法（.kasc）</h2>
       <pre class="text"><code>legend: 凡例 | https://example.com/legend.png
-legend: 凡例2 | DATA/legend2.png
+legend: 凡例2 | canvas_data/legend2.png
 legendnode: 凡例ノード順・ラベル・表示名（直前のレイヤー行に適用）</code></pre>
       <ul>
         <li>ベクター行の <code>style=QMLファイルURL</code> で QGIS スタイルを適用すると、QML 由来の凡例スウォッチと条件別の表示切替が凡例タブに出ます（再現範囲は <a href="../qgis.html#スタイル再現">スタイル（.qml）の再現</a>）</li>

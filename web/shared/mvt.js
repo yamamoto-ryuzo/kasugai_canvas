@@ -3,7 +3,7 @@
 // CesiumJS は MVT をネイティブ描画できないため、タイルを自前デコードして
 // canvas へラスタライズし、ImageryProvider 経由で globe へ重ねる。
 // PMTiles は Range リクエストで部分読み出しする単一ファイルアーカイブで、
-// 納品用ローカル化(単一 .pmtiles を DATA/ に置く)との相性が良い。
+// 納品用ローカル化(単一 .pmtiles を canvas_data/ に置く)との相性が良い。
 // 依存は利用時に CDN から遅延ロードする:
 //   @mapbox/vector-tile + pbf … MVT デコード (BSD-3-Clause)
 //   pmtiles                 … PMTiles アーカイブ読み出し (BSD-3-Clause)

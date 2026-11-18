@@ -230,6 +230,14 @@ strong {
   font-weight: 600;
 }
 
+.note {
+  background: #f0f3ff;
+  border-left: 4px solid #667eea;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin: 16px 0;
+}
+
 .features {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

@@ -2,7 +2,7 @@
 // 現在の QGIS プロジェクトを KASUGAI Canvas プロジェクトとして取り込む。
 //
 // 前提: QGIS 側で geo_webview プラグインの HTTP サーバー(既定 8089)が
-// 起動していること。ボタン押下 → QGIS 側で .kasc+DATA/ 生成 →
+// 起動していること。ボタン押下 → QGIS 側で .kasc+canvas_data/ 生成 →
 // KASUGAI ローカルサーバーへ外部プロジェクト登録 → switchProject で
 // この画面のプロジェクトが切り替わる。
 //

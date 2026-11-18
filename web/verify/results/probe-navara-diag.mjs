@@ -15,7 +15,7 @@ const PROBE_KASC = [
   "title: probe-515b4bd",
   "base: GSI標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | off",
   "terrain: qgis | generator=online | exaggeration=2",
-  "geojson: probe/Line | DATA/line.geojson | style=DATA/line.qml",
+  "geojson: probe/Line | canvas_data/line.geojson | style=canvas_data/line.qml",
   "cam:probe|35.685|139.765|h=3000|p=-45",
 ].join("\n");
 const PROBE_QML = `<?xml version="1.0"?><qgis version="3.34"><renderer-v2 type="singleSymbol"><symbols><symbol type="line" name="0" alpha="1"><layer class="SimpleLine" enabled="1" pass="0"><Option type="Map"><Option name="line_color" type="QString" value="200,30,30,255"/><Option name="line_style" type="QString" value="solid"/><Option name="line_width" type="QString" value="2"/></Option></layer></symbol></symbols></renderer-v2></qgis>`;
@@ -23,8 +23,8 @@ const PROBE_GEOJSON = JSON.stringify({ type: "FeatureCollection", features: [
   { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [[139.75, 35.67], [139.78, 35.70]] } }] });
 const srv = createServer(async (req, res) => {
   const p = decodeURIComponent(new URL(req.url, "http://x").pathname);
-  const mem = { "/probe/test.kasc": PROBE_KASC, "/probe/DATA/line.qml": PROBE_QML,
-    "/probe/DATA/line.geojson": PROBE_GEOJSON };
+  const mem = { "/probe/test.kasc": PROBE_KASC, "/probe/canvas_data/line.qml": PROBE_QML,
+    "/probe/canvas_data/line.geojson": PROBE_GEOJSON };
   if (mem[p]) { res.writeHead(200, { "content-type": MIME[extname(p)] || "text/plain" }); res.end(mem[p]); return; }
   try {
     let q = p.endsWith("/") ? p + "index.html" : p;

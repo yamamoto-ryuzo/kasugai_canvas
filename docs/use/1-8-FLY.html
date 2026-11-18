@@ -33,7 +33,7 @@
       </ol>
       <p>描画ルートの GeoJSON には各点の高さ <code>z</code> を <code>heightReference: "Terrain"</code> として保存し、<code>z</code> はその点の地形からの高さ（AGL）を表します。飛行時の実際のカメラ高さは <code>z + 地形高 + flyHeight</code> で計算します（<code>flyHeight</code> は操作中の補正値で GeoJSON には含まれません）。セグメント内では始点・終点の 3D 位置と地形高を距離に応じて補間し、滑らかな高度変化にします。点を選択して <code>z</code>（AGL）を編集し、保存ボタンで GeoJSON へ書き戻せます。</p>
       <p>AI が生成するルート（<code>flyRoute</code> ツール）は <code>heightReference: "MSL"</code> として各点に絶対標高（地形標高＋地上高）を焼き込み、飛行時は地形加算を行いません。飛行設定（速度・高度オフセット・ピッチ・ループ・視点）は <code>properties.fly</code> に保存され、リロード後の復元時にも維持されます。速度未指定のルートは総距離から自動プロファイル（80〜2000km/h・地上高50m〜10km）が適用されます。</p>
-      <p>QGIS のアトラス（印刷レイアウトの自動ページめくり）も同じ仕組みで再生できます。geo_webview の <code>.kasc</code> エクスポートはアトラス有効なレイアウトごとに各ページ表示範囲を巡回する <code>fly_geojson:</code> ルート（<code>DATA/atlas_*.geojson</code>）を出力します。座標 Z に各ページを収めるカメラ高を焼き込んでいるため、ページごとに縮尺の違う帳票もその範囲に合わせた高さで巡ります（点ごとの高度→ズーム換算は 2D プレイヤー側でも有効）。ルート名は <code>Atlas: &lt;レイアウト名&gt;</code>、ページ名一覧は GeoJSON の <code>properties.pages</code> に入ります（geo_webview v4.8.0〜）。</p>
+      <p>QGIS のアトラス（印刷レイアウトの自動ページめくり）も同じ仕組みで再生できます。geo_webview の <code>.kasc</code> エクスポートはアトラス有効なレイアウトごとに各ページ表示範囲を巡回する <code>fly_geojson:</code> ルート（<code>canvas_data/atlas_*.geojson</code>）を出力します。座標 Z に各ページを収めるカメラ高を焼き込んでいるため、ページごとに縮尺の違う帳票もその範囲に合わせた高さで巡ります（点ごとの高度→ズーム換算は 2D プレイヤー側でも有効）。ルート名は <code>Atlas: &lt;レイアウト名&gt;</code>、ページ名一覧は GeoJSON の <code>properties.pages</code> に入ります（geo_webview v4.8.0〜）。</p>
 
       <h3>🎬 Google Earth 風 FlyTo</h3>
       <p>カメラ移動は Google Earth と同じく「距離に応じた飛行時間＋一度ズームアウトしてから降下する弧」を描いて移動します。カメラプリセット・検索結果・属性行クリック・URL ハッシュの座標変更など、あらゆる移動がこの FlyTo 経路を通ります。</p>
@@ -41,7 +41,7 @@
       <h2>設定方法（.kasc）</h2>
       <p><code>fly_geojson:</code> 行で、GeoJSON の <code>LineString</code> / <code>MultiLineString</code> を Fly モードの自動飛行経路として登録します。複数行で複数ルートを定義でき、Fly パネルのドロップダウンから選択します（<code>手動</code> を選ぶと WASD / マウス操作に戻ります）。</p>
       <pre class="text"><code>fly_geojson: ルートA | https://example.com/route.geojson | speed=60 | height=100 | pitch=-15 | loop=true
-fly_geojson: ルートB | DATA/routeB.geojson | speed=30 | height=50
+fly_geojson: ルートB | canvas_data/routeB.geojson | speed=30 | height=50
 fly_geojson: 描いたルート | route:drawn_route_20260918_153000   （IndexedDB の描画ルートを参照）</code></pre>
       <table>
         <thead><tr><th>オプション</th><th>意味</th><th>既定</th></tr></thead>
@@ -54,7 +54,7 @@ fly_geojson: 描いたルート | route:drawn_route_20260918_153000   （Indexed
           <tr><td><code>off</code></td><td>選択肢に表示しない</td><td>-</td></tr>
         </tbody>
       </table>
-      <p>ルートの各頂点 <code>z</code> は地形からの高さ（AGL）で、実際の飛行高は <code>z + 地形高 + flyHeight</code> です。geo_webview のエクスポートでは QGIS アトラスの各ページ表示範囲を巡回する <code>fly_geojson:</code> ルート（<code>DATA/atlas_*.geojson</code>）も自動出力されます。</p>
+      <p>ルートの各頂点 <code>z</code> は地形からの高さ（AGL）で、実際の飛行高は <code>z + 地形高 + flyHeight</code> です。geo_webview のエクスポートでは QGIS アトラスの各ページ表示範囲を巡回する <code>fly_geojson:</code> ルート（<code>canvas_data/atlas_*.geojson</code>）も自動出力されます。</p>
       <h3>関連ページ</h3>
       <ul>
         <li><a href="1-5-カメラ.html">1-5 カメラ</a> — カメラプリセット・視点共有リンク</li>

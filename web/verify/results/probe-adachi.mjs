@@ -18,7 +18,7 @@ const labelAt = async (zoom, h) => await page.evaluate(async ([lat, lng, z, h]) 
   } else window.kasugaiApi?.flyTo({ latitude: lat, longitude: lng, zoom: z, instant: true });
   await new Promise(r => setTimeout(r, 1800));
   const m = await import("/shared/qml-style.js");
-  const qml = await (await fetch("/projects/sample_qgis/DATA/layer_cat.qml")).text();
+  const qml = await (await fetch("/projects/sample_qgis/canvas_data/layer_cat.qml")).text();
   const c = m.compileQmlStyle(qml);
   const spec = c.labelFor?.({ N03_004: "足立区" });
   return { scale: Math.round(m.evalQgisExpression("@map_scale")), text: spec?.text, sizePx: spec?.sizePx, fontCss: spec?.fontCss };

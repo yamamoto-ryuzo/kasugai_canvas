@@ -19,7 +19,7 @@
 </head>
 <body>
 <h1 style="font-size:1.15em">KASUGAI Canvas プロジェクト — <code>kasugai_canvas.kasc</code></h1>
-<p>このエクスポート物（<code>.kasc</code>+<code>DATA/</code>・起動HTML）は3つの経路で表示できます。</p>
+<p>このエクスポート物（<code>.kasc</code>+<code>canvas_data/</code>・起動HTML）は3つの経路で表示できます。</p>
 
 <section>
   <h2><span class="route-no">1</span>KASUGAI Canvas（主・統合プレイヤー）で開く</h2>
@@ -29,7 +29,7 @@
 
 <section>
   <h2><span class="route-no">2</span>ローカル HTTP 配信でブラウザ即表示</h2>
-  <p class="note">QGIS プラグインの HTTP サーバーが、インストール済み Canvas の <code>web/</code> と <code>DATA/</code> を配信します（要 Canvas インストール＋サーバー稼働）。</p>
+  <p class="note">QGIS プラグインの HTTP サーバーが、インストール済み Canvas の <code>web/</code> と <code>canvas_data/</code> を配信します（要 Canvas インストール＋サーバー稼働）。</p>
   <ul id="local-links"></ul>
   <p id="local-note" class="note" hidden>このページを <code>http://localhost:8089/export-data/</code> 経由で開くとリンクが有効になります。</p>
 </section>
@@ -47,7 +47,7 @@
 
 <section>
   <h2>パッケージ ZIP</h2>
-  <p class="note">エクスポート一式（<code>.kasc</code>+<code>DATA/</code>+起動HTML）の ZIP です。静的ホストへの配置や Re:Earth geo_suite の <code>qgis:</code> 取り込みに使えます。<br />プラグインの HTTP サーバー経由で開いている場合、クリック時にその場で生成してダウンロードします。
+  <p class="note">エクスポート一式（<code>.kasc</code>+<code>canvas_data/</code>+起動HTML）の ZIP です。静的ホストへの配置や Re:Earth geo_suite の <code>qgis:</code> 取り込みに使えます。<br />プラグインの HTTP サーバー経由で開いている場合、クリック時にその場で生成してダウンロードします。
   <span id="zip-note"></span></p>
   <p><a href="kasugai_canvas_stable.zip" download>kasugai_canvas_stable.zip をダウンロード</a></p>
 </section>

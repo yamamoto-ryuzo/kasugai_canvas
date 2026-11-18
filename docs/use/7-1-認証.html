@@ -43,7 +43,7 @@
 </strong>です。アプリの起動を制御し、
 <code>.kasc
 </code> の内容は ID/PASS 認証後に KV（Cloudflare）または GCS（Cloud Run）から取得されます。ただし、HTML/JS/CSS などの静的ファイル自体は公開されており、
-<code>DATA/
+<code>canvas_data/
 </code> 内の画像・GeoJSON 等は保護対象外です。
 <code>auth-selector.js
 </code> は 
@@ -613,7 +613,7 @@
 </code>・
 <code>projects.json
 </code>・HTML/JS 内にパスが書かれている、または 
-<code>projects/default/DATA/...
+<code>projects/default/canvas_data/...
 </code> のような推測しやすい固定パスのケース — 実質的に一覧・総当たりで列挙可能です。「URL が非公開・推測困難」はどこにもパスが書かれていないケースで、URL そのものが秘匿情報として機能します（ obscurity による弱い隠蔽で、URL が一度漏れれば防御はゼロです）。方式3 で 
 <code>.kasc
 </code> を KV に移せば、そこに書かれたデータ URL は未ログイン者には発見できなくなります。

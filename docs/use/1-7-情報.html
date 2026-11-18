@@ -18,7 +18,7 @@
       <h3>ℹ️ Info 表示</h3>
       <p><code>info:</code> 行で指定した外部 HTML を Info タブに表示します。スクリプト等はサニタイズされ、プロジェクト説明・参考資料・凡例ドキュメントの埋め込みに使えます。</p>
       <pre class="text"><code>info: https://example.com/project-info.html
-info: DATA/readme.html</code></pre>
+info: canvas_data/readme.html</code></pre>
       <p>埋め込まれた HTML 内の <code>.tab-button</code>＋<code>.tab-content</code> の組は、パネル内サブタブとして自動配線されます（<a href="1-9-ポータル.html">1-9 ポータル</a> のカスタム HTML と同じ規則）。</p>
 
       <h3>⚠️ 未対応行の警告</h3>
@@ -26,7 +26,7 @@ info: DATA/readme.html</code></pre>
 
       <h2>設定方法（.kasc）</h2>
       <pre class="text"><code>info: https://example.com/project-info.html
-info: DATA/readme.html
+info: canvas_data/readme.html
 title: 春日井市 防災マップ    （パネル左上とブラウザタブのタイトルを差し替え）</code></pre>
       <ul>
         <li>埋め込み HTML はサニタイズされます（script・on* 属性は除去。詳細は <a href="../security.html">セキュリティ対策</a>）</li>

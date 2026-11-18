@@ -98,7 +98,7 @@ ogrsql: 河川(上位100件) | SELECT * FROM 'rivers' ORDER BY 延長 DESC LIMIT
 ogrsql: 市区町村JOIN    | SELECT a.*, b.人口 FROM '行政区域' a LEFT JOIN '人口表' b ON a.コード = b.コード</code></pre>
       <ul>
         <li><code>where=</code> は全ベクター行で使用可。クエリ系は SQL 評価、全件読み込み系は <code>shared/where-eval.js</code> でクライアント評価します</li>
-        <li><code>ogrsql:</code> の FROM には読み込み済みレイヤータイトル・<code>'ds'.layer</code> 形式・<code>DATA/</code> 相対パス・URL を指定できます</li>
+        <li><code>ogrsql:</code> の FROM には読み込み済みレイヤータイトル・<code>'ds'.layer</code> 形式・<code>canvas_data/</code> 相対パス・URL を指定できます</li>
         <li>QGIS 側のフィルタ式（subsetString）との方言対応は <a href="../features/v7.html">V7: QGIS連携</a> の「QGIS フィルタ式との互換性」を参照してください</li>
       </ul>
 

@@ -85,7 +85,7 @@ Section "Install"
 
   CreateDirectory "$INSTDIR\projects\default"
   CreateDirectory "$INSTDIR\data"
-  ; ユーザーが編集し得るプロジェクト(.kasc・DATA 等)は既存ファイルを
+  ; ユーザーが編集し得るプロジェクト(.kasc・canvas_data 等)は既存ファイルを
   ; 上書きせず、不足分のみ補充する(SetOverwrite off)。
   ; /x で抜けた default/ が対象（default_local は廃止済み）
   SetOverwrite off

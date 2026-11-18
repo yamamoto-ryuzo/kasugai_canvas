@@ -18,16 +18,16 @@ try {
     const vl = await import("../shared/vector-load.js");
     const kasc = await import("../shared/kasc.js");
     const items = [
-      { type: "gpx", title: "gpx", url: `${base}/projects/format_test/DATA/track.gpx` },
-      { type: "czml", title: "czml", url: `${base}/projects/format_test/DATA/sat.czml` },
-      { type: "topojson", title: "topo", url: `${base}/projects/format_test/DATA/area.topojson` },
-      { type: "esrijson", title: "esri", url: `${base}/projects/format_test/DATA/field.esrijson` },
-      { type: "geojsonl", title: "nd", url: `${base}/projects/format_test/DATA/lines.geojsonl` },
-      { type: "wkt", title: "wkt", url: `${base}/projects/format_test/DATA/shapes.wkt` },
-      { type: "wkb", title: "wkb", url: `${base}/projects/format_test/DATA/pt.wkb` },
-      { type: "igc", title: "igc", url: `${base}/projects/format_test/DATA/flight.igc` },
-      { type: "polyline", title: "pl", url: `${base}/projects/format_test/DATA/line.polyline` },
-      { type: "gml", title: "gml", url: `${base}/projects/format_test/DATA/area.gml` },
+      { type: "gpx", title: "gpx", url: `${base}/projects/format_test/canvas_data/track.gpx` },
+      { type: "czml", title: "czml", url: `${base}/projects/format_test/canvas_data/sat.czml` },
+      { type: "topojson", title: "topo", url: `${base}/projects/format_test/canvas_data/area.topojson` },
+      { type: "esrijson", title: "esri", url: `${base}/projects/format_test/canvas_data/field.esrijson` },
+      { type: "geojsonl", title: "nd", url: `${base}/projects/format_test/canvas_data/lines.geojsonl` },
+      { type: "wkt", title: "wkt", url: `${base}/projects/format_test/canvas_data/shapes.wkt` },
+      { type: "wkb", title: "wkb", url: `${base}/projects/format_test/canvas_data/pt.wkb` },
+      { type: "igc", title: "igc", url: `${base}/projects/format_test/canvas_data/flight.igc` },
+      { type: "polyline", title: "pl", url: `${base}/projects/format_test/canvas_data/line.polyline` },
+      { type: "gml", title: "gml", url: `${base}/projects/format_test/canvas_data/area.gml` },
     ];
     const out = {};
     for (const it of items) {

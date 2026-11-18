@@ -28,7 +28,7 @@
 
 // cfg:
 //   t(key, vars?)          — i18n 関数 (portal.* キーを使う)
-//   resolveProjectUrl(path)— DATA/ 等の相対パス → URL
+//   resolveProjectUrl(path)— canvas_data/ 等の相対パス → URL
 //   loadInfoContent(el, spec, unused, {errorText}) — loadKascInfoContent
 //   applyView(view)        — view: カード押下時の地図状態適用(async 可)
 //   clearView()            — 適用前状態への復元(async 可)

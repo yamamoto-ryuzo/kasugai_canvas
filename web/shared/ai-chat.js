@@ -1937,7 +1937,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "setEffect",
-      description: "表示効果のON/OFF。nameは lighting(地形照明) translucency(地下透過) fog(霧) atmosphere(大気) shadows(影) depthTest(地形深度テスト) のいずれか",
+      description: "表示効果のON/OFF。nameは lighting(地形照明) translucency(地下透過) fog(霧) atmosphere(大気) shadows(影) depthTest(地形深度テスト) groundAtmosphere(地表大気) fxaa ao(環境光遮蔽) bloom bw(モノクロ) edge(エッジ検出) nightvision(暗視) lensflare(レンズフレア) dof(被写界深度) blur(ぼかし) brightness(輝度) depthview(深度可視化) silhouette(選択地物の縁取り) のいずれか",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -2200,12 +2200,12 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addLayer",
-      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/ogrsql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff(cog/tiff)。target は duckdb・sql・ogrsql 以外はURLまたは DATA/相対パス、sql・ogrsql は SELECT 文(ogrsql は OGR SQL 方言で FROM=レイヤー名/DATA パス)。wfs は options に typename= が必須(version=/maxfeatures=/cql_filter= も指定可)、shp は .zip 一式または .shp+sidecar のURL。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。geotiff/cog/tiff は GeoTIFF・COG ラスタをオーバーレイ表示する(Cesium エンジンのみ・options で mode=auto|tiles|overlay・opacity=・maxsize= 等)。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "ベクターレイヤを追加して即座に適用する。type: geojson(既定)/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/ogrsql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff(cog/tiff)。target は duckdb・sql・ogrsql 以外はURLまたは canvas_data/相対パス、sql・ogrsql は SELECT 文(ogrsql は OGR SQL 方言で FROM=レイヤー名/canvas_data パス)。wfs は options に typename= が必須(version=/maxfeatures=/cql_filter= も指定可)、shp は .zip 一式または .shp+sidecar のURL。duckdb には options で where=/limit=/format=/bbox=auto 等を指定可。geotiff/cog/tiff は GeoTIFF・COG ラスタをオーバーレイ表示する(Cesium エンジンのみ・options で mode=auto|tiles|overlay・opacity=・maxsize= 等)。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
           title: { type: "STRING", description: "レイヤ名" },
-          target: { type: "STRING", description: "データのURLまたは DATA/ファイル名(sql:/ogrsql: の場合は SELECT 文)" },
+          target: { type: "STRING", description: "データのURLまたは canvas_data/ファイル名(sql:/ogrsql: の場合は SELECT 文)" },
           type: { type: "STRING", description: "geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb/sql/ogrsql/kml/kmz/wfs/shp/csv/tsv/image/model/geotiff/cog/tiff (省略時 geojson)" },
           options: { type: "STRING", description: "省略可。wfs: の typename=/version=/maxfeatures=/cql_filter=、duckdb: の where=/limit=/format=/bbox=auto/proxy=on、render=primitive、geotiff: の mode=/opacity=/maxsize=/bands=、attr=出典 等(|区切り。where= は必ず最後に指定=以降は行末までが式)" },
         },
@@ -2214,12 +2214,12 @@ const CHAT_TOOLS = [{
     },
     {
       name: "addGeoJsonLayer",
-      description: "GeoJSONレイヤをURL指定で追加して即座に適用する(urlはDATA/相対パスまたは外部URL)。他形式は addLayer を使う。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
+      description: "GeoJSONレイヤをURL指定で追加して即座に適用する(urlはcanvas_data/相対パスまたは外部URL)。他形式は addLayer を使う。http(s) URL は実行前に実在確認され、到達不能なものは拒否されるため確実に存在するURLのみ指定する。追加はインスペクター設定に反映されるのでユーザーが明示した場合のみ使う",
       parameters: {
         type: "OBJECT",
         properties: {
           title: { type: "STRING", description: "レイヤ名" },
-          url: { type: "STRING", description: "GeoJSONのURLまたは DATA/ファイル名" },
+          url: { type: "STRING", description: "GeoJSONのURLまたは canvas_data/ファイル名" },
         },
         required: ["title", "url"],
       },
@@ -2413,16 +2413,16 @@ const CHAT_TOOLS = [{
     },
     {
       name: "listDataFiles",
-      description: "プロジェクトの DATA/ フォルダ内ファイル一覧(名前・サイズ・更新時刻)を取得する。ローカルサーバー版のみ利用可",
+      description: "プロジェクトの canvas_data/ フォルダ内ファイル一覧(名前・サイズ・更新時刻)を取得する。ローカルサーバー版のみ利用可",
       parameters: { type: "OBJECT", properties: {} },
     },
     {
       name: "saveDataFile",
-      description: "テキスト内容をプロジェクトの DATA/ フォルダへ保存する(.geojson等・サブフォルダ可)。既存ファイルの上書き時はユーザー確認が出る。ローカルサーバー版のみ利用可",
+      description: "テキスト内容をプロジェクトの canvas_data/ フォルダへ保存する(.geojson等・サブフォルダ可)。既存ファイルの上書き時はユーザー確認が出る。ローカルサーバー版のみ利用可",
       parameters: {
         type: "OBJECT",
         properties: {
-          name: { type: "STRING", description: "DATA/ 以下のファイル名(例: route.geojson, sub/out.txt)" },
+          name: { type: "STRING", description: "canvas_data/ 以下のファイル名(例: route.geojson, sub/out.txt)" },
           content: { type: "STRING", description: "保存するテキスト内容" },
         },
         required: ["name", "content"],
@@ -2430,11 +2430,11 @@ const CHAT_TOOLS = [{
     },
     {
       name: "deleteDataFile",
-      description: "DATA/ フォルダ内のファイルを削除する。実行前にユーザー確認が出る。ローカルサーバー版のみ利用可",
+      description: "canvas_data/ フォルダ内のファイルを削除する。実行前にユーザー確認が出る。ローカルサーバー版のみ利用可",
       parameters: {
         type: "OBJECT",
         properties: {
-          name: { type: "STRING", description: "DATA/ 以下のファイル名" },
+          name: { type: "STRING", description: "canvas_data/ 以下のファイル名" },
         },
         required: ["name"],
       },
@@ -2464,7 +2464,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "queryOgrSql",
-      description: "OGR SQL 方言の SELECT 文を実行し、結果を GeoJSON として返す。FROM には読み込み済みレイヤー名・DATA/ 相対パス・ファイルURLが使える('ds'.layer 形式も可)。JOIN・集計・DISTINCT・ORDER BY・LIMIT/OFFSET・OGR疑似フィールド(FID/OGR_GEOMETRY/OGR_GEOM_WKT/OGR_GEOM_AREA)に対応。ブラウザ内 JS 実装で実行され、FROM の解決に失敗した場合のみローカル QGIS の GDAL ExecuteSQL へフォールバックする。結果をレイヤーとして追加したい場合は addLayer(type=ogrsql) を使う",
+      description: "OGR SQL 方言の SELECT 文を実行し、結果を GeoJSON として返す。FROM には読み込み済みレイヤー名・canvas_data/ 相対パス・ファイルURLが使える('ds'.layer 形式も可)。JOIN・集計・DISTINCT・ORDER BY・LIMIT/OFFSET・OGR疑似フィールド(FID/OGR_GEOMETRY/OGR_GEOM_WKT/OGR_GEOM_AREA)に対応。ブラウザ内 JS 実装で実行され、FROM の解決に失敗した場合のみローカル QGIS の GDAL ExecuteSQL へフォールバックする。結果をレイヤーとして追加したい場合は addLayer(type=ogrsql) を使う",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -2575,7 +2575,7 @@ const CHAT_TOOLS = [{
     },
     {
       name: "importGsiSakuzu",
-      description: "GSI Mapsエンジン専用。地理院地図の作図をGeoJSONとしてCanvasレイヤーへ取り込む(元の作図は二重描画防止で非表示化)。ローカルサーバー版では DATA/ へ保存し geojson: 行で .kasc 永続化、静的配信環境では一時レイヤーになる。indices省略時は全作図",
+      description: "GSI Mapsエンジン専用。地理院地図の作図をGeoJSONとしてCanvasレイヤーへ取り込む(元の作図は二重描画防止で非表示化)。ローカルサーバー版では canvas_data/ へ保存し geojson: 行で .kasc 永続化、静的配信環境では一時レイヤーになる。indices省略時は全作図",
       parameters: {
         type: "OBJECT",
         properties: {
@@ -3202,7 +3202,7 @@ async function applyDroneViewDefaults(args) {
 }
 
 // AI が提示した URL 指定レイヤーの実在確認（架空・存在しない URL の登録を防ぐ）。
-// http(s) 以外（DATA/ 相対パス・sql文等）と proxy=on 指定（直接取得しなくてよい）は検証しない
+// http(s) 以外（canvas_data/ 相対パス・sql文等）と proxy=on 指定（直接取得しなくてよい）は検証しない
 async function verifyToolTargetUrl(target, options = "") {
   const url = String(target || "");
   if (!/^https?:\/\//i.test(url)) return { ok: true };
@@ -3223,7 +3223,7 @@ async function verifyToolTargetUrl(target, options = "") {
 
 // applyInspector 用。.kasc テキスト中のデータレイヤー行(タイプ:タイトル|URL|オプション)で
 // 新規追加される http(s) URL を一括実在確認する。タイル系({x}{y}{z}プレースホルダ)・
-// route:/DATA/相対パス・proxy=on 指定は対象外。既存行に既に含まれる URL は再検証しない
+// route:/canvas_data/相対パス・proxy=on 指定は対象外。既存行に既に含まれる URL は再検証しない
 // (CORS非対応でも現状動いているURL・一時的な障害で設定全体の適用を妨げないため)
 const INSPECTOR_URL_LAYER_TYPES = new Set(["geojson", "geoparquet", "flatgeobuf", "gpkg", "geopackage", "duckdb", "layer", "fly_geojson"]);
 

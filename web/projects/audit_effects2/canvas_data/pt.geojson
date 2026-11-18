@@ -1,0 +1,6 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "name": "中心点" }, "geometry": { "type": "Point", "coordinates": [139.770, 35.688] } }
+  ]
+}

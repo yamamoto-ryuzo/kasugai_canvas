@@ -1,6 +1,6 @@
 # ポイントドレープ検証プロジェクト
 # z 付き座標・QML ラベル・クラスタが地形へクランプされるかを確認する
 cam:drape|35.360|138.727|h=15000|p=-60
-geojson: Z付きポイント | DATA/zpoints.geojson | on
-geojson: QMLポイント | DATA/qmlpoints.geojson | on | style=DATA/qmlpoints.qml
-geojson: クラスタ | DATA/clusterpts.geojson | on | cluster=on
+geojson: Z付きポイント | canvas_data/zpoints.geojson | on
+geojson: QMLポイント | canvas_data/qmlpoints.geojson | on | style=canvas_data/qmlpoints.qml
+geojson: クラスタ | canvas_data/clusterpts.geojson | on | cluster=on

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>データ形式 — KASUGAI Canvas ドキュメント</title>
+  <title>データ形式（標準） — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="style.css">
   <script src="nav.js" defer></script>
 </head>
@@ -11,42 +11,44 @@
   <div class="container">
     <header>
       <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
-      <p>データ形式 — 2D/3D データの最適フォーマット、配信・管理</p>
+      <p>データ形式（標準） — 主要4エンジンで使えるデフォルト形式とデータ管理</p>
     </header>
     <main>
-      <h2>対応データ形式</h2>
-      <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。ベクター系は <strong>全件読み込み系</strong>（全件読み込み・ベクター検索対象）と <strong>クエリ系</strong>（SQL 絞り込み・表示範囲のみ描画・検索は常に全件）の2系統に分かれます。共通の設計方針は「<strong>描画は表示範囲・索引は全件</strong>」で、描画件数の上限（フリーズ防止の安全弁）・表示範囲スライス・<code>where=</code> フィルタは描画に適用され、属性一覧の行は描画済み地物から作られるため同じ絞り込みが反映されます（ベクター検索索引・プラグイン API は常に全件対象）。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
+      <h2>対応データ形式（標準）</h2>
+      <p>インスペクターの <code>.kasc</code> 設定で行タイプとして指定できるデータ形式の一覧です。<strong>このページは主要4エンジン（Cesium・MapLibre・OpenLayers・Leaflet）すべてで描画できる標準形式</strong>をまとめています（GSI Maps・Navara は試験段階のエンジンのため判定対象外。対応状況はオプションページのマトリクスを参照）。一部のエンジンでしか使えない形式（ベクタータイル・GLB・GeoTIFF・地形指定）は <a href="data-optional.html">データ形式（オプション・エンジン別）</a> を参照してください。形式は描画経路で4区分しています — <strong>ネイティブ対応</strong>（変換なし・最速）/ <strong>変換エンジン対応・高速</strong>（軽量デコーダー → GeoJSON 正規化）/ <strong>変換エンジン対応・中〜高速</strong>（DuckDB-WASM クエリ系・初回ロード後は大規模で最速級）/ <strong>変換エンジン対応・低速</strong>（sql.js 等の全件メモリ読み込み）。ベクター系は <strong>全件読み込み系</strong>（全件読み込み・ベクター検索対象）と <strong>クエリ系</strong>（SQL 絞り込み・表示範囲のみ描画・検索は常に全件）の2系統に分かれます。共通の設計方針は「<strong>描画は表示範囲・索引は全件</strong>」で、描画件数の上限（フリーズ防止の安全弁）・表示範囲スライス・<code>where=</code> フィルタは描画に適用され、属性一覧の行は描画済み地物から作られるため同じ絞り込みが反映されます（ベクター検索索引・プラグイン API は常に全件対象）。CesiumJS ネイティブ非対応の形式は、ブラウザ側で GeoJSON に正規化して描画するため、レイヤ一覧・表示切替・属性検索・属性パネルがそのまま使えます。</p>
 
-      <h3>ネイティブ・タイル系</h3>
+      <h3>ネイティブ対応（変換なし・最速）</h3>
+      <p>エンジンがデータを直接読み込んで描画する形式です。デコード・正規化のコストが無く最速です。</p>
       <div class="features">
         <div class="feature-card">
-          <h3>🗺️ XYZ タイル <span class="badge">対応</span></h3>
-          <p><code>xyz:</code> / <code>base:</code> で指定するラスタタイル。<code>{z}/{x}/{y}</code> 形式のタイル画像を重ね合わせ・ドレープ表示</p>
+          <h3>🗺️ XYZ タイル / ベースマップ <span class="badge recommended">推奨</span></h3>
+          <p><code>xyz:</code> / <code>tile:</code> で指定するラスタタイル。<code>{z}/{x}/{y}</code> 形式のタイル画像を重ね合わせ・ドレープ表示。<code>base:</code> はベースマップ選択リストへの登録行で、<code>transparent</code> / <code>none</code> のモード指定も可能。<strong>オルソ写真</strong>（地理院 seamlessphoto 等のタイル化済み正射画像）はこの経路が標準</p>
         </div>
         <div class="feature-card">
-          <h3>🏙️ 3D Tiles <span class="badge">対応</span></h3>
-          <p><code>3dtiles:</code> で tileset.json を指定。PLATEAU 建築物・点群など大規模3Dデータをストリーミング表示</p>
+          <h3>🌐 WMS / WMTS <span class="badge">対応</span></h3>
+          <p><code>wms:</code> / <code>wmts:</code> で指定する OGC タイルサービス。WMS は GetMap タイルテンプレート、WMTS は KVP / RESTful 指定を <code>{z}/{x}/{y}</code> へ正規化して描画</p>
         </div>
         <div class="feature-card">
-          <h3>🧩 MVT / PMTiles <span class="badge">対応</span></h3>
-          <p>ベクタータイル。<code>mvt:</code>/<code>pmtiles:</code> で指定（MapLibre=ネイティブ / Cesium=ラスタライズ・<code>layers=</code> でソースレイヤ指定）。数十万地物級の大規模データ向け経路。詳細は<a href="performance.html">描画性能とデータ形式方針</a></p>
+          <h3>🏙️ 3D Tiles <span class="badge recommended">推奨</span></h3>
+          <p><code>3dtiles:</code> で tileset.json を指定。PLATEAU 建築物・点群など大規模3Dデータをストリーミング表示。Cesium はネイティブ、MapLibre/OpenLayers/Leaflet は deck.gl オーバーレイ（初回利用時に CDN 遅延ロード）で描画</p>
         </div>
-      </div>
-
-      <h3>ベクター：全件読み込み系</h3>
-      <p>ファイル全件を読み込んで描画する経路です（既定は entity 化・<code>render=primitive</code> でバッチ描画も可）。読み込みは必要となった初回（表示ON、属性テーブルやベクター検索パネルでの選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧・検索では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。描画件数の上限（表示 → ドレープ・既定 20000）を超えるレイヤーは<strong>表示範囲内の地物のみ</strong>を描画し、カメラ移動で範囲内の地物に追随します（切り捨ては描画に適用され、属性一覧も描画済み地物が行になります。ベクター検索索引は常に全件対象）。</p>
-      <div class="features">
+        <div class="feature-card">
+          <h3>🖼️ ジオリファレンス画像 <span class="badge">対応</span></h3>
+          <p><code>image:</code> で画像を地図上へオーバーレイ。<code>bbox=w,s,e,n</code> または <code>corners=</code>（TL,TR,BR,BL 順）で配置を指定。単一画像のオルソ写真もこの経路</p>
+        </div>
         <div class="feature-card">
           <h3>📍 GeoJSON <span class="badge">対応</span></h3>
           <p><code>geojson:</code> / <code>layer:</code> で指定。ベクトル検索・属性一覧・ドレープに対応したベクターデータの基本形式。小〜中規模・全件表示はこれが最速</p>
         </div>
+      </div>
+      <p><small>MVT/PMTiles・GLB・GeoTIFF・地形指定等のエンジン別形式は <a href="data-optional.html">データ形式（オプション・エンジン別）</a> を参照。</small></p>
+
+      <h3>変換エンジン対応（高速 — 軽量デコーダーで GeoJSON 正規化）</h3>
+      <p>ブラウザ内の軽量デコーダー（<code>shared/vector-load.js</code>・hyparquet・flatgeobuf 公式リーダー・togeojson・shpjs 等、いずれも遅延ロード）で GeoJSON へ正規化し、ネイティブのベクター描画経路へ流す全件読み込み系の形式です（既定は entity 化・<code>render=primitive</code> でバッチ描画も可）。読み込みは必要となった初回（表示ON、属性テーブルやベクター検索パネルでの選択時）に行い、結果はメモリに保持して2回目以降の表示切替・属性一覧・検索では再取得しません。<code>off</code> のレイヤーは起動時にダウンロードされません。描画件数の上限（表示 → ドレープ・既定 20000）を超えるレイヤーは<strong>表示範囲内の地物のみ</strong>を描画し、カメラ移動で範囲内の地物に追随します（切り捨ては描画に適用され、属性一覧も描画済み地物が行になります。ベクター検索索引は常に全件対象）。</p>
+      <div class="features">
         <div class="feature-card">
-          <h3>📦 GeoParquet <span class="badge">対応</span></h3>
+          <h3>📦 GeoParquet <span class="badge recommended">推奨</span></h3>
           <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。常に全件読み込みのため中規模まで。「Parquet をそのまま置くだけで表示」の利便性重視の経路</p>
-        </div>
-        <div class="feature-card">
-          <h3>🧭 FlatGeobuf <span class="badge">対応</span></h3>
-          <p><code>flatgeobuf:</code> で指定。空間インデックス内蔵のバイナリ形式を公式 JS リーダー（CDN・遅延ロード）でストリームデコードし GeoJSON へ正規化。全件読み込み系の経路だが、全件バッファリングせず逐次変換する（SQL 絞り込み経路は下のクエリ系カードを参照）</p>
         </div>
         <div class="feature-card">
           <h3>🗺️ KML / KMZ <span class="badge">対応</span></h3>
@@ -102,12 +104,16 @@
         </div>
       </div>
 
-      <h3>ベクター：クエリ系（DuckDB SQL）</h3>
-      <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路です。DuckDB-WASM（CDN から遅延ロード）が SQL で絞り込んでから GeoJSON へ正規化して描画します。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です。ランタイム資産（約60MB）は Service Worker がブラウザ内に永続キャッシュするため、重いダウンロードはバージョンごとの初回のみで、以後はキャッシュから読み込まれます（詳細は <a href="runtime-cache.html">ランタイム永続キャッシュ</a>）。対応するファイル形式は以下のとおりです。</p>
+      <h3>変換エンジン対応（中〜高速 — 大規模向けクエリ系）</h3>
+      <p><code>duckdb:</code> / <code>sql:</code> で指定するクエリ経路と、<code>flatgeobuf:</code> の空間インデックス範囲読み経路です。DuckDB-WASM（CDN から遅延ロード・約60MB）は重いランタイムですが、ランタイム資産は Service Worker がブラウザ内に永続キャッシュするため重いダウンロードはバージョンごとの初回のみです（詳細は <a href="runtime-cache.html">ランタイム永続キャッシュ</a>）。SQL で絞り込んでから GeoJSON へ正規化するため、ロード済み以降は<strong>大規模データでも最速級の描画</strong>になります。<strong>表示は見えている範囲のみ・検索は常に全件</strong>。spatial 拡張により空間述語・WKT・<code>ST_Read</code> も利用可能です（<code>ST_Read</code>／<code>format=read</code> はスレッド生成が必要なため COI 環境限定。FlatGeobuf・Shapefile は <code>flatgeobuf:</code>・<code>shp:</code> 経路を推奨）。対応するファイル形式は以下のとおりです。</p>
       <div class="features">
         <div class="feature-card">
-          <h3>📦 Parquet / GeoParquet <span class="badge">対応</span></h3>
+          <h3>📦 Parquet / GeoParquet <span class="badge recommended">推奨</span></h3>
           <p><code>duckdb:</code> で指定（<code>format=parquet</code>・既定）。<code>where=</code>/<code>bbox=auto</code>/<code>columns=</code> の絞り込みで述語プッシュダウン・row group スキップ・列プルーニングが効くクエリ系の本来の対象。大規模・広範囲データ向け</p>
+        </div>
+        <div class="feature-card">
+          <h3>🧭 FlatGeobuf <span class="badge recommended">推奨</span></h3>
+          <p><code>flatgeobuf:</code> / <code>fgb:</code> で指定。<strong><code>bbox=auto</code> が既定 ON</strong> で、空間インデックス＋HTTP Range リクエストにより表示範囲の地物だけを読むクエリ系（カメラ移動で再クエリ・検索は常に全件）。DuckDB-WASM 不要の軽量経路で、重いランタイムなしに大規模データを扱える。索引なしファイル・Range 非対応サーバーは全件へフォールバック。<code>bbox=off</code> で全件読み込み系に戻る（全件バッファリングしない逐次デコード）。<code>where=</code> も利用可</p>
         </div>
         <div class="feature-card">
           <h3>📄 CSV / TSV <span class="badge">対応</span></h3>
@@ -115,15 +121,15 @@
         </div>
         <div class="feature-card">
           <h3>📋 JSON / GeoJSON <span class="badge">対応</span></h3>
-          <p><code>duckdb:</code> の <code>format=json</code>（<code>read_json_auto</code>）でテーブルとしてクエリ可能。FeatureCollection の構造は <code>format=read</code>（<code>ST_Read</code>・spatial 拡張必須）向け</p>
+          <p><code>duckdb:</code> の <code>format=json</code>（<code>read_json_auto</code>）でテーブルとしてクエリ可能。FeatureCollection の構造は <code>format=read</code>（<code>ST_Read</code>・spatial 拡張必須・COI 環境限定）向け</p>
         </div>
+      </div>
+      <h3>変換エンジン対応（低速 — 重いランタイム）</h3>
+      <p>ファイル全件を WASM メモリへ読み込む DB 経路です。小〜中規模の確認用途には使えますが、大規模データは上のクエリ系または変換済み形式を推奨します。</p>
+      <div class="features">
         <div class="feature-card">
           <h3>🗂️ GeoPackage <span class="badge">対応</span></h3>
-          <p><code>gpkg:</code>（または <code>duckdb:</code> の拡張子判別・<code>format=gpkg</code>）で読み込み。sql.js（SQLite WASM）を Web Worker で実行するためデコード中も地図操作をブロックしません。<code>table=</code> で複数地物テーブルを選択可。<code>where=</code>/<code>limit=</code>/<code>columns=</code>/<code>bbox=auto</code>（表示範囲連動・既定 ON）の絞り込みにも対応。QGIS が埋め込む <code>layer_styles</code> のスタイル（QML）も自動適用</p>
-        </div>
-        <div class="feature-card">
-          <h3>🧭 FlatGeobuf / 📐 Shapefile <span class="badge" style="background:#fd7e14;">対応中</span></h3>
-          <p><code>duckdb:</code>/<code>sql:</code> の <code>ST_Read</code>（<code>format=read</code>・spatial 拡張必須）で読み込み可能。<code>.fgb</code> は拡張子からも自動判別されます。ただし ST_Read は非 COI 環境（通常の静的ホスティング・ローカルサーバー）でスレッド生成に失敗しリモート URL も読めないため、現状の実行環境では実質利用できません。FlatGeobuf は全件読み込みの <code>flatgeobuf:</code>、Shapefile は <code>shp:</code> 経路（いずれも実装済み）を推奨</p>
+          <p><code>gpkg:</code>（または <code>duckdb:</code> の拡張子判別・<code>format=gpkg</code>）で読み込み。sql.js（SQLite WASM）が<strong>ファイル全件を WASM メモリへ読み込む</strong>ため大容量では低速になります（Web Worker 実行のためデコード中も地図操作はブロックしません）。<code>table=</code> で複数地物テーブルを選択可。<code>where=</code>/<code>limit=</code>/<code>columns=</code>/<code>bbox=auto</code>（表示範囲連動・既定 ON）の絞り込みにも対応。QGIS が埋め込む <code>layer_styles</code> のスタイル（QML）も自動適用</p>
         </div>
       </div>
       <p><small>方針の詳細（経路分類・新形式の追加手順）はリポジトリの <code>AGENTS.md</code>「データ形式方針」を参照してください。</small></p>
@@ -146,8 +152,9 @@
       <td><code>geoparquet:</code> / <code>flatgeobuf:</code> →
       GeoJSON 正規化 → <code>GeoJsonDataSource</code></td>
       <td>ブラウザ内デコード（hyparquet / flatgeobuf
-      公式リーダー）で変換不要。<code>duckdb:</code>/<code>sql:</code>
-      なら SQL 絞り込みも可</td>
+      公式リーダー）で変換不要。<code>flatgeobuf:</code> は <code>bbox=auto</code> の
+      範囲読み（既定 ON・索引+Range）、<code>duckdb:</code>/<code>sql:</code>
+      なら SQL 絞り込みも可（FlatGeobuf の ST_Read は COI 環境限定）</td>
       </tr>
       <tr>
       <td>2D ベクトル</td>
@@ -165,45 +172,25 @@
       </tr>
       <tr>
       <td>2D タイル</td>
-      <td>XYZ / WMTS / TMS</td>
+      <td>XYZ / WMTS / WMS</td>
       <td><code>CesiumJS ImageryLayer</code>（地形・3D Tiles
-      にドレープ）</td>
-      <td>広域地図・航空写真。MVT は mvt: 行で対応</td>
-      </tr>
-      <tr>
-      <td>3D モデル</td>
-      <td>GLB / glTF 2.0</td>
-      <td><code>CesiumJS Model</code> / Three.js
-      <code>GLTFLoader</code></td>
-      <td>建機・構造物</td>
+      にドレープ）＋ 全エンジンのタイル描画</td>
+      <td>広域地図・航空写真。TMS（Y 軸反転）は Leaflet 行の
+      <code>tms=</code> オプションのみ。MVT/PMTiles はエンジン別
+      （<a href="data-optional.html">オプション</a>）</td>
       </tr>
       <tr>
       <td>3D タイル</td>
-      <td>3D Tiles 1.1 (GLB 内包)</td>
+      <td>3D Tiles 1.1 (GLB 内包) / 点群</td>
       <td><code>3dtiles:</code> → <code>CesiumJS
-      Cesium3DTileset</code></td>
-      <td>PLATEAU・Google Photorealistic 等。LOD・ストリーミング対応</td>
+      Cesium3DTileset</code> / deck.gl <code>Tile3DLayer</code></td>
+      <td>PLATEAU・Google Photorealistic 等。LOD・ストリーミング対応。4エンジン全対応（2D エンジンは deck.gl オーバーレイ）</td>
       </tr>
       <tr>
-      <td>点群</td>
-      <td>3D Tiles 点群 (pnts / 1.1 glTF)</td>
-      <td><code>Cesium3DTileset</code> / Three.js
-      <code>Points</code></td>
-      <td>大規模点群向け。LAS/LAZ・EPT は変換が必要</td>
-      </tr>
-      <tr>
-      <td>3DGS</td>
-      <td>PLY / SPZ / .splat / .ksplat / .sog</td>
-      <td>Three.js 系専用レンダラー</td>
-      <td><code>gaussian-splats-3d</code> 等。CesiumJS
-      とカメラ同期（オーバーレイ canvas）</td>
-      </tr>
-      <tr>
-      <td>DEM / 地形</td>
-      <td>標高PNG (XYZ) / Cesium Terrain</td>
-      <td><code>CesiumJS TerrainProvider</code></td>
-      <td>地理院標高PNG は独自デコーダー
-      （<code>GsiDemTerrainProvider</code>）実装済み</td>
+      <td>画像オーバーレイ</td>
+      <td>PNG / JPEG 等 + 座標指定</td>
+      <td><code>image:</code> → bbox=/corners= で地図上へ配置</td>
+      <td>スキャン図面・写真の重ね合わせ</td>
       </tr>
       </tbody>
       </table>
@@ -237,18 +224,6 @@
       <td>GeoParquet / FlatGeobuf</td>
       <td>列指向・空間インデックスで読み込み効率化</td>
       </tr>
-      <tr>
-      <td>点群</td>
-      <td>PLY / LAS / LAZ</td>
-      <td>EPT / 3D Tiles / PointCloud バッファ</td>
-      <td>ブラウザ内 or 事前変換</td>
-      </tr>
-      <tr>
-      <td>DEM / 地形</td>
-      <td>GeoTIFF / CSV 等</td>
-      <td>標高PNG / GLB / 3D Tiles</td>
-      <td>Web Worker またはサーバー側で変換</td>
-      </tr>
       </tbody>
       </table>
       <ul>
@@ -256,76 +231,14 @@
       ネイティブ形式、または <code>vectorDecoders</code>
       レジストリのデコーダーで GeoJSON へ正規化して既存のベクター描画経路（<code>GeoJsonDataSource</code>
       / <code>GeoJsonPrimitive</code>）に流す</li>
-      <li><strong>要専用レンダラー</strong>：Three.js
-      系の専用ライブラリが必要。CesiumJS とはカメラ同期（オーバーレイ
-      canvas + <code>postRender</code>）のみ</li>
       <li><strong>パイプライン（変換）が必要</strong>：ブラウザ内 Web
       Worker または事前変換が必要。GPKG/FGDB は Single Source of Truth
       として管理・変換元に使用</li>
-      </ul>
-      <h2>CesiumJS と Three.js の担当分け</h2>
-      <table>
-      <thead>
-      <tr>
-      <th>データ</th>
-      <th>主担当エンジン</th>
-      <th>補完エンジン</th>
-      <th>用途</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr>
-      <td>2D ベクトル (GeoJSON / GeoParquet / FlatGeobuf)</td>
-      <td><strong>CesiumJS</strong>
-      (<code>GeoJsonDataSource</code> /
-      <code>GeoJsonPrimitive</code>)</td>
-      <td><code>duckdb:</code> / <code>sql:</code>（SQL 絞り込み）</td>
-      <td>図面・境界・大容量 2D</td>
-      </tr>
-      <tr>
-      <td>2D タイル (XYZ / WMTS)</td>
-      <td><strong>CesiumJS</strong> (<code>ImageryLayer</code>)</td>
-      <td>–</td>
-      <td>広域地図・航空写真（地形ドレープ可）</td>
-      </tr>
-      <tr>
-      <td>GLB / 3D Tiles</td>
-      <td><strong>CesiumJS</strong> (<code>Model</code> /
-      <code>Cesium3DTileset</code>)</td>
-      <td><strong>Three.js</strong> (<code>GLTFLoader</code>)</td>
-      <td>建機・構造物・都市モデル</td>
-      </tr>
-      <tr>
-      <td>点群 (PLY / LAS / EPT)</td>
-      <td><strong>CesiumJS</strong> (<code>Cesium3DTileset</code>
-      pnts)</td>
-      <td><strong>Three.js</strong> (<code>Points</code> / Potree)</td>
-      <td>測量・LiDAR 点群</td>
-      </tr>
-      <tr>
-      <td>3DGS (PLY / SPZ / Splat)</td>
-      <td><strong>Three.js</strong> 専用レンダラー</td>
-      <td><strong>CesiumJS</strong> (カメラ同期)</td>
-      <td>写真測量・ニューラル表現</td>
-      </tr>
-      <tr>
-      <td>管理データ (GPKG / FGDB)</td>
-      <td>GPKG は <code>gpkg:</code>（sql.js Web Worker）で直接読込、
-      FGDB は変換</td>
-      <td>–</td>
-      <td>正データ保持・変換元</td>
-      </tr>
-      </tbody>
-      </table>
-      <ul>
-      <li><strong>CesiumJS</strong>：グローブ・地形・3D
-      Tiles・ベクター・イメージリを同一 Scene / 深度バッファで描画</li>
-      <li><strong>Three.js</strong>：点群・3DGS・高度な GLB
-      表現を補完。別 canvas を重ね、<code>postRender</code> で
-      CesiumJS のカメラ行列を同期させる</li>
+      <li><strong>エンジン別形式</strong>（MVT/PMTiles・GLB・GeoTIFF・3DGS・DEM 等）は <a href="data-optional.html">データ形式（オプション・エンジン別）</a> を参照</li>
       </ul>
       <h2>2D データ</h2>
       <h3>2D データ整理</h3>
+      <p><strong>WEB 化の変換先としての定石: ベクター = FlatGeobuf（<code>flatgeobuf:</code>・<code>bbox=auto</code> 既定 ON の空間インデックス+Range 範囲読み）、大規模な属性・SQL 絞り込み = GeoParquet + <code>duckdb:</code>、ラスタ・オルソ = XYZ タイル（<code>base:</code>/<code>xyz:</code>）</strong>。小規模なベクターは GeoJSON のまま、管理用マスターは GPKG を保持して配信用に変換する形が推奨です。</p>
       <table>
       <thead>
       <tr>
@@ -344,7 +257,8 @@
       <td>列指向バイナリ・空間インデックス。<code>geoparquet:</code>
       / <code>flatgeobuf:</code> でブラウザ内デコードし GeoJSON
       正規化。変換不要で置くだけ</td>
-      <td>全件読み込みのため超大規模は向かない</td>
+      <td><code>geoparquet:</code> は全件読み込みのため超大規模は向かない
+      （<code>flatgeobuf:</code> は <code>bbox=auto</code> の範囲読みで大規模も可）</td>
       </tr>
       <tr>
       <td>大規模・条件絞り込み・表示範囲連動</td>
@@ -356,11 +270,21 @@
       <td>DuckDB-WASM の初期ロードが重い（SW キャッシュで緩和）</td>
       </tr>
       <tr>
+      <td>大容量・広範囲のバイナリベクター</td>
+      <td><strong>GeoParquet / FlatGeobuf</strong></td>
+      <td>🏆 別枠推奨</td>
+      <td>バイナリ形式で転送量が小さく GeoJSON より大幅に軽い。<strong>ともに範囲読み込み可</strong>:
+      GeoParquet は列指向・<code>duckdb:</code> 経路の述語プッシュダウン、
+      FlatGeobuf は空間インデックス＋HTTP Range（<code>flatgeobuf:</code> の <code>bbox=auto</code> 既定 ON）</td>
+      <td>索引なしの FlatGeobuf・Range 非対応サーバーは全件転送にフォールバック。
+      SQL の絞り込み・列選択が必要なら GeoParquet + <code>duckdb:</code> を推奨</td>
+      </tr>
+      <tr>
       <td>広域・大量の全国地図・航空写真</td>
-      <td><strong>XYZ / WMTS / MVT</strong>（mvt: 行・ラスタライズ）</td>
+      <td><strong>XYZ / WMTS / WMS</strong></td>
       <td>🥈</td>
-      <td>GIS/Web 標準。<code>ImageryLayer</code> で地形ドレープ可</td>
-      <td>MVT/PMTiles は mvt:/pmtiles: 行で対応済み</td>
+      <td>GIS/Web 標準。<code>ImageryLayer</code> で地形ドレープ可（4エンジン対応）</td>
+      <td>MVT/PMTiles は対応エンジン限定（<a href="data-optional.html">オプション</a>）</td>
       </tr>
       <tr>
       <td>管理・連携用の正データ</td>
@@ -393,134 +317,6 @@
       FlatGeobuf / GeoJSON に変換</strong>し、GeoJSON
       正規化経路（<code>GeoJsonDataSource</code> /
       <code>GeoJsonPrimitive</code>）へ流す</li>
-      </ul>
-      <h2>3D データ</h2>
-      <h3>3D データ整理</h3>
-      <table>
-      <thead>
-      <tr>
-      <th>用途・データ領域</th>
-      <th>最適フォーマット</th>
-      <th>評価</th>
-      <th>強み</th>
-      <th>注意点</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr>
-      <td>単体オブジェクト（建機・構造物）</td>
-      <td><strong>GLB (glTF 2.0)</strong></td>
-      <td>🏆 最推奨</td>
-      <td>3D モデルの「3D 版 JPEG/PNG」。1 ファイルで完結</td>
-      <td>–</td>
-      </tr>
-      <tr>
-      <td>広域・大容量（都市モデル）</td>
-      <td><strong>3D Tiles 1.1（GLB 内包）</strong></td>
-      <td>🏆 最推奨</td>
-      <td>タイル化・LOD 制御でストリーミング</td>
-      <td>1.1 から glTF 2.0 / GLB ペイロードを直接利用可能</td>
-      </tr>
-      <tr>
-      <td>点群（測量・LiDAR 生データ）</td>
-      <td><strong>LAS/LAZ / PLY / EPT</strong></td>
-      <td>🥈</td>
-      <td>測量標準。EPT は大規模点群を階層タイル化</td>
-      <td>そのままの描画には変換・ローダーが必要</td>
-      </tr>
-      <tr>
-      <td>画像からのニューラル表現</td>
-      <td><strong>3DGS (PLY / SPZ / Splat)</strong></td>
-      <td>🥈</td>
-      <td>写真起点の高品質ビジュアル。SPZ は PLY 比 10x 圧縮</td>
-      <td>PLY は未圧縮で大容量。描画には専用レンダラーが必要</td>
-      </tr>
-      </tbody>
-      </table>
-      <h3>KASUGAI Canvas への読み込み方</h3>
-      <table>
-      <thead>
-      <tr>
-      <th>データ</th>
-      <th>描画エンジン</th>
-      <th>ロード方法</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr>
-      <td><strong>GLB / 3D Tiles</strong></td>
-      <td><code>CesiumJS</code> (<code>Model</code> /
-      <code>Cesium3DTileset</code>) または <code>Three.js</code>
-      (<code>GLTFLoader</code> / <code>3DTilesRenderer</code>)</td>
-      <td><code>3dtiles:</code> 行で URL 指定。LOD・ストリーミングは
-      CesiumJS が管理</td>
-      </tr>
-      <tr>
-      <td><strong>点群 (PLY / LAS)</strong></td>
-      <td><code>CesiumJS</code> (<code>Cesium3DTileset</code>
-      pnts) または
-      <code>Three.js</code> (<code>Points</code> / Potree)</td>
-      <td>PLY/LAZ → 3D Tiles 変換 → <code>3dtiles:</code> で読み込み</td>
-      </tr>
-      <tr>
-      <td><strong>3DGS (PLY / SPZ)</strong></td>
-      <td><strong>Three.js</strong> 専用レンダラー</td>
-      <td><code>gaussian-splats-3d</code> / SuperSplat 等で読み込み</td>
-      </tr>
-      </tbody>
-      </table>
-      <h3>点群の扱い</h3>
-      <ul>
-      <li><strong>LAS/LAZ</strong>：測量・LiDAR での標準。LAZ
-      は圧縮形式</li>
-      <li><strong>PLY</strong>：簡易入出力用。点位置 + RGB
-      のみの軽量点群も可能</li>
-      <li><strong>EPT (Entwine Point Tile)</strong> / <strong>Potree
-      形式</strong>：ブラウザ向け大規模点群配信。八分木階層で LOD
-      制御</li>
-      <li>大量点群は <strong>EPT</strong> や <strong>3D Tiles 点群（pnts
-      / 1.1 glTF）</strong> に変換して <code>Cesium3DTileset</code> /
-      <code>Three.js</code> で描画すると安定</li>
-      </ul>
-      <h3>3D Gaussian Splatting（3DGS）</h3>
-      <ul>
-      <li>3D
-      空間上の多数のガウス分布でシーンを表現するニューラル描画手法</li>
-      <li>主要フォーマット
-      <ul>
-      <li><strong>PLY</strong>：学習済みモデルのデファクト標準。各ガウスに位置・スケール・回転・不透明度・球面調和係数を保持</li>
-      <li><strong>SPZ</strong>：Niantic 公開の圧縮形式。PLY と比べて約
-      10 倍小さく、Web 配信に適している</li>
-      <li><strong>.splat / .ksplat /
-      .sog</strong>：各ビューアー向けの圧縮・最適化形式</li>
-      </ul></li>
-      <li>KASUGAI Canvas では <strong>Three.js</strong>
-      側で専用レンダラーを使い、オーバーレイ canvas +
-      <code>postRender</code> で CesiumJS とカメラ同期を行う</li>
-      </ul>
-      <h2>地形（DEM）の扱い</h2>
-      <ul>
-      <li><strong>CesiumJS <code>TerrainProvider</code></strong>：KASUGAI
-      Canvas は独自実装の
-      <code>GsiDemTerrainProvider</code>（<code>HeightmapTerrainData</code>
-      を返す）で地理院標高PNG (XYZ)
-      を直接地形化する。国土地理院標高タイルは RGB →
-      標高値（x = 2^16R + 2^8G + B、u は標高分解能
-      0.01m）かつ符号付き・条件分岐形式（<code>x &lt; 2^23</code>
-      のとき <code>h = xu</code>、<code>x = 2^23</code> のとき
-      NA、<code>x &gt; 2^23</code> のとき <code>h = (x - 2^24)u</code>）だが、この変換は
-      <code>gsiDecodeHeight</code> として実装済み。表示 → 地形 タブで
-      Re:Earth Terrain（楕円体高 / 標高）・地理院 5m+10m・地理院 1m
-      を切替可能</li>
-      <li><strong>Three.js</strong>：DEM 画像から
-      <code>PlaneGeometry</code> + displacement map / 頂点シェーダーで
-      terrain メッシュを生成する代替経路（オーバーレイ canvas 上）</li>
-      <li><strong>PLATEAU 3D Tiles</strong>：3D
-      都市モデル（建物・地形等）を LOD 付きで配信しているので
-      <code>3dtiles:</code> 行 → <code>Cesium3DTileset</code>
-      でそのまま表示</li>
-      <li>生の DEM（GeoTIFF / CSV 等）は、Web Worker またはサーバー側で
-      <strong>標高PNG / GLB / 3D Tiles</strong> に変換してから描画</li>
       </ul>
       <h2>データパイプライン</h2>
       <p>KASUGAI Canvas
@@ -635,6 +431,7 @@
 KASUGAI Canvas (CesiumJS + Three.js)
     ↓
 ブラウザ内デコード → GeoJSON 正規化 → GPU 描画</code></pre>
+      <p><a href="data-optional.html">データ形式（オプション・エンジン別） →</a></p>
     </main>
   </div>
 </body>

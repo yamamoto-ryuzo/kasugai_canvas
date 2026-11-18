@@ -18,8 +18,11 @@
       section: '概要',
       sectionHref: 'index.html',
       items: [
-        { href: 'index.html', text: 'Canvas UI の説明' },
-        { href: 'engines.html', text: 'エンジン（特徴と使い分け）' },
+        { href: 'index.html', text: '1-1 Canvas UI の説明' },
+        { href: 'engines.html', text: '1-2 エンジン（特徴と使い分け）' },
+        { href: 'data-recommend.html', text: '1-3 データ形式（推奨）' },
+        { href: 'data.html', text: '1-4 データ形式（標準）' },
+        { href: 'data-optional.html', text: '1-5 データ形式（オプション・エンジン別）' },
       ]
     },
     {
@@ -153,7 +156,6 @@
         {
           href: 'tech/1-3-設定内部仕様.html', text: '1-3 設定・内部仕様',
           children: [
-            { href: 'data.html', text: 'データ形式' },
             { href: 'performance.html', text: '描画性能とデータ形式方針' },
             { href: 'library.html', text: 'ライブラリ' },
             { href: 'architecture.html', text: 'システム構成' },

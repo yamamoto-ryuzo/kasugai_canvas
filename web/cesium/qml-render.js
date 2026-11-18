@@ -263,7 +263,7 @@ function pointInsidePolygon(entity, time) {
 // エンティティ(entity 描画経路)にコンパイル済みスタイルを適用する。
 // clamp: 地形ドレープ中か(ドレープ時はポリゴンのアウトラインが描かれないため
 // 周線を別途 polyline で引く)。opacity: レイヤ透過度(色アルファへ乗算)
-export function applyQmlStyleToDataSource(ds, style, { clamp = false, clampRef = null, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
+export function applyQmlStyleToDataSource(ds, style, { clamp = false, clampRef = null, time = null, hiddenSymbols = null, opacity = 1, relayoutLabels = true } = {}) {
   if (!style) return;
   // 補助エンティティの生成/削除とラベル更新を1回の変更通知に束ねる。
   // 逐次変更だと実行中のプリミティブ構築と競合し(属性リスト不整合など)
@@ -277,6 +277,13 @@ export function applyQmlStyleToDataSource(ds, style, { clamp = false, clampRef =
     ds._qmlApplying = false;
     try { ds.entities.resumeEvents?.(); } catch (_) {}
   }
+  // 再適用で初期非表示へ戻ったラベルを復帰させるため declutter を再評価する
+  // (透過度変更等ジオメトリ不変のケースは前回表示状態が引き継がれるが、
+  // 凡例切替やルール変化で新たに出るラベルは再評価が必要)。
+  // relayoutLabels=false(透過度のみの再適用)では再評価しない:
+  // 表示状態は carry で完全に引き継がれ、declutter の再配置は
+  // 投影行列のタイミング差で表示判定が揺れてラベルが一時的に減る原因になる
+  if (relayoutLabels && ds._qmlLabels?.length) requestLabelDeclutter();
 }
 
 function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = null, time = null, hiddenSymbols = null, opacity = 1 } = {}) {
@@ -334,8 +341,12 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
     for (const c of list) if (!kept || kept.has(c)) labelCandidates.set(c.entity, c);
   }
   const allEnts = [...ds.entities.values];
+  const dbg = window.__kascQmlDbg
+    ? { ents: 0, noSpec: 0, cand: labelCandidates.size, prevT: 0, prevF: 0, prevU: 0, carryF: 0, elseHide: 0, newGfx: 0 }
+    : null;
   for (const entity of allEnts) {
     if (entity._kascAux) continue;
+    if (dbg) dbg.ents++;
     const props = entityFeatureProps(entity, t);
     // 凡例の条件別チェックで非表示化されたシンボルにだけ該当する地物は隠す
     const hiddenByLegend = hasHidden && style.namesFor
@@ -344,8 +355,17 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
     const hasPoint = !!entity.billboard;
     const hasLine = !!entity.polyline;
     const hasFill = !!entity.polygon;
+    // 再適用(レイヤ透過度・凡例・縮尺ルール変更等)でラベル gfx を
+    // 作り直す際、declutter 再評価までの間に表示が消えないよう
+    // 前回ラベル gfx の表示判定を引き継ぐ。
+    // bufferNoFill ラベルは entity.billboard を共有するため、
+    // マーカー処理が show を上書きする「前」に読んでおく必要がある
+    const prevLabelGfx = entity._kascLabelGfx || null;
+    const prevLabelShow = prevLabelGfx?.show?.getValue?.(t);
+    if (dbg) { if (prevLabelShow === true) dbg.prevT++; else if (prevLabelShow === false) dbg.prevF++; else dbg.prevU++; }
 
     if (!spec) {
+      if (dbg) dbg.noSpec++;
       if (entity.billboard) entity.billboard.show = new Cesium.ConstantProperty(false);
       if (entity.polyline) entity.polyline.show = new Cesium.ConstantProperty(false);
       if (entity.polygon) entity.polygon.show = new Cesium.ConstantProperty(false);
@@ -366,6 +386,9 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
     if (hasPoint) {
       if (spec.markers?.length) {
         const canvas = markerLayersToCanvas(spec.markers);
+        // bufferNoFill ラベルとの共存用にマーカー canvas を記録する
+        // (billboard は1枠しかないためラベル側で合成して描く)
+        entity._kascMarkerCanvas = canvas;
         entity.billboard.show = new Cesium.ConstantProperty(true);
         entity.billboard.image = new Cesium.ConstantProperty(canvas);
         entity.billboard.scale = new Cesium.ConstantProperty(1);
@@ -383,6 +406,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
         if (rot) entity.billboard.rotation = new Cesium.ConstantProperty(-rot * Math.PI / 180);
         if (ddc) entity.billboard.distanceDisplayCondition = new Cesium.ConstantProperty(ddc);
       } else {
+        entity._kascMarkerCanvas = null;
         entity.billboard.show = new Cesium.ConstantProperty(false);
       }
     }
@@ -550,6 +574,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
           entity.position = new Cesium.ConstantPositionProperty(center);
           if (!entity.billboard) entity.billboard = new Cesium.BillboardGraphics();
           const canvas = markerLayersToCanvas(spec.centroid);
+          entity._kascMarkerCanvas = canvas; // マーカー同様ラベルとの合成対象
           entity.billboard.image = new Cesium.ConstantProperty(canvas);
           entity.billboard.verticalOrigin = new Cesium.ConstantProperty(Cesium.VerticalOrigin.CENTER);
           entity.billboard.horizontalOrigin = new Cesium.ConstantProperty(Cesium.HorizontalOrigin.CENTER);
@@ -609,19 +634,46 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
           const bump = hasPoint && q.v ? -Math.sign(q.v) * 12 : 0;
           const bg = labelSpec.background;
           // bufferNoFill(中空ハロー): LabelGraphics では中空を表せないため
-          // canvas ラスタライズしたラベルを billboard で描く
+          // canvas ラスタライズしたラベルを billboard で描く。
+          // マーカー/centroid 画像と billboard 枠が競合する場合は
+          // 1枚の canvas に合成して共存させる(マーカーが消えないように)
           let labelCanvasH = 0;
           const labelGfx = labelSpec.halo?.noFill && (() => {
             const r = qmlLabelCanvas(labelSpec);
-            if (r) labelCanvasH = r.canvas?.height || 0;
-            return r ? entity.billboard = new Cesium.BillboardGraphics({
-              image: r.canvas,
+            if (!r) return null;
+            labelCanvasH = r.canvas?.height || 0;
+            let img = r.canvas, baseOff = null;
+            const mkCv = entity._kascMarkerCanvas;
+            if (mkCv) {
+              // 地物位置を原点としてマーカーは中心、ラベルは (oxPx,oyPx+bump) に配置
+              const lx = oxPx, ly = oyPx + bump;
+              const mw = mkCv.width || 1, mh = mkCv.height || 1;
+              const lw = img.width || 1, lh = img.height || 1;
+              const minX = Math.min(-mw / 2, lx - lw / 2), maxX = Math.max(mw / 2, lx + lw / 2);
+              const minY = Math.min(-mh / 2, ly - lh / 2), maxY = Math.max(mh / 2, ly + lh / 2);
+              const W = Math.max(1, Math.ceil(maxX - minX)), H = Math.max(1, Math.ceil(maxY - minY));
+              const ax = -minX, ay = -minY; // canvas 内の地物位置(アンカー)
+              const cv = document.createElement("canvas");
+              cv.width = W; cv.height = H;
+              const g2 = cv.getContext("2d");
+              g2.drawImage(mkCv, ax - mw / 2, ay - mh / 2);
+              g2.drawImage(img, ax + lx - lw / 2, ay + ly - lh / 2);
+              img = cv;
+              // ラベル中心が画面位置+(dx,dy)へ来る基準オフセット。
+              // declutter は pixelOffset を (dx,dy) で上書きするため合成分を加える
+              baseOff = { x: W / 2 - ax - lx, y: H / 2 - ay - ly };
+            }
+            entity.billboard = new Cesium.BillboardGraphics({
+              image: img,
+              color: Cesium.Color.WHITE.withAlpha(opacity),
               verticalOrigin: Cesium.VerticalOrigin.CENTER,
               horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
-              pixelOffset: new Cesium.Cartesian2(oxPx, oyPx + bump),
+              pixelOffset: new Cesium.Cartesian2(oxPx + (baseOff?.x || 0), oyPx + bump + (baseOff?.y || 0)),
               rotation: labelRot ? -labelRot * Math.PI / 180 : 0,
               heightReference: hRef ?? undefined,
-            }) : null;
+            });
+            if (baseOff) entity.billboard._kascBaseOffset = baseOff;
+            return entity.billboard;
           })();
           if (!labelGfx) {
             entity.label = new Cesium.LabelGraphics({
@@ -646,8 +698,10 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
             const refPx = labelGfx ? (labelCanvasH || labelSpec.sizePx) : labelSpec.sizePx;
             (entity._qmlMapUnits ||= {})[labelGfx ? "billboard" : "label"] = { meters: labelSpec.sizeMeters, refPx: Math.max(refPx || 1, 1) };
           }
-          // ラベル縮尺表示 → 規則縮尺との積集合を DDC として適用
-          const gfx = entity.label || entity.billboard;
+          // ラベル縮尺表示 → 規則縮尺との積集合を DDC として適用。
+          // 今回生成した gfx を確実に選ぶ(bufferNoFill 時に entity.label が
+          // 前回の通常ラベルの残骸を持っていることがあるため)
+          const gfx = labelGfx ? entity.billboard : entity.label;
           const ls = labelSpec.labelScale;
           if (ls && (ls.minScale || ls.maxScale)) {
             const near = scaleDenomToDist(ls.minScale || 0);
@@ -661,9 +715,20 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
           }
           // declutter 対象(重なり禁止系)は初期非表示にし、declutter が
           // 画面投影ベースで空き/収まりを判定したうえで復帰する
-          // (初期に全表示してから消すちらつきを防ぐ)
+          // (初期に全表示してから消すちらつきを防ぐ)。
+          // 再適用時は前回の表示判定を引き継ぎ、再評価(requestLabelDeclutter)
+          // が走るまでラベルが消えないようにする
           if (!(labelSpec.displayAll || labelSpec.allowOverlap)) {
-            gfx.show = new Cesium.ConstantProperty(false);
+            gfx.show = new Cesium.ConstantProperty(prevLabelShow === true);
+            if (dbg && prevLabelShow !== true) dbg.carryF++;
+          }
+          if (dbg) dbg.newGfx++;
+          entity._kascLabelGfx = gfx;
+          // ラベル gfx が付け替わった(bufferNoFill↔通常)場合、取り残された
+          // 旧 gfx を隠す。ただし marker として再利用中の billboard は除く
+          if (prevLabelGfx && prevLabelGfx !== gfx
+            && !(prevLabelGfx === entity.billboard && spec.markers?.length)) {
+            try { prevLabelGfx.show = new Cesium.ConstantProperty(false); } catch (_) {}
           }
           // ドロップシャドウ: 同色ラベルをオフセット重複で近似
           if (!labelGfx && labelSpec.shadow) pendingShadows.push({ entity, labelSpec, oxPx, oyPx: oyPx + bump, hOrigin, vOrigin });
@@ -680,31 +745,39 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
             });
           }
         }
+      } else if (entity._kascLabelGfx && !(entity._kascLabelGfx === entity.billboard && spec?.markers?.length)) {
+        // 今回のスタイル評価でラベルが消えた地物の取り残しを隠す
+        if (dbg) dbg.elseHide++;
+        try { entity._kascLabelGfx.show = new Cesium.ConstantProperty(false); } catch (_) {}
+        entity._kascLabelGfx = null;
       }
     }
   }
-    // ラベルシャドウ(本体ラベルの後ろにオフセット重複で近似)
+    // ラベルシャドウ(本体ラベルの後ろにオフセット重複で近似)。
+    // addAux 経由で _qmlAux に登録し、スタイル再適用時に重複蓄積しないようにする
   for (const s of pendingShadows) {
     try {
       const sh = s.labelSpec.shadow;
-      const se = ds.entities.add({ position: s.entity.position });
-      se.label = new Cesium.LabelGraphics({
-        text: s.labelSpec.text,
-        font: s.labelSpec.fontCss,
-        fillColor: toCesiumColor(mulAlpha(sh.color, opacity)),
-        outlineWidth: sh.radiusPx || 0,
-        outlineColor: toCesiumColor(mulAlpha(sh.color, opacity)),
-        style: sh.radiusPx ? Cesium.LabelStyle.FILL_AND_OUTLINE : Cesium.LabelStyle.FILL,
-        horizontalOrigin: s.hOrigin, verticalOrigin: s.vOrigin,
-        pixelOffset: new Cesium.Cartesian2(s.oxPx + sh.offsetPx[0], s.oyPx + sh.offsetPx[1]),
-        heightReference: hRef ?? undefined,
+      addAux({
+        position: s.entity.position?.getValue?.(t) || s.entity.position,
+        label: new Cesium.LabelGraphics({
+          text: s.labelSpec.text,
+          font: s.labelSpec.fontCss,
+          fillColor: toCesiumColor(mulAlpha(sh.color, opacity)),
+          outlineWidth: sh.radiusPx || 0,
+          outlineColor: toCesiumColor(mulAlpha(sh.color, opacity)),
+          style: sh.radiusPx ? Cesium.LabelStyle.FILL_AND_OUTLINE : Cesium.LabelStyle.FILL,
+          horizontalOrigin: s.hOrigin, verticalOrigin: s.vOrigin,
+          pixelOffset: new Cesium.Cartesian2(s.oxPx + sh.offsetPx[0], s.oyPx + sh.offsetPx[1]),
+          heightReference: hRef ?? undefined,
+        }),
       });
     } catch (e) { /* シャドウ生成失敗は無視 */ }
   }
   // コールアウト(引き出し線)
   for (const c of pendingCallouts) {
     try {
-      ds.entities.add({
+      addAux({
         polyline: {
           positions: [c.from, c.to],
           width: new Cesium.ConstantProperty(Math.max(c.line.widthPx, 0.5)),
@@ -716,6 +789,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
   }
   // declutter 用にラベル spec を退避
   ds._qmlLabels = [...labelCandidates.values()];
+  if (dbg) (window.__kascQmlDbg.applies ||= []).push(dbg);
 }
 
 
@@ -761,6 +835,10 @@ function orderToQuads(order, fallback) {
   return out.length ? out : [fallback || { h: 0, v: 0 }];
 }
 
+// ワールド座標 → 画面座標。worldToWindowCoordinates は最終描画フレームの
+// 行列を使うため、カメラ移動直後・requestRenderMode の描画停止中は
+// 古い投影になり得る → 投影不能(null)時は declutter 側で「非表示」ではなく
+// 現状維持とし、古い行列による一斉消去を防ぐ
 function toWindow(scene, pos) {
   const st = Cesium.SceneTransforms;
   if (st?.worldToWindowCoordinates) return st.worldToWindowCoordinates(scene, pos);
@@ -1090,7 +1168,10 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
   const t = Cesium.JulianDate.now();
   // requestRenderMode 下で描画を要求すべき「表示状態の変化」があったかを返す
   let changed = false;
+  const dbg = window.__kascQmlDbg ? { shown: 0, hidden: 0, winNull: 0, reasons: [], placed0: placed.length, detail: [] } : null;
+  if (dbg) (window.__kascQmlDbg.declutters ||= []).push(dbg);
   const setShow = (gfx, v) => {
+    if (dbg) { if (v) dbg.shown++; else dbg.hidden++; }
     if (gfx.show?.getValue?.() === v) return;
     gfx.show = new Cesium.ConstantProperty(v);
     changed = true;
@@ -1099,12 +1180,16 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
     (b.spec.zIndex - a.spec.zIndex) || (b.spec.priority - a.spec.priority));
   for (const c of sorted) {
     const e = c.entity;
-    // bufferNoFill 等は billboard ラベル(LabelGraphics では中空を表せない)
-    const gfx = e?.label || e?.billboard;
+    // bufferNoFill 等は billboard ラベル(LabelGraphics では中空を表せない)。
+    // _kascLabelGfx は再適用時に最新ラベル gfx を指す正本(古い残骸を拾わない)
+    const gfx = e?._kascLabelGfx || e?.label || e?.billboard;
     if (!gfx) continue;
     const pos = e.position?.getValue?.(t);
     const win = pos ? toWindow(scene, pos) : null;
-    if (!win || !Number.isFinite(win.x)) { setShow(gfx, false); continue; }
+    // 投影不能(カメラ背後 or 古い描画行列)は「隠す」判定にしない。
+    // requestRenderMode で描画が走る前の declutter が古い行列で全ラベルを
+    // 一斉に非表示→次の描画で復活、というちらつきを防ぐ
+    if (!win || !Number.isFinite(win.x)) { if (dbg) { dbg.winNull++; dbg.reasons.push(String(e.id).slice(0,8)+":winNull"); } continue; }
     const size = c.spec.sizePx || 12;
     const lines = String(c.spec.text).split("\n");
     // 全角は 1em・半角は 0.55em で幅を見積もる(日本語ラベル対応)
@@ -1118,6 +1203,7 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
       const pb = polyScreenBox(scene, e, t);
       const fits = pb && w <= (pb.x2 - pb.x1) && h <= (pb.y2 - pb.y1);
       if (!fits) {
+        if (dbg) dbg.reasons.push(String(e.id).slice(0,8)+":noFit");
         setShow(gfx, false);
         continue;
       }
@@ -1132,7 +1218,7 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
       } else {
         tooSmall = lineScreenLen(scene, e, t) < need;
       }
-      if (tooSmall) { setShow(gfx, false); continue; }
+      if (tooSmall) { if (dbg) dbg.reasons.push(String(e.id).slice(0,8)+":tooSmall"); setShow(gfx, false); continue; }
     }
     if (c.spec.allowOverlap || c.spec.displayAll) { setShow(gfx, true); continue; }
     const quads = pl.predefinedOrder?.length ? orderToQuads(pl.predefinedOrder, pl.quad) : [pl.quad || { h: 0, v: 0 }];
@@ -1146,16 +1232,21 @@ export function declutterDataSourceLabels(scene, ds, placed = []) {
       // ラベル自身の地物が登録した障害物(b.entity === e)は衝突対象から除く。
       // 除かないと fitInPolygonOnly/centroidInside 系ラベルは常に自ポリゴンと
       // 衝突して全滅する(QGIS PAL と同じく自己障害物は適用しない)
-      if (!placed.some(b => b.entity !== e && obstacleHit(b, box))) {
+      const hitBy = placed.find(b => b.entity !== e && obstacleHit(b, box));
+      if (dbg) dbg.detail.push({ id: String(e.id).slice(0, 8), q: [q.h, q.v], box: [x1 | 0, y1 | 0, x2 | 0, y2 | 0], hit: hitBy ? (hitBy.entity ? String(hitBy.entity.id).slice(0, 8) : hitBy.poly ? "poly" : "box") : null });
+      if (!hitBy) {
         placed.push(box);
-        gfx.pixelOffset = new Cesium.ConstantProperty(new Cesium.Cartesian2(dx, dy));
+        // 合成ラベル(マーカー+中空ラベル)は基準オフセット分を加える
+        const bOff = gfx._kascBaseOffset;
+        gfx.pixelOffset = new Cesium.ConstantProperty(
+          new Cesium.Cartesian2(dx + (bOff?.x || 0), dy + (bOff?.y || 0)));
         changed = true;
         setShow(gfx, true);
         done = true;
         break;
       }
     }
-    if (!done) setShow(gfx, false);
+    if (!done) { if (dbg) dbg.reasons.push(String(e.id).slice(0,8)+":collision"); setShow(gfx, false); }
   }
   return changed;
 }
@@ -1179,29 +1270,40 @@ export function declutterAllLabels(scene, sources) {
 let _declutterInstalled = false;
 let _declutterTimer = null;
 let _declutterLastRun = 0;
+let _declutterScene = null;
+let _declutterGetSources = null;
+const _scheduleDeclutter = () => {
+  if (_declutterTimer) return;
+  _declutterTimer = setTimeout(() => {
+    _declutterTimer = null;
+    _declutterLastRun = Date.now();
+    declutterAllLabels(_declutterScene, _declutterGetSources?.() || []);
+  }, 150);
+};
+// スタイル再適用(レイヤ透過度・凡例切替・縮尺ルール変化等)の直後に
+// declutter の再評価を要求する。未インストール時は何もしない
+// (初回適用は呼び出し側の遅延実行でカバーされる)
+export function requestLabelDeclutter() {
+  if (!_declutterInstalled) return;
+  _scheduleDeclutter();
+}
 // viewer.scene へカメラ停止時・描画後の自動 declutter を一度だけ仕掛ける
 export function installLabelDeclutter(scene, getSources) {
   if (_declutterInstalled || !scene) return;
   _declutterInstalled = true;
-  const run = () => {
-    if (_declutterTimer) return;
-    _declutterTimer = setTimeout(() => {
-      _declutterTimer = null;
-      _declutterLastRun = Date.now();
-      declutterAllLabels(scene, getSources?.() || []);
-    }, 150);
-  };
-  try { scene.camera.moveEnd.addEventListener(run); } catch (e) {}
+  _declutterScene = scene;
+  _declutterGetSources = getSources;
+  try { scene.camera.moveEnd.addEventListener(_scheduleDeclutter); } catch (e) {}
   try { scene.camera.changed.addEventListener(() => {
-    if (scene.camera.changed.percentageChanged > 0.5) run();
+    if (scene.camera.changed.percentageChanged > 0.5) _scheduleDeclutter();
   }); } catch (e) {}
   // moveEnd が来ない経路や初回描画の取りこぼしに備え、postRender で
   // 一定間隔(800ms)ごとの再判定も行う
   try { scene.postRender.addEventListener(() => {
-    if (Date.now() - _declutterLastRun > 800) run();
+    if (Date.now() - _declutterLastRun > 800) _scheduleDeclutter();
   }); } catch (e) {}
   // 初回は描画が安定してから
-  setTimeout(run, 800);
+  setTimeout(_scheduleDeclutter, 800);
 }
 
 // ---------------------------------------------------------------------------

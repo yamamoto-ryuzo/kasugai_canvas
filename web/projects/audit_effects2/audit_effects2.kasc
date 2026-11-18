@@ -1,0 +1,9 @@
+# engine-cesium 監査検証プロジェクト2(2026-11-18 追加分)
+title: エンジンAPI監査検証2
+cam: 東京|35.688|139.770|h=3000|p=-85
+base: ベースマップなし | none
+terrain: 任意地形 | url=https://terrain.reearth.land/cesium-mesh/ellipsoid
+scene3d: 監査 | blur=on | brightness=on | material=elevationcontour | matuniforms={"spacing":200,"width":3} | minzoom=50 | maxzoom=500000 | tilt=on
+model: 検証/モデル | https://cdn.jsdelivr.net/npm/cesium@1.147.0/Apps/SampleData/models/CesiumMan/Cesium_Man.glb | lon=139.77 | lat=35.688 | scale=50 | minimumpixelsize=64 | modelopts={"colorBlendMode":"replace","color":"#00ff00","silhouetteColor":"#ff0000","silhouetteSize":2,"runAnimations":false,"imageBasedLightingFactor":[2,2],"distanceDisplayCondition":[0,100000],"heightReference":"none"}
+geojson: 検証/点 | canvas_data/pt.geojson
+3dtiles: 検証/OSM建物 | osm

@@ -15,8 +15,8 @@ await page.goto(`${BASE}/cesium/?kasc=${KASC}`, { waitUntil: "domcontentloaded" 
 // 同一オリジン化してからモジュール直検証(CSV結合・LEFT JOIN・接頭辞・数値キー)
 const mod = await page.evaluate(async (base) => {
   const m = await import(`${base}/shared/vector-load.js`);
-  const item = { type: "geojson", title: "t", url: `${base}/projects/_join_test/DATA/city.geojson`,
-    opts: { join: `${base}/projects/_join_test/DATA/pop.csv`, on: "code=city_code", joinprefix: "pop_" } };
+  const item = { type: "geojson", title: "t", url: `${base}/projects/_join_test/canvas_data/city.geojson`,
+    opts: { join: `${base}/projects/_join_test/canvas_data/pop.csv`, on: "code=city_code", joinprefix: "pop_" } };
   const r = await m.loadVectorItem(item, "", null, null);
   return { props: r.geojson.features.map(f => f.properties), joinInfo: r.joinInfo };
 }, BASE);

@@ -242,8 +242,8 @@
     "integrated": "ページ経由で機能確認"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": "node --check OK"
+   "last_verified": "2026-11-18T00:00:00+09:00",
+   "note": "node --check OK。repaired: 透過度スライダ再適用でラベルが消える不具合を修正(_kascLabelGfx で表示判定引継ぎ+requestLabelDeclutter 新設・シャドウ/コールアウトを addAux 化)。追修: bufferNoFill ラベルが entity.billboard を共有し、マーカー処理の show リセットが前回表示判定を潰す問題を冒頭捕捉で修正。追修: 透過度入力でラベル激減→再描画復活は declutter 再評価の非決定性が原因(win-null 時は現状維持+透過度のみ再適用は relayoutLabels:false で再評価抑制)。bufferNoFill ラベル+マーカーは canvas 合成で共存(_kascMarkerCanvas/_kascBaseOffset)。__kascQmlDbg 計測フック追加。probe-label-opacity 11/11・probe-layer-opacity 9/9・probe-rec-qml 26/26 PASS"
   },
   {
    "id": "web.cesium.mod.auth-login-form",
@@ -611,7 +611,7 @@
    "name": "kasc_loader",
    "source": "web/shared/kasc_loader.js",
    "signature": "kasc_loader",
-   "summary": ".kasc+DATA/ローダ(プロジェクト展開)",
+   "summary": ".kasc+canvas_data/ローダ(プロジェクト展開)",
    "needs_runtime": false,
    "standalone_ok": true,
    "depends": [],
@@ -977,11 +977,11 @@
    "depends": [],
    "verify": {
     "standalone": "node --check + export存在確認",
-    "integrated": "エンジン経由で機能実行"
+    "integrated": "node web/verify/results/probe-rec-formats.mjs(3形式統合) + probe-rec-qml.mjs(QML適用)"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": "node --check OK + エンジン経由で利用"
+   "last_verified": "2026-11-18T00:00:00+09:00",
+   "note": "probe-rec-formats 22/22 PASS。probe-rec-qml 26/26 PASS(3形式の属性へ categorizedSymbol+ラベル+凡例が実機適用)。推奨形式の変更時検証は vector-formats スキル"
   },
   {
    "id": "web.shared.vendor-guard",
@@ -4327,7 +4327,7 @@
    "kind": "ui_control",
    "name": "html_sections",
    "source": "html:行 → loadKascInfoContent",
-   "signature": "html:タイトル|<HTML>|DATA/x.html|URL",
+   "signature": "html:タイトル|<HTML>|canvas_data/x.html|URL",
    "summary": "ポータル内HTMLセクション。インライン/ファイル/URL。サニタイズ(script/on*除去)経由",
    "needs_runtime": true,
    "standalone_ok": false,
@@ -4345,7 +4345,7 @@
    "kind": "ui_control",
    "name": "portal_fullhtml",
    "source": "portal:…|html= → portal.js",
-   "signature": "portal:on|title=|open=auto|html=DATA/x.html",
+   "signature": "portal:on|title=|open=auto|html=canvas_data/x.html",
    "summary": "ポータルボディ全体を1HTMLで構成。見出し/地図を開く/🏠/解除フッタは共通。カード自動生成なし",
    "needs_runtime": true,
    "standalone_ok": false,

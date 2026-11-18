@@ -7,7 +7,7 @@ await page.goto(`${BASE}/cesium/`, { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => window.Cesium, { timeout: 90000 });
 const r = await page.evaluate(async () => {
   const IGC = (await import("https://cdn.jsdelivr.net/npm/ol@10.11.0/format/IGC.js")).default;
-  const text = await (await fetch("../projects/format_test/DATA/flight.igc")).text();
+  const text = await (await fetch("../projects/format_test/canvas_data/flight.igc")).text();
   const feats = new IGC().readFeatures(text, { featureProjection: "EPSG:4326", dataProjection: "EPSG:4326" });
   const f = feats[0];
   const g = f.getGeometry();

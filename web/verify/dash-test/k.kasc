@@ -1,4 +1,4 @@
 title: ダッシュボード検証
-geojson: 事業箇所 | DATA/jigyo.geojson | on
+geojson: 事業箇所 | canvas_data/jigyo.geojson | on
 dash: 事業進捗 | layer=事業箇所 | kpi=count,pct:状態:完了,sum:予算 | chart=状態 | matrix=状態,担当 | filters=担当,年度
 dash: 公開用統計 | layer=事業箇所 | kpi=count | chart=状態 | detail=off

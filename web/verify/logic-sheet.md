@@ -12,7 +12,7 @@ flowchart TB
   eng --> shared[shared/ コアモジュール群]
   eng --> api[window.kasugaiApi]
   api --> tools[CHAT_TOOLS 91 + executeChatTool]
-  eng --> kasc[.kasc+DATA/ プロジェクト再生]
+  eng --> kasc[.kasc+canvas_data/ プロジェクト再生]
   shared --> sw[vendor-proxy-sw / sw-duckdb]
   api --> srv[(server /api/*)]
 ```
@@ -473,7 +473,7 @@ flowchart LR
 
 ### `web.shared.kasc_loader` ✅ kasc_loader
 - kind=logic_fn / source=`web/shared/kasc_loader.js` / needs_runtime=False standalone_ok=True
-- .kasc+DATA/ローダ(プロジェクト展開)
+- .kasc+canvas_data/ローダ(プロジェクト展開)
 - signature: `kasc_loader`
 - 単独検証: `node --check + export存在確認`
 - 連携検証: `エンジン経由で機能実行`
@@ -3357,7 +3357,7 @@ flowchart LR
 ### `web.portal.html_sections` ✅ html_sections
 - kind=ui_control / source=`html:行 → loadKascInfoContent` / needs_runtime=True standalone_ok=False
 - ポータル内HTMLセクション。インライン/ファイル/URL。サニタイズ(script/on*除去)経由
-- signature: `html:タイトル|<HTML>|DATA/x.html|URL`
+- signature: `html:タイトル|<HTML>|canvas_data/x.html|URL`
 - 連携検証: `Playwright: セクション描画assert`
 - 結果: **pass** (2026-11-14T00:00:00+09:00)
 
@@ -3371,7 +3371,7 @@ flowchart LR
 ### `web.portal.fullhtml` ✅ portal_fullhtml
 - kind=ui_control / source=`portal:…|html= → portal.js` / needs_runtime=True standalone_ok=False
 - ポータルボディ全体を1HTMLで構成。見出し/地図を開く/🏠/解除フッタは共通。カード自動生成なし
-- signature: `portal:on|title=|open=auto|html=DATA/x.html`
+- signature: `portal:on|title=|open=auto|html=canvas_data/x.html`
 - 連携検証: `Playwright: カスタムbody描画assert`
 - 結果: **pass** (2026-11-14T00:00:00+09:00)
 

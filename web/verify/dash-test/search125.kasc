@@ -1,6 +1,6 @@
 title: ポータル埋め込み検索検証
 portal:on | title=検索テスト | open=manual
-geojson: 事業箇所 | DATA/jigyo.geojson | on
+geojson: 事業箇所 | canvas_data/jigyo.geojson | on
 search: all | title=探す | ph=施設名・属性値で検索
 search: 事業箇所 | attr=箇所名 | title=箇所名検索
 html:カスタム | <p><input data-search="事業箇所" data-search-attr="担当" placeholder="担当で検索"></p>

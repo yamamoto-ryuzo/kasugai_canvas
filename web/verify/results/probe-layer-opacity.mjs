@@ -49,18 +49,18 @@ const PROBE_GEOJSON = JSON.stringify({ type: "FeatureCollection", features: [POL
 const PROBE_KASC = [
   "title: probe-layer-opacity",
   "base: GSI標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | off",
-  "geojson: plain | DATA/plain.geojson",
-  "geojson: qml | DATA/qml.geojson | style=DATA/qml.qml",
-  "image: overlay | DATA/ov.png | bbox=139.7,35.6,139.9,35.8",
+  "geojson: plain | canvas_data/plain.geojson",
+  "geojson: qml | canvas_data/qml.geojson | style=canvas_data/qml.qml",
+  "image: overlay | canvas_data/ov.png | bbox=139.7,35.6,139.9,35.8",
   "cam:probe|35.7|139.8|h=50000|p=-90",
 ].join("\n");
 
 const srv = createServer(async (req, res) => {
   const p = decodeURIComponent(new URL(req.url, "http://x").pathname);
-  const mem = { "/probe/test.kasc": PROBE_KASC, "/probe/DATA/qml.qml": PROBE_QML,
-    "/probe/DATA/plain.geojson": PROBE_GEOJSON, "/probe/DATA/qml.geojson": PROBE_GEOJSON };
+  const mem = { "/probe/test.kasc": PROBE_KASC, "/probe/canvas_data/qml.qml": PROBE_QML,
+    "/probe/canvas_data/plain.geojson": PROBE_GEOJSON, "/probe/canvas_data/qml.geojson": PROBE_GEOJSON };
   if (mem[p]) { res.writeHead(200, { "content-type": MIME[extname(p)] || "text/plain" }); res.end(mem[p]); return; }
-  if (p === "/probe/DATA/ov.png") { res.writeHead(200, { "content-type": "image/png" }); res.end(PNG1); return; }
+  if (p === "/probe/canvas_data/ov.png") { res.writeHead(200, { "content-type": "image/png" }); res.end(PNG1); return; }
   try {
     let q = p.endsWith("/") ? p + "index.html" : p;
     const fp = resolve(join(WEB, q));

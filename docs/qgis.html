@@ -21,7 +21,7 @@
       <p>QGIS プラグイン <code>geo_webview</code> の <code>kasugaiExport</code>
       （パネル「KASUGAI」ボタン / <code>GET :8089/kasugai</code> / bridge
       <code>kasugaiExport</code> / Canvas 側「QGISから取り込み」ボタン）は、
-      プロジェクトのレイヤーツリーを走査して <code>.kasc + DATA/</code> を出力し、
+      プロジェクトのレイヤーツリーを走査して <code>.kasc + canvas_data/</code> を出力し、
       起動中の Canvas へ登録・切替（または静的ホスト経由で
       <code>?kasc=</code> 再生）する。以下は現在「そのまま」再現される項目。</p>
       <h3 id="レイヤー行の対応表">レイヤー → .kasc 行の対応</h3>
@@ -38,13 +38,13 @@
       <td>ベクター（GPKG/GeoJSON/Parquet/FGB ソース）</td>
       <td><code>gpkg:</code> / <code>geojson:</code> / <code>geoparquet:</code> /
       <code>flatgeobuf:</code> のネイティブ参照</td>
-      <td>変換せずそのまま。ローカルは <code>DATA/</code> へ複製、URL は直参照。
+      <td>変換せずそのまま。ローカルは <code>canvas_data/</code> へ複製、URL は直参照。
       GPKG は <code>table=</code> 対応</td>
       </tr>
       <tr>
       <td>ベクター（上記以外のソース・再投影必要）</td>
       <td><code>geojson:</code></td>
-      <td>EPSG:4326 の GeoJSON へ変換して <code>DATA/</code> へ出力</td>
+      <td>EPSG:4326 の GeoJSON へ変換して <code>canvas_data/</code> へ出力</td>
       </tr>
       <tr>
       <td>CSV/TSV（delimitedtext / ogr）</td>
@@ -60,14 +60,14 @@
       <tr>
       <td>3D Tiles（QgsTiledSceneLayer）</td>
       <td><code>3dtiles:</code></td>
-      <td>ローカル tileset は DATA/ へ複製（サイズ上限あり）</td>
+      <td>ローカル tileset は canvas_data/ へ複製（サイズ上限あり）</td>
       </tr>
       <tr>
       <td>XYZ タイル</td>
       <td><code>xyz:</code> / <code>base:</code></td>
       <td>最下段の表示中 XYZ または「背景図」「ベースマップ」グループ内は
       <code>base:</code> 行。<code>minZoom=</code>/<code>maxZoom=</code> 反映。
-      ローカルタイルツリーは DATA/ へ複製</td>
+      ローカルタイルツリーは canvas_data/ へ複製</td>
       </tr>
       <tr>
       <td>WMS</td>
@@ -78,7 +78,7 @@
       <tr>
       <td>GeoTIFF/COG（GDAL ラスタ）</td>
       <td><code>geotiff:</code></td>
-      <td>ローカル .tif 系は DATA/ へ複製、URL/vsicurl は直参照。
+      <td>ローカル .tif 系は canvas_data/ へ複製、URL/vsicurl は直参照。
       それ以外のラスタ形式はスキップ（<a href="https://github.com/yamamoto-ryuzo/kasugai_canvas/issues/53">#53</a>）。
       ラスタレンダラは Canvas 側オプションで再現可（<code>colormap=</code>疑似カラー/
       <code>hillshade=</code>陰影/<code>stretch=minmax</code>・<code>min=/max=</code>値域/
@@ -140,12 +140,12 @@
       <td>マップテーマ</td>
       <td><code>theme:</code> 行 → 表示状態プリセット（テーマの可視レイヤ名を
       タイトル一致で記述）。テーマ記録の名前付きスタイルは
-      <code>DATA/&lt;slug&gt;__&lt;theme&gt;.qml</code> として出力し
+      <code>canvas_data/&lt;slug&gt;__&lt;theme&gt;.qml</code> として出力し
       <code>;style=</code> で付与（テーマ別スタイル切替を再現・v4.6.0〜）</td>
       </tr>
       <tr>
       <td>アトラス有効な印刷レイアウト</td>
-      <td><code>fly_geojson:</code> 行＋<code>DATA/atlas_*.geojson</code> →
+      <td><code>fly_geojson:</code> 行＋<code>canvas_data/atlas_*.geojson</code> →
       Fly パネルのプレゼン巡回ルート。各ページ表示範囲を巡回し、
       座標 Z にページを収めるカメラ高を焼き込む（点ごとの可変縮尺に対応・
       geo_webview v4.8.0〜）。印刷レイアウト本体の PDF 出力は
@@ -169,8 +169,8 @@
       <tbody>
       <tr>
       <td>ベクターの現在スタイル</td>
-      <td><code>DATA/&lt;slug&gt;.qml</code> として保存し
-      <code>style=DATA/&lt;slug&gt;.qml</code> で参照。<code>&lt;renderer-v2&gt;</code>
+      <td><code>canvas_data/&lt;slug&gt;.qml</code> として保存し
+      <code>style=canvas_data/&lt;slug&gt;.qml</code> で参照。<code>&lt;renderer-v2&gt;</code>
       の単一・分類（categorizedSymbol）・段階（graduatedSymbol）・ルール（RuleBased・
       式サブセット評価）レンダラをコンパイルして適用。シンボルレイヤ
       （マーカー/SVG・フォント/ラスタ・ライン実線破線＋結合部/端部/オフセット・
@@ -270,7 +270,7 @@
       </tr>
       <tr>
       <td>シンボルが参照する画像（SVG/ラスタ）</td>
-      <td><code>DATA/</code> へ複製し .qml 内の参照を書き換え
+      <td><code>canvas_data/</code> へ複製し .qml 内の参照を書き換え
       （QGIS 内蔵 SVG や絶対パスも拾う）</td>
       </tr>
       <tr>
@@ -323,12 +323,23 @@
       （billboard スプライト切出し）。<code>3dtiles:</code> 行は
       <code>tilestyle</code>/<code>tilecolor</code>/<code>tileshow</code>/
       <code>tilepointsize</code>/<code>sse</code>/<code>edl</code> で
-      Cesium3DTileStyle と点群描画を制御。<code>scene3d:</code> 行は
+      Cesium3DTileStyle と点群描画を制御。URL スロットの予約値
+      <code>osm</code> は Cesium ion の OSM Buildings を読み込み、
+      <code>ionkey=</code> でアクセストークンを指定できる。<code>scene3d:</code> 行は
       <code>fxaa</code>/<code>bloom</code>/<code>ao</code>/<code>tonemap</code>/
+      <code>blur</code>/<code>brightness</code>/<code>depthview</code>/
+      <code>silhouette</code>（クリック地物の縁取り）/
       <code>material</code>（globe.material 地表ファブリック）/
-      <code>groundatmosphere</code>/<code>specmap</code> を追加受理し、
-      QGIS 3D シーン設定を超える Cesium 固有の後処理・大気・環境マップを
-      同一行で指定できる。<code>wms:</code> レイヤーはクリック時に
+      <code>matuniforms</code>（ファブリック uniforms を JSON で上書き）/
+      <code>groundatmosphere</code>/<code>specmap</code>/
+      <code>minzoom</code>/<code>maxzoom</code>/<code>tilt</code>
+      （カメラ制約）を追加受理し、QGIS 3D シーン設定を超える
+      Cesium 固有の後処理・大気・環境マップ・カメラ制御を
+      同一行で指定できる。<code>terrain:</code> 行の <code>url=</code> は
+      任意の CesiumTerrainProvider エンドポイントを直接指定でき、
+      <code>model:</code> 行の <code>modelopts=</code> は ModelGraphics の
+      残り全引数（色・シルエット・IBL・ノード変換・アーティキュレーション・
+      カスタムシェーダ等）を JSON で一括指定する。<code>wms:</code> レイヤーはクリック時に
       GetFeatureInfo を自動発行して属性パネルへ追記する
       （<code>infoformat=</code> で応答形式指定）。</p>
       <h3 id="連携の起動経路">連携の起動経路</h3>

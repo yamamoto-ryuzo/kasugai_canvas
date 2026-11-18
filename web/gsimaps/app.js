@@ -225,7 +225,7 @@ function t(key, vars) {
   return String(PORTAL_STRINGS[key] ?? key)
     .replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] != null ? String(vars[k]) : ""));
 }
-// DATA/ 等の相対参照 → プロジェクト基準の絶対URL(img=/html: セクション用)
+// canvas_data/ 等の相対参照 → プロジェクト基準の絶対URL(img=/html: セクション用)
 const resolveProjectUrl = u => resolveKascUrl(u, lastBaseUrl);
 
 // ---- gsimaps 内部APIへの薄いアクセス ----
@@ -2538,7 +2538,7 @@ function setGsiGlobe(on) {
 // ---- GSI 作図(sakuzu)の取り込み ----
 // Canvas が注入した sakuzu item(entry.sakuzu と同一)は既存レイヤ扱いで除外。
 // 取り込みは GeoJSON コピー(元の作図は二重描画防止で非表示化)。
-// fileWrite 可能環境では DATA/ へ保存し geojson: 行として .kasc 永続化する
+// fileWrite 可能環境では canvas_data/ へ保存し geojson: 行として .kasc 永続化する
 function gsiSakuzuItems() {
   // globe 中は sakuzu(2D側)参照が死んでいるため一覧は空を返す
   if (globeMode) return [];
@@ -2575,7 +2575,7 @@ async function importGsiSakuzu({ indices = null } = {}) {
         const name = `gsi_sakuzu_${s.index}_${Date.now().toString(36)}.geojson`;
         const saved = await window.kasugaiApi.saveDataFile(name, JSON.stringify(geojson));
         if (saved?.ok) {
-          await window.kasugaiApi.addLayer(title, `DATA/${name}`, { type: "geojson" });
+          await window.kasugaiApi.addLayer(title, `${saved.dir || "canvas_data"}/${name}`, { type: "geojson" });
           persistent = true;
         }
       } catch (_) { /* fileWrite 不可環境は一時レイヤーへフォールバック */ }
@@ -2592,7 +2592,7 @@ async function importGsiSakuzu({ indices = null } = {}) {
   const sessionOnly = imported.length && imported.every(x => !x.persistent);
   return { ok: imported.length > 0 || skipped.length > 0, imported, skipped, failed,
     persistent: imported.some(x => x.persistent),
-    message: parts.join("・") + (sessionOnly ? "（この環境では DATA/ 保存不可のため一時レイヤー。永続化はローカルサーバー版で）" : "") };
+    message: parts.join("・") + (sessionOnly ? "（この環境では canvas_data/ 保存不可のため一時レイヤー。永続化はローカルサーバー版で）" : "") };
 }
 
 // ---- kasugaiApi（AI/外部制御） ----
@@ -2695,7 +2695,7 @@ window.kasugaiApi = createPlayerApi({
   },
   // .kasc fly_geojson: 行 → フライパス定義（speedはm/s。setFlySettings の書き戻し用に _item を持たせる）
   getFlyPaths: kascFlyPaths.getFlyPaths,
-  // flyRoute/addFlyPath の永続化: GeoJSON を DATA/ へ保存し fly_geojson: 行を追記。
+  // flyRoute/addFlyPath の永続化: GeoJSON を canvas_data/ へ保存し fly_geojson: 行を追記。
   // ファイル書込み可能なローカルサーバー版のみ（静的配信ではメモリ登録のみで false を返す）
   persistFlyPath: kascFlyPaths.persistFlyPath,
   // setFlySettings で書き換えた item.opts をインスペクタの fly_geojson: 行へ反映

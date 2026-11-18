@@ -1,5 +1,5 @@
 title:データテーブル埋め込み
-portal:on | title=データテーブル | open=auto | html=DATA/portal_table.html
+portal:on | title=データテーブル | open=auto | html=canvas_data/portal_table.html
 cam:全体 | 36.0 | 139.0 | h=80000
-geojson:テスト地物 | DATA/test.geojson
+geojson:テスト地物 | canvas_data/test.geojson
 table:テスト地物 | cols=name,状況 | title=台帳テスト | badge=状況:工事中=#e07b00;*=red

@@ -28,12 +28,12 @@ const PROBE_KASC = [
   "terrain: qgis | generator=flat | shading=off | exaggeration=2",
   "scene3d: s | background=#123456 | skybox=off | shadows=on | ao=on",
   "light: L | az=180 | el=45 | intensity=2 | color=#ff8800",
-  "geojson: probe/Poly | DATA/poly.geojson",
+  "geojson: probe/Poly | canvas_data/poly.geojson",
   "cam:probe|35.685|139.765|h=3000|p=-45",
 ].join("\n");
 const srv = createServer(async (req, res) => {
   const p = decodeURIComponent(new URL(req.url, "http://x").pathname);
-  const mem = { "/probe/test.kasc": PROBE_KASC, "/probe/DATA/poly.geojson": PROBE_GEOJSON };
+  const mem = { "/probe/test.kasc": PROBE_KASC, "/probe/canvas_data/poly.geojson": PROBE_GEOJSON };
   if (mem[p]) { res.writeHead(200, { "content-type": MIME[extname(p)] || "text/plain" }); res.end(mem[p]); return; }
   try {
     let q = p.endsWith("/") ? p + "index.html" : p;

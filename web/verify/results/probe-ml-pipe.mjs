@@ -6,7 +6,7 @@ await page.goto(`${BASE}/maplibre/`, { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => window.kasugaiApi, { timeout: 60000 });
 const r = await page.evaluate(async () => {
   const { loadCompiledQml, maplibreApplyQml } = await import("../shared/qml-2d.js");
-  const compiled = await loadCompiledQml("DATA/layer_cat.qml", `${location.origin}/projects/sample_qgis/`);
+  const compiled = await loadCompiledQml("canvas_data/layer_cat.qml", `${location.origin}/projects/sample_qgis/`);
   const gj = { type: "FeatureCollection", features: [{
     type: "Feature",
     properties: { N03_004: "足立区" },

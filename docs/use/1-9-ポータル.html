@@ -204,7 +204,7 @@
 <code>news:ファイル/URL | limit=件数 | title=見出し
 </code>
 </td>        
-<td>お知らせフィード。DATA/ 内ファイルまたは URL を fetch（no-store）し日付降順で一覧表示。Re:Earth CMS のモデル URL（<code>…/api/p/{workspace}/{project}/{model}.json</code>）も指定可 — アイテムの <code>fields</code>（date/title/body/link/view/feature/tags/importance・値が <code>{value:…}</code> 形は value を展開）を記事フィールドとして解釈し、CMS 管理画面からお知らせを更新できる。
+<td>お知らせフィード。canvas_data/ 内ファイルまたは URL を fetch（no-store）し日付降順で一覧表示。Re:Earth CMS のモデル URL（<code>…/api/p/{workspace}/{project}/{model}.json</code>）も指定可 — アイテムの <code>fields</code>（date/title/body/link/view/feature/tags/importance・値が <code>{value:…}</code> 形は value を展開）を記事フィールドとして解釈し、CMS 管理画面からお知らせを更新できる。
 <code>html:
 </code> セクションの後・記述順。JSON（
 <code>[{date,title,body,link,view,feature,tags,importance}]
@@ -421,7 +421,7 @@
 </code>・「地図を開く」ボタン・左上の 🏠 ボタン・「ビュー解除」フッタ）は共通のまま残ります。
 </p>      
 <pre class="text">
-<code>portal:on | title=フルHTMLポータル | open=auto | html=DATA/portal.html
+<code>portal:on | title=フルHTMLポータル | open=auto | html=canvas_data/portal.html
 </code>
 </pre>      
 <h4>設計上の役割分担
@@ -538,8 +538,8 @@
 </code> の相対参照は
 <strong>HTMLファイル自身のURLを基準
 </strong>に解決されます（.kasc 基準ではない）。
-<code>DATA/portal.html
-</code> と同じ DATA/ 内の画像なら 
+<code>canvas_data/portal.html
+</code> と同じ canvas_data/ 内の画像なら 
 <code>src="../features/x.png"
 </code> で参照可
 </td>
@@ -637,13 +637,13 @@
 <h4>完全な例
 </h4>      
 <pre class="text">
-<code>【portal_full.kasc】title: フルHTMLポータルportal:on | title=フルHTMLポータル | open=auto | html=DATA/portal.htmlview:工事中 | テスト地物;where=状況='工事中' | cam=全体view:未発注 | テスト地物;where=状況='未発注'view:全体 | *cam:全体 | 35.24 | 136.97 | h=8000 | p=-90geojson:テスト地物 | DATA/test.geojson【DATA/portal.html】&lt;div style="text-align:center"&gt;  &lt;h2&gt;カスタムポータル&lt;/h2&gt;  &lt;p&gt;作業を選んでください&lt;/p&gt;  &lt;button data-view="工事中" style="font-size:18px;padding:1em 2em"&gt;工事中を表示&lt;/button&gt;  &lt;button data-view="未発注" style="font-size:18px;padding:1em 2em"&gt;未発注を表示&lt;/button&gt;  &lt;button data-cam="全体"&gt;全体へ移動&lt;/button&gt;  &lt;button data-clear&gt;ビュー解除&lt;/button&gt;  &lt;button data-close&gt;地図を開く&lt;/button&gt;  &lt;button data-link="https://www.city.kasugai.lg.jp/"&gt;市役所サイト ↗&lt;/button&gt;&lt;/div&gt;
+<code>【portal_full.kasc】title: フルHTMLポータルportal:on | title=フルHTMLポータル | open=auto | html=canvas_data/portal.htmlview:工事中 | テスト地物;where=状況='工事中' | cam=全体view:未発注 | テスト地物;where=状況='未発注'view:全体 | *cam:全体 | 35.24 | 136.97 | h=8000 | p=-90geojson:テスト地物 | canvas_data/test.geojson【canvas_data/portal.html】&lt;div style="text-align:center"&gt;  &lt;h2&gt;カスタムポータル&lt;/h2&gt;  &lt;p&gt;作業を選んでください&lt;/p&gt;  &lt;button data-view="工事中" style="font-size:18px;padding:1em 2em"&gt;工事中を表示&lt;/button&gt;  &lt;button data-view="未発注" style="font-size:18px;padding:1em 2em"&gt;未発注を表示&lt;/button&gt;  &lt;button data-cam="全体"&gt;全体へ移動&lt;/button&gt;  &lt;button data-clear&gt;ビュー解除&lt;/button&gt;  &lt;button data-close&gt;地図を開く&lt;/button&gt;  &lt;button data-link="https://www.city.kasugai.lg.jp/"&gt;市役所サイト ↗&lt;/button&gt;&lt;/div&gt;
 </code>
 </pre>      
 <p>実際に動くサンプルは 
 <code>web/projects/_portal_test/portal_full.kasc
 </code> + 
-<code>DATA/portal.html
+<code>canvas_data/portal.html
 </code> です。
 <code>html:
 </code> セクション内でも同じ 
@@ -739,7 +739,7 @@
 <h3>📋 例
 </h3>      
 <pre class="text">
-<code>title: 道路工事ポータルportal:on | title=道路工事ポータル | open=autohtml:お知らせ | &lt;p&gt;本日の点検箇所を確認してください&lt;/p&gt;view:工事中 | desc=工事中の地物のみ表示 | cam=全体 | 道路工事;where=状況='工事中'view:未発注 | desc=未発注の地物のみ表示 | 道路工事;where=状況='未発注'view:全体 | desc=全地物を表示 | *link:市役所サイト | url=https://www.city.kasugai.lg.jp/ | desc=春日井市公式サイトgeojson:道路工事 | DATA/road_works.geojson
+<code>title: 道路工事ポータルportal:on | title=道路工事ポータル | open=autohtml:お知らせ | &lt;p&gt;本日の点検箇所を確認してください&lt;/p&gt;view:工事中 | desc=工事中の地物のみ表示 | cam=全体 | 道路工事;where=状況='工事中'view:未発注 | desc=未発注の地物のみ表示 | 道路工事;where=状況='未発注'view:全体 | desc=全地物を表示 | *link:市役所サイト | url=https://www.city.kasugai.lg.jp/ | desc=春日井市公式サイトgeojson:道路工事 | canvas_data/road_works.geojson
 </code>
 </pre>      
 <h3>⚠️ 制限・今後の課題

@@ -65,8 +65,8 @@
 <p>ローカルサーバー版の 
 <code>/api/files
 </code> API で 
-<code>projects/&lt;id&gt;/DATA/
-</code> へのファイル書き込み・一覧・削除ができます。ブラウザ側は File System Access API による DATA/ 直接保存も併存します（Chromium系のみ・選択フォルダへ直接書込み）。
+<code>projects/&lt;id&gt;/canvas_data/
+</code> へのファイル書き込み・一覧・削除ができます。ブラウザ側は File System Access API による canvas_data/ 直接保存も併存します（Chromium系のみ・選択フォルダへ直接書込み）。
 </p>      
 <p>利用例: 描画ルートの保存、インスペクターからのファイル追加（.geojson/.gpkg/.fgb/.parquet を選ぶと対応する行タイプのレイヤー行を自動追記）、ダウンロードしたデータのプロジェクト内配置など。静的配信では利用できません（サーバー API 依存機能）。
 </p>      
@@ -89,25 +89,25 @@
 </figcaption>      
 </figure>      
 <pre>
-<code>ProjectA_local/           … 納品ワークスペース。このフォルダを ZIP にして渡す├─ projects.json          … 群マニフェスト（複製内 .kasc を開くだけで登録される）├─ DATA/                  … 共有スコープ│  ├─ cloud/              … 取得元別サブフォルダ（生成物）│  ├─ http/               … HTTP・HTTPS データと _sources.json（生成物）│  │  ├─ 3dtiles/         … HTTP 由来の 3D Tiles タイルセット一式（_sources.json に記録）│  │  └─ xyz/             … XYZ タイルの受け皿（タイル本体はユーザーが配置）│  └─ local/              … 既存の共有 ../DATA の複製（../DATA/local/x で参照）└─ ProjectA/              … 元プロジェクトの複製（kasc・project.json・DATA/ 含む）   ├─ a.kasc              … ../DATA/http/x.csv・DATA/local/x などの相対参照   └─ DATA/               … 専用スコープ      ├─ http/            … 専用スコープの取り込み先（生成物）      └─ local/           … 元からローカルだったデータ（DATA/local/x で参照）
+<code>ProjectA_local/           … 納品ワークスペース。このフォルダを ZIP にして渡す├─ projects.json          … 群マニフェスト（複製内 .kasc を開くだけで登録される）├─ canvas_data/                  … 共有スコープ│  ├─ cloud/              … 取得元別サブフォルダ（生成物）│  ├─ http/               … HTTP・HTTPS データと _sources.json（生成物）│  │  ├─ 3dtiles/         … HTTP 由来の 3D Tiles タイルセット一式（_sources.json に記録）│  │  └─ xyz/             … XYZ タイルの受け皿（タイル本体はユーザーが配置）│  └─ local/              … 既存の共有 ../DATA の複製（../canvas_data/local/x で参照）└─ ProjectA/              … 元プロジェクトの複製（kasc・project.json・canvas_data/ 含む）   ├─ a.kasc              … ../canvas_data/http/x.csv・canvas_data/local/x などの相対参照   └─ canvas_data/               … 専用スコープ      ├─ http/            … 専用スコープの取り込み先（生成物）      └─ local/           … 元からローカルだったデータ（canvas_data/local/x で参照）
 </code>
 </pre>      
 <p>共有は 
-<code>_local/DATA/
+<code>_local/canvas_data/
 </code> に保存して参照を 
-<code>../DATA/http/x
+<code>../canvas_data/http/x
 </code> に、専用は 
-<code>_local/&lt;name&gt;/DATA/
+<code>_local/&lt;name&gt;/canvas_data/
 </code> に保存して参照を 
-<code>DATA/http/x
-</code> に書き換えます。元プロジェクトの DATA/ は 
-<code>DATA/local/
-</code>、親の共有 DATA/ は 
-<code>_local/DATA/local/
+<code>canvas_data/http/x
+</code> に書き換えます。元プロジェクトの canvas_data/ は 
+<code>canvas_data/local/
+</code>、親の共有 canvas_data/ は 
+<code>_local/canvas_data/local/
 </code> に集約して複製し、既存参照も 
-<code>DATA/local/x
+<code>canvas_data/local/x
 </code>・
-<code>../DATA/local/x
+<code>../canvas_data/local/x
 </code> に書き換えるため、生成物（http/・cloud/）と元からあったデータ（local/）は別フォルダで混在しません。
 <code>_local/
 </code> フォルダだけで全参照が解決します。再実行は 
@@ -120,19 +120,19 @@
 </p>      
 <ul>        
 <li>
-<code>DATA/cloud/&lt;取得元ハッシュ&gt;/
+<code>canvas_data/cloud/&lt;取得元ハッシュ&gt;/
 </code>: 接続中のクラウドルートを 
 <code>rclone copy
 </code> でコピーします。別の接続先・ルートの同名ファイルが混ざらないよう取得元ごとに分け、共有時は 
-<code>../DATA/cloud/&lt;取得元ハッシュ&gt;/パス
+<code>../canvas_data/cloud/&lt;取得元ハッシュ&gt;/パス
 </code> に書き換えます（未接続時はスキップ）。取得元の対応は 
 <code>cloud/_sources.json
 </code> に保存します
 </li>        
 <li>
-<code>DATA/http/
+<code>canvas_data/http/
 </code>（共有時は 
-<code>../DATA/http/
+<code>../canvas_data/http/
 </code>）: 
 <code>.kasc
 </code> 内の http(s) URL をサーバーがダウンロードして保存し、複製 .kasc の参照を書き換えます。対象はベクター系レイヤー行（
@@ -170,7 +170,7 @@
 </code> 同梱）を生成して参照をローカルテンプレートへ書き換えます（元 URL は 
 <code>http/_sources.json
 </code> に記録）。ローカルの 
-<code>DATA/...
+<code>canvas_data/...
 </code> タイル参照はディレクトリごと 
 <code>local/
 </code> に複製されます。ベースマップ相当（
@@ -178,7 +178,7 @@
 </code> 行）は対象外です
 </li>        
 <li>
-<code>DATA/http/3dtiles/&lt;name&gt;/
+<code>canvas_data/http/3dtiles/&lt;name&gt;/
 </code>: 
 <code>3dtiles:
 </code> 行のリモート URL は 
@@ -217,7 +217,7 @@
 <p>
 <code>sql:
 </code> のファイル参照も 
-<code>read_csv_auto('../DATA/http/x.csv')
+<code>read_csv_auto('../canvas_data/http/x.csv')
 </code> のように相対パスで保存し、描画・属性検索時に現在のプロジェクトから解決します。納品先の登録IDに依存しません。HTTP(S)の保存先は 
 <code>http/
 </code> に統一し、旧保存先との互換維持は行いません。スコープを切り替えると 
@@ -256,11 +256,11 @@
 </code> のあるフォルダがそのまま 
 <code>/projects/&lt;id&gt;/
 </code> の配信元になり、
-<code>DATA/
+<code>canvas_data/
 </code> 等の相対参照はすべてそのフォルダ基準で解決されます。
 <code>.kasc
 </code> + 
-<code>DATA/
+<code>canvas_data/
 </code> をまとめたフォルダを納品すれば、受け取った側はダブルクリックだけで開けます（納品用ローカル化の出力とも整合）
 </li>        
 <li>
@@ -306,19 +306,19 @@
 </code> のような群構成なら 
 <code>../
 </code> が群内共有、
-<code>../../DATA/
-</code> がワークスペースルートの全群共有 DATA になり、
+<code>../../canvas_data/
+</code> がワークスペースルートの全群共有 canvas_data になり、
 <code>ProjectsA/
 </code>・
 <code>ProjectsB/
-</code> のような複数のプロジェクト群で同じ DATA/ を共有できます。マニフェストが無いフラット構造は従来通り1階層上まで。通常プロジェクトも同じ意味で、
+</code> のような複数のプロジェクト群で同じ canvas_data/ を共有できます。マニフェストが無いフラット構造は従来通り1階層上まで。通常プロジェクトも同じ意味で、
 <code>../
 </code> は 
 <code>projects/
 </code> 直下（
-<code>../DATA/
+<code>../canvas_data/
 </code> = 全プロジェクト共有の 
-<code>projects/DATA/
+<code>projects/canvas_data/
 </code>）を指します
 </li>        
 <li>
@@ -363,26 +363,26 @@
 <h4>推奨納品パッケージ構造（プロジェクト群＋共有DATA）
 </h4>      
 <pre>
-<code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡せる├─ DATA/                  … 全プロジェクト群で共有（../../DATA/… で参照）├─ ProjectsA/│  ├─ projects.json       … 群マニフェスト [{"dir":"ProjectA","title":"計画A","kasc":"xxx.kasc"}, ...]│  │                        （群のプロジェクト一括登録＋共有スコープ宣言の役割）│  ├─ DATA/               … （任意）群内だけの共有（../DATA/… で参照）│  ├─ ProjectA/│  │  ├─ xxx.kasc         … geojson: 名 | ../../DATA/共有.geojson で全群共有を参照│  │  ├─ DATA/            … （任意）プロジェクト専用（DATA/… で参照）│  │  └─ project.json     … （任意）表示名 {"title": "..."}│  └─ ProjectB/│     └─ yyy.kasc└─ ProjectsB/   ├─ projects.json   └─ ProjectC/      └─ zzz.kasc          … ProjectsA と同じ ../../DATA/ を共有できる
+<code>納品フォルダ/             … ワークスペースルート。ZIP にしてそのまま渡せる├─ canvas_data/                  … 全プロジェクト群で共有（../../canvas_data/… で参照）├─ ProjectsA/│  ├─ projects.json       … 群マニフェスト [{"dir":"ProjectA","title":"計画A","kasc":"xxx.kasc"}, ...]│  │                        （群のプロジェクト一括登録＋共有スコープ宣言の役割）│  ├─ canvas_data/               … （任意）群内だけの共有（../canvas_data/… で参照）│  ├─ ProjectA/│  │  ├─ xxx.kasc         … geojson: 名 | ../../canvas_data/共有.geojson で全群共有を参照│  │  ├─ canvas_data/            … （任意）プロジェクト専用（canvas_data/… で参照）│  │  └─ project.json     … （任意）表示名 {"title": "..."}│  └─ ProjectB/│     └─ yyy.kasc└─ ProjectsB/   ├─ projects.json   └─ ProjectC/      └─ zzz.kasc          … ProjectsA と同じ ../../canvas_data/ を共有できる
 </code>
 </pre>      
 <ul>        
 <li>
-<code>DATA/x
-</code> → プロジェクトフォルダ内の DATA/（プロジェクト専用）
+<code>canvas_data/x
+</code> → プロジェクトフォルダ内の canvas_data/（プロジェクト専用）
 </li>        
 <li>
-<code>../DATA/x
-</code> → 群フォルダ内の DATA/（群内のプロジェクトで共有）
+<code>../canvas_data/x
+</code> → 群フォルダ内の canvas_data/（群内のプロジェクトで共有）
 </li>        
 <li>
-<code>../../DATA/x
-</code> → ワークスペースルートの DATA/（全プロジェクト群で共有）
+<code>../../canvas_data/x
+</code> → ワークスペースルートの canvas_data/（全プロジェクト群で共有）
 </li>        
 <li>
 <code>projects.json
 </code> を持たないフラット構造（
-<code>{P1, DATA}
+<code>{P1, canvas_data}
 </code>）は従来通り 
 <code>../
 </code> が1つ上を指し、

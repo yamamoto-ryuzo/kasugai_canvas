@@ -1,11 +1,11 @@
 title: QML trim/dashoffset/glow verify
 base: 地理院タイル 淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | maxZoom=18 | minZoom=5
-geojson: notrim_ref | DATA/trim_line.geojson | on | style=DATA/notrim_line.qml
-geojson: trim_line | DATA/trim_line.geojson | on | style=DATA/trim_line.qml
-geojson: dash_line | DATA/dash_line.geojson | on | style=DATA/dash_line.qml
-geojson: glow_line | DATA/glow_line.geojson | on | style=DATA/glow_line.qml
-geojson: width_test | DATA/width_test.geojson | on | style=DATA/width_test.qml
-geojson: style_test | DATA/style_test.geojson | on | style=DATA/style_test.qml
-geojson: fill_test | DATA/fill_test.geojson | on | style=DATA/fill_test.qml
-geojson: label_test | DATA/label_test.geojson | on | style=DATA/label_test.qml
+geojson: notrim_ref | canvas_data/trim_line.geojson | on | style=canvas_data/notrim_line.qml
+geojson: trim_line | canvas_data/trim_line.geojson | on | style=canvas_data/trim_line.qml
+geojson: dash_line | canvas_data/dash_line.geojson | on | style=canvas_data/dash_line.qml
+geojson: glow_line | canvas_data/glow_line.geojson | on | style=canvas_data/glow_line.qml
+geojson: width_test | canvas_data/width_test.geojson | on | style=canvas_data/width_test.qml
+geojson: style_test | canvas_data/style_test.geojson | on | style=canvas_data/style_test.qml
+geojson: fill_test | canvas_data/fill_test.geojson | on | style=canvas_data/fill_test.qml
+geojson: label_test | canvas_data/label_test.geojson | on | style=canvas_data/label_test.qml
 cam: 東京 | 35.61 | 139.65 | h=25000 | p=-90

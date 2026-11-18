@@ -3,7 +3,7 @@
 <style>body{font-family:system-ui,sans-serif;max-width:1100px;margin:2em auto;padding:0 1em}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:.5em .8em;text-align:left}</style></head>
 <body><h1>kasugai_canvas — 全機能検証ダッシュボード <small>2026-11-14</small></h1>
 <pre class="mermaid">flowchart TB
-  qgis[QGIS geo_webview] -->|.kasc+DATA/ register /live/*| web[web/ 6エンジン]
+  qgis[QGIS geo_webview] -->|.kasc+canvas_data/ register /live/*| web[web/ 6エンジン]
   web --> srv[server :8510]
   srv --> hub[bridge-hub :8511]
   srv --> rcl[rclone cloud]

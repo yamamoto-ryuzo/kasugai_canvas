@@ -1,0 +1,2 @@
+flatgeobuf: テスト/countries(bbox=auto) | /verify/fgb-test/countries.fgb | on
+flatgeobuf: テスト/countries(bbox=off) | /verify/fgb-test/countries.fgb | on | bbox=off

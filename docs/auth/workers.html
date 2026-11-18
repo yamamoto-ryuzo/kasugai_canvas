@@ -33,7 +33,7 @@ functions/
   api/capabilities.js・health.js       … 能力通知 {tier:"workers"}・起動確認</code></pre>
         <p><code>worker.js</code> は <code>functions/api/*</code>・<code>functions/_lib/*</code> のハンドラをそのまま再利用します。二重実装ではありません。</p>
         <p><code>POST /api/gemini</code> は内蔵AI（ブラウザ）向けの薄いキー隠蔽プロキシで、ブラウザの generateContent リクエストにサーバーキー（<code>wrangler secret put GEMINI_API_KEY</code>）を注入して Gemini へ転送します。推論ループ・地図操作はブラウザの内蔵AIが担うため、サーバー側にエージェント実装はありません。BYO キーがあるユーザーはブラウザから直接 Gemini を呼ぶためプロキシは使いません。<code>ANTIGRAVITY_TOKEN</code>（Bearer 必須化）・<code>GEMINI_MODELS</code>（許可モデル・カンマ区切り）・<code>ANTIGRAVITY_RATE_LIMIT</code>（KV バインド時の IP 毎時間制限）で制御できます。</p>
-        <p>認証前に公開されるのはログイン画面に必要な最小限のみです（<code>index.html</code>・<code>styles.css</code>・<code>favicon.ico</code>・<code>auth-*.js</code>・<code>auth-methods.json</code>・<code>i18n.js</code>・<code>i18n/</code>・<code>PLUGIN/auth-*/</code>）。それ以外のファイル（<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等）はすべて未認証では 401 になります。</p>
+        <p>認証前に公開されるのはログイン画面に必要な最小限のみです（<code>index.html</code>・<code>styles.css</code>・<code>favicon.ico</code>・<code>auth-*.js</code>・<code>auth-methods.json</code>・<code>i18n.js</code>・<code>i18n/</code>・<code>PLUGIN/auth-*/</code>）。それ以外のファイル（<code>app.js</code>・<code>projects/</code>・<code>canvas_data/</code> 等）はすべて未認証では 401 になります。</p>
       </div>
       <div class="url-box">
         <h3>デプロイ手順</h3>
@@ -189,7 +189,7 @@ wrangler deploy</code></pre>
               <td>❌ 見える</td>
             </tr>
             <tr>
-              <td colspan="3"><small>未ログインで公開されるのはログイン画面に必要な最小限のみ（<code>index.html</code>・<code>styles.css</code>・<code>auth-*.js</code>・<code>i18n.js</code>・<code>i18n/</code>・<code>PLUGIN/auth-*/</code>）。<code>app.js</code>・<code>projects/</code>・<code>DATA/</code> 等はすべて 401 です。</small></td>
+              <td colspan="3"><small>未ログインで公開されるのはログイン画面に必要な最小限のみ（<code>index.html</code>・<code>styles.css</code>・<code>auth-*.js</code>・<code>i18n.js</code>・<code>i18n/</code>・<code>PLUGIN/auth-*/</code>）。<code>app.js</code>・<code>projects/</code>・<code>canvas_data/</code> 等はすべて 401 です。</small></td>
             </tr>
             <tr>
               <td>データ（web/）<br><small>URL が公開情報から分かる</small></td>
@@ -219,7 +219,7 @@ wrangler deploy</code></pre>
       <div class="url-box">
         <h3>セキュリティ上の注意</h3>
         <ul>
-          <li>保護できるもの：<strong>静的ファイルすべて</strong>（HTML/JS/CSS/DATA/ 等）、<code>.kasc</code>、R2 内の秘匿データ</li>
+          <li>保護できるもの：<strong>静的ファイルすべて</strong>（HTML/JS/CSS/canvas_data/ 等）、<code>.kasc</code>、R2 内の秘匿データ</li>
           <li>保護できないもの：公開許可リストのファイル（ログイン画面系）、<code>PLUGIN/auth-*/</code> の内容（ID/PASS を直書きするプラグインの中身は見えます — 本番では cloudflare 系のみ使用してください）</li>
           <li>セッションは HttpOnly Cookie（<code>kasugai_session</code>・SameSite=Strict・12時間）で管理され、JS から読み取れません</li>
           <li>Cloud Run で同様の全ゲート構成を取る場合は <a href="cloudrun.html">6. Cloud Run 認証 — cloudrun-gate</a>（<code>control: 6</code>）、組織アカウント運用ができる場合は <code>control: 7</code>（Cloud IAP）があります</li>

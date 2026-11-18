@@ -181,13 +181,13 @@ ${ftr}`);
 // --- kasc ---
 fs.writeFileSync(`${OUT}/gaps.kasc`, `title: QML gap verify
 base: 地理院タイル 淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | maxZoom=18 | minZoom=5
-geojson: markerline | DATA/gaps_line.geojson | on | style=DATA/gaps_markerline.qml
-geojson: rasterline | DATA/gaps_line.geojson | on | style=DATA/gaps_rasterline.qml
-geojson: mapunit | DATA/gaps_points.geojson | on | style=DATA/gaps_mapunit.qml
-geojson: inverted | DATA/gaps_poly.geojson | on | style=DATA/gaps_inverted.qml
-geojson: heat | DATA/gaps_points.geojson | on | style=DATA/gaps_heat.qml
-geojson: cluster | DATA/gaps_points.geojson | on | style=DATA/gaps_cluster.qml
-geojson: d25 | DATA/gaps_poly.geojson | on | style=DATA/gaps_25d.qml
+geojson: markerline | canvas_data/gaps_line.geojson | on | style=canvas_data/gaps_markerline.qml
+geojson: rasterline | canvas_data/gaps_line.geojson | on | style=canvas_data/gaps_rasterline.qml
+geojson: mapunit | canvas_data/gaps_points.geojson | on | style=canvas_data/gaps_mapunit.qml
+geojson: inverted | canvas_data/gaps_poly.geojson | on | style=canvas_data/gaps_inverted.qml
+geojson: heat | canvas_data/gaps_points.geojson | on | style=canvas_data/gaps_heat.qml
+geojson: cluster | canvas_data/gaps_points.geojson | on | style=canvas_data/gaps_cluster.qml
+geojson: d25 | canvas_data/gaps_poly.geojson | on | style=canvas_data/gaps_25d.qml
 cam: 東京 | 35.605 | 139.61 | h=20000 | p=-90
 `);
 

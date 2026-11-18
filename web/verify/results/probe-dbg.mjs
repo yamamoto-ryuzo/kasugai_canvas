@@ -10,7 +10,7 @@ await page.evaluate(() => window.kasugaiApi.flyTo({ latitude: 35.678, longitude:
 await page.waitForTimeout(1800);
 const out = await page.evaluate(async () => {
   const m = await import("/shared/qml-style.js");
-  const qml = await (await fetch("/projects/scale_test/DATA/pts_scaled.qml")).text();
+  const qml = await (await fetch("/projects/scale_test/canvas_data/pts_scaled.qml")).text();
   const c = m.compileQmlStyle(qml);
   const scale = m.evalQgisExpression("@map_scale");
   const ifexpr = m.evalQgisExpression("if(@map_scale>=5000, 1.2, 5.0)");

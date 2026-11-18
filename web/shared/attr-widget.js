@@ -51,7 +51,7 @@ const LABELS = {
   sqlTitle: "SQL で絞り込み・レイヤフィルタ・新規レイヤ",
   statsCount: "count",
   sqlDlgTitle: "SQL フィルター",
-  sqlDlgHint: "WHERE 式または SELECT 文(OGR SQL)。FROM にはレイヤー名・DATA/ パスが使えます",
+  sqlDlgHint: "WHERE 式または SELECT 文(OGR SQL)。FROM にはレイヤー名・canvas_data/ パスが使えます",
   sqlDlgTest: "テスト",
   sqlDlgClear: "解除",
   sqlDlgView: "一覧を絞る",
@@ -314,7 +314,7 @@ export function renderAttrContent(el, records, opts = {}) {
 //     sql:/ogrsql: は SELECT 文を渡す。未指定なら同ボタンを無効化
 //   resolveLayer?:     async (name) => GeoJSON FC | null
 //     SELECT 実行時の FROM 名 → 読み込み済みレイヤーの解決フック
-//     (vectorHooks.resolveLayer と同じ)。未指定でも DATA/ パス解決は効く
+//     (vectorHooks.resolveLayer と同じ)。未指定でも canvas_data/ パス解決は効く
 //   getBaseUrl?:       () => string  SELECT 内の相対パス解決用
 //   addLayer?:         async (title, query, {type}) => bool
 //     「新規レイヤ」の追加経路。既定は window.kasugaiApi.addLayer

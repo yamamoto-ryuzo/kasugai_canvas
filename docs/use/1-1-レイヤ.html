@@ -18,7 +18,7 @@
 
       <h2>使い方</h2>
       <h3>➕ レイヤー追加・管理</h3>
-      <p>XYZ タイル・3D Tiles・GeoJSON などを URL 指定で追加できます。ローカルサーバー版では <code>DATA/</code> 内ファイルや <code>cloud:</code> スキームのクラウド上ファイルもレイヤーとして読み込めます。追加したレイヤーは Layers パネルで表示切替・並べ替えでき、設定（.kasc）に永続化されます。</p>
+      <p>XYZ タイル・3D Tiles・GeoJSON などを URL 指定で追加できます。ローカルサーバー版では <code>canvas_data/</code> 内ファイルや <code>cloud:</code> スキームのクラウド上ファイルもレイヤーとして読み込めます。追加したレイヤーは Layers パネルで表示切替・並べ替えでき、設定（.kasc）に永続化されます。</p>
 
       <h3>📑 レイヤー一覧UI</h3>
       <p>読み込んだレイヤーを一覧し、チェックで表示切替、ドラッグ＆ドロップで並び替えができます。各行の 📍 ボタンでレイヤー全体の範囲へフォーカス（FlyTo）します。並べ替えた順序は <code>ImageryLayerCollection</code> の lower/raise や DataSource の index に反映され、表示切替や排他グループ動作は並べ替え後も維持されます。</p>
@@ -39,9 +39,9 @@
         <li><code>gpkg:</code> GeoPackage / <code>duckdb:</code>・<code>sql:</code>・<code>ogrsql:</code> SQL 絞り込み（既定で表示範囲連動 <code>bbox=auto</code>）</li>
         <li><code>image:</code> 画像オーバーレイ / <code>geotiff:</code> COG ラスタ / <code>model:</code> 3D モデル / <code>mvt:</code>・<code>pmtiles:</code> ベクトルタイル</li>
       </ul>
-      <pre class="text"><code>geojson: 東京都/行政区域 | DATA/kuiki.geojson | on
+      <pre class="text"><code>geojson: 東京都/行政区域 | canvas_data/kuiki.geojson | on
 3dtiles: 建築物（LOD1） | https://example.com/tileset.json | off
-gpkg: 河川 | DATA/rivers.gpkg | table=rivers | where=延長 &gt; 100
+gpkg: 河川 | canvas_data/rivers.gpkg | table=rivers | where=延長 &gt; 100
 duckdb: 施設 | https://example.com/facilities.parquet | limit=1000</code></pre>
       <ul>
         <li>タイトルの <code>/</code> = グループ、<code>//</code> = 排他グループ（ラジオ動作）。<code>on</code>/<code>off</code> で初期表示を指定</li>

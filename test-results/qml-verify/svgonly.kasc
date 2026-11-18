@@ -1,4 +1,4 @@
 title: QML svgmarker verify
 base: ベースマップなし | none
-geojson: svgmarker | DATA/gaps_points.geojson | on | style=DATA/gaps_svgmarker.qml
+geojson: svgmarker | canvas_data/gaps_points.geojson | on | style=canvas_data/gaps_svgmarker.qml
 cam: 東京 | 35.60 | 139.60 | h=6000 | p=-60

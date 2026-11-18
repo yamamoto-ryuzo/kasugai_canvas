@@ -73,7 +73,7 @@ struct FetchSettings {
 
 // .kasc ファイルから起動(または /api/projects/register)した、
 // projects/ 以外の場所にあるプロジェクト。dir がプロジェクトルートになり、
-// /projects/<id>/ でそのフォルダを配信する。相対パス(DATA/ 等)は dir 基準
+// /projects/<id>/ でそのフォルダを配信する。相対パス(canvas_data/ 等)は dir 基準
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ExternalProject {
@@ -1313,10 +1313,22 @@ fn resolve_project_dir(state: &AppState, id: &str) -> Result<PathBuf, (StatusCod
     Ok(state.projects_dir.join(id))
 }
 
-// <project_dir>/DATA/ 以下の相対パスを検証して絶対パスへ解決する。
-// ".." やドライブ指定・バックスラッシュを拒否し、書き込みを DATA/ 内に限定する
+// プロジェクトのデータフォルダを返す。現行の正は canvas_data/。
+// canvas_data/ が無く旧構成の DATA/ だけが存在するプロジェクトは DATA/ を継続利用する
+fn project_data_dir(project_dir: &Path) -> PathBuf {
+    let current = project_dir.join("canvas_data");
+    let legacy = project_dir.join("DATA");
+    if !current.is_dir() && legacy.is_dir() {
+        legacy
+    } else {
+        current
+    }
+}
+
+// <project_dir>/<データフォルダ>/ 以下の相対パスを検証して絶対パスへ解決する。
+// ".." やドライブ指定・バックスラッシュを拒否し、書き込みをデータフォルダ内に限定する
 fn resolve_data_path(project_dir: &Path, rel: &str) -> Result<PathBuf, (StatusCode, String)> {
-    let mut path = project_dir.join("DATA");
+    let mut path = project_data_dir(project_dir);
     if rel.is_empty() {
         return Ok(path);
     }
@@ -1343,12 +1355,17 @@ struct FileListQuery {
     project: String,
 }
 
-// GET /api/files?project=<id> → DATA/ 内のファイル一覧（再帰・相対パス）
+// GET /api/files?project=<id> → canvas_data/(旧 DATA/)内のファイル一覧（再帰・相対パス）
 async fn list_data_files(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<FileListQuery>,
 ) -> Result<Json<Value>, (StatusCode, String)> {
-    let dir = resolve_data_path(&resolve_project_dir(&state, &query.project)?, "")?;
+    let project_dir = resolve_project_dir(&state, &query.project)?;
+    let dir = resolve_data_path(&project_dir, "")?;
+    let data_dir_name = dir
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "canvas_data".to_string());
     let mut files = Vec::new();
     let mut stack = vec![dir.clone()];
     while let Some(current) = stack.pop() {
@@ -1374,10 +1391,10 @@ async fn list_data_files(
         }
     }
     files.sort_by_key(|f| f["name"].as_str().unwrap_or("").to_string());
-    Ok(Json(json!({ "files": files })))
+    Ok(Json(json!({ "files": files, "dataDir": data_dir_name })))
 }
 
-// PUT /api/files/{project}/{*path} → DATA/ へボディをそのまま書き込む。
+// PUT /api/files/{project}/{*path} → canvas_data/(旧 DATA/)へボディをそのまま書き込む。
 // ローカルサーバー(127.0.0.1)前提の高権限API。フロント側では上書き時に確認ダイアログを挟む
 async fn write_data_file(
     State(state): State<AppState>,
@@ -1393,7 +1410,11 @@ async fn write_data_file(
     tokio::fs::write(&path, &body)
         .await
         .map_err(internal_error)?;
-    Ok(Json(json!({ "ok": true, "name": rel })))
+    let data_dir_name = project_data_dir(&resolve_project_dir(&state, &project)?)
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "canvas_data".to_string());
+    Ok(Json(json!({ "ok": true, "name": rel, "dataDir": data_dir_name })))
 }
 
 async fn delete_data_file(
@@ -2332,7 +2353,7 @@ fn localize_output_path(root: &Path, rel: &str) -> Result<PathBuf, (StatusCode, 
     Ok(path)
 }
 
-// 複製内の .kasc から見た DATA/ の位置。共有は _local/ 直下、
+// 複製内の .kasc から見た canvas_data/ の位置。共有は _local/ 直下、
 // 専用は複製プロジェクト内に置く
 fn localize_output_scope(
     local_root: &Path,
@@ -2340,14 +2361,14 @@ fn localize_output_scope(
     scope: LocalizeScope,
 ) -> (PathBuf, &'static str) {
     match scope {
-        LocalizeScope::Shared => (local_root.to_path_buf(), "../DATA"),
-        LocalizeScope::Project => (project_dir.to_path_buf(), "DATA"),
+        LocalizeScope::Shared => (local_root.to_path_buf(), "../canvas_data"),
+        LocalizeScope::Project => (project_dir.to_path_buf(), "canvas_data"),
     }
 }
 
-// ---- 納品用ローカル化(.kasc 内のリモート参照の DATA/ 化) ----
-// 参照の置き換え先は出所で分ける: クラウド由来は DATA/cloud/、
-// 一般の http(s) URL は DATA/http/(ファイル名→取得元URLは DATA/http/_sources.json)
+// ---- 納品用ローカル化(.kasc 内のリモート参照の canvas_data/ 化) ----
+// 参照の置き換え先は出所で分ける: クラウド由来は canvas_data/cloud/、
+// 一般の http(s) URL は canvas_data/http/(ファイル名→取得元URLは canvas_data/http/_sources.json)
 
 // 1ファイルのダウンロード上限(タイル系は対象外のためこの程度で十分)
 const LOCALIZE_FILE_MAX_BYTES: usize = 256 * 1024 * 1024;
@@ -2472,7 +2493,7 @@ fn localize_file_name(url: &str) -> String {
     sanitize_file_name(&percent_decode(&base))
 }
 
-// 正規化済み URL 一覧に DATA/http/ 内の保存先を割り当てる。
+// 正規化済み URL 一覧に canvas_data/http/ 内の保存先を割り当てる。
 // 同一 URL は常に同名(重複アドレスは1ファイルに簡素化)で、
 // 別 URL の同名衝突だけ hash 接尾辞を付ける
 fn read_localize_sources(
@@ -2540,7 +2561,7 @@ fn assign_localize_names(
 }
 
 // リモート参照の出現位置。置換文字列の形が位置によって異なる
-// Field: DATA/http/x または ../DATA/http/x(resolveProjectUrl で解決する)
+// Field: canvas_data/http/x または ../canvas_data/http/x(resolveProjectUrl で解決する)
 // Sql:   同じ相対パスを保存し、実行時に resolveProjectSql で解決する
 #[derive(Clone, Copy)]
 enum RefPos {
@@ -2549,7 +2570,7 @@ enum RefPos {
 }
 
 // 行タイプごとの URL フィールド位置(| 区切りの先頭フィールドを 0 とする)。
-// タイル系(xyz/base/3dtiles)は DATA/http/ の単体取得では対象外で None を
+// タイル系(xyz/base/3dtiles)は canvas_data/http/ の単体取得では対象外で None を
 // 返す(3dtiles は tileset.json ツリーごと取るため collect_tileset_urls で
 // 別系統として収集する)
 fn kasc_url_field_index(line_type: &str, field_count: usize) -> Option<usize> {
@@ -2564,7 +2585,7 @@ fn kasc_url_field_index(line_type: &str, field_count: usize) -> Option<usize> {
 
 // ローカル参照・リモート置換の書き換え対象フィールド。xyz/base のリモート
 // URL は取得しないがローカルファイルを参照しうるし、3dtiles は
-// DATA/http/3dtiles/ への参照に書き換えるため、全レイヤー行を対象にする
+// canvas_data/http/3dtiles/ への参照に書き換えるため、全レイヤー行を対象にする
 fn kasc_local_ref_field_index(line_type: &str, field_count: usize) -> Option<usize> {
     match line_type {
         "xyz" | "base" | "3dtiles" => Some(1),
@@ -2572,20 +2593,22 @@ fn kasc_local_ref_field_index(line_type: &str, field_count: usize) -> Option<usi
     }
 }
 
-// 複製では既存 DATA/ の中身を DATA/local/ に集約するため、既存のローカル
-// 参照を local/ 入りに書き換える。リモート URL・cloud: は対象外
+// 複製では既存データフォルダの中身を canvas_data/local/ に集約するため、
+// 既存のローカル参照を local/ 入りに書き換える。現行 canvas_data/ と
+// 旧構成 DATA/ の両方の参照を受け付ける。リモート URL・cloud: は対象外
 fn localize_data_ref(text: &str) -> Option<String> {
     if is_remote_url(text) || strip_prefix_ci(text, "cloud:").is_some() {
         return None;
     }
-    if let Some(rest) = strip_prefix_ci(text, "data/") {
-        return Some(format!("DATA/local/{rest}"));
+    for prefix in ["canvas_data/", "./canvas_data/", "data/", "./data/"] {
+        if let Some(rest) = strip_prefix_ci(text, prefix) {
+            return Some(format!("canvas_data/local/{rest}"));
+        }
     }
-    if let Some(rest) = strip_prefix_ci(text, "./data/") {
-        return Some(format!("DATA/local/{rest}"));
-    }
-    if let Some(rest) = strip_prefix_ci(text, "../data/") {
-        return Some(format!("../DATA/local/{rest}"));
+    for prefix in ["../canvas_data/", "../data/"] {
+        if let Some(rest) = strip_prefix_ci(text, prefix) {
+            return Some(format!("../canvas_data/local/{rest}"));
+        }
     }
     None
 }
@@ -2602,7 +2625,7 @@ fn rewrite_kasc_field(
     let indent = &part[..part.len() - trimmed.len()];
     if let Some(prefix) = cloud_prefix {
         if let Some(rest) = strip_prefix_ci(trimmed, "cloud:") {
-            // ../ 等を含む参照は DATA/ に置き換えるとプロジェクト外に出るため書き換えない
+            // ../ 等を含む参照は canvas_data/ に置き換えるとプロジェクト外に出るため書き換えない
             if is_valid_cloud_path(rest) {
                 return format!("{indent}{prefix}/{rest}");
             }
@@ -2810,7 +2833,7 @@ fn count_cloud_refs(text: &str) -> usize {
 // ---- 3dtiles のローカル化(tileset.json ツリーごと取得) ----
 // 3dtiles: 行のリモート参照は tileset.json 単体では意味を成さないため、
 // 参照される外部タイルセット(.json)とコンテンツ(content.uri/contents[].uri)
-// を辿って DATA/http/3dtiles/<name>/ 配下に一式取得する(取得元別の構成は
+// を辿って canvas_data/http/3dtiles/<name>/ 配下に一式取得する(取得元別の構成は
 // 他形式と同じ)。ルート tileset.json のディレクトリ配下に収まる参照は階層を
 // そのまま保持し、収まらない外部参照は _ext/ に集めて参照元 JSON の uri を
 // 書き換える
@@ -2835,7 +2858,7 @@ fn is_basemap_tileset_url(url: &str) -> bool {
 }
 
 // .kasc 内の 3dtiles: 行の URL フィールド(タイトル | URL | ...)を正規化して
-// 列挙する。ツリーごとの取得になるため通常の DATA/http/ 収集とは別経路
+// 列挙する。ツリーごとの取得になるため通常の canvas_data/http/ 収集とは別経路
 fn collect_tileset_urls(text: &str) -> Vec<String> {
     let mut urls = Vec::new();
     let mut seen = HashSet::new();
@@ -2914,9 +2937,9 @@ fn tileset_inner_path(root_dir: &reqwest::Url, url: &reqwest::Url) -> Option<Str
 // ---- xyz: タイルのローカル化(受け皿のみ生成) ----
 // xyz: 行のリモート {z}/{x}/{y} テンプレートは、タイル本体の取得範囲が
 // 曖昧なため納品側ではダウンロードしない。代わりにユーザーがタイルを配置
-// する受け皿 DATA/http/xyz/<name>/ を生成し、参照をそのローカルテンプレート
+// する受け皿 canvas_data/http/xyz/<name>/ を生成し、参照をそのローカルテンプレート
 // へ書き換える(元 URL は http/_sources.json に記録)。base: のベースマップ
-// 相当は対象外。ローカル DATA/ 内のテンプレート参照は既存の local/ 集約で
+// 相当は対象外。ローカル canvas_data/ 内のテンプレート参照は既存の local/ 集約で
 // ディレクトリごと複製される
 
 // xyz: 行の URL フィールドを (受け皿フォルダ名, ローカルテンプレート末尾)
@@ -3243,12 +3266,12 @@ async fn localize_tileset(
 
 // リモート参照のローカル化(納品用)。元プロジェクトは変更せず、
 // 兄弟に <dir>_local/ ワークスペース(群マニフェスト+プロジェクト複製+
-// DATA/)を生成する。接続中ならクラウドルートを選択先の
-// DATA/cloud/<取得元ハッシュ>/ へ rclone copy し、cloud: 参照を .kasc 基準の
+// canvas_data/)を生成する。接続中ならクラウドルートを選択先の
+// canvas_data/cloud/<取得元ハッシュ>/ へ rclone copy し、cloud: 参照を .kasc 基準の
 // 相対パスに書き換える。さらに http(s) 参照(レイヤーURL・style=・
-// info:/legend:・sql: クエリ内リテラル)を DATA/http/ へダウンロードして
+// info:/legend:・sql: クエリ内リテラル)を canvas_data/http/ へダウンロードして
 // 参照を書き換える。3dtiles: 行のリモート URL は tileset.json から参照
-// ツリーごと DATA/http/3dtiles/<name>/ に取得する(ベースマップ相当のサービス
+// ツリーごと canvas_data/http/3dtiles/<name>/ に取得する(ベースマップ相当のサービス
 // ・implicit tiling は対象外)。重複する URL は1ファイルにまとめ、sql: 文中の
 // URL も同一ファイルを指す。納品先は rclone 設定・OAuth・ネット接続不要で
 // ファイル一式だけで動く構成になる
@@ -3272,7 +3295,7 @@ async fn cloud_localize(
 
     // 出力は元プロジェクトを変更しない納品ワークスペース。
     // 兄弟に <dir>_local/ を作り、群マニフェスト + プロジェクト複製 +
-    // DATA/ を内包する自己完結パッケージにする。
+    // canvas_data/ を内包する自己完結パッケージにする。
     // 既存 _local は毎回作り直し、スコープ違いの残りファイルが
     // 混ざらないようにする
     let dir_name = project_dir
@@ -3296,18 +3319,22 @@ async fn cloud_localize(
         ));
     }
     let local_project_dir = local_root.join(dir_name);
-    copy_dir_all(&project_dir, &local_project_dir, &["DATA"]).await?;
-    // 既存のローカル DATA/ は取得物(http/, cloud/)と混ざらないよう
-    // DATA/local/ に集約して複製する
-    let project_data = project_dir.join("DATA");
-    if project_data.is_dir() {
-        copy_dir_all(&project_data, &local_project_dir.join("DATA/local"), &[]).await?;
+    copy_dir_all(&project_dir, &local_project_dir, &["canvas_data", "DATA"]).await?;
+    // 既存のローカルデータは取得物(http/, cloud/)と混ざらないよう
+    // canvas_data/local/ に集約して複製する(現行 canvas_data/ と旧 DATA/ の両方)
+    for name in ["canvas_data", "DATA"] {
+        let project_data = project_dir.join(name);
+        if project_data.is_dir() {
+            copy_dir_all(&project_data, &local_project_dir.join("canvas_data/local"), &[]).await?;
+        }
     }
-    // 共有スコープ(../DATA)が既存データを指している場合も _local 内で
-    // 解決できるよう、親の DATA/ をワークスペース側へ複製しておく
-    let shared_src = parent.join("DATA");
-    if shared_src.is_dir() {
-        copy_dir_all(&shared_src, &local_root.join("DATA/local"), &[]).await?;
+    // 共有スコープ(../canvas_data)が既存データを指している場合も _local 内で
+    // 解決できるよう、親のデータフォルダをワークスペース側へ複製しておく
+    for name in ["canvas_data", "DATA"] {
+        let shared_src = parent.join(name);
+        if shared_src.is_dir() {
+            copy_dir_all(&shared_src, &local_root.join("canvas_data/local"), &[]).await?;
+        }
     }
     // 群マニフェスト: 生成フォルダ内の .kasc を開けば既存の群登録で
     // 取り込める構造にし、../ スコープの階層宣言としても機能させる
@@ -3424,12 +3451,12 @@ async fn cloud_localize(
     });
 
     // 3dtiles: 行は tileset.json ツリーごと取得するため別経路で先に列挙する
-    // (http(s) 由来の保存先は他形式と同じく取得元別の DATA/http/3dtiles/<name>/)
+    // (http(s) 由来の保存先は他形式と同じく取得元別の canvas_data/http/3dtiles/<name>/)
     let tileset_urls = collect_tileset_urls(&text);
     // xyz: 行のリモートタイルテンプレートは受け皿のみ生成(別経路)
     let xyz_template_urls = collect_xyz_template_urls(&text);
 
-    // DATA/http/<name> に割り当てて順次ダウンロード。失敗した参照は URL のまま残す
+    // canvas_data/http/<name> に割り当てて順次ダウンロード。失敗した参照は URL のまま残す
     let http_dir = localize_output_path(&output_root, "http")?;
     let manifest_path = localize_output_path(&output_root, "http/_sources.json")?;
     let mut sources = read_localize_sources(&manifest_path)?;
@@ -3482,7 +3509,7 @@ async fn cloud_localize(
             }
         }
     }
-    // 3dtiles: 行は tileset.json を起点に参照ツリーごと DATA/http/3dtiles/<name>/
+    // 3dtiles: 行は tileset.json を起点に参照ツリーごと canvas_data/http/3dtiles/<name>/
     // へ取得する。ベースマップ相当のサービス(Google Photorealistic 3D Tiles
     // 等の全球・キー依存サービス)は対象外として URL を残す
     let mut tilesets: Vec<Value> = Vec::new();
@@ -3573,7 +3600,7 @@ async fn cloud_localize(
             .map_err(internal_error)?;
     }
 
-    // 参照の書き換え。既存のローカル DATA 参照を先に local/ へ集約して
+    // 参照の書き換え。既存のローカルデータ参照を先に local/ へ集約して
     // から、ダウンロード済みのリモート参照を http/・cloud/ へ置き換える
     // (この順でないと生成した参照を二重書き換えしてしまう)。
     // 書き換え対象は 3dtiles を含む全レイヤー行の URL フィールド
@@ -3659,10 +3686,10 @@ mod localize_tests {
         );
         rewrite_kasc_remote_refs(
             text,
-            include_cloud.then_some("DATA/cloud"),
+            include_cloud.then_some("canvas_data/cloud"),
             &mut |url, _pos| {
                 let rel = names.get(&normalize_remote_url(url))?;
-                Some(format!("DATA/{rel}"))
+                Some(format!("canvas_data/{rel}"))
             },
         )
     }
@@ -3699,10 +3726,10 @@ mod localize_tests {
                     duckdb: b | https://x/d.csv\n\
                     sql: q | SELECT * FROM 'https://x/d.csv' | style=https://x/d.csv";
         let out = rewrite(text, false, &["https://x/d.csv"]);
-        assert!(out.contains("geojson: a | DATA/http/d.csv "));
-        assert!(out.contains("duckdb: b | DATA/http/d.csv"));
-        assert!(out.contains("'DATA/http/d.csv'"));
-        assert!(out.contains("style=DATA/http/d.csv"));
+        assert!(out.contains("geojson: a | canvas_data/http/d.csv "));
+        assert!(out.contains("duckdb: b | canvas_data/http/d.csv"));
+        assert!(out.contains("'canvas_data/http/d.csv'"));
+        assert!(out.contains("style=canvas_data/http/d.csv"));
         assert!(!out.contains("--"));
     }
 
@@ -3729,11 +3756,11 @@ mod localize_tests {
                     xyz: t | cloud:tiles/{z}/{x}/{y}.png";
         // 未接続(未同期)なら接続行も参照もそのまま
         assert_eq!(rewrite(text, false, &[]), text);
-        // 同期済みなら接続行はコメント化・参照は DATA/cloud/(タイル系も同様)
+        // 同期済みなら接続行はコメント化・参照は canvas_data/cloud/(タイル系も同様)
         let out = rewrite(text, true, &[]);
         assert!(out.contains("# cloud: box | root"));
-        assert!(out.contains("geojson: a | DATA/cloud/dir/f.geojson"));
-        assert!(out.contains("xyz: t | DATA/cloud/tiles/{z}/{x}/{y}.png"));
+        assert!(out.contains("geojson: a | canvas_data/cloud/dir/f.geojson"));
+        assert!(out.contains("xyz: t | canvas_data/cloud/tiles/{z}/{x}/{y}.png"));
         // ../ を含む参照はプロジェクト外に出るため保持
         assert!(out.contains("geojson: b | cloud:../evil"));
     }
@@ -3836,7 +3863,8 @@ mod localize_tests {
             .await
             .unwrap();
         });
-        // 既存のローカル参照と共有 ../DATA が _local 内で解決できるかを見る
+        // 既存のローカル参照と共有 ../canvas_data(旧 DATA)が _local 内で解決できるかを見る。
+        // 入力プロジェクトは旧構成 DATA/ で作り、レガシー参照の集約も確認する
         let shared_dir = env.state.projects_dir.join("DATA");
         std::fs::create_dir_all(&shared_dir).unwrap();
         std::fs::write(shared_dir.join("shared.geojson"), "{}").unwrap();
@@ -3866,7 +3894,7 @@ mod localize_tests {
         let local_root = env.state.projects_dir.join("A_local");
         let copied = local_root.join("A").join(KASC_FILE_NAME);
         assert_eq!(result["downloaded"], 1);
-        assert_eq!(result["dataReference"], "../DATA");
+        assert_eq!(result["dataReference"], "../canvas_data");
         assert_eq!(result["outputPath"], json!(local_root.to_string_lossy()));
         // 元プロジェクトは kasc・DATA とも変更されない
         assert_eq!(
@@ -3881,7 +3909,7 @@ mod localize_tests {
                 .count(),
             1
         );
-        // 群マニフェスト + プロジェクト複製 + DATA/ の構成
+        // 群マニフェスト + プロジェクト複製 + canvas_data/ の構成
         let manifest: Value = serde_json::from_str(
             &std::fs::read_to_string(local_root.join(GROUP_MANIFEST_FILE_NAME)).unwrap(),
         )
@@ -3890,28 +3918,28 @@ mod localize_tests {
         assert_eq!(manifest[0]["dir"], "A");
         assert_eq!(manifest[0]["kasc"], json!(KASC_FILE_NAME));
         let text = std::fs::read_to_string(&copied).unwrap();
-        assert!(text.contains("../DATA/http/data.csv"));
-        assert!(text.contains("read_csv('../DATA/http/data.csv')"));
-        assert!(text.contains("| DATA/local/local.geojson |"));
-        assert!(!text.contains("| DATA/local.geojson |"));
-        assert!(text.contains("read_csv('DATA/local/local.geojson')"));
-        assert!(text.contains("| ../DATA/local/shared.geojson |"));
-        assert!(text.contains("| DATA/local/http/old.geojson |"));
+        assert!(text.contains("../canvas_data/http/data.csv"));
+        assert!(text.contains("read_csv('../canvas_data/http/data.csv')"));
+        assert!(text.contains("| canvas_data/local/local.geojson |"));
+        assert!(!text.contains("| canvas_data/local.geojson |"));
+        assert!(text.contains("read_csv('canvas_data/local/local.geojson')"));
+        assert!(text.contains("| ../canvas_data/local/shared.geojson |"));
+        assert!(text.contains("| canvas_data/local/http/old.geojson |"));
         assert!(!text.contains(&base));
         // 生成物(http/)と複製したローカルデータ(local/)は混在しない
-        assert!(local_root.join("DATA/http/data.csv").is_file());
-        assert!(!local_root.join("DATA/shared.geojson").exists());
-        assert!(local_root.join("DATA/local/shared.geojson").is_file());
-        assert!(!local_root.join("A/DATA/local.geojson").exists());
-        assert!(local_root.join("A/DATA/local/local.geojson").is_file());
-        assert!(local_root.join("A/DATA/local/http/old.geojson").is_file());
-        let sources = read_localize_sources(&local_root.join("DATA/http/_sources.json")).unwrap();
+        assert!(local_root.join("canvas_data/http/data.csv").is_file());
+        assert!(!local_root.join("canvas_data/shared.geojson").exists());
+        assert!(local_root.join("canvas_data/local/shared.geojson").is_file());
+        assert!(!local_root.join("A/canvas_data/local.geojson").exists());
+        assert!(local_root.join("A/canvas_data/local/local.geojson").is_file());
+        assert!(local_root.join("A/canvas_data/local/http/old.geojson").is_file());
+        let sources = read_localize_sources(&local_root.join("canvas_data/http/_sources.json")).unwrap();
         assert_eq!(sources.len(), 1);
         // 生成物はそのまま群として外部プロジェクト登録できる
         let (_primary, members) = register_external_project(&env.state, &copied).unwrap();
         assert_eq!(members.len(), 1);
         // 再実行はワークスペースを作り直すので残滓が混ざらない
-        std::fs::write(local_root.join("DATA/http/stale.tmp"), "stale").unwrap();
+        std::fs::write(local_root.join("canvas_data/http/stale.tmp"), "stale").unwrap();
         let result = cloud_localize(
             State(env.state.clone()),
             Json(CloudLocalizeRequest {
@@ -3923,9 +3951,9 @@ mod localize_tests {
         .unwrap()
         .0;
         assert_eq!(result["downloaded"], 1);
-        assert!(!local_root.join("DATA/http/stale.tmp").exists());
-        assert!(local_root.join("DATA/http/data.csv").is_file());
-        // 専用スコープは複製プロジェクト内 DATA/ に置き直す
+        assert!(!local_root.join("canvas_data/http/stale.tmp").exists());
+        assert!(local_root.join("canvas_data/http/data.csv").is_file());
+        // 専用スコープは複製プロジェクト内 canvas_data/ に置き直す
         let private = cloud_localize(
             State(env.state.clone()),
             Json(CloudLocalizeRequest {
@@ -3936,12 +3964,12 @@ mod localize_tests {
         .await
         .unwrap()
         .0;
-        assert_eq!(private["dataReference"], "DATA");
-        assert!(local_root.join("A/DATA/http/data.csv").is_file());
-        assert!(!local_root.join("DATA/http/data.csv").exists());
+        assert_eq!(private["dataReference"], "canvas_data");
+        assert!(local_root.join("A/canvas_data/http/data.csv").is_file());
+        assert!(!local_root.join("canvas_data/http/data.csv").exists());
         let text = std::fs::read_to_string(&copied).unwrap();
-        assert!(text.contains("DATA/http/data.csv"));
-        assert!(text.contains("| DATA/local/local.geojson |"));
+        assert!(text.contains("canvas_data/http/data.csv"));
+        assert!(text.contains("| canvas_data/local/local.geojson |"));
         task.abort();
     }
 
@@ -3954,18 +3982,24 @@ mod localize_tests {
                     info: ./DATA/i.html\n\
                     legend: l | DATA/l.png\n\
                     sql: s | SELECT * FROM read_csv('DATA/x.csv')\n\
+                    geojson: e | canvas_data/e.geojson | on\n\
+                    geojson: f | ../canvas_data/f.geojson | on\n\
+                    info: ./canvas_data/j.html\n\
                     geojson: c | cloud:folder/c.geojson\n\
                     geojson: d | https://x/d.geojson";
         let out = rewrite_kasc_refs(text, None, kasc_local_ref_field_index, &mut |v, _| {
             localize_data_ref(v)
         });
-        assert!(out.contains("| DATA/local/a.geojson |"));
-        assert!(out.contains("| ../DATA/local/b.geojson |"));
-        assert!(out.contains("3dtiles: t | DATA/local/tiles/tileset.json"));
-        assert!(out.contains("xyz: t | DATA/local/tiles/{z}/{x}/{y}.png"));
-        assert!(out.contains("info: DATA/local/i.html"));
-        assert!(out.contains("| DATA/local/l.png"));
-        assert!(out.contains("read_csv('DATA/local/x.csv')"));
+        assert!(out.contains("| canvas_data/local/a.geojson |"));
+        assert!(out.contains("| ../canvas_data/local/b.geojson |"));
+        assert!(out.contains("3dtiles: t | canvas_data/local/tiles/tileset.json"));
+        assert!(out.contains("xyz: t | canvas_data/local/tiles/{z}/{x}/{y}.png"));
+        assert!(out.contains("info: canvas_data/local/i.html"));
+        assert!(out.contains("| canvas_data/local/l.png"));
+        assert!(out.contains("read_csv('canvas_data/local/x.csv')"));
+        assert!(out.contains("| canvas_data/local/e.geojson |"));
+        assert!(out.contains("| ../canvas_data/local/f.geojson |"));
+        assert!(out.contains("info: canvas_data/local/j.html"));
         // cloud:・リモート URL・非参照フィールドは無変更
         assert!(out.contains("cloud:folder/c.geojson"));
         assert!(out.contains("https://x/d.geojson"));
@@ -3979,11 +4013,11 @@ mod localize_tests {
         let dir = root.join("p");
         assert_eq!(
             localize_output_scope(root, &dir, request.scope),
-            (root.to_path_buf(), "../DATA")
+            (root.to_path_buf(), "../canvas_data")
         );
         assert_eq!(
             localize_output_scope(root, &dir, LocalizeScope::Project),
-            (dir.to_path_buf(), "DATA")
+            (dir.to_path_buf(), "canvas_data")
         );
         assert!(serde_json::from_value::<CloudLocalizeRequest>(
             json!({"project":"p","scope":"../../"})
@@ -4017,12 +4051,12 @@ mod localize_tests {
     #[test]
     fn shared_references_do_not_embed_registration_id() {
         let text = "geojson: a | https://a/data.csv\nsql: b | SELECT * FROM read_csv('https://a/data.csv')\ngeojson: c | cloud:folder/c.geojson";
-        let out = rewrite_kasc_remote_refs(text, Some("../DATA/cloud/source"), &mut |_, _| {
-            Some("../DATA/http/data.csv".to_string())
+        let out = rewrite_kasc_remote_refs(text, Some("../canvas_data/cloud/source"), &mut |_, _| {
+            Some("../canvas_data/http/data.csv".to_string())
         });
-        assert!(out.contains("read_csv('../DATA/http/data.csv')"));
-        assert!(out.contains("geojson: a | ../DATA/http/data.csv"));
-        assert!(out.contains("../DATA/cloud/source/folder/c.geojson"));
+        assert!(out.contains("read_csv('../canvas_data/http/data.csv')"));
+        assert!(out.contains("geojson: a | ../canvas_data/http/data.csv"));
+        assert!(out.contains("../canvas_data/cloud/source/folder/c.geojson"));
         assert!(!out.contains("/projects/"));
     }
 
@@ -4156,7 +4190,7 @@ mod localize_tests {
         let local_root = env.state.projects_dir.join("T_local");
         // http 由来のタイルセットは他形式と同じく http/ 配下(3dtiles/ 区画)へ
         // ルート内の参照は階層保持、ルート外は _ext/ へ
-        let data = local_root.join("DATA/http/3dtiles/tiles");
+        let data = local_root.join("canvas_data/http/3dtiles/tiles");
         assert!(data.join("tileset.json").is_file());
         assert!(data.join("sub/child.json").is_file());
         assert!(data.join("a.b3dm").is_file());
@@ -4176,17 +4210,17 @@ mod localize_tests {
         assert_eq!(result["tilesetSkipped"].as_array().unwrap().len(), 1);
         // .kasc の参照はルート tileset.json を指し、Google は URL のまま残る
         let text = std::fs::read_to_string(local_root.join("T").join(KASC_FILE_NAME)).unwrap();
-        assert!(text.contains("| ../DATA/http/3dtiles/tiles/tileset.json |"));
+        assert!(text.contains("| ../canvas_data/http/3dtiles/tiles/tileset.json |"));
         assert!(text.contains("tile.googleapis.com"));
         // タイルセットの対応も http/_sources.json に記録する
-        let sources = read_localize_sources(&local_root.join("DATA/http/_sources.json")).unwrap();
+        let sources = read_localize_sources(&local_root.join("canvas_data/http/_sources.json")).unwrap();
         assert_eq!(
             sources["http/3dtiles/tiles"],
             json!(format!("{base}/tiles/tileset.json"))
         );
         // xyz: リモートテンプレートは受け皿のみ生成し参照をローカル化する。
         // 受け皿には配置手順の _README.txt が入る(タイル本体は取得しない)
-        let xyz_dir = local_root.join("DATA/http/xyz/std");
+        let xyz_dir = local_root.join("canvas_data/http/xyz/std");
         let entries: Vec<_> = std::fs::read_dir(&xyz_dir)
             .unwrap()
             .filter_map(|e| e.ok())
@@ -4195,7 +4229,7 @@ mod localize_tests {
         let readme = std::fs::read_to_string(xyz_dir.join("_README.txt")).unwrap();
         assert!(readme.contains(&format!("{base}/xyz/std/")));
         assert!(
-            text.contains("| ../DATA/http/xyz/std/{z}/{x}/{y}.png |"),
+            text.contains("| ../canvas_data/http/xyz/std/{z}/{x}/{y}.png |"),
             "{text}"
         );
         assert!(text.contains("maxZoom=15"));
@@ -4205,11 +4239,11 @@ mod localize_tests {
             sources["http/xyz/std"],
             json!(format!("{base}/xyz/std/{{z}}/{{x}}/{{y}}.png"))
         );
-        // ローカル DATA/ 内のテンプレートは local/ へ集約され複製される
+        // ローカル canvas_data/ 内のテンプレートは local/ へ集約され複製される
         assert!(local_root
-            .join("T/DATA/local/xyz/ortho/0/0/0.png")
+            .join("T/canvas_data/local/xyz/ortho/0/0/0.png")
             .is_file());
-        assert!(text.contains("| DATA/local/xyz/ortho/{z}/{x}/{y}.png |"));
+        assert!(text.contains("| canvas_data/local/xyz/ortho/{z}/{x}/{y}.png |"));
         // base: のベースマップ相当はリモート URL のまま残る
         assert!(text.contains("cyberjapandata.gsi.go.jp"));
         task.abort();
@@ -4723,7 +4757,7 @@ async fn no_cache_middleware(
 // ---- 外部プロジェクト(.kasc ファイル関連付け起動) ----
 // インストールフォルダ外にある .kasc をプロジェクトとして登録する。
 // .kasc のあるフォルダがそのまま /projects/<id>/ のルートになるため、
-// DATA/ 等の相対参照はそのフォルダ基準で解決される。納品フォルダを
+// canvas_data/ 等の相対参照はそのフォルダ基準で解決される。納品フォルダを
 // そのまま開ける構成。.kasc の実ファイル名は kasugai_canvas.kasc 以外でもよい
 
 // canonicalize は \\?\ プレフィックスを返すことがある。比較・結合で扱いにくいので剥がす
@@ -5017,7 +5051,7 @@ struct RegisterProjectRequest {
 // ローカルAPI(/api/*, /health)へ file:// 等の別オリジンからのアクセスを許可する。
 // エクスポートフォルダの <engine>.html ランチャー(file://)からの
 // /api/projects/register 呼び出し用。
-// /projects/* はホスト版エンジン(CDN)がローカルの .kasc+DATA/ を読む用途で
+// /projects/* はホスト版エンジン(CDN)がローカルの .kasc+canvas_data/ を読む用途で
 // CORS+Private Network Access を許可するが、許可リスト外のオリジンからは
 // 読めないよう Access-Control-Allow-Origin をエコーしない(任意サイトからの
 // ローカルデータ読み取りを防ぐ)。その他の静的配信部分には付けない。
@@ -5161,7 +5195,7 @@ async fn register_project(
 
 // POST /api/projects/import {name?, kasc} — リモートプロジェクトの軽い取り込み。
 // .kasc 本文を projects/imported/<slug>/ へ書き出し外部プロジェクトとして登録。
-// DATA/ 等の参照は取り込まず .kasc 内の URL をそのまま参照する（呼び出し側で
+// canvas_data/ 等の参照は取り込まず .kasc 内の URL をそのまま参照する（呼び出し側で
 // 相対参照は絶対 URL 化して送る前提）。id を返す
 #[derive(Deserialize)]
 struct ImportProjectRequest {
@@ -5184,7 +5218,7 @@ async fn import_project(
     let slug = sanitize_project_id(request.name.as_deref().unwrap_or("imported"));
     let dir = state.projects_dir.join("imported").join(&slug);
     let kasc_path = dir.join(format!("{slug}.kasc"));
-    tokio::fs::create_dir_all(dir.join("DATA"))
+    tokio::fs::create_dir_all(dir.join("canvas_data"))
         .await
         .map_err(internal_error)?;
     tokio::fs::write(&kasc_path, &kasc)

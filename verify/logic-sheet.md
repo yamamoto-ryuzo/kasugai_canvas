@@ -5,7 +5,7 @@
 ## トポロジ（全体）
 ```mermaid
 flowchart TB
-  qgis[QGIS geo_webview] -->|.kasc+DATA/ register /live/*| web[web/ 6エンジン]
+  qgis[QGIS geo_webview] -->|.kasc+canvas_data/ register /live/*| web[web/ 6エンジン]
   web --> srv[server :8510]
   srv --> hub[bridge-hub :8511]
   srv --> rcl[rclone cloud]

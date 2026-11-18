@@ -1,7 +1,7 @@
 // ローカルフォルダ直読み(File System Access API)。
-// ホスト版エンジンが .kasc+DATA/ を「localfs:///」疑似URL経由で読む土台。
+// ホスト版エンジンが .kasc+canvas_data/ を「localfs:///」疑似URL経由で読む土台。
 // - localfs:///path は fetch シムが選択済みフォルダハンドルから読む
-// - 相対参照(DATA/x 等)はブラウザのURL解決に任せる(通常の ?kasc= と同型)
+// - 相対参照(canvas_data/x 等)はブラウザのURL解決に任せる(通常の ?kasc= と同型)
 // - ハンドルは IndexedDB に保持し、次回は「前回のフォルダで開く」1クリック
 // - Chromium 系のみ(Firefox/Safari は showDirectoryPicker 非対応)
 // - `<img>` 等のサブリソースは通らないためローカルXYZタイルツリーは未対応
@@ -47,7 +47,7 @@ const _MIME = {
   parquet: "application/octet-stream", wasm: "application/wasm",
 };
 
-// localfs:///DATA/x.geojson → 選択フォルダハンドルから File を取る
+// localfs:///canvas_data/x.geojson → 選択フォルダハンドルから File を取る
 async function _fileFor(url) {
   if (!rootHandle) throw new Error("フォルダ未選択");
   const rel = url.slice("localfs://".length);
@@ -133,7 +133,7 @@ function _showOverlay(dirName) {
     "<h2 style='margin:0 0 10px;font-size:16px'>ローカルプロジェクトを開く</h2>" +
     "<p style='margin:0 0 12px;font-size:13px'>.kasc のあるフォルダを選択してください" +
     (hint ? "（期待: <strong>" + hint.replace(/[<>&"]/g, "") + "</strong>）" : "") +
-    "（DATA/ はフォルダ内から読み込みます）</p>";
+    "（canvas_data/・旧 DATA/ 等の相対参照はフォルダ内から読み込みます）</p>";
   const btn = document.createElement("button");
   btn.textContent = dirName ? `「${dirName}」で開く` : "フォルダを選択";
   btn.style.cssText = "padding:8px 16px;font-size:14px";

@@ -299,9 +299,9 @@
                 <button id="effects-reset" type="button" style="width: 100%; margin-top: 6px;" data-i18n="common.reset">リセット</button>
               </section>
               <section id="display-general-panel" class="settings-subpanel">
-                <label class="field-label" for="display-basemap-opacity" data-i18n="display.basemapOpacity">ベースマップ透過度</label>
+                <label class="field-label" for="display-basemap-opacity"><span data-i18n="display.basemapOpacity">ベースマップ透過度</span> <span id="display-basemap-opacity-value">100%</span></label>
                 <input id="display-basemap-opacity" type="range" min="0" max="1" step="0.05" value="1" style="width: 100%;" />
-                <label class="field-label" for="display-layer-opacity" data-i18n="display.layerOpacity">レイヤー透過度</label>
+                <label class="field-label" for="display-layer-opacity"><span data-i18n="display.layerOpacity">レイヤー透過度</span> <span id="display-layer-opacity-value">100%</span></label>
                 <input id="display-layer-opacity" type="range" min="0" max="1" step="0.05" value="1" style="width: 100%;" />
                 <div class="terrain-options">
                   <label><input id="display-scalebar" type="checkbox" checked /><span data-i18n="display.scalebar"> スケールバーを表示</span></label>
@@ -512,7 +512,7 @@
                     <p class="hint" data-i18n="settings.project.panelHint">プロジェクトの切替はパネル上部のリストから行います。</p>
                     <label class="field-label" for="project-root-path" style="margin-top:3px;" data-i18n="settings.project.root">プロジェクトルート</label>
                     <input id="project-root-path" class="share-url" style="margin-top:0;" readonly />
-                    <p class="hint" data-i18n="settings.project.rootHint">プロジェクト内の相対パス(DATA/ 等)はこのフォルダを基準に解決されます。</p>
+                    <p class="hint" data-i18n="settings.project.rootHint">プロジェクト内の相対パス(canvas_data/ 等)はこのフォルダを基準に解決されます。</p>
                   </section>
                   <section id="settings-inspector-panel" class="settings-subpanel">
                     <textarea id="inspector-input" class="inspector-input" spellcheck="false"></textarea>
@@ -520,16 +520,16 @@
                     <button id="export-inspector" type="button" data-i18n="inspector.export">エクスポート(.kasc)</button>
                     <p id="inspector-status" class="hint" aria-live="polite"></p>
                     <div class="section-title" style="margin-top:3px;" data-i18n="inspector.dataDirTitle">ファイル保存先</div>
-                    <label class="field-label" for="inspector-data-dir" data-i18n="inspector.dataDirLabel">保存先フォルダ (DATA/ を選択)</label>
+                    <label class="field-label" for="inspector-data-dir" data-i18n="inspector.dataDirLabel">保存先フォルダ (canvas_data/ を選択)</label>
                     <div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;">
                       <button id="inspector-data-dir" type="button" style="flex:0 0 auto;" data-i18n="inspector.dataDirButton">フォルダを選択</button>
                       <span id="inspector-data-dir-name" style="font-size:0.85em;color:#71818d;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-i18n="inspector.dataDirNone">未選択</span>
                     </div>
                     <div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;">
                       <input id="inspector-add-file" type="file" multiple style="display:none;" />
-                      <button id="inspector-add-file-button" type="button" style="flex:0 0 auto;" data-i18n="inspector.addFileButton">DATA/ に保存して追加</button>
+                      <button id="inspector-add-file-button" type="button" style="flex:0 0 auto;" data-i18n="inspector.addFileButton">canvas_data/ に保存して追加</button>
                     </div>
-                    <p class="hint" data-i18n="inspector.addFileHint">選択したファイルを DATA/ へ保存し（ローカルサーバー版はサーバー側、それ以外は上で選択したフォルダ）、対応形式なら設定行を追記して即時反映します。対応: .geojson .json .gpkg .fgb .parquet</p>
+                    <p class="hint" data-i18n="inspector.addFileHint">選択したファイルを canvas_data/ へ保存し（ローカルサーバー版はサーバー側、それ以外は上で選択したフォルダ）、対応形式なら設定行を追記して即時反映します。対応: .geojson .json .gpkg .fgb .parquet</p>
                   </section>
                 </section>
                 <section id="manage-ai" class="manage-pane">
@@ -887,10 +887,10 @@
                       <button id="cloud-save-kasc" type="button" data-i18n="cloud.saveKasc">現在の設定(.kasc)をクラウドへ保存</button>
                       <label class="field-label" for="cloud-localize-scope" data-i18n="cloud.localizeScope">納品用データの保存先</label>
                       <select id="cloud-localize-scope">
-                        <option value="shared" selected data-i18n="cloud.localizeShared">共有（既定）: ../DATA/</option>
-                        <option value="project" data-i18n="cloud.localizeProject">専用: DATA/</option>
+                        <option value="shared" selected data-i18n="cloud.localizeShared">共有（既定）: ../canvas_data/</option>
+                        <option value="project" data-i18n="cloud.localizeProject">専用: canvas_data/</option>
                       </select>
-                      <p class="hint" data-i18n="cloud.localizeHint">プロジェクトの隣に &lt;name&gt;_local/（群マニフェスト＋プロジェクト複製＋DATA/）を生成します。共有は _local/DATA/、専用は _local/&lt;name&gt;/DATA/。元は変更されません。納品は _local フォルダごと渡してください。</p>
+                      <p class="hint" data-i18n="cloud.localizeHint">プロジェクトの隣に &lt;name&gt;_local/（群マニフェスト＋プロジェクト複製＋canvas_data/）を生成します。共有は _local/canvas_data/、専用は _local/&lt;name&gt;/canvas_data/。元は変更されません。納品は _local フォルダごと渡してください。</p>
                       <button id="cloud-localize" type="button" data-i18n="cloud.localize">納品パッケージを生成（_local/）</button>
                       <p id="save-status" class="hint" aria-live="polite"></p>
                     </div>
@@ -1146,7 +1146,7 @@
           <button id="sql-dialog-close" type="button" aria-label="閉じる" data-i18n-attr="aria-label:vattr.close">×</button>
         </div>
         <textarea id="sql-dialog-input" rows="4" spellcheck="false"></textarea>
-        <div class="sql-dialog-hint" data-i18n="sqldlg.hint">WHERE 式または SELECT 文(OGR SQL)。FROM にはレイヤー名・DATA/ パスが使えます</div>
+        <div class="sql-dialog-hint" data-i18n="sqldlg.hint">WHERE 式または SELECT 文(OGR SQL)。FROM にはレイヤー名・canvas_data/ パスが使えます</div>
         <div id="sql-dialog-status" class="sql-dialog-status"></div>
         <div class="sql-dialog-actions">
           <button id="sql-dialog-test" type="button" data-i18n="sqldlg.test">テスト</button>

@@ -21,7 +21,7 @@ kasugai_canvas/
 │  └─ images/            # ドキュメント画像
 ├─ server/               # Rust(Axum) 静的配信サーバー（オプション）
 ├─ web/                  # フロントエンド資産（index.html / app.js / styles.css）
-│  └─ projects/          # プロジェクト（projects.json / <id>/kasugai_canvas.kasc / DATA/）
+│  └─ projects/          # プロジェクト（projects.json / <id>/kasugai_canvas.kasc / canvas_data/）
 ├─ functions/            # Cloudflare Pages Functions（認証 API / KV・R2 ゲート）
 ├─ workers/              # Cloudflare Workers 版デプロイ設定（worker.js / wrangler.toml）
 ├─ agent/                # Cloud Run エージェントサービス（FastAPI・認証 5/6/7・GCS ストレージ）
