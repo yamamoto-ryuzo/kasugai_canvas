@@ -1,10 +1,14 @@
 // Issue #133 検証: join=/on=/joinprefix=
+// ※ join= 機能は意図的に撤去済み(検証資産 _join_test も commit a585e62 で削除)。
+//    本プローブは検証対象が存在しないため常に SKIP を返す。
+console.log("SKIP issue133 :: join=/on=/joinprefix= 機能は撤去済み(検証対象なし)");
+process.exit(0);
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 const { chromium } = await import(
   "file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
 const OUT = fileURLToPath(new URL("./", import.meta.url));
-const BASE = process.env.PROBE_BASE || "http://127.0.0.1:8899";
+const BASE = process.env.PROBE_BASE || "http://127.0.0.1:8510";
 const browser = await chromium.launch({
   executablePath: `${process.env.LOCALAPPDATA}/ms-playwright/chromium-1243/chrome-win64/chrome.exe`,
 });

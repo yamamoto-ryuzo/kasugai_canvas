@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import os from "node:os";
 const { chromium } = await import("file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
 const OUT = fileURLToPath(new URL("./", import.meta.url));
-const BASE = "http://127.0.0.1:8899";
+const BASE = "http://127.0.0.1:8510";
 const prof = join(os.tmpdir(), "kasc-probe-profile-search125");
 const ctx = await chromium.launchPersistentContext(prof, { channel: "chrome", headless: true }).catch(() => chromium.launchPersistentContext(prof, { channel: "msedge", headless: true }));
 const page = await ctx.newPage();

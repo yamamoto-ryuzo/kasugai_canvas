@@ -1,0 +1,136 @@
+{
+  "date": "2026-11-19T14:24:55.989Z",
+  "checks": [
+    {
+      "name": "起動: プロジェクト読込",
+      "pass": true,
+      "extra": "layers=10"
+    },
+    {
+      "name": "起動: 視点取得",
+      "pass": true,
+      "extra": "{\"latitude\":35.686698,\"longitude\":139.753035,\"zoom\":15,\"height\":3071.134751905985,\"heading\":0,\"pitch\":-90}"
+    },
+    {
+      "name": "listGsiBasemaps",
+      "pass": true,
+      "extra": "count=5 active=ort"
+    },
+    {
+      "name": "setGsiBasemap(pale)",
+      "pass": true,
+      "extra": "{\"ok\":true,\"id\":\"pale\",\"title\":\"淡色地図\",\"added\":false,\"active\":\"pale\"}"
+    },
+    {
+      "name": "setGsiBasemap 反映",
+      "pass": false,
+      "extra": "active=ort"
+    },
+    {
+      "name": "listGsiCatalog(filter)",
+      "pass": true,
+      "extra": "total=133 first=ort"
+    },
+    {
+      "name": "listGsiCatalog(全件)",
+      "pass": true,
+      "extra": "total=1266"
+    },
+    {
+      "name": "addGsiLayer(airphoto)",
+      "pass": true,
+      "extra": "{\"ok\":true,\"id\":\"airphoto\",\"title\":\"簡易空中写真（2004年～）\"}"
+    },
+    {
+      "name": "listGsiLayers",
+      "pass": true,
+      "extra": "count=2 ids=airphoto,ort"
+    },
+    {
+      "name": "setGsiLayerOpacity",
+      "pass": true,
+      "extra": "{\"ok\":true,\"opacity\":0.5}"
+    },
+    {
+      "name": "setGsiLayerHidden(true)",
+      "pass": true,
+      "extra": "{\"ok\":true,\"hidden\":true}"
+    },
+    {
+      "name": "moveGsiLayer(top)",
+      "pass": true,
+      "extra": "{\"ok\":true,\"index\":0}"
+    },
+    {
+      "name": "importGsiLayers",
+      "pass": true,
+      "extra": "\"1件取り込み・1件未対応\""
+    },
+    {
+      "name": "importGsiCatalog",
+      "pass": true,
+      "extra": "\"1件取り込み\""
+    },
+    {
+      "name": "getGsiElevation(富士山)",
+      "pass": true,
+      "extra": "elev=3770.6 src=1m（レーザ）"
+    },
+    {
+      "name": "getGsiShareUrl",
+      "pass": true,
+      "extra": "https://maps.gsi.go.jp/#15/35.686686/139.753046/1/&base=ort&ls=ort%7Cairphoto%2C0.5&blend=0&disp=11"
+    },
+    {
+      "name": "listGsiSakuzu",
+      "pass": true,
+      "extra": "count=4"
+    },
+    {
+      "name": "setGsiGlobe(true)",
+      "pass": true,
+      "extra": "{\"ok\":true,\"globe\":true}"
+    },
+    {
+      "name": "Globe: GLOBE.MAP.viewer",
+      "pass": true,
+      "extra": "{\"hasGLOBE\":true,\"hasViewer\":true,\"hasMl\":true,\"tileCount\":2,\"view\":{\"latitude\":35.68668597997463,\"longitude\":139.753046,\"zoom\":15.175178639502436,\"height\":2720"
+    },
+    {
+      "name": "Globe: GLOBALS.mapLayerList",
+      "pass": true,
+      "extra": "tileList=2"
+    },
+    {
+      "name": "Globe: getViewInfo",
+      "pass": true,
+      "extra": "{\"latitude\":35.68668597997463,\"longitude\":139.753046,\"zoom\":15.175178639502436,\"height\":2720,\"heading\":360,\"pitch\":-50.0"
+    },
+    {
+      "name": "Globe: listGsiBasemaps",
+      "pass": true,
+      "extra": "count=5"
+    },
+    {
+      "name": "Globe: listGsiLayers",
+      "pass": true,
+      "extra": "count=2"
+    },
+    {
+      "name": "setGsiGlobe(false)",
+      "pass": true,
+      "extra": "{\"ok\":true,\"globe\":false}"
+    },
+    {
+      "name": "2D復帰: 視点・レイヤ",
+      "pass": true,
+      "extra": "{\"view\":{\"latitude\":35.68672068232048,\"longitude\":139.75304603576663,\"zoom\":15,\"height\":3071.133878761109,\"heading\":0,\"pitch\":-90},\"layers\":10,\"gsiLayers\":1}"
+    },
+    {
+      "name": "removeGsiLayer",
+      "pass": false,
+      "extra": "{\"ok\":false,\"reason\":\"baseLayer\"}"
+    }
+  ],
+  "summary": "24/26 PASS"
+}

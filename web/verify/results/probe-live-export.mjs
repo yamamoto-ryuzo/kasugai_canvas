@@ -46,11 +46,11 @@ for (const eng of engines) {
       s.status = st ? st.textContent.slice(0, 300) : null;
       return s;
     }).catch(e => ({ evalError: String(e) }));
-    await page.screenshot({ path: `${SHOTS}/${eng}.png` });
+    await page.screenshot({ path: `${SHOTS}/${eng}.png`, timeout: 90000 });
     ok(eng, "page-load", !state.evalError, JSON.stringify(state).slice(0, 200));
-    // 致命的エラーのみ FAIL (タイル404や CORS 警告等は別記録)
+    // 致命的エラーのみ FAIL (タイル404/403等外部リソース応答・CORS 警告は別記録)
     const fatal = errs.filter(e =>
-      !/404|net::|CORS|Access-Control|favicon|tile|ERR_/i.test(e));
+      !/403|404|net::|CORS|Access-Control|favicon|tile|ERR_/i.test(e));
     ok(eng, "no-fatal-error", fatal.length === 0,
        fatal.slice(0, 3).join(" | ") || `nonfatal=${errs.length}`);
     results.errors[eng] = errs.slice(0, 10);

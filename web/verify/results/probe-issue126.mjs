@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 const { chromium } = await import("file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
 const OUT = fileURLToPath(new URL("./", import.meta.url));
-const BASE = "http://127.0.0.1:8899";
+const BASE = "http://127.0.0.1:8510";
 const GJ = process.env.GJ, G = process.env.G;
 const KASC = encodeURIComponent(`${BASE}/projects/_portal_test/stat_test.kasc`);
 const gj = await (await fetch(`${BASE}/projects/_portal_test/${GJ}`)).json();

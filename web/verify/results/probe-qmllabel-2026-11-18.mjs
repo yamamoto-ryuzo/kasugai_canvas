@@ -66,10 +66,9 @@ rec("B2: cesium 実プロジェクトの障害物警告が実形状文言",
   !ces.badges.some(t => t.includes("bboxで近似")), ces.badges.join(" | ").slice(0, 300) || "(バッジなし)");
 const obsInfo = await page.evaluate(() => {
   // _qmlObstacles の収集数を全データソースから集計
-  const vw = window.Cesium?.viewer || window.viewer;
   const out = { found: false, obstacles: 0, labelsShown: 0, labelsTotal: 0 };
   try {
-    const v = window.viewer || window.kascViewer;
+    const v = window._viewer || window.viewer || window.kascViewer;
     if (!v) return out;
     out.found = true;
     for (const ds of v.dataSources?._dataSources || []) {
@@ -115,10 +114,15 @@ const feat = await page2.evaluate(() => {
   const map = window.kascMap || window.map;
   try {
     let hit = 0, checked = 0;
-    for (const s of Object.values(map.style?.sourceCaches || map.style?._sources || {})) {
-      const data = s.getSource?.()?.data || s._source?.data || s._data;
-      const feats = data?.features || data?.data?.features;
-      if (!feats) continue;
+    for (const sid of Object.keys(map.getStyle().sources || {})) {
+      let feats = [];
+      try {
+        const s = map.getSource(sid);
+        const d = s?.data || s?._data;
+        feats = typeof d === "string" ? [] : (d?.features || []);
+        if (!feats.length && s?._options?.data?.features) feats = s._options.data.features;
+      } catch (_) {}
+      if (!feats.length) { try { feats = map.querySourceFeatures(sid) || []; } catch (_) {} }
       for (const f of feats) {
         checked++;
         if (f.properties?.__kasc_label_img) hit++;

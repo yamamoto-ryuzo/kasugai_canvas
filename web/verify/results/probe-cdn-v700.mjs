@@ -7,7 +7,7 @@
 // 実行: node web/verify/results/probe-cdn-v700.mjs
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import os from "node:os";
 const { chromium } = await import(
   "file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
@@ -25,12 +25,21 @@ const rec = (id, ok, detail) => { results.push({ id, ok, detail });
   console.log(`${ok ? "PASS" : "FAIL"} ${id} :: ${detail}`); };
 
 // ================= 1. HTTP レベル =================
+// 期待バージョン: 正本はローカル server/Cargo.toml の version(CDN はその発行物)
+const EXPECT_VER = (() => {
+  try {
+    const toml = readFileSync(new URL("../../../server/Cargo.toml", import.meta.url), "utf8");
+    return toml.match(/^version\s*=\s*"([^"]+)"/m)?.[1] || null;
+  } catch { return null; }
+})();
+
 async function getJson(url) { const r = await fetch(url, { cache: "no-store" }); return { ok: r.ok, status: r.status, body: await r.json().catch(() => null) }; }
 try {
   const ch = await getJson(`${CDN}/channels.json`);
   rec("http.channels", ch.ok && ch.body?.default === "stable", JSON.stringify(ch.body));
   const v = await getJson(`${STABLE}/version.json`);
-  rec("http.version", v.ok && v.body?.version === "7.0.0", JSON.stringify(v.body));
+  rec("http.version", v.ok && !!v.body?.version && v.body.version === EXPECT_VER,
+    `${JSON.stringify(v.body)} expect=${EXPECT_VER}`);
   const pj = await getJson(`${STABLE}/projects/projects.json`);
   const ids = (pj.body || []).map(p => p.id).sort();
   rec("http.projects", pj.ok && ["default", "reinfolib", "sample_qgis"].every(i => ids.includes(i)),
@@ -77,7 +86,7 @@ try {
   });
   rec("cesium.boot", info.cesium && info.ready === true, JSON.stringify(info));
   rec("cesium.redirect_default_engine", info.url.includes("/cesium/"), `url=${info.url}`);
-  rec("cesium.version_display", info.ver === "7.0.0", `version.json=${info.ver}`);
+  rec("cesium.version_display", info.ver === EXPECT_VER, `version.json=${info.ver} expect=${EXPECT_VER}`);
   rec("cesium.default_project", info.layers > 0, `listLayers=${info.layers}`);
   rec("cesium.no_pageerror", pageErrors.length === errsBefore, `errors=${pageErrors.length - errsBefore}`);
   await page.screenshot({ path: join(OUT, "cdn-cesium.png") });

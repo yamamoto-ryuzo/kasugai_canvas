@@ -131,6 +131,7 @@ try {
       const gj = (window.kasugaiApi.getLayerGeoJson?.(l.id) ?? window.getLayerGeoJson?.(l.id));
       if (!gj?.features?.length) continue;
       out[l.id] = { type: l.type, title: l.title, n: gj.features.length,
+        geom: gj.features[0]?.geometry?.type || "",
         props: gj.features.slice(0, 80).map(f => f.properties || {}) };
     }
     return out;
@@ -138,37 +139,64 @@ try {
   for (const [id, v] of Object.entries(raw)) inspect[id] = v;
 } catch (e) { rec("inspect.run", false, String(e).slice(0, 300)); }
 
-const specs = []; // {id, type, qmlPath, catAttr, catVals, labelAttr, symbolType}
+// rec-formats.kasc のレイヤ行から title(末尾要素)→データURL の対応を引く。
+// 同一 type で異なるデータ(example.parquet / grid.parquet 等)が混在するため、
+// Phase B の再読込は type ではなく spec ごとの URL を使う必要がある
+const srcByTitle = new Map();
+try {
+  const kascTxt = await readFile(join(WEB, "verify/rec-formats/rec-formats.kasc"), "utf8");
+  for (const line of kascTxt.split(/\r?\n/)) {
+    const m = line.match(/^\s*(geojson|flatgeobuf|geoparquet)\s*:\s*([^|]+)\|\s*([^|\s]+)/);
+    if (m) srcByTitle.set(m[2].trim().split("/").pop(), m[3].trim());
+  }
+} catch {}
+
+const specs = []; // {id, type, qmlPath, src, catAttr, catVals, labelAttr, symbolType}
 for (const [id, v] of Object.entries(inspect)) {
   const features = v.props.map(p => ({ properties: p }));
   const { catAttr, catVals, labelAttr } = pickAttrs(features);
   rec(`inspect.${v.type}`, !!catAttr && !!labelAttr,
     `${v.title}: cat=${catAttr}(${catVals?.length}種) label=${labelAttr} n=${v.n}`);
   if (!catAttr) continue;
-  const qmlPath = `/probe/${v.type}.qml`;
-  // geojson(points 混在)は marker シンボル、ポリゴン系は fill
-  const symbolType = v.type === "geojson" ? "marker" : "fill";
+  // spec ごとに固有の QML パスが必要(同一 type で属性構成が違うレイヤーが
+  // 複数あると共有パスが上書きされ、全 spec が最後の QML を拾って失敗する)
+  const qmlPath = `/probe/${v.type}-${specs.length}.qml`;
+  // 点データは marker シンボル、ポリゴン/ライン系は fill
+  const symbolType = /point/i.test(v.geom) ? "marker" : "fill";
   mem.set(qmlPath, buildQml({ attr: catAttr, labelAttr, categories: catVals, symbolType }));
-  specs.push({ id, type: v.type, title: v.title, qmlPath, catAttr, catVals, labelAttr, symbolType });
+  const src = srcByTitle.get(v.title) ||
+    (v.type === "geojson" ? "/verify/rec-formats/points.geojson"
+      : v.type === "flatgeobuf" ? "/verify/fgb-test/countries.fgb"
+      : "/verify/rec-formats/example.parquet");
+  specs.push({ id, type: v.type, title: v.title, qmlPath, src, catAttr, catVals, labelAttr, symbolType });
 }
 rec("inspect.specs", specs.length >= 3,
   `QML 適用対象 ${specs.length}/3 (geojson/flatgeobuf/geoparquet)`);
 
 // ---- Phase B: QML 適用 kasc を生成して再読み込み ----
 try {
-  const urlFor = s => s.type === "geojson" ? "/verify/rec-formats/points.geojson"
-    : s.type === "flatgeobuf" ? "/verify/fgb-test/countries.fgb"
-    : "/verify/rec-formats/example.parquet";
   const kasc = ["title: rec-qml", "base: 背景なし | none",
     "cam:世界|20|10|h=40000000|p=-90",
-    ...specs.map((s, i) => `${s.type}: QML-${i} | ${urlFor(s)} | on${s.type === "flatgeobuf" ? " | bbox=off" : ""} | style=${s.qmlPath}`),
+    ...specs.map((s, i) => `${s.type}: QML-${i} | ${s.src} | on${s.type === "flatgeobuf" ? " | bbox=off" : ""} | style=${s.qmlPath}`),
   ].join("\n");
   specs.forEach((s, i) => { s.qmlTitle = `QML-${i}`; });
   mem.set("/probe/qml.kasc", kasc);
   await page.goto(`${base}/cesium/?kasc=${encodeURIComponent(base + "/probe/qml.kasc")}`,
     { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => window._viewer && window.kasugaiApi, null, { timeout: 90000 });
-  await page.waitForTimeout(10000);
+  // 全 spec の dataSource がデコード・登録されるまで待つ
+  // (大きい parquet/fgb は 10s 固定待ちでは間に合わないことがある)
+  await page.waitForFunction((n) => {
+    const v = window._viewer;
+    const ids = new Set((window.kasugaiApi?.listLayers?.() || []).map(l => l.id));
+    let ready = 0;
+    for (let i = 0; i < v.dataSources.length; i++) {
+      const d = v.dataSources.get(i);
+      if (d._kasugaiLayerId && ids.has(d._kasugaiLayerId) && d.entities.values.length) ready++;
+    }
+    return ready >= n;
+  }, specs.length, { timeout: 90000 }).catch(() => {});
+  await page.waitForTimeout(3000);
 
   for (const s of specs) {
     const r = await page.evaluate(({ spec }) => {

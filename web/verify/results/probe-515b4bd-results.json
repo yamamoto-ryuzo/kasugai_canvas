@@ -2,17 +2,17 @@
   {
     "id": "qml2d.lgrp.multiply",
     "ok": true,
-    "detail": "{\"lgrp\":\"multiply|[37.795275590551185,15.118110236220474]\",\"fblendP\":\"multiply\",\"lblendLayers\":[\"multiply\"],\"dashLayers\":1,\"lgrpLayers\":2}"
+    "detail": "{\"lgrp\":\"multiply|[2.5,1]|\",\"fblendP\":\"multiply\",\"lblendLayers\":[\"multiply\"],\"dashLayers\":1,\"lgrpLayers\":2}"
   },
   {
     "id": "qml2d.lighter_to_plusLighter",
     "ok": true,
-    "detail": "{\"lgrp\":\"plus-lighter|[37.795275590551185,15.118110236220474]\",\"blends\":[\"plus-lighter\"]}"
+    "detail": "{\"lgrp\":\"plus-lighter|[2.5,1]|\",\"blends\":[\"plus-lighter\"]}"
   },
   {
     "id": "qml2d.unmapped_no_group",
     "ok": true,
-    "detail": "{\"lgrp\":\"|[37.795275590551185,15.118110236220474]\",\"dashOnly\":true,\"blendLayers\":0}"
+    "detail": "{\"lgrp\":\"|[2.5,1]|\",\"dashOnly\":true,\"blendLayers\":0}"
   },
   {
     "id": "qml2d.fill_blend_screen",
@@ -22,17 +22,17 @@
   {
     "id": "qml2d.normal_dash_lgrp",
     "ok": true,
-    "detail": "{\"lgrp\":\"|[37.795275590551185,15.118110236220474]\",\"lineLayers\":2}"
+    "detail": "{\"lgrp\":\"|[2.5,1]|\",\"lineLayers\":2}"
   },
   {
     "id": "maplibre.blend_accepted",
     "ok": true,
-    "detail": "{\"layers\":43,\"blend\":{\"line\":\"multiply\",\"fill\":\"screen\"},\"err\":null,\"lgrpLayers\":0,\"dashLayers\":0}"
+    "detail": "{\"layers\":74,\"blend\":{\"line\":\"multiply\",\"fill\":\"screen\"},\"err\":null,\"lgrpLayers\":0,\"dashLayers\":0}"
   },
   {
     "id": "maplibre.sample_boot",
     "ok": true,
-    "detail": "styleLayers=43 lgrpLayers=0 dashLayers=0"
+    "detail": "styleLayers=74 lgrpLayers=0 dashLayers=0"
   },
   {
     "id": "maplibre.no_pageerror",
@@ -40,14 +40,29 @@
     "detail": "errors=0"
   },
   {
-    "id": "navara.boot",
-    "ok": false,
-    "detail": "TimeoutError: page.waitForSelector: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#nv-terrain-exagg') to be visible\u001b[22m\n\u001b[2m    118 × locator resolved to hidden <input min=\"0\" value=\"1\" step=\"0.1\" type=\"number\" id=\"nv-terrain-exagg\"/>\u001b[22m\n"
+    "id": "navara.kasc.exaggeration_read",
+    "ok": true,
+    "detail": "#nv-terrain-exagg.value=2 (kasc terrain: exaggeration=2)"
   },
   {
-    "id": "cesium.boot",
-    "ok": false,
-    "detail": "TimeoutError: page.goto: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"http://127.0.0.1:56946/cesium/\", waiting until \"load\"\u001b[22m\n"
+    "id": "navara.ui.terrain_exaggeration",
+    "ok": true,
+    "detail": "terrainLayer.update exaggeration seq=[2,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]"
+  },
+  {
+    "id": "navara.ui.terrain_exagg_reset",
+    "ok": true,
+    "detail": "after reset value=1 updates=[2,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]"
+  },
+  {
+    "id": "navara.qml.dash_cap",
+    "ok": true,
+    "detail": "dashArray=[6.299212455749512,2.5196850299835205] cap=round"
+  },
+  {
+    "id": "cesium.boot_1.147",
+    "ok": true,
+    "detail": "Cesium.VERSION=1.147.0"
   },
   {
     "id": "gsimaps.boot_new_sha",

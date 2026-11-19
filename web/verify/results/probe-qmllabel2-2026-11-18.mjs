@@ -18,6 +18,12 @@ page.on("pageerror", e => console.log("PAGEERR", String(e).slice(0, 200)));
 
 await page.goto(`${BASE}/cesium/?project=ProjectFiles`, { waitUntil: "domcontentloaded", timeout: 120000 });
 await page.waitForTimeout(15000);
+// fitInPolygonOnly + centroidInside が有効なため、全体図(h=30000)では
+// 区市町村ポリゴン内にラベルが収まらず全滅するのが正しい挙動(QGIS と同じ)。
+// ラベル描画の確認は詳細ズームで行う
+await page.evaluate(() => window.kasugaiApi.flyTo(
+  { latitude: 35.66, longitude: 139.75, height: 2500, pitch: -90 }, 0));
+await page.waitForTimeout(4000);
 const obs = await page.evaluate(() => {
   const v = window._viewer;
   const out = { obstacles: 0, labelsTotal: 0, labelsShown: 0, obsByKind: {} };
@@ -66,7 +72,13 @@ const feat = await page2.evaluate(() => {
 });
 console.log("  ml features:", JSON.stringify(feat));
 rec("C3: 地物に __kasc_label_img が焼き込まれている", (feat?.hit || 0) > 0, JSON.stringify(feat));
-// 画面に icon が実描画されているか(queryRenderedFeatures で icon レイヤの描画物)
+// 画面に icon が実描画されているか(queryRenderedFeatures で icon レイヤの描画物)。
+// 全体図では衝突判定(fitInPolygonOnly 相当)で全滅するのが正しいため詳細ズームで確認
+await page2.evaluate(() => {
+  const map = window.kascMap;
+  map.jumpTo({ center: [139.75, 35.66], zoom: 13 });
+});
+await page2.waitForTimeout(4000);
 const drawn = await page2.evaluate(() => {
   const map = window.kascMap;
   const l = (map.getStyle().layers || []).find(l => l.type === "symbol"

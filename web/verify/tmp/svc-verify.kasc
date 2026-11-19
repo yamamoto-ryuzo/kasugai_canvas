@@ -1,0 +1,6 @@
+title: svc-verify
+base: 背景なし | none
+cam:日本|35|137|h=3000000|p=-90
+wms: terrestris | https://ows.terrestris.de/osm/service | layers=OSM-WMS | transparent=true | format=image/png
+image: gsi-tile | https://cyberjapandata.gsi.go.jp/xyz/std/10/905/416.png | bbox=139.0,35.0,140.0,36.0 | opacity=0.8
+wfs: dwd-orte | https://maps.dwd.de/geoserver/ows | typename=dwd:BRD_Orte | maxfeatures=10

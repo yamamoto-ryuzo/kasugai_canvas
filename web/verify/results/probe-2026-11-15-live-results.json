@@ -13,7 +13,7 @@
   {
    "id": "web.shared.ai-chat.auto_connect_discover",
    "ok": true,
-   "detail": "discover=true reqs=6"
+   "detail": "discover=true reqs=5"
   },
   {
    "id": "web.shared.ai-chat.auto_connect_mcp",
@@ -25,8 +25,7 @@
   "GET http://127.0.0.1:8510/shared/mcp.js",
   "GET http://127.0.0.1:8510/api/qgis-live/discover",
   "POST http://127.0.0.1:8585/mcp",
-  "POST http://127.0.0.1:8585/mcp",
-  "POST http://127.0.0.1:8585/mcp",
+  "POST http://127.0.0.1:8510/api/mcp?url=http%3A%2F%2F127.0.0.1%3A8585%2Fmcp",
   "POST http://127.0.0.1:8510/api/qgis-live/mcp"
  ]
 }

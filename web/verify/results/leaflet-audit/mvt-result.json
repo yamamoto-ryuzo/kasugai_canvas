@@ -9,15 +9,16 @@
     "mvtGsi": {
       "ok": true,
       "tiles": 24,
-      "renderedTiles": 1,
-      "paths": 1650,
+      "renderedTiles": 4,
+      "paths": 11081,
       "layerNames": [
         "AdmBdry",
         "Anno",
+        "Cntr",
         "RailCL",
         "RdCL",
-        "RvrCL",
-        "WA"
+        "WA",
+        "RvrCL"
       ],
       "interactive": true,
       "sample": [
@@ -26,24 +27,24 @@
           "stroke": "#2b8cbe"
         },
         {
-          "fill": "none",
-          "stroke": "#2b8cbe"
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
         },
         {
-          "fill": "none",
-          "stroke": "#2b8cbe"
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
         },
         {
-          "fill": "none",
-          "stroke": "#2b8cbe"
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
         },
         {
-          "fill": "none",
-          "stroke": "#2b8cbe"
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
         },
         {
-          "fill": "none",
-          "stroke": "#2b8cbe"
+          "fill": "#e6550d",
+          "stroke": "#ffffff"
         },
         {
           "fill": "#e6550d",
@@ -58,17 +59,45 @@
     "mvtStyle": {
       "ok": true,
       "tiles": 24,
-      "renderedTiles": 1,
-      "paths": 2,
+      "renderedTiles": 24,
+      "paths": 89,
       "layerNames": [
         "AdmBdry",
         "Anno",
         "RailCL",
         "RdCL",
-        "WA"
+        "WA",
+        "RvrCL",
+        "Cntr",
+        "SpcfArea",
+        "TpgphArea"
       ],
       "interactive": true,
       "sample": [
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        },
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        },
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        },
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        },
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        },
+        {
+          "fill": "#ffcc00",
+          "stroke": "#ff0000"
+        },
         {
           "fill": "#ffcc00",
           "stroke": "#ff0000"
@@ -83,7 +112,7 @@
         "fills": [
           [
             "#ffcc00",
-            20
+            89
           ]
         ]
       }
@@ -91,14 +120,18 @@
     "mvtTilejson": {
       "ok": true,
       "tiles": 24,
-      "renderedTiles": 1,
-      "paths": 1217,
+      "renderedTiles": 24,
+      "paths": 53617,
       "layerNames": [
         "AdmBdry",
         "Anno",
         "RailCL",
         "RdCL",
-        "WA"
+        "WA",
+        "RvrCL",
+        "Cntr",
+        "SpcfArea",
+        "TpgphArea"
       ],
       "interactive": true,
       "sample": [
@@ -151,8 +184,8 @@
         "places",
         "pois",
         "roads",
-        "water",
         "transit",
+        "water",
         "boundaries"
       ],
       "interactive": true,

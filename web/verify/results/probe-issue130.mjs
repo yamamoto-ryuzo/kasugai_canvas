@@ -2,13 +2,13 @@
 //  1) _portal_test のポータルに project: カードが描画される
 //  2) 未解決ID(missing-proj)は無効カードになる
 //  3) "default" カード押下で ?project=default へ in-place 切替・ポータルは開いたまま
-// 実行: node web/verify/results/probe-issue130.mjs  (要 http://127.0.0.1:8899 で web/ 静的配信)
+// 実行: node web/verify/results/probe-issue130.mjs  (要 http://127.0.0.1:8510 で web/ 静的配信)
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 const { chromium } = await import(
   "file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
 const OUT = fileURLToPath(new URL("./", import.meta.url));
-const BASE = process.env.PROBE_BASE || "http://127.0.0.1:8899";
+const BASE = process.env.PROBE_BASE || "http://127.0.0.1:8510";
 
 const browser = await chromium.launch({
   executablePath: `${process.env.LOCALAPPDATA}/ms-playwright/chromium-1243/chrome-win64/chrome.exe`,

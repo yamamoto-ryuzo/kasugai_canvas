@@ -47,8 +47,8 @@
     "integrated": "ブラウザで /cesium/ を開き kasugaiApi.listLayers() 実行"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-15T15:30:00+09:00",
-   "note": "Cesium 1.147.0 ブート確認(canvas有)"
+   "last_verified": "2026-11-19T15:31:40.973Z",
+   "note": "再検証: default project 10レイヤ(3dtiles/geoparquet/fgb/duckdb/gpkg/geojson)実ロード(外部URL群のため初回~2分)。2026-11-18再実測PASS"
   },
   {
    "id": "web.maplibre.app",
@@ -131,8 +131,8 @@
     "integrated": "ブラウザで /gsimaps/ を開き kasugaiApi.listLayers() 実行"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-15T15:30:00+09:00",
-   "note": "vendor SW経由で起動・新sha(3cc3b49)で canvas/gsi 確認"
+   "last_verified": "2026-11-19T15:31:40.973Z",
+   "note": "再検証: api+10レイヤ実ブート。2026-11-18"
   },
   {
    "id": "web.navara.app",
@@ -1160,8 +1160,8 @@
     "integrated": "page.evaluate(kasugaiApi.applyTheme(...))"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": "テーマ無し環境で正常応答"
+   "last_verified": "2026-11-19T15:31:40.973Z",
+   "note": "再検証: 未定義テーマ指定で false を正常返却(例外なし)。2026-11-18"
   },
   {
    "id": "web.cesium.api.listBasemaps",
@@ -3824,8 +3824,8 @@
     "integrated": "executeChatTool('lineOfSight',...) → ok/assert"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": "repaired: toCartesians非配列引数のTypeError修正(geo-tools.js)"
+   "last_verified": "2026-11-19T15:31:40.973Z",
+   "note": "再検証: ok:true distanceMeters/blockedAt 実算出。2026-11-18"
   },
   {
    "id": "web.tool.viewshed",
@@ -3842,8 +3842,8 @@
     "integrated": "executeChatTool('viewshed',...) → ok/assert"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": "repaired: 同上"
+   "last_verified": "2026-11-19T15:31:40.973Z",
+   "note": "再検証: ok:true visibleRatio=0.676 counts実算出 + 引数不正時 ok:false reason 正常返却。2026-11-18"
   },
   {
    "id": "web.tool.setGraticule",
@@ -4151,8 +4151,8 @@
     "integrated": ""
    },
    "last_result": "pass",
-   "last_verified": "2026-11-15T00:00:00+09:00",
-   "note": "8言語971キー一致・legend.showAll/hideAll/viewVertical/viewTabs/selectLayer/groupImages/groupLayers 全言語存在"
+   "last_verified": "2026-11-19T15:31:40.973Z",
+   "note": "再検証: 8言語全1011キー一致。2026-11-18"
   },
   {
    "id": "web.projects.bundled",
@@ -4169,8 +4169,8 @@
     "integrated": "GET /projects/projects.json → 各idの.kasc取得可"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": "全kasc実ファイル200。stale登録import-test除去済 正本 web/projects 一本化・reinfolib追加・sample_qgis刷新(2026-11-15 1446a3c)"
+   "last_verified": "2026-11-19T15:31:40.973Z",
+   "note": "再検証: 死に外部登録4件(kasc_test_proj*)をDELETE /api/projects/{id}で掃除。残9件全てkasc 200。2026-11-18"
   },
   {
    "id": "web.live.qgis",

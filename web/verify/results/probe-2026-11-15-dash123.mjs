@@ -11,7 +11,7 @@ import os from "node:os";
 const { chromium } = await import(
   "file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
 const OUT = fileURLToPath(new URL("./", import.meta.url));
-const BASE = "http://127.0.0.1:8765";
+const BASE = "http://127.0.0.1:8510";
 const KASC = "/verify/dash-test/k.kasc";
 const prof = join(os.tmpdir(), "kasc-probe-profile-dash123");
 const ctx = await chromium.launchPersistentContext(prof,

@@ -187,20 +187,37 @@ try {
 
 // ================= C. navara =================
 try {
+  // addLayer/update フックはロード前に注入する(terrain レイヤはロード中に
+  // 生成されるため、ロード後のフックでは update 呼出しを捕捉できない)
+  await page.addInitScript(() => {
+    let _v;
+    const toJson = x => JSON.parse(JSON.stringify(x, (k, v2) =>
+      ArrayBuffer.isView(v2) ? [...v2] : v2));
+    Object.defineProperty(window, "kascView", {
+      configurable: true,
+      get: () => _v,
+      set: val => {
+        _v = val;
+        window.__descs = []; window.__updates = [];
+        try {
+          const orig = val.addLayer.bind(val);
+          val.addLayer = d => { window.__descs.push(toJson(d));
+            const L = orig(d);
+            try { const ou = L.update?.bind(L);
+              if (ou) L.update = x => { window.__updates.push(toJson(x)); return ou(x); }; } catch {}
+            return L; };
+        } catch {}
+      },
+    });
+  });
   await page.goto(`${base}/navara/?kasc=${encodeURIComponent(base + "/probe/test.kasc")}`);
   await page.waitForFunction(() => window.kascView, null, { timeout: 120000 });
-  await page.waitForSelector("#nv-terrain-exagg", { timeout: 60000 });
+  await page.waitForSelector("#nv-terrain-exagg", { state: "attached", timeout: 60000 });
   await page.waitForTimeout(6000); // terrain/layer 読込待ち
   const c1 = await page.evaluate(() => {
     const inp = document.querySelector("#nv-terrain-exagg");
-    // addLayer/update をフックして後続操作を捕捉
-    window.__descs = []; window.__updates = [];
-    const v = window.kascView;
-    const orig = v.addLayer.bind(v);
-    v.addLayer = d => { const L = orig(d); window.__descs.push(d);
-      try { const ou = L.update?.bind(L); if (ou) L.update = x => { window.__updates.push(x); return ou(x); }; } catch {}
-      return L; };
-    return { exaggInput: inp?.value, hasView: !!v };
+    return { exaggInput: inp?.value, hasView: !!window.kascView,
+      descs: (window.__descs || []).length };
   });
   rec("navara.kasc.exaggeration_read", c1.exaggInput === "2",
     `#nv-terrain-exagg.value=${c1.exaggInput} (kasc terrain: exaggeration=2)`);
@@ -223,30 +240,19 @@ try {
   });
   rec("navara.ui.terrain_exagg_reset", c3.v === "1" && c3.ups.includes(1),
     `after reset value=${c3.v} updates=${JSON.stringify(c3.ups)}`);
-  // QML dash/cap: レイヤ一覧から vector レイヤの polyline desc を探す
+  // QML dash/cap: addLayer desc の polyline.dashArray/cap を確認
+  // (Navara レイヤ内部オブジェクトに元 desc は保持されないため
+  //  addLayer 呼出時に捕捉した desc を検査する)
   const c4 = await page.evaluate(() => {
-    const v = window.kascView;
-    const found = { keys: Object.keys(v).filter(k => /layer|child|scene/i.test(k)).slice(0, 20) };
-    const digs = [];
-    const dig = (o, depth, path) => {
-      if (!o || depth > 3 || digs.length > 60) return;
-      if (Array.isArray(o)) { o.forEach((x, i) => dig(x, depth + 1, `${path}[${i}]`)); return; }
-      if (typeof o !== "object") return;
-      if (o.polyline?.dashArray || o.desc?.polyline?.dashArray || o.material?.dashArray)
-        digs.push({ path, dash: o.polyline?.dashArray || o.desc?.polyline?.dashArray || o.material?.dashArray, cap: o.polyline?.cap || o.desc?.polyline?.cap });
-      for (const k of Object.keys(o).slice(0, 40)) {
-        if (k.startsWith("_") && k.length > 12) continue;
-        try { dig(o[k], depth + 1, `${path}.${k}`); } catch {}
-      }
-    };
-    try { dig(v, 0, "view"); } catch (e) { found.err = String(e); }
-    found.digs = digs.slice(0, 8);
-    return found;
+    const descs = (window.__descs || []).filter(d => d?.type === "vector");
+    const hits = descs.map(d => ({ dash: d.polyline?.dashArray, cap: d.polyline?.cap }))
+      .filter(x => x.dash?.length);
+    return { n: descs.length, digs: hits.slice(0, 8) };
   });
-  const dashHit = c4.digs.find(d => d.dash && (d.dash.length > 0));
+  const dashHit = c4.digs[0];
   rec("navara.qml.dash_cap", !!dashHit,
     dashHit ? `dashArray=${JSON.stringify([...dashHit.dash])} cap=${dashHit.cap}` :
-    `no dashArray found; viewKeys=${JSON.stringify(c4.keys)}`);
+    `no dashArray found; vectorDescs=${c4.n}`);
   await page.screenshot({ path: join(OUT, "navara-terrain-exagg.png") });
 } catch (e) { rec("navara.boot", false, String(e).slice(0, 300)); }
 

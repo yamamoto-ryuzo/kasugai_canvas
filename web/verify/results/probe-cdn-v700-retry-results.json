@@ -2,12 +2,12 @@
   {
     "id": "cesium.boot",
     "ok": true,
-    "detail": "{\"ready\":true,\"layers\":10,\"elapsed\":9}"
+    "detail": "{\"ready\":true,\"layers\":10,\"elapsed\":7}"
   },
   {
     "id": "cesium.default_project",
     "ok": true,
-    "detail": "layers=10 in 9s"
+    "detail": "layers=10 in 7s"
   },
   {
     "id": "cesium.no_pageerror",

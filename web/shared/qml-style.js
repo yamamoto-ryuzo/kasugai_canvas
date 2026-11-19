@@ -370,7 +370,7 @@ function tokenizeExpr(src) {
     if (two === "--") { while (i < n && src[i] !== "\n") i++; continue; }
     if (two === "/*") { const e = src.indexOf("*/", i + 2); i = e < 0 ? n : e + 2; continue; }
     if (["<=", ">=", "<>", "!=", "||"].includes(two)) { push("op", two); i += 2; continue; }
-    if ("+-*/%=<>()".includes(ch)) { push(ch === "(" ? "lparen" : ch === ")" ? "rparen" : "op", ch); i++; continue; }
+    if ("+-*/%^=<>()".includes(ch)) { push(ch === "(" ? "lparen" : ch === ")" ? "rparen" : "op", ch); i++; continue; }
     if (ch === ",") { push("comma", ch); i++; continue; }
     if (/[A-Za-z_\u0080-\uffff]/.test(ch)) {
       let s = "";
@@ -519,6 +519,10 @@ function rampColorAt(stops, v) {
   return `${mix[0]},${mix[1]},${mix[2]},${mix[3]}`;
 }
 
+// QGIS 式の評価エラー(変換失敗等)。call ノードから上位へ伝播し、
+// try() で捕捉されるか compileExpr の式全体 NULL 化で終わる
+class ExprEvalError extends Error {}
+
 const EXPR_FUNCS = {
   abs: Math.abs,
   ceil: Math.ceil, ceiling: Math.ceil, floor: Math.floor,
@@ -533,7 +537,8 @@ const EXPR_FUNCS = {
   clamp: (mn, v, mx) => Math.min(Math.max(v, mn), mx),
   sign: v => Math.sign(Number(v)) || 0, log2: v => Math.log2(Number(v)),
   lower: s => String(s ?? "").toLowerCase(), upper: s => String(s ?? "").toUpperCase(),
-  title: s => String(s ?? "").replace(/\b\w/g, c => c.toUpperCase()),
+  // QGIS 仕様: 1文字の語(a, b 等)は大文字化しない(実機 title('a b')='a b' 確認済)
+  title: s => String(s ?? "").replace(/\b\w+/g, w => w.length > 1 ? w[0].toUpperCase() + w.slice(1) : w),
   length: s => String(s ?? "").length, len: s => String(s ?? "").length,
   substr: (s, start, len) => String(s ?? "").substr(Number(start) - 1, len === undefined ? undefined : Number(len)),
   left: (s, n) => String(s ?? "").slice(0, Number(n)), right: (s, n) => String(s ?? "").slice(-Number(n)),
@@ -557,10 +562,29 @@ const EXPR_FUNCS = {
       return lines;
     }, [""]).join(String(delim));
   },
-  to_int: v => parseInt(v, 10) || 0, to_real: v => Number(v) || 0,
+  // QGIS 仕様: 変換不能なら評価エラーで式全体 NULL(0 ではない・IS NULL も NULL)。
+  // ExprEvalError は call ノードから上位へ伝播し compileExpr が式全体 null 化する
+  to_int: v => {
+    if (v == null) return null;
+    if (typeof v === "number") return Number.isFinite(v) ? Math.trunc(v) : null;
+    const s = String(v).trim();
+    if (/^[+-]?\d+$/.test(s)) return parseInt(s, 10);
+    throw new ExprEvalError(`to_int: '${s}' を整数に変換できません`);
+  },
+  to_real: v => {
+    if (v == null) return null;
+    if (typeof v === "number") return Number.isFinite(v) ? v : null;
+    const s = String(v).trim();
+    const n = Number(s);
+    if (s && Number.isFinite(n)) return n;
+    throw new ExprEvalError(`to_real: '${s}' を数値に変換できません`);
+  },
   to_string: v => String(v ?? ""), to_text: v => String(v ?? ""),
-  toint: v => parseInt(v, 10) || 0, toreal: v => Number(v) || 0, // QGIS2 旧名エイリアス
+  toint: v => EXPR_FUNCS.to_int(v), toreal: v => EXPR_FUNCS.to_real(v), // QGIS2 旧名エイリアス
   tostring: v => String(v ?? ""),
+  // QGIS age(a,b)=a-b の QgsInterval。Canvas に interval 型は無いため
+  // ミリ秒差の数値で返す(IS NOT NULL/大小比較は機能。interval リテラル比較は未対応)
+  age: (a, b) => { const d1 = toExprDate(a), d2 = toExprDate(b); return (d1 && d2) ? d1 - d2 : null; },
   to_date: v => toExprDate(v), to_datetime: v => toExprDate(v), to_time: v => toExprDate(v),
   todate: v => toExprDate(v), todatetime: v => toExprDate(v), totime: v => toExprDate(v),
   format_date: (d, fmt) => formatExprDate(d, fmt),
@@ -754,15 +778,26 @@ function parseExpr(tokens) {
     return left;
   }
   function parseMul() {
-    let left = parseUnary();
+    let left = parsePow();
     for (;;) {
       const tk = peek();
       if (tk?.t === "op" && (tk.v === "*" || tk.v === "/" || tk.v === "%")) {
         next();
-        left = { t: "arith", op: tk.v, a: left, b: parseUnary() };
+        left = { t: "arith", op: tk.v, a: left, b: parsePow() };
         continue;
       }
       break;
+    }
+    return left;
+  }
+  // QGIS 仕様: ^ は右結合の冪乗で、単項 +/- より弱い
+  // (実機 -2^2=4, 2^-1=0.5, 2^3^2=2^(3^2) 確認済)
+  function parsePow() {
+    const left = parseUnary();
+    const tk = peek();
+    if (tk?.t === "op" && tk.v === "^") {
+      next();
+      return { t: "arith", op: "^", a: left, b: parsePow() };
     }
     return left;
   }
@@ -851,6 +886,7 @@ function evalAst(node, props) {
         case "*": return Number(a) * Number(b);
         case "/": return Number(b) === 0 ? null : Number(a) / Number(b);
         case "%": return Number(b) === 0 ? null : Number(a) % Number(b);
+        case "^": { const r = Math.pow(Number(a), Number(b)); return Number.isFinite(r) ? r : null; }
       }
       return null;
     }
@@ -901,12 +937,19 @@ function evalAst(node, props) {
       return node.elseExpr ? evalAst(node.elseExpr, props) : null;
     }
     case "call": {
+      // QGIS try(expr[, fallback]): 第1引数の評価エラーを捕捉して代替値
+      if (node.name === "try" && node.args.length) {
+        try { return evalAst(node.args[0], props); }
+        catch (e) { return node.args.length > 1 ? evalAst(node.args[1], props) : null; }
+      }
       const args = node.args.map(a => evalAst(a, props));
       if (node.name === "attribute") return props?.[args[0]];
       if (node.name === "var") return resolveExprVar(args[0]); // var('map_scale') 形式
       const fn = EXPR_FUNCS[node.name];
       if (!fn) { warnUnknownExprFunc(node.name); return null; }
-      try { return fn(...args); } catch (e) { return null; }
+      // 評価エラー(to_int 変換失敗等)は式全体の失敗として上位へ伝播。
+      // 実装側の予期せぬ例外のみ局所 null 化する
+      try { return fn(...args); } catch (e) { if (e instanceof ExprEvalError) throw e; return null; }
     }
   }
   return null;
@@ -914,13 +957,15 @@ function evalAst(node, props) {
 
 const exprCache = new Map();
 // 式文字列 → (props)=>value の関数にコンパイルする。失敗時は常に null を返す関数
+// 評価中の例外(ExprEvalError 伝播・予期せぬ例外)も式全体 NULL とする
+// (QGIS の evalError → NULL と同じ。ルール/DD 側は null を除外扱いにできる)
 function compileExpr(src) {
   const key = String(src || "");
   if (exprCache.has(key)) return exprCache.get(key);
   let fn;
   try {
     const ast = parseExpr(tokenizeExpr(key));
-    fn = props => evalAst(ast, props);
+    fn = props => { try { return evalAst(ast, props); } catch (e) { return null; } };
   } catch (e) {
     fn = () => null;
   }

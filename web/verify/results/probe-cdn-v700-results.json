@@ -2,12 +2,12 @@
   {
     "id": "http.channels",
     "ok": true,
-    "detail": "{\"stable\":\"7.0.0\",\"unstable\":\"7.0.0\",\"default\":\"stable\"}"
+    "detail": "{\"stable\":\"7.1.0\",\"unstable\":\"7.1.0\",\"default\":\"stable\"}"
   },
   {
     "id": "http.version",
-    "ok": true,
-    "detail": "{\"version\":\"7.0.0\",\"channel\":\"stable\",\"source_repo\":\"yamamoto-ryuzo/kasugai_canvas\",\"source_branch\":\"main\"}"
+    "ok": false,
+    "detail": "{\"version\":\"7.1.0\",\"channel\":\"stable\",\"source_repo\":\"yamamoto-ryuzo/kasugai_canvas\",\"source_branch\":\"main\"}"
   },
   {
     "id": "http.projects",
@@ -32,7 +32,7 @@
   {
     "id": "cesium.boot",
     "ok": false,
-    "detail": "{\"url\":\"https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?project=default#latitude=35.653108&longitude=139.761449&height=2200.6&pitch=-30.00&heading=348.50\",\"cesium\":\"1.147.0\",\"ready\":false,\"layers\":0,\"ver\":\"7.0.0\"}"
+    "detail": "{\"url\":\"https://yamamoto-ryuzo.github.io/kasugai-canvas-web/stable/cesium/?project=default#latitude=35.653108&longitude=139.761449&height=2200.6&pitch=-30.00&heading=348.50\",\"cesium\":\"1.147.0\",\"ready\":false,\"layers\":0,\"ver\":\"7.1.0\"}"
   },
   {
     "id": "cesium.redirect_default_engine",
@@ -41,8 +41,8 @@
   },
   {
     "id": "cesium.version_display",
-    "ok": true,
-    "detail": "version.json=7.0.0"
+    "ok": false,
+    "detail": "version.json=7.1.0"
   },
   {
     "id": "cesium.default_project",
@@ -111,13 +111,13 @@
   },
   {
     "id": "navara.boot",
-    "ok": false,
-    "detail": "{\"api\":false,\"layers\":-1}"
+    "ok": true,
+    "detail": "{\"api\":true,\"layers\":8}"
   },
   {
     "id": "navara.kasc_layers",
-    "ok": false,
-    "detail": "listLayers=-1"
+    "ok": true,
+    "detail": "listLayers=8"
   },
   {
     "id": "navara.no_pageerror",

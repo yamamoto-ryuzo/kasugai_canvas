@@ -113,6 +113,14 @@ let lastCameraSearch = null;
 try { lastCameraSearch = sessionStorage.getItem("lastCameraSearch"); } catch (e) {}
 const lastCamera = lastCameraSearch ? parseUrlCamera(lastCameraSearch) : null;
 const hasLastCamera = !!(lastCamera && Number.isFinite(lastCamera.latitude) && Number.isFinite(lastCamera.longitude));
+
+// resolveInitialCamera の await(ipapi 等)が長引くと、その間に API/ユーザーが
+// 動かした視点を遅れて解決した初期カメラが上書きしてしまう競合がある。
+// 解決待ちの間に外部からの flyTo があれば初期カメラの適用をスキップする
+// ※ flyTo は下の startupCamera 適用など let 初期化前にも呼ばれ得るため、
+//   この宣言は flyTo の最初の呼び出しより前に置く必要がある
+let resolvingInitialCamera = false;
+let cameraTouchedWhileResolving = false;
 {
   const startupCamera = hasLastCamera ? lastCamera : parseUrlCamera(initialCameraSource);
   if (Number.isFinite(startupCamera.latitude) && Number.isFinite(startupCamera.longitude)) flyTo(startupCamera, 0);
@@ -2001,6 +2009,7 @@ function flyTo(options = {}, duration = null) {
   const latitude = Number(options.latitude);
   const longitude = Number(options.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  if (resolvingInitialCamera) cameraTouchedWhileResolving = true;
   let height = Number(options.height);
   if (!Number.isFinite(height)) height = DEFAULT_VIEW.height;
   const ssec = viewer.scene.screenSpaceCameraController;
@@ -2037,6 +2046,7 @@ function flyTo(options = {}, duration = null) {
 // extent そのものへフレームするため、範囲フィットを使う他エンジンと同一の表示になる
 function flyToExtent(cam) {
   const e = cam._extent;
+  if (resolvingInitialCamera) cameraTouchedWhileResolving = true;
   const rect = Cesium.Rectangle.fromDegrees(e.west, e.south, e.east, e.north);
   const ssec = viewer.scene.screenSpaceCameraController;
   viewer.camera.flyTo({
@@ -15379,12 +15389,17 @@ window.addEventListener("pagehide", () => {
       void fetch("/api/browser/lna").then(r => r.json()).then(render).catch(() => {});
     }
   }
+  resolvingInitialCamera = true;
   const initialCamera = await resolveInitialCamera();
+  // 解決待ち(ipapi fetch)の間に API/ユーザーが視点を変えた場合は、
+  // 遅れて届いた初期カメラで上書きしない(?kasc= 読込後の flyTo 潰し防止)
+  const skipInitialCamera = cameraTouchedWhileResolving;
+  resolvingInitialCamera = false;
   // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
   if (hasLastCamera && lastCameraSearch !== initialCameraSource) {
-    if (initialCamera) flyTo(initialCamera);      // 前回の位置から新しいURLへGoogle Earth風にFLYTO
+    if (initialCamera && !skipInitialCamera) flyTo(initialCamera);      // 前回の位置から新しいURLへGoogle Earth風にFLYTO
   } else {
-    if (initialCamera) flyTo(initialCamera, 0);   // 履歴がない or 同じURL
+    if (initialCamera && !skipInitialCamera) flyTo(initialCamera, 0);   // 履歴がない or 同じURL
   }
   // URL ディープリンク(view=/feature=/where=)を適用(#124)。初期カメラ位置と
   // エンジン切替の引継ぎ状態より後に適用し、view= の cam=/feature= のズームと

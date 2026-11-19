@@ -12,7 +12,7 @@ import os from "node:os";
 const { chromium } = await import(
   "file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
 const OUT = fileURLToPath(new URL("./", import.meta.url));
-const BASE = "http://127.0.0.1:8765";
+const BASE = "http://127.0.0.1:8510";
 const KASC = "/projects/_portal_test/kasugai_canvas.kasc";
 const prof = join(os.tmpdir(), "kasc-probe-profile-issue124");
 const ctx = await chromium.launchPersistentContext(prof,

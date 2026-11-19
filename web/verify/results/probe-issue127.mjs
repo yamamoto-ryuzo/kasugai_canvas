@@ -4,13 +4,17 @@
 //  3) 検索ボックス・列ソート
 //  4) 行クリック=ポータルを閉じて移動 / 📍ボタン=開いたまま
 //  5) data-table 属性によるカスタムHTML内配置
-// 実行: node web/verify/results/probe-issue127.mjs (要 http://127.0.0.1:8899 で web/ 静的配信)
+// 実行: node web/verify/results/probe-issue127.mjs
+// ※ table: 機能は commit 5b41d46 (Revert #127) で意図的に撤去済み。
+//    本プローブは検証対象が存在しないため常に SKIP を返す。
+console.log("SKIP issue127 :: table: 行機能は commit 5b41d46 で意図的に撤去済み(検証対象なし)");
+process.exit(0);
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 const { chromium } = await import(
   "file:///C:/devin/kasugai_canvas/tools/hub-test/node_modules/playwright-core/index.mjs");
 const OUT = fileURLToPath(new URL("./", import.meta.url));
-const BASE = process.env.PROBE_BASE || "http://127.0.0.1:8899";
+const BASE = process.env.PROBE_BASE || "http://127.0.0.1:8510";
 const KASC1 = encodeURIComponent(`${BASE}/projects/_portal_test/table_test.kasc`);
 const KASC2 = encodeURIComponent(`${BASE}/projects/_portal_test/table_datatable.kasc`);
 

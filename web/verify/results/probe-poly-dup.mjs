@@ -62,14 +62,16 @@ try {
     const out = { dataSources: [], primitives: [], perLayer: layers.map(l => ({ id: l.id, type: l.type, title: l.title })) };
     for (let i = 0; i < v.dataSources.length; i++) {
       const ds = v.dataSources.get(i);
-      let poly = 0, auxPoly = 0, line = 0, total = 0;
+      let poly = 0, auxPoly = 0, line = 0, pt = 0, total = 0;
       for (const e of ds.entities.values) {
+        if (e._kascAux) { if (e.polygon) auxPoly++; continue; }
         total++;
-        if (e.polygon) { if (e._kascAux) auxPoly++; else poly++; }
-        if (e.polyline && !e._kascAux) line++;
+        if (e.polygon) poly++;
+        else if (e.polyline) line++;
+        else if (e.point || e.billboard) pt++;
       }
       out.dataSources.push({ name: ds.name || `ds${i}`, layerId: ds._kasugaiLayerId || null,
-        entities: total, poly, auxPoly, line });
+        entities: total, poly, auxPoly, line, pt });
     }
     return out;
   });
@@ -93,17 +95,19 @@ try {
   // 2) fgb レイヤーが 2 本ある(bbox=auto / off) → 同一ポリゴンを 2 回描くのは仕様
   rec("fgb.two_layers", fgbDs.length === 2,
     `flatgeobuf ds=${fgbDs.length} (auto+off で同一 countries を各1回描画)`);
-  rec("geoparquet.two_layers", pqDs.length === 2,
-    `geoparquet ds=${pqDs.length} (全件+where=Africa で一部 2 回描画)`);
+  // geoparquet は 全件(example)+where=Africa(example)+範囲(grid 点) の 3 本
+  rec("geoparquet.three_layers", pqDs.length === 3,
+    `geoparquet ds=${pqDs.length} (全件+where+範囲(grid 点) で各1回描画)`);
 
   // 3) 1 レイヤー内で補助ポリゴン(_qmlAux)が紛れていない
   const auxTotal = snap.dataSources.reduce((a, d) => a + d.auxPoly, 0);
   rec("no_aux_poly", auxTotal === 0, `aux polygon total=${auxTotal}`);
 
-  // 4) entity 総数がおおむね地物数(各国 1 entity)と一致
+  // 4) entity 総数が地物数と一致(全 entity が polygon/line/point のいずれか1つ。
+  //    grid.parquet のような点レイヤーは poly=0 で pt=地物数になるのが正しい)
   for (const d of [...fgbDs, ...pqDs]) {
-    rec(`count.${d.name}`, d.poly === d.entities - d.auxPoly,
-      `${d.name}: entities=${d.entities} poly=${d.poly} aux=${d.auxPoly}`);
+    rec(`count.${d.name}`, d.poly + d.line + d.pt === d.entities && d.auxPoly === 0,
+      `${d.name}: entities=${d.entities} poly=${d.poly} line=${d.line} pt=${d.pt} aux=${d.auxPoly}`);
   }
 
   rec("no_pageerror", pageErrors.length === 0,
