@@ -97,7 +97,7 @@ flowchart TD
   C -->|数千地物以下| F["GeoJSON のまま<br/>geojson:（変換不要）"]
   C -->|"汎用・広範囲<br/>（第一推奨）"| G["FlatGeobuf<br/>flatgeobuf:<br/>bbox=auto で範囲読み"]
   C -->|"超大規模<br/>属性・SQL 絞り込み"| H["GeoParquet + duckdb:<br/>述語プッシュダウン"]
-  C -->|"中規模<br/>クエリ不要"| I["GeoParquet<br/>geoparquet:（全件読み込み）"]
+  C -->|"中規模<br/>covering 付きなら範囲読み"| I["GeoParquet<br/>geoparquet:（bbox=auto）"]
 
   D -->|タイル化可能| J["XYZ タイル<br/>base: / xyz:"]
   D -->|単一画像| K["ジオリファレンス画像<br/>image: bbox= / corners="]
@@ -115,7 +115,7 @@ flowchart TD
       <ul>
       <li><strong>FlatGeobuf は空間インデックス付きで書き出すこと</strong>（GDAL は既定で付与）。<code>bbox=auto</code> 既定 ON で空間インデックス+HTTP Range の範囲読み・重いランタイム不要・全4エンジン対応</li>
       <li><strong>GeoParquet + <code>duckdb:</code></strong> は述語プッシュダウン・row group スキップ・列プルーニングで「必要な列と範囲だけ」読む。検索は常に全件対象。DuckDB-WASM 約60MB の初期ロードあり（SW 永続キャッシュで初回のみ）</li>
-      <li><strong><code>geoparquet:</code> 直接経路</strong> は全件読み込みだがバイナリで軽量・変換不要で置くだけ。超大規模は <code>duckdb:</code> 経路へ</li>
+      <li><strong><code>geoparquet:</code> 直接経路</strong> はバイナリで軽量・変換不要で置くだけ。<code>bbox=auto</code>（既定 ON）で covering.bbox 列か行グループ geospatial statistics があれば表示範囲のみ部分読み（無いファイルは全件へフォールバック）。超大規模・複雑な絞り込みは <code>duckdb:</code> 経路へ</li>
       <li><strong>XYZ タイル</strong> はネイティブ・全エンジン・プログレッシブ表示。ドローンオルソ等もタイル化して配信するのが定石</li>
       </ul>
 
@@ -139,7 +139,7 @@ flowchart TD
         </div>
         <div class="feature-card">
           <h3>📦 GeoParquet <span class="badge recommended">推奨</span></h3>
-          <p><code>geoparquet:</code> / <code>parquet:</code>。中規模ベクターをクエリなしで置くだけ配信する場合の推奨。軽量デコーダー（hyparquet）で全件読み込み → GeoJSON 正規化。範囲読み込みは <code>duckdb:</code> 経路。</p>
+          <p><code>geoparquet:</code> / <code>parquet:</code>。中規模ベクターをクエリなしで置くだけ配信する場合の推奨。軽量デコーダー（hyparquet）で GeoJSON 正規化。<code>bbox=auto</code>（既定 ON）で covering.bbox 列か行グループ geospatial statistics があれば表示範囲のみ部分読み（無いファイル・Range 非対応サーバーは全件へフォールバック）。超大規模・複雑な絞り込みは <code>duckdb:</code> 経路。</p>
         </div>
         <div class="feature-card">
           <h3>🗺️ XYZ タイル <span class="badge recommended">推奨</span></h3>

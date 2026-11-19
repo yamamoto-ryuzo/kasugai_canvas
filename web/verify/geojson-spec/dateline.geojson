@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+ {"type":"Feature","geometry":{"type":"LineString","coordinates":[[170,10],[-170,12]]},"properties":{"name":"antimeridian"}},
+ {"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[170,0],[-170,0],[-170,10],[170,10],[170,0]]]},"properties":{"name":"dl-poly"}}
+]}

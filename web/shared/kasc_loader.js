@@ -59,7 +59,7 @@
       var hasZ = (raw & 0x80000000) !== 0;
       var hasM = (raw & 0x40000000) !== 0;
       var hasSrid = (raw & 0x20000000) !== 0;
-      if (!hasZ && !hasM && raw >= 1000) {
+      if (!hasZ && !hasM && !hasSrid && raw >= 1000) {
         var variant = Math.floor(raw / 1000);
         hasZ = variant === 1 || variant === 3;
         hasM = variant === 2 || variant === 3;
@@ -77,14 +77,79 @@
       var points = function () { var a = new Array(count()); for (var i = 0; i < a.length; i++) a[i] = point(); return a; };
       var rings = function () { var a = new Array(count()); for (var i = 0; i < a.length; i++) a[i] = points(); return a; };
       var children = function () { var a = new Array(count()); for (var i = 0; i < a.length; i++) a[i] = readGeometry(); return a; };
+      // 3点円弧の折線近似(Worker文字列版と同一ロジック)
+      var strokeArc = function (p0, p1, p2, out) {
+        var ax = p0[0], ay = p0[1], bx = p1[0], by = p1[1], cx = p2[0], cy = p2[1];
+        var d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+        if (!isFinite(d) || Math.abs(d) < 1e-15) { out.push([cx, cy]); return; }
+        var aa = ax * ax + ay * ay, bb = bx * bx + by * by, cc = cx * cx + cy * cy;
+        var ux = (aa * (by - cy) + bb * (cy - ay) + cc * (ay - by)) / d;
+        var uy = (aa * (cx - bx) + bb * (ax - cx) + cc * (bx - ax)) / d;
+        var r = Math.sqrt((ax - ux) * (ax - ux) + (ay - uy) * (ay - uy));
+        var t0 = Math.atan2(ay - uy, ax - ux);
+        var t1 = Math.atan2(by - uy, bx - ux);
+        var t2 = Math.atan2(cy - uy, cx - ux);
+        var ccw = function (a) { while (a <= t0) a += 2 * Math.PI; return a; };
+        if (ccw(t1) <= ccw(t2)) t2 = ccw(t2);
+        else { var cw = function (a) { while (a >= t0) a -= 2 * Math.PI; return a; }; t2 = cw(t2); }
+        var n = Math.max(4, Math.ceil(Math.abs(t2 - t0) / (Math.PI / 18)));
+        for (var i = 1; i <= n; i++) {
+          var t = t0 + (t2 - t0) * (i / n);
+          out.push([ux + r * Math.cos(t), uy + r * Math.sin(t)]);
+        }
+      };
+      var circularString = function () {
+        var pts = points();
+        var out = [];
+        if (pts.length < 3) {
+          for (var k = 0; k < pts.length; k++) out.push([pts[k][0], pts[k][1]]);
+          return out;
+        }
+        out.push([pts[0][0], pts[0][1]]);
+        var i = 0;
+        for (; i + 2 < pts.length; i += 2) strokeArc(pts[i], pts[i + 1], pts[i + 2], out);
+        for (; i < pts.length; i++) out.push([pts[i][0], pts[i][1]]);
+        return out;
+      };
+      var joinCurveParts = function (geoms) {
+        var out = [];
+        for (var i = 0; i < geoms.length; i++) {
+          var seg = geoms[i] && geoms[i].coordinates;
+          if (!seg || !seg.length) continue;
+          var part = out.length ? seg.slice(1) : seg;
+          for (var j = 0; j < part.length; j++) out.push(part[j]);
+        }
+        return out;
+      };
+      var curveRings = function () {
+        var a = new Array(count());
+        for (var i = 0; i < a.length; i++) {
+          var g = readGeometry();
+          a[i] = g && g.coordinates ? g.coordinates : [];
+        }
+        return a;
+      };
+      var mapChildCoords = function () {
+        var gs = children(), out = [];
+        for (var i = 0; i < gs.length; i++) { if (gs[i] && gs[i].coordinates) out.push(gs[i].coordinates); }
+        return out;
+      };
       switch (base) {
         case 1: return { type: 'Point', coordinates: point() };
         case 2: return { type: 'LineString', coordinates: points() };
         case 3: return { type: 'Polygon', coordinates: rings() };
-        case 4: return { type: 'MultiPoint', coordinates: children().map(function (g) { return g && g.coordinates; }) };
-        case 5: return { type: 'MultiLineString', coordinates: children().map(function (g) { return g && g.coordinates; }) };
-        case 6: return { type: 'MultiPolygon', coordinates: children().map(function (g) { return g && g.coordinates; }) };
+        case 4: return { type: 'MultiPoint', coordinates: mapChildCoords() };
+        case 5: return { type: 'MultiLineString', coordinates: mapChildCoords() };
+        case 6: return { type: 'MultiPolygon', coordinates: mapChildCoords() };
         case 7: return { type: 'GeometryCollection', geometries: children().filter(Boolean) };
+        case 8: return { type: 'LineString', coordinates: circularString() };
+        case 9: return { type: 'LineString', coordinates: joinCurveParts(children()) };
+        case 10: return { type: 'Polygon', coordinates: curveRings() };
+        case 11: return { type: 'MultiLineString', coordinates: mapChildCoords() };
+        case 12: return { type: 'MultiPolygon', coordinates: mapChildCoords() };
+        case 13: case 14: return null;
+        case 15: case 16: return { type: 'MultiPolygon', coordinates: mapChildCoords() };
+        case 17: return { type: 'Polygon', coordinates: rings() };
         default: return null;
       }
     };
@@ -398,7 +463,7 @@
           visible: vvisible, attribution: parseAttributionField(vparts[2]), sourceLine: line
         };
         // cms: Re:Earth CMS Public API のモデル URL を {model}.geojson へ正規化
-        if (type === 'cms') item.url = cmsGeoJsonUrl(vurl);
+        if (type === 'cms') { item.url = cmsGeoJsonUrl(vurl); item.cms = true; }
         var optStart = item.attribution ? 3 : 2;
         vparts.slice(optStart).forEach(function (p) {
           var eq = p.indexOf('=');
@@ -429,7 +494,7 @@
             item[key === 'minscale' ? 'minScale' : 'maxScale'] = num;
           }
         });
-        if (vtype === 'gpkg' || vtype === 'duckdb') {
+        if (vtype === 'gpkg' || vtype === 'duckdb' || vtype === 'geoparquet') {
           if (item.bboxAuto === undefined) item.bboxAuto = true;
         }
         if (type === 'cms' && !item.url) {
@@ -455,8 +520,8 @@
   // ---------------------------------------------------------------
   KascLoader.detectType = function (name) {
     var n = String(name || '').toLowerCase();
-    if (/\.geojson$|\.json$/.test(n)) return 'geojson';
-    if (/\.fgb$|\.flatgeobuf$/.test(n)) return 'flatgeobuf';
+    if (/\.geojson$|\.json$|\.jsonfg$/.test(n)) return 'geojson';
+    if (/\.fgb$|\.flatgeobuf$|\.fgbz$|\.zst$/.test(n)) return 'flatgeobuf';
     if (/\.parquet$|\.geoparquet$/.test(n)) return 'geoparquet';
     if (/\.gpkg$|\.geopackage$/.test(n)) return 'gpkg';
     if (/\.csv$|\.tsv$/.test(n)) return 'csv';
@@ -481,6 +546,49 @@
     return path + suffix;
   }
 
+  // CMS .geojson 全頁回収。page=/start_cursor= 等が URL に明示済みなら
+  // 1頁のみ。継続指標(hasNext/totalCount/links.next/nextCursor)を追従し、
+  // 無ければ page=N を繰り上げて空頁・同一応答(page 無視サーバ)で打ち止め
+  function collectCmsGeoJson(item, opt, firstObj) {
+    var merged = { type: 'FeatureCollection', features: (firstObj.features || []).slice() };
+    if (/[?&](page|start_cursor|offset|limit|per_?page)=/i.test(item.url)) return merged;
+    var hasNext = function (o) {
+      if (!o || typeof o !== 'object') return null;
+      if (o.hasNext === true || o.has_next === true) return true;
+      if (o.hasNext === false || o.has_next === false) return false;
+      var total = Number(o.totalCount != null ? o.totalCount : o.total);
+      if (Number.isFinite(total)) return merged.features.length < total;
+      var links = o.links || [];
+      for (var i = 0; i < links.length; i++) {
+        if (links[i] && (links[i].rel === 'next' || links[i].relation === 'next') && links[i].href) return links[i].href;
+      }
+      return null;
+    };
+    var obj = firstObj;
+    var page = 1;
+    var step = function () {
+      if (page >= 100) return merged;
+      var nx = hasNext(obj);
+      if (nx === false) return merged;
+      var next = typeof nx === 'string' ? nx
+        : item.url + (item.url.indexOf('?') < 0 ? '?' : '&') + 'page=' + (page + 1);
+      page += 1;
+      return fetch(next, opt).then(function (res) {
+        if (!res.ok) return merged;
+        return res.json();
+      }).then(function (obj2) {
+        var feats = obj2 && obj2.features ? obj2.features : [];
+        if (!feats.length) return merged;
+        // page= 無視サーバは同じ1頁目を返す → 同一応答なら打ち止め
+        if (page === 2 && feats.length === merged.features.length
+            && JSON.stringify(feats[0] || null) === JSON.stringify(merged.features[0] || null)) return merged;
+        merged.features.push.apply(merged.features, feats);
+        obj = obj2;
+        return step();
+      });
+    };
+    return Promise.resolve(step());
+  }
   function loadGeoJson(item) {
     if (item.data) return Promise.resolve(item.data);
     var opt = { mode: 'cors' };
@@ -488,49 +596,177 @@
     return fetch(item.url, opt).then(function (res) {
       if (!res.ok) throw new Error('HTTP ' + res.status);
       return res.json();
+    }).then(function (obj) {
+      if (item.cms && obj && obj.type === 'FeatureCollection') {
+        return collectCmsGeoJson(item, opt, obj);
+      }
+      return obj;
+    }).then(function (obj) {
+      // RFC 7946 §3: 単体 Feature/裸 Geometry も正当な GeoJSON → FC へ包む
+      if (obj && obj.type === 'Feature') return { type: 'FeatureCollection', features: [obj] };
+      if (obj && obj.type && obj.type !== 'FeatureCollection' && (obj.coordinates || obj.geometries)) {
+        return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: obj, properties: {} }] };
+      }
+      return obj;
+    }).then(function (fc) {
+      // OGC JSON-FG (21-045r1): geometry が null で place が GeoJSON 型なら
+      // place を geometry へ昇格。非WGS84 coordRefSys・立体型は警告
+      applyJsonFg(fc, item);
+      return fc;
+    }).then(function (fc) {
+      // simplestyle 色値の # 省略形を # 付きへ正規化(shared/vector-load.js 同規則)
+      if (fc && fc.features) {
+        var reBare = /^[0-9a-f]{3}$|^[0-9a-f]{4}$|^[0-9a-f]{6}$|^[0-9a-f]{8}$/i;
+        fc.features.forEach(function (f) {
+          var p = f && f.properties;
+          if (!p) return;
+          ['marker-color', 'stroke', 'fill', 'icon-color'].forEach(function (k) {
+            if (typeof p[k] === 'string' && reBare.test(p[k].trim())) p[k] = '#' + p[k].trim();
+          });
+        });
+      }
+      return fc;
     });
+  }
+
+  var JSONFG_GEOM_TYPES = { Point: 1, MultiPoint: 1, LineString: 1, MultiLineString: 1,
+    Polygon: 1, MultiPolygon: 1, GeometryCollection: 1 };
+  var JSONFG_WGS84 = /\/crs\/(OGC\/0\/CRS84h?|EPSG\/0\/(4326|4269|4612|6668))$/i;
+  function jsonFgCrsHrefs(v, out) {
+    if (v == null) return;
+    if (typeof v === 'string') out.push(v);
+    else if (v && v.length !== undefined && typeof v !== 'string' && v.forEach) v.forEach(function (x) { jsonFgCrsHrefs(x, out); });
+    else if (typeof v === 'object') jsonFgCrsHrefs(v.href || v.uri, out);
+  }
+  function applyJsonFg(fc, item) {
+    if (!fc || !fc.features) return;
+    var warn = function (msg) { console.warn('JSON-FG (' + (item && item.title || item && item.url || '') + '): ' + msg); };
+    var checkCrs = function (ref) {
+      if (ref == null) return;
+      var hrefs = [];
+      jsonFgCrsHrefs(ref, hrefs);
+      var ok = !hrefs.length || hrefs.every(function (h) { return JSONFG_WGS84.test(String(h)); });
+      if (!ok) warn('非WGS84の coordRefSys — 再投影未対応のため place の表示位置がずれます ' + JSON.stringify(ref).slice(0, 120));
+    };
+    checkCrs(fc.coordRefSys);
+    var solid = {};
+    fc.features.forEach(function (f) {
+      if (!f) return;
+      checkCrs(f.coordRefSys);
+      // time メンバー → properties.time へ昇格(属性表・時系列フィルタ用)
+      if (f.time != null) {
+        var tp = f.properties || (f.properties = {});
+        if (tp.time == null) tp.time = f.time.date || f.time.timestamp || f.time.interval;
+      }
+      var p = f.place;
+      if (p && typeof p === 'object') {
+        checkCrs(p.coordRefSys);
+        if (f.geometry == null) {
+          if (JSONFG_GEOM_TYPES[p.type]) f.geometry = p;
+          else if (p.type === 'Prism' || p.type === 'MultiPrism') {
+            // Prism={base,lower,upper}/MultiPrism={prisms:[Prism]} → base を
+            // フットプリント昇格し、鉛直範囲を __kasc_z/__kasc_extrude へ保持
+            var prisms = p.type === 'Prism' ? [p] : (p.prisms || []);
+            var bases = prisms.map(function (q) { return q && q.base; }).filter(function (b) { return b && JSONFG_GEOM_TYPES[b.type]; });
+            if (bases.length) {
+              f.geometry = bases.length === 1 ? { type: bases[0].type, coordinates: bases[0].coordinates }
+                : bases.every(function (b) { return b.type === 'Polygon'; })
+                  ? { type: 'MultiPolygon', coordinates: bases.map(function (b) { return b.coordinates; }) }
+                  : { type: 'GeometryCollection', geometries: bases };
+              var lows = prisms.map(function (q) { return Number(q && q.lower != null ? q.lower : 0); }).filter(Number.isFinite);
+              var highs = prisms.map(function (q) { return Number(q && q.upper); }).filter(Number.isFinite);
+              var pp = f.properties || (f.properties = {});
+              if (lows.length) pp.__kasc_z = Math.min.apply(null, lows);
+              if (highs.length) pp.__kasc_extrude = Math.max.apply(null, highs) - (lows.length ? Math.min.apply(null, lows) : 0);
+            } else {
+              solid[p.type] = 1;
+            }
+          } else {
+            solid[p.type || 'unknown'] = 1;
+          }
+        }
+      }
+    });
+    var solidTypes = Object.keys(solid);
+    if (solidTypes.length) {
+      warn('未対応の JSON-FG ジオメトリ型が含まれます: ' + solidTypes.join(', ') + '(geometry フォールバックの無い地物は描画されません)');
+    }
   }
 
   // ---------------------------------------------------------------
   // FlatGeobuf (CDN lazy import)
   // ---------------------------------------------------------------
+  // geojson.deserialize ではなく generic.deserialize + 自前 fromFeature を使う
+  // (vector-load.js の loadFgbDecoder と同じ規則)。理由: Json 列の値が JSON
+  // として不正だと geojson 側 fromFeature の JSON.parse が例外を投げ、
+  // レイヤー全体の読み込みが中断するため。Json→String 再パースで救出する
   var fgbPromise = null;
   function loadFlatGeobufModule() {
     if (!fgbPromise) {
-      fgbPromise = import('https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson.js/+esm');
+      fgbPromise = Promise.all([
+        import('https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/generic.js/+esm'),
+        import('https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson/geometry.js/+esm'),
+      ]).then(function (mods) {
+        var g = mods[0], geom = mods[1];
+        var fromFeature = function (id, feature, header) {
+          var properties = null;
+          try { properties = g.parseProperties(feature, header.columns); }
+          catch (e) {
+            var cols = (header.columns || []).map(function (c) {
+              return c.type === g.ColumnType.Json ? Object.assign({}, c, { type: g.ColumnType.String }) : c;
+            });
+            try { properties = g.parseProperties(feature, cols); } catch (e2) { /* 属性なしで通す */ }
+          }
+          return { type: 'Feature', id: id,
+            geometry: geom.fromGeometry(feature.geometry(), header.geometryType), properties: properties };
+        };
+        return { deserialize: function (input, ctx) { return g.deserialize(input, Object.assign({ fromFeature: fromFeature }, ctx)); } };
+      });
       fgbPromise.catch(function () { fgbPromise = null; });
     }
     return fgbPromise;
   }
   function loadFlatGeobufAsGeoJson(item) {
     return loadFlatGeobufModule().then(function (mod) {
-      var streamPromise;
+      var sourcePromise;
       if (item.file) {
-        streamPromise = Promise.resolve(item.file.stream ? item.file.stream() : null);
+        sourcePromise = Promise.resolve(item.file.stream ? { body: item.file.stream(), bytes: function () { return item.file.arrayBuffer(); } } : null);
       } else {
-        streamPromise = fetch(item.url, { mode: 'cors' }).then(function (res) {
+        var fopt = { mode: 'cors' };
+        // key= オプション由来の Bearer 認証(loadGeoJson と同じ規約)
+        if (item.headers) fopt.headers = item.headers;
+        sourcePromise = fetch(item.url, fopt).then(function (res) {
           if (!res.ok) throw new Error('HTTP ' + res.status);
-          return res.body;
+          return { body: res.body, bytes: function () { return fetch(item.url, fopt).then(function (r) { return r.arrayBuffer(); }); } };
         });
       }
-      return streamPromise.then(function (body) {
-        if (!body) throw new Error('empty response body');
+      return sourcePromise.then(function (src) {
+        if (!src || !src.body) throw new Error('empty response body');
         var features = [];
-        var iter = mod.deserialize(body);
-        var readNext = function () {
-          return iter.next().then(function (r) {
-            if (r.done) return { type: 'FeatureCollection', features: features };
-            var f = r.value;
-            if (f && f.geometry) {
-              if (f.properties) {
-                Object.keys(f.properties).forEach(function (k) { f.properties[k] = sanitize(f.properties[k]); });
+        var headerMetaFn = function (h) { item.fgbHeader = h; };
+        var collect = function (iter) {
+          var readNext = function () {
+            return iter.next().then(function (r) {
+              if (r.done) return { type: 'FeatureCollection', features: features };
+              var f = r.value;
+              if (f && f.geometry) {
+                if (f.properties) {
+                  Object.keys(f.properties).forEach(function (k) { f.properties[k] = sanitize(f.properties[k]); });
+                }
+                features.push(f);
               }
-              features.push(f);
-            }
-            return readNext();
-          });
+              return readNext();
+            });
+          };
+          return readNext();
         };
-        return readNext();
+        return collect(mod.deserialize(src.body, { headerMetaFn: headerMetaFn })).catch(function (e) {
+          // seekable Zstandard 圧縮 FGB はバッファ読みで再試行
+          if (!/not a flatgeobuf/i.test(String(e && e.message || e))) throw e;
+          return src.bytes().then(function (buf) {
+            return collect(mod.deserialize(new Uint8Array(buf), { seekableZstd: true, headerMetaFn: headerMetaFn }));
+          });
+        });
       });
     });
   }
@@ -538,12 +774,22 @@
   // ---------------------------------------------------------------
   // GeoParquet (hyparquet CDN lazy import)
   // ---------------------------------------------------------------
+  // geo メタの crs が OGC:CRS84 と同等か(仕様の簡易判定: crs.id のみ見る。
+  // 欠落=CRS84・明示 null=未定義)。vector-load.js の同名関数と同じ規則
+  function geoParquetCrsIsWgs84(crs) {
+    if (crs === undefined) return true;
+    if (crs === null) return false;
+    var id = crs && crs.id;
+    if (!id || !id.authority) return false;
+    return (id.authority === 'OGC' && id.code === 'CRS84')
+      || (id.authority === 'EPSG' && Number(id.code) === 4326);
+  }
   var pqPromise = null;
   function loadHyparquet() {
     if (!pqPromise) {
       pqPromise = Promise.all([
-        import('https://cdn.jsdelivr.net/npm/hyparquet@1.31.5/+esm'),
-        import('https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.2/+esm')
+        import('https://cdn.jsdelivr.net/npm/hyparquet@1.33.1/+esm'),
+        import('https://cdn.jsdelivr.net/npm/hyparquet-compressors@1.1.3/+esm')
       ]).then(function (mods) {
         var hp = mods[0], hc = mods[1];
         return {
@@ -557,13 +803,103 @@
     }
     return pqPromise;
   }
+  // covering.bbox の4パスを hyparquet filter のキー形式(ドット結合)で取り出す
+  function geoParquetCoveringPaths(colMeta) {
+    var bbox = colMeta && colMeta.covering && colMeta.covering.bbox;
+    if (!bbox) return null;
+    var path = function (key) {
+      return Array.isArray(bbox[key]) && bbox[key].length ? bbox[key].join('.') : null;
+    };
+    var xmin = path('xmin'), ymin = path('ymin'), xmax = path('xmax'), ymax = path('ymax');
+    return (xmin && ymin && xmax && ymax) ? { xmin: xmin, ymin: ymin, xmax: xmax, ymax: ymax } : null;
+  }
+  // bounds {ranges:[{west,east}],south,north} → covering 列への範囲フィルタ
+  // (行グループ min/max 統計とページインデックスによる読み飛ばしが効く)
+  function geoParquetCoveringFilter(refs, bounds) {
+    var lonBlocks = bounds.ranges.map(function (r) {
+      var a = {}, b = {};
+      a[refs.xmin] = { $lte: r.east };
+      b[refs.xmax] = { $gte: r.west };
+      return { $and: [a, b] };
+    });
+    var yminF = {}, ymaxF = {};
+    yminF[refs.ymin] = { $lte: bounds.north };
+    ymaxF[refs.ymax] = { $gte: bounds.south };
+    return { $and: [{ $or: lonBlocks }, yminF, ymaxF] };
+  }
+  // 行グループ geospatial_statistics.bbox で表示範囲と重ならないグループを
+  // 読み飛ばす(covering 列の無い 2.0 ネイティブ型ファイル向け)。
+  // 統計を持つグループが無ければ null、あれば残存行範囲 [start,end) を返す
+  function geoParquetStatPrunedRanges(meta, geomColumn, bounds) {
+    if (!meta || !meta.row_groups || !meta.row_groups.length || !geomColumn) return null;
+    var sawStats = false, kept = [], rowStart = 0;
+    for (var i = 0; i < meta.row_groups.length; i++) {
+      var rg = meta.row_groups[i];
+      var n = Number(rg.num_rows) || 0;
+      var col = (rg.columns || []).find(function (c) {
+        var p = c && c.meta_data && c.meta_data.path_in_schema;
+        return Array.isArray(p) && p.join('.') === geomColumn;
+      });
+      var bb = col && col.meta_data && col.meta_data.geospatial_statistics && col.meta_data.geospatial_statistics.bbox;
+      var keep = true; // 統計が無いグループは保守的に残す
+      if (bb && [bb.xmin, bb.ymin, bb.xmax, bb.ymax].every(Number.isFinite)) {
+        sawStats = true;
+        keep = bounds.ranges.some(function (r) { return bb.xmin <= r.east && bb.xmax >= r.west; })
+          && bb.ymin <= bounds.north && bb.ymax >= bounds.south;
+      }
+      if (keep) {
+        var last = kept[kept.length - 1];
+        if (last && last[1] === rowStart) last[1] = rowStart + n;
+        else kept.push([rowStart, rowStart + n]);
+      }
+      rowStart += n;
+    }
+    return sawStats ? kept : null;
+  }
+  // GeoJSON ジオメトリのエンベロープ [minX,minY,maxX,maxY]
+  function geoJsonGeometryEnvelope(geom) {
+    if (!geom) return null;
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    var walk = function (coords) {
+      if (!Array.isArray(coords)) return;
+      if (typeof coords[0] === 'number') {
+        var x = coords[0], y = coords[1] || 0;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        return;
+      }
+      coords.forEach(walk);
+    };
+    if (geom.type === 'GeometryCollection') (geom.geometries || []).forEach(walk);
+    else walk(geom.coordinates);
+    return minX === Infinity ? null : [minX, minY, maxX, maxY];
+  }
+  // bbox=auto(bboxBounds 指定)時は covering.bbox 列 → 行グループ geospatial
+  // statistics の順で部分読みを試みる。どちらも無い・Range 非対応サーバ・
+  // 非 CRS84 は全件読みへフォールバックし item._gpRanged=false を立てる
+  // (vector-load.js の loadGeoParquet と同じ規則)
   function loadGeoParquetAsGeoJson(item) {
     return loadHyparquet().then(function (mod) {
       var fileP;
+      var sawPartial = { v: false };
+      var wantBounds = item.bboxAuto !== false && item.bboxBounds
+        && Array.isArray(item.bboxBounds.ranges) && item.bboxBounds.ranges.length;
       if (item.file) {
         fileP = item.file.arrayBuffer();
       } else {
-        try { fileP = mod.asyncBufferFromUrl({ url: item.url }); } catch (e) { fileP = Promise.reject(e); }
+        try {
+          fileP = mod.asyncBufferFromUrl({
+            url: item.url,
+            // 206 を観測して Range 対応を判定する(非対応サーバは初回 slice で
+            // 全量取得する。部分結果を返すと再クエリされず地物が欠ける)
+            fetch: wantBounds ? function (u, init) {
+              return fetch(u, init).then(function (res) {
+                if (res.status === 206) sawPartial.v = true;
+                return res;
+              });
+            } : undefined
+          });
+        } catch (e) { fileP = Promise.reject(e); }
         fileP = fileP.catch(function () {
           return fetch(item.url, { mode: 'cors' }).then(function (res) {
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -572,22 +908,76 @@
         });
       }
       return fileP.then(function (file) {
-        return Promise.all([
-          mod.parquetReadObjects({ file: file, compressors: mod.compressors }),
-          Promise.resolve(mod.parquetMetadata ? mod.parquetMetadata(file) : null).catch(function () { return null; })
-        ]).then(function (r) { return { rows: r[0] || [], meta: r[1] }; });
+        return Promise.resolve(mod.parquetMetadata ? mod.parquetMetadata(file) : null)
+          .catch(function () { return null; })
+          .then(function (meta) {
+            var geo = null;
+            try {
+              var kv = meta && (meta.key_value_metadata || meta.metadata || []);
+              var entry = Array.isArray(kv) ? kv.find(function (it) { return it && it.key === 'geo'; }) : (kv instanceof Map ? { value: kv.get('geo') } : null);
+              var rawGeo = entry && entry.value;
+              var geoText = rawGeo instanceof Uint8Array ? new TextDecoder().decode(rawGeo) : rawGeo;
+              geo = geoText ? JSON.parse(geoText) : null;
+            } catch (e) {}
+            var primary = geo && geo.primary_column || null;
+            var colMeta = primary && geo && geo.columns ? geo.columns[primary] : null;
+            var bounds = (wantBounds && sawPartial.v && (!colMeta || geoParquetCrsIsWgs84(colMeta.crs))) ? item.bboxBounds : null;
+            var postFilter = false;
+            var readP = null;
+            if (bounds) {
+              var refs = geoParquetCoveringPaths(colMeta);
+              if (refs) {
+                readP = mod.parquetReadObjects({
+                  file: file, compressors: mod.compressors, metadata: meta, usePageIndex: true,
+                  filter: geoParquetCoveringFilter(refs, bounds)
+                }).then(function (rows) { return { rows: rows, ranged: true }; })
+                  .catch(function (e) {
+                    console.warn('geoparquet 範囲読み(covering)失敗。全件へフォールバック: ' + item.url, e);
+                    return null;
+                  });
+              } else {
+                var runs = geoParquetStatPrunedRanges(meta, primary, bounds);
+                if (runs) {
+                  postFilter = true;
+                  readP = runs.reduce(function (p, run) {
+                    return p.then(function (acc) {
+                      return mod.parquetReadObjects({ file: file, compressors: mod.compressors, metadata: meta, rowStart: run[0], rowEnd: run[1] })
+                        .then(function (rows) { return acc.concat(rows); });
+                    });
+                  }, Promise.resolve([])).then(function (rows) { return { rows: rows, ranged: true }; })
+                    .catch(function (e) {
+                      console.warn('geoparquet 範囲読み(geospatial statistics)失敗。全件へフォールバック: ' + item.url, e);
+                      return null;
+                    });
+                }
+              }
+            }
+            var fullRead = function () {
+              return mod.parquetReadObjects({ file: file, compressors: mod.compressors, metadata: meta })
+                .then(function (rows) { return { rows: rows, ranged: false }; });
+            };
+            return (readP || fullRead()).then(function (r) { return r || fullRead(); })
+              .then(function (r) {
+                // bounds 未指定の初回全件読みで false を立てると以後の再クエリが
+                // 永久に止まるため、範囲読みを実際に試みた時だけラッチする
+                if (wantBounds) item._gpRanged = !!r.ranged;
+                return { rows: r.rows || [], meta: meta, geo: geo, postFilter: postFilter && !!r.ranged, bounds: bounds };
+              });
+          });
       }).then(function (r0) {
         var rows = r0.rows;
+        var geo = r0.geo;
+        // geo メタ(version/crs/encoding/covering 等)を行アイテムへ保持
+        if (geo) item.geoHeader = geo;
         if (!rows.length) return { type: 'FeatureCollection', features: [] };
-        var geomColumn = null;
-        try {
-          var kv = r0.meta && (r0.meta.key_value_metadata || r0.meta.metadata || []);
-          var entry = Array.isArray(kv) ? kv.find(function (it) { return it && it.key === 'geo'; }) : (kv instanceof Map ? { value: kv.get('geo') } : null);
-          var rawGeo = entry && entry.value;
-          var geoText = rawGeo instanceof Uint8Array ? new TextDecoder().decode(rawGeo) : rawGeo;
-          var geo = geoText ? JSON.parse(geoText) : null;
-          if (geo && geo.primary_column) geomColumn = geo.primary_column;
-        } catch (e) {}
+        var geomColumn = geo && geo.primary_column || null;
+        var colMeta = geomColumn && geo && geo.columns ? geo.columns[geomColumn] : null;
+        if (colMeta && colMeta.encoding && colMeta.encoding !== 'WKB') {
+          console.warn('geoparquet: geometry encoding "' + colMeta.encoding + '" is not supported (WKB only)');
+        }
+        if (colMeta && !geoParquetCrsIsWgs84(colMeta.crs)) {
+          console.warn('geoparquet: CRS is not OGC:CRS84; coordinates may be misplaced', colMeta.crs == null ? '(undefined)' : colMeta.crs);
+        }
         var isGeom = function (v) {
           return v instanceof Uint8Array || (v && typeof v === 'object' && typeof v.type === 'string' && ('coordinates' in v || 'geometries' in v));
         };
@@ -596,15 +986,27 @@
           geomColumn = ('geometry' in firstRow) ? 'geometry' : Object.keys(firstRow).find(function (k) { return isGeom(firstRow[k]); });
         }
         if (!geomColumn) throw new Error('geometry column not found');
+        // 属性から除外: geo.columns 全ジオメトリ列 + covering.bbox 参照列
+        var excluded = {};
+        if (geo && geo.columns) Object.keys(geo.columns).forEach(function (k) { excluded[k] = 1; });
+        var covXmin = colMeta && colMeta.covering && colMeta.covering.bbox && colMeta.covering.bbox.xmin;
+        if (Array.isArray(covXmin) && typeof covXmin[0] === 'string') excluded[covXmin[0]] = 1;
         var features = [];
         for (var i = 0; i < rows.length; i++) {
           var row = rows[i];
           var value = row[geomColumn];
           var geometry = value instanceof Uint8Array ? wkbToGeoJsonGeometry(value) : (isGeom(value) ? value : null);
           if (!geometry) continue;
+          if (r0.postFilter && r0.bounds) {
+            // 行グループ統計は包絡でしかないため個別地物でも厳密に範囲判定する。
+            // 包絡が取れないジオメトリは保守的に残す
+            var env = geoJsonGeometryEnvelope(geometry);
+            if (env && !(r0.bounds.ranges.some(function (r) { return env[0] <= r.east && env[2] >= r.west; })
+              && env[1] <= r0.bounds.north && env[3] >= r0.bounds.south)) continue;
+          }
           var properties = {};
           var keys = Object.keys(row);
-          for (var j = 0; j < keys.length; j++) { if (keys[j] !== geomColumn) properties[keys[j]] = sanitize(row[keys[j]]); }
+          for (var j = 0; j < keys.length; j++) { if (keys[j] !== geomColumn && !excluded[keys[j]]) properties[keys[j]] = sanitize(row[keys[j]]); }
           features.push({ type: 'Feature', geometry: geometry, properties: properties });
         }
         return { type: 'FeatureCollection', features: features };
@@ -618,7 +1020,7 @@
   // Worker ソースはテンプレートリテラル内に埋め込むため ${ } と
   // バッククォートは使わない。importScripts は UMD 版 sql.js を使う。
   var GPKG_WORKER_SRC = [
-    'var SQL_JS_VERSION = "1.15.1";',
+    'var SQL_JS_VERSION = "1.16.0";',
     'var sqlJsPromise = null;',
     'function loadSqlJs() {',
     '  if (!sqlJsPromise) {',
@@ -636,7 +1038,76 @@
     '  return sqlJsPromise;',
     '}',
     '',
-    'var quoteIdent = function (n) { return "\\"" + String(n).replace(/"/g, "\\"\\"") + "\\""; };',
+    '// 再投影用。非経緯度 CRS の GPKG が出た時だけ遅延ロード(geotiff-layer.js と同ピン)',
+    'var PROJ4_VERSION = "2.23.0";',
+    'var proj4Promise = null;',
+    'function loadProj4() {',
+    '  if (!proj4Promise) {',
+    '    proj4Promise = new Promise(function (resolve, reject) {',
+    '      try {',
+    '        importScripts("https://cdn.jsdelivr.net/npm/proj4@" + PROJ4_VERSION + "/dist/proj4-src.js");',
+    '        if (typeof self.proj4 !== "function") throw new Error("proj4 not found");',
+    '        resolve(self.proj4);',
+    '      } catch (e) { reject(e); }',
+    '    });',
+    '    proj4Promise.catch(function () { proj4Promise = null; });',
+    '  }',
+    '  return proj4Promise;',
+    '}',
+    '',
+    'var transforms = new Map();',
+    'function mercatorToLonLat(x, y) {',
+    '  var R = 6378137;',
+    '  return [x / R * 180 / Math.PI, (Math.atan(Math.exp(y / R)) * 2 - Math.PI / 2) * 180 / Math.PI];',
+    '}',
+    'function buildTransform(entry, srsId) {',
+    '  if (!entry || isGeographicSrs(entry, srsId) !== false) return Promise.resolve(null);',
+    '  if (entry.code === 3857 || srsId === 3857) {',
+    '    return Promise.resolve({ fn: mercatorToLonLat, method: "EPSG:3857 数式" });',
+    '  }',
+    '  var wkts = [entry.definition, entry.definition12];',
+    '  var chain = Promise.resolve(null);',
+    '  var tryWkt = function (i) {',
+    '    if (i >= wkts.length) return Promise.resolve(null);',
+    '    var s = String(wkts[i] || "");',
+    '    s = s.replace(/^\\s+|\\s+$/g, "");',
+    '    if (!s || s.toLowerCase() === "undefined") return tryWkt(i + 1);',
+    '    return loadProj4().then(function (proj4) {',
+    '      var name = "GPKG" + srsId;',
+    '      proj4.defs(name, s);',
+    '      var t = proj4(name, "EPSG:4326", [1000, 1000]);',
+    '      if (!Number.isFinite(t[0]) || !Number.isFinite(t[1])) throw new Error("non-finite");',
+    '      return { fn: function (x, y) { return proj4(name, "EPSG:4326", [x, y]); }, method: "GPKG 内蔵 WKT" };',
+    '    }).catch(function () { return tryWkt(i + 1); });',
+    '  };',
+    '  return tryWkt(0).then(function (t) {',
+    '    if (t) return t;',
+    '    if (!/^EPSG$/i.test(String(entry.org || "")) || !Number.isFinite(entry.code) || entry.code <= 0) return null;',
+    '    return loadProj4().then(function (proj4) {',
+    '      return fetch("https://epsg.io/" + entry.code + ".proj4").then(function (res) {',
+    '        if (!res.ok) return null;',
+    '        return res.text().then(function (def) {',
+    '          proj4.defs("EPSG:" + entry.code, def);',
+    '          var t = proj4("EPSG:" + entry.code, "EPSG:4326", [1000, 1000]);',
+    '          if (!Number.isFinite(t[0]) || !Number.isFinite(t[1])) throw new Error("non-finite");',
+    '          return { fn: function (x, y) { return proj4("EPSG:" + entry.code, "EPSG:4326", [x, y]); },',
+    '            method: "epsg.io EPSG:" + entry.code };',
+    '        });',
+    '      });',
+    '    }).catch(function () { return null; });',
+    '  });',
+    '}',
+    'function resolveTransform(url, srsId, meta) {',
+    '  var key = url + "|" + srsId;',
+    '  var p = transforms.get(key);',
+    '  if (!p) {',
+    '    p = buildTransform(meta && meta.srs ? meta.srs[srsId] : null, srsId).catch(function () { return null; });',
+    '    transforms.set(key, p);',
+    '  }',
+    '  return p;',
+    '}',
+    '',
+    'var quoteIdent = function (n) { return \'"\' + String(n).replace(/"/g, \'""\') + \'"\'; };',
     'var quoteLit = function (v) { return "\'" + String(v).replace(/\'/g, "\'\'") + "\'"; };',
     'function sanitize(v) { return typeof v === "bigint" ? (Number.isSafeInteger(Number(v)) ? Number(v) : v.toString()) : v; }',
     '',
@@ -651,7 +1122,7 @@
     '    var hasZ = (raw & 0x80000000) !== 0;',
     '    var hasM = (raw & 0x40000000) !== 0;',
     '    var hasSrid = (raw & 0x20000000) !== 0;',
-    '    if (!hasZ && !hasM && raw >= 1000) {',
+    '    if (!hasZ && !hasM && !hasSrid && raw >= 1000) {',
     '      var variant = Math.floor(raw / 1000);',
     '      hasZ = variant === 1 || variant === 3;',
     '      hasM = variant === 2 || variant === 3;',
@@ -669,14 +1140,78 @@
     '    var points = function () { var a = new Array(count()); for (var i = 0; i < a.length; i++) a[i] = point(); return a; };',
     '    var rings = function () { var a = new Array(count()); for (var i = 0; i < a.length; i++) a[i] = points(); return a; };',
     '    var children = function () { var a = new Array(count()); for (var i = 0; i < a.length; i++) a[i] = readGeometry(); return a; };',
+    '    var strokeArc = function (p0, p1, p2, out) {',
+    '      var ax = p0[0], ay = p0[1], bx = p1[0], by = p1[1], cx = p2[0], cy = p2[1];',
+    '      var d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));',
+    '      if (!isFinite(d) || Math.abs(d) < 1e-15) { out.push([cx, cy]); return; }',
+    '      var aa = ax * ax + ay * ay, bb = bx * bx + by * by, cc = cx * cx + cy * cy;',
+    '      var ux = (aa * (by - cy) + bb * (cy - ay) + cc * (ay - by)) / d;',
+    '      var uy = (aa * (cx - bx) + bb * (ax - cx) + cc * (bx - ax)) / d;',
+    '      var r = Math.sqrt((ax - ux) * (ax - ux) + (ay - uy) * (ay - uy));',
+    '      var t0 = Math.atan2(ay - uy, ax - ux);',
+    '      var t1 = Math.atan2(by - uy, bx - ux);',
+    '      var t2 = Math.atan2(cy - uy, cx - ux);',
+    '      var ccw = function (a) { while (a <= t0) a += 2 * Math.PI; return a; };',
+    '      if (ccw(t1) <= ccw(t2)) t2 = ccw(t2);',
+    '      else { var cw = function (a) { while (a >= t0) a -= 2 * Math.PI; return a; }; t2 = cw(t2); }',
+    '      var n = Math.max(4, Math.ceil(Math.abs(t2 - t0) / (Math.PI / 18)));',
+    '      for (var i = 1; i <= n; i++) {',
+    '        var t = t0 + (t2 - t0) * (i / n);',
+    '        out.push([ux + r * Math.cos(t), uy + r * Math.sin(t)]);',
+    '      }',
+    '    };',
+    '    var circularString = function () {',
+    '      var pts = points();',
+    '      var out = [];',
+    '      if (pts.length < 3) {',
+    '        for (var k = 0; k < pts.length; k++) out.push([pts[k][0], pts[k][1]]);',
+    '        return out;',
+    '      }',
+    '      out.push([pts[0][0], pts[0][1]]);',
+    '      var i = 0;',
+    '      for (; i + 2 < pts.length; i += 2) strokeArc(pts[i], pts[i + 1], pts[i + 2], out);',
+    '      for (; i < pts.length; i++) out.push([pts[i][0], pts[i][1]]);',
+    '      return out;',
+    '    };',
+    '    var joinCurveParts = function (geoms) {',
+    '      var out = [];',
+    '      for (var i = 0; i < geoms.length; i++) {',
+    '        var seg = geoms[i] && geoms[i].coordinates;',
+    '        if (!seg || !seg.length) continue;',
+    '        var part = out.length ? seg.slice(1) : seg;',
+    '        for (var j = 0; j < part.length; j++) out.push(part[j]);',
+    '      }',
+    '      return out;',
+    '    };',
+    '    var curveRings = function () {',
+    '      var a = new Array(count());',
+    '      for (var i = 0; i < a.length; i++) {',
+    '        var g = readGeometry();',
+    '        a[i] = g && g.coordinates ? g.coordinates : [];',
+    '      }',
+    '      return a;',
+    '    };',
+    '    var mapChildCoords = function () {',
+    '      var gs = children(), out = [];',
+    '      for (var i = 0; i < gs.length; i++) { if (gs[i] && gs[i].coordinates) out.push(gs[i].coordinates); }',
+    '      return out;',
+    '    };',
     '    switch (base) {',
     '      case 1: return { type: "Point", coordinates: point() };',
     '      case 2: return { type: "LineString", coordinates: points() };',
     '      case 3: return { type: "Polygon", coordinates: rings() };',
-    '      case 4: return { type: "MultiPoint", coordinates: children().map(function (g) { return g && g.coordinates; }) };',
-    '      case 5: return { type: "MultiLineString", coordinates: children().map(function (g) { return g && g.coordinates; }) };',
-    '      case 6: return { type: "MultiPolygon", coordinates: children().map(function (g) { return g && g.coordinates; }) };',
+    '      case 4: return { type: "MultiPoint", coordinates: mapChildCoords() };',
+    '      case 5: return { type: "MultiLineString", coordinates: mapChildCoords() };',
+    '      case 6: return { type: "MultiPolygon", coordinates: mapChildCoords() };',
     '      case 7: return { type: "GeometryCollection", geometries: children().filter(Boolean) };',
+    '      case 8: return { type: "LineString", coordinates: circularString() };',
+    '      case 9: return { type: "LineString", coordinates: joinCurveParts(children()) };',
+    '      case 10: return { type: "Polygon", coordinates: curveRings() };',
+    '      case 11: return { type: "MultiLineString", coordinates: mapChildCoords() };',
+    '      case 12: return { type: "MultiPolygon", coordinates: mapChildCoords() };',
+    '      case 13: case 14: return null;',
+    '      case 15: case 16: return { type: "MultiPolygon", coordinates: mapChildCoords() };',
+    '      case 17: return { type: "Polygon", coordinates: rings() };',
     '      default: return null;',
     '    }',
     '  };',
@@ -697,6 +1232,68 @@
     '  var view = new DataView(value.buffer, value.byteOffset, value.byteLength);',
     '  try { return { west: view.getFloat64(8, little), east: view.getFloat64(16, little), south: view.getFloat64(24, little), north: view.getFloat64(32, little) }; } catch (e) { return null; }',
     '}',
+    'function geoJsonGeometryEnvelope(geom) {',
+    '  var west = Infinity, south = Infinity, east = -Infinity, north = -Infinity;',
+    '  var visit = function (coords) {',
+    '    if (!coords || typeof coords.length !== "number") return;',
+    '    if (typeof coords[0] === "number" && coords.length >= 2) {',
+    '      var x = coords[0], y = coords[1];',
+    '      if (isFinite(x) && isFinite(y)) {',
+    '        if (x < west) west = x;',
+    '        if (x > east) east = x;',
+    '        if (y < south) south = y;',
+    '        if (y > north) north = y;',
+    '      }',
+    '      return;',
+    '    }',
+    '    for (var i = 0; i < coords.length; i++) visit(coords[i]);',
+    '  };',
+    '  if (geom && geom.type === "GeometryCollection") {',
+    '    var gs = geom.geometries || [];',
+    '    for (var i = 0; i < gs.length; i++) {',
+    '      var env = geoJsonGeometryEnvelope(gs[i]);',
+    '      if (env) {',
+    '        if (env.west < west) west = env.west;',
+    '        if (env.east > east) east = env.east;',
+    '        if (env.south < south) south = env.south;',
+    '        if (env.north > north) north = env.north;',
+    '      }',
+    '    }',
+    '  } else if (geom && geom.coordinates) {',
+    '    visit(geom.coordinates);',
+    '  }',
+    '  return west <= east && south <= north ? { west: west, south: south, east: east, north: north } : null;',
+    '}',
+    'function transformGeoJsonGeometry(geom, fn) {',
+    '  if (!geom || !fn) return geom;',
+    '  var visit = function (coords) {',
+    '    if (!Array.isArray(coords)) return;',
+    '    if (typeof coords[0] === "number" && coords.length >= 2) {',
+    '      var p = fn(coords[0], coords[1]);',
+    '      coords[0] = p[0]; coords[1] = p[1];',
+    '      return;',
+    '    }',
+    '    for (var i = 0; i < coords.length; i++) visit(coords[i]);',
+    '  };',
+    '  if (geom.type === "GeometryCollection") {',
+    '    for (var i = 0; i < (geom.geometries || []).length; i++) transformGeoJsonGeometry(geom.geometries[i], fn);',
+    '  } else {',
+    '    visit(geom.coordinates);',
+    '  }',
+    '  return geom;',
+    '}',
+    'function transformEnvelope(env, fn) {',
+    '  if (!env || !fn) return env;',
+    '  var pts = [fn(env.west, env.south), fn(env.east, env.south), fn(env.west, env.north), fn(env.east, env.north)];',
+    '  var xs = [], ys = [];',
+    '  for (var i = 0; i < pts.length; i++) {',
+    '    if (Number.isFinite(pts[i][0])) xs.push(pts[i][0]);',
+    '    if (Number.isFinite(pts[i][1])) ys.push(pts[i][1]);',
+    '  }',
+    '  if (!xs.length || !ys.length) return env;',
+    '  return { west: Math.min.apply(null, xs), south: Math.min.apply(null, ys),',
+    '    east: Math.max.apply(null, xs), north: Math.max.apply(null, ys) };',
+    '}',
     'function envelopeIntersects(env, bbox) {',
     '  if (!env || !bbox) return true;',
     '  var south = Number(bbox.south), north = Number(bbox.north);',
@@ -705,17 +1302,32 @@
     '}',
     '',
     'var dbs = new Map();',
+    'function dbKey(msg) {',
+    '  if (msg.buffer) return "buffer:" + (msg.url || (msg.reqId || 0));',
+    '  return msg.url || ("buffer:" + (msg.reqId || 0) + ":" + Math.random());',
+    '}',
+    '// 取得は url → 失敗時のみ directUrl(元URL)の順で試す(プロキシ失敗の退避)',
+    'function fetchBytes(url, fallbackUrl) {',
+    '  function get(u) {',
+    '    return fetch(u).then(function (res) {',
+    '      if (!res.ok) throw new Error("HTTP " + res.status);',
+    '      return res.arrayBuffer();',
+    '    });',
+    '  }',
+    '  return get(url).then(null, function (e) {',
+    '    if (!fallbackUrl) throw e;',
+    '    return get(fallbackUrl);',
+    '  });',
+    '}',
     'function openDb(msg) {',
-    '  var key = msg.url || ("buffer:" + (msg.reqId || 0) + ":" + Math.random());',
-    '  if (msg.buffer) key = "buffer:" + msg.url;',
+    '  var key = dbKey(msg);',
     '  var promise = dbs.get(key);',
     '  if (!promise) {',
     '    promise = loadSqlJs().then(function (SQL) {',
     '      if (msg.buffer) return new SQL.Database(new Uint8Array(msg.buffer));',
-    '      return fetch(msg.url).then(function (res) {',
-    '        if (!res.ok) throw new Error("HTTP " + res.status);',
-    '        return res.arrayBuffer();',
-    '      }).then(function (buf) { return new SQL.Database(new Uint8Array(buf)); });',
+    '      return fetchBytes(msg.url, msg.directUrl || null).then(function (buf) {',
+    '        return new SQL.Database(new Uint8Array(buf));',
+    '      });',
     '    });',
     '    promise.catch(function () { if (dbs.get(key) === promise) dbs.delete(key); });',
     '    dbs.set(key, promise);',
@@ -723,15 +1335,222 @@
     '  return promise;',
     '}',
     '',
-    'function resolveFeatureTable(db, table) {',
+    'function tableColumns(db, name) {',
+    '  var res = db.exec("PRAGMA table_info(" + quoteIdent(name) + ")");',
+    '  var vals = (res[0] && res[0].values) || [];',
+    '  return vals.map(function (row) { return row[1]; });',
+    '}',
+    '',
+    'var metas = new Map();',
+    'function readDbMeta(db) {',
+    '  var meta = { extensions: [], tiles: [], kinds: {}, srs: {} };',
+    '  try {',
+    '    var res = db.exec("SELECT table_name, column_name, extension_name, scope FROM gpkg_extensions");',
+    '    var vals = (res[0] && res[0].values) || [];',
+    '    for (var i = 0; i < vals.length; i++) meta.extensions.push({ table: vals[i][0], column: vals[i][1], name: vals[i][2], scope: vals[i][3] });',
+    '  } catch (e) {}',
+    '  try {',
+    '    var res2 = db.exec("SELECT table_name, data_type FROM gpkg_contents");',
+    '    var vals2 = (res2[0] && res2[0].values) || [];',
+    '    for (var i = 0; i < vals2.length; i++) {',
+    '      meta.kinds[vals2[i][0]] = vals2[i][1];',
+    '      if (vals2[i][1] === "tiles") meta.tiles.push(vals2[i][0]);',
+    '    }',
+    '  } catch (e) {}',
+    '  try {',
+    '    var cols = tableColumns(db, "gpkg_spatial_ref_sys");',
+    '    var has12 = cols.indexOf("definition_12_063") >= 0;',
+    '    var res3 = db.exec("SELECT srs_id, srs_name, organization, organization_coordsys_id, \\"definition\\"" + (has12 ? ", \\"definition_12_063\\"" : "") + " FROM gpkg_spatial_ref_sys");',
+    '    var vals3 = (res3[0] && res3[0].values) || [];',
+    '    for (var i = 0; i < vals3.length; i++) {',
+    '      meta.srs[Number(vals3[i][0])] = { name: vals3[i][1], org: vals3[i][2], code: Number(vals3[i][3]), definition: vals3[i][4], definition12: has12 ? vals3[i][5] : null };',
+    '    }',
+    '  } catch (e) {}',
+    // OGC 24-050 Portrayal 拡張(ドラフト)のスタイル登録表。module Worker と同じく
+    // 登録内容を meta.styles として露出する(描画適用は未対応のため警告で通知)
+    '  try {',
+    '    var res4 = db.exec("SELECT id, style, description, uri FROM gpkgext_styles");',
+    '    var vals4 = (res4[0] && res4[0].values) || [];',
+    '    var stylesMap = {};',
+    '    var order = [];',
+    '    for (var i = 0; i < vals4.length; i++) {',
+    '      var sid = Number(vals4[i][0]);',
+    '      stylesMap[sid] = { id: sid, style: vals4[i][1], description: vals4[i][2] || null, uri: vals4[i][3] || null, formats: [] };',
+    '      order.push(sid);',
+    '    }',
+    '    var sh = db.exec("SELECT style_id, format FROM gpkgext_stylesheets");',
+    '    var vals5 = (sh[0] && sh[0].values) || [];',
+    '    var orphan = 0;',
+    '    for (var j = 0; j < vals5.length; j++) {',
+    '      var s = stylesMap[Number(vals5[j][0])];',
+    '      if (s) { if (vals5[j][1] && s.formats.indexOf(String(vals5[j][1])) < 0) s.formats.push(String(vals5[j][1])); }',
+    '      else orphan++;',
+    '    }',
+    '    var list = order.map(function (id) { return stylesMap[id]; });',
+    '    if (list.length || orphan) meta.styles = { list: list, orphanStylesheets: orphan };',
+    '  } catch (e) {}',
+    '  try {',
+    '    var res5 = db.exec("SELECT COUNT(*) FROM gpkgext_symbols");',
+    '    meta.symbolCount = Number((res5[0] && res5[0].values && res5[0].values[0] && res5[0].values[0][0]) || 0);',
+    '  } catch (e) {}',
+    '  try {',
+    '    var res6 = db.exec("SELECT COUNT(*) FROM gpkgext_fonts");',
+    '    meta.fontCount = Number((res6[0] && res6[0].values && res6[0].values[0] && res6[0].values[0][0]) || 0);',
+    '  } catch (e) {}',
+    // OGC 24-049 semantic-annotations(ドラフト): GeoDataClass 注釈と参照表
+    '  try {',
+    '    var res7 = db.exec("SELECT id, type, title, description, uri FROM gpkgext_semantic_annotations");',
+    '    var vals7 = (res7[0] && res7[0].values) || [];',
+    '    var annotations = {};',
+    '    for (var i = 0; i < vals7.length; i++) {',
+    '      annotations[Number(vals7[i][0])] = { id: Number(vals7[i][0]), type: vals7[i][1], title: vals7[i][2], description: vals7[i][3] || null, uri: vals7[i][4] || null };',
+    '    }',
+    '    if (Object.keys(annotations).length) meta.annotations = annotations;',
+    '    var res8 = db.exec("SELECT table_name, key_column_name, key_value, sa_id FROM gpkgext_sa_reference");',
+    '    var vals8 = (res8[0] && res8[0].values) || [];',
+    '    var arefs = [];',
+    '    for (var j = 0; j < vals8.length; j++) {',
+    '      arefs.push({ table: vals8[j][0], keyColumn: vals8[j][1], key: Number(vals8[j][2]), saId: Number(vals8[j][3]) });',
+    '    }',
+    '    if (arefs.length) meta.annotationRefs = arefs;',
+    '  } catch (e) {}',
+    '  return meta;',
+    '}',
+    'function dbMetaFor(msg) {',
+    '  var key = dbKey(msg);',
+    '  var p = metas.get(key);',
+    '  if (!p) {',
+    '    p = openDb(msg).then(readDbMeta);',
+    '    p.catch(function () { if (metas.get(key) === p) metas.delete(key); });',
+    '    metas.set(key, p);',
+    '  }',
+    '  return p;',
+    '}',
+    '',
+    'function isGeographicSrs(entry, srsId) {',
+    '  if (srsId === -1) return false;',
+    '  var def = String((entry && (entry.definition || entry.definition12)) || "");',
+    '  if (/^\\s*(GEOGCS|GEODCRS|GEOGCRS|GEOGRAPHIC)/i.test(def)) return true;',
+    '  if (def.replace(/^\\s+|\\s+$/g, "") && def.toLowerCase() !== "undefined") return false;',
+    '  return null;',
+    '}',
+    '',
+    'var warned = new Map();',
+    'function freshWarnings(key, warnings) {',
+    '  var seen = warned.get(key);',
+    '  if (!seen) { seen = new Set(); warned.set(key, seen); }',
+    '  return warnings.filter(function (w) {',
+    '    if (seen.has(w)) return false;',
+    '    seen.add(w);',
+    '    return true;',
+    '  });',
+    '}',
+    '',
+    'function resolveFeatureTable(db, table, meta) {',
     '  var tableName = table || null;',
     '  if (!tableName) {',
     '    var res = db.exec("SELECT table_name FROM gpkg_geometry_columns ORDER BY rowid LIMIT 1");',
-    '    tableName = res[0] && res[0].values && res[0].values[0] && res[0].values[0][0] || null;',
+    '    tableName = (res[0] && res[0].values && res[0].values[0] && res[0].values[0][0]) || null;',
     '  }',
     '  if (!tableName) throw new Error("feature table not found");',
-    '  var gres = db.exec("SELECT column_name FROM gpkg_geometry_columns WHERE table_name = " + quoteLit(tableName) + " LIMIT 1");',
-    '  return { tableName: tableName, geomCol: (gres[0] && gres[0].values && gres[0].values[0] && gres[0].values[0][0]) || "geom" };',
+    '  var gres = db.exec("SELECT column_name, srs_id FROM gpkg_geometry_columns WHERE table_name = " + quoteLit(tableName) + " LIMIT 1");',
+    '  var row = (gres[0] && gres[0].values && gres[0].values[0]) || null;',
+    '  var kind = (meta && meta.kinds && meta.kinds[tableName]) || (row ? "features" : "attributes");',
+    '  if (!row) {',
+    '    var isFeatures = kind === "features";',
+    '    return { tableName: tableName, geomCol: isFeatures ? "geom" : null, hasGeom: isFeatures,',
+    '      srsId: null, kind: kind, unregistered: true };',
+    '  }',
+    '  return { tableName: tableName, geomCol: row[0] || "geom", hasGeom: true,',
+    '    srsId: row[1] != null ? Number(row[1]) : null, kind: kind };',
+    '}',
+    '',
+    'function tableWarnings(meta, t, reprojMethod) {',
+    '  var warnings = [];',
+    '  if (t.unregistered && t.kind !== "features") {',
+    '    warnings.push("テーブル " + t.tableName + " は非空間(attributes)表です。地図には描画されません");',
+    '  }',
+    '  var srs = null;',
+    '  if (t.srsId != null) {',
+    '    var entry = meta && meta.srs ? (meta.srs[t.srsId] || null) : null;',
+    '    var geo = isGeographicSrs(entry, t.srsId);',
+    '    srs = { id: t.srsId, name: entry ? entry.name : null, org: entry ? entry.org : null, code: entry ? entry.code : null, geographic: geo, reprojected: reprojMethod || null };',
+    '    var label = entry ? ((entry.org || "EPSG") + ":" + entry.code + " (" + entry.name + ")") : ("srs_id=" + t.srsId);',
+    '    if (geo === false) {',
+    '      warnings.push(reprojMethod',
+    '        ? "座標系 " + label + " を WGS84(経緯度)へ再投影して表示します(" + reprojMethod + ")"',
+    '        : "座標系 " + label + " は経緯度系ではなく再投影も解決できませんでした。表示位置がずれます");',
+    '    } else if (t.srsId === -1 || t.srsId === 0) {',
+    '      warnings.push("座標系が未定義です(" + label + ")");',
+    '    }',
+    '  }',
+    '  if (meta && meta.tiles && meta.tiles.length) {',
+    '    warnings.push("タイル行列セット " + meta.tiles.join(", ") + " を含みます(タイル描画は未対応)");',
+    '  }',
+    '  if (meta && meta.styles && ((meta.styles.list && meta.styles.list.length) || meta.styles.orphanStylesheets)) {',
+    '    var parts = [];',
+    '    if (meta.styles.list && meta.styles.list.length) {',
+    '      var fmts = [];',
+    '      var styleNames = [];',
+    '      for (var i = 0; i < meta.styles.list.length; i++) {',
+    '        var st = meta.styles.list[i];',
+    '        styleNames.push(st.style || ("#" + st.id));',
+    '        for (var k = 0; k < st.formats.length; k++) { if (fmts.indexOf(st.formats[k]) < 0) fmts.push(st.formats[k]); }',
+    '      }',
+    '      parts.push("スタイル " + styleNames.join(", ") + (fmts.length ? "(形式: " + fmts.join("/") + ")" : ""));',
+    '    }',
+    '    if (meta.styles.orphanStylesheets) parts.push("地物表未紐付けのスタイルシート " + meta.styles.orphanStylesheets + " 件");',
+    '    warnings.push("Portrayal 拡張(gpkgext_styles)に" + parts.join("、") + "が登録されています(描画への適用はエンジン依存: MapLibre は GeoDataClass 紐付け時に mbstyle を自動適用)");',
+    '  }',
+    '  if (meta && meta.symbolCount) warnings.push("Portrayal 拡張のシンボル " + meta.symbolCount + " 件を含みます(画像適用は Portrayal 対応エンジンのみ)");',
+    '  if (meta && meta.fontCount) warnings.push("Portrayal 拡張のフォント " + meta.fontCount + " 件を含みます(フォント適用は Portrayal 対応エンジンのみ)");',
+    '  var names = [];',
+    '  var exts = (meta && meta.extensions) || [];',
+    '  for (var i = 0; i < exts.length; i++) {',
+    '    if (exts[i].name !== "gpkg_rtree_index" && exts[i].name !== "gpkg_schema" && !/^gpkgext_(sty|sym|font|semantic)/.test(exts[i].name) && names.indexOf(exts[i].name) < 0) names.push(exts[i].name);',
+    '  }',
+    '  if (names.length) warnings.push("未対応の拡張が登録されています: " + names.join(", "));',
+    '  return { warnings: warnings, srs: srs };',
+    '}',
+    '',
+    'function readColumnMeta(db, tableName) {',
+    '  try {',
+    '    var res = db.exec("SELECT column_name, title, description FROM gpkg_data_columns WHERE table_name = " + quoteLit(tableName));',
+    '    var vals = (res[0] && res[0].values) || [];',
+    '    var out = {};',
+    '    for (var i = 0; i < vals.length; i++) {',
+    '      if (vals[i][1] || vals[i][2]) out[vals[i][0]] = { title: vals[i][1] || null, description: vals[i][2] || null };',
+    '    }',
+    '    return Object.keys(out).length ? out : null;',
+    '  } catch (e) { return null; }',
+    '}',
+    '',
+    'function readStyleInfo(db, tableName, styleName) {',
+    '  try {',
+    '    var sres = db.exec("SELECT styleName, styleQML, styleSLD FROM layer_styles WHERE f_table_name = " + quoteLit(tableName) + " ORDER BY useAsDefault DESC");',
+    '    var rows = (sres[0] && sres[0].values) || [];',
+    '    if (!rows.length) return null;',
+    '    var styleNames = [];',
+    '    for (var n = 0; n < rows.length; n++) {',
+    '      if (typeof rows[n][0] === "string" && rows[n][0].trim()) styleNames.push(rows[n][0]);',
+    '    }',
+    '    var target = null, missing = null;',
+    '    if (styleName) {',
+    '      for (var k = 0; k < rows.length; k++) { if (rows[k][0] === styleName) { target = rows[k]; break; } }',
+    '      if (!target) missing = styleName;',
+    '    }',
+    '    if (!target) {',
+    '      for (var i = 0; i < rows.length; i++) {',
+    '        if (typeof rows[i][1] === "string" && rows[i][1].trim()) { target = rows[i]; break; }',
+    '      }',
+    '      if (!target) target = rows[0];',
+    '    }',
+    '    var qml = (typeof target[1] === "string" && target[1].trim()) ? target[1] : null;',
+    '    var sld = (typeof target[2] === "string" && target[2].trim()) ? target[2] : null;',
+    '    return { qml: qml, sld: qml ? null : sld, sldOnly: !qml && !!sld,',
+    '      styleName: (typeof target[0] === "string") ? target[0] : null,',
+    '      styleNames: styleNames, missing: missing };',
+    '  } catch (e) { return null; }',
     '}',
     '',
     'function buildFeatureSelect(o) {',
@@ -747,33 +1566,181 @@
     '',
     'function cmdLoad(msg) {',
     '  return openDb(msg).then(function (db) {',
-    '    var t = resolveFeatureTable(db, msg.table);',
-    '    var sql = buildFeatureSelect({ tableName: t.tableName, geomCol: t.geomCol, columns: msg.columns, where: msg.where, limit: msg.limit });',
-    '    var stmt = db.prepare(sql);',
-    '    var colNames = stmt.getColumnNames();',
-    '    var features = [];',
-    '    while (stmt.step()) {',
-    '      var row = stmt.get();',
-    '      var rec = {};',
-    '      colNames.forEach(function (c, i) { rec[c] = row[i]; });',
-    '      if (msg.bbox && !envelopeIntersects(gpkgGeometryEnvelope(rec[t.geomCol]), msg.bbox)) continue;',
-    '      var wkb = gpkgGeometryToWkb(rec[t.geomCol]);',
-    '      var geometry = wkb ? wkbToGeoJsonGeometry(wkb) : null;',
-    '      if (!geometry) continue;',
-    '      var properties = {};',
-    '      for (var i = 0; i < colNames.length; i++) { var c = colNames[i]; if (c !== t.geomCol) properties[c] = sanitize(rec[c]); }',
-    '      features.push({ type: "Feature", geometry: geometry, properties: properties });',
-    '    }',
-    '    stmt.free();',
-    '    var qml = null;',
-    '    if (msg.wantStyle) {',
+    '    return dbMetaFor(msg).then(function (meta) {',
+    '      var t = resolveFeatureTable(db, msg.table, meta);',
+    '      var xp = (t.srsId != null && t.srsId > 0) ? resolveTransform(msg.url, t.srsId, meta) : Promise.resolve(null);',
+    '      return xp.then(function (xform) {',
+    '        var tw = tableWarnings(meta, t, xform ? xform.method : null);',
+    '        var warnings = tw.warnings;',
+    '        var columnMeta = readColumnMeta(db, t.tableName);',
+    '        var styleInfo = readStyleInfo(db, t.tableName, msg.styleName || null);',
+    '        if (styleInfo && styleInfo.missing) {',
+    '          warnings.push("layer_styles に styleName \\"" + styleInfo.missing + "\\" がありません(登録: " + (styleInfo.styleNames.join(", ") || "なし") + ")。既定スタイルを適用します");',
+    '        }',
+    '        if (!t.hasGeom) {',
+    '          return { geojson: { type: "FeatureCollection", features: [] }, qml: null, total: 0,',
+    '            count: 0, kind: "attributes", srs: tw.srs, extensions: meta.extensions, columnMeta: columnMeta,',
+    '            styles: meta.styles || null,',
+    '            warnings: freshWarnings(msg.url + "|" + t.tableName, warnings) };',
+    '        }',
+    '        var canFilter = msg.bbox && (xform || !tw.srs || tw.srs.geographic !== false);',
+    '        var sql = buildFeatureSelect({ tableName: t.tableName, geomCol: t.geomCol, columns: msg.columns, where: msg.where, limit: msg.limit });',
+    '        var stmt = db.prepare(sql);',
+    '        var colNames = stmt.getColumnNames();',
+    '        var features = [];',
+    '        var dropped = 0;',
+    '        while (stmt.step()) {',
+    '          var row = stmt.get();',
+    '          var rec = {};',
+    '          colNames.forEach(function (c, i) { rec[c] = row[i]; });',
+    '          if (canFilter && !envelopeIntersects(transformEnvelope(gpkgGeometryEnvelope(rec[t.geomCol]), xform && xform.fn), msg.bbox)) continue;',
+    '          var wkb = gpkgGeometryToWkb(rec[t.geomCol]);',
+    '          var geometry = wkb ? wkbToGeoJsonGeometry(wkb) : null;',
+    '          if (!geometry) { dropped++; continue; }',
+    '          if (xform) transformGeoJsonGeometry(geometry, xform.fn);',
+    '          var properties = {};',
+    '          for (var i = 0; i < colNames.length; i++) { var c = colNames[i]; if (c !== t.geomCol) properties[c] = sanitize(rec[c]); }',
+    '          features.push({ type: "Feature", geometry: geometry, properties: properties });',
+    '        }',
+    '        stmt.free();',
+    '        if (dropped) warnings.push(dropped + " 件の地物ジオメトリをデコードできませんでした(未対応のジオメトリ型)");',
+    '        var total = null;',
+    '        if (msg.bbox && msg.where) {',
+    '          try {',
+    '            var cres = db.exec("SELECT COUNT(*) AS n FROM " + quoteIdent(t.tableName) + " WHERE (" + msg.where + ")");',
+    '            total = Number((cres[0] && cres[0].values && cres[0].values[0] && cres[0].values[0][0]) || 0);',
+    '          } catch (e) {}',
+    '        }',
+    '        var qml = msg.wantStyle && styleInfo ? styleInfo.qml : null;',
+    '        return { geojson: { type: "FeatureCollection", features: features }, qml: qml,',
+    '          sld: msg.wantStyle && styleInfo ? styleInfo.sld : null,',
+    '          styleName: styleInfo ? styleInfo.styleName : null,',
+    '          styleNames: styleInfo ? styleInfo.styleNames : null,',
+    '          total: total, count: features.length, kind: "features", srs: tw.srs,',
+    '          extensions: meta.extensions, columnMeta: columnMeta, styles: meta.styles || null, dropped: dropped,',
+    '          warnings: freshWarnings(msg.url + "|" + t.tableName, warnings) };',
+    '      });',
+    '    });',
+    '  });',
+    '}',
+    '',
+    'function cmdAttrs(msg) {',
+    '  return openDb(msg).then(function (db) {',
+    '    return dbMetaFor(msg).then(function (meta) {',
+    '      var t = resolveFeatureTable(db, msg.table, meta);',
+    '      var xp = (t.srsId != null && t.srsId > 0) ? resolveTransform(msg.url, t.srsId, meta) : Promise.resolve(null);',
+    '      return xp.then(function (xform) {',
+    '      var allCols = tableColumns(db, t.tableName);',
+    '      var attrCols = (Array.isArray(msg.columns) && msg.columns.length)',
+    '        ? msg.columns.filter(function (name) { return allCols.indexOf(name) >= 0; })',
+    '        : allCols.filter(function (name) { return name !== t.geomCol; });',
+    '      var predicates = [];',
+    '      if (msg.where) predicates.push("(" + msg.where + ")");',
+    '      var needle = String(msg.searchText || "").trim();',
+    '      if (needle && attrCols.length) {',
+    '        var escaped = needle.replace(/[\\\\%_]/g, function (m) { return "\\\\" + m; });',
+    '        var lit = quoteLit("%" + escaped + "%");',
+    '        predicates.push("(" + attrCols.map(function (name) { return "CAST(" + quoteIdent(name) + " AS TEXT) LIKE " + lit + " ESCAPE \'\\\\\'"; }).join(" OR ") + ")");',
+    '      }',
+    '      var where = predicates.length ? " WHERE " + predicates.join(" AND ") : "";',
+    '      var geomExpr = t.hasGeom',
+    '        ? (attrCols.length ? ", " + quoteIdent(t.geomCol) : quoteIdent(t.geomCol))',
+    '        : "";',
+    '      var stmt = db.prepare("SELECT " + (attrCols.map(quoteIdent).join(", ") || "*") + geomExpr + " FROM " + quoteIdent(t.tableName) + where);',
+    '      var rows = [];',
+    '      while (stmt.step()) {',
+    '        var row = stmt.get();',
+    '        var values = row.slice(0, attrCols.length).map(function (v) {',
+    '          var sv = sanitize(v);',
+    '          return sv == null ? "" : String(sv);',
+    '        });',
+    '        var geomValue = t.hasGeom ? row[attrCols.length] : null;',
+    '        var env = t.hasGeom ? gpkgGeometryEnvelope(geomValue) : null;',
+    '        var geometry = null;',
+    '        if (t.hasGeom && (!env || msg.wantGeom)) {',
+    '          var wkb = gpkgGeometryToWkb(geomValue);',
+    '          geometry = wkb ? wkbToGeoJsonGeometry(wkb) : null;',
+    '          if (geometry && xform) transformGeoJsonGeometry(geometry, xform.fn);',
+    '          if (!env && geometry) env = geoJsonGeometryEnvelope(geometry);',
+    '        }',
+    '        if (env && xform) env = transformEnvelope(env, xform.fn);',
+    '        var center = env ? { lat: (env.south + env.north) / 2, lng: (env.west + env.east) / 2 } : null;',
+    '        rows.push({ values: values, lat: center ? center.lat : null, lng: center ? center.lng : null, geometry: geometry });',
+    '      }',
+    '      stmt.free();',
+    '      var tw = tableWarnings(meta, t, xform ? xform.method : null);',
+    '      return { attributes: attrCols, rows: rows, columnMeta: readColumnMeta(db, t.tableName),',
+    '        warnings: freshWarnings(msg.url + "|" + t.tableName, tw.warnings) };',
+    '      });',
+    '    });',
+    '  });',
+    '}',
+    '',
+    'function u8ToBase64(u8) {',
+    '  if (!u8) return null;',
+    '  var bytes = u8 instanceof Uint8Array ? u8 : new Uint8Array(u8);',
+    '  var s = "";',
+    '  for (var i = 0; i < bytes.length; i += 0x8000) {',
+    '    s += String.fromCharCode.apply(null, Array.prototype.slice.call(bytes.subarray(i, i + 0x8000)));',
+    '  }',
+    '  return btoa(s);',
+    '}',
+    'function blobToTextOrBase64(v) {',
+    '  if (typeof v === "string") return { text: v, base64: null };',
+    '  if (!v) return { text: null, base64: null };',
+    '  var u8 = new Uint8Array(v);',
+    '  try {',
+    '    var t = new TextDecoder("utf-8", { fatal: true }).decode(u8);',
+    '    return { text: t, base64: null };',
+    '  } catch (e) { return { text: null, base64: u8ToBase64(u8) }; }',
+    '}',
+    '',
+    // OGC 24-050 Portrayal 拡張の内容物と 24-049 semantic-annotations を返す。
+    // module Worker の cmdStyle と同じ返却形式
+    'function cmdStyle(msg) {',
+    '  return openDb(msg).then(function (db) {',
+    '    return dbMetaFor(msg).then(function (meta) {',
+    '      var sheets = [];',
     '      try {',
-    '        var sres = db.exec("SELECT styleQML FROM layer_styles WHERE f_table_name = " + quoteLit(t.tableName) + " ORDER BY useAsDefault DESC");',
-    '        var v = sres[0] && sres[0].values && sres[0].values[0] && sres[0].values[0][0];',
-    '        if (typeof v === "string" && v.trim()) qml = v;',
+    '        var res = db.exec("SELECT id, style_id, format, stylesheet FROM gpkgext_stylesheets");',
+    '        var vals = (res[0] && res[0].values) || [];',
+    '        for (var i = 0; i < vals.length; i++) {',
+    '          var tb = blobToTextOrBase64(vals[i][3]);',
+    '          sheets.push({ id: Number(vals[i][0]), styleId: Number(vals[i][1]), format: String(vals[i][2] || ""), data: tb.text, dataBase64: tb.base64 });',
+    '        }',
     '      } catch (e) {}',
-    '    }',
-    '    return { geojson: { type: "FeatureCollection", features: features }, qml: qml, count: features.length };',
+    '      var symbols = [];',
+    '      try {',
+    '        var sres = db.exec("SELECT s.id, s.symbol, s.title, s.description, s.uri, i.id, i.content_id, i.width, i.height, i.offset_x, i.offset_y, i.pixel_ratio, c.format, c.uri, c.content FROM gpkgext_symbols s LEFT JOIN gpkgext_symbol_images i ON i.symbol_id = s.id LEFT JOIN gpkgext_symbol_content c ON c.id = i.content_id");',
+    '        var svals = (sres[0] && sres[0].values) || [];',
+    '        var byId = {};',
+    '        var order = [];',
+    '        for (var j = 0; j < svals.length; j++) {',
+    '          var v = svals[j];',
+    '          var sid = Number(v[0]);',
+    '          if (!byId[sid]) { byId[sid] = { id: sid, symbol: v[1], title: v[2] || null, description: v[3] || null, uri: v[4] || null, images: [] }; order.push(sid); }',
+    '          if (v[5] != null) {',
+    '            byId[sid].images.push({ id: Number(v[5]), contentId: Number(v[6]),',
+    '              width: v[7] != null ? v[7] : null, height: v[8] != null ? v[8] : null,',
+    '              offsetX: v[9] != null ? v[9] : null, offsetY: v[10] != null ? v[10] : null, pixelRatio: v[11] != null ? v[11] : null,',
+    '              format: v[12] || null, uri: v[13] || null, dataBase64: u8ToBase64(v[14]) });',
+    '          }',
+    '        }',
+    '        for (var m = 0; m < order.length; m++) symbols.push(byId[order[m]]);',
+    '      } catch (e) {}',
+    '      var fonts = [];',
+    '      try {',
+    '        var fres = db.exec("SELECT id, name, font, glyphs FROM gpkgext_fonts");',
+    '        var fvals = (fres[0] && fres[0].values) || [];',
+    '        for (var f = 0; f < fvals.length; f++) {',
+    '          fonts.push({ id: Number(fvals[f][0]), name: fvals[f][1] || null, fontBase64: u8ToBase64(fvals[f][2]), glyphsBase64: u8ToBase64(fvals[f][3]) });',
+    '        }',
+    '      } catch (e) {}',
+    '      var featureTables = Object.keys(meta.kinds || {}).filter(function (t) { return meta.kinds[t] === "features"; });',
+    '      return { styles: meta.styles || null, sheets: sheets, symbols: symbols, fonts: fonts,',
+    '        annotations: meta.annotations || {}, annotationRefs: meta.annotationRefs || [],',
+    '        featureTables: featureTables };',
+    '    });',
     '  });',
     '}',
     '',
@@ -783,7 +1750,14 @@
     '  var reqId = msg.reqId;',
     '  queue = queue.then(function () {',
     '    if (msg.cmd === "load") return cmdLoad(msg);',
-    '    if (msg.cmd === "reset") { dbs.clear(); return {}; }',
+    '    if (msg.cmd === "attrs") return cmdAttrs(msg);',
+    '    if (msg.cmd === "style") return cmdStyle(msg);',
+    '    if (msg.cmd === "warm") return loadSqlJs().then(function () { return {}; });',
+    '    if (msg.cmd === "reset") {',
+    '      dbs.forEach(function (p) { p.then(function (db) { try { db.close(); } catch (e) {} }, function () {}); });',
+    '      dbs.clear(); metas.clear(); warned.clear(); transforms.clear();',
+    '      return {};',
+    '    }',
     '    return {};',
     '  }).then(function (result) {',
     '    var out = { reqId: reqId };',
@@ -792,7 +1766,7 @@
     '  }, function (error) {',
     '    self.postMessage({ reqId: reqId, error: error instanceof Error ? error.message : String(error) });',
     '  });',
-    '};'
+    '};',
   ].join('\n');
 
   var gpkgWorker = null;
@@ -840,12 +1814,16 @@
   function loadGeoPackageAsGeoJson(item) {
     var msg = {
       url: item.url || (item.file && item.file.name) || 'file',
+      directUrl: item.directUrl || null,
       table: item.gpkgTable || null,
       where: item.where || null,
       limit: item.limit || null,
       columns: item.columns || null,
       bbox: item.bboxAuto ? item.bboxBounds : null,
-      wantStyle: false
+      // 埋め込みスタイル(layer_styles QML/SLD)は style= 外部指定が無い場合に取得。
+      // gpkgstyle= で任意スタイルを選択可(通常 gpkg: 経路と同規約)
+      wantStyle: !item.style || !!item.gpkgstyle,
+      styleName: item.gpkgstyle || null
     };
     var callP;
     if (item.file) {
@@ -855,8 +1833,20 @@
     } else {
       callP = gpkgWorkerCall('load', msg);
     }
-    return callP.then(function (res) { return res.geojson; });
+    return callP.then(function (res) {
+      // Worker 側で重複排除済みの未対応警告(非経緯度CRS/拡張/タイル行列等)を console へ
+      if (res && res.warnings && res.warnings.length) {
+        console.warn('GPKG (' + (item.title || item.url || '') + '): ' + res.warnings.join(' / '));
+      }
+      // qml/sld/メタを呼び出し側(vector-load.js)が拾えるよう item へ保持する
+      // (KascLoader.load の戻り値契約は FeatureCollection なのでサイドチャネル)
+      item._gpkgLoadRes = res;
+      return res.geojson;
+    });
   }
+  // 属性一覧・メタ問合せ等の attrs/load 拡張コマンドを呼べるよう公開する
+  // (module Worker 版 gpkg-worker.js との機能パリティ)
+  KascLoader.gpkgWorkerCall = gpkgWorkerCall;
 
   // ---------------------------------------------------------------
   // DuckDB-Wasm (CDN lazy load。kasugai app.js 移植)
@@ -1193,7 +2183,7 @@
   var ogrLoadedLayers = {};
   function ogrFileType(path) {
     var clean = String(path || '').split(/[?#]/)[0];
-    if (/\.(fgb|flatgeobuf)$/i.test(clean)) return 'flatgeobuf';
+    if (/\.(fgb|flatgeobuf|fgbz|zst)$/i.test(clean)) return 'flatgeobuf';
     if (/\.(parquet|geoparquet)$/i.test(clean)) return 'geoparquet';
     if (/\.gpkg$/i.test(clean)) return 'gpkg';
     if (/\.tsv$/i.test(clean)) return 'csv';
@@ -1214,7 +2204,7 @@
         if (ogrLoadedLayers[key]) return Promise.resolve(ogrLoadedLayers[key]);
         if (ogrLoadedLayers[leaf]) return Promise.resolve(ogrLoadedLayers[leaf]);
         var looksPath = /[/\]/.test(key) || /^[a-z][a-z0-9+.-]*:/i.test(key)
-          || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|csv|tsv)$/i.test(key);
+          || /\.(geojson|json|fgb|flatgeobuf|fgbz|zst|parquet|geoparquet|gpkg|csv|tsv)$/i.test(key);
         var candidates = looksPath ? [ref.name]
           : ['canvas_data/' + ref.name + '.geojson', 'canvas_data/' + ref.name + '.fgb',
              'canvas_data/' + ref.name + '.parquet', 'canvas_data/' + ref.name + '.gpkg',
@@ -1285,10 +2275,13 @@
     });
   };
 
-  // bbox=auto の対象か(duckdb:/gpkg:。sql: は :bbox を含む場合)
+  // bbox=auto の対象か(duckdb:/gpkg:/geoparquet:。sql: は :bbox を含む場合。
+  // geoparquet は covering/stats 無し・Range 非対応で全件へ落ちた
+  // _gpRanged===false を除く)
   KascLoader.isViewportQueryLayer = function (item) {
     if (!item) return false;
     if ((item.type === 'duckdb' || item.type === 'gpkg') && item.bboxAuto) return true;
+    if ((item.type === 'geoparquet' || item.type === 'parquet') && item.bboxAuto && item._gpRanged !== false) return true;
     if (item.type === 'sql' && /:bbox\b/i.test(item.query || '')) return true;
     return false;
   };

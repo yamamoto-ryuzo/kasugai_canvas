@@ -280,7 +280,8 @@ export function parseKasc(text) {
     if (["xyz", "tile", "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
          "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "wms", "wmts",
          "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis",
-         "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml",
+         "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq",
+         "wkt", "wkb", "igc", "polyline", "gml",
          "wfs", "shp", "shapefile", "image", "cms"].includes(type)) {
       doc.layers.push(item);
       continue;
@@ -932,7 +933,7 @@ export function hostedProjectsBaseUrl(id = "default") {
 const __kascZipStores = new Map();   // zipId -> Map<relPath, Blob>
 const __kascZipBlobUrls = new Map(); // "<id>/<path>" -> blob: URL（使い回し）
 const __kascZipBlobRev = new Map();  // blob: URL -> "kasczip://<id>/<path>"（相対解決用の論理URL復元）
-const JSZIP_URL = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm";
+const JSZIP_URL = "https://cdn.jsdelivr.net/npm/jszip@3.10.2/+esm";
 
 function __fnv(s) {
   let h = 0x811c9dc5 >>> 0;
@@ -2087,11 +2088,14 @@ export function parseDefaultStyleSpec(parts) {
 // CSS 色を {r,g,b(0-255),a(0-1)} へ正規化する(canvas fillStyle の正規化を借用)。
 // 解釈できない色は null
 let _colorProbe = null;
+// simplestyle は色値の # 省略を許す("3bb2d0")ため裸 hex には # を補う
+const _BARE_HEX_COLOR = /^[0-9a-f]{3}$|^[0-9a-f]{4}$|^[0-9a-f]{6}$|^[0-9a-f]{8}$/i;
 export function cssColorToRgba(css) {
   try {
     _colorProbe = _colorProbe || document.createElement("canvas").getContext("2d");
     _colorProbe.fillStyle = "#000";
-    _colorProbe.fillStyle = String(css);
+    const raw = String(css);
+    _colorProbe.fillStyle = _BARE_HEX_COLOR.test(raw.trim()) ? `#${raw.trim()}` : raw;
     const v = _colorProbe.fillStyle;
     let m = /^#([0-9a-f]{8})$/i.exec(v);
     if (m) { const n = parseInt(m[1], 16); return { r: (n >>> 24) & 255, g: (n >>> 16) & 255, b: (n >>> 8) & 255, a: (n & 255) / 255 }; }
@@ -2160,4 +2164,80 @@ export function resolveDefaultPolygonStyle(props, dflt, lineDflt, engine = {}) {
     strokeWidth: _num(p["stroke-width"]) ?? dflt?.strokeWidth ?? lineDflt?.width ?? engine.strokeWidth,
     strokeOpacity: _effOpacity(_num(p["stroke-opacity"]), p.stroke != null ? null : (dflt?.strokeOpacity ?? lineDflt?.opacity), stroke, engine.strokeOpacity ?? 1),
   };
+}
+
+// simplestyle-spec §3 marker-symbol: Maki icon ID / 1文字(a-z|0-9) /
+// URL 形式は画像 URL として受理(Cesium GeoJsonDataSource と同規則)
+export const MAKI_ICON_BASE = "https://cdn.jsdelivr.net/npm/@mapbox/maki@8.2.0/icons";
+export function markerSymbolSpec(value) {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  if (/^[a-zA-Z0-9]$/.test(v)) return { kind: "text", char: v.toUpperCase() };
+  if (/^https?:\/\//i.test(v) || v.includes("/")) return { kind: "url", url: v };
+  return { kind: "maki", id: v, url: `${MAKI_ICON_BASE}/${v}.svg` };
+}
+
+// marker-symbol → DOM バッジ HTML(Leaflet divIcon 等)。marker-color の丸に
+// 白文字 or 白アイコンを重ねた simplestyle 近似。size はバッジ直径(px)
+export function markerSymbolDivHtml(sym, color, size = 24) {
+  if (!sym) return "";
+  const c = color || "#555555";
+  const base = `width:${size}px;height:${size}px;border-radius:50%;` +
+    `background:${c};display:flex;align-items:center;justify-content:center;` +
+    `box-shadow:0 0 0 1px rgba(255,255,255,0.9),0 1px 3px rgba(0,0,0,0.35);`;
+  if (sym.kind === "text") {
+    return `<div style="${base}"><span style="color:#fff;font:bold ${Math.round(size * 0.55)}px/1 sans-serif;">${sym.char}</span></div>`;
+  }
+  const img = Math.round(size * 0.62);
+  return `<div style="${base}"><img src="${sym.url}" width="${img}" height="${img}" style="filter:invert(1);pointer-events:none;" alt=""/></div>`;
+}
+
+// KML の <color>(aabbggrr)→ CSS #rrggbbaa。togeojson は KML の色を
+// デコードせず透過するため、icon-color はこの変換が必要。css 形式ならそのまま返す
+export function kmlColorToCss(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const h = s.replace(/^#/, "");
+  if (/^[0-9a-f]{8}$/i.test(h)) {
+    return `#${h.slice(6, 8)}${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`;
+  }
+  if (/^[0-9a-f]{6}$/i.test(h)) return `#${h}ff`;
+  return s.startsWith("#") || /^[a-z]/i.test(s) ? s : null;
+}
+
+// @tmcw/togeojson(KML) 方言の icon-* properties → 画像アイコン指定へ解釈する。
+// marker-symbol 系(バッジ円+白抜き)とは別系統で、KML の pushpin 等をそのまま
+// 画像描画するための仕様。offset は KML hotSpot(左上原点の割合 or px)を
+// 左上原点の割合へ正規化して返す。該当プロパティが無ければ null
+export function togeojsonIconSpec(props) {
+  const p = props || {};
+  const url = typeof p.icon === "string" && p.icon.trim() ? p.icon.trim() : null;
+  if (!url) return null;
+  const n = v => { const x = Number(v); return Number.isFinite(x) ? x : null; };
+  let anchor = null;
+  const off = p["icon-offset"];
+  if (Array.isArray(off) && off.length >= 2) {
+    const x = n(off[0]), y = n(off[1]);
+    if (x != null && y != null) {
+      // KML hotSpot は既定 fraction(左下原点)。px 単位(32px基準)にも寛容に対応
+      const fx = Math.abs(x) <= 1 ? x : x / 32;
+      const fy = Math.abs(y) <= 1 ? y : y / 32;
+      anchor = [Math.max(0, Math.min(1, fx)), Math.max(0, Math.min(1, 1 - fy))]; // →左上原点
+    }
+  }
+  return {
+    url,
+    scale: n(p["icon-scale"]) ?? 1,
+    opacity: n(p["icon-opacity"]) != null ? Math.max(0, Math.min(1, n(p["icon-opacity"]))) : 1,
+    heading: n(p.heading) ?? 0,       // KML: 北基準・時計回り deg
+    color: kmlColorToCss(p["icon-color"]),
+    anchor,                           // 左上原点の割合 [x,y]、なければ中央
+  };
+}
+
+// 地物 properties から simplestyle の title/description を取り出す。
+// description は HTML を含みうるため表示側で sanitizeAttributionFragment を通す
+export function featurePopupMeta(props) {
+  const p = props || {};
+  return { title: p.title ?? null, description: p.description ?? null };
 }

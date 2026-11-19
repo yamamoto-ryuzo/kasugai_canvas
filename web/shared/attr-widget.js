@@ -14,6 +14,7 @@
 import { computeGroupStats } from "./attr-stats.js";
 import { rowsToXlsx, geometryToWKT } from "./export-formats.js";
 import { filterGeoJsonByWhere } from "./where-eval.js";
+import { sanitizeAttributionFragment, featurePopupMeta } from "./kasc.js";
 import { t } from "./i18n.js";
 
 const LABELS = {
@@ -276,7 +277,28 @@ export function renderAttrContent(el, records, opts = {}) {
     const labelEl = document.createElement("span");
     labelEl.textContent = label;
     header.append(marker, labelEl);
+    // simplestyle §3: 地物 title=ポップアップ見出し・description=本文(HTML可)。
+    // 属性行としても残しつつ、見出しの直下へ意味付きブロックとしても表示する
+    const fpMeta = featurePopupMeta(rec.feature?.properties
+      ?? (rec.entries ? Object.fromEntries(rec.entries) : null));
     const table = buildAttrTable(rec.entries);
+    // title/description/descriptionブロックも開閉へ含めるため body ラッパ化
+    const body = document.createElement("div");
+    if (fpMeta.title != null && fpMeta.title !== "") {
+      const tEl = document.createElement("div");
+      tEl.className = "attr-feature-ptitle";
+      tEl.style.cssText = "font-weight:700;font-size:13px;margin:2px 0 2px;color:#1d2b36;";
+      tEl.textContent = String(fpMeta.title);
+      body.append(tEl);
+    }
+    if (fpMeta.description != null && fpMeta.description !== "") {
+      const dEl = document.createElement("div");
+      dEl.className = "attr-feature-desc";
+      dEl.style.cssText = "font-size:12px;margin:2px 0 4px;color:#33424e;";
+      dEl.append(sanitizeAttributionFragment(String(fpMeta.description)));
+      body.append(dEl);
+    }
+    body.append(table);
     // 属性行クリックでその地物へ移動(属性テーブルの行クリックと同じ挙動)
     if (rec.flyable && opts.onRecordClick) {
       table.querySelectorAll("tr").forEach(tr => {
@@ -286,20 +308,20 @@ export function renderAttrContent(el, records, opts = {}) {
       });
     }
     const setOpen = open => {
-      table.hidden = !open;
+      body.hidden = !open;
       marker.textContent = open ? "▾" : "▸";
       header.setAttribute("aria-expanded", String(open));
     };
     if (multiple) {
       header.addEventListener("click", () => {
-        const open = table.hidden;
+        const open = body.hidden;
         setOpen(open);
         // 展開した地物のレイヤーを属性一覧ボタンの対象にする
         if (open && rec.layerId != null) el.dataset.layerId = String(rec.layerId);
       });
     }
     setOpen(!multiple);
-    block.append(header, table);
+    block.append(header, body);
     el.append(block);
   });
 }

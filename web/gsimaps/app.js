@@ -21,7 +21,7 @@ import {
   applyPanelTitle, loadKascBookmarks, downloadKascCamLines, downloadQgisBookmarksXml,
   layerAttribution, loadKascInfoContent,
   resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle,
-  defaultPointRadius, buildWmsTileTemplate, buildWmtsTileTemplate,
+  defaultPointRadius, markerSymbolSpec, markerSymbolDivHtml, togeojsonIconSpec, buildWmsTileTemplate, buildWmtsTileTemplate,
   kascScaleZoomRange, setAllLayerGroupsExpanded,
 } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
@@ -123,7 +123,7 @@ const VECTOR_TYPES = new Set([
   "geojson", "layer", "flatgeobuf", "fgb", "geoparquet", "parquet",
   "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql",
   "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis",
-  "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile",
+  "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile",
 ]);
 const TILE_TYPES = new Set(["xyz", "tile", "wms", "wmts"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
@@ -708,6 +708,26 @@ function styledFeature(item, feature) {
   const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
   if (/Point/.test(gt)) {
     const s = resolveDefaultPointStyle(props, ds.point, { color: "#2c5ea8", size: 0, opacity: 1 });
+    // togeojson(KML) icon-* → 上流 sakuzu の _iconUrl 経路(KML scale1=32px基準)
+    const tg = togeojsonIconSpec(props);
+    if (tg) {
+      const sz = Math.max(Math.round(32 * tg.scale), 4);
+      props._iconUrl = tg.url;
+      props._iconSize = [sz, sz];
+      props._iconAnchor = tg.anchor ? [tg.anchor[0] * sz, tg.anchor[1] * sz] : [sz / 2, sz / 2];
+      return { ...feature, properties: props };
+    }
+    // simplestyle marker-symbol → sakuzu の DivIcon 経路(_html)へ近似描画
+    const sym = markerSymbolSpec(s.symbol);
+    if (sym) {
+      const d = Math.max(Math.round((s.size || 24) * 0.55), 20);
+      props._markerType = "DivIcon";
+      props._html = markerSymbolDivHtml(sym, s.color, d);
+      props._iconSize = [d, d];
+      props._iconAnchor = [d / 2, d / 2];
+      props._className = "kasc-ssym";
+      return { ...feature, properties: props };
+    }
     props._markerType = "CircleMarker";
     props._radius = s.size ? defaultPointRadius(s.size) : 5;
     props._color = props.stroke ?? "#ffffff";
@@ -914,7 +934,7 @@ async function reloadEntryData(entry) {
   const wasVisible = effectiveVisible(entry);
   removeSakuzuItem(entry.sakuzu);
   entry.sakuzu = null;
-  const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds(), vectorHooks);
+  const result = await loadVectorItem(entry.item, lastBaseUrl, viewRanges(), vectorHooks);
   entry.item._geojson = result.geojson;
   entry.item._env = geojsonExtent(result.geojson) || null;
   if (globeMode) {
@@ -974,6 +994,17 @@ function viewBounds() {
   if (!gmap) return null;
   const b = gmap.getBounds();
   return { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() };
+}
+
+// loadVectorItem の bounds 形式 {ranges:[{west,east}],south,north} へ変換する
+// (viewBounds() 自体は geoTools/minimap の {west,south,east,north} 規約を維持)
+function viewRanges() {
+  const b = viewBounds();
+  if (!b) return null;
+  const ranges = b.west <= b.east
+    ? [{ west: b.west, east: b.east }]
+    : [{ west: b.west, east: 180 }, { west: -180, east: b.east }];
+  return { ranges, south: b.south, north: b.north };
 }
 
 let viewportReloadTimer = null;
@@ -2663,7 +2694,7 @@ window.kasugaiApi = createPlayerApi({
   },
   unmountEntry,
   reloadEntryData: async entry => {
-    const result = await loadVectorItem(entry.item, lastBaseUrl, viewBounds(), vectorHooks);
+    const result = await loadVectorItem(entry.item, lastBaseUrl, viewRanges(), vectorHooks);
     entry.item._geojson = result.geojson;
     entry.item._env = geojsonExtent(result.geojson) || null;
     removeSakuzuItem(entry.sakuzu);

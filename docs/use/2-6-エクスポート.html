@@ -18,7 +18,7 @@
 
       <h2>使い方</h2>
       <h3>📤 エクスポート</h3>
-      <p>「エクスポート」でベクターレイヤを選び、形式を指定してダウンロードします（クエリ系=bbox=auto 等は読み込み済み範囲のみになるため <code>*</code> 印で明示）。形式は <strong>GeoJSON / CSV / TSV / KML / FlatGeobuf / Shapefile</strong>（.zip 同梱）。CSV・TSV はジオメトリを <code>WKT</code> 列として出力する QGIS の CSV エクスポート（GEOMETRY=AS_WKT）互換で、UTF-8 BOM 付き・3D 座標は <code>Z</code> 修飾付きです。Shapefile はジオメトリ種別ごとに分割した .shp/.shx/.dbf/.prj/.cpg を ZIP にまとめます。</p>
+      <p>「エクスポート」でベクターレイヤを選び、形式を指定してダウンロードします（クエリ系=bbox=auto 等は読み込み済み範囲のみになるため <code>*</code> 印で明示）。形式は <strong>GeoJSON / CSV / TSV / KML / FlatGeobuf / Shapefile</strong>（.zip 同梱）。CSV・TSV はジオメトリを <code>WKT</code> 列として出力する QGIS の CSV エクスポート（GEOMETRY=AS_WKT）互換で、UTF-8 BOM 付き・3D 座標は <code>Z</code> 修飾付きです。Shapefile はジオメトリ種別ごとに分割した .shp/.shx/.dbf/.prj/.cpg を ZIP にまとめます。FlatGeobuf は地物を Hilbert ソートし packed R-tree 空間インデックス付きで書き出すため、出力ファイルを <code>flatgeobuf:</code> 行（<code>bbox=auto</code> 既定 ON）でそのまま範囲読みに再利用できます。</p>
       <p><a href="1-4-属性.html">属性テーブル</a> にも CSV / TSV ボタンがあり、検索フィルタ・ソート適用後の全行を UTF-8 BOM 付き・代表点 lon/lat 列付きで出力します。</p>
 
       <h3>対応エンジン</h3>

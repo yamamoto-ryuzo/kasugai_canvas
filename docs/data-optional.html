@@ -158,6 +158,10 @@
           <h3>🌈 GeoTIFF / COG <span class="badge" style="background:#fd7e14;">対応: Cesium・OpenLayers</span></h3>
           <p><code>geotiff:</code> / <code>cog:</code> / <code>tiff:</code>（または <code>.tif/.tiff</code> ファイルの直接読み込み）でブラウザ内デコードしてラスタ表示。<strong>ドローン測量等の GeoTIFF/COG オルソ画像</strong>はこの経路（タイル化済みオルソは標準の <code>xyz:</code>、単一画像は <code>image:</code> を推奨）。Cesium は geotiff.js 遅延ロードの独自経路でタイルモードと地物ドレープモードに対応。<strong>OpenLayers は <code>layer/WebGLTile</code>+<code>source/GeoTIFF</code> のネイティブ経路</strong>（ライブラリ内蔵 geotiff.js が COG の Range 読み出し・オーバービュー・任意座標系のリプロジェクトを処理。<code>bands=</code>/<code>nodata=</code>/<code>opacity=</code> 対応）。MapLibre・Leaflet は未対応</p>
         </div>
+        <div class="feature-card">
+          <h3>📦 FlatGeobuf（<code>flatgeobuf:</code>/<code>fgb:</code>） <span class="badge" style="background:#fd7e14;">GeoJSON 正規化・全エンジン</span></h3>
+          <p>空間インデックス+HTTP Range で<strong>表示範囲の地物だけ読むクエリ系</strong>（<code>bbox=auto</code> 既定 ON・カメラ移動で再クエリ。<code>bbox=off</code> で全件読み込み系）。索引なし・Range 非対応サーバーは全件へ自動フォールバック。<strong>seekable Zstandard 圧縮（<code>.fgb.zst</code>/<code>.fgbz</code>）も範囲読みのまま対応</strong>。<code>proxy=on</code>（ローカルサーバーの /api/fetch 経由・Range 転送で CORS 回避）・<code>nocache=on</code>（Range バッファ無効化・更新されるリモート FGB 向け）・<code>key=</code>（Bearer 認証）・<code>where=</code>（クライアント評価）に対応。レイヤー一覧の <strong>FGB バッジ</strong>（Cesium）でヘッダメタ（件数・索引有無・CRS・列定義）を表示し、<code>listLayers</code> API の <code>fgb</code> フィールドからも参照できる（未ロード行はヘッダのみ Range 取得して先に表示）。エクスポート（レイヤー → .fgb）も可能で、出力には地物を Hilbert ソートした packed R-tree の<strong>空間インデックスを自前で付与</strong>する（ライブラリの serialize が索引を書けないため spec 準拠で実装）。書き出した FGB はそのまま <code>flatgeobuf:</code> + <code>bbox=auto</code> の範囲読みに対応する</p>
+        </div>
       </div>
 
       <h2>3D・エンジン別形式の一覧</h2>

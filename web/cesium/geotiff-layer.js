@@ -18,8 +18,8 @@ export function isGeoTiffType(type) {
 
 // ---- geotiff.js / proj4 の遅延ロード -------------------------------------
 
-const GEOTIFF_ESM = "https://cdn.jsdelivr.net/npm/geotiff@2.1.3/+esm";
-const PROJ4_URL = "https://cdn.jsdelivr.net/npm/proj4@2.15.0/dist/proj4-src.js";
+const GEOTIFF_ESM = "https://cdn.jsdelivr.net/npm/geotiff@3.0.5/+esm";
+const PROJ4_URL = "https://cdn.jsdelivr.net/npm/proj4@2.23.0/dist/proj4-src.js";
 
 let _geoTiffLibPromise = null;
 function loadGeoTiffLib() {

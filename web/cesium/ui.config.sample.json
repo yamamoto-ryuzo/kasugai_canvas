@@ -5,6 +5,8 @@
   // このファイルを `ui.config.json` にリネームして index.html と
   // 同じフォルダに置くと有効になります(エンジンごとに配置)。
   // // ・/* */ コメント記法が使えます。
+  // なお管理画面の「ブラウザに保存」による localStorage 設定は
+  // このファイルより優先して適用されます(CDN でも修正可)。
   // ================================================================
 
   // ---- hide: 機能の非表示 ----
@@ -22,6 +24,7 @@
   // 管理内サブタブ:         managesub:gemini managesub:datasource
   //                        managesub:plugin managesub:ai-install 等
   // 固定名:                chat(AIチャット) portal(ポータル) engines(エンジン切替)
+  // エンジン切替個別:       engine:navara 等(engine:<名> でバー内のそのリンクだけ隠す)
   // 要素id/CSSセレクタ:    time-bar tools-dock share-copy screenshot-button
   //                        manage-open help-open project-select
   //                        "#search-provider" ".control-panel" 等

@@ -6,7 +6,13 @@
 // - GeoJSON → Shapefile（.shp/.shx/.dbf/.prj/.cpg を非圧縮 ZIP に同梱。
 //   ジオメトリ種別ごとにファイル分割、Z 座標を含む場合は Z 形状として出力）
 
-const FGB_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson.js/+esm";
+// serialize 合成用の深部モジュール(上流 geojson.serialize は features[0] のみで
+// スキーマ推定するため、全地物の属性和集合で構築する自前合成に置き換える)
+const FGB_GENFC_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/generic/featurecollection.js/+esm";
+const FGB_GENFEAT_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/generic/feature.js/+esm";
+const FGB_GENHDR_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/generic/header.js/+esm";
+const FGB_GJGEOM_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/geojson/geometry.js/+esm";
+const FGB_CONST_URL = "https://cdn.jsdelivr.net/npm/flatgeobuf@4.6.1/lib/mjs/constants.js/+esm";
 const te = new TextEncoder();
 const td = new TextDecoder();
 
@@ -114,10 +120,202 @@ export function toKml(fc, docName = "layer") {
 }
 
 // ---------- FlatGeobuf（動的 import・未読み込み時のみネットワーク取得） ----------
-export async function toFlatGeobuf(fc) {
-  const { serialize } = await import(FGB_URL);
+// 第2引数 crsCode=4326: GeoJSON 正規化済みのため座標系は常に WGS84。
+// ライブラリの serialize は indexNodeSize=0 固定で索引を書けない(4.6.1 仕様)ため、
+// FGB 仕様の packed Hilbert R-tree を自前生成して挿入する:
+//   1) 地物を bbox 中心の Hilbert 値でソート(索引の局所性要件)
+//   2) serialize → ヘッダ flatbuffer の index_node_size(field id 9)を vtable 経由でパッチ
+//   3) ヘッダと地物列の間に索引を挿入
+// ノード配置はルートレベルが先頭・葉が末尾(lib/mjs/packedrtree.js generateLevelBounds と同一)。
+// NodeItem=40B(minX/minY/maxX/maxY f64 + offset u64)、葉 offset=地物セクション先頭からの
+// バイト、非葉 offset=最初の子ノード番号
+const FGB_NODE_SIZE = 16;
+const FGB_NODE_BYTES = 40;
+
+function fgbCoordExtent(coords, e) {
+  if (!Array.isArray(coords)) return;
+  if (typeof coords[0] === "number") {
+    if (coords[0] < e[0]) e[0] = coords[0];
+    if (coords[1] < e[1]) e[1] = coords[1];
+    if (coords[0] > e[2]) e[2] = coords[0];
+    if (coords[1] > e[3]) e[3] = coords[1];
+    return;
+  }
+  for (const c of coords) fgbCoordExtent(c, e);
+}
+
+function fgbGeomBbox(g, e) {
+  if (!g) return;
+  if (g.type === "GeometryCollection") {
+    for (const k of g.geometries || []) fgbGeomBbox(k, e);
+  } else {
+    fgbCoordExtent(g.coordinates, e);
+  }
+}
+
+function fgbFeatureBbox(f) {
+  const e = [Infinity, Infinity, -Infinity, -Infinity];
+  fgbGeomBbox(f.geometry, e);
+  return Number.isFinite(e[0]) ? e : null;
+}
+
+// 16bit Hilbert 曲線(xy2d)。索引の品質(空間局所性)のためのソートキーで、
+// リーダーはこの値自体を参照しない
+function fgbHilbert(x, y) {
+  let d = 0;
+  for (let s = 0x8000; s > 0; s >>>= 1) {
+    const rx = (x & s) !== 0 ? 1 : 0;
+    const ry = (y & s) !== 0 ? 1 : 0;
+    d += s * s * ((3 * rx) ^ ry);
+    if (ry === 0) {
+      if (rx === 1) { x = 0xFFFF - x; y = 0xFFFF - y; }
+      const t = x; x = y; y = t;
+    }
+  }
+  return d >>> 0;
+}
+
+// ヘッダ flatbuffer の index_node_size(field id 9)を vtable 経由で書き換える。
+// buildHeader が addIndexNodeSize(0) を明示書込みしているためフィールドスロットは必ず存在する
+function fgbPatchIndexNodeSize(dv, fbStart) {
+  const FIELD_ID = 9;
+  const root = fbStart + dv.getUint32(fbStart, true);
+  const vtable = root - dv.getInt32(root, true);
+  if (dv.getUint16(vtable, true) < 4 + (FIELD_ID + 1) * 2) throw new Error("vtable 不正");
+  const foff = dv.getUint16(vtable + 4 + FIELD_ID * 2, true);
+  if (!foff) throw new Error("index_node_size スロットなし");
+  dv.setUint16(root + foff, FGB_NODE_SIZE, true);
+}
+
+// serialize 出力(magic+ヘッダ+地物列)へ索引を挿入した完成バイト列を返す
+function fgbAddSpatialIndex(bytes, bboxes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const headEnd = 12 + dv.getUint32(8, true); // magic(8) + size-prefix(4) + header
+  fgbPatchIndexNodeSize(dv, 12);
+  // 各地物のセクション先頭からのオフセット(size-prefix 走査)
+  const offsets = [];
+  for (let pos = headEnd; pos < bytes.length && offsets.length < bboxes.length;) {
+    offsets.push(pos - headEnd);
+    pos += 4 + dv.getUint32(pos, true);
+  }
+  if (offsets.length !== bboxes.length) throw new Error("地物列の走査が一致しません");
+  // レベル境界(generateLevelBounds と同一: ルート先頭・葉末尾)
+  const levelNumNodes = [bboxes.length];
+  let numNodes = bboxes.length, n = bboxes.length;
+  do { n = Math.ceil(n / FGB_NODE_SIZE); numNodes += n; levelNumNodes.push(n); } while (n !== 1);
+  const bounds = [];
+  for (let off = numNodes, i = 0; i < levelNumNodes.length; i++) {
+    bounds.push([off - levelNumNodes[i], off]);
+    off -= levelNumNodes[i];
+  }
+  const index = new DataView(new ArrayBuffer(numNodes * FGB_NODE_BYTES));
+  const writeNode = (idx, b, offset) => {
+    const p = idx * FGB_NODE_BYTES;
+    index.setFloat64(p, b[0], true);
+    index.setFloat64(p + 8, b[1], true);
+    index.setFloat64(p + 16, b[2], true);
+    index.setFloat64(p + 24, b[3], true);
+    index.setBigUint64(p + 32, BigInt(offset), true);
+  };
+  const [leafStart] = bounds[0];
+  bboxes.forEach((b, i) => writeNode(leafStart + i, b, offsets[i]));
+  for (let l = 1; l < bounds.length; l++) {
+    const [p0, p1] = bounds[l];
+    const [c0, c1] = bounds[l - 1];
+    for (let p = p0; p < p1; p++) {
+      const s = c0 + (p - p0) * FGB_NODE_SIZE;
+      const e = Math.min(s + FGB_NODE_SIZE, c1);
+      const u = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let k = s; k < e; k++) {
+        const q = k * FGB_NODE_BYTES;
+        u[0] = Math.min(u[0], index.getFloat64(q, true));
+        u[1] = Math.min(u[1], index.getFloat64(q + 8, true));
+        u[2] = Math.max(u[2], index.getFloat64(q + 16, true));
+        u[3] = Math.max(u[3], index.getFloat64(q + 24, true));
+      }
+      writeNode(p, u, s);
+    }
+  }
+  const out = new Uint8Array(bytes.length + index.byteLength);
+  out.set(bytes.subarray(0, headEnd), 0);
+  out.set(new Uint8Array(index.buffer), headEnd);
+  out.set(bytes.subarray(headEnd), headEnd + index.byteLength);
+  return out;
+}
+
+// geojson.serialize 相当の合成。上流は features[0] のみで列スキーマを推定するため
+// 後続地物の属性が捨てられる(Hilbert ソートで先頭が入れ替わると顕在化)欠陥がある。
+// ここでは全地物の属性和集合(キーごと最初の非 null 値で型推定)でスキーマを構築し、
+// 各地物は欠損キーを null で埋めてから buildFeature する(buildFeature は
+// `value === null` のみスキップで、undefined だと壊れた値を書き込むため)
+async function fgbSerialize(fc, crsCode = 4326) {
+  const [genfc, genfeat, genhdr, gjgeom, consts] = await Promise.all([
+    import(FGB_GENFC_URL), import(FGB_GENFEAT_URL), import(FGB_GENHDR_URL),
+    import(FGB_GJGEOM_URL), import(FGB_CONST_URL)]);
+  const features = fc.features || [];
+  // キーごと最初の非 null 値を代表値とする(キー間で型が衝突した場合は最初に現れた型)
+  const probe = {};
+  for (const f of features) {
+    const p = f?.properties;
+    if (!p) continue;
+    for (const k of Object.keys(p)) {
+      if (k === "geometry" || k in probe) continue;
+      if (p[k] !== null && p[k] !== undefined) probe[k] = p[k];
+    }
+  }
+  const keys = Object.keys(probe);
+  const headerMeta = {
+    geometryType: genhdr.inferGeometryType(features),
+    columns: keys.length ? keys.map(k => genfc.mapColumn(probe, k)) : null,
+    envelope: null,
+    featuresCount: features.length,
+    indexNodeSize: 0,
+    crs: null,
+    title: null,
+    description: null,
+    metadata: null,
+  };
+  const header = genfc.buildHeader(headerMeta, crsCode);
+  const parts = features.map(f => {
+    const props = { ...(f.properties || {}) };
+    for (const k of keys) if (props[k] === undefined) props[k] = null;
+    return genfeat.buildFeature(
+      f.geometry.type === "GeometryCollection" ? gjgeom.parseGC(f.geometry) : gjgeom.parseGeometry(f.geometry),
+      props, headerMeta);
+  });
+  const total = consts.magicbytes.length + header.length + parts.reduce((s, b) => s + b.length, 0);
+  const uint8 = new Uint8Array(total);
+  uint8.set(consts.magicbytes, 0);
+  uint8.set(header, consts.magicbytes.length);
+  let offset = consts.magicbytes.length + header.length;
+  for (const b of parts) { uint8.set(b, offset); offset += b.length; }
+  return uint8;
+}
+
+export async function toFlatGeobuf(fc, { index = true } = {}) {
   const features = (fc.features || []).filter(f => f && f.geometry);
-  return serialize({ type: "FeatureCollection", features });
+  const bboxes = features.map(fgbFeatureBbox);
+  if (index && features.length && bboxes.every(Boolean)) {
+    // bbox 中心を全体エクステントで 0..65535 に正規化して Hilbert ソート
+    const ex = bboxes.reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]),
+      Math.max(a[2], b[2]), Math.max(a[3], b[3])]);
+    const w = ex[2] - ex[0] || 1, h = ex[3] - ex[1] || 1;
+    const order = bboxes.map((b, i) => ({
+      i,
+      h: fgbHilbert(
+        Math.min(Math.max(Math.round(((b[0] + b[2]) / 2 - ex[0]) / w * 65535), 0), 65535),
+        Math.min(Math.max(Math.round(((b[1] + b[3]) / 2 - ex[1]) / h * 65535), 0), 65535)),
+    })).sort((a, b) => a.h - b.h || a.i - b.i);
+    const bytes = await fgbSerialize({ type: "FeatureCollection",
+      features: order.map(o => features[o.i]) });
+    try {
+      return fgbAddSpatialIndex(bytes, order.map(o => bboxes[o.i]));
+    } catch (e) {
+      console.warn("flatgeobuf 空間インデックス付与に失敗。索引なしで出力します", e);
+      return bytes;
+    }
+  }
+  return fgbSerialize({ type: "FeatureCollection", features });
 }
 
 // ---------- Shapefile（.shp/.shx/.dbf/.prj/.cpg → 非圧縮 ZIP） ----------

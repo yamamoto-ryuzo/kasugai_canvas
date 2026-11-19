@@ -18,14 +18,14 @@ import GeoTIFFSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/GeoTIF
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import MVTFormat from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/MVT.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, markerSymbolSpec, togeojsonIconSpec, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
 import { kascTimeSpec, collectTimeValues, featureInTime, buildKascTimeControl } from "../shared/kasc-time.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
-import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { loadVectorItem, isViewportQueryItem, probeQmlSidecar, compileEmbeddedStyle } from "../shared/vector-load.js";
 import { loadPmtiles, mvtStyle } from "../shared/mvt.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
@@ -45,7 +45,7 @@ import { formatLatLng } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
-import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
+import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch, parseDeckTile3dOpts, ensureI3sLoader, deckWantsI3s } from "../shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
 import Style from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Style.js";
 import Fill from "https://cdn.jsdelivr.net/npm/ol@10.11.0/style/Fill.js";
@@ -70,7 +70,7 @@ import { createStringXY } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/coordina
 await initI18n();
 applyI18n();
 
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
 // parseKasc では doc.unsupported へ振り分けられるが OL 側で描画する行タイプ
@@ -271,7 +271,7 @@ function getViewBounds() {
 // deck.Deck を #map 上のオーバーレイキャンバスとして viewState を手動同期する
 // （OL は2Dビューのため真俯瞰の 2.5D 表示。キャンバス単位のため全 OL レイヤより
 // 手前に1枚で描かれ、OL レイヤとの相互挿入はしない）
-const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.0/dist.min.js";
+const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.1/dist.min.js";
 let deckLoadPromise = null;
 function loadDeck() {
   if (window.deck) return Promise.resolve(window.deck);
@@ -372,8 +372,15 @@ function syncDeckLayers() {
           if (!isGoogle3dTilesUrl(def.url)) groundDeckTileset(tileset, def.item.opts);
         } catch (_) {}
       },
+      // タイル単位の取得/デコード失敗を可視化（黙って落ちると原因追跡不能のため）
+      onTileError: (tile, url, message) => {
+        console.warn(`3dtiles タイル読込失敗 (${def.item?.title || lid}): ${url} ${message || ""}`);
+      },
     };
     if (def.pointSize) opts.pointSize = def.pointSize;
+    if (def.loaderObj) opts.loader = def.loaderObj;
+    // operation=/pointcolor=/deckopts= の反映（operation 指定時は自動値を上書き）
+    Object.assign(opts, def.deckProps);
     layers.push(new deck.Tile3DLayer(opts));
   }
   // ベースマップ/XYZ/ベクターのドレープコピー（TerrainExtension）
@@ -487,9 +494,17 @@ async function buildLayer(item, baseUrl, preloaded) {
       opacity: opts.opacity !== undefined ? Number(opts.opacity) : 1,
       pointSize: opts.pointsize !== undefined ? Number(opts.pointsize) : undefined,
       order: item._idx ?? 0,
+      // operation=/pointcolor=/deckopts= → Tile3DLayer 追加 props（共通パース）
+      deckProps: parseDeckTile3dOpts(opts),
     };
     const lid = `deck-${deckDefs.size}`;
     deckDefs.set(lid, def);
+    // loader=i3s: @loaders.gl/i3s は UMD 未同梱のため遅延ロードして反映
+    if (deckWantsI3s(opts)) {
+      ensureI3sLoader()
+        .then(l => { def.loaderObj = l; syncDeckLayers(); })
+        .catch(e => console.warn(e?.message || e));
+    }
     // 可視の 3dtiles がある時だけ deck.gl 本体(CDN)を初期化する。
     // 全て | off なら CDN ロード自体を発生させない
     if (item.visible !== false || deckInst) {
@@ -563,9 +578,12 @@ async function buildLayer(item, baseUrl, preloaded) {
     // 生成時オプションへ反映する
     let compiled = null;
     let qmlStyleFn = null;
-    if (item.opts?.style) {
+    const embStyle = (loaded.qml || loaded.sld) ? loaded : null;
+    if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
-        compiled = await loadCompiledQml(item.opts.style, baseUrl, "openlayers");
+        compiled = item.opts?.style
+          ? await loadCompiledQml(item.opts.style, baseUrl, "openlayers")
+          : await compileEmbeddedStyle(embStyle, baseUrl, "openlayers");
         item._qml = compiled;
         const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text, Point, MultiPoint, MultiLineString, LineString, Polygon });
         // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない
@@ -920,6 +938,36 @@ function makeDefaultVectorStyle() {
         opts.stroke = new Stroke({ color: cssColorWithAlpha(s.stroke, s.strokeOpacity), width: s.strokeWidth });
       } else if (/Point/.test(gt)) {
         const s = resolveDefaultPointStyle(props, ds.point, OL_POINT_DFLT);
+        // togeojson(KML) icon-* → 画像 Icon(KML scale1=32px・heading=時計回りdeg)
+        const tg = togeojsonIconSpec(props);
+        if (tg) {
+          const sz = Math.max(Math.round(32 * tg.scale), 4);
+          st = new Style({ image: new Icon({
+            src: tg.url, crossOrigin: "anonymous",
+            width: sz, height: sz,
+            opacity: tg.opacity,
+            rotation: tg.heading * Math.PI / 180,
+            ...(tg.color ? { color: tg.color } : {}),
+            ...(tg.anchor ? { anchor: tg.anchor } : {}),
+          })});
+          styleCache.set(key, st);
+          return st;
+        }
+        const sym = markerSymbolSpec(s.symbol);
+        if (sym) {
+          // simplestyle marker-symbol: バッジ円 + 白文字/白アイコンの近似
+          const d = Math.max(Math.round((s.size || 24) * 0.55), 20);
+          const badge = new CircleStyle({
+            radius: d / 2,
+            fill: new Fill({ color: cssColorWithAlpha(s.color, s.opacity) }),
+            stroke: new Stroke({ color: "#ffffff", width: 1.5 }),
+          });
+          st = sym.kind === "text"
+            ? new Style({ image: badge, text: new Text({ text: sym.char, font: `bold ${Math.round(d * 0.55)}px sans-serif`, fill: new Fill({ color: "#ffffff" }), offsetY: 1 }) })
+            : [new Style({ image: badge }), new Style({ image: new Icon({ src: sym.url, width: Math.round(d * 0.62), color: "#ffffff", crossOrigin: "anonymous" }) })];
+          styleCache.set(key, st);
+          return st;
+        }
         opts.image = new CircleStyle({
           radius: s.size ? defaultPointRadius(s.size) : 5,
           fill: new Fill({ color: cssColorWithAlpha(s.color, s.opacity) }),
@@ -2702,7 +2750,7 @@ async function saveToDataDir(name, content) {
       try {
         const dir = (await saveToDataDir(file.name, file)) || "canvas_data";
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", fgbz: "flatgeobuf", zst: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", fgseq: "geojsonseq", geojsonseq: "geojsonseq", jsonseq: "geojsonseq", jsonfg: "geojson", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           inspectorInput.value = inspectorInput.value.replace(/\s*$/, "") + `\n${type}:${title} | ${dir}/${file.name}\n`;

@@ -1,14 +1,14 @@
 // KASUGAI Canvas — MapLibre フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+canvas_data/ を MapLibre GL で再生する
 import * as maplibregl from "https://cdn.jsdelivr.net/npm/maplibre-gl@6.19.0/dist/maplibre-gl.mjs";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, camFromGroundCenter, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, defaultPointRadius, cssColorAlpha, markerSymbolSpec, togeojsonIconSpec, kascOptOn, parseImageOverlay, kascScaleZoomRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { kascTimeSpec, collectTimeValues, featureInTime, timeKey, buildKascTimeControl } from "../shared/kasc-time.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
-import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { loadVectorItem, isViewportQueryItem, probeQmlSidecar, compileEmbeddedStyle, gpkgStyleRegistry } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
@@ -29,14 +29,14 @@ import { initPrint, compositeCanvases } from "../shared/print.js";
 import { initUiConfig } from "../shared/ui-config.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
-import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
+import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch, parseDeckTile3dOpts, ensureI3sLoader, deckWantsI3s } from "../shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, installLayerVisibilityResolver, bakeQmlLabels, maplibreApplyQml, setMapScaleGetter } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 
 await initI18n();
 applyI18n();
 
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
 // ogrsql: 行の FROM 名を、読み込み済みレイヤーの GeoJSON(item._geojson)へ
@@ -189,6 +189,69 @@ function registerQmlImages(applied) {
     }
   }
 }
+// simplestyle marker-symbol の画像値(Maki ID/URL)を白抜き PNG にラスタライズして
+// map.addImage へ登録する(1文字値は text-field で描くため対象外)。
+// 登録名は icon-image 式 `kasc-ssym-<生値>` と一致させる
+async function registerSsImages(geojson) {
+  const jobs = [];
+  const seen = new Set();
+  for (const f of geojson?.features || []) {
+    const raw = String(f?.properties?.["marker-symbol"] ?? "").trim();
+    const sym = markerSymbolSpec(raw);
+    if (!sym || sym.kind === "text" || seen.has(raw)) continue;
+    seen.add(raw);
+    jobs.push((async () => {
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = sym.url;
+        await img.decode();
+        const cv = document.createElement("canvas");
+        cv.width = 40; cv.height = 40;
+        const g = cv.getContext("2d");
+        g.drawImage(img, 0, 0, 40, 40);
+        // アルファを保ったまま白化(source-in)してバッジ上に白アイコンを近似
+        g.globalCompositeOperation = "source-in";
+        g.fillStyle = "#ffffff";
+        g.fillRect(0, 0, 40, 40);
+        const name = `kasc-ssym-${raw}`;
+        if (!map.hasImage(name)) {
+          map.addImage(name, { width: 40, height: 40, data: g.getImageData(0, 0, 40, 40).data });
+        }
+      } catch (e) { console.warn("marker-symbol 画像の読み込みに失敗:", sym.url, e?.message || e); }
+    })());
+  }
+  return Promise.all(jobs);
+}
+// togeojson(KML) icon の画像 URL を 32px へ正規化して map.addImage へ登録する
+// (KML icon-scale=1 → 32px 基準と合わせるため自然サイズではなく32pxへ揃える)。
+// 登録名は icon-image 式 `kasc-tgicon-<URL>` と一致させる
+async function registerTgIcons(geojson) {
+  const jobs = [];
+  const seen = new Set();
+  for (const f of geojson?.features || []) {
+    const url = String(f?.properties?.icon ?? "").trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    jobs.push((async () => {
+      try {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = url;
+        await img.decode();
+        const cv = document.createElement("canvas");
+        cv.width = 32; cv.height = 32;
+        const g = cv.getContext("2d");
+        g.drawImage(img, 0, 0, 32, 32);
+        const name = `kasc-tgicon-${url}`;
+        if (!map.hasImage(name)) {
+          map.addImage(name, { width: 32, height: 32, data: g.getImageData(0, 0, 32, 32).data });
+        }
+      } catch (e) { console.warn("icon の読み込みに失敗:", url, e?.message || e); }
+    })());
+  }
+  return Promise.all(jobs);
+}
 // ローダ由来の生 GeoJSON へ QML スタイルを焼き直す。
 // viewport 再クエリ・フィルタ再読込などで __kasc_* プロパティを持たない
 // データが _geojson を置き換えた後に必ず通す共通経路
@@ -336,7 +399,7 @@ function removeManaged() {
 
 // ---- deck.gl（3dtiles: 行専用・初回利用時にCDNから遅延ロード） ----
 // 軽量プレイヤー維持のため 3dtiles を含む .kasc の時だけ読み込む
-const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.0/dist.min.js";
+const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.1/dist.min.js";
 let deckLoadPromise = null;
 function loadDeck() {
   if (window.deck) return Promise.resolve(window.deck);
@@ -444,8 +507,15 @@ function syncDeckLayers() {
           regroundDeckDef(def);
         } catch (_) {}
       },
+      // タイル単位の取得/デコード失敗を可視化（黙って落ちると原因追跡不能のため）
+      onTileError: (tile, url, message) => {
+        console.warn(`3dtiles タイル読込失敗 (${def.item?.title || lid}): ${url} ${message || ""}`);
+      },
     };
     if (def.pointSize) opts.pointSize = def.pointSize;
+    if (def.loaderObj) opts.loader = def.loaderObj;
+    // operation=/pointcolor=/deckopts= の反映（operation 指定時は自動値を上書き）
+    Object.assign(opts, def.deckProps);
     layers.push(new deck.Tile3DLayer(opts));
   }
   // ベースマップ/XYZ/ベクターのドレープコピー（TerrainExtension）
@@ -586,12 +656,196 @@ function defaultVectorKinds() {
 let pmtilesModuleP = null;
 let pmtilesProtocol = null;
 function ensurePmtiles() {
-  pmtilesModuleP ||= import("https://cdn.jsdelivr.net/npm/pmtiles@4.4.1/+esm").then(m => {
+  pmtilesModuleP ||= import("https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/+esm").then(m => {
     pmtilesProtocol = new m.Protocol();
     maplibregl.addProtocol("pmtiles", pmtilesProtocol.tile);
     return m;
   });
   return pmtilesModuleP;
+}
+
+// ---- OGC 24-050 Portrayal(gpkgext_styles/stylesheets/symbols/fonts) ----
+// Worker の cmd "style" でレジストリを取得し、本エンジンへ適用する:
+//   - mbstyle stylesheet: GeoDataClass(24-049 semantic-annotations)紐付けが
+//     本テーブルと一致するシートの layers を当該 geojson ソースへ差し替えて追加
+//   - symbols: gpkgext_symbol_content の画像を map.addImage へ登録
+//     (icon-image は symbol 名または uri で参照されるため両名で登録)
+//   - fonts: gpkgext_fonts.glyphs(Mapbox glyphs zip)を gpkgfont:// プロトコルで
+//     提供し、font 列(TTF/OTF)は FontFace で DOM へ登録する
+// 未登録 fontstack の glyph 要求は fonts.openmaptiles.org へフォールバックする
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+const gpkgGlyphRanges = new Map(); // fontstack(lowercase) -> Map<"lo-hi", Uint8Array>
+let gpkgFontProto = false;
+function ensureGpkgFontProto() {
+  if (gpkgFontProto) return;
+  gpkgFontProto = true;
+  maplibregl.addProtocol("gpkgfont", async params => {
+    const m = /^gpkgfont:\/\/(.+)\/(\d+)-(\d+)\.pbf$/.exec(params.url);
+    if (m) {
+      const hit = gpkgGlyphRanges.get(decodeURIComponent(m[1]).toLowerCase())?.get(`${m[2]}-${m[3]}`);
+      if (hit) return { data: hit.buffer.slice(hit.byteOffset, hit.byteOffset + hit.byteLength) };
+    }
+    const fb = await fetch(`https://fonts.openmaptiles.org/${m ? `${m[1]}/${m[2]}-${m[3]}` : "Noto%20Sans%20Regular/0-255"}.pbf`);
+    return { data: fb.ok ? await fb.arrayBuffer() : new ArrayBuffer(0) };
+  });
+}
+async function installGpkgFonts(fonts) {
+  const withGlyphs = (fonts || []).filter(f => f?.glyphsBase64);
+  if (withGlyphs.length) {
+    ensureGpkgFontProto();
+    const { default: JSZip } = await import("https://cdn.jsdelivr.net/npm/jszip@3.10.2/+esm");
+    for (const f of withGlyphs) {
+      try {
+        const zip = await JSZip.loadAsync(b64ToBytes(f.glyphsBase64));
+        const ranges = new Map();
+        for (const [name, entry] of Object.entries(zip.files)) {
+          const m = /(\d+)-(\d+)\.pbf$/i.exec(name.split("/").pop() || "");
+          if (!entry.dir && m) ranges.set(`${m[1]}-${m[2]}`, await entry.async("uint8array"));
+        }
+        if (ranges.size) gpkgGlyphRanges.set(String(f.name || "").toLowerCase(), ranges);
+      } catch (e) { console.warn("gpkgext_fonts.glyphs 展開失敗:", f.name, e); }
+    }
+    if (gpkgGlyphRanges.size) {
+      // glyphs テンプレートは style 全体で1本のみ。gpkg フォントが存在する時は
+      // プロトコル経由へ切替え、未登録 fontstack はフォールバックへ流す
+      try {
+        const st = map.getStyle();
+        if (st) st.glyphs = "gpkgfont://{fontstack}/{range}.pbf";
+        if (map.style?.stylesheet) map.style.stylesheet.glyphs = "gpkgfont://{fontstack}/{range}.pbf";
+      } catch (e) { /* 切替失敗時は従来 glyphs で描画継続 */ }
+    }
+  }
+  // font 列(TTF/OTF)は Mapbox glyphs ではなく DOM FontFace として登録し、
+  // canvas 系(凡例・計測ラベル等)から参照可能にする
+  for (const f of (fonts || []).filter(f => f?.fontBase64)) {
+    try {
+      const face = new FontFace(String(f.name || "gpkg-font"), b64ToBytes(f.fontBase64));
+      await face.load();
+      document.fonts.add(face);
+    } catch (e) { console.warn("gpkgext_fonts.font 登録失敗:", f.name, e); }
+  }
+}
+async function installGpkgSymbols(symbols) {
+  let registered = 0;
+  for (const s of symbols || []) {
+    const img = (s.images || []).find(i => i.dataBase64);
+    if (!img) continue;
+    try {
+      const bmp = await createImageBitmap(new Blob([b64ToBytes(img.dataBase64)], { type: img.format || "image/png" }));
+      let src = bmp;
+      // スプライト領域(offset_x/offset_y 起点 width×height)は切出す
+      if ((img.offsetX || img.offsetY) && img.width && img.height) {
+        const cv = document.createElement("canvas");
+        cv.width = img.width; cv.height = img.height;
+        cv.getContext("2d").drawImage(bmp, img.offsetX || 0, img.offsetY || 0, img.width, img.height, 0, 0, img.width, img.height);
+        src = cv;
+      }
+      const opt = { pixelRatio: Number(img.pixelRatio) || 1 };
+      for (const name of new Set([s.symbol, s.uri].filter(Boolean).map(String))) {
+        try { if (!map.hasImage(name)) map.addImage(name, src, opt); registered++; } catch (e) { /* 同名は登録済み */ }
+      }
+    } catch (e) { console.warn("gpkgext シンボル画像の登録に失敗:", s.symbol, e); }
+  }
+  return registered;
+}
+// mbstyle シートが本レイヤの地物表へ適用されるかを 24-049 sa_reference で判定。
+// 地物表の GeoDataClass(sa_id)とスタイル側の GeoDataClass が一致すれば適用。
+// annotation 未整備の GPKG では誤適用を避け、地物表が1枚だけの時に限り適用
+// する(draft の簡易解釈。複数表では .kasc 行への gpkgstyle= 明示を推奨)
+function gpkgSheetApplies(sh, item, reg) {
+  const table = String(item.opts?.table || "");
+  const refs = reg.annotationRefs || [];
+  if (!refs.length) return (reg.featureTables || []).length <= 1;
+  const tableSas = new Set(refs.filter(r => r.table === table).map(r => r.saId));
+  for (const r of refs) {
+    if (r.table === "gpkgext_styles" && Number(r.key) === Number(sh.styleId) && tableSas.has(r.saId)) return true;
+  }
+  return false;
+}
+// mbstyle の sprite (URL文字列 or {id,url}配列,MapLibre v4) を展開して
+// map.addImage へ個別登録する。sprite.json {name:{x,y,width,height,pixelRatio,sdf}}
+// のメタデータで sprite.png を切り出す。戻り値は登録数
+async function installMbstyleSprite(spriteSpec, baseUrl) {
+  const entries = Array.isArray(spriteSpec)
+    ? spriteSpec.filter(s => s?.url).map(s => ({ id: String(s.id || ""), url: s.url }))
+    : (spriteSpec ? [{ id: "", url: String(spriteSpec) }] : []);
+  let n = 0;
+  for (const sp of entries) {
+    const base = resolveKascUrl(sp.url, baseUrl);
+    try {
+      const meta = await (await fetch(`${base}.json`)).json();
+      // map.loadImage は MapLibre v5+ で Promise 式(コールバック不発)のため
+      // fetch+createImageBitmap で自前読込する
+      const img = await createImageBitmap(await (await fetch(`${base}.png`)).blob());
+      for (const [name, d] of Object.entries(meta || {})) {
+        if (!d || !Number.isFinite(d.width)) continue;
+        const id = sp.id ? `${sp.id}/${name}` : name;
+        if (map.hasImage(id)) continue;
+        const part = await createImageBitmap(img, d.x, d.y, d.width, d.height);
+        map.addImage(id, part, { pixelRatio: d.pixelRatio || 1, sdf: !!d.sdf });
+        n++;
+      }
+    } catch (e) { console.warn(`mbstyle sprite ${base} の登録に失敗しました:`, e); }
+  }
+  return n;
+}
+
+// gpkg ベクタレイヤへ gpkgext_styles の内容を適用する。
+// gpkgstyle= はスタイル名/uri で stylesheet を直接選択できる
+async function applyGpkgPortrayal(item, sid, lids, filters, opas, before, baseUrl) {
+  let reg;
+  try { reg = await gpkgStyleRegistry(resolveKascUrl(item.url, baseUrl)); }
+  catch (e) { console.warn("gpkgext スタイルレジストリ取得失敗:", item.title, e); return; }
+  if (!reg) return;
+  const symN = await installGpkgSymbols(reg.symbols).catch(() => 0);
+  await installGpkgFonts(reg.fonts).catch(() => {});
+  // probe/診断用: 登録内容と適用結果を item へ残す
+  item._gpkgPortrayal = {
+    symbols: (reg.symbols || []).length,
+    symbolImages: symN,
+    fonts: (reg.fonts || []).map(f => f.name).filter(Boolean),
+    glyphStacks: gpkgGlyphRanges.size,
+    annotations: Object.keys(reg.annotations || {}).length,
+    mbstyleSheets: (reg.sheets || []).filter(sh => String(sh.format).toLowerCase() === "mbstyle").length,
+    appliedLayers: 0,
+  };
+  const sheets = (reg.sheets || []).filter(sh => String(sh.format).toLowerCase() === "mbstyle" && sh.data);
+  if (!sheets.length) return;
+  const wantName = String(item.opts?.gpkgstyle || "");
+  const styleRows = new Map((reg.styles?.list || []).map(s => [s.id, s]));
+  let applied = 0;
+  for (const sh of sheets) {
+    const style = styleRows.get(sh.styleId);
+    if (wantName && style?.style !== wantName && style?.uri !== wantName) continue;
+    let mbstyle;
+    try { mbstyle = JSON.parse(sh.data); } catch (e) { console.warn("mbstyle 解析失敗:", style?.style, e); continue; }
+    if (!gpkgSheetApplies(sh, item, reg)) continue;
+    // sprite.png+sprite.json を切り出して icon-image 名で参照できるよう登録
+    if (mbstyle.sprite) {
+      const sn = await installMbstyleSprite(mbstyle.sprite, baseUrl).catch(() => 0);
+      if (sn) item._gpkgPortrayal.sprites = (item._gpkgPortrayal?.sprites || 0) + sn;
+    }
+    const srcIds = new Set(Object.keys(mbstyle.sources || {}));
+    for (const lyr of mbstyle.layers || []) {
+      if (!lyr || lyr.type === "background" || !srcIds.has(lyr.source)) continue;
+      const def = { ...lyr, id: `${sid}-gpkgp-${lyr.id || applied}`, source: sid };
+      delete def["source-layer"];
+      try { map.addLayer(applyVisZoom(def, item), before); } catch (e) { console.warn("mbstyle レイヤ追加失敗:", lyr.id, e); continue; }
+      lids.push(def.id);
+      applied++;
+      const prop = { fill: "fill-opacity", "fill-extrusion": "fill-extrusion-opacity", line: "line-opacity", circle: "circle-opacity", symbol: "icon-opacity", raster: "raster-opacity" }[def.type];
+      if (prop) opas.set(def.id, { prop, base: typeof def.paint?.[prop] === "number" ? def.paint[prop] : 1 });
+      if (!filters) filters = new Map();
+      if (lyr.filter) filters.set(def.id, lyr.filter);
+    }
+  }
+  if (item._gpkgPortrayal) item._gpkgPortrayal.appliedLayers = applied;
+  if (applied) console.info(`GPKG Portrayal: ${item.title} に mbstyle を適用しました(${applied}レイヤ)`);
 }
 
 // 縮尺表示(minScale=/maxScale=) → レイヤ def の minzoom/maxzoom。
@@ -665,13 +919,22 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     // 全て | off なら deck.gl の CDN ロード自体を発生させない
     if (item.visible !== false || deckOverlay) await ensureDeckOverlay();
     const lid = `deck-${deckDefs.size}`;
-    deckDefs.set(lid, {
+    const def = {
       item,
       url: resolveKascUrl(item.url, baseUrl),
       opacity,
       pointSize: opts.pointsize !== undefined ? Number(opts.pointsize) : undefined,
       order: item._idx ?? 0,
-    });
+      // operation=/pointcolor=/deckopts= → Tile3DLayer 追加 props（共通パース）
+      deckProps: parseDeckTile3dOpts(opts),
+    };
+    deckDefs.set(lid, def);
+    // loader=i3s: @loaders.gl/i3s は UMD 未同梱のため遅延ロードして反映
+    if (deckWantsI3s(opts)) {
+      ensureI3sLoader()
+        .then(l => { def.loaderObj = l; syncDeckLayers(); })
+        .catch(e => console.warn(e?.message || e));
+    }
     lids.push(lid);
     opas.set(lid, { prop: "opacity", base: opacity });
     syncDeckLayers();
@@ -754,10 +1017,13 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
     const pointRadius = (currentDefaultStyles || {}).point?.size ? defaultPointRadius((currentDefaultStyles || {}).point.size) : 5;
     let zoomRange = null;
     let qmlExtra = null;
-    if (item.opts?.style) {
+    const embStyle = (loaded.qml || loaded.sld) ? loaded : null;
+    if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
         const { loadCompiledQml, maplibreApplyQml, compiledScaleToResRange, resToZoom } = await import("../shared/qml-2d.js");
-        const compiled = await loadCompiledQml(item.opts.style, baseUrl, "maplibre");
+        const compiled = item.opts?.style
+          ? await loadCompiledQml(item.opts.style, baseUrl, "maplibre")
+          : await compileEmbeddedStyle(embStyle, baseUrl, "maplibre");
         item._qml = compiled;
         const applied = maplibreApplyQml(geojson, compiled);
         kinds = applied.kinds;
@@ -844,6 +1110,61 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
         }, layout];
       });
     }
+    // simplestyle marker-symbol(QML 無しのみ): 1文字→text、Maki/URL→icon-image の
+    // symbol レイヤを kinds 末尾へ追加し、バッジ用に circle を拡大する近似
+    const hasSsSymbol = !item._qml && geojson.features?.some(
+      f => /point/i.test(f?.geometry?.type || "") && markerSymbolSpec(f.properties?.["marker-symbol"]));
+    if (hasSsSymbol) {
+      const badgeR = ["match", ["to-string", ["get", "marker-size"]],
+        "small", 11, "medium", 15, "large", 20, 11];
+      kinds = kinds.map(([kind, filter, paint, layout]) => kind !== "circle"
+        ? [kind, filter, paint, layout]
+        : [kind, filter, { ...paint,
+            "circle-radius": ["case", ["has", "marker-symbol"], badgeR, paint["circle-radius"]],
+            "circle-stroke-color": ["case", ["has", "marker-symbol"], "#ffffff", paint["circle-stroke-color"]],
+            "circle-stroke-width": ["case", ["has", "marker-symbol"], 1.5, paint["circle-stroke-width"]],
+          }, layout]);
+      kinds.push(
+        ["symbol", ["all", ["==", ["geometry-type"], "Point"], ["has", "marker-symbol"],
+          ["==", ["length", ["to-string", ["get", "marker-symbol"]]], 1]],
+          { "text-color": "#ffffff", "text-opacity": 1 },
+          { "text-field": ["upcase", ["to-string", ["get", "marker-symbol"]]],
+            "text-font": ["literal", ["Noto Sans Regular"]],
+            "text-size": 11, "text-allow-overlap": true }],
+        ["symbol", ["all", ["==", ["geometry-type"], "Point"], ["has", "marker-symbol"],
+          [">", ["length", ["to-string", ["get", "marker-symbol"]]], 1]],
+          { "icon-opacity": 1 },
+          { "icon-image": ["concat", "kasc-ssym-", ["to-string", ["get", "marker-symbol"]]],
+            "icon-size": 0.55, "icon-allow-overlap": true }],
+      );
+      registerSsImages(geojson);
+    }
+    // togeojson(KML) icon-* → 画像 icon-image レイヤ(QML 無しのみ)。
+    // icon-color tint は非SDF画像へ効かないため未対応(KML scale1=32px基準)
+    const hasTgIcon = !item._qml && geojson.features?.some(
+      f => /point/i.test(f?.geometry?.type || "") && typeof f?.properties?.icon === "string" && f.properties.icon.trim());
+    if (hasTgIcon) {
+      // KML icon-offset(hotSpot)は左上原点の割合 anchor へ正規化済み — maplibre の
+      // icon-anchor 名へ近似して地物プロパティへ焼く(icon-offset は em 単位で意味が違う)
+      for (const f of geojson.features) {
+        const a = togeojsonIconSpec(f?.properties)?.anchor;
+        if (!a || !f.properties) continue;
+        const ax = a[0] <= 0.33 ? "left" : a[0] >= 0.67 ? "right" : "";
+        const ay = a[1] <= 0.33 ? "top" : a[1] >= 0.67 ? "bottom" : "";
+        f.properties.__kasc_iconanchor = (ay && ax ? `${ay}-${ax}` : ay || ax || "center");
+      }
+      kinds.push(
+        ["symbol", ["all", ["==", ["geometry-type"], "Point"], ["has", "icon"],
+          ["!=", ["to-string", ["get", "icon"]], ""]],
+          { "icon-opacity": ["to-number", ["get", "icon-opacity"], 1] },
+          { "icon-image": ["concat", "kasc-tgicon-", ["to-string", ["get", "icon"]]],
+            "icon-size": ["to-number", ["get", "icon-scale"], 1],
+            "icon-rotate": ["to-number", ["get", "heading"], 0],
+            "icon-anchor": ["coalesce", ["get", "__kasc_iconanchor"], "center"],
+            "icon-allow-overlap": true }],
+      );
+      registerTgIcons(geojson);
+    }
     map.addSource(sid, { type: "geojson", data: applyClientWhere(item, geojson), attribution: layerAttribution(item) || undefined,
       ...(qmlExtra?.lineMetrics ? { lineMetrics: true } : {}),
       ...(wantCluster ? { cluster: true, clusterRadius: Math.max(item._qml?.cluster?.distancePx || 50, 5), clusterMaxZoom: 16 } : {}) });
@@ -892,6 +1213,11 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
         filters.set(lid, filter);
         opas.set(lid, { prop: opaProp, base: typeof paint?.[opaProp] === "number" ? paint[opaProp] : 1 });
       }
+    }
+    // OGC 24-050 Portrayal: gpkgext_styles の mbstyle/symbols/fonts を
+    // このテーブルへ適用する(draft 拡張。GeoDataClass 紐付け優先)
+    if (item.gpkgMeta?.styles?.list?.length || item.gpkgMeta?.styles?.orphanStylesheets) {
+      await applyGpkgPortrayal(item, sid, lids, filters, opas, before, baseUrl);
     }
     syncDeckLayers(); // 読込完了でドレープコピー対象(_geojson)が増えた場合に反映
   } else {
@@ -3095,7 +3421,7 @@ async function saveToDataDir(name, content) {
       try {
         const dir = (await saveToDataDir(file.name, file)) || "canvas_data";
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", fgbz: "flatgeobuf", zst: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", fgseq: "geojsonseq", geojsonseq: "geojsonseq", jsonseq: "geojsonseq", jsonfg: "geojson", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           inspectorInput.value = inspectorInput.value.replace(/\s*$/, "") + `\n${type}:${title} | ${dir}/${file.name}\n`;

@@ -1,0 +1,13 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "clip-area" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[139.6, 35.4], [139.9, 35.4], [139.9, 35.8], [139.6, 35.8], [139.6, 35.4]]]
+      }
+    }
+  ]
+}

@@ -33,6 +33,7 @@ export function mountEngineSwitcher(container, currentEngine, engines = ENGINE_I
   for (const name of engines) {
     if (name === currentEngine) {
       const b = document.createElement("b");
+      b.dataset.engine = name;
       b.textContent = engineLabel(name);
       el.append(b);
       continue;

@@ -31,10 +31,11 @@ const srv = createServer(async (req, res) => {
     const mime = MIME[extname(q)] || "application/octet-stream";
     const range = req.headers.range;
     if (range) {
-      const m = /bytes=(\d+)-(\d*)/.exec(range);
-      if (m) {
-        const start = Number(m[1]);
-        const end = m[2] ? Number(m[2]) : data.length - 1;
+      const m = /bytes=(\d*)-(\d*)/.exec(range);
+      if (m && (m[1] || m[2])) {
+        // bytes=-N(接尾辞) も受ける(seekable-zstd が使用)
+        const start = m[1] === "" ? Math.max(data.length - Number(m[2]), 0) : Number(m[1]);
+        const end = m[1] === "" || !m[2] ? data.length - 1 : Number(m[2]);
         reqLog.push({ path: q, range: `${start}-${end}` });
         res.writeHead(206, {
           "content-type": mime, "accept-ranges": "bytes",
@@ -70,12 +71,13 @@ await page.goto(`${base}/cesium/?kasc=${encodeURIComponent("/verify/fgb-test/fgb
 async function waitLayer(titlePart, timeout = 60000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeout) {
+    // アプリ側の初期遷移で実行コンテキストが壊れることがあるためリトライ
     const n = await page.evaluate(t => {
       const layer = window.kasugaiApi?.listLayers?.().find(l => (l.title || "").includes(t));
       if (!layer) return -1;
       const gj = window.kasugaiApi.getLayerGeoJson?.(layer.id);
       return gj?.features?.length ?? 0;
-    }, titlePart);
+    }, titlePart).catch(() => -1);
     if (n > 0) return n;
     await new Promise(r => setTimeout(r, 500));
   }

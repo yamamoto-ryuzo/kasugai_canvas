@@ -1,0 +1,36 @@
+{
+  "type": "FeatureCollection",
+  "conformsTo": [
+    "http://www.opengis.net/spec/json-fg-1/1.0/conf/core"
+  ],
+  "coordRefSys": "http://www.opengis.net/def/crs/OGC/0/CRS84h",
+  "featureType": "building",
+  "links": [
+    { "href": "https://example.com/buildings", "rel": "self", "type": "application/vnd.ogc.fg+json" }
+  ],
+  "features": [
+    {
+      "type": "Feature",
+      "id": "fg-place-only",
+      "time": { "date": "1969-07-16" },
+      "place": { "type": "Point", "coordinates": [139.7671, 35.6812, 40.0] },
+      "geometry": null,
+      "properties": { "name": "place-only 建物" }
+    },
+    {
+      "type": "Feature",
+      "id": "fg-with-fallback",
+      "time": { "interval": ["1969-07-16T05:32:00Z", "1969-07-24T16:50:35Z"] },
+      "place": { "type": "Point", "coordinates": [139.77, 35.69, 50.0] },
+      "geometry": { "type": "Point", "coordinates": [139.77, 35.69, 0.0] },
+      "properties": { "name": "place+fallback 建物" }
+    },
+    {
+      "type": "Feature",
+      "id": "fg-ordinary",
+      "time": { "timestamp": "2026-05-21T09:00:00Z" },
+      "geometry": { "type": "Point", "coordinates": [139.7, 35.7] },
+      "properties": { "name": "通常地物" }
+    }
+  ]
+}

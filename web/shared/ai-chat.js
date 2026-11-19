@@ -17,7 +17,7 @@ import {
 import {
   backendUrl, detectBackend, getBackendCapabilities, hasBackendFeature,
   isBackendCapabilitiesResolved, setBackendCapabilities as setBackendCaps,
-  localNetworkPermission,
+  localNetworkPermission, isFetchProxyTarget,
 } from "./backend.js";
 import { splitKascTail, renderMarkdownLite } from "./kasc.js";
 export { renderMarkdownLite };
@@ -36,21 +36,9 @@ export function setBackendCapabilities(caps, resolved = true, base = "") {
 }
 let aiEngine = "cesium";
 
-// /api/fetch プロキシに渡せる取得先かを判定する。同一オリジンは直接取得できる
-// ためプロキシ不要で、ループバック(localhost/127.x/::1)は SSRF 対策により
-// /api/fetch が 403 を返すため対象外としブラウザから直接取得させる
-export function isFetchProxyTarget(url) {
-  try {
-    const target = new URL(String(url || ""));
-    if (target.protocol !== "http:" && target.protocol !== "https:") return false;
-    if (target.origin === location.origin) return false;
-    const host = target.hostname.toLowerCase();
-    return !(host === "localhost" || host.endsWith(".localhost")
-      || host === "::1" || host === "[::1]" || /^127\./.test(host));
-  } catch (e) {
-    return false;
-  }
-}
+// /api/fetch プロキシ対象判定・プロキシURL生成の正本は shared/backend.js。
+// ここでは従来通り ai-chat.js 経由でも import できるよう再 export する
+export { isFetchProxyTarget, fetchProxyUrl } from "./backend.js";
 
 // /health + /api/capabilities によるバックエンド検出。
 // 検出本体は shared/backend.js（同一オリジン優先・静的配信ではローカル

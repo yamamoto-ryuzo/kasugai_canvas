@@ -48,7 +48,7 @@
       <div class="features">
         <div class="feature-card">
           <h3>📦 GeoParquet <span class="badge recommended">推奨</span></h3>
-          <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。常に全件読み込みのため中規模まで。「Parquet をそのまま置くだけで表示」の利便性重視の経路</p>
+          <p><code>geoparquet:</code> で指定。列指向バイナリ形式を hyparquet でデコードし GeoJSON へ正規化。<code>bbox=auto</code>（既定 ON）で covering.bbox 列または行グループ geospatial statistics を使った表示範囲の部分読みに対応（無いファイル・Range 非対応サーバーは全件へフォールバック）。「Parquet をそのまま置くだけで表示」の利便性重視の経路。大規模・複雑な絞り込みは <code>duckdb:</code> 経路が向く</p>
         </div>
         <div class="feature-card">
           <h3>🗺️ KML / KMZ <span class="badge">対応</span></h3>
@@ -85,6 +85,7 @@
         <div class="feature-card">
           <h3>📃 GeoJSON Lines <span class="badge">対応</span></h3>
           <p><code>geojsonl:</code> / <code>ndjson:</code> / <code>jsonl:</code> で指定。行区切り GeoJSON/Feature を逐行パースして FeatureCollection 化（ストリーミング系ログ向け）</p>
+          <p><code>geojsonseq:</code> / <code>fgseq:</code> / <code>geojson-seq:</code> で指定。RFC 8142 の GeoJSON テキストシーケンス（<code>application/geo+json-seq</code>・RS(0x1E) 区切り）をパースして FeatureCollection 化</p>
         </div>
         <div class="feature-card">
           <h3>✏️ WKT / WKB <span class="badge">対応</span></h3>
@@ -257,8 +258,9 @@
       <td>列指向バイナリ・空間インデックス。<code>geoparquet:</code>
       / <code>flatgeobuf:</code> でブラウザ内デコードし GeoJSON
       正規化。変換不要で置くだけ</td>
-      <td><code>geoparquet:</code> は全件読み込みのため超大規模は向かない
-      （<code>flatgeobuf:</code> は <code>bbox=auto</code> の範囲読みで大規模も可）</td>
+      <td><code>geoparquet:</code>・<code>flatgeobuf:</code> とも <code>bbox=auto</code>
+      の範囲読み対応（GeoParquet は covering.bbox 列または行グループ
+      geospatial statistics が必要・無いファイルは全件読み）</td>
       </tr>
       <tr>
       <td>大規模・条件絞り込み・表示範囲連動</td>

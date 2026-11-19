@@ -1,0 +1,2 @@
+{"type": "Feature", "geometry": {"type": "Point", "coordinates": [139.7, 35.68]}, "properties": {"name": "seq1"}}
+{"type": "Feature", "geometry": {"type": "Point", "coordinates": [139.8, 35.7]}, "properties": {"name": "seq2"}}

@@ -1,6 +1,6 @@
 // KASUGAI Canvas — Leaflet フロント
 // .kasc プレイヤーモード: projects/<id>/ の .kasc+canvas_data/ を Leaflet で再生する
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, kascOptOn, parseImageOverlay, kascScaleZoomRange, mergeZoomRange, applyKascGroupStates, setAllLayerGroupsExpanded, parseKascViewValue, parseKascPortalValue, parseKascLinkValue } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, markerSymbolSpec, markerSymbolDivHtml, togeojsonIconSpec, kascOptOn, parseImageOverlay, kascScaleZoomRange, mergeZoomRange, applyKascGroupStates, setAllLayerGroupsExpanded, parseKascViewValue, parseKascPortalValue, parseKascLinkValue } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
@@ -8,7 +8,7 @@ import { kascTimeSpec, collectTimeValues, featureInTime, buildKascTimeControl } 
 import { loadScriptOnce, loadCssOnce } from "../shared/lazy-lib.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
-import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
+import { loadVectorItem, isViewportQueryItem, probeQmlSidecar, compileEmbeddedStyle } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { scaleNiceFloor } from "../shared/scale-nice.js";
@@ -28,13 +28,13 @@ import { initUiConfig } from "../shared/ui-config.js";
 
 import { mvtStyle, loadMvtDecoder, loadPmtiles } from "../shared/mvt.js";
 import { groundDeckTileset } from "../shared/deck-ground.js";
-import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch } from "../shared/deck-drape.js";
+import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch, parseDeckTile3dOpts, ensureI3sLoader, deckWantsI3s } from "../shared/deck-drape.js";
 import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson } from "../shared/qml-2d.js";
 import { markerLayersToCanvas, fillPartsToTile, rgbaToCss, linRefFormatText } from "../shared/qml-style.js";
 import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
 // parseKasc の doc.unsupported に入るが本エンジンで描画経路を持つタイプ
@@ -497,7 +497,7 @@ function makeVectorStyleFn(item) {
 // OL 版と同様に deck.Deck を #map 上のオーバーレイキャンバスとして viewState を
 // 手動同期する（Leaflet は2Dビューのため真俯瞰の 2.5D 表示。キャンバス単位のため
 // 全 Leaflet レイヤより手前に1枚で描かれ、Leaflet レイヤとの相互挿入はしない）
-const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.0/dist.min.js";
+const DECK_CDN = "https://cdn.jsdelivr.net/npm/deck.gl@9.4.1/dist.min.js";
 let deckLoadPromise = null;
 function loadDeck() {
   if (window.deck) return Promise.resolve(window.deck);
@@ -634,8 +634,15 @@ function syncDeckLayers() {
           if (!isGoogle3dTilesUrl(def.url)) groundDeckTileset(tileset, def.item.opts);
         } catch (_) {}
       },
+      // タイル単位の取得/デコード失敗を可視化（黙って落ちると原因追跡不能のため）
+      onTileError: (tile, url, message) => {
+        console.warn(`3dtiles タイル読込失敗 (${def.item?.title || lid}): ${url} ${message || ""}`);
+      },
     };
     if (def.pointSize) opts.pointSize = def.pointSize;
+    if (def.loaderObj) opts.loader = def.loaderObj;
+    // operation=/pointcolor=/deckopts= の反映（operation 指定時は自動値を上書き）
+    Object.assign(opts, def.deckProps);
     layers.push(new deck.Tile3DLayer(opts));
   }
   // ベースマップ/XYZ/ベクターのドレープコピー（TerrainExtension）
@@ -922,9 +929,17 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       opacity: opts.opacity !== undefined ? Number(opts.opacity) : 1,
       pointSize: opts.pointsize !== undefined ? Number(opts.pointsize) : undefined,
       order: item._idx ?? 0,
+      // operation=/pointcolor=/deckopts= → Tile3DLayer 追加 props（共通パース）
+      deckProps: parseDeckTile3dOpts(opts),
     };
     const lid = `deck-${deckDefs.size}`;
     deckDefs.set(lid, def);
+    // loader=i3s: @loaders.gl/i3s は UMD 未同梱のため遅延ロードして反映
+    if (deckWantsI3s(opts)) {
+      ensureI3sLoader()
+        .then(l => { def.loaderObj = l; syncDeckLayers(); })
+        .catch(e => console.warn(e?.message || e));
+    }
     // 可視の 3dtiles がある時だけ deck.gl 本体(CDN)を初期化する。
     // 全て | off なら CDN ロード自体を発生させない
     if (item.visible !== false || deckInst) {
@@ -986,11 +1001,14 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     // (item._geojson はフィルタ前のフルソースを保持)
     const geojson = applyClientWhere(item, loaded.geojson);
     const viewportQuery = !!loaded.viewportQuery;
-    if (item.opts?.style) {
+    const embStyle = (loaded.qml || loaded.sld) ? loaded : null;
+    if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
-        item._qml = await loadCompiledQml(item.opts.style, baseUrl, "leaflet");
+        item._qml = item.opts?.style
+          ? await loadCompiledQml(item.opts.style, baseUrl, "leaflet")
+          : await compileEmbeddedStyle(embStyle, baseUrl, "leaflet");
         if (item._qml?.inverted) applyInvertedMaskGeojson(geojson);
-      } catch (e) { console.warn("QML 適用失敗:", item.opts.style, e); }
+      } catch (e) { console.warn("埋め込みスタイル適用失敗:", item.opts?.style || item.url, e); }
     }
     // opacity=(0-1): レイヤ透過度。スタイル関数のアルファ乗算に引き継ぐ(#58)
     if (item.opts?.opacity !== undefined && item._opacityFactor === undefined) {
@@ -1010,6 +1028,30 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         if (!url) { url = cv.toDataURL(); iconUrlCache.set(cv, url); }
         return L.icon({ iconUrl: url, iconSize: [cv.width, cv.height], iconAnchor: [cv.width / 2, cv.height / 2] });
       } catch (_) { return null; }
+    };
+    // simplestyle marker-symbol → divIcon バッジ(Maki SVG / 1文字/URL画像)。
+    // QML アイコンが無い場合の近似描画(simplestyle-spec §3)
+    const ssIcon = f => {
+      if (item._qml) return null;
+      const ds = currentDefaultStyles || {};
+      const s = resolveDefaultPointStyle(f.properties || {}, ds.point, { color: "#2c5ea8", size: 0, opacity: 1 });
+      const sym = markerSymbolSpec(s.symbol);
+      if (!sym) return null;
+      const d = Math.max(Math.round((s.size || 24) * 0.55), 20);
+      return L.divIcon({ html: markerSymbolDivHtml(sym, s.color, d), className: "kasc-ssym", iconSize: [d, d], iconAnchor: [d / 2, d / 2] });
+    };
+    // togeojson(KML) icon-* → 画像アイコン(KML scale1=32px基準)。
+    // heading は Leaflet 本体に回転手段が無いため非対応
+    const tgIcon = f => {
+      if (item._qml) return null;
+      const spec = togeojsonIconSpec(f.properties || {});
+      if (!spec) return null;
+      const sz = Math.max(Math.round(32 * spec.scale), 4);
+      return {
+        icon: L.icon({ iconUrl: spec.url, iconSize: [sz, sz],
+          iconAnchor: spec.anchor ? [spec.anchor[0] * sz, spec.anchor[1] * sz] : [sz / 2, sz / 2] }),
+        opacity: spec.opacity,
+      };
     };
     // cluster=on / heat=on: 点レイヤーのクラスタ表示・ヒートマップ表示。
     // どちらも点地物のみを対象とし、点以外のジオメトリは通常の geoJSON で描画する
@@ -1068,9 +1110,10 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
             for (const f of pointFeatures) {
               const [lon, lat] = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0];
               // QML アイコンマーカーがあれば marker、無ければスタイル済み circleMarker
-              const ic = item._qml ? pointIcon(f) : null;
+              const ic0 = item._qml ? pointIcon(f) : (tgIcon(f) || ssIcon(f));
+              const ic = ic0?.icon || ic0;
               group.addLayer(ic
-                ? L.marker([lat, lon], { icon: ic, pane })
+                ? L.marker([lat, lon], { icon: ic, pane, ...(ic0?.opacity != null ? { opacity: ic0.opacity } : {}) })
                 : L.circleMarker([lat, lon], { radius: 5, pane, ...styleFn(f) }));
             }
             sub.push(group);
@@ -1128,7 +1171,11 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       if (!sub.length || otherFeatures.length) {
         sub.push(L.geoJSON({ type: "FeatureCollection", features: sub.length ? otherFeatures : geojson.features }, {
           pane, style: styleFn,
-          pointToLayer: (f, latlng) => L.circleMarker(latlng, { radius: 5, pane }),
+          pointToLayer: (f, latlng) => {
+            const ic0 = tgIcon(f) || ssIcon(f);
+            const ic = ic0?.icon || ic0;
+            return ic ? L.marker(latlng, { icon: ic, pane, ...(ic0?.opacity != null ? { opacity: ic0.opacity } : {}) }) : L.circleMarker(latlng, { radius: 5, pane });
+          },
         }));
       }
       const layer = L.layerGroup(sub, { pane });
@@ -1195,8 +1242,9 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
           if (ic) return L.marker(latlng, { icon: L.icon({ iconUrl: ic.url, iconSize: ic.size, iconAnchor: [ic.size[0] / 2, ic.size[1] / 2] }), pane, interactive: false });
           return L.circleMarker(latlng, { radius: 0, pane, interactive: false, opacity: 0, fillOpacity: 0 });
         }
-        const ic = item._qml ? pointIcon(f) : null;
-        return ic ? L.marker(latlng, { icon: ic, pane, ...mkExtra }) : L.circleMarker(latlng, { radius: 5, pane });
+        const ic0 = item._qml ? pointIcon(f) : (tgIcon(f) || ssIcon(f));
+        const ic = ic0?.icon || ic0;
+        return ic ? L.marker(latlng, { icon: ic, pane, ...(ic0?.opacity != null ? { opacity: ic0.opacity } : {}), ...mkExtra }) : L.circleMarker(latlng, { radius: 5, pane });
       },
       onEachFeature: (f, l) => {
         // linref 生成点: 距離ラベルを permanent tooltip で表示(クリック対象外)
@@ -3118,7 +3166,7 @@ async function saveToDataDir(name, content) {
       try {
         const dir = (await saveToDataDir(file.name, file)) || "canvas_data";
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", fgbz: "flatgeobuf", zst: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", fgseq: "geojsonseq", geojsonseq: "geojsonseq", jsonseq: "geojsonseq", jsonfg: "geojson", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           inspectorInput.value = inspectorInput.value.replace(/\s*$/, "") + `\n${type}:${title} | ${dir}/${file.name}\n`;

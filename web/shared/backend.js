@@ -29,6 +29,35 @@ export function hasBackendFeature(name) {
   return !!capabilities?.features?.includes(name);
 }
 
+// /api/fetch プロキシに渡せる取得先かを判定する。同一オリジンは直接取得できる
+// ためプロキシ不要で、ループバック(localhost/127.x/::1)は SSRF 対策により
+// /api/fetch が 403 を返すため対象外としブラウザから直接取得させる。
+// 正本はこのモジュール（ai-chat.js からも再 export される）
+export function isFetchProxyTarget(url) {
+  try {
+    const target = new URL(String(url || ""));
+    if (target.protocol !== "http:" && target.protocol !== "https:") return false;
+    if (target.origin === location.origin) return false;
+    const host = target.hostname.toLowerCase();
+    return !(host === "localhost" || host.endsWith(".localhost")
+      || host === "::1" || host === "[::1]" || /^127\./.test(host));
+  } catch (e) {
+    return false;
+  }
+}
+
+// リモート URL を検出済みバックエンドの /api/fetch 経由へ書き換える。
+// fetchRange 能力(Range/HEAD 転送)があるバックエンドでのみ有効。
+// useProxy 指定が無い・バックエンド無し・プロキシ対象外の URL はそのまま返す。
+// 注意: Range 無しの全件 GET はサーバー側の上限(FETCH_MAX_BYTES=20MB)があるため、
+// 巨大ファイルの全件読み込みを前提にする用途では opt-in とするのが安全
+export function fetchProxyUrl(url, useProxy = false) {
+  if (!useProxy || !/^https?:\/\//i.test(String(url || ""))) return url;
+  if (!hasBackendFeature("fetchRange")) return url;
+  if (!isFetchProxyTarget(url)) return url;
+  return `${backendUrl("/api/fetch")}?url=${encodeURIComponent(url)}`;
+}
+
 export function setBackendCapabilities(caps, done = true, baseUrl = base) {
   capabilities = caps && caps.tier ? caps : null;
   resolved = done;

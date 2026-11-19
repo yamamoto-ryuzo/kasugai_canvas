@@ -4,12 +4,12 @@
 // UI/共通機構は shared/ を他エンジンと共用する。
 import ThreeView, { Color, fetchFontFamilyFromCss, vector3ToGeodetic } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, normKascTitle, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha, setAllLayerGroupsExpanded } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, normKascTitle, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha, setAllLayerGroupsExpanded, markerSymbolSpec, togeojsonIconSpec } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { backendUrl } from "../shared/backend.js";
-import { loadVectorItem } from "../shared/vector-load.js";
+import { loadVectorItem, probeQmlSidecar, compileEmbeddedStyle } from "../shared/vector-load.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -30,7 +30,7 @@ import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { mountSunControls } from "../shared/sun-time.js";
 
 const TERRAIN_URL = "https://terrain.reearth.land/cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain";
-const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
+const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 const RASTER_TYPES = new Set(["xyz", "tile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
 const QUERY_TYPES = new Set(["gpkg", "geopackage", "duckdb", "sql", "ogrsql"]);
@@ -69,6 +69,40 @@ const panel = {
   progressText: $("#load-progress-text"), progressBar: $("#load-progress-bar"),
   attribution: $("#map-attribution"), coords: $("#map-coords"),
 };
+
+// simplestyle marker-symbol のバッジを canvas 生成する(Navara billboard 用)。
+// 文字種は白抜き文字、Maki/URL 種は白化アイコンを marker-color 円上へ描く。
+// sym=null(シンボル無し地物)は点色の小円で点の見た目を代替する
+async function navaraSsBadge(sym, color, size) {
+  const d = sym ? Math.max(sym.d, 8) : 10;
+  const cv = document.createElement("canvas");
+  cv.width = cv.height = Math.max(Math.round(d * 2), 2);
+  const g = cv.getContext("2d");
+  g.scale(2, 2);
+  g.beginPath(); g.arc(d / 2, d / 2, d / 2 - 1, 0, Math.PI * 2);
+  g.fillStyle = color; g.fill();
+  g.lineWidth = 1.5; g.strokeStyle = "#fff"; g.stroke();
+  if (!sym) return { url: cv.toDataURL(), h: d };
+  if (sym.kind === "text") {
+    g.fillStyle = "#fff";
+    g.font = `bold ${Math.round(d * 0.55)}px sans-serif`;
+    g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(sym.char, d / 2, d / 2 + 1);
+    return { url: cv.toDataURL(), h: d };
+  }
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = sym.url;
+  await img.decode();
+  const s = Math.round(d * 0.62);
+  const ic = document.createElement("canvas"); ic.width = ic.height = s;
+  const ig = ic.getContext("2d");
+  ig.drawImage(img, 0, 0, s, s);
+  ig.globalCompositeOperation = "source-in";
+  ig.fillStyle = "#fff"; ig.fillRect(0, 0, s, s);
+  g.drawImage(ic, (d - s) / 2, (d - s) / 2);
+  return { url: cv.toDataURL(), h: d };
+}
 
 const css2hex = (css, fallback = 0x2c5ea8) => {
   try { const c = css2hex._c ||= document.createElement("canvas").getContext("2d"); c.fillStyle = "#000"; c.fillStyle = String(css); const v = c.fillStyle; return v.startsWith("#") ? parseInt(v.slice(1), 16) : fallback; } catch (_) { return fallback; }
@@ -1198,9 +1232,12 @@ async function addKascLayer(item, baseUrl) {
     // QML スタイル: 代表地物の spec からレイヤ既定色を取る（Navara はレイヤ単位マテリアル）
     let fillCss = item.opts?.fill, strokeCss = item.opts?.stroke || item.opts?.color, markerCss = item.opts?.marker_color;
     let lineDash = null, lineCap = null;
-    if (item.opts?.style) {
+    const embStyle = (loaded.qml || loaded.sld) ? loaded : null;
+    if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
-        const compiled = await loadCompiledQml(item.opts.style, baseUrl, "navara");
+        const compiled = item.opts?.style
+          ? await loadCompiledQml(item.opts.style, baseUrl, "navara")
+          : await compileEmbeddedStyle(embStyle, baseUrl, "navara");
         item._qml = compiled;
         const spec = compiled.evaluate?.(item._geojson?.features?.[0]?.properties || {});
         const s = specToStyle(spec);
@@ -1255,6 +1292,42 @@ async function addKascLayer(item, baseUrl) {
         geometryTypes: ["point"], transparent: true, opacity: pointO,
         clampToGround: true, billboardFacing: "upright", rotateWithCamera: true,
       };
+    }
+    // simplestyle marker-symbol → billboard 地物別 canvas バッジ(QML 無し時)。
+    // QML マーカー経路と同じ billboardMat+FeatureEvaluator.image 機構を再利用する。
+    // marker-symbol を持たない地物は点色の小円バッジで点の見た目を維持する
+    let ssImageFor = null;
+    if (!item._qml && hasPointGeoms) {
+      const ssCache = new Map();
+      const ssKeyOf = props => {
+        const s = resolveDefaultPointStyle(props, ds.point, { color: "#d94f3d", size: 0, opacity: 1 });
+        return { s, key: `${s.symbol ?? ""}|${s.color}|${s.size}|${props?.icon ?? ""}|${props?.["icon-scale"] ?? ""}` };
+      };
+      const badgeFor = async props => {
+        const { s, key } = ssKeyOf(props);
+        if (ssCache.has(key)) return ssCache.get(key);
+        let e = null;
+        try {
+          // togeojson(KML) icon-* → 画像 URL を直接 billboard へ(scale1=32px)
+          const tg = togeojsonIconSpec(props);
+          e = tg ? { url: tg.url, h: Math.max(Math.round(32 * tg.scale), 4) }
+            : await navaraSsBadge(markerSymbolSpec(s.symbol), s.color, s.size);
+        } catch (_) {}
+        ssCache.set(key, e);
+        return e;
+      };
+      await Promise.all((item._geojson?.features || [])
+        .filter(f => /point/i.test(f?.geometry?.type || ""))
+        .map(f => badgeFor(f.properties || {})));
+      if ([...ssCache.values()].some(Boolean)) {
+        ssImageFor = props => ssCache.get(ssKeyOf(props).key) || null;
+        billboardMat = {
+          url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          sizeInMeters: false, size: 1,
+          geometryTypes: ["point"], transparent: true, opacity: pointO,
+          clampToGround: true, billboardFacing: "upright", rotateWithCamera: true,
+        };
+      }
     }
     // invertedPolygonRenderer: 世界矩形 − 地物リング(穴)マスク(他エンジンと
     // 同じ近似)。_geojson を破壊しないよう geometry オブジェクトだけ複写する
@@ -1490,6 +1563,25 @@ async function addKascLayer(item, baseUrl) {
       };
       layer.on("featureCreated", applyStyle);
       layer.on("featureUpdated", applyStyle);
+    }
+    // simplestyle marker-symbol の地物別バッジ(QML 無し時)。billboard メッシュへ
+    // 事前生成した canvas 画像を差し込む(マーカー無し地物は点色の小円で代替)
+    if (!compiled && ssImageFor) {
+      const applySs = ({ evaluator }) => {
+        try {
+          evaluator.evaluate(info => {
+            try {
+              const gt = info?.meshGeomType;
+              if (gt === "text" || gt === "polygon" || gt === "polyline") return {};
+              const mi = ssImageFor(info?.properties || {});
+              if (mi) return { image: mi.url, size: Math.max(mi.h, 1) };
+              return {};
+            } catch (_) { return {}; }
+          });
+        } catch (_) {}
+      };
+      layer.on("featureCreated", applySs);
+      layer.on("featureUpdated", applySs);
     }
     return { src, layer, desc };
   }
@@ -2191,7 +2283,7 @@ async function saveToDataDir(name, content) {
       try {
         const dir = (await saveToDataDir(file.name, file)) || "canvas_data";
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", fgbz: "flatgeobuf", zst: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", fgseq: "geojsonseq", geojsonseq: "geojsonseq", jsonseq: "geojsonseq", jsonfg: "geojson", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           panel.inspector.value = panel.inspector.value.replace(/\s*$/, "") + `\n${type}:${title} | ${dir}/${file.name}\n`;
@@ -2443,6 +2535,13 @@ configureFollow({
     },
     openPortal() { openPortal(); return portalAvailable(); },
     closePortal() { closePortal(); return true; },
+    // 検証用: レイヤー desc のマテリアル種別(point/billboard/text 等)を返す
+    getLayerStyle(id) {
+      const e = layerEntries.find(e => e.item.id === id || e.sid === id || e.item.title === id);
+      const d = e?.desc;
+      if (!d) return null;
+      return Object.fromEntries(Object.keys(d).filter(k => d[k] && typeof d[k] === "object").map(k => [k, true]));
+    },
     // Navara 診断情報（メモリ/キャッシュ統計）を AI・検証スクリプトから取得可能にする
     getMemoryStats() {
       try { return view.memoryStats?.() ?? null; } catch (_) { return null; }

@@ -1,0 +1,14 @@
+cam:世界|20|10|h=40000000|p=-90
+geojson: spec/単体Feature | /verify/geojson-spec/feature.geojson | on
+geojson: spec/裸Geometry | /verify/geojson-spec/geometry.geojson | on
+geojson: spec/GeometryCollection | /verify/geojson-spec/geomcollection.geojson | on
+geojson: spec/3D座標 | /verify/geojson-spec/three-d.geojson | on
+geojson: spec/外部メンバー | /verify/geojson-spec/foreign.geojson | on
+geojson: spec/null地物 | /verify/geojson-spec/null-geom.geojson | on
+geojson: spec/日付線 | /verify/geojson-spec/dateline.geojson | on
+geojsonl: spec/geojsonl | /verify/geojson-spec/seq-geojsonl.geojsonl | on
+geojsonseq: spec/geojsonseq | /verify/geojson-spec/seq.fgseq | on
+geojson: spec/JSON-FG | /verify/geojson-spec/jsonfg.geojson | on
+geojson: spec/JSON-FG-3857 | /verify/geojson-spec/jsonfg-3857.geojson | on
+geojson: spec/JSON-FG-solid | /verify/geojson-spec/jsonfg-solid.geojson | on
+geojson: style/simplestyle | /verify/geojson-spec/style-simplestyle.geojson | on

@@ -1,0 +1,75 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "title": "テスト駅",
+        "description": "<b>太字の説明</b><script>alert(1)</script><a href=\"https://example.com\">リンク</a>",
+        "marker-color": "#e45756",
+        "marker-size": "medium",
+        "marker-symbol": "a"
+      },
+      "geometry": { "type": "Point", "coordinates": [139.70, 35.60] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "title": "Makiアイコン",
+        "marker-color": "#1b7fbd",
+        "marker-size": "small",
+        "marker-symbol": "rail"
+      },
+      "geometry": { "type": "Point", "coordinates": [139.75, 35.60] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "marker-color": "3bb2d0",
+        "marker-size": "large",
+        "marker-symbol": "7"
+      },
+      "geometry": { "type": "Point", "coordinates": [139.80, 35.60] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "title": "線地物",
+        "stroke": "#ff8800",
+        "stroke-width": 4,
+        "stroke-opacity": 0.8
+      },
+      "geometry": { "type": "LineString", "coordinates": [[139.70, 35.55], [139.80, 35.55]] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "title": "ポリゴン",
+        "fill": "#00aa00",
+        "fill-opacity": 0.5,
+        "stroke": "#006600",
+        "stroke-width": 3,
+        "stroke-opacity": 0.9
+      },
+      "geometry": { "type": "Polygon", "coordinates": [[[139.70, 35.65], [139.80, 35.65], [139.80, 35.70], [139.70, 35.70], [139.70, 35.65]]] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "装飾なし点" },
+      "geometry": { "type": "Point", "coordinates": [139.72, 35.62] }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "title": "KML由来icon",
+        "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "icon-scale": 2,
+        "icon-opacity": 0.5,
+        "heading": 90,
+        "icon-offset": [4, -8],
+        "icon-color": "FF0000FF"
+      },
+      "geometry": { "type": "Point", "coordinates": [139.77, 35.62] }
+    }
+  ]
+}

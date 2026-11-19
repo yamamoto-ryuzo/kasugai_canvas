@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+ {"type":"Feature","geometry":null,"properties":{"name":"unlocated","kind":"nogeo"}},
+ {"type":"Feature","geometry":{"type":"Point","coordinates":[139.7,35.68]},"properties":{"name":"located"}}
+]}

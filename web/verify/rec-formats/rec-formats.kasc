@@ -6,3 +6,4 @@ flatgeobuf: 検証/fgb(bbox=auto) | /verify/fgb-test/countries.fgb | on
 flatgeobuf: 検証/fgb(bbox=off) | /verify/fgb-test/countries.fgb | on | bbox=off
 geoparquet: 検証/geoparquet | /verify/rec-formats/example.parquet | on
 geoparquet: 検証/geoparquet where | /verify/rec-formats/example.parquet | on | where="continent"='Africa'
+geoparquet: 検証/geoparquet範囲 | /verify/rec-formats/grid.parquet | on

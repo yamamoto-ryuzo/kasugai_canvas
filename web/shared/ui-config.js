@@ -24,11 +24,18 @@
 //   manage:<名>         … 管理ウィンドウの大分類 (manage-<名> / data-settab)
 //   managesub:<名>      … 管理ウィンドウ内サブタブ (data-manage-sub)
 //   chat / portal / engines … AIチャット・ポータル・エンジン切替の固定名
+//   engine:<名>           … エンジン切替バー内の個別リンク
+//                           (engine:navara で navara リンクだけ隠す)
 //   #id / .class / <要素id> … CSS セレクタまたは要素 id 直指定
 //                             (time-bar, tools-dock, help-open 等)
 // タブを隠すと対応パネルも隠し、アクティブだった場合は先頭の
 // 表示タブへ繰り上げる。適用は起動時の1回のみ(後から動的に
 // 追加される要素は対象外)。
+//
+// ブラウザ保存: 管理画面の「ブラウザに保存」が localStorage
+// ("kasugai.ui-config.<配置dir>")へ書き込む上書き設定。
+// あれば ui.config.json ファイルより優先して適用されるため、
+// CDN 等の静的ホストでもブラウザごとに画面構成を修正できる
 
 const DEFAULT_CONFIG_URL = "./ui.config.json";
 
@@ -63,6 +70,23 @@ function stripJsonComments(text) {
   return out.replace(/,(\s*[}\]])/g, "$1");
 }
 
+// ---- ブラウザ保存の上書き設定(localStorage) ----
+// UI カスタマイズ管理画面の「ブラウザに保存」が書き込む上書き設定。
+// キーはエンジンの配置ディレクトリ(/cesium/・/stable/cesium/ 等)単位で、
+// 同一オリジンに複数チャンネルが同居しても衝突しない
+
+export function localConfigKey(pathname = location.pathname) {
+  const dir = pathname.endsWith("/") ? pathname : pathname.replace(/[^/]*$/, "");
+  return "kasugai.ui-config." + dir;
+}
+
+export function loadLocalUiConfig() {
+  try {
+    const raw = localStorage.getItem(localConfigKey());
+    return raw ? JSON.parse(stripJsonComments(raw)) : null;
+  } catch { return null; }
+}
+
 export async function loadUiConfig(url = DEFAULT_CONFIG_URL) {
   try {
     const res = await fetch(url, { cache: "no-store" });
@@ -85,6 +109,9 @@ const PREFIXED_SELECTORS = {
   manage: n => [`[data-manage-pane="manage-${n}"]`, `[data-settab="${n}"]`, `#manage-${n}`, `#setpane-${n}`],
   managesub: n => [`[data-manage-sub="${n}-panel"]`, `[data-manage-sub="${n}"]`, `#${n}-panel`],
   sub: n => [`[data-manage-sub="${n}-panel"]`, `[data-manage-sub="${n}"]`, `#${n}-panel`],
+  // エンジン切替バーの個別リンク/ラベル(現在エンジンは <b data-engine> で描画)
+  engine: n => [`#engines [data-engine="${n}"]`],
+  engines: n => [`#engines [data-engine="${n}"]`],
 };
 
 // 機能名そのまま使える固定名(タブ規約に載らないUI部品)
@@ -287,7 +314,8 @@ export function applyUiConfig(cfg = {}) {
 }
 
 export async function initUiConfig(url = DEFAULT_CONFIG_URL) {
-  const cfg = await loadUiConfig(url);
-  if (Object.keys(cfg).length) applyUiConfig(cfg);
-  return cfg;
+  // ブラウザ保存(localStorage)があればファイルより優先する
+  const cfg = loadLocalUiConfig() ?? (await loadUiConfig(url));
+  if (cfg && Object.keys(cfg).length) applyUiConfig(cfg);
+  return cfg || {};
 }

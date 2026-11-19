@@ -152,6 +152,62 @@ function featureDeckStyle(item, feature) {
   };
 }
 
+// @loaders.gl/i3s は deck.gl dist.min.js に同梱されないため、3dtiles 行の
+// loader=i3s 指定時のみモジュール単体の dist バンドルを遅延読み込みする。
+// バンドルは UMD で window.loaders 名前空間を公開する（I3SLoader 等）。
+// deck.gl 同梱の loaders.gl(^4.4.3)とメジャーを揃えて 4.4.x をピンする
+const I3S_CDN = "https://cdn.jsdelivr.net/npm/@loaders.gl/i3s@4.4.5/dist/dist.min.js";
+let i3sLoadPromise = null;
+export function ensureI3sLoader() {
+  if (window.loaders?.I3SLoader) return Promise.resolve(window.loaders.I3SLoader);
+  i3sLoadPromise ||= new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = I3S_CDN;
+    s.crossOrigin = "anonymous";
+    s.onload = () => window.loaders?.I3SLoader
+      ? resolve(window.loaders.I3SLoader)
+      : reject(new Error("I3SLoader が初期化されませんでした"));
+    s.onerror = () => { i3sLoadPromise = null; reject(new Error("@loaders.gl/i3s の読み込みに失敗しました")); };
+    document.head.append(s);
+  });
+  return i3sLoadPromise;
+}
+
+// .kasc の 3dtiles 行オプション → Tile3DLayer 追加 props（3エンジン共通の反映点）。
+//   operation=draw|terrain|terrain+draw … operation 上書き。
+//     terrain は自身を描画せずドレープの地形ソースだけになる（未指定はドレープ連動の自動値）
+//   pointcolor=<CSS色> … pnts に色情報が無い場合の代替色（getPointColor 定数）
+//   loader=i3s … ensureI3sLoader で取得した I3SLoader を loader に使う目印
+//     （def 側が非同期的に loaderObj を保持して opts.loader へ入れる）
+//   deckopts=<JSON> … Tile3DLayer props へそのままマージする最終エスケープハッチ。
+//     loadOptions/_subLayerProps/getPointColor 配列等を自由指定できる。
+//     JSON では関数を書けないためコールバック系(onTileLoad 等)は対象外
+// 戻り値は Tile3DLayer opts へ Object.assign するための props オブジェクト
+export function parseDeckTile3dOpts(opts = {}) {
+  const out = {};
+  const op = String(opts.operation ?? "").toLowerCase();
+  if (["draw", "terrain", "terrain+draw"].includes(op)) out.operation = op;
+  else if (op) console.warn(`3dtiles: operation=${op} は draw|terrain|terrain+draw のいずれかを指定してください`);
+  if (opts.pointcolor != null && String(opts.pointcolor).trim() !== "") {
+    out.getPointColor = cssToRgba(String(opts.pointcolor).trim(), [0, 0, 0, 255]);
+  }
+  if (opts.deckopts != null && String(opts.deckopts).trim() !== "") {
+    try {
+      const extra = JSON.parse(String(opts.deckopts));
+      if (extra && typeof extra === "object") Object.assign(out, extra);
+      else console.warn("3dtiles: deckopts= は JSON オブジェクトで指定してください");
+    } catch (e) {
+      console.warn(`3dtiles: deckopts= の JSON を解釈できません: ${e.message}`);
+    }
+  }
+  return out;
+}
+
+// .kasc opts の loader=i3s 指定判定（ensureI3sLoader を呼ぶかの目印）
+export function deckWantsI3s(opts = {}) {
+  return /^i3s$/i.test(String(opts.loader ?? ""));
+}
+
 // ドレープ対象レイヤー集合 → deck レイヤー配列。
 //   rasterItems: xyz/wms/wmts/base の .kasc アイテム（ベースマップを含む場合は先頭に）
 //   vectorItems: _geojson を持つベクター .kasc アイテム

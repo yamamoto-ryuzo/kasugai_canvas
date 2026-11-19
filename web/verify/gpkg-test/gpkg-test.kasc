@@ -1,0 +1,12 @@
+gpkg: テスト/pt(基本) | /verify/gpkg-test/gpkg-test.gpkg | on | table=pt | bbox=off
+gpkg: テスト/pt(where) | /verify/gpkg-test/gpkg-test.gpkg | on | table=pt | bbox=off | where=value >= 30
+gpkg: テスト/pt(limit2) | /verify/gpkg-test/gpkg-test.gpkg | on | table=pt | bbox=off | limit=2
+gpkg: テスト/pt(columns) | /verify/gpkg-test/gpkg-test.gpkg | on | table=pt | bbox=off | columns=name
+gpkg: テスト/ln(table=) | /verify/gpkg-test/gpkg-test.gpkg | on | table=ln | bbox=off
+gpkg: テスト/pt(bbox=auto) | /verify/gpkg-test/gpkg-test.gpkg | on | table=pt
+gpkg: テスト/curves | /verify/gpkg-test/gpkg-test.gpkg | on | table=curves | bbox=off
+gpkg: テスト/proj3857 | /verify/gpkg-test/gpkg-test.gpkg | on | table=proj | bbox=off
+gpkg: テスト/proj6677 | /verify/gpkg-test/gpkg-test.gpkg | on | table=proj6677 | bbox=off
+gpkg: テスト/attr表 | /verify/gpkg-test/gpkg-test.gpkg | on | table=attr_table | bbox=off
+gpkg: テスト/pt(altスタイル) | /verify/gpkg-test/gpkg-test.gpkg | on | table=pt | bbox=off | gpkgstyle=alt
+duckdb: テスト/ln(duckdb経由) | /verify/gpkg-test/gpkg-test.gpkg | on | format=gpkg | table=ln | bbox=off

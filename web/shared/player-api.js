@@ -4,7 +4,7 @@
 // kasugaiApi 互換の API 面をここで構成する。AI チャット（shared/ai-chat.js）の
 // ツールはこの api メソッドの有無で公開可否が決まる。
 import { camToZoom, viewZoomToHeight, geojsonExtent, splitKascTitle, buildViewUrl, normKascTitle } from "./kasc.js";
-import { loadVectorItem } from "./vector-load.js";
+import { loadVectorItem, summarizeFlatGeobufHeader, summarizeGeoParquetHeader } from "./vector-load.js";
 import { backendUrl } from "./backend.js";
 import { hasBackendFeature, isFetchProxyTarget, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
 import { getLanguage, t } from "./i18n.js";
@@ -436,6 +436,23 @@ export function createPlayerApi(hooks) {
           type: item.type,
           filter: item.opts?.where || "",
         };
+        // flatgeobuf: のヘッダメタ(件数/索引有無/列/CRS)を listLayers へ露出
+        const fgbMeta = summarizeFlatGeobufHeader(item.fgbHeader);
+        if (fgbMeta) entry.fgb = fgbMeta;
+        // geoparquet: の geo メタ(version/encoding/geometry_types/crs 等)を露出
+        const geoMeta = summarizeGeoParquetHeader(item.geoHeader);
+        if (geoMeta) entry.geo = geoMeta;
+        // GeoPackage メタ(CRS/拡張/埋め込みスタイル選択)と OGC 24-050
+        // Portrayal 適用結果を fgb/geo と同じく露出する
+        if (item.gpkgMeta) {
+          const gm = item.gpkgMeta;
+          entry.gpkg = { kind: gm.kind, srs: gm.srs || null,
+            styleName: gm.styleName || null, styleNames: gm.styleNames || null,
+            styles: gm.styles || null, extensions: (gm.extensions || []).map(x => x.name) };
+        }
+        if (item._gpkgPortrayal) entry.gpkgPortrayal = item._gpkgPortrayal;
+        const gpkgpLids = (e.lids || []).filter(id => /gpkgp/.test(id));
+        if (gpkgpLids.length) entry.gpkgpLids = gpkgpLids;
         const legend = item._qml?.legend;
         if (legend?.length > 1) {
           entry.legend = legend.map(le => ({ label: le.label || le.symbolName, visible: !item._legendHidden?.has(le.symbolName) }));

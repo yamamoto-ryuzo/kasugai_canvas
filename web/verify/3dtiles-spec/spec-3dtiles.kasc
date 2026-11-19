@@ -1,0 +1,6 @@
+title: 3D Tiles spec probe
+3dtiles: 最小1.1 | min11/tileset.json | 出典テスト | sse=4 | edl=off | tilecolor=orange | tileshow=${height} > 0 | tilepointsize=8
+3dtiles: ネスト1.0 | nested/root.json
+3dtiles: 非表示行 | hidden/tileset.json | off
+3dtiles: 拡張opts | min11/tileset.json | | clippoly=clip.geojson | customshader=shader.json | colorblend=highlight | blendamount=0.5 | splitdir=none | debug=colorize,geoerror,wireframe | foveated=on | foveatedcone=0.6 | foveatedmin=8 | foveateddelay=0.5 | pcshade={"attenuation":true,"baseResolution":5,"geometricErrorScale":0.8,"maximumAttenuation":16,"eyeDomeLightingStrength":1.2,"eyeDomeLightingRadius":1.5} | tiletime=2020-06-01T00:00:00Z
+3dtiles: deck拡張 | min11/tileset.json | operation=terrain | pointcolor=#ff0000 | deckopts={"loadOptions":{"tileset":{"throttleRequests":false}}} | off

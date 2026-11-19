@@ -1,0 +1,14 @@
+{
+  "type": "FeatureCollection",
+  "conformsTo": ["http://www.opengis.net/spec/json-fg-1/1.0/conf/core"],
+  "coordRefSys": "http://www.opengis.net/def/crs/EPSG/0/3857",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "fg-3857",
+      "place": { "type": "Point", "coordinates": [15567892.5, 4256246.0] },
+      "geometry": null,
+      "properties": { "name": "3857のplace" }
+    }
+  ]
+}

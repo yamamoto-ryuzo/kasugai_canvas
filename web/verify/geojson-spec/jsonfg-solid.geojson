@@ -1,0 +1,36 @@
+{
+  "type": "FeatureCollection",
+  "conformsTo": [
+    "http://www.opengis.net/spec/json-fg-1/1.0/conf/core",
+    "http://www.opengis.net/spec/json-fg-1/1.0/conf/polyhedra"
+  ],
+  "coordRefSys": "http://www.opengis.net/def/crs/OGC/0/CRS84h",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "fg-polyhedron",
+      "place": {
+        "type": "Polyhedron",
+        "coordinates": [
+          [
+            [[139.70, 35.68, 0], [139.71, 35.68, 0], [139.71, 35.69, 0], [139.70, 35.69, 0]],
+            [[139.70, 35.68, 10], [139.70, 35.69, 10], [139.71, 35.69, 10], [139.71, 35.68, 10]]
+          ]
+        ]
+      },
+      "geometry": { "type": "Polygon", "coordinates": [[[139.70, 35.68], [139.71, 35.68], [139.71, 35.69], [139.70, 35.69], [139.70, 35.68]]] },
+      "properties": { "name": "Polyhedron+footprint" }
+    },
+    {
+      "type": "Feature",
+      "id": "fg-prism-nofallback",
+      "place": {
+        "type": "Prism",
+        "base": { "type": "Polygon", "coordinates": [[[139.72, 35.68], [139.73, 35.68], [139.73, 35.69], [139.72, 35.69], [139.72, 35.68]]] },
+        "lower": 0, "upper": 15
+      },
+      "geometry": null,
+      "properties": { "name": "Prism(フォールバック無し)" }
+    }
+  ]
+}

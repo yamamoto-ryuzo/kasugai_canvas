@@ -977,11 +977,11 @@
    "depends": [],
    "verify": {
     "standalone": "node --check + export存在確認",
-    "integrated": "node web/verify/results/probe-rec-formats.mjs(3形式統合) + probe-rec-qml.mjs(QML適用)"
+    "integrated": "node web/verify/results/probe-rec-formats.mjs(3形式統合) + probe-geoparquet-style.mjs(geoparquet スタイル経路) + probe-rec-qml.mjs(QML適用)"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-18T00:00:00+09:00",
-   "note": "probe-rec-formats 22/22 PASS。probe-rec-qml 26/26 PASS(3形式の属性へ categorizedSymbol+ラベル+凡例が実機適用)。推奨形式の変更時検証は vector-formats スキル"
+   "last_verified": "2026-11-19T00:00:00+09:00",
+   "note": "probe-rec-formats 34/34 PASS(geoparquet geoHeader 露出・covering.bbox 列の属性除外・bbox=auto 範囲読みを含む)。geoparquet: は covering.bbox 列→行グループ geospatial statistics の順で部分読み(bbox=auto 既定 ON・両方無し/Range 非対応は全件フォールバック)。3000行15RG fixture で covering→5行・geo-stats→5行・平WKB→全件。hyparquet 1.33.1/compressors 1.1.3。仕様監査は engine-geoparquet スキル、変更時検証は vector-formats スキル"
   },
   {
    "id": "web.shared.vendor-guard",

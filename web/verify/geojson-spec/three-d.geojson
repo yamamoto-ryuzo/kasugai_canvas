@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+ {"type":"Feature","geometry":{"type":"Point","coordinates":[139.7,35.68,123.4]},"properties":{"name":"p3d"}},
+ {"type":"Feature","geometry":{"type":"LineString","coordinates":[[139.6,35.6,10],[139.8,35.7,50.5]]},"properties":{"name":"l3d"}}
+]}

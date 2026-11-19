@@ -104,6 +104,7 @@
       <tr><td><code>topojson:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>topojson-client でトポロジー復元</td></tr>
       <tr><td><code>esrijson:</code> / <code>arcgis:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>ArcGIS REST JSON→GeoJSON（wkid 自動補正）</td></tr>
       <tr><td><code>geojsonl:</code> / <code>ndjson:</code> / <code>jsonl:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>行区切り GeoJSON を逐行パース</td></tr>
+      <tr><td><code>geojsonseq:</code> / <code>fgseq:</code> / <code>geojson-seq:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>RFC 8142 GeoJSON テキストシーケンス（RS 区切り）</td></tr>
       <tr><td><code>wkt:</code> / <code>wkb:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>WKT パーサ＋WKB バイナリ/hex デコーダ</td></tr>
       <tr><td><code>igc:</code> / <code>polyline:</code> / <code>gml:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td><code>ol/format/{IGC,Polyline,WFS,GML}</code> を CDN 遅延ロードしてパース（ol 本体は使う形式の出現時のみロード）。GML は <code>axisorder=lonlat</code> で座標順入替対応</td></tr>
       <tr><td><code>wfs:</code></td><td>〇</td><td>〇</td><td>〇</td><td>〇</td><td>GetFeature GET（CORS 要）。JSON 応答優先・XML/GML 応答は ol/format へ自動フォールバック</td></tr>

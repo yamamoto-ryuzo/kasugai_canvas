@@ -8,15 +8,16 @@
 //   @mapbox/vector-tile + pbf … MVT デコード (BSD-3-Clause)
 //   pmtiles                 … PMTiles アーカイブ読み出し (BSD-3-Clause)
 
-const VT_URL = "https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@1.3.1/+esm";
-const PBF_URL = "https://cdn.jsdelivr.net/npm/pbf@3.3.0/+esm";
-const PMTILES_URL = "https://cdn.jsdelivr.net/npm/pmtiles@4.4.1/+esm";
+const VT_URL = "https://cdn.jsdelivr.net/npm/@mapbox/vector-tile@3.0.0/+esm";
+const PBF_URL = "https://cdn.jsdelivr.net/npm/pbf@5.2.0/+esm";
+const PMTILES_URL = "https://cdn.jsdelivr.net/npm/pmtiles@4.5.0/+esm";
 
 let _decoderP = null;
 export function loadMvtDecoder() {
   _decoderP ||= Promise.all([import(VT_URL), import(PBF_URL)]).then(([vt, pb]) => {
     const VectorTile = vt.VectorTile || vt.default?.VectorTile || vt.default;
-    const Pbf = pb.Pbf || pb.default?.Pbf || pb.default;
+    // pbf@4 以降は Reader/Writer が分離(Pbf→PbfReader)。旧名もフォールバック
+    const Pbf = pb.PbfReader || pb.Pbf || pb.default?.PbfReader || pb.default?.Pbf || pb.default;
     if (!VectorTile || !Pbf) throw new Error("vector-tile/pbf の読み込みに失敗しました");
     return { VectorTile, Pbf };
   });

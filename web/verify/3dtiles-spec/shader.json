@@ -1,0 +1,5 @@
+{
+  "fragmentShaderText": "void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) { material.diffuse *= 1.5; }",
+  "lightingModel": "PBR",
+  "translucencyMode": "INHERIT"
+}

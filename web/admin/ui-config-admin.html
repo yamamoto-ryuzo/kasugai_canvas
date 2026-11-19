@@ -86,12 +86,14 @@
     <div class="row">
       <button id="gen">生成して反映</button>
       <button id="save" class="primary">サーバーに保存</button>
+      <button id="save-local" title="このブラウザの localStorage に保存(同じ配信元のエンジン起動時にファイルより優先して適用)">ブラウザに保存</button>
       <button id="download">ダウンロード</button>
       <button id="copy">コピー</button>
       <button id="reapply" title="現在の編集内容をプレビューへ再適用">再適用</button>
       <button id="delete" class="danger">設定を削除</button>
+      <button id="delete-local" class="danger" title="ブラウザ保存(localStorage)を削除">ブラウザ保存を削除</button>
     </div>
-    <p class="hint">「サーバーに保存」はローカルサーバー起動時のみ有効です。静的ホスト(CDN)ではダウンロードして &lt;engine&gt;/ フォルダへ配置してください。反映にはページ再読み込みが必要です。</p>
+    <p class="hint">「サーバーに保存」はローカルサーバー起動時のみ有効です。「ブラウザに保存」はこのブラウザの localStorage に書き込み、同じ配信元のエンジン起動時に<strong>ファイルより優先</strong>して適用されます（CDN でも使えます）。別環境へ配る場合はダウンロード（&lt;engine&gt;.ui.config.json で出力）して &lt;engine&gt;/ フォルダへ <code>ui.config.json</code> として配置してください。反映にはページ再読み込みが必要です。</p>
     <p class="hint"><a href="https://yamamoto-ryuzo.github.io/kasugai_canvas/docs/ui-config.html" target="_blank" style="color:var(--accent)">設定ファイル仕様 (docs/ui-config.html)</a> ／ <a id="engine-link" href="#" target="_blank" style="color:var(--accent)">エンジンを別タブで開く</a></p>
   </section>
 </main>
@@ -255,6 +257,14 @@ function collectSubButtons(withBadges = false) {
   for (const el of idoc.querySelectorAll(SUB_BUTTON_SEL)) {
     if (el.closest("#walk-help, #chat-panel, #ai-section")) continue;
     const spec = `#${el.id}`;
+    if (!specEls.has(spec)) {
+      specEls.set(spec, el);
+      if (withBadges) addBadge(spec, el);
+    }
+  }
+  // エンジン切替バーの各リンク/ラベル(エンジンごとに個別 ON/OFF)
+  for (const el of idoc.querySelectorAll("#engines [data-engine]")) {
+    const spec = `engine:${el.dataset.engine}`;
     if (!specEls.has(spec)) {
       specEls.set(spec, el);
       if (withBadges) addBadge(spec, el);
@@ -490,7 +500,7 @@ function renderOpenOptions() {
   const cur = workingCfg.open;
   sel.innerHTML = '<option value="">(未設定)</option>';
   for (const spec of specEls.keys()) {
-    if (spec.startsWith("#") || spec.startsWith(".") || spec === "chat" || spec === "portal" || spec === "engines") continue;
+    if (spec.startsWith("#") || spec.startsWith(".") || spec.startsWith("engine:") || spec === "chat" || spec === "portal" || spec === "engines") continue;
     const o = document.createElement("option");
     o.value = o.textContent = spec;
     sel.appendChild(o);
@@ -570,11 +580,30 @@ $("delete").addEventListener("click", async () => {
   }
 });
 
+$("save-local").addEventListener("click", () => {
+  if (!$("out").value.trim()) $("gen").click();
+  const engine = $("engine").value;
+  try {
+    localStorage.setItem(localConfigKeyFor(engine), $("out").value);
+    status(`${engine} の設定をブラウザに保存しました（起動時にファイルより優先して適用）`, "ok");
+    $("engine-file").textContent = `${engine}/ui.config.json ※ブラウザ保存を優先`;
+  } catch (e) {
+    status(`ブラウザ保存に失敗: ${e.message || e}`, "err");
+  }
+});
+
+$("delete-local").addEventListener("click", () => {
+  const engine = $("engine").value;
+  localStorage.removeItem(localConfigKeyFor(engine));
+  status(`${engine} のブラウザ保存を削除しました（次回起動はファイル/既定に戻ります）`, "ok");
+  $("engine-file").textContent = `${engine}/ui.config.json`;
+});
+
 $("download").addEventListener("click", () => {
   if (!$("out").value.trim()) $("gen").click();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([$("out").value], { type: "application/json" }));
-  a.download = "ui.config.json";
+  a.download = `${$("engine").value}.ui.config.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 });
@@ -587,9 +616,26 @@ $("copy").addEventListener("click", async () => {
 
 // ---- エンジン切替 ----
 
+// ui-config.js localConfigKey と同じ規約(エンジン配置dir単位)
+function localConfigKeyFor(engine) {
+  const dir = new URL(`../${engine}/`, location.href).pathname;
+  return "kasugai.ui-config." + dir;
+}
+
+// 読み込んだ設定を編集状態へ反映
+function applyCfgToWorking(cfg) {
+  workingCfg.hide.clear();
+  workingCfg.defaults = cfg.defaults || {};
+  workingCfg.open = cfg.open || "";
+  workingCfg.helpUrl = cfg.helpUrl || "";
+  for (const s of Array.isArray(cfg.hide) ? cfg.hide : cfg.hide ? [cfg.hide] : []) {
+    workingCfg.hide.add(s);
+  }
+  $("help-url").value = workingCfg.helpUrl;
+}
+
 async function loadEngine(engine) {
   status("プレビュー読み込み中…");
-  $("engine-file").textContent = `${engine}/ui.config.json`;
   $("engine-link").href = `../${engine}/`;
   if (badgeTimer) { clearInterval(badgeTimer); badgeTimer = null; }
   workingCfg.hide.clear();
@@ -603,19 +649,23 @@ async function loadEngine(engine) {
     const res = await fetch(`../${engine}/ui.config.json`, { cache: "no-store" });
     if (res.ok) {
       const text = await res.text();
-      const cfg = JSON.parse(stripJsonComments(text));
       $("out").value = text;
-      for (const s of Array.isArray(cfg.hide) ? cfg.hide : cfg.hide ? [cfg.hide] : []) {
-        workingCfg.hide.add(s);
-      }
-      workingCfg.defaults = cfg.defaults || {};
-      workingCfg.open = cfg.open || "";
-      workingCfg.helpUrl = cfg.helpUrl || "";
-      $("help-url").value = workingCfg.helpUrl;
+      applyCfgToWorking(JSON.parse(stripJsonComments(text)));
     } else {
       $("out").value = "";
     }
   } catch { /* 未配置 */ }
+  // ブラウザ保存(localStorage)はファイルより優先されるため、あればそちらを表示
+  let localSaved = false;
+  try {
+    const raw = localStorage.getItem(localConfigKeyFor(engine));
+    if (raw) {
+      $("out").value = raw;
+      applyCfgToWorking(JSON.parse(stripJsonComments(raw)));
+      localSaved = true;
+    }
+  } catch { /* ignore */ }
+  $("engine-file").textContent = `${engine}/ui.config.json` + (localSaved ? " ※ブラウザ保存を優先" : "");
   $("preview").src = `../${engine}/`;
   try {
     await setupPreview();
@@ -631,6 +681,22 @@ async function loadEngine(engine) {
     status(`プレビュー初期化失敗: ${e.message || e}`, "err");
   }
 }
+
+// サーバー保存可否: /api はローカルアプリのみに存在するため、
+// 静的ホスト(CDN)では保存/削除ボタンを無効化する
+(async () => {
+  try {
+    const res = await fetch("../health", { cache: "no-store" });
+    if (!res.ok) throw new Error();
+  } catch {
+    for (const id of ["save", "delete"]) {
+      const b = $(id);
+      b.disabled = true;
+      b.style.opacity = ".5";
+      b.title = "静的ホスト(CDN)では使えません —「生成して反映」→「ダウンロード」/「コピー」で <engine>/ フォルダへ配置してください";
+    }
+  }
+})();
 
 (async () => {
   const sel = $("engine");

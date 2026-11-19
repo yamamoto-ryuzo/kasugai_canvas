@@ -22,7 +22,7 @@ import { buildViewUrl } from "../shared/kasc.js";
 import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, setMapScaleGetter, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
 import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive, declutterAllLabels, installLabelDeclutter, installMapUnitScaler } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
-import { loadVectorItem } from "../shared/vector-load.js";
+import { loadVectorItem, normalizeGeoJsonToFeatureCollection, applyJsonFgSemantics, reprojectJsonFg, summarizeFlatGeobufHeader, summarizeGeoParquetHeader, readFlatGeobufMeta, probeQmlSidecar } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { mountSunControls } from "../shared/sun-time.js";
@@ -33,7 +33,7 @@ import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-ev
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createKascDashboard, featureCentroid } from "../shared/dashboard.js";
-import { parseKascDashValue, parseKascFormValue, parseKascStatValue, parseKascSearchValue } from "../shared/kasc.js";
+import { parseKascDashValue, parseKascFormValue, parseKascStatValue, parseKascSearchValue, featurePopupMeta, togeojsonIconSpec } from "../shared/kasc.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
@@ -305,7 +305,14 @@ function loadVectorSourceCached(item, decoder) {
     promise = decoder ? decoder.load(item) : (async () => {
       const response = await fetch(item.url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return normalizeGeoJsonCrs(await response.json());
+      // RFC 7946 §3: 単体 Feature/裸 Geometry も正当な GeoJSON。属性一覧・検索・
+      // where= 等の features 参照へ揃えるため FeatureCollection へ正規化する
+      const fc = normalizeGeoJsonToFeatureCollection(normalizeGeoJsonCrs(await response.json()));
+      const fg = applyJsonFgSemantics(fc);
+      await reprojectJsonFg(fc, fg);
+      if (fg.warnings.length) console.warn(`JSON-FG (${item.title}): ${fg.warnings.join(" / ")}`);
+      if (fg.isJsonFg) item.jsonfg = fg;
+      return fc;
     })();
     promise.catch(() => { if (vectorSourceCache.get(key) === promise) vectorSourceCache.delete(key); });
     vectorSourceCache.set(key, promise);
@@ -478,7 +485,7 @@ function scheduleLayerListRender() {
   });
 }
 // 凡例スウォッチを出しうるレイヤー種別(ベクター系)
-const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "wkt", "wkb", "igc", "polyline", "gml"]);
+const LEGEND_VECTOR_TYPES = new Set(["geojson", "layer", "entities", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "duckdb", "sql", "ogrsql", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml"]);
 
 // 描画指示内の canvas/画像をサイズ+src に正規化してキャッシュキーを作る
 function legendDescKey(desc) {
@@ -2565,6 +2572,29 @@ function renderLayerList() {
           const limitBadge = layer.entityLimited
             ? `<small class="entity-limit-badge" title="${escapeHtml(t("layer.entityLimited", { shown: layer.entityLimited.shown, total: layer.entityLimited.total }))}">${layer.entityLimited.shown}/${layer.entityLimited.total}</small>`
             : "";
+          // FlatGeobuf ヘッダメタ(件数/索引有無/CRS/列)をホバーで見るバッジ。
+          // 内容は loadFlatGeobuf が deserialize 時に headerMetaFn で捕捉した正規ヘッダ。
+          // 非表示など未ロードの fgb 行はヘッダのみ Range 取得(readMetadata)して
+          // 索引有無・件数を先にバッジへ出す(数KBの取得で済む)
+          const fgbMeta = summarizeFlatGeobufHeader(layer.fgbHeader);
+          if (!fgbMeta && !layer._fgbMetaReq
+            && (layer.type === "flatgeobuf" || layer.type === "fgb") && layer.url) {
+            layer._fgbMetaReq = true;
+            void readFlatGeobufMeta(layer.url, { proxy: layer.proxy, nocache: layer.nocache, key: layer.fgbKey }).then(meta => {
+              if (meta && !layer.fgbHeader) {
+                layer.fgbHeader = meta;
+                renderLayerList();
+              }
+            });
+          }
+          const fgbBadge = fgbMeta
+            ? `<small class="entity-limit-badge fgb-meta-badge" title="${escapeHtml(`FlatGeobuf: ${fgbMeta.geometryType} / ${fgbMeta.featuresCount}件 / ${fgbMeta.hasSpatialIndex ? `索引あり(nodeSize=${fgbMeta.indexNodeSize})` : "索引なし"}${fgbMeta.crs?.code ? ` / ${fgbMeta.crs.org || "EPSG"}:${fgbMeta.crs.code}` : ""} / 列:${fgbMeta.columns.map(c => c.name).join(", ") || "なし"}`)}">FGB</small>`
+            : "";
+          // GeoParquet の geo メタ(version/encoding/geometry_types/crs 等)をホバーで見るバッジ
+          const geoMeta = summarizeGeoParquetHeader(layer.geoHeader);
+          const geoBadge = geoMeta
+            ? `<small class="entity-limit-badge fgb-meta-badge" title="${escapeHtml(`GeoParquet: v${geoMeta.version || "?"} / ${geoMeta.encoding || "?"} / ${geoMeta.geometryTypes?.join(",") || "?"}${geoMeta.crs ? ` / ${geoMeta.crs.authority || ""}:${geoMeta.crs.code ?? ""}` : " / CRS不明"}${geoMeta.covering ? ` / covering:${geoMeta.covering.join(",")}` : ""}${geoMeta.geometryColumns.length > 1 ? ` / ジオメトリ列:${geoMeta.geometryColumns.join(",")}` : ""}`)}">PQ</small>`
+            : "";
           let legendEntries = getLayerLegend(layer)?.entries || null;
           // legendnode: メタ — ユーザーラベル(元インデックス基準)を先に
           // 適用し、その後で凡例ノード順へ並べ替える(#63)
@@ -2610,6 +2640,8 @@ function renderLayerList() {
           <span class="layer-status${layer._loadStatus === "loading" ? " loading" : ""}${layer._loadStatus === "failed" ? " failed" : ""}${deferred ? " deferred" : ""}" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer._loadStatus === "failed" ? (layer._loadError || "") : deferred ? t("layer.notLoadedHint") : "")}">${layer._loadStatus === "failed" ? escapeHtml(t("layer.loadFailed")) : deferred ? escapeHtml(t("layer.notLoaded")) : ""}</span>
           ${filterButton}
           ${limitBadge}
+          ${fgbBadge}
+          ${geoBadge}
           ${layer.qmlStyle?.warnings?.length ? `<button class="entity-limit-badge style-warn-badge" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(layer.qmlStyle.warnings.join(" / "))}">⚠${layer.qmlStyle.warnings.length}</button>` : ""}
           <button class="layer-focus" type="button" data-layer-id="${escapeHtml(layer.id)}" title="${escapeHtml(t("layer.focus"))}" aria-label="${escapeHtml(t("layer.focus"))}">📍</button>
         </label>
@@ -3583,14 +3615,146 @@ async function applyTilesetStyle(item, tileset) {
   }
 }
 
+// clippoly= の値 → [ [lon,lat,lon,lat,…], … ] (度)。
+// カンマ区切り座標列、または GeoJSON URL(Polygon/MultiPolygon の外周リングを採用)
+async function clipPolygonRings(item) {
+  const raw = String(item.clipPoly || "").trim();
+  if (!raw) return [];
+  if (/^[\s+\-\d.,]+$/.test(raw)) {
+    const nums = raw.split(",").map(Number).filter(Number.isFinite);
+    return nums.length >= 6 ? [nums] : [];
+  }
+  const gj = await (await fetch(proxyFetchUrl(raw, item.proxy))).json();
+  const rings = [];
+  const collect = geom => {
+    if (!geom) return;
+    if (geom.type === "Polygon") {
+      if (geom.coordinates?.[0]?.length >= 3) rings.push(geom.coordinates[0].flat());
+    } else if (geom.type === "MultiPolygon") {
+      for (const poly of geom.coordinates || []) {
+        if (poly?.[0]?.length >= 3) rings.push(poly[0].flat());
+      }
+    }
+  };
+  if (gj.type === "FeatureCollection") (gj.features || []).forEach(f => collect(f.geometry));
+  else if (gj.type === "Feature") collect(gj.geometry);
+  else collect(gj);
+  return rings;
+}
+
+// 3dtiles: 行の追加オプション → 未露出 Cesium3DTileset プロパティ(engine-3dtiles 監査)。
+// clippoly=/clipinverse= / customshader= / colorblend=・blendamount= / splitdir= /
+// debug= / pcshade= / tiletime=。失敗は警告のみでタイルセット全体は落とさない
+async function applyTilesetExtras(item, tileset) {
+  if (!item || !tileset) return;
+  // clippoly= + clipinverse=on → ClippingPolygonCollection
+  // (既定=ポリゴン外側をクリップ=領域内だけ残す。inverse=内側を削る)
+  if (item.clipPoly) {
+    try {
+      const rings = await clipPolygonRings(item);
+      if (rings.length) {
+        tileset.clippingPolygons = new Cesium.ClippingPolygonCollection({
+          polygons: rings.map(r => new Cesium.ClippingPolygon({
+            positions: Cesium.Cartesian3.fromDegreesArray(r),
+          })),
+          inverse: !!item.clipInverse,
+        });
+      }
+    } catch (error) {
+      console.warn(`3D Tiles クリッピングポリゴンの適用に失敗しました: ${item.url}`, error);
+    }
+  }
+  // customshader=<JSON URL> → CustomShader。enum は JSON では表現できないので文字列を変換
+  if (item.customShaderUrl) {
+    try {
+      const spec = await (await fetch(proxyFetchUrl(item.customShaderUrl, item.proxy))).json();
+      if (typeof spec.lightingModel === "string") {
+        const lm = { unlit: Cesium.LightingModel.UNLIT, pbr: Cesium.LightingModel.PBR };
+        spec.lightingModel = lm[spec.lightingModel.toLowerCase()];
+      }
+      if (typeof spec.translucencyMode === "string") {
+        const tm = {
+          opaque: Cesium.CustomShaderTranslucencyMode.OPAQUE,
+          translucent: Cesium.CustomShaderTranslucencyMode.TRANSLUCENT,
+          inherit: Cesium.CustomShaderTranslucencyMode.INHERIT,
+        };
+        spec.translucencyMode = tm[spec.translucencyMode.toLowerCase()];
+      }
+      tileset.customShader = new Cesium.CustomShader(spec);
+    } catch (error) {
+      console.warn(`3D Tiles CustomShader の適用に失敗しました: ${item.url}`, error);
+    }
+  }
+  // colorblend=highlight|replace|mix + blendamount=<0-1>
+  if (item.colorBlendMode && Cesium.Cesium3DTileColorBlendMode[item.colorBlendMode] !== undefined) {
+    tileset.colorBlendMode = Cesium.Cesium3DTileColorBlendMode[item.colorBlendMode];
+  }
+  if (Number.isFinite(item.colorBlendAmount)) tileset.colorBlendAmount = item.colorBlendAmount;
+  // splitdir=left|right|none
+  if (item.tileSplitDirection) {
+    const m = {
+      left: Cesium.SplitDirection.LEFT,
+      right: Cesium.SplitDirection.RIGHT,
+      none: Cesium.SplitDirection.NONE,
+    };
+    tileset.splitDirection = m[item.tileSplitDirection] ?? Cesium.SplitDirection.NONE;
+  }
+  // debug=colorize,freeze,bounds,contentbounds,geoerror,memory,stats,url,vrv,wireframe
+  if (item.tileDebug?.length) {
+    const dbg = {
+      colorize: "debugColorizeTiles", freeze: "debugFreezeFrame",
+      bounds: "debugShowBoundingVolume", contentbounds: "debugShowContentBoundingVolume",
+      geoerror: "debugShowGeometricError", memory: "debugShowMemoryUsage",
+      stats: "debugShowRenderingStatistics", url: "debugShowUrl",
+      vrv: "debugShowViewerRequestVolume", wireframe: "debugWireframe",
+    };
+    for (const k of item.tileDebug) if (dbg[k]) tileset[dbg[k]] = true;
+  }
+  // pcshade=<JSON 一括> → pointCloudShading(edl= 系以外のメンバーもここで)
+  if (item.pcShadeJson && tileset.pointCloudShading) {
+    try {
+      const spec = JSON.parse(item.pcShadeJson);
+      const pcs = tileset.pointCloudShading;
+      const nums = {
+        baseresolution: "baseResolution", geometricerrorscale: "geometricErrorScale",
+        maximumattenuation: "maximumAttenuation",
+        eyedomelightingstrength: "eyeDomeLightingStrength",
+        eyedomelightingradius: "eyeDomeLightingRadius",
+      };
+      const bools = {
+        attenuation: "attenuation", eyedomelighting: "eyeDomeLighting",
+        backfaceculling: "backFaceCulling", normalshading: "normalShading",
+      };
+      for (const [k, v] of Object.entries(spec)) {
+        const lk = k.toLowerCase();
+        if (nums[lk] && Number.isFinite(Number(v))) pcs[nums[lk]] = Number(v);
+        else if (bools[lk]) pcs[bools[lk]] = !!v;
+      }
+    } catch (error) {
+      console.warn(`pcshade= の JSON 適用に失敗しました: ${item.url}`, error);
+    }
+  }
+  // tiletime=<ISO8601> → JulianDate(time-dynamic タイルセットの表示時刻)
+  if (item.tileTime) {
+    try {
+      tileset.time = Cesium.JulianDate.fromIso8601(item.tileTime);
+    } catch (error) {
+      console.warn(`tiletime= の解釈に失敗しました: ${item.url}`, error);
+    }
+  }
+}
+
 function getCesiumTilesetOptions() {
   const sseInput = document.querySelector("#cesium-sse");
   const memoryInput = document.querySelector("#cesium-max-memory");
   const sse = sseInput ? Number(sseInput.value) : 16;
-  const maximumMemoryUsage = memoryInput ? Number(memoryInput.value) : 2048;
+  const memoryMb = memoryInput ? Number(memoryInput.value) : 2048;
   return {
     maximumScreenSpaceError: Number.isFinite(sse) && sse >= 0 ? sse : 16,
-    maximumMemoryUsage: Number.isFinite(maximumMemoryUsage) && maximumMemoryUsage >= 0 ? maximumMemoryUsage : 2048,
+    // maximumMemoryUsage(MB)はCesium 1.110で削除済み。cacheBytes(bytes)+
+    // maximumCacheOverflowBytes=MAX_VALUE で旧挙動を再現する(Cesium移行ガイド)
+    cacheBytes: Number.isFinite(memoryMb) && memoryMb >= 0 ? memoryMb * 1024 * 1024 : 2048 * 1024 * 1024,
+    maximumCacheOverflowBytes: Number.MAX_VALUE,
     dynamicScreenSpaceError: document.querySelector("#cesium-dynamic-sse")?.checked ?? false,
     cullWithChildrenBounds: document.querySelector("#cesium-cull-children")?.checked ?? true,
     preferLeaves: document.querySelector("#cesium-prefer-leaves")?.checked ?? false,
@@ -3968,15 +4132,47 @@ async function loadGeoPackageAsGeoJson(item) {
     columns: item.columns || null,
     bbox: item.bboxAuto ? item.bboxBounds : null,
     wantStyle: !item.styleUrl && !item.qmlStyle,
+    // gpkgstyle=styleName: layer_styles 内の任意スタイルを選択(既定は useAsDefault)
+    styleName: item.opts?.gpkgstyle || null,
   });
   if (res.total != null) {
     console.info(`[gpkg] ${item.title}: 検索ヒット全 ${res.total} 件 / 表示範囲内 ${res.count} 件`);
   }
+  // GPKG メタ(srs/拡張/列タイトル)と未対応警告。警告は Worker 側で url+table 毎に
+  // 重複排除済みのため、そのまま console へ流す
+  if (res.warnings?.length) console.warn(`GPKG (${item.title}): ${res.warnings.join(" / ")}`);
+  item.gpkgMeta = {
+    kind: res.kind || "features",
+    srs: res.srs || null,
+    extensions: res.extensions || [],
+    columnMeta: res.columnMeta || null,
+    styles: res.styles || null,
+    styleName: res.styleName || null,
+    styleNames: res.styleNames || null,
+  };
   if (res.qml) {
     const style = compileQmlStyle(res.qml, item.url, undefined, "cesium");
     item.qmlStyle = style;
     item.fieldMeta = style?.fields || null;
     if (style?.warnings?.length) console.warn(`GPKG 埋め込みスタイル (${item.url}):`, style.warnings.join(" / "));
+  } else if (res.sld) {
+    // layer_styles の styleSLD(QML 無し)は SLD サブセットパーサで適用
+    try {
+      const { compileSldStyle } = await import("../shared/sld-style.js");
+      const style = compileSldStyle(res.sld, item.url, "cesium");
+      item.qmlStyle = style;
+      item.fieldMeta = style?.fields || null;
+      if (style?.warnings?.length) console.warn(`GPKG 埋め込みSLDスタイル (${item.url}):`, style.warnings.join(" / "));
+    } catch (e) { console.warn(`GPKG 埋め込みSLDスタイル適用失敗 (${item.url}):`, e); }
+  }
+  // gpkg_data_columns(schema 拡張)の列タイトルを属性パネルの列名エイリアスへ
+  // 補完する。QML の <aliases> があればそちらを優先
+  if (res.columnMeta) {
+    const fm = item.fieldMeta || (item.fieldMeta = {});
+    const alias = fm.alias || (fm.alias = {});
+    for (const [col, m] of Object.entries(res.columnMeta)) {
+      if (m?.title && !alias[col]) alias[col] = m.title;
+    }
   }
   return res.geojson;
 }
@@ -3995,7 +4191,8 @@ async function queryGpkgAttributeRows(item, searchText, wantGeom = false) {
     searchText: searchText || "",
     wantGeom,
   });
-  return { attributes: res.attributes, rows: res.rows };
+  if (res.warnings?.length) console.warn(`GPKG (${item.title}): ${res.warnings.join(" / ")}`);
+  return { attributes: res.attributes, rows: res.rows, columnMeta: res.columnMeta || null };
 }
 
 // DuckDB-WASM を CDN から遅延ロードし、SQL で絞り込んでから GeoJSON 化する重い経路。
@@ -4111,7 +4308,10 @@ function isViewportQueryLayer(item) {
     || (item.type === "sql" && /:bbox\b/i.test(item.query || ""))
     // flatgeobuf:/fgb: は Range 読み出しが初回ロードで成功した場合のみ再クエリ対象
     // (_fgbRanged===false は索引なし・Range 非対応で全件へ落ちた印)
-    || ((item.type === "flatgeobuf" || item.type === "fgb") && item.bboxAuto && item._fgbRanged !== false));
+    || ((item.type === "flatgeobuf" || item.type === "fgb") && item.bboxAuto && item._fgbRanged !== false)
+    // geoparquet:/parquet: も同様(_gpRanged===false は covering/stats 無し・
+    // Range 非対応で全件へ落ちた印)
+    || ((item.type === "geoparquet" || item.type === "parquet") && item.bboxAuto && item._gpRanged !== false));
 }
 
 const DUCKDB_WORLD_ENVELOPE = "ST_MakeEnvelope(-180, -90, 180, 90)";
@@ -4445,7 +4645,7 @@ async function queryDuckDbAttributeRows(item, searchText, wantWkt = false) {
 // ファイルパス/canvas_data/ 推測。デコードは shared/vector-load.js へ委譲する
 function ogrFileTypeByPath(path) {
   const clean = String(path || "").split(/[?#]/)[0];
-  if (/\.(fgb|flatgeobuf)$/i.test(clean)) return "flatgeobuf";
+  if (/\.(fgb|flatgeobuf|fgbz|zst)$/i.test(clean)) return "flatgeobuf";
   if (/\.(parquet|geoparquet)$/i.test(clean)) return "geoparquet";
   if (/\.gpkg$/i.test(clean)) return "gpkg";
   if (/\.kml$/i.test(clean)) return "kml";
@@ -4458,6 +4658,8 @@ function ogrFileTypeByPath(path) {
   if (/\.(polyline|encodedpolyline)$/i.test(clean)) return "polyline";
   if (/\.gml$/i.test(clean)) return "gml";
   if (/\.(geojsonl|ndjson|jsonl)$/i.test(clean)) return "geojsonl";
+  if (/\.(fgseq|geojsonseq|jsonseq|geojson-seq)$/i.test(clean)) return "geojsonseq";
+  if (/\.jsonfg$/i.test(clean)) return "geojson";
   if (/\.wkt$/i.test(clean)) return "wkt";
   if (/\.wkb$/i.test(clean)) return "wkb";
   if (/\.(zip|shp|dbf)$/i.test(clean)) return "shp";
@@ -4533,7 +4735,8 @@ function attrRowsFromFeatureCollection(fc, searchText = "") {
 // where= は描画と同じ where-eval 評価をかけてから絞る
 async function queryFgbAttributeRows(item, searchText) {
   const { geojson } = await loadVectorItem(
-    { type: "flatgeobuf", title: item.title, url: item.url, opts: { bbox: "off" } }, "");
+    { type: "flatgeobuf", title: item.title, url: item.url,
+      opts: { bbox: "off", proxy: item.proxy ? "on" : undefined, nocache: item.nocache ? "on" : undefined, key: item.fgbKey || undefined } }, "");
   let fc = geojson;
   if (item.where && fc?.features?.length) {
     if (item._whereExpr !== item.where) {
@@ -4560,7 +4763,7 @@ async function resolveOgrSqlFromRef(ref) {
   if (layer) return layer;
   const name = String(ref.name || "");
   const looksPath = /[/\\]/.test(name) || /^[a-z][a-z0-9+.-]*:/i.test(name)
-    || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(name);
+    || /\.(geojson|json|fgb|flatgeobuf|fgbz|zst|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv)$/i.test(name);
   const candidates = looksPath ? [name]
     : [`canvas_data/${name}.geojson`, `canvas_data/${name}.fgb`, `canvas_data/${name}.parquet`,
        `canvas_data/${name}.gpkg`, `canvas_data/${name}.kml`, `canvas_data/${name}.csv`,
@@ -4600,10 +4803,44 @@ async function loadOgrSqlLayerAsGeoJson(item) {
 async function loadFlatGeobufLayerAsGeoJson(item) {
   const bounds = item.bboxAuto ? item.bboxBounds : null;
   const res = await loadVectorItem(
-    { type: "flatgeobuf", title: item.title, url: item.url, opts: { bbox: item.bboxAuto ? "auto" : "off" } },
+    { type: "flatgeobuf", title: item.title, url: item.url,
+      opts: { bbox: item.bboxAuto ? "auto" : "off", proxy: item.proxy ? "on" : undefined, nocache: item.nocache ? "on" : undefined, key: item.fgbKey || undefined } },
     "", bounds);
   // viewportQuery=false は範囲読みに失敗した印。以降の再クエリを止める
   if (item.bboxAuto) item._fgbRanged = !!res.viewportQuery;
+  // ヘッダメタ(件数/索引有無/列/CRS)を行バッジ・listLayers へ露出する
+  if (res.header) item.fgbHeader = res.header;
+  let geojson = res.geojson;
+  if (item.where && geojson?.features?.length) {
+    if (item._whereExpr !== item.where) {
+      item._whereExpr = item.where;
+      try { item._wherePred = compileWhereExpression(item.where); }
+      catch (e) { item._wherePred = null; console.warn(`${item.title}: where= の式を解釈できません`, e.message); }
+    }
+    if (item._wherePred) {
+      const kept = geojson.features.filter((f, i) => item._wherePred(f, i));
+      if (kept.length !== geojson.features.length) geojson = { ...geojson, features: kept };
+    }
+  }
+  return geojson;
+}
+
+// geoparquet:/parquet: レイヤー。bbox=auto(既定 ON)なら item.bboxBounds の
+// 範囲を使い、covering.bbox 列→行グループ geospatial statistics の順で
+// 部分読みを試みる(shared/vector-load.js。どちらも無い・Range 非対応は
+// 全件へフォールバック)。where= はクライアント評価で絞る。
+// geo メタ(version/crs/encoding/covering 等)を item.geoHeader へ保持して
+// バッジ・listLayers へ露出する
+async function loadGeoParquetLayerAsGeoJson(item) {
+  const res = await loadVectorItem(
+    { type: "geoparquet", title: item.title, url: item.url,
+      opts: { bbox: item.bboxAuto ? "auto" : "off" } },
+    "", item.bboxAuto ? item.bboxBounds : null);
+  // viewportQuery=false は範囲読みに失敗した印。以降の再クエリを止める
+  // (_gpRanged===false は covering/stats 無し・Range 非対応で全件へ落ちた印)。
+  // bounds 未提供の経路(検索用の全件読み等)ではラッチしない
+  if (item.bboxAuto && item.bboxBounds) item._gpRanged = !!res.viewportQuery;
+  if (res.header) item.geoHeader = res.header;
   let geojson = res.geojson;
   if (item.where && geojson?.features?.length) {
     if (item._whereExpr !== item.where) {
@@ -4625,8 +4862,12 @@ async function loadFlatGeobufLayerAsGeoJson(item) {
 const vectorDecoders = new Map([
   // 全件読み込み系は shared/vector-load.js へ一本化(item.url は解決済みのため baseUrl 不要)。
   // duckdb/sql は Cesium 側の高機能版(proxy=/属性クエリ/covering)を維持する
-  ["geoparquet", { load: item => loadVectorItem({ type: "geoparquet", title: item.title, url: item.url }, "").then(r => r.geojson) }],
-  ["parquet", { load: item => loadVectorItem({ type: "parquet", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  // geoparquet:/parquet: は bbox=auto(既定 ON)なら covering.bbox/geospatial
+  // statistics による範囲読みのクエリ系。covering/stats 無し・Range 非対応で
+  // 全件へ落ちた(_gpRanged===false)レイヤーは全件読み込み系として
+  // キャッシュ・検索索引の対象に戻す
+  ["geoparquet", { load: item => loadGeoParquetLayerAsGeoJson(item), query: item => !!(item.bboxAuto && item._gpRanged !== false) }],
+  ["parquet", { load: item => loadGeoParquetLayerAsGeoJson(item), query: item => !!(item.bboxAuto && item._gpRanged !== false) }],
   // flatgeobuf:/fgb: は bbox=auto(既定 ON)なら空間インデックス+Range による
   // 範囲読みのクエリ系、bbox=off 明示時のみ全件読み込み系(キャッシュ・検索索引の対象)
   ["flatgeobuf", { load: item => loadFlatGeobufLayerAsGeoJson(item), query: item => !!item.bboxAuto }],
@@ -4649,6 +4890,9 @@ const vectorDecoders = new Map([
   ["geojsonl", { load: item => loadVectorItem({ type: "geojsonl", title: item.title, url: item.url }, "").then(r => r.geojson) }],
   ["ndjson", { load: item => loadVectorItem({ type: "ndjson", title: item.title, url: item.url }, "").then(r => r.geojson) }],
   ["jsonl", { load: item => loadVectorItem({ type: "jsonl", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["geojsonseq", { load: item => loadVectorItem({ type: "geojsonseq", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["fgseq", { load: item => loadVectorItem({ type: "fgseq", title: item.title, url: item.url }, "").then(r => r.geojson) }],
+  ["geojson-seq", { load: item => loadVectorItem({ type: "geojson-seq", title: item.title, url: item.url }, "").then(r => r.geojson) }],
   ["wkt", { load: item => loadVectorItem({ type: "wkt", title: item.title, url: item.url }, "").then(r => r.geojson) }],
   ["wkb", { load: item => loadVectorItem({ type: "wkb", title: item.title, url: item.url }, "").then(r => r.geojson) }],
   ["igc", { load: item => loadVectorItem({ type: "igc", title: item.title, url: item.url }, "").then(r => r.geojson) }],
@@ -4860,8 +5104,11 @@ async function refreshLayersImpl() {
   // 未キャッシュ(=実質初回)は ~60MB の実コストがかかるため、表示対象の
   // クエリ系があるときだけ先行する(非表示は選択・表示ONの時点で初期化される)
   const queryLayers = orderedOtherLayers.filter(item => isQueryDecoder(vectorDecoders.get(item.type), item));
-  // duckdb:/sql:/ogrsql: 以外のクエリ系(gpkg:/flatgeobuf:)は DuckDB-WASM を使わないため温めない
-  const duckQueryLayers = queryLayers.filter(item => !isGpkgBackedItem(item) && item.type !== "flatgeobuf" && item.type !== "fgb");
+  // duckdb:/sql:/ogrsql: 以外のクエリ系(gpkg:/flatgeobuf:/geoparquet:)は
+  // DuckDB-WASM を使わないため温めない
+  const duckQueryLayers = queryLayers.filter(item => !isGpkgBackedItem(item)
+    && item.type !== "flatgeobuf" && item.type !== "fgb"
+    && item.type !== "geoparquet" && item.type !== "parquet");
   if (duckQueryLayers.length) {
     const warmAll = duckQueryLayers.some(item => item.visible) || await duckDbAssetsCached();
     if (warmAll) void loadDuckDb().catch(() => {});
@@ -4993,6 +5240,12 @@ async function refreshLayersImpl() {
         if (Number.isFinite(item.tilesetSse)) tilesetOptions.maximumScreenSpaceError = item.tilesetSse;
         // ionkey=<トークン>: Cesium ion アセット(osm 建物等)用のアクセストークン
         if (item.ionKey) { try { Cesium.Ion.defaultAccessToken = item.ionKey; } catch (_) {} }
+        // debug=wireframe / foveated= 系: コンストラクタオプション(engine-3dtiles 監査)
+        if (item.tileDebug?.includes("wireframe")) tilesetOptions.enableDebugWireframe = true;
+        if (item.foveated !== undefined) tilesetOptions.foveatedScreenSpaceError = item.foveated;
+        if (Number.isFinite(item.foveatedCone)) tilesetOptions.foveatedConeSize = item.foveatedCone;
+        if (Number.isFinite(item.foveatedMin)) tilesetOptions.foveatedMinimumScreenSpaceErrorRelaxation = item.foveatedMin;
+        if (Number.isFinite(item.foveatedDelay)) tilesetOptions.foveatedTimeDelay = item.foveatedDelay;
         // url=osm 予約トークン → Cesium ion の OSM Buildings(createOsmBuildingsAsync)
         const tileset = item.osmBuildings
           ? await Cesium.createOsmBuildingsAsync(tilesetOptions)
@@ -5007,6 +5260,8 @@ async function refreshLayersImpl() {
         if (edl !== undefined && tileset.pointCloudShading) {
           try { tileset.pointCloudShading.eyeDomeLighting = edl; } catch (_) {}
         }
+        // clippoly=/customshader=/colorblend=/splitdir=/debug=/pcshade=/tiletime=
+        await applyTilesetExtras(item, tileset);
         viewer.scene.primitives.add(tileset);
         activePrimitives.push(tileset);
         layerRuntimeTargets.set(item.id, tileset);
@@ -5069,8 +5324,9 @@ async function refreshLayersImpl() {
         if (!item.visible) continue;
         // 表示範囲連動レイヤーは現在の表示範囲を絞り込み条件としてセットしてからクエリする
         if (decoder && isViewportQueryLayer(item)) updateViewportFilter(item);
-        // style= 指定レイヤーは .qml を先に取得・コンパイルする(失敗時は null で通常描画)
-        if (item.styleUrl) await ensureQmlStyle(item);
+        // style= 指定レイヤーは .qml を先に取得・コンパイルする(失敗時は null で通常描画)。
+        // flatgeobuf: は <base>.qml サイドカー(QGIS 既定スタイル規約)も探査する
+        if (item.styleUrl || await probeQmlSidecar(item)) await ensureQmlStyle(item);
         // レイヤー行の render=primitive はグローバル設定より優先する明示指定で、
         // HeightReference.NONE のバッチ描画にする(CLAMP系は scene.pick で拾えなくなるため)。
         // クエリ系レイヤーはベクター検索パネルに登録しない(検索は全件対象の SQL フィルターに一本化)
@@ -6095,6 +6351,12 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
         const z = Number.isFinite(item.z) ? item.z : 0;
         entity.polygon.height = new Cesium.ConstantProperty(z);
         entity.polygon.extrudedHeight = new Cesium.ConstantProperty(z + item.extrude);
+      } else if (Number((entity.properties?.getValue?.(styleTime) || {}).__kasc_extrude) > 0) {
+        // JSON-FG Prism: 地物単位の鉛直範囲(__kasc_z=下端, __kasc_extrude=高さ)
+        const pv = entity.properties.getValue(styleTime);
+        const pz = Number(pv.__kasc_z) || 0;
+        entity.polygon.height = new Cesium.ConstantProperty(pz);
+        entity.polygon.extrudedHeight = new Cesium.ConstantProperty(pz + Number(pv.__kasc_extrude));
       } else if (clamp) {
         entity.polygon.classificationType = new Cesium.ConstantProperty(classification);
       }
@@ -6105,6 +6367,21 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
       if (clamp) {
         entity.polyline.clampToGround = new Cesium.ConstantProperty(true);
         entity.polyline.classificationType = new Cesium.ConstantProperty(classification);
+      }
+    }
+    // togeojson(KML) icon-* → billboard を icon URL 画像へ差し替える。
+    // icon-color(aabbggrr→css済)は tint、icon-opacity は alpha へ乗算、
+    // heading は billboard.rotation(反時計回り)へ符号反転して写す
+    if (entity.billboard && !item?.qmlStyle) {
+      const tg = togeojsonIconSpec(entity.properties?.getValue?.(styleTime) || {});
+      if (tg) {
+        entity.billboard.image = new Cesium.ConstantProperty(tg.url);
+        entity.billboard.scale = new Cesium.ConstantProperty(tg.scale);
+        entity.billboard.rotation = new Cesium.ConstantProperty(-tg.heading * Math.PI / 180);
+        if (tg.color || tg.opacity < 1) {
+          const c = tg.color ? Cesium.Color.fromCssColorString(tg.color) : Cesium.Color.WHITE.clone();
+          entity.billboard.color = new Cesium.ConstantProperty(c.withAlpha(c.alpha * tg.opacity));
+        }
       }
     }
     // 点・ラベルのドレープ。Cesium の GeoJsonDataSource は座標が2要素の
@@ -6247,7 +6524,7 @@ async function reloadVectorLayer(item) {
   const oldPrimitive = Cesium.GeoJsonPrimitive && oldTarget instanceof Cesium.GeoJsonPrimitive ? oldTarget : null;
   if (!entry && !oldPrimitive) return;
   if (isViewportQueryLayer(item)) updateViewportFilter(item);
-  if (item.styleUrl) await ensureQmlStyle(item);
+  if (item.styleUrl || await probeQmlSidecar(item)) await ensureQmlStyle(item);
   const geojson = await decoder.load(item);
   const vectorDrape = getVectorDrapeFlags();
   const hadLimited = !!item.entityLimited;
@@ -6292,7 +6569,7 @@ async function reloadFailedVectorLayer(item) {
   const decoder = vectorDecoders.get(item.type);
   if (!decoder) throw new Error("decoder がありません");
   if (isViewportQueryLayer(item)) updateViewportFilter(item);
-  if (item.styleUrl) await ensureQmlStyle(item);
+  if (item.styleUrl || await probeQmlSidecar(item)) await ensureQmlStyle(item);
   const source = await decoder.load(item);
   if (item.renderPrimitive && Cesium.GeoJsonPrimitive) {
     await addGeoJsonPrimitiveLayer(item, source);
@@ -7620,6 +7897,7 @@ function applyInspector(text) {
       || type === "kml" || type === "kmz" || type === "wfs" || type === "shp" || type === "shapefile" || type === "csv" || type === "tsv"
       || type === "gpx" || type === "czml" || type === "topojson" || type === "esrijson" || type === "arcgis"
       || type === "geojsonl" || type === "ndjson" || type === "jsonl" || type === "wkt" || type === "wkb"
+      || type === "geojsonseq" || type === "fgseq" || type === "geojson-seq"
       || type === "igc" || type === "polyline" || type === "gml") {
       const parts = splitKascTail(value);
       const title = parts[0];
@@ -7659,6 +7937,59 @@ function applyInspector(text) {
         }
         const edlOpt = parts.find(part => /^edl\s*=\s*\S/i.test(part));
         if (edlOpt) item.pointCloudEdl = !/=\s*(off|none|false|0)\s*$/i.test(edlOpt);
+        // --- 未露出 Cesium3DTileset プロパティの露出(engine-3dtiles 監査) ---
+        // clippoly=<GeoJSON URL|lon,lat,lon,lat,…>: ポリゴン範囲クリップ
+        // (ClippingPolygonCollection。既定=ポリゴン外側をクリップ=内側だけ残す)
+        const cpOpt = parts.find(part => /^clippoly\s*=\s*\S/i.test(part));
+        if (cpOpt) {
+          const v = cpOpt.slice(cpOpt.indexOf("=") + 1).trim();
+          item.clipPoly = /^[\s+\-\d.,]+$/.test(v) ? v : resolveProjectUrl(v);
+        }
+        // clipinverse=on: 反転(ポリゴン内側を削るマスク用途)
+        const ciOpt = parts.find(part => /^clipinverse\s*=\s*\S/i.test(part));
+        if (ciOpt) item.clipInverse = !/=\s*(off|none|false|0)\s*$/i.test(ciOpt);
+        // customshader=<シェーダJSON URL>: CustomShader(uniforms/varyings/
+        //   vertexShaderText/fragmentShaderText/lightingModel/translucencyMode)
+        const csOpt = parts.find(part => /^customshader\s*=\s*\S/i.test(part));
+        if (csOpt) item.customShaderUrl = resolveProjectUrl(csOpt.slice(csOpt.indexOf("=") + 1).trim());
+        // colorblend=highlight|replace|mix + blendamount=<0-1>
+        const cbOpt = parts.find(part => /^colorblend\s*=\s*\S/i.test(part));
+        if (cbOpt) item.colorBlendMode = cbOpt.slice(cbOpt.indexOf("=") + 1).trim().toUpperCase();
+        const baOpt = parts.find(part => /^blendamount\s*=\s*\S/i.test(part));
+        if (baOpt) {
+          const n = Number(baOpt.slice(baOpt.indexOf("=") + 1).trim());
+          if (Number.isFinite(n)) item.colorBlendAmount = Math.min(1, Math.max(0, n));
+        }
+        // splitdir=left|right|none: クリッピング平面の左右分割(entity と同名)
+        const sdOpt = parts.find(part => /^splitdir\s*=\s*\S/i.test(part));
+        if (sdOpt) {
+          const v = sdOpt.slice(sdOpt.indexOf("=") + 1).trim().toLowerCase();
+          if (["left", "right", "none"].includes(v)) item.tileSplitDirection = v;
+        }
+        // debug=colorize,freeze,bounds,contentbounds,geoerror,memory,stats,url,vrv,wireframe
+        const dbgOpt = parts.find(part => /^debug\s*=\s*\S/i.test(part));
+        if (dbgOpt) {
+          item.tileDebug = dbgOpt.slice(dbgOpt.indexOf("=") + 1).trim()
+            .toLowerCase().split(",").map(s => s.trim()).filter(Boolean);
+        }
+        // foveated=on|off + foveatedcone=<0-1>/foveatedmin=<SSE>/foveateddelay=<sec>
+        const fvOpt = parts.find(part => /^foveated\s*=\s*\S/i.test(part));
+        if (fvOpt) item.foveated = !/=\s*(off|none|false|0)\s*$/i.test(fvOpt);
+        for (const [key, field] of [["foveatedcone", "foveatedCone"], ["foveatedmin", "foveatedMin"], ["foveateddelay", "foveatedDelay"]]) {
+          const opt = parts.find(part => new RegExp(`^${key}\\s*=\\s*\\S`, "i").test(part));
+          if (opt) {
+            const n = Number(opt.slice(opt.indexOf("=") + 1).trim());
+            if (Number.isFinite(n)) item[field] = n;
+          }
+        }
+        // pcshade=<JSON 一括>: pointCloudShading の EDL 以外
+        // (attenuation/baseResolution/geometricErrorScale/maximumAttenuation/
+        //   eyeDomeLightingStrength/eyeDomeLightingRadius/backFaceCulling/normalShading)
+        const pcsOpt = parts.find(part => /^pcshade\s*=\s*\S/i.test(part));
+        if (pcsOpt) item.pcShadeJson = pcsOpt.slice(pcsOpt.indexOf("=") + 1).trim();
+        // tiletime=<ISO8601>: time-dynamic タイルセットの表示時刻(tileset.time)
+        const ttOpt = parts.find(part => /^tiletime\s*=\s*\S/i.test(part));
+        if (ttOpt) item.tileTime = ttOpt.slice(ttOpt.indexOf("=") + 1).trim();
       }
       // render=primitive|entity: ベクター系の描画方式指定(duckdb:/sql: と同じ意味。
       // primitive は GeoJsonPrimitive バッチ描画、entity は GeoJsonDataSource 描画)
@@ -7739,10 +8070,40 @@ function applyInspector(text) {
           }
           if (item.bboxAuto === undefined) item.bboxAuto = true;
           item.sourceVisible = !off;
+          // gpkgstyle=styleName: layer_styles 内の埋め込みスタイル選択
+          const gpkgStyleOpt = parts.find(part => /^gpkgstyle\s*=\s*\S+/i.test(part));
+          if (gpkgStyleOpt) (item.opts ||= {}).gpkgstyle = gpkgStyleOpt.slice(gpkgStyleOpt.indexOf("=") + 1).trim();
         }
         // flatgeobuf:/fgb: は空間インデックス+HTTP Range で表示範囲のみ読むクエリ系。
-        // bbox=auto が既定 ON(gpkg: と同じ)。bbox=off で全件読み込み系に戻る
+        // bbox=auto が既定 ON(gpkg: と同じ)。bbox=off で全件読み込み系に戻る。
+        // proxy=on: ローカルサーバーの /api/fetch 経由で取得(CORS回避・Range転送。
+        // duckdb:/geotiff: と同じ opt-in。共通パースの既定 proxy=true を
+        // fgb では明示指定のみ有効な意味へ上書きする)。nocache=on: ライブラリの
+        // Range バッファキャッシュを無効化(更新されるリモート FGB 向け)
         if (type === "flatgeobuf" || type === "fgb") {
+          const bboxOpt = parts.find(part => /^bbox\s*=\s*\S+/i.test(part));
+          if (bboxOpt) {
+            const v = bboxOpt.slice(bboxOpt.indexOf("=") + 1).trim();
+            if (/^(auto|on|true|view|viewport)$/i.test(v)) item.bboxAuto = true;
+            else if (/^(off|none|false|static|manual)$/i.test(v)) item.bboxAuto = false;
+          }
+          if (item.bboxAuto === undefined) item.bboxAuto = true;
+          const proxyOpt = parts.find(part => /^proxy\s*=\s*\S+/i.test(part));
+          item.proxy = proxyOpt
+            ? /^(on|true|auto|yes|1)$/i.test(proxyOpt.slice(proxyOpt.indexOf("=") + 1).trim())
+            : false;
+          const ncOpt = parts.find(part => /^nocache\s*=\s*\S+/i.test(part));
+          if (ncOpt) item.nocache = /^(on|true|yes|1)$/i.test(ncOpt.slice(ncOpt.indexOf("=") + 1).trim());
+          // key=<APIキー>: Bearer 認証ヘッダ(cms: 行と同じ規約)。
+          // DeserializeOptions.headers へ接続され Range 読みでも付与される
+          const keyOpt = parts.find(part => /^key\s*=\s*\S+/i.test(part));
+          if (keyOpt) item.fgbKey = keyOpt.slice(keyOpt.indexOf("=") + 1).trim();
+        }
+        // geoparquet:/parquet: は covering.bbox 列または行グループ geospatial
+        // statistics を使った範囲読みのクエリ系。bbox=auto が既定 ON(fgb: と同じ)。
+        // どちらも無い平 WKB ファイル・Range 非対応サーバは全件へフォールバック。
+        // bbox=off で常時全件読み込み系に戻る
+        if (type === "geoparquet" || type === "parquet") {
           const bboxOpt = parts.find(part => /^bbox\s*=\s*\S+/i.test(part));
           if (bboxOpt) {
             const v = bboxOpt.slice(bboxOpt.indexOf("=") + 1).trim();
@@ -10814,7 +11175,7 @@ function setupEvents() {
       try {
         const dir = (await saveToDataDir(file.name, file)) || "canvas_data";
         const ext = file.name.toLowerCase().split(".").pop() || "";
-        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv", tif: "geotiff", tiff: "geotiff", gtif: "geotiff" }[ext];
+        const type = { geojson: "geojson", json: "geojson", gpkg: "gpkg", geopackage: "gpkg", fgb: "flatgeobuf", fgbz: "flatgeobuf", zst: "flatgeobuf", parquet: "geoparquet", kml: "kml", kmz: "kmz", gpx: "gpx", czml: "czml", topojson: "topojson", esrijson: "esrijson", arcgis: "arcgis", igc: "igc", polyline: "polyline", gml: "gml", geojsonl: "geojsonl", ndjson: "geojsonl", jsonl: "geojsonl", fgseq: "geojsonseq", geojsonseq: "geojsonseq", jsonseq: "geojsonseq", jsonfg: "geojson", wkt: "wkt", wkb: "wkb", shp: "shp", zip: "shp", csv: "csv", tsv: "tsv", tif: "geotiff", tiff: "geotiff", gtif: "geotiff" }[ext];
         if (type) {
           const title = file.name.replace(/\.[^.]+$/, "");
           window.kasugaiApi.addLayer(title, `${dir}/${file.name}`, { type });
@@ -10850,7 +11211,7 @@ function setupEvents() {
   // 配信元 URL からローカル保存先へ変わるため）。URL スロットは `type:`
   // 直後の先頭2パートのみ対象とし、key=value・scheme 付きは触らない
   const absolutizeKascRefs = (text, baseUrl) => {
-    const fileExt = "(geojson|json|fgb|flatgeobuf|parquet|gpkg|zip|kml|kmz|csv|tsv|tif|tiff|png|jpe?g|webp|duckdb|qml|xml|html?|glb|gltf|b3dm|3tz|xyz|mvt|pbf|bin)";
+    const fileExt = "(geojson|json|fgb|flatgeobuf|fgbz|zst|parquet|gpkg|zip|kml|kmz|csv|tsv|tif|tiff|png|jpe?g|webp|duckdb|qml|xml|html?|glb|gltf|b3dm|3tz|xyz|mvt|pbf|bin)";
     const refRe = new RegExp("^(\\.{1,2}/|(?:canvas_data|DATA)/|[^|\\s<>\"']+\\." + fileExt.slice(1, -1) + ")$", "i");
     const isRef = (p) => !!p && !/^[a-z][a-z0-9+.-]*:/i.test(p) && !/^[a-z0-9_-]+=/i.test(p) && refRe.test(p);
     return String(text).split(/\r?\n/).map((line) => {
@@ -11950,7 +12311,25 @@ function setupEvents() {
       const labelEl = document.createElement("span");
       labelEl.textContent = label;
       header.append(marker, labelEl);
+      // simplestyle §3: 地物 title=ポップアップ見出し・description=本文(HTML可)
+      const fpMeta = featurePopupMeta(Object.fromEntries(record.entries || []));
+      const fpBody = document.createElement("div");
+      if (fpMeta.title != null && fpMeta.title !== "") {
+        const tEl = document.createElement("div");
+        tEl.className = "attr-feature-ptitle";
+        tEl.style.cssText = "font-weight:700;font-size:13px;margin:2px 0 2px;color:#1d2b36;";
+        tEl.textContent = String(fpMeta.title);
+        fpBody.append(tEl);
+      }
+      if (fpMeta.description != null && fpMeta.description !== "") {
+        const dEl = document.createElement("div");
+        dEl.className = "attr-feature-desc";
+        dEl.style.cssText = "font-size:12px;margin:2px 0 4px;color:#33424e;";
+        dEl.append(sanitizeAttributionFragment(String(fpMeta.description)));
+        fpBody.append(dEl);
+      }
       const table = buildAttrTable(record.entries);
+      fpBody.append(table);
       // 属性行クリックでその地物へ飛ぶ(属性テーブルの行クリックと同じ挙動)。
       // 位置が取れる entity 由来のレコードのみ対象
       const flyCartesian = record.entity ? getEntityPosition(record.entity) : null;
@@ -11979,18 +12358,18 @@ function setupEvents() {
         });
       }
       const setOpen = open => {
-        table.hidden = !open;
+        fpBody.hidden = !open;
         marker.textContent = open ? "▾" : "▸";
         header.setAttribute("aria-expanded", String(open));
       };
       header.addEventListener("click", () => {
         // 展開した地物のレイヤーを属性一覧ボタンの対象にする
-        const open = table.hidden;
+        const open = fpBody.hidden;
         setOpen(open);
         if (open) setAttrLayerContext(attr, record.item);
       });
       setOpen(!multiple);
-      block.append(header, table);
+      block.append(header, fpBody);
       attr.append(block);
     });
     // 表示中 WMS レイヤーの GetFeatureInfo 結果を非同期で追記する
@@ -13986,6 +14365,17 @@ window.kasugaiApi = {
   listLayers() {
     return getOrderedLayerItems().map(layer => {
       const entry = { id: layer.id, title: layer.title, sourceTitle: layer.sourceTitle || null, exclusiveGroup: !!layer.exclusiveGroup, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: (layer.type === "sql" || layer.type === "ogrsql") ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced };
+      const fgbMeta = summarizeFlatGeobufHeader(layer.fgbHeader);
+      if (fgbMeta) entry.fgb = fgbMeta;
+      const geoMeta = summarizeGeoParquetHeader(layer.geoHeader);
+      if (geoMeta) entry.geo = geoMeta;
+      // GeoPackage メタ(CRS/拡張/埋め込みスタイル選択)を fgb/geo と同じく露出
+      if (layer.gpkgMeta) {
+        const gm = layer.gpkgMeta;
+        entry.gpkg = { kind: gm.kind, srs: gm.srs || null,
+          styleName: gm.styleName || null, styleNames: gm.styleNames || null,
+          styles: gm.styles || null, extensions: (gm.extensions || []).map(e => e.name) };
+      }
       const legend = layer.qmlStyle?.legend;
       if (legend?.length > 1) entry.legend = legend.map(e => ({ label: e.label || e.symbolName, visible: !layer.legendHidden?.has(e.symbolName) }));
       return entry;
@@ -14528,7 +14918,7 @@ window.kasugaiApi = {
   // type: geojson/layer/geoparquet/flatgeobuf/gpkg/duckdb(target は URL) / sql・ogrsql(target は SELECT 文)
   addLayer(title, target, { type = "geojson", options = "" } = {}) {
     const input = document.querySelector("#inspector-input");
-    const urlTypes = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "duckdb", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "image", "model", "geotiff", "cog", "tiff"]);
+    const urlTypes = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "duckdb", "kml", "kmz", "wfs", "shp", "shapefile", "csv", "tsv", "image", "model", "geotiff", "cog", "tiff", "geojsonseq", "fgseq"]);
     const clean = value => String(value || "").replace(/[\r\n]+/g, " ").trim();
     title = clean(title); target = clean(target); options = clean(options);
     if (!title || !target || !input) return false;

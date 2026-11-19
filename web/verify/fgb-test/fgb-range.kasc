@@ -1,2 +1,5 @@
 flatgeobuf: テスト/countries(bbox=auto) | /verify/fgb-test/countries.fgb | on
 flatgeobuf: テスト/countries(bbox=off) | /verify/fgb-test/countries.fgb | on | bbox=off
+flatgeobuf: テスト/countries(zstd) | /verify/fgb-test/countries-32k.fgb.zst | on
+flatgeobuf: テスト/countries(遅延メタ) | /verify/fgb-test/countries.fgb | off
+flatgeobuf: テスト/alldatatypes | /verify/fgb-test/alldatatypes.fgb | off

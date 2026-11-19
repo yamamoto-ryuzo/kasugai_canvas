@@ -165,7 +165,7 @@ function describeSource(ref, resolved, resolvePath = null) {
   }
   const name = String(ref.name || "");
   if (/[/\\]/.test(name) || /^[a-z][a-z0-9+.-]*:\/\//i.test(name)
-    || /\.(geojson|json|fgb|flatgeobuf|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv|sqlite|db)$/i.test(name)) {
+    || /\.(geojson|json|fgb|flatgeobuf|fgbz|zst|parquet|geoparquet|gpkg|kml|kmz|zip|shp|dbf|csv|tsv|sqlite|db)$/i.test(name)) {
     return { path: resolvePath ? resolvePath(name) : name };
   }
   return { qgisLayer: name };

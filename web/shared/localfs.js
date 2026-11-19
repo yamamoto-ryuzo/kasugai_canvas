@@ -36,6 +36,9 @@ export async function findKascUrl(dir) {
 
 const _MIME = {
   geojson: "application/geo+json", json: "application/json",
+  jsonfg: "application/vnd.ogc.fg+json",
+  fgseq: "application/geo+json-seq", geojsonseq: "application/geo+json-seq",
+  geojsonl: "application/x-ndjson", ndjson: "application/x-ndjson",
   kasc: "text/plain", csv: "text/csv", tsv: "text/tab-separated-values",
   xml: "application/xml", qml: "application/xml", html: "text/html",
   txt: "text/plain", png: "image/png", jpg: "image/jpeg",

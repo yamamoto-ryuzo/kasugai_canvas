@@ -1,0 +1,4 @@
+flatgeobuf: 属性style | http://127.0.0.1:65495/verify/tmp/style-attrs.fgb | on | bbox=off
+flatgeobuf: サイドカー | http://127.0.0.1:65495/verify/tmp/sidecar.fgb | on | bbox=off
+flatgeobuf: 明示style | http://127.0.0.1:65495/verify/tmp/explicit.fgb | on | bbox=off | style=http://127.0.0.1:65495/verify/tmp/explicit.qml
+flatgeobuf: サイドカーなし | http://127.0.0.1:65495/verify/tmp/nosidecar.fgb | on | bbox=off
