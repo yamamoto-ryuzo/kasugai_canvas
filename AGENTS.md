@@ -292,6 +292,8 @@ CesiumJS ネイティブ非対応の形式は、**「ブラウザ側でデコー
 
 **推奨形式（`flatgeobuf:`/`geoparquet:`/`geojson:`）の回帰検証は `vector-formats` スキル（`C:\devin\.devin\skills\vector-formats`）に集約**。ベクター形式関連のコード・オプション・デコーダを変更したら必ず `node web/verify/results/probe-rec-formats.mjs`（自己完結・アプリサーバ不要）を実行する。
 
+**全検証スキルの体系・発動マトリクス・統合実行手順の正本は `canvas-verify` スキル（`C:\devin\.devin\skills\canvas-verify\SKILL.md`）**。52本ある engine-*/qml-*/verify 系スキルの分類・変更箇所→発動スキル対応表・実機検証ルール・レポート形式はそこを参照（新スキル追加時は同書の §2/§4 も更新する）。
+
 ### QGIS 側との仕様同期（必須）
 
 `.kasc` 行形式・オプション(`opts`)、`NON_LAYER_TYPES`、エンジン別対応、QML 再現スコープを本リポジトリで拡張・変更した場合は、**QGIS 側の対応物にも連携して反映する**。対象は `C:\devin\qgis_live_harness\qgis-plugin\geo_webview\` の:

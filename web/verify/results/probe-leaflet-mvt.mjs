@@ -30,7 +30,7 @@ const waitVg = async (title, timeout = 20000) => await page.evaluate(async ([tit
   const t0 = Date.now();
   let vg = null;
   while (Date.now() - t0 < timeout) {
-    window.kascMap.eachLayer(l => { if (l instanceof L.VectorGrid) vg = l; });
+    window.kascMap.eachLayer(l => { if (L.VectorGrid && l instanceof L.VectorGrid) vg = l; });
     if (vg && Object.keys(vg._tiles || {}).some(k => vg._tiles[k].loaded || vg._tiles[k].el?.querySelector?.("path,canvas"))) break;
     await new Promise(r => setTimeout(r, 300));
   }
@@ -87,14 +87,18 @@ await page.screenshot({ path: `${OUT}leaflet-audit/mvt-tilejson.png` });
 // ---- 4. pmtiles-firenze (PMTiles アーカイブ。フィレンツェへ移動して描画) ----
 await page.evaluate(() => window.kasugaiApi.setLayerVisible("mvt-tilejson", false));
 await page.evaluate(() => window.kasugaiApi.setLayerVisible("pmtiles-firenze", true));
-await page.evaluate(() => window.kascMap.setView([43.7696, 11.2558], 14));
+await page.evaluate(() => window.kascMap.setView([43.7696, 11.2558], 14)).catch(() => {});
+// setView→moveend で #latitude= ハッシュ書換(same-document nav)が起き、
+// Playwright が evaluate コンテキストを破棄するため catch + ナビ完了待ちにする
+await page.waitForURL("**#latitude=43.76**", { timeout: 10000 }).catch(() => {});
+await page.waitForTimeout(500);
 result.checks.pmtiles = await waitVg("pmtiles-firenze");
 await page.screenshot({ path: `${OUT}leaflet-audit/pmtiles-firenze.png` });
 
 // ---- 5. クリック → 属性タブ (interactive:true の vectorgrid 地物) ----
 result.checks.clickAttr = await page.evaluate(async () => {
   let vg = null;
-  window.kascMap.eachLayer(l => { if (l instanceof L.VectorGrid) vg = l; });
+  window.kascMap.eachLayer(l => { if (L.VectorGrid && l instanceof L.VectorGrid) vg = l; });
   if (!vg) return { ok: false, reason: "no VectorGrid" };
   // 描画済み path の1つに click イベントを発火(実 DOM イベント)
   let path = null;

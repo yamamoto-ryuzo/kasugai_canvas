@@ -586,7 +586,9 @@ async function buildLayer(item, baseUrl, preloaded) {
       try {
         compiled = item.opts?.style
           ? await loadCompiledQml(item.opts.style, baseUrl, "openlayers")
-          : await compileEmbeddedStyle(embStyle, baseUrl, "openlayers");
+          : embStyle
+            ? await compileEmbeddedStyle(embStyle, baseUrl, "openlayers")
+            : await loadCompiledQml(item.styleUrl, baseUrl, "openlayers");
         item._qml = compiled;
         const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text, Point, MultiPoint, MultiLineString, LineString, Polygon });
         // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない

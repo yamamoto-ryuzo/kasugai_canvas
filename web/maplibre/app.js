@@ -1026,7 +1026,9 @@ async function addKascLayer(item, baseUrl, preloaded, beforeIdFn) {
         const { loadCompiledQml, maplibreApplyQml, compiledScaleToResRange, resToZoom } = await import("../shared/qml-2d.js");
         const compiled = item.opts?.style
           ? await loadCompiledQml(item.opts.style, baseUrl, "maplibre")
-          : await compileEmbeddedStyle(embStyle, baseUrl, "maplibre");
+          : embStyle
+            ? await compileEmbeddedStyle(embStyle, baseUrl, "maplibre")
+            : await loadCompiledQml(item.styleUrl, baseUrl, "maplibre");
         item._qml = compiled;
         const applied = maplibreApplyQml(geojson, compiled);
         kinds = applied.kinds;

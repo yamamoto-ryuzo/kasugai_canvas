@@ -1009,7 +1009,9 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       try {
         item._qml = item.opts?.style
           ? await loadCompiledQml(item.opts.style, baseUrl, "leaflet")
-          : await compileEmbeddedStyle(embStyle, baseUrl, "leaflet");
+          : embStyle
+            ? await compileEmbeddedStyle(embStyle, baseUrl, "leaflet")
+            : await loadCompiledQml(item.styleUrl, baseUrl, "leaflet");
         if (item._qml?.inverted) applyInvertedMaskGeojson(geojson);
       } catch (e) { console.warn("埋め込みスタイル適用失敗:", item.opts?.style || item.url, e); }
     }

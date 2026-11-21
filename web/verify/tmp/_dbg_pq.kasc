@@ -1,5 +1,0 @@
-title: dbg-pq
-base: 背景なし | none
-cam:世界|20|10|h=40000000|p=-90
-geoparquet: PQ-QML | /verify/rec-formats/example.parquet | on | style=/verify/results/_dbg_pq.qml
-geoparquet: PQ-NOQML | /verify/rec-formats/example.parquet | on

@@ -9,16 +9,18 @@
     "mvtGsi": {
       "ok": true,
       "tiles": 24,
-      "renderedTiles": 4,
-      "paths": 11081,
+      "renderedTiles": 23,
+      "paths": 50978,
       "layerNames": [
         "AdmBdry",
         "Anno",
-        "Cntr",
         "RailCL",
         "RdCL",
+        "RvrCL",
         "WA",
-        "RvrCL"
+        "SpcfArea",
+        "TpgphArea",
+        "Cntr"
       ],
       "interactive": true,
       "sample": [
@@ -27,28 +29,28 @@
           "stroke": "#2b8cbe"
         },
         {
-          "fill": "#e6550d",
-          "stroke": "#ffffff"
+          "fill": "none",
+          "stroke": "#2b8cbe"
         },
         {
-          "fill": "#e6550d",
-          "stroke": "#ffffff"
+          "fill": "none",
+          "stroke": "#2b8cbe"
         },
         {
-          "fill": "#e6550d",
-          "stroke": "#ffffff"
+          "fill": "none",
+          "stroke": "#2b8cbe"
         },
         {
-          "fill": "#e6550d",
-          "stroke": "#ffffff"
+          "fill": "none",
+          "stroke": "#2b8cbe"
         },
         {
-          "fill": "#e6550d",
-          "stroke": "#ffffff"
+          "fill": "none",
+          "stroke": "#2b8cbe"
         },
         {
-          "fill": "#e6550d",
-          "stroke": "#ffffff"
+          "fill": "none",
+          "stroke": "#2b8cbe"
         },
         {
           "fill": "#e6550d",
@@ -59,45 +61,17 @@
     "mvtStyle": {
       "ok": true,
       "tiles": 24,
-      "renderedTiles": 24,
-      "paths": 89,
+      "renderedTiles": 1,
+      "paths": 2,
       "layerNames": [
         "AdmBdry",
         "Anno",
         "RailCL",
         "RdCL",
-        "WA",
-        "RvrCL",
-        "Cntr",
-        "SpcfArea",
-        "TpgphArea"
+        "WA"
       ],
       "interactive": true,
       "sample": [
-        {
-          "fill": "#ffcc00",
-          "stroke": "#ff0000"
-        },
-        {
-          "fill": "#ffcc00",
-          "stroke": "#ff0000"
-        },
-        {
-          "fill": "#ffcc00",
-          "stroke": "#ff0000"
-        },
-        {
-          "fill": "#ffcc00",
-          "stroke": "#ff0000"
-        },
-        {
-          "fill": "#ffcc00",
-          "stroke": "#ff0000"
-        },
-        {
-          "fill": "#ffcc00",
-          "stroke": "#ff0000"
-        },
         {
           "fill": "#ffcc00",
           "stroke": "#ff0000"
@@ -112,7 +86,7 @@
         "fills": [
           [
             "#ffcc00",
-            89
+            4
           ]
         ]
       }
@@ -180,12 +154,12 @@
         "landuse",
         "natural",
         "physical_line",
-        "physical_point",
         "places",
         "pois",
         "roads",
         "transit",
         "water",
+        "physical_point",
         "boundaries"
       ],
       "interactive": true,

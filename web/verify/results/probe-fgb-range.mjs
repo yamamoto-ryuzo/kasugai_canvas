@@ -114,9 +114,17 @@ if (autoGet && fullGet) {
 // 初期表示は広域のため地物が読まれている(0 ではない)
 rec("load.auto", autoCount > 0, `bbox=auto 範囲読み込み ${autoCount} 地物`);
 
+// まず全球広域へ移動して baseline を取る(初期カメラ位置はフィクスチャ非依存で不安定なため)
+await page.evaluate(() => window.kasugaiApi.flyTo({ latitude: 20, longitude: 0, height: 30000000, pitch: -90 }, 0)).catch(() => {});
+await new Promise(r => setTimeout(r, 4000));
+const wideCount = await page.evaluate(() => {
+  const layer = window.kasugaiApi.listLayers().find(l => (l.title || "").includes("countries(bbox=auto)"));
+  const gj = window.kasugaiApi.getLayerGeoJson(layer.id);
+  return gj?.features?.length ?? 0;
+});
 // 狭い範囲(日本付近)へ移動 → 再クエリで地物が絞られる
 const before = reqLog.length;
-await page.evaluate(() => window.kasugaiApi.flyTo({ latitude: 36, longitude: 138, height: 800000, pitch: -90 }, 0));
+await page.evaluate(() => window.kasugaiApi.flyTo({ latitude: 36, longitude: 138, height: 800000, pitch: -90 }, 0)).catch(() => {});
 await new Promise(r => setTimeout(r, 4000));
 const zoomCount = await page.evaluate(() => {
   const layer = window.kasugaiApi.listLayers().find(l => (l.title || "").includes("countries(bbox=auto)"));
@@ -126,8 +134,8 @@ const zoomCount = await page.evaluate(() => {
 const requeryReqs = reqLog.slice(before).filter(r => r.path.includes("countries.fgb") && r.range);
 rec("viewport.requery", requeryReqs.length > 0,
   `カメラ移動で再クエリ(Range リクエスト ${requeryReqs.length} 件)`);
-rec("viewport.subset", zoomCount > 0 && zoomCount < autoCount,
-  `狭範囲で ${zoomCount} 地物(広域時 ${autoCount})`);
+rec("viewport.subset", zoomCount > 0 && zoomCount < wideCount,
+  `狭範囲で ${zoomCount} 地物(広域時 ${wideCount})`);
 
 srv.close();
 await ctx.close();

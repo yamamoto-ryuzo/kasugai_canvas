@@ -1245,7 +1245,9 @@ async function addKascLayer(item, baseUrl) {
       try {
         const compiled = item.opts?.style
           ? await loadCompiledQml(item.opts.style, baseUrl, "navara")
-          : await compileEmbeddedStyle(embStyle, baseUrl, "navara");
+          : embStyle
+            ? await compileEmbeddedStyle(embStyle, baseUrl, "navara")
+            : await loadCompiledQml(item.styleUrl, baseUrl, "navara");
         item._qml = compiled;
         const spec = compiled.evaluate?.(item._geojson?.features?.[0]?.properties || {});
         const s = specToStyle(spec);
