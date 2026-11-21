@@ -1,7 +1,7 @@
 // QML スタイル(.qml)の Cesium への適用（描画側バインディング）
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
-import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas, linRefFormatText } from "../shared/qml-style.js";
+import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas, linRefFormatText, clampMapUnitsPerPixel } from "../shared/qml-style.js";
 import { trimCoordsPlanar, TRIM_PX_TO_M } from "../shared/qml-2d.js";
 
 const Cesium = window.Cesium;
@@ -395,7 +395,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
         // MapUnit/MetersInMapUnits: メートル実寸のためカメラ距離で拡縮する
         // (installMapUnitScaler が _qmlMapUnits を参照して更新)
         const mu = spec.markers.find(m => m?.sizeMeters);
-        if (mu) (entity._qmlMapUnits ||= {}).billboard = { meters: mu.sizeMeters, refPx: Math.max(canvas.height || 1, 1) };
+        if (mu) (entity._qmlMapUnits ||= {}).billboard = { meters: mu.sizeMeters, refPx: Math.max(canvas.height || 1, 1), mus: mu.sizeMetersMus || null };
         else if (entity._qmlMapUnits) delete entity._qmlMapUnits.billboard;
         entity.billboard.verticalOrigin = new Cesium.ConstantProperty(Cesium.VerticalOrigin.CENTER);
         entity.billboard.horizontalOrigin = new Cesium.ConstantProperty(Cesium.HorizontalOrigin.CENTER);
@@ -1452,7 +1452,10 @@ export function installMapUnitScaler(scene, getSources) {
           if (!(mpp > 0)) continue;
           const setScale = (gfx, m) => {
             if (!gfx || !m) return;
-            const scale = Math.min(Math.max((m.meters / mpp) / (m.refPx || 1), 0.01), 100);
+            // size_map_unit_scale(QgsMapUnitScale)が付く場合は QGIS 準拠で
+            // mup をクランプする(縮尺縮尺範囲外の拡縮を止める)
+            const mup = m.mus ? clampMapUnitsPerPixel(mpp, m.mus) : mpp;
+            const scale = Math.min(Math.max((m.meters / mup) / (m.refPx || 1), 0.01), 100);
             const cur = gfx.scale?.getValue?.() ?? 1;
             if (Math.abs(cur - scale) > 0.02) {
               gfx.scale = new Cesium.ConstantProperty(scale);

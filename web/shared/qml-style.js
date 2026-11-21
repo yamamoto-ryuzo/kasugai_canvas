@@ -136,6 +136,83 @@ function mapUnitMeters(value, unit) {
   return (unit === "MapUnit" || unit === "MetersInMapUnits") ? n : null;
 }
 
+// "*_map_unit_scale"(QgsMapUnitScale)の実値形式(実機確認済み):
+//   旧形式 "minScale,maxScale" / 新形式 "3x:minScale,maxScale,minSizeMMEnabled,minSizeMM,maxSizeMMEnabled,maxSizeMM"
+// このスケールは QgsRenderContext::convertToPainterUnits の MapUnits 分岐でのみ
+// 効く(QGIS 実装)。単位が MM/Pixel 等のプロパティでは QGIS 側も無視するため、
+// 読んで保持のみ行い警告は出さない
+function parseMapUnitScale(v) {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const parts = s.replace(/^3x:/, "").split(",").map(Number);
+  const mus = {
+    minScale: parts[0] || 0, maxScale: parts[1] || 0,
+    minSizeMMEnabled: !!parts[2], minSizeMM: parts[3] || 0,
+    maxSizeMMEnabled: !!parts[4], maxSizeMM: parts[5] || 0,
+  };
+  return (mus.minScale || mus.maxScale || mus.minSizeMMEnabled || mus.maxSizeMMEnabled) ? mus : null;
+}
+
+// props マップから "<base>_map_unit_scale" を引く(例: musOf(p,"size")→p.size_map_unit_scale)
+function musOf(p, base) {
+  return parseMapUnitScale(p?.[base + "_map_unit_scale"]);
+}
+
+// QgsMapUnitScale::computeMapUnitsPerPixel 相当。現縮尺(scaleDenom)で
+// 1pxあたり地図単位(mup)をクランプし、size(地図単位)→px を返す。
+// mup = scaleDenom × 0.00028(OGC標準ピクセル)。renderScale=scaleDenom とみなす
+export const MUP_PER_SCALE_DENOM = 0.00028;
+function mapUnitSizeToPxClamped(sizeMapUnits, mus, scaleDenom) {
+  const s = scaleDenom ?? currentMapScale();
+  if (!s || !mus || !Number.isFinite(sizeMapUnits)) return null;
+  let mup = s * MUP_PER_SCALE_DENOM;
+  if (mus.minScale) mup = Math.min(mup / (s / mus.minScale), mup);
+  if (mus.maxScale) mup = Math.max(mup / (s / mus.maxScale), mup);
+  if (!(mup > 0)) return null;
+  let px = sizeMapUnits / mup;
+  if (mus.minSizeMMEnabled) px = Math.max(px, mus.minSizeMM * MM_TO_PX);
+  if (mus.maxSizeMMEnabled) px = Math.min(px, mus.maxSizeMM * MM_TO_PX);
+  return px;
+}
+
+// 同様のクランプを 1pxあたり地図単位(mup)へ直接適用する(エンジン側
+// 距離連動スケーリングで使う。renderScale = mpp / MUP_PER_SCALE_DENOM)
+export function clampMapUnitsPerPixel(mup, mus) {
+  if (!mus || !(mup > 0)) return mup;
+  const rs = mup / MUP_PER_SCALE_DENOM;
+  if (mus.minScale) mup = Math.min(mup / (rs / mus.minScale), mup);
+  if (mus.maxScale) mup = Math.max(mup / (rs / mus.maxScale), mup);
+  return mup;
+}
+
+// QGIS join/cap 名 → canvas/エンジン名(全シンボルレイヤ共通)
+const QGIS_JOIN = { bevel: "bevel", miter: "miter", miter2: "miter", round: "round" };
+const QGIS_CAP = { square: "square", flat: "butt", butt: "butt", round: "round" };
+function qgisJoin(v, fallback = "bevel") { return QGIS_JOIN[String(v || "").toLowerCase()] || fallback; }
+function qgisCap(v, fallback = "butt") { return QGIS_CAP[String(v || "").toLowerCase()] || fallback; }
+
+// spec へ *_map_unit_scale / *_unit_scale(QGIS4 の一部クラスは後者の命名)を
+// まとめて付与する。mus.<base> = parsed QgsMapUnitScale。
+// 少なくとも1つ有効(非ゼロ)なら true を返す(縮尺依存フラグ判定用)
+function attachMusProps(spec, p) {
+  let has = false;
+  for (const k in p || {}) {
+    const suf = k.endsWith("_map_unit_scale") ? "_map_unit_scale"
+      : k.endsWith("_unit_scale") ? "_unit_scale" : null;
+    if (!suf) continue;
+    const mus = parseMapUnitScale(p[k]);
+    if (mus) { (spec.mus ||= {})[k.slice(0, -suf.length)] = mus; has = true; }
+  }
+  return has;
+}
+
+// ring_filter(実機 QGIS4 名): 0=全リング 1=外周のみ 2=内周のみ。
+// 対応エンジンが限られるため spec へ保持し、消費側が扱えなければ警告は出さない近似
+function ringFilterOf(p) {
+  const n = Number(p?.ring_filter ?? 0);
+  return (n === 1 || n === 2) ? n : 0;
+}
+
 // "5;2" のようなカスタムダッシュ(線幅単位)または線種名 → [onPx, offPx, ...]
 export function dashPattern(styleName, customDash, widthPx, customUnit = "MM") {
   if (customDash && /^\d/.test(String(customDash))) {
@@ -1210,6 +1287,30 @@ function compileRenderer(rendererEl, warnings) {
     }
     case "nullSymbol":
       return { evaluate: () => [], ...ctx };
+    case "embeddedSymbol": {
+      // 実機 QGIS4 出力: <symbols> の既定シンボルのみを持つ(内側 renderer 無し)。
+      // 地物ごとの埋め込みシンボル上書きは QML に保持されず再現不能のため、
+      // 既定シンボルで全地物を描画する(singleSymbol 相当)
+      const name = [...symbols.keys()][0];
+      if (name) legend.push({ label: "", symbolName: name });
+      warnOnce(warnings, "embeddedSymbol は地物別の埋め込みシンボル上書きを再現しません(既定シンボルで描画)");
+      return { evaluate: () => (name ? [name] : []), ...ctx };
+    }
+    case "mergedFeatureRenderer": {
+      // 実機 QGIS4 出力: 内側 <renderer-v2> を持つラッパー。QGIS はポリゴン
+      // 地物をディゾルブ統合してから描画するが、真の統合は Web エンジンで
+      // 再現不能のため内側レンダラへ委譲して個別描画で近似する。
+      // spec.merged は将来のジオメトリ統合フック用に保持
+      const inner = [...rendererEl.children].find(c => c.tagName === "renderer-v2");
+      warnOnce(warnings, "mergedFeatureRenderer は地物統合を再現しません(個別描画で近似)");
+      if (inner) {
+        const compiledInner = compileRenderer(inner, warnings);
+        return { ...compiledInner, merged: true };
+      }
+      const name = [...symbols.keys()][0];
+      if (name) legend.push({ label: "", symbolName: name });
+      return { evaluate: () => (name ? [name] : []), ...ctx, merged: true };
+    }
     case "invertedPolygonRenderer": {
       // 「地物の外側を塗る」マスク。内側の renderer-v2 を評価したうえで
       // spec に inverted フラグを立て、エンジン側が
@@ -1412,10 +1513,21 @@ function loadImage(url) {
 }
 
 // SVG を param(fill)/param(outline) で再着色して data URL 化する
-async function loadSvgRecolored(url, fillColor, strokeColor, fetchText) {
+async function loadSvgRecolored(url, fillColor, strokeColor, fetchText, params = null) {
   try {
     const text = await fetchText(url);
     let svg = String(text);
+    // parameters(Option Map): 埋込SVGの param(fill/outline/outline-width) 上書き。
+    // color/outline_color より優先される(実機 QGIS4 の prop名は fill/outline/outline-width)
+    if (params && typeof params === "object") {
+      if (params.fill) fillColor = parseQgisColor(params.fill, fillColor);
+      if (params.outline) strokeColor = parseQgisColor(params.outline, strokeColor);
+      const ow = params["outline-width"] ?? params.outlineWidth;
+      if (ow != null && ow !== "") {
+        svg = svg.replace(/param\(outline-width[^)]*\)/gi, String(ow))
+          .replace(/stroke-width="[^"]*"/gi, `stroke-width="${ow}"`);
+      }
+    }
     if (fillColor) {
       const c = rgbaToCss(fillColor);
       svg = svg.replace(/param\(fill[^)]*\)/gi, c).replace(/fill="(?!none)[^"]*"/gi, `fill="${c}"`);
@@ -1458,15 +1570,46 @@ function markerOffsetPx(p, dd, props, sizePx) {
 }
 
 function resolveMarkerLayer(layer, props, images, warnings) {
+  const p = layer?.props || {};
   const arr = resolveMarkerLayerBase(layer, props, images, warnings) || [];
+  // scale_method(実機名): diameter(既定)/area。area は size を面積として
+  // 解釈し直径=2*sqrt(size/π)にする(QGIS QgsMarkerSymbolLayer)
+  const sm = String(p.scale_method ?? "diameter").toLowerCase();
+  const areaScale = (sm === "1" || sm === "area") ? 2 / Math.sqrt(Math.PI) : 1;
+  // joinstyle/cap_style はマーカー輪郭のペン設定(描画側が ctx.lineJoin/lineCap へ)
+  const strokeJoin = qgisJoin(p.joinstyle);
+  const strokeCap = qgisCap(p.cap_style);
+  const sizeMus = musOf(p, "size");
+  for (const m of arr) {
+    if (!m || typeof m !== "object") continue;
+    if (areaScale !== 1) {
+      if (m.sizePx) m.sizePx *= areaScale;
+      if (m.widthPx) m.widthPx *= areaScale;
+      if (m.heightPx) m.heightPx *= areaScale;
+    }
+    if (m.stroke != null) { m.strokeJoin = strokeJoin; m.strokeCap = strokeCap; }
+    attachMusProps(m, p);
+  }
   // MapUnit/MetersInMapUnits のマーカーサイズはメートル値を保持する。
   // 対応エンジンがカメラ距離連動で拡縮し、非対応エンジンは sizePx 近似のまま
-  const unit = layer?.props?.size_unit || "MM";
+  const unit = p.size_unit || "MM";
   if (unit === "MapUnit" || unit === "MetersInMapUnits") {
-    const n = Number(ddValue(layer?.dd, ["size"], props, layer?.props?.size ?? 2));
+    const n = Number(ddValue(layer?.dd, ["size"], props, p.size ?? 2));
     if (Number.isFinite(n) && n > 0) {
-      warnOnce(warnings, "MapUnit/MetersInMapUnits のマーカーサイズは距離連動スケーリングです(非対応エンジンは px 近似)");
-      for (const m of arr) if (m && typeof m === "object") m.sizeMeters = n;
+      if (sizeMus) {
+        // size_map_unit_scale が有効: QGIS は mup クランプで縮尺範囲外の
+        // 拡縮を止める。対応エンジンへ mus を渡し、非対応は現縮尺で px に畳む
+        const px = mapUnitSizeToPxClamped(n, sizeMus);
+        for (const m of arr) {
+          if (!m || typeof m !== "object") continue;
+          if (px != null) { m.sizePx = px; }
+          else { m.sizeMeters = n; m.sizeMetersMus = sizeMus; }
+        }
+        warnOnce(warnings, "size_map_unit_scale(縮尺クランプ)は対応エンジンで距離連動・非対応では現縮尺固定の近似です");
+      } else {
+        warnOnce(warnings, "MapUnit/MetersInMapUnits のマーカーサイズは距離連動スケーリングです(非対応エンジンは px 近似)");
+        for (const m of arr) if (m && typeof m === "object") m.sizeMeters = n;
+      }
     }
   }
   return arr;
@@ -1500,8 +1643,13 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
       }];
     }
     case "EllipseMarker": {
-      const w = sizeToPx(ddValue(dd, ["width", "symbol_width"], props, p.symbol_width ?? p.size ?? 2), sizeUnit);
-      const h = sizeToPx(ddValue(dd, ["height", "symbol_height"], props, p.symbol_height ?? p.size ?? 2), sizeUnit);
+      // 幅・高さは symbol_width/symbol_height + 個別単位(実機名)。
+      // symbol_name(実機名)は装飾形状名(ellipse 以外は未対応のため読み捨て)
+      const w = sizeToPx(ddValue(dd, ["width", "symbol_width"], props, p.symbol_width ?? p.size ?? 2), p.symbol_width_unit || sizeUnit);
+      const h = sizeToPx(ddValue(dd, ["height", "symbol_height"], props, p.symbol_height ?? p.size ?? 2), p.symbol_height_unit || sizeUnit);
+      if (p.symbol_name && String(p.symbol_name).toLowerCase() !== "circle") {
+        warnOnce(warnings, `EllipseMarker の symbol_name=${p.symbol_name} は ellipse 以外未対応です(楕円で近似)`);
+      }
       const fill = parseQgisColor(ddValue(dd, ["fillColor", "color"], props, p.color), [0.2, 0.4, 0.9, 1]);
       const stroke = parseQgisColor(ddValue(dd, ["outlineColor", "outline_color"], props, p.outline_color), null);
       const strokeWidth = sizeToPx(ddValue(dd, ["outlineWidth", "outline_width"], props, p.outline_width ?? 0), p.outline_width_unit || "MM");
@@ -1517,27 +1665,39 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
       const pathKey = String(p.name ?? p.imageFile ?? p.path ?? "");
       const image = images.get(pathKey) || null;
       // SVG/ラスタマーカーは幅・高さの DD(size とは別名)で拡縮される(#dd)
+      // 単位は symbol_width_unit/symbol_height_unit(実機名)
       const wdd = ddValue(dd, ["width", "symbol_width"], props, null);
       const hdd = ddValue(dd, ["height", "symbol_height"], props, null);
+      const wUnit = p.symbol_width_unit || p.size_unit || sizeUnit;
+      const hUnit = p.symbol_height_unit || p.size_unit || sizeUnit;
       const imgSizePx = (wdd != null || hdd != null)
-        ? Math.max(sizeToPx(wdd ?? hdd, sizeUnit) || 0, sizeToPx(hdd ?? wdd, sizeUnit) || 0, 1)
+        ? Math.max(sizeToPx(wdd ?? hdd, wUnit) || 0, sizeToPx(hdd ?? wdd, hUnit) || 0, 1)
         : sizePx;
+      // fixedAspectRatio(実機名): >0 で縦横比を固定し height = width / aspect
+      const far = Number(p.fixedAspectRatio ?? 0) || 0;
+      const imgHeightPx = far > 0 ? imgSizePx / far : null;
+      // outline_width/outline_width_unit(実機名): SVG param(outline-width) への
+      // フォールバック上書き値として spec 保持(実際の注入は画像ロード時)
+      const owPx = sizeToPx(ddValue(dd, ["outlineWidth", "outline_width"], props, p.outline_width ?? 0), p.outline_width_unit || "MM") || 0;
       if (!image) {
         warnOnce(warnings, `${layer.cls} の画像を読めませんでした: ${pathKey}(円で代替)`);
         const fill = parseQgisColor(p.color, [0.2, 0.4, 0.9, 1]);
         return [{ kind: "shape", shape: "circle", sizePx: imgSizePx, fill, stroke: null, strokeWidthPx: 0, rotationDeg: angle, offsetPx, alpha }];
       }
-      return [{ kind: "image", image, sizePx: imgSizePx, rotationDeg: angle, offsetPx, alpha }];
+      return [{ kind: "image", image, sizePx: imgSizePx, heightPx: imgHeightPx, aspectRatio: far || null, outlineWidthPx: owPx, rotationDeg: angle, offsetPx, alpha }];
     }
     case "FontMarker":
     case "MdiFontMarker": {
       const chr = String(ddValue(dd, ["char", "chr"], props, p.chr ?? ""));
       const font = String(ddValue(dd, ["fontFamily"], props, p.font) || p.font || p.font_family || "sans-serif");
+      // font_style(実機名): "Italic"/"Bold" 等の名付きスタイル
+      const fs = String(ddValue(dd, ["fontStyle"], props, p.font_style ?? "")).toLowerCase();
       const fill = parseQgisColor(ddValue(dd, ["fillColor", "color"], props, p.color), [0.2, 0.2, 0.2, 1]);
       const stroke = parseQgisColor(ddValue(dd, ["outlineColor", "outline_color"], props, p.outline_color), null);
-      const strokeWidth = sizeToPx(ddValue(dd, ["outlineWidth", "outline_width"], props, p.outline_width ?? 0), "MM");
+      const strokeWidth = sizeToPx(ddValue(dd, ["outlineWidth", "outline_width"], props, p.outline_width ?? 0), p.outline_width_unit || "MM");
       return [{
         kind: "text", text: chr, fontFamily: font, sizePx, fill,
+        fontItalic: /italic|oblique/.test(fs), fontBold: /bold/.test(fs),
         stroke, strokeWidthPx: strokeWidth,
         rotationDeg: angle, offsetPx, alpha,
       }];
@@ -1560,12 +1720,14 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
     }
     case "AnimatedMarker": {
       // アニメーションマーカー(#108): 動画再生は未対応のため先頭フレームを静止表示。
-      // 実プロパティ名は imageFile(実機検証済み)
+      // 実プロパティ名は imageFile(実機検証済み)。frameRate/fixedAspectRatio も実名
       const pathKey = String(p.imageFile ?? p.name ?? p.file ?? "");
+      const frameRate = Number(p.frameRate ?? 0) || 0;
+      const far = Number(p.fixedAspectRatio ?? 0) || 0;
       const image = pathKey ? images.get(pathKey) || null : null;
       if (image) {
         warnOnce(warnings, "AnimatedMarker は先頭フレームのみ静止表示です(アニメーション未対応)");
-        return [{ kind: "image", image, sizePx, rotationDeg: angle, offsetPx, alpha }];
+        return [{ kind: "image", image, sizePx, heightPx: far > 0 ? sizePx / far : null, aspectRatio: far || null, frameRate, rotationDeg: angle, offsetPx, alpha }];
       }
       warnOnce(warnings, `AnimatedMarker の画像を読めませんでした: ${pathKey || "?"}(円で代替)`);
       const fill = parseQgisColor(p.color, [0.2, 0.4, 0.9, 1]);
@@ -1579,7 +1741,7 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
         const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
         if (sub.markers?.length) {
           warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
-          return [{ gg: { expr, markers: sub.markers } }];
+          return [{ gg: { expr, units: p.units, markers: sub.markers } }];
         }
       }
       warnOnce(warnings, "GeometryGenerator マーカーは未対応です(スキップ)");
@@ -1620,7 +1782,8 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
         }
       }
       if (!Number.isFinite(mag)) {
-        if (!xAttr && !yAttr) mag = Number(p.size ?? 2) || 2; // 属性未設定→固定矢印(凡例)
+        // 属性未設定 or 凡例/初期解決(props={}で地物属性未適用)は固定矢印
+        if ((!xAttr && !yAttr) || !props || Object.keys(props).length === 0) mag = Number(p.size ?? 2) || 2;
         else {
           warnOnce(warnings, `VectorField の属性(${xAttr || "?"},${yAttr || "?"})が地物に無いか数値ではありません(スキップ)`);
           return [];
@@ -1651,8 +1814,12 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
     case "MaskMarker": {
       // マスク形状マーカー(QGIS4): サブシンボル(マーカー)をそのまま描画する。
       // QGIS ではこの形状がラベル/他シンボルレイヤの「マスク」としても登録される
-      // が、Web エンジンでは真のマスク効果(遮蔽抜き)は実現不能なため形状のみ
-      warnOnce(warnings, "MaskMarker のマスク効果(ラベル/シンボル遮蔽)は未対応です(形状のみ描画)");
+      // が、Web エンジンでは真のマスク効果(遮蔽抜き)は実現不能なため形状のみ。
+      // mask_symbollayers(実機名)=マスク対象レイヤ ID リスト。再現不能のため読み捨て+警告
+      const maskTargets = String(p.mask_symbollayers ?? "");
+      warnOnce(warnings, maskTargets
+        ? `MaskMarker のマスク効果(対象: ${maskTargets.slice(0, 60)})は未対応です(形状のみ描画)`
+        : "MaskMarker のマスク効果(ラベル/シンボル遮蔽)は未対応です(形状のみ描画)");
       if (!layer.subSymbol) return [];
       return layer.subSymbol.layers.flatMap(l =>
         l.enabled ? resolveMarkerLayer(l, props, images, warnings) : []);
@@ -1743,6 +1910,23 @@ export function linRefFormatText(distM, num) {
 }
 
 function resolveLineLayer(layer, props, warnings, images = null) {
+  const p = layer.props || {};
+  const r = resolveLineLayerBase(layer, props, warnings, images);
+  if (r && typeof r === "object" && !r.gg) {
+    // join/cap/offset/ring_filter は QGIS 全ラインシンボルレイヤ共通プロパティ。
+    // 各クラスの個別指定を優先し、未設定ならここで埋める
+    r.join ??= qgisJoin(p.joinstyle);
+    r.cap ??= qgisCap(p.capstyle);
+    r.offsetPx ??= sizeToPx(ddValue(layer.dd, ["offset"], props, p.offset ?? 0), p.offset_unit || "MM") || 0;
+    // ring_filter(実機名): 0=全リング 1=外周のみ 2=内周のみ。対応エンジン限定のため spec 保持
+    const rf = ringFilterOf(p);
+    if (rf) r.ringFilter = rf;
+    attachMusProps(r, p);
+  }
+  return r;
+}
+
+function resolveLineLayerBase(layer, props, warnings, images = null) {
   const p = layer.props;
   const dd = layer.dd;
   const widthUnit = p.line_width_unit || "MM";
@@ -1771,10 +1955,16 @@ function resolveLineLayer(layer, props, warnings, images = null) {
       return {
         color, widthPx: Math.max(widthPx, 1), dash,
         // 結合部・端部・オフセット(2D エンジンで反映)
-        join: { bevel: "bevel", miter: "miter", miter2: "miter", round: "round" }[String(p.joinstyle || "bevel").toLowerCase()] || "bevel",
-        cap: { square: "square", flat: "butt", round: "round" }[String(p.capstyle || "square").toLowerCase()] || "butt",
+        join: qgisJoin(p.joinstyle),
+        cap: qgisCap(p.capstyle),
         offsetPx: sizeToPx(ddValue(dd, ["offset"], props, p.offset ?? 0), p.offset_unit || "MM") || 0,
         trimStartPx, trimEndPx, dashOffsetPx,
+        // align_dash_pattern=線の先端基準で破線位置を揃える /
+        // tweak_dash_pattern_on_corners=角で破線を見栄え調整 /
+        // draw_inside_polygon=ポリゴン内側のみ描画(クリップ近似・未対応エンジンは無視)
+        alignDash: String(p.align_dash_pattern ?? "0") === "1" || String(p.align_dash_pattern).toLowerCase() === "true",
+        tweakDash: String(p.tweak_dash_pattern_on_corners ?? "0") === "1" || String(p.tweak_dash_pattern_on_corners).toLowerCase() === "true",
+        drawInside: String(p.draw_inside_polygon ?? "0") === "1" || String(p.draw_inside_polygon).toLowerCase() === "true",
       };
     }
     case "InterpolatedLine": {
@@ -1802,12 +1992,24 @@ function resolveLineLayer(layer, props, warnings, images = null) {
         w1v), widthUnit) || 0, 0.5);
       const widthEndPx = Math.max(sizeToPx(ddValue(dd, ["lineEndWidthValue", "widthEnd", "width_end"], props,
         w2v), widthUnit) || 0, 0.5);
+      // 幅の可変値域(実機名): width_varying_minimum_value/maximum_value は
+      // 補間パラメータ t→値域の写像範囲。use_absolute_value=値そのものを幅とする
+      // 解釈、ignore_out_of_range=値域外をクランプせず除外する指定。
+      // エンジンが線形近似で使うため spec へ保持する
+      const varying = variable ? {
+        minValue: Number(p.width_varying_minimum_value ?? 0) || 0,
+        maxValue: Number(p.width_varying_maximum_value ?? 1) || 1,
+        absolute: String(p.width_varying_use_absolute_value ?? "0") === "1"
+          || String(p.width_varying_use_absolute_value).toLowerCase() === "true",
+        ignoreOutOfRange: String(p.width_varying_ignore_out_of_range ?? "0") === "1"
+          || String(p.width_varying_ignore_out_of_range).toLowerCase() === "true",
+      } : null;
       warnOnce(warnings, "InterpolatedLine は始点→終点の線形補間で近似です(未対応エンジンは単色)");
       // decor {kind:"interpolated"} は対応エンジン(Cesium)が弧長分割で
       // 幅・色補間を再現する契約。非対応エンジンは color/widthPx の単色線
       return {
         color: colorStart, widthPx: Math.max(widthStartPx, widthEndPx, 1), dash: null,
-        decor: { kind: "interpolated", c1: colorStart, c2: colorEnd, w1: widthStartPx, w2: widthEndPx },
+        decor: { kind: "interpolated", c1: colorStart, c2: colorEnd, w1: widthStartPx, w2: widthEndPx, varying },
       };
     }
     case "FilledLine": {
@@ -1920,7 +2122,7 @@ function resolveLineLayer(layer, props, warnings, images = null) {
         const line = sub.line;
         if (line) {
           warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
-          return { gg: { expr, line } };
+          return { gg: { expr, units: p.units, line } };
         }
       }
       warnOnce(warnings, "GeometryGenerator ラインは未対応です(スキップ)");
@@ -1950,13 +2152,28 @@ function buildLineDecor(layer, p, props, images, color, widthUnit, warnings) {
     p.interval_unit || p.repeat_distance_unit || "MM") || 0;
   // QGIS4 は placements(enum名文字列: Interval/Vertex/...)。旧名 placement も拾う
   const placement = String(ddValue(dd, ["placement"], props, p.placements ?? p.placement ?? "interval")).toLowerCase(); // interval|centralpoint|vertex|firstvertex|lastvertex|curvepoint
+  // 装飾ライン共通(実機名): offset_along_line=線に沿った開始オフセット、
+  // average_angle_length=配置角の平滑化窓、place_on_every_part=マルチパート
+  // 全パートに配置、ring_filter=リング絞込。非対応エンジンは無視
+  const decorCommon = {
+    offsetAlongPx: sizeToPx(ddValue(dd, ["offsetAlongLine"], props, p.offset_along_line ?? 0),
+      p.offset_along_line_unit || "MM") || 0,
+    avgAnglePx: sizeToPx(ddValue(dd, ["averageAngleLength"], props, p.average_angle_length ?? 0),
+      p.average_angle_unit || "MM") || 0,
+    everyPart: String(p.place_on_every_part ?? "0") === "1"
+      || String(p.place_on_every_part).toLowerCase() === "true",
+    ringFilter: ringFilterOf(p) || undefined,
+    // blank_segments は空白セグメント定義(実名)。間隔パターン近似では未再現
+    blankSegmentsUnit: p.blank_segments_unit || undefined,
+  };
   if (cls === "MarkerLine") {
     const markers = layer.subSymbol
       ? layer.subSymbol.layers.flatMap(l => l.enabled ? resolveMarkerLayer(l, props, images, warnings) : [])
       : [];
     return { kind: "markerline", intervalPx: intervalPx || sizeToPx(4, "MM"), placement, markers,
       // QGIS4 は rotate(bool)。旧名 rotate_marker も拾う
-      rotateMarker: String(p.rotate ?? p.rotate_marker ?? "1") !== "0" };
+      rotateMarker: String(p.rotate ?? p.rotate_marker ?? "1") !== "0",
+      ...decorCommon };
   }
   if (cls === "HashLine" || cls === "HashedLine") {
     // 刻みの長さ・間隔・角度。QGIS 既定: 斜め 45 度の刻み
@@ -1967,7 +2184,10 @@ function buildLineDecor(layer, p, props, images, color, widthUnit, warnings) {
       tick?.props?.line_width ?? p.line_width ?? 0.26), "MM") || 1;
     const hashAngle = Number(p.hash_angle ?? p.angle ?? 90);
     return { kind: "hashline", intervalPx: intervalPx || sizeToPx(2, "MM"),
-      tick: { color: tickColor, widthPx: Math.max(tickWidthPx, 0.5), lengthPx: tickLenPx, angleDeg: hashAngle } };
+      // rotate(実機名): 刻みを線方向へ回転させるか(既定1)
+      rotate: String(p.rotate ?? "1") !== "0",
+      tick: { color: tickColor, widthPx: Math.max(tickWidthPx, 0.5), lengthPx: tickLenPx, angleDeg: hashAngle },
+      ...decorCommon };
   }
   if (cls === "InterpolatedLine") {
     // 始端→終端の色・幅補間(#108)。dd 指定も拾い、描画側がセグメント分割で近似する。
@@ -1988,23 +2208,45 @@ function buildLineDecor(layer, p, props, images, color, widthUnit, warnings) {
     const w2 = Math.max(sizeToPx(ddValue(dd, ["lineEndWidthValue", "width_end"], props, w2v), widthUnit) || 1, 0.5);
     return { kind: "interpolated", c1, c2, w1, w2 };
   }
+  if (cls === "Lineburst") {
+    // 線端部のグラデーションライン(QGIS4)。color1/color2 または rampType の
+    // カラーランプを始端→終端へ展開する。direction/spec/discrete はランプ制御
+    const c1 = parseQgisColor(p.color1 ?? p.color ?? p.gradient_color2 ?? p.line_color, [0, 0, 0, 1]);
+    const c2 = parseQgisColor(p.color2 ?? p.gradient_color2, null);
+    warnOnce(warnings, "Lineburst は始端→終端の色補間で近似します");
+    return { kind: "interpolated", c1, c2: c2 || [c1[0], c1[1], c1[2], 0],
+      lineburst: true,
+      direction: String(p.direction ?? ""), rampType: String(p.rampType ?? ""),
+      colorType: String(p.color_type ?? ""), discrete: String(p.discrete ?? "0") === "1",
+      spec: Number(p.spec ?? 0) || 0, ...decorCommon };
+  }
   if (cls === "ArrowLine") {
-    // 実プロパティ名: head_length/head_thickness(単位付き)/is_curved。
+    // 実プロパティ名: head_length/head_thickness(単位付き)/is_curved/
+    // head_type(0=単一 1=反転 2=両端)/arrow_type(0=矢印 1=塗りつぶし)/
+    // is_repeated(線上反復)/arrow_start_width(矢尻幅)。
     // arrow_head_length/arrow_head_width/curved_arrow は存在しない旧名フォールバック
     return { kind: "arrowline", color: parseQgisColor(color, [0, 0, 0, 1]),
       headLenPx: sizeToPx(p.head_length ?? p.arrow_head_length ?? 2.5, p.head_length_unit || "MM") || 9,
       headWidthPx: sizeToPx(p.head_thickness ?? p.arrow_head_width ?? 2.5, p.head_thickness_unit || "MM") || 9,
       tailWidthPx: sizeToPx(p.arrow_width ?? 0, p.arrow_width_unit || "MM") || null,
-      curved: String(p.is_curved ?? p.curved_arrow ?? "0") === "1" };
+      startWidthPx: sizeToPx(p.arrow_start_width ?? 0, p.arrow_start_width_unit || "MM") || null,
+      headType: Number(p.head_type ?? 0) || 0, // 0=末尾のみ 1=先頭のみ(反転) 2=両端
+      arrowType: Number(p.arrow_type ?? 0) || 0, // 0=矢印 1=素線
+      repeated: String(p.is_repeated ?? "0") === "1" || String(p.is_repeated).toLowerCase() === "true",
+      curved: String(p.is_curved ?? p.curved_arrow ?? "0") === "1",
+      ...decorCommon };
   }
   if (cls === "RasterLine") {
     // ラスターライン: imageFile の画像を線幅高さで線に沿って繰り返す。
-    // image は事前ロード済み(collectImagePaths)なら images から取れる
+    // image は事前ロード済み(collectImagePaths)なら images から取れる。
+    // alpha(実機名)は画像不透明度
     const pathKey = String(p.imageFile ?? p.path ?? p.file ?? "");
     const image = pathKey ? images?.get(pathKey) || null : null;
     if (!image) warnOnce(warnings, `RasterLine の画像を読めませんでした: ${pathKey || "?"}(単色線で近似)`);
     return { kind: "rasterline", image,
-      offsetPx: sizeToPx(p.offset ?? 0, p.offset_unit || "MM") || 0 };
+      alpha: Number(p.alpha ?? 1),
+      offsetPx: sizeToPx(p.offset ?? 0, p.offset_unit || "MM") || 0,
+      ...decorCommon };
   }
   return null;
 }
@@ -2030,6 +2272,26 @@ const FILL_STYLES = {
 };
 
 function resolveFillLayer(layer, props, images, warnings, tileCache) {
+  const p = layer.props || {};
+  const r = resolveFillLayerBase(layer, props, images, warnings);
+  if (r && typeof r === "object" && !r.gg) {
+    // offset/offset_unit(実機名): パターン全体のずらし("x,y" ペア形式)。
+    // clip_mode/coordinate_reference はパターン描画のクリップ・座標基準(近似:spec 保持)
+    const offRaw = String(ddValue(layer.dd, ["offset"], props, p.offset ?? "0,0"));
+    const [offX0, offY0] = offRaw.split(",").map(Number);
+    const offPx = [
+      sizeToPx(offX0 || 0, p.offset_unit || "MM") || 0,
+      sizeToPx(offY0 || 0, p.offset_unit || "MM") || 0,
+    ];
+    if (offPx[0] || offPx[1]) r.offsetPx = offPx;
+    if (p.clip_mode != null) r.clipMode = Number(p.clip_mode) || p.clip_mode;
+    if (p.coordinate_reference != null) r.coordRef = Number(p.coordinate_reference) || p.coordinate_reference;
+    attachMusProps(r, p);
+  }
+  return r;
+}
+
+function resolveFillLayerBase(layer, props, images, warnings) {
   const p = layer.props;
   const dd = layer.dd;
   switch (layer.cls) {
@@ -2072,6 +2334,12 @@ function resolveFillLayer(layer, props, images, warnings, tileCache) {
         dispY: sizeToPx(ddValue(dd, ["displacementY"], props, p.displacement_y ?? 0), p.displacement_y_unit || "MM"),
         offX: sizeToPx(ddValue(dd, ["offsetX"], props, p.offset_x ?? 0), p.offset_x_unit || "MM"),
         offY: sizeToPx(ddValue(dd, ["offsetY"], props, p.offset_y ?? 0), p.offset_y_unit || "MM"),
+        // angle=パターン回転、seed=ランダムずらしのシード、
+        // random_deviation_x/y(実機名)=各点のランダム変位幅
+        angleDeg: Number(ddValue(dd, ["angle"], props, p.angle ?? 0)) || 0,
+        seed: Number(ddValue(dd, ["randomSeed"], props, p.seed ?? 0)) || 0,
+        randDevX: sizeToPx(ddValue(dd, ["randomOffsetX"], props, p.random_deviation_x ?? 0), p.random_deviation_x_unit || "MM") || 0,
+        randDevY: sizeToPx(ddValue(dd, ["randomOffsetY"], props, p.random_deviation_y ?? 0), p.random_deviation_y_unit || "MM") || 0,
       } };
     }
     case "RandomMarkerFill": {
@@ -2114,21 +2382,64 @@ function resolveFillLayer(layer, props, images, warnings, tileCache) {
         warnOnce(warnings, `${layer.cls} の画像を読めませんでした: ${pathKey}(単色で代替)`);
         return { solid: parseQgisColor(p.color ?? p.svgFillColor, [0.5, 0.5, 0.5, 0.7]) };
       }
-      const w = Math.max(sizeToPx(p.width ?? p.pattern_width ?? 4, p.pattern_width_unit || "MM"), 4);
-      return { imagePattern: { image, widthPx: w } };
+      // 実機名: width/width_unit(タイル幅・単位)、height(タイル高)、angle(パターン
+      // 回転)、alpha(不透明度)、coordinate_mode(0=地物基準 1=ビューポート基準)、
+      // svg_outline_width(SVG の内部輪郭幅)、parameters(埋込SVGのparam上書きMap)
+      const w = Math.max(sizeToPx(p.width ?? p.pattern_width ?? 4, p.width_unit || p.pattern_width_unit || "MM"), 4);
+      const hp = p.height != null && p.height !== ""
+        ? sizeToPx(p.height, p.height_unit || p.width_unit || "MM") : null;
+      return { imagePattern: {
+        image, widthPx: w, heightPx: hp || null,
+        angleDeg: Number(p.angle ?? 0) || 0,
+        alpha: Number.isFinite(Number(p.alpha)) ? Number(p.alpha) : 1,
+        coordinateMode: Number(p.coordinate_mode ?? 0) || 0,
+        svgParams: (p.parameters && typeof p.parameters === "object") ? p.parameters : null,
+        svgOutlineWidthPx: sizeToPx(p.svg_outline_width ?? 0, p.svg_outline_width_unit || "MM") || 0,
+      } };
     }
     case "GradientFill":
     case "ShapeburstFill":
     case "ColorRampFill": {
       const c1 = parseQgisColor(p.color ?? p.gradient_color2 ?? p.color1 ?? p.two_color_second, [0.5, 0.5, 0.5, 1]);
       const c2 = parseQgisColor(p.gradient_color2 ?? p.color2 ?? p.two_color_second, null);
-      // グラデーションはタイルで近似
-      return { gradient: { color1: c1, color2: c2 || [c1[0], c1[1], c1[2], 0], angleDeg: Number(p.angle ?? 0) } };
+      // グラデーションはタイルで近似。実機名の制御パラメータを spec へ保持する:
+      //   type(linear|radial|conical)/color_type(simple|ramp)/rampType(ランプ名)/
+      //   coordinate_mode(0=地物 1=ビューポート)/gradient_spread|spread(pad等)/
+      //   discrete+spec(段数)/direction(ccw)/reference_point1/2(+_iscentroid)。
+      //   Shapeburst 固有: use_whole_shape/max_distance(+distance_unit)/
+      //   blur_radius/ignore_rings
+      return { gradient: {
+        color1: c1, color2: c2 || [c1[0], c1[1], c1[2], 0], angleDeg: Number(p.angle ?? 0),
+        type: String(p.type ?? "linear"), colorType: String(p.color_type ?? "simple"),
+        rampType: String(p.rampType ?? ""),
+        coordinateMode: Number(p.coordinate_mode ?? 0) || 0,
+        spread: Number(p.gradient_spread ?? p.spread ?? 0) || 0,
+        discrete: String(p.discrete ?? "0") === "1" || String(p.discrete).toLowerCase() === "true",
+        steps: Number(p.spec ?? 0) || 0,
+        direction: String(p.direction ?? ""),
+        ref1: p.reference_point1 ?? null, ref2: p.reference_point2 ?? null,
+        ref1Centroid: String(p.reference_point1_iscentroid ?? "0") === "1",
+        ref2Centroid: String(p.reference_point2_iscentroid ?? "0") === "1",
+        // ShapeburstFill 固有
+        shapeburst: layer.cls === "ShapeburstFill",
+        useWholeShape: String(p.use_whole_shape ?? "0") === "1" || String(p.use_whole_shape).toLowerCase() === "true",
+        maxDistancePx: sizeToPx(p.max_distance ?? 0, p.distance_unit || "MM") || 0,
+        blurRadiusPx: sizeToPx(p.blur_radius ?? 0, "MM") || 0,
+        ignoreRings: String(p.ignore_rings ?? "0") === "1" || String(p.ignore_rings).toLowerCase() === "true",
+      } };
     }
     case "CentroidFill": {
       const markers = layer.subSymbol
         ? layer.subSymbol.layers.flatMap(l => l.enabled ? resolveMarkerLayer(l, props, images, warnings) : [])
         : [];
+      // 実機名: point_on_surface(ポリゴン内の代表点)/point_on_all_parts(全パート)/
+      // clip_points(範囲クリップ)/clip_on_current_part_only(現パートのみ)
+      markers.opts = {
+        onSurface: String(p.point_on_surface ?? "0") === "1" || String(p.point_on_surface).toLowerCase() === "true",
+        allParts: String(p.point_on_all_parts ?? "0") === "1" || String(p.point_on_all_parts).toLowerCase() === "true",
+        clip: String(p.clip_points ?? "0") === "1" || String(p.clip_points).toLowerCase() === "true",
+        clipPart: String(p.clip_on_current_part_only ?? "0") === "1" || String(p.clip_on_current_part_only).toLowerCase() === "true",
+      };
       return { centroid: markers };
     }
     case "GeometryGenerator": {
@@ -2154,15 +2465,15 @@ function resolveFillLayer(layer, props, images, warnings, tileCache) {
         const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
         if (/marker|point/i.test(subType) && sub.markers?.length) {
           warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
-          return { gg: { expr, markers: sub.markers } };
+          return { gg: { expr, units: p.units, markers: sub.markers } };
         }
         if (/line/i.test(subType) && sub.line) {
           warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
-          return { gg: { expr, line: sub.line } };
+          return { gg: { expr, units: p.units, line: sub.line } };
         }
         if (sub.fillParts?.length || sub.outline) {
           warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
-          return { gg: { expr, fillParts: sub.fillParts || [{ solid: null }], outline: sub.outline || null } };
+          return { gg: { expr, units: p.units, fillParts: sub.fillParts || [{ solid: null }], outline: sub.outline || null } };
         }
       }
       warnOnce(warnings, `GeometryGenerator(${mod.slice(0, 40) || "?"}) 塗りつぶしは未対応です(スキップ)`);
@@ -2183,7 +2494,8 @@ function resolveOutline(layer, props, warnings) {
   if (!color) return null;
   const widthPx = sizeToPx(ddValue(dd, ["outlineWidth", "outline_width"], props, p.outline_width ?? 0.26), p.outline_width_unit || "MM");
   const dash = dashPattern(style, null, Math.max(widthPx, 1));
-  return { color, widthPx: Math.max(widthPx, 1), dash: dash === "none" ? null : dash };
+  return { color, widthPx: Math.max(widthPx, 1), dash: dash === "none" ? null : dash,
+    join: qgisJoin(p.joinstyle) };
 }
 
 // <symbol> を feature 属性で正規化する
@@ -3142,7 +3454,11 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map(), e
     // ズーム確定後の再評価を行う
     scaleDependent: /[@$](?:map_)?scale\b|var\(\s*['"](?:map_)?scale['"]\s*\)/i.test(String(xmlText))
       || !!(renderer.ruleScales?.some(s => s.min > 0 || s.max > 0))
-      || !!(layerScale && (layerScale.minScale > 0 || layerScale.maxScale > 0)),
+      || !!(layerScale && (layerScale.minScale > 0 || layerScale.maxScale > 0))
+      // *_map_unit_scale が有効値(非ゼロ)かつ MapUnit 系単位のプロパティがある
+      // とき、縮尺変化でサイズのクランプが変わるため再評価対象とする
+      || (/_map_unit_scale"[^>]*value="(?!3x:0,0,0,0,0,0|0,0)/.test(String(xmlText))
+          && /_unit"[^>]*value="(?:MapUnit|MetersInMapUnits)"/.test(String(xmlText))),
   };
 }
 
@@ -3253,7 +3569,15 @@ export async function loadQmlStyle(url, fetchText, engine = null) {
       const markerProps = findMarkerPropsForKey(doc.documentElement, key) || {};
       const fill = parseQgisColor(markerProps.color, null);
       const stroke = parseQgisColor(markerProps.outline_color, null);
-      img = await loadSvgRecolored(resolved, fill, stroke, fetchText);
+      const svgParams = (markerProps.parameters && typeof markerProps.parameters === "object")
+        ? { ...markerProps.parameters } : {};
+      // outline_width(レイヤ prop)は parameters["outline-width"] が無い場合のフォールバック
+      if (svgParams["outline-width"] == null && markerProps.outline_width != null && markerProps.outline_width !== "") {
+        const ow = sizeToPx(markerProps.outline_width, markerProps.outline_width_unit || "MM");
+        if (ow > 0) svgParams["outline-width"] = ow;
+      }
+      img = await loadSvgRecolored(resolved, fill, stroke, fetchText,
+        Object.keys(svgParams).length ? svgParams : null);
       if (!img) img = await loadImage(resolved);
     } else {
       img = await loadImage(resolved);
@@ -3324,6 +3648,8 @@ function drawMarkerLayerTo(ctx, layer) {
       if (layer.stroke && layer.strokeWidthPx > 0) {
         ctx.strokeStyle = rgbaToCss(layer.stroke);
         ctx.lineWidth = layer.strokeWidthPx;
+        ctx.lineJoin = layer.strokeJoin || "bevel";
+        ctx.lineCap = layer.strokeCap || "butt";
         ctx.stroke();
       }
     }
@@ -3331,14 +3657,21 @@ function drawMarkerLayerTo(ctx, layer) {
     ctx.beginPath();
     ctx.ellipse(0, 0, (layer.widthPx || 8) / 2, (layer.heightPx || 8) / 2, 0, 0, Math.PI * 2);
     if (layer.fill) { ctx.fillStyle = rgbaToCss(layer.fill); ctx.fill(); }
-    if (layer.stroke) { ctx.strokeStyle = rgbaToCss(layer.stroke); ctx.lineWidth = layer.strokeWidthPx || 1; ctx.stroke(); }
+    if (layer.stroke) {
+      ctx.strokeStyle = rgbaToCss(layer.stroke);
+      ctx.lineWidth = layer.strokeWidthPx || 1;
+      ctx.lineJoin = layer.strokeJoin || "bevel";
+      ctx.stroke();
+    }
   } else if (layer.kind === "image" && layer.image) {
     const img = layer.image;
-    const ratio = img.height / (img.width || 1);
-    const w = layer.sizePx, h = layer.sizePx * (Number.isFinite(ratio) ? ratio : 1);
+    const w = layer.sizePx;
+    // heightPx(fixedAspectRatio)>aspectRatio>画像固有比 の順で高さを決める
+    const h = layer.heightPx
+      ?? layer.sizePx / (layer.aspectRatio || ((img.width || 1) / (img.height || 1)));
     ctx.drawImage(img, -w / 2, -h / 2, w, h);
   } else if (layer.kind === "text") {
-    ctx.font = `${Math.round(layer.sizePx || 10)}px ${layer.fontFamily || "sans-serif"}`;
+    ctx.font = `${layer.fontItalic ? "italic " : ""}${layer.fontBold ? "bold " : ""}${Math.round(layer.sizePx || 10)}px ${layer.fontFamily || "sans-serif"}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     if (layer.stroke) {
@@ -3547,35 +3880,49 @@ export function fillPartsToTile(fillParts) {
   const maxSpacing = Math.max(...patterns.map(pt =>
     pt.hatch ? pt.hatch.spacingPx : pt.linePattern ? pt.linePattern.spacingPx : pt.pointPattern ? Math.max(pt.pointPattern.spacingX, pt.pointPattern.spacingY) : pt.imagePattern ? pt.imagePattern.widthPx : 32), 8);
   const tilePx = Math.min(Math.max(Math.ceil(maxSpacing), 8), 128);
-  const key = `ft:${JSON.stringify(fillParts.map(pt => ({ ...pt, imagePattern: pt.imagePattern ? { w: pt.imagePattern.widthPx, src: pt.imagePattern.image.src } : undefined, pointPattern: pt.pointPattern ? { sx: pt.pointPattern.spacingX, sy: pt.pointPattern.spacingY, n: pt.pointPattern.markers.length } : undefined })))}`;
+  const key = `ft:${JSON.stringify(fillParts.map(pt => ({ ...pt, imagePattern: pt.imagePattern ? { w: pt.imagePattern.widthPx, src: pt.imagePattern.image.src } : undefined, pointPattern: pt.pointPattern ? { sx: pt.pointPattern.spacingX, sy: pt.pointPattern.spacingY, n: pt.pointPattern.markers.length, a: pt.pointPattern.angleDeg, sd: pt.pointPattern.seed } : undefined })))}`;
   const canvas = getCanvas(key, tilePx, (ctx, W) => {
     if (solidBase) {
       ctx.fillStyle = rgbaToCss(solidBase);
       ctx.fillRect(0, 0, W, W);
     }
+    // 決定論的ランダム(seed 付き)で random_deviation のずらしを再現する
+    const seededRand = (seed, i) => {
+      let x = Math.sin((seed + i) * 12.9898) * 43758.5453;
+      return x - Math.floor(x); // 0..1
+    };
     for (const pt of patterns) {
       ctx.save();
       if (pt.blend) ctx.globalCompositeOperation = pt.blend;
       if (pt.alphaMul != null) ctx.globalAlpha *= pt.alphaMul;
+      // offset/offset_unit(全 fill レイヤ共通): パターン原点のずらし
+      if (pt.offsetPx) ctx.translate(pt.offsetPx[0] || 0, pt.offsetPx[1] || 0);
       if (pt.hatch) {
         drawHatch(ctx, W, pt.hatch.angles, pt.hatch.spacingPx, pt.hatch.color);
       } else if (pt.linePattern) {
         drawHatch(ctx, W, [pt.linePattern.angleDeg], pt.linePattern.spacingPx, pt.linePattern.color, pt.linePattern.widthPx);
       } else if (pt.pointPattern) {
-        const { markers, spacingX, spacingY, dispX = 0, dispY = 0, offX = 0, offY = 0 } = pt.pointPattern;
+        const { markers, spacingX, spacingY, dispX = 0, dispY = 0, offX = 0, offY = 0,
+          angleDeg = 0, seed = 0, randDevX = 0, randDevY = 0 } = pt.pointPattern;
         const stamp = markerLayersToCanvas(markers);
         const stepX = Math.max(spacingX, 4), stepY = Math.max(spacingY, 4);
-        let row = 0;
+        if (angleDeg) { ctx.translate(W / 2, W / 2); ctx.rotate(angleDeg * Math.PI / 180); ctx.translate(-W / 2, -W / 2); }
+        let row = 0, i = 0;
         for (let y = offY; y < W + stepY; y += stepY, row++) {
           const shift = row % 2 ? (dispX || 0) : 0;
-          for (let x = offX + shift; x < W + stepX; x += stepX) {
-            ctx.drawImage(stamp, x - stamp.width / 2, y - stamp.height / 2);
+          for (let x = offX + shift; x < W + stepX; x += stepX, i++) {
+            // random_deviation: seed 連動の決定論的ずらし(タイル再生成で不変)
+            const dx = randDevX ? (seededRand(seed, i * 2) - 0.5) * 2 * randDevX : 0;
+            const dy = randDevY ? (seededRand(seed, i * 2 + 1) - 0.5) * 2 * randDevY : 0;
+            ctx.drawImage(stamp, x + dx - stamp.width / 2, y + dy - stamp.height / 2);
           }
         }
       } else if (pt.imagePattern && pt.imagePattern.image) {
         const img = pt.imagePattern.image;
         const w = pt.imagePattern.widthPx;
-        const h = w * (img.height / (img.width || 1) || 1);
+        const h = pt.imagePattern.heightPx || w * (img.height / (img.width || 1) || 1);
+        if (pt.imagePattern.angleDeg) { ctx.translate(W / 2, W / 2); ctx.rotate(pt.imagePattern.angleDeg * Math.PI / 180); ctx.translate(-W / 2, -W / 2); }
+        if (pt.imagePattern.alpha != null && pt.imagePattern.alpha < 1) ctx.globalAlpha *= pt.imagePattern.alpha;
         for (let y = 0; y < W + h; y += h) {
           for (let x = 0; x < W + w; x += w) {
             ctx.drawImage(img, x, y, w, h);
@@ -3583,9 +3930,27 @@ export function fillPartsToTile(fillParts) {
         }
       } else if (pt.gradient) {
         const a = (pt.gradient.angleDeg || 0) * Math.PI / 180;
-        const g = ctx.createLinearGradient(0, 0, Math.cos(a) * W, Math.sin(a) * W);
-        g.addColorStop(0, rgbaToCss(pt.gradient.color1));
-        g.addColorStop(1, rgbaToCss(pt.gradient.color2));
+        // type=radial/conical は中心放射、それ以外は angle 方向の線形。
+        // discrete+steps は段数分割、spread=1 は繰返し近似(2周目反転)
+        let g;
+        if (pt.gradient.type === "radial" || pt.gradient.type === "conical") {
+          g = ctx.createRadialGradient(W / 2, W / 2, 0, W / 2, W / 2, W / 2);
+        } else {
+          g = ctx.createLinearGradient(0, 0, Math.cos(a) * W, Math.sin(a) * W);
+        }
+        const steps = pt.gradient.discrete && pt.gradient.steps > 1 ? Math.min(pt.gradient.steps, 32) : 0;
+        const c1 = rgbaToCss(pt.gradient.color1), c2 = rgbaToCss(pt.gradient.color2);
+        const [r1, g1, b1, a1] = pt.gradient.color1, [r2, g2, b2, a2] = pt.gradient.color2;
+        const lerp = (t) => rgbaToCss([r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t, a1 + (a2 - a1) * t]);
+        if (steps) {
+          for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            g.addColorStop(t, lerp(Math.floor(t * steps) / steps));
+          }
+        } else {
+          g.addColorStop(0, c1);
+          g.addColorStop(1, c2);
+        }
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, W, W);
       }

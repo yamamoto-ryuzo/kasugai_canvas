@@ -1,0 +1,7 @@
+# verify-webview-import フィクスチャ
+# qgis-import プラグインを plugin: 行経由で起動し、「QGISから取り込み」ボタンの
+# 動作(geo_webview /kasugai → register+switchProject)を検証する最小プロジェクト
+title: webview-import fixture
+plugin: qgis-import
+base: OpenStreetMap|https://tile.openstreetmap.org/{z}/{x}/{y}.png|© OpenStreetMap contributors
+cam:初期|35.6812|139.7671|h=15000
