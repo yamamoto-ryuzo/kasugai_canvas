@@ -35,7 +35,7 @@ import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../shared/attr-widget.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
-import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
 import { initAiChat } from "../shared/ai-chat.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection } from "../shared/live.js";
@@ -1837,7 +1837,10 @@ async function applyProject(proj) {
   // 初回描画の doc そのものに使う（他エンジンと同じ単一ビルド。ファイル doc で
   // 一度描画してから inspector で建て直すと、引継ぎカメラが extent fit で
   // 上書きされ二重構築の残渣も残る）
-  const text = sw?.inspector ?? (proj.raw || "");
+  // セッション inspector はファイルが外部更新されていなければ引継ぐ
+  // (kascBase 不一致=再エクスポート等ならファイルを優先)
+  const text = sessionInspectorFor(sw, proj.raw || "") ?? (proj.raw || "");
+  markSessionKascBase(proj.raw || "");
   inspectorInput.value = text;
   applyPanelTitle(proj.doc.title || proj.title);
   const doc = text === (proj.raw || "") ? proj.doc : parseKasc(text);

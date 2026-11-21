@@ -31,6 +31,9 @@ import { getLanguage, t } from "./i18n.js";
 //   mountEntry(entry, preloaded) : 新規エントリを地図へ追加（item._preloaded に GeoJSON 可）
 //   unmountEntry(entry)          : 地図から除去
 //   reloadEntryData(entry)       : item.opts.where 反映後の再読み込み（setLayerFilter 用）
+//   getEntryGeoJson(entry)       : エントリの GeoJSON を返す（検索・属性操作用フルソース）
+//   getEntryFilteredGeoJson(entry): where= 等 適用後の表示中地物のみ返す（省略可。
+//                                  省略時は getEntryGeoJson と同じ結果＝無絞込）
 //   getEntryGeoJson(entry)       : () => GeoJSON（未対応なら省略可）
 //   setBaseEntryVisible(entry, on) : ベースマップ1枚の表示切替
 //   getCams()                   : () => cam: プリセット配列
@@ -782,6 +785,15 @@ export function createPlayerApi(hooks) {
     getLayerGeoJson(name) {
       const e = findEntry(name);
       if (!e) return null;
+      return hooks.getEntryGeoJson ? hooks.getEntryGeoJson(e) : (e.item._geojson || null);
+    },
+    // where= (と属性テーブルの表示限定)適用後の「実際に表示中」の地物だけを返す。
+    // getLayerGeoJson はフルソース/クエリ適用済みソースを返す設計のまま維持。
+    // hooks.getEntryFilteredGeoJson 未実装エンジンではフルソースにフォールバック。
+    getLayerFilteredGeoJson(name) {
+      const e = findEntry(name);
+      if (!e) return null;
+      if (hooks.getEntryFilteredGeoJson) return hooks.getEntryFilteredGeoJson(e);
       return hooks.getEntryGeoJson ? hooks.getEntryGeoJson(e) : (e.item._geojson || null);
     },
     // ogrsql: 行と同じ実行経路で OGR SQL SELECT を実行し GeoJSON を返す

@@ -93,6 +93,7 @@ const CHAT_TOOL_API = {
   getPluginCode: "getStoragePlugin", removePlugin: "removeStoragePlugin",
   setPluginEnabled: "setStoragePluginEnabled", publishPlugin: "publishStoragePlugin",
   fetchData: "fetchData", getLayerGeoJson: "getLayerGeoJson",
+  getLayerFilteredGeoJson: "getLayerFilteredGeoJson",
   addDataLayer: "addDataLayer", removeDataLayer: "removeDataLayer",
   setToolMaxSteps: "local:setToolMaxSteps",
   setLayerFilter: "setLayerFilter", queryOgrSql: "queryOgrSql",
@@ -2305,6 +2306,17 @@ const CHAT_TOOLS = [{
       },
     },
     {
+      name: "getLayerFilteredGeoJson",
+      description: "レイヤーの where= フィルタ適用後・実際に地図へ表示中の地物だけをGeoJSONで取得する。getLayerGeoJson はフィルタ前のフルソースを返す。「今表示されている地物」「フィルタで残っている値」の確認に使う",
+      parameters: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING", description: "レイヤ名またはID(listLayersで確認)" },
+        },
+        required: ["name"],
+      },
+    },
+    {
       name: "exportLayer",
       description: "レイヤーをファイルとしてダウンロード出力する（ブラウザのダウンロードに保存）。format: geojson(既定)/csv/tsv/kml/fgb/shp。csv・tsv はジオメトリを WKT 列として出力（QGIS の CSV エクスポート互換）、kml は GoogleEarth 向け、fgb は FlatGeobuf バイナリ、shp はジオメトリ種別ごとの Shapefile を .zip に同梱",
       parameters: {
@@ -3544,6 +3556,15 @@ export async function executeChatTool(name, args = {}) {
   }
   if (name === "getLayerGeoJson") {
     const geojson = window.kasugaiApi.getLayerGeoJson(args.name);
+    if (!geojson) return { ok: false, message: t("tool.layerDataNotFound", { name: args.name }) };
+    const size = JSON.stringify(geojson).length;
+    if (size > 400000) {
+      return { ok: false, message: t("tool.dataTooLarge", { size, count: geojson.features?.length ?? 0 }) };
+    }
+    return { geojson };
+  }
+  if (name === "getLayerFilteredGeoJson") {
+    const geojson = window.kasugaiApi.getLayerFilteredGeoJson(args.name);
     if (!geojson) return { ok: false, message: t("tool.layerDataNotFound", { name: args.name }) };
     const size = JSON.stringify(geojson).length;
     if (size > 400000) {

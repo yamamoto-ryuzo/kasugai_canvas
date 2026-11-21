@@ -18,7 +18,7 @@ import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
-import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
 import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
@@ -2042,7 +2042,10 @@ async function loadProject(id) {
   const { id: loadedId, baseUrl, doc, manifest, raw, kascUrl } = await loadKascProject(id);
   switchRestore = pendingSwitchState;
   pendingSwitchState = null;
-  const text = switchRestore?.inspector ?? raw;
+  // セッション inspector はファイルが外部更新されていなければ引継ぐ
+  // (kascBase 不一致=再エクスポート等ならファイルを優先)
+  const text = sessionInspectorFor(switchRestore, raw) ?? raw;
+  markSessionKascBase(raw);
   inspectorInput.value = text;
   lastKascUrl = kascUrl || "";
   // プロジェクト読込ごとの起動時ポータル自動表示を1回に戻す
@@ -3265,6 +3268,8 @@ window.kasugaiApi = createPlayerApi({
   },
   reloadEntryData,
   getEntryGeoJson: entry => entry.item._geojson || null,
+  // where=/表示限定 適用後の表示中地物(getLayerFilteredGeoJson フック)
+  getEntryFilteredGeoJson: entry => applyClientWhere(entry.item, entry.item._geojson || null),
   geoTools: () => geoTools,
   setBaseEntryVisible: (entry, on) => {
     if (entry.layer && !entry.layer._isDeck) {

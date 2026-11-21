@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ユーザーパネル WEBVIEW連携 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>4-1 WEBVIEW連携 — QGIS からカスタムレイヤ＋フィルタを出力</p>
+    </header>
+    <main>
+
+      <section>
+        <h2>1. 概要 — QGIS 設定がそのまま Canvas のタブになる</h2>
+        <p>
+          QGIS プラグイン <strong>geo_webview</strong>（KASUGAI WEBVIEW）は、QGIS のレイヤツリー構成を
+          <code>.kasc</code>＋<code>canvas_data/</code> へ出力する際、Layers 設定で指定した
+          <code>site=</code>/<code>order=</code>/<code>list=off</code>/<code>legend_order=</code> や
+          Filter タブの選択状態を <code>filter_*</code> オプションとして書き出します。
+          Canvas 側では同梱プラグイン <code>PLUGIN/custom-layer</code> がそれらを読み、
+          「<strong>レイヤ</strong>」（カスタムレイヤ）と「<strong>フィルタ</strong>」の2タブを自動構成します。
+          ユーザー側でコードを書く必要はありません。
+        </p>
+        <pre class="text"><code># geo_webview が出力する .kasc の例
+geojson: A工区・ポリゴン | canvas_data/a-poly.geojson | site=A工区 | order=1
+geojson: A工区・ライン   | canvas_data/a-line.geojson | site=A工区 | order=2
+geojson: A工区・ポイント | canvas_data/a-pt.geojson   | site=A工区 | order=3
+geojson: 背景ライン    | canvas_data/free.geojson    （site なし → 標準タブにも「その他」にも出る）
+plugin: custom-layer | name=レイヤ | url=canvas_data/custom-layer.js | before=layers-panel | filter_site=A工区 | filter_field=種別</code></pre>
+      </section>
+
+      <section>
+        <h2>2. カスタムレイヤ（site= 集約）</h2>
+        <p>「ポイント・ライン・ポリゴンなど型の違うレイヤを任意グループ（箇所）にまとめて1トグルで制御する」タブです。レイヤ行に <code>site=&lt;グループ名&gt;</code> を付けるだけで、その名前1行に集約されます。</p>
+        <figure class="mermaid-fig"><figcaption>カスタムレイヤの集約ロジック</figcaption>
+<pre class="mermaid" aria-label="カスタムレイヤの集約ロジック">
+flowchart TB
+  K[".kasc レイヤ行<br/>geojson: 名前 | site=A工区 | order=1 | ..."]
+  L["api.listLayers()<br/>各エントリの options を読取"]
+  F{"list=off ?"}
+  G{"site= あり?"}
+  S["site 名で集約<br/>箇所行（3状態チェック）"]
+  O["末尾の「その他」<br/>.kasc 順のまま"]
+  R["order= 数値で並べ替え<br/>省略時は末尾扱い"]
+  LG{"分類凡例<br/>style=.qml あり?"}
+  LI["凡例項目を展開<br/>チェック＋スウォッチ＋ラベル"]
+  T["箇所チェック操作<br/>→ setLayerVisible を全メンバーへ"]
+  LV["凡例チェック操作<br/>→ setLayerLegendVisible"]
+  K --> L --> F
+  F -->|"はい"| X["一覧に出さない<br/>（地図描画は維持）"]
+  F -->|"いいえ"| G
+  G -->|"あり"| S --> R
+  G -->|"なし"| O
+  R --> LG
+  O --> LG
+  LG -->|"あり"| LI --> LV
+  LG -->|"なし"| END["パネル完成"]
+  LV --> END
+  S -.->|"チェック操作"| T
+  O -.->|"チェック操作"| T
+</pre>
+        </figure>
+        <ul>
+          <li>箇所ごとの1トグルで全メンバーをまとめて on/off（<code>setLayerVisible</code> をメンバー全件に適用）、部分表示は中間状態表示</li>
+          <li>メンバーが分類凡例（QML <code>style=</code>）を持つ場合、箇所行の下に凡例項目（チェック＋スウォッチ＋ラベル）を表示し、シンボル単位の on/off（<code>setLayerLegendVisible</code>）ができます。凡例の並び順は <code>legend_order=asc|desc|reverse</code> またはカンマ区切りのラベル列挙（<code>legend_order=区分A,区分C,区分B</code>。未列挙は末尾・元順維持）で変更でき、未指定時は .qml のシンボル順です。<code>listLayers()</code> の <code>legend[].spec</code> を <code>api.legendSwatchUrl()</code> でスウォッチ画像に変換します</li>
+          <li>メンバー内の順序は <code>order=&lt;数値&gt;</code>（書式: レイヤ行の <code>key=value</code>・例 <code>order=1</code>）で制御します。小さいほど上で、省略時は現在の並び順の末尾扱いです。これはプラグインが <code>listLayers()</code> の <code>options.order</code> を読んで並べ替える独自キーであり、エンジン本体の描画順（.kasc 行順・<code>setLayerOrder</code>）とは別物です — 「この集約タブでの表示順のヒント」として使います</li>
+          <li><code>site=</code> はこのタブ専用の集約キーで、<strong>標準レイヤタブには全レイヤが従来通り表示されます</strong>（全体を見る標準タブ＋簡素化した集約タブの併用）。レイヤ一覧（標準・カスタムとも）から隠したいレイヤは <code>list=off</code> を付けます（地図には描画される）。<code>site=</code> と別の集約キー名を使う場合は <code>manifest.options.key</code>（<code>plugin: sc | ... | key=site</code>）で変更できます</li>
+          <li><code>site=</code> を付けないレイヤはタブ末尾の「その他」に集約され、一括 on/off ができます（順序操作は出さず .kasc 順のまま）</li>
+          <li><code>site=</code>/<code>order=</code>/<code>list=off</code> はクエリ系行（<code>gpkg:</code>/<code>duckdb:</code>/<code>sql:</code>/<code>ogrsql:</code>/<code>geoparquet:</code>/<code>flatgeobuf:</code>）を含む全ベクター行で有効です。QGIS WEBVIEW が CSV/TSV・フィルタ付きソースを <code>duckdb:</code> 行として出力する場合も同じく site 集約・フィルタの対象になります（<code>sql:</code>/<code>ogrsql:</code> はクエリ全文を <code>where=</code> で差し替える仕様のため、フィルタタブからは式が適用されない点に注意）</li>
+          <li>プラグインタブの表示名（<code>name=</code>）が組み込みタブと重複する場合、<strong>組み込み側のタブ名が自動的に「システムレイヤ」等に改称</strong>されます（<code>name=レイヤ</code> → 組み込みは「ｼｽﾃﾑﾚｲﾔ」表示。重複解消で自動復元・i18n 対応）。また重複が発生したプラグインタブは組み込みの代替とみなされ、<strong>初期表示タブとして自動選択</strong>されます</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. フィルタ（site 共通属性の絞り込み）</h2>
+        <p>
+          同じプラグインが「<strong>フィルタ</strong>」タブも登録します。QGIS WEBVIEW の Filter タブと同じ構成で、
+          site（箇所）を選ぶとメンバーレイヤ全員が持つ共通属性フィールドを列挙し、
+          選択した条件を <code>where=</code> 式として全メンバーレイヤへ一括適用します。
+        </p>
+        <figure class="mermaid-fig"><figcaption>フィルタの適用・状態同期ロジック</figcaption>
+<pre class="mermaid" aria-label="フィルタの適用・状態同期ロジック">
+flowchart TB
+  subgraph UI["フィルタタブの操作"]
+    direction TB
+    U1["site 選択"] --> U2["共通属性フィールド列挙<br/>数値は (num) 付記"]
+    U2 --> U3{"複数選択?"}
+    U3 -->|"OFF"| U4["単一値<br/>数値: = != &lt; &lt;= &gt; &gt;= ＋入力<br/>文字: = != ＋既存値"]
+    U3 -->|"ON"| U5["IN / NOT IN ＋値チェックリスト<br/>全選択・全解除ボタン"]
+  end
+  subgraph EX["where= 式の構築（チェックした値だけが表示される）"]
+    direction TB
+    E1{"選択状態"}
+    E2["IN (値...)"]
+    E3["NOT IN (値...)"]
+    E4["1=0（常偽）<br/>IN で0件選択"]
+    E5["比較式<br/>field = v 等"]
+    E6["（なし）<br/>未選択・NOT IN で0件"]
+    E1 -->|"IN＋値あり"| E2
+    E1 -->|"NOT IN＋値あり"| E3
+    E1 -->|"IN＋0件（全解除）"| E4
+    E1 -->|"単一値"| E5
+    E1 -->|"未選択 / NOT IN＋0件"| E6
+  end
+  subgraph AP["適用（site 全メンバーレイヤへ）"]
+    direction TB
+    A1["api.setLayerFilter(title, expr)"]
+    A2{"レイヤ種別"}
+    A3["クエリ系（gpkg: 等）<br/>SQL 再クエリ"]
+    A4["geojson: 等<br/>applyClientWhere でクライアント評価"]
+    A1 --> A2
+    A2 --> A3
+    A2 --> A4
+  end
+  subgraph SY["状態同期"]
+    direction TB
+    S1["live writeback<br/>→ QGIS subsetString"]
+    S2["__kascFilterSel<br/>セッション内の直前選択を保存"]
+    S3["getLayerFilteredGeoJson<br/>表示中地物の値 → チェックへ反映"]
+  end
+  U4 --> E1
+  U5 --> E1
+  E2 & E3 & E4 & E5 & E6 --> A1
+  A3 & A4 --> M["地図更新"]
+  A1 --> S1
+  M --> S3
+  S3 -.->|"フィールド切替・再起動時"| U5
+  S2 -.->|"プラグイン再初期化時に優先復元"| U5
+</pre>
+        </figure>
+        <ul>
+          <li><strong>チェックボックスの意味 = 表示される値</strong>。全選択は <code>IN (全値)</code>、<strong>全解除は常偽式 <code>1=0</code> で地図から全地物が消えます</strong>（フィルタ解除＝全表示ではありません）。NOT IN で0件の場合のみ解除相当（全表示）です</li>
+          <li>値の列挙は適用中フィルタを一時解除して全件から収集しますが、<strong>チェック状態は <code>api.getLayerFilteredGeoJson</code>（where= 適用後の表示中地物のみを返す API）から採取</strong>します。フィールド切替時は「いま地図に見えている地物が持つ値」だけがチェックされた状態で開きます。本 API は Cesium に加え maplibre / openlayers / leaflet / navara のプレイヤー系エンジンでも提供されます（フック未実装・古いホストでは適用済み式からの復元にフォールバック）</li>
+          <li>適用経路はレイヤ行の ⏷ フィルタと同じ <code>setLayerFilter</code>（クエリ系は SQL 再クエリ、geojson: 等はクライアント評価）です。レイヤ自体の <code>where=</code> が既に適用済みの場合、その式をパースして初期選択（フィールド・演算子・値）を復元します。<code>1=0</code> は「複数選択 IN・0件チェック」として復元されます</li>
+          <li><code>plugin:</code> 行の <code>filter_*</code> オプション（<code>filter_site</code>/<code>filter_field</code>/<code>filter_multi</code>/<code>filter_op</code>/<code>filter_values</code>/<code>filter_value</code>）で QGIS WEBVIEW Filter タブの選択状態を初期値として受け取れます。なおプラグインが再初期化された場合は、プリセットより<strong>セッション内の直前選択</strong>（<code>window.__kascFilterSel</code>）が優先されます</li>
+          <li>ライブ連携中は変更が <code>/live/writeback</code> で QGIS 側の <code>subsetString</code> へ反映されます（QGIS 側の抑止機構により再エクスポートの巻き戻しは防止済み）</li>
+          <li><code>setLayerFilter</code>/<code>getLayerGeoJson</code> 非対応エンジンではフィルタタブ自体を表示しません</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>4. 関連リンク</h2>
+        <ul>
+          <li><a href="user-panels.html">← ユーザーパネル概要</a></li>
+          <li><a href="user-panels-js.html">4-2 JS作成 — 自作プラグインでパネルを追加</a></li>
+          <li><a href="tech/1-1-QGIS連携.html">QGIS連携（技術資料）</a></li>
+          <li><a href="use/6-2-インスペクター.html">.kasc 設定仕様（インスペクター）</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+    </main>
+  </div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+  </script>
+</body>
+</html>

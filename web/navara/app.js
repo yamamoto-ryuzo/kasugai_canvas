@@ -15,7 +15,7 @@ import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
-import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges } from "../shared/session-state.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
 import { initUiConfig } from "../shared/ui-config.js";
 import { formatLatLng } from "../shared/coords-format.js";
@@ -1911,7 +1911,10 @@ async function loadProject(projectId) {
   const sess = pendingSession; pendingSession = null;
   // インスペクタは「現在の .kasc」（切替元の編集込み）を優先。
   // 初期表示はファイル内容。プロジェクト切替時も新しい raw で更新する
-  const text = sess?.inspector ?? lastKascRaw;
+  // セッション inspector はファイルが外部更新されていなければ引継ぐ
+  // (kascBase 不一致=再エクスポート等ならファイルを優先)
+  const text = sessionInspectorFor(sess, lastKascRaw) ?? lastKascRaw;
+  markSessionKascBase(lastKascRaw);
   if (panel.inspector) panel.inspector.value = text;
 
   panel.project.replaceChildren();
@@ -2507,6 +2510,8 @@ configureFollow({
     viewToUrl: () => { syncCamFromView(); return urlViewFromCam(); },
     flyToView: v => { if (Number.isFinite(v.latitude) && Number.isFinite(v.longitude)) flyTo({ longitude: v.longitude, latitude: v.latitude, height: v.height ?? (Number.isFinite(v.zoom) ? viewZoomToHeight(v.latitude, v.zoom, 512) : undefined), heading: v.heading, pitch: v.pitch ?? (Number.isFinite(v.pitchDeg) ? v.pitchDeg - 90 : undefined) }); },
     getEntryGeoJson: e => e.item._geojson,
+    // where=/表示限定 適用後の表示中地物(getLayerFilteredGeoJson フック)
+    getEntryFilteredGeoJson: e => whereFilteredGeojson(e.item),
     geoTools: () => geoTools,
     getCams: () => currentCams,
     getThemes: () => currentThemes,

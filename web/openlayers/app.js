@@ -36,7 +36,7 @@ import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries } from "../shared/live.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
-import { matchSessionState, bindSessionState, applySessionState, sessionBootView } from "../shared/session-state.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
 import { initPrint, compositeCanvases } from "../shared/print.js";
 import { initNavTools } from "../shared/nav-tools.js";
 import { initUiConfig } from "../shared/ui-config.js";
@@ -1515,7 +1515,10 @@ async function loadProject(id) {
   const { id: loadedId, baseUrl, doc, manifest, raw, kascUrl } = await loadKascProject(id);
   switchRestore = pendingSwitchState;
   pendingSwitchState = null;
-  const text = switchRestore?.inspector ?? raw;
+  // セッション inspector はファイルが外部更新されていなければ引継ぐ
+  // (kascBase 不一致=再エクスポート等ならファイルを優先)
+  const text = sessionInspectorFor(switchRestore, raw) ?? raw;
+  markSessionKascBase(raw);
   inspectorInput.value = text;
   lastKascUrl = kascUrl || "";
   await renderProject(loadedId, baseUrl, text === raw ? doc : parseKasc(text), manifest);
@@ -2854,11 +2857,18 @@ window.kasugaiApi = createPlayerApi({
     updateMapAttribution();
   },
   reloadEntryData,
+  // getLayerGeoJson はフルソースを返す設計(属性一覧・検索・フィルタ値列挙の
+  // 元データ)。item._geojson はロード時の全件を常に保持するのでそれを優先し、
+  // 無い場合のみ OL ソースから読み戻す(ソースは where= 適用後の表示分のみ
+  // 保持することがあり、1=0 適用中は空になって値列挙ができなかった)
   getEntryGeoJson: entry => {
+    if (entry.item._geojson) return entry.item._geojson;
     const src = entry.layer?.getSource?.();
-    if (!src?.getFeatures) return entry.item._geojson || null;
+    if (!src?.getFeatures) return null;
     return new GeoJSON().writeFeaturesObject(src.getFeatures(), { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" });
   },
+  // where=/表示限定 適用後の表示中地物(getLayerFilteredGeoJson フック)
+  getEntryFilteredGeoJson: entry => clientWhereGeojson(entry.item, entry.item._geojson || null),
   geoTools: () => geoTools,
   setBaseEntryVisible: (entry, on) => { entry.layer?.setVisible?.(on); updateMapAttribution(); },
   getFlyPaths: kascFlyPaths.getFlyPaths,

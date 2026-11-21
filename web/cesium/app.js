@@ -38,7 +38,7 @@ import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
-import { matchSessionState, bindSessionState, applySessionState } from "../shared/session-state.js";
+import { matchSessionState, bindSessionState, applySessionState, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
 import { initToolsDockUX } from "../shared/tools-dock-ux.js";
 import { initPrint } from "../shared/print.js";
 import { formatLatLng, parseCoordinateQuery } from "../shared/coords-format.js";
@@ -1331,8 +1331,12 @@ async function loadInspectorConfig() {
     if (currentKascUrl) {
       try { localStorage.setItem(`kasc:lastProjectUrl:${projectId}`, currentKascUrl); } catch (e) {}
     }
-    // エンジン切替の引継ぎ .kasc があれば初期テキストとして使う
-    if (switchRestore?.inspector != null && switchRestore.inspector !== text) text = switchRestore.inspector;
+    // エンジン切替の引継ぎ .kasc があれば初期テキストとして使う。
+    // ただしファイルが外部更新(QGIS 再エクスポート等)されていた場合は
+    // ファイルを優先する(sessionInspectorFor が kascBase 不一致を破棄)
+    const swInsp = sessionInspectorFor(switchRestore, text);
+    markSessionKascBase(text);
+    if (swInsp != null && swInsp !== text) text = swInsp;
     document.querySelector("#inspector-input").value = text;
     applyInspector(text);
     setInspectorStatus(t("inspector.status.loaded"));
@@ -8097,6 +8101,15 @@ function applyInspector(text) {
       // オプションとして解釈するため、その場合は options 走査を parts[2] から始める
       const attribution = parseAttributionField(parts[2]);
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, url, visible: !off, sourceVisible: !off, attribution, group, exclusiveGroup, renderPrimitive: false, proxy: false };
+      // key=value オプションを汎用に opts マップへ保持する(site=/order=/list= 等
+      // を listLayers().options 経由でプラグインが読める。専用フィールド化する
+      // where=/lon= 等も opts 側へ残す点は汎用ベクター行と同じ規則)
+      for (const part of parts) {
+        const kv = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
+        if (kv && !["attr", "attribution"].includes(kv[1].toLowerCase())) {
+          (item.opts ||= {})[kv[1].toLowerCase()] = kv[2].trim();
+        }
+      }
       parts.slice(attribution ? 3 : 2).forEach(part => {
         const eq = part.indexOf("=");
         if (eq < 0) return;
@@ -8162,7 +8175,8 @@ function applyInspector(text) {
       let heat = false;
       let timeField = null, timeEndField = null, timeSpan = null;
       const gfxParts = [];
-      const tailRe = /\|\s*(off|false|render\s*=\s*[a-z]+|attr(?:ibution)?\s*=[^|]*|style\s*=\s*[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+|time(?:_end|_span)?\s*=\s*[^|]*|scaledist\s*=\s*[^|]*|transldist\s*=\s*[^|]*|pixoffdist\s*=\s*[^|]*|splitdir\s*=\s*[a-z]+|strot\s*=\s*[\d.-]+|subregion\s*=\s*[^|]*)\s*$/i;
+      const optParts = [];
+      const tailRe = /\|\s*(off|false|render\s*=\s*[a-z]+|attr(?:ibution)?\s*=[^|]*|style\s*=\s*[^|]*|cluster\s*=\s*[a-z0-9]+|heat(?:map)?\s*=\s*[a-z0-9]+|time(?:_end|_span)?\s*=\s*[^|]*|scaledist\s*=\s*[^|]*|transldist\s*=\s*[^|]*|pixoffdist\s*=\s*[^|]*|splitdir\s*=\s*[a-z]+|strot\s*=\s*[\d.-]+|subregion\s*=\s*[^|]*|site\s*=\s*[^|]*|order\s*=\s*[^|]*|list\s*=\s*[^|]*|legend_order\s*=\s*[^|]*|filter_\w+\s*=\s*[^|]*)\s*$/i;
       let tail;
       while ((tail = tailRe.exec(query))) {
         const seg = tail[1].trim();
@@ -8183,6 +8197,11 @@ function applyInspector(text) {
         else if (/^(scaledist|transldist|pixoffdist|splitdir|strot|subregion)\s*=/i.test(seg)) {
           gfxParts.push(seg);
         }
+        // site=/order=/list=/legend_order=/filter_*: プラグイン向け汎用オプション。
+        // opts へ保持し listLayers().options から読めるようにする(クエリに混入させない)
+        else if (/^(site|order|list|legend_order|filter_\w+)\s*=/i.test(seg)) {
+          optParts.push(seg);
+        }
         else {
           const opt = seg.replace(/\s+/g, "").toLowerCase();
           if (opt === "off" || opt === "false") visible = false;
@@ -8196,6 +8215,10 @@ function applyInspector(text) {
       const { group, title: displayTitle, exclusiveGroup } = parseLayerTitle(title);
       const id = `inspector-layer-${inspectorLayerIndex++}`;
       const item = { id, title: displayTitle, sourceTitle: title, sourceLine: line, type, query, visible, sourceVisible: visible, attribution, group, exclusiveGroup, renderPrimitive, renderSpecified, cluster, heat };
+      for (const seg of optParts) {
+        const eq = seg.indexOf("=");
+        if (eq > 0) (item.opts ||= {})[seg.slice(0, eq).trim().toLowerCase()] = seg.slice(eq + 1).trim();
+      }
       parseScaleVisOpts(query.split("|"), item);
       if (styleUrl) item.styleUrl = resolveProjectUrl(styleUrl);
       if (timeField) item.timeField = timeField;
@@ -14288,6 +14311,20 @@ function getLayerGeoJson(idOrTitle) {
   return entitiesToGeoJson(ds);
 }
 
+// getLayerGeoJson はフルソース(item.geojsonSource)を返す。
+// こちらは where= 適用後の「実際に表示中」の地物だけを返す
+// (フィルタUIが表示実態をチェック状態へ反映する用途向け)。
+function getLayerFilteredGeoJson(idOrTitle) {
+  const item = getOrderedLayerItems().find(layer => layer.id === idOrTitle || layer.title === idOrTitle);
+  if (!item) return null;
+  const src = item.geojsonSource
+    || (item.data && typeof item.data === "object" ? item.data : null);
+  if (src) return applyClientWhere(item, src);
+  const entry = vectorDataSources.find(source => source.id === item.id);
+  const ds = entry?.ds || item.dataSource || null;
+  return ds ? entitiesToGeoJson(ds) : null;
+}
+
 window.kasugaiApi = {
   engine: "cesium",
   flyTo,
@@ -15012,6 +15049,10 @@ window.kasugaiApi = {
   // 読み込み済みレイヤーの地物を GeoJSON で返す（データ加工の入力用）
   getLayerGeoJson(idOrTitle) {
     return getLayerGeoJson(idOrTitle);
+  },
+  // where= 適用後の「表示中」地物のみを返す(フィルタUIの表示実態同期用)
+  getLayerFilteredGeoJson(idOrTitle) {
+    return getLayerFilteredGeoJson(idOrTitle);
   },
   // レイヤーをファイルとしてダウンロード出力する（geo-tools.js。
   // format: geojson/csv/tsv/kml/fgb/shp）

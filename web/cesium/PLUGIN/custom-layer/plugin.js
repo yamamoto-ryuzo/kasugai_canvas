@@ -415,6 +415,8 @@ export async function init(api, manifest) {
     .sf-vals label { display: flex; align-items: center; gap: 4px;
       font-size: 0.85em; line-height: 1.35; }
     .sf-btn { min-height: 24px; padding: 2px 10px; font-size: 0.85em; cursor: pointer; }
+    .sf-allcol { flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; }
+    .sf-btn.sf-mini { min-height: 18px; padding: 1px 6px; font-size: 0.75em; }
     .sf-status { flex: 1; font-size: 0.78em; color: #345;
       word-break: break-all; }
   `;
@@ -423,6 +425,14 @@ export async function init(api, manifest) {
     if (!api.setLayerFilter || !api.getLayerGeoJson) return;
     let siteSel, fieldSel, multiCb, rowNum, rowStr, rowMulti,
       opNum, opStr, opMulti, inputNum, inputStr, listEl, statusEl, valList;
+    // manifest.options の filter_* = QGIS Filter タブの選択状態。
+    // 複数選択のチェックは値列挙後に1回だけ反映する
+    const fpreset = manifest?.options || {};
+    let pendingMulti = Array.isArray(fpreset.filter_values)
+      ? new Set(fpreset.filter_values.map(String)) : null;
+    // フィルタ無し(where 無し/全通過)は全値が通る状態 →
+    // 初回の値列挙で全チェックにする(pendingMulti があればそちら優先)
+    let pendingMultiAll = false;
     const h = (tag, cls, text) => {
       const el = document.createElement(tag);
       if (cls) el.className = cls;
@@ -435,6 +445,43 @@ export async function init(api, manifest) {
 
     const curMembers = () =>
       filterSites().find(s => s.name === siteSel.value)?.members || [];
+    // 現在表示中(where= 適用後)の地物が持つ値の集合。
+    // チェック状態を「実際の表示状態」に合わせるために使う。
+    // getLayerFilteredGeoJson 非対応の古いホストでは null を返す
+    const displayedValues = field => {
+      if (!field || typeof api.getLayerFilteredGeoJson !== "function")
+        return null;
+      const s = new Set();
+      for (const m of curMembers()) {
+        const gj = api.getLayerFilteredGeoJson(m.id ?? m.title);
+        for (const ft of gj?.features || []) {
+          const v = ft?.properties?.[field];
+          if (v != null) s.add(String(v));
+        }
+      }
+      return s;
+    };
+    // 現在の選択をページセッションへ保存する。プラグインが再初期化
+    // (inspector-plugins-changed の差分再起動・.kasc 再適用)された
+    // とき、古い filter_values プリセットへ巻き戻るのではなく
+    // ユーザーの直前選択を優先復元するために使う
+    const saveSel = () => {
+      try {
+        window.__kascFilterSel = {
+          site: siteSel?.value || "",
+          field: fieldSel?.value || "",
+          multi: !!multiCb?.checked,
+          op: multiCb?.checked ? opMulti?.value
+            : (fieldNumeric() ? opNum?.value : opStr?.value) || "",
+          values: multiCb?.checked
+            ? [...listEl.querySelectorAll("input:checked")].map(i => i.value)
+            : null,
+          value: multiCb?.checked ? null
+            : (fieldNumeric() ? inputNum?.value : inputStr?.value) || "",
+          at: Date.now(),
+        };
+      } catch (_) { /* 無視 */ }
+    };
     const fieldNumeric = () =>
       fieldSel.selectedOptions?.[0]?.dataset.num === "1";
 
@@ -467,8 +514,55 @@ export async function init(api, manifest) {
         fieldSel.value = cur;
       }
       if (!Object.keys(common).length) status(members.length ? "共通属性がありません" : "対象レイヤがありません");
-      else if (/共通属性がありません|対象レイヤがありません/.test(statusEl.textContent)) status("");
+      else if (statusEl && /共通属性がありません|対象レイヤがありません/.test(statusEl.textContent)) status("");
       updateMode();
+    };
+
+    // 直近に列挙したフィールド(prev の引継ぎは同一フィールドの
+    // 再列挙時のみ行い、フィールド変更時は適用状態から再シードする)
+    let valsField = "";
+
+    // フィールド/サイト変更時のチェック/入力再シード。
+    // チェックは常に「現在表示中の地物が持つ値」(実表示状態に一致:
+    // 全除外→0件・フィルタ無し→全値・絞り込み中→通過値のみ)。
+    // 演算子・複数/単一モード・単一値は適用済み where= から復元する
+    const reseedField = () => {
+      valsField = "";  // prev の引継ぎを無効化(サイト/フィールド変更)
+      const field = fieldSel.value;
+      const f = (curMembers()[0]?.filter || "").trim();
+      const a = restoreFromExpr(f);
+      pendingMultiAll = false;
+      inputNum.value = "";
+      inputStr.value = "";
+      const disp = displayedValues(field);
+      if (disp != null) {
+        pendingMulti = disp;
+      } else if (a?.empty) {
+        pendingMulti = new Set();   // 全除外 → 0件
+      } else if (a?.full || !f || !a || a.field !== field) {
+        pendingMultiAll = true;     // 無制限 → 全チェック
+      } else if (a.multi) {
+        pendingMulti = new Set(a.values.map(String));
+      }
+      if (a && !a.empty && !a.full && a.field === field) {
+        // このフィールドへの適用済み式 → op/モード/単一値を復元
+        multiCb.checked = !!a.multi;
+        if (a.multi) {
+          if ([...opMulti.options].some(o => o.value === a.op))
+            opMulti.value = a.op;
+        } else {
+          const tgt = fieldNumeric() ? opNum : opStr;
+          if ([...tgt.options].some(o => o.value === a.op))
+            tgt.value = a.op;
+          if (fieldNumeric()) inputNum.value = a.value;
+          else inputStr.value = a.value;
+        }
+      } else if (!multiCb.checked && disp?.size === 1) {
+        // 単一モード: 表示中の値が1種ならそれを実態として入力
+        const v = [...disp][0];
+        if (fieldNumeric()) inputNum.value = v;
+        else inputStr.value = v;
+      }
     };
 
     const refreshValues = async () => {
@@ -484,7 +578,10 @@ export async function init(api, manifest) {
           valList.appendChild(o);
         }
       }
-      // 複数選択のチェックリスト(チェック状態は値が残る限り保持)
+      // 複数選択のチェックリスト(チェック状態は同一フィールドの
+      // 再列挙でのみ保持。フィールド変更時は reseedField 済み)
+      const sameField = valsField === field;
+      valsField = field;
       const prev = new Set(
         [...listEl.querySelectorAll("input:checked")].map(i => i.value));
       listEl.textContent = "";
@@ -493,10 +590,13 @@ export async function init(api, manifest) {
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.value = v;
-        cb.checked = prev.has(v);
+        cb.checked = (sameField && prev.has(v)) || pendingMultiAll
+          || pendingMulti?.has(v) === true;
         lb.append(cb, document.createTextNode(v));
         listEl.appendChild(lb);
       }
+      pendingMulti = null;
+      pendingMultiAll = false;
     };
 
     const updateMode = () => {
@@ -515,7 +615,11 @@ export async function init(api, manifest) {
       if (multiCb.checked) {
         const sel = [...listEl.querySelectorAll("input:checked")]
           .map(i => i.value);
-        if (!sel.length) return { error: "値を選択" };
+        if (!sel.length) {
+          // 0件選択: IN=何も通さない(常偽式 1=0) / NOT IN=全て通す(解除)
+          return opMulti.value === "NOT IN" ? { expr: "" }
+            : { expr: "1=0" };
+        }
         const vs = sel.map(v => numeric ? v : ql(v)).join(",");
         const inner = `${qf(field)} IN (${vs})`;
         return { expr: opMulti.value === "NOT IN" ? `NOT (${inner})` : inner };
@@ -536,6 +640,7 @@ export async function init(api, manifest) {
       const r = buildExpr();
       if (r.error) { status(r.error); return; }
       let n = 0;
+      saveSel();
       for (const m of members) {
         try {
           const res = await api.setLayerFilter(m.id, r.expr);
@@ -548,11 +653,77 @@ export async function init(api, manifest) {
 
     const clearFilter = async () => {
       const members = curMembers();
+      saveSel();
       for (const m of members) {
         try { await api.setLayerFilter(m.id, ""); } catch (_) {}
       }
       status("");
       void refreshValues();
+    };
+
+    // IN リスト("'a','b''c',1,2")を分解してデコードする
+    const splitInVals = body => {
+      const out = [];
+      let i = 0;
+      while (i < body.length) {
+        while (i < body.length && /[\s,]/.test(body[i])) i++;
+        if (i >= body.length) break;
+        if (body[i] === "'") {
+          let v = ""; i++;
+          while (i < body.length) {
+            if (body[i] === "'" && body[i + 1] === "'") { v += "'"; i += 2; }
+            else if (body[i] === "'") { i++; break; }
+            else v += body[i++];
+          }
+          out.push(v);
+        } else {
+          const j = body.indexOf(",", i);
+          const tok = (j < 0 ? body.slice(i) : body.slice(i, j)).trim();
+          if (tok) out.push(tok);
+          i = j < 0 ? body.length : j;
+        }
+      }
+      return out;
+    };
+
+    // レイヤ適用済みの where= 式から UI 選択状態を復元する
+    // (適用済みがデフォルト。filter_* プリセットより優先して使う)
+    const restoreFromExpr = expr => {
+      const t = String(expr || "").trim();
+      if (!t) return null;
+      // 0件選択の書き戻し(常偽式 1=0)は「複数選択 IN + チェック0件」
+      // として復元する(1=1 は 0件+NOT IN = 全通過)
+      if (/^(?:1\s*=\s*0|0\s*=\s*1)$/.test(t))
+        return { empty: true };
+      if (/^1\s*=\s*1$/.test(t))
+        return { full: true };
+      const F = '"((?:[^"]|"")+)"';
+      let m = t.match(new RegExp(`^NOT\\s*\\(\\s*${F}\\s+IN\\s*\\((.*)\\)\\s*\\)$`, "i"));
+      if (m) return { field: m[1].replace(/""/g, '"'), multi: true, op: "NOT IN", values: splitInVals(m[2]) };
+      m = t.match(new RegExp(`^${F}\\s+IN\\s*\\((.*)\\)\\s*$`, "i"));
+      if (m) return { field: m[1].replace(/""/g, '"'), multi: true, op: "IN", values: splitInVals(m[2]) };
+      m = t.match(new RegExp(`^${F}\\s*(=|!=|<=|>=|<|>)\\s*(?:'((?:[^']|'')*)'|(-?[\\d.]+))\\s*$`));
+      if (m) return { field: m[1].replace(/""/g, '"'), multi: false, op: m[2],
+        value: m[3] != null ? m[3].replace(/''/g, "'") : m[4] };
+      return null;
+    };
+
+    // 選択が完結していれば即適用(適用ボタン不要)。値・演算子・
+    // 複数選択の変更のみトリガ — サイト/フィールドの選択自体では
+    // 適用しない(未完成の選択で誤適用しないため)。値が0件
+    // (全解除/入力クリア)のときはフィルタ解除として即反映する
+    let autoT = null;
+    const autoApply = (delay = 200) => {
+      clearTimeout(autoT);
+      autoT = setTimeout(() => {
+        if (!curMembers().length) return;
+        const r = buildExpr();
+        if (r.error) {
+          if (r.error !== "フィールドを選択") void clearFilter();
+          return;
+        }
+        void applyFilter();
+      }, delay);
     };
 
     api.registerPanel({
@@ -606,26 +777,120 @@ export async function init(api, manifest) {
         opMulti = document.createElement("select");
         opMulti.className = "sf-op";
         for (const o of ["IN", "NOT IN"]) opMulti.appendChild(new Option(o, o));
+        const allCol = h("div", "sf-allcol");
+        const setAll = checked => {
+          for (const cb of listEl.querySelectorAll("input[type=checkbox]"))
+            cb.checked = checked;
+        };
+        const allBtn = h("button", "sf-btn sf-mini", "全選択");
+        allBtn.type = "button";
+        // チェック操作と同時に地図へ即反映(デバウンスを介さず直接適用)
+        allBtn.addEventListener("click", () => {
+          setAll(true);
+          void applyFilter();
+        });
+        const noneBtn = h("button", "sf-btn sf-mini", "全解除");
+        noneBtn.type = "button";
+        // 0件選択 = 1件も通さない(IN は常偽式・NOT IN は全通過)。
+        // 全選択の逆操作として地図へ即反映する
+        noneBtn.addEventListener("click", () => {
+          setAll(false);
+          saveSel();  // 0件選択の状態も再初期化時に復元できるよう保存
+          void applyFilter();
+        });
+        allCol.append(opMulti, allBtn, noneBtn);
         listEl = h("div", "sf-vals");
-        rowMulti.append(opMulti, listEl);
+        // チェック1つ切替ごとに即適用(デバウンスでまとめる)
+        listEl.addEventListener("change", ev => {
+          if (ev.target?.type === "checkbox") autoApply();
+        });
+        rowMulti.append(allCol, listEl);
         rowMulti.style.alignItems = "flex-start";
         panel.appendChild(rowMulti);
-        // ボタン行
-        const brow = h("div", "sf-row");
-        const ab = h("button", "sf-btn", "適用");
-        ab.type = "button";
-        ab.addEventListener("click", () => void applyFilter());
-        const cb = h("button", "sf-btn", "クリア");
-        cb.type = "button";
-        cb.addEventListener("click", () => void clearFilter());
-        statusEl = h("span", "sf-status");
-        brow.append(ab, cb, statusEl);
-        panel.appendChild(brow);
-        // イベント
-        siteSel.addEventListener("change", refreshFields);
-        fieldSel.addEventListener("change", updateMode);
-        multiCb.addEventListener("change", updateMode);
+        // ステータス表示は不要(適用は選択時点で即反映)
+        statusEl = null;
+        // イベント(値・演算子・複数選択の変更で即適用)
+        siteSel.addEventListener("change",
+          () => { refreshFields(); reseedField(); });
+        fieldSel.addEventListener("change",
+          () => { reseedField(); updateMode(); });
+        multiCb.addEventListener("change", () => { updateMode(); autoApply(); });
+        for (const s of [opNum, opStr, opMulti])
+          s.addEventListener("change", () => autoApply());
+        inputNum.addEventListener("input", () => autoApply(350));
+        inputStr.addEventListener("input", () => autoApply(350));
         refreshSites();
+        // .kasc の filter_* = QGIS Filter タブの選択状態を初期値へ復元
+        const pStr = v => (v == null ? "" : String(v));
+        if (fpreset.filter_site != null
+          && [...siteSel.options].some(o => o.value === pStr(fpreset.filter_site))) {
+          siteSel.value = pStr(fpreset.filter_site);
+          refreshFields();
+        }
+        if (fpreset.filter_field != null
+          && [...fieldSel.options].some(o => o.value === pStr(fpreset.filter_field))) {
+          fieldSel.value = pStr(fpreset.filter_field);
+        }
+        if (fpreset.filter_multi === true) multiCb.checked = true;
+        updateMode();
+        const pOp = pStr(fpreset.filter_op);
+        const opTarget = multiCb.checked ? opMulti
+          : fieldNumeric() ? opNum : opStr;
+        if (pOp && [...opTarget.options].some(o => o.value === pOp)) {
+          opTarget.value = pOp;
+        }
+        if (fpreset.filter_value != null && !multiCb.checked) {
+          if (fieldNumeric()) inputNum.value = pStr(fpreset.filter_value);
+          else inputStr.value = pStr(fpreset.filter_value);
+        }
+        // レイヤへ適用済みの where= があればフィールド/演算子/単一値を
+        // 復元(filter_* プリセットより実際の適用状態を優先)。
+        // 値のチェックは式ではなく「表示中の地物が持つ値」で決める
+        const applied = restoreFromExpr(curMembers()[0]?.filter);
+        if (applied && !applied.empty && !applied.full
+            && [...fieldSel.options]
+            .some(o => o.value === applied.field)) {
+          fieldSel.value = applied.field;
+          multiCb.checked = !!applied.multi;
+          updateMode();
+          const apOp = multiCb.checked ? opMulti
+            : fieldNumeric() ? opNum : opStr;
+          if ([...apOp.options].some(o => o.value === applied.op))
+            apOp.value = applied.op;
+          if (!applied.multi) {
+            if (fieldNumeric()) inputNum.value = applied.value;
+            else inputStr.value = applied.value;
+          }
+        } else if (applied == null
+            && (curMembers()[0]?.filter || "").trim()) {
+          // 解析不能な where(独自式等)が残る場合はセッション内の
+          // 直前選択のフィールド/演算子だけ復元(値は表示実態から)
+          const snap = window.__kascFilterSel;
+          if (snap?.field &&
+              [...fieldSel.options].some(o => o.value === snap.field)) {
+            fieldSel.value = snap.field;
+            multiCb.checked = !!snap.multi;
+            updateMode();
+            const snOp = multiCb.checked ? opMulti
+              : fieldNumeric() ? opNum : opStr;
+            if (snap.op &&
+                [...snOp.options].some(o => o.value === snap.op))
+              snOp.value = snap.op;
+          }
+        }
+        // チェック値は実表示状態に一致させる(1=0→0件・無し→全件・
+        // 絞り込み中→通過値)。getLayerFilteredGeoJson 非対応の古い
+        // ホストでは where 有無で推定する
+        const disp = displayedValues(fieldSel.value);
+        if (disp != null) {
+          pendingMulti = disp;
+        } else if (applied?.empty) {
+          multiCb.checked = true;
+          pendingMulti = new Set();
+          updateMode();
+        } else if (applied?.full || !pendingMulti) {
+          pendingMultiAll = true;
+        }
         // 現在のフィルタをステータスに表示(先頭メンバー)
         const first = curMembers()[0];
         if (first?.filter) status(first.filter);

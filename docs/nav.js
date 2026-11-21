@@ -155,7 +155,8 @@
       label: '4. ユーザーパネル',
       href: 'user-panels.html',
       items: [
-        { href: 'user-panels.html', text: '4-1 パネル追加・カスタムレイヤ表示' },
+        { href: 'user-panels-webview.html', text: '4-1 WEBVIEW連携（カスタムレイヤ＋フィルタ）' },
+        { href: 'user-panels-js.html', text: '4-2 JS作成（自作プラグイン）' },
       ]
     },
     {

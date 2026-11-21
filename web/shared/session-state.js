@@ -10,6 +10,7 @@
 //     project, kasc,                 // 書込み時点の URL 識別子（復元は同一プロジェクトのみ）
 //     camera: { latitude, longitude, zoom, height, pitch, heading },  // URL ハッシュと同じ Cesium 規約
 //     inspector,                     // 現在の .kasc テキスト（ファイル初期値ではなく現在値）
+//     kascBase,                      // ファイルから読んだ .kasc 本文のハッシュ(inspector 復元の新旧判定アンカー)
 //     theme,                         // #theme-select の値
 //     basemap: { id, title },        // 選択中のベースマップ（title は item.title 正典）
 //     vis: { "完全タイトル": bool }, // レイヤ可視性（kasugaiApi.listLayers の title キー）
@@ -216,6 +217,36 @@ export function bindSessionState(engine) {
 }
 
 // ---- 読み取り側（復元ヘルパー） ----
+
+// .kasc ファイル本文の軽量ハッシュ(fnv-1a 32bit → base36)。
+// inspector(編集込み現在値)とは別に「読込時点のファイル本文」のハッシュを
+// kascBase として記録し、復元時にファイルの外部更新を検出する
+function kascTextHash(s) {
+  let h = 0x811c9dc5;
+  const str = String(s ?? "");
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+// ファイルから読み込んだ .kasc 本文を基準として記録する。
+// 各エンジンは「ファイル本文を inspector へ流し込んだ」時点で呼ぶ
+export function markSessionKascBase(fileText) {
+  patchSessionState({ kascBase: kascTextHash(fileText) });
+}
+
+// セッションの inspector を適用してよいか判定して返す(不適なら null)。
+// st.kascBase(前回ファイル読込時の本文ハッシュ)があり fileText と一致しない
+// = ディスク上で .kasc が外部更新済み(QGIS 再エクスポート等)。前セッションの
+// テキストは旧版のため破棄し、新しいファイル内容を使わせる。
+// kascBase 未記録の旧形式セッションは従来通り inspector を返す
+export function sessionInspectorFor(st, fileText) {
+  if (!st || st.inspector == null) return null;
+  if (st.kascBase != null && kascTextHash(fileText) !== st.kascBase) return null;
+  return st.inspector;
+}
 
 // vis マップ照合: 完全タイトル → 葉名(一意のみ) の2段。
 // 戻り値は適用すべき [{entry, on}]（現状と異なるものだけ）。
