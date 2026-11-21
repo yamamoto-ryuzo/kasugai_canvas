@@ -1588,6 +1588,14 @@ export async function compileEmbeddedStyle(loaded, baseUrl, engine = null) {
     const { compileSldStyle } = await import("./sld-style.js");
     return compileSldStyle(loaded.sld, baseUrl, engine, loaded.symbolImages || null);
   }
+  if (loaded?.mbstyle) {
+    // OGC 24-050 Portrayal(gpkgext_stylesheets format=mbstyle)の
+    // サブセット変換。maplibre はネイティブ適用のため本経路は
+    // openlayers/leaflet/navara/cesium 等の非 maplibre エンジン向け
+    const { compileMbstyle } = await import("./mbstyle-style.js");
+    return compileMbstyle(loaded.mbstyle, baseUrl, engine,
+      loaded.mbstyleSymbols || null, loaded.mbstyleFonts || null);
+  }
   return null;
 }
 
@@ -1723,6 +1731,37 @@ export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null)
         if (m?.title && !alias[col]) alias[col] = m.title;
       }
     }
+    // OGC 24-050 Portrayal: layer_styles(QML/SLD)が無い表は mbstyle シートを
+    // compileQmlStyle 互換 spec へ変換して適用する。適用対象は GeoDataClass
+    // (24-049)紐付け or 単一地物表 + gpkgstyle= 選択のルールは maplibre
+    // (applyGpkgPortrayal)と同一。maplibre はネイティブ適用が優先のため
+    // ここで付随する loaded.mbstyle は embStyle 判定から外してよい
+    const wantMbstyle = !opts.style && !result.qml && !result.sld
+      && (result.styles?.list || []).some(s => (s.formats || []).some(f => String(f).toLowerCase() === "mbstyle"));
+    if (wantMbstyle) {
+      try {
+        const reg = await gpkgStyleRegistry(url);
+        const { selectGpkgMbstyleSheets } = await import("./mbstyle-style.js");
+        const sheets = selectGpkgMbstyleSheets(reg, {
+          table: opts.table || result.table || "",
+          gpkgstyle: opts.gpkgstyle || "",
+        });
+        if (sheets.length) {
+          result.mbstyle = sheets.map(s => s.mbstyle);
+          result.mbstyleStyleName = sheets[0].style?.style || null;
+          result.mbstyleSymbols = reg.symbols || [];
+          result.mbstyleFonts = reg.fonts || [];
+          item._gpkgPortrayal = {
+            done: true, mode: "compiled",
+            style: sheets[0].style?.style || sheets[0].style?.uri || null,
+            sheets: sheets.length,
+            layers: sheets.reduce((n, s) => n + (s.mbstyle?.layers?.length || 0), 0),
+            symbols: (reg.symbols || []).length,
+            fonts: (reg.fonts || []).map(f => f.name).filter(Boolean),
+          };
+        }
+      } catch (e) { console.warn(`GPKG Portrayal レジストリ取得失敗 (${item.title}):`, e); }
+    }
     return { ...result, viewportQuery };
   }
   if (type === "kml" || type === "kmz") {
@@ -1800,6 +1839,33 @@ export async function loadVectorItem(item, baseUrl, bounds = null, hooks = null)
         styles: g.styles || null, styleName: g.styleName || null,
         styleNames: g.styleNames || null,
       };
+      // OGC 24-050 Portrayal: 通常 gpkg: 経路と同規約で mbstyle を付随
+      const wantMb = !it.style && !g.qml && !g.sld
+        && (g.styles?.list || []).some(s => (s.formats || []).some(f => String(f).toLowerCase() === "mbstyle"));
+      if (wantMb) {
+        try {
+          const reg = await window.KascLoader.gpkgWorkerCall("style", { url: it.url, directUrl: it.directUrl || null });
+          const { selectGpkgMbstyleSheets } = await import("./mbstyle-style.js");
+          const sheets = selectGpkgMbstyleSheets(reg, {
+            table: it.gpkgTable || g.table || "",
+            gpkgstyle: it.gpkgstyle || "",
+          });
+          if (sheets.length) {
+            out.mbstyle = sheets.map(s => s.mbstyle);
+            out.mbstyleStyleName = sheets[0].style?.style || null;
+            out.mbstyleSymbols = reg.symbols || [];
+            out.mbstyleFonts = reg.fonts || [];
+            item._gpkgPortrayal = {
+              done: true, mode: "compiled",
+              style: sheets[0].style?.style || sheets[0].style?.uri || null,
+              sheets: sheets.length,
+              layers: sheets.reduce((n, s) => n + (s.mbstyle?.layers?.length || 0), 0),
+              symbols: (reg.symbols || []).length,
+              fonts: (reg.fonts || []).map(f => f.name).filter(Boolean),
+            };
+          }
+        } catch (e) { console.warn(`GPKG Portrayal レジストリ取得失敗 (${item.title}):`, e); }
+      }
     }
     return out;
   }

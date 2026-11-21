@@ -16,7 +16,7 @@
       "engine": "maplibre",
       "name": "page-load",
       "pass": true,
-      "extra": "{\"title\":\"KASUGAI Canvas — MapLibre\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）DM_C未読込📍DM_1📍DM_3未読込📍▸サンプル / PSEA(P21)2QGISLine未読込📍point(letter)"
+      "extra": "{\"title\":\"KASUGAI Canvas — MapLibre\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）▾DM_C📍市･東京都の区町・村・指定都市の区市町村の飛地大区域 大字・町・丁目 小字・丁目 通りその他の地名（大） その他の地名（中"
     },
     {
       "engine": "maplibre",
@@ -28,7 +28,7 @@
       "engine": "openlayers",
       "name": "page-load",
       "pass": true,
-      "extra": "{\"title\":\"KASUGAI Canvas — OpenLayers\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）DM_C未読込📍▾DM_1📍スノーポール\\rカーブミラー火災報知器官　公　署裁　判　所\\r税　務　署郵　便　局 森林管理署測　候"
+      "extra": "{\"title\":\"KASUGAI Canvas — OpenLayers\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）▾DM_C📍市･東京都の区町・村・指定都市の区市町村の飛地大区域 大字・町・丁目 小字・丁目 通りその他の地名（大） その他の地名"
     },
     {
       "engine": "openlayers",
@@ -40,7 +40,7 @@
       "engine": "leaflet",
       "name": "page-load",
       "pass": true,
-      "extra": "{\"title\":\"KASUGAI Canvas — Leaflet\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）DM_C未読込📍DM_1📍DM_3未読込📍▸サンプル / PSEA(P21)2QGISLine未読込📍point(letter)未"
+      "extra": "{\"title\":\"KASUGAI Canvas — Leaflet\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▾サンプル / DM（スタイルサンプル）▾DM_C📍市･東京都の区町・村・指定都市の区市町村の飛地大区域 大字・町・丁目 小字・丁目 通りその他の地名（大） その他の地名（中）"
     },
     {
       "engine": "leaflet",
@@ -52,13 +52,13 @@
       "engine": "navara",
       "name": "page-load",
       "pass": true,
-      "extra": "{\"title\":\"KASUGAI Canvas — Navara\",\"layerText\":\"\\n    \\n      \\n      🔽\\n      🔼\\n    \\n    \\n  \",\"status\":\"\"}"
+      "extra": "{\"title\":\"KASUGAI Canvas — Navara\",\"layerText\":\"\\n    \\n      テーマを選択テーマテーマ2検索前\\n      🔽\\n      🔼\\n    \\n    ▸サンプル / DM（スタイルサンプル）▾DM_C📍市･東京都の区町・村・指定都市の区市町村の飛地大区域 大字・町・丁目 小字・丁目 通りその他の地名（大） その他の地名（中） "
     },
     {
       "engine": "navara",
       "name": "no-fatal-error",
       "pass": true,
-      "extra": "nonfatal=0"
+      "extra": "nonfatal=3"
     },
     {
       "engine": "gsimaps",
@@ -70,7 +70,7 @@
       "engine": "gsimaps",
       "name": "no-fatal-error",
       "pass": true,
-      "extra": "nonfatal=5"
+      "extra": "nonfatal=3"
     }
   ],
   "errors": {
@@ -94,13 +94,15 @@
       "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
       "[error] Failed to load resource: the server responded with a status of 403 (Forbidden)"
     ],
-    "navara": [],
+    "navara": [
+      "[error] Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
+      "[error] Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    ],
     "gsimaps": [
       "[error] Failed to load resource: the server responded with a status of 404 (Not Found)",
       "[error] Failed to load resource: net::ERR_CONNECTION_REFUSED",
-      "[error] Failed to load resource: the server responded with a status of 403 (Forbidden)",
-      "[error] Failed to load resource: the server responded with a status of 404 ()",
-      "[error] Failed to load resource: the server responded with a status of 404 ()"
+      "[error] Failed to load resource: the server responded with a status of 403 (Forbidden)"
     ]
   }
 }

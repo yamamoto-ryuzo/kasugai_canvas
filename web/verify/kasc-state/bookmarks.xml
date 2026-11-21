@@ -1,0 +1,17 @@
+<!DOCTYPE qgis_bookmarks>
+<qgis_bookmarks>
+ <bookmark id="0">
+  <name>新宿御苑</name>
+  <project/>
+  <xmin>139.7000</xmin><ymin>35.6800</ymin>
+  <xmax>139.7200</xmax><ymax>35.6950</ymax>
+  <rotation>0</rotation><sr_id>3452</sr_id>
+ </bookmark>
+ <bookmark id="1">
+  <name>東京駅</name>
+  <project>中心部</project>
+  <xmin>139.7600</xmin><ymin>35.6750</ymin>
+  <xmax>139.7750</xmax><ymax>35.6850</ymax>
+  <rotation>0</rotation><sr_id>3452</sr_id>
+ </bookmark>
+</qgis_bookmarks>

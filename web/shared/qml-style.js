@@ -410,6 +410,9 @@ function currentMapScale() {
   if (v == null) { try { v = Number(mapScaleGetter?.()); } catch (e) { v = null; } }
   return Number.isFinite(v) && v > 0 ? v : null;
 }
+// 現在の評価縮尺分母(setEvalScale 優先・未設定時は mapScaleGetter)を外部公開。
+// mbstyle-style.js の ["zoom"] 評価・ルール縮尺ゲートが共有する
+export function evalScaleDenom() { return currentMapScale(); }
 
 // @map_scale 等の式コンテキスト変数(@xxx)の解決先。
 // アプリ側が setExpressionVariableResolver で「変数名(@抜き) → 値」を注入する。

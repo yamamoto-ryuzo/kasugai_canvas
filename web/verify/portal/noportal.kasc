@@ -1,0 +1,3 @@
+title:宣言なし検証
+base: ベースマップなし | none
+geojson:G/レイヤ1 | ../rec-formats/points.geojson

@@ -16,7 +16,7 @@ const page = await ctx.newPage();
 page.setDefaultTimeout(120000);
 page.on("pageerror", e => console.log("PAGEERR", String(e).slice(0, 200)));
 
-await page.goto(`${BASE}/cesium/?project=ProjectFiles`, { waitUntil: "domcontentloaded", timeout: 120000 });
+await page.goto(`${BASE}/cesium/?project=_qml_verify`, { waitUntil: "domcontentloaded", timeout: 120000 });
 await page.waitForTimeout(15000);
 // fitInPolygonOnly + centroidInside が有効なため、全体図(h=30000)では
 // 区市町村ポリゴン内にラベルが収まらず全滅するのが正しい挙動(QGIS と同じ)。
@@ -47,7 +47,7 @@ await page.screenshot({ path: `${OUT}/qmllabel-cesium.png` });
 const page2 = await ctx.newPage();
 page2.setDefaultTimeout(120000);
 page2.on("pageerror", e => console.log("PAGEERR(ml)", String(e).slice(0, 200)));
-await page2.goto(`${BASE}/maplibre/?project=ProjectFiles`, { waitUntil: "domcontentloaded", timeout: 120000 });
+await page2.goto(`${BASE}/maplibre/?project=_qml_verify`, { waitUntil: "domcontentloaded", timeout: 120000 });
 await page2.waitForTimeout(20000);
 const feat = await page2.evaluate(() => {
   const map = window.kascMap;

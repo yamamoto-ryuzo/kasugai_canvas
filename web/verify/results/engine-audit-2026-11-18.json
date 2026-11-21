@@ -58,7 +58,7 @@
     {
       "name": "kasugaiApi.setEffect('edge') → エッジ検出ステージ",
       "pass": true,
-      "extra": "[\"czm_black_and_white\",\"czm_edge_detection_10be74a5-a864-4557-9fa4-3bafd6ce07c0\"]"
+      "extra": "[\"czm_black_and_white\",\"czm_edge_detection_666160b2-acf1-4ca0-b898-15f2637f1e77\"]"
     },
     {
       "name": "kasugaiApi.setEffect('bloom') → composite enabled",

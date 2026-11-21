@@ -69,6 +69,7 @@
 
 ## 動作確認（Playwrigh：必須）
 
+- **検証用テストデータは極力 geo_import（QGIS CKAN 取込）から取得する**。手順: geo_import bridge で実オープンデータ取込 → geo_webview `kasugaiExport` で `.kasc`+`canvas_data/` 出力 → Canvas 検証（`.devin/skills/verify-import-pipeline/SKILL.md` 参照）。geo_import は GIS 構築実務の入口でもあるためこの経路の検証は実運用品質に直結する。取得できない形式・再現性重視のケースのみ手動 fixture を使う
 - **コードを修正したら必ず動作確認を行う**。構文チェック（`node --check web/cesium/app.js`・`cargo check`）だけで完了とみなさない
 - フロントエンドの挙動変更はブラウザで実際に検証する（Playwright + インストール済みブラウザによる自動化を推奨。`applyInspector`・`kasugaiApi`・`vectorAttrWidget.open()` 等を `page.evaluate` で直接叩けば UI 操作なしで検証できる）
 - **ブラウザ検証を始める前に、まず Chrome がインストール済みか確認する**。Playwright 管理ブラウザ（`ms-playwright/` キャッシュ）が空でも、`chromium.launch({ channel: 'chrome' })`・`channel: 'msedge'` で OS インストール済みブラウザをそのまま headless 起動できる。Chrome → Edge の順で探し、両方無い場合だけ `npx playwright install` で取得する（重いダウンロードを避け、まず既存ブラウザを使う）

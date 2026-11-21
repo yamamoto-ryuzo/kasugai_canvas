@@ -32,31 +32,31 @@
   {
     "id": "B1: cesium 実プロジェクトに bufferNoFill 未対応警告が出ない",
     "ok": true,
-    "detail": "回転ベースの縦書きは水平で代替します | ラインシンボル HashLine は一部エンジンで単色近似です | offsetType(シンボル外接/左上基準)は点基準で近似します | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です"
+    "detail": "回転ベースの縦書きは水平で代替します | ラインシンボル HashLine は一部エンジンで単色近似です | offsetType(シンボル外接/左上基準)は点基準で近似します | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です"
   },
   {
     "id": "B2: cesium 実プロジェクトの障害物警告が実形状文言",
     "ok": true,
-    "detail": "回転ベースの縦書きは水平で代替します | ラインシンボル HashLine は一部エンジンで単色近似です | offsetType(シンボル外接/左上基準)は点基準で近似します | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です"
+    "detail": "回転ベースの縦書きは水平で代替します | ラインシンボル HashLine は一部エンジンで単色近似です | offsetType(シンボル外接/左上基準)は点基準で近似します | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です | ラベル障害物(obstacle)は地物ジオメトリの画面投影で近似判定です"
   },
   {
     "id": "B3: 障害物登録が obstacle=1 のレイヤのみに限定",
     "ok": true,
-    "detail": "{\"found\":true,\"obstacles\":6177,\"labelsShown\":51,\"labelsTotal\":6177}"
+    "detail": "{\"found\":true,\"obstacles\":25,\"labelsShown\":0,\"labelsTotal\":25}"
   },
   {
     "id": "C1: maplibre に __kasc_label_img の icon-image レイヤがある",
     "ok": true,
-    "detail": "[\"kasc-39-symbol-3\"]"
+    "detail": "[\"kasc-41-symbol-3\"]"
   },
   {
     "id": "C2: ラベル画像が style に登録されている",
     "ok": true,
-    "detail": "ql_* images=6177"
+    "detail": "ql_* images=25"
   },
   {
     "id": "C3: 地物に __kasc_label_img が焼き込まれている",
     "ok": true,
-    "detail": "{\"hit\":6177,\"checked\":6177}"
+    "detail": "{\"hit\":25,\"checked\":25}"
   }
 ]

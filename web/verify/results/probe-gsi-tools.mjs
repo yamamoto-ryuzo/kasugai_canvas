@@ -3,7 +3,8 @@
 import { chromium } from "file:///C:/devin/kasugai_canvas/.testtmp/node_modules/playwright/index.mjs";
 import { writeFileSync } from "node:fs";
 
-const BASE = "http://127.0.0.1:8510";
+// 既定はインストール版(:8510)。開発ツリー検証は GSI_PROBE_BASE=http://127.0.0.1:8899/web 等で実行
+const BASE = process.env.GSI_PROBE_BASE || "http://127.0.0.1:8510";
 const OUT = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
 const result = { date: new Date().toISOString(), checks: [] };
@@ -127,11 +128,19 @@ check("2D復帰: 視点・レイヤ", !!restored.view?.latitude && restored.laye
 await page.screenshot({ path: `${OUT}gsi-tools-restored.png` });
 
 // ---- レイヤ削除 ----
+// baseLayer は removeGsiLayer が {ok:false,reason:"baseLayer"} で正しく拒否する
+// 仕様のため、非ベース候補を優先して試し、全候補がベースなら拒否契約を検証する
 const after = await page.evaluate(() => window.kasugaiApi.listGsiLayers());
-const del = after.find(l => /airphoto|lakedata|ort/.test(l.id + l.title));
-if (del) {
-  const rm = await page.evaluate(k => window.kasugaiApi.removeGsiLayer(k), del.id);
-  check("removeGsiLayer", rm?.ok === true, JSON.stringify(rm));
+const cands = after.filter(l => /airphoto|lakedata|ort/.test(l.id + l.title));
+if (cands.length) {
+  let removed = null, refused = [];
+  for (const c of cands) {
+    const rm = await page.evaluate(k => window.kasugaiApi.removeGsiLayer(k), c.id);
+    if (rm?.ok === true) { removed = c.id; break; }
+    refused.push(`${c.id}:${rm?.reason}`);
+  }
+  check("removeGsiLayer", !!removed || refused.every(r => r.endsWith(":baseLayer")),
+    removed ? `removed=${removed}` : `全候補ベースレイヤ拒否(仕様通り) ${refused.join(",")}`);
 } else check("removeGsiLayer", true, "対象なし(取込済みでスキップされた場合)");
 
 const passCount = result.checks.filter(c => c.pass).length;

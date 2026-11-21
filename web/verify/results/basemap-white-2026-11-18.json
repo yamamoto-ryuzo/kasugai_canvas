@@ -8,28 +8,21 @@
   {
     "engine": "cesium",
     "case": "none",
-    "pixel": "#1427b9",
-    "white": false
+    "pixel": "#fafbfc",
+    "white": true
   },
   {
     "engine": "cesium",
     "case": "opacity0",
-    "pixel": "#1427b9",
-    "white": false
+    "pixel": "#fafbfc",
+    "white": true
   },
   {
     "engine": "cesium",
     "case": "background:red",
-    "pixel": "#1427b9",
+    "pixel": "#ff0000",
     "white": false,
-    "expectRed": false
-  },
-  {
-    "engine": "cesium",
-    "case": "pageerror",
-    "pixel": null,
-    "white": false,
-    "note": "pageerror: Cannot access 'resolvingInitialCamera' before initialization | pageerror: Cannot access 'resolvingInitialCamera' before initialization | pageerror: Cannot access 'resolvingInitialCamera' before initialization"
+    "expectRed": true
   },
   {
     "engine": "maplibre",

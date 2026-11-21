@@ -2,21 +2,21 @@
   {
     "id": "B3: 障害物が登録されている(obstacle=1 レイヤのみ)",
     "ok": true,
-    "detail": "{\"obstacles\":6177,\"labelsTotal\":6177,\"labelsShown\":103,\"obsByKind\":{\"kind1\":6177}}"
+    "detail": "{\"obstacles\":2,\"labelsTotal\":2,\"labelsShown\":2,\"obsByKind\":{\"kind1\":2}}"
   },
   {
     "id": "B4: ラベルが描画されている(障害物で全滅していない)",
     "ok": true,
-    "detail": "103/6177"
+    "detail": "2/2"
   },
   {
     "id": "C3: 地物に __kasc_label_img が焼き込まれている",
     "ok": true,
-    "detail": "{\"hit\":6177,\"checked\":6177,\"sources\":1}"
+    "detail": "{\"hit\":2,\"checked\":2,\"sources\":1}"
   },
   {
     "id": "C4: icon-image ラベルが画面に描画されている",
     "ok": true,
-    "detail": "{\"rendered\":13,\"layerId\":\"kasc-39-symbol-3\"}"
+    "detail": "{\"rendered\":13,\"layerId\":\"kasc-41-symbol-3\"}"
   }
 ]

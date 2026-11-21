@@ -21,7 +21,7 @@ const page = await ctx.newPage();
 page.setDefaultTimeout(120000);
 page.on("pageerror", e => console.log("PAGEERR", String(e).slice(0, 200)));
 
-const qmlText = await (await fetch("http://127.0.0.1:8510/projects/ProjectFiles/canvas_data/layer.qml")).text();
+const qmlText = await (await fetch("http://127.0.0.1:8510/projects/_qml_verify/canvas_data/layer.qml")).text();
 console.log("layer.qml bytes:", qmlText.length);
 
 // --- A) エンジン別警告(ページ内で共有モジュールを直接 import して評価) ---
@@ -52,7 +52,7 @@ rec("A6: navara は両方とも未対応警告", warnByEngine.navara.some(w => w
   && warnByEngine.navara.some(w => w.includes("適用されません")), warnByEngine.navara.join(" | ") || "(なし)");
 
 // --- B) Cesium 実プロジェクト ---
-await page.goto(`${BASE}/cesium/?project=ProjectFiles`, { waitUntil: "domcontentloaded", timeout: 120000 });
+await page.goto(`${BASE}/cesium/?project=_qml_verify`, { waitUntil: "domcontentloaded", timeout: 120000 });
 await page.waitForTimeout(15000);
 const ces = await page.evaluate(() => {
   const badges = [...document.querySelectorAll(".style-warn-badge")].map(b => b.title);
@@ -90,7 +90,7 @@ await page.screenshot({ path: `${OUT}/qmllabel-cesium.png` });
 const page2 = await ctx.newPage();
 page2.setDefaultTimeout(120000);
 page2.on("pageerror", e => console.log("PAGEERR(ml)", String(e).slice(0, 200)));
-await page2.goto(`${BASE}/maplibre/?project=ProjectFiles`, { waitUntil: "domcontentloaded", timeout: 120000 });
+await page2.goto(`${BASE}/maplibre/?project=_qml_verify`, { waitUntil: "domcontentloaded", timeout: 120000 });
 await page2.waitForTimeout(20000);
 const ml = await page2.evaluate(() => {
   const map = window.kascMap || window.map;

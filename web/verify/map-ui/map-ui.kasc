@@ -1,0 +1,4 @@
+title:map-ui probe
+base: ベースマップなし | none
+info: <b>インフォテストXYZ</b><script>window.__xss=1</script>
+geojson:ポイント | ../rec-formats/points.geojson

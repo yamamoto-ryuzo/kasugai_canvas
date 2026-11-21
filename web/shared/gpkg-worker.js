@@ -272,10 +272,10 @@ function tableWarnings(meta, t, reprojMethod) {
       parts.push(`スタイル ${meta.styles.list.map(s => s.style || `#${s.id}`).join(", ")}${fmts.length ? `(形式: ${fmts.join("/")})` : ""}`);
     }
     if (meta.styles.orphanStylesheets) parts.push(`地物表未紐付けのスタイルシート ${meta.styles.orphanStylesheets} 件`);
-    warnings.push(`Portrayal 拡張(gpkgext_styles)に${parts.join("、")}が登録されています(描画への適用はエンジン依存: MapLibre は GeoDataClass 紐付け時に mbstyle を自動適用)`);
+    warnings.push(`Portrayal 拡張(gpkgext_styles)に${parts.join("、")}が登録されています(GeoDataClass 紐付け時に自動適用: MapLibre は mbstyle ネイティブ、その他エンジンは mbstyle→共有スタイルspec変換のサブセット適用)`);
   }
-  if (meta?.symbolCount) warnings.push(`Portrayal 拡張のシンボル ${meta.symbolCount} 件を含みます(画像適用は Portrayal 対応エンジンのみ)`);
-  if (meta?.fontCount) warnings.push(`Portrayal 拡張のフォント ${meta.fontCount} 件を含みます(フォント適用は Portrayal 対応エンジンのみ)`);
+  if (meta?.symbolCount) warnings.push(`Portrayal 拡張のシンボル ${meta.symbolCount} 件を含みます(mbstyle の icon-image で適用。共有 spec 未対応エンジンを除く)`);
+  if (meta?.fontCount) warnings.push(`Portrayal 拡張のフォント ${meta.fontCount} 件を含みます(mbstyle の text 系で適用。共有 spec 未対応エンジンを除く)`);
   // 対応済みの拡張は警告対象外(rtree=エンベロープ代替・schema=列タイトル読取済。
   // gpkgext_* の portrayal/annotation 系は上で個別通知するため汎用警告からも除く)
   const ext = [...new Set((meta?.extensions || []).map(e => e.name))]
@@ -379,6 +379,7 @@ async function cmdLoad(msg) {
       geojson: { type: "FeatureCollection", features: [] },
       qml: null, total: 0, count: 0, kind: "attributes",
       srs, extensions: meta.extensions, columnMeta, styles: meta.styles || null,
+      table: t.tableName,
       warnings: freshWarnings(`${msg.url}|${t.tableName}`, warnings),
     };
   }
@@ -424,6 +425,7 @@ async function cmdLoad(msg) {
     total,
     count: features.length,
     kind: "features",
+    table: t.tableName,
     srs,
     extensions: meta.extensions,
     columnMeta,

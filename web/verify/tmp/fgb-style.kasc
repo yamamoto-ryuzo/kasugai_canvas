@@ -1,4 +1,4 @@
-flatgeobuf: 属性style | http://127.0.0.1:59864/verify/tmp/style-attrs.fgb | on | bbox=off
-flatgeobuf: サイドカー | http://127.0.0.1:59864/verify/tmp/sidecar.fgb | on | bbox=off
-flatgeobuf: 明示style | http://127.0.0.1:59864/verify/tmp/explicit.fgb | on | bbox=off | style=http://127.0.0.1:59864/verify/tmp/explicit.qml
-flatgeobuf: サイドカーなし | http://127.0.0.1:59864/verify/tmp/nosidecar.fgb | on | bbox=off
+flatgeobuf: 属性style | http://127.0.0.1:63215/verify/tmp/style-attrs.fgb | on | bbox=off
+flatgeobuf: サイドカー | http://127.0.0.1:63215/verify/tmp/sidecar.fgb | on | bbox=off
+flatgeobuf: 明示style | http://127.0.0.1:63215/verify/tmp/explicit.fgb | on | bbox=off | style=http://127.0.0.1:63215/verify/tmp/explicit.qml
+flatgeobuf: サイドカーなし | http://127.0.0.1:63215/verify/tmp/nosidecar.fgb | on | bbox=off

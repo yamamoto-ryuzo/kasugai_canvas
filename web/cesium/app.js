@@ -4138,6 +4138,38 @@ async function loadGeoPackageAsGeoJson(item) {
       item.fieldMeta = style?.fields || null;
       if (style?.warnings?.length) console.warn(`GPKG 埋め込みSLDスタイル (${item.url}):`, style.warnings.join(" / "));
     } catch (e) { console.warn(`GPKG 埋め込みSLDスタイル適用失敗 (${item.url}):`, e); }
+  } else {
+    // OGC 24-050 Portrayal: layer_styles が無い表は mbstyle シートを
+    // compileQmlStyle 互換 spec へ変換して適用(GeoDataClass 紐付けは
+    // maplibre applyGpkgPortrayal と同規則)
+    const hasMb = (res.styles?.list || []).some(s => (s.formats || []).some(f => String(f).toLowerCase() === "mbstyle"));
+    // style= 外部指定・既適用スタイルがある場合は埋め込み Portrayal を使わない
+    // (wantStyle と同じ優先順位規約)
+    if (hasMb && !item.styleUrl && !item.qmlStyle) {
+      try {
+        const reg = await gpkgWorkerCall("style", { url: fetchUrl, directUrl: fetchUrl === item.url ? null : item.url });
+        const { selectGpkgMbstyleSheets, compileMbstyle } = await import("../shared/mbstyle-style.js");
+        const sheets = selectGpkgMbstyleSheets(reg, {
+          table: item.gpkgTable || res.table || "",
+          gpkgstyle: item.opts?.gpkgstyle || "",
+        });
+        if (sheets.length) {
+          const style = await compileMbstyle(sheets.map(s => s.mbstyle), item.url, "cesium",
+            reg.symbols || null, reg.fonts || null);
+          item.qmlStyle = style;
+          if (style?.warnings?.length) console.warn(`GPKG Portrayal(mbstyle) (${item.url}):`, style.warnings.join(" / "));
+          item._gpkgPortrayal = {
+            done: true, mode: "compiled",
+            style: sheets[0].style?.style || sheets[0].style?.uri || null,
+            sheets: sheets.length,
+            layers: sheets.reduce((n, s) => n + (s.mbstyle?.layers?.length || 0), 0),
+            symbols: (reg.symbols || []).length,
+            fonts: (reg.fonts || []).map(f => f.name).filter(Boolean),
+          };
+          console.info(`GPKG Portrayal: ${item.title} に mbstyle を適用しました(${item._gpkgPortrayal.layers}レイヤ)`);
+        }
+      } catch (e) { console.warn(`GPKG Portrayal(mbstyle) 適用失敗 (${item.url}):`, e); }
+    }
   }
   // gpkg_data_columns(schema 拡張)の列タイトルを属性パネルの列名エイリアスへ
   // 補完する。QML の <aliases> があればそちらを優先
@@ -14352,6 +14384,9 @@ window.kasugaiApi = {
   listLayers() {
     return getOrderedLayerItems().map(layer => {
       const entry = { id: layer.id, title: layer.title, sourceTitle: layer.sourceTitle || null, exclusiveGroup: !!layer.exclusiveGroup, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: (layer.type === "sql" || layer.type === "ogrsql") ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced, options: { ...(layer.opts || {}) } };
+      // attr= は本エンジンでは attribution(クレジット)へ消費されるが、他エンジンは
+      // options.attr に残るため、listLayers 読取面だけ統一して露出する
+      if (layer.attribution && entry.options.attr == null) entry.options.attr = layer.attribution;
       const fgbMeta = summarizeFlatGeobufHeader(layer.fgbHeader);
       if (fgbMeta) entry.fgb = fgbMeta;
       const geoMeta = summarizeGeoParquetHeader(layer.geoHeader);
@@ -14363,6 +14398,8 @@ window.kasugaiApi = {
           styleName: gm.styleName || null, styleNames: gm.styleNames || null,
           styles: gm.styles || null, extensions: (gm.extensions || []).map(e => e.name) };
       }
+      // Portrayal 適用診断(OGC 24-050 mbstyle→共有 spec 変換)も露出する
+      if (layer._gpkgPortrayal) entry.gpkgPortrayal = layer._gpkgPortrayal;
       const legendEntries = getLayerLegend(layer)?.entries;
       if (legendEntries?.length) entry.legend = legendEntries.map(e => ({ label: e.label || e.symbolName || "", symbolName: e.symbolName || "", spec: e.desc ?? null, visible: !(e.symbolName && layer.legendHidden?.has(e.symbolName)) }));
       return entry;

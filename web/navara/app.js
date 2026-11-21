@@ -1240,7 +1240,7 @@ async function addKascLayer(item, baseUrl) {
     // QML スタイル: 代表地物の spec からレイヤ既定色を取る（Navara はレイヤ単位マテリアル）
     let fillCss = item.opts?.fill, strokeCss = item.opts?.stroke || item.opts?.color, markerCss = item.opts?.marker_color;
     let lineDash = null, lineCap = null;
-    const embStyle = (loaded.qml || loaded.sld) ? loaded : null;
+    const embStyle = (loaded.qml || loaded.sld || loaded.mbstyle) ? loaded : null;
     if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
         const compiled = item.opts?.style

@@ -581,7 +581,7 @@ async function buildLayer(item, baseUrl, preloaded) {
     // 生成時オプションへ反映する
     let compiled = null;
     let qmlStyleFn = null;
-    const embStyle = (loaded.qml || loaded.sld) ? loaded : null;
+    const embStyle = (loaded.qml || loaded.sld || loaded.mbstyle) ? loaded : null;
     if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
         compiled = item.opts?.style

@@ -1004,7 +1004,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     // (item._geojson はフィルタ前のフルソースを保持)
     const geojson = applyClientWhere(item, loaded.geojson);
     const viewportQuery = !!loaded.viewportQuery;
-    const embStyle = (loaded.qml || loaded.sld) ? loaded : null;
+    const embStyle = (loaded.qml || loaded.sld || loaded.mbstyle) ? loaded : null;
     if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
         item._qml = item.opts?.style

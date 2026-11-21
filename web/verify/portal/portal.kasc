@@ -1,0 +1,10 @@
+title:ポータル検証
+base: ベースマップなし | none
+portal:on | title=検証ポータル | open=auto
+view:レイヤ1のみ | desc=レイヤ1だけ表示 | G/レイヤ1
+view:全部ビュー | desc=全レイヤ表示 | G/レイヤ1 | G/レイヤ2 | 対象外
+link:外部リンク | url=https://example.com/ | desc=リンク説明
+html:お知らせ | <b>テストお知らせXYZ</b>
+geojson:G/レイヤ1 | ../rec-formats/points.geojson
+geojson:G/レイヤ2 | ../rec-formats/points.geojson
+geojson:対象外 | ../rec-formats/points.geojson | off

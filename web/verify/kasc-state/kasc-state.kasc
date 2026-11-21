@@ -1,0 +1,10 @@
+title:kasc-state probe
+base: ベースマップなし | none
+cam:検証カメラ|35.68|139.75|h=8000|p=-60
+bookmark:QGISブックマーク | bookmarks.xml
+theme:テーマA | 排他G/排他1
+geojson:通常G/通常A | ../rec-formats/points.geojson | attr=出典A
+geojson:通常G/通常B | ../rec-formats/points.geojson | off
+geojson:排他G//排他1 | ../rec-formats/points.geojson
+geojson:排他G//排他2 | ../rec-formats/points.geojson | off
+geojson:半透明 | ../rec-formats/points.geojson | opacity=0.5 | attr=出典テスト | minScale=1000 | maxScale=10000000

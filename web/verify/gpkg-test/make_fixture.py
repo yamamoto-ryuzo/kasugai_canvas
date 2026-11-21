@@ -306,10 +306,15 @@ def main():
     cur.execute("INSERT INTO gpkgext_styles VALUES (1,'demo-style','検証用スタイル','gpkgstyle::test::canvas::demo')")
     cur.execute("INSERT INTO gpkgext_stylesheets VALUES (1,1,'sld',?)", (SLD,))
     # mbstyle: source.url = GeoDataClass URI → sa_reference 経由で pt 表へ紐付く。
-    # sprite は同ディレクトリの sprite.png+sprite.json(gpkg と同階層の相対 URL)
+    # sprite は同ディレクトリの sprite.png+sprite.json(gpkg と同階層の相対 URL)。
+    # circle/symbol(icon-image) のほか fill/line レイヤと gpkgsym 参照を含め、
+    # 非 maplibre エンジンの compiled-spec 変換経路(curves 表)も検証できる構成にする
     MBSTYLE = '{"version":8,"name":"demo-mbstyle","sprite":"sprite","sources":{"pts":{"type":"geojson","url":"gpkgtest://geodataclass/pt"}},"layers":['\
         '{"id":"pt-circles","type":"circle","source":"pts","paint":{"circle-color":"#e6550d","circle-radius":9,"circle-stroke-color":"#ffffff","circle-stroke-width":2}},'\
-        '{"id":"pt-icons","type":"symbol","source":"pts","layout":{"icon-image":"mysquare","icon-size":1,"icon-allow-overlap":true}}]}'
+        '{"id":"pt-icons","type":"symbol","source":"pts","layout":{"icon-image":"mysquare","icon-size":1,"icon-allow-overlap":true}},'\
+        '{"id":"pt-gpkgsym","type":"symbol","source":"pts","layout":{"icon-image":"circle","icon-size":1,"icon-allow-overlap":true}},'\
+        '{"id":"cv-fill","type":"fill","source":"pts","paint":{"fill-color":"#31a354","fill-opacity":0.4,"fill-outline-color":"#006d2c"}},'\
+        '{"id":"cv-line","type":"line","source":"pts","paint":{"line-color":"#3182bd","line-width":3,"line-dasharray":[2,1]}}]}'
     cur.execute("INSERT INTO gpkgext_stylesheets VALUES (2,1,'mbstyle',?)", (MBSTYLE,))
     # mbstyle sprite.png(16x16 青) + sprite.json(mysquare のみ)
     with open(os.path.join(os.path.dirname(OUT), "sprite.png"), "wb") as f:
@@ -323,10 +328,15 @@ def main():
     cur.execute("INSERT INTO gpkgext_fonts (id,name,font,glyphs) VALUES (1,'test-font',?,?)",
                 (b"\x00\x01\x00\x00" + b"\x00" * 16, make_zip({"0-255.pbf": b"gpkgtest-glyphs"})))
     # OGC 24-049 semantic-annotations: pt 表と demo-style を同一
-    # GeoDataClass へ紐付ける(mbstyle の適用先解決に使う)
+    # GeoDataClass へ紐付ける(mbstyle の適用先解決に使う)。curves 表にも
+    # 別 GeoDataClass 経由で同一スタイルを紐付け、layer_styles を持たない
+    # 表での compiled-spec 適用経路を検証する
     cur.execute("INSERT INTO gpkgext_semantic_annotations (type,title,description,uri) VALUES ('GeoDataClass','ポイント地物クラス','テスト用 GeoDataClass','gpkgtest://geodataclass/pt')")
+    cur.execute("INSERT INTO gpkgext_semantic_annotations (type,title,description,uri) VALUES ('GeoDataClass','ジオメトリ地物クラス','曲線検証用 GeoDataClass','gpkgtest://geodataclass/curves')")
     cur.execute("INSERT INTO gpkgext_sa_reference (table_name,key_column_name,key_value,sa_id) VALUES ('pt',NULL,NULL,1)")
+    cur.execute("INSERT INTO gpkgext_sa_reference (table_name,key_column_name,key_value,sa_id) VALUES ('curves',NULL,NULL,2)")
     cur.execute("INSERT INTO gpkgext_sa_reference (table_name,key_column_name,key_value,sa_id) VALUES ('gpkgext_styles','id',1,1)")
+    cur.execute("INSERT INTO gpkgext_sa_reference (table_name,key_column_name,key_value,sa_id) VALUES ('gpkgext_styles','id',1,2)")
     for tn, en in [
         ("gpkgext_styles", "gpkgext_styles"),
         ("gpkgext_stylesheets", "gpkgext_styles"),

@@ -1,4 +1,4 @@
-geoparquet: 属性style | http://127.0.0.1:61154/verify/rec-formats/style-attrs.parquet | on | bbox=off
-geoparquet: サイドカー | http://127.0.0.1:61154/verify/tmp/gp-sidecar.parquet | on | bbox=off
-geoparquet: 明示style | http://127.0.0.1:61154/verify/tmp/gp-explicit.parquet | on | bbox=off | style=http://127.0.0.1:61154/verify/tmp/gp-explicit.qml
-geoparquet: サイドカーなし | http://127.0.0.1:61154/verify/tmp/gp-nosidecar.parquet | on | bbox=off
+geoparquet: 属性style | http://127.0.0.1:61330/verify/rec-formats/style-attrs.parquet | on | bbox=off
+geoparquet: サイドカー | http://127.0.0.1:61330/verify/tmp/gp-sidecar.parquet | on | bbox=off
+geoparquet: 明示style | http://127.0.0.1:61330/verify/tmp/gp-explicit.parquet | on | bbox=off | style=http://127.0.0.1:61330/verify/tmp/gp-explicit.qml
+geoparquet: サイドカーなし | http://127.0.0.1:61330/verify/tmp/gp-nosidecar.parquet | on | bbox=off

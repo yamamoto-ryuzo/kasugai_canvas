@@ -108,7 +108,24 @@ async function reboot() {
       // 正典ハッシュは zoom を持たないため、無ければ height から換算する
       { const gc = groundCenterFromCam(v); gmap.setView([gc.latitude, gc.longitude], Number.isFinite(v.zoom) ? v.zoom : heightToViewZoom(gc.latitude, v.height, gmapH())); }
     }
-    if (lastDocCtx) await buildFromDoc(lastDocCtx);
+    // iframe の予期しない再読込(iframe 内 setActiveId 等)では buildFromDoc が
+    // ベース選択を先頭(既定)へ戻してしまうため、直前の選択キーを保持して復元する
+    const baseSelEl = document.getElementById("basemap-select");
+    const prevIdx = Number(baseSelEl?.value ?? -1);
+    const prevEntry = prevIdx >= 0 ? baseEntries[prevIdx] : null;
+    const prevBaseKey = prevEntry
+      ? (prevEntry.gsiId || `${prevEntry.item?.title ?? ""}|${prevEntry.item?.url ?? ""}`)
+      : (baseSelEl ? "__none__" : null);
+    // ランタイム追記分(setGsiBasemap/importGsiCatalog の行追加)を失わないよう
+    // インスペクタ本文を再パースする。失敗時のみ起動時 doc へフォールバック
+    let rebuilt = false;
+    if (inspectorInput?.value?.trim()) {
+      try {
+        await applyInspectorTextEx(inspectorInput.value, prevBaseKey);
+        rebuilt = true;
+      } catch (e) { console.warn("[gsimaps] reboot: inspector 再適用に失敗", e); }
+    }
+    if (!rebuilt && lastDocCtx) await buildFromDoc({ ...lastDocCtx, baseKey: prevBaseKey });
   } catch (e) { console.error(e); }
   finally { rebooting = false; }
 }
@@ -1760,12 +1777,13 @@ function setInspectorStatus(msg, isError = false) {
   el.textContent = msg || "";
   el.style.color = isError ? "#c0392b" : "#666";
 }
-async function applyInspectorText(text) {
+async function applyInspectorTextEx(text, baseKey = null) {
   // buildFromDoc がカード順序復元にテキストを参照するため先に反映する
   inspectorInput.value = String(text ?? "");
   const doc = parseKasc(String(text ?? ""));
-  await buildFromDoc({ doc, baseUrl: lastBaseUrl });
+  await buildFromDoc({ doc, baseUrl: lastBaseUrl, baseKey });
 }
+async function applyInspectorText(text) { return applyInspectorTextEx(text); }
 document.getElementById("apply-inspector")?.addEventListener("click", async () => {
   try { setInspectorStatus("適用中…"); await applyInspectorText(inspectorInput.value); setInspectorStatus("適用しました"); }
   catch (e) { setInspectorStatus(`適用失敗: ${e?.message || e}`, true); }
@@ -1876,7 +1894,7 @@ async function applyProject(proj) {
   });
 }
 
-async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
+async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null, baseKey = null }) {
   lastDocCtx = { doc, baseUrl };
   resetAll();
   currentDefaultStyles = doc.defaultStyles || {};
@@ -1933,6 +1951,18 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null }) {
     try { e.tileLayer = createTileLayer({ ...e.item, type: "xyz" }); } catch (err) { console.warn(err); }
   }
   rebuildBasemapSelect();
+  // reboot 等で直前のベース選択を引き継ぐ場合は既定(先頭)ではなく該当行を選ぶ
+  if (baseKey != null) {
+    const bsel = document.getElementById("basemap-select");
+    if (bsel) {
+      if (baseKey === "__none__") bsel.value = "-1";
+      else {
+        const bi = baseEntries.findIndex(e =>
+          (e.gsiId || `${e.item?.title ?? ""}|${e.item?.url ?? ""}`) === baseKey);
+        if (bi >= 0) bsel.value = String(bi);
+      }
+    }
+  }
   applyBaseSelection();
 
   // ベクター・タイル行

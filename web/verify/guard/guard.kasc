@@ -1,0 +1,2 @@
+base:none
+gpkg:pt-limit2|/verify/gpkg-test/gpkg-test.gpkg|table=pt|bbox=off|limit=2

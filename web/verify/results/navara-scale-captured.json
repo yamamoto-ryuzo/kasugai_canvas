@@ -375,38 +375,6 @@
       "v": {}
     },
     {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
       "gt": "polygon",
       "props": {
         "name": "中央区サンプル"
@@ -514,9 +482,25 @@
     {
       "gt": "polyline",
       "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
         "name": "江東区サンプル"
       },
       "v": {}
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
     },
     {
       "gt": "polygon",
@@ -542,6 +526,22 @@
       "v": {
         "color": "#3c64dc"
       }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
     }
   ],
   "cap1": [
@@ -614,38 +614,6 @@
       }
     },
     {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#28b43c"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#28b43c"
-      }
-    },
-    {
       "gt": "billboard",
       "props": {
         "name": "本所吾妻橋"
@@ -718,58 +686,18 @@
       }
     },
     {
-      "gt": "polygon",
+      "gt": "polyline",
       "props": {
         "name": "中央区サンプル"
       },
-      "v": {
-        "color": "#28b43c"
-      }
+      "v": {}
     },
     {
-      "gt": "polygon",
+      "gt": "polyline",
       "props": {
         "name": "江東区サンプル"
       },
-      "v": {
-        "color": "#28b43c"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#28b43c"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#28b43c"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#28b43c"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#28b43c"
-      }
+      "v": {}
     },
     {
       "gt": "polygon",
@@ -876,74 +804,22 @@
       }
     },
     {
-      "gt": "polyline",
+      "gt": "polygon",
       "props": {
         "name": "中央区サンプル"
       },
-      "v": {}
+      "v": {
+        "color": "#28b43c"
+      }
     },
     {
-      "gt": "polyline",
+      "gt": "polygon",
       "props": {
         "name": "江東区サンプル"
       },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
+      "v": {
+        "color": "#28b43c"
+      }
     },
     {
       "gt": "polygon",
@@ -1011,6 +887,74 @@
     {
       "gt": "polygon",
       "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#28b43c"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#28b43c"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#28b43c"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#28b43c"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#28b43c"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#28b43c"
+      }
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polygon",
+      "props": {
         "name": "中央区サンプル"
       },
       "v": {
@@ -1083,6 +1027,62 @@
       "gt": "polyline",
       "props": {
         "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
       },
       "v": {}
     },
@@ -1188,6 +1188,169 @@
       }
     },
     {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
+      "gt": "polygon",
+      "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {
+        "color": "#3c64dc"
+      }
+    },
+    {
       "gt": "billboard",
       "props": {
         "name": "本所吾妻橋"
@@ -1256,183 +1419,6 @@
       "v": {}
     },
     {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polygon",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {
-        "color": "#3c64dc"
-      }
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "中央区サンプル"
-      },
-      "v": {}
-    },
-    {
-      "gt": "polyline",
-      "props": {
-        "name": "江東区サンプル"
-      },
-      "v": {}
-    },
-    {
       "gt": "polyline",
       "props": {
         "name": "中央区サンプル"
@@ -1637,6 +1623,20 @@
     {
       "gt": "polyline",
       "props": {
+        "name": "江東区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
+        "name": "中央区サンプル"
+      },
+      "v": {}
+    },
+    {
+      "gt": "polyline",
+      "props": {
         "name": "中央区サンプル"
       },
       "v": {}
@@ -1667,7 +1667,7 @@
     {
       "gt": "polygon",
       "props": {
-        "name": "中央区サンプル"
+        "name": "江東区サンプル"
       },
       "v": {
         "color": "#3c64dc"
@@ -1676,7 +1676,7 @@
     {
       "gt": "polygon",
       "props": {
-        "name": "江東区サンプル"
+        "name": "中央区サンプル"
       },
       "v": {
         "color": "#3c64dc"

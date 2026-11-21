@@ -124,6 +124,7 @@ const layerInfo = await page.evaluate(() => {
       metaKeys: it.gpkgMeta ? Object.keys(it.gpkgMeta) : null,
       portrayal: it._gpkgPortrayal || l.gpkgPortrayal || null,
       lids: l.gpkgpLids || (l.lids || []).filter(id => /gpkgp/.test(id)),
+      spec: !!(it._qml || it.qmlStyle || (l.legend || []).length),
       props: gj?.features?.[0] ? Object.keys(gj.features[0].properties || {}) : [] };
   }
   return out;
@@ -292,7 +293,7 @@ if (workerRes.error) {
   rec("worker.styles", st?.list?.length === 1 && st.list[0].style === "demo-style"
       && fmts.includes("sld") && fmts.includes("mbstyle") && st.orphanStylesheets === 0,
     `gpkgext_styles → ${JSON.stringify(st)}`);
-  rec("worker.portrayalWarn", (workerRes.ptWarnings || []).some(w => /Portrayal 拡張.*エンジン依存/.test(w))
+  rec("worker.portrayalWarn", (workerRes.ptWarnings || []).some(w => /Portrayal 拡張.*GeoDataClass 紐付け時に自動適用/.test(w))
       && (workerRes.ptWarnings || []).some(w => /シンボル 1 件/.test(w))
       && (workerRes.ptWarnings || []).some(w => /フォント 1 件/.test(w)),
     `portrayal 警告 ${JSON.stringify(workerRes.ptWarnings)}`);
@@ -310,7 +311,7 @@ if (workerRes.error) {
       && sc.symbols?.[0]?.symbol === "circle" && sc.symbols[0].images === 1
       && sc.fonts?.[0]?.name === "test-font" && sc.fonts[0].glyphs === true
       && sc.annotations?.["1"]?.type === "GeoDataClass"
-      && (sc.annotationRefs || []).length === 2
+      && (sc.annotationRefs || []).length === 4
       && (sc.featureTables || []).includes("pt"),
     `style cmd → sheets=${JSON.stringify(sc.sheets)} symbols=${JSON.stringify(sc.symbols)} fonts=${JSON.stringify(sc.fonts)} refs=${(sc.annotationRefs || []).length} tables=${JSON.stringify(sc.featureTables)}`);
 }
@@ -367,17 +368,37 @@ rec("app.standalone", standaloneLabel.count === 2
 if (ENGINE === "maplibre") {
   const pt = infoOf("pt(基本)") || {};
   const po = pt.portrayal || {};
-  rec("app.mbstyle", (pt.lids || []).length === 2 && po.appliedLayers === 2,
+  rec("app.mbstyle", (pt.lids || []).length === 5 && po.appliedLayers === 5,
     `mbstyle → lids=${JSON.stringify(pt.lids)} applied=${po.appliedLayers} gpkgStyles=${JSON.stringify(pt.gpkgStyles)}`);
   rec("app.symbols", po.symbols === 1 && po.symbolImages === 2,
     `symbols → ${JSON.stringify(po)}(symbol+uri の2名で登録)`);
-  rec("app.fonts", (po.fonts || []).includes("test-font") && po.glyphStacks === 1 && po.annotations === 1,
+  rec("app.fonts", (po.fonts || []).includes("test-font") && po.glyphStacks === 1 && po.annotations === 2,
     `fonts/annotations → ${JSON.stringify(po)}`);
   // mbstyle sprite: sprite.png+sprite.json の切り出し登録(icon-image "mysquare" 参照)。
   // 画像は map 共有のため先着1レイヤのみ sprites カウントが立つ
   const spriteN = Math.max(...Object.values(layerInfo).map(l => l.portrayal?.sprites || 0));
   rec("app.sprite", spriteN === 1,
     `mbstyle sprite → sprites=${spriteN}(mysquare 16x16 登録)`);
+}
+
+// OGC 24-050 mbstyle → 共有 spec 変換経路: layer_styles を持たない curves 表へ
+// GeoDataClass(sa_reference)紐付けで mbstyle シートが選択され、shared/mbstyle-style.js
+// が compileEmbeddedStyle 互換 spec として実レイヤに適用されること。
+// (maplibre はネイティブ経路で上記確認済み。gsimaps は style spec を消費しないため GAP)
+{
+  const cv = infoOf("curves");
+  const port = cv?.portrayal || {};
+  const detail = `curves → portrayal=${JSON.stringify(port)} spec=${cv?.spec}`;
+  if (ENGINE === "gsimaps") {
+    gap("app.mbstyleCompiled", !!cv?.spec, `${detail}(gsimaps は共有 style spec 未消費)`);
+  } else if (ENGINE === "maplibre") {
+    // maplibre はネイティブ直接適用: curves 表にも GeoDataClass 紐付けで gpkgp レイヤ追加
+    rec("app.mbstyleCompiled", port.done === true && port.appliedLayers === 5,
+      `${detail}(ネイティブ適用)`);
+  } else {
+    const compiled = port.mode === "compiled" && port.sheets === 1 && port.layers === 5;
+    rec("app.mbstyleCompiled", compiled && cv?.spec === true, detail);
+  }
 }
 
 srv.close();

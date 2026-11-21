@@ -5,7 +5,7 @@ import { chromium } from "file:///C:/devin/kasugai_canvas/.testtmp/node_modules/
 import { writeFileSync, mkdirSync } from "node:fs";
 
 const BASE = "http://127.0.0.1:8510";
-const PROJECT = "ProjectFiles";
+const PROJECT = "_qml_verify";
 const OUT = new URL(".", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const SHOTS = `${OUT}live-export`;
 mkdirSync(SHOTS, { recursive: true });
