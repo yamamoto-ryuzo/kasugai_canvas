@@ -134,6 +134,31 @@
       ]
     },
     {
+      // ==== エンジン自体の自前配信・改造・AI 教材利用（CDN を使わない運用） ====
+      label: '2. エンジン自前配信・教本',
+      href: 'engine-customize.html',
+      items: [
+        { href: 'engine-customize.html', text: '2-1 自前配信・独自カスタマイズ' },
+        { href: 'engine-ai-textbook.html', text: '2-2 AI 教本としての利用（自前 WebGIS 開発）' },
+      ]
+    },
+    {
+      // ==== 閉鎖環境（ライブラリも同梱して CDN ゼロにする配信形態） ====
+      label: '3. 閉鎖環境での利用',
+      href: 'engine-offline.html',
+      items: [
+        { href: 'engine-offline.html', text: '3-1 ライブラリのローカル化（Cesium 等）' },
+      ]
+    },
+    {
+      // ==== プラグインによるユーザーパネル追加（パネルタブ拡張。今後拡大） ====
+      label: '4. ユーザーパネル',
+      href: 'user-panels.html',
+      items: [
+        { href: 'user-panels.html', text: '4-1 パネル追加・カスタムレイヤ表示' },
+      ]
+    },
+    {
       // ==== 技術資料（UI パネルに対応しない技術系ドキュメント・tech/ 配下） ====
       section: '技術資料',
       label: '1. 設定・システム構成',

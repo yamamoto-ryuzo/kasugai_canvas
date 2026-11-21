@@ -1691,7 +1691,7 @@ async function handleLocalChatCommand(text) {
 
 // AIが書き込むコードの適用前確認。コード全文を表示し、ユーザーが明示承認した場合のみ true。
 // ストレージプラグインは読み込まれると kasugaiApi へフルアクセスできるため必須のガード
-function confirmPluginApply({ id, name, code }) {
+export function confirmPluginApply({ id, name, code }) {
   return new Promise(resolve => {
     const overlay = document.createElement("div");
     overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;";

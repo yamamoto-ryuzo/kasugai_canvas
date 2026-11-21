@@ -40,6 +40,18 @@
       "options": {
         "port": 8089
       }
+    },
+    {
+      "id": "sample-layer-panel",
+      "name": "レイヤパネル(サンプル)",
+      "version": "0.1.0",
+      "url": "./PLUGIN/sample-layer-panel/plugin.js"
+    },
+    {
+      "id": "custom-layer",
+      "name": "カスタムレイヤ(サンプル)",
+      "version": "0.1.0",
+      "url": "./PLUGIN/custom-layer/plugin.js"
     }
   ]
 }

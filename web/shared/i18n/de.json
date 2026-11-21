@@ -1011,5 +1011,7 @@
   "legend.showAll": "Alle einblenden",
   "legend.hideAll": "Alle ausblenden",
   "legend.viewVertical": "Vertikal",
-  "legend.viewTabs": "Tabs"
+  "legend.viewTabs": "Tabs",
+  "tab.layers.system": "Systemebenen",
+  "tab.systemPrefix": "System-"
 }

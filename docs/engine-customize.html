@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>エンジン自前配信・教本としての利用 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+  <style>
+    .ftree { font-family: ui-monospace, Consolas, "Noto Sans JP", monospace; background: #f6f8fa; border-radius: 8px; padding: 14px 18px; }
+    .ftree .ft-root { font-weight: 700; margin-bottom: 4px; }
+    .ftree ul { list-style: none; margin: 0; padding-left: 0; }
+    .ftree ul ul { border-left: 1px solid #c9d2dc; margin-left: .55em; }
+    .ftree li { position: relative; padding: 3px 0 3px 1.4em; }
+    .ftree ul ul li::before { content: ""; position: absolute; left: 0; top: .95em; width: 1em; border-top: 1px solid #c9d2dc; }
+    .ftree ul ul li:last-child::after { content: ""; position: absolute; left: -1px; top: 1em; bottom: 0; background: #f6f8fa; }
+    .ft-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5em; }
+    .ft-tag { font-size: .7em; padding: .1em .55em; border-radius: 8px; font-weight: 700; white-space: nowrap; }
+    .ft-tag.engine { background: #e9f7ee; color: #237a44; border: 1px solid #2e9e56; }
+    .ft-tag.core { background: #e8f0fb; color: #2358a8; border: 1px solid #4a7ec9; }
+    .ft-tag.opt { background: #eef0f3; color: #5a6577; border: 1px solid #9aa5b1; }
+    .ft-note { color: #5a6577; font-family: inherit; font-size: .85em; }
+    /* WEBVIEW配布枠（geo_webview 出力の配置先）— 枠ごと薄い黄色 */
+    .ftree.qgis { background: #fff9e0; border: 1px solid #e8d48b; }
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>エンジン自前配信 — CDN を使わない独自 WebGIS / カスタマイズ / WebGIS 開発の教本としての利用</p>
+    </header>
+    <main>
+      <section>
+        <h2>1. 概要 — <code>web/</code> はビルド不要の静的ファイル一式</h2>
+        <p>
+          KASUGAI Canvas のエンジン本体は <code>web/</code> フォルダの静的ファイル（HTML・JS・CSS）だけで構成されており、
+          <strong>ビルド工程も npm install もありません</strong>。
+          CDN ホスト版（<a href="https://yamamoto-ryuzo.github.io/kasugai-canvas-web/">kasugai-canvas-web</a>）は
+          この <code>web/</code> を GitHub Pages へコピーしたものにすぎません。
+          つまり <code>web/</code> を<strong>任意の HTTP サーバー・任意の静的ホストへ置くだけで、
+          そのまま KASUGAI Canvas として動作</strong>します（ライセンスは MIT）。
+        </p>
+        <p>このページでは次の3つの用途を説明します。</p>
+        <ul>
+          <li><strong>自前配信</strong>: 社内サーバーや GitHub Pages 等へ自分でエンジンを置き、独自 WebGIS として公開する（本ページ）</li>
+          <li><strong>独自カスタマイズ</strong>: 画面・挙動・配色を改造して自社向け WebGIS のベースにする（本ページ）</li>
+          <li><strong>AI 教本</strong>: 独自に各エンジンで WebGIS を開発する際、<code>web/</code> の実装コードを AI エージェントへ参照材料として読み込ませる（<a href="engine-ai-textbook.html">2-2 AI 教本としての利用</a>）</li>
+        </ul>
+        <p>
+          対象は主要4エンジン（<code>cesium</code> / <code>maplibre</code> / <code>openlayers</code> / <code>leaflet</code>）です。
+          なお、コードを書かずに画面構成を調整したいだけなら <a href="ui-config.html">UI カスタマイズ（ui.config.json）</a> で済みます — まずそちらを検討してください。
+        </p>
+        <figure class="mermaid-fig"><figcaption>作業の流れ</figcaption>
+<pre class="mermaid" aria-label="自前配信の作業フロー">
+flowchart LR
+  A["1. web/ を取得<br/>リポジトリ or 配布 ZIP"]
+  B["2. 静的ホストへ配置<br/>web/ 丸ごとコピー（サブパス可）"]
+  C["3. ブラウザで開く<br/>…/&amp;lt;配置dir&amp;gt;/cesium/ 等"]
+  D["プロジェクト登録<br/>geo_webview 出力を<br/>projects/&amp;lt;id&amp;gt;/ + projects.json"]
+  E["独自カスタマイズ<br/>ui.config.json / styles.css /<br/>app.js / shared/"]
+  F["閉鎖環境化<br/>ライブラリを web/engine/ に<br/>→ 3. 閉鎖環境での利用"]
+
+  A --&gt; B --&gt; C
+  C -.->|任意| D
+  C -.->|任意| E
+  C -.->|CDN を切る場合| F
+
+  style D fill:#fff9e0,stroke:#e8d48b,color:#333
+  style F fill:#e8f0fb,stroke:#7fa8d9,color:#333
+</pre>
+</figure>
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+        </script>
+      </section>
+
+      <section>
+        <h2>2. フォルダ構成 — <code>web/</code> の中身</h2>
+        <p>
+          <code>web/</code> がエンジン本体です。<strong>配布単位・改造単位ともにこの1フォルダ</strong>で、
+          全体像は3ブロックに分かれます。<span style="background:#fff9e0;border:1px solid #e8d48b;padding:1px .5em;border-radius:6px;">黄色の枠</span>は
+          QGIS <code>geo_webview</code> のエクスポート出力の配置先です。
+        </p>
+
+        <h3>2-1. 4エンジン必須</h3>
+        <p>4エンジンの動作に必要な一式。<strong>このブロックだけコピーすれば動く最小構成</strong>です。</p>
+        <div class="ftree">
+          <div class="ft-root">web/ ← このフォルダ丸ごと = エンジン本体（静的ファイルのみ・ビルド不要）</div>
+          <ul>
+            <li>
+              <div class="ft-row"><code>index.html</code><span class="ft-note"><code>?engine=</code> で各エンジンへ振り分けるリダイレクタ（既定 cesium）</span></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>favicon.ico</code></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>cesium/</code><span class="ft-tag engine">エンジン別</span><span class="ft-note">メインエンジン（フル機能・3D）</span></div>
+              <ul>
+                <li><div class="ft-row"><code>index.html</code><span class="ft-note">UI 構造（タブ・パネル・ボタン）＋ ライブラリ CDN 読込・importmap</span></div></li>
+                <li><div class="ft-row"><code>app.js</code><span class="ft-note">エンジン別フロント（薄いアダプタ）— .kasc → Cesium API の写像</span></div></li>
+                <li><div class="ft-row"><code>styles.css</code><span class="ft-note">見た目・配色・レイアウト</span></div></li>
+                <li><div class="ft-row"><code>plugins.json</code> + <code>PLUGIN/</code><span class="ft-note">拡張プラグイン（<code>plugin:</code> 行宣言でパネル追加）</span></div></li>
+                <li><div class="ft-row"><code>ui.config.sample.json</code><span class="ft-note">ui.config.json の雛形（<a href="ui-config.html">UI カスタマイズ</a>）</span></div></li>
+              </ul>
+            </li>
+            <li>
+              <div class="ft-row"><code>maplibre/</code> <code>openlayers/</code> <code>leaflet/</code><span class="ft-tag engine">エンジン別</span><span class="ft-note">同構成の 2D プレイヤー（index.html / app.js / styles.css / PLUGIN/）</span></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>shared/</code><span class="ft-tag core">全エンジン共通</span><span class="ft-note">エンジン非依存コア — ここを変えると4エンジンすべてに効く</span></div>
+              <ul>
+                <li><div class="ft-row"><code>kasc.js</code><span class="ft-note">.kasc パーサ・読込器・カメラ/縮尺換算・テンプレート生成</span></div></li>
+                <li><div class="ft-row"><code>vector-load.js</code><span class="ft-note">形式デコード（GeoParquet/FlatGeobuf/GPKG/DuckDB-WASM）→ GeoJSON 正規化</span></div></li>
+                <li><div class="ft-row"><code>qml-style.js</code> / <code>qml-2d.js</code><span class="ft-note">QGIS スタイル（QML）コンパイラ</span></div></li>
+                <li><div class="ft-row"><code>where-eval.js</code> <code>portal.js</code> <code>player-api.js</code> <code>ui-config.js</code> …<span class="ft-note">機能別モジュール</span></div></li>
+                <li><div class="ft-row"><code>i18n/</code><span class="ft-note">9言語 JSON カタログ</span></div></li>
+              </ul>
+            </li>
+            <li>
+              <div class="ft-row"><code>sw-duckdb.js</code><span class="ft-note">Service Worker（cesium の DuckDB-WASM 永続キャッシュ。無くても起動可・キャッシュ効果だけ失われる）</span></div>
+            </li>
+          </ul>
+        </div>
+        <p>
+          <small>
+            <code>&lt;engine&gt;/</code> と <code>shared/</code> の分かれ目がこの設計の骨格です。
+            改造は「エンジン固有の画面・描画 → <code>&lt;engine&gt;/</code>」「データ形式・.kasc 仕様・スタイル解釈 → <code>shared/</code>」に振り分けてください。
+          </small>
+        </p>
+
+        <h3>2-2. WEBVIEW配布（geo_webview 出力の配置先）</h3>
+        <p>QGIS プラグイン <code>geo_webview</code> のエクスポート出力を置く場所。<code>?kasc=</code> 無しでもプロジェクト選択肢に出ます。</p>
+        <div class="ftree qgis">
+          <div class="ft-root">web/projects/</div>
+          <ul>
+            <li><div class="ft-row"><code>projects.json</code><span class="ft-note">一覧マニフェスト。<code>{"id":"&lt;id&gt;","title":"表示名"}</code> を追記して登録</span></div></li>
+            <li>
+              <div class="ft-row"><code>&lt;id&gt;/</code><span class="ft-note">フォルダ名 = プロジェクト ID（実例: <code>sample_qgis/</code>）</span></div>
+              <ul>
+                <li><div class="ft-row"><code>kasugai_canvas.kasc</code><span class="ft-note">geo_webview の Export 出力をそのまま置く（必須）</span></div></li>
+                <li><div class="ft-row"><code>canvas_data/</code><span class="ft-note">同じく出力一式 — GeoJSON・<code>.qml</code> スタイル・SVG シンボル等（.kasc の相対参照はこのフォルダ基準）</span></div></li>
+                <li><div class="ft-row"><code>project.json</code><span class="ft-note">表示名 <code>{"title":"…"}</code>（任意）</span></div></li>
+                <li><div class="ft-row"><code>bookmarks.xml</code><span class="ft-note">QGIS ブックマーク出力（任意）</span></div></li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+        <p>
+          <small>
+            エクスポート出力（<code>.kasc</code> + <code>canvas_data/</code>）を <code>web/projects/&lt;id&gt;/</code> へ展開し
+            <code>projects.json</code> に1行登録するだけで起動時のプロジェクト選択肢に出ます。
+            <code>web/</code> の外へ置く場合は <code>?kasc=&lt;.kascのURL&gt;</code>（<a href="datahost.html">外部ホスト配信</a>参照）。
+          </small>
+        </p>
+
+        <h3>2-3. その他</h3>
+        <p>4エンジンの動作には不要なもの。自前配信で削っても構いません。</p>
+        <div class="ftree">
+          <div class="ft-root">web/</div>
+          <ul>
+            <li>
+              <div class="ft-row"><code>gsimaps/</code> <code>navara/</code><span class="ft-tag opt">対象外</span><span class="ft-note">vendor 依存エンジン（本ページでは扱わない）</span></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>vendor/</code> + <code>vendor-proxy-sw.js</code><span class="ft-tag opt">配布物には同梱しない</span><span class="ft-note">上流ライブラリの既定置き場＋gsimaps/navara 用の同一オリジン中継 SW。閉鎖環境で4エンジンのライブラリ実体を置く場合は別名の <code>web/engine/</code> を使う（<a href="engine-offline.html">3. 閉鎖環境</a>参照）</span></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>admin/</code><span class="ft-note">管理画面（ui-config-admin.html 等。CDN にも配信される）</span></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>verify/</code> <code>test-import.html</code> <code>portal-test.html</code><span class="ft-note">動作確認・小さなサンプルページ</span></div>
+            </li>
+            <li>
+              <div class="ft-row"><code>download/</code><span class="ft-note">bridge-hub 等の配布物</span></div>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. 自前配信の手順</h2>
+        <h3>3-1. 最小手順</h3>
+        <ol>
+          <li><code>web/</code> フォルダを丸ごと静的ホストへコピーする（サブパス配信でもよい。内部参照はすべて相対パス）</li>
+          <li><code>https://&lt;ホスト&gt;/&lt;配置dir&gt;/cesium/</code> をブラウザで開く。ルートの <code>index.html</code> は <code>?engine=</code> で各エンジンへ振り分けるリダイレクタ</li>
+        </ol>
+        <p>
+          取得は CDN リポジトリ <code>kasugai-canvas-web</code> の <code>stable/</code>（リリース済みの公開物と同じ一式）を基本にします。
+          配布に必要なフォルダだけを tar から抜き出すのが簡単です:
+        </p>
+        <pre><code># stable/ だけを取得
+curl -L https://github.com/yamamoto-ryuzo/kasugai-canvas-web/archive/refs/heads/main.tar.gz | tar -xz '*/stable' --strip-components=1
+
+# unstable/ の場合（開発版）
+curl -L https://github.com/yamamoto-ryuzo/kasugai-canvas-web/archive/refs/heads/main.tar.gz | tar -xz '*/unstable' --strip-components=1</code></pre>
+        <p>リポジトリを <code>kasugai_canvas</code>（対象 <code>web</code>）に差し替えれば、開発中の正本も同じ手順で取れます。</p>
+        <p>
+          <code>.git</code> は付かず、<code>stable/</code> の中身だけがそのまま展開されます
+          （<code>git clone</code> + sparse checkout でも部分的には取れますが、<code>.git</code> とリポジトリ直下のファイルが付くため配布用にはこの方法が簡単です）。
+        </p>
+        <p>ローカルでの動作確認は任意の静的サーバーで構いません。例:</p>
+        <pre><code>cd stable
+python -m http.server 8000
+# → http://localhost:8000/cesium/  を開く</code></pre>
+        <ul>
+          <li><strong><code>file://</code> 直開きは不可</strong> — ES module・fetch・Service Worker が動かないため、必ず HTTP 配信にしてください</li>
+          <li><strong>プロジェクトデータ</strong>: <code>web/projects/</code> に同梱のサンプルが選択肢に出ます。<code>?kasc=&lt;.kasc のURL&gt;</code> を付ければ外部ホスト上のプロジェクトもそのまま再生できます（仕様は <a href="datahost.html">ブラウザ WebGIS（外部ホスト配信）</a> と同じ。エンジンの URL が自分のホストに変わるだけです）</li>
+        </ul>
+        <h3>3-2. 自前配信で動かない機能</h3>
+        <p>
+          フロントは起動時に <code>/api/capabilities</code> でサーバー能力を検出して UI を出し分けるため、
+          <strong>純粋な静的配信でもエラーにはならず、サーバー依存機能のボタンが自動で消えます</strong>。
+          失われるのはローカルアプリ（Rust サーバー）専用の機能です:
+        </p>
+        <ul>
+          <li>設定のサーバー保存・プロジェクトのファイル書き込み</li>
+          <li>rclone クラウドストレージ連携・ローカルファイル保存（V5 のアプリ機能）</li>
+          <li><code>/api/gemini</code> プロキシ経由のキーレス内蔵 AI（AI チャット自体はブリッジハブ等の別経路で使えます）</li>
+          <li>自動更新（自前配信はファイルの差し替え＝自分で管理）</li>
+        </ul>
+        <h3>3-3. Service Worker 系の注意</h3>
+        <ul>
+          <li>DuckDB-WASM の永続キャッシュ（<code>sw-duckdb.js</code>）や vendor 中継（<code>vendor-proxy-sw.js</code>）は Service Worker 前提のため <strong>https または localhost</strong> が必要です。登録失敗時は握り潰す設計なので、http のイントラ IP 直叩きでも基本機能は動きます（キャッシュ効果が無いだけです）</li>
+        </ul>
+      </section>
+
+      <section id="deps">
+        <h2>4. 外部ライブラリの依存関係（CDN 参照の内訳）</h2>
+        <p>
+          4エンジンとも<strong>描画ライブラリ本体は CDN からピン留めバージョンで読み込み</strong>ます。
+          自前の完全ホスト（閉域網・CDN ポリシー制約など）にする場合は、下表の URL をローカルファイルへ差し替えます。
+        </p>
+        <table>
+          <thead><tr><th>エンジン</th><th>必須ライブラリ（起動時ロード）</th><th>参照箇所</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>cesium</code></td>
+              <td><code>cesium@1.147.0</code>（Cesium.js + widgets.css、jsdelivr）<br><code>three@0.187.0</code>（unpkg・importmap）</td>
+              <td><code>cesium/index.html</code></td>
+            </tr>
+            <tr>
+              <td><code>maplibre</code></td>
+              <td><code>maplibre-gl@6.19.0</code>（css は index.html、<code>.mjs</code> は app.js 先頭の import）</td>
+              <td><code>maplibre/index.html</code>・<code>app.js</code></td>
+            </tr>
+            <tr>
+              <td><code>openlayers</code></td>
+              <td><code>ol@10.11.0</code>（個別モジュールを app.js で import）＋ <code>rbush</code>/<code>earcut</code>/<code>pbf</code>/<code>geotiff</code>/<code>zarrita</code>（importmap・<code>+esm</code>）</td>
+              <td><code>openlayers/index.html</code>・<code>app.js</code></td>
+            </tr>
+            <tr>
+              <td><code>leaflet</code></td>
+              <td><code>leaflet@1.9.4</code>（js + css、jsdelivr）</td>
+              <td><code>leaflet/index.html</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <h3>4-1. 機能別の遅延ロード（該当データを読む時だけ取得）</h3>
+        <table>
+          <thead><tr><th>ライブラリ</th><th>使われる機能</th><th>参照箇所</th></tr></thead>
+          <tbody>
+            <tr><td><code>@duckdb/duckdb-wasm</code></td><td><code>geoparquet:</code>・<code>duckdb:</code>・<code>sql:</code> 行のブラウザ内クエリ</td><td>app.js（遅延 import）</td></tr>
+            <tr><td><code>hyparquet</code> 系・<code>flatgeobuf</code></td><td>GeoParquet / FlatGeobuf デコード</td><td><code>shared/vector-load.js</code></td></tr>
+            <tr><td><code>deck.gl</code></td><td><code>3dtiles:</code> のオーバーレイ・3D Tiles ドレープ（2D エンジン）</td><td>maplibre / leaflet の app.js</td></tr>
+            <tr><td><code>pmtiles</code>・<code>jszip</code></td><td>PMTiles・KMZ 等</td><td>maplibre app.js</td></tr>
+            <tr><td><code>leaflet.markercluster</code>・<code>leaflet.heat</code>・<code>leaflet.vectorgrid</code></td><td>クラスタ・ヒートマップ・MVT（leaflet）</td><td>leaflet app.js（<code>loadScriptOnce</code>）</td></tr>
+            <tr><td><code>heatmap.js</code></td><td>ヒートマップ（cesium）</td><td>cesium app.js</td></tr>
+          </tbody>
+        </table>
+        <p>
+          これらは機能使用時に初めて取りに行くため、使わない形式を含まない運用なら差し替え不要です。
+          洗い出しは <code>cdn.jsdelivr.net</code>・<code>unpkg.com</code> で <code>web/</code> 内を grep するのが確実です。
+        </p>
+        <h3>4-2. オフライン / クローズド網化の手順</h3>
+        <p>汎用手順は次の通りです。<strong>Cesium 本体の具体的なローカル化手順は <a href="engine-offline.html">3. 閉鎖環境での利用</a> を参照</strong>してください。</p>
+        <ol>
+          <li>上表のバージョンの npm dist ファイルをダウンロードし、<code>web/vendor/</code> 等へ配置</li>
+          <li><code>index.html</code> の <code>&lt;script&gt;</code>/<code>&lt;link&gt;</code>/<code>importmap</code> と、<code>app.js</code> 先頭の CDN import を相対パスへ書き換える（importmap 方式は値の書き換えだけで済みます）</li>
+          <li>タイル・検索 API 等の<strong>データ参照先も外部 URL</strong>（地理院タイル・OSM 等）なので、完全オフライン化では自前タイルサーバー・ローカルタイルを .kasc で参照します</li>
+        </ol>
+        <p>
+          <small>補足: vendor 依存エンジン（navara・gsimaps）では <code>vendor-proxy-sw.js</code> が <code>vendor/*</code> を
+          <code>vendor.json</code> のピン先から同一オリジン中継しており、<code>tools/fetch_vendor.py</code> で実体を取得して
+          <code>?hosted=&lt;base&gt;</code> のミラーモードに切り替える仕組みがあります。4エンジンのライブラリ差し替えにも同じ考え方が使えます。</small>
+        </p>
+      </section>
+
+      <section>
+        <h2>5. 独自カスタマイズの勘所（どこを触るか）</h2>
+        <table>
+          <thead><tr><th>ファイル・フォルダ</th><th>役割</th><th>改造の効果範囲</th></tr></thead>
+          <tbody>
+            <tr><td><code>web/&lt;engine&gt;/ui.config.json</code></td><td>機能の表示/非表示・初期値・起動タブ・ヘルプ先</td><td>コード無しでできる調整はまずこれ（<a href="ui-config.html">UI カスタマイズ</a>）</td></tr>
+            <tr><td><code>web/&lt;engine&gt;/index.html</code></td><td>UI 構造 — パネル・タブ・ボタンの DOM</td><td>そのエンジンの画面構成</td></tr>
+            <tr><td><code>web/&lt;engine&gt;/styles.css</code></td><td>見た目・配色・レイアウト</td><td>そのエンジンの外観</td></tr>
+            <tr><td><code>web/&lt;engine&gt;/app.js</code></td><td>エンジン別フロント（薄いアダプタ）— .kasc の各行をそのエンジンの API へ写像</td><td>そのエンジンの描画・操作ロジック</td></tr>
+            <tr><td><code>web/shared/</code></td><td><strong>エンジン非依存コア</strong> — .kasc パーサ（kasc.js）・形式デコーダ（vector-load.js）・QML スタイルコンパイラ（qml-style.js/qml-2d.js）・where 評価・ポータル・player-api・i18n</td><td><strong>全エンジン共通</strong> — ここを変えると4エンジンすべてに効く</td></tr>
+            <tr><td><code>web/&lt;engine&gt;/PLUGIN/</code> + <code>plugins.json</code></td><td>拡張プラグイン（パネル追加）— <code>plugin:</code> 行宣言で読み込み</td><td>機能追加はプラグインとして書くのが本体改変より保守しやすい</td></tr>
+            <tr><td><code>web/projects/</code></td><td>同梱サンプルプロジェクト（<code>default</code> 等）</td><td>配信時の初期表示データ</td></tr>
+            <tr><td><code>web/vendor/</code></td><td>上流スナップショット（navara/gsimaps 用）</td><td><strong>改変禁止</strong> — 再取得で消えます</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li><strong>改造の基本方針</strong>: エンジン固有の見た目・操作は <code>&lt;engine&gt;/</code> 側、データ形式・.kasc 仕様・スタイル解釈は <code>shared/</code> 側に置くのがこの設計の分かれ目です。新しいデータ形式や .kasc 行タイプを追加する場合は <code>shared/</code> に実装すれば全エンジンで使えます</li>
+          <li><strong>ライセンス</strong>: MIT — フォーク・改変・商用・再配布いずれも自由です（著作権表示の保持のみ必須）</li>
+          <li><strong>追従</strong>: 正本は <code>kasugai_canvas</code> リポジトリの <code>web/</code> です。自前改造は fork 管理にし、上流の変更は自分で取り込みます</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>6. 関連リンク</h2>
+        <ul>
+          <li><a href="ui-config.html">UI カスタマイズ（ui.config.json）— コード無しの画面調整</a></li>
+          <li><a href="engine-ai-textbook.html">2-2 AI 教本としての利用（自前 WebGIS 開発）</a></li>
+          <li><a href="engine-offline.html">3. 閉鎖環境での利用（ライブラリのローカル化）</a></li>
+          <li><a href="datahost.html">ブラウザ WebGIS（外部ホスト配信）— ?kasc= によるデータ分離</a></li>
+          <li><a href="engines.html">エンジン（特徴と使い分け）</a> / <a href="library.html">ライブラリ</a> / <a href="architecture.html">システム構成</a></li>
+          <li><a href="use/6-2-インスペクター.html">.kasc 設定仕様（インスペクター）</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+      <p><a href="ui-config.html">← カスタマイズへ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>

@@ -1011,5 +1011,7 @@
   "legend.showAll": "全表示",
   "legend.hideAll": "全非表示",
   "legend.viewVertical": "縦表示",
-  "legend.viewTabs": "タブ表示"
+  "legend.viewTabs": "タブ表示",
+  "tab.layers.system": "ｼｽﾃﾑﾚｲﾔ",
+  "tab.systemPrefix": "ｼｽﾃﾑ"
 }

@@ -2644,6 +2644,7 @@ function maybeLoadEntry(entry) {
 
 window.kasugaiApi = createPlayerApi({
   engine: "gsimaps",
+  legendSwatchUrl: qmlLegendSwatchDataUrl,
   getEntries: () => layerEntries,
   getBaseEntries: () => baseEntries,
   getProjectId: () => currentProjectId,

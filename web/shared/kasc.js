@@ -300,6 +300,44 @@ export function parseKasc(text) {
   return doc;
 }
 
+// plugin: 行の key=value 値の型変換。真偽値・数値・カンマ区切り(配列)を解釈する
+function coerceKascPluginOption(raw) {
+  if (/^(true|on|yes)$/i.test(raw)) return true;
+  if (/^(false|off|no)$/i.test(raw)) return false;
+  if (raw !== "" && Number.isFinite(Number(raw))) return Number(raw);
+  if (raw.includes(",")) return raw.split(",").map(part => coerceKascPluginOption(part.trim()));
+  return raw;
+}
+
+// plugin: 行の値部("id | key=value | url= | off")→ {id, options, off, url}。
+// url= はプラグインコードの設置場所(.kasc 埋め込み指定)で options には含めない。
+// Cesium の applyInspector と同じ規則（同時に揃えて変更すること）
+export function parseKascPluginSpec(value) {
+  const parts = String(value || "").split("|").map(part => part.trim());
+  const id = parts[0] || "";
+  if (!id || id.includes("=")) return null;
+  const spec = { id, options: {}, off: false, url: "" };
+  for (const part of parts.slice(1)) {
+    if (!part) continue;
+    if (/^(off|false|disable)$/i.test(part)) { spec.off = true; continue; }
+    if (/^(on|true|enable)$/i.test(part)) continue;
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    const key = part.slice(0, eq).trim();
+    if (!key) continue;
+    if (key === "url") { spec.url = part.slice(eq + 1).trim(); continue; }
+    spec.options[key] = coerceKascPluginOption(part.slice(eq + 1).trim());
+  }
+  return spec;
+}
+
+// "plugin: …" の1行そのものから spec を取る（doc.unsupported の item.line 用）
+export function parseKascPluginLine(line) {
+  const sep = String(line || "").indexOf(":");
+  if (sep < 0 || line.slice(0, sep).trim().toLowerCase() !== "plugin") return null;
+  return parseKascPluginSpec(line.slice(sep + 1).trim());
+}
+
 // 可視性フラグ(on/off)の書き換え対象外となる非レイヤ行タイプ。
 // これ以外の既知・未知の行タイプはすべて「表示を持つレイヤ行」として扱う
 export const NON_LAYER_TYPES = new Set([

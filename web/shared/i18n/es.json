@@ -1011,5 +1011,7 @@
   "legend.showAll": "Mostrar todo",
   "legend.hideAll": "Ocultar todo",
   "legend.viewVertical": "Vertical",
-  "legend.viewTabs": "Pestañas"
+  "legend.viewTabs": "Pestañas",
+  "tab.layers.system": "Capas del sistema",
+  "tab.systemPrefix": "Sistema "
 }

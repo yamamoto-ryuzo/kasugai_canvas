@@ -47,6 +47,9 @@ KASUGAI Canvas のマルチエンジン化に伴う、エンジン非依存モ�
 | `qml-style.js` / `qml-2d.js` | QGIS .qml スタイルのコンパイルと 2D エンジンへの適用アダプタ |
 | `attr-widget.js` / `attr-stats.js` | 画面下部ドッキングの属性テーブル（Σ 集計・CSV/TSV 出力）と集計計算 |
 | `player-api.js` | 2D プレイヤー向け `window.kasugaiApi` アダプタ（AI ツール公開の土台） |
+| `plugin-panels.js` | プラグインのユーザーパネル追加機構（`createPanelHost`/`attachPanelApi`）。タブ＋パネルの DOM 規約差（Cesium `.panel-tab`/`.plugin-panel`・プレイヤー `.tab`/`.tab-pane`）を `mode` で吸収し、全エンジンで同一の `registerPanel`/`selectPanel`/`listPanels` API 面を提供 |
+| `layer-view.js` | プラグインパネル用レイヤ一覧ビュー（`renderLayerView`/`bindLayerView`）。`listLayers()`＋`layers-changed` で自動追従し、`groupBy`/`sort`/`filter`/`decorateRow`/`decorateGroup` で表示をカスタマイズ |
+| `plugin-storage.js` | ストレージプラグイン（IndexedDB "kasugai-canvas"/"plugins"・ブラウザローカル）＋ inspector(plugin:行) ローダー。`installStoragePluginSupport(api)` で `listStoragePlugins`/`saveStoragePlugin`/`removeStoragePlugin`/`setStoragePluginEnabled`/`publishStoragePlugin` 等と最小ローダー（Blob URL import＋自動ロード＋パネル撤去）を api へ取り付け。`setInspectorPlugins(specs)` で `plugin: id | url=<JS>` の .kasc 埋め込みプラグインも差分ロード/停止（url= は呼び出し側で `resolveKascUrl` 解決済みを渡す）。ユーザー向け設置・配布の標準経路は `url=`、IndexedDB は AI 生成プラグインの草稿・全プロジェクト常駐のための内部機構 |
 | `fly-kasc.js` | `fly_geojson:` 行 → フライパス定義＋player-api フック（全プレイヤーエンジン共通） |
 | `geo-tools-2d.js` / `export-formats.js` | ツールタブ（計測・標高断面・見通し・緯度経度グリッド・レイヤーエクスポート GeoJSON/CSV/TSV/KML/FGB/SHP）。描画は `{update(fc)}` オーバーレイへ委譲（`makeLeafletOverlay` は Leaflet 系向け共通実装） |
 | `spatial-ops.js` | GeoJSON 空間演算 — 包含/交差判定・範囲生成（矩形・測地線円）・ポリゴン内集計・バッファ（点は測地線円、ライン/面は turf.js 遅延ロード） |

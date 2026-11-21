@@ -4,7 +4,7 @@
 // UI/共通機構は shared/ を他エンジンと共用する。
 import ThreeView, { Color, fetchFontFamilyFromCss, vector3ToGeodetic } from "@navaramap/three";
 import { DefaultPlugin } from "@navaramap/three-default-plugin";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, normKascTitle, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha, setAllLayerGroupsExpanded, markerSymbolSpec, togeojsonIconSpec } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeight, camToZoomView, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmsTileTemplate, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, fillThemeSelect, kascTitleInTheme, normKascTitle, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha, setAllLayerGroupsExpanded, markerSymbolSpec, togeojsonIconSpec, parseKascPluginLine } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
@@ -27,6 +27,9 @@ import { initPrint } from "../shared/print.js";
 import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec, setMapScaleGetter, applyInvertedMaskGeojson, installLayerVisibilityResolver, linRefSamplesGeojson, QML_POS_CODE_TO_ANCHOR } from "../shared/qml-2d.js";
 import { rgbaToCss, markerLayersToCanvas, linRefFormatText } from "../shared/qml-style.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
+import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
+import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
+import { installStoragePluginSupport } from "../shared/plugin-storage.js";
 import { mountSunControls } from "../shared/sun-time.js";
 
 const TERRAIN_URL = "https://terrain.reearth.land/cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain";
@@ -618,6 +621,8 @@ function buildLayerList() {
   // "グループ/レイヤ名"（"//"は排他グループ）でグループセクション化する
   const grouped = new Map();
   for (const entry of layerEntries) {
+    // list=off 付きレイヤは標準タブに出さない(地図には描画される)
+    if (entry.item.opts?.list === "off") continue;
     const sp = splitKascTitle(entry.item.title);
     entry._leaf = sp.title;
     const key = `${sp.group}|${sp.exclusiveGroup ? "exclusive" : "regular"}`;
@@ -704,6 +709,9 @@ function buildLayerList() {
       liveWritebackEntries(layerEntries);
     });
   }
+
+  // プラグインパネル等の外部ビュー向けに一覧更新を通知する
+  window.kasugaiApi?.emit("layers-changed");
 }
 
 // ---- 凡例タブ: legend: 行の画像とレイヤ凡例を1つのセレクタで切替表示する ----
@@ -1588,6 +1596,8 @@ async function addKascLayer(item, baseUrl) {
   return null;
 }
 
+let lastPluginSpecs = []; // renderLayers で収集した plugin: 行 spec（api 生成前の初期描画対策）
+
 async function renderLayers(doc, baseUrl) {
   for (const e of layerEntries) { try { e.layer?.delete(); } catch (_) {} try { e.src?.delete(); } catch (_) {} }
   layerEntries.length = 0;
@@ -1596,6 +1606,14 @@ async function renderLayers(doc, baseUrl) {
   currentDefaultStyles = doc.defaultStyles || null;
   currentLegends = doc.legends || [];
   kascFlyPaths.setItems(doc.unsupported);
+  // plugin: 行 → ユーザーパネル等の起動（url= の .kasc 埋め込み / IndexedDB id 解決。
+  // plugin-storage.js の setInspectorPlugins が差分ロード/停止する。
+  // navara は api 生成より先に初期 renderLayers が走るため、最新 spec を
+  // lastPluginSpecs に保持し api セットアップ完了後に再適用する
+  lastPluginSpecs = doc.unsupported.filter(i => i.type === "plugin").map(i => parseKascPluginLine(i.line))
+    .filter(Boolean)
+    .map(s => s.url ? { ...s, url: resolveKascUrl(s.url, baseUrl) } : s);
+  void window.kasugaiApi?.setInspectorPlugins?.(lastPluginSpecs);
   const items = [...doc.layers, ...doc.unsupported.filter(u => u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type))]
     .sort((a, b) => (a._idx ?? 0) - (b._idx ?? 0));
   const unsupported = doc.unsupported.filter(u => u.type !== "3dtiles" && u.type !== "mvt" && u.type !== "fly_geojson" && !NON_LAYER_TYPES.has(u.type));
@@ -2461,6 +2479,7 @@ configureFollow({
 
   window.kasugaiApi = createPlayerApi({
     engine: "navara",
+    legendSwatchUrl: qmlLegendSwatchDataUrl,
     getProjectId: () => currentProjectId,
     getEntries: () => layerEntries,
     // 全ベース候補を返す（listBasemaps/setBasemap が選択肢全体を扱うため）。
@@ -2507,6 +2526,25 @@ configureFollow({
     // QGIS ライブ連携: /api/command の liveSync プッシュで即時反映(#62)
     liveSync: async args => liveUpdate(args),
     rerenderLayers: () => { buildLayerList(); syncAttribution(); },
+    // setLayerOrder の実描画反映: Navara は mount 順が描画順のため、
+    // 新しいエントリ順で作り直す(unmount は item.visible を false にするので退避)
+    applyEntryOrder: async entries => {
+      for (const e of entries) {
+        if (!e.layer && !e.src) continue;
+        const vis = e.item.visible;
+        try { e.layer?.delete(); } catch (_) {}
+        try { e.src?.delete(); } catch (_) {}
+        e.layer = e.src = e.desc = null;
+        e.item.visible = vis;
+      }
+      for (const e of entries) {
+        if (e.item.visible === false) continue;
+        const r = await addKascLayer(e.item, lastBaseUrl).catch(() => null);
+        if (r) { e.src = r.src; e.layer = r.layer; e.desc = r.desc; }
+        setEntryVisible(e, true);
+      }
+      syncAttribution();
+    },
     getFlyPaths: kascFlyPaths.getFlyPaths,
     persistFlyPath: kascFlyPaths.persistFlyPath,
     syncFlyPathLine: kascFlyPaths.syncFlyPathLine,
@@ -2547,6 +2585,21 @@ configureFollow({
       try { return view.memoryStats?.() ?? null; } catch (_) { return null; }
     },
   });
+
+  // ---- プラグインパネル（ユーザーパネル追加機構。shared/plugin-panels.js）----
+  attachPanelApi(window.kasugaiApi, createPanelHost({
+    nav: document.querySelector("#tabs"),
+    panels: document.querySelector("#panel"),
+    mode: "panes",
+  }));
+  window.kasugaiApi.renderLayerView = (container, opts = {}) => renderLayerView(container, window.kasugaiApi.listLayers(), { api: window.kasugaiApi, ...opts });
+  window.kasugaiApi.bindLayerView = (container, opts = {}) => bindLayerView(container, window.kasugaiApi, opts);
+  // ユーザー側設置プラグイン（IndexedDB・CDN でも有効。shared/plugin-storage.js）
+  installStoragePluginSupport(window.kasugaiApi);
+  // plugin: 行の url= 解決（canvas_data/ 等の相対参照 → プロジェクト基準 URL）に使う
+  window.kasugaiApi.resolveProjectUrl = resolveProjectUrl;
+  // 初期 renderLayers は api 生成前に走るため、収集済み spec をここで再適用する
+  void window.kasugaiApi.setInspectorPlugins?.(lastPluginSpecs);
 
   // 🏠ボタン・「地図を開く」・Esc・「ビュー解除」の配線(DOM は静的マークアップ)
   kascPortal().bindEvents();

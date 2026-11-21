@@ -18,7 +18,7 @@ import GeoTIFFSource from "https://cdn.jsdelivr.net/npm/ol@10.11.0/source/GeoTIF
 import GeoJSON from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/GeoJSON.js";
 import MVTFormat from "https://cdn.jsdelivr.net/npm/ol@10.11.0/format/MVT.js";
 import { fromLonLat, toLonLat, transformExtent, getPointResolution } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/proj.js";
-import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, markerSymbolSpec, togeojsonIconSpec, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates, setAllLayerGroupsExpanded } from "../shared/kasc.js";
+import { loadKascProject, NON_LAYER_TYPES, parseKasc, resolveKascUrl, camToZoom, zoomToCamHeightView, heightToViewZoom, viewZoomToHeight, groundCenterFromCam, parseUrlView, hasUrlView, writeUrlView, geojsonExtent, splitKascTitle, appendGroupedTitleOptions, syncBasemapList, sanitizeAttributionFragment, layerAttribution, loadKascInfoContent, buildWmtsTileTemplate, rewriteKascVisibility, rewriteKascLineVisibility, rewriteKascLineOpt, themeShowSet, kascTitleInTheme, normKascTitle, fillThemeSelect, loadKascBookmarks, parseQgisBookmarksXml, qgisBookmarkToCam, downloadQgisBookmarksXml, downloadKascCamLines, projectsBaseUrl, applyPanelTitle, resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, defaultPointRadius, cssColorWithAlpha, markerSymbolSpec, togeojsonIconSpec, kascOptOn, parseImageOverlay, kascScaleResRange, applyKascGroupStates, setAllLayerGroupsExpanded, parseKascPluginLine } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
 import { initI18n, t, applyI18n } from "../shared/i18n.js";
@@ -60,6 +60,9 @@ import LineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/LineString.
 import Polygon from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/Polygon.js";
 import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver, setMapScaleGetter } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
+import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
+import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
+import { installStoragePluginSupport } from "../shared/plugin-storage.js";
 import { defaults as defaultControls } from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/defaults.js";
 import ScaleLine from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/ScaleLine.js";
 import MousePosition from "https://cdn.jsdelivr.net/npm/ol@10.11.0/control/MousePosition.js";
@@ -1232,6 +1235,8 @@ function renderLayerRows(entries, unsupported) {
   // "グループ/レイヤ名"（"//"は排他グループ）でグループセクション化する
   const grouped = new globalThis.Map(); // Map は ol.Map でシャドウ済みのため globalThis 経由
   for (const entry of entries) {
+    // list=off 付きレイヤは標準タブに出さない(地図には描画される)
+    if (entry.item.opts?.list === "off") continue;
     const sp = splitKascTitle(entry.item.title);
     entry._leaf = sp.title;
     const key = `${sp.group}|${sp.exclusiveGroup ? "exclusive" : "regular"}`;
@@ -1328,6 +1333,8 @@ function renderLayerRows(entries, unsupported) {
   attrWidget.refresh();
   // 凡例タブのレイヤ選択凡例も最新へ追従させる
   renderLegendPicker();
+  // プラグインパネル等の外部ビュー向けに一覧更新を通知する
+  window.kasugaiApi?.emit("layers-changed");
 }
 
 // ---- 段階読み込み: 行ステータス・進捗・遅延ロード ----
@@ -1622,6 +1629,12 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   // 3dtiles: 行は deck.gl で対応するため未対応通知から外す
   // 3dtiles: は deck.gl、fly_geojson: はフライパスとして対応するため未対応通知から外す
   kascFlyPaths.setItems(doc.unsupported);
+  // plugin: 行 → ユーザーパネル等の起動（url= の .kasc 埋め込み / IndexedDB id 解決。
+  // plugin-storage.js の setInspectorPlugins が差分ロード/停止する）
+  void window.kasugaiApi?.setInspectorPlugins?.(
+    doc.unsupported.filter(i => i.type === "plugin").map(i => parseKascPluginLine(i.line))
+      .filter(Boolean)
+      .map(s => s.url ? { ...s, url: resolveKascUrl(s.url, baseUrl) } : s));
   const unsupported = doc.unsupported.filter(i => !OL_HANDLED_TYPES.has(i.type) && i.type !== "fly_geojson" && !NON_LAYER_TYPES.has(i.type));
 
   // base: は先頭が既定のベースマップ。transparent/none はモード指定（レイヤにしない）
@@ -2774,6 +2787,7 @@ async function saveToDataDir(name, content) {
 // ---- AI チャット連携（kasugaiApi アダプタ + shared/ai-chat.js） ----
 window.kasugaiApi = createPlayerApi({
   engine: "openlayers",
+  legendSwatchUrl: qmlLegendSwatchDataUrl,
   getEntries: () => layerEntries,
   getBaseEntries: () => currentBaseEntries,
   getProjectId: () => currentProjectId,
@@ -2786,6 +2800,15 @@ window.kasugaiApi = createPlayerApi({
   applyEntryVisibility, focusEntry, maybeLoadEntry,
   applyLegendFilter: entry => { entry.layer?.changed?.(); },
   rerenderLayers: () => renderLayerRows(layerEntries, currentUnsupported),
+  // setLayerOrder の実描画反映: 同一 zIndex 内は挿入順が描画順のため、
+  // エントリ層を一度除去して新しい順で insertEntryLayer に通し直す
+  applyEntryOrder: () => {
+    const layers = map.getLayers();
+    for (const e of layerEntries) {
+      if (e.layer && !e.layer._isDeck) { try { layers.remove(e.layer); } catch (_) {} }
+    }
+    layerEntries.forEach((e, i) => { if (e.layer && !e.layer._isDeck) insertEntryLayer(e, i); });
+  },
   getThemes: () => currentThemes,
   applyThemeByName: name => {
     const theme = currentThemes.find(t => t.name === name);
@@ -2864,6 +2887,18 @@ Object.assign(window.kasugaiApi, {
   openPortal() { openPortal(); return portalAvailable(); },
   closePortal() { closePortal(); return true; },
 });
+// ---- プラグインパネル（ユーザーパネル追加機構。shared/plugin-panels.js）----
+attachPanelApi(window.kasugaiApi, createPanelHost({
+  nav: document.querySelector("#tabs"),
+  panels: document.querySelector("#panel"),
+  mode: "panes",
+}));
+window.kasugaiApi.renderLayerView = (container, opts = {}) => renderLayerView(container, window.kasugaiApi.listLayers(), { api: window.kasugaiApi, ...opts });
+window.kasugaiApi.bindLayerView = (container, opts = {}) => bindLayerView(container, window.kasugaiApi, opts);
+// ユーザー側設置プラグイン（IndexedDB・CDN でも有効。shared/plugin-storage.js）
+installStoragePluginSupport(window.kasugaiApi);
+// plugin: 行の url= 解決（canvas_data/ 等の相対参照 → プロジェクト基準 URL）に使う
+window.kasugaiApi.resolveProjectUrl = resolveProjectUrl;
 mountEngineSwitcher(document.querySelector("#engines"), "openlayers");
 // カレント状態ファイル(Cesium規約)へ現在値を反映する(変化イベント駆動)
 bindSessionState("openlayers");

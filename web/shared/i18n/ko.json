@@ -1011,5 +1011,7 @@
   "legend.showAll": "모두 표시",
   "legend.hideAll": "모두 숨기기",
   "legend.viewVertical": "세로 표시",
-  "legend.viewTabs": "탭"
+  "legend.viewTabs": "탭",
+  "tab.layers.system": "시스템 레이어",
+  "tab.systemPrefix": "시스템 "
 }

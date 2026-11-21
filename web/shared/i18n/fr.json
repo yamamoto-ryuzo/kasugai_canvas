@@ -1011,5 +1011,7 @@
   "legend.showAll": "Tout afficher",
   "legend.hideAll": "Tout masquer",
   "legend.viewVertical": "Vertical",
-  "legend.viewTabs": "Onglets"
+  "legend.viewTabs": "Onglets",
+  "tab.layers.system": "Couches système",
+  "tab.systemPrefix": "Système "
 }

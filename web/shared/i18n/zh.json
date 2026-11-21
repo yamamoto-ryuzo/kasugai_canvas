@@ -1011,5 +1011,7 @@
   "legend.showAll": "全部显示",
   "legend.hideAll": "全部隐藏",
   "legend.viewVertical": "纵向",
-  "legend.viewTabs": "标签页"
+  "legend.viewTabs": "标签页",
+  "tab.layers.system": "系统图层",
+  "tab.systemPrefix": "系统"
 }

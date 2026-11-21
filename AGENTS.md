@@ -181,7 +181,7 @@ web/
 
 - **エンジン横断コードは `shared/`、エンジン固有コードは各エンジンフォルダに置く**。新規ファイルの置き場はこの基準で判断する
 - 認証・公開パスの許可リストは `/cesium/` 起点（`agent/app/main.py` の `_PUBLIC_PATHS`/`_PUBLIC_PREFIXES`・`workers/worker.js` の `PUBLIC_PATHS`/`PUBLIC_PREFIXES`）。新エンジン公開時は同様に更新する
-- `/api/plugins`（プラグイン保存/削除）の対象は `web/cesium/plugins.json`・`web/cesium/PLUGIN/`（プラグイン仕様は当面 Cesium 固有。エンジン横断プラグインは別途設計）
+- `/api/plugins`（プラグイン保存/削除）の対象は `web/cesium/plugins.json`・`web/cesium/PLUGIN/`（同梱カタログと `plugin-loader.js` は Cesium 固有。ただし `plugin:` 行のパース（`parseKascPluginSpec`/`parseKascPluginLine` in `shared/kasc.js`）と **.kasc 埋め込み `plugin: id | url=<JS>`** は全エンジン対応 — プレイヤー系は `shared/plugin-storage.js` の `setInspectorPlugins` が差分ロード/停止。クロスオリジンJSはコード確認ダイアログ経由。**ユーザーパネル追加** `registerPanel` とレイヤビュー `bindLayerView`/`renderLayerView` は `web/shared/plugin-panels.js`・`web/shared/layer-view.js` のエンジン非依存機構で、Cesium・maplibre・openlayers・leaflet・navara の `kasugaiApi` に同じ API 面で接続済み。`listLayers()` の各エントリは `options`(.kasc の key=value)を持ち、`api.setLayerOrder(keys)`(指定キー同士の相対順を指定順に・未指定は位置維持・先頭=最前面)も全エンジン対応 — 集約制御の参考実装は `PLUGIN/custom-layer`(site= キーで複数レイヤを1トグル制御)。**IndexedDB ストレージプラグイン**（AI 生成プラグインの草稿・全プロジェクト常駐の内部機構。ユーザー向け設置・配布の標準経路は `url=` の .kasc 埋め込み）も `installStoragePluginSupport` で全エンジン対応）
 - `sw-duckdb.js` の Service Worker スコープは登録元ディレクトリ（現状 `/cesium/`）。エンジンごとに登録する
 - API・データパスは `/api/*`・`/projects/*`・`/health` のルート起点で書く（`./api/` 等のページ相対はエンジン配下で壊れるため禁止）
 

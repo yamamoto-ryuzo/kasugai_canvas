@@ -1011,5 +1011,7 @@
   "legend.showAll": "Mostrar tudo",
   "legend.hideAll": "Ocultar tudo",
   "legend.viewVertical": "Vertical",
-  "legend.viewTabs": "Abas"
+  "legend.viewTabs": "Abas",
+  "tab.layers.system": "Camadas do sistema",
+  "tab.systemPrefix": "Sistema "
 }

@@ -33,7 +33,7 @@ import { compileWhereExpression, filterGeoJsonByWhere } from "../shared/where-ev
 import { executeOgrSelect } from "../shared/ogr-sql.js";
 import { createKascPortal } from "../shared/portal.js";
 import { createKascDashboard, featureCentroid } from "../shared/dashboard.js";
-import { parseKascDashValue, parseKascFormValue, parseKascStatValue, parseKascSearchValue, featurePopupMeta, togeojsonIconSpec } from "../shared/kasc.js";
+import { parseKascDashValue, parseKascFormValue, parseKascStatValue, parseKascSearchValue, featurePopupMeta, togeojsonIconSpec, parseKascPluginSpec } from "../shared/kasc.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
 import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
@@ -49,6 +49,9 @@ import { matchAttrCellFilter } from "../shared/attr-widget.js";
 import { loadScriptOnce } from "../shared/lazy-lib.js";
 import { initUiConfig } from "../shared/ui-config.js";
 import { isGeoTiffType, resolveGeoTiffItem, buildGeoTiffOverlayDataSource, createGeoTiffImageryProvider } from "./geotiff-layer.js";
+import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
+import { pluginStore } from "../shared/plugin-storage.js";
+import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
 
 import { createReportTool } from "../shared/report.js";
 import { installViewHistory } from "../shared/nav-tools.js";
@@ -755,54 +758,8 @@ function openAppDb() {
   });
 }
 
-// AI/ユーザー生成プラグインの保存先。配布物(PLUGIN/・plugins.json)とは分離された
-// ブラウザローカルの開発領域。レコードは {id,name,version,description,layer,code,enabled,updatedAt,lastError}
-const pluginStore = {
-  async list() {
-    try {
-      const db = await openAppDb();
-      return await new Promise(resolve => {
-        const query = db.transaction("plugins", "readonly").objectStore("plugins").getAll();
-        query.onsuccess = () => resolve(query.result || []);
-        query.onerror = () => resolve([]);
-      });
-    } catch (e) { return []; }
-  },
-  async get(id) {
-    try {
-      const db = await openAppDb();
-      return await new Promise(resolve => {
-        const query = db.transaction("plugins", "readonly").objectStore("plugins").get(id);
-        query.onsuccess = () => resolve(query.result ?? null);
-        query.onerror = () => resolve(null);
-      });
-    } catch (e) { return null; }
-  },
-  async put(record) {
-    const db = await openAppDb();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction("plugins", "readwrite");
-      tx.objectStore("plugins").put(record, record.id);
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-  },
-  async remove(id) {
-    const db = await openAppDb();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction("plugins", "readwrite");
-      tx.objectStore("plugins").delete(id);
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-    });
-  },
-  async setError(id, message) {
-    const record = await this.get(id);
-    if (!record) return;
-    record.lastError = message || "";
-    try { await this.put(record); } catch (e) {}
-  },
-};
+// AI/ユーザー生成プラグインの保存先は shared/plugin-storage.js の
+// pluginStore（IndexedDB "kasugai-canvas"・全エンジン共有）を使う。
 
 // プラグイン宣言レイヤー(plugins.json の layer 設定由来)。applyInspector で
 // layers/layerState/layerOrder がクリアされても再登録されるよう別リストで保持する
@@ -2558,6 +2515,8 @@ function renderLayerList() {
   const list = document.querySelector("#layer-list");
   const groupedLayers = new Map();
   getOrderedLayerItems().forEach(layer => {
+    // list=off 付きレイヤは標準タブに出さない(地図には描画される)
+    if (layer.opts?.list === "off") return;
     const group = layer.group || "";
     const key = `${group}|${layer.exclusiveGroup ? "exclusive" : "regular"}`;
     if (!groupedLayers.has(key)) groupedLayers.set(key, { group, exclusive: !!layer.exclusiveGroup, layers: [] });
@@ -2892,6 +2851,8 @@ function renderLayerList() {
   refreshTimeConfigLayers();
   // 凡例タブのレイヤ選択凡例も最新へ追従させる
   renderLegendPanelPicker();
+  // プラグインパネル等の外部ビュー向けに一覧更新を通知する
+  window.kasugaiApi?.emit("layers-changed");
 }
 
 function renderFlyPathSelect() {
@@ -7174,15 +7135,6 @@ async function updateStreetViewPickCoverage() {
   }
 }
 
-// plugin: 行の key=value 値の型変換。真偽値・数値・カンマ区切り(配列)を解釈する
-function coercePluginOptionValue(raw) {
-  if (/^(true|on|yes)$/i.test(raw)) return true;
-  if (/^(false|off|no)$/i.test(raw)) return false;
-  if (raw !== "" && Number.isFinite(Number(raw))) return Number(raw);
-  if (raw.includes(",")) return raw.split(",").map(part => coercePluginOptionValue(part.trim()));
-  return raw;
-}
-
 function applyInspector(text) {
   const nextLines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const parsedCameras = [];
@@ -7627,20 +7579,10 @@ function applyInspector(text) {
     // plugins.json カタログの同梱プラグインまたは IndexedDB ストレージプラグインを
     // このプロジェクトで有効化する。実際のロード/停止は plugin-loader が
     // inspector-plugins-changed を受けて差分実行する（プロジェクトスコープ扱い）
+    // url= は .kasc 埋め込みの設置場所指定（canvas_data/ 等の相対パス可）
     if (type === "plugin") {
-      const parts = value.split("|").map(part => part.trim());
-      const id = parts[0] || "";
-      if (!id || id.includes("=")) return;
-      const spec = { id, options: {}, off: false };
-      parts.slice(1).forEach(part => {
-        if (!part) return;
-        if (/^(off|false|disable)$/i.test(part)) { spec.off = true; return; }
-        if (/^(on|true|enable)$/i.test(part)) return;
-        const eq = part.indexOf("=");
-        if (eq < 0) return;
-        const key = part.slice(0, eq).trim();
-        if (key) spec.options[key] = coercePluginOptionValue(part.slice(eq + 1).trim());
-      });
+      const spec = parseKascPluginSpec(value);
+      if (!spec) return;
       // 同一 id の重複行は後の行を採用する
       const existing = inspectorPluginSpecs.findIndex(entry => entry.id === spec.id);
       if (existing >= 0) inspectorPluginSpecs[existing] = spec;
@@ -8049,14 +7991,13 @@ function applyInspector(text) {
           const n = Number(zOpt.slice(zOpt.indexOf("=") + 1).trim());
           if (Number.isFinite(n)) item.z = n;
         }
-        // wfs: 等の key=value オプション(typename=/version=/maxfeatures=/cql_filter= 等)を
-        // 汎用に opts マップへ保持する。render=/attr=/style=/table= は既に専用フィールドへ
-        if (["wfs", "kml", "kmz", "shp", "shapefile", "csv", "tsv", "polyline", "gml"].includes(type)) {
-          for (const part of parts) {
-            const kv = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
-            if (kv && !["render", "attr", "attribution", "style", "table"].includes(kv[1].toLowerCase())) {
-              (item.opts ||= {})[kv[1].toLowerCase()] = kv[2].trim();
-            }
+        // key=value オプション(typename=/site= 等)を汎用に opts マップへ保持する。
+        // render=/attr=/style=/table= は既に専用フィールドへ。
+        // 全レイヤタイプで保持し listLayers().options からプラグインが読めるようにする
+        for (const part of parts) {
+          const kv = /^([A-Za-z_][\w-]*)\s*=\s*(.+)$/.exec(part);
+          if (kv && !["render", "attr", "attribution", "style", "table"].includes(kv[1].toLowerCase())) {
+            (item.opts ||= {})[kv[1].toLowerCase()] = kv[2].trim();
           }
         }
         // GPKG の絞り込みオプション(sql.js に渡す SQLite 式)。
@@ -14374,7 +14315,7 @@ window.kasugaiApi = {
   },
   listLayers() {
     return getOrderedLayerItems().map(layer => {
-      const entry = { id: layer.id, title: layer.title, sourceTitle: layer.sourceTitle || null, exclusiveGroup: !!layer.exclusiveGroup, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: (layer.type === "sql" || layer.type === "ogrsql") ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced };
+      const entry = { id: layer.id, title: layer.title, sourceTitle: layer.sourceTitle || null, exclusiveGroup: !!layer.exclusiveGroup, group: layer.group || "", visible: !!layer.visible, type: layer.type, filter: (layer.type === "sql" || layer.type === "ogrsql") ? (layer.query || "") : (layer.where || ""), bboxAuto: layer.bboxAuto ?? null, entityLimited: layer.entityLimited || null, viewportSliced: !!layer.viewportSliced, options: { ...(layer.opts || {}) } };
       const fgbMeta = summarizeFlatGeobufHeader(layer.fgbHeader);
       if (fgbMeta) entry.fgb = fgbMeta;
       const geoMeta = summarizeGeoParquetHeader(layer.geoHeader);
@@ -14386,8 +14327,8 @@ window.kasugaiApi = {
           styleName: gm.styleName || null, styleNames: gm.styleNames || null,
           styles: gm.styles || null, extensions: (gm.extensions || []).map(e => e.name) };
       }
-      const legend = layer.qmlStyle?.legend;
-      if (legend?.length > 1) entry.legend = legend.map(e => ({ label: e.label || e.symbolName, visible: !layer.legendHidden?.has(e.symbolName) }));
+      const legendEntries = getLayerLegend(layer)?.entries;
+      if (legendEntries?.length) entry.legend = legendEntries.map(e => ({ label: e.label || e.symbolName || "", symbolName: e.symbolName || "", spec: e.desc ?? null, visible: !(e.symbolName && layer.legendHidden?.has(e.symbolName)) }));
       return entry;
     });
   },
@@ -14415,6 +14356,40 @@ window.kasugaiApi = {
     renderLayerList();
     refreshLayers();
     liveWritebackEntries(getOrderedLayerItems());
+    return true;
+  },
+  // listLayers().legend[].spec から凡例スウォッチの dataURL を生成する。
+  // プラグインが独自凡例を描くための公開ヘルパ
+  legendSwatchUrl(spec) {
+    return spec ? buildLegendSwatchDataUrl(spec) : null;
+  },
+  // 表示順の制御（プラグイン用）: 指定したキー(id/title)同士の相対順を
+  // keys の順に並べ替える。指定していないレイヤーは現在の位置を維持する
+  // （＝指定レイヤが占めていたスロットを指定順で埋める）。先頭=最前面。
+  setLayerOrder(keys) {
+    const items = getOrderedLayerItems();
+    const byKey = new Map();
+    for (const item of items) {
+      if (item.id != null) byKey.set(String(item.id), item.id);
+      if (item.title) byKey.set(item.title, item.id);
+    }
+    const wanted = [];
+    const seen = new Set();
+    for (const key of keys || []) {
+      const id = byKey.get(String(key));
+      if (id != null && !seen.has(id)) { seen.add(id); wanted.push(id); }
+    }
+    if (!wanted.length) return false;
+    const wantSet = new Set(wanted);
+    const cur = items.map(item => item.id);
+    const slots = cur.map((id, i) => wantSet.has(id) ? i : -1).filter(i => i >= 0);
+    const next = [...cur];
+    wanted.forEach((id, i) => { next[slots[i]] = id; });
+    layerOrder = next;
+    renderLayerList();
+    refreshLayers();
+    void persistLayerOrder().catch(error => { console.warn("レイヤー順の保存エラー:", error); });
+    window.kasugaiApi?.emit("layers-changed");
     return true;
   },
   // QGIS ライブ連携: レイヤーの GeoJSON を QGIS スクラッチレイヤへ送る
@@ -14988,6 +14963,8 @@ window.kasugaiApi = {
       this._plugins.splice(i, 1);
       try { meta.dispose?.(); } catch (e) { console.error(e); }
     }
+    // プラグインが登録したユーザーパネル（registerPanel）も撤去する
+    try { this.removePluginPanels?.(id); } catch (e) { console.error(e); }
     this.emit("plugin-unregistered", { id });
   },
   getPlugins() { return this._plugins; },
@@ -14995,6 +14972,9 @@ window.kasugaiApi = {
   getInspectorPlugins() {
     return inspectorPluginSpecs.map(spec => ({ ...spec, options: { ...spec.options } }));
   },
+  // plugin: id | url= の解決等で plugin-loader から使う
+  // （canvas_data/ 等の相対パス → .kasc 基準 URL）
+  resolveProjectUrl,
   async registerPluginLayer(config, pluginId) {
     return await registerPluginLayer(config, pluginId);
   },
@@ -15240,6 +15220,20 @@ window.kasugaiApi = {
   },
   getAuth() { return window.kasugaiAuth || null; },
 };
+
+// ---- プラグインパネル（ユーザーパネル追加機構）----
+// プラグインは registerPanel({id,title,icon,after,onInit,onShow,onHide}) で
+// パネルタブへ独自セクションを追加できる。plugin-loader が pluginId を
+// スタンプした scoped api を渡すため、unregisterPlugin で自動撤去される
+attachPanelApi(window.kasugaiApi, createPanelHost({
+  nav: document.querySelector(".panel-tabs"),
+  panels: document.querySelector(".control-panel"),
+  mode: "sections",
+}));
+// プラグインパネル内のレイヤ表示向けビルダ（shared/layer-view.js）。
+// 独自描画は listLayers()/layers-changed/setLayerVisible/focusLayer を直接利用する
+window.kasugaiApi.renderLayerView = (container, opts = {}) => renderLayerView(container, window.kasugaiApi.listLayers(), { api: window.kasugaiApi, ...opts });
+window.kasugaiApi.bindLayerView = (container, opts = {}) => bindLayerView(container, window.kasugaiApi, opts);
 
 window.addEventListener("popstate", applyUrlCamera);
 window.addEventListener("hashchange", applyUrlCamera);

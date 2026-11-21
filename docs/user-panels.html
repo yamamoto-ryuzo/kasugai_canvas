@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ユーザーパネル（プラグインによるパネル追加）— KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>ユーザーパネル — プラグインでパネルタブへ独自のパネル・レイヤ表示を追加</p>
+    </header>
+    <main>
+
+      <section>
+        <h2>1. 概要 — プラグインがパネルタブへ独自 UI を追加できる</h2>
+        <p>
+          プラグインは <code>api.registerPanel(spec)</code> でパネルタブへ独自のユーザーパネルを追加できます。
+          機構は <code>web/shared/plugin-panels.js</code>（エンジン非依存）が担い、
+          Cesium（<code>.panel-tab</code>/<code>section.plugin-panel</code> 規約）と
+          2D プレイヤー各エンジン — maplibre / openlayers / leaflet / navara
+          （<code>.tab[data-tab]</code>/<code>.tab-pane</code> 規約）の両方で同じ API 面を提供します。
+        </p>
+        <ul>
+          <li>プラグインが停止・登録解除されるとパネルは自動で撤去されます（owner = pluginId で追跡）</li>
+          <li>生成されたタブは <code>data-panel</code>/<code>data-tab</code> 属性を持つため、AI の汎用ブリッジ（<code>listUiControls</code>/<code>controlUi</code>）からそのまま操作できます</li>
+          <li>標準のレイヤタブは変更せず、別タブとして追加されます。レイヤの自由な表示（型別グループ・独自順・絞り込み・行装飾）は <a href="#layerview">3. カスタムレイヤビュー</a> を参照してください</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. 使い方 — <code>api.registerPanel(spec)</code></h2>
+        <pre class="text"><code>// プラグインの init(api, manifest) 内
+const view = { unbind: null };
+api.registerPanel({
+  id: "layers2",            // プラグイン内で一意
+  title: "レイヤ2",
+  icon: "🗂",               // 省略可
+  after: "layers-panel",    // 挿入位置（省略可・タブキー名）
+  onInit(panel) {           // DOM 構築
+    view.unbind = api.bindLayerView(panel, {
+      groupBy: l => l.type,            // グルーピング（既定: l.group）
+      sort: ls => [...ls].sort(...),   // 並べ替え
+      filter: l => true,               // 表示行の絞り込み
+      decorateRow: (row, l) => {},     // 行へのバッジ/ボタン追加
+      decorateGroup: (head, key, ls) => {},
+    });
+  },
+  onShow(panel) {},
+  onHide(panel) {},
+});
+// 関連 API: unregisterPanel(id) / selectPanel(id) / listPanels()</code></pre>
+        <ul>
+          <li><code>onInit(panel)</code> は登録時に1回、<code>onShow/onHide</code> はタブ表示状態の変化ごとに呼ばれます（組み込みタブへの切替でも正しく発火します）</li>
+          <li>plugin-loader / ストレージプラグインのローダーが <code>pluginId</code> をスタンプした scoped api を渡すため、<code>spec.owner</code> を書く必要はありません</li>
+        </ul>
+      </section>
+
+      <section id="layerview">
+        <h2>3. カスタムレイヤビュー — <code>bindLayerView</code> / <code>renderLayerView</code></h2>
+        <p>
+          <code>api.bindLayerView(container, opts)</code> / <code>api.renderLayerView(container, opts)</code>
+          （<code>web/shared/layer-view.js</code>）はレイヤ一覧の最小描画＋<code>layers-changed</code>
+          イベントでの自動追従を提供します。チェックボックスは <code>setLayerVisible</code> に連動するため、
+          別タブで「型別にまとめたレイヤ一覧」「担当者向けの絞り込み一覧」などがそのまま作れます。
+        </p>
+        <ul>
+          <li><code>bindLayerView</code> は <code>layers-changed</code> を購読して自動再描画し、<code>{ unbind }</code> を返します（パネル撤去時に解除）</li>
+          <li>完全に独自の表示は <code>api.listLayers()</code>・<code>api.setLayerVisible()</code>・<code>api.focusLayer()</code>・<code>api.setLayerLegendVisible()</code> と <code>api.on("layers-changed", cb)</code> を直接使って構築します</li>
+          <li><code>listLayers()</code> の各エントリは <code>options</code>（.kasc 行の <code>key=value</code> をそのまま保持するマップ）を持ちます。<code>site=</code> などの独自キーをレイヤ行へ付けてプラグイン側で集約・制御する用途に使えます</li>
+          <li><code>api.setLayerOrder(keys)</code> — 表示順の制御。<code>keys</code>（id または title・先頭=最前面）に挙げたレイヤ同士の相対順を keys 順に並べ替えます。未指定のレイヤは現在の位置を維持する（＝指定レイヤが占めていたスロットを指定順で埋める）ため、レイヤ群だけをまとめて並べ替えられます。全エンジン対応（実描画反映はエンジン別に map.moveLayer / zIndex＋再挿入 / bringToFront / 再マウントで実現）</li>
+          <li>参考実装: <code>PLUGIN/sample-layer-panel/plugin.js</code>（レイヤを型別にまとめた別タブ表示）、<code>PLUGIN/custom-layer/plugin.js</code>（次項）</li>
+        </ul>
+        <h3>カスタムレイヤ（site= 集約サンプル）</h3>
+        <p><code>PLUGIN/custom-layer</code> は「ポイント・ライン・ポリゴンなど型の違うレイヤを任意グループにまとめて1トグルで制御する」カスタムレイヤパネルです。レイヤ行に <code>site=&lt;グループ名&gt;</code> を付けるだけで、その名前1行に集約されます。</p>
+        <pre class="text"><code>geojson: A工区・ポリゴン | canvas_data/a-poly.geojson | site=A工区 | order=1
+geojson: A工区・ライン   | canvas_data/a-line.geojson | site=A工区 | order=2
+geojson: A工区・ポイント | canvas_data/a-pt.geojson   | site=A工区 | order=3
+geojson: 背景ライン    | canvas_data/free.geojson    （site なし → 標準タブにも「その他」にも出る）
+plugin: custom-layer | name=レイヤ | url=canvas_data/custom-layer.js | before=layers-panel</code></pre>
+        <ul>
+          <li>箇所ごとの1トグルで全メンバーをまとめて on/off（<code>setLayerVisible</code> をメンバー全件に適用）、部分表示は中間状態表示</li>
+          <li>メンバーが分類凡例（QML <code>style=</code>）を持つ場合、箇所行の下に凡例項目（チェック＋スウォッチ＋ラベル）を表示し、シンボル単位の on/off（<code>setLayerLegendVisible</code>）ができます。<code>listLayers()</code> の <code>legend[].spec</code> を <code>api.legendSwatchUrl()</code> でスウォッチ画像に変換します</li>
+          <li>メンバー内の順序は <code>order=&lt;数値&gt;</code>（書式: レイヤ行の <code>key=value</code>・例 <code>order=1</code>）で制御します。小さいほど上で、省略時は現在の並び順の末尾扱いです。これはプラグインが <code>listLayers()</code> の <code>options.order</code> を読んで並べ替える独自キーであり、エンジン本体の描画順（.kasc 行順・<code>setLayerOrder</code>）とは別物です — 「この集約タブでの表示順のヒント」として使います</li>
+          <li><code>site=</code> はこのタブ専用の集約キーで、<strong>標準レイヤタブには全レイヤが従来通り表示されます</strong>（全体を見る標準タブ＋簡素化した集約タブの併用）。標準一覧から隠したいレイヤは <code>list=off</code> を付けます（地図には描画される）。<code>site=</code> と別の集約キー名を使う場合は <code>manifest.options.key</code>（<code>plugin: sc | ... | key=site</code>）で変更できます</li>
+          <li><code>site=</code> を付けないレイヤはタブ末尾の「その他」に集約され、一括 on/off ができます（順序操作は出さず .kasc 順のまま）</li>
+          <li>プラグインタブの表示名（<code>name=</code>）が組み込みタブと重複する場合、<strong>組み込み側のタブ名が自動的に「システムレイヤ」等に改称</strong>されます（<code>name=レイヤ</code> → 組み込みは「ｼｽﾃﾑﾚｲﾔ」表示。重複解消で自動復元・i18n 対応）。また重複が発生したプラグインタブは組み込みの代替とみなされ、<strong>初期表示タブとして自動選択</strong>されます</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. プラグインの起動 — <code>plugin:</code> 行</h2>
+        <pre class="text"><code>plugin: プラグインID | name=表示名 | url=JSファイル | after=タブキー | before=タブキー | key=value | off
+plugin: my-panel | name=レイヤ2 | url=canvas_data/my-panel.js | after=info-panel</code></pre>
+        <ul>
+          <li><code>plugin:</code> は <code>plugins.json</code> カタログまたは管理タブのストレージプラグインの ID を指定し、そのプロジェクトでのみプラグインを起動します。<code>key=value</code> はプラグインの <code>manifest.options</code> にマージされ、真偽値・数値・カンマ区切り（配列）を解釈します</li>
+          <li>ID は起動・照合の<strong>キー</strong>（後勝ち・<code>| off</code> 照合・パネル/レイヤ撤去の所有単位）で、表示名ではありません。<strong>表示名は <code>name=</code> で分離</strong>し <code>manifest.name</code> へ渡されます — プラグイン側が <code>title: manifest.name</code> のように使えば .kasc からタブ名を制御できます（ID 指定・<code>url=</code> どちらでも有効）</li>
+          <li><code>plugin:</code> 行を複数書くと宣言順に逐次起動し、各プラグインのパネルタブは組み込みタブの右から順に追加されます。<code>after=&lt;タブキー&gt;</code> を書くとプラグインが登録するパネルの既定挿入位置がそのタブの直後、<code>before=&lt;タブキー&gt;</code> なら直前になります — プラグイン側の <code>registerPanel({ after })</code> 指定があればそちらが優先されます。タブキーは組み込みタブの <code>data-panel</code>/<code>data-tab</code> 値（Cesium: <code>layers-panel</code>/<code>info-panel</code> 等、プレイヤー: <code>layers</code>/<code>info</code> 等）です</li>
+          <li><code>url=&lt;JSファイル&gt;</code> はプラグインコードの設置場所を .kasc 内で直接指定する記法です。<code>canvas_data/my-panel.js</code> のような相対パスは .kasc のあるフォルダ基準で解決されるため、<code>.kasc</code>＋<code>canvas_data/</code>＋プラグインJS をまとめて配布すれば、CDN 配信でもユーザー側でプラグインを設置できます（IndexedDB への取込・ローカルサーバーへの公開は不要）。<code>manifest.url</code> に解決後の絶対 URL が渡されます</li>
+          <li><code>url=</code> で同一オリジン（配備物に同梱したJS）は無確認で読み込みますが、クロスオリジン（<code>?kasc=</code> で共有された .kasc が指す外部ホストのJS 等）は任意コード実行防止のため、コード全文を表示する確認ダイアログを出します。承認は同一コードに限りそのセッション内で記憶されます</li>
+          <li>起動したプラグインのレイヤーはプロジェクトスコープになり、プロジェクト切替・行削除・<code>| off</code> でレイヤー除去＋停止（<code>dispose</code>）されます</li>
+          <li><code>plugin:</code> 行は全エンジンで読めます。Cesium は <code>plugin-loader.js</code>、maplibre / openlayers / leaflet / navara は <code>web/shared/plugin-storage.js</code> の <code>setInspectorPlugins</code> が差分ロード/停止を担います。プレイヤー系は同梱カタログ（<code>plugins.json</code>）を持たないため、ID 指定は IndexedDB のストレージプラグインを解決します（<code>url=</code> は全エンジンで同一の動作）</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. プラグインの設置方法 — <code>url=</code>（.kasc 埋め込み）を標準とする</h2>
+        <p>ユーザー側へのプラグイン設置・配布は <code>plugin: id | url=&lt;JS&gt;</code> の .kasc 埋め込みを標準経路とします。プラグインJS を <code>canvas_data/</code> などプロジェクトと同じ場所に置き、.kasc に1行書くだけで、CDN 配信・ローカルサーバー・全エンジンで同一に動作します。</p>
+        <figure class="mermaid-fig"><figcaption>プラグイン設置経路の全体像</figcaption>
+<pre class="mermaid" aria-label="プラグイン設置経路の全体像">
+flowchart TB
+  subgraph STD["標準の設置経路（ユーザー向け・全エンジン）"]
+    direction TB
+    P["プロジェクト配布単位<br/>.kasc ＋ canvas_data/ ＋ プラグインJS"]
+    L[".kasc に宣言<br/>plugin: my-panel → url=canvas_data/my-panel.js"]
+    O{"url= が指すJSのオリジン"}
+    S["同一オリジン<br/>無確認でロード"]
+    X["クロスオリジン<br/>コード確認ダイアログ"]
+    R["Blob URL import で起動<br/>registerPanel / レイヤ登録などが有効"]
+    P --> L --> O
+    O -->|"canvas_data/ 等・配備物内"| S --> R
+    O -->|"?kasc= の外部ホスト等"| X -->|"承認"| R
+  end
+  subgraph INT["内部機構（ユーザー向け設置経路ではない）"]
+    direction TB
+    A["AI 生成プラグイン<br/>savePlugin → IndexedDB 草稿（全プロジェクト常駐）"]
+    B[".kasp 出力 → PLUGIN/ へ公開<br/>ローカルサーバー版のみ・Cesium 同梱カタログ"]
+    A -->|"昇格ルート"| B
+  end
+  style INT fill:#e8e8e8,stroke:#999
+</pre>
+        </figure>
+        <pre class="text"><code>project/
+  my.kasc                     ← plugin: my-panel | url=canvas_data/my-panel.js
+  canvas_data/
+    my-panel.js               ← プラグイン本体
+    ...（プロジェクトデータ）</code></pre>
+        <ul>
+          <li>プラグインの有効範囲はその .kasc のみ。別プロジェクトでも使う場合はその .kasc にも <code>plugin:</code> 行を書きます</li>
+          <li>配布は .kasc と canvas_data/ をまとめてコピーするだけ。<code>?kasc=&lt;外部ホストの.kasc&gt;</code> で読ませる構成でも動きます（その場合のJSはクロスオリジン確認の対象）</li>
+        </ul>
+        <p>※ IndexedDB ストレージ・サーバー PLUGIN/ は内部機構です（<a href="use/7-2-プラグイン.html">7-2 プラグイン・外部連携</a> 参照）。</p>
+      </section>
+
+      <section class="card">
+        <h2>6. 関連リンク</h2>
+        <ul>
+          <li><a href="use/7-2-プラグイン.html">7-2 プラグイン・外部連携</a> — <code>plugin:</code> 行仕様・ストレージプラグイン・昇格ルート</li>
+          <li><a href="use/7-1-認証.html">7-1 認証とプラグイン</a></li>
+          <li><a href="ui-config.html">UI カスタマイズ（ui.config.json）</a> — コード無しの画面調整はこちら</li>
+          <li><a href="engine-customize.html">エンジン自前配信・独自カスタマイズ</a></li>
+          <li><a href="use/6-2-インスペクター.html">.kasc 設定仕様（インスペクター）</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+      <p><a href="ui-config.html">← カスタマイズへ戻る</a></p>
+    </main>
+  </div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+  </script>
+</body>
+</html>

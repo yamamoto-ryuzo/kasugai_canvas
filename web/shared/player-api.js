@@ -435,6 +435,7 @@ export function createPlayerApi(hooks) {
           visible: item.visible !== false,
           type: item.type,
           filter: item.opts?.where || "",
+          options: { ...(item.opts || {}) },
         };
         // flatgeobuf: のヘッダメタ(件数/索引有無/列/CRS)を listLayers へ露出
         const fgbMeta = summarizeFlatGeobufHeader(item.fgbHeader);
@@ -454,8 +455,8 @@ export function createPlayerApi(hooks) {
         const gpkgpLids = (e.lids || []).filter(id => /gpkgp/.test(id));
         if (gpkgpLids.length) entry.gpkgpLids = gpkgpLids;
         const legend = item._qml?.legend;
-        if (legend?.length > 1) {
-          entry.legend = legend.map(le => ({ label: le.label || le.symbolName, visible: !item._legendHidden?.has(le.symbolName) }));
+        if (legend?.length) {
+          entry.legend = legend.map(le => ({ label: le.label || le.symbolName, symbolName: le.symbolName || "", spec: le.spec || null, visible: !item._legendHidden?.has(le.symbolName) }));
         }
         return entry;
       });
@@ -478,6 +479,9 @@ export function createPlayerApi(hooks) {
       hooks.applyEntryVisibility(e);
       hooks.maybeLoadEntry(e);
       e._groupCtl?.sync?.();
+      // 標準一覧は行 DOM を直更新するため rerenderLayers を通らない。
+      // プラグインパネル等の外部ビューへはここで変更を通知する
+      this.emit("layers-changed");
       return true;
     },
     setLayerLegendVisible(name, label, visible) {
@@ -492,12 +496,46 @@ export function createPlayerApi(hooks) {
       else e.item._legendHidden.add(le.symbolName);
       if (!e.item._legendHidden.size) e.item._legendHidden = null;
       hooks.applyLegendFilter(e);
+      this.emit("layers-changed");
       return true;
     },
     async focusLayer(name) {
       const e = findEntry(name);
       if (!e) return false;
       hooks.focusEntry(e);
+      return true;
+    },
+    // listLayers().legend[].spec から凡例スウォッチの dataURL を生成する。
+    // プラグインが独自凡例を描くための公開ヘルパ
+    legendSwatchUrl(spec) {
+      return spec ? (hooks.legendSwatchUrl?.(spec) || null) : null;
+    },
+    // 表示順の制御（プラグイン用）: 指定したキー(id/title)同士の相対順を
+    // keys の順に並べ替える。指定していないレイヤーは現在の位置を維持する
+    // （＝指定レイヤが占めていたスロットを指定順で埋める）。先頭=最前面。
+    // 実描画順の反映はエンジン別フック hooks.applyEntryOrder が担う
+    async setLayerOrder(keys) {
+      const arr = hooks.getEntries();
+      const byKey = new Map();
+      arr.forEach(e => {
+        const item = e.item || {};
+        for (const k of [item.id, e.sid, item.title]) {
+          if (k != null && !byKey.has(String(k))) byKey.set(String(k), e);
+        }
+      });
+      const wanted = [];
+      const seen = new Set();
+      for (const key of keys || []) {
+        const e = byKey.get(String(key));
+        if (e && !seen.has(e)) { seen.add(e); wanted.push(e); }
+      }
+      if (!wanted.length) return false;
+      const wantSet = new Set(wanted);
+      const slots = arr.map((e, i) => wantSet.has(e) ? i : -1).filter(i => i >= 0);
+      wanted.forEach((e, i) => { arr[slots[i]] = e; });
+      await hooks.applyEntryOrder?.(arr);
+      hooks.rerenderLayers();
+      this.emit("layers-changed");
       return true;
     },
     async setLayerFilter(name, filter) {

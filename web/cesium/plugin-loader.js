@@ -11,17 +11,30 @@
 // inspector(plugin:行)で起動したプラグインにはプロジェクトスコープの API を渡し、
 // registerPluginLayer の scope を強制的に "project" にする。
 
+import { confirmPluginApply } from "../shared/ai-chat.js";
+
 const bundledCatalog = new Map(); // id -> manifest
 // 起動中プラグイン。signature が変わったら再起動（オプション変更・スコープ切替）
 const activePlugins = new Map();  // id -> { source:"auto"|"inspector"|"storage", signature }
 
-// inspector 宣言で起動するプラグインへ渡すプロジェクトスコープ API。
-// registerPluginLayer で scope:"project" を強制し、プロジェクト切替時に
-// 本体側がレイヤーを自動除去できるようにする
-function projectScopedApi(api) {
+// プラグインへ渡すスコープ付き API。全プラグインへ pluginId をスタンプし、
+// registerPanel/unregisterPanel の所有者を自動付与する（unregisterPlugin で
+// パネルが自動撤去される）。projectScope 時は registerPluginLayer で
+// scope:"project" を強制し、プロジェクト切替時に本体側がレイヤーを自動除去する
+function pluginScopedApi(api, pluginId, projectScope, panelDefaults = {}) {
   const scoped = Object.create(api);
-  scoped.registerPluginLayer = (config = {}, pluginId) =>
-    api.registerPluginLayer({ ...config, scope: "project" }, pluginId);
+  scoped.pluginId = pluginId;
+  scoped.registerPanel = (spec = {}) => api.registerPanel?.(
+    { ...(panelDefaults.before != null ? { before: panelDefaults.before } : {}),
+      ...(panelDefaults.after != null ? { after: panelDefaults.after } : {}), ...spec },
+    pluginId,
+  );
+  scoped.unregisterPanel = (keyOrId) => api.unregisterPanel?.(keyOrId, pluginId);
+  scoped.selectPanel = (keyOrId) => api.selectPanel?.(keyOrId, pluginId);
+  if (projectScope) {
+    scoped.registerPluginLayer = (config = {}, pid) =>
+      api.registerPluginLayer({ ...config, scope: "project" }, pid);
+  }
   return scoped;
 }
 
@@ -40,7 +53,8 @@ async function loadPlugin(manifest, { projectScope = false } = {}) {
       }
     }
     const module = await import(url);
-    const pluginApi = projectScope ? projectScopedApi(api) : api;
+    const pluginApi = pluginScopedApi(api, manifest.id, projectScope,
+      { after: manifest.options?.after, before: manifest.options?.before });
     if (typeof module.init === "function") {
       await module.init(pluginApi, manifest);
     } else if (typeof module.default === "function") {
@@ -114,8 +128,10 @@ async function loadStoragePlugin(record, { projectScope = false, options = null 
       layer: record.layer,
       storage: true,
     };
+    if (record.url) manifest.url = record.url;
     if (options) manifest.options = options;
-    const pluginApi = projectScope ? projectScopedApi(api) : api;
+    const pluginApi = pluginScopedApi(api, manifest.id, projectScope,
+      { after: manifest.options?.after, before: manifest.options?.before });
     if (typeof module.init === "function") {
       await module.init(pluginApi, manifest);
     } else if (typeof module.default === "function") {
@@ -144,6 +160,52 @@ async function loadStoragePluginById(id) {
   return result;
 }
 
+// plugin: id | url=<JS> — .kasc 埋め込みのプラグイン設置場所。
+// canvas_data/ 等の相対パスは api.resolveProjectUrl で .kasc 基準へ解決されるため、
+// .kasc+canvas_data/+プラグインJS をまとめて配布すれば CDN でも動作する。
+// クロスオリジン（共有 .kasc が指す外部ホストのJS）だけ、任意コード実行防止のため
+// コードを確認するダイアログを出す（セッション内では同一コードへの承認を記憶）
+const approvedInlinePlugins = new Set(); // `${id}|${absoluteUrl}|${codeHash}`
+
+function hashInlineCode(code) {
+  let hash = 5381;
+  for (let i = 0; i < code.length; i++) hash = ((hash << 5) + hash + code.charCodeAt(i)) | 0;
+  return (hash >>> 0).toString(36);
+}
+
+async function loadUrlPlugin(spec) {
+  const api = window.kasugaiApi;
+  const id = spec?.id;
+  if (!api || !id || !spec.url) return false;
+  const resolved = api.resolveProjectUrl?.(spec.url) || spec.url;
+  const absolute = new URL(resolved, window.location.href).href;
+  let code = "";
+  try {
+    const response = await fetch(absolute, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    code = await response.text();
+  } catch (error) {
+    console.warn(`[plugin-loader] plugin: url= の取得失敗 "${id}": ${absolute}`, error);
+    return false;
+  }
+  if (new URL(absolute).origin !== window.location.origin) {
+    const key = `${id}|${absolute}|${hashInlineCode(code)}`;
+    if (!approvedInlinePlugins.has(key)) {
+      const ok = await confirmPluginApply({ id, name: spec.options?.name || absolute, code });
+      if (!ok) {
+        console.warn(`[plugin-loader] plugin: url= がユーザーに拒否されました "${id}"`);
+        return false;
+      }
+      approvedInlinePlugins.add(key);
+    }
+  }
+  const result = await loadStoragePlugin(
+    { id, name: spec.options?.name || id, code, url: absolute },
+    { projectScope: true, options: spec.options || null },
+  );
+  return !!result?.ok;
+}
+
 async function activatePlugin(id, want) {
   const api = window.kasugaiApi;
   if (want.source === "auto") {
@@ -151,12 +213,16 @@ async function activatePlugin(id, want) {
     return manifest ? await loadPlugin(manifest) : false;
   }
   if (want.source === "inspector") {
+    // url= 指定は .kasc 埋め込みの設置場所指定。明示された場合は
+    // カタログ/ストレージより優先してそのJSを読み込む
+    if (want.spec?.url) return await loadUrlPlugin(want.spec);
     // カタログ(plugins.json)優先、無ければストレージプラグインを id で解決する。
     // 外部 URL の直接指定は受け付けない（共有 .kasc による任意コード読み込み防止）
     const catalogManifest = bundledCatalog.get(id);
     if (catalogManifest) {
       const manifest = {
         ...catalogManifest,
+        name: want.spec?.options?.name || catalogManifest.name,
         options: { ...(catalogManifest.options || {}), ...(want.spec?.options || {}) },
         inspector: true,
       };
@@ -164,7 +230,8 @@ async function activatePlugin(id, want) {
     }
     const record = await api?.getStoragePlugin?.(id).catch(() => null);
     if (record) {
-      const result = await loadStoragePlugin(record, { projectScope: true, options: want.spec?.options || null });
+      const named = want.spec?.options?.name ? { ...record, name: want.spec.options.name } : record;
+      const result = await loadStoragePlugin(named, { projectScope: true, options: want.spec?.options || null });
       return !!result?.ok;
     }
     console.warn(`[plugin-loader] plugin: 未解決のプラグインID "${id}"`);
@@ -201,7 +268,7 @@ async function reconcilePlugins() {
     }
     for (const [id, spec] of specById) {
       if (spec.off) desired.delete(id); // 明示 off は auto/有効ストレージより優先
-      else desired.set(id, { source: "inspector", spec, signature: `inspector|${JSON.stringify(spec.options || {})}` });
+      else desired.set(id, { source: "inspector", spec, signature: `inspector|${spec.url || ""}|${JSON.stringify(spec.options || {})}` });
     }
     const stored = await api.listStoragePlugins?.().catch(() => []) || [];
     for (const meta of stored) {

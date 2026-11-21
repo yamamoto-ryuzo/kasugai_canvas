@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>閉鎖環境での利用 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+    .engine-tree { background: #e8f0fb; border: 1px solid #7fa8d9; border-radius: 8px; }
+    .engine-tree .dim { color: #8a94a3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>閉鎖環境での利用 — 描画ライブラリ本体もダウンロードして CDN ゼロの完全自前配信にする</p>
+    </header>
+    <main>
+      <section>
+        <h2>1. 概要 — ライブラリも <code>web/</code> に同梱する</h2>
+        <p>
+          通常の自前配信（<a href="engine-customize.html">2-1</a>）でも、描画ライブラリ本体は CDN（jsdelivr / unpkg）から読み込んでいます。
+          外部ネットワークに出られない<strong>閉鎖環境（イントラ・オフライン）</strong>で使うには、
+          ライブラリ本体をダウンロードして <code>web/</code> 内に同梱し、参照をローカルファイルへ差し替えます。
+          対象の全一覧は <a href="engine-customize.html#deps">2-1 の依存関係表</a> を参照してください（使わない機能の遅延ロード分は不要です）。
+        </p>
+        <p>
+          配置先は <a href="engine-customize.html">2-1 のフォルダ構成</a>に合わせ、<strong><code>web/engine/</code></strong> を新設して
+          ライブラリ実体を1箇所にまとめます。<code>web/&lt;エンジン&gt;/</code> は「KASUGAI 側のエンジン別フロント（.kasc を各 API へ写像する薄い層）」で、
+          本当のエンジン本体＝地図描画ライブラリ（Cesium.js・maplibre-gl・ol・leaflet）はここに置く、という住み分けです。
+        </p>
+        <pre class="engine-tree"><code>web/                  ← 配信ルート（2-1 のフォルダ構成と同じ階層）
+<span class="dim">├─ index.html
+├─ cesium/ maplibre/ openlayers/ leaflet/   ← エンジン別フロント（.kasc → エンジンAPI 写像の薄い層。参照を書き換える側）
+├─ shared/ projects/ …</span>
+└─ engine/            ← ここを新設して「地図描画エンジン本体」（ライブラリ実体）を置く
+   ├─ cesium/         ← Build/Cesium/ の中身（Cesium.js・Workers/・Assets/・Widgets/・ThirdParty/）
+   ├─ three/          ← three.module.js
+   ├─ maplibre/       ← maplibre-gl.mjs・maplibre-gl.css
+   ├─ ol/             ← ol モジュール一式 ＋ rbush・earcut・pbf・geotiff・zarrita
+   ├─ leaflet/        ← leaflet.js・leaflet.css・images/
+   └─ …               ← 遅延ロード分も同じく engine/&lt;ライブラリ名&gt;/（duckdb-wasm・hyparquet・flatgeobuf・deck.gl 等）</code></pre>
+        <ul>
+          <li><strong>なぜ <code>vendor/</code> という名前を避けるか</strong>: <code>vendor</code> は gsimaps/navara 用の既存機構
+            （<code>web/vendor/</code>・<code>vendor.json</code>・<code>vendor-proxy-sw.js</code>）で使われる語です。
+            web 直下の <code>web/vendor/</code> は Service Worker の中継対象で実体を置いても横取りされるため使えず、
+            各所に <code>vendor/</code> を増やすと「どの vendor か」が紛らわしくなります。<strong><code>web/engine/</code> は中継対象外かつ一意</strong>です</li>
+          <li><strong>遅延ロード分も同じ場所</strong>: <code>shared/</code> や app.js が遅延ロードするライブラリも <code>engine/&lt;ライブラリ名&gt;/</code> に置き、
+            参照元ファイル（<code>shared/vector-load.js</code> 等）の import URL を書き換えます</li>
+          <li>取得した実体を置くだけでは読まれません — 各エンジンの <code>index.html</code>/<code>app.js</code> と
+            <code>shared/</code> 内の CDN 参照をこのパスへ書き換えて初めてローカルが使われます</li>
+        </ul>
+        <figure class="mermaid-fig"><figcaption>作業の流れ</figcaption>
+<pre class="mermaid" aria-label="閉鎖環境化の作業フロー">
+flowchart LR
+  A["1. ライブラリ取得<br/>npm dist / GitHub Release<br/>（バージョンはピン済み）"]
+  B["2. web/engine/ へ配置<br/>engine/&amp;lt;名&amp;gt;/"]
+  C["3. 参照の書き換え<br/>index.html / app.js /<br/>shared/ の CDN URL → ../engine/"]
+  D["4. データ面のローカル化<br/>タイル・DEM・検索API"]
+  E["5. 静的ホストへ配信<br/>ブラウザで動作確認"]
+
+  A --&gt; B --&gt; C --&gt; D --&gt; E
+
+  style A fill:#e8f0fb,stroke:#7fa8d9,color:#333
+  style B fill:#e8f0fb,stroke:#7fa8d9,color:#333
+  style C fill:#e8f0fb,stroke:#7fa8d9,color:#333
+  style D fill:#e8f0fb,stroke:#7fa8d9,color:#333
+  style E fill:#e8f0fb,stroke:#7fa8d9,color:#333
+</pre>
+</figure>
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({ startOnLoad: true, securityLevel: 'strict', theme: 'default' });
+        </script>
+      </section>
+
+      <section>
+        <h2>2. Cesium 本体のローカル化（手順例）</h2>
+        <p>バージョンは <code>cesium/index.html</code> のピンに合わせてください。他エンジンも同じ考え方です。</p>
+        <ol>
+          <li><strong>Cesium の取得</strong> — <code>cesium@1.147.0</code> の <code>Build/Cesium/</code> 一式を取得します
+            （npm パッケージ <code>cesium</code>、GitHub Release、jsdelivr いずれでも同じ内容です）。
+            <code>Cesium.js</code> 単体では動きません — <code>Workers/</code>・<code>Assets/</code>・<code>Widgets/</code>・<code>ThirdParty/</code> を含む<strong>ディレクトリ丸ごと</strong>が必要です</li>
+          <li><strong>配置</strong> — <code>web/engine/cesium/</code> に Build/Cesium の中身を置きます
+            （<code>engine/cesium/Cesium.js</code>・<code>engine/cesium/Workers/…</code> という形になるように）</li>
+          <li><strong><code>cesium/index.html</code> の書き換え</strong> — CDN 参照をローカルへ差し替えます:
+            <pre><code>&lt;script&gt;window.CESIUM_BASE_URL = "../engine/cesium/";&lt;/script&gt;
+&lt;link rel="stylesheet" href="../engine/cesium/Widgets/widgets.css" /&gt;
+&lt;script src="../engine/cesium/Cesium.js"&gt;&lt;/script&gt;</code></pre>
+            <code>CESIUM_BASE_URL</code> は Cesium.js が Worker・画像・言語ファイルを解決する基点です
+            （script タグの src から自動検出もされますが、明示する方が確実です）。
+            importmap の <code>three</code> も同様に、<code>three@0.187.0/build/three.module.js</code> を
+            <code>engine/three/</code> に置いて <code>"three": "../engine/three/three.module.js"</code> に差し替えます</li>
+          <li><strong>外部サービス依存の遮断</strong> — 閉鎖環境では Cesium ion（既定トークンの地図・Cesium World Terrain）にも届きません。
+            <code>.kasc</code> の <code>base:</code>/<code>xyz:</code> は自前・ローカルのタイルを参照し、
+            地形（DEM）もローカル配信の TerrainProvider・標高タイルに差し替えます</li>
+          <li><strong>遅延ロード系も同様</strong> — <code>duckdb:</code>・<code>geoparquet:</code> 等を使う場合は
+            <a href="engine-customize.html#deps">依存関係表の遅延ロード分</a>も同じ手順でローカル化します（使わない形式は不要です）</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>3. 他エンジンも同じ手順</h2>
+        <table>
+          <thead><tr><th>エンジン</th><th>ダウンロードするもの</th><th>差し替え箇所</th></tr></thead>
+          <tbody>
+            <tr><td><code>maplibre</code></td><td><code>maplibre-gl@6.19.0</code> の <code>dist/maplibre-gl.mjs</code> + <code>maplibre-gl.css</code> → <code>engine/maplibre/</code></td><td><code>index.html</code> の css と <code>app.js</code> 先頭の import</td></tr>
+            <tr><td><code>openlayers</code></td><td><code>ol@10.11.0</code> のモジュール一式 ＋ <code>rbush</code>/<code>earcut</code>/<code>pbf</code>/<code>geotiff</code>/<code>zarrita</code> → <code>engine/ol/</code> 等</td><td><code>index.html</code> の importmap と <code>app.js</code> 先頭の import 群</td></tr>
+            <tr><td><code>leaflet</code></td><td><code>leaflet@1.9.4</code> の <code>dist/leaflet.js</code> + <code>leaflet.css</code>（+ images）→ <code>engine/leaflet/</code></td><td><code>index.html</code> の script/link</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li>遅延ロード（deck.gl・pmtiles・jszip・leaflet.markercluster/heat/vectorgrid・heatmap.js 等）は使う機能の分だけで足ります</li>
+          <li>OpenLayers は多数の個別モジュールを import しているため、パッケージ全体を <code>engine/ol/</code> として配置し、importmap で <code>"ol/": "../engine/ol/"</code> のようなプレフィックスマッピングにすると一括で済みます</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. ライブラリ以外の外部依存も洗い出す</h2>
+        <p>ライブラリをローカル化しても、次の外部参照が残ると閉鎖環境では動きません。<code>.kasc</code> と設定を確認してください。</p>
+        <ul>
+          <li><strong>タイル・地形データ</strong> — <code>base:</code>/<code>xyz:</code>/<code>wms:</code>/<code>wmts:</code>/<code>3dtiles:</code> の参照先（地理院タイル・Google・OSM 等）。自前のタイルサーバーまたはローカルタイルツリー（<code>xyz:</code> ローカルテンプレート）へ差し替え</li>
+          <li><strong>DEM</strong> — 表示タブの地形ソース（地理院標高 PNG・Re:Earth Terrain 等）も外部 URL。ローカル配信の標高タイルに差し替え</li>
+          <li><strong>検索・ジオコーディング API</strong> — 地理院 msearch・Yahoo ジオコーダ等は外部サービス（不要なら <code>hide: ["search"]</code> でタブごと隠せます）</li>
+          <li><strong>AI チャット</strong> — 内蔵 AI・ブリッジハブ経路は外部 API・ローカルプロセス依存。閉鎖環境では <code>hide: ["chat"]</code> で非表示が無難です</li>
+          <li><strong>ベクターデータ本体</strong> — <code>geojson:</code>/<code>gpkg:</code> 等の URL 参照も当然ローカルへ（<code>canvas_data/</code> 同梱なら相対参照のまま動きます）</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>5. 注意点</h2>
+        <ul>
+          <li>
+            <strong><code>file://</code> 直開きは不可 — HTTP サーバーは必須</strong>。
+            ライブラリを全てローカル化しても、以下がブラウザにブロックされるため <code>index.html</code> のダブルクリック起動は動きません:
+            <ul>
+              <li><code>&lt;script type="module"&gt;</code>・dynamic import — <code>file://</code> は同一オリジンを持たず CORS で拒否</li>
+              <li><code>fetch()</code> での <code>.kasc</code>・<code>canvas_data/</code>・タイル読み込み — <code>file://</code> の fetch は失敗</li>
+              <li>Service Worker・Web Worker（Cesium Workers 等）— <code>file://</code> では登録・生成不可</li>
+            </ul>
+            「サーバーなし」に近づける現実的な代替は:
+            <ul>
+              <li><strong>localhost の最小静的サーバ</strong>（<code>python -m http.server</code> 等）— 閉鎖環境でも外部通信なしで動き、これが最小構成です</li>
+              <li><strong>Tauri / WebView2 への内蔵</strong> — カスタムスキーム（仮想ホスト）に <code>web/</code> をマッピングすれば、見かけ上サーバー無しのアプリとして起動できます（KASUGAI フレーム側の構想と同じ方向）</li>
+            </ul>
+          </li>
+          <li><strong>Service Worker</strong> — <code>sw-duckdb.js</code>（DuckDB-WASM キャッシュ）は https または localhost でのみ動きます。http のイントラ IP 直叩きでも基本機能は動き、キャッシュ効果が無いだけです。4エンジンでは <code>vendor-proxy-sw.js</code> は不要です（gsimaps/navara 専用）</li>
+          <li><strong>バージョン固定</strong> — 同梱ライブラリは <code>index.html</code>・<code>app.js</code> のピン済みバージョンに厳密に合わせてください（違う版を置くと API 差異で壊れます）</li>
+          <li><strong>ライセンス</strong> — 各ライブラリの再配布条件（著作権表示等）は個別のライセンスに従ってください</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>6. 関連リンク</h2>
+        <ul>
+          <li><a href="engine-customize.html">2-1 自前配信・独自カスタマイズ</a>（<a href="engine-customize.html#deps">外部ライブラリ依存の内訳</a>）</li>
+          <li><a href="engine-ai-textbook.html">2-2 AI 教本としての利用</a></li>
+          <li><a href="ui-config.html">UI カスタマイズ（外部依存機能を hide で消す）</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+      <p><a href="engine-customize.html">← カスタマイズへ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>

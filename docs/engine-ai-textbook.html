@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 教本としての利用 — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="nav.js" defer></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>AI 教本としての利用 — 自前 WebGIS 開発時に Canvas の実装コードを AI エージェントの参照材料にする</p>
+    </header>
+    <main>
+      <section>
+        <h2>1. 概要 — Canvas のコードを「AI への教科書」にする</h2>
+        <p>
+          各エンジン（Cesium / MapLibre / OpenLayers / Leaflet）で<strong>独自の WebGIS を開発する</strong>とき、
+          KASUGAI Canvas の <code>web/</code> 実装コードを AI エージェント（Devin・Copilot・その他コーディングエージェント）に
+          <strong>参照材料として読み込ませる</strong>使い方です。
+          「同じ GIS 要件（.kasc の行タイプ）を4つの地図ライブラリで実装済み」という構成のため、
+          AI は対象エンジンの正しい API 写像・エッジケース対処をこのコードから直接学んで移植できます。
+        </p>
+        <p>AI 教本として使いやすい前提条件が揃っています。</p>
+        <ul>
+          <li><strong>バニラ JS の ES modules</strong> — フレームワーク・ビルド工程・npm install が無く、ファイルをそのままコンテキストへ渡せる</li>
+          <li><strong>日本語コメント主体</strong> — 設計意図・ワークアラウンドの理由がコード内に残っている（AI が「なぜそうするか」まで引き継げる）</li>
+          <li><strong>機能ごとのモジュール分割</strong> — <code>shared/</code> がエンジン非依存の機能単位（.kasc パーサ・形式デコーダ・スタイルコンパイラ等）に分かれており、必要な機能だけを抜き出して読ませられる</li>
+          <li><strong>MIT ライセンス</strong> — コード抜粋・改変・自プロダクトへの流用が自由（著作権表示の保持のみ必須）</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>2. なぜ AI 教本として有効か</h2>
+        <ul>
+          <li><strong>同一要件の4実装</strong> — 「XYZ タイルを重ねる」「GeoJSON をスタイル付きで描く」「カメラを動かす」「地物クリックで属性を出す」等の同じ要件が、宣言型スタイルの MapLibre・命令型 API の OpenLayers/Leaflet・3D シーンの Cesium でそれぞれ実装されています。AI は設計思想の違うエンジン間で何が共通で何が固有かを対比して移植できます</li>
+          <li><strong>実運用級のエッジケース</strong> — Service Worker キャッシュ・同一オリジン Worker 制約・遅延ロード・CORS・座標変換・縮尺↔高度換算など、ドキュメントや公式チュートリアルには出てこない対処がコメント付きで残っています</li>
+          <li><strong>.kasc = AI への指示単位</strong> — 行ベースの宣言形式なので、「この .kasc 行タイプを読むビューアを作って」という曖昧さの無い指示ができます。仕様は <a href="use/6-2-インスペクター.html">.kasc 設定仕様（インスペクター）</a> が正本</li>
+          <li><strong>実績</strong> — このリポジトリ自体が AI エージェント運用（<code>AGENTS.md</code> ルール・エンジン/形式ごとの実装照合スキル）を前提に整備されており、AI が読むことを想定した構造になっています</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>3. 実践手順 — AI に読ませる素材の選び方</h2>
+        <p>
+          基本は「<strong>作りたい機能に対応する <code>shared/</code> モジュール + 対象エンジン <code>app.js</code> の該当箇所</strong>」を
+          コンテキストとして渡すことです。やりたいこと別の対応表:
+        </p>
+        <table>
+          <thead><tr><th>実装したい機能</th><th>読ませるファイル</th></tr></thead>
+          <tbody>
+            <tr><td>.kasc 形式の読み込み・レイヤツリー構築</td><td><code>shared/kasc.js</code>（parseKasc・loadKascProject）＋ 対象エンジン <code>app.js</code> のレイヤ追加処理</td></tr>
+            <tr><td>XYZ / WMS / WMTS タイル</td><td><code>shared/kasc.js</code> の <code>buildWmsTileTemplate</code>・<code>buildWmtsTileTemplate</code> ＋ app.js の <code>base:</code>/<code>xyz:</code>/<code>wms:</code> 行処理</td></tr>
+            <tr><td>GeoJSON ベクター＋スタイル描画</td><td><code>shared/vector-load.js</code> ＋ <code>shared/qml-style.js</code>（QGIS QML→各エンジン表現のスタイルコンパイラ）</td></tr>
+            <tr><td>GeoParquet / FlatGeobuf / GPKG のブラウザ内デコード</td><td><code>shared/vector-load.js</code>（hyparquet・flatgeobuf・sql.js・DuckDB-WASM 経路）</td></tr>
+            <tr><td>CSV/DB への SQL クエリ</td><td>app.js の duckdb-wasm 遅延ロード箇所 ＋ <code>shared/ogr-sql.js</code></td></tr>
+            <tr><td>カメラ・縮尺↔高度の換算</td><td><code>shared/kasc.js</code> の <code>camToZoom</code>・<code>heightToViewZoom</code> 等 ＋ app.js カメラ操作</td></tr>
+            <tr><td>地物クリック → 属性パネル</td><td><code>shared/attr-widget.js</code> ＋ app.js の pick/click 処理</td></tr>
+            <tr><td>レイヤ一覧・可視性・凡例管理</td><td>app.js の layer-list 処理 ＋ <code>shared/legend-tab.js</code></td></tr>
+            <tr><td><code>where=</code> フィルタ</td><td><code>shared/where-eval.js</code>（クエリ非対応形式向けクライアント評価）</td></tr>
+            <tr><td>外部からの地図操作 API（埋め込み制御）</td><td><code>shared/player-api.js</code></td></tr>
+            <tr><td>多言語対応</td><td><code>shared/i18n.js</code> ＋ <code>shared/i18n/*.json</code>（9言語カタログ）</td></tr>
+            <tr><td>UI の配布単位カスタマイズ機構</td><td><code>shared/ui-config.js</code>（ui.config.json の適用器）</td></tr>
+          </tbody>
+        </table>
+        <h3>3-1. プロンプト例</h3>
+        <pre><code>kasugai_canvas/web/maplibre/app.js と shared/kasc.js を参照し、
+同じ .kasc 行タイプ（xyz:/geojson:/cam:）を読める独自の
+MapLibre ビューアを実装して。ライブラリは maplibre-gl@6.19.0。</code></pre>
+        <ul>
+          <li><strong>参照ファイルを明示する</strong>のがコツです。「KASUGAI Canvas を参考に」だけでは AI は読みに行けません</li>
+          <li><strong>大きいファイルは該当箇所だけ</strong> — <code>cesium/app.js</code> は1万行超のため、「<code>3dtiles:</code> 行の処理」「属性パネルの実装」など機能名・行タイプで grep させて部分だけ読ませてください</li>
+          <li><strong>.kasc 実物も渡す</strong> — <code>web/projects/default/kasugai_canvas.kasc</code> が最小の実例です。目標出力として見せると移植の精度が上がります</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>4. エンジン別の写像早見表</h2>
+        <p>同じ .kasc 行タイプが各エンジンのどの API へ写像されるか — AI への「正解対応表」としても使えます。</p>
+        <table>
+          <thead><tr><th>.kasc 行</th><th>cesium</th><th>maplibre</th><th>openlayers</th><th>leaflet</th></tr></thead>
+          <tbody>
+            <tr><td><code>xyz:</code> / <code>base:</code></td><td><code>ImageryLayer</code></td><td>raster source + raster layer</td><td><code>TileLayer + XYZ</code></td><td><code>L.tileLayer</code></td></tr>
+            <tr><td><code>geojson:</code> 等ベクター行</td><td><code>GeoJsonDataSource</code>（entity / primitive）</td><td>geojson source + style layer</td><td><code>VectorLayer + VectorSource</code></td><td><code>L.geoJSON</code>（専用 pane で積み順再現）</td></tr>
+            <tr><td><code>cam:</code></td><td><code>camera.setView</code>（高度）</td><td><code>jumpTo</code>（zoom/center/bearing/pitch）</td><td><code>View</code>（center/resolution/rotation）</td><td><code>setView</code>（zoom/center）</td></tr>
+            <tr><td><code>style:</code> / .qml</td><td>entity/primitive プロパティ</td><td>style-spec paint/layout</td><td><code>Style</code> 関数</td><td><code>style</code>/<code>pointToLayer</code></td></tr>
+          </tbody>
+        </table>
+        <p><small>厳密な実装は各 app.js を参照してください。ここは読ませる範囲を絞る目安です。</small></p>
+      </section>
+
+      <section>
+        <h2>5. 注意点</h2>
+        <ul>
+          <li><strong>コピーより「仕様として読ませる」方が確実</strong> — app.js にはエンジン固有の最適化・ワークアラウンドが多く、素直な実装とは限りません。「この実装を参考に、自分のアプリ向けに簡潔に実装して」と意図を伝えてください</li>
+          <li><strong>ライブラリバージョンはピン済み</strong> — AI が最新版で書き換えようとする場合は、<code>index.html</code> の CDN URL・<code>vendor.json</code> のピンを根拠として固定させてください（<a href="engine-customize.html">2-1 の依存一覧</a>）</li>
+          <li><strong>shared/ でも DOM 前提の関数がある</strong> — UI 非依存の移植には、DOM を触らないパーサ・デコーダ・換算関数を選んでください</li>
+          <li><strong>ライセンス</strong> — MIT です。抜粋・移植したコードに元の著作権表示を残してください</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>6. 関連リンク</h2>
+        <ul>
+          <li><a href="engine-customize.html">2-1 エンジン自前配信・独自カスタマイズ</a></li>
+          <li><a href="use/6-2-インスペクター.html">.kasc 設定仕様（インスペクター）</a></li>
+          <li><a href="engines.html">エンジン（特徴と使い分け）</a> / <a href="library.html">ライブラリ</a> / <a href="architecture.html">システム構成</a></li>
+          <li><a href="index.html">← ドキュメントトップへ</a></li>
+        </ul>
+      </section>
+      <p><a href="engine-customize.html">← カスタマイズへ戻る</a></p>
+    </main>
+  </div>
+</body>
+</html>
