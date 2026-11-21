@@ -635,15 +635,14 @@ function legendDescFromEntitySample(item) {
 // 読み込みを開始し、解決後に一覧を再描画する
 function getLayerLegend(item) {
   if (!item) return null;
-  if (item.styleUrl) {
-    if (item.qmlStyle === undefined) {
-      ensureQmlStyle(item).then(() => { if (layerState.has(item.id)) scheduleLayerListRender(); });
-      return null;
-    }
-    const legend = item.qmlStyle?.legend;
-    if (legend?.length) {
-      return { entries: legend.map(e => ({ label: e.label, symbolName: e.symbolName, desc: e.spec ? legendDescFromQmlSpec(e.spec) : null })) };
-    }
+  if (item.styleUrl && item.qmlStyle === undefined) {
+    ensureQmlStyle(item).then(() => { if (layerState.has(item.id)) scheduleLayerListRender(); });
+    return null;
+  }
+  // styleUrl 由来だけでなく gpkg 埋め込み(styleUrl 無しで qmlStyle 設定)にも対応
+  const legend = item.qmlStyle?.legend;
+  if (legend?.length) {
+    return { entries: legend.map(e => ({ label: e.label, symbolName: e.symbolName, desc: e.spec ? legendDescFromQmlSpec(e.spec) : null })) };
   }
   if (LEGEND_VECTOR_TYPES.has(item.type)) {
     const desc = legendDescFromEntitySample(item);

@@ -100,6 +100,18 @@ async function waitLayers(min, timeout = 90000) {
 const loaded = await waitLayers(11);
 rec("load.layers", loaded >= 11, `gpkg レイヤー ${loaded}/11 読込`);
 
+// Portrayal 適用は maplibre のみ。レイヤ登録(_geojson 設定)後も非同期で継続する
+// ため、gpkgext_styles を持つレイヤは item._gpkgPortrayal.done まで待機する。
+// 待たないと appliedLayers/symbols が未設定のまま layerInfo を読んで flaky になる
+if (ENGINE === "maplibre") {
+  await page.waitForFunction(() =>
+    (window.kasugaiApi?.listLayers?.() || []).every(l => {
+      const it = l.item || l;
+      if (!it.gpkgMeta?.styles) return true;
+      return it._gpkgPortrayal?.done === true;
+    }), { timeout: 90000 }).catch(() => {});
+}
+
 const layerInfo = await page.evaluate(() => {
   const out = {};
   for (const l of window.kasugaiApi.listLayers()) {

@@ -801,12 +801,21 @@ async function installMbstyleSprite(spriteSpec, baseUrl) {
 // gpkg ベクタレイヤへ gpkgext_styles の内容を適用する。
 // gpkgstyle= はスタイル名/uri で stylesheet を直接選択できる
 async function applyGpkgPortrayal(item, sid, lids, filters, opas, before, baseUrl) {
+  // probe/API が適用完了を待てるよう、処理開始時点で未完了印を立てる
+  // (_geojson 露出→本関数呼出の隙間を含めて待機可能にするため先頭で代入)
+  item._gpkgPortrayal = { done: false };
+  // 外部取得(worker・CDN・FontFace・sprite fetch)は応答無しでハングし得るため
+  // 個別にタイムアウトを掛け、レイヤ登録パイプライン全体を止めないようにする
+  const timed = (p, ms) => Promise.race([
+    p,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`timeout(${ms}ms)`)), ms)),
+  ]);
   let reg;
-  try { reg = await gpkgStyleRegistry(resolveKascUrl(item.url, baseUrl)); }
-  catch (e) { console.warn("gpkgext スタイルレジストリ取得失敗:", item.title, e); return; }
-  if (!reg) return;
-  const symN = await installGpkgSymbols(reg.symbols).catch(() => 0);
-  await installGpkgFonts(reg.fonts).catch(() => {});
+  try { reg = await timed(gpkgStyleRegistry(resolveKascUrl(item.url, baseUrl)), 20000); }
+  catch (e) { console.warn("gpkgext スタイルレジストリ取得失敗:", item.title, e); item._gpkgPortrayal = { error: String(e), done: true }; return; }
+  if (!reg) { item._gpkgPortrayal = { done: true }; return; }
+  const symN = await timed(installGpkgSymbols(reg.symbols), 15000).catch(() => 0);
+  await timed(installGpkgFonts(reg.fonts), 20000).catch(() => {});
   // probe/診断用: 登録内容と適用結果を item へ残す
   item._gpkgPortrayal = {
     symbols: (reg.symbols || []).length,
@@ -816,9 +825,11 @@ async function applyGpkgPortrayal(item, sid, lids, filters, opas, before, baseUr
     annotations: Object.keys(reg.annotations || {}).length,
     mbstyleSheets: (reg.sheets || []).filter(sh => String(sh.format).toLowerCase() === "mbstyle").length,
     appliedLayers: 0,
+    // probe/API から適用完了を待てるよう非同期完了印を付ける
+    done: false,
   };
   const sheets = (reg.sheets || []).filter(sh => String(sh.format).toLowerCase() === "mbstyle" && sh.data);
-  if (!sheets.length) return;
+  if (!sheets.length) { item._gpkgPortrayal.done = true; return; }
   const wantName = String(item.opts?.gpkgstyle || "");
   const styleRows = new Map((reg.styles?.list || []).map(s => [s.id, s]));
   let applied = 0;
@@ -830,7 +841,7 @@ async function applyGpkgPortrayal(item, sid, lids, filters, opas, before, baseUr
     if (!gpkgSheetApplies(sh, item, reg)) continue;
     // sprite.png+sprite.json を切り出して icon-image 名で参照できるよう登録
     if (mbstyle.sprite) {
-      const sn = await installMbstyleSprite(mbstyle.sprite, baseUrl).catch(() => 0);
+      const sn = await timed(installMbstyleSprite(mbstyle.sprite, baseUrl), 10000).catch(() => 0);
       if (sn) item._gpkgPortrayal.sprites = (item._gpkgPortrayal?.sprites || 0) + sn;
     }
     const srcIds = new Set(Object.keys(mbstyle.sources || {}));
@@ -847,7 +858,7 @@ async function applyGpkgPortrayal(item, sid, lids, filters, opas, before, baseUr
       if (lyr.filter) filters.set(def.id, lyr.filter);
     }
   }
-  if (item._gpkgPortrayal) item._gpkgPortrayal.appliedLayers = applied;
+  if (item._gpkgPortrayal) { item._gpkgPortrayal.appliedLayers = applied; item._gpkgPortrayal.done = true; }
   if (applied) console.info(`GPKG Portrayal: ${item.title} に mbstyle を適用しました(${applied}レイヤ)`);
 }
 
