@@ -16,6 +16,9 @@
 // で変更できる。未指定は .qml のシンボル順。
 // タブ名(name=)が組み込みタブと重複する場合、組み込み側は自動的に
 // 「システムレイヤ」等に改称される。
+// 同時に「フィルタ」タブも登録する — site 単位の共通属性で全メンバー
+// レイヤへ where= 式を一括適用/解除する(QGIS WEBVIEW の Filter タブと
+// 同じ構成。setLayerFilter/getLayerGeoJson 非対応エンジンでは出ない)。
 //
 //   geojson: A工区・ポリゴン | canvas_data/a-poly.geojson | site=A工区 | order=1
 //   geojson: A工区・ライン   | canvas_data/a-line.geojson | site=A工区 | order=2
@@ -290,6 +293,351 @@ export async function init(api, manifest) {
     return wrap;
   };
 
+  // ---- サイト共通フィルタ(「フィルタ」タブ) --------------------------
+  // QGIS WEBVIEW の Filter タブと同じ構成: site(=集約キー)単位で
+  // 全メンバーレイヤに共通する属性を選び、where= 式を一括適用する。
+  //   数値フィールド → 演算子(= != < <= > >=) + 数値入力
+  //   その他         → = / != + 既存値入力(候補リスト付き)
+  //   複数選択       → IN / NOT IN + 既存値チェックリスト(数値も可)
+  // where= は where-eval.js の OGR SQL WHERE 句として評価される。
+  // ※ NOT IN は where-eval が中置 NOT 非対応のため NOT (… IN (…)) で出す
+
+  // where= を受け付けるベクター型(sql:/ogrsql: はクエリ全文型なので除外)
+  const FILTER_VECTOR_TYPES = new Set([
+    "geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb",
+    "gpkg", "geopackage", "csv", "tsv", "duckdb", "kml", "kmz", "gpx",
+    "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson",
+    "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc",
+    "polyline", "gml", "wfs", "shp", "shapefile",
+  ]);
+  // geojsonSource/_geojson が where= 適用前の全件を保持する型
+  // (それ以外はフィルタ済みになるため、値列挙時に一時解除→復元する)
+  const FULL_SOURCE_TYPES = new Set(["geojson", "layer", "entities"]);
+  // FlatGeobuf ヘッダ columns の数値型
+  const NUMERIC_COL_TYPES = new Set([
+    "Byte", "UByte", "Short", "UShort", "Int", "UInt",
+    "Long", "ULong", "Float", "Double",
+  ]);
+
+  // list=off も含めて site ごとのフィルタ対象メンバーを集約
+  const filterSites = () => {
+    const map = new Map();
+    const misc = [];
+    for (const l of api.listLayers() || []) {
+      if (!FILTER_VECTOR_TYPES.has(l.type)) continue;
+      const k = l.options?.[KEY];
+      if (!k) { misc.push(l); continue; }
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(l);
+    }
+    const sites = [...map.entries()].map(([name, members]) => ({ name, members }));
+    if (misc.length) sites.push({ name: MISC, members: misc });
+    return sites;
+  };
+
+  // メンバー1件の フィールド名→数値か マップ
+  // (fgb ヘッダの列型を優先、無ければ地物の値から判定)
+  const fieldMapOf = l => {
+    const cols = l.fgb?.columns;
+    if (cols?.length) {
+      const m = {};
+      for (const c of cols) if (c?.name) m[c.name] = NUMERIC_COL_TYPES.has(c.type);
+      return m;
+    }
+    const gj = api.getLayerGeoJson?.(l.id) || api.getLayerGeoJson?.(l.title);
+    const m = {};
+    for (const f of (gj?.features || []).slice(0, 500)) {
+      const p = f?.properties || {};
+      for (const [k, v] of Object.entries(p)) {
+        if (k.startsWith("__kasc_")) continue; // スタイル焼付け内部属性
+        if (!(k in m)) m[k] = true;
+        if (v != null && typeof v !== "number") m[k] = false;
+      }
+    }
+    return m;
+  };
+
+  // 全メンバー共通フィールド名→数値か(全メンバーで数値のとき true)
+  const commonFields = members => {
+    let common = null;
+    for (const m of members) {
+      const fm = fieldMapOf(m);
+      if (common == null) common = fm;
+      else {
+        for (const k of Object.keys(common)) {
+          if (!(k in fm)) delete common[k];
+          else common[k] = common[k] && fm[k];
+        }
+      }
+    }
+    return common || {};
+  };
+
+  // メンバー全レイヤの既存値を列挙(最大100件)。
+  // フィルタ済みソースの型は where= を一時解除して全件から集めて復元する
+  const collectValues = async (members, field) => {
+    const vals = new Set();
+    for (const m of members) {
+      const prev = m.filter || "";
+      const cleared = !!prev && !FULL_SOURCE_TYPES.has(m.type) && !!api.setLayerFilter;
+      if (cleared) { try { await api.setLayerFilter(m.id, ""); } catch (_) {} }
+      try {
+        const gj = await api.getLayerGeoJson?.(m.id)
+          || await api.getLayerGeoJson?.(m.title);
+        for (const f of gj?.features || []) {
+          const v = f?.properties?.[field];
+          if (v != null) vals.add(String(v));
+          if (vals.size > 100) break;
+        }
+      } finally {
+        if (cleared) { try { await api.setLayerFilter(m.id, prev); } catch (_) {} }
+      }
+      if (vals.size > 100) break;
+    }
+    return [...vals]
+      .sort((a, b) => a.localeCompare(b, "ja", { numeric: true }))
+      .slice(0, 100);
+  };
+
+  const filterStyle = document.createElement("style");
+  filterStyle.textContent = `
+    .sf-row { display: flex; align-items: center; gap: 5px; margin: 3px 0; }
+    .sf-row > label { flex: 0 0 auto; font-size: 0.85em; }
+    .sf-row select, .sf-row input[type="text"], .sf-row input[type="number"] {
+      flex: 1; min-width: 0; min-height: 26px; font-size: 0.85em; padding: 2px 5px;
+      border: 1px solid #b9c4cc; border-radius: 3px; }
+    .sf-row select.sf-op { flex: 0 0 auto; width: 76px; }
+    .sf-multi-cb { font-size: 0.85em; display: flex; align-items: center; gap: 4px; }
+    .sf-multi-cb input[type="checkbox"], .sf-vals input[type="checkbox"] {
+      flex: 0 0 auto; width: 13px; min-height: 13px; margin: 0; }
+    .sf-vals { flex: 1; max-height: calc(100vh - var(--control-panel-bottom-clearance, 140px)); overflow-y: auto;
+      border: 1px solid #b9c4cc; border-radius: 3px; padding: 2px 5px; }
+    .sf-vals label { display: flex; align-items: center; gap: 4px;
+      font-size: 0.85em; line-height: 1.35; }
+    .sf-btn { min-height: 24px; padding: 2px 10px; font-size: 0.85em; cursor: pointer; }
+    .sf-status { flex: 1; font-size: 0.78em; color: #345;
+      word-break: break-all; }
+  `;
+
+  const registerFilterPanel = afterKey => {
+    if (!api.setLayerFilter || !api.getLayerGeoJson) return;
+    let siteSel, fieldSel, multiCb, rowNum, rowStr, rowMulti,
+      opNum, opStr, opMulti, inputNum, inputStr, listEl, statusEl, valList;
+    const h = (tag, cls, text) => {
+      const el = document.createElement(tag);
+      if (cls) el.className = cls;
+      if (text != null) el.textContent = text;
+      return el;
+    };
+    const qf = s => `"${String(s).replace(/"/g, '""')}"`;
+    const ql = s => `'${String(s).replace(/'/g, "''")}'`;
+    const status = txt => { if (statusEl) statusEl.textContent = txt || ""; };
+
+    const curMembers = () =>
+      filterSites().find(s => s.name === siteSel.value)?.members || [];
+    const fieldNumeric = () =>
+      fieldSel.selectedOptions?.[0]?.dataset.num === "1";
+
+    const refreshSites = () => {
+      const cur = siteSel.value;
+      siteSel.textContent = "";
+      for (const s of filterSites()) {
+        const o = document.createElement("option");
+        o.value = s.name;
+        o.textContent = s.name;
+        siteSel.appendChild(o);
+      }
+      if (cur) siteSel.value = cur;
+      refreshFields();
+    };
+
+    const refreshFields = () => {
+      const members = curMembers();
+      const cur = fieldSel.value;
+      fieldSel.textContent = "";
+      const common = commonFields(members);
+      for (const name of Object.keys(common).sort((a, b) => a.localeCompare(b, "ja"))) {
+        const o = document.createElement("option");
+        o.value = name;
+        o.textContent = common[name] ? `${name} (num)` : name;
+        if (common[name]) o.dataset.num = "1";
+        fieldSel.appendChild(o);
+      }
+      if (cur && fieldSel.querySelector(`option[value="${CSS.escape(cur)}"]`)) {
+        fieldSel.value = cur;
+      }
+      if (!Object.keys(common).length) status(members.length ? "共通属性がありません" : "対象レイヤがありません");
+      else if (/共通属性がありません|対象レイヤがありません/.test(statusEl.textContent)) status("");
+      updateMode();
+    };
+
+    const refreshValues = async () => {
+      const field = fieldSel.value;
+      if (!field) return;
+      const vals = await collectValues(curMembers(), field);
+      // 単一選択の候補(datalist)
+      if (valList) {
+        valList.textContent = "";
+        for (const v of vals) {
+          const o = document.createElement("option");
+          o.value = v;
+          valList.appendChild(o);
+        }
+      }
+      // 複数選択のチェックリスト(チェック状態は値が残る限り保持)
+      const prev = new Set(
+        [...listEl.querySelectorAll("input:checked")].map(i => i.value));
+      listEl.textContent = "";
+      for (const v of vals) {
+        const lb = document.createElement("label");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = v;
+        cb.checked = prev.has(v);
+        lb.append(cb, document.createTextNode(v));
+        listEl.appendChild(lb);
+      }
+    };
+
+    const updateMode = () => {
+      const numeric = fieldNumeric();
+      const multi = multiCb.checked;
+      rowNum.style.display = numeric && !multi ? "" : "none";
+      rowStr.style.display = !numeric && !multi ? "" : "none";
+      rowMulti.style.display = multi ? "" : "none";
+      if (!numeric || multi) void refreshValues();
+    };
+
+    const buildExpr = () => {
+      const field = fieldSel.value;
+      if (!field) return { error: "フィールドを選択" };
+      const numeric = fieldNumeric();
+      if (multiCb.checked) {
+        const sel = [...listEl.querySelectorAll("input:checked")]
+          .map(i => i.value);
+        if (!sel.length) return { error: "値を選択" };
+        const vs = sel.map(v => numeric ? v : ql(v)).join(",");
+        const inner = `${qf(field)} IN (${vs})`;
+        return { expr: opMulti.value === "NOT IN" ? `NOT (${inner})` : inner };
+      }
+      if (numeric) {
+        const num = Number(inputNum.value.trim());
+        if (!Number.isFinite(num)) return { error: "数値を入力" };
+        return { expr: `${qf(field)} ${opNum.value} ${num}` };
+      }
+      const v = inputStr.value.trim();
+      if (!v) return { error: "値を選択" };
+      return { expr: `${qf(field)} ${opStr.value} ${ql(v)}` };
+    };
+
+    const applyFilter = async () => {
+      const members = curMembers();
+      if (!members.length) { status("対象レイヤがありません"); return; }
+      const r = buildExpr();
+      if (r.error) { status(r.error); return; }
+      let n = 0;
+      for (const m of members) {
+        try {
+          const res = await api.setLayerFilter(m.id, r.expr);
+          if (res?.ok !== false) n++;
+        } catch (_) {}
+      }
+      status(`${r.expr}（${n}件に適用）`);
+      void refreshValues();
+    };
+
+    const clearFilter = async () => {
+      const members = curMembers();
+      for (const m of members) {
+        try { await api.setLayerFilter(m.id, ""); } catch (_) {}
+      }
+      status("");
+      void refreshValues();
+    };
+
+    api.registerPanel({
+      id: "site-filter",
+      title: "フィルタ",
+      ...(afterKey ? { after: afterKey } : {}),
+      onInit(panel) {
+        panel.appendChild(filterStyle);
+        siteSel = document.createElement("select");
+        fieldSel = document.createElement("select");
+        const sfRow = h("div", "sf-row");
+        sfRow.append(h("label", null, "サイト:"), siteSel,
+          h("label", null, "フィールド:"), fieldSel);
+        panel.appendChild(sfRow);
+        // 複数選択トグル
+        const mrow = h("div", "sf-row");
+        const mlb = h("label", "sf-multi-cb");
+        multiCb = document.createElement("input");
+        multiCb.type = "checkbox";
+        mlb.append(multiCb, document.createTextNode("複数選択"));
+        mrow.appendChild(mlb);
+        panel.appendChild(mrow);
+        // 数値行
+        rowNum = h("div", "sf-row");
+        opNum = document.createElement("select");
+        opNum.className = "sf-op";
+        for (const o of ["=", "!=", "<", "<=", ">", ">="])
+          opNum.appendChild(new Option(o, o));
+        inputNum = document.createElement("input");
+        inputNum.type = "number";
+        inputNum.step = "any";
+        inputNum.placeholder = "値(数値)";
+        rowNum.append(opNum, inputNum);
+        panel.appendChild(rowNum);
+        // 文字列行(入力+候補datalist)
+        rowStr = h("div", "sf-row");
+        opStr = document.createElement("select");
+        opStr.className = "sf-op";
+        for (const o of ["=", "!="]) opStr.appendChild(new Option(o, o));
+        inputStr = document.createElement("input");
+        inputStr.type = "text";
+        inputStr.placeholder = "値";
+        valList = document.createElement("datalist");
+        const dlId = `sf-vals-${Math.random().toString(36).slice(2)}`;
+        valList.id = dlId;
+        inputStr.setAttribute("list", dlId);
+        rowStr.append(opStr, inputStr, valList);
+        panel.appendChild(rowStr);
+        // 複数選択行
+        rowMulti = h("div", "sf-row");
+        opMulti = document.createElement("select");
+        opMulti.className = "sf-op";
+        for (const o of ["IN", "NOT IN"]) opMulti.appendChild(new Option(o, o));
+        listEl = h("div", "sf-vals");
+        rowMulti.append(opMulti, listEl);
+        rowMulti.style.alignItems = "flex-start";
+        panel.appendChild(rowMulti);
+        // ボタン行
+        const brow = h("div", "sf-row");
+        const ab = h("button", "sf-btn", "適用");
+        ab.type = "button";
+        ab.addEventListener("click", () => void applyFilter());
+        const cb = h("button", "sf-btn", "クリア");
+        cb.type = "button";
+        cb.addEventListener("click", () => void clearFilter());
+        statusEl = h("span", "sf-status");
+        brow.append(ab, cb, statusEl);
+        panel.appendChild(brow);
+        // イベント
+        siteSel.addEventListener("change", refreshFields);
+        fieldSel.addEventListener("change", updateMode);
+        multiCb.addEventListener("change", updateMode);
+        refreshSites();
+        // 現在のフィルタをステータスに表示(先頭メンバー)
+        const first = curMembers()[0];
+        if (first?.filter) status(first.filter);
+      },
+      onShow() {
+        refreshSites();
+        const first = curMembers()[0];
+        if (first?.filter) status(first.filter);
+      },
+    });
+  };
+
   let list = null;
   const render = () => {
     if (!list) return;
@@ -313,7 +661,7 @@ export async function init(api, manifest) {
     }
   };
 
-  api.registerPanel({
+  const layerPanel = api.registerPanel({
     id: "custom-layer",
     title: manifest.name || "レイヤ",
     onInit(panel) {
@@ -355,5 +703,8 @@ export async function init(api, manifest) {
     },
     onShow() { render(); },
   });
+  // 「フィルタ」タブをレイヤタブの直後に登録(setLayerFilter 非対応の
+  // エンジンでは registerFilterPanel 内で何もしない)
+  registerFilterPanel(layerPanel?.key);
   api.on?.("layers-changed", () => render());
 }

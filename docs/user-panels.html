@@ -88,6 +88,7 @@ plugin: custom-layer | name=レイヤ | url=canvas_data/custom-layer.js | before
           <li><code>site=</code> はこのタブ専用の集約キーで、<strong>標準レイヤタブには全レイヤが従来通り表示されます</strong>（全体を見る標準タブ＋簡素化した集約タブの併用）。レイヤ一覧（標準・カスタムとも）から隠したいレイヤは <code>list=off</code> を付けます（地図には描画される）。<code>site=</code> と別の集約キー名を使う場合は <code>manifest.options.key</code>（<code>plugin: sc | ... | key=site</code>）で変更できます</li>
           <li><code>site=</code> を付けないレイヤはタブ末尾の「その他」に集約され、一括 on/off ができます（順序操作は出さず .kasc 順のまま）</li>
           <li>プラグインタブの表示名（<code>name=</code>）が組み込みタブと重複する場合、<strong>組み込み側のタブ名が自動的に「システムレイヤ」等に改称</strong>されます（<code>name=レイヤ</code> → 組み込みは「ｼｽﾃﾑﾚｲﾔ」表示。重複解消で自動復元・i18n 対応）。また重複が発生したプラグインタブは組み込みの代替とみなされ、<strong>初期表示タブとして自動選択</strong>されます</li>
+          <li>同じプラグインが「<strong>フィルタ</strong>」タブも登録します — QGIS WEBVIEW の Filter タブと同じ構成で、site 単位の共通属性フィルタを全メンバーレイヤへ <code>where=</code> 式として一括適用します。数値フィールドは演算子（= != &lt; &lt;= &gt; &gt;=）＋数値入力、その他は = / != ＋既存値入力、「複数選択」で <code>IN</code>/<code>NOT IN</code>＋既存値チェックリスト（数値も可）に切り替わります。適用経路はレイヤ行の ⏷ フィルタと同じ <code>setLayerFilter</code>（クエリ系は SQL 再クエリ、geojson: 等はクライアント評価）で、値の列挙は適用中フィルタを一時解除して全件から集めます</li>
         </ul>
       </section>
 

@@ -6,6 +6,8 @@
 
 ## [Unreleased]
 
+- **custom-layer プラグインに「フィルタ」タブを追加** — QGIS WEBVIEW の Filter タブと同じ構成の site 共通フィルタ。サイト選択→全メンバー共通属性(数値は `(num)` 付記)を列挙し、`where=` 式を `api.setLayerFilter` で一括適用/解除。数値は演算子(= != < <= > >=)+数値入力、その他は = / != + 既存値(datalist)、「複数選択」で IN/NOT IN+既存値チェックリスト。値の列挙は適用中フィルタを一時解除して全件から収集(geojson: 等フルソース保持型は解除不要)。`setLayerFilter`/`getLayerGeoJson` 非対応エンジンではタブ自体を出さない
+- **player-api `setLayerFilter` を全ベクター型へ拡張** — 従来はクエリ系(gpkg/duckdb/flatgeobuf 等)のみ対応で geojson: 等のクライアント評価型が `unsupported` だったのを、where= 対象の全ベクター型(geojson/layer/csv/kml/shp 等)へ拡大。`opts.where` 設定 + インスペクタの .kasc 行へ `where=` を書き戻し(`rewriteKascLineOpt`) + `layers-changed` 発火。sql:/ogrsql: のクエリ全文差し替えは従来通り
 - **ポイント・ラベルの地形/3D Tiles ドレープを修正(Cesium)** — Cesium の `GeoJsonDataSource` は座標が2要素の billboard にしか `CLAMP_TO_GROUND` を付けないため、z 付き座標(PointZ 等)のポイント・QML 由来のラベル/補助 billboard・クラスタバッジがドレープ設定時でも地表へ張り付かなかった問題を修正。entity 経路で billboard/label/point へ `heightReference`(ドレープ先に応じ TERRAIN/3D_TILE/GROUND)を明示付与し、QML レンダラにも `clampRef` を追加してマーカー・ラベル・シャドウ・ダイアグラム・ラインデコレーション・GeometryGenerator マーカー等の全補助エンティティへ伝播。`cluster=on` のクラスタバッジも同様にクランプ。検証: `web/projects/drape_points/` + `web/verify/results/probe-2026-11-18-drape-points.mjs`(7/7 PASS)
 - **QML ラベルの自己障害物衝突を修正** — `obstacle="1"` + `fitInPolygonOnly`/`centroidInside` 系ラベルが全て非表示になっていた問題を修正。ラベル declutter が地物自身のポリゴン bbox を障害物として登録し、自ポリゴン内に置かれる自分のラベルも障害物と衝突判定して全滅させていた。QGIS(PAL) と同じく「地物自身の障害物はその地物のラベルには適用しない」よう、障害物に所有者 entity をタグ付けして衝突判定でスキップ（Cesium `declutterDataSourceLabels`・Leaflet `syncLabelZoomVisibility` の2箇所）。他地物・他レイヤーの障害物は従来どおり有効
 - ベクターデータ形式を8系統追加（`.kasc` 行タイプとして全エンジン共通の `shared/vector-load.js` 全件読み込み系へ統合、GeoJSON 正規化で描画）:

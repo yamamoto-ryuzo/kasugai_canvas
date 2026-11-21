@@ -3,7 +3,7 @@
 // エンジン別の描画フック）を持つため、エンジン差分は hooks として注入し、
 // kasugaiApi 互換の API 面をここで構成する。AI チャット（shared/ai-chat.js）の
 // ツールはこの api メソッドの有無で公開可否が決まる。
-import { camToZoom, viewZoomToHeight, geojsonExtent, splitKascTitle, buildViewUrl, normKascTitle } from "./kasc.js";
+import { camToZoom, viewZoomToHeight, geojsonExtent, splitKascTitle, buildViewUrl, normKascTitle, rewriteKascLineOpt } from "./kasc.js";
 import { loadVectorItem, summarizeFlatGeobufHeader, summarizeGeoParquetHeader } from "./vector-load.js";
 import { backendUrl } from "./backend.js";
 import { hasBackendFeature, isFetchProxyTarget, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
@@ -556,13 +556,31 @@ export function createPlayerApi(hooks) {
           return { ok: false, reason: "failed" };
         }
       }
-      if (!new Set(["gpkg", "geopackage", "duckdb", "flatgeobuf", "fgb", "geoparquet", "parquet"]).has(t)) {
-        return { ok: false, reason: "unsupported" };
-      }
+      // where= を受け付けるベクター全型(クエリ系はローダ側の SQL、
+      // それ以外は shared/where-eval.js のクライアント評価で絞り込む。
+      // sql:/ogrsql: は上の分岐でクエリ全文として扱う)
+      const WHERE_TYPES = new Set([
+        "gpkg", "geopackage", "duckdb", "flatgeobuf", "fgb", "geoparquet", "parquet",
+        "geojson", "layer", "csv", "tsv", "kml", "kmz", "gpx", "czml", "topojson",
+        "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq",
+        "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile",
+      ]);
+      if (!WHERE_TYPES.has(t)) return { ok: false, reason: "unsupported" };
+      const value = String(filter ?? "").trim();
       e.item.opts ||= {};
-      e.item.opts.where = String(filter ?? "").trim() || undefined;
+      e.item.opts.where = value || undefined;
+      // インスペクタの .kasc 行へ where= を書き戻す(各エンジンの ⏷ 編集と同じ規則)
+      const oldLine = e.item.line;
+      if (oldLine) {
+        e.item.line = rewriteKascLineOpt(oldLine, "where", value || null);
+        if (e.item.line && e.item.line !== oldLine && hooks.getInspectorText && hooks.setInspectorText) {
+          hooks.setInspectorText(hooks.getInspectorText()
+            .split(/\r?\n/).map(l => (l.trim() === oldLine.trim() ? e.item.line : l)).join("\n"));
+        }
+      }
       try {
         await hooks.reloadEntryData(e);
+        this.emit?.("layers-changed");
         return { ok: true };
       } catch {
         return { ok: false, reason: "failed" };
