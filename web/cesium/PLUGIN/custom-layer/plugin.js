@@ -11,6 +11,9 @@
 // 「一覧から除外」なのでこのタブにも表示しない。site= 無しレイヤは
 // このタブ末尾の「その他」に集約されて一括 on/off できる。
 // メンバー内の表示順は order=<数値> で指定できる。
+// 凡例の並びは legend_order=asc|desc|reverse またはカンマ区切りの
+// ラベル列挙(legend_order=区分A,区分C,区分B。未列挙は末尾・元順維持)
+// で変更できる。未指定は .qml のシンボル順。
 // タブ名(name=)が組み込みタブと重複する場合、組み込み側は自動的に
 // 「システムレイヤ」等に改称される。
 //
@@ -110,6 +113,24 @@ export async function init(api, manifest) {
     return row;
   };
 
+  // 凡例の並び順: legend_order=asc|desc|reverse または
+  // カンマ区切りのラベル列挙(未列挙は末尾・元順維持)
+  const sortLegendEntries = (m, entries) => {
+    const spec = String(m.options?.legend_order || "").trim();
+    if (!spec || entries.length < 2) return entries;
+    const key = e => String(e.label || e.symbolName || "");
+    if (spec === "reverse") return [...entries].reverse();
+    if (spec === "asc" || spec === "desc") {
+      const s = [...entries].sort(
+        (a, b) => key(a).localeCompare(key(b), "ja"));
+      return spec === "desc" ? s.reverse() : s;
+    }
+    const pos = new Map(
+      spec.split(",").map((t, i) => [t.trim(), i]));
+    const idx = e => pos.has(key(e)) ? pos.get(key(e)) : 1e9;
+    return [...entries].sort((a, b) => idx(a) - idx(b));
+  };
+
   // 標準タブの .layer-item と同じ構造:
   // <label class="layer-row">[toggle|spacer][cb][swatch][title][📍]
   // 複数シンボルは .layer-legend-items(開閉可)の凡例行を子に持つ
@@ -118,7 +139,7 @@ export async function init(api, manifest) {
     item.className = "layer-item";
     const row = document.createElement("label");
     row.className = "layer-row";
-    const entries = m.legend || [];
+    const entries = sortLegendEntries(m, m.legend || []);
     const multi = entries.length > 1;
     let items = null;
     if (multi) {

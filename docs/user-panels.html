@@ -83,9 +83,9 @@ geojson: 背景ライン    | canvas_data/free.geojson    （site なし → 標
 plugin: custom-layer | name=レイヤ | url=canvas_data/custom-layer.js | before=layers-panel</code></pre>
         <ul>
           <li>箇所ごとの1トグルで全メンバーをまとめて on/off（<code>setLayerVisible</code> をメンバー全件に適用）、部分表示は中間状態表示</li>
-          <li>メンバーが分類凡例（QML <code>style=</code>）を持つ場合、箇所行の下に凡例項目（チェック＋スウォッチ＋ラベル）を表示し、シンボル単位の on/off（<code>setLayerLegendVisible</code>）ができます。<code>listLayers()</code> の <code>legend[].spec</code> を <code>api.legendSwatchUrl()</code> でスウォッチ画像に変換します</li>
+          <li>メンバーが分類凡例（QML <code>style=</code>）を持つ場合、箇所行の下に凡例項目（チェック＋スウォッチ＋ラベル）を表示し、シンボル単位の on/off（<code>setLayerLegendVisible</code>）ができます。凡例の並び順は <code>legend_order=asc|desc|reverse</code> またはカンマ区切りのラベル列挙（<code>legend_order=区分A,区分C,区分B</code>。未列挙は末尾・元順維持）で変更でき、未指定時は .qml のシンボル順です。<code>listLayers()</code> の <code>legend[].spec</code> を <code>api.legendSwatchUrl()</code> でスウォッチ画像に変換します</li>
           <li>メンバー内の順序は <code>order=&lt;数値&gt;</code>（書式: レイヤ行の <code>key=value</code>・例 <code>order=1</code>）で制御します。小さいほど上で、省略時は現在の並び順の末尾扱いです。これはプラグインが <code>listLayers()</code> の <code>options.order</code> を読んで並べ替える独自キーであり、エンジン本体の描画順（.kasc 行順・<code>setLayerOrder</code>）とは別物です — 「この集約タブでの表示順のヒント」として使います</li>
-          <li><code>site=</code> はこのタブ専用の集約キーで、<strong>標準レイヤタブには全レイヤが従来通り表示されます</strong>（全体を見る標準タブ＋簡素化した集約タブの併用）。標準一覧から隠したいレイヤは <code>list=off</code> を付けます（地図には描画される）。<code>site=</code> と別の集約キー名を使う場合は <code>manifest.options.key</code>（<code>plugin: sc | ... | key=site</code>）で変更できます</li>
+          <li><code>site=</code> はこのタブ専用の集約キーで、<strong>標準レイヤタブには全レイヤが従来通り表示されます</strong>（全体を見る標準タブ＋簡素化した集約タブの併用）。レイヤ一覧（標準・カスタムとも）から隠したいレイヤは <code>list=off</code> を付けます（地図には描画される）。<code>site=</code> と別の集約キー名を使う場合は <code>manifest.options.key</code>（<code>plugin: sc | ... | key=site</code>）で変更できます</li>
           <li><code>site=</code> を付けないレイヤはタブ末尾の「その他」に集約され、一括 on/off ができます（順序操作は出さず .kasc 順のまま）</li>
           <li>プラグインタブの表示名（<code>name=</code>）が組み込みタブと重複する場合、<strong>組み込み側のタブ名が自動的に「システムレイヤ」等に改称</strong>されます（<code>name=レイヤ</code> → 組み込みは「ｼｽﾃﾑﾚｲﾔ」表示。重複解消で自動復元・i18n 対応）。また重複が発生したプラグインタブは組み込みの代替とみなされ、<strong>初期表示タブとして自動選択</strong>されます</li>
         </ul>
