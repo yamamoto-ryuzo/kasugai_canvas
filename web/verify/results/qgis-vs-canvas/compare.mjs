@@ -5,7 +5,7 @@
 //   node compare.mjs <engine> [bbox4326] [project] [waitLayer] [solo[,solo2,...]]
 //   solo をカンマ区切りで渡すと 1 セッションで複数層を連続ペア撮影
 // 出力: web/verify/results/qgis-vs-canvas/{qgis,canvas}-<engine>[-<layer>].png
-import { resolveLiveDirs, getControlPage } from "file:///C:/devin/qgis_live_harness/scripts/live-drive.mjs";
+import { resolveLiveDirs, getControlPage, LivePage } from "file:///C:/devin/qgis_live_harness/scripts/live-drive.mjs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,9 +22,36 @@ const CANVAS = "http://127.0.0.1:8510";
 
 // --- 1) QGIS 側: ドライバ接続 + 範囲設定 ---
 const liveDir = join("C:/devin/qgis_live_harness/test-results/live");
-await resolveLiveDirs(liveDir);
-const page = await getControlPage(liveDir);
-const st = await page.status().catch(e => ({ err: String(e) }));
+const liveDirs = await resolveLiveDirs(liveDir);
+// 死んだセッションの live dir が残ることがあるため、status が応答する
+// geo_driver を探す(先頭=最新とは限らない)
+let page = null, st = null, bestScore = -1;
+// 複数 QGIS が同時起動している場合、目的レイヤ(qmltest_* 等)を持つ
+// プロジェクト側を選ぶ。SOLO_LIST 先頭名でスコアリングする
+const wantName = SOLO_LIST[0] || WAIT_LAYER;
+for (const d of liveDirs.filter(d => d.pluginId === "geo_driver")) {
+  const p = new LivePage(d.dir);
+  const s = await Promise.race([p.status().catch(() => null), new Promise(r => setTimeout(() => r(null), 12000))]);
+  if (!s || !s.pid) continue;
+  let score = 0;
+  try {
+    const nm = await p.pyeval(`
+from qgis.core import QgsProject
+names = [n.layer().name() for n in QgsProject.instance().layerTreeRoot().findLayers()]
+result = str(sum(1 for x in names if x == ${JSON.stringify(wantName)})) + "/" + str(sum(1 for x in names if "qmltest" in x)) + "/" + str(len(names))
+`, { timeoutMs: 15000 });
+    const [hit, qml, total] = String(nm).split("/").map(Number);
+    score = (hit || 0) * 100 + Math.min(qml || 0, 50);
+    console.log("driver", s.pid, "layers:", nm, "score:", score);
+  } catch { score = 0; }
+  if (score > bestScore) { bestScore = score; page = p; st = s; }
+  if (score >= 100) break;
+}
+if (!page) { page = await getControlPage(liveDir); st = await page.status().catch(e => ({ err: String(e) })); }
+if (wantName && bestScore === 0) {
+  console.log(`WARN: 対象レイヤ ${wantName} を持つドライバが無い — 全 solo が NOTFOUND になり白画像を量産するため中断`);
+  process.exit(2);
+}
 console.log("driver pid:", st.pid, "port:", st.http_port);
 
 const setExtent = `
@@ -274,7 +301,9 @@ async function canvasVisible(only /* ""=all */) {
       } catch (_) {}
     }
     // 非cesium: NOBASE 時はベースマップを none へ(QGIS 白背景条件に合わせる)。
-    // solo 解除(only="")で元の選択へ戻す
+    // solo 解除(only="")で元の選択へ戻す。
+    // leaflet のベースマップは deck ドレープ経路のため tilePane 隠しでは
+    // 消えず setBasemap("none") が必要(フリーズ原因は別の大容量層)
     if (nobase && window.kasugaiApi.engine !== "gsimaps" && typeof window.kasugaiApi.setBasemap === "function") {
       try {
         if (only) {
@@ -283,9 +312,20 @@ async function canvasVisible(only /* ""=all */) {
             window.__savedBasemap = sel ? sel.title : null;
           }
           window.kasugaiApi.setBasemap("none");
-        } else if (window.__savedBasemap) {
-          window.kasugaiApi.setBasemap(window.__savedBasemap);
-          window.__savedBasemap = undefined;
+          // leaflet は deck ドレープ経路のベースコピーが別途残るため、
+          // drape-tiles3d-basemap チェックも外して白背景にする
+          const dcb = document.querySelector("#drape-tiles3d-basemap");
+          if (dcb) {
+            if (window.__savedDrapeBase === undefined) window.__savedDrapeBase = dcb.checked;
+            if (dcb.checked) dcb.click();
+          }
+        } else {
+          if (window.__savedBasemap) {
+            window.kasugaiApi.setBasemap(window.__savedBasemap);
+            window.__savedBasemap = undefined;
+          }
+          const dcb = document.querySelector("#drape-tiles3d-basemap");
+          if (dcb && window.__savedDrapeBase === true && !dcb.checked) { dcb.click(); window.__savedDrapeBase = undefined; }
         }
       } catch (_) {}
     }
@@ -300,7 +340,15 @@ async function canvasVisible(only /* ""=all */) {
     }
     if (viaApi) {
       for (const [l, want] of wantMap) {
-        try { await window.kasugaiApi.setLayerVisible(l.id, want); if (want) out.push(l.title); } catch (_) {}
+        // 稀に特定層(遅延ロード競合)でトグルが解決しないケースがあるため
+        // 層ごとに打ち切って全体ハングを防ぐ(検証ハーネスのみの保険)
+        try {
+          const ok = await Promise.race([
+            Promise.resolve(window.kasugaiApi.setLayerVisible(l.id, want)),
+            new Promise(res => setTimeout(() => res("TIMEOUT"), 10000)),
+          ]);
+          if (want && ok !== "TIMEOUT") out.push(l.title);
+        } catch (_) {}
       }
       return out;
     }
@@ -459,7 +507,12 @@ for (const solo of shots) {
     // ds.show 直接切替のため rebuild は起きない。ds 未構築層の API フォールバック
     // 用に hidden 安定計測だけリセットする
     await pg.evaluate(() => { window.__lpHiddenAt = 0; });
-    console.log("canvas solo:", (await canvasVisible(solo)).join(","));
+    // ページフリーズで evaluate が永久 pending になる事故を検出するため打ち切り
+    const soloVis = await Promise.race([
+      canvasVisible(solo),
+      new Promise((_, rej) => setTimeout(() => rej(new Error(`canvasVisible timeout: ${solo}`)), 120000)),
+    ]);
+    console.log("canvas solo:", soloVis.join(","));
   } else {
     console.log("qgis all:", await qgisAll());
     console.log("canvas all:", (await canvasVisible("")).length, "layers");

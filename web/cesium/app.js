@@ -5413,7 +5413,7 @@ async function refreshLayersImpl() {
         if (primitiveDrape) {
           const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: drapeHeightReference(primDem, prim3d), scene: viewer.scene });
           applyPrimitiveVectorStyle(primitive, item);
-          registerPrimitiveLayer(item, primitive, source, true);
+          registerPrimitiveLayer(item, primitive, source, drapeHeightReference(primDem, prim3d));
           if (loadTarget) layerOk(item);
           continue;
         }
@@ -5513,14 +5513,16 @@ async function refreshLayersImpl() {
 // geojson は primitive 描画レイヤーが vectorDataSources に載らないため、
 // getLayerGeoJson 用に描画に使った GeoJSON を item に保持する
 // (参照を1本増やすだけで追加のデコード・ダウンロードは発生しない)
-function registerPrimitiveLayer(item, primitive, geojson = null, decorClamp = false) {
+function registerPrimitiveLayer(item, primitive, geojson = null, decorClampRef = null) {
   primitive._kasugaiLayerId = item.id;
   primitive.show = effectiveLayerShow(item);
   viewer.scene.primitives.add(primitive);
   activePrimitives.push(primitive);
   layerRuntimeTargets.set(item.id, primitive);
   item.geojsonSource = geojson;
-  primitive._decorClamp = !!decorClamp;
+  // drapeHeightReference の実値を保持(entity 経路の item._qmlClampRef と同じ意味。
+  // null=非クランプ/明示 render=primitive、CLAMP_*=ドレープ経路)
+  primitive._decorClampRef = decorClampRef || null;
   refreshPrimitiveDecor(item, primitive);
 }
 
@@ -5545,8 +5547,8 @@ function refreshPrimitiveDecor(item, primitive) {
   let n = 0;
   try {
     n = buildLineDecorForGeojson(gj, style, dds, {
-      clamp: !!primitive._decorClamp, opacity: effectiveLayerOpacity(item),
-      hiddenSymbols: item.legendHidden,
+      clamp: !!primitive._decorClampRef, clampRef: primitive._decorClampRef,
+      opacity: effectiveLayerOpacity(item), hiddenSymbols: item.legendHidden,
     });
   } catch (e) { console.warn("QML 装飾の生成に失敗:", e); }
   if (!n) return;

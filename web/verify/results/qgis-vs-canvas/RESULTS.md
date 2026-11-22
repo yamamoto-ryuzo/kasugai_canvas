@@ -139,8 +139,15 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 - **GeomGen_line**: 2D 全エンジン**無描画**（cesium のみ imagery 経路で描画）
 - **CentroidFill**: leaflet/gsimaps は重心マーカーでなく**ポリゴン塗りを誤描画**
 - **ren_merged**: leaflet/gsimaps **過剰描画**（QGIS は無描画＝merged+非描画系内側シンボル）
-- **LinearReferencing**: `qgis-cesium` 側が全白（cesium は ents=33k を描画）。
-  QGIS 側が実際に無描画かキャプチャ不良か**要再確認**（一致候補のまま未確定）
+- **LinearReferencing**: 仕様確定済。`interval` は**ソース座標系の map units**
+  （`visitPointsByRegularDistance` が未変換座標で計測）で、EPSG:4326 では度。
+  interval=4° > 線分長(~0.14°) のため QGIS は0ラベル=**無描画が仕様上正しい**。
+  Canvas 側は距離を別単位(メートル相当値「2,900」を表示)で解釈しラベルを
+  描画するため**過剰描画+interval 意味論の相違**と確定。
+  interval=0.02° に修正して再生成すると QGIS は線に沿って
+  「0.02,0.04,0.08,0.1,0.12」ラベルを正しく分散配置。Canvas(maplibre)は
+  ラベルが線の始点に凝集し**配置も相違**。全エンジンで interval 意味論・
+  ラベル配置・値フォーマットの修正が必要
 - 小地物層（VectorField/CentroidFill の maplibre・OL 等）は非白率が UI ベースライン
   以下で機械判定不可 → 個別目視が必要
 
@@ -152,6 +159,16 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 - **VectorField**: 2Dエンジンでの描画有無がベースライン以下で未確定
 - **ren_25d 単独動作**: 本プロジェクトは 3D Tiles ドレープ併用。ドレープ無し
   プロジェクトでの 2.5D 押出挙動は未検証
+- **ren_25d QGIS 側スクリーンショット**: 高さ/角度はレンダラ属性でなく
+  **レイヤ変数** `qgis_25d_height`/`qgis_25d_angle` に保持される
+  （`Qgs25DRenderer::save` はシンボルのみ出力）。変数未設定では
+  `extrude()`/`translate()` が NULL を返し床の SimpleFill のみ描画
+  = 以前観測した「グレーボックス×4」の正体。`saveNamedStyle` は変数を
+  `<customproperties>` の `variableNames`/`variableValues` として出力するため
+  **Canvas 側も消費可能**。変数を設定して描画トリガーしたところ
+  **QGIS セッションが3連続で死亡**（15212=GUIスレッドdeadlock後kill、
+  15996/13656=25dレンダー直後にプロセス消失）→ **QGIS 4.0.1 の 2.5D
+  レンダー自体が不安定**と疑われ、実表示ペアの取得は次セッションで再試行
 - **CDN ホスト版**: kasugai-canvas-web への同期・ホスト側実表示は未実施
 - QML warnings 出力確認（未対応項目が console warning されるかの監査）
 
@@ -165,13 +182,23 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
   （pointcluster 以降でスタイルが外れていた問題を修正）
 - gsimaps: ベクタは `G.SakuzuListItem` 経由で描画。`setVisible(false→true)` の
   地図復帰は正常動作を確認（probe-gsimaps3）
+- leaflet NOBASE: `.leaflet-tile-pane` 隠しでは効かない（ベースマップは
+  deck ドレープキャンバスに描画される）。`setBasemap("none")` +
+  `#drape-tiles3d-basemap` チェック OFF の併用で白背景化
+- **pyeval 内で `mapCanvas().grab()`/`waitWhileRendering()` を呼ばない**
+  （pyeval は GUI スレッドで実行され、レンダリング完了待ちが自分自身を
+  ブロックしてデッドロック=セッション破壊）。撮影はドライバの
+  `screenshot` コマンド経路を使う
+- ドライバ選別: 複数 live dir がある場合 `status` 応答+レイヤ数スコアで
+  目的プロジェクトのセッションを選択（死 dir・無関係プロジェクトを回避）
 
 ## 残課題（未対応・近似として明記）
 
 | 項目 | 状態 |
 |---|---|
 | `ren_inverted` 反転マスク | **maplibre/openlayers/leaflet は一致**。Cesium 無描画・navara/gsimaps マスク無し |
-| `ren_25d` | 3D Tiles ドレープ併用時は押出無効(既知)。2Dエンジンは平坦近似 |
+| `ren_25d` | 3D Tiles ドレープ併用時は押出無効(既知)。2Dエンジンは平坦近似。`variableNames`/`variableValues` で高さ/角度を QML から取得可能 → extrude/translate の実装余地あり |
+| `LinearReferencing` | interval をソース座標 units ではなく別単位で解釈しラベル値・配置が QGIS と相違。全エンジンで修正必要 |
 | `GeomGen_marker` | maplibre のみ生成位置描画。leaflet/gsimaps は元地物を描画、他は無描画 |
 | `MaskMarker` | Canvas が可視描画。QGIS はマスク専用で無描画 → **全エンジンで描画抑制が必要** |
 | `ArrowLine` | 矢羽根・曲線化なし（既知近似）。navara は線自体が無描画 |

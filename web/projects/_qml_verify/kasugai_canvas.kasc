@@ -1,74 +1,37 @@
 # Exported from QGIS geo_webview -> KASUGAI Canvas
 base: Google/Google Maps | https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z} | 出典：©Google
-base: Google/Google Streets | https://mt1.google.com/vt/lyrs=r&x={x}&y={y}&z={z} | 出典：©Google | off
-base: Google/Google Satellite | https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z} | 出典：©Google | off
-base: Google/Google Satellite Hybrid | https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z} | 出典：©Google | off
-base: Google/Google Roads | https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z} | 出典：©Google | off
-base: 地形図（地理院）/地理院00_地形図_地理院標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18 | minZoom=2 | off
-base: 地形図（地理院）/地理院00_地形図_地理院淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | maxZoom=18 | minZoom=2 | off
-base: 地形図（地理院）/地理院00_地形図_地理院白地図 | https://cyberjapandata.gsi.go.jp/xyz/blank/{z}/{x}/{y}.png | maxZoom=14 | minZoom=5 | off
-base: 地形図（地理院）/地理院00_地形図_地理院English | https://cyberjapandata.gsi.go.jp/xyz/english/{z}/{x}/{y}.png | maxZoom=11 | minZoom=5 | off
-base: 地形図（OpenStreetMap）/OpenStreetMap（標準） | https://tile.openstreetmap.org/{z}/{x}/{y}.png | maxZoom=19 | minZoom=0 | off
-base: 地形図（OpenStreetMap）/OpenStreetMap（Humanitarian） | https://tile-a.openstreetmap.fr/hot/{z}/{x}/{y}.png | maxZoom=19 | minZoom=0 | off
-base: 地形図（OpenStreetMap）/OpenStreetMap（CyclOSM） | https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png | maxZoom=19 | minZoom=0 | off
-base: 地形図（OpenStreetMap）/OpenStreetMap（OpenTopoMap） | https://a.tile.opentopomap.org/{z}/{x}/{y}.png | maxZoom=19 | minZoom=0 | off
-base: 空中写真/地理院02_写真_全国最新写真（シームレス） | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | maxZoom=18 | minZoom=2 | off
-base: 空中写真/地理院02_写真_簡易空中写真（2004年～） | https://cyberjapandata.gsi.go.jp/xyz/airphoto/{z}/{x}/{y}.png | maxZoom=18 | minZoom=2 | off
-base: 空中写真/地理院02_写真_全国ランドサットモザイク画像 | https://cyberjapandata.gsi.go.jp/xyz/lndst/{z}/{x}/{y}.png | maxZoom=18 | minZoom=2 | off
-base: 空中写真/地理院02_写真_世界衛星モザイク画像 | https://cyberjapandata.gsi.go.jp/xyz/modis/{z}/{x}/{y}.png | maxZoom=18 | minZoom=2 | off
-base: 年度別空中写真/地理院03_年度別空中写真_電子国土基本図（オルソ画像）（2007年～） | https://cyberjapandata.gsi.go.jp/xyz/ort/{z}/{x}/{y}.jpg | maxZoom=18 | minZoom=2 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1936～1942年_空中写真_東京23区・大阪市 | https://cyberjapandata.gsi.go.jp/xyz/ort_riku10/{z}/{x}/{y}.png | maxZoom=17 | minZoom=15 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1945～1950年_空中写真 | https://cyberjapandata.gsi.go.jp/xyz/ort_USA10/{z}/{x}/{y}.png | maxZoom=17 | minZoom=15 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1974～1978年_国土画像情報 | https://cyberjapandata.gsi.go.jp/xyz/gazo1/{z}/{x}/{y}.jpg | maxZoom=17 | minZoom=10 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1979～1983年_国土画像情報 | https://cyberjapandata.gsi.go.jp/xyz/gazo2/{z}/{x}/{y}.jpg | maxZoom=17 | minZoom=15 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1984～1986年_国土画像情報 | https://cyberjapandata.gsi.go.jp/xyz/gazo3/{z}/{x}/{y}.jpg | maxZoom=17 | minZoom=15 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1987～1990年_国土画像情報 | https://cyberjapandata.gsi.go.jp/xyz/gazo4/{z}/{x}/{y}.jpg | maxZoom=17 | minZoom=15 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1961～1969年_空中写真 | https://cyberjapandata.gsi.go.jp/xyz/ort_old10/{z}/{x}/{y}.png | maxZoom=17 | minZoom=15 | off
-base: 年度別空中写真/地理院03_年度別空中写真_1928年ごろ_空中写真_大阪市 | https://cyberjapandata.gsi.go.jp/xyz/ort_USA10/{z}/{x}/{y}.png | maxZoom=17 | minZoom=15 | off
-base: 年度別空中写真/地理院03_年度別空中写真_2004年〜_簡易空中写真 | https://cyberjapandata.gsi.go.jp/xyz/airphoto/{z}/{x}/{y}.png | maxZoom=18 | minZoom=15 | off
-base: 年度別空中写真/地理院02_写真_森林（国有林）の空中写真（林野庁） | https://cyberjapandata.gsi.go.jp/xyz/rinya/{z}/{x}/{y}.png | maxZoom=18 | minZoom=2 | off
-base: 標高/地理院01_標高_地理院色別標高図 | https://cyberjapandata.gsi.go.jp/xyz/relief/{z}/{x}/{y}.png | 出典：国土地理院' | maxZoom=15 | minZoom=5 | off
-base: 標高/地理院01_標高_アナグリフ_カラー | https://cyberjapandata.gsi.go.jp/xyz/anaglyphmap_color/{z}/{x}/{y}.png | maxZoom=15 | minZoom=5 | off
-base: 標高/地理院01_標高_アナグリフ_グレー | https://cyberjapandata.gsi.go.jp/xyz/anaglyphmap_gray/{z}/{x}/{y}.png | maxZoom=15 | minZoom=5 | off
-base: 標高/地理院01_標高_陰影起伏図 | https://cyberjapandata.gsi.go.jp/xyz/hillshademap/{z}/{x}/{y}.png | maxZoom=15 | minZoom=5 | off
-base: 標高/地理院01_標高_陰影起伏図（全球版） | https://cyberjapandata.gsi.go.jp/xyz/earthhillshade/{z}/{x}/{y}.png | maxZoom=15 | minZoom=5 | off
-base: 地理院タイル 標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18
-base: 地理院タイル 淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47
-base: 地理院タイル 全国最新写真 | https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg | 出典：国土地理院 | maxZoom=18 | minZoom=2 | bbox=122,19,155,47
-base: OpenStreetMap | https://tile.openstreetmap.org/{z}/{x}/{y}.png | (c) OpenStreetMap contributors | maxZoom=19
-cam:QGIS|35.643544|139.735792|h=10547|p=-90
-bookmark: bookmarks.xml
-group: Canvas | expanded
-group: サンプル | expanded | checked=partial
-group: サンプル / DM（スタイルサンプル） | expanded
-group: サンプル / PSEA(P21)2QGIS | collapsed | checked=unchecked
-group: 国土数値情報 | expanded
-group: 国土数値情報 / 政策区域 | expanded
-group: 国土数値情報 / 政策区域 / 行政地域 | expanded
-group: 国土数値情報 / 政策区域 / 行政地域 / 表示・非表示 | expanded
-group: 図郭 | collapsed | checked=unchecked
-group: 図郭 / 全国標準地域メッシュ | collapsed | checked=unchecked
-group: 背景図 | expanded | checked=partial
-group: 背景図 / Google | expanded | checked=partial
-group: 背景図 / 地形図（地理院） | expanded | checked=partial
-group: 背景図 / 地形図（OpenStreetMap） | expanded | checked=partial
-group: 背景図 / 空中写真 | collapsed | checked=unchecked
-group: 背景図 / 年度別空中写真 | collapsed | checked=unchecked
-group: 背景図 / 標高 | collapsed | checked=unchecked
-cam:QGIS3D 3Dマップ 1|35.640706|139.665247|h=31392|p=-77.5|d=355.9
-terrain: qgis | generator=online
-light: 3Dマップ 1 | az=340.6 | el=15.6
-flatgeobuf: サンプル/DM（スタイルサンプル）/DM_C | canvas_data/DM_C.fgb | on | style=canvas_data/DM_C.qml
-flatgeobuf: サンプル/DM（スタイルサンプル）/DM_1 | canvas_data/DM_1.fgb | on | style=canvas_data/DM_1.qml
-flatgeobuf: サンプル/DM（スタイルサンプル）/DM_3 | canvas_data/DM_3.fgb | on | style=canvas_data/DM_3.qml
-flatgeobuf: サンプル/PSEA(P21)2QGIS/Line | canvas_data/Line.fgb | off | style=canvas_data/Line.qml
-flatgeobuf: サンプル/PSEA(P21)2QGIS/point(letter) | canvas_data/point_letter.fgb | off | style=canvas_data/point_letter.qml
-gpkg: 国土数値情報/政策区域/行政地域/行政区域 | canvas_data/layer.gpkg | on | table=行政区域 | style=canvas_data/layer.qml
-gpkg: 国土数値情報/政策区域/行政地域/表示・非表示/都道府県名 | canvas_data/layer_2.gpkg | on | table=dummy | style=canvas_data/layer_2.qml
-gpkg: 国土数値情報/政策区域/行政地域/表示・非表示/市区町村名 | canvas_data/layer_2.gpkg | on | table=dummy | style=canvas_data/layer_3.qml
-gpkg: 図郭/全国標準地域メッシュ/2次メッシュ（約10㎞四方） | canvas_data/2_10.gpkg | off | table=2次メッシュ（約10㎞四方） | style=canvas_data/2_10.qml
-gpkg: 図郭/全国標準地域メッシュ/5kmメッシュ（約5km四方） | canvas_data/5km_5km.gpkg | off | table=5kmメッシュ（約5km四方） | style=canvas_data/5km_5km.qml
-gpkg: 図郭/全国標準地域メッシュ/3次メッシュ（約1km四方） | canvas_data/3_1km.gpkg | off | table=3次メッシュ（約1km四方） | style=canvas_data/3_1km.qml
-theme: テーマ
-theme: テーマ2 | サンプル/DM（スタイルサンプル）/DM_C | サンプル/DM（スタイルサンプル）/DM_1 | サンプル/DM（スタイルサンプル）/DM_3 | 国土数値情報/政策区域/行政地域/行政区域 | 国土数値情報/政策区域/行政地域/表示・非表示/都道府県名 | 国土数値情報/政策区域/行政地域/表示・非表示/市区町村名
-theme: 検索前 | 国土数値情報/政策区域/行政地域/行政区域 | 国土数値情報/政策区域/行政地域/表示・非表示/都道府県名 | 国土数値情報/政策区域/行政地域/表示・非表示/市区町村名
+cam:QGIS|35.696533|139.770315|h=6194|p=-90
+geojson: qmltest_ren_embedded | canvas_data/qmltest_ren_embedded.geojson | on | style=canvas_data/qmltest_ren_embedded.qml
+geojson: qmltest_ren_25d | canvas_data/qmltest_ren_25d.geojson | on | style=canvas_data/qmltest_ren_25d.qml
+geojson: qmltest_ren_merged | canvas_data/qmltest_ren_merged.geojson | on | style=canvas_data/qmltest_ren_merged.qml
+geojson: qmltest_ren_inverted | canvas_data/qmltest_ren_inverted.geojson | on | style=canvas_data/qmltest_ren_inverted.qml
+geojson: qmltest_ren_pointdisp | canvas_data/qmltest_ren_pointdisp.geojson | on | style=canvas_data/qmltest_ren_pointdisp.qml | cluster=on
+geojson: qmltest_ren_pointcluster | canvas_data/qmltest_ren_pointcluster.geojson | on | style=canvas_data/qmltest_ren_pointcluster.qml | cluster=on
+geojson: qmltest_ren_heatmap | canvas_data/qmltest_ren_heatmap.geojson | on | style=canvas_data/qmltest_ren_heatmap.qml | heat=on
+geojson: qmltest_ren_graduated | canvas_data/qmltest_ren_graduated.geojson | on | style=canvas_data/qmltest_ren_graduated.qml
+geojson: qmltest_GeomGen_fill | canvas_data/qmltest_GeomGen_fill.geojson | on | style=canvas_data/qmltest_GeomGen_fill.qml
+geojson: qmltest_SVGFill | canvas_data/qmltest_SVGFill.geojson | on | style=canvas_data/qmltest_SVGFill.qml
+geojson: qmltest_RasterFill | canvas_data/qmltest_RasterFill.geojson | on | style=canvas_data/qmltest_RasterFill.qml
+geojson: qmltest_RandomMarkerFill | canvas_data/qmltest_RandomMarkerFill.geojson | on | style=canvas_data/qmltest_RandomMarkerFill.qml
+xyz: qmltest_PointPatternFill | canvas_data/qmltest_PointPatternFill_xyz/{z}/{x}/{y}.png | on | maxZoom=15 | minZoom=1 | bbox=139.700000,35.680000,139.990000,35.730000
+geojson: qmltest_PointPatternFill | canvas_data/qmltest_PointPatternFill.geojson | off | style=canvas_data/qmltest_PointPatternFill.qml
+geojson: qmltest_LinePatternFill | canvas_data/qmltest_LinePatternFill.geojson | on | style=canvas_data/qmltest_LinePatternFill.qml
+geojson: qmltest_ShapeburstFill | canvas_data/qmltest_ShapeburstFill.geojson | on | style=canvas_data/qmltest_ShapeburstFill.qml
+xyz: qmltest_GradientFill | canvas_data/qmltest_GradientFill_xyz/{z}/{x}/{y}.png | on | maxZoom=15 | minZoom=1 | bbox=139.700000,35.680000,139.990000,35.730000
+geojson: qmltest_GradientFill | canvas_data/qmltest_GradientFill.geojson | off | style=canvas_data/qmltest_GradientFill.qml
+geojson: qmltest_CentroidFill | canvas_data/qmltest_CentroidFill.geojson | on | style=canvas_data/qmltest_CentroidFill.qml
+xyz: qmltest_GeomGen_line | canvas_data/qmltest_GeomGen_line_xyz/{z}/{x}/{y}.png | on | maxZoom=15 | minZoom=1 | bbox=139.700000,35.700000,139.980000,35.760000
+geojson: qmltest_GeomGen_line | canvas_data/qmltest_GeomGen_line.geojson | off | style=canvas_data/qmltest_GeomGen_line.qml
+geojson: qmltest_LinearReferencing | canvas_data/qmltest_LinearReferencing.geojson | on | style=canvas_data/qmltest_LinearReferencing.qml
+geojson: qmltest_MarkerLine | canvas_data/qmltest_MarkerLine.geojson | on | style=canvas_data/qmltest_MarkerLine.qml
+geojson: qmltest_RasterLine | canvas_data/qmltest_RasterLine.geojson | on | style=canvas_data/qmltest_RasterLine.qml
+geojson: qmltest_Lineburst | canvas_data/qmltest_Lineburst.geojson | on | style=canvas_data/qmltest_Lineburst.qml
+geojson: qmltest_InterpolatedLine | canvas_data/qmltest_InterpolatedLine.geojson | on | style=canvas_data/qmltest_InterpolatedLine.qml
+geojson: qmltest_FilledLine | canvas_data/qmltest_FilledLine.geojson | on | style=canvas_data/qmltest_FilledLine.qml
+geojson: qmltest_ArrowLine | canvas_data/qmltest_ArrowLine.geojson | on | style=canvas_data/qmltest_ArrowLine.qml
+geojson: qmltest_GeomGen_marker | canvas_data/qmltest_GeomGen_marker.geojson | on | style=canvas_data/qmltest_GeomGen_marker.qml
+geojson: qmltest_MaskMarker | canvas_data/qmltest_MaskMarker.geojson | on | style=canvas_data/qmltest_MaskMarker.qml
+geojson: qmltest_VectorField | canvas_data/qmltest_VectorField.geojson | on | style=canvas_data/qmltest_VectorField.qml
+geojson: qmltest_RasterMarker | canvas_data/qmltest_RasterMarker.geojson | on | style=canvas_data/qmltest_RasterMarker.qml
+geojson: qmltest_FilledMarker | canvas_data/qmltest_FilledMarker.geojson | on | style=canvas_data/qmltest_FilledMarker.qml
+geojson: qmltest_AnimatedMarker | canvas_data/qmltest_AnimatedMarker.geojson | on | style=canvas_data/qmltest_AnimatedMarker.qml

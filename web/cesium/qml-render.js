@@ -1714,10 +1714,11 @@ function transparentMaterial(kind) {
 // (applyQmlStyleToDataSource 内 addAux と同じ規則)。
 // hiddenSymbols は applyQmlStyleToPrimitive と同じ凡例非表示判定。
 // 戻り値: 追加した補助エンティティ数
-export function buildLineDecorForGeojson(geojson, style, ds, { clamp = false, opacity = 1, hiddenSymbols = null, time } = {}) {
+export function buildLineDecorForGeojson(geojson, style, ds, { clamp = false, clampRef = null, opacity = 1, hiddenSymbols = null, time } = {}) {
   if (!geojson || !style || !ds) return 0;
   const t = time || Cesium.JulianDate.now();
-  const hRef = clamp ? Cesium.HeightReference.CLAMP_TO_GROUND : null;
+  // clampRef 未指定のクランプは従来どおり CLAMP_TO_GROUND(entity 経路と同じ規則)
+  const hRef = clamp ? (clampRef ?? Cesium.HeightReference.CLAMP_TO_GROUND) : null;
   const hasHidden = !!(hiddenSymbols && hiddenSymbols.size);
   let added = 0;
   const addAux = ent => {
