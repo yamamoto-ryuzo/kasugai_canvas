@@ -2,7 +2,7 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setMapScaleGetter, setEvalScale, linRefFormatText } from "./qml-style.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setMapScaleGetter, setEvalScale, evalScaleDenom, linRefFormatText, clampMapUnitsPerPixel, MUP_PER_SCALE_DENOM, interpolatedColorAt } from "./qml-style.js";
 import { resolveKascUrl } from "./kasc.js";
 
 // qml-style.js の縮尺注入 API を 2D アダプタ経由で各エンジンへ再公開
@@ -229,22 +229,51 @@ function markerColorOf(spec) {
 }
 
 // spec → シンプルな描画パラメータ（2D エンジン共通の最小表現）
+// MapUnit/MetersInMapUnits 由来のメートル値を現在縮尺で px へ換算する。
+// mus(QgsMapUnitScale)があれば QGIS 準拠で mup をクランプする。
+// 縮尺未取得時は null(呼び出し側は widthPx/sizePx 近似へフォールバック)
+function metersToPx(meters, mus) {
+  if (!Number.isFinite(meters)) return null;
+  const sd = evalScaleDenom();
+  if (!sd) return null;
+  const mup = clampMapUnitsPerPixel(sd * MUP_PER_SCALE_DENOM, mus);
+  if (!(mup > 0)) return null;
+  return meters / mup;
+}
+
 export function specToStyle(spec) {
   if (!spec) return null;
   const strokeSrc = spec.outline || spec.line || null;
+  // 線幅: MapUnit 系はメートル保持されているため現縮尺で px へ換算
+  // (QGIS QgsRenderContext::convertToPainterUnits の MapUnits 分岐相当)。
+  // 解像度不明時は widthPx 近似のまま
+  let strokeWidth = strokeSrc?.widthPx ?? 1.5;
+  if (Number.isFinite(strokeSrc?.widthMeters)) {
+    const px = metersToPx(strokeSrc.widthMeters, strokeSrc.widthMus);
+    if (px != null) strokeWidth = Math.max(px, 0.25);
+  }
+  let lineOffsetPx = spec.line?.offsetPx || 0;
+  if (Number.isFinite(spec.line?.offsetMeters)) {
+    const px = metersToPx(spec.line.offsetMeters, spec.line.offsetMus);
+    if (px != null) lineOffsetPx = px;
+  }
   return {
     fill: fillColorOf(spec),
     stroke: strokeSrc ? rgbaToCss(strokeSrc.color) : null,
-    strokeWidth: strokeSrc?.widthPx ?? 1.5,
+    strokeWidth,
     dash: strokeSrc?.dash || null,
     dashOffsetPx: strokeSrc?.dashOffsetPx || 0,
     join: strokeSrc?.join || null,
     cap: strokeSrc?.cap || null,
-    lineOffsetPx: spec.line?.offsetPx || 0,
+    lineOffsetPx,
     trimStartPx: strokeSrc?.trimStartPx || 0,
     trimEndPx: strokeSrc?.trimEndPx || 0,
     markerColor: markerColorOf(spec) || "#2c5ea8",
     markerCanvas: spec.markers?.length ? markerLayersToCanvas(spec.markers) : null,
+    // MapUnit マーカー: 現縮尺での目標px(canvas拡縮率の算出用)
+    markerSizePx: spec.markers?.length && Number.isFinite(spec.markers[0]?.sizeMeters)
+      ? metersToPx(spec.markers[0].sizeMeters, spec.markers[0].sizeMetersMus)
+      : null,
   };
 }
 
@@ -391,11 +420,100 @@ export function linRefSamplesGeojson(geom, decor) {
   return out;
 }
 
+// GeoJSON(4326) LineString/MultiLineString を弧長で n 等分したセグメント
+// 地物へ分解する(InterpolatedLine の Leaflet/Navara 近似用)。
+// 各地物の properties には __kasc_iseg={f:弧長中央比率} と元 properties を継承
+export function splitInterpolatedGeojson(geom, baseProps, n = 24) {
+  const parts = geom?.type === "LineString" ? [geom.coordinates]
+    : geom?.type === "MultiLineString" ? geom.coordinates : [];
+  const out = [];
+  for (const c of parts) {
+    const segs = splitLinePlanar(c.map(ll2m), n);
+    for (const s of segs) {
+      out.push({
+        type: "Feature",
+        properties: { ...(baseProps || {}), __kasc_iseg: s.mid },
+        geometry: { type: "LineString", coordinates: s.coords.map(m2ll) },
+      });
+    }
+  }
+  return out;
+}
+
+// InterpolatedLine のセグメント地物(__kasc_iseg)に色・幅を焼き込む。
+// evaluate 済み spec の line.decor を参照する
+export function interpolatedSegmentStyle(decor, f) {
+  return {
+    color: rgbaToCss(interpolatedColorAt(decor, f)),
+    width: Math.max((decor.w1 || 1) + ((decor.w2 || decor.w1 || 1) - (decor.w1 || 1)) * f, 0.5),
+  };
+}
+
+// 平面座標列を弧長で n 等分する。[{coords, mid}] mid=区間中央の弧長比率
+// (InterpolatedLine の線分細分化用)
+function splitLinePlanar(coords, n) {
+  if (!coords || coords.length < 2 || !(n > 0)) return [];
+  const cum = [0];
+  for (let i = 1; i < coords.length; i++) {
+    const dx = coords[i][0] - coords[i - 1][0], dy = coords[i][1] - coords[i - 1][1];
+    cum.push(cum[i - 1] + Math.hypot(dx, dy));
+  }
+  const total = cum[cum.length - 1];
+  if (!(total > 0)) return [];
+  const at = d => {
+    let j = 1;
+    while (j < cum.length - 1 && cum[j] < d) j++;
+    const f = Math.min(1, (d - cum[j - 1]) / Math.max(cum[j] - cum[j - 1], 1e-12));
+    return [coords[j - 1][0] + (coords[j][0] - coords[j - 1][0]) * f,
+      coords[j - 1][1] + (coords[j][1] - coords[j - 1][1]) * f];
+  };
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const d0 = total * i / n, d1 = total * (i + 1) / n;
+    const seg = [at(d0)];
+    for (let j = 1; j < coords.length; j++) {
+      if (cum[j] > d0 && cum[j] < d1) seg.push(coords[j]);
+    }
+    seg.push(at(d1));
+    if (seg.length >= 2) out.push({ coords: seg, mid: (i + 0.5) / n });
+  }
+  return out;
+}
+
+// InterpolatedLine 装飾 → 区間分割 Stroke 群。色は interpolatedColorAt
+// (ramp 優先)、幅は w1→w2 線形補間(OL は data-driven 幅を持てないため
+// セグメント別 Style を生成する近似)
+function interpolatedToOlStyles(decor, geom, resolution, OL) {
+  const { Style, Stroke, LineString, MultiLineString } = OL;
+  if (!LineString || !geom || !Number.isFinite(resolution)) return [];
+  const lines = geom.getType() === "MultiLineString" && MultiLineString
+    ? geom.getCoordinates() : [geom.getCoordinates()];
+  const styles = [];
+  const N = 24;
+  for (const coords of lines) {
+    for (const seg of splitLinePlanar(coords, N)) {
+      const w = decor.w1 + (decor.w2 - decor.w1) * seg.mid;
+      styles.push(new Style({
+        geometry: new LineString(seg.coords),
+        stroke: new Stroke({
+          color: rgbaToCss(interpolatedColorAt(decor, seg.mid)),
+          width: Math.max(w || 1, 0.5),
+        }),
+      }));
+    }
+  }
+  return styles;
+}
+
 // MarkerLine/HashLine/ArrowLine の spec.line.decor → OL Style 配列
 function decorToOlStyles(decor, geom, resolution, OL) {
   const { Style, Fill, Stroke, Icon, Point, MultiPoint, MultiLineString, Polygon, Text } = OL;
   if (!MultiPoint || !MultiLineString || !Polygon || !geom || !Number.isFinite(resolution)) return [];
   const px = v => v * resolution; // 画面px → マップ単位
+  // InterpolatedLine/Lineburst: 区間分割 Stroke 群(本体 stroke は抑制される)
+  if (decor.kind === "interpolated") {
+    return interpolatedToOlStyles(decor, geom, resolution, OL);
+  }
   const step = Math.max(px(decor.intervalPx || 30), resolution * 2);
   if (decor.kind === "markerline" && decor.markers?.length) {
     let samples;
@@ -576,7 +694,9 @@ export function olQmlStyleFunction(compiled, OL) {
     // LinearReferencing(里程標)は基線を描かず標点ラベル/マーカーのみ。
     // 実線ストロークを抑える(QGIS 準拠)
     const linrefOnly = spec.line?.decor?.kind === "linref" && !spec.outline;
-    if (s.stroke && !linrefOnly) {
+    // InterpolatedLine はセグメント分割 Stroke に置き換えるため本体 stroke を抑える
+    const interpOnly = spec.line?.decor?.kind === "interpolated";
+    if (s.stroke && !linrefOnly && !interpOnly) {
       styleOpts.stroke = new Stroke({
         color: s.stroke, width: s.strokeWidth, lineDash: s.dash || undefined,
         lineDashOffset: s.dashOffsetPx || undefined,
@@ -609,8 +729,13 @@ export function olQmlStyleFunction(compiled, OL) {
     const topTrim = trimGeomOf(spec.line ?? spec.outline);
     if (topTrim) styleOpts.geometry = topTrim;
     if (/Point|MultiPoint/.test(geomType)) {
+      // MapUnit マーカーは現 resolution で拡縮(markerSizePx = m/px 換算の
+      // 目標直径。canvas は compile 時 px で焼かれているため比率で scale)
+      const mScale = s.markerCanvas && Number.isFinite(s.markerSizePx)
+        ? Math.min(Math.max(s.markerSizePx / Math.max(s.markerCanvas.height || 1, 1), 0.02), 100)
+        : null;
       styleOpts.image = s.markerCanvas
-        ? new Icon({ img: s.markerCanvas, anchor: [0.5, 0.5] })
+        ? new Icon({ img: s.markerCanvas, anchor: [0.5, 0.5], ...(mScale ? { scale: mScale } : {}) })
         : new CircleStyle({ radius: 5, fill: new Fill({ color: s.markerColor }), stroke: s.stroke ? new Stroke({ color: s.stroke, width: 1 }) : null });
     }
     // <labeling>: ラベルspec があれば Text を付ける(描画ごとに再評価されるため
@@ -795,10 +920,29 @@ export function defaultVectorLegendSpec(geomType, { fill = [58 / 255, 123 / 255,
 const KASC_PROPS = ["__kasc_fill", "__kasc_stroke", "__kasc_width", "__kasc_color", "__kasc_symbol",
   "__kasc_icon", "__kasc_fillpat", "__kasc_dash", "__kasc_fopa", "__kasc_lopa", "__kasc_copa",
   "__kasc_cr", "__kasc_csw", "__kasc_csc", "__kasc_cicon",
+  "__kasc_cmf", "__kasc_cmlo", "__kasc_cmhi",
   "__kasc_lgrp", "__kasc_lblend", "__kasc_fblend", "__kasc_lggrp", "__kasc_fillx",
   "__kasc_lblur", "__kasc_mgrp", "__kasc_hgrp", "__kasc_lpat", "__kasc_lpatw",
+  "__kasc_wf", "__kasc_wlo", "__kasc_whi",
   "__kasc_loff", "__kasc_join", "__kasc_cap", "__kasc_heat", "__kasc_zkey",
   "__kasc_lronly", "__kasc_lrt", "__kasc_lrr", "__kasc_lrg"];
+
+// MapUnit 線幅対応の line-width 式。MapLibre は zoom を top-level の
+// interpolate/step でしか使えない制約があるため、両端ストップ側で case 分岐:
+// __kasc_wf(zoom0 時 px)=widthMeters/(156543.03392*cos(lat)) が焼かれた地物は
+// zoom 連動(px = wf*2^z)し、__kasc_wlo/whi(mus 由来の px 上下限)でクランプ。
+// 無ければ従来の固定 px(両端同値 = 定数のまま)
+const KASC_LINE_WIDTH_EXPR = [
+  "interpolate", ["exponential", 2], ["zoom"],
+  0, ["case", ["has", "__kasc_wf"],
+    ["min", ["coalesce", ["get", "__kasc_whi"], 1e6],
+      ["max", ["coalesce", ["get", "__kasc_wlo"], 0], ["get", "__kasc_wf"]]],
+    ["coalesce", ["get", "__kasc_width"], 1.5]],
+  1, ["case", ["has", "__kasc_wf"],
+    ["min", ["coalesce", ["get", "__kasc_whi"], 1e6],
+      ["max", ["coalesce", ["get", "__kasc_wlo"], 0], ["*", 2, ["get", "__kasc_wf"]]]],
+    ["coalesce", ["get", "__kasc_width"], 1.5]],
+];
 
 // HashLine の刻みを icon-image 用 canvas へ。刻み方向は
 // QGIS と同じく「線方向 + hash_angle − 90°」(hash_angle=0 が線直交)
@@ -926,6 +1070,25 @@ export function maplibreApplyQml(geojson, compiled) {
     }
     if (s.stroke) feature.properties.__kasc_stroke = s.stroke;
     feature.properties.__kasc_width = s.strokeWidth;
+    // MapUnit 線幅: 地物緯度で m→px 係数を焼き、line-width を zoom 補間式に
+    // する(QGIS の MapUnit 描画相当)。mus があれば px 上下限も保持
+    {
+      const strokeSrc = spec.outline || spec.line;
+      if (strokeSrc && Number.isFinite(strokeSrc.widthMeters)) {
+        const c0 = feature.geometry?.coordinates;
+        const flat = Array.isArray(c0) ? c0.flat(Infinity) : [];
+        const lat = Number(flat[1]) || 0;
+        feature.properties.__kasc_wf = strokeSrc.widthMeters
+          / (156543.03392 * Math.max(Math.cos(lat * Math.PI / 180), 0.01));
+        const mus = strokeSrc.widthMus;
+        // mus のクランプは mup(=scaleDenom×0.00028)への上限/下限なので、
+        // px 幅に換算すると: minScale→拡大側上限 px、maxScale→縮小側下限 px
+        feature.properties.__kasc_wlo = mus?.maxScale
+          ? Math.max(strokeSrc.widthMeters / (mus.maxScale * 0.00028), 0) : 0;
+        feature.properties.__kasc_whi = mus?.minScale
+          ? Math.max(strokeSrc.widthMeters / (mus.minScale * 0.00028), 0) : 1e6;
+      }
+    }
     feature.properties.__kasc_color = s.markerColor;
     if (s.join) feature.properties.__kasc_join = s.join;
     if (s.cap) feature.properties.__kasc_cap = s.cap;
@@ -937,6 +1100,19 @@ export function maplibreApplyQml(geojson, compiled) {
     const mk = spec.markers?.[0];
     if (mk) {
       feature.properties.__kasc_cr = Math.max((mk.sizePx || 8) / 2, 1);
+      // MapUnit マーカー: 線幅と同じく m→px 係数と mus 境界を焼く
+      if (Number.isFinite(mk.sizeMeters)) {
+        const c0 = feature.geometry?.coordinates;
+        const flat = Array.isArray(c0) ? c0.flat(Infinity) : [];
+        const lat = Number(flat[1]) || 0;
+        feature.properties.__kasc_cmf = (mk.sizeMeters / 2)
+          / (156543.03392 * Math.max(Math.cos(lat * Math.PI / 180), 0.01));
+        const mus = mk.sizeMetersMus;
+        feature.properties.__kasc_cmlo = mus?.maxScale
+          ? Math.max((mk.sizeMeters / 2) / (mus.maxScale * 0.00028), 0) : 0;
+        feature.properties.__kasc_cmhi = mus?.minScale
+          ? Math.max((mk.sizeMeters / 2) / (mus.minScale * 0.00028), 0) : 1e6;
+      }
       feature.properties.__kasc_copa = alphaOf(mk.fill);
       if (mk.stroke) feature.properties.__kasc_csc = rgbaToCss(mk.stroke);
       if (mk.strokeWidthPx) feature.properties.__kasc_csw = mk.strokeWidthPx;
@@ -973,7 +1149,15 @@ export function maplibreApplyQml(geojson, compiled) {
     // レイヤ別に出す(幅補間は line-progress 非対応のため __kasc_width で近似)
     const dec = spec.line?.decor ?? spec.outline?.decor;
     if (dec?.kind === "interpolated") {
-      feature.properties.__kasc_lggrp = `${rgbaToCss(dec.c1)}|${rgbaToCss(dec.c2)}`;
+      // color_ramp_shader(items/stops)があれば中間色もストップ化して
+      // line-gradient に反映する(QGIS のランプ補間近似)。無い場合は両端のみ
+      if (dec.ramp && (dec.ramp.items?.length || dec.ramp.stops?.length)) {
+        const cols = [];
+        for (let i = 0; i <= 8; i++) cols.push(rgbaToCss(interpolatedColorAt(dec, i / 8)));
+        feature.properties.__kasc_lggrp = cols.join("|");
+      } else {
+        feature.properties.__kasc_lggrp = `${rgbaToCss(dec.c1)}|${rgbaToCss(dec.c2)}`;
+      }
       hasGrad = true;
     }
     // MarkerLine/HashLine/RasterLine: icon-image(symbol-placement:line)・
@@ -1096,7 +1280,7 @@ export function maplibreApplyQml(geojson, compiled) {
   }
   const linePaint = blend => ({
     "line-color": ["coalesce", ["get", "__kasc_stroke"], "#2c5ea8"],
-    "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
+    "line-width": KASC_LINE_WIDTH_EXPR,
     "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
     "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
     ...(blend ? { "line-layer-blend": blend } : {}),
@@ -1129,12 +1313,15 @@ export function maplibreApplyQml(geojson, compiled) {
       if (g) pairs.add(g);
     }
     for (const g of pairs) {
-      const [c1, c2] = g.split("|");
+      // g = "c1|c2|c3|..." — ramp 利用時は中間ストップも列に含める
+      const cols = g.split("|").filter(Boolean);
+      const stops = ["interpolate", ["linear"], ["line-progress"]];
+      cols.forEach((c, i) => { stops.push(cols.length > 1 ? i / (cols.length - 1) : 0, c); });
       kinds.push(["line", ["all", nonPoint, ["==", ["get", "__kasc_lggrp"], g]], {
-        "line-width": ["coalesce", ["get", "__kasc_width"], 1.5],
+        "line-width": KASC_LINE_WIDTH_EXPR,
         "line-offset": ["coalesce", ["get", "__kasc_loff"], 0],
         "line-opacity": ["coalesce", ["get", "__kasc_lopa"], 1],
-        "line-gradient": ["interpolate", ["linear"], ["line-progress"], 0, c1, 1, c2],
+        "line-gradient": stops,
       }, lineLayout]);
     }
   }
@@ -1226,7 +1413,19 @@ export function maplibreApplyQml(geojson, compiled) {
     ...zlay("symbol-sort-key"),
   }]);
   kinds.push(["circle", ["all", pointOnly, ["!", ["has", "__kasc_icon"]]], {
-    "circle-radius": ["coalesce", ["get", "__kasc_cr"], 5],
+    // MapUnit マーカーは __kasc_cmf(zoom0 半径 px)で zoom 連動、mus 境界でクランプ
+    // (zoom は top-level interpolate/step のみ許可のため両端ストップ側で case)
+    "circle-radius": [
+      "interpolate", ["exponential", 2], ["zoom"],
+      0, ["case", ["has", "__kasc_cmf"],
+        ["min", ["coalesce", ["get", "__kasc_cmhi"], 1e6],
+          ["max", ["coalesce", ["get", "__kasc_cmlo"], 0], ["get", "__kasc_cmf"]]],
+        ["coalesce", ["get", "__kasc_cr"], 5]],
+      1, ["case", ["has", "__kasc_cmf"],
+        ["min", ["coalesce", ["get", "__kasc_cmhi"], 1e6],
+          ["max", ["coalesce", ["get", "__kasc_cmlo"], 0], ["*", 2, ["get", "__kasc_cmf"]]]],
+        ["coalesce", ["get", "__kasc_cr"], 5]],
+    ],
     "circle-color": ["coalesce", ["get", "__kasc_color"], "#2c5ea8"],
     "circle-opacity": ["coalesce", ["get", "__kasc_copa"], 1],
     "circle-stroke-color": ["coalesce", ["get", "__kasc_csc"], ["get", "__kasc_stroke"], "#ffffff"],

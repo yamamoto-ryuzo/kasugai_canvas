@@ -29,7 +29,7 @@ import { initUiConfig } from "../shared/ui-config.js";
 import { mvtStyle, loadMvtDecoder, loadPmtiles } from "../shared/mvt.js";
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch, parseDeckTile3dOpts, ensureI3sLoader, deckWantsI3s } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle } from "../shared/qml-2d.js";
 import { markerLayersToCanvas, fillPartsToTile, rgbaToCss, linRefFormatText } from "../shared/qml-style.js";
 import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
@@ -449,6 +449,16 @@ function makeVectorStyleFn(item) {
       if (names?.length && item._legendHidden?.has(names[0])) return HIDDEN_STYLE;
       const spec = item._qml.evaluate(props);
       if (spec) {
+        // InterpolatedLine セグメント地物: 弧長比率で色・幅を補間
+        const iseg = Number(props.__kasc_iseg);
+        const idec = spec.line?.decor;
+        if (Number.isFinite(iseg) && idec?.kind === "interpolated") {
+          const ss = interpolatedSegmentStyle(idec, iseg);
+          return {
+            color: ss.color, weight: ss.width, fill: false,
+            opacity: o, interactive: true, ...pathExtra,
+          };
+        }
         const s = specToStyle(spec);
         if (s) {
           if (isPoint) {
@@ -1031,7 +1041,12 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         const cv = markerLayersToCanvas(spec.markers);
         let url = iconUrlCache.get(cv);
         if (!url) { url = cv.toDataURL(); iconUrlCache.set(cv, url); }
-        return L.icon({ iconUrl: url, iconSize: [cv.width, cv.height], iconAnchor: [cv.width / 2, cv.height / 2] });
+        // MapUnit マーカー(sizeMeters)は現縮尺で px 換算し iconSize を拡縮
+        const msp = specToStyle(spec)?.markerSizePx;
+        const sz = Number.isFinite(msp)
+          ? [Math.max(msp * (cv.width / (cv.height || 1)), 1), Math.max(msp, 1)]
+          : [cv.width, cv.height];
+        return L.icon({ iconUrl: url, iconSize: sz, iconAnchor: [sz[0] / 2, sz[1] / 2] });
       } catch (_) { return null; }
     };
     // simplestyle marker-symbol → divIcon バッジ(Maki SVG / 1文字/URL画像)。
@@ -1228,6 +1243,24 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         }
       }
       if (lrPts.length) geojson.features = [...geojson.features, ...lrPts];
+    }
+    // InterpolatedLine/Lineburst: セグメント分割地物へ展開する
+    // (Leaflet は1地物1スタイルのため、弧長24分割の近似)
+    if (item._qml && geojson?.features?.length) {
+      const expanded = [];
+      let changed = false;
+      for (const f of geojson.features) {
+        const fdec = /LineString/.test(f?.geometry?.type || "")
+          ? (() => { try { return item._qml.evaluate(f.properties || {})?.line?.decor; } catch (_) { return null; } })()
+          : null;
+        if (fdec?.kind === "interpolated") {
+          expanded.push(...splitInterpolatedGeojson(f.geometry, f.properties));
+          changed = true;
+        } else {
+          expanded.push(f);
+        }
+      }
+      if (changed) geojson.features = expanded;
     }
     // symbollevels=1 の近似: pass 順に地物を並べ替え(SVG レンダラは追加順が z 順)
     if (item._qml?.symbolLevels && geojson?.features?.length) {

@@ -1,7 +1,7 @@
 // QML スタイル(.qml)の Cesium への適用（描画側バインディング）
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
-import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas, linRefFormatText, clampMapUnitsPerPixel } from "../shared/qml-style.js";
+import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas, linRefFormatText, clampMapUnitsPerPixel, interpolatedColorAt } from "../shared/qml-style.js";
 import { trimCoordsPlanar, TRIM_PX_TO_M } from "../shared/qml-2d.js";
 
 const Cesium = window.Cesium;
@@ -447,6 +447,25 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
           entity.polyline.material = dashMaterialProperty(mulAlpha(spec.line.color, opacity), spec.line.dash);
         }
         entity.polyline.width = new Cesium.ConstantProperty(spec.line.widthPx);
+        // MapUnit/MetersInMapUnits の線幅: Cesium polyline は画面 px 幅しか
+        // 持てないため CorridorGraphics(実幅 m の帯)へ置き換える
+        // (QgsRenderContext の MapUnits 分岐相当。mus は実距離描画へ移るため不要)
+        if (Number.isFinite(spec.line.widthMeters) && !spec.line.dash?.length
+            && !spec.line.decor) {
+          const pos0 = entity.polyline.positions?.getValue?.(t);
+          if (pos0?.length >= 2) {
+            entity.polyline.show = new Cesium.ConstantProperty(false);
+            addAux({
+              corridor: {
+                positions: pos0,
+                width: new Cesium.ConstantProperty(spec.line.widthMeters),
+                cornerType: { bevel: Cesium.CornerType.BEVEL, miter: Cesium.CornerType.MITERED, round: Cesium.CornerType.ROUNDED }[spec.line.join] ?? Cesium.CornerType.ROUNDED,
+                material: new Cesium.ColorMaterialProperty(toCesiumColor(mulAlpha(spec.line.color, opacity))),
+                ...(clamp ? { height: new Cesium.ConstantProperty(0) } : {}),
+              },
+            });
+          }
+        }
         // symbollevels 近似: 地物最小 pass を ground プリミティブの zIndex へ
         // (非クランプの 3D 空間では深度ソートが優先されるため無効)
         if (Number.isFinite(spec.zRank)) {
@@ -1007,7 +1026,8 @@ function renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity }) {
   // 本体の単色ラインは補間セグメントで置き換える
   entity.polyline.show = new Cesium.ConstantProperty(false);
   const N = Math.min(32, Math.max(8, Math.round(total / 500)));
-  const lerpC = f => decor.c1.map((v, i) => v + (decor.c2[i] - v) * f);
+  // color_ramp_shader(items/stops)があればそちら優先、無ければ c1→c2 線形
+  const lerpC = f => interpolatedColorAt(decor, f);
   const clampToGround = entity.polyline.clampToGround?.getValue?.(t) ?? clamp;
   const arcType = entity.polyline.arcType?.getValue?.(t) ?? Cesium.ArcType.GEODESIC;
   let prev = pos[0];

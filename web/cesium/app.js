@@ -5173,6 +5173,7 @@ async function refreshLayersImpl() {
       try {
         const provider = createGeoTiffImageryProvider(Cesium, item, item._gt);
         const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: (item.opacity ?? 1) * layerOpacityFactor });
+        imageryLayer._kasugaiLayerId = item.id;
         imageryLayer._baseAlpha = item.opacity ?? 1;
         imageryLayer.show = effectiveLayerShow(item);
         viewer.imageryLayers.add(imageryLayer);
@@ -5199,6 +5200,7 @@ async function refreshLayersImpl() {
           opts: item.mvtOpts || {},
         });
         const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: (item.opacity ?? 0.8) * layerOpacityFactor });
+        imageryLayer._kasugaiLayerId = item.id;
         imageryLayer._baseAlpha = item.opacity ?? 0.8;
         imageryLayer.show = effectiveLayerShow(item);
         viewer.imageryLayers.add(imageryLayer);
@@ -5221,6 +5223,7 @@ async function refreshLayersImpl() {
         tileSize: item.tileSize || 256,
       });
       const imageryLayer = new Cesium.ImageryLayer(provider, { alpha: (item.opacity ?? 0.8) * layerOpacityFactor });
+      imageryLayer._kasugaiLayerId = item.id;
       imageryLayer._baseAlpha = item.opacity ?? 0.8;
       imageryLayer.show = effectiveLayerShow(item);
       viewer.imageryLayers.add(imageryLayer);
@@ -5477,6 +5480,7 @@ async function refreshLayersImpl() {
 // getLayerGeoJson 用に描画に使った GeoJSON を item に保持する
 // (参照を1本増やすだけで追加のデコード・ダウンロードは発生しない)
 function registerPrimitiveLayer(item, primitive, geojson = null) {
+  primitive._kasugaiLayerId = item.id;
   primitive.show = effectiveLayerShow(item);
   viewer.scene.primitives.add(primitive);
   activePrimitives.push(primitive);
@@ -5718,10 +5722,166 @@ function applyDefaultPolygonOutline(entity, polygonDflt, clamp, time) {
   if (width != null) entity.polygon.outlineWidth = new Cesium.ConstantProperty(width);
 }
 
+// QML pointDisplacement の移植。QGIS C++(QgsPointDisplacementRenderer)の
+// Ring placement 準拠: tolerance 内の点群をグループ化し、重心に
+// centerSymbol + circleColor の輪郭円を描き、メンバーはリング上等間隔配置。
+// 近似点: グルーピングとリング半径はロード時カメラ縮尺で固定
+// (QGIS はズーム毎にスクリーン単位で再計算する)
+function applyPointDisplacement(ds, spec, badgeCanvasFn) {
+  const v = window._viewer;
+  if (!v || !ds || !spec) return;
+  const tolPx = Math.max(spec.distancePx || 30, 4);
+  // 現在カメラでの m/px → 度換算(pitch≈俯瞰前提の近似)
+  const h = Math.max(v.camera.positionCartographic.height, 1);
+  const fov = v.camera.frustum.fov || Math.PI / 3;
+  const mPerPx = 2 * h * Math.tan(fov / 2) / Math.max(v.canvas.clientHeight || 1, 1);
+  const degPerPx = mPerPx / 111320;
+  const tolDeg = tolPx * degPerPx;
+  const ents = ds.entities.values;
+  const pts = [];
+  for (const e of ents) {
+    if (e._kascDisplacementCenter) continue;
+    const pos = e.position && e.position.getValue(Cesium.JulianDate.now());
+    if (!pos) continue;
+    const c = Cesium.Cartographic.fromCartesian(pos);
+    pts.push({ e, lon: Cesium.Math.toDegrees(c.longitude), lat: Cesium.Math.toDegrees(c.latitude) });
+  }
+  if (pts.length < 2) return;
+  // 重心ベースの貪欲グルーピング(tolerance 内の最近傍グループへ)
+  const groups = [];
+  for (const p of pts) {
+    let best = null, bestD = Infinity;
+    for (const g of groups) {
+      const d = Math.hypot(p.lon - g.lon, p.lat - g.lat);
+      if (d < bestD) { bestD = d; best = g; }
+    }
+    if (best && bestD <= tolDeg) {
+      best.members.push(p);
+      best.lon = best.members.reduce((s, m) => s + m.lon, 0) / best.members.length;
+      best.lat = best.members.reduce((s, m) => s + m.lat, 0) / best.members.length;
+    } else {
+      groups.push({ lon: p.lon, lat: p.lat, members: [p] });
+    }
+  }
+  const clampRef = ds._kascClampRef;
+  const cos0 = lat => Math.cos(lat * Math.PI / 180) || 1e-6;
+  for (const g of groups) {
+    if (g.members.length < 2) continue;
+    const n = g.members.length;
+    const cosLat = cos0(g.lat);
+    // QGIS drawGroup: 各メンバー symbol->size·√2 の最大を共通対角長に使う。
+    // billboard canvas は size+pad でほぼ √2·size に一致するため canvas 幅を流用
+    const diagonals = g.members.map(m => {
+      const img = m.e.billboard?.image?.getValue?.(Cesium.JulianDate.now());
+      return Math.max((img && Math.max(img.width, img.height)) || 12, 4);
+    });
+    const diag = Math.max(...diagonals);
+    const addPx = spec.circleRadiusAdditionPx || 0;
+    const placement = spec.ringStyle || "ring";
+    // QGIS calculateSymbolAndLabelPositions 準拠の配置計算(px 単位の dx/dy。y は下向き)
+    const shifts = [];
+    let circlePx = -1;
+    const gridSegs = [];
+    if (placement === "grid") {
+      const centerDiag = diag; // mCenterSymbol 対角長はメンバー対角長で近似
+      let gridSize = Math.ceil(Math.sqrt(n));
+      if (n - (gridSize - 1) ** 2 < gridSize) gridSize -= 1;
+      const userR = ((centerDiag / 2 + diag / 2) + diag) / 2 + addPx;
+      let rem = n, yi = 0;
+      while (rem > 0) {
+        for (let xi = 0; xi < gridSize && rem > 0; xi++, rem--) shifts.push([xi * userR, yi * userR]);
+        yi++;
+      }
+      const c = -userR * (gridSize - 1) / 2; // centralizeGrid
+      for (const s of shifts) { s[0] += c; s[1] += c; }
+      // drawGrid: 行内連結 + i→i+gridSize の縦線
+      for (let i = 0; i < shifts.length; i++) {
+        if (i + 1 < shifts.length && (i + 1) % gridSize !== 0) gridSegs.push([shifts[i], shifts[i + 1]]);
+        if (i + gridSize < shifts.length) gridSegs.push([shifts[i], shifts[i + gridSize]]);
+      }
+    } else if (placement === "concentric") {
+      const centerDiag = diag;
+      const firstR = centerDiag / 2 + diag / 2;
+      let rem = n, ring = 1;
+      while (rem > 0) {
+        const r = Math.max(firstR + (ring - 1) * diag + ring * addPx, 0);
+        const cnt = Math.min(Math.max(Math.floor(2 * Math.PI * r / diag), 1), rem);
+        for (let i = 0; i < cnt; i++) {
+          const a = i * 2 * Math.PI / cnt;
+          shifts.push([r * Math.sin(a), r * Math.cos(a)]);
+        }
+        rem -= cnt; ring++;
+        circlePx = r;
+      }
+    } else { // ring
+      const r = Math.max(diag / 2, n * diag / (2 * Math.PI)) + addPx;
+      for (let i = 0; i < n; i++) {
+        const a = i * 2 * Math.PI / n;
+        shifts.push([r * Math.sin(a), r * Math.cos(a)]);
+      }
+      circlePx = r;
+    }
+    // メンバーをリング/グリッド配置へ(painter座標 +y=下 → lat では -dy)
+    g.members.forEach((m, i) => {
+      const [dx, dy] = shifts[i];
+      const lon = g.lon + dx * degPerPx / cosLat;
+      const lat = g.lat - dy * degPerPx;
+      m.e.position = new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(lon, lat));
+    });
+    // 輪郭円/グリッド線(circleColor·circleWidth。n>=2 のみ。QGIS drawCircle/drawGrid)
+    const circCol = spec.circleColor ? new Cesium.Color(
+      spec.circleColor[0], spec.circleColor[1], spec.circleColor[2], spec.circleColor[3]) : null;
+    const circW = Math.max(spec.circleWidthPx ?? 1.5, 0.5);
+    if (circCol && circCol.alpha > 0) {
+      const segEnts = [];
+      if (circlePx > 0) {
+        const ringDeg = circlePx * degPerPx;
+        const pos = [];
+        for (let i = 0; i <= 48; i++) {
+          const a = (i / 48) * Math.PI * 2;
+          pos.push(g.lon + Math.sin(a) * ringDeg / cosLat, g.lat - Math.cos(a) * ringDeg);
+        }
+        segEnts.push(pos);
+      }
+      for (const [[ax, ay], [bx, by]] of gridSegs) {
+        segEnts.push([
+          g.lon + ax * degPerPx / cosLat, g.lat - ay * degPerPx,
+          g.lon + bx * degPerPx / cosLat, g.lat - by * degPerPx,
+        ]);
+      }
+      for (const pos of segEnts) {
+        const ce = ds.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(g.lon, g.lat),
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray(pos),
+            width: circW, material: circCol, clampToGround: true,
+          },
+        });
+        ce._kascDisplacementCenter = true;
+      }
+    }
+    // 中心シンボル(QML centerSymbol を count 込みで canvas 化。group.size>1 のみ)
+    const img = badgeCanvasFn ? badgeCanvasFn(n) : null;
+    if (img) {
+      const be = ds.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(g.lon, g.lat),
+        billboard: {
+          image: img,
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          ...(clampRef != null ? { heightReference: clampRef } : {}),
+        },
+      });
+      be._kascDisplacementCenter = true;
+    }
+  }
+}
+
 // cluster=on: 点 entity を件数バッジのピンでクラスタ表示する。
 // 点以外の entity(billboard なし)はクラスタ対象外としてそのまま残る
 let vectorPinBuilder = null;
-function enableLayerClustering(ds, pixelRange = 56) {
+function enableLayerClustering(ds, pixelRange = 56, badgeCanvasFn = null) {
   if (!vectorPinBuilder) vectorPinBuilder = new Cesium.PinBuilder();
   const pinBuilder = vectorPinBuilder;
   ds.clustering.enabled = true;
@@ -5731,10 +5891,20 @@ function enableLayerClustering(ds, pixelRange = 56) {
     const n = clusteredEntities.length;
     cluster.label.show = false;
     cluster.billboard.show = true;
-    cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.BOTTOM;
     cluster.billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
     // ドレープ中レイヤーのクラスタバッジも地表へクランプする(ds._kascClampRef)
     if (ds._kascClampRef != null) cluster.billboard.heightReference = ds._kascClampRef;
+    // QML のクラスタ中心シンボル(centerSymbol)があるときは QGIS 準拠で
+    // 件数込みのシンボルを描画する。無ければ従来の生成ピン
+    const badge = badgeCanvasFn ? badgeCanvasFn(n) : null;
+    if (badge) {
+      cluster.billboard.image = badge;
+      cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.CENTER;
+      cluster.billboard.horizontalOrigin = Cesium.HorizontalOrigin.CENTER;
+      return;
+    }
+    cluster.billboard.verticalOrigin = Cesium.VerticalOrigin.BOTTOM;
+    cluster.billboard.horizontalOrigin = Cesium.HorizontalOrigin.CENTER;
     const size = n < 10 ? 44 : n < 100 ? 52 : 60;
     const color = n < 10
       ? Cesium.Color.fromCssColorString("#3a7bd5")
@@ -5941,9 +6111,13 @@ async function buildHeatmapDataSource(item, source) {
   const padX = Math.max((east - west) * 0.05, 0.0005);
   const padY = Math.max((north - south) * 0.05, 0.0005);
   west -= padX; east += padX; south -= padY; north += padY;
-  const W = 1200;
+  // QML heatmapRenderer の spec(radius/ramp/maximum_value/weight_expression)
+  // があればそれを使う。radiusPx は画面 px 換算済みのため、画像キャンバス W を
+  // 表示時の典型幅(~1000px)とみなして同じ px をそのまま当てる近似
+  const hmSpec = item?.qmlStyle?.heatmap || null;
+  const W = 1024;
   const H = Math.max(64, Math.round(W * (north - south) / Math.max(east - west, 1e-9)));
-  const radiusPx = 24;
+  const radiusPx = Math.max(hmSpec?.radiusPx || 24, 4);
   // 半径サイズのビンで局所密度を計算し value に割り当てる
   const bins = new Map();
   const mapped = points.map(f => {
@@ -5955,12 +6129,29 @@ async function buildHeatmapDataSource(item, source) {
     bins.set(key, (bins.get(key) || 0) + 1);
   }
   const keyOf = p => `${Math.floor(p.x / radiusPx)}:${Math.floor(p.y / radiusPx)}`;
-  const data = mapped.map(p => ({ x: p.x, y: p.y, value: bins.get(keyOf(p)) || 1 }));
-  const max = Math.max(2, ...bins.values());
+  // weight_expression があれば地物属性評価を優先(未指定時は局所密度)
+  const data = mapped.map((p, i) => {
+    let v = bins.get(keyOf(p)) || 1;
+    if (hmSpec?.weightFn) {
+      const w = Number(hmSpec.weightFn(points[i]?.properties || {}));
+      if (Number.isFinite(w) && w > 0) v = w;
+    }
+    return { x: p.x, y: p.y, value: v };
+  });
+  const max = Math.max(hmSpec?.maxValue || 2, ...bins.values());
+  // QML カラーランプ → h337 gradient {offset: "rgba(...)"}
+  let gradient = null;
+  if (hmSpec?.ramp?.length) {
+    gradient = {};
+    for (const s of hmSpec.ramp) {
+      const [r, g, b, a] = s.color;
+      gradient[String(s.offset)] = `rgba(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)},${Math.min(Math.max(a, 0), 1)})`;
+    }
+  }
   const div = document.createElement("div");
   div.style.cssText = `position:absolute;left:-9999px;top:0;width:${W}px;height:${H}px;`;
   document.body.append(div);
-  const inst = h337.create({ container: div, radius: radiusPx, maxOpacity: 0.75, minOpacity: 0.05, blur: 0.85 });
+  const inst = h337.create({ container: div, radius: radiusPx, maxOpacity: 0.75, minOpacity: 0.05, blur: 0.85, ...(gradient ? { gradient } : {}) });
   inst.setData({ max, data });
   const canvas = div.querySelector("canvas");
   const material = new Cesium.ImageMaterialProperty({
@@ -6431,9 +6622,16 @@ async function buildStyledGeoJsonDataSource(source, drape, item = null) {
     // applyQmlStyleToDataSource の opacity 引数が担う）
     applyLayerOpacityToEntities(ds, effectiveLayerOpacity(item));
   }
-  // cluster=on または QML pointCluster: 点を含むレイヤーのみクラスタを有効化する
-  if ((item?.cluster || item?.qmlStyle?.cluster?.kind === "cluster") && geoJsonHasPoints(source)) {
-    enableLayerClustering(ds, item?.qmlStyle?.cluster?.distancePx);
+  // cluster=on または QML pointCluster/pointDisplacement。点を含む層のみ。
+  // pointDisplacement は QML spec を優先してリング配置移植版へ、
+  // pointCluster / cluster=on は EntityCluster + centerSymbol バッジへ
+  if ((item?.cluster || item?.qmlStyle?.cluster) && geoJsonHasPoints(source)) {
+    const cs = item?.qmlStyle?.cluster;
+    if (cs?.kind === "displacement") {
+      applyPointDisplacement(ds, cs, item?.qmlStyle?.badgeCanvas || null);
+    } else {
+      enableLayerClustering(ds, cs?.distancePx, item?.qmlStyle?.badgeCanvas || null);
+    }
   }
   // time=<プロパティ>: 時系列レイヤー登録(タイムスライダー連動)
   if (item?.timeField) registerTimeLayer(item, ds);

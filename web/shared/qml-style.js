@@ -141,7 +141,7 @@ function mapUnitMeters(value, unit) {
 // このスケールは QgsRenderContext::convertToPainterUnits の MapUnits 分岐でのみ
 // 効く(QGIS 実装)。単位が MM/Pixel 等のプロパティでは QGIS 側も無視するため、
 // 読んで保持のみ行い警告は出さない
-function parseMapUnitScale(v) {
+export function parseMapUnitScale(v) {
   const s = String(v ?? "").trim();
   if (!s) return null;
   const parts = s.replace(/^3x:/, "").split(",").map(Number);
@@ -154,7 +154,7 @@ function parseMapUnitScale(v) {
 }
 
 // props マップから "<base>_map_unit_scale" を引く(例: musOf(p,"size")→p.size_map_unit_scale)
-function musOf(p, base) {
+export function musOf(p, base) {
   return parseMapUnitScale(p?.[base + "_map_unit_scale"]);
 }
 
@@ -162,7 +162,7 @@ function musOf(p, base) {
 // 1pxあたり地図単位(mup)をクランプし、size(地図単位)→px を返す。
 // mup = scaleDenom × 0.00028(OGC標準ピクセル)。renderScale=scaleDenom とみなす
 export const MUP_PER_SCALE_DENOM = 0.00028;
-function mapUnitSizeToPxClamped(sizeMapUnits, mus, scaleDenom) {
+export function mapUnitSizeToPxClamped(sizeMapUnits, mus, scaleDenom) {
   const s = scaleDenom ?? currentMapScale();
   if (!s || !mus || !Number.isFinite(sizeMapUnits)) return null;
   let mup = s * MUP_PER_SCALE_DENOM;
@@ -291,7 +291,9 @@ function parsePaintEffects(layerEl, props) {
     if (c.tagName !== "effect") continue;
     const p = optionMap(c) || {};
     if (String(p.enabled ?? "1") === "0") continue;
-    out.push({ ...p, type: c.getAttribute("type") || p.type || "drawSource" });
+    const fx = { ...p, type: c.getAttribute("type") || p.type || "drawSource" };
+    attachMusProps(fx, p);
+    out.push(fx);
   }
   if (out.length) return out;
   // 手書き・旧形式: Option マップ内の effects/paintEffect キーも拾う
@@ -1379,7 +1381,21 @@ function compileRenderer(rendererEl, warnings) {
         // 中心シンボルは <symbol> 子要素(属性ではない)。旧属性名も読むが
         // 実機 QGIS4 の出力には存在しない
         renderer: rendererEl.getAttribute("renderer") || rendererEl.getAttribute("centerSymbol") || "",
+        // pointDisplacement のグループ輪郭円(Qgis C++ renderGroup 準拠):
+        // circleColor/circleWidth(+unit)/circleRadiusAddition。
+        // クラスタでは circleWidth=0 で非描画
+        circleColor: parseQgisColor(rendererEl.getAttribute("circleColor")),
+        circleWidthPx: rendererEl.hasAttribute("circleWidth")
+          ? Math.max(sizeToPx(rendererEl.getAttribute("circleWidth"),
+              rendererEl.getAttribute("circleWidthUnit") || "MM") || 0, 0) : null,
+        circleRadiusAdditionPx: sizeToPx(rendererEl.getAttribute("circleRadiusAddition") || 0,
+          rendererEl.getAttribute("circleRadiusAdditionUnit") || "MM") || 0,
       };
+      // クラスタ中心シンボル(<symbol name="centerSymbol"> は renderer-v2 の
+      // 直接の子で <symbols> コンテナには入らない)。badgeCanvas ファクトリは
+      // compileQmlStyle 側で images スコープと共に添える
+      const centerEl = [...rendererEl.children].find(c => c.tagName === "symbol");
+      if (centerEl) cluster.centerSymbol = parseSymbolEl(centerEl);
       if (type === "pointDisplacement") {
         warnOnce(warnings, "pointDisplacement は点群の放射配置を再現しません(中心点シンボルで近似)");
       }
@@ -1926,6 +1942,49 @@ function resolveLineLayer(layer, props, warnings, images = null) {
   return r;
 }
 
+// decor {kind:"interpolated"} の f∈[0,1] における色を返す。
+// ramp.items(明示 value/color ペア) → ramp.stops(offset/color) → c1→c2 線形補間
+// の優先順位で求める(QgsInterpolatedLineRenderer::colorForValue 相当の近似)
+export function interpolatedColorAt(decor, f) {
+  const lerp = (a, b, t) => a.map((v, i) => v + ((b?.[i] ?? v) - v) * t);
+  const ramp = decor?.ramp;
+  const items = Array.isArray(ramp?.items) && ramp.items.length ? ramp.items : null;
+  if (items) {
+    const lo = Number.isFinite(ramp.min) ? ramp.min : items[0].value;
+    const hi = Number.isFinite(ramp.max) ? ramp.max : items[items.length - 1].value;
+    const v = lo + Math.min(Math.max(f, 0), 1) * ((hi - lo) || 1);
+    const sorted = [...items].sort((a, b) => a.value - b.value);
+    let a = sorted[0], b = sorted[sorted.length - 1];
+    for (let i = 0; i < sorted.length - 1; i++) {
+      if (v >= sorted[i].value && v <= sorted[i + 1].value) { a = sorted[i]; b = sorted[i + 1]; break; }
+    }
+    if (v <= a.value) return a.color;
+    if (v >= b.value) return b.color;
+    return lerp(a.color, b.color, (v - a.value) / ((b.value - a.value) || 1));
+  }
+  const stops = Array.isArray(ramp?.stops) && ramp.stops.length ? ramp.stops : null;
+  if (stops) {
+    const pts = [{ off: 0, c: decor.c1 }, ...stops.map(s => ({ off: Number(s.off), c: s.c })),
+      { off: 1, c: decor.c2 }]
+      .map(s => ({ off: s.off, color: s.color || parseQgisColor(s.c, null) }))
+      .filter(s => s.color)
+      .sort((a, b) => a.off - b.off);
+    if (pts.length >= 2) {
+      const t = Math.min(Math.max(f, 0), 1);
+      if (t <= pts[0].off) return pts[0].color;
+      if (t >= pts[pts.length - 1].off) return pts[pts.length - 1].color;
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (t >= pts[i].off && t <= pts[i + 1].off) {
+          return lerp(pts[i].color, pts[i + 1].color,
+            (t - pts[i].off) / ((pts[i + 1].off - pts[i].off) || 1));
+        }
+      }
+    }
+  }
+  return lerp(decor?.c1 || [0, 0, 0, 1], decor?.c2 || decor?.c1 || [0, 0, 0, 1],
+    Math.min(Math.max(f, 0), 1));
+}
+
 function resolveLineLayerBase(layer, props, warnings, images = null) {
   const p = layer.props;
   const dd = layer.dd;
@@ -1934,12 +1993,20 @@ function resolveLineLayerBase(layer, props, warnings, images = null) {
     case "SimpleLine": {
       // 実 QML の DD 名: 線色=outlineColor, 線幅=outlineWidth, 線種=outlineStyle,
       // トリム=trimStart/trimEnd(実機 QGIS4 検証済み。qml-spec スキル参照)
-      const color = parseQgisColor(ddValue(dd, ["outlineColor", "lineColor", "line_color", "color"], props, p.line_color), [0, 0, 0, 1]);
-      const widthPx = sizeToPx(ddValue(dd, ["outlineWidth", "width", "lineWidth", "line_width", "outline_width"], props, p.line_width ?? 0.26), widthUnit);
+      // C++: color=line_color→outline_color→color / width=line_width→outline_width→width
+      const color = parseQgisColor(ddValue(dd, ["outlineColor", "lineColor", "line_color", "color"], props,
+        p.line_color ?? p.outline_color ?? p.color), [0, 0, 0, 1]);
+      const widthUnit2 = p.line_width_unit || p.outline_width_unit || p.width_unit || widthUnit;
+      const widthRaw = ddValue(dd, ["outlineWidth", "width", "lineWidth", "line_width", "outline_width"], props,
+        p.line_width ?? p.outline_width ?? p.width ?? 0.26);
+      const widthPx = sizeToPx(widthRaw, widthUnit2);
       const ddDash = ddValue(dd, ["customDash"], props, null);
       const custom = (ddDash != null && ddDash !== "") ? String(ddDash)
         : (p.use_custom_dash === "1" || p.use_custom_dash === "true" ? p.customdash : null);
-      const dash = dashPattern(ddValue(dd, ["outlineStyle", "lineStyle", "line_style"], props, p.line_style), custom, widthPx, p.customdash_unit);
+      // C++: line_style→outline_style→penstyle の順で評価
+      const dash = dashPattern(ddValue(dd, ["outlineStyle", "lineStyle", "line_style"], props,
+        p.line_style ?? p.outline_style ?? p.penstyle), custom, widthPx, p.customdash_unit);
+      const offsetRaw = ddValue(dd, ["offset"], props, p.offset ?? 0);
       if (dash === "none") return null;
       // 線端トリム・破線開始オフセット。trim はジオメトリ近似で再現するため
       // px 値を spec に保持する(対応しないエンジンは無視)
@@ -1952,13 +2019,25 @@ function resolveLineLayerBase(layer, props, warnings, images = null) {
       if (trimStartPx || trimEndPx) {
         warnOnce(warnings, "trim_distance はジオメトリ切断で近似再現します(基準縮尺1:1万換算)");
       }
+      // MapUnit/MetersInMapUnits の線幅はメートル値と mus を保持する。
+      // 対応エンジン(OL/Leaflet/MapLibre/Navara/Cesium)が描画縮尺で
+      // m→px 変換し、mus があれば QgsMapUnitScale 準拠でクランプする。
+      // 非対応エンジンは widthPx 近似のまま
+      const widthMeters = mapUnitMeters(widthRaw, widthUnit2);
+      const widthMus = widthMeters
+        ? (musOf(p, "line_width") || musOf(p, "outline_width") || musOf(p, "width"))
+        : null;
       return {
         color, widthPx: Math.max(widthPx, 1), dash,
         // 結合部・端部・オフセット(2D エンジンで反映)
         join: qgisJoin(p.joinstyle),
         cap: qgisCap(p.capstyle),
-        offsetPx: sizeToPx(ddValue(dd, ["offset"], props, p.offset ?? 0), p.offset_unit || "MM") || 0,
+        offsetPx: sizeToPx(offsetRaw, p.offset_unit || "MM") || 0,
         trimStartPx, trimEndPx, dashOffsetPx,
+        ...(widthMeters ? { widthMeters, widthMus } : {}),
+        ...(mapUnitMeters(offsetRaw, p.offset_unit || "MM")
+          ? { offsetMeters: mapUnitMeters(offsetRaw, p.offset_unit || "MM"),
+              offsetMus: musOf(p, "offset") } : {}),
         // align_dash_pattern=線の先端基準で破線位置を揃える /
         // tweak_dash_pattern_on_corners=角で破線を見栄え調整 /
         // draw_inside_polygon=ポリゴン内側のみ描画(クリップ近似・未対応エンジンは無視)
@@ -1974,24 +2053,58 @@ function resolveLineLayerBase(layer, props, warnings, images = null) {
       // line_width/width_varying_is_variable_width/width_varying_minimum_width/
       // width_varying_maximum_width。DD は lineStartColorValue/lineEndColorValue/
       // lineStartWidthValue/lineEndWidthValue
+      // C++: color_ramp_shader はネスト Map。color_ramp_source(ランプ本体) +
+      // shader_type/classification_mode/items_list/min/max/clip/label_precision
       const ramp = p.color_ramp_shader && typeof p.color_ramp_shader === "object" ? p.color_ramp_shader : null;
-      const rampC1 = ramp ? (ramp.color1 ?? ramp["stop_0"]) : null;
-      const rampC2 = ramp ? (ramp.color2 ?? ramp["stop_100"]) : null;
-      const isRamp = /colorramp|ramp/i.test(String(p.coloring_method ?? ""));
-      const colorStart = parseQgisColor(ddValue(dd, ["lineStartColorValue", "startColor", "start_color", "color_start"], props,
-        (isRamp ? rampC1 : p.single_color) ?? rampC1 ?? p.single_color ?? p.line_color ?? p.color), [0, 0, 0, 1]);
-      const colorEnd = parseQgisColor(ddValue(dd, ["lineEndColorValue", "endColor", "end_color", "color_end"], props,
-        (isRamp ? rampC2 : null) ?? rampC2 ?? p.single_color ?? p.line_color ?? p.color), colorStart);
+      let rampSpec = null, rampC1 = null, rampC2 = null;
+      if (ramp) {
+        const src = ramp.color_ramp_source && typeof ramp.color_ramp_source === "object" ? ramp.color_ramp_source : ramp;
+        rampC1 = src.color1 ?? src["stop_0"] ?? ramp["stop_0"] ?? ramp.color1;
+        rampC2 = src.color2 ?? src["stop_100"] ?? ramp["stop_100"] ?? ramp.color2;
+        // items_list(明示的な value/color/label ペア)がある場合はそちらが優先
+        const items = Array.isArray(ramp.color_ramp_shader_items_list) ? ramp.color_ramp_shader_items_list
+          .filter(it => it && typeof it === "object" && it.color != null && it.value != null)
+          .map(it => ({ value: Number(it.value), color: parseQgisColor(it.color, [0, 0, 0, 1]), label: it.label || "" }))
+          .filter(it => Number.isFinite(it.value)) : null;
+        rampSpec = {
+          type: Number(ramp.color_ramp_shader_type ?? 0) || 0,
+          classificationMode: Number(ramp.color_ramp_shader_classification_mode ?? 0) || 0,
+          min: Number(ramp.color_ramp_shader_minimum_value),
+          max: Number(ramp.color_ramp_shader_maximum_value),
+          clip: String(ramp.color_ramp_shader_value_out_of_range ?? "0") === "1",
+          labelPrecision: Number(ramp.color_ramp_shader_label_precision ?? 6) || 6,
+          items: items && items.length ? items : null,
+          stops: src.stops ? String(src.stops).split(";").reduce((a, s, i, arr) => {
+            if (i % 2) a.push({ off: Number(arr[i - 1]), c: s }); return a; }, []) : null,
+        };
+        if (rampSpec.items?.length) { rampC1 = null; rampC2 = null; }
+      }
+      const isRamp = /colorramp|ramp/i.test(String(p.coloring_method ?? "")) || ramp != null;
+      // *_expression キーは地物単位の DD 式。evaluateExpression で評価して
+      // start/end の値へ畳む(式が無効/属性欠如ならプロパティ値へフォールバック)
+      const evExpr = (expr, fb) => {
+        if (!expr) return fb;
+        try {
+          const v = evalQgisExpression(String(expr), props || {});
+          return (v != null && v !== "") ? v : fb;
+        } catch { return fb; }
+      };
+      const colorStart = parseQgisColor(evExpr(p.start_color_expression,
+        ddValue(dd, ["lineStartColorValue", "startColor", "start_color", "color_start"], props,
+        (isRamp ? rampC1 : p.single_color) ?? rampC1 ?? p.single_color ?? p.line_color ?? p.color)), [0, 0, 0, 1]);
+      const colorEnd = parseQgisColor(evExpr(p.end_color_expression,
+        ddValue(dd, ["lineEndColorValue", "endColor", "end_color", "color_end"], props,
+        (isRamp ? rampC2 : null) ?? rampC2 ?? p.single_color ?? p.line_color ?? p.color)), colorStart);
       // 可変幅: width_varying_is_variable_width=1 のとき minimum/maximum_width、
       // それ以外は両端 line_width
       const variable = String(p.width_varying_is_variable_width ?? "0") === "1"
         || String(p.width_varying_is_variable_width).toLowerCase() === "true";
       const w1v = variable ? (p.width_varying_minimum_width ?? p.line_width ?? 0.26) : (p.line_width ?? 0.26);
       const w2v = variable ? (p.width_varying_maximum_width ?? w1v) : w1v;
-      const widthStartPx = Math.max(sizeToPx(ddValue(dd, ["lineStartWidthValue", "widthStart", "width_start"], props,
-        w1v), widthUnit) || 0, 0.5);
-      const widthEndPx = Math.max(sizeToPx(ddValue(dd, ["lineEndWidthValue", "widthEnd", "width_end"], props,
-        w2v), widthUnit) || 0, 0.5);
+      const widthStartPx = Math.max(sizeToPx(Number(evExpr(p.start_width_expression,
+        ddValue(dd, ["lineStartWidthValue", "widthStart", "width_start"], props, w1v))) || w1v, widthUnit) || 0, 0.5);
+      const widthEndPx = Math.max(sizeToPx(Number(evExpr(p.end_width_expression,
+        ddValue(dd, ["lineEndWidthValue", "widthEnd", "width_end"], props, w2v))) || w2v, widthUnit) || 0, 0.5);
       // 幅の可変値域(実機名): width_varying_minimum_value/maximum_value は
       // 補間パラメータ t→値域の写像範囲。use_absolute_value=値そのものを幅とする
       // 解釈、ignore_out_of_range=値域外をクランプせず除外する指定。
@@ -2009,7 +2122,8 @@ function resolveLineLayerBase(layer, props, warnings, images = null) {
       // 幅・色補間を再現する契約。非対応エンジンは color/widthPx の単色線
       return {
         color: colorStart, widthPx: Math.max(widthStartPx, widthEndPx, 1), dash: null,
-        decor: { kind: "interpolated", c1: colorStart, c2: colorEnd, w1: widthStartPx, w2: widthEndPx, varying },
+        decor: { kind: "interpolated", c1: colorStart, c2: colorEnd, w1: widthStartPx, w2: widthEndPx, varying,
+          ramp: rampSpec },
       };
     }
     case "FilledLine": {
@@ -2308,9 +2422,11 @@ function resolveFillLayerBase(layer, props, images, warnings) {
       // DD は fillColor/lineAngle/lineDistance が実名(実機検証済み)。
       // lineColor/color は存在しない旧名フォールバック
       const color = parseQgisColor(ddValue(dd, ["fillColor", "lineColor", "color"], props, p.color), [0, 0, 0, 1]);
-      const angle = Number(ddValue(dd, ["lineAngle"], props, p.angle ?? 45));
+      // C++: lineangle→angle(角度) / linewidth→outline_width→line_width(幅)
+      const angle = Number(ddValue(dd, ["lineAngle"], props, p.lineangle ?? p.angle ?? 45));
       const distPx = sizeToPx(ddValue(dd, ["lineDistance"], props, p.distance ?? 2), p.distance_unit || "MM") || 4;
-      const widthPx = Math.max(sizeToPx(p.line_width ?? p.outline_width ?? 0.3, p.line_width_unit || "MM"), 0.8);
+      const widthPx = Math.max(sizeToPx(p.linewidth ?? p.outline_width ?? p.line_width ?? 0.3,
+        p.line_width_unit || p.outline_width_unit || "MM"), 0.8);
       let lineColor = color, lineWidth = widthPx;
       if (layer.subSymbol) {
         for (const l of layer.subSymbol.layers || []) {
@@ -2394,14 +2510,18 @@ function resolveFillLayerBase(layer, props, images, warnings) {
         alpha: Number.isFinite(Number(p.alpha)) ? Number(p.alpha) : 1,
         coordinateMode: Number(p.coordinate_mode ?? 0) || 0,
         svgParams: (p.parameters && typeof p.parameters === "object") ? p.parameters : null,
-        svgOutlineWidthPx: sizeToPx(p.svg_outline_width ?? 0, p.svg_outline_width_unit || "MM") || 0,
+        // C++: svgOutlineWidth→outline_width→line_width / svgOutlineColor→outline_color→line_color
+        svgOutlineWidthPx: sizeToPx(p.svgOutlineWidth ?? p.svg_outline_width ?? p.outline_width ?? p.line_width ?? 0,
+          p.svg_outline_width_unit || p.outline_width_unit || "MM") || 0,
+        svgOutlineColor: parseQgisColor(p.svgOutlineColor ?? p.outline_color ?? p.line_color, null),
       } };
     }
     case "GradientFill":
     case "ShapeburstFill":
     case "ColorRampFill": {
-      const c1 = parseQgisColor(p.color ?? p.gradient_color2 ?? p.color1 ?? p.two_color_second, [0.5, 0.5, 0.5, 1]);
-      const c2 = parseQgisColor(p.gradient_color2 ?? p.color2 ?? p.two_color_second, null);
+      // C++ ShapeburstFill: shapeburst_color→color / shapeburst_color2→gradient_color2
+      const c1 = parseQgisColor(p.shapeburst_color ?? p.color ?? p.gradient_color2 ?? p.color1 ?? p.two_color_second, [0.5, 0.5, 0.5, 1]);
+      const c2 = parseQgisColor(p.shapeburst_color2 ?? p.gradient_color2 ?? p.color2 ?? p.two_color_second, null);
       // グラデーションはタイルで近似。実機名の制御パラメータを spec へ保持する:
       //   type(linear|radial|conical)/color_type(simple|ramp)/rampType(ランプ名)/
       //   coordinate_mode(0=地物 1=ビューポート)/gradient_spread|spread(pad等)/
@@ -2488,14 +2608,28 @@ function resolveFillLayerBase(layer, props, images, warnings) {
 function resolveOutline(layer, props, warnings) {
   const p = layer.props;
   const dd = layer.dd;
-  const style = String(ddValue(dd, ["outlineStyle", "outline_style"], props, p.outline_style ?? "solid")).toLowerCase();
+  // QgsSimpleFillSymbolLayer::create と同じフォールバック順序:
+  // style_border→outline_style→line_style / color_border→outline_color→line_color /
+  // width_border→outline_width→line_width / border_width_unit→outline_width_unit→line_width_unit
+  const style = String(ddValue(dd, ["outlineStyle", "style_border", "outline_style", "line_style"], props,
+    p.style_border ?? p.outline_style ?? p.line_style ?? "solid")).toLowerCase();
   if (style === "no") return null;
-  const color = parseQgisColor(ddValue(dd, ["outlineColor", "outline_color"], props, p.outline_color), null);
+  const color = parseQgisColor(ddValue(dd, ["outlineColor", "color_border", "outline_color", "line_color"], props,
+    p.color_border ?? p.outline_color ?? p.line_color), null);
   if (!color) return null;
-  const widthPx = sizeToPx(ddValue(dd, ["outlineWidth", "outline_width"], props, p.outline_width ?? 0.26), p.outline_width_unit || "MM");
+  const widthUnit = p.border_width_unit || p.outline_width_unit || p.line_width_unit || "MM";
+  const widthRaw = ddValue(dd, ["outlineWidth", "width_border", "outline_width", "line_width"], props,
+    p.width_border ?? p.outline_width ?? p.line_width ?? 0.26);
+  const widthPx = sizeToPx(widthRaw, widthUnit);
   const dash = dashPattern(style, null, Math.max(widthPx, 1));
+  // MapUnit 系の輪郭幅もメートル値+mus を保持(対応エンジンが縮尺連動で再現)
+  const widthMeters = mapUnitMeters(widthRaw, widthUnit);
+  const widthMus = widthMeters
+    ? (musOf(p, "outline_width") || musOf(p, "line_width") || musOf(p, "width") || musOf(p, "width_border"))
+    : null;
   return { color, widthPx: Math.max(widthPx, 1), dash: dash === "none" ? null : dash,
-    join: qgisJoin(p.joinstyle) };
+    join: qgisJoin(p.joinstyle),
+    ...(widthMeters ? { widthMeters, widthMus } : {}) };
 }
 
 // <symbol> を feature 属性で正規化する
@@ -3428,6 +3562,22 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map(), e
     symbolLevels: !!renderer.symbolLevels,
     heatmap: renderer.heatmap || null,
     cluster: renderer.cluster || null,
+    // クラスタ中心シンボルがあるとき、件数を @cluster_size 変数へ供給しながら
+    // canvas 化するファクトリ。Cesium/OL 等のクラスタバッジ描画で使う
+    badgeCanvas: renderer.cluster?.centerSymbol?.layers?.length ? (count) => {
+      const prev = exprVarResolver;
+      exprVarResolver = name => {
+        const vn = String(name ?? "").toLowerCase();
+        if (vn === "cluster_size") return count;
+        if (vn === "cluster_color" || vn === "cluster_colour") return null;
+        return prev ? prev(name) : undefined;
+      };
+      try {
+        const spec = resolveSymbolLayers(renderer.cluster.centerSymbol, {}, images, warnings);
+        applySymbolAlpha(spec);
+        return spec.markers?.length ? markerLayersToCanvas(spec.markers) : null;
+      } finally { exprVarResolver = prev; }
+    } : null,
     inverted: !!renderer.inverted,
     // 25dRenderer: {height} を保持(Cesium/Navara の押出し近似用)
     d25: renderer.d25 || null,
@@ -3715,6 +3865,7 @@ function applyEffectToCanvas(cur, fx) {
   const css = rgbaToCss(withAlpha(col, Number(fx.opacity ?? 1) || 1));
   const blurPx = sizeToPx(fx.blur_level ?? fx.blur_radius ?? 0, fx.blur_unit || "MM");
   const distPx = sizeToPx(fx.offset_distance ?? fx.offset ?? 0, fx.offset_unit || "MM");
+  const spreadPx = sizeToPx(fx.spread ?? 0, fx.spread_unit || "MM") || 0;
   const ang = (Number(fx.offset_angle) || 0) * Math.PI / 180;
   switch (type) {
     case "blur":
@@ -3734,7 +3885,7 @@ function applyEffectToCanvas(cur, fx) {
     case "glow":
     case "outerglow": {
       ctx.shadowColor = css;
-      ctx.shadowBlur = Math.max(blurPx || Number(fx.spread) * MM_TO_PX || 4, 1);
+      ctx.shadowBlur = Math.max(blurPx || spreadPx || 4, 1);
       ctx.drawImage(cur, 0, 0);
       ctx.shadowColor = "transparent"; ctx.shadowBlur = 0;
       ctx.drawImage(cur, 0, 0);

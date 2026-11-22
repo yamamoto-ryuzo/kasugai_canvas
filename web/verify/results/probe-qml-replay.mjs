@@ -45,6 +45,8 @@ for (const eng of engines) {
       for (const l of window.kasugaiApi.listLayers()) {
         const leaf = leafOf(l.title || l.id);
         if (!/qmltest_/.test(leaf) || l.visible === false) continue;
+        // xyz: タイル行はベクタ地物を持たないため対象外(QGIS焼き付け画像)
+        if (l.type === "tile" || l.type === "xyz") { out[leaf] = -2; continue; }
         let best = -1;
         for (let i = 0; i < 20 && best <= 0; i++) {
           try {
@@ -58,7 +60,8 @@ for (const eng of engines) {
       }
       return out;
     });
-    const zeros = Object.entries(counts).filter(([, v]) => !(v > 0));
+    // -2 = xyz タイル行(ベクタ地物を持たない正常)、-1 = ロード失敗/未取得
+    const zeros = Object.entries(counts).filter(([, v]) => !(v > 0) && v !== -2);
     ok(zeros.length === 0, "表示 qmltest レイヤが地物を持つ",
       zeros.map(([k, v]) => `${k}=${v}`).join(","));
     note(`feature counts: ${JSON.stringify(counts).slice(0, 500)}`);

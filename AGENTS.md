@@ -75,6 +75,7 @@
 - **ブラウザ検証を始める前に、まず Chrome がインストール済みか確認する**。Playwright 管理ブラウザ（`ms-playwright/` キャッシュ）が空でも、`chromium.launch({ channel: 'chrome' })`・`channel: 'msedge'` で OS インストール済みブラウザをそのまま headless 起動できる。Chrome → Edge の順で探し、両方無い場合だけ `npx playwright install` で取得する（重いダウンロードを避け、まず既存ブラウザを使う）
 - 検証は「変更した機能が実際に動くこと」に加え、既存機能への影響（回帰）も対象とする
 - **QML/スタイル描画の検証は背景地図なしで行う**。地図の文字・道路・色と地物描画が混同して誤診するため、検証用 .kasc には `base: ベースマップなし | none`（URL の代わりにモード指定 `none`）を書くか、画面上で「ベースマップなし」を選択してからスクリーンショット・目視判定を行う（`qml-text` スキルの「背景なし検証手順」と同じ規約。透明が必要なら `transparent` も可）
+- **QML 描画変更時は QGIS↔Canvas のペア・スクリーンショット比較を行う**（機能リプレイだけで完了としない）。ハーネス `web/verify/results/qgis-vs-canvas/compare.mjs` が、live-drive 経由で QGIS 地図キャンバスを bbox 設定→`screenshot` 取得し、Canvas 側を同一範囲・同一解像度で Playwright 撮影する。全層モードと単層（solo）モードがあり、差異はまず単層で犯レイヤを特定する。結果は同ディレクトリ `RESULTS.md` に「一致/許容近似/未対応/回帰」で記録する。詳細手順は `qml-spec` スキルの「QGIS↔Canvas スクリーンショット比較」節を参照
 - サーバー側の変更は起動して実リクエスト（curl 等）で確認する
 - 検証用の一時ファイル・スクリプトはシステムの temp ディレクトリ（Windows: `%TEMP%`）に置く。`.testtmp/` は gitignore 対象パスのためエージェントのファイル作成ツールで書き込めず、使わないこと（シェルのリダイレクトで生成する分には可）
 - **注意**: Git Bash で `>nul` と書くとカレントに `nul` という実ファイルが作られる。これが `web/` 内に残ると Cloud Build の `COPY web` が "operation not permitted" で失敗する（実際に発生）。リダイレクトは `> /dev/null` か `> /tmp/xxx.log` を使う

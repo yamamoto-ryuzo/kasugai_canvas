@@ -30,7 +30,7 @@ import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../shared/attr-widget.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -512,9 +512,17 @@ async function mountGlobeEntry(e, preloaded) {
       item._geojson = result.geojson;
       item._env = geojsonExtent(result.geojson) || null;
       if (result.viewportQuery) item._viewportQuery = true;
-      if (item.opts?.style) e._qmlPending = true; // QML→_props 変換は未対応
+      if (item.opts?.style && !item._qml) {
+        try { item._qml = await loadCompiledQml(item.opts.style, lastBaseUrl, "gsimaps"); }
+        catch (_) { /* QML コンパイル失敗は既定スタイルへ */ }
+      }
     }
-    e._globeDs = await addGlobeGeoJson(whereFilteredGeoJson(item, item._geojson));
+    // QML 適用時は styledFeature で _props を焼いてから Globe へ渡す
+    // (styleGlobeEntity が _color/_weight/_fillColor 等を参照する)
+    const gsrc = item._qml
+      ? { type: "FeatureCollection", features: (whereFilteredGeoJson(item, item._geojson)?.features || []).map(f => styledFeature(item, f)) }
+      : whereFilteredGeoJson(item, item._geojson);
+    e._globeDs = await addGlobeGeoJson(gsrc);
     if (e._globeDs) e._globeDs.show = on;
     return;
   }
@@ -723,6 +731,44 @@ function styledFeature(item, feature) {
   const gt = feature.geometry?.type || "";
   const ds = currentDefaultStyles || {};
   const num = v => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+  // QML コンパイル済みなら specToStyle で _props へ変換(2D sakuzu と
+  // Globe モードの styleGlobeEntity 双方が _props を参照する)
+  if (item._qml) {
+    try {
+      const spec = item._qml.evaluate(props);
+      const s = specToStyle(spec);
+      if (s) {
+        if (/Point/.test(gt)) {
+          if (s.markerCanvas) {
+            props._markerType = "Icon";
+            props._iconUrl = s.markerCanvas.toDataURL();
+            const sz = Number.isFinite(s.markerSizePx) ? Math.max(s.markerSizePx, 2)
+              : s.markerCanvas.height;
+            props._iconSize = [sz, sz];
+            props._iconAnchor = [sz / 2, sz / 2];
+          } else {
+            props._markerType = "CircleMarker";
+            props._radius = 5;
+            props._color = s.stroke || "#ffffff";
+            props._weight = 1;
+            props._fillColor = s.markerColor || "#2c5ea8";
+            props._fillOpacity = 1;
+            props._opacity = 0.8;
+          }
+        } else {
+          props._color = s.stroke || "#2c5ea8";
+          props._weight = s.strokeWidth ?? 1.5;
+          props._opacity = 1;
+          if (/Polygon/.test(gt)) {
+            props._fillColor = s.fill || "#3a7bd5";
+            props._fillOpacity = 0.4;
+            props._fill = true;
+          }
+        }
+        return { ...feature, properties: props };
+      }
+    } catch (_) { /* QML 評価失敗は既定スタイルへフォールバック */ }
+  }
   if (/Point/.test(gt)) {
     const s = resolveDefaultPointStyle(props, ds.point, { color: "#2c5ea8", size: 0, opacity: 1 });
     // togeojson(KML) icon-* → 上流 sakuzu の _iconUrl 経路(KML scale1=32px基準)
@@ -927,7 +973,10 @@ async function mountEntry(entry, preloaded) {
     item._geojson = result.geojson;
     item._env = geojsonExtent(result.geojson) || null;
     if (result.viewportQuery) item._viewportQuery = true;
-    if (item.opts?.style) entry._qmlPending = true; // QML→_props 変換は未対応
+    if (item.opts?.style && !item._qml) {
+      try { item._qml = await loadCompiledQml(item.opts.style, lastBaseUrl, "gsimaps"); }
+      catch (_) { /* QML コンパイル失敗は既定スタイルへ */ }
+    }
     entry.sakuzu = injectSakuzuLayer(item, item._geojson);
     return;
   }
@@ -1174,7 +1223,7 @@ function defaultLegendSpec(item) {
 
 // ---- 凡例タブ: legend: 画像とレイヤ凡例を1つのセレクタで切替表示する ----
 // 選択中は legendPickerState.selected で保持し、再描画で維持する。
-// 本エンジンは QML 未対応(_qmlPending)のため既定スタイルのスウォッチのみ
+// 本エンジンの QML は基本スタイル(_props)のみ対応のため、凡例は spec があれば生成・無ければ既定スウォッチ
 const legendPickerState = {};
 // legend: 行で指定された凡例画像(buildFromDoc で収集)
 let legendTabImages = [];
