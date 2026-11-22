@@ -17,9 +17,9 @@ let session = null;
 export function configureLive(doc, hooks = {}) {
   const liveUrl = doc?.live?.url || "";
   if (!/^https?:\/\//i.test(liveUrl)) { stopLive(); return; }
-  // live: 行の | follow オプションは一度有効化したら維持する
-  // (インスペクタ再適用でユーザーの手動解除を上書きしない)
-  if (doc?.live?.follow) liveFollowEnabled = true;
+  // live: 行の | follow オプションは規定で有効化するが、ユーザーがパネルで
+  // 手動切替した後は再適用(kasc 差分適用→liveConfigureFromSpec)で上書きしない
+  if (doc?.live?.follow && !followUserSet) liveFollowEnabled = true;
   if (!session) session = new LiveSession();
   session.configure({ liveUrl, ...hooks });
 }
@@ -65,7 +65,11 @@ export async function liveWritebackEntries(entries, { theme } = {}) {
 // ---- live セッションの追加操作(QGIS → Canvas の状態・取得系) ----
 export function liveBase() { return session?.cfg?.liveUrl || null; }
 // live: 行の follow / UI トグルで有効化する QGIS キャンバス追従
-export function liveSetFollow(on) { liveFollowEnabled = !!on; return liveFollowEnabled; }
+export function liveSetFollow(on) {
+  liveFollowEnabled = !!on;
+  followUserSet = true;
+  return liveFollowEnabled;
+}
 export function liveIsFollowing() { return liveFollowEnabled; }
 export function liveFollowAvailable() { return typeof engineFollowApply === "function"; }
 // QGIS 側選択ハイライトの表示切替(OFF で受信適用を止め表示を消す)
@@ -127,6 +131,7 @@ let followLegacy = false;   // /live/state 未対応の旧サーバ → /present
 // 記憶しておき、live セッション確立時は ?follow 無しでも追従できる
 let engineFollowApply = null;
 let liveFollowEnabled = false;
+let followUserSet = false;
 // QGIS 側選択の Canvas ハイライト表示フラグ(OFF で受信適用を止めて消す)
 let selVisible = true;
 
@@ -158,13 +163,16 @@ function applyFollowCanvas(canvas, sess = null) {
   const key = followKeyOf(canvas);
   if (key === lastFollowKey) return;
   lastFollowKey = key;
-  if (sess) sess.camHoldUntil = Date.now() + 1300;
+  // 起動直後の初期抑止(configure の +10s)を follow 適用で縮めないよう max を取る
+  if (sess) sess.camHoldUntil = Math.max(sess.camHoldUntil || 0, Date.now() + 1300);
   for (const f of followReg) {
     try { f.apply(canvas); } catch (_) { /* エンジン側適用失敗は無視 */ }
   }
   // live: 行の follow オプション(?follow 登録が無い場合のみ重複適用を避けて呼ぶ)
+  // apply のシグネチャは (canvasState, {topdown}) — 第2引数を渡さないと
+  // 分割代入で TypeError になり follow が無言で死ぬ(pitch 保持の既定)
   if (!followReg.length && liveFollowEnabled && engineFollowApply) {
-    try { engineFollowApply(canvas); } catch (_) { /* 同上 */ }
+    try { engineFollowApply(canvas, { topdown: false }); } catch (_) { /* 同上 */ }
   }
 }
 
@@ -197,7 +205,12 @@ function applyLiveState(data, sess = null) {
       })();
     }
   }
-  if (followReg.length) applyFollowCanvas(data?.canvas, sess);
+  // ?follow 登録がある場合だけでなく live: 行の | follow でも
+  // QGIS キャンバス位置を適用する(従来は followReg 必須で、
+  // live: 行経由では /live/state を読んでもカメラ追従が起きなかった)
+  if (followReg.length || (liveFollowEnabled && engineFollowApply)) {
+    applyFollowCanvas(data?.canvas, sess);
+  }
 }
 
 // live セッションが無い環境(standalone ?follow=)専用のポーラ。
@@ -249,6 +262,10 @@ class LiveSession {
       this.stateDisabled = false;
       this.sendDisabled = false;
       this.sendRetryAt = 0;
+      // 起動直後の初期カメラ位置(デフォルト/復元位置)を /live/camera で
+      // QGIS へ逆送しないよう、最初の follow 適用が来るまでの間は送信を抑止する
+      // (applyFollowCanvas も camHoldUntil を更新するので追従中も継続抑止される)
+      this.camHoldUntil = Date.now() + 10000;
       // 既存 live.json を即読みして現在 rev を掴む(初回適用は行わない)
       void this.tick(true);
     }

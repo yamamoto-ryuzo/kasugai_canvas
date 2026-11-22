@@ -1,0 +1,9 @@
+geojson: ren_embedded | canvas_data/qmltest_ren_embedded.geojson | on | style=canvas_data/qmltest_ren_embedded.qml
+geojson: ren_25d | canvas_data/qmltest_ren_25d.geojson | on | style=canvas_data/qmltest_ren_25d.qml
+geojson: ren_merged | canvas_data/qmltest_ren_merged.geojson | on | style=canvas_data/qmltest_ren_merged.qml
+geojson: ren_inverted | canvas_data/qmltest_ren_inverted.geojson | on | style=canvas_data/qmltest_ren_inverted.qml
+geojson: ren_pointdisp | canvas_data/qmltest_ren_pointdisp.geojson | on | style=canvas_data/qmltest_ren_pointdisp.qml | cluster=on
+geojson: ren_pointcluster | canvas_data/qmltest_ren_pointcluster.geojson | on | style=canvas_data/qmltest_ren_pointcluster.qml | cluster=on
+geojson: ren_heatmap | canvas_data/qmltest_ren_heatmap.geojson | on | style=canvas_data/qmltest_ren_heatmap.qml | heat=on
+geojson: ren_graduated | canvas_data/qmltest_ren_graduated.geojson | on | style=canvas_data/qmltest_ren_graduated.qml
+geojson: symlevel | canvas_data/symlevel.geojson | on | style=canvas_data/symlevel.qml

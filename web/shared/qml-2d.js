@@ -397,12 +397,13 @@ function sampleLineGeom(geom, stepMap) {
   return out;
 }
 
-// LinearReferencing(里程標): 平面座標列(単位=m)を intervalM 間隔でサンプル。
-// 戻り値 [{x,y,angle,dist}] — angle は進行方向(y-up 空間の atan2 rad)、
-// dist はパート先頭からの累積距離(m)。skip_multiples はその倍数地点を除外
-export function linRefSamplesPlanar(coordsList, intervalM, { skipMultiples = 0, startMeasure = 0, max = 500 } = {}) {
+// LinearReferencing(里程標): 平面座標列(ソースCRS単位)を interval 間隔で
+// サンプル。戻り値 [{x,y,angle,dist}] — angle は進行方向(y-up 空間の
+// atan2 rad)、dist はパート先頭からの累積距離(ソース単位)。
+// skip_multiples はその倍数地点を除外
+export function linRefSamplesPlanar(coordsList, interval, { skipMultiples = 0, startMeasure = 0, max = 500 } = {}) {
   const out = [];
-  const step = Math.max(intervalM || 1, 1);
+  const step = Math.max(interval || 0, 1e-9);
   const skip = Math.max(skipMultiples || 0, 0);
   const eps = step * 1e-6;
   for (const coords of coordsList || []) {
@@ -428,9 +429,10 @@ export function linRefSamplesPlanar(coordsList, intervalM, { skipMultiples = 0, 
   return out;
 }
 
-// GeoJSON(4326) LineString/MultiLineString → メートル空間で標点サンプルし
-// 4326 座標へ戻す。labelOffsetPx は基準縮尺(TRIM_PX_TO_M=2.8m/px)換算で
-// 座標へ直接焼き込む(回転時は線方向系、非回転時は画面系)
+// GeoJSON(4326) LineString/MultiLineString → QGIS 同様にソース座標単位(度)
+// で標点サンプルして 4326 座標を返す。labelOffsetPx は基準縮尺
+// (TRIM_PX_TO_M=2.8m/px)換算で座標へ直接焼き込む(回転時は線方向系、
+// 非回転時は画面系)。dist ラベルもソース単位(度)の累積距離
 export function linRefSamplesGeojson(geom, decor) {
   const parts = geom?.type === "LineString" ? [geom.coordinates]
     : geom?.type === "MultiLineString" ? geom.coordinates : [];
@@ -439,10 +441,12 @@ export function linRefSamplesGeojson(geom, decor) {
   const rot = !!decor?.rotate;
   const out = [];
   for (const c of parts) {
-    for (const s of linRefSamplesPlanar([c.map(ll2m)], decor?.intervalM, decor || {})) {
+    for (const s of linRefSamplesPlanar([c], decor?.interval, decor || {})) {
+      // オフセット(px→m 換算)はメルカトル m 空間で適用して 4326 へ戻す
+      const [mx, my] = ll2m([s.x, s.y]);
       const ca = Math.cos(s.angle), sa = Math.sin(s.angle);
-      const x = rot ? s.x + dxm * ca + dym * sa : s.x + dxm;
-      const y = rot ? s.y + dxm * sa - dym * ca : s.y - dym;
+      const x = rot ? mx + dxm * ca + dym * sa : mx + dxm;
+      const y = rot ? my + dxm * sa - dym * ca : my - dym;
       const [lon, lat] = m2ll([x, y]);
       out.push({ coord: [lon, lat], angle: s.angle, dist: s.dist });
     }
@@ -912,7 +916,11 @@ function decorToOlStyles(decor, geom, resolution, OL) {
     // 里程標: 等間隔の標点へ距離ラベル(+任意マーカー)を置く。
     // resolution でオフセット px→地図単位を正確換算する
     const lines = geom.getType() === "LineString" ? [geom.getCoordinates()] : geom.getCoordinates();
-    const samples = linRefSamplesPlanar(lines, decor.intervalM, decor);
+    // QGIS は interval をソース座標系(4326=度)で計測するため、3857 ビュー
+    // 座標を 4326 へ逆変換してサンプルし、標点をビュー座標へ戻す。
+    // dist ラベルもソース単位(度)の累積距離
+    const linesDeg = lines.map(l => l.map(m2ll));
+    const samples = linRefSamplesPlanar(linesDeg, decor.interval, decor);
     if (!samples.length) return [];
     const tf = decor.text || {};
     const [lox, loy] = decor.labelOffsetPx || [0, 0];
@@ -921,10 +929,11 @@ function decorToOlStyles(decor, geom, resolution, OL) {
       ? markerLayersToCanvas(decor.markers) : null;
     const styles = [];
     for (const s of samples) {
+      const [vx, vy] = ll2m([s.x, s.y]);
       const ca = Math.cos(s.angle), sa = Math.sin(s.angle);
       // オフセットを線方向系へ回転(rotate 時)または画面系のまま適用(y-up→y-down 反転)
-      const px_ = decor.rotate ? s.x + dxm * ca + dym * sa : s.x + dxm;
-      const py_ = decor.rotate ? s.y + dxm * sa - dym * ca : s.y - dym;
+      const px_ = decor.rotate ? vx + dxm * ca + dym * sa : vx + dxm;
+      const py_ = decor.rotate ? vy + dxm * sa - dym * ca : vy - dym;
       if (mkCv) styles.push(new Style({
         geometry: new Point([px_, py_]),
         image: new Icon({ img: mkCv, anchor: [0.5, 0.5],

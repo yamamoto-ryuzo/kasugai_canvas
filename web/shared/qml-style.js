@@ -1280,6 +1280,12 @@ function compileRenderer(rendererEl, warnings) {
     case "25d": {
       // QGIS 2.5D レンダラ: 屋根色(面シンボル)+立体表示。高さは QML に
       // 保持されず固定値のため、Cesium polygon.extrudedHeight で簡易近似(#64)
+      // QGIS4 は面シンボルを <symbols> コンテナではなく <renderer-v2> の
+      // 直接の <symbol> 子要素として出力する(実機出力検証済み)
+      if (!symbols.size) {
+        const symEl = [...rendererEl.children].find(c => c.tagName === "symbol");
+        if (symEl) { const s = parseSymbolEl(symEl); symbols.set(s.name || "symbol", s); }
+      }
       const name = [...symbols.keys()][0];
       if (name) legend.push({ label: "", symbolName: name });
       warnOnce(warnings, "25dRenderer は固定高さの簡易 2.5D 近似です(ドレープ時は無効)");
@@ -1542,7 +1548,7 @@ function compileRenderer(rendererEl, warnings) {
       const centerEl = [...rendererEl.children].find(c => c.tagName === "symbol");
       if (centerEl) cluster.centerSymbol = parseSymbolEl(centerEl);
       if (type === "pointDisplacement") {
-        warnOnce(warnings, "pointDisplacement は点群の放射配置を再現しません(中心点シンボルで近似)");
+        warnOnce(warnings, "pointDisplacement はリング/グリッド配置と輪郭円を再現します(グルーピングは距離近似)");
       }
       if (compiledInner) return { ...compiledInner, cluster };
       warnOnce(warnings, `レンダラ ${type} には未対応です(既定スタイルで描画)`);
@@ -2379,11 +2385,12 @@ function resolveLineLayerBase(layer, props, warnings, images = null) {
     }
     case "LinearReferencing": {
       // 里程標(QGIS4・実機検証済み)。線上に一定間隔で距離ラベル/マーカーを配置。
-      // 実プロパティ名: interval(地図単位=m)/placement(IntervalCartesian2D等
-      // の enum 文字列)/source(CartesianDistance2D)/rotate/show_marker/
-      // skip_multiples/label_offset("x,y")/average_angle_length/
-      // text_format(エスケープ<text-style>XML)/numeric_format(<numericFormat>XML)
-      const intervalM = Math.max(Number(ddValue(dd, ["interval"], props, p.interval ?? 1000)) || 1000, 1);
+      // 実プロパティ名: interval(地図単位=ソースCRS単位。4326 では度)/
+      // placement(IntervalCartesian2D等の enum 文字列)/source(CartesianDistance2D)/
+      // rotate/show_marker/skip_multiples/label_offset("x,y")/
+      // average_angle_length/text_format(エスケープ<text-style>XML)/
+      // numeric_format(<numericFormat>XML)
+      const interval = Math.max(Number(ddValue(dd, ["interval"], props, p.interval ?? 1000)) || 1000, 1e-9);
       const loUnit = p.label_offset_unit || "MM";
       const [lox, loy] = String(p.label_offset ?? "0,0").split(",").map(Number);
       // QGIS の y+ は上方向 → canvas の y+ (下) と符号反転
@@ -2399,13 +2406,13 @@ function resolveLineLayerBase(layer, props, warnings, images = null) {
       const markers = layer.subSymbol
         ? layer.subSymbol.layers.flatMap(l => l.enabled ? resolveMarkerLayer(l, props, images, warnings) : [])
         : [];
-      warnOnce(warnings, "LinearReferencing(里程標)は線上等間隔配置の近似です(地図単位=m 換算)");
+      warnOnce(warnings, "LinearReferencing(里程標)は線上等間隔配置の近似です(地図単位=ソースCRS単位で計測)");
       return {
         // 本体は基線(ラベルのみでも地物は残す)。QGIS では線自体は描かないため
         // 描画側で decor.linref を検出して折れ線を隠す
         color: parseQgisColor(p.line_color ?? p.color, [0, 0, 0, 1]), widthPx: 1, dash: null,
         decor: {
-          kind: "linref", intervalM, placement,
+          kind: "linref", interval, placement,
           rotate: String(p.rotate ?? "1") !== "0" && String(p.rotate).toLowerCase() !== "false",
           showMarker: String(p.show_marker ?? "0") === "1" || String(p.show_marker).toLowerCase() === "true",
           skipMultiples: Math.max(Number(p.skip_multiples) || 0, 0),

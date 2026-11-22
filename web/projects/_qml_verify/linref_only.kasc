@@ -1,0 +1,3 @@
+base: Google/Google Maps | https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z} | 出典：©Google
+cam:QGIS|35.696533|139.770315|h=6194|p=-90
+geojson: qmltest_LinearReferencing | canvas_data/qmltest_LinearReferencing.geojson | on | style=canvas_data/qmltest_LinearReferencing.qml

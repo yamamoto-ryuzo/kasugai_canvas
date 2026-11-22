@@ -1,0 +1,17 @@
+geojson: ArrowLine-prim | canvas_data/qmltest_ArrowLine.geojson | style=canvas_data/qmltest_ArrowLine.qml | render=primitive
+geojson: ArrowLine-entity | canvas_data/qmltest_ArrowLine.geojson | style=canvas_data/qmltest_ArrowLine.qml
+geojson: MarkerLine-prim | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/qmltest_MarkerLine.qml | render=primitive
+geojson: MarkerLine-entity | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/qmltest_MarkerLine.qml
+geojson: InterpLine-prim | canvas_data/qmltest_InterpolatedLine.geojson | style=canvas_data/qmltest_InterpolatedLine.qml | render=primitive
+geojson: LinRef-prim | canvas_data/qmltest_LinearReferencing.geojson | style=canvas_data/qmltest_LinearReferencing.qml | render=primitive
+geojson: FilledLine-prim | canvas_data/qmltest_FilledLine.geojson | style=canvas_data/qmltest_FilledLine.qml | render=primitive
+geojson: HashLine-prim | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/hashline.qml | render=primitive
+geojson: Multi-prim | canvas_data/multiline.geojson | style=canvas_data/qmltest_MarkerLine.qml | render=primitive
+geojson: Cat-prim | canvas_data/catline.geojson | style=canvas_data/catline.qml | render=primitive
+geojson: MarkerLine-scale | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/qmltest_MarkerLine.qml | render=primitive | minscale=50000
+duckdb: dbline | canvas_data/lines.csv | format=csv | geom=wkt | bbox=off | style=canvas_data/qmltest_MarkerLine.qml | render=primitive
+theme: arrow | * | MarkerLine-prim;style=canvas_data/qmltest_ArrowLine.qml
+geojson: ScaleLine-prim | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/scaleline.qml | render=primitive
+geojson: ScaleLine-ent | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/scaleline.qml
+geojson: VisLine-prim | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/visline.qml | render=primitive
+geojson: VisLine-ent | canvas_data/qmltest_MarkerLine.geojson | style=canvas_data/visline.qml

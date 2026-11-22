@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"cat":"A"},"geometry":{"type":"LineString","coordinates":[[139.760,35.670],[139.780,35.670]]}},
+{"type":"Feature","properties":{"cat":"B"},"geometry":{"type":"LineString","coordinates":[[139.760,35.672],[139.780,35.672]]}}
+]}

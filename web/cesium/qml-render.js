@@ -1006,6 +1006,38 @@ function samplePolylinePositions(entity, t, stepM, { skipMultiples = 0 } = {}) {
   return out;
 }
 
+// LinearReferencing 用: QGIS は interval をソース座標系の地図単位
+// (4326=度)でユークリッド計測するため cartographic 度空間でサンプルする。
+// 戻り値 [{position,angle,dist}] — angle は北基準方位 rad、dist は
+// ソース単位(度)の累積距離。skipMultiples はその倍数地点を除外
+function linRefSamples3D(pos, interval, { skipMultiples = 0, max = 500 } = {}) {
+  const step = Math.max(interval || 0, 1e-9);
+  const skip = Math.max(skipMultiples || 0, 0);
+  const eps = step * 1e-6;
+  const ll = (pos || []).map(p => {
+    const c = Cesium.Cartographic.fromCartesian(p);
+    return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
+  });
+  const out = [];
+  let acc = 0, next = step;
+  for (let i = 0; i + 1 < ll.length && out.length < max; i++) {
+    const [x1, y1] = ll[i], [x2, y2] = ll[i + 1];
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy);
+    if (!len) continue;
+    const ang = Math.atan2(dx, dy);
+    while (next <= acc + len + eps && out.length < max) {
+      const t = Math.min(Math.max((next - acc) / len, 0), 1);
+      if (!(skip > 0 && Math.abs(next % skip) < Math.max(eps, skip * 1e-6))) {
+        out.push({ position: Cesium.Cartesian3.fromDegrees(x1 + dx * t, y1 + dy * t),
+          angle: ang, dist: next });
+      }
+      next += step;
+    }
+    acc += len;
+  }
+  return out;
+}
+
 // MarkerLine 配置サンプリング(Cesium 版)。Qgis C++
 // QgsTemplatedLineSymbolLayerBase(renderPolylineInterval/renderPolylineCentral/
 // renderPolylineVertex/renderOffsetVertexAlongLine/markerAngle)準拠で
@@ -1211,8 +1243,8 @@ function renderLineDecor(entity, decor, t, { addAux, clamp, opacity }) {
     const tf = decor.text || {};
     const offM = (decor.labelOffsetPx || [0, 0]).map(v => (v || 0) * LABEL_M_PER_PX);
     const mkCv = decor.showMarker && decor.markers?.length ? markerLayersToCanvas(decor.markers) : null;
-    for (const s of samplePolylinePositions(entity, t, Math.max(decor.intervalM || 1, 1), decor)) {
-      if (s.dist <= 1e-9) continue; // 先頭(0m)は QGIS 同様ラベル無し
+    for (const s of linRefSamples3D(pos, decor.interval, decor)) {
+      if (s.dist <= 1e-9) continue; // 先頭(0)は QGIS 同様ラベル無し
       let p = s.position;
       if (offM[0] || offM[1]) {
         // label_offset: rotate 時は線方向系(北=0 時計回りの方位)、

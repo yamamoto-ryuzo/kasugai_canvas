@@ -5541,7 +5541,8 @@ function refreshPrimitiveDecor(item, primitive) {
     if (i >= 0) primitiveDecorSources.splice(i, 1);
     primitive._decorDs = null;
   }
-  const style = item.qmlStyle, gj = item.geojsonSource;
+  const style = item.qmlStyle;
+  const gj = applyClientWhere(item, item.geojsonSource);
   if (!style || !gj?.features?.length) return;
   const dds = new Cesium.CustomDataSource(`qml-decor:${item.id}`);
   let n = 0;
@@ -14378,6 +14379,7 @@ const scheduleQmlScaleRefresh = () => {
       if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
         try { applyQmlStyleToPrimitive(target, style, item.legendHidden, effectiveLayerOpacity(item)); }
         catch (_) {}
+        refreshPrimitiveDecor(item, target);
       }
     }
     requestRender();
@@ -15761,7 +15763,10 @@ window.addEventListener("pagehide", () => {
   const initialCamera = await resolveInitialCamera();
   // 解決待ち(ipapi fetch)の間に API/ユーザーが視点を変えた場合は、
   // 遅れて届いた初期カメラで上書きしない(?kasc= 読込後の flyTo 潰し防止)
-  const skipInitialCamera = cameraTouchedWhileResolving;
+  // live follow 有効中も初期カメラで上書きしない。URL ハッシュ書戻しが
+  // Cesium デフォルト位置(-82.5等)を載せた直後だと、ハッシュ優先の
+  // 初期カメラ解決が追従位置を打ち消してしまうため
+  const skipInitialCamera = cameraTouchedWhileResolving || liveIsFollowing();
   resolvingInitialCamera = false;
   // 前回のカメラ位置は起動直後に即セット済み。URLの座標が変わっていればそこからFLYTOする
   if (hasLastCamera && lastCameraSearch !== initialCameraSource) {
@@ -15786,9 +15791,17 @@ window.addEventListener("pagehide", () => {
 //  ?follow=top で従来の真俯瞰固定)
 configureFollow({
   apply: (s, { topdown }) => {
-    const height = typeof s.zoom === "number"
+    // follow 適用は「ユーザー/外部が視点を動かした」と同じ扱いにし、
+    // 遅れて解決する初期カメラ(ipapi 等)で上書きされないようにする
+    if (resolvingInitialCamera) cameraTouchedWhileResolving = true;
+    let height = typeof s.zoom === "number"
       ? zoomToCamHeightView(s.lat, s.zoom, viewer.canvas.clientHeight, Cesium.Math.toDegrees(viewer.camera.frustum.fovy))
-      : Cesium.Cartographic.fromCartesian(viewer.camera.position)?.height;
+      : undefined;
+    // canvas 未サイズ(clientHeight=0)等でズーム換算できない初期状態でも、
+    // 現在高度をフォールバックにして中心だけは追従させる
+    if (!Number.isFinite(height)) {
+      height = Cesium.Cartographic.fromCartesian(viewer.camera.position)?.height;
+    }
     if (!Number.isFinite(height)) return;
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(s.lon, s.lat, height),

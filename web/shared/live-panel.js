@@ -21,6 +21,8 @@ let box = null;
 let hooks = {};
 let selEl = null;
 let statusEl = null;
+let followEl = null;
+let selVisEl = null;
 let layersLoaded = false;
 
 const tr = (key, fallback) => {
@@ -67,6 +69,7 @@ export function mountLivePanel(host, h = {}) {
     cb.id = "live-follow";
     cb.checked = liveIsFollowing();
     cb.addEventListener("change", () => liveSetFollow(cb.checked));
+    followEl = cb;
     box.append(row(tr("live.follow", "QGISキャンバスへ追従"), cb));
   }
 
@@ -77,6 +80,7 @@ export function mountLivePanel(host, h = {}) {
     cb.id = "live-sel-visible";
     cb.checked = liveSelectionVisible();
     cb.addEventListener("change", () => liveSetSelectionVisible(cb.checked));
+    selVisEl = cb;
     box.append(row(tr("live.showSelection", "QGISの選択を表示"), cb));
   }
 
@@ -154,5 +158,10 @@ export function syncLivePanel() {
   if (!box) return;
   const active = liveIsActive();
   box.style.display = active ? "" : "none";
+  // チェック状態はマウント時ではなくセッション確立のたびに実値へ同期する
+  // (mount は kasc 適用前に走るため、| follow 読込後の liveIsFollowing()
+  // とずれたまま表示される問題があった)
+  if (followEl) followEl.checked = liveIsFollowing();
+  if (selVisEl) selVisEl.checked = liveSelectionVisible();
   if (active && !layersLoaded) void populateLayers();
 }

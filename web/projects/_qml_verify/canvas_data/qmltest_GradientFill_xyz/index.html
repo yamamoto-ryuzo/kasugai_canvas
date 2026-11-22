@@ -1,0 +1,16 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>qmltest_GradientFill — XYZ tile check</title>
+<link rel="stylesheet"
+ href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>html,body,#map{height:100%;margin:0}</style></head>
+<body><div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var map = L.map('map');
+L.tileLayer('./{z}/{x}/{y}.png', {
+  minZoom: 1, maxZoom: 15,
+  tms: false, attribution: 'QGIS-rendered XYZ bake: qmltest_GradientFill'
+}).addTo(map);
+map.fitBounds([[35.68,139.7],[35.73,139.99]]);
+</script></body></html>

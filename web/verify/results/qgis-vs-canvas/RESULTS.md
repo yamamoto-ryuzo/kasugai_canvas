@@ -33,7 +33,7 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 | GradientFill | 一致 | imagery 経路で青グラデ矩形一致 |
 | GradientFill_xyz | — | 同上 |
 | InterpolatedLine | 許容近似 | 線形・色・太さ一致、補間段差がやや粗い |
-| LinearReferencing | 一致候補 | ents=33255 描画、要詳細比較 |
+| LinearReferencing | **一致** | ソース単位 interval 修正済。「0.02…0.12」ラベル分散配置が QGIS と一致 |
 | Lineburst | 一致 | |
 | LinePatternFill | 一致 | |
 | MarkerLine | 一致 | 紫線+頂点マーカー一致 |
@@ -139,23 +139,31 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 - **GeomGen_line**: 2D 全エンジン**無描画**（cesium のみ imagery 経路で描画）
 - **CentroidFill**: leaflet/gsimaps は重心マーカーでなく**ポリゴン塗りを誤描画**
 - **ren_merged**: leaflet/gsimaps **過剰描画**（QGIS は無描画＝merged+非描画系内側シンボル）
-- **LinearReferencing**: 仕様確定済。`interval` は**ソース座標系の map units**
-  （`visitPointsByRegularDistance` が未変換座標で計測）で、EPSG:4326 では度。
-  interval=4° > 線分長(~0.14°) のため QGIS は0ラベル=**無描画が仕様上正しい**。
-  Canvas 側は距離を別単位(メートル相当値「2,900」を表示)で解釈しラベルを
-  描画するため**過剰描画+interval 意味論の相違**と確定。
-  interval=0.02° に修正して再生成すると QGIS は線に沿って
-  「0.02,0.04,0.08,0.1,0.12」ラベルを正しく分散配置。Canvas(maplibre)は
-  ラベルが線の始点に凝集し**配置も相違**。全エンジンで interval 意味論・
-  ラベル配置・値フォーマットの修正が必要
+- **LinearReferencing**: **修正・検証済み**。`interval` は**ソース座標系の
+  map units**（`visitPointsByRegularDistance` が未変換座標で計測）で、
+  EPSG:4326 では度。旧実装はメートル換算で interval=0.02 を 0.02m と
+  解釈しており、ラベル値（「2,900」「599」等のメートル値）・配置ともに
+  QGIS と相違していた。**`decor.interval` をソース単位でサンプルするよう
+  全経路を修正**（`linRefSamplesGeojson` は度空間でサンプル→オフセットのみ
+  メルカトル m 空間で適用、OL は 3857→4326 逆変換してサンプル、Cesium は
+  cartographic 度空間の `linRefSamples3D` を新設）。検証画像:
+  `canvas-{cesium,maplibre,openlayers,leaflet,navara}-qmltest_LinearReferencing.png`
+  — 5エンジンとも QGIS と同じ「0.02,0.04,…,0.12」の度単位ラベルを線に沿って
+  分散配置（navara はマーカー無し・ラベルのみ）。**gsimaps は linref 未実装で
+  基線のみ描画**（QGIS は基線を描かないため差異として残る）
 - 小地物層（VectorField/CentroidFill の maplibre・OL 等）は非白率が UI ベースライン
   以下で機械判定不可 → 個別目視が必要
 
 ### 未検証として残る項目
 
-- **AnimatedMarker**: 静止フレームのみ比較。アニメーション時系列は未検証
-- **ズーム依存挙動**: cluster/displacement のリグループ・LinRef/マーカー間隔の
-  縮尺連動はロード時1縮尺のみ検証（既知近似として文書化済）
+- **AnimatedMarker**: **宣言済み未対応**（qml-style.js が「先頭フレームのみ
+  静止表示です(アニメーション未対応)」を warning 出力）。時系列比較の
+  実施価値は実装追加後
+- **ズーム依存挙動**: cesium pointdisp を全範囲/4倍ズームで撮影済み
+  （`canvas-cesium-qmltest_ren_pointdisp_zoom{1,4}.png`）。グルーピング/
+  リング半径はロード時縮尺で固定の既知近似を実測で確認（ズーム後も
+  リング構成は変わらない）。QGIS は縮尺毎にリグループするため差異は
+  既知近似として継続
 - **VectorField**: 2Dエンジンでの描画有無がベースライン以下で未確定
 - **ren_25d 単独動作**: 本プロジェクトは 3D Tiles ドレープ併用。ドレープ無し
   プロジェクトでの 2.5D 押出挙動は未検証
@@ -191,6 +199,15 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
   `screenshot` コマンド経路を使う
 - ドライバ選別: 複数 live dir がある場合 `status` 応答+レイヤ数スコアで
   目的プロジェクトのセッションを選択（死 dir・無関係プロジェクトを回避）
+- **Canvas ポート区別**: `8510` はインストール版 `C:\kasugai\kasugai_canvas`
+  のスナップショット配信（同期しないとコード変更が反映されない）、
+  `8520` は dev 版 `server/target/debug` で `C:\devin\kasugai_canvas\web`
+  をライブ配信。開発中コードの検証は 8520 を使い、確定後に
+  `C:\kasugai` 側へファイル同期する（Canvas 専用撮影は
+  `_canvas_only.mjs` で `CANVAS_PORT`/`NOBASE`/`kasc:` プロジェクト指定可）
+- 旧 interval メートル解釈時、Cesium は `samplePolylinePositions` の無上限
+  ループで 1m 間隔×全線分の標点を生成しページが永久ブロック→クラッシュ
+  していた。`linRefSamples3D` は max=500 上限付きで解消
 
 ## 残課題（未対応・近似として明記）
 
@@ -198,7 +215,7 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 |---|---|
 | `ren_inverted` 反転マスク | **maplibre/openlayers/leaflet は一致**。Cesium 無描画・navara/gsimaps マスク無し |
 | `ren_25d` | 3D Tiles ドレープ併用時は押出無効(既知)。2Dエンジンは平坦近似。`variableNames`/`variableValues` で高さ/角度を QML から取得可能 → extrude/translate の実装余地あり |
-| `LinearReferencing` | interval をソース座標 units ではなく別単位で解釈しラベル値・配置が QGIS と相違。全エンジンで修正必要 |
+| `LinearReferencing` | **修正済み**: interval をソース座標単位(4326=度)でサンプル。cesium/maplibre/OL/leaflet/navara は QGIS と一致。gsimaps は linref 未実装で基線のみ描画(残課題) |
 | `GeomGen_marker` | maplibre のみ生成位置描画。leaflet/gsimaps は元地物を描画、他は無描画 |
 | `MaskMarker` | Canvas が可視描画。QGIS はマスク専用で無描画 → **全エンジンで描画抑制が必要** |
 | `ArrowLine` | 矢羽根・曲線化なし（既知近似）。navara は線自体が無描画 |
