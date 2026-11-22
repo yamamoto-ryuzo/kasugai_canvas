@@ -19,8 +19,8 @@ import {
   localNetworkPermission, markBackendUnreachable,
 } from "../shared/backend.js";
 import { buildViewUrl } from "../shared/kasc.js";
-import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, setMapScaleGetter, markerLayersToCanvas, fillPartsToTile, rgbaToCss } from "../shared/qml-style.js";
-import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive, declutterAllLabels, installLabelDeclutter, installMapUnitScaler } from "./qml-render.js";
+import { loadQmlStyle, compileQmlStyle, setLayerVisibilityResolver, setExprFeatureResolver, setMapScaleGetter, markerLayersToCanvas, fillPartsToTile, rgbaToCss, evalMapTipTemplate } from "../shared/qml-style.js";
+import { applyQmlStyleToDataSource, applyQmlStyleToPrimitive, buildLineDecorForGeojson, declutterAllLabels, installLabelDeclutter, installMapUnitScaler } from "./qml-render.js";
 import { wkbToGeoJsonGeometry, sanitizeVectorPropertyValue, quoteSqlIdent, quoteSqlLiteral } from "../shared/vector-decode.js";
 import { loadVectorItem, normalizeGeoJsonToFeatureCollection, applyJsonFgSemantics, reprojectJsonFg, summarizeFlatGeobufHeader, summarizeGeoParquetHeader, readFlatGeobufMeta, probeQmlSidecar } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
@@ -242,6 +242,29 @@ setLayerVisibilityResolver(name => {
     return path.split("/").map(seg => seg.trim()).includes(key);
   });
   return hit ? !!hit.visible : false;
+});
+// QML 式の get_feature/get_feature_by_id を読み込み済みレイヤーの
+// GeoJSON(item._geojson / geojsonSource)へ解決する。qml-2d.js の
+// installExprFeatureResolver と同規則(他エンジンはそちら経由)
+setExprFeatureResolver((layerName, attrName, value) => {
+  const key = String(layerName ?? "").trim();
+  if (!key) return null;
+  const item = getOrderedLayerItems().find(it => {
+    if (it.title === key || it.id === key) return true;
+    const path = (it.group ? `${it.group}/${it.title}` : String(it.title || ""));
+    return path.split("/").map(seg => seg.trim()).includes(key);
+  });
+  const feats = item?._geojson?.features ?? item?.geojsonSource?.features;
+  if (!Array.isArray(feats)) return null;
+  if (attrName == null) {
+    return feats.find(f => f?.id != null && String(f.id) === String(value))
+      ?? feats[Number(value)] ?? null;
+  }
+  const col = String(attrName);
+  return feats.find(f => {
+    const v = f?.properties?.[col];
+    return v === value || (v != null && value != null && String(v) === String(value));
+  }) ?? null;
 });
 // QML 式変数 @map_scale → 画面中心の地表距離と垂直画角から m/px を出し、
 // 0.28mm/px で縮尺分母へ換算する(スケールバーと同じ概算。
@@ -716,6 +739,7 @@ function applyLegendSymbolHidden(item) {
     if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
       try { applyQmlStyleToPrimitive(target, style, item.legendHidden, effectiveLayerOpacity(item)); }
       catch (error) { console.warn("凡例の再適用に失敗しました:", error); }
+      refreshPrimitiveDecor(item, target);
     }
   }
   requestRender();
@@ -983,7 +1007,11 @@ function applyScaleVisibility() {
   for (const item of getOrderedLayerItems()) {
     if (!itemScaleVisRange(item)) continue;
     const t = layerRuntimeTargets.get(item.id);
-    if (t) { try { t.show = effectiveLayerShow(item); } catch (_) {} }
+    if (t) {
+      try { t.show = effectiveLayerShow(item); } catch (_) {}
+      // primitive 経路の装飾補助 ds も本体と同じ可視条件へ追従させる
+      if (t._decorDs) { try { t._decorDs.show = effectiveLayerShow(item); } catch (_) {} }
+    }
   }
   // ベースマップは layerRuntimeTargets 対象外のため個別に同期する
   if (basemapImageryLayer && itemScaleVisRange(selectedBasemap)) {
@@ -1437,8 +1465,10 @@ async function applyKascThemeStyles(theme, items) {
             opacity: effectiveLayerOpacity(item) });
         } else {
           const target = layerRuntimeTargets.get(item.id);
-          if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive)
+          if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
             applyQmlStyleToPrimitive(target, style, item.legendHidden, effectiveLayerOpacity(item));
+            refreshPrimitiveDecor(item, target);
+          }
         }
       } catch (e) { console.warn("テーマスタイルの適用に失敗:", e); }
     })());
@@ -5036,6 +5066,9 @@ async function refreshLayersImpl() {
   activeDataSources.length = 0;
   activePrimitives.forEach(primitive => { try { viewer.scene.primitives.remove(primitive); } catch (error) { /* ignore */ } });
   activePrimitives.length = 0;
+  // primitive 経路の装飾補助 ds をまとめて除去(_decorDs 参照は primitive 破棄と共に消える)
+  primitiveDecorSources.forEach(ds => { try { viewer.dataSources.remove(ds, false); } catch (_) {} });
+  primitiveDecorSources.length = 0;
   layerRuntimeTargets.clear();
 
   const demSource = terrainEnabled ? demSources[selectedDemSource] : null;
@@ -5380,7 +5413,7 @@ async function refreshLayersImpl() {
         if (primitiveDrape) {
           const primitive = await Cesium.GeoJsonPrimitive.fromGeoJson(source, { heightReference: drapeHeightReference(primDem, prim3d), scene: viewer.scene });
           applyPrimitiveVectorStyle(primitive, item);
-          registerPrimitiveLayer(item, primitive, source);
+          registerPrimitiveLayer(item, primitive, source, true);
           if (loadTarget) layerOk(item);
           continue;
         }
@@ -5471,6 +5504,7 @@ async function refreshLayersImpl() {
     if (Cesium.GeoJsonPrimitive && target instanceof Cesium.GeoJsonPrimitive) {
       try { applyQmlStyleToPrimitive(target, item.qmlStyle, item.legendHidden, effectiveLayerOpacity(item)); }
       catch (_) {}
+      refreshPrimitiveDecor(item, target);
     }
   }
 }
@@ -5479,13 +5513,47 @@ async function refreshLayersImpl() {
 // geojson は primitive 描画レイヤーが vectorDataSources に載らないため、
 // getLayerGeoJson 用に描画に使った GeoJSON を item に保持する
 // (参照を1本増やすだけで追加のデコード・ダウンロードは発生しない)
-function registerPrimitiveLayer(item, primitive, geojson = null) {
+function registerPrimitiveLayer(item, primitive, geojson = null, decorClamp = false) {
   primitive._kasugaiLayerId = item.id;
   primitive.show = effectiveLayerShow(item);
   viewer.scene.primitives.add(primitive);
   activePrimitives.push(primitive);
   layerRuntimeTargets.set(item.id, primitive);
   item.geojsonSource = geojson;
+  primitive._decorClamp = !!decorClamp;
+  refreshPrimitiveDecor(item, primitive);
+}
+
+// QML 装飾系(MarkerLine/ArrowLine/HashLine/里程標/Interpolated/Filled 等)は
+// GeoJsonPrimitive のバッチ描画では表現できないため、entity ベースの補助
+// CustomDataSource を併設する。スタイル再適用(凡例/テーマ)時は除去→再生成。
+// vectorDataSources には入れない(id 検索で本体 ds と誤認される + 
+// removeOtherLayerDataSources の _kasugaiLayerId 除去対象にしないためタグ無し)
+const primitiveDecorSources = [];
+function refreshPrimitiveDecor(item, primitive) {
+  if (!item || !primitive) return;
+  const old = primitive._decorDs;
+  if (old) {
+    try { viewer.dataSources.remove(old, false); } catch (_) {}
+    const i = primitiveDecorSources.indexOf(old);
+    if (i >= 0) primitiveDecorSources.splice(i, 1);
+    primitive._decorDs = null;
+  }
+  const style = item.qmlStyle, gj = item.geojsonSource;
+  if (!style || !gj?.features?.length) return;
+  const dds = new Cesium.CustomDataSource(`qml-decor:${item.id}`);
+  let n = 0;
+  try {
+    n = buildLineDecorForGeojson(gj, style, dds, {
+      clamp: !!primitive._decorClamp, opacity: effectiveLayerOpacity(item),
+      hiddenSymbols: item.legendHidden,
+    });
+  } catch (e) { console.warn("QML 装飾の生成に失敗:", e); }
+  if (!n) return;
+  dds.show = effectiveLayerShow(item);
+  viewer.dataSources.add(dds);
+  primitiveDecorSources.push(dds);
+  primitive._decorDs = dds;
 }
 
 // ドレープ先(地形/3D Tiles)に応じた HeightReference を返す。
@@ -6737,6 +6805,13 @@ async function reloadVectorLayer(item) {
       viewer.scene.primitives.remove(oldPrimitive);
       const index = activePrimitives.indexOf(oldPrimitive);
       if (index >= 0) activePrimitives.splice(index, 1);
+      // 旧 primitive の装飾補助 ds を除去(addGeoJsonPrimitiveLayer→registerPrimitiveLayer で再生成される)
+      if (oldPrimitive._decorDs) {
+        try { viewer.dataSources.remove(oldPrimitive._decorDs, false); } catch (_) {}
+        const di = primitiveDecorSources.indexOf(oldPrimitive._decorDs);
+        if (di >= 0) primitiveDecorSources.splice(di, 1);
+        oldPrimitive._decorDs = null;
+      }
     }
     // primitive 経路は件数上限の対象外。entity 経路から戻った場合のバッジを消す
     item.entityLimited = null;
@@ -12515,13 +12590,23 @@ function setupEvents() {
       labelEl.textContent = label;
       header.append(marker, labelEl);
       // simplestyle §3: 地物 title=ポップアップ見出し・description=本文(HTML可)
-      const fpMeta = featurePopupMeta(Object.fromEntries(record.entries || []));
+      const fpProps = Object.fromEntries(record.entries || []);
+      const fpMeta = featurePopupMeta(fpProps);
       const fpBody = document.createElement("div");
-      if (fpMeta.title != null && fpMeta.title !== "") {
+      // QGIS <previewExpression>(表示式): 地物の表示名。simplestyle title が
+      // 無ければこちらを見出しに使う(QGIS の識別結果ツリーの地物名と同じ意味)
+      let fpTitle = fpMeta.title;
+      if ((fpTitle == null || fpTitle === "") && record.item?.qmlStyle?.displayFor) {
+        try {
+          const d = record.item.qmlStyle.displayFor(fpProps);
+          if (d != null && d !== "") fpTitle = String(d);
+        } catch (_) {}
+      }
+      if (fpTitle != null && fpTitle !== "") {
         const tEl = document.createElement("div");
         tEl.className = "attr-feature-ptitle";
         tEl.style.cssText = "font-weight:700;font-size:13px;margin:2px 0 2px;color:#1d2b36;";
-        tEl.textContent = String(fpMeta.title);
+        tEl.textContent = String(fpTitle);
         fpBody.append(tEl);
       }
       if (fpMeta.description != null && fpMeta.description !== "") {
@@ -12530,6 +12615,18 @@ function setupEvents() {
         dEl.style.cssText = "font-size:12px;margin:2px 0 4px;color:#33424e;";
         dEl.append(sanitizeAttributionFragment(String(fpMeta.description)));
         fpBody.append(dEl);
+      }
+      // QGIS <mapTip>: HTML テンプレートの [% 式 %] を地物属性で評価して表示。
+      // QGIS ではホバー吹き出しだが Canvas では属性ピック結果の表示面として出す
+      const mapTipTpl = record.item?.fieldMeta?.mapTip || record.item?.qmlStyle?.fields?.mapTip;
+      if (mapTipTpl) {
+        const mEl = document.createElement("div");
+        mEl.className = "attr-feature-maptip";
+        mEl.style.cssText = "font-size:12px;margin:2px 0 4px;";
+        try {
+          mEl.append(sanitizeAttributionFragment(evalMapTipTemplate(mapTipTpl, fpProps)));
+        } catch (_) { mEl.remove(); }
+        if (mEl.childNodes.length) fpBody.append(mEl);
       }
       const table = buildAttrTable(record.entries);
       fpBody.append(table);

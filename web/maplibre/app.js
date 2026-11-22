@@ -30,7 +30,7 @@ import { initUiConfig } from "../shared/ui-config.js";
 
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch, parseDeckTile3dOpts, ensureI3sLoader, deckWantsI3s } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, installLayerVisibilityResolver, bakeQmlLabels, maplibreApplyQml, setMapScaleGetter } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, installLayerVisibilityResolver, installExprFeatureResolver, bakeQmlLabels, maplibreApplyQml, setMapScaleGetter } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
 import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
@@ -167,6 +167,7 @@ let managedSources = [];
 let layerEntries = [];
 // QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
 installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+installExprFeatureResolver(() => layerEntries.map(e => e.item));
 // QML 式変数 @map_scale → Web メルカトル解像度 ÷ 0.28mm = 縮尺分母。
 // getZoom() は 512px 基準(正典-1)のため +1 して正典(256px 基準)へ換算する
 // (mapViewToUrl の zoom と同規約。生値だと実縮尺の2倍を返してしまう)

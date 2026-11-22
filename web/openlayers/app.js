@@ -58,7 +58,7 @@ import MultiPoint from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiPoint.
 import MultiLineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiLineString.js";
 import LineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/LineString.js";
 import Polygon from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/Polygon.js";
-import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver, setMapScaleGetter } from "../shared/qml-2d.js";
+import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver, installExprFeatureResolver, setMapScaleGetter } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
 import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
@@ -204,6 +204,7 @@ document.querySelector("#attr-widget-open")?.addEventListener("click", () => {
 let layerEntries = [];
 // QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
 installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+installExprFeatureResolver(() => layerEntries.map(e => e.item));
 // QML 式変数 @map_scale → 現在解像度(m/px) ÷ 0.28mm。スタイル関数は
 // 描画ごとの setEvalScale(resolution) が優先され、こちらはフォールバック
 setMapScaleGetter(() => map.getView().getResolution() / 0.00028);

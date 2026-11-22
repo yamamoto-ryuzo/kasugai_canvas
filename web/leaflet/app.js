@@ -29,7 +29,7 @@ import { initUiConfig } from "../shared/ui-config.js";
 import { mvtStyle, loadMvtDecoder, loadPmtiles } from "../shared/mvt.js";
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch, parseDeckTile3dOpts, ensureI3sLoader, deckWantsI3s } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, installExprFeatureResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle } from "../shared/qml-2d.js";
 import { markerLayersToCanvas, fillPartsToTile, rgbaToCss, linRefFormatText } from "../shared/qml-style.js";
 import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
@@ -232,6 +232,7 @@ function removeManagedPanes() {
 let layerEntries = [];
 // QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
 installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+installExprFeatureResolver(() => layerEntries.map(e => e.item));
 // QGIS 式変数 @map_scale → 現在ズームから縮尺分母を供給。
 // zoomend でのスタイル再適用(qmlRestyle)で縮尺連動の評価が動的に切り替わる
 setMapScaleGetter(() => {

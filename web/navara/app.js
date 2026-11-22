@@ -24,7 +24,7 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { initPrint } from "../shared/print.js";
-import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec, setMapScaleGetter, applyInvertedMaskGeojson, installLayerVisibilityResolver, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle, QML_POS_CODE_TO_ANCHOR } from "../shared/qml-2d.js";
+import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec, setMapScaleGetter, applyInvertedMaskGeojson, installLayerVisibilityResolver, installExprFeatureResolver, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle, QML_POS_CODE_TO_ANCHOR } from "../shared/qml-2d.js";
 import { rgbaToCss, markerLayersToCanvas, linRefFormatText } from "../shared/qml-style.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
@@ -125,6 +125,7 @@ const layerEntries = [];   // {item, sid, src, layer, desc}
 window.kascLayerEntries = layerEntries; // デバッグ/検証用参照(kascMap/kascView と同じ公開範囲)
 // QML 式 is_layer_visible('名前') を item.visible へ解決する(Cesium 版と同規則)
 installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+installExprFeatureResolver(() => layerEntries.map(e => e.item));
 const baseEntries = [];    // 選択中ベースマップ {item, src, layer}
 const themes = [];
 let baseDocs = [], basemapSrc = null, basemapLayer = null;

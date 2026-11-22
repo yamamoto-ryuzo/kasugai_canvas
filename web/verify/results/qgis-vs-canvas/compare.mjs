@@ -251,11 +251,52 @@ async function canvasVisible(only /* ""=all */) {
       try { v.scene.requestRender?.(); } catch (_) {}
       return out;
     }
+    // gsimaps: GSI タイルは setBasemap("none") 対象外のため、iframe 内の
+    // tilePane を直接隠して白背景化する(作図/ベクタは別ペインで残る)
+    if (nobase && window.kasugaiApi.engine === "gsimaps") {
+      try {
+        const w = document.querySelector("iframe")?.contentWindow;
+        const d = w?.document;
+        if (only) {
+          // iframe 再読込で document が差し替わると要素が detached になるため
+          // 「style が現在の head にぶら下がっているか」で毎回判定して再注入する
+          if (!window.__gsiNobase || window.__gsiNobase.ownerDocument !== d || !d.head.contains(window.__gsiNobase)) {
+            window.__gsiNobase = d.createElement("style");
+            window.__gsiNobase.textContent =
+              ".leaflet-tile-pane,.leaflet-control-minimap{display:none!important}" +
+              ".leaflet-container{background:#fff!important}";
+            d.head.appendChild(window.__gsiNobase);
+          }
+        } else if (window.__gsiNobase) {
+          window.__gsiNobase.remove();
+          window.__gsiNobase = undefined;
+        }
+      } catch (_) {}
+    }
+    // 非cesium: NOBASE 時はベースマップを none へ(QGIS 白背景条件に合わせる)。
+    // solo 解除(only="")で元の選択へ戻す
+    if (nobase && window.kasugaiApi.engine !== "gsimaps" && typeof window.kasugaiApi.setBasemap === "function") {
+      try {
+        if (only) {
+          if (window.__savedBasemap === undefined) {
+            const sel = (window.kasugaiApi.listBasemaps?.() || []).find(b => b.selected);
+            window.__savedBasemap = sel ? sel.title : null;
+          }
+          window.kasugaiApi.setBasemap("none");
+        } else if (window.__savedBasemap) {
+          window.kasugaiApi.setBasemap(window.__savedBasemap);
+          window.__savedBasemap = undefined;
+        }
+      } catch (_) {}
+    }
     const viaApi = typeof window.kasugaiApi.setLayerVisible === "function";
     const wantMap = new Map();
+    // QGIS 側は非対象レイヤを全て隠すため、Canvas 側も全レイヤを対象に solo する。
+    // (qmltest 限定だと DM_C 等が残って白背景条件にならない)
+    const origN = window.__origVisN || (window.__origVisN = new Map());
     for (const l of window.kasugaiApi.listLayers()) {
-      if (!/qmltest/i.test(l.title || l.id)) continue;
-      wantMap.set(l, only ? String(l.title || l.id) === only : true);
+      if (!origN.has(l.id)) origN.set(l.id, l.visible !== false);
+      wantMap.set(l, only ? String(l.title || l.id) === only : origN.get(l.id) !== false);
     }
     if (viaApi) {
       for (const [l, want] of wantMap) {
@@ -312,7 +353,23 @@ const setCam = `(async ({ bbox, vw, vh }) => {
     v.scene.requestRender();
     return height;
   }
-  try { if (window.kasugaiApi.fitBounds) { window.kasugaiApi.fitBounds([bbox[0], bbox[1], bbox[2], bbox[3]]); return "fitBounds"; } } catch (_) {}
+  // navara: fitBounds 未実装の3D地球。ThreeView.setCamera の height は
+  // 注視点の標高で、カメラは distance(注視点までの距離m)で配置する。
+  // FOV60 は Cesium と同じなので distance=height で同じ地面範囲になる。
+  // setCamera は即時適用(アニメ無し)で、kasugaiApi.setView 経由だと
+  // distance を渡せないため kascView 直叩き
+  if (window.kasugaiApi.engine === "navara") {
+    try {
+      if (window.kascView?.setCamera) {
+        window.kascView.setCamera({ lng: midLng, lat: midLat, height: 0, distance: height, heading: 0, pitch: -90, roll: 0 });
+        return "navara-dist:" + Math.round(height);
+      }
+      window.kasugaiApi.setView?.({ lng: midLng, lat: midLat, longitude: midLng, latitude: midLat, height, heading: 0, pitch: -85 });
+      return "navara-height:" + Math.round(height);
+    } catch (_) {}
+  }
+  // kasugaiApi.fitBounds の公開シグネチャは (w,s,e,n) の4引数(配列ではない)
+  try { if (window.kasugaiApi.fitBounds) { window.kasugaiApi.fitBounds(bbox[0], bbox[1], bbox[2], bbox[3]); return "fitBounds"; } } catch (_) {}
   try { if (window.kasugaiApi.zoomToExtent) return window.kasugaiApi.zoomToExtent(bbox[0], bbox[1], bbox[2], bbox[3]); } catch (_) {}
   try { window.kasugaiApi.setView?.({ longitude: midLng, latitude: midLat, zoom: 13 }); } catch (_) {}
 })(${JSON.stringify({ bbox: BBOX_ACT, vw, vh })})`;
@@ -385,6 +442,14 @@ for (let i = 0; i < (isCesium ? 30 : 0); i++) {
 }
 // パネル最小化（存在するエンジンのみ）
 await pg.evaluate(() => { try { document.querySelector("#layer-panel-toggle")?.click(); } catch (_) {} });
+// 非cesium: 左レイヤパネル・AIチャットが地図を覆うため solo 比較中は隠す
+// (#panel-toggle はレイヤ一覧を消すと待機関数の視認診断に影響し得るため CSS で隠す)
+if (!isCesium) await pg.evaluate(() => {
+  const st = document.createElement("style");
+  st.id = "__solo-hide-ui";
+  st.textContent = "#panel,#chat-panel{display:none!important}";
+  document.head.appendChild(st);
+});
 await pg.waitForTimeout(1500);
 
 for (const solo of shots) {

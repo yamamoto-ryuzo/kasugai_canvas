@@ -7,6 +7,8 @@
 Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメラ高度 35,592m
 （実ピッチ -84° で4隅投影が画面内に収まるまで反復フィット）
 背景条件: `NOBASE=1` でベースマップを隠し、QGIS と同じ白背景で比較
+（gsimaps は iframe 内 tilePane を非表示化して同等条件にする）
+対象エンジン: cesium / maplibre / openlayers / leaflet / navara / gsimaps（全6）
 
 ## 判定ルール
 
@@ -90,18 +92,68 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
    - ターゲット判定を ds+primitive+imagery の全描画経路で行い
      `setLayerVisible` フォールバック誤爆（全 rebuild 誘発）を解消
 
+## 他5エンジン ペア判定（NOBASE=1 白背景・fitBounds 補正後に全31層撮影）
+
+### エンジン別・重点層マトリクス
+
+同一 spec でもエンジンで再現度が異なるためエンジン別に記録。
+未記載の標準層（FilledMarker/CentroidFill/MarkerLine/各 Fill 等）は全エンジンで
+ジオメトリ・基本色が描画されることを確認（Cesium 判定表と同傾向）。
+
+| レイヤー | MapLibre | OpenLayers | Leaflet | Navara | GSI Maps |
+|---|---|---|---|---|---|
+| ren_inverted | **一致**(緑マスク+穴) | **一致**(緑マスク+穴) | **一致**(緑マスク+穴) | 差異(淡矩形のみ・マスク無し) | 差異(淡緑矩形・マスク無し) |
+| ren_25d | 未対応近似(輪郭のみ) | 未対応(無描画) | 近似(平坦青矩形) | 未対応(無描画) | 近似(平坦青矩形) |
+| ren_embedded | 差異(赤縁を描画) | 差異(赤縁を描画) | 差異(塗り+赤縁) | 差異(微少描画) | 差異(塗り+赤縁) |
+| ren_graduated | 一致 | 一致 | 一致 | 差異(微小1点のみ) | 一致 |
+| ren_heatmap | 未対応(無描画) | 差異(既定ramp強すぎ・QML ramp未適用) | 一致(薄紫ブロブ6個) | 未対応(微小点) | 差異(青点として描画) |
+| ren_pointcluster | 近似(青丸バッジ「7」+単点・centerSymbol非適用) | 差異(左上に巨大赤バッジ・位置不良) | 近似(青丸バッジ「7」+単点5) | 差異(微小点のみ) | 差異(クラスタ無し・単点6) |
+| ren_pointdisp | 近似(クラスタ近似・青バッジ「6」) | 差異(単点のみ) | 近似(クラスタ近似・橙バッジ「6」) | 差異(微小点) | 差異(単点6・displacement無し) |
+| GeomGen_marker | 近似(青点4・生成位置一致) | 未対応(無描画) | 差異(6点=元地物描画・位置不一致) | 未対応(無描画) | 差異(6点=元地物描画) |
+| MaskMarker | 差異(赤点5を可視描画) | ほぼ一致(微小残存点のみ) | 差異(赤点6) | 差異(微小赤点) | 差異(赤点6) |
+| SVGFill | **一致**(橙円タイル反復) | **一致**(橙円タイル反復) | 差異(縦縞パターン) | 未対応(無描画) | 差異(単色塗り) |
+| ArrowLine | 未対応近似(直線のみ) | 未対応近似(直線のみ) | 未対応近似(直線のみ) | 未対応(無描画) | 未対応近似(直線のみ) |
+
+### エンジン別まとめ
+
+- **MapLibre**: 2Dエンジン中最も再現度高い。inverted/SVGFill 完全一致、
+  cluster/displacement はクラスタ近似（centerSymbol 未適用・リング無し）
+- **OpenLayers**: inverted/SVGFill 一致。pointcluster のバッジ位置・サイズが
+  破綻（左上に巨大バッジ）、displacement は単点化、heatmap は OL 既定 ramp で
+  QML ramp 未適用、GeomGen_marker/ren_25d 無描画
+- **Leaflet**: inverted/heatmap/graduated 一致。GeomGen_marker は生成せず元地物を
+  描画（6点）、SVGFill が縦縞、displacement はクラスタ近似
+- **Navara**: 3D 地球エンジンのため2D QML 再現度が最も低い。点は微小化・大半が
+  表示されず、線・パターン塗りは無描画。ren_inverted は淡矩形として部分的に
+  表示されるのみ。`setCamera`+`distance` 指定でカメラ配置は正確（修正済）
+- **GSI Maps**: sakuzu(作図)注入で全ジオメトリは描画されるが QML スタイルは
+  simplestyle 近似に留まる。cluster/heatmap/displacement/inverted 未対応、
+  GeomGen_marker は元地物描画、SVGFill 単色塗り
+
+### ハーネス側の修正（本サイクルで追加）
+
+- 非cesium `fitBounds(w,s,e,n)` 4引数シグネチャに統一（gsimaps 公開 API を変更済）
+- navara: `flyTo` のドリフトを `setCamera`+`distance` 即時配置に変更
+- gsimaps NOBASE: GSI タイルは `setBasemap("none")` 対象外のため iframe 内
+  `.leaflet-tile-pane` を style 注入で非表示化。iframe 再読込で document が
+  差し替わると注入 style が detached になるため `ownerDocument===d` を毎回確認
+  （pointcluster 以降でスタイルが外れていた問題を修正）
+- gsimaps: ベクタは `G.SakuzuListItem` 経由で描画。`setVisible(false→true)` の
+  地図復帰は正常動作を確認（probe-gsimaps3）
+
 ## 残課題（未対応・近似として明記）
 
 | 項目 | 状態 |
 |---|---|
-| `ren_inverted` 反転マスク | Canvas 無描画。世界矩形−地物のマスク合成が未実装 |
-| `ren_25d` | 3D Tiles ドレープ併用時は押出無効(既知)。単独利用時も要再確認 |
-| `GeomGen_marker` | ジオメトリ生成マーカーが無描画（生成ジオメトリの点化未実装?） |
-| `MaskMarker` | Canvas が可視描画。QGIS はマスク専用で無描画 → 描画抑制が必要 |
-| `ArrowLine` | 矢羽根・曲線化なし（既知近似） |
-| `SVGFill` | タイル反復なしストレッチ（OL は一致。Cesium 側は ImageMaterial 近似） |
-| pointDisplacement ズーム連動 | グルーピング/リング半径がロード時固定 |
-| pointCluster 単点描画 | EntityCluster のピクセル距離クラスタで許容近似 |
+| `ren_inverted` 反転マスク | **maplibre/openlayers/leaflet は一致**。Cesium 無描画・navara/gsimaps マスク無し |
+| `ren_25d` | 3D Tiles ドレープ併用時は押出無効(既知)。2Dエンジンは平坦近似 |
+| `GeomGen_marker` | maplibre のみ生成位置描画。leaflet/gsimaps は元地物を描画、他は無描画 |
+| `MaskMarker` | Canvas が可視描画。QGIS はマスク専用で無描画 → **全エンジンで描画抑制が必要** |
+| `ArrowLine` | 矢羽根・曲線化なし（既知近似）。navara は線自体が無描画 |
+| `SVGFill` | maplibre/openlayers はタイル反復で一致。Cesium ストレッチ・leaflet 縦縞・gsimaps 単色 |
+| `ren_embedded` | QGIS は polygon+line で無描画。Cesium のみ一致、他エンジンは縁/塗りを誤描画 |
+| pointDisplacement ズーム連動 | グルーピング/リング半径がロード時固定(Cesium)。2Dエンジンはクラスタ近似 |
+| pointCluster centerSymbol | Cesium のみ QML シンボルバッジ。2Dエンジンは既定色バッジ、gsimaps/OL は不良 |
 | *_xyz 3層 | QGIS 側に対応レイヤが無いためペア対象外 |
 
 ## 方法上の確認事項（今回の実行で確立・追加）

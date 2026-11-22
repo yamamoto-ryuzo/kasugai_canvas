@@ -30,7 +30,7 @@ import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, installExprFeatureResolver, installLayerVisibilityResolver, setMapScaleGetter } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../shared/attr-widget.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -188,6 +188,14 @@ let lastBaseUrl = null;
 // projectId へ undefined を渡す（他プレイヤーエンジンと同じ扱い）
 let lastKascUrl = "";
 let layerEntries = [];   // {item, sakuzu, cb, pending, failed, _siblings}
+installExprFeatureResolver(() => layerEntries.map(e => e.item));
+installLayerVisibilityResolver(() => layerEntries.map(e => e.item));
+// @map_scale: EPSG:3857 の zoom→m/px を 0.28mm/px で縮尺分母へ(OpenLayers と同規約)
+setMapScaleGetter(() => {
+  if (!gmap?.getZoom) return null;
+  const res = 156543.03392 * Math.cos((gmap.getCenter()?.lat || 0) * Math.PI / 180) / Math.pow(2, gmap.getZoom());
+  return res / 0.00028;
+});
 let baseEntries = [];    // {item, gsiId|null, tileLayer|null}
 let baseHidden = false;
 let docBackgroundCss = null;  // .kasc background: 行。ベースマップなし/透過時の下敷き色
@@ -2852,6 +2860,11 @@ Object.assign(window.kasugaiApi, {
   getGsiElevation: (lat, lon) => getGsiElevation(lat, lon),
   getGsiShareUrl: () => getGsiShareUrl(),
   setGsiGlobe: on => setGsiGlobe(on),
+  // 他エンジンと同じ公開 fitBounds(w,s,e,n)（hook の fitBoundsView と同経路）
+  fitBounds: (w, s, e, n) => {
+    if (globeMode) { globeFitBounds(w, s, e, n); return; }
+    gmap?.fitBounds([[s, w], [n, e]], { padding: [50, 50] });
+  },
   // Globe(Cesium)表示中のみ有効な表示効果。2D 中・未対応の効果名・旧Cesiumに
   // プロパティが無い場合は false（ツール側は「不明な効果」として返る）
   setEffect: (name, enabled) => {

@@ -37,6 +37,16 @@ const QML_LABEL_CAPS = {
 // "r,g,b,a[,spec:...]" / "#rrggbb[aa]" / "r,g,b" → [r,g,b,a] (0-1 float)
 function parseQgisColor(value, fallback = null) {
   if (value == null) return fallback;
+  // 既に [r,g,b,a](0-1) ならそのまま返す(サブシンボル色の再パースで
+  // 再度 /255 されて透明化する二重パースを防ぐ)。0-255 配列は /255 で正規化
+  if (Array.isArray(value)) {
+    if (value.length >= 3 && value.every(Number.isFinite)) {
+      if (value.every(v => v >= 0 && v <= 1)) return value;
+      return [value[0] / 255, value[1] / 255, value[2] / 255,
+        value.length >= 4 ? value[3] / 255 : 1];
+    }
+    return fallback;
+  }
   const s = String(value).trim();
   if (!s) return fallback;
   if (s.startsWith("#")) {
@@ -222,13 +232,14 @@ export function dashPattern(styleName, customDash, widthPx, customUnit = "MM") {
   }
   switch (String(styleName || "solid").toLowerCase().replace(/[_\s]/g, "")) {
     case "solid": return null;
+    // 名前付きパターンは Qt PenStyle プリセット(QPen::dashPattern 実機採取: Qt6)
     case "dash":
     case "dashline": return [4 * widthPx, 2 * widthPx];
-    case "dot": return [1.5 * widthPx, 2 * widthPx];
+    case "dot": return [1 * widthPx, 2 * widthPx];
     case "dashdot":
-    case "dashdotline": return [4 * widthPx, 2 * widthPx, 1.5 * widthPx, 2 * widthPx];
+    case "dashdotline": return [4 * widthPx, 2 * widthPx, 1 * widthPx, 2 * widthPx];
     case "dashdotdot":
-    case "dashdotdotline": return [4 * widthPx, 2 * widthPx, 1.5 * widthPx, 2 * widthPx, 1.5 * widthPx, 2 * widthPx];
+    case "dashdotdotline": return [4 * widthPx, 2 * widthPx, 1 * widthPx, 2 * widthPx, 1 * widthPx, 2 * widthPx];
     case "nopen":
     case "no": return "none";
     default: return null;
@@ -448,8 +459,8 @@ function tokenizeExpr(src) {
     // QGIS 式のコメント: -- 行コメント / /* */ ブロックコメント
     if (two === "--") { while (i < n && src[i] !== "\n") i++; continue; }
     if (two === "/*") { const e = src.indexOf("*/", i + 2); i = e < 0 ? n : e + 2; continue; }
-    if (["<=", ">=", "<>", "!=", "||"].includes(two)) { push("op", two); i += 2; continue; }
-    if ("+-*/%^=<>()".includes(ch)) { push(ch === "(" ? "lparen" : ch === ")" ? "rparen" : "op", ch); i++; continue; }
+    if (["<=", ">=", "<>", "!=", "||", "//"].includes(two)) { push("op", two); i += 2; continue; }
+    if ("+-*/%^=<>()~".includes(ch)) { push(ch === "(" ? "lparen" : ch === ")" ? "rparen" : "op", ch); i++; continue; }
     if (ch === ",") { push("comma", ch); i++; continue; }
     if (/[A-Za-z_\u0080-\uffff]/.test(ch)) {
       let s = "";
@@ -469,6 +480,14 @@ function tokenizeExpr(src) {
 let layerVisibilityResolver = null;
 export function setLayerVisibilityResolver(fn) {
   layerVisibilityResolver = (typeof fn === "function") ? fn : null;
+}
+
+// QGIS 式関数 get_feature(layer,attr,value)/get_feature_by_id(layer,id) の解決先。
+// アプリ側が (layerName, attrName|null, value) → 地物(properties持ち) を注入する。
+// 未注入時は null(QGIS でレイヤー未発見と同じ扱い)
+let exprFeatureResolver = null;
+export function setExprFeatureResolver(fn) {
+  exprFeatureResolver = (typeof fn === "function") ? fn : null;
 }
 
 // QGIS 式変数 @map_scale(現在の地図縮尺分母)の供給元。
@@ -500,7 +519,13 @@ let exprVarResolver = null;
 export function setExpressionVariableResolver(fn) {
   exprVarResolver = (typeof fn === "function") ? fn : null;
 }
+// @element/@変数 のスコープ束縛(array_filter/array_foreach/with_variable 等の
+// 式引数関数が要素評価時に push する。QGIS の QgsExpressionContextScope 相当)
+const exprVarScope = [];
 function resolveExprVar(name) {
+  for (let i = exprVarScope.length - 1; i >= 0; i--) {
+    if (exprVarScope[i] && name in exprVarScope[i]) return exprVarScope[i][name];
+  }
   try {
     const v = exprVarResolver ? exprVarResolver(String(name ?? "")) : undefined;
     if (v !== undefined) return v;
@@ -741,6 +766,56 @@ const EXPR_FUNCS = {
   array: (...a) => a,
   array_get: (arr, i) => (Array.isArray(arr) ? arr[Number(i)] : undefined),
   array_length: arr => (Array.isArray(arr) ? arr.length : 0),
+  // QGIS 仕様準拠(index は 0 始まり)
+  // array_count(array)=要素数(QGIS は1引数。QWC2 の (arr,v) 個数カウントは非準拠)
+  array_count: arr => (Array.isArray(arr) ? arr.length : 0),
+  // array_all(array,array)=第2配列の全要素が第1配列に含まれるか(QGIS 実機確認済)
+  array_all: (a, b) => Array.isArray(a) && Array.isArray(b) && b.every(x => a.includes(x)),
+  array_find: (arr, v) => (Array.isArray(arr) ? arr.indexOf(v) : -1),
+  array_insert: (arr, i, v) => (Array.isArray(arr) ? [...arr.slice(0, Number(i)), v, ...arr.slice(Number(i))] : null),
+  array_intersect: (a, b) => Array.isArray(a) && Array.isArray(b) && b.some(x => a.includes(x)),
+  array_remove_all: (arr, v) => (Array.isArray(arr) ? arr.filter(x => x !== v) : arr),
+  array_remove_at: (arr, i) => (Array.isArray(arr) ? [...arr.slice(0, Number(i)), ...arr.slice(Number(i) + 1)] : arr),
+  array_replace: (arr, b, c) => !Array.isArray(arr) ? arr
+    : (c === undefined
+      ? (b && typeof b === "object" && !Array.isArray(b) ? arr.map(x => (x in b ? b[x] : x)) : arr)
+      : arr.map(x => (x === b ? c : x))),
+  array_prioritize: (arr, keys) => !Array.isArray(arr) ? arr
+    : [...(Array.isArray(keys) ? keys : []).filter(k => arr.includes(k)),
+       ...arr.filter(x => !(Array.isArray(keys) ? keys : []).includes(x))],
+  array_max: arr => { const n = (Array.isArray(arr) ? arr : []).map(Number).filter(Number.isFinite); return n.length ? Math.max(...n) : null; },
+  array_min: arr => { const n = (Array.isArray(arr) ? arr : []).map(Number).filter(Number.isFinite); return n.length ? Math.min(...n) : null; },
+  array_mean: arr => { const n = (Array.isArray(arr) ? arr : []).map(Number).filter(Number.isFinite); return n.length ? n.reduce((s, x) => s + x, 0) / n.length : null; },
+  array_median: arr => {
+    const n = (Array.isArray(arr) ? arr : []).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+    if (!n.length) return null;
+    const m = Math.floor(n.length / 2);
+    return n.length % 2 ? n[m] : (n[m - 1] + n[m]) / 2;
+  },
+  array_sum: arr => (Array.isArray(arr) ? arr : []).map(Number).filter(Number.isFinite).reduce((s, x) => s + x, 0),
+  generate_series: (start, stop, step = 1) => {
+    const s = Number(step) || 1, lo = Number(start), hi = Number(stop), out = [];
+    for (let v = lo; s > 0 ? v <= hi : v >= hi; v += s) { out.push(v); if (out.length > 1e6) break; }
+    return out;
+  },
+  // QGIS map(k1,v1,...) → {k:v}。アクセサは map_get/map_akeys/map_avals 系
+  map: (...a) => { const o = {}; for (let i = 0; i + 1 < a.length; i += 2) o[a[i]] = a[i + 1]; return o; },
+  map_get: (m, k) => (m && typeof m === "object" ? m[k] : null),
+  map_akeys: m => (m && typeof m === "object" ? Object.keys(m) : []),
+  map_avals: m => (m && typeof m === "object" ? Object.values(m) : []),
+  map_exist: (m, k) => !!(m && typeof m === "object" && k in m),
+  map_insert: (m, k, v) => ({ ...(m && typeof m === "object" ? m : {}), [k]: v }),
+  map_delete: (m, k) => { const o = { ...(m && typeof m === "object" ? m : {}) }; delete o[k]; return o; },
+  map_concat: (...ms) => Object.assign({}, ...ms.filter(m => m && typeof m === "object")),
+  // regexp_matches(str,re[,empty]): 最初の一致のキャプチャ群(QGIS/QWC2 準拠)
+  regexp_matches: (s, re, empty) => {
+    try {
+      const m = new RegExp(String(re)).exec(String(s ?? ""));
+      if (!m) return [];
+      return m.slice(1).map(x => (x === "" && empty !== undefined ? empty : x));
+    } catch (e) { return []; }
+  },
+  pow: (a, b) => { const r = Math.pow(Number(a), Number(b)); return Number.isFinite(r) ? r : null; },
   array_first: arr => (Array.isArray(arr) ? arr[0] : undefined),
   array_last: arr => (Array.isArray(arr) ? arr[arr.length - 1] : undefined),
   array_contains: (arr, v) => Array.isArray(arr) && arr.some(x => x == v || String(x) === String(v)),
@@ -807,6 +882,12 @@ function parseExpr(tokens) {
         continue;
       }
       const not = isKw("NOT") ? (next(), true) : false;
+      // QGIS `~` 演算子: 右辺正規表現の部分一致(QWC2 expr_grammar 準拠)
+      if (tk?.t === "op" && tk.v === "~") {
+        next();
+        left = { t: "regex", a: left, pattern: parseAdd(), not };
+        continue;
+      }
       if (isKw("IN")) {
         next();
         const items = [];
@@ -837,8 +918,12 @@ function parseExpr(tokens) {
       if (isKw("IS")) {
         next();
         const n2 = eatKw("NOT");
-        eatKw("NULL");
-        left = { t: "isnull", a: left, not: n2 || not };
+        if (eatKw("NULL")) {
+          left = { t: "isnull", a: left, not: n2 || not };
+        } else {
+          // QGIS/QWC2 仕様: 汎用の IS/IS NOT は =/!= と同義
+          left = { t: "cmp", op: (n2 || not) ? "!=" : "=", a: left, b: parseAdd() };
+        }
         continue;
       }
       if (not) { pos--; } // NOT を消費したが後続が比較語でない場合は戻す
@@ -863,7 +948,7 @@ function parseExpr(tokens) {
     let left = parsePow();
     for (;;) {
       const tk = peek();
-      if (tk?.t === "op" && (tk.v === "*" || tk.v === "/" || tk.v === "%")) {
+      if (tk?.t === "op" && (tk.v === "*" || tk.v === "/" || tk.v === "%" || tk.v === "//")) {
         next();
         left = { t: "arith", op: tk.v, a: left, b: parsePow() };
         continue;
@@ -967,6 +1052,9 @@ function evalAst(node, props) {
         case "-": return Number(a) - Number(b);
         case "*": return Number(a) * Number(b);
         case "/": return Number(b) === 0 ? null : Number(a) / Number(b);
+        // QGIS // は整数除算=床除算(実機: -7//2=-4, 7//-2=-4 確認済。QWC2 grammar の
+        // Math.floor と一致。ゼロ方向切捨て(Math.trunc)は QGIS とずれるため不採用)
+        case "//": return Number(b) === 0 ? null : Math.floor(Number(a) / Number(b));
         case "%": return Number(b) === 0 ? null : Number(a) % Number(b);
         case "^": { const r = Math.pow(Number(a), Number(b)); return Number.isFinite(r) ? r : null; }
       }
@@ -1009,6 +1097,14 @@ function evalAst(node, props) {
       const isNull = v === null || v === undefined;
       return node.not ? !isNull : isNull;
     }
+    case "regex": {
+      const v = String(evalAst(node.a, props) ?? "");
+      const p = String(evalAst(node.pattern, props) ?? "");
+      try {
+        const hit = new RegExp(p).test(v);
+        return node.not ? !hit : hit;
+      } catch (e) { return null; }
+    }
     case "case": {
       const operand = node.operand ? evalAst(node.operand, props) : undefined;
       for (const [cond, val] of node.whens) {
@@ -1024,8 +1120,47 @@ function evalAst(node, props) {
         try { return evalAst(node.args[0], props); }
         catch (e) { return node.args.length > 1 ? evalAst(node.args[1], props) : null; }
       }
+      // 式引数関数(array_filter/array_foreach/with_variable): 第2/第3引数を
+      // 未評価のまま残し @element/@変数 スコープ下で逐次評価する(QGIS 準拠)
+      if (node.name === "array_filter" || node.name === "array_foreach") {
+        const arr = evalAst(node.args[0], props);
+        if (!Array.isArray(arr)) return null;
+        const body = node.args[1];
+        const each = el => {
+          exprVarScope.push({ element: el });
+          try { return evalAst(body, props); }
+          finally { exprVarScope.pop(); }
+        };
+        return node.name === "array_filter" ? arr.filter(el => !!each(el)) : arr.map(each);
+      }
+      if (node.name === "with_variable") {
+        const vname = evalAst(node.args[0], props);
+        const val = evalAst(node.args[1], props);
+        exprVarScope.push({ [String(vname)]: val });
+        try { return evalAst(node.args[2], props); }
+        finally { exprVarScope.pop(); }
+      }
       const args = node.args.map(a => evalAst(a, props));
-      if (node.name === "attribute") return props?.[args[0]];
+      // attribute('name')=現行地物 / attribute(feature,'name')=地物オブジェクト指定(QWC2 準拠の2形態)
+      if (node.name === "attribute") {
+        return args.length < 2 ? props?.[args[0]]
+          : (args[0]?.properties?.[args[1]] ?? args[0]?.[args[1]] ?? null);
+      }
+      // current_value('name') は地物コンテキスト中の属性値参照(フォーム連結評価と同じ props 経路)
+      if (node.name === "current_value") return props?.[args[0]];
+      if (node.name === "get_feature" || node.name === "get_feature_by_id") {
+        // レイヤー横断参照はアプリ注入のリゾルバ経由(未注入時は null + 1回警告)
+        if (exprFeatureResolver) {
+          try {
+            const f = node.name === "get_feature"
+              ? exprFeatureResolver(args[0], args[1], args[2])
+              : exprFeatureResolver(args[0], null, args[1]);
+            return f?.properties ?? f ?? null;
+          } catch (e) { return null; }
+        }
+        warnUnknownExprFunc(node.name + "(レイヤー横断参照: setExprFeatureResolver 未注入)");
+        return null;
+      }
       if (node.name === "var") return resolveExprVar(args[0]); // var('map_scale') 形式
       const fn = EXPR_FUNCS[node.name];
       if (!fn) { warnUnknownExprFunc(node.name); return null; }
@@ -1063,6 +1198,16 @@ function evalExpression(src, props) {
 // (DD/ルール/ラベル等の内部経路と同一の評価器・変数リゾルバを使う)
 export function evalQgisExpression(src, props) {
   return evalExpression(src, props);
+}
+
+// QGIS mapTip テンプレート評価: HTML 中の [% 式 %] を地物属性で評価して
+// 結果文字列へ置換する(QgsMapTip と同じ置換規則。式評価器は evalExpression 共有)
+export function evalMapTipTemplate(tpl, props) {
+  return String(tpl || "").replace(/\[%\s*([\s\S]*?)\s*%\]/g,
+    (_, expr) => {
+      const v = evalExpression(expr, props);
+      return v == null ? "" : String(v);
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1418,63 +1563,135 @@ function compileRenderer(rendererEl, warnings) {
 // ---------------------------------------------------------------------------
 
 // マーカー形状名 → canvas パス描画関数(中心0,0・半径1に正規化)
+// QGIS QgsSimpleMarkerSymbolLayerBase::shapeToPolygon /
+// prepareMarkerPath (qgsmarkersymbollayer.cpp) と同一座標。
+// 全形状は ±1 の正規化座標で定義し、呼出し側が size/2 でスケールする
+// (QGIS は transform.scale(half,half) = size がバウンディングボックス径)
 const MARKER_SHAPES = {
   circle(ctx) { ctx.arc(0, 0, 1, 0, Math.PI * 2); },
-  semi_circle(ctx) { ctx.arc(0, 0, 1, Math.PI, 0); ctx.closePath(); },
-  third_circle(ctx) { ctx.arc(0, 0, 1, Math.PI * 0.83, Math.PI * 0.17); ctx.closePath(); },
-  quarter_circle(ctx) { ctx.moveTo(0, 0); ctx.arc(0, 0, 1, -Math.PI / 2, 0); ctx.closePath(); },
-  square(ctx) { ctx.rect(-0.85, -0.85, 1.7, 1.7); },
-  rectangle(ctx) { ctx.rect(-1, -0.7, 2, 1.4); },
-  rounded_square(ctx) { ctx.roundRect(-0.85, -0.85, 1.7, 1.7, 0.3); },
-  rounded_rectangle(ctx) { ctx.roundRect(-1, -0.7, 2, 1.4, 0.25); },
-  diamond(ctx) { ctx.moveTo(0, -1); ctx.lineTo(0.8, 0); ctx.lineTo(0, 1); ctx.lineTo(-0.8, 0); ctx.closePath(); },
+  // QGIS: arcTo(-1,-1,2,2, 0°,180°) + lineTo(0,0) → 上半分の扇形
+  semi_circle(ctx) { ctx.arc(0, 0, 1, Math.PI, 0); ctx.lineTo(0, 0); ctx.closePath(); },
+  // QGIS: arcTo(90°,120°) + lineTo(0,0) → 上→左→左下 の 120° 楔形
+  third_circle(ctx) { ctx.arc(0, 0, 1, Math.PI * 5 / 6, Math.PI * 1.5); ctx.lineTo(0, 0); ctx.closePath(); },
+  // QGIS: arcTo(90°,90°) + lineTo(0,0) → 上→左 の左上90° 楔形
+  quarter_circle(ctx) { ctx.arc(0, 0, 1, Math.PI, Math.PI * 1.5); ctx.lineTo(0, 0); ctx.closePath(); },
+  square(ctx) { ctx.rect(-1, -1, 2, 2); },
+  // QGIS: VERTEX_OFFSET_FROM_ORIGIN = 0.6072 の八角方形
+  square_with_corners(ctx) {
+    const v = 0.6072;
+    ctx.moveTo(-v, 1); ctx.lineTo(v, 1); ctx.lineTo(1, v);
+    ctx.lineTo(1, -v); ctx.lineTo(v, -1); ctx.lineTo(-v, -1);
+    ctx.lineTo(-1, -v); ctx.lineTo(-1, v); ctx.closePath();
+  },
+  rounded_square(ctx) { ctx.roundRect(-1, -1, 2, 2, 0.25); },
+  // QGIS: (-1,0),(0,1),(1,0),(0,-1) 正菱形
+  diamond(ctx) { ctx.moveTo(-1, 0); ctx.lineTo(0, 1); ctx.lineTo(1, 0); ctx.lineTo(0, -1); ctx.closePath(); },
+  // QGIS: (1,0.5),(1,-1),(-1,-1),(-1,0.5),(0,1) 方形+下向き頂点
+  shield(ctx) {
+    ctx.moveTo(1, 0.5); ctx.lineTo(1, -1); ctx.lineTo(-1, -1);
+    ctx.lineTo(-1, 0.5); ctx.lineTo(0, 1); ctx.closePath();
+  },
   pentagon(ctx) { polygonPath(ctx, 5, -Math.PI / 2); },
   hexagon(ctx) { polygonPath(ctx, 6, -Math.PI / 2); },
-  octagon(ctx) { polygonPath(ctx, 8, -Math.PI / 2); },
-  triangle(ctx) { polygonPath(ctx, 3, -Math.PI / 2); },
+  // QGIS: VERTEX_OFFSET = 1/(1+√2) ≈ 0.4142 のフラットエッジ八角形
+  octagon(ctx) {
+    const v = 1 / (1 + Math.SQRT2);
+    ctx.moveTo(-v, 1); ctx.lineTo(v, 1); ctx.lineTo(1, v);
+    ctx.lineTo(1, -v); ctx.lineTo(v, -1); ctx.lineTo(-v, -1);
+    ctx.lineTo(-1, -v); ctx.lineTo(-1, v); ctx.closePath();
+  },
+  decagon(ctx) {
+    ctx.moveTo(0.5878, 0.8090); ctx.lineTo(0.9511, 0.3090);
+    ctx.lineTo(0.9511, -0.3090); ctx.lineTo(0.5878, -0.8090);
+    ctx.lineTo(0, -1); ctx.lineTo(-0.5878, -0.8090);
+    ctx.lineTo(-0.9511, -0.3090); ctx.lineTo(-0.9511, 0.3090);
+    ctx.lineTo(-0.5878, 0.8090); ctx.lineTo(0, 1); ctx.closePath();
+  },
+  // QGIS: (-1,1),(1,1),(0,-1) 二等辺(正三角形ではない)
+  triangle(ctx) { ctx.moveTo(-1, 1); ctx.lineTo(1, 1); ctx.lineTo(0, -1); ctx.closePath(); },
   equilateral_triangle(ctx) { polygonPath(ctx, 3, -Math.PI / 2); },
-  right_triangle(ctx) { ctx.moveTo(-1, 1); ctx.lineTo(1, 1); ctx.lineTo(1, -1); ctx.closePath(); },
-  star(ctx) { starPath(ctx, 5, 0.4); },
-  regular_star(ctx) { starPath(ctx, 5, 0.4); },
-  rounded_star(ctx) { starPath(ctx, 5, 0.5); },
-  asterisk_fill(ctx) { starPath(ctx, 6, 0.55); },
+  // QGIS: (-1,1),(0,1),(0,-1) Triangle の左半分
+  right_half_triangle(ctx) { ctx.moveTo(-1, 1); ctx.lineTo(0, 1); ctx.lineTo(0, -1); ctx.closePath(); },
+  // QGIS: (0,1),(1,1),(0,-1) Triangle の右半分
+  left_half_triangle(ctx) { ctx.moveTo(0, 1); ctx.lineTo(1, 1); ctx.lineTo(0, -1); ctx.closePath(); },
+  // QGIS: (-1,-1),(1,1),(-1,1) 左下の直角三角形
+  diagonal_half_square(ctx) { ctx.moveTo(-1, -1); ctx.lineTo(1, 1); ctx.lineTo(-1, 1); ctx.closePath(); },
+  // QGIS: inner_r = cos(72°)/cos(36°) ≈ 0.38197 の4芒星
+  star_diamond(ctx) { starPath(ctx, 4, Math.cos(Math.PI * 72 / 180) / Math.cos(Math.PI * 36 / 180)); },
+  // QGIS: inner_r = cos(72°)/cos(36°) ≈ 0.38197 の5芒星
+  star(ctx) { starPath(ctx, 5, Math.cos(Math.PI * 72 / 180) / Math.cos(Math.PI * 36 / 180)); },
+  regular_star(ctx) { MARKER_SHAPES.star(ctx); },
+  // QGIS: THICKNESS=0.3 の8方向アステリスク(24頂点)
+  asterisk_fill(ctx) {
+    const h = 0.15;                    // HALF_THICKNESS = 0.3/2
+    const ip = 0.3 / Math.SQRT2;       // INTERSECTION_POINT
+    const d1 = Math.SQRT1_2 - ip * 0.5; // DIAGONAL1 ≈ 0.6010
+    const d2 = Math.SQRT1_2 + ip * 0.5; // DIAGONAL2 ≈ 0.8132
+    ctx.moveTo(-h, -1); ctx.lineTo(h, -1);
+    ctx.lineTo(h, -h - ip); ctx.lineTo(d1, -d2); ctx.lineTo(d2, -d1);
+    ctx.lineTo(h + ip, -h); ctx.lineTo(1, -h); ctx.lineTo(1, h);
+    ctx.lineTo(h + ip, h); ctx.lineTo(d2, d1); ctx.lineTo(d1, d2);
+    ctx.lineTo(h, h + ip); ctx.lineTo(h, 1); ctx.lineTo(-h, 1);
+    ctx.lineTo(-h, h + ip); ctx.lineTo(-d1, d2); ctx.lineTo(-d2, d1);
+    ctx.lineTo(-h - ip, h); ctx.lineTo(-1, h); ctx.lineTo(-1, -h);
+    ctx.lineTo(-h - ip, -h); ctx.lineTo(-d2, -d1); ctx.lineTo(-d1, -d2);
+    ctx.lineTo(-h, -h - ip); ctx.closePath();
+  },
+  // QGIS: moveTo(0,0.75) + 左右 210° 円弧のハート(近似)
   heart(ctx) {
-    ctx.moveTo(0, 0.9);
+    ctx.moveTo(0, 0.75);
     ctx.bezierCurveTo(-1.4, -0.1, -0.8, -1.1, 0, -0.5);
-    ctx.bezierCurveTo(0.8, -1.1, 1.4, -0.1, 0, 0.9);
+    ctx.bezierCurveTo(0.8, -1.1, 1.4, -0.1, 0, 0.75);
     ctx.closePath();
   },
-  cross(ctx) {
-    const w = 0.28;
-    ctx.moveTo(-w, -1); ctx.lineTo(w, -1); ctx.lineTo(w, -w); ctx.lineTo(1, -w);
-    ctx.lineTo(1, w); ctx.lineTo(w, w); ctx.lineTo(w, 1); ctx.lineTo(-w, 1);
-    ctx.lineTo(-w, w); ctx.lineTo(-1, w); ctx.lineTo(-1, -w); ctx.lineTo(-w, -w);
+  // QGIS: Cross は線のみ(塗りは cross_fill)。腕幅 ±0.2
+  cross_fill(ctx) {
+    const w = 0.2;
+    ctx.moveTo(-1, -w); ctx.lineTo(-w, -w); ctx.lineTo(-w, -1);
+    ctx.lineTo(w, -1); ctx.lineTo(w, -w); ctx.lineTo(1, -w);
+    ctx.lineTo(1, w); ctx.lineTo(w, w); ctx.lineTo(w, 1);
+    ctx.lineTo(-w, 1); ctx.lineTo(-w, w); ctx.lineTo(-1, w);
     ctx.closePath();
   },
-  cross_fill(ctx) { MARKER_SHAPES.cross(ctx); },
+  cross(ctx) { ctx.moveTo(-1, 0); ctx.lineTo(1, 0); ctx.moveTo(0, -1); ctx.lineTo(0, 1); },
   cross2(ctx) {
     ctx.moveTo(-1, -1); ctx.lineTo(1, 1); ctx.moveTo(1, -1); ctx.lineTo(-1, 1);
   },
   x(ctx) { MARKER_SHAPES.cross2(ctx); },
   diagonal_cross(ctx) { MARKER_SHAPES.cross2(ctx); },
   line(ctx) { ctx.moveTo(0, -1); ctx.lineTo(0, 1); },
+  // QGIS: (0,-1),(0.5,-0.5),(0.25,-0.5),(0.25,1),(-0.25,1),(-0.25,-0.5),(-0.5,-0.5) 塗り上向き矢印
   arrow(ctx) {
-    ctx.moveTo(0, 1); ctx.lineTo(0, -0.45);
-    ctx.moveTo(-0.55, 0); ctx.lineTo(0, -0.45); ctx.lineTo(0.55, 0);
+    ctx.moveTo(0, -1); ctx.lineTo(0.5, -0.5); ctx.lineTo(0.25, -0.5);
+    ctx.lineTo(0.25, 1); ctx.lineTo(-0.25, 1); ctx.lineTo(-0.25, -0.5);
+    ctx.lineTo(-0.5, -0.5); ctx.closePath();
   },
-  arrowhead(ctx) { ctx.moveTo(-0.7, 0.7); ctx.lineTo(0, -0.4); ctx.lineTo(0.7, 0.7); },
-  filled_arrowhead(ctx) { ctx.moveTo(-0.7, 0.7); ctx.lineTo(0, -0.6); ctx.lineTo(0.7, 0.7); ctx.closePath(); },
-  half_square(ctx) { ctx.rect(-0.85, 0, 1.7, 0.85); },
-  quarter_square(ctx) { ctx.rect(0, 0, 0.85, 0.85); },
+  // QGIS: (-1,-1),(0,0),(-1,1) 右向き「>」(線のみ)
+  arrowhead(ctx) { ctx.moveTo(-1, -1); ctx.lineTo(0, 0); ctx.lineTo(-1, 1); },
+  // QGIS: (0,0),(-1,1),(-1,-1) 右向き塗り三角
+  filled_arrowhead(ctx) { ctx.moveTo(0, 0); ctx.lineTo(-1, 1); ctx.lineTo(-1, -1); ctx.closePath(); },
+  // QGIS: rect(-1,-1)→(0,1) = 左半分
+  half_square(ctx) { ctx.rect(-1, -1, 1, 2); },
+  // QGIS: rect(-1,-1)→(0,0) = 左上1/4
+  quarter_square(ctx) { ctx.rect(-1, -1, 1, 1); },
+  // QGIS: (0.5,-0.5),(1,0.5),(-1,0.5),(-0.5,-0.5) 上狭下広
+  trapezoid(ctx) { ctx.moveTo(0.5, -0.5); ctx.lineTo(1, 0.5); ctx.lineTo(-1, 0.5); ctx.lineTo(-0.5, -0.5); ctx.closePath(); },
+  // QGIS: (0.5,0.5),(1,-0.5),(-0.5,-0.5),(-1,0.5)
+  parallelogram_right(ctx) { ctx.moveTo(0.5, 0.5); ctx.lineTo(1, -0.5); ctx.lineTo(-0.5, -0.5); ctx.lineTo(-1, 0.5); ctx.closePath(); },
+  // QGIS: (1,0.5),(0.5,-0.5),(-0.5,-0.5),(-1,0.5)
+  parallelogram_left(ctx) { ctx.moveTo(1, 0.5); ctx.lineTo(0.5, -0.5); ctx.lineTo(-0.5, -0.5); ctx.lineTo(-1, 0.5); ctx.closePath(); },
+  // QGIS: 上端のアーチ(線のみ) moveTo(1,0)+arcTo(0°,180°)
+  half_arc(ctx) { ctx.moveTo(1, 0); ctx.arc(0, 0, 1, 0, Math.PI, true); },
+  // QGIS: 上→左下 の120°アーチ(線のみ) arcTo(90°,120°)
+  third_arc(ctx) { ctx.moveTo(0, -1); ctx.arc(0, 0, 1, -Math.PI / 2, -Math.PI / 2 - Math.PI * 2 / 3, true); },
+  // QGIS: 上→左 の90°アーチ(線のみ) arcTo(90°,90°)
+  quarter_arc(ctx) { ctx.moveTo(0, -1); ctx.arc(0, 0, 1, -Math.PI / 2, -Math.PI, true); },
+  // Canvas 固有(QGIS 名なし・後方互換)
+  rectangle(ctx) { ctx.rect(-1, -0.7, 2, 1.4); },
+  rounded_rectangle(ctx) { ctx.roundRect(-1, -0.7, 2, 1.4, 0.25); },
+  rounded_star(ctx) { starPath(ctx, 5, 0.5); },
+  right_triangle(ctx) { ctx.moveTo(-1, 1); ctx.lineTo(1, 1); ctx.lineTo(1, -1); ctx.closePath(); },
   third_square(ctx) { ctx.rect(-0.85, 0.28, 1.7, 0.57); },
-  trapezoid(ctx) { ctx.moveTo(-0.6, -0.8); ctx.lineTo(0.6, -0.8); ctx.lineTo(1, 0.8); ctx.lineTo(-1, 0.8); ctx.closePath(); },
-  parallelogram_left(ctx) { ctx.moveTo(-0.5, -0.8); ctx.lineTo(1, -0.8); ctx.lineTo(0.5, 0.8); ctx.lineTo(-1, 0.8); ctx.closePath(); },
-  parallelogram_right(ctx) { ctx.moveTo(-1, -0.8); ctx.lineTo(0.5, -0.8); ctx.lineTo(1, 0.8); ctx.lineTo(-0.5, 0.8); ctx.closePath(); },
-  shield(ctx) {
-    ctx.moveTo(0, -0.9); ctx.lineTo(0.8, -0.6); ctx.lineTo(0.7, 0.3);
-    ctx.quadraticCurveTo(0.6, 0.8, 0, 1); ctx.quadraticCurveTo(-0.6, 0.8, -0.7, 0.3);
-    ctx.lineTo(-0.8, -0.6); ctx.closePath();
-  },
   play(ctx) { polygonPath(ctx, 3, 0); },
 };
 
@@ -1497,8 +1714,9 @@ function starPath(ctx, points, innerRatio) {
   ctx.closePath();
 }
 
-// 線のみの形状(塗りつぶさずストロークのみ)
-const STROKE_ONLY_SHAPES = new Set(["cross2", "x", "diagonal_cross", "line", "arrow", "arrowhead"]);
+// 線のみの形状(QGIS でも fill しないパス形状)
+const STROKE_ONLY_SHAPES = new Set(["cross", "cross2", "x", "diagonal_cross",
+  "line", "arrowhead", "half_arc", "third_arc", "quarter_arc"]);
 
 import { kascZipLogicalUrl, resolveKascUrl } from "./kasc.js";
 
@@ -2274,7 +2492,9 @@ function buildLineDecor(layer, p, props, images, color, widthUnit, warnings) {
       p.offset_along_line_unit || "MM") || 0,
     avgAnglePx: sizeToPx(ddValue(dd, ["averageAngleLength"], props, p.average_angle_length ?? 0),
       p.average_angle_unit || "MM") || 0,
-    everyPart: String(p.place_on_every_part ?? "0") === "1"
+    // QGIS C++ setCommonProperties: place_on_every_part 既定 true
+    everyPart: p.place_on_every_part == null
+      || String(p.place_on_every_part) === "1"
       || String(p.place_on_every_part).toLowerCase() === "true",
     ringFilter: ringFilterOf(p) || undefined,
     // blank_segments は空白セグメント定義(実名)。間隔パターン近似では未再現
@@ -2336,18 +2556,22 @@ function buildLineDecor(layer, p, props, images, color, widthUnit, warnings) {
   }
   if (cls === "ArrowLine") {
     // 実プロパティ名: head_length/head_thickness(単位付き)/is_curved/
-    // head_type(0=単一 1=反転 2=両端)/arrow_type(0=矢印 1=塗りつぶし)/
+    // head_type(0=末尾 1=反転 2=両端)/arrow_type(0=通常 1=左半 2=右半)/
     // is_repeated(線上反復)/arrow_start_width(矢尻幅)。
-    // arrow_head_length/arrow_head_width/curved_arrow は存在しない旧名フォールバック
+    // arrow_head_length/arrow_head_width/curved_arrow は存在しない旧名フォールバック。
+    // 既定値は実機 QgsArrowSymbolLayer().properties() 採取(4.0.1):
+    // arrow_width=1,arrow_start_width=1,head_length=1.5,head_thickness=1.5(MM),
+    // is_curved=1,is_repeated=1
     return { kind: "arrowline", color: parseQgisColor(color, [0, 0, 0, 1]),
-      headLenPx: sizeToPx(p.head_length ?? p.arrow_head_length ?? 2.5, p.head_length_unit || "MM") || 9,
-      headWidthPx: sizeToPx(p.head_thickness ?? p.arrow_head_width ?? 2.5, p.head_thickness_unit || "MM") || 9,
-      tailWidthPx: sizeToPx(p.arrow_width ?? 0, p.arrow_width_unit || "MM") || null,
-      startWidthPx: sizeToPx(p.arrow_start_width ?? 0, p.arrow_start_width_unit || "MM") || null,
+      headLenPx: sizeToPx(p.head_length ?? p.arrow_head_length ?? 1.5, p.head_length_unit || "MM") || 9,
+      headWidthPx: sizeToPx(p.head_thickness ?? p.arrow_head_width ?? 1.5, p.head_thickness_unit || "MM") || 9,
+      tailWidthPx: sizeToPx(p.arrow_width ?? 1, p.arrow_width_unit || "MM") || null,
+      startWidthPx: sizeToPx(p.arrow_start_width ?? p.arrow_width ?? 1, p.arrow_start_width_unit || p.arrow_width_unit || "MM") || null,
+      offsetPx: sizeToPx(p.offset ?? 0, p.offset_unit || "MM") || 0,
       headType: Number(p.head_type ?? 0) || 0, // 0=末尾のみ 1=先頭のみ(反転) 2=両端
-      arrowType: Number(p.arrow_type ?? 0) || 0, // 0=矢印 1=素線
-      repeated: String(p.is_repeated ?? "0") === "1" || String(p.is_repeated).toLowerCase() === "true",
-      curved: String(p.is_curved ?? p.curved_arrow ?? "0") === "1",
+      arrowType: Number(p.arrow_type ?? 0) || 0, // 0=両側 1=左半のみ 2=右半のみ
+      repeated: String(p.is_repeated ?? "1") !== "0" && String(p.is_repeated ?? "1").toLowerCase() !== "false",
+      curved: String(p.is_curved ?? p.curved_arrow ?? "1") !== "0" && String(p.is_curved ?? p.curved_arrow ?? "1").toLowerCase() !== "false",
       ...decorCommon };
   }
   if (cls === "RasterLine") {
@@ -3545,9 +3769,12 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map(), e
     if (col.getAttribute("hidden") === "1") fields.hidden.add(nm);
   }
   fields.displayExpr = doc.querySelector("previewExpression")?.textContent?.trim() || "";
-  fields.mapTip = doc.querySelector("mapTip")?.textContent?.trim() || "";
+  // <mapTip enabled="0"> は QGIS で地図チップ無効を示すため無効扱いにする
+  const mapTipEl = doc.querySelector("mapTip");
+  fields.mapTip = mapTipEl?.getAttribute("enabled") === "0"
+    ? "" : (mapTipEl?.textContent?.trim() || "");
   const displayFn = fields.displayExpr ? compileExpr(fields.displayExpr) : null;
-  const hasFieldMeta = Object.keys(fields.alias).length > 0 || fields.hidden.size > 0 || fields.order.length > 0 || !!fields.displayExpr;
+  const hasFieldMeta = Object.keys(fields.alias).length > 0 || fields.hidden.size > 0 || fields.order.length > 0 || !!fields.displayExpr || !!fields.mapTip;
 
   return {
     evaluate,
