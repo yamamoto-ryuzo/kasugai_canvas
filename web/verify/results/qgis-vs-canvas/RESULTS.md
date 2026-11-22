@@ -130,6 +130,31 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
   simplestyle 近似に留まる。cluster/heatmap/displacement/inverted 未対応、
   GeomGen_marker は元地物描画、SVGFill 単色塗り
 
+### 白率解析で追加検出した差異（全ペア機械走査＋目視確認）
+
+全186ペアを非白率で機械走査し、面積差が大きい層を目視確認した結果:
+
+- **PointPatternFill**: maplibre/openlayers/leaflet/gsimaps **無描画**（cesium のみ imagery 経路で一致）
+- **GradientFill**: maplibre/openlayers/leaflet **無描画**（cesium は一致・gsimaps 単色塗り）
+- **GeomGen_line**: 2D 全エンジン**無描画**（cesium のみ imagery 経路で描画）
+- **CentroidFill**: leaflet/gsimaps は重心マーカーでなく**ポリゴン塗りを誤描画**
+- **ren_merged**: leaflet/gsimaps **過剰描画**（QGIS は無描画＝merged+非描画系内側シンボル）
+- **LinearReferencing**: `qgis-cesium` 側が全白（cesium は ents=33k を描画）。
+  QGIS 側が実際に無描画かキャプチャ不良か**要再確認**（一致候補のまま未確定）
+- 小地物層（VectorField/CentroidFill の maplibre・OL 等）は非白率が UI ベースライン
+  以下で機械判定不可 → 個別目視が必要
+
+### 未検証として残る項目
+
+- **AnimatedMarker**: 静止フレームのみ比較。アニメーション時系列は未検証
+- **ズーム依存挙動**: cluster/displacement のリグループ・LinRef/マーカー間隔の
+  縮尺連動はロード時1縮尺のみ検証（既知近似として文書化済）
+- **VectorField**: 2Dエンジンでの描画有無がベースライン以下で未確定
+- **ren_25d 単独動作**: 本プロジェクトは 3D Tiles ドレープ併用。ドレープ無し
+  プロジェクトでの 2.5D 押出挙動は未検証
+- **CDN ホスト版**: kasugai-canvas-web への同期・ホスト側実表示は未実施
+- QML warnings 出力確認（未対応項目が console warning されるかの監査）
+
 ### ハーネス側の修正（本サイクルで追加）
 
 - 非cesium `fitBounds(w,s,e,n)` 4引数シグネチャに統一（gsimaps 公開 API を変更済）
