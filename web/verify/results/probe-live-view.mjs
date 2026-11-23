@@ -17,7 +17,10 @@ const args = process.argv.slice(2);
 let host = 8510;
 const hi = args.indexOf("--host");
 if (hi >= 0) { host = args[hi + 1]; args.splice(hi, 2); }
-const BASE = `http://127.0.0.1:${host}`;
+// --host はポート番号(8510/8520)か URL(https://…/stable)のどちらでも可
+const BASE = /^https?:/.test(String(host))
+  ? String(host).replace(/\/+$/, "")
+  : `http://127.0.0.1:${host}`;
 const engines = args.length
   ? args
   : ["cesium", "maplibre", "openlayers", "leaflet", "gsimaps", "navara"];
