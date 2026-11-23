@@ -57,6 +57,11 @@ import { createReportTool } from "../shared/report.js";
 import { installViewHistory } from "../shared/nav-tools.js";
 import { coordPins as coordPinStore } from "../shared/coord-pins.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
+import {
+  SEL_FILL_ALPHA, SEL_LINE_WIDTH, SEL_POINT_OUTLINE,
+  getSelectionColor, resolveSelColor, initSelectionUI,
+} from "../shared/selection.js";
+import { pointInPolygonCoords } from "../shared/spatial-ops.js";
 
 await initI18n();
 applyI18n();
@@ -5520,6 +5525,15 @@ function registerPrimitiveLayer(item, primitive, geojson = null, decorClampRef =
   activePrimitives.push(primitive);
   layerRuntimeTargets.set(item.id, primitive);
   item.geojsonSource = geojson;
+  // 選択ハイライト用: ピック結果の properties 参照から元 GeoJSON 地物を逆引きする
+  // 索引(バッチ primitive の pick オブジェクトはジオメトリを持たないため)
+  primitive._selIndex = new Map();
+  primitive._selIndexId = new Map();
+  for (const f of geojson?.features || []) {
+    if (f?.properties && f.geometry) primitive._selIndex.set(f.properties, f);
+    const fid = f?.id ?? f?.properties?.id ?? f?.properties?.fid ?? f?.properties?.FID;
+    if (fid != null) primitive._selIndexId.set(String(fid), f);
+  }
   // drapeHeightReference の実値を保持(entity 経路の item._qmlClampRef と同じ意味。
   // null=非クランプ/明示 render=primitive、CLAMP_*=ドレープ経路)
   primitive._decorClampRef = decorClampRef || null;
@@ -8883,18 +8897,19 @@ async function applyQgisSelection(sel) {
   try { if (qgisSelDs) { viewer.dataSources.remove(qgisSelDs, true); } } catch (_) {}
   qgisSelDs = null;
   if (fc.features.length) {
+    const selCol = cssToCesiumColor(getSelectionColor());
     try {
       qgisSelDs = await Cesium.GeoJsonDataSource.load(fc, {
-        stroke: Cesium.Color.YELLOW,
-        fill: Cesium.Color.YELLOW.withAlpha(0.35),
+        stroke: selCol,
+        fill: selCol.withAlpha(SEL_FILL_ALPHA + 0.07),
         clampToGround: true,
       });
       for (const ent of qgisSelDs.entities.values) {
         if (ent.billboard) {
           ent.billboard = undefined;
           ent.point = new Cesium.PointGraphics({
-            pixelSize: 11, color: Cesium.Color.YELLOW,
-            outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
+            pixelSize: 11, color: selCol,
+            outlineColor: Cesium.Color.fromCssColorString(SEL_POINT_OUTLINE), outlineWidth: 2,
             heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
           });
         }
@@ -8903,6 +8918,188 @@ async function applyQgisSelection(sel) {
     } catch (_) { qgisSelDs = null; }
   }
   requestRender();
+}
+
+// ---- 地物選択ハイライト(地図上のクリックで選択した地物を強調) ----
+// QGIS の「選択地物表示」に相当。選択色/反転モードは shared/selection.js の
+// 共通設定(表示>一般タブ)を全エンジンで共有する。QGIS 側選択(qgisSelDs)とは
+// 別の CustomDataSource で保持し、互いの更新で消し合わない
+let localSelDs = null;
+const selTileRestore = []; // 3D Tiles 地物の色上書きを戻す退避 {feature,color,baseCss}
+const localSelState = { items: [] }; // 再描画用 {shapes:[{kind,...}], baseCss}
+
+function ensureLocalSelDs() {
+  if (!localSelDs) {
+    localSelDs = new Cesium.CustomDataSource("kasugai-selection");
+    viewer.dataSources.add(localSelDs);
+  }
+  return localSelDs;
+}
+
+function cssToCesiumColor(css, alpha = 1) {
+  const c = parseCssColor(css); // 既存ヘルパー: css → Cesium.Color
+  if (!c) return Cesium.Color.YELLOW.withAlpha(alpha);
+  return c.withAlpha(alpha);
+}
+
+// entity の描画ジオメトリを選択オーバーレイ用の shape に正規化する
+// 反転マスク適用地物は _qmlInvHier(適用前の元 hierarchy)を使い、
+// 世界矩形マスクがハイライトされないようにする
+function entityToSelShape(entity, time) {
+  try {
+    const inv = entity._qmlInvHier;
+    if (inv) {
+      const hs = Array.isArray(inv) ? inv : [inv];
+      const shapes = [];
+      for (const h of hs) {
+        if (h?.positions?.length >= 3) {
+          shapes.push({ kind: "polygon", positions: h.positions,
+            holes: (h.holes || []).map(hh => hh.positions || []) });
+        }
+      }
+      if (shapes.length) return shapes;
+    }
+    if (entity.polygon?.hierarchy) {
+      const h = entity.polygon.hierarchy.getValue(time);
+      if (h?.positions?.length >= 3) {
+        return [{
+          kind: "polygon", positions: h.positions,
+          holes: (h.holes || []).map(hh => hh.positions || []),
+        }];
+      }
+    }
+    if (entity.polyline?.positions) {
+      const positions = entity.polyline.positions.getValue(time);
+      if (positions?.length >= 2) return [{ kind: "line", positions }];
+    }
+    const pos = getEntityPosition(entity);
+    if (pos) return [{ kind: "point", position: pos }];
+  } catch (_) { /* 取得不能は選択対象外 */ }
+  return null;
+}
+
+// GeoJSON ジオメトリ → shape 配列(Multi 系は展開)
+function geomToSelShapes(geom) {
+  const pt = c => Cesium.Cartesian3.fromDegrees(c[0], c[1], c[2] || 0);
+  const line = cs => ({ kind: "line", positions: cs.map(pt) });
+  const poly = cs => ({ kind: "polygon", positions: (cs[0] || []).map(pt), holes: cs.slice(1).map(r => r.map(pt)) });
+  try {
+    switch (geom?.type) {
+      case "Point": return [{ kind: "point", position: pt(geom.coordinates) }];
+      case "MultiPoint": return geom.coordinates.map(c => ({ kind: "point", position: pt(c) }));
+      case "LineString": return [line(geom.coordinates)];
+      case "MultiLineString": return geom.coordinates.map(line);
+      case "Polygon": return [poly(geom.coordinates)];
+      case "MultiPolygon": return geom.coordinates.map(poly);
+      case "GeometryCollection": return (geom.geometries || []).flatMap(geomToSelShapes);
+    }
+  } catch (_) { /* 不正ジオメトリは無視 */ }
+  return [];
+}
+
+// 反転モード用に entity の現在の塗り/線色を css で取り出す(取れなければ null)
+function entityBaseCss(entity, time) {
+  const hex = c => c?.toCssHexString?.() || null;
+  try {
+    if (entity.polygon) {
+      return hex(entity.polygon.material?.color?.getValue?.(time))
+        || hex(entity.polygon.outlineColor?.getValue?.(time));
+    }
+    if (entity.polyline) return hex(entity.polyline.material?.color?.getValue?.(time));
+    if (entity.point) return hex(entity.point.color?.getValue?.(time));
+    if (entity.billboard) return hex(entity.billboard.color?.getValue?.(time));
+    if (entity.label) return hex(entity.label.fillColor?.getValue?.(time));
+  } catch (_) { /* マテリアル非対応はフォールバック色 */ }
+  return null;
+}
+
+function addSelShape(ds, shape, css) {
+  const line = cssToCesiumColor(css, 1);
+  if (shape.kind === "point") {
+    ds.entities.add({
+      position: shape.position,
+      point: {
+        pixelSize: 11, color: line,
+        outlineColor: Cesium.Color.fromCssColorString(SEL_POINT_OUTLINE), outlineWidth: 2,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+    return;
+  }
+  if (shape.kind === "line") {
+    ds.entities.add({ polyline: { positions: shape.positions, width: SEL_LINE_WIDTH + 1, material: line, clampToGround: true } });
+    return;
+  }
+  if (shape.kind === "polygon") {
+    const holes = (shape.holes || []).filter(h => h.length >= 3).map(h => new Cesium.PolygonHierarchy(h));
+    ds.entities.add({
+      polygon: {
+        hierarchy: new Cesium.PolygonHierarchy(shape.positions, holes),
+        material: cssToCesiumColor(css, SEL_FILL_ALPHA),
+        height: 0, heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        outline: false, // 外周は太線ポリラインで縁取る(outlineWidth は Windows で 1px 固定)
+      },
+    });
+    const ring = shape.positions.concat([shape.positions[0]]);
+    ds.entities.add({ polyline: { positions: ring, width: SEL_LINE_WIDTH, material: line, clampToGround: true } });
+    for (const h of shape.holes || []) {
+      if (h.length >= 3) ds.entities.add({ polyline: { positions: h.concat([h[0]]), width: SEL_LINE_WIDTH, material: line, clampToGround: true } });
+    }
+  }
+}
+
+function clearLocalSelection() {
+  if (localSelDs) localSelDs.entities.removeAll();
+  for (const { feature, color } of selTileRestore.splice(0)) {
+    try { feature.color = color; } catch (_) {}
+  }
+  localSelState.items = [];
+  requestRender();
+}
+
+// 保持中の選択を現在の設定色/モードで描き直す(設定変更時にも使う)
+function redrawLocalSelection() {
+  if (!localSelState.items.length && !selTileRestore.length) return;
+  const ds = ensureLocalSelDs();
+  ds.entities.removeAll();
+  for (const it of localSelState.items) {
+    const css = resolveSelColor(it.baseCss);
+    for (const shape of it.shapes) addSelShape(ds, shape, css);
+  }
+  for (const t of selTileRestore) {
+    try { t.feature.color = cssToCesiumColor(resolveSelColor(t.baseCss)); } catch (_) {}
+  }
+  requestRender();
+}
+
+// 属性ピックの結果を選択ハイライトへ反映する(records は dedup 済み)
+function updateLocalSelection(records, time) {
+  clearLocalSelection();
+  for (const rec of records || []) {
+    const picked = rec.picked;
+    if (picked instanceof Cesium.Cesium3DTileFeature) {
+      // ジオメトリを持たないため地物自体の色を上書きする
+      try {
+        const orig = picked.color?.clone?.() || Cesium.Color.WHITE;
+        selTileRestore.push({ feature: picked, color: orig, baseCss: orig?.toCssHexString?.() });
+      } catch (_) { /* 色を持たない feature は無視 */ }
+      continue;
+    }
+    if (Cesium.GeoJsonPrimitive && picked?.parentPrimitive instanceof Cesium.GeoJsonPrimitive) {
+      const prim = picked.parentPrimitive;
+      const fid = picked.featureId ?? picked.properties?.id ?? picked.properties?.fid;
+      const f = prim._selIndex?.get(picked.properties)
+        || (fid != null ? prim._selIndexId?.get(String(fid)) : null);
+      const shapes = f?.geometry ? geomToSelShapes(f.geometry) : [];
+      if (shapes.length) localSelState.items.push({ shapes, baseCss: null });
+      continue;
+    }
+    if (rec.entity) {
+      const shapes = entityToSelShape(rec.entity, time);
+      if (shapes?.length) localSelState.items.push({ shapes, baseCss: entityBaseCss(rec.entity, time) });
+    }
+  }
+  redrawLocalSelection();
 }
 
 // 表示範囲(EPSG:4326 の軸平行 bbox)。日付変更線またぎは正規化する
@@ -9487,6 +9684,13 @@ function setupEvents() {
       requestRender();
     });
   }
+
+  // 地物選択ハイライトの方式/色(shared/selection.js。全エンジン共通設定)
+  initSelectionUI({
+    modeSel: document.querySelector("#selection-mode"),
+    colorInput: document.querySelector("#selection-color"),
+    onChange: () => redrawLocalSelection(),
+  });
 
   // スケールバー: 画面中心の地表までの距離からメートル/ピクセルを出し、
   // 概ね330pxになる全長を表示する。全長は4分割各区間が偶数になる
@@ -12249,6 +12453,57 @@ function setupEvents() {
 
   // 1件分のピック結果を {item,label,entries} に正規化する。
   // 属性を持たない描画物(地形・モデル等)は null を返す
+  // クリック位置の緯度経度(entity 包含判定用)
+  const pickLngLat = position => {
+    try {
+      const cart = viewer.camera.pickEllipsoid(position, viewer.scene.globe.ellipsoid);
+      if (!cart) return null;
+      const c = Cesium.Cartographic.fromCartesian(cart);
+      return { lng: Cesium.Math.toDegrees(c.longitude), lat: Cesium.Math.toDegrees(c.latitude) };
+    } catch (_) { return null; }
+  };
+  // hierarchy(PolygonHierarchy | その配列)が緯度経度を含むか。
+  // entity._qmlInvHier には反転マスク適用前の元 hierarchy が入るため、
+  // これを渡せば論理ジオメトリでの判定になる
+  const hierContains = (hier, lng, lat) => {
+    const toRing = ps => (ps || []).map(p => {
+      const c = Cesium.Cartographic.fromCartesian(p);
+      return [Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude)];
+    });
+    for (const h of (Array.isArray(hier) ? hier : (hier ? [hier] : []))) {
+      const outer = toRing(h?.positions);
+      if (outer.length < 3) continue;
+      const coords = [outer, ...(h?.holes || []).map(hh => toRing(hh?.positions)).filter(r => r.length >= 3)];
+      if (pointInPolygonCoords(lng, lat, coords)) return true;
+    }
+    return false;
+  };
+  // drillPick の結果を整える:
+  //  - 反転マスク(_qmlInvHier=元 hierarchy)のマスク領域ヒットを除去
+  //  - 塗り無しポリゴン内部など未ピック分を entity の包含判定で追加
+  const refinePolygonPick = (pickedList, position, time) => {
+    const ll = pickLngLat(position);
+    if (!ll) return pickedList;
+    const kept = pickedList.filter(p => {
+      const e = p?.id;
+      if (!e?._qmlInvHier) return true;
+      return hierContains(e._qmlInvHier, ll.lng, ll.lat);
+    });
+    const seen = new Set(kept.map(p => p?.id).filter(Boolean));
+    for (let i = 0; i < viewer.dataSources.length; i++) {
+      const ds = viewer.dataSources.get(i);
+      if (ds === localSelDs || ds === qgisSelDs || ds.show === false) continue;
+      for (const e of ds.entities?.values || []) {
+        if (e._kascAux || e.show === false || seen.has(e)) continue;
+        const hier = e._qmlInvHier ?? e.polygon?.hierarchy?.getValue?.(time);
+        if (!hier) continue;
+        if (hierContains(hier, ll.lng, ll.lat)) kept.push({ id: e });
+        seen.add(e);
+      }
+    }
+    return kept;
+  };
+
   const describePicked = (picked, time) => {
     if (picked instanceof Cesium.Cesium3DTileFeature) {
       // Cesium 1.9x以降の構造化メタデータは getPropertyIds() で列挙する
@@ -12258,12 +12513,14 @@ function setupEvents() {
       return {
         item: findAttrLayerItem(picked.tileset || picked.primitive),
         entries: names.map(name => [name, picked.getProperty(name)]),
+        picked,
       };
     }
     if (Cesium.GeoJsonPrimitive && picked.parentPrimitive instanceof Cesium.GeoJsonPrimitive && picked.properties) {
       return {
         item: findAttrLayerItem(picked.parentPrimitive),
         entries: Object.entries(picked.properties),
+        picked,
       };
     }
     const entity = picked.id;
@@ -12275,6 +12532,7 @@ function setupEvents() {
         label: typeof entity.name === "string" && entity.name ? entity.name : null,
         entries: Object.entries(entity.properties.getValue(time) || {}),
         entity,
+        picked,
       };
     }
     return null;
@@ -12495,8 +12753,11 @@ function setupEvents() {
     // 計測・断面・見通しツールのモードがアクティブなら属性ピックより優先して頂点拾いに使う
     if (geoTools && geoTools.handleClick(movement.position)) return;
     if (walkModeActive) return;
-    // 重なった地物も拾えるよう drillPick で手前から順に全件取得する
-    const pickedList = viewer.scene.drillPick(movement.position, DRILL_PICK_LIMIT) || [];
+    const time = Cesium.JulianDate.now();
+    // 重なった地物も拾えるよう drillPick で手前から順に全件取得する。
+    // 反転マスク領域の誤ヒット除去と塗り無しポリゴン内部の包含フォールバックを適用
+    const pickedList = refinePolygonPick(
+      viewer.scene.drillPick(movement.position, DRILL_PICK_LIMIT) || [], movement.position, time);
     // silhouette ポストプロセス有効中は pick 結果を選択ハイライト対象にする。
     // selected には Sandcastle 例に倣い pick オブジェクトではなく primitive を渡す
     // (Cesium3DTileFeature 等 primitive を持たない pick はそのまま入れる)
@@ -12515,12 +12776,12 @@ function setupEvents() {
     if (!pickedList.length) {
       setAttrLayerContext(attr, null);
       attr.textContent = t("attr.empty");
+      clearLocalSelection(); // 空白クリックで選択解除
       // 地物が無くても表示中 WMS レイヤーには属性がある可能性があるため問い合わせる
       void runWmsFeatureInfo(movement.position);
       return;
     }
 
-    const time = Cesium.JulianDate.now();
     const seen = new Set();
     const records = [];
     for (const picked of pickedList) {
@@ -12534,8 +12795,12 @@ function setupEvents() {
     if (!records.length) {
       setAttrLayerContext(attr, null);
       attr.textContent = t("attr.noAttrs");
+      clearLocalSelection();
       return;
     }
+
+    // ピックした地物を選択色/反転色でハイライトする
+    updateLocalSelection(records, time);
 
     // 「選択中のレイヤ属性一覧」は最前面の地物が属するレイヤーに紐付ける
     setAttrLayerContext(attr, records.map(record => record.item).find(Boolean) || null);

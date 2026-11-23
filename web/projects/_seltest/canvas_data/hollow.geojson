@@ -1,0 +1,3 @@
+{"type":"FeatureCollection","features":[
+ {"type":"Feature","id":10,"properties":{"id":10,"name":"hollow"},"geometry":{"type":"Polygon","coordinates":[[[139.50,35.45],[140.00,35.45],[140.00,35.85],[139.50,35.85],[139.50,35.45]]]}}
+]}

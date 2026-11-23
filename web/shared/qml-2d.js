@@ -2,8 +2,9 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setExprFeatureResolver, setMapScaleGetter, setEvalScale, evalScaleDenom, linRefFormatText, clampMapUnitsPerPixel, MUP_PER_SCALE_DENOM, interpolatedColorAt, sizeToPx, blankCheckForPart } from "./qml-style.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setExprFeatureResolver, setMapScaleGetter, setEvalScale, evalScaleDenom, linRefFormatText, clampMapUnitsPerPixel, MUP_PER_SCALE_DENOM, interpolatedColorAt, sizeToPx, blankCheckForPart, evalGeomExpr } from "./qml-style.js";
 import { resolveKascUrl } from "./kasc.js";
+import { pointInPolygonGeom, geomBbox, isWorldMaskRing } from "./spatial-ops.js";
 
 // qml-style.js の縮尺注入 API を 2D アダプタ経由で各エンジンへ再公開
 export { setMapScaleGetter, setEvalScale };
@@ -433,6 +434,225 @@ export function linRefSamplesPlanar(coordsList, interval, { skipMultiples = 0, s
 // で標点サンプルして 4326 座標を返す。labelOffsetPx は基準縮尺
 // (TRIM_PX_TO_M=2.8m/px)換算で座標へ直接焼き込む(回転時は線方向系、
 // 非回転時は画面系)。dist ラベルもソース単位(度)の累積距離
+// GeoJSON ポリゴンの内部代表点(面積最大パートの頂点重心を試し、内部に無ければ
+// 格子走査で重心に最も近い内点を選ぶ)。CentroidFill/GGマーカー用
+export function geomInteriorPointGeo(geom) {
+  const rings = geom?.type === "Polygon" ? [geom.coordinates?.[0]]
+    : geom?.type === "MultiPolygon" ? (geom.coordinates || []).map(p => p?.[0])
+    : [];
+  let ring = null, bestA = -1;
+  for (const r of rings) {
+    if (!r?.length) continue;
+    let a = 0;
+    for (let i = 0; i < r.length - 1; i++) a += r[i][0] * r[i + 1][1] - r[i + 1][0] * r[i][1];
+    if (Math.abs(a) > bestA) { bestA = Math.abs(a); ring = r; }
+  }
+  if (!ring) return null;
+  const n = ring.length;
+  const cx = ring.reduce((s, p) => s + p[0], 0) / n;
+  const cy = ring.reduce((s, p) => s + p[1], 0) / n;
+  const inside = p => { try { return pointInPolygonGeom(p[0], p[1], geom); } catch (_) { return false; } };
+  if (inside([cx, cy])) return [cx, cy];
+  const xs = ring.map(p => p[0]), ys = ring.map(p => p[1]);
+  const minx = Math.min(...xs), maxx = Math.max(...xs);
+  const miny = Math.min(...ys), maxy = Math.max(...ys);
+  let bestPt = null, bestD = Infinity;
+  for (let i = 1; i < 9; i++) for (let j = 1; j < 9; j++) {
+    const p = [minx + (maxx - minx) * i / 9, miny + (maxy - miny) * j / 9];
+    if (!inside(p)) continue;
+    const d = Math.hypot(p[0] - cx, p[1] - cy);
+    if (d < bestD) { bestD = d; bestPt = p; }
+  }
+  return bestPt || [ring[0][0], ring[0][1]];
+}
+
+// GeometryGenerator(spec.gg)/CentroidFill(spec.centroid) の生成地物展開。
+// Cesium(qml-render.js applyGeometryGenerators)の 2D 版として全2Dエンジン
+// で共有する。生成地物には合成 spec を __qmlSpec(feature オブジェクト自身)と
+// __kasc_gspec(properties、embedProps 時。OL/navara 等の props 参照経路用)へ
+// 埋め込む。MapLibre は properties がタイルへ直列化されるため embedProps:false
+// にして feature.__qmlSpec のみ参照する
+export function qmlExpandGeneratedFeatures(geojson, compiled, { geomGen = true, centroid = true, embedProps = true, useIds = false, decor = null, displacement = false } = {}) {
+  if (!compiled?.evaluate || !geojson?.features?.length) return null;
+  // 再適用(maplibre の @map_scale 再焼き込み等)で生成地物が増殖しないよう
+  // 既存の生成地物を除去してから展開する(冪等)。識別は feature.__qmlSpec
+  // (再焼き込みの __kasc_* プロパティ剥がしを通り抜ける)優先
+  const isGen = f => f?.__qmlSpec || f?.properties?.__kasc_ggen;
+  if (geojson.features.some(isGen))
+    geojson.features = geojson.features.filter(f => !isGen(f));
+  const extra = [];
+  // useIds: properties 直列化される経路(Navara tiled geojson 等)向けに
+  // 合成 spec を id 参照化して Map で返す。解決側は props.__kasc_gspec の
+  // 数値 id で specMap.get() する
+  const specMap = useIds ? new Map() : null;
+  let nextId = 0;
+  const push = (f, gspec, geom) => {
+    const nf = { type: "Feature", properties: { ...(f.properties || {}), __kasc_ggen: 1 }, geometry: geom };
+    nf.__qmlSpec = gspec;
+    if (useIds) { nf.properties.__kasc_gspec = ++nextId; specMap.set(nextId, gspec); }
+    else if (embedProps) nf.properties.__kasc_gspec = gspec;
+    extra.push(nf);
+  };
+  for (const f of geojson.features) {
+    if (!f?.geometry) continue;
+    let spec = null;
+    try { spec = compiled.evaluate(f.properties || {}); } catch (_) { spec = null; }
+    if (!spec) continue;
+    if (geomGen && spec.gg?.length) {
+      for (const part of spec.gg) {
+        let gen = null;
+        try { gen = evalGeomExpr(part.expr, f.geometry); } catch (_) { gen = null; }
+        if (!gen?.type) continue;
+        const isPoly = /Polygon/.test(gen.type);
+        if (part.kind === "fill" && isPoly) {
+          push(f, { fillParts: part.fillParts || [{ solid: null }], outline: part.outline || null }, gen);
+        } else if (part.kind === "line") {
+          if (isPoly) {
+            // 生成ポリゴンへラインシンボルは境界線として描く(QGIS 準拠)
+            const l = part.line || {};
+            push(f, { outline: { color: l.color, widthPx: l.widthPx ?? 1, dash: l.dash } }, gen);
+          } else if (/Line/.test(gen.type)) {
+            push(f, { line: part.line }, gen);
+          }
+        } else if (part.kind === "marker") {
+          if (/Point/.test(gen.type)) {
+            push(f, { markers: part.markers }, gen);
+          } else if (isPoly) {
+            // 生成ポリゴンへのマーカーは内部代表点近似(Cesium 側と同規約)
+            const pt = geomInteriorPointGeo(gen);
+            if (pt) push(f, { markers: part.markers }, { type: "Point", coordinates: pt });
+          }
+        }
+      }
+    }
+    if (centroid && spec.centroid?.length && /Polygon/.test(f.geometry?.type || "")) {
+      const pt = geomInteriorPointGeo(f.geometry);
+      if (pt) push(f, { markers: spec.centroid }, { type: "Point", coordinates: pt });
+    }
+    // ---- 線装飾(MarkerLine/HashLine/ArrowLine/LinearReferencing/
+    // InterpolatedLine)の生成地物展開。スクリーン px 基準の装飾を
+    // TRIM_PX_TO_M(2.8m/px=縮尺1:1万)で度換算した固定サイズ近似
+    // (linref/trim と同規約)。生成地物のみ追加し、基線の描画抑制は
+    // 各エンジンの spec 解決側で decor 種別を見て行う
+    if (decor && /Line|Polygon/.test(f.geometry?.type || "")) {
+      const lat = (() => { try {
+        const bb = geomBbox(f.geometry); return bb ? (bb[1] + bb[3]) / 2 : 0;
+      } catch (_) { return 0; } })();
+      const degPerPx = TRIM_PX_TO_M / Math.max(111319.9 * Math.cos(lat * Math.PI / 180), 1e-6);
+      const px = v => (Number(v) || 0) * degPerPx;
+      const shim = { getType: () => f.geometry.type, getCoordinates: () => f.geometry.coordinates };
+      const lineCoords = () => f.geometry.type === "LineString" ? [f.geometry.coordinates]
+        : /Line/.test(f.geometry.type) ? f.geometry.coordinates
+        : f.geometry.type === "Polygon" ? f.geometry.coordinates
+        : (f.geometry.coordinates || []).flat(1);
+      for (const lspec of spec.lines || (spec.line ? [spec.line] : [])) {
+        const d = lspec?.decor;
+        if (!d) continue;
+        if (d.kind === "markerline" && decor.markerline && d.markers?.length) {
+          for (const s of markerlineDecorSamples(shim, d, px)) {
+            const rot = d.rotateMarker === false ? 0 : s.angle * 180 / Math.PI;
+            push(f, { markers: d.markers.map(m => ({ ...m, rotationDeg: (m.rotationDeg || 0) + rot })) },
+              { type: "Point", coordinates: [s.x, s.y] });
+          }
+        } else if (d.kind === "hashline" && decor.hashline && d.tick) {
+          const half = px(d.tick.lengthPx || 4) / 2;
+          const base = d.rotate === false ? (d.tick.angleDeg || 90) * Math.PI / 180 : 0;
+          for (const s of markerlineDecorSamples(shim, d, px)) {
+            const a = base + s.angle + ((d.tick.angleDeg || 0) * Math.PI / 180) * (d.rotate === false ? 0 : 1);
+            push(f, { line: { color: d.tick.color, widthPx: d.tick.widthPx } },
+              { type: "LineString", coordinates: [
+                [s.x - Math.cos(a) * half, s.y - Math.sin(a) * half],
+                [s.x + Math.cos(a) * half, s.y + Math.sin(a) * half]] });
+          }
+        } else if (d.kind === "arrowline" && decor.arrow) {
+          for (const ring of arrowLinePolygonRings(lineCoords(), d, px)) {
+            push(f, { fillParts: [{ solid: d.color }] },
+              { type: "Polygon", coordinates: [[...ring, ring[0]]] });
+          }
+        } else if (d.kind === "linref" && decor.linref && /Line/.test(f.geometry.type)) {
+          for (const smp of linRefSamplesGeojson(f.geometry, d)) {
+            const nf = { type: "Feature", properties: {
+              ...(f.properties || {}), __kasc_ggen: 1, __kasc_lronly: 1,
+              __kasc_lrt: linRefFormatText(smp.dist, d.num),
+              __kasc_lrr: d.rotate ? -(smp.angle * 180 / Math.PI) : 0,
+            }, geometry: { type: "Point", coordinates: smp.coord } };
+            nf.__qmlSpec = d.showMarker && d.markers?.length ? { markers: d.markers } : { markers: [] };
+            if (useIds) { nf.properties.__kasc_gspec = ++nextId; specMap.set(nextId, nf.__qmlSpec); }
+            else if (embedProps) nf.properties.__kasc_gspec = nf.__qmlSpec;
+            extra.push(nf);
+          }
+        } else if (d.kind === "interpolated" && decor.interpolated && /LineString/.test(f.geometry.type)) {
+          for (const sf of splitInterpolatedGeojson(f.geometry, f.properties)) {
+            const iseg = Number(sf.properties?.__kasc_iseg) || 0;
+            const w = Math.max((d.w1 || 1) + ((d.w2 || d.w1 || 1) - (d.w1 || 1)) * iseg, 0.5);
+            const nf = { type: "Feature", properties: { ...(f.properties || {}), __kasc_ggen: 1 }, geometry: sf.geometry };
+            nf.__qmlSpec = { line: { color: interpolatedColorAt(d, iseg), widthPx: w } };
+            if (useIds) { nf.properties.__kasc_gspec = ++nextId; specMap.set(nextId, nf.__qmlSpec); }
+            else if (embedProps) nf.properties.__kasc_gspec = nf.__qmlSpec;
+            extra.push(nf);
+          }
+        }
+      }
+    }
+  }
+  if (extra.length) geojson.features = geojson.features.concat(extra);
+  // ---- pointDisplacement: 近接点をリング/グリッド配置へ再配置する。
+  // 地物ジオメトリを変位させる描画近似(QGIS の member 描画)。元座標は
+  // f.__qmlOrigGeom へ退避し再適用時に復元して冪等にする
+  if (displacement && compiled.cluster?.kind === "displacement") {
+    // まず過去の変位を復元
+    for (const f of geojson.features) {
+      if (f?.__qmlOrigGeom) { f.geometry = f.__qmlOrigGeom; delete f.__qmlOrigGeom; }
+    }
+    const pts = geojson.features.filter(f => /Point/.test(f?.geometry?.type || "") && !f?.__qmlSpec);
+    const cl = compiled.cluster;
+    // グルーピング距離: distancePx を度換算(代表緯度は地物重心)
+    let latSum = 0, latN = 0;
+    for (const f of pts) { const c = f.geometry.coordinates; if (c?.length >= 2) { latSum += c[1]; latN++; } }
+    const latRef = latN ? latSum / latN : 0;
+    const degPerPx = TRIM_PX_TO_M / Math.max(111319.9 * Math.cos(latRef * Math.PI / 180), 1e-6);
+    const thresh = Math.max((cl.distancePx || 40) * degPerPx, 1e-9);
+    const groups = [];
+    for (const f of pts) {
+      const c = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates?.[0];
+      if (!c) continue;
+      const g = groups.find(g => Math.hypot(c[0] - g.x, c[1] - g.y) < thresh);
+      if (g) { g.members.push(f); g.x = g.members.reduce((s, m) => s + (m.geometry.type === "Point" ? m.geometry.coordinates[0] : m.geometry.coordinates[0][0]), 0) / (g.members.length + 1); g.y = g.members.reduce((s, m) => s + (m.geometry.type === "Point" ? m.geometry.coordinates[1] : m.geometry.coordinates[0][1]), 0) / g.members.length; }
+      else groups.push({ x: c[0], y: c[1], members: [f] });
+    }
+    const place = String(cl.placement ?? "0");
+    for (const g of groups) {
+      if (g.members.length < 2) continue;
+      g.members.forEach((f, i) => {
+        const c = f.geometry.type === "Point" ? f.geometry.coordinates : f.geometry.coordinates[0];
+        f.__qmlOrigGeom = f.geometry;
+        let nx = c[0], ny = c[1];
+        if (place === "2") {
+          // Grid: 重心を中心とした正方格子
+          const cols = Math.ceil(Math.sqrt(g.members.length));
+          const r = Math.floor(i / cols), cq = i % cols;
+          nx = g.x + (cq - (cols - 1) / 2) * thresh;
+          ny = g.y + (r - (Math.ceil(g.members.length / cols) - 1) / 2) * thresh;
+        } else {
+          // Ring/ConcentricRings: 1周最大8個で外側リングへ拡張
+          const perRing = place === "1" && i >= 8 ? 16 : Math.max(g.members.length, 1);
+          const ring = place === "1" ? Math.floor(i / 8) : 0;
+          const idx = place === "1" ? i % (ring === 0 ? 8 : 16) : i;
+          const n = place === "1" ? (ring === 0 ? Math.min(g.members.length, 8) : 16) : g.members.length;
+          const a = (idx / Math.max(n, 1)) * 2 * Math.PI;
+          const r = thresh * (1 + ring);
+          nx = g.x + r * Math.cos(a);
+          ny = g.y + r * Math.sin(a);
+        }
+        f.geometry = f.geometry.type === "Point"
+          ? { type: "Point", coordinates: [nx, ny] }
+          : { type: "MultiPoint", coordinates: [[nx, ny]] };
+      });
+    }
+  }
+  return specMap;
+}
+
 export function linRefSamplesGeojson(geom, decor) {
   const parts = geom?.type === "LineString" ? [geom.coordinates]
     : geom?.type === "MultiLineString" ? geom.coordinates : [];
@@ -996,9 +1216,12 @@ export function applyInvertedMaskGeojson(geojson) {
   for (const f of geojson?.features || []) {
     const g = f?.geometry;
     if (!g) continue;
-    if (g.type === "Polygon") {
+    // 冪等: 既に世界矩形リングが外周なら再ラップしない(二重適用で
+    // マスクが穴扱いされて壊れるのを防ぐ)。シリアライズ経由で別オブジェクト
+    // 化しても検出できるよう参照比較ではなく値比較(isWorldMaskRing)で判定
+    if (g.type === "Polygon" && !isWorldMaskRing(g.coordinates?.[0])) {
       g.coordinates = [_KASC_WORLD_RING, ...g.coordinates];
-    } else if (g.type === "MultiPolygon") {
+    } else if (g.type === "MultiPolygon" && !isWorldMaskRing(g.coordinates?.[0]?.[0])) {
       g.coordinates = [[_KASC_WORLD_RING, ...g.coordinates.flat()]];
     }
   }
@@ -1019,7 +1242,7 @@ export function olQmlStyleFunction(compiled, OL) {
     // @map_scale 評価用に現在縮尺を供給(解像度 m/px ÷ 0.28mm = 縮尺分母)。
     // レンダリングごとに再評価されるため縮尺連動ルール/データ定義が動的に切り替わる
     if (Number.isFinite(resolution)) setEvalScale(resolution / 0.00028);
-    const spec = compiled.evaluate(props);
+    const spec = props.__kasc_gspec || compiled.evaluate(props);
     if (!spec) return null;
     const s = specToStyle(spec);
     const geom = feature.getGeometry();
@@ -1061,8 +1284,9 @@ export function olQmlStyleFunction(compiled, OL) {
     // 実線は引かない(C++ 各 SymbolLayer は templated 描画で線を引かない)。
     // 最上位レイヤがこれらなら本体 stroke を抑制。下位の実線レイヤは
     // spec.lines の extra で描かれるため単独時のみ消える=QGIS と同じ。
-    // filledline は OL 側が corridor 描画未対応のため fallback 線を残す
-    const decorOnly = /^(markerline|hashline|rasterline|arrowline)$/.test(spec.line?.decor?.kind || "");
+    // filledline は OL 側が corridor 描画未対応のため fallback 線を残す。
+    // rasterline も OL は画像繰り返し未対応のため fallback 線を残す
+    const decorOnly = /^(markerline|hashline|arrowline)$/.test(spec.line?.decor?.kind || "");
     if (s.stroke && !linrefOnly && !interpOnly && !decorOnly) {
       styleOpts.stroke = new Stroke({
         color: s.stroke, width: s.strokeWidth, lineDash: s.dash || undefined,
@@ -1360,6 +1584,11 @@ const MLB_MAP = { multiply: "multiply", screen: "screen", overlay: "overlay", li
 
 export function maplibreApplyQml(geojson, compiled) {
   if (compiled.inverted) applyInvertedMaskGeojson(geojson);
+  // GeometryGenerator 生成地物を展開(__qmlSpec は feature オブジェクトへ。
+  // centroid は __kasc_cicon 経路が既にあるため展開しない。
+  // arrow はポリゴン生成で対応、displacement は座標変位で対応)
+  qmlExpandGeneratedFeatures(geojson, compiled, { centroid: false, embedProps: false,
+    decor: { arrow: true }, displacement: true });
   // このQMLで使う画像レジストリ(map.addImage する canvas/dataURL → id)
   const icons = new Map();  // id → canvas (点シンボル・centroid)
   const fills = new Map();  // id → canvas (fill-pattern タイル)
@@ -1416,7 +1645,7 @@ export function maplibreApplyQml(geojson, compiled) {
   const lrPts = [];
 
   for (const feature of geojson.features || []) {
-    const spec = compiled.evaluate(feature.properties || {});
+    const spec = feature.__qmlSpec || compiled.evaluate(feature.properties || {});
     if (!spec) continue;
     const s = specToStyle(spec);
     // 線端トリム: line-trim-offset 相当が MapLibre に無いためジオメトリを
@@ -1595,7 +1824,7 @@ export function maplibreApplyQml(geojson, compiled) {
     // QGIS では刻み・マーカー・画像・標点のみを描き実線は引かない。
     // 最上位レイヤが装飾なら実線ストロークを抑え、下位に実線レイヤが
     // あればそちらを使う
-    if (spec.line?.decor && /^(markerline|hashline|rasterline|linref)$/.test(spec.line.decor.kind)) {
+    if (spec.line?.decor && /^(markerline|hashline|rasterline|linref|arrowline|interpolated)$/.test(spec.line.decor.kind)) {
       const lowerSolid = lineStack.slice(0, -1).filter(l => l && !l.decor).pop();
       if (lowerSolid) {
         feature.properties.__kasc_stroke = rgbaToCss(lowerSolid.color);

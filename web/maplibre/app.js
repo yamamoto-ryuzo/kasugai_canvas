@@ -35,6 +35,11 @@ import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
 import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
 import { installStoragePluginSupport } from "../shared/plugin-storage.js";
+import {
+  SEL_PROP, SEL_FILL_ALPHA, SEL_LINE_WIDTH, SEL_POINT_RADIUS, SEL_POINT_OUTLINE,
+  getSelectionColor, tagSelectionFeature, initSelectionUI,
+} from "../shared/selection.js";
+import { pointInFeature, isWorldMaskedGeom, logicalPickGeom } from "../shared/spatial-ops.js";
 
 await initI18n();
 applyI18n();
@@ -1916,14 +1921,71 @@ function collectQgisSelectedFeatures(sel) {
 function applyQgisSelection(sel) {
   try {
     if (!qgisSelReady) {
+      const c = getSelectionColor();
       map.addSource("qgis-sel", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "qgis-sel-fill", type: "fill", source: "qgis-sel", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": "#ff0", "fill-opacity": 0.28 } });
-      map.addLayer({ id: "qgis-sel-line", type: "line", source: "qgis-sel", layout: { "line-cap": "round" }, paint: { "line-color": "#ff0", "line-width": 3 } });
-      map.addLayer({ id: "qgis-sel-circle", type: "circle", source: "qgis-sel", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-color": "#ff0", "circle-radius": 7, "circle-stroke-color": "#111", "circle-stroke-width": 1.5 } });
+      map.addLayer({ id: "qgis-sel-fill", type: "fill", source: "qgis-sel", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": c, "fill-opacity": SEL_FILL_ALPHA } });
+      map.addLayer({ id: "qgis-sel-line", type: "line", source: "qgis-sel", layout: { "line-cap": "round" }, paint: { "line-color": c, "line-width": SEL_LINE_WIDTH } });
+      map.addLayer({ id: "qgis-sel-circle", type: "circle", source: "qgis-sel", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-color": c, "circle-radius": SEL_POINT_RADIUS, "circle-stroke-color": SEL_POINT_OUTLINE, "circle-stroke-width": 1.5 } });
       qgisSelReady = true;
     }
     map.getSource("qgis-sel")?.setData(collectQgisSelectedFeatures(sel));
   } catch (_) { /* ハイライト失敗は無視 */ }
+}
+
+// ---- 地物選択ハイライト(地図上のクリックで選択した地物を強調) ----
+// QGIS の「選択地物表示」に相当。local-sel ソースへ選択地物の GeoJSON を流し、
+// QGIS 側選択(qgis-sel)とは別ソースで保持して互いの更新で消し合わない。
+// managedLayers へは登録しない(属性ピックで選択自身を拾わないため)
+let localSelReady = false;
+const localSelPicked = []; // {feature: GeoJSON, baseCss} 設定変更時の再描画用
+function ensureLocalSel() {
+  if (localSelReady) return;
+  const c = getSelectionColor();
+  const col = ["coalesce", ["get", SEL_PROP], c];
+  map.addSource("local-sel", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  map.addLayer({ id: "local-sel-fill", type: "fill", source: "local-sel", filter: ["==", ["geometry-type"], "Polygon"], paint: { "fill-color": col, "fill-opacity": SEL_FILL_ALPHA } });
+  map.addLayer({ id: "local-sel-line", type: "line", source: "local-sel", layout: { "line-cap": "round" }, paint: { "line-color": col, "line-width": SEL_LINE_WIDTH } });
+  map.addLayer({ id: "local-sel-circle", type: "circle", source: "local-sel", filter: ["==", ["geometry-type"], "Point"], paint: { "circle-color": col, "circle-radius": SEL_POINT_RADIUS, "circle-stroke-color": SEL_POINT_OUTLINE, "circle-stroke-width": 1.5 } });
+  localSelReady = true;
+}
+// 指定色の既定値を coalesce のフォールバックへ追従させる
+function syncLocalSelPaint() {
+  if (!localSelReady) return;
+  const col = ["coalesce", ["get", SEL_PROP], getSelectionColor()];
+  try {
+    map.setPaintProperty("local-sel-fill", "fill-color", col);
+    map.setPaintProperty("local-sel-line", "line-color", col);
+    map.setPaintProperty("local-sel-circle", "circle-color", col);
+  } catch (_) { /* スタイル未ロードは無視 */ }
+}
+function renderLocalSelection() {
+  try {
+    ensureLocalSel();
+    map.getSource("local-sel")?.setData({
+      type: "FeatureCollection",
+      features: localSelPicked.map(p => tagSelectionFeature(p.feature, p.baseCss)),
+    });
+    syncLocalSelPaint();
+  } catch (_) { /* ハイライト失敗は無視 */ }
+}
+function updateLocalSelection(list) {
+  localSelPicked.length = 0;
+  localSelPicked.push(...(list || []));
+  renderLocalSelection();
+}
+// 反転モード用にヒットした地物の描画色を取り出す。描画色は fill/stroke/marker-color
+// プロパティのデータドリブン式が主のため地物属性を優先し、取れなければ
+// style layer のリテラル値を試す(式のまま返る場合は null → 指定色フォールバック)
+function mlBaseCss(f) {
+  try {
+    const p = f.properties || {};
+    const pc = p.fill || p.stroke || p["marker-color"] || p.color;
+    if (typeof pc === "string" && pc) return pc;
+    const type = f.layer?.type;
+    const prop = type === "fill" ? "fill-color" : type === "line" ? "line-color" : type === "circle" ? "circle-color" : null;
+    const v = prop && f.layer?.id ? map.getPaintProperty(f.layer.id, prop) : null;
+    return typeof v === "string" ? v : null;
+  } catch (_) { return null; }
 }
 
 // 他エンジンからの切替時、同一プロジェクトなら引き継がれたレイヤ状態
@@ -2660,19 +2722,69 @@ map.on("click", e => {
   // またがってヒットするため、ソース+属性で重複を除外する
   const seen = new Set();
   const records = [];
-  for (const f of features) {
-    const key = `${f.source}|${JSON.stringify(f.properties || {})}`;
-    if (seen.has(key)) continue;
+  const selList = [];
+  const pushFeature = (f, sid, entry) => {
+    const props = f.properties || {};
+    const fid = f.id ?? props.id ?? props.fid
+      ?? JSON.stringify(Object.fromEntries(Object.entries(props).filter(([k]) => !k.startsWith("__kasc_"))));
+    const key = `${sid}|${fid}`;
+    if (seen.has(key)) return;
     seen.add(key);
-    const entry = layerEntries.find(en => en.sid === f.source);
     records.push({
       title: entry ? (entry.item.title || entry.item.url) : null,
       entries: attrEntriesFromProps(f.properties),
       layerId: entry ? String(layerEntries.indexOf(entry)) : null,
-      feature: f,
+      // 反転マスク地物は論理ジオメトリへ戻す(flyTo 範囲が世界矩形にならないよう)
+      feature: entry?.item?._qml?.inverted && f.geometry
+        ? { ...f, geometry: logicalPickGeom(f.geometry, true) || f.geometry }
+        : f,
       flyable: !!f.geometry,
     });
+    // 選択ハイライト用にジオメトリ付きの GeoJSON を保持する
+    // (反転マスクの世界矩形は論理ジオメトリへ戻してから保持)
+    if (f.geometry) {
+      const gjson = typeof f.toJSON === "function" ? f.toJSON()
+        : { type: "Feature", geometry: f.geometry, properties: f.properties || {} };
+      if (gjson?.geometry) {
+        gjson.geometry = logicalPickGeom(gjson.geometry, !!entry?.item?._qml?.inverted) || gjson.geometry;
+        selList.push({ feature: gjson, baseCss: mlBaseCss(f) });
+      }
+    }
+  };
+  for (const f of features) {
+    const entry = layerEntries.find(en => en.sid === f.source);
+    // 反転マスク(世界矩形塗り)は元地物の外側領域でもヒットするため、
+    // 論理ジオメトリに含まれないヒットは落とす(タイル切り抜きで外環が
+    // 変形するためレイヤの inverted フラグで判定する)
+    if ((entry?.item?._qml?.inverted || isWorldMaskedGeom(f.geometry))
+        && !pointInFeature(e.lngLat.lng, e.lngLat.lat, f, !!entry?.item?._qml?.inverted)) continue;
+    pushFeature(f, f.source, entry);
   }
+  // 塗り無しポリゴン内部・反転マスクの穴など、レンダリング hit-test に乗らない
+  // クリックをソース地物の包含判定で拾う
+  const zNow = map.getZoom();
+  for (const entry of layerEntries) {
+    if (!entry.sid || entry.item?.visible === false) continue;
+    // 縮尺範囲外で非描画のレイヤは拾わない(全サブレイヤが範囲外なら除外)
+    const lids = entry.lids || [];
+    if (lids.length && !lids.some(lid => {
+      const l = map.getLayer(lid);
+      return l && zNow >= (l.minzoom ?? 0) && zNow < (l.maxzoom ?? 24);
+    })) continue;
+    const src = map.getSource(entry.sid);
+    // maplibre の GeoJSONSource._data は "geojson" 文字列なので serialize().data
+    // (FC オブジェクト)を優先し、オブジェクト形のみ使う
+    const sd = src?.serialize?.().data;
+    const data = (sd && typeof sd === "object" ? sd : null)
+      ?? (src?._data && typeof src._data === "object" ? src._data : null);
+    const feats = data?.features || [];
+    const masked = !!entry.item?._qml?.inverted;
+    for (const f of feats) {
+      if (pointInFeature(e.lngLat.lng, e.lngLat.lat, f, masked)) pushFeature(f, entry.sid, entry);
+    }
+  }
+  // ピックした地物を選択色/反転色でハイライトする(空白クリックでは解除)
+  updateLocalSelection(selList);
   // QGIS ライブ連携: 最前面の地物を QGIS 側の選択へ逆通知(#62)
   if (records[0]?.title) {
     try {
@@ -3009,6 +3121,15 @@ map.on("sourcedata", e => {
     setC("#display-north", false);
     setC("#display-scalebar", true);
     setC("#display-coords", true);
+    setV("#selection-mode", "color", "change");
+    setV("#selection-color", "#ffff00", "input");
+  });
+
+  // 地物選択ハイライトの方式/色(shared/selection.js。全エンジン共通設定)
+  initSelectionUI({
+    modeSel: document.querySelector("#selection-mode"),
+    colorInput: document.querySelector("#selection-color"),
+    onChange: () => renderLocalSelection(),
   });
 
   // 太陽日時コントロール → 画面中心の太陽位置を計算して map.setLight（hillshade/extrusion に反映）

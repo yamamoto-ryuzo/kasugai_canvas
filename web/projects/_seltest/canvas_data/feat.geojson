@@ -1,0 +1,5 @@
+{"type":"FeatureCollection","features":[
+ {"type":"Feature","id":1,"properties":{"id":1,"name":"poly"},"geometry":{"type":"Polygon","coordinates":[[[139.72,35.66],[139.76,35.66],[139.76,35.70],[139.72,35.70],[139.72,35.66]]]}},
+ {"type":"Feature","id":2,"properties":{"id":2,"name":"line"},"geometry":{"type":"LineString","coordinates":[[139.72,35.67],[139.76,35.69]]}},
+ {"type":"Feature","id":3,"properties":{"id":3,"name":"pt"},"geometry":{"type":"Point","coordinates":[139.74,35.68]}}
+]}

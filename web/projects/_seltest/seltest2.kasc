@@ -1,0 +1,5 @@
+cam:テスト|35.68|139.74|h=30000|p=-90|d=0
+geojson:テスト地物|canvas_data/feat.geojson
+geojson:塗り無し|canvas_data/hollow.geojson|style=canvas_data/hollow.qml
+geojson:反転|canvas_data/inverted.geojson|style=canvas_data/inverted.qml
+base: ベースマップなし | none

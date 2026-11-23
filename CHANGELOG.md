@@ -55,6 +55,10 @@
   - web: 裸レイヤー名解決（`vector-load.js`/`kasc_loader.js`/Cesium `resolveOgrSqlFromRef`）は `canvas_data/` 候補を優先し `DATA/` もフォールバック。SQL リテラル・`.kasc` 参照分類（`absolutizeKascRefs`・`resolveProjectSql`）は `canvas_data/` と旧 `DATA/` の両名を受理。`saveDataFile`/`saveToDataDir`/`listDataFiles` は実フォルダ名を返し、`fly_geojson:` 行・ファイル追加の参照生成はそれを使う
   - `web/projects/*/DATA` フィクスチャ・同梱 .kasc 参照・`test-results/qml-verify` を `canvas_data/` へリネーム。i18n(8言語)・各エンジン index.html の UI 文言・docs/・AGENTS.md を同期
   - geo_webview 側は出力データフォルダを常時 `canvas_data/` に統一（SPEC.md・docs/・i18n・スキル・verify 資産も同期済み）
+- **地物選択ハイライト（クリックした地物の強調表示）を全6エンジンに実装** — これまで Canvas 側クリックは属性パネル表示のみで地物の可視選択が無かった（QGIS→Canvas 方向の黄色オーバーレイのみ存在）。`web/shared/selection.js` を新設し「表示>一般」タブへ選択モード（指定色/反転）・選択色・線幅・塗り不透明度の設定 UI を追加。地図上クリックでピックした地物を選択オーバーレイで強調（空白クリックで解除・再クリックで置換）。反転モードは地物の元描画色を反転した色で表示（取得不能時は指定色フォールバック）。QGIS→Canvas の既存選択オーバーレイも同じ設定色へ統一。エンジン別実装: Cesium は `kasugai-selection` CustomDataSource + 3D Tiles 地物の `feature.color` 上書き・MapLibre は `local-sel` ソース+fill/line/circle レイヤ・OpenLayers は zIndex 941 VectorLayer・Leaflet/GSI Maps は L.geoJSON オーバーレイ・Navara は色別 source+layer
+- **OpenLayers でプロジェクト再描画時に固定オーバーレイが消える問題を修正** — `renderProject` の `map.getLayers().clear()` が計測ツール（zIndex 900/950）・QGIS選択（940）・ローカル選択（941）レイヤも除去し、再登録する経路が無かった。`fixedOverlayLayers` で保持して clear 後に再登録
+- **Navara で地物クリック直後に選択が即解除される問題を修正** — `view` のイベント発火順が `featureClick`→`click`（コードが想定していた逆順）のため、click ハンドラの「空白クリックで解除」が同じジェスチャの featureClick 直後の選択を消していた。featureClick タイムスタンプで同ジェスチャを判定し抑止
+- **塗りつぶし無しポリゴン内部・反転マスクの穴がクリックで拾えない問題を修正（全エンジン）** — (1) `no_brush` 等で塗りが無いポリゴンはレンダリング hit-test に内部が乗らず、内部クリックが空白扱いになっていた。(2) `invertedPolygonRenderer` の生成マスク（世界矩形−地物穴）は地物の外側領域でもヒットし、選択すると世界サイズのハイライトになっていた。`web/shared/spatial-ops.js` に `pointInFeature`/`logicalPickGeom`/`isWorldMaskedGeom` を追加し、ソース地物の論理ジオメトリ（マスクの世界矩形外環を剥がした元形状）で包含判定フォールバックを実装。マスク領域ヒットは論理形状外として除去、穴（元地物位置）・塗り無し内部は包含判定で拾う。選択ハイライトにも論理ジオメトリを使う（Cesium は entity `_qmlInvHier` 復元・MapLibre はタイル切り抜きで外環が変形するため `item._qml.inverted` フラグで判定）。Leaflet/GSI Maps はマスク地物の featureClick を包含フォールバックへ委譲、Navara は `_geojson`（マスク非適用コピー）で判定
 
 ## [7.1.0] - 2026-11-15
 

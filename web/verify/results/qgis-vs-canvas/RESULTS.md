@@ -255,3 +255,199 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
   検証用 DD 式はフィールド参照で書くこと（今回 `val` フィールドを追加して対処）
 - 画像: `qgis-*-qmltest_SimpleLine[DD].png` / `canvas-*-qmltest_SimpleLine[DD].png`
   （NOBASE=1・QGIS 実解像度 1514×913・範囲 139.68,35.68,140.00,35.90）
+
+## LIVE 検証: 実稼働 QGIS ↔ live Canvas 全エンジン（2026-XX-XX・ProjectFile.qgs）
+
+- 経路: 起動中 QGIS 4.2.3（PID 7652・geo_webview :8089）→ `GET /live/kasc` →
+  dev Canvas :8520 `?kasc=<live URL>`。**ファイルエクスポートを介さない完全 live 経路**
+- フィクスチャ: `web/projects/_qml_verify/` の geojson+qml ペア 31層を
+  `__qmltest_verify` グループとして起動中プロジェクトへ一時追加＋
+  QGIS API 生成の追加9層（`__qmltest_extra`: rule/null/singleDD/ellipse/font/
+  hashline/symlevel/scalevis/label）。検証後に両グループ除去・プロジェクト非保存
+- QGIS 側基準画像: `QgsMapRendererSequentialJob` による同期オフスクリーンレンダ
+  （非同期 `setItemVisibilityChecked` は再描画混在で不可）。白背景・範囲・
+  ビューポート（1514×912）を QGIS 実表示と一致させたペア比較
+- Canvas 側: NOBASE=1、solo は `item.visible`+ds/imagery 直接切替
+  （`setLayerVisible` は rebuild 誘発で不使用）・`/api/command` ブロック
+- 結果サマリ: **6エンジン × 31層、全層 solo 描画・PAGEERR 0**
+  （navara のみ googlefonts へのアクセス CORS 警告2件・描画への影響なし）
+
+### ペア画像・差分
+
+- 画像: `live-{qgis,canvas}-<engine>-<layer>.png`（cesium 41組・他5エンジン各31組）
+- コンタクトシート: `live-sheet-<engine>-{0..2}.png`
+- 機械差分: `_diff-<engine>.txt`（白率ベース。UIベースライン ~3.3%/cesium 他）
+  machine-OK: cesium 11/41, maplibre 5/31, openlayers 11/31, leaflet 12/31,
+  navara 2/31, gsimaps 13/31 — 機械値は粗いため最終判定は目視
+
+### 実 finding（今回修正）
+
+- **`invertedPolygonRenderer` が Cesium で非描画 → 修正済**
+  (`web/cesium/qml-render.js`)
+  1. マスクポリゴンを `height=0` で通常 Primitive 化していたが、
+     `scene.globe.depthTestAgainstTerrain = true`（app.js:92 常時ON）下で
+     楕円体表面と同面になり深度競合で全体が非表示だった
+     → `height` をカメラ高度比例の `CallbackProperty`（camH×0.01, 下限1m）へ
+  2. 地物ごとに「外枠−自地物の穴」を作っていたため外枠が重なり半透明色が
+     積算されていた（QGIS はレイヤ全体に1枚の補集合マスク）
+     → ループ中はリング集約のみ行い、代表1エンティティへ
+     「外枠−全地物リングの穴」の1枚マスクをループ後に設定
+     （再適用時は `_qmlInvHier` で元ジオメトリ復元）
+  - 修正後: QGIS と同等の「外側塗り＋地物だけ抜き」描画を確認
+    （`_chk_inverted4.png`）
+
+### エンジン別の不一致・近似（目視判定）
+
+- **ren_25d**: QGIS 橙色系 vs Canvas 青系グラデの押出し表現（全エンジン近似・色不一致）
+- **ArrowLine**: cesium/openlayers は太め弧状近似、maplibre/leaflet は単色線近似
+  （宣言済み警告あり）/ gsimaps・navara は細い線
+- **GeomGen_fill**: buffer 範囲が QGIS より小さく出る傾向（cesium/OL）。
+  maplibre/leaflet は塗り抜けてアウトラインのみ描画
+- **GradientFill**: 2D 系エンジンはグラデが細帯タイリング風に出る
+  （QGIS は面内連続グラデ）。cesium は近い見た目
+- **CentroidFill**: maplibre はポリゴンアウトラインのみ、leaflet は未描画、
+  cesium/OL は点描画
+- **ren_inverted (2D)**: 2D 系は `applyInvertedMaskGeojson` で正しく
+  1枚マスク（maplibre/OL 確認）。色味はやや濃い差あり
+- **ren_heatmap**: 非対応エンジンは点シンボル近似（宣言済み）。色味差あり
+- **ren_merged**: maplibre でアウトライン矩形が残る（QGIS は統合表示）
+- **LinearReferencing**: 距離標ラベルが 2D 系では疎な点表示のみ
+- **MarkerLine**: maplibre/leaflet はマーカー間隔が疎・色付き線になる差
+- **RasterLine**: fallback 色が leaflet/cesium で黒（QGIS 赤）—
+  画像未ロード時の代替色差
+- **navara**: ライン系は描画されるがポリゴン塗り系が描画されない
+  （FilledLine は表示、GradientFill は空白）。白背景化も非対応
+- **gsimaps**: ライン系は描画。複数の塗り系（GeomGen_fill/GradientFill/
+  PointPatternFill/ShapeburstFill）が未描画
+- **画像フォールバック系**（AnimatedMarker/RasterMarker/RasterFill/SVGFill/
+  RasterLine）: フィクスチャの参照画像（Temp パス等）が存在しないため
+  円/単色フォールバック — 意図通りの警告・挙動
+
+### QML 警告カタログ（宣言済み近似・障害なし）
+
+- ArrowLine/InterpolatedLine/LinearReferencing/Lineburst/MarkerLine/HashLine
+  のエンジン別単色近似
+- VectorField 矢印画像近似・MaskMarker 非描画（QGIS 準拠）
+- embeddedSymbol 地物別上書き未再現・heatmapRenderer 点近似
+- mergedFeatureRenderer 個別描画・pointDisplacement 距離近似
+- GeometryGenerator 常用関数近似・25dRenderer 固定高さ近似
+- ラベル obstacle 画面投影近似・縦書き水平代替・offsetType 点近似
+- bufferNoFill 非対応エンジン警告・EllipseMarker symbol_name=rectangle 近似
+
+### メモ
+
+- `/live/style` 発行 QML は QGIS 4.2.3 自身のシリアライズ
+  （QGIS4 新形式 prop 名もそのまま到達する経路を確認）
+- `/live/file/` 配信 SVG/画像はブラウザ直接 fetch/Image で取得可
+  （CORS 応答正常）。style-audit の `compileQmlStyle` 直接呼出しは
+  画像未ロードなためフォールバック警告が出るが、実描画経路
+  `loadQmlStyle`（プリロード付き）では DM_1 で警告0を確認
+- `qmltest2_*`（追加9層）は rule/null/DD/ellipse/font/hashline/symlevel/
+  scalevis/label を網羅し全エンジンで概ね整合（scalevis/null は正しく非表示）
+- QGIS プロジェクトは非保存（dirty のみ残存＝復帰済状態）
+
+## エンジン能力分類と未対応処理の整備（2025-XX-XX 追検証）
+
+「未対応」項目を各エンジンの実 API/消費経路で照合し、**エンジン非対応
+(ネイティブ API 不存在)** と **アダプタ実装ギャップ(エンジンは可能だが
+配線不足)** を分類した。エンジン非対応は `QML_ENGINE_CAPS` テーブルで
+能力宣言し、`compileQmlStyle(engine)` に対して「このエンジンでは未対応
+です」形式の警告を出す。実装ギャップは共有展開ヘルパーで解消した。
+
+### エンジン能力マトリクス（実コード調査結果）
+
+| 機能 | cesium | maplibre | openlayers | leaflet | navara | gsimaps |
+|---|---|---|---|---|---|---|
+| 25d 押出し | ○ entity | ○ fill-extrusion | ✗ エンジン非対応 | ✗ 同 | ○ extrudedHeight | ✗ 同 |
+| heatmap | ○ heatmap.js 矩形 | ○ heatmap 層 | ○ HeatmapLayer | ○ leaflet.heat | ✗ 点近似 | ✗ 点近似 |
+| pointCluster | ○ EntityCluster | ○ cluster | ○ ClusterSource | ○ markercluster | ✗ | ✗ |
+| pointDisplacement | ○ リング移植 | ○ 座標変位(今回実装) | ○ 同 | ○ 同 | ○ 同 | ○ 同 |
+| mergedFeature | ✗ 全エンジン(宣言済み近似・地物跨ぎ dissolve なし) | | | | | |
+| invertedPolygon | ○ 1枚マスク | ○ | ○ geometry差替 | ○ | ○ | ○ |
+| GeometryGenerator | ○ | ○ | ○ | ○ | ○ | ○ |
+| CentroidFill | ○ | ○ __kasc_cicon | ○ interiorPoint | ○ | ○ | ○ |
+| ArrowLine | ○ 矢印ポリゴン | ○ 生成ポリゴン | ○ arrow rings | ○ 生成ポリゴン | ○ 生成ポリゴン | ○ 生成ポリゴン |
+| MarkerLine/HashLine | ○ | ○ icon-image | ○ | ○ 生成点/刻み(今回実装) | ○ 同 | ○ 同 |
+| RasterLine | ✗ | ○ line-pattern | ✗ | ✗ | ✗ | ✗ |
+| LinearReferencing | ○ | ○ | ○ | ○ | ○ | ○ 生成点+tooltip |
+| InterpolatedLine | ○ | ○ line-gradient | ○ | ○ 分割 | ○ 分割 | ○ 生成分割(今回実装) |
+| パターン塗り(tile) | ○ ImageMaterial | ○ fill-pattern | ○ CanvasPattern | ○ SVG pattern | ✗ 単色 | ✗ 単色 |
+
+✗ のうち **エンジン非対応**（ネイティブ能力なし）として警告処理したもの:
+- 25dRenderer 押出し: openlayers / leaflet / gsimaps
+- heatmapRenderer: navara / gsimaps（cesium は heatmap.js 画像矩形で実装済・警告解除）
+- pointCluster: navara / gsimaps
+- パターン塗り: navara / gsimaps（単色代替）
+- RasterLine: cesium / openlayers / leaflet / navara / gsimaps
+  （基線を fallback として残す。OL の decorOnly から rasterline を
+  除外して不可視を解消）
+
+### 追加実装（生成地物展開の拡張・第2弾）
+
+`qmlExpandGeneratedFeatures` に `decor`/`displacement` オプションを追加し、
+スクリーン px 基準装飾を TRIM_PX_TO_M(2.8m/px=縮尺1:1万換算)の固定サイズ
+生成地物として展開（linref/trim と同規約の近似。ズームには追従しない
+宣言済み近似）。
+
+- **MarkerLine**: サンプル点へ回転付きマーカー点生成 → leaflet/navara/gsimaps
+- **HashLine**: サンプル点へ tick 短線生成 → 同上
+- **ArrowLine**: `arrowLinePolygonRings`（C++ straightArrow/curved 移植）で
+  矢印ポリゴン生成 → maplibre/leaflet/navara/gsimaps
+- **LinearReferencing**: 標点生成+`__kasc_lrt` ラベル → gsimaps
+  （tooltip で里程表示。他エンジンは既存ネイティブ経路）
+- **InterpolatedLine**: `splitInterpolatedGeojson` 24分割+補間色・幅 → gsimaps
+- **pointDisplacement**: 近接点を重心基準リング/同心円/グリッドへ座標変位
+  （`__qmlOrigGeom` 退避で再適用時も冪等）→ maplibre/OL/leaflet/navara/gsimaps
+- **基線抑制**: 装飾レイヤ(MarkerLine/HashLine/ArrowLine/RasterLine/linref/
+  interpolated/lineburst)は QGIS 同様実線を引かないため、
+  leaflet/navara/gsimaps の spec 解決で「下位の実線レイヤがあればその
+  スタイル、無ければストローク無し」に統一。maplibre の装飾抑制正規表現に
+  arrowline/interpolated を追加
+- **警告整理**: cesium heatmap を実装済みとみなし caps 修正。
+  「ラインシンボル X は一部エンジンで単色近似です」汎用警告は、
+  エンジンが該当装飾を実描画できる場合のみ除去（capabilities ゲート）
+
+実測値（?project=_qml_verify・`_genfeat_probe.mjs`）:
+- leaflet: MarkerLine +15 生成点 / ArrowLine +5 生成ポリゴン
+- navara: 同上（useIds 経路）/ maplibre: ArrowLine +5 生成ポリゴン
+- 全6エンジン page errors = 0
+
+### 実装ギャップとして修正したもの（エンジン能力は存在）
+
+- **GeometryGenerator(spec.gg) の 2D 全エンジン未消費**:
+  共有 `qmlExpandGeneratedFeatures()`(qml-2d.js) を新設し、
+  `evalGeomExpr` で生成ジオメトリを生成地物として展開。
+  合成 spec を `feature.__qmlSpec` / `properties.__kasc_gspec`
+  (navara は tiled geojson のため id 参照 `item._qmlGenSpecs`) に埋込み、
+  各エンジンの per-feature spec 解決で優先参照させる。
+  - maplibre: maplibreApplyQml 冒頭で展開→既存 `__kasc_*` 焼込み経路
+  - openlayers: compiled 確定後に生成地物を vectorSource.addFeatures
+  - leaflet/navara/gsimaps: 既存の地物展開ブロックへ追加
+  - 実測: GeomGen_fill=+4 ポリゴン / GeomGen_marker=+6 点 /
+    CentroidFill=+4 点（leaflet/navara/gsimaps/maplibre/OL で確認）
+- **CentroidFill の leaflet/navara/gsimaps 未描画**:
+  同ヘルパーで interior 点（外周重心→内部走査）生成地物に展開
+  （maplibre/OL/cesium は既存ネイティブ経路を維持）
+- **invertedPolygon の gsimaps 未適用**:
+  `applyInvertedMaskGeojson` を描画コピーへ適用（元 _geojson 不変）
+- **`evalGeomExpr` centroid 系の座標バグ**:
+  `{type:"Point", coordinates:{lng,lat}}` を返していた
+  （geomCentroid はオブジェクト返却）→ `[c.lng, c.lat]` に修正。
+  cesium 側でも centroid() 式の GG が無描画だった潜在バグ
+
+### エンジン別警告の発火確認（実パス loadQmlStyle）
+
+- navara heatmap: `heatmapRenderer はこのエンジンでは未対応です(点シンボルで近似)`
+  （汎用文は自動除去）
+- leaflet/OL/gsimaps 25d: `25dRenderer の押出しはこのエンジンでは未対応です(平面に描画)`
+- page errors: 全エンジン 0
+
+### 残存する宣言済み近似（エンジン非対応）
+
+- mergedFeatureRenderer の地物統合（全 Web エンジンで dissolve 不可）
+- AnimatedMarker のアニメーション（静止先頭フレーム）
+- RasterLine の画像繰り返し（maplibre 以外。基線 fallback で可視を維持）
+- GradientFill 等の連続グラデ（タイルタイリング近似）
+- 生成装飾の固定サイズ性: MarkerLine/HashLine/ArrowLine の生成地物は
+  縮尺1:1万換算の固定サイズ近似で、ズームに追従しない
+  （QGIS のスクリーン px 指定を地図単位へ換算したもの）

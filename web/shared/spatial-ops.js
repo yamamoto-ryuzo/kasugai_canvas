@@ -131,6 +131,46 @@ export function pointInPolygonGeom(lng, lat, geom) {
   return false;
 }
 
+// invertedPolygonRenderer のマスク外環(qml-2d.js _KASC_WORLD_RING と同矩形。
+// 循環 import を避けるため値はこちらに置く)
+export const KASC_WORLD_MASK_RING = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+export const isWorldMaskRing = r => r?.length === KASC_WORLD_MASK_RING.length
+  && r.every((p, i) => Math.abs(p[0] - KASC_WORLD_MASK_RING[i][0]) < 1e-6
+    && Math.abs(p[1] - KASC_WORLD_MASK_RING[i][1]) < 1e-6);
+
+// 反転マスク(世界矩形外環)のジオメトリか
+export function isWorldMaskedGeom(geom) {
+  return (geom?.type === "Polygon" && isWorldMaskRing(geom.coordinates?.[0]))
+    || (geom?.type === "MultiPolygon" && isWorldMaskRing(geom.coordinates?.[0]?.[0]));
+}
+
+// ピック判定用の論理ジオメトリ: 反転マスク(世界矩形外環)を剥がして元の
+// 地物形状へ戻す。非マスクは元参照をそのまま返す。
+// MultiPolygon は平坦化済みのため穴情報は失われ、全リングを独立ポリゴンの
+// 外環として近似復元する(内部の穴への誤ヒットは稀なので許容)。
+// masked=true はレイヤの反転スタイルが確定しているケース(レンダリング経路で
+// 外環がタイル切り抜き等で変形し座標一致検出できないとき)に先頭リングを
+// 無条件に剥がす
+export function logicalPickGeom(geom, masked) {
+  if (geom?.type === "Polygon" && (masked === true || isWorldMaskRing(geom.coordinates?.[0]))) {
+    const rest = geom.coordinates.slice(1);
+    return rest.length ? { type: "Polygon", coordinates: rest } : null;
+  }
+  if (geom?.type === "MultiPolygon" && (masked === true || isWorldMaskRing(geom.coordinates?.[0]?.[0]))) {
+    const rings = geom.coordinates[0].slice(1);
+    return rings.length ? { type: "MultiPolygon", coordinates: rings.map(r => [r]) } : null;
+  }
+  return geom;
+}
+
+// 地物の論理ジオメトリが点を含むか。塗り無しポリゴン内部・反転マスクの
+// 穴(元地物位置)でのクリックを拾うフォールバック判定に使う。
+// masked は logicalPickGeom へ転送される
+export function pointInFeature(lng, lat, feature, masked) {
+  const g = feature?.geometry ?? feature;
+  return pointInPolygonGeom(lng, lat, logicalPickGeom(g, masked));
+}
+
 // 線分交差（端点接触も交差とみなす）
 function segsIntersect(a, b, c, d) {
   const cross = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);

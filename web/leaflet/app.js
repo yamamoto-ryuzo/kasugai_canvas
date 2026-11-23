@@ -30,13 +30,18 @@ import { initUiConfig } from "../shared/ui-config.js";
 import { mvtStyle, loadMvtDecoder, loadPmtiles } from "../shared/mvt.js";
 import { groundDeckTileset } from "../shared/deck-ground.js";
 import { buildDeckDrapeLayers, invalidateDeckTerrainCovers, isGoogle3dTilesUrl, withGoogleTileKey, ensureGoogleTileKeyFetch, parseDeckTile3dOpts, ensureI3sLoader, deckWantsI3s } from "../shared/deck-drape.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, installExprFeatureResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, compiledScaleToResRange, resToZoom, installLayerVisibilityResolver, installExprFeatureResolver, qmlLabelElement, setMapScaleGetter, trimGeoJsonLine, TRIM_PX_TO_M, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle, qmlExpandGeneratedFeatures } from "../shared/qml-2d.js";
 import { markerLayersToCanvas, fillPartsToTile, rgbaToCss, linRefFormatText } from "../shared/qml-style.js";
 import { applyInvertedMaskGeojson } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
 import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
 import { installStoragePluginSupport } from "../shared/plugin-storage.js";
+import {
+  SEL_FILL_ALPHA, SEL_LINE_WIDTH, SEL_POINT_RADIUS, SEL_POINT_OUTLINE,
+  getSelectionColor, tagSelectionFeature, selColorOf, initSelectionUI,
+} from "../shared/selection.js";
+import { pointInFeature, logicalPickGeom, isWorldMaskedGeom } from "../shared/spatial-ops.js";
 
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
 // ⏷フィルタ編集の対象（where= またはクエリ全文の再読み込みが効く形式）
@@ -449,8 +454,18 @@ function makeVectorStyleFn(item) {
     if (item._qml) {
       const names = item._qml.namesFor?.(props);
       if (names?.length && item._legendHidden?.has(names[0])) return HIDDEN_STYLE;
-      const spec = item._qml.evaluate(props);
+      const spec = feature.__qmlSpec || item._qml.evaluate(props);
       if (spec) {
+        // 装飾レイヤ(MarkerLine/HashLine/ArrowLine/RasterLine/linref/
+        // interpolated/lineburst)は QGIS では装飾のみを描き実線は引かない。
+        // 生成地物/専用経路が装飾を担うため、最上位レイヤが装飾なら基線の
+        // stroke を抑え、下位の実線レイヤがあればそのスタイルを使う
+        let effSpec = spec;
+        const _dk = spec.line?.decor?.kind;
+        if (_dk && !feature.__qmlSpec && /^(markerline|hashline|arrowline|rasterline|linref|interpolated|lineburst)$/.test(_dk)) {
+          const lower = (spec.lines || []).filter(l => l && !l.decor).pop();
+          effSpec = { ...spec, line: lower || null };
+        }
         // InterpolatedLine セグメント地物: 弧長比率で色・幅を補間
         const iseg = Number(props.__kasc_iseg);
         const idec = spec.line?.decor;
@@ -461,7 +476,7 @@ function makeVectorStyleFn(item) {
             opacity: o, interactive: true, ...pathExtra,
           };
         }
-        const s = specToStyle(spec);
+        const s = specToStyle(effSpec);
         if (s) {
           if (isPoint) {
             return { radius: 5, color: s.stroke || "#ffffff", weight: 1,
@@ -469,8 +484,8 @@ function makeVectorStyleFn(item) {
               interactive: true, ...pathExtra };
           }
           const isPoly = /Polygon/.test(gt);
-          // 里程標は基線を描かない(標点ラベルのみ。QGIS 準拠)
-          if (spec.line?.decor?.kind === "linref" && !spec.outline) {
+          // 里程標・装飾のみの線は基線を描かない(QGIS 準拠)
+          if (!effSpec.line && !spec.outline && !isPoly) {
             return { opacity: 0, weight: 0, fill: false, interactive: true, ...pathExtra };
           }
           return {
@@ -906,6 +921,11 @@ async function buildMvtGridLayer(item, baseUrl, pane) {
     const src = e.propagatedFrom || e.layer;
     const props = src?.properties || src?.feature?.properties;
     if (!props) return;
+    // 選択ハイライト(ベクタタイル地物は Path から GeoJSON を再構成)
+    {
+      const gjson = src?.toGeoJSON?.();
+      updateLocalSelection(gjson?.geometry ? [{ feature: gjson, baseCss: leafletLayerBaseCss(src) }] : []);
+    }
     try {
       const fid = props.id;
       liveNotifySelection({
@@ -1044,7 +1064,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
     const iconUrlCache = new WeakMap();
     const pointIcon = f => {
       try {
-        const spec = item._qml?.evaluate?.(f?.properties || {});
+        const spec = f?.__qmlSpec || item._qml?.evaluate?.(f?.properties || {});
         if (!spec?.markers?.length) return null;
         const cv = markerLayersToCanvas(spec.markers);
         let url = iconUrlCache.get(cv);
@@ -1270,6 +1290,15 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
       }
       if (changed) geojson.features = expanded;
     }
+    // GeometryGenerator/CentroidFill/線装飾生成地物の展開(Leaflet は
+    // ネイティブ経路が無いため生成地物として追加)+ displacement 座標変位
+    if (item._qml && geojson?.features?.length) {
+      try {
+        qmlExpandGeneratedFeatures(geojson, item._qml, {
+          decor: { markerline: true, hashline: true, arrow: true },
+          displacement: true });
+      } catch (_) {}
+    }
     // symbollevels=1 の近似: pass 順に地物を並べ替え(SVG レンダラは追加順が z 順)
     if (item._qml?.symbolLevels && geojson?.features?.length) {
       try {
@@ -1307,7 +1336,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         // (基準縮尺1:1万換算の近似。qml-2d.js TRIM_PX_TO_M)
         if (item._qml && /LineString/.test(f?.geometry?.type || "") && l.setLatLngs) {
           try {
-            const _sp = item._qml.evaluate(f.properties || {});
+            const _sp = f.__qmlSpec || item._qml.evaluate(f.properties || {});
             const _tr = _sp?.line ?? _sp?.outline;
             if (_tr && (_tr.trimStartPx || _tr.trimEndPx)) {
               const _g = JSON.parse(JSON.stringify(f.geometry));
@@ -1322,6 +1351,15 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         if (item._qml?.labelFor) { l._kascLabel = { item, feature: f }; syncLeafletLabel(l); }
         l.on("click", e => {
           if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
+          // 反転レンダラ: マスク領域(元地物の外側)のクリックは論理地物ヒット
+          // ではない。マップ側の包含判定フォールバックへ委ねる(穴=元地物は
+          // 描画されないのでこのハンドラはマスク領域のみに発火する)
+          if (isWorldMaskedGeom(f?.geometry) && !pointInFeature(e.latlng?.lng, e.latlng?.lat, f, true)) {
+            leafletEmptyPick(e);
+            return;
+          }
+          // 選択ハイライト(クリックした地物を選択色/反転色で強調)
+          updateLocalSelection([{ feature: { ...f, geometry: logicalPickGeom(f.geometry, !!item._qml?.inverted) || f.geometry }, baseCss: leafletLayerBaseCss(l) }]);
           // QGIS ライブ連携: クリック地物を QGIS 側の選択へ逆通知(#62)
           try {
             const fid = f.id ?? f.properties?.id;
@@ -1358,7 +1396,7 @@ async function addKascLayer(item, baseUrl, preloaded, paneName) {
         try {
           const f = sub.feature;
           if (!f || !/Polygon/.test(f.geometry?.type || "")) return;
-          const spec = item._qml.evaluate(f.properties || {});
+          const spec = f.__qmlSpec || item._qml.evaluate(f.properties || {});
           if (!spec?.fillParts?.length) return;
           const { tile } = fillPartsToTile(spec.fillParts);
           if (!tile) return;
@@ -2700,12 +2738,53 @@ map.on("zoomend", () => {
 // ベクター地物(Leaflet interactive path)由来のクリックは地物側ハンドラで
 // 属性タブを更新済みのため、二重表示・クリアをしない。
 // (map の click には propagatedFrom が乗らないため DOM ターゲットで判定)
-map.on("click", e => {
-  // 計測・断面・見通しツールのモードがアクティブなら頂点拾いに使う
-  if (geoTools.handleClick(e.latlng)) return;
-  const target = e.originalEvent?.target;
-  if (target && target.closest && target.closest(".leaflet-interactive")) return;
+// 塗り無しポリゴン内部・反転マスクの穴など、Path の hit-test に乗らない
+// クリックをソース地物(_geojson)の包含判定で拾う
+function leafletPickPolygons(latlng) {
+  const hits = [];
+  const seen = new Set();
+  for (const en of layerEntries) {
+    // 表示状態+縮尺範囲(zoomRange)の実効可視で判定(非描画レイヤは拾わない)
+    if (!effectiveVisible(en)) continue;
+    for (const f of en.item?._geojson?.features || []) {
+      if (!pointInFeature(latlng.lng, latlng.lat, f)) continue;
+      // 生成地物(__kasc_ggen)は元地物と同じ属性で別レコードになるため属性で重複除外
+      const p = f.properties || {};
+      const key = `${layerEntries.indexOf(en)}|${f.id ?? p.id ?? JSON.stringify(
+        Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith("__kasc_"))))}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hits.push({ entry: en, f });
+    }
+  }
+  return hits;
+}
+// Path hit-test に乗らないクリック(空白・塗り無しポリゴン内部・反転マスクの
+// 穴/マスク領域)の共通拾い。地物ハンドラからも呼ばれる
+function leafletEmptyPick(e) {
   window.switchPanelTab?.("attr");
+  // 包含判定でポリゴン地物を拾えたら属性表示+選択ハイライト(空白なら下へ)
+  const hits = leafletPickPolygons(e.latlng);
+  if (hits.length) {
+    updateLocalSelection(hits.map(h => ({ feature: { ...h.f, geometry: logicalPickGeom(h.f.geometry) || h.f.geometry }, baseCss: null })));
+    try {
+      const fid = hits[0].f.id ?? hits[0].f.properties?.id;
+      liveNotifySelection({
+        layer: hits[0].entry.item.title || hits[0].entry.item.url,
+        longitude: e.latlng?.lng, latitude: e.latlng?.lat,
+        ...(Number.isFinite(Number(fid)) ? { ids: [Number(fid)] } : {}),
+      });
+    } catch (_) { /* 逆通知失敗は無視 */ }
+    renderAttrContent(panel.attrContent, hits.map(h => ({
+      title: h.entry.item.title || h.entry.item.url,
+      entries: attrEntriesFromProps(h.f.properties),
+      layerId: String(layerEntries.indexOf(h.entry)),
+      // 反転マスク地物は論理ジオメトリへ戻す(flyTo 範囲が世界矩形にならないよう)
+      feature: { ...h.f, geometry: logicalPickGeom(h.f.geometry) || h.f.geometry }, flyable: true,
+    })), { onRecordClick: rec => focusFeatureExtent(rec.feature) });
+    return;
+  }
+  updateLocalSelection([]); // 空白クリックで選択解除
   if (!deckInst) { renderAttrContent(panel.attrContent, []); return; }
   try {
     const p = e.containerPoint;
@@ -2714,10 +2793,19 @@ map.on("click", e => {
     if (props) {
       const def = deckDefs.get(info?.layer?.id);
       renderAttrContent(panel.attrContent, [{ title: def?.item?.title, entries: attrEntriesFromProps(props) }]);
+      // deck オブジェクトにジオメトリがあれば選択ハイライト対象にする
+      if (info.object?.geometry) updateLocalSelection([{ feature: info.object, baseCss: null }]);
     } else {
       renderAttrContent(panel.attrContent, []);
     }
   } catch (_) {}
+}
+map.on("click", e => {
+  // 計測・断面・見通しツールのモードがアクティブなら頂点拾いに使う
+  if (geoTools.handleClick(e.latlng)) return;
+  const target = e.originalEvent?.target;
+  if (target && target.closest && target.closest(".leaflet-interactive")) return;
+  leafletEmptyPick(e);
 });
 
 // ui.config.json の UI カスタマイズ(非同期で適用。fetch 待ちの間に
@@ -2767,13 +2855,50 @@ function applyQgisSelection(sel) {
       }
     }
     if (!features.length) return;
+    const c = getSelectionColor();
     L.geoJSON({ type: "FeatureCollection", features }, {
       interactive: false,
-      style: { color: "#ffff00", weight: 3, fillColor: "#ffff00", fillOpacity: 0.28 },
-      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 7, color: "#111", weight: 1.5, fillColor: "#ffff00", fillOpacity: 1 }),
+      style: { color: c, weight: SEL_LINE_WIDTH, fillColor: c, fillOpacity: SEL_FILL_ALPHA },
+      pointToLayer: (f, ll) => L.circleMarker(ll, { radius: SEL_POINT_RADIUS, color: SEL_POINT_OUTLINE, weight: 1.5, fillColor: c, fillOpacity: 1 }),
     }).addTo(qgisSelGroup);
   } catch (_) { /* ハイライト失敗は無視 */ }
 }
+
+// ---- 地物選択ハイライト(地図上のクリックで選択した地物を強調) ----
+// QGIS の「選択地物表示」に相当。QGIS 側選択(qgisSelGroup)とは別グループで
+// 保持し、互いの更新で消し合わない
+let localSelGroup = null;
+const localSelPicked = []; // {feature: GeoJSON, baseCss} 設定変更時の再描画用
+function ensureLocalSelGroup() {
+  if (!localSelGroup) localSelGroup = L.layerGroup().addTo(map);
+  return localSelGroup;
+}
+function renderLocalSelection() {
+  const g = ensureLocalSelGroup();
+  g.clearLayers();
+  const features = localSelPicked.map(p => tagSelectionFeature(p.feature, p.baseCss));
+  if (!features.length) return;
+  L.geoJSON({ type: "FeatureCollection", features }, {
+    interactive: false,
+    style: f => {
+      const c = selColorOf(f);
+      return { color: c, weight: SEL_LINE_WIDTH, fillColor: c, fillOpacity: SEL_FILL_ALPHA };
+    },
+    pointToLayer: (f, ll) => L.circleMarker(ll, {
+      radius: SEL_POINT_RADIUS, color: SEL_POINT_OUTLINE, weight: 1.5,
+      fillColor: selColorOf(f), fillOpacity: 1,
+    }),
+  }).addTo(g);
+}
+function updateLocalSelection(list) {
+  localSelPicked.length = 0;
+  for (const p of list || []) {
+    if (p?.feature?.geometry) localSelPicked.push({ feature: p.feature, baseCss: p.baseCss || null });
+  }
+  renderLocalSelection();
+}
+// 反転モード用にクリックした Leaflet レイヤーの塗り/線色を取り出す
+const leafletLayerBaseCss = l => l?.options?.fillColor || l?.options?.color || null;
 
 // ベースマップコントロールの最小化トグル
 document.querySelector("#basemap-toggle").addEventListener("click", e => {
@@ -2876,6 +3001,15 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
     setV("#display-layer-opacity", 1, "input");
     setC("#display-scalebar", true);
     setC("#display-coords", true);
+    setV("#selection-mode", "color", "change");
+    setV("#selection-color", "#ffff00", "input");
+  });
+
+  // 地物選択ハイライトの方式/色(shared/selection.js。全エンジン共通設定)
+  initSelectionUI({
+    modeSel: document.querySelector("#selection-mode"),
+    colorInput: document.querySelector("#selection-color"),
+    onChange: () => renderLocalSelection(),
   });
 
   // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当
@@ -3549,6 +3683,8 @@ function syncCoordPinLayer(fc) {
     onEachFeature: (f, l) => {
       l.on("click", () => {
         if (geoTools.isActive()) return; // ツールモード中は頂点拾い優先
+        // 選択ハイライト(クリックした地物を選択色/反転色で強調)
+        updateLocalSelection([{ feature: f, baseCss: leafletLayerBaseCss(l) }]);
         // 属性タブ(Cesium 版 attr-panel 相当)へ通常地物と同じ内容を表示する
         window.switchPanelTab?.("attr");
         renderAttrContent(panel.attrContent, [{

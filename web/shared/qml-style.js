@@ -34,6 +34,86 @@ const QML_LABEL_CAPS = {
   leaflet:    { hollowHalo: true,  obstacle: "bbox" },
 };
 
+// エンジン別のレンダラ/シンボル能力。false=そのエンジンの API では描けない
+// (実装ではなくエンジン非対応として処理し、専用の警告を出す)。
+// テーブルに無いエンジン名は能力不明として従来の汎用警告のままにする。
+//   extrusion   : 25dRenderer の押出し(Cesium polygon.extrudedHeight /
+//                 MapLibre fill-extrusion / Navara extrudedHeight)
+//   heatmap     : ネイティブ/プラグインのヒートマップ描画
+//   patternFill : 画像タイル等のパターン塗り(fill-pattern/CanvasPattern/
+//                 SVG<pattern>/ImageMaterialProperty)
+//   inverted    : invertedPolygonRenderer の全面マスク
+//   cluster     : pointCluster の集約表示
+//   displacement: pointDisplacement のリング/グリッド配置
+//   decorArrow  : ArrowLine の矢印ポリゴン
+//   decorMarker : MarkerLine/HashLine の繰り返し装飾
+//   decorRaster : RasterLine の画像繰り返し
+//   decorLinref : LinearReferencing の里程標
+//   decorInterp : InterpolatedLine/Lineburst のセグメント補間
+const QML_ENGINE_CAPS = {
+  cesium:     { extrusion: true,  heatmap: true,  patternFill: true,  inverted: true,  cluster: true,  displacement: true,  decorArrow: true,  decorMarker: true,  decorRaster: false, decorLinref: true,  decorInterp: true  },
+  maplibre:   { extrusion: true,  heatmap: true,  patternFill: true,  inverted: true,  cluster: true,  displacement: true,  decorArrow: true,  decorMarker: true,  decorRaster: true,  decorLinref: true,  decorInterp: true  },
+  openlayers: { extrusion: false, heatmap: true,  patternFill: true,  inverted: true,  cluster: true,  displacement: true,  decorArrow: true,  decorMarker: true,  decorRaster: false, decorLinref: true,  decorInterp: true  },
+  leaflet:    { extrusion: false, heatmap: true,  patternFill: true,  inverted: true,  cluster: true,  displacement: true,  decorArrow: true,  decorMarker: true,  decorRaster: false, decorLinref: true,  decorInterp: true  },
+  navara:     { extrusion: true,  heatmap: false, patternFill: false, inverted: true,  cluster: false, displacement: true,  decorArrow: true,  decorMarker: true,  decorRaster: false, decorLinref: true,  decorInterp: true  },
+  gsimaps:    { extrusion: false, heatmap: false, patternFill: false, inverted: true,  cluster: false, displacement: true,  decorArrow: true,  decorMarker: true,  decorRaster: false, decorLinref: true,  decorInterp: true  },
+};
+
+// 画像タイル(パターン)に変換される塗りシンボルクラス。CentroidFill は
+// パターンではなく interior 点マーカー経路なので含めない
+const QML_PATTERN_FILL_CLASSES = new Set([
+  "SVGFill", "RasterFill", "LinePatternFill", "PointPatternFill",
+  "RandomMarkerFill", "ShapeburstFill", "GradientFill",
+]);
+
+// 線装飾シンボルクラス → QML_ENGINE_CAPS のキー
+const QML_DECOR_CAP = {
+  ArrowLine: "decorArrow",
+  MarkerLine: "decorMarker",
+  HashLine: "decorMarker",
+  RasterLine: "decorRaster",
+  LinearReferencing: "decorLinref",
+  InterpolatedLine: "decorInterp",
+  Lineburst: "decorInterp",
+};
+
+// compileQmlStyle 内でエンジン能力を検査し、そのエンジンの API では描けない
+// 機能だけ「このエンジンでは未対応です」と警告する(実装ギャップと区別する)
+function warnEngineUnsupported(renderer, engine, warnings) {
+  const caps = engine ? QML_ENGINE_CAPS[engine] : null;
+  if (!caps || !renderer) return;
+  if (renderer.d25 && !caps.extrusion)
+    warnOnce(warnings, "25dRenderer の押出しはこのエンジンでは未対応です(平面に描画)");
+  if (renderer.heatmap) {
+    // 汎用文(対応エンジンのみ…)は常に除去し、未対応時のみエンジン別文を出す
+    warnings.delete("heatmapRenderer は対応エンジンのみネイティブ描画です(未対応エンジンは点シンボルで近似)");
+    if (!caps.heatmap)
+      warnOnce(warnings, "heatmapRenderer はこのエンジンでは未対応です(点シンボルで近似)");
+  }
+  if (renderer.inverted && !caps.inverted)
+    warnOnce(warnings, "invertedPolygonRenderer はこのエンジンでは未対応です");
+  if (renderer.cluster?.kind === "displacement" && !caps.displacement) {
+    warnings.delete("pointDisplacement はリング/グリッド配置と輪郭円を再現します(グルーピングは距離近似)");
+    warnOnce(warnings, "pointDisplacement のリング/グリッド配置はこのエンジンでは未対応です(個別描画で近似)");
+  }
+  else if (renderer.cluster?.kind === "cluster" && !caps.cluster)
+    warnOnce(warnings, "pointCluster の集約表示はこのエンジンでは未対応です(個別描画で近似)");
+  const badFill = new Set(), badDecor = new Set();
+  const scan = sym => {
+    for (const l of sym?.layers || []) {
+      if (!caps.patternFill && QML_PATTERN_FILL_CLASSES.has(l.cls)) badFill.add(l.cls);
+      const dk = QML_DECOR_CAP[l.cls];
+      if (dk && !caps[dk]) badDecor.add(l.cls);
+      if (l.subSymbol) scan(l.subSymbol);
+    }
+  };
+  for (const sym of renderer.symbols?.values?.() || []) scan(sym);
+  if (badFill.size)
+    warnOnce(warnings, `パターン塗り(${[...badFill].join("/")})はこのエンジンでは未対応です(単色で代替)`);
+  if (badDecor.size)
+    warnOnce(warnings, `線装飾(${[...badDecor].join("/")})はこのエンジンでは未対応です(単色線で近似)`);
+}
+
 // "r,g,b,a[,spec:...]" / "#rrggbb[aa]" / "r,g,b" → [r,g,b,a] (0-1 float)
 function parseQgisColor(value, fallback = null) {
   if (value == null) return fallback;
@@ -3296,7 +3376,7 @@ export function evalGeomExpr(expr, geom) {
     }
     case "centroid": case "point_on_surface": case "pointonsurface": case "pole_of_inaccessibility": {
       const c = geomCentroid(g(0));
-      return c ? { type: "Point", coordinates: c } : null;
+      return c ? { type: "Point", coordinates: [c.lng, c.lat] } : null;
     }
     case "exterior_ring": {
       const p = g(0);
@@ -4028,6 +4108,7 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map(), e
   const rendererEl = doc.querySelector("renderer-v2");
   if (!rendererEl) throw new Error("QML に renderer-v2 がありません(シンボロジが含まれていません)");
   const renderer = compileRenderer(rendererEl, warnings);
+  warnEngineUnsupported(renderer, engine, warnings);
   const diagram = parseDiagram(doc.documentElement, warnings);
   // ルート <qgis labelsEnabled="0"> はラベル無効の実出力属性。
   // <labeling> 設定が残っていても描画しない(QGIS 準拠)
@@ -4182,12 +4263,23 @@ export function compileQmlStyle(xmlText, baseUrl, preloadedImages = new Map(), e
   // ValueMap の逆引き表を属性パネル等へも公開(represent_value と同じ lookup)
   if (Object.keys(valueMaps).length) fields.valueMap = valueMaps;
 
+  // エンジンが装飾を実描画(生成地物展開含む)できる場合、単色近似を前提に
+  // した汎用警告は除去する(エンジン未対応の場合のみ残る)
+  let warnList = [...warnings];
+  if (engine) {
+    const caps = QML_ENGINE_CAPS[engine] || {};
+    warnList = warnList.filter(w => {
+      const m = String(w).match(/^ラインシンボル (\w+) は一部エンジンで単色近似です$/);
+      return !(m && QML_DECOR_CAP[m[1]] && caps[QML_DECOR_CAP[m[1]]]);
+    });
+  }
+
   return {
     evaluate,
     namesFor,
     labelFor: labelFn ? withLayerVars(props => labelFn(props)) : null,
     legend,
-    warnings: [...warnings],
+    warnings: warnList,
     unsupported: !!renderer.unsupported,
     // symbollevels=1 か。true のとき evaluate() の spec.zRank に最小 pass が入る
     // (Web エンジンではレイヤ単位の完全な cross-feature 順序制御は不可能なため

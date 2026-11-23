@@ -41,6 +41,10 @@ import { matchSessionState, bindSessionState, applySessionState, sessionBootView
 import { initPrint, compositeCanvases } from "../shared/print.js";
 import { initNavTools } from "../shared/nav-tools.js";
 import { initUiConfig } from "../shared/ui-config.js";
+import {
+  SEL_PROP, SEL_FILL_ALPHA, SEL_LINE_WIDTH, SEL_POINT_RADIUS, SEL_POINT_OUTLINE,
+  getSelectionColor, resolveSelColor, normHex, cssWithAlpha, initSelectionUI,
+} from "../shared/selection.js";
 import { coordPins } from "../shared/coord-pins.js";
 import { formatLatLng } from "../shared/coords-format.js";
 import { installLocalCrsUI } from "../shared/coords-local.js";
@@ -59,7 +63,7 @@ import MultiPoint from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiPoint.
 import MultiLineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/MultiLineString.js";
 import LineString from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/LineString.js";
 import Polygon from "https://cdn.jsdelivr.net/npm/ol@10.11.0/geom/Polygon.js";
-import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver, installExprFeatureResolver, setMapScaleGetter } from "../shared/qml-2d.js";
+import { loadCompiledQml, olQmlStyleFunction, compiledScaleToResRange, installLayerVisibilityResolver, installExprFeatureResolver, setMapScaleGetter, qmlExpandGeneratedFeatures } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
 import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
@@ -593,6 +597,19 @@ async function buildLayer(item, baseUrl, preloaded) {
             ? await compileEmbeddedStyle(embStyle, baseUrl, "openlayers")
             : await loadCompiledQml(item.styleUrl, baseUrl, "openlayers");
         item._qml = compiled;
+        // GeometryGenerator 生成地物を drawGeojson へ展開して追加する。
+        // __kasc_gspec(合成 spec)は properties 経由で olQmlStyleFunction が拾う。
+        // centroid は olQmlStyleFunction 内で OL ジオメトリ経路があるため展開しない
+        try {
+          const _nGen = drawGeojson.features?.length || 0;
+          qmlExpandGeneratedFeatures(drawGeojson, compiled, { centroid: false, displacement: true });
+          const _gen = (drawGeojson.features || []).slice(_nGen);
+          if (_gen.length) {
+            vectorSource.addFeatures(new GeoJSON().readFeatures(
+              { type: "FeatureCollection", features: _gen },
+              { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" }));
+          }
+        } catch (_) { /* GG 展開失敗は元地物のみ */ }
         const base = olQmlStyleFunction(compiled, { Style, Fill, Stroke, Circle: CircleStyle, Icon, Text, Point, MultiPoint, MultiLineString, LineString, Polygon });
         // 凡例シンボル単位の表示切替: 先頭シンボル名が hidden 集合にある地物は描画しない
         qmlStyleFn = (f, res) => {
@@ -1602,6 +1619,8 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
   clearTimeout(progressHideTimer);
   if (progressEl) progressEl.hidden = true;
   map.getLayers().clear();
+  // clear で消える固定オーバーレイ(計測ツール・選択ハイライト)を再登録する
+  for (const l of fixedOverlayLayers) map.addLayer(l);
   deckDefs.clear();
   syncDeckLayers();
   layerEntries = [];
@@ -2068,8 +2087,13 @@ function toolStyleFn(feature) {
   }
   return styles;
 }
-map.addLayer(new VectorLayer({ source: gratSrc, style: toolStyleFn, zIndex: 900 }));
-map.addLayer(new VectorLayer({ source: toolSrc, style: toolStyleFn, zIndex: 950 }));
+// renderProject の map.getLayers().clear() で消える固定オーバーレイを再登録するため保持
+const fixedOverlayLayers = [];
+const gratLayer = new VectorLayer({ source: gratSrc, style: toolStyleFn, zIndex: 900 });
+const toolLayer = new VectorLayer({ source: toolSrc, style: toolStyleFn, zIndex: 950 });
+map.addLayer(gratLayer);
+map.addLayer(toolLayer);
+fixedOverlayLayers.push(gratLayer, toolLayer);
 const olOverlayOf = src => ({
   update: fc => {
     src.clear();
@@ -2176,7 +2200,41 @@ map.on("singleclick", e => {
   }
   // 重なった地物を全件拾い、属性タブへ表示する
   const picked = [];
-  map.forEachFeatureAtPixel(e.pixel, (f, l) => { picked.push({ f, l }); }, { hitTolerance: 5 });
+  map.forEachFeatureAtPixel(e.pixel, (f, l) => {
+    // 選択ハイライト・ツールのオーバーレイ自体はピック対象にしない
+    if (l === localSelLayer || l === qgisSelLayer || l === gratLayer || l === toolLayer) return;
+    const g = f?.getGeometry?.();
+    // 反転レンダラのマスク領域(元地物の外側)ヒットは論理ジオメトリ判定で落とす
+    // (通常ポリゴンは hitTolerance の許容ヒットを維持するため inverted のみ判定)
+    if (/Polygon/.test(g?.getType?.() || "")
+        && layerEntries.some(en => en.layer === l && en.item?._qml?.inverted)
+        && !olGeomContainsPoint(g, e.coordinate)) return;
+    picked.push({ f, l });
+  }, { hitTolerance: 5 });
+  // 塗り無しポリゴン内部・反転マスクの穴など、レンダリング hit-test に乗らない
+  // クリックをソース地物の包含判定で拾う
+  {
+    const have = new Set(picked.map(p => p.f));
+    const resNow = map.getView().getResolution() ?? 0;
+    for (const en of layerEntries) {
+      if (en.item?.visible === false || en.layer?.getVisible?.() === false) continue;
+      // 縮尺範囲(min/maxResolution)外で非描画のレイヤは拾わない
+      if (en.layer && !(resNow > (en.layer.getMinResolution?.() ?? 0)
+          && resNow <= (en.layer.getMaxResolution?.() ?? Infinity))) continue;
+      const src = en.layer?.getSource?.();
+      if (!src?.forEachFeature) continue;
+      src.forEachFeature(f => {
+        const g = f.getGeometry?.();
+        if (!g || !/Polygon/.test(g.getType()) || have.has(f)) return;
+        const ext = g.getExtent();
+        const c = e.coordinate;
+        if (c[0] < ext[0] || c[0] > ext[2] || c[1] < ext[1] || c[1] > ext[3]) return;
+        if (olGeomContainsPoint(g, c)) { have.add(f); picked.push({ f, l: en.layer }); }
+      });
+    }
+  }
+  // ピックした地物を選択色/反転色でハイライトする(空白クリックでは解除)
+  updateLocalSelection(picked.map(({ f, l }) => ({ feature: f, baseCss: olBaseCss(f, l) })));
   const records = picked.map(({ f, l }) => {
     const entry = layerEntries.find(en => en.layer === l);
     const { geometry, ...props } = f.getProperties ? f.getProperties() : {};
@@ -2196,6 +2254,15 @@ map.on("singleclick", e => {
       if (props) {
         const def = deckDefs.get(info?.layer?.id);
         records.push({ title: def?.item?.title, entries: attrEntriesFromProps(props) });
+        // deck オブジェクトにジオメトリがあれば選択ハイライト対象にする
+        if (info.object?.geometry) {
+          try {
+            const selFeats = toolFmt.readFeatures(
+              { type: "FeatureCollection", features: [info.object] },
+              { featureProjection: "EPSG:3857", dataProjection: "EPSG:4326" });
+            updateLocalSelection(selFeats.map(sf => ({ feature: sf, baseCss: null })));
+          } catch (_) { /* 無視 */ }
+        }
       }
     } catch (_) {}
   }
@@ -2241,12 +2308,107 @@ configureFollow({
 
 // QGIS 側選択 → 地物ハイライト(#62 双方向)
 const qgisSelSrc = new VectorSource();
-const qgisSelStyle = new Style({
-  stroke: new Stroke({ color: "#ffff00", width: 3 }),
-  fill: new Fill({ color: "rgba(255,255,0,0.28)" }),
-  image: new CircleStyle({ radius: 7, fill: new Fill({ color: "#ffff00" }), stroke: new Stroke({ color: "#111", width: 1.5 }) }),
+// 選択色は shared/selection.js の共通設定(表示>一般タブ)を全エンジンで共有する
+const selStyleFor = color => new Style({
+  stroke: new Stroke({ color, width: SEL_LINE_WIDTH }),
+  fill: new Fill({ color: cssWithAlpha(color, SEL_FILL_ALPHA) }),
+  image: new CircleStyle({ radius: SEL_POINT_RADIUS, fill: new Fill({ color }), stroke: new Stroke({ color: SEL_POINT_OUTLINE, width: 1.5 }) }),
 });
-map.addLayer(new VectorLayer({ source: qgisSelSrc, style: qgisSelStyle, zIndex: 940 }));
+const qgisSelLayer = new VectorLayer({ source: qgisSelSrc, style: () => selStyleFor(getSelectionColor()), zIndex: 940 });
+map.addLayer(qgisSelLayer);
+fixedOverlayLayers.push(qgisSelLayer);
+
+// ---- 地物選択ハイライト(地図上のクリックで選択した地物を強調) ----
+// QGIS の「選択地物表示」に相当。QGIS 側選択(qgisSelSrc)とは別ソースで保持し、
+// 互いの更新で消し合わない。地物の __selc プロパティに解決済み色を埋める
+const localSelSrc = new VectorSource();
+const localSelLayer = new VectorLayer({
+  source: localSelSrc, zIndex: 941,
+  style: f => selStyleFor(f.get(SEL_PROP) || getSelectionColor()),
+});
+map.addLayer(localSelLayer);
+fixedOverlayLayers.push(localSelLayer);
+const localSelPicked = []; // {feature: ol.Feature, baseCss} 設定変更時の再描画用
+function renderLocalSelection() {
+  localSelSrc.clear();
+  for (const p of localSelPicked) {
+    const c = p.feature.clone();
+    // 反転マスク地物は世界矩形ではなく論理ジオメトリでハイライトする
+    c.setGeometry(olLogicalGeom(c.getGeometry()));
+    c.set(SEL_PROP, resolveSelColor(p.baseCss));
+    localSelSrc.addFeature(c);
+  }
+}
+function updateLocalSelection(list) {
+  localSelPicked.length = 0;
+  for (const p of list || []) {
+    if (p?.feature?.clone) localSelPicked.push({ feature: p.feature.clone(), baseCss: p.baseCss || null });
+  }
+  renderLocalSelection();
+}
+
+// オーバーレイ描画・選択保持用に、マスク地物から世界矩形外環を剥がした
+// ジオメトリを返す(非マスクは元参照のまま)
+function olLogicalGeom(geom) {
+  const t = geom?.getType?.();
+  if (t === "Polygon") {
+    const rings = geom.getCoordinates();
+    if (isWorldRing3857(rings[0])) return new Polygon(rings.slice(1));
+  } else if (t === "MultiPolygon") {
+    const polys = geom.getCoordinates();
+    if (polys.length === 1 && isWorldRing3857(polys[0][0])) {
+      return new MultiPolygon(polys[0].slice(1).map(r => [r]));
+    }
+  }
+  return geom;
+}
+// 反転マスク(qml-2d.js の世界矩形外環。4326 では [[-180,-85],...])を 3857 で
+// 判定するための概形チェック。外周が世界全域を覆う5点リングのみ該当
+const WORLD3857 = 20037508.34;
+function isWorldRing3857(ring) {
+  if (ring?.length !== 5) return false;
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const p of ring) {
+    w = Math.min(w, p[0]); e = Math.max(e, p[0]);
+    s = Math.min(s, p[1]); n = Math.max(n, p[1]);
+  }
+  return (e - w) > WORLD3857 * 1.9 && (n - s) > WORLD3857 * 1.9;
+}
+// クリック座標(3857)が地物の論理ジオメトリに含まれるか。
+// マスク地物は世界矩形外環を剥がして判定する
+function olGeomContainsPoint(geom, coord) {
+  const t = geom?.getType?.();
+  if (t === "Polygon") {
+    const rings = geom.getCoordinates();
+    if (isWorldRing3857(rings[0])) {
+      const rest = rings.slice(1);
+      return rest.length ? new Polygon(rest).intersectsCoordinate(coord) : false;
+    }
+    return geom.intersectsCoordinate(coord);
+  }
+  if (t === "MultiPolygon") {
+    const polys = geom.getCoordinates();
+    if (polys.length === 1 && isWorldRing3857(polys[0][0])) {
+      // 平坦化済みで穴は失われる。全リングを独立外環として近似判定する
+      return polys[0].slice(1).some(r => new Polygon([r]).intersectsCoordinate(coord));
+    }
+    return geom.intersectsCoordinate(coord);
+  }
+  return false;
+}
+// 反転モード用にレイヤーのスタイル関数から塗り/線色を取り出す
+// (取れなければ null → 指定色フォールバック)
+function olBaseCss(f, l) {
+  try {
+    const sf = typeof l?.getStyleFunction === "function" ? l.getStyleFunction() : null;
+    if (!sf) return null;
+    const st = sf(f, map.getView().getResolution());
+    const s = Array.isArray(st) ? st[0] : st;
+    return normHex(s?.getFill?.()?.getColor?.())
+      || normHex(s?.getImage?.()?.getFill?.()?.getColor?.())
+      || normHex(s?.getStroke?.()?.getColor?.());
+  } catch (_) { return null; }
+}
 function qgisSelFeatureId(f) {
   return f?.id ?? f?.properties?.id ?? f?.properties?.fid ?? f?.properties?.FID;
 }
@@ -2410,6 +2572,15 @@ document.querySelector("#basemap-globe").addEventListener("click", openGoogleEar
     setC("#display-north", false);
     setC("#display-scalebar", true);
     setC("#display-coords", true);
+    setV("#selection-mode", "color", "change");
+    setV("#selection-color", "#ffff00", "input");
+  });
+
+  // 地物選択ハイライトの方式/色(shared/selection.js。全エンジン共通設定)
+  initSelectionUI({
+    modeSel: document.querySelector("#selection-mode"),
+    colorInput: document.querySelector("#selection-color"),
+    onChange: () => renderLocalSelection(),
   });
 
   // 3D Tiles ドレープ（deck.gl TerrainExtension）。Cesium 版のドレープ対象地形=3D Tiles 相当

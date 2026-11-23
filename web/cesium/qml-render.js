@@ -344,6 +344,10 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
   const dbg = window.__kascQmlDbg
     ? { ents: 0, noSpec: 0, cand: labelCandidates.size, prevT: 0, prevF: 0, prevU: 0, carryF: 0, elseHide: 0, newGfx: 0 }
     : null;
+  // invertedPolygonRenderer: 地物ごとの外枠−穴は外枠同士が重なって半透明色が
+  // 積算されるため、ループ中はリングを集約するだけに留め、ループ後に代表1
+  // エンティティへ「外枠−全地物リングの穴」の1枚マスクを設定する
+  const invPending = style.inverted ? [] : null;
   for (const entity of allEnts) {
     if (entity._kascAux) continue;
     if (dbg) dbg.ents++;
@@ -522,35 +526,26 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
       // invertedPolygonRenderer: 地物 bbox を大きく広げた外枠 − 地物リング(穴)の
       // マスクへ差し替える(±180跨ぎの世界矩形はプリミティブ分割で壊れるため
       // データ周辺の矩形に留める)
+      if (!style.inverted && entity._qmlInvHier) {
+        // inverted 適用で差し替えた hierarchy を元地物へ復元する
+        try {
+          entity.polygon.hierarchy = new Cesium.ConstantProperty(entity._qmlInvHier);
+          entity.polygon.height = undefined;
+        } catch (_) {}
+        entity._qmlInvHier = null;
+      }
       if (style.inverted && spec.fillParts?.length) {
         try {
-          const h = entity.polygon?.hierarchy?.getValue?.(t);
+          const h = entity._qmlInvHier ?? entity.polygon?.hierarchy?.getValue?.(t);
           const parts = Array.isArray(h) ? h : (h ? [h] : []);
-          let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
-          for (const p of parts) {
-            for (const pos of p.positions || []) {
-              const c = Cesium.Cartographic.fromCartesian(pos);
-              w = Math.min(w, c.longitude); e = Math.max(e, c.longitude);
-              s = Math.min(s, c.latitude); n = Math.max(n, c.latitude);
-            }
+          if (parts.length) {
+            entity._qmlInvHier = h;
+            entity._qmlInvSpec = spec;
+            invPending.push(entity);
           }
-          if (Number.isFinite(w)) {
-            const dw = Math.max((e - w) * 4, 0.5), dh = Math.max((n - s) * 4, 0.5);
-            const wc = w - dw, ec = e + dw, sc = s - dh, nc = n + dh;
-            const holes = parts.map(p =>
-              new Cesium.PolygonHierarchy((p.positions || p).slice().reverse()));
-            entity.polygon.hierarchy = new Cesium.ConstantProperty(
-              new Cesium.PolygonHierarchy(
-                Cesium.Cartesian3.fromRadiansArray(
-                  [wc, sc, ec, sc, ec, nc, wc, nc]), holes));
-            // GroundPrimitive は穴付きポリゴン非対応のため、
-            // height=0 指定で通常 Primitive(穴対応)へ切り替える
-            entity.polygon.height = new Cesium.ConstantProperty(0);
-            entity.polygon.perPositionHeight = new Cesium.ConstantProperty(false);
-          }
-        } catch (_) { /* マスク生成失敗時は元地物のまま */ }
+        } catch (_) { /* 収集失敗時は元地物のまま */ }
       }
-      if (spec.fillParts?.length) {
+      if (spec.fillParts?.length && !invPending?.includes(entity)) {
         entity.polygon.show = new Cesium.ConstantProperty(true);
         const { solidBase, tile, tileMeters } = fillPartsToTile(scaleFillPartsAlpha(spec.fillParts, opacity));
         if (tile) {
@@ -812,6 +807,54 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
         },
       });
     } catch (e) { /* 追加失敗時は非表示扱い */ }
+  }
+  // invertedPolygonRenderer: 集約した全地物リングを穴とした外枠マスクを
+  // 代表1エンティティへ設定する(QGIS はレイヤ全体に1枚の反転マスクを引く。
+  // ±180跨ぎの世界矩形はプリミティブ分割で壊れるためデータ周辺の矩形に留める)
+  if (invPending?.length) {
+    try {
+      let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+      const holes = [];
+      for (const ent of invPending) {
+        const h = ent._qmlInvHier;
+        const parts = Array.isArray(h) ? h : (h ? [h] : []);
+        for (const p of parts) {
+          const ring = p.positions || p;
+          if (ring?.length) holes.push(new Cesium.PolygonHierarchy(ring.slice().reverse()));
+          for (const pos of ring || []) {
+            const c = Cesium.Cartographic.fromCartesian(pos);
+            w = Math.min(w, c.longitude); e = Math.max(e, c.longitude);
+            s = Math.min(s, c.latitude); n = Math.max(n, c.latitude);
+          }
+        }
+      }
+      const carrier = invPending[0];
+      if (Number.isFinite(w) && carrier) {
+        const dw = Math.max((e - w) * 4, 0.5), dh = Math.max((n - s) * 4, 0.5);
+        carrier.polygon.hierarchy = new Cesium.ConstantProperty(
+          new Cesium.PolygonHierarchy(
+            Cesium.Cartesian3.fromRadiansArray(
+              [w - dw, s - dh, e + dw, s - dh, e + dw, n + dh, w - dw, n + dh]), holes));
+        // GroundPrimitive は穴付きポリゴン非対応のため高さ指定で通常
+        // Primitive(穴対応)へ切り替える。高さ0だと楕円体表面と同面になり
+        // depthTestAgainstTerrain で深度競合して非表示になるため、
+        // カメラ高度に比例して僅かに浮かせる
+        carrier.polygon.height = new Cesium.CallbackProperty(
+          () => Math.max((window._viewer?.scene?.camera?.positionCartographic?.height || 0) * 0.01, 1), false);
+        carrier.polygon.perPositionHeight = new Cesium.ConstantProperty(false);
+        carrier.polygon.show = new Cesium.ConstantProperty(true);
+        const spec = carrier._qmlInvSpec;
+        const { solidBase, tile, tileMeters } = fillPartsToTile(scaleFillPartsAlpha(spec.fillParts, opacity));
+        if (tile) {
+          const repeat = computeFillRepeat(carrier, t, tileMeters);
+          carrier.polygon.material = new Cesium.ImageMaterialProperty({ image: tile, repeat, transparent: true });
+        } else if (solidBase) {
+          carrier.polygon.material = new Cesium.ColorMaterialProperty(toCesiumColor(solidBase));
+        }
+        if (spec.scale) carrier.polygon.distanceDisplayCondition = new Cesium.ConstantProperty(
+          new Cesium.DistanceDisplayCondition(spec.scale.near, spec.scale.far));
+      }
+    } catch (_) { /* マスク生成失敗時は元地物のまま */ }
   }
   // declutter 用にラベル spec を退避
   ds._qmlLabels = [...labelCandidates.values()];

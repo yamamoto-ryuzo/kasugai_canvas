@@ -294,6 +294,14 @@
     <button id="export-inspector" type="button" style="flex:1;padding:5px;border:1px solid #666;background:#fff;border-radius:4px;cursor:pointer;">エクスポート(.kasc)</button>
   </div>
   <p id="inspector-status" class="note" aria-live="polite"></p>
+  <div style="display:flex;gap:6px;align-items:center;margin-top:6px;font-size:12px;">
+    <span>地物選択の強調</span>
+    <select id="selection-mode" style="flex:1;">
+      <option value="color" selected>指定色で表示</option>
+      <option value="invert">色を反転して表示</option>
+    </select>
+    <input id="selection-color" type="color" value="#ffff00" title="選択色" aria-label="選択色" />
+  </div>
   <div id="setpane-ai"></div>
 </div>
 <div id="panel">

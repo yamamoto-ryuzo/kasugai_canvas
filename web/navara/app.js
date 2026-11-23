@@ -25,13 +25,18 @@ import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d } from "../shared/geo-tools-2d.js";
 import { initPrint } from "../shared/print.js";
-import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec, setMapScaleGetter, applyInvertedMaskGeojson, installLayerVisibilityResolver, installExprFeatureResolver, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle, QML_POS_CODE_TO_ANCHOR } from "../shared/qml-2d.js";
+import { loadCompiledQml, specToStyle, qmlLegendSwatchDataUrl, defaultVectorLegendSpec, setMapScaleGetter, applyInvertedMaskGeojson, installLayerVisibilityResolver, installExprFeatureResolver, linRefSamplesGeojson, splitInterpolatedGeojson, interpolatedSegmentStyle, QML_POS_CODE_TO_ANCHOR, qmlExpandGeneratedFeatures } from "../shared/qml-2d.js";
 import { rgbaToCss, markerLayersToCanvas, linRefFormatText } from "../shared/qml-style.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createPanelHost, attachPanelApi } from "../shared/plugin-panels.js";
 import { renderLayerView, bindLayerView } from "../shared/layer-view.js";
 import { installStoragePluginSupport } from "../shared/plugin-storage.js";
 import { mountSunControls } from "../shared/sun-time.js";
+import {
+  SEL_LINE_WIDTH,
+  getSelectionColor, parseCssColor, resolveSelColor, initSelectionUI,
+} from "../shared/selection.js";
+import { pointInFeature } from "../shared/spatial-ops.js";
 
 const TERRAIN_URL = "https://terrain.reearth.land/cesium-mesh/ellipsoid/{z}/{x}/{y}.terrain";
 const VECTOR_TYPES = new Set(["geojson", "layer", "geoparquet", "parquet", "flatgeobuf", "fgb", "gpkg", "geopackage", "csv", "tsv", "duckdb", "sql", "ogrsql", "kml", "kmz", "gpx", "czml", "topojson", "esrijson", "arcgis", "geojsonl", "ndjson", "jsonl", "geojsonseq", "fgseq", "geojson-seq", "wkt", "wkb", "igc", "polyline", "gml", "wfs", "shp", "shapefile"]);
@@ -1342,11 +1347,25 @@ async function addKascLayer(item, baseUrl) {
     let markerImageFor = null;
     let billboardMat = null;
     const hasPointGeoms = (item._geojson?.features || []).some(f => /point/i.test(f?.geometry?.type || ""));
-    if (item._qml && hasPointGeoms) {
+    // GeometryGenerator(marker 系)/CentroidFill は点地物を後段で生成するため
+    // ネイティブ点が無くてもマーカー画像経路が必要
+    const hasQmlPointGen = (() => {
+      try {
+        for (const sym of item._qml?.symbols?.values?.() || []) {
+          for (const l of sym?.layers || []) {
+            if (l.cls === "CentroidFill") return true;
+            if (l.cls === "GeometryGenerator" &&
+                /marker|point/i.test(String(l.props?.SymbolType ?? l.props?.symbolType ?? l.props?.symbol_type ?? l.props?.type ?? ""))) return true;
+          }
+        }
+      } catch (_) {}
+      return false;
+    })();
+    if (item._qml && (hasPointGeoms || hasQmlPointGen)) {
       const cache = new Map();
       markerImageFor = props => {
         let spec = null;
-        try { spec = item._qml.evaluate?.(props || {}); } catch (_) { return null; }
+        try { spec = item._qmlGenSpecs?.get(props?.__kasc_gspec) || item._qml.evaluate?.(props || {}); } catch (_) { return null; }
         if (!spec?.markers?.length) return null;
         const key = JSON.stringify(spec.markers.map(m =>
           [m.kind, m.shape, m.sizePx, m.widthPx, m.heightPx, m.fill, m.stroke,
@@ -1462,6 +1481,17 @@ async function addKascLayer(item, baseUrl) {
         }
       }
       if (changed) geoData.features = expanded;
+    }
+    // GeometryGenerator/CentroidFill 生成地物の展開。tiled geojson は
+    // properties が直列化されるため useIds で id 参照化し、合成 spec は
+    // item._qmlGenSpecs 経由で FeatureEvaluator/markerImageFor が引く
+    if (item._qml && geoData?.features?.length) {
+      try {
+        item._qmlGenSpecs = qmlExpandGeneratedFeatures(geoData, item._qml, {
+          useIds: true,
+          decor: { markerline: true, hashline: true, arrow: true },
+          displacement: true });
+      } catch (_) {}
     }
     const src = view.addSource({ type: "geojson", data: geoData, tiled: true });
     // 破線は Navara 0.3.x の PolylineMaterial.dashArray（線幅倍率）で実現。
@@ -1622,7 +1652,7 @@ async function addKascLayer(item, baseUrl) {
                 if (fox || foy) v.offset = { x: fox, y: foy };
               }
             }
-            const spec = compiled.evaluate?.(props);
+            const spec = item._qmlGenSpecs?.get(props.__kasc_gspec) || compiled.evaluate?.(props);
             if (!spec) { if (gt !== "text") v.show = false; return v; }
             if (gt === "polygon") {
               const solid = spec.fillParts?.find(pt => pt.solid)?.solid || spec.fillParts?.[0]?.hatch?.color || null;
@@ -1638,10 +1668,14 @@ async function addKascLayer(item, baseUrl) {
               }
               if (extrudeH > 0) v.extrudedHeight = extrudeH;
             } else if (gt === "polyline") {
-              const strokeSrc = spec.outline || spec.line;
               const iseg = Number(props.__kasc_iseg);
-              if (spec.line?.decor?.kind === "linref" && !spec.outline) {
-                // 里程標は基線を描かない(QGIS 準拠)。標点は生成点が担う
+              // 装飾レイヤは基線を描かない(QGIS 準拠)。生成地物が装飾を担い、
+              // 下位に実線レイヤがあればそのスタイルを使う
+              const _dk = spec.line?.decor?.kind;
+              const _decorSupp = !props.__kasc_ggen && /^(markerline|hashline|arrowline|rasterline|linref|interpolated|lineburst)$/.test(_dk || "");
+              const _lower = _decorSupp ? (spec.lines || []).filter(l => l && !l.decor).pop() : null;
+              const strokeSrc = spec.outline || (_decorSupp ? _lower : spec.line);
+              if (_decorSupp && !strokeSrc) {
                 v.show = false;
               } else if (Number.isFinite(iseg) && spec.line?.decor?.kind === "interpolated") {
                 // InterpolatedLine セグメント: 弧長比率で色・幅を補間
@@ -1986,12 +2020,101 @@ function applyQgisSelection(sel) {
       }
     }
     if (!features.length || !view) return;
+    const c = selCssToInt(getSelectionColor());
     qgisSelSrc = view.addSource({ type: "geojson", data: { type: "FeatureCollection", features }, tiled: false });
     qgisSelLayer = view.addLayer({ type: "vector", source: qgisSelSrc,
-      polygon: { color: 0xffff00, clampToGround: true, opacity: 0.3, transparent: true },
-      polyline: { color: 0xffff00, width: 3, clampToGround: true, opacity: 1 },
-      point: { color: 0xffff00, clampToGround: true, opacity: 1 } });
+      polygon: { color: c, clampToGround: true, opacity: 0.3, transparent: true },
+      polyline: { color: c, width: SEL_LINE_WIDTH, clampToGround: true, opacity: 1 },
+      point: { color: c, clampToGround: true, opacity: 1 } });
   } catch (_) { /* ハイライト失敗は無視 */ }
+}
+
+// ---- 地物選択ハイライト(地図上のクリックで選択した地物を強調) ----
+// QGIS の「選択地物表示」に相当。QGIS 側選択とは別オーバーレイで保持する。
+// Navara のベクターはレイヤ単位マテリアルのため、解決色ごとに
+// source+layer を分けて重ねる(反転モードの地物別色もこれで表現)
+const localSelPicked = []; // {feature: GeoJSON, baseCss} 設定変更時の再描画用
+let localSelObjs = []; // 削除対象の addSource/addLayer 戻り値
+window._navaraLocalSel = localSelPicked; // 検証用参照(kascView と同じ公開範囲)
+function selCssToInt(css) {
+  const c = parseCssColor(css);
+  return c ? (Math.round(c.r) << 16) | (Math.round(c.g) << 8) | Math.round(c.b) : 0xffff00;
+}
+function clearLocalSelLayers() {
+  for (const o of localSelObjs.splice(0)) { try { o?.delete?.(); } catch (_) {} }
+}
+function renderLocalSelection() {
+  clearLocalSelLayers();
+  try {
+    const features = localSelPicked.map(p => ({
+      ...p.feature,
+      properties: { ...(p.feature?.properties || {}), __selc: resolveSelColor(p.baseCss) },
+    }));
+    if (!features.length || !view) return;
+    const byColor = new Map();
+    for (const f of features) {
+      const c = f.properties.__selc;
+      if (!byColor.has(c)) byColor.set(c, []);
+      byColor.get(c).push(f);
+    }
+    for (const [css, feats] of byColor) {
+      const c = selCssToInt(css);
+      const src = view.addSource({ type: "geojson", data: { type: "FeatureCollection", features: feats }, tiled: false });
+      const layer = view.addLayer({ type: "vector", source: src,
+        polygon: { color: c, clampToGround: true, opacity: 0.3, transparent: true },
+        polyline: { color: c, width: SEL_LINE_WIDTH, clampToGround: true, opacity: 1 },
+        point: { color: c, clampToGround: true, opacity: 1 } });
+      localSelObjs.push(layer, src);
+    }
+  } catch (_) { /* ハイライト失敗は無視 */ }
+}
+function updateLocalSelection(list) {
+  localSelPicked.length = 0;
+  for (const p of list || []) {
+    if (p?.feature?.geometry) localSelPicked.push({ feature: p.feature, baseCss: p.baseCss || null });
+  }
+  renderLocalSelection();
+}
+// 塗り無しポリゴン内部・反転マスクの穴など featureClick が出ないクリックを
+// ソース地物(_geojson)の包含判定で拾う。生成地物は属性で重複除外
+function navaraPickPolygons(ll) {
+  const hits = [];
+  const seen = new Set();
+  for (const en of layerEntries) {
+    // 縮尺連動でレイヤが未構築/破棄されている場合も非描画なので拾わない
+    if (en.item?.visible === false || !en.layer) continue;
+    for (const f of en.item?._geojson?.features || []) {
+      if (!pointInFeature(ll.lng, ll.lat, f)) continue;
+      const p = f.properties || {};
+      const key = `${layerEntries.indexOf(en)}|${f.id ?? p.id ?? JSON.stringify(
+        Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith("__kasc_"))))}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hits.push({ entry: en, f });
+    }
+  }
+  return hits;
+}
+window._navaraPickPolygons = navaraPickPolygons; // 検証用参照(kascView と同じ公開範囲)
+
+// ピック結果の properties からレイヤー内の元 GeoJSON 地物を引く
+// (同一参照 → id 一致 → 属性全一致 の順で照合)
+function navaraSelFeature(entry, props) {
+  const feats = entry?.item?._geojson?.features || [];
+  if (!feats.length || !props) return null;
+  const fid = props.id ?? props.fid ?? props.FID;
+  return feats.find(f => f.properties === props)
+    || (fid != null && feats.find(f => String(f.id ?? f.properties?.id ?? f.properties?.fid ?? f.properties?.FID) === String(fid)))
+    || feats.find(f => JSON.stringify(f.properties) === JSON.stringify(props))
+    || null;
+}
+// 反転モード用にレイヤー desc のマテリアル色を css へ戻す
+function navaraLayerBaseCss(entry, geomType) {
+  const d = entry?.desc;
+  const num = /point/i.test(geomType || "") ? d?.point?.color
+    : /line/i.test(geomType || "") ? d?.polyline?.color
+      : d?.polygon?.color;
+  return Number.isFinite(num) ? `#${num.toString(16).padStart(6, "0")}` : null;
 }
 
 // session-state の可視性を描画前の doc アイテムへ先適用する。
@@ -2586,6 +2709,13 @@ configureFollow({
     e.currentTarget.title = collapsed ? "展開" : "最小化";
   });
   $("#basemap-toggle")?.addEventListener("click", () => panel.basemap?.classList.toggle("collapsed"));
+
+  // 地物選択ハイライトの方式/色(shared/selection.js。全エンジン共通設定)
+  initSelectionUI({
+    modeSel: $("#selection-mode"),
+    colorInput: $("#selection-color"),
+    onChange: () => renderLocalSelection(),
+  });
   $("#basemap-globe")?.addEventListener("click", () => open(`https://earth.google.com/web/@${lastCam.lat},${lastCam.lng},${lastCam.height}d`, "_blank"));
 
   initPrint({
@@ -2834,12 +2964,46 @@ const pointerToLL = ev => {
 };
 
 // ツールモードがクリックを消費した場合、同じジェスチャの featureClick を
-// 属性ピックに使わないようフラグで抑止する(click→featureClick の順で発火)
+// 属性ピックに使わないようフラグで抑止する(発火順は環境依存)
 let _toolClickHandled = false;
+let _pendingSelClear = false;
+let _lastFeatureClickAt = -Infinity;
 try {
   view.on("click", ev => {
     const ll = pointerToLL(ev);
     if (ll && geoTools.handleClick(ll)) _toolClickHandled = true;
+    // 空白クリックで選択解除。発火順は環境により featureClick→click の場合も
+    // あるため、直前の featureClick と同じジェスチャなら解除しない
+    if (performance.now() - _lastFeatureClickAt > 150) {
+      _pendingSelClear = true;
+      setTimeout(() => {
+        if (!_pendingSelClear) return;
+        _pendingSelClear = false;
+        // 塗り無しポリゴン内部・反転マスクの穴など featureClick が出ない
+        // クリックは、ソース地物の包含判定で拾う
+        const hits = ll ? navaraPickPolygons(ll) : [];
+        if (!hits.length) { updateLocalSelection([]); return; }
+        updateLocalSelection(hits.map(h => ({
+          feature: h.f, baseCss: navaraLayerBaseCss(h.entry, h.f.geometry?.type),
+        })));
+        const recs = hits.map(h => ({
+          title: h.entry.item.title || h.entry.item.url,
+          entries: attrEntriesFromProps(h.f.properties || {}),
+          layerId: String(layerEntries.indexOf(h.entry)),
+          feature: null, flyable: false,
+        }));
+        try {
+          const fid = hits[0].f.id ?? hits[0].f.properties?.id;
+          liveNotifySelection({
+            layer: recs[0].title,
+            longitude: ll.lng, latitude: ll.lat,
+            ...(Number.isFinite(Number(fid)) ? { ids: [Number(fid)] } : {}),
+          });
+        } catch (_) { /* 逆通知失敗は無視 */ }
+        window.switchPanelTab?.("attr");
+        renderAttrContent(panel.attrContent, recs);
+      }, 0);
+    }
   });
   view.on("pointermove", ev => {
     const ll = pointerToLL(ev);
@@ -2852,6 +3016,18 @@ try {
     if (!info) return;
     const entry = layerEntries.find(e =>
       e.layer && (e.layer.id === info.layerId || String(e.layer.id) === String(info.layerId)));
+    // invertedPolygonRenderer レイヤでは featureClick が発火するのは
+    // マスク領域のみ(穴=元地物位置には描画がなく発火しない)。マスク地物の
+    // 選択・属性表示は行わず、click イベント側の包含判定フォールバックへ
+    // 委ねる(穴クリックも featureClick が出ないので同じ経路で拾われる)
+    if (entry?.item?._qml?.inverted) return;
+    _lastFeatureClickAt = performance.now();
+    _pendingSelClear = false;
+    // 選択ハイライト(クリックした地物を選択色/反転色で強調)
+    {
+      const sf = navaraSelFeature(entry, info.properties);
+      updateLocalSelection(sf ? [{ feature: sf, baseCss: navaraLayerBaseCss(entry, sf.geometry?.type) }] : []);
+    }
     const records = [{
       title: entry ? (entry.item.title || entry.item.url) : null,
       entries: attrEntriesFromProps(info.properties || {}),

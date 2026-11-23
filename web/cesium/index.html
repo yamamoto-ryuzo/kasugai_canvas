@@ -303,6 +303,14 @@
                 <input id="display-basemap-opacity" type="range" min="0" max="1" step="0.05" value="1" style="width: 100%;" />
                 <label class="field-label" for="display-layer-opacity"><span data-i18n="display.layerOpacity">レイヤー透過度</span> <span id="display-layer-opacity-value">100%</span></label>
                 <input id="display-layer-opacity" type="range" min="0" max="1" step="0.05" value="1" style="width: 100%;" />
+                <label class="field-label" for="selection-mode"><span data-i18n="display.selHighlight">地物選択の強調</span></label>
+                <div class="terrain-options" style="display:flex;gap:6px;align-items:center;">
+                  <select id="selection-mode" data-i18n-attr="aria-label:display.selHighlight">
+                    <option value="color" selected data-i18n="display.selModeColor">指定色で表示</option>
+                    <option value="invert" data-i18n="display.selModeInvert">色を反転して表示</option>
+                  </select>
+                  <input id="selection-color" type="color" value="#ffff00" data-i18n-attr="title:display.selColor;aria-label:display.selColor" />
+                </div>
                 <div class="terrain-options">
                   <label><input id="display-scalebar" type="checkbox" checked /><span data-i18n="display.scalebar"> スケールバーを表示</span></label>
                   <label><input id="display-coords" type="checkbox" checked /><span data-i18n="display.coords"> カーソル座標を表示</span></label>
