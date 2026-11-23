@@ -199,6 +199,7 @@ setMapScaleGetter(() => {
 });
 let baseEntries = [];    // {item, gsiId|null, tileLayer|null}
 let baseHidden = false;
+let baseTransparent = false; // 「ベースマップ透明」選択中(または .kasc の base: | transparent)
 let docBackgroundCss = null;  // .kasc background: 行。ベースマップなし/透過時の下敷き色
 let currentCams = [];
 let currentThemes = [];
@@ -1658,8 +1659,9 @@ async function applyKascView(view) {
 function applyViewBase(rawName, logPrefix = "data-base") {
   const name = String(rawName || "").trim();
   const sel = document.getElementById("basemap-select");
-  if (/^(none|off|なし|ベースマップなし|transparent|hide|透明)$/i.test(name)) {
-    if (sel) { sel.value = "-1"; applyBaseSelection(); }
+  const isTrans = /^(transparent|hide|透明)$/i.test(name);
+  if (isTrans || /^(none|off|なし|ベースマップなし)$/i.test(name)) {
+    if (sel) { sel.value = isTrans ? "-2" : "-1"; applyBaseSelection(); }
   } else {
     const idx = baseEntries.findIndex(e =>
       e.gsiId === name || e.item.title === name || splitKascTitle(e.item.title).title === name);
@@ -1828,26 +1830,30 @@ function rebuildBasemapSelect() {
   sel.replaceChildren();
   const none = document.createElement("option");
   none.value = "-1"; none.textContent = "ベースマップなし";
-  sel.append(none);
+  const trans = document.createElement("option");
+  trans.value = "-2"; trans.textContent = "ベースマップ透明";
+  sel.append(none, trans);
   baseEntries.forEach((e, i) => {
     const o = document.createElement("option");
     o.value = String(i); o.textContent = e.item.title || `base ${i + 1}`;
     sel.append(o);
   });
-  sel.value = baseHidden ? "-1" : "0";
+  sel.value = baseTransparent ? "-2" : baseHidden ? "-1" : "0";
 }
 let gsiBaseRetryCount = 0;
 function applyBaseSelection() {
   const sel = document.getElementById("basemap-select");
   const idx = Number(sel?.value ?? -1);
   baseHidden = idx < 0;
+  baseTransparent = idx === -2;
   // 「ベースマップなし/透過」は GSI の blank(白地図)ではベージュの地図が出て
   // 白にならないため、iframe 内のタイルペインごと隠し、コンテナ背景を
   // 下敷き色(background: 行、既定白)にする
   const tilePane = gmap?.getPane?.("tilePane");
   if (tilePane) tilePane.style.visibility = baseHidden ? "hidden" : "";
   const mapContainer = gmap?.getContainer?.();
-  if (mapContainer) mapContainer.style.background = baseHidden ? (docBackgroundCss || "#fff") : "";
+  if (mapContainer) mapContainer.style.background =
+    baseTransparent ? "transparent" : baseHidden ? (docBackgroundCss || "#fff") : "";
   if (globeMode) { applyGlobeBaseSelection(idx); return; }
   // gsimaps 標準ベースマップ: .kasc の先頭 GSI ベース行が選ばれた時だけ使い、
   // それ以外・なし選択時は blank(白地図)にして外部タイルを実質ベースにする
@@ -2084,7 +2090,7 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null, baseKey = 
     const entry = { item, gsiId, tileLayer: null };
     baseEntries.push(entry);
   }
-  if (baseModeRow) baseHidden = true;
+  if (baseModeRow) { baseHidden = true; baseTransparent = baseModeRow.mode === "transparent"; }
   // base 行の外部タイル分は作成のみ（表示は applyBaseSelection が制御）
   // globe 中は Leaflet が無いため tileLayer は作らず imagery 側へ委ねる
   for (const e of baseEntries) {

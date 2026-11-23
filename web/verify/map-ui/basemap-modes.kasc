@@ -1,0 +1,4 @@
+title: ベースマップモード検証
+base:標準地図 | https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png
+base:淡色地図 | https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png
+geojson:ポイント | map-ui/pt.geojson

@@ -2248,19 +2248,41 @@ async function renderProject(loadedId, baseUrl, doc, manifest) {
       opt.value = i; opt.textContent = leafTitle || `base ${i}`;
       return opt;
     });
+    // 「ベースマップなし」「ベースマップ透明」を先頭に明示選択肢として置く
+    // (Cesium 版と同じ構成。値 -1=なし / -2=透明)
+    {
+      const noneOpt = document.createElement("option");
+      noneOpt.value = "-1"; noneOpt.textContent = t("basemap.none");
+      const transOpt = document.createElement("option");
+      transOpt.value = "-2"; transOpt.textContent = t("basemap.transparent");
+      sel.prepend(noneOpt, transOpt);
+    }
     baseEntries.forEach((entry, i) => {
       if (i === active) map.addLayer(entry.layer);
       else if (map.hasLayer(entry.layer)) map.removeLayer(entry.layer);
     });
-    sel.value = active;
+    // base: 行の | none / | transparent は初期でベースマップを張らない
+    // (Cesium 版と同じ規則)。対応する疑似選択肢を選んだ状態にする
+    const baseModeRow = (doc.bases || []).find(b => b.mode);
+    if (baseModeRow) {
+      baseEntries.forEach(e => { if (map.hasLayer(e.layer)) map.removeLayer(e.layer); });
+      sel.value = baseModeRow.mode === "transparent" ? "-2" : "-1";
+    } else {
+      sel.value = active;
+    }
     // 初期表示は選択中の1レイヤのみ示す畳み状態で同期するため、
     // sel.value 確定後にリストを描画する
     syncBasemapList(sel);
     sel.onchange = () => {
+      const v = Number(sel.value);
       baseEntries.forEach((e, i) => {
-        if (i === Number(sel.value)) map.addLayer(e.layer);
+        if (i === v) map.addLayer(e.layer);
         else if (map.hasLayer(e.layer)) map.removeLayer(e.layer);
       });
+      // -2「ベースマップ透明」は #map 背景を透過してページ側を見せる。
+      // それ以外では background: 行(未指定なら既定)へ戻す
+      const mapEl = document.querySelector("#map");
+      if (mapEl) mapEl.style.background = v === -2 ? "transparent" : (doc.background || "");
       syncDeckLayers(); // ベースマップのドレープコピーを選択中タイルへ差替える
       updateMapAttribution();
     };
@@ -3063,8 +3085,15 @@ function applyViewBase(name) {
   const sel = panel.basemapSelect;
   const nm = String(name || "").trim();
   if (!sel || !currentBaseEntries.length) return;
-  if (/^(none|off|なし|ベースマップなし)$/i.test(nm)) {
+  if (/^(none|off|なし|ベースマップなし|transparent|hide|透明)$/i.test(nm)) {
+    const transparent = /^(transparent|hide|透明)$/i.test(nm);
     currentBaseEntries.forEach(e => { if (map.hasLayer(e.layer)) map.removeLayer(e.layer); });
+    if (transparent) {
+      const mapEl = document.querySelector("#map");
+      if (mapEl) mapEl.style.background = "transparent";
+    }
+    sel.value = transparent ? "-2" : "-1";
+    syncBasemapList(sel);
     updateMapAttribution();
     return;
   }

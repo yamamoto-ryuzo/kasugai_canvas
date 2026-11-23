@@ -927,11 +927,12 @@ async function applyBasemap(idx) {
 // 入れ(他エンジンの none と見た目を揃える)、通常タイル選択時は解除する
 panel.basemapSelect?.addEventListener("change", () => {
   const idx = Number(panel.basemapSelect.value);
-  // 「ベースマップなし」は地表を単色で残す none モード(地表透明ではない)。
-  // 手動選択は常に地表透明モードを解除する(.kasc の transparent 指定より優先)
-  setNoBasemap(idx < 0, docBackgroundHex ?? 0xffffff);
-  setGlobeTransparent(false);
-  applyBasemap(idx);
+  // 「ベースマップなし」(-1)は地表を単色で残す none モード、
+  // 「ベースマップ透明」(-2)は地表自体を透明化する transparent モード。
+  // 通常タイル選択時はどちらも解除する
+  setNoBasemap(idx === -1, docBackgroundHex ?? 0xffffff);
+  setGlobeTransparent(idx === -2, docBackgroundHex ?? 0xffffff);
+  applyBasemap(idx < 0 ? -1 : idx);
 });
 
 // ---- 地形・写実 ----
@@ -1851,11 +1852,14 @@ async function renderDoc(doc, baseUrl, presetBase) {
     if (mapEl) mapEl.style.background = doc.background || "#fff";
   } catch (_) {}
   panel.basemapSelect.replaceChildren();
-  // 「ベースマップなし」を明示選択できるよう先頭に置く(他エンジンとのパリティ)
+  // 「ベースマップなし」「ベースマップ透明」を明示選択できるよう先頭に置く
+  // (他エンジンとのパリティ。値 -1=なし / -2=透明)
   {
     const noneOpt = document.createElement("option");
     noneOpt.value = "-1"; noneOpt.textContent = "ベースマップなし";
-    panel.basemapSelect.append(noneOpt);
+    const transOpt = document.createElement("option");
+    transOpt.value = "-2"; transOpt.textContent = "ベースマップ透明";
+    panel.basemapSelect.append(noneOpt, transOpt);
   }
   appendGroupedTitleOptions(panel.basemapSelect, baseDocs, (b, title, i) => {
     const opt = document.createElement("option"); opt.value = String(i); opt.textContent = title; return opt;
@@ -1874,7 +1878,7 @@ async function renderDoc(doc, baseUrl, presetBase) {
   if (!noneSel && initIdx < 0) initIdx = Math.max(0, baseDocs.findIndex(b => b.visible !== false));
   // base: 行の | none / | transparent モードは初期でベースマップを張らない
   // (Cesium 版の parsedBaseMode → selectedBasemap=null と同じ規則)
-  if (baseModeRow) initIdx = -1;
+  if (baseModeRow) initIdx = baseModeRow.mode === "transparent" ? -2 : -1;
   panel.basemapSelect.value = String(noneSel ? -1 : initIdx);
   syncBasemapList(panel.basemapSelect);
   await applyBasemap(noneSel ? -1 : initIdx);
@@ -2196,10 +2200,11 @@ async function applyViewBase(rawName, logPrefix = "data-base") {
     if (idx < 0) console.warn(`${logPrefix}: base= のベースマップが見つかりません`, name);
   }
   if (isNone || idx >= 0) {
-    setNoBasemap(isNone, docBackgroundHex ?? 0xffffff);
-    setGlobeTransparent(false);
-    if (panel.basemapSelect) panel.basemapSelect.value = String(idx);
-    await applyBasemap(idx);
+    setNoBasemap(isNone && !isTransparent, docBackgroundHex ?? 0xffffff);
+    setGlobeTransparent(isTransparent, docBackgroundHex ?? 0xffffff);
+    const selIdx = isTransparent ? -2 : idx;
+    if (panel.basemapSelect) panel.basemapSelect.value = String(selIdx);
+    await applyBasemap(selIdx < 0 ? -1 : selIdx);
     syncBasemapList(panel.basemapSelect);
   }
 }
