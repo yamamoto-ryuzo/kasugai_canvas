@@ -1304,7 +1304,7 @@ async function addKascLayer(item, baseUrl) {
     const gd = ds.polygon ? resolveDefaultPolygonStyle({}, ds.polygon, ds.line, {}) : null;
     // QML スタイル: 代表地物の spec からレイヤ既定色を取る（Navara はレイヤ単位マテリアル）
     let fillCss = item.opts?.fill, strokeCss = item.opts?.stroke || item.opts?.color, markerCss = item.opts?.marker_color;
-    let lineDash = null, lineCap = null;
+    let lineDash = null, lineCap = null, qmlS = null;
     const embStyle = (loaded.qml || loaded.sld || loaded.mbstyle) ? loaded : null;
     if (item.opts?.style || embStyle || await probeQmlSidecar(item)) {
       try {
@@ -1316,19 +1316,23 @@ async function addKascLayer(item, baseUrl) {
         item._qml = compiled;
         const spec = compiled.evaluate?.(item._geojson?.features?.[0]?.properties || {});
         const s = specToStyle(spec);
-        if (s) { fillCss ||= s.fill; strokeCss ||= s.stroke; markerCss ||= s.markerColor; lineDash = s.dash; lineCap = s.cap; }
+        if (s) { qmlS = s; fillCss ||= s.fill; strokeCss ||= s.stroke; markerCss ||= s.markerColor; lineDash = s.dash; lineCap = s.cap; }
       } catch (_) {}
     }
-    fillCss ||= gd?.fill;
-    strokeCss ||= gd?.stroke ?? ld?.color;
+    // QML が fill/stroke を明示的に持たない(brush=none/pen=none)場合は
+    // default_style や既定色へフォールバックしない(opts 明示指定は優先)
+    const qmlNoFill = qmlS && !qmlS.fill && item.opts?.fill == null;
+    const qmlNoStroke = qmlS && !qmlS.stroke && item.opts?.stroke == null && item.opts?.color == null;
+    fillCss ||= qmlNoFill ? null : gd?.fill;
+    strokeCss ||= qmlNoStroke ? null : (gd?.stroke ?? ld?.color);
     markerCss ||= pd?.color;
     // 不透明度: opts 明示(fill_opacity/stroke_opacity/opacity) > 色のアルファ
     // (QML rgba 含む) > default_style: > 既定。塗りは他エンジンと同じ半透明 0.4 が既定。
     // Navara マテリアルは透過描画に transparent フラグも必要
     const oNum = v => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : null; };
     const aOf = css => { const a = cssColorAlpha(css); return a < 1 ? a : null; };
-    const polyFillO = oNum(item.opts?.fill_opacity) ?? oNum(item.opts?.opacity) ?? aOf(fillCss) ?? gd?.fillOpacity ?? 0.4;
-    const polyLineO = oNum(item.opts?.stroke_opacity) ?? oNum(item.opts?.opacity) ?? aOf(strokeCss) ?? gd?.strokeOpacity ?? ld?.opacity ?? 1;
+    const polyFillO = qmlNoFill ? 0 : (oNum(item.opts?.fill_opacity) ?? oNum(item.opts?.opacity) ?? aOf(fillCss) ?? gd?.fillOpacity ?? 0.4);
+    const polyLineO = qmlNoStroke ? 0 : (oNum(item.opts?.stroke_opacity) ?? oNum(item.opts?.opacity) ?? aOf(strokeCss) ?? gd?.strokeOpacity ?? ld?.opacity ?? 1);
     const pointO = oNum(item.opts?.opacity) ?? aOf(markerCss) ?? pd?.opacity ?? 1;
     // extrude=<m>(#60)・QML 2.5D レンダラ → PolygonMaterial.extrudedHeight(m)。
     // 地物別の上書きは FeatureEvaluator の extrudedHeight で同値を返す
@@ -1624,7 +1628,13 @@ async function addKascLayer(item, baseUrl) {
               const solid = spec.fillParts?.find(pt => pt.solid)?.solid || spec.fillParts?.[0]?.hatch?.color || null;
               if (solid) {
                 v.color = new Color().setStyle(rgbaToCss(solid));
-                if (solid.length > 3 && solid[3] < 1) v.opacity = solid[3];
+                // α 未指定(不透明)でもレイヤ既定 0.4 が残らないよう
+                // solid ありでは必ず α を明示する
+                v.opacity = (solid.length > 3) ? solid[3] : 1;
+              } else {
+                // QML で塗り無し(brush=none 等)はレイヤ既定の塗りで
+                // 埋めない(QGIS 準拠)
+                v.opacity = 0;
               }
               if (extrudeH > 0) v.extrudedHeight = extrudeH;
             } else if (gt === "polyline") {
@@ -1644,10 +1654,14 @@ async function addKascLayer(item, baseUrl) {
                 const sPx = specToStyle(spec)?.strokeWidth;
                 const wPx = sPx ?? strokeSrc.widthPx;
                 if (wPx) v.width = Math.max(wPx, 0.5);
-                if (strokeSrc.color?.length > 3 && strokeSrc.color[3] < 1) v.opacity = strokeSrc.color[3];
+                // α 未指定(不透明)でもレイヤ既定が残らないよう明示する
+                v.opacity = strokeSrc.color?.length > 3 ? strokeSrc.color[3] : 1;
                 // ルール別の破線・端帽(dash は px 配列→線幅倍率へ換算)
                 if (strokeSrc.dash?.length) v.dashArray = strokeSrc.dash.map(d => d / Math.max(wPx || polyWidth, 0.5));
                 if (strokeSrc.cap) v.cap = strokeSrc.cap;
+              } else {
+                // QML で線無し(pen=none)はレイヤ既定の線で描かない(QGIS 準拠)
+                v.opacity = 0;
               }
             } else if (gt !== "text") {
               // 点: マーカー canvas を billboard.image へ(dataURL は atlas へ収容)

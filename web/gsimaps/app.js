@@ -20,7 +20,7 @@ import {
   normKascTitle, rewriteKascLineOpt, rewriteKascLineVisibility,
   applyPanelTitle, loadKascBookmarks, downloadKascCamLines, downloadQgisBookmarksXml,
   layerAttribution, loadKascInfoContent,
-  resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle,
+  resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle, cssColorAlpha,
   defaultPointRadius, markerSymbolSpec, markerSymbolDivHtml, togeojsonIconSpec, buildWmsTileTemplate, buildWmtsTileTemplate,
   kascScaleZoomRange, setAllLayerGroupsExpanded,
   appendGroupedTitleOptions, syncBasemapList,
@@ -768,13 +768,25 @@ function styledFeature(item, feature) {
             props._opacity = 0.8;
           }
         } else {
-          props._color = s.stroke || "#2c5ea8";
-          props._weight = s.strokeWidth ?? 1.5;
-          props._opacity = 1;
+          // _opacity を最終 α として渡すため _color は不透明化
+          // (_fillOpacity と同じ理由: 乗算適用と置換適用の両対応)
+          props._color = (s.stroke || "#2c5ea8").replace(/^rgba\(([^,]+),([^,]+),([^,]+),[^)]+\)$/, "rgb($1,$2,$3)");
+          // QML で線無し(pen=none)は描かない: _weight=0・_opacity=0
+          // (styleGlobeEntity は _opacity を α 上書きに使う)
+          props._weight = s.stroke ? (s.strokeWidth ?? 1.5) : 0;
+          props._opacity = s.stroke ? cssColorAlpha(s.stroke) : 0;
           if (/Polygon/.test(gt)) {
-            props._fillColor = s.fill || "#3a7bd5";
-            props._fillOpacity = 0.4;
-            props._fill = true;
+            // QML で塗り無し(brush=none)は青フォールバックせず非表示。
+            // s.fill は α 込み rgba() → _fillOpacity は α を別渡しする
+            props._fill = !!s.fill;
+            if (s.fill) {
+              // _fillOpacity を最終 α として渡し _fillColor は不透明化
+              // (2D sakuzu の乗算適用・Globe の withA 置換の両方で α が一致)
+              props._fillColor = s.fill.replace(/^rgba\(([^,]+),([^,]+),([^,]+),[^)]+\)$/, "rgb($1,$2,$3)");
+              props._fillOpacity = cssColorAlpha(s.fill);
+            } else {
+              props._fillOpacity = 0;
+            }
           }
         }
         return { ...feature, properties: props };

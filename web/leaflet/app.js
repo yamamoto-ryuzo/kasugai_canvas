@@ -474,13 +474,19 @@ function makeVectorStyleFn(item) {
             return { opacity: 0, weight: 0, fill: false, interactive: true, ...pathExtra };
           }
           return {
-            color: s.stroke || "#2c5ea8", weight: s.strokeWidth ?? 1.5,
+            color: s.stroke || "#2c5ea8",
+            // QML で線無し(pen=none)は weight=0+stroke:false(QGIS 準拠)。
+            // 色フォールバックは見た目を出すため残すが stroke:false で非表示
+            weight: s.stroke ? (s.strokeWidth ?? 1.5) : 0,
+            stroke: !!s.stroke,
             dashArray: s.dash || undefined, dashOffset: s.dashOffsetPx || undefined,
             lineJoin: s.join || undefined, lineCap: s.cap || undefined,
             // LineString に fill を掛けると閉合ポリゴンとして誤塗りされるため
-            // ポリゴンのみ fill を適用する
-            ...(isPoly
-              ? { fillColor: s.fill || "#3a7bd5", fillOpacity: 0.5 * o, fill: true }
+            // ポリゴンのみ fill を適用。QML で塗り無し(brush=none・fill 無し)
+            // の場合は青フォールバックせず fill:false(QGIS 準拠)。
+            // fillColor は α 込み rgba() のため fillOpacity は o のみ掛ける
+            ...(isPoly && s.fill
+              ? { fillColor: s.fill, fillOpacity: o, fill: true }
               : { fill: false }),
             opacity: o, interactive: true, ...pathExtra,
           };
