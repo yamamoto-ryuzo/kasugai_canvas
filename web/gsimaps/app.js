@@ -30,7 +30,7 @@ import { loadVectorItem, isViewportQueryItem } from "../shared/vector-load.js";
 import { diagnoseHubLayerError } from "../shared/hub-diag.js";
 import { createMinimap } from "../shared/minimap.js";
 import { initGeoTools2d, makeLeafletOverlay } from "../shared/geo-tools-2d.js";
-import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, installExprFeatureResolver, installLayerVisibilityResolver, setMapScaleGetter } from "../shared/qml-2d.js";
+import { qmlLegendSwatchDataUrl, defaultVectorLegendSpec, specToStyle, loadCompiledQml, installExprFeatureResolver, installLayerVisibilityResolver, setMapScaleGetter, qmlLabelElement, resToZoom } from "../shared/qml-2d.js";
 import { renderLayerLegendPicker } from "../shared/legend-tab.js";
 import { createAttrWidget, attrEntriesFromProps, renderAttrContent } from "../shared/attr-widget.js";
 import { createPlayerApi } from "../shared/player-api.js";
@@ -727,6 +727,7 @@ function bindViewSync() {
   gmap.on("moveend", () => {
     // QGIS ライブ連携: カメラ停止で QGIS キャンバスへ逆通知(#62)
     liveNotifyCamera();
+    syncGsiLabelZoom();
     // 親 replaceState と iframe 側 L.Hash の hash 書込が連鎖すると
     // joint session history で iframe が親URLを拾うケースがあるため、
     // 親への書き込みはデバウンスして頻度を下げる
@@ -869,6 +870,25 @@ async function reinjectEntry(entry) {
   }
 }
 
+// QML ラベルの縮尺表示: zoom 範囲外の tooltip を隠す(leaflet 版
+// syncLabelZoomVisibility の軽量版。衝突判定は Leaflet の declutter 非対応
+// なので縮尺ゲートのみ)
+function syncGsiLabelZoom() {
+  if (!gmap) return;
+  const z = gmap.getZoom();
+  for (const entry of layerEntries) {
+    const inner = entry.sakuzu?._layer?.layer || entry.sakuzu?._layer;
+    try {
+      inner?.eachLayer?.(l => {
+        const st = l._kascLabel;
+        if (!st?.zoomRange) return;
+        const tipEl = l.getTooltip?.()?.getElement?.();
+        if (tipEl) tipEl.style.display = (z < st.zoomRange.minZoom || z > st.zoomRange.maxZoom) ? "none" : "";
+      });
+    } catch (_) {}
+  }
+}
+
 // GeoJSON を作図アイテムとして注入。visible=false なら非表示で登録のみ
 function injectSakuzuLayer(item, geojson) {
   const fc = { type: "FeatureCollection", features: (whereFilteredGeoJson(item, geojson)?.features || []).map(f => styledFeature(item, f)) };
@@ -884,6 +904,30 @@ function injectSakuzuLayer(item, geojson) {
         showFeatureAttrs(l.feature?.properties || {}, splitKascTitle(item.title).title || item.title, ev)));
     }
   } catch (_) { /* クリック付与失敗は表示自体を妨げない */ }
+  // QML <labeling>: iframe 内 Leaflet の permanent tooltip でラベル描画
+  // (leaflet エンジンと同じ qmlLabelElement 経路。縮尺範囲は zoomend で切替)
+  if (item._qml?.labelFor) {
+    try {
+      const inner = layer.layer || layer;
+      if (typeof inner.eachLayer === "function") {
+        inner.eachLayer(l => {
+          const el = qmlLabelElement(item._qml, l.feature?.properties || {});
+          if (!el) return;
+          const spec = el._kascLabelSpec || {};
+          const [ox, oy] = spec.pixelOffsetOf ? spec.pixelOffsetOf() : [0, 0];
+          l._kascLabel = {
+            spec,
+            zoomRange: spec.labelScale ? {
+              minZoom: spec.labelScale.maxScale ? resToZoom(spec.labelScale.maxScale * 0.00028, gmap?.getCenter?.().lat ?? 0) : 0,
+              maxZoom: spec.labelScale.minScale ? resToZoom(spec.labelScale.minScale * 0.00028, gmap?.getCenter?.().lat ?? 0) : 99,
+            } : null,
+          };
+          l.bindTooltip(el, { permanent: true, direction: "center", className: "kasc-label", interactive: false, offset: [ox, oy] });
+        });
+      }
+    } catch (_) { /* ラベル付与失敗は表示自体を妨げない */ }
+    syncGsiLabelZoom();
+  }
   const title = item.title || "layer";
   const fileName = /\.[a-z0-9]+$/i.test(title) ? title : `${title}.geojson`;
   const sk = new G.SakuzuListItem(
@@ -1134,7 +1178,7 @@ async function addLiveQgisLayer(title) {
     }
     return { added: 0, existing: true };
   }
-  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 2000 });
+  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 10000 });
   if (!data?.ok) throw new Error(data?.reason || data?.error || "query failed");
   const fc = data.geojson || { type: "FeatureCollection", features: [] };
   const url = URL.createObjectURL(new Blob(
@@ -1168,7 +1212,7 @@ async function addLiveQgisLayer(title) {
 async function reloadLiveEntry(entry) {
   const t = entry.item.liveSource?.title;
   if (!t) return;
-  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 2000 });
+  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 10000 });
   if (!data?.ok) return;
   entry.item._geojson = data.geojson
     || { type: "FeatureCollection", features: [] };

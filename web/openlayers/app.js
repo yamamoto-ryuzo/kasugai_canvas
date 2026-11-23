@@ -128,6 +128,7 @@ const map = new Map({
   view: new View({ center: fromLonLat([139.767, 35.681]), zoom: 10 }),
 });
 window.kascMap = map; // デバッグ/外部連携用参照（他エンジンと同じ公開範囲）
+Object.defineProperty(window, "kascEntries", { get: () => layerEntries }); // デバッグ/外部連携用参照（kascMap と同じ公開範囲）
 
 // 地物の範囲へ移動。属性一覧・属性タブの行クリックで共通使用。
 // GeoJSON Feature(EPSG:4326)と ol/Feature(EPSG:3857)の両方を受け付ける
@@ -1979,7 +1980,7 @@ async function addLiveQgisLayer(title) {
     }
     return { added: 0, existing: true };
   }
-  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 2000 });
+  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 10000 });
   if (!data?.ok) throw new Error(data?.reason || data?.error || "query failed");
   const fc = data.geojson || { type: "FeatureCollection", features: [] };
   const url = URL.createObjectURL(new Blob(
@@ -2006,7 +2007,7 @@ async function addLiveQgisLayer(title) {
 async function reloadLiveEntry(entry) {
   const t = entry.item.liveSource?.title;
   if (!t) return;
-  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 2000 });
+  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 10000 });
   if (!data?.ok) return;
   const geojson = data.geojson || { type: "FeatureCollection", features: [] };
   entry.item._geojson = geojson;

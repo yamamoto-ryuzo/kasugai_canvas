@@ -1072,6 +1072,11 @@ export function olQmlStyleFunction(compiled, OL) {
     }
     // symbollevels=1 の近似: 地物の最小 pass をスタイル z-index として使う
     if (Number.isFinite(spec.zRank)) styleOpts.zIndex = spec.zRank;
+    // ポリゴン内部点: MultiPolygon は getInteriorPoint を持たないため
+    // getInteriorPoints(MultiPoint)の先頭点を使う
+    const interiorPtOf = gg => gg?.getInteriorPoint ? gg.getInteriorPoint()
+      : gg?.getInteriorPoints ? new Point(gg.getInteriorPoints().getCoordinates()[0])
+      : null;
     // 線端トリム: 描画ごとの resolution で画面px→地図単位へ正確換算し
     // geometry を切断して返す(基準縮尺近似ではなく実縮尺で再現できる)
     const trimGeomOf = (line) => {
@@ -1139,7 +1144,7 @@ export function olQmlStyleFunction(compiled, OL) {
             const g = feature.getGeometry?.();
             const pt = r && g ? (
               /Point/.test(geomType) ? g
-                : (/Polygon/.test(geomType) && g.getInteriorPoint) ? g.getInteriorPoint()
+                : /Polygon/.test(geomType) ? interiorPtOf(g)
                 : (/LineString/.test(geomType) && g.getCoordinateAt) ? new Point(g.getCoordinateAt(0.5))
                 : null) : null;
             if (pt) extra.push(new Style({
@@ -1192,9 +1197,9 @@ export function olQmlStyleFunction(compiled, OL) {
       }
     }
     // CentroidFill: ポリゴン内部点へマーカーを描く
-    if (spec.centroid?.length && /Polygon/.test(geomType) && geom?.getInteriorPoint && Point) {
+    if (spec.centroid?.length && /Polygon/.test(geomType) && interiorPtOf(geom)) {
       extra.push(new Style({
-        geometry: geom.getInteriorPoint(),
+        geometry: interiorPtOf(geom),
         image: new Icon({ img: markerLayersToCanvas(spec.centroid), anchor: [0.5, 0.5] }),
       }));
     }

@@ -1,0 +1,4 @@
+title: multipolygon label test
+base: ベースマップなし | none
+cam: 初期 | 35.68 | 139.75 | h=15000 | p=-90
+geojson: mpoly | canvas_data/mpoly.geojson | style=canvas_data/label.qml | on

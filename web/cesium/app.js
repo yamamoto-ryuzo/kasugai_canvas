@@ -8945,7 +8945,7 @@ async function addLiveQgisLayer(title) {
     return { added: 0, existing: true };
   }
   const bbox = currentViewBbox4326();
-  const data = await liveQueryFeatures(t, { bbox, limit: 2000 });
+  const data = await liveQueryFeatures(t, { bbox, limit: 10000 });
   if (!data?.ok) throw new Error(data?.reason || data?.error || "query failed");
   const fc = data.geojson || { type: "FeatureCollection", features: [] };
   const url = URL.createObjectURL(new Blob(
@@ -8971,7 +8971,7 @@ async function addLiveQgisLayer(title) {
 async function reloadLiveLayer(item) {
   const bbox = currentViewBbox4326();
   if (!bbox) return;
-  const data = await liveQueryFeatures(item.liveSource.title, { bbox, limit: 2000 });
+  const data = await liveQueryFeatures(item.liveSource.title, { bbox, limit: 10000 });
   if (!data?.ok) return;
   const fc = data.geojson || { type: "FeatureCollection", features: [] };
   item.geojsonSource = fc;
