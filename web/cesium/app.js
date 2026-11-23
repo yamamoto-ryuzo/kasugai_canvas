@@ -8822,11 +8822,20 @@ function liveConfigureFromSpec() {
     getView: () => {
       const c = Cesium.Cartographic.fromCartesian(viewer.camera.position);
       if (!c) return {};
-      const lat = c.latitude * 180 / Math.PI;
+      // 送信座標は QGIS 側が「画面中心」として扱うため、カメラ空中位置ではなく
+      // 画面中央の地表ピック点を使う(傾斜時に数十kmずれるのを防ぐ)
+      const canvas = viewer.canvas;
+      const cx = canvas ? canvas.clientWidth / 2 : 0;
+      const cy = canvas ? canvas.clientHeight / 2 : 0;
+      const picked = (cx > 0 && cy > 0)
+        ? viewer.camera.pickEllipsoid(new Cesium.Cartesian2(cx, cy), Cesium.Ellipsoid.WGS84)
+        : null;
+      const center = picked ? Cesium.Cartographic.fromCartesian(picked) : c;
+      const lat = center.latitude * 180 / Math.PI;
       const height = c.height;
       return {
         latitude: lat,
-        longitude: c.longitude * 180 / Math.PI,
+        longitude: center.longitude * 180 / Math.PI,
         height,
         pitch: viewer.camera.pitch * 180 / Math.PI,
         heading: viewer.camera.heading * 180 / Math.PI,
