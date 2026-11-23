@@ -198,6 +198,31 @@ for (const eng of engines) {
     } else note("地物>0 の geojson 行なし(空レイヤのみのプロジェクト)");
     // R5-R8: 状態系行の Canvas UI 適用(存在する面のみ。無い面は NOTE)
     if (kasc) {
+      // mount ループ完了まで待つ。テーマ選択肢・カメラ/ブックマークプリセットは
+      // レイヤ mount 完了後にまとめて描画される(gsimaps は mountEntry が
+      // iframe 経由で重く、#cams と別に常設の .cam-btn(保存/読込)が3個ある
+      // ため「cam-btn が有る」では収束判定できない)。#load-progress の
+      // 「一度表示→再び hidden」または期待値の充足で打ち切る
+      const expectTheme = (kasc.types.theme || 0) > 0
+        ? (kasc.types.theme || 0) + 1 : null;
+      const expectBm = (kasc.types.bookmark || 0) > 0;
+      let lpSeenVisible = false;
+      for (let i = 0; i < 90; i++) {
+        const st = await page.evaluate(() => {
+          const lp = document.querySelector("#load-progress");
+          return {
+            lpHidden: lp ? !!lp.hidden : true,
+            themeOpts: document.querySelectorAll("#theme-select option").length,
+            bms: document.querySelectorAll(".bm-btn").length,
+          };
+        }).catch(() => null);
+        if (!st) { await new Promise(r => setTimeout(r, 1000)); continue; }
+        if (!st.lpHidden) lpSeenVisible = true;
+        const themeOk = expectTheme == null || st.themeOpts === expectTheme;
+        const bmOk = !expectBm || st.bms > 0;
+        if ((themeOk && bmOk) || (lpSeenVisible && st.lpHidden)) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
       const ui = await page.evaluate(async () => {
         // カメラプリセットは遅延レンダリング(タブを開いて初めて描画)の
         // エンジンがあるため、カメラタブがあれば開いてから数える
@@ -212,11 +237,15 @@ for (const eng of engines) {
             if (document.querySelectorAll(".cam-btn, .preset-button").length) break;
           }
         }
+        // gsimaps の #cams とは別に常設の .cam-btn(cams-save-*/cams-load 等の
+        // 保存/読込ユーティリティ)があるため、id^=cams- のボタンは数えない
+        const isPreset = el => !/^cams-/.test(el.id || "");
         return {
           themeOpts: document.querySelectorAll("#theme-select option").length,
           groups: document.querySelectorAll(".layer-group").length,
-          cams: document.querySelectorAll(".cam-btn, .preset-button").length,
-          bms: document.querySelectorAll(".bm-btn").length,
+          cams: [...document.querySelectorAll(".cam-btn, .preset-button")]
+            .filter(isPreset).length,
+          bms: [...document.querySelectorAll(".bm-btn")].filter(isPreset).length,
           panels: window.kasugaiApi.listPanels?.().map(
             p => `${p.owner}/${p.title}/${p.id}/${p.key}`) || null,
         };

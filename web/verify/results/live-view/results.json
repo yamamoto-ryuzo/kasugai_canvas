@@ -1,0 +1,250 @@
+{
+ "checks": [
+  {
+   "engine": "qgis",
+   "name": "live-state",
+   "pass": true,
+   "extra": "rev=?"
+  },
+  {
+   "engine": "kasc",
+   "name": "live-line",
+   "pass": true,
+   "extra": "live: http://127.0.0.1:8089 | follow"
+  },
+  {
+   "engine": "kasc",
+   "name": "style-refs",
+   "pass": true,
+   "extra": "10 lines"
+  },
+  {
+   "engine": "kasc",
+   "name": "feature-refs",
+   "pass": true,
+   "extra": "5 lines"
+  },
+  {
+   "engine": "qml",
+   "name": "live-style-qml",
+   "pass": true,
+   "extra": "qml-ok"
+  },
+  {
+   "engine": "cesium",
+   "name": "page-load",
+   "pass": true,
+   "extra": "title=ProjectFile"
+  },
+  {
+   "engine": "cesium",
+   "name": "layers",
+   "pass": true,
+   "extra": "layers=8"
+  },
+  {
+   "engine": "cesium",
+   "name": "live-fetch",
+   "pass": true,
+   "extra": "13 live reqs"
+  },
+  {
+   "engine": "cesium",
+   "name": "qml-style-fetch",
+   "pass": true,
+   "extra": "style fetched"
+  },
+  {
+   "engine": "cesium",
+   "name": "qml-asset-404",
+   "pass": true,
+   "extra": "all resolved"
+  },
+  {
+   "engine": "cesium",
+   "name": "console-clean",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "engine": "maplibre",
+   "name": "page-load",
+   "pass": true,
+   "extra": "title=ProjectFile"
+  },
+  {
+   "engine": "maplibre",
+   "name": "layers",
+   "pass": true,
+   "extra": "layers=8"
+  },
+  {
+   "engine": "maplibre",
+   "name": "live-fetch",
+   "pass": true,
+   "extra": "65 live reqs"
+  },
+  {
+   "engine": "maplibre",
+   "name": "qml-style-fetch",
+   "pass": true,
+   "extra": "style fetched"
+  },
+  {
+   "engine": "maplibre",
+   "name": "qml-asset-404",
+   "pass": true,
+   "extra": "all resolved"
+  },
+  {
+   "engine": "maplibre",
+   "name": "console-clean",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "engine": "openlayers",
+   "name": "page-load",
+   "pass": true,
+   "extra": "title=ProjectFile"
+  },
+  {
+   "engine": "openlayers",
+   "name": "layers",
+   "pass": true,
+   "extra": "layers=8"
+  },
+  {
+   "engine": "openlayers",
+   "name": "live-fetch",
+   "pass": true,
+   "extra": "63 live reqs"
+  },
+  {
+   "engine": "openlayers",
+   "name": "qml-style-fetch",
+   "pass": true,
+   "extra": "style fetched"
+  },
+  {
+   "engine": "openlayers",
+   "name": "qml-asset-404",
+   "pass": true,
+   "extra": "all resolved"
+  },
+  {
+   "engine": "openlayers",
+   "name": "console-clean",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "engine": "leaflet",
+   "name": "page-load",
+   "pass": true,
+   "extra": "title=ProjectFile"
+  },
+  {
+   "engine": "leaflet",
+   "name": "layers",
+   "pass": true,
+   "extra": "layers=8"
+  },
+  {
+   "engine": "leaflet",
+   "name": "live-fetch",
+   "pass": true,
+   "extra": "64 live reqs"
+  },
+  {
+   "engine": "leaflet",
+   "name": "qml-style-fetch",
+   "pass": true,
+   "extra": "style fetched"
+  },
+  {
+   "engine": "leaflet",
+   "name": "qml-asset-404",
+   "pass": true,
+   "extra": "all resolved"
+  },
+  {
+   "engine": "leaflet",
+   "name": "console-clean",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "engine": "gsimaps",
+   "name": "page-load",
+   "pass": true,
+   "extra": "title=ProjectFile"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "layers",
+   "pass": true,
+   "extra": "layers=8"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "live-fetch",
+   "pass": true,
+   "extra": "7 live reqs"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "qml-style-fetch",
+   "pass": true,
+   "extra": "style fetched"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "qml-asset-404",
+   "pass": true,
+   "extra": "all resolved"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "console-clean",
+   "pass": true,
+   "extra": ""
+  },
+  {
+   "engine": "navara",
+   "name": "page-load",
+   "pass": true,
+   "extra": "title=ProjectFile"
+  },
+  {
+   "engine": "navara",
+   "name": "layers",
+   "pass": true,
+   "extra": "layers=8"
+  },
+  {
+   "engine": "navara",
+   "name": "live-fetch",
+   "pass": true,
+   "extra": "61 live reqs"
+  },
+  {
+   "engine": "navara",
+   "name": "qml-style-fetch",
+   "pass": true,
+   "extra": "style fetched"
+  },
+  {
+   "engine": "navara",
+   "name": "qml-asset-404",
+   "pass": true,
+   "extra": "all resolved"
+  },
+  {
+   "engine": "navara",
+   "name": "console-clean",
+   "pass": true,
+   "extra": ""
+  }
+ ]
+}

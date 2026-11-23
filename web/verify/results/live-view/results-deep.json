@@ -1,0 +1,89 @@
+{
+ "checks": [
+  {
+   "id": "A-live-state",
+   "pass": true,
+   "extra": "ok"
+  },
+  {
+   "id": "A-driver",
+   "pass": true,
+   "extra": "http://127.0.0.1:57358"
+  },
+  {
+   "id": "Q9-named-style",
+   "pass": true,
+   "extra": "len=104843"
+  },
+  {
+   "id": "L6-mcp-loopback",
+   "pass": true,
+   "extra": "status=200 (非loopback拒否はコード上担保)"
+  },
+  {
+   "id": "B-ready",
+   "pass": true,
+   "extra": "layers=8"
+  },
+  {
+   "id": "Q3-single-symbol",
+   "pass": true,
+   "extra": "kasc-kasc-41-* line-color=[\"coalesce\",[\"get\",\"__kasc_stroke\"],\"#2c5ea8\"]"
+  },
+  {
+   "id": "Q4-rule-renderer",
+   "pass": true,
+   "extra": "legend=29"
+  },
+  {
+   "id": "Q6-labels",
+   "pass": true,
+   "extra": "symbolLayers=13 rendered=31 ids=kasc-43-symbol-1,kasc-43-symbol-2,kasc-42-symbol-1"
+  },
+  {
+   "id": "Q7-is-layer-visible-expr",
+   "pass": true,
+   "extra": "labels 31→(両参照OFF)→0→(復帰)→31"
+  },
+  {
+   "id": "Q8-scale-compiled",
+   "pass": true,
+   "extra": "zoom bounds on DM layers: 18 layers e.g. kasc-38-fill-1 max=22.60"
+  },
+  {
+   "id": "Q11-warnings-visible",
+   "pass": true,
+   "extra": "warnings=0"
+  },
+  {
+   "id": "L1-rev-bump",
+   "pass": true,
+   "extra": "rev 1795448013331→1795448157612"
+  },
+  {
+   "id": "Q10-edit-reflect",
+   "pass": true,
+   "extra": "served=true paint=[\"coalesce\",[\"get\",\"__kasc_stroke\"],\"#2c5ea8\"] kascRefetch=1 styleRefetch=6"
+  },
+  {
+   "id": "L2-controls-roundtrip",
+   "pass": true,
+   "extra": "true→false→true"
+  },
+  {
+   "id": "L3-camera-to-qgis",
+   "pass": true,
+   "extra": "lon 139.790→139.750 scale 150000→482722"
+  },
+  {
+   "id": "L4-selection-to-qgis",
+   "pass": true,
+   "extra": "applied={\"ok\":true,\"selected\":6,\"layer\":\"行政区域\"} qgis_sel=6"
+  },
+  {
+   "id": "L5-writeback-visibility",
+   "pass": true,
+   "extra": "visible False→True"
+  }
+ ]
+}
