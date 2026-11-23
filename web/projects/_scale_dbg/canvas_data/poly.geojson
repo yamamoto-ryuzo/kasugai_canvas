@@ -1,4 +1,0 @@
-{"type":"FeatureCollection","features":[
-{"type":"Feature","properties":{"name":"中央区サンプル"},"geometry":{"type":"Polygon","coordinates":[[[139.74,35.66],[139.78,35.66],[139.78,35.685],[139.74,35.685],[139.74,35.66]]]}},
-{"type":"Feature","properties":{"name":"江東区サンプル"},"geometry":{"type":"Polygon","coordinates":[[[139.80,35.66],[139.84,35.66],[139.84,35.685],[139.80,35.685],[139.80,35.66]]]}}
-]}
