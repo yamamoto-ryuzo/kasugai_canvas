@@ -42,8 +42,9 @@ try {
     `${JSON.stringify(v.body)} expect=${EXPECT_VER}`);
   const pj = await getJson(`${STABLE}/projects/projects.json`);
   const ids = (pj.body || []).map(p => p.id).sort();
-  rec("http.projects", pj.ok && ["default", "reinfolib", "sample_qgis"].every(i => ids.includes(i)),
-    `ids=${JSON.stringify(ids)}`);
+  rec("http.projects", pj.ok && ids.length === 2 &&
+    ["default", "sample_qgis"].every(i => ids.includes(i)),
+    `ids=${JSON.stringify(ids)} (CDN は default+sample_qgis のみ)`);
   const idx = await fetch(`${STABLE}/index.html`, { cache: "no-store" });
   rec("http.index", idx.ok, `status=${idx.status}`);
   const kasc = await fetch(KASC_CDN, { cache: "no-store" });
