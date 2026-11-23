@@ -34,10 +34,10 @@ RequestExecutionLevel user
 ManifestDPIAware true
 Unicode True
 
-VIProductVersion "7.1.0.0"
+VIProductVersion "7.2.0.0"
 VIAddVersionKey "ProductName" "${APP_NAME}"
 VIAddVersionKey "FileDescription" "${APP_NAME} installer"
-VIAddVersionKey "FileVersion" "7.1.0"
+VIAddVersionKey "FileVersion" "7.2.0"
 VIAddVersionKey "CompanyName" "${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 VIAddVersionKey "LegalCopyright" "Copyright ${U+00A9} ${U+5C71}${U+672C}${U+7ADC}${U+4E09}"
 
@@ -76,7 +76,9 @@ Section "Install"
   SetOutPath "$INSTDIR\web"
   ; vendor/ (vendored gsimaps) is served from the CDN and must not be bundled.
   ; The /x exclusion also covers a locally re-fetched web/vendor/.
-  File /r /x "vendor" "${WEB_DIR}\*"
+  ; verify/results/ is verification evidence (screenshots/JSON, >100MB) —
+  ; not needed at runtime and exceeds the GitHub file limit, so excluded.
+  File /r /x "vendor" /x "results" "${WEB_DIR}\*"
 
   SetOutPath "$INSTDIR\projects"
   ; /x "default" は相対パスではなく項目名にマッチするため、

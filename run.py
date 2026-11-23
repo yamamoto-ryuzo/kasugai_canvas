@@ -457,8 +457,13 @@ def build_release() -> None:
                 archive.write(project_file, arcname=(Path("projects") / rel).as_posix())
         if web_dir.exists():
             for web_file in web_dir.rglob("*"):
+                rel = web_file.relative_to(web_dir)
                 # vendor/ は SW が vendor.json のピン先 CDN へ直接解決するため配布物へ含めない
-                if "vendor" in web_file.relative_to(web_dir).parts:
+                if "vendor" in rel.parts:
+                    continue
+                # verify/results/ は検証証跡(スクショ・JSON・100MB超)で
+                # 実行に不要かつ GitHub 100MB 上限を超えるため配布物へ含めない
+                if len(rel.parts) >= 2 and rel.parts[0] == "verify" and rel.parts[1] == "results":
                     continue
                 if web_file.is_file():
                     archive.write(web_file, arcname=(Path("web") / web_file.relative_to(web_dir)).as_posix())

@@ -5,7 +5,7 @@
 // - JS が無効でも本文は通常表示される（サイドバーだけ出ない）
 (function () {
   const base = new URL('.', document.currentScript.src).pathname;
-  const VERSION = 'v7.1.0';
+  const VERSION = 'v7.2.0';
 
   // ナビ構造 = Canvas UI の章・節構成
   //   章（グループ）= パネルの呼び名（レイヤパネル・ツール・AIチャット・管理・プラグイン）

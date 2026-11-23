@@ -4,7 +4,7 @@
 
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に準拠し、バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) を使用します。
 
-## [Unreleased]
+## [7.2.0] - 2026-11-23
 
 - **ベースマップ一覧 UI(「すべて展開」「すべて閉じる」+項目行)を全エンジンで統一** — `syncBasemapList` は optgroup が無い select を早期 return で素の select 表示にしていたため、フラットなベースマップ一覧では一覧 UI 自体が出なかった。optgroup 有無に関わらず常時一覧描画へ変更(フラット時も同じ外観)。gsimaps は `syncBasemapList` 未配線だったため import+`rebuildBasemapSelect` で `appendGroupedTitleOptions` による optgroup 化と一覧同期を追加し `.basemap-list` CSS を導入。疑似選択肢「ベースマップなし」「ベースマップ透明」は全エンジンで一覧行として表示される
 - **OpenLayers で MultiPolygon 地物の QML ラベルが一切描画されない問題を修正** — `shared/qml-2d.js` のポリゴン内部点取得が `getInteriorPoint()`(Polygon 専用)に固定されており、MultiPolygon では常に null → ラベル全体ドロップ。中空ハロー(bufferNoFill)のラスタライズ経路と centroid フォールバック経路の両方で発生していた。`interiorPtOf()` を新設し MultiPolygon は `getInteriorPoints()` の最大ポリゴン部の内部点を使うよう修正。実機 live プロジェクト(行政区域=全地物 MultiPolygon・bufferNoFill=1)で「テキストが全く出ない」状態を解消
