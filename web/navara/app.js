@@ -1268,7 +1268,7 @@ async function addKascLayer(item, baseUrl) {
     const pointO = oNum(item.opts?.opacity) ?? aOf(markerCss) ?? pd?.opacity ?? 1;
     // extrude=<m>(#60)・QML 2.5D レンダラ → PolygonMaterial.extrudedHeight(m)。
     // 地物別の上書きは FeatureEvaluator の extrudedHeight で同値を返す
-    const extrudeH = Math.max(Number(item.opts?.extrude) || 0, item._qml?.d25?.height || 0);
+    const extrudeH = Math.max(Number(item.opts?.extrude) || 0, item._qml?.d25?.heightM ?? item._qml?.d25?.height ?? 0);
     // QML マーカー: 形状・画像を含むため markerLayersToCanvas で canvas 化し、
     // billboard の地物別 image(URL/dataURL、atlas 収容)で差し替える
     let markerImageFor = null;

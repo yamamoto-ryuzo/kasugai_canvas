@@ -35,7 +35,7 @@ import { createKascPortal } from "../shared/portal.js";
 import { createKascDashboard, featureCentroid } from "../shared/dashboard.js";
 import { parseKascDashValue, parseKascFormValue, parseKascStatValue, parseKascSearchValue, featurePopupMeta, togeojsonIconSpec, parseKascPluginSpec } from "../shared/kasc.js";
 import { createMvtImageryProvider } from "../shared/mvt.js";
-import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveIsActive, liveQueryFeatures, liveRenderUrl, liveSetFollow, liveIsFollowing } from "../shared/live.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveStatus, liveWritebackEntries, liveSendFeatures, liveQueryFeatures, liveSetFollow, liveIsFollowing } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
@@ -8844,8 +8844,9 @@ function liveConfigureFromSpec() {
       };
     },
     applySelection: sel => void applyQgisSelection(sel),
+    addLiveLayer: addLiveQgisLayer,
   });
-  // live セッション有無に合わせて操縦パネルを出し分ける
+  // live セッション有無に合わせて接続バッジを出し分ける
   syncLivePanel();
 }
 
@@ -8904,22 +8905,6 @@ async function applyQgisSelection(sel) {
   requestRender();
 }
 
-// ---- QGIS 描画フォールバック・オーバーレイ(#62) ----
-// /live/render で QGIS エンジンが描いた現在範囲の透過PNGを
-// SingleTileImagery として重ねる。Canvas が描けないレイヤー
-// (メッシュ/複雑レンダラ/アノテーション等)も QGIS 描画で見える。
-let qgisRenderLayer = null;
-let qgisRenderTimer = null;
-let qgisRenderOn = false;
-function setQgisRender(on) {
-  qgisRenderOn = !!on;
-  if (!qgisRenderOn && qgisRenderLayer) {
-    try { viewer.imageryLayers.remove(qgisRenderLayer, true); } catch (_) {}
-    qgisRenderLayer = null;
-    requestRender();
-  }
-  if (qgisRenderOn) scheduleQgisRender(0);
-}
 // 表示範囲(EPSG:4326 の軸平行 bbox)。日付変更線またぎは正規化する
 function currentViewBbox4326() {
   try {
@@ -8934,55 +8919,33 @@ function currentViewBbox4326() {
     return [w, s, e, n];
   } catch (_) { return null; }
 }
-// bbox を w/h のアスペクト比へ拡張(QGIS 側 _adjust_extent_to_aspect と同型)
-function adjustBboxToAspect(bbox, w, h) {
-  const [x0, y0, x1, y1] = bbox;
-  const cur = (x1 - x0) / (y1 - y0);
-  const tgt = w / h;
-  if (!(cur > 0) || !(tgt > 0) || Math.abs(cur - tgt) < 1e-9) return bbox;
-  if (cur > tgt) {
-    const dh = (x1 - x0) / tgt - (y1 - y0);
-    return [x0, y0 - dh / 2, x1, y1 + dh / 2];
-  }
-  const dw = (y1 - y0) * tgt - (x1 - x0);
-  return [x0 - dw / 2, y0, x1 + dw / 2, y1];
-}
-async function refreshQgisRender() {
-  if (!qgisRenderOn || !liveIsActive()) return;
-  const bbox = currentViewBbox4326();
-  if (!bbox) return;
-  const w = Math.max(1, viewer.canvas.clientWidth || 800);
-  const h = Math.max(1, viewer.canvas.clientHeight || 600);
-  const adj = adjustBboxToAspect(bbox, w, h);
-  const url = liveRenderUrl({ bbox: adj, w, h });
-  if (!url) return;
-  const layer = new Cesium.ImageryLayer(
-    new Cesium.SingleTileImageryProvider({
-      url,
-      rectangle: Cesium.Rectangle.fromDegrees(adj[0], adj[1], adj[2], adj[3]),
-    }), { alpha: 0.9 });
-  viewer.imageryLayers.add(layer);
-  if (qgisRenderLayer) {
-    try { viewer.imageryLayers.remove(qgisRenderLayer, true); } catch (_) {}
-  }
-  qgisRenderLayer = layer;
-  requestRender();
-}
-function scheduleQgisRender(delay = 700) {
-  clearTimeout(qgisRenderTimer);
-  qgisRenderTimer = setTimeout(() => { void refreshQgisRender(); }, delay);
-}
-viewer.camera.moveEnd.addEventListener(() => {
-  if (qgisRenderOn) scheduleQgisRender();
-});
-
 // ---- QGIS オンデマンド地物読み込み(#62: GET /live/features) ----
 // カタログの title を現在表示範囲(bbox)で取得して geojson レイヤー化し、
 // liveSource を付けてカメラ停止ごとの範囲追従再取得対象にする
 let liveLayerSeq = 0;
 async function addLiveQgisLayer(title) {
+  // 追加要求(QGIS Live タブのキュー)が重複した場合は既存レイヤを
+  // 現在範囲で再取得する(重複エントリを増やさない)
+  const t = String(title);
+  const existing = layers.find(it => it.liveSource?.title === t);
+  if (existing) {
+    await reloadLiveLayer(existing);
+    return { added: existing.geojsonSource?.features?.length ?? 0 };
+  }
+  // 同名レイヤが既に live kasc へ載っているなら二重追加しない
+  // (キューの title は QGIS カタログ=kasc タイトルと一致する)。
+  // 非表示(| off)なら追加要求を「表示にする」操作として扱う
+  const inKasc = layers.find(it => (it.sourceTitle || it.title) === t);
+  if (inKasc) {
+    if (inKasc.visible === false) {
+      inKasc.visible = true;
+      renderLayerList();
+      await refreshLayers();
+    }
+    return { added: 0, existing: true };
+  }
   const bbox = currentViewBbox4326();
-  const data = await liveQueryFeatures(title, { bbox, limit: 2000 });
+  const data = await liveQueryFeatures(t, { bbox, limit: 2000 });
   if (!data?.ok) throw new Error(data?.reason || data?.error || "query failed");
   const fc = data.geojson || { type: "FeatureCollection", features: [] };
   const url = URL.createObjectURL(new Blob(
@@ -9054,8 +9017,6 @@ async function liveApplyKascText(text, { changed = [], full = false } = {}) {
   buildVectorSearchIndex();
   updateVectorSearchUI();
   renderLayerList();
-  // QGIS描画オーバーレイ表示中は編集差分の反映として描画も取り直す
-  if (qgisRenderOn) scheduleQgisRender(300);
 }
 
 // 1レイヤーだけ再取得して DataSource を差し替える。
@@ -9513,7 +9474,7 @@ function setupEvents() {
       layerOpacityFactor = Number(event.target.value) || 0;
       if (layerOpacityValue) layerOpacityValue.textContent = `${Math.round(layerOpacityFactor * 100)}%`;
       // タイル/ライブ描画などの ImageryLayer は alpha を直接更新する。
-      // _baseAlpha 未設定のレイヤー(/live/render 等)は現在値を初回の基準値にする
+      // _baseAlpha 未設定のレイヤーは現在値を初回の基準値にする
       const len = viewer.imageryLayers.length;
       for (let i = 0; i < len; i++) {
         const l = viewer.imageryLayers.get(i);
@@ -15174,16 +15135,12 @@ window.kasugaiApi = {
   liveSyncStatus() {
     return liveStatus();
   },
-  // QGIS ライブ連携: カメラ追従・QGIS描画オーバーレイ・オンデマンド地物追加
+  // QGIS ライブ連携: カメラ追従・オンデマンド地物追加
   liveSetFollow(on) {
     return liveSetFollow(on);
   },
   liveIsFollowing() {
     return liveIsFollowing();
-  },
-  liveSetQgisRender(on) {
-    setQgisRender(on);
-    return qgisRenderOn;
   },
   async liveAddQgisLayer(title) {
     return addLiveQgisLayer(title);
@@ -15824,8 +15781,6 @@ configureFollow({
   },
 });
 
-// QGIS Live 操縦パネル(live: 行検出時にレイヤ一覧先頭へ表示)
-mountLivePanel(document.querySelector("#layers-panel"), {
-  setRender: setQgisRender,
-  addLayer: addLiveQgisLayer,
-});
+// QGIS Live 接続バッジ(live: 行検出時にレイヤ一覧先頭へ表示。
+// 操縦は QGIS 側 geo_webview パネルの Live タブへ集約済み)
+mountLivePanel(document.querySelector("#layers-panel"));

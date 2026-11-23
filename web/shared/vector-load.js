@@ -652,7 +652,9 @@ export function normalizeGeoJsonToFeatureCollection(obj) {
     : obj.type === "Feature" ? { type: "FeatureCollection", features: [obj] }
     : GEOJSON_GEOMETRY_TYPES.has(obj.type)
       ? { type: "FeatureCollection", features: [{ type: "Feature", geometry: obj, properties: {} }] }
-      : { type: "FeatureCollection", features: [] };
+      : (obj.geojson && typeof obj.geojson === "object")
+        ? normalizeGeoJsonToFeatureCollection(obj.geojson)
+        : { type: "FeatureCollection", features: [] };
   return normalizeSimpleStyleColors(fc);
 }
 

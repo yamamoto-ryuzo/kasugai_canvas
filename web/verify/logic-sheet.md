@@ -529,11 +529,11 @@ flowchart LR
 
 ### `web.shared.live-panel` ✅ live-panel
 - kind=logic_fn / source=`web/shared/live-panel.js` / needs_runtime=False standalone_ok=True
-- Live連携パネルUI
+- Live接続バッジUI(操縦はQGIS側Liveタブへ集約)
 - signature: `live-panel`
 - 単独検証: `node --check + export存在確認`
 - 連携検証: `エンジン経由で機能実行`
-- 結果: **pass** (2026-11-14T00:00:00+09:00) — node --check OK + エンジン経由で利用
+- 結果: **pass** (2026-11-23T11:47:50+09:00) — node --check OK(ESM)・mountLivePanel/syncLivePanel export 確認・バッジ化後の再実装で再検証
 
 ```mermaid
 flowchart LR
@@ -1180,20 +1180,6 @@ flowchart LR
 ```mermaid
 flowchart LR
   ai[AI/外部エージェント] -->|kasugaiApi.liveIsFollowing| d[executeChatTool/bridge]
-  d --> api[kasugaiApi実装 web/cesium/app.js]
-  api --> st[状態変化/応答]
-```
-
-### `web.cesium.api.liveSetQgisRender` ✅ kasugaiApi.liveSetQgisRender
-- kind=ai_integration / source=`web/cesium/app.js:11623` / needs_runtime=True standalone_ok=False
-- AI/外部制御面メソッド liveSetQgisRender()
-- signature: `kasugaiApi.liveSetQgisRender`
-- 連携検証: `page.evaluate(kasugaiApi.liveSetQgisRender(...))`
-- 結果: **pass** (2026-11-14T00:00:00+09:00)
-
-```mermaid
-flowchart LR
-  ai[AI/外部エージェント] -->|kasugaiApi.liveSetQgisRender| d[executeChatTool/bridge]
   d --> api[kasugaiApi実装 web/cesium/app.js]
   api --> st[状態変化/応答]
 ```
@@ -3135,7 +3121,7 @@ flowchart LR
 
 ### `web.cesium.ui.live_panel` ✅ live_panel
 - kind=ui_control / source=`web/cesium/index.html+app.js` / needs_runtime=True standalone_ok=False
-- QGIS Live連携パネル(#live-panel・mountLivePanel)
+- QGIS Live接続バッジ(#live-panel・mountLivePanel)
 - signature: `live_panel`
 - 連携検証: `listUiControls列挙+controlUi操作/DOM assert`
 - 結果: **pass** (2026-11-14T00:00:00+09:00)
@@ -3580,7 +3566,6 @@ flowchart LR
 | `web.cesium.api.liveSyncStatus` | ai_integration | ● | - | ✅ pass |
 | `web.cesium.api.liveSetFollow` | ai_integration | ● | - | ✅ pass |
 | `web.cesium.api.liveIsFollowing` | ai_integration | ● | - | ✅ pass |
-| `web.cesium.api.liveSetQgisRender` | ai_integration | ● | - | ✅ pass |
 | `web.cesium.api.exportInspector` | ai_integration | ● | - | ✅ pass |
 | `web.cesium.api.checkUpdate` | ai_integration | ● | - | ✅ pass |
 | `web.cesium.api.installUpdate` | ai_integration | ● | - | ⏭ skip |

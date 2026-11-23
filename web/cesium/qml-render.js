@@ -1,7 +1,7 @@
 // QML スタイル(.qml)の Cesium への適用（描画側バインディング）
 // パース・式評価・シンボルコンパイルは /shared/qml-style.js を参照。
 // 本ファイルは Cesium 固有の entity/primitive 適用部のみを持つ。
-import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas, linRefFormatText, clampMapUnitsPerPixel, interpolatedColorAt } from "../shared/qml-style.js";
+import { toCesiumColor, dashPattern, markerLayersToCanvas, fillPartsToTile, scaleFillPartsAlpha, rgbaToCss, qmlLabelCanvas, evalGeomExpr, diagramCanvas, linRefFormatText, clampMapUnitsPerPixel, interpolatedColorAt, sizeToPx, blankCheckForPart } from "../shared/qml-style.js";
 import { trimCoordsPlanar, TRIM_PX_TO_M, arrowLinePolygonRings } from "../shared/qml-2d.js";
 
 const Cesium = window.Cesium;
@@ -434,7 +434,8 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
           /^(outer)?glow$/i.test(String(fx?.type || "")));
         const glowBlurPx = glowFx
           ? Math.max(Number(glowFx.blur_level ?? glowFx.blur_radius ?? 0)
-              * ({ Point: 96 / 72, Pixel: 1, MapUnit: 0.3 * 96 / 25.4 }[glowFx.blur_unit] ?? 96 / 25.4), 0)
+              * ({ Point: 96 / 72, Pixel: 1, MapUnit: 0.3 * 96 / 25.4,
+                  MetersInMapUnits: 0.3 * 96 / 25.4, RenderMetersInMapUnits: 0.3 * 96 / 25.4 }[glowFx.blur_unit] ?? 96 / 25.4), 0)
           : 0;
         if (glowFx && !spec.line.dash?.length && Cesium.PolylineGlowMaterialProperty) {
           const w = Math.max(spec.line.widthPx || 1, 0.5);
@@ -558,7 +559,7 @@ function _applyQmlStyleToDataSourceInner(ds, style, { clamp = false, clampRef = 
         } else if (solidBase) {
           entity.polygon.material = new Cesium.ColorMaterialProperty(toCesiumColor(solidBase));
           // 2.5D レンダラ近似: 非ドレープ時のみ立体押出し(クランプと両立しない)(#64)
-          if (style?.d25 && !clamp) entity.polygon.extrudedHeight = new Cesium.ConstantProperty(style.d25.height ?? 10);
+          if (style?.d25 && !clamp) entity.polygon.extrudedHeight = new Cesium.ConstantProperty(style.d25.heightM ?? style.d25.height ?? 10);
         } else {
           entity.polygon.material = new Cesium.ColorMaterialProperty(Cesium.Color.TRANSPARENT);
         }
@@ -1043,10 +1044,19 @@ function linRefSamples3D(pos, interval, { skipMultiples = 0, max = 500 } = {}) {
 // renderPolylineVertex/renderOffsetVertexAlongLine/markerAngle)準拠で
 // qml-2d.js markerlineDecorSamples と同じ規約を Cartesian 空間で実装。
 // 戻り値 [{position,angle}] — angle は北基準方位 rad(既存 s.angle 規約)
-function markerlineDecorSamples3D(pos, decor) {
+function markerlineDecorSamples3D(pos, decor, partIdx = 0) {
   const MAX = 500;
   const out = [];
   if (!pos || pos.length < 2) return out;
+  // blank_segments_unit → メートル距離 変換(MapUnit=4326度を m 概算換算、
+  // 絵単位は px→m の既存 LABEL_M_PER_PX 規約、MetersInMapUnits=生値)
+  const blankConv = v => {
+    const u = String(decor.blankSegmentsUnit || "MM");
+    if (u === "MetersInMapUnits" || u === "RenderMetersInMapUnits") return v;
+    if (u === "MapUnit") return v * 111319.9;
+    return (sizeToPx(v, u) || 0) * LABEL_M_PER_PX;
+  };
+  const blank = blankCheckForPart(decor, partIdx, blankConv);
   const ll = pos.map(p => Cesium.Cartographic.fromCartesian(p));
   const segAng = (i, j) => Math.atan2(ll[j].longitude - ll[i].longitude,
     ll[j].latitude - ll[i].latitude);
@@ -1101,6 +1111,7 @@ function markerlineDecorSamples3D(pos, decor) {
     let d = off;
     if (isRing && total > 0 && off !== 0) d = ((off % total) + total) % total;
     for (; d <= total && out.length < MAX; d += step) {
+      if (blank && blank(d)) continue;
       const s = pointAt(Math.min(d, total));
       const wa = windowAngle(d);
       out.push({ position: s.position, angle: wa !== undefined ? wa : s.angle });
@@ -1108,33 +1119,40 @@ function markerlineDecorSamples3D(pos, decor) {
   }
   if (flags.has("vertex") || flags.has("curvepoint")) {
     const m = isRing ? n - 1 : n;
-    for (let i = 0; i < m && out.length < MAX; i++)
+    for (let i = 0; i < m && out.length < MAX; i++) {
+      if (blank && blank(cum[i])) continue;
       out.push({ position: pos[i], angle: vertexAngle(isRing, i) });
+    }
   }
   if (flags.has("innervertices")) {
     const m = isRing ? n - 1 : n;
-    for (let i = 1; i < m - 1 && out.length < MAX; i++)
+    for (let i = 1; i < m - 1 && out.length < MAX; i++) {
+      if (blank && blank(cum[i])) continue;
       out.push({ position: pos[i], angle: vertexAngle(isRing, i) });
+    }
   }
   if (flags.has("segmentcenter")) {
     for (let i = 0; i + 1 < n && out.length < MAX; i++) {
       if (eq(i, i + 1)) continue;
+      if (blank && blank((cum[i] + cum[i + 1]) / 2)) continue;
       out.push({ position: Cesium.Cartesian3.midpoint(pos[i], pos[i + 1], new Cesium.Cartesian3()),
         angle: segAng(i, i + 1) });
     }
   }
   if (flags.has("firstvertex") && decor.everyPart !== false) {
-    if (off > 0 && off <= total) out.push(pointAt(off));
-    else if (off <= 0) out.push({ position: pos[0], angle: vertexAngle(isRing, 0) });
+    if (off > 0 && off <= total) { if (!blank || !blank(off)) out.push(pointAt(off)); }
+    else if (off <= 0 && (!blank || !blank(0))) out.push({ position: pos[0], angle: vertexAngle(isRing, 0) });
   }
   if (flags.has("lastvertex") && decor.everyPart !== false) {
-    if (off > 0 && off <= total) out.push(pointAt(total - off));
-    else if (off <= 0) out.push({ position: pos[n - 1], angle: vertexAngle(isRing, n - 1) });
+    if (off > 0 && off <= total) { if (!blank || !blank(total - off)) out.push(pointAt(total - off)); }
+    else if (off <= 0 && (!blank || !blank(total))) out.push({ position: pos[n - 1], angle: vertexAngle(isRing, n - 1) });
   }
   if (flags.has("centralpoint")) {
-    const s = pointAt(total / 2);
-    const wa = windowAngle(total / 2);
-    out.push({ position: s.position, angle: wa !== undefined ? wa : s.angle });
+    if (!blank || !blank(total / 2)) {
+      const s = pointAt(total / 2);
+      const wa = windowAngle(total / 2);
+      out.push({ position: s.position, angle: wa !== undefined ? wa : s.angle });
+    }
   }
   return out;
 }
@@ -1184,7 +1202,7 @@ function renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity }) {
   }
 }
 
-function renderLineDecor(entity, decor, t, { addAux, clamp, opacity }) {
+function renderLineDecor(entity, decor, t, { addAux, clamp, opacity, partIdx = 0 }) {
   if (decor.kind === "interpolated") {
     renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity });
     return;
@@ -1295,7 +1313,7 @@ function renderLineDecor(entity, decor, t, { addAux, clamp, opacity }) {
     // QGIS C++ の MarkerLine はマーカーのみ描き基線は引かない
     entity.polyline.show = new Cesium.ConstantProperty(false);
     const cv = markerLayersToCanvas(decor.markers);
-    const pts = markerlineDecorSamples3D(pos, decor);
+    const pts = markerlineDecorSamples3D(pos, decor, partIdx);
     for (const s of pts) {
       const bb = { position: s.position, billboard: { image: cv, verticalOrigin: Cesium.VerticalOrigin.CENTER, horizontalOrigin: Cesium.HorizontalOrigin.CENTER } };
       if (decor.rotateMarker !== false && s.angle !== undefined) bb.billboard.rotation = -(s.angle - Math.PI / 2);
@@ -1768,7 +1786,7 @@ export function buildLineDecorForGeojson(geojson, style, ds, { clamp = false, cl
   for (const f of geojson.features || []) {
     const geom = f?.geometry;
     if (!geom || !/LineString/.test(geom.type || "")) continue;
-    const props = f.properties || {};
+    const props = { ...(f.properties || {}), __geometry: geom };
     const hiddenByLegend = hasHidden && style.namesFor
       && (() => { const names = style.namesFor(props); return names.length > 0 && names.every(name => hiddenSymbols.has(name)); })();
     if (hiddenByLegend) continue;
@@ -1777,7 +1795,9 @@ export function buildLineDecorForGeojson(geojson, style, ds, { clamp = false, cl
     const decor = spec?.line?.decor;
     if (!decor) continue;
     const parts = geom.type === "MultiLineString" ? geom.coordinates : [geom.coordinates];
+    let partIdx = 0;
     for (const c of parts) {
+      const pi = partIdx++;
       if (!Array.isArray(c) || c.length < 2) continue;
       const flat = [];
       for (const p of c) { if (p) flat.push(p[0], p[1], p[2] || 0); }
@@ -1789,7 +1809,7 @@ export function buildLineDecorForGeojson(geojson, style, ds, { clamp = false, cl
         positions: { getValue: () => pos },
         show: new Cesium.ConstantProperty(true),
       } };
-      try { renderLineDecor(shim, decor, t, { addAux, clamp, opacity }); } catch (_) {}
+      try { renderLineDecor(shim, decor, t, { addAux, clamp, opacity, partIdx: pi }); } catch (_) {}
     }
   }
   return added;

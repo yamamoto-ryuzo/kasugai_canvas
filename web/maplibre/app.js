@@ -17,7 +17,7 @@ import { scaleNiceFloor } from "../shared/scale-nice.js";
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries, liveIsActive, liveRenderUrl } from "../shared/live.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries } from "../shared/live.js";
 import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
@@ -2601,64 +2601,8 @@ map.on("load", () => {
   })();
 });
 
-// ---- QGIS 描画フォールバック・オーバーレイ(#62) ----
-// /live/render の透過PNGを image source として重ねる
-// (Canvas で描けないレイヤーを QGIS レンダリングで表示)
-let qgisRenderOn = false;
-let qgisRenderTimer = null;
-function setQgisRender(on) {
-  qgisRenderOn = !!on;
-  if (!qgisRenderOn) {
-    try { if (map.getLayer("qgis-render")) map.removeLayer("qgis-render"); } catch (_) {}
-    try { if (map.getSource("qgis-render")) map.removeSource("qgis-render"); } catch (_) {}
-    return;
-  }
-  refreshQgisRender();
-}
-function qgisViewBbox() {
-  const b = map.getBounds();
-  return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-}
-function adjustBboxAspect(bbox, w, h) {
-  const [x0, y0, x1, y1] = bbox;
-  const cur = (x1 - x0) / (y1 - y0);
-  const tgt = w / h;
-  if (!(cur > 0) || !(tgt > 0) || Math.abs(cur - tgt) < 1e-9) return bbox;
-  if (cur > tgt) {
-    const dh = (x1 - x0) / tgt - (y1 - y0);
-    return [x0, y0 - dh / 2, x1, y1 + dh / 2];
-  }
-  const dw = (y1 - y0) * tgt - (x1 - x0);
-  return [x0 - dw / 2, y0, x1 + dw / 2, y1];
-}
-function refreshQgisRender() {
-  if (!qgisRenderOn || !liveIsActive()) return;
-  const bbox = qgisViewBbox();
-  if (!bbox) return;
-  const w = Math.max(1, map.getContainer().clientWidth || 800);
-  const h = Math.max(1, map.getContainer().clientHeight || 600);
-  const adj = adjustBboxAspect(bbox, w, h);
-  const url = liveRenderUrl({ bbox: adj, w, h });
-  if (!url) return;
-  const coordinates = [
-    [adj[0], adj[3]], [adj[2], adj[3]], [adj[2], adj[1]], [adj[0], adj[1]],
-  ];
-  const src = map.getSource("qgis-render");
-  if (src) {
-    src.updateImage({ url, coordinates });
-    return;
-  }
-  map.addSource("qgis-render", { type: "image", url, coordinates });
-  map.addLayer({ id: "qgis-render", type: "raster", source: "qgis-render",
-    paint: { "raster-opacity": 0.9 } });
-}
-map.on("moveend", () => {
-  if (!qgisRenderOn) return;
-  clearTimeout(qgisRenderTimer);
-  qgisRenderTimer = setTimeout(refreshQgisRender, 700);
-});
 // QGIS Live 操縦パネル(live: 行検出時にパネル先頭へ表示)
-mountLivePanel(document.querySelector("#panel"), { setRender: setQgisRender });
+mountLivePanel(document.querySelector("#panel"));
 
 // ?follow[=<base>] → geo_webview の /live/state をポーリングして表示を追従
 // (shared/live.js の live セッションへ統合。pitch は保持される)

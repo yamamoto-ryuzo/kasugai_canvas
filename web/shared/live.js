@@ -9,19 +9,28 @@
 //    作図/GeoJSON は POST /live/features で QGIS スクラッチレイヤへ投入
 //   ・<base>/live/state をポーリングし、QGIS 側の選択変更(→地物ハイライト)
 //    と QGIS キャンバス位置(→ ?follow カメラ追従)をエンジンへ反映
+//   ・live.controls(follow/selection)は QGIS 側が正。geo_webview パネルの
+//    Live タブ/POST /live/controls/bridge から更新され、本モジュールが
+//    /live/state 経由で検出して適用する(Canvas 側パネルは接続バッジのみ)
+//   ・live.add_layers は QGIS 側からのレイヤ追加要求キュー。未処理 seq を
+//    検出してエンジンの addLiveLayer(title) フックへ振る
 // エンジンは configureLive(doc, hooks) を各プロジェクト描画後に呼ぶ。
-// hooks: { baseUrl, kascUrl, applyKascText, getView, applySelection }
+// hooks: { baseUrl, kascUrl, applyKascText, getView, applySelection,
+//          addLiveLayer }
 // ?follow=<base|top> は configureFollow({apply}) で live セッションへ統合。
 let session = null;
 
 export function configureLive(doc, hooks = {}) {
   const liveUrl = doc?.live?.url || "";
   if (!/^https?:\/\//i.test(liveUrl)) { stopLive(); return; }
-  // live: 行の | follow オプションは規定で有効化するが、ユーザーがパネルで
-  // 手動切替した後は再適用(kasc 差分適用→liveConfigureFromSpec)で上書きしない
+  // live: 行の | follow オプションは規定で有効化するが、ユーザーが切替
+  // した後(followUserSet)は再適用で上書きしない。同時に新規セッション
+  // 確立時は QGIS 側 controls の初期値として1回だけ POST /live/controls
+  // {follow:true} する(QSettings=全ライブビューア共通の正へ反映)
   if (doc?.live?.follow && !followUserSet) liveFollowEnabled = true;
   if (!session) session = new LiveSession();
-  session.configure({ liveUrl, ...hooks });
+  session.configure({
+    liveUrl, pushFollow: !!doc?.live?.follow, ...hooks });
 }
 
 export function stopLive() { if (session) session.stop(); }
@@ -33,6 +42,21 @@ export async function liveUpdate(args = {}) {
 }
 export function liveNotifyCamera() { if (session) session.notifyCamera(); }
 export function liveNotifySelection(payload) { if (session) session.notifySelection(payload); }
+
+// 接続状態の購読(live-panel バッジ用)。
+// cb({active,connected,follow,selection,lastAdd}) → 解除関数を返す
+const statusListeners = new Set();
+export function onLiveStatus(cb) {
+  if (typeof cb === "function") statusListeners.add(cb);
+  return () => statusListeners.delete(cb);
+}
+function emitLiveStatus() {
+  if (!statusListeners.size) return;
+  const st = liveStatus();
+  for (const cb of statusListeners) {
+    try { cb(st); } catch (_) { /* リスナー例外は無視 */ }
+  }
+}
 
 // live セッションが有効か(作図/レイヤー → QGIS 投入ボタンの活性判定用)
 export function liveIsActive() { return !!session?.cfg; }
@@ -64,22 +88,30 @@ export async function liveWritebackEntries(entries, { theme } = {}) {
 
 // ---- live セッションの追加操作(QGIS → Canvas の状態・取得系) ----
 export function liveBase() { return session?.cfg?.liveUrl || null; }
-// live: 行の follow / UI トグルで有効化する QGIS キャンバス追従
+// live: 行の follow / 外部 API で有効化する QGIS キャンバス追従。
+// QGIS 側が正なので POST /live/controls でも通知し、応答が回れば
+// /live/state 経由で同じ値が返ってくる(往復しても値は同じ)
 export function liveSetFollow(on) {
   liveFollowEnabled = !!on;
   followUserSet = true;
+  if (session?.cfg) void session.post("/live/controls", { follow: liveFollowEnabled });
+  emitLiveStatus();
   return liveFollowEnabled;
 }
 export function liveIsFollowing() { return liveFollowEnabled; }
 export function liveFollowAvailable() { return typeof engineFollowApply === "function"; }
-// QGIS 側選択ハイライトの表示切替(OFF で受信適用を止め表示を消す)
-export function liveSetSelectionVisible(on) {
+// QGIS 側選択ハイライトの表示切替(OFF で受信適用を止め表示を消す)。
+// applyLiveState からの QGIS 側正適用でも通るため、POST は発信側
+// (外部 API 呼出)のみが必要になるよう opts で制御する
+export function liveSetSelectionVisible(on, { notify = true } = {}) {
   selVisible = !!on;
+  if (notify && session?.cfg) void session.post("/live/controls", { selection: selVisible });
   if (!on && session?.cfg?.applySelection) {
     try { session.cfg.applySelection({ layers: [] }); } catch (_) { /* 無視 */ }
   } else if (session) {
-    session.selRev = 0; // 再有効化で次回ポーリングの rev 差分を取り直す
+    session.selSig = ""; // 再有効化で次回ポーリングの署名差分を取り直す
   }
+  emitLiveStatus();
 }
 export function liveSelectionVisible() { return selVisible; }
 
@@ -105,20 +137,6 @@ export function liveFetchSelection(max = 800) {
   if (!session?.cfg) return Promise.resolve({ ok: false, reason: "inactive" });
   return session.getJson(`/live/selection?max=${Number(max) || 800}`, 30000);
 }
-// GET /live/render のURLを組み立てる(QGIS描画フォールバック画像)
-// bbox は EPSG:4326。transparent=透過PNG(既定)。layers=kascタイトル配列
-export function liveRenderUrl({ bbox, w, h, layers, transparent = true } = {}) {
-  if (!session?.cfg || !Array.isArray(bbox)) return null;
-  const q = new URLSearchParams({
-    bbox: bbox.join(","),
-    w: String(Math.max(1, Math.round(w || 1024))),
-    h: String(Math.max(1, Math.round(h || 768))),
-  });
-  if (transparent) q.set("bg", "transparent");
-  if (Array.isArray(layers) && layers.length) q.set("layers", layers.join(","));
-  return session.cfg.liveUrl.replace(/\/$/, "") + "/live/render?" + q.toString();
-}
-
 // ---- ?follow/present の登録(live セッション統合版カメラ追従) ----
 // apply(canvasState, {topdown}) を登録する。canvasState は
 // geo_webview の _canvas_state_dict (lon/lat/zoom/rotation/mupp/scale)。
@@ -222,7 +240,60 @@ function applyFollowCanvas(canvas, sess = null) {
 // GET /live/selection から選択地物 GeoJSON を取得して
 // エンジンの applySelection(fc) へ渡してハイライト表示する
 function applyLiveState(data, sess = null) {
-  if (sess?.cfg?.applySelection) {
+  // QGIS 側が正の制御フラグ(geo_webview Live タブ / POST /live/controls /
+  // bridge liveSetControls いずれの経路でも同じ値が live.controls へ出る)。
+  // 到着したらローカルの follow/選択表示フラグへ適用する。follow 適用は
+  // liveSetFollow 相当(followUserSet=true で kasc | follow の再適用を抑止)
+  const ctl = data?.live?.controls;
+  if (ctl && typeof ctl === "object") {
+    if (typeof ctl.follow === "boolean") {
+      liveFollowEnabled = ctl.follow;
+      followUserSet = true;
+    }
+    if (typeof ctl.selection === "boolean"
+        && ctl.selection !== selVisible) {
+      liveSetSelectionVisible(ctl.selection, { notify: false });
+    }
+  }
+  // QGIS 側からのレイヤ追加要求キュー(未処理 seq のみ順に適用)。
+  // addLiveLayer フックを持たないエンジンではスキップする。
+  // 追加は fetch 込みの非同期処理なので、同一 title の連続要求が
+  // 重複追加にならないようセッション内の promise チェーンで直列化する
+  const pending = data?.live?.add_layers;
+  if (Array.isArray(pending) && sess) {
+    // サーバ再起動で seq が巻き戻った(観測最大値が処理済みより小さい)
+    // 場合は処理済み位置を取り直して新キュー全体を処理対象にする
+    const maxSeq = Math.max(0, ...pending.map(r => Number(r?.seq) || 0));
+    if (pending.length && maxSeq < (sess.addSeq || 0)) sess.addSeq = 0;
+    const reqs = [];
+    for (const req of pending) {
+      const seq = Number(req?.seq) || 0;
+      if (seq <= (sess.addSeq || 0)) continue;
+      sess.addSeq = seq;
+      const title = String(req?.title || "");
+      if (title && typeof sess.cfg?.addLiveLayer === "function") {
+        reqs.push(title);
+      }
+    }
+    if (reqs.length) {
+      const fn = sess.cfg.addLiveLayer;
+      sess.addChain = (sess.addChain || Promise.resolve()).then(async () => {
+        for (const title of reqs) {
+          try {
+            const res = await fn(title);
+            sess.lastAdd = { title, ok: true, added: res?.added };
+          } catch (e) {
+            sess.lastAdd = { title, ok: false, error: String(e?.message || e) };
+          }
+          emitLiveStatus();
+        }
+      });
+    }
+  }
+  // 選択表示フラグ(selVisible=live.controls.selection)が OFF の間は
+  // QGIS 側選択の取得・適用を行わない(ハイライトは OFF 時に除去済み。
+  // 再有効化は selSig リセット済みのため次回署名差分で取り直す)
+  if (sess?.cfg?.applySelection && selVisible) {
     const qs = data?.live?.qgis_selection;
     const sig = qs !== undefined && qs !== null
       ? (qs.rev ?? JSON.stringify(qs))
@@ -292,6 +363,10 @@ class LiveSession {
     this.stateDisabled = false;
     this.camHoldUntil = 0;
     this.pushedEcho = null;
+    this.addSeq = 0;      // 処理済みの live.add_layers seq
+    this.lastAdd = null;  // 直近のレイヤ追加結果(バッジ表示用)
+    this.stateOk = false; // 直近 /live/state 取得の成否
+    this.followOptPushed = false; // | follow を QGIS 側へ反映済みか
   }
   configure(cfg) {
     const changed = !this.cfg || this.cfg.baseUrl !== cfg.baseUrl
@@ -300,6 +375,8 @@ class LiveSession {
     if (changed) {
       this.rev = 0;
       this.selSig = "";
+      this.addSeq = 0;    // seq はサーバごとの連番(新規セッションは 1 から)
+      this.lastAdd = null;
       this.stateDisabled = false;
       this.sendDisabled = false;
       this.sendRetryAt = 0;
@@ -319,18 +396,29 @@ class LiveSession {
     }
     // セッション確立後は standalone ポーラへ任せずこちらで処理する
     if (followPoller) followPoller.stop();
+    // live: 行の | follow 要求は新規セッション時に1回だけ QGIS 側へ反映
+    if (changed && cfg.pushFollow && !this.followOptPushed) {
+      this.followOptPushed = true;
+      void this.post("/live/controls", { follow: true });
+    }
+    emitLiveStatus();
   }
   stop() {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     if (this.stateTimer) { clearInterval(this.stateTimer); this.stateTimer = null; }
     this.cfg = null;
+    this.stateOk = false;
+    emitLiveStatus();
   }
   status() {
     return {
       active: !!this.cfg, rev: this.rev,
       live: this.cfg?.liveUrl || null,
       sendDisabled: this.sendDisabled,
-      follow: followReg.length > 0,
+      follow: followReg.length > 0 || liveFollowEnabled,
+      selection: selVisible,
+      connected: this.stateOk,
+      lastAdd: this.lastAdd,
     };
   }
   manifestUrl() {
@@ -357,28 +445,37 @@ class LiveSession {
     await this.tickState();
   }
   // live.json とは別に <liveUrl>/live/state を読み、
-  // QGIS 側選択(qgis_selection)と QGIS キャンバス位置(follow)を反映する
+  // QGIS 側選択(qgis_selection)・QGIS キャンバス位置(follow)・
+  // controls/add_layers(QGIS 側正の制御)を反映する。
+  // controls は QGIS 側から follow/selection を後から切替えられるため、
+  // 現在値に関わらずセッション中は常時ポーリングする
   async tickState() {
     if (!this.cfg || this.stateDisabled) return;
     if (typeof document !== "undefined" && document.hidden) return;
-    if (!this.cfg.applySelection && !followReg.length
-        && !(liveFollowEnabled && engineFollowApply)) return;
     const url = this.cfg.liveUrl.replace(/\/$/, "") + "/live/state";
     try {
       const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) {
         if (res.status === 404) this.stateDisabled = true;
+        this.stateOk = false;
+        emitLiveStatus();
         return;
       }
       const data = await res.json();
+      this.stateOk = true;
       applyLiveState(data, this);
-    } catch (_) { /* QGIS 停止中は次の tick で追従 */ }
+      emitLiveStatus();
+    } catch (_) {
+      this.stateOk = false;
+      emitLiveStatus();
+      /* QGIS 停止中は次の tick で追従 */
+    }
   }
   // liveSync プッシュ(/api/command)またはポーリング検出からの適用。
   // args.selection は QGIS 側選択の即時プッシュ(ハイライト専用)
   async update(args = {}) {
     if (!this.cfg) return { ok: false, reason: "inactive" };
-    if (args?.selection) {
+    if (args?.selection && selVisible) {
       try { await this.cfg.applySelection?.(args.selection); } catch (_) { /* 無視 */ }
     }
     const hasManifest = args.rev != null || !!args.full || Array.isArray(args.changed);

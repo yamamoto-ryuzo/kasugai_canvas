@@ -2,7 +2,7 @@
 // shared/qml-style.js の compileQmlStyle が返す spec:
 //   evaluate(props) → { markers, line:{color,widthPx,dash}, fillParts:[{solid|rgba|hatch}],
 //                       outline:{color,widthPx,dash}, centroid, scale, label }
-import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setExprFeatureResolver, setMapScaleGetter, setEvalScale, evalScaleDenom, linRefFormatText, clampMapUnitsPerPixel, MUP_PER_SCALE_DENOM, interpolatedColorAt } from "./qml-style.js";
+import { loadQmlStyle, rgbaToCss, markerLayersToCanvas, fillPartsToTile, qmlLabelCanvas, setLayerVisibilityResolver, setExprFeatureResolver, setMapScaleGetter, setEvalScale, evalScaleDenom, linRefFormatText, clampMapUnitsPerPixel, MUP_PER_SCALE_DENOM, interpolatedColorAt, sizeToPx, blankCheckForPart } from "./qml-style.js";
 import { resolveKascUrl } from "./kasc.js";
 
 // qml-style.js の縮尺注入 API を 2D アダプタ経由で各エンジンへ再公開
@@ -612,14 +612,26 @@ export function markerlineDecorSamples(geom, decor, px) {
   const off = px(decor.offsetAlongPx || 0) || 0;
   const avg = px(decor.avgAnglePx || 0) || 0;
   const everyPart = decor.everyPart !== false;
+  // blank_segments_unit → マップ単位距離 変換(MapUnit は生値、絵単位は px 経由)
+  const blankConv = v => {
+    const u = String(decor.blankSegmentsUnit || "MM");
+    if (u === "MapUnit" || u === "MetersInMapUnits" || u === "RenderMetersInMapUnits") return v;
+    return px(sizeToPx(v, u) || 0);
+  };
+  let partIdx = -1;
   let firstPart = true;
   for (const c of lines) {
     if (!c || c.length < 2) continue;
+    partIdx++;
     const isFirst = firstPart; firstPart = false;
     if (out.length >= MAX) break;
     const n = c.length;
     const isRing = n > 2 && eq(c[0], c[n - 1]);
     const total = totalLen(c);
+    // blank_segments: [start,end] 内の距離の標点は描画しない(C++ BlankSegmentsWalker)
+    const cum = [0];
+    for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(c[i][0] - c[i - 1][0], c[i][1] - c[i - 1][1]));
+    const blank = blankCheckForPart(decor, partIdx, blankConv);
     const windowAngle = d => avg > 0
       ? segAng(pointAt(c, Math.max(0, d - avg)), pointAt(c, Math.min(total, d + avg)))
       : undefined;
@@ -629,6 +641,7 @@ export function markerlineDecorSamples(geom, decor, px) {
       // C++: 閉リングでは offset を全長で fmod する
       if (isRing && total > 0 && off !== 0) d = ((off % total) + total) % total;
       for (; d <= total && out.length < MAX; d += stepMap) {
+        if (blank && blank(d)) continue;
         const s = pointAt(c, Math.min(d, total));
         const wa = windowAngle(d);
         out.push({ x: s.x, y: s.y, angle: wa !== undefined ? wa : s.angle });
@@ -636,39 +649,44 @@ export function markerlineDecorSamples(geom, decor, px) {
     }
     if (flags.has("vertex") || flags.has("curvepoint")) {
       const m = isRing ? n - 1 : n;
-      for (let i = 0; i < m && out.length < MAX; i++)
+      for (let i = 0; i < m && out.length < MAX; i++) {
+        if (blank && blank(cum[i])) continue;
         out.push({ x: c[i][0], y: c[i][1], angle: vertexAngle(c, isRing, i) });
+      }
     }
     if (flags.has("innervertices")) {
       const m = isRing ? n - 1 : n;
-      for (let i = 1; i < m - 1 && out.length < MAX; i++)
+      for (let i = 1; i < m - 1 && out.length < MAX; i++) {
+        if (blank && blank(cum[i])) continue;
         out.push({ x: c[i][0], y: c[i][1], angle: vertexAngle(c, isRing, i) });
+      }
     }
     if (flags.has("segmentcenter")) {
       for (let i = 0; i + 1 < n && out.length < MAX; i++) {
         if (eq(c[i], c[i + 1])) continue;
+        if (blank && blank((cum[i] + cum[i + 1]) / 2)) continue;
         out.push({ x: (c[i][0] + c[i + 1][0]) / 2, y: (c[i][1] + c[i + 1][1]) / 2,
           angle: segAng(c[i], c[i + 1]) });
       }
     }
     // offset_along_line は C++ 同様 First/LastVertex にのみ適用される
     if (flags.has("firstvertex") && (everyPart || isFirst)) {
-      if (off > 0 && off <= total)
-        out.push(pointAt(c, off));
-      else if (off <= 0)
+      if (off > 0 && off <= total) { if (!blank || !blank(off)) out.push(pointAt(c, off)); }
+      else if (off <= 0 && (!blank || !blank(0)))
         out.push({ x: c[0][0], y: c[0][1], angle: vertexAngle(c, isRing, 0) });
     }
     if (flags.has("lastvertex") && (everyPart || isFirst)) {
-      if (off > 0 && off <= total)
-        out.push(pointAt(c, total - off));
-      else if (off <= 0)
+      if (off > 0 && off <= total) { if (!blank || !blank(total - off)) out.push(pointAt(c, total - off)); }
+      else if (off <= 0 && (!blank || !blank(total)))
         out.push({ x: c[n - 1][0], y: c[n - 1][1], angle: vertexAngle(c, isRing, n - 1) });
     }
     if (flags.has("centralpoint")) {
       const d = total / 2;
-      const s = pointAt(c, d);
-      const wa = windowAngle(d);
-      out.push({ x: s.x, y: s.y, angle: wa !== undefined ? wa : s.angle });
+      if (!blank || !blank(d)) {
+        const s = pointAt(c, d);
+        const wa = windowAngle(d);
+        out.push({ x: s.x, y: s.y, angle: wa !== undefined ? wa : s.angle });
+      }
     }
   }
   return out;
@@ -1374,7 +1392,9 @@ export function maplibreApplyQml(geojson, compiled) {
     switch (String(unit || "MM")) {
       case "Pixel": return n;
       case "Point": return n * 96 / 72;
-      case "MapUnit": return n * 0.3 * 96 / 25.4;
+      case "MapUnit":
+      case "MetersInMapUnits":
+      case "RenderMetersInMapUnits": return n * 0.3 * 96 / 25.4;
       default: return n * 96 / 25.4;
     }
   };

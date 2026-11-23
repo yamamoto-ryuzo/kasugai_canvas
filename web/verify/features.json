@@ -683,7 +683,7 @@
    "name": "live-panel",
    "source": "web/shared/live-panel.js",
    "signature": "live-panel",
-   "summary": "Live連携パネルUI",
+   "summary": "Live接続バッジUI(操縦はQGIS側Liveタブへ集約)",
    "needs_runtime": false,
    "standalone_ok": true,
    "depends": [],
@@ -692,8 +692,8 @@
     "integrated": "エンジン経由で機能実行"
    },
    "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": "node --check OK + エンジン経由で利用"
+   "last_verified": "2026-11-23T11:47:50+09:00",
+   "note": "node --check OK(ESM)・mountLivePanel/syncLivePanel export 確認・バッジ化後の再実装で再検証"
   },
   {
    "id": "web.shared.localfs",
@@ -1518,24 +1518,6 @@
    "verify": {
     "standalone": "",
     "integrated": "page.evaluate(kasugaiApi.liveIsFollowing(...))"
-   },
-   "last_result": "pass",
-   "last_verified": "2026-11-14T00:00:00+09:00",
-   "note": ""
-  },
-  {
-   "id": "web.cesium.api.liveSetQgisRender",
-   "kind": "ai_integration",
-   "name": "kasugaiApi.liveSetQgisRender",
-   "source": "web/cesium/app.js:11623",
-   "signature": "kasugaiApi.liveSetQgisRender",
-   "summary": "AI/外部制御面メソッド liveSetQgisRender()",
-   "needs_runtime": true,
-   "standalone_ok": false,
-   "depends": [],
-   "verify": {
-    "standalone": "",
-    "integrated": "page.evaluate(kasugaiApi.liveSetQgisRender(...))"
    },
    "last_result": "pass",
    "last_verified": "2026-11-14T00:00:00+09:00",
@@ -4034,7 +4016,7 @@
    "name": "live_panel",
    "source": "web/cesium/index.html+app.js",
    "signature": "live_panel",
-   "summary": "QGIS Live連携パネル(#live-panel・mountLivePanel)",
+   "summary": "QGIS Live接続バッジ(#live-panel・mountLivePanel)",
    "needs_runtime": true,
    "standalone_ok": false,
    "depends": [],
