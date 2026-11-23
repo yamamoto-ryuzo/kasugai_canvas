@@ -2,12 +2,56 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=../ui-config.html">
-  <link rel="canonical" href="../ui-config.html">
-  <title>ページが移動しました — KASUGAI Canvas ドキュメント</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QGIS 双方向オーサリング — KASUGAI Canvas ドキュメント</title>
+  <link rel="stylesheet" href="../style.css">
+  <script src="../nav.js" defer></script>
 </head>
 <body>
-  <p>このページは <a href="../ui-config.html">ui-config.html</a> へ移動しました。</p>
-  <script>location.replace('../ui-config.html' + location.hash);</script>
+  <div class="container">
+    <header>
+      <h1>KASUGAI Canvas <span class="version-badge">v8.0.0</span></h1>
+      <p>QGIS 双方向オーサリング — QGIS ⇄ Canvas の往復</p>
+    </header>
+    <main>
+      <p><a href="../tech/2-1-バージョン履歴.html">← バージョン履歴へ戻る</a></p>
+
+      <h2 id="v8">QGIS 双方向オーサリング</h2>
+      <p>V7 が「QGIS プロジェクトを、そのまま Canvas で再現する」一方向のテーマなら、V8 はその往復 — <strong>Canvas 側の操作・成果物を QGIS プロジェクトへ書き戻す</strong>テーマです。QGIS がデータ・スタイル・編集の正本、Canvas が最終 2D/3D 表示エンジンという役割分担は V7 と同じで、そこに「Canvas → QGIS」の復路を追加します。</p>
+
+      <h3>📏 役割分担の原則</h3>
+      <ul>
+        <li><strong>スタイル（.qml）は QGIS で作る</strong> — Canvas 側は <code>style=</code> の参照・適用のみ。Canvas でのスタイル編集 → .qml 書き戻しは対象外とします</li>
+        <li><strong>データ本体の編集・正本管理は基本的に QGIS</strong> — Canvas からの地物投入はスクラッチレイヤ経由とし、正式レイヤへの昇格・保存・主データへの追記は QGIS 側の操作で行います（Canvas 上での地物編集を QGIS レイヤへ直接書き込む API や、Canvas 発の新規レイヤ正式追加は設けません）</li>
+        <li><strong>Canvas → QGIS の受け渡しは URL ベース</strong> — 複雑な部分書き込み・トランザクション機構は持たず、GeoJSON / .kasc の URL を QGIS が ogr / vsicurl / delimitedtext で読む形に統一します</li>
+      </ul>
+
+      <h3>🔄 双方向の流れ</h3>
+      <pre class="text"><code>QGIS プロジェクト ── geo_webview（.kasc 出力 / GET /live/kasc）──→ Canvas で再現・配信
+        ▲                                                                  │
+        └── kascImport（.kasc URL → QGIS 復元）・/live/writeback（表示/      │
+            フィルタ/テーマ）・/live/features（作図→スクラッチ）・            │
+            /live/camera・/live/selection（逆通知）────────────────────────┘</code></pre>
+
+      <h3>✅ 実装済みの基盤（geo_webview + Canvas）</h3>
+      <table>
+        <thead><tr><th>機能</th><th>経路</th><th>内容</th></tr></thead>
+        <tbody>
+        <tr><td>.kasc → QGIS 復元</td><td>bridge <code>kascInspect</code> / <code>kascImport</code>（4.14.0〜）</td><td><code>.kasc+canvas_data/</code>（パスまたは http(s) URL）を QGIS プロジェクトへ逆取り込み。全行タイプをレイヤ化し、<code>style=</code>（.qml）・縮尺・不透明度・<code>where=</code>→subsetString・グループ構造・<code>theme:</code>→マップテーマ・<code>bookmark:</code>・<code>cam:</code>・<code>| off</code> を復元。<code>replace</code> で冪等再取込。<code>kascInspect</code> は dry run</td></tr>
+        <tr><td>表示/フィルタ/テーマ書き戻し</td><td><code>POST /live/writeback</code>（4.11.0〜）</td><td>Canvas 側の表示トグル・⏷フィルタ・テーマ適用を QGIS プロジェクトのレイヤチェック・subsetString・マップテーマへ反映</td></tr>
+        <tr><td>作図・地物の投入</td><td><code>POST /live/features</code>（4.11.0〜）</td><td>Canvas の作図スケッチ・選択レイヤの GeoJSON を QGIS スクラッチ（memory）レイヤとして投入（昇格・保存は QGIS 側）</td></tr>
+        <tr><td>カメラ・選択の逆通知</td><td><code>POST /live/camera</code>・<code>POST /live/selection</code>（4.9.0〜）</td><td>Canvas の視点 → QGIS キャンバス中心/縮尺/回転、Canvas の地物ピック → QGIS レイヤ選択</td></tr>
+        <tr><td>Canvas 操縦の QGIS 集約</td><td><code>live.controls</code>・<code>POST /live/controls</code>（4.33.0〜）</td><td>追従・選択表示の正を QSettings で一元管理し <code>GET /live/state</code> で全ライブビューアへ配信。<code>live.add_layers</code> キューで QGIS 側からのレイヤ追加要求も実現</td></tr>
+        </tbody>
+      </table>
+      <p>bridge API（<code>kascImport</code>・<code>liveControls</code>・<code>liveSetControls</code>・<code>liveAddToCanvas</code> 等）により、これらの往復操作は AI エージェントからも駆動できます。</p>
+
+      <h3>🔎 構想（本格化対象）</h3>
+      <ul>
+        <li><strong>Canvas 編集結果の URL 提供 → QGIS が読む往路導線</strong> — Canvas 側で編集した地物を GeoJSON URL（ローカルアプリ <code>:8510</code> の API または <code>/live/*</code> 経由）として提供し、QGIS がレイヤとして読み込む入口（「Canvas から取り込み」導線）を整備する。<code>kascImport</code> は既に URL 対応済みのため、単一 GeoJSON URL を読む薄い入口で実現できる</li>
+      </ul>
+      <p>なお以下は方針上の対象外です：地物編集の QGIS レイヤ直接書き込み API（URL 経路で代替）、Canvas 発の新規レイヤ正式追加（QGIS 側で昇格・保存）、Canvas でのスタイル編集 → .qml 書き戻し（.qml は QGIS で作る）。</p>
+    </main>
+  </div>
 </body>
 </html>

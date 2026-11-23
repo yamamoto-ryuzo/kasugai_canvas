@@ -6,27 +6,96 @@
   <title>QGIS連携 — KASUGAI Canvas ドキュメント</title>
   <link rel="stylesheet" href="../style.css">
   <script src="../nav.js" defer></script>
+  <style>
+    .mermaid { background: #f6f8fa; border-radius: 8px; padding: 1em; }
+  </style>
 </head>
 <body>
   <div class="container">
     <header>
-      <h1>KASUGAI Canvas <span class="version-badge">v6.23.0</span></h1>
-      <p>QGIS連携 — エクスポート / プロジェクト再現</p>
+      <h1>KASUGAI Canvas <span class="version-badge">v7.1.0</span></h1>
+      <p>QGIS連携 — geo_webview（WEBVIEW）で実現する Web化 / 3DVIEW化 / 双方向オーサリング</p>
     </header>
     <main>
-      <p>QGIS プラグイン <code>geo_webview</code> がプロジェクトを <code>.kasc + canvas_data/</code> へエクスポートし、Canvas で再現する連携のドキュメントです。</p>
+      <h2>1. 概要 — QGIS と geo_webview（WEBVIEW）</h2>
+      <p><strong>QGIS</strong>（キュージーアイエス）は、無償のオープンソース・デスクトップ GIS ソフトウェアです（<a href="https://qgis.org/" target="_blank" rel="noopener noreferrer">qgis.org</a>）。地図データ（ベクター・ラスタ・3D）の表示・作成・編集・解析・スタイル設計をフル機能で行え、官庁・自治体・建設・研究機関で広く使われている業界標準のツールです。QGIS の作業単位が「プロジェクト」（レイヤーの組合せ＋スタイル＋表示設定）です。</p>
+      <p><strong>KASUGAI Canvas は「表示・配信」専用の設計</strong>で、地図プロジェクト自体の作成・編集は行いません。その役割を担うのが QGIS です — QGIS で作ったプロジェクトを、そのまま Canvas の高速 2D/3D エンジン（Cesium 等）で再現・配信するのが QGIS連携の目的です。Canvas ユーザーが QGIS を使うのは、「地図の中身を作る・直す」ためです。</p>
+      <p><strong><code>geo_webview</code>（WEBVIEW）はその橋渡しとなる QGIS プラグイン</strong>です。QGIS 内部で動作し、プロジェクトの <code>.kasc + canvas_data/</code> へのエクスポート・<code>GET /live/kasc</code> オンデマンド生成・ライブ双方向同期・Canvas からの書き戻し受付をすべて QGIS 側で担います。<strong>QGIS連携を使う = QGIS に geo_webview を導入すること</strong>、これが唯一の前提です。</p>
+      <figure class="mermaid-fig"><figcaption>QGIS連携の全体像 — geo_webview（WEBVIEW）が QGIS と Canvas を結ぶ（緑=QGIS・橙=WEBVIEWプラグイン・青=Canvas / ①②③の枠をクリックで各節へ）</figcaption>
+<pre class="mermaid" aria-label="QGIS連携の全体像">
+flowchart TB
+  subgraph QG["QGIS（デスクトップ GIS・正本と編集の場）"]
+    direction TB
+    subgraph ROLES["QGIS の役割 — geo_webview が取り込んで Canvas へ再現するもの"]
+      direction LR
+      P1["プロジェクト構築<br/>レイヤ構成・順序・グループ"]
+      P2["データ編集<br/>地物の作成・頂点・属性"]
+      P3["スタイル設定<br/>.qml（シンボル・色分け・<br/>ラベル・縮尺ルール）"]
+      P4["表示設定<br/>チェック・不透明度・<br/>縮尺範囲・フィルタ"]
+      P5["テーマ・その他<br/>マップテーマ・ブックマーク・座標系"]
+      P1 ~~~ P2 ~~~ P3 ~~~ P4 ~~~ P5
+    end
+    W["geo_webview プラグイン<br/>（WEBVIEW）<br/>エクスポート + HTTP サーバ :8089"]
+  end
+  ROLES --> W
+  W ==> D1["① プロジェクトWeb化<br/>.kasc + canvas_data/ を出力<br/>静的ホストやローカルアプリへ配信"]
+  W ==> D2["② 3DVIEW化（ライブビューア）<br/>GET /live/kasc + live: 継続同期<br/>（QGIS の3Dビューとして2画面運用）"]
+  D1 & D2 ==> C["KASUGAI Canvas<br/>ブラウザ 2D/3D 表示エンジン<br/>Cesium / MapLibre / OpenLayers / Leaflet"]
+  C -.-> D3["③ 双方向オーサリング<br/>＝ geo_webview が受けて実装<br/>/live/writeback・features・camera/selection<br/>+ kascImport"] -.-> W
+
+  click D1 "#web" "プロジェクトWeb化の節へ"
+  click D2 "#3dview" "3DVIEW化の節へ"
+  click D3 "#bidirectional" "双方向オーサリングの節へ"
+
+  classDef qgis fill:#e9f7ee,stroke:#2e9e56,color:#1a2230
+  classDef webview fill:#fff3e0,stroke:#e67e22,color:#1a2230
+  classDef canvas fill:#eef0ff,stroke:#667eea,color:#1a2230
+  class QG,ROLES,P1,P2,P3,P4,P5 qgis
+  class W,D1,D2,D3 webview
+  class C canvas
+</pre>
+      </figure>
+      <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, securityLevel: 'loose', theme: 'default' });
+      </script>
+      <h4>導入の流れ</h4>
+      <ol>
+        <li><strong>QGIS をインストール</strong> — <a href="https://qgis.org/" target="_blank" rel="noopener noreferrer">公式サイト</a>から。GIS データの編集・プロジェクト作成・スタイル（.qml）作成はすべて QGIS 側で行います</li>
+        <li><strong>geo_webview（WEBVIEW）を導入</strong> — <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview" target="_blank" rel="noopener noreferrer">リポジトリ</a>の配布物を QGIS のプラグイン管理からインストール（使い方は <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/tree/master/qgis-plugin/geo_webview/docs" target="_blank" rel="noopener noreferrer">プラグインドキュメント</a> / <a href="https://github.com/yamamoto-ryuzo/qgis_live_harness/blob/master/qgis-plugin/geo_webview/SPEC.md" target="_blank" rel="noopener noreferrer">SPEC.md</a>）</li>
+        <li><strong>連携を開始</strong> — パネルの「KASUGAI」ボタンでプロジェクトを Web 化（→ 下記1）、「Live」タブの「Open Canvas Live View」で 3DVIEW 化（→ 下記2）</li>
+      </ol>
+      <p>連携の成果は3つ — <strong>① プロジェクトWeb化</strong>: <code>.kasc + canvas_data/</code> をエクスポートして WebGIS として配信。<strong>② 3DVIEW化</strong>: <code>/live/kasc</code> + <code>live:</code> 行で編集差分・制御を継続同期し、Canvas を QGIS の3Dビューとして運用。<strong>③ 双方向オーサリング</strong>: Canvas → QGIS の復路（書き戻し・地物投入・URL 取込）。①②はどちらも同じ <code>.kasc</code> 形式による「再現」の輸送経路です。</p>
+
+      <h2 id="web">2. プロジェクトWeb化</h2>
       <div class="features">
         <a class="feature-card" href="../qgis-delivery.html">
           <h3>📦 QGIS連携の利用方法</h3>
           <p>?kasc= / ?kasc=local / project= でのエクスポート物の指定方法と、on-demand ZIP 配信（qgis: 行で Re:Earth へ直取込み）の整理 — QGIS連携の入口</p>
         </a>
         <a class="feature-card" href="../features/v7.html">
-          <h3>🧭 QGIS連携 — 方針・構想・再現</h3>
-          <p>連携の基本方針・役割分担・データ3層構造・OGR SQL対応表・実行エンジン方針・エンジン別再現度と実装ロードマップ</p>
+          <h3>🧭 QGIS連携 — 方針・構成・再現</h3>
+          <p>連携の基本構成（エクスポート/ライブの2経路）・役割分担・データ3層構造・OGR SQL対応表・実行エンジン方針・エンジン別再現度と実装ロードマップ</p>
         </a>
         <a class="feature-card" href="../qgis.html">
           <h3>🔗 実装済みの再現範囲</h3>
           <p>geo_webview がプロジェクトを .kasc+canvas_data/（スタイル .qml 同梱）へ出力し Canvas へ登録。実装済みの再現範囲と未対応課題（Issue）</p>
+        </a>
+      </div>
+
+      <h2 id="3dview">3. 3DVIEW化（ライブビューア）</h2>
+      <div class="features">
+        <a class="feature-card" href="../features/v7.html#live">
+          <h3>📺 Open Canvas Live View・live 同期</h3>
+          <p>QGIS パネルの「Live」タブからブラウザ版 Canvas を常駐ビューとして起動し、QGIS の3D View として2画面運用。編集差分の即時反映・カメラ追従・QGIS 選択表示・レイヤ逐次追加はすべて QGIS 側が制御の正</p>
+        </a>
+      </div>
+
+      <h2 id="bidirectional">4. 双方向オーサリング</h2>
+      <div class="features">
+        <a class="feature-card" href="../features/v8.html">
+          <h3>🔁 QGIS ⇄ Canvas の往復</h3>
+          <p>.kasc→QGIS 復元（kascImport）・ライブ書き戻し（表示/フィルタ/テーマ）・地物投入・カメラ/選択逆通知・URL ベースの Canvas→QGIS 受け渡し</p>
         </a>
       </div>
       <p><a href="../index.html">← 概要へ戻る</a></p>

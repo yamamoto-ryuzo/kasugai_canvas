@@ -42,7 +42,7 @@ flowchart TD
       <ul>
       <li><strong>切替閾値はズーム帯で設ける</strong> — ハードな境界だとラスタ→ベクターの見た目が飛ぶため、境界±1ズーム程度のオーバーラップ（FGB 読み込み完了まで XYZ を残す）を想定</li>
       <li><strong>広域側はラスタのみ</strong> — ピック・属性パネル・ベクター検索・選択ハイライトは拡大側（FGB）でのみ有効。追従ミラー用途では許容とする</li>
-      <li><strong>広域ラスタの生成元は未定</strong> — 既存の <code>/live/render</code>（QGIS 描画の透過 PNG・moveend 追従）流用が実装最小、事前タイル化した <code>xyz:</code> ツリーも可。QGIS 側 OGC 配信（WMS/WMTS）は撤去済みのため復活させない</li>
+      <li><strong>広域ラスタの生成元は未定</strong> — QGIS 側に残置された <code>/live/render</code>（QGIS 描画の透過 PNG。旧 Canvas「QGIS描画で表示」オーバーレイ用で Canvas 側は廃止済みだが API は残存）流用が実装最小、事前タイル化した <code>xyz:</code> ツリーも可。QGIS 側 OGC 配信（WMS/WMTS）は撤去済みのため復活させない</li>
       <li><strong>3D は同じ 2 段＋ <code>3dtiles:</code></strong> — 広域 XYZ はイメージレイヤー（地球面ドレープ）、拡大 FGB は entity/primitive 描画。3D モデル・点群はタイル自身の LOD が縮尺を吸収するため切替不要</li>
       <li><strong>追従ポーリングとの整合</strong> — <code>/live/state</code> 1.5s ポーリング → moveend デバウンス（現行 400〜700ms）再クエリで現行機構のまま成立。連続ズーム操作時の追いつき遅延は実装時に実機確認</li>
       </ul>

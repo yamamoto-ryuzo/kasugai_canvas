@@ -54,7 +54,7 @@
         <p>V7 のメインテーマです。QGIS プラグイン <strong>geo_webview</strong> がレイヤーツリー・スタイル（.qml）・表示状態・テーマ・ブックマークを <code>.kasc + canvas_data/</code> へエクスポートし、ブラウザ WebGIS（<code>?kasc=</code>）またはローカルアプリでそのまま再生します。レイヤーフィルタ（subsetString）は <code>where=</code> として引き継がれ、同期系統は2系統あります。</p>
         <table>
           <tr><th>連携面</th><th>内容</th></tr>
-          <tr><td>Live 双方向同期</td><td><code>live:</code> 行入り .kasc で有効化。カメラ追従・QGIS 選択表示・QGIS 描画オーバーレイ・レイヤーのオンデマンド追加・表示/フィルタ/テーマの書き戻し（レイヤ一覧の QGIS Live パネル）</td></tr>
+          <tr><td>Live 双方向同期</td><td><code>live:</code> 行入り .kasc で有効化。カメラ追従・QGIS 選択表示・レイヤーのオンデマンド追加・表示/フィルタ/テーマの書き戻し（操縦は QGIS 側 geo_webview パネルの Live タブ、Canvas 側は接続バッジ表示のみ）</td></tr>
           <tr><td>AI / MCP 操作</td><td>起動時に稼働中の QGIS Live Driver セッションを自動検出して MCP 接続し、<code>qgis_pyeval</code>・<code>qgis_bridge_call</code> でレイヤ制御・<code>kasugaiExport</code>・Processing 解析まで AI から実行（書き込み系は公開ゲート対象）</td></tr>
         </table>
         <p>詳細は <a href="features/v7.html">V7 概要 — QGIS連携</a>・<a href="qgis.html">QGIS連携（技術詳細・未対応 Issue）</a> を参照してください。</p>
@@ -127,23 +127,38 @@
             <p>PLUGIN/ 拡張パネル・認証方式・外部連携のカード索引</p>
           </a>
         </div>
-        <h3>技術資料（章1〜2）</h3>
+        <h3>QGIS連携（章1〜4）</h3>
         <div class="features">
           <a class="feature-card" href="tech/1-1-QGIS連携.html">
-            <h3>📦 1-1 QGIS連携</h3>
-            <p>エクスポートの利用方法・連携方針・実装済み再現範囲のカード索引</p>
+            <h3>🧭 1. 概要・導入（QGIS・WEBVIEW とは）</h3>
+            <p>QGIS って何？から始める連携の全体像 — geo_webview（WEBVIEW）プラグインの役割と導入の流れ</p>
           </a>
-          <a class="feature-card" href="tech/1-2-配信実行形態.html">
-            <h3>🌐 1-2 配信・実行形態</h3>
+          <a class="feature-card" href="tech/1-1-QGIS連携.html">
+            <h3>📦 2. プロジェクトWeb化</h3>
+            <p>エクスポートによる QGIS プロジェクトの WebGIS 配信 — 利用方法・連携方針・実装済み再現範囲</p>
+          </a>
+          <a class="feature-card" href="features/v7.html#live">
+            <h3>📺 3. 3DVIEW化（ライブビューア）</h3>
+            <p>Open Canvas Live View — QGIS の3D View として Canvas を2画面運用。編集差分・カメラ・選択・制御を継続同期</p>
+          </a>
+          <a class="feature-card" href="features/v8.html">
+            <h3>🔁 4. 双方向オーサリング</h3>
+            <p>Canvas → QGIS の復路 — .kasc→QGIS 復元・ライブ書き戻し・地物投入・URL 取込</p>
+          </a>
+        </div>
+        <h3>技術資料（章1〜2）</h3>
+        <div class="features">
+          <a class="feature-card" href="tech/1-1-配信実行形態.html">
+            <h3>🌐 1-1 配信・実行形態</h3>
             <p>ブラウザ WebGIS・永続キャッシュのカード索引</p>
           </a>
-          <a class="feature-card" href="tech/1-3-設定内部仕様.html">
-            <h3>📝 1-3 設定・内部仕様</h3>
+          <a class="feature-card" href="tech/1-2-設定内部仕様.html">
+            <h3>📝 1-2 設定・内部仕様</h3>
             <p>データ形式・描画性能・ライブラリ・システム構成・実装詳細・セキュリティのカード索引</p>
           </a>
           <a class="feature-card" href="tech/2-1-バージョン履歴.html">
             <h3>🗺️ 2-1 バージョン履歴（機能カード索引）</h3>
-            <p>V0〜V10 のテーマごとの機能追加履歴。GIS 基本機能・Fly プレゼン機能の一覧と、現行実装の仕組み・ドレープ・制限事項</p>
+            <p>V0〜V11 のテーマごとの機能追加履歴。GIS 基本機能・Fly プレゼン機能の一覧と、現行実装の仕組み・ドレープ・制限事項</p>
           </a>
         </div>
         <h3>記録（挑戦中）</h3>

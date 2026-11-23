@@ -125,7 +125,42 @@
       ]
     },
     {
-      // ==== カスタマイズ（ui.config.json で配備先ごとの UI 調整・V8） ====
+      // ==== QGIS連携（前提: geo_webview「WEBVIEW」プラグイン → Web化 / 3DVIEW化 / 双方向） ====
+      section: 'QGIS連携',
+      sectionHref: 'tech/1-1-QGIS連携.html',
+      label: '1. 概要・導入',
+      href: 'tech/1-1-QGIS連携.html',
+      items: [
+        { href: 'tech/1-1-QGIS連携.html', text: '1-1 QGIS・WEBVIEWとは（導入の流れ）' },
+      ]
+    },
+    {
+      label: '2. プロジェクトWeb化',
+      href: 'tech/1-1-QGIS連携.html',
+      items: [
+        { href: 'qgis-delivery.html', text: '2-1 QGIS連携の利用方法' },
+        { href: 'features/v7.html', text: '2-2 方針・構成' },
+        { href: 'qgis.html', text: '2-3 実装済みの再現範囲' },
+      ]
+    },
+    {
+      // ==== QGIS の3D View として Canvas を使う（live セッション・2画面運用） ====
+      label: '3. 3DVIEW化（ライブビューア）',
+      href: 'features/v7.html#live',
+      items: [
+        { href: 'features/v7.html#live', text: '3-1 Open Canvas Live View・live 同期' },
+      ]
+    },
+    {
+      // ==== Canvas → QGIS の復路（書き戻し・地物投入・URL 取込） ====
+      label: '4. 双方向オーサリング',
+      href: 'features/v8.html',
+      items: [
+        { href: 'features/v8.html', text: '4-1 QGIS ⇄ Canvas の往復' },
+      ]
+    },
+    {
+      // ==== カスタマイズ（ui.config.json で配備先ごとの UI 調整・V9） ====
       section: 'カスタマイズ',
       label: '1. UIカスタマイズ',
       href: 'ui-config.html',
@@ -165,22 +200,14 @@
       label: '1. 設定・システム構成',
       items: [
         {
-          href: 'tech/1-1-QGIS連携.html', text: '1-1 QGIS連携',
-          children: [
-            { href: 'qgis-delivery.html', text: 'QGIS連携の利用方法' },
-            { href: 'features/v7.html', text: 'QGIS連携 — 方針・構想・再現' },
-            { href: 'qgis.html', text: '実装済みの再現範囲' },
-          ]
-        },
-        {
-          href: 'tech/1-2-配信実行形態.html', text: '1-2 配信・実行形態',
+          href: 'tech/1-1-配信実行形態.html', text: '1-1 配信・実行形態',
           children: [
             { href: 'datahost.html', text: 'ブラウザ WebGIS（外部ホスト配信）' },
             { href: 'runtime-cache.html', text: 'ランタイム永続キャッシュ' },
           ]
         },
         {
-          href: 'tech/1-3-設定内部仕様.html', text: '1-3 設定・内部仕様',
+          href: 'tech/1-2-設定内部仕様.html', text: '1-2 設定・内部仕様',
           children: [
             { href: 'performance.html', text: '描画性能とデータ形式方針' },
             { href: 'library.html', text: 'ライブラリ' },
@@ -212,8 +239,8 @@
   ];
 
   function norm(path) {
-    // 末尾の index.html / / を正規化し、日本語ファイル名用にデコードして比較できる形にする
-    let p = path.replace(/index\.html$/, '').replace(/\/$/, '');
+    // 末尾の index.html / / と #hash を正規化し、日本語ファイル名用にデコードして比較できる形にする
+    let p = path.replace(/#.*$/, '').replace(/index\.html$/, '').replace(/\/$/, '');
     try { p = decodeURIComponent(p); } catch (e) { /* 不正な%列はそのまま */ }
     return p;
   }
@@ -266,6 +293,20 @@
   nav.innerHTML = html;
   document.body.prepend(nav);
   document.body.classList.add('has-nav');
+
+  // サイドバーのスクロール位置をページ遷移間で保持（タブ単位）
+  const SCROLL_KEY = 'kasugai-docs-nav-scroll';
+  try {
+    const savedTop = sessionStorage.getItem(SCROLL_KEY);
+    if (savedTop) nav.scrollTop = parseInt(savedTop, 10) || 0;
+    let scrollTimer = null;
+    nav.addEventListener('scroll', () => {
+      if (scrollTimer) clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        try { sessionStorage.setItem(SCROLL_KEY, String(nav.scrollTop)); } catch (e) { /* 無視 */ }
+      }, 80);
+    });
+  } catch (e) { /* sessionStorage 不可時は位置保持なし */ }
 
   // モバイル用ハンバーガー
   const btn = document.createElement('button');

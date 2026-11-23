@@ -14,12 +14,12 @@
       <p>バージョン履歴 — 機能追加の履歴と現行実装の仕組み・制限（カード索引）</p>
     </header>
     <main>
-      <p>機能をバージョンごとのテーマに沿ってカード形式で整理した履歴索引です。実装済みのテーマ（V8・V7→V1 の新しい順）と、検討中のテーマ（未実装項目が多い V9・V10）に分けています。ドキュメント全体のナビゲーションは Canvas の UI（タブ・機能単位）に準じたテーマ軸を使ってください（このページは履歴としての一覧）。各カードの詳細は各節の「詳細 →」リンク先の個別ページ、バージョン横断の実装詳細は <a href="../features/v0.html">V0: システム基本構成</a> を参照してください。</p>
+      <p>機能をバージョンごとのテーマに沿ってカード形式で整理した履歴索引です。実装済みのテーマ（V9・V8・V7→V1 の新しい順）と、検討中のテーマ（未実装項目が多い V10・V11）に分けています。ドキュメント全体のナビゲーションは Canvas の UI（タブ・機能単位）に準じたテーマ軸を使ってください（このページは履歴としての一覧）。各カードの詳細は各節の「詳細 →」リンク先の個別ページ、バージョン横断の実装詳細は <a href="../features/v0.html">V0: システム基本構成</a> を参照してください。</p>
 
-      <h2>✅ 実装済みのテーマ（V8・V7 → V1）</h2>
+      <h2>✅ 実装済みのテーマ（V9・V8・V7 → V1）</h2>
 
-      <h3 id="uiconfig"><a href="../ui-config.html">V8: UIカスタマイズ</a></h3>
-      <p>デプロイ先が各エンジンの <code>index.html</code> と同階層に <code>ui.config.json</code> を置くだけで画面構成を調整できる仕組みです。ソースの HTML/JS を編集せず、表示/非表示・初期値・リンク先を配備単位で切り替えられます。<a href="../ui-config.html">詳細 →</a>（内部仕様は <a href="1-3-設定内部仕様.html">設定・内部仕様</a>）</p>
+      <h3 id="uiconfig"><a href="../ui-config.html">V9: UIカスタマイズ</a></h3>
+      <p>デプロイ先が各エンジンの <code>index.html</code> と同階層に <code>ui.config.json</code> を置くだけで画面構成を調整できる仕組みです。ソースの HTML/JS を編集せず、表示/非表示・初期値・リンク先を配備単位で切り替えられます。<a href="../ui-config.html">詳細 →</a>（内部仕様は <a href="1-2-設定内部仕様.html">設定・内部仕様</a>）</p>
       <div class="features">
         <div class="feature-card">
           <h3>🙈 hide — 機能の表示/非表示</h3>
@@ -32,6 +32,23 @@
         <div class="feature-card">
           <h3>🖥️ UI カスタマイズ管理画面（ライブプレビュー）</h3>
           <p><code>:8510/admin/ui-config-admin.html</code> が実エンジンを iframe で起動し、各機能・ボタンにチェックバッジを重畳。OFF はグレー化（再チェックで復帰）・「実際に隠す」確認モード付き。コントロール操作・一覧入力で defaults 記録、JSON 生成→保存 API まで完結。<code>web/admin/</code> は CDN にも配信されます（そちらは閲覧・JSON生成専用で保存/削除ボタンは無効化）</p>
+        </div>
+      </div>
+
+      <h3 id="qgis-authoring"><a href="../features/v8.html">V8: QGIS 双方向オーサリング</a></h3>
+      <p>V7 が「QGIS プロジェクトを Canvas で再現する」一方向なら、V8 はその往復 — <strong>Canvas 側の操作・成果物を QGIS プロジェクトへ書き戻す</strong>テーマです。.kasc→QGIS 復元（<code>kascImport</code>）・ライブ書き戻し・地物投入・カメラ/選択逆通知は実装済みで、原則「スタイル（.qml）は QGIS で作る」「データ本体の編集・正本管理は QGIS」。Canvas → QGIS の受け渡しは URL ベース（GeoJSON/.kasc URL を QGIS が読む）に統一します。<a href="../features/v8.html">詳細 →</a></p>
+      <div class="features">
+        <div class="feature-card">
+          <h3>📥 .kasc → QGIS 復元（kascImport）</h3>
+          <p><code>.kasc+canvas_data/</code>（パスまたは URL）を QGIS プロジェクトへ逆取り込み。全行タイプをレイヤ化し、<code>style=</code>(.qml)・縮尺・不透明度・<code>where=</code>・グループ・テーマ・ブックマーク・カメラを復元。<code>replace</code> で冪等再取込</p>
+        </div>
+        <div class="feature-card">
+          <h3>↩️ ライブ書き戻し・地物投入</h3>
+          <p><code>POST /live/writeback</code> で表示/フィルタ/テーマを QGIS プロジェクトへ、<code>POST /live/features</code> で作図・地物をスクラッチレイヤへ投入（正式レイヤ化・保存は QGIS 側操作）。カメラ/選択の逆通知も実装済み</p>
+        </div>
+        <div class="feature-card">
+          <h3>🔗 URL ベース受け渡し（構想）</h3>
+          <p>Canvas で編集した地物を GeoJSON URL として提供し QGIS がレイヤとして読む往路導線を整備（直接書き込み API・スタイル編集・新規レイヤ正式追加は対象外 — QGIS で行う前提）</p>
         </div>
       </div>
 
@@ -245,7 +262,7 @@
       <h2>🔎 検討中のテーマ（未実装項目が多い）</h2>
       <p>以下は実装が進行中・計画段階のテーマです。項目の多くが未実装または調整中のため、実現範囲は各詳細ページを確認してください。</p>
 
-      <h3 id="portal"><a href="../use/1-9-ポータル.html">V9: ポータル（調整中）</a></h3>
+      <h3 id="portal"><a href="../use/1-9-ポータル.html">V10: ポータル（調整中）</a></h3>
       <p>レイヤー管理ではなく目的別の大きなカード/ボタンで GIS 業務を完結させるタスク指向ポータル。<code>.kasc</code> に <code>portal:</code>/<code>view:</code>/<code>link:</code>/<code>html:</code> の4行形式を追加し、表示レイヤー・スタイル・フィルタ・カメラ・背景を束ねたビューをカード押下で一括適用します。全6エンジン対応。<a href="../use/1-9-ポータル.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">
@@ -262,7 +279,7 @@
         </div>
       </div>
 
-      <h3 id="analysis"><a href="../use/5-6-解析.html">V10: 解析（予定）</a></h3>
+      <h3 id="analysis"><a href="../use/5-6-解析.html">V11: 解析（予定）</a></h3>
       <p>AI チャット経由で空間解析を駆動するテーマ（計画段階）。解析エンジンは自前で実装せず QGIS Processing をバックエンドとして借り、Canvas は AI による操縦面と結果表示を担います。<a href="../use/5-6-解析.html">詳細 →</a></p>
       <div class="features">
         <div class="feature-card">
