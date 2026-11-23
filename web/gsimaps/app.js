@@ -23,6 +23,7 @@ import {
   resolveDefaultPointStyle, resolveDefaultLineStyle, resolveDefaultPolygonStyle,
   defaultPointRadius, markerSymbolSpec, markerSymbolDivHtml, togeojsonIconSpec, buildWmsTileTemplate, buildWmtsTileTemplate,
   kascScaleZoomRange, setAllLayerGroupsExpanded,
+  appendGroupedTitleOptions, syncBasemapList,
 } from "../shared/kasc.js";
 import { createKascPortal } from "../shared/portal.js";
 import { compileWhereExpression } from "../shared/where-eval.js";
@@ -1877,12 +1878,16 @@ function rebuildBasemapSelect() {
   const trans = document.createElement("option");
   trans.value = "-2"; trans.textContent = "ベースマップ透明";
   sel.append(none, trans);
-  baseEntries.forEach((e, i) => {
+  // タイトルの "グループ/名前" 階層は optgroup でグループ化表示し、
+  // syncBasemapList で折りたたみ可能な一覧 UI(他エンジンと同一外観)へ置換。
+  // appendGroupedTitleOptions は要素の .title を読むため item をそのまま渡す
+  appendGroupedTitleOptions(sel, baseEntries.map(e => e.item), (it, leafTitle, i) => {
     const o = document.createElement("option");
-    o.value = String(i); o.textContent = e.item.title || `base ${i + 1}`;
-    sel.append(o);
+    o.value = String(i); o.textContent = leafTitle || `base ${i + 1}`;
+    return o;
   });
   sel.value = baseTransparent ? "-2" : baseHidden ? "-1" : "0";
+  syncBasemapList(sel);
 }
 let gsiBaseRetryCount = 0;
 function applyBaseSelection() {

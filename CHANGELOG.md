@@ -6,6 +6,7 @@
 
 ## [Unreleased]
 
+- **ベースマップ一覧 UI(「すべて展開」「すべて閉じる」+項目行)を全エンジンで統一** — `syncBasemapList` は optgroup が無い select を早期 return で素の select 表示にしていたため、フラットなベースマップ一覧では一覧 UI 自体が出なかった。optgroup 有無に関わらず常時一覧描画へ変更(フラット時も同じ外観)。gsimaps は `syncBasemapList` 未配線だったため import+`rebuildBasemapSelect` で `appendGroupedTitleOptions` による optgroup 化と一覧同期を追加し `.basemap-list` CSS を導入。疑似選択肢「ベースマップなし」「ベースマップ透明」は全エンジンで一覧行として表示される
 - **OpenLayers で MultiPolygon 地物の QML ラベルが一切描画されない問題を修正** — `shared/qml-2d.js` のポリゴン内部点取得が `getInteriorPoint()`(Polygon 専用)に固定されており、MultiPolygon では常に null → ラベル全体ドロップ。中空ハロー(bufferNoFill)のラスタライズ経路と centroid フォールバック経路の両方で発生していた。`interiorPtOf()` を新設し MultiPolygon は `getInteriorPoints()` の最大ポリゴン部の内部点を使うよう修正。実機 live プロジェクト(行政区域=全地物 MultiPolygon・bufferNoFill=1)で「テキストが全く出ない」状態を解消
 - **gsimaps に QML ラベル描画を実装** — 従来ラベル機構自体が無かった。`injectSakuzuLayer` で `item._qml.labelFor` 有りの場合、iframe 内 Leaflet の permanent tooltip(`qmlLabelElement`)を各地物へ付与。`labelScale` 縮尺範囲は moveend 連動の `syncGsiLabelZoom()` で tooltip 表示を切替(衝突判定なし)。live プロジェクト(6177地物・中空ハロー付きラベル)で動作確認済み
 - **live クエリの既定地物数を 2000→10000 へ引き上げ** — `liveQueryFeatures` の `limit:` 指定を全6エンジン×2箇所(addLiveLayer 初回+範囲追従再取得)で統一変更。QGIS 側サーバ既定も 2000→10000 に追随(geo_webview 4.34.1)。上限 20000・live kasc 行の `limit=20000` は従来通り

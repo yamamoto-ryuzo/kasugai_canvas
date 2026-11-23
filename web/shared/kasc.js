@@ -1576,11 +1576,10 @@ const _basemapListState = new WeakMap();
 
 // <select>(optgroup 対応)をミラーする折りたたみ可能なリスト UI
 // (.basemap-list) を select の親内へ同期描画する。
-// - optgroup が無い場合は素の select を表示し、リストは除去する
-// - optgroup がある場合は select を隠し、グループ見出し(▸/▾で
-//   折りたたみ)付きのリストへ置き換える。グループは初期状態で閉じ
-//   (expanded に含まれるもののみ展開)。先頭の「すべて展開」
-//   「すべて閉じる」ボタンで一括操作できる
+// - optgroup がある場合はグループ見出し(▸/▾で折りたたみ)付き、無い場合は
+//   フラットな項目リストとして描画する(いずれも select は隠す)。
+//   グループは初期状態で閉じ(expanded に含まれるもののみ展開)。
+//   先頭の「すべて展開」「すべて閉じる」ボタンで一括操作できる
 // - 項目クリックは select.value 更新 + change 発火なので、
 //   既存の select.onchange ハンドラ・AI 制御がそのまま動く
 // - labels.expandAll / labels.collapseAll でボタン文言を上書きできる
@@ -1588,11 +1587,6 @@ export function syncBasemapList(select, labels) {
   if (!select?.parentElement) return null;
   const container = select.parentElement;
   let list = container.querySelector(".basemap-list");
-  if (!select.querySelector("optgroup")) {
-    list?.remove();
-    select.hidden = false;
-    return null;
-  }
   select.hidden = true;
   if (!list) {
     list = document.createElement("div");
@@ -1638,7 +1632,7 @@ export function syncBasemapList(select, labels) {
   }
   const groupNames = [...select.querySelectorAll("optgroup")]
     .map(o => o.label);
-  if (groupNames.length) {
+  {
     const tools = document.createElement("div");
     tools.className = "basemap-list-tools";
     const expand = document.createElement("button");
