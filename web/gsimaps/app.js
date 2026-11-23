@@ -38,7 +38,8 @@ import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
 import { initAiChat } from "../shared/ai-chat.js";
 import { createKascFlyPaths } from "../shared/fly-kasc.js";
-import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection } from "../shared/live.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries, liveQueryFeatures } from "../shared/live.js";
+import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
 import { initUiConfig } from "../shared/ui-config.js";
 
 // 診断: この中間エンジンが iframe 内で読み込まれた場合(ネスト)、
@@ -1046,6 +1047,8 @@ async function applyEntryQueryFilter(entry, value) {
     if (isSql || item._viewportQuery || isViewportQueryItem(item)) await reloadEntryData(entry);
     else await reinjectEntry(entry);
     attrWidget.refresh();
+    // QGIS ライブ連携: フィルタ変更をプロジェクトへ書き戻す
+    liveWritebackEntries(layerEntries);
   } catch (e) {
     console.warn("フィルタ再読み込み失敗:", item.title, e);
   }
@@ -1086,6 +1089,7 @@ function scheduleViewportReload() {
   clearTimeout(viewportReloadTimer);
   viewportReloadTimer = setTimeout(() => {
     for (const e of layerEntries) {
+      if (e.item.liveSource && effectiveVisible(e)) { void reloadLiveEntry(e); continue; }
       if (e.item._viewportQuery && effectiveVisible(e)) reloadEntryData(e).catch(console.error);
       // bbox=auto / :bbox の初回読込に失敗したレイヤーは移動後の表示範囲で自動リトライする
       else if (e.failed && effectiveVisible(e) && isViewportQueryItem(e.item)) {
@@ -1095,6 +1099,80 @@ function scheduleViewportReload() {
       }
     }
   }, 400);
+}
+
+// 現在の表示範囲を [w,s,e,n] (EPSG:4326) で返す。アンチメリディアン
+// 跨ぎは全経度幅へ畳む(liveQueryFeatures の bbox= 引き渡し用)
+function viewBbox4326() {
+  const b = viewBounds();
+  if (!b) return null;
+  if (b.west > b.east) return [-180, b.south, 180, b.north];
+  return [b.west, b.south, b.east, b.north];
+}
+
+// QGIS Live「Add to Canvas」: カタログ title を表示範囲(bbox)で
+// /live/features から取得して geojson エントリとして追加する。
+// liveSource を付けてカメラ停止ごとの範囲追従再取得対象にする
+async function addLiveQgisLayer(title) {
+  const t = String(title);
+  const existing = layerEntries.find(e => e.item.liveSource?.title === t);
+  if (existing) {
+    await reloadLiveEntry(existing);
+    return { added: existing.item._geojson?.features?.length ?? 0 };
+  }
+  // 同名レイヤが既に live kasc へ載っているなら二重追加しない
+  // (非表示 | off なら「表示にする」操作として扱う)
+  const inKasc = layerEntries.find(e =>
+    (e.item.sourceTitle || e.item.title) === t);
+  if (inKasc) {
+    if (inKasc.item.visible === false) {
+      inKasc.item.visible = true;
+      applyEntryVisibility(inKasc);
+      maybeLoadEntry(inKasc);
+      renderLayerRows();
+    }
+    return { added: 0, existing: true };
+  }
+  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 2000 });
+  if (!data?.ok) throw new Error(data?.reason || data?.error || "query failed");
+  const fc = data.geojson || { type: "FeatureCollection", features: [] };
+  const url = URL.createObjectURL(new Blob(
+    [JSON.stringify(fc)], { type: "application/geo+json" }));
+  const item = {
+    type: "geojson",
+    title: t,
+    sourceTitle: t,
+    url,
+    visible: true,
+    liveSource: { title: t },
+    _idx: (layerEntries.at(-1)?.item._idx ?? 0) + 1,
+  };
+  const entry = { item, pending: true };
+  layerEntries.push(entry);
+  renderLayerRows();
+  try {
+    await mountEntry(entry);
+    applyEntryVisibility(entry);
+  } catch (err) {
+    entry.failed = true;
+    entry.error = String(err?.message || err);
+  }
+  entry.pending = false;
+  renderLayerRows();
+  return { added: fc.features.length, truncated: !!data.truncated };
+}
+
+// liveSource レイヤーの表示範囲追従再取得(moveend→scheduleViewportReload
+// から呼ばれる)。_geojson を差し替えて reinjectEntry で再注入する
+async function reloadLiveEntry(entry) {
+  const t = entry.item.liveSource?.title;
+  if (!t) return;
+  const data = await liveQueryFeatures(t, { bbox: viewBbox4326(), limit: 2000 });
+  if (!data?.ok) return;
+  entry.item._geojson = data.geojson
+    || { type: "FeatureCollection", features: [] };
+  entry.item._env = geojsonExtent(entry.item._geojson) || null;
+  await reinjectEntry(entry);
 }
 
 // ---- 属性 ----
@@ -1316,6 +1394,8 @@ function buildLayerRow(entry, exclusive, radioName) {
     applyEntryVisibility(entry);
     if (cb.checked) maybeLoadEntry(entry);
     entry._groupCtl?.sync();
+    // QGIS ライブ連携: 表示切替をプロジェクトへ書き戻す
+    liveWritebackEntries(layerEntries);
   });
   row.append(cb);
 
@@ -1448,6 +1528,8 @@ function renderLayerRows() {
         }
       }
       ctl.sync();
+      // QGIS ライブ連携: グループ表示切替をプロジェクトへ書き戻す
+      liveWritebackEntries(layerEntries);
     });
   }
 
@@ -1473,6 +1555,8 @@ function applyKascTheme(theme) {
   }
   renderLayerRows();
   inspectorInput.value = rewriteKascVisibility(inspectorInput.value, show);
+  // QGIS ライブ連携: テーマ適用をプロジェクトへ書き戻す
+  liveWritebackEntries(layerEntries, { theme: theme?.name });
 }
 themeSelect?.addEventListener("change", () => {
   const theme = currentThemes.find(t => t.name === themeSelect.value);
@@ -2050,7 +2134,9 @@ async function buildFromDoc({ doc, baseUrl, noFit = false, sw = null, baseKey = 
         height: viewZoomToHeight(c.lat, gmap.getZoom(), gmapH()), pitch: -90, heading: 0 };
     },
     applySelection: sel => applyQgisSelection(sel),
+    addLiveLayer: addLiveQgisLayer,
   });
+  syncLivePanel();
   // 引継ぎセッションの可視性を mount 前に item.visible へ畳み込む。
   // doc の |off は実行時トグルを反映しない(正典は vis マップ)ため、
   // mount 後に隠すと非表示レイヤが一瞬地図へ出る(他エンジンは mount 前適用)
@@ -2905,6 +2991,9 @@ mountEngineSwitcher(document.querySelector("#engines"), "gsimaps");
 // 🏠ボタン・「地図を開く」・Esc・「ビュー解除」の配線(共有ポータルモジュール)
 kascPortal().bindEvents();
 // ?follow[=<base>] → geo_webview の /live/state をポーリングして表示を追従(#62)
+// QGIS Live 操縦パネル(live: 行検出時にパネル先頭へ表示)
+mountLivePanel(document.querySelector("#panel"));
+
 configureFollow({
   apply: s => {
     if (globeMode || !gmap) return;

@@ -13,7 +13,8 @@ import { loadVectorItem, probeQmlSidecar, compileEmbeddedStyle } from "../shared
 import { createAttrWidget, renderAttrContent, attrEntriesFromProps } from "../shared/attr-widget.js";
 import { initAiChat, hasBackendFeature } from "../shared/ai-chat.js";
 import { createPlayerApi } from "../shared/player-api.js";
-import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries } from "../shared/live.js";
+import { configureLive, configureFollow, liveUpdate, liveNotifyCamera, liveNotifySelection, liveWritebackEntries, liveQueryFeatures } from "../shared/live.js";
+import { mountLivePanel, syncLivePanel } from "../shared/live-panel.js";
 import { mountEngineSwitcher } from "../shared/engine-switch.js";
 import { matchSessionState, bindSessionState, applySessionState, sessionBootView, sessionVisChanges, sessionInspectorFor, markSessionKascBase } from "../shared/session-state.js";
 import { initNavTools } from "../shared/nav-tools.js";
@@ -460,6 +461,68 @@ async function maybeLoadEntry(entry) {
     console.warn("layer failed", entry.item.title, e);
   }
   entry.loading = false; syncRowStatus(entry);
+}
+
+// QGIS Live「Add to Canvas」: カタログ title を /live/features から
+// 取得して geojson エントリとして追加する。Navara は viewport クエリを
+// 持たない(loadVectorItem の bounds=null と同じ方針)ため全件取得とし、
+// liveSource は再要求時の差替対象として保持する
+async function addLiveQgisLayer(title) {
+  const t = String(title);
+  const existing = layerEntries.find(e => e.item.liveSource?.title === t);
+  if (existing) {
+    await reloadLiveEntry(existing);
+    return { added: existing.item._geojson?.features?.length ?? 0 };
+  }
+  // 同名レイヤが既に live kasc へ載っているなら二重追加しない
+  // (非表示 | off なら「表示にする」操作として扱う)
+  const inKasc = layerEntries.find(e =>
+    (e.item.sourceTitle || e.item.title) === t);
+  if (inKasc) {
+    if (inKasc.item.visible === false) {
+      inKasc.item.visible = true;
+      navaraSetShow(inKasc, true);
+      void maybeLoadEntry(inKasc);
+      buildLayerList();
+    }
+    return { added: 0, existing: true };
+  }
+  const data = await liveQueryFeatures(t, { limit: 2000 });
+  if (!data?.ok) throw new Error(data?.reason || data?.error || "query failed");
+  const fc = data.geojson || { type: "FeatureCollection", features: [] };
+  const url = URL.createObjectURL(new Blob(
+    [JSON.stringify(fc)], { type: "application/geo+json" }));
+  const item = {
+    type: "geojson",
+    title: t,
+    sourceTitle: t,
+    url,
+    visible: true,
+    liveSource: { title: t },
+    _idx: (layerEntries.at(-1)?.item._idx ?? 0) + 1,
+  };
+  const entry = { item, sid: `liveqgis-${item._idx}`, unsupported: false };
+  layerEntries.push(entry);
+  buildLayerList();
+  await maybeLoadEntry(entry);
+  buildLayerList();
+  return { added: fc.features.length, truncated: !!data.truncated };
+}
+
+// liveSource レイヤーの再取得。_geojson を差し替えて src/layer を再構築
+// する(reloadEntryData と同じ経路・取得元だけ /live/features へ差替)
+async function reloadLiveEntry(entry) {
+  const t = entry.item.liveSource?.title;
+  if (!t) return;
+  const data = await liveQueryFeatures(t, { limit: 2000 });
+  if (!data?.ok) return;
+  entry.item._geojson = data.geojson
+    || { type: "FeatureCollection", features: [] };
+  if (!entry.layer) return;
+  try { entry.layer.delete(); } catch (_) {}
+  try { entry.src?.delete(); } catch (_) {}
+  const r = await addKascLayer(entry.item, lastBaseUrl);
+  if (r) { entry.src = r.src; entry.layer = r.layer; entry.desc = r.desc; }
 }
 
 // 地物単位の凡例フィルタは Navara 側で未実装（レイヤ単位マテリアルのため）
@@ -1868,7 +1931,9 @@ async function renderDoc(doc, baseUrl, presetBase) {
       };
     },
     applySelection: sel => applyQgisSelection(sel),
+    addLiveLayer: addLiveQgisLayer,
   });
+  syncLivePanel();
 
   // ポータル画面の内容を最新の宣言へ反映する(🏠ボタン表示もここで更新)
   updatePortalUI();
@@ -2357,6 +2422,9 @@ async function saveToDataDir(name, content) {
 
 // ?follow[=<base>] → geo_webview の /live/state をポーリングして QGIS キャンバスに追従
 // (shared/live.js の live セッションへ統合。pitch は現在値を保持するリンクビュー)
+// QGIS Live 操縦パネル(live: 行検出時にパネル先頭へ表示)
+mountLivePanel(document.querySelector("#panel"));
+
 configureFollow({
   apply: (s, { topdown }) => {
     const height = typeof s.zoom === "number"

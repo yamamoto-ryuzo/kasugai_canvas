@@ -8,6 +8,7 @@ import { loadVectorItem, summarizeFlatGeobufHeader, summarizeGeoParquetHeader } 
 import { backendUrl } from "./backend.js";
 import { hasBackendFeature, isFetchProxyTarget, executeChatTool, showReportModal, listUiControls, controlUi } from "./ai-chat.js";
 import { getLanguage, t } from "./i18n.js";
+import { liveSendFeatures } from "./live.js";
 
 // hooks:
 //   engine            : "maplibre" | "openlayers" | "leaflet"
@@ -795,6 +796,22 @@ export function createPlayerApi(hooks) {
       if (!e) return null;
       if (hooks.getEntryFilteredGeoJson) return hooks.getEntryFilteredGeoJson(e);
       return hooks.getEntryGeoJson ? hooks.getEntryGeoJson(e) : (e.item._geojson || null);
+    },
+    // QGIS ライブ連携: レイヤーの GeoJSON を QGIS スクラッチレイヤへ送る
+    // (POST /live/features。ライブ未接続なら ok:false で返す)
+    async sendLayerToQgis(idOrTitle, name) {
+      const layer = (hooks.getOrderedLayerItems?.() || [])
+        .find(item => item.id === idOrTitle || item.title === idOrTitle);
+      if (!layer) return { ok: false, reason: "notFound" };
+      const gj = this.getLayerGeoJson?.(layer.id) ?? layer._geojson ?? null;
+      if (!gj?.features?.length) return { ok: false, reason: "noData" };
+      return liveSendFeatures(String(name || layer.title || layer.id), gj);
+    },
+    // ツールの作図アノテーションを QGIS スクラッチレイヤへ送る
+    async sendDrawingsToQgis(name) {
+      const gt = typeof hooks.geoTools === "function" ? hooks.geoTools() : hooks.geoTools;
+      if (!gt?.sendAnnotationsToQgis) return { ok: false, reason: "unavailable" };
+      return gt.sendAnnotationsToQgis(name);
     },
     // ogrsql: 行と同じ実行経路で OGR SQL SELECT を実行し GeoJSON を返す
     // (AI ツール queryOgrSql 用。FROM は読み込み済みレイヤー名/canvas_data パス。
