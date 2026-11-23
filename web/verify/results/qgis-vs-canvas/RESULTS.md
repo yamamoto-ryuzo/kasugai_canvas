@@ -237,3 +237,21 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 - エンジン差: 他エンジンは `kasugaiApi.fitBounds`＋`setLayerVisible`/checkbox で代替
 - **同一 spec でもエンジンで再現度が異なる**。ペア比較は原則全エンジンで行い、
   判定はエンジン別に記録する
+
+## SimpleLine プロパティ単位検証（2026-11-23・qgis_export プロジェクト）
+
+- 対象: `qmltest_SimpleLine`（全27プロパティ非既定）＋ `qmltest_SimpleLineDD`
+  （DD `outlineColor`/`outlineWidth` をフィールド `val` 式で設定）
+- 経路: 実機 QGIS 4.0.1（PID 5052・geo_webview :8090）→ `GET /kasugai` →
+  `C:\kasugai\kasugai_canvas\QGIS_projects\qgis_export`（13層・実エクスポート）
+- 結果: **cesium / maplibre / openlayers / leaflet / navara 全5エンジン一致**
+  - 破線（customdash 6;3;1.5;3 + use_custom_dash）・赤色・round cap/join・
+    offset・trim・dash_pattern_offset が QGIS と同じ見た目で再現
+  - DD: 青→赤の地物別グラデーション色＋太さ変化が QGIS と一致（全エンジン）
+  - `qmlStyle.warnings` は2層とも全エンジンで空（未知プロパティ警告なし）
+- 今回の修正: `EXPR_FUNCS` に `color_rgb`/`color_rgba` を追加
+  （DD 色式の評価不能でベース色にフォールバックしていた問題を解消）
+- 注意: DD 式の `$id` は geojson エクスポートに fid が載らないため null になる。
+  検証用 DD 式はフィールド参照で書くこと（今回 `val` フィールドを追加して対処）
+- 画像: `qgis-*-qmltest_SimpleLine[DD].png` / `canvas-*-qmltest_SimpleLine[DD].png`
+  （NOBASE=1・QGIS 実解像度 1514×913・範囲 139.68,35.68,140.00,35.90）
