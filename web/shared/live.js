@@ -9,9 +9,11 @@
 //    作図/GeoJSON は POST /live/features で QGIS スクラッチレイヤへ投入
 //   ・<base>/live/state をポーリングし、QGIS 側の選択変更(→地物ハイライト)
 //    と QGIS キャンバス位置(→ ?follow カメラ追従)をエンジンへ反映
-//   ・live.controls(follow/selection)は QGIS 側が正。geo_webview パネルの
-//    Live タブ/POST /live/controls/bridge から更新され、本モジュールが
-//    /live/state 経由で検出して適用する(Canvas 側パネルは接続バッジのみ)
+//   ・live.controls(follow/selection/qgis_follow)は QGIS 側が正。
+//    geo_webview パネルの Live タブ/POST /live/controls/bridge から
+//    更新され、本モジュールが /live/state 経由で検出して適用する
+//    (Canvas 側パネルは接続バッジのみ)。qgis_follow=OFF の間は
+//    /live/camera POST(逆方向追従)を送らない
 //   ・live.add_layers は QGIS 側からのレイヤ追加要求キュー。未処理 seq を
 //    検出してエンジンの addLiveLayer(title) フックへ振る
 // エンジンは configureLive(doc, hooks) を各プロジェクト描画後に呼ぶ。
@@ -166,6 +168,10 @@ if (typeof document !== "undefined") {
 }
 // QGIS 側選択の Canvas ハイライト表示フラグ(OFF で受信適用を止めて消す)
 let selVisible = true;
+// QGIS キャンバスを Canvas 視点へ追従させるか(=live.controls.qgis_follow)。
+// OFF の間は /live/camera POST を送らない。controls を持たない
+// 旧プラグイン互換で既定 true(従来の無条件送信と同じ)
+let qgisFollowEnabled = true;
 
 export function configureFollow({ apply, topdown = false } = {}) {
   if (typeof apply === "function") engineFollowApply = apply;
@@ -253,6 +259,9 @@ function applyLiveState(data, sess = null) {
     if (typeof ctl.selection === "boolean"
         && ctl.selection !== selVisible) {
       liveSetSelectionVisible(ctl.selection, { notify: false });
+    }
+    if (typeof ctl.qgis_follow === "boolean") {
+      qgisFollowEnabled = ctl.qgis_follow;
     }
   }
   // QGIS 側からのレイヤ追加要求キュー(未処理 seq のみ順に適用)。
@@ -510,6 +519,9 @@ class LiveSession {
   }
   notifyCamera() {
     if (!this.cfg || !this.cfg.getView) return;
+    // live.controls.qgis_follow(Follow Canvas view)OFF の間は送らない
+    // (QGIS 側でもゲートされるが、往復 traffic を抑えるため送信側でも止める)
+    if (!qgisFollowEnabled) return;
     // ユーザー入力起点のカメラ移動のみ送信する。マウス/タッチ/キー操作=
     // 発信側、follow 適用・flyTo・初期カメラ等の API 移動=受信側として
     // 振り分け、双方向性を保ったまま QGIS→Canvas→QGIS ループを断つ
