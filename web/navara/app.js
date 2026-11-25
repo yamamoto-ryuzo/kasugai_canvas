@@ -1336,7 +1336,9 @@ async function addKascLayer(item, baseUrl) {
     // Navara マテリアルは透過描画に transparent フラグも必要
     const oNum = v => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : null; };
     const aOf = css => { const a = cssColorAlpha(css); return a < 1 ? a : null; };
-    const polyFillO = qmlNoFill ? 0 : (oNum(item.opts?.fill_opacity) ?? oNum(item.opts?.opacity) ?? aOf(fillCss) ?? gd?.fillOpacity ?? 0.4);
+    const qmlFill = !!(qmlS && qmlS.fill);
+    const polyFillO = qmlNoFill ? 0 : (oNum(item.opts?.fill_opacity) ?? oNum(item.opts?.opacity)
+      ?? aOf(fillCss) ?? (qmlFill ? 1 : (gd?.fillOpacity ?? 0.4)));
     const polyLineO = qmlNoStroke ? 0 : (oNum(item.opts?.stroke_opacity) ?? oNum(item.opts?.opacity) ?? aOf(strokeCss) ?? gd?.strokeOpacity ?? ld?.opacity ?? 1);
     const pointO = oNum(item.opts?.opacity) ?? aOf(markerCss) ?? pd?.opacity ?? 1;
     // extrude=<m>(#60)・QML 2.5D レンダラ → PolygonMaterial.extrudedHeight(m)。

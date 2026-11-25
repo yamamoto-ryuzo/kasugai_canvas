@@ -1,0 +1,5 @@
+# no-fill / no-stroke QML 検証 (commit 86a92e6)
+cam:QGIS|35.70|139.79|h=9000|p=-90
+geojson: nofill | canvas_data/nofill.geojson | on | style=canvas_data/nofill.qml
+geojson: nostroke | canvas_data/nostroke.geojson | on | style=canvas_data/nostroke.qml
+geojson: neither | canvas_data/neither.geojson | on | style=canvas_data/neither.qml

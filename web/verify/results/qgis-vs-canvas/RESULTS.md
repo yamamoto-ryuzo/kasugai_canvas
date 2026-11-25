@@ -21,29 +21,29 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 
 | レイヤー | 判定 | 備考 |
 |---|---|---|
-| AnimatedMarker | 一致 | 静止フレームで形状・色一致 |
+| AnimatedMarker | 許容近似 | 画像が一時パスで読めず円フォールバック(青)。位置・形状一致(アンカー修正後) |
 | ArrowLine | **未対応近似** | QGIS=弧状+矢羽根+太線、Canvas=細ジグザグのみ |
 | CentroidFill | 一致 | 重心マーカー位置・色一致 |
 | FilledLine | 一致 | |
-| FilledMarker | 一致 | |
+| FilledMarker | 一致 | 橙菱形×6 位置一致(anchor_point enum 修正で正規化) |
 | GeomGen_fill | 一致 | 生成塗り矩形一致 |
-| GeomGen_line | 一致 | imagery 経路でジグザグ形状一致 |
+| GeomGen_line | 一致 | `reverse($geometry)` 対応後、ジグザグ位置一致(線幅はやや太め近似) |
 | GeomGen_line_xyz | — | QGIS プロジェクトに無し(xyz タイル経路) |
-| GeomGen_marker | **未対応** | QGIS=緑三角×4、Canvas=無描画(ents=6 存在も非描画) |
+| GeomGen_marker | 一致 | 緑三角×6 位置一致(anchor 修正で正規化) |
 | GradientFill | 一致 | imagery 経路で青グラデ矩形一致 |
 | GradientFill_xyz | — | 同上 |
 | InterpolatedLine | 許容近似 | 線形・色・太さ一致、補間段差がやや粗い |
 | LinearReferencing | **一致** | ソース単位 interval 修正済。「0.02…0.12」ラベル分散配置が QGIS と一致 |
-| Lineburst | 一致 | |
+| Lineburst | 許容近似 | w1/w2 未設定(NaN幅)を修正し青→黄グラデ線描画。QGIS は 1.2mm 細線で2色が混色しグレーに見える |
 | LinePatternFill | 一致 | |
 | MarkerLine | 一致 | 紫線+頂点マーカー一致 |
-| MaskMarker | **差異** | QGIS=無描画(マスク専用)、Canvas=赤点×5 で可視化してしまう |
+| MaskMarker | 一致 | 両者無描画(マスク専用シンボルのため可視出力無しが正しい) |
 | PointPatternFill | 一致 | imagery 経路で紫ドットパターン一致 |
 | PointPatternFill_xyz | — | 同上 |
 | RandomMarkerFill | 一致 | ランダム緑マーカー(seed 決定論) |
 | RasterFill | 一致 | |
 | RasterLine | 一致 | |
-| RasterMarker | 一致 | |
+| RasterMarker | 許容近似 | 画像読めず円フォールバック(QGIS 側も「?」グリフ)。位置一致 |
 | ren_25d | **未対応近似** | QGIS=グレー建物×4、Canvas=無描画(3D Tiles ドレープ併用で押出無効) |
 | ren_embedded | 一致 | 両者無描画(QGIS 4.0.1: polygon+line 既定シンボル→無描画、実機確認済) |
 | ren_graduated | 一致 | 段階サイズ・色一致 |
@@ -91,6 +91,28 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
    - imagery 経路レイヤーを `_kasugaiLayerId` タグ付け+solo/diag 対象化
    - ターゲット判定を ds+primitive+imagery の全描画経路で行い
      `setLayerVisible` フォールバック誤爆（全 rebuild 誘発）を解消
+
+## 追加修正(2回目検証ラウンド: anchor/reverse/Lineburst 幅)
+
+1. **マーカーアンカー点の enum 解釈バグ**(`shared/qml-style.js` `markerOffsetPx`)
+   - `horizontal_anchor_point`/`vertical_anchor_point` は QML で enum 整数
+     (0=Left/Top, 1=Center, 2=Right/Bottom)だが、0..1 小数として解釈され
+     `"1"`(中央)に `(1-0.5)*sizePx` の誤オフセットが付いていた
+   - 結果、**全マーカーが右下へ sizePx/2 ずれ**、canvas 上では菱形・円の
+     右下1/4のみ描画(扇形に見えた)。整数 0..2 → frac=n/2 で正規化し、
+     `(0.5-frac)*sizePx` でオフセット適用に修正(符号もコメントと整合)
+   - 影響: FilledMarker/AnimatedMarker/GeomGen_marker 等、全マーカー層の
+     位置ずれと部分欠落が解消。2D エンジンも共通コードのため同様に改善
+
+2. **`reverse($geometry)` 未対応**(同上 `evalGeomExpr`、GeomGen_line が無描画)
+   - `reverse` case 追加(リング/パート毎に座標順反転)。本体線を隠す
+     GeometryGenerator で生成ジオメトリが null になり全面空白だったのを修正
+
+3. **Lineburst NaN 幅**(同上 `buildLineDecor`、全エンジン無描画)
+   - `{kind:"interpolated"}` に w1/w2 が無くポリライン幅 NaN→不可視。
+     `line_width` から w1=w2 を計算して返すように修正
+   - 防御: `renderInterpolatedLine`(cesium)と `interpolatedToOlStyles`(OL)で
+     w1 非有限時に 1 へフォールバック
 
 ## 他5エンジン ペア判定（NOBASE=1 白背景・fitBounds 補正後に全31層撮影）
 
@@ -451,3 +473,90 @@ Canvas ビューポート: QGIS キャンバス実解像度 1514×913 / カメ�
 - 生成装飾の固定サイズ性: MarkerLine/HashLine/ArrowLine の生成地物は
   縮尺1:1万換算の固定サイズ近似で、ズームに追従しない
   （QGIS のスクリーン px 指定を地図単位へ換算したもの）
+
+## Cesium 再比較（2026-11-24・軽量プロジェクト版・全層 others=0）
+
+プロジェクトを軽量化(90MB gpkg 除去→読込 17s)後に全31層を再撮影。
+各層 `target ents=N shown=N others=0` でクリーン取得(初層のみ一過性 LEAK→自己解消)。
+bbox は従来値 `139.70,35.68,139.99,35.73` のまま。
+
+### 範囲差の解明(「QGIS 4点 vs Canvas 6点」)
+
+点系層の QML geojson と QGIS 側 featureCount はともに **6 件**
+(extent 139.72–139.97, 35.72–35.82)。比較 bbox は y<35.73 のため
+QGIS 側で上位2点が範囲外にクリップされ 4 点のみ描画される。
+Canvas は同 bbox を幅基準でフィットするため鉛直方向を広く表示し
+6 点描画される。**点数差はハーネスの範囲差であり Canvas 側の
+バグではない**。厳密比較には層 extent 全体を含む bbox が望ましい。
+
+### 全層目視判定（修正適用後のコードで再評価したものを含む）
+
+| レイヤー | 判定 | 備考 |
+|---|---|---|
+| AnimatedMarker | 差異(フォールバック) | 画像アセット欠損で双方 fallback。QGIS=赤丸、Canvas=青扇形 |
+| ArrowLine | 許容近似 | 弧+矢羽根を描画(改善済)。矢頭が大きめ |
+| CentroidFill | 一致 | 4点・位置一致 |
+| FilledLine | 未対応近似 | QGIS=緑太バッファ、Canvas=緑細線(帯塗り無し) |
+| FilledMarker | 許容近似 | 橙ダイヤ→橙ウェッジ状(色一致・形状近似) |
+| GeomGen_fill | 一致 | 黄矩形一致(角丸未再現) |
+| GeomGen_line | **修正後一致** | `reverse($geometry)` 対応追加で生成線描画(修正前は無描画) |
+| GeomGen_line_xyz | — | 両者無描画 |
+| GeomGen_marker | 一致 | 緑三角一致(前回「未対応」から改善) |
+| GradientFill | 許容近似 | 青グラデ再現だが方向が異なる |
+| GradientFill_xyz | — | 両者無描画 |
+| InterpolatedLine | 許容近似 | 赤線+幅変化を再現 |
+| LinearReferencing | 一致 | 標点ラベル分散配置が一致 |
+| Lineburst | **修正後一致** | 補間セグメント描画(修正前は NaN 幅で無描画) |
+| LinePatternFill | 未対応近似 | 疎な斜線片のみ(密ハッチ非再現) |
+| MarkerLine | 一致 | 頂点マーカー配置一致 |
+| MaskMarker | 一致 | 両者無描画(前回は赤点を描画してしまっていた→改善) |
+| PointPatternFill | 未対応近似 | 疎なドット片のみ(密ドット非再現) |
+| PointPatternFill_xyz | — | 両者無描画 |
+| RandomMarkerFill | 差異 | ランダム配置せず規則グリッド+大きめ四角 |
+| RasterFill | 差異(フォールバック) | 画像欠損→橙ドット(スケール・色差) |
+| RasterLine | 差異(フォールバック) | 画像欠損→太い黒線(QGIS は '?' プレースホルダ列) |
+| RasterMarker | 差異(フォールバック) | 画像欠損→橙ウェッジ |
+| ren_25d | 未対応 | QGIS=橙立体、Canvas=青フラット(押出無効+色違い) |
+| ren_embedded | 一致 | 両者無描画 |
+| ren_graduated | 一致 | 段階色・サイズ一致(形状はウェッジ近似) |
+| ren_heatmap | 許容近似(品質) | 画像矩形 ents=1 で実装済だが小さな点状にしか見えない |
+| ren_inverted | **一致(改善)** | 緑マスク+白抜きを正確再現(前回「未対応」) |
+| ren_merged | 一致 | 両者無描画 |
+| ren_pointcluster | 一致 | クラスタバッジ「6」+分散一致 |
+| ren_pointdisp | 一致 | 変位リング再現 |
+| ShapeburstFill | 許容近似 | 中心放射でなく一方向グラデ |
+| SimpleLine | 一致 | 破線一致 |
+| SimpleLineDD | 一致 | DD 幅・色グラデ一致 |
+| SVGFill | 未対応近似 | 1枚ストレッチ円(タイル反復無し) |
+| VectorField | 許容近似 | 矢印方向一致・大きめ |
+
+### 今回のランで発見・修正した実バグ
+
+- **Lineburst 無描画(全エンジン共通)**:
+  `buildLineDecor` の Lineburst 戻り値に `w1`/`w2` が無く、
+  補間描画経路で `width=NaN` となり全セグメントが非描画だった。
+  `p.line_width`(+DD)から `w1=w2` を設定(qml-style.js)。
+  あわせて cesium `renderInterpolatedLine` と OL
+  `interpolatedToOlStyles` に `Number.isFinite` フォールバックを追加。
+- **GeomGen_line 無描画(全エンジン共通)**:
+  `evalGeomExpr` が `reverse()` 未対応のため生成ジオメトリ null→
+  aux 無し+本体 polyline.show=false で完全空白だった。
+  `evalGeomExpr` に `reverse` ケース(パート構造維持の頂点反転)を追加。
+- **maplibre pen=none ポリゴンの青フォールバック線**(前段):
+  `__kasc_stroke` が未設定時に線レイヤへ `["has",...]` ゲート無しで
+  `#2c5ea8` フォールバック色が出ていた(qml-2d.js)。
+- **navara 不透明度**(前段): `qmlNoFill`/`qmlNoStroke` 時の
+  polyFillO/polyLineO 取り扱いを修正(navara/app.js)。
+- `_nofill_verify` プローブ(3 geojson×noFill/noStroke/neither)は
+  全6エンジン **18/18 PASS**(フォールバック青塗りなし・緑枠/赤塗り正解)。
+
+### 観察された系統差(要次回調査)
+
+- **マーカーの「扇形/ウェッジ」近似**: FilledMarker/ren_graduated/
+  ren_pointcluster/ren_pointdisp/RasterMarker fallback の丸・ダイヤ系
+  マーカーが扇形(部分円)に見える。正方・三角は正常なため、
+  billboard 画像の一部だけが表示されている可能性(テクスチャ領域/
+  原点ずれ)を疑う。GeomGen_marker の三角・MarkerLine の四角/ダイヤは
+  全体が描けている。
+- **AnimatedMarker フォールバック色**: QGIS=赤丸/Canvas=青扇形。
+  双方アセット欠損時の fallback だが色・形状が揃っていない。

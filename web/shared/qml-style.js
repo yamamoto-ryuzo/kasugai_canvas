@@ -2201,8 +2201,9 @@ export function rgbaToCss(rgba) {
 // ---------------------------------------------------------------------------
 
 // マーカーのオフセット("x,y" + offset_unit)とアンカー点
-// (horizontal_anchor_point/vertical_anchor_point または anchor_x/anchor_y: 0..1)を
-// ピクセルオフセットへ正規化する。アンカーはシンボル内の基準点(0.5=中央)で、
+// (horizontal_anchor_point/vertical_anchor_point: enum 0=Left/Top,1=Center,
+// 2=Right/Bottom。anchor_x/anchor_y は 0..1 小数)をピクセルオフセットへ
+// 正規化する。アンカーはシンボル内の基準点(0.5=中央)で、
 // (0.5-anchor)*sizePx だけ描画位置がずれる
 function markerOffsetPx(p, dd, props, sizePx) {
   const raw = String(ddValue(dd, ["offset"], props, p.offset ?? "0,0"));
@@ -2210,10 +2211,19 @@ function markerOffsetPx(p, dd, props, sizePx) {
   const unit = p.offset_unit || "MM";
   let ox = sizeToPx(ox0 || 0, unit);
   let oy = -sizeToPx(oy0 || 0, unit);
-  const ax = Number(p.horizontal_anchor_point ?? p.anchor_x);
-  const ay = Number(p.vertical_anchor_point ?? p.anchor_y);
-  if (Number.isFinite(ax) && ax !== 0.5) ox += (ax - 0.5) * (sizePx || 0);
-  if (Number.isFinite(ay) && ay !== 0.5) oy += (ay - 0.5) * (sizePx || 0);
+  // QML の horizontal_anchor_point/vertical_anchor_point は enum 整数
+  // (0=Left/Top, 1=Center, 2=Right/Bottom)。anchor_x/anchor_y 形式の
+  // 0..1 小数も受け付ける。アンカー=端なら、その端が地物点へ来るよう
+  // シンボルを (0.5-frac)*sizePx だけずらす(Top/Left → +size/2)
+  const toFrac = v => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Number.isInteger(n) && n >= 0 && n <= 2 ? n / 2 : n;
+  };
+  const ax = toFrac(p.horizontal_anchor_point ?? p.anchor_x);
+  const ay = toFrac(p.vertical_anchor_point ?? p.anchor_y);
+  if (ax != null && ax !== 0.5) ox += (0.5 - ax) * (sizePx || 0);
+  if (ay != null && ay !== 0.5) oy += (0.5 - ay) * (sizePx || 0);
   return [ox || 0, oy || 0];
 }
 
@@ -2388,7 +2398,7 @@ function resolveMarkerLayerBase(layer, props, images, warnings) {
       if (layer.subSymbol) {
         const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
         if (sub.markers?.length) {
-          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope/reverse 等の常用関数のみ)`);
           return [{ gg: { expr, units: p.units, markers: sub.markers } }];
         }
       }
@@ -2870,7 +2880,7 @@ function resolveLineLayerBase(layer, props, warnings, images = null) {
         const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
         const line = sub.line;
         if (line) {
-          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope/reverse 等の常用関数のみ)`);
           return { gg: { expr, units: p.units, line } };
         }
       }
@@ -2974,8 +2984,12 @@ function buildLineDecor(layer, p, props, images, color, widthUnit, warnings) {
     const c1 = parseQgisColor(p.color1 ?? p.color ?? p.gradient_color2 ?? p.line_color, [0, 0, 0, 1]);
     const c2 = parseQgisColor(p.color2 ?? p.gradient_color2, null);
     warnOnce(warnings, "Lineburst は始端→終端の色補間で近似します");
+    // InterpolatedLine と同じ描画経路(decor.w1/w2)を使うため line_width を
+    // 補間幅へマップする。未設定だと NaN 幅になって全エンジンで非表示になる
+    const bw = Math.max(sizeToPx(ddValue(dd, ["outlineWidth", "width", "lineWidth", "line_width", "outline_width"], props,
+      p.line_width ?? 0.26), p.line_width_unit || widthUnit || "MM") || 1, 0.5);
     return { kind: "interpolated", c1, c2: c2 || [c1[0], c1[1], c1[2], 0],
-      lineburst: true,
+      lineburst: true, w1: bw, w2: bw,
       direction: String(p.direction ?? ""), rampType: String(p.rampType ?? ""),
       colorType: String(p.color_type ?? ""), discrete: String(p.discrete ?? "0") === "1",
       spec: Number(p.spec ?? 0) || 0, ...decorCommon };
@@ -3234,15 +3248,15 @@ function resolveFillLayerBase(layer, props, images, warnings) {
         const expr = mod || "$geometry";
         const sub = resolveSymbolLayers(layer.subSymbol, props, images, warnings);
         if (/marker|point/i.test(subType) && sub.markers?.length) {
-          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope/reverse 等の常用関数のみ)`);
           return { gg: { expr, units: p.units, markers: sub.markers } };
         }
         if (/line/i.test(subType) && sub.line) {
-          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope/reverse 等の常用関数のみ)`);
           return { gg: { expr, units: p.units, line: sub.line } };
         }
         if (sub.fillParts?.length || sub.outline) {
-          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope 等の常用関数のみ)`);
+          warnOnce(warnings, `GeometryGenerator は近似評価です(buffer/translate/centroid/exterior_ring/boundary/convex_hull/envelope/reverse 等の常用関数のみ)`);
           return { gg: { expr, units: p.units, fillParts: sub.fillParts || [{ solid: null }], outline: sub.outline || null } };
         }
       }
@@ -3397,6 +3411,13 @@ export function evalGeomExpr(expr, geom) {
       return (T?.simplify && sub)
         ? (T.simplify({ type: "Feature", properties: {}, geometry: sub }, { tolerance: num(1) || 0.0001 })?.geometry ?? sub)
         : sub;
+    }
+    case "reverse": {
+      // 頂点順序の反転(パート構造は維持)。リングの巻き方向も逆になる
+      const sub = g(0);
+      if (!sub) return null;
+      const rev = c => (typeof c[0]?.[0] === "number") ? [...c].reverse() : c.map(rev);
+      return { type: sub.type, coordinates: rev(sub.coordinates) };
     }
     default: return null;
   }

@@ -10,13 +10,13 @@
       "engine": "cesium",
       "name": "VectorField→billboard",
       "pass": true,
-      "extra": "billboard=25"
+      "extra": "billboard=16"
     },
     {
       "engine": "cesium",
       "name": "LinearReferencing→距離ラベル",
       "pass": true,
-      "extra": "label=6 aux-bb=9"
+      "extra": "label=6 aux-bb=0"
     },
     {
       "engine": "cesium",
@@ -27,7 +27,7 @@
     {
       "engine": "maplibre",
       "name": "LinearReferencing→symbol レイヤ(__kasc_lrt)",
-      "pass": true,
+      "pass": false,
       "extra": ""
     },
     {
@@ -51,8 +51,8 @@
     {
       "engine": "maplibre",
       "name": "linref 標点点地物の描画",
-      "pass": true,
-      "extra": "rendered=12"
+      "pass": false,
+      "extra": "rendered=0"
     },
     {
       "engine": "maplibre",
@@ -75,14 +75,14 @@
     {
       "engine": "leaflet",
       "name": "LinearReferencing→標点 tooltip",
-      "pass": true,
-      "extra": "tips=12"
+      "pass": false,
+      "extra": "tips=0"
     },
     {
       "engine": "leaflet",
       "name": "VectorField/MaskMarker→マーカー",
       "pass": true,
-      "extra": "markers=16"
+      "extra": "markers=13"
     },
     {
       "engine": "leaflet",
@@ -105,7 +105,7 @@
     {
       "engine": "navara",
       "name": "LinearReferencing→text マテリアル",
-      "pass": true,
+      "pass": false,
       "extra": ""
     },
     {

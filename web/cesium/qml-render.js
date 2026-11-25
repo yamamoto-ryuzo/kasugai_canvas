@@ -1222,6 +1222,9 @@ function renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity }) {
   const N = Math.min(32, Math.max(8, Math.round(total / 500)));
   // color_ramp_shader(items/stops)があればそちら優先、無ければ c1→c2 線形
   const lerpC = f => interpolatedColorAt(decor, f);
+  // w1/w2 未指定(Lineburst 等)でも NaN 幅で消えないようフォールバック
+  const w1 = Number.isFinite(decor.w1) ? decor.w1 : 1;
+  const w2 = Number.isFinite(decor.w2) ? decor.w2 : w1;
   const clampToGround = entity.polyline.clampToGround?.getValue?.(t) ?? clamp;
   const arcType = entity.polyline.arcType?.getValue?.(t) ?? Cesium.ArcType.GEODESIC;
   let prev = pos[0];
@@ -1235,7 +1238,7 @@ function renderInterpolatedLine(entity, decor, t, { addAux, clamp, opacity }) {
     addAux({
       polyline: {
         positions: [prev, pt],
-        width: new Cesium.ConstantProperty(decor.w1 + (decor.w2 - decor.w1) * f0),
+        width: new Cesium.ConstantProperty(w1 + (w2 - w1) * f0),
         material: new Cesium.ColorMaterialProperty(toCesiumColor(mulAlpha(lerpC(f0), opacity))),
         clampToGround,
         arcType,

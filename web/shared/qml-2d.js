@@ -746,7 +746,9 @@ function interpolatedToOlStyles(decor, geom, resolution, OL) {
   const N = 24;
   for (const coords of lines) {
     for (const seg of splitLinePlanar(coords, N)) {
-      const w = decor.w1 + (decor.w2 - decor.w1) * seg.mid;
+      const w1 = Number.isFinite(decor.w1) ? decor.w1 : 1;
+      const w2 = Number.isFinite(decor.w2) ? decor.w2 : w1;
+      const w = w1 + (w2 - w1) * seg.mid;
       styles.push(new Style({
         geometry: new LineString(seg.coords),
         stroke: new Stroke({
@@ -1699,7 +1701,9 @@ export function maplibreApplyQml(geojson, compiled) {
     // 不透明度(色アルファから分離。データ駆動 *-opacity 用)
     const fSrc = spec.fillParts?.find(pt => pt.solid)?.solid;
     feature.properties.__kasc_fopa = fSrc ? alphaOf(fSrc) : 0.5;
-    feature.properties.__kasc_lopa = (spec.outline || spec.line) ? alphaOf((spec.outline || spec.line).color) : 1;
+    // outline/line が無い(pen=none 等)場合は線不透明度 0 にして
+    // line レイヤの既定色(#2c5ea8)が枠線として出ないようにする
+    feature.properties.__kasc_lopa = (spec.outline || spec.line) ? alphaOf((spec.outline || spec.line).color) : 0;
     const mk = spec.markers?.[0];
     if (mk) {
       feature.properties.__kasc_cr = Math.max((mk.sizePx || 8) / 2, 1);

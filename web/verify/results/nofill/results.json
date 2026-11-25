@@ -1,0 +1,112 @@
+{
+ "checks": [
+  {
+   "engine": "leaflet",
+   "name": "no-fallback-blue",
+   "pass": true,
+   "extra": "fillBlue=24 strokeBlue=68"
+  },
+  {
+   "engine": "leaflet",
+   "name": "nofill-green-outline",
+   "pass": true,
+   "extra": "green=3585"
+  },
+  {
+   "engine": "leaflet",
+   "name": "nostroke-red-fill",
+   "pass": true,
+   "extra": "red=151202"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "no-fallback-blue",
+   "pass": true,
+   "extra": "fillBlue=24 strokeBlue=103"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "nofill-green-outline",
+   "pass": true,
+   "extra": "green=3273"
+  },
+  {
+   "engine": "gsimaps",
+   "name": "nostroke-red-fill",
+   "pass": true,
+   "extra": "red=37319"
+  },
+  {
+   "engine": "navara",
+   "name": "no-fallback-blue",
+   "pass": true,
+   "extra": "fillBlue=24 strokeBlue=68"
+  },
+  {
+   "engine": "navara",
+   "name": "nofill-green-outline",
+   "pass": true,
+   "extra": "green=3906"
+  },
+  {
+   "engine": "navara",
+   "name": "nostroke-red-fill",
+   "pass": true,
+   "extra": "red=63180"
+  },
+  {
+   "engine": "cesium",
+   "name": "no-fallback-blue",
+   "pass": true,
+   "extra": "fillBlue=24 strokeBlue=0"
+  },
+  {
+   "engine": "cesium",
+   "name": "nofill-green-outline",
+   "pass": true,
+   "extra": "green=4703"
+  },
+  {
+   "engine": "cesium",
+   "name": "nostroke-red-fill",
+   "pass": true,
+   "extra": "red=103981"
+  },
+  {
+   "engine": "maplibre",
+   "name": "no-fallback-blue",
+   "pass": true,
+   "extra": "fillBlue=24 strokeBlue=68"
+  },
+  {
+   "engine": "maplibre",
+   "name": "nofill-green-outline",
+   "pass": true,
+   "extra": "green=4478"
+  },
+  {
+   "engine": "maplibre",
+   "name": "nostroke-red-fill",
+   "pass": true,
+   "extra": "red=102304"
+  },
+  {
+   "engine": "openlayers",
+   "name": "no-fallback-blue",
+   "pass": true,
+   "extra": "fillBlue=24 strokeBlue=68"
+  },
+  {
+   "engine": "openlayers",
+   "name": "nofill-green-outline",
+   "pass": true,
+   "extra": "green=3634"
+  },
+  {
+   "engine": "openlayers",
+   "name": "nostroke-red-fill",
+   "pass": true,
+   "extra": "red=101950"
+  }
+ ]
+}
